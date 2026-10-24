@@ -57,6 +57,8 @@ describe('yugipedia client', () => {
     expect(await client.listSetListTitles()).toEqual(['A', 'B', 'C'])
     expect(calls[0].url.searchParams.get('apnamespace')).toBe('3006')
     expect(calls[0].url.searchParams.get('aplimit')).toBe('max')
+    expect(calls[0].url.searchParams.get('apfilterredir')).toBe('nonredirects')
+    expect(calls[1].url.searchParams.get('apfilterredir')).toBe('nonredirects')
     expect(calls[0].url.searchParams.get('apcontinue')).toBeNull()
     expect(calls[1].url.searchParams.get('apcontinue')).toBe('B')
   })

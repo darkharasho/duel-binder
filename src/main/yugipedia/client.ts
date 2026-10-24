@@ -133,6 +133,7 @@ export function createYugipediaClient(opts: {
           action: 'query',
           list: 'allpages',
           apnamespace: SET_LIST_NAMESPACE,
+          apfilterredir: 'nonredirects',
           aplimit: 'max'
         }
         if (cont) params.apcontinue = cont

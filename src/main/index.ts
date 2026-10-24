@@ -15,6 +15,11 @@ import { createImageCache } from './images/cache'
 import { handleImageProtocol, registerImageScheme } from './images/protocol'
 import { createUpdater, updateMode, RELEASES_URL } from './updater'
 import { createHandlers, registerIpc, type AppDeps } from './ipc/handlers'
+import { seedFakeCollection } from './dev/fakeData'
+
+/** `npm run dev:fake-data`: a separate profile with a seeded collection; never in packaged builds. */
+const fakeData = !app.isPackaged && process.env['YGO_FAKE_DATA'] === '1'
+if (fakeData) app.setPath('userData', `${app.getPath('userData')}-fake-data`)
 
 registerImageScheme()
 
@@ -86,7 +91,12 @@ function bootstrap(): void {
   handleImageProtocol(images)
 
   const client = createYgoClient()
-  const emitSync = (s: SyncStatus): void => broadcast(SYNC_PROGRESS, s)
+  const emitSync = (s: SyncStatus): void => {
+    // Seed before the renderer hears "idle" and refetches.
+    if (fakeData && s.state === 'idle') seedFakeCollection(db)
+    broadcast(SYNC_PROGRESS, s)
+  }
+  if (fakeData) seedFakeCollection(db)
 
   const updater = createUpdater({
     autoUpdater,

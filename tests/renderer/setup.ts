@@ -14,3 +14,13 @@ if (!window.matchMedia) {
       dispatchEvent: () => false
     }) as MediaQueryList
 }
+
+// jsdom lacks ResizeObserver and scrollIntoView (used by cmdk).
+if (!('ResizeObserver' in globalThis)) {
+  globalThis.ResizeObserver = class {
+    observe = (): void => undefined
+    unobserve = (): void => undefined
+    disconnect = (): void => undefined
+  } as unknown as typeof ResizeObserver
+}
+if (!Element.prototype.scrollIntoView) Element.prototype.scrollIntoView = () => {}

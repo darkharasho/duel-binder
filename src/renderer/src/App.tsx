@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { AppShell, type NavigateFn, type Page } from '@/components/AppShell'
 import { Toaster } from '@/components/ui/sonner'
+import { AddCardDialog } from '@/features/add-card/AddCardDialog'
 import { DashboardPage } from '@/features/dashboard/DashboardPage'
 import { CollectionPage } from '@/features/collection/CollectionPage'
 import { SettingsPage } from '@/features/settings/SettingsPage'
@@ -33,8 +34,7 @@ function App(): React.JSX.Element {
         {page === 'collection' && <CollectionPage key={entryId ?? 'all'} initialEntryId={entryId} />}
         {page === 'settings' && <SettingsPage />}
       </AppShell>
-      {/* Task 12: render <AddCardDialog open={addOpen} onOpenChange={setAddOpen} onNavigate={onNavigate} /> here. */}
-      <span hidden data-add-open={addOpen} />
+      <AddCardDialog open={addOpen} onOpenChange={setAddOpen} />
       <Toaster />
     </>
   )

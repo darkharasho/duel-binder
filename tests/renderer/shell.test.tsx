@@ -25,11 +25,14 @@ describe('AppShell', () => {
   })
 
   it('Ctrl+K and the Add card button open the add flow', async () => {
-    const { container } = renderWithProviders(<App />)
-    const flag = (): string | null => container.ownerDocument.querySelector('[data-add-open]')!.getAttribute('data-add-open')
-    expect(flag()).toBe('false')
+    renderWithProviders(<App />)
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
-    expect(flag()).toBe('true')
+    expect(await screen.findByPlaceholderText(/Search cards/)).toBeInTheDocument()
+    await userEvent.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    await userEvent.click(screen.getByRole('button', { name: /Add card/ }))
+    expect(await screen.findByRole('dialog')).toBeInTheDocument()
   })
 })
 

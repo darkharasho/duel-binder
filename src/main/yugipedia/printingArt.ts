@@ -70,6 +70,18 @@ export function rarityAbbr(rarity: string, rarityCode = ''): string | null {
   return /^\(([A-Za-z0-9]+)\)$/.exec(rarityCode.trim())?.[1] ?? null
 }
 
+// English codes say where the print was made: LOB-EN001, LOB-E001 (Europe), LOB-A001
+// (Australia), SDK-001 (the first North American prints, no letters).
+const ENGLISH_CODE_REGION: Record<string, string> = { EN: 'EN', E: 'EU', A: 'AU', '': 'NA' }
+
+function regionsFor(setCode: string, language: Language): string[] {
+  const regions = REGIONS[language] ?? []
+  if (language !== 'en') return regions
+  const letters = /-([A-Z]*)\d/i.exec(setCode)?.[1]?.toUpperCase()
+  const hint = letters === undefined ? undefined : ENGLISH_CODE_REGION[letters]
+  return hint ? [hint, ...regions.filter((r) => r !== hint)] : regions
+}
+
 const EDITIONS = ['1E', 'UE', 'LE', 'DT']
 // <Card>-<SETPREFIX>-<REGION>-<RARITY>[-<EDITION>][-<variant>].<ext>
 const FILE_RE = /^[^-]+-([A-Za-z0-9]+)-([A-Z]{2})-([A-Za-z0-9]+)(?:-([^.]+))?\.(?:png|jpe?g|gif|webp)$/i
@@ -88,7 +100,7 @@ export interface PrintingKey {
  */
 export function choosePrintingFile(files: string[], p: PrintingKey): string | null {
   const prefix = p.setCode.split('-')[0].toUpperCase()
-  const regions = REGIONS[p.language] ?? []
+  const regions = regionsFor(p.setCode, p.language)
   const wanted = rarityAbbr(p.rarity, p.rarityCode)
   const candidates = files.flatMap((file) => {
     const m = FILE_RE.exec(file.replace(/^File:/, ''))

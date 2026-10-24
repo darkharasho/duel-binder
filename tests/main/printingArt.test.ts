@@ -10,6 +10,7 @@ const BEWD = [
   'File:BlueEyesWhiteDragon-LOB-EN-UR-UE-25thAnniversaryEdition.png',
   'File:BlueEyesWhiteDragon-LOB-EN-UR-UE.png',
   'File:BlueEyesWhiteDragon-LOB-NA-UR-1E.jpg',
+  'File:BlueEyesWhiteDragon-LOB-EU-UR-1E.png',
   'File:BlueEyesWhiteDragon-SDK-NA-UR-1E.png',
   'File:BlueEyesWhiteDragon-SDK-NA-C-UE.png',
   'File:BlueEyesWhiteDragon-LOB-KR-UR-1E.png'
@@ -20,6 +21,15 @@ describe('choosePrintingFile', () => {
     expect(
       choosePrintingFile(BEWD, { setCode: 'LOB-EN001', language: 'en', rarity: 'Ultra Rare' })
     ).toBe('BlueEyesWhiteDragon-LOB-EN-UR-UE.png')
+  })
+
+  it('follows the region in English set codes', () => {
+    expect(
+      choosePrintingFile(BEWD, { setCode: 'LOB-E001', language: 'en', rarity: 'Ultra Rare' })
+    ).toBe('BlueEyesWhiteDragon-LOB-EU-UR-1E.png')
+    expect(
+      choosePrintingFile(BEWD, { setCode: 'LOB-001', language: 'en', rarity: 'Ultra Rare' })
+    ).toBe('BlueEyesWhiteDragon-LOB-NA-UR-1E.jpg')
   })
 
   it('falls back to older English regions', () => {

@@ -3,6 +3,7 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { LayoutGrid, Table2 } from 'lucide-react'
 import { LANGUAGES } from '@shared/languages'
 import type { CollectionFilters, EntryView, SortKey } from '@shared/types'
+import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { TooltipProvider } from '@/components/ui/tooltip'
@@ -117,31 +118,33 @@ export function CollectionPage({ initialEntryId, onAddCard }: Props): React.JSX.
   return (
     <TooltipProvider>
       <div className="space-y-4 p-8">
-        <header className="flex flex-wrap items-end justify-between gap-2">
-          <div>
-            <h1 className="text-xl font-semibold">Collection</h1>
-            <p className="text-sm text-muted-foreground tabular-nums">
-              {list.length} {list.length === 1 ? 'entry' : 'entries'} · Prices updated{' '}
-              {formatRelative(stats.data?.pricesUpdatedAt ?? null)}
-            </p>
-          </div>
-          <ToggleGroup type="single" variant="outline" value={view} onValueChange={changeView}>
-            <ToggleGroupItem value="grid" aria-label="Grid view">
-              <LayoutGrid />
-            </ToggleGroupItem>
-            <ToggleGroupItem value="table" aria-label="Table view">
-              <Table2 />
-            </ToggleGroupItem>
-          </ToggleGroup>
-        </header>
+        <PageHeader>
+          <header className="flex flex-wrap items-end justify-between gap-2">
+            <div>
+              <h1 className="text-xl font-semibold">Collection</h1>
+              <p className="text-sm text-muted-foreground tabular-nums">
+                {list.length} {list.length === 1 ? 'entry' : 'entries'} · Prices updated{' '}
+                {formatRelative(stats.data?.pricesUpdatedAt ?? null)}
+              </p>
+            </div>
+            <ToggleGroup type="single" variant="outline" value={view} onValueChange={changeView}>
+              <ToggleGroupItem value="grid" aria-label="Grid view">
+                <LayoutGrid />
+              </ToggleGroupItem>
+              <ToggleGroupItem value="table" aria-label="Table view">
+                <Table2 />
+              </ToggleGroupItem>
+            </ToggleGroup>
+          </header>
 
-        <FilterBar
-          key={resetCount}
-          filters={filters}
-          facets={facets.data}
-          onChange={onChange}
-          onClear={clear}
-        />
+          <FilterBar
+            key={resetCount}
+            filters={filters}
+            facets={facets.data}
+            onChange={onChange}
+            onClear={clear}
+          />
+        </PageHeader>
 
         {entries.isSuccess && list.length === 0 ? (
           <div className="flex flex-col items-center gap-3 py-24 text-center">

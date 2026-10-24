@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft } from 'lucide-react'
 import { toast } from 'sonner'
@@ -6,6 +6,7 @@ import type { Language } from '@shared/languages'
 import type { CardSearchResult, CountMode, SetChecklist as SetChecklistData } from '@shared/types'
 import { CardArt } from '@/components/CardArt'
 import { LanguageTag } from '@/components/LanguageTag'
+import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { TooltipProvider } from '@/components/ui/tooltip'
@@ -42,11 +43,37 @@ const FILTERS: { value: TileFilter; label: string }[] = [
 
 function BackButton({ onBack }: { onBack: () => void }): React.JSX.Element {
   return (
-    <Button variant="ghost" size="sm" onClick={onBack}>
+    <Button variant="ghost" size="sm" onClick={onBack} title="Back to all sets (Esc)">
       <ArrowLeft />
       All sets
     </Button>
   )
+}
+
+/** Esc and the mouse's back button leave the set, unless a dialog or panel is open. */
+function useBackShortcuts(onBack: () => void): void {
+  const latest = useRef(onBack)
+  useEffect(() => {
+    latest.current = onBack
+  })
+  useEffect(() => {
+    const overlayOpen = (): boolean => document.querySelector('[role="dialog"]') !== null
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key !== 'Escape' || e.defaultPrevented || overlayOpen()) return
+      const t = e.target as HTMLElement | null
+      if (t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)) return
+      latest.current()
+    }
+    const onMouse = (e: MouseEvent): void => {
+      if (e.button === 3 && !overlayOpen()) latest.current()
+    }
+    window.addEventListener('keydown', onKey)
+    window.addEventListener('mouseup', onMouse)
+    return () => {
+      window.removeEventListener('keydown', onKey)
+      window.removeEventListener('mouseup', onMouse)
+    }
+  }, [])
 }
 
 export function SetChecklist({
@@ -69,6 +96,7 @@ export function SetChecklist({
   const [pending, setPending] = useState<Record<number, number>>({})
   const queues = useRef(new Map<number, ReturnType<typeof createSerialQueue>>())
   const qc = useQueryClient()
+  useBackShortcuts(onBack)
 
   const checklist = useQuery({
     queryKey: queryKeys.setChecklist(setName, language),
@@ -159,14 +187,63 @@ export function SetChecklist({
   return (
     <TooltipProvider>
       <div className="space-y-4 p-8">
-        <BackButton onBack={onBack} />
-        <header className="flex flex-wrap items-center gap-4">
-          <SetArt imageKey={data.set.imageKey} setCode={data.set.setCode} className="h-16 w-24" />
-          <div className="min-w-0 flex-1">
-            <h1 className="flex items-center gap-2 text-xl font-semibold">
+        <PageHeader>
+          <div className="flex flex-wrap items-center gap-2">
+            <BackButton onBack={onBack} />
+            <h1 className="flex min-w-0 items-center gap-2 text-xl font-semibold">
               <span className="truncate">{data.set.setName}</span>
               <LanguageTag language={data.set.language} />
             </h1>
+          </div>
+          <div className="flex flex-wrap items-center gap-3">
+            <ToggleGroup
+              type="single"
+              variant="outline"
+              size="sm"
+              value={filter}
+              onValueChange={(f) => {
+                if (f === 'all' || f === 'owned' || f === 'missing') setFilter(f)
+              }}
+            >
+              {FILTERS.map((f) => (
+                <ToggleGroupItem key={f.value} value={f.value}>
+                  {f.label}
+                </ToggleGroupItem>
+              ))}
+            </ToggleGroup>
+            <ToggleGroup
+              type="single"
+              variant="outline"
+              size="sm"
+              value={mode}
+              onValueChange={(m) => {
+                if (m === 'cards' || m === 'rarities') onModeChange(m)
+              }}
+            >
+              <ToggleGroupItem value="cards">Each card once</ToggleGroupItem>
+              <ToggleGroupItem value="rarities">Every rarity</ToggleGroupItem>
+            </ToggleGroup>
+            <div className="ml-auto flex items-center gap-3">
+              {bulk && (
+                <span className="text-sm text-muted-foreground">Changes save as you click.</span>
+              )}
+              <Button
+                variant={bulk ? 'default' : 'outline'}
+                size="sm"
+                onClick={() => {
+                  setBulk(!bulk)
+                  setFrozen(null)
+                }}
+              >
+                {bulk ? 'Done' : 'Bulk add'}
+              </Button>
+            </div>
+          </div>
+        </PageHeader>
+
+        <header className="flex flex-wrap items-center gap-4">
+          <SetArt imageKey={data.set.imageKey} setCode={data.set.setCode} className="h-16 w-24" />
+          <div className="min-w-0 flex-1">
             <p className="text-sm tabular-nums text-muted-foreground">
               {data.set.setCode}
               {data.set.tcgDate && ` · ${data.set.tcgDate}`} · {progress.owned} of {progress.total}
@@ -179,52 +256,7 @@ export function SetChecklist({
             ) : null}
             <SetProgress progress={progress} className="mt-2 max-w-md" />
           </div>
-          <ToggleGroup
-            type="single"
-            variant="outline"
-            size="sm"
-            value={mode}
-            onValueChange={(m) => {
-              if (m === 'cards' || m === 'rarities') onModeChange(m)
-            }}
-          >
-            <ToggleGroupItem value="cards">Each card once</ToggleGroupItem>
-            <ToggleGroupItem value="rarities">Every rarity</ToggleGroupItem>
-          </ToggleGroup>
         </header>
-
-        <div className="flex flex-wrap items-center gap-3">
-          <ToggleGroup
-            type="single"
-            variant="outline"
-            size="sm"
-            value={filter}
-            onValueChange={(f) => {
-              if (f === 'all' || f === 'owned' || f === 'missing') setFilter(f)
-            }}
-          >
-            {FILTERS.map((f) => (
-              <ToggleGroupItem key={f.value} value={f.value}>
-                {f.label}
-              </ToggleGroupItem>
-            ))}
-          </ToggleGroup>
-          <div className="ml-auto flex items-center gap-3">
-            {bulk && (
-              <span className="text-sm text-muted-foreground">Changes save as you click.</span>
-            )}
-            <Button
-              variant={bulk ? 'default' : 'outline'}
-              size="sm"
-              onClick={() => {
-                setBulk(!bulk)
-                setFrozen(null)
-              }}
-            >
-              {bulk ? 'Done' : 'Bulk add'}
-            </Button>
-          </div>
-        </div>
 
         {bulk ? (
           <ul className="grid grid-cols-[repeat(auto-fill,minmax(14rem,1fr))] gap-3">

@@ -33,8 +33,7 @@ export function SetsList({ sets, mode, view, onOpen }: Props): React.JSX.Element
               onClick={() => onOpen(s.setName, s.language)}
               className={cn(
                 'w-full rounded-xl border bg-card text-left transition-colors duration-150 hover:bg-muted/50 focus-visible:outline-2 focus-visible:outline-ring',
-                grid ? 'flex flex-col gap-3 p-3' : 'flex items-center gap-4 p-2.5',
-                !started && 'opacity-60'
+                grid ? 'flex flex-col gap-3 p-3' : 'flex items-center gap-4 p-2.5'
               )}
             >
               <SetArt
@@ -61,7 +60,9 @@ export function SetsList({ sets, mode, view, onOpen }: Props): React.JSX.Element
                     <span>
                       {p.owned} / {p.total}
                     </span>
-                    <span className="text-muted-foreground">{p.percent}%</span>
+                    <span className="text-muted-foreground">
+                      {started ? `${p.percent}%` : 'Not started'}
+                    </span>
                   </div>
                   <SetProgress progress={p} />
                   {p.complete && (

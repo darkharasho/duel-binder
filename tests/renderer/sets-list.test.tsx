@@ -98,13 +98,20 @@ describe('SetsPage languages', () => {
 })
 
 describe('SetsPage', () => {
-  it('shows the header summary and hides unstarted sets until All sets', async () => {
+  it('shows the header summary and lists unstarted sets by default', async () => {
     renderPage()
     expect(await screen.findByText("You've started 2 of 3 sets · 1 complete")).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /Legend of Blue Eyes/ })).not.toBeInTheDocument()
-    await userEvent.click(screen.getByRole('radio', { name: 'All sets' }))
     const lob = screen.getByRole('button', { name: /Legend of Blue Eyes/ })
     expect(lob).toHaveAttribute('data-started', 'false')
+    expect(within(lob).getByText('Not started')).toBeInTheDocument()
+  })
+
+  it('Started hides unstarted sets, and the filter is remembered', async () => {
+    renderPage()
+    await screen.findByRole('button', { name: /Legend of Blue Eyes/ })
+    await userEvent.click(screen.getByRole('radio', { name: 'Started' }))
+    expect(screen.queryByRole('button', { name: /Legend of Blue Eyes/ })).not.toBeInTheDocument()
+    expect(localStorage.getItem('sets.filter')).toBe('started')
   })
 
   it('marks complete sets', async () => {
@@ -144,6 +151,7 @@ describe('SetsPage', () => {
 
   it('empty started state offers Show all sets and Add card', async () => {
     const onAddCard = vi.fn()
+    localStorage.setItem('sets.filter', 'started')
     renderPage([LOB], onAddCard)
     expect(await screen.findByText("You haven't started any sets yet")).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Add card' }))
@@ -180,5 +188,16 @@ describe('SetArt', () => {
   it('uses the ygo-img set URL', () => {
     const { container } = renderWithProviders(<SetArt imageKey="LOB" setCode="LOB" />)
     expect(container.querySelector('img')).toHaveAttribute('src', 'ygo-img://set/LOB')
+  })
+
+  it('Esc leaves a set', async () => {
+    const api = createMockApi({
+      sets: { list: async () => [MR], checklist: async () => metalRaidersChecklist }
+    })
+    renderWithProviders(<SetsPage onAddCard={() => {}} onAddMissing={() => {}} />, { api })
+    await userEvent.click(await screen.findByRole('button', { name: /Metal Raiders/ }))
+    await screen.findByRole('button', { name: 'Alpha Dragon' })
+    await userEvent.keyboard('{Escape}')
+    expect(await screen.findByText(/You've started/)).toBeInTheDocument()
   })
 })

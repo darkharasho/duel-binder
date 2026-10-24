@@ -1,9 +1,11 @@
-import { useMemo, useState } from 'react'
+import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { LayoutGrid, List, Search } from 'lucide-react'
 import type { Language } from '@shared/languages'
 import type { CardSearchResult, CountMode } from '@shared/types'
 import { LanguageSelect } from '@/components/LanguageSelect'
+import { useMainScroll } from '@/components/mainScroll'
+import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -23,6 +25,7 @@ import { filterSets, setsHeader, sortSets, type SetFilter, type SetSort } from '
 type View = 'grid' | 'list'
 const VIEW_KEY = 'sets.view'
 const MODE_KEY = 'sets.countMode'
+const FILTER_KEY = 'sets.filter'
 
 function readView(): View {
   try {
@@ -37,6 +40,15 @@ function readMode(): CountMode {
     return localStorage.getItem(MODE_KEY) === 'rarities' ? 'rarities' : 'cards'
   } catch {
     return 'cards'
+  }
+}
+
+function readFilter(): SetFilter {
+  try {
+    const f = localStorage.getItem(FILTER_KEY)
+    return f === 'started' || f === 'complete' ? f : 'all'
+  } catch {
+    return 'all'
   }
 }
 
@@ -62,10 +74,25 @@ interface SetsPageProps {
 export function SetsPage({ onAddCard, onAddMissing }: SetsPageProps): React.JSX.Element {
   const [view, setView] = useState<View>(readView)
   const [mode, setMode] = useState<CountMode>(readMode)
-  const [filter, setFilter] = useState<SetFilter>('started')
+  const [filter, setFilterState] = useState<SetFilter>(readFilter)
   const [q, setQ] = useState('')
   const [sort, setSort] = useState<SetSort>('complete')
-  const [openSet, setOpenSet] = useState<{ setName: string; language: Language } | null>(null)
+  const [openSet, setOpenSetState] = useState<{ setName: string; language: Language } | null>(null)
+  const main = useMainScroll()
+  // Where the list was scrolled when a set was opened, restored on the way back.
+  const listScroll = useRef<number | null>(null)
+  const setOpenSet = (next: { setName: string; language: Language } | null): void => {
+    if (next && main) listScroll.current = main.get()
+    setOpenSetState(next)
+  }
+  useLayoutEffect(() => {
+    if (!main) return
+    if (openSet) main.set(0)
+    else if (listScroll.current !== null) {
+      main.set(listScroll.current)
+      listScroll.current = null
+    }
+  }, [openSet, main])
 
   const [language, setLanguage] = useLanguageFilter()
 
@@ -92,6 +119,10 @@ export function SetsPage({ onAddCard, onAddMissing }: SetsPageProps): React.JSX.
     setMode(m)
     persist(MODE_KEY, m)
   }
+  const setFilter = (f: SetFilter): void => {
+    setFilterState(f)
+    persist(FILTER_KEY, f)
+  }
   const changeFilter = (f: string): void => {
     if (f === 'started' || f === 'all' || f === 'complete') setFilter(f)
   }
@@ -114,75 +145,77 @@ export function SetsPage({ onAddCard, onAddMissing }: SetsPageProps): React.JSX.
 
   return (
     <div className="space-y-4 p-8">
-      <header className="flex flex-wrap items-end justify-between gap-2">
-        <div>
-          <h1 className="text-xl font-semibold">Sets</h1>
-          {sets.isSuccess && (
-            <p className="text-sm text-muted-foreground tabular-nums">
-              You&apos;ve started {header.started} of {header.total} sets · {header.complete}{' '}
-              complete
-            </p>
-          )}
-        </div>
-        <ToggleGroup type="single" variant="outline" value={view} onValueChange={changeView}>
-          <ToggleGroupItem value="grid" aria-label="Grid view">
-            <LayoutGrid />
-          </ToggleGroupItem>
-          <ToggleGroupItem value="list" aria-label="List view">
-            <List />
-          </ToggleGroupItem>
-        </ToggleGroup>
-      </header>
+      <PageHeader>
+        <header className="flex flex-wrap items-end justify-between gap-2">
+          <div>
+            <h1 className="text-xl font-semibold">Sets</h1>
+            {sets.isSuccess && (
+              <p className="text-sm text-muted-foreground tabular-nums">
+                You&apos;ve started {header.started} of {header.total} sets · {header.complete}{' '}
+                complete
+              </p>
+            )}
+          </div>
+          <ToggleGroup type="single" variant="outline" value={view} onValueChange={changeView}>
+            <ToggleGroupItem value="grid" aria-label="Grid view">
+              <LayoutGrid />
+            </ToggleGroupItem>
+            <ToggleGroupItem value="list" aria-label="List view">
+              <List />
+            </ToggleGroupItem>
+          </ToggleGroup>
+        </header>
 
-      <div className="flex flex-wrap items-center gap-2">
-        <ToggleGroup
-          type="single"
-          variant="outline"
-          size="sm"
-          value={filter}
-          onValueChange={changeFilter}
-        >
-          <ToggleGroupItem value="started">Started</ToggleGroupItem>
-          <ToggleGroupItem value="all">All sets</ToggleGroupItem>
-          <ToggleGroupItem value="complete">Complete</ToggleGroupItem>
-        </ToggleGroup>
-        <ToggleGroup
-          type="single"
-          variant="outline"
-          size="sm"
-          value={mode}
-          onValueChange={changeMode}
-        >
-          <ToggleGroupItem value="cards">Each card once</ToggleGroupItem>
-          <ToggleGroupItem value="rarities">Every rarity</ToggleGroupItem>
-        </ToggleGroup>
-        <div className="relative min-w-56 flex-1">
-          <Search
-            className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
-            aria-hidden
-          />
-          <Input
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
-            placeholder="Search sets by name or code"
-            aria-label="Search sets"
-            className="h-8 pl-8"
-          />
+        <div className="flex flex-wrap items-center gap-2">
+          <ToggleGroup
+            type="single"
+            variant="outline"
+            size="sm"
+            value={filter}
+            onValueChange={changeFilter}
+          >
+            <ToggleGroupItem value="started">Started</ToggleGroupItem>
+            <ToggleGroupItem value="all">All sets</ToggleGroupItem>
+            <ToggleGroupItem value="complete">Complete</ToggleGroupItem>
+          </ToggleGroup>
+          <ToggleGroup
+            type="single"
+            variant="outline"
+            size="sm"
+            value={mode}
+            onValueChange={changeMode}
+          >
+            <ToggleGroupItem value="cards">Each card once</ToggleGroupItem>
+            <ToggleGroupItem value="rarities">Every rarity</ToggleGroupItem>
+          </ToggleGroup>
+          <div className="relative min-w-56 flex-1">
+            <Search
+              className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+              aria-hidden
+            />
+            <Input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Search sets by name or code"
+              aria-label="Search sets"
+              className="h-8 pl-8"
+            />
+          </div>
+          <LanguageSelect value={language} onChange={setLanguage} available={available} />
+          <Select value={sort} onValueChange={(v) => setSort(v as SetSort)}>
+            <SelectTrigger size="sm" aria-label="Sort by" className="w-40">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {SORTS.map((s) => (
+                <SelectItem key={s.value} value={s.value}>
+                  {s.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
-        <LanguageSelect value={language} onChange={setLanguage} available={available} />
-        <Select value={sort} onValueChange={(v) => setSort(v as SetSort)}>
-          <SelectTrigger size="sm" aria-label="Sort by" className="w-40">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {SORTS.map((s) => (
-              <SelectItem key={s.value} value={s.value}>
-                {s.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
+      </PageHeader>
 
       {sets.isSuccess && visible.length === 0 ? (
         <div className="flex flex-col items-center gap-3 py-24 text-center">

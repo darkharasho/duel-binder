@@ -1,6 +1,9 @@
+import { useLayoutEffect, useMemo, useRef } from 'react'
 import { Layers, LayoutDashboard, Library, Plus, Settings } from 'lucide-react'
+import logo from '@/assets/logo.png'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { MainScrollContext, type MainScroll } from './mainScroll'
 import { SyncBanner } from './SyncBanner'
 
 export type Page = 'dashboard' | 'collection' | 'sets' | 'settings'
@@ -21,11 +24,32 @@ interface AppShellProps {
 }
 
 export function AppShell({ page, onNavigate, onAddCard, children }: AppShellProps): React.JSX.Element {
+  const mainRef = useRef<HTMLElement>(null)
+  const scroll = useMemo<MainScroll>(
+    () => ({
+      get: () => mainRef.current?.scrollTop ?? 0,
+      set: (top) => {
+        if (mainRef.current) mainRef.current.scrollTop = top
+      }
+    }),
+    []
+  )
+  // Each page opens at its top, not wherever the previous page was scrolled to.
+  useLayoutEffect(() => {
+    scroll.set(0)
+  }, [page, scroll])
   return (
     <div className="flex h-screen bg-background text-foreground tabular-nums">
       <aside className="flex w-[220px] shrink-0 flex-col gap-4 border-r p-3">
-        <div className="px-2 pt-2 text-sm font-semibold leading-tight tracking-tight">
-          Yugioh Collection Tracker
+        <div className="flex items-center gap-2.5 px-1 pt-1">
+          <img
+            src={logo}
+            alt=""
+            className="h-10 w-auto drop-shadow-[0_0_8px_rgb(139_92_246/0.5)]"
+          />
+          <span className="text-sm font-semibold leading-tight tracking-tight">
+            Yugioh Collection Tracker
+          </span>
         </div>
         <Button onClick={onAddCard} className="justify-start gap-2">
           <Plus className="size-4" aria-hidden />
@@ -52,7 +76,9 @@ export function AppShell({ page, onNavigate, onAddCard, children }: AppShellProp
       </aside>
       <div className="flex min-w-0 flex-1 flex-col">
         <SyncBanner />
-        <main className="min-h-0 flex-1 overflow-auto">{children}</main>
+        <main ref={mainRef} className="min-h-0 flex-1 overflow-auto">
+          <MainScrollContext.Provider value={scroll}>{children}</MainScrollContext.Provider>
+        </main>
       </div>
     </div>
   )

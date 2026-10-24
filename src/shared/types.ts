@@ -209,6 +209,7 @@ export interface SetSummary {
   tcgDate: string | null // 'YYYY-MM-DD'
   imageKey: string | null // file stem under images/sets/, already validated
   packImageKey: string | null // official pack render, under images/sets/ like imageKey
+  logoImageKey: string | null // English set logo from Yugipedia, under images/sets/ like imageKey
   coverImageId: number | null // artwork of the set's headline card (its rarest printing)
   totalCards: number
   ownedCards: number

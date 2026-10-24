@@ -301,6 +301,7 @@ export function SetChecklist({
           <SetArt
             imageKey={data.set.imageKey}
             packImageKey={data.set.packImageKey}
+            logoImageKey={data.set.logoImageKey}
             coverImageId={data.set.coverImageId}
             setCode={data.set.setCode}
             className="size-24 rounded-[3px] shadow-[0_8px_20px_rgb(0_0_0/0.5)]"

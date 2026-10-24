@@ -13,6 +13,7 @@ const set = (o: Partial<SetSummary>): SetSummary => ({
   tcgDate: '2002-06-26',
   imageKey: 'SET',
   packImageKey: null,
+  logoImageKey: null,
   coverImageId: null,
   totalCards: 1,
   ownedCards: 0,
@@ -187,30 +188,37 @@ describe('SetArt', () => {
     expect(screen.getByTestId('set-art-placeholder')).toHaveTextContent('LOB')
   })
 
-  it('prefers the headline card artwork and falls back to the pack photo', () => {
-    const { container } = renderWithProviders(
-      <SetArt imageKey="LOB" coverImageId={7} setCode="LOB" />
+  it('floats the logo over the blurred headline card, falling back to the pack', () => {
+    const { container, getByTestId } = renderWithProviders(
+      <SetArt
+        imageKey="LOB"
+        packImageKey="yc-abc"
+        logoImageKey="yp-logo"
+        coverImageId={7}
+        setCode="LOB"
+      />
     )
-    const img = container.querySelector('img')!
-    expect(img).toHaveAttribute('src', 'ygo-img://cropped/7')
-    fireEvent.error(img)
-    expect(container.querySelector('img')).toHaveAttribute('src', 'ygo-img://set/LOB')
+    expect(getByTestId('set-art-backdrop')).toHaveAttribute('src', 'ygo-img://cropped/7')
+    fireEvent.error(getByTestId('set-art-logo'))
+    expect(getByTestId('set-art-pack')).toHaveAttribute('src', 'ygo-img://set/yc-abc')
+    fireEvent.error(getByTestId('set-art-pack'))
+    expect(getByTestId('set-art-set')).toHaveAttribute('src', 'ygo-img://set/LOB')
+    fireEvent.error(getByTestId('set-art-set'))
+    expect(container).toHaveTextContent('LOB')
+    expect(getByTestId('set-art-backdrop')).toBeInTheDocument()
   })
 
-  it('shows the official pack render zoomed in, ahead of the headline card', () => {
-    const { container } = renderWithProviders(
-      <SetArt imageKey="LOB" packImageKey="yc-abc" coverImageId={7} setCode="LOB" />
+  it('blurs the pack behind itself when there is no headline card', () => {
+    const { getByTestId } = renderWithProviders(
+      <SetArt imageKey={null} packImageKey="yc-abc" setCode="LOB" />
     )
-    const pack = container.querySelector('img[loading="lazy"]')!
-    expect(pack).toHaveAttribute('src', 'ygo-img://set/yc-abc')
-    expect(pack).toHaveClass('object-cover')
-    fireEvent.error(pack)
-    expect(container.querySelector('img')).toHaveAttribute('src', 'ygo-img://cropped/7')
+    expect(getByTestId('set-art-backdrop')).toHaveAttribute('src', 'ygo-img://set/yc-abc')
+    expect(getByTestId('set-art-pack')).toHaveAttribute('src', 'ygo-img://set/yc-abc')
   })
 
   it('uses the ygo-img set URL', () => {
-    const { container } = renderWithProviders(<SetArt imageKey="LOB" setCode="LOB" />)
-    expect(container.querySelector('img')).toHaveAttribute('src', 'ygo-img://set/LOB')
+    renderWithProviders(<SetArt imageKey="LOB" setCode="LOB" />)
+    expect(screen.getByTestId('set-art-set')).toHaveAttribute('src', 'ygo-img://set/LOB')
   })
 
   it('Esc leaves a set', async () => {

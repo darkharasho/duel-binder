@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query'
 import type { ChecklistCard } from '@shared/types'
+import { CardDetails } from '@/components/CardDetails'
 import { PanelCardArt } from '@/components/PanelCardArt'
 import { Button } from '@/components/ui/button'
 import {
@@ -62,6 +63,8 @@ export function SetCardPanel({
             {setName} · {card.numberLabel}
           </p>
 
+          <CardDetails card={info} />
+
           <section aria-label="Copies in this set" className="space-y-2">
             <h3 className="text-sm font-medium">
               {card.owned > 0 ? `You have ${card.owned}` : 'You have none yet'}
@@ -81,7 +84,6 @@ export function SetCardPanel({
             </Button>
           )}
 
-          {info?.desc && <p className="whitespace-pre-line text-sm">{info.desc}</p>}
         </div>
       </SheetContent>
     </Sheet>

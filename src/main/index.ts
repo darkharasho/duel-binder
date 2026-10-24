@@ -15,6 +15,7 @@ import { createPriceService } from './prices/service'
 import { refreshIntlPrices } from './prices/refresh'
 import { createYugipediaClient } from './yugipedia/client'
 import { createPrintingArtResolver } from './yugipedia/artResolver'
+import { refreshSetLogos, shouldRefreshSetLogos } from './yugipedia/setLogos'
 import { refreshPackArt, shouldRefreshPackArt } from './konami/packArt'
 import { createTcgplayerLookup, refreshTcgCatalog, shouldRefreshTcgCatalog } from './tcgplayer/catalog'
 import { recordSnapshot } from './repo/stats'
@@ -217,6 +218,9 @@ function bootstrap(): void {
     }
     if (hasSetData(db) && shouldRefreshPackArt(db, new Date())) {
       if ((await refreshPackArt(db, { version: app.getVersion() })) > 0) emitDataChanged()
+    }
+    if (hasSetData(db) && shouldRefreshSetLogos(db, new Date())) {
+      if ((await refreshSetLogos(db, yugipedia)) > 0) emitDataChanged()
     }
     const { n } = db.prepare('SELECT count(*) AS n FROM cards').get() as { n: number }
     if (n > 0 && shouldRefreshIntl(db, new Date())) {

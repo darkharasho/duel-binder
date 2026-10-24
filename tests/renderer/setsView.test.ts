@@ -20,6 +20,7 @@ const mk = (o: Partial<SetSummary>): SetSummary => ({
   tcgDate: null,
   imageKey: null,
   packImageKey: null,
+  logoImageKey: null,
   coverImageId: null,
   totalCards: 100,
   ownedCards: 0,

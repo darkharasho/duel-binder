@@ -8,12 +8,13 @@ import { MainScrollContext, type MainScroll } from './mainScroll'
 import { SyncBanner } from './SyncBanner'
 import { TitleBar } from './TitleBar'
 
-export type Page = 'dashboard' | 'collection' | 'sets' | 'settings'
+export type Page = 'dashboard' | 'collection' | 'browse' | 'sets' | 'settings'
 export type NavigateFn = (page: Page, opts?: { entryId?: number }) => void
 
 const NAV = [
   { page: 'dashboard', label: 'Dashboard' },
   { page: 'collection', label: 'Collection' },
+  { page: 'browse', label: 'Browse' },
   { page: 'sets', label: 'Sets' },
   { page: 'settings', label: 'Settings' }
 ] as const

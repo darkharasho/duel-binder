@@ -1,6 +1,6 @@
 import type { Api } from '@shared/ipc'
 import type { Language } from '@shared/languages'
-import type { CollectionFilters } from '@shared/types'
+import type { BrowseFilters, CollectionFilters } from '@shared/types'
 
 /** Typed accessor for `window.api`; resolved lazily so tests can install a mock first. */
 export const api: Api = new Proxy({} as Api, {
@@ -20,7 +20,9 @@ export const queryKeys = {
   card: (id: number) => ['card', id] as const,
   forCard: (id: number) => ['forCard', id] as const,
   update: ['update'] as const,
-  priceSettings: ['prices', 'settings'] as const
+  priceSettings: ['prices', 'settings'] as const,
+  browse: (f: Omit<BrowseFilters, 'offset' | 'limit'>) => ['browse', f] as const,
+  browseFacets: ['browse', 'facets'] as const
 }
 
 /** Query-key prefixes to invalidate after any collection mutation. */
@@ -29,5 +31,6 @@ export const mutationInvalidationKeys = [
   ['facets'],
   ['stats'],
   ['forCard'],
-  ['sets']
+  ['sets'],
+  ['browse']
 ] as const

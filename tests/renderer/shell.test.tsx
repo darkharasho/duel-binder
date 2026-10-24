@@ -42,7 +42,7 @@ describe('AppShell sets nav', () => {
     const names = within(screen.getByRole('navigation', { name: 'Main' }))
       .getAllByRole('button')
       .map((b) => b.textContent)
-    expect(names).toEqual(['Dashboard', 'Collection', 'Sets', 'Settings'])
+    expect(names).toEqual(['Dashboard', 'Collection', 'Browse', 'Sets', 'Settings'])
     await userEvent.click(screen.getByRole('button', { name: 'Sets' }))
     expect(screen.getByRole('heading', { name: 'Sets' })).toBeInTheDocument()
   })

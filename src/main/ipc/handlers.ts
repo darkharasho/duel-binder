@@ -8,6 +8,7 @@ import type { YgoClient } from '../ygo/client'
 import type { ImageCache } from '../images/cache'
 import { getSyncStatus, runSync } from '../sync/sync'
 import { getCardDetail, searchCards } from '../repo/cards'
+import { browseCards, browseFacets } from '../repo/browse'
 import {
   CollectionError,
   addEntry,
@@ -82,6 +83,8 @@ export function createHandlers({
   return {
     'cards:search': async (q: string) => searchCards(db, q),
     'cards:get': async (cardId: number) => getCardDetail(db, cardId),
+    'cards:browse': async (f) => browseCards(db, f),
+    'cards:browseFacets': async () => browseFacets(db),
     'collection:list': async (f) => listEntries(db, f),
     'collection:forCard': async (cardId: number) => entriesForCard(db, cardId),
     'collection:add': async (input) => {

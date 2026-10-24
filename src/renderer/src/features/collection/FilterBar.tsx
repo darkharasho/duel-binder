@@ -1,14 +1,9 @@
 import { useEffect, useState } from 'react'
-import { ArrowDownAZ, ArrowUpAZ, ChevronDown, Search } from 'lucide-react'
+import { ArrowDownAZ, ArrowUpAZ, Search } from 'lucide-react'
 import type { CollectionFilters, Facets, SortKey } from '@shared/types'
 import { Button } from '@/components/ui/button'
-import {
-  DropdownMenu,
-  DropdownMenuCheckboxItem,
-  DropdownMenuContent,
-  DropdownMenuTrigger
-} from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
+import { FacetMenu } from '@/components/FacetMenu'
 import { LanguageSelect } from '@/components/LanguageSelect'
 import { useLanguageFilter } from '@/lib/languageFilter'
 import {
@@ -41,52 +36,6 @@ interface Props {
   facets: Facets | undefined
   onChange: (patch: Partial<CollectionFilters>) => void
   onClear: () => void
-}
-
-function FacetMenu({
-  label,
-  options,
-  selected,
-  onChange
-}: {
-  label: string
-  options: string[]
-  selected: string[]
-  onChange: (next: string[] | undefined) => void
-}): React.JSX.Element {
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button variant="ghost" size="sm" aria-label={label} className="text-foreground/80">
-          {label}
-          {selected.length > 0 && (
-            <span className="rounded-full bg-primary px-1.5 text-xs tabular-nums text-primary-foreground">
-              {selected.length}
-            </span>
-          )}
-          <ChevronDown className="size-3.5" />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="max-h-72 overflow-y-auto">
-        {options.length === 0 && (
-          <div className="px-2 py-1.5 text-sm text-muted-foreground">No options</div>
-        )}
-        {options.map((opt) => (
-          <DropdownMenuCheckboxItem
-            key={opt}
-            checked={selected.includes(opt)}
-            onSelect={(e) => e.preventDefault()}
-            onCheckedChange={(on) => {
-              const next = on ? [...selected, opt] : selected.filter((s) => s !== opt)
-              onChange(next.length > 0 ? next : undefined)
-            }}
-          >
-            {opt}
-          </DropdownMenuCheckboxItem>
-        ))}
-      </DropdownMenuContent>
-    </DropdownMenu>
-  )
 }
 
 function parseLevel(v: string): number | undefined {

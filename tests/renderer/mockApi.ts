@@ -12,7 +12,19 @@ const emptyStatus = { state: 'idle', lastSyncAt: null, dbVersion: null, cardCoun
 
 export function createMockApi(overrides: DeepPartial<Api> = {}): Api {
   const base = {
-    cards: { search: vi.fn(async () => []), get: vi.fn(async () => null) },
+    cards: {
+      search: vi.fn(async () => []),
+      get: vi.fn(async () => null),
+      browse: vi.fn(async () => ({ cards: [], total: 0 })),
+      browseFacets: vi.fn(async () => ({
+        cardTypes: [],
+        attributes: [],
+        races: [],
+        archetypes: [],
+        setNames: [],
+        rarities: []
+      }))
+    },
     collection: {
       list: vi.fn(async () => []),
       forCard: vi.fn(async () => []),

@@ -97,6 +97,62 @@ export interface CollectionFilters {
   dir: 'asc' | 'desc'
 }
 
+export type BrowseSort = 'name' | 'released' | 'price' | 'atk' | 'def' | 'level'
+
+/** Filters for the Browse page: every card in the database, not just owned ones. */
+export interface BrowseFilters {
+  q?: string
+  cardTypes?: string[]
+  attributes?: string[]
+  races?: string[]
+  archetypes?: string[]
+  setNames?: string[]
+  rarities?: string[]
+  levelMin?: number
+  levelMax?: number
+  owned?: 'all' | 'owned' | 'missing'
+  sort: BrowseSort
+  dir: 'asc' | 'desc'
+  offset?: number
+  limit?: number
+}
+
+export interface BrowseCard {
+  id: number
+  name: string
+  type: string
+  frameType: string
+  attribute: string | null
+  race: string
+  level: number | null
+  linkval: number | null
+  atk: number | null
+  def: number | null
+  imageId: number
+  /** TCGplayer market price for the card (cheapest English printing), when known. */
+  price: number | null
+  /** Earliest English release date across its printings ('YYYY-MM-DD'). */
+  releasedAt: string | null
+  /** Copies owned in any printing or language. */
+  owned: number
+  /** An English printing to preselect when adding the card, if it has one. */
+  defaultPrintingId: number | null
+}
+
+export interface BrowsePage {
+  cards: BrowseCard[]
+  total: number
+}
+
+export interface BrowseFacets {
+  cardTypes: string[]
+  attributes: string[]
+  races: string[]
+  archetypes: string[]
+  setNames: string[]
+  rarities: string[]
+}
+
 export interface Facets {
   cardTypes: string[]
   attributes: string[]

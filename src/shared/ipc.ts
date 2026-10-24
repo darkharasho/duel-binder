@@ -1,6 +1,9 @@
 import type { Language } from './languages'
 import type {
   AddEntryInput,
+  BrowseFacets,
+  BrowseFilters,
+  BrowsePage,
   CardDetail,
   CardSearchResult,
   ChecklistCard,
@@ -21,6 +24,9 @@ export interface Api {
   cards: {
     search(q: string): Promise<CardSearchResult[]>
     get(cardId: number): Promise<CardDetail | null>
+    /** One page of every card in the database. */
+    browse(f: BrowseFilters): Promise<BrowsePage>
+    browseFacets(): Promise<BrowseFacets>
   }
   collection: {
     list(f: CollectionFilters): Promise<EntryView[]>
@@ -79,6 +85,8 @@ export interface Api {
 export const INVOKE_CHANNELS = [
   'cards:search',
   'cards:get',
+  'cards:browse',
+  'cards:browseFacets',
   'collection:list',
   'collection:forCard',
   'collection:add',

@@ -18,7 +18,12 @@ function LinuxControls(): React.JSX.Element {
   )
   return (
     <div className="flex items-center gap-3 pr-3">
-      <button type="button" aria-label="Minimize" className={button} onClick={() => void api.window.minimize()}>
+      <button
+        type="button"
+        aria-label="Minimize"
+        className={button}
+        onClick={() => void api.window.minimize()}
+      >
         <Minus />
       </button>
       <button
@@ -29,7 +34,12 @@ function LinuxControls(): React.JSX.Element {
       >
         <Square className={maximized ? 'size-3!' : undefined} />
       </button>
-      <button type="button" aria-label="Close" className={button} onClick={() => void api.window.close()}>
+      <button
+        type="button"
+        aria-label="Close"
+        className={button}
+        onClick={() => void api.window.close()}
+      >
         <X />
       </button>
     </div>

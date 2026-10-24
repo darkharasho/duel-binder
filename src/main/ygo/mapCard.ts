@@ -37,16 +37,16 @@ export function mapApiCard(
     card: {
       id: c.id,
       name: c.name,
-      type: c.type,
-      frameType: c.frameType,
-      race: c.race,
+      type: c.type ?? '',
+      frameType: c.frameType ?? '',
+      race: c.race ?? '',
       attribute: c.attribute ?? null,
       level: c.level ?? null,
       linkval: c.linkval ?? null,
       atk: c.atk ?? null,
       def: c.def ?? null,
       archetype: c.archetype ?? null,
-      desc: c.desc,
+      desc: c.desc ?? '',
       tcgplayerPrice: parsePrice(c.card_prices?.[0]?.tcgplayer_price)
     },
     printings: (c.card_sets ?? []).map((s) => ({
@@ -57,7 +57,7 @@ export function mapApiCard(
       setRarityCode: s.set_rarity_code ?? '',
       setPrice: parsePrice(s.set_price)
     })),
-    images: (c.card_images ?? []).map((img, i) => ({
+    images: (c.card_images ?? []).filter((img) => Number.isInteger(img?.id)).map((img, i) => ({
       imageId: img.id,
       cardId: c.id,
       sortOrder: i

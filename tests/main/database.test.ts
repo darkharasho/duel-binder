@@ -1,3 +1,7 @@
+import Database from 'better-sqlite3'
+import { mkdtempSync, rmSync } from 'node:fs'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { openDatabase, migrate } from '../../src/main/db/database'
 import { getMeta, setMeta } from '../../src/main/db/meta'
 
@@ -51,5 +55,23 @@ describe('database', () => {
     expect(getMeta(db, 'last_sync_at')).toBe('2026-10-23T00:00:00Z')
     expect(getMeta(db, 'db_version')).toBeNull()
     db.close()
+  })
+})
+
+describe('openDatabase failure', () => {
+  test('closes the handle when migration throws', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'ygo-db-'))
+    try {
+      const file = join(dir, 'collection.db')
+      const pre = new Database(file)
+      pre.exec('CREATE TABLE cards (x INTEGER)') // makes SCHEMA_V1 fail
+      pre.close()
+      const close = vi.spyOn(Database.prototype, 'close')
+      expect(() => openDatabase(file)).toThrow(/already exists/)
+      expect(close).toHaveBeenCalledTimes(1)
+      close.mockRestore()
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
   })
 })

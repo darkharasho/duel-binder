@@ -2,6 +2,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { api, queryKeys } from '@/lib/api'
+import { formatRelative } from '@/lib/format'
 import { isSyncing, useSyncStatus } from './useSyncStatus'
 
 export function SyncBanner(): React.JSX.Element | null {
@@ -23,7 +24,10 @@ export function SyncBanner(): React.JSX.Element | null {
     message = 'Downloading card database…'
     showRetry = false
   } else if (status.state === 'error') {
-    message = `Couldn't update card data: ${status.error ?? 'unknown error'}`
+    message =
+      status.cardCount > 0
+        ? `Offline — using saved card data (prices updated ${formatRelative(status.lastSyncAt)})`
+        : 'No card data yet. Connect to the internet and download the card database to get started.'
   } else if (status.cardCount === 0) {
     message = 'No card data yet. Connect to the internet and download the card database to get started.'
   } else {

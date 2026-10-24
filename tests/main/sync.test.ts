@@ -126,3 +126,46 @@ test('FTS finds synced names', async () => {
   const rows = db.prepare(`SELECT rowid FROM cards_fts WHERE cards_fts MATCH 'magician'`).all()
   expect(rows).toEqual([{ rowid: 46986414 }])
 })
+
+test('getSyncStatus is live mid-sync and keeps the last error until the next success', async () => {
+  let midSync: string | null = null
+  const slow: YgoClient = {
+    fetchDbVersion: async () => ({ databaseVersion: '1', lastUpdate: '' }),
+    fetchCardInfo: async () => {
+      midSync = getSyncStatus(db).state
+      return cards
+    }
+  }
+  await runSync(db, slow, () => {}, NOW)
+  expect(midSync).toBe('downloading')
+  expect(getSyncStatus(db)).toMatchObject({ state: 'idle', error: null })
+
+  const failing: YgoClient = {
+    fetchDbVersion: async () => {
+      throw new Error('offline')
+    },
+    fetchCardInfo: async () => cards
+  }
+  await runSync(db, failing, () => {}, NOW)
+  expect(getSyncStatus(db)).toMatchObject({ state: 'error', error: 'offline', cardCount: 3 })
+
+  await runSync(db, okClient(), () => {}, NOW)
+  expect(getSyncStatus(db)).toMatchObject({ state: 'idle', error: null })
+})
+
+test('malformed API records are skipped without failing the sync', async () => {
+  const bad = [
+    { id: 1, name: 'No Strings' },
+    { id: Number.NaN, name: 'NaN id', card_images: [] },
+    { id: 2 },
+    ...cards
+  ] as unknown as ApiCard[]
+  const status = await runSync(db, okClient(bad), () => {}, NOW)
+  expect(status).toMatchObject({ state: 'idle', cardCount: 4 })
+  expect(db.prepare('SELECT type, frame_type, race, "desc" FROM cards WHERE id = 1').get()).toEqual({
+    type: '',
+    frame_type: '',
+    race: '',
+    desc: ''
+  })
+})

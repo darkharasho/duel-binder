@@ -13,14 +13,18 @@ export function shouldSync(lastSyncAt: string | null, now: Date): boolean {
   return now.getTime() - last >= SYNC_INTERVAL_MS
 }
 
+/** Live state per database: the in-flight phase, or the last error until the next success. */
+const live = new WeakMap<Database.Database, { state: SyncStatus['state']; error: string | null }>()
+
 export function getSyncStatus(db: Database.Database): SyncStatus {
   const { n } = db.prepare('SELECT count(*) AS n FROM cards').get() as { n: number }
+  const l = live.get(db)
   return {
-    state: 'idle',
+    state: l?.state ?? 'idle',
     lastSyncAt: getMeta(db, 'last_sync_at'),
     dbVersion: getMeta(db, 'db_version'),
     cardCount: n,
-    error: null
+    error: l?.error ?? null
   }
 }
 
@@ -46,7 +50,8 @@ async function doSync(
   now: Date
 ): Promise<SyncStatus> {
   const emit = (state: SyncStatus['state']): SyncStatus => {
-    const status = { ...getSyncStatus(db), state }
+    live.set(db, { state, error: null })
+    const status = getSyncStatus(db)
     onProgress(status)
     return status
   }
@@ -57,15 +62,16 @@ async function doSync(
     const payload = await client.fetchCardInfo()
     emit('saving')
     saveCards(db, payload, now.toISOString(), version.databaseVersion)
+    live.delete(db)
     const done = getSyncStatus(db)
     onProgress(done)
     return done
   } catch (err) {
-    const status: SyncStatus = {
-      ...getSyncStatus(db),
+    live.set(db, {
       state: 'error',
       error: (err instanceof Error && err.message) || 'Card database sync failed'
-    }
+    })
+    const status = getSyncStatus(db)
     onProgress(status)
     return status
   }
@@ -78,7 +84,7 @@ function saveCards(
   dbVersion: string
 ): void {
   const valid = payload.filter(
-    (c) => c && typeof c.id === 'number' && typeof c.name === 'string'
+    (c) => c && Number.isInteger(c.id) && typeof c.name === 'string' && c.name !== ''
   )
   if (valid.length === 0) throw new Error('The card database response contained no cards')
 

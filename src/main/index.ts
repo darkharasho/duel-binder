@@ -17,8 +17,10 @@ import { createHandlers, registerIpc, type AppDeps } from './ipc/handlers'
 
 registerImageScheme()
 
+let mainWindow: BrowserWindow | null = null
+
 function createWindow(): void {
-  const mainWindow = new BrowserWindow({
+  const win = new BrowserWindow({
     width: 1280,
     height: 800,
     minWidth: 1100,
@@ -35,11 +37,22 @@ function createWindow(): void {
     }
   })
 
-  mainWindow.on('ready-to-show', () => {
-    mainWindow.show()
+  mainWindow = win
+  win.on('closed', () => {
+    if (mainWindow === win) mainWindow = null
+  })
+  win.on('ready-to-show', () => {
+    win.show()
   })
 
-  mainWindow.webContents.setWindowOpenHandler((details) => {
+  // Never let the window navigate away from the app (e.g. a dropped file or link).
+  const devUrl = is.dev ? process.env['ELECTRON_RENDERER_URL'] : undefined
+  win.webContents.on('will-navigate', (event, url) => {
+    if (devUrl && url.startsWith(devUrl)) return
+    event.preventDefault()
+  })
+
+  win.webContents.setWindowOpenHandler((details) => {
     try {
       if (new URL(details.url).protocol === 'https:') void shell.openExternal(details.url)
     } catch {
@@ -49,9 +62,9 @@ function createWindow(): void {
   })
 
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
-    mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
+    win.loadURL(process.env['ELECTRON_RENDERER_URL'])
   } else {
-    mainWindow.loadFile(join(__dirname, '../renderer/index.html'))
+    win.loadFile(join(__dirname, '../renderer/index.html'))
   }
 }
 
@@ -59,7 +72,7 @@ function broadcast(channel: string, payload: unknown): void {
   for (const win of BrowserWindow.getAllWindows()) win.webContents.send(channel, payload)
 }
 
-app.whenReady().then(() => {
+function bootstrap(): void {
   electronApp.setAppUserModelId('com.darkharasho.yugiohcollectiontracker')
 
   app.on('browser-window-created', (_, window) => {
@@ -85,11 +98,13 @@ app.whenReady().then(() => {
     enabled: app.isPackaged
   })
   app.on('before-quit', () => updater.stop())
+  app.on('will-quit', () => db.close())
 
   const appDeps: AppDeps = {
     version: () => app.getVersion(),
     openDataFolder: async () => {
-      await shell.openPath(userData)
+      const error = await shell.openPath(userData)
+      if (error) throw new Error(`Couldn't open the data folder: ${error}`)
     },
     backupDatabase: async () => {
       const now = new Date()
@@ -122,7 +137,31 @@ app.whenReady().then(() => {
   app.on('activate', function () {
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
-})
+}
+
+const gotLock = app.requestSingleInstanceLock()
+if (!gotLock) {
+  app.quit()
+} else {
+  app.on('second-instance', () => {
+    if (!mainWindow) return
+    if (mainWindow.isMinimized()) mainWindow.restore()
+    mainWindow.focus()
+  })
+
+  app.whenReady().then(() => {
+    try {
+      bootstrap()
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e)
+      dialog.showErrorBox(
+        "Couldn't open your collection",
+        `${message}\n\nData folder: ${app.getPath('userData')}`
+      )
+      app.quit()
+    }
+  })
+}
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {

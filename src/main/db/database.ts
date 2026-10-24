@@ -30,7 +30,12 @@ export function openDatabase(file: string): Database.Database {
   const db = new Database(file)
   db.pragma('journal_mode = WAL')
   db.pragma('foreign_keys = ON')
-  migrate(db)
+  try {
+    migrate(db)
+  } catch (e) {
+    db.close()
+    throw e
+  }
   return db
 }
 

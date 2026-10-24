@@ -47,10 +47,22 @@ describe('SyncBanner', () => {
     await waitFor(() => expect(screen.queryByText(/No card data yet/)).not.toBeInTheDocument())
   })
 
-  it('shows the error text', async () => {
-    const api = createMockApi({ sync: { status: async () => status({ state: 'error', error: 'HTTP 500' }) } })
+  it('says offline with saved data when a sync failed but cards exist', async () => {
+    const api = createMockApi({
+      sync: { status: async () => status({ state: 'error', error: 'HTTP 500', cardCount: 5, lastSyncAt: new Date().toISOString() }) }
+    })
     renderWithProviders(<App />, { api })
-    expect(await screen.findByText("Couldn't update card data: HTTP 500")).toBeInTheDocument()
+    expect(
+      await screen.findByText('Offline — using saved card data (prices updated just now)')
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument()
+  })
+
+  it('asks to connect when the first sync failed with no cards', async () => {
+    const api = createMockApi({ sync: { status: async () => status({ state: 'error', error: 'HTTP 500', cardCount: 0 }) } })
+    renderWithProviders(<App />, { api })
+    expect(await screen.findByText(/Connect to the internet/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument()
   })
 
   it('shows progress while downloading', async () => {

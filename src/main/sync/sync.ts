@@ -2,6 +2,7 @@ import type Database from 'better-sqlite3'
 import type { SyncStatus } from '@shared/types'
 import { getMeta, setMeta } from '../db/meta'
 import type { YgoClient } from '../ygo/client'
+import { refreshSets } from './sets'
 import { mapApiCard, type ApiCard } from '../ygo/mapCard'
 
 export const SYNC_INTERVAL_MS = 24 * 60 * 60 * 1000
@@ -62,6 +63,7 @@ async function doSync(
     const payload = await client.fetchCardInfo()
     emit('saving')
     saveCards(db, payload, now.toISOString(), version.databaseVersion)
+    await refreshSets(db, client)
     live.delete(db)
     const done = getSyncStatus(db)
     onProgress(done)

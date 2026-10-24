@@ -5,7 +5,7 @@ interface Migration {
   sql: string
 }
 
-const SCHEMA_V1 = `
+export const SCHEMA_V1 = `
 CREATE TABLE cards (id INTEGER PRIMARY KEY, name TEXT NOT NULL, type TEXT NOT NULL, frame_type TEXT NOT NULL,
   race TEXT NOT NULL, attribute TEXT, level INTEGER, linkval INTEGER, atk INTEGER, def INTEGER, archetype TEXT,
   "desc" TEXT NOT NULL, tcgplayer_price REAL, updated_at TEXT NOT NULL);
@@ -24,7 +24,15 @@ CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 `
 
 /** Ordered schema steps. Append new versions to the end; never edit a shipped step. */
-const MIGRATIONS: Migration[] = [{ version: 1, sql: SCHEMA_V1 }]
+const SCHEMA_V2 = `
+CREATE TABLE sets (set_name TEXT PRIMARY KEY, set_code TEXT NOT NULL, tcg_date TEXT, image_url TEXT);
+CREATE INDEX idx_printings_set_name ON card_printings(set_name);
+`
+
+const MIGRATIONS: Migration[] = [
+  { version: 1, sql: SCHEMA_V1 },
+  { version: 2, sql: SCHEMA_V2 }
+]
 
 export function openDatabase(file: string): Database.Database {
   const db = new Database(file)

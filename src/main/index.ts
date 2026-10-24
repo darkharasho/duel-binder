@@ -9,6 +9,7 @@ import { openDatabase } from './db/database'
 import { getMeta } from './db/meta'
 import { createYgoClient } from './ygo/client'
 import { runSync, shouldSync } from './sync/sync'
+import { hasSetData, refreshSets } from './sync/sets'
 import { recordSnapshot } from './repo/stats'
 import { createImageCache } from './images/cache'
 import { handleImageProtocol, registerImageScheme } from './images/protocol'
@@ -132,6 +133,8 @@ function bootstrap(): void {
     void runSync(db, client, emitSync).then((status) => {
       if (status.state === 'idle') recordSnapshot(db)
     }).catch((e) => console.error('Startup sync failed', e))
+  } else if (!hasSetData(db)) {
+    void refreshSets(db, client)
   }
 
   app.on('activate', function () {

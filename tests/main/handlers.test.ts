@@ -10,7 +10,7 @@ async function makeHandlers() {
   const db = await seededDb()
   const handlers = createHandlers({
     db,
-    client: { fetchDbVersion: vi.fn(), fetchCardInfo: vi.fn() },
+    client: { fetchDbVersion: vi.fn(), fetchCardInfo: vi.fn(), fetchCardSets: vi.fn() },
     images: { get: vi.fn(), sizeBytes: async () => 0, clear: async () => {} },
     emitSync: () => {},
     app: {

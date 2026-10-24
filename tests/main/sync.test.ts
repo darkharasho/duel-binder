@@ -11,6 +11,7 @@ const NOW = new Date('2026-10-23T12:00:00.000Z')
 const HOUR = 60 * 60 * 1000
 
 const okClient = (data: ApiCard[] = cards): YgoClient => ({
+  fetchCardSets: async () => [],
   fetchDbVersion: async () => ({ databaseVersion: '123.45', lastUpdate: '2026-10-22' }),
   fetchCardInfo: async () => data
 })
@@ -78,6 +79,7 @@ test('vanished printing referenced by an entry is flagged, unreferenced one dele
 test('failure leaves data intact', async () => {
   await runSync(db, okClient(), () => {}, NOW)
   const bad: YgoClient = {
+    fetchCardSets: async () => [],
     fetchDbVersion: async () => ({ databaseVersion: '9', lastUpdate: '' }),
     fetchCardInfo: async () => {
       throw new Error('HTTP 500')
@@ -104,6 +106,7 @@ test('malformed payload elements are skipped and an empty payload is an error', 
 test('concurrent calls share one run', async () => {
   let calls = 0
   const client: YgoClient = {
+    fetchCardSets: async () => [],
     fetchDbVersion: async () => ({ databaseVersion: '1', lastUpdate: '' }),
     fetchCardInfo: async () => (calls++, cards)
   }
@@ -130,6 +133,7 @@ test('FTS finds synced names', async () => {
 test('getSyncStatus is live mid-sync and keeps the last error until the next success', async () => {
   let midSync: string | null = null
   const slow: YgoClient = {
+    fetchCardSets: async () => [],
     fetchDbVersion: async () => ({ databaseVersion: '1', lastUpdate: '' }),
     fetchCardInfo: async () => {
       midSync = getSyncStatus(db).state
@@ -141,6 +145,7 @@ test('getSyncStatus is live mid-sync and keeps the last error until the next suc
   expect(getSyncStatus(db)).toMatchObject({ state: 'idle', error: null })
 
   const failing: YgoClient = {
+    fetchCardSets: async () => [],
     fetchDbVersion: async () => {
       throw new Error('offline')
     },

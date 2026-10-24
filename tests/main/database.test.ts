@@ -2,15 +2,33 @@ import Database from 'better-sqlite3'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { openDatabase, migrate } from '../../src/main/db/database'
+import { openDatabase, migrate, SCHEMA_V1 } from '../../src/main/db/database'
 import { getMeta, setMeta } from '../../src/main/db/meta'
 
 describe('database', () => {
-  test('migrate sets user_version 1 and is idempotent', () => {
+  test('migrate sets user_version 2 and is idempotent', () => {
     const db = openDatabase(':memory:')
-    expect(db.pragma('user_version', { simple: true })).toBe(1)
+    expect(db.pragma('user_version', { simple: true })).toBe(2)
     expect(() => migrate(db)).not.toThrow()
-    expect(db.pragma('user_version', { simple: true })).toBe(1)
+    expect(db.pragma('user_version', { simple: true })).toBe(2)
+    db.close()
+  })
+
+  test('creates the sets table', () => {
+    const db = openDatabase(':memory:')
+    expect(db.prepare("SELECT name FROM sqlite_master WHERE name = 'sets'").get()).toBeTruthy()
+    db.close()
+  })
+
+  test('migrates a v1 database to v2 keeping rows', () => {
+    const db = new Database(':memory:')
+    db.exec(SCHEMA_V1)
+    db.pragma('user_version = 1')
+    db.prepare("INSERT INTO meta (key, value) VALUES ('k', 'v')").run()
+    migrate(db)
+    expect(db.pragma('user_version', { simple: true })).toBe(2)
+    expect(db.prepare('SELECT value FROM meta WHERE key = ?').get('k')).toEqual({ value: 'v' })
+    expect(db.prepare('SELECT count(*) AS n FROM sets').get()).toEqual({ n: 0 })
     db.close()
   })
 

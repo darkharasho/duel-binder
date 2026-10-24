@@ -3,6 +3,7 @@ import type { ApiCard } from './mapCard'
 export type { ApiCard }
 
 const CARD_INFO_URL = 'https://db.ygoprodeck.com/api/v7/cardinfo.php'
+const CARD_SETS_URL = 'https://db.ygoprodeck.com/api/v7/cardsets.php'
 const DB_VERSION_URL = 'https://db.ygoprodeck.com/api/v7/checkDBVer.php'
 const TIMEOUT_MS = 120_000
 
@@ -13,7 +14,16 @@ export class YgoApiError extends Error {
   }
 }
 
+export interface ApiCardSet {
+  set_name: string
+  set_code?: string
+  num_of_cards?: number
+  tcg_date?: string
+  set_image?: string
+}
+
 export interface YgoClient {
+  fetchCardSets(): Promise<ApiCardSet[]>
   fetchCardInfo(): Promise<ApiCard[]>
   fetchDbVersion(): Promise<{ databaseVersion: string; lastUpdate: string }>
 }
@@ -43,6 +53,13 @@ export function createYgoClient(fetchFn: typeof fetch = fetch): YgoClient {
         throw new YgoApiError('Unexpected YGOPRODeck payload: "data" is not an array')
       }
       return body.data as ApiCard[]
+    },
+    async fetchCardSets() {
+      const body = await getJson(CARD_SETS_URL)
+      if (!Array.isArray(body)) {
+        throw new YgoApiError('Unexpected YGOPRODeck set list payload: not an array')
+      }
+      return body as ApiCardSet[]
     },
     async fetchDbVersion() {
       const body = await getJson(DB_VERSION_URL)

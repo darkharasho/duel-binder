@@ -73,3 +73,14 @@ test('fetchDbVersion reads first element', async () => {
     lastUpdate: '2026-10-22 10:00:00'
   })
 })
+
+test('fetchCardSets returns the array', async () => {
+  const sets = [{ set_name: 'Metal Raiders', set_code: 'MRD' }]
+  const client = createYgoClient(respond(JSON.stringify(sets)))
+  expect(await client.fetchCardSets()).toEqual(sets)
+})
+
+test('fetchCardSets rejects a non-array body', async () => {
+  const client = createYgoClient(respond(JSON.stringify({ error: 'x' })))
+  await expect(client.fetchCardSets()).rejects.toBeInstanceOf(YgoApiError)
+})

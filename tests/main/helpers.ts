@@ -10,7 +10,8 @@ export async function seededDb(): Promise<Database.Database> {
   const db = openDatabase(':memory:')
   const client: YgoClient = {
     fetchDbVersion: async () => ({ databaseVersion: '1', lastUpdate: '2026-10-22' }),
-    fetchCardInfo: async () => fixture.data as ApiCard[]
+    fetchCardInfo: async () => fixture.data as ApiCard[],
+    fetchCardSets: async () => []
   }
   await runSync(db, client, () => {}, new Date('2026-10-23T12:00:00.000Z'))
   return db

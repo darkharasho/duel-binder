@@ -4,7 +4,7 @@ import { toast } from 'sonner'
 import type { Language } from '@shared/languages'
 import type { EntryView, UpdateEntryInput } from '@shared/types'
 import { CardArt } from '@/components/CardArt'
-import { TiltCard } from '@/components/TiltCard'
+import { PanelCardArt } from '@/components/PanelCardArt'
 import { scanFor } from '@/components/scanFor'
 import { LanguageTag } from '@/components/LanguageTag'
 import { Button } from '@/components/ui/button'
@@ -247,15 +247,11 @@ export function EntryDetailPanel({
         </SheetHeader>
         <div className="space-y-5 px-4 pb-6">
           {entry && (
-            <TiltCard className="mx-auto w-48">
-              <CardArt
-                imageId={entry.imageId}
-                printingId={scanFor(entry)}
-                size="full"
-                alt={entry.card.name}
-                className="w-full"
-              />
-            </TiltCard>
+            <PanelCardArt
+              imageId={entry.imageId}
+              printingId={scanFor(entry)}
+              alt={entry.card.name}
+            />
           )}
           {stats.length > 0 && (
             <div className="text-sm tabular-nums text-muted-foreground">{stats.join(' · ')}</div>

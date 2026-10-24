@@ -7,10 +7,17 @@ interface TiltCardProps {
   className?: string
   /** Largest tilt in degrees, reached at the card's edges. */
   maxTilt?: number
+  /** Rounds the glare to match the card's corners. */
+  glareClassName?: string
 }
 
 /** Tilts its contents toward the mouse like a card held in the hand, with a glare that follows. */
-export function TiltCard({ children, className, maxTilt = 14 }: TiltCardProps): React.JSX.Element {
+export function TiltCard({
+  children,
+  className,
+  maxTilt = 14,
+  glareClassName
+}: TiltCardProps): React.JSX.Element {
   const inner = useRef<HTMLDivElement>(null)
   const frame = useRef(0)
 
@@ -59,7 +66,10 @@ export function TiltCard({ children, className, maxTilt = 14 }: TiltCardProps): 
         {children}
         <div
           aria-hidden
-          className="pointer-events-none absolute inset-0 rounded-[4px] opacity-0 mix-blend-overlay transition-opacity duration-300 group-data-[tilting]/tilt:opacity-100 motion-reduce:hidden"
+          className={cn(
+            'pointer-events-none absolute inset-0 rounded-[4px] opacity-0 mix-blend-overlay transition-opacity duration-300 group-data-[tilting]/tilt:opacity-100 motion-reduce:hidden',
+            glareClassName
+          )}
           style={{
             background:
               'radial-gradient(circle at var(--glare-x, 50%) var(--glare-y, 50%), rgb(255 255 255 / 0.55), transparent 60%)'

@@ -3,8 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Minus, Plus } from 'lucide-react'
 import { toast } from 'sonner'
 import type { BrowseCard, Printing } from '@shared/types'
-import { CardArt } from '@/components/CardArt'
-import { TiltCard } from '@/components/TiltCard'
+import { PanelCardArt } from '@/components/PanelCardArt'
 import { LanguageTag } from '@/components/LanguageTag'
 import { Button } from '@/components/ui/button'
 import {
@@ -79,15 +78,11 @@ export function BrowseCardPanel({
           <SheetDescription>{typeLine}</SheetDescription>
         </SheetHeader>
         <div className="space-y-5 px-4 pb-6">
-          <TiltCard className="mx-auto w-48">
-            <CardArt
-              imageId={card.imageId}
-              printingId={card.defaultPrintingId ?? undefined}
-              size="full"
-              alt={card.name}
-              className="w-full"
-            />
-          </TiltCard>
+          <PanelCardArt
+            imageId={card.imageId}
+            printingId={card.defaultPrintingId}
+            alt={card.name}
+          />
 
           <section aria-label="Printings" className="space-y-2">
             <h3 className="text-sm font-medium">

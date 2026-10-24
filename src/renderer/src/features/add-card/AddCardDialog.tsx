@@ -134,6 +134,8 @@ export function AddCardDialog({
   const pickCard = (c: CardSearchResult): void => {
     setCard(c)
     setImageId(c.defaultImageId)
+    setPreferredId(null)
+    setHighlight(undefined)
     setStep('printing')
   }
 

@@ -242,4 +242,26 @@ describe('AddCardDialog', () => {
     await userEvent.keyboard('{Enter}')
     expect(await screen.findAllByRole('radio')).toHaveLength(2)
   })
+
+  it('a stale highlight from an initial open does not block Enter on the next card', async () => {
+    const api = createMockApi({
+      cards: {
+        search: async (q: string) => (q.toLowerCase().startsWith('pot') ? [pot] : []),
+        get: async (id: number) => details[id] ?? null
+      }
+    })
+    renderWithProviders(
+      <AddCardDialog open onOpenChange={() => {}} initial={{ card: dm, printingId: 3 }} />,
+      { api }
+    )
+    const item = await screen.findByRole('option', { name: /LOB-EN005/ })
+    await userEvent.hover(item)
+    await userEvent.keyboard('L{Backspace}{Backspace}')
+    await userEvent.type(await screen.findByPlaceholderText(/Search cards/), 'pot')
+    await userEvent.click(await screen.findByText('Pot of Greed'))
+    const next = await screen.findByRole('option', { name: /LOB-EN119/ })
+    await waitFor(() => expect(next).toHaveAttribute('aria-selected', 'true'))
+    await userEvent.keyboard('{Enter}')
+    expect(await screen.findByLabelText('Quantity')).toBeInTheDocument()
+  })
 })

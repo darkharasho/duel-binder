@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react'
+import { fireEvent, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { toast } from 'sonner'
 import type { CardDetail, CardRow, CardSearchResult, Printing } from '@shared/types'
@@ -74,19 +74,21 @@ const details: Record<number, CardDetail> = {
 
 function setup(overrides: Parameters<typeof createMockApi>[0] = {}): {
   add: ReturnType<typeof vi.fn>
+  get: ReturnType<typeof vi.fn>
 } {
   const add = vi.fn(async () => ({}) as never)
+  const get = vi.fn(async (id: number) => details[id] ?? null)
   const api = createMockApi({
     cards: {
       search: async (q: string) =>
         q.toLowerCase().startsWith('pot') ? [pot] : q.toLowerCase().startsWith('dark') ? [dm] : [],
-      get: async (id: number) => details[id] ?? null
+      get
     },
     collection: { add },
     ...overrides
   })
   const utils = renderWithProviders(<AddCardDialog open onOpenChange={() => {}} />, { api })
-  return { add, ...utils }
+  return { add, get, ...utils }
 }
 
 describe('AddCardDialog', () => {
@@ -157,6 +159,27 @@ describe('AddCardDialog', () => {
     await screen.findByText('LOB-EN119')
     await userEvent.keyboard('{Backspace}')
     expect(await screen.findByPlaceholderText(/Search cards/)).toBeInTheDocument()
+  })
+
+  it('ignores auto-repeated Backspace so holding it does not cascade back', async () => {
+    setup()
+    await userEvent.type(await screen.findByPlaceholderText(/Search cards/), 'pot')
+    await userEvent.click(await screen.findByText('Pot of Greed'))
+    const filter = await screen.findByPlaceholderText(/Filter printings/)
+    fireEvent.keyDown(filter, { key: 'Backspace', repeat: true })
+    expect(screen.getByPlaceholderText(/Filter printings/)).toBeInTheDocument()
+    expect(screen.queryByPlaceholderText(/Search cards/)).not.toBeInTheDocument()
+  })
+
+  it('does not select stale results when Enter is pressed before the debounce settles', async () => {
+    const { get } = setup()
+    const input = await screen.findByPlaceholderText(/Search cards/)
+    await userEvent.type(input, 'pot')
+    await screen.findByText('Pot of Greed')
+    await userEvent.type(input, 'x')
+    await userEvent.keyboard('{Enter}')
+    expect(get).not.toHaveBeenCalled()
+    expect(screen.queryByText('Pot of Greed')).not.toBeInTheDocument()
   })
 
   it('shows downloading message when card db empty', async () => {

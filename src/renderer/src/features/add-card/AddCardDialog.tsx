@@ -53,6 +53,8 @@ export function AddCardDialog({ open, onOpenChange }: AddCardDialogProps): React
   const artRefs = useRef<(HTMLButtonElement | null)[]>([])
 
   const q = useDebounced(text.trim(), 200)
+  // Results belong to `q`; never show or select them while the typed text is ahead of it.
+  const settled = text.trim() === q
   const search = useQuery({
     queryKey: queryKeys.search(q),
     queryFn: () => api.cards.search(q),
@@ -116,7 +118,7 @@ export function AddCardDialog({ open, onOpenChange }: AddCardDialogProps): React
   }
 
   const onKeyDown = (e: React.KeyboardEvent): void => {
-    if (e.key !== 'Backspace') return
+    if (e.key !== 'Backspace' || e.repeat) return
     const el = e.target as HTMLElement
     if (el instanceof HTMLInputElement && el.value !== '') return
     if (step === 'search') return
@@ -186,11 +188,14 @@ export function AddCardDialog({ open, onOpenChange }: AddCardDialogProps): React
                 onValueChange={setText}
               />
               <CommandList className="max-h-80">
-                {q !== '' && !search.isFetching && (search.data?.length ?? 0) === 0 && (
+                {text.trim() !== '' && (!settled || search.isFetching) && (
+                  <p className="py-6 text-center text-sm text-muted-foreground">Searching…</p>
+                )}
+                {settled && q !== '' && !search.isFetching && (search.data?.length ?? 0) === 0 && (
                   <CommandEmpty>No cards found.</CommandEmpty>
                 )}
                 <CommandGroup>
-                  {(q === '' ? [] : (search.data ?? [])).map((c) => (
+                  {(!settled || q === '' ? [] : (search.data ?? [])).map((c) => (
                     <CommandItem
                       key={c.id}
                       value={String(c.id)}

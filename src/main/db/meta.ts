@@ -1,6 +1,6 @@
 import type Database from 'better-sqlite3'
 
-export type MetaKey = 'last_sync_at' | 'db_version'
+export type MetaKey = 'last_sync_at' | 'db_version' | 'intl_sets_synced_at'
 
 export function getMeta(db: Database.Database, key: MetaKey): string | null {
   const row = db.prepare('SELECT value FROM meta WHERE key = ?').get(key) as

@@ -3,13 +3,15 @@ import { join } from 'path'
 import { autoUpdater } from 'electron-updater'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import type { SyncStatus, UpdateStatus } from '@shared/types'
-import { SYNC_PROGRESS, UPDATE_STATUS } from '@shared/ipc'
+import { DATA_CHANGED, SYNC_PROGRESS, UPDATE_STATUS } from '@shared/ipc'
 import icon from '../../resources/icon.png?asset'
 import { openDatabase } from './db/database'
 import { getMeta } from './db/meta'
 import { createYgoClient } from './ygo/client'
 import { runSync, shouldSync } from './sync/sync'
 import { hasSetData, refreshSets } from './sync/sets'
+import { refreshIntlSets, shouldRefreshIntl } from './sync/intl'
+import { createYugipediaClient } from './yugipedia/client'
 import { recordSnapshot } from './repo/stats'
 import { createImageCache } from './images/cache'
 import { handleImageProtocol, registerImageScheme } from './images/protocol'
@@ -139,12 +141,25 @@ function bootstrap(): void {
   updater.start()
 
   recordSnapshot(db)
-  if (shouldSync(getMeta(db, 'last_sync_at'), new Date())) {
-    void runSync(db, client, emitSync).then((status) => {
-      if (status.state === 'idle') recordSnapshot(db)
-    }).catch((e) => console.error('Startup sync failed', e))
-  } else if (!hasSetData(db)) {
-    void refreshSets(db, client)
+  void startupSync().catch((e) => console.error('Startup sync failed', e))
+
+  async function startupSync(): Promise<void> {
+    let changed = false
+    if (shouldSync(getMeta(db, 'last_sync_at'), new Date())) {
+      const status = await runSync(db, client, emitSync)
+      if (status.state === 'idle') {
+        recordSnapshot(db)
+        changed = true
+      }
+    } else if (!hasSetData(db)) {
+      changed = await refreshSets(db, client)
+    }
+    const { n } = db.prepare('SELECT count(*) AS n FROM cards').get() as { n: number }
+    if (n > 0 && shouldRefreshIntl(db, new Date())) {
+      await refreshIntlSets(db, createYugipediaClient({ version: app.getVersion() }))
+      changed = true
+    }
+    if (changed) broadcast(DATA_CHANGED, undefined)
   }
 
   app.on('activate', function () {

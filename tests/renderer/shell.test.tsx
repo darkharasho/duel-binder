@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import App from '@/App'
 import { CardArt } from '@/components/CardArt'
@@ -45,6 +45,19 @@ describe('AppShell sets nav', () => {
     expect(names).toEqual(['Dashboard', 'Collection', 'Sets', 'Settings'])
     await userEvent.click(screen.getByRole('button', { name: 'Sets' }))
     expect(screen.getByRole('heading', { name: 'Sets' })).toBeInTheDocument()
+  })
+})
+
+describe('data changed', () => {
+  it('refetches the sets queries when main reports changed data', async () => {
+    let fire: () => void = () => {}
+    const api = createMockApi({ app: { onDataChanged: vi.fn((cb) => ((fire = cb), () => {})) } })
+    renderWithProviders(<App />, { api })
+    await userEvent.click(screen.getByRole('button', { name: 'Sets' }))
+    await waitFor(() => expect(api.sets.list).toHaveBeenCalled())
+    const before = vi.mocked(api.sets.list).mock.calls.length
+    act(() => fire())
+    await waitFor(() => expect(vi.mocked(api.sets.list).mock.calls.length).toBeGreaterThan(before))
   })
 })
 

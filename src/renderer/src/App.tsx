@@ -7,6 +7,7 @@ import { DashboardPage } from '@/features/dashboard/DashboardPage'
 import { CollectionPage } from '@/features/collection/CollectionPage'
 import { SetsPage } from '@/features/sets/SetsPage'
 import { SettingsPage } from '@/features/settings/SettingsPage'
+import { useDataChanged } from '@/components/useDataChanged'
 import { useUpdateToasts } from '@/features/settings/useUpdateToasts'
 
 interface AddInitial {
@@ -20,6 +21,7 @@ function App(): React.JSX.Element {
   const [addOpen, setAddOpen] = useState(false)
   const [addInitial, setAddInitial] = useState<AddInitial | null>(null)
   useUpdateToasts()
+  useDataChanged()
 
   const openAdd = useCallback((initial: AddInitial | null = null): void => {
     setAddInitial(initial)

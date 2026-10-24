@@ -138,3 +138,9 @@ test('refreshSets leaves non-English set rows alone', async () => {
   ])
   db.close()
 })
+
+test('hasSetData ignores non-English sets', () => {
+  const db = openDatabase(':memory:')
+  db.prepare("INSERT INTO sets (language, set_name, set_code) VALUES ('ja', 'X', '')").run()
+  expect(hasSetData(db)).toBe(false)
+})

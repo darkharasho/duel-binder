@@ -1,0 +1,266 @@
+import type Database from 'better-sqlite3'
+import { languageForSuffix, type Language } from '@shared/languages'
+import { getMeta, setMeta } from '../db/meta'
+import type { YugipediaClient } from '../yugipedia/client'
+import {
+  listTitleParts,
+  normalizeRarity,
+  parseInfobox,
+  parseSetList,
+  releaseDateFor,
+  type ParsedSetList
+} from '../yugipedia/parse'
+
+export const INTL_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000
+const CHUNK_SIZE = 50
+const MAX_LOGGED_UNMATCHED = 20
+
+export interface IntlSyncResult {
+  sets: number
+  failedSets: number
+  unmatchedRows: number
+  ok: boolean
+}
+
+export function shouldRefreshIntl(db: Database.Database, now: Date): boolean {
+  const last = getMeta(db, 'intl_sets_synced_at')
+  if (!last) return true
+  const t = Date.parse(last)
+  return Number.isNaN(t) || now.getTime() - t >= INTL_INTERVAL_MS
+}
+
+export function normalizeName(name: string): string {
+  return name
+    .normalize('NFKC')
+    .toLowerCase()
+    .replace(/[‘’´]/g, "'")
+    .replace(/[“”]/g, '"')
+    .replace(/[‐‑‒–—−]/g, '-')
+    .replace(/\s+/g, ' ')
+    .trim()
+}
+
+interface SetJob {
+  title: string
+  setName: string
+  language: Language
+}
+
+interface LoadedSet extends SetJob {
+  parsed: ParsedSetList
+}
+
+function chunk<T>(items: T[], size: number): T[][] {
+  const out: T[][] = []
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size))
+  return out
+}
+
+/** Pages by requested title; a failed chunk is left out and reported through `failed`. */
+async function fetchChunked(
+  client: YugipediaClient,
+  titles: string[]
+): Promise<{ pages: Map<string, string>; failed: Set<string> }> {
+  const pages = new Map<string, string>()
+  const failed = new Set<string>()
+  for (const part of chunk(titles, CHUNK_SIZE)) {
+    try {
+      for (const [t, text] of await client.fetchPages(part)) pages.set(t, text)
+    } catch {
+      for (const t of part) failed.add(t)
+    }
+  }
+  return { pages, failed }
+}
+
+/** Rows not seen this run: delete when no entry references them, else flag as missing. */
+function deleteOrFlag(db: Database.Database, ids: number[]): void {
+  const del = db.prepare(
+    `DELETE FROM card_printings WHERE id = ? AND NOT EXISTS
+       (SELECT 1 FROM collection_entries WHERE printing_id = card_printings.id)`
+  )
+  const flag = db.prepare('UPDATE card_printings SET missing_from_api = 1 WHERE id = ?')
+  for (const id of ids) {
+    del.run(id)
+    flag.run(id) // no-op for rows already deleted
+  }
+}
+
+/** Never rejects. Non-English rows are written only here; English rows are never touched. */
+export async function refreshIntlSets(
+  db: Database.Database,
+  client: YugipediaClient,
+  now: Date = new Date()
+): Promise<IntlSyncResult> {
+  const result: IntlSyncResult = { sets: 0, failedSets: 0, unmatchedRows: 0, ok: false }
+  try {
+    return await run(db, client, now, result)
+  } catch (e) {
+    console.warn('Non-English set sync failed', e)
+    result.ok = false
+    return result
+  }
+}
+
+async function run(
+  db: Database.Database,
+  client: YugipediaClient,
+  now: Date,
+  result: IntlSyncResult
+): Promise<IntlSyncResult> {
+  let allTitles: string[]
+  try {
+    allTitles = await client.listSetListTitles()
+  } catch (e) {
+    console.warn('Yugipedia set listing failed', e)
+    return result
+  }
+
+  const jobs: SetJob[] = []
+  for (const title of allTitles) {
+    const parts = listTitleParts(title)
+    const language = parts ? languageForSuffix(parts.suffix) : null
+    if (parts && language && language !== 'en')
+      jobs.push({ title, setName: parts.setName, language })
+  }
+  // An empty listing would otherwise look like "every set vanished".
+  if (jobs.length === 0) {
+    console.warn('Yugipedia listed no non-English sets; keeping existing data')
+    return result
+  }
+  result.sets = jobs.length
+
+  const cardIds = new Map<string, number>()
+  const cardRows = db.prepare('SELECT id, name FROM cards ORDER BY id').all() as {
+    id: number
+    name: string
+  }[]
+  for (const c of cardRows) {
+    const key = normalizeName(c.name)
+    if (!cardIds.has(key)) cardIds.set(key, c.id)
+  }
+
+  const listFetch = await fetchChunked(
+    client,
+    jobs.map((j) => j.title)
+  )
+  const loaded: LoadedSet[] = []
+  for (const job of jobs) {
+    const text = listFetch.pages.get(job.title)
+    const parsed = text === undefined ? null : parseSetList(text)
+    if (parsed) loaded.push({ ...job, parsed })
+    else result.failedSets++
+  }
+
+  const pageTitle = (s: LoadedSet): string => s.parsed.setPage ?? s.setName
+  const infoFetch = await fetchChunked(client, [...new Set(loaded.map(pageTitle))])
+  const infoboxes = new Map(
+    loaded.map((s) => {
+      const text = infoFetch.pages.get(pageTitle(s))
+      return [s.title, text === undefined ? null : parseInfobox(text)] as const
+    })
+  )
+  const files = [...new Set([...infoboxes.values()].flatMap((b) => (b?.image ? [b.image] : [])))]
+  let imageUrls = new Map<string, string>()
+  if (files.length > 0) {
+    try {
+      imageUrls = await client.fetchImageUrls(files)
+    } catch {
+      // images are optional
+    }
+  }
+
+  const upsertPrinting = db.prepare(`
+    INSERT INTO card_printings (card_id, language, set_name, set_code, set_rarity, set_rarity_code, set_price,
+      missing_from_api)
+    VALUES (@cardId, @language, @setName, @setCode, @setRarity, '', NULL, 0)
+    ON CONFLICT(card_id, language, set_name, set_code, set_rarity) WHERE language <> 'en'
+      DO UPDATE SET missing_from_api = 0
+    RETURNING id`)
+  const upsertSet = db.prepare(`
+    INSERT INTO sets (language, set_name, set_code, tcg_date, image_url, image_key, list_rows, unmatched_rows)
+    VALUES (@language, @setName, '', @tcgDate, @imageUrl, NULL, @listRows, @unmatchedRows)
+    ON CONFLICT(language, set_name) DO UPDATE SET set_code = '',
+      tcg_date = CASE WHEN @keepOld THEN COALESCE(excluded.tcg_date, sets.tcg_date) ELSE excluded.tcg_date END,
+      image_url = CASE WHEN @keepOld THEN COALESCE(excluded.image_url, sets.image_url) ELSE excluded.image_url END,
+      image_key = excluded.image_key, list_rows = excluded.list_rows, unmatched_rows = excluded.unmatched_rows`)
+  const existing = db.prepare('SELECT id FROM card_printings WHERE language = ? AND set_name = ?')
+
+  const unmatchedExamples: string[] = []
+  const seenSets = new Set<string>()
+  for (const s of loaded) {
+    let unmatched = 0
+    const printings: { cardId: number; setCode: string; setRarity: string }[] = []
+    for (const row of s.parsed.rows) {
+      const cardId = cardIds.get(normalizeName(row.name))
+      if (cardId === undefined) {
+        unmatched++
+        if (unmatchedExamples.length < MAX_LOGGED_UNMATCHED) unmatchedExamples.push(row.name)
+        continue
+      }
+      for (const r of row.rarities) {
+        printings.push({ cardId, setCode: row.code, setRarity: normalizeRarity(r) })
+      }
+    }
+    result.unmatchedRows += unmatched
+
+    const box = infoboxes.get(s.title) ?? null
+    const imageUrl = box?.image ? (imageUrls.get(box.image) ?? null) : null
+    db.transaction(() => {
+      const seen = new Set<number>()
+      for (const p of printings) {
+        const row = upsertPrinting.get({
+          ...p,
+          language: s.language,
+          setName: s.setName
+        }) as { id: number }
+        seen.add(row.id)
+      }
+      const stale = (existing.all(s.language, s.setName) as { id: number }[])
+        .map((r) => r.id)
+        .filter((id) => !seen.has(id))
+      deleteOrFlag(db, stale)
+      upsertSet.run({
+        language: s.language,
+        setName: s.setName,
+        tcgDate: box ? releaseDateFor(box, s.language) : null,
+        imageUrl,
+        listRows: s.parsed.rows.length,
+        unmatchedRows: unmatched,
+        keepOld: box ? 0 : 1
+      })
+    })()
+    seenSets.add(`${s.language}\u0000${s.setName}`)
+  }
+
+  if (unmatchedExamples.length > 0) {
+    console.info(
+      `Yugipedia: ${result.unmatchedRows} unmatched rows; examples: ${unmatchedExamples.join(', ')}`
+    )
+  }
+
+  result.ok = result.failedSets === 0
+  if (result.ok) {
+    db.transaction(() => {
+      const gone = (
+        db.prepare("SELECT language, set_name FROM sets WHERE language <> 'en'").all() as {
+          language: string
+          set_name: string
+        }[]
+      ).filter((r) => !seenSets.has(`${r.language}\u0000${r.set_name}`))
+      const orphanPrintings = (
+        db
+          .prepare("SELECT id, language, set_name FROM card_printings WHERE language <> 'en'")
+          .all() as { id: number; language: string; set_name: string }[]
+      ).filter((r) => !seenSets.has(`${r.language}\u0000${r.set_name}`))
+      deleteOrFlag(
+        db,
+        orphanPrintings.map((r) => r.id)
+      )
+      const delSet = db.prepare('DELETE FROM sets WHERE language = ? AND set_name = ?')
+      for (const r of gone) delSet.run(r.language, r.set_name)
+      setMeta(db, 'intl_sets_synced_at', now.toISOString())
+    })()
+  }
+  return result
+}

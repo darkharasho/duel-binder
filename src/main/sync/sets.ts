@@ -11,7 +11,7 @@ interface SetRow {
 }
 
 export function hasSetData(db: Database.Database): boolean {
-  return db.prepare('SELECT 1 FROM sets LIMIT 1').get() !== undefined
+  return db.prepare("SELECT 1 FROM sets WHERE language = 'en' LIMIT 1").get() !== undefined
 }
 
 /** Replaces the English set rows with the API list. Never rejects; failures keep the old rows. */

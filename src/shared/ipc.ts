@@ -54,6 +54,8 @@ export interface Api {
     /** Current updater status; no network. */
     updateStatus(): Promise<UpdateStatus>
     onUpdateStatus(cb: (s: UpdateStatus) => void): () => void
+    /** Fired after background syncs change card or set data. */
+    onDataChanged(cb: () => void): () => void
   }
 }
 
@@ -88,6 +90,7 @@ export type InvokeChannel = (typeof INVOKE_CHANNELS)[number]
 /** Event channels pushed from main to renderer. */
 export const SYNC_PROGRESS = 'sync:progress'
 export const UPDATE_STATUS = 'update:status'
+export const DATA_CHANGED = 'data:changed' // payload: void
 
 // Compile-time check: INVOKE_CHANNELS must list exactly the invoke methods of Api.
 // Only methods returning a Promise count as invoke methods, so the event

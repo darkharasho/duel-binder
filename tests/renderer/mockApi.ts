@@ -57,7 +57,8 @@ export function createMockApi(overrides: DeepPartial<Api> = {}): Api {
       checkForUpdates: vi.fn(async () => ({ state: 'none', mode: 'auto', version: null, error: null })),
       applyUpdate: vi.fn(async () => undefined),
       updateStatus: vi.fn(async () => ({ state: 'idle', mode: 'auto', version: null, error: null })),
-      onUpdateStatus: vi.fn(() => () => {})
+      onUpdateStatus: vi.fn(() => () => {}),
+      onDataChanged: vi.fn(() => () => {})
     }
   }
   for (const ns of Object.keys(overrides) as (keyof Api)[]) {

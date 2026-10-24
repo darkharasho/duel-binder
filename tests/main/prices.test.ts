@@ -2,7 +2,7 @@ import type Database from 'better-sqlite3'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 import { PriceUnavailableError, createPriceClient, type PriceClient } from '../../src/main/prices/client'
 import { PRICE_INTERVAL_MS, refreshIntlPrices } from '../../src/main/prices/refresh'
-import { priceWorkerUrl } from '../../src/main/prices/config'
+import { PRICE_WORKER_URL, priceWorkerUrl } from '../../src/main/prices/config'
 import { getMeta } from '../../src/main/db/meta'
 import { addEntry } from '../../src/main/repo/collection'
 import { seededDb } from './helpers'
@@ -58,10 +58,12 @@ test('client times out after 15 s', async () => {
   }
 })
 
-test('priceWorkerUrl is null when empty and honours the env override', () => {
+test('priceWorkerUrl defaults to the deployed Worker and honours the env override', () => {
   const prev = process.env['YGO_PRICE_WORKER_URL']
   try {
     delete process.env['YGO_PRICE_WORKER_URL']
+    expect(priceWorkerUrl()).toBe(PRICE_WORKER_URL)
+    process.env['YGO_PRICE_WORKER_URL'] = ''
     expect(priceWorkerUrl()).toBeNull()
     process.env['YGO_PRICE_WORKER_URL'] = 'https://x.example'
     expect(priceWorkerUrl()).toBe('https://x.example')

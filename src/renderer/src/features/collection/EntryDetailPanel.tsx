@@ -23,7 +23,7 @@ import {
 } from '@/components/ui/sheet'
 import { api, mutationInvalidationKeys, queryKeys } from '@/lib/api'
 import { cn } from '@/lib/utils'
-import { EntryValue, StaleBadge, displayTotal } from './EntryValue'
+import { EbayPriceLine, EntryValue, StaleBadge, displayTotal } from './EntryValue'
 
 interface Props {
   cardId: number
@@ -105,6 +105,7 @@ function EntryEditor({
         <span className="text-muted-foreground">Value</span>
         <EntryValue entry={entry} amount={displayTotal(entry)} />
       </div>
+      <EbayPriceLine entry={entry} />
       <StaleBadge entry={entry} />
 
       <div className="space-y-1.5">

@@ -47,6 +47,7 @@ const entry = (id: number, name: string, extra: Partial<EntryView> = {}): EntryV
   priceApproximate: false,
   priceSource: 'ygoprodeck',
   priceCheckedAt: null,
+  priceListingCount: null,
   noPriceReason: null,
   totalValue: 20,
   ...extra
@@ -249,6 +250,44 @@ describe('CollectionPage', () => {
     expect(
       await within(screen.getByRole('dialog')).findByText('Blue-Eyes White Dragon')
     ).toBeInTheDocument()
+  })
+
+  it('detail panel shows the eBay asking-price line for a priced non-English copy', async () => {
+    const ja = entry(3, 'Red-Eyes', {
+      printing: printing(3, 103, { language: 'ja', setCode: 'LB-05' }),
+      unitPrice: 12.5,
+      totalValue: 25,
+      priceSource: 'ebay',
+      priceCheckedAt: new Date(Date.now() - 3 * 86_400_000).toISOString(),
+      priceListingCount: 32
+    })
+    setup([ja], {}, { initialEntryId: 3 })
+    const dialog = await screen.findByRole('dialog')
+    expect(
+      await within(dialog).findByText('eBay asking price · checked 3 days ago · 32 listings')
+    ).toBeInTheDocument()
+  })
+
+  it('detail panel shows the no-price reason for an unpriced non-English copy', async () => {
+    const ja = entry(3, 'Red-Eyes', {
+      printing: printing(3, 103, { language: 'ja', setCode: 'LB-05' }),
+      unitPrice: null,
+      totalValue: 0,
+      priceSource: 'ebay',
+      priceCheckedAt: '2026-10-20T00:00:00.000Z',
+      priceListingCount: 0,
+      noPriceReason: 'no-listings'
+    })
+    setup([ja], {}, { initialEntryId: 3 })
+    const dialog = await screen.findByRole('dialog')
+    expect(await within(dialog).findByText('No eBay listings found')).toBeInTheDocument()
+  })
+
+  it('detail panel shows no eBay line for an English copy', async () => {
+    setup([dm, bew], {}, { initialEntryId: 1 })
+    const dialog = await screen.findByRole('dialog')
+    await within(dialog).findByText('Value')
+    expect(within(dialog).queryByText(/eBay/)).not.toBeInTheDocument()
   })
 
   it('keeps the panel open when a filter excludes the initial entry', async () => {

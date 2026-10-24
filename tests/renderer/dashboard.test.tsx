@@ -41,6 +41,7 @@ const entry = (id: number, name: string, extra: Partial<EntryView> = {}): EntryV
   priceApproximate: false,
   priceSource: 'ygoprodeck',
   priceCheckedAt: null,
+  priceListingCount: null,
   noPriceReason: null,
   totalValue: 20,
   ...extra
@@ -127,6 +128,31 @@ describe('DashboardPage', () => {
     setup(stats({ topEntries: [entry(1, 'Dark Magician', { priceApproximate: true })] }))
     const row = await screen.findByRole('button', { name: /Dark Magician/ })
     expect(within(row).getByLabelText('approximately')).toHaveTextContent('≈')
+  })
+
+  it('non-English top entries are labelled eBay, or No price when unpriced', async () => {
+    const ja = (id: number, name: string, extra: Partial<EntryView>): EntryView =>
+      entry(id, name, {
+        printing: { ...entry(id, name).printing, language: 'ja', setCode: `LB-0${id}` },
+        priceSource: 'ebay',
+        priceCheckedAt: '2026-10-20T00:00:00.000Z',
+        priceListingCount: 5,
+        ...extra
+      })
+    setup(
+      stats({
+        topEntries: [
+          ja(1, 'Dark Magician', { unitPrice: 40, totalValue: 80 }),
+          ja(2, 'Blue-Eyes White Dragon', { unitPrice: null, totalValue: 0, noPriceReason: 'pending' })
+        ]
+      })
+    )
+    const priced = await screen.findByRole('button', { name: /Dark Magician/ })
+    expect(within(priced).getByText('$80.00')).toBeInTheDocument()
+    expect(within(priced).getByText('eBay')).toBeInTheDocument()
+    const unpriced = screen.getByRole('button', { name: /Blue-Eyes White Dragon/ })
+    expect(within(unpriced).getByText('No price')).toBeInTheDocument()
+    expect(within(unpriced).queryByText('—')).not.toBeInTheDocument()
   })
 
   it('top entry click navigates', async () => {

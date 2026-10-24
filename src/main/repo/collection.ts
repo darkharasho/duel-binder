@@ -29,7 +29,8 @@ const SELECT = `
          c.archetype, c.desc, c.tcgplayer_price,
          p.id AS p_id, p.card_id, p.set_name, p.set_code, p.set_rarity, p.set_rarity_code, p.set_price,
          p.missing_from_api, p.language,
-         ip.printing_id AS ip_id, ip.price AS ip_price, ip.checked_at AS ip_checked_at
+         ip.printing_id AS ip_id, ip.price AS ip_price, ip.checked_at AS ip_checked_at,
+         ip.listing_count AS ip_listing_count
   FROM collection_entries e
   JOIN card_printings p ON p.id = e.printing_id
   JOIN cards c ON c.id = p.card_id
@@ -65,6 +66,7 @@ function toView(r: EntryDbRow, priceStatus: string | null): EntryView {
     priceApproximate: approximate,
     priceSource: ebay ? 'ebay' : 'ygoprodeck',
     priceCheckedAt: ebay ? ((r.ip_checked_at as string | null) ?? null) : null,
+    priceListingCount: ebay ? ((r.ip_listing_count as number | null) ?? null) : null,
     noPriceReason,
     totalValue: (unitPrice ?? 0) * r.e_quantity
   }

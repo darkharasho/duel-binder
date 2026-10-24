@@ -62,6 +62,8 @@ export interface EntryView {
   priceApproximate: boolean
   priceSource: 'ygoprodeck' | 'ebay'
   priceCheckedAt: string | null
+  /** eBay listings behind the asking price (non-English copies only). */
+  priceListingCount: number | null
   noPriceReason: 'no-listings' | 'pending' | 'unavailable' | null
   totalValue: number
 }

@@ -153,6 +153,7 @@ test('a ja entry is valued from its eBay price', () => {
     priceSource: 'ebay',
     priceApproximate: false,
     priceCheckedAt: '2026-10-20T00:00:00.000Z',
+    priceListingCount: 4,
     noPriceReason: null
   })
   expect(e.totalValue).toBeCloseTo(37.5)
@@ -183,7 +184,12 @@ test('a ja printing never uses the card tcgplayer price', () => {
 
 test('an English entry keeps the ygoprodeck source', () => {
   const e = addEntry(db, { printingId: pid('LOB-EN005'), imageId: 46986414, quantity: 1 })
-  expect(e).toMatchObject({ priceSource: 'ygoprodeck', priceCheckedAt: null, noPriceReason: null })
+  expect(e).toMatchObject({
+    priceSource: 'ygoprodeck',
+    priceCheckedAt: null,
+    priceListingCount: null,
+    noPriceReason: null
+  })
 })
 
 test('language filter and facets', () => {

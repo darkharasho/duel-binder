@@ -34,9 +34,20 @@ const NO_PRICE_TIPS = {
   unavailable: 'Prices unavailable'
 } as const
 
+/** The plain-language eBay price description: asking-price label + checked date + listing count. */
+export function ebayPriceDetail(entry: EntryView): string {
+  if (entry.unitPrice === null) return NO_PRICE_TIPS[entry.noPriceReason ?? 'unavailable']
+  const parts = ['eBay asking price']
+  if (entry.priceCheckedAt !== null) parts.push(`checked ${formatRelative(entry.priceCheckedAt)}`)
+  if (entry.priceListingCount !== null)
+    parts.push(`${entry.priceListingCount} ${entry.priceListingCount === 1 ? 'listing' : 'listings'}`)
+  return parts.join(' · ')
+}
+
 /**
- * An entry's price. YGOPRODeck prices render as `ValueText`; eBay (non-English) prices are labelled
- * as asking prices with their checked date, or "No price" with the reason.
+ * An entry's price. YGOPRODeck prices render as `ValueText`; eBay (non-English) prices carry a
+ * visible "eBay" marker plus a tooltip with the asking-price label and checked date, or render as
+ * "No price" with the reason.
  */
 export function EntryValue({
   entry,
@@ -57,13 +68,26 @@ export function EntryValue({
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <span className={noPrice ? 'text-muted-foreground' : 'tabular-nums'}>
-          {noPrice ? 'No price' : formatUsd(amount)}
-        </span>
+        {noPrice ? (
+          <span className="text-muted-foreground">No price</span>
+        ) : (
+          <span className="inline-flex items-baseline gap-1">
+            <span className="tabular-nums">{formatUsd(amount)}</span>
+            <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
+              eBay
+            </span>
+          </span>
+        )}
       </TooltipTrigger>
       <TooltipContent>{tip}</TooltipContent>
     </Tooltip>
   )
+}
+
+/** Visible eBay price details for a non-English copy (entry detail); null for English copies. */
+export function EbayPriceLine({ entry }: { entry: EntryView }): React.JSX.Element | null {
+  if (entry.priceSource !== 'ebay') return null
+  return <p className="text-xs text-muted-foreground">{ebayPriceDetail(entry)}</p>
 }
 
 /** Total for display: null (shown as "—") when the entry has no price at all. */

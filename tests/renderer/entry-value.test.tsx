@@ -25,6 +25,7 @@ describe('EntryValue', () => {
   it('shows an eBay asking price with its checked date', async () => {
     show({})
     expect(screen.getByText('$12.50')).toBeInTheDocument()
+    expect(screen.getByText('eBay')).toBeInTheDocument()
     await userEvent.hover(screen.getByText('$12.50'))
     expect((await screen.findAllByText('eBay asking price · checked 3 days ago')).length).toBeGreaterThan(0)
   })
@@ -49,5 +50,6 @@ describe('EntryValue', () => {
   it('shows a plain price for YGOPRODeck entries', () => {
     show({ priceSource: 'ygoprodeck', priceCheckedAt: null })
     expect(screen.getByText('$12.50')).toBeInTheDocument()
+    expect(screen.queryByText('eBay')).not.toBeInTheDocument()
   })
 })

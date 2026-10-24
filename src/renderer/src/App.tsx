@@ -30,7 +30,7 @@ function App(): React.JSX.Element {
   return (
     <>
       <AppShell page={page} onNavigate={onNavigate} onAddCard={() => setAddOpen(true)}>
-        {page === 'dashboard' && <DashboardPage onNavigate={onNavigate} />}
+        {page === 'dashboard' && <DashboardPage onNavigate={onNavigate} onAddCard={() => setAddOpen(true)} />}
         {page === 'collection' && (
           <CollectionPage
             key={entryId ?? 'all'}

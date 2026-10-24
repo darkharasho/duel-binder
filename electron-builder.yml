@@ -28,6 +28,7 @@ mac:
     - target: zip
       arch: universal
   hardenedRuntime: true
+  artifactName: ${name}-${version}-${arch}-mac.${ext}
   notarize: true
 dmg:
   artifactName: ${name}-${version}.${ext}
@@ -43,4 +44,4 @@ publish:
   provider: github
   owner: darkharasho
   repo: yugioh-collection-tracker
-  releaseType: release
+  releaseType: draft

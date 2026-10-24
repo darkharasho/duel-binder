@@ -16,12 +16,28 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      - name: Verify tag matches package.json version
+        run: |
+          VERSION=$(node -p "require('./package.json').version")
+          if [ "refs/tags/v${VERSION}" != "${GITHUB_REF}" ]; then
+            echo "::error::Tag ${GITHUB_REF} does not match package.json version v${VERSION}"
+            exit 1
+          fi
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
 
-  release:
+  create-release:
     needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Create draft release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release create "$GITHUB_REF_NAME" --draft --title "$GITHUB_REF_NAME" --generate-notes -R "$GITHUB_REPOSITORY"
+
+  release:
+    needs: create-release
     strategy:
       fail-fast: false
       matrix:
@@ -37,13 +53,6 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - name: Verify tag matches package.json version
-        run: |
-          VERSION=$(node -p "require('./package.json').version")
-          if [ "refs/tags/v${VERSION}" != "${GITHUB_REF}" ]; then
-            echo "::error::Tag ${GITHUB_REF} does not match package.json version v${VERSION}"
-            exit 1
-          fi
       - name: Build app
         # CSC_LINK is read at build time (electron.vite.config.ts bakes __MAC_SIGNED__)
         env:
@@ -58,14 +67,23 @@ jobs:
           APPLE_APP_SPECIFIC_PASSWORD: ${{ matrix.os == 'macos-latest' && secrets.APPLE_APP_SPECIFIC_PASSWORD || '' }}
           APPLE_TEAM_ID: ${{ matrix.os == 'macos-latest' && secrets.APPLE_TEAM_ID || '' }}
         run: |
-          EXTRA=""
+          EXTRA=()
           if [ -z "${CSC_LINK}" ]; then
             unset CSC_LINK CSC_KEY_PASSWORD
             if [ "${{ matrix.os }}" = "macos-latest" ]; then
               # no signing secrets: ad-hoc sign, skip notarization
               export CSC_IDENTITY_AUTO_DISCOVERY=false
-              EXTRA="-c.mac.identity=- -c.mac.notarize=false"
+              # hardened runtime without a real identity would block loading unsigned native libs
+              EXTRA=(-c.mac.identity=- -c.mac.notarize=false -c.mac.hardenedRuntime=false)
             fi
           fi
-          # shellcheck disable=SC2086
-          npx electron-builder --publish always $EXTRA
+          npx electron-builder --publish always "${EXTRA[@]}"
+
+  publish-release:
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release edit "$GITHUB_REF_NAME" --draft=false -R "$GITHUB_REPOSITORY"

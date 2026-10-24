@@ -1,14 +1,17 @@
-import { useMemo, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useMemo, useRef, useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft } from 'lucide-react'
-import type { CardSearchResult, CountMode } from '@shared/types'
+import { toast } from 'sonner'
+import type { CardSearchResult, CountMode, SetChecklist as SetChecklistData } from '@shared/types'
 import { CardArt } from '@/components/CardArt'
 import { Button } from '@/components/ui/button'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { EntryDetailPanel } from '@/features/collection/EntryDetailPanel'
-import { api, queryKeys } from '@/lib/api'
+import { api, mutationInvalidationKeys, queryKeys } from '@/lib/api'
+import { createSerialQueue } from '@/lib/serialQueue'
 import { cn } from '@/lib/utils'
+import { BulkRow } from './BulkRow'
 import { SetArt } from './SetArt'
 import { SetProgress } from './SetProgress'
 import { checklistTiles, filterTiles, progressFor, type Tile, type TileFilter } from './setsView'
@@ -45,16 +48,49 @@ export function SetChecklist({
 }: SetChecklistProps): React.JSX.Element {
   const [filter, setFilter] = useState<TileFilter>('all')
   const [selected, setSelected] = useState<{ cardId: number; entryId: number } | null>(null)
+  const [bulk, setBulk] = useState(false)
+  const [pending, setPending] = useState<Record<number, number>>({})
+  const queues = useRef(new Map<number, ReturnType<typeof createSerialQueue>>())
+  const qc = useQueryClient()
 
   const checklist = useQuery({
     queryKey: queryKeys.setChecklist(setName),
     queryFn: () => api.sets.checklist(setName)
   })
   const data = checklist.data
+  // Bulk layout is one item per card whatever the count mode.
+  const tileMode = bulk ? 'cards' : mode
   const tiles = useMemo(
-    () => (data ? filterTiles(checklistTiles(data, mode), filter) : []),
-    [data, mode, filter]
+    () => (data ? filterTiles(checklistTiles(data, tileMode), filter) : []),
+    [data, tileMode, filter]
   )
+
+  const bumpPending = (cardId: number, by: 1 | -1): void =>
+    setPending((p) => ({ ...p, [cardId]: (p[cardId] ?? 0) + by }))
+
+  /** Queues one +/- for a card; the server's card replaces ours, the checklist is never refetched. */
+  const adjust = (cardId: number, printingId: number, delta: 1 | -1): void => {
+    let queue = queues.current.get(cardId)
+    if (!queue) {
+      queue = createSerialQueue()
+      queues.current.set(cardId, queue)
+    }
+    bumpPending(cardId, 1)
+    queue(async () => {
+      const card = await api.sets.adjust(setName, printingId, delta)
+      qc.setQueryData<SetChecklistData | null>(queryKeys.setChecklist(setName), (old) =>
+        old ? { ...old, cards: old.cards.map((c) => (c.cardId === card.cardId ? card : c)) } : old
+      )
+      void qc.invalidateQueries({ queryKey: [...queryKeys.setsList] })
+      for (const k of mutationInvalidationKeys) {
+        if (k[0] !== 'sets') void qc.invalidateQueries({ queryKey: [...k] })
+      }
+    })
+      .catch((e: unknown) => {
+        toast.error(e instanceof Error ? e.message : 'Could not update the collection')
+      })
+      .finally(() => bumpPending(cardId, -1))
+  }
 
   if (data === null) {
     return (
@@ -124,55 +160,91 @@ export function SetChecklist({
           </ToggleGroup>
         </header>
 
-        <ToggleGroup
-          type="single"
-          variant="outline"
-          size="sm"
-          value={filter}
-          onValueChange={(f) => {
-            if (f === 'all' || f === 'owned' || f === 'missing') setFilter(f)
-          }}
-        >
-          {FILTERS.map((f) => (
-            <ToggleGroupItem key={f.value} value={f.value}>
-              {f.label}
-            </ToggleGroupItem>
-          ))}
-        </ToggleGroup>
+        <div className="flex flex-wrap items-center gap-3">
+          <ToggleGroup
+            type="single"
+            variant="outline"
+            size="sm"
+            value={filter}
+            onValueChange={(f) => {
+              if (f === 'all' || f === 'owned' || f === 'missing') setFilter(f)
+            }}
+          >
+            {FILTERS.map((f) => (
+              <ToggleGroupItem key={f.value} value={f.value}>
+                {f.label}
+              </ToggleGroupItem>
+            ))}
+          </ToggleGroup>
+          <div className="ml-auto flex items-center gap-3">
+            {bulk && (
+              <span className="text-sm text-muted-foreground">Changes save as you click.</span>
+            )}
+            <Button
+              variant={bulk ? 'default' : 'outline'}
+              size="sm"
+              onClick={() => setBulk((b) => !b)}
+            >
+              {bulk ? 'Done' : 'Bulk add'}
+            </Button>
+          </div>
+        </div>
 
-        <ul className="grid grid-cols-[repeat(auto-fill,minmax(7.5rem,1fr))] gap-3">
-          {tiles.map((t) => {
-            const owned = t.owned > 0
-            return (
-              <li key={t.key}>
-                <button
-                  type="button"
-                  data-owned={owned}
-                  aria-label={t.rarity ? `${t.card.name}, ${t.rarity}` : t.card.name}
-                  onClick={() => open(t)}
-                  className={cn(
-                    'relative flex w-full flex-col gap-1 rounded-lg p-1.5 text-left outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring',
-                    !owned && 'grayscale opacity-40'
-                  )}
-                >
-                  <CardArt imageId={t.card.imageId} size="small" alt="" className="w-full" />
-                  {owned && (
-                    <span className="absolute right-2.5 top-2.5 rounded-full bg-primary px-1.5 text-xs font-semibold tabular-nums text-primary-foreground">
-                      ×{t.owned}
-                    </span>
-                  )}
-                  <span className="text-xs tabular-nums text-muted-foreground">
-                    {t.card.numberLabel}
-                  </span>
-                  <span className="truncate text-xs font-medium">{t.card.name}</span>
-                  {t.rarity && (
-                    <span className="truncate text-xs text-muted-foreground">{t.rarity}</span>
-                  )}
-                </button>
+        {bulk ? (
+          <ul className="grid grid-cols-[repeat(auto-fill,minmax(14rem,1fr))] gap-3">
+            {tiles.map(({ card }) => (
+              <li key={card.cardId} className="flex gap-2 rounded-lg border p-2">
+                <CardArt imageId={card.imageId} size="small" alt="" className="w-14 shrink-0" />
+                <div className="min-w-0 flex-1 space-y-1.5">
+                  <div className="truncate text-xs font-medium">{card.name}</div>
+                  {card.rarities.map((r) => (
+                    <BulkRow
+                      key={r.rarity}
+                      card={card}
+                      rarity={r}
+                      busy={(pending[card.cardId] ?? 0) > 0}
+                      onAdjust={(printingId, delta) => adjust(card.cardId, printingId, delta)}
+                    />
+                  ))}
+                </div>
               </li>
-            )
-          })}
-        </ul>
+            ))}
+          </ul>
+        ) : (
+          <ul className="grid grid-cols-[repeat(auto-fill,minmax(7.5rem,1fr))] gap-3">
+            {tiles.map((t) => {
+              const owned = t.owned > 0
+              return (
+                <li key={t.key}>
+                  <button
+                    type="button"
+                    data-owned={owned}
+                    aria-label={t.rarity ? `${t.card.name}, ${t.rarity}` : t.card.name}
+                    onClick={() => open(t)}
+                    className={cn(
+                      'relative flex w-full flex-col gap-1 rounded-lg p-1.5 text-left outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring',
+                      !owned && 'grayscale opacity-40'
+                    )}
+                  >
+                    <CardArt imageId={t.card.imageId} size="small" alt="" className="w-full" />
+                    {owned && (
+                      <span className="absolute right-2.5 top-2.5 rounded-full bg-primary px-1.5 text-xs font-semibold tabular-nums text-primary-foreground">
+                        ×{t.owned}
+                      </span>
+                    )}
+                    <span className="text-xs tabular-nums text-muted-foreground">
+                      {t.card.numberLabel}
+                    </span>
+                    <span className="truncate text-xs font-medium">{t.card.name}</span>
+                    {t.rarity && (
+                      <span className="truncate text-xs text-muted-foreground">{t.rarity}</span>
+                    )}
+                  </button>
+                </li>
+              )
+            })}
+          </ul>
+        )}
 
         {selected && (
           <EntryDetailPanel

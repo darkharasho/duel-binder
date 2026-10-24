@@ -132,6 +132,17 @@ describe('BrowsePage', () => {
     await waitFor(() => expect(adjust).toHaveBeenCalledWith('Duelist Pack', 'ja', 11, 1))
   })
 
+  it('the panel shows the market price, and each printing its own price', async () => {
+    setup([card(1, 'Dark Magician')])
+    await userEvent.click(await screen.findByRole('button', { name: /Dark Magician/ }))
+    const panel = await screen.findByRole('dialog')
+    expect(within(panel).getByText('Market price').parentElement).toHaveTextContent(
+      'Market price $7.50'
+    )
+    const rows = await within(panel).findAllByRole('group')
+    for (const row of rows) expect(within(row).getByText('$10.00')).toBeInTheDocument()
+  })
+
   it('More options… in the panel opens Add with the default printing', async () => {
     const { onAddCard } = setup([card(1, 'Dark Magician')])
     await userEvent.click(await screen.findByRole('button', { name: /Dark Magician/ }))

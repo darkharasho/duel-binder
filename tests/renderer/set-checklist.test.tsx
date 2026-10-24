@@ -116,6 +116,9 @@ describe('SetChecklist', () => {
     const panel = await screen.findByRole('dialog')
     expect(within(panel).getByText('You have none yet')).toBeInTheDocument()
     expect(onAddMissing).not.toHaveBeenCalled()
+    // The card's price, and its rarity's price on the stepper row.
+    expect(within(panel).getByText('Market price')).toBeInTheDocument()
+    expect(within(panel).getAllByText('$3.00')).toHaveLength(2)
 
     const rarity = metalRaidersChecklist.cards[2].rarities[0].rarity
     await userEvent.click(within(panel).getByRole('button', { name: `Add one Gamma Trap ${rarity}` }))

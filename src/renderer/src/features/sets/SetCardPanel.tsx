@@ -11,6 +11,7 @@ import {
   SheetTitle
 } from '@/components/ui/sheet'
 import { api, queryKeys } from '@/lib/api'
+import { formatUsd } from '@/lib/format'
 import { BulkRow } from './BulkRow'
 
 interface SetCardPanelProps {
@@ -59,9 +60,17 @@ export function SetCardPanel({
             printingId={focus?.defaultPrintingId}
             alt={card.name}
           />
-          <p className="font-mono text-[13px] text-muted-foreground">
-            {setName} · {card.numberLabel}
-          </p>
+          <div className="space-y-1">
+            <p className="font-mono text-[13px] text-muted-foreground">
+              {setName} · {card.numberLabel}
+            </p>
+            {card.price !== null && (
+              <p className="text-sm">
+                <span className="text-muted-foreground">Market price</span>{' '}
+                <span className="font-medium tabular-nums">{formatUsd(card.price)}</span>
+              </p>
+            )}
+          </div>
 
           <CardDetails card={info} />
 
@@ -70,7 +79,14 @@ export function SetCardPanel({
               {card.owned > 0 ? `You have ${card.owned}` : 'You have none yet'}
             </h3>
             {rarities.map((r) => (
-              <BulkRow key={r.rarity} card={card} rarity={r} busy={busy} onAdjust={onAdjust} />
+              <BulkRow
+                key={r.rarity}
+                card={card}
+                rarity={r}
+                busy={busy}
+                onAdjust={onAdjust}
+                showPrice
+              />
             ))}
           </section>
 

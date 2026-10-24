@@ -16,6 +16,7 @@ import {
 } from '@/components/ui/sheet'
 import { api, mutationInvalidationKeys, queryKeys } from '@/lib/api'
 import { createSerialQueue } from '@/lib/serialQueue'
+import { formatUsd } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
 interface BrowseCardPanelProps {
@@ -84,6 +85,12 @@ export function BrowseCardPanel({
             printingId={card.defaultPrintingId}
             alt={card.name}
           />
+          {card.price !== null && (
+            <p className="text-sm">
+              <span className="text-muted-foreground">Market price</span>{' '}
+              <span className="font-medium tabular-nums">{formatUsd(card.price)}</span>
+            </p>
+          )}
 
           <CardDetails card={info} />
 
@@ -110,6 +117,11 @@ export function BrowseCardPanel({
                       {p.setCode} · {p.setRarity}
                     </div>
                   </div>
+                  {p.setPrice !== null && (
+                    <span className="text-xs text-muted-foreground tabular-nums">
+                      {formatUsd(p.setPrice)}
+                    </span>
+                  )}
                   <Button
                     variant="outline"
                     size="icon-sm"

@@ -9,6 +9,7 @@ import {
   SelectTrigger,
   SelectValue
 } from '@/components/ui/select'
+import { formatUsd } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
 interface BulkRowProps {
@@ -16,10 +17,18 @@ interface BulkRowProps {
   rarity: ChecklistRarity
   busy: boolean
   onAdjust: (printingId: number, delta: 1 | -1) => void
+  /** Shows the rarity's price before the stepper (the side panel has room; bulk tiles don't). */
+  showPrice?: boolean
 }
 
 /** One rarity of a card in bulk mode: a code picker and a −/count/+ stepper. */
-export function BulkRow({ card, rarity, busy, onAdjust }: BulkRowProps): React.JSX.Element {
+export function BulkRow({
+  card,
+  rarity,
+  busy,
+  onAdjust,
+  showPrice
+}: BulkRowProps): React.JSX.Element {
   const [chosenId, setPrintingId] = useState(rarity.defaultPrintingId)
   // A sync can drop the chosen printing; fall back to the default rather than adjusting a dead id.
   const printingId = rarity.codes.some((c) => c.printingId === chosenId)
@@ -56,6 +65,9 @@ export function BulkRow({ card, rarity, busy, onAdjust }: BulkRowProps): React.J
           </Select>
         )}
       </div>
+      {showPrice && rarity.price !== null && (
+        <span className="text-xs text-muted-foreground tabular-nums">{formatUsd(rarity.price)}</span>
+      )}
       <Button
         variant="outline"
         size="icon-sm"

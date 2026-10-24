@@ -28,4 +28,14 @@ describe('BulkRow', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Add one Alpha Ultra Rare' }))
     expect(onAdjust).toHaveBeenLastCalledWith(1, 1)
   })
+
+  it('shows the price only when asked', () => {
+    const priced = { ...rarity([1], 1), price: 4.25 }
+    const { rerender } = render(
+      <BulkRow card={card} rarity={priced} busy={false} onAdjust={() => {}} />
+    )
+    expect(screen.queryByText('$4.25')).not.toBeInTheDocument()
+    rerender(<BulkRow card={card} rarity={priced} busy={false} onAdjust={() => {}} showPrice />)
+    expect(screen.getByText('$4.25')).toBeInTheDocument()
+  })
 })

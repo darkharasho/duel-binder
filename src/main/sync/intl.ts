@@ -168,11 +168,20 @@ async function run(
   const seenSets = new Set<string>()
 
   // Sets not stored yet go first, so an interrupted first sync fills in rather than starting over;
-  // within that, Asian-market lists first, since those hold the sets English data lacks entirely.
+  // within that, sets with no English release (e.g. Limit Over Collection) first, then Asian-market
+  // lists before European ones.
   const storedSet = db.prepare('SELECT 1 FROM sets WHERE language = ? AND set_name = ?')
+  const englishSets = new Set(
+    (
+      db.prepare("SELECT DISTINCT set_name FROM card_printings WHERE language = 'en'").all() as {
+        set_name: string
+      }[]
+    ).map((r) => r.set_name.toLowerCase())
+  )
   const priority = (j: SetJob): number => {
     const i = LANGUAGE_PRIORITY.indexOf(j.language)
-    return i === -1 ? LANGUAGE_PRIORITY.length : i
+    const lang = i === -1 ? LANGUAGE_PRIORITY.length : i
+    return (englishSets.has(j.setName.toLowerCase()) ? LANGUAGE_PRIORITY.length + 1 : 0) + lang
   }
   const byPriority = (a: SetJob, b: SetJob): number => priority(a) - priority(b)
   const ordered = [

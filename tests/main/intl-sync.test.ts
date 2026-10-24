@@ -76,12 +76,21 @@ afterEach(() => vi.restoreAllMocks())
 
 describe('refreshIntlSets', () => {
   it('fetches Japanese and Korean lists before European ones', async () => {
-    const de = 'Set Card Lists:Alpha Pack (TCG-DE)'
-    const ko = 'Set Card Lists:Zeta Pack (OCG-KR)'
+    const de = 'Set Card Lists:Legend of Blue Eyes White Dragon (TCG-DE)'
+    const ko = 'Set Card Lists:Legend of Blue Eyes White Dragon (OCG-KR)'
     const f = fake({ [de]: listPage([]), [LB]: listPage([]), [ko]: listPage([]) })
     f.lists = [de, ko, LB]
     await refreshIntlSets(db, f.client, NOW)
     expect(f.pageCalls[0]).toEqual([LB, ko, de])
+  })
+
+  it('fetches sets with no English release before the rest', async () => {
+    const de = 'Set Card Lists:Alpha Pack (TCG-DE)'
+    const ko = 'Set Card Lists:Zeta Pack (OCG-KR)'
+    const f = fake({ [de]: listPage([]), [LB]: listPage([]), [ko]: listPage([]) })
+    f.lists = [LB, de, ko]
+    await refreshIntlSets(db, f.client, NOW)
+    expect(f.pageCalls[0]).toEqual([ko, de, LB])
   })
 
   it('imports a Japanese set as its own set', async () => {

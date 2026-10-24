@@ -156,8 +156,8 @@ describe('TCGplayer catalog', () => {
 
   it('variantLabel keeps what sets a product apart, not its rarity', () => {
     expect(variantLabel('Audhumla', 'Ultra Rare')).toBe('')
-    expect(variantLabel('Audhumla (Extended Art)', 'Ultra Rare')).toBe('Extended Art')
-    expect(variantLabel('Audhumla (Starlight Rare) (Extended Art)', 'Starlight Rare')).toBe('Extended Art')
+    expect(variantLabel('Audhumla (Extended Art)', 'Ultra Rare')).toBe('Overframe')
+    expect(variantLabel('Audhumla (Starlight Rare) (Extended Art)', 'Starlight Rare')).toBe('Overframe')
     expect(variantLabel('Danger! Bigfoot! (Alternate Art) (PCR)', "Prismatic Collector's Rare")).toBe(
       'Alternate Art'
     )
@@ -184,7 +184,7 @@ describe('TCGplayer catalog', () => {
       .all() as { id: number; set_rarity: string; tcg_product_id: number | null }[]
     expect(rows.map((r) => [r.set_rarity, r.tcg_product_id])).toEqual([
       ['Ultra Rare', null],
-      ['Ultra Rare (Extended Art)', 7]
+      ['Ultra Rare (Overframe)', 7]
     ])
     const lookup = createTcgplayerLookup(db)
     // The plain card keeps the plain photo even though the variant has the lower product id.
@@ -199,10 +199,26 @@ describe('TCGplayer catalog', () => {
     await runSync(db, client, () => {}, now)
     expect(db.prepare('SELECT count(*) AS n FROM card_printings WHERE tcg_product_id = 7').get()).toEqual({ n: 1 })
 
+    // An overframe-only rarity: its single product is the variant, so the printing is labelled.
+    const sdy = printingId(db, 'SDY-006')
+    await refreshTcgCatalog(db, {
+      version: '1',
+      fetchFn: catalogFetch([{ groupId: 10, modifiedOn: 'c' }], {
+        10: [...products, product(11, 'SDY-006', 'Ultra Rare', 1, 'Dark Magician (Extended Art)')]
+      }) as unknown as typeof fetch,
+      now
+    })
+    expect(db.prepare('SELECT variant FROM card_printings WHERE id = ?').get(sdy)).toEqual({
+      variant: 'Overframe'
+    })
+    expect(db.prepare('SELECT variant FROM card_printings WHERE id = ?').get(rows[0].id)).toEqual({
+      variant: null
+    })
+
     // Gone from the catalog: removed.
     await refreshTcgCatalog(db, {
       version: '1',
-      fetchFn: catalogFetch([{ groupId: 10, modifiedOn: 'b' }], {
+      fetchFn: catalogFetch([{ groupId: 10, modifiedOn: 'd' }], {
         10: [products[1]]
       }) as unknown as typeof fetch,
       now

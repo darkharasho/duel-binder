@@ -1,4 +1,5 @@
 import type Database from 'better-sqlite3'
+import { RARITY_LABEL } from '../db/database'
 import type { CardDetail, CardImage, CardRow, CardSearchResult, Printing } from '../../shared/types'
 import { isLanguage } from '../../shared/languages'
 
@@ -129,7 +130,13 @@ export function getCardDetail(db: Database.Database, cardId: number): CardDetail
   const row = db.prepare('SELECT * FROM cards WHERE id = ?').get(cardId) as CardDbRow | undefined
   if (!row) return null
   const printings = (
-    db.prepare('SELECT * FROM card_printings WHERE card_id = ? ORDER BY set_code, id').all(cardId) as PrintingDbRow[]
+    db
+      .prepare(
+        `SELECT p.id, p.card_id, p.set_name, p.set_code, ${RARITY_LABEL} AS set_rarity, p.set_rarity_code,
+                p.set_price, p.missing_from_api, p.language
+         FROM card_printings p WHERE p.card_id = ? ORDER BY p.set_code, p.id`
+      )
+      .all(cardId) as PrintingDbRow[]
   ).map(rowToPrinting)
   const images = (
     db

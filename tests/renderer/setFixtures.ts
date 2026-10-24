@@ -18,6 +18,7 @@ export const metalRaidersChecklist: SetChecklist = {
     setCode: 'MRD',
     tcgDate: '2002-06-26',
     imageKey: 'MRD',
+    packImageKey: null,
     coverImageId: null,
     totalCards: 3,
     ownedCards: 1,

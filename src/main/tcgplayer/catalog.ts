@@ -131,7 +131,7 @@ export async function refreshTcgCatalog(
     }
   })()
 
-  if (result.updatedGroups > 0) saveTcgVariants(db)
+  saveTcgVariants(db)
   result.ok = result.failedGroups === 0
   if (result.ok) setMeta(db, 'tcgplayer_synced_at', (opts.now ?? new Date()).toISOString())
   console.info(
@@ -170,7 +170,8 @@ export function variantLabel(name: string, rarity: string): string {
     }
     notes.push(note)
   }
-  return notes.join(', ')
+  // TCGplayer's "Extended Art" is the card art running over the frame: an overframe.
+  return notes.map((n) => (/^extended art$/i.test(n) ? 'Overframe' : n)).join(', ')
 }
 
 interface ProductRow {
@@ -194,7 +195,8 @@ function sameRarity(rows: ProductRow[], rarity: string): ProductRow[] {
  * Adds a printing for each art variant TCGplayer lists beside a printing YGOPRODeck has
  * (an overframe Ultra Rare next to the plain one, the colours of a Legendary Duelists foil),
  * named "<rarity> (<variant>)". Variants gone from the catalog are removed, or flagged missing
- * when owned. Misprints are left out.
+ * when owned. Misprints are left out. A YGOPRODeck printing whose own product is itself a variant
+ * (an overframe-only Starlight Rare) gets that variant in card_printings.variant.
  */
 export function saveTcgVariants(db: Database.Database): number {
   const groups = db
@@ -246,6 +248,17 @@ export function saveTcgVariants(db: Database.Database): number {
         ) as { id: number }
         seen.add(row.id)
       }
+    }
+    const labelled = db.prepare('UPDATE card_printings SET variant = ? WHERE id = ?')
+    const plain = db.prepare(
+      `SELECT id, set_code, set_rarity, variant FROM card_printings
+       WHERE language = 'en' AND tcg_product_id IS NULL AND set_code <> ''`
+    ).all() as { id: number; set_code: string; set_rarity: string; variant: string | null }[]
+    for (const p of plain) {
+      const own = sameRarity(products.all(p.set_code) as ProductRow[], p.set_rarity)[0]
+      const label = own ? variantLabel(own.name, own.rarity) : ''
+      const variant = label && !/misprint/i.test(label) ? label : null
+      if (variant !== p.variant) labelled.run(variant, p.id)
     }
     const stale = (
       db.prepare("SELECT id FROM card_printings WHERE tcg_product_id IS NOT NULL").all() as { id: number }[]

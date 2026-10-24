@@ -4,6 +4,7 @@ import path from 'node:path'
 import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import type { ReadableStream as WebReadableStream } from 'node:stream/web'
+import { PACK_ART_PREFIX } from '../konami/packArt'
 import { createLimiter, type Limiter } from './limiter'
 
 /** 'cropped' is the artwork alone, without the card frame. */
@@ -91,7 +92,7 @@ export function createImageCache(opts: {
   limit?: Limiter
   /** App version, sent in the Yugipedia User-Agent. */
   version?: string
-  /** Maps a `yp-` set-image key to its source URL (null when unknown). */
+  /** Maps a `yp-` (Yugipedia) or `yc-` (official site) set-image key to its source URL (null when unknown). */
   resolveSetImage?: (key: string) => string | null
   /** Finds the photo URL of a printing, Yugipedia or TCGplayer (null when none). */
   resolvePrintingArt?: (printingId: number) => Promise<string | null>
@@ -140,14 +141,15 @@ export function createImageCache(opts: {
 
     async getSet(key) {
       if (!SET_KEY_RE.test(key)) return null
-      if (key.startsWith('yp-')) {
+      if (key.startsWith('yp-') || key.startsWith('yc-')) {
         let remote: string | null
         try {
           remote = opts.resolveSetImage?.(key) ?? null
         } catch {
           return null // e.g. the database is closed or busy; never reject the protocol handler
         }
-        if (remote === null || !remote.startsWith(YUGIPEDIA_IMAGE_PREFIX)) return null
+        const prefix = key.startsWith('yp-') ? YUGIPEDIA_IMAGE_PREFIX : PACK_ART_PREFIX
+        if (remote === null || !remote.startsWith(prefix)) return null
         return cached(`set/${key}`, remote, path.join(opts.dir, 'sets', `${key}.jpg`), {
           'User-Agent': `YugiohCollectionTracker/${opts.version ?? 'unknown'} (${REPO_URL})`
         })

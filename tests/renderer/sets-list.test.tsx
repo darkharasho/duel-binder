@@ -12,6 +12,7 @@ const set = (o: Partial<SetSummary>): SetSummary => ({
   setCode: 'SET',
   tcgDate: '2002-06-26',
   imageKey: 'SET',
+  packImageKey: null,
   coverImageId: null,
   totalCards: 1,
   ownedCards: 0,
@@ -194,6 +195,17 @@ describe('SetArt', () => {
     expect(img).toHaveAttribute('src', 'ygo-img://cropped/7')
     fireEvent.error(img)
     expect(container.querySelector('img')).toHaveAttribute('src', 'ygo-img://set/LOB')
+  })
+
+  it('shows the official pack render whole, ahead of the headline card', () => {
+    const { container } = renderWithProviders(
+      <SetArt imageKey="LOB" packImageKey="yc-abc" coverImageId={7} setCode="LOB" />
+    )
+    const pack = container.querySelector('img[loading="lazy"]')!
+    expect(pack).toHaveAttribute('src', 'ygo-img://set/yc-abc')
+    expect(pack).toHaveClass('object-contain')
+    fireEvent.error(pack)
+    expect(container.querySelector('img')).toHaveAttribute('src', 'ygo-img://cropped/7')
   })
 
   it('uses the ygo-img set URL', () => {

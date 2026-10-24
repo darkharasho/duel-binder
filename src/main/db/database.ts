@@ -82,6 +82,19 @@ DELETE FROM tcgplayer_groups;
 DELETE FROM meta WHERE key = 'tcgplayer_synced_at';
 `
 
+/**
+ * Official pack renders for English sets, keyed by name since English set rows are rebuilt; and
+ * the variant a printing's TCGplayer product names ("Extended Art"), shown after its rarity.
+ */
+export const SCHEMA_V7 = `
+CREATE TABLE pack_art (set_name TEXT PRIMARY KEY, image_url TEXT NOT NULL, image_key TEXT NOT NULL UNIQUE);
+ALTER TABLE card_printings ADD COLUMN variant TEXT;
+DELETE FROM meta WHERE key = 'tcgplayer_synced_at';
+`
+
+/** A printing's rarity as shown: "Starlight Rare (Extended Art)" for a labelled variant. */
+export const RARITY_LABEL = "p.set_rarity || COALESCE(' (' || p.variant || ')', '')"
+
 /** Ordered schema steps. Append new versions to the end; never edit a shipped step. */
 const MIGRATIONS: Migration[] = [
   { version: 1, sql: SCHEMA_V1 },
@@ -89,7 +102,8 @@ const MIGRATIONS: Migration[] = [
   { version: 3, sql: SCHEMA_V3, foreignKeysOff: true },
   { version: 4, sql: SCHEMA_V4 },
   { version: 5, sql: SCHEMA_V5 },
-  { version: 6, sql: SCHEMA_V6 }
+  { version: 6, sql: SCHEMA_V6 },
+  { version: 7, sql: SCHEMA_V7 }
 ]
 
 export function openDatabase(file: string): Database.Database {

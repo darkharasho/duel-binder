@@ -1,4 +1,5 @@
 import type Database from 'better-sqlite3'
+import { RARITY_LABEL } from '../db/database'
 import { pickDefaultCode, setNumber, setPrefix } from '../../shared/sets'
 import type { ChecklistCard, ChecklistRarity, SetChecklist, SetSummary } from '../../shared/types'
 import type { Language } from '../../shared/languages'
@@ -13,6 +14,7 @@ interface SummaryDbRow {
   tcg_date: string | null
   image_url: string | null
   image_key: string | null
+  pack_key: string | null
   list_rows: number | null
   unmatched_rows: number | null
   total_cards: number
@@ -25,7 +27,7 @@ interface SummaryDbRow {
 // card_id is an integer, so the first "|" always ends it.
 const SUMMARY = `
   SELECT p.language, p.set_name, s.set_code AS s_code, MIN(p.set_code) AS min_code, s.tcg_date, s.image_url,
-         s.image_key, s.list_rows, s.unmatched_rows,
+         s.image_key, pa.image_key AS pack_key, s.list_rows, s.unmatched_rows,
          COUNT(DISTINCT p.card_id) AS total_cards,
          COUNT(DISTINCT CASE WHEN o.printing_id IS NOT NULL THEN p.card_id END) AS owned_cards,
          COUNT(DISTINCT p.card_id || '|' || p.set_rarity) AS total_rarities,
@@ -33,7 +35,8 @@ const SUMMARY = `
            AS owned_rarities
   FROM card_printings p
   LEFT JOIN (SELECT DISTINCT printing_id FROM collection_entries) o ON o.printing_id = p.id
-  LEFT JOIN sets s ON s.language = p.language AND s.set_name = p.set_name`
+  LEFT JOIN sets s ON s.language = p.language AND s.set_name = p.set_name
+  LEFT JOIN pack_art pa ON p.language = 'en' AND pa.set_name = p.set_name`
 
 /**
  * Each set's headline card: its rarest printing (lowest code, skipping 000 bonus cards). Its
@@ -84,6 +87,7 @@ function toSummary(r: SummaryDbRow, covers: Map<string, number>): SetSummary {
     setCode: r.s_code ? r.s_code : setPrefix(r.min_code),
     tcgDate: r.tcg_date,
     imageKey: r.image_key ?? setImageKey(r.image_url),
+    packImageKey: r.pack_key,
     coverImageId: covers.get(`${r.language}|${r.set_name}`) ?? null,
     totalCards: r.total_cards,
     ownedCards: r.owned_cards,
@@ -157,7 +161,7 @@ function checklistCards(
   const params = cardId === undefined ? [language, setName] : [language, setName, cardId]
   const printings = db
     .prepare(
-      `SELECT p.id, p.card_id, p.set_code, p.set_rarity, c.name, c.type, p.set_price,
+      `SELECT p.id, p.card_id, p.set_code, ${RARITY_LABEL} AS set_rarity, c.name, c.type, p.set_price,
               c.tcgplayer_price AS card_price, c.atk, c.def, COALESCE(c.level, c.linkval) AS level,
               (SELECT i.image_id FROM card_images i WHERE i.card_id = c.id
                ORDER BY i.sort_order, i.image_id LIMIT 1) AS image_id

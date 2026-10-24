@@ -15,6 +15,7 @@ import { createPriceService } from './prices/service'
 import { refreshIntlPrices } from './prices/refresh'
 import { createYugipediaClient } from './yugipedia/client'
 import { createPrintingArtResolver } from './yugipedia/artResolver'
+import { refreshPackArt, shouldRefreshPackArt } from './konami/packArt'
 import { createTcgplayerLookup, refreshTcgCatalog, shouldRefreshTcgCatalog } from './tcgplayer/catalog'
 import { recordSnapshot } from './repo/stats'
 import { createImageCache } from './images/cache'
@@ -118,7 +119,12 @@ function bootstrap(): void {
     version: app.getVersion(),
     resolveSetImage: (key) =>
       (
-        db.prepare('SELECT image_url FROM sets WHERE image_key = ?').get(key) as
+        db
+          .prepare(
+            `SELECT image_url FROM sets WHERE image_key = ?1
+             UNION ALL SELECT image_url FROM pack_art WHERE image_key = ?1 LIMIT 1`
+          )
+          .get(key) as
           { image_url: string | null } | undefined
       )?.image_url ?? null,
     resolvePrintingArt: (id) => printingArt.url(id)
@@ -216,6 +222,9 @@ function bootstrap(): void {
       // A few minutes at most; English cards then show their TCGplayer photos.
       const tcg = await refreshTcgCatalog(db, { version: app.getVersion() })
       if (tcg.updatedGroups > 0) emitDataChanged()
+    }
+    if (hasSetData(db) && shouldRefreshPackArt(db, new Date())) {
+      if ((await refreshPackArt(db, { version: app.getVersion() })) > 0) emitDataChanged()
     }
     const { n } = db.prepare('SELECT count(*) AS n FROM cards').get() as { n: number }
     if (n > 0 && shouldRefreshIntl(db, new Date())) {

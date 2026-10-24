@@ -15,6 +15,7 @@ import {
 export const INTL_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000
 const CHUNK_SIZE = 50
 const MAX_LOGGED_UNMATCHED = 20
+const LANGUAGE_PRIORITY: readonly Language[] = ['ja', 'ko', 'zh-hans', 'zh-hant']
 
 export interface IntlSyncResult {
   sets: number
@@ -166,10 +167,16 @@ async function run(
   const unmatchedExamples: string[] = []
   const seenSets = new Set<string>()
 
-  // Sets not stored yet go first, so an interrupted first sync fills in rather than starting over.
+  // Sets not stored yet go first, so an interrupted first sync fills in rather than starting over;
+  // within that, Asian-market lists first, since those hold the sets English data lacks entirely.
   const storedSet = db.prepare('SELECT 1 FROM sets WHERE language = ? AND set_name = ?')
+  const priority = (j: SetJob): number => {
+    const i = LANGUAGE_PRIORITY.indexOf(j.language)
+    return i === -1 ? LANGUAGE_PRIORITY.length : i
+  }
+  const byPriority = (a: SetJob, b: SetJob): number => priority(a) - priority(b)
   const ordered = [
-    ...jobs.filter((j) => !storedSet.get(j.language, j.setName)),
+    ...jobs.filter((j) => !storedSet.get(j.language, j.setName)).sort(byPriority),
     ...jobs.filter((j) => storedSet.get(j.language, j.setName))
   ]
   let saved = 0

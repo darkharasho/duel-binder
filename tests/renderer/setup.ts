@@ -24,3 +24,10 @@ if (!('ResizeObserver' in globalThis)) {
   } as unknown as typeof ResizeObserver
 }
 if (!Element.prototype.scrollIntoView) Element.prototype.scrollIntoView = () => {}
+
+// jsdom lacks pointer-capture APIs used by Radix Select.
+if (!Element.prototype.hasPointerCapture) {
+  Element.prototype.hasPointerCapture = () => false
+  Element.prototype.setPointerCapture = () => {}
+  Element.prototype.releasePointerCapture = () => {}
+}

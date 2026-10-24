@@ -31,7 +31,13 @@ function App(): React.JSX.Element {
     <>
       <AppShell page={page} onNavigate={onNavigate} onAddCard={() => setAddOpen(true)}>
         {page === 'dashboard' && <DashboardPage onNavigate={onNavigate} />}
-        {page === 'collection' && <CollectionPage key={entryId ?? 'all'} initialEntryId={entryId} />}
+        {page === 'collection' && (
+          <CollectionPage
+            key={entryId ?? 'all'}
+            initialEntryId={entryId}
+            onAddCard={() => setAddOpen(true)}
+          />
+        )}
         {page === 'settings' && <SettingsPage />}
       </AppShell>
       <AddCardDialog open={addOpen} onOpenChange={setAddOpen} />

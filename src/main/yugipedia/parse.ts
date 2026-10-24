@@ -74,19 +74,32 @@ export function parseSetList(wikitext: string): ParsedSetList | null {
     const fallback = splitRarities(params.get('rarities'))
     i++
     for (; i < lines.length; i++) {
-      const line = lines[i].trim()
+      let line = lines[i].trim()
+      let closes = false
       if (line.startsWith('}}')) {
         i++
         break
       }
       if (line === '' || line.startsWith('<!--')) continue
-      const fields = line.split(';').map((s) => s.trim())
-      const code = noCode ? '' : (fields.shift() ?? '')
-      const name = (fields[0] ?? '').replace(/\s*\/\/.*$/, '').trim()
-      if (name === '') continue
-      const own = splitRarities(fields[1])
-      const rarities = own.length ? own : fallback.length ? fallback : ['Common']
-      rows.push({ code, name, rarities })
+      if (line.endsWith('}}')) {
+        closes = true
+        line = line.slice(0, -2)
+      }
+      line = line.replace(/\s*\/\/.*$/, '').trim()
+      if (line !== '') {
+        const fields = line.split(';').map((s) => s.trim())
+        const code = noCode ? '' : (fields.shift() ?? '')
+        const name = fields[0] ?? ''
+        if (name !== '') {
+          const own = splitRarities(fields[1])
+          const rarities = own.length ? own : fallback.length ? fallback : ['Common']
+          rows.push({ code, name, rarities })
+        }
+      }
+      if (closes) {
+        i++
+        break
+      }
     }
   }
   if (!found) return null

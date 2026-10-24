@@ -11,7 +11,10 @@ import {
 } from '../../src/main/yugipedia/parse'
 
 const fx = (name: string): string =>
-  readFileSync(join(__dirname, '..', 'fixtures', 'yugipedia', `${name}.wikitext`), 'utf8')
+  readFileSync(
+    join(__dirname, '..', 'fixtures', 'yugipedia', `${name.replace(':', ' - ')}.wikitext`),
+    'utf8'
+  )
 
 describe('parseSetList', () => {
   it('parses the LB Japanese list', () => {
@@ -61,9 +64,21 @@ describe('parseSetList', () => {
   })
 
   it('expands abbreviations, skips comments, strips // suffixes', () => {
-    const r = parseSetList('{{Set list|region=JP|\n<!-- x -->\n\nAB-001; Foo // note; SR, UR\n}}')!
+    const r = parseSetList(
+      '{{Set list|region=JP|\n<!-- x -->\n\nAB-001; Foo // note\nAB-002; Bar; SR, UR\nAB-003; Baz; Ultra Rare // reprint\n}}'
+    )!
     expect(r.rows).toEqual([
-      { code: 'AB-001', name: 'Foo', rarities: ['Super Rare', 'Ultra Rare'] }
+      { code: 'AB-001', name: 'Foo', rarities: ['Common'] },
+      { code: 'AB-002', name: 'Bar', rarities: ['Super Rare', 'Ultra Rare'] },
+      { code: 'AB-003', name: 'Baz', rarities: ['Ultra Rare'] }
+    ])
+  })
+
+  it('closes the template when }} follows the last row', () => {
+    const r = parseSetList('{{Set list|region=JP|\nA-1; One; R\nA-2; Two; SR}}\nA-3; Not a row\n')!
+    expect(r.rows).toEqual([
+      { code: 'A-1', name: 'One', rarities: ['Rare'] },
+      { code: 'A-2', name: 'Two', rarities: ['Super Rare'] }
     ])
   })
 

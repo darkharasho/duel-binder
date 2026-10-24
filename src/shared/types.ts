@@ -121,3 +121,47 @@ export interface UpdateStatus {
   version: string | null
   error: string | null
 }
+
+export type CountMode = 'cards' | 'rarities'
+
+export interface SetSummary {
+  setName: string
+  setCode: string // sets.set_code, else setPrefix of the set's lowest printing code
+  tcgDate: string | null // 'YYYY-MM-DD'
+  imageKey: string | null // file stem under images/sets/, already validated
+  totalCards: number
+  ownedCards: number
+  totalRarities: number
+  ownedRarities: number
+}
+
+export interface ChecklistCode {
+  printingId: number
+  setCode: string
+  owned: number
+}
+
+export interface ChecklistRarity {
+  rarity: string
+  owned: number
+  codes: ChecklistCode[] // sorted by setCode
+  defaultPrintingId: number // pickDefaultCode over codes
+  entryId: number | null // most recently updated entry of this rarity in this set
+}
+
+export interface ChecklistCard {
+  cardId: number
+  name: string
+  type: string
+  number: number | null
+  numberLabel: string // from the lowest-numbered code
+  imageId: number // original art (card_images sort_order 0)
+  owned: number // sum over rarities
+  entryId: number | null // most recently updated entry of the card in this set
+  rarities: ChecklistRarity[] // sorted by rarity name
+}
+
+export interface SetChecklist {
+  set: SetSummary
+  cards: ChecklistCard[]
+}

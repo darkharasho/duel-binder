@@ -128,18 +128,18 @@ export function FilterBar({ filters, facets, onChange, onClear }: Props): React.
       <Input
         type="number"
         aria-label="Level min"
-        placeholder="Lv min"
+        placeholder="Min Lv"
         value={filters.levelMin ?? ''}
         onChange={(e) => onChange({ levelMin: parseLevel(e.target.value) })}
-        className="w-20 tabular-nums"
+        className="w-24 tabular-nums"
       />
       <Input
         type="number"
         aria-label="Level max"
-        placeholder="Lv max"
+        placeholder="Max Lv"
         value={filters.levelMax ?? ''}
         onChange={(e) => onChange({ levelMax: parseLevel(e.target.value) })}
-        className="w-20 tabular-nums"
+        className="w-24 tabular-nums"
       />
       <Select value={filters.sort} onValueChange={(v) => onChange({ sort: v as SortKey })}>
         <SelectTrigger size="sm" aria-label="Sort by" className="w-36">

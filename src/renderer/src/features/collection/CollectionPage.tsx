@@ -58,8 +58,14 @@ export function CollectionPage({ initialEntryId, onAddCard }: Props): React.JSX.
   const facets = useQuery({ queryKey: queryKeys.facets, queryFn: () => api.collection.facets() })
   const stats = useQuery({ queryKey: queryKeys.stats, queryFn: () => api.stats.get() })
 
-  // An entry opened by id (initialEntryId) resolves its card once the list has loaded.
-  const cardId = pickedCardId ?? entries.data?.find((e) => e.id === selectedId)?.card.id ?? null
+  // An entry opened by id (initialEntryId) resolves its card once the list has loaded;
+  // persist it so later filtering that excludes the entry does not unmount the panel.
+  const resolvedCardId =
+    pickedCardId === null && selectedId !== null
+      ? entries.data?.find((e) => e.id === selectedId)?.card.id
+      : undefined
+  if (resolvedCardId !== undefined) setCardId(resolvedCardId)
+  const cardId = pickedCardId ?? resolvedCardId ?? null
 
   const onChange = useCallback(
     (patch: Partial<CollectionFilters>) => setFilters((f) => ({ ...f, ...patch })),

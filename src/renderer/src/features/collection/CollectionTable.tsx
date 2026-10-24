@@ -10,7 +10,6 @@ import {
   TableHeader,
   TableRow
 } from '@/components/ui/table'
-import { formatUsd } from '@/lib/format'
 import { StaleBadge, ValueText } from './EntryValue'
 
 interface Props {
@@ -57,7 +56,9 @@ const columns = helper.columns([
   helper.accessor('unitPrice', {
     id: 'unitPrice',
     header: 'Unit price',
-    cell: ({ row }) => <span className="tabular-nums">{formatUsd(row.original.unitPrice)}</span>
+    cell: ({ row }) => (
+      <ValueText amount={row.original.unitPrice} approximate={row.original.priceApproximate} />
+    )
   }),
   helper.accessor('totalValue', {
     id: 'total',

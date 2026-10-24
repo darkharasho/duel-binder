@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { toast } from 'sonner'
 import type { CardDetail, CardRow, EntryView, Printing } from '@shared/types'
@@ -196,6 +196,20 @@ describe('CollectionPage', () => {
     expect(
       await within(screen.getByRole('dialog')).findByText('Blue-Eyes White Dragon')
     ).toBeInTheDocument()
+  })
+
+  it('keeps the panel open when a filter excludes the initial entry', async () => {
+    const { list } = setup([dm, bew], {}, { initialEntryId: 2 })
+    expect(
+      await within(await screen.findByRole('dialog')).findByText('Blue-Eyes White Dragon')
+    ).toBeInTheDocument()
+    list.mockImplementation(async () => [dm])
+    fireEvent.change(screen.getByLabelText('Level min'), { target: { value: '3' } })
+    await waitFor(() =>
+      expect(list).toHaveBeenLastCalledWith(expect.objectContaining({ levelMin: 3 }))
+    )
+    await new Promise((r) => setTimeout(r, 50))
+    expect(screen.getByRole('dialog')).toBeInTheDocument()
   })
 
   it('empty and no-match states', async () => {

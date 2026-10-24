@@ -88,6 +88,7 @@ describe('imageUrl', () => {
   it('returns the YGOPRODeck URLs', () => {
     expect(imageUrl('full', 46986414)).toBe('https://images.ygoprodeck.com/images/cards/46986414.jpg')
     expect(imageUrl('small', 46986414)).toBe('https://images.ygoprodeck.com/images/cards_small/46986414.jpg')
+    expect(imageUrl('cropped', 5)).toBe('https://images.ygoprodeck.com/images/cards_cropped/5.jpg')
   })
 })
 
@@ -95,6 +96,7 @@ describe('parseImageUrl', () => {
   it('parses valid urls', () => {
     expect(parseImageUrl('ygo-img://small/46986414')).toEqual({ size: 'small', id: 46986414 })
     expect(parseImageUrl('ygo-img://full/1')).toEqual({ size: 'full', id: 1 })
+    expect(parseImageUrl('ygo-img://cropped/5')).toEqual({ size: 'cropped', id: 5 })
   })
   it('rejects malformed urls', () => {
     for (const u of ['ygo-img://huge/1', 'ygo-img://small/abc', 'ygo-img://small/0', 'ygo-img://small/-5', 'ygo-img://small/1.5', 'ygo-img://small/', 'ygo-img://small/1/2', 'ygo-img://small/1e3', 'nonsense'])

@@ -17,6 +17,7 @@ const mk = (o: Partial<SetSummary>): SetSummary => ({
   setCode: 'SET',
   tcgDate: null,
   imageKey: null,
+  coverImageId: null,
   totalCards: 100,
   ownedCards: 0,
   totalRarities: 120,

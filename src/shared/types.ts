@@ -208,6 +208,7 @@ export interface SetSummary {
   setCode: string // sets.set_code, else setPrefix of the set's lowest printing code
   tcgDate: string | null // 'YYYY-MM-DD'
   imageKey: string | null // file stem under images/sets/, already validated
+  coverImageId: number | null // artwork of the set's headline card (its rarest printing)
   totalCards: number
   ownedCards: number
   totalRarities: number

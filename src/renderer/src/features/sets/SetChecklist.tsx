@@ -5,7 +5,7 @@ import { toast } from 'sonner'
 import type { Language } from '@shared/languages'
 import type { CardSearchResult, CountMode, SetChecklist as SetChecklistData } from '@shared/types'
 import { CardArt } from '@/components/CardArt'
-import { setArtUrl, useArtWash } from '@/components/artWash'
+import { coverArtUrl, setArtUrl, useArtWash } from '@/components/artWash'
 import { LanguageTag } from '@/components/LanguageTag'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
@@ -111,7 +111,13 @@ export function SetChecklist({
     queryFn: () => api.sets.checklist(setName, language)
   })
   const data = checklist.data
-  useArtWash(data?.set.imageKey ? setArtUrl(data.set.imageKey) : null)
+  useArtWash(
+    data?.set.coverImageId
+      ? coverArtUrl(data.set.coverImageId)
+      : data?.set.imageKey
+        ? setArtUrl(data.set.imageKey)
+        : null
+  )
   const tiles = useMemo(
     () =>
       data
@@ -248,8 +254,9 @@ export function SetChecklist({
         <header className="flex flex-wrap items-center gap-5">
           <SetArt
             imageKey={data.set.imageKey}
+            coverImageId={data.set.coverImageId}
             setCode={data.set.setCode}
-            className="h-24 w-[4.5rem] rounded-[3px] object-cover shadow-[0_8px_20px_rgb(0_0_0/0.5)]"
+            className="size-24 rounded-[3px] shadow-[0_8px_20px_rgb(0_0_0/0.5)]"
           />
           <div className="min-w-0 flex-1">
             <p className="font-mono text-[13px] text-foreground/75">

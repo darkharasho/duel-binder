@@ -31,9 +31,10 @@ export function SetsList({ sets, mode, view, onOpen }: Props): React.JSX.Element
               >
                 <SetArt
                   imageKey={s.imageKey}
+                  coverImageId={s.coverImageId}
                   setCode={s.setCode}
                   className={cn(
-                    'h-44 w-full transition-transform duration-200 group-hover:-translate-y-1',
+                    'aspect-[4/3] w-full rounded-[4px] shadow-[0_8px_20px_rgb(0_0_0/0.45)] transition-transform duration-200 group-hover:-translate-y-1',
                     !started && 'opacity-60 grayscale-[0.6]'
                   )}
                 />
@@ -83,9 +84,10 @@ export function SetsList({ sets, mode, view, onOpen }: Props): React.JSX.Element
             >
               <SetArt
                 imageKey={s.imageKey}
+                coverImageId={s.coverImageId}
                 setCode={s.setCode}
                 className={cn(
-                  'h-16 w-12 shrink-0 rounded-[3px] object-cover',
+                  'size-12 shrink-0 rounded-[3px]',
                   !started && 'brightness-75 grayscale-[0.7]'
                 )}
               />

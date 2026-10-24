@@ -35,13 +35,56 @@ const SUMMARY = `
   LEFT JOIN (SELECT DISTINCT printing_id FROM collection_entries) o ON o.printing_id = p.id
   LEFT JOIN sets s ON s.language = p.language AND s.set_name = p.set_name`
 
-function toSummary(r: SummaryDbRow): SetSummary {
+/**
+ * Each set's headline card: its rarest printing (lowest code, skipping 000 bonus cards). Its
+ * artwork identifies the set better than a pack photo.
+ */
+const COVERS = `
+  WITH per_card AS (
+    SELECT p.language, p.set_name, p.card_id, MIN(p.set_code) AS code,
+      MIN(CASE
+        WHEN p.set_rarity LIKE '%Starlight%' THEN 1
+        WHEN p.set_rarity LIKE '%Quarter Century%' THEN 2
+        WHEN p.set_rarity LIKE '%Ghost%' THEN 3
+        WHEN p.set_rarity LIKE '%Ultimate%' THEN 4
+        WHEN p.set_rarity LIKE '%Collector%' THEN 5
+        WHEN p.set_rarity LIKE '%Secret%' THEN 6
+        WHEN p.set_rarity LIKE '%Ultra%' THEN 7
+        WHEN p.set_rarity LIKE '%Super%' THEN 8
+        WHEN p.set_rarity LIKE '%Rare%' THEN 9
+        ELSE 10 END) AS rank
+    FROM card_printings p WHERE p.missing_from_api = 0 %WHERE%
+    GROUP BY p.language, p.set_name, p.card_id),
+  ranked AS (
+    SELECT *, ROW_NUMBER() OVER (PARTITION BY language, set_name
+      ORDER BY rank, code LIKE '%000', code, card_id) AS rn
+    FROM per_card)
+  SELECT r.language, r.set_name,
+    (SELECT ci.image_id FROM card_images ci WHERE ci.card_id = r.card_id
+     ORDER BY ci.sort_order, ci.image_id LIMIT 1) AS image_id
+  FROM ranked r WHERE r.rn = 1`
+
+function coverImages(
+  db: Database.Database,
+  only?: { language: Language; setName: string }
+): Map<string, number> {
+  const sql = COVERS.replace('%WHERE%', only ? 'AND p.language = ? AND p.set_name = ?' : '')
+  const rows = (only
+    ? db.prepare(sql).all(only.language, only.setName)
+    : db.prepare(sql).all()) as { language: string; set_name: string; image_id: number | null }[]
+  const out = new Map<string, number>()
+  for (const r of rows) if (r.image_id !== null) out.set(`${r.language}|${r.set_name}`, r.image_id)
+  return out
+}
+
+function toSummary(r: SummaryDbRow, covers: Map<string, number>): SetSummary {
   return {
     language: r.language,
     setName: r.set_name,
     setCode: r.s_code ? r.s_code : setPrefix(r.min_code),
     tcgDate: r.tcg_date,
     imageKey: r.image_key ?? setImageKey(r.image_url),
+    coverImageId: covers.get(`${r.language}|${r.set_name}`) ?? null,
     totalCards: r.total_cards,
     ownedCards: r.owned_cards,
     totalRarities: r.total_rarities,
@@ -53,7 +96,8 @@ function toSummary(r: SummaryDbRow): SetSummary {
 
 /** Completion summary of every (language, set); English first within a name. */
 export function listSets(db: Database.Database): SetSummary[] {
-  return (db.prepare(`${SUMMARY} GROUP BY p.language, p.set_name ORDER BY p.set_name, p.language <> 'en', p.language`).all() as SummaryDbRow[]).map(toSummary)
+  const covers = coverImages(db)
+  return (db.prepare(`${SUMMARY} GROUP BY p.language, p.set_name ORDER BY p.set_name, p.language <> 'en', p.language`).all() as SummaryDbRow[]).map((r) => toSummary(r, covers))
 }
 
 interface PrintingDbRow {
@@ -196,7 +240,7 @@ export function getChecklist(
     .prepare(`${SUMMARY} WHERE p.language = ? AND p.set_name = ? GROUP BY p.language, p.set_name`)
     .get(language, setName) as SummaryDbRow | undefined
   if (!row) return null
-  return { set: toSummary(row), cards: checklistCards(db, setName, language) }
+  return { set: toSummary(row, coverImages(db, { language, setName })), cards: checklistCards(db, setName, language) }
 }
 
 /**

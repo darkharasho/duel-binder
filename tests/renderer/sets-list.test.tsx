@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { SetSummary } from '@shared/types'
 import { SetsPage } from '@/features/sets/SetsPage'
@@ -12,6 +12,7 @@ const set = (o: Partial<SetSummary>): SetSummary => ({
   setCode: 'SET',
   tcgDate: '2002-06-26',
   imageKey: 'SET',
+  coverImageId: null,
   totalCards: 1,
   ownedCards: 0,
   totalRarities: 1,
@@ -183,6 +184,16 @@ describe('SetArt', () => {
   it('falls back to a placeholder with the set code when there is no image key', () => {
     renderWithProviders(<SetArt imageKey={null} setCode="LOB" />)
     expect(screen.getByTestId('set-art-placeholder')).toHaveTextContent('LOB')
+  })
+
+  it('prefers the headline card artwork and falls back to the pack photo', () => {
+    const { container } = renderWithProviders(
+      <SetArt imageKey="LOB" coverImageId={7} setCode="LOB" />
+    )
+    const img = container.querySelector('img')!
+    expect(img).toHaveAttribute('src', 'ygo-img://cropped/7')
+    fireEvent.error(img)
+    expect(container.querySelector('img')).toHaveAttribute('src', 'ygo-img://set/LOB')
   })
 
   it('uses the ygo-img set URL', () => {

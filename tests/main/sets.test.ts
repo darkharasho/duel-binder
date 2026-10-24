@@ -105,6 +105,7 @@ describe('listSets', () => {
       setCode: 'MRD',
       tcgDate: '2002-06-26',
       imageKey: 'MRD',
+      coverImageId: 1001, // Alpha Dragon: the set's only Secret Rare
       totalCards: 3,
       ownedCards: 0,
       totalRarities: 4,
@@ -118,6 +119,7 @@ describe('listSets', () => {
       setCode: 'SDY',
       tcgDate: null,
       imageKey: null,
+      coverImageId: 2001,
       totalCards: 1,
       ownedCards: 0,
       totalRarities: 1,

@@ -6,17 +6,22 @@ import { pipeline } from 'node:stream/promises'
 import type { ReadableStream as WebReadableStream } from 'node:stream/web'
 import { createLimiter, type Limiter } from './limiter'
 
-export type ImageSize = 'small' | 'full'
+/** 'cropped' is the artwork alone, without the card frame. */
+export type ImageSize = 'small' | 'full' | 'cropped'
+
+const IMAGE_FOLDER: Record<ImageSize, string> = {
+  small: 'cards_small',
+  full: 'cards',
+  cropped: 'cards_cropped'
+}
 
 export function imageUrl(size: ImageSize, id: number): string {
-  return size === 'full'
-    ? `https://images.ygoprodeck.com/images/cards/${id}.jpg`
-    : `https://images.ygoprodeck.com/images/cards_small/${id}.jpg`
+  return `https://images.ygoprodeck.com/images/${IMAGE_FOLDER[size]}/${id}.jpg`
 }
 
 /** Parses `ygo-img://<size>/<id>`; null for unknown sizes or ids that aren't positive integers. */
 export function parseImageUrl(url: string): { size: ImageSize; id: number } | null {
-  const m = /^ygo-img:\/\/(small|full)\/(\d+)\/?$/.exec(url)
+  const m = /^ygo-img:\/\/(small|full|cropped)\/(\d+)\/?$/.exec(url)
   if (!m) return null
   const id = Number(m[2])
   if (!Number.isSafeInteger(id) || id <= 0) return null

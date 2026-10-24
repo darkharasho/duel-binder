@@ -2,8 +2,8 @@ import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { LayoutGrid, List, Search } from 'lucide-react'
 import type { Language } from '@shared/languages'
-import type { CardSearchResult, CountMode } from '@shared/types'
-import { setArtUrl, useArtWash } from '@/components/artWash'
+import type { CardSearchResult, CountMode, SetSummary } from '@shared/types'
+import { coverArtUrl, setArtUrl, useArtWash } from '@/components/artWash'
 import { LanguageSelect } from '@/components/LanguageSelect'
 import { useMainScroll } from '@/components/mainScroll'
 import { PageHeader } from '@/components/PageHeader'
@@ -132,9 +132,19 @@ export function SetsPage({ onAddCard, onAddMissing }: SetsPageProps): React.JSX.
     persist(FILTER_KEY, f)
   }
   // The most complete set in view (else the first) tints the page; an open set tints its own.
-  const washSet = visible.find((s) => s.imageKey && (s.ownedCards > 0 || s.ownedRarities > 0)) ??
-    visible.find((s) => s.imageKey)
-  useArtWash(openSet ? undefined : washSet?.imageKey ? setArtUrl(washSet.imageKey) : null)
+  const hasArt = (s: SetSummary): boolean => s.coverImageId !== null || s.imageKey !== null
+  const washSet =
+    visible.find((s) => hasArt(s) && (s.ownedCards > 0 || s.ownedRarities > 0)) ??
+    visible.find(hasArt)
+  useArtWash(
+    openSet
+      ? undefined
+      : washSet?.coverImageId
+        ? coverArtUrl(washSet.coverImageId)
+        : washSet?.imageKey
+          ? setArtUrl(washSet.imageKey)
+          : null
+  )
 
   if (openSet !== null) {
     return (

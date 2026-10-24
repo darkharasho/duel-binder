@@ -14,4 +14,5 @@ export function useArtWash(src: string | null | undefined): void {
 }
 
 export const cardArtUrl = (imageId: number): string => `ygo-img://small/${imageId}`
+export const coverArtUrl = (imageId: number): string => `ygo-img://cropped/${imageId}`
 export const setArtUrl = (imageKey: string): string => `ygo-img://set/${imageKey}`

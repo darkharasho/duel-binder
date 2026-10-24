@@ -1,0 +1,68 @@
+{{Infobox set
+| image           = LB-BoosterJP.jpg
+
+| en_name         = Legend of Blue Eyes White Dragon
+| ja_name         = {{Ruby|青眼の白龍伝説|レジェンド・オブ・ブルーアイズ・ホワイト・ドラゴン}}
+| romaji_name     = Rejendo obu Burūaizu Howaito Doragon
+
+| type            = [[Booster Pack]]
+| jp_prefix       = LB
+| size            = 61
+| cover_card      = [[Blue-Eyes White Dragon]]
+| jp_release_date = May 18, 2000
+| ja_database_id  = 3302000
+
+| next            = Phantom God
+}}
+
+'''''Legend of Blue Eyes White Dragon''''' is a ''[[Yu-Gi-Oh! Official Card Game]]'' [[Booster Pack]], released only in Japanese on May 18, 2000. In other languages another [[Legend of Blue Eyes White Dragon|set of the same name]] is a combination of this set and ''[[Phantom God]]''.
+
+== Features ==
+This is the first reprint set in [[Series 2]]. It contained 61 cards chosen from the original ''[[Starter Box]]'' and ''[[Vol.1]]''. Cards in this set featured the [[Card layout#Series 2 layout|Series 2 layout]] introduced a month earlier by ''[[Magic Ruler]]'', with wider text boxes and narrower [[ATK]]/[[DEF]] area. All cards in this set have since been released in the ''[[Yu-Gi-Oh! Trading Card Game]]''.
+
+The set is composed of [[Normal Monster|Normal]] and [[Fusion Monster]]s and basic [[Spell Card|Spell]] and [[Trap Card]]s.
+
+A number of the cards from the [[Duelist Kingdom (manga arc)|Duelist Kingdom arc]] of the [[Yu-Gi-Oh! (manga)|''Yu-Gi-Oh!'' manga]] were printed in this set.
+
+== Breakdown ==
+Each pack contains five cards. Each box contains 30 packs.
+
+The set contained 61 cards, including:
+* 1 [[Secret Rare]]
+* 4 [[Ultra Rare]]
+* 5 [[Super Rare]]
+* 11 [[Rare]]
+* 40 [[Common]]
+
+== Gallery ==
+<gallery captionalign="center">
+LB-BoosterJP.jpg | Japanese<br />青眼の白龍伝説<br />[[Set Card Galleries:Legend of Blue Eyes White Dragon (OCG-JP)|Unlimited Edition]]
+LB-Poster-JP.png | Promotional poster
+Legend of Blue Eyes White Dragon Japanese logo.png | Logo
+</gallery>
+
+== List ==
+{{Set navigation
+| lists        = JP
+| ue_galleries = JP
+}}
+
+{{Set list transclusion}}
+
+==Video games==
+<gallery widths="240" heights="160">
+LegendofBlueEyesWhiteDragon-Booster-G5.png       | [[Legend of Blue Eyes White Dragon (DM5)| ''Legend of Blue Eyes White Dragon'' (''Duel Monsters 5'')]]
+BlueEyesWhiteDragon-Booster-EDS.png              | [[Blue-Eyes White Dragon pack (EDS)| Blue-Eyes White Dragon pack (''Eternal Duelist Soul'')]]
+Legend of Blue Eyes White Dragon-Booster-DM6.png | [[Legend of Blue Eyes White Dragon (DM6)| ''Legend of Blue Eyes White Dragon'' (''Duel Monsters 6'')]]
+BlueEyesWhiteDragon-Booster-SDD.png              | [[Blue-Eyes White Dragon pack (SDD)| Blue-Eyes White Dragon pack (''Stairway to the Destined Duel'')]]
+</gallery>
+
+== External links ==
+* [http://www.yugioh-card.com/japan/lineup/duel_monsters/blue_eyes yugioh-card.com] 青眼の白龍伝説 - LEGEND OF BLUE EYES WHITE DRAGON - {{icon|Japanese}}
+* [http://www.yugioh-card.com/japan/list/list.php?title=%E9%9D%92%E7%9C%BC%E3%81%AE%E7%99%BD%E9%BE%8D%E4%BC%9D%E8%AA%AC+-+LEGEND+OF+BLUE+EYES+WHITE+DRAGON+- yugioh-card.com] Card lists > ''Legend of Blue Eyes White Dragon'' {{icon|Japanese}}
+* [http://www.yugioh-card.com/hk/lineup/cn-t/duel_monsters/blue_eyes/ yugioh-card.com] 青眼の白龍伝説 - LEGEND OF BLUE EYES WHITE DRAGON - {{icon|Japanese}}
+
+{{Reprint sets}}
+{{Series 2 sets}}
+
+[[Category:OCG Booster Packs]]

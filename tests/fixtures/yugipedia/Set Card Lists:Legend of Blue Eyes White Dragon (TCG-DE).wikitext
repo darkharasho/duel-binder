@@ -1,0 +1,107 @@
+{{Set page header}}
+
+{{Set list|region=DE|
+LOB-G000; Tri-Horned Dragon; Secret Rare
+LOB-G001; Blue-Eyes White Dragon; Ultra Rare
+LOB-G002; Skull Servant; Common
+LOB-G003; Dark Magician; Ultra Rare
+LOB-G004; Gaia The Fierce Knight; Ultra Rare
+LOB-G005; Celtic Guardian; Super Rare
+LOB-G006; Basic Insect; Common
+LOB-G007; Silver Fang; Common
+LOB-G008; Dark Gray; Common
+LOB-G009; Nemuriko; Common
+LOB-G010; The 13th Grave; Common
+LOB-G011; Charubin the Fire Knight; Rare
+LOB-G012; Flame Manipulator; Common
+LOB-G013; Monster Egg; Common
+LOB-G014; Firegrass; Common
+LOB-G015; Darkfire Dragon; Rare
+LOB-G016; Dark King of the Abyss; Common
+LOB-G017; Fiend Reflection #2; Common
+LOB-G018; Turtle Tiger; Common
+LOB-G019; Petit Dragon; Common
+LOB-G020; Hinotama Soul; Common
+LOB-G021; Aqua Madoor; Rare
+LOB-G022; Kagemusha of the Blue Flame; Common
+LOB-G023; Flame Ghost; Rare
+LOB-G024; Two-Mouth Darkruler; Common
+LOB-G025; Dissolverock; Common
+LOB-G026; Root Water; Common
+LOB-G027; The Furious Sea King; Common
+LOB-G028; Green Phantom King; Common
+LOB-G029; Ray & Temperature; Common
+LOB-G030; King Fog; Common
+LOB-G031; Legendary Sword; Short Print
+LOB-G032; Beast Fangs; Short Print
+LOB-G033; Violet Crystal; Short Print
+LOB-G034; Book of Secret Arts; Short Print
+LOB-G035; Dragon Capture Jar; Rare
+LOB-G036; Forest; Common
+LOB-G037; Wasteland; Common
+LOB-G038; Sogen; Common
+LOB-G039; Umi; Common
+LOB-G040; Yami; Common
+LOB-G041; Dark Hole; Super Rare
+LOB-G042; Raigeki; Super Rare
+LOB-G043; Red Medicine; Common
+LOB-G044; Sparks; Common
+LOB-G045; Fissure; Rare
+LOB-G046; Trap Hole; Super Rare
+LOB-G047; Polymerization; Super Rare
+LOB-G048; Remove Trap; Common
+LOB-G049; Two-Pronged Attack; Rare
+LOB-G050; Mystical Elf; Super Rare
+LOB-G051; Tyhone; Common
+LOB-G052; Gravedigger Ghoul; Rare
+LOB-G053; Curse of Dragon; Super Rare
+LOB-G054; Giant Soldier of Stone; Rare
+LOB-G055; Uraby; Common
+LOB-G056; Red-Eyes Black Dragon; Ultra Rare
+LOB-G057; Reaper of the Cards; Rare
+LOB-G058; Witty Phantom; Common
+LOB-G059; Hard Armor; Common
+LOB-G060; Man Eater; Common
+LOB-G061; Spirit of the Harp; Rare
+LOB-G062; Armaill; Common
+LOB-G063; Terra the Terrible; Common
+LOB-G064; Kumootoko; Common
+LOB-G065; Meda Bat; Common
+LOB-G066; Enchanting Mermaid; Common
+LOB-G067; Fireyarou; Common
+LOB-G068; Dark Energy; Short Print
+LOB-G069; Laser Cannon Armor; Short Print
+LOB-G070; Vile Germs; Short Print
+LOB-G071; Silver Bow and Arrow; Short Print
+LOB-G072; Dragon Treasure; Short Print
+LOB-G073; Electro-Whip; Common
+LOB-G074; Mystical Moon; Short Print
+LOB-G075; Stop Defense; Rare
+LOB-G076; Machine Conversion Factory; Short Print
+LOB-G077; Raise Body Heat; Super Short Print
+LOB-G078; Follow Wind; Super Short Print
+LOB-G079; Goblin's Secret Remedy; Rare
+LOB-G080; Final Flame; Rare
+LOB-G081; Swords of Revealing Light; Super Rare
+LOB-G082; Metal Dragon; Rare
+LOB-G083; Spike Seadra; Common
+LOB-G084; Tripwire Beast; Common
+LOB-G085; Skull Red Bird; Common
+LOB-G086; Armed Ninja; Rare
+LOB-G087; Flower Wolf; Rare
+LOB-G088; Man-Eater Bug; Super Rare
+LOB-G089; Misairuzame; Common
+LOB-G090; Steel Ogre Grotto #1; Common
+LOB-G091; Lesser Dragon; Common
+LOB-G092; Darkworld Thorns; Common
+LOB-G093; Drooling Lizard; Common
+LOB-G094; Armored Starfish; Common
+LOB-G095; Succubus Knight; Common
+LOB-G096; Monster Reborn; Ultra Rare
+LOB-G097; Right Leg of the Forbidden One; Ultra Rare
+LOB-G098; Left Leg of the Forbidden One; Ultra Rare
+LOB-G099; Right Arm of the Forbidden One; Ultra Rare
+LOB-G100; Left Arm of the Forbidden One; Ultra Rare
+LOB-G101; Exodia the Forbidden One; Ultra Rare
+LOB-G102; Gaia the Dragon Champion; Secret Rare
+}}

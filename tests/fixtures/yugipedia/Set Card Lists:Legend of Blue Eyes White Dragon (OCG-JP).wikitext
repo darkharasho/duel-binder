@@ -1,0 +1,65 @@
+{{Set page header|set=Legend of Blue Eyes White Dragon (Japanese)}}
+
+{{Set list|region=JP|
+LB-00; Celtic Guardian; Secret Rare
+LB-01; Blue-Eyes White Dragon; Ultra Rare
+LB-02; Hitotsu-Me Giant; Common
+LB-03; Flame Swordsman; Ultra Rare
+LB-04; Skull Servant; Common
+LB-05; Dark Magician; Ultra Rare
+LB-06; Gaia The Fierce Knight; Ultra Rare
+LB-07; Basic Insect; Common
+LB-08; Mammoth Graveyard; Common
+LB-09; Silver Fang; Common
+LB-10; Dark Gray; Common
+LB-11; Trial of Nightmare; Rare
+LB-12; Nemuriko; Common
+LB-13; The 13th Grave; Rare
+LB-14; Charubin the Fire Knight; Common
+LB-15; Flame Manipulator; Common
+LB-16; Monster Egg; Common
+LB-17; Firegrass; Common
+LB-18; Darkfire Dragon; Common
+LB-19; Dark King of the Abyss; Rare
+LB-20; Fiend Reflection #2; Common
+LB-21; Fusionist; Common
+LB-22; Turtle Tiger; Rare
+LB-23; Petit Dragon; Common
+LB-24; Petit Angel; Common
+LB-25; Hinotama Soul; Common
+LB-26; Aqua Madoor; Rare
+LB-27; Kagemusha of the Blue Flame; Common
+LB-28; Flame Ghost; Common
+LB-29; Two-Mouth Darkruler; Common
+LB-30; Dissolverock; Common
+LB-31; Root Water; Common
+LB-32; The Furious Sea King; Common
+LB-33; Green Phantom King; Common
+LB-34; Ray & Temperature; Common
+LB-35; King Fog; Common
+LB-36; Mystical Sheep #2; Common
+LB-37; Masaki the Legendary Swordsman; Common
+LB-38; Kurama; Common
+LB-39; Legendary Sword; Common
+LB-40; Beast Fangs; Common
+LB-41; Violet Crystal; Common
+LB-42; Book of Secret Arts; Common
+LB-43; Power of Kaishin; Common
+LB-44; Dragon Capture Jar; Common
+LB-45; Forest; Rare
+LB-46; Wasteland; Rare
+LB-47; Mountain; Rare
+LB-48; Sogen; Rare
+LB-49; Umi; Rare
+LB-50; Yami; Rare
+LB-51; Dark Hole; Super Rare
+LB-52; Raigeki; Super Rare
+LB-53; Red Medicine; Common
+LB-54; Sparks; Common
+LB-55; Hinotama; Common
+LB-56; Fissure; Super Rare
+LB-57; Trap Hole; Super Rare
+LB-58; Polymerization; Super Rare
+LB-59; Remove Trap; Common
+LB-60; Two-Pronged Attack; Common
+}}

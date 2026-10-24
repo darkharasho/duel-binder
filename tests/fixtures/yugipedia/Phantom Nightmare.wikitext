@@ -1,0 +1,148 @@
+{{Infobox set
+| image           = PHNI-BoosterEN.png
+
+| en_name         = Phantom Nightmare
+| ja_name         = ファントム・ナイトメア
+| romaji_name     = Fantomu Naitomea
+| fr_name         = Cauchemar Fantôme
+| de_name         = Phantom Nightmare
+| it_name         = Incubo Fantasma
+| ko_name         = 팬텀 나이트메어
+| ko_rr_name      = 
+| pt_name         = Pesadelo Fantasma
+| es_name         = Pesadilla Fantasma
+| sc_name         = 魅影梦魇
+
+| type            = [[Booster pack]]
+| series          = Core Booster
+| prefix          = PHNI
+| order_number    = 
+| size            = 
+* 81 (JP, KR)
+* 101 (''TCG'')
+* 121 (AE, SC)
+| cover_card      = [[Yubel - The Loving Defender Forever]]
+| ja_database_id  = 1000009002000
+| ko_database_id  = 1010001326000
+| ae_database_id  = 5000001336000
+| sc_database_id  = 3000001308000
+| database_id     = 2000001328000
+
+| premiere        = Phantom Nightmare Premiere! promotional card
+
+| jp_release_date = October 28, 2023
+| kr_release_date = December 2, 2023
+| sc_release_date = December 16, 2023
+| ae_release_date = March 30, 2024
+| na_release_date = February 9, 2024
+| eu_release_date = February 8, 2024
+| oc_release_date = February 8, 2024
+| fr/de/it/sp_release_date = February 8, 2024
+| pt_release_date = February 8, 2024
+
+| prev            = Age of Overlord
+| next            = Legacy of Destruction
+}}
+
+'''''Phantom Nightmare''''' is a [[Core Booster]] in the ''[[Yu-Gi-Oh! Official Card Game]]'' (''OCG'') and ''[[Yu-Gi-Oh! Trading Card Game]]'' (''TCG''). It is the 3rd Core Booster of [[Series 12]], following ''[[Age of Overlord]]''.
+
+The Korean set was pre-released at Anime X Game Festival 2023 on December 2–3, 2023. It was released to retail on January 12, 2024.<ref>{{Cite tweet |user=Yugioh_Korea |number=1729035497681654187 |date=27 November 2023 |title=AGF 2023 유희왕 부스에서 부스터 팩 “팬텀 나이트메어” 선행 발매! |language=Korean |access-date=27 November 2023}}</ref>
+
+== Features ==
+* In the ''[[OCG]]'', the first print runs of ''Phantom Nightmare'' boxes include 1 ''[[Phantom Nightmare +1 Bonus Pack]]''. In addition, 1 ''[[Hidden Chapter Pack 2023 Vol.3]]'' was given to buyers for every Asian box purchase of ''Phantom Nightmare''.
+* Includes cards used by the [[Paradox Brothers]] and [[Sergey Volkov]].
+** The ''[[TCG]]'' version also includes cards used by [[Tragoedia (character)|Tragoedia]] and [[Yusei Fudo (manga)|Yusei Fudo]].
+* Introduces new members/support for the "[[Archfiend]]", "[[Aroma]]", "[[Diabellstar]]", "[[Dracoslayer]]", "[[Earthbound]]", "[[Favorite]]", "[[Gate Guardian (archetype)|Gate Guardian]]", "[[Ghoti]]", "[[Goblin]]", "[[Guardian]]", "[[Horus]]", "[[Majespecter]]", "[[Memento]]", "[[Phantasm]]", "[[Polymerization (archetype)|Polymerization]]", "[[Raidraptor]]", "[[Rank-Up-Magic]]", "[[Rebellion (archetype)|Rebellion]]", "[[Rose]]" and "[[Snake-Eye]]" archetypes, as well as the [[Sacred Beast]], [[Signature move]] and [[White]] series.
+** Introduces the first support for the "[[Skull Guardian (archetype)|Skull Guardian]]", "[[White Aura]]", and "[[Yubel (archetype)|Yubel]]" archetypes.
+** The ''TCG'' version also introduces new members/support for the "[[Junk]]" and "[[Xyz (archetype)|Xyz]]" archetypes.
+* Introduces the "[[Goblin Biker]]" and "[[Voiceless Voice]]" archetypes.
+** Introduces the "[[Ashened]]" archetype to the ''[[TCG]]''.
+
+=== World Premieres ===
+* The ''TCG'' version of this set starts the trend of releasing 6 [[World Premiere]] cards (081 to 086) that are not direct support for any archetype, but whose effects have great synergy with two World Premiere archetypes from the past. This set introduces cards designed for the "[[Kozmo]]" and "[[Subterror]]" archetypes.
+
+== Breakdown ==
+=== Japanese and Korean ===
+* There are 5 cards per pack and 30 packs per box. The set contains 81 cards:
+** 1 [[Quarter Century Secret Rare]]
+** 9 [[Ultra Rare]]s
+** 11 [[Super Rare]]s
+** 19 [[Rare]]s
+** 41 [[Common]]s
+* Ultra Rares are also available as [[Ultimate Rare]].
+* Ultra Rares and Super Rares are also available as [[Secret Rare]] and Quarter Century Secret Rare.
+* 1 card is also available as [[Holographic Rare]].
+
+=== Asian-English ===
+* There are 5 cards per pack and 30 packs per box. The set contains 121 cards:
+** 1 Quarter Century Secret Rare
+** 15 Ultra Rares
+** 18 Super Rares
+** 25 Rares
+** 62 Commons
+* Ultra Rares are also available as Ultimate Rare.
+* 28 Ultra Rares and/or Super Rares are also available as Secret Rare.
+* 25 Ultra Rares and/or Super Rares are also available as Quarter Century Secret Rare.
+* 1 card is also available as Holographic Rare.
+
+=== Simplified Chinese ===
+* There are 5 cards per pack and 30 packs per box. The set contains 121 cards:
+** 1 Quarter Century Secret Rare
+** 14 Ultra Rares
+** 18 Super Rares
+** 25 Rares
+** 63 Commons
+* 9 Ultra Rares are also available as Ultimate Rare.
+* 25 Ultra Rares and/or Super Rares are also available as Secret Rare.
+* 25 Ultra Rares and/or Super Rares are also available as Quarter Century Secret Rare.
+* 1 card is also available as Holographic Rare.
+
+=== TCG ===
+* There are 9 cards per pack and 24 packs per box. The set contains 101 cards:
+** 1 [[Quarter Century Secret Rare]]
+** 10 [[Secret Rare]]s
+** 14 [[Ultra Rare]]s
+** 26 [[Super Rare]]s
+** 50 [[Common]]s
+* Ultra Rares and Secret Rares are also available as Quarter Century Secret Rare.
+
+== Galleries ==
+<gallery heights="175px" captionalign="center">
+PHNI-BoosterEN.png | English<br />[[Set Card Galleries:Phantom Nightmare (TCG-EN-1E)|1st Edition]]
+PHNI-BoosterFR.png | French<br />[[Set Card Galleries:Phantom Nightmare (TCG-FR-1E)|1st Edition]]
+PHNI-BoosterDE.png | German<br />[[Set Card Galleries:Phantom Nightmare (TCG-DE-1E)|1st Edition]]
+PHNI-BoosterIT.png | Italian<br />[[Set Card Galleries:Phantom Nightmare (TCG-IT-1E)|1st Edition]]
+PHNI-BoosterPT.png | Portuguese<br />[[Set Card Galleries:Phantom Nightmare (TCG-PT-1E)|1st Edition]]
+PHNI-BoosterSP.png | Spanish<br />[[Set Card Galleries:Phantom Nightmare (TCG-SP-1E)|1st Edition]]
+PHNI-BoosterJP.png | [[Set Card Galleries:Phantom Nightmare (OCG-JP)|Japanese]]
+PHNI-BoosterAE.png | [[Set Card Galleries:Phantom Nightmare (OCG-AE-UE)|Asian-English]]
+PHNI-BoosterKR.png | [[Set Card Galleries:Phantom Nightmare (OCG-KR-UE)|Korean]]
+PHNI-BoosterSC.png | [[Set Card Galleries:Phantom Nightmare (OCG-SC)|Simplified Chinese]]
+PHNI-Poster-JP.png | Japanese promotional poster
+</gallery>
+
+== Lists ==
+{{Set navigation
+| lists        = EN,FR,DE,IT,PT,SP,JP,AE,KR,SC
+| 1e_galleries = EN,FR,DE,IT,PT,SP
+| ue_galleries = JP,AE,KR,SC
+}}
+{{Set list tabs|EN,FR,DE,IT,PT,SP,JP,AE,KR,SC}}
+
+== External links ==
+* [https://www.yugioh-card.com/japan/products/phni/ yugioh-card.com/japan/] ''Phantom Nightmare'' {{icon|ja}}
+* [https://yugioh.co.kr/product/product_info.php?product_no=305 yugioh.co.kr] ''Phantom Nightmare'' {{icon|ko}}
+* [https://www.yugioh-card.com/en/products/phni/ yugioh-card.com/en/] ''Phantom Nightmare''
+* [https://www.yugioh-card.com/eu/product/phantom-nightmare/ yugioh-card.com/eu/] ''Phantom Nightmare''
+* [https://www.yugioh-card.com/eu/fr/product/phantom-nightmare/ yugioh-card.com/eu/fr/] ''Phantom Nightmare'' {{icon|fr}}
+* [https://www.yugioh-card.com/eu/de/product/phantom-nightmare/ yugioh-card.com/eu/de/] ''Phantom Nightmare'' {{icon|de}}
+* [https://www.yugioh-card.com/eu/it/product/phantom-nightmare/ yugioh-card.com/eu/it/] ''Phantom Nightmare'' {{icon|it}}
+* [https://www.yugioh-card.com/eu/es/product/phantom-nightmare/ yugioh-card.com/eu/es/] ''Phantom Nightmare'' {{icon|es}}
+
+== References ==
+<references />
+
+{{Core Boosters}}
+
+[[Category:OCG Core Boosters]]
+[[Category:TCG Core Boosters]]

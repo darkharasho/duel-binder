@@ -1,0 +1,85 @@
+{{Set page header}}
+
+{{Set list|region=KR|rarities=Common|
+PHNI-KR000; Magicians of Bonds and Unity; Quarter Century Secret Rare
+PHNI-KR001; Spirit of Yubel; Super Rare, Secret Rare, Quarter Century Secret Rare
+PHNI-KR002; Geistgrinder Golem
+PHNI-KR003; Samsara D Lotus; Rare
+PHNI-KR004; Raidraptor - Noir Lanius
+PHNI-KR005; Raidraptor - Bloom Vulture; Rare
+PHNI-KR006; White Sunfish
+PHNI-KR007; White Sardine; Rare
+PHNI-KR008; Goblin Biker Dugg Charger; Super Rare, Secret Rare, Quarter Century Secret Rare
+PHNI-KR009; Goblin Biker Clatter Sploder
+PHNI-KR010; Goblin Biker Boom Mach
+PHNI-KR011; Goblin Biker Mean Merciless; Rare
+PHNI-KR012; Snake-Eyes Poplar; Super Rare, Secret Rare, Quarter Century Secret Rare
+PHNI-KR013; Dark Guardian; Rare
+PHNI-KR014; Phantasmal Summoning Beast
+PHNI-KR015; Keaf, Murk of the Ghoti
+PHNI-KR016; Psiics, Moonlight of the Ghoti
+PHNI-KR017; Mementotlan Ghattic
+PHNI-KR018; Horus the Black Flame Deity; Super Rare, Secret Rare, Quarter Century Secret Rare
+PHNI-KR019; Lo, the Prayers of the Voiceless Voice; Super Rare, Secret Rare, Quarter Century Secret Rare
+PHNI-KR020; Saffira, Dragon Queen of the Voiceless Voice; Rare
+PHNI-KR021; Sauravis, Dragon Sage of the Voiceless Voice
+PHNI-KR022; Aromalilith Rosalina; Super Rare, Secret Rare, Quarter Century Secret Rare
+PHNI-KR023; Majespecter Porcupine - Yamarashi
+PHNI-KR024; Carnot the Eternal Machine; Ultra Rare, Ultimate Rare, Secret Rare, Quarter Century Secret Rare
+PHNI-KR025; Magmacho Dragon
+PHNI-KR026; Time Reloader
+PHNI-KR027; Berserk Archfiend
+PHNI-KR028; E Stranger Big Bang
+PHNI-KR029; Goblin Freefall Squad
+PHNI-KR030; Emissary from the House of Wax; Rare
+PHNI-KR031; Procession of the Tea Jar
+PHNI-KR032; EM:P Meowmine; Rare
+PHNI-KR033; Mokomoko
+PHNI-KR034; Principug
+PHNI-KR035; Jongleur-Ghoul Illusionist; Normal Rare
+PHNI-KR036; Royal Rhino with Deceitful Dice; Normal Rare
+PHNI-KR037; Skull Guardian, Protector of the Voiceless Voice; Ultra Rare, Ultimate Rare, Secret Rare, Quarter Century Secret Rare
+PHNI-KR038; Yubel - The Loving Defender Forever; Ultra Rare, Ultimate Rare, Secret Rare, Quarter Century Secret Rare, Holographic Rare
+PHNI-KR039; Aromalilith Magnolia; Rare
+PHNI-KR040; Master of Ham
+PHNI-KR041; White Aura Porpoise; Rare
+PHNI-KR042; Enigmaster Packbit; Ultra Rare, Ultimate Rare, Secret Rare, Quarter Century Secret Rare
+PHNI-KR043; Vagnawa the Moon-Eating Dragon
+PHNI-KR044; Fish Lamp
+PHNI-KR045; Raidraptor - Rising Rebellion Falcon; Ultra Rare, Ultimate Rare, Secret Rare, Quarter Century Secret Rare
+PHNI-KR046; Raidraptor - Brave Strix; Super Rare, Secret Rare, Quarter Century Secret Rare
+PHNI-KR047; Goblin Biker Big Gabonga; Ultra Rare, Ultimate Rare, Secret Rare, Quarter Century Secret Rare
+PHNI-KR048; Goblin's Crazy Beast; Rare
+PHNI-KR049; Majespecter Draco - Ryu; Ultra Rare, Ultimate Rare, Secret Rare, Quarter Century Secret Rare
+PHNI-KR050; Aromalilith Rosemary; Ultra Rare, Ultimate Rare, Secret Rare, Quarter Century Secret Rare
+PHNI-KR051; Majespecter Orthrus - Nue; Rare
+PHNI-KR052; Promethean Princess, Bestower of Flames; Ultra Rare, Ultimate Rare, Secret Rare, Quarter Century Secret Rare
+PHNI-KR053; Sorcerer of Sebek
+PHNI-KR054; Nightmare Pain; Rare
+PHNI-KR055; Mature Chronicle
+PHNI-KR056; Rise Rank-Up-Magic Raidraptor's Force; Super Rare, Secret Rare, Quarter Century Secret Rare
+PHNI-KR057; Raidraptor - Roost
+PHNI-KR058; White Reincarnation
+PHNI-KR059; Ages of Stars and Frost; Rare
+PHNI-KR060; Goblin Biker Grand Bash
+PHNI-KR061; Goblin Biker Grand Entrance; Rare
+PHNI-KR062; Dramatic Snake-Eye Chase
+PHNI-KR063; Dark Element
+PHNI-KR064; Earthbound Fusion
+PHNI-KR065; Walls of the Imperial Tomb
+PHNI-KR066; Prayers of the Voiceless Voice
+PHNI-KR067; Barrier of the Voiceless Voice; Rare
+PHNI-KR068; Aroma Blend; Rare
+PHNI-KR069; Majespecter Wind
+PHNI-KR070; Mutamorphosis; Super Rare, Secret Rare, Quarter Century Secret Rare
+PHNI-KR071; Materialization
+PHNI-KR072; Flock Together; Normal Rare
+PHNI-KR073; Eternal Favorite; Rare
+PHNI-KR074; Raidraptor - Glorious Bright
+PHNI-KR075; Goblin Biker Grand Stampede
+PHNI-KR076; Radiance of the Voiceless Voice
+PHNI-KR077; Aroma Healing
+PHNI-KR078; The Black Goat Laughs; Rare
+PHNI-KR079; Terrors of the Afterroot; Super Rare, Secret Rare, Quarter Century Secret Rare
+PHNI-KR080; Iron Thunder; Super Rare, Secret Rare, Quarter Century Secret Rare
+}}

@@ -1,0 +1,44 @@
+{{Set page header|set=Vol.1}}
+
+{{Set list|options=noabbr|region=JP|rarities=Common|
+Hitotsu-Me Giant
+Dark Magician; Ultra Rare
+Gaia The Fierce Knight; Ultra Rare
+Mammoth Graveyard
+Silver Fang
+Curtain of the Dark Ones
+Tomozaurus
+Dark Gray
+Nemuriko
+Fiend's Hand
+Fire Reaper
+Firegrass
+Eyearmor
+LaLa Li-oon
+Petit Dragon
+Archfiend Marmot of Nefariousness
+Petit Angel
+Winged Cleaver
+Thunder Kid
+Meotoko
+Kagemusha of the Blue Flame
+Hitodenchak
+Hourglass of Life
+Haniwa
+The Drdek
+Candle of Fate
+Archfiend Mirror
+The Furious Sea King
+Sectarian of Secrets
+Kurama
+Legendary Sword; Rare
+Beast Fangs; Rare
+Violet Crystal; Rare
+Book of Secret Arts; Rare
+Power of Kaishin; Rare
+Dark Hole; Super Rare
+Red Medicine
+Sparks
+Fissure; Super Rare
+Trap Hole; Super Rare
+}}

@@ -4,10 +4,12 @@ import {
   filterSets,
   filterTiles,
   progressFor,
+  replaceChecklistCard,
   setsHeader,
   sortSets
 } from '@/features/sets/setsView'
 import { createSerialQueue } from '@/lib/serialQueue'
+import { metalRaidersChecklist } from './setFixtures'
 
 const mk = (o: Partial<SetSummary>): SetSummary => ({
   setName: 'Set',
@@ -194,5 +196,38 @@ describe('createSerialQueue', () => {
     const good = enqueue(async () => 'ok')
     await expect(bad).rejects.toThrow('boom')
     await expect(good).resolves.toBe('ok')
+  })
+})
+
+describe('replaceChecklistCard', () => {
+  it('replaces the card by id and recomputes owned counts, leaving totals', () => {
+    const [alpha, beta, gamma] = metalRaidersChecklist.cards
+    const newBeta: ChecklistCard = {
+      ...beta,
+      owned: 1,
+      rarities: [{ ...beta.rarities[0], owned: 1 }]
+    }
+    const newAlpha: ChecklistCard = {
+      ...alpha,
+      owned: 3,
+      rarities: [{ ...alpha.rarities[0], owned: 1 }, alpha.rarities[1]]
+    }
+    const once = replaceChecklistCard(metalRaidersChecklist, newBeta)
+    expect(once.cards).toEqual([alpha, newBeta, gamma])
+    expect(once.set).toEqual({ ...metalRaidersChecklist.set, ownedCards: 2, ownedRarities: 2 })
+    const twice = replaceChecklistCard(once, newAlpha)
+    expect(twice.set).toMatchObject({
+      ownedCards: 2,
+      ownedRarities: 3,
+      totalCards: 3,
+      totalRarities: 4
+    })
+    const zeroed = replaceChecklistCard(twice, {
+      ...newAlpha,
+      owned: 0,
+      rarities: newAlpha.rarities.map((r) => ({ ...r, owned: 0 }))
+    })
+    expect(zeroed.set).toMatchObject({ ownedCards: 1, ownedRarities: 1 })
+    expect(metalRaidersChecklist.set.ownedCards).toBe(1)
   })
 })

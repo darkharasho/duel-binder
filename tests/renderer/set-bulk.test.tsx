@@ -168,6 +168,15 @@ describe('SetChecklist bulk mode', () => {
     expect(within(row('Gamma Trap Rare')).getByText('0')).toBeInTheDocument()
   })
 
+  it('the header count moves after a bulk +', async () => {
+    const { releaseNext } = setup()
+    await enterBulk()
+    expect(screen.getByText(/1 of 3/)).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Add one Gamma Trap Rare' }))
+    releaseNext()
+    await waitFor(() => expect(screen.getByText(/2 of 3/)).toBeInTheDocument())
+  })
+
   it('Done restores tiles', async () => {
     setup()
     await enterBulk()

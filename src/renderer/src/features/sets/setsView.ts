@@ -102,3 +102,16 @@ export function filterTiles(tiles: Tile[], f: TileFilter): Tile[] {
   if (f === 'missing') return tiles.filter((t) => t.owned === 0)
   return tiles
 }
+
+/** The checklist with one card replaced by id and the set's owned counts recomputed from the cards. */
+export function replaceChecklistCard(cl: SetChecklist, card: ChecklistCard): SetChecklist {
+  const cards = cl.cards.map((c) => (c.cardId === card.cardId ? card : c))
+  return {
+    set: {
+      ...cl.set,
+      ownedCards: cards.filter((c) => c.owned > 0).length,
+      ownedRarities: cards.reduce((n, c) => n + c.rarities.filter((r) => r.owned > 0).length, 0)
+    },
+    cards
+  }
+}

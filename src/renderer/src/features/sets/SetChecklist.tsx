@@ -14,7 +14,14 @@ import { cn } from '@/lib/utils'
 import { BulkRow } from './BulkRow'
 import { SetArt } from './SetArt'
 import { SetProgress } from './SetProgress'
-import { checklistTiles, filterTiles, progressFor, type Tile, type TileFilter } from './setsView'
+import {
+  checklistTiles,
+  filterTiles,
+  progressFor,
+  replaceChecklistCard,
+  type Tile,
+  type TileFilter
+} from './setsView'
 
 interface SetChecklistProps {
   setName: string
@@ -68,7 +75,7 @@ export function SetChecklist({
   const bumpPending = (cardId: number, by: 1 | -1): void =>
     setPending((p) => ({ ...p, [cardId]: (p[cardId] ?? 0) + by }))
 
-  /** Queues one +/- for a card; the server's card replaces ours, the checklist is never refetched. */
+  /** Queues one +/- for a card; the server's card replaces ours (set counts recomputed), never refetched. */
   const adjust = (cardId: number, printingId: number, delta: 1 | -1): void => {
     let queue = queues.current.get(cardId)
     if (!queue) {
@@ -79,7 +86,7 @@ export function SetChecklist({
     queue(async () => {
       const card = await api.sets.adjust(setName, printingId, delta)
       qc.setQueryData<SetChecklistData | null>(queryKeys.setChecklist(setName), (old) =>
-        old ? { ...old, cards: old.cards.map((c) => (c.cardId === card.cardId ? card : c)) } : old
+        old ? replaceChecklistCard(old, card) : old
       )
       void qc.invalidateQueries({ queryKey: [...queryKeys.setsList] })
       for (const k of mutationInvalidationKeys) {

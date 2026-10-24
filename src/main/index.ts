@@ -1,18 +1,34 @@
-import { app, shell, BrowserWindow, ipcMain } from 'electron'
+import { app, shell, BrowserWindow, dialog } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
+import type { SyncStatus } from '@shared/types'
+import { SYNC_PROGRESS } from '@shared/ipc'
 import icon from '../../resources/icon.png?asset'
+import { openDatabase } from './db/database'
+import { getMeta } from './db/meta'
+import { createYgoClient } from './ygo/client'
+import { runSync, shouldSync } from './sync/sync'
+import { recordSnapshot } from './repo/stats'
+import { createImageCache } from './images/cache'
+import { handleImageProtocol, registerImageScheme } from './images/protocol'
+import { createHandlers, registerIpc, type AppDeps } from './ipc/handlers'
+
+registerImageScheme()
 
 function createWindow(): void {
-  // Create the browser window.
   const mainWindow = new BrowserWindow({
-    width: 900,
-    height: 670,
+    width: 1280,
+    height: 800,
+    minWidth: 1100,
+    minHeight: 700,
+    title: 'Yugioh Collection Tracker',
     show: false,
     autoHideMenuBar: true,
     ...(process.platform === 'linux' ? { icon } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
       sandbox: true
     }
   })
@@ -22,12 +38,14 @@ function createWindow(): void {
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
-    shell.openExternal(details.url)
+    try {
+      if (new URL(details.url).protocol === 'https:') void shell.openExternal(details.url)
+    } catch {
+      // invalid URL: deny
+    }
     return { action: 'deny' }
   })
 
-  // HMR for renderer base on electron-vite cli.
-  // Load the remote URL for development or the local html file for production.
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
     mainWindow.loadURL(process.env['ELECTRON_RENDERER_URL'])
   } else {
@@ -35,40 +53,62 @@ function createWindow(): void {
   }
 }
 
-// This method will be called when Electron has finished
-// initialization and is ready to create browser windows.
-// Some APIs can only be used after this event occurs.
-app.whenReady().then(() => {
-  // Set app user model id for windows
-  electronApp.setAppUserModelId('com.electron')
+function broadcast(channel: string, payload: unknown): void {
+  for (const win of BrowserWindow.getAllWindows()) win.webContents.send(channel, payload)
+}
 
-  // Default open or close DevTools by F12 in development
-  // and ignore CommandOrControl + R in production.
-  // see https://github.com/alex8088/electron-toolkit/tree/master/packages/utils
+app.whenReady().then(() => {
+  electronApp.setAppUserModelId('com.darkharasho.yugiohcollectiontracker')
+
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)
   })
 
-  // IPC test
-  ipcMain.on('ping', () => console.log('pong'))
+  const userData = app.getPath('userData')
+  const db = openDatabase(join(userData, 'collection.db'))
+  const images = createImageCache({ dir: join(userData, 'images') })
+  handleImageProtocol(images)
+
+  const client = createYgoClient()
+  const emitSync = (s: SyncStatus): void => broadcast(SYNC_PROGRESS, s)
+
+  const appDeps: AppDeps = {
+    version: () => app.getVersion(),
+    openDataFolder: async () => {
+      await shell.openPath(userData)
+    },
+    backupDatabase: async () => {
+      const date = new Date().toISOString().slice(0, 10)
+      const { canceled, filePath } = await dialog.showSaveDialog({
+        defaultPath: `yugioh-collection-${date}.db`
+      })
+      if (canceled || !filePath) return null
+      await db.backup(filePath)
+      return filePath
+    },
+    // TODO(Task 15): replace these stubs with createUpdater.
+    checkForUpdates: async () => ({ state: 'none', mode: 'auto', version: null, error: null }),
+    applyUpdate: async () => undefined
+  }
+
+  registerIpc(createHandlers({ db, client, images, emitSync, app: appDeps }))
 
   createWindow()
 
+  recordSnapshot(db)
+  if (shouldSync(getMeta(db, 'last_sync_at'), new Date())) {
+    void runSync(db, client, emitSync).then((status) => {
+      if (status.state === 'idle') recordSnapshot(db)
+    })
+  }
+
   app.on('activate', function () {
-    // On macOS it's common to re-create a window in the app when the
-    // dock icon is clicked and there are no other windows open.
     if (BrowserWindow.getAllWindows().length === 0) createWindow()
   })
 })
 
-// Quit when all windows are closed, except on macOS. There, it's common
-// for applications and their menu bar to stay active until the user quits
-// explicitly with Cmd + Q.
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {
     app.quit()
   }
 })
-
-// In this file you can include the rest of your app's specific main process
-// code. You can also put them in separate files and require them here.

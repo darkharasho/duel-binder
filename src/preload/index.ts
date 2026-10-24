@@ -1,22 +1,26 @@
-import { contextBridge } from 'electron'
-import { electronAPI } from '@electron-toolkit/preload'
+import { contextBridge, ipcRenderer } from 'electron'
+import { INVOKE_CHANNELS, SYNC_PROGRESS, UPDATE_STATUS, type Api } from '../shared/ipc'
+import type { SyncStatus, UpdateStatus } from '../shared/types'
 
-// Custom APIs for renderer
-const api = {}
+const invoke =
+  (channel: string) =>
+  (...args: unknown[]): Promise<unknown> =>
+    ipcRenderer.invoke(channel, ...args)
 
-// Use `contextBridge` APIs to expose Electron APIs to
-// renderer only if context isolation is enabled, otherwise
-// just add to the DOM global.
-if (process.contextIsolated) {
-  try {
-    contextBridge.exposeInMainWorld('electron', electronAPI)
-    contextBridge.exposeInMainWorld('api', api)
-  } catch (error) {
-    console.error(error)
+function subscribe<T>(channel: string, cb: (s: T) => void): () => void {
+  const listener = (_e: unknown, s: T): void => cb(s)
+  ipcRenderer.on(channel, listener)
+  return () => {
+    ipcRenderer.removeListener(channel, listener)
   }
-} else {
-  // @ts-ignore (define in dts)
-  window.electron = electronAPI
-  // @ts-ignore (define in dts)
-  window.api = api
 }
+
+const api: Record<string, Record<string, unknown>> = {}
+for (const channel of INVOKE_CHANNELS) {
+  const [ns, method] = channel.split(':')
+  ;(api[ns] ??= {})[method] = invoke(channel)
+}
+api.sync.onProgress = (cb: (s: SyncStatus) => void) => subscribe(SYNC_PROGRESS, cb)
+api.app.onUpdateStatus = (cb: (s: UpdateStatus) => void) => subscribe(UPDATE_STATUS, cb)
+
+contextBridge.exposeInMainWorld('api', api as unknown as Api)

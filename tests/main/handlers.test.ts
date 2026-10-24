@@ -23,6 +23,7 @@ async function makeHandlers() {
       checkForUpdates: async () => ({ state: 'none', mode: 'auto', version: null, error: null }),
       applyUpdate: async () => {}
     },
+    window: { minimize: vi.fn(), toggleMaximize: vi.fn(), close: vi.fn(), isMaximized: () => false },
     prices: {
       client: () => ({ lookup }),
       settings: () => ({ url: '', defaultUrl: '', isDefault: true, envOverride: false }),

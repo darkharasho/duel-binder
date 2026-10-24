@@ -14,10 +14,10 @@ export function SetProgress({
       aria-valuemin={0}
       aria-valuemax={100}
       aria-valuenow={progress.percent}
-      className={cn('h-1.5 w-full overflow-hidden rounded-full bg-muted', className)}
+      className={cn('h-1 w-full overflow-hidden rounded-[2px] bg-white/10', className)}
     >
       <div
-        className={cn('h-full rounded-full', progress.complete ? 'bg-emerald-500' : 'bg-primary')}
+        className={cn('h-full rounded-[2px]', progress.complete ? 'bg-complete' : 'bg-foreground')}
         style={{ width: `${progress.percent}%` }}
       />
     </div>

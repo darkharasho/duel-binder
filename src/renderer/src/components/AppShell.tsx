@@ -1,19 +1,21 @@
-import { useLayoutEffect, useMemo, useRef } from 'react'
-import { Layers, LayoutDashboard, Library, Plus, Settings } from 'lucide-react'
+import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import logo from '@/assets/logo.png'
-import { Button } from '@/components/ui/button'
+import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
+import { ArtWash } from './ArtWash'
+import { ArtWashContext } from './artWash'
 import { MainScrollContext, type MainScroll } from './mainScroll'
 import { SyncBanner } from './SyncBanner'
+import { TitleBar } from './TitleBar'
 
 export type Page = 'dashboard' | 'collection' | 'sets' | 'settings'
 export type NavigateFn = (page: Page, opts?: { entryId?: number }) => void
 
 const NAV = [
-  { page: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-  { page: 'collection', label: 'Collection', icon: Library },
-  { page: 'sets', label: 'Sets', icon: Layers },
-  { page: 'settings', label: 'Settings', icon: Settings }
+  { page: 'dashboard', label: 'Dashboard' },
+  { page: 'collection', label: 'Collection' },
+  { page: 'sets', label: 'Sets' },
+  { page: 'settings', label: 'Settings' }
 ] as const
 
 interface AppShellProps {
@@ -34,51 +36,64 @@ export function AppShell({ page, onNavigate, onAddCard, children }: AppShellProp
     }),
     []
   )
+  const [wash, setWash] = useState<string | null>(null)
   // Each page opens at its top, not wherever the previous page was scrolled to.
   useLayoutEffect(() => {
     scroll.set(0)
   }, [page, scroll])
   return (
-    <div className="flex h-screen bg-background text-foreground tabular-nums">
-      <aside className="flex w-[220px] shrink-0 flex-col gap-4 border-r p-3">
-        <div className="flex items-center gap-2.5 px-1 pt-1">
-          <img
-            src={logo}
-            alt=""
-            className="h-10 w-auto drop-shadow-[0_0_8px_rgb(139_92_246/0.5)]"
-          />
-          <span className="text-sm font-semibold leading-tight tracking-tight">
-            Yugioh Collection Tracker
-          </span>
+    <div className="relative isolate flex h-screen flex-col overflow-hidden bg-background text-foreground tabular-nums">
+      <ArtWash src={wash} />
+      <TitleBar />
+      <div className="flex min-h-0 flex-1">
+        <aside className="flex w-[200px] shrink-0 flex-col gap-6 border-r border-white/[0.06] px-4 pb-5 pt-1">
+          <div className="flex items-center gap-2.5">
+            <img src={logo} alt="" className="h-9 w-auto" />
+            <span className="text-[13px] font-semibold leading-tight">
+              Yugioh
+              <br />
+              Collection Tracker
+            </span>
+          </div>
+          <nav aria-label="Main" className="flex flex-col">
+            {NAV.map(({ page: p, label }) => (
+              <button
+                key={p}
+                type="button"
+                aria-current={page === p ? 'page' : undefined}
+                onClick={() => onNavigate(p)}
+                className={cn(
+                  'flex items-center gap-2 rounded-sm py-1.5 text-left text-sm text-muted-foreground transition-colors duration-150 hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring',
+                  page === p && 'font-semibold text-foreground'
+                )}
+              >
+                <span
+                  aria-hidden
+                  className={cn('size-1.5 rounded-full', page === p ? 'bg-foreground' : 'bg-transparent')}
+                />
+                {label}
+              </button>
+            ))}
+          </nav>
+          <button
+            type="button"
+            onClick={onAddCard}
+            className="flex items-center justify-between rounded-md border border-white/20 px-3 py-1.5 text-sm font-semibold transition-colors hover:border-white/40 hover:bg-white/5 focus-visible:outline-2 focus-visible:outline-ring"
+          >
+            Add card
+            <kbd className="font-mono text-xs font-normal text-muted-foreground">
+              {api.window.platform === 'darwin' ? '⌘K' : 'Ctrl K'}
+            </kbd>
+          </button>
+        </aside>
+        <div className="flex min-w-0 flex-1 flex-col">
+          <SyncBanner />
+          <main ref={mainRef} className="min-h-0 flex-1 overflow-auto">
+            <ArtWashContext.Provider value={setWash}>
+              <MainScrollContext.Provider value={scroll}>{children}</MainScrollContext.Provider>
+            </ArtWashContext.Provider>
+          </main>
         </div>
-        <Button onClick={onAddCard} className="justify-start gap-2">
-          <Plus className="size-4" aria-hidden />
-          Add card
-          <kbd className="ml-auto text-xs font-normal opacity-70">Ctrl K</kbd>
-        </Button>
-        <nav aria-label="Main" className="flex flex-col gap-0.5">
-          {NAV.map(({ page: p, label, icon: Icon }) => (
-            <button
-              key={p}
-              type="button"
-              aria-current={page === p ? 'page' : undefined}
-              onClick={() => onNavigate(p)}
-              className={cn(
-                'flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-sm text-muted-foreground transition-colors duration-150 hover:bg-muted hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring',
-                page === p && 'bg-primary/10 font-medium text-primary hover:bg-primary/10 hover:text-primary'
-              )}
-            >
-              <Icon className="size-4" aria-hidden />
-              {label}
-            </button>
-          ))}
-        </nav>
-      </aside>
-      <div className="flex min-w-0 flex-1 flex-col">
-        <SyncBanner />
-        <main ref={mainRef} className="min-h-0 flex-1 overflow-auto">
-          <MainScrollContext.Provider value={scroll}>{children}</MainScrollContext.Provider>
-        </main>
       </div>
     </div>
   )

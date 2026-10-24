@@ -52,6 +52,15 @@ export interface Api {
     cacheSize(): Promise<number>
     clearCache(): Promise<void>
   }
+  window: {
+    /** `process.platform`, for drawing the title bar the way the OS does. */
+    platform: string
+    minimize(): Promise<void>
+    toggleMaximize(): Promise<void>
+    close(): Promise<void>
+    isMaximized(): Promise<boolean>
+    onMaximizedChange(cb: (maximized: boolean) => void): () => void
+  }
   app: {
     version(): Promise<string>
     openDataFolder(): Promise<void>
@@ -86,6 +95,10 @@ export const INVOKE_CHANNELS = [
   'prices:setUrl',
   'images:cacheSize',
   'images:clearCache',
+  'window:minimize',
+  'window:toggleMaximize',
+  'window:close',
+  'window:isMaximized',
   'app:version',
   'app:openDataFolder',
   'app:backupDatabase',
@@ -100,6 +113,7 @@ export type InvokeChannel = (typeof INVOKE_CHANNELS)[number]
 export const SYNC_PROGRESS = 'sync:progress'
 export const UPDATE_STATUS = 'update:status'
 export const DATA_CHANGED = 'data:changed' // payload: void
+export const WINDOW_MAXIMIZED = 'window:maximized' // payload: boolean
 
 // Compile-time check: INVOKE_CHANNELS must list exactly the invoke methods of Api.
 // Only methods returning a Promise count as invoke methods, so the event

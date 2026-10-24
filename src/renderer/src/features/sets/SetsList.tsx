@@ -1,7 +1,7 @@
 import type { Language } from '@shared/languages'
 import type { CountMode, SetSummary } from '@shared/types'
 import { LanguageTag } from '@/components/LanguageTag'
-import { Badge } from '@/components/ui/badge'
+import { formatMonthYear } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { SetArt } from './SetArt'
 import { SetProgress } from './SetProgress'
@@ -15,13 +15,58 @@ interface Props {
 }
 
 export function SetsList({ sets, mode, view, onOpen }: Props): React.JSX.Element {
-  const grid = view === 'grid'
+  if (view === 'grid') {
+    return (
+      <ul className="grid grid-cols-[repeat(auto-fill,minmax(170px,1fr))] gap-x-5 gap-y-7">
+        {sets.map((s) => {
+          const p = progressFor(s, mode)
+          const started = p.owned > 0
+          return (
+            <li key={`${s.language}|${s.setName}`}>
+              <button
+                type="button"
+                data-started={started}
+                onClick={() => onOpen(s.setName, s.language)}
+                className="group flex w-full flex-col gap-2.5 rounded-md text-left focus-visible:outline-2 focus-visible:outline-ring"
+              >
+                <SetArt
+                  imageKey={s.imageKey}
+                  setCode={s.setCode}
+                  className={cn(
+                    'h-44 w-full transition-transform duration-200 group-hover:-translate-y-1',
+                    !started && 'opacity-60 grayscale-[0.6]'
+                  )}
+                />
+                <div className="min-w-0 space-y-1.5">
+                  <div className="flex items-center gap-1.5 text-sm font-semibold">
+                    <span className="truncate">{s.setName}</span>
+                    <LanguageTag language={s.language} />
+                  </div>
+                  <div className="flex items-center justify-between gap-2 font-mono text-xs text-muted-foreground">
+                    <span>
+                      {s.setCode}
+                      {s.tcgDate ? ` · ${s.tcgDate.slice(0, 4)}` : null}
+                    </span>
+                    <span className={cn(started && 'text-foreground')}>
+                      {started ? `${p.owned} / ${p.total}` : 'Not started'}
+                      {p.complete && (
+                        <span aria-label="Complete" className="ml-1 text-complete">
+                          ✓
+                        </span>
+                      )}
+                    </span>
+                  </div>
+                  {started && <SetProgress progress={p} />}
+                </div>
+              </button>
+            </li>
+          )
+        })}
+      </ul>
+    )
+  }
   return (
-    <ul
-      className={cn(
-        grid ? 'grid grid-cols-[repeat(auto-fill,minmax(180px,1fr))] gap-4' : 'flex flex-col gap-2'
-      )}
-    >
+    <ul className="divide-y divide-white/[0.06] border-b border-white/[0.06]">
       {sets.map((s) => {
         const p = progressFor(s, mode)
         const started = p.owned > 0
@@ -32,44 +77,43 @@ export function SetsList({ sets, mode, view, onOpen }: Props): React.JSX.Element
               data-started={started}
               onClick={() => onOpen(s.setName, s.language)}
               className={cn(
-                'w-full rounded-xl border bg-card text-left transition-colors duration-150 hover:bg-muted/50 focus-visible:outline-2 focus-visible:outline-ring',
-                grid ? 'flex flex-col gap-3 p-3' : 'flex items-center gap-4 p-2.5'
+                'flex w-full items-center gap-4 px-1 py-2.5 text-left transition-colors hover:bg-white/[0.03] focus-visible:outline-2 focus-visible:outline-ring',
+                !started && 'text-muted-foreground'
               )}
             >
               <SetArt
                 imageKey={s.imageKey}
                 setCode={s.setCode}
-                className={grid ? 'h-32 w-full' : 'h-12 w-16 shrink-0'}
+                className={cn(
+                  'h-16 w-12 shrink-0 rounded-[3px] object-cover',
+                  !started && 'brightness-75 grayscale-[0.7]'
+                )}
               />
-              <div className={cn('min-w-0', grid ? 'space-y-2' : 'flex flex-1 items-center gap-4')}>
-                <div className="min-w-0 flex-1">
-                  <div className="flex items-center gap-1.5 text-sm font-medium">
-                    <span className="truncate">{s.setName}</span>
-                    <LanguageTag language={s.language} />
-                  </div>
-                  <div className="text-xs text-muted-foreground">
-                    {s.setCode}
-                    {grid && s.tcgDate ? ` · ${s.tcgDate.slice(0, 4)}` : null}
-                  </div>
-                  {!grid && s.tcgDate && (
-                    <div className="text-xs text-muted-foreground">{s.tcgDate}</div>
-                  )}
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-1.5 text-sm font-semibold">
+                  <span className="truncate">{s.setName}</span>
+                  <LanguageTag language={s.language} />
                 </div>
-                <div className={cn('space-y-1.5', !grid && 'w-48 shrink-0')}>
-                  <div className="flex items-center justify-between gap-2 text-xs tabular-nums">
-                    <span>
-                      {p.owned} / {p.total}
-                    </span>
-                    <span className="text-muted-foreground">
-                      {started ? `${p.percent}%` : 'Not started'}
-                    </span>
-                  </div>
-                  <SetProgress progress={p} />
-                  {p.complete && (
-                    <Badge className="bg-emerald-500/15 text-emerald-400">✓ Complete</Badge>
-                  )}
+                <div className="mt-0.5 font-mono text-xs text-muted-foreground">
+                  {s.setCode}
+                  {s.tcgDate && ` · ${formatMonthYear(s.tcgDate)}`}
                 </div>
               </div>
+              <div className="w-32 shrink-0">
+                {started ? (
+                  <SetProgress progress={p} className="h-[3px]" />
+                ) : (
+                  <span className="text-xs">Not started</span>
+                )}
+              </div>
+              <span className="w-24 shrink-0 text-right font-mono text-[13px]">
+                {started ? `${p.owned} / ${p.total}` : `— / ${p.total}`}
+                {p.complete && (
+                  <span aria-label="Complete" className="ml-1 text-complete">
+                    ✓
+                  </span>
+                )}
+              </span>
             </button>
           </li>
         )

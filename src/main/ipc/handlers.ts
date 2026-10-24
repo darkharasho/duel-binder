@@ -22,6 +22,13 @@ import { getStats, recordSnapshot } from '../repo/stats'
 import type { PriceService } from '../prices/service'
 import { needsPrice, refreshIntlPrices } from '../prices/refresh'
 
+export interface WindowDeps {
+  minimize(): void
+  toggleMaximize(): void
+  close(): void
+  isMaximized(): boolean
+}
+
 export interface AppDeps {
   version(): string
   openDataFolder(): Promise<void>
@@ -37,6 +44,7 @@ export interface HandlerDeps {
   images: ImageCache
   emitSync: (s: SyncStatus) => void
   app: AppDeps
+  window: WindowDeps
   prices: PriceService
   emitDataChanged: () => void
 }
@@ -56,6 +64,7 @@ export function createHandlers({
   images,
   emitSync,
   app,
+  window,
   prices,
   emitDataChanged
 }: HandlerDeps): Handlers {
@@ -112,6 +121,10 @@ export function createHandlers({
     },
     'images:cacheSize': () => images.sizeBytes(),
     'images:clearCache': () => images.clear(),
+    'window:minimize': async () => window.minimize(),
+    'window:toggleMaximize': async () => window.toggleMaximize(),
+    'window:close': async () => window.close(),
+    'window:isMaximized': async () => window.isMaximized(),
     'app:version': async () => app.version(),
     'app:openDataFolder': () => app.openDataFolder(),
     'app:backupDatabase': () => app.backupDatabase(),

@@ -3,7 +3,7 @@ import { join } from 'path'
 import { autoUpdater } from 'electron-updater'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import type { SyncStatus, UpdateStatus } from '@shared/types'
-import { DATA_CHANGED, SYNC_PROGRESS, UPDATE_STATUS } from '@shared/ipc'
+import { DATA_CHANGED, SYNC_PROGRESS, UPDATE_STATUS, WINDOW_MAXIMIZED } from '@shared/ipc'
 import icon from '../../resources/icon.png?asset'
 import { openDatabase } from './db/database'
 import { getMeta } from './db/meta'
@@ -38,7 +38,15 @@ function createWindow(): void {
     title: 'Yugioh Collection Tracker',
     show: false,
     autoHideMenuBar: true,
-    ...(process.platform === 'linux' ? { icon } : {}),
+    backgroundColor: '#111113',
+    // The renderer draws the title bar (TitleBar.tsx): macOS keeps its traffic lights, Windows keeps
+    // native caption buttons as an overlay, Linux gets drawn buttons.
+    titleBarStyle: 'hidden',
+    ...(process.platform === 'darwin' ? { trafficLightPosition: { x: 14, y: 12 } } : {}),
+    ...(process.platform === 'win32'
+      ? { titleBarOverlay: { color: '#111113', symbolColor: '#ecebe8', height: 36 } }
+      : {}),
+    ...(process.platform === 'linux' ? { icon, frame: false } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
@@ -51,6 +59,11 @@ function createWindow(): void {
   win.on('closed', () => {
     if (mainWindow === win) mainWindow = null
   })
+  const sendMaximized = (): void => {
+    if (!win.isDestroyed()) win.webContents.send(WINDOW_MAXIMIZED, win.isMaximized())
+  }
+  win.on('maximize', sendMaximized)
+  win.on('unmaximize', sendMaximized)
   win.on('ready-to-show', () => {
     win.show()
   })
@@ -148,7 +161,29 @@ function bootstrap(): void {
   const priceService = createPriceService(db)
   const emitDataChanged = (): void => broadcast(DATA_CHANGED, undefined)
 
-  registerIpc(createHandlers({ db, client, images, emitSync, app: appDeps, prices: priceService, emitDataChanged }))
+  const windowDeps = {
+    minimize: () => mainWindow?.minimize(),
+    toggleMaximize: () => {
+      if (!mainWindow) return
+      if (mainWindow.isMaximized()) mainWindow.unmaximize()
+      else mainWindow.maximize()
+    },
+    close: () => mainWindow?.close(),
+    isMaximized: () => mainWindow?.isMaximized() ?? false
+  }
+
+  registerIpc(
+    createHandlers({
+      db,
+      client,
+      images,
+      emitSync,
+      app: appDeps,
+      window: windowDeps,
+      prices: priceService,
+      emitDataChanged
+    })
+  )
 
   createWindow()
   updater.start()

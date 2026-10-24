@@ -50,6 +50,18 @@ export function createMockApi(overrides: DeepPartial<Api> = {}): Api {
       onProgress: vi.fn(() => () => {})
     },
     images: { cacheSize: vi.fn(async () => 0), clearCache: vi.fn(async () => undefined) },
+    prices: {
+      settings: vi.fn(async () => ({ url: '', defaultUrl: '', isDefault: true, envOverride: false })),
+      setUrl: vi.fn(async () => ({ url: '', defaultUrl: '', isDefault: true, envOverride: false }))
+    },
+    window: {
+      platform: 'linux',
+      minimize: vi.fn(async () => undefined),
+      toggleMaximize: vi.fn(async () => undefined),
+      close: vi.fn(async () => undefined),
+      isMaximized: vi.fn(async () => false),
+      onMaximizedChange: vi.fn(() => () => {})
+    },
     app: {
       version: vi.fn(async () => '0.0.0'),
       openDataFolder: vi.fn(async () => undefined),

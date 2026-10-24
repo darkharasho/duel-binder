@@ -3,6 +3,7 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { LayoutGrid, Table2 } from 'lucide-react'
 import { LANGUAGES } from '@shared/languages'
 import type { CollectionFilters, EntryView, SortKey } from '@shared/types'
+import { cardArtUrl, useArtWash } from '@/components/artWash'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
@@ -109,6 +110,8 @@ export function CollectionPage({ initialEntryId, onAddCard }: Props): React.JSX.
   }
 
   const list = entries.data ?? []
+  // The collection tints the page with its first card in the current order.
+  useArtWash(list[0] ? cardArtUrl(list[0].imageId) : null)
   const filtered = hasActiveFilters(filters)
   // Entries exist, but the language filter alone hides them all.
   const hiddenByLanguage =

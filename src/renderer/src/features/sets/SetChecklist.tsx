@@ -5,11 +5,13 @@ import { toast } from 'sonner'
 import type { Language } from '@shared/languages'
 import type { CardSearchResult, CountMode, SetChecklist as SetChecklistData } from '@shared/types'
 import { CardArt } from '@/components/CardArt'
+import { setArtUrl, useArtWash } from '@/components/artWash'
 import { LanguageTag } from '@/components/LanguageTag'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { TooltipProvider } from '@/components/ui/tooltip'
+import { UnderlineTabs } from '@/components/UnderlineTabs'
 import { EntryDetailPanel } from '@/features/collection/EntryDetailPanel'
 import { api, mutationInvalidationKeys, queryKeys } from '@/lib/api'
 import { createSerialQueue } from '@/lib/serialQueue'
@@ -35,7 +37,7 @@ interface SetChecklistProps {
   onAddMissing: (card: CardSearchResult, printingId: number) => void
 }
 
-const FILTERS: { value: TileFilter; label: string }[] = [
+const FILTERS: readonly { value: TileFilter; label: string }[] = [
   { value: 'all', label: 'All' },
   { value: 'owned', label: 'Owned' },
   { value: 'missing', label: 'Missing' }
@@ -103,6 +105,7 @@ export function SetChecklist({
     queryFn: () => api.sets.checklist(setName, language)
   })
   const data = checklist.data
+  useArtWash(data?.set.imageKey ? setArtUrl(data.set.imageKey) : null)
   const tiles = useMemo(
     () => (data ? filterTiles(checklistTiles(data, mode), filter) : []),
     [data, mode, filter]
@@ -195,35 +198,21 @@ export function SetChecklist({
               <LanguageTag language={data.set.language} />
             </h1>
           </div>
-          <div className="flex flex-wrap items-center gap-3">
-            <ToggleGroup
-              type="single"
-              variant="outline"
-              size="sm"
-              value={filter}
-              onValueChange={(f) => {
-                if (f === 'all' || f === 'owned' || f === 'missing') setFilter(f)
-              }}
-            >
-              {FILTERS.map((f) => (
-                <ToggleGroupItem key={f.value} value={f.value}>
-                  {f.label}
-                </ToggleGroupItem>
-              ))}
-            </ToggleGroup>
-            <ToggleGroup
-              type="single"
-              variant="outline"
-              size="sm"
-              value={mode}
-              onValueChange={(m) => {
-                if (m === 'cards' || m === 'rarities') onModeChange(m)
-              }}
-            >
-              <ToggleGroupItem value="cards">Each card once</ToggleGroupItem>
-              <ToggleGroupItem value="rarities">Every rarity</ToggleGroupItem>
-            </ToggleGroup>
-            <div className="ml-auto flex items-center gap-3">
+          <div className="flex flex-wrap items-end gap-3 border-b border-white/[0.08]">
+            <UnderlineTabs label="Show" value={filter} options={FILTERS} onChange={setFilter} />
+            <div className="ml-auto flex flex-wrap items-center gap-3 pb-2">
+              <ToggleGroup
+                type="single"
+                variant="outline"
+                size="sm"
+                value={mode}
+                onValueChange={(m) => {
+                  if (m === 'cards' || m === 'rarities') onModeChange(m)
+                }}
+              >
+                <ToggleGroupItem value="cards">Each card once</ToggleGroupItem>
+                <ToggleGroupItem value="rarities">Every rarity</ToggleGroupItem>
+              </ToggleGroup>
               {bulk && (
                 <span className="text-sm text-muted-foreground">Changes save as you click.</span>
               )}
@@ -241,10 +230,14 @@ export function SetChecklist({
           </div>
         </PageHeader>
 
-        <header className="flex flex-wrap items-center gap-4">
-          <SetArt imageKey={data.set.imageKey} setCode={data.set.setCode} className="h-16 w-24" />
+        <header className="flex flex-wrap items-center gap-5">
+          <SetArt
+            imageKey={data.set.imageKey}
+            setCode={data.set.setCode}
+            className="h-24 w-[4.5rem] rounded-[3px] object-cover shadow-[0_8px_20px_rgb(0_0_0/0.5)]"
+          />
           <div className="min-w-0 flex-1">
-            <p className="text-sm tabular-nums text-muted-foreground">
+            <p className="font-mono text-[13px] text-foreground/75">
               {data.set.setCode}
               {data.set.tcgDate && ` · ${data.set.tcgDate}`} · {progress.owned} of {progress.total}
             </p>

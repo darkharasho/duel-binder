@@ -1,3 +1,9 @@
+import '@fontsource/ibm-plex-sans/400.css'
+import '@fontsource/ibm-plex-sans/500.css'
+import '@fontsource/ibm-plex-sans/600.css'
+import '@fontsource/ibm-plex-sans/700.css'
+import '@fontsource/ibm-plex-mono/400.css'
+import '@fontsource/ibm-plex-mono/500.css'
 import './index.css'
 
 import { StrictMode } from 'react'
@@ -7,12 +13,8 @@ import App from './App'
 
 const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: 30_000, refetchOnWindowFocus: false } } })
 
-const media = window.matchMedia('(prefers-color-scheme: dark)')
-const applyTheme = (dark: boolean): void => {
-  document.documentElement.classList.toggle('dark', dark)
-}
-applyTheme(media.matches)
-media.addEventListener('change', (e) => applyTheme(e.matches))
+// The app has one dark theme; `dark` keeps shadcn's dark: variants in step with it.
+document.documentElement.classList.add('dark')
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

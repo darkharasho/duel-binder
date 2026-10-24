@@ -11,7 +11,7 @@ import type { UpdateStatus } from '@shared/types'
 
 function Section({ title, children }: { title: string; children: React.ReactNode }): React.JSX.Element {
   return (
-    <section className="rounded-xl border bg-card p-5">
+    <section className="border-t border-white/[0.08] pt-5">
       <h2 className="mb-3 text-sm font-semibold">{title}</h2>
       <div className="space-y-3">{children}</div>
     </section>
@@ -140,8 +140,8 @@ export function SettingsPage(): React.JSX.Element {
   const lastSync = sync?.lastSyncAt ?? null
 
   return (
-    <div className="mx-auto max-w-2xl space-y-5 p-8">
-      <h1 className="text-xl font-semibold">Settings</h1>
+    <div className="max-w-2xl space-y-8 px-8 pb-10 pt-3">
+      <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
 
       <Section title="App">
         <Row label="Version">{version.data ?? '—'}</Row>

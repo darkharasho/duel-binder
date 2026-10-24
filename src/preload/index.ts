@@ -1,5 +1,12 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import { DATA_CHANGED, INVOKE_CHANNELS, SYNC_PROGRESS, UPDATE_STATUS, type Api } from '../shared/ipc'
+import {
+  DATA_CHANGED,
+  INVOKE_CHANNELS,
+  SYNC_PROGRESS,
+  UPDATE_STATUS,
+  WINDOW_MAXIMIZED,
+  type Api
+} from '../shared/ipc'
 import type { SyncStatus, UpdateStatus } from '../shared/types'
 
 const invoke =
@@ -23,5 +30,7 @@ for (const channel of INVOKE_CHANNELS) {
 api.sync.onProgress = (cb: (s: SyncStatus) => void) => subscribe(SYNC_PROGRESS, cb)
 api.app.onUpdateStatus = (cb: (s: UpdateStatus) => void) => subscribe(UPDATE_STATUS, cb)
 api.app.onDataChanged = (cb: () => void) => subscribe<void>(DATA_CHANGED, () => cb())
+api.window.platform = process.platform
+api.window.onMaximizedChange = (cb: (maximized: boolean) => void) => subscribe(WINDOW_MAXIMIZED, cb)
 
 contextBridge.exposeInMainWorld('api', api as unknown as Api)

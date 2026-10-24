@@ -117,8 +117,8 @@ describe('SetsPage', () => {
   it('marks complete sets', async () => {
     renderPage()
     const sd = await screen.findByRole('button', { name: /Starter Deck/ })
-    expect(within(sd).getByText('✓ Complete')).toBeInTheDocument()
-    expect(within(sd).getByText('1 / 1')).toBeInTheDocument()
+    expect(within(sd).getByLabelText('Complete')).toBeInTheDocument()
+    expect(sd).toHaveTextContent('1 / 1')
   })
 
   it('count mode changes progress and persists', async () => {
@@ -140,13 +140,13 @@ describe('SetsPage', () => {
     expect(screen.queryByRole('button', { name: /Starter Deck/ })).not.toBeInTheDocument()
   })
 
-  it('list view persists and shows the full date', async () => {
+  it('opens as a list with month and year; grid view persists and shows the year', async () => {
     renderPage()
-    await screen.findByRole('button', { name: /Metal Raiders/ })
-    expect(screen.queryByText('2002-06-26')).not.toBeInTheDocument()
-    await userEvent.click(screen.getByRole('radio', { name: 'List view' }))
-    expect(localStorage.getItem('sets.view')).toBe('list')
-    expect(screen.getByText('2002-06-26')).toBeInTheDocument()
+    const mr = await screen.findByRole('button', { name: /Metal Raiders/ })
+    expect(mr).toHaveTextContent('MRD · Jun 2002')
+    await userEvent.click(screen.getByRole('radio', { name: 'Grid view' }))
+    expect(localStorage.getItem('sets.view')).toBe('grid')
+    expect(screen.getByRole('button', { name: /Metal Raiders/ })).toHaveTextContent('MRD · 2002')
   })
 
   it('empty started state offers Show all sets and Add card', async () => {

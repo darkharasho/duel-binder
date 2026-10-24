@@ -57,7 +57,7 @@ function FacetMenu({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <Button variant="outline" size="sm" aria-label={label}>
+        <Button variant="ghost" size="sm" aria-label={label} className="text-foreground/80">
           {label}
           {selected.length > 0 && (
             <span className="rounded-full bg-primary px-1.5 text-xs tabular-nums text-primary-foreground">
@@ -107,8 +107,8 @@ export function FilterBar({ filters, facets, onChange, onClear }: Props): React.
   }, [text, filters.q, onChange])
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      <div className="relative">
+    <div className="flex flex-wrap items-center gap-1.5">
+      <div className="relative mr-1">
         <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
         <Input
           type="search"
@@ -116,7 +116,7 @@ export function FilterBar({ filters, facets, onChange, onClear }: Props): React.
           placeholder="Search collection…"
           value={text}
           onChange={(e) => setText(e.target.value)}
-          className="w-56 pl-8"
+          className="h-8 w-52 pl-8"
         />
       </div>
       {FACETS.map(({ key, label }) => (
@@ -133,22 +133,27 @@ export function FilterBar({ filters, facets, onChange, onClear }: Props): React.
         onChange={setLanguage}
         available={facets?.languages ?? []}
       />
-      <Input
-        type="number"
-        aria-label="Level min"
-        placeholder="Min Lv"
-        value={filters.levelMin ?? ''}
-        onChange={(e) => onChange({ levelMin: parseLevel(e.target.value) })}
-        className="w-24 tabular-nums"
-      />
-      <Input
-        type="number"
-        aria-label="Level max"
-        placeholder="Max Lv"
-        value={filters.levelMax ?? ''}
-        onChange={(e) => onChange({ levelMax: parseLevel(e.target.value) })}
-        className="w-24 tabular-nums"
-      />
+      <div className="flex items-center gap-1 text-[13px] text-foreground/80">
+        <span className="px-1">Level</span>
+        <Input
+          type="number"
+          aria-label="Level min"
+          placeholder="min"
+          value={filters.levelMin ?? ''}
+          onChange={(e) => onChange({ levelMin: parseLevel(e.target.value) })}
+          className="h-8 w-14 px-2 font-mono text-xs"
+        />
+        <span aria-hidden>–</span>
+        <Input
+          type="number"
+          aria-label="Level max"
+          placeholder="max"
+          value={filters.levelMax ?? ''}
+          onChange={(e) => onChange({ levelMax: parseLevel(e.target.value) })}
+          className="h-8 w-14 px-2 font-mono text-xs"
+        />
+      </div>
+      <div className="ml-auto flex items-center gap-1">
       <Select value={filters.sort} onValueChange={(v) => onChange({ sort: v as SortKey })}>
         <SelectTrigger size="sm" aria-label="Sort by" className="w-36">
           <SelectValue />
@@ -169,7 +174,8 @@ export function FilterBar({ filters, facets, onChange, onClear }: Props): React.
       >
         {filters.dir === 'asc' ? <ArrowUpAZ /> : <ArrowDownAZ />}
       </Button>
-      <Button variant="ghost" size="sm" onClick={onClear}>
+      </div>
+      <Button variant="ghost" size="sm" onClick={onClear} className="text-muted-foreground">
         Clear filters
       </Button>
     </div>

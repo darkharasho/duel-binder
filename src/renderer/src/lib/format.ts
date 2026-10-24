@@ -16,3 +16,11 @@ export function formatRelative(iso: string | null, now = new Date()): string {
   const days = Math.floor(hours / 24)
   return `${days} ${days === 1 ? 'day' : 'days'} ago`
 }
+
+const monthYear = new Intl.DateTimeFormat('en-US', { month: 'short', year: 'numeric', timeZone: 'UTC' })
+
+/** '2002-06-26' → 'Jun 2002'; anything unparseable is returned as-is. */
+export function formatMonthYear(date: string): string {
+  const t = Date.parse(date)
+  return Number.isNaN(t) ? date : monthYear.format(t)
+}

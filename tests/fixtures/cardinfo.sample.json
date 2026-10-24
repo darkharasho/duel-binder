@@ -1,0 +1,46 @@
+{
+  "data": [
+    {
+      "id": 46986414,
+      "name": "Dark Magician",
+      "type": "Normal Monster",
+      "frameType": "normal",
+      "desc": "The ultimate wizard in terms of attack and defense.",
+      "race": "Spellcaster",
+      "atk": 2500,
+      "def": 2100,
+      "level": 7,
+      "attribute": "DARK",
+      "archetype": "Dark Magician",
+      "card_sets": [
+        { "set_name": "Legend of Blue Eyes White Dragon", "set_code": "LOB-EN005", "set_rarity": "Ultra Rare", "set_rarity_code": "(UR)", "set_price": "5.12" },
+        { "set_name": "Starter Deck: Yugi", "set_code": "SDY-006", "set_rarity": "Ultra Rare", "set_rarity_code": "(UR)", "set_price": "0.00" }
+      ],
+      "card_images": [{ "id": 46986414 }, { "id": 46986415 }],
+      "card_prices": [{ "tcgplayer_price": "7.50" }]
+    },
+    {
+      "id": 55144522,
+      "name": "Pot of Greed",
+      "type": "Spell Card",
+      "frameType": "spell",
+      "desc": "Draw 2 cards.",
+      "race": "Normal",
+      "card_sets": [
+        { "set_name": "Legend of Blue Eyes White Dragon", "set_code": "LOB-EN119", "set_rarity": "Rare", "set_rarity_code": "(R)", "set_price": "3.50" }
+      ],
+      "card_images": [{ "id": 55144522 }],
+      "card_prices": [{ "tcgplayer_price": "3.00" }]
+    },
+    {
+      "id": 18144506,
+      "name": "Harpie's Feather Duster",
+      "type": "Spell Card",
+      "frameType": "spell",
+      "desc": "Destroy all Spells and Traps your opponent controls.",
+      "race": "Normal",
+      "card_images": [{ "id": 18144506 }],
+      "card_prices": []
+    }
+  ]
+}

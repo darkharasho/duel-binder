@@ -56,8 +56,10 @@ beforeEach(() => {
   env = { PRICES: makeKv(), EBAY_APP_ID: APP, EBAY_CERT_ID: CERT }
   errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
   logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+  for (const m of ['warn', 'info', 'debug']) vi.spyOn(console, m).mockImplementation(() => {})
 })
 afterEach(() => {
+  vi.useRealTimers()
   vi.unstubAllGlobals()
   vi.restoreAllMocks()
 })
@@ -184,8 +186,102 @@ describe('GET /v1/price', () => {
     const p = worker.fetch(req(), env)
     await vi.runAllTimersAsync()
     const res = await p
-    vi.useRealTimers()
     expect(res.status).toBe(200)
     expect(f.calls.filter((u) => u.includes('item_summary'))).toHaveLength(2)
+  })
+
+  it('treats a KV get error as a cache miss', async () => {
+    vi.stubGlobal('fetch', makeFetch([json(items(['LOB-DE001 a', 'LOB-DE001 b']))]))
+    env.PRICES.get = vi.fn(async () => {
+      throw new Error('kv down')
+    })
+    const res = await worker.fetch(req(), env)
+    expect(res.status).toBe(200)
+    expect((await res.json()).listingCount).toBe(2)
+  })
+
+  it('still returns 200 when a KV put rejects or throws', async () => {
+    for (const put of [
+      vi.fn(async () => {
+        throw new Error('kv down')
+      }),
+      vi.fn(() => {
+        throw new Error('kv down')
+      })
+    ]) {
+      vi.stubGlobal('fetch', makeFetch([json(items(['LOB-DE001 a', 'LOB-DE001 b']))]))
+      env.PRICES.put = put
+      expect((await worker.fetch(req(), env)).status).toBe(200)
+    }
+  })
+
+  it('uses ctx.waitUntil for the put when available', async () => {
+    vi.stubGlobal('fetch', makeFetch([json(items(['LOB-DE001 a', 'LOB-DE001 b']))]))
+    env.PRICES.put = vi.fn(async () => {
+      throw new Error('kv down')
+    })
+    const ctx = { waitUntil: vi.fn() }
+    expect((await worker.fetch(req(), env, ctx)).status).toBe(200)
+    expect(ctx.waitUntil).toHaveBeenCalledTimes(1)
+    await expect(ctx.waitUntil.mock.calls[0][0]).resolves.toBeUndefined()
+  })
+
+  it('rejects over-long fields with 400', async () => {
+    vi.stubGlobal('fetch', makeFetch([]))
+    const long = 'a'.repeat(201)
+    const res = await worker.fetch(
+      req(`https://w.test/v1/price?code=&name=${long}&set=s&rarity=r&lang=de`),
+      env
+    )
+    expect(res.status).toBe(400)
+  })
+
+  it('normalizes code case for the language word and the cache key', async () => {
+    const f = makeFetch([json(items(['LB-05 a', 'LB-05 b']))])
+    vi.stubGlobal('fetch', f)
+    const u = (c) =>
+      `https://w.test/v1/price?code=${c}&name=Dark%20Magician&set=Vol.1&rarity=&lang=ja`
+    await worker.fetch(req(u('lb-05')), env)
+    expect(decodeURIComponent(f.calls[1]).replaceAll('+', ' ')).toContain('"LB-05" Japanese')
+    f.mockClear()
+    await worker.fetch(req(u('LB-05')), env)
+    expect(f).not.toHaveBeenCalled()
+  })
+
+  it('keeps the rarity result when the fallback finds fewer listings', async () => {
+    vi.stubGlobal(
+      'fetch',
+      makeFetch([json(items(['LOB-DE001 only one'], '20')), json(items(['unrelated']))])
+    )
+    const body = await (await worker.fetch(req(), env)).json()
+    expect(body).toMatchObject({ price: null, listingCount: 1 })
+  })
+
+  it.each([
+    ['500', () => json({}, 500)],
+    ['throw', () => Promise.reject(new Error(`boom ${TOKEN} ${APP}`))]
+  ])('leaks nothing when OAuth succeeds but Browse fails (%s)', async (_n, fail) => {
+    vi.useFakeTimers()
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url) =>
+        String(url).includes('oauth2/token')
+          ? json({ access_token: TOKEN, expires_in: 7200 })
+          : fail()
+      )
+    )
+    const p = worker.fetch(req(), env)
+    await vi.runAllTimersAsync()
+    const res = await p
+    const text = await res.text()
+    expect(res.status).toBe(502)
+    expect(JSON.parse(text)).toEqual({ error: 'upstream' })
+    const logged = JSON.stringify(
+      ['error', 'log', 'warn', 'info', 'debug'].map((m) => console[m].mock?.calls)
+    )
+    for (const s of [APP, CERT, TOKEN, btoa(`${APP}:${CERT}`)]) {
+      expect(text).not.toContain(s)
+      expect(logged).not.toContain(s)
+    }
   })
 })

@@ -6,6 +6,7 @@ const OAUTH_BODY =
   'grant_type=client_credentials&scope=https%3A%2F%2Fapi.ebay.com%2Foauth%2Fapi_scope'
 const CACHE_TTL = 604800
 const ATTEMPTS = 3
+const MAX_FIELD = 200
 
 let cachedToken = null // { value, expiresAt }
 
@@ -80,7 +81,11 @@ function matchingPrices(items, ref) {
 async function lookup(env, params) {
   let prices = matchingPrices(await search(env, buildQuery(params)), params)
   if (prices.length < 2 && params.rarity) {
-    prices = matchingPrices(await search(env, buildQuery({ ...params, rarity: '' })), params)
+    const fallback = matchingPrices(
+      await search(env, buildQuery({ ...params, rarity: '' })),
+      params
+    )
+    if (fallback.length > prices.length) prices = fallback
   }
   return {
     ...askingPrice(prices),
@@ -90,14 +95,14 @@ async function lookup(env, params) {
 }
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     if (request.method !== 'GET') return respond({ error: 'method not allowed' }, 405)
     const url = new URL(request.url)
     if (url.pathname !== '/v1/price') return respond({ error: 'not found' }, 404)
 
     const q = url.searchParams
     const params = {
-      code: (q.get('code') ?? '').trim(),
+      code: (q.get('code') ?? '').trim().toUpperCase(),
       name: (q.get('name') ?? '').trim(),
       set: (q.get('set') ?? '').trim(),
       rarity: (q.get('rarity') ?? '').trim(),
@@ -106,7 +111,8 @@ export default {
     if (
       request.headers.get('X-Client') !== 'ygo-collection-tracker' ||
       !Object.hasOwn(EBAY_WORDS, params.lang) ||
-      !params.name
+      !params.name ||
+      [params.code, params.name, params.set, params.rarity].some((v) => v.length > MAX_FIELD)
     ) {
       return respond({ error: 'bad request' }, 400)
     }
@@ -119,12 +125,26 @@ export default {
       params.rarity,
       params.lang
     ].join('|')
-    const hit = await env.PRICES.get(key)
+    let hit = null
+    try {
+      hit = await env.PRICES.get(key)
+    } catch {
+      // KV read failure is a cache miss.
+    }
     if (hit) return new Response(hit, { headers: { 'content-type': 'application/json' } })
 
     try {
       const body = JSON.stringify(await lookup(env, params))
-      await env.PRICES.put(key, body, { expirationTtl: CACHE_TTL })
+      // Best-effort: a KV write failure must not fail a good result.
+      let write
+      try {
+        write = Promise.resolve(env.PRICES.put(key, body, { expirationTtl: CACHE_TTL }))
+      } catch {
+        write = Promise.resolve()
+      }
+      write = write.catch(() => {})
+      if (ctx?.waitUntil) ctx.waitUntil(write)
+      else await write
       return new Response(body, { headers: { 'content-type': 'application/json' } })
     } catch (e) {
       // Status line only: never URLs, headers, bodies or env values.

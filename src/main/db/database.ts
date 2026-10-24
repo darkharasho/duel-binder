@@ -69,13 +69,27 @@ CREATE TABLE tcgplayer_products (product_id INTEGER PRIMARY KEY, group_id INTEGE
 CREATE INDEX tcgplayer_products_number ON tcgplayer_products(number COLLATE NOCASE);
 `
 
+/**
+ * Art variants TCGplayer sells under one code and rarity (overframes, coloured foils): product names
+ * are kept to tell them apart, and each variant becomes its own printing tied to its product.
+ * The catalog is cleared so the next refresh refetches every set with names.
+ */
+export const SCHEMA_V6 = `
+ALTER TABLE tcgplayer_products ADD COLUMN name TEXT NOT NULL DEFAULT '';
+ALTER TABLE card_printings ADD COLUMN tcg_product_id INTEGER;
+DELETE FROM tcgplayer_products;
+DELETE FROM tcgplayer_groups;
+DELETE FROM meta WHERE key = 'tcgplayer_synced_at';
+`
+
 /** Ordered schema steps. Append new versions to the end; never edit a shipped step. */
 const MIGRATIONS: Migration[] = [
   { version: 1, sql: SCHEMA_V1 },
   { version: 2, sql: SCHEMA_V2 },
   { version: 3, sql: SCHEMA_V3, foreignKeysOff: true },
   { version: 4, sql: SCHEMA_V4 },
-  { version: 5, sql: SCHEMA_V5 }
+  { version: 5, sql: SCHEMA_V5 },
+  { version: 6, sql: SCHEMA_V6 }
 ]
 
 export function openDatabase(file: string): Database.Database {

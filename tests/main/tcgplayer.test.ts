@@ -3,8 +3,13 @@ import {
   createTcgplayerLookup,
   largeImageUrl,
   refreshTcgCatalog,
-  shouldRefreshTcgCatalog
+  shouldRefreshTcgCatalog,
+  variantLabel
 } from '../../src/main/tcgplayer/catalog'
+import { runSync } from '../../src/main/sync/sync'
+import type { YgoClient } from '../../src/main/ygo/client'
+import type { ApiCard } from '../../src/main/ygo/mapCard'
+import fixture from '../fixtures/cardinfo.sample.json'
 import { printingImageKey } from '../../src/main/images/cache'
 import { createPrintingArtResolver } from '../../src/main/yugipedia/artResolver'
 import type { YugipediaClient } from '../../src/main/yugipedia/client'
@@ -13,8 +18,15 @@ import { seededDb } from './helpers'
 const json = (results: unknown[]): Response =>
   new Response(JSON.stringify({ success: true, results }), { status: 200 })
 
-const product = (id: number, number: string, rarity: string, imageCount = 1): unknown => ({
+const product = (
+  id: number,
+  number: string,
+  rarity: string,
+  imageCount = 1,
+  name = 'Card'
+): unknown => ({
   productId: id,
+  name,
   imageUrl: `https://tcgplayer-cdn.tcgplayer.com/product/${id}_200w.jpg`,
   imageCount,
   extendedData: [
@@ -140,5 +152,63 @@ describe('TCGplayer catalog', () => {
     })
     expect(await art.url(printingId(db, 'LOB-EN005'))).toContain('tcgplayer')
     expect(listPageImages).not.toHaveBeenCalled()
+  })
+
+  it('variantLabel keeps what sets a product apart, not its rarity', () => {
+    expect(variantLabel('Audhumla', 'Ultra Rare')).toBe('')
+    expect(variantLabel('Audhumla (Extended Art)', 'Ultra Rare')).toBe('Extended Art')
+    expect(variantLabel('Audhumla (Starlight Rare) (Extended Art)', 'Starlight Rare')).toBe('Extended Art')
+    expect(variantLabel('Danger! Bigfoot! (Alternate Art) (PCR)', "Prismatic Collector's Rare")).toBe(
+      'Alternate Art'
+    )
+    expect(variantLabel('"A Case for K9" (Emblazoned Secret Rare)', 'Secret Rare')).toBe('Emblazoned')
+    expect(variantLabel('Raigeki (Ultra Rare)', 'Ultra Rare')).toBe('')
+    expect(variantLabel('Penguin Soldier (Blue)', 'Rare')).toBe('Blue')
+  })
+
+  it('adds a printing for each art variant, with its own photo, kept across card syncs', async () => {
+    const db = await seededDb()
+    const products = [
+      product(7, 'LOB-EN005', 'Ultra Rare', 1, 'Blue-Eyes (Extended Art)'),
+      product(8, 'LOB-EN005', 'Ultra Rare', 1, 'Blue-Eyes'),
+      product(9, 'LOB-EN005', 'Ultra Rare', 1, 'Blue-Eyes (Misprint)')
+    ]
+    const now = new Date('2026-10-24T00:00:00Z')
+    await refreshTcgCatalog(db, {
+      version: '1',
+      fetchFn: catalogFetch([{ groupId: 10, modifiedOn: 'a' }], { 10: products }) as unknown as typeof fetch,
+      now
+    })
+    const rows = db
+      .prepare("SELECT id, set_rarity, tcg_product_id FROM card_printings WHERE set_code = 'LOB-EN005' ORDER BY id")
+      .all() as { id: number; set_rarity: string; tcg_product_id: number | null }[]
+    expect(rows.map((r) => [r.set_rarity, r.tcg_product_id])).toEqual([
+      ['Ultra Rare', null],
+      ['Ultra Rare (Extended Art)', 7]
+    ])
+    const lookup = createTcgplayerLookup(db)
+    // The plain card keeps the plain photo even though the variant has the lower product id.
+    expect(lookup(rows[0].id)).toBe('https://tcgplayer-cdn.tcgplayer.com/product/8_in_1000x1000.jpg')
+    expect(lookup(rows[1].id)).toBe('https://tcgplayer-cdn.tcgplayer.com/product/7_in_1000x1000.jpg')
+
+    const client: YgoClient = {
+      fetchDbVersion: async () => ({ databaseVersion: '2', lastUpdate: '2026-10-24' }),
+      fetchCardInfo: async () => fixture.data as ApiCard[],
+      fetchCardSets: async () => []
+    }
+    await runSync(db, client, () => {}, now)
+    expect(db.prepare('SELECT count(*) AS n FROM card_printings WHERE tcg_product_id = 7').get()).toEqual({ n: 1 })
+
+    // Gone from the catalog: removed.
+    await refreshTcgCatalog(db, {
+      version: '1',
+      fetchFn: catalogFetch([{ groupId: 10, modifiedOn: 'b' }], {
+        10: [products[1]]
+      }) as unknown as typeof fetch,
+      now
+    })
+    expect(db.prepare('SELECT count(*) AS n FROM card_printings WHERE tcg_product_id IS NOT NULL').get()).toEqual({
+      n: 0
+    })
   })
 })

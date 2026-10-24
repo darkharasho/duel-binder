@@ -128,8 +128,16 @@ function saveCards(
         seenImages.add(img.imageId)
       }
     }
-    // Only English printings come from YGOPRODeck; other languages belong to the Yugipedia sync.
-    prune(db, 'card_printings', 'id', 'printing_id', seenPrintings, "language = 'en'")
+    // Only English printings come from YGOPRODeck; other languages belong to the Yugipedia sync,
+    // and art variants to the TCGplayer catalog.
+    prune(
+      db,
+      'card_printings',
+      'id',
+      'printing_id',
+      seenPrintings,
+      "language = 'en' AND tcg_product_id IS NULL"
+    )
     prune(db, 'card_images', 'image_id', 'image_id', seenImages)
     db.exec(`INSERT INTO cards_fts(cards_fts) VALUES('rebuild')`)
     setMeta(db, 'last_sync_at', nowIso)

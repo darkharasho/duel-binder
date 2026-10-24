@@ -6,11 +6,11 @@ import { openDatabase, migrate, SCHEMA_V1, SCHEMA_V2 } from '../../src/main/db/d
 import { getMeta, setMeta } from '../../src/main/db/meta'
 
 describe('database', () => {
-  test('migrate sets user_version 5 and is idempotent', () => {
+  test('migrate sets user_version 6 and is idempotent', () => {
     const db = openDatabase(':memory:')
-    expect(db.pragma('user_version', { simple: true })).toBe(5)
+    expect(db.pragma('user_version', { simple: true })).toBe(6)
     expect(() => migrate(db)).not.toThrow()
-    expect(db.pragma('user_version', { simple: true })).toBe(5)
+    expect(db.pragma('user_version', { simple: true })).toBe(6)
     db.close()
   })
 
@@ -35,7 +35,7 @@ describe('database', () => {
     ).run()
     db.prepare(`INSERT INTO sets (set_name, set_code) VALUES ('Legend of Blue Eyes White Dragon', 'LOB')`).run()
     migrate(db)
-    expect(db.pragma('user_version', { simple: true })).toBe(5)
+    expect(db.pragma('user_version', { simple: true })).toBe(6)
     expect(db.prepare('SELECT id, language FROM card_printings').all()).toEqual([{ id: 7, language: 'en' }])
     expect(db.prepare('SELECT id, printing_id FROM collection_entries').all()).toEqual([
       { id: 3, printing_id: 7 }
@@ -76,7 +76,7 @@ describe('database', () => {
     db.pragma('user_version = 1')
     db.prepare("INSERT INTO meta (key, value) VALUES ('k', 'v')").run()
     migrate(db)
-    expect(db.pragma('user_version', { simple: true })).toBe(5)
+    expect(db.pragma('user_version', { simple: true })).toBe(6)
     expect(db.prepare('SELECT value FROM meta WHERE key = ?').get('k')).toEqual({ value: 'v' })
     expect(db.prepare('SELECT count(*) AS n FROM sets').get()).toEqual({ n: 0 })
     db.close()

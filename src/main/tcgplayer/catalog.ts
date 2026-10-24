@@ -20,6 +20,7 @@ interface Group {
 
 interface Product {
   productId: number
+  name?: string
   imageUrl?: string
   imageCount?: number
   extendedData?: { name: string; value: string }[]
@@ -85,8 +86,8 @@ export async function refreshTcgCatalog(
 
   const delProducts = db.prepare('DELETE FROM tcgplayer_products WHERE group_id = ?')
   const insProduct = db.prepare(
-    `INSERT OR REPLACE INTO tcgplayer_products (product_id, group_id, number, rarity, image_url)
-     VALUES (?, ?, ?, ?, ?)`
+    `INSERT OR REPLACE INTO tcgplayer_products (product_id, group_id, number, rarity, image_url, name)
+     VALUES (?, ?, ?, ?, ?, ?)`
   )
   const saveGroup = db.prepare(
     `INSERT INTO tcgplayer_groups (group_id, modified_on) VALUES (?, ?)
@@ -111,7 +112,8 @@ export async function refreshTcgCatalog(
             const number = ext.get('Number')?.trim()
             const image = p.imageCount !== 0 && p.imageUrl ? largeImageUrl(p.imageUrl) : null
             if (!Number.isSafeInteger(p.productId) || !number || !image) continue
-            insProduct.run(p.productId, g.groupId, number, ext.get('Rarity')?.trim() ?? '', image)
+            const name = typeof p.name === 'string' ? p.name.trim() : ''
+            insProduct.run(p.productId, g.groupId, number, ext.get('Rarity')?.trim() ?? '', image, name)
           }
           saveGroup.run(g.groupId, g.modifiedOn)
         })()
@@ -129,6 +131,7 @@ export async function refreshTcgCatalog(
     }
   })()
 
+  if (result.updatedGroups > 0) saveTcgVariants(db)
   result.ok = result.failedGroups === 0
   if (result.ok) setMeta(db, 'tcgplayer_synced_at', (opts.now ?? new Date()).toISOString())
   console.info(
@@ -139,26 +142,151 @@ export async function refreshTcgCatalog(
 }
 
 const rarityKey = (r: string): string => r.toLowerCase().replace(/[^a-z]/g, '')
+const initials = (r: string): string =>
+  r
+    .split(/\s+/)
+    .map((w) => w[0] ?? '')
+    .join('')
+    .toLowerCase()
 
 /**
- * The TCGplayer photo of an English printing: the product with the same card number and rarity,
- * or the only product with that number when TCGplayer names the rarity differently.
+ * What sets a product apart from the plain card: its parenthesised notes, minus the rarity
+ * itself ("Starlight Rare", "UR", or a trailing "Secret Rare" as in "Emblazoned Secret Rare").
+ * "" for the plain card.
+ */
+export function variantLabel(name: string, rarity: string): string {
+  const want = rarityKey(rarity)
+  const notes: string[] = []
+  for (const m of name.matchAll(/\(([^()]+)\)/g)) {
+    const note = m[1].trim()
+    const key = rarityKey(note)
+    if (key === want || key === initials(rarity)) continue
+    if (want && key.endsWith(want)) {
+      const rest = note.slice(0, note.length - rarity.length).trim()
+      if (rest && rarityKey(note.slice(rest.length)) === want) {
+        notes.push(rest)
+        continue
+      }
+    }
+    notes.push(note)
+  }
+  return notes.join(', ')
+}
+
+interface ProductRow {
+  product_id: number
+  rarity: string
+  name: string
+  image_url: string
+}
+
+/** Same-rarity products, the plain one (no variant label) first, then by product id. */
+function sameRarity(rows: ProductRow[], rarity: string): ProductRow[] {
+  const want = rarityKey(rarity)
+  return rows
+    .filter((r) => rarityKey(r.rarity) === want)
+    .map((r) => ({ r, plain: variantLabel(r.name, r.rarity) === '' }))
+    .sort((a, b) => Number(b.plain) - Number(a.plain) || a.r.product_id - b.r.product_id)
+    .map((x) => x.r)
+}
+
+/**
+ * Adds a printing for each art variant TCGplayer lists beside a printing YGOPRODeck has
+ * (an overframe Ultra Rare next to the plain one, the colours of a Legendary Duelists foil),
+ * named "<rarity> (<variant>)". Variants gone from the catalog are removed, or flagged missing
+ * when owned. Misprints are left out.
+ */
+export function saveTcgVariants(db: Database.Database): number {
+  const groups = db
+    .prepare(
+      `SELECT number, rarity FROM tcgplayer_products
+       GROUP BY number COLLATE NOCASE, rarity HAVING count(*) > 1`
+    )
+    .all() as { number: string; rarity: string }[]
+  const products = db.prepare(
+    'SELECT product_id, rarity, name, image_url FROM tcgplayer_products WHERE number = ? COLLATE NOCASE'
+  )
+  const printings = db.prepare(
+    `SELECT card_id, set_name, set_code, set_rarity, set_rarity_code FROM card_printings
+     WHERE language = 'en' AND tcg_product_id IS NULL AND set_code = ? COLLATE NOCASE`
+  )
+  const upsert = db.prepare(
+    `INSERT INTO card_printings (card_id, set_name, set_code, set_rarity, set_rarity_code, set_price,
+       missing_from_api, language, tcg_product_id)
+     VALUES (?, ?, ?, ?, ?, NULL, 0, 'en', ?)
+     ON CONFLICT(card_id, set_code, set_rarity) WHERE language = 'en' DO UPDATE SET
+       set_name = excluded.set_name, missing_from_api = 0, tcg_product_id = excluded.tcg_product_id
+     RETURNING id`
+  )
+  type Base = { card_id: number; set_name: string; set_code: string; set_rarity: string; set_rarity_code: string }
+  const seen = new Set<number>()
+  db.transaction(() => {
+    for (const g of groups) {
+      const bases = (printings.all(g.number) as Base[]).filter(
+        (p) => rarityKey(p.set_rarity) === rarityKey(g.rarity)
+      )
+      // Two cards under one code and rarity: no telling which variant is whose.
+      if (bases.length !== 1) continue
+      const [base] = bases
+      const [, ...variants] = sameRarity(products.all(g.number) as ProductRow[], g.rarity)
+      const used = new Set<string>()
+      for (const v of variants) {
+        const label = variantLabel(v.name, v.rarity)
+        if (!label || /misprint/i.test(label)) continue
+        const rarity = `${base.set_rarity} (${label})`
+        if (used.has(rarity)) continue
+        used.add(rarity)
+        const row = upsert.get(
+          base.card_id,
+          base.set_name,
+          base.set_code,
+          rarity,
+          base.set_rarity_code,
+          v.product_id
+        ) as { id: number }
+        seen.add(row.id)
+      }
+    }
+    const stale = (
+      db.prepare("SELECT id FROM card_printings WHERE tcg_product_id IS NOT NULL").all() as { id: number }[]
+    ).filter((r) => !seen.has(r.id))
+    const del = db.prepare(
+      `DELETE FROM card_printings WHERE id = ? AND NOT EXISTS
+         (SELECT 1 FROM collection_entries WHERE printing_id = card_printings.id)`
+    )
+    const flag = db.prepare('UPDATE card_printings SET missing_from_api = 1 WHERE id = ?')
+    for (const { id } of stale) {
+      del.run(id)
+      flag.run(id)
+    }
+  })()
+  return seen.size
+}
+
+/**
+ * The TCGplayer photo of an English printing: its own product for an art variant; otherwise the
+ * plain product with the same card number and rarity, or the only product with that number when
+ * TCGplayer names the rarity differently.
  */
 export function createTcgplayerLookup(
   db: Database.Database
 ): (printingId: number) => string | null {
   const printing = db.prepare(
-    "SELECT set_code, set_rarity FROM card_printings WHERE id = ? AND language = 'en'"
+    "SELECT set_code, set_rarity, tcg_product_id FROM card_printings WHERE id = ? AND language = 'en'"
   )
+  const byId = db.prepare('SELECT image_url FROM tcgplayer_products WHERE product_id = ?')
   const products = db.prepare(
-    'SELECT number, rarity, image_url FROM tcgplayer_products WHERE number = ? COLLATE NOCASE ORDER BY product_id'
+    'SELECT product_id, rarity, name, image_url FROM tcgplayer_products WHERE number = ? COLLATE NOCASE ORDER BY product_id'
   )
   return (printingId) => {
-    const p = printing.get(printingId) as { set_code: string; set_rarity: string } | undefined
+    const p = printing.get(printingId) as
+      | { set_code: string; set_rarity: string; tcg_product_id: number | null }
+      | undefined
     if (!p || !p.set_code) return null
-    const rows = products.all(p.set_code) as { rarity: string; image_url: string }[]
-    const want = rarityKey(p.set_rarity)
-    const same = rows.find((r) => rarityKey(r.rarity) === want)
+    if (p.tcg_product_id !== null)
+      return (byId.get(p.tcg_product_id) as { image_url: string } | undefined)?.image_url ?? null
+    const rows = products.all(p.set_code) as ProductRow[]
+    const same = sameRarity(rows, p.set_rarity)[0]
     if (same) return same.image_url
     return rows.length === 1 ? rows[0].image_url : null
   }

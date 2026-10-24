@@ -3,7 +3,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createLimiter } from '../../src/main/images/limiter'
-import { createImageCache, imageUrl, parseImageUrl, parseSetImageUrl, setImageKey, setImageUrl } from '../../src/main/images/cache'
+import { createImageCache, imageUrl, parseImageUrl, parseSetImageUrl, setImageKey, setImageUrl, yugipediaImageKey } from '../../src/main/images/cache'
 
 let dir: string
 beforeEach(async () => {
@@ -182,6 +182,47 @@ describe('image cache sets', () => {
     const fetchFn = vi.fn(async () => okResponse())
     const cache = createImageCache({ dir, fetchFn: fetchFn as unknown as typeof fetch, limit: noLimit })
     expect(await cache.getSet('../x')).toBeNull()
+    expect(fetchFn).not.toHaveBeenCalled()
+  })
+})
+
+describe('yugipedia set images', () => {
+  const URL_A = 'https://ms.yugipedia.com/a/ab/LB-JP.png'
+
+  it('yugipediaImageKey is stable, 23 chars, and null outside ms.yugipedia.com', () => {
+    const k = yugipediaImageKey(URL_A)!
+    expect(k).toMatch(/^yp-[0-9a-f]{20}$/)
+    expect(k).toHaveLength(23)
+    expect(yugipediaImageKey(URL_A)).toBe(k)
+    expect(yugipediaImageKey('https://ms.yugipedia.com/a/ab/Other.png')).not.toBe(k)
+    expect(yugipediaImageKey('http://ms.yugipedia.com/a.png')).toBeNull()
+    expect(yugipediaImageKey('https://evil.example/a.png')).toBeNull()
+    expect(yugipediaImageKey(null)).toBeNull()
+  })
+
+  it('downloads the resolved URL with the User-Agent into sets/<key>.jpg', async () => {
+    const key = yugipediaImageKey(URL_A)!
+    const fetchFn = vi.fn<(url: string, init?: RequestInit) => Promise<Response>>(async () => okResponse())
+    const resolveSetImage = vi.fn((k: string) => (k === key ? URL_A : null))
+    const cache = createImageCache({ dir, fetchFn: fetchFn as unknown as typeof fetch, limit: noLimit, version: '1.2.3', resolveSetImage })
+    expect(await cache.getSet(key)).toBe(path.join(dir, 'sets', `${key}.jpg`))
+    expect(fetchFn.mock.calls[0][0]).toBe(URL_A)
+    expect(new Headers(fetchFn.mock.calls[0][1]?.headers).get('user-agent')).toBe(
+      'YugiohCollectionTracker/1.2.3 (https://github.com/darkharasho/yugioh-collection-tracker)'
+    )
+  })
+
+  it('refuses a resolved URL outside ms.yugipedia.com', async () => {
+    const fetchFn = vi.fn(async () => okResponse())
+    const cache = createImageCache({ dir, fetchFn: fetchFn as unknown as typeof fetch, limit: noLimit, resolveSetImage: () => 'https://evil.example/x.jpg' })
+    expect(await cache.getSet('yp-0123456789abcdef0123')).toBeNull()
+    expect(fetchFn).not.toHaveBeenCalled()
+  })
+
+  it('returns null for a yp- key with no resolver', async () => {
+    const fetchFn = vi.fn(async () => okResponse())
+    const cache = createImageCache({ dir, fetchFn: fetchFn as unknown as typeof fetch, limit: noLimit })
+    expect(await cache.getSet('yp-0123456789abcdef0123')).toBeNull()
     expect(fetchFn).not.toHaveBeenCalled()
   })
 })

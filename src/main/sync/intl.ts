@@ -1,5 +1,6 @@
 import type Database from 'better-sqlite3'
 import { languageForSuffix, type Language } from '@shared/languages'
+import { yugipediaImageKey } from '../images/cache'
 import { getMeta, setMeta } from '../db/meta'
 import type { YugipediaClient } from '../yugipedia/client'
 import {
@@ -162,11 +163,12 @@ async function run(
   )
   const files = [...new Set([...infoboxes.values()].flatMap((b) => (b?.image ? [b.image] : [])))]
   let imageUrls = new Map<string, string>()
+  let imagesFailed = false
   if (files.length > 0) {
     try {
       imageUrls = await client.fetchImageUrls(files)
     } catch {
-      // images are optional
+      imagesFailed = true // images are optional; keep what is stored
     }
   }
 
@@ -179,11 +181,11 @@ async function run(
     RETURNING id`)
   const upsertSet = db.prepare(`
     INSERT INTO sets (language, set_name, set_code, tcg_date, image_url, image_key, list_rows, unmatched_rows)
-    VALUES (@language, @setName, '', @tcgDate, @imageUrl, NULL, @listRows, @unmatchedRows)
+    VALUES (@language, @setName, '', @tcgDate, @imageUrl, @imageKey, @listRows, @unmatchedRows)
     ON CONFLICT(language, set_name) DO UPDATE SET set_code = '',
-      tcg_date = CASE WHEN @keepOld THEN COALESCE(excluded.tcg_date, sets.tcg_date) ELSE excluded.tcg_date END,
-      image_url = CASE WHEN @keepOld THEN COALESCE(excluded.image_url, sets.image_url) ELSE excluded.image_url END,
-      image_key = excluded.image_key, list_rows = excluded.list_rows, unmatched_rows = excluded.unmatched_rows`)
+      tcg_date = CASE WHEN @keepDate THEN sets.tcg_date ELSE excluded.tcg_date END,
+      image_url = CASE WHEN @keepImage THEN sets.image_url ELSE excluded.image_url END,
+      image_key = CASE WHEN @keepImage THEN sets.image_key ELSE excluded.image_key END, list_rows = excluded.list_rows, unmatched_rows = excluded.unmatched_rows`)
   const existing = db.prepare('SELECT id FROM card_printings WHERE language = ? AND set_name = ?')
 
   const unmatchedExamples: string[] = []
@@ -227,7 +229,9 @@ async function run(
         imageUrl,
         listRows: s.parsed.rows.length,
         unmatchedRows: unmatched,
-        keepOld: box ? 0 : 1
+        imageKey: yugipediaImageKey(imageUrl),
+        keepDate: box ? 0 : 1,
+        keepImage: !box || imagesFailed ? 1 : 0
       })
     })()
     seenSets.add(`${s.language}\u0000${s.setName}`)
@@ -241,17 +245,20 @@ async function run(
 
   result.ok = result.failedSets === 0
   if (result.ok) {
+    // Only languages in this run's listing: another language may simply not be listed right now.
+    const langs = [...new Set(jobs.map((j) => j.language))]
+    const inLangs = `language IN (${langs.map(() => '?').join(', ')})`
     db.transaction(() => {
       const gone = (
-        db.prepare("SELECT language, set_name FROM sets WHERE language <> 'en'").all() as {
+        db.prepare(`SELECT language, set_name FROM sets WHERE ${inLangs}`).all(...langs) as {
           language: string
           set_name: string
         }[]
       ).filter((r) => !seenSets.has(`${r.language}\u0000${r.set_name}`))
       const orphanPrintings = (
         db
-          .prepare("SELECT id, language, set_name FROM card_printings WHERE language <> 'en'")
-          .all() as { id: number; language: string; set_name: string }[]
+          .prepare(`SELECT id, language, set_name FROM card_printings WHERE ${inLangs}`)
+          .all(...langs) as { id: number; language: string; set_name: string }[]
       ).filter((r) => !seenSets.has(`${r.language}\u0000${r.set_name}`))
       deleteOrFlag(
         db,

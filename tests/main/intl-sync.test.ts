@@ -7,6 +7,7 @@ import {
   refreshIntlSets,
   shouldRefreshIntl
 } from '../../src/main/sync/intl'
+import { yugipediaImageKey } from '../../src/main/images/cache'
 import { YugipediaError, type YugipediaClient } from '../../src/main/yugipedia/client'
 import { seededDb } from './helpers'
 
@@ -100,7 +101,7 @@ describe('refreshIntlSets', () => {
       set_code: '',
       tcg_date: '2002-03-08',
       image_url: 'https://ms.yugipedia.com/x/LB-JP.png',
-      image_key: null,
+      image_key: yugipediaImageKey('https://ms.yugipedia.com/x/LB-JP.png'),
       list_rows: 2,
       unmatched_rows: 1
     })
@@ -284,6 +285,47 @@ describe('refreshIntlSets', () => {
       { language: 'en' },
       { language: 'ja' }
     ])
+  })
+
+  it('a clean run only prunes languages present in the listing', async () => {
+    const f = fake({ [LB]: listPage(['LB-05; Dark Magician; UR']) })
+    await refreshIntlSets(db, f.client, NOW)
+    const card = db.prepare('SELECT id FROM cards ORDER BY id LIMIT 1').get() as { id: number }
+    db.prepare(
+      "INSERT INTO sets (language, set_name, set_code) VALUES ('ko', 'Korean Set', '')"
+    ).run()
+    db.prepare(
+      `INSERT INTO card_printings (card_id, language, set_name, set_code, set_rarity, set_rarity_code, missing_from_api)
+       VALUES (?, 'ko', 'Korean Set', 'K-1', 'Common', '', 0)`
+    ).run(card.id)
+    const res = await refreshIntlSets(db, f.client, NOW)
+    expect(res.ok).toBe(true)
+    expect(db.prepare("SELECT set_name FROM sets WHERE language = 'ko'").all()).toHaveLength(1)
+    expect(
+      db.prepare("SELECT missing_from_api FROM card_printings WHERE language = 'ko'").all()
+    ).toEqual([{ missing_from_api: 0 }])
+  })
+
+  it('keeps the stored image when the image lookup fails but the infobox parses', async () => {
+    const f = fake({
+      [LB]: listPage(['LB-05; Dark Magician; UR']),
+      'Legend of Blue Eyes White Dragon': infobox('| image = LB-JP.png\n| jp_release_date = March 8, 2002')
+    })
+    await refreshIntlSets(db, f.client, NOW)
+    const before = db.prepare("SELECT image_url, image_key FROM sets WHERE language = 'ja'").get()
+    expect((before as { image_key: string }).image_key).toBeTruthy()
+    f.pages.set(
+      'Legend of Blue Eyes White Dragon',
+      infobox('| image = LB-JP.png\n| jp_release_date = April 1, 2003')
+    )
+    f.client.fetchImageUrls = async () => {
+      throw new YugipediaError('images down')
+    }
+    await refreshIntlSets(db, f.client, NOW)
+    expect(db.prepare("SELECT image_url, image_key FROM sets WHERE language = 'ja'").get()).toEqual(before)
+    expect(db.prepare("SELECT tcg_date FROM sets WHERE language = 'ja'").get()).toEqual({
+      tcg_date: '2003-04-01'
+    })
   })
 })
 

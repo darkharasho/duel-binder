@@ -10,6 +10,7 @@ interface SummaryDbRow {
   min_code: string
   tcg_date: string | null
   image_url: string | null
+  image_key: string | null
   total_cards: number
   owned_cards: number
   total_rarities: number
@@ -19,7 +20,7 @@ interface SummaryDbRow {
 // One row per distinct set_name. A (card, rarity) pair is keyed as "<card_id>|<rarity>";
 // card_id is an integer, so the first "|" always ends it.
 const SUMMARY = `
-  SELECT p.set_name, s.set_code AS s_code, MIN(p.set_code) AS min_code, s.tcg_date, s.image_url,
+  SELECT p.set_name, s.set_code AS s_code, MIN(p.set_code) AS min_code, s.tcg_date, s.image_url, s.image_key,
          COUNT(DISTINCT p.card_id) AS total_cards,
          COUNT(DISTINCT CASE WHEN o.printing_id IS NOT NULL THEN p.card_id END) AS owned_cards,
          COUNT(DISTINCT p.card_id || '|' || p.set_rarity) AS total_rarities,
@@ -34,7 +35,7 @@ function toSummary(r: SummaryDbRow): SetSummary {
     setName: r.set_name,
     setCode: r.s_code ? r.s_code : setPrefix(r.min_code),
     tcgDate: r.tcg_date,
-    imageKey: setImageKey(r.image_url),
+    imageKey: r.image_key ?? setImageKey(r.image_url),
     totalCards: r.total_cards,
     ownedCards: r.owned_cards,
     totalRarities: r.total_rarities,

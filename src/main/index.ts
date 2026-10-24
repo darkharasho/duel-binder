@@ -89,7 +89,15 @@ function bootstrap(): void {
 
   const userData = app.getPath('userData')
   const db = openDatabase(join(userData, 'collection.db'))
-  const images = createImageCache({ dir: join(userData, 'images') })
+  const images = createImageCache({
+    dir: join(userData, 'images'),
+    version: app.getVersion(),
+    resolveSetImage: (key) =>
+      (
+        db.prepare('SELECT image_url FROM sets WHERE image_key = ?').get(key) as
+          { image_url: string | null } | undefined
+      )?.image_url ?? null
+  })
   handleImageProtocol(images)
 
   const client = createYgoClient()

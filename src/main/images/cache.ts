@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { createWriteStream, promises as fs } from 'node:fs'
 import path from 'node:path'
 import { Readable } from 'node:stream'
@@ -31,6 +32,15 @@ export function setImageKey(sourceUrl: string | null): string | null {
   return SET_IMAGE_RE.exec(sourceUrl)?.[1] ?? null
 }
 
+const YUGIPEDIA_IMAGE_PREFIX = 'https://ms.yugipedia.com/'
+const REPO_URL = 'https://github.com/darkharasho/yugioh-collection-tracker'
+
+/** 'yp-' + first 20 hex chars of sha1(url); null unless url starts with https://ms.yugipedia.com/ */
+export function yugipediaImageKey(url: string | null): string | null {
+  if (url === null || !url.startsWith(YUGIPEDIA_IMAGE_PREFIX)) return null
+  return `yp-${createHash('sha1').update(url).digest('hex').slice(0, 20)}`
+}
+
 export function setImageUrl(key: string): string {
   return `https://images.ygoprodeck.com/images/sets/${key}.jpg`
 }
@@ -51,7 +61,15 @@ const IMAGE_TIMEOUT_MS = 30_000
 
 export const defaultLimiter = (): Limiter => createLimiter({ concurrency: 4, minIntervalMs: 100 })
 
-export function createImageCache(opts: { dir: string; fetchFn?: typeof fetch; limit?: Limiter }): ImageCache {
+export function createImageCache(opts: {
+  dir: string
+  fetchFn?: typeof fetch
+  limit?: Limiter
+  /** App version, sent in the Yugipedia User-Agent. */
+  version?: string
+  /** Maps a `yp-` set-image key to its source URL (null when unknown). */
+  resolveSetImage?: (key: string) => string | null
+}): ImageCache {
   const fetchFn = opts.fetchFn ?? fetch
   const limit = opts.limit ?? defaultLimiter()
   const inFlight = new Map<string, Promise<string | null>>()
@@ -59,11 +77,11 @@ export function createImageCache(opts: { dir: string; fetchFn?: typeof fetch; li
   const exists = (p: string): Promise<boolean> =>
     fs.stat(p).then((s) => s.isFile() && s.size > 0, () => false)
 
-  async function download(remoteUrl: string, finalPath: string): Promise<string | null> {
+  async function download(remoteUrl: string, finalPath: string, headers?: Record<string, string>): Promise<string | null> {
     const tmpPath = `${finalPath}.tmp`
     try {
       await fs.mkdir(path.dirname(finalPath), { recursive: true })
-      const res = await fetchFn(remoteUrl, { signal: AbortSignal.timeout(IMAGE_TIMEOUT_MS) })
+      const res = await fetchFn(remoteUrl, { signal: AbortSignal.timeout(IMAGE_TIMEOUT_MS), ...(headers && { headers }) })
       if (!res.ok || !res.body) return null
       if (!(res.headers.get('content-type') ?? '').toLowerCase().startsWith('image/')) return null
       await pipeline(Readable.fromWeb(res.body as unknown as WebReadableStream), createWriteStream(tmpPath))
@@ -76,11 +94,16 @@ export function createImageCache(opts: { dir: string; fetchFn?: typeof fetch; li
     }
   }
 
-  async function cached(key: string, remoteUrl: string, finalPath: string): Promise<string | null> {
+  async function cached(
+    key: string,
+    remoteUrl: string,
+    finalPath: string,
+    headers?: Record<string, string>
+  ): Promise<string | null> {
     if (await exists(finalPath)) return finalPath
     let pending = inFlight.get(key)
     if (!pending) {
-      pending = limit(() => download(remoteUrl, finalPath)).finally(() => inFlight.delete(key))
+      pending = limit(() => download(remoteUrl, finalPath, headers)).finally(() => inFlight.delete(key))
       inFlight.set(key, pending)
     }
     return pending
@@ -91,6 +114,13 @@ export function createImageCache(opts: { dir: string; fetchFn?: typeof fetch; li
 
     async getSet(key) {
       if (!SET_KEY_RE.test(key)) return null
+      if (key.startsWith('yp-')) {
+        const remote = opts.resolveSetImage?.(key) ?? null
+        if (remote === null || !remote.startsWith(YUGIPEDIA_IMAGE_PREFIX)) return null
+        return cached(`set/${key}`, remote, path.join(opts.dir, 'sets', `${key}.jpg`), {
+          'User-Agent': `YugiohCollectionTracker/${opts.version ?? 'unknown'} (${REPO_URL})`
+        })
+      }
       return cached(`set/${key}`, setImageUrl(key), path.join(opts.dir, 'sets', `${key}.jpg`))
     },
 

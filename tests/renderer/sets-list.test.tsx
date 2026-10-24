@@ -4,6 +4,7 @@ import type { SetSummary } from '@shared/types'
 import { SetsPage } from '@/features/sets/SetsPage'
 import { SetArt } from '@/features/sets/SetArt'
 import { createMockApi, renderWithProviders } from './mockApi'
+import { metalRaidersChecklist } from './setFixtures'
 
 const set = (o: Partial<SetSummary>): SetSummary => ({
   setName: 'Set',
@@ -115,10 +116,15 @@ describe('SetsPage', () => {
     expect(screen.getByText('No sets match')).toBeInTheDocument()
   })
 
-  it('opening a set shows the placeholder', async () => {
-    renderPage()
+  it('opening a set shows its checklist and All sets returns to the list', async () => {
+    const api = createMockApi({
+      sets: { list: async () => [MR], checklist: async () => metalRaidersChecklist }
+    })
+    renderWithProviders(<SetsPage onAddCard={() => {}} onAddMissing={() => {}} />, { api })
     await userEvent.click(await screen.findByRole('button', { name: /Metal Raiders/ }))
-    expect(screen.getByTestId('open-set')).toHaveTextContent('Metal Raiders')
+    expect(await screen.findByRole('button', { name: 'Alpha Dragon' })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: /All sets/ }))
+    expect(await screen.findByText(/You've started/)).toBeInTheDocument()
   })
 })
 

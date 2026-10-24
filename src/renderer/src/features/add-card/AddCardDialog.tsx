@@ -32,6 +32,8 @@ type Step = 'search' | 'printing' | 'art' | 'quantity'
 interface AddCardDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
+  /** Start at the printing step for this card with this printing highlighted. */
+  initial?: { card: CardSearchResult; printingId: number } | null
 }
 
 function useDebounced<T>(value: T, ms: number): T {
@@ -58,7 +60,11 @@ function PrintingPrice({
   )
 }
 
-export function AddCardDialog({ open, onOpenChange }: AddCardDialogProps): React.JSX.Element {
+export function AddCardDialog({
+  open,
+  onOpenChange,
+  initial = null
+}: AddCardDialogProps): React.JSX.Element {
   const qc = useQueryClient()
   const sync = useSyncStatus()
   const [step, setStep] = useState<Step>('search')
@@ -67,6 +73,9 @@ export function AddCardDialog({ open, onOpenChange }: AddCardDialogProps): React
   const [printing, setPrinting] = useState<Printing | null>(null)
   const [imageId, setImageId] = useState<number | null>(null)
   const [quantity, setQuantity] = useState('1')
+  const [preferredId, setPreferredId] = useState<number | null>(null)
+  const [seeded, setSeeded] = useState<AddCardDialogProps['initial']>(null)
+  const [highlight, setHighlight] = useState<string | undefined>()
   const artRefs = useRef<(HTMLButtonElement | null)[]>([])
 
   const q = useDebounced(text.trim(), 200)
@@ -85,6 +94,9 @@ export function AddCardDialog({ open, onOpenChange }: AddCardDialogProps): React
 
   const printings = (detail.data?.printings ?? []).filter((p) => !p.missingFromApi)
   const images = [...(detail.data?.images ?? [])].sort((a, b) => a.sortOrder - b.sortOrder)
+  const printingValue = (p: Printing): string => `${p.id} ${p.setName} ${p.setCode} ${p.setRarity}`
+  const preferred = printings.find((p) => p.id === preferredId)
+  const highlighted = highlight ?? (preferred ? printingValue(preferred) : undefined)
   const qty = Number(quantity)
   const qtyValid = quantity.trim() !== '' && Number.isInteger(qty) && qty >= 1
 
@@ -95,6 +107,8 @@ export function AddCardDialog({ open, onOpenChange }: AddCardDialogProps): React
     setPrinting(null)
     setImageId(null)
     setQuantity('1')
+    setPreferredId(null)
+    setHighlight(undefined)
   }
 
   const add = useMutation({
@@ -157,6 +171,20 @@ export function AddCardDialog({ open, onOpenChange }: AddCardDialogProps): React
     const next = (i + delta + images.length) % images.length
     setImageId(images[next].imageId)
     artRefs.current[next]?.focus()
+  }
+
+  // Seed from `initial` once per open (adjusting state during render, not in an effect).
+  if (!open && seeded !== null) {
+    setSeeded(null)
+  } else if (open && initial && seeded !== initial) {
+    setSeeded(initial)
+    setCard(initial.card)
+    setImageId(initial.card.defaultImageId)
+    setPrinting(null)
+    setText('')
+    setHighlight(undefined)
+    setPreferredId(initial.printingId)
+    setStep('printing')
   }
 
   const downloading = sync?.cardCount === 0
@@ -246,7 +274,7 @@ export function AddCardDialog({ open, onOpenChange }: AddCardDialogProps): React
           ))}
 
         {step === 'printing' && (
-          <Command className="rounded-xl">
+          <Command className="rounded-xl" value={highlighted} onValueChange={setHighlight}>
             <CommandInput autoFocus placeholder="Filter printings…" />
             <CommandList className="max-h-80">
               <CommandEmpty>
@@ -256,7 +284,7 @@ export function AddCardDialog({ open, onOpenChange }: AddCardDialogProps): React
                 {printings.map((p) => (
                   <CommandItem
                     key={p.id}
-                    value={`${p.id} ${p.setName} ${p.setCode} ${p.setRarity}`}
+                    value={printingValue(p)}
                     onSelect={() => pickPrinting(p)}
                     className="gap-3 py-2"
                   >

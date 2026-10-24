@@ -13,6 +13,7 @@ import {
 } from '@/components/ui/select'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { api, queryKeys } from '@/lib/api'
+import { SetChecklist } from './SetChecklist'
 import { SetsList } from './SetsList'
 import { filterSets, setsHeader, sortSets, type SetFilter, type SetSort } from './setsView'
 
@@ -55,7 +56,7 @@ interface SetsPageProps {
   onAddMissing: (card: CardSearchResult, printingId: number) => void
 }
 
-export function SetsPage({ onAddCard }: SetsPageProps): React.JSX.Element {
+export function SetsPage({ onAddCard, onAddMissing }: SetsPageProps): React.JSX.Element {
   const [view, setView] = useState<View>(readView)
   const [mode, setMode] = useState<CountMode>(readMode)
   const [filter, setFilter] = useState<SetFilter>('started')
@@ -86,14 +87,14 @@ export function SetsPage({ onAddCard }: SetsPageProps): React.JSX.Element {
   }
 
   if (openSet !== null) {
-    // Task 7 replaces this placeholder with the set checklist (receives mode/onModeChange).
     return (
-      <div data-testid="open-set" className="space-y-4 p-8">
-        <Button variant="outline" size="sm" onClick={() => setOpenSet(null)}>
-          Back to sets
-        </Button>
-        <h1 className="text-xl font-semibold">{openSet}</h1>
-      </div>
+      <SetChecklist
+        setName={openSet}
+        mode={mode}
+        onModeChange={changeMode}
+        onBack={() => setOpenSet(null)}
+        onAddMissing={onAddMissing}
+      />
     )
   }
 

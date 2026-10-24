@@ -228,4 +228,18 @@ describe('AddCardDialog', () => {
     expect(await screen.findByText('Card database is still downloading')).toBeInTheDocument()
     expect(screen.queryByPlaceholderText(/Search cards/)).not.toBeInTheDocument()
   })
+
+  it('opens at the printing step with the initial printing highlighted', async () => {
+    const api = createMockApi({
+      cards: { search: async () => [], get: async (id: number) => details[id] ?? null }
+    })
+    renderWithProviders(
+      <AddCardDialog open onOpenChange={() => {}} initial={{ card: dm, printingId: 3 }} />,
+      { api }
+    )
+    const item = await screen.findByRole('option', { name: /LOB-EN005/ })
+    await waitFor(() => expect(item).toHaveAttribute('aria-selected', 'true'))
+    await userEvent.keyboard('{Enter}')
+    expect(await screen.findAllByRole('radio')).toHaveLength(2)
+  })
 })

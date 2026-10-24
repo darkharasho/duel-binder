@@ -1,0 +1,107 @@
+import { screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import type { CountMode } from '@shared/types'
+import { SetChecklist } from '@/features/sets/SetChecklist'
+import { createMockApi, renderWithProviders } from './mockApi'
+import { metalRaidersChecklist, PRINTING } from './setFixtures'
+
+function renderChecklist(
+  o: { mode?: CountMode; checklist?: typeof metalRaidersChecklist | null } = {}
+): {
+  forCard: ReturnType<typeof vi.fn>
+  onAddMissing: ReturnType<typeof vi.fn>
+  onBack: ReturnType<typeof vi.fn>
+} {
+  const forCard = vi.fn(async () => [])
+  const onAddMissing = vi.fn()
+  const onBack = vi.fn()
+  const api = createMockApi({
+    sets: {
+      checklist: async () => (o.checklist === undefined ? metalRaidersChecklist : o.checklist)
+    },
+    collection: { forCard }
+  })
+  renderWithProviders(
+    <SetChecklist
+      setName="Metal Raiders"
+      mode={o.mode ?? 'cards'}
+      onModeChange={() => {}}
+      onBack={onBack}
+      onAddMissing={onAddMissing}
+    />,
+    { api }
+  )
+  return { forCard, onAddMissing, onBack }
+}
+
+describe('SetChecklist', () => {
+  it('lists cards in set order with number labels and owned state', async () => {
+    renderChecklist()
+    const tiles = await screen.findAllByRole('button', {
+      name: /Alpha Dragon|Beta Knight|Gamma Trap/
+    })
+    expect(tiles.map((t) => t.textContent)).toEqual([
+      expect.stringContaining('Alpha Dragon'),
+      expect.stringContaining('Beta Knight'),
+      expect.stringContaining('Gamma Trap')
+    ])
+    expect(within(tiles[0]).getByText('001')).toBeInTheDocument()
+    expect(within(tiles[1]).getByText('002')).toBeInTheDocument()
+    expect(within(tiles[2]).getByText('010')).toBeInTheDocument()
+    expect(tiles[0]).toHaveAttribute('data-owned', 'true')
+    expect(within(tiles[0]).getByText('×2')).toBeInTheDocument()
+    expect(tiles[1]).toHaveAttribute('data-owned', 'false')
+    expect(tiles[1]).toHaveClass('grayscale', 'opacity-40')
+  })
+
+  it('Missing filter hides owned cards', async () => {
+    renderChecklist()
+    await screen.findByRole('button', { name: /Alpha Dragon/ })
+    await userEvent.click(screen.getByRole('radio', { name: 'Missing' }))
+    expect(screen.queryByRole('button', { name: /Alpha Dragon/ })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Beta Knight/ })).toBeInTheDocument()
+  })
+
+  it('rarities mode shows one tile per rarity', async () => {
+    renderChecklist({ mode: 'rarities' })
+    const ultra = await screen.findByRole('button', { name: /Alpha Dragon.*Ultra Rare/ })
+    const secret = screen.getByRole('button', { name: /Alpha Dragon.*Secret Rare/ })
+    expect(ultra).toHaveAttribute('data-owned', 'true')
+    expect(secret).toHaveAttribute('data-owned', 'false')
+  })
+
+  it('clicking an owned tile opens the detail panel', async () => {
+    const { forCard } = renderChecklist()
+    await userEvent.click(await screen.findByRole('button', { name: /Alpha Dragon/ }))
+    expect(forCard).toHaveBeenCalledWith(1001)
+  })
+
+  it('clicking a missing tile asks to add it with the default printing', async () => {
+    const { onAddMissing } = renderChecklist()
+    await userEvent.click(await screen.findByRole('button', { name: /Gamma Trap/ }))
+    expect(onAddMissing).toHaveBeenCalledWith(
+      {
+        id: 3001,
+        name: 'Gamma Trap',
+        type: 'Trap Card',
+        defaultImageId: 3001,
+        matchedSetCode: null
+      },
+      PRINTING.gammaEN010
+    )
+  })
+
+  it('All sets goes back', async () => {
+    const { onBack } = renderChecklist()
+    await screen.findByRole('button', { name: /Alpha Dragon/ })
+    await userEvent.click(await screen.findByRole('button', { name: /All sets/ }))
+    expect(onBack).toHaveBeenCalled()
+  })
+
+  it('shows a message when the set vanished', async () => {
+    const { onBack } = renderChecklist({ checklist: null })
+    expect(await screen.findByText('This set is no longer in the card data')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: /All sets/ }))
+    expect(onBack).toHaveBeenCalled()
+  })
+})

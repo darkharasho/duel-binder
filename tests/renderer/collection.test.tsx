@@ -146,7 +146,9 @@ describe('CollectionPage', () => {
   })
 
   it('shows a language tag on non-English rows', async () => {
-    const ja = entry(3, 'Red-Eyes', { printing: printing(3, 103, { language: 'ja', setCode: 'LB-05' }) })
+    const ja = entry(3, 'Red-Eyes', {
+      printing: printing(3, 103, { language: 'ja', setCode: 'LB-05' })
+    })
     setup([ja])
     expect(await screen.findByText('JP')).toBeInTheDocument()
   })

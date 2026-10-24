@@ -12,6 +12,8 @@ export const queryKeys = {
   facets: ['facets'] as const,
   stats: ['stats'] as const,
   sync: ['sync'] as const,
+  setsList: ['sets', 'list'] as const,
+  setChecklist: (name: string) => ['sets', 'checklist', name] as const,
   search: (q: string) => ['search', q] as const,
   card: (id: number) => ['card', id] as const,
   forCard: (id: number) => ['forCard', id] as const,
@@ -19,4 +21,10 @@ export const queryKeys = {
 }
 
 /** Query-key prefixes to invalidate after any collection mutation. */
-export const mutationInvalidationKeys = [['entries'], ['facets'], ['stats'], ['forCard']] as const
+export const mutationInvalidationKeys = [
+  ['entries'],
+  ['facets'],
+  ['stats'],
+  ['forCard'],
+  ['sets']
+] as const

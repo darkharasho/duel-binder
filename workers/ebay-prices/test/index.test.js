@@ -16,6 +16,20 @@ function makeKv() {
   }
 }
 
+// Drives fake timers until the request settles (the SHA-256 digest resolves off-microtask).
+async function settle(p) {
+  let done = false
+  p.then(
+    () => (done = true),
+    () => (done = true)
+  )
+  for (let i = 0; i < 200 && !done; i++) {
+    await vi.advanceTimersByTimeAsync(1000)
+    await new Promise((r) => setImmediate(r))
+  }
+  return p
+}
+
 const json = (body, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
 
@@ -180,12 +194,11 @@ describe('GET /v1/price', () => {
   })
 
   it('retries a 503 from Browse and then succeeds', async () => {
-    vi.useFakeTimers()
+    vi.useFakeTimers({ toFake: ['setTimeout'] })
     const f = makeFetch([json({}, 503), json(items(['LOB-DE001 a', 'LOB-DE001 b']))])
     vi.stubGlobal('fetch', f)
     const p = worker.fetch(req(), env)
-    await vi.runAllTimersAsync()
-    const res = await p
+    const res = await settle(p)
     expect(res.status).toBe(200)
     expect(f.calls.filter((u) => u.includes('item_summary'))).toHaveLength(2)
   })
@@ -261,7 +274,7 @@ describe('GET /v1/price', () => {
     ['500', () => json({}, 500)],
     ['throw', () => Promise.reject(new Error(`boom ${TOKEN} ${APP}`))]
   ])('leaks nothing when OAuth succeeds but Browse fails (%s)', async (_n, fail) => {
-    vi.useFakeTimers()
+    vi.useFakeTimers({ toFake: ['setTimeout'] })
     vi.stubGlobal(
       'fetch',
       vi.fn(async (url) =>
@@ -271,8 +284,7 @@ describe('GET /v1/price', () => {
       )
     )
     const p = worker.fetch(req(), env)
-    await vi.runAllTimersAsync()
-    const res = await p
+    const res = await settle(p)
     const text = await res.text()
     expect(res.status).toBe(502)
     expect(JSON.parse(text)).toEqual({ error: 'upstream' })
@@ -283,5 +295,19 @@ describe('GET /v1/price', () => {
       expect(text).not.toContain(s)
       expect(logged).not.toContain(s)
     }
+  })
+
+  it('keeps the KV key short for long multi-byte input and still hits the cache', async () => {
+    const f = makeFetch([json(items(['x', 'x']))])
+    vi.stubGlobal('fetch', f)
+    const field = encodeURIComponent('龍'.repeat(200))
+    const u = `https://w.test/v1/price?code=${field}&name=${field}&set=${field}&rarity=${field}&lang=ja`
+    expect((await worker.fetch(req(u), env)).status).toBe(200)
+    const keys = [...env.PRICES.store.keys()]
+    expect(keys).toHaveLength(1)
+    expect(new TextEncoder().encode(keys[0]).length).toBeLessThanOrEqual(512)
+    f.mockClear()
+    expect((await worker.fetch(req(u), env)).status).toBe(200)
+    expect(f).not.toHaveBeenCalled()
   })
 })

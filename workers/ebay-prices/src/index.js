@@ -15,6 +15,13 @@ export function resetTokenCache() {
   cachedToken = null
 }
 
+async function cacheKey(p) {
+  const joined = ['v1', p.code, p.name.toLowerCase(), p.set, p.rarity, p.lang].join('|')
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(joined))
+  const hex = [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('')
+  return `v1:${hex}`
+}
+
 const respond = (body, status = 200) =>
   new Response(JSON.stringify(body), {
     status,
@@ -117,14 +124,7 @@ export default {
       return respond({ error: 'bad request' }, 400)
     }
 
-    const key = [
-      'v1',
-      params.code,
-      params.name.toLowerCase(),
-      params.set,
-      params.rarity,
-      params.lang
-    ].join('|')
+    const key = await cacheKey(params)
     let hit = null
     try {
       hit = await env.PRICES.get(key)

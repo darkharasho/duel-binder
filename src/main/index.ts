@@ -18,6 +18,7 @@ import { createPrintingArtResolver } from './yugipedia/artResolver'
 import { refreshPackArt, shouldRefreshPackArt } from './konami/packArt'
 import { createTcgplayerLookup, refreshTcgCatalog, shouldRefreshTcgCatalog } from './tcgplayer/catalog'
 import { recordSnapshot } from './repo/stats'
+import { findSetImageUrl } from './repo/sets'
 import { createImageCache } from './images/cache'
 import { handleImageProtocol, registerImageScheme } from './images/protocol'
 import { createUpdater, updateMode, RELEASES_URL } from './updater'
@@ -117,16 +118,7 @@ function bootstrap(): void {
   const images = createImageCache({
     dir: join(userData, 'images'),
     version: app.getVersion(),
-    resolveSetImage: (key) =>
-      (
-        db
-          .prepare(
-            `SELECT image_url FROM sets WHERE image_key = ?1
-             UNION ALL SELECT image_url FROM pack_art WHERE image_key = ?1 LIMIT 1`
-          )
-          .get(key) as
-          { image_url: string | null } | undefined
-      )?.image_url ?? null,
+    resolveSetImage: (key) => findSetImageUrl(db, key),
     resolvePrintingArt: (id) => printingArt.url(id)
   })
   handleImageProtocol(images)

@@ -3,7 +3,7 @@ import type Database from 'better-sqlite3'
 import { openDatabase } from '../../src/main/db/database'
 import { runSync } from '../../src/main/sync/sync'
 import { addEntry, CollectionError } from '../../src/main/repo/collection'
-import { adjustPrinting, getChecklist, listSets } from '../../src/main/repo/sets'
+import { adjustPrinting, findSetImageUrl, getChecklist, listSets } from '../../src/main/repo/sets'
 import type { ApiCardSet, YgoClient } from '../../src/main/ygo/client'
 import type { ApiCard } from '../../src/main/ygo/mapCard'
 import type { ChecklistCard, ChecklistRarity, EntryView } from '../../src/shared/types'
@@ -315,5 +315,20 @@ describe('language-aware sets', () => {
     )
     expect(entries(db)).toEqual([])
     expect(ur(adjustPrinting(db, MRD, 'ja', jaUltra, 1)).owned).toBe(1)
+  })
+})
+
+describe('findSetImageUrl', () => {
+  it('finds Yugipedia set images and official pack renders by key', () => {
+    const db = openDatabase(':memory:')
+    db.prepare(
+      "INSERT INTO sets (language, set_name, set_code, image_url, image_key) VALUES ('ja', 'X', 'XJ', 'https://ms.yugipedia.com/x.png', 'yp-1')"
+    ).run()
+    db.prepare(
+      "INSERT INTO pack_art (set_name, image_url, image_key) VALUES ('Beyond the Brave', 'https://www.yugioh-card.com/en/wp-content/uploads/BETB.png', 'yc-1')"
+    ).run()
+    expect(findSetImageUrl(db, 'yp-1')).toBe('https://ms.yugipedia.com/x.png')
+    expect(findSetImageUrl(db, 'yc-1')).toBe('https://www.yugioh-card.com/en/wp-content/uploads/BETB.png')
+    expect(findSetImageUrl(db, 'yc-unknown')).toBeNull()
   })
 })

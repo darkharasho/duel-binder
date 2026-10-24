@@ -99,6 +99,17 @@ function toSummary(r: SummaryDbRow, covers: Map<string, number>): SetSummary {
 }
 
 /** Completion summary of every (language, set); English first within a name. */
+/** Source URL of a stored set image key: a Yugipedia set image or an official pack render. */
+export function findSetImageUrl(db: Database.Database, key: string): string | null {
+  const row = db
+    .prepare(
+      `SELECT image_url FROM sets WHERE image_key = @key
+       UNION ALL SELECT image_url FROM pack_art WHERE image_key = @key LIMIT 1`
+    )
+    .get({ key }) as { image_url: string | null } | undefined
+  return row?.image_url ?? null
+}
+
 export function listSets(db: Database.Database): SetSummary[] {
   const covers = coverImages(db)
   return (db.prepare(`${SUMMARY} GROUP BY p.language, p.set_name ORDER BY p.set_name, p.language <> 'en', p.language`).all() as SummaryDbRow[]).map((r) => toSummary(r, covers))

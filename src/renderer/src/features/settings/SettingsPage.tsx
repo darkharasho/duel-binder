@@ -1,8 +1,132 @@
-// Placeholder: replaced in Task 15.
-export function SettingsPage(): React.JSX.Element {
+import { useEffect, useState } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
+import { Button } from '@/components/ui/button'
+import { isSyncing, useSyncStatus } from '@/components/useSyncStatus'
+import { api, queryKeys } from '@/lib/api'
+import { formatRelative } from '@/lib/format'
+import type { UpdateStatus } from '@shared/types'
+
+function Section({ title, children }: { title: string; children: React.ReactNode }): React.JSX.Element {
   return (
-    <div className="p-8">
+    <section className="rounded-xl border bg-card p-5">
+      <h2 className="mb-3 text-sm font-semibold">{title}</h2>
+      <div className="space-y-3">{children}</div>
+    </section>
+  )
+}
+
+function Row({ label, children }: { label: string; children: React.ReactNode }): React.JSX.Element {
+  return (
+    <div className="flex items-center justify-between gap-4 text-sm">
+      <span className="text-muted-foreground">{label}</span>
+      <span className="text-right tabular-nums">{children}</span>
+    </div>
+  )
+}
+
+function describeUpdate(s: UpdateStatus | undefined): string {
+  if (!s) return ''
+  switch (s.state) {
+    case 'checking':
+      return 'Checking for updates…'
+    case 'none':
+      return "You're up to date"
+    case 'available':
+      return s.mode === 'notify' ? `Update ${s.version} available` : `Update ${s.version} found, downloading…`
+    case 'downloading':
+      return 'Downloading update…'
+    case 'ready':
+      return `Update ${s.version} ready to install`
+    case 'error':
+      return `Update check failed: ${s.error ?? 'unknown error'}`
+    default:
+      return ''
+  }
+}
+
+const formatMb = (bytes: number): string => `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+
+export function SettingsPage(): React.JSX.Element {
+  const qc = useQueryClient()
+  const sync = useSyncStatus()
+  const version = useQuery({ queryKey: ['app', 'version'], queryFn: () => api.app.version() })
+  const cache = useQuery({ queryKey: ['images', 'cacheSize'], queryFn: () => api.images.cacheSize() })
+  const [update, setUpdate] = useState<UpdateStatus | undefined>()
+
+  useEffect(() => api.app.onUpdateStatus(setUpdate), [])
+
+  const check = useMutation({
+    mutationFn: () => api.app.checkForUpdates(),
+    onSuccess: setUpdate,
+    onError: (e: Error) => setUpdate({ state: 'error', mode: 'auto', version: null, error: e.message })
+  })
+  const refresh = useMutation({
+    mutationFn: () => api.sync.run(),
+    onSuccess: (s) => qc.setQueryData(queryKeys.sync, s),
+    onError: (e: Error) => toast.error(`Couldn't refresh card data: ${e.message}`)
+  })
+  const clear = useMutation({
+    mutationFn: () => api.images.clearCache(),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['images', 'cacheSize'] }),
+    onError: (e: Error) => toast.error(`Couldn't clear image cache: ${e.message}`)
+  })
+  const backup = useMutation({
+    mutationFn: () => api.app.backupDatabase(),
+    onSuccess: (path) => {
+      if (path) toast.success(`Backup saved to ${path}`)
+    },
+    onError: (e: Error) => toast.error(`Backup failed: ${e.message}`)
+  })
+
+  const syncing = isSyncing(sync) || refresh.isPending
+  const lastSync = sync?.lastSyncAt ?? null
+
+  return (
+    <div className="mx-auto max-w-2xl space-y-5 p-8">
       <h1 className="text-xl font-semibold">Settings</h1>
+
+      <Section title="App">
+        <Row label="Version">{version.data ?? '—'}</Row>
+        <div className="flex items-center justify-between gap-4">
+          <span role="status" className="text-sm text-muted-foreground">
+            {describeUpdate(update)}
+          </span>
+          <Button variant="outline" size="sm" disabled={check.isPending} onClick={() => check.mutate()}>
+            Check for updates
+          </Button>
+        </div>
+      </Section>
+
+      <Section title="Card data">
+        <Row label="Last synced">
+          {lastSync ? `${formatRelative(lastSync)} (${new Date(lastSync).toLocaleString()})` : 'never'}
+        </Row>
+        <Row label="Cards">{(sync?.cardCount ?? 0).toLocaleString('en-US')}</Row>
+        <Row label="Database version">{sync?.dbVersion ?? '—'}</Row>
+        {sync?.error && <p className="text-sm text-destructive">Last error: {sync.error}</p>}
+        <Button size="sm" disabled={syncing} onClick={() => refresh.mutate()}>
+          Refresh card data
+        </Button>
+      </Section>
+
+      <Section title="Image cache">
+        <Row label="Size">{formatMb(cache.data ?? 0)}</Row>
+        <Button variant="outline" size="sm" disabled={clear.isPending} onClick={() => clear.mutate()}>
+          Clear image cache
+        </Button>
+      </Section>
+
+      <Section title="Data">
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={() => void api.app.openDataFolder()}>
+            Open data folder
+          </Button>
+          <Button variant="outline" size="sm" disabled={backup.isPending} onClick={() => backup.mutate()}>
+            Back up collection…
+          </Button>
+        </div>
+      </Section>
     </div>
   )
 }

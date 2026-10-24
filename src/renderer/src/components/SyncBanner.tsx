@@ -10,7 +10,11 @@ export function SyncBanner(): React.JSX.Element | null {
   if (!status) return null
 
   const retry = (): void => {
-    void api.sync.run().then((s) => qc.setQueryData(queryKeys.sync, s))
+    // Failures are surfaced through the sync status (onProgress); just log here.
+    void api.sync
+      .run()
+      .then((s) => qc.setQueryData(queryKeys.sync, s))
+      .catch((e) => console.error('Sync retry failed', e))
   }
 
   let message: string

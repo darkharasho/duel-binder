@@ -7,7 +7,8 @@ const shared = resolve('src/shared')
 
 export default defineConfig({
   main: {
-    resolve: { alias: { '@shared': shared } }
+    resolve: { alias: { '@shared': shared } },
+    define: { __MAC_SIGNED__: JSON.stringify(Boolean(process.env.CSC_LINK)) }
   },
   preload: {
     resolve: { alias: { '@shared': shared } },

@@ -5,11 +5,13 @@ import { AddCardDialog } from '@/features/add-card/AddCardDialog'
 import { DashboardPage } from '@/features/dashboard/DashboardPage'
 import { CollectionPage } from '@/features/collection/CollectionPage'
 import { SettingsPage } from '@/features/settings/SettingsPage'
+import { useUpdateToasts } from '@/features/settings/useUpdateToasts'
 
 function App(): React.JSX.Element {
   const [page, setPage] = useState<Page>('dashboard')
   const [entryId, setEntryId] = useState<number | undefined>()
   const [addOpen, setAddOpen] = useState(false)
+  useUpdateToasts()
 
   const onNavigate: NavigateFn = useCallback((next, opts) => {
     setEntryId(opts?.entryId)

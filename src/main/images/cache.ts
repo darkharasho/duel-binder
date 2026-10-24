@@ -28,7 +28,9 @@ export interface ImageCache {
   clear(): Promise<void>
 }
 
-export const defaultLimiter = (): Limiter => createLimiter({ concurrency: 4, minIntervalMs: 50 })
+const IMAGE_TIMEOUT_MS = 30_000
+
+export const defaultLimiter = (): Limiter => createLimiter({ concurrency: 4, minIntervalMs: 100 })
 
 export function createImageCache(opts: { dir: string; fetchFn?: typeof fetch; limit?: Limiter }): ImageCache {
   const fetchFn = opts.fetchFn ?? fetch
@@ -42,7 +44,7 @@ export function createImageCache(opts: { dir: string; fetchFn?: typeof fetch; li
     const tmpPath = `${finalPath}.tmp`
     try {
       await fs.mkdir(path.dirname(finalPath), { recursive: true })
-      const res = await fetchFn(imageUrl(size, id))
+      const res = await fetchFn(imageUrl(size, id), { signal: AbortSignal.timeout(IMAGE_TIMEOUT_MS) })
       if (!res.ok || !res.body) return null
       if (!(res.headers.get('content-type') ?? '').toLowerCase().startsWith('image/')) return null
       await pipeline(Readable.fromWeb(res.body as unknown as WebReadableStream), createWriteStream(tmpPath))

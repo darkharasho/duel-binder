@@ -45,5 +45,7 @@ describe('createHandlers', () => {
     expect(added.quantity).toBe(2)
     const list = (await handlers['collection:list']({ sort: 'name', dir: 'asc' })) as { id: number }[]
     expect(list.map((e) => e.id)).toContain(added.id)
+    const today = db.prepare('SELECT total_cards AS n FROM value_snapshots').all() as { n: number }[]
+    expect(today).toEqual([{ n: 2 }])
   })
 })

@@ -60,7 +60,7 @@ export function SettingsPage(): React.JSX.Element {
   const check = useMutation({
     mutationFn: () => api.app.checkForUpdates(),
     onSuccess: setUpdate,
-    onError: (e: Error) => setUpdate({ state: 'error', mode: 'auto', version: null, error: e.message })
+    onError: (e: Error) => setUpdate({ state: 'error', mode: update?.mode ?? 'auto', version: null, error: e.message })
   })
   const refresh = useMutation({
     mutationFn: () => api.sync.run(),

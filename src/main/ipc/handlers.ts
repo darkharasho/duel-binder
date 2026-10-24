@@ -38,14 +38,19 @@ export interface HandlerDeps {
 export type Handlers = Record<(typeof INVOKE_CHANNELS)[number], (...args: any[]) => Promise<unknown>>
 
 export function createHandlers({ db, client, images, emitSync, app }: HandlerDeps): Handlers {
+  // Keep today's value snapshot meaning "end of day" as the collection changes.
+  const snapshotAfter = <T>(result: T): T => {
+    recordSnapshot(db)
+    return result
+  }
   return {
     'cards:search': async (q: string) => searchCards(db, q),
     'cards:get': async (cardId: number) => getCardDetail(db, cardId),
     'collection:list': async (f) => listEntries(db, f),
     'collection:forCard': async (cardId: number) => entriesForCard(db, cardId),
-    'collection:add': async (input) => addEntry(db, input),
-    'collection:update': async (id: number, patch) => updateEntry(db, id, patch),
-    'collection:remove': async (id: number) => removeEntry(db, id),
+    'collection:add': async (input) => snapshotAfter(addEntry(db, input)),
+    'collection:update': async (id: number, patch) => snapshotAfter(updateEntry(db, id, patch)),
+    'collection:remove': async (id: number) => snapshotAfter(removeEntry(db, id)),
     'collection:facets': async () => getFacets(db),
     'stats:get': async () => getStats(db),
     'sync:status': async () => getSyncStatus(db),

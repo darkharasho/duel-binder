@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import type { UpdateStatus } from '@shared/types'
@@ -21,6 +21,8 @@ export function useUpdateToasts(): void {
   const state = data?.state
   const mode = data?.mode
   const version = data?.version
+  // Versions whose "available" toast the user already dismissed this session.
+  const dismissed = useRef(new Set<string>())
   useEffect(() => {
     if (state === 'ready') {
       toast(`Update ${version} ready`, {
@@ -29,11 +31,13 @@ export function useUpdateToasts(): void {
         action: { label: 'Restart now', onClick: () => void api.app.applyUpdate() },
         cancel: { label: 'Later', onClick: () => undefined }
       })
-    } else if (state === 'available' && mode === 'notify') {
+    } else if (state === 'available' && mode === 'notify' && version) {
+      if (dismissed.current.has(version)) return
       toast(`Update ${version} available`, {
         id: TOAST_ID,
         duration: Infinity,
-        action: { label: 'Download', onClick: () => void api.app.applyUpdate() }
+        action: { label: 'Download', onClick: () => void api.app.applyUpdate() },
+        onDismiss: () => dismissed.current.add(version)
       })
     }
   }, [state, mode, version])

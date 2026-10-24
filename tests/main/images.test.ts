@@ -20,6 +20,13 @@ const okResponse = (body = 'jpegdata', type = 'image/jpeg') =>
 const noLimit = createLimiter({ concurrency: 4, minIntervalMs: 0 })
 
 describe('image cache', () => {
+  it('fetches with a timeout signal', async () => {
+    const fetchFn = vi.fn(async (..._args: unknown[]) => okResponse())
+    const cache = createImageCache({ dir, fetchFn: fetchFn as unknown as typeof fetch, limit: noLimit })
+    await cache.get('small', 7)
+    expect((fetchFn.mock.calls[0][1] as RequestInit).signal).toBeInstanceOf(AbortSignal)
+  })
+
   it('downloads once then serves from disk', async () => {
     const fetchFn = vi.fn(async () => okResponse())
     const cache = createImageCache({ dir, fetchFn: fetchFn as unknown as typeof fetch, limit: noLimit })

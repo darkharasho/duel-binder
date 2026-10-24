@@ -23,7 +23,11 @@ async function makeHandlers() {
       checkForUpdates: async () => ({ state: 'none', mode: 'auto', version: null, error: null }),
       applyUpdate: async () => {}
     },
-    priceClient: { lookup },
+    prices: {
+      client: () => ({ lookup }),
+      settings: () => ({ url: '', defaultUrl: '', isDefault: true, envOverride: false }),
+      setUrl: () => ({ url: '', defaultUrl: '', isDefault: true, envOverride: false })
+    },
     emitDataChanged
   })
   return { db, handlers, lookup, emitDataChanged }

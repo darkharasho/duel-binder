@@ -19,7 +19,8 @@ export const queryKeys = {
   search: (q: string) => ['search', q] as const,
   card: (id: number) => ['card', id] as const,
   forCard: (id: number) => ['forCard', id] as const,
-  update: ['update'] as const
+  update: ['update'] as const,
+  priceSettings: ['prices', 'settings'] as const
 }
 
 /** Query-key prefixes to invalidate after any collection mutation. */

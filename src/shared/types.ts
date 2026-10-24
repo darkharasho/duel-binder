@@ -125,6 +125,16 @@ export interface SyncStatus {
   error: string | null
 }
 
+/** The eBay price service address shown in Settings. */
+export interface PriceSettings {
+  /** The saved address, or the built-in one; '' means prices are turned off. */
+  url: string
+  defaultUrl: string
+  isDefault: boolean
+  /** YGO_PRICE_WORKER_URL is set, so the saved address is ignored. */
+  envOverride: boolean
+}
+
 export interface UpdateStatus {
   state: 'idle' | 'checking' | 'none' | 'available' | 'downloading' | 'ready' | 'error'
   mode: 'auto' | 'notify'

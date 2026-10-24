@@ -27,6 +27,7 @@ wrangler secret put EBAY_CERT_ID
 wrangler deploy
 ```
 
-Then point the app at the Worker URL (`PRICE_WORKER_URL`, or env `YGO_PRICE_WORKER_URL`).
+Then point the app at the Worker URL: Settings → eBay prices, or the built-in `PRICE_WORKER_URL`
+(env `YGO_PRICE_WORKER_URL` overrides both).
 
 Tests run from the repo root with `npm test`.

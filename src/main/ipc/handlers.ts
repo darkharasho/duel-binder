@@ -19,7 +19,7 @@ import {
 } from '../repo/collection'
 import { adjustPrinting, getChecklist, listSets } from '../repo/sets'
 import { getStats, recordSnapshot } from '../repo/stats'
-import type { PriceClient } from '../prices/client'
+import type { PriceService } from '../prices/service'
 import { needsPrice, refreshIntlPrices } from '../prices/refresh'
 
 export interface AppDeps {
@@ -37,7 +37,7 @@ export interface HandlerDeps {
   images: ImageCache
   emitSync: (s: SyncStatus) => void
   app: AppDeps
-  priceClient: PriceClient | null
+  prices: PriceService
   emitDataChanged: () => void
 }
 
@@ -56,14 +56,14 @@ export function createHandlers({
   images,
   emitSync,
   app,
-  priceClient,
+  prices,
   emitDataChanged
 }: HandlerDeps): Handlers {
   // A non-English printing without a fresh eBay price is looked up in the background; the renderer is
   // told to refetch once the lookup has finished.
   const priceNewCopy = (printingId: number): void => {
     if (!needsPrice(db, printingId)) return
-    void refreshIntlPrices(db, priceClient, { printingIds: [printingId] }).then(() => emitDataChanged())
+    void refreshIntlPrices(db, prices.client(), { printingIds: [printingId] }).then(() => emitDataChanged())
   }
   // Keep today's value snapshot meaning "end of day" as the collection changes.
   const snapshotAfter = <T>(result: T): T => {
@@ -101,6 +101,14 @@ export function createHandlers({
       const status = await runSync(db, client, emitSync)
       if (status.state === 'idle') recordSnapshot(db)
       return status
+    },
+    'prices:settings': async () => prices.settings(),
+    'prices:setUrl': async (url: unknown) => {
+      if (url !== null && typeof url !== 'string') throw new Error('Invalid address')
+      const settings = prices.setUrl(url)
+      // Re-check stale prices against the new address; the renderer refetches either way.
+      void refreshIntlPrices(db, prices.client()).then(() => emitDataChanged())
+      return settings
     },
     'images:cacheSize': () => images.sizeBytes(),
     'images:clearCache': () => images.clear(),

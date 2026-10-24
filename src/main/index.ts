@@ -6,13 +6,12 @@ import type { SyncStatus, UpdateStatus } from '@shared/types'
 import { DATA_CHANGED, SYNC_PROGRESS, UPDATE_STATUS } from '@shared/ipc'
 import icon from '../../resources/icon.png?asset'
 import { openDatabase } from './db/database'
-import { getMeta, setMeta } from './db/meta'
+import { getMeta } from './db/meta'
 import { createYgoClient } from './ygo/client'
 import { runSync, shouldSync } from './sync/sync'
 import { hasSetData, refreshSets } from './sync/sets'
 import { refreshIntlSets, shouldRefreshIntl } from './sync/intl'
-import { createPriceClient } from './prices/client'
-import { priceWorkerUrl } from './prices/config'
+import { createPriceService } from './prices/service'
 import { refreshIntlPrices } from './prices/refresh'
 import { createYugipediaClient } from './yugipedia/client'
 import { recordSnapshot } from './repo/stats'
@@ -146,12 +145,10 @@ function bootstrap(): void {
     updateStatus: async () => updater.status()
   }
 
-  const workerUrl = priceWorkerUrl()
-  const priceClient = workerUrl ? createPriceClient({ url: workerUrl }) : null
-  if (!priceClient) setMeta(db, 'price_service_status', 'unavailable')
+  const priceService = createPriceService(db)
   const emitDataChanged = (): void => broadcast(DATA_CHANGED, undefined)
 
-  registerIpc(createHandlers({ db, client, images, emitSync, app: appDeps, priceClient, emitDataChanged }))
+  registerIpc(createHandlers({ db, client, images, emitSync, app: appDeps, prices: priceService, emitDataChanged }))
 
   createWindow()
   updater.start()
@@ -176,7 +173,7 @@ function bootstrap(): void {
       changed = true
     }
     // refreshIntlPrices never rejects; failures still change the shown no-price reason.
-    const prices = await refreshIntlPrices(db, priceClient)
+    const prices = await refreshIntlPrices(db, priceService.client())
     if (prices.updated > 0) recordSnapshot(db)
     if (changed || prices.updated > 0 || prices.failed > 0) emitDataChanged()
   }

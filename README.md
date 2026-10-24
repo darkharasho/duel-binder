@@ -1,6 +1,15 @@
 # yugioh-collection-tracker
 
-A local, offline-first Electron desktop app for cataloging a personal Yu-Gi-Oh! card collection. Users add cards with quantity, set, rarity, and condition, then search and filter them. Card details and images are fetched automatically from the YGOPRODeck API and cached locally. A modern, easy-to-use UI shows collection stats such as total cards and estimated value.
+A local, offline-first Electron desktop app for cataloging a personal Yu-Gi-Oh! card collection. Users add cards with quantity, set, and rarity, then search and filter them. Card details and images are fetched automatically from the YGOPRODeck API and cached locally. A modern, easy-to-use UI shows collection stats such as total cards and estimated value.
+
+Card data and images come from [YGOPRODeck](https://ygoprodeck.com). This project is not affiliated with or endorsed by Konami; Yu-Gi-Oh! is a trademark of Konami.
+
+## Install notes
+
+Release builds are not code-signed by a paid certificate, so the OS warns on first launch:
+
+- **macOS:** the app is ad-hoc signed. Right-click the app and choose Open, or go to System Settings → Privacy & Security and click Open Anyway. Alternatively run `xattr -dr com.apple.quarantine "/Applications/Yugioh Collection Tracker.app"`. The mac build does not auto-update; it shows a notice with a link to the new release.
+- **Windows:** SmartScreen may say "Windows protected your PC". Click More info → Run anyway.
 
 ## Run
 

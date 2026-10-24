@@ -59,6 +59,16 @@ describe('data changed', () => {
     act(() => fire())
     await waitFor(() => expect(vi.mocked(api.sets.list).mock.calls.length).toBeGreaterThan(before))
   })
+
+  it('also invalidates card detail queries', async () => {
+    let fire: () => void = () => {}
+    const api = createMockApi({ app: { onDataChanged: vi.fn((cb) => ((fire = cb), () => {})) } })
+    const { client } = renderWithProviders(<App />, { api })
+    await waitFor(() => expect(api.app.onDataChanged).toHaveBeenCalled())
+    const spy = vi.spyOn(client, 'invalidateQueries')
+    act(() => fire())
+    expect(spy).toHaveBeenCalledWith({ queryKey: ['card'] })
+  })
 })
 
 describe('SyncBanner', () => {

@@ -8,6 +8,8 @@ export function useDataChanged(): void {
   useEffect(() => {
     return api.app.onDataChanged(() => {
       for (const queryKey of mutationInvalidationKeys) void qc.invalidateQueries({ queryKey })
+      // Card details (printings) change with sync; mutations don't need this, so it's not shared.
+      void qc.invalidateQueries({ queryKey: ['card'] })
     })
   }, [qc])
 }

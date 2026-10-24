@@ -175,9 +175,10 @@ function bootstrap(): void {
       await refreshIntlSets(db, createYugipediaClient({ version: app.getVersion() }))
       changed = true
     }
+    // refreshIntlPrices never rejects; failures still change the shown no-price reason.
     const prices = await refreshIntlPrices(db, priceClient)
-    if (prices.updated > 0) changed = true
-    if (changed) emitDataChanged()
+    if (prices.updated > 0) recordSnapshot(db)
+    if (changed || prices.updated > 0 || prices.failed > 0) emitDataChanged()
   }
 
   app.on('activate', function () {

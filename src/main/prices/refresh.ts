@@ -76,8 +76,10 @@ export async function refreshIntlPrices(
         const r = await client.lookup({ code: c.code, name: c.name, set: c.set, rarity: c.rarity, lang: c.lang })
         upsert.run(c.id, r.price, r.listingCount, r.checkedAt)
         updated++
-      } catch {
+      } catch (e) {
         failed++
+        // Status text only (PriceUnavailableError messages carry no URLs or env).
+        console.warn('Price lookup failed:', e instanceof Error ? e.message : String(e))
       }
     }
     if (updated > 0) setMeta(db, 'price_service_status', 'ok')

@@ -115,7 +115,12 @@ export function createImageCache(opts: {
     async getSet(key) {
       if (!SET_KEY_RE.test(key)) return null
       if (key.startsWith('yp-')) {
-        const remote = opts.resolveSetImage?.(key) ?? null
+        let remote: string | null
+        try {
+          remote = opts.resolveSetImage?.(key) ?? null
+        } catch {
+          return null // e.g. the database is closed or busy; never reject the protocol handler
+        }
         if (remote === null || !remote.startsWith(YUGIPEDIA_IMAGE_PREFIX)) return null
         return cached(`set/${key}`, remote, path.join(opts.dir, 'sets', `${key}.jpg`), {
           'User-Agent': `YugiohCollectionTracker/${opts.version ?? 'unknown'} (${REPO_URL})`

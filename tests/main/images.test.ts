@@ -219,6 +219,16 @@ describe('yugipedia set images', () => {
     expect(fetchFn).not.toHaveBeenCalled()
   })
 
+  it('returns null when the resolver throws', async () => {
+    const fetchFn = vi.fn(async () => okResponse())
+    const resolveSetImage = (): string | null => {
+      throw new Error('database closed')
+    }
+    const cache = createImageCache({ dir, fetchFn: fetchFn as unknown as typeof fetch, limit: noLimit, resolveSetImage })
+    expect(await cache.getSet('yp-0123456789abcdef0123')).toBeNull()
+    expect(fetchFn).not.toHaveBeenCalled()
+  })
+
   it('returns null for a yp- key with no resolver', async () => {
     const fetchFn = vi.fn(async () => okResponse())
     const cache = createImageCache({ dir, fetchFn: fetchFn as unknown as typeof fetch, limit: noLimit })

@@ -91,11 +91,13 @@ function deleteOrFlag(db: Database.Database, ids: number[]): void {
 export async function refreshIntlSets(
   db: Database.Database,
   client: YugipediaClient,
-  now: Date = new Date()
+  now: Date = new Date(),
+  /** Called after each batch of sets is saved (e.g. to refresh the UI). */
+  onBatch?: () => void
 ): Promise<IntlSyncResult> {
   const result: IntlSyncResult = { sets: 0, failedSets: 0, unmatchedRows: 0, ok: false }
   try {
-    return await run(db, client, now, result)
+    return await run(db, client, now, result, onBatch)
   } catch (e) {
     console.warn('Non-English set sync failed', e)
     result.ok = false
@@ -107,7 +109,8 @@ async function run(
   db: Database.Database,
   client: YugipediaClient,
   now: Date,
-  result: IntlSyncResult
+  result: IntlSyncResult,
+  onBatch?: () => void
 ): Promise<IntlSyncResult> {
   let allTitles: string[]
   try {
@@ -141,37 +144,6 @@ async function run(
     if (!cardIds.has(key)) cardIds.set(key, c.id)
   }
 
-  const listFetch = await fetchChunked(
-    client,
-    jobs.map((j) => j.title)
-  )
-  const loaded: LoadedSet[] = []
-  for (const job of jobs) {
-    const text = listFetch.pages.get(job.title)
-    const parsed = text === undefined ? null : parseSetList(text)
-    if (parsed) loaded.push({ ...job, parsed })
-    else result.failedSets++
-  }
-
-  const pageTitle = (s: LoadedSet): string => s.parsed.setPage ?? s.setName
-  const infoFetch = await fetchChunked(client, [...new Set(loaded.map(pageTitle))])
-  const infoboxes = new Map(
-    loaded.map((s) => {
-      const text = infoFetch.pages.get(pageTitle(s))
-      return [s.title, text === undefined ? null : parseInfobox(text)] as const
-    })
-  )
-  const files = [...new Set([...infoboxes.values()].flatMap((b) => (b?.image ? [b.image] : [])))]
-  let imageUrls = new Map<string, string>()
-  let imagesFailed = false
-  if (files.length > 0) {
-    try {
-      imageUrls = await client.fetchImageUrls(files)
-    } catch {
-      imagesFailed = true // images are optional; keep what is stored
-    }
-  }
-
   const upsertPrinting = db.prepare(`
     INSERT INTO card_printings (card_id, language, set_name, set_code, set_rarity, set_rarity_code, set_price,
       missing_from_api)
@@ -190,51 +162,94 @@ async function run(
 
   const unmatchedExamples: string[] = []
   const seenSets = new Set<string>()
-  for (const s of loaded) {
-    let unmatched = 0
-    const printings: { cardId: number; setCode: string; setRarity: string }[] = []
-    for (const row of s.parsed.rows) {
-      const cardId = cardIds.get(normalizeName(row.name))
-      if (cardId === undefined) {
-        unmatched++
-        if (unmatchedExamples.length < MAX_LOGGED_UNMATCHED) unmatchedExamples.push(row.name)
-        continue
-      }
-      for (const r of row.rarities) {
-        printings.push({ cardId, setCode: row.code, setRarity: normalizeRarity(r) })
+
+  // Sets not stored yet go first, so an interrupted first sync fills in rather than starting over.
+  const storedSet = db.prepare('SELECT 1 FROM sets WHERE language = ? AND set_name = ?')
+  const ordered = [
+    ...jobs.filter((j) => !storedSet.get(j.language, j.setName)),
+    ...jobs.filter((j) => storedSet.get(j.language, j.setName))
+  ]
+  // Each batch is fetched, parsed and saved on its own, so progress survives a quit mid-sync.
+  for (const batch of chunk(ordered, CHUNK_SIZE)) {
+    const listFetch = await fetchChunked(
+      client,
+      batch.map((j) => j.title)
+    )
+    const loaded: LoadedSet[] = []
+    for (const job of batch) {
+      const text = listFetch.pages.get(job.title)
+      const parsed = text === undefined ? null : parseSetList(text)
+      if (parsed) loaded.push({ ...job, parsed })
+      else result.failedSets++
+    }
+
+    const pageTitle = (s: LoadedSet): string => s.parsed.setPage ?? s.setName
+    const infoFetch = await fetchChunked(client, [...new Set(loaded.map(pageTitle))])
+    const infoboxes = new Map(
+      loaded.map((s) => {
+        const text = infoFetch.pages.get(pageTitle(s))
+        return [s.title, text === undefined ? null : parseInfobox(text)] as const
+      })
+    )
+    const files = [...new Set([...infoboxes.values()].flatMap((b) => (b?.image ? [b.image] : [])))]
+    let imageUrls = new Map<string, string>()
+    let imagesFailed = false
+    if (files.length > 0) {
+      try {
+        imageUrls = await client.fetchImageUrls(files)
+      } catch {
+        imagesFailed = true // images are optional; keep what is stored
       }
     }
-    result.unmatchedRows += unmatched
 
-    const box = infoboxes.get(s.title) ?? null
-    const imageUrl = box?.image ? (imageUrls.get(box.image) ?? null) : null
-    db.transaction(() => {
-      const seen = new Set<number>()
-      for (const p of printings) {
-        const row = upsertPrinting.get({
-          ...p,
-          language: s.language,
-          setName: s.setName
-        }) as { id: number }
-        seen.add(row.id)
+    for (const s of loaded) {
+      let unmatched = 0
+      const printings: { cardId: number; setCode: string; setRarity: string }[] = []
+      for (const row of s.parsed.rows) {
+        const cardId = cardIds.get(normalizeName(row.name))
+        if (cardId === undefined) {
+          unmatched++
+          if (unmatchedExamples.length < MAX_LOGGED_UNMATCHED) unmatchedExamples.push(row.name)
+          continue
+        }
+        for (const r of row.rarities) {
+          printings.push({ cardId, setCode: row.code, setRarity: normalizeRarity(r) })
+        }
       }
-      const stale = (existing.all(s.language, s.setName) as { id: number }[])
-        .map((r) => r.id)
-        .filter((id) => !seen.has(id))
-      deleteOrFlag(db, stale)
-      upsertSet.run({
-        language: s.language,
-        setName: s.setName,
-        tcgDate: box ? releaseDateFor(box, s.language) : null,
-        imageUrl,
-        listRows: s.parsed.rows.length,
-        unmatchedRows: unmatched,
-        imageKey: yugipediaImageKey(imageUrl),
-        keepDate: box ? 0 : 1,
-        keepImage: !box || imagesFailed ? 1 : 0
-      })
-    })()
-    seenSets.add(`${s.language}\u0000${s.setName}`)
+      result.unmatchedRows += unmatched
+
+      const box = infoboxes.get(s.title) ?? null
+      const imageUrl = box?.image ? (imageUrls.get(box.image) ?? null) : null
+      db.transaction(() => {
+        const seen = new Set<number>()
+        for (const p of printings) {
+          const row = upsertPrinting.get({
+            ...p,
+            language: s.language,
+            setName: s.setName
+          }) as { id: number }
+          seen.add(row.id)
+        }
+        const stale = (existing.all(s.language, s.setName) as { id: number }[])
+          .map((r) => r.id)
+          .filter((id) => !seen.has(id))
+        deleteOrFlag(db, stale)
+        upsertSet.run({
+          language: s.language,
+          setName: s.setName,
+          tcgDate: box ? releaseDateFor(box, s.language) : null,
+          imageUrl,
+          listRows: s.parsed.rows.length,
+          unmatchedRows: unmatched,
+          imageKey: yugipediaImageKey(imageUrl),
+          keepDate: box ? 0 : 1,
+          keepImage: !box || imagesFailed ? 1 : 0
+        })
+      })()
+      seenSets.add(`${s.language}\u0000${s.setName}`)
+    }
+
+    onBatch?.()
   }
 
   if (unmatchedExamples.length > 0) {

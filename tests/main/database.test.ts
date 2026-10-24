@@ -6,15 +6,15 @@ import { openDatabase, migrate, SCHEMA_V1, SCHEMA_V2 } from '../../src/main/db/d
 import { getMeta, setMeta } from '../../src/main/db/meta'
 
 describe('database', () => {
-  test('migrate sets user_version 3 and is idempotent', () => {
+  test('migrate sets user_version 4 and is idempotent', () => {
     const db = openDatabase(':memory:')
-    expect(db.pragma('user_version', { simple: true })).toBe(3)
+    expect(db.pragma('user_version', { simple: true })).toBe(4)
     expect(() => migrate(db)).not.toThrow()
-    expect(db.pragma('user_version', { simple: true })).toBe(3)
+    expect(db.pragma('user_version', { simple: true })).toBe(4)
     db.close()
   })
 
-  test('migrates a v2 database with an entry to v3 keeping ids', () => {
+  test('migrates a v2 database with an entry to the latest version keeping ids', () => {
     const db = new Database(':memory:')
     db.pragma('foreign_keys = ON')
     db.exec(SCHEMA_V1)
@@ -35,7 +35,7 @@ describe('database', () => {
     ).run()
     db.prepare(`INSERT INTO sets (set_name, set_code) VALUES ('Legend of Blue Eyes White Dragon', 'LOB')`).run()
     migrate(db)
-    expect(db.pragma('user_version', { simple: true })).toBe(3)
+    expect(db.pragma('user_version', { simple: true })).toBe(4)
     expect(db.prepare('SELECT id, language FROM card_printings').all()).toEqual([{ id: 7, language: 'en' }])
     expect(db.prepare('SELECT id, printing_id FROM collection_entries').all()).toEqual([
       { id: 3, printing_id: 7 }
@@ -76,7 +76,7 @@ describe('database', () => {
     db.pragma('user_version = 1')
     db.prepare("INSERT INTO meta (key, value) VALUES ('k', 'v')").run()
     migrate(db)
-    expect(db.pragma('user_version', { simple: true })).toBe(3)
+    expect(db.pragma('user_version', { simple: true })).toBe(4)
     expect(db.prepare('SELECT value FROM meta WHERE key = ?').get('k')).toEqual({ value: 'v' })
     expect(db.prepare('SELECT count(*) AS n FROM sets').get()).toEqual({ n: 0 })
     db.close()
@@ -162,4 +162,17 @@ describe('openDatabase failure', () => {
       rmSync(dir, { recursive: true, force: true })
     }
   })
+})
+
+test('v4 adds printing_art, which goes away with its printing', () => {
+  const db = openDatabase(':memory:')
+  db.prepare(
+    "INSERT INTO cards (id, name, type, frame_type, race, \"desc\", updated_at) VALUES (1, 'A', 't', 'normal', 'r', '', 'x')"
+  ).run()
+  const p = db
+    .prepare("INSERT INTO card_printings (card_id, set_name, set_code, set_rarity) VALUES (1, 'S', 'S-001', 'Common')")
+    .run().lastInsertRowid
+  db.prepare("INSERT INTO printing_art (printing_id, url, checked_at) VALUES (?, NULL, 'now')").run(p)
+  db.prepare('DELETE FROM card_printings WHERE id = ?').run(p)
+  expect(db.prepare('SELECT count(*) AS n FROM printing_art').get()).toEqual({ n: 0 })
 })

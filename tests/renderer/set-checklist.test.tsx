@@ -118,4 +118,28 @@ describe('SetChecklist', () => {
     await userEvent.click(screen.getByRole('button', { name: /All sets/ }))
     expect(onBack).toHaveBeenCalled()
   })
+
+  it('search narrows the set by name or code, and says when nothing matches', async () => {
+    renderChecklist()
+    await screen.findByRole('button', { name: 'Alpha Dragon' })
+    await userEvent.type(screen.getByLabelText('Search this set'), 'beta')
+    expect(screen.queryByRole('button', { name: 'Alpha Dragon' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Beta Knight' })).toBeInTheDocument()
+    await userEvent.clear(screen.getByLabelText('Search this set'))
+    await userEvent.type(screen.getByLabelText('Search this set'), 'mrd-e001')
+    expect(screen.getByRole('button', { name: 'Alpha Dragon' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Beta Knight' })).not.toBeInTheDocument()
+    await userEvent.type(screen.getByLabelText('Search this set'), 'zzz')
+    expect(screen.getByText(/No cards in this set match/)).toBeInTheDocument()
+  })
+
+  it('tiles ask for the printing scan of their rarity', async () => {
+    renderChecklist()
+    const tile = await screen.findByRole('button', { name: 'Alpha Dragon' })
+    expect(within(tile).getByTestId('printing-scan')).toHaveAttribute(
+      'src',
+      expect.stringMatching(/^ygo-img:\/\/printing\/\d+$/)
+    )
+  })
 })
+

@@ -56,11 +56,17 @@ CREATE TABLE intl_prices (printing_id INTEGER PRIMARY KEY REFERENCES card_printi
   price REAL, listing_count INTEGER NOT NULL, checked_at TEXT NOT NULL);
 `
 
+export const SCHEMA_V4 = `
+CREATE TABLE printing_art (printing_id INTEGER PRIMARY KEY REFERENCES card_printings(id) ON DELETE CASCADE,
+  url TEXT, checked_at TEXT NOT NULL);
+`
+
 /** Ordered schema steps. Append new versions to the end; never edit a shipped step. */
 const MIGRATIONS: Migration[] = [
   { version: 1, sql: SCHEMA_V1 },
   { version: 2, sql: SCHEMA_V2 },
-  { version: 3, sql: SCHEMA_V3, foreignKeysOff: true }
+  { version: 3, sql: SCHEMA_V3, foreignKeysOff: true },
+  { version: 4, sql: SCHEMA_V4 }
 ]
 
 export function openDatabase(file: string): Database.Database {

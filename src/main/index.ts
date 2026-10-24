@@ -14,6 +14,7 @@ import { refreshIntlSets, shouldRefreshIntl } from './sync/intl'
 import { createPriceService } from './prices/service'
 import { refreshIntlPrices } from './prices/refresh'
 import { createYugipediaClient } from './yugipedia/client'
+import { createPrintingArtResolver } from './yugipedia/artResolver'
 import { recordSnapshot } from './repo/stats'
 import { createImageCache } from './images/cache'
 import { handleImageProtocol, registerImageScheme } from './images/protocol'
@@ -104,6 +105,9 @@ function bootstrap(): void {
 
   const userData = app.getPath('userData')
   const db = openDatabase(join(userData, 'collection.db'))
+  // One Yugipedia client, so set syncs and art lookups share its request pacing.
+  const yugipedia = createYugipediaClient({ version: app.getVersion() })
+  const printingArt = createPrintingArtResolver({ db, client: yugipedia })
   const images = createImageCache({
     dir: join(userData, 'images'),
     version: app.getVersion(),
@@ -111,7 +115,8 @@ function bootstrap(): void {
       (
         db.prepare('SELECT image_url FROM sets WHERE image_key = ?').get(key) as
           { image_url: string | null } | undefined
-      )?.image_url ?? null
+      )?.image_url ?? null,
+    resolvePrintingArt: (id) => printingArt.url(id)
   })
   handleImageProtocol(images)
 
@@ -204,7 +209,8 @@ function bootstrap(): void {
     }
     const { n } = db.prepare('SELECT count(*) AS n FROM cards').get() as { n: number }
     if (n > 0 && shouldRefreshIntl(db, new Date())) {
-      await refreshIntlSets(db, createYugipediaClient({ version: app.getVersion() }))
+      // Each saved batch refreshes the UI, so sets appear while a long first sync runs.
+      await refreshIntlSets(db, yugipedia, new Date(), emitDataChanged)
       changed = true
     }
     // refreshIntlPrices never rejects; failures still change the shown no-price reason.

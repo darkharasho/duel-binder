@@ -21,6 +21,8 @@ export interface YugipediaClient {
   fetchPages(titles: string[]): Promise<Map<string, string>>
   /** File name (no "File:") -> URL, only for URLs starting with https://ms.yugipedia.com/. Chunks of 50. */
   fetchImageUrls(files: string[]): Promise<Map<string, string>>
+  /** File names (no "File:") used on each requested page (redirects followed). Chunks of 50. */
+  listPageImages(titles: string[]): Promise<Map<string, string[]>>
 }
 
 interface FromTo {
@@ -33,11 +35,12 @@ interface ApiPage {
   missing?: boolean
   revisions?: { slots?: { main?: { content?: string } } }[]
   imageinfo?: { url?: string }[]
+  images?: { title: string }[]
 }
 
 interface ApiBody {
   error?: { code?: string }
-  continue?: { apcontinue?: string }
+  continue?: { apcontinue?: string; imcontinue?: string; continue?: string }
   query?: {
     allpages?: { title: string }[]
     pages?: ApiPage[]
@@ -160,6 +163,39 @@ export function createYugipediaClient(opts: {
         for (const t of part) {
           const content = byTitle.get(resolve(t))?.revisions?.[0]?.slots?.main?.content
           if (typeof content === 'string') out.set(t, content)
+        }
+      }
+      return out
+    },
+
+    async listPageImages(titles) {
+      const out = new Map<string, string[]>()
+      for (const part of chunk(titles, CHUNK_SIZE)) {
+        const byTitle = new Map<string, string[]>()
+        let resolve: (t: string) => string = (t) => t
+        let cont: Record<string, string> = {}
+        do {
+          const body = await request({
+            action: 'query',
+            prop: 'images',
+            imlimit: 'max',
+            redirects: '1',
+            titles: part.join('|'),
+            ...cont
+          })
+          if (Object.keys(cont).length === 0) resolve = resolver(body)
+          for (const p of body.query?.pages ?? []) {
+            const files = byTitle.get(p.title) ?? []
+            for (const i of p.images ?? []) files.push(i.title.replace(/^File:/, ''))
+            byTitle.set(p.title, files)
+          }
+          cont = body.continue?.imcontinue
+            ? { imcontinue: body.continue.imcontinue, continue: body.continue.continue ?? '' }
+            : {}
+        } while (cont.imcontinue)
+        for (const t of part) {
+          const files = byTitle.get(resolve(t))
+          if (files) out.set(t, files)
         }
       }
       return out

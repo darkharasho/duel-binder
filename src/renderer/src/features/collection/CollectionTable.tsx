@@ -33,7 +33,13 @@ const columns = helper.columns([
     id: 'art',
     header: 'Art',
     cell: ({ row }) => (
-      <CardArt imageId={row.original.imageId} size="small" alt="" className="w-8" />
+      <CardArt
+        imageId={row.original.imageId}
+        printingId={row.original.printing.id}
+        size="small"
+        alt=""
+        className="w-8"
+      />
     )
   }),
   helper.accessor((e) => e.card.name, {

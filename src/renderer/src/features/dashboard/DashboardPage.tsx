@@ -175,6 +175,7 @@ function Content({
                 >
                   <CardArt
                     imageId={e.imageId}
+                    printingId={e.printing.id}
                     size="small"
                     alt=""
                     className="w-full rounded-[4px] shadow-[0_8px_20px_rgb(0_0_0/0.5)] transition-transform duration-200 group-hover:-translate-y-1"

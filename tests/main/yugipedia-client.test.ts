@@ -205,4 +205,22 @@ describe('yugipedia client', () => {
     expect(calls[0].url.searchParams.get('titles')).toBe('File:a_b.png|File:Evil.png|File:None.png')
     expect([...out]).toEqual([['a_b.png', 'https://ms.yugipedia.com/x/a.png']])
   })
+
+  it('listPageImages follows imcontinue and redirects, stripping File:', async () => {
+    const { client, calls } = setup((_call, n) =>
+      n === 0
+        ? res({
+            continue: { imcontinue: '123|B.png', continue: '||' },
+            query: {
+              redirects: [{ from: 'Card Gallery:Old', to: 'Card Gallery:New' }],
+              pages: [{ title: 'Card Gallery:New', images: [{ title: 'File:A.png' }] }]
+            }
+          })
+        : res({ query: { pages: [{ title: 'Card Gallery:New', images: [{ title: 'File:B.png' }] }] } })
+    )
+    const out = await client.listPageImages(['Card Gallery:Old', 'Card Gallery:Missing'])
+    expect(calls[0].url.searchParams.get('prop')).toBe('images')
+    expect(calls[1].url.searchParams.get('imcontinue')).toBe('123|B.png')
+    expect([...out]).toEqual([['Card Gallery:Old', ['A.png', 'B.png']]])
+  })
 })

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft } from 'lucide-react'
+import { ArrowLeft, Search } from 'lucide-react'
 import { toast } from 'sonner'
 import type { Language } from '@shared/languages'
 import type { CardSearchResult, CountMode, SetChecklist as SetChecklistData } from '@shared/types'
@@ -9,6 +9,7 @@ import { setArtUrl, useArtWash } from '@/components/artWash'
 import { LanguageTag } from '@/components/LanguageTag'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { UnderlineTabs } from '@/components/UnderlineTabs'
@@ -22,6 +23,7 @@ import { SetProgress } from './SetProgress'
 import {
   checklistTiles,
   filterTiles,
+  matchesCardSearch,
   progressFor,
   replaceChecklistCard,
   type Tile,
@@ -87,6 +89,7 @@ export function SetChecklist({
   onAddMissing
 }: SetChecklistProps): React.JSX.Element {
   const [filter, setFilter] = useState<TileFilter>('all')
+  const [q, setQ] = useState('')
   const [selected, setSelected] = useState<{ cardId: number; entryId: number } | null>(null)
   const [bulk, setBulk] = useState(false)
   // Card ids shown in bulk mode, frozen so saves never re-filter a card away mid-click.
@@ -107,8 +110,11 @@ export function SetChecklist({
   const data = checklist.data
   useArtWash(data?.set.imageKey ? setArtUrl(data.set.imageKey) : null)
   const tiles = useMemo(
-    () => (data ? filterTiles(checklistTiles(data, mode), filter) : []),
-    [data, mode, filter]
+    () =>
+      data
+        ? filterTiles(checklistTiles(data, mode), filter).filter((t) => matchesCardSearch(t.card, q))
+        : [],
+    [data, mode, filter, q]
   )
 
   // Recompute the frozen ids on entering bulk mode and when the filter or count mode changes.
@@ -117,7 +123,10 @@ export function SetChecklist({
     const ids = filterTiles(checklistTiles(data, 'cards'), filter).map((t) => t.card.cardId)
     setFrozen({ filter, mode, ids: new Set(ids) })
   }
-  const bulkCards = data && frozen ? data.cards.filter((c) => frozen.ids.has(c.cardId)) : []
+  const bulkCards =
+    data && frozen
+      ? data.cards.filter((c) => frozen.ids.has(c.cardId) && matchesCardSearch(c, q))
+      : []
 
   const bumpPending = (cardId: number, by: 1 | -1): void =>
     setPending((p) => ({ ...p, [cardId]: (p[cardId] ?? 0) + by }))
@@ -201,6 +210,20 @@ export function SetChecklist({
           <div className="flex flex-wrap items-end gap-3 border-b border-white/[0.08]">
             <UnderlineTabs label="Show" value={filter} options={FILTERS} onChange={setFilter} />
             <div className="ml-auto flex flex-wrap items-center gap-3 pb-2">
+              <div className="relative w-52">
+                <Search
+                  className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+                  aria-hidden
+                />
+                <Input
+                  type="search"
+                  value={q}
+                  onChange={(e) => setQ(e.target.value)}
+                  placeholder="Search this set"
+                  aria-label="Search this set"
+                  className="h-8 pl-8"
+                />
+              </div>
               <ToggleGroup
                 type="single"
                 variant="outline"
@@ -251,6 +274,12 @@ export function SetChecklist({
           </div>
         </header>
 
+        {q.trim() !== '' && (bulk ? bulkCards : tiles).length === 0 && (
+          <p className="py-12 text-center text-sm text-muted-foreground">
+            No cards in this set match &ldquo;{q.trim()}&rdquo;
+          </p>
+        )}
+
         {bulk ? (
           <ul className="grid grid-cols-[repeat(auto-fill,minmax(14rem,1fr))] gap-3">
             {bulkCards.map((card) => (
@@ -278,7 +307,16 @@ export function SetChecklist({
                       !owned && 'grayscale opacity-40'
                     )}
                   >
-                    <CardArt imageId={t.card.imageId} size="small" alt="" className="w-full" />
+                    <CardArt
+                      imageId={t.card.imageId}
+                      printingId={
+                        (t.card.rarities.find((r) => r.rarity === t.rarity) ?? t.card.rarities[0])
+                          ?.defaultPrintingId
+                      }
+                      size="small"
+                      alt=""
+                      className="w-full"
+                    />
                     {owned && (
                       <span className="absolute right-2.5 top-2.5 rounded-full bg-primary px-1.5 text-xs font-semibold tabular-nums text-primary-foreground">
                         ×{t.owned}

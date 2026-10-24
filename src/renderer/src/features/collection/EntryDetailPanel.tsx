@@ -241,6 +241,7 @@ export function EntryDetailPanel({
           {entry && (
             <CardArt
               imageId={entry.imageId}
+              printingId={entry.printing.id}
               size="full"
               alt={entry.card.name}
               className="mx-auto w-48"

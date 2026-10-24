@@ -50,9 +50,19 @@ export function parseSetImageUrl(url: string): string | null {
   return /^ygo-img:\/\/set\/([A-Za-z0-9_-]+)\/?$/.exec(url)?.[1] ?? null
 }
 
+/** Parses `ygo-img://printing/<id>`; null unless the id is a positive integer. */
+export function parsePrintingImageUrl(url: string): number | null {
+  const m = /^ygo-img:\/\/printing\/(\d+)\/?$/.exec(url)
+  if (!m) return null
+  const id = Number(m[1])
+  return Number.isSafeInteger(id) && id > 0 ? id : null
+}
+
 export interface ImageCache {
   get(size: ImageSize, id: number): Promise<string | null>
   getSet(key: string): Promise<string | null>
+  /** The scan of one printing (from Yugipedia); null when it has none. */
+  getPrinting(printingId: number): Promise<string | null>
   sizeBytes(): Promise<number>
   clear(): Promise<void>
 }
@@ -69,6 +79,8 @@ export function createImageCache(opts: {
   version?: string
   /** Maps a `yp-` set-image key to its source URL (null when unknown). */
   resolveSetImage?: (key: string) => string | null
+  /** Finds the Yugipedia scan URL of a printing (null when none). */
+  resolvePrintingArt?: (printingId: number) => Promise<string | null>
 }): ImageCache {
   const fetchFn = opts.fetchFn ?? fetch
   const limit = opts.limit ?? defaultLimiter()
@@ -127,6 +139,21 @@ export function createImageCache(opts: {
         })
       }
       return cached(`set/${key}`, setImageUrl(key), path.join(opts.dir, 'sets', `${key}.jpg`))
+    },
+
+    async getPrinting(printingId) {
+      let remote: string | null
+      try {
+        remote = (await opts.resolvePrintingArt?.(printingId)) ?? null
+      } catch {
+        return null
+      }
+      const key = yugipediaImageKey(remote)
+      if (remote === null || key === null) return null
+      const ext = /\.(png|jpe?g|gif|webp)$/i.exec(remote)?.[1]?.toLowerCase() ?? 'png'
+      return cached(`printing/${key}`, remote, path.join(opts.dir, 'printings', `${key}.${ext}`), {
+        'User-Agent': `YugiohCollectionTracker/${opts.version ?? 'unknown'} (${REPO_URL})`
+      })
     },
 
     async sizeBytes() {

@@ -12,7 +12,13 @@ interface BulkCardProps {
 export function BulkCard({ card, busy, onAdjust }: BulkCardProps): React.JSX.Element {
   return (
     <li className="flex gap-2 rounded-lg border p-2">
-      <CardArt imageId={card.imageId} size="small" alt="" className="w-14 shrink-0" />
+      <CardArt
+        imageId={card.imageId}
+        printingId={card.rarities[0]?.defaultPrintingId}
+        size="small"
+        alt=""
+        className="w-14 shrink-0"
+      />
       <div className="min-w-0 flex-1 space-y-1.5">
         <div className="truncate text-xs font-medium">{card.name}</div>
         {card.rarities.map((r) => (

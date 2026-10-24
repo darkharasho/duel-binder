@@ -3,7 +3,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createLimiter } from '../../src/main/images/limiter'
-import { createImageCache, imageUrl, parseImageUrl, parseSetImageUrl, setImageKey, setImageUrl, yugipediaImageKey } from '../../src/main/images/cache'
+import { createImageCache, imageUrl, parseImageUrl, parsePrintingImageUrl, parseSetImageUrl, setImageKey, setImageUrl, yugipediaImageKey } from '../../src/main/images/cache'
 
 let dir: string
 beforeEach(async () => {
@@ -233,6 +233,45 @@ describe('yugipedia set images', () => {
     const fetchFn = vi.fn(async () => okResponse())
     const cache = createImageCache({ dir, fetchFn: fetchFn as unknown as typeof fetch, limit: noLimit })
     expect(await cache.getSet('yp-0123456789abcdef0123')).toBeNull()
+    expect(fetchFn).not.toHaveBeenCalled()
+  })
+})
+
+describe('printing scans', () => {
+  it('parsePrintingImageUrl accepts only positive integer ids', () => {
+    expect(parsePrintingImageUrl('ygo-img://printing/42')).toBe(42)
+    expect(parsePrintingImageUrl('ygo-img://printing/0')).toBeNull()
+    expect(parsePrintingImageUrl('ygo-img://printing/../x')).toBeNull()
+  })
+
+  it('downloads the resolved Yugipedia scan with the User-Agent, keeping its extension', async () => {
+    const fetchFn = vi.fn<(url: string, init?: RequestInit) => Promise<Response>>(async () =>
+      okResponse('png', 'image/png')
+    )
+    const cache = createImageCache({
+      dir,
+      fetchFn: fetchFn as unknown as typeof fetch,
+      limit: noLimit,
+      version: '9.9.9',
+      resolvePrintingArt: async (id) => (id === 1 ? 'https://ms.yugipedia.com/a/b/X-LOB-EN-UR-UE.png' : null)
+    })
+    const file = await cache.getPrinting(1)
+    expect(file).toMatch(/printings[\\/]yp-[0-9a-f]{20}\.png$/)
+    expect((fetchFn.mock.calls[0][1] as RequestInit).headers).toMatchObject({
+      'User-Agent': expect.stringContaining('9.9.9')
+    })
+    expect(await cache.getPrinting(2)).toBeNull()
+  })
+
+  it('refuses resolved URLs outside Yugipedia', async () => {
+    const fetchFn = vi.fn(async () => okResponse())
+    const cache = createImageCache({
+      dir,
+      fetchFn: fetchFn as unknown as typeof fetch,
+      limit: noLimit,
+      resolvePrintingArt: async () => 'https://evil.example/x.png'
+    })
+    expect(await cache.getPrinting(1)).toBeNull()
     expect(fetchFn).not.toHaveBeenCalled()
   })
 })

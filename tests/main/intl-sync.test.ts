@@ -49,7 +49,8 @@ function fake(pages: Record<string, string>): Fake {
       return out
     },
     fetchImageUrls: async (files) =>
-      new Map(files.map((n) => [n, `https://ms.yugipedia.com/x/${n}`]))
+      new Map(files.map((n) => [n, `https://ms.yugipedia.com/x/${n}`])),
+    listPageImages: async () => new Map()
   }
   return f
 }
@@ -185,7 +186,7 @@ describe('refreshIntlSets', () => {
     pages['Set Card Lists:S01 (OCG-JP)'] = listPage(['S-1; Dark Magician; SR'])
     pages['Set Card Lists:S51 (OCG-JP)'] = listPage(['S-51; Dark Magician; SR'])
     const second = fake(pages)
-    second.failCall = 1
+    second.failCall = 2 // batch 1: set lists (0), set pages (1); batch 2: set lists (2)
     const res = await refreshIntlSets(db, second.client, NOW)
     expect(res.ok).toBe(false)
     expect(res.failedSets).toBe(1)
@@ -342,5 +343,26 @@ describe('shouldRefreshIntl', () => {
   it('is true for an unparseable stamp', () => {
     db.prepare("INSERT INTO meta (key, value) VALUES ('intl_sets_synced_at', 'garbage')").run()
     expect(shouldRefreshIntl(db, NOW)).toBe(true)
+  })
+})
+
+describe('refreshIntlSets batching', () => {
+  it('saves each batch as it goes, new sets first, and reports each batch', async () => {
+    const db = await seededDb()
+    const pages: Record<string, string> = {}
+    for (let i = 1; i <= 60; i++) {
+      pages[`Set Card Lists:S${String(i).padStart(2, '0')} (OCG-JP)`] = listPage([
+        `S-${i}; Dark Magician; UR`
+      ])
+    }
+    const f = fake(pages)
+    const savedAtBatch: number[] = []
+    await refreshIntlSets(db, f.client, NOW, () => {
+      const { n } = db.prepare("SELECT count(*) AS n FROM sets WHERE language = 'ja'").get() as {
+        n: number
+      }
+      savedAtBatch.push(n)
+    })
+    expect(savedAtBatch).toEqual([50, 60])
   })
 })

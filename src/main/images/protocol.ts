@@ -1,6 +1,6 @@
 import { net, protocol } from 'electron'
 import { pathToFileURL } from 'node:url'
-import { parseImageUrl, parseSetImageUrl, type ImageCache } from './cache'
+import { parseImageUrl, parsePrintingImageUrl, parseSetImageUrl, type ImageCache } from './cache'
 
 const SCHEME = 'ygo-img'
 
@@ -13,6 +13,11 @@ export function registerImageScheme(): void {
 
 export function handleImageProtocol(cache: ImageCache): void {
   protocol.handle(SCHEME, async (request) => {
+    const printingId = parsePrintingImageUrl(request.url)
+    if (printingId !== null) {
+      const file = await cache.getPrinting(printingId)
+      return file ? net.fetch(pathToFileURL(file).toString()) : new Response('Not found', { status: 404 })
+    }
     const parsed = parseImageUrl(request.url)
     const setKey = parsed ? null : parseSetImageUrl(request.url)
     if (!parsed && !setKey) return new Response('Not found', { status: 404 })

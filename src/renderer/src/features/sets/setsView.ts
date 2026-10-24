@@ -118,3 +118,14 @@ export function replaceChecklistCard(cl: SetChecklist, card: ChecklistCard): Set
     cards
   }
 }
+
+/** Whether a checklist card matches a search: name, number label or any of its set codes. */
+export function matchesCardSearch(card: ChecklistCard, q: string): boolean {
+  const needle = q.trim().toLowerCase()
+  if (!needle) return true
+  return (
+    card.name.toLowerCase().includes(needle) ||
+    card.numberLabel.toLowerCase().includes(needle) ||
+    card.rarities.some((r) => r.codes.some((c) => c.setCode.toLowerCase().includes(needle)))
+  )
+}

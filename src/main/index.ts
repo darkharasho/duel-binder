@@ -15,6 +15,7 @@ import { createPriceService } from './prices/service'
 import { refreshIntlPrices } from './prices/refresh'
 import { createYugipediaClient } from './yugipedia/client'
 import { createPrintingArtResolver } from './yugipedia/artResolver'
+import { createTcgplayerLookup, refreshTcgCatalog, shouldRefreshTcgCatalog } from './tcgplayer/catalog'
 import { recordSnapshot } from './repo/stats'
 import { createImageCache } from './images/cache'
 import { handleImageProtocol, registerImageScheme } from './images/protocol'
@@ -107,7 +108,11 @@ function bootstrap(): void {
   const db = openDatabase(join(userData, 'collection.db'))
   // One Yugipedia client, so set syncs and art lookups share its request pacing.
   const yugipedia = createYugipediaClient({ version: app.getVersion() })
-  const printingArt = createPrintingArtResolver({ db, client: yugipedia })
+  const printingArt = createPrintingArtResolver({
+    db,
+    client: yugipedia,
+    quickUrl: createTcgplayerLookup(db)
+  })
   const images = createImageCache({
     dir: join(userData, 'images'),
     version: app.getVersion(),
@@ -206,6 +211,11 @@ function bootstrap(): void {
       }
     } else if (!hasSetData(db)) {
       changed = await refreshSets(db, client)
+    }
+    if (shouldRefreshTcgCatalog(db, new Date())) {
+      // A few minutes at most; English cards then show their TCGplayer photos.
+      const tcg = await refreshTcgCatalog(db, { version: app.getVersion() })
+      if (tcg.updatedGroups > 0) emitDataChanged()
     }
     const { n } = db.prepare('SELECT count(*) AS n FROM cards').get() as { n: number }
     if (n > 0 && shouldRefreshIntl(db, new Date())) {

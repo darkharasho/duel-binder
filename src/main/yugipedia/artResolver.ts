@@ -9,7 +9,7 @@ const BATCH_WAIT_MS = 40
 const RETRY_MISSING_MS = 30 * 24 * 60 * 60 * 1000
 
 export interface PrintingArtResolver {
-  /** URL of the Yugipedia scan of this printing, or null when there is none (yet). Never rejects. */
+  /** URL of this printing's own photo (TCGplayer's or Yugipedia's scan), or null when there is none (yet). Never rejects. */
   url(printingId: number): Promise<string | null>
 }
 
@@ -32,6 +32,8 @@ export function createPrintingArtResolver(opts: {
   client: YugipediaClient
   now?: () => Date
   batchWaitMs?: number
+  /** A photo found without asking Yugipedia (TCGplayer's, for English printings); checked first. */
+  quickUrl?: (printingId: number) => string | null
 }): PrintingArtResolver {
   const { db, client } = opts
   const now = opts.now ?? (() => new Date())
@@ -109,6 +111,8 @@ export function createPrintingArtResolver(opts: {
   return {
     url(printingId) {
       try {
+        const quick = opts.quickUrl?.(printingId)
+        if (quick) return Promise.resolve(quick)
         const row = stored.get(printingId) as { url: string | null; checked_at: string } | undefined
         if (row?.url) return Promise.resolve(row.url)
         if (row && now().getTime() - Date.parse(row.checked_at) < RETRY_MISSING_MS)

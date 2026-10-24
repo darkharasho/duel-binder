@@ -2,7 +2,8 @@ const API_URL = 'https://yugipedia.com/api.php'
 const REPO_URL = 'https://github.com/darkharasho/yugioh-collection-tracker'
 const IMAGE_URL_PREFIX = 'https://ms.yugipedia.com/'
 const SET_LIST_NAMESPACE = '3006'
-const TIMEOUT_MS = 30_000
+// Yugipedia can take 20-30s to answer a batch, so give it room before retrying.
+const TIMEOUT_MS = 90_000
 const MIN_GAP_MS = 500
 const CHUNK_SIZE = 50
 const BACKOFF_MS = [2000, 4000, 8000]

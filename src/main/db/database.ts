@@ -61,12 +61,21 @@ CREATE TABLE printing_art (printing_id INTEGER PRIMARY KEY REFERENCES card_print
   url TEXT, checked_at TEXT NOT NULL);
 `
 
+/** TCGplayer's Yu-Gi-Oh catalog (via TCGCSV), kept only as far as matching printings to photos. */
+export const SCHEMA_V5 = `
+CREATE TABLE tcgplayer_groups (group_id INTEGER PRIMARY KEY, modified_on TEXT NOT NULL);
+CREATE TABLE tcgplayer_products (product_id INTEGER PRIMARY KEY, group_id INTEGER NOT NULL,
+  number TEXT NOT NULL, rarity TEXT NOT NULL, image_url TEXT NOT NULL);
+CREATE INDEX tcgplayer_products_number ON tcgplayer_products(number COLLATE NOCASE);
+`
+
 /** Ordered schema steps. Append new versions to the end; never edit a shipped step. */
 const MIGRATIONS: Migration[] = [
   { version: 1, sql: SCHEMA_V1 },
   { version: 2, sql: SCHEMA_V2 },
   { version: 3, sql: SCHEMA_V3, foreignKeysOff: true },
-  { version: 4, sql: SCHEMA_V4 }
+  { version: 4, sql: SCHEMA_V4 },
+  { version: 5, sql: SCHEMA_V5 }
 ]
 
 export function openDatabase(file: string): Database.Database {

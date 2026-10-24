@@ -6,6 +6,7 @@ export type MetaKey =
   | 'intl_sets_synced_at'
   | 'price_service_status'
   | 'price_worker_url'
+  | 'tcgplayer_synced_at'
 
 export function getMeta(db: Database.Database, key: MetaKey): string | null {
   const row = db.prepare('SELECT value FROM meta WHERE key = ?').get(key) as

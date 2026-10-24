@@ -67,7 +67,8 @@ async function fetchChunked(
   for (const part of chunk(titles, CHUNK_SIZE)) {
     try {
       for (const [t, text] of await client.fetchPages(part)) pages.set(t, text)
-    } catch {
+    } catch (e) {
+      console.warn('Yugipedia page fetch failed:', e instanceof Error ? e.message : String(e))
       for (const t of part) failed.add(t)
     }
   }
@@ -113,6 +114,7 @@ async function run(
   onBatch?: () => void
 ): Promise<IntlSyncResult> {
   let allTitles: string[]
+  console.info('Yugipedia: listing set lists')
   try {
     allTitles = await client.listSetListTitles()
   } catch (e) {
@@ -133,6 +135,7 @@ async function run(
     return result
   }
   result.sets = jobs.length
+  console.info(`Yugipedia: ${jobs.length} non-English set lists to sync`)
 
   const cardIds = new Map<string, number>()
   const cardRows = db.prepare('SELECT id, name FROM cards ORDER BY id').all() as {
@@ -169,6 +172,7 @@ async function run(
     ...jobs.filter((j) => !storedSet.get(j.language, j.setName)),
     ...jobs.filter((j) => storedSet.get(j.language, j.setName))
   ]
+  let saved = 0
   // Each batch is fetched, parsed and saved on its own, so progress survives a quit mid-sync.
   for (const batch of chunk(ordered, CHUNK_SIZE)) {
     const listFetch = await fetchChunked(
@@ -249,6 +253,8 @@ async function run(
       seenSets.add(`${s.language}\u0000${s.setName}`)
     }
 
+    saved += loaded.length
+    console.info(`Yugipedia: saved ${saved} of ${jobs.length} set lists`)
     onBatch?.()
   }
 

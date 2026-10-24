@@ -41,6 +41,15 @@ export function yugipediaImageKey(url: string | null): string | null {
   return `yp-${createHash('sha1').update(url).digest('hex').slice(0, 20)}`
 }
 
+const TCGPLAYER_IMAGE_RE = /^https:\/\/tcgplayer-cdn\.tcgplayer\.com\/product\/\d+_in_1000x1000\.jpg$/
+
+/** Cache key of a printing photo: Yugipedia scans as for set images, TCGplayer photos as 'tp-'. */
+export function printingImageKey(url: string | null): string | null {
+  if (url !== null && TCGPLAYER_IMAGE_RE.test(url))
+    return `tp-${createHash('sha1').update(url).digest('hex').slice(0, 20)}`
+  return yugipediaImageKey(url)
+}
+
 export function setImageUrl(key: string): string {
   return `https://images.ygoprodeck.com/images/sets/${key}.jpg`
 }
@@ -79,7 +88,7 @@ export function createImageCache(opts: {
   version?: string
   /** Maps a `yp-` set-image key to its source URL (null when unknown). */
   resolveSetImage?: (key: string) => string | null
-  /** Finds the Yugipedia scan URL of a printing (null when none). */
+  /** Finds the photo URL of a printing, Yugipedia or TCGplayer (null when none). */
   resolvePrintingArt?: (printingId: number) => Promise<string | null>
 }): ImageCache {
   const fetchFn = opts.fetchFn ?? fetch
@@ -148,7 +157,7 @@ export function createImageCache(opts: {
       } catch {
         return null
       }
-      const key = yugipediaImageKey(remote)
+      const key = printingImageKey(remote)
       if (remote === null || key === null) return null
       const ext = /\.(png|jpe?g|gif|webp)$/i.exec(remote)?.[1]?.toLowerCase() ?? 'png'
       return cached(`printing/${key}`, remote, path.join(opts.dir, 'printings', `${key}.${ext}`), {

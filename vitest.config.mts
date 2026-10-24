@@ -30,6 +30,14 @@ export default defineConfig({
           include: ['tests/renderer/**/*.test.{ts,tsx}'],
           setupFiles: ['tests/renderer/setup.ts']
         }
+      },
+      {
+        test: {
+          name: 'workers',
+          environment: 'node',
+          globals: true,
+          include: ['workers/**/test/*.test.js']
+        }
       }
     ]
   }

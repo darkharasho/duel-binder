@@ -1,0 +1,191 @@
+import worker, { resetTokenCache } from '../src/index.js'
+
+const APP = 'test-app-id-SECRET'
+const CERT = 'test-cert-id-SECRET'
+const TOKEN = 'test-token-SECRET'
+
+function makeKv() {
+  const store = new Map()
+  return {
+    store,
+    get: vi.fn(async (k) => store.get(k) ?? null),
+    put: vi.fn(async (k, v, opts) => {
+      store.set(k, v)
+      store.opts = opts
+    })
+  }
+}
+
+const json = (body, status = 200) =>
+  new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
+
+function items(titles, value = '10.00') {
+  return {
+    itemSummaries: titles.map((title, i) => ({
+      title,
+      price: { value: String(Number(value) + i), currency: 'USD' }
+    }))
+  }
+}
+
+function makeFetch(searchResponses) {
+  const calls = []
+  const queue = [...searchResponses]
+  const fn = vi.fn(async (url) => {
+    calls.push(String(url))
+    if (String(url).includes('/identity/v1/oauth2/token')) {
+      return json({ access_token: TOKEN, expires_in: 7200 })
+    }
+    return queue.shift() ?? json(items([]))
+  })
+  fn.calls = calls
+  return fn
+}
+
+const URL_OK =
+  'https://w.test/v1/price?code=LOB-DE001&name=Blue-Eyes%20White%20Dragon&set=Legend&rarity=Ultra%20Rare&lang=de'
+const req = (url = URL_OK, headers = { 'X-Client': 'ygo-collection-tracker' }, method = 'GET') =>
+  new Request(url, { method, headers })
+
+let env
+let errSpy
+let logSpy
+
+beforeEach(() => {
+  resetTokenCache()
+  env = { PRICES: makeKv(), EBAY_APP_ID: APP, EBAY_CERT_ID: CERT }
+  errSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+  logSpy = vi.spyOn(console, 'log').mockImplementation(() => {})
+})
+afterEach(() => {
+  vi.unstubAllGlobals()
+  vi.restoreAllMocks()
+})
+
+describe('GET /v1/price', () => {
+  it('returns the contract shape', async () => {
+    vi.stubGlobal(
+      'fetch',
+      makeFetch([json(items(['LOB-DE001 Blue-Eyes', 'lob-de001 holo', 'LOB-DE001 x'], '10'))])
+    )
+    const res = await worker.fetch(req(), env)
+    expect(res.status).toBe(200)
+    expect(res.headers.get('content-type')).toContain('application/json')
+    const body = await res.json()
+    expect(body).toEqual({
+      price: 11,
+      listingCount: 3,
+      currency: 'USD',
+      checkedAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/)
+    })
+    expect(env.PRICES.store.opts).toEqual({ expirationTtl: 604800 })
+  })
+
+  it('sends the OAuth and Browse requests as specified', async () => {
+    const f = makeFetch([json(items(['LOB-DE001 a', 'LOB-DE001 b']))])
+    vi.stubGlobal('fetch', f)
+    await worker.fetch(req(), env)
+    expect(f.calls[0]).toBe('https://api.ebay.com/identity/v1/oauth2/token')
+    expect(f.calls[1]).toContain('https://api.ebay.com/buy/browse/v1/item_summary/search?')
+    expect(f.calls[1]).toContain('category_ids=31395')
+    expect(f.calls[1]).toContain('limit=50')
+    const [, init] = f.mock.calls[0]
+    expect(init.headers.Authorization).toBe(`Basic ${btoa(`${APP}:${CERT}`)}`)
+    expect(init.body).toBe(
+      'grant_type=client_credentials&scope=https%3A%2F%2Fapi.ebay.com%2Foauth%2Fapi_scope'
+    )
+    expect(f.mock.calls[1][1].headers['X-EBAY-C-MARKETPLACE-ID']).toBe('EBAY_US')
+  })
+
+  it('rejects a missing or wrong X-Client header', async () => {
+    vi.stubGlobal('fetch', makeFetch([]))
+    for (const headers of [{}, { 'X-Client': 'nope' }]) {
+      const res = await worker.fetch(req(URL_OK, headers), env)
+      expect(res.status).toBe(400)
+      expect(await res.json()).toEqual({ error: 'bad request' })
+    }
+  })
+
+  it('rejects bad params', async () => {
+    vi.stubGlobal('fetch', makeFetch([]))
+    for (const q of [
+      'code=A-1&name=&set=s&rarity=r&lang=de',
+      'code=A-1&name=x&set=s&rarity=r&lang=xx'
+    ]) {
+      const res = await worker.fetch(req(`https://w.test/v1/price?${q}`), env)
+      expect(res.status).toBe(400)
+    }
+  })
+
+  it('rejects non-GET with 405', async () => {
+    const res = await worker.fetch(
+      req(URL_OK, { 'X-Client': 'ygo-collection-tracker' }, 'POST'),
+      env
+    )
+    expect(res.status).toBe(405)
+  })
+
+  it('serves the second identical request from KV without calling eBay', async () => {
+    const f = makeFetch([json(items(['LOB-DE001 a', 'LOB-DE001 b']))])
+    vi.stubGlobal('fetch', f)
+    const first = await (await worker.fetch(req(), env)).json()
+    f.mockClear()
+    const second = await (await worker.fetch(req(), env)).json()
+    expect(f).not.toHaveBeenCalled()
+    expect(second).toEqual(first)
+  })
+
+  it('caches a fallback result under the original request', async () => {
+    const f = makeFetch([
+      json(items(['LOB-DE001 only one'])),
+      json(items(['LOB-DE001 a', 'LOB-DE001 b', 'LOB-DE001 c']))
+    ])
+    vi.stubGlobal('fetch', f)
+    await worker.fetch(req(), env)
+    f.mockClear()
+    await worker.fetch(req(), env)
+    expect(f).not.toHaveBeenCalled()
+  })
+
+  it('searches again without rarity when fewer than 2 listings match', async () => {
+    const f = makeFetch([
+      json(items(['LOB-DE001 only one', 'unrelated card'])),
+      json(items(['LOB-DE001 a', 'LOB-DE001 b', 'LOB-DE001 c']))
+    ])
+    vi.stubGlobal('fetch', f)
+    const body = await (await worker.fetch(req(), env)).json()
+    const searches = f.calls.filter((u) => u.includes('item_summary'))
+    expect(searches).toHaveLength(2)
+    expect(decodeURIComponent(searches[0].replaceAll('+', ' '))).toContain('Ultra Rare')
+    expect(decodeURIComponent(searches[1].replaceAll('+', ' '))).not.toContain('Ultra Rare')
+    expect(body.listingCount).toBe(3)
+  })
+
+  it('returns 502 when OAuth fails and leaks no secrets', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => json({ error: 'invalid_client', echo: `${APP}${CERT}` }, 401))
+    )
+    const res = await worker.fetch(req(), env)
+    const text = await res.text()
+    expect(res.status).toBe(502)
+    expect(JSON.parse(text)).toEqual({ error: 'upstream' })
+    const logged = JSON.stringify([...errSpy.mock.calls, ...logSpy.mock.calls])
+    for (const s of [APP, CERT, TOKEN, btoa(`${APP}:${CERT}`)]) {
+      expect(text).not.toContain(s)
+      expect(logged).not.toContain(s)
+    }
+  })
+
+  it('retries a 503 from Browse and then succeeds', async () => {
+    vi.useFakeTimers()
+    const f = makeFetch([json({}, 503), json(items(['LOB-DE001 a', 'LOB-DE001 b']))])
+    vi.stubGlobal('fetch', f)
+    const p = worker.fetch(req(), env)
+    await vi.runAllTimersAsync()
+    const res = await p
+    vi.useRealTimers()
+    expect(res.status).toBe(200)
+    expect(f.calls.filter((u) => u.includes('item_summary'))).toHaveLength(2)
+  })
+})

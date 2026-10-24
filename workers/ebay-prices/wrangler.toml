@@ -1,0 +1,7 @@
+name = "ygo-ebay-prices"
+main = "src/index.js"
+compatibility_date = "2026-10-01"
+
+[[kv_namespaces]]
+binding = "PRICES"
+id = "REPLACE_WITH_KV_NAMESPACE_ID"

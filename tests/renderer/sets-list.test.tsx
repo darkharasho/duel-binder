@@ -7,6 +7,7 @@ import { createMockApi, renderWithProviders } from './mockApi'
 import { metalRaidersChecklist } from './setFixtures'
 
 const set = (o: Partial<SetSummary>): SetSummary => ({
+  language: 'en',
   setName: 'Set',
   setCode: 'SET',
   tcgDate: '2002-06-26',
@@ -15,6 +16,8 @@ const set = (o: Partial<SetSummary>): SetSummary => ({
   ownedCards: 0,
   totalRarities: 1,
   ownedRarities: 0,
+  listRows: null,
+  unmatchedRows: null,
   ...o
 })
 

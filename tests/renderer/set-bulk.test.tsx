@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { toast } from 'sonner'
 import type { Mock } from 'vitest'
 import type { Api } from '@shared/ipc'
+import type { Language } from '@shared/languages'
 import type { ChecklistCard } from '@shared/types'
 import { SetChecklist } from '@/features/sets/SetChecklist'
 import { queryKeys } from '@/lib/api'
@@ -32,7 +33,7 @@ function createAdjust(): {
 
   const queue: (() => void)[] = []
   const adjust = vi.fn<Api['sets']['adjust']>(
-    (_setName: string, printingId: number, delta: 1 | -1) =>
+    (_setName: string, _language: Language, printingId: number, delta: 1 | -1) =>
       new Promise<ChecklistCard>((resolve) => {
         queue.push(() => {
           owned.set(printingId, owned.get(printingId)! + delta)
@@ -103,7 +104,7 @@ describe('SetChecklist bulk mode', () => {
     await userEvent.click(plus)
     await userEvent.click(plus)
     expect(adjust).toHaveBeenCalledTimes(1)
-    expect(adjust).toHaveBeenCalledWith('Metal Raiders', PRINTING.gammaEN010, 1)
+    expect(adjust).toHaveBeenCalledWith('Metal Raiders', 'en', PRINTING.gammaEN010, 1)
     expect(within(row('Gamma Trap Rare')).getByText('0')).toBeInTheDocument()
 
     releaseNext()
@@ -115,7 +116,7 @@ describe('SetChecklist bulk mode', () => {
     await waitFor(() => expect(within(row('Gamma Trap Rare')).getByText('3')).toBeInTheDocument())
     expect(adjust).toHaveBeenCalledTimes(3)
     for (const call of adjust.mock.calls)
-      expect(call).toEqual(['Metal Raiders', PRINTING.gammaEN010, 1])
+      expect(call).toEqual(['Metal Raiders', 'en', PRINTING.gammaEN010, 1])
   })
 
   it('cancels in-flight checklist fetches before writing a bulk result', async () => {
@@ -124,7 +125,9 @@ describe('SetChecklist bulk mode', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Add one Gamma Trap Rare' }))
     releaseNext()
     await waitFor(() =>
-      expect(cancel).toHaveBeenCalledWith({ queryKey: queryKeys.setChecklist('Metal Raiders') })
+      expect(cancel).toHaveBeenCalledWith({
+        queryKey: queryKeys.setChecklist('Metal Raiders', 'en')
+      })
     )
   })
 
@@ -142,11 +145,11 @@ describe('SetChecklist bulk mode', () => {
       screen.getByRole('button', { name: 'Remove one Alpha Dragon Ultra Rare' })
     )
     expect(adjust).toHaveBeenCalledTimes(1)
-    expect(adjust).toHaveBeenNthCalledWith(1, 'Metal Raiders', PRINTING.alphaSecret, 1)
+    expect(adjust).toHaveBeenNthCalledWith(1, 'Metal Raiders', 'en', PRINTING.alphaSecret, 1)
 
     releaseNext()
     await waitFor(() => expect(adjust).toHaveBeenCalledTimes(2))
-    expect(adjust).toHaveBeenNthCalledWith(2, 'Metal Raiders', PRINTING.alphaUltraE001, -1)
+    expect(adjust).toHaveBeenNthCalledWith(2, 'Metal Raiders', 'en', PRINTING.alphaUltraE001, -1)
     releaseNext()
 
     await waitFor(() =>
@@ -168,7 +171,7 @@ describe('SetChecklist bulk mode', () => {
     )
     await userEvent.click(await screen.findByRole('option', { name: 'MRD-001' }))
     await userEvent.click(screen.getByRole('button', { name: 'Add one Alpha Dragon Ultra Rare' }))
-    expect(adjust).toHaveBeenCalledWith('Metal Raiders', PRINTING.alphaUltra001, 1)
+    expect(adjust).toHaveBeenCalledWith('Metal Raiders', 'en', PRINTING.alphaUltra001, 1)
   })
 
   it('a failed adjust toasts and keeps the count', async () => {

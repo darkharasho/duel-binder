@@ -1,26 +1,31 @@
 import type Database from 'better-sqlite3'
 import { pickDefaultCode, setNumber, setPrefix } from '../../shared/sets'
 import type { ChecklistCard, ChecklistRarity, SetChecklist, SetSummary } from '../../shared/types'
+import type { Language } from '../../shared/languages'
 import { setImageKey } from '../images/cache'
 import { addEntry, CollectionError } from './collection'
 
 interface SummaryDbRow {
+  language: Language
   set_name: string
   s_code: string | null
   min_code: string
   tcg_date: string | null
   image_url: string | null
   image_key: string | null
+  list_rows: number | null
+  unmatched_rows: number | null
   total_cards: number
   owned_cards: number
   total_rarities: number
   owned_rarities: number
 }
 
-// One row per distinct set_name. A (card, rarity) pair is keyed as "<card_id>|<rarity>";
+// One row per distinct (language, set_name). A (card, rarity) pair is keyed as "<card_id>|<rarity>";
 // card_id is an integer, so the first "|" always ends it.
 const SUMMARY = `
-  SELECT p.set_name, s.set_code AS s_code, MIN(p.set_code) AS min_code, s.tcg_date, s.image_url, s.image_key,
+  SELECT p.language, p.set_name, s.set_code AS s_code, MIN(p.set_code) AS min_code, s.tcg_date, s.image_url,
+         s.image_key, s.list_rows, s.unmatched_rows,
          COUNT(DISTINCT p.card_id) AS total_cards,
          COUNT(DISTINCT CASE WHEN o.printing_id IS NOT NULL THEN p.card_id END) AS owned_cards,
          COUNT(DISTINCT p.card_id || '|' || p.set_rarity) AS total_rarities,
@@ -28,10 +33,11 @@ const SUMMARY = `
            AS owned_rarities
   FROM card_printings p
   LEFT JOIN (SELECT DISTINCT printing_id FROM collection_entries) o ON o.printing_id = p.id
-  LEFT JOIN sets s ON s.set_name = p.set_name`
+  LEFT JOIN sets s ON s.language = p.language AND s.set_name = p.set_name`
 
 function toSummary(r: SummaryDbRow): SetSummary {
   return {
+    language: r.language,
     setName: r.set_name,
     setCode: r.s_code ? r.s_code : setPrefix(r.min_code),
     tcgDate: r.tcg_date,
@@ -39,13 +45,15 @@ function toSummary(r: SummaryDbRow): SetSummary {
     totalCards: r.total_cards,
     ownedCards: r.owned_cards,
     totalRarities: r.total_rarities,
-    ownedRarities: r.owned_rarities
+    ownedRarities: r.owned_rarities,
+    listRows: r.list_rows,
+    unmatchedRows: r.unmatched_rows
   }
 }
 
-/** Completion summary of every set; unsorted. */
+/** Completion summary of every (language, set); English first within a name. */
 export function listSets(db: Database.Database): SetSummary[] {
-  return (db.prepare(`${SUMMARY} GROUP BY p.set_name`).all() as SummaryDbRow[]).map(toSummary)
+  return (db.prepare(`${SUMMARY} GROUP BY p.language, p.set_name ORDER BY p.set_name, p.language <> 'en', p.language`).all() as SummaryDbRow[]).map(toSummary)
 }
 
 interface PrintingDbRow {
@@ -84,23 +92,28 @@ function latest(entries: EntryDbRow[]): number | null {
 const sum = (entries: EntryDbRow[]): number => entries.reduce((n, e) => n + e.quantity, 0)
 
 /** Checklist cards of a set, optionally limited to one card, sorted by number (nulls last) then name. */
-function checklistCards(db: Database.Database, setName: string, cardId?: number): ChecklistCard[] {
+function checklistCards(
+  db: Database.Database,
+  setName: string,
+  language: Language,
+  cardId?: number
+): ChecklistCard[] {
   const cardFilter = cardId === undefined ? '' : ' AND p.card_id = ?'
-  const params = cardId === undefined ? [setName] : [setName, cardId]
+  const params = cardId === undefined ? [language, setName] : [language, setName, cardId]
   const printings = db
     .prepare(
       `SELECT p.id, p.card_id, p.set_code, p.set_rarity, c.name, c.type,
               (SELECT i.image_id FROM card_images i WHERE i.card_id = c.id
                ORDER BY i.sort_order, i.image_id LIMIT 1) AS image_id
        FROM card_printings p JOIN cards c ON c.id = p.card_id
-       WHERE p.set_name = ?${cardFilter}`
+       WHERE p.language = ? AND p.set_name = ?${cardFilter}`
     )
     .all(...params) as PrintingDbRow[]
   const entries = db
     .prepare(
       `SELECT e.id, e.printing_id, e.quantity, e.updated_at
        FROM collection_entries e JOIN card_printings p ON p.id = e.printing_id
-       WHERE p.set_name = ?${cardFilter}`
+       WHERE p.language = ? AND p.set_name = ?${cardFilter}`
     )
     .all(...params) as EntryDbRow[]
 
@@ -173,12 +186,17 @@ function checklistCards(db: Database.Database, setName: string, cardId?: number)
   })
 }
 
-/** The set's summary and checklist; null when no printing has that set_name. */
-export function getChecklist(db: Database.Database, setName: string): SetChecklist | null {
-  const row = db.prepare(`${SUMMARY} WHERE p.set_name = ? GROUP BY p.set_name`).get(setName) as
-    SummaryDbRow | undefined
+/** The set's summary and checklist; null when no printing has that set_name in that language. */
+export function getChecklist(
+  db: Database.Database,
+  setName: string,
+  language: Language
+): SetChecklist | null {
+  const row = db
+    .prepare(`${SUMMARY} WHERE p.language = ? AND p.set_name = ? GROUP BY p.language, p.set_name`)
+    .get(language, setName) as SummaryDbRow | undefined
   if (!row) return null
-  return { set: toSummary(row), cards: checklistCards(db, setName) }
+  return { set: toSummary(row), cards: checklistCards(db, setName, language) }
 }
 
 /**
@@ -189,6 +207,7 @@ export function getChecklist(db: Database.Database, setName: string): SetCheckli
 export function adjustPrinting(
   db: Database.Database,
   setName: string,
+  language: Language,
   printingId: number,
   delta: 1 | -1,
   now = new Date()
@@ -196,10 +215,10 @@ export function adjustPrinting(
   if (delta !== 1 && delta !== -1) throw new CollectionError('Adjustment must be +1 or -1')
   return db.transaction(() => {
     const p = db
-      .prepare('SELECT card_id, set_name FROM card_printings WHERE id = ?')
-      .get(printingId) as { card_id: number; set_name: string } | undefined
-    if (!p || p.set_name !== setName)
-      throw new CollectionError(`Printing ${printingId} is not in ${setName}`)
+      .prepare('SELECT card_id, set_name, language FROM card_printings WHERE id = ?')
+      .get(printingId) as { card_id: number; set_name: string; language: Language } | undefined
+    if (!p || p.set_name !== setName || p.language !== language)
+      throw new CollectionError(`Printing ${printingId} is not in ${setName} (${language})`)
     const original = db
       .prepare(
         'SELECT image_id FROM card_images WHERE card_id = ? ORDER BY sort_order, image_id LIMIT 1'
@@ -224,6 +243,6 @@ export function adjustPrinting(
         db.prepare('DELETE FROM collection_entries WHERE id = ?').run(entry.id)
       }
     }
-    return checklistCards(db, setName, p.card_id)[0]
+    return checklistCards(db, setName, language, p.card_id)[0]
   })()
 }

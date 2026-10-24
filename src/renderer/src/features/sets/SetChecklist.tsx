@@ -67,8 +67,8 @@ export function SetChecklist({
   const qc = useQueryClient()
 
   const checklist = useQuery({
-    queryKey: queryKeys.setChecklist(setName),
-    queryFn: () => api.sets.checklist(setName)
+    queryKey: queryKeys.setChecklist(setName, 'en'),
+    queryFn: () => api.sets.checklist(setName, 'en')
   })
   const data = checklist.data
   const tiles = useMemo(
@@ -96,9 +96,9 @@ export function SetChecklist({
     }
     bumpPending(cardId, 1)
     queue(async () => {
-      const card = await api.sets.adjust(setName, printingId, delta)
-      await qc.cancelQueries({ queryKey: queryKeys.setChecklist(setName) })
-      qc.setQueryData<SetChecklistData | null>(queryKeys.setChecklist(setName), (old) =>
+      const card = await api.sets.adjust(setName, 'en', printingId, delta)
+      await qc.cancelQueries({ queryKey: queryKeys.setChecklist(setName, 'en') })
+      qc.setQueryData<SetChecklistData | null>(queryKeys.setChecklist(setName, 'en'), (old) =>
         old ? replaceChecklistCard(old, card) : old
       )
       void qc.invalidateQueries({ queryKey: [...queryKeys.setsList] })

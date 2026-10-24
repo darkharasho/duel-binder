@@ -1,3 +1,4 @@
+import type { Language } from './languages'
 import type {
   AddEntryInput,
   CardDetail,
@@ -33,8 +34,8 @@ export interface Api {
   }
   sets: {
     list(): Promise<SetSummary[]>
-    checklist(setName: string): Promise<SetChecklist | null>
-    adjust(setName: string, printingId: number, delta: 1 | -1): Promise<ChecklistCard>
+    checklist(setName: string, language: Language): Promise<SetChecklist | null>
+    adjust(setName: string, language: Language, printingId: number, delta: 1 | -1): Promise<ChecklistCard>
   }
   sync: {
     status(): Promise<SyncStatus>

@@ -13,6 +13,7 @@ export const PRINTING = {
 
 export const metalRaidersChecklist: SetChecklist = {
   set: {
+    language: 'en',
     setName: 'Metal Raiders',
     setCode: 'MRD',
     tcgDate: '2002-06-26',
@@ -20,7 +21,9 @@ export const metalRaidersChecklist: SetChecklist = {
     totalCards: 3,
     ownedCards: 1,
     totalRarities: 4,
-    ownedRarities: 1
+    ownedRarities: 1,
+    listRows: null,
+    unmatchedRows: null
   },
   cards: [
     {

@@ -12,6 +12,7 @@ import { createSerialQueue } from '@/lib/serialQueue'
 import { metalRaidersChecklist } from './setFixtures'
 
 const mk = (o: Partial<SetSummary>): SetSummary => ({
+  language: 'en',
   setName: 'Set',
   setCode: 'SET',
   tcgDate: null,
@@ -20,6 +21,8 @@ const mk = (o: Partial<SetSummary>): SetSummary => ({
   ownedCards: 0,
   totalRarities: 120,
   ownedRarities: 0,
+  listRows: null,
+  unmatchedRows: null,
   ...o
 })
 

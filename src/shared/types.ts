@@ -128,6 +128,7 @@ export interface UpdateStatus {
 export type CountMode = 'cards' | 'rarities'
 
 export interface SetSummary {
+  language: Language
   setName: string
   setCode: string // sets.set_code, else setPrefix of the set's lowest printing code
   tcgDate: string | null // 'YYYY-MM-DD'
@@ -136,6 +137,8 @@ export interface SetSummary {
   ownedCards: number
   totalRarities: number
   ownedRarities: number
+  listRows: number | null // Yugipedia list rows; null for English
+  unmatchedRows: number | null // rows not matched to a card; null for English
 }
 
 export interface ChecklistCode {

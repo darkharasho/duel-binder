@@ -98,6 +98,9 @@ describe('listSets', () => {
     const sets = listSets(db)
     expect(sets).toHaveLength(2)
     expect(sets).toContainEqual({
+      language: 'en',
+      listRows: null,
+      unmatchedRows: null,
       setName: 'Metal Raiders',
       setCode: 'MRD',
       tcgDate: '2002-06-26',
@@ -108,6 +111,9 @@ describe('listSets', () => {
       ownedRarities: 0
     })
     expect(sets).toContainEqual({
+      language: 'en',
+      listRows: null,
+      unmatchedRows: null,
       setName: 'Starter Deck',
       setCode: 'SDY',
       tcgDate: null,
@@ -135,7 +141,7 @@ describe('getChecklist', () => {
   it('orders cards and fills fields', async () => {
     const db = await setup()
     own(db, 'MRD-E001', 'Ultra Rare', 1001, 2)
-    const list = getChecklist(db, MRD)!
+    const list = getChecklist(db, MRD, 'en')!
     expect(list.set.setName).toBe(MRD)
     expect(list.cards.map((c) => c.cardId)).toEqual([1001, 2001, 3001])
     expect(list.cards.map((c) => c.numberLabel)).toEqual(['001', '002', '010'])
@@ -156,7 +162,7 @@ describe('getChecklist', () => {
 
   it('returns null for an unknown set', async () => {
     const db = await setup()
-    expect(getChecklist(db, 'Nope')).toBeNull()
+    expect(getChecklist(db, 'Nope', 'en')).toBeNull()
   })
 
   it('still counts printings missing from the API', async () => {
@@ -170,7 +176,7 @@ describe('getChecklist', () => {
     expect(flagged).toEqual({ m: 1 })
     const mrd = listSets(db).find((x) => x.setName === MRD)!
     expect(mrd).toMatchObject({ totalCards: 3, ownedCards: 2 })
-    const gamma = getChecklist(db, MRD)!.cards.find((c) => c.cardId === 3001)!
+    const gamma = getChecklist(db, MRD, 'en')!.cards.find((c) => c.cardId === 3001)!
     expect(gamma.owned).toBe(1)
   })
 })
@@ -182,23 +188,23 @@ describe('adjustPrinting', () => {
     let t = Date.parse('2026-10-23T13:00:00.000Z')
     const next = (): Date => new Date((t += 1000))
 
-    adjustPrinting(db, MRD, id, 1, next())
-    const card = adjustPrinting(db, MRD, id, 1, next())
+    adjustPrinting(db, MRD, 'en', id, 1, next())
+    const card = adjustPrinting(db, MRD, 'en', id, 1, next())
     expect(entries(db)).toEqual([{ imageId: 1001, quantity: 2 }])
     expect(card.cardId).toBe(1001)
     expect(ur(card).owned).toBe(2)
 
     addEntry(db, { printingId: id, imageId: 1002, quantity: 1 }, next())
-    adjustPrinting(db, MRD, id, -1, next())
+    adjustPrinting(db, MRD, 'en', id, -1, next())
     expect(entries(db)).toEqual([
       { imageId: 1001, quantity: 1 },
       { imageId: 1002, quantity: 1 }
     ])
-    adjustPrinting(db, MRD, id, -1, next())
+    adjustPrinting(db, MRD, 'en', id, -1, next())
     expect(entries(db)).toEqual([{ imageId: 1002, quantity: 1 }])
-    adjustPrinting(db, MRD, id, -1, next())
+    adjustPrinting(db, MRD, 'en', id, -1, next())
     expect(entries(db)).toEqual([])
-    const after = adjustPrinting(db, MRD, id, -1, next())
+    const after = adjustPrinting(db, MRD, 'en', id, -1, next())
     expect(entries(db)).toEqual([])
     expect(ur(after).owned).toBe(0)
   })
@@ -211,7 +217,7 @@ describe('adjustPrinting', () => {
       { printingId: id, imageId: 1001, quantity: 2 },
       new Date('2026-10-23T13:00:00.000Z')
     )
-    adjustPrinting(db, MRD, id, -1, new Date('2026-10-24T09:00:00.000Z'))
+    adjustPrinting(db, MRD, 'en', id, -1, new Date('2026-10-24T09:00:00.000Z'))
     expect(db.prepare('SELECT quantity, updated_at AS u FROM collection_entries').get()).toEqual({
       quantity: 1,
       u: '2026-10-24T09:00:00.000Z'
@@ -220,10 +226,75 @@ describe('adjustPrinting', () => {
 
   it('rejects a printing from another set', async () => {
     const db = await setup()
-    expect(() => adjustPrinting(db, 'Starter Deck', pid(db, 'MRD-001', 'Ultra Rare'), 1)).toThrow(
+    expect(() => adjustPrinting(db, 'Starter Deck', 'en', pid(db, 'MRD-001', 'Ultra Rare'), 1)).toThrow(
       CollectionError
     )
-    expect(() => adjustPrinting(db, MRD, 999999, 1)).toThrow(CollectionError)
+    expect(() => adjustPrinting(db, MRD, 'en', 999999, 1)).toThrow(CollectionError)
     expect(entries(db)).toEqual([])
+  })
+})
+
+describe('language-aware sets', () => {
+  /** The English fixture plus a Japanese Metal Raiders: Alpha (Ultra, Secret) and Beta (Common). */
+  async function withJapanese(): Promise<{ db: Database.Database; jaUltra: number }> {
+    const db = await setup()
+    db.prepare(
+      `INSERT INTO sets (language, set_name, set_code, tcg_date, image_url, list_rows, unmatched_rows)
+       VALUES ('ja', ?, '', NULL, NULL, 9, 2)`
+    ).run(MRD)
+    const ins = db.prepare(
+      `INSERT INTO card_printings (card_id, language, set_name, set_code, set_rarity, set_rarity_code,
+         set_price, missing_from_api) VALUES (?, 'ja', ?, '', ?, '', NULL, 0)`
+    )
+    const jaUltra = Number(ins.run(1001, MRD, 'Ultra Rare').lastInsertRowid)
+    ins.run(1001, MRD, 'Secret Rare')
+    ins.run(2001, MRD, 'Common')
+    return { db, jaUltra }
+  }
+
+  it('lists the Japanese and English LOB separately', async () => {
+    const { db } = await withJapanese()
+    const mrd = listSets(db).filter((x) => x.setName === MRD)
+    expect(mrd.map((x) => x.language)).toEqual(['en', 'ja'])
+    expect(mrd[0]).toMatchObject({ totalCards: 3, totalRarities: 4, setCode: 'MRD' })
+    expect(mrd[1]).toMatchObject({ totalCards: 2, totalRarities: 3, tcgDate: null })
+  })
+
+  it('owning the Japanese copy fills only the Japanese set', async () => {
+    const { db, jaUltra } = await withJapanese()
+    addEntry(db, { printingId: jaUltra, imageId: 1001, quantity: 1 })
+    const mrd = listSets(db).filter((x) => x.setName === MRD)
+    expect(mrd[0]).toMatchObject({ language: 'en', ownedCards: 0, ownedRarities: 0 })
+    expect(mrd[1]).toMatchObject({ language: 'ja', ownedCards: 1, ownedRarities: 1 })
+  })
+
+  it('summary carries listRows and unmatchedRows, null for English', async () => {
+    const { db } = await withJapanese()
+    const [en, ja] = listSets(db).filter((x) => x.setName === MRD)
+    expect(en).toMatchObject({ listRows: null, unmatchedRows: null })
+    expect(ja).toMatchObject({ listRows: 9, unmatchedRows: 2 })
+  })
+
+  it('getChecklist returns only that language', async () => {
+    const { db, jaUltra } = await withJapanese()
+    const ja = getChecklist(db, MRD, 'ja')!
+    expect(ja.set.language).toBe('ja')
+    expect(ja.cards.map((c) => c.cardId)).toEqual([1001, 2001])
+    const ids = ja.cards.flatMap((c) => c.rarities.flatMap((r) => r.codes.map((x) => x.printingId)))
+    expect(ids).toHaveLength(3)
+    expect(ids).toContain(jaUltra)
+    const en = getChecklist(db, MRD, 'en')!
+    expect(en.cards.map((c) => c.cardId)).toEqual([1001, 2001, 3001])
+    expect(getChecklist(db, 'Starter Deck', 'ja')).toBeNull()
+  })
+
+  it('adjustPrinting refuses a printing from the other language', async () => {
+    const { db, jaUltra } = await withJapanese()
+    expect(() => adjustPrinting(db, MRD, 'en', jaUltra, 1)).toThrow(CollectionError)
+    expect(() => adjustPrinting(db, MRD, 'ja', pid(db, 'MRD-001', 'Ultra Rare'), 1)).toThrow(
+      CollectionError
+    )
+    expect(entries(db)).toEqual([])
+    expect(ur(adjustPrinting(db, MRD, 'ja', jaUltra, 1)).owned).toBe(1)
   })
 })

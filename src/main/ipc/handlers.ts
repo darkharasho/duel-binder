@@ -1,5 +1,6 @@
 import type Database from 'better-sqlite3'
 import { ipcMain } from 'electron'
+import type { Language } from '@shared/languages'
 import type { SyncStatus, UpdateStatus } from '@shared/types'
 import type { INVOKE_CHANNELS } from '@shared/ipc'
 import { INVOKE_CHANNELS as CHANNELS } from '@shared/ipc'
@@ -55,9 +56,10 @@ export function createHandlers({ db, client, images, emitSync, app }: HandlerDep
     'collection:facets': async () => getFacets(db),
     'stats:get': async () => getStats(db),
     'sets:list': async () => listSets(db),
-    'sets:checklist': async (setName: string) => getChecklist(db, setName),
-    'sets:adjust': async (setName: string, printingId: number, delta: 1 | -1) =>
-      snapshotAfter(adjustPrinting(db, setName, printingId, delta)),
+    'sets:checklist': async (setName: string, language: Language) =>
+      getChecklist(db, setName, language),
+    'sets:adjust': async (setName: string, language: Language, printingId: number, delta: 1 | -1) =>
+      snapshotAfter(adjustPrinting(db, setName, language, printingId, delta)),
     'sync:status': async () => getSyncStatus(db),
     'sync:run': async () => {
       const status = await runSync(db, client, emitSync)

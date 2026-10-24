@@ -1,6 +1,6 @@
 import { net, protocol } from 'electron'
 import { pathToFileURL } from 'node:url'
-import { parseImageUrl, type ImageCache } from './cache'
+import { parseImageUrl, parseSetImageUrl, type ImageCache } from './cache'
 
 const SCHEME = 'ygo-img'
 
@@ -14,8 +14,9 @@ export function registerImageScheme(): void {
 export function handleImageProtocol(cache: ImageCache): void {
   protocol.handle(SCHEME, async (request) => {
     const parsed = parseImageUrl(request.url)
-    if (!parsed) return new Response('Not found', { status: 404 })
-    const file = await cache.get(parsed.size, parsed.id)
+    const setKey = parsed ? null : parseSetImageUrl(request.url)
+    if (!parsed && !setKey) return new Response('Not found', { status: 404 })
+    const file = parsed ? await cache.get(parsed.size, parsed.id) : await cache.getSet(setKey!)
     if (!file) return new Response('Not found', { status: 404 })
     return net.fetch(pathToFileURL(file).toString())
   })

@@ -11,7 +11,7 @@ async function makeHandlers() {
   const handlers = createHandlers({
     db,
     client: { fetchDbVersion: vi.fn(), fetchCardInfo: vi.fn(), fetchCardSets: vi.fn() },
-    images: { get: vi.fn(), sizeBytes: async () => 0, clear: async () => {} },
+    images: { get: vi.fn(), getSet: vi.fn(), sizeBytes: async () => 0, clear: async () => {} },
     emitSync: () => {},
     app: {
       version: () => '0.0.0',

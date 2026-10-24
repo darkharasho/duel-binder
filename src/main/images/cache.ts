@@ -22,8 +22,27 @@ export function parseImageUrl(url: string): { size: ImageSize; id: number } | nu
   return { size: m[1] as ImageSize, id }
 }
 
+const SET_KEY_RE = /^[A-Za-z0-9_-]+$/
+const SET_IMAGE_RE = /^https:\/\/images\.ygoprodeck\.com\/images\/sets\/([A-Za-z0-9_-]+)\.jpg$/
+
+/** Stem of a YGOPRODeck set-image URL; null for anything outside that folder. */
+export function setImageKey(sourceUrl: string | null): string | null {
+  if (sourceUrl === null) return null
+  return SET_IMAGE_RE.exec(sourceUrl)?.[1] ?? null
+}
+
+export function setImageUrl(key: string): string {
+  return `https://images.ygoprodeck.com/images/sets/${key}.jpg`
+}
+
+/** Parses `ygo-img://set/<key>`; null when the key has characters outside the allowed set. */
+export function parseSetImageUrl(url: string): string | null {
+  return /^ygo-img:\/\/set\/([A-Za-z0-9_-]+)\/?$/.exec(url)?.[1] ?? null
+}
+
 export interface ImageCache {
   get(size: ImageSize, id: number): Promise<string | null>
+  getSet(key: string): Promise<string | null>
   sizeBytes(): Promise<number>
   clear(): Promise<void>
 }
@@ -40,11 +59,11 @@ export function createImageCache(opts: { dir: string; fetchFn?: typeof fetch; li
   const exists = (p: string): Promise<boolean> =>
     fs.stat(p).then((s) => s.isFile() && s.size > 0, () => false)
 
-  async function download(size: ImageSize, id: number, finalPath: string): Promise<string | null> {
+  async function download(remoteUrl: string, finalPath: string): Promise<string | null> {
     const tmpPath = `${finalPath}.tmp`
     try {
       await fs.mkdir(path.dirname(finalPath), { recursive: true })
-      const res = await fetchFn(imageUrl(size, id), { signal: AbortSignal.timeout(IMAGE_TIMEOUT_MS) })
+      const res = await fetchFn(remoteUrl, { signal: AbortSignal.timeout(IMAGE_TIMEOUT_MS) })
       if (!res.ok || !res.body) return null
       if (!(res.headers.get('content-type') ?? '').toLowerCase().startsWith('image/')) return null
       await pipeline(Readable.fromWeb(res.body as unknown as WebReadableStream), createWriteStream(tmpPath))
@@ -57,17 +76,22 @@ export function createImageCache(opts: { dir: string; fetchFn?: typeof fetch; li
     }
   }
 
+  async function cached(key: string, remoteUrl: string, finalPath: string): Promise<string | null> {
+    if (await exists(finalPath)) return finalPath
+    let pending = inFlight.get(key)
+    if (!pending) {
+      pending = limit(() => download(remoteUrl, finalPath)).finally(() => inFlight.delete(key))
+      inFlight.set(key, pending)
+    }
+    return pending
+  }
+
   return {
-    async get(size, id) {
-      const finalPath = path.join(opts.dir, size, `${id}.jpg`)
-      if (await exists(finalPath)) return finalPath
-      const key = `${size}/${id}`
-      let pending = inFlight.get(key)
-      if (!pending) {
-        pending = limit(() => download(size, id, finalPath)).finally(() => inFlight.delete(key))
-        inFlight.set(key, pending)
-      }
-      return pending
+    get: (size, id) => cached(`${size}/${id}`, imageUrl(size, id), path.join(opts.dir, size, `${id}.jpg`)),
+
+    async getSet(key) {
+      if (!SET_KEY_RE.test(key)) return null
+      return cached(`set/${key}`, setImageUrl(key), path.join(opts.dir, 'sets', `${key}.jpg`))
     },
 
     async sizeBytes() {

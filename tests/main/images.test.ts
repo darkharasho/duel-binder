@@ -3,7 +3,7 @@ import os from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createLimiter } from '../../src/main/images/limiter'
-import { createImageCache, imageUrl, parseImageUrl } from '../../src/main/images/cache'
+import { createImageCache, imageUrl, parseImageUrl, parseSetImageUrl, setImageKey, setImageUrl } from '../../src/main/images/cache'
 
 let dir: string
 beforeEach(async () => {
@@ -129,5 +129,59 @@ describe('limiter', () => {
     await all
     expect(starts).toHaveLength(5)
     for (let i = 1; i < starts.length; i++) expect(starts[i] - starts[i - 1]).toBeGreaterThanOrEqual(50)
+  })
+})
+
+describe('set image keys', () => {
+  it('setImageKey accepts only the YGOPRODeck set-image folder', () => {
+    expect(setImageKey('https://images.ygoprodeck.com/images/sets/MRD.jpg')).toBe('MRD')
+    for (const bad of [
+      'http://images.ygoprodeck.com/images/sets/MRD.jpg',
+      'https://evil.example/images/sets/MRD.jpg',
+      'https://images.ygoprodeck.com/images/sets/../x.jpg',
+      'https://images.ygoprodeck.com/images/sets/A B.jpg',
+      'https://images.ygoprodeck.com/images/cards/1.jpg',
+      null,
+    ]) {
+      expect(setImageKey(bad)).toBeNull()
+    }
+  })
+
+  it('setImageUrl builds the remote url', () => {
+    expect(setImageUrl('MRD')).toBe('https://images.ygoprodeck.com/images/sets/MRD.jpg')
+  })
+
+  it('parseSetImageUrl parses ygo-img://set/<key>', () => {
+    expect(parseSetImageUrl('ygo-img://set/MRD')).toBe('MRD')
+    expect(parseSetImageUrl('ygo-img://set/MRD/')).toBe('MRD')
+    expect(parseSetImageUrl('ygo-img://set/..%2Fx')).toBeNull()
+    expect(parseImageUrl('ygo-img://set/1')).toBeNull()
+  })
+})
+
+describe('image cache sets', () => {
+  it('downloads once for concurrent calls and writes sets/<key>.jpg', async () => {
+    const fetchFn = vi.fn<(url: string) => Promise<Response>>(async () => okResponse())
+    const cache = createImageCache({ dir, fetchFn: fetchFn as unknown as typeof fetch, limit: noLimit })
+    const [a, b] = await Promise.all([cache.getSet('MRD'), cache.getSet('MRD')])
+    expect(fetchFn).toHaveBeenCalledTimes(1)
+    expect(fetchFn.mock.calls[0][0]).toBe('https://images.ygoprodeck.com/images/sets/MRD.jpg')
+    expect(a).toBe(path.join(dir, 'sets', 'MRD.jpg'))
+    expect(b).toBe(a)
+    expect(await fs.readFile(a!, 'utf8')).toBe('jpegdata')
+  })
+
+  it('failed set download leaves nothing behind', async () => {
+    const bad = vi.fn(async () => new Response('err', { status: 500 }))
+    const cache = createImageCache({ dir, fetchFn: bad as unknown as typeof fetch, limit: noLimit })
+    expect(await cache.getSet('MRD')).toBeNull()
+    expect(await fs.readdir(path.join(dir, 'sets'))).toEqual([])
+  })
+
+  it('invalid key resolves null without fetching', async () => {
+    const fetchFn = vi.fn(async () => okResponse())
+    const cache = createImageCache({ dir, fetchFn: fetchFn as unknown as typeof fetch, limit: noLimit })
+    expect(await cache.getSet('../x')).toBeNull()
+    expect(fetchFn).not.toHaveBeenCalled()
   })
 })

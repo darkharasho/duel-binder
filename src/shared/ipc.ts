@@ -2,10 +2,13 @@ import type {
   AddEntryInput,
   CardDetail,
   CardSearchResult,
+  ChecklistCard,
   CollectionFilters,
   CollectionStats,
   EntryView,
   Facets,
+  SetChecklist,
+  SetSummary,
   SyncStatus,
   UpdateEntryInput,
   UpdateStatus
@@ -27,6 +30,11 @@ export interface Api {
   }
   stats: {
     get(): Promise<CollectionStats>
+  }
+  sets: {
+    list(): Promise<SetSummary[]>
+    checklist(setName: string): Promise<SetChecklist | null>
+    adjust(setName: string, printingId: number, delta: 1 | -1): Promise<ChecklistCard>
   }
   sync: {
     status(): Promise<SyncStatus>
@@ -60,6 +68,9 @@ export const INVOKE_CHANNELS = [
   'collection:remove',
   'collection:facets',
   'stats:get',
+  'sets:list',
+  'sets:checklist',
+  'sets:adjust',
   'sync:status',
   'sync:run',
   'images:cacheSize',

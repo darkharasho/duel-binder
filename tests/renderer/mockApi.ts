@@ -37,6 +37,13 @@ export function createMockApi(overrides: DeepPartial<Api> = {}): Api {
         pricesUpdatedAt: null
       }))
     },
+    sets: {
+      list: vi.fn(async () => []),
+      checklist: vi.fn(async () => null),
+      adjust: vi.fn(async () => {
+        throw new Error('sets.adjust not mocked')
+      })
+    },
     sync: {
       status: vi.fn(async () => ({ ...emptyStatus })),
       run: vi.fn(async () => ({ ...emptyStatus })),

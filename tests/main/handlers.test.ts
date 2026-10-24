@@ -48,4 +48,16 @@ describe('createHandlers', () => {
     const today = db.prepare('SELECT total_cards AS n FROM value_snapshots').all() as { n: number }[]
     expect(today).toEqual([{ n: 2 }])
   })
+
+  it('sets:adjust records the value snapshot', async () => {
+    const { db, handlers } = await makeHandlers()
+    const p = db.prepare('SELECT id, set_name AS setName FROM card_printings LIMIT 1').get() as {
+      id: number
+      setName: string
+    }
+    const card = (await handlers['sets:adjust'](p.setName, p.id, 1)) as { owned: number }
+    expect(card.owned).toBe(1)
+    const today = db.prepare('SELECT total_cards AS n FROM value_snapshots').all() as { n: number }[]
+    expect(today).toEqual([{ n: 1 }])
+  })
 })

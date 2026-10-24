@@ -15,6 +15,7 @@ import {
   removeEntry,
   updateEntry
 } from '../repo/collection'
+import { adjustPrinting, getChecklist, listSets } from '../repo/sets'
 import { getStats, recordSnapshot } from '../repo/stats'
 
 export interface AppDeps {
@@ -53,6 +54,10 @@ export function createHandlers({ db, client, images, emitSync, app }: HandlerDep
     'collection:remove': async (id: number) => snapshotAfter(removeEntry(db, id)),
     'collection:facets': async () => getFacets(db),
     'stats:get': async () => getStats(db),
+    'sets:list': async () => listSets(db),
+    'sets:checklist': async (setName: string) => getChecklist(db, setName),
+    'sets:adjust': async (setName: string, printingId: number, delta: 1 | -1) =>
+      snapshotAfter(adjustPrinting(db, setName, printingId, delta)),
     'sync:status': async () => getSyncStatus(db),
     'sync:run': async () => {
       const status = await runSync(db, client, emitSync)

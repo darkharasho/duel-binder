@@ -23,6 +23,7 @@ export interface AppDeps {
   backupDatabase(): Promise<string | null>
   checkForUpdates(): Promise<UpdateStatus>
   applyUpdate(): Promise<void>
+  updateStatus(): Promise<UpdateStatus>
 }
 
 export interface HandlerDeps {
@@ -59,7 +60,8 @@ export function createHandlers({ db, client, images, emitSync, app }: HandlerDep
     'app:openDataFolder': () => app.openDataFolder(),
     'app:backupDatabase': () => app.backupDatabase(),
     'app:checkForUpdates': () => app.checkForUpdates(),
-    'app:applyUpdate': () => app.applyUpdate()
+    'app:applyUpdate': () => app.applyUpdate(),
+    'app:updateStatus': () => app.updateStatus()
   }
 }
 

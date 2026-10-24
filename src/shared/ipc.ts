@@ -43,6 +43,8 @@ export interface Api {
     backupDatabase(): Promise<string | null>
     checkForUpdates(): Promise<UpdateStatus>
     applyUpdate(): Promise<void>
+    /** Current updater status; no network. */
+    updateStatus(): Promise<UpdateStatus>
     onUpdateStatus(cb: (s: UpdateStatus) => void): () => void
   }
 }
@@ -66,7 +68,8 @@ export const INVOKE_CHANNELS = [
   'app:openDataFolder',
   'app:backupDatabase',
   'app:checkForUpdates',
-  'app:applyUpdate'
+  'app:applyUpdate',
+  'app:updateStatus'
 ] as const
 
 export type InvokeChannel = (typeof INVOKE_CHANNELS)[number]

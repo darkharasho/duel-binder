@@ -1,8 +1,8 @@
-import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { isSyncing, useSyncStatus } from '@/components/useSyncStatus'
+import { useUpdateStatus } from './useUpdateToasts'
 import { api, queryKeys } from '@/lib/api'
 import { formatRelative } from '@/lib/format'
 import type { UpdateStatus } from '@shared/types'
@@ -52,9 +52,10 @@ export function SettingsPage(): React.JSX.Element {
   const sync = useSyncStatus()
   const version = useQuery({ queryKey: ['app', 'version'], queryFn: () => api.app.version() })
   const cache = useQuery({ queryKey: ['images', 'cacheSize'], queryFn: () => api.images.cacheSize() })
-  const [update, setUpdate] = useState<UpdateStatus | undefined>()
-
-  useEffect(() => api.app.onUpdateStatus(setUpdate), [])
+  const update = useUpdateStatus()
+  const setUpdate = (s: UpdateStatus): void => {
+    qc.setQueryData(queryKeys.update, s)
+  }
 
   const check = useMutation({
     mutationFn: () => api.app.checkForUpdates(),
@@ -92,9 +93,21 @@ export function SettingsPage(): React.JSX.Element {
           <span role="status" className="text-sm text-muted-foreground">
             {describeUpdate(update)}
           </span>
-          <Button variant="outline" size="sm" disabled={check.isPending} onClick={() => check.mutate()}>
-            Check for updates
-          </Button>
+          <div className="flex gap-2">
+            {update?.mode === 'notify' && update.state === 'available' && (
+              <Button size="sm" onClick={() => void api.app.applyUpdate()}>
+                Download
+              </Button>
+            )}
+            {update?.mode === 'auto' && update.state === 'ready' && (
+              <Button size="sm" onClick={() => void api.app.applyUpdate()}>
+                Restart now
+              </Button>
+            )}
+            <Button variant="outline" size="sm" disabled={check.isPending} onClick={() => check.mutate()}>
+              Check for updates
+            </Button>
+          </div>
         </div>
       </Section>
 
@@ -119,7 +132,9 @@ export function SettingsPage(): React.JSX.Element {
 
       <Section title="Data">
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={() => void api.app.openDataFolder()}>
+          <Button variant="outline" size="sm" onClick={() =>
+              api.app.openDataFolder().catch((e: Error) => toast.error(`Couldn't open data folder: ${e.message}`))
+            }>
             Open data folder
           </Button>
           <Button variant="outline" size="sm" disabled={backup.isPending} onClick={() => backup.mutate()}>

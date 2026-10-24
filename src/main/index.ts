@@ -103,7 +103,8 @@ app.whenReady().then(() => {
       return filePath
     },
     checkForUpdates: () => updater.check(),
-    applyUpdate: () => updater.apply()
+    applyUpdate: () => updater.apply(),
+    updateStatus: async () => updater.status()
   }
 
   registerIpc(createHandlers({ db, client, images, emitSync, app: appDeps }))

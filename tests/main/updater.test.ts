@@ -5,6 +5,7 @@ import { createUpdater, updateMode, RELEASES_URL } from '../../src/main/updater'
 
 class FakeUpdater extends EventEmitter {
   autoDownload = true
+  autoInstallOnAppQuit = false
   quitAndInstall = vi.fn()
   checkForUpdates = vi.fn(async () => null)
 }
@@ -40,6 +41,7 @@ describe('createUpdater', () => {
   it('auto mode reaches ready and apply calls quitAndInstall', async () => {
     const { fake, emitted, updater } = setup('auto')
     expect(fake.autoDownload).toBe(true)
+    expect(fake.autoInstallOnAppQuit).toBe(true)
     fake.checkForUpdates.mockImplementation(async () => {
       fake.emit('checking-for-update')
       fake.emit('update-available', { version: '1.2.0' })
@@ -57,6 +59,7 @@ describe('createUpdater', () => {
   it('notify mode never downloads and apply opens the release tag URL', async () => {
     const { fake, openExternal, updater } = setup('notify')
     expect(fake.autoDownload).toBe(false)
+    expect(fake.autoInstallOnAppQuit).toBe(false)
     fake.checkForUpdates.mockImplementation(async () => {
       fake.emit('update-available', { version: '1.2.0' })
       return null
@@ -81,6 +84,14 @@ describe('createUpdater', () => {
       return null
     })
     expect(await updater.check()).toMatchObject({ state: 'error', error: 'offline' })
+  })
+
+  it('check while ready returns ready without calling checkForUpdates', async () => {
+    const { fake, updater } = setup('auto')
+    fake.emit('update-downloaded', { version: '1.2.0' })
+    expect(await updater.check()).toMatchObject({ state: 'ready', version: '1.2.0' })
+    expect(fake.checkForUpdates).not.toHaveBeenCalled()
+    expect(updater.status().state).toBe('ready')
   })
 
   it('a rejected check becomes error status instead of throwing', async () => {

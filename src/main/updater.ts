@@ -18,6 +18,7 @@ export interface UpdaterDeps {
 }
 
 export interface Updater {
+  status(): UpdateStatus
   check(): Promise<UpdateStatus>
   apply(): Promise<void>
   start(): void
@@ -30,14 +31,15 @@ export function createUpdater(deps: UpdaterDeps): Updater {
   let timer: ReturnType<typeof setInterval> | null = null
 
   const set = (patch: Partial<UpdateStatus> & Pick<UpdateStatus, 'state'>): void => {
-    current = { ...current, version: current.version, error: null, ...patch }
+    current = { ...current, error: null, ...patch }
     emit(current)
   }
   const message = (e: unknown): string => (e instanceof Error ? e.message : String(e))
 
   if (enabled) {
     autoUpdater.autoDownload = mode === 'auto'
-    autoUpdater.autoInstallOnAppQuit = false
+    // Installing on a user-initiated quit is fine; we never restart on our own.
+    autoUpdater.autoInstallOnAppQuit = mode === 'auto'
     autoUpdater.on('checking-for-update', () => set({ state: 'checking' }))
     autoUpdater.on('update-available', (info: { version: string }) =>
       set({ state: 'available', version: info.version })
@@ -67,7 +69,7 @@ export function createUpdater(deps: UpdaterDeps): Updater {
       if (mode === 'auto') {
         if (current.state === 'ready') autoUpdater.quitAndInstall()
       } else if (current.version) {
-        await openExternal(`${RELEASES_URL}/tag/v${current.version}`)
+        await openExternal(`${RELEASES_URL}/tag/v${encodeURIComponent(current.version)}`)
       }
     } catch (e) {
       set({ state: 'error', error: message(e) })
@@ -75,6 +77,7 @@ export function createUpdater(deps: UpdaterDeps): Updater {
   }
 
   return {
+    status: () => current,
     check,
     apply,
     start() {

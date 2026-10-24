@@ -17,6 +17,7 @@ async function makeHandlers() {
       version: () => '0.0.0',
       openDataFolder: async () => {},
       backupDatabase: async () => null,
+      updateStatus: async () => ({ state: 'idle', mode: 'auto', version: null, error: null }),
       checkForUpdates: async () => ({ state: 'none', mode: 'auto', version: null, error: null }),
       applyUpdate: async () => {}
     }

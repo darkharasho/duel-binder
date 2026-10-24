@@ -5,6 +5,7 @@ import { toast } from 'sonner'
 import type { Language } from '@shared/languages'
 import type { CardSearchResult, CountMode, SetChecklist as SetChecklistData } from '@shared/types'
 import { CardArt } from '@/components/CardArt'
+import { TiltCard } from '@/components/TiltCard'
 import { coverArtUrl, setArtUrl, useArtWash } from '@/components/artWash'
 import { LanguageTag } from '@/components/LanguageTag'
 import { PageHeader } from '@/components/PageHeader'
@@ -352,16 +353,18 @@ export function SetChecklist({
                       !owned && 'grayscale opacity-40'
                     )}
                   >
-                    <CardArt
-                      imageId={t.card.imageId}
-                      printingId={
-                        (t.card.rarities.find((r) => r.rarity === t.rarity) ?? t.card.rarities[0])
-                          ?.defaultPrintingId
-                      }
-                      size="small"
-                      alt=""
-                      className="w-full"
-                    />
+                    <TiltCard>
+                      <CardArt
+                        imageId={t.card.imageId}
+                        printingId={
+                          (t.card.rarities.find((r) => r.rarity === t.rarity) ?? t.card.rarities[0])
+                            ?.defaultPrintingId
+                        }
+                        size="small"
+                        alt=""
+                        className="w-full"
+                      />
+                    </TiltCard>
                     {owned && (
                       <span className="absolute right-2.5 top-2.5 rounded-full bg-primary px-1.5 text-xs font-semibold tabular-nums text-primary-foreground">
                         ×{t.owned}

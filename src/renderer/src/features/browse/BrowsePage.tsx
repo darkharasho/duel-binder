@@ -4,6 +4,7 @@ import { ArrowDownAZ, ArrowUpAZ, Search } from 'lucide-react'
 import type { BrowseCard, BrowseFilters, BrowseSort, CardSearchResult } from '@shared/types'
 import { cardArtUrl, useArtWash } from '@/components/artWash'
 import { CardArt } from '@/components/CardArt'
+import { TiltCard } from '@/components/TiltCard'
 import { FacetMenu } from '@/components/FacetMenu'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
@@ -260,19 +261,19 @@ export function BrowsePage({ onAddCard }: Props): React.JSX.Element {
                 onClick={() => void open(c)}
                 className="group flex w-full flex-col gap-2 rounded-md p-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
-                <div className="relative">
+                <TiltCard>
                   <CardArt
                     imageId={c.imageId}
                     size="small"
                     alt={c.name}
-                    className="w-full rounded-[4px] shadow-[0_8px_20px_rgb(0_0_0/0.45)] transition-transform duration-200 group-hover:-translate-y-1"
+                    className="w-full rounded-[4px] shadow-[0_8px_20px_rgb(0_0_0/0.45)]"
                   />
                   {c.owned > 0 && (
                     <span className="absolute right-1.5 top-1.5 rounded-full bg-primary px-1.5 font-mono text-xs font-semibold text-primary-foreground shadow">
                       ×{c.owned}
                     </span>
                   )}
-                </div>
+                </TiltCard>
                 <div className="min-w-0 space-y-0.5">
                   <div className="truncate text-[13px] font-semibold">{c.name}</div>
                   <div className="truncate font-mono text-[11px] text-muted-foreground">

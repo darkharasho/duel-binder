@@ -3,6 +3,7 @@ import type { CollectionStats } from '@shared/types'
 import type { NavigateFn } from '@/components/AppShell'
 import { cardArtUrl, useArtWash } from '@/components/artWash'
 import { CardArt } from '@/components/CardArt'
+import { TiltCard } from '@/components/TiltCard'
 import { scanFor } from '@/components/scanFor'
 import { Button } from '@/components/ui/button'
 import { TooltipProvider } from '@/components/ui/tooltip'
@@ -174,13 +175,15 @@ function Content({
                   onClick={() => onNavigate('collection', { entryId: e.id })}
                   className="group flex w-full flex-col gap-2 rounded-md p-1 text-left focus-visible:outline-2 focus-visible:outline-ring"
                 >
-                  <CardArt
-                    imageId={e.imageId}
-                    printingId={scanFor(e)}
-                    size="small"
-                    alt=""
-                    className="w-full rounded-[4px] shadow-[0_8px_20px_rgb(0_0_0/0.5)] transition-transform duration-200 group-hover:-translate-y-1"
-                  />
+                  <TiltCard>
+                    <CardArt
+                      imageId={e.imageId}
+                      printingId={scanFor(e)}
+                      size="small"
+                      alt=""
+                      className="w-full rounded-[4px] shadow-[0_8px_20px_rgb(0_0_0/0.5)]"
+                    />
+                  </TiltCard>
                   <span className="min-w-0 text-xs leading-snug">
                     <span className="line-clamp-2">{e.card.name}</span>
                     <span className="block truncate font-mono text-[11px] text-muted-foreground">

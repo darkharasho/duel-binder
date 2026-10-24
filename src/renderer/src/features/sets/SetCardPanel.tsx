@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import type { ChecklistCard } from '@shared/types'
 import { CardArt } from '@/components/CardArt'
+import { TiltCard } from '@/components/TiltCard'
 import { Button } from '@/components/ui/button'
 import {
   Sheet,
@@ -53,13 +54,15 @@ export function SetCardPanel({
           <SheetDescription>{typeLine}</SheetDescription>
         </SheetHeader>
         <div className="space-y-5 px-4 pb-6">
-          <CardArt
-            imageId={card.imageId}
-            printingId={focus?.defaultPrintingId}
-            size="full"
-            alt={card.name}
-            className="mx-auto w-48"
-          />
+          <TiltCard className="mx-auto w-48">
+            <CardArt
+              imageId={card.imageId}
+              printingId={focus?.defaultPrintingId}
+              size="full"
+              alt={card.name}
+              className="w-full"
+            />
+          </TiltCard>
           <p className="font-mono text-[13px] text-muted-foreground">
             {setName} · {card.numberLabel}
           </p>

@@ -1,6 +1,6 @@
 {
   "name": "yugioh-collection-tracker",
-  "version": "1.0.0",
+  "version": "0.1.0",
   "description": "Local Yu-Gi-Oh! card collection tracker",
   "main": "./out/main/index.js",
   "author": "darkharasho",

@@ -35,7 +35,7 @@ const NO_PRICE_TIPS = {
 } as const
 
 /** The plain-language eBay price description: asking-price label + checked date + listing count. */
-export function ebayPriceDetail(entry: EntryView): string {
+function ebayPriceDetail(entry: EntryView): string {
   if (entry.unitPrice === null) return NO_PRICE_TIPS[entry.noPriceReason ?? 'unavailable']
   const parts = ['eBay asking price']
   if (entry.priceCheckedAt !== null) parts.push(`checked ${formatRelative(entry.priceCheckedAt)}`)

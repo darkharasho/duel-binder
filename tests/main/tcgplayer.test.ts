@@ -204,13 +204,21 @@ describe('TCGplayer catalog', () => {
     await refreshTcgCatalog(db, {
       version: '1',
       fetchFn: catalogFetch([{ groupId: 10, modifiedOn: 'c' }], {
-        10: [...products, product(11, 'SDY-006', 'Ultra Rare', 1, 'Dark Magician (Extended Art)')]
+        10: [
+          ...products,
+          product(11, 'SDY-006', 'Ultra Rare', 1, 'Dark Magician (Extended Art)'),
+          product(12, 'LOB-EN119', 'Rare', 1, 'Card (UTR)')
+        ]
       }) as unknown as typeof fetch,
       now
     })
     expect(db.prepare('SELECT variant FROM card_printings WHERE id = ?').get(sdy)).toEqual({
       variant: 'Overframe'
     })
+    // A rarity abbreviation isn't a variant.
+    expect(
+      db.prepare('SELECT variant FROM card_printings WHERE id = ?').get(printingId(db, 'LOB-EN119'))
+    ).toEqual({ variant: null })
     expect(db.prepare('SELECT variant FROM card_printings WHERE id = ?').get(rows[0].id)).toEqual({
       variant: null
     })

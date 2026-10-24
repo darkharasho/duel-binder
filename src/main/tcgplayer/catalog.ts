@@ -174,6 +174,13 @@ export function variantLabel(name: string, rarity: string): string {
   return notes.map((n) => (/^extended art$/i.test(n) ? 'Overframe' : n)).join(', ')
 }
 
+/**
+ * Notes that describe a card's look. Only these label a YGOPRODeck printing from its single
+ * product; other notes there are rarity abbreviations ("UTR"), codes, or where a promo came from.
+ */
+const ART_NOTE =
+  /^(overframe|alternate art|new art|\d+(st|nd|rd|th) art|.*artwork|emblazoned.*|red|blue|green|purple|silver|bronze|gold|yellow|orange|pink|white)$/i
+
 interface ProductRow {
   product_id: number
   rarity: string
@@ -257,7 +264,7 @@ export function saveTcgVariants(db: Database.Database): number {
     for (const p of plain) {
       const own = sameRarity(products.all(p.set_code) as ProductRow[], p.set_rarity)[0]
       const label = own ? variantLabel(own.name, own.rarity) : ''
-      const variant = label && !/misprint/i.test(label) ? label : null
+      const variant = label && label.split(', ').every((n) => ART_NOTE.test(n)) ? label : null
       if (variant !== p.variant) labelled.run(variant, p.id)
     }
     const stale = (

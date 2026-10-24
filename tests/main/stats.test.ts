@@ -78,3 +78,22 @@ test('snapshot is one row per day', () => {
   rows = db.prepare('SELECT * FROM value_snapshots ORDER BY date').all() as typeof rows
   expect(rows.map((r) => r.date)).toEqual(['2026-10-23', '2026-10-24'])
 })
+
+test('totals include eBay prices and approximateCount excludes them', () => {
+  const ja = (
+    db
+      .prepare(
+        `INSERT INTO card_printings (card_id, language, set_name, set_code, set_rarity)
+         VALUES (46986414, 'ja', 'Legend of Blue Eyes White Dragon', 'LB-05', 'Ultra Rare') RETURNING id`
+      )
+      .get() as { id: number }
+  ).id
+  db.prepare(
+    `INSERT INTO intl_prices (printing_id, price, listing_count, checked_at) VALUES (?, 12.5, 3, '2026-10-20T00:00:00.000Z')`
+  ).run(ja)
+  addEntry(db, { printingId: ja, imageId: 46986414, quantity: 2 })
+  addEntry(db, { printingId: pid('LOB-EN005'), imageId: 46986414, quantity: 1 })
+  const s = getStats(db)
+  expect(s.totalValue).toBeCloseTo(25 + 5.12)
+  expect(s.approximateCount).toBe(0)
+})

@@ -128,3 +128,60 @@ test('entries report their printing language', () => {
   const en = addEntry(db, { printingId: pid('LOB-EN005'), imageId: 46986414, quantity: 1 })
   expect(en.printing.language).toBe('en')
 })
+
+const jaPrinting = (): number =>
+  (
+    db
+      .prepare(
+        `INSERT INTO card_printings (card_id, language, set_name, set_code, set_rarity)
+         VALUES (46986414, 'ja', 'Legend of Blue Eyes White Dragon', 'LB-05', 'Ultra Rare') RETURNING id`
+      )
+      .get() as { id: number }
+  ).id
+const setPrice = (id: number, price: number | null): void => {
+  db.prepare(
+    `INSERT INTO intl_prices (printing_id, price, listing_count, checked_at) VALUES (?, ?, 4, '2026-10-20T00:00:00.000Z')`
+  ).run(id, price)
+}
+
+test('a ja entry is valued from its eBay price', () => {
+  const id = jaPrinting()
+  setPrice(id, 12.5)
+  const e = addEntry(db, { printingId: id, imageId: 46986414, quantity: 3 })
+  expect(e).toMatchObject({
+    unitPrice: 12.5,
+    priceSource: 'ebay',
+    priceApproximate: false,
+    priceCheckedAt: '2026-10-20T00:00:00.000Z',
+    noPriceReason: null
+  })
+  expect(e.totalValue).toBeCloseTo(37.5)
+})
+
+test('a ja entry with a null price row has no-listings and counts $0', () => {
+  const id = jaPrinting()
+  setPrice(id, null)
+  const e = addEntry(db, { printingId: id, imageId: 46986414, quantity: 2 })
+  expect(e).toMatchObject({ unitPrice: null, noPriceReason: 'no-listings', totalValue: 0 })
+})
+
+test('a ja entry with no price row is pending when the service is ok, else unavailable', () => {
+  const id = jaPrinting()
+  const e = addEntry(db, { printingId: id, imageId: 46986414, quantity: 1 })
+  expect(e.noPriceReason).toBe('unavailable')
+  db.prepare(`INSERT INTO meta (key, value) VALUES ('price_service_status', 'ok')`).run()
+  expect(getEntry(db, e.id)?.noPriceReason).toBe('pending')
+})
+
+test('a ja printing never uses the card tcgplayer price', () => {
+  const tcg = db.prepare('SELECT tcgplayer_price AS p FROM cards WHERE id = 46986414').get() as { p: unknown }
+  expect(Number(tcg.p)).toBeGreaterThan(0)
+  const e = addEntry(db, { printingId: jaPrinting(), imageId: 46986414, quantity: 1 })
+  expect(e.unitPrice).toBeNull()
+  expect(e.totalValue).toBe(0)
+})
+
+test('an English entry keeps the ygoprodeck source', () => {
+  const e = addEntry(db, { printingId: pid('LOB-EN005'), imageId: 46986414, quantity: 1 })
+  expect(e).toMatchObject({ priceSource: 'ygoprodeck', priceCheckedAt: null, noPriceReason: null })
+})

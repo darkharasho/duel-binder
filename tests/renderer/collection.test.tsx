@@ -45,6 +45,9 @@ const entry = (id: number, name: string, extra: Partial<EntryView> = {}): EntryV
   imageId: 100 + id,
   unitPrice: 10,
   priceApproximate: false,
+  priceSource: 'ygoprodeck',
+  priceCheckedAt: null,
+  noPriceReason: null,
   totalValue: 20,
   ...extra
 })

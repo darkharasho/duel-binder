@@ -19,6 +19,8 @@ import {
 } from '../repo/collection'
 import { adjustPrinting, getChecklist, listSets } from '../repo/sets'
 import { getStats, recordSnapshot } from '../repo/stats'
+import type { PriceClient } from '../prices/client'
+import { needsPrice, refreshIntlPrices } from '../prices/refresh'
 
 export interface AppDeps {
   version(): string
@@ -35,6 +37,8 @@ export interface HandlerDeps {
   images: ImageCache
   emitSync: (s: SyncStatus) => void
   app: AppDeps
+  priceClient: PriceClient | null
+  emitDataChanged: () => void
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -46,7 +50,21 @@ function checkLanguage(language: unknown): Language {
   return language
 }
 
-export function createHandlers({ db, client, images, emitSync, app }: HandlerDeps): Handlers {
+export function createHandlers({
+  db,
+  client,
+  images,
+  emitSync,
+  app,
+  priceClient,
+  emitDataChanged
+}: HandlerDeps): Handlers {
+  // A non-English printing without a fresh eBay price is looked up in the background; the renderer is
+  // told to refetch once the lookup has finished.
+  const priceNewCopy = (printingId: number): void => {
+    if (!needsPrice(db, printingId)) return
+    void refreshIntlPrices(db, priceClient, { printingIds: [printingId] }).then(() => emitDataChanged())
+  }
   // Keep today's value snapshot meaning "end of day" as the collection changes.
   const snapshotAfter = <T>(result: T): T => {
     recordSnapshot(db)
@@ -57,16 +75,27 @@ export function createHandlers({ db, client, images, emitSync, app }: HandlerDep
     'cards:get': async (cardId: number) => getCardDetail(db, cardId),
     'collection:list': async (f) => listEntries(db, f),
     'collection:forCard': async (cardId: number) => entriesForCard(db, cardId),
-    'collection:add': async (input) => snapshotAfter(addEntry(db, input)),
-    'collection:update': async (id: number, patch) => snapshotAfter(updateEntry(db, id, patch)),
+    'collection:add': async (input) => {
+      const entry = snapshotAfter(addEntry(db, input))
+      priceNewCopy(entry.printing.id)
+      return entry
+    },
+    'collection:update': async (id: number, patch) => {
+      const entry = snapshotAfter(updateEntry(db, id, patch))
+      if (patch.printingId !== undefined) priceNewCopy(entry.printing.id)
+      return entry
+    },
     'collection:remove': async (id: number) => snapshotAfter(removeEntry(db, id)),
     'collection:facets': async () => getFacets(db),
     'stats:get': async () => getStats(db),
     'sets:list': async () => listSets(db),
     'sets:checklist': async (setName: string, language: Language) =>
       getChecklist(db, setName, checkLanguage(language)),
-    'sets:adjust': async (setName: string, language: Language, printingId: number, delta: 1 | -1) =>
-      snapshotAfter(adjustPrinting(db, setName, checkLanguage(language), printingId, delta)),
+    'sets:adjust': async (setName: string, language: Language, printingId: number, delta: 1 | -1) => {
+      const result = snapshotAfter(adjustPrinting(db, setName, checkLanguage(language), printingId, delta))
+      if (delta === 1) priceNewCopy(printingId)
+      return result
+    },
     'sync:status': async () => getSyncStatus(db),
     'sync:run': async () => {
       const status = await runSync(db, client, emitSync)

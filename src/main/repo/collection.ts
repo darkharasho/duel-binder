@@ -1,6 +1,7 @@
 import type Database from 'better-sqlite3'
 import { priceFor } from '../../shared/pricing'
 import type { AddEntryInput, CollectionFilters, EntryView, Facets, UpdateEntryInput } from '../../shared/types'
+import { getMeta } from '../db/meta'
 import { buildFtsQuery, rowToCard, rowToPrinting, type CardDbRow, type PrintingDbRow } from './cards'
 
 export class CollectionError extends Error {
@@ -26,15 +27,30 @@ const SELECT = `
          c.id AS id, c.name, c.type, c.frame_type, c.race, c.attribute, c.level, c.linkval, c.atk, c.def,
          c.archetype, c.desc, c.tcgplayer_price,
          p.id AS p_id, p.card_id, p.set_name, p.set_code, p.set_rarity, p.set_rarity_code, p.set_price,
-         p.missing_from_api, p.language
+         p.missing_from_api, p.language,
+         ip.printing_id AS ip_id, ip.price AS ip_price, ip.checked_at AS ip_checked_at
   FROM collection_entries e
   JOIN card_printings p ON p.id = e.printing_id
-  JOIN cards c ON c.id = p.card_id`
+  JOIN cards c ON c.id = p.card_id
+  LEFT JOIN intl_prices ip ON ip.printing_id = p.id`
 
-function toView(r: EntryDbRow): EntryView {
+function toView(r: EntryDbRow, priceStatus: string | null): EntryView {
   const card = rowToCard(r as unknown as CardDbRow)
   const printing = rowToPrinting({ ...(r as unknown as PrintingDbRow), id: r.p_id as number })
-  const { unitPrice, approximate } = priceFor(printing.setPrice, card.tcgplayerPrice)
+  const ebay = printing.language !== 'en'
+  let unitPrice: number | null
+  let approximate: boolean
+  let noPriceReason: EntryView['noPriceReason'] = null
+  if (ebay) {
+    // Never falls back to the English (TCGplayer) price.
+    const hasRow = r.ip_id !== null && r.ip_id !== undefined
+    unitPrice = hasRow ? (r.ip_price as number | null) : null
+    approximate = false
+    if (unitPrice === null)
+      noPriceReason = hasRow ? 'no-listings' : priceStatus === 'ok' ? 'pending' : 'unavailable'
+  } else {
+    ;({ unitPrice, approximate } = priceFor(printing.setPrice, card.tcgplayerPrice))
+  }
   return {
     id: r.e_id,
     quantity: r.e_quantity,
@@ -46,13 +62,16 @@ function toView(r: EntryDbRow): EntryView {
     imageId: r.e_image_id,
     unitPrice,
     priceApproximate: approximate,
+    priceSource: ebay ? 'ebay' : 'ygoprodeck',
+    priceCheckedAt: ebay ? ((r.ip_checked_at as string | null) ?? null) : null,
+    noPriceReason,
     totalValue: (unitPrice ?? 0) * r.e_quantity
   }
 }
 
 export function getEntry(db: Database.Database, id: number): EntryView | null {
   const row = db.prepare(`${SELECT} WHERE e.id = ?`).get(id) as EntryDbRow | undefined
-  return row ? toView(row) : null
+  return row ? toView(row, getMeta(db, 'price_service_status')) : null
 }
 
 function requireEntry(db: Database.Database, id: number): EntryView {
@@ -176,8 +195,9 @@ export function listEntries(db: Database.Database, f: CollectionFilters): EntryV
     where.push('COALESCE(c.level, c.linkval) <= ?')
     params.push(f.levelMax)
   }
+  const status = getMeta(db, 'price_service_status')
   const sql = `${SELECT}${where.length ? ` WHERE ${where.join(' AND ')}` : ''}`
-  const entries = (db.prepare(sql).all(...params) as EntryDbRow[]).map(toView)
+  const entries = (db.prepare(sql).all(...params) as EntryDbRow[]).map((r) => toView(r, status))
 
   const dir = f.dir === 'desc' ? -1 : 1
   const key = (e: EntryView): number | string => {
@@ -202,9 +222,10 @@ export function listEntries(db: Database.Database, f: CollectionFilters): EntryV
 }
 
 export function entriesForCard(db: Database.Database, cardId: number): EntryView[] {
+  const status = getMeta(db, 'price_service_status')
   return (
     db.prepare(`${SELECT} WHERE c.id = ? ORDER BY p.set_code, e.id`).all(cardId) as EntryDbRow[]
-  ).map(toView)
+  ).map((r) => toView(r, status))
 }
 
 export function getFacets(db: Database.Database): Facets {

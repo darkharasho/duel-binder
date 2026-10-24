@@ -8,6 +8,8 @@ import { seededDb } from './helpers'
 
 async function makeHandlers() {
   const db = await seededDb()
+  const lookup = vi.fn(async () => ({ price: 12.5, listingCount: 3, checkedAt: '2026-10-23T12:00:00.000Z' }))
+  const emitDataChanged = vi.fn()
   const handlers = createHandlers({
     db,
     client: { fetchDbVersion: vi.fn(), fetchCardInfo: vi.fn(), fetchCardSets: vi.fn() },
@@ -20,9 +22,11 @@ async function makeHandlers() {
       updateStatus: async () => ({ state: 'idle', mode: 'auto', version: null, error: null }),
       checkForUpdates: async () => ({ state: 'none', mode: 'auto', version: null, error: null }),
       applyUpdate: async () => {}
-    }
+    },
+    priceClient: { lookup },
+    emitDataChanged
   })
-  return { db, handlers }
+  return { db, handlers, lookup, emitDataChanged }
 }
 
 describe('createHandlers', () => {
@@ -89,5 +93,44 @@ describe('createHandlers', () => {
       await expect(handlers['sets:adjust'](p.setName, bad, p.id, 1)).rejects.toThrow(/language/i)
     }
     expect(db.prepare('SELECT COUNT(*) AS n FROM collection_entries').get()).toEqual({ n: 0 })
+  })
+
+  it('collection:add of a ja printing looks up its price once, then emits data changed', async () => {
+    const { db, handlers, lookup, emitDataChanged } = await makeHandlers()
+    const ja = db
+      .prepare(
+        `INSERT INTO card_printings (card_id, language, set_name, set_code, set_rarity)
+         VALUES (46986414, 'ja', 'Legend of Blue Eyes White Dragon', 'LB-05', 'Ultra Rare') RETURNING id`
+      )
+      .get() as { id: number }
+    await handlers['collection:add']({ printingId: ja.id, imageId: 46986414, quantity: 1 })
+    expect(emitDataChanged).not.toHaveBeenCalled()
+    await vi.waitFor(() => expect(emitDataChanged).toHaveBeenCalledTimes(1))
+    expect(lookup).toHaveBeenCalledTimes(1)
+    expect(lookup).toHaveBeenCalledWith({
+      code: 'LB-05',
+      name: expect.any(String),
+      set: 'Legend of Blue Eyes White Dragon',
+      rarity: 'Ultra Rare',
+      lang: 'ja'
+    })
+    // A fresh price is not looked up again.
+    await handlers['collection:add']({ printingId: ja.id, imageId: 46986414, quantity: 1 })
+    await new Promise((r) => setTimeout(r, 10))
+    expect(lookup).toHaveBeenCalledTimes(1)
+    expect(emitDataChanged).toHaveBeenCalledTimes(1)
+  })
+
+  it('an English add looks up nothing and emits nothing', async () => {
+    const { db, handlers, lookup, emitDataChanged } = await makeHandlers()
+    const printing = db
+      .prepare(
+        'SELECT p.id AS printingId, i.image_id AS imageId FROM card_printings p JOIN card_images i ON i.card_id = p.card_id LIMIT 1'
+      )
+      .get() as { printingId: number; imageId: number }
+    await handlers['collection:add']({ ...printing, quantity: 1 })
+    await new Promise((r) => setTimeout(r, 10))
+    expect(lookup).not.toHaveBeenCalled()
+    expect(emitDataChanged).not.toHaveBeenCalled()
   })
 })

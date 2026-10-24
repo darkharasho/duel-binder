@@ -60,6 +60,9 @@ export interface EntryView {
   imageId: number
   unitPrice: number | null
   priceApproximate: boolean
+  priceSource: 'ygoprodeck' | 'ebay'
+  priceCheckedAt: string | null
+  noPriceReason: 'no-listings' | 'pending' | 'unavailable' | null
   totalValue: number
 }
 

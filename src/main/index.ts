@@ -6,11 +6,14 @@ import type { SyncStatus, UpdateStatus } from '@shared/types'
 import { DATA_CHANGED, SYNC_PROGRESS, UPDATE_STATUS } from '@shared/ipc'
 import icon from '../../resources/icon.png?asset'
 import { openDatabase } from './db/database'
-import { getMeta } from './db/meta'
+import { getMeta, setMeta } from './db/meta'
 import { createYgoClient } from './ygo/client'
 import { runSync, shouldSync } from './sync/sync'
 import { hasSetData, refreshSets } from './sync/sets'
 import { refreshIntlSets, shouldRefreshIntl } from './sync/intl'
+import { createPriceClient } from './prices/client'
+import { priceWorkerUrl } from './prices/config'
+import { refreshIntlPrices } from './prices/refresh'
 import { createYugipediaClient } from './yugipedia/client'
 import { recordSnapshot } from './repo/stats'
 import { createImageCache } from './images/cache'
@@ -143,7 +146,12 @@ function bootstrap(): void {
     updateStatus: async () => updater.status()
   }
 
-  registerIpc(createHandlers({ db, client, images, emitSync, app: appDeps }))
+  const workerUrl = priceWorkerUrl()
+  const priceClient = workerUrl ? createPriceClient({ url: workerUrl }) : null
+  if (!priceClient) setMeta(db, 'price_service_status', 'unavailable')
+  const emitDataChanged = (): void => broadcast(DATA_CHANGED, undefined)
+
+  registerIpc(createHandlers({ db, client, images, emitSync, app: appDeps, priceClient, emitDataChanged }))
 
   createWindow()
   updater.start()
@@ -167,7 +175,9 @@ function bootstrap(): void {
       await refreshIntlSets(db, createYugipediaClient({ version: app.getVersion() }))
       changed = true
     }
-    if (changed) broadcast(DATA_CHANGED, undefined)
+    const prices = await refreshIntlPrices(db, priceClient)
+    if (prices.updated > 0) changed = true
+    if (changed) emitDataChanged()
   }
 
   app.on('activate', function () {

@@ -43,9 +43,13 @@ describe('createHandlers', () => {
       quantity: 2
     })) as { id: number; quantity: number }
     expect(added.quantity).toBe(2)
-    const list = (await handlers['collection:list']({ sort: 'name', dir: 'asc' })) as { id: number }[]
+    const list = (await handlers['collection:list']({ sort: 'name', dir: 'asc' })) as {
+      id: number
+    }[]
     expect(list.map((e) => e.id)).toContain(added.id)
-    const today = db.prepare('SELECT total_cards AS n FROM value_snapshots').all() as { n: number }[]
+    const today = db.prepare('SELECT total_cards AS n FROM value_snapshots').all() as {
+      n: number
+    }[]
     expect(today).toEqual([{ n: 2 }])
   })
 
@@ -57,7 +61,9 @@ describe('createHandlers', () => {
     }
     const card = (await handlers['sets:adjust'](p.setName, 'en', p.id, 1)) as { owned: number }
     expect(card.owned).toBe(1)
-    const today = db.prepare('SELECT total_cards AS n FROM value_snapshots').all() as { n: number }[]
+    const today = db.prepare('SELECT total_cards AS n FROM value_snapshots').all() as {
+      n: number
+    }[]
     expect(today).toEqual([{ n: 1 }])
   })
 
@@ -70,5 +76,18 @@ describe('createHandlers', () => {
     expect(await handlers['sets:checklist'](p.setName, 'ja')).toBeNull()
     expect(await handlers['sets:checklist'](p.setName, 'en')).not.toBeNull()
     await expect(handlers['sets:adjust'](p.setName, 'ja', p.id, 1)).rejects.toThrow(/\(ja\)/)
+  })
+
+  it('sets handlers reject an unknown or non-string language without writing', async () => {
+    const { db, handlers } = await makeHandlers()
+    const p = db.prepare('SELECT id, set_name AS setName FROM card_printings LIMIT 1').get() as {
+      id: number
+      setName: string
+    }
+    for (const bad of ['xx', 5]) {
+      await expect(handlers['sets:checklist'](p.setName, bad)).rejects.toThrow(/language/i)
+      await expect(handlers['sets:adjust'](p.setName, bad, p.id, 1)).rejects.toThrow(/language/i)
+    }
+    expect(db.prepare('SELECT COUNT(*) AS n FROM collection_entries').get()).toEqual({ n: 0 })
   })
 })

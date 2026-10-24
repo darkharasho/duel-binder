@@ -122,3 +122,19 @@ test('refreshSets treats a non-string set_code as empty and keeps the other rows
   ])
   db.close()
 })
+
+test('refreshSets leaves non-English set rows alone', async () => {
+  const db = openDatabase(':memory:')
+  db.prepare(
+    `INSERT INTO sets (language, set_name, set_code, tcg_date, image_url) VALUES ('ja', 'X', 'XJ', '2000-01-01', NULL)`
+  ).run()
+  expect(await refreshSets(db, makeClient())).toBe(true)
+  expect(db.prepare(`SELECT set_name, set_code, tcg_date FROM sets WHERE language = 'ja'`).all()).toEqual([
+    { set_name: 'X', set_code: 'XJ', tcg_date: '2000-01-01' }
+  ])
+  expect(db.prepare(`SELECT set_name FROM sets WHERE language = 'en' ORDER BY set_name`).all()).toEqual([
+    { set_name: 'Metal Raiders' },
+    { set_name: 'Odd' }
+  ])
+  db.close()
+})

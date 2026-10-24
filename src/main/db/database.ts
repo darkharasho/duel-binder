@@ -3,6 +3,8 @@ import Database from 'better-sqlite3'
 interface Migration {
   version: number
   sql: string
+  /** Run with foreign keys off (needed to rebuild a referenced table); checked before commit. */
+  foreignKeysOff?: true
 }
 
 export const SCHEMA_V1 = `
@@ -23,16 +25,42 @@ CREATE TABLE value_snapshots (date TEXT PRIMARY KEY, total_value REAL NOT NULL, 
 CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 `
 
-const SCHEMA_V2 = `
+export const SCHEMA_V2 = `
 CREATE TABLE sets (set_name TEXT PRIMARY KEY, set_code TEXT NOT NULL, tcg_date TEXT, image_url TEXT);
 CREATE INDEX idx_printings_set_name ON card_printings(set_name);
 CREATE INDEX idx_images_card ON card_images(card_id, sort_order);
 `
 
+/** Per-language printings and sets. card_printings is rebuilt to replace its inline UNIQUE. */
+const SCHEMA_V3 = `
+CREATE TABLE card_printings_new (id INTEGER PRIMARY KEY, card_id INTEGER NOT NULL REFERENCES cards(id),
+  set_name TEXT NOT NULL, set_code TEXT NOT NULL, set_rarity TEXT NOT NULL, set_rarity_code TEXT NOT NULL DEFAULT '',
+  set_price REAL, missing_from_api INTEGER NOT NULL DEFAULT 0, language TEXT NOT NULL DEFAULT 'en');
+INSERT INTO card_printings_new (id, card_id, set_name, set_code, set_rarity, set_rarity_code, set_price, missing_from_api)
+  SELECT id, card_id, set_name, set_code, set_rarity, set_rarity_code, set_price, missing_from_api FROM card_printings;
+DROP TABLE card_printings;
+ALTER TABLE card_printings_new RENAME TO card_printings;
+CREATE INDEX idx_printings_set_code ON card_printings(set_code COLLATE NOCASE);
+CREATE INDEX idx_printings_set_name ON card_printings(set_name);
+CREATE UNIQUE INDEX ux_printings_en ON card_printings(card_id, set_code, set_rarity) WHERE language = 'en';
+CREATE UNIQUE INDEX ux_printings_intl ON card_printings(card_id, language, set_name, set_code, set_rarity)
+  WHERE language <> 'en';
+CREATE TABLE sets_new (language TEXT NOT NULL DEFAULT 'en', set_name TEXT NOT NULL, set_code TEXT NOT NULL,
+  tcg_date TEXT, image_url TEXT, image_key TEXT, list_rows INTEGER, unmatched_rows INTEGER,
+  PRIMARY KEY (language, set_name));
+INSERT INTO sets_new (language, set_name, set_code, tcg_date, image_url)
+  SELECT 'en', set_name, set_code, tcg_date, image_url FROM sets;
+DROP TABLE sets;
+ALTER TABLE sets_new RENAME TO sets;
+CREATE TABLE intl_prices (printing_id INTEGER PRIMARY KEY REFERENCES card_printings(id) ON DELETE CASCADE,
+  price REAL, listing_count INTEGER NOT NULL, checked_at TEXT NOT NULL);
+`
+
 /** Ordered schema steps. Append new versions to the end; never edit a shipped step. */
 const MIGRATIONS: Migration[] = [
   { version: 1, sql: SCHEMA_V1 },
-  { version: 2, sql: SCHEMA_V2 }
+  { version: 2, sql: SCHEMA_V2 },
+  { version: 3, sql: SCHEMA_V3, foreignKeysOff: true }
 ]
 
 export function openDatabase(file: string): Database.Database {
@@ -53,9 +81,27 @@ export function migrate(db: Database.Database): void {
   const current = db.pragma('user_version', { simple: true }) as number
   for (const migration of MIGRATIONS) {
     if (migration.version <= current) continue
-    db.transaction(() => {
+    const apply = db.transaction(() => {
       db.exec(migration.sql)
+      if (migration.foreignKeysOff) {
+        const violations = db.pragma('foreign_key_check') as unknown[]
+        if (violations.length > 0) {
+          throw new Error(`Migration ${migration.version} left ${violations.length} foreign key violation(s)`)
+        }
+      }
       db.pragma(`user_version = ${migration.version}`)
-    })()
+    })
+    if (!migration.foreignKeysOff) {
+      apply()
+      continue
+    }
+    // PRAGMA foreign_keys is a no-op inside a transaction, so toggle it around the transaction.
+    const previous = db.pragma('foreign_keys', { simple: true }) as number
+    db.pragma('foreign_keys = OFF')
+    try {
+      apply()
+    } finally {
+      db.pragma(`foreign_keys = ${previous ? 'ON' : 'OFF'}`)
+    }
   }
 }

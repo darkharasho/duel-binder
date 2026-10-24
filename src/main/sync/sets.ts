@@ -14,7 +14,7 @@ export function hasSetData(db: Database.Database): boolean {
   return db.prepare('SELECT 1 FROM sets LIMIT 1').get() !== undefined
 }
 
-/** Replaces the sets table with the API list. Never rejects; failures keep the old rows. */
+/** Replaces the English set rows with the API list. Never rejects; failures keep the old rows. */
 export async function refreshSets(db: Database.Database, client: YgoClient): Promise<boolean> {
   try {
     const payload = await client.fetchCardSets()
@@ -33,10 +33,11 @@ export async function refreshSets(db: Database.Database, client: YgoClient): Pro
       return false
     }
     const insert = db.prepare(
-      'INSERT INTO sets (set_name, set_code, tcg_date, image_url) VALUES (@set_name, @set_code, @tcg_date, @image_url)'
+      `INSERT INTO sets (language, set_name, set_code, tcg_date, image_url)
+       VALUES ('en', @set_name, @set_code, @tcg_date, @image_url)`
     )
     db.transaction(() => {
-      db.exec('DELETE FROM sets')
+      db.exec("DELETE FROM sets WHERE language = 'en'")
       for (const row of rows.values()) insert.run(row)
     })()
     return true

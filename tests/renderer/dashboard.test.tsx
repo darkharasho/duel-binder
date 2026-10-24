@@ -32,6 +32,7 @@ const entry = (id: number, name: string, extra: Partial<EntryView> = {}): EntryV
     setCode: `LOB-EN00${id}`,
     setRarity: 'Ultra Rare',
     setRarityCode: '(UR)',
+    language: 'en',
     setPrice: 10,
     missingFromApi: false
   },

@@ -29,6 +29,7 @@ const printing = (id: number, cardId: number, extra: Partial<Printing> = {}): Pr
   setCode: `LOB-EN00${id}`,
   setRarity: 'Ultra Rare',
   setRarityCode: '(UR)',
+  language: 'en',
   setPrice: 10,
   missingFromApi: false,
   ...extra

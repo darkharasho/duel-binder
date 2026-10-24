@@ -101,9 +101,10 @@ function saveCards(
       archetype = excluded.archetype, "desc" = excluded."desc",
       tcgplayer_price = excluded.tcgplayer_price, updated_at = excluded.updated_at`)
   const upsertPrinting = db.prepare(`
-    INSERT INTO card_printings (card_id, set_name, set_code, set_rarity, set_rarity_code, set_price, missing_from_api)
-    VALUES (@cardId, @setName, @setCode, @setRarity, @setRarityCode, @setPrice, 0)
-    ON CONFLICT(card_id, set_code, set_rarity) DO UPDATE SET set_name = excluded.set_name,
+    INSERT INTO card_printings (card_id, set_name, set_code, set_rarity, set_rarity_code, set_price,
+      missing_from_api, language)
+    VALUES (@cardId, @setName, @setCode, @setRarity, @setRarityCode, @setPrice, 0, 'en')
+    ON CONFLICT(card_id, set_code, set_rarity) WHERE language = 'en' DO UPDATE SET set_name = excluded.set_name,
       set_rarity_code = excluded.set_rarity_code, set_price = excluded.set_price, missing_from_api = 0
     RETURNING id`)
   const upsertImage = db.prepare(`
@@ -127,7 +128,8 @@ function saveCards(
         seenImages.add(img.imageId)
       }
     }
-    prune(db, 'card_printings', 'id', 'printing_id', seenPrintings)
+    // Only English printings come from YGOPRODeck; other languages belong to the Yugipedia sync.
+    prune(db, 'card_printings', 'id', 'printing_id', seenPrintings, "language = 'en'")
     prune(db, 'card_images', 'image_id', 'image_id', seenImages)
     db.exec(`INSERT INTO cards_fts(cards_fts) VALUES('rebuild')`)
     setMeta(db, 'last_sync_at', nowIso)
@@ -141,9 +143,10 @@ function prune(
   table: 'card_printings' | 'card_images',
   idCol: string,
   entryCol: string,
-  seen: Set<number>
+  seen: Set<number>,
+  where = '1'
 ): void {
-  const ids = (db.prepare(`SELECT ${idCol} AS id FROM ${table}`).all() as { id: number }[])
+  const ids = (db.prepare(`SELECT ${idCol} AS id FROM ${table} WHERE ${where}`).all() as { id: number }[])
     .map((r) => r.id)
     .filter((id) => !seen.has(id))
   const del = db.prepare(

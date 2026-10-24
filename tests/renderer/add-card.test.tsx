@@ -34,6 +34,7 @@ const printing = (
   setCode,
   setRarity: 'Ultra Rare',
   setRarityCode: '(UR)',
+  language: 'en',
   setPrice: 12.5,
   missingFromApi: false,
   ...extra

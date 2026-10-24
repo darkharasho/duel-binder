@@ -1,5 +1,6 @@
 import type Database from 'better-sqlite3'
 import { openDatabase } from '../../src/main/db/database'
+import { seededDb } from './helpers'
 import { getMeta } from '../../src/main/db/meta'
 import { SYNC_INTERVAL_MS, getSyncStatus, runSync, shouldSync } from '../../src/main/sync/sync'
 import type { YgoClient } from '../../src/main/ygo/client'
@@ -173,4 +174,45 @@ test('malformed API records are skipped without failing the sync', async () => {
     race: '',
     desc: ''
   })
+})
+
+test('keeps non-English printings across a YGOPRODeck sync', async () => {
+  const sdb = await seededDb()
+  try {
+    const ja = sdb
+      .prepare(
+        `INSERT INTO card_printings (card_id, language, set_name, set_code, set_rarity)
+         VALUES (46986414, 'ja', 'Legend of Blue Eyes White Dragon', 'LB-05', 'Ultra Rare') RETURNING id`
+      )
+      .get() as { id: number }
+    const bare = sdb
+      .prepare(
+        `INSERT INTO card_printings (card_id, language, set_name, set_code, set_rarity)
+         VALUES (46986414, 'ja', 'Vol.1', '', 'Ultra Rare') RETURNING id`
+      )
+      .get() as { id: number }
+    sdb
+      .prepare(
+        `INSERT INTO collection_entries (printing_id, image_id, quantity, created_at, updated_at)
+         VALUES (?, 46986414, 1, 'x', 'x')`
+      )
+      .run(ja.id)
+    sdb
+      .prepare(`INSERT INTO intl_prices (printing_id, price, listing_count, checked_at) VALUES (?, 12.5, 4, 'x')`)
+      .run(ja.id)
+    const status = await runSync(sdb, okClient(), () => {}, new Date(NOW.getTime() + 25 * HOUR))
+    expect(status.state).toBe('idle')
+    expect(sdb.prepare('SELECT missing_from_api FROM card_printings WHERE id = ?').get(ja.id)).toEqual({
+      missing_from_api: 0
+    })
+    expect(sdb.prepare('SELECT count(*) AS n FROM collection_entries WHERE printing_id = ?').get(ja.id)).toEqual({
+      n: 1
+    })
+    expect(sdb.prepare('SELECT price FROM intl_prices WHERE printing_id = ?').get(ja.id)).toEqual({ price: 12.5 })
+    expect(sdb.prepare('SELECT missing_from_api FROM card_printings WHERE id = ?').get(bare.id)).toEqual({
+      missing_from_api: 0
+    })
+  } finally {
+    sdb.close()
+  }
 })

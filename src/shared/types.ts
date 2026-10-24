@@ -1,3 +1,5 @@
+import type { Language } from './languages'
+
 export interface CardRow {
   id: number
   name: string
@@ -23,6 +25,7 @@ export interface Printing {
   setRarityCode: string
   setPrice: number | null
   missingFromApi: boolean
+  language: Language
 }
 
 /** sortOrder 0 is the original art. */

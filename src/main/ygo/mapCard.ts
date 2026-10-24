@@ -30,7 +30,7 @@ export function mapApiCard(
   _now: string
 ): {
   card: CardRow
-  printings: Omit<Printing, 'id' | 'missingFromApi'>[]
+  printings: Omit<Printing, 'id' | 'missingFromApi' | 'language'>[]
   images: CardImage[]
 } {
   return {

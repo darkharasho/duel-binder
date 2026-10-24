@@ -50,10 +50,10 @@ export function seedFakeCollection(db: Database.Database, now = new Date()): num
   const picks = new Map<number, number>() // printing id → quantity
 
   const cardsInSet = db.prepare(
-    'SELECT DISTINCT card_id FROM card_printings WHERE set_name = ? AND missing_from_api = 0 ORDER BY card_id'
+    `SELECT DISTINCT card_id FROM card_printings WHERE set_name = ? AND missing_from_api = 0 AND language = 'en' ORDER BY card_id`
   )
   const printingsOf = db.prepare(
-    'SELECT id FROM card_printings WHERE set_name = ? AND card_id = ? AND missing_from_api = 0 ORDER BY id'
+    `SELECT id FROM card_printings WHERE set_name = ? AND card_id = ? AND missing_from_api = 0 AND language = 'en' ORDER BY id`
   )
   for (const [setName, share] of SET_PLAN) {
     const cardIds = (cardsInSet.all(setName) as { card_id: number }[]).map((r) => r.card_id)
@@ -65,7 +65,7 @@ export function seedFakeCollection(db: Database.Database, now = new Date()): num
   }
 
   const allPrintings = (
-    db.prepare('SELECT id FROM card_printings WHERE missing_from_api = 0 ORDER BY id').all() as {
+    db.prepare(`SELECT id FROM card_printings WHERE missing_from_api = 0 AND language = 'en' ORDER BY id`).all() as {
       id: number
     }[]
   ).map((r) => r.id)

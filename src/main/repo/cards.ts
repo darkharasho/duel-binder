@@ -1,5 +1,6 @@
 import type Database from 'better-sqlite3'
 import type { CardDetail, CardImage, CardRow, CardSearchResult, Printing } from '../../shared/types'
+import { isLanguage } from '../../shared/languages'
 
 export interface CardDbRow {
   id: number
@@ -26,6 +27,7 @@ export interface PrintingDbRow {
   set_rarity_code: string
   set_price: number | null
   missing_from_api: number
+  language: string
 }
 
 export function rowToCard(row: CardDbRow): CardRow {
@@ -55,7 +57,8 @@ export function rowToPrinting(row: PrintingDbRow): Printing {
     setRarity: row.set_rarity,
     setRarityCode: row.set_rarity_code,
     setPrice: row.set_price,
-    missingFromApi: row.missing_from_api === 1
+    missingFromApi: row.missing_from_api === 1,
+    language: isLanguage(row.language) ? row.language : 'en'
   }
 }
 

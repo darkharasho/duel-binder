@@ -6,7 +6,9 @@ import {
   progressFor,
   replaceChecklistCard,
   setsHeader,
-  sortSets
+  sortCards,
+  sortSets,
+  sortTiles
 } from '@/features/sets/setsView'
 import { createSerialQueue } from '@/lib/serialQueue'
 import { metalRaidersChecklist } from './setFixtures'
@@ -145,9 +147,13 @@ const alpha: ChecklistCard = {
   imageId: 1,
   owned: 2,
   entryId: 7,
+  price: null,
+  atk: null,
+  def: null,
+  level: null,
   rarities: [
-    { rarity: 'Common', owned: 0, codes: [], defaultPrintingId: 1, entryId: null },
-    { rarity: 'Rare', owned: 2, codes: [], defaultPrintingId: 2, entryId: 7 }
+    { rarity: 'Common', owned: 0, codes: [], defaultPrintingId: 1, entryId: null, price: null },
+    { rarity: 'Rare', owned: 2, codes: [], defaultPrintingId: 2, entryId: 7, price: null }
   ]
 }
 const checklist: SetChecklist = { set: started, cards: [alpha] }
@@ -246,5 +252,33 @@ describe('replaceChecklistCard', () => {
     })
     expect(zeroed.set).toMatchObject({ ownedCards: 1, ownedRarities: 1 })
     expect(metalRaidersChecklist.set.ownedCards).toBe(1)
+  })
+})
+
+describe('sortTiles', () => {
+  const names = (tiles: { card: ChecklistCard }[]): string[] => tiles.map((t) => t.card.name)
+  const cardTiles = checklistTiles(metalRaidersChecklist, 'cards')
+
+  it('sorts by ATK with cards that have none last, whichever the direction', () => {
+    expect(names(sortTiles(cardTiles, 'atk', 'desc'))).toEqual(['Alpha Dragon', 'Beta Knight', 'Gamma Trap'])
+    expect(names(sortTiles(cardTiles, 'atk', 'asc'))).toEqual(['Beta Knight', 'Alpha Dragon', 'Gamma Trap'])
+  })
+
+  it('sorts by name and set number', () => {
+    expect(names(sortTiles(cardTiles, 'name', 'desc'))).toEqual(['Gamma Trap', 'Beta Knight', 'Alpha Dragon'])
+    expect(names(sortTiles(cardTiles, 'number', 'desc'))).toEqual(['Gamma Trap', 'Beta Knight', 'Alpha Dragon'])
+  })
+
+  it('prices each rarity tile by its own rarity', () => {
+    const tiles = sortTiles(checklistTiles(metalRaidersChecklist, 'rarities'), 'price', 'desc')
+    expect(tiles.map((t) => t.rarity)).toEqual(['Secret Rare', 'Ultra Rare', 'Rare', 'Common'])
+  })
+
+  it('sortCards orders bulk cards the same way', () => {
+    expect(sortCards(metalRaidersChecklist.cards, 'price', 'asc').map((c) => c.name)).toEqual([
+      'Gamma Trap',
+      'Alpha Dragon',
+      'Beta Knight'
+    ])
   })
 })

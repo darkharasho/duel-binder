@@ -9,7 +9,8 @@ const rarity = (ids: number[], defaultPrintingId: number): ChecklistRarity => ({
   owned: 0,
   codes: ids.map((id) => ({ printingId: id, setCode: `MRD-${id}`, owned: 0 })),
   defaultPrintingId,
-  entryId: null
+  entryId: null,
+  price: null
 })
 
 describe('BulkRow', () => {

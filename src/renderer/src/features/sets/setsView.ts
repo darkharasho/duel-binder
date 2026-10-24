@@ -5,6 +5,18 @@ import type { ChecklistCard, CountMode, SetChecklist, SetSummary } from '@shared
 export type SetFilter = 'started' | 'all' | 'complete'
 export type SetSort = 'complete' | 'name' | 'date'
 export type TileFilter = 'all' | 'owned' | 'missing'
+export type ChecklistSort = 'number' | 'name' | 'price' | 'atk' | 'def' | 'level'
+export type SortDir = 'asc' | 'desc'
+
+/** Sort choices for a set's cards, each with the direction it starts in. */
+export const CHECKLIST_SORTS: readonly { value: ChecklistSort; label: string; dir: SortDir }[] = [
+  { value: 'number', label: 'Set number', dir: 'asc' },
+  { value: 'name', label: 'Name', dir: 'asc' },
+  { value: 'price', label: 'Price', dir: 'desc' },
+  { value: 'atk', label: 'ATK', dir: 'desc' },
+  { value: 'def', label: 'DEF', dir: 'desc' },
+  { value: 'level', label: 'Level / Link', dir: 'desc' }
+]
 
 export interface Progress {
   owned: number
@@ -98,6 +110,54 @@ export function checklistTiles(cl: SetChecklist, mode: CountMode): Tile[] {
       entryId: r.entryId
     }))
   )
+}
+
+function sortValue(t: Tile, sort: ChecklistSort): number | string | null {
+  const c = t.card
+  switch (sort) {
+    case 'number':
+      return c.number
+    case 'name':
+      return c.name
+    case 'price': {
+      const r = t.rarity === null ? undefined : c.rarities.find((x) => x.rarity === t.rarity)
+      return r?.price ?? c.price
+    }
+    default:
+      return c[sort]
+  }
+}
+
+/**
+ * Tiles in the chosen order. Cards without the value (a spell's ATK, an unpriced card) go last
+ * either way; ties keep the set's own order.
+ */
+export function sortTiles(tiles: Tile[], sort: ChecklistSort, dir: SortDir): Tile[] {
+  const sign = dir === 'asc' ? 1 : -1
+  return tiles
+    .map((t, i) => ({ t, i, v: sortValue(t, sort) }))
+    .sort((a, b) => {
+      if (a.v !== b.v) {
+        if (a.v === null) return 1
+        if (b.v === null) return -1
+        const d = typeof a.v === 'string' ? a.v.localeCompare(String(b.v)) : a.v - Number(b.v)
+        if (d !== 0) return sign * d
+      }
+      return a.i - b.i
+    })
+    .map((x) => x.t)
+}
+
+/** Cards in the chosen order, as `sortTiles` orders one tile per card. */
+export function sortCards(cards: ChecklistCard[], sort: ChecklistSort, dir: SortDir): ChecklistCard[] {
+  const tiles = cards.map((card) => ({
+    key: String(card.cardId),
+    card,
+    rarity: null,
+    owned: card.owned,
+    entryId: card.entryId
+  }))
+  return sortTiles(tiles, sort, dir).map((t) => t.card)
 }
 
 export function filterTiles(tiles: Tile[], f: TileFilter): Tile[] {

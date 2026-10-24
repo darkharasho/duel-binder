@@ -108,6 +108,11 @@ interface PrintingDbRow {
   name: string
   type: string
   image_id: number | null
+  set_price: number | null
+  card_price: number | null
+  atk: number | null
+  def: number | null
+  level: number | null
 }
 
 interface EntryDbRow {
@@ -133,6 +138,12 @@ function latest(entries: EntryDbRow[]): number | null {
   return best?.id ?? null
 }
 
+/** The dearest printing price among the rows; null when none has one. */
+function maxPrice(rows: PrintingDbRow[]): number | null {
+  const prices = rows.map((r) => r.set_price).filter((v): v is number => v !== null && v > 0)
+  return prices.length > 0 ? Math.max(...prices) : null
+}
+
 const sum = (entries: EntryDbRow[]): number => entries.reduce((n, e) => n + e.quantity, 0)
 
 /** Checklist cards of a set, optionally limited to one card, sorted by number (nulls last) then name. */
@@ -146,7 +157,8 @@ function checklistCards(
   const params = cardId === undefined ? [language, setName] : [language, setName, cardId]
   const printings = db
     .prepare(
-      `SELECT p.id, p.card_id, p.set_code, p.set_rarity, c.name, c.type,
+      `SELECT p.id, p.card_id, p.set_code, p.set_rarity, c.name, c.type, p.set_price,
+              c.tcgplayer_price AS card_price, c.atk, c.def, COALESCE(c.level, c.linkval) AS level,
               (SELECT i.image_id FROM card_images i WHERE i.card_id = c.id
                ORDER BY i.sort_order, i.image_id LIMIT 1) AS image_id
        FROM card_printings p JOIN cards c ON c.id = p.card_id
@@ -196,6 +208,7 @@ function checklistCards(
         return {
           rarity,
           owned: sum(rarityEntries),
+          price: maxPrice(ps),
           codes,
           defaultPrintingId: codes[pickDefaultCode(codes)].printingId,
           entryId: latest(rarityEntries)
@@ -217,7 +230,11 @@ function checklistCards(
       imageId: rows[0].image_id ?? 0,
       owned: sum(cardEntries),
       entryId: latest(cardEntries),
-      rarities
+      rarities,
+      price: maxPrice(rows) ?? rows[0].card_price,
+      atk: rows[0].atk,
+      def: rows[0].def,
+      level: rows[0].level
     })
   }
   return cards.sort((a, b) => {

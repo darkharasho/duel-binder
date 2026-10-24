@@ -162,6 +162,21 @@ describe('getChecklist', () => {
     expect(gamma.entryId).toBeNull()
   })
 
+  it('gives each card its stats and dearest printing price in the set', async () => {
+    const db = await setup()
+    db.prepare("UPDATE cards SET atk = 3000, def = 2500, level = 8, tcgplayer_price = 99 WHERE id = 1001").run()
+    db.prepare("UPDATE cards SET linkval = 3, level = NULL, tcgplayer_price = 5 WHERE id = 2001").run()
+    db.prepare('UPDATE card_printings SET set_price = NULL').run()
+    db.prepare("UPDATE card_printings SET set_price = 12 WHERE set_code = 'MRD-E001'").run()
+    db.prepare("UPDATE card_printings SET set_price = 40 WHERE set_code = 'MRD-001' AND set_rarity = 'Secret Rare'").run()
+    const [alpha, beta] = getChecklist(db, MRD, 'en')!.cards
+    expect(alpha).toMatchObject({ atk: 3000, def: 2500, level: 8, price: 40 })
+    expect(alpha.rarities.map((r) => r.price)).toEqual([40, 12])
+    // No printing price in the set: falls back to the card's price; link rating counts as level.
+    expect(beta).toMatchObject({ level: 3, price: 5 })
+    expect(beta.rarities[0].price).toBeNull()
+  })
+
   it('returns null for an unknown set', async () => {
     const db = await setup()
     expect(getChecklist(db, 'Nope', 'en')).toBeNull()

@@ -229,6 +229,7 @@ export interface ChecklistRarity {
   codes: ChecklistCode[] // sorted by setCode
   defaultPrintingId: number // pickDefaultCode over codes
   entryId: number | null // most recently updated entry of this rarity in this set
+  price: number | null // dearest printing price of this rarity in this set
 }
 
 export interface ChecklistCard {
@@ -241,6 +242,10 @@ export interface ChecklistCard {
   owned: number // sum over rarities
   entryId: number | null // most recently updated entry of the card in this set
   rarities: ChecklistRarity[] // sorted by rarity name
+  price: number | null // dearest printing price in this set, else the card's price
+  atk: number | null
+  def: number | null
+  level: number | null // level, rank or link rating
 }
 
 export interface SetChecklist {

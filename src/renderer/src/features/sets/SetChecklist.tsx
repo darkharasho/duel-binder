@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowLeft, Search } from 'lucide-react'
+import { ArrowDownAZ, ArrowLeft, ArrowUpAZ, Search } from 'lucide-react'
 import { toast } from 'sonner'
 import type { Language } from '@shared/languages'
 import type { CardSearchResult, CountMode, SetChecklist as SetChecklistData } from '@shared/types'
@@ -10,6 +10,7 @@ import { LanguageTag } from '@/components/LanguageTag'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { UnderlineTabs } from '@/components/UnderlineTabs'
@@ -22,11 +23,16 @@ import { SetCardPanel } from './SetCardPanel'
 import { SetArt } from './SetArt'
 import { SetProgress } from './SetProgress'
 import {
+  CHECKLIST_SORTS,
   checklistTiles,
   filterTiles,
   matchesCardSearch,
   progressFor,
   replaceChecklistCard,
+  sortCards,
+  sortTiles,
+  type ChecklistSort,
+  type SortDir,
   type Tile,
   type TileFilter
 } from './setsView'
@@ -91,6 +97,7 @@ export function SetChecklist({
 }: SetChecklistProps): React.JSX.Element {
   const [filter, setFilter] = useState<TileFilter>('all')
   const [q, setQ] = useState('')
+  const [sort, setSort] = useState<{ by: ChecklistSort; dir: SortDir }>({ by: 'number', dir: 'asc' })
   const [selected, setSelected] = useState<{ cardId: number; entryId: number } | null>(null)
   // A card not owned yet opens with steppers instead of an entry editor.
   const [unowned, setUnowned] = useState<{ cardId: number; rarity: string | null } | null>(null)
@@ -121,9 +128,15 @@ export function SetChecklist({
   const tiles = useMemo(
     () =>
       data
-        ? filterTiles(checklistTiles(data, mode), filter).filter((t) => matchesCardSearch(t.card, q))
+        ? sortTiles(
+            filterTiles(checklistTiles(data, mode), filter).filter((t) =>
+              matchesCardSearch(t.card, q)
+            ),
+            sort.by,
+            sort.dir
+          )
         : [],
-    [data, mode, filter, q]
+    [data, mode, filter, q, sort]
   )
 
   // Recompute the frozen ids on entering bulk mode and when the filter or count mode changes.
@@ -134,7 +147,11 @@ export function SetChecklist({
   }
   const bulkCards =
     data && frozen
-      ? data.cards.filter((c) => frozen.ids.has(c.cardId) && matchesCardSearch(c, q))
+      ? sortCards(
+          data.cards.filter((c) => frozen.ids.has(c.cardId) && matchesCardSearch(c, q)),
+          sort.by,
+          sort.dir
+        )
       : []
 
   const bumpPending = (cardId: number, by: 1 | -1): void =>
@@ -221,6 +238,34 @@ export function SetChecklist({
                   aria-label="Search this set"
                   className="h-8 pl-8"
                 />
+              </div>
+              <div className="flex items-center gap-1.5">
+                <Select
+                  value={sort.by}
+                  onValueChange={(v) => {
+                    const o = CHECKLIST_SORTS.find((x) => x.value === v)
+                    if (o) setSort({ by: o.value, dir: o.dir })
+                  }}
+                >
+                  <SelectTrigger size="sm" aria-label="Sort by" className="w-36">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {CHECKLIST_SORTS.map((o) => (
+                      <SelectItem key={o.value} value={o.value}>
+                        {o.label}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <Button
+                  variant="outline"
+                  size="icon-sm"
+                  aria-label={sort.dir === 'asc' ? 'Sort ascending' : 'Sort descending'}
+                  onClick={() => setSort((s) => ({ ...s, dir: s.dir === 'asc' ? 'desc' : 'asc' }))}
+                >
+                  {sort.dir === 'asc' ? <ArrowUpAZ /> : <ArrowDownAZ />}
+                </Button>
               </div>
               <ToggleGroup
                 type="single"

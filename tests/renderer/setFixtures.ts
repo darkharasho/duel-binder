@@ -36,13 +36,15 @@ export const metalRaidersChecklist: SetChecklist = {
       imageId: 1001,
       owned: 2,
       entryId: 7,
+      price: 40, atk: 3000, def: 2500, level: 8,
       rarities: [
         {
           rarity: 'Secret Rare',
           owned: 0,
           codes: [{ printingId: PRINTING.alphaSecret, setCode: 'MRD-001', owned: 0 }],
           defaultPrintingId: PRINTING.alphaSecret,
-          entryId: null
+          entryId: null,
+          price: 40
         },
         {
           rarity: 'Ultra Rare',
@@ -53,7 +55,8 @@ export const metalRaidersChecklist: SetChecklist = {
             { printingId: PRINTING.alphaUltraEN001, setCode: 'MRD-EN001', owned: 0 }
           ],
           defaultPrintingId: PRINTING.alphaUltraE001,
-          entryId: 7
+          entryId: 7,
+          price: 12
         }
       ]
     },
@@ -66,13 +69,15 @@ export const metalRaidersChecklist: SetChecklist = {
       imageId: 2001,
       owned: 0,
       entryId: null,
+      price: null, atk: 1800, def: null, level: 4,
       rarities: [
         {
           rarity: 'Common',
           owned: 0,
           codes: [{ printingId: PRINTING.beta, setCode: 'MRD-002', owned: 0 }],
           defaultPrintingId: PRINTING.beta,
-          entryId: null
+          entryId: null,
+          price: null
         }
       ]
     },
@@ -85,6 +90,7 @@ export const metalRaidersChecklist: SetChecklist = {
       imageId: 3001,
       owned: 0,
       entryId: null,
+      price: 3, atk: null, def: null, level: null,
       rarities: [
         {
           rarity: 'Rare',
@@ -94,7 +100,8 @@ export const metalRaidersChecklist: SetChecklist = {
             { printingId: PRINTING.gammaEN010, setCode: 'MRD-EN010', owned: 0 }
           ],
           defaultPrintingId: PRINTING.gammaEN010,
-          entryId: null
+          entryId: null,
+          price: 3
         }
       ]
     }

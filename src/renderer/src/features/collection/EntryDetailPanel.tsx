@@ -21,7 +21,7 @@ import {
 } from '@/components/ui/sheet'
 import { api, mutationInvalidationKeys, queryKeys } from '@/lib/api'
 import { cn } from '@/lib/utils'
-import { StaleBadge, ValueText } from './EntryValue'
+import { StaleBadge, ValueText, displayTotal } from './EntryValue'
 
 interface Props {
   cardId: number
@@ -100,7 +100,7 @@ function EntryEditor({
     <div className="space-y-4">
       <div className="flex items-center gap-2 text-sm">
         <span className="text-muted-foreground">Value</span>
-        <ValueText amount={entry.totalValue} approximate={entry.priceApproximate} />
+        <ValueText amount={displayTotal(entry)} approximate={entry.priceApproximate} />
       </div>
       <StaleBadge entry={entry} />
 

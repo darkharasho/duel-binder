@@ -1,7 +1,7 @@
 import type { EntryView } from '@shared/types'
 import { Badge } from '@/components/ui/badge'
 import { CardArt } from '@/components/CardArt'
-import { StaleBadge, ValueText } from './EntryValue'
+import { StaleBadge, ValueText, displayTotal } from './EntryValue'
 
 interface Props {
   entries: EntryView[]
@@ -35,7 +35,7 @@ export function CollectionGrid({ entries, selectedId, onSelect }: Props): React.
                 {e.printing.setCode} · {e.printing.setRarity}
               </div>
               <div className="text-xs">
-                <ValueText amount={e.totalValue} approximate={e.priceApproximate} />
+                <ValueText amount={displayTotal(e)} approximate={e.priceApproximate} />
               </div>
               <StaleBadge entry={e} />
             </div>

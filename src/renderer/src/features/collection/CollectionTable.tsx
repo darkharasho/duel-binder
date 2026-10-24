@@ -10,7 +10,7 @@ import {
   TableHeader,
   TableRow
 } from '@/components/ui/table'
-import { StaleBadge, ValueText } from './EntryValue'
+import { StaleBadge, ValueText, displayTotal } from './EntryValue'
 
 interface Props {
   entries: EntryView[]
@@ -64,7 +64,7 @@ const columns = helper.columns([
     id: 'total',
     header: 'Total',
     cell: ({ row }) => (
-      <ValueText amount={row.original.totalValue} approximate={row.original.priceApproximate} />
+      <ValueText amount={displayTotal(row.original)} approximate={row.original.priceApproximate} />
     )
   })
 ])

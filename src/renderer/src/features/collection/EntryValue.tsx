@@ -14,7 +14,7 @@ export function ValueText({
   approximate: boolean
 }): React.JSX.Element {
   const text = formatUsd(amount)
-  if (!approximate) return <span className="tabular-nums">{text}</span>
+  if (amount === null || !approximate) return <span className="tabular-nums">{text}</span>
   return (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -27,6 +27,10 @@ export function ValueText({
     </Tooltip>
   )
 }
+
+/** Total for display: null (shown as "—") when the entry has no price at all. */
+export const displayTotal = (e: EntryView): number | null =>
+  e.unitPrice === null ? null : e.totalValue
 
 export function StaleBadge({ entry }: { entry: EntryView }): React.JSX.Element | null {
   if (!entry.printing.missingFromApi) return null

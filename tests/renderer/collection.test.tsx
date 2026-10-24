@@ -144,6 +144,14 @@ describe('CollectionPage', () => {
     expect(await screen.findByText('≈')).toBeInTheDocument()
   })
 
+  it('unpriced entries show an em dash instead of $0.00', async () => {
+    setup([entry(1, 'Dark Magician', { unitPrice: null, totalValue: 0, priceApproximate: true })])
+    await screen.findByText('Dark Magician')
+    expect(screen.getByText('—')).toBeInTheDocument()
+    expect(screen.queryByText('$0.00')).not.toBeInTheDocument()
+    expect(screen.queryByText('≈')).not.toBeInTheDocument()
+  })
+
   it('missing printing shows stale badge', async () => {
     setup([entry(1, 'Dark Magician', { printing: printing(1, 101, { missingFromApi: true }) })])
     expect(

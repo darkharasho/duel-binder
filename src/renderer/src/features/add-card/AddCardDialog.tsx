@@ -3,7 +3,8 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import type { CardSearchResult, Printing } from '@shared/types'
 import { api, mutationInvalidationKeys, queryKeys } from '@/lib/api'
-import { formatUsd } from '@/lib/format'
+import { priceFor } from '@shared/pricing'
+import { ValueText } from '@/features/collection/EntryValue'
 import { cn } from '@/lib/utils'
 import { CardArt } from '@/components/CardArt'
 import { useSyncStatus } from '@/components/useSyncStatus'
@@ -24,6 +25,7 @@ import {
   DialogTitle
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
+import { TooltipProvider } from '@/components/ui/tooltip'
 
 type Step = 'search' | 'printing' | 'art' | 'quantity'
 
@@ -39,6 +41,21 @@ function useDebounced<T>(value: T, ms: number): T {
     return () => clearTimeout(t)
   }, [value, ms])
   return debounced
+}
+
+function PrintingPrice({
+  setPrice,
+  cardPrice
+}: {
+  setPrice: number | null
+  cardPrice: number | null
+}): React.JSX.Element {
+  const { unitPrice, approximate } = priceFor(setPrice, cardPrice)
+  return (
+    <TooltipProvider>
+      <ValueText amount={unitPrice} approximate={approximate} />
+    </TooltipProvider>
+  )
 }
 
 export function AddCardDialog({ open, onOpenChange }: AddCardDialogProps): React.JSX.Element {
@@ -177,7 +194,9 @@ export function AddCardDialog({ open, onOpenChange }: AddCardDialogProps): React
         {step === 'search' &&
           (downloading ? (
             <p className="px-6 py-10 text-center text-sm text-muted-foreground">
-              Card database is still downloading
+              {sync?.state === 'error'
+                ? "Couldn't download the card database. Check your connection and retry from the banner."
+                : 'Card database is still downloading'}
             </p>
           ) : (
             <Command shouldFilter={false} className="rounded-xl">
@@ -244,8 +263,11 @@ export function AddCardDialog({ open, onOpenChange }: AddCardDialogProps): React
                     <span className="min-w-0 flex-1 truncate">{p.setName}</span>
                     <span className="text-xs tabular-nums text-muted-foreground">{p.setCode}</span>
                     <span className="text-xs text-muted-foreground">{p.setRarity}</span>
-                    <span className="w-16 text-right text-xs tabular-nums">
-                      {formatUsd(p.setPrice)}
+                    <span className="w-16 text-right text-xs">
+                      <PrintingPrice
+                        setPrice={p.setPrice}
+                        cardPrice={detail.data?.card.tcgplayerPrice ?? null}
+                      />
                     </span>
                   </CommandItem>
                 ))}
@@ -275,8 +297,16 @@ export function AddCardDialog({ open, onOpenChange }: AddCardDialogProps): React
                     setImageId(im.imageId)
                     setStep('quantity')
                   }}
+                  onKeyUp={(e) => {
+                    // Space only selects the radio; it must not fire the button's click.
+                    if (e.key === ' ') e.preventDefault()
+                  }}
                   onKeyDown={(e) => {
                     moveArt(e, i)
+                    if (e.key === ' ') {
+                      e.preventDefault()
+                      setImageId(im.imageId)
+                    }
                     if (e.key === 'Enter') {
                       e.preventDefault()
                       setImageId(im.imageId)

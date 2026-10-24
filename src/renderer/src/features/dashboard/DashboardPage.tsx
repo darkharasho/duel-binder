@@ -4,7 +4,7 @@ import type { NavigateFn } from '@/components/AppShell'
 import { CardArt } from '@/components/CardArt'
 import { Button } from '@/components/ui/button'
 import { TooltipProvider } from '@/components/ui/tooltip'
-import { StaleBadge, ValueText } from '@/features/collection/EntryValue'
+import { StaleBadge, ValueText, displayTotal } from '@/features/collection/EntryValue'
 import { api, queryKeys } from '@/lib/api'
 import { formatRelative, formatUsd } from '@/lib/format'
 
@@ -138,7 +138,7 @@ function Content({ stats, onNavigate }: { stats: CollectionStats; onNavigate: Na
                 </span>
                 <span className="text-sm tabular-nums text-muted-foreground">×{e.quantity}</span>
                 <span className="min-w-20 text-right text-sm">
-                  <ValueText amount={e.totalValue} approximate={e.priceApproximate} />
+                  <ValueText amount={displayTotal(e)} approximate={e.priceApproximate} />
                 </span>
               </button>
             </li>

@@ -36,6 +36,24 @@ describe('useUpdateToasts', () => {
     renderWithProviders(<Host />, { api })
     await waitFor(() => expect(toast).toHaveBeenCalledWith('Update 1.3.0 available', expect.anything()))
   })
+
+  it('does not re-show the notify toast for a version the user dismissed', async () => {
+    let push: (s: UpdateStatus) => void = () => {}
+    const available: UpdateStatus = { state: 'available', mode: 'notify', version: '1.3.0', error: null }
+    const api = createMockApi({ app: { onUpdateStatus: vi.fn((cb) => ((push = cb), () => {})) } })
+    renderWithProviders(<Host />, { api })
+    await waitFor(() => expect(api.app.updateStatus).toHaveBeenCalled())
+    act(() => push(available))
+    await waitFor(() => expect(toast).toHaveBeenCalledTimes(1))
+    const opts = vi.mocked(toast).mock.calls[0][1] as { onDismiss: () => void }
+    opts.onDismiss()
+    act(() => push({ ...available, state: 'checking' }))
+    act(() => push(available))
+    // A newer version still notifies.
+    act(() => push({ ...available, version: '1.4.0' }))
+    await waitFor(() => expect(toast).toHaveBeenCalledWith('Update 1.4.0 available', expect.anything()))
+    expect(toast).toHaveBeenCalledTimes(2)
+  })
 })
 
 describe('SettingsPage update actions', () => {

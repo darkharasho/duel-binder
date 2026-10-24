@@ -126,6 +126,37 @@ describe('AddCardDialog', () => {
     )
   })
 
+  it('printing list falls back to the card price (approximate) when the set price is missing', async () => {
+    setup({
+      cards: {
+        search: async () => [pot],
+        get: async () => ({
+          card: row(pot.id, pot.name, pot.type),
+          printings: [printing(1, pot.id, 'LOB-EN119', { setPrice: null })],
+          images: [{ imageId: 55144522, cardId: pot.id, sortOrder: 0 }]
+        })
+      }
+    })
+    await userEvent.type(await screen.findByPlaceholderText(/Search cards/), 'pot')
+    await userEvent.click(await screen.findByText('Pot of Greed'))
+    await screen.findByText('LOB-EN119')
+    expect(screen.getByText('≈')).toBeInTheDocument()
+    expect(screen.getByText('$1.00')).toBeInTheDocument()
+  })
+
+  it('Space on an art radio selects it without advancing', async () => {
+    setup()
+    await userEvent.type(await screen.findByPlaceholderText(/Search cards/), 'dark')
+    await userEvent.click(await screen.findByText('Dark Magician'))
+    await userEvent.click(await screen.findByText('LOB-EN005'))
+    const arts = await screen.findAllByRole('radio')
+    await waitFor(() => expect(arts[0]).toHaveFocus())
+    await userEvent.keyboard('{ArrowRight}')
+    await userEvent.keyboard(' ')
+    expect(screen.getAllByRole('radio')[1]).toHaveAttribute('aria-checked', 'true')
+    expect(screen.queryByLabelText('Quantity')).not.toBeInTheDocument()
+  })
+
   it('quantity 0 disables Save', async () => {
     setup()
     await userEvent.type(await screen.findByPlaceholderText(/Search cards/), 'pot')

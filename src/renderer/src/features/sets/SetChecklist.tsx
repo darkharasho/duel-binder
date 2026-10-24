@@ -299,6 +299,7 @@ export function SetChecklist({
         <header className="flex flex-wrap items-center gap-5">
           <SetArt
             imageKey={data.set.imageKey}
+            packImageKey={data.set.packImageKey}
             coverImageId={data.set.coverImageId}
             setCode={data.set.setCode}
             className="size-24 rounded-[3px] shadow-[0_8px_20px_rgb(0_0_0/0.5)]"

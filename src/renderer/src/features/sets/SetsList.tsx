@@ -31,6 +31,7 @@ export function SetsList({ sets, mode, view, onOpen }: Props): React.JSX.Element
               >
                 <SetArt
                   imageKey={s.imageKey}
+                  packImageKey={s.packImageKey}
                   coverImageId={s.coverImageId}
                   setCode={s.setCode}
                   className={cn(
@@ -86,6 +87,7 @@ export function SetsList({ sets, mode, view, onOpen }: Props): React.JSX.Element
             >
               <SetArt
                 imageKey={s.imageKey}
+                packImageKey={s.packImageKey}
                 coverImageId={s.coverImageId}
                 setCode={s.setCode}
                 className={cn(

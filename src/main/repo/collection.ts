@@ -26,7 +26,7 @@ const SELECT = `
          c.id AS id, c.name, c.type, c.frame_type, c.race, c.attribute, c.level, c.linkval, c.atk, c.def,
          c.archetype, c.desc, c.tcgplayer_price,
          p.id AS p_id, p.card_id, p.set_name, p.set_code, p.set_rarity, p.set_rarity_code, p.set_price,
-         p.missing_from_api
+         p.missing_from_api, p.language
   FROM collection_entries e
   JOIN card_printings p ON p.id = e.printing_id
   JOIN cards c ON c.id = p.card_id`

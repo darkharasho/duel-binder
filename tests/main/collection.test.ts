@@ -113,3 +113,18 @@ test('remove deletes', () => {
   removeEntry(db, a.id)
   expect(getEntry(db, a.id)).toBeNull()
 })
+
+test('entries report their printing language', () => {
+  const ja = db
+    .prepare(
+      `INSERT INTO card_printings (card_id, language, set_name, set_code, set_rarity)
+       VALUES (46986414, 'ja', 'Legend of Blue Eyes White Dragon', 'LB-05', 'Ultra Rare') RETURNING id`
+    )
+    .get() as { id: number }
+  const e = addEntry(db, { printingId: ja.id, imageId: 46986414, quantity: 1 })
+  expect(e.printing.language).toBe('ja')
+  expect(getEntry(db, e.id)?.printing.language).toBe('ja')
+  expect(listEntries(db, all).map((x) => x.printing.language)).toEqual(['ja'])
+  const en = addEntry(db, { printingId: pid('LOB-EN005'), imageId: 46986414, quantity: 1 })
+  expect(en.printing.language).toBe('en')
+})

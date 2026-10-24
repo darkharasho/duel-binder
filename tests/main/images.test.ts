@@ -277,3 +277,38 @@ describe('printing scans', () => {
     expect(fetchFn).not.toHaveBeenCalled()
   })
 })
+
+describe('Konami logos', () => {
+  const URL_K = 'https://img.konami.com/games_cms/promo/eu/uploads/rao5_en_169.jpg'
+  const KEY = 'km-0123456789abcdef0123'
+
+  it('cuts the download out before keeping it as sets/<key>.png', async () => {
+    const fetchFn = vi.fn<(url: string) => Promise<Response>>(async () => okResponse('jpeg', 'image/jpeg'))
+    const prepareLogo = vi.fn(async (file: string) => fs.writeFile(file, 'png'))
+    const cache = createImageCache({ dir, fetchFn: fetchFn as unknown as typeof fetch, limit: noLimit, resolveSetImage: () => URL_K, prepareLogo })
+    const file = path.join(dir, 'sets', `${KEY}.png`)
+    expect(await cache.getSet(KEY)).toBe(file)
+    expect(await fs.readFile(file, 'utf8')).toBe('png')
+    expect(fetchFn.mock.calls[0][0]).toBe(URL_K)
+  })
+
+  it('keeps nothing when the cutout fails, and needs a cutout to show anything', async () => {
+    const fetchFn = vi.fn(async () => okResponse())
+    const prepareLogo = vi.fn(async () => {
+      throw new Error('blank logo')
+    })
+    const failing = createImageCache({ dir, fetchFn: fetchFn as unknown as typeof fetch, limit: noLimit, resolveSetImage: () => URL_K, prepareLogo })
+    expect(await failing.getSet(KEY)).toBeNull()
+    expect(await fs.readdir(path.join(dir, 'sets'))).toEqual([])
+
+    const bare = createImageCache({ dir, fetchFn: fetchFn as unknown as typeof fetch, limit: noLimit, resolveSetImage: () => URL_K })
+    expect(await bare.getSet(KEY)).toBeNull()
+  })
+
+  it('refuses a resolved URL outside img.konami.com', async () => {
+    const fetchFn = vi.fn(async () => okResponse())
+    const cache = createImageCache({ dir, fetchFn: fetchFn as unknown as typeof fetch, limit: noLimit, resolveSetImage: () => 'https://evil.example/x.png', prepareLogo: async () => undefined })
+    expect(await cache.getSet(KEY)).toBeNull()
+    expect(fetchFn).not.toHaveBeenCalled()
+  })
+})

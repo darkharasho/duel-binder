@@ -4,6 +4,7 @@ import path from 'node:path'
 import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import type { ReadableStream as WebReadableStream } from 'node:stream/web'
+import { KONAMI_LOGO_PREFIX } from '../konami/logos'
 import { PACK_ART_PREFIX } from '../konami/packArt'
 import { createLimiter, type Limiter } from './limiter'
 
@@ -92,8 +93,10 @@ export function createImageCache(opts: {
   limit?: Limiter
   /** App version, sent in the Yugipedia User-Agent. */
   version?: string
-  /** Maps a `yp-` (Yugipedia) or `yc-` (official site) set-image key to its source URL (null when unknown). */
+  /** Maps a `yp-` (Yugipedia), `yc-` (official site) or `km-` (Konami news) set-image key to its source URL (null when unknown). */
   resolveSetImage?: (key: string) => string | null
+  /** Rewrites a downloaded Konami logo in place (cutting out its white); a throw drops the download. */
+  prepareLogo?: (file: string) => Promise<void>
   /** Finds the photo URL of a printing, Yugipedia or TCGplayer (null when none). */
   resolvePrintingArt?: (printingId: number) => Promise<string | null>
 }): ImageCache {
@@ -104,7 +107,12 @@ export function createImageCache(opts: {
   const exists = (p: string): Promise<boolean> =>
     fs.stat(p).then((s) => s.isFile() && s.size > 0, () => false)
 
-  async function download(remoteUrl: string, finalPath: string, headers?: Record<string, string>): Promise<string | null> {
+  async function download(
+    remoteUrl: string,
+    finalPath: string,
+    headers?: Record<string, string>,
+    prepare?: (file: string) => Promise<void>
+  ): Promise<string | null> {
     const tmpPath = `${finalPath}.tmp`
     try {
       await fs.mkdir(path.dirname(finalPath), { recursive: true })
@@ -113,6 +121,7 @@ export function createImageCache(opts: {
       if (!(res.headers.get('content-type') ?? '').toLowerCase().startsWith('image/')) return null
       await pipeline(Readable.fromWeb(res.body as unknown as WebReadableStream), createWriteStream(tmpPath))
       if ((await fs.stat(tmpPath)).size === 0) throw new Error('empty image body')
+      await prepare?.(tmpPath)
       await fs.rename(tmpPath, finalPath)
       return finalPath
     } catch {
@@ -125,12 +134,13 @@ export function createImageCache(opts: {
     key: string,
     remoteUrl: string,
     finalPath: string,
-    headers?: Record<string, string>
+    headers?: Record<string, string>,
+    prepare?: (file: string) => Promise<void>
   ): Promise<string | null> {
     if (await exists(finalPath)) return finalPath
     let pending = inFlight.get(key)
     if (!pending) {
-      pending = limit(() => download(remoteUrl, finalPath, headers)).finally(() => inFlight.delete(key))
+      pending = limit(() => download(remoteUrl, finalPath, headers, prepare)).finally(() => inFlight.delete(key))
       inFlight.set(key, pending)
     }
     return pending
@@ -141,18 +151,23 @@ export function createImageCache(opts: {
 
     async getSet(key) {
       if (!SET_KEY_RE.test(key)) return null
-      if (key.startsWith('yp-') || key.startsWith('yc-')) {
+      const source = key.slice(0, 3)
+      if (source === 'yp-' || source === 'yc-' || source === 'km-') {
         let remote: string | null
         try {
           remote = opts.resolveSetImage?.(key) ?? null
         } catch {
           return null // e.g. the database is closed or busy; never reject the protocol handler
         }
-        const prefix = key.startsWith('yp-') ? YUGIPEDIA_IMAGE_PREFIX : PACK_ART_PREFIX
+        const prefix =
+          source === 'yp-' ? YUGIPEDIA_IMAGE_PREFIX : source === 'yc-' ? PACK_ART_PREFIX : KONAMI_LOGO_PREFIX
         if (remote === null || !remote.startsWith(prefix)) return null
-        return cached(`set/${key}`, remote, path.join(opts.dir, 'sets', `${key}.jpg`), {
-          'User-Agent': `YugiohCollectionTracker/${opts.version ?? 'unknown'} (${REPO_URL})`
-        })
+        const headers = { 'User-Agent': `YugiohCollectionTracker/${opts.version ?? 'unknown'} (${REPO_URL})` }
+        if (source === 'km-') {
+          if (!opts.prepareLogo) return null // shown only once its white is cut out
+          return cached(`set/${key}`, remote, path.join(opts.dir, 'sets', `${key}.png`), headers, opts.prepareLogo)
+        }
+        return cached(`set/${key}`, remote, path.join(opts.dir, 'sets', `${key}.jpg`), headers)
       }
       return cached(`set/${key}`, setImageUrl(key), path.join(opts.dir, 'sets', `${key}.jpg`))
     },

@@ -28,7 +28,7 @@ interface SummaryDbRow {
 // card_id is an integer, so the first "|" always ends it.
 const SUMMARY = `
   SELECT p.language, p.set_name, s.set_code AS s_code, MIN(p.set_code) AS min_code, s.tcg_date, s.image_url,
-         s.image_key, pa.image_key AS pack_key, sl.image_key AS logo_key, s.list_rows, s.unmatched_rows,
+         s.image_key, pa.image_key AS pack_key, COALESCE(sl.image_key, kl.image_key) AS logo_key, s.list_rows, s.unmatched_rows,
          COUNT(DISTINCT p.card_id) AS total_cards,
          COUNT(DISTINCT CASE WHEN o.printing_id IS NOT NULL THEN p.card_id END) AS owned_cards,
          COUNT(DISTINCT p.card_id || '|' || p.set_rarity) AS total_rarities,
@@ -38,7 +38,8 @@ const SUMMARY = `
   LEFT JOIN (SELECT DISTINCT printing_id FROM collection_entries) o ON o.printing_id = p.id
   LEFT JOIN sets s ON s.language = p.language AND s.set_name = p.set_name
   LEFT JOIN pack_art pa ON p.language = 'en' AND pa.set_name = p.set_name
-  LEFT JOIN set_logos sl ON p.language = 'en' AND sl.set_name = p.set_name`
+  LEFT JOIN set_logos sl ON p.language = 'en' AND sl.set_name = p.set_name
+  LEFT JOIN konami_logos kl ON p.language = 'en' AND kl.set_name = p.set_name`
 
 /**
  * Each set's headline card: its rarest printing (lowest code, skipping 000 bonus cards). Its
@@ -102,13 +103,14 @@ function toSummary(r: SummaryDbRow, covers: Map<string, number>): SetSummary {
 }
 
 /** Completion summary of every (language, set); English first within a name. */
-/** Source URL of a stored set image key: a Yugipedia set image or logo, or an official pack render. */
+/** Source URL of a stored set image key: a Yugipedia set image or logo, an official pack render, or a Konami logo. */
 export function findSetImageUrl(db: Database.Database, key: string): string | null {
   const row = db
     .prepare(
       `SELECT image_url FROM sets WHERE image_key = @key
        UNION ALL SELECT image_url FROM pack_art WHERE image_key = @key
-       UNION ALL SELECT image_url FROM set_logos WHERE image_key = @key LIMIT 1`
+       UNION ALL SELECT image_url FROM set_logos WHERE image_key = @key
+       UNION ALL SELECT image_url FROM konami_logos WHERE image_key = @key LIMIT 1`
     )
     .get({ key }) as { image_url: string | null } | undefined
   return row?.image_url ?? null

@@ -17,10 +17,12 @@ import { createYugipediaClient } from './yugipedia/client'
 import { createPrintingArtResolver } from './yugipedia/artResolver'
 import { refreshSetLogos, shouldRefreshSetLogos } from './yugipedia/setLogos'
 import { refreshPackArt, shouldRefreshPackArt } from './konami/packArt'
+import { refreshKonamiLogos, shouldRefreshKonamiLogos } from './konami/logos'
 import { createTcgplayerLookup, refreshTcgCatalog, shouldRefreshTcgCatalog } from './tcgplayer/catalog'
 import { recordSnapshot } from './repo/stats'
 import { findSetImageUrl } from './repo/sets'
 import { createImageCache } from './images/cache'
+import { prepareLogo } from './images/prepareLogo'
 import { handleImageProtocol, registerImageScheme } from './images/protocol'
 import { createUpdater, updateMode, RELEASES_URL } from './updater'
 import { createHandlers, registerIpc, type AppDeps } from './ipc/handlers'
@@ -120,6 +122,7 @@ function bootstrap(): void {
     dir: join(userData, 'images'),
     version: app.getVersion(),
     resolveSetImage: (key) => findSetImageUrl(db, key),
+    prepareLogo,
     resolvePrintingArt: (id) => printingArt.url(id)
   })
   handleImageProtocol(images)
@@ -221,6 +224,9 @@ function bootstrap(): void {
     }
     if (hasSetData(db) && shouldRefreshSetLogos(db, new Date())) {
       if ((await refreshSetLogos(db, yugipedia)) > 0) emitDataChanged()
+    }
+    if (hasSetData(db) && shouldRefreshKonamiLogos(db, new Date())) {
+      if ((await refreshKonamiLogos(db, { version: app.getVersion() })) > 0) emitDataChanged()
     }
     const { n } = db.prepare('SELECT count(*) AS n FROM cards').get() as { n: number }
     if (n > 0 && shouldRefreshIntl(db, new Date())) {

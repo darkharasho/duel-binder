@@ -97,6 +97,11 @@ export const SCHEMA_V8 = `
 CREATE TABLE set_logos (set_name TEXT PRIMARY KEY, image_url TEXT NOT NULL, image_key TEXT NOT NULL UNIQUE);
 `
 
+/** English set logos from Konami's news announcements, for sets Yugipedia has no logo for. */
+export const SCHEMA_V9 = `
+CREATE TABLE konami_logos (set_name TEXT PRIMARY KEY, image_url TEXT NOT NULL, image_key TEXT NOT NULL UNIQUE);
+`
+
 /** A printing's rarity as shown: "Starlight Rare (Extended Art)" for a labelled variant. */
 export const RARITY_LABEL = "p.set_rarity || COALESCE(' (' || p.variant || ')', '')"
 
@@ -109,7 +114,8 @@ const MIGRATIONS: Migration[] = [
   { version: 5, sql: SCHEMA_V5 },
   { version: 6, sql: SCHEMA_V6 },
   { version: 7, sql: SCHEMA_V7 },
-  { version: 8, sql: SCHEMA_V8 }
+  { version: 8, sql: SCHEMA_V8 },
+  { version: 9, sql: SCHEMA_V9 }
 ]
 
 export function openDatabase(file: string): Database.Database {

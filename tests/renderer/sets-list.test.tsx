@@ -197,13 +197,13 @@ describe('SetArt', () => {
     expect(container.querySelector('img')).toHaveAttribute('src', 'ygo-img://set/LOB')
   })
 
-  it('shows the official pack render whole, ahead of the headline card', () => {
+  it('shows the official pack render zoomed in, ahead of the headline card', () => {
     const { container } = renderWithProviders(
       <SetArt imageKey="LOB" packImageKey="yc-abc" coverImageId={7} setCode="LOB" />
     )
     const pack = container.querySelector('img[loading="lazy"]')!
     expect(pack).toHaveAttribute('src', 'ygo-img://set/yc-abc')
-    expect(pack).toHaveClass('object-contain')
+    expect(pack).toHaveClass('object-cover')
     fireEvent.error(pack)
     expect(container.querySelector('img')).toHaveAttribute('src', 'ygo-img://cropped/7')
   })

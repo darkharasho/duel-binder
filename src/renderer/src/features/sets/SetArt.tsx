@@ -4,7 +4,7 @@ import { cn } from '@/lib/utils'
 interface SetArtProps {
   imageKey: string | null
   setCode: string
-  /** Official pack render; shown whole, ahead of everything else, when there. */
+  /** Official pack render; zoomed to its front, ahead of everything else, when there. */
   packImageKey?: string | null
   /** Artwork of the set's headline card; shown cropped in place of the pack photo when there. */
   coverImageId?: number | null
@@ -48,14 +48,8 @@ export function SetArt({
   const onError = (): void => setFailed((f) => ({ ...f, [source]: true }))
   if (source === 'pack') {
     return (
-      <div className={cn('relative overflow-hidden rounded-md bg-muted', className)}>
-        <img
-          src={src}
-          alt=""
-          aria-hidden
-          draggable={false}
-          className="absolute inset-0 size-full scale-125 object-cover opacity-50 blur-xl saturate-150"
-        />
+      <div className={cn('overflow-hidden rounded-md bg-muted', className)}>
+        {/* The render is a product on a transparent square; zoom past the edges to its front. */}
         <img
           key={src}
           src={src}
@@ -63,7 +57,7 @@ export function SetArt({
           loading="lazy"
           draggable={false}
           onError={onError}
-          className="relative size-full object-contain p-[6%] drop-shadow-[0_6px_10px_rgb(0_0_0/0.5)]"
+          className="size-full origin-[50%_40%] scale-[1.85] object-cover"
         />
       </div>
     )

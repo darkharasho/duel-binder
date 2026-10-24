@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
+import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowDownAZ, ArrowUpAZ, Search } from 'lucide-react'
 import type { BrowseCard, BrowseFilters, BrowseSort, CardSearchResult } from '@shared/types'
 import { cardArtUrl, useArtWash } from '@/components/artWash'
@@ -16,8 +16,10 @@ import {
   SelectValue
 } from '@/components/ui/select'
 import { UnderlineTabs } from '@/components/UnderlineTabs'
+import { EntryDetailPanel } from '@/features/collection/EntryDetailPanel'
 import { api, queryKeys } from '@/lib/api'
 import { formatUsd } from '@/lib/format'
+import { BrowseCardPanel } from './BrowseCardPanel'
 
 const PAGE = 120
 
@@ -70,6 +72,10 @@ interface Props {
 export function BrowsePage({ onAddCard }: Props): React.JSX.Element {
   const [filters, setFilters] = useState<Filters>(DEFAULTS)
   const [text, setText] = useState('')
+  const [selected, setSelected] = useState<{ cardId: number; entryId: number } | null>(null)
+  // A card not owned yet opens with a stepper per printing instead of an entry editor.
+  const [unowned, setUnowned] = useState<BrowseCard | null>(null)
+  const qc = useQueryClient()
   const change = (patch: Partial<Filters>): void => setFilters((f) => ({ ...f, ...patch }))
 
   // Debounce search text into the query.
@@ -125,12 +131,18 @@ export function BrowsePage({ onAddCard }: Props): React.JSX.Element {
     setText('')
   }
 
-  const open = (c: BrowseCard): void => {
-    if (c.defaultPrintingId === null) return
-    onAddCard(
-      { id: c.id, name: c.name, type: c.type, defaultImageId: c.imageId, matchedSetCode: null },
-      c.defaultPrintingId
-    )
+  const open = async (c: BrowseCard): Promise<void> => {
+    if (c.owned > 0) {
+      const copies = await qc.fetchQuery({
+        queryKey: queryKeys.forCard(c.id),
+        queryFn: () => api.collection.forCard(c.id)
+      })
+      if (copies[0]) {
+        setSelected({ cardId: c.id, entryId: copies[0].id })
+        return
+      }
+    }
+    setUnowned(c)
   }
 
   return (
@@ -245,19 +257,15 @@ export function BrowsePage({ onAddCard }: Props): React.JSX.Element {
             <li key={c.id}>
               <button
                 type="button"
-                onClick={() => open(c)}
-                disabled={c.defaultPrintingId === null}
-                title={
-                  c.defaultPrintingId === null ? 'No English printing to add' : `Add ${c.name}`
-                }
-                className="group flex w-full flex-col gap-2 rounded-md p-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-default"
+                onClick={() => void open(c)}
+                className="group flex w-full flex-col gap-2 rounded-md p-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
                 <div className="relative">
                   <CardArt
                     imageId={c.imageId}
                     size="small"
                     alt={c.name}
-                    className="w-full rounded-[4px] shadow-[0_8px_20px_rgb(0_0_0/0.45)] transition-transform duration-200 group-enabled:group-hover:-translate-y-1"
+                    className="w-full rounded-[4px] shadow-[0_8px_20px_rgb(0_0_0/0.45)] transition-transform duration-200 group-hover:-translate-y-1"
                   />
                   {c.owned > 0 && (
                     <span className="absolute right-1.5 top-1.5 rounded-full bg-primary px-1.5 font-mono text-xs font-semibold text-primary-foreground shadow">
@@ -293,6 +301,34 @@ export function BrowsePage({ onAddCard }: Props): React.JSX.Element {
           </Button>
         )}
       </div>
+
+      {selected && (
+        <EntryDetailPanel
+          cardId={selected.cardId}
+          entryId={selected.entryId}
+          onSelectEntry={(entryId) => setSelected({ cardId: selected.cardId, entryId })}
+          onClose={() => setSelected(null)}
+        />
+      )}
+      {unowned && (
+        <BrowseCardPanel
+          card={unowned}
+          onMoreOptions={(printingId) => {
+            setUnowned(null)
+            onAddCard(
+              {
+                id: unowned.id,
+                name: unowned.name,
+                type: unowned.type,
+                defaultImageId: unowned.imageId,
+                matchedSetCode: null
+              },
+              printingId
+            )
+          }}
+          onClose={() => setUnowned(null)}
+        />
+      )}
     </div>
   )
 }

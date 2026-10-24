@@ -1,9 +1,19 @@
 import { describe, expect, it, vi } from 'vitest'
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import type { BrowseCard, BrowseFilters } from '@shared/types'
+import type {
+  BrowseCard,
+  BrowseFilters,
+  CardDetail,
+  ChecklistCard,
+  EntryView,
+  Printing
+} from '@shared/types'
 import { BrowsePage } from '@/features/browse/BrowsePage'
-import { createMockApi, renderWithProviders } from './mockApi'
+import { createMockApi, renderWithProviders, type DeepPartial } from './mockApi'
+import type { Api } from '@shared/ipc'
+
+vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() }, Toaster: () => null }))
 
 const card = (id: number, name: string, o: Partial<BrowseCard> = {}): BrowseCard => ({
   id,
@@ -24,9 +34,46 @@ const card = (id: number, name: string, o: Partial<BrowseCard> = {}): BrowseCard
   ...o
 })
 
+const printing = (id: number, extra: Partial<Printing> = {}): Printing => ({
+  id,
+  cardId: 1,
+  setName: 'Legend of Blue Eyes',
+  setCode: `LOB-EN00${id}`,
+  setRarity: 'Ultra Rare',
+  setRarityCode: '(UR)',
+  language: 'en',
+  setPrice: 10,
+  missingFromApi: false,
+  ...extra
+})
+
+const detail: CardDetail = {
+  card: {
+    id: 1,
+    name: 'Dark Magician',
+    type: 'Normal Monster',
+    frameType: 'normal',
+    race: 'Spellcaster',
+    attribute: 'DARK',
+    level: 7,
+    linkval: null,
+    atk: 2500,
+    def: 2100,
+    archetype: null,
+    desc: 'The ultimate wizard.',
+    tcgplayerPrice: 1
+  },
+  printings: [
+    printing(11, { setName: 'Duelist Pack', setCode: 'DP-JP001', language: 'ja' }),
+    printing(10)
+  ],
+  images: [{ imageId: 1, cardId: 1, sortOrder: 0 }]
+}
+
 const setup = (
   cards: BrowseCard[],
-  total = cards.length
+  total = cards.length,
+  api: DeepPartial<Api> = {}
 ): { browse: ReturnType<typeof vi.fn>; onAddCard: ReturnType<typeof vi.fn> } => {
   const browse = vi.fn(async (f: BrowseFilters) => ({
     cards: cards.slice(f.offset ?? 0, (f.offset ?? 0) + (f.limit ?? 120)),
@@ -34,7 +81,7 @@ const setup = (
   }))
   const onAddCard = vi.fn()
   renderWithProviders(<BrowsePage onAddCard={onAddCard} />, {
-    api: createMockApi({ cards: { browse } })
+    api: createMockApi({ ...api, cards: { browse, get: async () => detail, ...api.cards } })
   })
   return { browse, onAddCard }
 }
@@ -68,13 +115,59 @@ describe('BrowsePage', () => {
     )
   })
 
-  it('clicking a card opens Add with its default printing', async () => {
+  it('clicking a card not owned opens a panel with a stepper per printing, English first', async () => {
+    const adjust = vi.fn(async () => ({}) as ChecklistCard)
+    setup([card(1, 'Dark Magician')], 1, { sets: { adjust } })
+    await userEvent.click(await screen.findByRole('button', { name: /Dark Magician/ }))
+    const panel = await screen.findByRole('dialog')
+    expect(within(panel).getByText('You have none yet')).toBeInTheDocument()
+    const rows = await within(panel).findAllByRole('group')
+    expect(rows.map((r) => r.getAttribute('aria-label'))).toEqual([
+      'Dark Magician LOB-EN0010 Ultra Rare',
+      'Dark Magician DP-JP001 Ultra Rare'
+    ])
+    await userEvent.click(
+      within(panel).getByRole('button', { name: 'Add one Dark Magician DP-JP001 Ultra Rare' })
+    )
+    await waitFor(() => expect(adjust).toHaveBeenCalledWith('Duelist Pack', 'ja', 11, 1))
+  })
+
+  it('More options… in the panel opens Add with the default printing', async () => {
     const { onAddCard } = setup([card(1, 'Dark Magician')])
     await userEvent.click(await screen.findByRole('button', { name: /Dark Magician/ }))
+    const panel = await screen.findByRole('dialog')
+    await userEvent.click(within(panel).getByRole('button', { name: 'More options…' }))
     expect(onAddCard).toHaveBeenCalledWith(
       expect.objectContaining({ id: 1, name: 'Dark Magician' }),
       10
     )
+  })
+
+  it('clicking an owned card opens its first copy in the entry editor', async () => {
+    const copy: EntryView = {
+      id: 7,
+      quantity: 2,
+      notes: '',
+      createdAt: '2026-01-01T00:00:00Z',
+      updatedAt: '2026-01-01T00:00:00Z',
+      card: detail.card,
+      printing: printing(10),
+      imageId: 1,
+      originalArt: true,
+      unitPrice: 10,
+      priceApproximate: false,
+      priceSource: 'ygoprodeck',
+      priceCheckedAt: null,
+      priceListingCount: null,
+      noPriceReason: null,
+      totalValue: 20
+    }
+    setup([card(1, 'Dark Magician', { owned: 2 })], 1, {
+      collection: { forCard: async () => [copy] }
+    })
+    await userEvent.click(await screen.findByRole('button', { name: /Dark Magician/ }))
+    const panel = await screen.findByRole('dialog')
+    expect(await within(panel).findByText('Your copies')).toBeInTheDocument()
   })
 
   it('Load more fetches the next page', async () => {

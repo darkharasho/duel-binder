@@ -43,8 +43,13 @@ export function AppShell({ page, onNavigate, onAddCard, children }: AppShellProp
     scroll.set(0)
   }, [page, scroll])
   return (
-    <div className="relative isolate flex h-screen flex-col overflow-hidden bg-background text-foreground tabular-nums">
+    <div className="group/shell relative isolate flex h-screen flex-col overflow-hidden bg-background text-foreground tabular-nums">
       <ArtWash src={wash} />
+      {/* Carries a page header's glass up to the top of the window, so it doesn't float as a box. */}
+      <div
+        aria-hidden
+        className="absolute left-[199px] right-0 top-0 hidden h-9 border-l border-white/[0.06] bg-background/60 backdrop-blur-xl group-has-[[data-page-header]]/shell:block"
+      />
       <TitleBar />
       <div className="flex min-h-0 flex-1">
         <aside className="flex w-[200px] shrink-0 flex-col gap-6 border-r border-white/[0.06] px-4 pb-5 pt-1">
@@ -89,7 +94,7 @@ export function AppShell({ page, onNavigate, onAddCard, children }: AppShellProp
         </aside>
         <div className="flex min-w-0 flex-1 flex-col">
           <SyncBanner />
-          <main ref={mainRef} className="min-h-0 flex-1 overflow-auto">
+          <main ref={mainRef} data-main-scroll className="min-h-0 flex-1 overflow-auto">
             <ArtWashContext.Provider value={setWash}>
               <MainScrollContext.Provider value={scroll}>{children}</MainScrollContext.Provider>
             </ArtWashContext.Provider>

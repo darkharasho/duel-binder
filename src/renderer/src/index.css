@@ -85,6 +85,16 @@
   ::-webkit-scrollbar-thumb:hover {
     background-color: rgb(255 255 255 / 24%);
   }
+  /* Under a page header, the main scrollbar's gutter takes the header's glass and its thumb stays below. */
+  main[data-main-scroll]::-webkit-scrollbar {
+    background: linear-gradient(
+      color-mix(in oklab, var(--background) 60%, transparent) var(--page-header-h, 0px),
+      transparent 0
+    );
+  }
+  main[data-main-scroll]::-webkit-scrollbar-track {
+    margin-top: var(--page-header-h, 0px);
+  }
   ::-webkit-scrollbar-button {
     display: none;
   }

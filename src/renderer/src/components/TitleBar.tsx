@@ -57,7 +57,7 @@ export function TitleBar(): React.JSX.Element {
       data-testid="title-bar"
       onDoubleClick={platform === 'linux' ? () => void api.window.toggleMaximize() : undefined}
       className={cn(
-        'flex h-9 shrink-0 items-center [-webkit-app-region:drag] select-none',
+        'relative flex h-9 shrink-0 items-center [-webkit-app-region:drag] select-none',
         platform === 'darwin' && 'pl-20',
         platform === 'win32' && 'pr-[140px]'
       )}

@@ -124,6 +124,27 @@ describe('CollectionPage', () => {
     )
   })
 
+  it('offers Show all languages when only other-language cards are owned', async () => {
+    const stats = {
+      totalCards: 2,
+      uniqueCards: 1,
+      totalValue: 0,
+      approximateCount: 0,
+      byRarity: [],
+      byFrameType: [],
+      topEntries: [],
+      pricesUpdatedAt: null
+    }
+    // The English-filtered list is empty because the only owned entry is Japanese.
+    const { list } = setup([], { stats: { get: async () => stats } })
+    expect(await screen.findByText('No English cards')).toBeInTheDocument()
+    expect(screen.queryByText('No cards yet')).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Show all languages' }))
+    await waitFor(() =>
+      expect(list).toHaveBeenLastCalledWith(expect.objectContaining({ language: undefined }))
+    )
+  })
+
   it('shows a language tag on non-English rows', async () => {
     const ja = entry(3, 'Red-Eyes', { printing: printing(3, 103, { language: 'ja', setCode: 'LB-05' }) })
     setup([ja])

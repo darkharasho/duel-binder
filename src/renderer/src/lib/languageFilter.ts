@@ -3,7 +3,11 @@ import { isLanguage, type Language, type LanguageFilter } from '@shared/language
 
 const KEY = 'language.filter'
 
+// Set only when localStorage rejects a write, so the choice still holds for the session.
+let memoryFallback: LanguageFilter | null = null
+
 function read(): LanguageFilter {
+  if (memoryFallback !== null) return memoryFallback
   try {
     const v = localStorage.getItem(KEY)
     return v === 'all' || isLanguage(v) ? v : 'en'
@@ -23,8 +27,9 @@ const subscribe = (cb: () => void): (() => void) => {
 function write(f: LanguageFilter): void {
   try {
     localStorage.setItem(KEY, f)
+    memoryFallback = null
   } catch {
-    /* storage unavailable: preference just isn't remembered */
+    memoryFallback = f // storage unavailable: remembered for this session only
   }
   listeners.forEach((cb) => cb())
 }

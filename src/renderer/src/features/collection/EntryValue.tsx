@@ -51,7 +51,9 @@ export function EntryValue({
   const noPrice = amount === null
   const tip = noPrice
     ? NO_PRICE_TIPS[entry.noPriceReason ?? 'unavailable']
-    : `eBay asking price · checked ${formatRelative(entry.priceCheckedAt)}`
+    : entry.priceCheckedAt === null
+      ? 'eBay asking price'
+      : `eBay asking price · checked ${formatRelative(entry.priceCheckedAt)}`
   return (
     <Tooltip>
       <TooltipTrigger asChild>

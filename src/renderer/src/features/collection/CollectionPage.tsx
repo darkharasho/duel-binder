@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from 'react'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { LayoutGrid, Table2 } from 'lucide-react'
+import { LANGUAGES } from '@shared/languages'
 import type { CollectionFilters, EntryView, SortKey } from '@shared/types'
 import { Button } from '@/components/ui/button'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
@@ -46,7 +47,7 @@ interface Props {
 
 export function CollectionPage({ initialEntryId, onAddCard }: Props): React.JSX.Element {
   const [pageFilters, setFilters] = useState<CollectionFilters>(DEFAULT_FILTERS)
-  const [languageFilter] = useLanguageFilter()
+  const [languageFilter, setLanguageFilter] = useLanguageFilter()
   // The language is the shared app-wide setting, not page state.
   const filters = useMemo<CollectionFilters>(
     () => ({ ...pageFilters, language: languageFilter === 'all' ? undefined : languageFilter }),
@@ -108,6 +109,10 @@ export function CollectionPage({ initialEntryId, onAddCard }: Props): React.JSX.
 
   const list = entries.data ?? []
   const filtered = hasActiveFilters(filters)
+  // Entries exist, but the language filter alone hides them all.
+  const hiddenByLanguage =
+    !filtered && languageFilter !== 'all' && (stats.data?.uniqueCards ?? 0) > 0
+  const languageLabel = LANGUAGES.find((l) => l.code === languageFilter)?.label ?? ''
 
   return (
     <TooltipProvider>
@@ -140,7 +145,14 @@ export function CollectionPage({ initialEntryId, onAddCard }: Props): React.JSX.
 
         {entries.isSuccess && list.length === 0 ? (
           <div className="flex flex-col items-center gap-3 py-24 text-center">
-            {filtered ? (
+            {hiddenByLanguage ? (
+              <>
+                <p className="text-lg font-medium">No {languageLabel} cards</p>
+                <Button variant="outline" onClick={() => setLanguageFilter('all')}>
+                  Show all languages
+                </Button>
+              </>
+            ) : filtered ? (
               <>
                 <p className="text-lg font-medium">No cards match these filters</p>
                 <Button variant="outline" onClick={clear}>

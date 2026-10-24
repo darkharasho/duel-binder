@@ -113,6 +113,21 @@ const intlApi = (): ReturnType<typeof createMockApi> =>
 describe('AddCardDialog languages', () => {
   beforeEach(() => localStorage.clear())
 
+  it('hints at the language when the card only has other-language printings', async () => {
+    const api = createMockApi({
+      cards: {
+        search: async () => [bewd],
+        get: async () => ({ ...bewdDetail, printings: [bewdDetail.printings[1]] })
+      }
+    })
+    renderWithProviders(<AddCardDialog open onOpenChange={() => {}} />, { api })
+    await userEvent.type(await screen.findByPlaceholderText(/Search cards/), 'blue')
+    await userEvent.click(await screen.findByText('Blue-Eyes White Dragon'))
+    expect(
+      await screen.findByText('No English printings — choose another language above.')
+    ).toBeInTheDocument()
+  })
+
   it('shows only English printings while the filter is English, and Japanese after switching', async () => {
     renderWithProviders(<AddCardDialog open onOpenChange={() => {}} />, { api: intlApi() })
     await userEvent.type(await screen.findByPlaceholderText(/Search cards/), 'blue')

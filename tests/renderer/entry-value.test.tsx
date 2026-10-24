@@ -40,6 +40,12 @@ describe('EntryValue', () => {
     expect((await screen.findAllByText(tip)).length).toBeGreaterThan(0)
   })
 
+  it('omits the checked clause when there is no checked date', async () => {
+    show({ priceCheckedAt: null })
+    await userEvent.hover(screen.getByText('$12.50'))
+    expect((await screen.findAllByText('eBay asking price')).length).toBeGreaterThan(0)
+  })
+
   it('shows a plain price for YGOPRODeck entries', () => {
     show({ priceSource: 'ygoprodeck', priceCheckedAt: null })
     expect(screen.getByText('$12.50')).toBeInTheDocument()

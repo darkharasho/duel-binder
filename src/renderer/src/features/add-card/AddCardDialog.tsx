@@ -114,6 +114,8 @@ export function AddCardDialog({
   const availableLanguages = LANGUAGES.map((l) => l.code).filter((code) =>
     printings.some((p) => p.language === code)
   )
+  const languageLabel =
+    languageFilter === 'all' ? '' : (LANGUAGES.find((l) => l.code === languageFilter)?.label ?? '')
   const shownPrintings = printings.filter((p) => matchesLanguage(languageFilter, p.language))
   const highlighted = highlight ?? (preferred ? printingValue(preferred) : undefined)
   const qty = Number(quantity)
@@ -309,7 +311,11 @@ export function AddCardDialog({
             <CommandInput autoFocus placeholder="Filter printings…" />
             <CommandList className="max-h-80">
               <CommandEmpty>
-                {detail.isLoading ? 'Loading…' : 'No printings available.'}
+                {detail.isLoading
+                  ? 'Loading…'
+                  : printings.length > 0
+                    ? `No ${languageLabel} printings — choose another language above.`
+                    : 'No printings available.'}
               </CommandEmpty>
               <CommandGroup>
                 {shownPrintings.map((p) => (

@@ -1,4 +1,11 @@
-import { EBAY_WORDS, buildQuery, titleMatches, askingPrice } from './price.js'
+import {
+  EBAY_WORDS,
+  buildQuery,
+  titleMatches,
+  isSingleCard,
+  namesOtherRarity,
+  askingPrice
+} from './price.js'
 
 const OAUTH_URL = 'https://api.ebay.com/identity/v1/oauth2/token'
 const BROWSE_URL = 'https://api.ebay.com/buy/browse/v1/item_summary/search'
@@ -16,10 +23,10 @@ export function resetTokenCache() {
 }
 
 async function cacheKey(p) {
-  const joined = ['v1', p.code, p.name.toLowerCase(), p.set, p.rarity, p.lang].join('|')
+  const joined = ['v2', p.code, p.name.toLowerCase(), p.set, p.rarity, p.lang].join('|')
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(joined))
   const hex = [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('')
-  return `v1:${hex}`
+  return `v2:${hex}`
 }
 
 const respond = (body, status = 200) =>
@@ -78,24 +85,37 @@ async function search(env, query) {
   return data.itemSummaries ?? []
 }
 
-function matchingPrices(items, ref) {
+function matchingPrices(items, ref, { otherRarities = true } = {}) {
   return items
-    .filter((i) => titleMatches(i.title, ref) && i.price?.currency === 'USD')
+    .filter(
+      (i) =>
+        titleMatches(i.title, ref) &&
+        isSingleCard(i.title) &&
+        (otherRarities || !namesOtherRarity(i.title, ref.rarity)) &&
+        i.price?.currency === 'USD'
+    )
     .map((i) => Number.parseFloat(i.price.value))
     .filter(Number.isFinite)
 }
 
 async function lookup(env, params) {
   let prices = matchingPrices(await search(env, buildQuery(params)), params)
+  let rarityFallback = false
   if (prices.length < 2 && params.rarity) {
+    // Without rarity in the query, drop listings that name a different rarity.
     const fallback = matchingPrices(
       await search(env, buildQuery({ ...params, rarity: '' })),
-      params
+      params,
+      { otherRarities: false }
     )
-    if (fallback.length > prices.length) prices = fallback
+    if (fallback.length > prices.length) {
+      prices = fallback
+      rarityFallback = true
+    }
   }
   return {
     ...askingPrice(prices),
+    rarityFallback,
     currency: 'USD',
     checkedAt: new Date().toISOString()
   }

@@ -1,4 +1,10 @@
-import { buildQuery, titleMatches, askingPrice } from '../src/price.js'
+import {
+  buildQuery,
+  titleMatches,
+  isSingleCard,
+  namesOtherRarity,
+  askingPrice
+} from '../src/price.js'
 
 describe('buildQuery', () => {
   it('quotes a code that already carries a language', () => {
@@ -70,5 +76,33 @@ describe('askingPrice', () => {
   })
   it('rounds to cents', () => {
     expect(askingPrice([1.001, 1.004]).price).toBe(1)
+  })
+})
+
+describe('isSingleCard', () => {
+  it('rejects slabs, lots and proxies', () => {
+    for (const t of [
+      'PSA 10 LOB-JP001',
+      'BGS 9.5 Blue-Eyes',
+      'Lot of 5 LB-01',
+      'LB-01 Orica proxy'
+    ]) {
+      expect(isSingleCard(t)).toBe(false)
+    }
+    expect(isSingleCard('LB-01 Blue-Eyes White Dragon Ultra Rare NM')).toBe(true)
+  })
+})
+
+describe('namesOtherRarity', () => {
+  it('flags a rarity the request does not contain', () => {
+    expect(namesOtherRarity('SDK-001 Secret Rare', 'Common')).toBe(true)
+    expect(namesOtherRarity('SDK-001 Prismatic Secret Rare', 'Secret Rare')).toBe(true)
+    expect(namesOtherRarity('SDK-001 Super Rare', 'Rare')).toBe(true)
+  })
+
+  it('allows the same rarity or none named', () => {
+    expect(namesOtherRarity('SDK-001 ULTRA RARE', 'Ultra Rare')).toBe(false)
+    expect(namesOtherRarity('SDK-001 Prismatic Secret Rare', 'Prismatic Secret Rare')).toBe(false)
+    expect(namesOtherRarity('SDK-001 Blue-Eyes NM', 'Common')).toBe(false)
   })
 })

@@ -35,6 +35,35 @@ export function titleMatches(title, { code, name }) {
   return needle !== '' && String(title).toLowerCase().includes(needle)
 }
 
+// Slabs, lots and fakes are priced unlike a single raw card.
+const NOT_A_SINGLE_CARD = /\b(psa|bgs|cgc|sgc|beckett|graded|slab|lot|bundle|proxy|orica|custom)\b/i
+
+export function isSingleCard(title) {
+  return !NOT_A_SINGLE_CARD.test(String(title))
+}
+
+const RARITY_PHRASES = [
+  'quarter century secret rare',
+  'prismatic secret rare',
+  'starlight rare',
+  'ghost rare',
+  'ultimate rare',
+  "collector's rare",
+  'secret rare',
+  'ultra rare',
+  'super rare',
+  'gold rare',
+  'platinum rare',
+  'parallel rare'
+]
+
+/** True when the title names a rarity the requested one doesn't contain (e.g. "Secret Rare" for a Common). */
+export function namesOtherRarity(title, rarity) {
+  const t = String(title).toLowerCase()
+  const r = String(rarity).toLowerCase()
+  return RARITY_PHRASES.some((phrase) => t.includes(phrase) && !r.includes(phrase))
+}
+
 function median(sorted) {
   const mid = sorted.length >> 1
   return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2

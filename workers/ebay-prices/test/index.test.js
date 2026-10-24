@@ -91,6 +91,7 @@ describe('GET /v1/price', () => {
     expect(body).toEqual({
       price: 11,
       listingCount: 3,
+      rarityFallback: false,
       currency: 'USD',
       checkedAt: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T/)
     })
@@ -175,6 +176,27 @@ describe('GET /v1/price', () => {
     expect(decodeURIComponent(searches[0].replaceAll('+', ' '))).toContain('Ultra Rare')
     expect(decodeURIComponent(searches[1].replaceAll('+', ' '))).not.toContain('Ultra Rare')
     expect(body.listingCount).toBe(3)
+    expect(body.rarityFallback).toBe(true)
+  })
+
+  it('drops other rarities, slabs and lots from the fallback search', async () => {
+    vi.stubGlobal(
+      'fetch',
+      makeFetch([
+        json(items([])),
+        json({
+          itemSummaries: [
+            ['LOB-DE001 a', '10'],
+            ['LOB-DE001 b', '12'],
+            ['LOB-DE001 Secret Rare', '400'],
+            ['PSA 10 LOB-DE001', '900'],
+            ['Lot of 3 LOB-DE001', '30']
+          ].map(([title, value]) => ({ title, price: { value, currency: 'USD' } }))
+        })
+      ])
+    )
+    const body = await (await worker.fetch(req(), env)).json()
+    expect(body).toMatchObject({ price: 11, listingCount: 2, rarityFallback: true })
   })
 
   it('returns 502 when OAuth fails and leaks no secrets', async () => {

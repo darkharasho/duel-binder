@@ -1,14 +1,15 @@
-import { LayoutDashboard, Library, Plus, Settings } from 'lucide-react'
+import { Layers, LayoutDashboard, Library, Plus, Settings } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { SyncBanner } from './SyncBanner'
 
-export type Page = 'dashboard' | 'collection' | 'settings'
+export type Page = 'dashboard' | 'collection' | 'sets' | 'settings'
 export type NavigateFn = (page: Page, opts?: { entryId?: number }) => void
 
 const NAV = [
   { page: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { page: 'collection', label: 'Collection', icon: Library },
+  { page: 'sets', label: 'Sets', icon: Layers },
   { page: 'settings', label: 'Settings', icon: Settings }
 ] as const
 

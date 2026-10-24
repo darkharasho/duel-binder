@@ -1,4 +1,4 @@
-import { fireEvent, screen, waitFor } from '@testing-library/react'
+import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import App from '@/App'
 import { CardArt } from '@/components/CardArt'
@@ -33,6 +33,18 @@ describe('AppShell', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
     await userEvent.click(screen.getByRole('button', { name: /Add card/ }))
     expect(await screen.findByRole('dialog')).toBeInTheDocument()
+  })
+})
+
+describe('AppShell sets nav', () => {
+  it('lists Sets between Collection and Settings and opens it', async () => {
+    renderWithProviders(<App />)
+    const names = within(screen.getByRole('navigation', { name: 'Main' }))
+      .getAllByRole('button')
+      .map((b) => b.textContent)
+    expect(names).toEqual(['Dashboard', 'Collection', 'Sets', 'Settings'])
+    await userEvent.click(screen.getByRole('button', { name: 'Sets' }))
+    expect(screen.getByRole('heading', { name: 'Sets' })).toBeInTheDocument()
   })
 })
 

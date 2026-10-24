@@ -4,6 +4,7 @@ import { Toaster } from '@/components/ui/sonner'
 import { AddCardDialog } from '@/features/add-card/AddCardDialog'
 import { DashboardPage } from '@/features/dashboard/DashboardPage'
 import { CollectionPage } from '@/features/collection/CollectionPage'
+import { SetsPage } from '@/features/sets/SetsPage'
 import { SettingsPage } from '@/features/settings/SettingsPage'
 import { useUpdateToasts } from '@/features/settings/useUpdateToasts'
 
@@ -40,6 +41,7 @@ function App(): React.JSX.Element {
             onAddCard={() => setAddOpen(true)}
           />
         )}
+        {page === 'sets' && <SetsPage onAddCard={() => setAddOpen(true)} onAddMissing={() => {}} />}
         {page === 'settings' && <SettingsPage />}
       </AppShell>
       <AddCardDialog open={addOpen} onOpenChange={setAddOpen} />

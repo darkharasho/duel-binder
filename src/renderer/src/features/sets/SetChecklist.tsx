@@ -2,8 +2,10 @@ import { useMemo, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft } from 'lucide-react'
 import { toast } from 'sonner'
+import type { Language } from '@shared/languages'
 import type { CardSearchResult, CountMode, SetChecklist as SetChecklistData } from '@shared/types'
 import { CardArt } from '@/components/CardArt'
+import { LanguageTag } from '@/components/LanguageTag'
 import { Button } from '@/components/ui/button'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { TooltipProvider } from '@/components/ui/tooltip'
@@ -25,6 +27,7 @@ import {
 
 interface SetChecklistProps {
   setName: string
+  language: Language
   mode: CountMode
   onModeChange: (m: CountMode) => void
   onBack: () => void
@@ -48,6 +51,7 @@ function BackButton({ onBack }: { onBack: () => void }): React.JSX.Element {
 
 export function SetChecklist({
   setName,
+  language,
   mode,
   onModeChange,
   onBack,
@@ -67,8 +71,8 @@ export function SetChecklist({
   const qc = useQueryClient()
 
   const checklist = useQuery({
-    queryKey: queryKeys.setChecklist(setName, 'en'),
-    queryFn: () => api.sets.checklist(setName, 'en')
+    queryKey: queryKeys.setChecklist(setName, language),
+    queryFn: () => api.sets.checklist(setName, language)
   })
   const data = checklist.data
   const tiles = useMemo(
@@ -96,9 +100,9 @@ export function SetChecklist({
     }
     bumpPending(cardId, 1)
     queue(async () => {
-      const card = await api.sets.adjust(setName, 'en', printingId, delta)
-      await qc.cancelQueries({ queryKey: queryKeys.setChecklist(setName, 'en') })
-      qc.setQueryData<SetChecklistData | null>(queryKeys.setChecklist(setName, 'en'), (old) =>
+      const card = await api.sets.adjust(setName, language, printingId, delta)
+      await qc.cancelQueries({ queryKey: queryKeys.setChecklist(setName, language) })
+      qc.setQueryData<SetChecklistData | null>(queryKeys.setChecklist(setName, language), (old) =>
         old ? replaceChecklistCard(old, card) : old
       )
       void qc.invalidateQueries({ queryKey: [...queryKeys.setsList] })
@@ -159,11 +163,20 @@ export function SetChecklist({
         <header className="flex flex-wrap items-center gap-4">
           <SetArt imageKey={data.set.imageKey} setCode={data.set.setCode} className="h-16 w-24" />
           <div className="min-w-0 flex-1">
-            <h1 className="truncate text-xl font-semibold">{data.set.setName}</h1>
+            <h1 className="flex items-center gap-2 text-xl font-semibold">
+              <span className="truncate">{data.set.setName}</span>
+              <LanguageTag language={data.set.language} />
+            </h1>
             <p className="text-sm tabular-nums text-muted-foreground">
               {data.set.setCode}
               {data.set.tcgDate && ` · ${data.set.tcgDate}`} · {progress.owned} of {progress.total}
             </p>
+            {data.set.listRows !== null && data.set.unmatchedRows ? (
+              <p className="text-sm text-muted-foreground">
+                {data.set.listRows - data.set.unmatchedRows} of {data.set.listRows} cards listed;{' '}
+                {data.set.unmatchedRows} couldn&apos;t be identified
+              </p>
+            ) : null}
             <SetProgress progress={progress} className="mt-2 max-w-md" />
           </div>
           <ToggleGroup

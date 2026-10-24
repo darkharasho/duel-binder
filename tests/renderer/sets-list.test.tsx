@@ -1,4 +1,4 @@
-import { screen, within } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { SetSummary } from '@shared/types'
 import { SetsPage } from '@/features/sets/SetsPage'
@@ -56,6 +56,46 @@ function renderPage(
 }
 
 beforeEach(() => localStorage.clear())
+
+describe('SetsPage languages', () => {
+  const LOB_JA = set({
+    language: 'ja',
+    setName: 'Legend of Blue Eyes White Dragon',
+    setCode: 'LB',
+    totalCards: 61,
+    ownedCards: 1
+  })
+  const LOB_EN = set({
+    setName: 'Legend of Blue Eyes White Dragon',
+    setCode: 'LOB',
+    totalCards: 126,
+    ownedCards: 1
+  })
+
+  it('shows only English by default; choosing Japanese shows the JP tile and opens it in ja', async () => {
+    const checklist = vi.fn(async () => metalRaidersChecklist)
+    const api = createMockApi({ sets: { list: async () => [LOB_EN, LOB_JA], checklist } })
+    renderWithProviders(<SetsPage onAddCard={() => {}} onAddMissing={() => {}} />, { api })
+    const tile = await screen.findByRole('button', { name: /Legend of Blue Eyes/ })
+    expect(within(tile).queryByText('JP')).not.toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: /Legend of Blue Eyes/ })).toHaveLength(1)
+
+    await userEvent.click(screen.getByRole('combobox', { name: 'Language' }))
+    await userEvent.click(await screen.findByRole('option', { name: 'Japanese' }))
+    const jp = await screen.findByRole('button', { name: /Legend of Blue Eyes/ })
+    expect(within(jp).getByText('JP')).toBeInTheDocument()
+    await userEvent.click(jp)
+    await waitFor(() =>
+      expect(checklist).toHaveBeenCalledWith('Legend of Blue Eyes White Dragon', 'ja')
+    )
+  })
+
+  it('header counts only the selected language', async () => {
+    localStorage.setItem('language.filter', 'ja')
+    renderPage([LOB_EN, LOB_JA, MR])
+    expect(await screen.findByText("You've started 1 of 1 sets · 0 complete")).toBeInTheDocument()
+  })
+})
 
 describe('SetsPage', () => {
   it('shows the header summary and hides unstarted sets until All sets', async () => {

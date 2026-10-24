@@ -1,7 +1,9 @@
 import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { LayoutGrid, List, Search } from 'lucide-react'
+import type { Language } from '@shared/languages'
 import type { CardSearchResult, CountMode } from '@shared/types'
+import { LanguageSelect } from '@/components/LanguageSelect'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -13,6 +15,7 @@ import {
 } from '@/components/ui/select'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { api, queryKeys } from '@/lib/api'
+import { useLanguageFilter } from '@/lib/languageFilter'
 import { SetChecklist } from './SetChecklist'
 import { SetsList } from './SetsList'
 import { filterSets, setsHeader, sortSets, type SetFilter, type SetSort } from './setsView'
@@ -62,14 +65,21 @@ export function SetsPage({ onAddCard, onAddMissing }: SetsPageProps): React.JSX.
   const [filter, setFilter] = useState<SetFilter>('started')
   const [q, setQ] = useState('')
   const [sort, setSort] = useState<SetSort>('complete')
-  const [openSet, setOpenSet] = useState<string | null>(null)
+  const [openSet, setOpenSet] = useState<{ setName: string; language: Language } | null>(null)
+
+  const [language, setLanguage] = useLanguageFilter()
 
   const sets = useQuery({ queryKey: queryKeys.setsList, queryFn: () => api.sets.list() })
   const all = useMemo(() => sets.data ?? [], [sets.data])
-  const header = setsHeader(all, mode)
+  const inLanguage = useMemo(
+    () => all.filter((s) => language === 'all' || s.language === language),
+    [all, language]
+  )
+  const available = useMemo(() => [...new Set(all.map((s) => s.language))], [all])
+  const header = setsHeader(inLanguage, mode)
   const visible = useMemo(
-    () => sortSets(filterSets(all, { filter, q, mode }), sort, mode),
-    [all, filter, q, mode, sort]
+    () => sortSets(filterSets(all, { filter, q, mode, language }), sort, mode),
+    [all, filter, q, mode, sort, language]
   )
 
   const changeView = (v: string): void => {
@@ -89,7 +99,9 @@ export function SetsPage({ onAddCard, onAddMissing }: SetsPageProps): React.JSX.
   if (openSet !== null) {
     return (
       <SetChecklist
-        setName={openSet}
+        key={`${openSet.language}|${openSet.setName}`}
+        setName={openSet.setName}
+        language={openSet.language}
         mode={mode}
         onModeChange={changeMode}
         onBack={() => setOpenSet(null)}
@@ -157,6 +169,7 @@ export function SetsPage({ onAddCard, onAddMissing }: SetsPageProps): React.JSX.
             className="h-8 pl-8"
           />
         </div>
+        <LanguageSelect value={language} onChange={setLanguage} available={available} />
         <Select value={sort} onValueChange={(v) => setSort(v as SetSort)}>
           <SelectTrigger size="sm" aria-label="Sort by" className="w-40">
             <SelectValue />
@@ -188,7 +201,12 @@ export function SetsPage({ onAddCard, onAddMissing }: SetsPageProps): React.JSX.
           )}
         </div>
       ) : (
-        <SetsList sets={visible} mode={mode} view={view} onOpen={setOpenSet} />
+        <SetsList
+          sets={visible}
+          mode={mode}
+          view={view}
+          onOpen={(setName, language) => setOpenSet({ setName, language })}
+        />
       )}
     </div>
   )

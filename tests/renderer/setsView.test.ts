@@ -87,20 +87,33 @@ describe('setsHeader', () => {
 
 describe('filterSets', () => {
   const all = [complete, started, untouched]
+  it('filters by language, with all keeping every set', () => {
+    const ja = mk({ language: 'ja', setName: 'JP Set', ownedCards: 1 })
+    const mixed = [started, ja]
+    const o = { filter: 'all' as const, q: '', mode: 'cards' as const }
+    expect(filterSets(mixed, { ...o, language: 'ja' })).toEqual([ja])
+    expect(filterSets(mixed, { ...o, language: 'all' })).toEqual(mixed)
+  })
   it('started excludes untouched', () => {
-    expect(filterSets(all, { filter: 'started', q: '', mode: 'cards' })).toEqual([
+    expect(filterSets(all, { filter: 'started', q: '', mode: 'cards', language: 'all' })).toEqual([
       complete,
       started
     ])
   })
   it('complete keeps only complete', () => {
-    expect(filterSets(all, { filter: 'complete', q: '', mode: 'cards' })).toEqual([complete])
+    expect(filterSets(all, { filter: 'complete', q: '', mode: 'cards', language: 'all' })).toEqual([
+      complete
+    ])
   })
   it('matches code case-insensitively', () => {
-    expect(filterSets(all, { filter: 'all', q: 'mrd', mode: 'cards' })).toEqual([started])
+    expect(filterSets(all, { filter: 'all', q: 'mrd', mode: 'cards', language: 'all' })).toEqual([
+      started
+    ])
   })
   it('matches name substring', () => {
-    expect(filterSets(all, { filter: 'all', q: 'RAID', mode: 'cards' })).toEqual([started])
+    expect(filterSets(all, { filter: 'all', q: 'RAID', mode: 'cards', language: 'all' })).toEqual([
+      started
+    ])
   })
 })
 

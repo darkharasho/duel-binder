@@ -51,7 +51,7 @@ function createAdjust(): {
   }
 }
 
-function setup(): ReturnType<typeof createAdjust> & {
+function setup(language: Language = 'en'): ReturnType<typeof createAdjust> & {
   checklist: ReturnType<typeof vi.fn>
   invalidate: ReturnType<typeof vi.spyOn>
   cancel: ReturnType<typeof vi.spyOn>
@@ -62,6 +62,7 @@ function setup(): ReturnType<typeof createAdjust> & {
   const { client } = renderWithProviders(
     <SetChecklist
       setName="Metal Raiders"
+      language={language}
       mode="cards"
       onModeChange={() => {}}
       onBack={() => {}}
@@ -94,6 +95,13 @@ describe('SetChecklist bulk mode', () => {
       screen.getByRole('combobox', { name: 'Set code for Alpha Dragon Ultra Rare' })
     ).toHaveTextContent('MRD-E001')
     expect(screen.queryByRole('button', { name: /^Alpha Dragon/ })).not.toBeInTheDocument()
+  })
+
+  it("adjusts in the open set's language", async () => {
+    const { adjust } = setup('ja')
+    await enterBulk()
+    await userEvent.click(screen.getByRole('button', { name: 'Add one Gamma Trap Rare' }))
+    expect(adjust).toHaveBeenCalledWith('Metal Raiders', 'ja', PRINTING.gammaEN010, 1)
   })
 
   it('serialises rapid clicks and shows the server count', async () => {

@@ -24,6 +24,7 @@ function renderChecklist(
   renderWithProviders(
     <SetChecklist
       setName="Metal Raiders"
+      language="en"
       mode={o.mode ?? 'cards'}
       onModeChange={() => {}}
       onBack={onBack}
@@ -35,6 +36,19 @@ function renderChecklist(
 }
 
 describe('SetChecklist', () => {
+  it('shows the language tag and the unmatched-rows note', async () => {
+    renderChecklist({
+      checklist: {
+        ...metalRaidersChecklist,
+        set: { ...metalRaidersChecklist.set, language: 'ja', listRows: 61, unmatchedRows: 1 }
+      }
+    })
+    expect(
+      await screen.findByText("60 of 61 cards listed; 1 couldn't be identified")
+    ).toBeInTheDocument()
+    expect(screen.getByText('JP')).toBeInTheDocument()
+  })
+
   it('lists cards in set order with number labels and owned state', async () => {
     renderChecklist()
     const tiles = await screen.findAllByRole('button', {

@@ -1,4 +1,6 @@
+import type { Language } from '@shared/languages'
 import type { CountMode, SetSummary } from '@shared/types'
+import { LanguageTag } from '@/components/LanguageTag'
 import { Badge } from '@/components/ui/badge'
 import { cn } from '@/lib/utils'
 import { SetArt } from './SetArt'
@@ -9,7 +11,7 @@ interface Props {
   sets: SetSummary[]
   mode: CountMode
   view: 'grid' | 'list'
-  onOpen: (setName: string) => void
+  onOpen: (setName: string, language: Language) => void
 }
 
 export function SetsList({ sets, mode, view, onOpen }: Props): React.JSX.Element {
@@ -24,11 +26,11 @@ export function SetsList({ sets, mode, view, onOpen }: Props): React.JSX.Element
         const p = progressFor(s, mode)
         const started = p.owned > 0
         return (
-          <li key={s.setName}>
+          <li key={`${s.language}|${s.setName}`}>
             <button
               type="button"
               data-started={started}
-              onClick={() => onOpen(s.setName)}
+              onClick={() => onOpen(s.setName, s.language)}
               className={cn(
                 'w-full rounded-xl border bg-card text-left transition-colors duration-150 hover:bg-muted/50 focus-visible:outline-2 focus-visible:outline-ring',
                 grid ? 'flex flex-col gap-3 p-3' : 'flex items-center gap-4 p-2.5',
@@ -42,7 +44,10 @@ export function SetsList({ sets, mode, view, onOpen }: Props): React.JSX.Element
               />
               <div className={cn('min-w-0', grid ? 'space-y-2' : 'flex flex-1 items-center gap-4')}>
                 <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm font-medium">{s.setName}</div>
+                  <div className="flex items-center gap-1.5 text-sm font-medium">
+                    <span className="truncate">{s.setName}</span>
+                    <LanguageTag language={s.language} />
+                  </div>
                   <div className="text-xs text-muted-foreground">
                     {s.setCode}
                     {grid && s.tcgDate ? ` · ${s.tcgDate.slice(0, 4)}` : null}

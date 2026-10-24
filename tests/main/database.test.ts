@@ -124,6 +124,19 @@ describe('database', () => {
     db.close()
   })
 
+  test('v3 replaces the set_name index with a (language, set) covering index', () => {
+    const db = new Database(':memory:')
+    db.exec(SCHEMA_V1)
+    db.pragma('user_version = 1')
+    migrate(db)
+    const cols = db.pragma('index_info(idx_printings_lang_set)') as { name: string }[]
+    expect(cols.map((c) => c.name)).toEqual(['language', 'set_name', 'card_id', 'set_rarity'])
+    expect(
+      db.prepare("SELECT name FROM sqlite_master WHERE name = 'idx_printings_set_name'").get()
+    ).toBeUndefined()
+    db.close()
+  })
+
   test('meta round-trips', () => {
     const db = openDatabase(':memory:')
     setMeta(db, 'last_sync_at', '2026-10-23T00:00:00Z')

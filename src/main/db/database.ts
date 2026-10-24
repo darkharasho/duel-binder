@@ -41,7 +41,7 @@ INSERT INTO card_printings_new (id, card_id, set_name, set_code, set_rarity, set
 DROP TABLE card_printings;
 ALTER TABLE card_printings_new RENAME TO card_printings;
 CREATE INDEX idx_printings_set_code ON card_printings(set_code COLLATE NOCASE);
-CREATE INDEX idx_printings_set_name ON card_printings(set_name);
+CREATE INDEX idx_printings_lang_set ON card_printings(language, set_name, card_id, set_rarity);
 CREATE UNIQUE INDEX ux_printings_en ON card_printings(card_id, set_code, set_rarity) WHERE language = 'en';
 CREATE UNIQUE INDEX ux_printings_intl ON card_printings(card_id, language, set_name, set_code, set_rarity)
   WHERE language <> 'en';

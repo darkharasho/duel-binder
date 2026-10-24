@@ -23,12 +23,13 @@ CREATE TABLE value_snapshots (date TEXT PRIMARY KEY, total_value REAL NOT NULL, 
 CREATE TABLE meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 `
 
-/** Ordered schema steps. Append new versions to the end; never edit a shipped step. */
 const SCHEMA_V2 = `
 CREATE TABLE sets (set_name TEXT PRIMARY KEY, set_code TEXT NOT NULL, tcg_date TEXT, image_url TEXT);
 CREATE INDEX idx_printings_set_name ON card_printings(set_name);
+CREATE INDEX idx_images_card ON card_images(card_id, sort_order);
 `
 
+/** Ordered schema steps. Append new versions to the end; never edit a shipped step. */
 const MIGRATIONS: Migration[] = [
   { version: 1, sql: SCHEMA_V1 },
   { version: 2, sql: SCHEMA_V2 }

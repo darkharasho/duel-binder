@@ -20,7 +20,11 @@ interface BulkRowProps {
 
 /** One rarity of a card in bulk mode: a code picker and a −/count/+ stepper. */
 export function BulkRow({ card, rarity, busy, onAdjust }: BulkRowProps): React.JSX.Element {
-  const [printingId, setPrintingId] = useState(rarity.defaultPrintingId)
+  const [chosenId, setPrintingId] = useState(rarity.defaultPrintingId)
+  // A sync can drop the chosen printing; fall back to the default rather than adjusting a dead id.
+  const printingId = rarity.codes.some((c) => c.printingId === chosenId)
+    ? chosenId
+    : rarity.defaultPrintingId
   const selected = rarity.codes.find((c) => c.printingId === printingId)
   const label = `${card.name} ${rarity.rarity}`
   const showOwned = rarity.codes.filter((c) => c.owned > 0).length > 1

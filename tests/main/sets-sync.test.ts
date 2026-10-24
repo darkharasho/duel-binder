@@ -106,3 +106,19 @@ test('card failure skips sets entirely', async () => {
   expect(status.state).toBe('error')
   expect(fetchCardSets).not.toHaveBeenCalled()
 })
+
+test('refreshSets treats a non-string set_code as empty and keeps the other rows', async () => {
+  const db = openDatabase(':memory:')
+  const payload = [
+    { set_name: 'Good', set_code: 'GD' },
+    { set_name: 'Weird', set_code: { x: 1 } },
+    { set_name: 'Flag', set_code: true }
+  ] as unknown as ApiCardSet[]
+  expect(await refreshSets(db, makeClient({ fetchCardSets: async () => payload }))).toBe(true)
+  expect(rows(db)).toEqual([
+    { set_name: 'Flag', set_code: '', tcg_date: null, image_url: null },
+    { set_name: 'Good', set_code: 'GD', tcg_date: null, image_url: null },
+    { set_name: 'Weird', set_code: '', tcg_date: null, image_url: null }
+  ])
+  db.close()
+})

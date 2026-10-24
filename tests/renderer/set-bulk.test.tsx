@@ -53,6 +53,7 @@ function createAdjust(): {
 function setup(): ReturnType<typeof createAdjust> & {
   checklist: ReturnType<typeof vi.fn>
   invalidate: ReturnType<typeof vi.spyOn>
+  cancel: ReturnType<typeof vi.spyOn>
 } {
   const adj = createAdjust()
   const checklist = vi.fn(async () => metalRaidersChecklist)
@@ -68,7 +69,8 @@ function setup(): ReturnType<typeof createAdjust> & {
     { api }
   )
   const invalidate = vi.spyOn(client, 'invalidateQueries')
-  return { ...adj, checklist, invalidate }
+  const cancel = vi.spyOn(client, 'cancelQueries')
+  return { ...adj, checklist, invalidate, cancel }
 }
 
 async function enterBulk(): Promise<void> {
@@ -114,6 +116,16 @@ describe('SetChecklist bulk mode', () => {
     expect(adjust).toHaveBeenCalledTimes(3)
     for (const call of adjust.mock.calls)
       expect(call).toEqual(['Metal Raiders', PRINTING.gammaEN010, 1])
+  })
+
+  it('cancels in-flight checklist fetches before writing a bulk result', async () => {
+    const { releaseNext, cancel } = setup()
+    await enterBulk()
+    await userEvent.click(screen.getByRole('button', { name: 'Add one Gamma Trap Rare' }))
+    releaseNext()
+    await waitFor(() =>
+      expect(cancel).toHaveBeenCalledWith({ queryKey: queryKeys.setChecklist('Metal Raiders') })
+    )
   })
 
   it('remove is disabled when the selected code is not owned', async () => {

@@ -23,7 +23,7 @@ export async function refreshSets(db: Database.Database, client: YgoClient): Pro
       if (!s || typeof s.set_name !== 'string' || s.set_name === '') continue
       rows.set(s.set_name, {
         set_name: s.set_name,
-        set_code: s.set_code ?? '',
+        set_code: typeof s.set_code === 'string' ? s.set_code : '',
         tcg_date: typeof s.tcg_date === 'string' && DATE_RE.test(s.tcg_date) ? s.tcg_date : null,
         image_url: typeof s.set_image === 'string' ? s.set_image : null
       })

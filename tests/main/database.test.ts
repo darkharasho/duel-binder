@@ -67,6 +67,13 @@ describe('database', () => {
     db.close()
   })
 
+  test('migration creates the card_images lookup index', () => {
+    const db = openDatabase(':memory:')
+    const cols = db.pragma('index_info(idx_images_card)') as { name: string }[]
+    expect(cols.map((c) => c.name)).toEqual(['card_id', 'sort_order'])
+    db.close()
+  })
+
   test('meta round-trips', () => {
     const db = openDatabase(':memory:')
     setMeta(db, 'last_sync_at', '2026-10-23T00:00:00Z')

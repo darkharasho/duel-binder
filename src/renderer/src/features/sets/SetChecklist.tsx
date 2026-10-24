@@ -97,6 +97,7 @@ export function SetChecklist({
     bumpPending(cardId, 1)
     queue(async () => {
       const card = await api.sets.adjust(setName, printingId, delta)
+      await qc.cancelQueries({ queryKey: queryKeys.setChecklist(setName) })
       qc.setQueryData<SetChecklistData | null>(queryKeys.setChecklist(setName), (old) =>
         old ? replaceChecklistCard(old, card) : old
       )

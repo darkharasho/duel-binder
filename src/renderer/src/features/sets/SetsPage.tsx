@@ -15,7 +15,7 @@ import {
 } from '@/components/ui/select'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { api, queryKeys } from '@/lib/api'
-import { useLanguageFilter } from '@/lib/languageFilter'
+import { matchesLanguage, useLanguageFilter } from '@/lib/languageFilter'
 import { SetChecklist } from './SetChecklist'
 import { SetsList } from './SetsList'
 import { filterSets, setsHeader, sortSets, type SetFilter, type SetSort } from './setsView'
@@ -72,7 +72,7 @@ export function SetsPage({ onAddCard, onAddMissing }: SetsPageProps): React.JSX.
   const sets = useQuery({ queryKey: queryKeys.setsList, queryFn: () => api.sets.list() })
   const all = useMemo(() => sets.data ?? [], [sets.data])
   const inLanguage = useMemo(
-    () => all.filter((s) => language === 'all' || s.language === language),
+    () => all.filter((s) => matchesLanguage(language, s.language)),
     [all, language]
   )
   const available = useMemo(() => [...new Set(all.map((s) => s.language))], [all])

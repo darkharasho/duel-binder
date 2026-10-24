@@ -92,6 +92,52 @@ function setup(overrides: Parameters<typeof createMockApi>[0] = {}): {
   return { add, get, ...utils }
 }
 
+const bewd: CardSearchResult = {
+  id: 89631139,
+  name: 'Blue-Eyes White Dragon',
+  type: 'Normal Monster',
+  defaultImageId: 89631139,
+  matchedSetCode: null
+}
+const bewdDetail: CardDetail = {
+  card: row(bewd.id, bewd.name, bewd.type),
+  printings: [
+    printing(10, bewd.id, 'LOB-EN001'),
+    printing(11, bewd.id, 'LB-05', { language: 'ja', setPrice: null })
+  ],
+  images: [{ imageId: 89631139, cardId: bewd.id, sortOrder: 0 }]
+}
+const intlApi = (): ReturnType<typeof createMockApi> =>
+  createMockApi({ cards: { search: async () => [bewd], get: async () => bewdDetail } })
+
+describe('AddCardDialog languages', () => {
+  beforeEach(() => localStorage.clear())
+
+  it('shows only English printings while the filter is English, and Japanese after switching', async () => {
+    renderWithProviders(<AddCardDialog open onOpenChange={() => {}} />, { api: intlApi() })
+    await userEvent.type(await screen.findByPlaceholderText(/Search cards/), 'blue')
+    await userEvent.click(await screen.findByText('Blue-Eyes White Dragon'))
+    await screen.findByText('LOB-EN001')
+    expect(screen.queryByText('LB-05')).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('combobox', { name: 'Language' }))
+    await userEvent.click(await screen.findByRole('option', { name: 'Japanese' }))
+    expect(await screen.findByText('LB-05')).toBeInTheDocument()
+    expect(screen.getByText('JP')).toBeInTheDocument()
+    expect(screen.queryByText('LOB-EN001')).not.toBeInTheDocument()
+    expect(localStorage.getItem('language.filter')).toBeNull()
+  })
+
+  it('opened on a Japanese printing shows it highlighted even though the shared filter is English', async () => {
+    renderWithProviders(
+      <AddCardDialog open onOpenChange={() => {}} initial={{ card: bewd, printingId: 11 }} />,
+      { api: intlApi() }
+    )
+    const item = await screen.findByRole('option', { name: /LB-05/ })
+    await waitFor(() => expect(item).toHaveAttribute('aria-selected', 'true'))
+    expect(screen.queryByText('LOB-EN001')).not.toBeInTheDocument()
+  })
+})
+
 describe('AddCardDialog', () => {
   beforeEach(() => vi.mocked(toast.success).mockClear())
 

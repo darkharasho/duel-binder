@@ -90,6 +90,7 @@ export interface CollectionFilters {
   archetypes?: string[]
   setNames?: string[]
   rarities?: string[]
+  language?: Language
   sort: SortKey
   dir: 'asc' | 'desc'
 }
@@ -100,6 +101,7 @@ export interface Facets {
   archetypes: string[]
   setNames: string[]
   rarities: string[]
+  languages: Language[]
 }
 
 export interface CollectionStats {

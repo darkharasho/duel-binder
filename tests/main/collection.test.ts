@@ -185,3 +185,18 @@ test('an English entry keeps the ygoprodeck source', () => {
   const e = addEntry(db, { printingId: pid('LOB-EN005'), imageId: 46986414, quantity: 1 })
   expect(e).toMatchObject({ priceSource: 'ygoprodeck', priceCheckedAt: null, noPriceReason: null })
 })
+
+test('language filter and facets', () => {
+  const ja = db
+    .prepare(
+      `INSERT INTO card_printings (card_id, language, set_name, set_code, set_rarity)
+       VALUES (46986414, 'ja', 'Legend of Blue Eyes White Dragon', 'LB-05', 'Ultra Rare') RETURNING id`
+    )
+    .get() as { id: number }
+  addEntry(db, { printingId: ja.id, imageId: 46986414, quantity: 1 })
+  addEntry(db, { printingId: pid('LOB-EN005'), imageId: 46986414, quantity: 1 })
+  expect(listEntries(db, { ...all, language: 'ja' }).map((e) => e.printing.language)).toEqual(['ja'])
+  expect(listEntries(db, { ...all, language: 'en' }).map((e) => e.printing.language)).toEqual(['en'])
+  expect(listEntries(db, all)).toHaveLength(2)
+  expect(getFacets(db).languages).toEqual(['en', 'ja'])
+})

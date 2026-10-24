@@ -9,6 +9,8 @@ import {
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
+import { LanguageSelect } from '@/components/LanguageSelect'
+import { useLanguageFilter } from '@/lib/languageFilter'
 import {
   Select,
   SelectContent,
@@ -95,6 +97,7 @@ function parseLevel(v: string): number | undefined {
 
 export function FilterBar({ filters, facets, onChange, onClear }: Props): React.JSX.Element {
   const [text, setText] = useState(filters.q ?? '')
+  const [language, setLanguage] = useLanguageFilter()
 
   // Debounce search text into the page's filter state.
   useEffect(() => {
@@ -125,6 +128,11 @@ export function FilterBar({ filters, facets, onChange, onClear }: Props): React.
           onChange={(next) => onChange({ [key]: next })}
         />
       ))}
+      <LanguageSelect
+        value={language}
+        onChange={setLanguage}
+        available={facets?.languages ?? []}
+      />
       <Input
         type="number"
         aria-label="Level min"

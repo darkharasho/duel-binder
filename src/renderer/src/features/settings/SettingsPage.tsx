@@ -142,6 +142,21 @@ export function SettingsPage(): React.JSX.Element {
           </Button>
         </div>
       </Section>
+
+      <Section title="About">
+        <p className="text-sm text-muted-foreground">
+          Non-English set lists from{' '}
+          <a
+            href="https://yugipedia.com/"
+            target="_blank"
+            rel="noreferrer"
+            className="underline underline-offset-2 hover:text-foreground"
+          >
+            Yugipedia
+          </a>{' '}
+          (CC BY-SA 4.0).
+        </p>
+      </Section>
     </div>
   )
 }

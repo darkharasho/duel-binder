@@ -4,9 +4,13 @@ import { toast } from 'sonner'
 import type { CardSearchResult, Printing } from '@shared/types'
 import { api, mutationInvalidationKeys, queryKeys } from '@/lib/api'
 import { priceFor } from '@shared/pricing'
+import { LANGUAGES, type LanguageFilter } from '@shared/languages'
 import { ValueText } from '@/features/collection/EntryValue'
 import { cn } from '@/lib/utils'
 import { CardArt } from '@/components/CardArt'
+import { LanguageSelect } from '@/components/LanguageSelect'
+import { LanguageTag } from '@/components/LanguageTag'
+import { matchesLanguage, useLanguageFilter } from '@/lib/languageFilter'
 import { useSyncStatus } from '@/components/useSyncStatus'
 import { Button } from '@/components/ui/button'
 import {
@@ -47,12 +51,17 @@ function useDebounced<T>(value: T, ms: number): T {
 
 function PrintingPrice({
   setPrice,
-  cardPrice
+  cardPrice,
+  english
 }: {
   setPrice: number | null
   cardPrice: number | null
+  english: boolean
 }): React.JSX.Element {
-  const { unitPrice, approximate } = priceFor(setPrice, cardPrice)
+  // A non-English printing never borrows the English (TCGplayer) price.
+  const { unitPrice, approximate } = english
+    ? priceFor(setPrice, cardPrice)
+    : { unitPrice: null, approximate: false }
   return (
     <TooltipProvider>
       <ValueText amount={unitPrice} approximate={approximate} />
@@ -76,6 +85,10 @@ export function AddCardDialog({
   const [preferredId, setPreferredId] = useState<number | null>(null)
   const [seeded, setSeeded] = useState<AddCardDialogProps['initial']>(null)
   const [highlight, setHighlight] = useState<string | undefined>()
+  // The dialog's own copy of the language filter: null until the user picks, then it follows the
+  // shared setting (or the language of the printing the dialog was opened on).
+  const [sharedLanguage] = useLanguageFilter()
+  const [pickedLanguage, setPickedLanguage] = useState<LanguageFilter | null>(null)
   const artRefs = useRef<(HTMLButtonElement | null)[]>([])
 
   const q = useDebounced(text.trim(), 200)
@@ -94,8 +107,14 @@ export function AddCardDialog({
 
   const printings = (detail.data?.printings ?? []).filter((p) => !p.missingFromApi)
   const images = [...(detail.data?.images ?? [])].sort((a, b) => a.sortOrder - b.sortOrder)
-  const printingValue = (p: Printing): string => `${p.id} ${p.setName} ${p.setCode} ${p.setRarity}`
+  const printingValue = (p: Printing): string =>
+    `${p.id} ${p.setName} ${p.setCode} ${p.setRarity} ${p.language}`
   const preferred = printings.find((p) => p.id === preferredId)
+  const languageFilter = pickedLanguage ?? preferred?.language ?? sharedLanguage
+  const availableLanguages = LANGUAGES.map((l) => l.code).filter((code) =>
+    printings.some((p) => p.language === code)
+  )
+  const shownPrintings = printings.filter((p) => matchesLanguage(languageFilter, p.language))
   const highlighted = highlight ?? (preferred ? printingValue(preferred) : undefined)
   const qty = Number(quantity)
   const qtyValid = quantity.trim() !== '' && Number.isInteger(qty) && qty >= 1
@@ -108,6 +127,7 @@ export function AddCardDialog({
     setImageId(null)
     setQuantity('1')
     setPreferredId(null)
+    setPickedLanguage(null)
     setHighlight(undefined)
   }
 
@@ -135,6 +155,7 @@ export function AddCardDialog({
     setCard(c)
     setImageId(c.defaultImageId)
     setPreferredId(null)
+    setPickedLanguage(null)
     setHighlight(undefined)
     setStep('printing')
   }
@@ -186,6 +207,7 @@ export function AddCardDialog({
     setText('')
     setHighlight(undefined)
     setPreferredId(initial.printingId)
+    setPickedLanguage(null)
     setStep('printing')
   }
 
@@ -277,13 +299,20 @@ export function AddCardDialog({
 
         {step === 'printing' && (
           <Command className="rounded-xl" value={highlighted} onValueChange={setHighlight}>
+            <div className="flex items-center justify-end border-b px-3 py-2">
+              <LanguageSelect
+                value={languageFilter}
+                onChange={setPickedLanguage}
+                available={availableLanguages}
+              />
+            </div>
             <CommandInput autoFocus placeholder="Filter printings…" />
             <CommandList className="max-h-80">
               <CommandEmpty>
                 {detail.isLoading ? 'Loading…' : 'No printings available.'}
               </CommandEmpty>
               <CommandGroup>
-                {printings.map((p) => (
+                {shownPrintings.map((p) => (
                   <CommandItem
                     key={p.id}
                     value={printingValue(p)}
@@ -291,12 +320,14 @@ export function AddCardDialog({
                     className="gap-3 py-2"
                   >
                     <span className="min-w-0 flex-1 truncate">{p.setName}</span>
+                    <LanguageTag language={p.language} />
                     <span className="text-xs tabular-nums text-muted-foreground">{p.setCode}</span>
                     <span className="text-xs text-muted-foreground">{p.setRarity}</span>
                     <span className="w-16 text-right text-xs">
                       <PrintingPrice
                         setPrice={p.setPrice}
                         cardPrice={detail.data?.card.tcgplayerPrice ?? null}
+                        english={p.language === 'en'}
                       />
                     </span>
                   </CommandItem>

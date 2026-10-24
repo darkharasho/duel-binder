@@ -1,4 +1,5 @@
 import type { LanguageFilter } from '@shared/languages'
+import { matchesLanguage } from '@/lib/languageFilter'
 import type { ChecklistCard, CountMode, SetChecklist, SetSummary } from '@shared/types'
 
 export type SetFilter = 'started' | 'all' | 'complete'
@@ -51,7 +52,7 @@ export function filterSets(
 ): SetSummary[] {
   const q = o.q.trim().toLowerCase()
   return sets.filter((s) => {
-    if (o.language !== 'all' && s.language !== o.language) return false
+    if (!matchesLanguage(o.language, s.language)) return false
     const p = progressFor(s, o.mode)
     if (o.filter === 'started' && p.owned === 0) return false
     if (o.filter === 'complete' && !p.complete) return false

@@ -23,7 +23,7 @@ export function createMockApi(overrides: DeepPartial<Api> = {}): Api {
         throw new Error('collection.update not mocked')
       }),
       remove: vi.fn(async () => undefined),
-      facets: vi.fn(async () => ({ cardTypes: [], attributes: [], archetypes: [], setNames: [], rarities: [] }))
+      facets: vi.fn(async () => ({ cardTypes: [], attributes: [], archetypes: [], setNames: [], rarities: [], languages: [] }))
     },
     stats: {
       get: vi.fn(async () => ({

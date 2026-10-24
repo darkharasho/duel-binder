@@ -85,7 +85,8 @@ function setup(
         attributes: ['DARK'],
         archetypes: [],
         setNames: [],
-        rarities: ['Ultra Rare', 'Common']
+        rarities: ['Ultra Rare', 'Common'],
+        languages: ['en', 'ja']
       }),
       forCard: async (id: number) => entries.filter((e) => e.card.id === id),
       ...overrides.collection
@@ -110,6 +111,23 @@ describe('CollectionPage', () => {
     expect(await screen.findByRole('columnheader', { name: 'Unit price' })).toBeInTheDocument()
     expect(screen.getByText('Blue-Eyes White Dragon')).toBeInTheDocument()
     expect(localStorage.getItem('collection.view')).toBe('table')
+  })
+
+  it('sends the shared language filter (English by default) and All languages clears it', async () => {
+    const { list } = setup()
+    await screen.findByText('Dark Magician')
+    expect(list).toHaveBeenLastCalledWith(expect.objectContaining({ language: 'en' }))
+    await userEvent.click(screen.getByRole('combobox', { name: 'Language' }))
+    await userEvent.click(await screen.findByRole('option', { name: 'All languages' }))
+    await waitFor(() =>
+      expect(list).toHaveBeenLastCalledWith(expect.objectContaining({ language: undefined }))
+    )
+  })
+
+  it('shows a language tag on non-English rows', async () => {
+    const ja = entry(3, 'Red-Eyes', { printing: printing(3, 103, { language: 'ja', setCode: 'LB-05' }) })
+    setup([ja])
+    expect(await screen.findByText('JP')).toBeInTheDocument()
   })
 
   it('changing rarity facet calls list with rarities', async () => {

@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { useCallback, useMemo, useState } from 'react'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { LayoutGrid, Table2 } from 'lucide-react'
 import type { CollectionFilters, EntryView, SortKey } from '@shared/types'
@@ -7,6 +7,7 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { api, queryKeys } from '@/lib/api'
 import { formatRelative } from '@/lib/format'
+import { useLanguageFilter } from '@/lib/languageFilter'
 import { CollectionGrid } from './CollectionGrid'
 import { CollectionTable } from './CollectionTable'
 import { EntryDetailPanel } from './EntryDetailPanel'
@@ -44,7 +45,13 @@ interface Props {
 }
 
 export function CollectionPage({ initialEntryId, onAddCard }: Props): React.JSX.Element {
-  const [filters, setFilters] = useState<CollectionFilters>(DEFAULT_FILTERS)
+  const [pageFilters, setFilters] = useState<CollectionFilters>(DEFAULT_FILTERS)
+  const [languageFilter] = useLanguageFilter()
+  // The language is the shared app-wide setting, not page state.
+  const filters = useMemo<CollectionFilters>(
+    () => ({ ...pageFilters, language: languageFilter === 'all' ? undefined : languageFilter }),
+    [pageFilters, languageFilter]
+  )
   const [view, setView] = useState<View>(readView)
   const [selectedId, setSelectedId] = useState<number | null>(initialEntryId ?? null)
   const [resetCount, setResetCount] = useState(0)

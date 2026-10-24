@@ -10,7 +10,8 @@ import {
   TableHeader,
   TableRow
 } from '@/components/ui/table'
-import { StaleBadge, ValueText, displayTotal } from './EntryValue'
+import { LanguageTag } from '@/components/LanguageTag'
+import { EntryValue, StaleBadge, displayTotal } from './EntryValue'
 
 interface Props {
   entries: EntryView[]
@@ -45,7 +46,16 @@ const columns = helper.columns([
       </div>
     )
   }),
-  helper.accessor((e) => e.printing.setCode, { id: 'setCode', header: 'Set code' }),
+  helper.accessor((e) => e.printing.setCode, {
+    id: 'setCode',
+    header: 'Set code',
+    cell: ({ row }) => (
+      <span className="inline-flex items-center gap-1.5">
+        {row.original.printing.setCode}
+        <LanguageTag language={row.original.printing.language} />
+      </span>
+    )
+  }),
   helper.accessor((e) => e.printing.setName, { id: 'setName', header: 'Set' }),
   helper.accessor((e) => e.printing.setRarity, { id: 'rarity', header: 'Rarity' }),
   helper.accessor('quantity', {
@@ -57,14 +67,14 @@ const columns = helper.columns([
     id: 'unitPrice',
     header: 'Unit price',
     cell: ({ row }) => (
-      <ValueText amount={row.original.unitPrice} approximate={row.original.priceApproximate} />
+      <EntryValue entry={row.original} amount={row.original.unitPrice} />
     )
   }),
   helper.accessor('totalValue', {
     id: 'total',
     header: 'Total',
     cell: ({ row }) => (
-      <ValueText amount={displayTotal(row.original)} approximate={row.original.priceApproximate} />
+      <EntryValue entry={row.original} amount={displayTotal(row.original)} />
     )
   })
 ])

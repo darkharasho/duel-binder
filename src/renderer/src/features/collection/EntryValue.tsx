@@ -1,7 +1,7 @@
 import type { EntryView } from '@shared/types'
 import { Badge } from '@/components/ui/badge'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
-import { formatUsd } from '@/lib/format'
+import { formatRelative, formatUsd } from '@/lib/format'
 
 const APPROX_TIP = "Set price unavailable — using the card's general TCGplayer price"
 
@@ -24,6 +24,42 @@ export function ValueText({
         </span>
       </TooltipTrigger>
       <TooltipContent>{APPROX_TIP}</TooltipContent>
+    </Tooltip>
+  )
+}
+
+const NO_PRICE_TIPS = {
+  'no-listings': 'No eBay listings found',
+  pending: 'Checking eBay…',
+  unavailable: 'Prices unavailable'
+} as const
+
+/**
+ * An entry's price. YGOPRODeck prices render as `ValueText`; eBay (non-English) prices are labelled
+ * as asking prices with their checked date, or "No price" with the reason.
+ */
+export function EntryValue({
+  entry,
+  amount
+}: {
+  entry: EntryView
+  amount: number | null
+}): React.JSX.Element {
+  if (entry.priceSource !== 'ebay') {
+    return <ValueText amount={amount} approximate={entry.priceApproximate} />
+  }
+  const noPrice = amount === null
+  const tip = noPrice
+    ? NO_PRICE_TIPS[entry.noPriceReason ?? 'unavailable']
+    : `eBay asking price · checked ${formatRelative(entry.priceCheckedAt)}`
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className={noPrice ? 'text-muted-foreground' : 'tabular-nums'}>
+          {noPrice ? 'No price' : formatUsd(amount)}
+        </span>
+      </TooltipTrigger>
+      <TooltipContent>{tip}</TooltipContent>
     </Tooltip>
   )
 }

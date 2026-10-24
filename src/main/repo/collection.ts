@@ -1,4 +1,5 @@
 import type Database from 'better-sqlite3'
+import { LANGUAGES } from '../../shared/languages'
 import { priceFor } from '../../shared/pricing'
 import type { AddEntryInput, CollectionFilters, EntryView, Facets, UpdateEntryInput } from '../../shared/types'
 import { getMeta } from '../db/meta'
@@ -187,6 +188,10 @@ export function listEntries(db: Database.Database, f: CollectionFilters): EntryV
   inList('c.archetype', f.archetypes)
   inList('p.set_name', f.setNames)
   inList('p.set_rarity', f.rarities)
+  if (f.language) {
+    where.push('p.language = ?')
+    params.push(f.language)
+  }
   if (f.levelMin !== undefined) {
     where.push('COALESCE(c.level, c.linkval) >= ?')
     params.push(f.levelMin)
@@ -239,11 +244,13 @@ export function getFacets(db: Database.Database): Facets {
         )
         .all() as { v: string }[]
     ).map((r) => r.v)
+  const owned = new Set(distinct('p.language'))
   return {
     cardTypes: distinct('c.type'),
     attributes: distinct('c.attribute'),
     archetypes: distinct('c.archetype'),
     setNames: distinct('p.set_name'),
-    rarities: distinct('p.set_rarity')
+    rarities: distinct('p.set_rarity'),
+    languages: LANGUAGES.map((l) => l.code).filter((code) => owned.has(code))
   }
 }

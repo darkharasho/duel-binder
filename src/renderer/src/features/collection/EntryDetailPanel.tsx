@@ -1,8 +1,10 @@
 import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
+import type { Language } from '@shared/languages'
 import type { EntryView, UpdateEntryInput } from '@shared/types'
 import { CardArt } from '@/components/CardArt'
+import { LanguageTag } from '@/components/LanguageTag'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -21,7 +23,7 @@ import {
 } from '@/components/ui/sheet'
 import { api, mutationInvalidationKeys, queryKeys } from '@/lib/api'
 import { cn } from '@/lib/utils'
-import { StaleBadge, ValueText, displayTotal } from './EntryValue'
+import { EntryValue, StaleBadge, displayTotal } from './EntryValue'
 
 interface Props {
   cardId: number
@@ -45,6 +47,7 @@ function EntryEditor({
     setCode: string
     setName: string
     setRarity: string
+    language: Language
     missingFromApi: boolean
   }[]
   onSelectEntry: (entryId: number) => void
@@ -100,7 +103,7 @@ function EntryEditor({
     <div className="space-y-4">
       <div className="flex items-center gap-2 text-sm">
         <span className="text-muted-foreground">Value</span>
-        <ValueText amount={displayTotal(entry)} approximate={entry.priceApproximate} />
+        <EntryValue entry={entry} amount={displayTotal(entry)} />
       </div>
       <StaleBadge entry={entry} />
 
@@ -170,7 +173,8 @@ function EntryEditor({
             <SelectContent>
               {choosable.map((p) => (
                 <SelectItem key={p.id} value={String(p.id)}>
-                  {p.setCode} · {p.setRarity} — {p.setName}
+                  {p.setCode} · {p.setRarity} — {p.setName}{' '}
+                  <LanguageTag language={p.language} />
                 </SelectItem>
               ))}
             </SelectContent>
@@ -261,8 +265,9 @@ export function EntryDetailPanel({
                         c.id === entryId ? 'bg-accent' : 'hover:bg-accent/50'
                       )}
                     >
-                      <span>
+                      <span className="flex items-center gap-1.5">
                         {c.printing.setCode} · {c.printing.setRarity}
+                        <LanguageTag language={c.printing.language} />
                       </span>
                       <span className="tabular-nums text-muted-foreground">×{c.quantity}</span>
                     </button>

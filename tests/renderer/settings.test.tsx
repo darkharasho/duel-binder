@@ -32,6 +32,17 @@ describe('SettingsPage', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: /Refresh card data|Syncing/ })).toBeDisabled())
   })
 
+  it('credits Yugipedia for non-English set lists', async () => {
+    renderWithProviders(<SettingsPage />, { api: createMockApi() })
+    expect(
+      await screen.findByText(/Non-English set lists from/)
+    ).toHaveTextContent('Non-English set lists from Yugipedia (CC BY-SA 4.0).')
+    expect(screen.getByRole('link', { name: 'Yugipedia' })).toHaveAttribute(
+      'href',
+      'https://yugipedia.com/'
+    )
+  })
+
   it('shows the last sync error', async () => {
     const api = createMockApi({
       sync: { status: vi.fn(async () => ({ ...synced, state: 'error' as const, error: 'HTTP 500' })) }

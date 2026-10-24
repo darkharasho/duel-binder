@@ -39,8 +39,10 @@ export function SetsList({ sets, mode, view, onOpen }: Props): React.JSX.Element
                   )}
                 />
                 <div className="min-w-0 space-y-1.5">
-                  <div className="flex items-start gap-1.5 text-sm font-semibold leading-snug">
-                    <span className="min-w-0 break-words">{s.setName}</span>
+                  <div className="flex min-h-[2lh] items-start gap-1.5 text-sm font-semibold leading-snug">
+                    <span title={s.setName} className="line-clamp-2 min-w-0 break-words">
+                      {s.setName}
+                    </span>
                     <LanguageTag language={s.language} className="mt-px shrink-0" />
                   </div>
                   <div className="flex items-center justify-between gap-2 font-mono text-xs text-muted-foreground">

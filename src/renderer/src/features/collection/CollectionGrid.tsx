@@ -1,6 +1,7 @@
 import type { EntryView } from '@shared/types'
 import { Badge } from '@/components/ui/badge'
 import { CardArt } from '@/components/CardArt'
+import { scanFor } from '@/components/scanFor'
 import { LanguageTag } from '@/components/LanguageTag'
 import { EntryValue, StaleBadge, displayTotal } from './EntryValue'
 
@@ -27,7 +28,7 @@ export function CollectionGrid({ entries, selectedId, onSelect }: Props): React.
             <div className="relative">
               <CardArt
                 imageId={e.imageId}
-                printingId={e.printing.id}
+                printingId={scanFor(e)}
                 size="small"
                 alt={e.card.name}
                 className="w-full rounded-[4px] shadow-[0_8px_20px_rgb(0_0_0/0.45)] transition-transform duration-200 group-hover:-translate-y-1"

@@ -3,6 +3,7 @@ import type { CollectionStats } from '@shared/types'
 import type { NavigateFn } from '@/components/AppShell'
 import { cardArtUrl, useArtWash } from '@/components/artWash'
 import { CardArt } from '@/components/CardArt'
+import { scanFor } from '@/components/scanFor'
 import { Button } from '@/components/ui/button'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { EntryValue, StaleBadge, displayTotal } from '@/features/collection/EntryValue'
@@ -175,7 +176,7 @@ function Content({
                 >
                   <CardArt
                     imageId={e.imageId}
-                    printingId={e.printing.id}
+                    printingId={scanFor(e)}
                     size="small"
                     alt=""
                     className="w-full rounded-[4px] shadow-[0_8px_20px_rgb(0_0_0/0.5)] transition-transform duration-200 group-hover:-translate-y-1"

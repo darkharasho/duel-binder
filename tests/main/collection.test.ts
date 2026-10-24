@@ -206,3 +206,10 @@ test('language filter and facets', () => {
   expect(listEntries(db, all)).toHaveLength(2)
   expect(getFacets(db).languages).toEqual(['en', 'ja'])
 })
+
+test('originalArt is true only for the card’s first artwork', () => {
+  const a = addEntry(db, { printingId: pid('LOB-EN005'), imageId: 46986414, quantity: 1 })
+  const b = addEntry(db, { printingId: pid('LOB-EN005'), imageId: 46986415, quantity: 1 })
+  expect(getEntry(db, a.id)?.originalArt).toBe(true)
+  expect(getEntry(db, b.id)?.originalArt).toBe(false)
+})

@@ -25,6 +25,8 @@ interface EntryDbRow {
 const SELECT = `
   SELECT e.id AS e_id, e.quantity AS e_quantity, e.notes AS e_notes, e.created_at AS e_created_at,
          e.updated_at AS e_updated_at, e.image_id AS e_image_id,
+         e.image_id IS (SELECT ci.image_id FROM card_images ci WHERE ci.card_id = c.id
+                        ORDER BY ci.sort_order, ci.image_id LIMIT 1) AS e_original_art,
          c.id AS id, c.name, c.type, c.frame_type, c.race, c.attribute, c.level, c.linkval, c.atk, c.def,
          c.archetype, c.desc, c.tcgplayer_price,
          p.id AS p_id, p.card_id, p.set_name, p.set_code, p.set_rarity, p.set_rarity_code, p.set_price,
@@ -62,6 +64,7 @@ function toView(r: EntryDbRow, priceStatus: string | null): EntryView {
     card,
     printing,
     imageId: r.e_image_id,
+    originalArt: r.e_original_art === 1,
     unitPrice,
     priceApproximate: approximate,
     priceSource: ebay ? 'ebay' : 'ygoprodeck',

@@ -90,9 +90,39 @@ describe('SetChecklist', () => {
     expect(forCard).toHaveBeenCalledWith(1001)
   })
 
-  it('clicking a missing tile asks to add it with the default printing', async () => {
-    const { onAddMissing } = renderChecklist()
+  it('clicking a missing tile opens a panel with steppers for that set', async () => {
+    const adjust = vi.fn(async () => ({
+      ...metalRaidersChecklist.cards[2],
+      owned: 1,
+      rarities: metalRaidersChecklist.cards[2].rarities.map((r) => ({ ...r, owned: 1 }))
+    }))
+    const onAddMissing = vi.fn()
+    const api = createMockApi({
+      sets: { checklist: async () => metalRaidersChecklist, adjust },
+      collection: { forCard: vi.fn(async () => []) }
+    })
+    renderWithProviders(
+      <SetChecklist
+        setName="Metal Raiders"
+        language="en"
+        mode="cards"
+        onModeChange={() => {}}
+        onBack={() => {}}
+        onAddMissing={onAddMissing}
+      />,
+      { api }
+    )
     await userEvent.click(await screen.findByRole('button', { name: /Gamma Trap/ }))
+    const panel = await screen.findByRole('dialog')
+    expect(within(panel).getByText('You have none yet')).toBeInTheDocument()
+    expect(onAddMissing).not.toHaveBeenCalled()
+
+    const rarity = metalRaidersChecklist.cards[2].rarities[0].rarity
+    await userEvent.click(within(panel).getByRole('button', { name: `Add one Gamma Trap ${rarity}` }))
+    expect(adjust).toHaveBeenCalledWith('Metal Raiders', 'en', PRINTING.gammaEN010, 1)
+    expect(await within(panel).findByText('You have 1')).toBeInTheDocument()
+
+    await userEvent.click(within(panel).getByRole('button', { name: 'More options…' }))
     expect(onAddMissing).toHaveBeenCalledWith(
       {
         id: 3001,

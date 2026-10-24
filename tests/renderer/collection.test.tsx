@@ -43,6 +43,7 @@ const entry = (id: number, name: string, extra: Partial<EntryView> = {}): EntryV
   card: card(100 + id, name),
   printing: printing(id, 100 + id),
   imageId: 100 + id,
+  originalArt: true,
   unitPrice: 10,
   priceApproximate: false,
   priceSource: 'ygoprodeck',

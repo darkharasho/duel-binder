@@ -2,6 +2,7 @@ import { createColumnHelper, tableFeatures, useTable } from '@tanstack/react-tab
 import { ArrowDown, ArrowUp } from 'lucide-react'
 import type { CollectionFilters, EntryView, SortKey } from '@shared/types'
 import { CardArt } from '@/components/CardArt'
+import { scanFor } from '@/components/scanFor'
 import {
   Table,
   TableBody,
@@ -35,7 +36,7 @@ const columns = helper.columns([
     cell: ({ row }) => (
       <CardArt
         imageId={row.original.imageId}
-        printingId={row.original.printing.id}
+        printingId={scanFor(row.original)}
         size="small"
         alt=""
         className="w-8"

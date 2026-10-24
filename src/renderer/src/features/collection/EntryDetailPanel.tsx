@@ -4,6 +4,7 @@ import { toast } from 'sonner'
 import type { Language } from '@shared/languages'
 import type { EntryView, UpdateEntryInput } from '@shared/types'
 import { CardArt } from '@/components/CardArt'
+import { scanFor } from '@/components/scanFor'
 import { LanguageTag } from '@/components/LanguageTag'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -153,7 +154,13 @@ function EntryEditor({
                     : 'hover:bg-accent'
                 )}
               >
-                <CardArt imageId={im.imageId} size="small" alt="" className="w-14" />
+                <CardArt
+                  imageId={im.imageId}
+                  printingId={i === 0 ? entry.printing.id : undefined}
+                  size="small"
+                  alt=""
+                  className="w-14"
+                />
               </button>
             ))}
           </div>
@@ -241,7 +248,7 @@ export function EntryDetailPanel({
           {entry && (
             <CardArt
               imageId={entry.imageId}
-              printingId={entry.printing.id}
+              printingId={scanFor(entry)}
               size="full"
               alt={entry.card.name}
               className="mx-auto w-48"

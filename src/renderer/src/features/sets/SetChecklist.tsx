@@ -18,6 +18,7 @@ import { api, mutationInvalidationKeys, queryKeys } from '@/lib/api'
 import { createSerialQueue } from '@/lib/serialQueue'
 import { cn } from '@/lib/utils'
 import { BulkCard } from './BulkCard'
+import { SetCardPanel } from './SetCardPanel'
 import { SetArt } from './SetArt'
 import { SetProgress } from './SetProgress'
 import {
@@ -91,6 +92,8 @@ export function SetChecklist({
   const [filter, setFilter] = useState<TileFilter>('all')
   const [q, setQ] = useState('')
   const [selected, setSelected] = useState<{ cardId: number; entryId: number } | null>(null)
+  // A card not owned yet opens with steppers instead of an entry editor.
+  const [unowned, setUnowned] = useState<{ cardId: number; rarity: string | null } | null>(null)
   const [bulk, setBulk] = useState(false)
   // Card ids shown in bulk mode, frozen so saves never re-filter a card away mid-click.
   const [frozen, setFrozen] = useState<{
@@ -181,20 +184,9 @@ export function SetChecklist({
       setSelected({ cardId: t.card.cardId, entryId: t.entryId })
       return
     }
-    const rarity =
-      mode === 'rarities' ? t.card.rarities.find((r) => r.rarity === t.rarity) : t.card.rarities[0]
-    if (!rarity) return
-    onAddMissing(
-      {
-        id: t.card.cardId,
-        name: t.card.name,
-        type: t.card.type,
-        defaultImageId: t.card.imageId,
-        matchedSetCode: null
-      },
-      rarity.defaultPrintingId
-    )
+    setUnowned({ cardId: t.card.cardId, rarity: t.rarity })
   }
+  const unownedCard = unowned ? data.cards.find((c) => c.cardId === unowned.cardId) : undefined
 
   return (
     <TooltipProvider>
@@ -342,6 +334,29 @@ export function SetChecklist({
             entryId={selected.entryId}
             onSelectEntry={(entryId) => setSelected({ cardId: selected.cardId, entryId })}
             onClose={() => setSelected(null)}
+          />
+        )}
+        {unowned && unownedCard && (
+          <SetCardPanel
+            setName={data.set.setName}
+            card={unownedCard}
+            rarity={unowned.rarity}
+            busy={(pending[unownedCard.cardId] ?? 0) > 0}
+            onAdjust={(printingId, delta) => adjust(unownedCard.cardId, printingId, delta)}
+            onMoreOptions={(printingId) => {
+              setUnowned(null)
+              onAddMissing(
+                {
+                  id: unownedCard.cardId,
+                  name: unownedCard.name,
+                  type: unownedCard.type,
+                  defaultImageId: unownedCard.imageId,
+                  matchedSetCode: null
+                },
+                printingId
+              )
+            }}
+            onClose={() => setUnowned(null)}
           />
         )}
       </div>

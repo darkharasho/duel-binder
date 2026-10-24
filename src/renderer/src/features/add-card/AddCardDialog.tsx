@@ -235,7 +235,9 @@ export function AddCardDialog({
           <div className="flex items-center gap-3 border-b px-4 py-3 pr-10">
             <CardArt
               imageId={imageId ?? card.defaultImageId}
-              printingId={printing?.id}
+              printingId={
+                images.length === 0 || imageId === images[0].imageId ? printing?.id : undefined
+              }
               size="small"
               alt=""
               className="w-9"
@@ -391,7 +393,14 @@ export function AddCardDialog({
                     im.imageId === imageId ? 'ring-2 ring-primary' : 'opacity-80 hover:opacity-100'
                   )}
                 >
-                  <CardArt imageId={im.imageId} size="small" alt="" className="w-24" />
+                  {/* The original artwork stands for "as printed", so it shows this printing's photo. */}
+                  <CardArt
+                    imageId={im.imageId}
+                    printingId={i === 0 ? printing?.id : undefined}
+                    size="small"
+                    alt=""
+                    className="w-24"
+                  />
                 </button>
               ))}
             </div>

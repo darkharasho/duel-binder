@@ -58,6 +58,8 @@ export interface EntryView {
   card: CardRow
   printing: Printing
   imageId: number
+  /** The entry uses the card's original artwork, so the printing's own photo can stand in for it. */
+  originalArt: boolean
   unitPrice: number | null
   priceApproximate: boolean
   priceSource: 'ygoprodeck' | 'ebay'

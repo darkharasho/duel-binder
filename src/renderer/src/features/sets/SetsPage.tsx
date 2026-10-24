@@ -69,9 +69,9 @@ const FILTERS = [
 ] as const satisfies readonly { value: SetFilter; label: string }[]
 
 const SORTS: { value: SetSort; label: string }[] = [
+  { value: 'date', label: 'Newest' },
   { value: 'complete', label: 'Most complete' },
-  { value: 'name', label: 'Name' },
-  { value: 'date', label: 'Release date' }
+  { value: 'name', label: 'Name' }
 ]
 
 interface SetsPageProps {
@@ -84,7 +84,7 @@ export function SetsPage({ onAddCard, onAddMissing }: SetsPageProps): React.JSX.
   const [mode, setMode] = useState<CountMode>(readMode)
   const [filter, setFilterState] = useState<SetFilter>(readFilter)
   const [q, setQ] = useState('')
-  const [sort, setSort] = useState<SetSort>('complete')
+  const [sort, setSort] = useState<SetSort>('date')
   const [openSet, setOpenSetState] = useState<{ setName: string; language: Language } | null>(null)
   const main = useMainScroll()
   // Where the list was scrolled when a set was opened, restored on the way back.

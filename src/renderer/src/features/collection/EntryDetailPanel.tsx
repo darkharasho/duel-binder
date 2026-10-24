@@ -4,6 +4,7 @@ import { toast } from 'sonner'
 import type { Language } from '@shared/languages'
 import type { EntryView, UpdateEntryInput } from '@shared/types'
 import { CardArt } from '@/components/CardArt'
+import { CardDetails } from '@/components/CardDetails'
 import { PanelCardArt } from '@/components/PanelCardArt'
 import { scanFor } from '@/components/scanFor'
 import { LanguageTag } from '@/components/LanguageTag'
@@ -229,14 +230,6 @@ export function EntryDetailPanel({
   const entry = copies.data?.find((c) => c.id === entryId)
   const card = detail.data?.card ?? entry?.card
   const typeLine = card ? [card.type, card.attribute, card.race].filter(Boolean).join(' · ') : ''
-  const stats = card
-    ? [
-        card.atk !== null && `ATK ${card.atk}`,
-        card.def !== null && `DEF ${card.def}`,
-        card.level !== null && `Level ${card.level}`,
-        card.linkval !== null && `Link ${card.linkval}`
-      ].filter(Boolean)
-    : []
 
   return (
     <Sheet open onOpenChange={(open) => !open && onClose()}>
@@ -253,10 +246,7 @@ export function EntryDetailPanel({
               alt={entry.card.name}
             />
           )}
-          {stats.length > 0 && (
-            <div className="text-sm tabular-nums text-muted-foreground">{stats.join(' · ')}</div>
-          )}
-          {card && <p className="whitespace-pre-line text-sm">{card.desc}</p>}
+          <CardDetails card={card} />
 
           {(copies.data?.length ?? 0) > 0 && (
             <section aria-label="Your copies" className="space-y-1.5">

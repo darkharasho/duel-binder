@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Minus, Plus } from 'lucide-react'
 import { toast } from 'sonner'
 import type { BrowseCard, Printing } from '@shared/types'
+import { CardDetails } from '@/components/CardDetails'
 import { PanelCardArt } from '@/components/PanelCardArt'
 import { LanguageTag } from '@/components/LanguageTag'
 import { Button } from '@/components/ui/button'
@@ -84,6 +85,8 @@ export function BrowseCardPanel({
             alt={card.name}
           />
 
+          <CardDetails card={info} />
+
           <section aria-label="Printings" className="space-y-2">
             <h3 className="text-sm font-medium">
               {total > 0 ? `You have ${total}` : 'You have none yet'}
@@ -144,7 +147,6 @@ export function BrowseCardPanel({
             </Button>
           )}
 
-          {info?.desc && <p className="whitespace-pre-line text-sm">{info.desc}</p>}
         </div>
       </SheetContent>
     </Sheet>

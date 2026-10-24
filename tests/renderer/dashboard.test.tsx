@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react'
+import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { CollectionStats, EntryView } from '@shared/types'
 import { DashboardPage } from '@/features/dashboard/DashboardPage'
@@ -71,8 +71,9 @@ describe('DashboardPage', () => {
   it('tiles show formatted stats', async () => {
     setup(stats())
     expect(await screen.findByText('$31.74')).toBeInTheDocument()
-    expect(screen.getByText('12')).toBeInTheDocument()
-    expect(screen.getByText('7')).toBeInTheDocument()
+    const tile = (label: string): HTMLElement => screen.getByText(label).parentElement as HTMLElement
+    expect(within(tile('Total cards')).getByText('12')).toBeInTheDocument()
+    expect(within(tile('Unique cards')).getByText('7')).toBeInTheDocument()
     expect(screen.getByText('Total cards')).toBeInTheDocument()
     expect(screen.getByText('Prices updated')).toBeInTheDocument()
   })
@@ -99,6 +100,29 @@ describe('DashboardPage', () => {
     const types = screen.getByRole('list', { name: 'By card type' }).querySelectorAll('li')
     expect(types[0]).toHaveTextContent('Normal')
     expect(types[1]).toHaveTextContent('Spell')
+  })
+
+  it('title-cases multi-word frame types', async () => {
+    setup(stats({ byFrameType: [{ frameType: 'effect_pendulum', count: 2 }] }))
+    expect(await screen.findByText('Effect Pendulum')).toBeInTheDocument()
+  })
+
+  it('flags stale prices only when older than 24 h', async () => {
+    const ago = (ms: number): string => new Date(Date.now() - ms).toISOString()
+    const { unmount } = renderWithProviders(<DashboardPage onNavigate={vi.fn()} />, {
+      api: createMockApi({ stats: { get: async () => stats({ pricesUpdatedAt: ago(3 * 86_400_000) }) } })
+    })
+    expect(await screen.findByText('stale')).toBeInTheDocument()
+    unmount()
+    setup(stats({ pricesUpdatedAt: ago(3_600_000) }))
+    expect(await screen.findByText('1 h ago')).toBeInTheDocument()
+    expect(screen.queryByText('stale')).not.toBeInTheDocument()
+  })
+
+  it('approximate top entry shows ≈', async () => {
+    setup(stats({ topEntries: [entry(1, 'Dark Magician', { priceApproximate: true })] }))
+    const row = await screen.findByRole('button', { name: /Dark Magician/ })
+    expect(within(row).getByLabelText('approximately')).toHaveTextContent('≈')
   })
 
   it('top entry click navigates', async () => {

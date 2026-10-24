@@ -58,7 +58,19 @@ function BarList({ title, rows }: { title: string; rows: BarRow[] }): React.JSX.
   )
 }
 
-const titleCase = (s: string): string => (s ? s[0].toUpperCase() + s.slice(1) : s)
+const titleCase = (s: string): string =>
+  s
+    .split('_')
+    .filter(Boolean)
+    .map((w) => w[0].toUpperCase() + w.slice(1))
+    .join(' ')
+
+const STALE_MS = 24 * 60 * 60 * 1000
+const isStale = (iso: string | null): boolean => {
+  if (iso === null) return true
+  const t = new Date(iso).getTime()
+  return Number.isNaN(t) || Date.now() - t > STALE_MS
+}
 
 function Content({ stats, onNavigate }: { stats: CollectionStats; onNavigate: NavigateFn }): React.JSX.Element {
   const n = stats.approximateCount
@@ -74,7 +86,16 @@ function Content({ stats, onNavigate }: { stats: CollectionStats; onNavigate: Na
           {formatUsd(stats.totalValue)}
         </Tile>
         <Tile label="Prices updated">
-          <span className="text-lg">{formatRelative(stats.pricesUpdatedAt)}</span>
+          {isStale(stats.pricesUpdatedAt) ? (
+            <span className="flex items-baseline gap-2">
+              <span className="text-lg text-amber-500">{formatRelative(stats.pricesUpdatedAt)}</span>
+              <span className="rounded border border-amber-500/60 px-1.5 py-0.5 text-xs font-medium text-amber-600 dark:text-amber-400">
+                stale
+              </span>
+            </span>
+          ) : (
+            <span className="text-lg">{formatRelative(stats.pricesUpdatedAt)}</span>
+          )}
         </Tile>
       </div>
 

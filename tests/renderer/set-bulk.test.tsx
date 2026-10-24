@@ -177,6 +177,33 @@ describe('SetChecklist bulk mode', () => {
     await waitFor(() => expect(screen.getByText(/2 of 3/)).toBeInTheDocument())
   })
 
+  it('remove is disabled when the rarity is owned but the picked code is not', async () => {
+    setup()
+    await enterBulk()
+    const remove = screen.getByRole('button', { name: 'Remove one Alpha Dragon Ultra Rare' })
+    expect(remove).toBeEnabled()
+    await userEvent.click(
+      screen.getByRole('combobox', { name: 'Set code for Alpha Dragon Ultra Rare' })
+    )
+    await userEvent.click(await screen.findByRole('option', { name: 'MRD-001' }))
+    expect(remove).toBeDisabled()
+  })
+
+  it('the filter does not hide a card while it is being changed', async () => {
+    const { releaseNext } = setup()
+    await screen.findByRole('button', { name: /^Alpha Dragon/ })
+    await userEvent.click(screen.getByRole('radio', { name: 'Missing' }))
+    await enterBulk()
+    expect(screen.queryByRole('group', { name: /^Alpha Dragon/ })).not.toBeInTheDocument()
+    const plus = screen.getByRole('button', { name: 'Add one Gamma Trap Rare' })
+    await userEvent.click(plus)
+    releaseNext()
+    await waitFor(() => expect(within(row('Gamma Trap Rare')).getByText('1')).toBeInTheDocument())
+    await userEvent.click(screen.getByRole('button', { name: 'Add one Gamma Trap Rare' }))
+    releaseNext()
+    await waitFor(() => expect(within(row('Gamma Trap Rare')).getByText('2')).toBeInTheDocument())
+  })
+
   it('Done restores tiles', async () => {
     setup()
     await enterBulk()

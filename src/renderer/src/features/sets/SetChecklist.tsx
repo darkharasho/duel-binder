@@ -11,7 +11,7 @@ import { EntryDetailPanel } from '@/features/collection/EntryDetailPanel'
 import { api, mutationInvalidationKeys, queryKeys } from '@/lib/api'
 import { createSerialQueue } from '@/lib/serialQueue'
 import { cn } from '@/lib/utils'
-import { BulkRow } from './BulkRow'
+import { BulkCard } from './BulkCard'
 import { SetArt } from './SetArt'
 import { SetProgress } from './SetProgress'
 import {
@@ -56,6 +56,12 @@ export function SetChecklist({
   const [filter, setFilter] = useState<TileFilter>('all')
   const [selected, setSelected] = useState<{ cardId: number; entryId: number } | null>(null)
   const [bulk, setBulk] = useState(false)
+  // Card ids shown in bulk mode, frozen so saves never re-filter a card away mid-click.
+  const [frozen, setFrozen] = useState<{
+    filter: TileFilter
+    mode: CountMode
+    ids: Set<number>
+  } | null>(null)
   const [pending, setPending] = useState<Record<number, number>>({})
   const queues = useRef(new Map<number, ReturnType<typeof createSerialQueue>>())
   const qc = useQueryClient()
@@ -65,12 +71,18 @@ export function SetChecklist({
     queryFn: () => api.sets.checklist(setName)
   })
   const data = checklist.data
-  // Bulk layout is one item per card whatever the count mode.
-  const tileMode = bulk ? 'cards' : mode
   const tiles = useMemo(
-    () => (data ? filterTiles(checklistTiles(data, tileMode), filter) : []),
-    [data, tileMode, filter]
+    () => (data ? filterTiles(checklistTiles(data, mode), filter) : []),
+    [data, mode, filter]
   )
+
+  // Recompute the frozen ids on entering bulk mode and when the filter or count mode changes.
+  if (bulk && data && (!frozen || frozen.filter !== filter || frozen.mode !== mode)) {
+    // Bulk layout is one item per card whatever the count mode.
+    const ids = filterTiles(checklistTiles(data, 'cards'), filter).map((t) => t.card.cardId)
+    setFrozen({ filter, mode, ids: new Set(ids) })
+  }
+  const bulkCards = data && frozen ? data.cards.filter((c) => frozen.ids.has(c.cardId)) : []
 
   const bumpPending = (cardId: number, by: 1 | -1): void =>
     setPending((p) => ({ ...p, [cardId]: (p[cardId] ?? 0) + by }))
@@ -90,7 +102,7 @@ export function SetChecklist({
       )
       void qc.invalidateQueries({ queryKey: [...queryKeys.setsList] })
       for (const k of mutationInvalidationKeys) {
-        if (k[0] !== 'sets') void qc.invalidateQueries({ queryKey: [...k] })
+        if (!(k.length === 1 && k[0] === 'sets')) void qc.invalidateQueries({ queryKey: [...k] })
       }
     })
       .catch((e: unknown) => {
@@ -190,7 +202,10 @@ export function SetChecklist({
             <Button
               variant={bulk ? 'default' : 'outline'}
               size="sm"
-              onClick={() => setBulk((b) => !b)}
+              onClick={() => {
+                setBulk(!bulk)
+                setFrozen(null)
+              }}
             >
               {bulk ? 'Done' : 'Bulk add'}
             </Button>
@@ -199,22 +214,13 @@ export function SetChecklist({
 
         {bulk ? (
           <ul className="grid grid-cols-[repeat(auto-fill,minmax(14rem,1fr))] gap-3">
-            {tiles.map(({ card }) => (
-              <li key={card.cardId} className="flex gap-2 rounded-lg border p-2">
-                <CardArt imageId={card.imageId} size="small" alt="" className="w-14 shrink-0" />
-                <div className="min-w-0 flex-1 space-y-1.5">
-                  <div className="truncate text-xs font-medium">{card.name}</div>
-                  {card.rarities.map((r) => (
-                    <BulkRow
-                      key={r.rarity}
-                      card={card}
-                      rarity={r}
-                      busy={(pending[card.cardId] ?? 0) > 0}
-                      onAdjust={(printingId, delta) => adjust(card.cardId, printingId, delta)}
-                    />
-                  ))}
-                </div>
-              </li>
+            {bulkCards.map((card) => (
+              <BulkCard
+                key={card.cardId}
+                card={card}
+                busy={(pending[card.cardId] ?? 0) > 0}
+                onAdjust={(printingId, delta) => adjust(card.cardId, printingId, delta)}
+              />
             ))}
           </ul>
         ) : (

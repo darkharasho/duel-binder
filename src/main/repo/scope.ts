@@ -26,18 +26,23 @@ export interface Scope {
   snapshotTable: { insertCols: string; insertVals: string }
 }
 
+/** SQL for the owner the desktop is showing: the `cloud_active_owner` meta value, or 0 (local). */
+export const ACTIVE_OWNER =
+  "(SELECT COALESCE((SELECT CAST(value AS INTEGER) FROM meta WHERE key = 'cloud_active_owner'), 0))"
+
 export const LOCAL: Scope = {
-  where: () => '1',
+  where: (alias) => `${alias}.owner_id = ${ACTIVE_OWNER}`,
   insertEntry(db, row) {
     const info = db
       .prepare(
-        'INSERT INTO collection_entries (printing_id, image_id, quantity, notes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)'
+        `INSERT INTO collection_entries (uid, owner_id, printing_id, image_id, quantity, notes, created_at, updated_at)
+         VALUES (?, ${ACTIVE_OWNER}, ?, ?, ?, ?, ?, ?)`
       )
-      .run(row.printingId, row.imageId, row.quantity, row.notes, row.ts, row.ts)
+      .run(crypto.randomUUID(), row.printingId, row.imageId, row.quantity, row.notes, row.ts, row.ts)
     return Number(info.lastInsertRowid)
   },
   deleteEntry(db, id) {
     db.prepare('DELETE FROM collection_entries WHERE id = ?').run(id)
   },
-  snapshotTable: { insertCols: '', insertVals: '' }
+  snapshotTable: { insertCols: 'owner_id, ', insertVals: `${ACTIVE_OWNER}, ` }
 }

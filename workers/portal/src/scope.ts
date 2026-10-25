@@ -1,5 +1,8 @@
 import type { Scope } from '../../../src/main/repo/scope'
 
+/** SQL for the next server_seq: one past the highest in use (the column is unique). */
+export const NEXT_SEQ = '(SELECT COALESCE(MAX(server_seq), 0) + 1 FROM collection_entries)'
+
 /** One user's live (non-deleted) rows on the server. */
 export function userScope(userId: number): Scope {
   if (!Number.isSafeInteger(userId)) throw new Error(`Invalid user id: ${userId}`)
@@ -8,8 +11,8 @@ export function userScope(userId: number): Scope {
     insertEntry(db, row) {
       const info = db
         .prepare(
-          `INSERT INTO collection_entries (user_id, uid, printing_id, image_id, quantity, notes, created_at, updated_at)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+          `INSERT INTO collection_entries (user_id, uid, printing_id, image_id, quantity, notes, created_at, updated_at, server_seq)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ${NEXT_SEQ})`
         )
         .run(userId, crypto.randomUUID(), row.printingId, row.imageId, row.quantity, row.notes, row.ts, row.ts)
       return Number(info.lastInsertRowid)

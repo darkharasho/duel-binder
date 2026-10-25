@@ -78,8 +78,8 @@ export function seedFakeCollection(db: Database.Database, now = new Date()): num
      WHERE p.id = ? ORDER BY i.sort_order LIMIT 1`
   )
   const insert = db.prepare(
-    `INSERT OR IGNORE INTO collection_entries (printing_id, image_id, quantity, notes, created_at, updated_at)
-     VALUES (?, ?, ?, '', ?, ?)`
+    `INSERT OR IGNORE INTO collection_entries (uid, printing_id, image_id, quantity, notes, created_at, updated_at)
+     VALUES (?, ?, ?, ?, '', ?, ?)`
   )
   const snapshot = db.prepare(
     'INSERT OR REPLACE INTO value_snapshots (date, total_value, total_cards) VALUES (?, ?, ?)'
@@ -91,7 +91,7 @@ export function seedFakeCollection(db: Database.Database, now = new Date()): num
     for (const [printingId, qty] of picks) {
       const image = firstImage.get(printingId) as { image_id: number } | undefined
       if (!image) continue
-      inserted += insert.run(printingId, image.image_id, qty, ts, ts).changes
+      inserted += insert.run(crypto.randomUUID(), printingId, image.image_id, qty, ts, ts).changes
     }
 
     // A collection that grew toward today's totals, with some day-to-day price noise.

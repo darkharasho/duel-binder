@@ -45,6 +45,21 @@ describe('owner scope', () => {
     expect(listEntries(db, ALL, userScope(u2)).map((e) => e.quantity)).toEqual([5])
   })
 
+  it('inserts take distinct, increasing server_seq values', () => {
+    const other = db
+      .prepare(
+        `SELECT p.id, i.image_id FROM card_printings p JOIN card_images i ON i.card_id = p.card_id
+         WHERE p.id <> ? ORDER BY p.id, i.image_id LIMIT 1`
+      )
+      .get(printing.id) as { id: number; image_id: number }
+    const a = addEntry(db, input(1), now, userScope(u1))
+    const b = addEntry(db, { printingId: other.id, imageId: other.image_id, quantity: 1 }, now, userScope(u1))
+    const seq = (id: number): number =>
+      (db.prepare('SELECT server_seq FROM collection_entries WHERE id = ?').get(id) as { server_seq: number }).server_seq
+    expect(seq(a.id)).toBeGreaterThan(0)
+    expect(seq(b.id)).toBeGreaterThan(seq(a.id))
+  })
+
   it('remove tombstones on the server', () => {
     const s = userScope(u1)
     const e = addEntry(db, input(1), now, s)

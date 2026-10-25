@@ -26,7 +26,9 @@ describe('Store Durable Object SQLite', () => {
       )
     )
     expect(names).toContain('desktop-10')
+    expect(names).toContain('desktop-12')
     expect(names).toContain('server-1')
+    expect(names).toContain('server-2')
   })
 
   it('FTS5 works', async () => {
@@ -67,5 +69,27 @@ describe('Store Durable Object SQLite', () => {
     })
     expect(result.lastInsertRowid).toBe(result.id)
     expect(result.changes).toBe(1)
+  })
+
+  it('next-seq update runs on DO', async () => {
+    const seqs = await inStore('next-seq', (db) => {
+      insertCard(db, 1, 'A')
+      db.exec(`
+        INSERT INTO users (id, discord_id, username, created_at, updated_at) VALUES (1, 'd1', 'one', 'x', 'x');
+        INSERT INTO card_printings (id, card_id, set_name, set_code, set_rarity) VALUES (7, 1, 'S', 'S-001', 'Rare');
+        INSERT INTO card_images (image_id, card_id, sort_order) VALUES (1, 1, 0);
+        INSERT INTO collection_entries (id, user_id, uid, printing_id, image_id, quantity, created_at, updated_at, server_seq)
+          VALUES (1, 1, 'a', 7, 1, 1, 'x', 'x', 5);
+      `)
+      const seq = (): number =>
+        (db.prepare('SELECT server_seq FROM collection_entries WHERE id = 1').get() as { server_seq: number })
+          .server_seq
+      const before = seq()
+      db.prepare(
+        'UPDATE collection_entries SET server_seq = (SELECT COALESCE(MAX(server_seq), 0) + 1 FROM collection_entries) WHERE id = ?'
+      ).run(1)
+      return { before, after: seq() }
+    })
+    expect(seqs).toEqual({ before: 5, after: 6 })
   })
 })

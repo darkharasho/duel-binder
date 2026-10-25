@@ -120,6 +120,36 @@ DELETE FROM meta WHERE key = 'intl_sets_synced_at';
 DELETE FROM printing_art WHERE url IS NULL;
 `
 
+/**
+ * Cloud sync: each entry gets a uuid, an owner (0 = this computer's own collection, otherwise a
+ * cloud account), tombstone and dirty columns, and live-only uniqueness per owner. Snapshots are
+ * kept per owner. sync_pending holds remote rows whose printing isn't in the local catalog yet;
+ * cloud_accounts holds each signed-in account's pull cursor. The server has its own shape for
+ * these tables, so this step is desktop-only (see server-2).
+ */
+export const SCHEMA_V12 = `
+CREATE TABLE collection_entries_new (id INTEGER PRIMARY KEY, uid TEXT NOT NULL UNIQUE, owner_id INTEGER NOT NULL DEFAULT 0,
+  printing_id INTEGER NOT NULL REFERENCES card_printings(id), image_id INTEGER NOT NULL REFERENCES card_images(image_id),
+  quantity INTEGER NOT NULL CHECK (quantity >= 1), notes TEXT NOT NULL DEFAULT '', created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL, deleted_at TEXT, dirty INTEGER NOT NULL DEFAULT 1);
+INSERT INTO collection_entries_new (id, uid, printing_id, image_id, quantity, notes, created_at, updated_at)
+  SELECT id, lower(hex(randomblob(4))) || '-' || lower(hex(randomblob(2))) || '-4' || substr(lower(hex(randomblob(2))), 2)
+    || '-' || substr('89ab', 1 + (abs(random()) % 4), 1) || substr(lower(hex(randomblob(2))), 2) || '-' || lower(hex(randomblob(6))),
+    printing_id, image_id, quantity, notes, created_at, updated_at FROM collection_entries;
+DROP TABLE collection_entries;
+ALTER TABLE collection_entries_new RENAME TO collection_entries;
+CREATE UNIQUE INDEX ux_entries_live ON collection_entries(owner_id, printing_id, image_id) WHERE deleted_at IS NULL;
+CREATE INDEX ix_entries_dirty ON collection_entries(owner_id) WHERE dirty = 1;
+CREATE TABLE value_snapshots_new (owner_id INTEGER NOT NULL DEFAULT 0, date TEXT NOT NULL, total_value REAL NOT NULL,
+  total_cards INTEGER NOT NULL, PRIMARY KEY (owner_id, date));
+INSERT INTO value_snapshots_new (date, total_value, total_cards) SELECT date, total_value, total_cards FROM value_snapshots;
+DROP TABLE value_snapshots;
+ALTER TABLE value_snapshots_new RENAME TO value_snapshots;
+CREATE TABLE sync_pending (owner_id INTEGER NOT NULL, uid TEXT NOT NULL, pkey TEXT NOT NULL, entry TEXT NOT NULL,
+  received_at TEXT NOT NULL, PRIMARY KEY (owner_id, uid));
+CREATE TABLE cloud_accounts (owner_id INTEGER PRIMARY KEY, name TEXT NOT NULL, cursor INTEGER NOT NULL DEFAULT 0, synced_at TEXT);
+`
+
 /** A printing's rarity as shown: "Starlight Rare (Extended Art)" for a labelled variant. */
 export const RARITY_LABEL = "p.set_rarity || COALESCE(' (' || p.variant || ')', '')"
 
@@ -135,6 +165,7 @@ export const MIGRATIONS: Migration[] = [
   { version: 8, sql: SCHEMA_V8 },
   { version: 9, sql: SCHEMA_V9 },
   { version: 10, sql: SCHEMA_V10 },
-  { version: 11, sql: SCHEMA_V11 }
+  { version: 11, sql: SCHEMA_V11 },
+  { version: 12, sql: SCHEMA_V12, server: false }
 ]
 

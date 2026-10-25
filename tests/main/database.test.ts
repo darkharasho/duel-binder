@@ -2,9 +2,9 @@ import Database from 'better-sqlite3'
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { openDatabase, migrate, SCHEMA_V1, SCHEMA_V2 } from '../../src/main/db/database'
+import { openDatabase, migrate, MIGRATIONS, SCHEMA_V1, SCHEMA_V2 } from '../../src/main/db/database'
 import { seededDb } from './helpers'
-import { getMeta, setMeta } from '../../src/main/db/meta'
+import { deleteMeta, getMeta, setMeta } from '../../src/main/db/meta'
 
 describe('database', () => {
   it('V10 gives every printing a unique pkey', async () => {
@@ -17,19 +17,28 @@ describe('database', () => {
     db.close()
   })
 
-  test('V11 forces a non-English re-sync and retries printing art misses', async () => {
-    const db = await seededDb()
-    const ids = (db.prepare('SELECT id FROM card_printings LIMIT 2').all() as { id: number }[]).map(
-      (r) => r.id
-    )
+  test('V11 forces a non-English re-sync and retries printing art misses', () => {
+    const db = new Database(':memory:')
+    db.pragma('foreign_keys = ON')
+    for (const m of MIGRATIONS.slice(0, 10)) db.exec(m.sql)
     db.pragma('user_version = 10')
+    db.prepare(
+      `INSERT INTO cards (id, name, type, frame_type, race, "desc", updated_at)
+       VALUES (1, 'Dark Magician', 'Normal Monster', 'normal', 'Spellcaster', 'desc', '2026-10-23')`
+    ).run()
+    db.prepare(
+      `INSERT INTO card_printings (id, card_id, set_name, set_code, set_rarity) VALUES
+       (7, 1, 'Legend of Blue Eyes White Dragon', 'LOB-EN005', 'Ultra Rare'),
+       (8, 1, 'Starter Deck: Yugi', 'SDY-006', 'Ultra Rare')`
+    ).run()
+    const ids = [7, 8]
     setMeta(db, 'intl_sets_synced_at', '2026-10-01T00:00:00.000Z')
     setMeta(db, 'tcgplayer_synced_at', '2026-10-01T00:00:00.000Z')
     const art = db.prepare('INSERT INTO printing_art (printing_id, url, checked_at) VALUES (?, ?, ?)')
     art.run(ids[0], null, '2026-10-01')
     art.run(ids[1], 'https://x/y.png', '2026-10-01')
     migrate(db)
-    expect(db.pragma('user_version', { simple: true })).toBe(11)
+    expect(db.pragma('user_version', { simple: true })).toBe(12)
     expect(getMeta(db, 'intl_sets_synced_at')).toBeNull()
     expect(getMeta(db, 'tcgplayer_synced_at')).toBe('2026-10-01T00:00:00.000Z')
     expect(db.prepare('SELECT printing_id, url FROM printing_art').all()).toEqual([
@@ -38,11 +47,74 @@ describe('database', () => {
     db.close()
   })
 
-  test('migrate sets user_version 11 and is idempotent', () => {
+  test('V12 gives every entry a uuid, owner 0 and dirty', () => {
+    const db = new Database(':memory:')
+    db.pragma('foreign_keys = ON')
+    for (const m of MIGRATIONS.slice(0, 11)) db.exec(m.sql)
+    db.pragma('user_version = 11')
+    db.prepare(
+      `INSERT INTO cards (id, name, type, frame_type, race, "desc", updated_at)
+       VALUES (1, 'Dark Magician', 'Normal Monster', 'normal', 'Spellcaster', 'desc', '2026-10-23')`
+    ).run()
+    db.prepare(
+      `INSERT INTO card_printings (id, card_id, set_name, set_code, set_rarity) VALUES
+       (7, 1, 'Legend of Blue Eyes White Dragon', 'LOB-EN005', 'Ultra Rare'),
+       (8, 1, 'Starter Deck: Yugi', 'SDY-006', 'Ultra Rare')`
+    ).run()
+    db.prepare('INSERT INTO card_images (image_id, card_id, sort_order) VALUES (1, 1, 0)').run()
+    const insert = db.prepare(
+      'INSERT INTO collection_entries (id, printing_id, image_id, quantity, notes, created_at, updated_at) VALUES (?, ?, 1, ?, ?, ?, ?)'
+    )
+    insert.run(5, 7, 2, 'first', '2026-10-01', '2026-10-02')
+    insert.run(9, 8, 3, '', '2026-10-03', '2026-10-04')
+    db.prepare("INSERT INTO value_snapshots (date, total_value, total_cards) VALUES ('2026-10-04', 12.5, 5)").run()
+    migrate(db)
+    expect(db.pragma('user_version', { simple: true })).toBe(12)
+    const rows = db
+      .prepare(
+        'SELECT id, uid, owner_id, dirty, deleted_at, quantity, notes, created_at, updated_at FROM collection_entries ORDER BY id'
+      )
+      .all() as { uid: string; [col: string]: unknown }[]
+    for (const r of rows) {
+      expect(r.uid).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/)
+    }
+    expect(rows[0].uid).not.toBe(rows[1].uid)
+    expect(rows.map((r) => ({ ...r, uid: undefined }))).toEqual([
+      { id: 5, uid: undefined, owner_id: 0, dirty: 1, deleted_at: null, quantity: 2, notes: 'first', created_at: '2026-10-01', updated_at: '2026-10-02' },
+      { id: 9, uid: undefined, owner_id: 0, dirty: 1, deleted_at: null, quantity: 3, notes: '', created_at: '2026-10-03', updated_at: '2026-10-04' }
+    ])
+    expect(db.prepare('SELECT * FROM value_snapshots').all()).toEqual([
+      { owner_id: 0, date: '2026-10-04', total_value: 12.5, total_cards: 5 }
+    ])
+    expect(db.pragma('foreign_key_check')).toEqual([])
+    db.close()
+  })
+
+  test('V12 allows a tombstone beside a live entry and one live entry per owner', async () => {
+    const db = await seededDb()
+    const p = db.prepare('SELECT id, card_id FROM card_printings ORDER BY id LIMIT 1').get() as {
+      id: number
+      card_id: number
+    }
+    const img = (db.prepare('SELECT image_id FROM card_images WHERE card_id = ? LIMIT 1').get(p.card_id) as {
+      image_id: number
+    }).image_id
+    const insert = db.prepare(
+      `INSERT INTO collection_entries (uid, owner_id, printing_id, image_id, quantity, created_at, updated_at, deleted_at)
+       VALUES (?, ?, ?, ?, 1, 'x', 'x', ?)`
+    )
+    insert.run('u-live', 0, p.id, img, null)
+    insert.run('u-dead', 0, p.id, img, '2026-10-24')
+    insert.run('u-other', 7, p.id, img, null)
+    expect(() => insert.run('u-dup', 0, p.id, img, null)).toThrow(/UNIQUE/)
+    db.close()
+  })
+
+  test('migrate sets user_version 12 and is idempotent', () => {
     const db = openDatabase(':memory:')
-    expect(db.pragma('user_version', { simple: true })).toBe(11)
+    expect(db.pragma('user_version', { simple: true })).toBe(12)
     expect(() => migrate(db)).not.toThrow()
-    expect(db.pragma('user_version', { simple: true })).toBe(11)
+    expect(db.pragma('user_version', { simple: true })).toBe(12)
     db.close()
   })
 
@@ -67,7 +139,7 @@ describe('database', () => {
     ).run()
     db.prepare(`INSERT INTO sets (set_name, set_code) VALUES ('Legend of Blue Eyes White Dragon', 'LOB')`).run()
     migrate(db)
-    expect(db.pragma('user_version', { simple: true })).toBe(11)
+    expect(db.pragma('user_version', { simple: true })).toBe(12)
     expect(db.prepare('SELECT id, language FROM card_printings').all()).toEqual([{ id: 7, language: 'en' }])
     expect(db.prepare('SELECT id, printing_id FROM collection_entries').all()).toEqual([
       { id: 3, printing_id: 7 }
@@ -108,7 +180,7 @@ describe('database', () => {
     db.pragma('user_version = 1')
     db.prepare("INSERT INTO meta (key, value) VALUES ('k', 'v')").run()
     migrate(db)
-    expect(db.pragma('user_version', { simple: true })).toBe(11)
+    expect(db.pragma('user_version', { simple: true })).toBe(12)
     expect(db.prepare('SELECT value FROM meta WHERE key = ?').get('k')).toEqual({ value: 'v' })
     expect(db.prepare('SELECT count(*) AS n FROM sets').get()).toEqual({ n: 0 })
     db.close()
@@ -119,8 +191,8 @@ describe('database', () => {
     expect(() =>
       db
         .prepare(
-          `INSERT INTO collection_entries (printing_id, image_id, quantity, created_at, updated_at)
-           VALUES (999, 999, 1, '2026-10-23', '2026-10-23')`
+          `INSERT INTO collection_entries (uid, printing_id, image_id, quantity, created_at, updated_at)
+           VALUES ('u-1', 999, 999, 1, '2026-10-23', '2026-10-23')`
         )
         .run()
     ).toThrow(/FOREIGN KEY/)
@@ -141,8 +213,8 @@ describe('database', () => {
     expect(() =>
       db
         .prepare(
-          `INSERT INTO collection_entries (printing_id, image_id, quantity, created_at, updated_at)
-           VALUES (1, 1, 0, '2026-10-23', '2026-10-23')`
+          `INSERT INTO collection_entries (uid, printing_id, image_id, quantity, created_at, updated_at)
+           VALUES ('u-1', 1, 1, 0, '2026-10-23', '2026-10-23')`
         )
         .run()
     ).toThrow(/CHECK/)
@@ -174,6 +246,17 @@ describe('database', () => {
     setMeta(db, 'last_sync_at', '2026-10-23T00:00:00Z')
     expect(getMeta(db, 'last_sync_at')).toBe('2026-10-23T00:00:00Z')
     expect(getMeta(db, 'db_version')).toBeNull()
+    db.close()
+  })
+
+  test('deleteMeta removes a key and ignores a missing one', () => {
+    const db = openDatabase(':memory:')
+    setMeta(db, 'cloud_active_owner', '7')
+    setMeta(db, 'last_sync_at', 'kept')
+    deleteMeta(db, 'cloud_active_owner')
+    expect(getMeta(db, 'cloud_active_owner')).toBeNull()
+    expect(getMeta(db, 'last_sync_at')).toBe('kept')
+    expect(() => deleteMeta(db, 'cloud_user')).not.toThrow()
     db.close()
   })
 })

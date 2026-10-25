@@ -196,7 +196,7 @@ describe('refreshIntlSets', () => {
       }
     ).image_id
     const own = db.prepare(
-      "INSERT INTO collection_entries (printing_id, image_id, quantity, created_at, updated_at) VALUES (?, ?, 1, 'x', 'x')"
+      "INSERT INTO collection_entries (uid, printing_id, image_id, quantity, created_at, updated_at) VALUES (lower(hex(randomblob(16))), ?, ?, 1, 'x', 'x')"
     )
     for (const r of ['Ultra Rare', 'Prismatic Secret Rare', 'Grand Master Rare']) own.run(old[r], imageId)
     const f = fake({
@@ -329,7 +329,7 @@ describe('refreshIntlSets', () => {
       }
     ).image_id
     db.prepare(
-      "INSERT INTO collection_entries (printing_id, image_id, quantity, created_at, updated_at) VALUES (?, ?, 1, 'x', 'x')"
+      "INSERT INTO collection_entries (uid, printing_id, image_id, quantity, created_at, updated_at) VALUES (lower(hex(randomblob(16))), ?, ?, 1, 'x', 'x')"
     ).run(owned.id, imageId)
     f.pages.set(LB, listPage(['LB-05; Pot of Greed; C']))
     await refreshIntlSets(db, f.client, NOW)

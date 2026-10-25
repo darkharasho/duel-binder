@@ -29,6 +29,19 @@ const IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif
 /** The media type alone, lowercased and without parameters. */
 const mediaType = (contentType: string): string => contentType.split(';')[0].trim().toLowerCase()
 
+/** The promise's value, or null if it hasn't settled within `ms`; the timer never outlives the race. */
+async function withTimeout<T>(p: Promise<T>, ms: number): Promise<T | null> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const timeout = new Promise<null>((resolve) => {
+    timer = setTimeout(() => resolve(null), ms)
+  })
+  try {
+    return await Promise.race([p, timeout])
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
 const notFound = (): Response => new Response('Not found', { status: 404 })
 
 /** Defence in depth: whatever the body is, the browser must not run or sniff it. */
@@ -78,7 +91,7 @@ function resolve(deps: AppDeps, path: string): Target | null {
       key: `printing/${n}`,
       cache: SET_CACHE,
       source: async () => {
-        const url = await deps.printingArt.url(n).catch(() => null)
+        const url = await withTimeout(deps.printingArt.url(n).catch(() => null), IMAGE_TIMEOUT_MS)
         if (url === null) return null
         if (url.startsWith(YUGIPEDIA_IMAGE_PREFIX)) return { url, headers: { 'User-Agent': USER_AGENT } }
         return url.startsWith(TCGPLAYER_IMAGE_PREFIX) ? { url } : null

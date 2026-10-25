@@ -217,6 +217,28 @@ describe('image route', () => {
       expect(printingArt.url).not.toHaveBeenCalled()
     })
 
+    it('a resolver that rejects answers 404 and stores nothing', async () => {
+      printingArt.url.mockRejectedValueOnce(new Error('boom'))
+      expect((await get('printing/7')).status).toBe(404)
+      expect(upstream).not.toHaveBeenCalled()
+      expect(bucket.store.size).toBe(0)
+    })
+
+    it('a resolver that never answers gives 404 once the timeout passes', async () => {
+      vi.useFakeTimers()
+      try {
+        printingArt.url.mockImplementationOnce(() => new Promise<string | null>(() => {}))
+        const pending = get('printing/7')
+        await vi.advanceTimersByTimeAsync(30_000)
+        expect((await pending).status).toBe(404)
+        expect(upstream).not.toHaveBeenCalled()
+        expect(bucket.store.size).toBe(0)
+        expect(vi.getTimerCount()).toBe(0)
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
     it('a stored photo is served without asking the resolver', async () => {
       await bucket.put('printing/7', JPEG.buffer as ArrayBuffer, { httpMetadata: { contentType: 'image/jpeg' } })
       expect((await get('printing/7')).status).toBe(200)

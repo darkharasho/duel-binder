@@ -40,8 +40,8 @@ describe('handleSite', () => {
       const res = await handleSite(new Request(`https://duelbinder.com${path}`), d)
       expect(res.status).toBe(200)
       expect(res.headers.get('content-type')).toBe('text/html; charset=utf-8')
-      expect(res.headers.get('cache-control')).toBe('public, max-age=300')
-      expect(await res.text()).toContain('A binder for your Yu-Gi-Oh! collection.')
+      expect(res.headers.get('cache-control')).toBe('private, max-age=300')
+      expect(await res.text()).toContain('A binder for your <span class="nowrap">Yu-Gi-Oh!</span> collection.')
     }
   })
 
@@ -61,7 +61,7 @@ describe('handleSite', () => {
     const res = await handleSite(new Request('https://duelbinder.com/', { method: 'HEAD' }), d)
     expect(res.status).toBe(200)
     expect(res.headers.get('content-type')).toBe('text/html; charset=utf-8')
-    expect(res.headers.get('cache-control')).toBe('public, max-age=300')
+    expect(res.headers.get('cache-control')).toBe('private, max-age=300')
     expect(await res.text()).toBe('')
   })
 

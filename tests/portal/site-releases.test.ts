@@ -87,4 +87,45 @@ describe('createReleaseSource', () => {
       expect(fetchMock).toHaveBeenCalledTimes(2)
     })
   }
+
+  it('serves the last good result when a refresh fails, and re-checks after 5 minutes', async () => {
+    let fail = false
+    const { get, fetchMock, advance } = setup(() => (fail ? Promise.resolve(new Response('x', { status: 500 })) : ok()))
+    expect((await get()).version).toBe('0.2.1')
+    advance(61 * MIN)
+    fail = true
+    expect((await get()).version).toBe('0.2.1')
+    advance(4 * MIN)
+    expect((await get()).version).toBe('0.2.1')
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    advance(2 * MIN)
+    fail = false
+    expect((await get()).version).toBe('0.2.1')
+    expect(fetchMock).toHaveBeenCalledTimes(3)
+  })
+
+  it('shares one in-flight fetch between concurrent callers', async () => {
+    const { get, fetchMock } = setup(ok)
+    const [a, b, c] = await Promise.all([get(), get(), get()])
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+    expect(a).toBe(b)
+    expect(b).toBe(c)
+  })
+
+  it('passes an abort signal and treats an abort as a failure', async () => {
+    const { get, fetchMock } = setup(async () => { throw new DOMException('timed out', 'TimeoutError') })
+    expect(await get()).toEqual(EMPTY)
+    const [, init] = fetchMock.mock.calls[0] as unknown as [string, RequestInit]
+    expect(init.signal).toBeInstanceOf(AbortSignal)
+  })
+
+  it('does not cache a 200 without tag_name as a good result', async () => {
+    let body: unknown = { assets: [] }
+    const { get, fetchMock, advance } = setup(() => Promise.resolve(new Response(JSON.stringify(body), { status: 200 })))
+    expect(await get()).toEqual(EMPTY)
+    advance(6 * MIN)
+    body = releaseV021
+    expect((await get()).version).toBe('0.2.1')
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
 })

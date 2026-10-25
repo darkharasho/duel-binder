@@ -38,7 +38,7 @@ function hero(v: PageView): string {
   const href = os ? (asset ? asset.url : RELEASES_FALLBACK) : '#download'
   const meta = `${downloads.version ? `v${downloads.version} · ` : ''}Windows, macOS, Linux · free`
   return `<header class="hero">
-<h1>A binder for your Yu-Gi-Oh! collection.</h1>
+<h1>A binder for your <span class="nowrap">Yu-Gi-Oh!</span> collection.</h1>
 <p class="lead">${LEAD}</p>
 <div class="actions"><a class="btn pri" href="${esc(href)}">${label}</a><a class="btn out" href="${esc(appUrl)}">Open the web app</a></div>
 <div class="meta mono">${esc(meta)}</div>
@@ -108,6 +108,8 @@ export function renderPage(view: PageView): string {
 <meta property="og:title" content="${TITLE}">
 <meta property="og:description" content="${DESCRIPTION}">
 <meta property="og:image" content="https://duelbinder.com/og.png">
+<meta property="og:url" content="https://duelbinder.com/">
+<meta name="twitter:card" content="summary_large_image">
 <link rel="stylesheet" href="/site.css">
 </head>
 <body>

@@ -26,8 +26,8 @@ import { captureShots } from './dev/capture'
 // The app was "yugioh-collection-tracker" before it became Duel Binder; keep reading the same data folder.
 app.setPath('userData', join(app.getPath('appData'), 'yugioh-collection-tracker'))
 
-/** `npm run dev:fake-data`: a separate profile with a seeded collection; never in packaged builds. */
-/** `npm run site:shots`: screenshots of the fake-data profile for the marketing site, then quit. */
+/** `npm run dev:fake-data`: a separate profile with a seeded collection; never in packaged builds.
+ *  `npm run site:shots`: screenshots of that profile for the marketing site, then quit. */
 const captureDir = !app.isPackaged ? process.env['YGO_CAPTURE_DIR'] : undefined
 const fakeData = !app.isPackaged && (process.env['YGO_FAKE_DATA'] === '1' || !!captureDir)
 if (captureDir) app.commandLine.appendSwitch('force-device-scale-factor', '2')

@@ -36,7 +36,7 @@ describe('renderPage', () => {
   it('has the charset, headline and lead', () => {
     const html = page()
     expect(html).toContain('<meta charset="utf-8">')
-    expect(html).toContain('A binder for your Yu-Gi-Oh! collection.')
+    expect(html).toContain('A binder for your <span class="nowrap">Yu-Gi-Oh!</span> collection.')
     expect(html).toContain(
       "Log what you own by set, rarity and condition. Prices update on their own. It runs on your computer and works offline. Sign in with Discord to see your friends' binders on the web.",
     )
@@ -103,6 +103,8 @@ describe('renderPage', () => {
     const html = page()
     expect(html).toContain('<title>Duel Binder — a binder for your Yu-Gi-Oh! collection</title>')
     expect(html).toContain('<meta property="og:image" content="https://duelbinder.com/og.png">')
+    expect(html).toContain('<meta property="og:url" content="https://duelbinder.com/">')
+    expect(html).toContain('<meta name="twitter:card" content="summary_large_image">')
     const imgs = html.match(/<img [^>]*>/g)!
     expect(imgs).toHaveLength(3)
     for (const img of imgs) {

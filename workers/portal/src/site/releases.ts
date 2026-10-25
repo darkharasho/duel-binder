@@ -32,26 +32,35 @@ export function pickDownloads(release: unknown): Downloads {
 }
 
 export function createReleaseSource(deps: { fetch: typeof fetch; now: () => Date }): () => Promise<Downloads> {
+  let lastGood: Downloads | null = null
   let cached: Downloads | null = null
   let expires = 0
+  let pending: Promise<Downloads> | null = null
 
-  return async () => {
+  async function refresh(): Promise<Downloads> {
     const t = deps.now().getTime()
-    if (cached && t < expires) return cached
-    let result: Downloads
-    let ttl = OK_TTL_MS
     try {
       const res = await deps.fetch(API_URL, {
         headers: { accept: 'application/vnd.github+json', 'user-agent': 'duel-binder-portal' },
+        signal: AbortSignal.timeout(3000),
       })
       if (!res.ok) throw new Error(`GitHub responded ${res.status}`)
-      result = pickDownloads(await res.json())
+      const result = pickDownloads(await res.json())
+      if (result.version === null) throw new Error('Release has no tag_name')
+      lastGood = result
+      cached = result
+      expires = t + OK_TTL_MS
     } catch {
-      result = empty()
-      ttl = FAIL_TTL_MS
+      // Keep serving the last good result; re-check after the short failure TTL.
+      cached = lastGood ?? empty()
+      expires = t + FAIL_TTL_MS
     }
-    cached = result
-    expires = t + ttl
-    return result
+    return cached
+  }
+
+  return async () => {
+    if (cached && deps.now().getTime() < expires) return cached
+    pending ??= refresh().finally(() => { pending = null })
+    return pending
   }
 }

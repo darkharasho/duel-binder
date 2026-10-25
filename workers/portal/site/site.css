@@ -25,6 +25,7 @@ nav .signin{color:var(--fg)}
 .btn.sm{height:30px;font-size:13px}
 .hero{padding:88px 0 56px}
 h1{font-size:44px;line-height:1.08;font-weight:600;letter-spacing:-.02em;margin:0;max-width:560px}
+.nowrap{white-space:nowrap}
 .lead{font-size:15px;line-height:1.6;color:rgb(236 235 232 / 75%);max-width:500px;margin:16px 0 28px}
 .actions{display:flex;flex-wrap:wrap;gap:12px}
 .meta{font-size:11px;color:var(--muted);margin-top:14px}

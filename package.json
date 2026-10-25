@@ -20,6 +20,7 @@
     "build:win": "npm run build && electron-builder --win",
     "build:mac": "npm run build && electron-builder --mac",
     "build:linux": "npm run build && electron-builder --linux",
+    "catalog:job": "vite build --config scripts/catalog/vite.config.ts && cross-env ELECTRON_RUN_AS_NODE=1 electron out/catalog/build.mjs",
     "test": "cross-env ELECTRON_RUN_AS_NODE=1 electron ./node_modules/vitest/vitest.mjs run --maxWorkers=2"
   },
   "dependencies": {

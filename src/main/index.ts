@@ -6,19 +6,13 @@ import type { SyncStatus, UpdateStatus } from '@shared/types'
 import { DATA_CHANGED, SYNC_PROGRESS, UPDATE_STATUS, WINDOW_MAXIMIZED } from '@shared/ipc'
 import icon from '../../resources/icon.png?asset'
 import { openDatabase } from './db/database'
-import { getMeta } from './db/meta'
 import { createYgoClient } from './ygo/client'
-import { runSync, shouldSync } from './sync/sync'
-import { hasSetData, refreshSets } from './sync/sets'
-import { refreshIntlSets, shouldRefreshIntl } from './sync/intl'
+import { refreshCatalog } from './sync/catalog'
 import { createPriceService } from './prices/service'
 import { refreshIntlPrices } from './prices/refresh'
 import { createYugipediaClient } from './yugipedia/client'
 import { createPrintingArtResolver } from './yugipedia/artResolver'
-import { refreshSetLogos, shouldRefreshSetLogos } from './yugipedia/setLogos'
-import { refreshPackArt, shouldRefreshPackArt } from './konami/packArt'
-import { refreshKonamiLogos, shouldRefreshKonamiLogos } from './konami/logos'
-import { createTcgplayerLookup, refreshTcgCatalog, shouldRefreshTcgCatalog } from './tcgplayer/catalog'
+import { createTcgplayerLookup } from './tcgplayer/catalog'
 import { recordSnapshot } from './repo/stats'
 import { findSetImageUrl } from './repo/sets'
 import { createImageCache } from './images/cache'
@@ -207,36 +201,14 @@ function bootstrap(): void {
   void startupSync().catch((e) => console.error('Startup sync failed', e))
 
   async function startupSync(): Promise<void> {
-    let changed = false
-    if (shouldSync(getMeta(db, 'last_sync_at'), new Date())) {
-      const status = await runSync(db, client, emitSync)
-      if (status.state === 'idle') {
-        recordSnapshot(db)
-        changed = true
-      }
-    } else if (!hasSetData(db)) {
-      changed = await refreshSets(db, client)
-    }
-    if (shouldRefreshTcgCatalog(db, new Date())) {
-      // A few minutes at most; English cards then show their TCGplayer photos.
-      const tcg = await refreshTcgCatalog(db, { version: app.getVersion() })
-      if (tcg.updatedGroups > 0) emitDataChanged()
-    }
-    if (hasSetData(db) && shouldRefreshPackArt(db, new Date())) {
-      if ((await refreshPackArt(db, { version: app.getVersion() })) > 0) emitDataChanged()
-    }
-    if (hasSetData(db) && shouldRefreshSetLogos(db, new Date())) {
-      if ((await refreshSetLogos(db, yugipedia)) > 0) emitDataChanged()
-    }
-    if (hasSetData(db) && shouldRefreshKonamiLogos(db, new Date())) {
-      if ((await refreshKonamiLogos(db, { version: app.getVersion() })) > 0) emitDataChanged()
-    }
-    const { n } = db.prepare('SELECT count(*) AS n FROM cards').get() as { n: number }
-    if (n > 0 && shouldRefreshIntl(db, new Date())) {
-      // Each saved batch refreshes the UI, so sets appear while a long first sync runs.
-      await refreshIntlSets(db, yugipedia, new Date(), emitDataChanged)
-      changed = true
-    }
+    const { changed } = await refreshCatalog(db, {
+      client,
+      yugipedia,
+      version: app.getVersion(),
+      onSyncProgress: emitSync,
+      onSynced: () => recordSnapshot(db),
+      onChanged: emitDataChanged
+    })
     // refreshIntlPrices never rejects; failures still change the shown no-price reason.
     const prices = await refreshIntlPrices(db, priceService.client())
     if (prices.updated > 0) recordSnapshot(db)

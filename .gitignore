@@ -10,3 +10,4 @@ out
 *.tsbuildinfo
 .worktrees
 .wrangler
+catalog-work/

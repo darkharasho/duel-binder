@@ -10,6 +10,7 @@ files:
   - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
   - '!{docs,tests,.github,.superpowers}/**'
+  - '!{scripts,catalog-work,out/catalog}/**'
   - '!*.tsbuildinfo'
   - '!{components.json,vitest.config.mts}'
 asarUnpack:

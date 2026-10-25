@@ -1,0 +1,76 @@
+name: Catalog
+
+# Refreshes the card catalog the way the desktop app does and uploads what changed to the portal.
+# work.sqlite is cached after every run so a long first sync resumes; base.sqlite (the last
+# snapshot the portal accepted) is cached only after a successful upload.
+
+on:
+  schedule:
+    - cron: '17 6 * * *'
+  workflow_dispatch:
+    inputs:
+      full:
+        description: Upload every row, ignoring the last uploaded snapshot
+        type: boolean
+        default: false
+
+concurrency:
+  group: catalog
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  catalog:
+    runs-on: ubuntu-latest
+    timeout-minutes: 340
+    env:
+      PORTAL_URL: ${{ vars.PORTAL_URL }}
+      PORTAL_ADMIN_TOKEN: ${{ secrets.PORTAL_ADMIN_TOKEN }}
+    steps:
+      - name: Check portal settings
+        run: |
+          if [ -z "$PORTAL_URL" ] || [ -z "$PORTAL_ADMIN_TOKEN" ]; then
+            echo "::error::Set the PORTAL_URL repository variable and the PORTAL_ADMIN_TOKEN secret"
+            exit 1
+          fi
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      # postinstall rebuilds better-sqlite3 for Electron, which the job runs under.
+      - run: npm ci
+      - name: Restore work database
+        uses: actions/cache/restore@v4
+        with:
+          # The WAL too: a run cut off by the timeout keeps the batches it saved.
+          path: |
+            catalog-work/work.sqlite
+            catalog-work/work.sqlite-wal
+          key: catalog-work-${{ github.run_id }}
+          restore-keys: catalog-work-
+      - name: Restore base snapshot
+        uses: actions/cache/restore@v4
+        with:
+          path: catalog-work/base.sqlite
+          key: catalog-base-${{ github.run_id }}
+          restore-keys: catalog-base-
+      - name: Refresh and upload
+        run: npm run catalog:job -- ${{ inputs.full && '--full' || '' }}
+      - name: Save work database
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          # The WAL too: a run cut off by the timeout keeps the batches it saved.
+          path: |
+            catalog-work/work.sqlite
+            catalog-work/work.sqlite-wal
+          key: catalog-work-${{ github.run_id }}
+      - name: Save base snapshot
+        if: success()
+        uses: actions/cache/save@v4
+        with:
+          path: catalog-work/base.sqlite
+          key: catalog-base-${{ github.run_id }}

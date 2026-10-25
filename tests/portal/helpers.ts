@@ -4,6 +4,7 @@ import type { YgoClient } from '../../src/main/ygo/client'
 import type { ApiCard } from '../../src/main/ygo/mapCard'
 import { migrateServer } from '../../workers/portal/src/migrate'
 import type { ImageBucket } from '../../workers/portal/src/images'
+import type { PrintingArtResolver } from '../../src/main/yugipedia/artResolver'
 import fixture from '../fixtures/cardinfo.sample.json'
 
 /** In-memory server-schema database loaded with the sample fixture through the real sync path. */
@@ -43,3 +44,6 @@ export function memoryBucket(): ImageBucket & { store: Map<string, { bytes: Arra
     }
   }
 }
+
+/** Printing-art stand-in that finds no photo for anything. */
+export const noPrintingArt: PrintingArtResolver = { url: async () => null }

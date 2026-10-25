@@ -3,6 +3,7 @@ import { adminRoute } from './catalogLoad'
 import { rpcRoute } from './rpc'
 import { finishSignIn, me, signOut, startSignIn } from './auth'
 import { home } from './home'
+import type { PrintingArtResolver } from '../../../src/main/yugipedia/artResolver'
 import { imageRoute, type ImageBucket } from './images'
 
 /** Vars and secrets the request handlers read. */
@@ -20,6 +21,7 @@ export interface Env {
 export interface AppDeps {
   db: SqlDb
   images: ImageBucket
+  printingArt: PrintingArtResolver
   env: Env
   now: () => Date
   fetch: typeof fetch

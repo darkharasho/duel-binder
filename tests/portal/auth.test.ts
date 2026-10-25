@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import Database from 'better-sqlite3'
-import { memoryBucket } from './helpers'
+import { memoryBucket, noPrintingArt } from './helpers'
 import { handle, type AppDeps } from '../../workers/portal/src/app'
 import { migrateServer } from '../../workers/portal/src/migrate'
 
@@ -37,6 +37,7 @@ describe('Discord sign-in and sessions', () => {
     deps = {
       db,
       images: memoryBucket(),
+      printingArt: noPrintingArt,
       env: { PUBLIC_URL: BASE, SITE_URL: 'https://site.test', DISCORD_CLIENT_ID: 'cid', DISCORD_CLIENT_SECRET: 'secret', ADMIN_TOKEN: 'admin' },
       now: () => clock,
       fetch: fetchMock as unknown as typeof fetch

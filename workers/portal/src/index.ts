@@ -1,5 +1,8 @@
 import { DurableObject } from 'cloudflare:workers'
 import type { SqlDb } from '../../../src/main/db/sql'
+import { createPrintingArtResolver, type PrintingArtResolver } from '../../../src/main/yugipedia/artResolver'
+import { createTcgplayerLookup } from '../../../src/main/tcgplayer/catalog'
+import { createYugipediaClient } from '../../../src/main/yugipedia/client'
 import { handle, type Env } from './app'
 import { doSql } from './doSql'
 import { migrateServer } from './migrate'
@@ -17,10 +20,16 @@ export interface WorkerEnv extends Env {
 /** The single Durable Object holding the catalog and every user's collection. */
 export class Store extends DurableObject<WorkerEnv> {
   private readonly db: SqlDb
+  private readonly printingArt: PrintingArtResolver
 
   constructor(ctx: DurableObjectState, env: WorkerEnv) {
     super(ctx, env)
     this.db = doSql(ctx.storage)
+    this.printingArt = createPrintingArtResolver({
+      db: this.db,
+      client: createYugipediaClient({ version: 'portal' }),
+      quickUrl: createTcgplayerLookup(this.db)
+    })
     void ctx.blockConcurrencyWhile(async () => migrateServer(this.db))
   }
 
@@ -28,6 +37,7 @@ export class Store extends DurableObject<WorkerEnv> {
     return handle(req, {
       db: this.db,
       images: this.env.IMAGES,
+      printingArt: this.printingArt,
       env: this.env,
       now: () => new Date(),
       fetch: (input, init) => fetch(input, init)

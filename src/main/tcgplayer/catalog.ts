@@ -1,4 +1,5 @@
 import type Database from 'better-sqlite3'
+import type { SqlDb } from '../db/sql'
 import { getMeta, setMeta } from '../db/meta'
 import { createLimiter } from '../images/limiter'
 
@@ -289,7 +290,7 @@ export function saveTcgVariants(db: Database.Database): number {
  * TCGplayer names the rarity differently.
  */
 export function createTcgplayerLookup(
-  db: Database.Database
+  db: SqlDb
 ): (printingId: number) => string | null {
   const printing = db.prepare(
     "SELECT set_code, set_rarity, tcg_product_id FROM card_printings WHERE id = ? AND language = 'en'"

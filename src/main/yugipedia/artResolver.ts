@@ -1,4 +1,4 @@
-import type Database from 'better-sqlite3'
+import type { SqlDb } from '../db/sql'
 import { isLanguage } from '../../shared/languages'
 import type { YugipediaClient } from './client'
 import { choosePrintingFile } from './printingArt'
@@ -28,7 +28,7 @@ interface PrintingInfo {
  * printing_art, misses included, so each printing is looked up once.
  */
 export function createPrintingArtResolver(opts: {
-  db: Database.Database
+  db: SqlDb
   client: YugipediaClient
   now?: () => Date
   batchWaitMs?: number

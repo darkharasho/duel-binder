@@ -7,6 +7,7 @@ import {
   type ImageSize
 } from '../../../src/shared/imageSources'
 import { findSetImageUrl } from '../../../src/main/repo/sets'
+import { TCGPLAYER_IMAGE_PREFIX } from '../../../src/main/tcgplayer/catalog'
 import type { AppDeps } from './app'
 
 /** The slice of an R2 bucket the image route uses. */
@@ -37,8 +38,17 @@ function locked(res: Response): Response {
   return res
 }
 
+interface Target {
+  key: string
+  /** The upstream URL and any request headers it needs, looked up only on an R2 miss; null when there is none. */
+  source: () => Promise<{ url: string; headers?: Record<string, string> } | null>
+  cache: string
+}
+
+const fixed = (url: string, headers?: Record<string, string>): Target['source'] => async () => ({ url, headers })
+
 /** Where a request's artwork comes from and how long browsers may keep it; null when the path names nothing servable. */
-function resolve(deps: AppDeps, path: string): { key: string; source: string; headers?: Record<string, string>; cache: string } | null {
+function resolve(deps: AppDeps, path: string): Target | null {
   const [kind, id, ...rest] = path.split('/')
   if (id === undefined || rest.length > 0) return null
   if (kind === 'small' || kind === 'full' || kind === 'cropped') {
@@ -46,7 +56,7 @@ function resolve(deps: AppDeps, path: string): { key: string; source: string; he
     const n = Number(id)
     if (!Number.isSafeInteger(n) || n <= 0) return null
     if (!deps.db.prepare('SELECT 1 FROM card_images WHERE image_id = ?').get(n)) return null
-    return { key: `card/${kind satisfies ImageSize}/${n}`, source: imageUrl(kind, n), cache: CARD_CACHE }
+    return { key: `card/${kind satisfies ImageSize}/${n}`, source: fixed(imageUrl(kind, n)), cache: CARD_CACHE }
   }
   if (kind === 'set') {
     if (id.length > MAX_SET_KEY || !SET_KEY_RE.test(id)) return null
@@ -56,11 +66,26 @@ function resolve(deps: AppDeps, path: string): { key: string; source: string; he
       const source = findSetImageUrl(deps.db, id)
       const allowed = prefix === 'yp-' ? YUGIPEDIA_IMAGE_PREFIX : PACK_ART_PREFIX
       if (source === null || !source.startsWith(allowed)) return null
-      return { key: `set/${id}`, source, headers: { 'User-Agent': USER_AGENT }, cache: SET_CACHE }
+      return { key: `set/${id}`, source: fixed(source, { 'User-Agent': USER_AGENT }), cache: SET_CACHE }
     }
-    return { key: `set/${id}`, source: setImageUrl(id), cache: SET_CACHE }
+    return { key: `set/${id}`, source: fixed(setImageUrl(id)), cache: SET_CACHE }
   }
-  return null // printing/<id> arrives with the printing route
+  if (kind === 'printing') {
+    if (!/^\d+$/.test(id)) return null
+    const n = Number(id)
+    if (!Number.isSafeInteger(n) || n <= 0) return null
+    return {
+      key: `printing/${n}`,
+      cache: SET_CACHE,
+      source: async () => {
+        const url = await deps.printingArt.url(n).catch(() => null)
+        if (url === null) return null
+        if (url.startsWith(YUGIPEDIA_IMAGE_PREFIX)) return { url, headers: { 'User-Agent': USER_AGENT } }
+        return url.startsWith(TCGPLAYER_IMAGE_PREFIX) ? { url } : null
+      }
+    }
+  }
+  return null
 }
 
 /** GET/HEAD /img/<path>: artwork mirrored into R2 on first request, so the web build never hotlinks its sources. */
@@ -83,13 +108,16 @@ async function serve(req: Request, deps: AppDeps, path: string): Promise<Respons
   const stored = await deps.images.get(target.key).catch(() => null) // a failing bucket is a miss
   if (stored) return reply(stored.body, stored.httpMetadata?.contentType ?? 'image/jpeg')
 
+  const source = await target.source()
+  if (!source) return notFound()
+
   let bytes: ArrayBuffer
   let contentType: string
   try {
-    const res = await deps.fetch(target.source, {
+    const res = await deps.fetch(source.url, {
       signal: AbortSignal.timeout(IMAGE_TIMEOUT_MS),
       redirect: 'manual', // the prefix check covers only the first hop
-      ...(target.headers && { headers: target.headers })
+      ...(source.headers && { headers: source.headers })
     })
     contentType = mediaType(res.headers.get('content-type') ?? '')
     if (!res.ok || !IMAGE_TYPES.has(contentType)) return notFound()

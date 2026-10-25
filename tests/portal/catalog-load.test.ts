@@ -4,7 +4,7 @@ import { handle, type AppDeps } from '../../workers/portal/src/app'
 import { searchCards } from '../../src/main/repo/cards'
 import { openDatabase } from '../../src/main/db/database'
 import { CATALOG_TABLES } from '../../src/shared/catalogTables'
-import { addUser, memoryBucket } from './helpers'
+import { addUser, memoryBucket, noPrintingArt } from './helpers'
 import { seededDb } from '../main/helpers'
 
 const BASE = 'https://portal.test'
@@ -25,6 +25,7 @@ describe('admin catalog loader', () => {
     deps = {
       db,
       images: memoryBucket(),
+      printingArt: noPrintingArt,
       env: { PUBLIC_URL: BASE, SITE_URL: 'https://site.test', DISCORD_CLIENT_ID: 'c', DISCORD_CLIENT_SECRET: 's', ADMIN_TOKEN: TOKEN },
       now: () => new Date('2026-10-24T12:00:00.000Z'),
       fetch: (async () => new Response('?', { status: 404 })) as unknown as typeof fetch

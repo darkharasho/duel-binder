@@ -1,7 +1,8 @@
 import type Database from 'better-sqlite3'
-import { PACK_ART_PREFIX } from '../../src/shared/imageSources'
+import { PACK_ART_PREFIX, YUGIPEDIA_IMAGE_PREFIX } from '../../src/shared/imageSources'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { handle, type AppDeps } from '../../workers/portal/src/app'
+import { TCGPLAYER_IMAGE_PREFIX } from '../../src/main/tcgplayer/catalog'
 import { memoryBucket, seededServerDb } from './helpers'
 
 const BASE = 'https://app.test'
@@ -14,15 +15,20 @@ describe('image route', () => {
   let upstream: ReturnType<typeof vi.fn>
   let deps: AppDeps
   let imageId: number
+  let printingUrl: string | null
+  const printingArt = { url: vi.fn(async () => printingUrl) }
 
   beforeEach(async () => {
     db = await seededServerDb()
+    printingUrl = null
+    printingArt.url.mockClear()
     bucket = memoryBucket()
     upstream = vi.fn(async () => imageResponse())
     imageId = (db.prepare('SELECT image_id FROM card_images LIMIT 1').get() as { image_id: number }).image_id
     deps = {
       db,
       images: bucket,
+      printingArt,
       env: { PUBLIC_URL: BASE, SITE_URL: 'https://site.test', DISCORD_CLIENT_ID: 'c', DISCORD_CLIENT_SECRET: 's', ADMIN_TOKEN: 'a' },
       now: () => new Date('2026-10-25T12:00:00.000Z'),
       fetch: upstream as unknown as typeof fetch
@@ -171,8 +177,51 @@ describe('image route', () => {
     expect([...bucket.store.keys()]).toEqual([`set/${'a'.repeat(200)}`])
   })
 
-  it('printing images answer 404 for now', async () => {
-    expect((await get('printing/1')).status).toBe(404)
+  describe('printing photos', () => {
+    it('printing photo comes from the resolver URL and is stored', async () => {
+      printingUrl = `${TCGPLAYER_IMAGE_PREFIX}1_in_1000x1000.jpg`
+      const res = await get('printing/7')
+      expect(res.status).toBe(200)
+      expect(res.headers.get('cache-control')).toBe('public, max-age=86400')
+      expect(new Uint8Array(await res.arrayBuffer())).toEqual(JPEG)
+      expect(printingArt.url).toHaveBeenCalledWith(7)
+      expect(upstream.mock.calls[0][0]).toBe(printingUrl)
+      expect(bucket.store.has('printing/7')).toBe(true)
+      expect((await get('printing/7')).status).toBe(200)
+      expect(upstream).toHaveBeenCalledTimes(1)
+    })
+
+    it('a Yugipedia photo is fetched with a User-Agent', async () => {
+      printingUrl = `${YUGIPEDIA_IMAGE_PREFIX}a/ab/Card.png`
+      expect((await get('printing/7')).status).toBe(200)
+      expect(upstream.mock.calls[0][1].headers['User-Agent']).toMatch(/^DuelBinder\//)
+    })
+
+    it('printing with no photo answers 404', async () => {
+      expect((await get('printing/7')).status).toBe(404)
+      expect(upstream).not.toHaveBeenCalled()
+      expect(bucket.store.size).toBe(0)
+    })
+
+    it('resolver URL on another host answers 404 without fetching', async () => {
+      printingUrl = 'https://evil.test/product/1.jpg'
+      expect((await get('printing/7')).status).toBe(404)
+      expect(upstream).not.toHaveBeenCalled()
+      expect(bucket.store.size).toBe(0)
+    })
+
+    it('malformed ids answer 404 without asking the resolver', async () => {
+      for (const id of ['0', '-1', 'x', '1.5', '99999999999999999999']) {
+        expect((await get(`printing/${id}`)).status).toBe(404)
+      }
+      expect(printingArt.url).not.toHaveBeenCalled()
+    })
+
+    it('a stored photo is served without asking the resolver', async () => {
+      await bucket.put('printing/7', JPEG.buffer as ArrayBuffer, { httpMetadata: { contentType: 'image/jpeg' } })
+      expect((await get('printing/7')).status).toBe(200)
+      expect(printingArt.url).not.toHaveBeenCalled()
+    })
   })
 
   it('HEAD answers with no body', async () => {

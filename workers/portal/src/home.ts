@@ -36,8 +36,9 @@ export function renderHome(v: HomeView): string {
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Duel Binder</title>
 <meta name="robots" content="noindex">
-<link rel="icon" href="${site}/favicon.ico" sizes="48x48">
-<link rel="icon" href="${site}/favicon.svg" type="image/svg+xml">
+<link rel="icon" href="/favicon.ico" sizes="48x48">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="stylesheet" href="${site}/site.css">
 <style>.note{font-size:13px;color:#e8a87c;margin:-12px 0 20px}form{margin:0}button.btn{font:inherit;font-size:14px;font-weight:500;color:inherit;background:none;cursor:pointer}</style>
 </head>

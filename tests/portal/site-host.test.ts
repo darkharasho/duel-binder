@@ -17,6 +17,9 @@ describe('routeHost', () => {
     })
   })
   it('sends app-host /app/ paths straight to assets', () => {
+    for (const p of ['/favicon.ico', '/favicon.svg', '/apple-touch-icon.png']) {
+      expect(routeHost(new URL(`https://app.duelbinder.com${p}`), SITE)).toEqual({ kind: 'app-asset' })
+    }
     expect(routeHost(new URL('https://app.duelbinder.com/app/assets/x.js'), SITE)).toEqual({ kind: 'app-asset' })
     expect(routeHost(new URL('https://app.duelbinder.com/'), SITE)).toEqual({ kind: 'app' })
   })

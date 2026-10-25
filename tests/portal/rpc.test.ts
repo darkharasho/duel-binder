@@ -124,9 +124,9 @@ describe('read-only RPC', () => {
     ).toBe(200)
   })
 
-  it('returns 404 for channels not served yet', async () => {
+  it('returns 404 for channels the portal does not serve', async () => {
     const cookie = await sessionFor(alice, 'ta')
-    const res = await rpc('collection:add', [{}], { cookie })
+    const res = await rpc('sync:run', [], { cookie })
     expect(res.status).toBe(404)
     expect(await res.json()).toEqual({ error: 'unknown-channel' })
     expect((await rpc('nope:nope', [], { cookie })).status).toBe(404)

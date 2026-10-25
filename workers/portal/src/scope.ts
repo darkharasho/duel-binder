@@ -15,13 +15,13 @@ export function userScope(userId: number): Scope {
       return Number(info.lastInsertRowid)
     },
     deleteEntry(db, id, ts) {
-      db.prepare('UPDATE collection_entries SET deleted_at = ?, updated_at = ? WHERE id = ? AND user_id = ?').run(
+      db.prepare('UPDATE collection_entries SET deleted_at = ?, updated_at = ? WHERE id = ? AND user_id = ? AND deleted_at IS NULL').run(
         ts,
         ts,
         id,
         userId
       )
     },
-    snapshotTable: { where: `user_id = ${userId}`, insertCols: 'user_id, ', insertVals: `${userId}, ` }
+    snapshotTable: { insertCols: 'user_id, ', insertVals: `${userId}, ` }
   }
 }

@@ -35,8 +35,15 @@ export async function handle(req: Request, deps: AppDeps): Promise<Response> {
     return finishSignIn(req, deps)
   if (req.method === 'POST' && url.pathname === '/auth/logout') return signOut(req, deps)
   if (req.method === 'GET' && url.pathname === '/api/me') return me(req, deps)
-  if (url.pathname.startsWith('/api/rpc/'))
-    return rpcRoute(req, deps, decodeURIComponent(url.pathname.slice('/api/rpc/'.length)))
+  if (url.pathname.startsWith('/api/rpc/')) {
+    let channel: string
+    try {
+      channel = decodeURIComponent(url.pathname.slice('/api/rpc/'.length))
+    } catch {
+      return json({ error: 'bad-channel' }, 400)
+    }
+    return rpcRoute(req, deps, channel)
+  }
   if (url.pathname.startsWith('/admin/')) return adminRoute(req, deps)
   return json({ error: 'Not found' }, 404)
 }

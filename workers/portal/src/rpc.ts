@@ -1,35 +1,34 @@
-import { isLanguage, type Language } from '../../../src/shared/languages'
-import type { InvokeChannel } from '../../../src/shared/ipc'
-import type { Api } from '../../../src/shared/ipc'
+import type { Api, InvokeChannel } from '../../../src/shared/ipc'
+import type { PortalChannel } from '../../../src/shared/portal'
+import type { BrowseFilters, CollectionFilters } from '../../../src/shared/types'
 import type { Scope } from '../../../src/main/repo/scope'
+import {
+  checkAddInput,
+  checkDelta,
+  checkId,
+  checkLanguage,
+  checkObject,
+  checkString,
+  checkUpdatePatch
+} from '../../../src/main/repo/args'
 import { getCardDetail, searchCards } from '../../../src/main/repo/cards'
 import { browseCards, browseFacets } from '../../../src/main/repo/browse'
 import {
   CollectionError,
+  addEntry,
   entriesForCard,
   getFacets,
-  listEntries
+  listEntries,
+  removeEntry,
+  updateEntry
 } from '../../../src/main/repo/collection'
-import { getChecklist, listSets } from '../../../src/main/repo/sets'
+import { adjustPrinting, getChecklist, listSets } from '../../../src/main/repo/sets'
+import { getStats, recordSnapshot } from '../../../src/main/repo/stats'
 import type { AppDeps } from './app'
 import { currentUser } from './auth'
 import { userScope } from './scope'
 
 type Params<T> = T extends (...args: infer A) => unknown ? A : never
-
-/** Channels the portal serves; Plan 2 adds the write channels to this table. */
-type Served = Extract<
-  InvokeChannel,
-  | 'cards:search'
-  | 'cards:get'
-  | 'cards:browse'
-  | 'cards:browseFacets'
-  | 'sets:list'
-  | 'sets:checklist'
-  | 'collection:list'
-  | 'collection:forCard'
-  | 'collection:facets'
->
 
 type ChannelMethod<C extends InvokeChannel> = C extends `${infer N}:${infer M}`
   ? N extends keyof Api
@@ -45,22 +44,48 @@ type Handler<C extends InvokeChannel> = (
   ...args: Params<ChannelMethod<C>>
 ) => unknown
 
-const checkLanguage = (language: unknown): Language => {
-  if (!isLanguage(language)) throw new CollectionError('Unknown language')
-  return language
-}
-
-const HANDLERS: { [C in Served]: Handler<C> } = {
-  'cards:search': ({ db }, _s, q) => searchCards(db, q),
-  'cards:get': ({ db }, _s, cardId) => getCardDetail(db, cardId),
-  'cards:browse': ({ db }, scope, f) => browseCards(db, f, scope),
+// Arguments come off the wire untyped: every handler checks its own before use.
+const HANDLERS: { [C in PortalChannel]: Handler<C> } = {
+  'cards:search': ({ db }, _s, q) => searchCards(db, checkString(q, 'q')),
+  'cards:get': ({ db }, _s, cardId) => getCardDetail(db, checkId(cardId, 'cardId')),
+  'cards:browse': ({ db }, scope, f) =>
+    browseCards(db, checkObject(f, 'Filters') as unknown as BrowseFilters, scope),
   'cards:browseFacets': ({ db }) => browseFacets(db),
   'sets:list': ({ db }, scope) => listSets(db, scope),
   'sets:checklist': ({ db }, scope, setName, language) =>
-    getChecklist(db, setName, checkLanguage(language), scope),
-  'collection:list': ({ db }, scope, f) => listEntries(db, f, scope),
-  'collection:forCard': ({ db }, scope, cardId) => entriesForCard(db, cardId, scope),
-  'collection:facets': ({ db }, scope) => getFacets(db, scope)
+    getChecklist(db, checkString(setName, 'setName'), checkLanguage(language), scope),
+  'sets:adjust': ({ db, now }, scope, setName, language, printingId, delta) => {
+    const result = adjustPrinting(
+      db,
+      checkString(setName, 'setName'),
+      checkLanguage(language),
+      checkId(printingId, 'printingId'),
+      checkDelta(delta),
+      now(),
+      scope
+    )
+    recordSnapshot(db, now(), scope)
+    return result
+  },
+  'collection:list': ({ db }, scope, f) =>
+    listEntries(db, checkObject(f, 'Filters') as unknown as CollectionFilters, scope),
+  'collection:forCard': ({ db }, scope, cardId) => entriesForCard(db, checkId(cardId, 'cardId'), scope),
+  'collection:facets': ({ db }, scope) => getFacets(db, scope),
+  'collection:add': ({ db, now }, scope, input) => {
+    const entry = addEntry(db, checkAddInput(input), now(), scope)
+    recordSnapshot(db, now(), scope)
+    return entry
+  },
+  'collection:update': ({ db, now }, scope, id, patch) => {
+    const entry = updateEntry(db, checkId(id, 'id'), checkUpdatePatch(patch), now(), scope)
+    recordSnapshot(db, now(), scope)
+    return entry
+  },
+  'collection:remove': ({ db, now }, scope, id) => {
+    removeEntry(db, checkId(id, 'id'), now(), scope)
+    recordSnapshot(db, now(), scope)
+  },
+  'stats:get': ({ db }, scope) => getStats(db, scope)
 }
 
 const json = (body: unknown, status = 200): Response =>
@@ -88,7 +113,7 @@ export async function rpcRoute(req: Request, deps: AppDeps, channel: string): Pr
   if (!Array.isArray(args)) return json({ error: 'args must be an array' }, 400)
 
   try {
-    const handler = HANDLERS[channel as Served] as (
+    const handler = HANDLERS[channel as PortalChannel] as (
       d: AppDeps,
       s: Scope,
       ...a: unknown[]

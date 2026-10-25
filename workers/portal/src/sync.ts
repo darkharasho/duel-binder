@@ -279,7 +279,9 @@ export async function syncRoute(req: Request, deps: AppDeps, path: string): Prom
 
     const pkeys = (body as { pkeys?: unknown } | null)?.pkeys
     if (!Array.isArray(pkeys) || !pkeys.every((k) => typeof k === 'string' && k.length <= MAX_PKEY))
-      throw new CollectionError(`pkeys must be an array of strings of at most ${MAX_PKEY} characters`)
+      throw new CollectionError(
+        `pkeys must be an array of strings of at most ${MAX_PKEY} characters`
+      )
     if (pkeys.length > MAX_PULL) return json({ error: 'too-many' }, 413)
     return json(pricesFor(deps.db, pkeys))
   } catch (e) {

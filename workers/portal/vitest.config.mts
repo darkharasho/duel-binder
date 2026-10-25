@@ -11,7 +11,8 @@ export default defineConfig({
           {
             name: 'ygo-ebay-prices',
             modules: true,
-            script: 'export default { fetch() { return new Response("not in tests", { status: 503 }) } }'
+            script:
+              'export default { fetch() { return new Response("not in tests", { status: 503 }) } }'
           }
         ]
       }

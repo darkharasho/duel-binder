@@ -65,7 +65,8 @@ interface EntryRow {
   user_id: number
   printing_id: number
   uid: string
-  pkey: string
+  /** Null only from `byUid`, when the row's printing has left the catalog. */
+  pkey: string | null
   image_id: number
   quantity: number
   notes: string
@@ -79,7 +80,10 @@ const ENTRY_SELECT = `SELECT e.id, e.user_id, e.printing_id, e.uid, p.pkey, e.im
   e.created_at, e.updated_at, e.deleted_at, e.server_seq
   FROM collection_entries e JOIN card_printings p ON p.id = e.printing_id`
 
-const toWire = (r: EntryRow): WireEntry => ({
+/** A row whose printing is in the catalog. */
+type WireRow = EntryRow & { pkey: string }
+
+const toWire = (r: WireRow): WireEntry => ({
   uid: r.uid,
   pkey: r.pkey,
   imageId: r.image_id,
@@ -101,20 +105,23 @@ const sameEntry = (x: WireEntry, y: WireEntry): boolean =>
 
 /**
  * Applies pushed entries for `userId` with latest-edit-wins per uid and one live row per printing+art,
- * then records the user's value snapshot, all in one transaction.
+ * then records the user's value snapshot, all in one transaction. `wroteLive` is set when a live entry
+ * was actually written (an identical re-push writes nothing).
  */
 export function applyPush(
   db: SqlDb,
   userId: number,
   entries: WireEntry[],
   now: Date
-): PushResult[] {
+): { results: PushResult[]; wroteLive: boolean } {
   const scope = userScope(userId)
   const findPrinting = db.prepare(
     `SELECT p.id FROM card_printings p JOIN card_images i ON i.card_id = p.card_id AND i.image_id = ?
      WHERE p.pkey = ?`
   )
-  const byUid = db.prepare(`${ENTRY_SELECT} WHERE e.uid = ?`)
+  // LEFT JOIN: a uid must be found even if its printing has left the catalog, or the insert below
+  // would hit the uid UNIQUE constraint.
+  const byUid = db.prepare(`${ENTRY_SELECT.replace(' JOIN ', ' LEFT JOIN ')} WHERE e.uid = ?`)
   const liveOnKey = db.prepare(
     `${ENTRY_SELECT} WHERE e.user_id = ? AND e.printing_id = ? AND e.image_id = ? AND e.deleted_at IS NULL AND e.uid <> ?`
   )
@@ -147,23 +154,24 @@ export function applyPush(
     else insert.run(userId, e.uid, ...fields)
   }
 
+  let wroteLive = false
   const applyOne = (e: WireEntry): PushResult => {
     const printing = findPrinting.get(e.imageId, e.pkey) as { id: number } | undefined
     if (!printing) return { uid: e.uid, status: 'unknown-printing' }
 
     const existing = byUid.get(e.uid) as EntryRow | undefined
     if (existing && existing.user_id !== userId) return { uid: e.uid, status: 'rejected' }
-    if (existing) {
-      const current = toWire(existing)
+    if (existing && existing.pkey !== null) {
+      const current = toWire({ ...existing, pkey: existing.pkey })
       if (sameEntry(e, current)) return { uid: e.uid, status: 'applied' }
       if (!replaces(e, current)) return { uid: e.uid, status: 'stale', current }
-    } else if (e.deletedAt !== null) {
+    } else if (!existing && e.deletedAt !== null) {
       // Nothing to delete; storing it would only grow the table.
       return { uid: e.uid, status: 'applied' }
     }
 
     if (e.deletedAt === null) {
-      const other = liveOnKey.get(userId, printing.id, e.imageId, e.uid) as EntryRow | undefined
+      const other = liveOnKey.get(userId, printing.id, e.imageId, e.uid) as WireRow | undefined
       if (other) {
         const winner = toWire(other)
         if (keepsKey(e, winner)) {
@@ -177,15 +185,18 @@ export function applyPush(
         }
       }
     }
+    // An owned row whose printing is gone can't be sent back as `current`, so the incoming entry replaces it.
     store(existing, printing.id, e)
+    if (e.deletedAt === null) wroteLive = true
     return { uid: e.uid, status: 'applied' }
   }
 
-  return db.transaction(() => {
-    const results = entries.map(applyOne)
+  const results = db.transaction(() => {
+    const out = entries.map(applyOne)
     recordSnapshot(db, now, scope)
-    return results
+    return out
   })()
+  return { results, wroteLive }
 }
 
 /** The caller's rows written after `cursor`, tombstones included, in seq order. */
@@ -199,7 +210,7 @@ export function pullSince(
     .prepare(
       `${ENTRY_SELECT} WHERE e.user_id = ? AND e.server_seq > ? ORDER BY e.server_seq LIMIT ?`
     )
-    .all(userId, cursor, limit + 1) as EntryRow[]
+    .all(userId, cursor, limit + 1) as WireRow[]
   const page = rows.slice(0, limit)
   const entries: PulledEntry[] = page.map((r) => ({ ...toWire(r), seq: r.server_seq }))
   return {
@@ -259,9 +270,8 @@ export async function syncRoute(req: Request, deps: AppDeps, path: string): Prom
       if (Array.isArray(raw) && raw.length > MAX_PUSH) return json({ error: 'too-many' }, 413)
       const now = deps.now()
       const entries = checkPush(body, now)
-      const results = applyPush(deps.db, user.id, entries, now)
-      if (results.some((r, i) => r.status === 'applied' && entries[i].deletedAt === null))
-        await deps.prices.soon()
+      const { results, wroteLive } = applyPush(deps.db, user.id, entries, now)
+      if (wroteLive) await deps.prices.soon()
       return json({ results })
     }
 

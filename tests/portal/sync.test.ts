@@ -248,6 +248,86 @@ describe('sync routes', () => {
     })
   })
 
+  describe('moving or reviving a uid onto a key another live uid holds', () => {
+    it('a revived tombstone that is newer takes the key', async () => {
+      const x = entry()
+      await push([x])
+      await push([{ ...x, updatedAt: T1, deletedAt: T1 }])
+      const y = entry({ quantity: 2, updatedAt: T1 })
+      expect(await push([y])).toEqual([{ uid: y.uid, status: 'applied' }])
+      const revived = { ...x, quantity: 5, updatedAt: T2, deletedAt: null }
+      expect(await push([revived])).toEqual([{ uid: x.uid, status: 'applied' }])
+      expect(
+        rows(alice)
+          .filter((r) => r.deleted_at === null)
+          .map((r) => r.uid)
+      ).toEqual([x.uid])
+      expect(row(y.uid).deleted_at).toBe(T2)
+      expect(row(y.uid).server_seq).toBeLessThan(row(x.uid).server_seq)
+    })
+
+    it('a revived tombstone that is older merges into the live holder', async () => {
+      const x = entry()
+      await push([x])
+      await push([{ ...x, updatedAt: T1, deletedAt: T1 }])
+      const y = entry({ quantity: 2, updatedAt: '2026-10-24T11:45:00.000Z' })
+      await push([y])
+      const revived = { ...x, quantity: 5, updatedAt: T2, deletedAt: null }
+      expect(await push([revived])).toEqual([{ uid: x.uid, status: 'merged', winner: y }])
+      expect(row(x.uid)).toMatchObject({ quantity: 5, updated_at: T2, deleted_at: T2 })
+      expect(
+        rows(alice)
+          .filter((r) => r.deleted_at === null)
+          .map((r) => r.uid)
+      ).toEqual([y.uid])
+      expect(row(x.uid).server_seq).toBeLessThan(row(y.uid).server_seq)
+    })
+
+    it('a uid moved to another printing takes it when newer', async () => {
+      const x = entry()
+      const y = entry({ pkey: b.pkey, imageId: b.imageId, quantity: 2, updatedAt: T1 })
+      await push([x, y])
+      const moved = { ...x, pkey: b.pkey, imageId: b.imageId, updatedAt: T2 }
+      expect(await push([moved])).toEqual([{ uid: x.uid, status: 'applied' }])
+      expect(row(y.uid).deleted_at).toBe(T2)
+      expect(
+        rows(alice)
+          .filter((r) => r.deleted_at === null)
+          .map((r) => r.uid)
+      ).toEqual([x.uid])
+      expect((await pull(0)).entries.find((e) => e.uid === x.uid)).toMatchObject({ pkey: b.pkey })
+    })
+
+    it('a uid moved to another printing merges when older', async () => {
+      const x = entry()
+      const y = entry({ pkey: b.pkey, imageId: b.imageId, quantity: 2, updatedAt: T2 })
+      await push([x, y])
+      const moved = { ...x, pkey: b.pkey, imageId: b.imageId, updatedAt: T1 }
+      expect(await push([moved])).toEqual([{ uid: x.uid, status: 'merged', winner: y }])
+      expect(row(x.uid).deleted_at).toBe(T1)
+      expect(
+        rows(alice)
+          .filter((r) => r.deleted_at === null)
+          .map((r) => r.uid)
+      ).toEqual([y.uid])
+    })
+  })
+
+  it('a uid whose printing left the catalog is still found, owned and replaced', async () => {
+    const x = entry()
+    await push([x])
+    db.pragma('foreign_keys = OFF')
+    db.prepare('DELETE FROM intl_prices WHERE printing_id = ?').run(a.id)
+    db.prepare('DELETE FROM card_printings WHERE id = ?').run(a.id)
+    db.pragma('foreign_keys = ON')
+    const moved = { ...x, pkey: b.pkey, imageId: b.imageId, updatedAt: T1 }
+    expect(await push([moved], BOB)).toEqual([{ uid: x.uid, status: 'rejected' }])
+    expect(await push([moved])).toEqual([{ uid: x.uid, status: 'applied' }])
+    expect(rows(alice)).toHaveLength(1)
+    const pulled = (await pull(0)).entries
+    expect(pulled).toEqual([{ ...moved, seq: pulled[0].seq }])
+  })
+
   it('a tombstone for an unknown uid stores nothing', async () => {
     const tomb = entry({ deletedAt: T1, updatedAt: T1 })
     expect(await push([tomb])).toEqual([{ uid: tomb.uid, status: 'applied' }])
@@ -449,6 +529,16 @@ describe('sync routes', () => {
     soon.mockClear()
     // A push that applies no live entry queues nothing.
     await push([entry({ deletedAt: T1, updatedAt: T1 })])
+    expect(soon).not.toHaveBeenCalled()
+    // Nor does an identical re-push, which writes nothing.
+    const e = entry({ pkey: b.pkey, imageId: b.imageId })
+    await push([e])
+    expect(soon).toHaveBeenCalledTimes(1)
+    soon.mockClear()
+    expect(await push([e])).toEqual([{ uid: e.uid, status: 'applied' }])
+    expect(soon).not.toHaveBeenCalled()
+    // A live entry that loses a merge writes only a tombstone.
+    await push([entry({ pkey: b.pkey, imageId: b.imageId, updatedAt: '2026-10-24T09:00:00.000Z' })])
     expect(soon).not.toHaveBeenCalled()
   })
 

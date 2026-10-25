@@ -1,4 +1,5 @@
 import type Database from 'better-sqlite3'
+import { PACK_ART_PREFIX } from '../../src/shared/imageSources'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { handle, type AppDeps } from '../../workers/portal/src/app'
 import { memoryBucket, seededServerDb } from './helpers'
@@ -107,6 +108,67 @@ describe('image route', () => {
       expect((await get('set/../x')).status).toBe(404)
       expect(upstream).not.toHaveBeenCalled()
     })
+  })
+
+  it('yc- key resolves through pack_art and fetches the official URL', async () => {
+    const url = `${PACK_ART_PREFIX}2024/01/pack.jpg`
+    db.prepare("INSERT INTO pack_art (set_name, image_url, image_key) VALUES ('Pack', ?, 'yc-abc')").run(url)
+    const res = await get('set/yc-abc')
+    expect(res.status).toBe(200)
+    expect(upstream.mock.calls[0][0]).toBe(url)
+  })
+
+  it('serves only jpeg, png, webp and gif, ignoring parameters', async () => {
+    for (const type of ['image/svg+xml', 'image/x-icon', 'text/html']) {
+      upstream.mockResolvedValueOnce(new Response('<svg/>', { headers: { 'content-type': type } }))
+      expect((await get(`small/${imageId}`)).status).toBe(404)
+    }
+    expect(bucket.store.size).toBe(0)
+    upstream.mockResolvedValueOnce(new Response(JPEG, { headers: { 'content-type': 'Image/PNG; charset=binary' } }))
+    const ok = await get(`small/${imageId}`)
+    expect(ok.status).toBe(200)
+    expect(ok.headers.get('content-type')).toBe('image/png')
+  })
+
+  it('locks down every response', async () => {
+    for (const res of [await get(`small/${imageId}`), await get('small/0'), await get(`small/${imageId}`, 'POST')]) {
+      expect(res.headers.get('x-content-type-options')).toBe('nosniff')
+      expect(res.headers.get('content-security-policy')).toBe('sandbox')
+    }
+  })
+
+  it('does not follow redirects and treats them as a miss', async () => {
+    upstream.mockResolvedValueOnce(new Response(null, { status: 302, headers: { location: 'https://evil.test/x.png' } }))
+    expect((await get(`small/${imageId}`)).status).toBe(404)
+    expect((upstream.mock.calls[0][1] as RequestInit).redirect).toBe('manual')
+    expect(bucket.store.size).toBe(0)
+  })
+
+  it('serves fetched bytes when R2 put fails, and treats a failing get as a miss', async () => {
+    bucket.put = async () => {
+      throw new Error('r2 down')
+    }
+    const res = await get(`small/${imageId}`)
+    expect(res.status).toBe(200)
+    expect(new Uint8Array(await res.arrayBuffer())).toEqual(JPEG)
+    bucket.get = async () => {
+      throw new Error('r2 down')
+    }
+    expect((await get(`small/${imageId}`)).status).toBe(200)
+    expect(upstream).toHaveBeenCalledTimes(2)
+  })
+
+  it('rejects oversized set keys and oversized upstream bodies', async () => {
+    expect((await get(`set/${'a'.repeat(201)}`)).status).toBe(404)
+    expect(upstream).not.toHaveBeenCalled()
+    expect((await get(`set/${'a'.repeat(200)}`)).status).toBe(200)
+    upstream.mockResolvedValueOnce(
+      new Response(JPEG, { headers: { 'content-type': 'image/jpeg', 'content-length': String(11 * 1024 * 1024) } })
+    )
+    expect((await get(`small/${imageId}`)).status).toBe(404)
+    upstream.mockResolvedValueOnce(new Response(new Uint8Array(10 * 1024 * 1024 + 1), { headers: { 'content-type': 'image/jpeg' } }))
+    expect((await get(`full/${imageId}`)).status).toBe(404)
+    expect([...bucket.store.keys()]).toEqual([`set/${'a'.repeat(200)}`])
   })
 
   it('printing images answer 404 for now', async () => {

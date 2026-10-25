@@ -20,7 +20,22 @@ const USER_AGENT = 'DuelBinder/portal (https://github.com/darkharasho/duel-binde
 const CARD_CACHE = 'public, max-age=31536000, immutable'
 const SET_CACHE = 'public, max-age=86400'
 
+const MAX_SET_KEY = 200
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024
+/** Formats safe to serve from the app origin; notably not SVG, which can carry script. */
+const IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/gif'])
+
+/** The media type alone, lowercased and without parameters. */
+const mediaType = (contentType: string): string => contentType.split(';')[0].trim().toLowerCase()
+
 const notFound = (): Response => new Response('Not found', { status: 404 })
+
+/** Defence in depth: whatever the body is, the browser must not run or sniff it. */
+function locked(res: Response): Response {
+  res.headers.set('x-content-type-options', 'nosniff')
+  res.headers.set('content-security-policy', 'sandbox')
+  return res
+}
 
 /** Where a request's artwork comes from and how long browsers may keep it; null when the path names nothing servable. */
 function resolve(deps: AppDeps, path: string): { key: string; source: string; headers?: Record<string, string>; cache: string } | null {
@@ -34,7 +49,7 @@ function resolve(deps: AppDeps, path: string): { key: string; source: string; he
     return { key: `card/${kind satisfies ImageSize}/${n}`, source: imageUrl(kind, n), cache: CARD_CACHE }
   }
   if (kind === 'set') {
-    if (!SET_KEY_RE.test(id)) return null
+    if (id.length > MAX_SET_KEY || !SET_KEY_RE.test(id)) return null
     const prefix = id.slice(0, 3)
     if (prefix === 'km-') return null
     if (prefix === 'yp-' || prefix === 'yc-') {
@@ -50,6 +65,10 @@ function resolve(deps: AppDeps, path: string): { key: string; source: string; he
 
 /** GET/HEAD /img/<path>: artwork mirrored into R2 on first request, so the web build never hotlinks its sources. */
 export async function imageRoute(req: Request, deps: AppDeps, path: string): Promise<Response> {
+  return locked(await serve(req, deps, path))
+}
+
+async function serve(req: Request, deps: AppDeps, path: string): Promise<Response> {
   if (req.method !== 'GET' && req.method !== 'HEAD') {
     return new Response('Method not allowed', { status: 405, headers: { allow: 'GET, HEAD' } })
   }
@@ -61,7 +80,7 @@ export async function imageRoute(req: Request, deps: AppDeps, path: string): Pro
       headers: { 'content-type': contentType, 'cache-control': target.cache }
     })
 
-  const stored = await deps.images.get(target.key)
+  const stored = await deps.images.get(target.key).catch(() => null) // a failing bucket is a miss
   if (stored) return reply(stored.body, stored.httpMetadata?.contentType ?? 'image/jpeg')
 
   let bytes: ArrayBuffer
@@ -69,15 +88,17 @@ export async function imageRoute(req: Request, deps: AppDeps, path: string): Pro
   try {
     const res = await deps.fetch(target.source, {
       signal: AbortSignal.timeout(IMAGE_TIMEOUT_MS),
+      redirect: 'manual', // the prefix check covers only the first hop
       ...(target.headers && { headers: target.headers })
     })
-    contentType = res.headers.get('content-type') ?? ''
-    if (!res.ok || !contentType.toLowerCase().startsWith('image/')) return notFound()
+    contentType = mediaType(res.headers.get('content-type') ?? '')
+    if (!res.ok || !IMAGE_TYPES.has(contentType)) return notFound()
+    if (Number(res.headers.get('content-length') ?? 0) > MAX_IMAGE_BYTES) return notFound()
     bytes = await res.arrayBuffer()
   } catch {
     return notFound()
   }
-  if (bytes.byteLength === 0) return notFound()
-  await deps.images.put(target.key, bytes, { httpMetadata: { contentType } })
+  if (bytes.byteLength === 0 || bytes.byteLength > MAX_IMAGE_BYTES) return notFound()
+  await deps.images.put(target.key, bytes, { httpMetadata: { contentType } }).catch(() => undefined) // still serve what was fetched
   return reply(bytes, contentType)
 }

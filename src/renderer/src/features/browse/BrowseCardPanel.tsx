@@ -5,6 +5,7 @@ import { toast } from 'sonner'
 import type { BrowseCard, Printing } from '@shared/types'
 import { CardDetails } from '@/components/CardDetails'
 import { PanelCardArt } from '@/components/PanelCardArt'
+import { PanelPrice } from '@/components/PanelPrice'
 import { LanguageTag } from '@/components/LanguageTag'
 import { Button } from '@/components/ui/button'
 import {
@@ -60,6 +61,8 @@ export function BrowseCardPanel({
   const shown = printings.find((p) => p.id === card.defaultPrintingId)
   const price = shown?.setPrice ?? card.price
   const priceLabel = shown?.setPrice != null ? shown.setRarity : 'cheapest printing'
+  // An owned printing shows the price the collection shows (eBay-first), not YGOPRODeck's.
+  const ownedEntry = shown ? (copies.data ?? []).find((c) => c.printing.id === shown.id) : undefined
 
   const adjust = (p: Printing, delta: 1 | -1): void => {
     setPending((n) => n + 1)
@@ -89,12 +92,7 @@ export function BrowseCardPanel({
             printingId={card.defaultPrintingId}
             alt={card.name}
           />
-          {price !== null && (
-            <p className="text-sm">
-              <span className="text-muted-foreground">Market price · {priceLabel}</span>{' '}
-              <span className="font-medium tabular-nums">{formatUsd(price)}</span>
-            </p>
-          )}
+          <PanelPrice entry={ownedEntry} price={price} label={priceLabel} />
 
           <CardDetails card={info} />
 

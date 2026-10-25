@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import type { ChecklistCard } from '@shared/types'
 import { CardDetails } from '@/components/CardDetails'
+import { PanelPrice } from '@/components/PanelPrice'
 import { PanelCardArt } from '@/components/PanelCardArt'
 import { Button } from '@/components/ui/button'
 import {
@@ -11,7 +12,6 @@ import {
   SheetTitle
 } from '@/components/ui/sheet'
 import { api, queryKeys } from '@/lib/api'
-import { formatUsd } from '@/lib/format'
 import { BulkRow } from './BulkRow'
 
 interface SetCardPanelProps {
@@ -40,6 +40,10 @@ export function SetCardPanel({
     queryKey: queryKeys.card(card.cardId),
     queryFn: () => api.cards.get(card.cardId)
   })
+  const copies = useQuery({
+    queryKey: queryKeys.forCard(card.cardId),
+    queryFn: () => api.collection.forCard(card.cardId)
+  })
   const info = detail.data?.card
   const typeLine = info
     ? [info.type, info.attribute, info.race].filter(Boolean).join(' · ')
@@ -49,6 +53,10 @@ export function SetCardPanel({
   // Rarities of one card can differ by orders of magnitude, so price the one being viewed.
   const price = focus?.price ?? card.price
   const priceLabel = focus?.price != null ? focus.rarity : 'cheapest printing'
+  // An owned printing shows the price the collection shows (eBay-first), not YGOPRODeck's.
+  const ownedEntry = focus
+    ? (copies.data ?? []).find((c) => c.printing.id === focus.defaultPrintingId)
+    : undefined
 
   return (
     <Sheet open onOpenChange={(open) => !open && onClose()}>
@@ -67,12 +75,7 @@ export function SetCardPanel({
             <p className="font-mono text-[13px] text-muted-foreground">
               {setName} · {card.numberLabel}
             </p>
-            {price !== null && (
-              <p className="text-sm">
-                <span className="text-muted-foreground">Market price · {priceLabel}</span>{' '}
-                <span className="font-medium tabular-nums">{formatUsd(price)}</span>
-              </p>
-            )}
+            <PanelPrice entry={ownedEntry} price={price} label={priceLabel} />
           </div>
 
           <CardDetails card={info} />

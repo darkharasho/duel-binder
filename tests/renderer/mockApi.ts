@@ -3,6 +3,7 @@ import { render } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import type { Api } from '@shared/ipc'
 import { createElement, type ReactElement, type ReactNode } from 'react'
+import { TooltipProvider } from '@/components/ui/tooltip'
 
 export type DeepPartial<T> = {
   [K in keyof T]?: T[K] extends (...args: never[]) => unknown ? T[K] : DeepPartial<T[K]>
@@ -95,7 +96,7 @@ export function renderWithProviders(ui: ReactElement, { api = createMockApi() }:
   window.api = api
   const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
   const wrapper = ({ children }: { children: ReactNode }): ReactElement =>
-    createElement(QueryClientProvider, { client }, children)
+    createElement(QueryClientProvider, { client }, createElement(TooltipProvider, null, children))
   const result = render(ui, { wrapper })
   return { api, client, ...result }
 }

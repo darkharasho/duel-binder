@@ -29,9 +29,10 @@ export interface Scope {
   touch: string
   /**
    * value_snapshots scoping. `insertCols`/`insertVals` are comma-terminated fragments placed before
-   * `date` / `?` in an INSERT (and `insertCols + 'date'` is the upsert conflict target).
+   * `date` / `?` in an INSERT (and `insertCols + 'date'` is the upsert conflict target); `where` limits a read
+   * to this owner's rows.
    */
-  snapshotTable: { insertCols: string; insertVals: string }
+  snapshotTable: { insertCols: string; insertVals: string; where: string }
 }
 
 /** SQL for the owner the desktop is showing: the `cloud_active_owner` meta value, or 0 (local). */
@@ -60,5 +61,9 @@ export const LOCAL: Scope = {
     ).run(ts, ts, id)
   },
   touch: 'dirty = 1',
-  snapshotTable: { insertCols: 'owner_id, ', insertVals: `${ACTIVE_OWNER}, ` }
+  snapshotTable: {
+    insertCols: 'owner_id, ',
+    insertVals: `${ACTIVE_OWNER}, `,
+    where: `owner_id = ${ACTIVE_OWNER}`
+  }
 }

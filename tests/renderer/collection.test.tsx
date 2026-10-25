@@ -135,6 +135,8 @@ describe('CollectionPage', () => {
       byRarity: [],
       byFrameType: [],
       topEntries: [],
+      recentEntries: [],
+      valueHistory: [],
       pricesUpdatedAt: null
     }
     // The English-filtered list is empty because the only owned entry is Japanese.

@@ -173,7 +173,18 @@ export interface CollectionStats {
   byRarity: { rarity: string; count: number; value: number }[]
   byFrameType: { frameType: string; count: number }[]
   topEntries: EntryView[]
+  /** Newest additions first. */
+  recentEntries: EntryView[]
+  /** One point per day the value was recorded, oldest first. */
+  valueHistory: ValuePoint[]
   pricesUpdatedAt: string | null
+}
+
+export interface ValuePoint {
+  /** Local date, YYYY-MM-DD. */
+  date: string
+  totalValue: number
+  totalCards: number
 }
 
 export interface SyncStatus {

@@ -62,6 +62,8 @@ const stats = (o: Partial<CollectionStats> = {}): CollectionStats => ({
     { frameType: 'normal', count: 9 }
   ],
   topEntries: [entry(1, 'Dark Magician'), entry(2, 'Blue-Eyes White Dragon')],
+  recentEntries: [],
+  valueHistory: [],
   pricesUpdatedAt: null,
   ...o
 })
@@ -77,7 +79,8 @@ describe('DashboardPage', () => {
   it('tiles show formatted stats', async () => {
     setup(stats())
     expect(await screen.findByText('$31.74')).toBeInTheDocument()
-    const tile = (label: string): HTMLElement => screen.getByText(label).parentElement as HTMLElement
+    const tile = (label: string): HTMLElement =>
+      screen.getByText(label).parentElement as HTMLElement
     expect(within(tile('Total cards')).getByText('12')).toBeInTheDocument()
     expect(within(tile('Unique cards')).getByText('7')).toBeInTheDocument()
     expect(screen.getByText('Total cards')).toBeInTheDocument()
@@ -116,7 +119,9 @@ describe('DashboardPage', () => {
   it('flags stale prices only when older than 24 h', async () => {
     const ago = (ms: number): string => new Date(Date.now() - ms).toISOString()
     const { unmount } = renderWithProviders(<DashboardPage onNavigate={vi.fn()} />, {
-      api: createMockApi({ stats: { get: async () => stats({ pricesUpdatedAt: ago(3 * 86_400_000) }) } })
+      api: createMockApi({
+        stats: { get: async () => stats({ pricesUpdatedAt: ago(3 * 86_400_000) }) }
+      })
     })
     expect(await screen.findByText('stale')).toBeInTheDocument()
     unmount()
@@ -144,7 +149,11 @@ describe('DashboardPage', () => {
       stats({
         topEntries: [
           ja(1, 'Dark Magician', { unitPrice: 40, totalValue: 80 }),
-          ja(2, 'Blue-Eyes White Dragon', { unitPrice: null, totalValue: 0, noPriceReason: 'pending' })
+          ja(2, 'Blue-Eyes White Dragon', {
+            unitPrice: null,
+            totalValue: 0,
+            noPriceReason: 'pending'
+          })
         ]
       })
     )
@@ -162,10 +171,56 @@ describe('DashboardPage', () => {
     expect(onNavigate).toHaveBeenCalledWith('collection', { entryId: 2 })
   })
 
+  it('value chart shows the change since the first recorded day', async () => {
+    setup(
+      stats({
+        valueHistory: [
+          { date: '2026-10-01', totalValue: 20, totalCards: 5 },
+          { date: '2026-10-10', totalValue: 25, totalCards: 8 },
+          { date: '2026-10-20', totalValue: 31.74, totalCards: 12 }
+        ]
+      })
+    )
+    const chart = await screen.findByRole('figure', { name: 'Value over time' })
+    expect(within(chart).getByText('+$11.74')).toBeInTheDocument()
+    expect(within(chart).getByText('(+58.7%)')).toBeInTheDocument()
+    expect(within(chart).getByText('since Oct 1')).toBeInTheDocument()
+  })
+
+  it('value chart explains itself until there are two days', async () => {
+    setup(stats({ valueHistory: [{ date: '2026-10-20', totalValue: 31.74, totalCards: 12 }] }))
+    const chart = await screen.findByRole('figure', { name: 'Value over time' })
+    expect(within(chart).getByText(/one point a day/)).toBeInTheDocument()
+  })
+
+  it('recently added lists entries newest first and navigates', async () => {
+    const { onNavigate } = setup(
+      stats({
+        recentEntries: [
+          entry(3, 'Kuriboh', { createdAt: new Date().toISOString() }),
+          entry(4, 'Pot of Greed')
+        ]
+      })
+    )
+    const list = await screen.findByRole('list', { name: 'Recently added' })
+    const items = within(list).getAllByRole('button')
+    expect(items[0]).toHaveTextContent('Kuriboh')
+    expect(items[0]).toHaveTextContent('just now')
+    await userEvent.click(items[1])
+    expect(onNavigate).toHaveBeenCalledWith('collection', { entryId: 4 })
+  })
+
   it('empty state', async () => {
     const onAddCard = vi.fn()
     setup(
-      stats({ totalCards: 0, uniqueCards: 0, totalValue: 0, byRarity: [], byFrameType: [], topEntries: [] }),
+      stats({
+        totalCards: 0,
+        uniqueCards: 0,
+        totalValue: 0,
+        byRarity: [],
+        byFrameType: [],
+        topEntries: []
+      }),
       { onAddCard }
     )
     await userEvent.click(await screen.findByRole('button', { name: 'Add your first card' }))

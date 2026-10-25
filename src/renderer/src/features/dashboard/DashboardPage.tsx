@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import type { CollectionStats } from '@shared/types'
+import type { CollectionStats, EntryView } from '@shared/types'
 import type { NavigateFn } from '@/components/AppShell'
 import { cardArtUrl, useArtWash } from '@/components/artWashContext'
 import { CardArt } from '@/components/CardArt'
@@ -10,6 +10,7 @@ import { TooltipProvider } from '@/components/ui/tooltip'
 import { EntryValue, StaleBadge, displayTotal } from '@/features/collection/EntryValue'
 import { api, queryKeys } from '@/lib/api'
 import { formatRelative, formatUsd } from '@/lib/format'
+import { ValueChart } from './ValueChart'
 
 interface Props {
   onNavigate: NavigateFn
@@ -48,7 +49,9 @@ const FRAME_COLORS: Record<string, string> = {
 const FALLBACK = ['#7aa38a', '#b98b6b', '#8a87b8', '#b8869c', '#7f9cad', '#a3a06a']
 
 const colorFor = (map: Record<string, string>, key: string, i: number): string =>
-  map[key] ?? (key.includes('_') ? map[key.split('_')[0]] : undefined) ?? FALLBACK[i % FALLBACK.length]
+  map[key] ??
+  (key.includes('_') ? map[key.split('_')[0]] : undefined) ??
+  FALLBACK[i % FALLBACK.length]
 
 interface Segment {
   label: string
@@ -76,7 +79,10 @@ function Breakdown({ title, segments }: { title: string; segments: Segment[] }):
               />
             ))}
           </div>
-          <ul aria-label={title} className="grid grid-cols-2 gap-x-6 gap-y-1.5 text-[13px]">
+          <ul
+            aria-label={title}
+            className="grid grid-cols-[repeat(auto-fill,minmax(15rem,1fr))] gap-x-6 gap-y-1.5 text-[13px]"
+          >
             {sorted.map((s) => (
               <li key={s.label} className="flex items-center gap-2">
                 <span
@@ -92,6 +98,57 @@ function Breakdown({ title, segments }: { title: string; segments: Segment[] }):
             ))}
           </ul>
         </>
+      )}
+    </section>
+  )
+}
+
+/** The newest additions, each opening in the collection. */
+function RecentlyAdded({
+  entries,
+  onNavigate
+}: {
+  entries: EntryView[]
+  onNavigate: NavigateFn
+}): React.JSX.Element {
+  return (
+    <section className="lg:col-span-2 xl:col-span-1">
+      <h2 className="mb-3 text-sm font-semibold">Recently added</h2>
+      {entries.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No data yet</p>
+      ) : (
+        <ul
+          aria-label="Recently added"
+          className="-mx-1.5 grid gap-x-6 lg:grid-cols-2 xl:grid-cols-1"
+        >
+          {entries.map((e) => (
+            <li key={e.id} className="min-w-0">
+              <button
+                type="button"
+                onClick={() => onNavigate('collection', { entryId: e.id })}
+                className="flex w-full items-center gap-3 rounded-md px-1.5 py-1 text-left text-[13px] hover:bg-white/5 focus-visible:outline-2 focus-visible:outline-ring"
+              >
+                <CardArt
+                  imageId={e.imageId}
+                  printingId={scanFor(e)}
+                  size="small"
+                  alt=""
+                  className="w-7 shrink-0 rounded-[2px]"
+                />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate">{e.card.name}</span>
+                  <span className="block truncate font-mono text-[11px] text-muted-foreground">
+                    {e.printing.setCode}
+                    {e.quantity > 1 && ` ×${e.quantity}`}
+                  </span>
+                </span>
+                <span className="shrink-0 text-right text-[11px] text-muted-foreground">
+                  {formatRelative(e.createdAt)}
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
       )}
     </section>
   )
@@ -122,38 +179,41 @@ function Content({
   const stale = isStale(stats.pricesUpdatedAt)
   return (
     <>
-      <header>
-        <p className="text-[13px] text-foreground/75">Your collection is worth</p>
-        <p className="mt-1 text-5xl font-semibold tracking-tight tabular-nums">
-          {formatUsd(stats.totalValue)}
-        </p>
-        {n > 0 && (
-          <p className="mt-1 text-xs text-muted-foreground tabular-nums">
-            ≈ includes {n} approximate {n === 1 ? 'price' : 'prices'}
+      <div className="grid gap-x-12 gap-y-8 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
+        <header className="self-end">
+          <p className="text-[13px] text-foreground/75">Your collection is worth</p>
+          <p className="mt-1 text-5xl font-semibold tracking-tight tabular-nums">
+            {formatUsd(stats.totalValue)}
           </p>
-        )}
-        <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-[13px] text-foreground/75">
-          <div className="flex gap-1.5">
-            <span className="font-semibold text-foreground">{stats.totalCards}</span>
-            <span>Total cards</span>
-          </div>
-          <div className="flex gap-1.5">
-            <span className="font-semibold text-foreground">{stats.uniqueCards}</span>
-            <span>Unique cards</span>
-          </div>
-          <div className="flex items-baseline gap-1.5">
-            <span>Prices updated</span>
-            <span className={stale ? 'text-amber-400' : undefined}>
-              {formatRelative(stats.pricesUpdatedAt)}
-            </span>
-            {stale && (
-              <span className="rounded-sm border border-amber-400/50 px-1 text-[11px] text-amber-400">
-                stale
+          {n > 0 && (
+            <p className="mt-1 text-xs text-muted-foreground tabular-nums">
+              ≈ includes {n} approximate {n === 1 ? 'price' : 'prices'}
+            </p>
+          )}
+          <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-[13px] text-foreground/75">
+            <div className="flex gap-1.5">
+              <span className="font-semibold text-foreground">{stats.totalCards}</span>
+              <span>Total cards</span>
+            </div>
+            <div className="flex gap-1.5">
+              <span className="font-semibold text-foreground">{stats.uniqueCards}</span>
+              <span>Unique cards</span>
+            </div>
+            <div className="flex items-baseline gap-1.5">
+              <span>Prices updated</span>
+              <span className={stale ? 'text-amber-400' : undefined}>
+                {formatRelative(stats.pricesUpdatedAt)}
               </span>
-            )}
+              {stale && (
+                <span className="rounded-sm border border-amber-400/50 px-1 text-[11px] text-amber-400">
+                  stale
+                </span>
+              )}
+            </div>
           </div>
-        </div>
-      </header>
+        </header>
+        <ValueChart history={stats.valueHistory} />
+      </div>
 
       {stats.topEntries.length > 0 && (
         <section>
@@ -167,9 +227,10 @@ function Content({
               See all
             </button>
           </div>
-          <ul className="-mx-2 flex gap-2 overflow-x-auto px-2 pb-2">
+          {/* One row of as many as fit, stretched to the full width; the rest sit in zero-height rows, clipped. */}
+          <ul className="-mx-1 grid auto-rows-[0] grid-cols-[repeat(auto-fit,minmax(7rem,1fr))] grid-rows-[auto] gap-x-2 overflow-hidden">
             {stats.topEntries.slice(0, 10).map((e) => (
-              <li key={e.id} className="w-28 shrink-0">
+              <li key={e.id} className="min-w-0">
                 <button
                   type="button"
                   onClick={() => onNavigate('collection', { entryId: e.id })}
@@ -202,7 +263,7 @@ function Content({
         </section>
       )}
 
-      <div className="grid gap-10 lg:grid-cols-2">
+      <div className="grid gap-10 lg:grid-cols-2 xl:grid-cols-3">
         <Breakdown
           title="By rarity"
           segments={stats.byRarity.map((r, i) => ({
@@ -221,6 +282,7 @@ function Content({
             color: colorFor(FRAME_COLORS, r.frameType, i)
           }))}
         />
+        <RecentlyAdded entries={stats.recentEntries} onNavigate={onNavigate} />
       </div>
     </>
   )
@@ -234,7 +296,7 @@ export function DashboardPage({ onNavigate, onAddCard }: Props): React.JSX.Eleme
 
   return (
     <TooltipProvider>
-      <div className="max-w-5xl space-y-10 px-8 pb-10 pt-3">
+      <div className="max-w-[1800px] space-y-10 px-8 pb-10 pt-3">
         <h1 className="sr-only">Dashboard</h1>
         {data && data.totalCards === 0 ? (
           <div className="flex flex-col items-start gap-3 py-16">

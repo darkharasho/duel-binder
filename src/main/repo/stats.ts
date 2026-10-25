@@ -1,10 +1,11 @@
 import type { SqlDb } from '../db/sql'
-import type { CollectionStats } from '../../shared/types'
+import type { CollectionStats, ValuePoint } from '../../shared/types'
 import { getMeta } from '../db/meta'
 import { listEntries } from './collection'
 import { LOCAL, type Scope } from './scope'
 
 const TOP_ENTRY_LIMIT = 10
+const RECENT_ENTRY_LIMIT = 8
 
 export function getStats(db: SqlDb, scope: Scope = LOCAL): CollectionStats {
   const entries = listEntries(db, { sort: 'value', dir: 'desc' }, scope)
@@ -35,6 +36,15 @@ export function getStats(db: SqlDb, scope: Scope = LOCAL): CollectionStats {
     byRarity: [...rarities].map(([rarity, v]) => ({ rarity, ...v })).sort((a, b) => b.value - a.value),
     byFrameType: [...frames].map(([frameType, count]) => ({ frameType, count })).sort((a, b) => b.count - a.count),
     topEntries: entries.slice(0, TOP_ENTRY_LIMIT),
+    recentEntries: [...entries]
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id - a.id)
+      .slice(0, RECENT_ENTRY_LIMIT),
+    valueHistory: db
+      .prepare(
+        `SELECT date, total_value AS totalValue, total_cards AS totalCards FROM value_snapshots
+         WHERE ${scope.snapshotTable.where} ORDER BY date`
+      )
+      .all() as ValuePoint[],
     pricesUpdatedAt: getMeta(db, 'last_sync_at')
   }
 }

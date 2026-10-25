@@ -56,6 +56,8 @@ export function createMockApi(overrides: DeepPartial<Api> = {}): Api {
         byRarity: [],
         byFrameType: [],
         topEntries: [],
+        recentEntries: [],
+        valueHistory: [],
         pricesUpdatedAt: null
       }))
     },

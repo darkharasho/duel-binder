@@ -24,6 +24,10 @@ export function userScope(userId: number): Scope {
       ).run(ts, ts, id, userId)
     },
     touch: `server_seq = ${NEXT_SEQ}`,
-    snapshotTable: { insertCols: 'user_id, ', insertVals: `${userId}, ` }
+    snapshotTable: {
+      insertCols: 'user_id, ',
+      insertVals: `${userId}, `,
+      where: `user_id = ${userId}`
+    }
   }
 }

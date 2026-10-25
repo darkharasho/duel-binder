@@ -35,9 +35,11 @@ test('entries and snapshots follow the active owner', () => {
   const stats = getStats(db)
   expect(stats.totalCards).toBe(4)
   expect(stats.topEntries.map((e) => e.id)).toEqual([y.id])
+  expect(stats.valueHistory.map((p) => p.totalCards)).toEqual([4])
 
   deleteMeta(db, 'cloud_active_owner')
   expect(listEntries(db, ALL).map((e) => e.id)).toEqual([x.id])
+  expect(getStats(db).valueHistory).toEqual([])
 })
 
 test('adding the same printing under two owners keeps separate rows', () => {

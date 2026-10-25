@@ -3,7 +3,10 @@ export interface SyncScheduler {
   start(): void
   /** Clears every timer; a run in flight finishes but nothing follows it. */
   stop(): void
-  /** Asks for a run `delayMs` from now (default: the debounce); a later poke replaces an earlier one. */
+  /**
+   * With no delay, asks for a run `debounceMs` after the last such poke (a debounce). With a delay, asks for
+   * a run then; of several delayed pokes the earliest deadline wins, and a run starting meanwhile keeps it.
+   */
   poke(delayMs?: number): void
   /** Runs as soon as possible (after the run in flight, if any); resolves when that run ends. Never rejects. */
   runNow(): Promise<void>
@@ -21,6 +24,8 @@ export function createSyncScheduler(opts: {
   periodMs?: number
   onlinePollMs?: number
   backoffMs?: number[]
+  /** Called when a requested run is skipped because the network is down. */
+  onSkippedOffline?: () => void
 }): SyncScheduler {
   const debounceMs = opts.debounceMs ?? 5_000
   const periodMs = opts.periodMs ?? 300_000
@@ -35,10 +40,16 @@ export function createSyncScheduler(opts: {
   let notBefore = 0
   let wasOnline = true
   let nextTimer: ReturnType<typeof setTimeout> | null = null
+  /** The debounced edit poke. */
   let pokeTimer: ReturnType<typeof setTimeout> | null = null
+  /** The earliest delayed poke, and when it is due. */
+  let laterTimer: ReturnType<typeof setTimeout> | null = null
+  let laterAt = Infinity
   let pollTimer: ReturnType<typeof setInterval> | null = null
   /** runNow callers waiting for the next run to start and finish. */
   let waiting: (() => void)[] = []
+  /** runNow callers waiting for the run in flight. */
+  let inRun: (() => void)[] = []
 
   const clear = (t: ReturnType<typeof setTimeout> | null): null => {
     if (t !== null) clearTimeout(t)
@@ -54,6 +65,7 @@ export function createSyncScheduler(opts: {
     if (!started) return release(waiting.splice(0))
     if (!opts.isOnline()) {
       wasOnline = false
+      opts.onSkippedOffline?.()
       return release(waiting.splice(0))
     }
     if (running) {
@@ -66,8 +78,9 @@ export function createSyncScheduler(opts: {
   async function execute(): Promise<void> {
     running = true
     nextTimer = clear(nextTimer)
+    // An edit poked before this run started is in it; a delayed poke still runs at its own time.
     pokeTimer = clear(pokeTimer)
-    const mine = waiting
+    inRun = waiting
     waiting = []
     let ok = true
     try {
@@ -76,7 +89,7 @@ export function createSyncScheduler(opts: {
       ok = false
     }
     running = false
-    release(mine)
+    release(inRun.splice(0))
     if (!started) return release(waiting.splice(0))
 
     if (ok) {
@@ -126,18 +139,36 @@ export function createSyncScheduler(opts: {
       queued = false
       nextTimer = clear(nextTimer)
       pokeTimer = clear(pokeTimer)
+      laterTimer = clear(laterTimer)
+      laterAt = Infinity
       if (pollTimer !== null) clearInterval(pollTimer)
       pollTimer = null
+      // Nobody waits on a stopped scheduler, not even for the run in flight.
       release(waiting.splice(0))
+      release(inRun.splice(0))
     },
-    poke(delayMs = debounceMs) {
+    poke(delayMs?: number) {
       if (!started) return
-      pokeTimer = clear(pokeTimer)
-      const wait = Math.max(delayMs, notBefore - Date.now())
-      pokeTimer = setTimeout(() => {
-        pokeTimer = null
+      if (delayMs === undefined) {
+        pokeTimer = clear(pokeTimer)
+        pokeTimer = setTimeout(
+          () => {
+            pokeTimer = null
+            trigger()
+          },
+          Math.max(debounceMs, notBefore - Date.now())
+        )
+        return
+      }
+      const at = Date.now() + Math.max(delayMs, notBefore - Date.now())
+      if (at >= laterAt) return
+      laterTimer = clear(laterTimer)
+      laterAt = at
+      laterTimer = setTimeout(() => {
+        laterTimer = null
+        laterAt = Infinity
         trigger()
-      }, wait)
+      }, at - Date.now())
     },
     runNow() {
       if (!started) return Promise.resolve()

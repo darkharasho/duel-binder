@@ -82,7 +82,11 @@ export function createAccountService(deps: AccountDeps): AccountService {
       inFlight = run()
       return inFlight
     },
-    isOnline: () => deps.isOnline()
+    isOnline: () => deps.isOnline(),
+    // A run skipped for want of network shows as offline; the next successful run makes it idle again.
+    onSkippedOffline: () => {
+      if (token !== null && state !== 'offline') set('offline')
+    }
   })
 
   const storedUser = (): Me | null => {
@@ -133,6 +137,10 @@ export function createAccountService(deps: AccountDeps): AccountService {
       const client = deps.client(current, { signal: abort.signal })
       const outcome = await syncOnce(db, owner, client, now)
       if (mine !== session) return
+      // Before me(), so a failing me() can't swallow them.
+      if (outcome.changed) deps.emitDataChanged()
+      // The server prices newly pushed cards shortly; sync once more to bring them in.
+      if (outcome.pushedLive > 0) scheduler.poke(PRICE_FOLLOW_UP_MS)
       if (!meRefreshed) {
         const me = await client.me()
         if (mine !== session) return
@@ -142,9 +150,6 @@ export function createAccountService(deps: AccountDeps): AccountService {
         }
         meRefreshed = true
       }
-      if (outcome.changed) deps.emitDataChanged()
-      // The server prices newly pushed cards shortly; sync once more to bring them in.
-      if (outcome.pushedLive > 0) scheduler.poke(PRICE_FOLLOW_UP_MS)
       set('idle')
     } catch (e) {
       if (mine !== session) return
@@ -238,41 +243,50 @@ export function createAccountService(deps: AccountDeps): AccountService {
     session++
     scheduler.stop()
     runAbort?.abort()
+    // Signed out on disk before any network call: quitting during the push or revoke below can't leave
+    // the token in place, and start() revokes it if this sign-out doesn't get to.
+    tokens.addPendingRevoke(old)
+    forget()
     await inFlight?.catch(() => {})
 
-    // One best-effort push for this account, outside the run error handler: a late 401 or a timeout
-    // here can't change the status, and rows it doesn't reach stay dirty for this owner.
+    // One best-effort push for this account with the token still in memory, outside the run error
+    // handler: a late 401 or a timeout here can't change the status, and rows it doesn't reach stay
+    // dirty for this owner.
     if (deps.isOnline()) {
       const cap = AbortSignal.timeout(SIGN_OUT_CAP_MS)
       try {
-        await syncOnce(
+        const outcome = await syncOnce(
           db,
           activeOwner(db),
           deps.client(old, { timeoutMs: SIGN_OUT_CAP_MS, signal: cap }),
           now
         )
+        if (outcome.changed) deps.emitDataChanged()
       } catch {
         // Ignored: the rows stay dirty and push when this account signs in again.
       }
     }
 
-    if (!(await revoke(old))) tokens.addPendingRevoke(old)
-    forget()
+    if (await revoke(old)) tokens.removePendingRevoke(old)
     set('signed-out')
     return status()
+  }
+
+  function signIn(): Promise<AccountStatus> {
+    // A sign-out still finishing (final push, revoke) completes first.
+    if (signingOut) return signingOut.then(signIn)
+    if (token !== null || stopped) return Promise.resolve(status())
+    signingIn ??= doSignIn().finally(() => {
+      signingIn = null
+    })
+    return signingIn
   }
 
   return {
     status,
     isSignedIn: () => token !== null,
 
-    signIn() {
-      if (token !== null || stopped) return Promise.resolve(status())
-      signingIn ??= doSignIn().finally(() => {
-        signingIn = null
-      })
-      return signingIn
-    },
+    signIn,
 
     signOut() {
       signingOut ??= doSignOut().finally(() => {

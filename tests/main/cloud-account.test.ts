@@ -52,6 +52,8 @@ let online: boolean
 let unreachable: boolean
 type Fetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
 let fetchSpy: Mock<Fetch>
+/** While set, push requests wait for it, failing like a real fetch when their signal aborts. */
+let pushGate: Promise<void> | null
 let nextSignIn: { token: string; user: Me } | null
 let emitted: AccountStatus[]
 let emitDataChanged: Mock<() => void>
@@ -147,14 +149,37 @@ beforeEach(async () => {
   dir = mkdtempSync(join(tmpdir(), 'duel-binder-account-'))
   online = true
   unreachable = false
+  pushGate = null
   nextSignIn = null
   emitted = []
   emitDataChanged = vi.fn<() => void>()
   fetchSpy = vi.fn<Fetch>(async (input: RequestInfo | URL, init?: RequestInit) => {
     if (unreachable) throw new TypeError('fetch failed')
+    if (pushGate && String(input).includes('/api/sync/push')) {
+      const gate = pushGate
+      await new Promise<void>((resolve, reject) => {
+        void gate.then(resolve)
+        init?.signal?.addEventListener('abort', () =>
+          reject(new DOMException('The operation was aborted', 'AbortError'))
+        )
+      })
+    }
     return portal.fetch(input, init)
   })
 })
+
+const revokeCalls = (): number =>
+  fetchSpy.mock.calls.filter(([input]) => String(input).includes('/auth/desktop/revoke')).length
+
+/** Push requests block until the returned function is called. */
+function blockPushes(): () => void {
+  let open!: () => void
+  pushGate = new Promise<void>((r) => (open = r))
+  return () => {
+    pushGate = null
+    open()
+  }
+}
 
 afterEach(() => {
   for (const s of services.splice(0)) s.stop()
@@ -297,6 +322,7 @@ describe('account service', () => {
     addEntry(db, { printingId: pid(db, 'LOB-EN005'), imageId: DM, quantity: 4 }, T2)
     portal.serverDb.prepare('DELETE FROM sessions').run()
     const before = pushCalls()
+    const revokesBefore = revokeCalls()
 
     const s = await service.syncNow()
 
@@ -322,6 +348,7 @@ describe('account service', () => {
     await new Promise((r) => setTimeout(r, 20))
     expect(pushCalls()).toBe(before + 1)
     expect(service.status().error).toBe(SERVER_SIGNED_OUT)
+    expect(revokeCalls()).toBe(revokesBefore)
   })
 
   it('the token never appears in status or events', async () => {
@@ -527,5 +554,119 @@ describe('account service', () => {
     expect(second.status()).toMatchObject({ state: 'idle', user: { id: alice } })
     second.start()
     await vi.waitFor(() => expect(serverRows(alice)).toHaveLength(1))
+  })
+  it('sign-out clears the token file before any network call', async () => {
+    const service = makeService()
+    const token = await signInAs(service, me(alice, 'alice'))
+    addEntry(db, { printingId: pid(db, 'LOB-EN005'), imageId: DM, quantity: 4 }, T2)
+    const open = blockPushes()
+    const pushesBefore = pushCalls()
+
+    const signingOut = service.signOut()
+    await vi.waitFor(() => expect(pushCalls()).toBe(pushesBefore + 1))
+    // Quitting now would start the next launch signed out, with the token queued for revoking.
+    const store = new TokenStore(tokenFile(), fakeCipher)
+    expect(store.get()).toBeNull()
+    expect(store.pendingRevokes()).toEqual([token])
+    expect(getMeta(db, 'cloud_user')).toBeNull()
+    expect(service.isSignedIn()).toBe(false)
+
+    open()
+    expect(await signingOut).toMatchObject({ state: 'signed-out', error: null })
+    // The final push still went through with the in-memory token, and the revoke cleared the queue.
+    expect(serverRows(alice)).toEqual([{ uid: localRows()[0].uid, quantity: 4, deleted_at: null }])
+    expect(store.pendingRevokes()).toEqual([])
+    await expect(authCheck(token)).rejects.toBeInstanceOf(CloudAuthError)
+  })
+
+  it('a 401 during the final sign-out push still signs out cleanly', async () => {
+    const service = makeService()
+    await signInAs(service, me(alice, 'alice'))
+    addEntry(db, { printingId: pid(db, 'LOB-EN005'), imageId: DM, quantity: 4 }, T2)
+    portal.serverDb.prepare('DELETE FROM sessions').run()
+
+    const s = await service.signOut()
+
+    expect(s).toMatchObject({ state: 'signed-out', user: null, error: null, localOwner: 'alice' })
+    expect(new TokenStore(tokenFile(), fakeCipher).pendingRevokes()).toEqual([])
+    expect(localRows()).toEqual([expect.objectContaining({ owner_id: alice, dirty: 1 })])
+    expect(emitted.at(-1)).toMatchObject({ state: 'signed-out', error: null })
+  })
+
+  it('a failing me() on the first run still tells the renderer about pulled changes', async () => {
+    addEntry(
+      portal.serverDb,
+      { printingId: pid(portal.serverDb, 'LOB-EN005'), imageId: DM, quantity: 3 },
+      T1,
+      userScope(alice)
+    )
+    const realFetch = fetchSpy.getMockImplementation()!
+    fetchSpy.mockImplementation(async (input, init) =>
+      String(input).endsWith('/api/me')
+        ? new Response('down', { status: 503 })
+        : realFetch(input, init)
+    )
+    const service = makeService()
+    await signInAs(service, me(alice, 'alice'))
+    // Once for the owner switch, once for the pulled entry.
+    expect(emitDataChanged).toHaveBeenCalledTimes(2)
+    expect(listEntries(db, ALL)).toHaveLength(1)
+    expect(service.status().state).toBe('offline')
+  })
+
+  it('a run skipped for want of network shows offline, then idle after the next run', async () => {
+    online = false
+    const service = makeService()
+    await willSignInAs(me(alice, 'alice'))
+    await service.signIn()
+    expect(service.status().state).toBe('offline')
+    expect(emitted.at(-1)?.state).toBe('offline')
+    online = true
+    expect(await service.syncNow()).toMatchObject({ state: 'idle', error: null })
+  })
+
+  it('stop() during a run in flight resolves promptly', async () => {
+    const service = makeService()
+    await signInAs(service, me(alice, 'alice'))
+    addEntry(db, { printingId: pid(db, 'LOB-EN005'), imageId: DM, quantity: 4 }, T2)
+    blockPushes()
+    const pushesBefore = pushCalls()
+    const syncing = service.syncNow()
+    await vi.waitFor(() => expect(pushCalls()).toBe(pushesBefore + 1))
+    service.stop()
+    const done = await Promise.race([
+      syncing.then(() => 'done'),
+      new Promise((r) => setTimeout(() => r('hung'), 1_000))
+    ])
+    expect(done).toBe('done')
+    // The edit waits, dirty, for the next run.
+    expect(localRows()).toEqual([expect.objectContaining({ dirty: 1 })])
+  })
+
+  it('stop() during a sign-in resolves promptly', async () => {
+    const service = createAccountService({
+      db,
+      tokens: new TokenStore(tokenFile(), fakeCipher),
+      client: () => {
+        throw new Error('no client while signing in')
+      },
+      signIn: (signal) =>
+        new Promise((_, reject) =>
+          signal.addEventListener('abort', () => reject(new Error('Sign-in was cancelled')))
+        ),
+      emit: (s) => emitted.push(s),
+      emitDataChanged,
+      isOnline: () => true,
+      now: NOW
+    })
+    services.push(service)
+    const signingIn = service.signIn()
+    service.stop()
+    const done = await Promise.race([
+      signingIn.then(() => 'done'),
+      new Promise((r) => setTimeout(() => r('hung'), 1_000))
+    ])
+    expect(done).toBe('done')
+    expect(service.isSignedIn()).toBe(false)
   })
 })

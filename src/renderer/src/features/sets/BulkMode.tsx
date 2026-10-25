@@ -79,6 +79,16 @@ export function BulkMode({ cards, pending, adjust }: BulkModeProps): React.JSX.E
   const [highlightKey, setHighlightKey] = useState<string | null>(null)
   const [added, setAdded] = useState<AddedItem[]>([])
   const nextId = useRef(0)
+  // The newest strip, readable between renders so two quick undos hit two different items.
+  const addedRef = useRef<AddedItem[]>([])
+  // Each strip item's save, so an undo can wait for it and only reverse an add that landed.
+  const saves = useRef(new Map<number, Promise<boolean>>())
+  // Whether an arrow key moved the highlight since the query last changed.
+  const moved = useRef(false)
+  const setStrip = useCallback((next: (list: AddedItem[]) => AddedItem[]): void => {
+    addedRef.current = next(addedRef.current)
+    setAdded(addedRef.current)
+  }, [])
   const tiles = useMemo(() => bulkTiles(filterBulkCards(cards, query)), [cards, query])
   const highlight = tiles.some((t) => t.key === highlightKey)
     ? highlightKey
@@ -99,37 +109,52 @@ export function BulkMode({ cards, pending, adjust }: BulkModeProps): React.JSX.E
   }, [highlight])
 
   /** The one way to add: Enter, a tile's + and its photo all list the card under "Just added". */
-  const add = useCallback((tile: BulkTileData, printingId: number) => {
-    const { card, rarity } = tile
-    const item: AddedItem = {
-      id: nextId.current++,
-      cardId: card.cardId,
-      printingId,
-      name: card.name,
-      rarity: rarity.rarity,
-      setCode: rarity.codes.find((c) => c.printingId === printingId)?.setCode ?? '',
-      imageId: card.imageId
-    }
-    setAdded((list) => [...list, item])
-    void adjustRef.current(card.cardId, printingId, 1).then((saved) => {
-      // A failed save was rolled back already, so there is nothing left to undo.
-      if (!saved) setAdded((list) => list.filter((i) => i.id !== item.id))
-    })
-  }, [])
+  const add = useCallback(
+    (tile: BulkTileData, printingId: number) => {
+      const { card, rarity } = tile
+      const item: AddedItem = {
+        id: nextId.current++,
+        cardId: card.cardId,
+        printingId,
+        name: card.name,
+        rarity: rarity.rarity,
+        setCode: rarity.codes.find((c) => c.printingId === printingId)?.setCode ?? '',
+        imageId: card.imageId
+      }
+      setStrip((list) => [...list, item])
+      const save = adjustRef.current(card.cardId, printingId, 1)
+      saves.current.set(item.id, save)
+      void save.then((saved) => {
+        saves.current.delete(item.id)
+        // A failed save was rolled back already, so there is nothing left to undo.
+        if (!saved) setStrip((list) => list.filter((i) => i.id !== item.id))
+      })
+    },
+    [setStrip]
+  )
 
-  const undo = (id: number): void => {
-    const item = added.find((i) => i.id === id)
-    if (!item) return
-    setAdded((list) => list.filter((i) => i.id !== id))
-    void adjust(item.cardId, item.printingId, -1)
-  }
+  const undo = useCallback(
+    (id: number): void => {
+      const item = addedRef.current.find((i) => i.id === id)
+      if (!item) return
+      setStrip((list) => list.filter((i) => i.id !== id))
+      // Only reverse the add once it has saved; if it failed, nothing was added.
+      const save = saves.current.get(id) ?? Promise.resolve(true)
+      void save.then((saved) => {
+        if (saved) void adjustRef.current(item.cardId, item.printingId, -1)
+      })
+    },
+    [setStrip]
+  )
 
   const changeQuery = (q: string): void => {
     setQuery(q)
     setHighlightKey(null)
+    moved.current = false
   }
 
   const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>): void => {
+    if (e.nativeEvent.isComposing) return
     switch (e.key) {
       case 'ArrowRight':
       case 'ArrowDown':
@@ -141,9 +166,12 @@ export function BulkMode({ cards, pending, adjust }: BulkModeProps): React.JSX.E
         const at = tiles.findIndex((t) => t.key === highlight)
         const next = Math.min(tiles.length - 1, Math.max(0, at + step))
         setHighlightKey(tiles[next].key)
+        moved.current = true
         return
       }
       case 'Enter': {
+        // A second Enter on the cleared box must not add the first tile by surprise.
+        if (query === '' && !moved.current) return
         const tile = tiles.find((t) => t.key === highlight)
         if (!tile) return
         e.preventDefault()
@@ -152,7 +180,7 @@ export function BulkMode({ cards, pending, adjust }: BulkModeProps): React.JSX.E
         return
       }
       case 'Backspace': {
-        const newest = added[added.length - 1]
+        const newest = addedRef.current[addedRef.current.length - 1]
         if (query !== '' || !newest) return
         e.preventDefault()
         undo(newest.id)

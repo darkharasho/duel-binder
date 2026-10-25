@@ -423,6 +423,69 @@ describe('SetChecklist bulk mode', () => {
     expect(adjust).toHaveBeenCalledTimes(1)
   })
 
+  it('Undo before the add saves sends no remove when the add fails', async () => {
+    const { adjust, rejectNext } = setup()
+    await enterBulk()
+    await userEvent.type(bulkBox(), '2{Enter}')
+    await userEvent.keyboard('{Backspace}')
+    expect(screen.queryByRole('list', { name: 'Just added' })).not.toBeInTheDocument()
+    rejectNext(new Error('x'))
+    await waitFor(() => expect(toast.error).toHaveBeenCalled())
+    await new Promise((r) => setTimeout(r, 20))
+    expect(adjust).toHaveBeenCalledTimes(1)
+    expect(adjust).not.toHaveBeenCalledWith('Metal Raiders', 'en', PRINTING.beta, -1)
+  })
+
+  it('Undo before the add saves sends the remove once it has saved', async () => {
+    const { adjust, releaseNext } = setup()
+    await enterBulk()
+    await userEvent.type(bulkBox(), '2{Enter}')
+    await userEvent.keyboard('{Backspace}')
+    expect(screen.queryByRole('list', { name: 'Just added' })).not.toBeInTheDocument()
+    expect(adjust).toHaveBeenCalledTimes(1)
+    releaseNext()
+    await waitFor(() =>
+      expect(adjust).toHaveBeenLastCalledWith('Metal Raiders', 'en', PRINTING.beta, -1)
+    )
+    expect(adjust).toHaveBeenCalledTimes(2)
+  })
+
+  it('two quick Backspaces undo two different adds', async () => {
+    const { adjust, releaseNext } = setup()
+    await enterBulk()
+    await userEvent.type(bulkBox(), '2{Enter}')
+    await userEvent.type(bulkBox(), '10{Enter}')
+    releaseNext()
+    await waitFor(() => expect(adjust).toHaveBeenCalledTimes(2))
+    releaseNext()
+    await userEvent.keyboard('{Backspace}{Backspace}')
+    await waitFor(() => expect(adjust).toHaveBeenCalledTimes(4))
+    const removes = adjust.mock.calls.filter((c) => c[3] === -1).map((c) => c[2])
+    expect(removes).toEqual(expect.arrayContaining([PRINTING.beta, PRINTING.gammaEN010]))
+    expect(screen.queryByRole('list', { name: 'Just added' })).not.toBeInTheDocument()
+  })
+
+  it('a second Enter on the cleared box adds nothing; an arrow then Enter does', async () => {
+    const { adjust } = setup()
+    await enterBulk()
+    await userEvent.type(bulkBox(), '2{Enter}')
+    await userEvent.keyboard('{Enter}')
+    expect(adjust).toHaveBeenCalledTimes(1)
+    await userEvent.keyboard('{ArrowRight}{Enter}')
+    expect(adjust).toHaveBeenCalledTimes(2)
+  })
+
+  it('clicking the photo lists the card under Just added', async () => {
+    setup()
+    await enterBulk()
+    await userEvent.click(screen.getByRole('button', { name: 'Add one Gamma Trap Rare (photo)' }))
+    expect(
+      within(screen.getByRole('list', { name: 'Just added' })).getByRole('button', {
+        name: 'Undo Gamma Trap Rare'
+      })
+    ).toBeInTheDocument()
+  })
+
   it('the highlight stays on its tile when the counts change', async () => {
     const { releaseNext } = setup()
     await enterBulk()

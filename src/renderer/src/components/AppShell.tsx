@@ -1,6 +1,6 @@
 import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import logo from '@/assets/logo.svg'
-import { isMac } from '@/lib/platform'
+import { isMac, isWeb } from '@/lib/platform'
 import { cn } from '@/lib/utils'
 import { ArtWash } from './ArtWash'
 import { ArtWashContext } from './artWashContext'
@@ -45,12 +45,16 @@ export function AppShell({ page, onNavigate, onAddCard, children }: AppShellProp
   return (
     <div className="group/shell relative isolate flex h-screen flex-col overflow-hidden bg-background text-foreground tabular-nums">
       <ArtWash src={wash} />
-      {/* Carries a page header's glass up to the top of the window, so it doesn't float as a box. */}
-      <div
-        aria-hidden
-        className="absolute left-[199px] right-0 top-0 hidden h-9 border-l border-white/[0.06] bg-background/60 backdrop-blur-xl group-has-[[data-page-header]]/shell:block"
-      />
-      <TitleBar />
+      {!isWeb() && (
+        <>
+          {/* Carries a page header's glass up to the top of the window, so it doesn't float as a box. */}
+          <div
+            aria-hidden
+            className="absolute left-[199px] right-0 top-0 hidden h-9 border-l border-white/[0.06] bg-background/60 backdrop-blur-xl group-has-[[data-page-header]]/shell:block"
+          />
+          <TitleBar />
+        </>
+      )}
       <div className="flex min-h-0 flex-1">
         <aside className="flex w-[200px] shrink-0 flex-col gap-6 border-r border-white/[0.06] px-4 pb-5 pt-1">
           <div className="flex items-center gap-2.5">

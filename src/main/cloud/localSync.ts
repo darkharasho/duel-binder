@@ -52,18 +52,22 @@ export function accountState(
   return { cursor: r ? Number(r.cursor) : 0, syncedAt: r?.synced_at ?? null }
 }
 
-/** Updates the given fields of an account recorded by `ensureAccount`. */
+/** Updates the given fields of the account, recording it (with no name yet) if `ensureAccount` hasn't. */
 export function saveAccountState(
   db: SqlDb,
   owner: number,
   s: { cursor?: number; syncedAt?: string }
 ): void {
   db.prepare(
-    `UPDATE cloud_accounts SET cursor = COALESCE(?, cursor), synced_at = COALESCE(?, synced_at) WHERE owner_id = ?`
-  ).run(s.cursor ?? null, s.syncedAt ?? null, owner)
+    `INSERT INTO cloud_accounts (owner_id, name, cursor, synced_at) VALUES (?, '', COALESCE(?, 0), ?)
+     ON CONFLICT(owner_id) DO UPDATE SET cursor = COALESCE(?, cursor), synced_at = COALESCE(?, synced_at)`
+  ).run(owner, s.cursor ?? null, s.syncedAt ?? null, s.cursor ?? null, s.syncedAt ?? null)
 }
 
-/** Moves the never-signed-in collection (owner 0) to `owner`, to be pushed; returns the entries moved. */
+/**
+ * Moves the never-signed-in collection (owner 0) to `owner`, to be pushed; returns the entries moved.
+ * Owner-0 rows exist only before the first sign-in ever, so the adopting owner has no local rows yet.
+ */
 export function adoptLocalData(db: SqlDb, owner: number): number {
   return db.transaction(() => {
     const moved = db
@@ -82,8 +86,7 @@ interface LocalRow {
   owner_id: number
   printing_id: number
   image_id: number
-  /** Null only when the row's printing has left the catalog. */
-  pkey: string | null
+  pkey: string
   quantity: number
   notes: string
   created_at: string
@@ -94,9 +97,9 @@ interface LocalRow {
 
 const ROW_SELECT = `SELECT e.id, e.uid, e.owner_id, e.printing_id, e.image_id, p.pkey, e.quantity, e.notes,
   e.created_at, e.updated_at, e.deleted_at, e.dirty
-  FROM collection_entries e LEFT JOIN card_printings p ON p.id = e.printing_id`
+  FROM collection_entries e JOIN card_printings p ON p.id = e.printing_id`
 
-const toWire = (r: LocalRow & { pkey: string }): WireEntry => ({
+const toWire = (r: LocalRow): WireEntry => ({
   uid: r.uid,
   pkey: r.pkey,
   imageId: r.image_id,
@@ -116,11 +119,11 @@ export function dirtyEntries(
 ): WireEntry[] {
   const rows = db
     .prepare(
-      `${ROW_SELECT.replace(' LEFT JOIN ', ' JOIN ')}
+      `${ROW_SELECT}
        WHERE e.owner_id = ? AND e.dirty = 1 AND e.uid NOT IN (SELECT value FROM json_each(?))
        ORDER BY e.id LIMIT ?`
     )
-    .all(owner, JSON.stringify([...skip]), limit) as (LocalRow & { pkey: string })[]
+    .all(owner, JSON.stringify([...skip]), limit) as LocalRow[]
   return rows.map(toWire)
 }
 
@@ -131,11 +134,15 @@ export function markPushed(db: SqlDb, e: WireEntry): void {
   ).run(e.uid, e.updatedAt, e.deletedAt)
 }
 
-/** Tombstones a uid at `ts` as already agreed with the server (a `merged` push), so it is not pushed again. */
-export function tombstoneClean(db: SqlDb, uid: string, ts: string): void {
+/**
+ * Tombstones the pushed entry `e` at `ts`, clean, as the server did (a `merged` push). Like
+ * `markPushed`, it leaves a row edited since `e` was read alone: still live and dirty.
+ */
+export function tombstoneClean(db: SqlDb, e: WireEntry, ts: string): void {
   db.prepare(
-    'UPDATE collection_entries SET deleted_at = ?, updated_at = ?, dirty = 0 WHERE uid = ?'
-  ).run(ts, ts, uid)
+    `UPDATE collection_entries SET deleted_at = ?, updated_at = ?, dirty = 0
+     WHERE uid = ? AND updated_at = ? AND deleted_at IS ?`
+  ).run(ts, ts, e.uid, e.updatedAt, e.deletedAt)
 }
 
 const findPrinting = (db: SqlDb, e: WireEntry): number | undefined =>
@@ -173,6 +180,8 @@ export function applyRemote(db: SqlDb, owner: number, e: WireEntry): ApplyResult
     if (local && local.owner_id !== owner) return 'ignored'
     if (!local && e.deletedAt !== null) return 'ignored'
 
+    if (local && local.dirty === 1 && !replaces(e, toWire(local))) return 'kept-local'
+
     let printingId = findPrinting(db, e)
     let imageId = e.imageId
     if (printingId === undefined) {
@@ -184,14 +193,6 @@ export function applyRemote(db: SqlDb, owner: number, e: WireEntry): ApplyResult
       printingId = local.printing_id
       imageId = local.image_id
     }
-
-    if (
-      local &&
-      local.dirty === 1 &&
-      local.pkey !== null &&
-      !replaces(e, toWire({ ...local, pkey: local.pkey }))
-    )
-      return 'kept-local'
 
     const write = (deletedAt: string | null, updatedAt: string, dirty: number): void => {
       const fields = [
@@ -227,7 +228,7 @@ export function applyRemote(db: SqlDb, owner: number, e: WireEntry): ApplyResult
         .get(owner, printingId, imageId, e.uid) as LocalRow | undefined
       if (other) {
         const at = editTime(e)
-        if (keepsKey(e, toWire({ ...other, pkey: e.pkey }))) {
+        if (keepsKey(e, toWire(other))) {
           // The local row loses; it stays dirty so the server hears of the delete.
           db.prepare(
             'UPDATE collection_entries SET deleted_at = ?, updated_at = ?, dirty = 1 WHERE id = ?'
@@ -245,7 +246,10 @@ export function applyRemote(db: SqlDb, owner: number, e: WireEntry): ApplyResult
   })()
 }
 
-/** Retries every owner's waiting entries against the current catalog. */
+/**
+ * Retries every owner's waiting entries against the current catalog. A waiting entry no newer than the
+ * local row is dropped unapplied, so a late replay can't roll back a row the server has since updated.
+ */
 export function applyPending(db: SqlDb): { applied: number; remaining: number } {
   return db.transaction(() => {
     const rows = db
@@ -256,11 +260,18 @@ export function applyPending(db: SqlDb): { applied: number; remaining: number } 
       entry: string
     }[]
     let applied = 0
+    const drop = db.prepare('DELETE FROM sync_pending WHERE owner_id = ? AND uid = ?')
+    const byUid = db.prepare(`${ROW_SELECT} WHERE e.uid = ?`)
     for (const r of rows) {
-      const result = applyRemote(db, r.owner_id, JSON.parse(r.entry) as WireEntry)
+      const e = JSON.parse(r.entry) as WireEntry
+      const local = byUid.get(e.uid) as LocalRow | undefined
+      if (local && !replaces(e, toWire(local))) {
+        drop.run(r.owner_id, r.uid)
+        continue
+      }
+      const result = applyRemote(db, r.owner_id, e)
       if (result === 'applied') applied++
-      if (result !== 'pending')
-        db.prepare('DELETE FROM sync_pending WHERE owner_id = ? AND uid = ?').run(r.owner_id, r.uid)
+      if (result !== 'pending') drop.run(r.owner_id, r.uid)
     }
     const { n } = db.prepare('SELECT COUNT(*) AS n FROM sync_pending').get() as { n: number }
     return { applied, remaining: Number(n) }

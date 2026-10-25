@@ -49,6 +49,7 @@ interface Row {
   image_id: number
   quantity: number
   notes: string
+  created_at: string
   updated_at: string
   deleted_at: string | null
   dirty: number
@@ -58,6 +59,26 @@ const row = (uid: string): Row | undefined =>
 const uidOf = (id: number): string =>
   (db.prepare('SELECT uid FROM collection_entries WHERE id = ?').get(id) as { uid: string }).uid
 const cleanAll = (): void => void db.prepare('UPDATE collection_entries SET dirty = 0').run()
+
+/** A local row as the wire carries it. */
+const wireOf = (uid: string): WireEntry => {
+  const r = row(uid)!
+  const { pkey } = db
+    .prepare('SELECT pkey FROM card_printings WHERE id = ?')
+    .get(r.printing_id) as {
+    pkey: string
+  }
+  return {
+    uid,
+    pkey,
+    imageId: r.image_id,
+    quantity: r.quantity,
+    notes: r.notes,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+    deletedAt: r.deleted_at
+  }
+}
 
 /** A remote entry on Dark Magician LOB-EN005 unless overridden. */
 const wire = (o: Partial<WireEntry> = {}): WireEntry => ({
@@ -78,6 +99,18 @@ const addAs = (owner: number, code: string, imageId: number, at = now, quantity 
   return uidOf(addEntry(db, { printingId: printing(code).id, imageId, quantity }, at).id)
 }
 
+/** Adds card 999 with art 999 and its printing `en|999|NEW-001|Rare` to the catalog. */
+const addNewPrinting = (): void => {
+  db.prepare(
+    `INSERT INTO cards (id, name, type, frame_type, race, "desc", updated_at)
+     VALUES (999, 'New Card', 'Normal Monster', 'normal', 'Dragon', '', ?)`
+  ).run(t0)
+  db.prepare('INSERT INTO card_images (image_id, card_id, sort_order) VALUES (999, 999, 0)').run()
+  db.prepare(
+    `INSERT INTO card_printings (card_id, set_name, set_code, set_rarity) VALUES (999, 'New Set', 'NEW-001', 'Rare')`
+  ).run()
+}
+
 test('active owner and account state round-trip', () => {
   expect(activeOwner(db)).toBe(0)
   setActiveOwner(db, 7)
@@ -94,6 +127,13 @@ test('active owner and account state round-trip', () => {
   saveAccountState(db, 7, { syncedAt: now.toISOString() })
   expect(accountState(db, 7)).toEqual({ cursor: 42, syncedAt: now.toISOString() })
   expect(accountName(db, 7)).toBe('Yugi Muto')
+
+  // Saving before ensureAccount records the account rather than dropping the cursor.
+  saveAccountState(db, 9, { cursor: 5 })
+  expect(accountState(db, 9)).toEqual({ cursor: 5, syncedAt: null })
+  ensureAccount(db, 9, 'Kaiba')
+  expect(accountState(db, 9)).toEqual({ cursor: 5, syncedAt: null })
+  expect(accountName(db, 9)).toBe('Kaiba')
 })
 
 test('dirty entries are per owner, carry the pkey and cap notes', () => {
@@ -248,7 +288,7 @@ test('a remote entry on a printing+art the owner already holds converges to the 
 
 test('tombstoneClean deletes a uid without marking it dirty', () => {
   const a = addAs(7, 'LOB-EN005', DM)
-  tombstoneClean(db, a, later.toISOString())
+  tombstoneClean(db, wireOf(a), later.toISOString())
   expect(row(a)).toMatchObject({
     deleted_at: later.toISOString(),
     updated_at: later.toISOString(),
@@ -258,6 +298,59 @@ test('tombstoneClean deletes a uid without marking it dirty', () => {
   const winner = wire({ quantity: 4, updatedAt: later.toISOString() })
   expect(applyRemote(db, 7, winner)).toBe('applied')
   expect(row(winner.uid)).toMatchObject({ quantity: 4, deleted_at: null, dirty: 0 })
+})
+
+test('a merged result does not tombstone an entry edited during the push', () => {
+  const mid = new Date(now.getTime() + 30 * 60_000).toISOString()
+
+  // Quantity edited during the push: the row stays live and dirty, and beats the older winner.
+  const a = addAs(7, 'LOB-EN005', DM, now)
+  const [pushed] = dirtyEntries(db, 7, 10)
+  updateEntry(db, row(a)!.id, { quantity: 5 }, later)
+  tombstoneClean(db, pushed, mid)
+  expect(row(a)).toMatchObject({ quantity: 5, deleted_at: null, dirty: 1 })
+  const winner = wire({ quantity: 2, updatedAt: mid })
+  expect(applyRemote(db, 7, winner)).toBe('ignored')
+  expect(row(a)).toMatchObject({ quantity: 5, deleted_at: null, dirty: 1 })
+  expect(row(winner.uid)).toBeUndefined()
+
+  // Moved to another printing during the push: the row stays live there, and the winner applies too.
+  const b = addAs(7, 'LOB-EN119', POT, now)
+  const [pushedB] = dirtyEntries(db, 7, 10, new Set([a]))
+  updateEntry(db, row(b)!.id, { printingId: printing('SDY-006').id, imageId: DM }, later)
+  tombstoneClean(db, pushedB, mid)
+  expect(row(b)).toMatchObject({ printing_id: printing('SDY-006').id, deleted_at: null, dirty: 1 })
+  const winnerB = wire({ pkey: printing('LOB-EN119').pkey, imageId: POT, updatedAt: mid })
+  expect(applyRemote(db, 7, winnerB)).toBe('applied')
+  expect(row(winnerB.uid)).toMatchObject({ deleted_at: null, dirty: 0 })
+  expect(row(b)).toMatchObject({ deleted_at: null, dirty: 1 })
+})
+
+test('a remote tombstone on a printing this computer lacks still deletes the known uid', () => {
+  const r = wire({ quantity: 2 })
+  expect(applyRemote(db, 7, r)).toBe('applied')
+  const tomb = {
+    ...r,
+    pkey: 'en|999|NEW-001|Rare',
+    imageId: 999,
+    updatedAt: later.toISOString(),
+    deletedAt: later.toISOString()
+  }
+  expect(applyRemote(db, 7, tomb)).toBe('applied')
+  expect(row(r.uid)).toMatchObject({
+    deleted_at: later.toISOString(),
+    printing_id: printing('LOB-EN005').id,
+    image_id: DM,
+    dirty: 0
+  })
+  expect(pendingCount(db, 7)).toBe(0)
+})
+
+test('a uid held by another owner is ignored', () => {
+  const r = wire({ quantity: 2 })
+  expect(applyRemote(db, 8, r)).toBe('applied')
+  expect(applyRemote(db, 7, { ...r, quantity: 9, updatedAt: later.toISOString() })).toBe('ignored')
+  expect(row(r.uid)).toMatchObject({ owner_id: 8, quantity: 2 })
 })
 
 test('an unknown printing waits in sync_pending and applies once the catalog has it', () => {
@@ -275,17 +368,32 @@ test('an unknown printing waits in sync_pending and applies once the catalog has
   expect(applyPending(db)).toEqual({ applied: 0, remaining: 1 })
   expect(row(r.uid)).toBeUndefined()
 
-  db.prepare(
-    `INSERT INTO cards (id, name, type, frame_type, race, "desc", updated_at)
-     VALUES (999, 'New Card', 'Normal Monster', 'normal', 'Dragon', '', ?)`
-  ).run(t0)
-  db.prepare('INSERT INTO card_images (image_id, card_id, sort_order) VALUES (999, 999, 0)').run()
-  db.prepare(
-    `INSERT INTO card_printings (card_id, set_name, set_code, set_rarity) VALUES (999, 'New Set', 'NEW-001', 'Rare')`
-  ).run()
+  addNewPrinting()
   expect(applyPending(db)).toEqual({ applied: 1, remaining: 0 })
   expect(row(r.uid)).toMatchObject({ owner_id: 7, quantity: 2, dirty: 0 })
   expect(pendingCount(db, 7)).toBe(0)
+})
+
+test('a late pending replay does not roll back a newer clean row', () => {
+  const v2 = wire({ quantity: 4, updatedAt: later.toISOString() })
+  expect(applyRemote(db, 7, v2)).toBe('applied')
+  // An older copy of the same uid, on a printing not yet in the catalog, arrives afterwards.
+  const v1 = {
+    ...v2,
+    pkey: 'en|999|NEW-001|Rare',
+    imageId: 999,
+    quantity: 1,
+    updatedAt: now.toISOString()
+  }
+  expect(applyRemote(db, 7, v1)).toBe('pending')
+  addNewPrinting()
+  expect(applyPending(db)).toEqual({ applied: 0, remaining: 0 })
+  expect(row(v2.uid)).toMatchObject({
+    quantity: 4,
+    printing_id: printing('LOB-EN005').id,
+    updated_at: later.toISOString(),
+    dirty: 0
+  })
 })
 
 test('adopting moves never-signed-in entries and snapshots to the first owner', () => {
@@ -330,8 +438,8 @@ test('purge removes only that owner’s clean tombstones', () => {
   const live = addAs(7, 'SDY-006', DM)
   const other = addAs(8, 'LOB-EN005', DM)
   cleanAll()
-  tombstoneClean(db, cleanTomb, later.toISOString())
-  tombstoneClean(db, other, later.toISOString())
+  tombstoneClean(db, wireOf(cleanTomb), later.toISOString())
+  tombstoneClean(db, wireOf(other), later.toISOString())
   db.prepare('UPDATE collection_entries SET deleted_at = ?, dirty = 1 WHERE uid = ?').run(
     later.toISOString(),
     dirtyTomb

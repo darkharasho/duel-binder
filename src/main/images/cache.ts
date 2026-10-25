@@ -7,6 +7,7 @@ import type { ReadableStream as WebReadableStream } from 'node:stream/web'
 import { KONAMI_LOGO_PREFIX } from '../konami/logos'
 import { PACK_ART_PREFIX } from '../konami/packArt'
 import { createLimiter, type Limiter } from './limiter'
+import { setImageKey } from '../../shared/setImages'
 
 /** 'cropped' is the artwork alone, without the card frame. */
 export type ImageSize = 'small' | 'full' | 'cropped'
@@ -31,13 +32,7 @@ export function parseImageUrl(url: string): { size: ImageSize; id: number } | nu
 }
 
 const SET_KEY_RE = /^[A-Za-z0-9_-]+$/
-const SET_IMAGE_RE = /^https:\/\/images\.ygoprodeck\.com\/images\/sets\/([A-Za-z0-9_-]+)\.jpg$/
-
-/** Stem of a YGOPRODeck set-image URL; null for anything outside that folder. */
-export function setImageKey(sourceUrl: string | null): string | null {
-  if (sourceUrl === null) return null
-  return SET_IMAGE_RE.exec(sourceUrl)?.[1] ?? null
-}
+export { setImageKey }
 
 const YUGIPEDIA_IMAGE_PREFIX = 'https://ms.yugipedia.com/'
 const REPO_URL = 'https://github.com/darkharasho/duel-binder'

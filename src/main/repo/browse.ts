@@ -1,4 +1,4 @@
-import type Database from 'better-sqlite3'
+import type { SqlDb } from '../db/sql'
 import type { BrowseCard, BrowseFacets, BrowseFilters, BrowsePage } from '../../shared/types'
 import { buildFtsQuery } from './cards'
 
@@ -99,7 +99,7 @@ function whereClause(f: BrowseFilters): { sql: string; params: unknown[] } {
 }
 
 /** One page of every card in the database, filtered and sorted. Cards missing the sort value go last. */
-export function browseCards(db: Database.Database, f: BrowseFilters): BrowsePage {
+export function browseCards(db: SqlDb, f: BrowseFilters): BrowsePage {
   const { sql, params } = whereClause(f)
   const sortCol = SORT_SQL[f.sort] ?? SORT_SQL.name
   const dir = f.dir === 'desc' ? 'DESC' : 'ASC'
@@ -149,7 +149,7 @@ export function browseCards(db: Database.Database, f: BrowseFilters): BrowsePage
 }
 
 /** Filter options across the whole card database (English sets and rarities). */
-export function browseFacets(db: Database.Database): BrowseFacets {
+export function browseFacets(db: SqlDb): BrowseFacets {
   const distinct = (sql: string): string[] =>
     (db.prepare(sql).all() as { v: string }[]).map((r) => r.v)
   const col = (c: string): string[] =>

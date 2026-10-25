@@ -1,9 +1,9 @@
-import type Database from 'better-sqlite3'
-import { RARITY_LABEL } from '../db/database'
+import type { SqlDb } from '../db/sql'
+import { RARITY_LABEL } from '../db/schema'
 import { pickDefaultCode, setNumber, setPrefix } from '../../shared/sets'
 import type { ChecklistCard, ChecklistRarity, SetChecklist, SetSummary } from '../../shared/types'
 import type { Language } from '../../shared/languages'
-import { setImageKey } from '../images/cache'
+import { setImageKey } from '../../shared/setImages'
 import { addEntry, CollectionError } from './collection'
 
 interface SummaryDbRow {
@@ -71,7 +71,7 @@ const COVERS = `
   FROM ranked r WHERE r.rn = 1`
 
 function coverImages(
-  db: Database.Database,
+  db: SqlDb,
   only?: { language: Language; setName: string }
 ): Map<string, number> {
   const sql = COVERS.replace('%WHERE%', only ? 'AND p.language = ? AND p.set_name = ?' : '')
@@ -104,19 +104,19 @@ function toSummary(r: SummaryDbRow, covers: Map<string, number>): SetSummary {
 
 /** Completion summary of every (language, set); English first within a name. */
 /** Source URL of a stored set image key: a Yugipedia set image or logo, an official pack render, or a Konami logo. */
-export function findSetImageUrl(db: Database.Database, key: string): string | null {
+export function findSetImageUrl(db: SqlDb, key: string): string | null {
   const row = db
     .prepare(
-      `SELECT image_url FROM sets WHERE image_key = @key
-       UNION ALL SELECT image_url FROM pack_art WHERE image_key = @key
-       UNION ALL SELECT image_url FROM set_logos WHERE image_key = @key
-       UNION ALL SELECT image_url FROM konami_logos WHERE image_key = @key LIMIT 1`
+      `SELECT image_url FROM sets WHERE image_key = ?
+       UNION ALL SELECT image_url FROM pack_art WHERE image_key = ?
+       UNION ALL SELECT image_url FROM set_logos WHERE image_key = ?
+       UNION ALL SELECT image_url FROM konami_logos WHERE image_key = ? LIMIT 1`
     )
-    .get({ key }) as { image_url: string | null } | undefined
+    .get(key, key, key, key) as { image_url: string | null } | undefined
   return row?.image_url ?? null
 }
 
-export function listSets(db: Database.Database): SetSummary[] {
+export function listSets(db: SqlDb): SetSummary[] {
   const covers = coverImages(db)
   return (db.prepare(`${SUMMARY} GROUP BY p.language, p.set_name ORDER BY p.set_name, p.language <> 'en', p.language`).all() as SummaryDbRow[]).map((r) => toSummary(r, covers))
 }
@@ -169,7 +169,7 @@ const sum = (entries: EntryDbRow[]): number => entries.reduce((n, e) => n + e.qu
 
 /** Checklist cards of a set, optionally limited to one card, sorted by number (nulls last) then name. */
 function checklistCards(
-  db: Database.Database,
+  db: SqlDb,
   setName: string,
   language: Language,
   cardId?: number
@@ -270,7 +270,7 @@ function checklistCards(
 
 /** The set's summary and checklist; null when no printing has that set_name in that language. */
 export function getChecklist(
-  db: Database.Database,
+  db: SqlDb,
   setName: string,
   language: Language
 ): SetChecklist | null {
@@ -287,7 +287,7 @@ export function getChecklist(
  * Returns the printing's card as it now appears in the set's checklist.
  */
 export function adjustPrinting(
-  db: Database.Database,
+  db: SqlDb,
   setName: string,
   language: Language,
   printingId: number,

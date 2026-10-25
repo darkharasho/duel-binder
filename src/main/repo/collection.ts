@@ -1,5 +1,5 @@
-import type Database from 'better-sqlite3'
-import { RARITY_LABEL } from '../db/database'
+import type { SqlDb } from '../db/sql'
+import { RARITY_LABEL } from '../db/schema'
 import { LANGUAGES } from '../../shared/languages'
 import { priceFor } from '../../shared/pricing'
 import type { AddEntryInput, CollectionFilters, EntryView, Facets, UpdateEntryInput } from '../../shared/types'
@@ -76,12 +76,12 @@ function toView(r: EntryDbRow, priceStatus: string | null): EntryView {
   }
 }
 
-export function getEntry(db: Database.Database, id: number): EntryView | null {
+export function getEntry(db: SqlDb, id: number): EntryView | null {
   const row = db.prepare(`${SELECT} WHERE e.id = ?`).get(id) as EntryDbRow | undefined
   return row ? toView(row, getMeta(db, 'price_service_status')) : null
 }
 
-function requireEntry(db: Database.Database, id: number): EntryView {
+function requireEntry(db: SqlDb, id: number): EntryView {
   const e = getEntry(db, id)
   if (!e) throw new CollectionError(`Entry ${id} not found`)
   return e
@@ -91,7 +91,7 @@ function assertQuantity(q: number): void {
   if (!Number.isInteger(q) || q < 1) throw new CollectionError('Quantity must be a whole number of at least 1')
 }
 
-function assertLink(db: Database.Database, printingId: number, imageId: number): void {
+function assertLink(db: SqlDb, printingId: number, imageId: number): void {
   const p = db.prepare('SELECT card_id FROM card_printings WHERE id = ?').get(printingId) as
     | { card_id: number }
     | undefined
@@ -102,14 +102,14 @@ function assertLink(db: Database.Database, printingId: number, imageId: number):
   if (!img || img.card_id !== p.card_id) throw new CollectionError('Image does not belong to the printing’s card')
 }
 
-const findExisting = (db: Database.Database, printingId: number, imageId: number): number | undefined =>
+const findExisting = (db: SqlDb, printingId: number, imageId: number): number | undefined =>
   (
     db.prepare('SELECT id FROM collection_entries WHERE printing_id = ? AND image_id = ?').get(printingId, imageId) as
       | { id: number }
       | undefined
   )?.id
 
-export function addEntry(db: Database.Database, input: AddEntryInput, now = new Date()): EntryView {
+export function addEntry(db: SqlDb, input: AddEntryInput, now = new Date()): EntryView {
   assertQuantity(input.quantity)
   assertLink(db, input.printingId, input.imageId)
   const ts = now.toISOString()
@@ -132,7 +132,7 @@ export function addEntry(db: Database.Database, input: AddEntryInput, now = new 
   })()
 }
 
-export function updateEntry(db: Database.Database, id: number, patch: UpdateEntryInput, now = new Date()): EntryView {
+export function updateEntry(db: SqlDb, id: number, patch: UpdateEntryInput, now = new Date()): EntryView {
   const ts = now.toISOString()
   return db.transaction(() => {
     const cur = requireEntry(db, id)
@@ -163,13 +163,13 @@ export function updateEntry(db: Database.Database, id: number, patch: UpdateEntr
   })()
 }
 
-export function removeEntry(db: Database.Database, id: number): void {
+export function removeEntry(db: SqlDb, id: number): void {
   db.prepare('DELETE FROM collection_entries WHERE id = ?').run(id)
 }
 
 const escapeLike = (s: string): string => s.replace(/[\\%_]/g, (c) => `\\${c}`)
 
-export function listEntries(db: Database.Database, f: CollectionFilters): EntryView[] {
+export function listEntries(db: SqlDb, f: CollectionFilters): EntryView[] {
   const where: string[] = []
   const params: unknown[] = []
   const inList = (col: string, values?: string[]): void => {
@@ -232,14 +232,14 @@ export function listEntries(db: Database.Database, f: CollectionFilters): EntryV
   })
 }
 
-export function entriesForCard(db: Database.Database, cardId: number): EntryView[] {
+export function entriesForCard(db: SqlDb, cardId: number): EntryView[] {
   const status = getMeta(db, 'price_service_status')
   return (
     db.prepare(`${SELECT} WHERE c.id = ? ORDER BY p.set_code, e.id`).all(cardId) as EntryDbRow[]
   ).map((r) => toView(r, status))
 }
 
-export function getFacets(db: Database.Database): Facets {
+export function getFacets(db: SqlDb): Facets {
   const distinct = (col: string): string[] =>
     (
       db

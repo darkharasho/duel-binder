@@ -1,11 +1,11 @@
-import type Database from 'better-sqlite3'
+import type { SqlDb } from '../db/sql'
 import type { CollectionStats } from '../../shared/types'
 import { getMeta } from '../db/meta'
 import { listEntries } from './collection'
 
 const TOP_ENTRY_LIMIT = 10
 
-export function getStats(db: Database.Database): CollectionStats {
+export function getStats(db: SqlDb): CollectionStats {
   const entries = listEntries(db, { sort: 'value', dir: 'desc' })
   const cardIds = new Set<number>()
   const rarities = new Map<string, { count: number; value: number }>()
@@ -42,7 +42,7 @@ const pad = (n: number): string => String(n).padStart(2, '0')
 const localDate = (d: Date): string => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 
 /** Upserts today's (local date) total value and card count. */
-export function recordSnapshot(db: Database.Database, now = new Date()): void {
+export function recordSnapshot(db: SqlDb, now = new Date()): void {
   const { totalValue, totalCards } = getStats(db)
   db.prepare(
     `INSERT INTO value_snapshots (date, total_value, total_cards) VALUES (?, ?, ?)

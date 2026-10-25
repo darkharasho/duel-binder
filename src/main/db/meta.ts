@@ -1,4 +1,4 @@
-import type Database from 'better-sqlite3'
+import type { SqlDb } from './sql'
 
 export type MetaKey =
   | 'last_sync_at'
@@ -11,14 +11,14 @@ export type MetaKey =
   | 'set_logos_synced_at'
   | 'konami_logos_synced_at'
 
-export function getMeta(db: Database.Database, key: MetaKey): string | null {
+export function getMeta(db: SqlDb, key: MetaKey): string | null {
   const row = db.prepare('SELECT value FROM meta WHERE key = ?').get(key) as
     | { value: string }
     | undefined
   return row?.value ?? null
 }
 
-export function setMeta(db: Database.Database, key: MetaKey, value: string): void {
+export function setMeta(db: SqlDb, key: MetaKey, value: string): void {
   db.prepare(
     'INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value'
   ).run(key, value)

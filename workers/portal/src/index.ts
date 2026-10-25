@@ -9,7 +9,6 @@ import { createReleaseSource, type Downloads } from './site/releases'
 
 export interface WorkerEnv extends Env {
   STORE: DurableObjectNamespace<Store>
-  SITE_URL: string
   ASSETS: Fetcher
   GITHUB_TOKEN?: string
 }

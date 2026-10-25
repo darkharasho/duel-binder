@@ -35,7 +35,7 @@ describe('Discord sign-in and sessions', () => {
     })
     deps = {
       db,
-      env: { PUBLIC_URL: BASE, DISCORD_CLIENT_ID: 'cid', DISCORD_CLIENT_SECRET: 'secret', ADMIN_TOKEN: 'admin' },
+      env: { PUBLIC_URL: BASE, SITE_URL: 'https://site.test', DISCORD_CLIENT_ID: 'cid', DISCORD_CLIENT_SECRET: 'secret', ADMIN_TOKEN: 'admin' },
       now: () => clock,
       fetch: fetchMock as unknown as typeof fetch
     }
@@ -186,6 +186,51 @@ describe('Discord sign-in and sessions', () => {
     expect(res.status).toBe(204)
     expect(res.headers.getSetCookie().some((c) => c.startsWith('session=;') && /Max-Age=0/.test(c))).toBe(true)
     expect(db.prepare('SELECT COUNT(*) AS n FROM sessions').get()).toEqual({ n: 0 })
+  })
+
+  it('logout from the page form goes back to the front page', async () => {
+    const token = await signIn()
+    const res = await handle(
+      new Request(BASE + '/auth/logout', {
+        method: 'POST',
+        headers: { cookie: `session=${token}`, 'content-type': 'application/x-www-form-urlencoded' },
+        body: ''
+      }),
+      deps
+    )
+    expect(res.status).toBe(303)
+    expect(res.headers.get('location')).toBe('/')
+    expect(db.prepare('SELECT COUNT(*) AS n FROM sessions').get()).toEqual({ n: 0 })
+  })
+
+  it('front page offers sign-in when signed out', async () => {
+    const res = await get('/')
+    expect(res.status).toBe(200)
+    expect(res.headers.get('content-type')).toBe('text/html; charset=utf-8')
+    expect(res.headers.get('cache-control')).toBe('no-store')
+    const html = await res.text()
+    expect(html).toContain('href="/auth/discord/start"')
+    expect(html).toContain('href="https://site.test/site.css"')
+    expect(html).not.toContain("didn't go through")
+  })
+
+  it('front page says when sign-in failed', async () => {
+    expect(await (await get('/?signin=failed')).text()).toContain("Sign-in didn't go through")
+  })
+
+  it('front page greets a signed-in user by display name, escaped', async () => {
+    discord.user.global_name = 'Seto <Kaiba>'
+    const token = await signIn()
+    const html = await (await get('/', `session=${token}`)).text()
+    expect(html).toContain('Signed in as Seto &lt;Kaiba&gt;.')
+    expect(html).toContain('action="/auth/logout"')
+    expect(html).not.toContain('/auth/discord/start')
+  })
+
+  it('front page answers HEAD with no body', async () => {
+    const res = await handle(new Request(BASE + '/', { method: 'HEAD' }), deps)
+    expect(res.status).toBe(200)
+    expect(await res.text()).toBe('')
   })
 
   it('session token is not stored in plaintext', async () => {

@@ -144,6 +144,10 @@ export async function finishSignIn(req: Request, deps: AppDeps): Promise<Respons
 export async function signOut(req: Request, deps: AppDeps): Promise<Response> {
   const token = readCookie(req, 'session')
   if (token) deps.db.prepare('DELETE FROM sessions WHERE token_hash = ?').run(await sha256Hex(token))
+  // A plain form post (the placeholder page's Sign out button) goes back to the front page.
+  if (req.headers.get('content-type')?.startsWith('application/x-www-form-urlencoded')) {
+    return respond(303, [clearCookie('session')], { location: '/' })
+  }
   return respond(204, [clearCookie('session')])
 }
 

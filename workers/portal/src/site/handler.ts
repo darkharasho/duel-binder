@@ -12,6 +12,13 @@ export interface SiteDeps {
 
 export async function handleSite(req: Request, deps: SiteDeps): Promise<Response> {
   const url = new URL(req.url)
+  if (url.pathname.startsWith('/fonts/')) {
+    // The app host's pages load these through the site stylesheet, so they're fetched cross-origin.
+    const asset = await deps.assets.fetch(req)
+    const res = new Response(asset.body, asset)
+    res.headers.set('access-control-allow-origin', '*')
+    return res
+  }
   if (url.pathname !== '/') return deps.assets.fetch(req)
   if (req.method !== 'GET' && req.method !== 'HEAD') {
     return new Response('Method Not Allowed', { status: 405, headers: { allow: 'GET, HEAD' } })

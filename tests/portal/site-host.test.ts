@@ -81,6 +81,14 @@ describe('handleSite', () => {
     expect(dl).not.toHaveBeenCalled()
   })
 
+  it('serves fonts with an open CORS header for the app host', async () => {
+    const { d } = deps()
+    const res = await handleSite(new Request('https://duelbinder.com/fonts/a.woff2'), d)
+    expect(res.status).toBe(218)
+    expect(res.headers.get('access-control-allow-origin')).toBe('*')
+    expect(await res.text()).toBe('css')
+  })
+
   it('still renders with fallback links when downloads are all null', async () => {
     const { d } = deps({ version: null, windows: null, mac: null, linux: null })
     const res = await handleSite(new Request('https://duelbinder.com/'), d)

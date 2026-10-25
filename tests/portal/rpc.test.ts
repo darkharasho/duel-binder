@@ -58,6 +58,7 @@ describe('read-only RPC', () => {
       db,
       env: {
         PUBLIC_URL: BASE,
+        SITE_URL: 'https://site.test',
         DISCORD_CLIENT_ID: 'c',
         DISCORD_CLIENT_SECRET: 's',
         ADMIN_TOKEN: 'a'

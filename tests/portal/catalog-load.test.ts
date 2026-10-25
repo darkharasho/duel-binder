@@ -24,7 +24,7 @@ describe('admin catalog loader', () => {
     source = await seededDb()
     deps = {
       db,
-      env: { PUBLIC_URL: BASE, DISCORD_CLIENT_ID: 'c', DISCORD_CLIENT_SECRET: 's', ADMIN_TOKEN: TOKEN },
+      env: { PUBLIC_URL: BASE, SITE_URL: 'https://site.test', DISCORD_CLIENT_ID: 'c', DISCORD_CLIENT_SECRET: 's', ADMIN_TOKEN: TOKEN },
       now: () => new Date('2026-10-24T12:00:00.000Z'),
       fetch: (async () => new Response('?', { status: 404 })) as unknown as typeof fetch
     }

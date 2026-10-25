@@ -44,6 +44,15 @@ type Handler<C extends InvokeChannel> = (
   ...args: Params<ChannelMethod<C>>
 ) => unknown
 
+const MAX_NOTES = 2000
+
+/** Web-only cap: desktop notes are unbounded, but the server stores them for everyone. */
+function checkNotesLength(v: unknown): void {
+  const notes = (v as { notes?: unknown } | null)?.notes
+  if (typeof notes === 'string' && notes.length > MAX_NOTES)
+    throw new CollectionError(`notes must be at most ${MAX_NOTES} characters`)
+}
+
 // Arguments come off the wire untyped: every handler checks its own before use.
 const HANDLERS: { [C in PortalChannel]: Handler<C> } = {
   'cards:search': ({ db }, _s, q) => searchCards(db, checkString(q, 'q')),
@@ -72,11 +81,13 @@ const HANDLERS: { [C in PortalChannel]: Handler<C> } = {
   'collection:forCard': ({ db }, scope, cardId) => entriesForCard(db, checkId(cardId, 'cardId'), scope),
   'collection:facets': ({ db }, scope) => getFacets(db, scope),
   'collection:add': ({ db, now }, scope, input) => {
+    checkNotesLength(input)
     const entry = addEntry(db, checkAddInput(input), now(), scope)
     recordSnapshot(db, now(), scope)
     return entry
   },
   'collection:update': ({ db, now }, scope, id, patch) => {
+    checkNotesLength(patch)
     const entry = updateEntry(db, checkId(id, 'id'), checkUpdatePatch(patch), now(), scope)
     recordSnapshot(db, now(), scope)
     return entry

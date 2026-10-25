@@ -3,7 +3,7 @@ import { PACK_ART_PREFIX, YUGIPEDIA_IMAGE_PREFIX } from '../../src/shared/imageS
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { handle, type AppDeps } from '../../workers/portal/src/app'
 import { TCGPLAYER_IMAGE_PREFIX } from '../../src/main/tcgplayer/catalog'
-import { memoryBucket, seededServerDb } from './helpers'
+import { addUser, memoryBucket, seededServerDb } from './helpers'
 
 const BASE = 'https://app.test'
 const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3])
@@ -25,6 +25,17 @@ describe('image route', () => {
     bucket = memoryBucket()
     upstream = vi.fn(async () => imageResponse())
     imageId = (db.prepare('SELECT image_id FROM card_images LIMIT 1').get() as { image_id: number }).image_id
+    const uid = addUser(db, '1', 'alice')
+    const hash = [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode('tok')))]
+      .map((b) => b.toString(16).padStart(2, '0'))
+      .join('')
+    db.prepare('INSERT INTO sessions (token_hash, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)').run(
+      hash,
+      uid,
+      '2026-10-25T11:00:00.000Z',
+      '2026-10-25T23:00:00.000Z'
+    )
+    cookie = 'session=tok'
     deps = {
       db,
       assets: { fetch: async () => new Response('nope', { status: 404 }) },
@@ -37,7 +48,10 @@ describe('image route', () => {
   })
   afterEach(() => db.close())
 
-  const get = (path: string, method = 'GET') => handle(new Request(`${BASE}/img/${path}`, { method }), deps)
+  let cookie = ''
+  const get = (path: string, method = 'GET') =>
+    handle(new Request(`${BASE}/img/${path}`, { method, headers: { cookie } }), deps)
+  const getAnon = (path: string) => handle(new Request(`${BASE}/img/${path}`), deps)
 
   it('serves a card image from upstream once, then from R2', async () => {
     const first = await get(`small/${imageId}`)
@@ -53,6 +67,26 @@ describe('image route', () => {
     expect(second.status).toBe(200)
     expect(second.headers.get('content-type')).toBe('image/jpeg')
     expect(upstream).toHaveBeenCalledTimes(1)
+  })
+
+  it('signed-out R2 miss answers 404 without any upstream call', async () => {
+    printingUrl = `${YUGIPEDIA_IMAGE_PREFIX}x.jpg`
+    for (const path of [`small/${imageId}`, 'printing/1']) {
+      const res = await getAnon(path)
+      expect(res.status).toBe(404)
+      expect(await res.text()).toBe('Not found')
+      expect(res.headers.get('x-content-type-options')).toBe('nosniff')
+    }
+    expect(upstream).not.toHaveBeenCalled()
+    expect(printingArt.url).not.toHaveBeenCalled()
+  })
+
+  it('signed-out R2 hit is still served', async () => {
+    await get(`small/${imageId}`)
+    upstream.mockClear()
+    const res = await getAnon(`small/${imageId}`)
+    expect(res.status).toBe(200)
+    expect(upstream).not.toHaveBeenCalled()
   })
 
   it('uses the full and cropped folders', async () => {
@@ -230,6 +264,7 @@ describe('image route', () => {
       try {
         printingArt.url.mockImplementationOnce(() => new Promise<string | null>(() => {}))
         const pending = get('printing/7')
+        await vi.waitFor(() => expect(printingArt.url).toHaveBeenCalled()) // session lookup uses real async crypto
         await vi.advanceTimersByTimeAsync(30_000)
         expect((await pending).status).toBe(404)
         expect(upstream).not.toHaveBeenCalled()

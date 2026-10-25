@@ -10,22 +10,23 @@ export interface HomeView {
 }
 
 /** Matches the CSP in src/renderer/web.html; sent as a header so it applies even if the meta tag is edited out. */
-const WEB_CSP = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:"
+export const WEB_CSP =
+  "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://cdn.discordapp.com"
 
 function body(v: HomeView): string {
   const download = `<a class="btn out" href="${esc(v.siteUrl)}/#download">Get the desktop app</a>`
   if (v.name) {
     return `<h1>Signed in as ${esc(v.name)}.</h1>
-<p class="lead">The web app isn't ready yet. When it is, you'll browse your binder and your friends' binders here. Until then, your collection lives in the desktop app.</p>
+<p class="lead">The web app couldn't load. Try refreshing; your collection is safe in the desktop app.</p>
 <div class="actions">${download}<form method="post" action="/auth/logout"><button class="btn out" type="submit">Sign out</button></form></div>`
   }
   const failed = v.signInFailed ? `<p class="note">Sign-in didn't go through. Try again.</p>` : ''
   return `<h1>Duel Binder on the web.</h1>
-<p class="lead">Sign in with Discord to save your spot. The web app is on its way; until then, your collection lives in the desktop app.</p>
+<p class="lead">Sign in with Discord to open your binder in the browser.</p>
 ${failed}<div class="actions"><a class="btn pri" href="/auth/discord/start">Sign in with Discord</a>${download}</div>`
 }
 
-/** The placeholder front page of the app host until the web app ships. */
+/** The signed-out front page of the app host, and the fallback a signed-in user sees if the web app asset fails to load. */
 export function renderHome(v: HomeView): string {
   const site = esc(v.siteUrl)
   return `<!doctype html>

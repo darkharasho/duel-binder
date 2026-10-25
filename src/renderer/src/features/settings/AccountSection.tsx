@@ -1,8 +1,10 @@
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
 import { fetchMe } from '@/web/account'
 
 export function AccountSection(): React.JSX.Element {
+  const [avatarFailed, setAvatarFailed] = useState(false)
   const me = useQuery({ queryKey: ['me'], queryFn: () => fetchMe() })
 
   if (me.isPending) return <p className="text-sm text-muted-foreground">Loading account…</p>
@@ -21,7 +23,9 @@ export function AccountSection(): React.JSX.Element {
   return (
     <div className="flex items-center justify-between gap-4 text-sm">
       <div className="flex items-center gap-3">
-        {avatarUrl && <img src={avatarUrl} alt="" className="size-8 rounded-full" />}
+        {avatarUrl && !avatarFailed && (
+          <img src={avatarUrl} alt="" className="size-8 rounded-full" onError={() => setAvatarFailed(true)} />
+        )}
         <span>Signed in as {displayName ?? username}</span>
       </div>
       <form method="post" action="/auth/logout">

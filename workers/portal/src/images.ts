@@ -9,6 +9,7 @@ import {
 import { findSetImageUrl } from '../../../src/main/repo/sets'
 import { TCGPLAYER_IMAGE_PREFIX } from '../../../src/main/tcgplayer/catalog'
 import type { AppDeps } from './app'
+import { currentUser } from './auth'
 
 /** The slice of an R2 bucket the image route uses. */
 export interface ImageBucket {
@@ -120,6 +121,9 @@ async function serve(req: Request, deps: AppDeps, path: string): Promise<Respons
 
   const stored = await deps.images.get(target.key).catch(() => null) // a failing bucket is a miss
   if (stored) return reply(stored.body, stored.httpMetadata?.contentType ?? 'image/jpeg')
+
+  // Only signed-in users may make the portal fetch from upstream; stored artwork stays public.
+  if (!(await currentUser(req, deps))) return notFound()
 
   const source = await target.source()
   if (!source) return notFound()

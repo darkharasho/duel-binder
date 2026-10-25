@@ -216,6 +216,8 @@ describe('Discord sign-in and sessions', () => {
     expect(res.headers.get('cache-control')).toBe('no-store')
     const html = await res.text()
     expect(html).toContain('href="/auth/discord/start"')
+    expect(html).toContain('Sign in with Discord to open your binder in the browser.')
+    expect(html).not.toContain('on its way')
     expect(html).toContain('href="https://site.test/site.css"')
     expect(html).not.toContain("didn't go through")
   })
@@ -245,13 +247,14 @@ describe('Discord sign-in and sessions', () => {
     expect(await res.text()).toContain('id="root"')
     expect(res.headers.get('cache-control')).toBe('no-store')
     expect(res.headers.get('content-type')).toBe('text/html; charset=utf-8')
-    expect(res.headers.get('content-security-policy')).toContain("img-src 'self' data:")
+    expect(res.headers.get('content-security-policy')).toContain("img-src 'self' data: https://cdn.discordapp.com")
   })
 
   it("front page falls back to the placeholder when the app isn't built", async () => {
     const token = await signIn()
     const html = await (await get('/', `session=${token}`)).text()
     expect(html).toContain('Signed in as')
+    expect(html).toContain("The web app couldn't load. Try refreshing; your collection is safe in the desktop app.")
   })
 
   it('front page answers HEAD with no body', async () => {

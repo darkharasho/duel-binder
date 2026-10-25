@@ -114,6 +114,17 @@ describe('write RPC', () => {
     expect(snaps).toEqual([{ user_id: alice, total_cards: 2 }])
   })
 
+  it('rejects notes longer than 2000 characters with a 400', async () => {
+    const cookie = await sessionFor(alice, 'ta')
+    const add = await rpc('collection:add', [{ printingId, imageId, quantity: 1, notes: 'x'.repeat(2001) }], cookie)
+    expect(add.status).toBe(400)
+    expect(await add.json()).toEqual({ error: 'notes must be at most 2000 characters' })
+    await rpc('collection:add', [{ printingId, imageId, quantity: 1 }], cookie)
+    const id = rows(alice)[0].id
+    expect((await rpc('collection:update', [id, { notes: 'x'.repeat(2001) }], cookie)).status).toBe(400)
+    expect((await rpc('collection:update', [id, { notes: 'x'.repeat(2000) }], cookie)).status).toBe(200)
+  })
+
   it('adding the same printing twice sums into one entry', async () => {
     const cookie = await sessionFor(alice, 'ta')
     for (let i = 0; i < 2; i++)

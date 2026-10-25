@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react'
+import { fireEvent, screen } from '@testing-library/react'
 import App from '@/App'
 import { SettingsPage } from '@/features/settings/SettingsPage'
 import { createMockApi, renderWithProviders } from './mockApi'
@@ -34,6 +34,16 @@ describe('web build', () => {
     for (const name of ['Check for updates', 'Clear image cache', 'Refresh card data', 'Open data folder']) {
       expect(screen.queryByRole('button', { name })).not.toBeInTheDocument()
     }
+  })
+
+  it('hides an avatar that fails to load', async () => {
+    stubMe({ ...seto, avatarUrl: 'https://cdn.discordapp.com/a.png' })
+    const { container } = renderWithProviders(<SettingsPage />, { api: createMockApi({ window: { platform: 'web' } }) })
+    await screen.findByText('Signed in as Seto')
+    const img = container.querySelector('img')!
+    expect(img).toBeInTheDocument()
+    fireEvent.error(img)
+    expect(container.querySelector('img')).toBeNull()
   })
 
   it('web settings offers sign-in when signed out', async () => {

@@ -13,7 +13,13 @@ import { PageHeader } from '@/components/PageHeader'
 import { listNav } from '@/components/panelNav'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from '@/components/ui/select'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { UnderlineTabs } from '@/components/UnderlineTabs'
@@ -100,7 +106,10 @@ export function SetChecklist({
 }: SetChecklistProps): React.JSX.Element {
   const [filter, setFilter] = useState<TileFilter>('all')
   const [q, setQ] = useState('')
-  const [sort, setSort] = useState<{ by: ChecklistSort; dir: SortDir }>({ by: 'number', dir: 'asc' })
+  const [sort, setSort] = useState<{ by: ChecklistSort; dir: SortDir }>({
+    by: 'number',
+    dir: 'asc'
+  })
   const [selected, setSelected] = useState<{ cardId: number; entryId: number } | null>(null)
   // A card not owned yet opens with steppers instead of an entry editor.
   const [unowned, setUnowned] = useState<{ cardId: number; rarity: string | null } | null>(null)

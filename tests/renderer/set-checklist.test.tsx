@@ -121,7 +121,9 @@ describe('SetChecklist', () => {
     expect(within(panel).getAllByText('$3.00')).toHaveLength(2)
 
     const rarity = metalRaidersChecklist.cards[2].rarities[0].rarity
-    await userEvent.click(within(panel).getByRole('button', { name: `Add one Gamma Trap ${rarity}` }))
+    await userEvent.click(
+      within(panel).getByRole('button', { name: `Add one Gamma Trap ${rarity}` })
+    )
     expect(adjust).toHaveBeenCalledWith('Metal Raiders', 'en', PRINTING.gammaEN010, 1)
     expect(await within(panel).findByText('You have 1')).toBeInTheDocument()
 
@@ -193,4 +195,3 @@ describe('SetChecklist', () => {
     )
   })
 })
-

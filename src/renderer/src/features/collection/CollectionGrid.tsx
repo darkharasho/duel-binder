@@ -35,9 +35,7 @@ export function CollectionGrid({ entries, selectedId, onSelect }: Props): React.
                 alt={e.card.name}
                 className="w-full rounded-[4px] shadow-[0_8px_20px_rgb(0_0_0/0.45)]"
               />
-              <Badge className="absolute right-1.5 top-1.5 font-mono shadow">
-                ×{e.quantity}
-              </Badge>
+              <Badge className="absolute right-1.5 top-1.5 font-mono shadow">×{e.quantity}</Badge>
             </TiltCard>
             <div className="min-w-0 space-y-0.5">
               <div className="truncate text-[13px] font-semibold">{e.card.name}</div>

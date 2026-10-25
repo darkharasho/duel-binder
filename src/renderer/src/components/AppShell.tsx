@@ -1,6 +1,6 @@
 import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import logo from '@/assets/logo.svg'
-import { api } from '@/lib/api'
+import { isMac } from '@/lib/platform'
 import { cn } from '@/lib/utils'
 import { ArtWash } from './ArtWash'
 import { ArtWashContext } from './artWashContext'
@@ -84,7 +84,7 @@ export function AppShell({ page, onNavigate, onAddCard, children }: AppShellProp
           >
             Add card
             <kbd className="font-mono text-xs font-normal text-muted-foreground">
-              {api.window.platform === 'darwin' ? '⌘K' : 'Ctrl K'}
+              {isMac() ? '⌘K' : 'Ctrl K'}
             </kbd>
           </button>
         </aside>

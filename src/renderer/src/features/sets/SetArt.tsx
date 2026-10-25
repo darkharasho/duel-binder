@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { cn } from '@/lib/utils'
+import { cardImageSrc, setImageSrc } from '@/lib/images'
 
 interface SetArtProps {
   imageKey: string | null
@@ -31,13 +32,13 @@ export function SetArt({
     cover: false
   })
   const fronts: [Front, string | null][] = [
-    ['logo', logoImageKey ? `ygo-img://set/${logoImageKey}` : null],
-    ['pack', packImageKey ? `ygo-img://set/${packImageKey}` : null],
-    ['set', imageKey !== null ? `ygo-img://set/${imageKey}` : null]
+    ['logo', logoImageKey ? setImageSrc(logoImageKey) : null],
+    ['pack', packImageKey ? setImageSrc(packImageKey) : null],
+    ['set', imageKey !== null ? setImageSrc(imageKey) : null]
   ]
   const front = fronts.find(([source, src]) => src !== null && !failed[source]) as
     [Front, string] | undefined
-  const cover = coverImageId != null && !failed.cover ? `ygo-img://cropped/${coverImageId}` : null
+  const cover = coverImageId != null && !failed.cover ? cardImageSrc('cropped', coverImageId) : null
   // Without a headline card, the pack itself is blurred behind, so the tile is never flat.
   const backdrop = cover ?? (front && front[0] !== 'logo' ? front[1] : null)
 

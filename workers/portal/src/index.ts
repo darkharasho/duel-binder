@@ -45,7 +45,7 @@ export class Store extends DurableObject<WorkerEnv> {
   async alarm(): Promise<void> {
     await runPriceAlarm(
       this.db,
-      createPriceClient({ url: this.env.PRICE_WORKER_URL }),
+      this.env.PRICE_WORKER_URL ? createPriceClient({ url: this.env.PRICE_WORKER_URL }) : null,
       this.ctx.storage,
       () => new Date()
     )

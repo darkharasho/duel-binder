@@ -90,11 +90,13 @@ describe('server eBay prices', () => {
     expect(price(p2.id)?.price).toBe(7.5)
     expect(storage.alarm).toBe(T + PRICE_MORE_MS)
 
-    await runPriceAlarm(db, client, storage, () => NOW, { limit: 1 })
+    // The second run is that alarm firing a minute later.
+    const later = new Date(T + PRICE_MORE_MS)
+    await runPriceAlarm(db, client, storage, () => later, { limit: 1 })
     expect(lookup).toHaveBeenCalledTimes(2)
     expect(lookup.mock.calls[1][0]).toMatchObject({ code: p1.code })
     expect(price(p1.id)?.price).toBe(7.5)
-    expect(storage.alarm).toBe(T + PRICE_IDLE_MS)
+    expect(storage.alarm).toBe(later.getTime() + PRICE_IDLE_MS)
     expect(getMeta(db, 'price_service_status')).toBe('ok')
   })
 
@@ -133,6 +135,46 @@ describe('server eBay prices', () => {
     await expect(runPriceAlarm(db, client, storage, () => NOW, { limit: 1 })).resolves.toBeUndefined()
     expect(storage.alarm).toBe(T + PRICE_FAILED_MS)
     expect(getMeta(db, 'price_service_status')).toBe('unavailable')
+  })
+
+  it('a lookup queued during the run keeps its earlier alarm', async () => {
+    own(alice, p1)
+    const storage = fakeStorage(T) // the alarm that is firing
+    const queue = alarmQueue(storage, () => T)
+    const { client } = fakeClient(async () => {
+      await queue.soon() // a web write landing while the lookup is in flight
+      return { price: 7.5, listingCount: 4, checkedAt: NOW.toISOString() }
+    })
+    await runPriceAlarm(db, client, storage, () => NOW)
+    expect(storage.alarm).toBe(T + PRICE_SOON_MS)
+  })
+
+  it('the firing alarm still left in storage does not stop the re-arm', async () => {
+    const storage = fakeStorage(T)
+    await runPriceAlarm(db, fakeClient().client, storage, () => NOW)
+    expect(storage.alarm).toBe(T + PRICE_IDLE_MS)
+  })
+
+  it('a run whose re-arm fails still resolves', async () => {
+    own(alice, p1)
+    const storage: AlarmStorage = {
+      getAlarm: async () => null,
+      setAlarm: async () => {
+        throw new Error('storage down')
+      }
+    }
+    await expect(runPriceAlarm(db, fakeClient().client, storage, () => NOW)).resolves.toBeUndefined()
+    expect(price(p1.id)?.price).toBe(7.5)
+  })
+
+  it('soon() never rejects', async () => {
+    const storage: AlarmStorage = {
+      getAlarm: async () => null,
+      setAlarm: async () => {
+        throw new Error('storage down')
+      }
+    }
+    await expect(alarmQueue(storage, () => T).soon()).resolves.toBeUndefined()
   })
 
   it('soon() never pushes an earlier alarm later', async () => {
@@ -199,6 +241,37 @@ describe('server eBay prices', () => {
       expect(soon).not.toHaveBeenCalled()
       expect((await rpc('collection:add', [{ printingId: p1.id, imageId: p1.imageId, quantity: 1 }])).status).toBe(200)
       expect(soon).toHaveBeenCalledTimes(1)
+    })
+
+    it('web updates and set adjustments queue a lookup too', async () => {
+      const add = (await (
+        await rpc('collection:add', [{ printingId: p1.id, imageId: p1.imageId, quantity: 1 }])
+      ).json()) as { result: { id: number } }
+      soon.mockClear()
+      expect((await rpc('collection:update', [add.result.id, { quantity: 3 }])).status).toBe(200)
+      expect(soon).toHaveBeenCalledTimes(1)
+      const { set_name, language } = db
+        .prepare('SELECT set_name, language FROM card_printings WHERE id = ?')
+        .get(p2.id) as { set_name: string; language: string }
+      expect((await rpc('sets:adjust', [set_name, language, p2.id, 1])).status).toBe(200)
+      expect(soon).toHaveBeenCalledTimes(2)
+    })
+
+    it('a write still succeeds when the alarm cannot be armed', async () => {
+      deps.prices = alarmQueue(
+        {
+          getAlarm: async () => null,
+          setAlarm: async () => {
+            throw new Error('storage down')
+          }
+        },
+        () => T
+      )
+      const res = await rpc('collection:add', [{ printingId: p1.id, imageId: p1.imageId, quantity: 1 }])
+      expect(res.status).toBe(200)
+      expect(
+        db.prepare('SELECT COUNT(*) AS n FROM collection_entries WHERE user_id = ? AND deleted_at IS NULL').get(alice)
+      ).toEqual({ n: 1 })
     })
 
     it('the web shows the server price', async () => {

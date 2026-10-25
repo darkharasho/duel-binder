@@ -24,13 +24,26 @@ export interface PriceQueue {
   soon(): Promise<void>
 }
 
+/**
+ * Arms the alarm at `at` unless one is already set at or before it. A time at or before `nowMs` counts as no
+ * alarm: inside an alarm handler `getAlarm()` may still return the alarm that is firing.
+ */
+async function armBy(storage: AlarmStorage, at: number, nowMs: number): Promise<void> {
+  const current = await storage.getAlarm()
+  if (current !== null && current > nowMs && current <= at) return
+  await storage.setAlarm(at)
+}
+
 export function alarmQueue(storage: AlarmStorage, now: () => number): PriceQueue {
   return {
+    // Never rejects: a write that succeeded must not fail because the alarm could not be armed.
     async soon() {
-      const at = now() + PRICE_SOON_MS
-      const current = await storage.getAlarm()
-      if (current !== null && current <= at) return
-      await storage.setAlarm(at)
+      try {
+        const t = now()
+        await armBy(storage, t + PRICE_SOON_MS, t)
+      } catch (e) {
+        console.error('Price alarm could not be queued', e)
+      }
     }
   }
 }
@@ -57,7 +70,9 @@ export async function runPriceAlarm(
     delay = PRICE_FAILED_MS
   }
   try {
-    await storage.setAlarm(now().getTime() + delay)
+    // Web writes can run while lookups are in flight; keep an earlier alarm they queued.
+    const t = now().getTime()
+    await armBy(storage, t + delay, t)
   } catch (e) {
     console.error('Price alarm could not re-arm', e)
   }

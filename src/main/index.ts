@@ -1,9 +1,9 @@
-import { app, shell, BrowserWindow, dialog } from 'electron'
+import { app, shell, BrowserWindow, dialog, net } from 'electron'
 import { join, resolve } from 'path'
 import { autoUpdater } from 'electron-updater'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
-import type { SyncStatus, UpdateStatus } from '@shared/types'
-import { DATA_CHANGED, SYNC_PROGRESS, UPDATE_STATUS, WINDOW_MAXIMIZED } from '@shared/ipc'
+import type { AccountStatus, SyncStatus, UpdateStatus } from '@shared/types'
+import { ACCOUNT_CHANGED, DATA_CHANGED, SYNC_PROGRESS, UPDATE_STATUS, WINDOW_MAXIMIZED } from '@shared/ipc'
 import icon from '../../resources/icon.png?asset'
 import { openDatabase } from './db/database'
 import { createYgoClient } from './ygo/client'
@@ -22,6 +22,11 @@ import { createUpdater, updateMode, RELEASES_URL } from './updater'
 import { createHandlers, registerIpc, type AppDeps } from './ipc/handlers'
 import { seedFakeCollection } from './dev/fakeData'
 import { captureShots } from './dev/capture'
+import { createAccountService } from './cloud/account'
+import { createCloudClient } from './cloud/client'
+import { portalUrl } from './cloud/config'
+import { signInWithBrowser } from './cloud/signIn'
+import { TokenStore, electronCipher } from './cloud/tokenStore'
 
 // Launched from a desktop menu, stdout/stderr can be closed pipes; a console.log then emits EPIPE,
 // which would surface as an uncaught exception dialog. Logging is best-effort, so drop those errors.
@@ -117,7 +122,7 @@ function broadcast(channel: string, payload: unknown): void {
   for (const win of BrowserWindow.getAllWindows()) win.webContents.send(channel, payload)
 }
 
-function bootstrap(): void {
+async function bootstrap(): Promise<void> {
   electronApp.setAppUserModelId('com.darkharasho.yugiohcollectiontracker')
 
   app.on('browser-window-created', (_, window) => {
@@ -195,6 +200,20 @@ function bootstrap(): void {
   const priceService = createPriceService(db)
   const emitDataChanged = (): void => broadcast(DATA_CHANGED, undefined)
 
+  const portal = portalUrl(process.env, app.isPackaged)
+  const account = createAccountService({
+    db,
+    tokens: new TokenStore(join(userData, 'account.json'), await electronCipher()),
+    client: (token, opts = {}) =>
+      createCloudClient({ baseUrl: portal, token, timeoutMs: opts.timeoutMs, signal: opts.signal }),
+    signIn: (signal) =>
+      signInWithBrowser({ portalUrl: portal, openExternal: (url) => shell.openExternal(url), signal }),
+    emit: (s: AccountStatus) => broadcast(ACCOUNT_CHANGED, s),
+    emitDataChanged,
+    isOnline: () => net.isOnline()
+  })
+  app.on('before-quit', () => account.stop())
+
   const windowDeps = {
     minimize: () => mainWindow?.minimize(),
     toggleMaximize: () => {
@@ -215,12 +234,14 @@ function bootstrap(): void {
       app: appDeps,
       window: windowDeps,
       prices: priceService,
-      emitDataChanged
+      emitDataChanged,
+      account
     })
   )
 
   createWindow()
   updater.start()
+  account.start()
 
   if (captureDir) {
     const win = mainWindow
@@ -249,6 +270,12 @@ function bootstrap(): void {
       onSynced: () => recordSnapshot(db),
       onChanged: emitDataChanged
     })
+    account.catalogRefreshed()
+    // Signed in, prices come from the account's server; signed out, straight from the eBay Worker.
+    if (account.isSignedIn()) {
+      if (changed) emitDataChanged()
+      return
+    }
     // refreshIntlPrices never rejects; failures still change the shown no-price reason.
     const prices = await refreshIntlPrices(db, priceService.client())
     if (prices.updated > 0) recordSnapshot(db)
@@ -270,9 +297,9 @@ if (!gotLock) {
     mainWindow.focus()
   })
 
-  app.whenReady().then(() => {
+  app.whenReady().then(async () => {
     try {
-      bootstrap()
+      await bootstrap()
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e)
       dialog.showErrorBox(

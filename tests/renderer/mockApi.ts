@@ -9,6 +9,15 @@ export type DeepPartial<T> = {
   [K in keyof T]?: T[K] extends (...args: never[]) => unknown ? T[K] : DeepPartial<T[K]>
 }
 
+const signedOut = {
+  state: 'signed-out',
+  user: null,
+  localOwner: null,
+  lastSyncedAt: null,
+  error: null,
+  pendingCount: 0
+} as const
+
 const emptyStatus = { state: 'idle', lastSyncAt: null, dbVersion: null, cardCount: 1, error: null } as const
 
 export function createMockApi(overrides: DeepPartial<Api> = {}): Api {
@@ -84,6 +93,13 @@ export function createMockApi(overrides: DeepPartial<Api> = {}): Api {
       updateStatus: vi.fn(async () => ({ state: 'idle', mode: 'auto', version: null, error: null })),
       onUpdateStatus: vi.fn(() => () => {}),
       onDataChanged: vi.fn(() => () => {})
+    },
+    account: {
+      status: vi.fn(async () => ({ ...signedOut })),
+      signIn: vi.fn(async () => ({ ...signedOut })),
+      signOut: vi.fn(async () => ({ ...signedOut })),
+      syncNow: vi.fn(async () => ({ ...signedOut })),
+      onChange: vi.fn(() => () => {})
     }
   }
   for (const ns of Object.keys(overrides) as (keyof Api)[]) {

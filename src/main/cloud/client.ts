@@ -39,6 +39,8 @@ export function createCloudClient(opts: {
   token: string
   fetch?: typeof fetch
   timeoutMs?: number
+  /** Cuts off every request of this client; a request cut off fails as offline. */
+  signal?: AbortSignal
 }): CloudClient {
   const doFetch = opts.fetch ?? fetch
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS
@@ -50,6 +52,9 @@ export function createCloudClient(opts: {
     if (body !== undefined) headers['content-type'] = 'application/json'
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), timeoutMs)
+    const cutOff = (): void => controller.abort()
+    if (opts.signal?.aborted) controller.abort()
+    else opts.signal?.addEventListener('abort', cutOff, { once: true })
     const offline = (e: unknown): CloudOfflineError =>
       new CloudOfflineError(
         controller.signal.aborted
@@ -59,6 +64,7 @@ export function createCloudClient(opts: {
     try {
       let res: Response
       try {
+        if (controller.signal.aborted) throw new Error('Cut off')
         res = await doFetch(base + path, {
           method,
           headers,
@@ -90,6 +96,7 @@ export function createCloudClient(opts: {
       }
     } finally {
       clearTimeout(timer)
+      opts.signal?.removeEventListener('abort', cutOff)
     }
   }
 

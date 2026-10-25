@@ -99,6 +99,15 @@ describe('createHttpApi', () => {
         expect(typeof (fn as (cb: () => void) => unknown)(() => {}), name).toBe('function')
       }
     }
-    expect(count).toBe(4)
+    expect(count).toBe(5)
+  })
+
+  it('account calls reject on the web without fetching', async () => {
+    const { api, fetch } = setup(reply(200, {}))
+    await expect(api.account.status()).rejects.toThrow('Not available on the web')
+    await expect(api.account.signIn()).rejects.toThrow('Not available on the web')
+    await expect(api.account.signOut()).rejects.toThrow('Not available on the web')
+    await expect(api.account.syncNow()).rejects.toThrow('Not available on the web')
+    expect(fetch).not.toHaveBeenCalled()
   })
 })

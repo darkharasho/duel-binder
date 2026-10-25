@@ -103,6 +103,14 @@ export function createHttpApi(opts: HttpApiOptions = {}): Api {
       updateStatus: async () => UPDATE_IDLE,
       onUpdateStatus: noUnsubscribe,
       onDataChanged: noUnsubscribe
+    },
+    // The web is always signed in through its own session; desktop sign-in and sync don't apply.
+    account: {
+      status: unavailable,
+      signIn: unavailable,
+      signOut: unavailable,
+      syncNow: unavailable,
+      onChange: noUnsubscribe
     }
   }
 }

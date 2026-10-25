@@ -64,6 +64,13 @@ export function saveAccountState(
   ).run(owner, s.cursor ?? null, s.syncedAt ?? null, s.cursor ?? null, s.syncedAt ?? null)
 }
 
+/** Whether this computer has never-signed-in entries (owner 0), tombstones included. */
+export function hasLocalData(db: SqlDb): boolean {
+  return (
+    db.prepare('SELECT 1 FROM collection_entries WHERE owner_id = 0 LIMIT 1').get() !== undefined
+  )
+}
+
 /**
  * Moves the never-signed-in collection (owner 0) to `owner`, to be pushed; returns the entries moved.
  * Owner-0 rows exist only before the first sign-in ever, so the adopting owner has no local rows yet.

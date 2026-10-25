@@ -77,9 +77,7 @@ export async function signInWithBrowser(deps: {
     }
 
     async function exchange(params: URLSearchParams): Promise<{ token: string; user: Me }> {
-      if (!sameSecret(params.get('state') ?? '', state) || params.has('error')) {
-        throw new SignInError(FAILED)
-      }
+      if (params.has('error')) throw new SignInError(FAILED)
       const code = params.get('code')
       if (!code) throw new SignInError(FAILED)
       let res: Response
@@ -113,13 +111,18 @@ export async function signInWithBrowser(deps: {
         reply(res, 404, 'Not found')
         return
       }
-      // Only the first callback decides the outcome.
-      if (answered || settled) {
+      // Any web page can fire requests at this port, so a callback without the right state
+      // (or with neither a code nor an error) is answered but ignored. Only the first valid
+      // callback decides the outcome.
+      const params = url.searchParams
+      const valid =
+        sameSecret(params.get('state') ?? '', state) && (params.has('code') || params.has('error'))
+      if (!valid || answered || settled) {
         reply(res, 400, FAILED_PAGE)
         return
       }
       answered = true
-      exchange(url.searchParams).then(
+      exchange(params).then(
         (value) => {
           reply(res, 200, SIGNED_IN_PAGE)
           finish({ value })
@@ -133,7 +136,10 @@ export async function signInWithBrowser(deps: {
 
     const startUrl =
       `${base}/auth/desktop/start?` + new URLSearchParams({ port: String(port), state, challenge })
-    deps.openExternal(startUrl).catch(() => finish({ error: new SignInError(FAILED) }))
+    // A synchronous throw from openExternal also settles through finish.
+    Promise.resolve()
+      .then(() => deps.openExternal(startUrl))
+      .catch(() => finish({ error: new SignInError(FAILED) }))
   })
 }
 

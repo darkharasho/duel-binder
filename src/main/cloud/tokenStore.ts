@@ -1,4 +1,16 @@
-import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { randomBytes } from 'node:crypto'
+import {
+  chmodSync,
+  closeSync,
+  existsSync,
+  fsyncSync,
+  mkdirSync,
+  openSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeSync
+} from 'node:fs'
 import { dirname } from 'node:path'
 
 export interface Cipher {
@@ -107,9 +119,27 @@ export class TokenStore {
     return data
   }
 
+  /**
+   * Writes atomically: a fresh 0600 temp file in the same directory is synced and renamed
+   * over the target, so a crash never leaves a truncated file (losing pending revokes) and
+   * new contents never land in an existing file with looser permissions.
+   */
   private write(data: FileShape): void {
     mkdirSync(dirname(this.path), { recursive: true })
-    writeFileSync(this.path, JSON.stringify(data, null, 2), { mode: 0o600 })
+    const tmp = `${this.path}.${process.pid}.${randomBytes(6).toString('hex')}.tmp`
+    try {
+      const fd = openSync(tmp, 'wx', 0o600)
+      try {
+        writeSync(fd, JSON.stringify(data, null, 2))
+        fsyncSync(fd)
+      } finally {
+        closeSync(fd)
+      }
+      renameSync(tmp, this.path)
+    } catch (e) {
+      rmSync(tmp, { force: true })
+      throw e
+    }
     chmodSync(this.path, 0o600)
   }
 }

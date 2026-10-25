@@ -1,5 +1,14 @@
 import { createHash } from 'node:crypto'
-import { existsSync, mkdtempSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import {
+  chmodSync,
+  existsSync,
+  mkdtempSync,
+  readdirSync,
+  readFileSync,
+  rmSync,
+  statSync,
+  writeFileSync
+} from 'node:fs'
 import { createConnection } from 'node:net'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
@@ -86,6 +95,19 @@ describe('TokenStore', () => {
     expect(reopened.pendingRevokes()).toEqual([])
     expect(existsSync(file)).toBe(true)
   })
+
+  it.skipIf(process.platform === 'win32')(
+    'writes replace a loose-permission file atomically and leave no temp files',
+    () => {
+      const store = new TokenStore(file, fakeCipher)
+      store.set('first')
+      chmodSync(file, 0o644)
+      store.set('second')
+      expect(statSync(file).mode & 0o777).toBe(0o600)
+      expect(store.get()).toBe('second')
+      expect(readdirSync(join(dir, 'nested'))).toEqual(['account.json'])
+    }
+  )
 })
 
 /** Runs sign-in, handing the test the start URL once the browser would open. */
@@ -160,15 +182,35 @@ describe('signInWithBrowser', () => {
     expect(await portIsFree(port)).toBe(true)
   })
 
-  it('a wrong state is refused without exchanging the code', async () => {
-    const exchange = vi.fn()
-    const { result, started } = startSignIn({ exchange: exchange as unknown as typeof fetch })
-    const rejected = expect(result).rejects.toThrow(new SignInError("Sign-in didn't go through"))
+  it('a wrong state is ignored without exchanging the code', async () => {
+    const exchange = vi.fn<typeof fetch>(async () =>
+      Response.json({ token: 'desk-token', user: ME })
+    )
+    const { result, started } = startSignIn({ exchange })
+    let settled = false
+    void result.then(
+      () => (settled = true),
+      () => (settled = true)
+    )
     const start = await started
-    const page = await callback(start, { code: 'c', state: 'x'.repeat(43) })
-    expect(await page.text()).toContain("Sign-in didn't go through.")
-    await rejected
+    const state = start.searchParams.get('state')!
+    for (const query of <Record<string, string>[]>[
+      { code: 'c', state: 'x'.repeat(43) },
+      { error: 'signin-failed', state: 'x'.repeat(43) },
+      { code: 'c' },
+      { state }
+    ]) {
+      const page = await callback(start, query)
+      expect(await page.text()).toContain("Sign-in didn't go through.")
+    }
+    await new Promise((r) => setTimeout(r, 20))
+    expect(settled).toBe(false)
     expect(exchange).not.toHaveBeenCalled()
+
+    const page = await callback(start, { code: 'good', state })
+    expect(await page.text()).toContain("You're signed in.")
+    await expect(result).resolves.toEqual({ token: 'desk-token', user: ME })
+    expect(exchange).toHaveBeenCalledTimes(1)
   })
 
   it('an error from the portal rejects', async () => {
@@ -181,6 +223,7 @@ describe('signInWithBrowser', () => {
     expect(await page.text()).toContain("Sign-in didn't go through.")
     await rejected
     expect(exchange).not.toHaveBeenCalled()
+    expect(await portIsFree(Number(start.searchParams.get('port')))).toBe(true)
   })
 
   it('a failed code exchange rejects without echoing the response', async () => {
@@ -199,6 +242,52 @@ describe('signInWithBrowser', () => {
     const start = await started
     await rejected
     expect(await portIsFree(Number(start.searchParams.get('port')))).toBe(true)
+  })
+
+  it('a timeout during the code exchange aborts it and frees the port', async () => {
+    let exchangeSignal: AbortSignal | undefined
+    const exchange = vi.fn<typeof fetch>(
+      (_url, init) =>
+        new Promise<Response>((_resolve, reject) => {
+          exchangeSignal = init?.signal ?? undefined
+          exchangeSignal?.addEventListener('abort', () => reject(new Error('aborted')))
+        })
+    )
+    const { result, started } = startSignIn({ exchange, timeoutMs: 200 })
+    const rejected = expect(result).rejects.toThrow(new SignInError('Sign-in timed out'))
+    const start = await started
+    const page = callback(start, { code: 'c', state: start.searchParams.get('state')! }).catch(
+      () => null
+    )
+    await rejected
+    expect(exchange).toHaveBeenCalledTimes(1)
+    expect(exchangeSignal?.aborted).toBe(true)
+    await page
+    expect(await portIsFree(Number(start.searchParams.get('port')))).toBe(true)
+  })
+
+  it('aborting before start never opens the browser', async () => {
+    const controller = new AbortController()
+    controller.abort()
+    const openExternal = vi.fn(async () => {})
+    await expect(
+      signInWithBrowser({ portalUrl: PORTAL, openExternal, signal: controller.signal })
+    ).rejects.toThrow(new SignInError('Sign-in was cancelled'))
+    expect(openExternal).not.toHaveBeenCalled()
+  })
+
+  it('a synchronous throw from openExternal rejects and frees the port', async () => {
+    let port = 0
+    await expect(
+      signInWithBrowser({
+        portalUrl: PORTAL,
+        openExternal: (url) => {
+          port = Number(new URL(url).searchParams.get('port'))
+          throw new Error('no browser')
+        }
+      })
+    ).rejects.toThrow(new SignInError("Sign-in didn't go through"))
+    expect(await portIsFree(port)).toBe(true)
   })
 
   it('aborting cancels sign-in', async () => {

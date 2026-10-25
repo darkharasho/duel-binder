@@ -1,7 +1,15 @@
 import type { SqlDb } from '../../../src/main/db/sql'
 import { adminRoute } from './catalogLoad'
 import { rpcRoute } from './rpc'
-import { finishSignIn, me, signOut, startSignIn } from './auth'
+import {
+  exchangeDesktopCode,
+  finishSignIn,
+  me,
+  revokeDesktopToken,
+  signOut,
+  startDesktopSignIn,
+  startSignIn
+} from './auth'
 import { home } from './home'
 import type { PrintingArtResolver } from '../../../src/main/yugipedia/artResolver'
 import { imageRoute, type ImageBucket } from './images'
@@ -39,12 +47,19 @@ const json = (body: unknown, status = 200): Response =>
 
 export async function handle(req: Request, deps: AppDeps): Promise<Response> {
   const url = new URL(req.url)
-  if ((req.method === 'GET' || req.method === 'HEAD') && url.pathname === '/') return home(req, deps)
+  if ((req.method === 'GET' || req.method === 'HEAD') && url.pathname === '/')
+    return home(req, deps)
   if (req.method === 'GET' && url.pathname === '/api/health') return json({ ok: true })
   if (req.method === 'GET' && url.pathname === '/auth/discord/start') return startSignIn(req, deps)
   if (req.method === 'GET' && url.pathname === '/auth/discord/callback')
     return finishSignIn(req, deps)
   if (req.method === 'POST' && url.pathname === '/auth/logout') return signOut(req, deps)
+  if (req.method === 'GET' && url.pathname === '/auth/desktop/start')
+    return startDesktopSignIn(req, deps)
+  if (req.method === 'POST' && url.pathname === '/auth/desktop/token')
+    return exchangeDesktopCode(req, deps)
+  if (req.method === 'POST' && url.pathname === '/auth/desktop/revoke')
+    return revokeDesktopToken(req, deps)
   if (req.method === 'GET' && url.pathname === '/api/me') return me(req, deps)
   if (url.pathname.startsWith('/api/rpc/')) {
     let channel: string
@@ -55,7 +70,8 @@ export async function handle(req: Request, deps: AppDeps): Promise<Response> {
     }
     return rpcRoute(req, deps, channel)
   }
-  if (url.pathname.startsWith('/img/')) return imageRoute(req, deps, url.pathname.slice('/img/'.length))
+  if (url.pathname.startsWith('/img/'))
+    return imageRoute(req, deps, url.pathname.slice('/img/'.length))
   if (url.pathname.startsWith('/admin/')) return adminRoute(req, deps)
   return json({ error: 'Not found' }, 404)
 }

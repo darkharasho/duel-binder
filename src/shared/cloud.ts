@@ -8,3 +8,11 @@ export const MAX_PULL = 1000
 export const MAX_NOTES = 2000
 /** How far in the future a client timestamp may be before the server clamps it to server time. */
 export const FUTURE_SKEW_MS = 600_000
+
+/** The signed-in user, as returned by the portal's `GET /api/me` and `POST /auth/desktop/token`. */
+export interface Me {
+  id: number
+  username: string
+  displayName: string | null
+  avatarUrl: string | null
+}

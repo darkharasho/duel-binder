@@ -1,10 +1,6 @@
-/** The signed-in user, as returned by the portal's `GET /api/me`. */
-export interface Me {
-  id: number
-  username: string
-  displayName: string | null
-  avatarUrl: string | null
-}
+import type { Me } from '@shared/cloud'
+
+export type { Me }
 
 /** Same-origin `GET /api/me`: the signed-in user, or null when signed out (401). Other failures throw. */
 export async function fetchMe(fetchFn: typeof fetch = fetch): Promise<Me | null> {

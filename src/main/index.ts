@@ -23,6 +23,14 @@ import { createHandlers, registerIpc, type AppDeps } from './ipc/handlers'
 import { seedFakeCollection } from './dev/fakeData'
 import { captureShots } from './dev/capture'
 
+// Launched from a desktop menu, stdout/stderr can be closed pipes; a console.log then emits EPIPE,
+// which would surface as an uncaught exception dialog. Logging is best-effort, so drop those errors.
+for (const stream of [process.stdout, process.stderr]) {
+  stream.on('error', (err: NodeJS.ErrnoException) => {
+    if (err.code !== 'EPIPE') throw err
+  })
+}
+
 // The app was "yugioh-collection-tracker" before it became Duel Binder; keep reading the same data folder.
 app.setPath('userData', join(app.getPath('appData'), 'yugioh-collection-tracker'))
 

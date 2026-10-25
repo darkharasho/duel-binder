@@ -305,6 +305,52 @@ describe('CollectionPage', () => {
     expect(screen.getByRole('dialog')).toBeInTheDocument()
   })
 
+  describe('previous / next card arrows', () => {
+    const rek = entry(3, 'Red-Eyes Black Dragon')
+    const arrow = (name: 'Previous card' | 'Next card'): HTMLElement =>
+      screen.getAllByRole('button', { name })[0]
+    const title = (name: string): Promise<HTMLElement> =>
+      within(screen.getByRole('dialog')).findByRole('heading', { name })
+
+    it('step through entries in the displayed order, disabled at the ends', async () => {
+      setup([bew, dm, rek])
+      await userEvent.click(await screen.findByText('Blue-Eyes White Dragon'))
+      const dialog = await screen.findByRole('dialog')
+      await title('Blue-Eyes White Dragon')
+      expect(arrow('Previous card')).toBeDisabled()
+
+      await userEvent.click(arrow('Next card'))
+      await title('Dark Magician')
+      expect(
+        screen.getByRole('button', { name: /Dark Magician/, pressed: true, hidden: true })
+      ).toBeInTheDocument()
+      await userEvent.click(arrow('Next card'))
+      await title('Red-Eyes Black Dragon')
+      expect(arrow('Next card')).toBeDisabled()
+      await userEvent.click(arrow('Previous card'))
+      await title('Dark Magician')
+      // The same sheet stays open throughout.
+      expect(screen.getByRole('dialog')).toBe(dialog)
+    })
+
+    it('ArrowRight steps, but not while typing in a field', async () => {
+      setup([bew, dm])
+      await userEvent.click(await screen.findByText('Blue-Eyes White Dragon'))
+      const notes = await screen.findByLabelText('Notes')
+      await userEvent.click(notes)
+      await userEvent.keyboard('{ArrowRight}')
+      await new Promise((r) => setTimeout(r, 20))
+      expect(
+        within(screen.getByRole('dialog')).getByRole('heading', { name: 'Blue-Eyes White Dragon' })
+      ).toBeInTheDocument()
+
+      fireEvent.keyDown(screen.getByRole('heading', { name: 'Blue-Eyes White Dragon' }), {
+        key: 'ArrowRight'
+      })
+      await title('Dark Magician')
+    })
+  })
+
   it('empty and no-match states', async () => {
     const onAddCard = vi.fn()
     const { unmount } = setup([], {}, { onAddCard })

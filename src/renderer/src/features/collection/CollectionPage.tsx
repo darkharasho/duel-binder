@@ -4,7 +4,9 @@ import { LayoutGrid, Table2 } from 'lucide-react'
 import { LANGUAGES } from '@shared/languages'
 import type { CollectionFilters, EntryView, SortKey } from '@shared/types'
 import { cardArtUrl, useArtWash } from '@/components/artWashContext'
+import { CardSheet } from '@/components/CardSheet'
 import { PageHeader } from '@/components/PageHeader'
+import { listNav } from '@/components/panelNav'
 import { Button } from '@/components/ui/button'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { TooltipProvider } from '@/components/ui/tooltip'
@@ -108,8 +110,18 @@ export function CollectionPage({ initialEntryId, onAddCard }: Props): React.JSX.
     setSelectedId(e.id)
     setCardId(e.card.id)
   }
+  const close = (): void => {
+    setSelectedId(null)
+    setCardId(null)
+  }
 
   const list = entries.data ?? []
+  const nav = listNav(
+    list,
+    list.findIndex((e) => e.id === selectedId),
+    select,
+    (e) => e.id
+  )
   // The collection tints the page with its first card in the current order.
   useArtWash(list[0] ? cardArtUrl(list[0].imageId) : null)
   const filtered = hasActiveFilters(filters)
@@ -186,15 +198,15 @@ export function CollectionPage({ initialEntryId, onAddCard }: Props): React.JSX.
         )}
 
         {selectedId !== null && cardId !== null && (
-          <EntryDetailPanel
-            cardId={cardId}
-            entryId={selectedId}
-            onSelectEntry={setSelectedId}
-            onClose={() => {
-              setSelectedId(null)
-              setCardId(null)
-            }}
-          />
+          <CardSheet onClose={close}>
+            <EntryDetailPanel
+              cardId={cardId}
+              entryId={selectedId}
+              onSelectEntry={setSelectedId}
+              onClose={close}
+              nav={nav}
+            />
+          </CardSheet>
         )}
       </div>
     </TooltipProvider>

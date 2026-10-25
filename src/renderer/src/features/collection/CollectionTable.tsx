@@ -136,6 +136,7 @@ export function CollectionTable({
         {table.getRowModel().rows.map((row) => (
           <TableRow
             key={row.id}
+            data-nav-key={row.original.id}
             data-state={row.original.id === selectedId ? 'selected' : undefined}
             onClick={() => onSelect(row.original)}
             onKeyDown={(e) => {

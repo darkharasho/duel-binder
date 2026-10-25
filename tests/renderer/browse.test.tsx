@@ -70,6 +70,25 @@ const detail: CardDetail = {
   images: [{ imageId: 1, cardId: 1, sortOrder: 0 }]
 }
 
+const copy: EntryView = {
+  id: 7,
+  quantity: 2,
+  notes: '',
+  createdAt: '2026-01-01T00:00:00Z',
+  updatedAt: '2026-01-01T00:00:00Z',
+  card: detail.card,
+  printing: printing(10),
+  imageId: 1,
+  originalArt: true,
+  unitPrice: 10,
+  priceApproximate: false,
+  priceSource: 'ygoprodeck',
+  priceCheckedAt: null,
+  priceListingCount: null,
+  noPriceReason: null,
+  totalValue: 20
+}
+
 const setup = (
   cards: BrowseCard[],
   total = cards.length,
@@ -165,29 +184,31 @@ describe('BrowsePage', () => {
   })
 
   it('clicking an owned card opens its first copy in the entry editor', async () => {
-    const copy: EntryView = {
-      id: 7,
-      quantity: 2,
-      notes: '',
-      createdAt: '2026-01-01T00:00:00Z',
-      updatedAt: '2026-01-01T00:00:00Z',
-      card: detail.card,
-      printing: printing(10),
-      imageId: 1,
-      originalArt: true,
-      unitPrice: 10,
-      priceApproximate: false,
-      priceSource: 'ygoprodeck',
-      priceCheckedAt: null,
-      priceListingCount: null,
-      noPriceReason: null,
-      totalValue: 20
-    }
     setup([card(1, 'Dark Magician', { owned: 2 })], 1, {
       collection: { forCard: async () => [copy] }
     })
     await userEvent.click(await screen.findByRole('button', { name: /Dark Magician/ }))
     const panel = await screen.findByRole('dialog')
+    expect(await within(panel).findByText('Your copies')).toBeInTheDocument()
+  })
+
+  it('arrows step through the results, opening each as a click would', async () => {
+    setup([card(1, 'Dark Magician', { owned: 2 }), card(2, 'Pot of Greed')], 2, {
+      collection: { forCard: async (id: number) => (id === 1 ? [copy] : []) }
+    })
+    await userEvent.click(await screen.findByRole('button', { name: /Dark Magician/ }))
+    const panel = await screen.findByRole('dialog')
+    expect(await within(panel).findByText('Your copies')).toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: 'Previous card' })[0]).toBeDisabled()
+
+    await userEvent.click(screen.getAllByRole('button', { name: 'Next card' })[0])
+    expect(await within(panel).findByText('You have none yet')).toBeInTheDocument()
+    expect(within(panel).getByRole('heading', { name: 'Pot of Greed' })).toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: 'Next card' })[0]).toBeDisabled()
+    // Switching panel kinds keeps the same sheet open.
+    expect(screen.getByRole('dialog')).toBe(panel)
+
+    await userEvent.click(screen.getAllByRole('button', { name: 'Previous card' })[0])
     expect(await within(panel).findByText('Your copies')).toBeInTheDocument()
   })
 

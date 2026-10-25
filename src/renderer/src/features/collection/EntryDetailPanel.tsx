@@ -6,6 +6,7 @@ import type { EntryView, UpdateEntryInput } from '@shared/types'
 import { CardArt } from '@/components/CardArt'
 import { CardDetails } from '@/components/CardDetails'
 import { PanelCardArt } from '@/components/PanelCardArt'
+import type { PanelNav } from '@/components/panelNav'
 import { scanFor } from '@/components/scanFor'
 import { LanguageTag } from '@/components/LanguageTag'
 import { Button } from '@/components/ui/button'
@@ -17,13 +18,7 @@ import {
   SelectTrigger,
   SelectValue
 } from '@/components/ui/select'
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle
-} from '@/components/ui/sheet'
+import { SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { api, mutationInvalidationKeys, queryKeys } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { EbayPriceLine, EntryValue, StaleBadge, displayTotal } from './EntryValue'
@@ -33,6 +28,7 @@ interface Props {
   entryId: number
   onSelectEntry: (entryId: number) => void
   onClose: () => void
+  nav?: PanelNav
 }
 
 /** Edit form for one entry; remounted (via `key`) when the selected entry changes. */
@@ -183,8 +179,7 @@ function EntryEditor({
             <SelectContent>
               {choosable.map((p) => (
                 <SelectItem key={p.id} value={String(p.id)}>
-                  {p.setCode} · {p.setRarity} — {p.setName}{' '}
-                  <LanguageTag language={p.language} />
+                  {p.setCode} · {p.setRarity} — {p.setName} <LanguageTag language={p.language} />
                 </SelectItem>
               ))}
             </SelectContent>
@@ -213,11 +208,13 @@ function EntryEditor({
   )
 }
 
+/** An owned card with its copies and the selected entry's editor; rendered inside a CardSheet. */
 export function EntryDetailPanel({
   cardId,
   entryId,
   onSelectEntry,
-  onClose
+  onClose,
+  nav
 }: Props): React.JSX.Element {
   const detail = useQuery({
     queryKey: queryKeys.card(cardId),
@@ -228,65 +225,68 @@ export function EntryDetailPanel({
     queryFn: () => api.collection.forCard(cardId)
   })
   const entry = copies.data?.find((c) => c.id === entryId)
+  // Keep the last art up while a stepped-to card's copies load, so the floated card stays put.
+  const [lastEntry, setLastEntry] = useState(entry)
+  if (entry && entry !== lastEntry) setLastEntry(entry)
+  const artEntry = entry ?? lastEntry
   const card = detail.data?.card ?? entry?.card
   const typeLine = card ? [card.type, card.attribute, card.race].filter(Boolean).join(' · ') : ''
 
   return (
-    <Sheet open onOpenChange={(open) => !open && onClose()}>
-      <SheetContent className="w-[420px] overflow-y-auto sm:max-w-[420px]">
-        <SheetHeader>
-          <SheetTitle>{card?.name ?? 'Card'}</SheetTitle>
-          <SheetDescription>{typeLine}</SheetDescription>
-        </SheetHeader>
-        <div className="space-y-5 px-4 pb-6">
-          {entry && (
-            <PanelCardArt
-              imageId={entry.imageId}
-              printingId={scanFor(entry)}
-              alt={entry.card.name}
-            />
-          )}
-          <CardDetails card={card} />
+    <>
+      <SheetHeader>
+        <SheetTitle>{card?.name ?? 'Card'}</SheetTitle>
+        <SheetDescription>{typeLine}</SheetDescription>
+      </SheetHeader>
+      <div className="space-y-5 px-4 pb-6">
+        {artEntry && (
+          <PanelCardArt
+            imageId={artEntry.imageId}
+            printingId={scanFor(artEntry)}
+            alt={artEntry.card.name}
+            nav={nav}
+          />
+        )}
+        <CardDetails card={card} />
 
-          {(copies.data?.length ?? 0) > 0 && (
-            <section aria-label="Your copies" className="space-y-1.5">
-              <h3 className="text-sm font-medium">Your copies</h3>
-              <ul className="space-y-1">
-                {copies.data?.map((c) => (
-                  <li key={c.id}>
-                    <button
-                      type="button"
-                      aria-current={c.id === entryId}
-                      onClick={() => onSelectEntry(c.id)}
-                      className={cn(
-                        'flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                        c.id === entryId ? 'bg-accent' : 'hover:bg-accent/50'
-                      )}
-                    >
-                      <span className="flex items-center gap-1.5">
-                        {c.printing.setCode} · {c.printing.setRarity}
-                        <LanguageTag language={c.printing.language} />
-                      </span>
-                      <span className="tabular-nums text-muted-foreground">×{c.quantity}</span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          )}
+        {(copies.data?.length ?? 0) > 0 && (
+          <section aria-label="Your copies" className="space-y-1.5">
+            <h3 className="text-sm font-medium">Your copies</h3>
+            <ul className="space-y-1">
+              {copies.data?.map((c) => (
+                <li key={c.id}>
+                  <button
+                    type="button"
+                    aria-current={c.id === entryId}
+                    onClick={() => onSelectEntry(c.id)}
+                    className={cn(
+                      'flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                      c.id === entryId ? 'bg-accent' : 'hover:bg-accent/50'
+                    )}
+                  >
+                    <span className="flex items-center gap-1.5">
+                      {c.printing.setCode} · {c.printing.setRarity}
+                      <LanguageTag language={c.printing.language} />
+                    </span>
+                    <span className="tabular-nums text-muted-foreground">×{c.quantity}</span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
 
-          {entry && (
-            <EntryEditor
-              key={`${entry.id}:${entry.updatedAt}`}
-              entry={entry}
-              images={detail.data?.images ?? []}
-              printings={detail.data?.printings ?? []}
-              onSelectEntry={onSelectEntry}
-              onClose={onClose}
-            />
-          )}
-        </div>
-      </SheetContent>
-    </Sheet>
+        {entry && (
+          <EntryEditor
+            key={`${entry.id}:${entry.updatedAt}`}
+            entry={entry}
+            images={detail.data?.images ?? []}
+            printings={detail.data?.printings ?? []}
+            onSelectEntry={onSelectEntry}
+            onClose={onClose}
+          />
+        )}
+      </div>
+    </>
   )
 }

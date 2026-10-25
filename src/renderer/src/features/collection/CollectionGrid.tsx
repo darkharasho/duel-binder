@@ -22,6 +22,7 @@ export function CollectionGrid({ entries, selectedId, onSelect }: Props): React.
         <li key={e.id}>
           <button
             type="button"
+            data-nav-key={e.id}
             onClick={() => onSelect(e)}
             aria-pressed={e.id === selectedId}
             className="group flex w-full flex-col gap-2 rounded-md p-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring aria-pressed:bg-white/[0.06]"

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { screen, within } from '@testing-library/react'
 import type { BrowseCard, CardDetail, EntryView, Printing } from '@shared/types'
+import { CardSheet } from '@/components/CardSheet'
 import { BrowseCardPanel } from '@/features/browse/BrowseCardPanel'
 import { SetCardPanel } from '@/features/sets/SetCardPanel'
 import { createMockApi, renderWithProviders } from './mockApi'
@@ -59,7 +60,9 @@ const browseCard: BrowseCard = {
 
 function renderBrowse(printings: Printing[], entries: EntryView[]): void {
   renderWithProviders(
-    <BrowseCardPanel card={browseCard} onMoreOptions={() => {}} onClose={() => {}} />,
+    <CardSheet onClose={() => {}}>
+      <BrowseCardPanel card={browseCard} onMoreOptions={() => {}} />
+    </CardSheet>,
     {
       api: createMockApi({
         cards: { get: async () => detail(printings) },
@@ -122,10 +125,12 @@ describe('SetCardPanel price for the viewed rarity', () => {
   })
   const renderSet = (entries: EntryView[], rarity = 'Ultra Rare'): void => {
     renderWithProviders(
-      <SetCardPanel
-        setName="Metal Raiders" card={alpha} rarity={rarity} busy={false}
-        onAdjust={() => {}} onMoreOptions={() => {}} onClose={() => {}}
-      />,
+      <CardSheet onClose={() => {}}>
+        <SetCardPanel
+          setName="Metal Raiders" card={alpha} rarity={rarity} busy={false}
+          onAdjust={() => {}} onMoreOptions={() => {}}
+        />
+      </CardSheet>,
       { api: createMockApi({ collection: { forCard: async () => entries } }) }
     )
   }

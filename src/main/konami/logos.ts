@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto'
 import type Database from 'better-sqlite3'
 import { getMeta, setMeta } from '../db/meta'
+import { KONAMI_LOGO_PREFIX } from '../../shared/imageSources'
 
 /**
  * English set logos from Konami's European Yu-Gi-Oh! TCG news, where each product announcement's
@@ -8,7 +9,6 @@ import { getMeta, setMeta } from '../db/meta'
  * The thumbnails sit on white, which the image cache cuts out when it downloads them.
  */
 const LIST_URL = 'https://www.konami.com/games/eu/en/topics/list/?type=topics&game=ygotcg&page='
-export const KONAMI_LOGO_PREFIX = 'https://img.konami.com/'
 const REPO_URL = 'https://github.com/darkharasho/duel-binder'
 export const KONAMI_LOGOS_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000
 const TIMEOUT_MS = 30_000

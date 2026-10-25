@@ -3,7 +3,7 @@ import type Database from 'better-sqlite3'
 import { handle, type AppDeps } from '../../workers/portal/src/app'
 import { addEntry } from '../../src/main/repo/collection'
 import { userScope } from '../../workers/portal/src/scope'
-import { addUser, seededServerDb } from './helpers'
+import { addUser, seededServerDb, memoryBucket } from './helpers'
 
 const BASE = 'https://portal.test'
 const NOW = new Date('2026-10-24T12:00:00.000Z')
@@ -56,6 +56,7 @@ describe('read-only RPC', () => {
     bob = addUser(db, '2', 'bob')
     deps = {
       db,
+      images: memoryBucket(),
       env: {
         PUBLIC_URL: BASE,
         SITE_URL: 'https://site.test',

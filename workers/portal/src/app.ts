@@ -3,6 +3,7 @@ import { adminRoute } from './catalogLoad'
 import { rpcRoute } from './rpc'
 import { finishSignIn, me, signOut, startSignIn } from './auth'
 import { home } from './home'
+import { imageRoute, type ImageBucket } from './images'
 
 /** Vars and secrets the request handlers read. */
 export interface Env {
@@ -18,6 +19,7 @@ export interface Env {
 
 export interface AppDeps {
   db: SqlDb
+  images: ImageBucket
   env: Env
   now: () => Date
   fetch: typeof fetch
@@ -44,6 +46,7 @@ export async function handle(req: Request, deps: AppDeps): Promise<Response> {
     }
     return rpcRoute(req, deps, channel)
   }
+  if (url.pathname.startsWith('/img/')) return imageRoute(req, deps, url.pathname.slice('/img/'.length))
   if (url.pathname.startsWith('/admin/')) return adminRoute(req, deps)
   return json({ error: 'Not found' }, 404)
 }

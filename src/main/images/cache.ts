@@ -4,23 +4,19 @@ import path from 'node:path'
 import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import type { ReadableStream as WebReadableStream } from 'node:stream/web'
-import { KONAMI_LOGO_PREFIX } from '../konami/logos'
-import { PACK_ART_PREFIX } from '../konami/packArt'
 import { createLimiter, type Limiter } from './limiter'
 import { setImageKey } from '../../shared/setImages'
+import {
+  imageUrl,
+  KONAMI_LOGO_PREFIX,
+  PACK_ART_PREFIX,
+  SET_KEY_RE,
+  setImageUrl,
+  YUGIPEDIA_IMAGE_PREFIX,
+  type ImageSize
+} from '../../shared/imageSources'
 
-/** 'cropped' is the artwork alone, without the card frame. */
-export type ImageSize = 'small' | 'full' | 'cropped'
-
-const IMAGE_FOLDER: Record<ImageSize, string> = {
-  small: 'cards_small',
-  full: 'cards',
-  cropped: 'cards_cropped'
-}
-
-export function imageUrl(size: ImageSize, id: number): string {
-  return `https://images.ygoprodeck.com/images/${IMAGE_FOLDER[size]}/${id}.jpg`
-}
+export { imageUrl, setImageUrl, type ImageSize }
 
 /** Parses `ygo-img://<size>/<id>`; null for unknown sizes or ids that aren't positive integers. */
 export function parseImageUrl(url: string): { size: ImageSize; id: number } | null {
@@ -31,10 +27,8 @@ export function parseImageUrl(url: string): { size: ImageSize; id: number } | nu
   return { size: m[1] as ImageSize, id }
 }
 
-const SET_KEY_RE = /^[A-Za-z0-9_-]+$/
 export { setImageKey }
 
-const YUGIPEDIA_IMAGE_PREFIX = 'https://ms.yugipedia.com/'
 const REPO_URL = 'https://github.com/darkharasho/duel-binder'
 
 /** 'yp-' + first 20 hex chars of sha1(url); null unless url starts with https://ms.yugipedia.com/ */
@@ -50,10 +44,6 @@ export function printingImageKey(url: string | null): string | null {
   if (url !== null && TCGPLAYER_IMAGE_RE.test(url))
     return `tp-${createHash('sha1').update(url).digest('hex').slice(0, 20)}`
   return yugipediaImageKey(url)
-}
-
-export function setImageUrl(key: string): string {
-  return `https://images.ygoprodeck.com/images/sets/${key}.jpg`
 }
 
 /** Parses `ygo-img://set/<key>`; null when the key has characters outside the allowed set. */

@@ -10,6 +10,7 @@ import { createReleaseSource, type Downloads } from './site/releases'
 export interface WorkerEnv extends Env {
   STORE: DurableObjectNamespace<Store>
   ASSETS: Fetcher
+  IMAGES: R2Bucket
   GITHUB_TOKEN?: string
 }
 
@@ -26,6 +27,7 @@ export class Store extends DurableObject<WorkerEnv> {
   fetch(req: Request): Promise<Response> {
     return handle(req, {
       db: this.db,
+      images: this.env.IMAGES,
       env: this.env,
       now: () => new Date(),
       fetch: (input, init) => fetch(input, init)

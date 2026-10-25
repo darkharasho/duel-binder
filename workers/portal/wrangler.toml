@@ -17,6 +17,10 @@ run_worker_first = true
 name = "STORE"
 class_name = "Store"
 
+[[r2_buckets]]
+binding = "IMAGES"
+bucket_name = "duel-binder-images"
+
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["Store"]

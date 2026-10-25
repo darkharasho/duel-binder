@@ -3,6 +3,7 @@ import { runSync } from '../../src/main/sync/sync'
 import type { YgoClient } from '../../src/main/ygo/client'
 import type { ApiCard } from '../../src/main/ygo/mapCard'
 import { migrateServer } from '../../workers/portal/src/migrate'
+import type { ImageBucket } from '../../workers/portal/src/images'
 import fixture from '../fixtures/cardinfo.sample.json'
 
 /** In-memory server-schema database loaded with the sample fixture through the real sync path. */
@@ -25,4 +26,20 @@ export function addUser(db: Database.Database, discordId: string, username: stri
     .prepare('INSERT INTO users (discord_id, username, created_at, updated_at) VALUES (?, ?, ?, ?)')
     .run(discordId, username, now, now)
   return Number(r.lastInsertRowid)
+}
+
+/** In-memory stand-in for the R2 bucket; `store` is exposed so tests can look inside. */
+export function memoryBucket(): ImageBucket & { store: Map<string, { bytes: ArrayBuffer; contentType: string }> } {
+  const store = new Map<string, { bytes: ArrayBuffer; contentType: string }>()
+  return {
+    store,
+    async get(key) {
+      const hit = store.get(key)
+      if (!hit) return null
+      return { body: new Response(hit.bytes).body!, httpMetadata: { contentType: hit.contentType } }
+    },
+    async put(key, value, opts) {
+      store.set(key, { bytes: value, contentType: opts.httpMetadata.contentType })
+    }
+  }
 }

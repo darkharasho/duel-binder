@@ -3,7 +3,13 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowDownAZ, ArrowLeft, ArrowUpAZ, Search } from 'lucide-react'
 import { toast } from 'sonner'
 import type { Language } from '@shared/languages'
-import type { CardSearchResult, CountMode, SetChecklist as SetChecklistData } from '@shared/types'
+import type {
+  CardSearchResult,
+  ChecklistCard,
+  CountMode,
+  SetChecklist as SetChecklistData,
+  SetSummary
+} from '@shared/types'
 import { CardArt } from '@/components/CardArt'
 import { CardSheet } from '@/components/CardSheet'
 import { TiltCard } from '@/components/TiltCard'
@@ -32,10 +38,12 @@ import { SetCardPanel } from './SetCardPanel'
 import { SetArt } from './SetArt'
 import { SetProgress } from './SetProgress'
 import {
+  adjustChecklistCard,
   CHECKLIST_SORTS,
   checklistTiles,
   filterTiles,
   matchesCardSearch,
+  patchSetSummary,
   progressFor,
   replaceChecklistCard,
   sortCards,
@@ -53,6 +61,12 @@ interface SetChecklistProps {
   onModeChange: (m: CountMode) => void
   onBack: () => void
   onAddMissing: (card: CardSearchResult, printingId: number) => void
+}
+
+/** A card's clicks not yet answered, in queue order, and the server's last answer for it. */
+interface InFlight {
+  confirmed: ChecklistCard
+  ops: { printingId: number; delta: 1 | -1 }[]
 }
 
 const FILTERS: readonly { value: TileFilter; label: string }[] = [
@@ -124,6 +138,7 @@ export function SetChecklist({
   } | null>(null)
   const [pending, setPending] = useState<Record<number, number>>({})
   const queues = useRef(new Map<number, ReturnType<typeof createSerialQueue>>())
+  const inFlight = useRef(new Map<number, InFlight>())
   const qc = useQueryClient()
   useBackShortcuts(onBack)
 
@@ -171,29 +186,81 @@ export function SetChecklist({
   const bumpPending = (cardId: number, by: 1 | -1): void =>
     setPending((p) => ({ ...p, [cardId]: (p[cardId] ?? 0) + by }))
 
-  /** Queues one +/- for a card; the server's card replaces ours (set counts recomputed), never refetched. */
+  /** Shows a card as its last server answer with the +/- still in flight applied on top. */
+  const show = (f: InFlight): void => {
+    const card = f.ops.reduce(
+      (c, op) => adjustChecklistCard(c, op.printingId, op.delta),
+      f.confirmed
+    )
+    const next = qc.setQueryData<SetChecklistData | null>(
+      queryKeys.setChecklist(setName, language),
+      (old) => (old ? replaceChecklistCard(old, card) : old)
+    )
+    // The set list stays mounted behind the checklist; patch its one row rather than refetch it.
+    if (next)
+      qc.setQueryData<SetSummary[]>(queryKeys.setsList, (list) =>
+        list ? patchSetSummary(list, next.set) : list
+      )
+  }
+
+  /**
+   * Queues one +/- for a card. The count moves at once; each server answer replaces the card (set
+   * counts recomputed) with later clicks re-applied, so nothing is refetched per click.
+   */
   const adjust = (cardId: number, printingId: number, delta: 1 | -1): void => {
+    const key = queryKeys.setChecklist(setName, language)
+    let f = inFlight.current.get(cardId)
+    if (!f) {
+      const card = qc
+        .getQueryData<SetChecklistData | null>(key)
+        ?.cards.find((c) => c.cardId === cardId)
+      if (!card) return
+      f = { confirmed: card, ops: [] }
+      inFlight.current.set(cardId, f)
+    }
+    const flight = f
+    flight.ops.push({ printingId, delta })
+    // A checklist fetch landing later would overwrite the optimistic card; cancelling reverts
+    // asynchronously, so write after it. show() derives from `flight`, so write order is moot.
+    void qc.cancelQueries({ queryKey: key }).then(() => show(flight))
+
     let queue = queues.current.get(cardId)
     if (!queue) {
       queue = createSerialQueue()
       queues.current.set(cardId, queue)
     }
     bumpPending(cardId, 1)
+    /** Retires this click; a failed one (no card) rolls back to the last server answer. */
+    const settle = (card: ChecklistCard | null): void => {
+      flight.ops.shift()
+      if (card) flight.confirmed = card
+      if (flight.ops.length === 0) inFlight.current.delete(cardId)
+    }
     queue(async () => {
-      const card = await api.sets.adjust(setName, language, printingId, delta)
-      await qc.cancelQueries({ queryKey: queryKeys.setChecklist(setName, language) })
-      qc.setQueryData<SetChecklistData | null>(queryKeys.setChecklist(setName, language), (old) =>
-        old ? replaceChecklistCard(old, card) : old
-      )
-      void qc.invalidateQueries({ queryKey: [...queryKeys.setsList] })
-      for (const k of mutationInvalidationKeys) {
-        if (!(k.length === 1 && k[0] === 'sets')) void qc.invalidateQueries({ queryKey: [...k] })
+      let card: ChecklistCard
+      try {
+        card = await api.sets.adjust(setName, language, printingId, delta)
+      } catch (e) {
+        settle(null)
+        void qc.cancelQueries({ queryKey: key }).then(() => show(flight))
+        throw e
       }
+      settle(card)
+      await qc.cancelQueries({ queryKey: key })
+      show(flight)
     })
       .catch((e: unknown) => {
         toast.error(e instanceof Error ? e.message : 'Could not update the collection')
       })
-      .finally(() => bumpPending(cardId, -1))
+      .finally(() => {
+        bumpPending(cardId, -1)
+        // Once this card's clicks are done, refresh what else counts copies. Only queries on
+        // screen refetch; ['sets'] is skipped since the checklist and set list are patched above.
+        if (inFlight.current.has(cardId)) return
+        for (const k of mutationInvalidationKeys) {
+          if (!(k.length === 1 && k[0] === 'sets')) void qc.invalidateQueries({ queryKey: [...k] })
+        }
+      })
   }
 
   if (data === null) {

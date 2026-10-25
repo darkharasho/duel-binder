@@ -1,8 +1,10 @@
 import type { ChecklistCard, SetChecklist, SetSummary } from '@shared/types'
 import {
+  adjustChecklistCard,
   checklistTiles,
   filterSets,
   filterTiles,
+  patchSetSummary,
   progressFor,
   replaceChecklistCard,
   setsHeader,
@@ -11,7 +13,7 @@ import {
   sortTiles
 } from '@/features/sets/setsView'
 import { createSerialQueue } from '@/lib/serialQueue'
-import { metalRaidersChecklist } from './setFixtures'
+import { metalRaidersChecklist, PRINTING } from './setFixtures'
 
 const mk = (o: Partial<SetSummary>): SetSummary => ({
   language: 'en',
@@ -262,13 +264,29 @@ describe('sortTiles', () => {
   const cardTiles = checklistTiles(metalRaidersChecklist, 'cards')
 
   it('sorts by ATK with cards that have none last, whichever the direction', () => {
-    expect(names(sortTiles(cardTiles, 'atk', 'desc'))).toEqual(['Alpha Dragon', 'Beta Knight', 'Gamma Trap'])
-    expect(names(sortTiles(cardTiles, 'atk', 'asc'))).toEqual(['Beta Knight', 'Alpha Dragon', 'Gamma Trap'])
+    expect(names(sortTiles(cardTiles, 'atk', 'desc'))).toEqual([
+      'Alpha Dragon',
+      'Beta Knight',
+      'Gamma Trap'
+    ])
+    expect(names(sortTiles(cardTiles, 'atk', 'asc'))).toEqual([
+      'Beta Knight',
+      'Alpha Dragon',
+      'Gamma Trap'
+    ])
   })
 
   it('sorts by name and set number', () => {
-    expect(names(sortTiles(cardTiles, 'name', 'desc'))).toEqual(['Gamma Trap', 'Beta Knight', 'Alpha Dragon'])
-    expect(names(sortTiles(cardTiles, 'number', 'desc'))).toEqual(['Gamma Trap', 'Beta Knight', 'Alpha Dragon'])
+    expect(names(sortTiles(cardTiles, 'name', 'desc'))).toEqual([
+      'Gamma Trap',
+      'Beta Knight',
+      'Alpha Dragon'
+    ])
+    expect(names(sortTiles(cardTiles, 'number', 'desc'))).toEqual([
+      'Gamma Trap',
+      'Beta Knight',
+      'Alpha Dragon'
+    ])
   })
 
   it('prices each rarity tile by its own rarity', () => {
@@ -281,6 +299,39 @@ describe('sortTiles', () => {
       'Gamma Trap',
       'Alpha Dragon',
       'Beta Knight'
+    ])
+  })
+})
+
+describe('adjustChecklistCard', () => {
+  const alpha = metalRaidersChecklist.cards[0]
+
+  it('moves the code, its rarity and the card by one', () => {
+    const up = adjustChecklistCard(alpha, PRINTING.alphaSecret, 1)
+    expect(up.owned).toBe(3)
+    expect(up.rarities[0]).toMatchObject({ owned: 1, codes: [{ owned: 1 }] })
+    expect(up.rarities[1]).toBe(alpha.rarities[1])
+    const down = adjustChecklistCard(alpha, PRINTING.alphaUltraE001, -1)
+    expect(down.owned).toBe(1)
+    expect(down.rarities[1].owned).toBe(1)
+    expect(down.rarities[1].codes.map((c) => c.owned)).toEqual([0, 1, 0])
+  })
+
+  it('never goes below zero, like the server', () => {
+    expect(adjustChecklistCard(alpha, PRINTING.alphaSecret, -1)).toBe(alpha)
+  })
+})
+
+describe('patchSetSummary', () => {
+  it("replaces only the matching set's owned counts", () => {
+    const en = mk({ setName: 'Metal Raiders', totalCards: 3 })
+    const ja = mk({ setName: 'Metal Raiders', language: 'ja' })
+    const other = mk({ setName: 'Other' })
+    const fresh = { ...en, ownedCards: 2, ownedRarities: 3, totalCards: 99 }
+    expect(patchSetSummary([en, ja, other], fresh)).toEqual([
+      { ...en, ownedCards: 2, ownedRarities: 3 },
+      ja,
+      other
     ])
   })
 })

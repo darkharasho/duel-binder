@@ -1,8 +1,13 @@
 import { useRef, useState } from 'react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import {
+  useQuery,
+  useQueryClient,
+  type InfiniteData,
+  type QueryClient
+} from '@tanstack/react-query'
 import { Minus, Plus } from 'lucide-react'
 import { toast } from 'sonner'
-import type { BrowseCard, Printing } from '@shared/types'
+import type { BrowseCard, BrowsePage, ChecklistCard, EntryView, Printing } from '@shared/types'
 import { CardDetails } from '@/components/CardDetails'
 import { PanelCardArt } from '@/components/PanelCardArt'
 import type { PanelNav } from '@/components/panelNav'
@@ -22,9 +27,45 @@ interface BrowseCardPanelProps {
   nav?: PanelNav
 }
 
+/** The panel's clicks not yet answered, in queue order, over the server's last count per printing. */
+interface InFlight {
+  confirmed: Map<number, number>
+  ops: { printingId: number; delta: 1 | -1 }[]
+}
+
+function countsOf(f: InFlight): Map<number, number> {
+  const counts = new Map(f.confirmed)
+  for (const op of f.ops)
+    counts.set(op.printingId, Math.max(0, (counts.get(op.printingId) ?? 0) + op.delta))
+  return counts
+}
+
+/** Moves a card's owned count in every cached Browse page, without refetching them. */
+function patchBrowseOwned(qc: QueryClient, cardId: number, by: number): void {
+  qc.setQueriesData<InfiniteData<BrowsePage>>(
+    { queryKey: ['browse'], predicate: (q) => q.queryKey[1] !== 'facets' },
+    (old) =>
+      old?.pages
+        ? {
+            ...old,
+            pages: old.pages.map((page) => ({
+              ...page,
+              cards: page.cards.map((c) =>
+                c.id === cardId ? { ...c, owned: Math.max(0, c.owned + by) } : c
+              )
+            }))
+          }
+        : old
+  )
+}
+
+/** A printing's owned count in the checklist card `sets.adjust` answers with. */
+const ownedIn = (card: ChecklistCard, printingId: number): number | undefined =>
+  card.rarities.flatMap((r) => r.codes).find((c) => c.printingId === printingId)?.owned
+
 /**
  * A card from Browse with a −/count/+ stepper per printing; English printings first.
- * Rendered inside a CardSheet.
+ * Rendered inside a CardSheet; give it a key per card so counts in flight never carry over.
  */
 export function BrowseCardPanel({
   card,
@@ -34,6 +75,12 @@ export function BrowseCardPanel({
   const qc = useQueryClient()
   const queue = useRef(createSerialQueue())
   const [pending, setPending] = useState(0)
+  const flight = useRef<InFlight | null>(null)
+  // Counts shown since the last click, with the forCard data they were shown over.
+  const [local, setLocal] = useState<{
+    base: EntryView[] | undefined
+    counts: Map<number, number>
+  } | null>(null)
   const detail = useQuery({
     queryKey: queryKeys.card(card.id),
     queryFn: () => api.cards.get(card.id)
@@ -49,11 +96,17 @@ export function BrowseCardPanel({
   const printings = [...(detail.data?.printings ?? [])].sort(
     (a, b) => Number(a.language !== 'en') - Number(b.language !== 'en')
   )
-  const ownedOf = (printingId: number): number =>
+  const serverOwned = (printingId: number): number =>
     (copies.data ?? [])
       .filter((c) => c.printing.id === printingId)
       .reduce((n, c) => n + c.quantity, 0)
-  const total = (copies.data ?? []).reduce((n, c) => n + c.quantity, 0)
+  // Our counts hold until forCard catches up (it is refetched once the clicks are done).
+  const overlay = local && (pending > 0 || local.base === copies.data) ? local.counts : null
+  const ownedOf = (printingId: number): number =>
+    overlay?.get(printingId) ?? serverOwned(printingId)
+  const total =
+    (copies.data ?? []).reduce((n, c) => n + c.quantity, 0) +
+    printings.reduce((n, p) => n + ownedOf(p.id) - serverOwned(p.id), 0)
   const moreFor = card.defaultPrintingId ?? printings[0]?.id
   // Price the printing the art shows; rarities of one card can differ by orders of magnitude.
   const shown = printings.find((p) => p.id === card.defaultPrintingId)
@@ -62,19 +115,48 @@ export function BrowseCardPanel({
   // An owned printing shows the price the collection shows (eBay-first), not YGOPRODeck's.
   const ownedEntry = shown ? (copies.data ?? []).find((c) => c.printing.id === shown.id) : undefined
 
+  /**
+   * Queues one +/- of a printing. The count moves at once; each answer from the server becomes
+   * the confirmed count with later clicks re-applied. Browse pages get the card's new owned count
+   * patched in, and other lists refresh in the background once the clicks are done.
+   */
   const adjust = (p: Printing, delta: 1 | -1): void => {
+    if (!flight.current)
+      flight.current = { confirmed: new Map(printings.map((x) => [x.id, ownedOf(x.id)])), ops: [] }
+    const f = flight.current
+    const show = (): void =>
+      setLocal({ base: qc.getQueryData(queryKeys.forCard(card.id)), counts: countsOf(f) })
+    f.ops.push({ printingId: p.id, delta })
+    show()
     setPending((n) => n + 1)
     queue
       .current(async () => {
-        await api.sets.adjust(p.setName, p.language, p.id, delta)
-        await Promise.all(
-          mutationInvalidationKeys.map((k) => qc.invalidateQueries({ queryKey: [...k] }))
-        )
+        let answer: ChecklistCard
+        try {
+          answer = await api.sets.adjust(p.setName, p.language, p.id, delta)
+        } finally {
+          f.ops.shift()
+        }
+        const before = f.confirmed.get(p.id) ?? 0
+        const after = ownedIn(answer, p.id) ?? Math.max(0, before + delta)
+        f.confirmed.set(p.id, after)
+        if (after !== before) patchBrowseOwned(qc, card.id, after - before)
       })
       .catch((e: unknown) => {
         toast.error(e instanceof Error ? e.message : 'Could not update the collection')
       })
-      .finally(() => setPending((n) => n - 1))
+      .finally(() => {
+        // A failed click is simply dropped: the counts roll back to the last confirmed ones.
+        show()
+        setPending((n) => n - 1)
+        if (f.ops.length > 0) return
+        flight.current = null
+        // Mark Browse stale without refetching every loaded page; its counts are patched above.
+        void qc.invalidateQueries({ queryKey: ['browse'], refetchType: 'none' })
+        for (const k of mutationInvalidationKeys) {
+          if (k[0] !== 'browse') void qc.invalidateQueries({ queryKey: [...k] })
+        }
+      })
   }
 
   return (

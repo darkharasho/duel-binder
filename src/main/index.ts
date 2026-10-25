@@ -28,6 +28,9 @@ import { createUpdater, updateMode, RELEASES_URL } from './updater'
 import { createHandlers, registerIpc, type AppDeps } from './ipc/handlers'
 import { seedFakeCollection } from './dev/fakeData'
 
+// The app was "yugioh-collection-tracker" before it became Duel Binder; keep reading the same data folder.
+app.setPath('userData', join(app.getPath('appData'), 'yugioh-collection-tracker'))
+
 /** `npm run dev:fake-data`: a separate profile with a seeded collection; never in packaged builds. */
 const fakeData = !app.isPackaged && process.env['YGO_FAKE_DATA'] === '1'
 if (fakeData) app.setPath('userData', `${app.getPath('userData')}-fake-data`)
@@ -42,7 +45,7 @@ function createWindow(): void {
     height: 800,
     minWidth: 1100,
     minHeight: 700,
-    title: 'Yugioh Collection Tracker',
+    title: 'Duel Binder',
     show: false,
     autoHideMenuBar: true,
     backgroundColor: '#111113',

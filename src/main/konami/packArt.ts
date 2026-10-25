@@ -17,7 +17,7 @@ const CATEGORIES = [
   'tournament-packs',
   'others'
 ]
-const REPO_URL = 'https://github.com/darkharasho/yugioh-collection-tracker'
+const REPO_URL = 'https://github.com/darkharasho/duel-binder'
 export const PACK_ART_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000
 const TIMEOUT_MS = 30_000
 
@@ -78,7 +78,7 @@ export async function refreshPackArt(
   opts: { version: string; fetchFn?: typeof fetch; now?: Date }
 ): Promise<number> {
   const fetchFn = opts.fetchFn ?? fetch
-  const headers = { 'User-Agent': `YugiohCollectionTracker/${opts.version} (${REPO_URL})` }
+  const headers = { 'User-Agent': `DuelBinder/${opts.version} (${REPO_URL})` }
   const listed: ListedProduct[] = []
   for (const category of CATEGORIES) {
     try {

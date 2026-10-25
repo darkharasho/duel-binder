@@ -1,5 +1,5 @@
 appId: com.darkharasho.yugiohcollectiontracker
-productName: Yugioh Collection Tracker
+productName: Duel Binder
 directories:
   buildResources: build
 files:
@@ -17,7 +17,7 @@ asarUnpack:
   - '**/*.node'
 win:
   target: nsis
-  executableName: yugioh-collection-tracker
+  executableName: duel-binder
 nsis:
   artifactName: ${name}-${version}-setup.${ext}
   shortcutName: ${productName}
@@ -49,5 +49,5 @@ npmRebuild: true
 publish:
   provider: github
   owner: darkharasho
-  repo: yugioh-collection-tracker
+  repo: duel-binder
   releaseType: draft

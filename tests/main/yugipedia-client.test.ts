@@ -69,7 +69,7 @@ describe('yugipedia client', () => {
     const { url, headers } = calls[0]
     expect(url.origin + url.pathname).toBe('https://yugipedia.com/api.php')
     expect(headers['User-Agent']).toBe(
-      'YugiohCollectionTracker/1.2.3 (https://github.com/darkharasho/yugioh-collection-tracker)'
+      'DuelBinder/1.2.3 (https://github.com/darkharasho/duel-binder)'
     )
     expect(url.searchParams.get('maxlag')).toBe('5')
     expect(url.searchParams.get('format')).toBe('json')

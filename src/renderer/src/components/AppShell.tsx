@@ -56,9 +56,9 @@ export function AppShell({ page, onNavigate, onAddCard, children }: AppShellProp
           <div className="flex items-center gap-2.5">
             <img src={logo} alt="" className="h-9 w-auto" />
             <span className="text-[13px] font-semibold leading-tight">
-              Yugioh
+              Duel
               <br />
-              Collection Tracker
+              Binder
             </span>
           </div>
           <nav aria-label="Main" className="flex flex-col">

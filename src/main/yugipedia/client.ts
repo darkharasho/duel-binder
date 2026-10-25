@@ -1,5 +1,5 @@
 const API_URL = 'https://yugipedia.com/api.php'
-const REPO_URL = 'https://github.com/darkharasho/yugioh-collection-tracker'
+const REPO_URL = 'https://github.com/darkharasho/duel-binder'
 const IMAGE_URL_PREFIX = 'https://ms.yugipedia.com/'
 const SET_LIST_NAMESPACE = '3006'
 // Yugipedia can take 20-30s to answer a batch, so give it room before retrying.
@@ -65,7 +65,7 @@ export function createYugipediaClient(opts: {
   const fetchFn = opts.fetchFn ?? fetch
   const sleep = opts.sleep ?? ((ms: number) => new Promise<void>((r) => setTimeout(r, ms)))
   const now = opts.now ?? Date.now
-  const userAgent = `YugiohCollectionTracker/${opts.version} (${REPO_URL})`
+  const userAgent = `DuelBinder/${opts.version} (${REPO_URL})`
   let lastStart: number | null = null
 
   async function paceThenFetch(url: string): Promise<Response> {

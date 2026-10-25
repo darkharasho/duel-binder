@@ -1,7 +1,7 @@
 import type { AppUpdater } from 'electron-updater'
 import type { UpdateStatus } from '@shared/types'
 
-export const RELEASES_URL = 'https://github.com/darkharasho/yugioh-collection-tracker/releases'
+export const RELEASES_URL = 'https://github.com/darkharasho/duel-binder/releases'
 export const CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000
 
 /** Unsigned macOS builds cannot self-update, so they only point at the release page. */

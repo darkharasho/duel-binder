@@ -9,7 +9,7 @@ import { getMeta, setMeta } from '../db/meta'
  */
 const LIST_URL = 'https://www.konami.com/games/eu/en/topics/list/?type=topics&game=ygotcg&page='
 export const KONAMI_LOGO_PREFIX = 'https://img.konami.com/'
-const REPO_URL = 'https://github.com/darkharasho/yugioh-collection-tracker'
+const REPO_URL = 'https://github.com/darkharasho/duel-binder'
 export const KONAMI_LOGOS_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000
 const TIMEOUT_MS = 30_000
 const MAX_PAGES = 30
@@ -133,7 +133,7 @@ export async function refreshKonamiLogos(
   opts: { version: string; fetchFn?: typeof fetch; now?: Date }
 ): Promise<number> {
   const fetchFn = opts.fetchFn ?? fetch
-  const headers = { 'User-Agent': `YugiohCollectionTracker/${opts.version} (${REPO_URL})` }
+  const headers = { 'User-Agent': `DuelBinder/${opts.version} (${REPO_URL})` }
   const articles: Article[] = []
   try {
     for (let page = 1, last = 1; page <= Math.min(last, MAX_PAGES); page++) {

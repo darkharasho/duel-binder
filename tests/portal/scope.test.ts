@@ -48,7 +48,7 @@ describe('owner scope', () => {
   it('remove tombstones on the server', () => {
     const s = userScope(u1)
     const e = addEntry(db, input(1), now, s)
-    removeEntry(db, e.id, s)
+    removeEntry(db, e.id, undefined, s)
     expect(listEntries(db, ALL, s)).toEqual([])
     const raw = db.prepare('SELECT deleted_at FROM collection_entries WHERE id = ?').get(e.id) as { deleted_at: string | null }
     expect(raw.deleted_at).not.toBeNull()

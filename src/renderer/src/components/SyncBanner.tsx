@@ -3,12 +3,13 @@ import { Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { api, queryKeys } from '@/lib/api'
 import { formatRelative } from '@/lib/format'
+import { isWeb } from '@/lib/platform'
 import { isSyncing, useSyncStatus } from './useSyncStatus'
 
 export function SyncBanner(): React.JSX.Element | null {
   const status = useSyncStatus()
   const qc = useQueryClient()
-  if (!status) return null
+  if (!status || isWeb()) return null
 
   const retry = (): void => {
     // Failures are surfaced through the sync status (onProgress); just log here.

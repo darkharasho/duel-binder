@@ -1,5 +1,8 @@
 import { DurableObject } from 'cloudflare:workers'
 import type { SqlDb } from '../../../src/main/db/sql'
+import { createPrintingArtResolver, type PrintingArtResolver } from '../../../src/main/yugipedia/artResolver'
+import { createTcgplayerLookup } from '../../../src/main/tcgplayer/catalog'
+import { createYugipediaClient } from '../../../src/main/yugipedia/client'
 import { handle, type Env } from './app'
 import { doSql } from './doSql'
 import { migrateServer } from './migrate'
@@ -10,22 +13,32 @@ import { createReleaseSource, type Downloads } from './site/releases'
 export interface WorkerEnv extends Env {
   STORE: DurableObjectNamespace<Store>
   ASSETS: Fetcher
+  IMAGES: R2Bucket
   GITHUB_TOKEN?: string
 }
 
 /** The single Durable Object holding the catalog and every user's collection. */
 export class Store extends DurableObject<WorkerEnv> {
   private readonly db: SqlDb
+  private readonly printingArt: PrintingArtResolver
 
   constructor(ctx: DurableObjectState, env: WorkerEnv) {
     super(ctx, env)
     this.db = doSql(ctx.storage)
+    this.printingArt = createPrintingArtResolver({
+      db: this.db,
+      client: createYugipediaClient({ version: 'portal' }),
+      quickUrl: createTcgplayerLookup(this.db)
+    })
     void ctx.blockConcurrencyWhile(async () => migrateServer(this.db))
   }
 
   fetch(req: Request): Promise<Response> {
     return handle(req, {
       db: this.db,
+      assets: this.env.ASSETS,
+      images: this.env.IMAGES,
+      printingArt: this.printingArt,
       env: this.env,
       now: () => new Date(),
       fetch: (input, init) => fetch(input, init)
@@ -44,6 +57,7 @@ export default {
       return handleSite(req, { appUrl: env.PUBLIC_URL, assets: env.ASSETS, downloads })
     }
     if (route.kind === 'redirect') return Response.redirect(route.location, 301)
+    if (route.kind === 'app-asset') return env.ASSETS.fetch(req)
     return env.STORE.get(env.STORE.idFromName('main')).fetch(req)
   }
 } satisfies ExportedHandler<WorkerEnv>

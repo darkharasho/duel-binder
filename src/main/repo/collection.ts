@@ -174,7 +174,7 @@ export function updateEntry(
   })()
 }
 
-export function removeEntry(db: SqlDb, id: number, scope: Scope = LOCAL, now = new Date()): void {
+export function removeEntry(db: SqlDb, id: number, now = new Date(), scope: Scope = LOCAL): void {
   scope.deleteEntry(db, id, now.toISOString())
 }
 

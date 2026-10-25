@@ -3,7 +3,7 @@ import type Database from 'better-sqlite3'
 import { handle, type AppDeps } from '../../workers/portal/src/app'
 import { addEntry } from '../../src/main/repo/collection'
 import { userScope } from '../../workers/portal/src/scope'
-import { addUser, seededServerDb } from './helpers'
+import { addUser, seededServerDb, memoryBucket, noPrintingArt } from './helpers'
 
 const BASE = 'https://portal.test'
 const NOW = new Date('2026-10-24T12:00:00.000Z')
@@ -56,6 +56,9 @@ describe('read-only RPC', () => {
     bob = addUser(db, '2', 'bob')
     deps = {
       db,
+      assets: { fetch: async () => new Response('nope', { status: 404 }) },
+      images: memoryBucket(),
+      printingArt: noPrintingArt,
       env: {
         PUBLIC_URL: BASE,
         SITE_URL: 'https://site.test',
@@ -124,9 +127,9 @@ describe('read-only RPC', () => {
     ).toBe(200)
   })
 
-  it('returns 404 for channels not served yet', async () => {
+  it('returns 404 for channels the portal does not serve', async () => {
     const cookie = await sessionFor(alice, 'ta')
-    const res = await rpc('collection:add', [{}], { cookie })
+    const res = await rpc('sync:run', [], { cookie })
     expect(res.status).toBe(404)
     expect(await res.json()).toEqual({ error: 'unknown-channel' })
     expect((await rpc('nope:nope', [], { cookie })).status).toBe(404)

@@ -1,0 +1,21 @@
+import type { InvokeChannel } from './ipc'
+
+/** The invoke channels the web portal serves (a subset of the desktop's). */
+export const PORTAL_CHANNELS = [
+  'cards:search',
+  'cards:get',
+  'cards:browse',
+  'cards:browseFacets',
+  'collection:list',
+  'collection:forCard',
+  'collection:add',
+  'collection:update',
+  'collection:remove',
+  'collection:facets',
+  'stats:get',
+  'sets:list',
+  'sets:checklist',
+  'sets:adjust'
+] as const satisfies readonly InvokeChannel[]
+
+export type PortalChannel = (typeof PORTAL_CHANNELS)[number]

@@ -16,6 +16,10 @@ describe('routeHost', () => {
       location: 'https://duelbinder.com/some/path?x=1'
     })
   })
+  it('sends app-host /app/ paths straight to assets', () => {
+    expect(routeHost(new URL('https://app.duelbinder.com/app/assets/x.js'), SITE)).toEqual({ kind: 'app-asset' })
+    expect(routeHost(new URL('https://app.duelbinder.com/'), SITE)).toEqual({ kind: 'app' })
+  })
   it('sends every other host to the app', () => {
     for (const u of [
       'https://app.duelbinder.com/api/health',
@@ -79,6 +83,13 @@ describe('handleSite', () => {
     expect(res.status).toBe(218)
     expect(assets.fetch).toHaveBeenCalledWith(req)
     expect(dl).not.toHaveBeenCalled()
+  })
+
+  it('answers 404 for /app/* on the site host without touching assets', async () => {
+    const { d, assets } = deps()
+    const res = await handleSite(new Request('https://duelbinder.com/app/web.html'), d)
+    expect(res.status).toBe(404)
+    expect(assets.fetch).not.toHaveBeenCalled()
   })
 
   it('serves fonts with an open CORS header for the app host', async () => {

@@ -1,6 +1,6 @@
 import type Database from 'better-sqlite3'
 import { ipcMain } from 'electron'
-import { isLanguage, type Language } from '@shared/languages'
+import type { Language } from '@shared/languages'
 import type { SyncStatus, UpdateStatus } from '@shared/types'
 import type { INVOKE_CHANNELS } from '@shared/ipc'
 import { INVOKE_CHANNELS as CHANNELS } from '@shared/ipc'
@@ -9,8 +9,8 @@ import type { ImageCache } from '../images/cache'
 import { getSyncStatus, runSync } from '../sync/sync'
 import { getCardDetail, searchCards } from '../repo/cards'
 import { browseCards, browseFacets } from '../repo/browse'
+import { checkLanguage } from '../repo/args'
 import {
-  CollectionError,
   addEntry,
   entriesForCard,
   getFacets,
@@ -52,12 +52,6 @@ export interface HandlerDeps {
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type Handlers = Record<(typeof INVOKE_CHANNELS)[number], (...args: any[]) => Promise<unknown>>
-
-/** The renderer is untrusted: reject anything that is not a known language code. */
-function checkLanguage(language: unknown): Language {
-  if (!isLanguage(language)) throw new CollectionError('Unknown language')
-  return language
-}
 
 export function createHandlers({
   db,

@@ -9,6 +9,7 @@ import { BrowsePage } from '@/features/browse/BrowsePage'
 import { SetsPage } from '@/features/sets/SetsPage'
 import { SettingsPage } from '@/features/settings/SettingsPage'
 import { useDataChanged } from '@/components/useDataChanged'
+import { isWeb } from '@/lib/platform'
 import { useUpdateToasts } from '@/features/settings/useUpdateToasts'
 
 interface AddInitial {
@@ -16,12 +17,17 @@ interface AddInitial {
   printingId: number
 }
 
+/** Hooks that only make sense in the desktop app; kept in a component so the web build can skip them. */
+function DesktopOnlyEffects(): null {
+  useUpdateToasts()
+  return null
+}
+
 function App(): React.JSX.Element {
   const [page, setPage] = useState<Page>('dashboard')
   const [entryId, setEntryId] = useState<number | undefined>()
   const [addOpen, setAddOpen] = useState(false)
   const [addInitial, setAddInitial] = useState<AddInitial | null>(null)
-  useUpdateToasts()
   useDataChanged()
 
   const openAdd = useCallback((initial: AddInitial | null = null): void => {
@@ -47,6 +53,7 @@ function App(): React.JSX.Element {
 
   return (
     <>
+      {!isWeb() && <DesktopOnlyEffects />}
       <AppShell page={page} onNavigate={onNavigate} onAddCard={() => openAdd()}>
         {page === 'dashboard' && (
           <DashboardPage onNavigate={onNavigate} onAddCard={() => openAdd()} />

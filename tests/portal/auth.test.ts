@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import Database from 'better-sqlite3'
+import { memoryBucket, noPrintingArt } from './helpers'
 import { handle, type AppDeps } from '../../workers/portal/src/app'
 import { migrateServer } from '../../workers/portal/src/migrate'
 
@@ -16,6 +17,7 @@ describe('Discord sign-in and sessions', () => {
   let discord: Discord
   let fetchMock: ReturnType<typeof vi.fn>
   let deps: AppDeps
+  let assetsFetch: ReturnType<typeof vi.fn<(r: Request) => Promise<Response>>>
 
   beforeEach(() => {
     clock = new Date('2026-10-24T12:00:00.000Z')
@@ -33,8 +35,12 @@ describe('Discord sign-in and sessions', () => {
       if (url === 'https://discord.com/api/users/@me') return new Response(JSON.stringify(discord.user), { status: 200 })
       return new Response('?', { status: 404 })
     })
+    assetsFetch = vi.fn(async (_r: Request) => new Response('nope', { status: 404 }))
     deps = {
       db,
+      assets: { fetch: assetsFetch },
+      images: memoryBucket(),
+      printingArt: noPrintingArt,
       env: { PUBLIC_URL: BASE, SITE_URL: 'https://site.test', DISCORD_CLIENT_ID: 'cid', DISCORD_CLIENT_SECRET: 'secret', ADMIN_TOKEN: 'admin' },
       now: () => clock,
       fetch: fetchMock as unknown as typeof fetch
@@ -210,6 +216,8 @@ describe('Discord sign-in and sessions', () => {
     expect(res.headers.get('cache-control')).toBe('no-store')
     const html = await res.text()
     expect(html).toContain('href="/auth/discord/start"')
+    expect(html).toContain('Sign in with Discord to open your binder in the browser.')
+    expect(html).not.toContain('on its way')
     expect(html).toContain('href="https://site.test/site.css"')
     expect(html).not.toContain("didn't go through")
   })
@@ -225,6 +233,28 @@ describe('Discord sign-in and sessions', () => {
     expect(html).toContain('Signed in as Seto &lt;Kaiba&gt;.')
     expect(html).toContain('action="/auth/logout"')
     expect(html).not.toContain('/auth/discord/start')
+  })
+
+  it('front page serves the web app to a signed-in user', async () => {
+    assetsFetch.mockImplementation(async (r: Request) =>
+      new URL(r.url).pathname === '/app/web.html'
+        ? new Response('<!doctype html><div id="root">', { status: 200 })
+        : new Response('nope', { status: 404 })
+    )
+    const token = await signIn()
+    const res = await get('/', `session=${token}`)
+    expect(res.status).toBe(200)
+    expect(await res.text()).toContain('id="root"')
+    expect(res.headers.get('cache-control')).toBe('no-store')
+    expect(res.headers.get('content-type')).toBe('text/html; charset=utf-8')
+    expect(res.headers.get('content-security-policy')).toContain("img-src 'self' data: https://cdn.discordapp.com")
+  })
+
+  it("front page falls back to the placeholder when the app isn't built", async () => {
+    const token = await signIn()
+    const html = await (await get('/', `session=${token}`)).text()
+    expect(html).toContain('Signed in as')
+    expect(html).toContain("The web app couldn't load. Try refreshing; your collection is safe in the desktop app.")
   })
 
   it('front page answers HEAD with no body', async () => {

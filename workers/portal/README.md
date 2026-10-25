@@ -4,7 +4,7 @@ One Cloudflare Worker serves three hosts:
 
 - `duelbinder.com`: the marketing page, rendered in `src/site/` from the latest GitHub release, plus the static files in `site/`.
 - `www.duelbinder.com`: a 301 redirect to the apex, keeping the path and query.
-- `app.duelbinder.com`: the API and sign-in. These run in the `Store` Durable Object, which holds the catalog and every user's collection.
+- `app.duelbinder.com`: the API and sign-in. These run in the `Store` Durable Object, which holds the catalog and every user's collection. A signed-in visitor to `/` gets the web app (the built renderer), and `/app/*` serves its files straight from assets. Card images are served by `/img/...` routes, backed by the `IMAGES` R2 bucket (`duel-binder-images`, which must exist before deploying).
 
 ## Configuration
 
@@ -25,8 +25,10 @@ The GitHub repo variable `PORTAL_URL` (`https://app.duelbinder.com`) tells `.git
 ```bash
 npm test && npm run typecheck   # from workers/portal
 npx wrangler dev --var SITE_URL:http://localhost:8787 --local-upstream localhost:8787
-npx wrangler deploy
+npm run deploy                  # builds the web app (npm run build:web at the repo root) into site/app/, then wrangler deploy
 ```
+
+The web build goes to `site/app/`, which is git-ignored. Build it before `wrangler dev` too, or the signed-in front page falls back to the placeholder.
 
 `wrangler dev` sends every request to the first custom domain. `--local-upstream` makes `localhost` serve the marketing page instead.
 

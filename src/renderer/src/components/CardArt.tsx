@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { cn } from '@/lib/utils'
+import { cardImageSrc, printingImageSrc } from '@/lib/images'
 
 interface CardArtProps {
   imageId: number
@@ -38,7 +39,7 @@ function PrintingScan({
   if (state === 'failed') return null
   return (
     <img
-      src={`ygo-img://printing/${printingId}`}
+      src={printingImageSrc(printingId)}
       alt=""
       aria-hidden
       data-testid="printing-scan"
@@ -67,7 +68,7 @@ export function CardArt({ imageId, size, alt, className, printingId }: CardArtPr
     if (failed) return <CardBack className={className} label={alt} />
     return (
       <img
-        src={`ygo-img://${size}/${imageId}`}
+        src={cardImageSrc(size, imageId)}
         alt={alt}
         loading="lazy"
         draggable={false}
@@ -88,7 +89,7 @@ export function CardArt({ imageId, size, alt, className, printingId }: CardArtPr
         <CardBack className="absolute inset-0 size-full" label={alt} />
       ) : (
         <img
-          src={`ygo-img://${size}/${imageId}`}
+          src={cardImageSrc(size, imageId)}
           alt={alt}
           loading="lazy"
           draggable={false}

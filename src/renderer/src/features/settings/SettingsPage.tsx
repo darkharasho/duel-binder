@@ -7,6 +7,8 @@ import { isSyncing, useSyncStatus } from '@/components/useSyncStatus'
 import { useUpdateStatus } from './useUpdateToasts'
 import { api, queryKeys } from '@/lib/api'
 import { formatRelative } from '@/lib/format'
+import { isWeb } from '@/lib/platform'
+import { AccountSection } from './AccountSection'
 import type { UpdateStatus } from '@shared/types'
 
 function Section({ title, children }: { title: string; children: React.ReactNode }): React.JSX.Element {
@@ -101,9 +103,28 @@ function PriceServiceSection(): React.JSX.Element {
   )
 }
 
+function AboutSection(): React.JSX.Element {
+  return (
+    <Section title="About">
+      <p className="text-sm text-muted-foreground">
+        Non-English set lists from{' '}
+        <a
+          href="https://yugipedia.com/"
+          target="_blank"
+          rel="noreferrer"
+          className="underline underline-offset-2 hover:text-foreground"
+        >
+          Yugipedia
+        </a>{' '}
+        (CC BY-SA 4.0).
+      </p>
+    </Section>
+  )
+}
+
 const formatMb = (bytes: number): string => `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 
-export function SettingsPage(): React.JSX.Element {
+function DesktopSettings(): React.JSX.Element {
   const qc = useQueryClient()
   const sync = useSyncStatus()
   const version = useQuery({ queryKey: ['app', 'version'], queryFn: () => api.app.version() })
@@ -201,20 +222,23 @@ export function SettingsPage(): React.JSX.Element {
         </div>
       </Section>
 
-      <Section title="About">
-        <p className="text-sm text-muted-foreground">
-          Non-English set lists from{' '}
-          <a
-            href="https://yugipedia.com/"
-            target="_blank"
-            rel="noreferrer"
-            className="underline underline-offset-2 hover:text-foreground"
-          >
-            Yugipedia
-          </a>{' '}
-          (CC BY-SA 4.0).
-        </p>
-      </Section>
+      <AboutSection />
     </div>
   )
+}
+
+function WebSettings(): React.JSX.Element {
+  return (
+    <div className="max-w-2xl space-y-8 px-8 pb-10 pt-3">
+      <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
+      <Section title="Account">
+        <AccountSection />
+      </Section>
+      <AboutSection />
+    </div>
+  )
+}
+
+export function SettingsPage(): React.JSX.Element {
+  return isWeb() ? <WebSettings /> : <DesktopSettings />
 }

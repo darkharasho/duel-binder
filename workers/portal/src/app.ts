@@ -3,6 +3,8 @@ import { adminRoute } from './catalogLoad'
 import { rpcRoute } from './rpc'
 import { finishSignIn, me, signOut, startSignIn } from './auth'
 import { home } from './home'
+import type { PrintingArtResolver } from '../../../src/main/yugipedia/artResolver'
+import { imageRoute, type ImageBucket } from './images'
 
 /** Vars and secrets the request handlers read. */
 export interface Env {
@@ -18,6 +20,10 @@ export interface Env {
 
 export interface AppDeps {
   db: SqlDb
+  /** The static assets binding; the signed-in front page serves the built web app from it. */
+  assets: { fetch(req: Request): Promise<Response> }
+  images: ImageBucket
+  printingArt: PrintingArtResolver
   env: Env
   now: () => Date
   fetch: typeof fetch
@@ -35,8 +41,16 @@ export async function handle(req: Request, deps: AppDeps): Promise<Response> {
     return finishSignIn(req, deps)
   if (req.method === 'POST' && url.pathname === '/auth/logout') return signOut(req, deps)
   if (req.method === 'GET' && url.pathname === '/api/me') return me(req, deps)
-  if (url.pathname.startsWith('/api/rpc/'))
-    return rpcRoute(req, deps, decodeURIComponent(url.pathname.slice('/api/rpc/'.length)))
+  if (url.pathname.startsWith('/api/rpc/')) {
+    let channel: string
+    try {
+      channel = decodeURIComponent(url.pathname.slice('/api/rpc/'.length))
+    } catch {
+      return json({ error: 'bad-channel' }, 400)
+    }
+    return rpcRoute(req, deps, channel)
+  }
+  if (url.pathname.startsWith('/img/')) return imageRoute(req, deps, url.pathname.slice('/img/'.length))
   if (url.pathname.startsWith('/admin/')) return adminRoute(req, deps)
   return json({ error: 'Not found' }, 404)
 }

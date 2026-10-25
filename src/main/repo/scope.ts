@@ -23,7 +23,7 @@ export interface Scope {
    * value_snapshots scoping. `insertCols`/`insertVals` are comma-terminated fragments placed before
    * `date` / `?` in an INSERT (and `insertCols + 'date'` is the upsert conflict target).
    */
-  snapshotTable: { where: string; insertCols: string; insertVals: string }
+  snapshotTable: { insertCols: string; insertVals: string }
 }
 
 export const LOCAL: Scope = {
@@ -39,5 +39,5 @@ export const LOCAL: Scope = {
   deleteEntry(db, id) {
     db.prepare('DELETE FROM collection_entries WHERE id = ?').run(id)
   },
-  snapshotTable: { where: '1', insertCols: '', insertVals: '' }
+  snapshotTable: { insertCols: '', insertVals: '' }
 }

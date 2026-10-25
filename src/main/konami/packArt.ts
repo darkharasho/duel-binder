@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto'
 import type Database from 'better-sqlite3'
 import { getMeta, setMeta } from '../db/meta'
+import { PACK_ART_PREFIX } from '../../shared/imageSources'
 
 /**
  * Official pack renders from the English Yu-Gi-Oh! TCG site's product listings, matched to
@@ -8,7 +9,6 @@ import { getMeta, setMeta } from '../db/meta'
  * from about 2018 on; older sets keep their other art.
  */
 const SITE = 'https://www.yugioh-card.com'
-export const PACK_ART_PREFIX = `${SITE}/en/wp-content/uploads/`
 const CATEGORIES = [
   'booster-pack',
   'structure-deck',

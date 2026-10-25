@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Minus, Square, X } from 'lucide-react'
 import { api } from '@/lib/api'
+import { isMac, isWeb } from '@/lib/platform'
 import { cn } from '@/lib/utils'
 
 const noDrag = '[-webkit-app-region:no-drag]'
@@ -58,7 +59,8 @@ export function TitleBar(): React.JSX.Element {
       onDoubleClick={platform === 'linux' ? () => void api.window.toggleMaximize() : undefined}
       className={cn(
         'relative flex h-9 shrink-0 items-center [-webkit-app-region:drag] select-none',
-        platform === 'darwin' && 'pl-20',
+        // Traffic-light room is for the desktop window only, not a Mac browser.
+        isMac() && !isWeb() && 'pl-20',
         platform === 'win32' && 'pr-[140px]'
       )}
     >

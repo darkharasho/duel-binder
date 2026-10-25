@@ -1,16 +1,17 @@
 import type { SqlDb } from '../db/sql'
 import type { BrowseCard, BrowseFacets, BrowseFilters, BrowsePage } from '../../shared/types'
 import { buildFtsQuery } from './cards'
+import { LOCAL, type Scope } from './scope'
 
 const MAX_LIMIT = 200
 
 const escapeLike = (s: string): string => s.replace(/[\\%_]/g, (c) => `\\${c}`)
 
 // Per card: owned copies, earliest English release, and an English printing to preselect.
-const BASE = `
+const base = (scope: Scope): string => `
   WITH owned AS (
     SELECT p.card_id, SUM(e.quantity) AS n FROM collection_entries e
-    JOIN card_printings p ON p.id = e.printing_id GROUP BY p.card_id
+    JOIN card_printings p ON p.id = e.printing_id WHERE ${scope.where('e')} GROUP BY p.card_id
   ),
   released AS (
     SELECT p.card_id, MIN(s.tcg_date) AS d FROM card_printings p
@@ -99,7 +100,7 @@ function whereClause(f: BrowseFilters): { sql: string; params: unknown[] } {
 }
 
 /** One page of every card in the database, filtered and sorted. Cards missing the sort value go last. */
-export function browseCards(db: SqlDb, f: BrowseFilters): BrowsePage {
+export function browseCards(db: SqlDb, f: BrowseFilters, scope: Scope = LOCAL): BrowsePage {
   const { sql, params } = whereClause(f)
   const sortCol = SORT_SQL[f.sort] ?? SORT_SQL.name
   const dir = f.dir === 'desc' ? 'DESC' : 'ASC'
@@ -115,7 +116,7 @@ export function browseCards(db: SqlDb, f: BrowseFilters): BrowsePage {
            LEFT JOIN sets s ON s.language = 'en' AND s.set_name = p.set_name
            WHERE p.card_id = page.id AND p.language = 'en'
            ORDER BY s.tcg_date IS NULL, s.tcg_date, p.id LIMIT 1) AS default_printing_id
-       FROM (${BASE}${sql} ORDER BY ${sortCol} IS NULL, ${sortCol} ${dir}, c.name COLLATE NOCASE, c.id
+       FROM (${base(scope)}${sql} ORDER BY ${sortCol} IS NULL, ${sortCol} ${dir}, c.name COLLATE NOCASE, c.id
          LIMIT ? OFFSET ?) page`
     )
     .all(...params, limit, offset) as BrowseRow[]
@@ -123,7 +124,7 @@ export function browseCards(db: SqlDb, f: BrowseFilters): BrowsePage {
     .prepare(
       `SELECT count(*) AS n FROM cards c
        LEFT JOIN (SELECT p.card_id, SUM(e.quantity) AS n FROM collection_entries e
-         JOIN card_printings p ON p.id = e.printing_id GROUP BY p.card_id) o ON o.card_id = c.id${sql}`
+         JOIN card_printings p ON p.id = e.printing_id WHERE ${scope.where('e')} GROUP BY p.card_id) o ON o.card_id = c.id${sql}`
     )
     .get(...params) as { n: number }
   return {

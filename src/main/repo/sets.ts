@@ -5,6 +5,7 @@ import type { ChecklistCard, ChecklistRarity, SetChecklist, SetSummary } from '.
 import type { Language } from '../../shared/languages'
 import { setImageKey } from '../../shared/setImages'
 import { addEntry, CollectionError } from './collection'
+import { LOCAL, type Scope } from './scope'
 
 interface SummaryDbRow {
   language: Language
@@ -26,7 +27,7 @@ interface SummaryDbRow {
 
 // One row per distinct (language, set_name). A (card, rarity) pair is keyed as "<card_id>|<rarity>";
 // card_id is an integer, so the first "|" always ends it.
-const SUMMARY = `
+const summary = (scope: Scope): string => `
   SELECT p.language, p.set_name, s.set_code AS s_code, MIN(p.set_code) AS min_code, s.tcg_date, s.image_url,
          s.image_key, pa.image_key AS pack_key, COALESCE(sl.image_key, kl.image_key) AS logo_key, s.list_rows, s.unmatched_rows,
          COUNT(DISTINCT p.card_id) AS total_cards,
@@ -35,7 +36,7 @@ const SUMMARY = `
          COUNT(DISTINCT CASE WHEN o.printing_id IS NOT NULL THEN p.card_id || '|' || p.set_rarity END)
            AS owned_rarities
   FROM card_printings p
-  LEFT JOIN (SELECT DISTINCT printing_id FROM collection_entries) o ON o.printing_id = p.id
+  LEFT JOIN (SELECT DISTINCT printing_id FROM collection_entries e WHERE ${scope.where('e')}) o ON o.printing_id = p.id
   LEFT JOIN sets s ON s.language = p.language AND s.set_name = p.set_name
   LEFT JOIN pack_art pa ON p.language = 'en' AND pa.set_name = p.set_name
   LEFT JOIN set_logos sl ON p.language = 'en' AND sl.set_name = p.set_name
@@ -116,9 +117,9 @@ export function findSetImageUrl(db: SqlDb, key: string): string | null {
   return row?.image_url ?? null
 }
 
-export function listSets(db: SqlDb): SetSummary[] {
+export function listSets(db: SqlDb, scope: Scope = LOCAL): SetSummary[] {
   const covers = coverImages(db)
-  return (db.prepare(`${SUMMARY} GROUP BY p.language, p.set_name ORDER BY p.set_name, p.language <> 'en', p.language`).all() as SummaryDbRow[]).map((r) => toSummary(r, covers))
+  return (db.prepare(`${summary(scope)} GROUP BY p.language, p.set_name ORDER BY p.set_name, p.language <> 'en', p.language`).all() as SummaryDbRow[]).map((r) => toSummary(r, covers))
 }
 
 interface PrintingDbRow {
@@ -172,7 +173,8 @@ function checklistCards(
   db: SqlDb,
   setName: string,
   language: Language,
-  cardId?: number
+  cardId: number | undefined,
+  scope: Scope
 ): ChecklistCard[] {
   const cardFilter = cardId === undefined ? '' : ' AND p.card_id = ?'
   const params = cardId === undefined ? [language, setName] : [language, setName, cardId]
@@ -190,7 +192,7 @@ function checklistCards(
     .prepare(
       `SELECT e.id, e.printing_id, e.quantity, e.updated_at
        FROM collection_entries e JOIN card_printings p ON p.id = e.printing_id
-       WHERE p.language = ? AND p.set_name = ?${cardFilter}`
+       WHERE ${scope.where('e')} AND p.language = ? AND p.set_name = ?${cardFilter}`
     )
     .all(...params) as EntryDbRow[]
 
@@ -272,13 +274,14 @@ function checklistCards(
 export function getChecklist(
   db: SqlDb,
   setName: string,
-  language: Language
+  language: Language,
+  scope: Scope = LOCAL
 ): SetChecklist | null {
   const row = db
-    .prepare(`${SUMMARY} WHERE p.language = ? AND p.set_name = ? GROUP BY p.language, p.set_name`)
+    .prepare(`${summary(scope)} WHERE p.language = ? AND p.set_name = ? GROUP BY p.language, p.set_name`)
     .get(language, setName) as SummaryDbRow | undefined
   if (!row) return null
-  return { set: toSummary(row, coverImages(db, { language, setName })), cards: checklistCards(db, setName, language) }
+  return { set: toSummary(row, coverImages(db, { language, setName })), cards: checklistCards(db, setName, language, undefined, scope) }
 }
 
 /**
@@ -292,7 +295,8 @@ export function adjustPrinting(
   language: Language,
   printingId: number,
   delta: 1 | -1,
-  now = new Date()
+  now = new Date(),
+  scope: Scope = LOCAL
 ): ChecklistCard {
   if (delta !== 1 && delta !== -1) throw new CollectionError('Adjustment must be +1 or -1')
   return db.transaction(() => {
@@ -309,11 +313,11 @@ export function adjustPrinting(
 
     if (delta === 1) {
       if (!original) throw new CollectionError('The card has no image')
-      addEntry(db, { printingId, imageId: original.image_id, quantity: 1 }, now)
+      addEntry(db, { printingId, imageId: original.image_id, quantity: 1 }, now, scope)
     } else {
       const entry = db
         .prepare(
-          `SELECT id, quantity FROM collection_entries WHERE printing_id = ?
+          `SELECT id, quantity FROM collection_entries WHERE printing_id = ? AND ${scope.where('collection_entries')}
            ORDER BY image_id = ? DESC, updated_at DESC, id DESC LIMIT 1`
         )
         .get(printingId, original?.image_id ?? null) as { id: number; quantity: number } | undefined
@@ -322,9 +326,9 @@ export function adjustPrinting(
           'UPDATE collection_entries SET quantity = quantity - 1, updated_at = ? WHERE id = ?'
         ).run(now.toISOString(), entry.id)
       } else if (entry) {
-        db.prepare('DELETE FROM collection_entries WHERE id = ?').run(entry.id)
+        scope.deleteEntry(db, entry.id, now.toISOString())
       }
     }
-    return checklistCards(db, setName, language, p.card_id)[0]
+    return checklistCards(db, setName, language, p.card_id, scope)[0]
   })()
 }

@@ -1,17 +1,17 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { ChevronDown } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
+  DropdownMenuSeparator,
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu'
 
-const SEARCHABLE_AT = 12
 const SHOWN_MAX = 200
 
-/** A multi-select filter menu; long lists get a search box. */
+/** A multi-select filter menu with a search box; what's selected is listed first. */
 export function FacetMenu({
   label,
   options,
@@ -24,12 +24,39 @@ export function FacetMenu({
   onChange: (next: string[] | undefined) => void
 }): React.JSX.Element {
   const [q, setQ] = useState('')
+  // The selection as the menu opened; it stays on top (checked or not) so rows don't jump while clicking.
+  const [pinned, setPinned] = useState<string[]>([])
+  const search = useRef<HTMLInputElement>(null)
+  const content = useRef<HTMLDivElement>(null)
   const needle = q.trim().toLowerCase()
-  const matches = needle ? options.filter((o) => o.toLowerCase().includes(needle)) : options
-  // Selected options stay visible even when the search hides them.
-  const shown = [...selected.filter((s) => !matches.includes(s)), ...matches].slice(0, SHOWN_MAX)
+  const matches = (
+    needle ? options.filter((o) => o.toLowerCase().includes(needle)) : options
+  ).filter((o) => !pinned.includes(o))
+  const shown = matches.slice(0, SHOWN_MAX)
+
+  const item = (opt: string): React.JSX.Element => (
+    <DropdownMenuCheckboxItem
+      key={opt}
+      checked={selected.includes(opt)}
+      onSelect={(e) => e.preventDefault()}
+      onCheckedChange={(on) => {
+        const next = on ? [...selected, opt] : selected.filter((s) => s !== opt)
+        onChange(next.length > 0 ? next : undefined)
+      }}
+    >
+      {opt}
+    </DropdownMenuCheckboxItem>
+  )
+
   return (
-    <DropdownMenu onOpenChange={(open) => !open && setQ('')}>
+    <DropdownMenu
+      onOpenChange={(open) => {
+        if (!open) return setQ('')
+        setPinned(selected)
+        // After the menu has taken focus itself on opening.
+        requestAnimationFrame(() => search.current?.focus())
+      }}
+    >
       <DropdownMenuTrigger asChild>
         <Button variant="ghost" size="sm" aria-label={label} className="text-foreground/80">
           {label}
@@ -41,34 +68,29 @@ export function FacetMenu({
           <ChevronDown className="size-3.5" />
         </Button>
       </DropdownMenuTrigger>
-      <DropdownMenuContent align="start" className="max-h-80 w-64 overflow-y-auto">
-        {options.length > SEARCHABLE_AT && (
-          <input
-            aria-label={`Search ${label.toLowerCase()}`}
-            placeholder={`Search ${label.toLowerCase()}…`}
-            value={q}
-            onChange={(e) => setQ(e.target.value)}
+      <DropdownMenuContent ref={content} align="start" className="max-h-80 w-64 overflow-y-auto">
+        <input
+          ref={search}
+          aria-label={`Search ${label.toLowerCase()}`}
+          placeholder={`Search ${label.toLowerCase()}…`}
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'ArrowDown') {
+              e.preventDefault()
+              content.current?.querySelector<HTMLElement>('[role="menuitemcheckbox"]')?.focus()
+            }
             // Keep typing in the box instead of the menu's type-ahead.
-            onKeyDown={(e) => e.stopPropagation()}
-            className="mb-1 h-8 w-full rounded-sm border border-input bg-transparent px-2 text-sm outline-none placeholder:text-muted-foreground focus-visible:border-ring"
-          />
-        )}
-        {shown.length === 0 && (
+            e.stopPropagation()
+          }}
+          className="mb-1 h-8 w-full rounded-sm border border-input bg-transparent px-2 text-sm outline-none placeholder:text-muted-foreground focus-visible:border-ring"
+        />
+        {pinned.map(item)}
+        {pinned.length > 0 && shown.length > 0 && <DropdownMenuSeparator />}
+        {pinned.length === 0 && shown.length === 0 && (
           <div className="px-2 py-1.5 text-sm text-muted-foreground">No options</div>
         )}
-        {shown.map((opt) => (
-          <DropdownMenuCheckboxItem
-            key={opt}
-            checked={selected.includes(opt)}
-            onSelect={(e) => e.preventDefault()}
-            onCheckedChange={(on) => {
-              const next = on ? [...selected, opt] : selected.filter((s) => s !== opt)
-              onChange(next.length > 0 ? next : undefined)
-            }}
-          >
-            {opt}
-          </DropdownMenuCheckboxItem>
-        ))}
+        {shown.map(item)}
         {matches.length > SHOWN_MAX && (
           <div className="px-2 py-1.5 text-xs text-muted-foreground">
             {matches.length - SHOWN_MAX} more — search to narrow

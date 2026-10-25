@@ -1,0 +1,15 @@
+name = "duel-binder-portal"
+main = "src/index.ts"
+compatibility_date = "2026-10-01"
+
+[[durable_objects.bindings]]
+name = "STORE"
+class_name = "Store"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Store"]
+
+[vars]
+PUBLIC_URL = "http://localhost:8787"
+DISCORD_CLIENT_ID = ""

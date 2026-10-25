@@ -35,7 +35,7 @@ describe('Discord sign-in and sessions', () => {
     })
     deps = {
       db,
-      env: { PUBLIC_URL: BASE, DISCORD_CLIENT_ID: 'cid', DISCORD_CLIENT_SECRET: 'secret' },
+      env: { PUBLIC_URL: BASE, DISCORD_CLIENT_ID: 'cid', DISCORD_CLIENT_SECRET: 'secret', ADMIN_TOKEN: 'admin' },
       now: () => clock,
       fetch: fetchMock as unknown as typeof fetch
     }

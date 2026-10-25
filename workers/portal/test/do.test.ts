@@ -66,6 +66,6 @@ describe('Store Durable Object SQLite', () => {
       return { lastInsertRowid: Number(info.lastInsertRowid), id: row.id, changes: info.changes }
     })
     expect(result.lastInsertRowid).toBe(result.id)
-    expect(result.changes).toBeGreaterThan(0)
+    expect(result.changes).toBe(1)
   })
 })

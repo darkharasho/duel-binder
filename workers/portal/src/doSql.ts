@@ -14,9 +14,11 @@ export function doSql(storage: DurableObjectStorage): SqlDb {
     get: (...params) => exec(query, params).toArray()[0],
     run: (...params) => {
       const cursor = exec(query, params)
-      cursor.toArray() // drain so rowsWritten is final
-      const lastInsertRowid = sql.exec<{ id: number }>('SELECT last_insert_rowid() AS id').one().id
-      return { changes: cursor.rowsWritten, lastInsertRowid }
+      cursor.toArray() // drain so the statement has fully run
+      const { id, n } = sql
+        .exec<{ id: number; n: number }>('SELECT last_insert_rowid() AS id, changes() AS n')
+        .one()
+      return { changes: n, lastInsertRowid: id }
     }
   })
 

@@ -1,4 +1,5 @@
 import type { SqlDb } from '../../../src/main/db/sql'
+import { adminRoute } from './catalogLoad'
 import { finishSignIn, me, signOut, startSignIn } from './auth'
 
 /** Vars and secrets the request handlers read. */
@@ -7,6 +8,8 @@ export interface Env {
   DISCORD_CLIENT_ID: string
   /** Worker secret; absent from wrangler vars. */
   DISCORD_CLIENT_SECRET: string
+  /** Worker secret guarding /admin/*; unset or empty rejects every admin request. */
+  ADMIN_TOKEN: string
 }
 
 export interface AppDeps {
@@ -26,5 +29,6 @@ export async function handle(req: Request, deps: AppDeps): Promise<Response> {
   if (req.method === 'GET' && url.pathname === '/auth/discord/callback') return finishSignIn(req, deps)
   if (req.method === 'POST' && url.pathname === '/auth/logout') return signOut(req, deps)
   if (req.method === 'GET' && url.pathname === '/api/me') return me(req, deps)
+  if (url.pathname.startsWith('/admin/')) return adminRoute(req, deps)
   return json({ error: 'Not found' }, 404)
 }

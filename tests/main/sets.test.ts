@@ -87,7 +87,7 @@ const own = (
 ): EntryView => addEntry(db, { printingId: pid(db, setCode, rarity), imageId, quantity })
 
 const entries = (db: Database.Database): unknown[] =>
-  db.prepare('SELECT image_id AS imageId, quantity FROM collection_entries ORDER BY id').all()
+  db.prepare('SELECT image_id AS imageId, quantity FROM collection_entries WHERE deleted_at IS NULL ORDER BY id').all()
 
 const ur = (card: ChecklistCard): ChecklistRarity =>
   card.rarities.find((r) => r.rarity === 'Ultra Rare')!

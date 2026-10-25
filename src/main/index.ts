@@ -154,7 +154,7 @@ function bootstrap(): void {
   if (fakeData) {
     seedFakeCollection(db)
     // Already seeded by an earlier run, or just now: nothing to wait for.
-    if (db.prepare('SELECT 1 FROM collection_entries LIMIT 1').get()) markSeeded()
+    if (db.prepare('SELECT 1 FROM collection_entries WHERE deleted_at IS NULL LIMIT 1').get()) markSeeded()
   }
 
   const updater = createUpdater({

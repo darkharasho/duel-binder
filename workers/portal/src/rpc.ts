@@ -7,6 +7,7 @@ import {
   checkDelta,
   checkId,
   checkLanguage,
+  checkNotesLength,
   checkObject,
   checkString,
   checkUpdatePatch
@@ -43,15 +44,6 @@ type Handler<C extends InvokeChannel> = (
   scope: Scope,
   ...args: Params<ChannelMethod<C>>
 ) => unknown
-
-const MAX_NOTES = 2000
-
-/** Web-only cap: desktop notes are unbounded, but the server stores them for everyone. */
-function checkNotesLength(v: unknown): void {
-  const notes = (v as { notes?: unknown } | null)?.notes
-  if (typeof notes === 'string' && notes.length > MAX_NOTES)
-    throw new CollectionError(`notes must be at most ${MAX_NOTES} characters`)
-}
 
 // Arguments come off the wire untyped: every handler checks its own before use.
 const HANDLERS: { [C in PortalChannel]: Handler<C> } = {

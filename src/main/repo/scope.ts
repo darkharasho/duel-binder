@@ -17,8 +17,13 @@ export interface Scope {
   where(alias: string): string
   /** Inserts a new entry for this owner and returns its id. */
   insertEntry(db: SqlDb, row: EntryInsert): number
-  /** Removes an entry (hard delete locally, tombstone on the server). */
+  /** Removes an entry by tombstoning it (and marking the change, as `touch` does). */
   deleteEntry(db: SqlDb, id: number, ts: string): void
+  /**
+   * SQL assignment every `UPDATE collection_entries SET …` appends, recording the change for sync:
+   * dirty locally, a new server_seq on the server.
+   */
+  touch: string
   /**
    * value_snapshots scoping. `insertCols`/`insertVals` are comma-terminated fragments placed before
    * `date` / `?` in an INSERT (and `insertCols + 'date'` is the upsert conflict target).
@@ -31,7 +36,7 @@ export const ACTIVE_OWNER =
   "(SELECT COALESCE((SELECT CAST(value AS INTEGER) FROM meta WHERE key = 'cloud_active_owner'), 0))"
 
 export const LOCAL: Scope = {
-  where: (alias) => `${alias}.owner_id = ${ACTIVE_OWNER}`,
+  where: (alias) => `${alias}.owner_id = ${ACTIVE_OWNER} AND ${alias}.deleted_at IS NULL`,
   insertEntry(db, row) {
     const info = db
       .prepare(
@@ -41,8 +46,12 @@ export const LOCAL: Scope = {
       .run(crypto.randomUUID(), row.printingId, row.imageId, row.quantity, row.notes, row.ts, row.ts)
     return Number(info.lastInsertRowid)
   },
-  deleteEntry(db, id) {
-    db.prepare('DELETE FROM collection_entries WHERE id = ?').run(id)
+  deleteEntry(db, id, ts) {
+    db.prepare(
+      `UPDATE collection_entries SET deleted_at = ?, updated_at = ?, dirty = 1
+       WHERE id = ? AND deleted_at IS NULL AND owner_id = ${ACTIVE_OWNER}`
+    ).run(ts, ts, id)
   },
+  touch: 'dirty = 1',
   snapshotTable: { insertCols: 'owner_id, ', insertVals: `${ACTIVE_OWNER}, ` }
 }

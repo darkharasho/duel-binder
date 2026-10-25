@@ -9,7 +9,7 @@ import type { ImageCache } from '../images/cache'
 import { getSyncStatus, runSync } from '../sync/sync'
 import { getCardDetail, searchCards } from '../repo/cards'
 import { browseCards, browseFacets } from '../repo/browse'
-import { checkLanguage } from '../repo/args'
+import { checkLanguage, checkNotesLength } from '../repo/args'
 import {
   addEntry,
   entriesForCard,
@@ -82,11 +82,13 @@ export function createHandlers({
     'collection:list': async (f) => listEntries(db, f),
     'collection:forCard': async (cardId: number) => entriesForCard(db, cardId),
     'collection:add': async (input) => {
+      checkNotesLength(input)
       const entry = snapshotAfter(addEntry(db, input))
       priceNewCopy(entry.printing.id)
       return entry
     },
     'collection:update': async (id: number, patch) => {
+      checkNotesLength(patch)
       const entry = snapshotAfter(updateEntry(db, id, patch))
       if (patch.printingId !== undefined) priceNewCopy(entry.printing.id)
       return entry

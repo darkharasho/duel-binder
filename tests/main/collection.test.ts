@@ -108,10 +108,14 @@ test('facets list owned values only', () => {
   expect(f.cardTypes).toHaveLength(1)
 })
 
-test('remove deletes', () => {
+test('remove tombstones', () => {
   const a = addEntry(db, { printingId: pid('LOB-EN005'), imageId: 46986414, quantity: 1 })
-  removeEntry(db, a.id)
+  removeEntry(db, a.id, new Date('2026-10-25T12:00:00.000Z'))
   expect(getEntry(db, a.id)).toBeNull()
+  expect(db.prepare('SELECT deleted_at, dirty FROM collection_entries WHERE id = ?').get(a.id)).toEqual({
+    deleted_at: '2026-10-25T12:00:00.000Z',
+    dirty: 1
+  })
 })
 
 test('entries report their printing language', () => {

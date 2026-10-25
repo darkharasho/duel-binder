@@ -68,6 +68,26 @@ describe('createHandlers', () => {
     expect(today).toEqual([{ n: 2 }])
   })
 
+  it('desktop notes are capped at 2000', async () => {
+    const { db, handlers } = await makeHandlers()
+    const printing = db
+      .prepare(
+        'SELECT p.id AS printingId, i.image_id AS imageId FROM card_printings p JOIN card_images i ON i.card_id = p.card_id LIMIT 1'
+      )
+      .get() as { printingId: number; imageId: number }
+    const long = 'x'.repeat(2001)
+    await expect(
+      handlers['collection:add']({ ...printing, quantity: 1, notes: long } as never)
+    ).rejects.toThrow('notes must be at most 2000 characters')
+    expect(db.prepare('SELECT COUNT(*) AS n FROM collection_entries').get()).toEqual({ n: 0 })
+    const added = (await handlers['collection:add']({ ...printing, quantity: 1 })) as { id: number }
+    await expect(handlers['collection:update'](added.id, { notes: long })).rejects.toThrow(
+      'notes must be at most 2000 characters'
+    )
+    const ok = (await handlers['collection:update'](added.id, { notes: 'x'.repeat(2000) })) as { notes: string }
+    expect(ok.notes).toHaveLength(2000)
+  })
+
   it('sets:adjust records the value snapshot', async () => {
     const { db, handlers } = await makeHandlers()
     const p = db.prepare('SELECT id, set_name AS setName FROM card_printings LIMIT 1').get() as {

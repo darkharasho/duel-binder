@@ -30,7 +30,7 @@ function candidates(db: Database.Database, now: Date, printingIds?: number[]): C
        JOIN cards c ON c.id = p.card_id
        LEFT JOIN intl_prices ip ON ip.printing_id = p.id -- holds eBay prices for every language
        WHERE ${where.join(' AND ')}
-         AND EXISTS (SELECT 1 FROM collection_entries e WHERE e.printing_id = p.id)
+         AND EXISTS (SELECT 1 FROM collection_entries e WHERE e.printing_id = p.id AND e.deleted_at IS NULL)
        ORDER BY p.id`
     )
     .all(...params) as Candidate[]

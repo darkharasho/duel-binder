@@ -323,7 +323,7 @@ export function adjustPrinting(
         .get(printingId, original?.image_id ?? null) as { id: number; quantity: number } | undefined
       if (entry && entry.quantity > 1) {
         db.prepare(
-          'UPDATE collection_entries SET quantity = quantity - 1, updated_at = ? WHERE id = ?'
+          `UPDATE collection_entries SET quantity = quantity - 1, updated_at = ?, ${scope.touch} WHERE id = ?`
         ).run(now.toISOString(), entry.id)
       } else if (entry) {
         scope.deleteEntry(db, entry.id, now.toISOString())

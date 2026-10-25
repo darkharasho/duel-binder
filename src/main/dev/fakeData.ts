@@ -42,7 +42,7 @@ const localDate = (d: Date): string =>
  * Returns the number of entries inserted.
  */
 export function seedFakeCollection(db: Database.Database, now = new Date()): number {
-  if (db.prepare('SELECT 1 FROM collection_entries LIMIT 1').get()) return 0
+  if (db.prepare('SELECT 1 FROM collection_entries WHERE deleted_at IS NULL LIMIT 1').get()) return 0
   if (!db.prepare('SELECT 1 FROM cards LIMIT 1').get()) return 0
 
   const rand = rng(SEED)

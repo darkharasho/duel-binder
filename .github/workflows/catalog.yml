@@ -49,13 +49,13 @@ jobs:
           path: |
             catalog-work/work.sqlite
             catalog-work/work.sqlite-wal
-          key: catalog-work-${{ github.run_id }}
+          key: catalog-work-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: catalog-work-
       - name: Restore base snapshot
         uses: actions/cache/restore@v4
         with:
           path: catalog-work/base.sqlite
-          key: catalog-base-${{ github.run_id }}
+          key: catalog-base-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: catalog-base-
       - name: Refresh and upload
         run: npm run catalog:job -- ${{ inputs.full && '--full' || '' }}
@@ -67,10 +67,10 @@ jobs:
           path: |
             catalog-work/work.sqlite
             catalog-work/work.sqlite-wal
-          key: catalog-work-${{ github.run_id }}
+          key: catalog-work-${{ github.run_id }}-${{ github.run_attempt }}
       - name: Save base snapshot
         if: success()
         uses: actions/cache/save@v4
         with:
           path: catalog-work/base.sqlite
-          key: catalog-base-${{ github.run_id }}
+          key: catalog-base-${{ github.run_id }}-${{ github.run_attempt }}

@@ -201,6 +201,24 @@ describe('refreshCatalog', () => {
     expect([ygo.calls.length, wiki.calls.length, webFetch.mock.calls.length]).toEqual(calls)
     db.close()
   })
+  it('without a fixed clock, the TCGplayer catalog is stamped when it finishes', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(NOW)
+    const later = new Date(NOW.getTime() + 60_000)
+    vi.stubGlobal('fetch', async (input: string | URL | Request): Promise<Response> => {
+      if (String(input).endsWith('/10/products')) vi.setSystemTime(later)
+      return webFetch(input)
+    })
+    const db = openDatabase(':memory:')
+    await refreshCatalog(db, {
+      client: fakeYgo().client,
+      yugipedia: fakeYugipedia().client,
+      version: '0.0.0-test'
+    })
+    expect(getMeta(db, 'last_sync_at')).toBe(NOW.toISOString())
+    expect(getMeta(db, 'tcgplayer_synced_at')).toBe(later.toISOString())
+    db.close()
+  })
 })
 
 describe('diffTable', () => {

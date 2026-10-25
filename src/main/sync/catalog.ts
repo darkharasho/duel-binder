@@ -38,6 +38,9 @@ export async function refreshCatalog(
   const { client, yugipedia, version } = deps
   const now = deps.now ?? ((): Date => new Date())
   const onChanged = deps.onChanged ?? ((): void => {})
+  // These refreshers stamp their sync time when they finish unless given one; pass it only when
+  // the caller fixes the clock, so desktop keeps finish-time stamps.
+  const stamp = (): { now?: Date } => (deps.now ? { now: deps.now() } : {})
   let changed = false
   if (shouldSync(getMeta(db, 'last_sync_at'), now())) {
     const status = await runSync(db, client, deps.onSyncProgress ?? (() => {}), now())
@@ -50,17 +53,17 @@ export async function refreshCatalog(
   }
   if (shouldRefreshTcgCatalog(db, now())) {
     // A few minutes at most; English cards then show their TCGplayer photos.
-    const tcg = await refreshTcgCatalog(db, { version, now: now() })
+    const tcg = await refreshTcgCatalog(db, { version, ...stamp() })
     if (tcg.updatedGroups > 0) onChanged()
   }
   if (hasSetData(db) && shouldRefreshPackArt(db, now())) {
-    if ((await refreshPackArt(db, { version, now: now() })) > 0) onChanged()
+    if ((await refreshPackArt(db, { version, ...stamp() })) > 0) onChanged()
   }
   if (hasSetData(db) && shouldRefreshSetLogos(db, now())) {
     if ((await refreshSetLogos(db, yugipedia, now())) > 0) onChanged()
   }
   if (hasSetData(db) && shouldRefreshKonamiLogos(db, now())) {
-    if ((await refreshKonamiLogos(db, { version, now: now() })) > 0) onChanged()
+    if ((await refreshKonamiLogos(db, { version, ...stamp() })) > 0) onChanged()
   }
   const { n } = db.prepare('SELECT count(*) AS n FROM cards').get() as { n: number }
   if (n > 0 && shouldRefreshIntl(db, now())) {

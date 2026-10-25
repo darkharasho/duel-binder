@@ -9,9 +9,9 @@ export interface Shot {
 }
 
 export const SHOTS: Shot[] = [
-  { file: 'collection.png', clicks: ['Collection'] },
+  { file: 'collection.png', clicks: ['Collection', 'Date added', 'Value'] },
   { file: 'dashboard.png', clicks: ['Dashboard'] },
-  { file: 'sets.png', clicks: ['Sets', 'Legend of Blue Eyes White Dragon'] }
+  { file: 'sets.png', clicks: ['Sets', 'Metal Raiders'] }
 ]
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
@@ -20,7 +20,7 @@ const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms
 const clickScript = (label: string): string => `(() => {
   const want = ${JSON.stringify(label)}
   const visible = (el) => { const r = el.getBoundingClientRect(); return r.width > 0 && r.height > 0 }
-  const el = [...document.querySelectorAll('button, a, [role=button]')]
+  const el = [...document.querySelectorAll('button, a, [role=button], [role=option]')]
     .find(
       (e) =>
         visible(e) &&

@@ -1,3 +1,4 @@
+import type { Me } from './cloud'
 import type { Language } from './languages'
 
 export interface CardRow {
@@ -181,6 +182,19 @@ export interface SyncStatus {
   dbVersion: string | null
   cardCount: number
   error: string | null
+}
+
+/** The desktop's Duel Binder account, as the renderer sees it. Never carries the token. */
+export interface AccountStatus {
+  state: 'signed-out' | 'signing-in' | 'idle' | 'syncing' | 'offline' | 'error'
+  /** The signed-in account. */
+  user: Me | null
+  /** Name of the account whose cards this computer shows (kept after sign-out). */
+  localOwner: string | null
+  lastSyncedAt: string | null
+  error: string | null
+  /** The shown account's entries waiting for this computer's catalog to gain their printing. */
+  pendingCount: number
 }
 
 /** The eBay price service address shown in Settings. */

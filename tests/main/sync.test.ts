@@ -61,7 +61,7 @@ test('vanished printing referenced by an entry is flagged, unreferenced one dele
   const ids = printingIds()
   const img = db.prepare('SELECT image_id, card_id FROM card_images LIMIT 1').get() as { image_id: number }
   db.prepare(
-    `INSERT INTO collection_entries (printing_id, image_id, quantity, created_at, updated_at) VALUES (?, ?, 1, 'x', 'x')`
+    `INSERT INTO collection_entries (uid, printing_id, image_id, quantity, created_at, updated_at) VALUES (lower(hex(randomblob(16))), ?, ?, 1, 'x', 'x')`
   ).run(ids['LOB-EN119'], img.image_id)
   const trimmed = cards.map((c) => ({
     ...c,
@@ -193,8 +193,8 @@ test('keeps non-English printings across a YGOPRODeck sync', async () => {
       .get() as { id: number }
     sdb
       .prepare(
-        `INSERT INTO collection_entries (printing_id, image_id, quantity, created_at, updated_at)
-         VALUES (?, 46986414, 1, 'x', 'x')`
+        `INSERT INTO collection_entries (uid, printing_id, image_id, quantity, created_at, updated_at)
+         VALUES (lower(hex(randomblob(16))), ?, 46986414, 1, 'x', 'x')`
       )
       .run(ja.id)
     sdb

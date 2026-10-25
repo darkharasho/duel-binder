@@ -6,6 +6,7 @@ import { createYugipediaClient } from '../../../src/main/yugipedia/client'
 import { handle, type Env } from './app'
 import { doSql } from './doSql'
 import { migrateServer } from './migrate'
+import { alarmQueue, priceClientFor, runPriceAlarm, type PriceQueue } from './prices'
 import { handleSite } from './site/handler'
 import { routeHost } from './site/host'
 import { createReleaseSource, type Downloads } from './site/releases'
@@ -15,12 +16,15 @@ export interface WorkerEnv extends Env {
   ASSETS: Fetcher
   IMAGES: R2Bucket
   GITHUB_TOKEN?: string
+  /** Service binding to the eBay price Worker; see priceClientFor. */
+  PRICES?: Fetcher
 }
 
 /** The single Durable Object holding the catalog and every user's collection. */
 export class Store extends DurableObject<WorkerEnv> {
   private readonly db: SqlDb
   private readonly printingArt: PrintingArtResolver
+  private readonly prices: PriceQueue
 
   constructor(ctx: DurableObjectState, env: WorkerEnv) {
     super(ctx, env)
@@ -30,7 +34,22 @@ export class Store extends DurableObject<WorkerEnv> {
       client: createYugipediaClient({ version: 'portal' }),
       quickUrl: createTcgplayerLookup(this.db)
     })
-    void ctx.blockConcurrencyWhile(async () => migrateServer(this.db))
+    this.prices = alarmQueue(ctx.storage, Date.now)
+    void ctx.blockConcurrencyWhile(async () => {
+      migrateServer(this.db)
+      // First start (or a lost alarm): begin pricing what is already owned.
+      if ((await ctx.storage.getAlarm()) === null) await this.prices.soon()
+    })
+  }
+
+  /** Keeps eBay prices fresh for every printing any user owns; re-arms itself. */
+  async alarm(): Promise<void> {
+    await runPriceAlarm(
+      this.db,
+      priceClientFor(this.env),
+      this.ctx.storage,
+      () => new Date()
+    )
   }
 
   fetch(req: Request): Promise<Response> {
@@ -39,6 +58,7 @@ export class Store extends DurableObject<WorkerEnv> {
       assets: this.env.ASSETS,
       images: this.env.IMAGES,
       printingArt: this.printingArt,
+      prices: this.prices,
       env: this.env,
       now: () => new Date(),
       fetch: (input, init) => fetch(input, init)

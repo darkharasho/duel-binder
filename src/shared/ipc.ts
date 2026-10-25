@@ -1,5 +1,6 @@
 import type { Language } from './languages'
 import type {
+  AccountStatus,
   AddEntryInput,
   BrowseFacets,
   BrowseFilters,
@@ -79,6 +80,15 @@ export interface Api {
     /** Fired after background syncs change card or set data. */
     onDataChanged(cb: () => void): () => void
   }
+  account: {
+    status(): Promise<AccountStatus>
+    /** Resolves when sign-in finishes or fails. */
+    signIn(): Promise<AccountStatus>
+    /** Also cancels a sign-in in progress. */
+    signOut(): Promise<AccountStatus>
+    syncNow(): Promise<AccountStatus>
+    onChange(cb: (s: AccountStatus) => void): () => void
+  }
 }
 
 /** One `'ns:method'` string per invoke (request/response) method on Api. */
@@ -112,7 +122,11 @@ export const INVOKE_CHANNELS = [
   'app:backupDatabase',
   'app:checkForUpdates',
   'app:applyUpdate',
-  'app:updateStatus'
+  'app:updateStatus',
+  'account:status',
+  'account:signIn',
+  'account:signOut',
+  'account:syncNow'
 ] as const
 
 export type InvokeChannel = (typeof INVOKE_CHANNELS)[number]
@@ -122,6 +136,7 @@ export const SYNC_PROGRESS = 'sync:progress'
 export const UPDATE_STATUS = 'update:status'
 export const DATA_CHANGED = 'data:changed' // payload: void
 export const WINDOW_MAXIMIZED = 'window:maximized' // payload: boolean
+export const ACCOUNT_CHANGED = 'account:changed' // payload: AccountStatus
 
 // Compile-time check: INVOKE_CHANNELS must list exactly the invoke methods of Api.
 // Only methods returning a Promise count as invoke methods, so the event

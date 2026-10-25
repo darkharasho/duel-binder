@@ -6,7 +6,14 @@ export interface ServerStep {
   sql: string
 }
 
-/** Server-only steps, run after every desktop step. Append only; never edit a shipped step. */
+/**
+ * Server-only steps, run after every desktop step. Append only; never edit a shipped step.
+ *
+ * Ordering rule: an upgraded server runs new desktop steps after the server steps it already has,
+ * while a fresh server runs every desktop step first. So any desktop step from 12 on that touches
+ * `collection_entries` or `value_snapshots` (whose server shape server-1 replaced) must set
+ * `server: false` and put the server's version of the change in a new entry here.
+ */
 export const SERVER_STEPS: ServerStep[] = [
   {
     name: 'server-1',
@@ -26,6 +33,19 @@ CREATE UNIQUE INDEX ux_entries_live ON collection_entries(user_id, printing_id, 
 DROP TABLE value_snapshots;
 CREATE TABLE value_snapshots (user_id INTEGER NOT NULL REFERENCES users(id), date TEXT NOT NULL,
   total_value REAL NOT NULL, total_cards INTEGER NOT NULL, PRIMARY KEY (user_id, date));
+`
+  },
+  {
+    name: 'server-2',
+    sql: `
+ALTER TABLE collection_entries ADD COLUMN server_seq INTEGER NOT NULL DEFAULT 0;
+UPDATE collection_entries SET server_seq = id;
+CREATE UNIQUE INDEX ux_entries_seq ON collection_entries(server_seq);
+CREATE INDEX ix_entries_user_seq ON collection_entries(user_id, server_seq);
+CREATE INDEX ix_entries_printing_live ON collection_entries(printing_id) WHERE deleted_at IS NULL;
+CREATE TABLE desktop_codes (code_hash TEXT PRIMARY KEY, user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  challenge TEXT NOT NULL, expires_at TEXT NOT NULL);
+CREATE INDEX ix_sessions_expires ON sessions(expires_at);
 `
   }
 ]

@@ -3,7 +3,7 @@ import { PACK_ART_PREFIX, YUGIPEDIA_IMAGE_PREFIX } from '../../src/shared/imageS
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { handle, type AppDeps } from '../../workers/portal/src/app'
 import { TCGPLAYER_IMAGE_PREFIX } from '../../src/main/tcgplayer/catalog'
-import { addUser, memoryBucket, seededServerDb } from './helpers'
+import { addUser, memoryBucket, noPrices, seededServerDb } from './helpers'
 
 const BASE = 'https://app.test'
 const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3])
@@ -41,7 +41,8 @@ describe('image route', () => {
       assets: { fetch: async () => new Response('nope', { status: 404 }) },
       images: bucket,
       printingArt,
-      env: { PUBLIC_URL: BASE, SITE_URL: 'https://site.test', DISCORD_CLIENT_ID: 'c', DISCORD_CLIENT_SECRET: 's', ADMIN_TOKEN: 'a' },
+      prices: noPrices,
+      env: { PUBLIC_URL: BASE, SITE_URL: 'https://site.test', DISCORD_CLIENT_ID: 'c', DISCORD_CLIENT_SECRET: 's', ADMIN_TOKEN: 'a', PRICE_WORKER_URL: 'https://prices.test' },
       now: () => new Date('2026-10-25T12:00:00.000Z'),
       fetch: upstream as unknown as typeof fetch
     }

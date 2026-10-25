@@ -1,5 +1,6 @@
 import type { SqlDb } from '../db/sql'
 import { RARITY_LABEL } from '../db/schema'
+import { MAX_NOTES } from '../../shared/cloud'
 import { LANGUAGES } from '../../shared/languages'
 import { priceFor } from '../../shared/pricing'
 import type { AddEntryInput, CollectionFilters, EntryView, Facets, UpdateEntryInput } from '../../shared/types'
@@ -122,7 +123,7 @@ export function addEntry(db: SqlDb, input: AddEntryInput, now = new Date(), scop
   return db.transaction(() => {
     const existing = findExisting(db, input.printingId, input.imageId, scope)
     if (existing !== undefined) {
-      db.prepare('UPDATE collection_entries SET quantity = quantity + ?, updated_at = ? WHERE id = ?').run(
+      db.prepare(`UPDATE collection_entries SET quantity = quantity + ?, updated_at = ?, ${scope.touch} WHERE id = ?`).run(
         input.quantity,
         ts,
         existing
@@ -160,9 +161,10 @@ export function updateEntry(
     const target = findExisting(db, printingId, imageId, scope)
     if (target !== undefined && target !== id) {
       const t = requireEntry(db, target, scope)
-      const joined = [t.notes, notes].filter((n) => n !== '').join('\n')
+      // Capped so the merge never exceeds what a write may store (and sync would otherwise truncate).
+      const joined = [t.notes, notes].filter((n) => n !== '').join('\n').slice(0, MAX_NOTES)
       scope.deleteEntry(db, id, ts)
-      db.prepare('UPDATE collection_entries SET quantity = ?, notes = ?, updated_at = ? WHERE id = ?').run(
+      db.prepare(`UPDATE collection_entries SET quantity = ?, notes = ?, updated_at = ?, ${scope.touch} WHERE id = ?`).run(
         t.quantity + quantity,
         joined,
         ts,
@@ -171,7 +173,8 @@ export function updateEntry(
       return requireEntry(db, target, scope)
     }
     db.prepare(
-      'UPDATE collection_entries SET printing_id = ?, image_id = ?, quantity = ?, notes = ?, updated_at = ? WHERE id = ?'
+      `UPDATE collection_entries SET printing_id = ?, image_id = ?, quantity = ?, notes = ?, updated_at = ?, ${scope.touch}
+       WHERE id = ?`
     ).run(printingId, imageId, quantity, notes, ts, id)
     return requireEntry(db, id, scope)
   })()

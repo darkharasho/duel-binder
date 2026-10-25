@@ -7,6 +7,7 @@ import {
   checkDelta,
   checkId,
   checkLanguage,
+  checkNotesLength,
   checkObject,
   checkString,
   checkUpdatePatch
@@ -43,15 +44,6 @@ type Handler<C extends InvokeChannel> = (
   scope: Scope,
   ...args: Params<ChannelMethod<C>>
 ) => unknown
-
-const MAX_NOTES = 2000
-
-/** Web-only cap: desktop notes are unbounded, but the server stores them for everyone. */
-function checkNotesLength(v: unknown): void {
-  const notes = (v as { notes?: unknown } | null)?.notes
-  if (typeof notes === 'string' && notes.length > MAX_NOTES)
-    throw new CollectionError(`notes must be at most ${MAX_NOTES} characters`)
-}
 
 // Arguments come off the wire untyped: every handler checks its own before use.
 const HANDLERS: { [C in PortalChannel]: Handler<C> } = {
@@ -99,6 +91,9 @@ const HANDLERS: { [C in PortalChannel]: Handler<C> } = {
   'stats:get': ({ db }, scope) => getStats(db, scope)
 }
 
+/** Writes that can leave a printing owned with no fresh price. */
+const QUEUES_PRICES: ReadonlySet<string> = new Set(['collection:add', 'collection:update', 'sets:adjust'])
+
 const json = (body: unknown, status = 200): Response =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
 
@@ -129,7 +124,9 @@ export async function rpcRoute(req: Request, deps: AppDeps, channel: string): Pr
       s: Scope,
       ...a: unknown[]
     ) => unknown
-    return json({ result: handler(deps, userScope(user.id), ...args) ?? null })
+    const result = handler(deps, userScope(user.id), ...args) ?? null
+    if (QUEUES_PRICES.has(channel)) await deps.prices.soon()
+    return json({ result })
   } catch (e) {
     if (e instanceof CollectionError) return json({ error: e.message }, 400)
     throw e

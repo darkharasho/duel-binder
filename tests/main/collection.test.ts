@@ -9,6 +9,8 @@ import {
   removeEntry,
   updateEntry
 } from '../../src/main/repo/collection'
+import { setMeta } from '../../src/main/db/meta'
+import { MAX_NOTES } from '../../src/shared/cloud'
 import { seededDb } from './helpers'
 
 let db: Database.Database
@@ -70,6 +72,15 @@ test('changing art onto an existing combination merges', () => {
   expect(listEntries(db, all)).toHaveLength(1)
 })
 
+test('merged notes are capped at MAX_NOTES, keeping the target note first', () => {
+  const a = addEntry(db, { printingId: pid('LOB-EN005'), imageId: 46986414, quantity: 1 })
+  db.prepare('UPDATE collection_entries SET notes = ? WHERE id = ?').run('a'.repeat(1500), a.id)
+  const b = addEntry(db, { printingId: pid('LOB-EN005'), imageId: 46986415, quantity: 2 })
+  const merged = updateEntry(db, b.id, { imageId: 46986414, notes: 'b'.repeat(1500) })
+  expect(merged.notes).toHaveLength(MAX_NOTES)
+  expect(merged.notes).toBe(`${'a'.repeat(1500)}\n${'b'.repeat(MAX_NOTES - 1501)}`)
+})
+
 test('re-link printing onto an existing combination merges', () => {
   const a = addEntry(db, { printingId: pid('LOB-EN005'), imageId: 46986414, quantity: 1 })
   const b = addEntry(db, { printingId: pid('SDY-006'), imageId: 46986414, quantity: 2 })
@@ -108,10 +119,15 @@ test('facets list owned values only', () => {
   expect(f.cardTypes).toHaveLength(1)
 })
 
-test('remove deletes', () => {
+test('remove tombstones for a signed-in owner', () => {
+  setMeta(db, 'cloud_active_owner', '1')
   const a = addEntry(db, { printingId: pid('LOB-EN005'), imageId: 46986414, quantity: 1 })
-  removeEntry(db, a.id)
+  removeEntry(db, a.id, new Date('2026-10-25T12:00:00.000Z'))
   expect(getEntry(db, a.id)).toBeNull()
+  expect(db.prepare('SELECT deleted_at, dirty FROM collection_entries WHERE id = ?').get(a.id)).toEqual({
+    deleted_at: '2026-10-25T12:00:00.000Z',
+    dirty: 1
+  })
 })
 
 test('entries report their printing language', () => {

@@ -59,11 +59,11 @@ describe('web build', () => {
     expect(await screen.findByText("Couldn't load your account")).toBeInTheDocument()
   })
 
-  it('desktop settings has no account section', async () => {
+  it('desktop settings shows the account section', async () => {
     stubMe(seto)
     renderWithProviders(<SettingsPage />, { api: createMockApi({ window: { platform: 'linux' } }) })
     expect(await screen.findByRole('button', { name: 'Check for updates' })).toBeInTheDocument()
-    expect(screen.queryByText(/Signed in as/)).not.toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Sign in with Discord' })).toBeInTheDocument()
     expect(fetch).not.toHaveBeenCalled()
   })
 })

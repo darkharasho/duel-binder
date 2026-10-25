@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import type Database from 'better-sqlite3'
-import { addEntry, listEntries, removeEntry } from '../../src/main/repo/collection'
-import { getChecklist } from '../../src/main/repo/sets'
+import { addEntry, listEntries, removeEntry, updateEntry } from '../../src/main/repo/collection'
+import { adjustPrinting, getChecklist } from '../../src/main/repo/sets'
 import { getStats, recordSnapshot } from '../../src/main/repo/stats'
 import { userScope } from '../../workers/portal/src/scope'
 import { addUser, seededServerDb } from './helpers'
@@ -43,6 +43,59 @@ describe('owner scope', () => {
     addEntry(db, input(5), now, userScope(u2))
     expect(listEntries(db, ALL, userScope(u1)).map((e) => e.quantity)).toEqual([3])
     expect(listEntries(db, ALL, userScope(u2)).map((e) => e.quantity)).toEqual([5])
+  })
+
+  it('inserts take distinct, increasing server_seq values', () => {
+    const other = db
+      .prepare(
+        `SELECT p.id, i.image_id FROM card_printings p JOIN card_images i ON i.card_id = p.card_id
+         WHERE p.id <> ? ORDER BY p.id, i.image_id LIMIT 1`
+      )
+      .get(printing.id) as { id: number; image_id: number }
+    const a = addEntry(db, input(1), now, userScope(u1))
+    const b = addEntry(db, { printingId: other.id, imageId: other.image_id, quantity: 1 }, now, userScope(u1))
+    const seq = (id: number): number =>
+      (db.prepare('SELECT server_seq FROM collection_entries WHERE id = ?').get(id) as { server_seq: number }).server_seq
+    expect(seq(a.id)).toBeGreaterThan(0)
+    expect(seq(b.id)).toBeGreaterThan(seq(a.id))
+  })
+
+  it('every server write takes a new server_seq', () => {
+    const s = userScope(u1)
+    const seq = (id: number): number =>
+      (db.prepare('SELECT server_seq FROM collection_entries WHERE id = ?').get(id) as { server_seq: number }).server_seq
+    const maxSeq = (): number =>
+      (db.prepare('SELECT COALESCE(MAX(server_seq), 0) AS m FROM collection_entries').get() as { m: number }).m
+    /** Runs `action` and checks each touched row now has a seq above every seq before it. */
+    const bumps = (action: () => number[]): void => {
+      const before = maxSeq()
+      const touched = action()
+      for (const id of touched) expect(seq(id)).toBeGreaterThan(before)
+      expect(new Set(touched.map(seq)).size).toBe(touched.length)
+    }
+    const other = db
+      .prepare(
+        `SELECT p.id FROM card_printings p WHERE p.card_id = ? AND p.id <> ? ORDER BY p.id LIMIT 1`
+      )
+      .get(printing.card_id, printing.id) as { id: number }
+    addEntry(db, input(1), now, userScope(u2)) // another user's row, so u1's seqs aren't the only ones
+    let a = 0
+    let b = 0
+    bumps(() => [(a = addEntry(db, input(1), now, s).id)]) // add new
+    bumps(() => [addEntry(db, input(2), now, s).id]) // add-sum
+    bumps(() => [updateEntry(db, a, { notes: 'x' }, now, s).id]) // update
+    bumps(() => [(b = addEntry(db, { printingId: other.id, imageId, quantity: 1 }, now, s).id)])
+    bumps(() => [updateEntry(db, b, { printingId: printing.id }, now, s).id, b]) // update-merge, both rows
+    expect(listEntries(db, ALL, s).map((e) => e.id)).toEqual([a])
+    bumps(() => {
+      adjustPrinting(db, printing.set_name, printing.language, printing.id, -1, now, s)
+      return [a]
+    })
+    bumps(() => {
+      removeEntry(db, a, now, s)
+      return [a]
+    })
+    expect(listEntries(db, ALL, s)).toEqual([])
   })
 
   it('remove tombstones on the server', () => {

@@ -10,6 +10,10 @@ export type MetaKey =
   | 'pack_art_synced_at'
   | 'set_logos_synced_at'
   | 'konami_logos_synced_at'
+  /** The cloud account whose collection is shown, as an integer string; absent means 0 (local). */
+  | 'cloud_active_owner'
+  /** The signed-in user's `Me` as JSON; absent when signed out. */
+  | 'cloud_user'
 
 export function getMeta(db: SqlDb, key: MetaKey): string | null {
   const row = db.prepare('SELECT value FROM meta WHERE key = ?').get(key) as
@@ -22,4 +26,8 @@ export function setMeta(db: SqlDb, key: MetaKey, value: string): void {
   db.prepare(
     'INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value'
   ).run(key, value)
+}
+
+export function deleteMeta(db: SqlDb, key: MetaKey): void {
+  db.prepare('DELETE FROM meta WHERE key = ?').run(key)
 }

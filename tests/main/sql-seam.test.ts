@@ -9,7 +9,8 @@ const root = join(__dirname, '../../src')
 const files = [
   ...readdirSync(join(root, 'main/repo')).map((f) => join(root, 'main/repo', f)),
   ...['meta', 'schema', 'sql'].map((f) => join(root, 'main/db', `${f}.ts`)),
-  join(root, 'shared/setImages.ts')
+  join(root, 'shared/setImages.ts'),
+  ...['client', 'refresh'].map((f) => join(root, 'main/prices', `${f}.ts`))
 ]
 
 describe('SqlDb seam', () => {

@@ -17,8 +17,16 @@ export interface Scope {
   where(alias: string): string
   /** Inserts a new entry for this owner and returns its id. */
   insertEntry(db: SqlDb, row: EntryInsert): number
-  /** Removes an entry (hard delete locally, tombstone on the server). */
+  /**
+   * Removes an entry by tombstoning it (and marking the change, as `touch` does). The desktop's never-signed-in
+   * owner 0 deletes the row outright instead.
+   */
   deleteEntry(db: SqlDb, id: number, ts: string): void
+  /**
+   * SQL assignment every `UPDATE collection_entries SET …` appends, recording the change for sync:
+   * dirty locally, a new server_seq on the server.
+   */
+  touch: string
   /**
    * value_snapshots scoping. `insertCols`/`insertVals` are comma-terminated fragments placed before
    * `date` / `?` in an INSERT (and `insertCols + 'date'` is the upsert conflict target).
@@ -26,18 +34,31 @@ export interface Scope {
   snapshotTable: { insertCols: string; insertVals: string }
 }
 
+/** SQL for the owner the desktop is showing: the `cloud_active_owner` meta value, or 0 (local). */
+export const ACTIVE_OWNER =
+  "(SELECT COALESCE((SELECT CAST(value AS INTEGER) FROM meta WHERE key = 'cloud_active_owner'), 0))"
+
 export const LOCAL: Scope = {
-  where: () => '1',
+  where: (alias) => `${alias}.owner_id = ${ACTIVE_OWNER} AND ${alias}.deleted_at IS NULL`,
   insertEntry(db, row) {
     const info = db
       .prepare(
-        'INSERT INTO collection_entries (printing_id, image_id, quantity, notes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)'
+        `INSERT INTO collection_entries (uid, owner_id, printing_id, image_id, quantity, notes, created_at, updated_at)
+         VALUES (?, ${ACTIVE_OWNER}, ?, ?, ?, ?, ?, ?)`
       )
-      .run(row.printingId, row.imageId, row.quantity, row.notes, row.ts, row.ts)
+      .run(crypto.randomUUID(), row.printingId, row.imageId, row.quantity, row.notes, row.ts, row.ts)
     return Number(info.lastInsertRowid)
   },
-  deleteEntry(db, id) {
-    db.prepare('DELETE FROM collection_entries WHERE id = ?').run(id)
+  deleteEntry(db, id, ts) {
+    // Owner 0 (never signed in) rows were never on the server: no one needs a tombstone, so drop the row.
+    db.prepare(
+      `DELETE FROM collection_entries WHERE id = ? AND deleted_at IS NULL AND owner_id = 0 AND owner_id = ${ACTIVE_OWNER}`
+    ).run(id)
+    db.prepare(
+      `UPDATE collection_entries SET deleted_at = ?, updated_at = ?, dirty = 1
+       WHERE id = ? AND deleted_at IS NULL AND owner_id = ${ACTIVE_OWNER}`
+    ).run(ts, ts, id)
   },
-  snapshotTable: { insertCols: '', insertVals: '' }
+  touch: 'dirty = 1',
+  snapshotTable: { insertCols: 'owner_id, ', insertVals: `${ACTIVE_OWNER}, ` }
 }

@@ -69,12 +69,66 @@ describe('choosePrintingFile', () => {
   })
 })
 
+const GAGAGA = [
+  'File:GagagaGirlCellPhoneSubtraction-LOCH-JP-GMR.png',
+  'File:GagagaGirlCellPhoneSubtraction-LOCH-JP-OP.png',
+  'File:GagagaGirlCellPhoneSubtraction-LOCH-JP-PScR.png',
+  'File:GagagaGirlCellPhoneSubtraction-LOCH-JP-ScR.png',
+  'File:GagagaGirlCellPhoneSubtraction-LOCH-JP-UR-EA.png',
+  'File:GagagaGirlCellPhoneSubtraction-LOCH-JP-UR.png',
+  'File:GagagaGirlCellPhoneSubtraction-LOCH-KR-UR-UE-EA.png',
+  'File:GagagaGirlCellPhoneSubtraction-LOCH-KR-UR-UE.png'
+]
+const ZOA = [
+  'File:Zoa-YAC1-JP-ScR-MangaStyle-Color.png',
+  'File:Zoa-YAC1-JP-ScR-MangaStyle-Monochrome.png',
+  'File:Zoa-YAC1-JP-UR-MangaStyle-Monochrome.png',
+  'File:Zoa-YAC1-JP-UR-MangaStyle-Color.png',
+  'File:Zoa-YAC1-JP-UR.png'
+]
+
+describe('choosePrintingFile variants', () => {
+  it('picks the extended-art (EA) file for an overframe, the plain one otherwise', () => {
+    const p = { setCode: 'LOCH-JP012', language: 'ja' as const }
+    expect(choosePrintingFile(GAGAGA, { ...p, rarity: 'Ultra Rare' })).toBe(
+      'GagagaGirlCellPhoneSubtraction-LOCH-JP-UR.png'
+    )
+    expect(choosePrintingFile(GAGAGA, { ...p, rarity: 'Ultra Rare (Overframe)' })).toBe(
+      'GagagaGirlCellPhoneSubtraction-LOCH-JP-UR-EA.png'
+    )
+    expect(choosePrintingFile(GAGAGA, { ...p, rarity: 'Ultra Rare', variant: 'Overframe' })).toBe(
+      'GagagaGirlCellPhoneSubtraction-LOCH-JP-UR-EA.png'
+    )
+    expect(
+      choosePrintingFile(GAGAGA, { ...p, rarity: 'Grand Master Rare', variant: 'Overframe' })
+    ).toBe('GagagaGirlCellPhoneSubtraction-LOCH-JP-GMR.png')
+    expect(
+      choosePrintingFile(GAGAGA, {
+        setCode: 'LOCH-KR012',
+        language: 'ko',
+        rarity: 'Ultra Rare (Overframe)'
+      })
+    ).toBe('GagagaGirlCellPhoneSubtraction-LOCH-KR-UR-UE-EA.png')
+  })
+
+  it('picks the Manga-Style colour file for a Manga-Style printing', () => {
+    const p = { setCode: 'YAC1', language: 'ja' as const, variant: 'Manga-Style' }
+    expect(choosePrintingFile(ZOA, { ...p, rarity: 'Ultra Rare' })).toBe(
+      'Zoa-YAC1-JP-UR-MangaStyle-Color.png'
+    )
+    expect(choosePrintingFile(ZOA, { ...p, rarity: 'Secret Rare' })).toBe(
+      'Zoa-YAC1-JP-ScR-MangaStyle-Color.png'
+    )
+  })
+})
+
 describe('rarityAbbr', () => {
   it('maps names and stored codes', () => {
     expect(rarityAbbr('Secret Rare')).toBe('ScR')
     expect(rarityAbbr('Quarter Century Secret Rare')).toBe('QCScR')
     expect(rarityAbbr('Whatever', '(UtR)')).toBe('UtR')
     expect(rarityAbbr('Platinum Secret Rare', '(PS)')).toBe('PlScR')
+    expect(rarityAbbr('Grand Master Rare')).toBe('GMR')
     expect(rarityAbbr('Unknown Shiny')).toBeNull()
   })
 })

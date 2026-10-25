@@ -30,6 +30,7 @@ const RARITY_ABBR: Record<string, string> = {
   'ghost/gold rare': 'GGR',
   'premium gold rare': 'PGR',
   'prismatic secret rare': 'PScR',
+  'grand master rare': 'GMR',
   'platinum rare': 'PlR',
   'platinum secret rare': 'PlScR',
   'starlight rare': 'StR',
@@ -87,10 +88,28 @@ const EDITIONS = ['1E', 'UE', 'LE', 'DT']
 const FILE_RE = /^[^-]+-([A-Za-z0-9]+)-([A-Z]{2})-([A-Za-z0-9]+)(?:-([^.]+))?\.(?:png|jpe?g|gif|webp)$/i
 
 export interface PrintingKey {
+  /** The printing's code, or just the set prefix ("YAC1") for an uncoded printing. */
   setCode: string
   language: Language
+  /** As stored; an art variant may be part of it, as in "Ultra Rare (Overframe)". */
   rarity: string
   rarityCode?: string
+  /** card_printings.variant, e.g. "Overframe" or "Manga-Style". */
+  variant?: string | null
+}
+
+/** File-name suffixes Yugipedia uses for an art variant, by variant name (lower case). */
+const VARIANT_SUFFIX: Record<string, string> = { overframe: 'EA' }
+const suffixKey = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]/g, '')
+const variantSuffix = (variant: string): string =>
+  suffixKey(VARIANT_SUFFIX[variant.toLowerCase()] ?? variant)
+
+/** "Ultra Rare (Overframe)" to its rarity and variant; the variant column wins when set. */
+function splitVariant(p: PrintingKey): { rarity: string; variant: string | null } {
+  if (p.variant) return { rarity: p.rarity, variant: p.variant }
+  const m = /^(.+?)\s*\(([^()]+)\)$/.exec(p.rarity.trim())
+  if (m && rarityAbbr(m[1])) return { rarity: m[1], variant: m[2] }
+  return { rarity: p.rarity, variant: null }
 }
 
 /**
@@ -101,7 +120,9 @@ export interface PrintingKey {
 export function choosePrintingFile(files: string[], p: PrintingKey): string | null {
   const prefix = p.setCode.split('-')[0].toUpperCase()
   const regions = regionsFor(p.setCode, p.language)
-  const wanted = rarityAbbr(p.rarity, p.rarityCode)
+  const { rarity, variant } = splitVariant(p)
+  const wanted = rarityAbbr(rarity, p.rarityCode)
+  const want = variant ? variantSuffix(variant) : null
   const candidates = files.flatMap((file) => {
     const m = FILE_RE.exec(file.replace(/^File:/, ''))
     if (!m || m[1].toUpperCase() !== prefix) return []
@@ -109,7 +130,20 @@ export function choosePrintingFile(files: string[], p: PrintingKey): string | nu
     if (region < 0) return []
     const rest = (m[4] ?? '').split('-').filter(Boolean)
     const edition = rest.length > 0 && EDITIONS.includes(rest[0].toUpperCase()) ? rest.shift() : undefined
-    return [{ file: file.replace(/^File:/, ''), region, rarity: m[3], edition, extra: rest.length }]
+    const keys = rest.map(suffixKey)
+    return [
+      {
+        file: file.replace(/^File:/, ''),
+        region,
+        rarity: m[3],
+        edition,
+        extra: rest.length,
+        // 0 when the file shows the printing's variant (or the printing has none), else 1.
+        variantMiss: want && !keys.includes(want) ? 1 : 0,
+        // Manga-Style comes in colour and monochrome; colour first.
+        mono: keys.includes('monochrome') ? 1 : 0
+      }
+    ]
   })
   if (candidates.length === 0) return null
   const sameRarity = wanted ? candidates.filter((c) => c.rarity.toLowerCase() === wanted.toLowerCase()) : []
@@ -118,6 +152,8 @@ export function choosePrintingFile(files: string[], p: PrintingKey): string | nu
     e === undefined ? 0 : EDITIONS.indexOf(e.toUpperCase()) + 1
   pool.sort(
     (a, b) =>
+      a.variantMiss - b.variantMiss ||
+      a.mono - b.mono ||
       a.extra - b.extra ||
       a.region - b.region ||
       editionRank(a.edition) - editionRank(b.edition) ||

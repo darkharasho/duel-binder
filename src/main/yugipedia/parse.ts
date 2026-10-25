@@ -4,6 +4,8 @@ export interface SetListRow {
   code: string
   name: string
   rarities: string[]
+  /** The row's art variant from `// description::(...)`, e.g. "Overframe"; absent for the plain card. */
+  variant?: string
 }
 export interface ParsedSetList {
   setPage: string | null
@@ -32,7 +34,21 @@ const RARITIES: Record<string, string> = {
   GUR: 'Gold Rare',
   PlR: 'Platinum Rare',
   StR: 'Starlight Rare',
-  '10000ScR': '10000 Secret Rare'
+  '10000ScR': '10000 Secret Rare',
+  // Checked against Yugipedia's abbreviation redirects. "MR" is not here: on Yugipedia it is
+  // Magic Ruler, the set; Millennium Rare is "MLR".
+  MLR: 'Millennium Rare',
+  GMR: 'Grand Master Rare',
+  NPR: 'Normal Parallel Rare',
+  UPR: 'Ultra Parallel Rare',
+  ScPR: 'Secret Parallel Rare',
+  EScR: 'Extra Secret Rare',
+  HGR: 'Holographic Rare',
+  GScR: 'Gold Secret Rare',
+  PGR: 'Premium Gold Rare',
+  SFR: 'Starfoil Rare',
+  SHR: 'Shatterfoil Rare',
+  KCR: 'Kaiba Corporation Rare'
 }
 
 export function normalizeRarity(raw: string): string {
@@ -45,6 +61,18 @@ function splitRarities(raw: string | undefined): string[] {
     .split(',')
     .map((s) => normalizeRarity(s.trim()))
     .filter((s) => s !== '')
+}
+
+/**
+ * The variant a row's `// description::(...)` note names. Yugipedia's "extended art" is the card art
+ * running over the frame: an overframe, as the English TCGplayer variants are labelled.
+ */
+function variantFromComment(comment: string): string | undefined {
+  const m = /description::\s*\(?([^()]*?)\)?\s*$/.exec(comment)
+  const note = m?.[1].trim()
+  if (!note) return undefined
+  if (/^extended art$/i.test(note)) return 'Overframe'
+  return note[0].toUpperCase() + note.slice(1)
 }
 
 export function parseSetList(wikitext: string): ParsedSetList | null {
@@ -85,7 +113,10 @@ export function parseSetList(wikitext: string): ParsedSetList | null {
         closes = true
         line = line.slice(0, -2)
       }
-      line = line.replace(/\s*\/\/.*$/, '').trim()
+      const slash = line.indexOf('//')
+      const variant = slash === -1 ? undefined : variantFromComment(line.slice(slash + 2))
+      if (slash !== -1) line = line.slice(0, slash)
+      line = line.trim()
       if (line !== '') {
         const fields = line.split(';').map((s) => s.trim())
         const code = noCode ? '' : (fields.shift() ?? '')
@@ -93,7 +124,7 @@ export function parseSetList(wikitext: string): ParsedSetList | null {
         if (name !== '') {
           const own = splitRarities(fields[1])
           const rarities = own.length ? own : fallback.length ? fallback : ['Common']
-          rows.push({ code, name, rarities })
+          rows.push(variant ? { code, name, rarities, variant } : { code, name, rarities })
         }
       }
       if (closes) {

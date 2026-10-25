@@ -111,6 +111,15 @@ ALTER TABLE card_printings ADD COLUMN pkey TEXT GENERATED ALWAYS AS (CASE WHEN l
 CREATE UNIQUE INDEX ux_printings_pkey ON card_printings(pkey);
 `
 
+/**
+ * Non-English lists now keep art variants (overframes, Manga-Style) and uncoded printings find their
+ * scans: re-sync those sets on next launch, and retry printing art lookups that found nothing.
+ */
+export const SCHEMA_V11 = `
+DELETE FROM meta WHERE key = 'intl_sets_synced_at';
+DELETE FROM printing_art WHERE url IS NULL;
+`
+
 /** A printing's rarity as shown: "Starlight Rare (Extended Art)" for a labelled variant. */
 export const RARITY_LABEL = "p.set_rarity || COALESCE(' (' || p.variant || ')', '')"
 
@@ -125,6 +134,7 @@ export const MIGRATIONS: Migration[] = [
   { version: 7, sql: SCHEMA_V7 },
   { version: 8, sql: SCHEMA_V8 },
   { version: 9, sql: SCHEMA_V9 },
-  { version: 10, sql: SCHEMA_V10 }
+  { version: 10, sql: SCHEMA_V10 },
+  { version: 11, sql: SCHEMA_V11 }
 ]
 

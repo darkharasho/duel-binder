@@ -67,6 +67,31 @@ describe('createPrintingArtResolver', () => {
     expect(await art2.url(id)).toBe('https://ms.yugipedia.com/a/DarkMagician-LOB-EN-UR-1E.png')
   })
 
+  it("finds an uncoded printing's scan from its set's prefix, preferring its variant", async () => {
+    const db = await seededDb()
+    const card = (db.prepare("SELECT id FROM cards WHERE name = 'Dark Magician'").get() as { id: number }).id
+    const insert = db.prepare(
+      `INSERT INTO card_printings (card_id, language, set_name, set_code, set_rarity, set_rarity_code,
+         missing_from_api, variant)
+       VALUES (?, 'ja', 'Original Artwork Collection', ?, ?, '', 0, ?) RETURNING id`
+    )
+    insert.get(card, 'YAC1-JP001', 'Ultra Rare', null)
+    insert.get(card, 'YAC1-JP002', 'Secret Rare', null)
+    insert.get(card, 'OTHER-JP001', 'Common', null)
+    const manga = (insert.get(card, '', 'Ultra Rare', 'Manga-Style') as { id: number }).id
+    const client = fakeClient({
+      'Card Gallery:Dark Magician': [
+        'DarkMagician-YAC1-JP-UR.png',
+        'DarkMagician-YAC1-JP-UR-MangaStyle-Monochrome.png',
+        'DarkMagician-YAC1-JP-UR-MangaStyle-Color.png'
+      ]
+    })
+    const art = createPrintingArtResolver({ db, client, batchWaitMs: 0 })
+    expect(await art.url(manga)).toBe(
+      'https://ms.yugipedia.com/a/DarkMagician-YAC1-JP-UR-MangaStyle-Color.png'
+    )
+  })
+
   it('answers null for unknown printings', async () => {
     const db = await seededDb()
     const art = createPrintingArtResolver({ db, client: fakeClient(GALLERY), batchWaitMs: 0 })

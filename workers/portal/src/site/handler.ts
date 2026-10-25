@@ -19,6 +19,8 @@ export async function handleSite(req: Request, deps: SiteDeps): Promise<Response
     res.headers.set('access-control-allow-origin', '*')
     return res
   }
+  // The built web app lives under /app/ and belongs to the app host only.
+  if (url.pathname.startsWith('/app/')) return new Response('Not Found', { status: 404 })
   if (url.pathname !== '/') return deps.assets.fetch(req)
   if (req.method !== 'GET' && req.method !== 'HEAD') {
     return new Response('Method Not Allowed', { status: 405, headers: { allow: 'GET, HEAD' } })

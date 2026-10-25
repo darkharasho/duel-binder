@@ -80,6 +80,7 @@ describe('write RPC', () => {
     language = p.language
     deps = {
       db,
+      assets: { fetch: async () => new Response('nope', { status: 404 }) },
       images: memoryBucket(),
       printingArt: noPrintingArt,
       env: {

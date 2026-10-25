@@ -24,6 +24,7 @@ describe('admin catalog loader', () => {
     source = await seededDb()
     deps = {
       db,
+      assets: { fetch: async () => new Response('nope', { status: 404 }) },
       images: memoryBucket(),
       printingArt: noPrintingArt,
       env: { PUBLIC_URL: BASE, SITE_URL: 'https://site.test', DISCORD_CLIENT_ID: 'c', DISCORD_CLIENT_SECRET: 's', ADMIN_TOKEN: TOKEN },

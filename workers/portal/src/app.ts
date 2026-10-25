@@ -20,6 +20,8 @@ export interface Env {
 
 export interface AppDeps {
   db: SqlDb
+  /** The static assets binding; the signed-in front page serves the built web app from it. */
+  assets: { fetch(req: Request): Promise<Response> }
   images: ImageBucket
   printingArt: PrintingArtResolver
   env: Env

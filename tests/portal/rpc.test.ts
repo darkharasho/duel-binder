@@ -56,6 +56,7 @@ describe('read-only RPC', () => {
     bob = addUser(db, '2', 'bob')
     deps = {
       db,
+      assets: { fetch: async () => new Response('nope', { status: 404 }) },
       images: memoryBucket(),
       printingArt: noPrintingArt,
       env: {

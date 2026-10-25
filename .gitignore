@@ -10,4 +10,5 @@ out
 *.tsbuildinfo
 .worktrees
 .wrangler
+workers/portal/site/app/
 catalog-work/

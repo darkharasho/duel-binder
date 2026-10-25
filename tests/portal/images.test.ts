@@ -27,6 +27,7 @@ describe('image route', () => {
     imageId = (db.prepare('SELECT image_id FROM card_images LIMIT 1').get() as { image_id: number }).image_id
     deps = {
       db,
+      assets: { fetch: async () => new Response('nope', { status: 404 }) },
       images: bucket,
       printingArt,
       env: { PUBLIC_URL: BASE, SITE_URL: 'https://site.test', DISCORD_CLIENT_ID: 'c', DISCORD_CLIENT_SECRET: 's', ADMIN_TOKEN: 'a' },

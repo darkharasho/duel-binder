@@ -36,6 +36,7 @@ export class Store extends DurableObject<WorkerEnv> {
   fetch(req: Request): Promise<Response> {
     return handle(req, {
       db: this.db,
+      assets: this.env.ASSETS,
       images: this.env.IMAGES,
       printingArt: this.printingArt,
       env: this.env,
@@ -56,6 +57,7 @@ export default {
       return handleSite(req, { appUrl: env.PUBLIC_URL, assets: env.ASSETS, downloads })
     }
     if (route.kind === 'redirect') return Response.redirect(route.location, 301)
+    if (route.kind === 'app-asset') return env.ASSETS.fetch(req)
     return env.STORE.get(env.STORE.idFromName('main')).fetch(req)
   }
 } satisfies ExportedHandler<WorkerEnv>

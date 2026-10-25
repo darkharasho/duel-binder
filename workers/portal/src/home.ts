@@ -9,6 +9,9 @@ export interface HomeView {
   signInFailed: boolean
 }
 
+/** Matches the CSP in src/renderer/web.html; sent as a header so it applies even if the meta tag is edited out. */
+const WEB_CSP = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:"
+
 function body(v: HomeView): string {
   const download = `<a class="btn out" href="${esc(v.siteUrl)}/#download">Get the desktop app</a>`
   if (v.name) {
@@ -55,6 +58,18 @@ export async function home(req: Request, deps: AppDeps): Promise<Response> {
         | { username: string; display_name: string | null }
         | undefined)
     : undefined
+  if (user && (req.method === 'GET' || req.method === 'HEAD')) {
+    const res = await deps.assets.fetch(new Request(new URL('/app/web.html', req.url)))
+    if (res.ok) {
+      return new Response(req.method === 'HEAD' ? null : res.body, {
+        headers: {
+          'content-type': 'text/html; charset=utf-8',
+          'cache-control': 'no-store',
+          'content-security-policy': WEB_CSP
+        }
+      })
+    }
+  }
   const html = renderHome({
     siteUrl: deps.env.SITE_URL,
     name: row ? (row.display_name ?? row.username) : null,

@@ -12,6 +12,9 @@ routes = [
 directory = "./site"
 binding = "ASSETS"
 run_worker_first = true
+# Keep asset paths literal. By default Workers Assets redirects or rewrites .html URLs
+# (it strips the extension), which would break /app/web.html for both home() and direct requests.
+html_handling = "none"
 
 [[durable_objects.bindings]]
 name = "STORE"

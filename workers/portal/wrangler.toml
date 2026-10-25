@@ -2,6 +2,17 @@ name = "duel-binder-portal"
 main = "src/index.ts"
 compatibility_date = "2026-10-01"
 
+routes = [
+  { pattern = "duelbinder.com", custom_domain = true },
+  { pattern = "www.duelbinder.com", custom_domain = true },
+  { pattern = "app.duelbinder.com", custom_domain = true }
+]
+
+[assets]
+directory = "./site"
+binding = "ASSETS"
+run_worker_first = true
+
 [[durable_objects.bindings]]
 name = "STORE"
 class_name = "Store"
@@ -11,5 +22,6 @@ tag = "v1"
 new_sqlite_classes = ["Store"]
 
 [vars]
+SITE_URL = "https://duelbinder.com"
 PUBLIC_URL = "http://localhost:8787"
 DISCORD_CLIENT_ID = ""

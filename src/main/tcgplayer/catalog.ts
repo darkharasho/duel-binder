@@ -293,15 +293,20 @@ export function saveTcgVariants(db: Database.Database): number {
   return seen.size
 }
 
+export interface TcgProductMatch {
+  product_id: number
+  group_id: number
+  image_url: string
+  exact: boolean
+}
+
 /**
  * The TCGplayer product of an English printing: its own product for an art variant; otherwise the
- * plain product with the same card number and rarity; the only product with that number when
- * TCGplayer names the rarity differently; or the plain product of the one rarity that ends in this
- * printing's ("Prismatic Collector's Rare" for "Collector's Rare").
+ * plain product with the same card number and rarity. Failing those (`exact: false`), the only
+ * product with that number when TCGplayer names the rarity differently, or the plain product of
+ * the "Prismatic" form of this printing's rarity ("Prismatic Collector's Rare" for "Collector's Rare").
  */
-export function createTcgProductResolver(
-  db: SqlDb
-): (printingId: number) => { product_id: number; group_id: number; image_url: string } | null {
+export function createTcgProductResolver(db: SqlDb): (printingId: number) => TcgProductMatch | null {
   const printing = db.prepare(
     "SELECT set_code, set_rarity, tcg_product_id FROM card_printings WHERE id = ? AND language = 'en'"
   )
@@ -315,16 +320,26 @@ export function createTcgProductResolver(
       | { set_code: string; set_rarity: string; tcg_product_id: number | null }
       | undefined
     if (!p || !p.set_code) return null
-    if (p.tcg_product_id !== null)
-      return (byId.get(p.tcg_product_id) as { product_id: number; group_id: number; image_url: string }) ?? null
+    if (p.tcg_product_id !== null) {
+      const own = byId.get(p.tcg_product_id) as Omit<TcgProductMatch, 'exact'> | undefined
+      return own ? { ...own, exact: true } : null
+    }
     const rows = products.all(p.set_code) as (ProductRow & { group_id: number })[]
+    const pick = (r: ProductRow & { group_id: number }, exact: boolean): TcgProductMatch => ({
+      product_id: r.product_id,
+      group_id: r.group_id,
+      image_url: r.image_url,
+      exact
+    })
     const same = sameRarity(rows, p.set_rarity)[0]
-    if (same) return same
-    if (rows.length === 1) return rows[0]
-    // "Collector's Rare" is TCGplayer's "Prismatic Collector's Rare": use the one rarity ending in it.
-    const want = rarityKey(p.set_rarity)
-    const longer = new Set(rows.map((r) => r.rarity).filter((r) => want && rarityKey(r).endsWith(want)))
-    return longer.size === 1 ? sameRarity(rows, [...longer][0])[0] : null
+    if (same) return pick(same, true)
+    if (rows.length === 1) return pick(rows[0], false)
+    // A rarity of two words or more ("Collector's Rare"), sold as its Prismatic form.
+    if (/\s/.test(p.set_rarity.trim())) {
+      const prismatic = sameRarity(rows, `Prismatic ${p.set_rarity}`)[0]
+      if (prismatic) return pick(prismatic, false)
+    }
+    return null
   }
 }
 

@@ -6,7 +6,7 @@ import {
   refreshTcgPrices,
   TCG_PRICES_INTERVAL_MS
 } from '../../src/main/tcgplayer/prices'
-import { addEntry } from '../../src/main/repo/collection'
+import { addEntry, removeEntry } from '../../src/main/repo/collection'
 import { seededDb } from './helpers'
 
 const json = (results: unknown[]): Response =>
@@ -116,7 +116,7 @@ describe('TCGplayer market prices', () => {
       fetchFn: fetchFn as never,
       now: NOW
     })
-    expect(r).toEqual({ groups: 2, updatedGroups: 2, failedGroups: 0 })
+    expect(r).toMatchObject({ groups: 2, updatedGroups: 2, failedGroups: 0 })
     expect(applyTcgPrices(db)).toBe(2)
     expect(marketPrice(db, 'LOB-EN005')).toBe(71.73)
     expect(marketPrice(db, 'LOB-EN119')).toBe(0.5)
@@ -198,7 +198,7 @@ describe('TCGplayer market prices', () => {
       fetchFn: fetchFn as never,
       now: NOW
     })
-    expect(r).toEqual({ groups: 2, updatedGroups: 1, failedGroups: 1 })
+    expect(r).toMatchObject({ groups: 2, updatedGroups: 1, failedGroups: 1 })
     fetchFn.mockClear()
     await refreshTcgPrices(db, { version: '1', scope: 'all', fetchFn: fetchFn as never, now: NOW })
     expect(priceUrls(fetchFn)).toEqual(['https://tcgcsv.com/tcgplayer/2/20/prices'])
@@ -210,5 +210,112 @@ describe('TCGplayer market prices', () => {
     await expect(
       refreshTcgPrices(db, { version: '1', scope: 'all', fetchFn: broken as never, now: NOW })
     ).resolves.toMatchObject({ failedGroups: 2 })
+  })
+
+  it('prices a fallback match only when no other printing claims that product', async () => {
+    const db = await seededDb()
+    const ultra = pid(db, 'LOB-EN005')
+    const card = (
+      db.prepare('SELECT card_id FROM card_printings WHERE id = ?').get(pid(db, 'LOB-EN005')) as {
+        card_id: number
+      }
+    ).card_id
+    const ultimate = (
+      db
+        .prepare(
+          `INSERT INTO card_printings (card_id, set_name, set_code, set_rarity, set_rarity_code)
+           VALUES (?, 'Legend of Blue Eyes White Dragon', 'LOB-EN005', 'Ultimate Rare', '(UtR)') RETURNING id`
+        )
+        .get(card) as { id: number }
+    ).id
+    const priceOf = (id: number): number | null =>
+      (
+        db.prepare('SELECT market_price FROM card_printings WHERE id = ?').get(id) as {
+          market_price: number | null
+        }
+      ).market_price
+    const ultimatePrice = (): number | null =>
+      (
+        db.prepare('SELECT market_price FROM card_printings WHERE id = ?').get(ultimate) as {
+          market_price: number | null
+        }
+      ).market_price
+    const run = async (rarity: string): Promise<void> => {
+      db.prepare('DELETE FROM tcgplayer_groups').run()
+      db.prepare('DELETE FROM tcgplayer_price_groups').run()
+      const fetchFn = vi.fn(async (url: string) => {
+        if (url.endsWith('/groups')) return json([{ groupId: 10, modifiedOn: rarity }])
+        if (url.endsWith('/products')) return json([product(1, 'LOB-EN005', rarity)])
+        return json([price(1, '1st Edition', 40)])
+      })
+      await refreshTcgCatalog(db, { version: '1', fetchFn: fetchFn as never })
+      await refreshTcgPrices(db, {
+        version: '1',
+        scope: 'all',
+        fetchFn: fetchFn as never,
+        now: NOW
+      })
+      applyTcgPrices(db)
+    }
+    // The one product is the Ultra Rare: the Ultimate Rare must not borrow its price.
+    await run('Ultra Rare')
+    expect(priceOf(ultra)).toBe(40)
+    expect(ultimatePrice()).toBeNull()
+    // A product both printings only fall back to: neither is priced.
+    await run('Secret Rare')
+    expect(priceOf(ultra)).toBeNull()
+    expect(ultimatePrice()).toBeNull()
+  })
+
+  it('ignores price moves under 2% or 5 cents, so the nightly upload stays small', async () => {
+    const prices: Record<number, unknown[]> = {
+      10: [price(1, '1st Edition', 10), price(3, 'Unlimited', 0.1)],
+      20: []
+    }
+    const { db, fetchFn } = await withCatalog(prices)
+    let at = NOW.getTime()
+    const step = async (): Promise<number> => {
+      await refreshTcgPrices(db, {
+        version: '1',
+        scope: 'all',
+        fetchFn: fetchFn as never,
+        now: new Date(at)
+      })
+      at += TCG_PRICES_INTERVAL_MS
+      return applyTcgPrices(db)
+    }
+    expect(await step()).toBe(2)
+    prices[10] = [price(1, '1st Edition', 10.15), price(3, 'Unlimited', 0.14)]
+    expect(await step()).toBe(0)
+    expect(marketPrice(db, 'LOB-EN005')).toBe(10)
+    prices[10] = [price(1, '1st Edition', 10.5), price(3, 'Unlimited', 0.16)]
+    expect(await step()).toBe(2)
+    expect(marketPrice(db, 'LOB-EN005')).toBe(10.5)
+    expect(marketPrice(db, 'LOB-EN119')).toBe(0.16)
+  })
+
+  it('"owned" scope drops prices of sets no longer owned and reports the sets it changed', async () => {
+    const { db, fetchFn } = await withCatalog({ 10: [price(1, '1st Edition', 5)], 20: [] })
+    const entry = addEntry(db, { printingId: pid(db, 'LOB-EN005'), imageId: 46986414, quantity: 1 })
+    const first = await refreshTcgPrices(db, {
+      version: '1',
+      scope: 'owned',
+      fetchFn: fetchFn as never,
+      now: NOW
+    })
+    expect(first.changedGroups).toEqual([10])
+    applyTcgPrices(db, first.changedGroups)
+    expect(marketPrice(db, 'LOB-EN005')).toBe(5)
+
+    removeEntry(db, entry.id)
+    const second = await refreshTcgPrices(db, {
+      version: '1',
+      scope: 'owned',
+      fetchFn: fetchFn as never,
+      now: NOW
+    })
+    expect(second.changedGroups).toEqual([10])
+    expect(applyTcgPrices(db, second.changedGroups)).toBe(1)
+    expect(marketPrice(db, 'LOB-EN005')).toBeNull()
   })
 })

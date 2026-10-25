@@ -69,7 +69,7 @@ export async function refreshCatalog(
     }
   }
   const prices = await refreshTcgPrices(db, { version, scope: deps.tcgPrices ?? 'owned', ...stamp() })
-  if ((rematch || prices.updatedGroups > 0) && applyTcgPrices(db) > 0) onChanged()
+  if (applyTcgPrices(db, rematch ? undefined : prices.changedGroups) > 0) onChanged()
   if (hasSetData(db) && shouldRefreshPackArt(db, now())) {
     if ((await refreshPackArt(db, { version, ...stamp() })) > 0) onChanged()
   }

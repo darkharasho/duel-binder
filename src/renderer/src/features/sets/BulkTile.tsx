@@ -20,6 +20,8 @@ interface BulkTileProps {
   /** The chosen code's printing; the parent owns the choice. */
   printingId: number
   onPickCode: (printingId: number) => void
+  /** Called instead of returning focus to the code picker when it closes. */
+  onPickerClose?: () => void
   busy: boolean
   highlighted: boolean
   onAdjust: (printingId: number, delta: 1 | -1) => void
@@ -34,6 +36,7 @@ export const BulkTile = memo(function BulkTile({
   rarity,
   printingId: chosenId,
   onPickCode,
+  onPickerClose,
   busy,
   highlighted,
   onAdjust
@@ -108,7 +111,16 @@ export const BulkTile = memo(function BulkTile({
             >
               <SelectValue />
             </SelectTrigger>
-            <SelectContent>
+            <SelectContent
+              onCloseAutoFocus={
+                onPickerClose
+                  ? (e) => {
+                      e.preventDefault()
+                      onPickerClose()
+                    }
+                  : undefined
+              }
+            >
               {rarity.codes.map((c) => (
                 <SelectItem key={c.printingId} value={String(c.printingId)}>
                   {c.setCode}

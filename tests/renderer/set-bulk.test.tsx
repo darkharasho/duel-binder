@@ -353,6 +353,18 @@ describe('SetChecklist bulk mode', () => {
     expect(remove).toBeDisabled()
   })
 
+  it('picking a code hands focus back to the search box', async () => {
+    setup()
+    await enterBulk()
+    await userEvent.click(
+      screen.getByRole('combobox', { name: 'Set code for Alpha Dragon Ultra Rare' })
+    )
+    await userEvent.click(await screen.findByRole('option', { name: 'MRD-001' }))
+    await waitFor(() =>
+      expect(screen.getByRole('searchbox', { name: 'Type a card number or name' })).toHaveFocus()
+    )
+  })
+
   it('the filter does not hide a card while it is being changed', async () => {
     const { releaseNext } = setup()
     await screen.findByRole('button', { name: /^Alpha Dragon/ })

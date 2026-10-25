@@ -23,6 +23,7 @@ interface BulkSlotProps {
   busy: boolean
   highlighted: boolean
   onPick: (key: string, printingId: number) => void
+  onPickerClose: () => void
   onAdd: (tile: BulkTileData, printingId: number) => void
   adjustRef: RefObject<Adjust>
 }
@@ -34,6 +35,7 @@ function BulkSlot({
   busy,
   highlighted,
   onPick,
+  onPickerClose,
   onAdd,
   adjustRef
 }: BulkSlotProps): React.JSX.Element {
@@ -57,6 +59,7 @@ function BulkSlot({
       rarity={rarity}
       printingId={printingId ?? rarity.defaultPrintingId}
       onPickCode={pick}
+      onPickerClose={onPickerClose}
       busy={busy}
       highlighted={highlighted}
       onAdjust={adjust}
@@ -101,9 +104,9 @@ export function BulkMode({ cards, pending, adjust }: BulkModeProps): React.JSX.E
   const inputRef = useRef<HTMLInputElement>(null)
   const pick = useCallback((key: string, printingId: number) => {
     setChosen((c) => ({ ...c, [key]: printingId }))
-    // The picker takes focus while open and hands it back on close; return it to the box after.
-    setTimeout(() => inputRef.current?.focus(), 0)
   }, [])
+  // The code picker takes focus while open; send it back to the box, not the picker, on close.
+  const focusBox = useCallback(() => inputRef.current?.focus(), [])
 
   useEffect(() => {
     // jsdom has no scrollIntoView.
@@ -235,6 +238,7 @@ export function BulkMode({ cards, pending, adjust }: BulkModeProps): React.JSX.E
               busy={(pending[tile.card.cardId] ?? 0) > 0}
               highlighted={tile.key === highlight}
               onPick={pick}
+              onPickerClose={focusBox}
               onAdd={add}
               adjustRef={adjustRef}
             />

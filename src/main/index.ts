@@ -271,6 +271,8 @@ async function bootstrap(): Promise<void> {
       onChanged: emitDataChanged
     })
     account.catalogRefreshed()
+    // TCGplayer prices may have moved the collection's value.
+    recordSnapshot(db)
     // Signed in, prices come from the account's server; signed out, straight from the eBay Worker.
     if (account.isSignedIn()) {
       if (changed) emitDataChanged()

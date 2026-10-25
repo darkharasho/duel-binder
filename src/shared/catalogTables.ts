@@ -35,7 +35,7 @@ export const CATALOG_TABLES: CatalogTable[] = [
     key: ['pkey'],
     columns: [
       'card_id', 'set_name', 'set_code', 'set_rarity', 'set_rarity_code', 'set_price',
-      'missing_from_api', 'language', 'tcg_product_id', 'variant'
+      'missing_from_api', 'language', 'tcg_product_id', 'variant', 'market_price'
     ]
   },
   {

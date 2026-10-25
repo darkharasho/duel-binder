@@ -200,6 +200,7 @@ const ENTRY_REFS: Record<string, [count: number, kind: string]> = {
   'src/main/sync/sync.ts': [1, FK],
   'src/main/sync/intl.ts': [1, FK],
   'src/main/tcgplayer/catalog.ts': [1, FK],
+  'src/main/tcgplayer/prices.ts': [1, LIVE],
   'workers/portal/src/catalogLoad.ts': [1, FK],
   'workers/portal/src/sync.ts': [5, SYNC],
   'src/main/cloud/localSync.ts': [11, SYNC],

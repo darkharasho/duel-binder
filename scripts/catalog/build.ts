@@ -54,6 +54,7 @@ export async function runJob(opts: JobOptions): Promise<JobResult> {
         client: createYgoClient(),
         yugipedia: createYugipediaClient({ version }),
         version,
+        tcgPrices: 'all',
         onSyncProgress: (s) => log(`Card sync: ${s.state}${s.error ? ` (${s.error})` : ''}`)
       }))
 

@@ -150,6 +150,18 @@ CREATE TABLE sync_pending (owner_id INTEGER NOT NULL, uid TEXT NOT NULL, pkey TE
 CREATE TABLE cloud_accounts (owner_id INTEGER PRIMARY KEY, name TEXT NOT NULL, cursor INTEGER NOT NULL DEFAULT 0, synced_at TEXT);
 `
 
+/**
+ * TCGplayer market prices (via TCGCSV): one per product, picked across editions, with when each
+ * set's prices were last fetched (local only); and each English printing's resolved price, shared
+ * with the portal.
+ */
+export const SCHEMA_V13 = `
+CREATE TABLE tcgplayer_price_groups (group_id INTEGER PRIMARY KEY, fetched_at TEXT NOT NULL);
+CREATE TABLE tcgplayer_prices (product_id INTEGER PRIMARY KEY, group_id INTEGER NOT NULL, price REAL NOT NULL);
+CREATE INDEX tcgplayer_prices_group ON tcgplayer_prices(group_id);
+ALTER TABLE card_printings ADD COLUMN market_price REAL;
+`
+
 /** A printing's rarity as shown: "Starlight Rare (Extended Art)" for a labelled variant. */
 export const RARITY_LABEL = "p.set_rarity || COALESCE(' (' || p.variant || ')', '')"
 
@@ -166,6 +178,7 @@ export const MIGRATIONS: Migration[] = [
   { version: 9, sql: SCHEMA_V9 },
   { version: 10, sql: SCHEMA_V10 },
   { version: 11, sql: SCHEMA_V11 },
-  { version: 12, sql: SCHEMA_V12, server: false }
+  { version: 12, sql: SCHEMA_V12, server: false },
+  { version: 13, sql: SCHEMA_V13 }
 ]
 

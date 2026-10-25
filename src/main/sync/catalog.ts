@@ -10,6 +10,7 @@ import { refreshSetLogos, shouldRefreshSetLogos } from '../yugipedia/setLogos'
 import { refreshPackArt, shouldRefreshPackArt } from '../konami/packArt'
 import { refreshKonamiLogos, shouldRefreshKonamiLogos } from '../konami/logos'
 import { refreshTcgCatalog, shouldRefreshTcgCatalog } from '../tcgplayer/catalog'
+import { applyTcgPrices, refreshTcgPrices } from '../tcgplayer/prices'
 
 // Runs headless in the nightly catalog job (ELECTRON_RUN_AS_NODE), so nothing reachable from
 // here may import 'electron'.
@@ -24,10 +25,15 @@ export interface RefreshCatalogDeps {
   onSynced?: () => void
   /** Called whenever a step changed data the UI shows. */
   onChanged?: () => void
+  /**
+   * Which sets' TCGplayer prices to keep: only those holding an owned English printing (desktop,
+   * the default), or every set (the nightly job, which shares them with the portal).
+   */
+  tcgPrices?: 'owned' | 'all'
 }
 
 /**
- * Brings the shared card catalog up to date: card sync, English sets, TCGplayer catalog, pack
+ * Brings the shared card catalog up to date: card sync, English sets, TCGplayer catalog and prices, pack
  * art, set logos, Konami logos and non-English sets, each only when its interval has passed.
  * `changed` is true when the cards or the non-English sets were refreshed.
  */
@@ -42,11 +48,14 @@ export async function refreshCatalog(
   // the caller fixes the clock, so desktop keeps finish-time stamps.
   const stamp = (): { now?: Date } => (deps.now ? { now: deps.now() } : {})
   let changed = false
+  /** Printings or their TCGplayer products changed, so market prices must be matched again. */
+  let rematch = false
   if (shouldSync(getMeta(db, 'last_sync_at'), now())) {
     const status = await runSync(db, client, deps.onSyncProgress ?? (() => {}), now())
     if (status.state === 'idle') {
       deps.onSynced?.()
       changed = true
+      rematch = true
     }
   } else if (!hasSetData(db)) {
     changed = await refreshSets(db, client)
@@ -54,8 +63,13 @@ export async function refreshCatalog(
   if (shouldRefreshTcgCatalog(db, now())) {
     // A few minutes at most; English cards then show their TCGplayer photos.
     const tcg = await refreshTcgCatalog(db, { version, ...stamp() })
-    if (tcg.updatedGroups > 0) onChanged()
+    if (tcg.updatedGroups > 0) {
+      rematch = true
+      onChanged()
+    }
   }
+  const prices = await refreshTcgPrices(db, { version, scope: deps.tcgPrices ?? 'owned', ...stamp() })
+  if (applyTcgPrices(db, rematch ? undefined : prices.changedGroups) > 0) onChanged()
   if (hasSetData(db) && shouldRefreshPackArt(db, now())) {
     if ((await refreshPackArt(db, { version, ...stamp() })) > 0) onChanged()
   }

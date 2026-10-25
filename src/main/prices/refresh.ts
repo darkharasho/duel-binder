@@ -25,6 +25,8 @@ function candidateFilter(now: Date, printingIds?: number[]): { where: string; pa
     where.push(`p.id IN (${printingIds.map(() => '?').join(',')})`)
     params.push(...printingIds)
   }
+  // English printings with a TCGplayer market price don't need eBay's.
+  where.push("(p.language <> 'en' OR p.market_price IS NULL)")
   // Owned by anyone: deliberately global across desktop owners and server users; tombstones don't count.
   where.push('EXISTS (SELECT 1 FROM collection_entries e WHERE e.printing_id = p.id AND e.deleted_at IS NULL)')
   return { where: where.join(' AND '), params }
@@ -36,7 +38,7 @@ const CANDIDATE_FROM = `FROM card_printings p
        LEFT JOIN intl_prices ip ON ip.printing_id = p.id`
 
 /**
- * Owned printings (every language) with no eBay price or one older than 7 days, never-priced first
+ * Owned printings (every language, English only without a TCGplayer market price) with no eBay price or one older than 7 days, never-priced first
  * (optionally only `printingIds`, at most `limit`).
  */
 export function priceCandidates(
@@ -70,21 +72,24 @@ function countCandidates(db: SqlDb, now: Date, printingIds?: number[]): number {
   return Number(row.n)
 }
 
-/** True when the printing (any language) has no eBay price checked in the last 7 days. */
+/**
+ * True when the printing (any language) has no eBay price checked in the last 7 days, unless it is an
+ * English printing with a TCGplayer market price.
+ */
 export function needsPrice(db: SqlDb, printingId: number, now = new Date()): boolean {
   const cutoff = new Date(now.getTime() - PRICE_INTERVAL_MS).toISOString()
   const row = db
     .prepare(
-      `SELECT ip.checked_at AS checkedAt
+      `SELECT ip.checked_at AS checkedAt, p.language = 'en' AND p.market_price IS NOT NULL AS priced
        FROM card_printings p LEFT JOIN intl_prices ip ON ip.printing_id = p.id WHERE p.id = ?`
     )
-    .get(printingId) as { checkedAt: string | null } | undefined
-  if (!row) return false
+    .get(printingId) as { checkedAt: string | null; priced: number } | undefined
+  if (!row || row.priced) return false
   return row.checkedAt === null || row.checkedAt < cutoff
 }
 
 /**
- * Looks up eBay asking prices for owned printings (every language) with no price row or one older than 7 days
+ * Looks up eBay asking prices for owned printings (see priceCandidates) with no price row or one older than 7 days
  * (optionally only `printingIds`, at most `limit`, never-priced first). `remaining` counts the candidates left
  * past `limit`. Sequential. Never rejects.
  */

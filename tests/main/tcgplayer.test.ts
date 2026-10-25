@@ -95,6 +95,46 @@ describe('TCGplayer catalog', () => {
     expect(fetchFn).toHaveBeenCalledTimes(1) // just the group list
   })
 
+  it('matches a rarity TCGplayer names with an extra word in front, when only one does', async () => {
+    const db = await seededDb()
+    const run = async (products: unknown[]): Promise<string | null> => {
+      db.prepare('DELETE FROM tcgplayer_groups').run()
+      await refreshTcgCatalog(db, {
+        version: '1',
+        fetchFn: catalogFetch([{ groupId: 10, modifiedOn: String(Math.random()) }], {
+          10: products
+        }) as unknown as typeof fetch
+      })
+      return createTcgplayerLookup(db)(printingId(db, 'LOB-EN005'))
+    }
+    // YGOPRODeck's "Ultra Rare" is TCGplayer's "Prismatic Ultra Rare".
+    expect(
+      await run([
+        product(1, 'LOB-EN005', 'Prismatic Ultra Rare'),
+        product(2, 'LOB-EN005', 'Super Rare')
+      ])
+    ).toBe('https://tcgplayer-cdn.tcgplayer.com/product/1_in_1000x1000.jpg')
+    // Only "Prismatic" counts as such a word: a Platinum Ultra Rare is its own rarity.
+    expect(
+      await run([
+        product(1, 'LOB-EN005', 'Platinum Ultra Rare'),
+        product(2, 'LOB-EN005', 'Super Rare')
+      ])
+    ).toBeNull()
+  })
+
+  it('never takes a one-word rarity for the end of a longer one', async () => {
+    const db = await seededDb()
+    await refreshTcgCatalog(db, {
+      version: '1',
+      fetchFn: catalogFetch([{ groupId: 10, modifiedOn: 'a' }], {
+        10: [product(1, 'LOB-EN119', 'Common'), product(2, 'LOB-EN119', 'Super Rare')]
+      }) as unknown as typeof fetch
+    })
+    // LOB-EN119 is a Rare: "Super Rare" ends in "Rare" but is another card.
+    expect(createTcgplayerLookup(db)(printingId(db, 'LOB-EN119'))).toBeNull()
+  })
+
   it('keeps going past a failed group and does not mark the catalog fresh', async () => {
     const db = await seededDb()
     const fetchFn = catalogFetch(
@@ -157,11 +197,15 @@ describe('TCGplayer catalog', () => {
   it('variantLabel keeps what sets a product apart, not its rarity', () => {
     expect(variantLabel('Audhumla', 'Ultra Rare')).toBe('')
     expect(variantLabel('Audhumla (Extended Art)', 'Ultra Rare')).toBe('Overframe')
-    expect(variantLabel('Audhumla (Starlight Rare) (Extended Art)', 'Starlight Rare')).toBe('Overframe')
-    expect(variantLabel('Danger! Bigfoot! (Alternate Art) (PCR)', "Prismatic Collector's Rare")).toBe(
-      'Alternate Art'
+    expect(variantLabel('Audhumla (Starlight Rare) (Extended Art)', 'Starlight Rare')).toBe(
+      'Overframe'
     )
-    expect(variantLabel('"A Case for K9" (Emblazoned Secret Rare)', 'Secret Rare')).toBe('Emblazoned')
+    expect(
+      variantLabel('Danger! Bigfoot! (Alternate Art) (PCR)', "Prismatic Collector's Rare")
+    ).toBe('Alternate Art')
+    expect(variantLabel('"A Case for K9" (Emblazoned Secret Rare)', 'Secret Rare')).toBe(
+      'Emblazoned'
+    )
     expect(variantLabel('Raigeki (Ultra Rare)', 'Ultra Rare')).toBe('')
     expect(variantLabel('Penguin Soldier (Blue)', 'Rare')).toBe('Blue')
   })
@@ -176,11 +220,15 @@ describe('TCGplayer catalog', () => {
     const now = new Date('2026-10-24T00:00:00Z')
     await refreshTcgCatalog(db, {
       version: '1',
-      fetchFn: catalogFetch([{ groupId: 10, modifiedOn: 'a' }], { 10: products }) as unknown as typeof fetch,
+      fetchFn: catalogFetch([{ groupId: 10, modifiedOn: 'a' }], {
+        10: products
+      }) as unknown as typeof fetch,
       now
     })
     const rows = db
-      .prepare("SELECT id, set_rarity, tcg_product_id FROM card_printings WHERE set_code = 'LOB-EN005' ORDER BY id")
+      .prepare(
+        "SELECT id, set_rarity, tcg_product_id FROM card_printings WHERE set_code = 'LOB-EN005' ORDER BY id"
+      )
       .all() as { id: number; set_rarity: string; tcg_product_id: number | null }[]
     expect(rows.map((r) => [r.set_rarity, r.tcg_product_id])).toEqual([
       ['Ultra Rare', null],
@@ -188,8 +236,12 @@ describe('TCGplayer catalog', () => {
     ])
     const lookup = createTcgplayerLookup(db)
     // The plain card keeps the plain photo even though the variant has the lower product id.
-    expect(lookup(rows[0].id)).toBe('https://tcgplayer-cdn.tcgplayer.com/product/8_in_1000x1000.jpg')
-    expect(lookup(rows[1].id)).toBe('https://tcgplayer-cdn.tcgplayer.com/product/7_in_1000x1000.jpg')
+    expect(lookup(rows[0].id)).toBe(
+      'https://tcgplayer-cdn.tcgplayer.com/product/8_in_1000x1000.jpg'
+    )
+    expect(lookup(rows[1].id)).toBe(
+      'https://tcgplayer-cdn.tcgplayer.com/product/7_in_1000x1000.jpg'
+    )
 
     const client: YgoClient = {
       fetchDbVersion: async () => ({ databaseVersion: '2', lastUpdate: '2026-10-24' }),
@@ -197,7 +249,9 @@ describe('TCGplayer catalog', () => {
       fetchCardSets: async () => []
     }
     await runSync(db, client, () => {}, now)
-    expect(db.prepare('SELECT count(*) AS n FROM card_printings WHERE tcg_product_id = 7').get()).toEqual({ n: 1 })
+    expect(
+      db.prepare('SELECT count(*) AS n FROM card_printings WHERE tcg_product_id = 7').get()
+    ).toEqual({ n: 1 })
 
     // An overframe-only rarity: its single product is the variant, so the printing is labelled.
     const sdy = printingId(db, 'SDY-006')
@@ -231,7 +285,9 @@ describe('TCGplayer catalog', () => {
       }) as unknown as typeof fetch,
       now
     })
-    expect(db.prepare('SELECT count(*) AS n FROM card_printings WHERE tcg_product_id IS NOT NULL').get()).toEqual({
+    expect(
+      db.prepare('SELECT count(*) AS n FROM card_printings WHERE tcg_product_id IS NOT NULL').get()
+    ).toEqual({
       n: 0
     })
   })

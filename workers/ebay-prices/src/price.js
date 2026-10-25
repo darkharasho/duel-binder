@@ -35,8 +35,9 @@ export function titleMatches(title, { code, name }) {
   return needle !== '' && String(title).toLowerCase().includes(needle)
 }
 
-// Slabs, lots and fakes are priced unlike a single raw card.
-const NOT_A_SINGLE_CARD = /\b(psa|bgs|cgc|sgc|beckett|graded|slab|lot|bundle|proxy|orica|custom)\b/i
+// Slabs, lots, several copies ("3x", "x3", "playset") and fakes are priced unlike a single raw card.
+const NOT_A_SINGLE_CARD =
+  /\b(psa|bgs|cgc|sgc|beckett|graded|slab|lot|bundle|proxy|orica|custom|playsets?|set of \d+|\d+ copies)\b|\b[2-9]\s?x\b|\bx\s?[2-9]\b/i
 
 export function isSingleCard(title) {
   return !NOT_A_SINGLE_CARD.test(String(title))

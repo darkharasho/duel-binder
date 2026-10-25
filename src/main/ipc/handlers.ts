@@ -22,6 +22,7 @@ import { adjustPrinting, getChecklist, listSets } from '../repo/sets'
 import { getStats, recordSnapshot } from '../repo/stats'
 import type { PriceService } from '../prices/service'
 import { needsPrice, refreshIntlPrices } from '../prices/refresh'
+import { applyTcgPrices, refreshTcgPrices } from '../tcgplayer/prices'
 import type { AccountService } from '../cloud/account'
 
 export interface WindowDeps {
@@ -66,11 +67,17 @@ export function createHandlers({
   emitDataChanged,
   account
 }: HandlerDeps): Handlers {
-  // An owned printing (any language) without a fresh eBay price is looked up in the background; the renderer is
-  // told to refetch once the lookup has finished. Signed in, prices come from the account's server instead.
+  // A copy from a set whose TCGplayer prices aren't kept yet gets them fetched. Then an owned printing (any
+  // language) still without a price is looked up on eBay in the background; the renderer is told to refetch
+  // once a lookup has finished. Signed in, eBay prices come from the account's server instead.
   const priceNewCopy = (printingId: number): void => {
-    if (account.isSignedIn() || !needsPrice(db, printingId)) return
-    void refreshIntlPrices(db, prices.client(), { printingIds: [printingId] }).then(() => emitDataChanged())
+    void (async () => {
+      const tcg = await refreshTcgPrices(db, { version: app.version(), scope: 'owned' })
+      if (applyTcgPrices(db, tcg.changedGroups) > 0) emitDataChanged()
+      if (account.isSignedIn() || !needsPrice(db, printingId)) return
+      await refreshIntlPrices(db, prices.client(), { printingIds: [printingId] })
+      emitDataChanged()
+    })().catch((e) => console.error('Pricing a new copy failed', e))
   }
   // Keep today's value snapshot meaning "end of day" as the collection changes.
   const snapshotAfter = <T>(result: T): T => {

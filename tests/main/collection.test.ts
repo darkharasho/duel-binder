@@ -234,6 +234,31 @@ test('an English entry with a null eBay price falls back to set_price', () => {
   expect(e.unitPrice).not.toBeNull()
 })
 
+test('an English entry with a TCGplayer market price uses it over eBay and YGOPRODeck', () => {
+  const id = pid('LOB-EN005')
+  setPrice(id, 50)
+  db.prepare('UPDATE card_printings SET market_price = 71.73 WHERE id = ?').run(id)
+  const e = addEntry(db, { printingId: id, imageId: 46986414, quantity: 2 })
+  expect(e).toMatchObject({
+    unitPrice: 71.73,
+    priceSource: 'tcgplayer',
+    priceApproximate: false,
+    priceCheckedAt: null,
+    priceListingCount: null,
+    noPriceReason: null
+  })
+  expect(e.printing.setPrice).toBe(71.73)
+  expect(e.totalValue).toBeCloseTo(143.46)
+})
+
+test('a ja entry ignores market_price', () => {
+  const id = jaPrinting()
+  db.prepare('UPDATE card_printings SET market_price = 99 WHERE id = ?').run(id)
+  setPrice(id, 12.5)
+  const e = addEntry(db, { printingId: id, imageId: 46986414, quantity: 1 })
+  expect(e).toMatchObject({ unitPrice: 12.5, priceSource: 'ebay' })
+})
+
 test('language filter and facets', () => {
   const ja = db
     .prepare(

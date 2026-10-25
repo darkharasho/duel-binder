@@ -86,7 +86,28 @@ const webFetch = vi.fn(async (input: string | URL | Request): Promise<Response> 
   if (url.endsWith('/groups')) {
     return Response.json({ success: true, results: [{ groupId: 10, modifiedOn: 'a' }] })
   }
-  if (url.endsWith('/10/products')) return Response.json({ success: true, results: [] })
+  if (url.endsWith('/10/products')) {
+    return Response.json({
+      success: true,
+      results: [
+        {
+          productId: 1,
+          name: 'Blue-Eyes White Dragon',
+          imageUrl: 'https://tcgplayer-cdn.tcgplayer.com/product/1_200w.jpg',
+          extendedData: [
+            { name: 'Number', value: 'LOB-EN005' },
+            { name: 'Rarity', value: 'Ultra Rare' }
+          ]
+        }
+      ]
+    })
+  }
+  if (url.endsWith('/10/prices')) {
+    return Response.json({
+      success: true,
+      results: [{ productId: 1, subTypeName: '1st Edition', marketPrice: 1234.5 }]
+    })
+  }
   if (url.startsWith('https://www.konami.com/')) {
     return new Response(
       `<script>x({data:${JSON.stringify({ api_name: 'topics', max_page: 1, list: [] })}});</script>`
@@ -199,6 +220,24 @@ describe('refreshCatalog', () => {
     })
     expect(second).toEqual({ changed: false })
     expect([ygo.calls.length, wiki.calls.length, webFetch.mock.calls.length]).toEqual(calls)
+    db.close()
+  })
+  it('the nightly job keeps TCGplayer prices for every set and matches them to printings', async () => {
+    vi.stubGlobal('fetch', webFetch)
+    const db = openDatabase(':memory:')
+    const deps = {
+      client: fakeYgo().client,
+      yugipedia: fakeYugipedia().client,
+      version: '0.0.0-test',
+      now: () => NOW
+    }
+    await refreshCatalog(db, deps)
+    // Desktop (owned scope) with nothing owned fetches no prices.
+    expect(webFetch.mock.calls.some(([u]) => String(u).endsWith('/prices'))).toBe(false)
+    await refreshCatalog(db, { ...deps, tcgPrices: 'all' })
+    expect(
+      db.prepare("SELECT market_price FROM card_printings WHERE set_code = 'LOB-EN005'").pluck().get()
+    ).toBe(1234.5)
     db.close()
   })
   it('without a fixed clock, the TCGplayer catalog is stamped when it finishes', async () => {

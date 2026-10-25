@@ -27,20 +27,24 @@ interface SummaryDbRow {
 
 // One row per distinct (language, set_name). A (card, rarity) pair is keyed as "<card_id>|<rarity>";
 // card_id is an integer, so the first "|" always ends it.
-const summary = (scope: Scope): string => `
+// Ownership is an uncorrelated IN list (built once, then a keyed lookup per printing). A LEFT JOIN
+// to the owned printings made SQLite scan them for every printing (~1 s on a full catalog).
+const summary = (scope: Scope): string => {
+  const owned = `p.id IN (SELECT printing_id FROM collection_entries e WHERE ${scope.where('e')})`
+  return `
   SELECT p.language, p.set_name, s.set_code AS s_code, MIN(p.set_code) AS min_code, s.tcg_date, s.image_url,
          s.image_key, pa.image_key AS pack_key, COALESCE(sl.image_key, kl.image_key) AS logo_key, s.list_rows, s.unmatched_rows,
          COUNT(DISTINCT p.card_id) AS total_cards,
-         COUNT(DISTINCT CASE WHEN o.printing_id IS NOT NULL THEN p.card_id END) AS owned_cards,
+         COUNT(DISTINCT CASE WHEN ${owned} THEN p.card_id END) AS owned_cards,
          COUNT(DISTINCT p.card_id || '|' || p.set_rarity) AS total_rarities,
-         COUNT(DISTINCT CASE WHEN o.printing_id IS NOT NULL THEN p.card_id || '|' || p.set_rarity END)
+         COUNT(DISTINCT CASE WHEN ${owned} THEN p.card_id || '|' || p.set_rarity END)
            AS owned_rarities
   FROM card_printings p
-  LEFT JOIN (SELECT DISTINCT printing_id FROM collection_entries e WHERE ${scope.where('e')}) o ON o.printing_id = p.id
   LEFT JOIN sets s ON s.language = p.language AND s.set_name = p.set_name
   LEFT JOIN pack_art pa ON p.language = 'en' AND pa.set_name = p.set_name
   LEFT JOIN set_logos sl ON p.language = 'en' AND sl.set_name = p.set_name
   LEFT JOIN konami_logos kl ON p.language = 'en' AND kl.set_name = p.set_name`
+}
 
 /**
  * Each set's headline card: its rarest printing (lowest code, skipping 000 bonus cards). Its

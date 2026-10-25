@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type Database from 'better-sqlite3'
 import { openDatabase } from '../../src/main/db/database'
+import { setMeta } from '../../src/main/db/meta'
 import { runSync } from '../../src/main/sync/sync'
 import { addEntry, CollectionError } from '../../src/main/repo/collection'
 import { adjustPrinting, findSetImageUrl, getChecklist, listSets } from '../../src/main/repo/sets'
@@ -140,6 +141,32 @@ describe('listSets', () => {
     const sdy = sets.find((x) => x.setName === 'Starter Deck')!
     expect(mrd).toMatchObject({ ownedCards: 1, ownedRarities: 1 })
     expect(sdy).toMatchObject({ ownedCards: 1, ownedRarities: 1 })
+  })
+
+  it("counts cards and (card, rarity) pairs of only the active owner's live entries", async () => {
+    const db = await setup()
+    own(db, 'MRD-001', 'Ultra Rare', 1001, 1)
+    own(db, 'MRD-E001', 'Ultra Rare', 1001, 1) // same card and rarity, another code
+    own(db, 'MRD-001', 'Secret Rare', 1001, 1)
+    const gamma = own(db, 'MRD-E010', 'Rare', 3001, 1)
+    db.prepare('UPDATE collection_entries SET deleted_at = ? WHERE id = ?').run(
+      '2026-10-24',
+      gamma.id
+    )
+    // Another account's copy of Beta Knight.
+    db.prepare(
+      `INSERT INTO collection_entries (uid, owner_id, printing_id, image_id, quantity, created_at, updated_at)
+       VALUES ('other', 7, ?, 2001, 1, '2026-10-24', '2026-10-24')`
+    ).run(pid(db, 'MRD-002', 'Common'))
+    const mrd = listSets(db).find((x) => x.setName === MRD)!
+    expect(mrd).toMatchObject({ totalCards: 3, ownedCards: 1, totalRarities: 4, ownedRarities: 2 })
+    expect(getChecklist(db, MRD, 'en')!.set).toEqual(mrd)
+
+    setMeta(db, 'cloud_active_owner', '7')
+    expect(listSets(db).find((x) => x.setName === MRD)).toMatchObject({
+      ownedCards: 1,
+      ownedRarities: 1
+    })
   })
 })
 

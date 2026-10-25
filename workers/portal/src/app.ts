@@ -1,9 +1,12 @@
 import type { SqlDb } from '../../../src/main/db/sql'
+import { finishSignIn, me, signOut, startSignIn } from './auth'
 
 /** Vars and secrets the request handlers read. */
 export interface Env {
   PUBLIC_URL: string
   DISCORD_CLIENT_ID: string
+  /** Worker secret; absent from wrangler vars. */
+  DISCORD_CLIENT_SECRET: string
 }
 
 export interface AppDeps {
@@ -16,9 +19,12 @@ export interface AppDeps {
 const json = (body: unknown, status = 200): Response =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
 
-// eslint-disable-next-line @typescript-eslint/no-unused-vars -- the stub router reads no deps yet
-export async function handle(req: Request, _deps: AppDeps): Promise<Response> {
+export async function handle(req: Request, deps: AppDeps): Promise<Response> {
   const url = new URL(req.url)
   if (req.method === 'GET' && url.pathname === '/api/health') return json({ ok: true })
+  if (req.method === 'GET' && url.pathname === '/auth/discord/start') return startSignIn(deps)
+  if (req.method === 'GET' && url.pathname === '/auth/discord/callback') return finishSignIn(req, deps)
+  if (req.method === 'POST' && url.pathname === '/auth/logout') return signOut(req, deps)
+  if (req.method === 'GET' && url.pathname === '/api/me') return me(req, deps)
   return json({ error: 'Not found' }, 404)
 }

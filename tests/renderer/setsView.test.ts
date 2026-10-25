@@ -1,7 +1,9 @@
 import type { ChecklistCard, SetChecklist, SetSummary } from '@shared/types'
 import {
   adjustChecklistCard,
+  bulkTiles,
   checklistTiles,
+  filterBulkCards,
   filterSets,
   filterTiles,
   patchSetSummary,
@@ -12,6 +14,7 @@ import {
   sortSets,
   sortTiles
 } from '@/features/sets/setsView'
+import { rarityColor } from '@/lib/rarityColors'
 import { createSerialQueue } from '@/lib/serialQueue'
 import { metalRaidersChecklist, PRINTING } from './setFixtures'
 
@@ -333,5 +336,45 @@ describe('patchSetSummary', () => {
       ja,
       other
     ])
+  })
+})
+
+describe('bulkTiles', () => {
+  it('makes one tile per card and rarity, in order', () => {
+    const tiles = bulkTiles(metalRaidersChecklist.cards)
+    expect(tiles.map((t) => t.key)).toEqual(
+      metalRaidersChecklist.cards.flatMap((c) => c.rarities.map((r) => `${c.cardId}:${r.rarity}`))
+    )
+    expect(tiles[0].key).toBe('1001:Secret Rare')
+    expect(tiles[1].key).toBe('1001:Ultra Rare')
+    expect(tiles[2].key).toBe('2001:Common')
+  })
+})
+
+describe('filterBulkCards', () => {
+  const cards = metalRaidersChecklist.cards
+  const names = (q: string): string[] => filterBulkCards(cards, q).map((c) => c.name)
+
+  it('returns everything for an empty query', () => {
+    expect(filterBulkCards(cards, '')).toEqual(cards)
+  })
+
+  it('treats a bare number as an exact set number', () => {
+    expect(names('2')).toEqual(['Beta Knight'])
+    expect(names(' 1 ')).toEqual(['Alpha Dragon'])
+    expect(names('10')).toEqual(['Gamma Trap'])
+  })
+
+  it('falls back to the text search otherwise', () => {
+    expect(names('999')).toEqual([])
+    expect(names('beta')).toEqual(['Beta Knight'])
+    expect(names('MRD-E001')).toEqual(['Alpha Dragon'])
+  })
+})
+
+describe('rarityColor', () => {
+  it('maps known rarities and falls back to grey', () => {
+    expect(rarityColor('Secret Rare')).toBe('#c8b6ff')
+    expect(rarityColor('Mystery')).toBe('#9ca3af')
   })
 })

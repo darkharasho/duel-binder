@@ -5,6 +5,7 @@ import { finishSignIn, me, signOut, startSignIn } from './auth'
 import { home } from './home'
 import type { PrintingArtResolver } from '../../../src/main/yugipedia/artResolver'
 import { imageRoute, type ImageBucket } from './images'
+import type { PriceQueue } from './prices'
 
 /** Vars and secrets the request handlers read. */
 export interface Env {
@@ -16,6 +17,8 @@ export interface Env {
   DISCORD_CLIENT_SECRET: string
   /** Worker secret guarding /admin/*; unset or empty rejects every admin request. */
   ADMIN_TOKEN: string
+  /** The eBay price Worker the price alarm asks. */
+  PRICE_WORKER_URL: string
 }
 
 export interface AppDeps {
@@ -24,6 +27,8 @@ export interface AppDeps {
   assets: { fetch(req: Request): Promise<Response> }
   images: ImageBucket
   printingArt: PrintingArtResolver
+  /** Queues an eBay price run after a write. */
+  prices: PriceQueue
   env: Env
   now: () => Date
   fetch: typeof fetch

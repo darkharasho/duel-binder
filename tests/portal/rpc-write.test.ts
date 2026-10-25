@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 import type Database from 'better-sqlite3'
 import { handle, type AppDeps } from '../../workers/portal/src/app'
-import { addUser, seededServerDb, memoryBucket, noPrintingArt } from './helpers'
+import { addUser, seededServerDb, memoryBucket, noPrintingArt, noPrices } from './helpers'
 
 const BASE = 'https://portal.test'
 const NOW = new Date('2026-10-24T12:00:00.000Z')
@@ -83,12 +83,14 @@ describe('write RPC', () => {
       assets: { fetch: async () => new Response('nope', { status: 404 }) },
       images: memoryBucket(),
       printingArt: noPrintingArt,
+      prices: noPrices,
       env: {
         PUBLIC_URL: BASE,
         SITE_URL: 'https://site.test',
         DISCORD_CLIENT_ID: 'c',
         DISCORD_CLIENT_SECRET: 's',
-        ADMIN_TOKEN: 'a'
+        ADMIN_TOKEN: 'a',
+        PRICE_WORKER_URL: 'https://prices.test'
       },
       now: () => NOW,
       fetch: (() => {

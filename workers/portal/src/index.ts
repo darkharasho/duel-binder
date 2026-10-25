@@ -1,11 +1,13 @@
 import { DurableObject } from 'cloudflare:workers'
 import type { SqlDb } from '../../../src/main/db/sql'
 import { createPrintingArtResolver, type PrintingArtResolver } from '../../../src/main/yugipedia/artResolver'
+import { createPriceClient } from '../../../src/main/prices/client'
 import { createTcgplayerLookup } from '../../../src/main/tcgplayer/catalog'
 import { createYugipediaClient } from '../../../src/main/yugipedia/client'
 import { handle, type Env } from './app'
 import { doSql } from './doSql'
 import { migrateServer } from './migrate'
+import { alarmQueue, runPriceAlarm, type PriceQueue } from './prices'
 import { handleSite } from './site/handler'
 import { routeHost } from './site/host'
 import { createReleaseSource, type Downloads } from './site/releases'
@@ -21,6 +23,7 @@ export interface WorkerEnv extends Env {
 export class Store extends DurableObject<WorkerEnv> {
   private readonly db: SqlDb
   private readonly printingArt: PrintingArtResolver
+  private readonly prices: PriceQueue
 
   constructor(ctx: DurableObjectState, env: WorkerEnv) {
     super(ctx, env)
@@ -30,7 +33,22 @@ export class Store extends DurableObject<WorkerEnv> {
       client: createYugipediaClient({ version: 'portal' }),
       quickUrl: createTcgplayerLookup(this.db)
     })
-    void ctx.blockConcurrencyWhile(async () => migrateServer(this.db))
+    this.prices = alarmQueue(ctx.storage, Date.now)
+    void ctx.blockConcurrencyWhile(async () => {
+      migrateServer(this.db)
+      // First start (or a lost alarm): begin pricing what is already owned.
+      if ((await ctx.storage.getAlarm()) === null) await this.prices.soon()
+    })
+  }
+
+  /** Keeps eBay prices fresh for every printing any user owns; re-arms itself. */
+  async alarm(): Promise<void> {
+    await runPriceAlarm(
+      this.db,
+      createPriceClient({ url: this.env.PRICE_WORKER_URL }),
+      this.ctx.storage,
+      () => new Date()
+    )
   }
 
   fetch(req: Request): Promise<Response> {
@@ -39,6 +57,7 @@ export class Store extends DurableObject<WorkerEnv> {
       assets: this.env.ASSETS,
       images: this.env.IMAGES,
       printingArt: this.printingArt,
+      prices: this.prices,
       env: this.env,
       now: () => new Date(),
       fetch: (input, init) => fetch(input, init)

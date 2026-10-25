@@ -124,7 +124,7 @@ test('only owned printings are looked up, and rows are written', async () => {
   })
   const r = await refreshIntlPrices(db, client, { now: NOW })
   // The owned ja printing and the owned English one; the unowned ko printing is skipped.
-  expect(r).toEqual({ updated: 2, failed: 0 })
+  expect(r).toEqual({ updated: 2, failed: 0, remaining: 0 })
   expect(lookup).toHaveBeenCalledTimes(2)
   expect(lookup.mock.calls.map((c) => c[0].lang).sort()).toEqual(['en', 'ja'])
   expect(lookup.mock.calls.find((c) => c[0].lang === 'ja')?.[0]).toMatchObject({
@@ -162,7 +162,7 @@ test('printingIds limits the run', async () => {
 
 test('a null client sets the status to unavailable and calls nothing', async () => {
   owned('LB-05', 'ja')
-  await expect(refreshIntlPrices(db, null, { now: NOW })).resolves.toEqual({ updated: 0, failed: 0 })
+  await expect(refreshIntlPrices(db, null, { now: NOW })).resolves.toEqual({ updated: 0, failed: 0, remaining: 0 })
   expect(getMeta(db, 'price_service_status')).toBe('unavailable')
 })
 
@@ -173,7 +173,7 @@ test('one failure among two lookups still updates the other', async () => {
     if (query.code === 'LB-05') throw new PriceUnavailableError('down')
     return { price: null, listingCount: 0, checkedAt: ago(0) }
   })
-  await expect(refreshIntlPrices(db, client, { now: NOW })).resolves.toEqual({ updated: 1, failed: 1 })
+  await expect(refreshIntlPrices(db, client, { now: NOW })).resolves.toEqual({ updated: 1, failed: 1, remaining: 0 })
   expect(row(a)).toBeUndefined()
   expect(row(b)).toMatchObject({ price: null, listing_count: 0 })
   expect(getMeta(db, 'price_service_status')).toBe('ok')
@@ -184,7 +184,7 @@ test('every lookup failing sets the status to unavailable', async () => {
   const { client } = fakeClient(async () => {
     throw new PriceUnavailableError('down')
   })
-  await expect(refreshIntlPrices(db, client, { now: NOW })).resolves.toEqual({ updated: 0, failed: 1 })
+  await expect(refreshIntlPrices(db, client, { now: NOW })).resolves.toEqual({ updated: 0, failed: 1, remaining: 0 })
   expect(getMeta(db, 'price_service_status')).toBe('unavailable')
 })
 
@@ -192,7 +192,7 @@ test('an owned English printing with no row is a candidate and gets upserted', a
   const en = owned('LOB-EN900', 'en')
   const { client, lookup } = fakeClient()
   expect(needsPrice(db, en, NOW)).toBe(true)
-  await expect(refreshIntlPrices(db, client, { now: NOW })).resolves.toEqual({ updated: 1, failed: 0 })
+  await expect(refreshIntlPrices(db, client, { now: NOW })).resolves.toEqual({ updated: 1, failed: 0, remaining: 0 })
   expect(lookup.mock.calls[0][0]).toMatchObject({ code: 'LOB-EN900', lang: 'en' })
   expect(row(en)).toMatchObject({ price: 9, listing_count: 2 })
 })

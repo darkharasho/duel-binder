@@ -32,3 +32,4 @@ new_sqlite_classes = ["Store"]
 SITE_URL = "https://duelbinder.com"
 PUBLIC_URL = "https://app.duelbinder.com"
 DISCORD_CLIENT_ID = "1563797080420655266"
+PRICE_WORKER_URL = "https://ygo-ebay-prices.project96.workers.dev"

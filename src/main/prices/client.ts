@@ -1,4 +1,4 @@
-import type { Language } from '@shared/languages'
+import type { Language } from '../../shared/languages'
 
 export class PriceUnavailableError extends Error {
   constructor(message: string) {

@@ -63,7 +63,7 @@ export function createHandlers({
   prices,
   emitDataChanged
 }: HandlerDeps): Handlers {
-  // A non-English printing without a fresh eBay price is looked up in the background; the renderer is
+  // An owned printing (any language) without a fresh eBay price is looked up in the background; the renderer is
   // told to refetch once the lookup has finished.
   const priceNewCopy = (printingId: number): void => {
     if (!needsPrice(db, printingId)) return

@@ -1,7 +1,7 @@
 import type Database from 'better-sqlite3'
 import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 import { PriceUnavailableError, createPriceClient, type PriceClient } from '../../src/main/prices/client'
-import { PRICE_INTERVAL_MS, refreshIntlPrices } from '../../src/main/prices/refresh'
+import { PRICE_INTERVAL_MS, needsPrice, refreshIntlPrices } from '../../src/main/prices/refresh'
 import { PRICE_WORKER_URL, priceWorkerUrl } from '../../src/main/prices/config'
 import { getMeta } from '../../src/main/db/meta'
 import { addEntry } from '../../src/main/repo/collection'
@@ -110,7 +110,7 @@ const fakeClient = (
   return { client: { lookup } as unknown as PriceClient, lookup }
 }
 
-test('only owned non-English printings are looked up, and rows are written', async () => {
+test('only owned printings are looked up, and rows are written', async () => {
   const ja = owned('LB-05', 'ja')
   // unowned ja printing and an owned English one
   db.prepare(
@@ -123,9 +123,15 @@ test('only owned non-English printings are looked up, and rows are written', asy
     quantity: 1
   })
   const r = await refreshIntlPrices(db, client, { now: NOW })
-  expect(r).toEqual({ updated: 1, failed: 0 })
-  expect(lookup).toHaveBeenCalledTimes(1)
-  expect(lookup.mock.calls[0][0]).toMatchObject({ code: 'LB-05', lang: 'ja', set: 'LOB', rarity: 'Ultra Rare' })
+  // The owned ja printing and the owned English one; the unowned ko printing is skipped.
+  expect(r).toEqual({ updated: 2, failed: 0 })
+  expect(lookup).toHaveBeenCalledTimes(2)
+  expect(lookup.mock.calls.map((c) => c[0].lang).sort()).toEqual(['en', 'ja'])
+  expect(lookup.mock.calls.find((c) => c[0].lang === 'ja')?.[0]).toMatchObject({
+    code: 'LB-05',
+    set: 'LOB',
+    rarity: 'Ultra Rare'
+  })
   expect(row(ja)).toMatchObject({ price: 9, listing_count: 2 })
   expect(getMeta(db, 'price_service_status')).toBe('ok')
 })
@@ -180,4 +186,28 @@ test('every lookup failing sets the status to unavailable', async () => {
   })
   await expect(refreshIntlPrices(db, client, { now: NOW })).resolves.toEqual({ updated: 0, failed: 1 })
   expect(getMeta(db, 'price_service_status')).toBe('unavailable')
+})
+
+test('an owned English printing with no row is a candidate and gets upserted', async () => {
+  const en = owned('LOB-EN900', 'en')
+  const { client, lookup } = fakeClient()
+  expect(needsPrice(db, en, NOW)).toBe(true)
+  await expect(refreshIntlPrices(db, client, { now: NOW })).resolves.toEqual({ updated: 1, failed: 0 })
+  expect(lookup.mock.calls[0][0]).toMatchObject({ code: 'LOB-EN900', lang: 'en' })
+  expect(row(en)).toMatchObject({ price: 9, listing_count: 2 })
+})
+
+test('an English printing checked within 7 days is skipped', async () => {
+  const en = owned('LOB-EN900', 'en')
+  db.prepare('INSERT INTO intl_prices (printing_id, price, listing_count, checked_at) VALUES (?, 1, 1, ?)').run(en, ago(3))
+  const { client, lookup } = fakeClient()
+  expect(needsPrice(db, en, NOW)).toBe(false)
+  await refreshIntlPrices(db, client, { now: NOW })
+  expect(lookup).not.toHaveBeenCalled()
+})
+
+test('needsPrice is true for a stale English printing', () => {
+  const en = owned('LOB-EN900', 'en')
+  db.prepare('INSERT INTO intl_prices (printing_id, price, listing_count, checked_at) VALUES (?, 1, 1, ?)').run(en, ago(8))
+  expect(needsPrice(db, en, NOW)).toBe(true)
 })

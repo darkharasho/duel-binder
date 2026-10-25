@@ -182,7 +182,7 @@ test('a ja printing never uses the card tcgplayer price', () => {
   expect(e.totalValue).toBe(0)
 })
 
-test('an English entry keeps the ygoprodeck source', () => {
+test('an English entry with no eBay row falls back to ygoprodeck', () => {
   const e = addEntry(db, { printingId: pid('LOB-EN005'), imageId: 46986414, quantity: 1 })
   expect(e).toMatchObject({
     priceSource: 'ygoprodeck',
@@ -190,6 +190,32 @@ test('an English entry keeps the ygoprodeck source', () => {
     priceListingCount: null,
     noPriceReason: null
   })
+  expect(e.unitPrice).toBeGreaterThan(0)
+})
+
+test('an English entry with an eBay row uses the eBay price', () => {
+  const id = pid('LOB-EN005')
+  setPrice(id, 50)
+  const e = addEntry(db, { printingId: id, imageId: 46986414, quantity: 2 })
+  expect(e).toMatchObject({
+    unitPrice: 50,
+    priceSource: 'ebay',
+    priceApproximate: false,
+    priceCheckedAt: '2026-10-20T00:00:00.000Z',
+    priceListingCount: 4,
+    noPriceReason: null
+  })
+  expect(e.totalValue).toBe(100)
+})
+
+test('an English entry with a null eBay price falls back to set_price', () => {
+  const id = pid('LOB-EN005')
+  const expected = (db.prepare('SELECT set_price AS p FROM card_printings WHERE id = ?').get(id) as { p: number | null }).p
+  setPrice(id, null)
+  const e = addEntry(db, { printingId: id, imageId: 46986414, quantity: 1 })
+  expect(e).toMatchObject({ priceSource: 'ygoprodeck', priceListingCount: null, noPriceReason: null })
+  expect(e.unitPrice).toBe(expected === null ? e.unitPrice : Number(expected))
+  expect(e.unitPrice).not.toBeNull()
 })
 
 test('language filter and facets', () => {

@@ -43,14 +43,17 @@ const SELECT = `
 function toView(r: EntryDbRow, priceStatus: string | null): EntryView {
   const card = rowToCard(r as unknown as CardDbRow)
   const printing = rowToPrinting({ ...(r as unknown as PrintingDbRow), id: r.p_id as number })
-  const ebay = printing.language !== 'en'
+  const english = printing.language === 'en'
+  const hasRow = r.ip_id !== null && r.ip_id !== undefined
+  const ebayPrice = hasRow ? (r.ip_price as number | null) : null
+  // intl_prices now holds eBay prices for every language. English uses eBay when it has a price and
+  // otherwise falls back to YGOPRODeck; non-English never falls back to the English (TCGplayer) price.
+  const ebay = english ? ebayPrice !== null : true
   let unitPrice: number | null
   let approximate: boolean
   let noPriceReason: EntryView['noPriceReason'] = null
   if (ebay) {
-    // Never falls back to the English (TCGplayer) price.
-    const hasRow = r.ip_id !== null && r.ip_id !== undefined
-    unitPrice = hasRow ? (r.ip_price as number | null) : null
+    unitPrice = ebayPrice
     approximate = false
     if (unitPrice === null)
       noPriceReason = hasRow ? 'no-listings' : priceStatus === 'ok' ? 'pending' : 'unavailable'

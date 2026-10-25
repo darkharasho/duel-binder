@@ -5,13 +5,21 @@ import { toast } from 'sonner'
 import type { Language } from '@shared/languages'
 import type { CardSearchResult, CountMode, SetChecklist as SetChecklistData } from '@shared/types'
 import { CardArt } from '@/components/CardArt'
+import { CardSheet } from '@/components/CardSheet'
 import { TiltCard } from '@/components/TiltCard'
 import { coverArtUrl, setArtUrl, useArtWash } from '@/components/artWashContext'
 import { LanguageTag } from '@/components/LanguageTag'
 import { PageHeader } from '@/components/PageHeader'
+import { listNav } from '@/components/panelNav'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from '@/components/ui/select'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { UnderlineTabs } from '@/components/UnderlineTabs'
@@ -98,10 +106,15 @@ export function SetChecklist({
 }: SetChecklistProps): React.JSX.Element {
   const [filter, setFilter] = useState<TileFilter>('all')
   const [q, setQ] = useState('')
-  const [sort, setSort] = useState<{ by: ChecklistSort; dir: SortDir }>({ by: 'number', dir: 'asc' })
+  const [sort, setSort] = useState<{ by: ChecklistSort; dir: SortDir }>({
+    by: 'number',
+    dir: 'asc'
+  })
   const [selected, setSelected] = useState<{ cardId: number; entryId: number } | null>(null)
   // A card not owned yet opens with steppers instead of an entry editor.
   const [unowned, setUnowned] = useState<{ cardId: number; rarity: string | null } | null>(null)
+  // The opened tile, for stepping to its neighbours (a card has one tile per rarity).
+  const [openKey, setOpenKey] = useState<string | null>(null)
   const [bulk, setBulk] = useState(false)
   // Card ids shown in bulk mode, frozen so saves never re-filter a card away mid-click.
   const [frozen, setFrozen] = useState<{
@@ -204,13 +217,26 @@ export function SetChecklist({
   const progress = progressFor(data.set, mode)
 
   const open = (t: Tile): void => {
+    setOpenKey(t.key)
     if (t.owned > 0 && t.entryId !== null) {
+      setUnowned(null)
       setSelected({ cardId: t.card.cardId, entryId: t.entryId })
       return
     }
+    setSelected(null)
     setUnowned({ cardId: t.card.cardId, rarity: t.rarity })
   }
+  const close = (): void => {
+    setSelected(null)
+    setUnowned(null)
+  }
   const unownedCard = unowned ? data.cards.find((c) => c.cardId === unowned.cardId) : undefined
+  const nav = listNav(
+    tiles,
+    tiles.findIndex((t) => t.key === openKey),
+    open,
+    (t) => t.key
+  )
 
   return (
     <TooltipProvider>
@@ -347,6 +373,7 @@ export function SetChecklist({
                   <button
                     type="button"
                     data-owned={owned}
+                    data-nav-key={t.key}
                     aria-label={t.rarity ? `${t.card.name}, ${t.rarity}` : t.card.name}
                     onClick={() => open(t)}
                     className={cn(
@@ -385,36 +412,40 @@ export function SetChecklist({
           </ul>
         )}
 
-        {selected && (
-          <EntryDetailPanel
-            cardId={selected.cardId}
-            entryId={selected.entryId}
-            onSelectEntry={(entryId) => setSelected({ cardId: selected.cardId, entryId })}
-            onClose={() => setSelected(null)}
-          />
-        )}
-        {unowned && unownedCard && (
-          <SetCardPanel
-            setName={data.set.setName}
-            card={unownedCard}
-            rarity={unowned.rarity}
-            busy={(pending[unownedCard.cardId] ?? 0) > 0}
-            onAdjust={(printingId, delta) => adjust(unownedCard.cardId, printingId, delta)}
-            onMoreOptions={(printingId) => {
-              setUnowned(null)
-              onAddMissing(
-                {
-                  id: unownedCard.cardId,
-                  name: unownedCard.name,
-                  type: unownedCard.type,
-                  defaultImageId: unownedCard.imageId,
-                  matchedSetCode: null
-                },
-                printingId
-              )
-            }}
-            onClose={() => setUnowned(null)}
-          />
+        {(selected || (unowned && unownedCard)) && (
+          <CardSheet onClose={close}>
+            {selected ? (
+              <EntryDetailPanel
+                cardId={selected.cardId}
+                entryId={selected.entryId}
+                onSelectEntry={(entryId) => setSelected({ cardId: selected.cardId, entryId })}
+                onClose={close}
+                nav={nav}
+              />
+            ) : unowned && unownedCard ? (
+              <SetCardPanel
+                setName={data.set.setName}
+                nav={nav}
+                card={unownedCard}
+                rarity={unowned.rarity}
+                busy={(pending[unownedCard.cardId] ?? 0) > 0}
+                onAdjust={(printingId, delta) => adjust(unownedCard.cardId, printingId, delta)}
+                onMoreOptions={(printingId) => {
+                  setUnowned(null)
+                  onAddMissing(
+                    {
+                      id: unownedCard.cardId,
+                      name: unownedCard.name,
+                      type: unownedCard.type,
+                      defaultImageId: unownedCard.imageId,
+                      matchedSetCode: null
+                    },
+                    printingId
+                  )
+                }}
+              />
+            ) : null}
+          </CardSheet>
         )}
       </div>
     </TooltipProvider>

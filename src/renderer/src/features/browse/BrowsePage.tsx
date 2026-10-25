@@ -4,9 +4,11 @@ import { ArrowDownAZ, ArrowUpAZ, Search } from 'lucide-react'
 import type { BrowseCard, BrowseFilters, BrowseSort, CardSearchResult } from '@shared/types'
 import { cardArtUrl, useArtWash } from '@/components/artWashContext'
 import { CardArt } from '@/components/CardArt'
+import { CardSheet } from '@/components/CardSheet'
 import { TiltCard } from '@/components/TiltCard'
 import { FacetMenu } from '@/components/FacetMenu'
 import { PageHeader } from '@/components/PageHeader'
+import { listNav } from '@/components/panelNav'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -132,19 +134,39 @@ export function BrowsePage({ onAddCard }: Props): React.JSX.Element {
     setText('')
   }
 
+  // Stepping quickly can overlap lookups of owned cards; only the latest open lands.
+  const opening = useRef(0)
   const open = async (c: BrowseCard): Promise<void> => {
+    const n = ++opening.current
     if (c.owned > 0) {
       const copies = await qc.fetchQuery({
         queryKey: queryKeys.forCard(c.id),
         queryFn: () => api.collection.forCard(c.id)
       })
+      if (n !== opening.current) return
       if (copies[0]) {
+        setUnowned(null)
         setSelected({ cardId: c.id, entryId: copies[0].id })
         return
       }
     }
+    setSelected(null)
     setUnowned(c)
   }
+  const close = (): void => {
+    opening.current++
+    setSelected(null)
+    setUnowned(null)
+  }
+  const openId = selected?.cardId ?? unowned?.id
+  const nav = listNav(
+    cards,
+    cards.findIndex((c) => c.id === openId),
+    // listNav only calls this on a step, never during render.
+    // eslint-disable-next-line react-hooks/refs
+    (c) => void open(c),
+    (c) => c.id
+  )
 
   return (
     <div className="space-y-5 p-8">
@@ -258,6 +280,7 @@ export function BrowsePage({ onAddCard }: Props): React.JSX.Element {
             <li key={c.id}>
               <button
                 type="button"
+                data-nav-key={c.id}
                 onClick={() => void open(c)}
                 className="group flex w-full flex-col gap-2 rounded-md p-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
               >
@@ -303,32 +326,36 @@ export function BrowsePage({ onAddCard }: Props): React.JSX.Element {
         )}
       </div>
 
-      {selected && (
-        <EntryDetailPanel
-          cardId={selected.cardId}
-          entryId={selected.entryId}
-          onSelectEntry={(entryId) => setSelected({ cardId: selected.cardId, entryId })}
-          onClose={() => setSelected(null)}
-        />
-      )}
-      {unowned && (
-        <BrowseCardPanel
-          card={unowned}
-          onMoreOptions={(printingId) => {
-            setUnowned(null)
-            onAddCard(
-              {
-                id: unowned.id,
-                name: unowned.name,
-                type: unowned.type,
-                defaultImageId: unowned.imageId,
-                matchedSetCode: null
-              },
-              printingId
-            )
-          }}
-          onClose={() => setUnowned(null)}
-        />
+      {(selected || unowned) && (
+        <CardSheet onClose={close}>
+          {selected ? (
+            <EntryDetailPanel
+              cardId={selected.cardId}
+              entryId={selected.entryId}
+              onSelectEntry={(entryId) => setSelected({ cardId: selected.cardId, entryId })}
+              onClose={close}
+              nav={nav}
+            />
+          ) : unowned ? (
+            <BrowseCardPanel
+              card={unowned}
+              nav={nav}
+              onMoreOptions={(printingId) => {
+                setUnowned(null)
+                onAddCard(
+                  {
+                    id: unowned.id,
+                    name: unowned.name,
+                    type: unowned.type,
+                    defaultImageId: unowned.imageId,
+                    matchedSetCode: null
+                  },
+                  printingId
+                )
+              }}
+            />
+          ) : null}
+        </CardSheet>
       )}
     </div>
   )

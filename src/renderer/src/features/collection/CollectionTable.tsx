@@ -73,16 +73,12 @@ const columns = helper.columns([
   helper.accessor('unitPrice', {
     id: 'unitPrice',
     header: 'Unit price',
-    cell: ({ row }) => (
-      <EntryValue entry={row.original} amount={row.original.unitPrice} />
-    )
+    cell: ({ row }) => <EntryValue entry={row.original} amount={row.original.unitPrice} />
   }),
   helper.accessor('totalValue', {
     id: 'total',
     header: 'Total',
-    cell: ({ row }) => (
-      <EntryValue entry={row.original} amount={displayTotal(row.original)} />
-    )
+    cell: ({ row }) => <EntryValue entry={row.original} amount={displayTotal(row.original)} />
   })
 ])
 
@@ -136,6 +132,7 @@ export function CollectionTable({
         {table.getRowModel().rows.map((row) => (
           <TableRow
             key={row.id}
+            data-nav-key={row.original.id}
             data-state={row.original.id === selectedId ? 'selected' : undefined}
             onClick={() => onSelect(row.original)}
             onKeyDown={(e) => {

@@ -1,4 +1,4 @@
-import { screen, within } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { CountMode } from '@shared/types'
 import { SetChecklist } from '@/features/sets/SetChecklist'
@@ -121,7 +121,9 @@ describe('SetChecklist', () => {
     expect(within(panel).getAllByText('$3.00')).toHaveLength(2)
 
     const rarity = metalRaidersChecklist.cards[2].rarities[0].rarity
-    await userEvent.click(within(panel).getByRole('button', { name: `Add one Gamma Trap ${rarity}` }))
+    await userEvent.click(
+      within(panel).getByRole('button', { name: `Add one Gamma Trap ${rarity}` })
+    )
     expect(adjust).toHaveBeenCalledWith('Metal Raiders', 'en', PRINTING.gammaEN010, 1)
     expect(await within(panel).findByText('You have 1')).toBeInTheDocument()
 
@@ -136,6 +138,24 @@ describe('SetChecklist', () => {
       },
       PRINTING.gammaEN010
     )
+  })
+
+  it('arrows step through the visible tiles, opening each as a click would', async () => {
+    const { forCard } = renderChecklist()
+    await userEvent.click(await screen.findByRole('button', { name: /Beta Knight/ }))
+    const panel = await screen.findByRole('dialog')
+    expect(within(panel).getByRole('heading', { name: 'Beta Knight' })).toBeInTheDocument()
+
+    await userEvent.click(screen.getAllByRole('button', { name: 'Next card' })[0])
+    expect(within(panel).getByRole('heading', { name: 'Gamma Trap' })).toBeInTheDocument()
+    expect(screen.getAllByRole('button', { name: 'Next card' })[0]).toBeDisabled()
+
+    await userEvent.click(screen.getAllByRole('button', { name: 'Previous card' })[0])
+    await userEvent.click(screen.getAllByRole('button', { name: 'Previous card' })[0])
+    // Alpha Dragon is owned, so it opens in the entry editor.
+    await waitFor(() => expect(forCard).toHaveBeenCalledWith(1001))
+    expect(within(panel).queryByText('You have none yet')).not.toBeInTheDocument()
+    expect(screen.getByRole('dialog')).toBe(panel)
   })
 
   it('All sets goes back', async () => {
@@ -175,4 +195,3 @@ describe('SetChecklist', () => {
     )
   })
 })
-

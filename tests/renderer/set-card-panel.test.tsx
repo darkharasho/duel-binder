@@ -1,4 +1,5 @@
 import { screen } from '@testing-library/react'
+import { CardSheet } from '@/components/CardSheet'
 import { SetCardPanel } from '@/features/sets/SetCardPanel'
 import { createMockApi, renderWithProviders } from './mockApi'
 import { metalRaidersChecklist } from './setFixtures'
@@ -7,15 +8,16 @@ const alpha = metalRaidersChecklist.cards[0]
 
 function renderPanel(rarity: string | null): void {
   renderWithProviders(
-    <SetCardPanel
-      setName="Metal Raiders"
-      card={alpha}
-      rarity={rarity}
-      busy={false}
-      onAdjust={() => {}}
-      onMoreOptions={() => {}}
-      onClose={() => {}}
-    />,
+    <CardSheet onClose={() => {}}>
+      <SetCardPanel
+        setName="Metal Raiders"
+        card={alpha}
+        rarity={rarity}
+        busy={false}
+        onAdjust={() => {}}
+        onMoreOptions={() => {}}
+      />
+    </CardSheet>,
     { api: createMockApi() }
   )
 }

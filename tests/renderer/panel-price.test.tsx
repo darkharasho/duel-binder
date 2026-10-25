@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { screen, within } from '@testing-library/react'
 import type { BrowseCard, CardDetail, EntryView, Printing } from '@shared/types'
+import { CardSheet } from '@/components/CardSheet'
 import { BrowseCardPanel } from '@/features/browse/BrowseCardPanel'
 import { SetCardPanel } from '@/features/sets/SetCardPanel'
 import { createMockApi, renderWithProviders } from './mockApi'
@@ -23,9 +24,19 @@ const printing = (id: number, extra: Partial<Printing> = {}): Printing => ({
 
 const detail = (printings: Printing[]): CardDetail => ({
   card: {
-    id: 1, name: 'Dark Magician', type: 'Normal Monster', frameType: 'normal', race: 'Spellcaster',
-    attribute: 'DARK', level: 7, linkval: null, atk: 2500, def: 2100, archetype: null,
-    desc: 'x', tcgplayerPrice: 1
+    id: 1,
+    name: 'Dark Magician',
+    type: 'Normal Monster',
+    frameType: 'normal',
+    race: 'Spellcaster',
+    attribute: 'DARK',
+    level: 7,
+    linkval: null,
+    atk: 2500,
+    def: 2100,
+    archetype: null,
+    desc: 'x',
+    tcgplayerPrice: 1
   },
   printings,
   images: [{ imageId: 1, cardId: 1, sortOrder: 0 }]
@@ -33,10 +44,23 @@ const detail = (printings: Printing[]): CardDetail => ({
 
 const entry = (p: Printing, extra: Partial<EntryView> = {}): EntryView =>
   ({
-    id: 5, quantity: 1, notes: '', createdAt: '', updatedAt: '', card: detail([]).card,
-    printing: p, imageId: 1, originalArt: true,
-    unitPrice: 10, priceApproximate: false, priceSource: 'ygoprodeck', priceCheckedAt: null,
-    priceListingCount: null, noPriceReason: null, totalValue: 10, ...extra
+    id: 5,
+    quantity: 1,
+    notes: '',
+    createdAt: '',
+    updatedAt: '',
+    card: detail([]).card,
+    printing: p,
+    imageId: 1,
+    originalArt: true,
+    unitPrice: 10,
+    priceApproximate: false,
+    priceSource: 'ygoprodeck',
+    priceCheckedAt: null,
+    priceListingCount: null,
+    noPriceReason: null,
+    totalValue: 10,
+    ...extra
   }) as EntryView
 
 const ebay: Partial<EntryView> = {
@@ -48,18 +72,35 @@ const ebay: Partial<EntryView> = {
 }
 
 const noPrice = (reason: EntryView['noPriceReason']): Partial<EntryView> => ({
-  unitPrice: null, totalValue: 0, priceSource: 'ebay', noPriceReason: reason
+  unitPrice: null,
+  totalValue: 0,
+  priceSource: 'ebay',
+  noPriceReason: reason
 })
 
 const browseCard: BrowseCard = {
-  id: 1, name: 'Dark Magician', type: 'Normal Monster', frameType: 'normal', attribute: 'DARK',
-  race: 'Spellcaster', level: 7, linkval: null, atk: 2500, def: 2100, imageId: 1, price: 7.5,
-  releasedAt: '2002-03-08', owned: 0, defaultPrintingId: 10
+  id: 1,
+  name: 'Dark Magician',
+  type: 'Normal Monster',
+  frameType: 'normal',
+  attribute: 'DARK',
+  race: 'Spellcaster',
+  level: 7,
+  linkval: null,
+  atk: 2500,
+  def: 2100,
+  imageId: 1,
+  price: 7.5,
+  releasedAt: '2002-03-08',
+  owned: 0,
+  defaultPrintingId: 10
 }
 
 function renderBrowse(printings: Printing[], entries: EntryView[]): void {
   renderWithProviders(
-    <BrowseCardPanel card={browseCard} onMoreOptions={() => {}} onClose={() => {}} />,
+    <CardSheet onClose={() => {}}>
+      <BrowseCardPanel card={browseCard} onMoreOptions={() => {}} />
+    </CardSheet>,
     {
       api: createMockApi({
         cards: { get: async () => detail(printings) },
@@ -118,14 +159,23 @@ describe('BrowseCardPanel price for the viewed printing', () => {
 describe('SetCardPanel price for the viewed rarity', () => {
   const alpha = metalRaidersChecklist.cards[0]
   const viewed = printing(PRINTING.alphaUltraE001, {
-    cardId: 1001, setName: 'Metal Raiders', setCode: 'MRD-E001', setPrice: 12
+    cardId: 1001,
+    setName: 'Metal Raiders',
+    setCode: 'MRD-E001',
+    setPrice: 12
   })
   const renderSet = (entries: EntryView[], rarity = 'Ultra Rare'): void => {
     renderWithProviders(
-      <SetCardPanel
-        setName="Metal Raiders" card={alpha} rarity={rarity} busy={false}
-        onAdjust={() => {}} onMoreOptions={() => {}} onClose={() => {}}
-      />,
+      <CardSheet onClose={() => {}}>
+        <SetCardPanel
+          setName="Metal Raiders"
+          card={alpha}
+          rarity={rarity}
+          busy={false}
+          onAdjust={() => {}}
+          onMoreOptions={() => {}}
+        />
+      </CardSheet>,
       { api: createMockApi({ collection: { forCard: async () => entries } }) }
     )
   }

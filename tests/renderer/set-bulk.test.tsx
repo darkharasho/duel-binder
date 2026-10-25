@@ -55,7 +55,10 @@ function createAdjust(): {
   }
 }
 
-function setup(language: Language = 'en'): ReturnType<typeof createAdjust> & {
+function setup(
+  language: Language = 'en',
+  onBack: () => void = () => {}
+): ReturnType<typeof createAdjust> & {
   checklist: ReturnType<typeof vi.fn>
   invalidate: ReturnType<typeof vi.spyOn>
   cancel: ReturnType<typeof vi.spyOn>
@@ -69,7 +72,7 @@ function setup(language: Language = 'en'): ReturnType<typeof createAdjust> & {
       language={language}
       mode="cards"
       onModeChange={() => {}}
-      onBack={() => {}}
+      onBack={onBack}
       onAddMissing={() => {}}
     />,
     { api }
@@ -84,6 +87,8 @@ async function enterBulk(): Promise<void> {
 }
 
 const row = (name: string): HTMLElement => screen.getByRole('group', { name })
+const bulkBox = (): HTMLElement =>
+  screen.getByRole('searchbox', { name: 'Type a card number or name' })
 
 describe('SetChecklist bulk mode', () => {
   it('Bulk add shows a stepper per rarity with the default code selected', async () => {
@@ -347,6 +352,118 @@ describe('SetChecklist bulk mode', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Add one Gamma Trap Rare' }))
     releaseNext()
     await waitFor(() => expect(within(row('Gamma Trap Rare')).getByText('2')).toBeInTheDocument())
+  })
+
+  it('highlights the first tile and moves the highlight with the arrow keys', async () => {
+    setup()
+    await enterBulk()
+    expect(row('Alpha Dragon Secret Rare')).toHaveAttribute('data-highlighted', 'true')
+    await userEvent.keyboard('{ArrowRight}')
+    expect(row('Alpha Dragon Ultra Rare')).toHaveAttribute('data-highlighted', 'true')
+    expect(row('Alpha Dragon Secret Rare')).toHaveAttribute('data-highlighted', 'false')
+    await userEvent.keyboard('{ArrowLeft}')
+    expect(row('Alpha Dragon Secret Rare')).toHaveAttribute('data-highlighted', 'true')
+  })
+
+  it('Enter adds the highlighted tile, clears the box and lists it under Just added', async () => {
+    const { adjust } = setup()
+    await enterBulk()
+    await userEvent.type(bulkBox(), '2{Enter}')
+    expect(adjust).toHaveBeenCalledWith('Metal Raiders', 'en', PRINTING.beta, 1)
+    expect(bulkBox()).toHaveValue('')
+    const list = screen.getByRole('list', { name: 'Just added' })
+    expect(
+      within(list).getByRole('button', { name: 'Undo Beta Knight Common' })
+    ).toBeInTheDocument()
+    expect(within(list).getByText('MRD-002')).toBeInTheDocument()
+  })
+
+  it('Enter with no match adds nothing', async () => {
+    const { adjust } = setup()
+    await enterBulk()
+    await userEvent.type(bulkBox(), 'zzz{Enter}')
+    expect(adjust).not.toHaveBeenCalled()
+    expect(screen.queryByRole('list', { name: 'Just added' })).not.toBeInTheDocument()
+  })
+
+  it('Backspace in the empty box undoes the newest add', async () => {
+    const { adjust, releaseNext } = setup()
+    await enterBulk()
+    await userEvent.type(bulkBox(), '2{Enter}')
+    releaseNext()
+    await userEvent.keyboard('{Backspace}')
+    await waitFor(() =>
+      expect(adjust).toHaveBeenLastCalledWith('Metal Raiders', 'en', PRINTING.beta, -1)
+    )
+    expect(screen.queryByRole('list', { name: 'Just added' })).not.toBeInTheDocument()
+  })
+
+  it("the strip's Undo button removes the card again", async () => {
+    const { adjust, releaseNext } = setup()
+    await enterBulk()
+    await userEvent.type(bulkBox(), '2{Enter}')
+    releaseNext()
+    await userEvent.click(screen.getByRole('button', { name: 'Undo Beta Knight Common' }))
+    await waitFor(() =>
+      expect(adjust).toHaveBeenLastCalledWith('Metal Raiders', 'en', PRINTING.beta, -1)
+    )
+    expect(screen.queryByRole('list', { name: 'Just added' })).not.toBeInTheDocument()
+  })
+
+  it('a failed add leaves the strip and cannot be undone', async () => {
+    const { adjust, rejectNext } = setup()
+    await enterBulk()
+    await userEvent.type(bulkBox(), '2{Enter}')
+    expect(screen.getByRole('list', { name: 'Just added' })).toBeInTheDocument()
+    rejectNext(new Error('x'))
+    await waitFor(() =>
+      expect(screen.queryByRole('list', { name: 'Just added' })).not.toBeInTheDocument()
+    )
+    await userEvent.keyboard('{Backspace}')
+    expect(adjust).toHaveBeenCalledTimes(1)
+  })
+
+  it('the highlight stays on its tile when the counts change', async () => {
+    const { releaseNext } = setup()
+    await enterBulk()
+    await userEvent.keyboard('{ArrowRight}')
+    await userEvent.click(screen.getByRole('button', { name: 'Add one Alpha Dragon Ultra Rare' }))
+    expect(screen.getByRole('button', { name: 'Undo Alpha Dragon Ultra Rare' })).toBeInTheDocument()
+    releaseNext()
+    await waitFor(() =>
+      expect(within(row('Alpha Dragon Ultra Rare')).getByText('3')).toBeInTheDocument()
+    )
+    expect(row('Alpha Dragon Ultra Rare')).toHaveAttribute('data-highlighted', 'true')
+  })
+
+  it('Escape clears the box without leaving the set', async () => {
+    const onBack = vi.fn()
+    setup('en', onBack)
+    await enterBulk()
+    await userEvent.type(bulkBox(), 'beta')
+    await userEvent.keyboard('{Escape}')
+    expect(bulkBox()).toHaveValue('')
+    expect(onBack).not.toHaveBeenCalled()
+  })
+
+  it('a tile minus does not join the strip', async () => {
+    const { adjust } = setup()
+    await enterBulk()
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Remove one Alpha Dragon Ultra Rare' })
+    )
+    expect(adjust).toHaveBeenCalledWith('Metal Raiders', 'en', PRINTING.alphaUltraE001, -1)
+    expect(screen.queryByRole('list', { name: 'Just added' })).not.toBeInTheDocument()
+  })
+
+  it('leaving bulk mode clears the strip', async () => {
+    setup()
+    await enterBulk()
+    await userEvent.type(bulkBox(), '2{Enter}')
+    expect(screen.getByRole('list', { name: 'Just added' })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Done' }))
+    await enterBulk()
+    expect(screen.queryByRole('list', { name: 'Just added' })).not.toBeInTheDocument()
   })
 
   it('Done restores tiles', async () => {

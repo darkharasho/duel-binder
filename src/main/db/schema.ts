@@ -102,6 +102,15 @@ export const SCHEMA_V9 = `
 CREATE TABLE konami_logos (set_name TEXT PRIMARY KEY, image_url TEXT NOT NULL, image_key TEXT NOT NULL UNIQUE);
 `
 
+/**
+ * A printing's natural key, mirroring the two partial unique indexes from V3 (English keys omit the set
+ * name), so the portal and desktop can address the same printing without sharing row ids.
+ */
+export const SCHEMA_V10 = `
+ALTER TABLE card_printings ADD COLUMN pkey TEXT GENERATED ALWAYS AS (CASE WHEN language = 'en' THEN 'en|' || card_id || '|' || set_code || '|' || set_rarity ELSE language || '|' || card_id || '|' || set_name || '|' || set_code || '|' || set_rarity END) VIRTUAL;
+CREATE UNIQUE INDEX ux_printings_pkey ON card_printings(pkey);
+`
+
 /** A printing's rarity as shown: "Starlight Rare (Extended Art)" for a labelled variant. */
 export const RARITY_LABEL = "p.set_rarity || COALESCE(' (' || p.variant || ')', '')"
 
@@ -115,6 +124,7 @@ export const MIGRATIONS: Migration[] = [
   { version: 6, sql: SCHEMA_V6 },
   { version: 7, sql: SCHEMA_V7 },
   { version: 8, sql: SCHEMA_V8 },
-  { version: 9, sql: SCHEMA_V9 }
+  { version: 9, sql: SCHEMA_V9 },
+  { version: 10, sql: SCHEMA_V10 }
 ]
 

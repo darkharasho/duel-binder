@@ -98,4 +98,19 @@ describe('renderPage', () => {
     expect(html).not.toContain('a<b"&.exe')
     expect(html).toContain('a&lt;b&quot;&amp;.exe')
   })
+
+  it('has the head metadata and well-formed images', () => {
+    const html = page()
+    expect(html).toContain('<title>Duel Binder — a binder for your Yu-Gi-Oh! collection</title>')
+    expect(html).toContain('<meta property="og:image" content="https://duelbinder.com/og.png">')
+    const imgs = html.match(/<img [^>]*>/g)!
+    expect(imgs).toHaveLength(3)
+    for (const img of imgs) {
+      expect(img).toContain('width="2560" height="1600"')
+      expect(img).toMatch(/alt="[^"]+"/)
+    }
+    expect(imgs[0]).toContain('/shots/collection.webp')
+    expect(imgs[0]).not.toContain('loading="lazy"')
+    for (const img of imgs.slice(1)) expect(img).toContain('loading="lazy"')
+  })
 })

@@ -24,6 +24,8 @@ interface BulkTileProps {
   onPickerClose?: () => void
   busy: boolean
   highlighted: boolean
+  /** Filtered out by the search; kept mounted so clearing the box needn't rebuild it. */
+  hidden?: boolean
   onAdjust: (printingId: number, delta: 1 | -1) => void
 }
 
@@ -39,6 +41,7 @@ export const BulkTile = memo(function BulkTile({
   onPickerClose,
   busy,
   highlighted,
+  hidden,
   onAdjust
 }: BulkTileProps): React.JSX.Element {
   // A sync can drop the chosen printing; fall back to the default rather than adjusting a dead id.
@@ -51,7 +54,8 @@ export const BulkTile = memo(function BulkTile({
   const owned = rarity.owned > 0
 
   return (
-    <li>
+    // content-visibility lets the browser skip laying out tiles scrolled out of view.
+    <li hidden={hidden} className="[contain-intrinsic-size:auto_22rem] [content-visibility:auto]">
       <div
         role="group"
         aria-label={label}

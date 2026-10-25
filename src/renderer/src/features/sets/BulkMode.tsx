@@ -22,6 +22,7 @@ interface BulkSlotProps {
   printingId: number | undefined
   busy: boolean
   highlighted: boolean
+  hidden: boolean
   onPick: (key: string, printingId: number) => void
   onPickerClose: () => void
   onAdd: (tile: BulkTileData, printingId: number) => void
@@ -34,6 +35,7 @@ function BulkSlot({
   printingId,
   busy,
   highlighted,
+  hidden,
   onPick,
   onPickerClose,
   onAdd,
@@ -62,6 +64,7 @@ function BulkSlot({
       onPickerClose={onPickerClose}
       busy={busy}
       highlighted={highlighted}
+      hidden={hidden}
       onAdjust={adjust}
     />
   )
@@ -92,7 +95,11 @@ export function BulkMode({ cards, pending, adjust }: BulkModeProps): React.JSX.E
     addedRef.current = next(addedRef.current)
     setAdded(addedRef.current)
   }, [])
+  // Every tile stays mounted and the search only hides the misses: clearing the box on a big set
+  // would otherwise remount hundreds of tiles and reload all their images.
+  const allTiles = useMemo(() => bulkTiles(cards), [cards])
   const tiles = useMemo(() => bulkTiles(filterBulkCards(cards, query)), [cards, query])
+  const shown = useMemo(() => new Set(tiles.map((t) => t.key)), [tiles])
   const highlight = tiles.some((t) => t.key === highlightKey)
     ? highlightKey
     : (tiles[0]?.key ?? null)
@@ -230,13 +237,14 @@ export function BulkMode({ cards, pending, adjust }: BulkModeProps): React.JSX.E
           </p>
         )}
         <ul ref={grid} className="grid grid-cols-[repeat(auto-fill,minmax(11rem,1fr))] gap-3">
-          {tiles.map((tile) => (
+          {allTiles.map((tile) => (
             <BulkSlot
               key={tile.key}
               tile={tile}
               printingId={chosen[tile.key]}
               busy={(pending[tile.card.cardId] ?? 0) > 0}
               highlighted={tile.key === highlight}
+              hidden={!shown.has(tile.key)}
               onPick={pick}
               onPickerClose={focusBox}
               onAdd={add}

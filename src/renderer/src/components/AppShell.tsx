@@ -14,8 +14,8 @@ export type NavigateFn = (page: Page, opts?: { entryId?: number }) => void
 const NAV = [
   { page: 'dashboard', label: 'Dashboard' },
   { page: 'collection', label: 'Collection' },
-  { page: 'browse', label: 'Browse' },
   { page: 'sets', label: 'Sets' },
+  { page: 'browse', label: 'Browse' },
   { page: 'settings', label: 'Settings' }
 ] as const
 

@@ -1,6 +1,12 @@
 import type { LanguageFilter } from '@shared/languages'
 import { matchesLanguage } from '@/lib/languageFilter'
-import type { ChecklistCard, CountMode, SetChecklist, SetSummary } from '@shared/types'
+import type {
+  ChecklistCard,
+  ChecklistRarity,
+  CountMode,
+  SetChecklist,
+  SetSummary
+} from '@shared/types'
 
 export type SetFilter = 'started' | 'all' | 'complete'
 export type SetSort = 'complete' | 'name' | 'date'
@@ -224,4 +230,29 @@ export function matchesCardSearch(card: ChecklistCard, q: string): boolean {
     card.numberLabel.toLowerCase().includes(needle) ||
     card.rarities.some((r) => r.codes.some((c) => c.setCode.toLowerCase().includes(needle)))
   )
+}
+
+export interface BulkTileData {
+  key: string
+  card: ChecklistCard
+  rarity: ChecklistRarity
+}
+
+/** One bulk-add tile per (card, rarity), in card order. */
+export function bulkTiles(cards: ChecklistCard[]): BulkTileData[] {
+  return cards.flatMap((card) =>
+    card.rarities.map((rarity) => ({ key: `${card.cardId}:${rarity.rarity}`, card, rarity }))
+  )
+}
+
+/** Bulk search: a bare number jumps to that set number; anything else is the usual text search. */
+export function filterBulkCards(cards: ChecklistCard[], q: string): ChecklistCard[] {
+  const needle = q.trim()
+  if (!needle) return cards
+  if (/^\d+$/.test(needle)) {
+    const n = Number(needle)
+    const exact = cards.filter((c) => c.number === n)
+    if (exact.length) return exact
+  }
+  return cards.filter((c) => matchesCardSearch(c, q))
 }

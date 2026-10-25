@@ -33,7 +33,7 @@ import { EntryDetailPanel } from '@/features/collection/EntryDetailPanel'
 import { api, mutationInvalidationKeys, queryKeys } from '@/lib/api'
 import { createSerialQueue } from '@/lib/serialQueue'
 import { cn } from '@/lib/utils'
-import { BulkCard } from './BulkCard'
+import { BulkMode } from './BulkMode'
 import { SetCardPanel } from './SetCardPanel'
 import { SetArt } from './SetArt'
 import { SetProgress } from './SetProgress'
@@ -174,14 +174,17 @@ export function SetChecklist({
     const ids = filterTiles(checklistTiles(data, 'cards'), filter).map((t) => t.card.cardId)
     setFrozen({ filter, mode, ids: new Set(ids) })
   }
-  const bulkCards =
-    data && frozen
-      ? sortCards(
-          data.cards.filter((c) => frozen.ids.has(c.cardId) && matchesCardSearch(c, q)),
-          sort.by,
-          sort.dir
-        )
-      : []
+  const bulkCards = useMemo(
+    () =>
+      data && frozen
+        ? sortCards(
+            data.cards.filter((c) => frozen.ids.has(c.cardId)),
+            sort.by,
+            sort.dir
+          )
+        : [],
+    [data, frozen, sort]
+  )
 
   const bumpPending = (cardId: number, by: 1 | -1): void =>
     setPending((p) => ({ ...p, [cardId]: (p[cardId] ?? 0) + by }))
@@ -205,16 +208,17 @@ export function SetChecklist({
 
   /**
    * Queues one +/- for a card. The count moves at once; each server answer replaces the card (set
-   * counts recomputed) with later clicks re-applied, so nothing is refetched per click.
+   * counts recomputed) with later clicks re-applied, so nothing is refetched per click. Resolves
+   * true once the server saved the click, false if it failed; never rejects.
    */
-  const adjust = (cardId: number, printingId: number, delta: 1 | -1): void => {
+  const adjust = (cardId: number, printingId: number, delta: 1 | -1): Promise<boolean> => {
     const key = queryKeys.setChecklist(setName, language)
     let f = inFlight.current.get(cardId)
     if (!f) {
       const card = qc
         .getQueryData<SetChecklistData | null>(key)
         ?.cards.find((c) => c.cardId === cardId)
-      if (!card) return
+      if (!card) return Promise.resolve(false)
       f = { confirmed: card, ops: [] }
       inFlight.current.set(cardId, f)
     }
@@ -236,7 +240,8 @@ export function SetChecklist({
       if (card) flight.confirmed = card
       if (flight.ops.length === 0) inFlight.current.delete(cardId)
     }
-    queue(async () => {
+    let saved = false
+    return queue(async () => {
       let card: ChecklistCard
       try {
         card = await api.sets.adjust(setName, language, printingId, delta)
@@ -248,6 +253,7 @@ export function SetChecklist({
       settle(card)
       await qc.cancelQueries({ queryKey: key })
       show(flight)
+      saved = true
     })
       .catch((e: unknown) => {
         toast.error(e instanceof Error ? e.message : 'Could not update the collection')
@@ -261,6 +267,7 @@ export function SetChecklist({
           if (!(k.length === 1 && k[0] === 'sets')) void qc.invalidateQueries({ queryKey: [...k] })
         }
       })
+      .then(() => saved)
   }
 
   if (data === null) {
@@ -319,20 +326,22 @@ export function SetChecklist({
           <div className="flex flex-wrap items-end gap-3 border-b border-white/[0.08]">
             <UnderlineTabs label="Show" value={filter} options={FILTERS} onChange={setFilter} />
             <div className="ml-auto flex flex-wrap items-center gap-3 pb-2">
-              <div className="relative w-52">
-                <Search
-                  className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
-                  aria-hidden
-                />
-                <Input
-                  type="search"
-                  value={q}
-                  onChange={(e) => setQ(e.target.value)}
-                  placeholder="Search this set"
-                  aria-label="Search this set"
-                  className="h-8 pl-8"
-                />
-              </div>
+              {!bulk && (
+                <div className="relative w-52">
+                  <Search
+                    className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+                    aria-hidden
+                  />
+                  <Input
+                    type="search"
+                    value={q}
+                    onChange={(e) => setQ(e.target.value)}
+                    placeholder="Search this set"
+                    aria-label="Search this set"
+                    className="h-8 pl-8"
+                  />
+                </div>
+              )}
               <div className="flex items-center gap-1.5">
                 <Select
                   value={sort.by}
@@ -414,23 +423,14 @@ export function SetChecklist({
           </div>
         </header>
 
-        {q.trim() !== '' && (bulk ? bulkCards : tiles).length === 0 && (
+        {!bulk && q.trim() !== '' && tiles.length === 0 && (
           <p className="py-12 text-center text-sm text-muted-foreground">
             No cards in this set match &ldquo;{q.trim()}&rdquo;
           </p>
         )}
 
         {bulk ? (
-          <ul className="grid grid-cols-[repeat(auto-fill,minmax(14rem,1fr))] gap-3">
-            {bulkCards.map((card) => (
-              <BulkCard
-                key={card.cardId}
-                card={card}
-                busy={(pending[card.cardId] ?? 0) > 0}
-                onAdjust={(printingId, delta) => adjust(card.cardId, printingId, delta)}
-              />
-            ))}
-          </ul>
+          <BulkMode cards={bulkCards} pending={pending} adjust={adjust} />
         ) : (
           <ul className="grid grid-cols-[repeat(auto-fill,minmax(7.5rem,1fr))] gap-3">
             {tiles.map((t) => {

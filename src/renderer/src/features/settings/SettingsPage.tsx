@@ -70,8 +70,8 @@ function PriceServiceSection(): React.JSX.Element {
   return (
     <Section title="eBay prices">
       <p className="text-sm text-muted-foreground">
-        Non-English copies are priced from eBay asking prices through a small web service. Leave the address
-        empty to turn this off.
+        Copies you own are priced from eBay asking prices through a small web service. English copies fall back
+        to TCGplayer prices when eBay has none. Leave the address empty to turn this off.
       </p>
       <form
         className="flex gap-2"

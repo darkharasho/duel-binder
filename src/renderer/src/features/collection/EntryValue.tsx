@@ -45,7 +45,7 @@ function ebayPriceDetail(entry: EntryView): string {
 }
 
 /**
- * An entry's price. YGOPRODeck prices render as `ValueText`; eBay (non-English) prices carry a
+ * An entry's price. YGOPRODeck prices render as `ValueText`; eBay prices carry a
  * visible "eBay" marker plus a tooltip with the asking-price label and checked date, or render as
  * "No price" with the reason.
  */
@@ -57,7 +57,14 @@ export function EntryValue({
   amount: number | null
 }): React.JSX.Element {
   if (entry.priceSource !== 'ebay') {
-    return <ValueText amount={amount} approximate={entry.priceApproximate} />
+    if (amount === null || entry.priceApproximate)
+      return <ValueText amount={amount} approximate={entry.priceApproximate} />
+    // English fallback (no eBay price yet): say where the number comes from.
+    return (
+      <span className="tabular-nums" title="TCGplayer price via YGOPRODeck">
+        {formatUsd(amount)}
+      </span>
+    )
   }
   const noPrice = amount === null
   const tip = noPrice
@@ -84,7 +91,7 @@ export function EntryValue({
   )
 }
 
-/** Visible eBay price details for a non-English copy (entry detail); null for English copies. */
+/** Visible eBay price details for an eBay-priced copy (entry detail); null for YGOPRODeck-priced ones. */
 export function EbayPriceLine({ entry }: { entry: EntryView }): React.JSX.Element | null {
   if (entry.priceSource !== 'ebay') return null
   return <p className="text-xs text-muted-foreground">{ebayPriceDetail(entry)}</p>

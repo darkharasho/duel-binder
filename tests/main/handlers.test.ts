@@ -132,7 +132,7 @@ describe('createHandlers', () => {
     expect(emitDataChanged).toHaveBeenCalledTimes(1)
   })
 
-  it('an English add looks up nothing and emits nothing', async () => {
+  it('an English add is looked up like any other printing', async () => {
     const { db, handlers, lookup, emitDataChanged } = await makeHandlers()
     const printing = db
       .prepare(
@@ -141,7 +141,8 @@ describe('createHandlers', () => {
       .get() as { printingId: number; imageId: number }
     await handlers['collection:add']({ ...printing, quantity: 1 })
     await new Promise((r) => setTimeout(r, 10))
-    expect(lookup).not.toHaveBeenCalled()
-    expect(emitDataChanged).not.toHaveBeenCalled()
+    expect(lookup).toHaveBeenCalledTimes(1)
+    expect(lookup).toHaveBeenCalledWith(expect.objectContaining({ lang: 'en' }))
+    expect(emitDataChanged).toHaveBeenCalledTimes(1)
   })
 })

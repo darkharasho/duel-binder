@@ -113,7 +113,7 @@ export function SetsPage({ onAddCard, onAddMissing }: SetsPageProps): React.JSX.
   const available = useMemo(() => [...new Set(all.map((s) => s.language))], [all])
   const header = setsHeader(inLanguage, mode)
   const visible = useMemo(
-    () => sortSets(filterSets(all, { filter, q, mode, language }), sort, mode),
+    () => sortSets(filterSets(all, { filter, q, mode, language, types: [] }), sort, mode),
     [all, filter, q, mode, sort, language]
   )
 
@@ -213,7 +213,13 @@ export function SetsPage({ onAddCard, onAddMissing }: SetsPageProps): React.JSX.
                 ))}
               </SelectContent>
             </Select>
-            <ToggleGroup type="single" variant="outline" size="sm" value={view} onValueChange={changeView}>
+            <ToggleGroup
+              type="single"
+              variant="outline"
+              size="sm"
+              value={view}
+              onValueChange={changeView}
+            >
               <ToggleGroupItem value="list" aria-label="List view">
                 <List />
               </ToggleGroupItem>

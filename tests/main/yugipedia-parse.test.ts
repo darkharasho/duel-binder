@@ -17,6 +17,64 @@ const fx = (name: string): string =>
   )
 
 describe('parseSetList', () => {
+  it('captures a description:: note as the row variant, extended art as Overframe', () => {
+    const r = parseSetList(
+      [
+        '{{Set list|region=KR|',
+        'LOCH-KR012; Gagaga Girl - Cell Phone Subtraction; Ultra Rare, Secret Rare; New',
+        'LOCH-KR012; Gagaga Girl - Cell Phone Subtraction; Ultra Rare, Prismatic Secret Rare, Grand Master Rare; New // description::(extended art)',
+        'LOCH-KR013; Some Card; UR // just a comment',
+        '}}'
+      ].join('\n')
+    )!
+    expect(r.rows).toEqual([
+      {
+        code: 'LOCH-KR012',
+        name: 'Gagaga Girl - Cell Phone Subtraction',
+        rarities: ['Ultra Rare', 'Secret Rare']
+      },
+      {
+        code: 'LOCH-KR012',
+        name: 'Gagaga Girl - Cell Phone Subtraction',
+        rarities: ['Ultra Rare', 'Prismatic Secret Rare', 'Grand Master Rare'],
+        variant: 'Overframe'
+      },
+      { code: 'LOCH-KR013', name: 'Some Card', rarities: ['Ultra Rare'] }
+    ])
+    expect('variant' in r.rows[0]).toBe(false)
+    expect('variant' in r.rows[2]).toBe(false)
+  })
+
+  it('reads //description:: with no space, without brackets, and on uncoded rows', () => {
+    const r = parseSetList(
+      [
+        '{{Set list|region=JP|rarities=Ultra Rare, Secret Rare|',
+        '; Zoa //description::(Manga-Style)',
+        'X-002; Some Card; UR // description::Manga-Style',
+        '}}'
+      ].join('\n')
+    )!
+    expect(r.rows).toEqual([
+      { code: '', name: 'Zoa', rarities: ['Ultra Rare', 'Secret Rare'], variant: 'Manga-Style' },
+      { code: 'X-002', name: 'Some Card', rarities: ['Ultra Rare'], variant: 'Manga-Style' }
+    ])
+  })
+
+  it('maps rarity codes confirmed on Yugipedia', () => {
+    expect(normalizeRarity('MLR')).toBe('Millennium Rare')
+    expect(normalizeRarity('GMR')).toBe('Grand Master Rare')
+    expect(normalizeRarity('NPR')).toBe('Normal Parallel Rare')
+    expect(normalizeRarity('EScR')).toBe('Extra Secret Rare')
+    expect(normalizeRarity('HGR')).toBe('Holographic Rare')
+    expect(normalizeRarity('GScR')).toBe('Gold Secret Rare')
+    expect(normalizeRarity('PGR')).toBe('Premium Gold Rare')
+  })
+
+  it('keeps other description:: notes as the variant, without parentheses', () => {
+    const r = parseSetList('{{Set list|\nX-001; Some Card; UR // description::(alternate art)\n}}')!
+    expect(r.rows[0].variant).toBe('Alternate art')
+  })
+
   it('parses the LB Japanese list', () => {
     const r = parseSetList(fx('Set Card Lists:Legend of Blue Eyes White Dragon (OCG-JP)'))!
     expect(r.rows).toHaveLength(61)

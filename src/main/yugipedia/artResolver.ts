@@ -20,6 +20,8 @@ interface PrintingInfo {
   language: string
   set_rarity: string
   set_rarity_code: string
+  set_name: string
+  variant: string | null
 }
 
 /**
@@ -44,9 +46,23 @@ export function createPrintingArtResolver(opts: {
 
   const stored = db.prepare('SELECT url, checked_at FROM printing_art WHERE printing_id = ?')
   const info = db.prepare(
-    `SELECT p.id, c.name, p.set_code, p.language, p.set_rarity, p.set_rarity_code
+    `SELECT p.id, c.name, p.set_code, p.language, p.set_rarity, p.set_rarity_code, p.set_name, p.variant
      FROM card_printings p JOIN cards c ON c.id = p.card_id WHERE p.id = ?`
   )
+  const siblingCodes = db.prepare(
+    "SELECT set_code FROM card_printings WHERE language = ? AND set_name = ? AND set_code <> ''"
+  )
+  /** An uncoded printing's set prefix: the most common one among its set's coded printings. */
+  const setPrefix = (p: PrintingInfo): string => {
+    const counts = new Map<string, number>()
+    for (const { set_code } of siblingCodes.all(p.language, p.set_name) as { set_code: string }[]) {
+      const prefix = set_code.split('-')[0]
+      counts.set(prefix, (counts.get(prefix) ?? 0) + 1)
+    }
+    let best = ''
+    for (const [prefix, n] of counts) if (n > (counts.get(best) ?? 0)) best = prefix
+    return best
+  }
   const save = db.prepare(
     `INSERT INTO printing_art (printing_id, url, checked_at) VALUES (?, ?, ?)
      ON CONFLICT(printing_id) DO UPDATE SET url = excluded.url, checked_at = excluded.checked_at`
@@ -74,10 +90,11 @@ export function createPrintingArtResolver(opts: {
           p.id,
           isLanguage(p.language)
             ? choosePrintingFile(files, {
-                setCode: p.set_code,
+                setCode: p.set_code || setPrefix(p),
                 language: p.language,
                 rarity: p.set_rarity,
-                rarityCode: p.set_rarity_code
+                rarityCode: p.set_rarity_code,
+                variant: p.variant
               })
             : null
         )

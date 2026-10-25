@@ -9,7 +9,8 @@ import {
   parseInfobox,
   parseSetList,
   releaseDateFor,
-  type ParsedSetList
+  type ParsedSetList,
+  type SetListRow
 } from '../yugipedia/parse'
 
 export const INTL_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000
@@ -89,6 +90,48 @@ function deleteOrFlag(db: Database.Database, ids: number[]): void {
   }
 }
 
+interface IntlPrinting {
+  cardId: number
+  setCode: string
+  setRarity: string
+  variant: string | null
+}
+
+/**
+ * One printing per row and rarity, keyed like the English art variants: a variant whose code and
+ * rarity a plain row also has becomes "<rarity> (<variant>)" (an overframe Ultra Rare beside the
+ * plain one); otherwise it keeps the bare rarity with the variant in `variant` (an overframe-only
+ * Prismatic Secret Rare), so a printing stored before variants were read keeps its row.
+ */
+function listPrintings(matched: { cardId: number; row: SetListRow }[]): IntlPrinting[] {
+  const out: IntlPrinting[] = []
+  const taken = new Set<string>()
+  const add = (p: IntlPrinting): void => {
+    const key = `${p.cardId}\u0000${p.setCode}\u0000${p.setRarity}`
+    if (taken.has(key)) return
+    taken.add(key)
+    out.push(p)
+  }
+  // Plain rows first, so they claim the bare rarity before any variant does.
+  for (const { cardId, row } of matched) {
+    if (row.variant) continue
+    for (const r of row.rarities)
+      add({ cardId, setCode: row.code, setRarity: normalizeRarity(r), variant: null })
+  }
+  for (const { cardId, row } of matched) {
+    const variant = row.variant
+    if (!variant) continue
+    for (const r of row.rarities) {
+      const rarity = normalizeRarity(r)
+      const bare = `${cardId}\u0000${row.code}\u0000${rarity}`
+      if (taken.has(bare))
+        add({ cardId, setCode: row.code, setRarity: `${rarity} (${variant})`, variant: null })
+      else add({ cardId, setCode: row.code, setRarity: rarity, variant })
+    }
+  }
+  return out
+}
+
 /** Never rejects. Non-English rows are written only here; English rows are never touched. */
 export async function refreshIntlSets(
   db: Database.Database,
@@ -150,10 +193,10 @@ async function run(
 
   const upsertPrinting = db.prepare(`
     INSERT INTO card_printings (card_id, language, set_name, set_code, set_rarity, set_rarity_code, set_price,
-      missing_from_api)
-    VALUES (@cardId, @language, @setName, @setCode, @setRarity, '', NULL, 0)
+      missing_from_api, variant)
+    VALUES (@cardId, @language, @setName, @setCode, @setRarity, '', NULL, 0, @variant)
     ON CONFLICT(card_id, language, set_name, set_code, set_rarity) WHERE language <> 'en'
-      DO UPDATE SET missing_from_api = 0
+      DO UPDATE SET missing_from_api = 0, variant = excluded.variant
     RETURNING id`)
   const upsertSet = db.prepare(`
     INSERT INTO sets (language, set_name, set_code, tcg_date, image_url, image_key, list_rows, unmatched_rows)
@@ -224,7 +267,7 @@ async function run(
 
     for (const s of loaded) {
       let unmatched = 0
-      const printings: { cardId: number; setCode: string; setRarity: string }[] = []
+      const matched: { cardId: number; row: SetListRow }[] = []
       for (const row of s.parsed.rows) {
         const cardId = cardIds.get(normalizeName(row.name))
         if (cardId === undefined) {
@@ -232,11 +275,10 @@ async function run(
           if (unmatchedExamples.length < MAX_LOGGED_UNMATCHED) unmatchedExamples.push(row.name)
           continue
         }
-        for (const r of row.rarities) {
-          printings.push({ cardId, setCode: row.code, setRarity: normalizeRarity(r) })
-        }
+        matched.push({ cardId, row })
       }
       result.unmatchedRows += unmatched
+      const printings = listPrintings(matched)
 
       const box = infoboxes.get(s.title) ?? null
       const imageUrl = box?.image ? (imageUrls.get(box.image) ?? null) : null

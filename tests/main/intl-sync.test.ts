@@ -8,6 +8,7 @@ import {
   shouldRefreshIntl
 } from '../../src/main/sync/intl'
 import { yugipediaImageKey } from '../../src/main/images/cache'
+import { RARITY_LABEL } from '../../src/main/db/schema'
 import { YugipediaError, type YugipediaClient } from '../../src/main/yugipedia/client'
 import { seededDb } from './helpers'
 
@@ -145,6 +146,84 @@ describe('refreshIntlSets', () => {
     const f = fake({ [LB]: listPage(['LB-05; Dark Magician; UR, SR']) })
     await refreshIntlSets(db, f.client, NOW)
     expect(intlRows(db).map((r) => r.set_rarity)).toEqual(['Super Rare', 'Ultra Rare'])
+  })
+
+  it('an extended-art row makes its own printings, labelled Overframe', async () => {
+    const f = fake({
+      [LB]: listPage([
+        'LB-05; Dark Magician; Ultra Rare, Secret Rare; New',
+        'LB-05; Dark Magician; Ultra Rare, Prismatic Secret Rare, Grand Master Rare; New // description::(extended art)'
+      ])
+    })
+    await refreshIntlSets(db, f.client, NOW)
+    const rows = db
+      .prepare(
+        `SELECT p.set_rarity, p.variant, ${RARITY_LABEL} AS label FROM card_printings p
+         WHERE p.language = 'ja' ORDER BY label`
+      )
+      .all()
+    expect(rows).toEqual([
+      { set_rarity: 'Grand Master Rare', variant: 'Overframe', label: 'Grand Master Rare (Overframe)' },
+      {
+        set_rarity: 'Prismatic Secret Rare',
+        variant: 'Overframe',
+        label: 'Prismatic Secret Rare (Overframe)'
+      },
+      { set_rarity: 'Secret Rare', variant: null, label: 'Secret Rare' },
+      { set_rarity: 'Ultra Rare', variant: null, label: 'Ultra Rare' },
+      { set_rarity: 'Ultra Rare (Overframe)', variant: null, label: 'Ultra Rare (Overframe)' }
+    ])
+  })
+
+  it('a merged printing from before variants keeps its id and stays current', async () => {
+    const card = db.prepare("SELECT id FROM cards WHERE name = 'Dark Magician'").get() as {
+      id: number
+    }
+    const insert = db.prepare(
+      `INSERT INTO card_printings (card_id, language, set_name, set_code, set_rarity, set_rarity_code,
+         set_price, missing_from_api)
+       VALUES (?, 'ja', 'Legend of Blue Eyes White Dragon', 'LB-05', ?, '', NULL, 0) RETURNING id`
+    )
+    const old = Object.fromEntries(
+      ['Ultra Rare', 'Secret Rare', 'Prismatic Secret Rare', 'Grand Master Rare'].map((r) => [
+        r,
+        (insert.get(card.id, r) as { id: number }).id
+      ])
+    )
+    const imageId = (
+      db.prepare('SELECT image_id FROM card_images WHERE card_id = ?').get(card.id) as {
+        image_id: number
+      }
+    ).image_id
+    const own = db.prepare(
+      "INSERT INTO collection_entries (printing_id, image_id, quantity, created_at, updated_at) VALUES (?, ?, 1, 'x', 'x')"
+    )
+    for (const r of ['Ultra Rare', 'Prismatic Secret Rare', 'Grand Master Rare']) own.run(old[r], imageId)
+    const f = fake({
+      [LB]: listPage([
+        'LB-05; Dark Magician; Ultra Rare, Secret Rare; New',
+        'LB-05; Dark Magician; Ultra Rare, Prismatic Secret Rare, Grand Master Rare; New // description::(extended art)'
+      ])
+    })
+    await refreshIntlSets(db, f.client, NOW)
+    const rows = db
+      .prepare(
+        "SELECT id, set_rarity, variant, missing_from_api FROM card_printings WHERE language = 'ja'"
+      )
+      .all() as { id: number; set_rarity: string; variant: string | null; missing_from_api: number }[]
+    expect(rows).toHaveLength(5)
+    for (const [r, id] of Object.entries(old)) {
+      expect(rows.find((x) => x.id === id)).toMatchObject({ set_rarity: r, missing_from_api: 0 })
+    }
+    expect(rows.find((x) => x.id === old['Prismatic Secret Rare'])!.variant).toBe('Overframe')
+    expect(rows.find((x) => x.id === old['Grand Master Rare'])!.variant).toBe('Overframe')
+    expect(rows.find((x) => x.id === old['Ultra Rare'])!.variant).toBeNull()
+    expect(rows.find((x) => x.set_rarity === 'Ultra Rare (Overframe)')).toMatchObject({
+      missing_from_api: 0
+    })
+    expect(
+      (db.prepare('SELECT count(*) AS n FROM collection_entries').get() as { n: number }).n
+    ).toBe(3)
   })
 
   it("codeless sets don't collide", async () => {

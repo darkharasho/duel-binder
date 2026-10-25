@@ -570,9 +570,22 @@ describe('account service', () => {
     expect(store.pendingRevokes()).toEqual([token])
     expect(getMeta(db, 'cloud_user')).toBeNull()
     expect(service.isSignedIn()).toBe(false)
+    // Settings shows the signed-out layout at once, not after the final push and revoke.
+    expect(service.status()).toMatchObject({ state: 'signed-out', user: null, error: null })
+    expect(emitted.at(-1)).toMatchObject({ state: 'signed-out', user: null, error: null })
+    // A sign-in meanwhile waits for the sign-out to finish.
+    await willSignInAs(me(alice, 'alice'))
+    let signedInAgain = false
+    const signingIn = service.signIn().then((st) => {
+      signedInAgain = true
+      return st
+    })
+    await new Promise((r) => setTimeout(r, 20))
+    expect(signedInAgain).toBe(false)
 
     open()
     expect(await signingOut).toMatchObject({ state: 'signed-out', error: null })
+    expect((await signingIn).user?.id).toBe(alice)
     // The final push still went through with the in-memory token, and the revoke cleared the queue.
     expect(serverRows(alice)).toEqual([{ uid: localRows()[0].uid, quantity: 4, deleted_at: null }])
     expect(store.pendingRevokes()).toEqual([])

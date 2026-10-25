@@ -24,6 +24,12 @@ class_name = "Store"
 binding = "IMAGES"
 bucket_name = "duel-binder-images"
 
+# The price alarm calls the eBay price Worker through this binding (a plain fetch to its workers.dev URL from
+# a Worker on the same account can fail with error 1042). PRICE_WORKER_URL below stays the URL base.
+[[services]]
+binding = "PRICES"
+service = "ygo-ebay-prices"
+
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["Store"]

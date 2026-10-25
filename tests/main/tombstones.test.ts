@@ -2,7 +2,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import type Database from 'better-sqlite3'
 import { vi } from 'vitest'
-import { setMeta } from '../../src/main/db/meta'
+import { deleteMeta, setMeta } from '../../src/main/db/meta'
 import { browseCards } from '../../src/main/repo/browse'
 import {
   addEntry,
@@ -22,6 +22,8 @@ import { seededDb } from './helpers'
 let db: Database.Database
 beforeEach(async () => {
   db = await seededDb()
+  // Tombstones are kept for signed-in owners; owner 0 (never signed in) hard-deletes, tested below.
+  setMeta(db, 'cloud_active_owner', '1')
 })
 afterEach(() => db.close())
 
@@ -63,6 +65,20 @@ test('removing an entry keeps a dirty tombstone', () => {
     updated_at: later.toISOString(),
     dirty: 1
   })
+})
+
+test('removing a never-signed-in (owner 0) entry deletes the row', () => {
+  deleteMeta(db, 'cloud_active_owner')
+  const { a, b } = addAB()
+  removeEntry(db, a, later)
+  expect(raw(a)).toBeUndefined()
+  expect(raw(b)).toMatchObject({ deleted_at: null })
+  // A merge that removes the loser also hard-deletes it.
+  const c = addEntry(db, { printingId: pid('SDY-006'), imageId: 46986414, quantity: 1 }, later).id
+  updateEntry(db, c, { printingId: pid('LOB-EN119'), imageId: 55144522 }, later)
+  expect(raw(c)).toBeUndefined()
+  expect(raw(b).quantity).toBe(2)
+  expect(db.prepare('SELECT COUNT(*) AS n FROM collection_entries WHERE deleted_at IS NOT NULL').get()).toEqual({ n: 0 })
 })
 
 test('removing another owner’s entry does nothing', () => {
@@ -175,7 +191,7 @@ const SYNC = 'sync, reads and writes tombstones explicitly'
 const ENTRY_REFS: Record<string, [count: number, kind: string]> = {
   'src/main/repo/browse.ts': [2, SCOPED],
   'src/main/repo/collection.ts': [6, SCOPED],
-  'src/main/repo/scope.ts': [4, SCOPED],
+  'src/main/repo/scope.ts': [5, SCOPED],
   'src/main/repo/sets.ts': [5, SCOPED],
   'workers/portal/src/scope.ts': [3, SCOPED],
   'src/main/prices/refresh.ts': [1, LIVE],

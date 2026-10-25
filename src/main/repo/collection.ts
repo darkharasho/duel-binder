@@ -1,5 +1,6 @@
 import type { SqlDb } from '../db/sql'
 import { RARITY_LABEL } from '../db/schema'
+import { MAX_NOTES } from '../../shared/cloud'
 import { LANGUAGES } from '../../shared/languages'
 import { priceFor } from '../../shared/pricing'
 import type { AddEntryInput, CollectionFilters, EntryView, Facets, UpdateEntryInput } from '../../shared/types'
@@ -160,7 +161,8 @@ export function updateEntry(
     const target = findExisting(db, printingId, imageId, scope)
     if (target !== undefined && target !== id) {
       const t = requireEntry(db, target, scope)
-      const joined = [t.notes, notes].filter((n) => n !== '').join('\n')
+      // Capped so the merge never exceeds what a write may store (and sync would otherwise truncate).
+      const joined = [t.notes, notes].filter((n) => n !== '').join('\n').slice(0, MAX_NOTES)
       scope.deleteEntry(db, id, ts)
       db.prepare(`UPDATE collection_entries SET quantity = ?, notes = ?, updated_at = ?, ${scope.touch} WHERE id = ?`).run(
         t.quantity + quantity,

@@ -7,6 +7,7 @@ import {
   PRICE_MORE_MS,
   PRICE_SOON_MS,
   alarmQueue,
+  priceClientFor,
   runPriceAlarm,
   type AlarmStorage
 } from '../../workers/portal/src/prices'
@@ -283,5 +284,46 @@ describe('server eBay prices', () => {
       expect(result).toHaveLength(1)
       expect(result[0]).toMatchObject({ unitPrice: 7.5, priceSource: 'ebay' })
     })
+  })
+})
+
+describe('priceClientFor', () => {
+  const query: PriceQuery = {
+    code: 'LOB-001',
+    name: 'Blue-Eyes White Dragon',
+    set: 'Legend of Blue Eyes White Dragon',
+    rarity: 'Ultra Rare',
+    lang: 'en'
+  }
+  const ok = (): Response =>
+    new Response(JSON.stringify({ price: 7.5, listingCount: 4, checkedAt: NOW.toISOString() }), { status: 200 })
+
+  it('is null when PRICE_WORKER_URL is empty, even with a binding', () => {
+    expect(priceClientFor({ PRICE_WORKER_URL: '', PRICES: { fetch: vi.fn() } })).toBeNull()
+  })
+
+  it('sends lookups through the PRICES service binding when present', async () => {
+    const binding = { fetch: vi.fn(async () => ok()) }
+    const global = vi.spyOn(globalThis, 'fetch')
+    try {
+      const client = priceClientFor({ PRICE_WORKER_URL: 'https://prices.example', PRICES: binding })
+      await expect(client!.lookup(query)).resolves.toMatchObject({ price: 7.5 })
+      expect(binding.fetch).toHaveBeenCalledTimes(1)
+      expect(String((binding.fetch.mock.calls[0] as unknown[])[0])).toMatch(/^https:\/\/prices\.example\/v1\/price\?/)
+      expect(global).not.toHaveBeenCalled()
+    } finally {
+      global.mockRestore()
+    }
+  })
+
+  it('falls back to global fetch without a binding', async () => {
+    const global = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => ok())
+    try {
+      const client = priceClientFor({ PRICE_WORKER_URL: 'https://prices.example' })
+      await expect(client!.lookup(query)).resolves.toMatchObject({ price: 7.5 })
+      expect(global).toHaveBeenCalledTimes(1)
+    } finally {
+      global.mockRestore()
+    }
   })
 })

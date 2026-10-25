@@ -1,5 +1,5 @@
 import type { SqlDb } from '../../../src/main/db/sql'
-import type { PriceClient } from '../../../src/main/prices/client'
+import { createPriceClient, type PriceClient } from '../../../src/main/prices/client'
 import { refreshIntlPrices } from '../../../src/main/prices/refresh'
 
 /** Lookups per alarm run. */
@@ -12,6 +12,26 @@ export const PRICE_MORE_MS = 60_000
 export const PRICE_FAILED_MS = 3_600_000
 /** Nothing left to price: look again for prices going stale. */
 export const PRICE_IDLE_MS = 21_600_000
+
+/** The env slice the price client needs; `PRICES` is the service binding to the eBay price Worker. */
+export interface PriceEnv {
+  PRICE_WORKER_URL: string
+  PRICES?: { fetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> }
+}
+
+/**
+ * The price alarm's client, or null when PRICE_WORKER_URL is empty. With the PRICES service binding the
+ * lookups go through it (a plain fetch to a workers.dev Worker on the same account can fail with error
+ * 1042); the binding ignores the host, so PRICE_WORKER_URL stays the URL base either way.
+ */
+export function priceClientFor(env: PriceEnv): PriceClient | null {
+  if (!env.PRICE_WORKER_URL) return null
+  const binding = env.PRICES
+  return createPriceClient({
+    url: env.PRICE_WORKER_URL,
+    ...(binding ? { fetchFn: (input: RequestInfo | URL, init?: RequestInit) => binding.fetch(input, init) } : {})
+  })
+}
 
 /** The slice of Durable Object storage the price alarm uses. */
 export interface AlarmStorage {

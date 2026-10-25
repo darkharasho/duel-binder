@@ -17,7 +17,10 @@ export interface Scope {
   where(alias: string): string
   /** Inserts a new entry for this owner and returns its id. */
   insertEntry(db: SqlDb, row: EntryInsert): number
-  /** Removes an entry by tombstoning it (and marking the change, as `touch` does). */
+  /**
+   * Removes an entry by tombstoning it (and marking the change, as `touch` does). The desktop's never-signed-in
+   * owner 0 deletes the row outright instead.
+   */
   deleteEntry(db: SqlDb, id: number, ts: string): void
   /**
    * SQL assignment every `UPDATE collection_entries SET …` appends, recording the change for sync:
@@ -47,6 +50,10 @@ export const LOCAL: Scope = {
     return Number(info.lastInsertRowid)
   },
   deleteEntry(db, id, ts) {
+    // Owner 0 (never signed in) rows were never on the server: no one needs a tombstone, so drop the row.
+    db.prepare(
+      `DELETE FROM collection_entries WHERE id = ? AND deleted_at IS NULL AND owner_id = 0 AND owner_id = ${ACTIVE_OWNER}`
+    ).run(id)
     db.prepare(
       `UPDATE collection_entries SET deleted_at = ?, updated_at = ?, dirty = 1
        WHERE id = ? AND deleted_at IS NULL AND owner_id = ${ACTIVE_OWNER}`

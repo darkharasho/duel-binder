@@ -225,6 +225,8 @@ describe('sync routes', () => {
       const older = entry({ uid: lowUid, updatedAt: T0 })
       const newer = entry({ uid: highUid, quantity: 2, updatedAt: T1 })
       await check(older, newer, newer, older)
+      // The stored loser's tombstone carries the winner's edit time in both fields, as the desktop writes it.
+      expect(row(lowUid)).toMatchObject({ deleted_at: T1, updated_at: T1 })
     })
 
     it('an older incoming entry merges into the newer one', async () => {
@@ -439,7 +441,7 @@ describe('sync routes', () => {
       expect(res.status, q).toBe(400)
     }
 
-    for (const body of [{ pkeys: [1] }, { pkeys: 'x' }, {}]) {
+    for (const body of [{ pkeys: [1] }, { pkeys: 'x' }, {}, { pkeys: ['ok', 'k'.repeat(301)] }]) {
       const res = await send('/api/sync/prices', { method: 'POST', body: JSON.stringify(body) })
       expect(res.status).toBe(400)
     }

@@ -126,7 +126,7 @@ export function applyPush(
     `${ENTRY_SELECT} WHERE e.user_id = ? AND e.printing_id = ? AND e.image_id = ? AND e.deleted_at IS NULL AND e.uid <> ?`
   )
   const tombstone = db.prepare(
-    `UPDATE collection_entries SET deleted_at = ?, server_seq = ${NEXT_SEQ} WHERE id = ?`
+    `UPDATE collection_entries SET deleted_at = ?, updated_at = ?, server_seq = ${NEXT_SEQ} WHERE id = ?`
   )
   const bumpSeq = db.prepare(`UPDATE collection_entries SET server_seq = ${NEXT_SEQ} WHERE id = ?`)
   const update = db.prepare(
@@ -176,7 +176,9 @@ export function applyPush(
         const winner = toWire(other)
         if (keepsKey(e, winner)) {
           // Tombstone the loser first so its seq comes before the winner's.
-          tombstone.run(editTime(e), other.id)
+          // Both times set to the winner's edit time, as the desktop does, so the two sides agree on the row.
+          const at = editTime(e)
+          tombstone.run(at, at, other.id)
         } else {
           store(existing, printing.id, { ...e, deletedAt: editTime(e) })
           // Re-sequence the winner so, here too, the loser's tombstone comes first in a pull.
@@ -276,8 +278,8 @@ export async function syncRoute(req: Request, deps: AppDeps, path: string): Prom
     }
 
     const pkeys = (body as { pkeys?: unknown } | null)?.pkeys
-    if (!Array.isArray(pkeys) || !pkeys.every((k) => typeof k === 'string'))
-      throw new CollectionError('pkeys must be an array of strings')
+    if (!Array.isArray(pkeys) || !pkeys.every((k) => typeof k === 'string' && k.length <= MAX_PKEY))
+      throw new CollectionError(`pkeys must be an array of strings of at most ${MAX_PKEY} characters`)
     if (pkeys.length > MAX_PULL) return json({ error: 'too-many' }, 413)
     return json(pricesFor(deps.db, pkeys))
   } catch (e) {

@@ -247,6 +247,9 @@ export function createAccountService(deps: AccountDeps): AccountService {
     // the token in place, and start() revokes it if this sign-out doesn't get to.
     tokens.addPendingRevoke(old)
     forget()
+    // Shown at once: the push and revoke below can take up to their caps, and run in the background of the UI.
+    // A sign-in meanwhile still waits for them (see signIn).
+    set('signed-out')
     await inFlight?.catch(() => {})
 
     // One best-effort push for this account with the token still in memory, outside the run error
@@ -268,6 +271,7 @@ export function createAccountService(deps: AccountDeps): AccountService {
     }
 
     if (await revoke(old)) tokens.removePendingRevoke(old)
+    // Again, for the pending count and last-synced time the final push may have changed.
     set('signed-out')
     return status()
   }

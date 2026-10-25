@@ -1,13 +1,12 @@
 import { DurableObject } from 'cloudflare:workers'
 import type { SqlDb } from '../../../src/main/db/sql'
 import { createPrintingArtResolver, type PrintingArtResolver } from '../../../src/main/yugipedia/artResolver'
-import { createPriceClient } from '../../../src/main/prices/client'
 import { createTcgplayerLookup } from '../../../src/main/tcgplayer/catalog'
 import { createYugipediaClient } from '../../../src/main/yugipedia/client'
 import { handle, type Env } from './app'
 import { doSql } from './doSql'
 import { migrateServer } from './migrate'
-import { alarmQueue, runPriceAlarm, type PriceQueue } from './prices'
+import { alarmQueue, priceClientFor, runPriceAlarm, type PriceQueue } from './prices'
 import { handleSite } from './site/handler'
 import { routeHost } from './site/host'
 import { createReleaseSource, type Downloads } from './site/releases'
@@ -17,6 +16,8 @@ export interface WorkerEnv extends Env {
   ASSETS: Fetcher
   IMAGES: R2Bucket
   GITHUB_TOKEN?: string
+  /** Service binding to the eBay price Worker; see priceClientFor. */
+  PRICES?: Fetcher
 }
 
 /** The single Durable Object holding the catalog and every user's collection. */
@@ -45,7 +46,7 @@ export class Store extends DurableObject<WorkerEnv> {
   async alarm(): Promise<void> {
     await runPriceAlarm(
       this.db,
-      this.env.PRICE_WORKER_URL ? createPriceClient({ url: this.env.PRICE_WORKER_URL }) : null,
+      priceClientFor(this.env),
       this.ctx.storage,
       () => new Date()
     )

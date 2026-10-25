@@ -1,5 +1,5 @@
 import { app, shell, BrowserWindow, dialog } from 'electron'
-import { join } from 'path'
+import { join, resolve } from 'path'
 import { autoUpdater } from 'electron-updater'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import type { SyncStatus, UpdateStatus } from '@shared/types'
@@ -21,17 +21,26 @@ import { handleImageProtocol, registerImageScheme } from './images/protocol'
 import { createUpdater, updateMode, RELEASES_URL } from './updater'
 import { createHandlers, registerIpc, type AppDeps } from './ipc/handlers'
 import { seedFakeCollection } from './dev/fakeData'
+import { captureShots } from './dev/capture'
 
 // The app was "yugioh-collection-tracker" before it became Duel Binder; keep reading the same data folder.
 app.setPath('userData', join(app.getPath('appData'), 'yugioh-collection-tracker'))
 
 /** `npm run dev:fake-data`: a separate profile with a seeded collection; never in packaged builds. */
-const fakeData = !app.isPackaged && process.env['YGO_FAKE_DATA'] === '1'
-if (fakeData) app.setPath('userData', `${app.getPath('userData')}-fake-data`)
+/** `npm run site:shots`: screenshots of the fake-data profile for the marketing site, then quit. */
+const captureDir = !app.isPackaged ? process.env['YGO_CAPTURE_DIR'] : undefined
+const fakeData = !app.isPackaged && (process.env['YGO_FAKE_DATA'] === '1' || !!captureDir)
+if (captureDir) app.commandLine.appendSwitch('force-device-scale-factor', '2')
+// Capture uses its own profile so it never collides with a running dev session's instance lock.
+if (fakeData)
+  app.setPath('userData', `${app.getPath('userData')}-fake-data${captureDir ? '-capture' : ''}`)
 
 registerImageScheme()
 
 let mainWindow: BrowserWindow | null = null
+let windowShown: Promise<void> = Promise.resolve()
+let markSeeded: () => void = () => {}
+const seeded = new Promise<void>((r) => (markSeeded = r))
 
 function createWindow(): void {
   const win = new BrowserWindow({
@@ -68,6 +77,7 @@ function createWindow(): void {
   }
   win.on('maximize', sendMaximized)
   win.on('unmaximize', sendMaximized)
+  windowShown = new Promise((r) => win.once('show', () => r()))
   win.on('ready-to-show', () => {
     win.show()
   })
@@ -127,10 +137,17 @@ function bootstrap(): void {
   const client = createYgoClient()
   const emitSync = (s: SyncStatus): void => {
     // Seed before the renderer hears "idle" and refetches.
-    if (fakeData && s.state === 'idle') seedFakeCollection(db)
+    if (fakeData && s.state === 'idle') {
+      seedFakeCollection(db)
+      markSeeded()
+    }
     broadcast(SYNC_PROGRESS, s)
   }
-  if (fakeData) seedFakeCollection(db)
+  if (fakeData) {
+    seedFakeCollection(db)
+    // Already seeded by an earlier run, or just now: nothing to wait for.
+    if (db.prepare('SELECT 1 FROM collection_entries LIMIT 1').get()) markSeeded()
+  }
 
   const updater = createUpdater({
     autoUpdater,
@@ -196,6 +213,21 @@ function bootstrap(): void {
 
   createWindow()
   updater.start()
+
+  if (captureDir) {
+    const win = mainWindow
+    void Promise.all([windowShown, seeded])
+      .then(async () => {
+        if (!win) throw new Error('No window to capture')
+        await new Promise((r) => setTimeout(r, 2000))
+        console.log((await captureShots(win, resolve(captureDir))).join('\n'))
+        app.quit()
+      })
+      .catch((e) => {
+        console.error('Capture failed', e)
+        app.exit(1)
+      })
+  }
 
   recordSnapshot(db)
   void startupSync().catch((e) => console.error('Startup sync failed', e))

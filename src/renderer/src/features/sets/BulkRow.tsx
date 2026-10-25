@@ -66,7 +66,9 @@ export function BulkRow({
         )}
       </div>
       {showPrice && rarity.price !== null && (
-        <span className="text-xs text-muted-foreground tabular-nums">{formatUsd(rarity.price)}</span>
+        <span className="text-xs text-muted-foreground tabular-nums">
+          {formatUsd(rarity.price)}
+        </span>
       )}
       <Button
         variant="outline"

@@ -129,6 +129,20 @@ describe('SetChecklist bulk mode', () => {
     expect(screen.getByText('No cards in this set match \u201Czzz\u201D')).toBeInTheDocument()
   })
 
+  it('clicking a tile keeps focus in the box, so typing and Enter still work', async () => {
+    const { adjust } = setup()
+    await enterBulk()
+    const box = bulkBox()
+    expect(box).toHaveFocus()
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Add one Alpha Dragon Secret Rare (photo)' })
+    )
+    expect(box).toHaveFocus()
+    await userEvent.type(box, '10{Enter}')
+    expect(adjust).toHaveBeenLastCalledWith('Metal Raiders', 'en', PRINTING.gammaEN010, 1)
+    expect(box).toHaveFocus()
+  })
+
   it('a picked code survives filtering', async () => {
     const { adjust } = setup()
     await enterBulk()

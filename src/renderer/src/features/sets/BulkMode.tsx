@@ -98,10 +98,12 @@ export function BulkMode({ cards, pending, adjust }: BulkModeProps): React.JSX.E
   useEffect(() => {
     adjustRef.current = adjust
   })
-  const pick = useCallback(
-    (key: string, printingId: number) => setChosen((c) => ({ ...c, [key]: printingId })),
-    []
-  )
+  const inputRef = useRef<HTMLInputElement>(null)
+  const pick = useCallback((key: string, printingId: number) => {
+    setChosen((c) => ({ ...c, [key]: printingId }))
+    // The picker takes focus while open and hands it back on close; return it to the box after.
+    setTimeout(() => inputRef.current?.focus(), 0)
+  }, [])
 
   useEffect(() => {
     // jsdom has no scrollIntoView.
@@ -171,7 +173,8 @@ export function BulkMode({ cards, pending, adjust }: BulkModeProps): React.JSX.E
       }
       case 'Enter': {
         // A second Enter on the cleared box must not add the first tile by surprise.
-        if (query === '' && !moved.current) return
+        // moved only counts while the arrowed tile is still shown (else the highlight fell back).
+        if (query === '' && !(moved.current && highlightKey === highlight)) return
         const tile = tiles.find((t) => t.key === highlight)
         if (!tile) return
         e.preventDefault()
@@ -205,6 +208,7 @@ export function BulkMode({ cards, pending, adjust }: BulkModeProps): React.JSX.E
           />
           <Input
             type="search"
+            ref={inputRef}
             autoFocus
             value={query}
             onChange={(e) => changeQuery(e.target.value)}

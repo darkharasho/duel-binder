@@ -25,6 +25,7 @@ describe('BulkTile', () => {
     const tile = screen.getByRole('group', { name: 'Alpha Dragon Secret Rare' })
     expect(tile).toHaveAttribute('data-tile-key', '1001:Secret Rare')
     expect(tile).toHaveAttribute('data-owned', 'false')
+    expect(tile).not.toHaveAttribute('aria-current')
     expect(within(tile).getByText('MRD-001')).toBeInTheDocument()
     expect(within(tile).getByText('$40.00')).toBeInTheDocument()
     expect(within(tile).getByText('Secret Rare')).toBeInTheDocument()
@@ -75,6 +76,10 @@ describe('BulkTile', () => {
     render(<BulkTile {...props({ highlighted: true })} />)
     expect(screen.getByRole('group', { name: 'Alpha Dragon Secret Rare' })).toHaveAttribute(
       'data-highlighted',
+      'true'
+    )
+    expect(screen.getByRole('group', { name: 'Alpha Dragon Secret Rare' })).toHaveAttribute(
+      'aria-current',
       'true'
     )
   })

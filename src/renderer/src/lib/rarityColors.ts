@@ -18,3 +18,11 @@ export const RARITY_COLORS: Record<string, string> = {
 export function rarityColor(rarity: string): string {
   return RARITY_COLORS[rarity] ?? '#9ca3af'
 }
+
+/** Dark or white text, whichever reads better on the rarity's colour. */
+export function rarityTextColor(rarity: string): string {
+  const hex = rarityColor(rarity).slice(1)
+  const [r, g, b] = [0, 2, 4].map((i) => parseInt(hex.slice(i, i + 2), 16))
+  const brightness = (r * 299 + g * 587 + b * 114) / 1000
+  return brightness > 140 ? '#18181b' : '#ffffff'
+}

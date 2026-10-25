@@ -10,11 +10,11 @@
 - Dashboard with collection stats (total cards, unique cards, estimated value)
 - Modern, clean, easy-to-use UI
 - Work offline with local data storage
+- Web portal, sync and friends' binders via the `workers/portal` Cloudflare Worker (marketing site at duelbinder.com, app at app.duelbinder.com)
 
 ## Out of scope
 
 - Trading or marketplace features
-- Cloud sync or user accounts
 - Mobile version
 
 ## Suggested stack

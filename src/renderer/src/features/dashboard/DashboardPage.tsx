@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import type { CollectionStats } from '@shared/types'
 import type { NavigateFn } from '@/components/AppShell'
-import { cardArtUrl, useArtWash } from '@/components/artWash'
+import { cardArtUrl, useArtWash } from '@/components/artWashContext'
 import { CardArt } from '@/components/CardArt'
 import { TiltCard } from '@/components/TiltCard'
 import { scanFor } from '@/components/scanFor'

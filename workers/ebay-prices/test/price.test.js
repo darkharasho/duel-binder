@@ -91,6 +91,23 @@ describe('isSingleCard', () => {
     }
     expect(isSingleCard('LB-01 Blue-Eyes White Dragon Ultra Rare NM')).toBe(true)
   })
+
+  it('rejects listings of several copies', () => {
+    for (const t of [
+      '3x Cyber Dragon GFP2-EN178 Ghost Rare PLAYSET',
+      'Cyber Dragon 2x GFP2-EN178',
+      'Ash Blossom x3 RA01-EN008',
+      '3 x Ash Blossom RA01-EN008',
+      'Ash Blossom RA01-EN008 Playset',
+      'Set of 3 Ash Blossom RA01-EN008',
+      'Ash Blossom RA01-EN008 - 2 copies'
+    ]) {
+      expect(isSingleCard(t), t).toBe(false)
+    }
+    for (const t of ['Number 39: Utopia LC01-EN039 1st Edition', 'Dragon Master Knight DRLG-EN001 x1', 'LOB-EN001 1x Blue-Eyes']) {
+      expect(isSingleCard(t), t).toBe(true)
+    }
+  })
 })
 
 describe('namesOtherRarity', () => {

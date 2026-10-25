@@ -95,6 +95,31 @@ describe('TCGplayer catalog', () => {
     expect(fetchFn).toHaveBeenCalledTimes(1) // just the group list
   })
 
+  it('matches a rarity TCGplayer names with an extra word in front, when only one does', async () => {
+    const db = await seededDb()
+    const run = async (products: unknown[]): Promise<string | null> => {
+      db.prepare('DELETE FROM tcgplayer_groups').run()
+      await refreshTcgCatalog(db, {
+        version: '1',
+        fetchFn: catalogFetch([{ groupId: 10, modifiedOn: String(Math.random()) }], {
+          10: products
+        }) as unknown as typeof fetch
+      })
+      return createTcgplayerLookup(db)(printingId(db, 'LOB-EN005'))
+    }
+    // YGOPRODeck's "Ultra Rare" is TCGplayer's "Prismatic Ultra Rare".
+    expect(
+      await run([product(1, 'LOB-EN005', 'Prismatic Ultra Rare'), product(2, 'LOB-EN005', 'Super Rare')])
+    ).toBe('https://tcgplayer-cdn.tcgplayer.com/product/1_in_1000x1000.jpg')
+    // Two such rarities: no telling which.
+    expect(
+      await run([
+        product(1, 'LOB-EN005', 'Prismatic Ultra Rare'),
+        product(2, 'LOB-EN005', 'Platinum Ultra Rare')
+      ])
+    ).toBeNull()
+  })
+
   it('keeps going past a failed group and does not mark the catalog fresh', async () => {
     const db = await seededDb()
     const fetchFn = catalogFetch(

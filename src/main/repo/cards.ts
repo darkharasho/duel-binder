@@ -27,6 +27,8 @@ export interface PrintingDbRow {
   set_rarity: string
   set_rarity_code: string
   set_price: number | null
+  /** The TCGplayer market price, when known; absent from queries that don't select it. */
+  market_price?: number | null
   missing_from_api: number
   language: string
 }
@@ -57,7 +59,7 @@ export function rowToPrinting(row: PrintingDbRow): Printing {
     setCode: row.set_code,
     setRarity: row.set_rarity,
     setRarityCode: row.set_rarity_code,
-    setPrice: row.set_price,
+    setPrice: row.market_price ?? row.set_price,
     missingFromApi: row.missing_from_api === 1,
     language: isLanguage(row.language) ? row.language : 'en'
   }
@@ -133,7 +135,7 @@ export function getCardDetail(db: SqlDb, cardId: number): CardDetail | null {
     db
       .prepare(
         `SELECT p.id, p.card_id, p.set_name, p.set_code, ${RARITY_LABEL} AS set_rarity, p.set_rarity_code,
-                p.set_price, p.missing_from_api, p.language
+                p.set_price, p.market_price, p.missing_from_api, p.language
          FROM card_printings p WHERE p.card_id = ? ORDER BY p.set_code, p.id`
       )
       .all(cardId) as PrintingDbRow[]

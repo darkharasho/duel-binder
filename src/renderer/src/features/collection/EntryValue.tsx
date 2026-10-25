@@ -28,6 +28,8 @@ export function ValueText({
   )
 }
 
+const TCG_TIP = 'TCGplayer market price (1st Edition when TCGplayer lists one)'
+
 const NO_PRICE_TIPS = {
   'no-listings': 'No eBay listings found',
   pending: 'Checking eBay…',
@@ -45,7 +47,8 @@ function ebayPriceDetail(entry: EntryView): string {
 }
 
 /**
- * An entry's price. YGOPRODeck prices render as `ValueText`; eBay prices carry a
+ * An entry's price. TCGplayer market prices and YGOPRODeck prices render as plain amounts (approximate
+ * ones as `ValueText`) titled with their source; eBay prices carry a
  * visible "eBay" marker plus a tooltip with the asking-price label and checked date, or render as
  * "No price" with the reason.
  */
@@ -59,9 +62,12 @@ export function EntryValue({
   if (entry.priceSource !== 'ebay') {
     if (amount === null || entry.priceApproximate)
       return <ValueText amount={amount} approximate={entry.priceApproximate} />
-    // English fallback (no eBay price yet): say where the number comes from.
+    // Say where the number comes from.
     return (
-      <span className="tabular-nums" title="TCGplayer price via YGOPRODeck">
+      <span
+        className="tabular-nums"
+        title={entry.priceSource === 'tcgplayer' ? TCG_TIP : 'Set price via YGOPRODeck'}
+      >
         {formatUsd(amount)}
       </span>
     )
@@ -91,8 +97,9 @@ export function EntryValue({
   )
 }
 
-/** Visible eBay price details for an eBay-priced copy (entry detail); null for YGOPRODeck-priced ones. */
+/** Visible price details for a TCGplayer- or eBay-priced copy (entry detail); null for YGOPRODeck-priced ones. */
 export function EbayPriceLine({ entry }: { entry: EntryView }): React.JSX.Element | null {
+  if (entry.priceSource === 'tcgplayer') return <p className="text-xs text-muted-foreground">{TCG_TIP}</p>
   if (entry.priceSource !== 'ebay') return null
   return <p className="text-xs text-muted-foreground">{ebayPriceDetail(entry)}</p>
 }

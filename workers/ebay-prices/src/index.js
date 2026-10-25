@@ -23,10 +23,10 @@ export function resetTokenCache() {
 }
 
 async function cacheKey(p) {
-  const joined = ['v2', p.code, p.name.toLowerCase(), p.set, p.rarity, p.lang].join('|')
+  const joined = ['v3', p.code, p.name.toLowerCase(), p.set, p.rarity, p.lang].join('|')
   const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(joined))
   const hex = [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('')
-  return `v2:${hex}`
+  return `v3:${hex}`
 }
 
 const respond = (body, status = 200) =>

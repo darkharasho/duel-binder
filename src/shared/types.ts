@@ -24,6 +24,7 @@ export interface Printing {
   setCode: string
   setRarity: string
   setRarityCode: string
+  /** This printing's price: its TCGplayer market price, else YGOPRODeck's set price. */
   setPrice: number | null
   missingFromApi: boolean
   language: Language
@@ -63,7 +64,7 @@ export interface EntryView {
   originalArt: boolean
   unitPrice: number | null
   priceApproximate: boolean
-  priceSource: 'ygoprodeck' | 'ebay'
+  priceSource: 'tcgplayer' | 'ygoprodeck' | 'ebay'
   priceCheckedAt: string | null
   /** eBay listings behind the asking price (non-English copies only). */
   priceListingCount: number | null

@@ -211,3 +211,12 @@ test('needsPrice is true for a stale English printing', () => {
   db.prepare('INSERT INTO intl_prices (printing_id, price, listing_count, checked_at) VALUES (?, 1, 1, ?)').run(en, ago(8))
   expect(needsPrice(db, en, NOW)).toBe(true)
 })
+
+test('an English printing with a TCGplayer market price never asks eBay', async () => {
+  const en = owned('LOB-EN900', 'en')
+  db.prepare('UPDATE card_printings SET market_price = 3 WHERE id = ?').run(en)
+  const { client, lookup } = fakeClient()
+  expect(needsPrice(db, en, NOW)).toBe(false)
+  await refreshIntlPrices(db, client, { now: NOW })
+  expect(lookup).not.toHaveBeenCalled()
+})

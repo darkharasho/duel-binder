@@ -184,7 +184,8 @@ function checklistCards(
   const params = cardId === undefined ? [language, setName] : [language, setName, cardId]
   const printings = db
     .prepare(
-      `SELECT p.id, p.card_id, p.set_code, ${RARITY_LABEL} AS set_rarity, c.name, c.type, p.set_price,
+      `SELECT p.id, p.card_id, p.set_code, ${RARITY_LABEL} AS set_rarity, c.name, c.type,
+              COALESCE(p.market_price, p.set_price) AS set_price,
               c.tcgplayer_price AS card_price, c.atk, c.def, COALESCE(c.level, c.linkval) AS level,
               (SELECT i.image_id FROM card_images i WHERE i.card_id = c.id
                ORDER BY i.sort_order, i.image_id LIMIT 1) AS image_id

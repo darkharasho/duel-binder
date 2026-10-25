@@ -8,7 +8,7 @@ import { createLimiter } from '../images/limiter'
  * find the photo of each English printing; the photos themselves load from TCGplayer's image
  * server when shown, and are cached like every other image.
  */
-const BASE_URL = 'https://tcgcsv.com/tcgplayer/2'
+export const TCGCSV_URL = 'https://tcgcsv.com/tcgplayer/2'
 const REPO_URL = 'https://github.com/darkharasho/duel-binder'
 export const TCGPLAYER_IMAGE_PREFIX = 'https://tcgplayer-cdn.tcgplayer.com/product/'
 export const TCG_CATALOG_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000
@@ -34,6 +34,21 @@ export interface TcgCatalogResult {
   ok: boolean
 }
 
+/** Reads a TCGCSV listing's `results`; throws on HTTP errors and malformed bodies. */
+export function tcgcsvReader(
+  version: string,
+  fetchFn: typeof fetch = fetch
+): <T>(url: string) => Promise<T[]> {
+  const headers = { 'User-Agent': `DuelBinder/${version} (${REPO_URL})` }
+  return async <T>(url: string): Promise<T[]> => {
+    const res = await fetchFn(url, { headers, signal: AbortSignal.timeout(TIMEOUT_MS) })
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    const body = (await res.json()) as { success?: boolean; results?: T[] }
+    if (!Array.isArray(body.results)) throw new Error('invalid response')
+    return body.results
+  }
+}
+
 export function shouldRefreshTcgCatalog(db: Database.Database, now: Date): boolean {
   const last = getMeta(db, 'tcgplayer_synced_at')
   if (!last) return true
@@ -53,19 +68,11 @@ export async function refreshTcgCatalog(
   opts: { version: string; fetchFn?: typeof fetch; now?: Date }
 ): Promise<TcgCatalogResult> {
   const result: TcgCatalogResult = { groups: 0, updatedGroups: 0, failedGroups: 0, ok: false }
-  const fetchFn = opts.fetchFn ?? fetch
-  const headers = { 'User-Agent': `DuelBinder/${opts.version} (${REPO_URL})` }
-  const getJson = async <T>(url: string): Promise<T[]> => {
-    const res = await fetchFn(url, { headers, signal: AbortSignal.timeout(TIMEOUT_MS) })
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
-    const body = (await res.json()) as { success?: boolean; results?: T[] }
-    if (!Array.isArray(body.results)) throw new Error('invalid response')
-    return body.results
-  }
+  const getJson = tcgcsvReader(opts.version, opts.fetchFn)
 
   let groups: Group[]
   try {
-    groups = (await getJson<Group>(`${BASE_URL}/groups`)).filter(
+    groups = (await getJson<Group>(`${TCGCSV_URL}/groups`)).filter(
       (g) => Number.isSafeInteger(g.groupId) && typeof g.modifiedOn === 'string'
     )
   } catch (e) {
@@ -101,7 +108,7 @@ export async function refreshTcgCatalog(
       limit(async () => {
         let products: Product[]
         try {
-          products = await getJson<Product>(`${BASE_URL}/${g.groupId}/products`)
+          products = await getJson<Product>(`${TCGCSV_URL}/${g.groupId}/products`)
         } catch {
           result.failedGroups++
           return
@@ -128,6 +135,8 @@ export async function refreshTcgCatalog(
     for (const id of stored.keys()) {
       if (listed.has(id)) continue
       delProducts.run(id)
+      db.prepare('DELETE FROM tcgplayer_prices WHERE group_id = ?').run(id)
+      db.prepare('DELETE FROM tcgplayer_price_groups WHERE group_id = ?').run(id)
       db.prepare('DELETE FROM tcgplayer_groups WHERE group_id = ?').run(id)
     }
   })()
@@ -190,7 +199,7 @@ interface ProductRow {
 }
 
 /** Same-rarity products, the plain one (no variant label) first, then by product id. */
-function sameRarity(rows: ProductRow[], rarity: string): ProductRow[] {
+function sameRarity<T extends ProductRow>(rows: T[], rarity: string): T[] {
   const want = rarityKey(rarity)
   return rows
     .filter((r) => rarityKey(r.rarity) === want)
@@ -285,19 +294,21 @@ export function saveTcgVariants(db: Database.Database): number {
 }
 
 /**
- * The TCGplayer photo of an English printing: its own product for an art variant; otherwise the
- * plain product with the same card number and rarity, or the only product with that number when
- * TCGplayer names the rarity differently.
+ * The TCGplayer product of an English printing: its own product for an art variant; otherwise the
+ * plain product with the same card number and rarity; the only product with that number when
+ * TCGplayer names the rarity differently; or the plain product of the one rarity that ends in this
+ * printing's ("Prismatic Collector's Rare" for "Collector's Rare").
  */
-export function createTcgplayerLookup(
+export function createTcgProductResolver(
   db: SqlDb
-): (printingId: number) => string | null {
+): (printingId: number) => { product_id: number; group_id: number; image_url: string } | null {
   const printing = db.prepare(
     "SELECT set_code, set_rarity, tcg_product_id FROM card_printings WHERE id = ? AND language = 'en'"
   )
-  const byId = db.prepare('SELECT image_url FROM tcgplayer_products WHERE product_id = ?')
+  const byId = db.prepare('SELECT product_id, group_id, image_url FROM tcgplayer_products WHERE product_id = ?')
   const products = db.prepare(
-    'SELECT product_id, rarity, name, image_url FROM tcgplayer_products WHERE number = ? COLLATE NOCASE ORDER BY product_id'
+    `SELECT product_id, group_id, rarity, name, image_url FROM tcgplayer_products
+     WHERE number = ? COLLATE NOCASE ORDER BY product_id`
   )
   return (printingId) => {
     const p = printing.get(printingId) as
@@ -305,10 +316,20 @@ export function createTcgplayerLookup(
       | undefined
     if (!p || !p.set_code) return null
     if (p.tcg_product_id !== null)
-      return (byId.get(p.tcg_product_id) as { image_url: string } | undefined)?.image_url ?? null
-    const rows = products.all(p.set_code) as ProductRow[]
+      return (byId.get(p.tcg_product_id) as { product_id: number; group_id: number; image_url: string }) ?? null
+    const rows = products.all(p.set_code) as (ProductRow & { group_id: number })[]
     const same = sameRarity(rows, p.set_rarity)[0]
-    if (same) return same.image_url
-    return rows.length === 1 ? rows[0].image_url : null
+    if (same) return same
+    if (rows.length === 1) return rows[0]
+    // "Collector's Rare" is TCGplayer's "Prismatic Collector's Rare": use the one rarity ending in it.
+    const want = rarityKey(p.set_rarity)
+    const longer = new Set(rows.map((r) => r.rarity).filter((r) => want && rarityKey(r).endsWith(want)))
+    return longer.size === 1 ? sameRarity(rows, [...longer][0])[0] : null
   }
+}
+
+/** The TCGplayer photo of an English printing (see createTcgProductResolver). */
+export function createTcgplayerLookup(db: SqlDb): (printingId: number) => string | null {
+  const resolve = createTcgProductResolver(db)
+  return (printingId) => resolve(printingId)?.image_url ?? null
 }

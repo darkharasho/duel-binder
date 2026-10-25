@@ -33,6 +33,7 @@ const SELECT = `
          c.id AS id, c.name, c.type, c.frame_type, c.race, c.attribute, c.level, c.linkval, c.atk, c.def,
          c.archetype, c.desc, c.tcgplayer_price,
          p.id AS p_id, p.card_id, p.set_name, p.set_code, ${RARITY_LABEL} AS set_rarity, p.set_rarity_code, p.set_price,
+         p.market_price,
          p.missing_from_api, p.language,
          ip.printing_id AS ip_id, ip.price AS ip_price, ip.checked_at AS ip_checked_at,
          ip.listing_count AS ip_listing_count
@@ -47,19 +48,23 @@ function toView(r: EntryDbRow, priceStatus: string | null): EntryView {
   const english = printing.language === 'en'
   const hasRow = r.ip_id !== null && r.ip_id !== undefined
   const ebayPrice = hasRow ? (r.ip_price as number | null) : null
-  // intl_prices now holds eBay prices for every language. English uses eBay when it has a price and
-  // otherwise falls back to YGOPRODeck; non-English never falls back to the English (TCGplayer) price.
-  const ebay = english ? ebayPrice !== null : true
+  // English uses the printing's TCGplayer market price, then its eBay asking price, then YGOPRODeck.
+  // intl_prices holds eBay prices for every language; non-English never falls back to an English price.
+  const market = english ? ((r.market_price as number | null) ?? null) : null
+  const ebay = market === null && (english ? ebayPrice !== null : true)
   let unitPrice: number | null
   let approximate: boolean
   let noPriceReason: EntryView['noPriceReason'] = null
-  if (ebay) {
+  if (market !== null) {
+    unitPrice = market
+    approximate = false
+  } else if (ebay) {
     unitPrice = ebayPrice
     approximate = false
     if (unitPrice === null)
       noPriceReason = hasRow ? 'no-listings' : priceStatus === 'ok' ? 'pending' : 'unavailable'
   } else {
-    ;({ unitPrice, approximate } = priceFor(printing.setPrice, card.tcgplayerPrice))
+    ;({ unitPrice, approximate } = priceFor(r.set_price as number | null, card.tcgplayerPrice))
   }
   return {
     id: r.e_id,
@@ -73,7 +78,7 @@ function toView(r: EntryDbRow, priceStatus: string | null): EntryView {
     originalArt: r.e_original_art === 1,
     unitPrice,
     priceApproximate: approximate,
-    priceSource: ebay ? 'ebay' : 'ygoprodeck',
+    priceSource: market !== null ? 'tcgplayer' : ebay ? 'ebay' : 'ygoprodeck',
     priceCheckedAt: ebay ? ((r.ip_checked_at as string | null) ?? null) : null,
     priceListingCount: ebay ? ((r.ip_listing_count as number | null) ?? null) : null,
     noPriceReason,

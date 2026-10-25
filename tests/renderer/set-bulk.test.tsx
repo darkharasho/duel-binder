@@ -92,13 +92,67 @@ describe('SetChecklist bulk mode', () => {
     expect(screen.getByText('Changes save as you click.')).toBeInTheDocument()
     expect(row('Alpha Dragon Secret Rare')).toBeInTheDocument()
     expect(row('Alpha Dragon Ultra Rare')).toBeInTheDocument()
-    expect(
-      within(row('Alpha Dragon Secret Rare')).getByText('Secret Rare · MRD-001')
-    ).toBeInTheDocument()
+    expect(within(row('Alpha Dragon Secret Rare')).getByText('MRD-001')).toBeInTheDocument()
     expect(
       screen.getByRole('combobox', { name: 'Set code for Alpha Dragon Ultra Rare' })
     ).toHaveTextContent('MRD-E001')
     expect(screen.queryByRole('button', { name: /^Alpha Dragon/ })).not.toBeInTheDocument()
+  })
+
+  it('entering bulk focuses its own search and hides the header one', async () => {
+    setup()
+    await enterBulk()
+    expect(screen.getByRole('searchbox', { name: 'Type a card number or name' })).toHaveFocus()
+    expect(screen.queryByRole('searchbox', { name: 'Search this set' })).not.toBeInTheDocument()
+  })
+
+  it('the bulk search filters tiles by number and name', async () => {
+    setup()
+    await enterBulk()
+    const box = screen.getByRole('searchbox', { name: 'Type a card number or name' })
+    await userEvent.type(box, '2')
+    expect(screen.getAllByRole('group')).toHaveLength(1)
+    expect(row('Beta Knight Common')).toBeInTheDocument()
+    await userEvent.clear(box)
+    await userEvent.type(box, 'alpha')
+    expect(screen.getAllByRole('group').map((g) => g.getAttribute('aria-label'))).toEqual([
+      'Alpha Dragon Secret Rare',
+      'Alpha Dragon Ultra Rare'
+    ])
+    await userEvent.clear(box)
+    await userEvent.type(box, 'zzz')
+    expect(screen.getByText('No cards in this set match \u201Czzz\u201D')).toBeInTheDocument()
+  })
+
+  it('a picked code survives filtering', async () => {
+    const { adjust } = setup()
+    await enterBulk()
+    await userEvent.click(
+      screen.getByRole('combobox', { name: 'Set code for Alpha Dragon Ultra Rare' })
+    )
+    await userEvent.click(await screen.findByRole('option', { name: 'MRD-EN001' }))
+    const box = screen.getByRole('searchbox', { name: 'Type a card number or name' })
+    await userEvent.type(box, 'beta')
+    await userEvent.clear(box)
+    await userEvent.click(screen.getByRole('button', { name: 'Add one Alpha Dragon Ultra Rare' }))
+    expect(adjust).toHaveBeenCalledWith('Metal Raiders', 'en', PRINTING.alphaUltraEN001, 1)
+  })
+
+  it('the header search is kept across bulk mode and the bulk box starts empty', async () => {
+    setup()
+    await userEvent.type(await screen.findByRole('searchbox', { name: 'Search this set' }), 'gamma')
+    await enterBulk()
+    expect(screen.getByRole('searchbox', { name: 'Type a card number or name' })).toHaveValue('')
+    expect(screen.getAllByRole('group')).toHaveLength(4)
+    await userEvent.click(screen.getByRole('button', { name: 'Done' }))
+    expect(screen.getByRole('searchbox', { name: 'Search this set' })).toHaveValue('gamma')
+  })
+
+  it('clicking the photo adds one', async () => {
+    const { adjust } = setup()
+    await enterBulk()
+    await userEvent.click(screen.getByRole('button', { name: 'Add one Gamma Trap Rare (photo)' }))
+    expect(adjust).toHaveBeenCalledWith('Metal Raiders', 'en', PRINTING.gammaEN010, 1)
   })
 
   it("adjusts in the open set's language", async () => {

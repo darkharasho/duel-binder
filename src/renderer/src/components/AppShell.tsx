@@ -55,11 +55,7 @@ export function AppShell({ page, onNavigate, onAddCard, children }: AppShellProp
         <aside className="flex w-[200px] shrink-0 flex-col gap-6 border-r border-white/[0.06] px-4 pb-5 pt-1">
           <div className="flex items-center gap-2.5">
             <img src={logo} alt="" className="h-9 w-9" />
-            <span className="text-[13px] font-semibold leading-tight">
-              Duel
-              <br />
-              Binder
-            </span>
+            <span className="whitespace-nowrap text-[15px] font-semibold tracking-[-0.01em]">Duel Binder</span>
           </div>
           <nav aria-label="Main" className="flex flex-col">
             {NAV.map(({ page: p, label }) => (

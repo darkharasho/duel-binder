@@ -132,15 +132,25 @@ describe('BrowsePage', () => {
     await waitFor(() => expect(adjust).toHaveBeenCalledWith('Duelist Pack', 'ja', 11, 1))
   })
 
-  it('the panel shows the market price, and each printing its own price', async () => {
+  it('the panel prices the printing its art shows, and each printing its own price', async () => {
     setup([card(1, 'Dark Magician')])
     await userEvent.click(await screen.findByRole('button', { name: /Dark Magician/ }))
     const panel = await screen.findByRole('dialog')
-    expect(within(panel).getByText('Market price').parentElement).toHaveTextContent(
-      'Market price $7.50'
-    )
     const rows = await within(panel).findAllByRole('group')
+    expect(within(panel).getByText(/^Market price/).parentElement).toHaveTextContent(
+      'Market price · Ultra Rare $10.00'
+    )
     for (const row of rows) expect(within(row).getByText('$10.00')).toBeInTheDocument()
+  })
+
+  it('the panel falls back to the cheapest-printing price, saying so', async () => {
+    setup([card(1, 'Dark Magician', { defaultPrintingId: null })])
+    await userEvent.click(await screen.findByRole('button', { name: /Dark Magician/ }))
+    const panel = await screen.findByRole('dialog')
+    await within(panel).findAllByRole('group')
+    expect(within(panel).getByText(/^Market price/).parentElement).toHaveTextContent(
+      'Market price · cheapest printing $7.50'
+    )
   })
 
   it('More options… in the panel opens Add with the default printing', async () => {

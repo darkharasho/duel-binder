@@ -46,6 +46,9 @@ export function SetCardPanel({
     : card.type
   const focus = card.rarities.find((r) => r.rarity === rarity) ?? card.rarities[0]
   const rarities = focus ? [focus, ...card.rarities.filter((r) => r !== focus)] : card.rarities
+  // Rarities of one card can differ by orders of magnitude, so price the one being viewed.
+  const price = focus?.price ?? card.price
+  const priceLabel = focus?.price != null ? focus.rarity : 'cheapest printing'
 
   return (
     <Sheet open onOpenChange={(open) => !open && onClose()}>
@@ -64,10 +67,10 @@ export function SetCardPanel({
             <p className="font-mono text-[13px] text-muted-foreground">
               {setName} · {card.numberLabel}
             </p>
-            {card.price !== null && (
+            {price !== null && (
               <p className="text-sm">
-                <span className="text-muted-foreground">Market price</span>{' '}
-                <span className="font-medium tabular-nums">{formatUsd(card.price)}</span>
+                <span className="text-muted-foreground">Market price · {priceLabel}</span>{' '}
+                <span className="font-medium tabular-nums">{formatUsd(price)}</span>
               </p>
             )}
           </div>

@@ -56,6 +56,10 @@ export function BrowseCardPanel({
       .reduce((n, c) => n + c.quantity, 0)
   const total = (copies.data ?? []).reduce((n, c) => n + c.quantity, 0)
   const moreFor = card.defaultPrintingId ?? printings[0]?.id
+  // Price the printing the art shows; rarities of one card can differ by orders of magnitude.
+  const shown = printings.find((p) => p.id === card.defaultPrintingId)
+  const price = shown?.setPrice ?? card.price
+  const priceLabel = shown?.setPrice != null ? shown.setRarity : 'cheapest printing'
 
   const adjust = (p: Printing, delta: 1 | -1): void => {
     setPending((n) => n + 1)
@@ -85,10 +89,10 @@ export function BrowseCardPanel({
             printingId={card.defaultPrintingId}
             alt={card.name}
           />
-          {card.price !== null && (
+          {price !== null && (
             <p className="text-sm">
-              <span className="text-muted-foreground">Market price</span>{' '}
-              <span className="font-medium tabular-nums">{formatUsd(card.price)}</span>
+              <span className="text-muted-foreground">Market price · {priceLabel}</span>{' '}
+              <span className="font-medium tabular-nums">{formatUsd(price)}</span>
             </p>
           )}
 

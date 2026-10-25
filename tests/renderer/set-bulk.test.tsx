@@ -129,6 +129,16 @@ describe('SetChecklist bulk mode', () => {
     expect(screen.getByText('No cards in this set match \u201Czzz\u201D')).toBeInTheDocument()
   })
 
+  it('clearing the search shows the same tiles again instead of rebuilding them', async () => {
+    setup()
+    await enterBulk()
+    const tile = row('Alpha Dragon Secret Rare')
+    await userEvent.type(bulkBox(), '2')
+    expect(screen.queryByRole('group', { name: 'Alpha Dragon Secret Rare' })).toBeNull()
+    await userEvent.clear(bulkBox())
+    expect(row('Alpha Dragon Secret Rare')).toBe(tile)
+  })
+
   it('clicking a tile keeps focus in the box, so typing and Enter still work', async () => {
     const { adjust } = setup()
     await enterBulk()

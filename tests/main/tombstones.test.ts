@@ -166,6 +166,7 @@ const SCOPED = 'scoped'
 const LIVE = 'live rows of any owner (deleted_at IS NULL)'
 const FK = 'catalog FK check, tombstones intentionally count'
 const DDL = 'schema or migration DDL'
+const SYNC = 'sync, reads and writes tombstones explicitly'
 
 /**
  * Every file under src/main and workers/portal/src that names collection_entries, with how many
@@ -184,6 +185,7 @@ const ENTRY_REFS: Record<string, [count: number, kind: string]> = {
   'src/main/sync/intl.ts': [1, FK],
   'src/main/tcgplayer/catalog.ts': [1, FK],
   'workers/portal/src/catalogLoad.ts': [1, FK],
+  'workers/portal/src/sync.ts': [5, SYNC],
   'src/main/db/schema.ts': [9, DDL],
   'workers/portal/src/migrate.ts': [10, DDL]
 }

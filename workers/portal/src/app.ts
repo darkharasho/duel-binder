@@ -1,6 +1,7 @@
 import type { SqlDb } from '../../../src/main/db/sql'
 import { adminRoute } from './catalogLoad'
 import { rpcRoute } from './rpc'
+import { syncRoute } from './sync'
 import {
   exchangeDesktopCode,
   finishSignIn,
@@ -70,6 +71,8 @@ export async function handle(req: Request, deps: AppDeps): Promise<Response> {
     }
     return rpcRoute(req, deps, channel)
   }
+  if (url.pathname.startsWith('/api/sync/'))
+    return syncRoute(req, deps, url.pathname.slice('/api/sync/'.length))
   if (url.pathname.startsWith('/img/'))
     return imageRoute(req, deps, url.pathname.slice('/img/'.length))
   if (url.pathname.startsWith('/admin/')) return adminRoute(req, deps)

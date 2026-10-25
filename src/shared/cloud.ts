@@ -16,3 +16,72 @@ export interface Me {
   displayName: string | null
   avatarUrl: string | null
 }
+
+/** One collection entry as the sync protocol carries it. Times are ISO 8601 in `toISOString()` form. */
+export interface WireEntry {
+  uid: string
+  pkey: string
+  imageId: number
+  quantity: number
+  notes: string
+  createdAt: string
+  updatedAt: string
+  deletedAt: string | null
+}
+
+/** An entry from a pull, with the server sequence number it was last written at. */
+export type PulledEntry = WireEntry & { seq: number }
+
+export type PushResult =
+  | { uid: string; status: 'applied' }
+  /** The server kept its newer row for this uid. */
+  | { uid: string; status: 'stale'; current: WireEntry }
+  /** Another uid holds this printing+art and won; this uid is now a tombstone. */
+  | { uid: string; status: 'merged'; winner: WireEntry }
+  /** The server catalog lacks the pkey or image; the client retries later. */
+  | { uid: string; status: 'unknown-printing' }
+  /** The uid belongs to another account. */
+  | { uid: string; status: 'rejected' }
+
+export interface PushResponse {
+  results: PushResult[]
+}
+
+export interface PullResponse {
+  entries: PulledEntry[]
+  cursor: number
+  more: boolean
+}
+
+export interface WirePrice {
+  pkey: string
+  price: number | null
+  listingCount: number
+  checkedAt: string
+}
+
+export interface PricesResponse {
+  prices: WirePrice[]
+  /** The server's price_service_status. */
+  status: string | null
+}
+
+/** When the entry was last edited: the later of its update and delete times. */
+export function editTime(e: Pick<WireEntry, 'updatedAt' | 'deletedAt'>): string {
+  if (e.deletedAt === null) return e.updatedAt
+  return Date.parse(e.deletedAt) > Date.parse(e.updatedAt) ? e.deletedAt : e.updatedAt
+}
+
+/** Same uid: a replaces b when its edit time is later, or equal with a a tombstone and b live. */
+export function replaces(a: WireEntry, b: WireEntry): boolean {
+  const ta = Date.parse(editTime(a))
+  const tb = Date.parse(editTime(b))
+  return ta > tb || (ta === tb && a.deletedAt !== null && b.deletedAt === null)
+}
+
+/** Different uids on one printing+art: true when a is kept. Later edit time wins; on a tie the smaller uid wins. */
+export function keepsKey(a: WireEntry, b: WireEntry): boolean {
+  const ta = Date.parse(editTime(a))
+  const tb = Date.parse(editTime(b))
+  return ta > tb || (ta === tb && a.uid < b.uid)
+}

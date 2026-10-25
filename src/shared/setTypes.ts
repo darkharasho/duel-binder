@@ -9,17 +9,7 @@ export const SET_TYPES: readonly { value: SetType; label: string }[] = [
 ]
 
 /** Exact set names the rules below misfile. Keep short. */
-const OVERRIDES: Record<string, SetType> = {
-  'Speed Duel: Scars of Battle Launch Event participation card': 'collection',
-  'Speed Duel: Trials of the Kingdom Sneak Peek participation cards': 'collection',
-  'Trials of the Pharaoh - Match of the Millennium & Twisted Nightmares promotional card':
-    'collection',
-  'Trials of the Pharaoh - Speed Duel: Battle City Box promotional card': 'collection',
-  'Trials of the Pharaoh - Trials of the Kingdom promotional card': 'collection',
-  'Yu-Gi-Oh! 7 Trials to Glory: World Championship Tournament 2005 promotional cards': 'collection',
-  'Yu-Gi-Oh! Ultimate Masters: World Championship Tournament 2006 promotional cards': 'collection',
-  'Yu-Gi-Oh! World Championship Tournament 2004 promotional cards': 'collection'
-}
+const OVERRIDES: Record<string, SetType> = {}
 
 /** Ordered rules on the lower-cased name; first match wins, no match is a booster. */
 const RULES: [SetType, RegExp][] = [
@@ -30,7 +20,7 @@ const RULES: [SetType, RegExp][] = [
   ['tin', /\btins?\b|\bmega-tins?\b/],
   [
     'collection',
-    /\bcollection\b|\bduelist pack\b|\bbattles of legend\b|\bmaximum gold\b|\bhidden arsenal\b|\bghosts from the past\b|\bduel devastator\b|\bquarter century bonanza\b|\bmega pack\b|\bchampion pack\b|special edition|movie pack|card pack|limited pack|double pack/
+    /\bcollection\b|\bduelist pack\b|\bbattles of legend\b|\bmaximum gold\b|\bhidden arsenal\b|\bghosts from the past\b|\bduel devastator\b|\bquarter century bonanza\b|\bmega pack\b|\bchampion pack\b|special edition/
   ],
   [
     'promo',

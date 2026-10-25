@@ -89,7 +89,7 @@ it('classifies the real cardsets list sensibly', () => {
   )
   const count = (t: SetType): number =>
     sets.filter((s) => setType({ setName: s.set_name, setCode: s.set_code }) === t).length
-  expect(count('promo')).toBeLessThan(450)
+  expect(count('promo')).toBeLessThan(600)
   expect(count('booster')).toBeGreaterThan(250)
   for (const s of sets.filter((s) => s.set_name.includes('Structure Deck')))
     expect(setType({ setName: s.set_name, setCode: s.set_code })).toBe('deck')

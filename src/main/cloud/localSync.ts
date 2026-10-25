@@ -167,7 +167,17 @@ function park(db: SqlDb, owner: number, e: WireEntry): void {
   ).run(owner, e.uid, e.pkey, JSON.stringify(e), new Date().toISOString())
 }
 
-export type ApplyResult = 'applied' | 'kept-local' | 'pending' | 'ignored'
+/** `unchanged`: the local row is clean and already holds exactly this entry (e.g. the echo of our own push). */
+export type ApplyResult = 'applied' | 'unchanged' | 'kept-local' | 'pending' | 'ignored'
+
+const sameEntry = (x: WireEntry, y: WireEntry): boolean =>
+  x.pkey === y.pkey &&
+  x.imageId === y.imageId &&
+  x.quantity === y.quantity &&
+  x.notes === y.notes &&
+  x.createdAt === y.createdAt &&
+  x.updatedAt === y.updatedAt &&
+  x.deletedAt === y.deletedAt
 
 /**
  * Applies one server entry to `owner`'s rows, clean. A newer unpushed local edit of the same uid is
@@ -179,6 +189,11 @@ export function applyRemote(db: SqlDb, owner: number, e: WireEntry): ApplyResult
     const local = db.prepare(`${ROW_SELECT} WHERE e.uid = ?`).get(e.uid) as LocalRow | undefined
     if (local && local.owner_id !== owner) return 'ignored'
     if (!local && e.deletedAt !== null) return 'ignored'
+
+    if (local && local.dirty === 0 && sameEntry(e, toWire(local))) {
+      db.prepare('DELETE FROM sync_pending WHERE owner_id = ? AND uid = ?').run(owner, e.uid)
+      return 'unchanged'
+    }
 
     if (local && local.dirty === 1 && !replaces(e, toWire(local))) return 'kept-local'
 

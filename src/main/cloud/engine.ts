@@ -67,12 +67,13 @@ export async function syncOnce(
 
     const results = await client.push(fresh)
     pushed += fresh.length
+    // Recorded before the results are read, so a uid the server leaves out isn't pushed again this run.
+    for (const e of fresh) sent.set(e.uid, sameAs(e))
     const byUid = new Map(fresh.map((e) => [e.uid, e]))
     db.transaction(() => {
       for (const r of results) {
         const e = byUid.get(r.uid)
         if (!e) continue
-        sent.set(e.uid, sameAs(e))
         switch (r.status) {
           case 'applied':
             markPushed(db, e)

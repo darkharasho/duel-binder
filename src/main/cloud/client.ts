@@ -63,7 +63,9 @@ export function createCloudClient(opts: {
           method,
           headers,
           body: body === undefined ? undefined : JSON.stringify(body),
-          signal: controller.signal
+          signal: controller.signal,
+          // The bearer token never follows a redirect; a redirect (a captive portal, say) counts as offline.
+          redirect: 'error'
         })
       } catch (e) {
         throw offline(e)

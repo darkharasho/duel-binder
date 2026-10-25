@@ -209,6 +209,26 @@ test('remote edits apply clean, to the given owner, never dirty', () => {
   expect(listEntries(db, ALL)).toEqual([])
 })
 
+test('an echo of a clean row is unchanged and writes nothing', () => {
+  const r = wire({ quantity: 3, notes: 'binder 2' })
+  expect(applyRemote(db, 7, r)).toBe('applied')
+  const before = row(r.uid)
+  expect(applyRemote(db, 7, { ...r })).toBe('unchanged')
+  expect(row(r.uid)).toEqual(before)
+
+  // A waiting copy of the same uid is no longer needed.
+  db.prepare(
+    "INSERT INTO sync_pending (owner_id, uid, pkey, entry, received_at) VALUES (7, ?, 'x', '{}', ?)"
+  ).run(r.uid, t0)
+  expect(applyRemote(db, 7, r)).toBe('unchanged')
+  expect(pendingCount(db, 7)).toBe(0)
+
+  // A different entry, or the same entry over a dirty row, is not an echo.
+  expect(applyRemote(db, 7, { ...r, notes: 'binder 3' })).toBe('applied')
+  db.prepare('UPDATE collection_entries SET dirty = 1 WHERE uid = ?').run(r.uid)
+  expect(applyRemote(db, 7, { ...r, notes: 'binder 3' })).toBe('kept-local')
+})
+
 test('a newer local unpushed edit beats an older remote one', () => {
   const a = addAs(7, 'LOB-EN005', DM, later, 2)
   const [mine] = dirtyEntries(db, 7, 10)
@@ -231,7 +251,7 @@ test('a remote tombstone removes the local entry for good', () => {
   expect(listEntries(db, ALL)).toEqual([])
   expect(dirtyEntries(db, 7, 10)).toEqual([])
   // Re-applying the same tombstone is harmless.
-  expect(applyRemote(db, 7, tomb)).toBe('applied')
+  expect(applyRemote(db, 7, tomb)).toBe('unchanged')
   expect(row(a)!.deleted_at).toBe(later.toISOString())
 
   // A tombstone for a uid this computer never had writes nothing.

@@ -129,7 +129,7 @@ describe('syncOnce', () => {
 
     const out = await sync(a)
 
-    expect(out).toMatchObject({ pushed: 3, pushedLive: 2, pulled: 2, pending: 0, changed: true })
+    expect(out).toMatchObject({ pushed: 3, pushedLive: 2, pulled: 2, pending: 0, changed: false })
     const local = localRows(a)
     expect(local).toHaveLength(2)
     expect(local.every((r) => r.dirty === 0)).toBe(true)
@@ -382,6 +382,45 @@ describe('syncOnce', () => {
     expect(getMeta(a, 'price_service_status')).toBe('ok')
   })
 
+  it('the echo of our own push changes nothing and records no snapshot', async () => {
+    const a = await desktop()
+    addEntry(a, { printingId: pid(a, 'LOB-EN005'), imageId: DM, quantity: 2 }, T1)
+    const snapshots = (): number =>
+      (a.prepare('SELECT COUNT(*) AS n FROM value_snapshots').get() as { n: number }).n
+    const before = snapshots()
+
+    const out = await sync(a)
+
+    expect(out).toMatchObject({ pushed: 1, pulled: 1, changed: false })
+    expect(snapshots()).toBe(before)
+    expect(localRows(a)).toEqual([expect.objectContaining({ quantity: 2, dirty: 0 })])
+  })
+
+  it('a push result the server leaves out does not make the loop push forever', async () => {
+    const a = await desktop()
+    addEntry(a, { printingId: pid(a, 'LOB-EN005'), imageId: DM, quantity: 2 }, T1)
+    addEntry(a, { printingId: pid(a, 'LOB-EN119'), imageId: POT, quantity: 1 }, T1)
+    const real = client()
+    let pushes = 0
+    const dropping: CloudClient = {
+      ...real,
+      push: async (entries) => {
+        if (++pushes > 5) throw new Error('push loop did not terminate')
+        // The server answers for every entry but the first.
+        return (await real.push(entries)).slice(1)
+      }
+    }
+
+    const out = await sync(a, dropping)
+
+    expect(pushes).toBe(1)
+    expect(out.pushed).toBe(2)
+    // The unanswered row stays dirty for the next run.
+    expect(localRows(a).filter((r) => r.dirty === 1)).toHaveLength(1)
+    expect(await sync(a)).toMatchObject({ pushed: 1 })
+    expect(localRows(a).every((r) => r.dirty === 0)).toBe(true)
+  })
+
   it('a 401 throws CloudAuthError and changes nothing locally', async () => {
     const a = await desktop()
     addEntry(a, { printingId: pid(a, 'LOB-EN005'), imageId: DM, quantity: 2 }, T1)
@@ -416,6 +455,20 @@ describe('createCloudClient', () => {
     expect(calls[0].headers.get('authorization')).toBe('Bearer tok')
     expect(calls[0].headers.get('content-type')).toBe('application/json')
     expect(await calls[0].json()).toEqual({ entries: [] })
+  })
+
+  it('never lets the bearer token follow a redirect', async () => {
+    const seen: (RequestInit | undefined)[] = []
+    const f = (async (_: RequestInfo | URL, init?: RequestInit) => {
+      seen.push(init)
+      // What fetch does with redirect: 'error' when the server redirects.
+      if (init?.redirect === 'error') throw new TypeError('unexpected redirect')
+      return Response.json({ id: 1 })
+    }) as typeof fetch
+    await expect(
+      createCloudClient({ baseUrl: PORTAL, token: 't', fetch: f }).me()
+    ).rejects.toBeInstanceOf(CloudOfflineError)
+    expect(seen[0]?.redirect).toBe('error')
   })
 
   it('maps statuses to errors', async () => {

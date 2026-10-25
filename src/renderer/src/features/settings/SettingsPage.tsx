@@ -67,6 +67,17 @@ function PriceServiceSection(): React.JSX.Element {
     onError: (e: Error) => toast.error(ipcMessage(e))
   })
   const s = settings.data
+  const account = useQuery({ queryKey: queryKeys.account, queryFn: () => api.account.status() })
+  const signedIn = account.data?.user != null
+  if (signedIn) {
+    return (
+      <Section title="eBay prices">
+        <p className="text-sm text-muted-foreground">
+          While you&apos;re signed in, prices come from your Duel Binder account.
+        </p>
+      </Section>
+    )
+  }
   return (
     <Section title="eBay prices">
       <p className="text-sm text-muted-foreground">
@@ -163,6 +174,10 @@ function DesktopSettings(): React.JSX.Element {
   return (
     <div className="max-w-2xl space-y-8 px-8 pb-10 pt-3">
       <h1 className="text-2xl font-semibold tracking-tight">Settings</h1>
+
+      <Section title="Account">
+        <AccountSection />
+      </Section>
 
       <Section title="App">
         <Row label="Version">{version.data ?? '—'}</Row>

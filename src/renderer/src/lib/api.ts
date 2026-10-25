@@ -20,6 +20,7 @@ export const queryKeys = {
   card: (id: number) => ['card', id] as const,
   forCard: (id: number) => ['forCard', id] as const,
   update: ['update'] as const,
+  account: ['account'] as const,
   priceSettings: ['prices', 'settings'] as const,
   browse: (f: Omit<BrowseFilters, 'offset' | 'limit'>) => ['browse', f] as const,
   browseFacets: ['browse', 'facets'] as const

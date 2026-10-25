@@ -5,12 +5,13 @@ import { doSql } from './doSql'
 import { migrateServer } from './migrate'
 import { handleSite } from './site/handler'
 import { routeHost } from './site/host'
-import { createReleaseSource } from './site/releases'
+import { createReleaseSource, type Downloads } from './site/releases'
 
 export interface WorkerEnv extends Env {
   STORE: DurableObjectNamespace<Store>
   SITE_URL: string
   ASSETS: Fetcher
+  GITHUB_TOKEN?: string
 }
 
 /** The single Durable Object holding the catalog and every user's collection. */
@@ -33,12 +34,14 @@ export class Store extends DurableObject<WorkerEnv> {
   }
 }
 
-const downloads = createReleaseSource({ fetch: (i, n) => fetch(i, n), now: () => new Date() })
+// Created on the first site request, once env (and the optional GitHub token) is known.
+let downloads: (() => Promise<Downloads>) | null = null
 
 export default {
   fetch(req, env) {
     const route = routeHost(new URL(req.url), env.SITE_URL)
     if (route.kind === 'site') {
+      downloads ??= createReleaseSource({ fetch: (i, n) => fetch(i, n), now: () => new Date(), token: env.GITHUB_TOKEN })
       return handleSite(req, { appUrl: env.PUBLIC_URL, assets: env.ASSETS, downloads })
     }
     if (route.kind === 'redirect') return Response.redirect(route.location, 301)

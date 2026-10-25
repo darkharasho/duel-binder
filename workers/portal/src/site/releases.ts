@@ -31,7 +31,8 @@ export function pickDownloads(release: unknown): Downloads {
   return out
 }
 
-export function createReleaseSource(deps: { fetch: typeof fetch; now: () => Date }): () => Promise<Downloads> {
+/** `token` is an optional GitHub PAT; without it the API allows 60 requests an hour per IP. */
+export function createReleaseSource(deps: { fetch: typeof fetch; now: () => Date; token?: string }): () => Promise<Downloads> {
   let lastGood: Downloads | null = null
   let cached: Downloads | null = null
   let expires = 0
@@ -40,8 +41,10 @@ export function createReleaseSource(deps: { fetch: typeof fetch; now: () => Date
   async function refresh(): Promise<Downloads> {
     const t = deps.now().getTime()
     try {
+      const headers: Record<string, string> = { accept: 'application/vnd.github+json', 'user-agent': 'duel-binder-portal' }
+      if (deps.token) headers.authorization = `Bearer ${deps.token}`
       const res = await deps.fetch(API_URL, {
-        headers: { accept: 'application/vnd.github+json', 'user-agent': 'duel-binder-portal' },
+        headers,
         signal: AbortSignal.timeout(3000),
       })
       if (!res.ok) throw new Error(`GitHub responded ${res.status}`)

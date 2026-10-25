@@ -47,6 +47,15 @@ describe('createReleaseSource', () => {
   }
   const ok = () => Promise.resolve(new Response(JSON.stringify(releaseV021), { status: 200 }))
 
+  it('sends the GitHub token only when one is set', async () => {
+    const { get, fetchMock } = setup(ok)
+    await get()
+    expect(new Headers((fetchMock.mock.calls[0] as unknown as [string, RequestInit])[1].headers).get('authorization')).toBeNull()
+    const withToken = vi.fn(ok)
+    await createReleaseSource({ fetch: withToken as unknown as typeof fetch, now: () => new Date(), token: 'tok' })()
+    expect(new Headers((withToken.mock.calls[0] as unknown as [string, RequestInit])[1].headers).get('authorization')).toBe('Bearer tok')
+  })
+
   it('requests the latest release with the expected headers', async () => {
     const { get, fetchMock } = setup(ok)
     const d = await get()

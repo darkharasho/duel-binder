@@ -23,5 +23,5 @@ new_sqlite_classes = ["Store"]
 
 [vars]
 SITE_URL = "https://duelbinder.com"
-PUBLIC_URL = "http://localhost:8787"
-DISCORD_CLIENT_ID = ""
+PUBLIC_URL = "https://app.duelbinder.com"
+DISCORD_CLIENT_ID = "1563797080420655266"

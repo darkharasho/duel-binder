@@ -30,6 +30,13 @@ CREATE TABLE value_snapshots (user_id INTEGER NOT NULL REFERENCES users(id), dat
   }
 ]
 
+/**
+ * Desktop versions with `foreignKeysOff` and no `server` override that only ever run on a fresh
+ * server: every desktop step runs at creation, before any catalog or user data exists, so their
+ * table rebuilds cannot hit a foreign key. Never add a version that could run on a populated server.
+ */
+const FRESH_ONLY_FK_OFF = new Set([3])
+
 /** Run each not-yet-recorded step in its own transaction; never issues PRAGMA. */
 export function runSteps(db: SqlDb, steps: (Migration | ServerStep)[]): void {
   db.exec('CREATE TABLE IF NOT EXISTS server_migrations (name TEXT PRIMARY KEY)')
@@ -38,6 +45,19 @@ export function runSteps(db: SqlDb, steps: (Migration | ServerStep)[]): void {
   for (const step of steps) {
     const name = 'name' in step ? step.name : `desktop-${step.version}`
     if (isDone.get(name)) continue
+    // Foreign keys are always on in a Durable Object (PRAGMA foreign_keys can't be changed), so a
+    // step that rebuilds a referenced table would fail once rows exist. Such a step needs a
+    // server-specific version.
+    if (
+      !('name' in step) &&
+      step.foreignKeysOff &&
+      step.server === undefined &&
+      !FRESH_ONLY_FK_OFF.has(step.version)
+    ) {
+      throw new Error(
+        `${name} needs foreignKeysOff, which the server can't do; give it a server override`
+      )
+    }
     const sql = 'name' in step ? step.sql : step.server === undefined ? step.sql : step.server
     db.transaction(() => {
       if (sql !== false) db.exec(sql)

@@ -97,6 +97,14 @@ function upsertRows(deps: AppDeps, table: CatalogTable, rows: unknown[]): void {
         }
         continue
       }
+      for (const u of table.unique ?? []) {
+        if (row[u] === undefined || row[u] === null) continue
+        const otherKey = table.key.map((k) => `"${k}" IS NOT ?`).join(' OR ')
+        db.prepare(`DELETE FROM ${table.name} WHERE "${u}" = ? AND (${otherKey})`).run(
+          row[u],
+          ...table.key.map((k) => row[k])
+        )
+      }
       const updates = cols.filter((c) => !table.key.includes(c)).map((c) => `"${c}" = excluded."${c}"`)
       const conflict = table.key.map((k) => `"${k}"`).join(', ')
       db.prepare(

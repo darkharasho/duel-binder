@@ -306,6 +306,25 @@ describe('uploadCatalog', () => {
     work.close()
   })
 
+  it('sends deletions before upserts', async () => {
+    const work = await workDb()
+    const base = snapshot(work)
+    work.prepare("UPDATE card_printings SET set_price = 99.5 WHERE set_code = 'LOB-EN005'").run()
+    work.prepare("DELETE FROM sets WHERE language = 'en' AND set_name = 'Starter Deck: Yugi'").run()
+    const { fetch, calls } = recordingFetch(ok)
+    expect(await uploadCatalog({ url: URL_BASE, token: TOKEN, work, base, fetch })).toEqual({
+      upserted: 1,
+      deleted: 1
+    })
+    expect(calls.map((c) => `${c.path} ${c.body.table ?? ''}`)).toEqual([
+      '/admin/catalog/delete sets',
+      '/admin/catalog/rows card_printings',
+      '/admin/catalog/finish '
+    ])
+    base.close()
+    work.close()
+  })
+
   it('does not retry a 400', async () => {
     const work = await workDb()
     const { fetch, calls } = recordingFetch(() =>

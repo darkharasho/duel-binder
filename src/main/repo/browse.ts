@@ -102,7 +102,7 @@ function whereClause(f: BrowseFilters): { sql: string; params: unknown[] } {
 /** One page of every card in the database, filtered and sorted. Cards missing the sort value go last. */
 export function browseCards(db: SqlDb, f: BrowseFilters, scope: Scope = LOCAL): BrowsePage {
   const { sql, params } = whereClause(f)
-  const sortCol = SORT_SQL[f.sort] ?? SORT_SQL.name
+  const sortCol = Object.hasOwn(SORT_SQL, f.sort) ? SORT_SQL[f.sort] : SORT_SQL.name
   const dir = f.dir === 'desc' ? 'DESC' : 'ASC'
   const limit = Math.min(Math.max(1, Math.floor(f.limit ?? 120)), MAX_LIMIT)
   const offset = Math.max(0, Math.floor(f.offset ?? 0))

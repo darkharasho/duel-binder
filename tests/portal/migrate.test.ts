@@ -42,4 +42,15 @@ describe('migrateServer', () => {
     expect(db.prepare("SELECT name FROM server_migrations WHERE name = 'desktop-99'").get()).toBeTruthy()
     db.close()
   })
+
+  it('a desktop step with foreignKeysOff and no server override is refused', () => {
+    const db = freshDb()
+    expect(() => runSteps(db, [{ version: 99, sql: 'CREATE TABLE nope(x)', foreignKeysOff: true }])).toThrow(
+      /desktop-99.*foreignKeysOff/
+    )
+    expect(tableNames(db)).not.toContain('nope')
+    runSteps(db, [{ version: 99, sql: 'CREATE TABLE nope(x)', foreignKeysOff: true, server: 'CREATE TABLE yes(x)' }])
+    expect(tableNames(db)).toContain('yes')
+    db.close()
+  })
 })

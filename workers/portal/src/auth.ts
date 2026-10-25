@@ -46,7 +46,10 @@ export async function currentUser(req: Request, deps: AppDeps): Promise<{ id: nu
   return row ? { id: row.user_id } : null
 }
 
-export function startSignIn(deps: AppDeps): Response {
+export function startSignIn(req: Request, deps: AppDeps): Response {
+  // The state cookie must be set on the host Discord sends the user back to (PUBLIC_URL).
+  const publicOrigin = new URL(deps.env.PUBLIC_URL).origin
+  if (new URL(req.url).origin !== publicOrigin) return redirect(`${publicOrigin}/auth/discord/start`, [])
   const state = randomToken()
   const params = new URLSearchParams({
     response_type: 'code',

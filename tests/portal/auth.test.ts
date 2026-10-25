@@ -80,6 +80,13 @@ describe('Discord sign-in and sessions', () => {
     expect(raw).toMatch(/Max-Age=600/)
   })
 
+  it('start on another host redirects to PUBLIC_URL before setting a cookie', async () => {
+    const res = await handle(new Request('https://portal.example.workers.dev/auth/discord/start'), deps)
+    expect(res.status).toBe(302)
+    expect(res.headers.get('location')).toBe(`${BASE}/auth/discord/start`)
+    expect(res.headers.getSetCookie()).toEqual([])
+  })
+
   it('callback creates user and session, then /api/me returns them', async () => {
     const state = await startState()
     const res = await get(`/auth/discord/callback?code=c&state=${state}`, `oauth_state=${state}`)

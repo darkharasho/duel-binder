@@ -38,9 +38,9 @@ function chunk<T>(items: T[], size: number): T[][] {
 }
 
 /**
- * Sends what changed in `work` since `base` to the portal's admin endpoints: upserts table by
- * table in `CATALOG_TABLES` order, then deletions in reverse order (children before parents),
- * then `/admin/catalog/finish` with the work database's version and sync time. Each request is
+ * Sends what changed in `work` since `base` to the portal's admin endpoints: deletions in
+ * reverse `CATALOG_TABLES` order (children before parents), then upserts table by table in
+ * `CATALOG_TABLES` order, then `/admin/catalog/finish` with the work database's version and sync time. Each request is
  * retried on network errors, 429 and 5xx; the first failure that can't be retried rejects.
  */
 export async function uploadCatalog(
@@ -77,16 +77,17 @@ export async function uploadCatalog(
   const diffs = CATALOG_TABLES.map((t) => ({ t, ...diffTable(opts.work, opts.base, t) }))
   let upserted = 0
   let deleted = 0
-  for (const { t, upserts } of diffs) {
-    for (const rows of chunk(upserts, batch)) {
-      await post('/admin/catalog/rows', { table: t.name, rows })
-      upserted += rows.length
-    }
-  }
+  // Deletes go first so a freed unique value (e.g. a logo's image_key) is gone before its new row lands.
   for (const { t, deletes } of [...diffs].reverse()) {
     for (const keys of chunk(deletes, batch)) {
       await post('/admin/catalog/delete', { table: t.name, keys })
       deleted += keys.length
+    }
+  }
+  for (const { t, upserts } of diffs) {
+    for (const rows of chunk(upserts, batch)) {
+      await post('/admin/catalog/rows', { table: t.name, rows })
+      upserted += rows.length
     }
   }
 

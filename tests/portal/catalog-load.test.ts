@@ -126,6 +126,54 @@ describe('admin catalog loader', () => {
     expect(db.prepare('SELECT 1 FROM cards WHERE id = ?').get(id)).toBeDefined()
   })
 
+  it('an image_key that moves to a new set_name in one batch replaces the old row', async () => {
+    for (const table of ['pack_art', 'set_logos', 'konami_logos']) {
+      const first = await call('/admin/catalog/rows', {
+        table,
+        rows: [{ set_name: 'Old', image_url: 'u', image_key: 'K' }, { set_name: 'Other', image_url: 'u', image_key: 'L' }]
+      })
+      expect(first.status).toBe(200)
+      const res = await call('/admin/catalog/rows', {
+        table,
+        rows: [{ set_name: 'New', image_url: 'u2', image_key: 'K' }]
+      })
+      expect(res.status, table).toBe(200)
+      expect(db.prepare(`SELECT set_name, image_url, image_key FROM ${table} ORDER BY set_name`).all()).toEqual([
+        { set_name: 'New', image_url: 'u2', image_key: 'K' },
+        { set_name: 'Other', image_url: 'u', image_key: 'L' }
+      ])
+    }
+  })
+
+  it('stores a non-English printing under the V10 pkey and updates it in place', async () => {
+    await loadCatalog()
+    const card = sourceRows('cards')[0] as { id: number }
+    const row = {
+      card_id: card.id,
+      set_name: 'Starter Deck: Yugi (DE)',
+      set_code: 'SDY-DE001',
+      set_rarity: 'Ultra Rare',
+      set_rarity_code: '(UR)',
+      set_price: null,
+      missing_from_api: 0,
+      language: 'de',
+      tcg_product_id: null,
+      variant: null
+    }
+    const pkey = `de|${card.id}|${row.set_name}|${row.set_code}|${row.set_rarity}`
+    expect((await call('/admin/catalog/rows', { table: 'card_printings', rows: [row] })).status).toBe(200)
+    const stored = db
+      .prepare("SELECT id, pkey FROM card_printings WHERE language = 'de'")
+      .all() as { id: number; pkey: string }[]
+    expect(stored).toHaveLength(1)
+    expect(stored[0].pkey).toBe(pkey)
+    const res = await call('/admin/catalog/rows', { table: 'card_printings', rows: [{ ...row, set_price: 3.25 }] })
+    expect(res.status).toBe(200)
+    expect(db.prepare("SELECT id, pkey, set_price FROM card_printings WHERE language = 'de'").all()).toEqual([
+      { id: stored[0].id, pkey, set_price: 3.25 }
+    ])
+  })
+
   it('rejects unknown tables and columns', async () => {
     const bad = async (path: string, body: unknown) => (await call(path, body)).status
     expect(await bad('/admin/catalog/rows', { table: 'users', rows: [{ id: 1 }] })).toBe(400)

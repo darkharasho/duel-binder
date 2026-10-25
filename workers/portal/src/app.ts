@@ -26,7 +26,7 @@ const json = (body: unknown, status = 200): Response =>
 export async function handle(req: Request, deps: AppDeps): Promise<Response> {
   const url = new URL(req.url)
   if (req.method === 'GET' && url.pathname === '/api/health') return json({ ok: true })
-  if (req.method === 'GET' && url.pathname === '/auth/discord/start') return startSignIn(deps)
+  if (req.method === 'GET' && url.pathname === '/auth/discord/start') return startSignIn(req, deps)
   if (req.method === 'GET' && url.pathname === '/auth/discord/callback')
     return finishSignIn(req, deps)
   if (req.method === 'POST' && url.pathname === '/auth/logout') return signOut(req, deps)

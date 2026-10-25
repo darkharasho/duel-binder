@@ -5,11 +5,15 @@
  * `columns` are the writable columns of the desktop table. `card_printings` leaves out `id`
  * (each store assigns its own) and `pkey` (generated); its `key` is `pkey`, which the loader
  * computes from language/card_id/set_name/set_code/set_rarity.
+ *
+ * `unique` lists columns with their own UNIQUE constraint. The desktop rebuilds those tables, so a
+ * value can move to a different key; the loader drops the old holder before upserting.
  */
 export interface CatalogTable {
   name: string
   key: string[]
   columns: string[]
+  unique?: string[]
 }
 
 export const CATALOG_TABLES: CatalogTable[] = [
@@ -42,9 +46,24 @@ export const CATALOG_TABLES: CatalogTable[] = [
       'unmatched_rows'
     ]
   },
-  { name: 'pack_art', key: ['set_name'], columns: ['set_name', 'image_url', 'image_key'] },
-  { name: 'set_logos', key: ['set_name'], columns: ['set_name', 'image_url', 'image_key'] },
-  { name: 'konami_logos', key: ['set_name'], columns: ['set_name', 'image_url', 'image_key'] },
+  {
+    name: 'pack_art',
+    key: ['set_name'],
+    columns: ['set_name', 'image_url', 'image_key'],
+    unique: ['image_key']
+  },
+  {
+    name: 'set_logos',
+    key: ['set_name'],
+    columns: ['set_name', 'image_url', 'image_key'],
+    unique: ['image_key']
+  },
+  {
+    name: 'konami_logos',
+    key: ['set_name'],
+    columns: ['set_name', 'image_url', 'image_key'],
+    unique: ['image_key']
+  },
   { name: 'tcgplayer_groups', key: ['group_id'], columns: ['group_id', 'modified_on'] },
   {
     name: 'tcgplayer_products',

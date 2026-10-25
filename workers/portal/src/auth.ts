@@ -12,9 +12,10 @@ const DESKTOP_CODE_TTL_MS = 120_000
 const PORT_RE = /^\d{4,5}$/
 const STATE_RE = /^[A-Za-z0-9_-]{16,128}$/
 const CHALLENGE_RE = /^[A-Za-z0-9_-]{43}$/
-/** Upper bounds on what the token exchange will hash. */
+/** Upper bound on the code the token exchange will hash. */
 const MAX_CODE_LEN = 128
-const MAX_VERIFIER_LEN = 256
+/** A PKCE code verifier, per RFC 7636 section 4.1. */
+const VERIFIER_RE = /^[A-Za-z0-9\-._~]{43,128}$/
 
 const toBase64Url = (bytes: Uint8Array): string =>
   btoa(String.fromCharCode(...bytes))
@@ -346,9 +347,10 @@ export async function exchangeDesktopCode(req: Request, deps: AppDeps): Promise<
 
   const now = deps.now()
   const nowIso = now.toISOString()
-  const verifierOk =
-    typeof verifier === 'string' && verifier.length > 0 && verifier.length <= MAX_VERIFIER_LEN
-  const challenge = verifierOk ? toBase64Url(await sha256(verifier)) : null
+  const challenge =
+    typeof verifier === 'string' && VERIFIER_RE.test(verifier)
+      ? toBase64Url(await sha256(verifier))
+      : null
   const token = randomToken()
   const tokenHash = await sha256Hex(token)
 

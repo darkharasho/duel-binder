@@ -229,6 +229,61 @@ describe('desktop sign-in and bearer tokens', () => {
     expect(res.status).toBe(400)
   })
 
+  it('a missing, non-string or malformed verifier still spends the code', async () => {
+    for (const bad of [
+      {},
+      { verifier: 42 },
+      { verifier: 'short' },
+      { verifier: VERIFIER.replace('-', '+') }
+    ]) {
+      const code = await desktopCode()
+      const res = await post('/auth/desktop/token', { code, ...bad })
+      expect(res.status).toBe(400)
+      expect(await res.json()).toEqual({ error: 'invalid-code' })
+      expect(db.prepare('SELECT COUNT(*) AS n FROM desktop_codes').get()).toEqual({ n: 0 })
+      expect((await post('/auth/desktop/token', { code, verifier: VERIFIER })).status).toBe(400)
+    }
+    expect(db.prepare('SELECT COUNT(*) AS n FROM sessions').get()).toEqual({ n: 0 })
+  })
+
+  it('a verifier outside RFC 7636 is refused even when its hash matches', async () => {
+    await desktopCode() // creates the user
+    const userId = (db.prepare('SELECT id FROM users').get() as { id: number }).id
+    for (const verifier of ['short-but-matching', 'x'.repeat(129), 'has space'.padEnd(50, 'y')]) {
+      const code = `forged-${verifier.length}`
+      db.prepare(
+        'INSERT INTO desktop_codes (code_hash, user_id, challenge, expires_at) VALUES (?, ?, ?, ?)'
+      ).run(
+        sha256Hex(code),
+        userId,
+        createHash('sha256').update(verifier).digest('base64url'),
+        new Date(clock.getTime() + 60_000).toISOString()
+      )
+      expect((await post('/auth/desktop/token', { code, verifier })).status).toBe(400)
+    }
+    expect(db.prepare('SELECT COUNT(*) AS n FROM sessions').get()).toEqual({ n: 0 })
+  })
+
+  it('a forged desktop cookie falls through to the web flow', async () => {
+    for (const forged of [
+      `53682.evil.com/x.${CHALLENGE}`,
+      `53682.${STATE}.${CHALLENGE}.extra`,
+      `80.${STATE}.${CHALLENGE}`
+    ]) {
+      const start = await get('/auth/discord/start')
+      const oauthState = cookieOf(start, 'oauth_state')!
+      const res = await get(`/auth/discord/callback?code=c&state=${oauthState}`, {
+        cookie: `oauth_state=${oauthState}; desktop_auth=${forged}`
+      })
+      expect(res.status).toBe(302)
+      const location = res.headers.get('location')!
+      expect(location).not.toContain('127.0.0.1')
+      expect(location).toBe('/')
+      expect(cookieOf(res, 'session')).toBeTruthy()
+    }
+    expect(db.prepare('SELECT COUNT(*) AS n FROM desktop_codes').get()).toEqual({ n: 0 })
+  })
+
   it('an expired code is refused', async () => {
     const code = await desktopCode()
     clock = new Date(clock.getTime() + 121_000)

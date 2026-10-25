@@ -4,8 +4,9 @@ import { toast } from 'sonner'
 import type { Mock } from 'vitest'
 import type { Api } from '@shared/ipc'
 import type { Language } from '@shared/languages'
-import type { ChecklistCard } from '@shared/types'
+import type { ChecklistCard, SetSummary } from '@shared/types'
 import { SetChecklist } from '@/features/sets/SetChecklist'
+import { SetsPage } from '@/features/sets/SetsPage'
 import { queryKeys } from '@/lib/api'
 import { createMockApi, renderWithProviders } from './mockApi'
 import { metalRaidersChecklist, PRINTING } from './setFixtures'
@@ -17,6 +18,7 @@ function createAdjust(): {
   adjust: Mock<Api['sets']['adjust']>
   pending: () => number
   releaseNext: () => void
+  rejectNext: (e: Error) => void
 } {
   const owned = new Map<number, number>()
   for (const card of metalRaidersChecklist.cards)
@@ -31,11 +33,12 @@ function createAdjust(): {
     return { ...card, rarities, owned: rarities.reduce((n, r) => n + r.owned, 0) }
   }
 
-  const queue: (() => void)[] = []
+  const queue: ((e?: Error) => void)[] = []
   const adjust = vi.fn<Api['sets']['adjust']>(
     (_setName: string, _language: Language, printingId: number, delta: 1 | -1) =>
-      new Promise<ChecklistCard>((resolve) => {
-        queue.push(() => {
+      new Promise<ChecklistCard>((resolve, reject) => {
+        queue.push((e) => {
+          if (e) return reject(e)
           owned.set(printingId, owned.get(printingId)! + delta)
           const card = metalRaidersChecklist.cards.find((c) =>
             c.rarities.some((r) => r.codes.some((x) => x.printingId === printingId))
@@ -47,7 +50,8 @@ function createAdjust(): {
   return {
     adjust,
     pending: () => queue.length,
-    releaseNext: () => queue.shift()!()
+    releaseNext: () => queue.shift()!(),
+    rejectNext: (e) => queue.shift()!(e)
   }
 }
 
@@ -104,7 +108,7 @@ describe('SetChecklist bulk mode', () => {
     expect(adjust).toHaveBeenCalledWith('Metal Raiders', 'ja', PRINTING.gammaEN010, 1)
   })
 
-  it('serialises rapid clicks and shows the server count', async () => {
+  it('counts rapid clicks at once, serialises them and settles on the server count', async () => {
     const { adjust, releaseNext, pending } = setup()
     await enterBulk()
     const plus = screen.getByRole('button', { name: 'Add one Gamma Trap Rare' })
@@ -113,10 +117,15 @@ describe('SetChecklist bulk mode', () => {
     await userEvent.click(plus)
     expect(adjust).toHaveBeenCalledTimes(1)
     expect(adjust).toHaveBeenCalledWith('Metal Raiders', 'en', PRINTING.gammaEN010, 1)
-    expect(within(row('Gamma Trap Rare')).getByText('0')).toBeInTheDocument()
+    // Every click shows before any answer arrives.
+    expect(within(row('Gamma Trap Rare')).getByText('3')).toBeInTheDocument()
+    expect(screen.getByText(/2 of 3/)).toBeInTheDocument()
 
+    // An answer for the first click keeps the two still in flight on top.
     releaseNext()
     await waitFor(() => expect(adjust).toHaveBeenCalledTimes(2))
+    expect(within(row('Gamma Trap Rare')).getByText('3')).toBeInTheDocument()
+
     expect(pending()).toBe(1)
     releaseNext()
     await waitFor(() => expect(adjust).toHaveBeenCalledTimes(3))
@@ -166,9 +175,11 @@ describe('SetChecklist bulk mode', () => {
     expect(within(row('Alpha Dragon Secret Rare')).getByText('1')).toBeInTheDocument()
 
     expect(checklist).toHaveBeenCalledTimes(1)
-    expect(invalidate).toHaveBeenCalledWith({ queryKey: [...queryKeys.setsList] })
+    // The set list is patched, not refetched; other lists refresh once the card's clicks are done.
+    expect(invalidate).not.toHaveBeenCalledWith({ queryKey: [...queryKeys.setsList] })
     expect(invalidate).not.toHaveBeenCalledWith({ queryKey: ['sets'] })
     expect(invalidate).toHaveBeenCalledWith({ queryKey: ['stats'] })
+    expect(invalidate.mock.calls.filter(([f]) => f?.queryKey?.[0] === 'stats')).toHaveLength(1)
   })
 
   it('a code picked in the dropdown is the one adjusted', async () => {
@@ -180,6 +191,35 @@ describe('SetChecklist bulk mode', () => {
     await userEvent.click(await screen.findByRole('option', { name: 'MRD-001' }))
     await userEvent.click(screen.getByRole('button', { name: 'Add one Alpha Dragon Ultra Rare' }))
     expect(adjust).toHaveBeenCalledWith('Metal Raiders', 'en', PRINTING.alphaUltra001, 1)
+  })
+
+  it('a failed adjust rolls its click back, keeping later clicks', async () => {
+    const { releaseNext, rejectNext } = setup()
+    await enterBulk()
+    const plus = screen.getByRole('button', { name: 'Add one Gamma Trap Rare' })
+    await userEvent.click(plus)
+    await userEvent.click(plus)
+    expect(within(row('Gamma Trap Rare')).getByText('2')).toBeInTheDocument()
+    rejectNext(new Error('Database is locked'))
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Database is locked'))
+    await waitFor(() => expect(within(row('Gamma Trap Rare')).getByText('1')).toBeInTheDocument())
+    releaseNext()
+    await waitFor(() => expect(screen.getByText(/2 of 3/)).toBeInTheDocument())
+    expect(within(row('Gamma Trap Rare')).getByText('1')).toBeInTheDocument()
+  })
+
+  it('the side panel stepper counts a click before the server answers', async () => {
+    const { releaseNext } = setup()
+    await userEvent.click(await screen.findByRole('button', { name: /Gamma Trap/ }))
+    const panel = await screen.findByRole('dialog')
+    await userEvent.click(within(panel).getByRole('button', { name: 'Add one Gamma Trap Rare' }))
+    expect(within(panel).getByText('You have 1')).toBeInTheDocument()
+    expect(
+      within(within(panel).getByRole('group', { name: 'Gamma Trap Rare' })).getByText('1')
+    ).toBeInTheDocument()
+    releaseNext()
+    await waitFor(() => expect(screen.getByText(/2 of 3/)).toBeInTheDocument())
+    expect(within(panel).getByText('You have 1')).toBeInTheDocument()
   })
 
   it('a failed adjust toasts and keeps the count', async () => {
@@ -198,6 +238,34 @@ describe('SetChecklist bulk mode', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Add one Gamma Trap Rare' }))
     releaseNext()
     await waitFor(() => expect(screen.getByText(/2 of 3/)).toBeInTheDocument())
+  })
+
+  it('a +/- patches the set list instead of fetching it again', async () => {
+    const adj = createAdjust()
+    const list = vi.fn(async () => [metalRaidersChecklist.set])
+    const api = createMockApi({
+      sets: { list, checklist: async () => metalRaidersChecklist, adjust: adj.adjust }
+    })
+    const { client } = renderWithProviders(
+      <SetsPage onAddCard={() => {}} onAddMissing={() => {}} />,
+      { api }
+    )
+    await userEvent.click(await screen.findByRole('button', { name: /Metal Raiders/ }))
+    await enterBulk()
+    const plus = screen.getByRole('button', { name: 'Add one Gamma Trap Rare' })
+    await userEvent.click(plus)
+    await userEvent.click(plus)
+    adj.releaseNext()
+    await waitFor(() => expect(adj.adjust).toHaveBeenCalledTimes(2))
+    adj.releaseNext()
+    await waitFor(() => expect(adj.pending()).toBe(0))
+    await waitFor(() =>
+      expect(client.getQueryData<SetSummary[]>(queryKeys.setsList)?.[0]).toMatchObject({
+        ownedCards: 2,
+        ownedRarities: 2
+      })
+    )
+    expect(list).toHaveBeenCalledTimes(1)
   })
 
   it('remove is disabled when the rarity is owned but the picked code is not', async () => {

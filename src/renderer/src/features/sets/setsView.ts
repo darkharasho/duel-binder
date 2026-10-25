@@ -149,7 +149,11 @@ export function sortTiles(tiles: Tile[], sort: ChecklistSort, dir: SortDir): Til
 }
 
 /** Cards in the chosen order, as `sortTiles` orders one tile per card. */
-export function sortCards(cards: ChecklistCard[], sort: ChecklistSort, dir: SortDir): ChecklistCard[] {
+export function sortCards(
+  cards: ChecklistCard[],
+  sort: ChecklistSort,
+  dir: SortDir
+): ChecklistCard[] {
   const tiles = cards.map((card) => ({
     key: String(card.cardId),
     card,
@@ -177,6 +181,38 @@ export function replaceChecklistCard(cl: SetChecklist, card: ChecklistCard): Set
     },
     cards
   }
+}
+
+/**
+ * The card as it will be after one +/- of a printing, never below zero (removing an unowned
+ * printing is a no-op on the server too). Entry ids are left for the server's answer to fill.
+ */
+export function adjustChecklistCard(
+  card: ChecklistCard,
+  printingId: number,
+  delta: 1 | -1
+): ChecklistCard {
+  let change = 0
+  const rarities = card.rarities.map((r) => {
+    if (!r.codes.some((c) => c.printingId === printingId)) return r
+    const codes = r.codes.map((c) => {
+      if (c.printingId !== printingId) return c
+      const owned = Math.max(0, c.owned + delta)
+      change = owned - c.owned
+      return { ...c, owned }
+    })
+    return { ...r, codes, owned: r.owned + change }
+  })
+  return change === 0 ? card : { ...card, rarities, owned: card.owned + change }
+}
+
+/** The set list with one set's owned counts taken from its (fresher) summary. */
+export function patchSetSummary(list: SetSummary[], set: SetSummary): SetSummary[] {
+  return list.map((s) =>
+    s.language === set.language && s.setName === set.setName
+      ? { ...s, ownedCards: set.ownedCards, ownedRarities: set.ownedRarities }
+      : s
+  )
 }
 
 /** Whether a checklist card matches a search: name, number label or any of its set codes. */

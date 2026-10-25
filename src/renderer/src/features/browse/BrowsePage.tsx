@@ -338,6 +338,7 @@ export function BrowsePage({ onAddCard }: Props): React.JSX.Element {
             />
           ) : unowned ? (
             <BrowseCardPanel
+              key={unowned.id}
               card={unowned}
               nav={nav}
               onMoreOptions={(printingId) => {

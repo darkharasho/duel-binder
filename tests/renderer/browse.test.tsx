@@ -10,6 +10,7 @@ import type {
   Printing
 } from '@shared/types'
 import { BrowsePage } from '@/features/browse/BrowsePage'
+import { toast } from 'sonner'
 import { createMockApi, renderWithProviders, type DeepPartial } from './mockApi'
 import type { Api } from '@shared/ipc'
 
@@ -105,6 +106,128 @@ const setup = (
   return { browse, onAddCard }
 }
 
+/** The checklist card sets.adjust answers with, holding one printing's owned count. */
+const answer = (printingId: number, owned: number): ChecklistCard =>
+  ({
+    owned,
+    rarities: [{ owned, codes: [{ printingId, setCode: 'LOB-EN0010', owned }] }]
+  }) as ChecklistCard
+
+/**
+ * A server holding Dark Magician's LOB copies: sets.adjust settles one call per release (or
+ * rejection), and forCard reports what has been settled.
+ */
+function lobServer(): {
+  api: DeepPartial<Api>
+  adjust: ReturnType<typeof vi.fn>
+  release: () => void
+  reject: (e: Error) => void
+} {
+  let owned = 0
+  const waiting: ((e?: Error) => void)[] = []
+  const adjust = vi.fn(
+    (_s: string, _l: string, printingId: number, delta: 1 | -1) =>
+      new Promise<ChecklistCard>((resolve, rej) => {
+        waiting.push((e) => {
+          if (e) return rej(e)
+          owned = Math.max(0, owned + delta)
+          resolve(answer(printingId, owned))
+        })
+      })
+  )
+  const forCard = vi.fn(async () => (owned > 0 ? [{ ...copy, quantity: owned }] : []))
+  return {
+    api: { sets: { adjust }, collection: { forCard } },
+    adjust,
+    release: () => waiting.shift()!(),
+    reject: (e) => waiting.shift()!(e)
+  }
+}
+
+const LOB_ROW = 'Dark Magician LOB-EN0010 Ultra Rare'
+
+async function openLobStepper(server: ReturnType<typeof lobServer>): Promise<{
+  panel: HTMLElement
+  plus: HTMLElement
+  minus: HTMLElement
+  count: () => string | null
+  browse: ReturnType<typeof vi.fn>
+}> {
+  const { browse } = setup([card(1, 'Dark Magician')], 1, server.api)
+  await userEvent.click(await screen.findByRole('button', { name: /Dark Magician/ }))
+  const panel = await screen.findByRole('dialog')
+  const row = await within(panel).findByRole('group', { name: LOB_ROW })
+  return {
+    panel,
+    plus: within(row).getByRole('button', { name: `Add one ${LOB_ROW}` }),
+    minus: within(row).getByRole('button', { name: `Remove one ${LOB_ROW}` }),
+    count: () => row.querySelector('[aria-busy]')!.textContent,
+    browse
+  }
+}
+
+describe('BrowseCardPanel steppers', () => {
+  it('counts a click before the server answers', async () => {
+    const server = lobServer()
+    const { panel, plus, count } = await openLobStepper(server)
+    await userEvent.click(plus)
+    expect(count()).toBe('1')
+    expect(within(panel).getByText('You have 1')).toBeInTheDocument()
+    expect(server.adjust).toHaveBeenCalledWith('Legend of Blue Eyes', 'en', 10, 1)
+    server.release()
+    await waitFor(() => expect(within(panel).getByText('1')).toHaveAttribute('aria-busy', 'false'))
+    expect(count()).toBe('1')
+  })
+
+  it('rapid clicks add up, are sent one at a time, and settle on the server count', async () => {
+    const server = lobServer()
+    const { panel, plus, minus, count } = await openLobStepper(server)
+    await userEvent.click(plus)
+    await userEvent.click(plus)
+    await userEvent.click(plus)
+    await userEvent.click(minus)
+    expect(count()).toBe('2')
+    expect(server.adjust).toHaveBeenCalledTimes(1)
+    for (let i = 1; i <= 4; i++) {
+      server.release()
+      if (i < 4) await waitFor(() => expect(server.adjust).toHaveBeenCalledTimes(i + 1))
+      expect(count()).toBe('2')
+    }
+    await waitFor(() => expect(within(panel).getByText('You have 2')).toBeInTheDocument())
+    expect(server.adjust.mock.calls.map((c) => c[3])).toEqual([1, 1, 1, -1])
+  })
+
+  it('a failed click rolls back and toasts', async () => {
+    const server = lobServer()
+    const { panel, plus, count } = await openLobStepper(server)
+    await userEvent.click(plus)
+    await userEvent.click(plus)
+    expect(count()).toBe('2')
+    server.release()
+    await waitFor(() => expect(server.adjust).toHaveBeenCalledTimes(2))
+    server.reject(new Error('Database is locked'))
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Database is locked'))
+    await waitFor(() => expect(count()).toBe('1'))
+    expect(within(panel).getByText('You have 1')).toBeInTheDocument()
+  })
+
+  it('patches the owned count into Browse instead of refetching every page', async () => {
+    const server = lobServer()
+    const { plus, browse } = await openLobStepper(server)
+    const fetched = browse.mock.calls.length
+    await userEvent.click(plus)
+    await userEvent.click(plus)
+    server.release()
+    await waitFor(() => expect(server.adjust).toHaveBeenCalledTimes(2))
+    server.release()
+    const tile = screen.getAllByRole('button', { name: /Dark Magician/, hidden: true })[0]
+    await waitFor(() => expect(within(tile).getByText('×2')).toBeInTheDocument())
+    // Give any background refetch a chance to run.
+    await new Promise((r) => setTimeout(r, 20))
+    expect(browse).toHaveBeenCalledTimes(fetched)
+  })
+})
+
 describe('BrowsePage', () => {
   it('shows every card with stats, price, owned count and the total', async () => {
     setup([
@@ -135,7 +258,7 @@ describe('BrowsePage', () => {
   })
 
   it('clicking a card not owned opens a panel with a stepper per printing, English first', async () => {
-    const adjust = vi.fn(async () => ({}) as ChecklistCard)
+    const adjust = vi.fn(async (_s: string, _l: string, id: number) => answer(id, 1))
     setup([card(1, 'Dark Magician')], 1, { sets: { adjust } })
     await userEvent.click(await screen.findByRole('button', { name: /Dark Magician/ }))
     const panel = await screen.findByRole('dialog')

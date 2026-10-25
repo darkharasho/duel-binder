@@ -7,6 +7,7 @@ import type { ReadableStream as WebReadableStream } from 'node:stream/web'
 import { KONAMI_LOGO_PREFIX } from '../konami/logos'
 import { PACK_ART_PREFIX } from '../konami/packArt'
 import { createLimiter, type Limiter } from './limiter'
+import { setImageKey } from '../../shared/setImages'
 
 /** 'cropped' is the artwork alone, without the card frame. */
 export type ImageSize = 'small' | 'full' | 'cropped'
@@ -31,16 +32,10 @@ export function parseImageUrl(url: string): { size: ImageSize; id: number } | nu
 }
 
 const SET_KEY_RE = /^[A-Za-z0-9_-]+$/
-const SET_IMAGE_RE = /^https:\/\/images\.ygoprodeck\.com\/images\/sets\/([A-Za-z0-9_-]+)\.jpg$/
-
-/** Stem of a YGOPRODeck set-image URL; null for anything outside that folder. */
-export function setImageKey(sourceUrl: string | null): string | null {
-  if (sourceUrl === null) return null
-  return SET_IMAGE_RE.exec(sourceUrl)?.[1] ?? null
-}
+export { setImageKey }
 
 const YUGIPEDIA_IMAGE_PREFIX = 'https://ms.yugipedia.com/'
-const REPO_URL = 'https://github.com/darkharasho/yugioh-collection-tracker'
+const REPO_URL = 'https://github.com/darkharasho/duel-binder'
 
 /** 'yp-' + first 20 hex chars of sha1(url); null unless url starts with https://ms.yugipedia.com/ */
 export function yugipediaImageKey(url: string | null): string | null {
@@ -162,7 +157,7 @@ export function createImageCache(opts: {
         const prefix =
           source === 'yp-' ? YUGIPEDIA_IMAGE_PREFIX : source === 'yc-' ? PACK_ART_PREFIX : KONAMI_LOGO_PREFIX
         if (remote === null || !remote.startsWith(prefix)) return null
-        const headers = { 'User-Agent': `YugiohCollectionTracker/${opts.version ?? 'unknown'} (${REPO_URL})` }
+        const headers = { 'User-Agent': `DuelBinder/${opts.version ?? 'unknown'} (${REPO_URL})` }
         if (source === 'km-') {
           if (!opts.prepareLogo) return null // shown only once its white is cut out
           return cached(`set/${key}`, remote, path.join(opts.dir, 'sets', `${key}.png`), headers, opts.prepareLogo)
@@ -183,7 +178,7 @@ export function createImageCache(opts: {
       if (remote === null || key === null) return null
       const ext = /\.(png|jpe?g|gif|webp)$/i.exec(remote)?.[1]?.toLowerCase() ?? 'png'
       return cached(`printing/${key}`, remote, path.join(opts.dir, 'printings', `${key}.${ext}`), {
-        'User-Agent': `YugiohCollectionTracker/${opts.version ?? 'unknown'} (${REPO_URL})`
+        'User-Agent': `DuelBinder/${opts.version ?? 'unknown'} (${REPO_URL})`
       })
     },
 

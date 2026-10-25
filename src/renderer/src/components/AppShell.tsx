@@ -1,5 +1,5 @@
 import { useLayoutEffect, useMemo, useRef, useState } from 'react'
-import logo from '@/assets/logo.png'
+import logo from '@/assets/logo.svg'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { ArtWash } from './ArtWash'
@@ -54,11 +54,11 @@ export function AppShell({ page, onNavigate, onAddCard, children }: AppShellProp
       <div className="flex min-h-0 flex-1">
         <aside className="flex w-[200px] shrink-0 flex-col gap-6 border-r border-white/[0.06] px-4 pb-5 pt-1">
           <div className="flex items-center gap-2.5">
-            <img src={logo} alt="" className="h-9 w-auto" />
+            <img src={logo} alt="" className="h-9 w-9" />
             <span className="text-[13px] font-semibold leading-tight">
-              Yugioh
+              Duel
               <br />
-              Collection Tracker
+              Binder
             </span>
           </div>
           <nav aria-label="Main" className="flex flex-col">

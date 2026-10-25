@@ -30,6 +30,14 @@ describe('browseCards', () => {
     ).toEqual(['Dark Magician'])
   })
 
+  it('falls back to name for a sort value that is a prototype key', async () => {
+    const db = await seededDb()
+    for (const sort of ['__proto__', 'constructor', 'toString']) {
+      const page = browseCards(db, { sort: sort as 'name', dir: 'asc' })
+      expect(names(page)).toEqual(['Dark Magician', "Harpie's Feather Duster", 'Pot of Greed'])
+    }
+  })
+
   it('sorts by price with unpriced cards last either way', async () => {
     const db = await seededDb()
     expect(names(browseCards(db, { sort: 'price', dir: 'desc' }))).toEqual([

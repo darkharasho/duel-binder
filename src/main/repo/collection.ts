@@ -1,9 +1,10 @@
-import type Database from 'better-sqlite3'
-import { RARITY_LABEL } from '../db/database'
+import type { SqlDb } from '../db/sql'
+import { RARITY_LABEL } from '../db/schema'
 import { LANGUAGES } from '../../shared/languages'
 import { priceFor } from '../../shared/pricing'
 import type { AddEntryInput, CollectionFilters, EntryView, Facets, UpdateEntryInput } from '../../shared/types'
 import { getMeta } from '../db/meta'
+import { LOCAL, type Scope } from './scope'
 import { buildFtsQuery, rowToCard, rowToPrinting, type CardDbRow, type PrintingDbRow } from './cards'
 
 export class CollectionError extends Error {
@@ -76,13 +77,13 @@ function toView(r: EntryDbRow, priceStatus: string | null): EntryView {
   }
 }
 
-export function getEntry(db: Database.Database, id: number): EntryView | null {
-  const row = db.prepare(`${SELECT} WHERE e.id = ?`).get(id) as EntryDbRow | undefined
+export function getEntry(db: SqlDb, id: number, scope: Scope = LOCAL): EntryView | null {
+  const row = db.prepare(`${SELECT} WHERE e.id = ? AND ${scope.where('e')}`).get(id) as EntryDbRow | undefined
   return row ? toView(row, getMeta(db, 'price_service_status')) : null
 }
 
-function requireEntry(db: Database.Database, id: number): EntryView {
-  const e = getEntry(db, id)
+function requireEntry(db: SqlDb, id: number, scope: Scope): EntryView {
+  const e = getEntry(db, id, scope)
   if (!e) throw new CollectionError(`Entry ${id} not found`)
   return e
 }
@@ -91,7 +92,7 @@ function assertQuantity(q: number): void {
   if (!Number.isInteger(q) || q < 1) throw new CollectionError('Quantity must be a whole number of at least 1')
 }
 
-function assertLink(db: Database.Database, printingId: number, imageId: number): void {
+function assertLink(db: SqlDb, printingId: number, imageId: number): void {
   const p = db.prepare('SELECT card_id FROM card_printings WHERE id = ?').get(printingId) as
     | { card_id: number }
     | undefined
@@ -102,40 +103,50 @@ function assertLink(db: Database.Database, printingId: number, imageId: number):
   if (!img || img.card_id !== p.card_id) throw new CollectionError('Image does not belong to the printing’s card')
 }
 
-const findExisting = (db: Database.Database, printingId: number, imageId: number): number | undefined =>
+const findExisting = (db: SqlDb, printingId: number, imageId: number, scope: Scope): number | undefined =>
   (
-    db.prepare('SELECT id FROM collection_entries WHERE printing_id = ? AND image_id = ?').get(printingId, imageId) as
-      | { id: number }
-      | undefined
+    db
+      .prepare(
+        `SELECT e.id FROM collection_entries e WHERE e.printing_id = ? AND e.image_id = ? AND ${scope.where('e')}`
+      )
+      .get(printingId, imageId) as { id: number } | undefined
   )?.id
 
-export function addEntry(db: Database.Database, input: AddEntryInput, now = new Date()): EntryView {
+export function addEntry(db: SqlDb, input: AddEntryInput, now = new Date(), scope: Scope = LOCAL): EntryView {
   assertQuantity(input.quantity)
   assertLink(db, input.printingId, input.imageId)
   const ts = now.toISOString()
   return db.transaction(() => {
-    const existing = findExisting(db, input.printingId, input.imageId)
+    const existing = findExisting(db, input.printingId, input.imageId, scope)
     if (existing !== undefined) {
       db.prepare('UPDATE collection_entries SET quantity = quantity + ?, updated_at = ? WHERE id = ?').run(
         input.quantity,
         ts,
         existing
       )
-      return requireEntry(db, existing)
+      return requireEntry(db, existing, scope)
     }
-    const info = db
-      .prepare(
-        'INSERT INTO collection_entries (printing_id, image_id, quantity, notes, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)'
-      )
-      .run(input.printingId, input.imageId, input.quantity, '', ts, ts)
-    return requireEntry(db, Number(info.lastInsertRowid))
+    const id = scope.insertEntry(db, {
+      printingId: input.printingId,
+      imageId: input.imageId,
+      quantity: input.quantity,
+      notes: '',
+      ts
+    })
+    return requireEntry(db, id, scope)
   })()
 }
 
-export function updateEntry(db: Database.Database, id: number, patch: UpdateEntryInput, now = new Date()): EntryView {
+export function updateEntry(
+  db: SqlDb,
+  id: number,
+  patch: UpdateEntryInput,
+  now = new Date(),
+  scope: Scope = LOCAL
+): EntryView {
   const ts = now.toISOString()
   return db.transaction(() => {
-    const cur = requireEntry(db, id)
+    const cur = requireEntry(db, id, scope)
     const quantity = patch.quantity ?? cur.quantity
     const notes = patch.notes ?? cur.notes
     const printingId = patch.printingId ?? cur.printing.id
@@ -143,34 +154,34 @@ export function updateEntry(db: Database.Database, id: number, patch: UpdateEntr
     assertQuantity(quantity)
     assertLink(db, printingId, imageId)
 
-    const target = findExisting(db, printingId, imageId)
+    const target = findExisting(db, printingId, imageId, scope)
     if (target !== undefined && target !== id) {
-      const t = requireEntry(db, target)
+      const t = requireEntry(db, target, scope)
       const joined = [t.notes, notes].filter((n) => n !== '').join('\n')
-      db.prepare('DELETE FROM collection_entries WHERE id = ?').run(id)
+      scope.deleteEntry(db, id, ts)
       db.prepare('UPDATE collection_entries SET quantity = ?, notes = ?, updated_at = ? WHERE id = ?').run(
         t.quantity + quantity,
         joined,
         ts,
         target
       )
-      return requireEntry(db, target)
+      return requireEntry(db, target, scope)
     }
     db.prepare(
       'UPDATE collection_entries SET printing_id = ?, image_id = ?, quantity = ?, notes = ?, updated_at = ? WHERE id = ?'
     ).run(printingId, imageId, quantity, notes, ts, id)
-    return requireEntry(db, id)
+    return requireEntry(db, id, scope)
   })()
 }
 
-export function removeEntry(db: Database.Database, id: number): void {
-  db.prepare('DELETE FROM collection_entries WHERE id = ?').run(id)
+export function removeEntry(db: SqlDb, id: number, scope: Scope = LOCAL, now = new Date()): void {
+  scope.deleteEntry(db, id, now.toISOString())
 }
 
 const escapeLike = (s: string): string => s.replace(/[\\%_]/g, (c) => `\\${c}`)
 
-export function listEntries(db: Database.Database, f: CollectionFilters): EntryView[] {
-  const where: string[] = []
+export function listEntries(db: SqlDb, f: CollectionFilters, scope: Scope = LOCAL): EntryView[] {
+  const where: string[] = [scope.where('e')]
   const params: unknown[] = []
   const inList = (col: string, values?: string[]): void => {
     if (values?.length) {
@@ -207,7 +218,7 @@ export function listEntries(db: Database.Database, f: CollectionFilters): EntryV
     params.push(f.levelMax)
   }
   const status = getMeta(db, 'price_service_status')
-  const sql = `${SELECT}${where.length ? ` WHERE ${where.join(' AND ')}` : ''}`
+  const sql = `${SELECT} WHERE ${where.join(' AND ')}`
   const entries = (db.prepare(sql).all(...params) as EntryDbRow[]).map((r) => toView(r, status))
 
   const dir = f.dir === 'desc' ? -1 : 1
@@ -232,21 +243,21 @@ export function listEntries(db: Database.Database, f: CollectionFilters): EntryV
   })
 }
 
-export function entriesForCard(db: Database.Database, cardId: number): EntryView[] {
+export function entriesForCard(db: SqlDb, cardId: number, scope: Scope = LOCAL): EntryView[] {
   const status = getMeta(db, 'price_service_status')
   return (
-    db.prepare(`${SELECT} WHERE c.id = ? ORDER BY p.set_code, e.id`).all(cardId) as EntryDbRow[]
+    db.prepare(`${SELECT} WHERE c.id = ? AND ${scope.where('e')} ORDER BY p.set_code, e.id`).all(cardId) as EntryDbRow[]
   ).map((r) => toView(r, status))
 }
 
-export function getFacets(db: Database.Database): Facets {
+export function getFacets(db: SqlDb, scope: Scope = LOCAL): Facets {
   const distinct = (col: string): string[] =>
     (
       db
         .prepare(
           `SELECT DISTINCT ${col} AS v FROM collection_entries e
            JOIN card_printings p ON p.id = e.printing_id JOIN cards c ON c.id = p.card_id
-           WHERE ${col} IS NOT NULL AND ${col} <> '' ORDER BY ${col}`
+           WHERE ${scope.where('e')} AND ${col} IS NOT NULL AND ${col} <> '' ORDER BY ${col}`
         )
         .all() as { v: string }[]
     ).map((r) => r.v)

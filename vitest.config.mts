@@ -32,6 +32,15 @@ export default defineConfig({
         }
       },
       {
+        resolve: { alias },
+        test: {
+          name: 'portal',
+          environment: 'node',
+          globals: true,
+          include: ['tests/portal/**/*.test.ts']
+        }
+      },
+      {
         test: {
           name: 'workers',
           environment: 'node',

@@ -1,6 +1,6 @@
 ## Project Context
 
-A local, offline-first Electron desktop app for cataloging a personal Yu-Gi-Oh! card collection. Users add cards with quantity, set, rarity, and condition, then search and filter them. Card details and images are fetched automatically from the YGOPRODeck API and cached locally. A modern, easy-to-use UI shows collection stats such as total cards and estimated value.
+**Duel Binder** (formerly yugioh-collection-tracker): a local, offline-first Electron desktop app for cataloging a personal Yu-Gi-Oh! card collection. Users add cards with quantity, set, rarity, and condition, then search and filter them. Card details and images are fetched automatically from the YGOPRODeck API and cached locally. A modern, easy-to-use UI shows collection stats such as total cards and estimated value.
 
 ## Goals
 
@@ -10,11 +10,11 @@ A local, offline-first Electron desktop app for cataloging a personal Yu-Gi-Oh! 
 - Dashboard with collection stats (total cards, unique cards, estimated value)
 - Modern, clean, easy-to-use UI
 - Work offline with local data storage
+- Web portal, sync and friends' binders via the `workers/portal` Cloudflare Worker (marketing site at duelbinder.com, app at app.duelbinder.com)
 
 ## Out of scope
 
 - Trading or marketplace features
-- Cloud sync or user accounts
 - Mobile version
 
 ## Suggested stack

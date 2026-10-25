@@ -1,5 +1,5 @@
-import type Database from 'better-sqlite3'
-import { RARITY_LABEL } from '../db/database'
+import type { SqlDb } from '../db/sql'
+import { RARITY_LABEL } from '../db/schema'
 import type { CardDetail, CardImage, CardRow, CardSearchResult, Printing } from '../../shared/types'
 import { isLanguage } from '../../shared/languages'
 
@@ -71,7 +71,7 @@ export function buildFtsQuery(q: string): string | null {
 
 const escapeLike = (s: string): string => s.replace(/[\\%_]/g, (c) => `\\${c}`)
 
-export function searchCards(db: Database.Database, q: string, limit = 20): CardSearchResult[] {
+export function searchCards(db: SqlDb, q: string, limit = 20): CardSearchResult[] {
   const text = q.trim()
   if (!text) return []
   const results: CardSearchResult[] = []
@@ -126,7 +126,7 @@ const toResult = (r: DbHit): CardSearchResult => ({
   matchedSetCode: r.matched
 })
 
-export function getCardDetail(db: Database.Database, cardId: number): CardDetail | null {
+export function getCardDetail(db: SqlDb, cardId: number): CardDetail | null {
   const row = db.prepare('SELECT * FROM cards WHERE id = ?').get(cardId) as CardDbRow | undefined
   if (!row) return null
   const printings = (

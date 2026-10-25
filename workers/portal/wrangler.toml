@@ -1,0 +1,27 @@
+name = "duel-binder-portal"
+main = "src/index.ts"
+compatibility_date = "2026-10-01"
+
+routes = [
+  { pattern = "duelbinder.com", custom_domain = true },
+  { pattern = "www.duelbinder.com", custom_domain = true },
+  { pattern = "app.duelbinder.com", custom_domain = true }
+]
+
+[assets]
+directory = "./site"
+binding = "ASSETS"
+run_worker_first = true
+
+[[durable_objects.bindings]]
+name = "STORE"
+class_name = "Store"
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["Store"]
+
+[vars]
+SITE_URL = "https://duelbinder.com"
+PUBLIC_URL = "https://app.duelbinder.com"
+DISCORD_CLIENT_ID = "1563797080420655266"

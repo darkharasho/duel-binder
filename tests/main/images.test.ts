@@ -210,7 +210,7 @@ describe('yugipedia set images', () => {
     expect(await cache.getSet(key)).toBe(path.join(dir, 'sets', `${key}.jpg`))
     expect(fetchFn.mock.calls[0][0]).toBe(URL_A)
     expect(new Headers(fetchFn.mock.calls[0][1]?.headers).get('user-agent')).toBe(
-      'YugiohCollectionTracker/1.2.3 (https://github.com/darkharasho/yugioh-collection-tracker)'
+      'DuelBinder/1.2.3 (https://github.com/darkharasho/duel-binder)'
     )
   })
 

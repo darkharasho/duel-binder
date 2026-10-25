@@ -1,24 +1,18 @@
 import { app, shell, BrowserWindow, dialog } from 'electron'
-import { join } from 'path'
+import { join, resolve } from 'path'
 import { autoUpdater } from 'electron-updater'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import type { SyncStatus, UpdateStatus } from '@shared/types'
 import { DATA_CHANGED, SYNC_PROGRESS, UPDATE_STATUS, WINDOW_MAXIMIZED } from '@shared/ipc'
 import icon from '../../resources/icon.png?asset'
 import { openDatabase } from './db/database'
-import { getMeta } from './db/meta'
 import { createYgoClient } from './ygo/client'
-import { runSync, shouldSync } from './sync/sync'
-import { hasSetData, refreshSets } from './sync/sets'
-import { refreshIntlSets, shouldRefreshIntl } from './sync/intl'
+import { refreshCatalog } from './sync/catalog'
 import { createPriceService } from './prices/service'
 import { refreshIntlPrices } from './prices/refresh'
 import { createYugipediaClient } from './yugipedia/client'
 import { createPrintingArtResolver } from './yugipedia/artResolver'
-import { refreshSetLogos, shouldRefreshSetLogos } from './yugipedia/setLogos'
-import { refreshPackArt, shouldRefreshPackArt } from './konami/packArt'
-import { refreshKonamiLogos, shouldRefreshKonamiLogos } from './konami/logos'
-import { createTcgplayerLookup, refreshTcgCatalog, shouldRefreshTcgCatalog } from './tcgplayer/catalog'
+import { createTcgplayerLookup } from './tcgplayer/catalog'
 import { recordSnapshot } from './repo/stats'
 import { findSetImageUrl } from './repo/sets'
 import { createImageCache } from './images/cache'
@@ -27,14 +21,26 @@ import { handleImageProtocol, registerImageScheme } from './images/protocol'
 import { createUpdater, updateMode, RELEASES_URL } from './updater'
 import { createHandlers, registerIpc, type AppDeps } from './ipc/handlers'
 import { seedFakeCollection } from './dev/fakeData'
+import { captureShots } from './dev/capture'
 
-/** `npm run dev:fake-data`: a separate profile with a seeded collection; never in packaged builds. */
-const fakeData = !app.isPackaged && process.env['YGO_FAKE_DATA'] === '1'
-if (fakeData) app.setPath('userData', `${app.getPath('userData')}-fake-data`)
+// The app was "yugioh-collection-tracker" before it became Duel Binder; keep reading the same data folder.
+app.setPath('userData', join(app.getPath('appData'), 'yugioh-collection-tracker'))
+
+/** `npm run dev:fake-data`: a separate profile with a seeded collection; never in packaged builds.
+ *  `npm run site:shots`: screenshots of that profile for the marketing site, then quit. */
+const captureDir = !app.isPackaged ? process.env['YGO_CAPTURE_DIR'] : undefined
+const fakeData = !app.isPackaged && (process.env['YGO_FAKE_DATA'] === '1' || !!captureDir)
+if (captureDir) app.commandLine.appendSwitch('force-device-scale-factor', '2')
+// Capture uses its own profile so it never collides with a running dev session's instance lock.
+if (fakeData)
+  app.setPath('userData', `${app.getPath('userData')}-fake-data${captureDir ? '-capture' : ''}`)
 
 registerImageScheme()
 
 let mainWindow: BrowserWindow | null = null
+let windowShown: Promise<void> = Promise.resolve()
+let markSeeded: () => void = () => {}
+const seeded = new Promise<void>((r) => (markSeeded = r))
 
 function createWindow(): void {
   const win = new BrowserWindow({
@@ -42,7 +48,7 @@ function createWindow(): void {
     height: 800,
     minWidth: 1100,
     minHeight: 700,
-    title: 'Yugioh Collection Tracker',
+    title: 'Duel Binder',
     show: false,
     autoHideMenuBar: true,
     backgroundColor: '#111113',
@@ -71,6 +77,7 @@ function createWindow(): void {
   }
   win.on('maximize', sendMaximized)
   win.on('unmaximize', sendMaximized)
+  windowShown = new Promise((r) => win.once('show', () => r()))
   win.on('ready-to-show', () => {
     win.show()
   })
@@ -130,10 +137,17 @@ function bootstrap(): void {
   const client = createYgoClient()
   const emitSync = (s: SyncStatus): void => {
     // Seed before the renderer hears "idle" and refetches.
-    if (fakeData && s.state === 'idle') seedFakeCollection(db)
+    if (fakeData && s.state === 'idle') {
+      seedFakeCollection(db)
+      markSeeded()
+    }
     broadcast(SYNC_PROGRESS, s)
   }
-  if (fakeData) seedFakeCollection(db)
+  if (fakeData) {
+    seedFakeCollection(db)
+    // Already seeded by an earlier run, or just now: nothing to wait for.
+    if (db.prepare('SELECT 1 FROM collection_entries LIMIT 1').get()) markSeeded()
+  }
 
   const updater = createUpdater({
     autoUpdater,
@@ -200,40 +214,33 @@ function bootstrap(): void {
   createWindow()
   updater.start()
 
+  if (captureDir) {
+    const win = mainWindow
+    void Promise.all([windowShown, seeded])
+      .then(async () => {
+        if (!win) throw new Error('No window to capture')
+        await new Promise((r) => setTimeout(r, 2000))
+        console.log((await captureShots(win, resolve(captureDir))).join('\n'))
+        app.quit()
+      })
+      .catch((e) => {
+        console.error('Capture failed', e)
+        app.exit(1)
+      })
+  }
+
   recordSnapshot(db)
   void startupSync().catch((e) => console.error('Startup sync failed', e))
 
   async function startupSync(): Promise<void> {
-    let changed = false
-    if (shouldSync(getMeta(db, 'last_sync_at'), new Date())) {
-      const status = await runSync(db, client, emitSync)
-      if (status.state === 'idle') {
-        recordSnapshot(db)
-        changed = true
-      }
-    } else if (!hasSetData(db)) {
-      changed = await refreshSets(db, client)
-    }
-    if (shouldRefreshTcgCatalog(db, new Date())) {
-      // A few minutes at most; English cards then show their TCGplayer photos.
-      const tcg = await refreshTcgCatalog(db, { version: app.getVersion() })
-      if (tcg.updatedGroups > 0) emitDataChanged()
-    }
-    if (hasSetData(db) && shouldRefreshPackArt(db, new Date())) {
-      if ((await refreshPackArt(db, { version: app.getVersion() })) > 0) emitDataChanged()
-    }
-    if (hasSetData(db) && shouldRefreshSetLogos(db, new Date())) {
-      if ((await refreshSetLogos(db, yugipedia)) > 0) emitDataChanged()
-    }
-    if (hasSetData(db) && shouldRefreshKonamiLogos(db, new Date())) {
-      if ((await refreshKonamiLogos(db, { version: app.getVersion() })) > 0) emitDataChanged()
-    }
-    const { n } = db.prepare('SELECT count(*) AS n FROM cards').get() as { n: number }
-    if (n > 0 && shouldRefreshIntl(db, new Date())) {
-      // Each saved batch refreshes the UI, so sets appear while a long first sync runs.
-      await refreshIntlSets(db, yugipedia, new Date(), emitDataChanged)
-      changed = true
-    }
+    const { changed } = await refreshCatalog(db, {
+      client,
+      yugipedia,
+      version: app.getVersion(),
+      onSyncProgress: emitSync,
+      onSynced: () => recordSnapshot(db),
+      onChanged: emitDataChanged
+    })
     // refreshIntlPrices never rejects; failures still change the shown no-price reason.
     const prices = await refreshIntlPrices(db, priceService.client())
     if (prices.updated > 0) recordSnapshot(db)

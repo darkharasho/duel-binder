@@ -8,7 +8,7 @@ import { createLimiter } from '../images/limiter'
  * server when shown, and are cached like every other image.
  */
 const BASE_URL = 'https://tcgcsv.com/tcgplayer/2'
-const REPO_URL = 'https://github.com/darkharasho/yugioh-collection-tracker'
+const REPO_URL = 'https://github.com/darkharasho/duel-binder'
 export const TCGPLAYER_IMAGE_PREFIX = 'https://tcgplayer-cdn.tcgplayer.com/product/'
 export const TCG_CATALOG_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000
 const TIMEOUT_MS = 60_000
@@ -53,7 +53,7 @@ export async function refreshTcgCatalog(
 ): Promise<TcgCatalogResult> {
   const result: TcgCatalogResult = { groups: 0, updatedGroups: 0, failedGroups: 0, ok: false }
   const fetchFn = opts.fetchFn ?? fetch
-  const headers = { 'User-Agent': `YugiohCollectionTracker/${opts.version} (${REPO_URL})` }
+  const headers = { 'User-Agent': `DuelBinder/${opts.version} (${REPO_URL})` }
   const getJson = async <T>(url: string): Promise<T[]> => {
     const res = await fetchFn(url, { headers, signal: AbortSignal.timeout(TIMEOUT_MS) })
     if (!res.ok) throw new Error(`HTTP ${res.status}`)

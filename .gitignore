@@ -9,3 +9,5 @@ out
 .sai/
 *.tsbuildinfo
 .worktrees
+.wrangler
+catalog-work/

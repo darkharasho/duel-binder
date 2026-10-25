@@ -1,5 +1,6 @@
 import type { SqlDb } from '../../../src/main/db/sql'
 import { adminRoute } from './catalogLoad'
+import { rpcRoute } from './rpc'
 import { finishSignIn, me, signOut, startSignIn } from './auth'
 
 /** Vars and secrets the request handlers read. */
@@ -26,9 +27,12 @@ export async function handle(req: Request, deps: AppDeps): Promise<Response> {
   const url = new URL(req.url)
   if (req.method === 'GET' && url.pathname === '/api/health') return json({ ok: true })
   if (req.method === 'GET' && url.pathname === '/auth/discord/start') return startSignIn(deps)
-  if (req.method === 'GET' && url.pathname === '/auth/discord/callback') return finishSignIn(req, deps)
+  if (req.method === 'GET' && url.pathname === '/auth/discord/callback')
+    return finishSignIn(req, deps)
   if (req.method === 'POST' && url.pathname === '/auth/logout') return signOut(req, deps)
   if (req.method === 'GET' && url.pathname === '/api/me') return me(req, deps)
+  if (url.pathname.startsWith('/api/rpc/'))
+    return rpcRoute(req, deps, decodeURIComponent(url.pathname.slice('/api/rpc/'.length)))
   if (url.pathname.startsWith('/admin/')) return adminRoute(req, deps)
   return json({ error: 'Not found' }, 404)
 }

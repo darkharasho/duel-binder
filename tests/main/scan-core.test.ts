@@ -188,5 +188,33 @@ describe('names', () => {
       ])
     ).toBeNull()
   })
+  it('a shorter runner-up still counts against the margin', () => {
+    const text = 'abcdefghijklmnopqrstuvwxyabcdefghijklmnopqrstuvwxy' // 50 letters
+    // 10 letters changed: 0.8, just enough.
+    const best = text.slice(0, 40) + 'ZZZZZZZZZZ'
+    // 11 letters shorter: 0.78, too close behind.
+    const runnerUp = text.slice(0, 39)
+    expect(bestNameMatch(text, [{ id: 1, name: best }])?.score).toBeCloseTo(0.8)
+    expect(
+      bestNameMatch(text, [
+        { id: 1, name: best },
+        { id: 2, name: runnerUp }
+      ])
+    ).toBeNull()
+  })
+  it('uses names normalized ahead of time the same way', () => {
+    const names = ['Dark Magician', 'Dark Magician Girl', 'Kuriboh'].map((name, i) => ({
+      id: i + 1,
+      name,
+      norm: normalizeName(name)
+    }))
+    expect(bestNameMatch('Dark Magicán', names)).toEqual(
+      bestNameMatch(
+        'Dark Magicán',
+        names.map(({ id, name }) => ({ id, name }))
+      )
+    )
+    expect(bestNameMatch('Kur1boh', names)?.id).toBe(3)
+  })
   it('normalizes', () => expect(normalizeName('Blue-Eyes W. Dragon!')).toBe('blueeyeswdragon'))
 })

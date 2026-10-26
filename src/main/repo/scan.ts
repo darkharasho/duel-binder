@@ -1,7 +1,7 @@
 import type { SqlDb } from '../db/sql'
 import { getMeta } from '../db/meta'
 import { rarityRank } from '../../shared/scan/rarity'
-import { bestNameMatch } from '../../shared/scan/names'
+import { bestNameMatch, normalizeName, type NameEntry } from '../../shared/scan/names'
 import { LANGUAGES, type Language } from '../../shared/languages'
 import type { ScanPrinting } from '../../shared/scan/types'
 
@@ -100,17 +100,15 @@ export function cardsForImages(
   return out.sort((a, b) => a.imageId - b.imageId)
 }
 
-// The English name list is rebuilt only when the catalog version changes.
-const nameCache = new WeakMap<
-  object,
-  { version: string | null; names: { id: number; name: string }[] }
->()
+// The name list, normalized for matching, is rebuilt only when the catalog version changes.
+const nameCache = new WeakMap<object, { version: string | null; names: NameEntry[] }>()
 
-function cardNames(db: SqlDb): { id: number; name: string }[] {
+function cardNames(db: SqlDb): NameEntry[] {
   const version = getMeta(db, 'db_version')
   const hit = nameCache.get(db)
   if (hit && hit.version === version) return hit.names
-  const names = db.prepare('SELECT id, name FROM cards').all() as { id: number; name: string }[]
+  const rows = db.prepare('SELECT id, name FROM cards').all() as { id: number; name: string }[]
+  const names = rows.map((r) => ({ ...r, norm: normalizeName(r.name) }))
   nameCache.set(db, { version, names })
   return names
 }

@@ -8,6 +8,7 @@ import {
 } from '../../src/main/repo/scan'
 import type Database from 'better-sqlite3'
 import { seededDb } from './helpers'
+import { getMeta, setMeta } from '../../src/main/db/meta'
 
 const LOB = 'Legend of Blue Eyes White Dragon'
 
@@ -84,6 +85,32 @@ describe('scan repo', () => {
     const { db } = await scanDb()
     expect(matchName(db, 'Dark Maglcian')?.name).toBe('Dark Magician')
     expect(matchName(db, 'zzzzzzzz')).toBeNull()
+  })
+
+  it('matchName sees the catalog again once its version changes', async () => {
+    const { db, cardId } = await scanDb()
+    expect(matchName(db, 'Dark Magician')?.cardId).toBe(cardId)
+    db.prepare('UPDATE cards SET name = ? WHERE id = ?').run('Dark Paladin', cardId)
+    // Same version: still the cached list.
+    expect(matchName(db, 'Dark Magician')?.cardId).toBe(cardId)
+    setMeta(db, 'db_version', `${getMeta(db, 'db_version') ?? ''}-next`)
+    expect(matchName(db, 'Dark Paladin')).toMatchObject({ cardId, name: 'Dark Paladin' })
+  })
+
+  it('looks up more ids than fit in one query', async () => {
+    const { db, cardId } = await scanDb()
+    const images = (
+      db.prepare('SELECT image_id AS imageId FROM card_images WHERE card_id = ?').all(cardId) as {
+        imageId: number
+      }[]
+    ).map((i) => i.imageId)
+    const filler = Array.from({ length: 1200 }, (_, i) => 900_000_000 + i)
+    expect(cardsForImages(db, [...filler, ...images])).toEqual(
+      [...images].sort((a, b) => a - b).map((imageId) => ({ imageId, cardId }))
+    )
+    const rows = printingsForCards(db, [...filler, cardId])
+    expect(rows.length).toBeGreaterThan(0)
+    expect(rows.every((r) => r.cardId === cardId && r.imageIds.length > 0)).toBe(true)
   })
 
   it('cardsForImages maps known artworks to their card and skips unknown ones', async () => {

@@ -2,6 +2,7 @@ import type { SqlDb } from '../../../src/main/db/sql'
 import { adminRoute } from './catalogLoad'
 import { rpcRoute } from './rpc'
 import { syncRoute } from './sync'
+import { catalogRoute } from './catalogFeed'
 import {
   exchangeDesktopCode,
   finishSignIn,
@@ -74,6 +75,8 @@ export async function handle(req: Request, deps: AppDeps): Promise<Response> {
   }
   if (url.pathname.startsWith('/api/sync/'))
     return syncRoute(req, deps, url.pathname.slice('/api/sync/'.length))
+  if (url.pathname.startsWith('/api/catalog/'))
+    return catalogRoute(req, deps, url.pathname.slice('/api/catalog/'.length))
   if (url.pathname.startsWith('/img/'))
     return imageRoute(req, deps, url.pathname.slice('/img/'.length))
   if (req.method === 'GET' && url.pathname === '/scan/fingerprints')

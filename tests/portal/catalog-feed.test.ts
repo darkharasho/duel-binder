@@ -94,7 +94,10 @@ describe('GET /api/catalog/changes', () => {
     const after = await feed(cursor)
     expect(after.more).toBe(false)
     expect(after.changes).toHaveLength(2)
-    expect(after.changes[0]).toMatchObject({ table: 'cards', row: { id: card.id, name: 'Renamed' } })
+    expect(after.changes[0]).toMatchObject({
+      table: 'cards',
+      row: { id: card.id, name: 'Renamed' }
+    })
     expect(after.changes[0]).not.toHaveProperty('row.catalog_seq')
     expect(after.changes[1]).toMatchObject({ table: 'sets', deleted: ['en', 'Doomed Set'] })
     expect(after.cursor).toBe(after.changes[1].seq)
@@ -115,14 +118,33 @@ describe('GET /api/catalog/changes', () => {
     expect(again.seq).toBeGreaterThan(target!.seq)
   })
 
+  it('pages stay exact when seqs sit in contiguous per-table blocks', async () => {
+    const total = (await drain(0, 5000)).length
+    const limit = 3
+    expect(total).toBeGreaterThan(limit * 3)
+    const seen: number[] = []
+    let since = 0
+    for (;;) {
+      const page = await feed(since, limit)
+      if (page.more) expect(page.changes).toHaveLength(limit)
+      else expect(page.changes.length).toBeLessThanOrEqual(limit)
+      seen.push(...page.changes.map((c) => c.seq))
+      since = page.cursor
+      if (!page.more) break
+    }
+    expect(seen).toHaveLength(total)
+    expect(new Set(seen).size).toBe(total)
+    expect(seen).toEqual([...seen].sort((x, y) => x - y))
+  })
+
   it('printing rows carry pkey, server id and contributed', async () => {
     const all = await drain(0, 500)
     const p = all.find((c) => c.table === 'card_printings' && 'row' in c) as {
       row: Record<string, unknown>
     }
-    const real = db.prepare('SELECT id, pkey, contributed FROM card_printings WHERE pkey = ?').get(
-      p.row.pkey
-    ) as { id: number; contributed: number }
+    const real = db
+      .prepare('SELECT id, pkey, contributed FROM card_printings WHERE pkey = ?')
+      .get(p.row.pkey) as { id: number; contributed: number }
     expect(p.row.id).toBe(real.id)
     expect(p.row.contributed).toBe(real.contributed)
     expect(p.row).not.toHaveProperty('catalog_seq')

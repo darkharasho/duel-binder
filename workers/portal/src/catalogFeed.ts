@@ -29,34 +29,47 @@ const FEED_COLUMNS = new Map(
  * merged by seq. At most `limit` come back; `more` says there are further changes after `cursor`.
  */
 export function catalogChanges(db: SqlDb, since: number, limit: number): CatalogChangesResponse {
-  const merged: CatalogChange[] = []
+  // Find the page's last seq with an index-only query so full rows are read at most `limit` times.
+  // Seqs come from one global clock, so they are unique across tables. Tombstones are left out
+  // of a from-scratch snapshot (since = 0).
+  const seqs = CATALOG_TABLES.map(
+    (t) => `SELECT catalog_seq AS seq FROM ${t.name} WHERE catalog_seq > ?`
+  )
+  if (since > 0) seqs.push('SELECT seq FROM catalog_tombstones WHERE seq > ?')
+  const edge = db
+    .prepare(`SELECT seq FROM (${seqs.join(' UNION ALL ')}) ORDER BY seq LIMIT 2 OFFSET ?`)
+    .all(...seqs.map(() => since), limit - 1) as { seq: number }[]
+  // No row at the edge: everything after `since` fits on this page.
+  const cutoff = edge.length ? edge[0].seq : Number.MAX_SAFE_INTEGER
+  const more = edge.length === 2
+
+  const changes: CatalogChange[] = []
   for (const t of CATALOG_TABLES) {
     const rows = db
       .prepare(
         `SELECT catalog_seq AS seq, ${FEED_COLUMNS.get(t.name)} FROM ${t.name}
-         WHERE catalog_seq > ? ORDER BY catalog_seq LIMIT ?`
+         WHERE catalog_seq > ? AND catalog_seq <= ?`
       )
-      .all(since, limit + 1) as ({ seq: number } & Record<string, string | number | null>)[]
+      .all(since, cutoff) as ({ seq: number } & Record<string, string | number | null>)[]
     for (const { seq, ...row } of rows)
-      merged.push({ seq, table: t.name as CatalogTableName, row })
+      changes.push({ seq, table: t.name as CatalogTableName, row })
   }
   if (since > 0) {
     const dead = db
-      .prepare('SELECT seq, tbl, key FROM catalog_tombstones WHERE seq > ? ORDER BY seq LIMIT ?')
-      .all(since, limit + 1) as { seq: number; tbl: string; key: string }[]
+      .prepare('SELECT seq, tbl, key FROM catalog_tombstones WHERE seq > ? AND seq <= ?')
+      .all(since, cutoff) as { seq: number; tbl: string; key: string }[]
     for (const d of dead)
-      merged.push({
+      changes.push({
         seq: d.seq,
         table: d.tbl as CatalogTableName,
         deleted: JSON.parse(d.key) as (string | number | null)[]
       })
   }
-  merged.sort((a, b) => a.seq - b.seq)
-  const changes = merged.slice(0, limit)
+  changes.sort((a, b) => a.seq - b.seq)
   return {
     changes,
     cursor: changes.length ? changes[changes.length - 1].seq : since,
-    more: merged.length > limit,
+    more,
     dbVersion: getMeta(db, 'db_version')
   }
 }

@@ -153,6 +153,8 @@ export function createScanEngine(deps: { api: Api['scan']; makeWorker: () => Wor
           ])
         } catch (e) {
           frames.delete(id)
+          // Never handed over, so it's still ours to free.
+          if (bitmap) frame.close()
           reject(e instanceof Error ? e : new Error(String(e)))
         }
       })

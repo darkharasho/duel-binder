@@ -313,7 +313,8 @@ describe('Scan page', () => {
       'LOB-EN005 · Common',
       'LOB-EN005 · Rare'
     ])
-    await u.type(screen.getByPlaceholderText('Search code, rarity or set…'), 'rare')
+    // The search box has a name of its own, not just a placeholder.
+    await u.type(screen.getByRole('combobox', { name: 'Search code, rarity or set…' }), 'rare')
     await u.click(screen.getByRole('option', { name: 'LOB-EN005 · Rare' }))
     const saved = JSON.parse(localStorage.getItem(SESSION_KEY)!) as ScanRow[]
     expect(saved[0]).toMatchObject({ printingId: 102, rarity: 'Rare', flag: null })
@@ -387,6 +388,29 @@ describe('Scan page', () => {
     expect(screen.getByText('Added 3 cards')).toBeInTheDocument()
     expect(screen.queryByText('Dark Magician')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Add 0 cards to collection' })).toBeDisabled()
+  })
+
+  it("a row can't be changed while Add runs", async () => {
+    stubCamera()
+    localStorage.setItem(SESSION_KEY, JSON.stringify([row({ quantity: 2, flag: null })]))
+    let finish!: () => void
+    const add = vi.fn(() => new Promise<never>((resolve) => (finish = () => resolve({} as never))))
+    renderScan(fakeEngine(), { collection: { add } })
+    await run()
+    const controls = (): HTMLElement[] => [
+      screen.getByRole('combobox', { name: 'Rarity for Dark Magician' }),
+      screen.getByRole('button', { name: 'One fewer Dark Magician' }),
+      screen.getByRole('button', { name: 'One more Dark Magician' }),
+      screen.getByRole('button', { name: 'Remove Dark Magician' })
+    ]
+    controls().forEach((c) => expect(c).toBeEnabled())
+    await user().click(screen.getByRole('button', { name: 'Add 2 cards to collection' }))
+    await run()
+    expect(add).toHaveBeenCalledTimes(1)
+    controls().forEach((c) => expect(c).toBeDisabled())
+    finish()
+    await run(100)
+    expect(screen.queryByText('Dark Magician')).not.toBeInTheDocument()
   })
 
   it('Add is disabled when no row has a printing', async () => {

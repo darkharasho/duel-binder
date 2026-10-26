@@ -48,11 +48,14 @@ export interface ScanRowActions {
 export const ScanRowItem = memo(function ScanRowItem({
   row,
   actions,
-  highlighted = false
+  highlighted = false,
+  disabled = false
 }: {
   row: ScanRow
   actions: ScanRowActions
   highlighted?: boolean
+  /** While the list is being added to the collection, rows can't change under it. */
+  disabled?: boolean
 }): React.JSX.Element {
   const choices = useMemo(() => choicesFor(row), [row])
   const { key } = row
@@ -82,6 +85,7 @@ export const ScanRowItem = memo(function ScanRowItem({
           placeholder="Choose a printing"
           searchPlaceholder="Search code, rarity or set…"
           className="h-7 w-full max-w-72 px-2 text-xs"
+          disabled={disabled}
         />
         {row.flag && <p className="text-xs text-amber-300">{FLAG_TEXT[row.flag]}</p>}
         {row.error && <p className="text-xs text-destructive">{row.error}</p>}
@@ -90,6 +94,7 @@ export const ScanRowItem = memo(function ScanRowItem({
         <Button
           variant="outline"
           size="icon-xs"
+          disabled={disabled}
           aria-label={`One fewer ${row.name}`}
           onClick={() => actions.setQuantity(row.key, row.quantity - 1)}
         >
@@ -104,6 +109,7 @@ export const ScanRowItem = memo(function ScanRowItem({
         <Button
           variant="outline"
           size="icon-xs"
+          disabled={disabled}
           aria-label={`One more ${row.name}`}
           onClick={() => actions.setQuantity(row.key, row.quantity + 1)}
         >
@@ -112,6 +118,7 @@ export const ScanRowItem = memo(function ScanRowItem({
         <Button
           variant="ghost"
           size="icon-xs"
+          disabled={disabled}
           aria-label={`Remove ${row.name}`}
           onClick={() => actions.remove(row.key)}
         >

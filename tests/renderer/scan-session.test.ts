@@ -197,4 +197,18 @@ describe('useScanSession', () => {
     expect(result.current.rows).toEqual([])
     expect(JSON.parse(localStorage.getItem(KEY) ?? '[]')).toEqual([])
   })
+
+  it("drops the saved list when it can't be saved, so stale rows never come back", () => {
+    const { result } = setup()
+    act(() => result.current.add(draft()))
+    expect(localStorage.getItem(KEY)).not.toBeNull()
+    const full = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+      throw new DOMException('full', 'QuotaExceededError')
+    })
+    act(() => result.current.add(draft({ cardId: 2, printingId: 201, imageId: 20 })))
+    full.mockRestore()
+    expect(localStorage.getItem(KEY)).toBeNull()
+    // The list itself carries on for this session.
+    expect(result.current.rows).toHaveLength(2)
+  })
 })

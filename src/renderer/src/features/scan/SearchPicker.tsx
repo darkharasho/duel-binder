@@ -106,7 +106,8 @@ function PickerList({
     if (words.every((w) => text.includes(w))) shown.push(o)
   }
   return (
-    <Command shouldFilter={false} className="rounded-md">
+    // cmdk names its search box after its own label, so the label is what gives it a name.
+    <Command shouldFilter={false} label={searchPlaceholder} className="rounded-md">
       <CommandInput
         autoFocus
         placeholder={searchPlaceholder}

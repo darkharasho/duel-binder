@@ -124,4 +124,24 @@ describe('createScanEngine', () => {
       'disposed'
     )
   })
+
+  it("closes a camera bitmap it couldn't hand to the worker", async () => {
+    const throwing = {
+      postMessage: () => {
+        throw new DOMException('no', 'DataCloneError')
+      },
+      terminate: vi.fn()
+    } as unknown as Worker
+    const engine = createScanEngine({ api: createMockApi().scan, makeWorker: () => throwing })
+    const bitmap = { width: 8, height: 8, close: vi.fn() } as unknown as ImageBitmap
+    await expect(engine.analyze(bitmap, { candidates: null, wantText: false })).rejects.toThrow()
+    expect(bitmap.close).toHaveBeenCalled()
+
+    engine.dispose()
+    const late = { width: 8, height: 8, close: vi.fn() } as unknown as ImageBitmap
+    await expect(engine.analyze(late, { candidates: null, wantText: false })).rejects.toThrow(
+      'disposed'
+    )
+    expect(late.close).toHaveBeenCalled()
+  })
 })

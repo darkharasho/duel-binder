@@ -42,7 +42,13 @@ function save(rows: ScanRow[]): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(rows))
   } catch {
-    // Storage full or unavailable: the list still works for this session.
+    // Storage full or unavailable: the list still works for this session. An older saved list
+    // mustn't outlive it, or rows added since would come back after a restart.
+    try {
+      localStorage.removeItem(STORAGE_KEY)
+    } catch {
+      // Unavailable altogether: there is nothing stale to come back.
+    }
   }
 }
 

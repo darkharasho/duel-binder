@@ -388,6 +388,7 @@ export function ScanPage({
                     row={row}
                     actions={rowActions}
                     highlighted={row.key === fresh}
+                    disabled={session.committing}
                   />
                 ))}
               </ul>

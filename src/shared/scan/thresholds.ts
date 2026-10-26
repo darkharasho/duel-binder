@@ -10,6 +10,12 @@ export const ART_MAX_DISTANCE_IN_SET = 80
  * the best.
  */
 export const ART_MIN_MARGIN = 10
+/**
+ * A card-shaped thing in view whose closest artwork is further off than this, and that reads as
+ * no card by code or name, is taken for something else (a book, the deck on the desk): nothing in
+ * view, rather than a card it couldn't recognize.
+ */
+export const ART_FAR_DISTANCE = 100
 /** Closest artworks fetched per frame, so a different card shows up past a card's alternate arts. */
 export const ART_MATCH_DEPTH = 20
 /** Lowest name similarity (1 - levenshtein / maxLen) accepted. */

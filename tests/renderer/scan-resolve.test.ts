@@ -8,6 +8,7 @@ import {
 import type { ArtMatch, RawSignals } from '@/features/scan/engine'
 import type { ScanPrinting } from '@shared/scan/types'
 import {
+  ART_FAR_DISTANCE,
   ART_MATCH_DEPTH,
   ART_MAX_DISTANCE,
   ART_MAX_DISTANCE_IN_SET,
@@ -96,6 +97,31 @@ describe('resolveSignals', () => {
     expect(await resolveSignals(raw({ codeTexts: ['garbage'], nameText: 'zz' }), noSet)).toEqual({
       kind: 'unsure'
     })
+  })
+
+  it('a card-shaped thing whose art is nothing like any card counts as nothing in view', async () => {
+    // A book or the deck on the desk: its closest artwork is far off, and nothing reads.
+    const far = [{ imageId: 201, distance: ART_FAR_DISTANCE + 1 }]
+    expect(await resolveSignals(raw({ art: far }), noSet)).toEqual({ kind: 'none' })
+    expect(await resolveSignals(raw({ art: far, codeTexts: ['garbage'] }), withSet(LOB))).toEqual({
+      kind: 'none'
+    })
+    // A code or name read still counts it.
+    expect(await recognized(raw({ art: far, codeTexts: ['SDY-EN006'] }))).toMatchObject({
+      via: 'code',
+      cardId: 1
+    })
+    expect(await recognized(raw({ art: far, nameText: 'Dark Magician' }))).toMatchObject({
+      via: 'name',
+      cardId: 1
+    })
+  })
+
+  it('a near miss on the art is unsure', async () => {
+    const near = [{ imageId: 201, distance: ART_FAR_DISTANCE }]
+    expect(await resolveSignals(raw({ art: near }), noSet)).toEqual({ kind: 'unsure' })
+    const justOver = [{ imageId: 201, distance: ART_MAX_DISTANCE + 1 }]
+    expect(await resolveSignals(raw({ art: justOver }), noSet)).toEqual({ kind: 'unsure' })
   })
 
   it('code wins over art', async () => {

@@ -2,6 +2,7 @@ import type { Api } from '@shared/ipc'
 import { pickRarity, pickRarityByCues, type RarityCues } from '@shared/scan/rarity'
 import { setCodeCandidates } from '@shared/scan/setCode'
 import {
+  ART_FAR_DISTANCE,
   ART_MATCH_DEPTH,
   ART_MAX_DISTANCE,
   ART_MAX_DISTANCE_IN_SET,
@@ -180,7 +181,9 @@ async function byName(raw: RawSignals, ctx: ResolveContext): Promise<ScanDraft |
 /**
  * What a frame shows: a card by its set code, else by its art, else by its name, or `unsure`
  * when a card is in view but none of those is trusted. A code read that names a different card
- * than confident art is a misread one way or the other, so it's unsure too.
+ * than confident art is a misread one way or the other, so it's unsure too. When art was matched
+ * and its closest artwork is past ART_FAR_DISTANCE, what's in view isn't taken for a card at all
+ * unless its code or name reads: `none`.
  */
 export async function resolveSignals(raw: RawSignals, ctx: ResolveContext): Promise<ScanOutcome> {
   if (!raw.found) return { kind: 'none' }
@@ -195,7 +198,9 @@ export async function resolveSignals(raw: RawSignals, ctx: ResolveContext): Prom
         : await anyPrinting(artCard, raw.art, ctx, 'art')
       : null) ??
     (await byName(raw, ctx))
-  return item ? { kind: 'recognized', item } : { kind: 'unsure' }
+  if (item) return { kind: 'recognized', item }
+  const [top] = raw.art
+  return top && top.distance > ART_FAR_DISTANCE ? { kind: 'none' } : { kind: 'unsure' }
 }
 
 /**

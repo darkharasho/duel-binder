@@ -249,6 +249,30 @@ describe('Scan page', () => {
     expect(within(list).getByLabelText('Quantity of Dark Magician')).toHaveTextContent('1')
   })
 
+  it('a card-shaped thing far from any artwork counts as the card being lowered', async () => {
+    stubCamera()
+    // The card, then only the book behind it (frames 6-11), then the card again.
+    const book: RawSignals = {
+      ...NOTHING,
+      found: true,
+      quad,
+      art: [{ imageId: 999, distance: 120 }]
+    }
+    const engine = fakeEngine((n) => (n >= 6 && n < 12 ? book : codeFrame('LOB-EN005')))
+    renderScan(engine, {
+      scan: {
+        printingsByCode: vi.fn(async () => [printing()]),
+        cardsForImages: vi.fn(async () => [])
+      }
+    })
+    await run(1200)
+    expect(screen.getByLabelText('Quantity of Dark Magician')).toHaveTextContent('1')
+    await run(1200)
+    expect(screen.queryByText("Couldn't recognize this card")).not.toBeInTheDocument()
+    await run(1200)
+    expect(screen.getByLabelText('Quantity of Dark Magician')).toHaveTextContent('2')
+  })
+
   it("under Auto, a card's name that looks the same over its frames picks its rarity", async () => {
     stubCamera()
     // A Normal Monster's plain name is black, so one that reads light and silver is prismatic.

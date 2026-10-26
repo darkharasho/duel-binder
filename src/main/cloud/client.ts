@@ -1,4 +1,9 @@
 import type {
+  CatalogChangesResponse,
+  ContributedPrinting,
+  ContributeResult
+} from '../../shared/catalogFeed'
+import type {
   Me,
   PricesResponse,
   PullResponse,
@@ -29,12 +34,18 @@ export interface CloudClient {
   push(entries: WireEntry[]): Promise<PushResult[]>
   pull(cursor: number): Promise<PullResponse>
   prices(pkeys: string[]): Promise<PricesResponse>
+  /** One page of the catalog change feed after `since`; `limit` defaults to the server's page size. */
+  catalogChanges(since: number, limit?: number): Promise<CatalogChangesResponse>
+  /** Offers printings the catalog lacks; one result per printing. */
+  contribute(printings: ContributedPrinting[]): Promise<ContributeResult[]>
   revoke(): Promise<void>
   /** Calls a portal RPC channel; resolves to its result. */
   rpc<T>(channel: PortalChannel, args: unknown[]): Promise<T>
 }
 
 const DEFAULT_TIMEOUT_MS = 30_000
+/** Catalog pages are large, so they get longer than an ordinary call. */
+const CATALOG_TIMEOUT_MS = 120_000
 
 /** The portal API as the desktop calls it, with its desktop token as a Bearer token. */
 export function createCloudClient(opts: {
@@ -50,11 +61,17 @@ export function createCloudClient(opts: {
   const base = opts.baseUrl.replace(/\/+$/, '')
 
   /** Sends one request; resolves to the parsed JSON body, or undefined when `parse` is false. */
-  async function call<T>(path: string, method: string, body?: unknown, parse = true): Promise<T> {
+  async function call<T>(
+    path: string,
+    method: string,
+    body?: unknown,
+    parse = true,
+    callTimeoutMs = timeoutMs
+  ): Promise<T> {
     const headers: Record<string, string> = { authorization: `Bearer ${opts.token}` }
     if (body !== undefined) headers['content-type'] = 'application/json'
     const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(), timeoutMs)
+    const timer = setTimeout(() => controller.abort(), callTimeoutMs)
     const cutOff = (): void => controller.abort()
     if (opts.signal?.aborted) controller.abort()
     else opts.signal?.addEventListener('abort', cutOff, { once: true })
@@ -109,6 +126,20 @@ export function createCloudClient(opts: {
       (await call<PushResponse>('/api/sync/push', 'POST', { entries })).results,
     pull: (cursor) => call<PullResponse>(`/api/sync/pull?cursor=${cursor}`, 'GET'),
     prices: (pkeys) => call<PricesResponse>('/api/sync/prices', 'POST', { pkeys }),
+    catalogChanges: (since, limit) =>
+      call<CatalogChangesResponse>(
+        `/api/catalog/changes?since=${since}${limit === undefined ? '' : `&limit=${limit}`}`,
+        'GET',
+        undefined,
+        true,
+        Math.max(timeoutMs, CATALOG_TIMEOUT_MS)
+      ),
+    contribute: async (printings) =>
+      (
+        await call<{ results: ContributeResult[] }>('/api/catalog/contribute', 'POST', {
+          printings
+        })
+      ).results,
     revoke: () => call<void>('/auth/desktop/revoke', 'POST', undefined, false),
     rpc: async <T>(channel: PortalChannel, args: unknown[]) =>
       (await call<{ result: T }>(`/api/rpc/${channel}`, 'POST', { args })).result

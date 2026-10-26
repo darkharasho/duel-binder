@@ -75,7 +75,7 @@ A new **Scan** nav item, between Browse and Friends. Desktop only.
   - Without the file (first use offline), Scan still works by **set code** and **name** reading. The art step is skipped and the page says so.
   - *Refresh:* the desktop checks the portal for a newer file after its own daily catalog sync, and replaces it if the version changed. Cards the local catalog has but the file doesn't (brand-new cards) can still be found by code or name; no special message.
 - **The session list survives an app restart** (stored locally, cleared by Add or Clear).
-- **English printings only** in this round. The code reader expects `XXXX-EN###` style codes. Non-English codes (`LOB-DE005`) are a later step. With "Any set", a non-English code is treated as unreadable and falls through to art/name matching, which then asks you to pick the printing.
+- **Every printing language** (owner's decision, 2026-10-26, replacing the earlier English-only call). Set codes are read with any region (`LOB-EN005`, `SR14-DE023`, `SDK-JP001`, regionless old Japanese codes), and the set picker lists every language's sets with its language tag. Card names are read in English only; a non-English card that has no legible code is found by its art, then you pick the printing (language included).
 
 ## Constraints and existing pieces
 

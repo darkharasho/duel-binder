@@ -6,6 +6,107 @@ export interface ServerStep {
   sql: string
 }
 
+interface FrozenTable {
+  name: string
+  key: string[]
+  columns: string[]
+  /** Extra columns whose change counts as a row change. */
+  extra?: string[]
+}
+
+/**
+ * Frozen copy of CATALOG_TABLES (src/shared/catalogTables.ts) as of server-6. Never read the live
+ * list here: a shipped step must not change. Key order matters; tombstone keys list the key columns
+ * in this order.
+ */
+const SERVER_6_TABLES: FrozenTable[] = [
+  {
+    name: 'cards',
+    key: ['id'],
+    columns: [
+      'id', 'name', 'type', 'frame_type', 'race', 'attribute', 'level', 'linkval', 'atk', 'def',
+      'archetype', 'desc', 'tcgplayer_price', 'updated_at'
+    ]
+  },
+  { name: 'card_images', key: ['image_id'], columns: ['image_id', 'card_id', 'sort_order', 'missing_from_api'] },
+  {
+    name: 'card_printings',
+    key: ['pkey'],
+    columns: [
+      'card_id', 'set_name', 'set_code', 'set_rarity', 'set_rarity_code', 'set_price',
+      'missing_from_api', 'language', 'tcg_product_id', 'variant', 'market_price'
+    ],
+    extra: ['contributed']
+  },
+  {
+    name: 'sets',
+    key: ['language', 'set_name'],
+    columns: [
+      'language', 'set_name', 'set_code', 'tcg_date', 'image_url', 'image_key', 'list_rows',
+      'unmatched_rows'
+    ]
+  },
+  { name: 'pack_art', key: ['set_name'], columns: ['set_name', 'image_url', 'image_key'] },
+  { name: 'set_logos', key: ['set_name'], columns: ['set_name', 'image_url', 'image_key'] },
+  { name: 'konami_logos', key: ['set_name'], columns: ['set_name', 'image_url', 'image_key'] },
+  { name: 'tcgplayer_groups', key: ['group_id'], columns: ['group_id', 'modified_on', 'name'] },
+  {
+    name: 'tcgplayer_products',
+    key: ['product_id'],
+    columns: ['product_id', 'group_id', 'number', 'rarity', 'image_url', 'name']
+  }
+]
+
+const q = (c: string): string => `"${c}"`
+
+/**
+ * Change-feed SQL: a global clock, a `catalog_seq` per row (stamped by triggers on real changes),
+ * and tombstones for deletes.
+ *
+ * WARNING: a future desktop step that rebuilds a catalog table on the server (drop, recreate,
+ * reinsert) would fire these triggers: it would tombstone and re-stamp every row.
+ */
+function catalogFeedSql(tables: FrozenTable[]): string {
+  const out: string[] = [
+    'CREATE TABLE catalog_clock (id INTEGER PRIMARY KEY CHECK (id = 1), seq INTEGER NOT NULL);',
+    'INSERT INTO catalog_clock (id, seq) VALUES (1, 0);'
+  ]
+  for (const t of tables) {
+    out.push(`ALTER TABLE ${t.name} ADD COLUMN catalog_seq INTEGER NOT NULL DEFAULT 0;`)
+  }
+  for (const t of tables) {
+    out.push(
+      `UPDATE ${t.name} SET catalog_seq = c.base + x.rn FROM (SELECT rowid AS r, row_number() OVER (ORDER BY rowid) AS rn FROM ${t.name}) AS x, (SELECT seq AS base FROM catalog_clock) AS c WHERE ${t.name}.rowid = x.r;`,
+      `UPDATE catalog_clock SET seq = seq + (SELECT count(*) FROM ${t.name});`
+    )
+  }
+  for (const t of tables) {
+    out.push(`CREATE INDEX ix_${t.name}_catalog_seq ON ${t.name}(catalog_seq);`)
+  }
+  out.push(
+    'CREATE TABLE catalog_tombstones (seq INTEGER PRIMARY KEY, tbl TEXT NOT NULL, key TEXT NOT NULL);',
+    `CREATE TABLE printing_contributions (printing_id INTEGER PRIMARY KEY REFERENCES card_printings(id) ON DELETE CASCADE,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, created_at TEXT NOT NULL);`,
+    'CREATE INDEX ix_contributions_user ON printing_contributions(user_id, created_at);'
+  )
+  const stamp = (t: FrozenTable): string =>
+    `UPDATE catalog_clock SET seq = seq + 1; UPDATE ${t.name} SET catalog_seq = (SELECT seq FROM catalog_clock) WHERE rowid = NEW.rowid;`
+  for (const t of tables) {
+    const watched = [...t.columns, ...(t.extra ?? [])]
+    // card_printings.key is the generated pkey, which isn't in its column list.
+    const changed = (t.name === 'card_printings' ? [...watched, 'pkey'] : watched)
+      .map((c) => `NEW.${q(c)} IS NOT OLD.${q(c)}`)
+      .join(' OR ')
+    const key = t.key.map((c) => `OLD.${q(c)}`).join(', ')
+    out.push(
+      `CREATE TRIGGER trg_${t.name}_seq_ins AFTER INSERT ON ${t.name} BEGIN ${stamp(t)} END;`,
+      `CREATE TRIGGER trg_${t.name}_seq_upd AFTER UPDATE ON ${t.name} WHEN ${changed} BEGIN ${stamp(t)} END;`,
+      `CREATE TRIGGER trg_${t.name}_seq_del AFTER DELETE ON ${t.name} BEGIN UPDATE catalog_clock SET seq = seq + 1; INSERT INTO catalog_tombstones (seq, tbl, key) VALUES ((SELECT seq FROM catalog_clock), '${t.name}', json_array(${key})); END;`
+    )
+  }
+  return out.join('\n')
+}
+
 /**
  * Server-only steps, run after every desktop step. Append only; never edit a shipped step.
  *
@@ -81,7 +182,8 @@ CREATE TABLE friend_blocks (
   CHECK (blocker_id <> blocked_id));
 CREATE INDEX ix_friend_blocks_blocked ON friend_blocks(blocked_id);
 `
-  }
+  },
+  { name: 'server-6', sql: catalogFeedSql(SERVER_6_TABLES) }
 ]
 
 /**

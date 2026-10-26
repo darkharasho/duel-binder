@@ -199,7 +199,8 @@ describe('CATALOG_TABLES', () => {
     for (const t of CATALOG_TABLES) {
       const cols = (desktop.prepare(`PRAGMA table_info(${t.name})`).all() as { name: string }[])
         .map((c) => c.name)
-        .filter((c) => !(t.name === 'card_printings' && c === 'id'))
+        // id is per-store; contributed and remote_id are catalog-feed bookkeeping (V15), not loaded rows
+        .filter((c) => !(t.name === 'card_printings' && ['id', 'contributed', 'remote_id'].includes(c)))
       expect([...t.columns].sort()).toEqual([...cols].sort())
     }
   })

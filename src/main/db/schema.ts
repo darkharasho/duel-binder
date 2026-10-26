@@ -170,6 +170,26 @@ export const SCHEMA_V14 = `
 ALTER TABLE tcgplayer_groups ADD COLUMN name TEXT;
 `
 
+/**
+ * Server-fed catalog: `contributed` marks printings a user added (the server keeps it too, see
+ * server-6), `remote_id` is the server's id for a printing. catalog_staging buffers rows pulled
+ * from the server's change feed until they are applied; sync_issues lists collection entries that
+ * could not be matched to a printing.
+ */
+export const SCHEMA_V15 = `
+ALTER TABLE card_printings ADD COLUMN contributed INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE card_printings ADD COLUMN remote_id INTEGER;
+CREATE INDEX ix_printings_remote ON card_printings(remote_id);
+CREATE TABLE catalog_staging (seq INTEGER PRIMARY KEY, tbl TEXT NOT NULL, row TEXT NOT NULL);
+CREATE TABLE sync_issues (owner_id INTEGER NOT NULL, uid TEXT NOT NULL, pkey TEXT NOT NULL, reason TEXT NOT NULL,
+  since TEXT NOT NULL, PRIMARY KEY (owner_id, uid));
+`
+
+/** The server only needs the contributed flag; remote ids and staging are desktop-side. */
+export const SCHEMA_V15_SERVER = `
+ALTER TABLE card_printings ADD COLUMN contributed INTEGER NOT NULL DEFAULT 0;
+`
+
 /** A printing's rarity as shown: "Starlight Rare (Extended Art)" for a labelled variant. */
 export const RARITY_LABEL = "p.set_rarity || COALESCE(' (' || p.variant || ')', '')"
 
@@ -188,6 +208,7 @@ export const MIGRATIONS: Migration[] = [
   { version: 11, sql: SCHEMA_V11 },
   { version: 12, sql: SCHEMA_V12, server: false },
   { version: 13, sql: SCHEMA_V13 },
-  { version: 14, sql: SCHEMA_V14 }
+  { version: 14, sql: SCHEMA_V14 },
+  { version: 15, sql: SCHEMA_V15, server: SCHEMA_V15_SERVER }
 ]
 

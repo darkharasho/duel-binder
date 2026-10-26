@@ -13,18 +13,15 @@ const OVERRIDES: Record<string, SetType> = {}
 
 /** Ordered rules on the lower-cased name; first match wins, no match is a booster. */
 const RULES: [SetType, RegExp][] = [
-  [
-    'deck',
-    /\b(structure|starter|demo|speed duel starter|egyptian god|chronicles) decks?\b|\bstarter (deck|set)s?\b|\bdecks?\b|\bsuper starter\b/
-  ],
+  ['deck', /\bdecks?\b|\bstarter sets?\b|\bsuper starter\b/],
   ['tin', /\btins?\b|\bmega-tins?\b/],
   [
     'collection',
-    /\bcollection\b|\bduelist pack\b|\bbattles of legend\b|\bmaximum gold\b|\bhidden arsenal\b|\bghosts from the past\b|\bduel devastator\b|\bquarter century bonanza\b|\bmega pack\b|\bchampion pack\b|special edition/
+    /\bcollection\b|\bduelist pack\b|\bbattles of legend\b|\bmaximum gold\b|\bhidden arsenal\b|\bghosts from the past\b|\bduel devastator\b|\bquarter century bonanza\b|\bmega pack\b|\bchampion pack\b|special edition|\blegendary duelists\b|\bgold series\b|\bpremium gold\b|\bking['’]s court\b|\banniversary pack\b|\bcollector box\b|\badvent calendar\b/
   ],
   [
     'promo',
-    /promo|prize|sweepstakes|collaboration|distribution|participation|\bots\b|sneak peek|championship|magazine|\bjump\b|movie|theater|game promotional/
+    /promo|prize|sweepstakes|collaboration|distribution|participation|\bots\b|sneak peek|championship|magazine|\bjump\b|movie|theater|game promotional|\btournament pack\b|winner['’]s pack|thank you pack|\bexclusive pack\b|\bevent pack\b|\blimited pack\b|collector['’]s edition/
   ]
 ]
 

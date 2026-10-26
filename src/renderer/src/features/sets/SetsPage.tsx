@@ -221,7 +221,14 @@ export function SetsPage({ onAddCard, onAddMissing }: SetsPageProps): React.JSX.
             />
           </div>
           <div className="ml-auto flex flex-wrap items-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => setPanelOpen(true)}>
+            <Button
+              variant="outline"
+              size="sm"
+              aria-label={
+                activeCount > 0 ? `Filters & sort, ${activeCount} active` : 'Filters & sort'
+              }
+              onClick={() => setPanelOpen(true)}
+            >
               <SlidersHorizontal />
               Filters &amp; sort
               {activeCount > 0 && (

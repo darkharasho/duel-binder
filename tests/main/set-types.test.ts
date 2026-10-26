@@ -50,7 +50,12 @@ const cases: [SetType, string[]][] = [
       'Duel Devastator',
       'Duelist Pack: Yusei',
       'Quarter Century Bonanza',
-      'Rarity Collection II'
+      'Rarity Collection II',
+      'Legendary Duelists: Season 1',
+      'Premium Gold',
+      'Gold Series',
+      "Kaiba's Collector Box",
+      'Yu-Gi-Oh! Advent Calendar'
     ]
   ],
   [
@@ -61,7 +66,10 @@ const cases: [SetType, string[]][] = [
       'Blue-Eyes Alternative White Dragon Sweepstakes',
       'OTS Tournament Pack 21',
       'Yu-Gi-Oh! 3D Bonds Beyond Time Theater distribution card',
-      'Shonen Jump Magazine Promos'
+      'Shonen Jump Magazine Promos',
+      'OTS Tournament Pack 4',
+      'THANK YOU PACK',
+      'WCS 2025 Limited Pack'
     ]
   ]
 ]
@@ -90,7 +98,11 @@ it('classifies the real cardsets list sensibly', () => {
   const count = (t: SetType): number =>
     sets.filter((s) => setType({ setName: s.set_name, setCode: s.set_code }) === t).length
   expect(count('promo')).toBeLessThan(600)
-  expect(count('booster')).toBeGreaterThan(250)
+  expect(count('booster')).toBeGreaterThan(200)
+  expect(count('booster')).toBeLessThan(300)
+  expect(count('deck')).toBeGreaterThan(90)
+  expect(count('tin')).toBeGreaterThan(40)
+  expect(count('collection')).toBeGreaterThan(100)
   for (const s of sets.filter((s) => s.set_name.includes('Structure Deck')))
     expect(setType({ setName: s.set_name, setCode: s.set_code })).toBe('deck')
 })

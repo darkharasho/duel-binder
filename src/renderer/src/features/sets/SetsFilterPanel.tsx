@@ -4,7 +4,13 @@ import type { CountMode } from '@shared/types'
 import { LanguageSelect } from '@/components/LanguageSelect'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle
+} from '@/components/ui/sheet'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import type { SetFilter, SetSort } from './setsView'
 
@@ -103,6 +109,7 @@ export function SetsFilterPanel(p: SetsFilterPanelProps): React.JSX.Element {
       <SheetContent side="right" className="w-80 gap-0 overflow-y-auto">
         <SheetHeader>
           <SheetTitle>Filters &amp; sort</SheetTitle>
+          <SheetDescription className="sr-only">Filter and sort the sets list</SheetDescription>
         </SheetHeader>
         <div className="flex flex-col gap-5 px-4 pb-4">
           <Section title="Type">

@@ -119,7 +119,9 @@ describe('SetsPage', () => {
     expect(screen.getByRole('button', { name: /Albaz Strike/ })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Metal Raiders/ })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Remove Decks filter' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /^Filters & sort/ })).toHaveTextContent('1')
+    expect(screen.getByRole('button', { name: 'Filters & sort, 1 active' })).toHaveTextContent(
+      /^Filters & sort1$/
+    )
     await userEvent.click(screen.getByRole('button', { name: 'Remove Decks filter' }))
     expect(screen.getByRole('button', { name: /Metal Raiders/ })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Albaz Strike/ })).toBeInTheDocument()
@@ -157,6 +159,7 @@ describe('SetsPage', () => {
     await userEvent.click(screen.getByRole('checkbox', { name: /Decks/ }))
     await closePanel()
     await userEvent.click(screen.getByRole('button', { name: 'Clear' }))
+    expect(screen.queryAllByRole('button', { name: /^Remove .* filter$/ })).toHaveLength(0)
     await openPanel()
     expect(screen.getByRole('radio', { name: 'All' })).toBeChecked()
     expect(screen.getByRole('checkbox', { name: /Decks/ })).not.toBeChecked()

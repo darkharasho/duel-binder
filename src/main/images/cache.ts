@@ -69,6 +69,8 @@ export interface ImageCache {
 export interface ImageSource {
   url: string
   headers?: Record<string, string>
+  /** Printings only: the file name (without extension) and in-flight key, stable across local row ids. */
+  key?: string
 }
 
 /** Where each kind of image comes from; null answers mean "nothing to fetch" and are never cached. */
@@ -115,7 +117,11 @@ export function createImageCache(opts: {
     finalPath: string | ((contentType: string) => string | null),
     prepare?: (file: string) => Promise<void>
   ): Promise<string | null> {
-    const tmpPath = `${typeof finalPath === 'string' ? finalPath : path.join(opts.dir, 'printings', `dl-${randomUUID()}`)}.tmp`
+    const tmpBase =
+      typeof finalPath === 'string'
+        ? finalPath
+        : path.join(opts.dir, 'printings', `dl-${randomUUID()}`)
+    const tmpPath = `${tmpBase}.tmp`
     try {
       await fs.mkdir(path.dirname(tmpPath), { recursive: true })
       const res = await fetchFn(source.url, {
@@ -200,16 +206,16 @@ export function createImageCache(opts: {
     },
 
     async getPrinting(printingId) {
-      const base = path.join(opts.dir, 'printings', `srv-${printingId}`)
-      for (const ext of PRINTING_EXTS) if (await exists(`${base}.${ext}`)) return `${base}.${ext}`
       let src: ImageSource | null
       try {
         src = await opts.sources.printing(printingId)
       } catch {
         return null
       }
-      if (src === null) return null
-      return cached(`printing/${printingId}`, src, (ct) => {
+      if (src === null || !src.key) return null
+      const base = path.join(opts.dir, 'printings', src.key)
+      for (const ext of PRINTING_EXTS) if (await exists(`${base}.${ext}`)) return `${base}.${ext}`
+      return cached(`printing/${src.key}`, src, (ct) => {
         const ext = PRINTING_EXT[ct.split(';')[0].trim()]
         return ext ? `${base}.${ext}` : null
       })

@@ -41,7 +41,8 @@ export function directImageSources(opts: {
     konami: (key) => resolved(key, KONAMI_LOGO_PREFIX),
     async printing(printingId) {
       const url = (await opts.resolvePrintingArt?.(printingId)) ?? null
-      return url !== null && printingImageKey(url) !== null ? { url, headers } : null
+      const key = printingImageKey(url)
+      return url !== null && key !== null ? { url, headers, key } : null
     }
   }
 }

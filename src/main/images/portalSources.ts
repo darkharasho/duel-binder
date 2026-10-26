@@ -20,7 +20,8 @@ export function portalImageSources(opts: {
     konami: (key) => at(`konami/${encodeURIComponent(key)}`),
     printing: async (printingId) => {
       const remote = opts.remoteId(printingId)
-      return remote === null ? null : at(`printing/${remote}`)
+      const source = remote === null ? null : at(`printing/${remote}`)
+      return source && { ...source, key: `srv-${remote}` }
     }
   }
 }

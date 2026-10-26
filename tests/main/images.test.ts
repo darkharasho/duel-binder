@@ -246,20 +246,30 @@ describe('images through the portal', () => {
     expect(new Headers(fetchFn.mock.calls[0][1]?.headers).get('authorization')).toBe('Bearer tok')
   })
 
-  it('asks nothing when signed out, and caches no miss', async () => {
-    const fetchFn = vi.fn<Fetch>(async () => okResponse())
-    const cache = setup({ token: null, remote: 77, fetchFn })
+  it('asks nothing when signed out, caches no miss, and fetches once signed in', async () => {
+    const fetchFn = vi.fn<Fetch>(async () => okResponse('png', 'image/png'))
+    let token: string | null = null
+    const cache = createImageCache({
+      dir,
+      fetchFn: fetchFn as unknown as typeof fetch,
+      limit: noLimit,
+      sources: portalImageSources({ portal: PORTAL, token: () => token, remoteId: () => 77 })
+    })
     expect(await cache.get('small', 9)).toBeNull()
     expect(await cache.getSet('MRD')).toBeNull()
     expect(await cache.getPrinting(5)).toBeNull()
     expect(fetchFn).not.toHaveBeenCalled()
+    token = 'tok'
+    expect(await cache.get('small', 9)).not.toBeNull()
+    expect(await cache.getPrinting(5)).not.toBeNull()
+    expect(fetchFn).toHaveBeenCalledTimes(2)
   })
 
   it('maps a printing to its server id', async () => {
     const fetchFn = vi.fn<Fetch>(async () => okResponse('png', 'image/png'))
     const cache = setup({ fetchFn })
     const file = await cache.getPrinting(5)
-    expect(file).toBe(path.join(dir, 'printings', 'srv-5.png'))
+    expect(file).toBe(path.join(dir, 'printings', 'srv-77.png'))
     expect(fetchFn.mock.calls[0][0]).toBe(`${PORTAL}/img/printing/77`)
     expect(await cache.getPrinting(5)).toBe(file)
     expect(fetchFn).toHaveBeenCalledTimes(1)
@@ -287,5 +297,51 @@ describe('images through the portal', () => {
     expect(fetchFn).toHaveBeenCalledTimes(2)
     expect(await cache.getPrinting(5)).toBeNull()
     expect(await fs.readdir(path.join(dir, 'sets'))).toEqual([])
+  })
+
+  it('keys printing files by the server id, not the local one', async () => {
+    const fetchFn = vi.fn<Fetch>(async () => okResponse('png', 'image/png'))
+    const ids = new Map<number, number>([[1, 77], [2, 77]])
+    const cache = createImageCache({
+      dir,
+      fetchFn: fetchFn as unknown as typeof fetch,
+      limit: noLimit,
+      sources: portalImageSources({ portal: PORTAL, token: () => 'tok', remoteId: (id) => ids.get(id) ?? null })
+    })
+    const a = await cache.getPrinting(1)
+    expect(await cache.getPrinting(2)).toBe(a)
+    expect(fetchFn).toHaveBeenCalledTimes(1)
+    ids.set(1, 88) // local id reused for another printing
+    const b = await cache.getPrinting(1)
+    expect(b).toBe(path.join(dir, 'printings', 'srv-88.png'))
+    expect(fetchFn.mock.calls[1][0]).toBe(`${PORTAL}/img/printing/88`)
+    ids.delete(1)
+    expect(await cache.getPrinting(1)).toBeNull()
+  })
+
+  it.each([
+    ['image/jpeg', 'jpg'],
+    ['image/webp', 'webp'],
+    ['image/gif', 'gif'],
+    ['image/png; charset=binary', 'png']
+  ])('names a printing file by its content-type %s', async (type, ext) => {
+    const cache = setup({ fetchFn: async () => okResponse('x', type) })
+    expect(await cache.getPrinting(5)).toBe(path.join(dir, 'printings', `srv-77.${ext}`))
+  })
+
+  it('refuses an unsupported printing format and leaves nothing on disk', async () => {
+    const cache = setup({ fetchFn: async () => okResponse('<svg/>', 'image/svg+xml') })
+    expect(await cache.getPrinting(5)).toBeNull()
+    expect(await fs.readdir(path.join(dir, 'printings'))).toEqual([])
+  })
+
+  it.each([401, 404])('does not cache a %i', async (status) => {
+    const fetchFn = vi.fn<Fetch>(async () => new Response('no', { status }))
+    const cache = setup({ fetchFn })
+    expect(await cache.get('small', 9)).toBeNull()
+    expect(await cache.get('small', 9)).toBeNull()
+    expect(await cache.getPrinting(5)).toBeNull()
+    expect(await cache.getPrinting(5)).toBeNull()
+    expect(fetchFn).toHaveBeenCalledTimes(4)
   })
 })

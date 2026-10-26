@@ -141,7 +141,21 @@ export function CollectionPage({
   }
 
   const list = entries.data ?? []
-  const selectedEntry = list.find((e) => e.id === selectedId)
+  // A friend's open card lists all their copies, not just those the filters let through.
+  const allFriendEntries = useQuery({
+    queryKey: queryKeys.friendEntries(friendId ?? 0, DEFAULT_FILTERS),
+    queryFn: () => api.friends.collection(friendId ?? 0, DEFAULT_FILTERS),
+    enabled: friendId !== undefined && selectedId !== null
+  })
+  const selectedEntry =
+    list.find((e) => e.id === selectedId) ??
+    (friend ? allFriendEntries.data?.find((e) => e.id === selectedId) : undefined)
+  // A failed background refetch keeps the cards already shown; a failed first load (or a load for
+  // filters whose results never arrived) shows the error in their place.
+  const friendLoadFailed =
+    friend !== undefined &&
+    entries.isError &&
+    (entries.data === undefined || entries.isPlaceholderData)
   const nav = listNav(
     list,
     list.findIndex((e) => e.id === selectedId),
@@ -204,7 +218,13 @@ export function CollectionPage({
           />
         </PageHeader>
 
-        {friend && entries.isError ? (
+        {friend && entries.isError && !friendLoadFailed && (
+          <p role="alert" className="mb-3 text-sm text-muted-foreground">
+            Couldn&apos;t refresh {friendName}&apos;s collection:{' '}
+            {friendsErrorMessage(entries.error)}
+          </p>
+        )}
+        {friendLoadFailed && entries.isError ? (
           <div className="flex flex-col items-center gap-3 py-24 text-center">
             <p role="alert" className="text-sm text-muted-foreground">
               {friendsErrorMessage(entries.error)}
@@ -255,7 +275,9 @@ export function CollectionPage({
           <CardSheet onClose={close}>
             <FriendEntryPanel
               entry={selectedEntry}
-              copies={list.filter((e) => e.card.id === selectedEntry.card.id)}
+              copies={(allFriendEntries.data ?? list).filter(
+                (e) => e.card.id === selectedEntry.card.id
+              )}
               onSelectEntry={setSelectedId}
               nav={nav}
             />

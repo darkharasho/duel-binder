@@ -44,6 +44,7 @@ const make = (overview: FriendsOverview, over: DeepPartial<Api> = {}): Api =>
 
 afterEach(() => {
   window.api = undefined as never
+  localStorage.clear()
 })
 
 const shell = (api: Api): void => {
@@ -88,6 +89,30 @@ describe('friends nav', () => {
     )
     shell(api)
     expect(await screen.findByRole('button', { name: 'Friends' })).toBeInTheDocument()
+  })
+
+  it('shows at once on desktop when the last status was signed in, before fetching', async () => {
+    localStorage.setItem('friends.signedIn', '1')
+    const api = make(
+      { friends: [], incoming: [] },
+      {
+        window: { platform: 'linux' },
+        account: { status: vi.fn(() => new Promise<AccountStatus>(() => {})) }
+      }
+    )
+    shell(api)
+    expect(screen.getByRole('button', { name: 'Friends' })).toBeInTheDocument()
+    await waitFor(() => expect(api.account.status).toHaveBeenCalled())
+    expect(api.friends.overview).not.toHaveBeenCalled()
+  })
+
+  it('remembers a signed-out status for the next start', async () => {
+    const api = make(
+      { friends: [], incoming: [] },
+      { window: { platform: 'linux' }, account: { status: vi.fn(async () => signedOut) } }
+    )
+    shell(api)
+    await waitFor(() => expect(localStorage.getItem('friends.signedIn')).toBe('0'))
   })
 
   it('badges incoming requests', async () => {
@@ -274,6 +299,17 @@ describe('friends cache across accounts', () => {
 
     act(() => emit({ ...signedIn, user: { ...seto, id: 99, username: 'other' } }))
     await waitFor(() => expect(client.getQueryData(['friends'])).toBeUndefined())
+  })
+
+  it('fetches the overview once at startup', async () => {
+    const api = make(
+      { friends: [bob], incoming: [] },
+      { window: { platform: 'linux' }, account: { status: vi.fn(async () => signedIn) } }
+    )
+    renderWithProviders(<FriendsPage onBackToMine={() => {}} />, { api })
+    expect(await screen.findByText('Bob')).toBeInTheDocument()
+    await new Promise((r) => setTimeout(r, 50))
+    expect(api.friends.overview).toHaveBeenCalledTimes(1)
   })
 
   it('drops the cached friends on sign-out', async () => {

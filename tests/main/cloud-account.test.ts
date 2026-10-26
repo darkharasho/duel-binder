@@ -729,6 +729,23 @@ describe('account portal calls', () => {
     await rejected
   })
 
+  it('cuts off a call still waiting when the account signs out', async () => {
+    const service = makeService()
+    await signInAs(service, me(alice, 'alice'))
+    fetchSpy.mockImplementationOnce(
+      (_input, init) =>
+        new Promise((_resolve, reject) => {
+          init?.signal?.addEventListener('abort', () =>
+            reject(new DOMException('Aborted', 'AbortError'))
+          )
+        })
+    )
+    const pending = service.portal('friends:overview', [])
+    const rejected = expect(pending).rejects.toThrow(FRIENDS_SIGNED_OUT)
+    await service.signOut()
+    await rejected
+  })
+
   it('signs out when the server no longer knows the token', async () => {
     const service = makeService()
     const token = await signInAs(service, me(alice, 'alice'))

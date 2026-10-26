@@ -60,6 +60,15 @@ CREATE TABLE friendships (
   CHECK (requester_id <> addressee_id));
 CREATE INDEX ix_friendships_addressee ON friendships(addressee_id, status);
 `
+  },
+  {
+    name: 'server-4',
+    sql: `
+CREATE TABLE friend_request_log (
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at TEXT NOT NULL);
+CREATE INDEX ix_friend_request_log ON friend_request_log(user_id, created_at);
+`
   }
 ]
 

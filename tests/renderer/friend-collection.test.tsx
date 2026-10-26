@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { QueryClientProvider } from '@tanstack/react-query'
 import type { CardRow, EntryView, Friend, Printing } from '@shared/types'
@@ -143,6 +143,48 @@ describe('friend collection', () => {
     expect(screen.queryByRole('radiogroup', { name: /Artwork/ })).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Printing')).not.toBeInTheDocument()
     expect(api.collection.forCard).not.toHaveBeenCalled()
+  })
+
+  it('lists all their copies of a card, even ones the filters hide', async () => {
+    const second = entry(3, 'Kuriboh', { card: kuriboh.card })
+    const api = createMockApi({
+      window: { platform: 'web' },
+      friends: {
+        collection: vi.fn(async (_id: number, f: { q?: string }) =>
+          f.q ? [kuriboh] : [kuriboh, second]
+        )
+      }
+    })
+    renderWithProviders(<CollectionPage friend={friend} onBackToMine={() => {}} />, { api })
+    await screen.findAllByText('Kuriboh')
+    await userEvent.type(screen.getByLabelText('Search collection'), 'LOB-EN001')
+    await waitFor(() => expect(screen.getAllByText('Kuriboh')).toHaveLength(1))
+    await userEvent.click(screen.getByText('Kuriboh'))
+    const copies = await screen.findByRole('region', { name: 'Their copies' })
+    await waitFor(() => expect(within(copies).getByText(/LOB-EN003/)).toBeInTheDocument())
+    // Picking the hidden copy keeps the panel open on it.
+    await userEvent.click(within(copies).getByText(/LOB-EN003/))
+    expect(
+      within(copies)
+        .getByText(/LOB-EN003/)
+        .closest('button')
+    ).toHaveAttribute('aria-current', 'true')
+  })
+
+  it('keeps the cards shown when a background refresh fails', async () => {
+    const collection = vi
+      .fn()
+      .mockResolvedValueOnce([kuriboh])
+      .mockRejectedValue(new Error("You're offline."))
+    const api = createMockApi({ window: { platform: 'web' }, friends: { collection } })
+    const { client } = renderWithProviders(
+      <CollectionPage friend={friend} onBackToMine={() => {}} />,
+      { api }
+    )
+    expect(await screen.findByText('Kuriboh')).toBeInTheDocument()
+    await act(() => client.refetchQueries({ queryKey: ['friends', 7, 'entries'] }))
+    expect(await screen.findByRole('alert')).toHaveTextContent(/Couldn't refresh.*You're offline/)
+    expect(screen.getByText('Kuriboh')).toBeInTheDocument()
   })
 
   it('passes search filters to the friend endpoint', async () => {

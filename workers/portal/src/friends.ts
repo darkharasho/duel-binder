@@ -12,6 +12,10 @@ import { avatarUrl } from './auth'
 /** A friend-request problem the caller can fix; rpc.ts answers it as a 400. */
 export class FriendError extends CollectionError {}
 
+/** New requests one user may send in a rolling day; repeats to a pending request don't count. */
+export const DAILY_REQUEST_LIMIT = 20
+const DAY_MS = 24 * 60 * 60 * 1000
+
 interface UserRow {
   id: number
   discord_id: string
@@ -23,7 +27,8 @@ interface UserRow {
 const toUser = (r: UserRow): FriendUser => ({
   id: r.id,
   username: r.username,
-  displayName: r.display_name,
+  // Discord sends '' for an unset global name; show the username then.
+  displayName: r.display_name || null,
   avatarUrl: avatarUrl(r.discord_id, r.avatar)
 })
 
@@ -44,7 +49,7 @@ export function friendsOverview(db: SqlDb, me: number): FriendsOverview {
                                           WHERE status = 'accepted' AND ? IN (requester_id, addressee_id))
                        GROUP BY user_id) c ON c.user_id = u.id
           WHERE f.status = 'accepted' AND ? IN (f.requester_id, f.addressee_id)
-          ORDER BY COALESCE(u.display_name, u.username) COLLATE NOCASE, u.id`
+          ORDER BY COALESCE(NULLIF(u.display_name, ''), u.username) COLLATE NOCASE, u.id`
       )
       .all(me, me, me, me) as (UserRow & { cards: number; updated: string | null })[]
   ).map((r): Friend => ({ ...toUser(r), cardCount: r.cards, updatedAt: r.updated }))
@@ -90,6 +95,17 @@ export function requestFriend(
   }
   if (!row) {
     const ts = now.toISOString()
+    const since = new Date(now.getTime() - DAY_MS).toISOString()
+    db.prepare('DELETE FROM friend_request_log WHERE user_id = ? AND created_at <= ?').run(
+      me,
+      since
+    )
+    const { n } = db
+      .prepare('SELECT count(*) AS n FROM friend_request_log WHERE user_id = ?')
+      .get(me) as { n: number }
+    if (n >= DAILY_REQUEST_LIMIT)
+      throw new FriendError("You've sent a lot of friend requests today. Try again tomorrow.")
+    db.prepare('INSERT INTO friend_request_log (user_id, created_at) VALUES (?, ?)').run(me, ts)
     db.prepare(
       "INSERT INTO friendships (requester_id, addressee_id, status, created_at, updated_at) VALUES (?, ?, 'pending', ?, ?)"
     ).run(me, target.id, ts, ts)

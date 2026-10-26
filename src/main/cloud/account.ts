@@ -59,6 +59,8 @@ export const SERVER_SIGNED_OUT = 'Signed out by the server. Sign in again to kee
 /** The final push before a deliberate sign-out, and each revoke, get at most this long. */
 const SIGN_OUT_CAP_MS = 10_000
 const PRICE_FOLLOW_UP_MS = 20_000
+/** A portal call the user is waiting on (friends) gives up after this long. */
+const PORTAL_TIMEOUT_MS = 15_000
 
 type State = AccountStatus['state']
 
@@ -76,6 +78,8 @@ export function createAccountService(deps: AccountDeps): AccountService {
   let error: string | null = null
   /** Bumped on every sign-in, sign-out and stop, so a run that outlives its session changes nothing. */
   let session = 0
+  /** Cuts off this session's portal calls when the session ends. */
+  let portalAbort = new AbortController()
   let meRefreshed = false
   let stopped = false
   let signInAbort: AbortController | null = null
@@ -83,6 +87,13 @@ export function createAccountService(deps: AccountDeps): AccountService {
   let signingOut: Promise<AccountStatus> | null = null
   let runAbort: AbortController | null = null
   let inFlight: Promise<void> | null = null
+
+  /** Ends the session: in-flight runs and portal calls belong to the old one. */
+  function endSession(): void {
+    session++
+    portalAbort.abort()
+    portalAbort = new AbortController()
+  }
 
   const scheduler: SyncScheduler = createSyncScheduler({
     run: () => {
@@ -134,7 +145,7 @@ export function createAccountService(deps: AccountDeps): AccountService {
 
   /** The server no longer knows this token: nothing to revoke, and no further runs. */
   function serverSignedOut(): void {
-    session++
+    endSession()
     scheduler.stop()
     forget()
     set('signed-out', SERVER_SIGNED_OUT)
@@ -210,7 +221,7 @@ export function createAccountService(deps: AccountDeps): AccountService {
     tokens.set(newToken)
     token = newToken
     setMeta(db, 'cloud_user', JSON.stringify(user))
-    session++
+    endSession()
     meRefreshed = false
     set('idle')
     if (before !== user.id) deps.emitDataChanged()
@@ -251,7 +262,7 @@ export function createAccountService(deps: AccountDeps): AccountService {
     }
 
     // Ends background sync; a run still in flight is cut off and its outcome ignored.
-    session++
+    endSession()
     scheduler.stop()
     runAbort?.abort()
     // Signed out on disk before any network call: quitting during the push or revoke below can't leave
@@ -333,9 +344,12 @@ export function createAccountService(deps: AccountDeps): AccountService {
       const current = token
       if (current === null) throw new Error(FRIENDS_SIGNED_OUT)
       const mine = session
+      const signal = portalAbort.signal
       let result: T
       try {
-        result = await deps.client(current).rpc<T>(channel, args)
+        result = await deps
+          .client(current, { signal, timeoutMs: PORTAL_TIMEOUT_MS })
+          .rpc<T>(channel, args)
       } catch (e) {
         // The account changed during the call (a newer sign-in keeps its own token): nothing here concerns it.
         if (mine !== session) throw new Error(FRIENDS_SIGNED_OUT, { cause: e })
@@ -359,7 +373,7 @@ export function createAccountService(deps: AccountDeps): AccountService {
 
     stop() {
       stopped = true
-      session++
+      endSession()
       scheduler.stop()
       signInAbort?.abort()
       signInAbort = null

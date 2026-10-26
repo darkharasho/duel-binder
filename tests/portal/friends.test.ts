@@ -8,7 +8,8 @@ import {
   friendsOverview,
   ignoreFriend,
   removeFriend,
-  requestFriend
+  requestFriend,
+  DAILY_REQUEST_LIMIT
 } from '../../workers/portal/src/friends'
 import { userScope } from '../../workers/portal/src/scope'
 import { addUser, seededServerDb } from './helpers'
@@ -190,5 +191,43 @@ describe('friends', () => {
     const dave = addUser(db, 'd-dave', 'dave')
     requestFriend(db, dave, 'carol', new Date('2026-10-25T14:00:00.000Z'))
     expect(friendsOverview(db, carol).incoming.map((r) => r.id)).toEqual([dave, bob])
+  })
+
+  it('shows the username when the display name is blank, and sorts by it', () => {
+    db.prepare("UPDATE users SET display_name = '' WHERE id = ?").run(bob)
+    db.prepare("UPDATE users SET display_name = 'Amy' WHERE id = ?").run(carol)
+    requestFriend(db, alice, 'bob', NOW)
+    expect(friendsOverview(db, bob).incoming).toEqual([
+      expect.objectContaining({ id: alice, displayName: null })
+    ])
+    acceptFriend(db, bob, alice, NOW)
+    requestFriend(db, alice, 'carol', NOW)
+    acceptFriend(db, carol, alice, NOW)
+    const friends = friendsOverview(db, alice).friends
+    expect(friends.map((f) => [f.id, f.displayName])).toEqual([
+      [carol, 'Amy'],
+      [bob, null]
+    ])
+  })
+
+  it('caps new requests per rolling day, not repeats or accepts', () => {
+    const others = Array.from({ length: DAILY_REQUEST_LIMIT + 1 }, (_, i) =>
+      addUser(db, `d-u${i}`, `user${i}`)
+    )
+    for (let i = 0; i < DAILY_REQUEST_LIMIT; i++) requestFriend(db, alice, `user${i}`, NOW)
+    // A repeat to a pending request and accepting a crossed one still work.
+    expect(requestFriend(db, alice, 'user0', NOW)).toEqual({ status: 'sent' })
+    requestFriend(db, bob, 'alice', NOW)
+    expect(requestFriend(db, alice, 'bob', NOW).status).toBe('accepted')
+    expect(() => requestFriend(db, alice, `user${DAILY_REQUEST_LIMIT}`, NOW)).toThrow(
+      /Try again tomorrow/
+    )
+    // Ignored requests still count, so ignore-and-resend can't get around it.
+    ignoreFriend(db, others[1], alice)
+    expect(() => requestFriend(db, alice, 'user1', NOW)).toThrow(FriendError)
+    const later = new Date(NOW.getTime() + 24 * 60 * 60 * 1000 + 1)
+    expect(requestFriend(db, alice, `user${DAILY_REQUEST_LIMIT}`, later)).toEqual({
+      status: 'sent'
+    })
   })
 })

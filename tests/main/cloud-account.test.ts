@@ -18,6 +18,7 @@ import { TokenStore, type Cipher } from '../../src/main/cloud/tokenStore'
 import { createHandlers } from '../../src/main/ipc/handlers'
 import { addEntry, listEntries, updateEntry } from '../../src/main/repo/collection'
 import type { Me } from '../../src/shared/cloud'
+import { FRIENDS_SIGNED_OUT, OFFLINE_MESSAGE } from '../../src/shared/friends'
 import type { AccountStatus } from '../../src/shared/types'
 import { userScope } from '../../workers/portal/src/scope'
 import { inProcessPortal, PORTAL } from './cloudHelpers'
@@ -681,5 +682,44 @@ describe('account service', () => {
     ])
     expect(done).toBe('done')
     expect(service.isSignedIn()).toBe(false)
+  })
+})
+
+describe('account portal calls', () => {
+  const rpcCalls = (): number =>
+    fetchSpy.mock.calls.filter(([input]) => String(input).includes('/api/rpc/')).length
+
+  it('rejects while signed out, without calling the portal', async () => {
+    const service = makeService()
+    await expect(service.portal('friends:overview', [])).rejects.toThrow(FRIENDS_SIGNED_OUT)
+    expect(rpcCalls()).toBe(0)
+  })
+
+  it('calls the channel as the signed-in account', async () => {
+    const service = makeService()
+    await signInAs(service, me(alice, 'alice'))
+    await expect(service.portal('friends:overview', [])).resolves.toBeDefined()
+    expect(rpcCalls()).toBe(1)
+  })
+
+  it('rejects with the offline message and leaves the status alone', async () => {
+    const service = makeService()
+    await signInAs(service, me(alice, 'alice'))
+    const before = service.status()
+    unreachable = true
+    await expect(service.portal('friends:overview', [])).rejects.toThrow(OFFLINE_MESSAGE)
+    expect(service.status()).toEqual(before)
+  })
+
+  it('signs out when the server no longer knows the token', async () => {
+    const service = makeService()
+    const token = await signInAs(service, me(alice, 'alice'))
+    portal.serverDb.prepare('DELETE FROM sessions').run()
+    await expect(service.portal('friends:overview', [])).rejects.toThrow(SERVER_SIGNED_OUT)
+    expect(service.status().state).toBe('signed-out')
+    expect(service.status().error).toBe(SERVER_SIGNED_OUT)
+    expect(service.isSignedIn()).toBe(false)
+    expect(new TokenStore(tokenFile(), fakeCipher).get()).toBeNull()
+    expect(token).toBeTruthy()
   })
 })

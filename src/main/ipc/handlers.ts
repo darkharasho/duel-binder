@@ -1,7 +1,7 @@
 import type Database from 'better-sqlite3'
 import { ipcMain } from 'electron'
 import type { Language } from '@shared/languages'
-import type { SyncStatus, UpdateStatus } from '@shared/types'
+import type { CollectionFilters, EntryView, SyncStatus, UpdateStatus } from '@shared/types'
 import type { INVOKE_CHANNELS } from '@shared/ipc'
 import { INVOKE_CHANNELS as CHANNELS } from '@shared/ipc'
 import type { YgoClient } from '../ygo/client'
@@ -54,12 +54,10 @@ export interface HandlerDeps {
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type Handlers = Record<(typeof INVOKE_CHANNELS)[number], (...args: any[]) => Promise<unknown>>
-
-/** Temporary: friends channels are wired to the portal in a later task. */
-const notImplemented = (): never => {
-  throw new Error('Not implemented')
-}
+export type Handlers = Record<
+  (typeof INVOKE_CHANNELS)[number],
+  (...args: any[]) => Promise<unknown>
+>
 
 export function createHandlers({
   db,
@@ -115,19 +113,28 @@ export function createHandlers({
     },
     'collection:remove': async (id: number) => edited(snapshotAfter(removeEntry(db, id))),
     'collection:facets': async () => getFacets(db),
-    // Replaced by the real desktop implementations in a later task.
-    'friends:overview': async () => notImplemented(),
-    'friends:request': async () => notImplemented(),
-    'friends:accept': async () => notImplemented(),
-    'friends:ignore': async () => notImplemented(),
-    'friends:remove': async () => notImplemented(),
-    'friends:collection': async () => notImplemented(),
-    'friends:facets': async () => notImplemented(),
+    'friends:overview': async () => account.portal('friends:overview', []),
+    'friends:request': async (username: string) => account.portal('friends:request', [username]),
+    'friends:accept': async (userId: number) => account.portal('friends:accept', [userId]),
+    'friends:ignore': async (userId: number) => account.portal('friends:ignore', [userId]),
+    'friends:remove': async (userId: number) => account.portal('friends:remove', [userId]),
+    // Printing ids differ between the server and this computer, so a friend's entries get no printing scans.
+    'friends:collection': async (userId: number, f: CollectionFilters) =>
+      (await account.portal<EntryView[]>('friends:collection', [userId, f])).map((e) => ({
+        ...e,
+        originalArt: false
+      })),
+    'friends:facets': async (userId: number) => account.portal('friends:facets', [userId]),
     'stats:get': async () => getStats(db),
     'sets:list': async () => listSets(db),
     'sets:checklist': async (setName: string, language: Language) =>
       getChecklist(db, setName, checkLanguage(language)),
-    'sets:adjust': async (setName: string, language: Language, printingId: number, delta: 1 | -1) => {
+    'sets:adjust': async (
+      setName: string,
+      language: Language,
+      printingId: number,
+      delta: 1 | -1
+    ) => {
       const result = edited(
         snapshotAfter(adjustPrinting(db, setName, checkLanguage(language), printingId, delta))
       )

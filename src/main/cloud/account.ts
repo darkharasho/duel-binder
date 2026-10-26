@@ -1,6 +1,8 @@
 import type Database from 'better-sqlite3'
 import { deleteMeta, getMeta, setMeta } from '../db/meta'
 import type { Me } from '../../shared/cloud'
+import { FRIENDS_SIGNED_OUT, OFFLINE_MESSAGE } from '../../shared/friends'
+import type { PortalChannel } from '../../shared/portal'
 import type { AccountStatus } from '../../shared/types'
 import { CloudAuthError, CloudOfflineError, type CloudClient } from './client'
 import { syncOnce } from './engine'
@@ -44,6 +46,11 @@ export interface AccountService {
   isSignedIn(): boolean
   noteLocalEdit(): void
   catalogRefreshed(): void
+  /**
+   * Calls a portal channel as the signed-in account. Rejects with Error(FRIENDS_SIGNED_OUT) when signed out,
+   * Error(OFFLINE_MESSAGE) when offline, Error(SERVER_SIGNED_OUT) after a 401 (and signs the account out).
+   */
+  portal<T>(channel: PortalChannel, args: unknown[]): Promise<T>
   start(): void
   stop(): void
 }
@@ -125,6 +132,14 @@ export function createAccountService(deps: AccountDeps): AccountService {
     deleteMeta(db, 'cloud_user')
   }
 
+  /** The server no longer knows this token: nothing to revoke, and no further runs. */
+  function serverSignedOut(): void {
+    session++
+    scheduler.stop()
+    forget()
+    set('signed-out', SERVER_SIGNED_OUT)
+  }
+
   async function run(): Promise<void> {
     const current = token
     if (current === null || stopped) return
@@ -154,11 +169,7 @@ export function createAccountService(deps: AccountDeps): AccountService {
     } catch (e) {
       if (mine !== session) return
       if (e instanceof CloudAuthError) {
-        // The server no longer knows this token: nothing to revoke, and no further runs.
-        session++
-        scheduler.stop()
-        forget()
-        set('signed-out', SERVER_SIGNED_OUT)
+        serverSignedOut()
         return
       }
       if (e instanceof CloudOfflineError) set('offline')
@@ -316,6 +327,23 @@ export function createAccountService(deps: AccountDeps): AccountService {
     catalogRefreshed() {
       if (applyPending(db).applied > 0) deps.emitDataChanged()
       if (token !== null) scheduler.poke()
+    },
+
+    async portal<T>(channel: PortalChannel, args: unknown[]): Promise<T> {
+      const current = token
+      if (current === null) throw new Error(FRIENDS_SIGNED_OUT)
+      const mine = session
+      try {
+        return await deps.client(current).rpc<T>(channel, args)
+      } catch (e) {
+        if (e instanceof CloudAuthError) {
+          // Only the session that made the call may sign out; a newer sign-in keeps its own token.
+          if (mine === session) serverSignedOut()
+          throw new Error(SERVER_SIGNED_OUT)
+        }
+        if (e instanceof CloudOfflineError) throw new Error(OFFLINE_MESSAGE)
+        throw e
+      }
     },
 
     start() {

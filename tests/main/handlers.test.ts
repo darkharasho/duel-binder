@@ -5,10 +5,13 @@ vi.mock('electron', () => ({ ipcMain: { handle: vi.fn() } }))
 import { INVOKE_CHANNELS } from '../../src/shared/ipc'
 import { createHandlers } from '../../src/main/ipc/handlers'
 import type { AccountService } from '../../src/main/cloud/account'
+import type { PortalChannel } from '../../src/shared/portal'
 import type { AccountStatus } from '../../src/shared/types'
 import { seededDb } from './helpers'
 
-type FakeAccount = { [K in keyof AccountService]: Mock<AccountService[K]> }
+type FakeAccount = { [K in Exclude<keyof AccountService, 'portal'>]: Mock<AccountService[K]> } & {
+  portal: Mock<(channel: PortalChannel, args: unknown[]) => Promise<unknown>>
+}
 
 const fakeAccount = (signedIn = false): FakeAccount => ({
   status: vi.fn(),
@@ -19,13 +22,18 @@ const fakeAccount = (signedIn = false): FakeAccount => ({
   noteLocalEdit: vi.fn(),
   catalogRefreshed: vi.fn(),
   start: vi.fn(),
-  stop: vi.fn()
+  stop: vi.fn(),
+  portal: vi.fn()
 })
 
 async function makeHandlers(opts: { signedIn?: boolean } = {}) {
   const db = await seededDb()
   const account = fakeAccount(opts.signedIn)
-  const lookup = vi.fn(async () => ({ price: 12.5, listingCount: 3, checkedAt: '2026-10-23T12:00:00.000Z' }))
+  const lookup = vi.fn(async () => ({
+    price: 12.5,
+    listingCount: 3,
+    checkedAt: '2026-10-23T12:00:00.000Z'
+  }))
   const emitDataChanged = vi.fn()
   const handlers = createHandlers({
     db,
@@ -46,14 +54,19 @@ async function makeHandlers(opts: { signedIn?: boolean } = {}) {
       checkForUpdates: async () => ({ state: 'none', mode: 'auto', version: null, error: null }),
       applyUpdate: async () => {}
     },
-    window: { minimize: vi.fn(), toggleMaximize: vi.fn(), close: vi.fn(), isMaximized: () => false },
+    window: {
+      minimize: vi.fn(),
+      toggleMaximize: vi.fn(),
+      close: vi.fn(),
+      isMaximized: () => false
+    },
     prices: {
       client: () => ({ lookup }),
       settings: () => ({ url: '', defaultUrl: '', isDefault: true, envOverride: false }),
       setUrl: () => ({ url: '', defaultUrl: '', isDefault: true, envOverride: false })
     },
     emitDataChanged,
-    account
+    account: account as unknown as AccountService
   })
   return { db, handlers, lookup, emitDataChanged, account }
 }
@@ -169,7 +182,9 @@ describe('createHandlers', () => {
     await expect(handlers['collection:update'](added.id, { notes: long })).rejects.toThrow(
       'notes must be at most 2000 characters'
     )
-    const ok = (await handlers['collection:update'](added.id, { notes: 'x'.repeat(2000) })) as { notes: string }
+    const ok = (await handlers['collection:update'](added.id, { notes: 'x'.repeat(2000) })) as {
+      notes: string
+    }
     expect(ok.notes).toHaveLength(2000)
   })
 
@@ -249,5 +264,47 @@ describe('createHandlers', () => {
     expect(lookup).toHaveBeenCalledTimes(1)
     expect(lookup).toHaveBeenCalledWith(expect.objectContaining({ lang: 'en' }))
     expect(emitDataChanged).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('friends handlers', () => {
+  it('overview forwards to the account', async () => {
+    const { handlers, account } = await makeHandlers({ signedIn: true })
+    const overview = { friends: [], incoming: [], outgoing: [] }
+    account.portal.mockResolvedValue(overview)
+    expect(await handlers['friends:overview']()).toBe(overview)
+    expect(account.portal).toHaveBeenCalledWith('friends:overview', [])
+  })
+
+  it('collection forwards and marks every entry as not original art', async () => {
+    const { handlers, account } = await makeHandlers({ signedIn: true })
+    const f = { sort: 'name', dir: 'asc' } as const
+    account.portal.mockResolvedValue([
+      { id: 1, originalArt: true },
+      { id: 2, originalArt: true }
+    ])
+    const out = await handlers['friends:collection'](7, f)
+    expect(account.portal).toHaveBeenCalledWith('friends:collection', [7, f])
+    expect(out).toEqual([
+      { id: 1, originalArt: false },
+      { id: 2, originalArt: false }
+    ])
+  })
+
+  it('the other channels forward their arguments', async () => {
+    const { handlers, account } = await makeHandlers({ signedIn: true })
+    account.portal.mockResolvedValue(undefined)
+    await handlers['friends:request']('bob')
+    await handlers['friends:accept'](3)
+    await handlers['friends:ignore'](4)
+    await handlers['friends:remove'](5)
+    await handlers['friends:facets'](6)
+    expect(account.portal.mock.calls).toEqual([
+      ['friends:request', ['bob']],
+      ['friends:accept', [3]],
+      ['friends:ignore', [4]],
+      ['friends:remove', [5]],
+      ['friends:facets', [6]]
+    ])
   })
 })

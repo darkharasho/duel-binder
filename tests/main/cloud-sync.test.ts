@@ -457,6 +457,22 @@ describe('createCloudClient', () => {
     expect(await calls[0].json()).toEqual({ entries: [] })
   })
 
+  it('rpc posts the args to the channel and resolves the result', async () => {
+    const { calls, f } = recorder(() => Response.json({ result: { friends: [] } }))
+    const c = createCloudClient({ baseUrl: `${PORTAL}/`, token: 'tok', fetch: f })
+    expect(await c.rpc('friends:overview', [])).toEqual({ friends: [] })
+    expect(calls[0].url).toBe(`${PORTAL}/api/rpc/friends:overview`)
+    expect(calls[0].method).toBe('POST')
+    expect(calls[0].headers.get('authorization')).toBe('Bearer tok')
+    expect(await calls[0].text()).toBe('{"args":[]}')
+  })
+
+  it('rpc rejects with the portal error message on a 400', async () => {
+    const { f } = recorder(() => Response.json({ error: 'x' }, { status: 400 }))
+    const c = createCloudClient({ baseUrl: PORTAL, token: 't', fetch: f })
+    await expect(c.rpc('friends:request', ['a'])).rejects.toThrow('x')
+  })
+
   it('never lets the bearer token follow a redirect', async () => {
     const seen: (RequestInit | undefined)[] = []
     const f = (async (_: RequestInfo | URL, init?: RequestInit) => {

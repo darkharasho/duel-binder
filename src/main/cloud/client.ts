@@ -6,6 +6,7 @@ import type {
   PushResult,
   WireEntry
 } from '../../shared/cloud'
+import type { PortalChannel } from '../../shared/portal'
 
 /** The portal answered 401: the desktop token is unknown, expired or revoked. */
 export class CloudAuthError extends Error {
@@ -29,6 +30,8 @@ export interface CloudClient {
   pull(cursor: number): Promise<PullResponse>
   prices(pkeys: string[]): Promise<PricesResponse>
   revoke(): Promise<void>
+  /** Calls a portal RPC channel; resolves to its result. */
+  rpc<T>(channel: PortalChannel, args: unknown[]): Promise<T>
 }
 
 const DEFAULT_TIMEOUT_MS = 30_000
@@ -106,6 +109,8 @@ export function createCloudClient(opts: {
       (await call<PushResponse>('/api/sync/push', 'POST', { entries })).results,
     pull: (cursor) => call<PullResponse>(`/api/sync/pull?cursor=${cursor}`, 'GET'),
     prices: (pkeys) => call<PricesResponse>('/api/sync/prices', 'POST', { pkeys }),
-    revoke: () => call<void>('/auth/desktop/revoke', 'POST', undefined, false)
+    revoke: () => call<void>('/auth/desktop/revoke', 'POST', undefined, false),
+    rpc: async <T>(channel: PortalChannel, args: unknown[]) =>
+      (await call<{ result: T }>(`/api/rpc/${channel}`, 'POST', { args })).result
   }
 }

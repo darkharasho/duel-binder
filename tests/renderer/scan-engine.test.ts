@@ -49,7 +49,8 @@ describe('createScanEngine', () => {
       quad,
       art: [{ imageId: 1, distance: 3 }],
       codeBands: [band(10), band(0)],
-      nameBand: null
+      nameBand: null,
+      cues: { nameInk: 'dark' }
     })
     const engine = createScanEngine({ api, makeWorker: () => worker })
     await engine.init(null)
@@ -60,7 +61,8 @@ describe('createScanEngine', () => {
       quad,
       art: [{ imageId: 1, distance: 3 }],
       codeTexts: [],
-      nameText: null
+      nameText: null,
+      cues: { nameInk: 'dark' }
     })
     expect(api.ocr).not.toHaveBeenCalled()
 
@@ -68,6 +70,7 @@ describe('createScanEngine', () => {
     expect(read.codeTexts).toEqual(['LOB-EN005'])
     expect(read.quad).toEqual(quad)
     expect(read.nameText).toBeNull()
+    expect(read.cues).toEqual({ nameInk: 'dark' })
     expect(api.ocr).toHaveBeenCalledTimes(1)
     expect(api.ocr).toHaveBeenCalledWith([band(10)], 'code')
 
@@ -84,7 +87,8 @@ describe('createScanEngine', () => {
       quad: null,
       art: [],
       codeBands: [],
-      nameBand: null
+      nameBand: null,
+      cues: null
     })
     const engine = createScanEngine({ api: createMockApi().scan, makeWorker: () => worker })
     const bitmap = { width: 810, height: 1080, close: vi.fn() } as unknown as ImageBitmap
@@ -100,7 +104,8 @@ describe('createScanEngine', () => {
       quad: null,
       art: [],
       codeBands: [],
-      nameBand: null
+      nameBand: null,
+      cues: null
     })
     const engine = createScanEngine({ api: createMockApi().scan, makeWorker: () => worker })
     const fp = new ArrayBuffer(16)

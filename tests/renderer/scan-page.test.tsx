@@ -50,13 +50,21 @@ const quad = [
   [10, 160]
 ] as const
 
-const NOTHING: RawSignals = { found: false, quad: null, art: [], codeTexts: [], nameText: null }
+const NOTHING: RawSignals = {
+  found: false,
+  quad: null,
+  art: [],
+  codeTexts: [],
+  nameText: null,
+  cues: null
+}
 const codeFrame = (code: string): RawSignals => ({
   found: true,
   quad,
   art: [],
   codeTexts: [code],
-  nameText: null
+  nameText: null,
+  cues: null
 })
 
 type FakeEngine = ScanEngine & {
@@ -239,6 +247,35 @@ describe('Scan page', () => {
     await run(1000)
     expect(within(list).getAllByRole('listitem')).toHaveLength(1)
     expect(within(list).getByLabelText('Quantity of Dark Magician')).toHaveTextContent('1')
+  })
+
+  it("under Auto, a card's name that looks the same over its frames picks its rarity", async () => {
+    stubCamera()
+    // A Normal Monster's plain name is black, so one that reads light is a prismatic foil.
+    const engine = fakeEngine(() => ({ ...codeFrame('LOB-EN005'), cues: { nameInk: 'light' } }))
+    const both = [printing(), printing({ printingId: 102, rarity: 'Secret Rare' })]
+    renderScan(engine, { scan: { printingsByCode: vi.fn(async () => both) } })
+    await run(1000)
+    const list = screen.getByRole('list', { name: 'This session' })
+    expect(within(list).getByText('Dark Magician')).toBeInTheDocument()
+    expect(within(list).queryByText('Check rarity')).not.toBeInTheDocument()
+    const saved = JSON.parse(localStorage.getItem(SESSION_KEY)!) as ScanRow[]
+    expect(saved[0]).toMatchObject({ printingId: 102, rarity: 'Secret Rare', flag: null })
+  })
+
+  it("flags the rarity when the name's look changes between frames", async () => {
+    stubCamera()
+    const engine = fakeEngine((n) => ({
+      ...codeFrame('LOB-EN005'),
+      cues: { nameInk: n % 2 ? 'light' : 'dark' }
+    }))
+    const both = [printing(), printing({ printingId: 102, rarity: 'Secret Rare' })]
+    renderScan(engine, { scan: { printingsByCode: vi.fn(async () => both) } })
+    await run(1000)
+    const list = screen.getByRole('list', { name: 'This session' })
+    expect(within(list).getByText('Check rarity')).toBeInTheDocument()
+    const saved = JSON.parse(localStorage.getItem(SESSION_KEY)!) as ScanRow[]
+    expect(saved[0]).toMatchObject({ printingId: 101, rarity: 'Ultra Rare' })
   })
 
   it('scans the centre crop the preview shows and draws the outline in its space', async () => {

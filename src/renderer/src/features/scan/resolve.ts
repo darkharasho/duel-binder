@@ -1,5 +1,5 @@
 import type { Api } from '@shared/ipc'
-import { pickRarity } from '@shared/scan/rarity'
+import { pickRarity, pickRarityByCues, type NameInk } from '@shared/scan/rarity'
 import { setCodeCandidates } from '@shared/scan/setCode'
 import {
   ART_MATCH_DEPTH,
@@ -196,4 +196,33 @@ export async function resolveSignals(raw: RawSignals, ctx: ResolveContext): Prom
       : null) ??
     (await byName(raw, ctx))
   return item ? { kind: 'recognized', item } : { kind: 'unsure' }
+}
+
+/**
+ * The draft with the rarity its name's look picks, under Auto (no default rarity), when the
+ * look settles which of its code's rarities it is: no longer flagged Check rarity. Unchanged
+ * when the rarity was already certain, the user said what the stack is, or the look doesn't
+ * settle it.
+ */
+export function withRarityByLook(
+  item: ScanDraft,
+  nameInk: NameInk | null,
+  defaultRarity: string | null
+): ScanDraft {
+  const current = item.options.find((p) => p.printingId === item.printingId)
+  if (!current || defaultRarity !== null || nameInk === null) return item
+  const sameCode = item.options.filter(
+    (p) => p.setCode === current.setCode && p.language === current.language
+  )
+  const available = sameCode.map((p) => p.rarity)
+  if (pickRarity(available, null).certain) return item
+  const { rarity, certain } = pickRarityByCues(available, { nameInk }, current.frameType)
+  const printing = sameCode.find((p) => p.rarity === rarity)
+  if (!certain || !printing) return item
+  return {
+    ...item,
+    printingId: printing.printingId,
+    rarity,
+    flag: item.flag === 'check-rarity' ? null : item.flag
+  }
 }

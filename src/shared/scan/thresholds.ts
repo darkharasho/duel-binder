@@ -20,3 +20,21 @@ export const NAME_MIN_MARGIN = 0.05
 export const STABLE_FRAMES = 2
 /** How long a card must be gone before the same card can count again. */
 export const ABSENT_MS = 600
+
+// Rarity from the card's look, tuned on real webcam photos. A reading of the name's ink counts
+// only when it is a line of text where a name starts.
+/** The name's text line must start within this share of the name band's width. */
+export const NAME_INK_MAX_LEFT = 0.1
+/** ...be at least this share of the band's height tall... */
+export const NAME_INK_MIN_HEIGHT = 0.45
+/** ...hold at least this many letters and marks... */
+export const NAME_INK_MIN_BLOBS = 5
+/**
+ * ...and this many times the blobs the other ink finds: a blurred frame reads as much light
+ * texture as dark.
+ */
+export const NAME_INK_MIN_DOMINANCE = 1.25
+/** Frames of one showing that must read the name's ink before it decides the rarity. */
+export const RARITY_MIN_READINGS = 2
+/** Share of those readings that must agree. */
+export const RARITY_MIN_AGREEMENT = 0.8

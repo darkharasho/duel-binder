@@ -1,4 +1,5 @@
 import type { Api } from '@shared/ipc'
+import type { RarityCues } from '@shared/scan/rarity'
 import type { OcrBand, RgbaImage } from '@shared/scan/types'
 import type { Quad } from './vision/detect'
 
@@ -17,6 +18,8 @@ export interface FrameSignals {
   /** Only when bands were asked for, and never empty ones. */
   codeBands: OcrBand[]
   nameBand: OcrBand | null
+  /** What the card shows of its foil; null when it couldn't be turned upright to look. */
+  cues: RarityCues | null
 }
 
 /** Messages to the vision worker. Frames are answered in the order they're sent. */
@@ -45,6 +48,7 @@ export interface RawSignals {
   art: ArtMatch[]
   codeTexts: string[]
   nameText: string | null
+  cues: RarityCues | null
 }
 
 export interface ScanEngine {
@@ -152,8 +156,8 @@ export function createScanEngine(deps: { api: Api['scan']; makeWorker: () => Wor
           reject(e instanceof Error ? e : new Error(String(e)))
         }
       })
-      const { found, quad, art } = signals
-      if (!wantText || !found) return { found, quad, art, codeTexts: [], nameText: null }
+      const { found, quad, art, cues } = signals
+      if (!wantText || !found) return { found, quad, art, codeTexts: [], nameText: null, cues }
       const codeBands = signals.codeBands.filter(hasPixels)
       const nameBand = signals.nameBand && hasPixels(signals.nameBand) ? signals.nameBand : null
       const [codes, names] = await Promise.all([
@@ -165,7 +169,8 @@ export function createScanEngine(deps: { api: Api['scan']; makeWorker: () => Wor
         quad,
         art,
         codeTexts: codes.map((t) => t.trim()).filter(Boolean),
-        nameText: names[0]?.trim() || null
+        nameText: names[0]?.trim() || null,
+        cues
       }
     },
 

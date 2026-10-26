@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { resolveSignals, type ResolveContext, type ScanDraft } from '@/features/scan/resolve'
+import {
+  resolveSignals,
+  withRarityByLook,
+  type ResolveContext,
+  type ScanDraft
+} from '@/features/scan/resolve'
 import type { ArtMatch, RawSignals } from '@/features/scan/engine'
 import type { ScanPrinting } from '@shared/scan/types'
 import {
@@ -62,6 +67,7 @@ const raw = (r: Partial<RawSignals>): RawSignals => ({
   art: [],
   codeTexts: [],
   nameText: null,
+  cues: null,
   ...r
 })
 const noSet = { setName: null, setPrintings: null, defaultRarity: null, lookups }
@@ -219,6 +225,57 @@ describe('resolveSignals', () => {
       imageId: 101,
       printingId: null,
       flag: 'pick-printing'
+    })
+  })
+})
+
+describe('withRarityByLook', () => {
+  // Dark Magician is a Normal Monster, whose plain name is black: a gold Ultra Rare name reads
+  // dark on camera and a prismatic Secret Rare one light.
+  const guessed = (ctx: ResolveContext = noSet): Promise<ScanDraft> =>
+    recognized(raw({ codeTexts: ['LOB-EN005'] }), ctx)
+
+  it("under Auto, picks the code's rarity the name's look settles and drops the flag", async () => {
+    const item = await guessed()
+    expect(withRarityByLook(item, 'light', null)).toEqual({
+      ...item,
+      rarity: 'Secret Rare',
+      printingId: 12,
+      flag: null
+    })
+    expect(withRarityByLook(item, 'dark', null)).toMatchObject({
+      rarity: 'Ultra Rare',
+      printingId: 11,
+      flag: null
+    })
+  })
+
+  it('keeps the guess and its flag without a look', async () => {
+    const item = await guessed()
+    expect(withRarityByLook(item, null, null)).toBe(item)
+  })
+
+  it('leaves the rarity to New scans as when it names one', async () => {
+    const chosen = await guessed({ ...noSet, defaultRarity: 'Secret Rare' })
+    expect(withRarityByLook(chosen, 'dark', 'Secret Rare')).toBe(chosen)
+    const missing = await guessed({ ...noSet, defaultRarity: 'Common' })
+    expect(withRarityByLook(missing, 'light', 'Common')).toBe(missing)
+  })
+
+  it('leaves certain rarities and unpicked printings alone', async () => {
+    const single = await recognized(raw({ codeTexts: ['SDY-EN006'] }))
+    expect(withRarityByLook(single, 'light', null)).toBe(single)
+    const unpicked = await recognized(raw({ art: [{ imageId: 101, distance: 20 }] }))
+    expect(withRarityByLook(unpicked, 'light', null)).toBe(unpicked)
+  })
+
+  it('picks the rarity of a card from another set but keeps that flag', async () => {
+    const item = await guessed(withSet(SDY))
+    expect(item.flag).toBe('other-set')
+    expect(withRarityByLook(item, 'light', null)).toMatchObject({
+      rarity: 'Secret Rare',
+      printingId: 12,
+      flag: 'other-set'
     })
   })
 })

@@ -8,6 +8,7 @@ import { toBand } from './bands'
 import { findCandidates, preferOuter, recognizeArt } from './candidates'
 import { loadCv, type CV } from './cv'
 import { CARD_W, dist, rotate180, warpCard, type Quad } from './detect'
+import { rarityCues } from './rarityCues'
 import { CODE_BANDS, NAME_BAND } from './regions'
 
 interface WorkerScope {
@@ -19,7 +20,14 @@ const scope = self as unknown as WorkerScope
 /** How far past CARD_W a card is straightened for reading its text. */
 const MAX_BAND_SCALE = 2
 
-const NOTHING: FrameSignals = { found: false, quad: null, art: [], codeBands: [], nameBand: null }
+const NOTHING: FrameSignals = {
+  found: false,
+  quad: null,
+  art: [],
+  codeBands: [],
+  nameBand: null,
+  cues: null
+}
 
 let index: FingerprintIndex | null = null
 // Messages are handled one at a time, in order, even while OpenCV is still loading.
@@ -48,6 +56,8 @@ function analyze(
   let art: ArtMatch[] = []
   // The straightened card for its text, made only when bands are wanted.
   let card: () => RgbaImage
+  // The card turned upright at CARD_W, when art matching found which way up it is.
+  let upright: RgbaImage | null = null
   if (index) {
     const found = recognizeArt(
       cv,
@@ -59,6 +69,7 @@ function analyze(
     if (!found) return NOTHING
     quad = found.quad
     art = found.matches
+    upright = found.card
     // Art is matched at CARD_W, the size it was tuned for; text is read at the card's own size.
     card = () => {
       const width = bandWidth(found.quad)
@@ -69,13 +80,16 @@ function analyze(
   } else {
     // No fingerprints: the candidate finder's likeliest outline (it holds up on real photos far
     // better than findCard alone), or the card around it when that is one of its inner frames.
-    // Read but not turned upright.
+    // Read but not turned upright, so its foil isn't looked at.
     const likeliest = preferOuter(findCandidates(cv, img))
     if (!likeliest) return NOTHING
     quad = likeliest
     card = () => warpCard(cv, img, likeliest, bandWidth(likeliest))
   }
-  if (!wantBands) return { found: true, quad, art, codeBands: [], nameBand: null }
+  if (!wantBands) {
+    const cues = upright ? rarityCues(upright) : null
+    return { found: true, quad, art, codeBands: [], nameBand: null, cues }
+  }
   const straight = card()
   const name = toBand(straight, NAME_BAND)
   return {
@@ -83,7 +97,8 @@ function analyze(
     quad,
     art,
     codeBands: CODE_BANDS.map((box) => toBand(straight, box)).filter(hasPixels),
-    nameBand: hasPixels(name) ? name : null
+    nameBand: hasPixels(name) ? name : null,
+    cues: upright ? rarityCues(straight) : null
   }
 }
 

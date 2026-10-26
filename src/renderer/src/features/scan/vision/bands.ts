@@ -6,12 +6,43 @@ const INK_CONTRAST = 12
 
 const MAX_CHAR_BLOBS = 400
 
-interface Blob {
+/** A line of text found in a band: its blobs, as pixel indexes into the band's width x height. */
+export interface TextLine {
+  width: number
+  height: number
+  /** Ink darker than its surroundings (1) or lighter (-1). */
+  sign: 1 | -1
+  blobs: Blob[]
+  /** Blobs in the longest line of the other ink, 0 when it has none. */
+  rivalBlobs: number
+}
+
+export interface Blob {
   x0: number
   y0: number
   x1: number
   y1: number
   pixels: number[]
+}
+
+/**
+ * The longest line of text in box on a straightened card, scaled up `scale` times: dark ink or
+ * light ink, whichever reads as more text. Null when there is none.
+ */
+export function findTextLine(img: RgbaImage, box: Box, scale = 2): TextLine | null {
+  const { width, height, data: px } = grayScaled(crop(img, box), scale)
+  stretch(px)
+  const diff = localContrast(px, width, height, Math.max(4, Math.round(height / 4)))
+  const [dark, light] = ([1, -1] as const).map((sign) => {
+    const mask = new Uint8Array(width * height)
+    for (let i = 0; i < mask.length; i++) mask[i] = sign * diff[i] < -INK_CONTRAST ? 1 : 0
+    return textLine(blobs(mask, width, height), height)
+  })
+  if (!dark.length && !light.length) return null
+  // Ties go to dark ink.
+  return dark.length >= light.length
+    ? { width, height, sign: 1, blobs: dark, rivalBlobs: light.length }
+    : { width, height, sign: -1, blobs: light, rivalBlobs: dark.length }
 }
 
 /**
@@ -21,19 +52,9 @@ interface Blob {
  * Empty when no text is found. Pure, so the vision worker can use it.
  */
 export function toBand(img: RgbaImage, box: Box, scale = 2): OcrBand {
-  const { width, height, data: px } = grayScaled(crop(img, box), scale)
-  stretch(px)
-  const diff = localContrast(px, width, height, Math.max(4, Math.round(height / 4)))
-
-  // Try dark ink and light ink; the reading with more text wins.
-  let line: Blob[] = []
-  for (const sign of [1, -1]) {
-    const mask = new Uint8Array(width * height)
-    for (let i = 0; i < mask.length; i++) mask[i] = sign * diff[i] < -INK_CONTRAST ? 1 : 0
-    const found = textLine(blobs(mask, width, height), height)
-    if (found.length > line.length) line = found
-  }
-  if (!line.length) return { width: 0, height: 0, data: new Uint8Array(0) }
+  const found = findTextLine(img, box, scale)
+  if (!found) return { width: 0, height: 0, data: new Uint8Array(0) }
+  const { width, blobs: line } = found
 
   // The line on white, with a margin of half its height.
   const x0 = Math.min(...line.map((b) => b.x0))

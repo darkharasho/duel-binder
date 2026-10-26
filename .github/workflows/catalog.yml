@@ -60,6 +60,9 @@ jobs:
           restore-keys: catalog-base-
       - name: Refresh and upload
         run: npm run catalog:job -- ${{ inputs.full && '--full' || '' }}
+      - name: Parity check
+        continue-on-error: false
+        run: npm run catalog:parity
       - name: Save work database
         if: always()
         uses: actions/cache/save@v4

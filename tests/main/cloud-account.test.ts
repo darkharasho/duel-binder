@@ -409,7 +409,8 @@ describe('account service', () => {
         read: async () => null,
         status: () => ({ state: 'missing', count: 0 }),
         refresh: async () => ({ state: 'missing', count: 0 })
-      }
+      },
+      ocr: { read: async () => [], dispose: async () => {} }
     })
 
     await signInAs(service, me(alice, 'alice'))

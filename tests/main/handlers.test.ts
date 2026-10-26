@@ -71,7 +71,8 @@ async function makeHandlers(opts: { signedIn?: boolean } = {}) {
       read: async () => null,
       status: () => ({ state: 'missing', count: 0 }),
       refresh: async () => ({ state: 'missing', count: 0 })
-    }
+    },
+    ocr: { read: async () => [], dispose: async () => {} }
   })
   return { db, handlers, lookup, emitDataChanged, account }
 }

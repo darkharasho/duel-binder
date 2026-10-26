@@ -31,6 +31,7 @@ import { captureShots } from './dev/capture'
 import { createAccountService } from './cloud/account'
 import { createCloudClient } from './cloud/client'
 import { createFingerprintStore } from './scan/fingerprints'
+import { createOcr, engLangPath } from './scan/ocr'
 import { portalUrl } from './cloud/config'
 import { signInWithBrowser } from './cloud/signIn'
 import { TokenStore, electronCipher } from './cloud/tokenStore'
@@ -226,6 +227,8 @@ async function bootstrap(): Promise<void> {
   })
   app.on('before-quit', () => account.stop())
   const fingerprints = createFingerprintStore({ dir: join(userData, 'scan'), portal })
+  const ocr = createOcr({ langPath: engLangPath(app.isPackaged) })
+  app.on('will-quit', () => void ocr.dispose())
 
   const windowDeps = {
     minimize: () => mainWindow?.minimize(),
@@ -249,7 +252,8 @@ async function bootstrap(): Promise<void> {
       prices: priceService,
       emitDataChanged,
       account,
-      fingerprints
+      fingerprints,
+      ocr
     })
   )
 

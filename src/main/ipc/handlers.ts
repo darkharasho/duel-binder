@@ -3,6 +3,7 @@ import { ipcMain } from 'electron'
 import type { Language } from '@shared/languages'
 import type { CollectionFilters, EntryView, SyncStatus, UpdateStatus } from '@shared/types'
 import type { INVOKE_CHANNELS } from '@shared/ipc'
+import type { OcrBand } from '@shared/scan/types'
 import { INVOKE_CHANNELS as CHANNELS } from '@shared/ipc'
 import type { YgoClient } from '../ygo/client'
 import type { ImageCache } from '../images/cache'
@@ -20,6 +21,7 @@ import {
 } from '../repo/collection'
 import { adjustPrinting, getChecklist, listSets } from '../repo/sets'
 import type { FingerprintStore } from '../scan/fingerprints'
+import type { Ocr } from '../scan/ocr'
 import { matchName, printingsByCode, printingsForCards, printingsForSet } from '../repo/scan'
 import { getStats, recordSnapshot } from '../repo/stats'
 import type { PriceService } from '../prices/service'
@@ -54,6 +56,7 @@ export interface HandlerDeps {
   emitDataChanged: () => void
   account: AccountService
   fingerprints: FingerprintStore
+  ocr: Ocr
 }
 
 export type Handlers = Record<
@@ -72,7 +75,8 @@ export function createHandlers({
   prices,
   emitDataChanged,
   account,
-  fingerprints
+  fingerprints,
+  ocr
 }: HandlerDeps): Handlers {
   // A copy from a set whose TCGplayer prices aren't kept yet gets them fetched. Then an owned printing (any
   // language) still without a price is looked up on eBay in the background; the renderer is told to refetch
@@ -135,10 +139,12 @@ export function createHandlers({
     'scan:printingsForSet': async (setName: string) => printingsForSet(db, setName),
     'scan:printingsForCards': async (cardIds: number[]) => printingsForCards(db, cardIds),
     'scan:matchName': async (text: string) => matchName(db, text),
-    // Filled in by the fingerprint and OCR tasks.
     'scan:fingerprints': () => fingerprints.read(),
     'scan:refreshFingerprints': () => fingerprints.refresh(),
-    'scan:ocr': async () => [],
+    'scan:ocr': async (bands: OcrBand[], kind: 'code' | 'name') => {
+      if (kind !== 'code' && kind !== 'name') throw new Error(`Unknown OCR kind: ${String(kind)}`)
+      return ocr.read(bands, kind)
+    },
     'stats:get': async () => getStats(db),
     'sets:list': async () => listSets(db),
     'sets:checklist': async (setName: string, language: Language) =>

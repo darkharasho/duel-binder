@@ -43,6 +43,7 @@ export interface ScanEngine {
     frame: ImageData,
     opts: { candidates: number[] | null; wantText: boolean }
   ): Promise<RawSignals>
+  /** Stops the worker and rejects pending calls; init and analyze reject afterwards. */
   dispose(): void
 }
 
@@ -63,6 +64,7 @@ const hasPixels = (b: OcrBand): boolean => b.width > 0 && b.height > 0
  */
 export function createScanEngine(deps: { api: Api['scan']; makeWorker: () => Worker }): ScanEngine {
   let worker: Worker | null = null
+  let disposed = false
   let nextId = 1
   const inits: Waiter<void>[] = []
   const frames = new Map<number, Waiter<FrameSignals>>()
@@ -74,6 +76,7 @@ export function createScanEngine(deps: { api: Api['scan']; makeWorker: () => Wor
   }
 
   const start = (): Worker => {
+    if (disposed) throw new Error('The scan engine was disposed')
     if (worker) return worker
     const w = deps.makeWorker()
     w.onmessage = (e: MessageEvent<WorkerReply>) => {
@@ -90,7 +93,13 @@ export function createScanEngine(deps: { api: Api['scan']; makeWorker: () => Wor
         frames.delete(msg.id)
       }
     }
-    w.onerror = (e) => failAll(new Error(e.message || 'The scan worker failed'))
+    // A dead worker takes its pending frames with it; the next call starts a new one.
+    w.onerror = (e) => {
+      failAll(new Error(e.message || 'The scan worker failed'))
+      w.terminate()
+      if (worker === w) worker = null
+    }
+    w.onmessageerror = () => failAll(new Error('A scan worker reply could not be read'))
     worker = w
     return w
   }
@@ -101,8 +110,12 @@ export function createScanEngine(deps: { api: Api['scan']; makeWorker: () => Wor
   return {
     init(fp) {
       return new Promise<void>((resolve, reject) => {
-        inits.push({ resolve, reject })
-        send({ type: 'init', fingerprints: fp })
+        try {
+          send({ type: 'init', fingerprints: fp })
+          inits.push({ resolve, reject })
+        } catch (e) {
+          reject(e instanceof Error ? e : new Error(String(e)))
+        }
       })
     },
 
@@ -137,6 +150,7 @@ export function createScanEngine(deps: { api: Api['scan']; makeWorker: () => Wor
     },
 
     dispose() {
+      disposed = true
       worker?.terminate()
       worker = null
       failAll(new Error('The scan engine was disposed'))

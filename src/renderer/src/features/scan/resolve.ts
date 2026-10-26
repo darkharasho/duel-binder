@@ -146,7 +146,7 @@ async function anyPrinting(
  * card shows up, the margin is unlimited if every candidate was ranked, else it runs to the last
  * match. An artwork missing from the catalog counts as another card.
  */
-async function byArt(raw: RawSignals, ctx: ResolveContext): Promise<ScanDraft | null> {
+async function confidentArt(raw: RawSignals, ctx: ResolveContext): Promise<number | null> {
   const [top] = raw.art
   const maxDistance = ctx.setPrintings ? ART_MAX_DISTANCE_IN_SET : ART_MAX_DISTANCE
   if (!top || top.distance > maxDistance) return null
@@ -165,10 +165,7 @@ async function byArt(raw: RawSignals, ctx: ResolveContext): Promise<ScanDraft | 
     : raw.art.length < ART_MATCH_DEPTH
       ? Infinity
       : last.distance - top.distance
-  if (margin < ART_MIN_MARGIN) return null
-  return ctx.setPrintings
-    ? inSet(cardId, raw.art, ctx, 'art')
-    : anyPrinting(cardId, raw.art, ctx, 'art')
+  return margin < ART_MIN_MARGIN ? null : cardId
 }
 
 async function byName(raw: RawSignals, ctx: ResolveContext): Promise<ScanDraft | null> {
@@ -182,10 +179,21 @@ async function byName(raw: RawSignals, ctx: ResolveContext): Promise<ScanDraft |
 
 /**
  * What a frame shows: a card by its set code, else by its art, else by its name, or `unsure`
- * when a card is in view but none of those is trusted.
+ * when a card is in view but none of those is trusted. A code read that names a different card
+ * than confident art is a misread one way or the other, so it's unsure too.
  */
 export async function resolveSignals(raw: RawSignals, ctx: ResolveContext): Promise<ScanOutcome> {
   if (!raw.found) return { kind: 'none' }
-  const item = (await byCode(raw, ctx)) ?? (await byArt(raw, ctx)) ?? (await byName(raw, ctx))
+  const artCard = await confidentArt(raw, ctx)
+  const code = await byCode(raw, ctx)
+  if (code && artCard !== null && code.cardId !== artCard) return { kind: 'unsure' }
+  const item =
+    code ??
+    (artCard !== null
+      ? ctx.setPrintings
+        ? inSet(artCard, raw.art, ctx, 'art')
+        : await anyPrinting(artCard, raw.art, ctx, 'art')
+      : null) ??
+    (await byName(raw, ctx))
   return item ? { kind: 'recognized', item } : { kind: 'unsure' }
 }

@@ -7,26 +7,28 @@ export interface ShowingTracker {
   reset(): void
 }
 
-const identity = (d: ScanDraft): string => `${d.cardId}:${d.imageId}:${d.printingId}`
-
 /**
- * Turns per-frame outcomes into counted cards. A card counts once it has been recognized the same
- * way in stableFrames frames in a row; it counts again only after nothing has been in view for
- * absentMs, or once a different card has counted. Unsure frames are skipped: they neither build
- * nor break a streak, but they do break an absence, since a card is in view.
+ * Turns per-frame outcomes into counted cards, one per showing. A card counts once it has been
+ * recognized in stableFrames frames in a row. Frames are matched by card alone: the same card
+ * read by its code in one frame and its art in the next, or matched to another of its artworks,
+ * is still one showing, and never counts again while shown. It counts again only after nothing
+ * has been in view, in consecutive `none` frames, for absentMs, or once a different card has
+ * counted. Unsure frames neither build nor break a streak, but they break an absence, since a
+ * card is in view.
  */
 export function createShowingTracker(
   opts: { stableFrames?: number; absentMs?: number } = {}
 ): ShowingTracker {
   const stableFrames = opts.stableFrames ?? STABLE_FRAMES
   const absentMs = opts.absentMs ?? ABSENT_MS
-  let streakOf: string | null = null
+  let streakOf: number | null = null
   let streak = 0
-  let shown: string | null = null
+  let shown: number | null = null
   let absentSince: number | null = null
 
-  const checkAbsence = (now: number): void => {
-    if (absentSince !== null && now - absentSince >= absentMs) shown = null
+  const clearStreak = (): void => {
+    streakOf = null
+    streak = 0
   }
 
   return {
@@ -36,25 +38,27 @@ export function createShowingTracker(
         return null
       }
       if (outcome.kind === 'none') {
-        streakOf = null
-        streak = 0
+        clearStreak()
         absentSince ??= now
-        checkAbsence(now)
+        if (now - absentSince >= absentMs) shown = null
         return null
       }
-      checkAbsence(now)
       absentSince = null
-      const id = identity(outcome.item)
-      streak = id === streakOf ? streak + 1 : 1
-      streakOf = id
-      if (streak < stableFrames || id === shown) return null
-      shown = id
+      const { cardId } = outcome.item
+      if (cardId === shown) {
+        clearStreak()
+        return null
+      }
+      streak = cardId === streakOf ? streak + 1 : 1
+      streakOf = cardId
+      if (streak < stableFrames) return null
+      shown = cardId
+      clearStreak()
       return outcome.item
     },
 
     reset() {
-      streakOf = null
-      streak = 0
+      clearStreak()
       shown = null
       absentSince = null
     }

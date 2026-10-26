@@ -92,15 +92,22 @@ describe('resolveSignals', () => {
   })
 
   it('code wins over art', async () => {
-    const item = await recognized(
-      raw({ codeTexts: ['SDY-EN006'], art: [{ imageId: 201, distance: 5 }] })
-    )
+    // Weak art of another card doesn't stand in the way.
+    const weak = [{ imageId: 201, distance: ART_MAX_DISTANCE + 1 }]
+    const item = await recognized(raw({ codeTexts: ['SDY-EN006'], art: weak }))
     expect(item).toMatchObject({ via: 'code', cardId: 1, printingId: 13, imageId: 101 })
-    // The art still picks which of the card's artworks it is.
+    // Agreeing art picks which of the card's artworks it is.
     const alt = await recognized(
       raw({ codeTexts: ['SDY-EN006'], art: [{ imageId: 102, distance: 5 }] })
     )
-    expect(alt.imageId).toBe(102)
+    expect(alt).toMatchObject({ via: 'code', printingId: 13, imageId: 102 })
+  })
+
+  it('code contradicting confident art is unsure', async () => {
+    const art = [{ imageId: 201, distance: 5 }]
+    expect(await resolveSignals(raw({ codeTexts: ['SDY-EN006'], art }), noSet)).toEqual({
+      kind: 'unsure'
+    })
   })
 
   it('region-less code retries with EN', async () => {

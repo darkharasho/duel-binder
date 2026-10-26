@@ -68,4 +68,16 @@ describe('createScanEngine', () => {
     engine.dispose()
     expect(worker.terminate).toHaveBeenCalled()
   })
+
+  it('dispose rejects a pending frame, and later calls reject', async () => {
+    const silent = { postMessage: vi.fn(), terminate: vi.fn() } as unknown as Worker
+    const engine = createScanEngine({ api: createMockApi().scan, makeWorker: () => silent })
+    const pending = engine.analyze(frame(), { candidates: null, wantText: false })
+    engine.dispose()
+    await expect(pending).rejects.toThrow('disposed')
+    await expect(engine.init(null)).rejects.toThrow('disposed')
+    await expect(engine.analyze(frame(), { candidates: null, wantText: false })).rejects.toThrow(
+      'disposed'
+    )
+  })
 })

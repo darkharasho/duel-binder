@@ -14,6 +14,10 @@ const draft = (cardId: number, imageId = cardId * 10): ScanDraft => ({
   via: 'art'
 })
 const seen = (cardId: number): ScanOutcome => ({ kind: 'recognized', item: draft(cardId) })
+const as = (d: Partial<ScanDraft>): ScanOutcome => ({
+  kind: 'recognized',
+  item: { ...draft(1), ...d }
+})
 const NONE: ScanOutcome = { kind: 'none' }
 const UNSURE: ScanOutcome = { kind: 'unsure' }
 
@@ -52,6 +56,32 @@ describe('createShowingTracker', () => {
     expect(run(t, [seen(1), seen(1), NONE, NONE, NONE, seen(1), seen(1)])).toEqual([1])
     // An unsure frame breaks the absence too: the card is still in view.
     expect(run(t, [NONE, NONE, NONE, UNSURE, NONE, NONE, NONE, seen(1), seen(1)], 1000)).toEqual([])
+  })
+
+  it('one card read by code, then art, then code counts once', () => {
+    const t = createShowingTracker({ stableFrames: 2, absentMs: 600 })
+    const code = as({ printingId: 13, via: 'code' })
+    const art = as({ printingId: null, via: 'art', flag: 'pick-printing' })
+    expect(run(t, [code, code, art, art, code, code])).toEqual([1])
+  })
+
+  it('alternating artworks of one card count once', () => {
+    const t = createShowingTracker({ stableFrames: 2, absentMs: 600 })
+    const a = as({ imageId: 101 })
+    const b = as({ imageId: 102 })
+    expect(run(t, [a, b, a, b, a, b, a])).toEqual([1])
+  })
+
+  it('a single none frame is no absence, however late the card comes back', () => {
+    const t = createShowingTracker({ stableFrames: 2, absentMs: 600 })
+    const counted = [
+      t.push(0, seen(1)),
+      t.push(100, seen(1)),
+      t.push(200, NONE),
+      t.push(800, seen(1)),
+      t.push(900, seen(1))
+    ].filter(Boolean)
+    expect(counted).toHaveLength(1)
   })
 
   it('different card counts without absence', () => {

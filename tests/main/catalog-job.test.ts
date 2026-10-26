@@ -162,7 +162,7 @@ function recordingFetch(respond: (call: Call, n: number) => Response): {
   const fn = async (input: string | URL | Request, init?: RequestInit): Promise<Response> => {
     const call: Call = {
       path: new URL(String(input)).pathname,
-      body: JSON.parse(String(init?.body)),
+      body: typeof init?.body === 'string' ? JSON.parse(init.body) : {},
       auth: new Headers(init?.headers).get('authorization')
     }
     calls.push(call)
@@ -170,6 +170,9 @@ function recordingFetch(respond: (call: Call, n: number) => Response): {
   }
   return { fetch: fn as typeof fetch, calls }
 }
+
+/** Card art isn't under test here: every image is missing, so only portal calls reach `fetch`. */
+const noImages = (async () => new Response('', { status: 404 })) as typeof fetch
 
 const ok = (): Response => Response.json({ ok: true })
 
@@ -236,7 +239,10 @@ describe('refreshCatalog', () => {
     expect(webFetch.mock.calls.some(([u]) => String(u).endsWith('/prices'))).toBe(false)
     await refreshCatalog(db, { ...deps, tcgPrices: 'all' })
     expect(
-      db.prepare("SELECT market_price FROM card_printings WHERE set_code = 'LOB-EN005'").pluck().get()
+      db
+        .prepare("SELECT market_price FROM card_printings WHERE set_code = 'LOB-EN005'")
+        .pluck()
+        .get()
     ).toBe(1234.5)
     db.close()
   })
@@ -392,7 +398,15 @@ describe('uploadCatalog', () => {
     work.close()
 
     const job = expect(
-      runJob({ dir, url: URL_BASE, token: TOKEN, fetch, refresh: async () => {}, log: () => {} })
+      runJob({
+        dir,
+        url: URL_BASE,
+        token: TOKEN,
+        fetch,
+        imageFetch: noImages,
+        refresh: async () => {},
+        log: () => {}
+      })
     ).rejects.toThrow(/500/)
     await vi.runAllTimersAsync()
     await job
@@ -416,10 +430,14 @@ describe('uploadCatalog', () => {
       url: URL_BASE,
       token: TOKEN,
       fetch,
+      imageFetch: noImages,
       refresh: async () => {},
       log: () => {}
     })
-    expect(calls.at(-1)!.path).toBe('/admin/catalog/finish')
+    expect(calls.map((c) => c.path).slice(-2)).toEqual([
+      '/admin/catalog/finish',
+      '/admin/scan/fingerprints'
+    ])
     expect(existsSync(join(dir, 'base.sqlite'))).toBe(true)
 
     const work = openDatabase(join(dir, 'work.sqlite'))
@@ -434,7 +452,14 @@ describe('uploadCatalog', () => {
   it('a dry run counts changes without uploading or writing base', async () => {
     ;(await workDb()).close()
     const { fetch, calls } = recordingFetch(ok)
-    const out = await runJob({ dir, dryRun: true, fetch, refresh: async () => {}, log: () => {} })
+    const out = await runJob({
+      dir,
+      dryRun: true,
+      fetch,
+      imageFetch: noImages,
+      refresh: async () => {},
+      log: () => {}
+    })
     expect(out.counts?.cards).toEqual({ upserts: 3, deletes: 0 })
     expect(calls).toEqual([])
     expect(existsSync(join(dir, 'base.sqlite'))).toBe(false)

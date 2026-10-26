@@ -20,6 +20,7 @@ import { createYgoClient } from '../../src/main/ygo/client'
 import { createYugipediaClient } from '../../src/main/yugipedia/client'
 import { CATALOG_TABLES } from '../../src/shared/catalogTables'
 import { diffTable } from './diff'
+import { buildFingerprints, uploadFingerprints } from './fingerprints'
 import { uploadCatalog } from './upload'
 
 export interface JobOptions {
@@ -30,6 +31,8 @@ export interface JobOptions {
   full?: boolean
   dryRun?: boolean
   fetch?: typeof fetch
+  /** Fetches card art for fingerprints; defaults to `fetch`. */
+  imageFetch?: typeof fetch
   /** Refreshes the work database; defaults to `refreshCatalog` against the live APIs. */
   refresh?: (work: Database.Database) => Promise<unknown>
   log?: (line: string) => void
@@ -63,6 +66,16 @@ export async function runJob(opts: JobOptions): Promise<JobResult> {
   const tmpPath = `${basePath}.tmp`
   const work = openDatabase(join(opts.dir, 'work.sqlite'))
   let base: Database.Database | null = null
+  const fingerprint = async (): ReturnType<typeof buildFingerprints> => {
+    const out = await buildFingerprints({
+      work,
+      cachePath: join(opts.dir, 'fingerprints.sqlite'),
+      fetch: opts.imageFetch ?? opts.fetch,
+      log
+    })
+    log(`Fingerprints: ${out.count} (${out.fetched} new, ${out.failed} failed)`)
+    return out
+  }
   try {
     await refresh(work)
     base = !opts.full && existsSync(basePath) ? openDatabase(basePath) : null
@@ -75,6 +88,7 @@ export async function runJob(opts: JobOptions): Promise<JobResult> {
         counts[t.name] = { upserts: d.upserts.length, deletes: d.deletes.length }
         log(`${t.name}: ${d.upserts.length} upserts, ${d.deletes.length} deletes`)
       }
+      await fingerprint()
       return { counts, uploaded: null }
     }
 
@@ -86,6 +100,8 @@ export async function runJob(opts: JobOptions): Promise<JobResult> {
       fetch: opts.fetch
     })
     log(`Uploaded ${uploaded.upserted} rows, deleted ${uploaded.deleted}`)
+    const { bytes } = await fingerprint()
+    await uploadFingerprints({ url: url!, token: token!, bytes, fetch: opts.fetch })
 
     // Only now, with the portal holding this state, does work become the new base.
     base?.close()

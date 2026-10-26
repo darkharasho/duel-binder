@@ -1,0 +1,151 @@
+import { useCallback, useRef, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
+import { api, mutationInvalidationKeys } from '@/lib/api'
+import type { ScanDraft } from './resolve'
+
+export interface ScanRow extends ScanDraft {
+  key: string
+  quantity: number
+  addedAt: number
+  error?: string
+}
+
+const STORAGE_KEY = 'scan.session.v1'
+
+export const rowKey = (d: Pick<ScanDraft, 'printingId' | 'cardId' | 'imageId'>): string =>
+  `${d.printingId ?? 'c' + d.cardId}:${d.imageId}`
+
+const isRow = (v: unknown): v is ScanRow => {
+  if (typeof v !== 'object' || v === null) return false
+  const r = v as Record<string, unknown>
+  return (
+    typeof r.key === 'string' &&
+    typeof r.cardId === 'number' &&
+    typeof r.imageId === 'number' &&
+    typeof r.name === 'string' &&
+    typeof r.quantity === 'number' &&
+    Array.isArray(r.options)
+  )
+}
+
+function load(): ScanRow[] {
+  try {
+    const parsed: unknown = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '[]')
+    return Array.isArray(parsed) ? parsed.filter(isRow) : []
+  } catch {
+    return []
+  }
+}
+
+function save(rows: ScanRow[]): void {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(rows))
+  } catch {
+    // Storage full or unavailable: the list still works for this session.
+  }
+}
+
+const messageOf = (err: unknown): string =>
+  err instanceof Error ? err.message : 'Could not add card'
+
+export function useScanSession(): {
+  rows: ScanRow[]
+  total: number
+  add(d: ScanDraft): void
+  setPrinting(key: string, printingId: number): void
+  setQuantity(key: string, q: number): void
+  remove(key: string): void
+  clear(): void
+  commit(): Promise<{ added: number; failed: number }>
+} {
+  const qc = useQueryClient()
+  const [rows, setRows] = useState<ScanRow[]>(load)
+  // Always the latest list, so back-to-back updates and the async commit never read stale state.
+  const ref = useRef(rows)
+
+  const update = useCallback((fn: (rows: ScanRow[]) => ScanRow[]): void => {
+    const next = fn(ref.current)
+    ref.current = next
+    save(next)
+    setRows(next)
+  }, [])
+
+  const add = useCallback(
+    (d: ScanDraft): void =>
+      update((list) => {
+        const key = rowKey(d)
+        const existing = list.find((r) => r.key === key)
+        const row: ScanRow = existing
+          ? { ...existing, quantity: existing.quantity + 1, addedAt: Date.now(), error: undefined }
+          : { ...d, key, quantity: 1, addedAt: Date.now() }
+        return [row, ...list.filter((r) => r.key !== key)]
+      }),
+    [update]
+  )
+
+  const setPrinting = useCallback(
+    (key: string, printingId: number): void =>
+      update((list) => {
+        const row = list.find((r) => r.key === key)
+        const opt = row?.options.find((o) => o.printingId === printingId)
+        if (!row || !opt) return list
+        const next: ScanRow = {
+          ...row,
+          printingId,
+          setCode: opt.setCode,
+          rarity: opt.rarity,
+          flag: null,
+          error: undefined
+        }
+        next.key = rowKey(next)
+        if (next.key === key) return list.map((r) => (r.key === key ? next : r))
+        const twin = list.find((r) => r.key === next.key)
+        if (!twin) return list.map((r) => (r.key === key ? next : r))
+        const merged = { ...twin, quantity: twin.quantity + row.quantity }
+        return list.filter((r) => r.key !== key).map((r) => (r.key === twin.key ? merged : r))
+      }),
+    [update]
+  )
+
+  const setQuantity = useCallback(
+    (key: string, q: number): void =>
+      update((list) =>
+        q < 1
+          ? list.filter((r) => r.key !== key)
+          : list.map((r) => (r.key === key ? { ...r, quantity: Math.floor(q) } : r))
+      ),
+    [update]
+  )
+
+  const remove = useCallback(
+    (key: string): void => update((list) => list.filter((r) => r.key !== key)),
+    [update]
+  )
+
+  const clear = useCallback((): void => update(() => []), [update])
+
+  const commit = useCallback(async (): Promise<{ added: number; failed: number }> => {
+    let added = 0
+    let failed = 0
+    for (const row of ref.current.filter((r) => r.printingId !== null)) {
+      try {
+        await api.collection.add({
+          printingId: row.printingId!,
+          imageId: row.imageId,
+          quantity: row.quantity
+        })
+        added++
+        update((list) => list.filter((r) => r.key !== row.key))
+      } catch (err) {
+        failed++
+        const error = messageOf(err)
+        update((list) => list.map((r) => (r.key === row.key ? { ...r, error } : r)))
+      }
+    }
+    for (const queryKey of mutationInvalidationKeys) void qc.invalidateQueries({ queryKey })
+    return { added, failed }
+  }, [qc, update])
+
+  const total = rows.reduce((n, r) => n + r.quantity, 0)
+  return { rows, total, add, setPrinting, setQuantity, remove, clear, commit }
+}

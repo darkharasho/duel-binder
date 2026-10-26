@@ -19,6 +19,7 @@ import {
   updateEntry
 } from '../repo/collection'
 import { adjustPrinting, getChecklist, listSets } from '../repo/sets'
+import type { FingerprintStore } from '../scan/fingerprints'
 import { matchName, printingsByCode, printingsForCards, printingsForSet } from '../repo/scan'
 import { getStats, recordSnapshot } from '../repo/stats'
 import type { PriceService } from '../prices/service'
@@ -52,6 +53,7 @@ export interface HandlerDeps {
   prices: PriceService
   emitDataChanged: () => void
   account: AccountService
+  fingerprints: FingerprintStore
 }
 
 export type Handlers = Record<
@@ -69,7 +71,8 @@ export function createHandlers({
   window,
   prices,
   emitDataChanged,
-  account
+  account,
+  fingerprints
 }: HandlerDeps): Handlers {
   // A copy from a set whose TCGplayer prices aren't kept yet gets them fetched. Then an owned printing (any
   // language) still without a price is looked up on eBay in the background; the renderer is told to refetch
@@ -133,8 +136,8 @@ export function createHandlers({
     'scan:printingsForCards': async (cardIds: number[]) => printingsForCards(db, cardIds),
     'scan:matchName': async (text: string) => matchName(db, text),
     // Filled in by the fingerprint and OCR tasks.
-    'scan:fingerprints': async () => null,
-    'scan:refreshFingerprints': async () => ({ state: 'missing', count: 0 }),
+    'scan:fingerprints': () => fingerprints.read(),
+    'scan:refreshFingerprints': () => fingerprints.refresh(),
     'scan:ocr': async () => [],
     'stats:get': async () => getStats(db),
     'sets:list': async () => listSets(db),

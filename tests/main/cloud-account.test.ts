@@ -404,7 +404,12 @@ describe('account service', () => {
         setUrl: () => ({ url: '', defaultUrl: '', isDefault: true, envOverride: false })
       },
       emitDataChanged,
-      account: service
+      account: service,
+      fingerprints: {
+        read: async () => null,
+        status: () => ({ state: 'missing', count: 0 }),
+        refresh: async () => ({ state: 'missing', count: 0 })
+      }
     })
 
     await signInAs(service, me(alice, 'alice'))

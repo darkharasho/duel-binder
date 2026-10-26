@@ -66,7 +66,12 @@ async function makeHandlers(opts: { signedIn?: boolean } = {}) {
       setUrl: () => ({ url: '', defaultUrl: '', isDefault: true, envOverride: false })
     },
     emitDataChanged,
-    account: account as unknown as AccountService
+    account: account as unknown as AccountService,
+    fingerprints: {
+      read: async () => null,
+      status: () => ({ state: 'missing', count: 0 }),
+      refresh: async () => ({ state: 'missing', count: 0 })
+    }
   })
   return { db, handlers, lookup, emitDataChanged, account }
 }

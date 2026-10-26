@@ -3,7 +3,13 @@ import { join, resolve } from 'path'
 import { autoUpdater } from 'electron-updater'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import type { AccountStatus, SyncStatus, UpdateStatus } from '@shared/types'
-import { ACCOUNT_CHANGED, DATA_CHANGED, SYNC_PROGRESS, UPDATE_STATUS, WINDOW_MAXIMIZED } from '@shared/ipc'
+import {
+  ACCOUNT_CHANGED,
+  DATA_CHANGED,
+  SYNC_PROGRESS,
+  UPDATE_STATUS,
+  WINDOW_MAXIMIZED
+} from '@shared/ipc'
 import icon from '../../resources/icon.png?asset'
 import { openDatabase } from './db/database'
 import { createYgoClient } from './ygo/client'
@@ -24,6 +30,7 @@ import { seedFakeCollection } from './dev/fakeData'
 import { captureShots } from './dev/capture'
 import { createAccountService } from './cloud/account'
 import { createCloudClient } from './cloud/client'
+import { createFingerprintStore } from './scan/fingerprints'
 import { portalUrl } from './cloud/config'
 import { signInWithBrowser } from './cloud/signIn'
 import { TokenStore, electronCipher } from './cloud/tokenStore'
@@ -159,7 +166,8 @@ async function bootstrap(): Promise<void> {
   if (fakeData) {
     seedFakeCollection(db)
     // Already seeded by an earlier run, or just now: nothing to wait for.
-    if (db.prepare('SELECT 1 FROM collection_entries WHERE deleted_at IS NULL LIMIT 1').get()) markSeeded()
+    if (db.prepare('SELECT 1 FROM collection_entries WHERE deleted_at IS NULL LIMIT 1').get())
+      markSeeded()
   }
 
   const updater = createUpdater({
@@ -207,12 +215,17 @@ async function bootstrap(): Promise<void> {
     client: (token, opts = {}) =>
       createCloudClient({ baseUrl: portal, token, timeoutMs: opts.timeoutMs, signal: opts.signal }),
     signIn: (signal) =>
-      signInWithBrowser({ portalUrl: portal, openExternal: (url) => shell.openExternal(url), signal }),
+      signInWithBrowser({
+        portalUrl: portal,
+        openExternal: (url) => shell.openExternal(url),
+        signal
+      }),
     emit: (s: AccountStatus) => broadcast(ACCOUNT_CHANGED, s),
     emitDataChanged,
     isOnline: () => net.isOnline()
   })
   app.on('before-quit', () => account.stop())
+  const fingerprints = createFingerprintStore({ dir: join(userData, 'scan'), portal })
 
   const windowDeps = {
     minimize: () => mainWindow?.minimize(),
@@ -235,7 +248,8 @@ async function bootstrap(): Promise<void> {
       window: windowDeps,
       prices: priceService,
       emitDataChanged,
-      account
+      account,
+      fingerprints
     })
   )
 
@@ -267,7 +281,10 @@ async function bootstrap(): Promise<void> {
       yugipedia,
       version: app.getVersion(),
       onSyncProgress: emitSync,
-      onSynced: () => recordSnapshot(db),
+      onSynced: () => {
+        recordSnapshot(db)
+        void fingerprints.refresh({ force: true }).catch(() => {})
+      },
       onChanged: emitDataChanged
     })
     account.catalogRefreshed()

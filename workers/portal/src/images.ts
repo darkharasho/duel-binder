@@ -4,6 +4,7 @@ import {
   SET_KEY_RE,
   setImageUrl,
   YUGIPEDIA_IMAGE_PREFIX,
+  KONAMI_LOGO_PREFIX,
   type ImageSize
 } from '../../../src/shared/imageSources'
 import { findSetImageUrl } from '../../../src/main/repo/sets'
@@ -24,6 +25,38 @@ export interface ImageBucket {
     value: ArrayBuffer,
     opts: { httpMetadata: { contentType: string } }
   ): Promise<unknown>
+}
+
+/** A per-user budget for upstream fetches made on that user's behalf. */
+export interface ImageQuota {
+  /** Spends one fetch; false when the user's budget for the current window is gone. */
+  take(userId: number): boolean
+  /** Milliseconds until the user's current window ends; 0 when none is open. */
+  retryAfterMs(userId: number): number
+}
+
+/** In-memory fixed-window quota; a window opens on a user's first take. */
+export function createImageQuota(
+  now: () => number,
+  opts: { limit: number; windowMs: number } = { limit: 1000, windowMs: 3_600_000 }
+): ImageQuota {
+  const windows = new Map<number, { end: number; used: number }>()
+  const current = (userId: number): { end: number; used: number } | undefined => {
+    const w = windows.get(userId)
+    if (w && w.end > now()) return w
+    windows.delete(userId)
+    return undefined
+  }
+  return {
+    take(userId) {
+      const w = current(userId) ?? { end: now() + opts.windowMs, used: 0 }
+      windows.set(userId, w)
+      if (w.used >= opts.limit) return false
+      w.used += 1
+      return true
+    },
+    retryAfterMs: (userId) => Math.max(0, (current(userId)?.end ?? 0) - now())
+  }
 }
 
 const IMAGE_TIMEOUT_MS = 30_000
@@ -103,6 +136,20 @@ function resolve(deps: AppDeps, path: string): Target | null {
     }
     return { key: `set/${id}`, source: fixed(setImageUrl(id)), cache: SET_CACHE }
   }
+  if (kind === 'konami') {
+    if (id.length > MAX_SET_KEY || !SET_KEY_RE.test(id) || !id.startsWith('km-')) return null
+    return {
+      key: `konami/${id}`,
+      cache: SET_CACHE,
+      // Served raw; the desktop cuts out the white, so /img/set never shows it.
+      source: async () => {
+        const url = findSetImageUrl(deps.db, id)
+        return url !== null && url.startsWith(KONAMI_LOGO_PREFIX)
+          ? { url, headers: { 'User-Agent': USER_AGENT } }
+          : null
+      }
+    }
+  }
   if (kind === 'printing') {
     if (!/^\d+$/.test(id)) return null
     const n = Number(id)
@@ -146,10 +193,17 @@ async function serve(req: Request, deps: AppDeps, path: string): Promise<Respons
   if (stored) return reply(stored.body, stored.httpMetadata?.contentType ?? 'image/jpeg')
 
   // Only signed-in users may make the portal fetch from upstream; stored artwork stays public.
-  if (!(await currentUser(req, deps))) return notFound()
+  const user = await currentUser(req, deps)
+  if (!user) return notFound()
 
   const source = await target.source()
   if (!source) return notFound()
+
+  // The quota is spent only now that an upstream fetch is certain.
+  if (deps.imageQuota && !deps.imageQuota.take(user.id)) {
+    const seconds = Math.max(1, Math.ceil(deps.imageQuota.retryAfterMs(user.id) / 1000))
+    return new Response('Too many requests', { status: 429, headers: { 'retry-after': String(seconds) } })
+  }
 
   let bytes: ArrayBuffer
   let contentType: string

@@ -1,8 +1,9 @@
 import type Database from 'better-sqlite3'
-import { PACK_ART_PREFIX, YUGIPEDIA_IMAGE_PREFIX } from '../../src/shared/imageSources'
+import { KONAMI_LOGO_PREFIX, PACK_ART_PREFIX, YUGIPEDIA_IMAGE_PREFIX } from '../../src/shared/imageSources'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { handle, type AppDeps } from '../../workers/portal/src/app'
 import { TCGPLAYER_IMAGE_PREFIX } from '../../src/main/tcgplayer/catalog'
+import { createImageQuota } from '../../workers/portal/src/images'
 import { addUser, memoryBucket, noPrices, seededServerDb } from './helpers'
 
 const BASE = 'https://app.test'
@@ -280,6 +281,79 @@ describe('image route', () => {
       await bucket.put('printing/7', JPEG.buffer as ArrayBuffer, { httpMetadata: { contentType: 'image/jpeg' } })
       expect((await get('printing/7')).status).toBe(200)
       expect(printingArt.url).not.toHaveBeenCalled()
+    })
+  })
+
+  describe('Konami logos and the upstream quota', () => {
+    const addLogo = (key: string, url = `${KONAMI_LOGO_PREFIX}logos/a.png`): void => {
+      db.prepare("INSERT INTO konami_logos (set_name, image_url, image_key) VALUES (?, ?, ?)").run(`Set ${key}`, url, key)
+    }
+
+    it('mirrors a Konami logo under konami/<key>', async () => {
+      addLogo('km-abc')
+      const res = await get('konami/km-abc')
+      expect(res.status).toBe(200)
+      expect(res.headers.get('cache-control')).toBe('public, max-age=86400')
+      expect(upstream.mock.calls[0][0]).toBe(`${KONAMI_LOGO_PREFIX}logos/a.png`)
+      expect(bucket.store.has('konami/km-abc')).toBe(true)
+      expect((await get('konami/km-abc')).status).toBe(200)
+      expect(upstream).toHaveBeenCalledTimes(1)
+    })
+
+    it('refuses unknown, off-prefix and non-km keys under konami', async () => {
+      addLogo('km-evil', 'https://evil.test/x.png')
+      addLogo('yp-nope')
+      for (const key of ['km-missing', 'km-evil', 'yp-nope', 'LOB', 'km-a/b']) {
+        expect((await get(`konami/${key}`)).status).toBe(404)
+      }
+      expect(upstream).not.toHaveBeenCalled()
+    })
+
+    it('a signed-out miss on a Konami logo is a 404 without fetching', async () => {
+      addLogo('km-abc')
+      expect((await getAnon('konami/km-abc')).status).toBe(404)
+      expect(upstream).not.toHaveBeenCalled()
+    })
+
+    it('still refuses km- keys under /img/set', async () => {
+      addLogo('km-abc')
+      expect((await get('set/km-abc')).status).toBe(404)
+      expect(upstream).not.toHaveBeenCalled()
+    })
+
+    it('limits upstream fetches per user but never R2 hits', async () => {
+      let t = 1_000_000
+      deps.imageQuota = createImageQuota(() => t, { limit: 2, windowMs: 3_600_000 })
+      await bucket.put('card/small/1', JPEG.buffer as ArrayBuffer, { httpMetadata: { contentType: 'image/jpeg' } })
+      expect((await get('set/AAA')).status).toBe(200)
+      expect((await get('set/BBB')).status).toBe(200)
+      const limited = await get('set/CCC')
+      expect(limited.status).toBe(429)
+      expect(limited.headers.get('retry-after')).toBe(String(Math.ceil((3_600_000 - 0) / 1000)))
+      expect(upstream).toHaveBeenCalledTimes(2)
+      // Stored images and keys that would 404 anyway cost nothing.
+      expect((await get('set/AAA')).status).toBe(200)
+      expect((await getAnon('set/BBB')).status).toBe(200)
+      expect((await get('small/999999999')).status).toBe(404)
+      expect((await get('set/km-abc')).status).toBe(404)
+      expect(upstream).toHaveBeenCalledTimes(2)
+      // The window rolls over.
+      t += 3_600_000
+      expect((await get('set/CCC')).status).toBe(200)
+    })
+
+    it('rounds retry-after up to whole seconds, minimum 1', async () => {
+      let t = 0
+      const quota = createImageQuota(() => t, { limit: 1, windowMs: 10_000 })
+      deps.imageQuota = quota
+      expect((await get('set/AAA')).status).toBe(200)
+      t = 8_500
+      const early = await get('set/BBB')
+      expect(early.status).toBe(429)
+      expect(early.headers.get('retry-after')).toBe('2') // 1.5 s left
+      t = 9_999
+      expect((await get('set/BBB')).headers.get('retry-after')).toBe('1') // 1 ms left
+      expect(quota.take(2)).toBe(true) // another user has their own budget
     })
   })
 

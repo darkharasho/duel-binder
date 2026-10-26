@@ -7,6 +7,7 @@ import {
 import { createTcgplayerLookup } from '../../../src/main/tcgplayer/catalog'
 import { createYugipediaClient } from '../../../src/main/yugipedia/client'
 import { handle, type Env } from './app'
+import { createImageQuota } from './images'
 import { doSql } from './doSql'
 import { migrateServer } from './migrate'
 import { alarmQueue, priceClientFor, runPriceAlarm, type PriceQueue } from './prices'
@@ -28,6 +29,7 @@ export class Store extends DurableObject<WorkerEnv> {
   private readonly db: SqlDb
   private readonly printingArt: PrintingArtResolver
   private readonly prices: PriceQueue
+  private readonly imageQuota = createImageQuota(Date.now)
 
   constructor(ctx: DurableObjectState, env: WorkerEnv) {
     super(ctx, env)
@@ -55,6 +57,7 @@ export class Store extends DurableObject<WorkerEnv> {
       db: this.db,
       assets: this.env.ASSETS,
       images: this.env.IMAGES,
+      imageQuota: this.imageQuota,
       printingArt: this.printingArt,
       prices: this.prices,
       env: this.env,

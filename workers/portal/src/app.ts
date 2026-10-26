@@ -14,7 +14,7 @@ import {
 } from './auth'
 import { home } from './home'
 import type { PrintingArtResolver } from '../../../src/main/yugipedia/artResolver'
-import { imageRoute, type ImageBucket } from './images'
+import { imageRoute, type ImageBucket, type ImageQuota } from './images'
 import type { PriceQueue } from './prices'
 import { getFingerprints } from './scanFiles'
 
@@ -37,6 +37,8 @@ export interface AppDeps {
   /** The static assets binding; the signed-in front page serves the built web app from it. */
   assets: { fetch(req: Request): Promise<Response> }
   images: ImageBucket
+  /** Caps upstream image fetches per user; absent means unlimited. */
+  imageQuota?: ImageQuota
   printingArt: PrintingArtResolver
   /** Queues an eBay price run after a write. */
   prices: PriceQueue

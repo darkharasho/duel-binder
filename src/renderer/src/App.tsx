@@ -8,6 +8,7 @@ import { CollectionPage } from '@/features/collection/CollectionPage'
 import { BrowsePage } from '@/features/browse/BrowsePage'
 import { SetsPage } from '@/features/sets/SetsPage'
 import { FriendsPage } from '@/features/friends/FriendsPage'
+import { ScanPage } from '@/features/scan/ScanPage'
 import { useFriendsAvailable } from '@/lib/friends'
 import { SettingsPage } from '@/features/settings/SettingsPage'
 import { useDataChanged } from '@/components/useDataChanged'
@@ -81,6 +82,7 @@ function App(): React.JSX.Element {
             onAddMissing={(card, printingId) => openAdd({ card, printingId })}
           />
         )}
+        {page === 'scan' && !isWeb() && <ScanPage />}
         {page === 'friends' && (
           <FriendsPage key={friendsKey} onBackToMine={() => onNavigate('collection')} />
         )}

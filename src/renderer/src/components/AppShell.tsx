@@ -9,7 +9,7 @@ import { MainScrollContext, type MainScroll } from './mainScroll'
 import { SyncBanner } from './SyncBanner'
 import { TitleBar } from './TitleBar'
 
-export type Page = 'dashboard' | 'collection' | 'browse' | 'friends' | 'sets' | 'settings'
+export type Page = 'dashboard' | 'collection' | 'browse' | 'scan' | 'friends' | 'sets' | 'settings'
 export type NavigateFn = (page: Page, opts?: { entryId?: number }) => void
 
 const NAV = [
@@ -17,6 +17,7 @@ const NAV = [
   { page: 'collection', label: 'Collection' },
   { page: 'sets', label: 'Sets' },
   { page: 'browse', label: 'Browse' },
+  { page: 'scan', label: 'Scan' },
   { page: 'friends', label: 'Friends' },
   { page: 'settings', label: 'Settings' }
 ] as const
@@ -73,42 +74,42 @@ export function AppShell({
             </span>
           </div>
           <nav aria-label="Main" className="flex flex-col">
-            {NAV.filter(({ page: p }) => p !== 'friends' || friendsAvailable).map(
-              ({ page: p, label }) => (
-                <button
-                  key={p}
-                  type="button"
-                  aria-label={
-                    p === 'friends' && requests > 0
-                      ? `Friends, ${requests} ${requests === 1 ? 'request' : 'requests'}`
-                      : undefined
-                  }
-                  aria-current={page === p ? 'page' : undefined}
-                  onClick={() => onNavigate(p)}
+            {NAV.filter(
+              ({ page: p }) => (p !== 'friends' || friendsAvailable) && (p !== 'scan' || !isWeb())
+            ).map(({ page: p, label }) => (
+              <button
+                key={p}
+                type="button"
+                aria-label={
+                  p === 'friends' && requests > 0
+                    ? `Friends, ${requests} ${requests === 1 ? 'request' : 'requests'}`
+                    : undefined
+                }
+                aria-current={page === p ? 'page' : undefined}
+                onClick={() => onNavigate(p)}
+                className={cn(
+                  'flex items-center gap-2 rounded-sm py-1.5 text-left text-sm text-muted-foreground transition-colors duration-150 hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring',
+                  page === p && 'font-semibold text-foreground'
+                )}
+              >
+                <span
+                  aria-hidden
                   className={cn(
-                    'flex items-center gap-2 rounded-sm py-1.5 text-left text-sm text-muted-foreground transition-colors duration-150 hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring',
-                    page === p && 'font-semibold text-foreground'
+                    'size-1.5 rounded-full',
+                    page === p ? 'bg-foreground' : 'bg-transparent'
                   )}
-                >
+                />
+                {label}
+                {p === 'friends' && requests > 0 && (
                   <span
                     aria-hidden
-                    className={cn(
-                      'size-1.5 rounded-full',
-                      page === p ? 'bg-foreground' : 'bg-transparent'
-                    )}
-                  />
-                  {label}
-                  {p === 'friends' && requests > 0 && (
-                    <span
-                      aria-hidden
-                      className="rounded-full bg-primary px-1.5 text-[11px] font-semibold leading-4 text-primary-foreground"
-                    >
-                      {requests}
-                    </span>
-                  )}
-                </button>
-              )
-            )}
+                    className="rounded-full bg-primary px-1.5 text-[11px] font-semibold leading-4 text-primary-foreground"
+                  >
+                    {requests}
+                  </span>
+                )}
+              </button>
+            ))}
           </nav>
           <button
             type="button"

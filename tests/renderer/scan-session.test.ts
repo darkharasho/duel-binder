@@ -117,7 +117,7 @@ describe('useScanSession', () => {
     await act(async () => {
       out = await result.current.commit()
     })
-    expect(out).toEqual({ added: 1, failed: 1 })
+    expect(out).toEqual({ added: 1, failed: 1, cards: 1 })
     expect(add).toHaveBeenNthCalledWith(1, { printingId: 101, imageId: 10, quantity: 1 })
     expect(result.current.rows).toHaveLength(1)
     expect(result.current.rows[0]).toMatchObject({ key: '201:20', error: 'boom' })
@@ -131,7 +131,7 @@ describe('useScanSession', () => {
       out = await result.current.commit()
     })
     expect(add).not.toHaveBeenCalled()
-    expect(out).toEqual({ added: 0, failed: 0 })
+    expect(out).toEqual({ added: 0, failed: 0, cards: 0 })
     expect(result.current.rows[0].key).toBe('c1:10')
   })
 
@@ -146,7 +146,7 @@ describe('useScanSession', () => {
       first = result.current.commit()
       second = await result.current.commit()
     })
-    expect(second).toEqual({ added: 0, failed: 0 })
+    expect(second).toEqual({ added: 0, failed: 0, cards: 0 })
     expect(result.current.committing).toBe(true)
     await act(async () => {
       release()

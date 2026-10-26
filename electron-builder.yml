@@ -29,6 +29,8 @@ nsis:
   createDesktopShortcut: always
 mac:
   entitlementsInherit: build/entitlements.mac.plist
+  extendInfo:
+    NSCameraUsageDescription: "Duel Binder uses the camera to scan your cards."
   # better-sqlite3 ships identical prebuilds for every platform in both arch builds;
   # keep them as-is when merging the universal app (picked at runtime by process.arch).
   x64ArchFiles: "**/node_modules/better-sqlite3/prebuilds/*.node"

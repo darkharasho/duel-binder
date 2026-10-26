@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow, dialog, net } from 'electron'
+import { app, shell, BrowserWindow, dialog, net, session } from 'electron'
 import { join, resolve } from 'path'
 import { autoUpdater } from 'electron-updater'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
@@ -25,6 +25,7 @@ import { createImageCache } from './images/cache'
 import { prepareLogo } from './images/prepareLogo'
 import { handleImageProtocol, registerImageScheme } from './images/protocol'
 import { createUpdater, updateMode, RELEASES_URL } from './updater'
+import { restrictPermissions } from './permissions'
 import { createHandlers, registerIpc, type AppDeps } from './ipc/handlers'
 import { seedFakeCollection } from './dev/fakeData'
 import { captureShots } from './dev/capture'
@@ -132,6 +133,12 @@ function broadcast(channel: string, payload: unknown): void {
 
 async function bootstrap(): Promise<void> {
   electronApp.setAppUserModelId('com.darkharasho.yugiohcollectiontracker')
+
+  // The webcam (Scan) is the only permission the app's pages get, and nothing else gets any.
+  restrictPermissions(
+    session.defaultSession,
+    is.dev ? process.env['ELECTRON_RENDERER_URL'] : undefined
+  )
 
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)

@@ -58,7 +58,8 @@ export function useScanSession(): {
   setQuantity(key: string, q: number): void
   remove(key: string): void
   clear(): void
-  commit(): Promise<{ added: number; failed: number }>
+  /** Rows added and failed, and the cards (copies) the added rows held. */
+  commit(): Promise<{ added: number; failed: number; cards: number }>
 } {
   const qc = useQueryClient()
   const [rows, setRows] = useState<ScanRow[]>(load)
@@ -130,12 +131,17 @@ export function useScanSession(): {
 
   const clear = useCallback((): void => update(() => []), [update])
 
-  const commit = useCallback(async (): Promise<{ added: number; failed: number }> => {
-    if (committingRef.current) return { added: 0, failed: 0 }
+  const commit = useCallback(async (): Promise<{
+    added: number
+    failed: number
+    cards: number
+  }> => {
+    if (committingRef.current) return { added: 0, failed: 0, cards: 0 }
     committingRef.current = true
     setCommitting(true)
     let added = 0
     let failed = 0
+    let cards = 0
     try {
       for (const row of ref.current.filter((r) => r.printingId !== null)) {
         try {
@@ -145,6 +151,7 @@ export function useScanSession(): {
             quantity: row.quantity
           })
           added++
+          cards += row.quantity
           // Scans merged in meanwhile stay: take off only what was added.
           update((list) =>
             list.flatMap((r) =>
@@ -168,7 +175,7 @@ export function useScanSession(): {
     if (added > 0) {
       for (const queryKey of mutationInvalidationKeys) void qc.invalidateQueries({ queryKey })
     }
-    return { added, failed }
+    return { added, failed, cards }
   }, [qc, update])
 
   const total = rows.reduce((n, r) => n + r.quantity, 0)

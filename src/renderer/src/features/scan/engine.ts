@@ -1,5 +1,6 @@
 import type { Api } from '@shared/ipc'
 import type { OcrBand, RgbaImage } from '@shared/scan/types'
+import type { Quad } from './vision/detect'
 
 export interface ArtMatch {
   imageId: number
@@ -9,6 +10,8 @@ export interface ArtMatch {
 /** What the vision worker sees in one frame. */
 export interface FrameSignals {
   found: boolean
+  /** The card's corners in frame pixels; null when no card was found. */
+  quad: Quad | null
   /** Closest artworks, closest first; empty without fingerprints. */
   art: ArtMatch[]
   /** Only when bands were asked for, and never empty ones. */
@@ -30,6 +33,8 @@ export type WorkerReply =
 /** A frame's signals with its bands read. */
 export interface RawSignals {
   found: boolean
+  /** The card's corners in frame pixels; null when no card was found. */
+  quad: Quad | null
   art: ArtMatch[]
   codeTexts: string[]
   nameText: string | null
@@ -133,8 +138,8 @@ export function createScanEngine(deps: { api: Api['scan']; makeWorker: () => Wor
           reject(e instanceof Error ? e : new Error(String(e)))
         }
       })
-      const { found, art } = signals
-      if (!wantText || !found) return { found, art, codeTexts: [], nameText: null }
+      const { found, quad, art } = signals
+      if (!wantText || !found) return { found, quad, art, codeTexts: [], nameText: null }
       const codeBands = signals.codeBands.filter(hasPixels)
       const nameBand = signals.nameBand && hasPixels(signals.nameBand) ? signals.nameBand : null
       const [codes, names] = await Promise.all([
@@ -143,6 +148,7 @@ export function createScanEngine(deps: { api: Api['scan']; makeWorker: () => Wor
       ])
       return {
         found,
+        quad,
         art,
         codeTexts: codes.map((t) => t.trim()).filter(Boolean),
         nameText: names[0]?.trim() || null

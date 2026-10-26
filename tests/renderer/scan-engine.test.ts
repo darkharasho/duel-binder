@@ -38,8 +38,15 @@ describe('createScanEngine', () => {
   it('reads text only when asked, skipping empty bands', async () => {
     const api = createMockApi().scan
     vi.mocked(api.ocr).mockResolvedValue(['LOB-EN005'])
+    const quad = [
+      [1, 2],
+      [30, 2],
+      [30, 44],
+      [1, 44]
+    ] as const
     const { worker, posted } = fakeWorker({
       found: true,
+      quad,
       art: [{ imageId: 1, distance: 3 }],
       codeBands: [band(10), band(0)],
       nameBand: null
@@ -50,6 +57,7 @@ describe('createScanEngine', () => {
     const quiet = await engine.analyze(frame(), { candidates: null, wantText: false })
     expect(quiet).toEqual({
       found: true,
+      quad,
       art: [{ imageId: 1, distance: 3 }],
       codeTexts: [],
       nameText: null
@@ -58,6 +66,7 @@ describe('createScanEngine', () => {
 
     const read = await engine.analyze(frame(), { candidates: [1], wantText: true })
     expect(read.codeTexts).toEqual(['LOB-EN005'])
+    expect(read.quad).toEqual(quad)
     expect(read.nameText).toBeNull()
     expect(api.ocr).toHaveBeenCalledTimes(1)
     expect(api.ocr).toHaveBeenCalledWith([band(10)], 'code')

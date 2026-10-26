@@ -58,6 +58,7 @@ const lookups: ResolveContext['lookups'] = {
 
 const raw = (r: Partial<RawSignals>): RawSignals => ({
   found: true,
+  quad: null,
   art: [],
   codeTexts: [],
   nameText: null,

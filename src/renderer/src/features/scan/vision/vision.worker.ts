@@ -7,7 +7,7 @@ import type { ArtMatch, FrameSignals, WorkerReply, WorkerRequest } from '../engi
 import { toBand } from './bands'
 import { recognizeArt } from './candidates'
 import { loadCv, type CV } from './cv'
-import { findCard, warpCard } from './detect'
+import { findCard, warpCard, type Quad } from './detect'
 import { CODE_BANDS, NAME_BAND } from './regions'
 
 interface WorkerScope {
@@ -16,7 +16,7 @@ interface WorkerScope {
 }
 const scope = self as unknown as WorkerScope
 
-const NOTHING: FrameSignals = { found: false, art: [], codeBands: [], nameBand: null }
+const NOTHING: FrameSignals = { found: false, quad: null, art: [], codeBands: [], nameBand: null }
 
 let index: FingerprintIndex | null = null
 // Messages are handled one at a time, in order, even while OpenCV is still loading.
@@ -32,6 +32,7 @@ function analyze(
   wantBands: boolean
 ): FrameSignals {
   let card: RgbaImage
+  let quad: Quad
   let art: ArtMatch[] = []
   if (index) {
     const found = recognizeArt(
@@ -42,18 +43,21 @@ function analyze(
       ART_MATCH_DEPTH
     )
     if (!found) return NOTHING
+    quad = found.quad
     card = found.card
     art = found.matches
   } else {
     // No fingerprints: the card can still be found and read, though not turned upright.
-    const quad = findCard(cv, img)
-    if (!quad) return NOTHING
+    const outline = findCard(cv, img)
+    if (!outline) return NOTHING
+    quad = outline
     card = warpCard(cv, img, quad)
   }
-  if (!wantBands) return { found: true, art, codeBands: [], nameBand: null }
+  if (!wantBands) return { found: true, quad, art, codeBands: [], nameBand: null }
   const name = toBand(card, NAME_BAND)
   return {
     found: true,
+    quad,
     art,
     codeBands: CODE_BANDS.map((box) => toBand(card, box)).filter(hasPixels),
     nameBand: hasPixels(name) ? name : null

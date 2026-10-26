@@ -66,15 +66,22 @@ export async function runJob(opts: JobOptions): Promise<JobResult> {
   const tmpPath = `${basePath}.tmp`
   const work = openDatabase(join(opts.dir, 'work.sqlite'))
   let base: Database.Database | null = null
-  const fingerprint = async (): ReturnType<typeof buildFingerprints> => {
-    const out = await buildFingerprints({
-      work,
-      cachePath: join(opts.dir, 'fingerprints.sqlite'),
-      fetch: opts.imageFetch ?? opts.fetch,
-      log
-    })
-    log(`Fingerprints: ${out.count} (${out.fetched} new, ${out.failed} failed)`)
-    return out
+  // The catalog is the job's main product, so a fingerprint failure is logged and never fails it.
+  const fingerprint = async (upload: boolean): Promise<void> => {
+    try {
+      const out = await buildFingerprints({
+        work,
+        cachePath: join(opts.dir, 'fingerprints.sqlite'),
+        fetch: opts.imageFetch ?? opts.fetch,
+        log
+      })
+      log(`Fingerprints: ${out.count} (${out.fetched} new, ${out.failed} failed)`)
+      if (upload) {
+        await uploadFingerprints({ url: url!, token: token!, bytes: out.bytes, fetch: opts.fetch })
+      }
+    } catch (e) {
+      log(`Fingerprints failed: ${e instanceof Error ? e.message : e}`)
+    }
   }
   try {
     await refresh(work)
@@ -88,7 +95,7 @@ export async function runJob(opts: JobOptions): Promise<JobResult> {
         counts[t.name] = { upserts: d.upserts.length, deletes: d.deletes.length }
         log(`${t.name}: ${d.upserts.length} upserts, ${d.deletes.length} deletes`)
       }
-      await fingerprint()
+      await fingerprint(false)
       return { counts, uploaded: null }
     }
 
@@ -100,8 +107,6 @@ export async function runJob(opts: JobOptions): Promise<JobResult> {
       fetch: opts.fetch
     })
     log(`Uploaded ${uploaded.upserted} rows, deleted ${uploaded.deleted}`)
-    const { bytes } = await fingerprint()
-    await uploadFingerprints({ url: url!, token: token!, bytes, fetch: opts.fetch })
 
     // Only now, with the portal holding this state, does work become the new base.
     base?.close()
@@ -112,6 +117,7 @@ export async function runJob(opts: JobOptions): Promise<JobResult> {
     rmSync(`${basePath}-wal`, { force: true })
     rmSync(`${basePath}-shm`, { force: true })
     renameSync(tmpPath, basePath)
+    await fingerprint(true)
     return { counts: null, uploaded }
   } finally {
     base?.close()

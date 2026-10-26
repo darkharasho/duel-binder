@@ -239,10 +239,7 @@ describe('refreshCatalog', () => {
     expect(webFetch.mock.calls.some(([u]) => String(u).endsWith('/prices'))).toBe(false)
     await refreshCatalog(db, { ...deps, tcgPrices: 'all' })
     expect(
-      db
-        .prepare("SELECT market_price FROM card_printings WHERE set_code = 'LOB-EN005'")
-        .pluck()
-        .get()
+      db.prepare("SELECT market_price FROM card_printings WHERE set_code = 'LOB-EN005'").pluck().get()
     ).toBe(1234.5)
     db.close()
   })
@@ -447,6 +444,25 @@ describe('uploadCatalog', () => {
     }
     base.close()
     work.close()
+  })
+
+  it('a failing fingerprint upload is logged and the catalog base still advances', async () => {
+    ;(await workDb()).close()
+    const { fetch } = recordingFetch((call) =>
+      call.path === '/admin/scan/fingerprints' ? new Response('', { status: 404 }) : ok()
+    )
+    const lines: string[] = []
+    await runJob({
+      dir,
+      url: URL_BASE,
+      token: TOKEN,
+      fetch,
+      imageFetch: noImages,
+      refresh: async () => {},
+      log: (l) => lines.push(l)
+    })
+    expect(existsSync(join(dir, 'base.sqlite'))).toBe(true)
+    expect(lines.some((l) => l.startsWith('Fingerprints failed: ') && l.includes('404'))).toBe(true)
   })
 
   it('a dry run counts changes without uploading or writing base', async () => {

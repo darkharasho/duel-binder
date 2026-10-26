@@ -1,12 +1,13 @@
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import type Database from 'better-sqlite3'
-import { encode } from 'jpeg-js'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import Database from 'better-sqlite3'
+import { decode, encode } from 'jpeg-js'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { runJob } from '../../scripts/catalog/build'
 import { buildFingerprints, uploadFingerprints } from '../../scripts/catalog/fingerprints'
 import { openDatabase } from '../../src/main/db/database'
+import { artHash } from '../../src/shared/scan/fingerprint'
 import { decodeFingerprints } from '../../src/shared/scan/fingerprintFile'
 
 let dir: string
@@ -65,6 +66,8 @@ describe('buildFingerprints', () => {
     expect(first).toMatchObject({ count: 2, fetched: 2, failed: 1 })
     const index = decodeFingerprints(first.bytes)
     expect(index.count).toBe(2)
+    const expected = artHash(decode(IMAGES['1'], { useTArray: true, formatAsRGBA: true }))
+    expect(index.nearest(expected, 1)[0]).toEqual({ imageId: 1, distance: 0 })
 
     requested.length = 0
     const second = await buildFingerprints({ work, cachePath, fetch: imageFetch(requested) })
@@ -79,6 +82,42 @@ describe('buildFingerprints', () => {
     work.prepare('DELETE FROM card_images WHERE image_id = 2').run()
     const out = await buildFingerprints({ work, cachePath, fetch: imageFetch() })
     expect(out.count).toBe(1)
+  })
+})
+
+describe('buildFingerprints resilience', () => {
+  it('retries a 429 and counts the image once it succeeds', async () => {
+    vi.useFakeTimers()
+    try {
+      work.prepare('DELETE FROM card_images WHERE image_id != 1').run()
+      let n = 0
+      const flaky = (async () =>
+        ++n === 1
+          ? new Response('', { status: 429 })
+          : new Response(IMAGES['1'] as BodyInit)) as typeof fetch
+      const run = buildFingerprints({
+        work,
+        cachePath: join(dir, 'fingerprints.sqlite'),
+        fetch: flaky
+      })
+      await vi.runAllTimersAsync()
+      expect(await run).toMatchObject({ count: 1, fetched: 1, failed: 0 })
+      expect(n).toBe(2)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('drops a cached hash of the wrong size and fetches it again', async () => {
+    const cachePath = join(dir, 'fingerprints.sqlite')
+    await buildFingerprints({ work, cachePath, fetch: imageFetch() })
+    const cache = new Database(cachePath)
+    cache.prepare('UPDATE fp SET hash = ? WHERE image_id = 1').run(Buffer.alloc(5))
+    cache.close()
+    const requested: string[] = []
+    const out = await buildFingerprints({ work, cachePath, fetch: imageFetch(requested) })
+    expect(out).toMatchObject({ count: 2, fetched: 1 })
+    expect(requested).toContain('1')
   })
 })
 

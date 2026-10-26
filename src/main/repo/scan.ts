@@ -79,6 +79,27 @@ export function printingsForCards(db: SqlDb, cardIds: number[]): ScanPrinting[] 
   return withImages(db, rows)
 }
 
+/** The card of each known artwork, by image id; unknown ids are left out. */
+export function cardsForImages(
+  db: SqlDb,
+  imageIds: number[]
+): { imageId: number; cardId: number }[] {
+  const ids = [...new Set(imageIds)]
+  const out: { imageId: number; cardId: number }[] = []
+  for (let i = 0; i < ids.length; i += 500) {
+    const chunk = ids.slice(i, i + 500)
+    out.push(
+      ...(db
+        .prepare(
+          `SELECT image_id AS imageId, card_id AS cardId FROM card_images
+           WHERE image_id IN (${chunk.map(() => '?').join(',')})`
+        )
+        .all(...chunk) as { imageId: number; cardId: number }[])
+    )
+  }
+  return out.sort((a, b) => a.imageId - b.imageId)
+}
+
 // The English name list is rebuilt only when the catalog version changes.
 const nameCache = new WeakMap<
   object,

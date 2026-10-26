@@ -128,6 +128,13 @@ describe('createHandlers', () => {
     await expect(handlers['scan:ocr']([], 'name')).resolves.toEqual([])
   })
 
+  it('scan:cardsForImages rejects anything but integer ids', async () => {
+    const { handlers } = await makeHandlers()
+    await expect(handlers['scan:cardsForImages']('1')).rejects.toThrow('list of integers')
+    await expect(handlers['scan:cardsForImages']([1.5])).rejects.toThrow('list of integers')
+    await expect(handlers['scan:cardsForImages']([])).resolves.toEqual([])
+  })
+
   it('account handlers delegate to the account service', async () => {
     const { handlers, account } = await makeHandlers()
     const status: AccountStatus = {

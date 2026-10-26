@@ -10,6 +10,8 @@ export const ART_MAX_DISTANCE_IN_SET = 80
  * the best.
  */
 export const ART_MIN_MARGIN = 10
+/** Closest artworks fetched per frame, so a different card shows up past a card's alternate arts. */
+export const ART_MATCH_DEPTH = 20
 /** Lowest name similarity (1 - levenshtein / maxLen) accepted. */
 export const NAME_MIN_SCORE = 0.8
 /** Best name score minus second-best score needed to trust the best. */

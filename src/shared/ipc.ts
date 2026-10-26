@@ -58,6 +58,8 @@ export interface Api {
     printingsForSet(setName: string, language: Language): Promise<ScanPrinting[]>
     printingsForCards(cardIds: number[]): Promise<ScanPrinting[]>
     matchName(text: string): Promise<{ cardId: number; name: string; score: number } | null>
+    /** The card of each artwork id that is in the catalog. */
+    cardsForImages(imageIds: number[]): Promise<{ imageId: number; cardId: number }[]>
     fingerprints(): Promise<ArrayBuffer | null>
     refreshFingerprints(): Promise<FingerprintStatus>
     ocr(bands: OcrBand[], kind: 'code' | 'name'): Promise<string[]>
@@ -146,6 +148,7 @@ export const INVOKE_CHANNELS = [
   'scan:printingsForSet',
   'scan:printingsForCards',
   'scan:matchName',
+  'scan:cardsForImages',
   'scan:fingerprints',
   'scan:refreshFingerprints',
   'scan:ocr',

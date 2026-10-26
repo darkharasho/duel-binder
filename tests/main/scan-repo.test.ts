@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  cardsForImages,
   matchName,
   printingsByCode,
   printingsForCards,
@@ -83,5 +84,20 @@ describe('scan repo', () => {
     const { db } = await scanDb()
     expect(matchName(db, 'Dark Maglcian')?.name).toBe('Dark Magician')
     expect(matchName(db, 'zzzzzzzz')).toBeNull()
+  })
+
+  it('cardsForImages maps known artworks to their card and skips unknown ones', async () => {
+    const { db, cardId } = await scanDb()
+    const images = (
+      db
+        .prepare('SELECT image_id AS imageId FROM card_images WHERE card_id = ? ORDER BY image_id')
+        .all(cardId) as {
+        imageId: number
+      }[]
+    ).map((i) => i.imageId)
+    expect(cardsForImages(db, [...images, 999999999])).toEqual(
+      images.map((imageId) => ({ imageId, cardId }))
+    )
+    expect(cardsForImages(db, [])).toEqual([])
   })
 })

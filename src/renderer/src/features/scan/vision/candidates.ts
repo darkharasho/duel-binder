@@ -347,13 +347,15 @@ export function findCandidates(cv: CV, img: RgbaImage): Quad[] {
  * The card in a frame and its closest artworks: each candidate outline is matched on a small
  * straightened copy, and the one closest to any artwork is straightened at full size and matched
  * again. card is that 842x1228 straightened card, turned the way up its art matched so the name
- * and code read. Null when the frame holds no card-shaped outline.
+ * and code read, and matches its k closest artworks (rankArt's default when k is left out). Null
+ * when the frame holds no card-shaped outline.
  */
 export function recognizeArt(
   cv: CV,
   img: RgbaImage,
   index: FingerprintIndex,
-  candidates?: ReadonlySet<number>
+  candidates?: ReadonlySet<number>,
+  k?: number
 ): { quad: Quad; card: RgbaImage; matches: { imageId: number; distance: number }[] } | null {
   let best: { quad: Quad; distance: number } | null = null
   for (const quad of findCandidates(cv, img)) {
@@ -363,6 +365,6 @@ export function recognizeArt(
   }
   if (!best) return null
   const card = warpCard(cv, img, best.quad, CARD_W)
-  const { matches, upsideDown } = rankArt(cv, card, index, candidates)
+  const { matches, upsideDown } = rankArt(cv, card, index, candidates, k)
   return { quad: best.quad, card: upsideDown ? rotate180(card) : card, matches }
 }

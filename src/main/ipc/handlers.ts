@@ -21,7 +21,13 @@ import {
 import { adjustPrinting, getChecklist, listSets } from '../repo/sets'
 import type { FingerprintStore } from '../scan/fingerprints'
 import { checkOcrBands, type Ocr } from '../scan/ocr'
-import { matchName, printingsByCode, printingsForCards, printingsForSet } from '../repo/scan'
+import {
+  cardsForImages,
+  matchName,
+  printingsByCode,
+  printingsForCards,
+  printingsForSet
+} from '../repo/scan'
 import { getStats, recordSnapshot } from '../repo/stats'
 import type { PriceService } from '../prices/service'
 import { needsPrice, refreshIntlPrices } from '../prices/refresh'
@@ -139,6 +145,11 @@ export function createHandlers({
       printingsForSet(db, setName, checkLanguage(language)),
     'scan:printingsForCards': async (cardIds: number[]) => printingsForCards(db, cardIds),
     'scan:matchName': async (text: string) => matchName(db, text),
+    'scan:cardsForImages': async (imageIds: unknown) => {
+      if (!Array.isArray(imageIds) || !imageIds.every((i) => Number.isInteger(i)))
+        throw new Error('Image ids must be a list of integers')
+      return cardsForImages(db, imageIds)
+    },
     'scan:fingerprints': () => fingerprints.read(),
     'scan:refreshFingerprints': () => fingerprints.refresh(),
     'scan:ocr': async (bands: unknown, kind: 'code' | 'name') => {

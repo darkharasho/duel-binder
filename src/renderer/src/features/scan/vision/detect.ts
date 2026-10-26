@@ -239,12 +239,15 @@ function hashBox(cv: CV, card: Mat, box: Box): Uint32Array {
   })
 }
 
-/** A straightened card's closest artworks, and whether the best of them matched it upside down. */
+/**
+ * A straightened card's k closest artworks, and whether the best of them matched it upside down.
+ */
 export function rankArt(
   cv: CV,
   card: RgbaImage,
   index: FingerprintIndex,
-  candidates?: ReadonlySet<number>
+  candidates?: ReadonlySet<number>,
+  k = TOP_MATCHES
 ): { matches: { imageId: number; distance: number }[]; upsideDown: boolean } {
   const upright = toMat(cv, card)
   const flipped = new cv.Mat()
@@ -255,7 +258,7 @@ export function rankArt(
     for (const mat of [upright, flipped]) {
       for (const box of Object.values(ART_BOXES)) {
         const hash = hashBox(cv, mat, box)
-        for (const { imageId, distance } of index.nearest(hash, TOP_MATCHES, candidates)) {
+        for (const { imageId, distance } of index.nearest(hash, k, candidates)) {
           const prev = best.get(imageId)
           if (prev === undefined || distance < prev.distance)
             best.set(imageId, { distance, upsideDown: mat === flipped })
@@ -265,7 +268,7 @@ export function rankArt(
     const ranked = [...best]
       .map(([imageId, m]) => ({ imageId, ...m }))
       .sort((a, b) => a.distance - b.distance || a.imageId - b.imageId)
-      .slice(0, TOP_MATCHES)
+      .slice(0, k)
     return {
       matches: ranked.map(({ imageId, distance }) => ({ imageId, distance })),
       upsideDown: ranked[0]?.upsideDown ?? false

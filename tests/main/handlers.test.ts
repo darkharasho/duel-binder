@@ -108,6 +108,12 @@ describe('createHandlers', () => {
     expect(account.noteLocalEdit).toHaveBeenCalledTimes(4)
   })
 
+  it('scan:printingsByCode is wired to the catalog', async () => {
+    const { handlers } = await makeHandlers()
+    const rows = (await handlers['scan:printingsByCode']('lob-en005')) as { name: string }[]
+    expect(rows.map((r) => r.name)).toEqual(['Dark Magician'])
+  })
+
   it('account handlers delegate to the account service', async () => {
     const { handlers, account } = await makeHandlers()
     const status: AccountStatus = {

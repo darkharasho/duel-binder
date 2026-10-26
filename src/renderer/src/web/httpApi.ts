@@ -10,6 +10,8 @@ export interface HttpApiOptions {
 }
 
 const unavailable = (): Promise<never> => Promise.reject(new Error('Not available on the web'))
+const scanUnavailable = (): Promise<never> =>
+  Promise.reject(new Error('Scan is only in the desktop app'))
 const noUnsubscribe = (): (() => void) => () => {}
 
 // The web has no sync or updater; report the quiet state the UI expects.
@@ -84,6 +86,15 @@ export function createHttpApi(opts: HttpApiOptions = {}): Api {
       unblock: call('friends:unblock'),
       collection: call('friends:collection'),
       facets: call('friends:facets')
+    },
+    scan: {
+      printingsByCode: scanUnavailable,
+      printingsForSet: scanUnavailable,
+      printingsForCards: scanUnavailable,
+      matchName: scanUnavailable,
+      fingerprints: scanUnavailable,
+      refreshFingerprints: scanUnavailable,
+      ocr: scanUnavailable
     },
     stats: { get: call('stats:get') },
     sets: {

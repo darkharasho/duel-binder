@@ -21,6 +21,7 @@ import type {
   UpdateEntryInput,
   UpdateStatus
 } from './types'
+import type { FingerprintStatus, OcrBand, ScanPrinting } from './scan/types'
 
 /** The API exposed to the renderer as `window.api`. */
 export interface Api {
@@ -52,13 +53,27 @@ export interface Api {
     collection(userId: number, f: CollectionFilters): Promise<EntryView[]>
     facets(userId: number): Promise<Facets>
   }
+  scan: {
+    printingsByCode(code: string): Promise<ScanPrinting[]>
+    printingsForSet(setName: string): Promise<ScanPrinting[]>
+    printingsForCards(cardIds: number[]): Promise<ScanPrinting[]>
+    matchName(text: string): Promise<{ cardId: number; name: string; score: number } | null>
+    fingerprints(): Promise<ArrayBuffer | null>
+    refreshFingerprints(): Promise<FingerprintStatus>
+    ocr(bands: OcrBand[], kind: 'code' | 'name'): Promise<string[]>
+  }
   stats: {
     get(): Promise<CollectionStats>
   }
   sets: {
     list(): Promise<SetSummary[]>
     checklist(setName: string, language: Language): Promise<SetChecklist | null>
-    adjust(setName: string, language: Language, printingId: number, delta: 1 | -1): Promise<ChecklistCard>
+    adjust(
+      setName: string,
+      language: Language,
+      printingId: number,
+      delta: 1 | -1
+    ): Promise<ChecklistCard>
   }
   sync: {
     status(): Promise<SyncStatus>
@@ -127,6 +142,13 @@ export const INVOKE_CHANNELS = [
   'friends:unblock',
   'friends:collection',
   'friends:facets',
+  'scan:printingsByCode',
+  'scan:printingsForSet',
+  'scan:printingsForCards',
+  'scan:matchName',
+  'scan:fingerprints',
+  'scan:refreshFingerprints',
+  'scan:ocr',
   'stats:get',
   'sets:list',
   'sets:checklist',

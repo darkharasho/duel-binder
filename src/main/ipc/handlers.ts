@@ -19,6 +19,7 @@ import {
   updateEntry
 } from '../repo/collection'
 import { adjustPrinting, getChecklist, listSets } from '../repo/sets'
+import { matchName, printingsByCode, printingsForCards, printingsForSet } from '../repo/scan'
 import { getStats, recordSnapshot } from '../repo/stats'
 import type { PriceService } from '../prices/service'
 import { needsPrice, refreshIntlPrices } from '../prices/refresh'
@@ -127,6 +128,14 @@ export function createHandlers({
         originalArt: false
       })),
     'friends:facets': async (userId: number) => account.portal('friends:facets', [userId]),
+    'scan:printingsByCode': async (code: string) => printingsByCode(db, code),
+    'scan:printingsForSet': async (setName: string) => printingsForSet(db, setName),
+    'scan:printingsForCards': async (cardIds: number[]) => printingsForCards(db, cardIds),
+    'scan:matchName': async (text: string) => matchName(db, text),
+    // Filled in by the fingerprint and OCR tasks.
+    'scan:fingerprints': async () => null,
+    'scan:refreshFingerprints': async () => ({ state: 'missing', count: 0 }),
+    'scan:ocr': async () => [],
     'stats:get': async () => getStats(db),
     'sets:list': async () => listSets(db),
     'sets:checklist': async (setName: string, language: Language) =>

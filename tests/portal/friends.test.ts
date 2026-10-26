@@ -5,10 +5,12 @@ import {
   FriendError,
   acceptFriend,
   areFriends,
+  blockUser,
   friendsOverview,
   ignoreFriend,
   removeFriend,
   requestFriend,
+  unblockUser,
   DAILY_REQUEST_LIMIT
 } from '../../workers/portal/src/friends'
 import { userScope } from '../../workers/portal/src/scope'
@@ -39,7 +41,7 @@ describe('friends', () => {
     expect(friendsOverview(db, bob).incoming).toEqual([
       expect.objectContaining({ id: alice, username: 'alice', sentAt: NOW.toISOString() })
     ])
-    expect(friendsOverview(db, alice)).toEqual({ friends: [], incoming: [] })
+    expect(friendsOverview(db, alice)).toEqual({ friends: [], incoming: [], blocked: [] })
   })
 
   it('a repeated request stays a single request', () => {
@@ -78,7 +80,7 @@ describe('friends', () => {
     requestFriend(db, alice, 'bob', NOW)
     ignoreFriend(db, bob, alice)
     expect(friendsOverview(db, bob).incoming).toEqual([])
-    expect(friendsOverview(db, alice)).toEqual({ friends: [], incoming: [] })
+    expect(friendsOverview(db, alice)).toEqual({ friends: [], incoming: [], blocked: [] })
     requestFriend(db, alice, 'bob', NOW)
     expect(friendsOverview(db, bob).incoming).toHaveLength(1)
   })
@@ -228,6 +230,65 @@ describe('friends', () => {
     const later = new Date(NOW.getTime() + 24 * 60 * 60 * 1000 + 1)
     expect(requestFriend(db, alice, `user${DAILY_REQUEST_LIMIT}`, later)).toEqual({
       status: 'sent'
+    })
+  })
+
+  describe('blocking', () => {
+    it('ends the friendship and lists them as blocked', () => {
+      befriend()
+      blockUser(db, alice, bob, NOW)
+      expect(areFriends(db, alice, bob)).toBe(false)
+      expect(friendsOverview(db, alice)).toEqual({
+        friends: [],
+        incoming: [],
+        blocked: [expect.objectContaining({ id: bob, username: 'bob' })]
+      })
+      expect(friendsOverview(db, bob).blocked).toEqual([])
+    })
+
+    it('drops a pending request either way', () => {
+      requestFriend(db, bob, 'alice', NOW)
+      blockUser(db, alice, bob, NOW)
+      expect(friendsOverview(db, alice).incoming).toEqual([])
+      unblockUser(db, alice, bob)
+      requestFriend(db, alice, 'bob', NOW)
+      blockUser(db, alice, bob, NOW)
+      expect(friendsOverview(db, bob).incoming).toEqual([])
+    })
+
+    it("tells the blocked person it was sent, but delivers nothing and doesn't count it", () => {
+      blockUser(db, alice, bob, NOW)
+      for (let i = 0; i <= DAILY_REQUEST_LIMIT; i++)
+        expect(requestFriend(db, bob, 'alice', NOW)).toEqual({ status: 'sent' })
+      expect(friendsOverview(db, alice).incoming).toEqual([])
+      expect(requestFriend(db, bob, 'carol', NOW)).toEqual({ status: 'sent' })
+    })
+
+    it("won't let the blocker send a request until they unblock", () => {
+      blockUser(db, alice, bob, NOW)
+      expect(() => requestFriend(db, alice, 'bob', NOW)).toThrow(
+        "You've blocked bob. Unblock them first."
+      )
+      unblockUser(db, alice, bob)
+      expect(friendsOverview(db, alice).blocked).toEqual([])
+      expect(areFriends(db, alice, bob)).toBe(false)
+      expect(requestFriend(db, alice, 'bob', NOW)).toEqual({ status: 'sent' })
+    })
+
+    it('blocking twice is fine; self and unknown users are refused', () => {
+      blockUser(db, alice, bob, NOW)
+      blockUser(db, alice, bob, NOW)
+      expect(friendsOverview(db, alice).blocked).toHaveLength(1)
+      expect(() => blockUser(db, alice, alice, NOW)).toThrow(FriendError)
+      expect(() => blockUser(db, alice, 9999, NOW)).toThrow(FriendError)
+    })
+
+    it('each side can block the other independently', () => {
+      blockUser(db, alice, bob, NOW)
+      blockUser(db, bob, alice, NOW)
+      unblockUser(db, alice, bob)
+      expect(requestFriend(db, alice, 'bob', NOW)).toEqual({ status: 'sent' })
+      expect(friendsOverview(db, bob).incoming).toEqual([])
     })
   })
 })

@@ -14,7 +14,16 @@ export function userScope(userId: number): Scope {
           `INSERT INTO collection_entries (user_id, uid, printing_id, image_id, quantity, notes, created_at, updated_at, server_seq)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ${NEXT_SEQ})`
         )
-        .run(userId, crypto.randomUUID(), row.printingId, row.imageId, row.quantity, row.notes, row.ts, row.ts)
+        .run(
+          userId,
+          crypto.randomUUID(),
+          row.printingId,
+          row.imageId,
+          row.quantity,
+          row.notes,
+          row.ts,
+          row.ts
+        )
       return Number(info.lastInsertRowid)
     },
     deleteEntry(db, id, ts) {

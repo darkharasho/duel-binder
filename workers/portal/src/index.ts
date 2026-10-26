@@ -1,6 +1,9 @@
 import { DurableObject } from 'cloudflare:workers'
 import type { SqlDb } from '../../../src/main/db/sql'
-import { createPrintingArtResolver, type PrintingArtResolver } from '../../../src/main/yugipedia/artResolver'
+import {
+  createPrintingArtResolver,
+  type PrintingArtResolver
+} from '../../../src/main/yugipedia/artResolver'
 import { createTcgplayerLookup } from '../../../src/main/tcgplayer/catalog'
 import { createYugipediaClient } from '../../../src/main/yugipedia/client'
 import { handle, type Env } from './app'
@@ -44,12 +47,7 @@ export class Store extends DurableObject<WorkerEnv> {
 
   /** Keeps eBay prices fresh for every printing any user owns; re-arms itself. */
   async alarm(): Promise<void> {
-    await runPriceAlarm(
-      this.db,
-      priceClientFor(this.env),
-      this.ctx.storage,
-      () => new Date()
-    )
+    await runPriceAlarm(this.db, priceClientFor(this.env), this.ctx.storage, () => new Date())
   }
 
   fetch(req: Request): Promise<Response> {
@@ -73,7 +71,11 @@ export default {
   fetch(req, env) {
     const route = routeHost(new URL(req.url), env.SITE_URL)
     if (route.kind === 'site') {
-      downloads ??= createReleaseSource({ fetch: (i, n) => fetch(i, n), now: () => new Date(), token: env.GITHUB_TOKEN })
+      downloads ??= createReleaseSource({
+        fetch: (i, n) => fetch(i, n),
+        now: () => new Date(),
+        token: env.GITHUB_TOKEN
+      })
       return handleSite(req, { appUrl: env.PUBLIC_URL, assets: env.ASSETS, downloads })
     }
     if (route.kind === 'redirect') return Response.redirect(route.location, 301)

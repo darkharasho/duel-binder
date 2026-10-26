@@ -105,7 +105,9 @@ function upsertRows(deps: AppDeps, table: CatalogTable, rows: unknown[]): void {
           ...table.key.map((k) => row[k])
         )
       }
-      const updates = cols.filter((c) => !table.key.includes(c)).map((c) => `"${c}" = excluded."${c}"`)
+      const updates = cols
+        .filter((c) => !table.key.includes(c))
+        .map((c) => `"${c}" = excluded."${c}"`)
       const conflict = table.key.map((k) => `"${k}"`).join(', ')
       db.prepare(
         `INSERT INTO ${table.name} (${quoted.join(', ')}) VALUES (${cols.map(() => '?').join(', ')}) ` +
@@ -130,7 +132,9 @@ function deleteKeys(deps: AppDeps, table: CatalogTable, keys: unknown[]): void {
     for (const k of tuples) {
       if (table.name === 'card_printings') {
         const owned = 'id IN (SELECT printing_id FROM collection_entries)'
-        db.prepare(`UPDATE card_printings SET missing_from_api = 1 WHERE pkey = ? AND ${owned}`).run(k[0])
+        db.prepare(
+          `UPDATE card_printings SET missing_from_api = 1 WHERE pkey = ? AND ${owned}`
+        ).run(k[0])
         db.prepare(`DELETE FROM card_printings WHERE pkey = ? AND NOT (${owned})`).run(k[0])
       } else {
         const where = table.key.map((c) => `"${c}" = ?`).join(' AND ')
@@ -161,7 +165,9 @@ export async function adminRoute(req: Request, deps: AppDeps): Promise<Response>
   if (req.method === 'GET' && path === '/admin/catalog/status') {
     const counts: Record<string, number> = {}
     for (const t of CATALOG_TABLES) {
-      counts[t.name] = (deps.db.prepare(`SELECT COUNT(*) AS n FROM ${t.name}`).get() as { n: number }).n
+      counts[t.name] = (
+        deps.db.prepare(`SELECT COUNT(*) AS n FROM ${t.name}`).get() as { n: number }
+      ).n
     }
     return json({ counts })
   }

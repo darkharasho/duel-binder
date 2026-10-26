@@ -69,6 +69,18 @@ CREATE TABLE friend_request_log (
   created_at TEXT NOT NULL);
 CREATE INDEX ix_friend_request_log ON friend_request_log(user_id, created_at);
 `
+  },
+  {
+    name: 'server-5',
+    sql: `
+CREATE TABLE friend_blocks (
+  blocker_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  blocked_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (blocker_id, blocked_id),
+  CHECK (blocker_id <> blocked_id));
+CREATE INDEX ix_friend_blocks_blocked ON friend_blocks(blocked_id);
+`
   }
 ]
 

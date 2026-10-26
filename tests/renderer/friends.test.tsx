@@ -58,7 +58,7 @@ const shell = (api: Api): void => {
 
 describe('friends nav', () => {
   it('is shown between Browse and Settings on web', () => {
-    shell(make({ friends: [], incoming: [] }))
+    shell(make({ friends: [], incoming: [], blocked: [] }))
     const names = screen.getAllByRole('button').map((b) => b.textContent)
     const i = names.indexOf('Friends')
     expect(names[i - 1]).toBe('Browse')
@@ -67,7 +67,7 @@ describe('friends nav', () => {
 
   it('is hidden on desktop when signed out', async () => {
     const api = make(
-      { friends: [], incoming: [] },
+      { friends: [], incoming: [], blocked: [] },
       {
         window: { platform: 'linux' },
         account: { status: vi.fn(async () => signedOut) }
@@ -81,7 +81,7 @@ describe('friends nav', () => {
 
   it('is shown on desktop when signed in', async () => {
     const api = make(
-      { friends: [], incoming: [] },
+      { friends: [], incoming: [], blocked: [] },
       {
         window: { platform: 'linux' },
         account: { status: vi.fn(async () => signedIn) }
@@ -94,7 +94,7 @@ describe('friends nav', () => {
   it('shows at once on desktop when the last status was signed in, before fetching', async () => {
     localStorage.setItem('friends.signedIn', '1')
     const api = make(
-      { friends: [], incoming: [] },
+      { friends: [], incoming: [], blocked: [] },
       {
         window: { platform: 'linux' },
         account: { status: vi.fn(() => new Promise<AccountStatus>(() => {})) }
@@ -108,7 +108,7 @@ describe('friends nav', () => {
 
   it('remembers a signed-out status for the next start', async () => {
     const api = make(
-      { friends: [], incoming: [] },
+      { friends: [], incoming: [], blocked: [] },
       { window: { platform: 'linux' }, account: { status: vi.fn(async () => signedOut) } }
     )
     shell(api)
@@ -116,13 +116,13 @@ describe('friends nav', () => {
   })
 
   it('badges incoming requests', async () => {
-    shell(make({ friends: [], incoming: [alice(3), alice(4)] }))
+    shell(make({ friends: [], incoming: [alice(3), alice(4)], blocked: [] }))
     const btn = await screen.findByRole('button', { name: 'Friends, 2 requests' })
     expect(btn).toHaveTextContent('2')
   })
 
   it('has no number without requests', async () => {
-    const api = make({ friends: [], incoming: [] })
+    const api = make({ friends: [], incoming: [], blocked: [] })
     shell(api)
     await waitFor(() => expect(api.friends.overview).toHaveBeenCalled())
     expect(screen.getByRole('button', { name: 'Friends' })).not.toHaveTextContent(/\d/)
@@ -132,7 +132,7 @@ describe('friends nav', () => {
 describe('friends page', () => {
   it('sends a request', async () => {
     const user = userEvent.setup()
-    const api = make({ friends: [], incoming: [] })
+    const api = make({ friends: [], incoming: [], blocked: [] })
     renderWithProviders(<FriendsPage onBackToMine={() => {}} />, { api })
     const send = screen.getByRole('button', { name: 'Send request' })
     expect(send).toBeDisabled()
@@ -145,7 +145,7 @@ describe('friends page', () => {
   it('reports an accepted request', async () => {
     const user = userEvent.setup()
     const api = make(
-      { friends: [], incoming: [] },
+      { friends: [], incoming: [], blocked: [] },
       {
         friends: { request: vi.fn(async () => ({ status: 'accepted' as const, friend: bob })) }
       }
@@ -159,7 +159,7 @@ describe('friends page', () => {
   it('shows a request error inline', async () => {
     const user = userEvent.setup()
     const api = make(
-      { friends: [], incoming: [] },
+      { friends: [], incoming: [], blocked: [] },
       {
         friends: {
           request: vi.fn(async () => {
@@ -178,7 +178,8 @@ describe('friends page', () => {
     const user = userEvent.setup()
     const api = make({
       friends: [],
-      incoming: [alice(3), { ...alice(4), displayName: 'Carl', username: 'carl' }]
+      incoming: [alice(3), { ...alice(4), displayName: 'Carl', username: 'carl' }],
+      blocked: []
     })
     renderWithProviders(<FriendsPage onBackToMine={() => {}} />, { api })
     await screen.findByText('Alice')
@@ -200,8 +201,13 @@ describe('friends page', () => {
       )
       .mockResolvedValue(undefined)
     const api = make(
-      { friends: [], incoming: [alice(3)] },
-      { friends: { accept, overview: vi.fn(async () => ({ friends: [], incoming: [alice(3)] })) } }
+      { friends: [], incoming: [alice(3)], blocked: [] },
+      {
+        friends: {
+          accept,
+          overview: vi.fn(async () => ({ friends: [], incoming: [alice(3)], blocked: [] }))
+        }
+      }
     )
     renderWithProviders(<FriendsPage onBackToMine={() => {}} />, { api })
     await user.click(await screen.findByRole('button', { name: 'Accept' }))
@@ -212,7 +218,7 @@ describe('friends page', () => {
 
   it('lists friends and unfriends after confirming', async () => {
     const user = userEvent.setup()
-    const api = make({ friends: [bob], incoming: [] })
+    const api = make({ friends: [bob], incoming: [], blocked: [] })
     renderWithProviders(<FriendsPage onBackToMine={() => {}} />, { api })
     expect(await screen.findByText('Bob')).toBeInTheDocument()
     expect(screen.getByText('@bob')).toBeInTheDocument()
@@ -226,16 +232,54 @@ describe('friends page', () => {
     expect(api.friends.remove).toHaveBeenCalledWith(2)
   })
 
+  it('blocks a friend after confirming', async () => {
+    const user = userEvent.setup()
+    const api = make({ friends: [bob], incoming: [], blocked: [] })
+    renderWithProviders(<FriendsPage onBackToMine={() => {}} />, { api })
+    await user.click(await screen.findByRole('button', { name: 'Block' }))
+    expect(screen.getByText('Block Bob?')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(api.friends.block).not.toHaveBeenCalled()
+    await user.click(screen.getByRole('button', { name: 'Block' }))
+    await user.click(screen.getByRole('button', { name: 'Confirm' }))
+    expect(api.friends.block).toHaveBeenCalledWith(2)
+    expect(api.friends.remove).not.toHaveBeenCalled()
+    await waitFor(() => expect(api.friends.overview).toHaveBeenCalledTimes(2))
+  })
+
+  it('blocks someone from their request', async () => {
+    const user = userEvent.setup()
+    const api = make({ friends: [], incoming: [alice(3)], blocked: [] })
+    renderWithProviders(<FriendsPage onBackToMine={() => {}} />, { api })
+    await user.click(await screen.findByRole('button', { name: 'Block' }))
+    expect(screen.getByText('Block Alice?')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Accept' })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Confirm' }))
+    expect(api.friends.block).toHaveBeenCalledWith(3)
+    expect(api.friends.ignore).not.toHaveBeenCalled()
+  })
+
+  it('lists blocked people with Unblock', async () => {
+    const user = userEvent.setup()
+    const carl = { id: 5, username: 'carl', displayName: 'Carl', avatarUrl: null }
+    const api = make({ friends: [], incoming: [], blocked: [carl] })
+    renderWithProviders(<FriendsPage onBackToMine={() => {}} />, { api })
+    const blocked = await screen.findByRole('region', { name: 'Blocked' })
+    expect(blocked).toHaveTextContent('Carl')
+    await user.click(screen.getByRole('button', { name: 'Unblock' }))
+    expect(api.friends.unblock).toHaveBeenCalledWith(5)
+  })
+
   it('says "1 card" for a single card', async () => {
     renderWithProviders(<FriendsPage onBackToMine={() => {}} />, {
-      api: make({ friends: [{ ...bob, cardCount: 1 }], incoming: [] })
+      api: make({ friends: [{ ...bob, cardCount: 1 }], incoming: [], blocked: [] })
     })
     expect(await screen.findByText('1 card · Updated 2 days ago')).toBeInTheDocument()
   })
 
   it('shows the empty state', async () => {
     renderWithProviders(<FriendsPage onBackToMine={() => {}} />, {
-      api: make({ friends: [], incoming: [] })
+      api: make({ friends: [], incoming: [], blocked: [] })
     })
     expect(
       await screen.findByText('No friends yet. Add one by their Discord username.')
@@ -249,8 +293,8 @@ describe('friends page', () => {
       .mockRejectedValueOnce(
         new Error(`Error invoking remote method 'friends:overview': Error: ${OFFLINE_MESSAGE}`)
       )
-      .mockResolvedValue({ friends: [], incoming: [] })
-    const api = make({ friends: [], incoming: [] }, { friends: { overview } })
+      .mockResolvedValue({ friends: [], incoming: [], blocked: [] })
+    const api = make({ friends: [], incoming: [], blocked: [] }, { friends: { overview } })
     renderWithProviders(<FriendsPage onBackToMine={() => {}} />, { api })
     expect(await screen.findByText(OFFLINE_MESSAGE)).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Retry' }))
@@ -261,7 +305,7 @@ describe('friends page', () => {
 
   it('shows the signed-out message on desktop', async () => {
     const api = make(
-      { friends: [], incoming: [] },
+      { friends: [], incoming: [], blocked: [] },
       {
         window: { platform: 'linux' },
         account: { status: vi.fn(async () => signedOut) }
@@ -277,7 +321,7 @@ describe('friends cache across accounts', () => {
   it('drops the cached friends when the signed-in user changes', async () => {
     let emit: (s: AccountStatus) => void = () => {}
     const api = make(
-      { friends: [bob], incoming: [] },
+      { friends: [bob], incoming: [], blocked: [] },
       {
         window: { platform: 'linux' },
         account: {
@@ -303,7 +347,7 @@ describe('friends cache across accounts', () => {
 
   it('fetches the overview once at startup', async () => {
     const api = make(
-      { friends: [bob], incoming: [] },
+      { friends: [bob], incoming: [], blocked: [] },
       { window: { platform: 'linux' }, account: { status: vi.fn(async () => signedIn) } }
     )
     renderWithProviders(<FriendsPage onBackToMine={() => {}} />, { api })
@@ -315,7 +359,7 @@ describe('friends cache across accounts', () => {
   it('drops the cached friends on sign-out', async () => {
     let emit: (s: AccountStatus) => void = () => {}
     const api = make(
-      { friends: [bob], incoming: [] },
+      { friends: [bob], incoming: [], blocked: [] },
       {
         window: { platform: 'linux' },
         account: {

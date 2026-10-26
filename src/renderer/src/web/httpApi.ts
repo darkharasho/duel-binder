@@ -80,6 +80,8 @@ export function createHttpApi(opts: HttpApiOptions = {}): Api {
       accept: call('friends:accept'),
       ignore: call('friends:ignore'),
       remove: call('friends:remove'),
+      block: call('friends:block'),
+      unblock: call('friends:unblock'),
       collection: call('friends:collection'),
       facets: call('friends:facets')
     },

@@ -13,8 +13,14 @@ import { currentUser } from './auth'
 
 /** The slice of an R2 bucket the image route uses. */
 export interface ImageBucket {
-  get(key: string): Promise<{ body: ReadableStream; httpMetadata?: { contentType?: string } } | null>
-  put(key: string, value: ArrayBuffer, opts: { httpMetadata: { contentType: string } }): Promise<unknown>
+  get(
+    key: string
+  ): Promise<{ body: ReadableStream; httpMetadata?: { contentType?: string } } | null>
+  put(
+    key: string,
+    value: ArrayBuffer,
+    opts: { httpMetadata: { contentType: string } }
+  ): Promise<unknown>
 }
 
 const IMAGE_TIMEOUT_MS = 30_000
@@ -59,7 +65,9 @@ interface Target {
   cache: string
 }
 
-const fixed = (url: string, headers?: Record<string, string>): Target['source'] => async () => ({ url, headers })
+const fixed =
+  (url: string, headers?: Record<string, string>): Target['source'] =>
+  async () => ({ url, headers })
 
 /** Where a request's artwork comes from and how long browsers may keep it; null when the path names nothing servable. */
 function resolve(deps: AppDeps, path: string): Target | null {
@@ -70,7 +78,11 @@ function resolve(deps: AppDeps, path: string): Target | null {
     const n = Number(id)
     if (!Number.isSafeInteger(n) || n <= 0) return null
     if (!deps.db.prepare('SELECT 1 FROM card_images WHERE image_id = ?').get(n)) return null
-    return { key: `card/${kind satisfies ImageSize}/${n}`, source: fixed(imageUrl(kind, n)), cache: CARD_CACHE }
+    return {
+      key: `card/${kind satisfies ImageSize}/${n}`,
+      source: fixed(imageUrl(kind, n)),
+      cache: CARD_CACHE
+    }
   }
   if (kind === 'set') {
     if (id.length > MAX_SET_KEY || !SET_KEY_RE.test(id)) return null
@@ -80,7 +92,11 @@ function resolve(deps: AppDeps, path: string): Target | null {
       const source = findSetImageUrl(deps.db, id)
       const allowed = prefix === 'yp-' ? YUGIPEDIA_IMAGE_PREFIX : PACK_ART_PREFIX
       if (source === null || !source.startsWith(allowed)) return null
-      return { key: `set/${id}`, source: fixed(source, { 'User-Agent': USER_AGENT }), cache: SET_CACHE }
+      return {
+        key: `set/${id}`,
+        source: fixed(source, { 'User-Agent': USER_AGENT }),
+        cache: SET_CACHE
+      }
     }
     return { key: `set/${id}`, source: fixed(setImageUrl(id)), cache: SET_CACHE }
   }
@@ -92,9 +108,13 @@ function resolve(deps: AppDeps, path: string): Target | null {
       key: `printing/${n}`,
       cache: SET_CACHE,
       source: async () => {
-        const url = await withTimeout(deps.printingArt.url(n).catch(() => null), IMAGE_TIMEOUT_MS)
+        const url = await withTimeout(
+          deps.printingArt.url(n).catch(() => null),
+          IMAGE_TIMEOUT_MS
+        )
         if (url === null) return null
-        if (url.startsWith(YUGIPEDIA_IMAGE_PREFIX)) return { url, headers: { 'User-Agent': USER_AGENT } }
+        if (url.startsWith(YUGIPEDIA_IMAGE_PREFIX))
+          return { url, headers: { 'User-Agent': USER_AGENT } }
         return url.startsWith(TCGPLAYER_IMAGE_PREFIX) ? { url } : null
       }
     }

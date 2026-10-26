@@ -45,6 +45,9 @@ export interface Api {
     accept(userId: number): Promise<void>
     ignore(userId: number): Promise<void>
     remove(userId: number): Promise<void>
+    /** Also ends any friendship or request with them. */
+    block(userId: number): Promise<void>
+    unblock(userId: number): Promise<void>
     /** An accepted friend's live entries, notes always ''. */
     collection(userId: number, f: CollectionFilters): Promise<EntryView[]>
     facets(userId: number): Promise<Facets>
@@ -120,6 +123,8 @@ export const INVOKE_CHANNELS = [
   'friends:accept',
   'friends:ignore',
   'friends:remove',
+  'friends:block',
+  'friends:unblock',
   'friends:collection',
   'friends:facets',
   'stats:get',

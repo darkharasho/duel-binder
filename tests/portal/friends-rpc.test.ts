@@ -191,6 +191,19 @@ describe('friends RPC', () => {
     expect((await call('friends:overview', [], cb)).body.result.incoming).toEqual([])
   })
 
+  it('block cuts off the collection and unblock lifts it', async () => {
+    await befriend()
+    expect((await call('friends:block', [bob], ca)).status).toBe(200)
+    expect((await call('friends:collection', [alice, F], cb)).body).toEqual(NOT_FRIENDS)
+    expect((await call('friends:overview', [], ca)).body.result.blocked[0].username).toBe('bob')
+    expect((await call('friends:request', ['alice'], cb)).body).toEqual({
+      result: { status: 'sent' }
+    })
+    expect((await call('friends:overview', [], ca)).body.result.incoming).toEqual([])
+    expect((await call('friends:unblock', [bob], ca)).status).toBe(200)
+    expect((await call('friends:overview', [], ca)).body.result.blocked).toEqual([])
+  })
+
   it('rejects an unknown username', async () => {
     const r = await call('friends:request', ['zed'], ca)
     expect(r.status).toBe(400)

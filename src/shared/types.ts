@@ -302,6 +302,8 @@ export interface FriendRequest extends FriendUser {
 export interface FriendsOverview {
   friends: Friend[]
   incoming: FriendRequest[]
+  /** People you've blocked, by name. */
+  blocked: FriendUser[]
 }
 
 export type FriendRequestResult = { status: 'sent' } | { status: 'accepted'; friend: FriendUser }

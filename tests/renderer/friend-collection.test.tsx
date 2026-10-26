@@ -68,7 +68,7 @@ const make = (friendEntries: EntryView[] = [kuriboh]): ReturnType<typeof createM
   createMockApi({
     window: { platform: 'web' },
     friends: {
-      overview: vi.fn(async () => ({ friends: [friend], incoming: [] })),
+      overview: vi.fn(async () => ({ friends: [friend], incoming: [], blocked: [] })),
       collection: vi.fn(async () => friendEntries)
     },
     collection: { list: vi.fn(async () => [mine]), forCard: vi.fn(async () => []) }

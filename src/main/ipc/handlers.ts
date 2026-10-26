@@ -118,6 +118,8 @@ export function createHandlers({
     'friends:accept': async (userId: number) => account.portal('friends:accept', [userId]),
     'friends:ignore': async (userId: number) => account.portal('friends:ignore', [userId]),
     'friends:remove': async (userId: number) => account.portal('friends:remove', [userId]),
+    'friends:block': async (userId: number) => account.portal('friends:block', [userId]),
+    'friends:unblock': async (userId: number) => account.portal('friends:unblock', [userId]),
     // Printing ids differ between the server and this computer, so a friend's entries get no printing scans.
     'friends:collection': async (userId: number, f: CollectionFilters) =>
       (await account.portal<EntryView[]>('friends:collection', [userId, f])).map((e) => ({

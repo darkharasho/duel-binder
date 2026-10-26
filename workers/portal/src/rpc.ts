@@ -27,7 +27,17 @@ import { adjustPrinting, getChecklist, listSets } from '../../../src/main/repo/s
 import { getStats, recordSnapshot } from '../../../src/main/repo/stats'
 import type { AppDeps } from './app'
 import { currentUser } from './auth'
-import { FriendError, acceptFriend, areFriends, friendsOverview, ignoreFriend, removeFriend, requestFriend } from './friends'
+import {
+  FriendError,
+  acceptFriend,
+  areFriends,
+  blockUser,
+  friendsOverview,
+  ignoreFriend,
+  removeFriend,
+  requestFriend,
+  unblockUser
+} from './friends'
 import { userScope } from './scope'
 
 type Params<T> = T extends (...args: infer A) => unknown ? A : never
@@ -80,7 +90,8 @@ const HANDLERS: { [C in PortalChannel]: Handler<C> } = {
   },
   'collection:list': ({ db }, scope, f) =>
     listEntries(db, checkObject(f, 'Filters') as unknown as CollectionFilters, scope),
-  'collection:forCard': ({ db }, scope, cardId) => entriesForCard(db, checkId(cardId, 'cardId'), scope),
+  'collection:forCard': ({ db }, scope, cardId) =>
+    entriesForCard(db, checkId(cardId, 'cardId'), scope),
   'collection:facets': ({ db }, scope) => getFacets(db, scope),
   'collection:add': ({ db, now }, scope, input) => {
     checkNotesLength(input)
@@ -105,6 +116,9 @@ const HANDLERS: { [C in PortalChannel]: Handler<C> } = {
     acceptFriend(db, userId, checkId(id, 'userId'), now()),
   'friends:ignore': ({ db, userId }, _s, id) => ignoreFriend(db, userId, checkId(id, 'userId')),
   'friends:remove': ({ db, userId }, _s, id) => removeFriend(db, userId, checkId(id, 'userId')),
+  'friends:block': ({ db, userId, now }, _s, id) =>
+    blockUser(db, userId, checkId(id, 'userId'), now()),
+  'friends:unblock': ({ db, userId }, _s, id) => unblockUser(db, userId, checkId(id, 'userId')),
   'friends:collection': ({ db, userId }, _s, id, f) => {
     const friend = friendId(db, userId, id)
     const filters = checkObject(f, 'Filters') as unknown as CollectionFilters
@@ -115,7 +129,11 @@ const HANDLERS: { [C in PortalChannel]: Handler<C> } = {
 }
 
 /** Writes that can leave a printing owned with no fresh price. */
-const QUEUES_PRICES: ReadonlySet<string> = new Set(['collection:add', 'collection:update', 'sets:adjust'])
+const QUEUES_PRICES: ReadonlySet<string> = new Set([
+  'collection:add',
+  'collection:update',
+  'sets:adjust'
+])
 
 const json = (body: unknown, status = 200): Response =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })

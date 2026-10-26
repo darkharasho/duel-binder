@@ -63,7 +63,25 @@ export function friendsOverview(db: SqlDb, me: number): FriendsOverview {
       )
       .all(me) as (UserRow & { sent: string })[]
   ).map((r): FriendRequest => ({ ...toUser(r), sentAt: r.sent }))
-  return { friends, incoming }
+  const blocked = (
+    db
+      .prepare(
+        `SELECT u.id, u.discord_id, u.username, u.display_name, u.avatar
+           FROM friend_blocks b JOIN users u ON u.id = b.blocked_id
+          WHERE b.blocker_id = ?
+          ORDER BY COALESCE(NULLIF(u.display_name, ''), u.username) COLLATE NOCASE, u.id`
+      )
+      .all(me) as UserRow[]
+  ).map(toUser)
+  return { friends, incoming, blocked }
+}
+
+function blocks(db: SqlDb, blocker: number, blocked: number): boolean {
+  return (
+    db
+      .prepare('SELECT 1 FROM friend_blocks WHERE blocker_id = ? AND blocked_id = ?')
+      .get(blocker, blocked) !== undefined
+  )
 }
 
 export function requestFriend(
@@ -81,6 +99,10 @@ export function requestFriend(
     .get(name) as UserRow | undefined
   if (!target) throw new FriendError(`No Duel Binder user called "${name}"`)
   if (target.id === me) throw new FriendError("That's you")
+  if (blocks(db, me, target.id))
+    throw new FriendError(`You've blocked ${target.username}. Unblock them first.`)
+  // Someone who blocked you gets nothing, but you're told it was sent, as with any request.
+  if (blocks(db, target.id, me)) return { status: 'sent' }
   const row = db
     .prepare(
       `SELECT requester_id, status FROM friendships
@@ -144,4 +166,23 @@ export function areFriends(db: SqlDb, me: number, other: number): boolean {
       )
       .get(me, other, other, me) !== undefined
   )
+}
+
+/** Ends any friendship or request between the two and stops `userId` reaching `me`. */
+export function blockUser(db: SqlDb, me: number, userId: number, now: Date): void {
+  if (userId === me) throw new FriendError("You can't block yourself")
+  if (!db.prepare('SELECT 1 FROM users WHERE id = ?').get(userId))
+    throw new FriendError('No such user')
+  db.prepare(
+    `DELETE FROM friendships
+      WHERE (requester_id = ? AND addressee_id = ?) OR (requester_id = ? AND addressee_id = ?)`
+  ).run(me, userId, userId, me)
+  db.prepare(
+    'INSERT OR IGNORE INTO friend_blocks (blocker_id, blocked_id, created_at) VALUES (?, ?, ?)'
+  ).run(me, userId, now.toISOString())
+}
+
+/** Lifts the block; the friendship isn't restored. */
+export function unblockUser(db: SqlDb, me: number, userId: number): void {
+  db.prepare('DELETE FROM friend_blocks WHERE blocker_id = ? AND blocked_id = ?').run(me, userId)
 }

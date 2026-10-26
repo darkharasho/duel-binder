@@ -29,7 +29,9 @@ export function priceClientFor(env: PriceEnv): PriceClient | null {
   const binding = env.PRICES
   return createPriceClient({
     url: env.PRICE_WORKER_URL,
-    ...(binding ? { fetchFn: (input: RequestInfo | URL, init?: RequestInit) => binding.fetch(input, init) } : {})
+    ...(binding
+      ? { fetchFn: (input: RequestInfo | URL, init?: RequestInit) => binding.fetch(input, init) }
+      : {})
   })
 }
 

@@ -57,8 +57,7 @@ export async function home(req: Request, deps: AppDeps): Promise<Response> {
   const user = await currentUser(req, deps)
   const row = user
     ? (deps.db.prepare('SELECT username, display_name FROM users WHERE id = ?').get(user.id) as
-        | { username: string; display_name: string | null }
-        | undefined)
+        { username: string; display_name: string | null } | undefined)
     : undefined
   if (user && (req.method === 'GET' || req.method === 'HEAD')) {
     const res = await deps.assets.fetch(new Request(new URL('/app/web.html', req.url)))

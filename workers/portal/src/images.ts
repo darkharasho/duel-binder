@@ -13,9 +13,12 @@ import { currentUser } from './auth'
 
 /** The slice of an R2 bucket the image route uses. */
 export interface ImageBucket {
-  get(
-    key: string
-  ): Promise<{ body: ReadableStream; httpMetadata?: { contentType?: string } } | null>
+  get(key: string): Promise<{
+    body: ReadableStream
+    httpMetadata?: { contentType?: string }
+    /** The quoted ETag R2 assigns each stored object. */
+    httpEtag?: string
+  } | null>
   put(
     key: string,
     value: ArrayBuffer,

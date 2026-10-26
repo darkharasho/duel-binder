@@ -1,6 +1,7 @@
 import { CATALOG_TABLES, type CatalogTable } from '../../../src/shared/catalogTables'
 import { setMeta, type MetaKey } from '../../../src/main/db/meta'
 import type { AppDeps } from './app'
+import { putFingerprints } from './scanFiles'
 
 const MAX_ITEMS = 5000
 const META_KEYS: MetaKey[] = ['db_version', 'last_sync_at']
@@ -171,6 +172,8 @@ export async function adminRoute(req: Request, deps: AppDeps): Promise<Response>
     }
     return json({ counts })
   }
+
+  if (req.method === 'PUT' && path === '/admin/scan/fingerprints') return putFingerprints(req, deps)
 
   const handlers: Record<string, (body: Record<string, unknown>) => void> = {
     '/admin/catalog/rows': (b) => upsertRows(deps, tableOf(b), listOf(b.rows, 'rows')),

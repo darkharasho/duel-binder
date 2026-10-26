@@ -15,6 +15,7 @@ import { home } from './home'
 import type { PrintingArtResolver } from '../../../src/main/yugipedia/artResolver'
 import { imageRoute, type ImageBucket } from './images'
 import type { PriceQueue } from './prices'
+import { getFingerprints } from './scanFiles'
 
 /** Vars and secrets the request handlers read. */
 export interface Env {
@@ -75,6 +76,8 @@ export async function handle(req: Request, deps: AppDeps): Promise<Response> {
     return syncRoute(req, deps, url.pathname.slice('/api/sync/'.length))
   if (url.pathname.startsWith('/img/'))
     return imageRoute(req, deps, url.pathname.slice('/img/'.length))
+  if (req.method === 'GET' && url.pathname === '/scan/fingerprints')
+    return getFingerprints(req, deps)
   if (url.pathname.startsWith('/admin/')) return adminRoute(req, deps)
   return json({ error: 'Not found' }, 404)
 }

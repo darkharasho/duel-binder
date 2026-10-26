@@ -31,17 +31,18 @@ export function addUser(db: Database.Database, discordId: string, username: stri
 }
 
 /** In-memory stand-in for the R2 bucket; `store` is exposed so tests can look inside. */
-export function memoryBucket(): ImageBucket & { store: Map<string, { bytes: ArrayBuffer; contentType: string }> } {
-  const store = new Map<string, { bytes: ArrayBuffer; contentType: string }>()
+export function memoryBucket(): ImageBucket & { store: Map<string, { bytes: ArrayBuffer; contentType: string; etag: string }> } {
+  const store = new Map<string, { bytes: ArrayBuffer; contentType: string; etag: string }>()
+  let writes = 0
   return {
     store,
     async get(key) {
       const hit = store.get(key)
       if (!hit) return null
-      return { body: new Response(hit.bytes).body!, httpMetadata: { contentType: hit.contentType } }
+      return { body: new Response(hit.bytes).body!, httpMetadata: { contentType: hit.contentType }, httpEtag: hit.etag }
     },
     async put(key, value, opts) {
-      store.set(key, { bytes: value, contentType: opts.httpMetadata.contentType })
+      store.set(key, { bytes: value, contentType: opts.httpMetadata.contentType, etag: `"v${++writes}"` })
     }
   }
 }

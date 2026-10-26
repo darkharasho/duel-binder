@@ -7,6 +7,7 @@ import { formatRelative } from '@/lib/format'
 import { friendsErrorMessage, useFriendsAvailable, useFriendsOverview } from '@/lib/friends'
 import { FRIENDS_SIGNED_OUT } from '@shared/friends'
 import type { Friend, FriendUser } from '@shared/types'
+import { CollectionPage } from '../collection/CollectionPage'
 import { AddFriendForm } from './AddFriendForm'
 
 function Avatar({ user }: { user: FriendUser }): React.JSX.Element {
@@ -33,7 +34,6 @@ function Avatar({ user }: { user: FriendUser }): React.JSX.Element {
 }
 
 export function FriendsPage({ onBackToMine }: { onBackToMine: () => void }): React.JSX.Element {
-  void onBackToMine // Task 5 uses this from the friend's collection view.
   const qc = useQueryClient()
   const available = useFriendsAvailable()
   const overview = useFriendsOverview()
@@ -60,18 +60,7 @@ export function FriendsPage({ onBackToMine }: { onBackToMine: () => void }): Rea
     )
   }
 
-  if (viewing) {
-    // Task 5 replaces this with the friend's read-only collection.
-    return (
-      <div className="space-y-4 p-8">
-        {header}
-        <Button variant="ghost" onClick={() => setViewing(null)}>
-          Back to friends
-        </Button>
-        <p className="text-sm text-muted-foreground">{viewing.displayName ?? viewing.username}</p>
-      </div>
-    )
-  }
+  if (viewing) return <CollectionPage friend={viewing} onBackToMine={onBackToMine} />
 
   const data = overview.data
   return (

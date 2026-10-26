@@ -2,7 +2,7 @@ import { useCallback, useMemo, useState } from 'react'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
 import { LayoutGrid, Table2 } from 'lucide-react'
 import { LANGUAGES } from '@shared/languages'
-import type { CollectionFilters, EntryView, SortKey } from '@shared/types'
+import type { CollectionFilters, EntryView, Friend, SortKey } from '@shared/types'
 import { cardArtUrl, useArtWash } from '@/components/artWashContext'
 import { CardSheet } from '@/components/CardSheet'
 import { PageHeader } from '@/components/PageHeader'
@@ -16,6 +16,7 @@ import { useLanguageFilter } from '@/lib/languageFilter'
 import { CollectionGrid } from './CollectionGrid'
 import { CollectionTable } from './CollectionTable'
 import { EntryDetailPanel } from './EntryDetailPanel'
+import { FriendEntryPanel } from '../friends/FriendEntryPanel'
 import { FilterBar } from './FilterBar'
 
 type View = 'grid' | 'table'
@@ -47,9 +48,17 @@ interface Props {
   /** Opens this entry's detail panel on mount (dashboard "top entries" navigation). */
   initialEntryId?: number
   onAddCard?: () => void
+  /** Shows this friend's collection read-only instead of your own. */
+  friend?: Friend
+  onBackToMine?: () => void
 }
 
-export function CollectionPage({ initialEntryId, onAddCard }: Props): React.JSX.Element {
+export function CollectionPage({
+  initialEntryId,
+  onAddCard,
+  friend,
+  onBackToMine
+}: Props): React.JSX.Element {
   const [pageFilters, setFilters] = useState<CollectionFilters>(DEFAULT_FILTERS)
   const [languageFilter, setLanguageFilter] = useLanguageFilter()
   // The language is the shared app-wide setting, not page state.
@@ -62,13 +71,28 @@ export function CollectionPage({ initialEntryId, onAddCard }: Props): React.JSX.
   const [resetCount, setResetCount] = useState(0)
   const [pickedCardId, setCardId] = useState<number | null>(null)
 
+  const friendId = friend?.id
   const entries = useQuery({
-    queryKey: queryKeys.entries(filters),
-    queryFn: () => api.collection.list(filters),
+    queryKey:
+      friendId !== undefined
+        ? queryKeys.friendEntries(friendId, filters)
+        : queryKeys.entries(filters),
+    queryFn: () =>
+      friendId !== undefined
+        ? api.friends.collection(friendId, filters)
+        : api.collection.list(filters),
     placeholderData: keepPreviousData
   })
-  const facets = useQuery({ queryKey: queryKeys.facets, queryFn: () => api.collection.facets() })
-  const stats = useQuery({ queryKey: queryKeys.stats, queryFn: () => api.stats.get() })
+  const facets = useQuery({
+    queryKey: friendId !== undefined ? queryKeys.friendFacets(friendId) : queryKeys.facets,
+    queryFn: () => (friendId !== undefined ? api.friends.facets(friendId) : api.collection.facets())
+  })
+  const stats = useQuery({
+    queryKey: queryKeys.stats,
+    queryFn: () => api.stats.get(),
+    enabled: !friend
+  })
+  const friendName = friend ? (friend.displayName ?? friend.username) : ''
 
   // An entry opened by id (initialEntryId) resolves its card once the list has loaded;
   // persist it so later filtering that excludes the entry does not unmount the panel.
@@ -116,6 +140,7 @@ export function CollectionPage({ initialEntryId, onAddCard }: Props): React.JSX.
   }
 
   const list = entries.data ?? []
+  const selectedEntry = list.find((e) => e.id === selectedId)
   const nav = listNav(
     list,
     list.findIndex((e) => e.id === selectedId),
@@ -127,7 +152,9 @@ export function CollectionPage({ initialEntryId, onAddCard }: Props): React.JSX.
   const filtered = hasActiveFilters(filters)
   // Entries exist, but the language filter alone hides them all.
   const hiddenByLanguage =
-    !filtered && languageFilter !== 'all' && (stats.data?.uniqueCards ?? 0) > 0
+    !filtered &&
+    languageFilter !== 'all' &&
+    (friend ? friend.cardCount > 0 : (stats.data?.uniqueCards ?? 0) > 0)
   const languageLabel = LANGUAGES.find((l) => l.code === languageFilter)?.label ?? ''
 
   return (
@@ -136,10 +163,14 @@ export function CollectionPage({ initialEntryId, onAddCard }: Props): React.JSX.
         <PageHeader>
           <header className="flex flex-wrap items-end justify-between gap-2">
             <div>
-              <h1 className="text-xl font-semibold">Collection</h1>
+              <h1 className="text-xl font-semibold">
+                {friend ? `${friendName}'s collection` : 'Collection'}
+              </h1>
               <p className="text-sm text-muted-foreground tabular-nums">
-                {list.length} {list.length === 1 ? 'entry' : 'entries'} · Prices updated{' '}
-                {formatRelative(stats.data?.pricesUpdatedAt ?? null)}
+                {list.length} {list.length === 1 ? 'entry' : 'entries'}
+                {!friend && (
+                  <> · Prices updated {formatRelative(stats.data?.pricesUpdatedAt ?? null)}</>
+                )}
               </p>
             </div>
             <ToggleGroup type="single" variant="outline" value={view} onValueChange={changeView}>
@@ -151,6 +182,17 @@ export function CollectionPage({ initialEntryId, onAddCard }: Props): React.JSX.
               </ToggleGroupItem>
             </ToggleGroup>
           </header>
+
+          {friend && (
+            <div className="flex items-center gap-3">
+              <p className="text-sm text-muted-foreground">
+                Viewing {friendName}&apos;s collection
+              </p>
+              <Button variant="outline" size="sm" onClick={onBackToMine}>
+                Back to mine
+              </Button>
+            </div>
+          )}
 
           <FilterBar
             key={resetCount}
@@ -177,6 +219,8 @@ export function CollectionPage({ initialEntryId, onAddCard }: Props): React.JSX.
                   Clear filters
                 </Button>
               </>
+            ) : friend ? (
+              <p className="text-lg font-medium">{friendName} hasn&apos;t added any cards yet</p>
             ) : (
               <>
                 <p className="text-lg font-medium">No cards yet</p>
@@ -197,7 +241,17 @@ export function CollectionPage({ initialEntryId, onAddCard }: Props): React.JSX.
           />
         )}
 
-        {selectedId !== null && cardId !== null && (
+        {friend && selectedEntry && (
+          <CardSheet onClose={close}>
+            <FriendEntryPanel
+              entry={selectedEntry}
+              copies={list.filter((e) => e.card.id === selectedEntry.card.id)}
+              onSelectEntry={setSelectedId}
+              nav={nav}
+            />
+          </CardSheet>
+        )}
+        {!friend && selectedId !== null && cardId !== null && (
           <CardSheet onClose={close}>
             <EntryDetailPanel
               cardId={cardId}

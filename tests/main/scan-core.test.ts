@@ -113,6 +113,11 @@ describe('set codes', () => {
   it('lists candidates with prefix zeros read as O as an alternate', () => {
     expect(setCodeCandidates('L0B-EN0O5')).toEqual(['L0B-EN005', 'LOB-EN005'])
     expect(setCodeCandidates('LOB-EN005')).toEqual(['LOB-EN005'])
+    expect(setCodeCandidates('LOB-ENO05')).toContain('LOB-EN005')
+    const mvp = setCodeCandidates('MVP1-ENS01')
+    expect(mvp[0]).toBe('MVP1-ENS01')
+    expect(mvp).toContain('MVP1-EN501')
+    expect(new Set(mvp).size).toBe(mvp.length)
     expect(setCodeCandidates('nothing')).toEqual([])
   })
 

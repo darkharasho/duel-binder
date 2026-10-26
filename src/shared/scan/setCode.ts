@@ -26,11 +26,22 @@ export function parseSetCode(text: string): string | null {
   return number ? `${prefix}-${region ?? ''}${number}` : null
 }
 
-/** parseSetCode first, then the same code with prefix zeros read as O. Try them in order. */
+/**
+ * parseSetCode first, then the same code with prefix zeros read as O. If the number part starts
+ * with a letter that could be a misread digit, the digit readings follow. Try them in order.
+ */
 export function setCodeCandidates(text: string): string[] {
   const code = parseSetCode(text)
   if (!code) return []
+  const withPrefixAlt = (c: string): string[] => {
+    const dash = c.indexOf('-')
+    return [c, c.slice(0, dash).replace(/0/g, 'O') + c.slice(dash)]
+  }
   const dash = code.indexOf('-')
-  const alt = code.slice(0, dash).replace(/0/g, 'O') + code.slice(dash)
-  return alt === code ? [code] : [code, alt]
+  const rest = code.slice(dash + 1)
+  const at = rest.startsWith('EN') ? 2 : 0
+  const lead = DIGIT_FIX[rest[at]]
+  const out = withPrefixAlt(code)
+  if (lead) out.push(...withPrefixAlt(code.slice(0, dash + 1 + at) + lead + rest.slice(at + 1)))
+  return [...new Set(out)]
 }

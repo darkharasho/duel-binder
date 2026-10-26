@@ -107,6 +107,25 @@ async function oldDesktop(): Promise<{
   return { db, used, unused, serverOnlyPkey: `en|${card}|SRV-EN001|Common` }
 }
 
+/** Adds an entry for owner 7 whose printing row doesn't exist, as a damaged old database might hold. */
+const addDanglingEntry = (db: Database.Database): number => {
+  const image = (
+    db.prepare('SELECT image_id FROM card_images ORDER BY image_id LIMIT 1').get() as {
+      image_id: number
+    }
+  ).image_id
+  db.pragma('foreign_keys = OFF')
+  const id = Number(
+    db
+      .prepare(
+        "INSERT INTO collection_entries (uid, owner_id, printing_id, image_id, quantity, created_at, updated_at) VALUES ('dangling-1', 7, 999999, ?, 1, ?, ?)"
+      )
+      .run(image, NOW.toISOString(), NOW.toISOString()).lastInsertRowid
+  )
+  db.pragma('foreign_keys = ON')
+  return id
+}
+
 const entriesSnapshot = (db: Database.Database): unknown[] =>
   db.prepare('SELECT * FROM collection_entries ORDER BY id').all()
 
@@ -426,6 +445,49 @@ describe('runSwitch', () => {
       now: () => NOW,
       afterApply: (d) => {
         // A tombstoned entry's printing: the live census alone wouldn't notice.
+        d.prepare(
+          'DELETE FROM card_printings WHERE id = (SELECT printing_id FROM collection_entries WHERE deleted_at IS NOT NULL)'
+        ).run()
+      }
+    })
+
+    expect(outcome).toEqual({
+      state: 'pending',
+      reason: "Your collection didn't match after updating card data"
+    })
+    expect(failure(db)?.retry).toBe('next-launch')
+    expect(entriesSnapshot(db)).toEqual(entries)
+    expect(remoteIds(db)).toBe(0)
+    warn.mockRestore()
+  })
+
+  it('switches a database that already has a dangling entry, leaving it as it was', async () => {
+    const { db } = await oldDesktop()
+    const id = addDanglingEntry(db)
+    const before = collectionCensus(db)
+    const entries = entriesSnapshot(db)
+
+    expect(await runSwitch(db, { client, backupPath, now: () => NOW })).toEqual({ state: 'done' })
+
+    expect(collectionCensus(db)).toBe(before)
+    expect(entriesSnapshot(db)).toEqual(entries)
+    expect(db.prepare('SELECT printing_id FROM collection_entries WHERE id = ?').get(id)).toEqual({
+      printing_id: 999999
+    })
+    expect(getMeta(db, 'catalog_switched_at')).toBe(NOW.toISOString())
+  })
+
+  it('still fails when the switch leaves an entry dangling, even with one dangling before', async () => {
+    const { db } = await oldDesktop()
+    addDanglingEntry(db)
+    const entries = entriesSnapshot(db)
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    const outcome = await runSwitch(db, {
+      client,
+      backupPath,
+      now: () => NOW,
+      afterApply: (d) => {
         d.prepare(
           'DELETE FROM card_printings WHERE id = (SELECT printing_id FROM collection_entries WHERE deleted_at IS NOT NULL)'
         ).run()

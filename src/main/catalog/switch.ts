@@ -87,17 +87,19 @@ export function collectionCensus(db: SqlDb): string {
   return JSON.stringify(census)
 }
 
-/** Entries of any kind (live or tombstoned) whose printing or image row is gone. */
-const danglingEntries = (db: SqlDb): number =>
-  (
-    db
-      .prepare(
-        `SELECT count(*) AS n FROM collection_entries e
-         WHERE NOT EXISTS (SELECT 1 FROM card_printings p WHERE p.id = e.printing_id)
-            OR NOT EXISTS (SELECT 1 FROM card_images i WHERE i.image_id = e.image_id)`
-      )
-      .get() as { n: number }
-  ).n
+/** Ids of entries of any kind (live or tombstoned) whose printing or image row is gone. */
+const danglingEntries = (db: SqlDb): Set<number> =>
+  new Set(
+    (
+      db
+        .prepare(
+          `SELECT e.id AS id FROM collection_entries e
+           WHERE NOT EXISTS (SELECT 1 FROM card_printings p WHERE p.id = e.printing_id)
+              OR NOT EXISTS (SELECT 1 FROM card_images i WHERE i.image_id = e.image_id)`
+        )
+        .all() as { id: number }[]
+    ).map((r) => r.id)
+  )
 
 function recordFailure(
   db: SqlDb,
@@ -115,7 +117,7 @@ function recordFailure(
  * snapshot into `catalog_staging` (resumable page by page), backs the database up, then in one
  * transaction applies the snapshot and prunes what the server doesn't have, keeping every row a
  * collection entry uses. The transaction commits only if every owner's live collection reads the
- * same before and after (by pkey) and no entry is left without its printing or image.
+ * same before and after (by pkey) and no entry newly lost its printing or image.
  */
 export async function runSwitch(raw: Database.Database, deps: SwitchDeps): Promise<SwitchOutcome> {
   const db: SqlDb = raw
@@ -169,15 +171,18 @@ export async function runSwitch(raw: Database.Database, deps: SwitchDeps): Promi
   try {
     db.transaction(() => {
       const before = collectionCensus(db)
+      // Entries already dangling in an old database stay as they are and never block the switch;
+      // only a reference this switch breaks fails it.
+      const danglingBefore = danglingEntries(db)
       const result = applyStaged(db)
       pruneUnlisted(db)
       finishApply(db, result)
       deps.afterApply?.(db)
       const after = collectionCensus(db)
-      const dangling = danglingEntries(db)
-      if (after !== before || dangling > 0) {
+      const broken = [...danglingEntries(db)].filter((id) => !danglingBefore.has(id))
+      if (after !== before || broken.length > 0) {
         console.warn(
-          `Catalog switch: census differs (${dangling} entries without a printing or image)`
+          `Catalog switch: census differs (entries newly without a printing or image: ${broken.join(', ') || 'none'})`
         )
         console.warn(`Catalog switch: census before: ${before}`)
         console.warn(`Catalog switch: census after: ${after}`)

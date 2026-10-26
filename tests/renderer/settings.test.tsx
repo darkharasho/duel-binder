@@ -53,11 +53,11 @@ describe('SettingsPage', () => {
 
   it('backup shows saved path', async () => {
     const user = userEvent.setup()
-    const api = createMockApi({ app: { backupDatabase: vi.fn(async () => '/tmp/yugioh-collection-2026-10-23.db') } })
+    const api = createMockApi({ app: { backupDatabase: vi.fn(async () => '/tmp/duel-binder-2026-10-23.db') } })
     renderWithProviders(<SettingsPage />, { api })
     await user.click(await screen.findByRole('button', { name: /Back up collection/ }))
     await waitFor(() =>
-      expect(toast.success).toHaveBeenCalledWith(expect.stringContaining('/tmp/yugioh-collection-2026-10-23.db'))
+      expect(toast.success).toHaveBeenCalledWith(expect.stringContaining('/tmp/duel-binder-2026-10-23.db'))
     )
   })
 

@@ -43,7 +43,7 @@ export function createPriceClient(opts: { url: string; fetchFn?: typeof fetch })
       const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS)
       try {
         const res = await fetchFn(`${base}/v1/price?${params}`, {
-          headers: { 'X-Client': 'ygo-collection-tracker' },
+          headers: { 'X-Client': 'duel-binder' },
           signal: ctrl.signal
         })
         if (res.status !== 200) throw new PriceUnavailableError(`Price service returned ${res.status}`)

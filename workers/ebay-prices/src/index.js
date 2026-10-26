@@ -14,6 +14,8 @@ const OAUTH_BODY =
 const CACHE_TTL = 604800
 const ATTEMPTS = 3
 const MAX_FIELD = 200
+// 'ygo-collection-tracker' is what app versions before the Duel Binder rename send.
+const CLIENTS = new Set(['duel-binder', 'ygo-collection-tracker'])
 
 let cachedToken = null // { value, expiresAt }
 
@@ -136,7 +138,7 @@ export default {
       lang: q.get('lang') ?? ''
     }
     if (
-      request.headers.get('X-Client') !== 'ygo-collection-tracker' ||
+      !CLIENTS.has(request.headers.get('X-Client')) ||
       !Object.hasOwn(EBAY_WORDS, params.lang) ||
       !params.name ||
       [params.code, params.name, params.set, params.rarity].some((v) => v.length > MAX_FIELD)

@@ -5,7 +5,7 @@ desktop app never ships an eBay key.
 
 ```
 GET /v1/price?code=<set code or ''>&name=<English card name>&set=<English set name>&rarity=<rarity>&lang=<language code>
-Header: X-Client: ygo-collection-tracker
+Header: X-Client: duel-binder (`ygo-collection-tracker` is still accepted from app versions before the rename)
 200 { "price": number | null, "listingCount": number, "rarityFallback": boolean, "currency": "USD", "checkedAt": "<ISO>" }
 400 bad params or header, 405 non-GET, 502 { "error": "upstream" }
 ```

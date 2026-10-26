@@ -1,7 +1,7 @@
 {
   "name": "duel-binder",
   "version": "0.6.1",
-  "description": "Local Yu-Gi-Oh! card collection tracker",
+  "description": "Duel Binder: a local Yu-Gi-Oh! card collection binder",
   "main": "./out/main/index.js",
   "author": "darkharasho",
   "homepage": "https://github.com/darkharasho/duel-binder",

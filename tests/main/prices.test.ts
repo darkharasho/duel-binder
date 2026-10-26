@@ -25,7 +25,7 @@ test('client sends X-Client and the query params', async () => {
     rarity: 'Ultra Rare',
     lang: 'ja'
   })
-  expect(new Headers(init.headers).get('X-Client')).toBe('ygo-collection-tracker')
+  expect(new Headers(init.headers).get('X-Client')).toBe('duel-binder')
 })
 
 test('client maps 502, bad JSON and bad shape to PriceUnavailableError', async () => {

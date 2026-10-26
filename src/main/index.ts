@@ -28,6 +28,7 @@ import { createUpdater, updateMode, RELEASES_URL } from './updater'
 import { restrictPermissions } from './permissions'
 import { createHandlers, registerIpc, type AppDeps } from './ipc/handlers'
 import { seedFakeCollection } from './dev/fakeData'
+import { resolveUserData } from './userData'
 import { captureShots } from './dev/capture'
 import { createAccountService } from './cloud/account'
 import { createCloudClient } from './cloud/client'
@@ -45,8 +46,9 @@ for (const stream of [process.stdout, process.stderr]) {
   })
 }
 
-// The app was "yugioh-collection-tracker" before it became Duel Binder; keep reading the same data folder.
-app.setPath('userData', join(app.getPath('appData'), 'yugioh-collection-tracker'))
+// The app was "yugioh-collection-tracker" before it became Duel Binder: move that data folder over once.
+// If the move fails (e.g. Windows holds a lock on it), keep using the old folder rather than start empty.
+app.setPath('userData', resolveUserData(app.getPath('appData')))
 
 /** `npm run dev:fake-data`: a separate profile with a seeded collection; never in packaged builds.
  *  `npm run site:shots`: screenshots of that profile for the marketing site, then quit. */
@@ -202,7 +204,7 @@ async function bootstrap(): Promise<void> {
       const pad = (n: number): string => String(n).padStart(2, '0')
       const date = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
       const { canceled, filePath } = await dialog.showSaveDialog({
-        defaultPath: `yugioh-collection-${date}.db`
+        defaultPath: `duel-binder-${date}.db`
       })
       if (canceled || !filePath) return null
       await db.backup(filePath)

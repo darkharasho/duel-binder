@@ -58,7 +58,7 @@ function makeFetch(searchResponses) {
 
 const URL_OK =
   'https://w.test/v1/price?code=LOB-DE001&name=Blue-Eyes%20White%20Dragon&set=Legend&rarity=Ultra%20Rare&lang=de'
-const req = (url = URL_OK, headers = { 'X-Client': 'ygo-collection-tracker' }, method = 'GET') =>
+const req = (url = URL_OK, headers = { 'X-Client': 'duel-binder' }, method = 'GET') =>
   new Request(url, { method, headers })
 
 let env
@@ -114,6 +114,12 @@ describe('GET /v1/price', () => {
     expect(f.mock.calls[1][1].headers['X-EBAY-C-MARKETPLACE-ID']).toBe('EBAY_US')
   })
 
+  it('accepts the X-Client header sent by app versions before the rename', async () => {
+    vi.stubGlobal('fetch', makeFetch([json(items(['LOB-DE001 a', 'LOB-DE001 b']))]))
+    const res = await worker.fetch(req(URL_OK, { 'X-Client': 'ygo-collection-tracker' }), env)
+    expect(res.status).toBe(200)
+  })
+
   it('rejects a missing or wrong X-Client header', async () => {
     vi.stubGlobal('fetch', makeFetch([]))
     for (const headers of [{}, { 'X-Client': 'nope' }]) {
@@ -135,10 +141,7 @@ describe('GET /v1/price', () => {
   })
 
   it('rejects non-GET with 405', async () => {
-    const res = await worker.fetch(
-      req(URL_OK, { 'X-Client': 'ygo-collection-tracker' }, 'POST'),
-      env
-    )
+    const res = await worker.fetch(req(URL_OK, { 'X-Client': 'duel-binder' }, 'POST'), env)
     expect(res.status).toBe(405)
   })
 

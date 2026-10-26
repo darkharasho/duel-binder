@@ -63,7 +63,7 @@ export async function refreshCatalog(
   if (shouldRefreshTcgCatalog(db, now())) {
     // A few minutes at most; English cards then show their TCGplayer photos.
     const tcg = await refreshTcgCatalog(db, { version, ...stamp() })
-    if (tcg.updatedGroups > 0) {
+    if (tcg.updatedGroups > 0 || tcg.addedPrintings > 0) {
       rematch = true
       onChanged()
     }

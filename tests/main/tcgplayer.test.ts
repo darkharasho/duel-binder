@@ -36,7 +36,7 @@ const product = (
 })
 
 function catalogFetch(
-  groups: { groupId: number; modifiedOn: string }[],
+  groups: { groupId: number; modifiedOn: string; name?: string }[],
   products: Record<number, unknown[]>
 ): ReturnType<typeof vi.fn<(url: string) => Promise<Response>>> {
   return vi.fn<(url: string) => Promise<Response>>(async (url) => {
@@ -290,5 +290,119 @@ describe('TCGplayer catalog', () => {
     ).toEqual({
       n: 0
     })
+  })
+
+  it('adds English printings TCGplayer sells but YGOPRODeck leaves out, kept across card syncs', async () => {
+    const db = await seededDb()
+    const insertIntl = db.prepare(
+      `INSERT INTO card_printings (card_id, set_name, set_code, set_rarity, set_rarity_code, language)
+       VALUES (?, 'Elsewhere', ?, 'Common', '', 'de')`
+    )
+    insertIntl.run(46986414, 'LOB-DE200') // Dark Magician's German copy of the missing code
+    insertIntl.run(55144522, 'XYZ-DE001') // Pot of Greed, while TCGplayer names Dark Magician
+    const lob = db
+      .prepare("SELECT set_name, set_rarity_code FROM card_printings WHERE set_code = 'LOB-EN005'")
+      .get() as { set_name: string; set_rarity_code: string }
+    const groups = [
+      { groupId: 10, modifiedOn: 'a', name: 'LOB group' },
+      { groupId: 20, modifiedOn: 'a', name: 'Structure Deck: Fire Kings' }
+    ]
+    const products = {
+      10: [
+        product(1, 'LOB-EN200', 'Ultra Rare', 1, 'Dunkler Magier Promo'),
+        product(2, 'XYZ-EN001', 'Rare', 1, 'Dark Magician'),
+        product(3, 'TKN-EN001', 'Common', 1, 'Token: Sheep')
+      ],
+      20: [
+        product(4, 'SR14-EN023', 'Common', 1, 'Pot of Greed (Alternate Art)'),
+        product(5, 'SR14-EN023', 'Common', 1, 'Pot of Greed'),
+        product(6, 'SR14-EN023', 'Common', 1, 'Pot of Greed (Misprint)')
+      ]
+    }
+    const now = new Date('2026-10-24T00:00:00Z')
+    const r = await refreshTcgCatalog(db, {
+      version: '1',
+      fetchFn: catalogFetch(groups, products) as unknown as typeof fetch,
+      now
+    })
+    expect(r.addedPrintings).toBe(3)
+    const added = (): unknown[] =>
+      db
+        .prepare(
+          `SELECT card_id, set_name, set_code, set_rarity, set_rarity_code, tcg_product_id FROM card_printings
+           WHERE language = 'en' AND set_code IN ('LOB-EN200', 'XYZ-EN001', 'TKN-EN001', 'SR14-EN023')
+           ORDER BY tcg_product_id`
+        )
+        .all()
+    const expected = [
+      // Matched through its German copy; the set named like the other LOB-EN cards.
+      {
+        card_id: 46986414,
+        set_name: lob.set_name,
+        set_code: 'LOB-EN200',
+        set_rarity: 'Ultra Rare',
+        set_rarity_code: lob.set_rarity_code,
+        tcg_product_id: 1
+      },
+      // Matched by name, in the set TCGplayer lists it under; the art variant beside it.
+      {
+        card_id: 55144522,
+        set_name: 'Structure Deck: Fire Kings',
+        set_code: 'SR14-EN023',
+        set_rarity: 'Common (Alternate Art)',
+        set_rarity_code: '',
+        tcg_product_id: 4
+      },
+      {
+        card_id: 55144522,
+        set_name: 'Structure Deck: Fire Kings',
+        set_code: 'SR14-EN023',
+        set_rarity: 'Common',
+        set_rarity_code: '',
+        tcg_product_id: 5
+      }
+    ]
+    expect(added()).toEqual(expected)
+    const lookup = createTcgplayerLookup(db)
+    expect(
+      lookup(
+        (
+          db.prepare('SELECT id FROM card_printings WHERE tcg_product_id = 5').get() as {
+            id: number
+          }
+        ).id
+      )
+    ).toBe('https://tcgplayer-cdn.tcgplayer.com/product/5_in_1000x1000.jpg')
+
+    const client: YgoClient = {
+      fetchDbVersion: async () => ({ databaseVersion: '2', lastUpdate: '2026-10-24' }),
+      fetchCardInfo: async () => fixture.data as ApiCard[],
+      fetchCardSets: async () => []
+    }
+    await runSync(db, client, () => {}, now)
+    expect(added()).toEqual(expected)
+
+    // A second run adds nothing new.
+    const again = await refreshTcgCatalog(db, {
+      version: '1',
+      fetchFn: catalogFetch(groups, products) as unknown as typeof fetch,
+      now
+    })
+    expect(again.addedPrintings).toBe(0)
+
+    // Sets stored before names were kept refresh once to list them.
+    expect(shouldRefreshTcgCatalog(db, now)).toBe(false)
+    db.prepare('UPDATE tcgplayer_groups SET name = NULL WHERE group_id = 20').run()
+    expect(shouldRefreshTcgCatalog(db, now)).toBe(true)
+
+    // Gone from the catalog: removed.
+    await refreshTcgCatalog(db, {
+      version: '1',
+      fetchFn: catalogFetch([{ ...groups[0], modifiedOn: 'b' }], {
+        10: products[10].slice(1)
+      }) as unknown as typeof fetch,
+      now
+    })
+    expect(added()).toEqual([])
   })
 })

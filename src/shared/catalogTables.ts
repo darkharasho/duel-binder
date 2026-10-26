@@ -64,7 +64,7 @@ export const CATALOG_TABLES: CatalogTable[] = [
     columns: ['set_name', 'image_url', 'image_key'],
     unique: ['image_key']
   },
-  { name: 'tcgplayer_groups', key: ['group_id'], columns: ['group_id', 'modified_on'] },
+  { name: 'tcgplayer_groups', key: ['group_id'], columns: ['group_id', 'modified_on', 'name'] },
   {
     name: 'tcgplayer_products',
     key: ['product_id'],

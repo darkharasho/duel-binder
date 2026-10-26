@@ -162,6 +162,14 @@ CREATE INDEX tcgplayer_prices_group ON tcgplayer_prices(group_id);
 ALTER TABLE card_printings ADD COLUMN market_price REAL;
 `
 
+/**
+ * TCGplayer set names, so English printings YGOPRODeck leaves out can be added under their set.
+ * Sets stored before this have a NULL name, which makes the catalog refresh on the next start.
+ */
+export const SCHEMA_V14 = `
+ALTER TABLE tcgplayer_groups ADD COLUMN name TEXT;
+`
+
 /** A printing's rarity as shown: "Starlight Rare (Extended Art)" for a labelled variant. */
 export const RARITY_LABEL = "p.set_rarity || COALESCE(' (' || p.variant || ')', '')"
 
@@ -179,6 +187,7 @@ export const MIGRATIONS: Migration[] = [
   { version: 10, sql: SCHEMA_V10 },
   { version: 11, sql: SCHEMA_V11 },
   { version: 12, sql: SCHEMA_V12, server: false },
-  { version: 13, sql: SCHEMA_V13 }
+  { version: 13, sql: SCHEMA_V13 },
+  { version: 14, sql: SCHEMA_V14 }
 ]
 

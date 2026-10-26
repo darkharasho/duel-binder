@@ -135,6 +135,61 @@ describe('useScanSession', () => {
     expect(result.current.rows[0].key).toBe('c1:10')
   })
 
+  it('a second commit while one runs is a no-op', async () => {
+    let release!: () => void
+    const add = vi.fn(() => new Promise<never>((res) => (release = () => res({} as never))))
+    const { result } = setup(add)
+    act(() => result.current.add(draft()))
+    let first!: Promise<{ added: number; failed: number }>
+    let second = { added: -1, failed: -1 }
+    await act(async () => {
+      first = result.current.commit()
+      second = await result.current.commit()
+    })
+    expect(second).toEqual({ added: 0, failed: 0 })
+    expect(result.current.committing).toBe(true)
+    await act(async () => {
+      release()
+      await first
+    })
+    expect(add).toHaveBeenCalledTimes(1)
+    expect(result.current.committing).toBe(false)
+  })
+
+  it('keeps scans merged in during a commit', async () => {
+    let release!: () => void
+    const add = vi.fn(() => new Promise<never>((res) => (release = () => res({} as never))))
+    const { result } = setup(add)
+    act(() => result.current.add(draft()))
+    let done!: Promise<unknown>
+    await act(async () => {
+      done = result.current.commit()
+    })
+    act(() => result.current.add(draft()))
+    await act(async () => {
+      release()
+      await done
+    })
+    expect(result.current.rows).toHaveLength(1)
+    expect(result.current.rows[0].quantity).toBe(1)
+  })
+
+  it('ignores non-finite quantities and floors the rest', () => {
+    const { result } = setup()
+    act(() => result.current.add(draft()))
+    act(() => result.current.setQuantity('101:10', NaN))
+    expect(result.current.rows[0].quantity).toBe(1)
+    act(() => result.current.setQuantity('101:10', 2.9))
+    expect(result.current.rows[0].quantity).toBe(2)
+  })
+
+  it('recomputes keys and drops malformed rows on load', () => {
+    const good = { ...draft(), key: 'stale', quantity: 1, addedAt: 1 }
+    localStorage.setItem(KEY, JSON.stringify([good, { ...good, options: [1] }]))
+    const { result } = setup()
+    expect(result.current.rows.map((r) => r.key)).toEqual(['101:10'])
+  })
+
   it('clear empties storage', () => {
     const { result } = setup()
     act(() => result.current.add(draft()))

@@ -24,14 +24,15 @@ const isRow = (v: unknown): v is ScanRow => {
     typeof r.imageId === 'number' &&
     typeof r.name === 'string' &&
     typeof r.quantity === 'number' &&
-    Array.isArray(r.options)
+    Array.isArray(r.options) &&
+    r.options.every((o) => typeof o === 'object' && o !== null)
   )
 }
 
 function load(): ScanRow[] {
   try {
     const parsed: unknown = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '[]')
-    return Array.isArray(parsed) ? parsed.filter(isRow) : []
+    return Array.isArray(parsed) ? parsed.filter(isRow).map((r) => ({ ...r, key: rowKey(r) })) : []
   } catch {
     return []
   }
@@ -51,6 +52,7 @@ const messageOf = (err: unknown): string =>
 export function useScanSession(): {
   rows: ScanRow[]
   total: number
+  committing: boolean
   add(d: ScanDraft): void
   setPrinting(key: string, printingId: number): void
   setQuantity(key: string, q: number): void
@@ -62,6 +64,8 @@ export function useScanSession(): {
   const [rows, setRows] = useState<ScanRow[]>(load)
   // Always the latest list, so back-to-back updates and the async commit never read stale state.
   const ref = useRef(rows)
+  const committingRef = useRef(false)
+  const [committing, setCommitting] = useState(false)
 
   const update = useCallback((fn: (rows: ScanRow[]) => ScanRow[]): void => {
     const next = fn(ref.current)
@@ -110,9 +114,11 @@ export function useScanSession(): {
   const setQuantity = useCallback(
     (key: string, q: number): void =>
       update((list) =>
-        q < 1
-          ? list.filter((r) => r.key !== key)
-          : list.map((r) => (r.key === key ? { ...r, quantity: Math.floor(q) } : r))
+        !Number.isFinite(q)
+          ? list
+          : q < 1
+            ? list.filter((r) => r.key !== key)
+            : list.map((r) => (r.key === key ? { ...r, quantity: Math.floor(q) } : r))
       ),
     [update]
   )
@@ -125,27 +131,46 @@ export function useScanSession(): {
   const clear = useCallback((): void => update(() => []), [update])
 
   const commit = useCallback(async (): Promise<{ added: number; failed: number }> => {
+    if (committingRef.current) return { added: 0, failed: 0 }
+    committingRef.current = true
+    setCommitting(true)
     let added = 0
     let failed = 0
-    for (const row of ref.current.filter((r) => r.printingId !== null)) {
-      try {
-        await api.collection.add({
-          printingId: row.printingId!,
-          imageId: row.imageId,
-          quantity: row.quantity
-        })
-        added++
-        update((list) => list.filter((r) => r.key !== row.key))
-      } catch (err) {
-        failed++
-        const error = messageOf(err)
-        update((list) => list.map((r) => (r.key === row.key ? { ...r, error } : r)))
+    try {
+      for (const row of ref.current.filter((r) => r.printingId !== null)) {
+        try {
+          await api.collection.add({
+            printingId: row.printingId!,
+            imageId: row.imageId,
+            quantity: row.quantity
+          })
+          added++
+          // Scans merged in meanwhile stay: take off only what was added.
+          update((list) =>
+            list.flatMap((r) =>
+              r.key !== row.key
+                ? [r]
+                : r.quantity > row.quantity
+                  ? [{ ...r, quantity: r.quantity - row.quantity, error: undefined }]
+                  : []
+            )
+          )
+        } catch (err) {
+          failed++
+          const error = messageOf(err)
+          update((list) => list.map((r) => (r.key === row.key ? { ...r, error } : r)))
+        }
       }
+    } finally {
+      committingRef.current = false
+      setCommitting(false)
     }
-    for (const queryKey of mutationInvalidationKeys) void qc.invalidateQueries({ queryKey })
+    if (added > 0) {
+      for (const queryKey of mutationInvalidationKeys) void qc.invalidateQueries({ queryKey })
+    }
     return { added, failed }
   }, [qc, update])
 
   const total = rows.reduce((n, r) => n + r.quantity, 0)
-  return { rows, total, add, setPrinting, setQuantity, remove, clear, commit }
+  return { rows, total, committing, add, setPrinting, setQuantity, remove, clear, commit }
 }

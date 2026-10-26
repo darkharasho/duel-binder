@@ -75,6 +75,7 @@ describe('friends nav', () => {
     shell(api)
     await waitFor(() => expect(api.account.status).toHaveBeenCalled())
     expect(screen.queryByRole('button', { name: /^Friends/ })).not.toBeInTheDocument()
+    expect(api.friends.overview).not.toHaveBeenCalled()
   })
 
   it('is shown on desktop when signed in', async () => {
@@ -163,6 +164,25 @@ describe('friends page', () => {
     await user.click(screen.getAllByRole('button', { name: 'Ignore' })[1])
     expect(api.friends.ignore).toHaveBeenCalledWith(4)
     await waitFor(() => expect(api.friends.overview).toHaveBeenCalledTimes(3))
+  })
+
+  it('shows a failed accept and clears it on the next action', async () => {
+    const user = userEvent.setup()
+    const accept = vi
+      .fn()
+      .mockRejectedValueOnce(
+        new Error(`Error invoking remote method 'friends:accept': Error: ${OFFLINE_MESSAGE}`)
+      )
+      .mockResolvedValue(undefined)
+    const api = make(
+      { friends: [], incoming: [alice(3)] },
+      { friends: { accept, overview: vi.fn(async () => ({ friends: [], incoming: [alice(3)] })) } }
+    )
+    renderWithProviders(<FriendsPage onBackToMine={() => {}} />, { api })
+    await user.click(await screen.findByRole('button', { name: 'Accept' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent(OFFLINE_MESSAGE)
+    await user.click(screen.getByRole('button', { name: 'Accept' }))
+    await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument())
   })
 
   it('lists friends and unfriends after confirming', async () => {

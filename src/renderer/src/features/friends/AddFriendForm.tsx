@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { api, queryKeys } from '@/lib/api'
+import { friendsErrorMessage } from '@/lib/friends'
 
 export function AddFriendForm(): React.JSX.Element {
   const qc = useQueryClient()
@@ -46,7 +47,7 @@ export function AddFriendForm(): React.JSX.Element {
       )}
       {request.isError && (
         <p role="alert" className="text-sm text-destructive">
-          {request.error.message.replace(/^Error invoking remote method '[^']*': (Error: )?/, '')}
+          {friendsErrorMessage(request.error)}
         </p>
       )}
     </div>

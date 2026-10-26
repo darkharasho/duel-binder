@@ -4,8 +4,8 @@ import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
 import { api, queryKeys } from '@/lib/api'
 import { formatRelative } from '@/lib/format'
-import { useFriendsAvailable, useFriendsOverview } from '@/lib/friends'
-import { FRIENDS_SIGNED_OUT, OFFLINE_MESSAGE } from '@shared/friends'
+import { friendsErrorMessage, useFriendsAvailable, useFriendsOverview } from '@/lib/friends'
+import { FRIENDS_SIGNED_OUT } from '@shared/friends'
 import type { Friend, FriendUser } from '@shared/types'
 import { AddFriendForm } from './AddFriendForm'
 
@@ -30,12 +30,6 @@ function Avatar({ user }: { user: FriendUser }): React.JSX.Element {
       {name.charAt(0)}
     </span>
   )
-}
-
-function errorText(error: Error): string {
-  if (error.message.includes(OFFLINE_MESSAGE)) return OFFLINE_MESSAGE
-  if (error.message.includes(FRIENDS_SIGNED_OUT)) return FRIENDS_SIGNED_OUT
-  return error.message
 }
 
 export function FriendsPage({ onBackToMine }: { onBackToMine: () => void }): React.JSX.Element {
@@ -87,12 +81,17 @@ export function FriendsPage({ onBackToMine }: { onBackToMine: () => void }): Rea
       {overview.isError && (
         <div className="space-y-2">
           <p role="alert" className="text-sm text-muted-foreground">
-            {errorText(overview.error)}
+            {friendsErrorMessage(overview.error)}
           </p>
           <Button variant="outline" onClick={() => void overview.refetch()}>
             Retry
           </Button>
         </div>
+      )}
+      {act.isError && (
+        <p role="alert" className="text-sm text-destructive">
+          {friendsErrorMessage(act.error)}
+        </p>
       )}
       {data && data.incoming.length > 0 && (
         <section aria-label="Friend requests" className="space-y-2">

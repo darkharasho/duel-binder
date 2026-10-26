@@ -31,3 +31,8 @@ export function useFriendsOverview(): UseQueryResult<FriendsOverview> {
     retry: false
   })
 }
+
+/** An error's message without Electron's "Error invoking remote method '…': Error: " IPC prefix. */
+export function friendsErrorMessage(error: Error): string {
+  return error.message.replace(/^Error invoking remote method '[^']*': (Error: )?/, '')
+}

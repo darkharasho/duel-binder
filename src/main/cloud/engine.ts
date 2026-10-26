@@ -138,6 +138,7 @@ export async function syncOnce(
         results = await client.contribute(chunk.map((g) => g.printing))
       } catch (err) {
         if (err instanceof CloudAuthError || err instanceof CloudOfflineError) throw err
+        console.warn('Contributing printings failed; entries stay unsynced', err)
         break // the rest stay recorded as unknown-printing
       }
       // Results answer the request rows in order; the pkey can be '' so it is never used to match.

@@ -139,16 +139,15 @@ export function dirtyEntries(
 
 /** Marks a pushed row clean, unless it was edited again since `e` was read; a clean row has no sync issue. */
 export function markPushed(db: SqlDb, e: WireEntry): void {
+  const row = db.prepare('SELECT owner_id FROM collection_entries WHERE uid = ?').get(e.uid) as
+    | { owner_id: number }
+    | undefined
   const r = db
     .prepare(
       'UPDATE collection_entries SET dirty = 0 WHERE uid = ? AND updated_at = ? AND deleted_at IS ?'
     )
     .run(e.uid, e.updatedAt, e.deletedAt)
-  if (r.changes > 0)
-    db.prepare(
-      `DELETE FROM sync_issues WHERE uid = ?
-       AND owner_id = (SELECT owner_id FROM collection_entries WHERE uid = ?)`
-    ).run(e.uid, e.uid)
+  if (row && r.changes > 0) clearSyncIssue(db, row.owner_id, e.uid)
 }
 
 /**
@@ -412,7 +411,7 @@ export function contributionGroups(
           // The server rejects an omitted field, so an empty optional one is an explicit null.
           set_rarity_code: r.set_rarity_code || null,
           language: r.language,
-          variant: r.variant ?? null,
+          variant: r.variant || null,
           tcg_product_id: r.tcg_product_id ?? null
         },
         uids: [uid]
@@ -458,10 +457,12 @@ export function pruneSyncIssues(db: SqlDb, owner: number, keep: ReadonlySet<stri
 
 export function syncIssueCount(db: SqlDb, owner: number): number {
   const { n } = db
-    .prepare('SELECT COUNT(*) AS n FROM sync_issues WHERE owner_id = ?')
-    .get(owner) as {
-    n: number
-  }
+    .prepare(
+      `SELECT COUNT(*) AS n FROM sync_issues i
+       JOIN collection_entries e ON e.uid = i.uid AND e.owner_id = i.owner_id AND e.deleted_at IS NULL
+       WHERE i.owner_id = ?`
+    )
+    .get(owner) as { n: number }
   return Number(n)
 }
 
@@ -471,7 +472,7 @@ export function listSyncIssues(db: SqlDb, owner: number): UnsyncedEntry[] {
     .prepare(
       `SELECT i.uid, c.name, p.set_code, p.set_name, p.set_rarity, p.language, e.quantity, i.reason
        FROM sync_issues i
-       JOIN collection_entries e ON e.uid = i.uid AND e.owner_id = i.owner_id
+       JOIN collection_entries e ON e.uid = i.uid AND e.owner_id = i.owner_id AND e.deleted_at IS NULL
        JOIN card_printings p ON p.id = e.printing_id
        JOIN cards c ON c.id = p.card_id
        WHERE i.owner_id = ?

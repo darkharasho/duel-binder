@@ -212,7 +212,7 @@ const ENTRY_REFS: Record<string, [count: number, kind: string]> = {
     4,
     'live rows for the census; all rows incl. tombstones for the dangling check and pruning (FK)'
   ],
-  'src/main/cloud/localSync.ts': [14, SYNC],
+  'src/main/cloud/localSync.ts': [15, SYNC],
   'src/main/db/schema.ts': [9, DDL],
   'workers/portal/src/migrate.ts': [10, DDL]
 }

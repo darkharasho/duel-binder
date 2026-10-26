@@ -429,6 +429,38 @@ describe('syncOnce', () => {
     expect(localRows(a)).toEqual([expect.objectContaining({ dirty: 1 })])
   })
 
+  it('neither lists nor counts the issue of a deleted entry', async () => {
+    const a = await desktop()
+    addEntry(a, { printingId: pid(a, 'SDY-006'), imageId: DM, quantity: 1 }, T1)
+    const uid = localRows(a)[0].uid
+    recordSyncIssue(a, user, uid, 'k', 'unknown-card', T2)
+    expect(syncIssueCount(a, user)).toBe(1)
+    removeEntry(a, (a.prepare('SELECT id FROM collection_entries').get() as { id: number }).id, T3)
+    expect(listSyncIssues(a, user)).toEqual([])
+    expect(syncIssueCount(a, user)).toBe(0)
+    expect(a.prepare('SELECT COUNT(*) AS n FROM sync_issues').get()).toEqual({ n: 1 })
+  })
+
+  it('applies one contribute result to every entry on the printing', async () => {
+    const a = await desktop()
+    const id = pid(a, 'SDY-006')
+    addEntry(a, { printingId: id, imageId: DM, quantity: 1 }, T1)
+    addEntry(a, { printingId: id, imageId: DM + 1, quantity: 2 }, T2)
+    hidePrinting(portal.serverDb, 'SDY-006')
+    const contributes: number[] = []
+    const spy = client({
+      fetch: (async (url, init) => {
+        if (String(url).includes('/api/catalog/contribute'))
+          contributes.push(JSON.parse(String(init?.body)).printings.length)
+        return portal.fetch(url, init)
+      }) as typeof fetch
+    })
+    expect(await sync(a, spy)).toMatchObject({ pushedLive: 2, unsynced: 0 })
+    expect(contributes).toEqual([1])
+    expect(localRows(a).map((r) => r.dirty)).toEqual([0, 0])
+    expect(live(serverRows())).toHaveLength(2)
+  })
+
   it('lists sync issues with name, set and rarity', async () => {
     const a = await desktop()
     const id = pid(a, 'SDY-006')

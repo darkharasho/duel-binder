@@ -12,6 +12,7 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { api, queryKeys } from '@/lib/api'
 import { formatRelative } from '@/lib/format'
+import { friendsErrorMessage } from '@/lib/friends'
 import { useLanguageFilter } from '@/lib/languageFilter'
 import { CollectionGrid } from './CollectionGrid'
 import { CollectionTable } from './CollectionTable'
@@ -203,7 +204,16 @@ export function CollectionPage({
           />
         </PageHeader>
 
-        {entries.isSuccess && list.length === 0 ? (
+        {friend && entries.isError ? (
+          <div className="flex flex-col items-center gap-3 py-24 text-center">
+            <p role="alert" className="text-sm text-muted-foreground">
+              {friendsErrorMessage(entries.error)}
+            </p>
+            <Button variant="outline" onClick={() => void entries.refetch()}>
+              Retry
+            </Button>
+          </div>
+        ) : entries.isSuccess && list.length === 0 ? (
           <div className="flex flex-col items-center gap-3 py-24 text-center">
             {hiddenByLanguage ? (
               <>

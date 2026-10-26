@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react'
+import { act, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { AppShell } from '@/components/AppShell'
 import { FriendsPage } from '@/features/friends/FriendsPage'
@@ -201,6 +201,13 @@ describe('friends page', () => {
     expect(api.friends.remove).toHaveBeenCalledWith(2)
   })
 
+  it('says "1 card" for a single card', async () => {
+    renderWithProviders(<FriendsPage onBackToMine={() => {}} />, {
+      api: make({ friends: [{ ...bob, cardCount: 1 }], incoming: [] })
+    })
+    expect(await screen.findByText('1 card · Updated 2 days ago')).toBeInTheDocument()
+  })
+
   it('shows the empty state', async () => {
     renderWithProviders(<FriendsPage onBackToMine={() => {}} />, {
       api: make({ friends: [], incoming: [] })
@@ -238,5 +245,55 @@ describe('friends page', () => {
     renderWithProviders(<FriendsPage onBackToMine={() => {}} />, { api })
     expect(await screen.findByText(FRIENDS_SIGNED_OUT)).toBeInTheDocument()
     expect(api.friends.overview).not.toHaveBeenCalled()
+  })
+})
+
+describe('friends cache across accounts', () => {
+  it('drops the cached friends when the signed-in user changes', async () => {
+    let emit: (s: AccountStatus) => void = () => {}
+    const api = make(
+      { friends: [bob], incoming: [] },
+      {
+        window: { platform: 'linux' },
+        account: {
+          status: vi.fn(async () => signedIn),
+          onChange: vi.fn((cb: (s: AccountStatus) => void) => {
+            emit = cb
+            return () => {}
+          })
+        }
+      }
+    )
+    const { client } = renderWithProviders(<FriendsPage onBackToMine={() => {}} />, { api })
+    expect(await screen.findByText('Bob')).toBeInTheDocument()
+    expect(client.getQueryData(['friends'])).toBeDefined()
+
+    // The same user pushing a status update keeps the cache.
+    act(() => emit({ ...signedIn, state: 'syncing' }))
+    expect(client.getQueryData(['friends'])).toBeDefined()
+
+    act(() => emit({ ...signedIn, user: { ...seto, id: 99, username: 'other' } }))
+    await waitFor(() => expect(client.getQueryData(['friends'])).toBeUndefined())
+  })
+
+  it('drops the cached friends on sign-out', async () => {
+    let emit: (s: AccountStatus) => void = () => {}
+    const api = make(
+      { friends: [bob], incoming: [] },
+      {
+        window: { platform: 'linux' },
+        account: {
+          status: vi.fn(async () => signedIn),
+          onChange: vi.fn((cb: (s: AccountStatus) => void) => {
+            emit = cb
+            return () => {}
+          })
+        }
+      }
+    )
+    const { client } = renderWithProviders(<FriendsPage onBackToMine={() => {}} />, { api })
+    expect(await screen.findByText('Bob')).toBeInTheDocument()
+    act(() => emit(signedOut))
+    await waitFor(() => expect(client.getQueryData(['friends'])).toBeUndefined())
   })
 })

@@ -711,6 +711,24 @@ describe('account portal calls', () => {
     expect(service.status()).toEqual(before)
   })
 
+  it('discards a result that lands after the account signed out', async () => {
+    const service = makeService()
+    await signInAs(service, me(alice, 'alice'))
+    let release: () => void = () => {}
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    fetchSpy.mockImplementationOnce(async (input, init) => {
+      await gate
+      return portal.fetch(input, init)
+    })
+    const pending = service.portal('friends:overview', [])
+    const rejected = expect(pending).rejects.toThrow(FRIENDS_SIGNED_OUT)
+    await service.signOut()
+    release()
+    await rejected
+  })
+
   it('signs out when the server no longer knows the token', async () => {
     const service = makeService()
     const token = await signInAs(service, me(alice, 'alice'))

@@ -50,8 +50,14 @@ describe('friends', () => {
   it('a crossed request accepts the friendship', () => {
     requestFriend(db, alice, 'bob', NOW)
     const r = requestFriend(db, bob, 'alice', NOW)
-    expect(r).toEqual({ status: 'accepted', friend: expect.objectContaining({ id: alice, username: 'alice' }) })
-    for (const [me, other] of [[alice, bob], [bob, alice]]) {
+    expect(r).toEqual({
+      status: 'accepted',
+      friend: expect.objectContaining({ id: alice, username: 'alice' })
+    })
+    for (const [me, other] of [
+      [alice, bob],
+      [bob, alice]
+    ]) {
       const o = friendsOverview(db, me)
       expect(o.friends.map((f) => f.id)).toEqual([other])
       expect(o.incoming).toEqual([])
@@ -89,12 +95,20 @@ describe('friends', () => {
   })
 
   it('rejects bad requests with clear messages', () => {
-    expect(() => requestFriend(db, alice, 'zed', NOW)).toThrow(new FriendError('No Duel Binder user called "zed"'))
+    expect(() => requestFriend(db, alice, 'zed', NOW)).toThrow(
+      new FriendError('No Duel Binder user called "zed"')
+    )
     expect(() => requestFriend(db, alice, 'Alice', NOW)).toThrow(new FriendError("That's you"))
-    expect(() => requestFriend(db, alice, '   ', NOW)).toThrow(new FriendError('Enter a Discord username'))
+    expect(() => requestFriend(db, alice, '   ', NOW)).toThrow(
+      new FriendError('Enter a Discord username')
+    )
     befriend()
-    expect(() => requestFriend(db, alice, 'bob', NOW)).toThrow(new FriendError("You're already friends with bob"))
-    expect(() => requestFriend(db, bob, 'alice', NOW)).toThrow(new FriendError("You're already friends with alice"))
+    expect(() => requestFriend(db, alice, 'bob', NOW)).toThrow(
+      new FriendError("You're already friends with bob")
+    )
+    expect(() => requestFriend(db, bob, 'alice', NOW)).toThrow(
+      new FriendError("You're already friends with alice")
+    )
   })
 
   it('areFriends is false while a request is only pending', () => {
@@ -105,27 +119,48 @@ describe('friends', () => {
 
   it('reports card count and latest change, tombstones included', () => {
     befriend()
-    const printing = db.prepare("SELECT id, card_id FROM card_printings WHERE language = 'en' ORDER BY id LIMIT 3").all() as {
+    const printing = db
+      .prepare("SELECT id, card_id FROM card_printings WHERE language = 'en' ORDER BY id LIMIT 3")
+      .all() as {
       id: number
       card_id: number
     }[]
     const scope = userScope(bob)
     const imageOf = (cardId: number): number =>
-      (db.prepare('SELECT image_id FROM card_images WHERE card_id = ? ORDER BY sort_order, image_id LIMIT 1').get(cardId) as { image_id: number }).image_id
-    const add = (i: number, q: number, at: string) =>
-      addEntry(db, { printingId: printing[i].id, imageId: imageOf(printing[i].card_id), quantity: q }, new Date(at), scope)
+      (
+        db
+          .prepare(
+            'SELECT image_id FROM card_images WHERE card_id = ? ORDER BY sort_order, image_id LIMIT 1'
+          )
+          .get(cardId) as { image_id: number }
+      ).image_id
+    const add = (i: number, q: number, at: string): ReturnType<typeof addEntry> =>
+      addEntry(
+        db,
+        { printingId: printing[i].id, imageId: imageOf(printing[i].card_id), quantity: q },
+        new Date(at),
+        scope
+      )
     add(0, 2, '2026-10-24T10:00:00.000Z')
     add(1, 3, '2026-10-24T11:00:00.000Z')
     const gone = add(2, 7, '2026-10-24T09:00:00.000Z')
     removeEntry(db, gone.id, new Date('2026-10-25T08:00:00.000Z'), scope)
-    const rows = db.prepare('SELECT updated_at FROM collection_entries WHERE user_id = ?').all(bob) as { updated_at: string }[]
-    const latest = rows.map((r) => r.updated_at).sort().at(-1)
+    const rows = db
+      .prepare('SELECT updated_at FROM collection_entries WHERE user_id = ?')
+      .all(bob) as { updated_at: string }[]
+    const latest = rows
+      .map((r) => r.updated_at)
+      .sort()
+      .at(-1)
     const [f] = friendsOverview(db, alice).friends
     expect(f.cardCount).toBe(5)
     expect(f.updatedAt).toBe(latest)
 
     befriend2(carol)
-    expect(friendsOverview(db, alice).friends.find((x) => x.id === carol)).toMatchObject({ cardCount: 0, updatedAt: null })
+    expect(friendsOverview(db, alice).friends.find((x) => x.id === carol)).toMatchObject({
+      cardCount: 0,
+      updatedAt: null
+    })
   })
 
   function befriend2(other: number): void {
@@ -136,7 +171,9 @@ describe('friends', () => {
   it('builds the avatar URL only when an avatar is set', () => {
     befriend()
     db.prepare("UPDATE users SET avatar = 'abc' WHERE id = ?").run(bob)
-    expect(friendsOverview(db, alice).friends[0].avatarUrl).toBe('https://cdn.discordapp.com/avatars/d-bob/abc.png')
+    expect(friendsOverview(db, alice).friends[0].avatarUrl).toBe(
+      'https://cdn.discordapp.com/avatars/d-bob/abc.png'
+    )
     expect(friendsOverview(db, bob).friends[0].avatarUrl).toBeNull()
   })
 

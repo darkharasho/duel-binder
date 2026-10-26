@@ -80,8 +80,14 @@ describe('friends RPC', () => {
   let ca: string
   let cb: string
 
-  const call = async (channel: string, args: unknown[], cookie: string) => {
+  const call = async (
+    channel: string,
+    args: unknown[],
+    cookie: string
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  ): Promise<{ status: number; body: any }> => {
     const res = await rpc(channel, args, { cookie })
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     return { status: res.status, body: (await res.json()) as any }
   }
 
@@ -96,7 +102,12 @@ describe('friends RPC', () => {
     ).json()) as { result: { cards: { defaultPrintingId: number; imageId: number }[] } }
     const [c1, c2] = browse.result.cards.filter((c) => c.defaultPrintingId != null)
     const scope = userScope(bob)
-    const kept = addEntry(db, { printingId: c1.defaultPrintingId, imageId: c1.imageId, quantity: 1 }, NOW, scope)
+    const kept = addEntry(
+      db,
+      { printingId: c1.defaultPrintingId, imageId: c1.imageId, quantity: 1 },
+      NOW,
+      scope
+    )
     db.prepare('UPDATE collection_entries SET notes = ? WHERE id = ?').run('secret', kept.id)
     const gone = addEntry(
       db,
@@ -139,7 +150,10 @@ describe('friends RPC', () => {
   it('refuses strangers', async () => {
     const carol = addUser(db, '3', 'carol')
     const cc = await sessionFor(carol, 'tc')
-    for (const [ch, args] of [['friends:collection', [bob, F]], ['friends:facets', [bob]]] as const) {
+    for (const [ch, args] of [
+      ['friends:collection', [bob, F]],
+      ['friends:facets', [bob]]
+    ] as const) {
       const r = await call(ch, [...args], cc)
       expect(r.status).toBe(400)
       expect(r.body).toEqual(NOT_FRIENDS)
@@ -148,7 +162,10 @@ describe('friends RPC', () => {
 
   it('refuses while a request is only pending', async () => {
     await call('friends:request', ['bob'], ca)
-    for (const [ch, args] of [['friends:collection', [bob, F]], ['friends:facets', [bob]]] as const) {
+    for (const [ch, args] of [
+      ['friends:collection', [bob, F]],
+      ['friends:facets', [bob]]
+    ] as const) {
       const r = await call(ch, [...args], ca)
       expect(r.status).toBe(400)
       expect(r.body).toEqual(NOT_FRIENDS)
@@ -158,7 +175,10 @@ describe('friends RPC', () => {
   it('refuses after the friendship is removed', async () => {
     await befriend()
     expect((await call('friends:remove', [bob], ca)).status).toBe(200)
-    for (const [ch, args] of [['friends:collection', [bob, F]], ['friends:facets', [bob]]] as const) {
+    for (const [ch, args] of [
+      ['friends:collection', [bob, F]],
+      ['friends:facets', [bob]]
+    ] as const) {
       const r = await call(ch, [...args], ca)
       expect(r.status).toBe(400)
       expect(r.body).toEqual(NOT_FRIENDS)

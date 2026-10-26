@@ -137,7 +137,8 @@ export function FriendsPage({ onBackToMine }: { onBackToMine: () => void }): Rea
                     </span>
                   </span>
                   <span className="ml-auto whitespace-nowrap text-xs text-muted-foreground">
-                    {f.cardCount} cards · Updated {formatRelative(f.updatedAt)}
+                    {f.cardCount} {f.cardCount === 1 ? 'card' : 'cards'} · Updated{' '}
+                    {formatRelative(f.updatedAt)}
                   </span>
                 </button>
                 {confirming === f.id ? (

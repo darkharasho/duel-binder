@@ -53,9 +53,9 @@ export interface HandlerDeps {
   account: AccountService
 }
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type Handlers = Record<
   (typeof INVOKE_CHANNELS)[number],
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   (...args: any[]) => Promise<unknown>
 >
 

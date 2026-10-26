@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query'
 import type { FriendsOverview } from '@shared/types'
 import { api, queryKeys } from './api'
@@ -17,7 +17,17 @@ export function useFriendsAvailable(): boolean {
     if (web) return
     return api.account.onChange((s) => qc.setQueryData(queryKeys.account, s))
   }, [web, qc])
-  return web || (status.data?.user ?? null) !== null
+  // A different signed-in account (or none) must not see the previous account's friends.
+  const userId = status.data?.user?.id ?? null
+  const lastUser = useRef<number | string | null>(userId)
+  useEffect(() => {
+    if (web || !status.isSuccess) return
+    if (lastUser.current !== userId) {
+      lastUser.current = userId
+      qc.removeQueries({ queryKey: queryKeys.friends })
+    }
+  }, [web, status.isSuccess, userId, qc])
+  return web || userId !== null
 }
 
 /** The overview query (key queryKeys.friends), enabled only when available, refetched every 60 s. */

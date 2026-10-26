@@ -109,6 +109,26 @@ describe('friend collection', () => {
     expect(screen.queryByRole('button', { name: 'Add card' })).not.toBeInTheDocument()
   })
 
+  it('shows an error with Retry when the friend collection fails to load', async () => {
+    const collection = vi
+      .fn()
+      .mockRejectedValueOnce(
+        new Error("Error invoking remote method 'friends:collection': Error: You're offline.")
+      )
+      .mockResolvedValue([kuriboh])
+    const api = createMockApi({
+      window: { platform: 'web' },
+      friends: { collection },
+      collection: { list: vi.fn(async () => [mine]), forCard: vi.fn(async () => []) }
+    })
+    renderWithProviders(<CollectionPage friend={friend} onBackToMine={() => {}} />, { api })
+    expect(await screen.findByRole('alert')).toHaveTextContent("You're offline.")
+    expect(screen.queryByText("Bob hasn't added any cards yet")).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Retry' }))
+    expect(await screen.findByText('Kuriboh')).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
   it('opens a read-only detail panel', async () => {
     const api = make([kuriboh, entry(3, 'Kuriboh', { card: kuriboh.card })])
     renderWithProviders(<CollectionPage friend={friend} onBackToMine={() => {}} />, { api })

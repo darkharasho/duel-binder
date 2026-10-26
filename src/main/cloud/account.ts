@@ -333,17 +333,22 @@ export function createAccountService(deps: AccountDeps): AccountService {
       const current = token
       if (current === null) throw new Error(FRIENDS_SIGNED_OUT)
       const mine = session
+      let result: T
       try {
-        return await deps.client(current).rpc<T>(channel, args)
+        result = await deps.client(current).rpc<T>(channel, args)
       } catch (e) {
+        // The account changed during the call (a newer sign-in keeps its own token): nothing here concerns it.
+        if (mine !== session) throw new Error(FRIENDS_SIGNED_OUT, { cause: e })
         if (e instanceof CloudAuthError) {
-          // Only the session that made the call may sign out; a newer sign-in keeps its own token.
-          if (mine === session) serverSignedOut()
-          throw new Error(SERVER_SIGNED_OUT)
+          serverSignedOut()
+          throw new Error(SERVER_SIGNED_OUT, { cause: e })
         }
-        if (e instanceof CloudOfflineError) throw new Error(OFFLINE_MESSAGE)
+        if (e instanceof CloudOfflineError) throw new Error(OFFLINE_MESSAGE, { cause: e })
         throw e
       }
+      // The account changed while the call was in flight: its result belongs to the previous session.
+      if (mine !== session) throw new Error(FRIENDS_SIGNED_OUT)
+      return result
     },
 
     start() {

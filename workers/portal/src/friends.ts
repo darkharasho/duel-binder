@@ -1,6 +1,12 @@
 import { CollectionError } from '../../../src/main/repo/collection'
 import type { SqlDb } from '../../../src/main/db/sql'
-import type { Friend, FriendRequest, FriendRequestResult, FriendsOverview, FriendUser } from '../../../src/shared/types'
+import type {
+  Friend,
+  FriendRequest,
+  FriendRequestResult,
+  FriendsOverview,
+  FriendUser
+} from '../../../src/shared/types'
 import { avatarUrl } from './auth'
 
 /** A friend-request problem the caller can fix; rpc.ts answers it as a 400. */
@@ -32,11 +38,15 @@ export function friendsOverview(db: SqlDb, me: number): FriendsOverview {
            LEFT JOIN (SELECT user_id,
                              SUM(CASE WHEN deleted_at IS NULL THEN quantity ELSE 0 END) AS cards,
                              MAX(updated_at) AS updated
-                        FROM collection_entries GROUP BY user_id) c ON c.user_id = u.id
+                        FROM collection_entries
+                       WHERE user_id IN (SELECT CASE WHEN requester_id = ? THEN addressee_id ELSE requester_id END
+                                           FROM friendships
+                                          WHERE status = 'accepted' AND ? IN (requester_id, addressee_id))
+                       GROUP BY user_id) c ON c.user_id = u.id
           WHERE f.status = 'accepted' AND ? IN (f.requester_id, f.addressee_id)
           ORDER BY COALESCE(u.display_name, u.username) COLLATE NOCASE, u.id`
       )
-      .all(me, me) as (UserRow & { cards: number; updated: string | null })[]
+      .all(me, me, me, me) as (UserRow & { cards: number; updated: string | null })[]
   ).map((r): Friend => ({ ...toUser(r), cardCount: r.cards, updatedAt: r.updated }))
   const incoming = (
     db
@@ -51,11 +61,18 @@ export function friendsOverview(db: SqlDb, me: number): FriendsOverview {
   return { friends, incoming }
 }
 
-export function requestFriend(db: SqlDb, me: number, username: string, now: Date): FriendRequestResult {
+export function requestFriend(
+  db: SqlDb,
+  me: number,
+  username: string,
+  now: Date
+): FriendRequestResult {
   const name = username.trim()
   if (!name) throw new FriendError('Enter a Discord username')
   const target = db
-    .prepare('SELECT id, discord_id, username, display_name, avatar FROM users WHERE username = ? COLLATE NOCASE')
+    .prepare(
+      'SELECT id, discord_id, username, display_name, avatar FROM users WHERE username = ? COLLATE NOCASE'
+    )
     .get(name) as UserRow | undefined
   if (!target) throw new FriendError(`No Duel Binder user called "${name}"`)
   if (target.id === me) throw new FriendError("That's you")
@@ -65,7 +82,8 @@ export function requestFriend(db: SqlDb, me: number, username: string, now: Date
         WHERE (requester_id = ? AND addressee_id = ?) OR (requester_id = ? AND addressee_id = ?)`
     )
     .get(me, target.id, target.id, me) as { requester_id: number; status: string } | undefined
-  if (row?.status === 'accepted') throw new FriendError(`You're already friends with ${target.username}`)
+  if (row?.status === 'accepted')
+    throw new FriendError(`You're already friends with ${target.username}`)
   if (row && row.requester_id === target.id) {
     acceptFriend(db, me, target.id, now)
     return { status: 'accepted', friend: toUser(target) }
@@ -89,7 +107,9 @@ export function acceptFriend(db: SqlDb, me: number, requesterId: number, now: Da
 }
 
 export function ignoreFriend(db: SqlDb, me: number, requesterId: number): void {
-  db.prepare("DELETE FROM friendships WHERE requester_id = ? AND addressee_id = ? AND status = 'pending'").run(requesterId, me)
+  db.prepare(
+    "DELETE FROM friendships WHERE requester_id = ? AND addressee_id = ? AND status = 'pending'"
+  ).run(requesterId, me)
 }
 
 export function removeFriend(db: SqlDb, me: number, friendId: number): void {

@@ -61,8 +61,8 @@ function parseUndashed(text: string): Parts | null {
   if (!m || !/[A-Z]/.test(m[1])) return null
   const [, prefix, region, num] = m
   for (let len = num.length; len >= 2; len--) {
-    const digits = toDigits(num.slice(0, len))
-    if (/^\d{2,4}$/.test(digits)) return { prefix, region, number: digits }
+    const number = fixNumber(num.slice(0, len))
+    if (number) return { prefix, region, number }
   }
   return null
 }

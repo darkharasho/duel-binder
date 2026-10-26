@@ -123,6 +123,7 @@ describe('set codes', () => {
     ['CT12EN001ATK2500', 'CT12-EN001'],
     ['BROL-EN062', 'BROL-EN062'],
     ['LOBDE005', 'LOB-DE005'],
+    ['DUPOENA01', 'DUPO-ENA01'],
     ['ATK2500DEF2000', null]
   ])('parseSetCode(%s) = %s', (text, want) => expect(parseSetCode(text)).toBe(want))
 

@@ -1,4 +1,5 @@
 import type { Api } from '@shared/ipc'
+import { LANGUAGES } from '@shared/languages'
 import { pickRarity, pickRarityByCues, type RarityCues } from '@shared/scan/rarity'
 import { setCodeCandidates } from '@shared/scan/setCode'
 import {
@@ -16,7 +17,7 @@ export interface ScanDraft {
   cardId: number
   name: string
   imageId: number
-  /** Null when the printing is for the user to pick. */
+  /** Null only on rows saved before every scan came with a printing. */
   printingId: number | null
   setCode: string | null
   rarity: string | null
@@ -118,7 +119,11 @@ function inSet(
   }
 }
 
-/** A card whose printing the user picks from all of its printings. */
+/**
+ * A card with no code read and no set to place it in: an assumed printing among all of its
+ * printings, in the first language it has (English when it has one), of the rarity pickRarity
+ * chooses there, flagged for the user to check unless the card was printed only once.
+ */
 async function anyPrinting(
   cardId: number,
   art: ArtMatch[],
@@ -126,17 +131,21 @@ async function anyPrinting(
   via: 'art' | 'name'
 ): Promise<ScanDraft | null> {
   const options = await ctx.lookups.printingsForCards([cardId])
-  const imageId = options[0] && imageFor(art, options[0].imageIds)
+  const language = LANGUAGES.find((l) => options.some((o) => o.language === l.code))?.code
+  const ofLanguage = options.filter((o) => o.language === language)
+  if (!ofLanguage.length) return null
+  const { printing } = choose(ofLanguage, ctx.defaultRarity)
+  const imageId = imageFor(art, printing.imageIds)
   if (imageId === undefined) return null
   return {
     cardId,
-    name: options[0].name,
+    name: printing.name,
     imageId,
-    printingId: null,
-    setCode: null,
-    rarity: null,
+    printingId: printing.printingId,
+    setCode: printing.setCode,
+    rarity: printing.rarity,
     options,
-    flag: 'pick-printing',
+    flag: options.length === 1 ? null : 'pick-printing',
     via
   }
 }

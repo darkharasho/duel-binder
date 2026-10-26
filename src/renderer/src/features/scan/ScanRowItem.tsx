@@ -10,7 +10,7 @@ import type { ScanRow } from './session'
 
 const FLAG_TEXT: Record<NonNullable<ScanDraft['flag']>, string> = {
   'check-rarity': 'Check rarity',
-  'pick-printing': 'Pick printing',
+  'pick-printing': 'Check printing',
   'other-set': 'From another set'
 }
 

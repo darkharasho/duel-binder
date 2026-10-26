@@ -471,7 +471,7 @@ describe('Scan page', () => {
     )
     renderScan(fakeEngine())
     await run()
-    expect(screen.getByText('Pick printing')).toBeInTheDocument()
+    expect(screen.getByText('Check printing')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Add 0 cards to collection' })).toBeDisabled()
   })
 

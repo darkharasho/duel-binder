@@ -177,17 +177,45 @@ describe('resolveSignals', () => {
     expect(guessed.options.map((o) => o.printingId)).toEqual([11, 12])
   })
 
-  it('art match without set needs pick-printing', async () => {
+  it('art match without set assumes the lowest rarity, to be checked', async () => {
     const item = await recognized(raw({ art: [{ imageId: 102, distance: 20 }] }))
     expect(item).toMatchObject({
       via: 'art',
       cardId: 1,
       imageId: 102,
-      printingId: null,
-      setCode: null,
+      printingId: 13,
+      setCode: 'SDY-EN006',
+      rarity: 'Common',
       flag: 'pick-printing'
     })
     expect(item.options.map((o) => o.printingId)).toEqual([11, 12, 13])
+  })
+
+  it('an assumed printing takes New scans as when the card came in it', async () => {
+    const item = await recognized(raw({ art: [{ imageId: 101, distance: 20 }] }), {
+      ...noSet,
+      defaultRarity: 'Secret Rare'
+    })
+    expect(item).toMatchObject({ printingId: 12, rarity: 'Secret Rare', flag: 'pick-printing' })
+  })
+
+  it('an assumed printing is English when the card has one', async () => {
+    const de: ScanPrinting = {
+      ...PRINTINGS[2],
+      printingId: 14,
+      setCode: 'AAA-DE001',
+      language: 'de'
+    }
+    const item = await recognized(raw({ art: [{ imageId: 101, distance: 20 }] }), {
+      ...noSet,
+      lookups: { ...lookups, printingsForCards: async () => [de, ...PRINTINGS.slice(0, 3)] }
+    })
+    expect(item).toMatchObject({ printingId: 13, rarity: 'Common' })
+  })
+
+  it('a card printed once is not flagged', async () => {
+    const item = await recognized(raw({ art: [{ imageId: 201, distance: 20 }] }))
+    expect(item).toMatchObject({ printingId: 21, rarity: 'Ultra Rare', flag: null })
   })
 
   it('art match within the set offers the cards set printings', async () => {
@@ -244,12 +272,13 @@ describe('resolveSignals', () => {
     expect(item.printingId).not.toBeNull()
   })
 
-  it('name fallback outside the set needs pick-printing', async () => {
+  it('name fallback outside the set assumes a printing, to be checked', async () => {
     const item = await recognized(raw({ nameText: 'Dark Magician' }), withSet(SDY + ' 2'))
     expect(item).toMatchObject({
       via: 'name',
       imageId: 101,
-      printingId: null,
+      printingId: 13,
+      rarity: 'Common',
       flag: 'pick-printing'
     })
   })

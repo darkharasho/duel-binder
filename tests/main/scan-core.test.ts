@@ -107,7 +107,14 @@ describe('set codes', () => {
     ['hello', null],
     ['RA01 - EN 054', 'RA01-EN054'],
     ['RA01 – EN 054', 'RA01-EN054'],
-    ['DUPO-ENA01', 'DUPO-ENA01']
+    ['DUPO-ENA01', 'DUPO-ENA01'],
+    // OCR drops the thin dash; only EN counts as a region then.
+    ['BROLEN062', 'BROL-EN062'],
+    ['LOBEN005', 'LOB-EN005'],
+    ['CT12EN001ATK2500', 'CT12-EN001'],
+    ['BROL-EN062', 'BROL-EN062'],
+    ['LOBDE005', null],
+    ['ATK2500DEF2000', null]
   ])('parseSetCode(%s) = %s', (text, want) => expect(parseSetCode(text)).toBe(want))
 
   it('lists candidates with prefix zeros read as O as an alternate', () => {
@@ -119,6 +126,9 @@ describe('set codes', () => {
     expect(mvp).toContain('MVP1-EN501')
     expect(new Set(mvp).size).toBe(mvp.length)
     expect(setCodeCandidates('nothing')).toEqual([])
+    expect(setCodeCandidates('CT12ENOO1')).toContain('CT12-EN001')
+    expect(setCodeCandidates('BPO1-ENO48')).toContain('BP01-EN048')
+    expect(setCodeCandidates('DTO7-EN030')).toEqual(['DTO7-EN030', 'DT07-EN030'])
   })
 
   it('setPrefix returns the part before the dash', () => {

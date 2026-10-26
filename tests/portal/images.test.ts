@@ -277,6 +277,20 @@ describe('image route', () => {
       }
     })
 
+    it('counts printing art lookups against the quota before asking the resolver', async () => {
+      deps.imageQuota = createImageQuota(() => 1_000_000, { limit: 2, windowMs: 3_600_000 })
+      await bucket.put('printing/9', JPEG.buffer as ArrayBuffer, { httpMetadata: { contentType: 'image/jpeg' } })
+      expect((await get('printing/1')).status).toBe(404) // resolves to nothing, still spends a unit
+      expect((await get('printing/2')).status).toBe(404)
+      printingArt.url.mockClear()
+      const limited = await get('printing/3')
+      expect(limited.status).toBe(429)
+      expect(limited.headers.get('retry-after')).not.toBeNull()
+      expect(printingArt.url).not.toHaveBeenCalled()
+      expect((await get('printing/9')).status).toBe(200) // stored: free
+      expect(upstream).not.toHaveBeenCalled()
+    })
+
     it('a stored photo is served without asking the resolver', async () => {
       await bucket.put('printing/7', JPEG.buffer as ArrayBuffer, { httpMetadata: { contentType: 'image/jpeg' } })
       expect((await get('printing/7')).status).toBe(200)

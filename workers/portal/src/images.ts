@@ -99,6 +99,8 @@ interface Target {
   /** The upstream URL and any request headers it needs, looked up only on an R2 miss; null when there is none. */
   source: () => Promise<{ url: string; headers?: Record<string, string> } | null>
   cache: string
+  /** Spend the quota before `source` runs, because resolving it already calls upstream. */
+  meterFirst?: boolean
 }
 
 const fixed =
@@ -157,6 +159,7 @@ function resolve(deps: AppDeps, path: string): Target | null {
     return {
       key: `printing/${n}`,
       cache: SET_CACHE,
+      meterFirst: true,
       source: async () => {
         const url = await withTimeout(
           deps.printingArt.url(n).catch(() => null),
@@ -196,14 +199,19 @@ async function serve(req: Request, deps: AppDeps, path: string): Promise<Respons
   const user = await currentUser(req, deps)
   if (!user) return notFound()
 
-  const source = await target.source()
-  if (!source) return notFound()
-
-  // The quota is spent only now that an upstream fetch is certain.
-  if (deps.imageQuota && !deps.imageQuota.take(user.id)) {
+  const overQuota = (): Response | null => {
+    if (!deps.imageQuota || deps.imageQuota.take(user.id)) return null
     const seconds = Math.max(1, Math.ceil(deps.imageQuota.retryAfterMs(user.id) / 1000))
     return new Response('Too many requests', { status: 429, headers: { 'retry-after': String(seconds) } })
   }
+
+  const early = target.meterFirst ? overQuota() : null
+  if (early) return early
+  const source = await target.source()
+  if (!source) return notFound()
+  // Otherwise the quota is spent only once an upstream fetch is certain.
+  const late = target.meterFirst ? null : overQuota()
+  if (late) return late
 
   let bytes: ArrayBuffer
   let contentType: string

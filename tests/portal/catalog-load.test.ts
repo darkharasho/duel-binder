@@ -117,6 +117,43 @@ describe('admin catalog loader', () => {
     expect(db.prepare('SELECT 1 FROM collection_entries WHERE printing_id = ?').get(p)).toBeDefined()
   })
 
+  it('a source upsert of a contributed pkey makes it a normal row', async () => {
+    await loadCatalog()
+    const row = sourceRows('card_printings')[0]
+    const pkey = (source.prepare('SELECT pkey FROM card_printings LIMIT 1').get() as { pkey: string }).pkey
+    db.prepare('UPDATE card_printings SET contributed = 1 WHERE pkey = ?').run(pkey)
+    const res = await call('/admin/catalog/rows', { table: 'card_printings', rows: [row] })
+    expect(res.status).toBe(200)
+    expect(db.prepare('SELECT contributed FROM card_printings WHERE pkey = ?').get(pkey)).toEqual({ contributed: 0 })
+  })
+
+  it('delete never removes a contributed printing', async () => {
+    await loadCatalog()
+    const pkey = (source.prepare('SELECT pkey FROM card_printings LIMIT 1').get() as { pkey: string }).pkey
+    db.prepare('UPDATE card_printings SET contributed = 1 WHERE pkey = ?').run(pkey)
+    const res = await call('/admin/catalog/delete', { table: 'card_printings', keys: [[pkey]] })
+    expect(res.status).toBe(200)
+    expect(printingId(pkey)).toBeDefined()
+    expect(db.prepare('SELECT missing_from_api FROM card_printings WHERE pkey = ?').get(pkey)).toEqual({
+      missing_from_api: 0
+    })
+  })
+
+  it('lists pkeys in order, paged', async () => {
+    await loadCatalog()
+    const all = (db.prepare('SELECT pkey FROM card_printings ORDER BY pkey').all() as { pkey: string }[]).map(
+      (r) => r.pkey
+    )
+    type Page = { pkeys: string[]; more: boolean }
+    const first = (await (await call('/admin/catalog/pkeys?limit=2', undefined)).json()) as Page
+    expect(first).toEqual({ pkeys: all.slice(0, 2), more: all.length > 2 })
+    const next = (await (
+      await call(`/admin/catalog/pkeys?limit=2&after=${encodeURIComponent(first.pkeys[1])}`)
+    ).json()) as Page
+    expect(next.pkeys).toEqual(all.slice(2, 4))
+    expect((await call('/admin/catalog/pkeys?limit=2', undefined, null)).status).toBe(401)
+  })
+
   it('deletes rows from keyed tables and ignores cards', async () => {
     await call('/admin/catalog/rows', {
       table: 'pack_art',

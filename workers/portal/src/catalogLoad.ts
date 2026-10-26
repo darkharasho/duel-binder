@@ -1,6 +1,7 @@
 import { CATALOG_TABLES, type CatalogTable } from '../../../src/shared/catalogTables'
 import { setMeta, type MetaKey } from '../../../src/main/db/meta'
 import type { AppDeps } from './app'
+import { upsertCatalogRow } from '../../../src/main/catalog/upsert'
 import { putFingerprints } from './scanFiles'
 
 const MAX_ITEMS = 5000
@@ -48,13 +49,6 @@ function listOf(v: unknown, what: string): unknown[] {
   return v
 }
 
-/**
- * Same formula as the desktop V10 generated column `card_printings.pkey`. Numbers bind as
- * floats, so card_id is cast back to an integer before it is concatenated into the key.
- */
-const PKEY_SQL = `CASE WHEN ? = 'en' THEN 'en|' || CAST(? AS INTEGER) || '|' || ? || '|' || ?
-  ELSE ? || '|' || CAST(? AS INTEGER) || '|' || ? || '|' || ? || '|' || ? END`
-
 function validateRow(table: CatalogTable, row: unknown): Record<string, string | number | null> {
   if (!isObject(row)) throw new BadRequest('Each row must be an object')
   const out: Record<string, string | number | null> = {}
@@ -76,47 +70,10 @@ function validateRow(table: CatalogTable, row: unknown): Record<string, string |
 function upsertRows(deps: AppDeps, table: CatalogTable, rows: unknown[]): void {
   const { db } = deps
   const valid = rows.map((r) => validateRow(table, r))
+  // A source upsert makes a contributed printing an ordinary catalog row again.
+  const extra = table.name === 'card_printings' ? { contributed: 0 } : undefined
   db.transaction(() => {
-    for (const row of valid) {
-      const cols = table.columns.filter((c) => row[c] !== undefined)
-      const quoted = cols.map((c) => `"${c}"`)
-      const values = cols.map((c) => row[c])
-      if (table.name === 'card_printings') {
-        const { language: l, card_id: c, set_name: n, set_code: s, set_rarity: r } = row
-        const found = db
-          .prepare(`SELECT id FROM card_printings WHERE pkey = ${PKEY_SQL}`)
-          .get(l, c, s, r, l, c, n, s, r) as { id: number } | undefined
-        if (found) {
-          const set = cols.filter((x) => x !== 'missing_from_api').map((x) => `"${x}" = ?`)
-          db.prepare(
-            `UPDATE card_printings SET ${[...set, 'missing_from_api = 0'].join(', ')} WHERE id = ?`
-          ).run(...cols.filter((x) => x !== 'missing_from_api').map((x) => row[x]), found.id)
-        } else {
-          db.prepare(
-            `INSERT INTO card_printings (${quoted.join(', ')}) VALUES (${cols.map(() => '?').join(', ')})`
-          ).run(...values)
-        }
-        continue
-      }
-      for (const u of table.unique ?? []) {
-        if (row[u] === undefined || row[u] === null) continue
-        const otherKey = table.key.map((k) => `"${k}" IS NOT ?`).join(' OR ')
-        db.prepare(`DELETE FROM ${table.name} WHERE "${u}" = ? AND (${otherKey})`).run(
-          row[u],
-          ...table.key.map((k) => row[k])
-        )
-      }
-      const updates = cols
-        .filter((c) => !table.key.includes(c))
-        .map((c) => `"${c}" = excluded."${c}"`)
-      const conflict = table.key.map((k) => `"${k}"`).join(', ')
-      db.prepare(
-        `INSERT INTO ${table.name} (${quoted.join(', ')}) VALUES (${cols.map(() => '?').join(', ')}) ` +
-          (updates.length > 0
-            ? `ON CONFLICT(${conflict}) DO UPDATE SET ${updates.join(', ')}`
-            : `ON CONFLICT(${conflict}) DO NOTHING`)
-      ).run(...values)
-    }
+    for (const row of valid) upsertCatalogRow(db, table, row, extra)
   })()
 }
 
@@ -133,10 +90,13 @@ function deleteKeys(deps: AppDeps, table: CatalogTable, keys: unknown[]): void {
     for (const k of tuples) {
       if (table.name === 'card_printings') {
         const owned = 'id IN (SELECT printing_id FROM collection_entries)'
+        // Contributed printings never came from the source, so its deletions don't apply to them.
         db.prepare(
-          `UPDATE card_printings SET missing_from_api = 1 WHERE pkey = ? AND ${owned}`
+          `UPDATE card_printings SET missing_from_api = 1 WHERE pkey = ? AND contributed = 0 AND ${owned}`
         ).run(k[0])
-        db.prepare(`DELETE FROM card_printings WHERE pkey = ? AND NOT (${owned})`).run(k[0])
+        db.prepare(
+          `DELETE FROM card_printings WHERE pkey = ? AND contributed = 0 AND NOT (${owned})`
+        ).run(k[0])
       } else {
         const where = table.key.map((c) => `"${c}" = ?`).join(' AND ')
         db.prepare(`DELETE FROM ${table.name} WHERE ${where}`).run(...k)
@@ -171,6 +131,16 @@ export async function adminRoute(req: Request, deps: AppDeps): Promise<Response>
       ).n
     }
     return json({ counts })
+  }
+
+  if (req.method === 'GET' && path === '/admin/catalog/pkeys') {
+    const q = new URL(req.url).searchParams
+    const asked = Number(q.get('limit') ?? MAX_ITEMS)
+    const limit = Math.min(MAX_ITEMS, Number.isInteger(asked) && asked > 0 ? asked : MAX_ITEMS)
+    const rows = deps.db
+      .prepare('SELECT pkey FROM card_printings WHERE pkey > ? ORDER BY pkey LIMIT ?')
+      .all(q.get('after') ?? '', limit + 1) as { pkey: string }[]
+    return json({ pkeys: rows.slice(0, limit).map((r) => r.pkey), more: rows.length > limit })
   }
 
   if (req.method === 'PUT' && path === '/admin/scan/fingerprints') return putFingerprints(req, deps)

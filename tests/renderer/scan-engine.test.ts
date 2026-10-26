@@ -78,6 +78,36 @@ describe('createScanEngine', () => {
     expect(worker.terminate).toHaveBeenCalled()
   })
 
+  it('hands a camera bitmap to the worker without copying it', async () => {
+    const { worker, posted } = fakeWorker({
+      found: false,
+      quad: null,
+      art: [],
+      codeBands: [],
+      nameBand: null
+    })
+    const engine = createScanEngine({ api: createMockApi().scan, makeWorker: () => worker })
+    const bitmap = { width: 810, height: 1080, close: vi.fn() } as unknown as ImageBitmap
+    await engine.analyze(bitmap, { candidates: null, wantText: false })
+    const [sent] = posted.filter((p) => p.msg.type === 'frame')
+    expect((sent.msg as unknown as { image: unknown }).image).toBe(bitmap)
+    expect(sent.transfer).toEqual([bitmap])
+  })
+
+  it('hands the fingerprints over rather than copying them', async () => {
+    const { worker, posted } = fakeWorker({
+      found: false,
+      quad: null,
+      art: [],
+      codeBands: [],
+      nameBand: null
+    })
+    const engine = createScanEngine({ api: createMockApi().scan, makeWorker: () => worker })
+    const fp = new ArrayBuffer(16)
+    await engine.init(fp)
+    expect(posted[0].transfer).toEqual([fp])
+  })
+
   it('dispose rejects a pending frame, and later calls reject', async () => {
     const silent = { postMessage: vi.fn(), terminate: vi.fn() } as unknown as Worker
     const engine = createScanEngine({ api: createMockApi().scan, makeWorker: () => silent })

@@ -25,6 +25,7 @@ import { cn } from '@/lib/utils'
 import { createScanEngine, makeVisionWorker, type ScanEngine } from './engine'
 import type { ScanDraft } from './resolve'
 import { ScanRowItem } from './ScanRowItem'
+import { SearchPicker, type PickerOption } from './SearchPicker'
 import { rowKey, useScanSession } from './session'
 import { rememberedCamera, useCamera, type CameraError } from './useCamera'
 import { useScanLoop, type ScanStatus } from './useScanLoop'
@@ -34,17 +35,19 @@ const RARITY_KEY = 'scan.defaultRarity'
 const ANY = 'any'
 const AUTO = 'auto'
 const HIGHLIGHT_MS = 1500
-
-interface PickedSet {
-  setName: string
-  language: Language
-}
+const RARITY_OPTIONS: PickerOption[] = [
+  { key: AUTO, label: 'Auto' },
+  ...RARITY_TIERS.map((r) => ({ key: r, label: r }))
+]
+const UNNAMED_CAMERA = 'unnamed-camera-'
 
 const CAMERA_MESSAGES: Record<CameraError, string> = {
   denied: 'Camera access was denied. Allow it in your system settings, then reopen Scan.',
   none: 'No camera found. Plug one in and reopen Scan.',
   lost: "The camera stopped. Check it's connected, then pick it again."
 }
+
+const SET_UNREADABLE = "Couldn't load this set's cards, so cards are matched against every set."
 
 const NO_FINGERPRINTS =
   'Artwork matching is unavailable until the artwork data downloads. Set codes and names still work.'
@@ -67,6 +70,11 @@ function write(key: string, value: string | null): void {
   }
 }
 
+interface PickedSet {
+  setName: string
+  language: Language
+}
+
 const parseSet = (raw: string): PickedSet | null => {
   const v = JSON.parse(raw) as Partial<PickedSet>
   return typeof v.setName === 'string' && isLanguage(v.language)
@@ -74,8 +82,7 @@ const parseSet = (raw: string): PickedSet | null => {
     : null
 }
 
-const setValue = (s: PickedSet): string => JSON.stringify([s.language, s.setName])
-const setLabel = (s: PickedSet): string => `${s.setName} · ${languageInfo(s.language).tag}`
+const setKeyOf = (s: PickedSet): string => `${s.language}|${s.setName}`
 
 const plural = (n: number, one: string, many: string): string => `${n} ${n === 1 ? one : many}`
 
@@ -88,7 +95,7 @@ function statusText(s: ScanStatus): string {
     case 'added':
       return `${s.setCode ? `${s.name} ${s.setCode}` : s.name} · added, lower it to scan the next card`
     case 'stopped':
-      return 'Scanning stopped after repeated errors. Reopen Scan to try again.'
+      return 'Scanning stopped after repeated errors.'
   }
 }
 
@@ -113,26 +120,48 @@ export function ScanPage({
   const videoRef = useRef<HTMLVideoElement>(null)
   const camera = useCamera(deviceId)
 
-  const sets = useQuery({ queryKey: queryKeys.setsList, queryFn: () => api.sets.list() })
+  // Not refetched while scanning (focus or staleness); data-changed events still invalidate it.
+  const sets = useQuery({
+    queryKey: queryKeys.setsList,
+    queryFn: () => api.sets.list(),
+    staleTime: Infinity,
+    refetchOnWindowFocus: false
+  })
   const setOptions = useMemo(() => {
     const order = new Map(LANGUAGES.map((l, i) => [l.code, i]))
-    return (sets.data ?? [])
+    const byName = new Intl.Collator('en').compare
+    const sorted = (sets.data ?? [])
       .map((s) => ({ setName: s.setName, language: s.language }))
       .sort(
         (a, b) =>
-          a.setName.localeCompare(b.setName) ||
+          byName(a.setName, b.setName) ||
           (order.get(a.language) ?? 0) - (order.get(b.language) ?? 0)
       )
+    const options: PickerOption[] = [{ key: ANY, label: 'Any set' }]
+    const byKey = new Map<string, PickedSet>()
+    for (const s of sorted) {
+      const key = setKeyOf(s)
+      const label = `${s.setName} · ${languageInfo(s.language).tag}`
+      byKey.set(key, s)
+      options.push({ key, label, search: label.toLowerCase() })
+    }
+    return { options, byKey }
   }, [sets.data])
 
   const setPrintings = useQuery({
     queryKey: ['scan', 'setPrintings', picked?.setName, picked?.language],
     queryFn: () => api.scan.printingsForSet(picked!.setName, picked!.language),
     enabled: picked !== null,
-    staleTime: Infinity
+    staleTime: Infinity,
+    refetchOnWindowFocus: false
   })
 
-  const { add } = session
+  const { add, setPrinting, setQuantity, remove } = session
+  // Stable, so rows (memoized) don't re-render on every camera frame.
+  const rowActions = useMemo(
+    () => ({ setPrinting, setQuantity, remove }),
+    [setPrinting, setQuantity, remove]
+  )
   const highlightTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const onDraft = useCallback(
     (d: ScanDraft) => {
@@ -145,14 +174,16 @@ export function ScanPage({
   )
   useEffect(() => () => clearTimeout(highlightTimer.current), [])
 
+  // A set whose printings can't be read scans as any set rather than not at all.
+  const setUnreadable = picked !== null && setPrintings.isError
+  const scanSet = setUnreadable ? null : picked
   const loop = useScanLoop({
     videoRef,
     engineFactory,
     running: camera.stream !== null && !paused,
-    setName: picked?.setName ?? null,
-    setKey: picked ? setValue(picked) : ANY,
-    // A set whose printings can't be read scans as any set rather than not at all.
-    setPrintings: picked === null || setPrintings.isError ? null : setPrintings.data,
+    setName: scanSet?.setName ?? null,
+    setKey: scanSet ? setKeyOf(scanSet) : ANY,
+    setPrintings: scanSet === null ? null : setPrintings.data,
     defaultRarity,
     onDraft
   })
@@ -162,26 +193,41 @@ export function ScanPage({
     if (video) video.srcObject = camera.stream
   }, [camera.stream])
 
-  const pickSet = (value: string): void => {
-    if (value === ANY) {
-      setPicked(null)
-      write(SET_KEY, null)
-      return
-    }
-    const [language, setName] = JSON.parse(value) as [Language, string]
-    const next = { setName, language }
-    setPicked(next)
-    write(SET_KEY, JSON.stringify(next))
-  }
+  const { byKey } = setOptions
+  // A remembered set missing from the list (still loading, say) still shows as picked.
+  const pickedSetOptions = useMemo(
+    () =>
+      picked && !byKey.has(setKeyOf(picked))
+        ? [
+            ...setOptions.options,
+            {
+              key: setKeyOf(picked),
+              label: `${picked.setName} · ${languageInfo(picked.language).tag}`
+            }
+          ]
+        : setOptions.options,
+    [picked, byKey, setOptions.options]
+  )
+  const pickSet = useCallback(
+    (key: string): void => {
+      setPicked((current) => {
+        const next = byKey.get(key) ?? (current && key === setKeyOf(current) ? current : null)
+        write(SET_KEY, next ? JSON.stringify(next) : null)
+        return next
+      })
+    },
+    [byKey]
+  )
 
-  const pickRarity = (value: string): void => {
+  const pickRarity = useCallback((value: string): void => {
     const next = value === AUTO ? null : value
     setDefaultRarity(next)
     write(RARITY_KEY, next)
-  }
+  }, [])
 
   const pickCamera = (id: string): void => {
-    setDeviceId(id)
+    // A camera listed before permission has no id: open the default one.
+    setDeviceId(id.startsWith(UNNAMED_CAMERA) ? null : id)
     camera.retry()
   }
 
@@ -196,8 +242,11 @@ export function ScanPage({
       toast.error(`${plural(failed, 'entry', 'entries')} couldn't be added; see the list`)
   }
 
+  const openCamera = camera.stream?.getVideoTracks()[0]?.getSettings().deviceId ?? deviceId ?? ''
+  // Shown as picked only when it's one of the listed cameras (ids are blank before permission),
+  // and not while the camera is in error, so picking it again reopens it.
   const activeCamera =
-    camera.stream?.getVideoTracks()[0]?.getSettings().deviceId ?? deviceId ?? undefined
+    !camera.error && camera.devices.some((d) => d.deviceId === openCamera) ? openCamera : ''
   const outline = loop.outline
 
   return (
@@ -205,33 +254,25 @@ export function ScanPage({
       <PageHeader>
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="mr-auto text-2xl font-semibold tracking-tight">Scan</h1>
-          <Select value={picked ? setValue(picked) : ANY} onValueChange={pickSet}>
-            <SelectTrigger size="sm" aria-label="Set" className="w-72">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={ANY}>Any set</SelectItem>
-              {picked && !setOptions.some((s) => setValue(s) === setValue(picked)) && (
-                <SelectItem value={setValue(picked)}>{setLabel(picked)}</SelectItem>
-              )}
-              {setOptions.map((s) => (
-                <SelectItem key={setValue(s)} value={setValue(s)}>
-                  {setLabel(s)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <SearchPicker
+            label="Set"
+            value={picked ? setKeyOf(picked) : ANY}
+            options={pickedSetOptions}
+            onPick={pickSet}
+            searchPlaceholder="Search sets…"
+            className="w-72"
+          />
           <Select
             value={activeCamera}
             onValueChange={pickCamera}
             disabled={camera.devices.length === 0}
           >
             <SelectTrigger size="sm" aria-label="Camera" className="w-56">
-              <SelectValue placeholder="No camera" />
+              <SelectValue placeholder={camera.devices.length ? 'Choose a camera' : 'No camera'} />
             </SelectTrigger>
             <SelectContent>
               {camera.devices.map((d, i) => (
-                <SelectItem key={d.deviceId || i} value={d.deviceId || `camera-${i}`}>
+                <SelectItem key={d.deviceId || i} value={d.deviceId || `${UNNAMED_CAMERA}${i}`}>
                   {d.label || `Camera ${i + 1}`}
                 </SelectItem>
               ))}
@@ -240,17 +281,23 @@ export function ScanPage({
         </div>
       </PageHeader>
 
-      <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_380px]">
-        <section aria-label="Camera" className="space-y-3">
+      <div className="mt-6 flex gap-6">
+        <section aria-label="Camera" className="flex w-min shrink-0 flex-col gap-3">
           <div
             className={cn(
-              'relative aspect-video overflow-hidden rounded-lg border-2 bg-black',
+              // Portrait, as tall as the window allows below the header and above the controls.
+              'relative aspect-[3/4] h-[calc(100vh-15rem)] min-h-72 overflow-hidden rounded-lg border-2 bg-black',
               loop.flash ? 'border-emerald-400' : 'border-white/10'
             )}
           >
             {camera.error ? (
-              <div className="flex h-full items-center justify-center p-8 text-center text-sm text-muted-foreground">
+              <div className="flex h-full flex-col items-center justify-center gap-3 p-8 text-center text-sm text-muted-foreground">
                 <p>{CAMERA_MESSAGES[camera.error]}</p>
+                {camera.error !== 'denied' && (
+                  <Button variant="outline" size="sm" onClick={camera.retry}>
+                    Try again
+                  </Button>
+                )}
               </div>
             ) : (
               <>
@@ -259,13 +306,13 @@ export function ScanPage({
                   autoPlay
                   muted
                   playsInline
-                  className="h-full w-full object-contain"
+                  className="h-full w-full object-cover object-center"
                 />
                 {outline && (
                   <svg
                     aria-hidden
                     viewBox={`0 0 ${outline.width} ${outline.height}`}
-                    preserveAspectRatio="xMidYMid meet"
+                    preserveAspectRatio="xMidYMid slice"
                     className="pointer-events-none absolute inset-0 h-full w-full"
                   >
                     <polygon
@@ -278,33 +325,31 @@ export function ScanPage({
                     />
                   </svg>
                 )}
-                <p
-                  role="status"
-                  className="absolute inset-x-0 bottom-0 bg-black/70 px-4 py-2 text-sm text-white"
-                >
-                  {statusText(loop.status)}
-                </p>
+                <div className="absolute inset-x-0 bottom-0 flex items-center gap-3 bg-black/70 px-4 py-2 text-sm text-white">
+                  <p role="status">{statusText(loop.status)}</p>
+                  {loop.status.kind === 'stopped' && (
+                    <Button variant="outline" size="xs" className="ml-auto" onClick={loop.retry}>
+                      Retry
+                    </Button>
+                  )}
+                </div>
               </>
             )}
           </div>
+          {setUnreadable && <p className="text-xs text-muted-foreground">{SET_UNREADABLE}</p>}
           {loop.artReady === false && (
             <p className="text-xs text-muted-foreground">{NO_FINGERPRINTS}</p>
           )}
           <div className="flex flex-wrap items-center gap-3">
             <span className="text-sm text-muted-foreground">New scans as</span>
-            <Select value={defaultRarity ?? AUTO} onValueChange={pickRarity}>
-              <SelectTrigger size="sm" aria-label="New scans as" className="w-48">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value={AUTO}>Auto</SelectItem>
-                {RARITY_TIERS.map((r) => (
-                  <SelectItem key={r} value={r}>
-                    {r}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <SearchPicker
+              label="New scans as"
+              value={defaultRarity ?? AUTO}
+              options={RARITY_OPTIONS}
+              onPick={pickRarity}
+              searchPlaceholder="Search rarities…"
+              className="w-48"
+            />
             <Button
               variant="outline"
               size="sm"
@@ -319,7 +364,7 @@ export function ScanPage({
 
         <section
           aria-labelledby="scan-session-title"
-          className="flex max-h-[calc(100vh-10rem)] min-h-80 flex-col rounded-lg border border-white/[0.08]"
+          className="flex h-[calc(100vh-15rem)] min-h-72 min-w-0 flex-1 flex-col rounded-lg border border-white/[0.08]"
         >
           <header className="flex items-baseline justify-between border-b border-white/[0.06] px-4 py-3">
             <h2 id="scan-session-title" className="text-sm font-semibold">
@@ -341,7 +386,7 @@ export function ScanPage({
                   <ScanRowItem
                     key={row.key}
                     row={row}
-                    actions={session}
+                    actions={rowActions}
                     highlighted={row.key === fresh}
                   />
                 ))}

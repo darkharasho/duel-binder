@@ -26,8 +26,10 @@ const stop = (s: MediaStream): void => s.getTracks().forEach((t) => t.stop())
 const constraints = (deviceId: string | null): MediaStreamConstraints => ({
   audio: false,
   video: {
-    width: { ideal: 1920 },
-    height: { ideal: 1080 },
+    // 4K where the camera has it (a held card's set code is then about 14 px tall, not 7);
+    // being ideal, not min, any lower resolution still opens.
+    width: { ideal: 3840 },
+    height: { ideal: 2160 },
     ...(deviceId ? { deviceId: { exact: deviceId } } : {})
   }
 })
@@ -38,7 +40,7 @@ const errorOf = (e: unknown): CameraError => {
 }
 
 /**
- * The webcam stream for deviceId (null: the system default), at up to 1920x1080, and the
+ * The webcam stream for deviceId (null: the system default), at up to 3840x2160, and the
  * webcams there are. A device that opens is remembered for next time. `lost` means the stream
  * ended on its own (unplugged); `retry` opens the camera again.
  */

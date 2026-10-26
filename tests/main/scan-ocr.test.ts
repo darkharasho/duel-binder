@@ -80,19 +80,22 @@ function rng(seed: number): () => number {
  * frame under the art's edge, slightly blurred, with sensor noise. Sized like CODE_BANDS[0] on a
  * straightened card (842 wide).
  */
-function codeLine(code: string, seed: number): RgbaImage {
+function codeLine(code: string, seed: number, light = false): RgbaImage {
   const rand = rng(seed)
   const width = 758
   const height = 86
   const mat = new cv.Mat(height, width, cv.CV_8UC4)
-  const base = [170 + rand() * 50, 160 + rand() * 50, 140 + rand() * 50]
+  // light: an Xyz card's black frame, the code printed light on dark.
+  const base = light
+    ? [25 + rand() * 30, 25 + rand() * 30, 30 + rand() * 30]
+    : [170 + rand() * 50, 160 + rand() * 50, 140 + rand() * 50]
   for (let y = 0; y < height; y++)
     for (let x = 0; x < width; x++) {
       const shade = 20 * (x / width - 0.5)
       for (let c = 0; c < 3; c++) mat.data[(y * width + x) * 4 + c] = base[c] + shade
       mat.data[(y * width + x) * 4 + 3] = 255
     }
-  const ink = new cv.Scalar(25, 25, 30, 255)
+  const ink = light ? new cv.Scalar(225, 225, 220, 255) : new cv.Scalar(25, 25, 30, 255)
   cv.line(mat, new cv.Point(20, 8), new cv.Point(width - 20, 8), ink, 2)
   const x = Math.round(width * (0.35 + rand() * 0.2))
   cv.putText(mat, code, new cv.Point(x, 54), cv.FONT_HERSHEY_SIMPLEX, 0.9, ink, 2, cv.LINE_AA)
@@ -113,6 +116,24 @@ describe('ocr', () => {
     }
     const hits = rows.filter((r) => r.candidates.includes(r.code))
     console.log(`set code, legible: ${hits.length}/${codes.length}`)
+    if (hits.length < codes.length) console.table(rows.filter((r) => !hits.includes(r)))
+    expect(hits.length).toBeGreaterThanOrEqual(0.75 * codes.length)
+  }, 60_000)
+
+  it('reads light-on-dark set codes, as on black Xyz frames', async () => {
+    const codes = [...new Set(shots.map((s) => s.setCode))]
+    const rows: { code: string; text: string }[] = []
+    for (const [i, code] of codes.entries()) {
+      const band = toBand(codeLine(code, i + 1, true), [0, 0, 1, 1])
+      // toBand turns the ink black on white either way, so tesseract sees the usual polarity.
+      const ink = band.data.filter((v) => v === 0).length
+      expect(ink).toBeGreaterThan(0)
+      expect(ink).toBeLessThan(band.data.length / 2)
+      const [text] = await timed([band], 'code')
+      rows.push({ code, text })
+    }
+    const hits = rows.filter((r) => setCodeCandidates(r.text).includes(r.code))
+    console.log(`set code, light on dark: ${hits.length}/${codes.length}`)
     if (hits.length < codes.length) console.table(rows.filter((r) => !hits.includes(r)))
     expect(hits.length).toBeGreaterThanOrEqual(0.75 * codes.length)
   }, 60_000)

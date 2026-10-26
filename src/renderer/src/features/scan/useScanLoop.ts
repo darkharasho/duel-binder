@@ -1,7 +1,8 @@
-import { useEffect, useRef, useState, type RefObject } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import { ABSENT_MS } from '@shared/scan/thresholds'
 import type { ScanPrinting } from '@shared/scan/types'
 import { api } from '@/lib/api'
+import { centreCrop } from './crop'
 import type { ScanEngine } from './engine'
 import { resolveSignals, type ScanDraft, type ScanOutcome } from './resolve'
 import { createShowingTracker } from './tracker'
@@ -36,7 +37,9 @@ export interface ScanLoopOptions {
 
 export interface ScanLoop {
   status: ScanStatus
-  /** The card's outline in frame pixels, and the frame's size, for drawing over the video. */
+  /** After scanning stopped on errors: starts over with a fresh init. */
+  retry: () => void
+  /** The card's outline in the scanned crop's pixels, and the crop's size, for drawing over the preview. */
   outline: { quad: Quad; width: number; height: number } | null
   /** null until the engine has been given the fingerprint file (or found there is none). */
   artReady: boolean | null
@@ -47,17 +50,17 @@ const sameStatus = (a: ScanStatus, b: ScanStatus): boolean =>
   a.kind === b.kind &&
   (a.kind !== 'added' || (b.kind === 'added' && a.name === b.name && a.setCode === b.setCode))
 
-/** A fresh copy of the video's current frame; the engine takes ownership of its pixels. */
-function grab(video: HTMLVideoElement, canvas: HTMLCanvasElement): ImageData | null {
-  const width = video.videoWidth
-  const height = video.videoHeight
-  if (!width || !height) return null
-  if (canvas.width !== width) canvas.width = width
-  if (canvas.height !== height) canvas.height = height
-  const ctx = canvas.getContext('2d', { willReadFrequently: true })
-  if (!ctx) return null
-  ctx.drawImage(video, 0, 0, width, height)
-  return ctx.getImageData(0, 0, width, height)
+/**
+ * The part of the video's current frame the preview shows (its centre crop), at full camera
+ * resolution, as a bitmap for the engine to hand to its worker: the pixels are never copied on
+ * the UI thread.
+ */
+async function grab(
+  video: HTMLVideoElement
+): Promise<{ frame: ImageBitmap; width: number; height: number } | null> {
+  if (!video.videoWidth || !video.videoHeight) return null
+  const { x, y, width, height } = centreCrop(video.videoWidth, video.videoHeight)
+  return { frame: await createImageBitmap(video, x, y, width, height), width, height }
 }
 
 /**
@@ -72,9 +75,14 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
   const [artReady, setArtReady] = useState<boolean | null>(null)
   const [flash, setFlash] = useState(false)
 
-  const latest = useRef(opts)
+  // The picked set's artworks, worked out once per set rather than per frame.
+  const candidates = useMemo(
+    () => (opts.setPrintings ? [...new Set(opts.setPrintings.flatMap((p) => p.imageIds))] : null),
+    [opts.setPrintings]
+  )
+  const latest = useRef({ ...opts, candidates })
   useEffect(() => {
-    latest.current = opts
+    latest.current = { ...opts, candidates }
   })
 
   const engineRef = useRef<ScanEngine | null>(null)
@@ -141,15 +149,26 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
     l.lastFound = false
     l.shown = null
     l.absentSince = null
+    // Stopped stays stopped until Retry.
+    if (l.stopped) return
     l.status = { kind: 'idle' }
     setStatusState(l.status)
   }, [opts.setKey])
+
+  const retry = useCallback(() => {
+    const l = loop.current
+    l.stopped = false
+    l.failures = 0
+    l.needsInit = true
+    l.retryAt = 0
+    l.status = { kind: 'idle' }
+    setStatusState(l.status)
+  }, [])
 
   useEffect(() => {
     if (!opts.running) return
     let live = true
     let flashTimer: ReturnType<typeof setTimeout> | undefined
-    const canvas = document.createElement('canvas')
     const l = loop.current
 
     const fail = (): void => {
@@ -201,14 +220,15 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
             return
           }
         }
-        const frame = grab(video, canvas)
-        if (!frame || !live) return
-        // Read before the pixels are handed over.
-        const { width, height } = frame
+        const grabbed = await grab(video).catch(() => null)
+        if (!grabbed) return
+        if (!live) {
+          grabbed.frame.close()
+          return
+        }
+        const { frame, width, height } = grabbed
         const setPrintings = o.setPrintings
-        const candidates = setPrintings
-          ? [...new Set(setPrintings.flatMap((p) => p.imageIds))]
-          : null
+        const candidates = o.candidates
         let raw
         try {
           raw = await engine.analyze(frame, { candidates, wantText: l.lastFound })
@@ -252,5 +272,5 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
     }
   }, [opts.running])
 
-  return { status, outline, artReady, flash }
+  return { status, retry, outline, artReady, flash }
 }

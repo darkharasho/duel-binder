@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { Suspense, lazy, useCallback, useEffect, useState } from 'react'
 import type { CardSearchResult } from '@shared/types'
 import { AppShell, type NavigateFn, type Page } from '@/components/AppShell'
 import { Toaster } from '@/components/ui/sonner'
@@ -8,12 +8,16 @@ import { CollectionPage } from '@/features/collection/CollectionPage'
 import { BrowsePage } from '@/features/browse/BrowsePage'
 import { SetsPage } from '@/features/sets/SetsPage'
 import { FriendsPage } from '@/features/friends/FriendsPage'
-import { ScanPage } from '@/features/scan/ScanPage'
 import { useFriendsAvailable } from '@/lib/friends'
 import { SettingsPage } from '@/features/settings/SettingsPage'
 import { useDataChanged } from '@/components/useDataChanged'
 import { isWeb } from '@/lib/platform'
 import { useUpdateToasts } from '@/features/settings/useUpdateToasts'
+
+// Loaded on demand, so the web build (which has no Scan) never pulls in the vision worker.
+const ScanPage = lazy(() =>
+  import('@/features/scan/ScanPage').then((m) => ({ default: m.ScanPage }))
+)
 
 interface AddInitial {
   card: CardSearchResult
@@ -82,7 +86,11 @@ function App(): React.JSX.Element {
             onAddMissing={(card, printingId) => openAdd({ card, printingId })}
           />
         )}
-        {page === 'scan' && !isWeb() && <ScanPage />}
+        {page === 'scan' && !isWeb() && (
+          <Suspense fallback={null}>
+            <ScanPage />
+          </Suspense>
+        )}
         {page === 'friends' && (
           <FriendsPage key={friendsKey} onBackToMine={() => onNavigate('collection')} />
         )}

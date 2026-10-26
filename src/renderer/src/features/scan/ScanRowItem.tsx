@@ -1,17 +1,11 @@
+import { memo, useMemo } from 'react'
 import { Minus, Plus, X } from 'lucide-react'
 import { languageInfo } from '@shared/languages'
-import type { ScanPrinting } from '@shared/scan/types'
 import { CardArt } from '@/components/CardArt'
 import { Button } from '@/components/ui/button'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue
-} from '@/components/ui/select'
 import { cn } from '@/lib/utils'
 import type { ScanDraft } from './resolve'
+import { SearchPicker, type PickerOption } from './SearchPicker'
 import type { ScanRow } from './session'
 
 const FLAG_TEXT: Record<NonNullable<ScanDraft['flag']>, string> = {
@@ -21,19 +15,27 @@ const FLAG_TEXT: Record<NonNullable<ScanDraft['flag']>, string> = {
 }
 
 /**
- * What the row's dropdown offers: every printing of the card while its printing is for the
- * user to pick, else the rarities its set code came in.
+ * What the row's dropdown offers, always only the row's card: the rarities its set code came in
+ * when the code was read off the card, else every printing it was matched to, so a printing
+ * picked for an art or name match can still be changed to another code. Each shows its code and
+ * rarity, and its language when they differ; the search also matches the set's name.
  */
-function choicesFor(row: ScanRow): { option: ScanPrinting; label: string }[] {
-  if (row.printingId === null || row.flag === 'pick-printing') {
-    return row.options.map((o) => ({
-      option: o,
-      label: `${o.setCode} · ${o.rarity} · ${languageInfo(o.language).tag}`
-    }))
-  }
-  return row.options
-    .filter((o) => o.cardId === row.cardId && o.setCode === row.setCode)
-    .map((o) => ({ option: o, label: o.rarity }))
+function choicesFor(row: ScanRow): PickerOption[] {
+  const own = row.options.filter((o) => o.cardId === row.cardId)
+  const shown =
+    row.via === 'code' && row.printingId !== null && row.flag !== 'pick-printing'
+      ? own.filter((o) => o.setCode === row.setCode)
+      : own
+  const languages = new Set(shown.map((o) => o.language)).size > 1
+  return shown.map((o) => {
+    const tag = languageInfo(o.language).tag
+    const label = `${o.setCode} · ${o.rarity}${languages ? ` · ${tag}` : ''}`
+    return {
+      key: String(o.printingId),
+      label,
+      search: `${o.setCode} ${o.rarity} ${o.setName} ${tag}`.toLowerCase()
+    }
+  })
 }
 
 export interface ScanRowActions {
@@ -43,7 +45,7 @@ export interface ScanRowActions {
 }
 
 /** One entry on the scan session list. */
-export function ScanRowItem({
+export const ScanRowItem = memo(function ScanRowItem({
   row,
   actions,
   highlighted = false
@@ -52,7 +54,10 @@ export function ScanRowItem({
   actions: ScanRowActions
   highlighted?: boolean
 }): React.JSX.Element {
-  const choices = choicesFor(row)
+  const choices = useMemo(() => choicesFor(row), [row])
+  const { key } = row
+  const { setPrinting } = actions
+  const pick = useMemo(() => (v: string) => setPrinting(key, Number(v)), [key, setPrinting])
   return (
     <li
       className={cn(
@@ -69,25 +74,15 @@ export function ScanRowItem({
             <span className="shrink-0 font-mono text-xs text-muted-foreground">{row.setCode}</span>
           )}
         </div>
-        <Select
-          value={row.printingId === null ? undefined : String(row.printingId)}
-          onValueChange={(v) => actions.setPrinting(row.key, Number(v))}
-        >
-          <SelectTrigger
-            size="sm"
-            aria-label={`Rarity for ${row.name}`}
-            className="h-7 w-full max-w-64 px-2 text-xs"
-          >
-            <SelectValue placeholder="Choose a printing" />
-          </SelectTrigger>
-          <SelectContent>
-            {choices.map(({ option, label }) => (
-              <SelectItem key={option.printingId} value={String(option.printingId)}>
-                {label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+        <SearchPicker
+          label={`Rarity for ${row.name}`}
+          value={row.printingId === null ? null : String(row.printingId)}
+          options={choices}
+          onPick={pick}
+          placeholder="Choose a printing"
+          searchPlaceholder="Search code, rarity or set…"
+          className="h-7 w-full max-w-72 px-2 text-xs"
+        />
         {row.flag && <p className="text-xs text-amber-300">{FLAG_TEXT[row.flag]}</p>}
         {row.error && <p className="text-xs text-destructive">{row.error}</p>}
       </div>
@@ -125,4 +120,4 @@ export function ScanRowItem({
       </div>
     </li>
   )
-}
+})

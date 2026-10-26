@@ -59,6 +59,13 @@ const SAME_QUAD = 0.015
 /** Candidates kept from the direction-split lines and, besides those, from all edges' lines. */
 const SPLIT_CANDIDATES = 8
 const PLAIN_CANDIDATES = 3
+/**
+ * preferOuter: an outer candidate may be at most this many times the first one's area (a card
+ * is about 1.5x its art-plus-text box), and the first one's corners may lie this far outside it,
+ * as a share of its diagonal.
+ */
+const NEST_MAX_GROWTH = 1.6
+const NEST_TOLERANCE = 0.02
 /** Width candidates are straightened to for choosing between them. */
 const PICK_WIDTH = 210
 
@@ -343,6 +350,51 @@ export function findCandidates(cv: CV, img: RgbaImage): Quad[] {
   })
 }
 
+/** Twice the quad's signed area; its sign is the way the corners wind. */
+const signedArea2 = (q: Quad): number =>
+  q.reduce((s, [x, y], i) => s + x * q[(i + 1) % 4][1] - q[(i + 1) % 4][0] * y, 0)
+const area = (q: Quad): number => Math.abs(signedArea2(q)) / 2
+
+/** Short side over long side, averaging opposite sides, is a card's. */
+const cardShaped = (q: Quad): boolean => {
+  const a = (dist(q[0], q[1]) + dist(q[2], q[3])) / 2
+  const b = (dist(q[1], q[2]) + dist(q[3], q[0])) / 2
+  return Math.abs(Math.min(a, b) / Math.max(a, b) - CARD_ASPECT) <= ASPECT_TOLERANCE
+}
+
+/** Every corner of inner lies inside the convex quad outer, or within tol of its sides. */
+function contains(outer: Quad, inner: Quad, tol: number): boolean {
+  // Which side of each edge is inside depends on the way outer winds.
+  const turn = Math.sign(signedArea2(outer))
+  return inner.every(([px, py]) =>
+    outer.every(([ax, ay], i) => {
+      const [bx, by] = outer[(i + 1) % 4]
+      const len = Math.hypot(bx - ax, by - ay) || 1
+      // Signed distance from the edge, positive inside.
+      return (turn * ((bx - ax) * (py - ay) - (by - ay) * (px - ax))) / len >= -tol
+    })
+  )
+}
+
+/**
+ * The first candidate, unless a later card-shaped one holds it whole and is at most
+ * NEST_MAX_GROWTH times its area: then the largest such one. A card's own inner frames (the art
+ * box, or the art and text boxes together) have crisp printed edges, while fingers over a held
+ * card's sides cost its outline edge cover, so the inner frame can rank first.
+ */
+export function preferOuter(quads: readonly Quad[]): Quad | null {
+  const [first] = quads
+  if (!first) return null
+  const tol = NEST_TOLERANCE * dist(first[0], first[2])
+  const limit = NEST_MAX_GROWTH * area(first)
+  let best = first
+  for (const q of quads.slice(1)) {
+    const a = area(q)
+    if (a > area(best) && a <= limit && cardShaped(q) && contains(q, first, tol)) best = q
+  }
+  return best
+}
+
 /**
  * The card in a frame and its closest artworks: each candidate outline is matched on a small
  * straightened copy, and the one closest to any artwork is straightened at full size and matched
@@ -356,7 +408,12 @@ export function recognizeArt(
   index: FingerprintIndex,
   candidates?: ReadonlySet<number>,
   k?: number
-): { quad: Quad; card: RgbaImage; matches: { imageId: number; distance: number }[] } | null {
+): {
+  quad: Quad
+  card: RgbaImage
+  upsideDown: boolean
+  matches: { imageId: number; distance: number }[]
+} | null {
   let best: { quad: Quad; distance: number } | null = null
   for (const quad of findCandidates(cv, img)) {
     const { matches } = rankArt(cv, warpCard(cv, img, quad, PICK_WIDTH), index, candidates)
@@ -366,5 +423,5 @@ export function recognizeArt(
   if (!best) return null
   const card = warpCard(cv, img, best.quad, CARD_W)
   const { matches, upsideDown } = rankArt(cv, card, index, candidates, k)
-  return { quad: best.quad, card: upsideDown ? rotate180(card) : card, matches }
+  return { quad: best.quad, card: upsideDown ? rotate180(card) : card, upsideDown, matches }
 }

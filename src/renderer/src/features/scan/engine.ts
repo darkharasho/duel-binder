@@ -22,7 +22,14 @@ export interface FrameSignals {
 /** Messages to the vision worker. Frames are answered in the order they're sent. */
 export type WorkerRequest =
   | { type: 'init'; fingerprints: ArrayBuffer | null }
-  | { type: 'frame'; id: number; image: RgbaImage; candidates: number[] | null; wantBands: boolean }
+  | {
+      type: 'frame'
+      id: number
+      /** A camera frame as a bitmap (the worker reads and closes it), or raw pixels. */
+      image: RgbaImage | ImageBitmap
+      candidates: number[] | null
+      wantBands: boolean
+    }
 
 /** Messages from it: `ready` answers `init`, and an error with no id is init's. */
 export type WorkerReply =
@@ -41,11 +48,14 @@ export interface RawSignals {
 }
 
 export interface ScanEngine {
-  /** Loads OpenCV and the fingerprints (null: no art matching) in the worker. */
+  /** Loads OpenCV and the fingerprints (null: no art matching) in the worker, which takes fp's buffer. */
   init(fp: ArrayBuffer | null): Promise<void>
-  /** The frame's pixels are handed to the worker, so frame can't be used afterwards. */
+  /**
+   * The frame is handed to the worker, so it can't be used afterwards. A camera frame is best
+   * an ImageBitmap: the worker reads its pixels, so the UI thread never copies them.
+   */
   analyze(
-    frame: ImageData,
+    frame: ImageBitmap | ImageData,
     opts: { candidates: number[] | null; wantText: boolean }
   ): Promise<RawSignals>
   /** Stops the worker and rejects pending calls; init and analyze reject afterwards. */
@@ -116,7 +126,8 @@ export function createScanEngine(deps: { api: Api['scan']; makeWorker: () => Wor
     init(fp) {
       return new Promise<void>((resolve, reject) => {
         try {
-          send({ type: 'init', fingerprints: fp })
+          // Handed over rather than copied: it's a few MB, and the caller reads a fresh one each time.
+          send({ type: 'init', fingerprints: fp }, fp ? [fp] : [])
           inits.push({ resolve, reject })
         } catch (e) {
           reject(e instanceof Error ? e : new Error(String(e)))
@@ -128,10 +139,13 @@ export function createScanEngine(deps: { api: Api['scan']; makeWorker: () => Wor
       const id = nextId++
       const signals = await new Promise<FrameSignals>((resolve, reject) => {
         frames.set(id, { resolve, reject })
-        const image: RgbaImage = { width: frame.width, height: frame.height, data: frame.data }
+        const bitmap = !('data' in frame)
+        const image: RgbaImage | ImageBitmap = bitmap
+          ? frame
+          : { width: frame.width, height: frame.height, data: frame.data }
         try {
           send({ type: 'frame', id, image, candidates, wantBands: wantText }, [
-            frame.data.buffer as ArrayBuffer
+            bitmap ? frame : (frame.data.buffer as ArrayBuffer)
           ])
         } catch (e) {
           frames.delete(id)

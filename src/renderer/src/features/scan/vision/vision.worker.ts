@@ -5,9 +5,9 @@ import { ART_MATCH_DEPTH } from '@shared/scan/thresholds'
 import type { OcrBand, RgbaImage } from '@shared/scan/types'
 import type { ArtMatch, FrameSignals, WorkerReply, WorkerRequest } from '../engine'
 import { toBand } from './bands'
-import { recognizeArt } from './candidates'
+import { findCandidates, preferOuter, recognizeArt } from './candidates'
 import { loadCv, type CV } from './cv'
-import { findCard, warpCard, type Quad } from './detect'
+import { CARD_W, dist, rotate180, warpCard, type Quad } from './detect'
 import { CODE_BANDS, NAME_BAND } from './regions'
 
 interface WorkerScope {
@@ -15,6 +15,9 @@ interface WorkerScope {
   postMessage(msg: WorkerReply, transfer?: Transferable[]): void
 }
 const scope = self as unknown as WorkerScope
+
+/** How far past CARD_W a card is straightened for reading its text. */
+const MAX_BAND_SCALE = 2
 
 const NOTHING: FrameSignals = { found: false, quad: null, art: [], codeBands: [], nameBand: null }
 
@@ -25,15 +28,26 @@ let queue = Promise.resolve()
 const hasPixels = (b: OcrBand): boolean => b.width > 0 && b.height > 0
 const messageOf = (e: unknown): string => (e instanceof Error ? e.message : String(e))
 
+/**
+ * The width to straighten a card to for reading its text: its width in the frame, so a card
+ * filmed bigger than CARD_W keeps its detail (a 4K camera's set code is twice a 1080p one's),
+ * within CARD_W to MAX_BAND_SCALE times that.
+ */
+function bandWidth(quad: Quad): number {
+  const shown = (dist(quad[0], quad[1]) + dist(quad[2], quad[3])) / 2
+  return Math.round(Math.min(MAX_BAND_SCALE * CARD_W, Math.max(CARD_W, shown)))
+}
+
 function analyze(
   cv: CV,
   img: RgbaImage,
   candidates: number[] | null,
   wantBands: boolean
 ): FrameSignals {
-  let card: RgbaImage
   let quad: Quad
   let art: ArtMatch[] = []
+  // The straightened card for its text, made only when bands are wanted.
+  let card: () => RgbaImage
   if (index) {
     const found = recognizeArt(
       cv,
@@ -44,23 +58,50 @@ function analyze(
     )
     if (!found) return NOTHING
     quad = found.quad
-    card = found.card
     art = found.matches
+    // Art is matched at CARD_W, the size it was tuned for; text is read at the card's own size.
+    card = () => {
+      const width = bandWidth(found.quad)
+      if (width === CARD_W) return found.card
+      const big = warpCard(cv, img, found.quad, width)
+      return found.upsideDown ? rotate180(big) : big
+    }
   } else {
-    // No fingerprints: the card can still be found and read, though not turned upright.
-    const outline = findCard(cv, img)
-    if (!outline) return NOTHING
-    quad = outline
-    card = warpCard(cv, img, quad)
+    // No fingerprints: the candidate finder's likeliest outline (it holds up on real photos far
+    // better than findCard alone), or the card around it when that is one of its inner frames.
+    // Read but not turned upright.
+    const likeliest = preferOuter(findCandidates(cv, img))
+    if (!likeliest) return NOTHING
+    quad = likeliest
+    card = () => warpCard(cv, img, likeliest, bandWidth(likeliest))
   }
   if (!wantBands) return { found: true, quad, art, codeBands: [], nameBand: null }
-  const name = toBand(card, NAME_BAND)
+  const straight = card()
+  const name = toBand(straight, NAME_BAND)
   return {
     found: true,
     quad,
     art,
-    codeBands: CODE_BANDS.map((box) => toBand(card, box)).filter(hasPixels),
+    codeBands: CODE_BANDS.map((box) => toBand(straight, box)).filter(hasPixels),
     nameBand: hasPixels(name) ? name : null
+  }
+}
+
+let canvas: OffscreenCanvas | null = null
+
+/** A frame's pixels; a camera frame arrives as an ImageBitmap and is closed once read. */
+function pixels(image: RgbaImage | ImageBitmap): RgbaImage {
+  if (!('close' in image)) return image
+  try {
+    const { width, height } = image
+    if (!canvas || canvas.width !== width || canvas.height !== height)
+      canvas = new OffscreenCanvas(width, height)
+    const ctx = canvas.getContext('2d', { willReadFrequently: true })
+    if (!ctx) throw new Error('No 2D canvas in the scan worker')
+    ctx.drawImage(image, 0, 0)
+    return { width, height, data: ctx.getImageData(0, 0, width, height).data }
+  } finally {
+    image.close()
   }
 }
 
@@ -76,13 +117,14 @@ async function handle(msg: WorkerRequest): Promise<void> {
     return
   }
   try {
-    const signals = analyze(await loadCv(), msg.image, msg.candidates, msg.wantBands)
+    const signals = analyze(await loadCv(), pixels(msg.image), msg.candidates, msg.wantBands)
     const bands = signals.nameBand ? [...signals.codeBands, signals.nameBand] : signals.codeBands
     scope.postMessage(
       { type: 'result', id: msg.id, signals },
       bands.map((b) => b.data.buffer as ArrayBuffer)
     )
   } catch (e) {
+    if ('close' in msg.image) msg.image.close()
     scope.postMessage({ type: 'error', id: msg.id, message: messageOf(e) })
   }
 }

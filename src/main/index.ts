@@ -228,7 +228,7 @@ async function bootstrap(): Promise<void> {
   app.on('before-quit', () => account.stop())
   const fingerprints = createFingerprintStore({ dir: join(userData, 'scan'), portal })
   const ocr = createOcr({ langPath: engLangPath(app.isPackaged) })
-  app.on('will-quit', () => void ocr.dispose())
+  app.on('will-quit', () => void ocr.dispose().catch(() => {}))
 
   const windowDeps = {
     minimize: () => mainWindow?.minimize(),

@@ -3,7 +3,6 @@ import { ipcMain } from 'electron'
 import type { Language } from '@shared/languages'
 import type { CollectionFilters, EntryView, SyncStatus, UpdateStatus } from '@shared/types'
 import type { INVOKE_CHANNELS } from '@shared/ipc'
-import type { OcrBand } from '@shared/scan/types'
 import { INVOKE_CHANNELS as CHANNELS } from '@shared/ipc'
 import type { YgoClient } from '../ygo/client'
 import type { ImageCache } from '../images/cache'
@@ -21,7 +20,7 @@ import {
 } from '../repo/collection'
 import { adjustPrinting, getChecklist, listSets } from '../repo/sets'
 import type { FingerprintStore } from '../scan/fingerprints'
-import type { Ocr } from '../scan/ocr'
+import { checkOcrBands, type Ocr } from '../scan/ocr'
 import { matchName, printingsByCode, printingsForCards, printingsForSet } from '../repo/scan'
 import { getStats, recordSnapshot } from '../repo/stats'
 import type { PriceService } from '../prices/service'
@@ -141,8 +140,9 @@ export function createHandlers({
     'scan:matchName': async (text: string) => matchName(db, text),
     'scan:fingerprints': () => fingerprints.read(),
     'scan:refreshFingerprints': () => fingerprints.refresh(),
-    'scan:ocr': async (bands: OcrBand[], kind: 'code' | 'name') => {
+    'scan:ocr': async (bands: unknown, kind: 'code' | 'name') => {
       if (kind !== 'code' && kind !== 'name') throw new Error(`Unknown OCR kind: ${String(kind)}`)
+      checkOcrBands(bands)
       return ocr.read(bands, kind)
     },
     'stats:get': async () => getStats(db),

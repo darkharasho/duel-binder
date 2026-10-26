@@ -120,6 +120,14 @@ describe('createHandlers', () => {
     expect(rows.map((r) => r.name)).toEqual(['Dark Magician'])
   })
 
+  it('scan:ocr rejects bands the renderer may not send', async () => {
+    const { handlers } = await makeHandlers()
+    const bad = [{ width: 10, height: 10, data: new Uint8Array(5) }]
+    await expect(handlers['scan:ocr'](bad, 'code')).rejects.toThrow('one byte per pixel')
+    await expect(handlers['scan:ocr']([], 'other')).rejects.toThrow('Unknown OCR kind')
+    await expect(handlers['scan:ocr']([], 'name')).resolves.toEqual([])
+  })
+
   it('account handlers delegate to the account service', async () => {
     const { handlers, account } = await makeHandlers()
     const status: AccountStatus = {

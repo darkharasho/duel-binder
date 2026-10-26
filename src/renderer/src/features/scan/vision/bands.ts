@@ -4,6 +4,8 @@ import { crop, type Box } from './regions'
 /** How much darker (or lighter) than its surroundings a pixel must be to count as ink, 0–255. */
 const INK_CONTRAST = 12
 
+const MAX_CHAR_BLOBS = 400
+
 interface Blob {
   x0: number
   y0: number
@@ -52,7 +54,9 @@ export function toBand(img: RgbaImage, box: Box, scale = 2): OcrBand {
 
 /**
  * The blobs of the longest line of text: character-sized blobs whose centres line up, without a
- * gap wider than two characters, plus the small marks (dashes, dots) between them.
+ * gap wider than two characters, plus the small marks (dashes, dots) between them. A band with
+ * more than MAX_CHAR_BLOBS character-sized blobs is texture, not text, and finds nothing (the
+ * search is quadratic in them).
  */
 function textLine(all: Blob[], height: number): Blob[] {
   const h = (b: Blob): number => b.y1 - b.y0 + 1
@@ -64,6 +68,7 @@ function textLine(all: Blob[], height: number): Blob[] {
       w(b) <= 3 * h(b) &&
       b.pixels.length >= 0.1 * h(b) * w(b)
   )
+  if (chars.length > MAX_CHAR_BLOBS) return []
   let best: Blob[] = []
   for (const seed of chars) {
     const cy = (seed.y0 + seed.y1) / 2

@@ -1,12 +1,12 @@
 // @vitest-environment node
-import { readFileSync } from 'node:fs'
-import { join } from 'node:path'
+import { existsSync, readFileSync, statSync } from 'node:fs'
+import { isAbsolute, join } from 'node:path'
 import { decode } from 'jpeg-js'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { bestNameMatch } from '../../src/shared/scan/names'
 import { setCodeCandidates } from '../../src/shared/scan/setCode'
 import type { RgbaImage } from '../../src/shared/scan/types'
-import { createOcr } from '../../src/main/scan/ocr'
+import { checkOcrBands, createOcr, engLangPath } from '../../src/main/scan/ocr'
 import { loadCv, type CV } from '../../src/renderer/src/features/scan/vision/cv'
 import { findCard, rotate180, warpCard } from '../../src/renderer/src/features/scan/vision/detect'
 import { CODE_BANDS, NAME_BAND } from '../../src/renderer/src/features/scan/vision/regions'
@@ -161,5 +161,70 @@ describe('ocr', () => {
 
   it('never reaches for the network', () => {
     expect(readFileSync('src/main/scan/ocr.ts', 'utf8')).not.toContain('http')
+  })
+
+  it('finds the installed English model', () => {
+    const dir = engLangPath()
+    expect(isAbsolute(dir)).toBe(true)
+    expect(statSync(dir).isDirectory()).toBe(true)
+    expect(existsSync(join(dir, 'eng.traineddata.gz'))).toBe(true)
+  })
+})
+
+describe('ocr failures', () => {
+  const band = (width: number, height: number, length = width * height): unknown => ({
+    width,
+    height,
+    data: new Uint8Array(length)
+  })
+
+  it('accepts what toBand makes, including an empty band', () => {
+    expect(() => checkOcrBands([band(300, 80), band(0, 0)])).not.toThrow()
+  })
+
+  it.each([
+    ['not a list', { width: 1, height: 1, data: new Uint8Array(1) }],
+    ['too many bands', Array.from({ length: 9 }, () => band(2, 2))],
+    ['a fractional width', [band(10.5, 10, 105)]],
+    ['a negative height', [band(10, -1, 0)]],
+    ['one side zero', [band(0, 10, 0)]],
+    ['a side over 4096', [band(4097, 1)]],
+    ['over 4 million pixels', [band(2001, 2000)]],
+    ['short data', [band(10, 10, 99)]],
+    ['data that is not bytes', [{ width: 1, height: 1, data: [0] }]],
+    ['a missing band', [null]]
+  ])('rejects %s', (_, bands) => {
+    expect(() => checkOcrBands(bands)).toThrow(/OCR/)
+  })
+
+  it('rejects a band tesseract cannot read without an uncaught exception, then reads again', async () => {
+    const uncaught = vi.fn()
+    process.on('uncaughtException', uncaught)
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const local = createOcr()
+    try {
+      // Past checkOcrBands this can't come from the renderer; it makes the job itself fail.
+      const bad = { width: 10.5, height: 10, data: new Uint8Array(105) }
+      await expect(local.read([bad], 'code')).rejects.toThrow()
+      const [text] = await local.read([toBand(codeLine('BROL-EN062', 1), [0, 0, 1, 1])], 'code')
+      expect(setCodeCandidates(text)).toContain('BROL-EN062')
+      expect(warn).toHaveBeenCalledTimes(1)
+      expect(uncaught).not.toHaveBeenCalled()
+    } finally {
+      process.off('uncaughtException', uncaught)
+      warn.mockRestore()
+      await local.dispose()
+    }
+  }, 30_000)
+
+  it('gives up on a read that takes too long and starts afresh', async () => {
+    const local = createOcr({ timeoutMs: 1 })
+    try {
+      await expect(
+        local.read([toBand(codeLine('LOB-EN005', 2), [0, 0, 1, 1])], 'code')
+      ).rejects.toThrow('OCR timed out')
+    } finally {
+      await local.dispose()
+    }
   })
 })

@@ -23,7 +23,10 @@ export const queryKeys = {
   account: ['account'] as const,
   priceSettings: ['prices', 'settings'] as const,
   browse: (f: Omit<BrowseFilters, 'offset' | 'limit'>) => ['browse', f] as const,
-  browseFacets: ['browse', 'facets'] as const
+  browseFacets: ['browse', 'facets'] as const,
+  friends: ['friends'] as const,
+  friendEntries: (id: number, f: CollectionFilters) => ['friends', id, 'entries', f] as const,
+  friendFacets: (id: number) => ['friends', id, 'facets'] as const
 }
 
 /** Query-key prefixes to invalidate after any collection mutation. */

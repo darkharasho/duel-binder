@@ -1,5 +1,6 @@
 import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import logo from '@/assets/logo.svg'
+import { useFriendsAvailable, useFriendsOverview } from '@/lib/friends'
 import { isMac, isWeb } from '@/lib/platform'
 import { cn } from '@/lib/utils'
 import { ArtWash } from './ArtWash'
@@ -8,7 +9,7 @@ import { MainScrollContext, type MainScroll } from './mainScroll'
 import { SyncBanner } from './SyncBanner'
 import { TitleBar } from './TitleBar'
 
-export type Page = 'dashboard' | 'collection' | 'browse' | 'sets' | 'settings'
+export type Page = 'dashboard' | 'collection' | 'browse' | 'friends' | 'sets' | 'settings'
 export type NavigateFn = (page: Page, opts?: { entryId?: number }) => void
 
 const NAV = [
@@ -16,6 +17,7 @@ const NAV = [
   { page: 'collection', label: 'Collection' },
   { page: 'sets', label: 'Sets' },
   { page: 'browse', label: 'Browse' },
+  { page: 'friends', label: 'Friends' },
   { page: 'settings', label: 'Settings' }
 ] as const
 
@@ -26,7 +28,14 @@ interface AppShellProps {
   children: React.ReactNode
 }
 
-export function AppShell({ page, onNavigate, onAddCard, children }: AppShellProps): React.JSX.Element {
+export function AppShell({
+  page,
+  onNavigate,
+  onAddCard,
+  children
+}: AppShellProps): React.JSX.Element {
+  const friendsAvailable = useFriendsAvailable()
+  const requests = useFriendsOverview().data?.incoming.length ?? 0
   const mainRef = useRef<HTMLElement>(null)
   const scroll = useMemo<MainScroll>(
     () => ({
@@ -59,27 +68,47 @@ export function AppShell({ page, onNavigate, onAddCard, children }: AppShellProp
         <aside className="flex w-[200px] shrink-0 flex-col gap-6 border-r border-white/[0.06] px-4 pb-5 pt-1">
           <div className="flex items-center gap-2.5">
             <img src={logo} alt="" className="h-9 w-9" />
-            <span className="whitespace-nowrap text-[15px] font-semibold tracking-[-0.01em]">Duel Binder</span>
+            <span className="whitespace-nowrap text-[15px] font-semibold tracking-[-0.01em]">
+              Duel Binder
+            </span>
           </div>
           <nav aria-label="Main" className="flex flex-col">
-            {NAV.map(({ page: p, label }) => (
-              <button
-                key={p}
-                type="button"
-                aria-current={page === p ? 'page' : undefined}
-                onClick={() => onNavigate(p)}
-                className={cn(
-                  'flex items-center gap-2 rounded-sm py-1.5 text-left text-sm text-muted-foreground transition-colors duration-150 hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring',
-                  page === p && 'font-semibold text-foreground'
-                )}
-              >
-                <span
-                  aria-hidden
-                  className={cn('size-1.5 rounded-full', page === p ? 'bg-foreground' : 'bg-transparent')}
-                />
-                {label}
-              </button>
-            ))}
+            {NAV.filter(({ page: p }) => p !== 'friends' || friendsAvailable).map(
+              ({ page: p, label }) => (
+                <button
+                  key={p}
+                  type="button"
+                  aria-label={
+                    p === 'friends' && requests > 0
+                      ? `Friends, ${requests} ${requests === 1 ? 'request' : 'requests'}`
+                      : undefined
+                  }
+                  aria-current={page === p ? 'page' : undefined}
+                  onClick={() => onNavigate(p)}
+                  className={cn(
+                    'flex items-center gap-2 rounded-sm py-1.5 text-left text-sm text-muted-foreground transition-colors duration-150 hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring',
+                    page === p && 'font-semibold text-foreground'
+                  )}
+                >
+                  <span
+                    aria-hidden
+                    className={cn(
+                      'size-1.5 rounded-full',
+                      page === p ? 'bg-foreground' : 'bg-transparent'
+                    )}
+                  />
+                  {label}
+                  {p === 'friends' && requests > 0 && (
+                    <span
+                      aria-hidden
+                      className="rounded-full bg-primary px-1.5 text-[11px] font-semibold leading-4 text-primary-foreground"
+                    >
+                      {requests}
+                    </span>
+                  )}
+                </button>
+              )
+            )}
           </nav>
           <button
             type="button"

@@ -7,6 +7,8 @@ import { DashboardPage } from '@/features/dashboard/DashboardPage'
 import { CollectionPage } from '@/features/collection/CollectionPage'
 import { BrowsePage } from '@/features/browse/BrowsePage'
 import { SetsPage } from '@/features/sets/SetsPage'
+import { FriendsPage } from '@/features/friends/FriendsPage'
+import { useFriendsAvailable } from '@/lib/friends'
 import { SettingsPage } from '@/features/settings/SettingsPage'
 import { useDataChanged } from '@/components/useDataChanged'
 import { isWeb } from '@/lib/platform'
@@ -24,8 +26,12 @@ function DesktopOnlyEffects(): null {
 }
 
 function App(): React.JSX.Element {
-  const [page, setPage] = useState<Page>('dashboard')
+  const [chosenPage, setPage] = useState<Page>('dashboard')
   const [entryId, setEntryId] = useState<number | undefined>()
+  const [friendsKey, setFriendsKey] = useState(0)
+  const friendsAvailable = useFriendsAvailable()
+  // Desktop sign-out takes the Friends nav item away; don't leave its page showing.
+  const page: Page = chosenPage === 'friends' && !friendsAvailable ? 'dashboard' : chosenPage
   const [addOpen, setAddOpen] = useState(false)
   const [addInitial, setAddInitial] = useState<AddInitial | null>(null)
   useDataChanged()
@@ -37,6 +43,7 @@ function App(): React.JSX.Element {
 
   const onNavigate: NavigateFn = useCallback((next, opts) => {
     setEntryId(opts?.entryId)
+    if (next === 'friends') setFriendsKey((k) => k + 1)
     setPage(next)
   }, [])
 
@@ -73,6 +80,9 @@ function App(): React.JSX.Element {
             onAddCard={() => openAdd()}
             onAddMissing={(card, printingId) => openAdd({ card, printingId })}
           />
+        )}
+        {page === 'friends' && (
+          <FriendsPage key={friendsKey} onBackToMine={() => onNavigate('collection')} />
         )}
         {page === 'settings' && <SettingsPage />}
       </AppShell>

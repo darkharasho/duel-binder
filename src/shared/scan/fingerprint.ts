@@ -85,3 +85,16 @@ export function hamming(a: Uint32Array, aOff: number, b: Uint32Array, bOff: numb
   for (let i = 0; i < HASH_WORDS; i++) d += popcount((a[aOff + i] ^ b[bOff + i]) >>> 0)
   return d
 }
+
+/**
+ * Share of the height of YGOPRODeck's cropped Pendulum art that a printed card shows above its
+ * Pendulum effect box. The cropped art is the whole picture, so only this top part is fingerprinted.
+ */
+export const PENDULUM_ART_VISIBLE = 0.58
+
+/** The part of a card's cropped art to fingerprint: the visible top for Pendulum cards, else all of it. */
+export function fingerprintSource(img: RgbaImage, frameType: string): RgbaImage {
+  if (!frameType.includes('pendulum')) return img
+  const height = Math.max(1, Math.round(img.height * PENDULUM_ART_VISIBLE))
+  return { width: img.width, height, data: img.data.subarray(0, img.width * height * 4) }
+}

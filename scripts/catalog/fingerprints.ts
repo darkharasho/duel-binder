@@ -1,13 +1,15 @@
 import Database from 'better-sqlite3'
 import { decode } from 'jpeg-js'
 import { imageUrl } from '../../src/shared/imageSources'
-import { HASH_WORDS, artHash } from '../../src/shared/scan/fingerprint'
+import { HASH_WORDS, artHash, fingerprintSource } from '../../src/shared/scan/fingerprint'
 import { encodeFingerprints } from '../../src/shared/scan/fingerprintFile'
 
 const DEFAULT_CONCURRENCY = 6
 const COMMIT_EVERY = 200
 /** Waits before each retry; an image is tried once plus once per entry. */
 const RETRY_DELAYS_MS = [1000, 2000]
+/** Bump when the way an image is hashed changes; v2 hashes only the visible top of Pendulum art. */
+const HASH_VERSION = '2'
 
 export interface FingerprintOptions {
   /** The work database; its `card_images` decides which ids the file holds. */
@@ -29,7 +31,11 @@ export interface FingerprintResult {
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
 
 /** Downloads and hashes one cropped art image; 429 and 5xx are retried, anything else rejects. */
-async function hashImage(fetchFn: typeof fetch, id: number): Promise<Uint32Array> {
+async function hashImage(
+  fetchFn: typeof fetch,
+  id: number,
+  frameType: string
+): Promise<Uint32Array> {
   for (let attempt = 0; ; attempt++) {
     const res = await fetchFn(imageUrl('cropped', id))
     if (res.ok) {
@@ -37,7 +43,7 @@ async function hashImage(fetchFn: typeof fetch, id: number): Promise<Uint32Array
         useTArray: true,
         formatAsRGBA: true
       })
-      return artHash(img)
+      return artHash(fingerprintSource(img, frameType))
     }
     await res.body?.cancel()
     const retry = res.status === 429 || res.status >= 500
@@ -59,8 +65,34 @@ export async function buildFingerprints(opts: FingerprintOptions): Promise<Finge
     cache.exec('CREATE TABLE IF NOT EXISTS fp (image_id INTEGER PRIMARY KEY, hash BLOB NOT NULL)')
     // A truncated or foreign blob would corrupt the file; drop it so it is fetched again.
     cache.prepare('DELETE FROM fp WHERE length(hash) != ?').run(HASH_WORDS * 4)
+    const frames = new Map(
+      (
+        opts.work
+          .prepare(
+            `SELECT i.image_id, COALESCE(c.frame_type, '') AS frame_type
+             FROM card_images i LEFT JOIN cards c ON c.id = i.card_id`
+          )
+          .all() as { image_id: number; frame_type: string }[]
+      ).map((r) => [r.image_id, r.frame_type])
+    )
+    cache.exec('CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)')
+    const version = cache.prepare("SELECT value FROM meta WHERE key = 'hash_version'").pluck().get()
+    if (version !== HASH_VERSION) {
+      // Older hashes are only still right for images known not to be Pendulum art.
+      const keep = (id: number): boolean => frames.has(id) && !frames.get(id)!.includes('pendulum')
+      const stale = (cache.prepare('SELECT image_id FROM fp').pluck().all() as number[]).filter(
+        (id) => !keep(id)
+      )
+      const drop = cache.prepare('DELETE FROM fp WHERE image_id = ?')
+      cache.transaction(() => {
+        for (const id of stale) drop.run(id)
+        cache
+          .prepare("INSERT OR REPLACE INTO meta (key, value) VALUES ('hash_version', ?)")
+          .run(HASH_VERSION)
+      })()
+    }
     const cached = new Set(cache.prepare('SELECT image_id FROM fp').pluck().all() as number[])
-    const ids = opts.work.prepare('SELECT image_id FROM card_images').pluck().all() as number[]
+    const ids = [...frames.keys()]
     const todo = ids.filter((id) => !cached.has(id))
     const insert = cache.prepare('INSERT OR REPLACE INTO fp (image_id, hash) VALUES (?, ?)')
     // Commit every few inserts rather than per row, but often enough that a run cut off by the
@@ -75,7 +107,7 @@ export async function buildFingerprints(opts: FingerprintOptions): Promise<Finge
       while (next < todo.length) {
         const id = todo[next++]
         try {
-          const hash = await hashImage(fetchFn, id)
+          const hash = await hashImage(fetchFn, id, frames.get(id)!)
           insert.run(id, Buffer.from(hash.buffer, hash.byteOffset, hash.byteLength))
           fetched++
           if (++pending >= COMMIT_EVERY) {

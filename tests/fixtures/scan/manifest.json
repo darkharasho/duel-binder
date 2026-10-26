@@ -1304,152 +1304,182 @@
     {
       "imageId": 111280,
       "cardId": 111280,
-      "name": "Dark Magic Expanded"
+      "name": "Dark Magic Expanded",
+      "frame": "normal"
     },
     {
       "imageId": 2129638,
       "cardId": 2129638,
-      "name": "Blue-Eyes Twin Burst Dragon"
+      "name": "Blue-Eyes Twin Burst Dragon",
+      "frame": "normal"
     },
     {
       "imageId": 1861630,
       "cardId": 1861629,
-      "name": "Decode Talker"
+      "name": "Decode Talker",
+      "frame": "link"
     },
     {
       "imageId": 1186447,
       "cardId": 1186447,
-      "name": "Horoscope Sorcerer, the Stargazer Magician"
+      "name": "Horoscope Sorcerer, the Stargazer Magician",
+      "frame": "pendulum"
     },
     {
       "imageId": 342673,
       "cardId": 342673,
-      "name": "Dark Magician the Magician of Black Magic"
+      "name": "Dark Magician the Magician of Black Magic",
+      "frame": "normal"
     },
     {
       "imageId": 2783661,
       "cardId": 2783661,
-      "name": "Majesty with Eyes of Blue"
+      "name": "Majesty with Eyes of Blue",
+      "frame": "normal"
     },
     {
       "imageId": 2347477,
       "cardId": 2347477,
-      "name": "Micro Coder"
+      "name": "Micro Coder",
+      "frame": "normal"
     },
     {
       "imageId": 1344018,
       "cardId": 1344018,
-      "name": "Time Pendulumgraph"
+      "name": "Time Pendulumgraph",
+      "frame": "normal"
     },
     {
       "imageId": 1784686,
       "cardId": 1784686,
-      "name": "The Eye of Timaeus"
+      "name": "The Eye of Timaeus",
+      "frame": "normal"
     },
     {
       "imageId": 8240199,
       "cardId": 8240199,
-      "name": "Sage with Eyes of Blue"
+      "name": "Sage with Eyes of Blue",
+      "frame": "normal"
     },
     {
       "imageId": 6622715,
       "cardId": 6622715,
-      "name": "Encode Talker"
+      "name": "Encode Talker",
+      "frame": "link"
     },
     {
       "imageId": 9156135,
       "cardId": 9156135,
-      "name": "Apprentice Magician"
+      "name": "Apprentice Magician",
+      "frame": "normal"
     },
     {
       "imageId": 2314238,
       "cardId": 2314238,
-      "name": "Dark Magic Attack"
+      "name": "Dark Magic Attack",
+      "frame": "normal"
     },
     {
       "imageId": 9433350,
       "cardId": 9433350,
-      "name": "Malefic Blue-Eyes White Dragon"
+      "name": "Malefic Blue-Eyes White Dragon",
+      "frame": "normal"
     },
     {
       "imageId": 7403341,
       "cardId": 7403341,
-      "name": "Cynet Conflict"
+      "name": "Cynet Conflict",
+      "frame": "normal"
     },
     {
       "imageId": 11067666,
       "cardId": 11067666,
-      "name": "White Wing Magician"
+      "name": "White Wing Magician",
+      "frame": "pendulum"
     },
     {
       "imageId": 2501624,
       "cardId": 2501624,
-      "name": "Dark Magician Girl the Magician's Apprentice"
+      "name": "Dark Magician Girl the Magician's Apprentice",
+      "frame": "normal"
     },
     {
       "imageId": 11443677,
       "cardId": 11443677,
-      "name": "Blue-Eyes Tyrant Dragon"
+      "name": "Blue-Eyes Tyrant Dragon",
+      "frame": "normal"
     },
     {
       "imageId": 15844566,
       "cardId": 15844566,
-      "name": "Powercode Talker"
+      "name": "Powercode Talker",
+      "frame": "link"
     },
     {
       "imageId": 12289247,
       "cardId": 12289247,
-      "name": "Chronograph Sorcerer"
+      "name": "Chronograph Sorcerer",
+      "frame": "pendulum"
     },
     {
       "imageId": 5829717,
       "cardId": 5829717,
-      "name": "Dark Magician the Knight of Dragon Magic"
+      "name": "Dark Magician the Knight of Dragon Magic",
+      "frame": "normal"
     },
     {
       "imageId": 17655904,
       "cardId": 17655904,
-      "name": "Burst Stream of Destruction"
+      "name": "Burst Stream of Destruction",
+      "frame": "normal"
     },
     {
       "imageId": 30114823,
       "cardId": 30114823,
-      "name": "Code Generator"
+      "name": "Code Generator",
+      "frame": "normal"
     },
     {
       "imageId": 14513273,
       "cardId": 14513273,
-      "name": "Supreme King Gate Magician"
+      "name": "Supreme King Gate Magician",
+      "frame": "pendulum"
     },
     {
       "imageId": 7084129,
       "cardId": 7084129,
-      "name": "Magician's Rod"
+      "name": "Magician's Rod",
+      "frame": "normal"
     },
     {
       "imageId": 20654247,
       "cardId": 20654247,
-      "name": "Blue-Eyes Chaos Dragon"
+      "name": "Blue-Eyes Chaos Dragon",
+      "frame": "normal"
     },
     {
       "imageId": 30822527,
       "cardId": 30822527,
-      "name": "Decode Talker Extended"
+      "name": "Decode Talker Extended",
+      "frame": "link"
     },
     {
       "imageId": 14920218,
       "cardId": 14920218,
-      "name": "Oafdragon Magician"
+      "name": "Oafdragon Magician",
+      "frame": "pendulum"
     },
     {
       "imageId": 7922915,
       "cardId": 7922915,
-      "name": "Magician Navigation"
+      "name": "Magician Navigation",
+      "frame": "normal"
     },
     {
       "imageId": 21082832,
       "cardId": 21082832,
-      "name": "Chaos Form"
+      "name": "Chaos Form",
+      "frame": "normal"
     }
   ],
   "swapped": []

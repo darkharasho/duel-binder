@@ -15,7 +15,7 @@ const { loadCv } = (await import(
 const { ART_BOXES, CODE_BANDS, crop } = (await import(
   appModule('renderer/src/features/scan/vision/regions.ts')
 )) as typeof import('../../src/renderer/src/features/scan/vision/regions')
-const { artHash, hamming } = (await import(
+const { artHash, fingerprintSource, hamming } = (await import(
   appModule('shared/scan/fingerprint.ts')
 )) as typeof import('../../src/shared/scan/fingerprint')
 const { imageUrl } = (await import(
@@ -192,7 +192,12 @@ function cardFace(
     data: m.data
   })
   const artPasted =
-    hamming(artHash(crop(asImage(card), box)), 0, artHash(asImage(art)), 0) > ART_MISMATCH
+    hamming(
+      artHash(crop(asImage(card), box)),
+      0,
+      artHash(fingerprintSource(asImage(art), frame)),
+      0
+    ) > ART_MISMATCH
   if (artPasted) {
     if (frame === 'pendulum') throw new Error(`Render and cropped art differ for ${setCode}`)
     const window = new cv.Rect(
@@ -500,7 +505,12 @@ writeFileSync(
       shots,
       distractors: distractors
         .filter((d) => thumbs.includes(d.imageId))
-        .map((d) => ({ imageId: d.imageId, cardId: d.card.id, name: d.card.name })),
+        .map((d) => ({
+          imageId: d.imageId,
+          cardId: d.card.id,
+          name: d.card.name,
+          frame: frameOf(d.card.frameType)
+        })),
       swapped
     },
     null,

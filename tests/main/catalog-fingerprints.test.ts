@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { runJob } from '../../scripts/catalog/build'
 import { buildFingerprints, uploadFingerprints } from '../../scripts/catalog/fingerprints'
 import { openDatabase } from '../../src/main/db/database'
-import { artHash } from '../../src/shared/scan/fingerprint'
+import { artHash, fingerprintSource } from '../../src/shared/scan/fingerprint'
 import { decodeFingerprints } from '../../src/shared/scan/fingerprintFile'
 
 let dir: string
@@ -47,7 +47,25 @@ function jpeg(vertical: boolean): Uint8Array {
   return new Uint8Array(encode({ data, width: size, height: size }, 90).data)
 }
 
-const IMAGES: Record<string, Uint8Array> = { '1': jpeg(false), '2': jpeg(true) }
+/** Pendulum-shaped art: a ramp in the visible top, a different picture below. */
+function pendulumJpeg(): Uint8Array {
+  const width = 32
+  const height = 48
+  const data = Buffer.alloc(width * height * 4)
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const v = y < height / 2 ? Math.round((x / (width - 1)) * 255) : (x * 37 + y * 11) % 256
+      data.set([v, v, v, 255], (y * width + x) * 4)
+    }
+  }
+  return new Uint8Array(encode({ data, width, height }, 90).data)
+}
+
+const IMAGES: Record<string, Uint8Array> = {
+  '1': jpeg(false),
+  '2': jpeg(true),
+  '4': pendulumJpeg()
+}
 
 function imageFetch(requested: string[] = []): typeof fetch {
   return (async (input: string | URL | Request) => {
@@ -82,6 +100,50 @@ describe('buildFingerprints', () => {
     work.prepare('DELETE FROM card_images WHERE image_id = 2').run()
     const out = await buildFingerprints({ work, cachePath, fetch: imageFetch() })
     expect(out.count).toBe(1)
+  })
+})
+
+describe('buildFingerprints with Pendulum art', () => {
+  beforeEach(() => {
+    work
+      .prepare(
+        `INSERT INTO cards (id, name, type, frame_type, race, "desc", updated_at)
+         VALUES (2, 'P', 'Pendulum Effect Monster', 'effect_pendulum', 'Dragon', '', '2026-01-01')`
+      )
+      .run()
+    work.prepare('INSERT INTO card_images (image_id, card_id, sort_order) VALUES (4, 2, 0)').run()
+  })
+
+  it('hashes only the visible top of Pendulum art', async () => {
+    const out = await buildFingerprints({
+      work,
+      cachePath: join(dir, 'fingerprints.sqlite'),
+      fetch: imageFetch()
+    })
+    const img = decode(IMAGES['4'], { useTArray: true, formatAsRGBA: true })
+    const visible = artHash(fingerprintSource(img, 'effect_pendulum'))
+    expect(visible).not.toEqual(artHash(img))
+    expect(decodeFingerprints(out.bytes).nearest(visible, 1)[0]).toEqual({
+      imageId: 4,
+      distance: 0
+    })
+  })
+
+  it('rehashes Pendulum images cached before the visible-top change, once', async () => {
+    const cachePath = join(dir, 'fingerprints.sqlite')
+    const old = new Database(cachePath)
+    old.exec('CREATE TABLE fp (image_id INTEGER PRIMARY KEY, hash BLOB NOT NULL)')
+    for (const id of [1, 4]) {
+      old.prepare('INSERT INTO fp (image_id, hash) VALUES (?, ?)').run(id, Buffer.alloc(32))
+    }
+    old.close()
+    const requested: string[] = []
+    await buildFingerprints({ work, cachePath, fetch: imageFetch(requested) })
+    expect(requested.sort()).toEqual(['2', '3', '4'])
+
+    requested.length = 0
+    await buildFingerprints({ work, cachePath, fetch: imageFetch(requested) })
+    expect(requested).toEqual(['3'])
   })
 })
 

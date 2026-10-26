@@ -47,6 +47,19 @@ CREATE TABLE desktop_codes (code_hash TEXT PRIMARY KEY, user_id INTEGER NOT NULL
   challenge TEXT NOT NULL, expires_at TEXT NOT NULL);
 CREATE INDEX ix_sessions_expires ON sessions(expires_at);
 `
+  },
+  {
+    name: 'server-3',
+    sql: `
+CREATE TABLE friendships (
+  requester_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  addressee_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  status TEXT NOT NULL CHECK (status IN ('pending', 'accepted')),
+  created_at TEXT NOT NULL, updated_at TEXT NOT NULL,
+  PRIMARY KEY (requester_id, addressee_id),
+  CHECK (requester_id <> addressee_id));
+CREATE INDEX ix_friendships_addressee ON friendships(addressee_id, status);
+`
   }
 ]
 

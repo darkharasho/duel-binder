@@ -399,6 +399,10 @@ export async function signOut(req: Request, deps: AppDeps): Promise<Response> {
   return respond(204, [clearCookie('session')])
 }
 
+export function avatarUrl(discordId: string, avatar: string | null): string | null {
+  return avatar ? `https://cdn.discordapp.com/avatars/${discordId}/${avatar}.png` : null
+}
+
 function loadMe(deps: AppDeps, userId: number): Me {
   const row = deps.db
     .prepare('SELECT id, discord_id, username, display_name, avatar FROM users WHERE id = ?')
@@ -413,9 +417,7 @@ function loadMe(deps: AppDeps, userId: number): Me {
     id: row.id,
     username: row.username,
     displayName: row.display_name,
-    avatarUrl: row.avatar
-      ? `https://cdn.discordapp.com/avatars/${row.discord_id}/${row.avatar}.png`
-      : null
+    avatarUrl: avatarUrl(row.discord_id, row.avatar)
   }
 }
 

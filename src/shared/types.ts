@@ -280,3 +280,28 @@ export interface SetChecklist {
   set: SetSummary
   cards: ChecklistCard[]
 }
+
+export interface FriendUser {
+  id: number
+  username: string
+  displayName: string | null
+  avatarUrl: string | null
+}
+
+export interface Friend extends FriendUser {
+  /** Copies across live entries (sum of quantity). */
+  cardCount: number
+  /** Latest change to any of their entries, tombstones included; null with none. */
+  updatedAt: string | null
+}
+
+export interface FriendRequest extends FriendUser {
+  sentAt: string
+}
+
+export interface FriendsOverview {
+  friends: Friend[]
+  incoming: FriendRequest[]
+}
+
+export type FriendRequestResult = { status: 'sent' } | { status: 'accepted'; friend: FriendUser }

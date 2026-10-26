@@ -15,6 +15,11 @@ import {
 
 export const INTL_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000
 const CHUNK_SIZE = 50
+/**
+ * Least time between onBatch calls after the first. Each one has the UI refetch its set and
+ * collection queries, which holds up the main process for most of a second.
+ */
+export const BATCH_NOTE_MS = 30_000
 const MAX_LOGGED_UNMATCHED = 20
 const LANGUAGE_PRIORITY: readonly Language[] = ['ja', 'ko', 'zh-hans', 'zh-hant']
 
@@ -137,12 +142,13 @@ export async function refreshIntlSets(
   db: Database.Database,
   client: YugipediaClient,
   now: Date = new Date(),
-  /** Called after each batch of sets is saved (e.g. to refresh the UI). */
-  onBatch?: () => void
+  /** Called after the first saved batch of sets, then at most every BATCH_NOTE_MS (e.g. to refresh the UI). */
+  onBatch?: () => void,
+  clock: () => number = Date.now
 ): Promise<IntlSyncResult> {
   const result: IntlSyncResult = { sets: 0, failedSets: 0, unmatchedRows: 0, ok: false }
   try {
-    return await run(db, client, now, result, onBatch)
+    return await run(db, client, now, result, onBatch, clock)
   } catch (e) {
     console.warn('Non-English set sync failed', e)
     result.ok = false
@@ -155,7 +161,8 @@ async function run(
   client: YugipediaClient,
   now: Date,
   result: IntlSyncResult,
-  onBatch?: () => void
+  onBatch: (() => void) | undefined,
+  clock: () => number
 ): Promise<IntlSyncResult> {
   let allTitles: string[]
   console.info('Yugipedia: listing set lists')
@@ -232,6 +239,7 @@ async function run(
     ...jobs.filter((j) => storedSet.get(j.language, j.setName))
   ]
   let saved = 0
+  let notedAt: number | null = null
   // Each batch is fetched, parsed and saved on its own, so progress survives a quit mid-sync.
   for (const batch of chunk(ordered, CHUNK_SIZE)) {
     const listFetch = await fetchChunked(
@@ -313,7 +321,10 @@ async function run(
 
     saved += loaded.length
     console.info(`Yugipedia: saved ${saved} of ${jobs.length} set lists`)
-    onBatch?.()
+    if (onBatch && (notedAt === null || clock() - notedAt >= BATCH_NOTE_MS)) {
+      notedAt = clock()
+      onBatch()
+    }
   }
 
   if (unmatchedExamples.length > 0) {

@@ -81,7 +81,7 @@ export async function refreshCatalog(
   }
   const { n } = db.prepare('SELECT count(*) AS n FROM cards').get() as { n: number }
   if (n > 0 && shouldRefreshIntl(db, now())) {
-    // Each saved batch calls onChanged, so sets appear while a long first sync runs.
+    // Saved batches call onChanged now and then, so sets appear while a long first sync runs.
     await refreshIntlSets(db, yugipedia, now(), deps.onChanged)
     changed = true
   }

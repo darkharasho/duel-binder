@@ -17,6 +17,15 @@ const fx = (name: string): string =>
   )
 
 describe('parseSetList', () => {
+  it('reads a list whose template name starts lowercase, as the wiki allows', () => {
+    const r = parseSetList(
+      ['{{set list|region=DE|', 'BLRR-DE001; Orgoth the Relentless; Secret Rare', '}}'].join('\n')
+    )
+    expect(r?.rows).toEqual([
+      { code: 'BLRR-DE001', name: 'Orgoth the Relentless', rarities: ['Secret Rare'] }
+    ])
+  })
+
   it('captures a description:: note as the row variant, extended art as Overframe', () => {
     const r = parseSetList(
       [

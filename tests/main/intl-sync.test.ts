@@ -2,6 +2,7 @@ import type Database from 'better-sqlite3'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { getMeta } from '../../src/main/db/meta'
 import {
+  BATCH_NOTE_MS,
   INTL_INTERVAL_MS,
   normalizeName,
   refreshIntlSets,
@@ -296,6 +297,33 @@ describe('refreshIntlSets', () => {
     expect(getMeta(db, 'intl_sets_synced_at')).toBe('2026-10-01T00:00:00.000Z')
   })
 
+  it('tells the UI after the first batch, then at most once per BATCH_NOTE_MS', async () => {
+    const pages: Record<string, string> = {}
+    for (let i = 1; i <= 151; i++) {
+      pages[`Set Card Lists:S${String(i).padStart(3, '0')} (OCG-JP)`] = listPage([
+        `S-${i}; Dark Magician; UR`
+      ])
+    }
+    let clock = 0
+    const f = fake(pages)
+    const fetchPages = f.client.fetchPages
+    // Each batch fetches lists then set pages, so a batch takes half the gap.
+    f.client.fetchPages = async (titles) => {
+      clock += BATCH_NOTE_MS / 4
+      return fetchPages(titles)
+    }
+    const notes: number[] = []
+    await refreshIntlSets(
+      db,
+      f.client,
+      NOW,
+      () => notes.push(clock),
+      () => clock
+    )
+    // 4 batches (151 sets) end at 0.5, 1, 1.5 and 2 gaps: the first, then one a full gap later.
+    expect(notes).toEqual([BATCH_NOTE_MS / 2, (3 * BATCH_NOTE_MS) / 2])
+  })
+
   it('a page without {{Set list counts as failed and keeps old rows', async () => {
     const f = fake({ [LB]: listPage(['LB-05; Dark Magician; UR']) })
     await refreshIntlSets(db, f.client, new Date('2026-10-01T00:00:00.000Z'))
@@ -454,12 +482,20 @@ describe('refreshIntlSets batching', () => {
     }
     const f = fake(pages)
     const savedAtBatch: number[] = []
-    await refreshIntlSets(db, f.client, NOW, () => {
-      const { n } = db.prepare("SELECT count(*) AS n FROM sets WHERE language = 'ja'").get() as {
-        n: number
-      }
-      savedAtBatch.push(n)
-    })
+    let clock = 0
+    await refreshIntlSets(
+      db,
+      f.client,
+      NOW,
+      () => {
+        const { n } = db.prepare("SELECT count(*) AS n FROM sets WHERE language = 'ja'").get() as {
+          n: number
+        }
+        savedAtBatch.push(n)
+      },
+      // A full gap between batches, so each one is reported.
+      () => (clock += BATCH_NOTE_MS)
+    )
     expect(savedAtBatch).toEqual([50, 60])
   })
 })

@@ -75,19 +75,22 @@ function variantFromComment(comment: string): string | undefined {
   return note[0].toUpperCase() + note.slice(1)
 }
 
+const SET_LIST_OPEN = /\{\{[Ss]et list\|/
+
 export function parseSetList(wikitext: string): ParsedSetList | null {
   const lines = wikitext.split(/\r?\n/)
   const rows: SetListRow[] = []
   let found = false
   let i = 0
   while (i < lines.length) {
-    const open = lines[i].indexOf('{{Set list|')
-    if (open === -1) {
+    // The wiki doesn't care about the case of a template name's first letter.
+    const open = SET_LIST_OPEN.exec(lines[i])
+    if (!open) {
       i++
       continue
     }
     found = true
-    const header = lines[i].slice(open + '{{Set list|'.length)
+    const header = lines[i].slice(open.index + open[0].length)
     const params = new Map<string, string>()
     for (const part of header.split('|')) {
       const eq = part.indexOf('=')

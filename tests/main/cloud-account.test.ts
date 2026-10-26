@@ -535,6 +535,29 @@ describe('account service', () => {
     expect(onCatalogChanged).not.toHaveBeenCalled()
   })
 
+  it('a catalog failure that never reached the server keeps the next run forced', async () => {
+    // Fresh enough that only a forced update calls the server.
+    setMeta(db, 'last_sync_at', NOW().toISOString())
+    const realFetch = fetchSpy.getMockImplementation()!
+    let refuse = true
+    fetchSpy.mockImplementation(async (input, init) =>
+      refuse && String(input).includes('/api/catalog/changes')
+        ? new Response(JSON.stringify({ error: 'bad request' }), { status: 400 })
+        : realFetch(input, init)
+    )
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const service = makeService()
+    await signInAs(service, me(alice, 'alice'))
+    warn.mockRestore()
+    expect(catalog.status().state).toBe('error')
+    const before = catalogCalls()
+
+    refuse = false
+    await service.syncNow()
+    expect(catalogCalls()).toBe(before + 1)
+    expect(catalog.status()).toMatchObject({ state: 'idle', error: null })
+  })
+
   it('refreshCatalog forces an update and returns the catalog status', async () => {
     const service = makeService()
     expect(await service.refreshCatalog()).toEqual(catalog.status())

@@ -192,6 +192,121 @@ describe('catalog service', () => {
     warn.mockRestore()
   })
 
+  it('finishes and announces pages that landed before the pull failed', async () => {
+    const service = makeService()
+    await service.update(client, { force: true })
+    portal.serverDb.prepare("UPDATE cards SET name = 'Zorblax Renamed' WHERE id = ?").run(DM)
+    portal.serverDb
+      .prepare("UPDATE cards SET name = name || ' Again' WHERE id = (SELECT max(id) FROM cards)")
+      .run()
+    let n = 0
+    const secondPageOffline: CloudClient = {
+      ...client,
+      catalogChanges: async (since) => {
+        if (++n === 2) throw new CloudOfflineError()
+        return client.catalogChanges(since, 1)
+      }
+    }
+
+    await expect(service.update(secondPageOffline, { force: true })).rejects.toBeInstanceOf(
+      CloudOfflineError
+    )
+    expect(n).toBe(2)
+    expect(cardName(db, DM)).toBe('Zorblax Renamed')
+    expect(getMeta(db, 'catalog_unannounced')).not.toBeNull()
+
+    // Within the hour and unforced: reported without a network call.
+    const call = vi.fn(client.catalogChanges)
+    expect(await service.update({ ...client, catalogChanges: call })).toEqual({
+      changed: true,
+      imagesChanged: false
+    })
+    expect(call).not.toHaveBeenCalled()
+    expect(
+      db.prepare("SELECT count(*) AS n FROM cards_fts WHERE cards_fts MATCH 'zorblax'").get()
+    ).toEqual({ n: 1 })
+    expect(getMeta(db, 'catalog_unannounced')).toBeNull()
+  })
+
+  it('a later update reports page 1 of a failed pull as changed', async () => {
+    const service = makeService()
+    await service.update(client, { force: true })
+    portal.serverDb.prepare("UPDATE cards SET name = 'Zorblax Renamed' WHERE id = ?").run(DM)
+    // Page 2 touches no card, so only page 1 needs the search index rebuilt.
+    portal.serverDb
+      .prepare("INSERT INTO sets (language, set_name, set_code) VALUES ('en', 'New Set', 'NEW')")
+      .run()
+    let n = 0
+    const secondPageOffline: CloudClient = {
+      ...client,
+      catalogChanges: async (since) => {
+        if (++n === 2) throw new CloudOfflineError()
+        return client.catalogChanges(since, 1)
+      }
+    }
+    await expect(service.update(secondPageOffline, { force: true })).rejects.toBeInstanceOf(
+      CloudOfflineError
+    )
+
+    expect(await service.update(client, { force: true })).toEqual({
+      changed: true,
+      imagesChanged: false
+    })
+    expect(
+      db.prepare("SELECT count(*) AS n FROM cards_fts WHERE cards_fts MATCH 'zorblax'").get()
+    ).toEqual({ n: 1 })
+    expect(await service.update(client, { force: true })).toEqual({
+      changed: false,
+      imagesChanged: false
+    })
+  })
+
+  it('announces a finished switch on the next update when the delta pull is offline', async () => {
+    const service = makeService()
+    const afterSwitchOffline: CloudClient = {
+      ...client,
+      catalogChanges: async (since, limit) => {
+        if (getMeta(db, 'catalog_switched_at') !== null) throw new CloudOfflineError()
+        return client.catalogChanges(since, limit)
+      }
+    }
+    await expect(service.update(afterSwitchOffline, { force: true })).rejects.toBeInstanceOf(
+      CloudOfflineError
+    )
+    expect(getMeta(db, 'catalog_switched_at')).toBe(NOW.toISOString())
+    expect(service.status()).toMatchObject({ state: 'idle', error: null, blocked: null })
+
+    expect(await service.update(client, { force: true })).toEqual({
+      changed: true,
+      imagesChanged: true
+    })
+    expect(await service.update(client, { force: true })).toEqual({
+      changed: false,
+      imagesChanged: false
+    })
+  })
+
+  it('going idle after a re-thrown error clears an earlier error', async () => {
+    const service = makeService()
+    await service.update(client, { force: true })
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    await service.update(
+      {
+        ...client,
+        catalogChanges: async () => {
+          throw new Error('bad page')
+        }
+      },
+      { force: true }
+    )
+    warn.mockRestore()
+    expect(service.status().error).toBe('bad page')
+    await expect(service.update(offline(), { force: true })).rejects.toBeInstanceOf(
+      CloudOfflineError
+    )
+    expect(service.status()).toMatchObject({ state: 'idle', error: null })
+  })
+
   it('re-throws offline during the delta pull', async () => {
     const service = makeService()
     await service.update(client, { force: true })

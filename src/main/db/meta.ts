@@ -24,6 +24,8 @@ export type MetaKey =
   | 'catalog_switch_backup'
   /** Why the last switch attempt didn't finish, as JSON `{ reason, at, retry }`. */
   | 'catalog_switch_failed'
+  /** Catalog work committed but not yet reported, as JSON `{ cardsChanged, imagesChanged, needsFinish }`. */
+  | 'catalog_unannounced'
 
 export function getMeta(db: SqlDb, key: MetaKey): string | null {
   const row = db.prepare('SELECT value FROM meta WHERE key = ?').get(key) as

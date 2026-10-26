@@ -1,9 +1,9 @@
 import type Database from 'better-sqlite3'
 import type { SqlDb } from '../db/sql'
-import { getMeta, setMeta } from '../db/meta'
+import { deleteMeta, getMeta, setMeta } from '../db/meta'
 import { CloudAuthError, CloudOfflineError, type CloudClient } from '../cloud/client'
 import type { SyncStatus } from '../../shared/types'
-import { applyChanges, finishApply, type ApplyResult } from './apply'
+import { applyChanges, finishApply } from './apply'
 import { runSwitch, type SwitchFailure } from './switch'
 
 export interface CatalogUpdate {
@@ -29,6 +29,14 @@ export interface CatalogServiceDeps {
 /** An unforced update within this long of the last one does nothing. */
 const FRESH_MS = 60 * 60 * 1000
 const UNCHANGED: CatalogUpdate = { changed: false, imagesChanged: false }
+
+/** Committed catalog work not yet announced; stored as JSON in meta `catalog_unannounced`. */
+interface Unannounced {
+  cardsChanged: boolean
+  imagesChanged: boolean
+  /** `finishApply` (the search index rebuild) hasn't run for it yet. */
+  needsFinish: boolean
+}
 
 /**
  * The card catalog, kept in step with the server's: the one-time switch to the server's catalog
@@ -82,9 +90,51 @@ export function createCatalogService(deps: CatalogServiceDeps): CatalogService {
     return f !== null && f.retry === 'next-launch' && Date.parse(f.at) >= deps.launchedAt.getTime()
   }
 
-  /** Applies the change feed from `catalog_cursor` to its end. */
-  async function pullDeltas(client: CloudClient): Promise<ApplyResult> {
-    const total: ApplyResult = { applied: 0, cardsChanged: false, imagesChanged: false }
+  /**
+   * Catalog work already committed but not yet reported by a successful update (and, with
+   * `needsFinish`, not yet followed by `finishApply`). Survives a failed update and a restart.
+   */
+  const unannounced = (): Unannounced | null => {
+    const raw = getMeta(db, 'catalog_unannounced')
+    if (raw === null) return null
+    try {
+      return JSON.parse(raw) as Unannounced
+    } catch {
+      return { cardsChanged: true, imagesChanged: true, needsFinish: true }
+    }
+  }
+
+  /** ORs `work` into the unannounced record; call it in the transaction that commits the work. */
+  const noteUnannounced = (work: Unannounced): void => {
+    const u = unannounced()
+    const merged: Unannounced = {
+      cardsChanged: work.cardsChanged || (u?.cardsChanged ?? false),
+      imagesChanged: work.imagesChanged || (u?.imagesChanged ?? false),
+      needsFinish: work.needsFinish || (u?.needsFinish ?? false)
+    }
+    setMeta(db, 'catalog_unannounced', JSON.stringify(merged))
+  }
+
+  /** Runs the `finishApply` committed work still waits for. */
+  const finishPending = (): void => {
+    const u = unannounced()
+    if (!u?.needsFinish) return
+    db.transaction(() => {
+      finishApply(db, { applied: 1, cardsChanged: u.cardsChanged, imagesChanged: u.imagesChanged })
+      setMeta(db, 'catalog_unannounced', JSON.stringify({ ...u, needsFinish: false }))
+    })()
+  }
+
+  /** Reports and clears the unannounced work. */
+  const announce = (): CatalogUpdate => {
+    const u = unannounced()
+    if (u === null) return UNCHANGED
+    deleteMeta(db, 'catalog_unannounced')
+    return { changed: true, imagesChanged: u.imagesChanged }
+  }
+
+  /** Applies the change feed from `catalog_cursor` to its end, a page per transaction. */
+  async function pullDeltas(client: CloudClient): Promise<void> {
     let cursor = Number(getMeta(db, 'catalog_cursor') ?? 0)
     for (;;) {
       set('downloading')
@@ -93,25 +143,26 @@ export function createCatalogService(deps: CatalogServiceDeps): CatalogService {
       if (page.changes.length > 0) set('saving')
       db.transaction(() => {
         const r = applyChanges(db, page.changes)
-        total.applied += r.applied
-        total.cardsChanged ||= r.cardsChanged
-        total.imagesChanged ||= r.imagesChanged
+        if (r.applied > 0)
+          noteUnannounced({
+            cardsChanged: r.cardsChanged,
+            imagesChanged: r.imagesChanged,
+            needsFinish: true
+          })
         setMeta(db, 'catalog_cursor', String(page.cursor))
         if (page.dbVersion !== null) setMeta(db, 'db_version', page.dbVersion)
       })()
       cursor = page.cursor
       if (!page.more) break
     }
-    if (total.applied > 0) db.transaction(() => finishApply(db, total))()
     setMeta(db, 'last_sync_at', now().toISOString())
-    return total
   }
 
   async function doUpdate(client: CloudClient, force: boolean): Promise<CatalogUpdate> {
-    if (!force && fresh()) return UNCHANGED
+    finishPending()
+    if (!force && fresh()) return announce()
     set('checking')
     try {
-      let switchedNow = false
       if (!switched()) {
         if (waitingForNextLaunch()) {
           set('idle')
@@ -127,17 +178,19 @@ export function createCatalogService(deps: CatalogServiceDeps): CatalogService {
           set('idle')
           return UNCHANGED
         }
-        switchedNow = true
+        noteUnannounced({ cardsChanged: true, imagesChanged: true, needsFinish: true })
       }
-      const deltas = await pullDeltas(client)
+      try {
+        await pullDeltas(client)
+      } finally {
+        finishPending()
+      }
+      const result = announce()
       set('idle')
-      return {
-        changed: switchedNow || deltas.applied > 0,
-        imagesChanged: switchedNow || deltas.imagesChanged
-      }
+      return result
     } catch (e) {
       if (e instanceof CloudAuthError || e instanceof CloudOfflineError) {
-        set('idle', error)
+        set('idle')
         throw e
       }
       console.warn('Catalog update failed', e)

@@ -173,7 +173,8 @@ export function createAccountService(deps: AccountDeps): AccountService {
       // Before pushing, so entries on printings the server just added can push in this run.
       await updateCatalog(client, !catalogUpdated)
       if (mine !== session) return
-      catalogUpdated = true
+      // A swallowed failure keeps the next run's update forced.
+      if (deps.catalog.status().state !== 'error') catalogUpdated = true
       const outcome = await syncOnce(db, owner, client, now)
       if (mine !== session) return
       // Before me(), so a failing me() can't swallow them.

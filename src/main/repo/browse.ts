@@ -16,7 +16,7 @@ const base = (scope: Scope): string => `
   released AS (
     SELECT p.card_id, MIN(s.tcg_date) AS d FROM card_printings p
     JOIN sets s ON s.language = 'en' AND s.set_name = p.set_name
-    WHERE p.language = 'en' AND s.tcg_date IS NOT NULL GROUP BY p.card_id
+    WHERE p.language = 'en' AND p.contributed = 0 AND s.tcg_date IS NOT NULL GROUP BY p.card_id
   )
   SELECT c.id, c.name, c.type, c.frame_type, c.attribute, c.race, c.level, c.linkval, c.atk, c.def,
     c.tcgplayer_price AS price, r.d AS released_at, COALESCE(o.n, 0) AS owned
@@ -63,7 +63,7 @@ function whereClause(f: BrowseFilters): { sql: string; params: unknown[] } {
   const text = f.q?.trim()
   if (text) {
     const fts = buildFtsQuery(text)
-    const parts = [`c.id IN (SELECT card_id FROM card_printings WHERE set_code LIKE ? ESCAPE '\\')`]
+    const parts = [`c.id IN (SELECT card_id FROM card_printings WHERE contributed = 0 AND set_code LIKE ? ESCAPE '\\')`]
     params.push(`${escapeLike(text)}%`)
     if (fts) {
       parts.push('c.id IN (SELECT rowid FROM cards_fts WHERE cards_fts MATCH ?)')
@@ -78,7 +78,7 @@ function whereClause(f: BrowseFilters): { sql: string; params: unknown[] } {
   const printingFilter = (col: string, values?: string[]): void => {
     if (!values?.length) return
     where.push(
-      `c.id IN (SELECT card_id FROM card_printings WHERE language = 'en' AND ${col} IN (${values
+      `c.id IN (SELECT card_id FROM card_printings WHERE contributed = 0 AND language = 'en' AND ${col} IN (${values
         .map(() => '?')
         .join(',')}))`
     )
@@ -114,7 +114,7 @@ export function browseCards(db: SqlDb, f: BrowseFilters, scope: Scope = LOCAL): 
            LIMIT 1), page.id) AS image_id,
          (SELECT p.id FROM card_printings p
            LEFT JOIN sets s ON s.language = 'en' AND s.set_name = p.set_name
-           WHERE p.card_id = page.id AND p.language = 'en'
+           WHERE p.card_id = page.id AND p.language = 'en' AND p.contributed = 0
            ORDER BY s.tcg_date IS NULL, s.tcg_date, p.id LIMIT 1) AS default_printing_id
        FROM (${base(scope)}${sql} ORDER BY ${sortCol} IS NULL, ${sortCol} ${dir}, c.name COLLATE NOCASE, c.id
          LIMIT ? OFFSET ?) page`
@@ -163,10 +163,10 @@ export function browseFacets(db: SqlDb): BrowseFacets {
     races: col('race'),
     archetypes: col('archetype'),
     setNames: distinct(
-      `SELECT DISTINCT set_name AS v FROM card_printings WHERE language = 'en' ORDER BY set_name`
+      `SELECT DISTINCT set_name AS v FROM card_printings WHERE contributed = 0 AND language = 'en' ORDER BY set_name`
     ),
     rarities: distinct(
-      `SELECT DISTINCT set_rarity AS v FROM card_printings WHERE language = 'en' AND set_rarity <> ''
+      `SELECT DISTINCT set_rarity AS v FROM card_printings WHERE contributed = 0 AND language = 'en' AND set_rarity <> ''
        ORDER BY set_rarity`
     )
   }

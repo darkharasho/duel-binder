@@ -91,7 +91,7 @@ export function searchCards(db: SqlDb, q: string, limit = 20): CardSearchResult[
       .prepare(
         `SELECT c.id, c.name, c.type, ${defaultImage} AS default_image_id, p.set_code AS matched
          FROM card_printings p JOIN cards c ON c.id = p.card_id
-         WHERE p.set_code LIKE ? ESCAPE '\\'
+         WHERE p.contributed = 0 AND p.set_code LIKE ? ESCAPE '\\'
          ORDER BY p.set_code, p.id LIMIT ?`
       )
       .all(`${escapeLike(text)}%`, limit) as DbHit[]
@@ -136,7 +136,7 @@ export function getCardDetail(db: SqlDb, cardId: number): CardDetail | null {
       .prepare(
         `SELECT p.id, p.card_id, p.set_name, p.set_code, ${RARITY_LABEL} AS set_rarity, p.set_rarity_code,
                 p.set_price, p.market_price, p.missing_from_api, p.language
-         FROM card_printings p WHERE p.card_id = ? ORDER BY p.set_code, p.id`
+         FROM card_printings p WHERE p.card_id = ? AND p.contributed = 0 ORDER BY p.set_code, p.id`
       )
       .all(cardId) as PrintingDbRow[]
   ).map(rowToPrinting)

@@ -19,6 +19,7 @@ interface PrintingRow {
 const SELECT = `SELECT p.id AS printingId, p.card_id AS cardId, c.name AS name, c.frame_type AS frameType,
   p.set_name AS setName, p.set_code AS setCode, p.set_rarity AS rarity, p.language AS language
   FROM card_printings p JOIN cards c ON c.id = p.card_id`
+const VISIBLE = 'p.contributed = 0'
 
 const languageRank = (l: Language): number => LANGUAGES.findIndex((x) => x.code === l)
 
@@ -53,14 +54,14 @@ function withImages(db: SqlDb, rows: PrintingRow[]): ScanPrinting[] {
 
 export function printingsByCode(db: SqlDb, code: string): ScanPrinting[] {
   const rows = db
-    .prepare(`${SELECT} WHERE p.set_code = ? COLLATE NOCASE`)
+    .prepare(`${SELECT} WHERE ${VISIBLE} AND p.set_code = ? COLLATE NOCASE`)
     .all(code) as PrintingRow[]
   return withImages(db, rows)
 }
 
 export function printingsForSet(db: SqlDb, setName: string, language: Language): ScanPrinting[] {
   const rows = db
-    .prepare(`${SELECT} WHERE p.set_name = ? AND p.language = ?`)
+    .prepare(`${SELECT} WHERE ${VISIBLE} AND p.set_name = ? AND p.language = ?`)
     .all(setName, language) as PrintingRow[]
   return withImages(db, rows)
 }
@@ -72,7 +73,7 @@ export function printingsForCards(db: SqlDb, cardIds: number[]): ScanPrinting[] 
     const chunk = ids.slice(i, i + 500)
     rows.push(
       ...(db
-        .prepare(`${SELECT} WHERE p.card_id IN (${chunk.map(() => '?').join(',')})`)
+        .prepare(`${SELECT} WHERE ${VISIBLE} AND p.card_id IN (${chunk.map(() => '?').join(',')})`)
         .all(...chunk) as PrintingRow[])
     )
   }

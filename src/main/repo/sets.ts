@@ -64,7 +64,7 @@ const COVERS = `
         WHEN p.set_rarity LIKE '%Super%' THEN 8
         WHEN p.set_rarity LIKE '%Rare%' THEN 9
         ELSE 10 END) AS rank
-    FROM card_printings p WHERE p.missing_from_api = 0 %WHERE%
+    FROM card_printings p WHERE p.missing_from_api = 0 AND p.contributed = 0 %WHERE%
     GROUP BY p.language, p.set_name, p.card_id),
   ranked AS (
     SELECT *, ROW_NUMBER() OVER (PARTITION BY language, set_name
@@ -123,7 +123,7 @@ export function findSetImageUrl(db: SqlDb, key: string): string | null {
 
 export function listSets(db: SqlDb, scope: Scope = LOCAL): SetSummary[] {
   const covers = coverImages(db)
-  return (db.prepare(`${summary(scope)} GROUP BY p.language, p.set_name ORDER BY p.set_name, p.language <> 'en', p.language`).all() as SummaryDbRow[]).map((r) => toSummary(r, covers))
+  return (db.prepare(`${summary(scope)} WHERE p.contributed = 0 GROUP BY p.language, p.set_name ORDER BY p.set_name, p.language <> 'en', p.language`).all() as SummaryDbRow[]).map((r) => toSummary(r, covers))
 }
 
 interface PrintingDbRow {
@@ -190,7 +190,7 @@ function checklistCards(
               (SELECT i.image_id FROM card_images i WHERE i.card_id = c.id
                ORDER BY i.sort_order, i.image_id LIMIT 1) AS image_id
        FROM card_printings p JOIN cards c ON c.id = p.card_id
-       WHERE p.language = ? AND p.set_name = ?${cardFilter}`
+       WHERE p.contributed = 0 AND p.language = ? AND p.set_name = ?${cardFilter}`
     )
     .all(...params) as PrintingDbRow[]
   const entries = db
@@ -283,7 +283,7 @@ export function getChecklist(
   scope: Scope = LOCAL
 ): SetChecklist | null {
   const row = db
-    .prepare(`${summary(scope)} WHERE p.language = ? AND p.set_name = ? GROUP BY p.language, p.set_name`)
+    .prepare(`${summary(scope)} WHERE p.contributed = 0 AND p.language = ? AND p.set_name = ? GROUP BY p.language, p.set_name`)
     .get(language, setName) as SummaryDbRow | undefined
   if (!row) return null
   return { set: toSummary(row, coverImages(db, { language, setName })), cards: checklistCards(db, setName, language, undefined, scope) }

@@ -41,6 +41,8 @@ export interface AccountDeps {
   catalog: CatalogService
   /** The catalog changed: anything derived from it should be refreshed. */
   onCatalogChanged(r: { imagesChanged: boolean }): void
+  /** Whether the app can be used signed out (`AccountStatus.signInRequired`); defaults to true. */
+  signInRequired?: boolean
   now?: () => Date
 }
 
@@ -137,7 +139,8 @@ export function createAccountService(deps: AccountDeps): AccountService {
       lastSyncedAt: owner === 0 ? null : accountState(db, owner).syncedAt,
       error,
       pendingCount: owner === 0 ? 0 : pendingCount(db, owner),
-      unsyncedCount: owner === 0 ? 0 : syncIssueCount(db, owner)
+      unsyncedCount: owner === 0 ? 0 : syncIssueCount(db, owner),
+      signInRequired: deps.signInRequired ?? true
     }
   }
 

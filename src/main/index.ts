@@ -12,17 +12,16 @@ import {
 } from '@shared/ipc'
 import icon from '../../resources/icon.png?asset'
 import { openDatabase } from './db/database'
-import { createYgoClient } from './ygo/client'
-import { refreshCatalog } from './sync/catalog'
-import { getSyncStatus } from './sync/sync'
-import { createPriceService } from './prices/service'
-import { refreshIntlPrices } from './prices/refresh'
-import { createYugipediaClient } from './yugipedia/client'
-import { createPrintingArtResolver } from './yugipedia/artResolver'
-import { createTcgplayerLookup } from './tcgplayer/catalog'
+import { createCatalogService } from './catalog/service'
 import { recordSnapshot } from './repo/stats'
-import { directImageSources } from './dev/directSources'
+import {
+  directCatalog,
+  directImageSources,
+  directPrintingArt,
+  startDirectCatalog
+} from './dev/directSources'
 import { createImageCache } from './images/cache'
+import { portalImageSources } from './images/portalSources'
 import { prepareLogo } from './images/prepareLogo'
 import { handleImageProtocol, registerImageScheme } from './images/protocol'
 import { createUpdater, updateMode, RELEASES_URL } from './updater'
@@ -49,7 +48,13 @@ for (const stream of [process.stdout, process.stderr]) {
 
 // The app was "yugioh-collection-tracker" before it became Duel Binder: move that data folder over once.
 // If the move fails (e.g. Windows holds a lock on it), keep using the old folder rather than start empty.
-app.setPath('userData', resolveUserData(app.getPath('appData')))
+// Unpackaged, DUEL_BINDER_USER_DATA points the app at another data folder instead (e.g. a copy to try
+// a migration on).
+const userDataOverride = !app.isPackaged ? process.env['DUEL_BINDER_USER_DATA'] : undefined
+app.setPath(
+  'userData',
+  userDataOverride ? resolve(userDataOverride) : resolveUserData(app.getPath('appData'))
+)
 
 /** `npm run dev:fake-data`: a separate profile with a seeded collection; never in packaged builds.
  *  `npm run site:shots`: screenshots of that profile for the marketing site, then quit. */
@@ -130,11 +135,18 @@ function createWindow(): void {
   }
 }
 
+/** `YYYY-MM-DD` in local time. */
+function localDate(d: Date): string {
+  const pad = (n: number): string => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+}
+
 function broadcast(channel: string, payload: unknown): void {
   for (const win of BrowserWindow.getAllWindows()) win.webContents.send(channel, payload)
 }
 
 async function bootstrap(): Promise<void> {
+  const launchedAt = new Date()
   electronApp.setAppUserModelId('com.darkharasho.yugiohcollectiontracker')
 
   // The webcam (Scan) is the only permission the app's pages get, and nothing else gets any.
@@ -149,25 +161,26 @@ async function bootstrap(): Promise<void> {
 
   const userData = app.getPath('userData')
   const db = openDatabase(join(userData, 'collection.db'))
-  // One Yugipedia client, so set syncs and art lookups share its request pacing.
-  const yugipedia = createYugipediaClient({ version: app.getVersion() })
-  const printingArt = createPrintingArtResolver({
-    db,
-    client: yugipedia,
-    quickUrl: createTcgplayerLookup(db)
-  })
+  const portal = portalUrl(process.env, app.isPackaged)
+  const tokens = new TokenStore(join(userData, 'account.json'), await electronCipher())
+  const remoteIdOf = db.prepare('SELECT remote_id FROM card_printings WHERE id = ?').pluck()
   const images = createImageCache({
     dir: join(userData, 'images'),
-    sources: directImageSources({
-      db,
-      version: app.getVersion(),
-      resolvePrintingArt: (id) => printingArt.url(id)
-    }),
+    sources: fakeData
+      ? directImageSources({
+          db,
+          version: app.getVersion(),
+          resolvePrintingArt: directPrintingArt(db, app.getVersion())
+        })
+      : portalImageSources({
+          portal,
+          token: () => tokens.get(),
+          remoteId: (id) => (remoteIdOf.get(id) as number | null | undefined) ?? null
+        }),
     prepareLogo
   })
   handleImageProtocol(images)
 
-  const client = createYgoClient()
   const emitSync = (s: SyncStatus): void => {
     // Seed before the renderer hears "idle" and refetches.
     if (fakeData && s.state === 'idle') {
@@ -203,11 +216,8 @@ async function bootstrap(): Promise<void> {
       if (error) throw new Error(`Couldn't open the data folder: ${error}`)
     },
     backupDatabase: async () => {
-      const now = new Date()
-      const pad = (n: number): string => String(n).padStart(2, '0')
-      const date = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())}`
       const { canceled, filePath } = await dialog.showSaveDialog({
-        defaultPath: `duel-binder-${date}.db`
+        defaultPath: `duel-binder-${localDate(new Date())}.db`
       })
       if (canceled || !filePath) return null
       await db.backup(filePath)
@@ -218,13 +228,22 @@ async function bootstrap(): Promise<void> {
     updateStatus: async () => updater.status()
   }
 
-  const priceService = createPriceService(db)
   const emitDataChanged = (): void => broadcast(DATA_CHANGED, undefined)
+  const fingerprints = createFingerprintStore({ dir: join(userData, 'scan'), portal })
+  // The dev fake-data profile keeps the self-built catalog and can be used signed out.
+  const catalog = fakeData
+    ? directCatalog(db)
+    : createCatalogService({
+        db,
+        backupPath: (now) =>
+          join(userData, 'backups', `${localDate(now)}-pre-server-catalog.sqlite`),
+        emit: emitSync,
+        launchedAt
+      })
 
-  const portal = portalUrl(process.env, app.isPackaged)
   const account = createAccountService({
     db,
-    tokens: new TokenStore(join(userData, 'account.json'), await electronCipher()),
+    tokens,
     client: (token, opts = {}) =>
       createCloudClient({ baseUrl: portal, token, timeoutMs: opts.timeoutMs, signal: opts.signal }),
     signIn: (signal) =>
@@ -236,16 +255,14 @@ async function bootstrap(): Promise<void> {
     emit: (s: AccountStatus) => broadcast(ACCOUNT_CHANGED, s),
     emitDataChanged,
     isOnline: () => net.isOnline(),
-    // The self-built catalog sync still owns the catalog here; the server catalog service
-    // (createCatalogService) replaces this when the app is rewired to it.
-    catalog: {
-      status: () => getSyncStatus(db),
-      update: async () => ({ changed: false, imagesChanged: false })
+    catalog,
+    onCatalogChanged: ({ imagesChanged }) => {
+      recordSnapshot(db)
+      if (imagesChanged) void fingerprints.refresh({ force: true }).catch(() => {})
     },
-    onCatalogChanged: () => {}
+    signInRequired: !fakeData
   })
   app.on('before-quit', () => account.stop())
-  const fingerprints = createFingerprintStore({ dir: join(userData, 'scan'), portal })
   const ocr = createOcr({ langPath: engLangPath(app.isPackaged) })
   app.on('will-quit', () => void ocr.dispose().catch(() => {}))
 
@@ -263,13 +280,10 @@ async function bootstrap(): Promise<void> {
   registerIpc(
     createHandlers({
       db,
-      client,
       images,
-      emitSync,
+      catalog,
       app: appDeps,
       window: windowDeps,
-      prices: priceService,
-      emitDataChanged,
       account,
       fingerprints,
       ocr
@@ -296,12 +310,8 @@ async function bootstrap(): Promise<void> {
   }
 
   recordSnapshot(db)
-  void startupSync().catch((e) => console.error('Startup sync failed', e))
-
-  async function startupSync(): Promise<void> {
-    const { changed } = await refreshCatalog(db, {
-      client,
-      yugipedia,
+  if (fakeData) {
+    void startDirectCatalog(db, {
       version: app.getVersion(),
       onSyncProgress: emitSync,
       onSynced: () => {
@@ -310,18 +320,13 @@ async function bootstrap(): Promise<void> {
       },
       onChanged: emitDataChanged
     })
-    account.catalogRefreshed()
-    // TCGplayer prices may have moved the collection's value.
-    recordSnapshot(db)
-    // Signed in, prices come from the account's server; signed out, straight from the eBay Worker.
-    if (account.isSignedIn()) {
-      if (changed) emitDataChanged()
-      return
-    }
-    // refreshIntlPrices never rejects; failures still change the shown no-price reason.
-    const prices = await refreshIntlPrices(db, priceService.client())
-    if (prices.updated > 0) recordSnapshot(db)
-    if (changed || prices.updated > 0 || prices.failed > 0) emitDataChanged()
+      .then(({ changed }) => {
+        account.catalogRefreshed()
+        // TCGplayer prices may have moved the collection's value.
+        recordSnapshot(db)
+        if (changed) emitDataChanged()
+      })
+      .catch((e) => console.error('Startup sync failed', e))
   }
 
   app.on('activate', function () {

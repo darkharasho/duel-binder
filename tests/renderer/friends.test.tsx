@@ -15,7 +15,8 @@ const signedOut: AccountStatus = {
   lastSyncedAt: null,
   error: null,
   pendingCount: 0,
-  unsyncedCount: 0
+  unsyncedCount: 0,
+  signInRequired: true
 }
 const signedIn: AccountStatus = { ...signedOut, state: 'idle', user: seto }
 

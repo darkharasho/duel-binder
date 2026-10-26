@@ -1,8 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
-import { useState } from 'react'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { isSyncing, useSyncStatus } from '@/components/useSyncStatus'
 import { useUpdateStatus } from './useUpdateToasts'
 import { api, queryKeys } from '@/lib/api'
@@ -47,71 +45,6 @@ function describeUpdate(s: UpdateStatus | undefined): string {
     default:
       return ''
   }
-}
-
-/** Electron wraps errors thrown in main as "Error invoking remote method '…': Error: <message>". */
-const ipcMessage = (e: Error): string => e.message.replace(/^Error invoking remote method '[^']+': (?:\w*Error: )?/, '')
-
-function PriceServiceSection(): React.JSX.Element {
-  const qc = useQueryClient()
-  const settings = useQuery({ queryKey: queryKeys.priceSettings, queryFn: () => api.prices.settings() })
-  const [draft, setDraft] = useState<string | null>(null)
-  const value = draft ?? settings.data?.url ?? ''
-  const save = useMutation({
-    mutationFn: (url: string | null) => api.prices.setUrl(url),
-    onSuccess: (s) => {
-      qc.setQueryData(queryKeys.priceSettings, s)
-      setDraft(null)
-      toast.success(s.url === '' ? 'eBay prices turned off' : 'Price service address saved')
-    },
-    onError: (e: Error) => toast.error(ipcMessage(e))
-  })
-  const s = settings.data
-  const account = useQuery({ queryKey: queryKeys.account, queryFn: () => api.account.status() })
-  const signedIn = account.data?.user != null
-  if (signedIn) {
-    return (
-      <Section title="eBay prices">
-        <p className="text-sm text-muted-foreground">
-          While you&apos;re signed in, prices come from your Duel Binder account.
-        </p>
-      </Section>
-    )
-  }
-  return (
-    <Section title="eBay prices">
-      <p className="text-sm text-muted-foreground">
-        Copies you own are priced from eBay asking prices through a small web service. English copies fall back
-        to TCGplayer prices when eBay has none. Leave the address empty to turn this off.
-      </p>
-      <form
-        className="flex gap-2"
-        onSubmit={(e) => {
-          e.preventDefault()
-          save.mutate(value)
-        }}
-      >
-        <Input
-          aria-label="Price service address"
-          placeholder="https://…"
-          value={value}
-          disabled={!s || s.envOverride}
-          onChange={(e) => setDraft(e.target.value)}
-        />
-        <Button type="submit" size="sm" className="h-9" disabled={!s || s.envOverride || draft === null || save.isPending}>
-          Save
-        </Button>
-      </form>
-      {s?.envOverride && (
-        <p className="text-sm text-muted-foreground">Set by YGO_PRICE_WORKER_URL, so this address is ignored.</p>
-      )}
-      {s && !s.isDefault && !s.envOverride && (
-        <Button variant="outline" size="sm" disabled={save.isPending} onClick={() => save.mutate(null)}>
-          Use the built-in address
-        </Button>
-      )}
-    </Section>
-  )
 }
 
 function AboutSection(): React.JSX.Element {
@@ -214,8 +147,6 @@ function DesktopSettings(): React.JSX.Element {
           Refresh card data
         </Button>
       </Section>
-
-      <PriceServiceSection />
 
       <Section title="Image cache">
         <Row label="Size">{formatMb(cache.data ?? 0)}</Row>

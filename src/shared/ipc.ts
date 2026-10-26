@@ -15,7 +15,6 @@ import type {
   Facets,
   FriendRequestResult,
   FriendsOverview,
-  PriceSettings,
   SetChecklist,
   SetSummary,
   SyncStatus,
@@ -82,11 +81,6 @@ export interface Api {
     status(): Promise<SyncStatus>
     run(): Promise<SyncStatus>
     onProgress(cb: (s: SyncStatus) => void): () => void
-  }
-  prices: {
-    settings(): Promise<PriceSettings>
-    /** Saves an address ('' turns eBay prices off); null goes back to the built-in one. */
-    setUrl(url: string | null): Promise<PriceSettings>
   }
   images: {
     cacheSize(): Promise<number>
@@ -161,8 +155,6 @@ export const INVOKE_CHANNELS = [
   'sets:adjust',
   'sync:status',
   'sync:run',
-  'prices:settings',
-  'prices:setUrl',
   'images:cacheSize',
   'images:clearCache',
   'window:minimize',

@@ -16,7 +16,8 @@ const signedOut = {
   lastSyncedAt: null,
   error: null,
   pendingCount: 0,
-  unsyncedCount: 0
+  unsyncedCount: 0,
+  signInRequired: true
 } as const
 
 const emptyStatus = { state: 'idle', lastSyncAt: null, dbVersion: null, cardCount: 1, error: null, blocked: null } as const
@@ -96,10 +97,6 @@ export function createMockApi(overrides: DeepPartial<Api> = {}): Api {
       onProgress: vi.fn(() => () => {})
     },
     images: { cacheSize: vi.fn(async () => 0), clearCache: vi.fn(async () => undefined) },
-    prices: {
-      settings: vi.fn(async () => ({ url: '', defaultUrl: '', isDefault: true, envOverride: false })),
-      setUrl: vi.fn(async () => ({ url: '', defaultUrl: '', isDefault: true, envOverride: false }))
-    },
     window: {
       platform: 'linux',
       minimize: vi.fn(async () => undefined),

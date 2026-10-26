@@ -1,6 +1,6 @@
 import { deleteMeta, getMeta, setMeta } from '../db/meta'
 import type { SqlDb } from '../db/sql'
-import { priceCandidates } from '../prices/refresh'
+import { priceCandidates } from '../prices/candidates'
 import type { ContributedPrinting } from '../../shared/catalogFeed'
 import type { UnsyncedEntry } from '../../shared/types'
 import type { Language } from '../../shared/languages'

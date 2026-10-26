@@ -16,7 +16,6 @@ import {
 import { CloudAuthError, createCloudClient } from '../../src/main/cloud/client'
 import { activeOwner } from '../../src/main/cloud/localSync'
 import { TokenStore, type Cipher } from '../../src/main/cloud/tokenStore'
-import { createHandlers } from '../../src/main/ipc/handlers'
 import { addEntry, listEntries, updateEntry } from '../../src/main/repo/collection'
 import type { Me } from '../../src/shared/cloud'
 import { FRIENDS_SIGNED_OUT, OFFLINE_MESSAGE } from '../../src/shared/friends'
@@ -120,7 +119,7 @@ async function willSignInAs(user: Me): Promise<string> {
 
 const tokenFile = (): string => join(dir, 'account.json')
 
-function makeService(): AccountService {
+function makeService(opts: { signInRequired?: boolean } = {}): AccountService {
   const service = createAccountService({
     db,
     tokens: new TokenStore(tokenFile(), fakeCipher),
@@ -143,6 +142,7 @@ function makeService(): AccountService {
     isOnline: () => online,
     catalog,
     onCatalogChanged,
+    ...opts,
     now: NOW
   })
   services.push(service)
@@ -227,9 +227,14 @@ describe('account service', () => {
       lastSyncedAt: null,
       error: null,
       pendingCount: 0,
-      unsyncedCount: 0
+      unsyncedCount: 0,
+      signInRequired: true
     })
     expect(service.isSignedIn()).toBe(false)
+  })
+
+  it('reports when the app can be used signed out', () => {
+    expect(makeService({ signInRequired: false }).status().signInRequired).toBe(false)
   })
 
   it('first sign-in adopts never-signed-in cards without asking', async () => {
@@ -393,67 +398,6 @@ describe('account service', () => {
     expect(emitted.length).toBeGreaterThan(3)
     expect(all).not.toContain(token)
     expect(all).not.toMatch(/token/i)
-  })
-
-  it('while signed in no request goes to the eBay Worker', async () => {
-    const service = makeService()
-    const lookup = vi.fn(async () => ({
-      price: 1.5,
-      listingCount: 2,
-      checkedAt: NOW().toISOString()
-    }))
-    const handlers = createHandlers({
-      db,
-      client: { fetchDbVersion: vi.fn(), fetchCardInfo: vi.fn(), fetchCardSets: vi.fn() },
-      images: {
-        get: vi.fn(),
-        getSet: vi.fn(),
-        getPrinting: vi.fn(),
-        sizeBytes: async () => 0,
-        clear: async () => {}
-      },
-      emitSync: () => {},
-      app: {
-        version: () => '0.0.0',
-        openDataFolder: async () => {},
-        backupDatabase: async () => null,
-        updateStatus: async () => ({ state: 'idle', mode: 'auto', version: null, error: null }),
-        checkForUpdates: async () => ({ state: 'none', mode: 'auto', version: null, error: null }),
-        applyUpdate: async () => {}
-      },
-      window: {
-        minimize: vi.fn(),
-        toggleMaximize: vi.fn(),
-        close: vi.fn(),
-        isMaximized: () => false
-      },
-      prices: {
-        client: () => ({ lookup }),
-        settings: () => ({ url: '', defaultUrl: '', isDefault: true, envOverride: false }),
-        setUrl: () => ({ url: '', defaultUrl: '', isDefault: true, envOverride: false })
-      },
-      emitDataChanged,
-      account: service,
-      fingerprints: {
-        read: async () => null,
-        status: () => ({ state: 'missing', count: 0 }),
-        refresh: async () => ({ state: 'missing', count: 0 })
-      },
-      ocr: { read: async () => [], dispose: async () => {} }
-    })
-
-    await signInAs(service, me(alice, 'alice'))
-    await handlers['collection:add']({ printingId: pid(db, 'LOB-EN005'), imageId: DM, quantity: 1 })
-    await new Promise((r) => setTimeout(r, 20))
-    expect(lookup).not.toHaveBeenCalled()
-
-    await handlers['account:signOut']()
-    await handlers['collection:add']({
-      printingId: pid(db, 'LOB-EN119'),
-      imageId: POT,
-      quantity: 1
-    })
-    await vi.waitFor(() => expect(lookup).toHaveBeenCalledTimes(1))
   })
 
   it('a catalog refresh applies pending entries', async () => {

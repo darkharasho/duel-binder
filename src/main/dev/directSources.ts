@@ -1,3 +1,4 @@
+import type Database from 'better-sqlite3'
 import type { SqlDb } from '../db/sql'
 import {
   imageUrl,
@@ -9,6 +10,13 @@ import {
 import type { ImageSources } from '../images/cache'
 import { printingImageKey } from '../images/cache'
 import { findSetImageUrl } from '../repo/sets'
+import type { CatalogService } from '../catalog/service'
+import { createYgoClient } from '../ygo/client'
+import { refreshCatalog, type RefreshCatalogDeps } from '../sync/catalog'
+import { getSyncStatus } from '../sync/sync'
+import { createYugipediaClient, type YugipediaClient } from '../yugipedia/client'
+import { createPrintingArtResolver } from '../yugipedia/artResolver'
+import { createTcgplayerLookup } from '../tcgplayer/catalog'
 
 const REPO_URL = 'https://github.com/darkharasho/duel-binder'
 
@@ -45,4 +53,45 @@ export function directImageSources(opts: {
       return url !== null && key !== null ? { url, headers, key } : null
     }
   }
+}
+
+// Today's self-built catalog, straight from YGOPRODeck, Yugipedia, TCGplayer and Konami. Dev
+// fake-data profile only; packaged builds get the catalog from the portal.
+
+/** One Yugipedia client per process, so set syncs and art lookups share its request pacing. */
+let yugipedia: YugipediaClient | null = null
+const sharedYugipedia = (version: string): YugipediaClient =>
+  (yugipedia ??= createYugipediaClient({ version }))
+
+/** Finds a printing's photo URL, TCGplayer's first, then Yugipedia's (for `directImageSources`). */
+export function directPrintingArt(
+  db: Database.Database,
+  version: string
+): (printingId: number) => Promise<string | null> {
+  const art = createPrintingArtResolver({
+    db,
+    client: sharedYugipedia(version),
+    quickUrl: createTcgplayerLookup(db)
+  })
+  return (id) => art.url(id)
+}
+
+/** The self-built catalog's status; updates from the server's catalog never apply to it. */
+export function directCatalog(db: Database.Database): CatalogService {
+  return {
+    status: () => getSyncStatus(db),
+    update: async () => ({ changed: false, imagesChanged: false })
+  }
+}
+
+/** Runs the self-built catalog refresh once (see `refreshCatalog`). */
+export function startDirectCatalog(
+  db: Database.Database,
+  deps: Pick<RefreshCatalogDeps, 'version' | 'onSyncProgress' | 'onSynced' | 'onChanged'>
+): Promise<{ changed: boolean }> {
+  return refreshCatalog(db, {
+    ...deps,
+    client: createYgoClient(),
+    yugipedia: sharedYugipedia(deps.version)
+  })
 }

@@ -12,7 +12,8 @@ const base: AccountStatus = {
   lastSyncedAt: null,
   error: null,
   pendingCount: 0,
-  unsyncedCount: 0
+  unsyncedCount: 0,
+  signInRequired: true
 }
 const signedIn = (over: Partial<AccountStatus> = {}): AccountStatus => ({
   ...base,
@@ -95,16 +96,6 @@ describe('desktop account section', () => {
         '4 cards from your account are waiting for newer card data. Refresh card data to bring them in.'
       )
     ).toBeInTheDocument()
-  })
-
-  it('signed in hides the custom eBay address field', async () => {
-    const { unmount } = renderWithProviders(<SettingsPage />, { api: make(signedIn()) })
-    expect(await screen.findByText("While you're signed in, prices come from your Duel Binder account.")).toBeInTheDocument()
-    expect(screen.queryByLabelText('Price service address')).not.toBeInTheDocument()
-    unmount()
-    renderWithProviders(<SettingsPage />, { api: make(base) })
-    expect(await screen.findByLabelText('Price service address')).toBeInTheDocument()
-    expect(screen.queryByText(/prices come from your Duel Binder account/)).not.toBeInTheDocument()
   })
 
   it('status pushed from main updates the section', async () => {

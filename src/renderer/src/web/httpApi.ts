@@ -109,7 +109,6 @@ export function createHttpApi(opts: HttpApiOptions = {}): Api {
       run: async () => SYNC_IDLE,
       onProgress: noUnsubscribe
     },
-    prices: { settings: unavailable, setUrl: unavailable },
     images: { cacheSize: unavailable, clearCache: unavailable },
     window: {
       platform: 'web',

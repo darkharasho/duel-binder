@@ -211,6 +211,8 @@ export interface AccountStatus {
   pendingCount: number
   /** The shown account's entries that can't sync (see `UnsyncedEntry`). */
   unsyncedCount: number
+  /** The app can't be used signed out; false only in the dev fake-data profile. */
+  signInRequired: boolean
 }
 
 /** A collection entry the server can't take, with why. */

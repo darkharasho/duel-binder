@@ -140,8 +140,7 @@ export function dirtyEntries(
 /** Marks a pushed row clean, unless it was edited again since `e` was read; a clean row has no sync issue. */
 export function markPushed(db: SqlDb, e: WireEntry): void {
   const row = db.prepare('SELECT owner_id FROM collection_entries WHERE uid = ?').get(e.uid) as
-    | { owner_id: number }
-    | undefined
+    { owner_id: number } | undefined
   const r = db
     .prepare(
       'UPDATE collection_entries SET dirty = 0 WHERE uid = ? AND updated_at = ? AND deleted_at IS ?'

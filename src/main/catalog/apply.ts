@@ -14,8 +14,13 @@ export interface ApplyResult {
  * lose or re-point a collection entry: a tombstone for a row an entry (any owner, live or
  * tombstoned) still depends on is skipped, or for printings the row is kept and flagged
  * `missing_from_api`.
+ *
+ * Must run inside a transaction: it defers foreign-key checks to commit, because a snapshot
+ * lists each row at its latest seq, so a printing or image can arrive before its (later
+ * updated) card. A real violation still fails the commit.
  */
 export function applyChanges(db: SqlDb, changes: CatalogChange[]): ApplyResult {
+  db.exec('PRAGMA defer_foreign_keys = ON')
   const result: ApplyResult = { applied: 0, cardsChanged: false, imagesChanged: false }
   const columnCache = new Map<string, Set<string>>()
   const localColumns = (table: string): Set<string> => {

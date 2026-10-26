@@ -159,4 +159,38 @@ describe('applyChanges', () => {
     finishApply(db, r)
     expect(searchCards(db, 'Zorblax').map((c) => c.id)).toContain(p.card_id)
   })
+
+  describe('foreign keys inside a snapshot transaction', () => {
+    const NEW_ID = 987654321
+    const batch = (db: Database.Database, withCard: boolean): CatalogChange[] => {
+      const card = db.prepare('SELECT * FROM cards ORDER BY id LIMIT 1').get() as Record<string, string | number | null>
+      return [
+        {
+          seq: 1,
+          table: 'card_printings',
+          row: { id: 7001, card_id: NEW_ID, set_name: 'Snap Set', set_code: 'SNP-EN001', set_rarity: 'Common', language: 'en', contributed: 0 }
+        },
+        { seq: 2, table: 'card_images', row: { image_id: NEW_ID, card_id: NEW_ID, sort_order: 0, missing_from_api: 0 } },
+        ...(withCard ? [{ seq: 3, table: 'cards' as const, row: { ...card, id: NEW_ID, name: 'Snapshot Card' } }] : [])
+      ]
+    }
+    const count = (db: Database.Database): number[] =>
+      [
+        'SELECT COUNT(*) AS n FROM cards WHERE id = ?',
+        'SELECT COUNT(*) AS n FROM card_printings WHERE card_id = ?',
+        'SELECT COUNT(*) AS n FROM card_images WHERE card_id = ?'
+      ].map((q) => (db.prepare(q).get(NEW_ID) as { n: number }).n)
+
+    it('accepts children that arrive before their card', async () => {
+      const db = await seededDb()
+      db.transaction(() => applyChanges(db, batch(db, true)))()
+      expect(count(db)).toEqual([1, 1, 1])
+    })
+
+    it('still fails at commit when the card never arrives, persisting nothing', async () => {
+      const db = await seededDb()
+      expect(() => db.transaction(() => applyChanges(db, batch(db, false)))()).toThrow(/FOREIGN KEY/)
+      expect(count(db)).toEqual([0, 0, 0])
+    })
+  })
 })

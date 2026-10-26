@@ -94,6 +94,7 @@ for (const t of truth) {
   }
 }
 const targets = wanted.size
+const truthImages = new Set(wanted.keys())
 const rand = rng(SEED)
 const pool = cards.filter((c) => c.frameType !== 'skill' && !wanted.has(c.card_images[0].id))
 while (wanted.size < targets + DISTRACTORS && pool.length) {
@@ -112,6 +113,8 @@ for (const [imageId, card] of wanted) {
     else {
       const res = await get(imageUrl('cropped', imageId))
       if (res.status === 404) {
+        if (truthImages.has(imageId))
+          console.warn(`No cropped art for ${card.name} (image ${imageId}); its shots can't match`)
         missing++
         continue
       }

@@ -337,7 +337,7 @@ export function findCandidates(cv: CV, img: RgbaImage): Quad[] {
         const quads = [...split, ...plain].map(
           (q) => q.map(([x, y]) => [x / scale, y / scale]) as unknown as Quad
         )
-        return outline ? [outline, ...quads] : quads
+        return outline ? [outline, ...quads.filter((q) => !sameQuad(q, outline))] : quads
       })
     })
   })

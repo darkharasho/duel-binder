@@ -39,8 +39,6 @@ interface Row {
   flags: string
   recognizable: boolean
   negative: boolean
-  /** False for unlabelled frames of several cards, where any card shown may be accepted. */
-  judged: boolean
   found: boolean
   top: number | null
   correct: boolean
@@ -101,7 +99,6 @@ describe.skipIf(!DIR)('recognizeArt on real webcam photos', () => {
         recognizable:
           t.cardId !== null && !t.flags.includes('art_not_in_db') && !t.flags.includes('unsure'),
         negative: t.name === null || t.flags.includes('art_not_in_db'),
-        judged: t.name !== null || !t.flags.includes('multiple'),
         found: found !== null,
         top,
         correct: top !== null && top === cardId,
@@ -124,10 +121,7 @@ describe.skipIf(!DIR)('recognizeArt on real webcam photos', () => {
         recognizable.length
       ),
       'false accepts (not recognizable)': `${negatives.filter((r) => r.accepted).length}/${negatives.length}`,
-      'accepted but wrong (all shots)': rows.filter((r) => r.accepted && !r.correct && r.judged)
-        .length,
-      'accepted in unlabelled multi-card frames': rows.filter((r) => r.accepted && !r.judged)
-        .length,
+      'accepted but wrong (all shots)': rows.filter((r) => r.accepted && !r.correct).length,
       'median ms': sorted[sorted.length >> 1]
     })
     console.table(
@@ -142,8 +136,13 @@ describe.skipIf(!DIR)('recognizeArt on real webcam photos', () => {
   }, 600_000)
 
   it('never accepts the wrong card', () => {
-    const wrong = rows.filter((r) => r.accepted && !r.correct && r.judged)
+    const wrong = rows.filter((r) => r.accepted && !r.correct)
     expect(wrong.map((r) => `${r.file} (${r.name}) as ${r.top}`)).toEqual([])
+  })
+
+  it('accepts nothing on shots without a card or whose artwork YGOPRODeck lacks', () => {
+    const accepted = rows.filter((r) => r.negative && r.accepted)
+    expect(accepted.map((r) => `${r.file} (${r.name}) as ${r.top}`)).toEqual([])
   })
 
   it(`accepts the right card in at least ${MIN_ACCEPTED_CORRECT * 100}% of recognizable shots`, () => {

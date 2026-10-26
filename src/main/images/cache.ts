@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto'
+import { createHash, randomUUID } from 'node:crypto'
 import { createWriteStream, promises as fs } from 'node:fs'
 import path from 'node:path'
 import { Readable } from 'node:stream'
@@ -8,8 +8,6 @@ import { createLimiter, type Limiter } from './limiter'
 import { setImageKey } from '../../shared/setImages'
 import {
   imageUrl,
-  KONAMI_LOGO_PREFIX,
-  PACK_ART_PREFIX,
   SET_KEY_RE,
   setImageUrl,
   YUGIPEDIA_IMAGE_PREFIX,
@@ -29,15 +27,14 @@ export function parseImageUrl(url: string): { size: ImageSize; id: number } | nu
 
 export { setImageKey }
 
-const REPO_URL = 'https://github.com/darkharasho/duel-binder'
-
 /** 'yp-' + first 20 hex chars of sha1(url); null unless url starts with https://ms.yugipedia.com/ */
 export function yugipediaImageKey(url: string | null): string | null {
   if (url === null || !url.startsWith(YUGIPEDIA_IMAGE_PREFIX)) return null
   return `yp-${createHash('sha1').update(url).digest('hex').slice(0, 20)}`
 }
 
-const TCGPLAYER_IMAGE_RE = /^https:\/\/tcgplayer-cdn\.tcgplayer\.com\/product\/\d+_in_1000x1000\.jpg$/
+const TCGPLAYER_IMAGE_RE =
+  /^https:\/\/tcgplayer-cdn\.tcgplayer\.com\/product\/\d+_in_1000x1000\.jpg$/
 
 /** Cache key of a printing photo: Yugipedia scans as for set images, TCGplayer photos as 'tp-'. */
 export function printingImageKey(url: string | null): string | null {
@@ -62,53 +59,82 @@ export function parsePrintingImageUrl(url: string): number | null {
 export interface ImageCache {
   get(size: ImageSize, id: number): Promise<string | null>
   getSet(key: string): Promise<string | null>
-  /** The scan of one printing (from Yugipedia); null when it has none. */
+  /** The scan of one printing; null when it has none. */
   getPrinting(printingId: number): Promise<string | null>
   sizeBytes(): Promise<number>
   clear(): Promise<void>
 }
 
+/** Where one image is fetched from, and the headers that fetch carries. */
+export interface ImageSource {
+  url: string
+  headers?: Record<string, string>
+}
+
+/** Where each kind of image comes from; null answers mean "nothing to fetch" and are never cached. */
+export interface ImageSources {
+  card(size: ImageSize, id: number): ImageSource | null
+  set(key: string): ImageSource | null
+  konami(key: string): ImageSource | null
+  printing(printingId: number): Promise<ImageSource | null>
+}
+
 const IMAGE_TIMEOUT_MS = 30_000
+
+const PRINTING_EXT: Record<string, string> = {
+  'image/png': 'png',
+  'image/jpeg': 'jpg',
+  'image/webp': 'webp',
+  'image/gif': 'gif'
+}
+const PRINTING_EXTS = ['png', 'jpg', 'webp', 'gif']
 
 export const defaultLimiter = (): Limiter => createLimiter({ concurrency: 4, minIntervalMs: 100 })
 
 export function createImageCache(opts: {
   dir: string
+  sources: ImageSources
   fetchFn?: typeof fetch
   limit?: Limiter
-  /** App version, sent in the Yugipedia User-Agent. */
-  version?: string
-  /** Maps a `yp-` (Yugipedia), `yc-` (official site) or `km-` (Konami news) set-image key to its source URL (null when unknown). */
-  resolveSetImage?: (key: string) => string | null
   /** Rewrites a downloaded Konami logo in place (cutting out its white); a throw drops the download. */
   prepareLogo?: (file: string) => Promise<void>
-  /** Finds the photo URL of a printing, Yugipedia or TCGplayer (null when none). */
-  resolvePrintingArt?: (printingId: number) => Promise<string | null>
 }): ImageCache {
   const fetchFn = opts.fetchFn ?? fetch
   const limit = opts.limit ?? defaultLimiter()
   const inFlight = new Map<string, Promise<string | null>>()
 
   const exists = (p: string): Promise<boolean> =>
-    fs.stat(p).then((s) => s.isFile() && s.size > 0, () => false)
+    fs.stat(p).then(
+      (s) => s.isFile() && s.size > 0,
+      () => false
+    )
 
+  /** `finalPath` may depend on the response's content-type (printings keep the format they arrive in). */
   async function download(
-    remoteUrl: string,
-    finalPath: string,
-    headers?: Record<string, string>,
+    source: ImageSource,
+    finalPath: string | ((contentType: string) => string | null),
     prepare?: (file: string) => Promise<void>
   ): Promise<string | null> {
-    const tmpPath = `${finalPath}.tmp`
+    const tmpPath = `${typeof finalPath === 'string' ? finalPath : path.join(opts.dir, 'printings', `dl-${randomUUID()}`)}.tmp`
     try {
-      await fs.mkdir(path.dirname(finalPath), { recursive: true })
-      const res = await fetchFn(remoteUrl, { signal: AbortSignal.timeout(IMAGE_TIMEOUT_MS), ...(headers && { headers }) })
+      await fs.mkdir(path.dirname(tmpPath), { recursive: true })
+      const res = await fetchFn(source.url, {
+        signal: AbortSignal.timeout(IMAGE_TIMEOUT_MS),
+        ...(source.headers && { headers: source.headers })
+      })
       if (!res.ok || !res.body) return null
-      if (!(res.headers.get('content-type') ?? '').toLowerCase().startsWith('image/')) return null
-      await pipeline(Readable.fromWeb(res.body as unknown as WebReadableStream), createWriteStream(tmpPath))
+      const contentType = (res.headers.get('content-type') ?? '').toLowerCase()
+      if (!contentType.startsWith('image/')) return null
+      const target = typeof finalPath === 'string' ? finalPath : finalPath(contentType)
+      if (target === null) return null
+      await pipeline(
+        Readable.fromWeb(res.body as unknown as WebReadableStream),
+        createWriteStream(tmpPath)
+      )
       if ((await fs.stat(tmpPath)).size === 0) throw new Error('empty image body')
       await prepare?.(tmpPath)
-      await fs.rename(tmpPath, finalPath)
-      return finalPath
+      await fs.rename(tmpPath, target)
+      return target
     } catch {
       await fs.rm(tmpPath, { force: true }).catch(() => undefined)
       return null
@@ -117,58 +143,75 @@ export function createImageCache(opts: {
 
   async function cached(
     key: string,
-    remoteUrl: string,
-    finalPath: string,
-    headers?: Record<string, string>,
+    source: ImageSource,
+    finalPath: string | ((contentType: string) => string | null),
     prepare?: (file: string) => Promise<void>
   ): Promise<string | null> {
-    if (await exists(finalPath)) return finalPath
     let pending = inFlight.get(key)
     if (!pending) {
-      pending = limit(() => download(remoteUrl, finalPath, headers, prepare)).finally(() => inFlight.delete(key))
+      pending = limit(() => download(source, finalPath, prepare)).finally(() =>
+        inFlight.delete(key)
+      )
       inFlight.set(key, pending)
     }
     return pending
   }
 
+  const fromSource = async (
+    source: () => ImageSource | null,
+    key: string,
+    finalPath: string,
+    prepare?: (file: string) => Promise<void>
+  ): Promise<string | null> => {
+    if (await exists(finalPath)) return finalPath
+    let src: ImageSource | null
+    try {
+      src = source()
+    } catch {
+      return null // e.g. the database is closed or busy; never reject the protocol handler
+    }
+    return src === null ? null : cached(key, src, finalPath, prepare)
+  }
+
   return {
-    get: (size, id) => cached(`${size}/${id}`, imageUrl(size, id), path.join(opts.dir, size, `${id}.jpg`)),
+    get: (size, id) =>
+      fromSource(
+        () => opts.sources.card(size, id),
+        `${size}/${id}`,
+        path.join(opts.dir, size, `${id}.jpg`)
+      ),
 
     async getSet(key) {
       if (!SET_KEY_RE.test(key)) return null
-      const source = key.slice(0, 3)
-      if (source === 'yp-' || source === 'yc-' || source === 'km-') {
-        let remote: string | null
-        try {
-          remote = opts.resolveSetImage?.(key) ?? null
-        } catch {
-          return null // e.g. the database is closed or busy; never reject the protocol handler
-        }
-        const prefix =
-          source === 'yp-' ? YUGIPEDIA_IMAGE_PREFIX : source === 'yc-' ? PACK_ART_PREFIX : KONAMI_LOGO_PREFIX
-        if (remote === null || !remote.startsWith(prefix)) return null
-        const headers = { 'User-Agent': `DuelBinder/${opts.version ?? 'unknown'} (${REPO_URL})` }
-        if (source === 'km-') {
-          if (!opts.prepareLogo) return null // shown only once its white is cut out
-          return cached(`set/${key}`, remote, path.join(opts.dir, 'sets', `${key}.png`), headers, opts.prepareLogo)
-        }
-        return cached(`set/${key}`, remote, path.join(opts.dir, 'sets', `${key}.jpg`), headers)
+      if (key.startsWith('km-')) {
+        if (!opts.prepareLogo) return null // shown only once its white is cut out
+        return fromSource(
+          () => opts.sources.konami(key),
+          `set/${key}`,
+          path.join(opts.dir, 'sets', `${key}.png`),
+          opts.prepareLogo
+        )
       }
-      return cached(`set/${key}`, setImageUrl(key), path.join(opts.dir, 'sets', `${key}.jpg`))
+      return fromSource(
+        () => opts.sources.set(key),
+        `set/${key}`,
+        path.join(opts.dir, 'sets', `${key}.jpg`)
+      )
     },
 
     async getPrinting(printingId) {
-      let remote: string | null
+      const base = path.join(opts.dir, 'printings', `srv-${printingId}`)
+      for (const ext of PRINTING_EXTS) if (await exists(`${base}.${ext}`)) return `${base}.${ext}`
+      let src: ImageSource | null
       try {
-        remote = (await opts.resolvePrintingArt?.(printingId)) ?? null
+        src = await opts.sources.printing(printingId)
       } catch {
         return null
       }
-      const key = printingImageKey(remote)
-      if (remote === null || key === null) return null
-      const ext = /\.(png|jpe?g|gif|webp)$/i.exec(remote)?.[1]?.toLowerCase() ?? 'png'
-      return cached(`printing/${key}`, remote, path.join(opts.dir, 'printings', `${key}.${ext}`), {
-        'User-Agent': `DuelBinder/${opts.version ?? 'unknown'} (${REPO_URL})`
+      if (src === null) return null
+      return cached(`printing/${printingId}`, src, (ct) => {
+        const ext = PRINTING_EXT[ct.split(';')[0].trim()]
+        return ext ? `${base}.${ext}` : null
       })
     },
 
@@ -193,6 +236,6 @@ export function createImageCache(opts: {
 
     async clear() {
       await fs.rm(opts.dir, { recursive: true, force: true })
-    },
+    }
   }
 }

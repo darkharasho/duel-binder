@@ -21,7 +21,7 @@ import { createYugipediaClient } from './yugipedia/client'
 import { createPrintingArtResolver } from './yugipedia/artResolver'
 import { createTcgplayerLookup } from './tcgplayer/catalog'
 import { recordSnapshot } from './repo/stats'
-import { findSetImageUrl } from './repo/sets'
+import { directImageSources } from './dev/directSources'
 import { createImageCache } from './images/cache'
 import { prepareLogo } from './images/prepareLogo'
 import { handleImageProtocol, registerImageScheme } from './images/protocol'
@@ -158,10 +158,12 @@ async function bootstrap(): Promise<void> {
   })
   const images = createImageCache({
     dir: join(userData, 'images'),
-    version: app.getVersion(),
-    resolveSetImage: (key) => findSetImageUrl(db, key),
-    prepareLogo,
-    resolvePrintingArt: (id) => printingArt.url(id)
+    sources: directImageSources({
+      db,
+      version: app.getVersion(),
+      resolvePrintingArt: (id) => printingArt.url(id)
+    }),
+    prepareLogo
   })
   handleImageProtocol(images)
 

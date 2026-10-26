@@ -135,7 +135,8 @@ export function createHandlers({
       })),
     'friends:facets': async (userId: number) => account.portal('friends:facets', [userId]),
     'scan:printingsByCode': async (code: string) => printingsByCode(db, code),
-    'scan:printingsForSet': async (setName: string) => printingsForSet(db, setName),
+    'scan:printingsForSet': async (setName: string, language: Language) =>
+      printingsForSet(db, setName, checkLanguage(language)),
     'scan:printingsForCards': async (cardIds: number[]) => printingsForCards(db, cardIds),
     'scan:matchName': async (text: string) => matchName(db, text),
     'scan:fingerprints': () => fingerprints.read(),

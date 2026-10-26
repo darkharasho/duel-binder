@@ -103,17 +103,26 @@ describe('set codes', () => {
     ['LOB-EN0O5', 'LOB-EN005'],
     ['mp19-en001', 'MP19-EN001'],
     ['SDK-001', 'SDK-001'],
-    ['LOB-DE005', null],
+    ['LOB-DE005', 'LOB-DE005'],
+    ['SR14-DE023', 'SR14-DE023'],
+    ['SDK-JP001', 'SDK-JP001'],
+    ['RA02-KR006', 'RA02-KR006'],
+    ['LOB-001', 'LOB-001'],
+    ['LOB-E001', 'LOB-E001'],
+    ['LOB-EO01', 'LOB-EO01'],
+    ['LOB-XX005', null],
+    ['SR14DE023', 'SR14-DE023'],
+    ['SDKJP001', 'SDK-JP001'],
     ['hello', null],
     ['RA01 - EN 054', 'RA01-EN054'],
     ['RA01 – EN 054', 'RA01-EN054'],
     ['DUPO-ENA01', 'DUPO-ENA01'],
-    // OCR drops the thin dash; only EN counts as a region then.
+    // OCR drops the thin dash; only two-letter regions parse then.
     ['BROLEN062', 'BROL-EN062'],
     ['LOBEN005', 'LOB-EN005'],
     ['CT12EN001ATK2500', 'CT12-EN001'],
     ['BROL-EN062', 'BROL-EN062'],
-    ['LOBDE005', null],
+    ['LOBDE005', 'LOB-DE005'],
     ['ATK2500DEF2000', null]
   ])('parseSetCode(%s) = %s', (text, want) => expect(parseSetCode(text)).toBe(want))
 
@@ -125,6 +134,10 @@ describe('set codes', () => {
     expect(mvp[0]).toBe('MVP1-ENS01')
     expect(mvp).toContain('MVP1-EN501')
     expect(new Set(mvp).size).toBe(mvp.length)
+    expect(setCodeCandidates('SR14-DEO23')).toContain('SR14-DE023')
+    expect(setCodeCandidates('SR14-DE023')).toEqual(['SR14-DE023'])
+    expect(setCodeCandidates('LOB-001')).toEqual(['LOB-001', 'LOB-EN001'])
+    expect(setCodeCandidates('L0B-JP0O1')).toEqual(['L0B-JP001', 'LOB-JP001'])
     expect(setCodeCandidates('nothing')).toEqual([])
     expect(setCodeCandidates('CT12ENOO1')).toContain('CT12-EN001')
     expect(setCodeCandidates('BPO1-ENO48')).toContain('BP01-EN048')

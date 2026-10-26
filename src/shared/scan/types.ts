@@ -1,3 +1,4 @@
+import type { Language } from '../languages'
 /** Raw pixels, 4 bytes per pixel (R, G, B, A), row-major. */
 export interface RgbaImage {
   width: number
@@ -5,7 +6,7 @@ export interface RgbaImage {
   data: Uint8ClampedArray | Uint8Array
 }
 
-/** An English printing the scanner can match a card to. */
+/** A printing, in any language, that the scanner can match a card to. */
 export interface ScanPrinting {
   printingId: number
   cardId: number
@@ -14,6 +15,7 @@ export interface ScanPrinting {
   setName: string
   setCode: string
   rarity: string
+  language: Language
   /** The card's artworks, in sort order. */
   imageIds: number[]
 }

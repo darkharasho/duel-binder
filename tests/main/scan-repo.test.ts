@@ -26,7 +26,7 @@ async function scanDb(): Promise<{ db: Database.Database; cardId: number }> {
 }
 
 describe('scan repo', () => {
-  it('printingsByCode is case-insensitive, English-only and carries ordered image ids', async () => {
+  it('printingsByCode is case-insensitive, carries ordered image ids', async () => {
     const { db, cardId } = await scanDb()
     const rows = printingsByCode(db, 'lob-en005')
     expect(rows.map((r) => r.rarity)).toEqual(['Ultra Rare', 'Ultra Rare (Extended Art)'])
@@ -38,12 +38,14 @@ describe('scan repo', () => {
     ).map((i) => i.id)
     expect(images.length).toBeGreaterThan(0)
     expect(rows[0].imageIds).toEqual(images)
-    expect(printingsByCode(db, 'LOB-FR005')).toEqual([])
+    const fr = printingsByCode(db, 'LOB-FR005')
+    expect(fr.map((r) => r.language)).toEqual(['fr'])
+    expect(rows.every((r) => r.language === 'en')).toBe(true)
   })
 
   it('printingsForSet returns every rarity, including the variant, sorted by code then tier', async () => {
     const { db } = await scanDb()
-    const rows = printingsForSet(db, LOB)
+    const rows = printingsForSet(db, LOB, 'en')
     expect(rows.map((r) => `${r.setCode} ${r.rarity}`)).toEqual([
       'LOB-EN005 Ultra Rare',
       'LOB-EN005 Ultra Rare (Extended Art)',
@@ -51,11 +53,29 @@ describe('scan repo', () => {
     ])
   })
 
-  it('printingsForCards returns the cards English printings', async () => {
+  it('printingsForSet filters by language', async () => {
+    const { db } = await scanDb()
+    expect(printingsForSet(db, 'Legend of Blue Eyes (French)', 'fr').map((r) => r.setCode)).toEqual(
+      ['LOB-FR005']
+    )
+    expect(printingsForSet(db, 'Legend of Blue Eyes (French)', 'en')).toEqual([])
+  })
+
+  it('sorts by code, then language order, then rarity', async () => {
+    const { db, cardId } = await scanDb()
+    db.prepare(
+      'INSERT INTO card_printings (card_id, set_name, set_code, set_rarity, language) VALUES (?, ?, ?, ?, ?)'
+    ).run(cardId, LOB, 'LOB-EN005', 'Ultra Rare', 'de')
+    const langs = printingsByCode(db, 'LOB-EN005').map((r) => r.language)
+    expect(langs).toEqual(['en', 'en', 'de'])
+  })
+
+  it('printingsForCards returns the cards printings in every language', async () => {
     const { db, cardId } = await scanDb()
     const rows = printingsForCards(db, [cardId])
     expect(rows.length).toBeGreaterThanOrEqual(3)
     expect(rows.every((r) => r.cardId === cardId)).toBe(true)
+    expect(rows.some((r) => r.language === 'fr')).toBe(true)
     expect(printingsForCards(db, [])).toEqual([])
   })
 

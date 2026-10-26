@@ -2,6 +2,7 @@ import type { SqlDb } from '../db/sql'
 import { getMeta } from '../db/meta'
 import { rarityRank } from '../../shared/scan/rarity'
 import { bestNameMatch } from '../../shared/scan/names'
+import { LANGUAGES, type Language } from '../../shared/languages'
 import type { ScanPrinting } from '../../shared/scan/types'
 
 interface PrintingRow {
@@ -12,13 +13,16 @@ interface PrintingRow {
   setName: string
   setCode: string
   rarity: string
+  language: Language
 }
 
 const SELECT = `SELECT p.id AS printingId, p.card_id AS cardId, c.name AS name, c.frame_type AS frameType,
-  p.set_name AS setName, p.set_code AS setCode, p.set_rarity AS rarity
+  p.set_name AS setName, p.set_code AS setCode, p.set_rarity AS rarity, p.language AS language
   FROM card_printings p JOIN cards c ON c.id = p.card_id`
 
-/** Attaches each card's artwork ids and sorts by set code, then rarity tier. */
+const languageRank = (l: Language): number => LANGUAGES.findIndex((x) => x.code === l)
+
+/** Attaches each card's artwork ids and sorts by set code, then language, then rarity tier. */
 function withImages(db: SqlDb, rows: PrintingRow[]): ScanPrinting[] {
   const ids = [...new Set(rows.map((r) => r.cardId))]
   const images = new Map<number, number[]>()
@@ -41,6 +45,7 @@ function withImages(db: SqlDb, rows: PrintingRow[]): ScanPrinting[] {
     .sort(
       (a, b) =>
         a.setCode.localeCompare(b.setCode) ||
+        languageRank(a.language) - languageRank(b.language) ||
         rarityRank(a.rarity) - rarityRank(b.rarity) ||
         a.printingId - b.printingId
     )
@@ -48,15 +53,15 @@ function withImages(db: SqlDb, rows: PrintingRow[]): ScanPrinting[] {
 
 export function printingsByCode(db: SqlDb, code: string): ScanPrinting[] {
   const rows = db
-    .prepare(`${SELECT} WHERE p.language = 'en' AND p.set_code = ? COLLATE NOCASE`)
+    .prepare(`${SELECT} WHERE p.set_code = ? COLLATE NOCASE`)
     .all(code) as PrintingRow[]
   return withImages(db, rows)
 }
 
-export function printingsForSet(db: SqlDb, setName: string): ScanPrinting[] {
+export function printingsForSet(db: SqlDb, setName: string, language: Language): ScanPrinting[] {
   const rows = db
-    .prepare(`${SELECT} WHERE p.language = 'en' AND p.set_name = ?`)
-    .all(setName) as PrintingRow[]
+    .prepare(`${SELECT} WHERE p.set_name = ? AND p.language = ?`)
+    .all(setName, language) as PrintingRow[]
   return withImages(db, rows)
 }
 
@@ -67,9 +72,7 @@ export function printingsForCards(db: SqlDb, cardIds: number[]): ScanPrinting[] 
     const chunk = ids.slice(i, i + 500)
     rows.push(
       ...(db
-        .prepare(
-          `${SELECT} WHERE p.language = 'en' AND p.card_id IN (${chunk.map(() => '?').join(',')})`
-        )
+        .prepare(`${SELECT} WHERE p.card_id IN (${chunk.map(() => '?').join(',')})`)
         .all(...chunk) as PrintingRow[])
     )
   }

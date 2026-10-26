@@ -55,7 +55,7 @@ export interface Api {
   }
   scan: {
     printingsByCode(code: string): Promise<ScanPrinting[]>
-    printingsForSet(setName: string): Promise<ScanPrinting[]>
+    printingsForSet(setName: string, language: Language): Promise<ScanPrinting[]>
     printingsForCards(cardIds: number[]): Promise<ScanPrinting[]>
     matchName(text: string): Promise<{ cardId: number; name: string; score: number } | null>
     fingerprints(): Promise<ArrayBuffer | null>

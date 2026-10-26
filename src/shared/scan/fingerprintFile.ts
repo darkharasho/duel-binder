@@ -41,14 +41,31 @@ export class FingerprintIndex {
     k: number,
     candidates?: ReadonlySet<number>
   ): { imageId: number; distance: number }[] {
+    // One pass keeping the best k in order: this runs a few dozen times per camera frame.
     const found: { imageId: number; distance: number }[] = []
+    if (k <= 0) return found
+    const { hashes } = this
     for (let i = 0; i < this.count; i++) {
       const imageId = this.ids[i]
       if (candidates && !candidates.has(imageId)) continue
-      found.push({ imageId, distance: hamming(hash, 0, this.hashes, i * HASH_WORDS) })
+      const distance = hamming(hash, 0, hashes, i * HASH_WORDS)
+      const last = found[found.length - 1]
+      if (
+        found.length === k &&
+        (distance > last.distance || (distance === last.distance && imageId > last.imageId))
+      )
+        continue
+      let at = found.length
+      while (
+        at > 0 &&
+        (found[at - 1].distance > distance ||
+          (found[at - 1].distance === distance && found[at - 1].imageId > imageId))
+      )
+        at--
+      found.splice(at, 0, { imageId, distance })
+      if (found.length > k) found.pop()
     }
-    found.sort((a, b) => a.distance - b.distance || a.imageId - b.imageId)
-    return found.slice(0, k)
+    return found
   }
 }
 

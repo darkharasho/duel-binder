@@ -13,12 +13,12 @@ export type Quad = readonly [Point, Point, Point, Point]
 const CARD_ASPECT = 0.69
 const ASPECT_TOLERANCE = 0.08
 /** Smallest card, as a share of the frame area. */
-const MIN_AREA = 0.08
+export const MIN_AREA = 0.04
 /** Frames are searched at this width at most; corners are scaled back up. */
-const SEARCH_WIDTH = 640
+export const SEARCH_WIDTH = 640
 const CANNY_LOW = 30
 const CANNY_HIGH = 90
-const CARD_W = 842
+export const CARD_W = 842
 const CARD_H = 1228
 const TOP_MATCHES = 5
 
@@ -34,7 +34,7 @@ function toMat(cv: CV, img: RgbaImage): Mat {
 }
 
 /** Deletes every mat once fn is done with them, even when it throws. */
-function using<T>(mats: { delete(): void }[], fn: () => T): T {
+export function using<T>(mats: { delete(): void }[], fn: () => T): T {
   try {
     return fn()
   } finally {
@@ -42,14 +42,14 @@ function using<T>(mats: { delete(): void }[], fn: () => T): T {
   }
 }
 
-const dist = (a: Point, b: Point): number => Math.hypot(a[0] - b[0], a[1] - b[1])
+export const dist = (a: Point, b: Point): number => Math.hypot(a[0] - b[0], a[1] - b[1])
 
 /**
  * Orders four corners clockwise from the top-left one, starting on a short side so a sideways
  * card comes out upright. Which short side is the card's top can't be told from the outline, so
  * the straightened card may be upside down: callers try it both ways (see rotate180).
  */
-function orderCorners(pts: Point[]): Quad {
+export function orderCorners(pts: Point[]): Quad {
   const cx = pts.reduce((s, p) => s + p[0], 0) / 4
   const cy = pts.reduce((s, p) => s + p[1], 0) / 4
   // With y pointing down, increasing angle runs clockwise.
@@ -75,21 +75,30 @@ function aspect(q: Point[]): number {
   return Math.min(a, b) / Math.max(a, b)
 }
 
-/** Edges of the frame at SEARCH_WIDTH, from each colour channel, thickened to join small gaps. */
-function edgeMap(cv: CV, img: RgbaImage, scale: number): Mat {
+/** img shrunk by scale (when below 1) and blurred, the frame edges are searched in. */
+export function searchImage(cv: CV, img: RgbaImage, scale: number): Mat {
   const small = toMat(cv, img)
-  const channels = new cv.MatVector()
-  const channelEdges = new cv.Mat()
-  const kernel = cv.Mat.ones(3, 3, cv.CV_8U)
   try {
     if (scale < 1) {
       const size = new cv.Size(Math.round(img.width * scale), Math.round(img.height * scale))
       cv.resize(small, small, size, 0, 0, cv.INTER_AREA)
     }
     cv.GaussianBlur(small, small, new cv.Size(5, 5), 0)
+    return small
+  } catch (e) {
+    small.delete()
+    throw e
+  }
+}
+
+/** Edges of a search image, from each colour channel. */
+export function edgeMap(cv: CV, small: Mat): Mat {
+  const channels = new cv.MatVector()
+  const channelEdges = new cv.Mat()
+  const edges = cv.Mat.zeros(small.rows, small.cols, cv.CV_8UC1)
+  try {
     // A card can match its background in brightness but not in hue.
     cv.split(small, channels)
-    const edges = cv.Mat.zeros(small.rows, small.cols, cv.CV_8UC1)
     for (let c = 0; c < 3; c++) {
       const channel = channels.get(c)
       try {
@@ -99,10 +108,28 @@ function edgeMap(cv: CV, img: RgbaImage, scale: number): Mat {
         channel.delete()
       }
     }
-    cv.dilate(edges, edges, kernel)
     return edges
+  } catch (e) {
+    edges.delete()
+    throw e
   } finally {
-    for (const m of [small, channels, channelEdges, kernel]) m.delete()
+    channels.delete()
+    channelEdges.delete()
+  }
+}
+
+/** edges thickened by a pixel each way to join small gaps. */
+export function thicken(cv: CV, edges: Mat): Mat {
+  const thick = new cv.Mat()
+  const kernel = cv.Mat.ones(3, 3, cv.CV_8U)
+  try {
+    cv.dilate(edges, thick, kernel)
+    return thick
+  } catch (e) {
+    thick.delete()
+    throw e
+  } finally {
+    kernel.delete()
   }
 }
 
@@ -112,12 +139,22 @@ function edgeMap(cv: CV, img: RgbaImage, scale: number): Mat {
  */
 export function findCard(cv: CV, img: RgbaImage): Quad | null {
   const scale = Math.min(1, SEARCH_WIDTH / img.width)
-  const edges = edgeMap(cv, img, scale)
+  const small = searchImage(cv, img, scale)
+  const thin = using([small], () => edgeMap(cv, small))
+  const edges = using([thin], () => thicken(cv, thin))
+  return using([edges], () => outlineQuad(cv, edges, scale))
+}
+
+/**
+ * The largest convex four-sided outline with a card's aspect ratio in a thickened edge map of a
+ * frame shrunk by scale, in full-frame coordinates.
+ */
+export function outlineQuad(cv: CV, edges: Mat, scale: number): Quad | null {
   const contours = new cv.MatVector()
   const hierarchy = new cv.Mat()
   const hull = new cv.Mat()
   const approx = new cv.Mat()
-  return using([edges, contours, hierarchy, hull, approx], () => {
+  return using([contours, hierarchy, hull, approx], () => {
     cv.findContours(edges, contours, hierarchy, cv.RETR_LIST, cv.CHAIN_APPROX_SIMPLE)
     const minArea = MIN_AREA * edges.rows * edges.cols
     let best: Point[] | null = null
@@ -202,6 +239,40 @@ function hashBox(cv: CV, card: Mat, box: Box): Uint32Array {
   })
 }
 
+/** A straightened card's closest artworks, and whether the best of them matched it upside down. */
+export function rankArt(
+  cv: CV,
+  card: RgbaImage,
+  index: FingerprintIndex,
+  candidates?: ReadonlySet<number>
+): { matches: { imageId: number; distance: number }[]; upsideDown: boolean } {
+  const upright = toMat(cv, card)
+  const flipped = new cv.Mat()
+  return using([upright, flipped], () => {
+    // Flipping both axes turns the card 180 degrees.
+    cv.flip(upright, flipped, -1)
+    const best = new Map<number, { distance: number; upsideDown: boolean }>()
+    for (const mat of [upright, flipped]) {
+      for (const box of Object.values(ART_BOXES)) {
+        const hash = hashBox(cv, mat, box)
+        for (const { imageId, distance } of index.nearest(hash, TOP_MATCHES, candidates)) {
+          const prev = best.get(imageId)
+          if (prev === undefined || distance < prev.distance)
+            best.set(imageId, { distance, upsideDown: mat === flipped })
+        }
+      }
+    }
+    const ranked = [...best]
+      .map(([imageId, m]) => ({ imageId, ...m }))
+      .sort((a, b) => a.distance - b.distance || a.imageId - b.imageId)
+      .slice(0, TOP_MATCHES)
+    return {
+      matches: ranked.map(({ imageId, distance }) => ({ imageId, distance })),
+      upsideDown: ranked[0]?.upsideDown ?? false
+    }
+  })
+}
+
 /**
  * The closest artworks to a straightened card, keeping each image's best distance over each art
  * box (normal and Pendulum frames) and both ways up, since the card may be upside down.
@@ -213,24 +284,5 @@ export function matchArt(
   index: FingerprintIndex,
   candidates?: ReadonlySet<number>
 ): { imageId: number; distance: number }[] {
-  const upright = toMat(cv, card)
-  const flipped = new cv.Mat()
-  return using([upright, flipped], () => {
-    // Flipping both axes turns the card 180 degrees.
-    cv.flip(upright, flipped, -1)
-    const best = new Map<number, number>()
-    for (const mat of [upright, flipped]) {
-      for (const box of Object.values(ART_BOXES)) {
-        const hash = hashBox(cv, mat, box)
-        for (const { imageId, distance } of index.nearest(hash, TOP_MATCHES, candidates)) {
-          const prev = best.get(imageId)
-          if (prev === undefined || distance < prev) best.set(imageId, distance)
-        }
-      }
-    }
-    return [...best]
-      .map(([imageId, distance]) => ({ imageId, distance }))
-      .sort((a, b) => a.distance - b.distance || a.imageId - b.imageId)
-      .slice(0, TOP_MATCHES)
-  })
+  return rankArt(cv, card, index, candidates).matches
 }

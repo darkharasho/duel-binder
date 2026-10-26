@@ -5,12 +5,13 @@ export type Box = readonly [number, number, number, number]
 
 /**
  * Where the artwork sits on a straightened card, calibrated on the generated fixtures (YGOPRODeck
- * renders). The hash is sensitive to this: a box 2.5% off adds about 50 bits of distance.
+ * renders), with the normal box's left edge moved in to fit real webcam photos. The hash is
+ * sensitive to this: a box 2.5% off adds about 50 bits of distance.
  * The Pendulum box is the art left visible above the Pendulum effect box, which is the part of
  * the cropped art that fingerprintSource keeps (PENDULUM_ART_VISIBLE).
  */
 export const ART_BOXES = {
-  normal: [0.092, 0.168, 0.911, 0.716],
+  normal: [0.1, 0.168, 0.911, 0.716],
   pendulum: [0.034, 0.164, 0.966, 0.626]
 } as const satisfies Record<string, Box>
 

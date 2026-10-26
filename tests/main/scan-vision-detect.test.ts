@@ -23,6 +23,10 @@ import {
   warpCard,
   type Quad
 } from '../../src/renderer/src/features/scan/vision/detect'
+import {
+  findCandidates,
+  recognizeArt
+} from '../../src/renderer/src/features/scan/vision/candidates'
 
 // Vitest's CommonJS interop exposes the Emscripten module's own `then` on the import, which
 // would make importing it never settle; hand over the plain module instead.
@@ -250,6 +254,67 @@ describe('matchArt', () => {
     const top = matchArt(cv, card, index, candidates)
     expect(top.length).toBeGreaterThan(0)
     expect(top.every((r) => candidates.has(r.imageId))).toBe(true)
+  })
+})
+
+describe('recognizeArt', () => {
+  /** Mean absolute difference of two same-sized images' pixels. */
+  const difference = (a: RgbaImage, b: RgbaImage): number => {
+    let sum = 0
+    for (let i = 0; i < a.data.length; i += 4)
+      for (let c = 0; c < 3; c++) sum += Math.abs(a.data[i + c] - b.data[i + c])
+    return sum / (a.data.length * 0.75)
+  }
+
+  it('names the right artwork first in at least 90% of shots, held any way round', () => {
+    const turns: [string, (img: RgbaImage) => RgbaImage][] = [
+      ['upright', (img) => img],
+      ['clockwise', (img) => rotate90(img, true)],
+      ['upside down', rotate180]
+    ]
+    const times: number[] = []
+    for (const [name, turn] of turns) {
+      const misses = shots
+        .filter((s) => {
+          const img = turn(frames.get(s.file)!)
+          const t = performance.now()
+          const found = recognizeArt(cv, img, index)
+          times.push(performance.now() - t)
+          return found?.matches[0]?.imageId !== s.imageId
+        })
+        .map((s) => s.file)
+      expect(shots.length - misses.length, `${name}: ${misses.join(', ')}`).toBeGreaterThanOrEqual(
+        0.9 * shots.length
+      )
+    }
+    const median = [...times].sort((a, b) => a - b)[times.length >> 1]
+    console.log(`recognizeArt median ${median.toFixed(1)} ms`)
+    expect(median).toBeLessThan(400)
+  }, 120_000)
+
+  it('returns the straightened card upright', () => {
+    for (const s of shots.slice(0, 12)) {
+      const upright = warpCard(cv, frames.get(s.file)!, s.quad)
+      for (const img of [frames.get(s.file)!, rotate180(frames.get(s.file)!)]) {
+        const { card } = recognizeArt(cv, img, index)!
+        expect([card.width, card.height]).toEqual([842, 1228])
+        expect(difference(card, upright), s.file).toBeLessThan(difference(rotate180(card), upright))
+      }
+    }
+  }, 60_000)
+
+  it('limits matches to the candidate images', () => {
+    const candidates = new Set([46986415, 89631139])
+    const found = recognizeArt(cv, frames.get(shots[0].file)!, index, candidates)!
+    expect(found.matches.length).toBeGreaterThan(0)
+    expect(found.matches.every((r) => candidates.has(r.imageId))).toBe(true)
+  })
+
+  it('finds no card on an empty textured background', () => {
+    for (let seed = 1; seed <= 5; seed++) {
+      expect(findCandidates(cv, emptyFrame(seed)), `seed ${seed}`).toEqual([])
+      expect(recognizeArt(cv, emptyFrame(seed), index), `seed ${seed}`).toBeNull()
+    }
   })
 })
 

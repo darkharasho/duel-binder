@@ -207,6 +207,7 @@ const ENTRY_REFS: Record<string, [count: number, kind: string]> = {
     'live rows for the card count; all rows incl. tombstones for the last-change time'
   ],
   'workers/portal/src/sync.ts': [5, SYNC],
+  'src/main/catalog/apply.ts': [4, FK],
   'src/main/cloud/localSync.ts': [11, SYNC],
   'src/main/db/schema.ts': [9, DDL],
   'workers/portal/src/migrate.ts': [10, DDL]

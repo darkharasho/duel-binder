@@ -86,10 +86,9 @@ function analyze(
     quad = likeliest
     card = () => warpCard(cv, img, likeliest, bandWidth(likeliest))
   }
-  if (!wantBands) {
-    const cues = upright ? rarityCues(upright) : null
-    return { found: true, quad, art, codeBands: [], nameBand: null, cues }
-  }
+  // Read at CARD_W, the size the cues were tuned at.
+  const cues = upright ? rarityCues(upright) : null
+  if (!wantBands) return { found: true, quad, art, codeBands: [], nameBand: null, cues }
   const straight = card()
   const name = toBand(straight, NAME_BAND)
   return {
@@ -98,7 +97,7 @@ function analyze(
     art,
     codeBands: CODE_BANDS.map((box) => toBand(straight, box)).filter(hasPixels),
     nameBand: hasPixels(name) ? name : null,
-    cues: upright ? rarityCues(straight) : null
+    cues
   }
 }
 

@@ -10,7 +10,7 @@ import { decode } from 'jpeg-js'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 import { artHash, fingerprintSource } from '../../src/shared/scan/fingerprint'
 import { decodeFingerprints, encodeFingerprints } from '../../src/shared/scan/fingerprintFile'
-import { pickRarityByCues, type NameInk } from '../../src/shared/scan/rarity'
+import { pickRarityByCues, type NameInk, type NameTint } from '../../src/shared/scan/rarity'
 import type { RgbaImage } from '../../src/shared/scan/types'
 import { loadCv } from '../../src/renderer/src/features/scan/vision/cv'
 import { recognizeArt } from '../../src/renderer/src/features/scan/vision/candidates'
@@ -52,6 +52,7 @@ interface Shot {
   frameType: string
   available: string[]
   nameInk: NameInk | null
+  nameTint: NameTint | null
 }
 
 const DIR = process.env.SCAN_REAL_DIR
@@ -102,15 +103,11 @@ describe.skipIf(!LABELS || !existsSync(LABELS))('rarity from the look of real ph
       const shot = {
         ...label,
         frameType: t.frameType,
-        nameInk: rarityCues(found.card).nameInk
+        ...rarityCues(found.card)
       }
       shots.push(shot)
       for (const rival of RIVALS.filter((r) => r !== label.rarity)) {
-        const { rarity, certain } = pickRarityByCues(
-          [label.rarity, rival],
-          { nameInk: shot.nameInk },
-          shot.frameType
-        )
+        const { rarity, certain } = pickRarityByCues([label.rarity, rival], shot, shot.frameType)
         const key = `${label.rarity} vs ${rival}`
         const counts = pairs.get(key) ?? { right: 0, wrong: 0, declined: 0 }
         counts[!certain ? 'declined' : rarity === label.rarity ? 'right' : 'wrong']++
@@ -125,7 +122,7 @@ describe.skipIf(!LABELS || !existsSync(LABELS))('rarity from the look of real ph
   it(`picks among a code's own rarities right ${MIN_PRECISION * 100}% of the time it is sure`, () => {
     const picks = shots.map((s) => ({
       ...s,
-      pick: pickRarityByCues(s.available, { nameInk: s.nameInk }, s.frameType)
+      pick: pickRarityByCues(s.available, s, s.frameType)
     }))
     const sure = picks.filter((p) => p.pick.certain)
     const right = sure.filter((p) => p.pick.rarity === p.rarity)

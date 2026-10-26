@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react'
-import { nameInkOver, type NameInk } from '@shared/scan/rarity'
-import { ABSENT_MS } from '@shared/scan/thresholds'
+import { cuesOver, type RarityCues } from '@shared/scan/rarity'
+import { ABSENT_MS, RARITY_MAX_READINGS } from '@shared/scan/thresholds'
 import type { ScanPrinting } from '@shared/scan/types'
 import { api } from '@/lib/api'
 import { centreCrop } from './crop'
@@ -99,8 +99,8 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
     lastFound: false,
     shown: null as number | null,
     absentSince: null as number | null,
-    // How the name of the card in view has read, frame by frame, since it came into view.
-    looks: { cardId: null as number | null, inks: [] as (NameInk | null)[] },
+    // What the card in view has shown of its foil in its latest frames.
+    looks: { cardId: null as number | null, cues: [] as RarityCues[] },
     status: { kind: 'idle' } as ScanStatus
   })
 
@@ -152,7 +152,7 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
     l.lastFound = false
     l.shown = null
     l.absentSince = null
-    l.looks = { cardId: null, inks: [] }
+    l.looks = { cardId: null, cues: [] }
     // Stopped stays stopped until Retry.
     if (l.stopped) return
     l.status = { kind: 'idle' }
@@ -207,16 +207,16 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
     }
 
     /**
-     * The outcome with the rarity its card's look picks over the frames it has been recognized
-     * in, so the draft that counts carries what all of them saw.
+     * The outcome with the rarity its card's look picks over the latest frames it has been
+     * recognized in, so the draft that counts carries what all of them saw.
      */
-    const withLook = (outcome: ScanOutcome, ink: NameInk | null = null): ScanOutcome => {
-      if (outcome.kind === 'none') l.looks = { cardId: null, inks: [] }
+    const withLook = (outcome: ScanOutcome, cues: RarityCues | null): ScanOutcome => {
+      if (outcome.kind === 'none') l.looks = { cardId: null, cues: [] }
       if (outcome.kind !== 'recognized') return outcome
       const { cardId } = outcome.item
-      if (l.looks.cardId !== cardId) l.looks = { cardId, inks: [] }
-      l.looks.inks.push(ink)
-      const look = nameInkOver(l.looks.inks)
+      if (l.looks.cardId !== cardId) l.looks = { cardId, cues: [] }
+      if (cues) l.looks.cues = [...l.looks.cues, cues].slice(-RARITY_MAX_READINGS)
+      const look = cuesOver(l.looks.cues)
       return {
         ...outcome,
         item: withRarityByLook(outcome.item, look, latest.current.defaultRarity)
@@ -269,7 +269,7 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
         }).catch(() => null)
         // The set changed mid-frame: this frame belongs to the old one.
         if (!outcome || !live || latest.current.setKey !== o.setKey) return
-        const draft = tracker.current.push(performance.now(), withLook(outcome, raw.cues?.nameInk))
+        const draft = tracker.current.push(performance.now(), withLook(outcome, raw.cues))
         show(outcome, draft)
         if (draft) {
           latest.current.onDraft(draft)

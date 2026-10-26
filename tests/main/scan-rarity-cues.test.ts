@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { nameInkOver, pickRarityByCues, type NameInk } from '../../src/shared/scan/rarity'
+import {
+  cuesOver,
+  pickRarityByCues,
+  type NameInk,
+  type NameTint,
+  type RarityCues
+} from '../../src/shared/scan/rarity'
 import type { RgbaImage } from '../../src/shared/scan/types'
 import { rarityCues } from '../../src/renderer/src/features/scan/vision/rarityCues'
 import { NAME_BAND } from '../../src/renderer/src/features/scan/vision/regions'
@@ -7,66 +13,87 @@ import { NAME_BAND } from '../../src/renderer/src/features/scan/vision/regions'
 const pick = (
   available: string[],
   nameInk: NameInk | null,
-  frameType: string
-): ReturnType<typeof pickRarityByCues> => pickRarityByCues(available, { nameInk }, frameType)
+  frameType: string,
+  nameTint: NameTint | null = null
+): ReturnType<typeof pickRarityByCues> =>
+  pickRarityByCues(available, { nameInk, nameTint }, frameType)
 
 describe('pickRarityByCues', () => {
-  it('tells gold from prismatic names on any frame', () => {
+  it('picks gold only when the ink reads dark and is gold-coloured', () => {
     const both = ['Ultra Rare', 'Starlight Rare']
-    for (const frame of ['spell', 'link', 'effect', 'synchro_pendulum']) {
-      expect(pick(both, 'dark', frame)).toEqual({ rarity: 'Ultra Rare', certain: true })
-      expect(pick(both, 'light', frame)).toEqual({ rarity: 'Starlight Rare', certain: true })
-    }
-    expect(pick(['Quarter Century Secret Rare', 'Ultra Rare'], 'light', 'normal')).toEqual({
-      rarity: 'Quarter Century Secret Rare',
-      certain: true
-    })
+    for (const frame of ['spell', 'link', 'effect', 'synchro_pendulum'])
+      expect(pick(both, 'dark', frame, 'gold')).toEqual({ rarity: 'Ultra Rare', certain: true })
+    // Dark but not gold-coloured: maybe a gold name, maybe not; silver reading dark is off.
+    expect(pick(both, 'dark', 'spell').certain).toBe(false)
+    expect(pick(both, 'dark', 'effect', 'silver').certain).toBe(false)
   })
 
-  it('tells plain from prismatic ink only where plain ink is dark', () => {
+  it('never rules gold out, since glare can make it read light', () => {
+    const both = ['Ultra Rare', 'Starlight Rare']
+    expect(pick(both, 'light', 'effect', 'silver').certain).toBe(false)
+    // Gold-coloured ink reading light is glare on gold.
+    expect(pick(both, 'light', 'effect', 'gold').certain).toBe(false)
+    expect(pick(['Common', 'Ultra Rare'], 'light', 'spell').certain).toBe(false)
+  })
+
+  it('tells plain from prismatic ink where plain ink is dark', () => {
     const both = ['Common', 'Secret Rare']
     expect(pick(both, 'dark', 'effect')).toEqual({ rarity: 'Common', certain: true })
-    expect(pick(both, 'light', 'effect')).toEqual({ rarity: 'Secret Rare', certain: true })
-    expect(pick(both, 'light', 'spell')).toEqual({ rarity: 'Common', certain: false })
+    expect(pick(both, 'light', 'effect', 'silver')).toEqual({
+      rarity: 'Secret Rare',
+      certain: true
+    })
+    // Light but not silver: not plainly prismatic.
+    expect(pick(both, 'light', 'effect').certain).toBe(false)
+    expect(pick(both, 'light', 'spell', 'silver')).toEqual({ rarity: 'Common', certain: false })
     // Neither should read dark on a spell: something is off, so don't guess.
     expect(pick(both, 'dark', 'spell')).toEqual({ rarity: 'Common', certain: false })
   })
 
-  it('tells plain from gold ink only where plain ink is light', () => {
-    const both = ['Super Rare', 'Ultra Rare']
-    expect(pick(both, 'light', 'trap')).toEqual({ rarity: 'Super Rare', certain: true })
-    expect(pick(both, 'dark', 'xyz')).toEqual({ rarity: 'Ultra Rare', certain: true })
-    expect(pick(both, 'dark', 'effect')).toEqual({ rarity: 'Super Rare', certain: false })
+  it('takes a dark name on a white-name frame for gold only when it is gold-coloured', () => {
+    // Old prints have black names on spells: a dark, uncoloured name proves nothing.
+    expect(pick(['Common', 'Ultra Rare'], 'dark', 'spell')).toEqual({
+      rarity: 'Common',
+      certain: false
+    })
+    expect(pick(['Super Rare', 'Ultra Rare'], 'dark', 'xyz', 'gold')).toEqual({
+      rarity: 'Ultra Rare',
+      certain: true
+    })
+    expect(pick(['Super Rare', 'Ultra Rare'], 'dark', 'effect', 'gold').certain).toBe(false)
   })
 
   it('never chooses between rarities that look alike', () => {
     expect(pick(['Common', 'Super Rare'], 'dark', 'effect').certain).toBe(false)
     expect(pick(['Common', 'Short Print'], 'light', 'spell').certain).toBe(false)
-    expect(pick(['Secret Rare', 'Starlight Rare'], 'light', 'effect').certain).toBe(false)
+    expect(pick(['Secret Rare', 'Starlight Rare'], 'light', 'effect', 'silver').certain).toBe(false)
     expect(
-      pick(['Platinum Secret Rare', 'Quarter Century Secret Rare'], 'light', 'xyz').certain
+      pick(['Platinum Secret Rare', 'Quarter Century Secret Rare'], 'light', 'xyz', 'silver')
+        .certain
     ).toBe(false)
     // A variant looks like its base.
-    expect(pick(['Ultra Rare', 'Ultra Rare (Overframe)'], 'dark', 'effect').certain).toBe(false)
-    expect(pick(['Ultra Rare (Overframe)', 'Starlight Rare'], 'dark', 'effect')).toEqual({
+    expect(pick(['Ultra Rare', 'Ultra Rare (Overframe)'], 'dark', 'spell', 'gold').certain).toBe(
+      false
+    )
+    expect(pick(['Ultra Rare (Overframe)', 'Starlight Rare'], 'dark', 'effect', 'gold')).toEqual({
       rarity: 'Ultra Rare (Overframe)',
       certain: true
     })
   })
 
   it("declines when a candidate's look is unknown", () => {
-    expect(pick(['Ultra Rare', 'Ultimate Rare'], 'dark', 'spell').certain).toBe(false)
-    expect(pick(['Rare', 'Secret Rare'], 'light', 'effect').certain).toBe(false)
+    expect(pick(['Ultra Rare', 'Ultimate Rare'], 'dark', 'spell', 'gold').certain).toBe(false)
+    expect(pick(['Rare', 'Secret Rare'], 'light', 'effect', 'silver').certain).toBe(false)
     expect(pick(['Common', 'Starfoil Rare'], 'dark', 'effect').certain).toBe(false)
-    expect(pick(["Collector's Rare", 'Ultra Rare'], 'light', 'effect').certain).toBe(false)
+    expect(pick(["Collector's Rare", 'Common'], 'dark', 'effect').certain).toBe(false)
   })
 
   it('declines without a reading or a known frame', () => {
-    expect(pick(['Ultra Rare', 'Starlight Rare'], null, 'spell')).toEqual({
-      rarity: 'Ultra Rare',
+    expect(pick(['Common', 'Secret Rare'], null, 'effect')).toEqual({
+      rarity: 'Common',
       certain: false
     })
-    expect(pick(['Ultra Rare', 'Starlight Rare'], 'dark', 'skill').certain).toBe(false)
+    expect(pick(['Common', 'Secret Rare'], 'dark', 'skill').certain).toBe(false)
   })
 
   it('is certain of a lone rarity', () => {
@@ -77,15 +104,29 @@ describe('pickRarityByCues', () => {
   })
 })
 
-describe('nameInkOver', () => {
-  it('needs enough frames that agree', () => {
-    expect(nameInkOver([])).toBeNull()
-    expect(nameInkOver(['dark'])).toBeNull()
-    expect(nameInkOver([null, null, 'dark'])).toBeNull()
-    expect(nameInkOver(['dark', null, 'dark'])).toBe('dark')
-    expect(nameInkOver(['light', 'dark'])).toBeNull()
-    expect(nameInkOver(['light', 'light', 'light', 'light', 'dark'])).toBe('light')
-    expect(nameInkOver(['light', 'light', 'light', 'dark'])).toBeNull()
+describe('cuesOver', () => {
+  const c = (nameInk: NameInk | null, nameTint: NameTint | null = null): RarityCues => ({
+    nameInk,
+    nameTint
+  })
+  const none = { nameInk: null, nameTint: null }
+
+  it('needs enough frames that agree on the ink', () => {
+    expect(cuesOver([])).toEqual(none)
+    expect(cuesOver([c('dark')])).toEqual(none)
+    expect(cuesOver([c(null), c(null), c('dark')])).toEqual(none)
+    expect(cuesOver([c('dark'), c(null), c('dark')])).toEqual(c('dark'))
+    expect(cuesOver([c('light'), c('dark')])).toEqual(none)
+    expect(cuesOver([c('light'), c('light'), c('light'), c('light'), c('dark')])).toEqual(
+      c('light')
+    )
+    expect(cuesOver([c('light'), c('light'), c('light'), c('dark')])).toEqual(none)
+  })
+
+  it('keeps a tint only when the frames that agree on the ink agree on it too', () => {
+    expect(cuesOver([c('light', 'silver'), c('light', 'silver')])).toEqual(c('light', 'silver'))
+    expect(cuesOver([c('light', 'silver'), c('light')])).toEqual(c('light'))
+    expect(cuesOver([c('dark', 'gold'), c('dark', 'gold'), c('light', 'silver')])).toEqual(none)
   })
 })
 
@@ -126,6 +167,11 @@ const TEAL: Rgb = [40, 150, 160]
 const BLACK: Rgb = [25, 20, 20]
 const WHITE: Rgb = [235, 240, 245]
 const DIM_GOLD: Rgb = [20, 95, 105]
+const GOLD: Rgb = [110, 85, 20]
+const BRIGHT_GOLD: Rgb = [250, 215, 110]
+const DARK_BAR: Rgb = [60, 55, 50]
+const PALE_BAR: Rgb = [235, 235, 238]
+const NOTHING = { nameInk: null, nameTint: null }
 const RAINBOW: Rgb[] = [
   [250, 210, 220],
   [220, 250, 215],
@@ -135,30 +181,47 @@ const RAINBOW: Rgb[] = [
 
 describe('rarityCues', () => {
   it('reads plain black and white names', () => {
-    expect(rarityCues(card(ORANGE, () => BLACK))).toEqual({ nameInk: 'dark' })
-    expect(rarityCues(card(TEAL, () => WHITE))).toEqual({ nameInk: 'light' })
+    expect(rarityCues(card(ORANGE, () => BLACK))).toEqual({ nameInk: 'dark', nameTint: null })
+    expect(rarityCues(card(TEAL, () => WHITE)).nameInk).toBe('light')
   })
 
-  it('reads a dim gold name on a spell as dark', () => {
-    expect(rarityCues(card(TEAL, () => DIM_GOLD))).toEqual({ nameInk: 'dark' })
+  it('reads a dim gold name that takes the bar colour as dark but not gold', () => {
+    expect(rarityCues(card(TEAL, () => DIM_GOLD))).toEqual({ nameInk: 'dark', nameTint: null })
   })
 
-  it('reads silver and rainbow names on a monster as light', () => {
-    expect(rarityCues(card(ORANGE, () => [225, 225, 230]))).toEqual({ nameInk: 'light' })
-    expect(rarityCues(card(ORANGE, (i) => RAINBOW[i % RAINBOW.length]))).toEqual({
-      nameInk: 'light'
-    })
+  it('reads a gold-coloured name as gold', () => {
+    expect(rarityCues(card(TEAL, () => GOLD))).toEqual({ nameInk: 'dark', nameTint: 'gold' })
+  })
+
+  it('reads silver and rainbow names on a monster as light silver', () => {
+    const silver = { nameInk: 'light', nameTint: 'silver' }
+    expect(rarityCues(card(ORANGE, () => [225, 225, 230]))).toEqual(silver)
+    expect(rarityCues(card(ORANGE, (i) => RAINBOW[i % RAINBOW.length]))).toEqual(silver)
+  })
+
+  it('declines gold against prismatic for glare on gold and for silver reading dark', () => {
+    const both = ['Ultra Rare', 'Starlight Rare']
+    const glare = rarityCues(card(DARK_BAR, () => BRIGHT_GOLD))
+    expect(glare).toEqual({ nameInk: 'light', nameTint: 'gold' })
+    expect(pickRarityByCues(both, glare, 'effect').certain).toBe(false)
+    const silverDark = rarityCues(card(PALE_BAR, () => [150, 150, 155]))
+    expect(silverDark).toEqual({ nameInk: 'dark', nameTint: null })
+    expect(pickRarityByCues(both, silverDark, 'synchro').certain).toBe(false)
+  })
+
+  it('declines a dark, uncoloured name on a spell between Common and Ultra', () => {
+    const oldPrint = rarityCues(card(TEAL, () => BLACK))
+    expect(oldPrint.nameInk).toBe('dark')
+    expect(pickRarityByCues(['Common', 'Ultra Rare'], oldPrint, 'spell').certain).toBe(false)
   })
 
   it('reads nothing when dark and light ink read about as much text, as in a blurred frame', () => {
-    expect(rarityCues(card([130, 130, 130], (i) => (i % 2 ? BLACK : WHITE)))).toEqual({
-      nameInk: null
-    })
+    expect(rarityCues(card([130, 130, 130], (i) => (i % 2 ? BLACK : WHITE)))).toEqual(NOTHING)
   })
 
   it('reads nothing from a blank bar, a stray mark or text that is not where a name starts', () => {
-    expect(rarityCues(card(ORANGE, () => null))).toEqual({ nameInk: null })
-    expect(rarityCues(card(ORANGE, (i) => (i < 2 ? BLACK : null)))).toEqual({ nameInk: null })
-    expect(rarityCues(card(ORANGE, () => BLACK, { from: 0.5 }))).toEqual({ nameInk: null })
+    expect(rarityCues(card(ORANGE, () => null))).toEqual(NOTHING)
+    expect(rarityCues(card(ORANGE, (i) => (i < 2 ? BLACK : null)))).toEqual(NOTHING)
+    expect(rarityCues(card(ORANGE, () => BLACK, { from: 0.5 }))).toEqual(NOTHING)
   })
 })

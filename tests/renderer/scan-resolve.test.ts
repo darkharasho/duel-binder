@@ -231,48 +231,72 @@ describe('resolveSignals', () => {
 
 describe('withRarityByLook', () => {
   // Dark Magician is a Normal Monster, whose plain name is black: a gold Ultra Rare name reads
-  // dark on camera and a prismatic Secret Rare one light.
+  // dark and gold on camera, and a prismatic Secret Rare one light and silver.
+  const LIGHT = { nameInk: 'light', nameTint: 'silver' } as const
+  const DARK = { nameInk: 'dark', nameTint: 'gold' } as const
+  const PLAIN = { nameInk: 'dark', nameTint: null } as const
   const guessed = (ctx: ResolveContext = noSet): Promise<ScanDraft> =>
     recognized(raw({ codeTexts: ['LOB-EN005'] }), ctx)
+  /** The guessed draft as if LOB-EN005 had been printed as Common (11) and Secret Rare (12). */
+  const commonOrSecret = async (ctx?: ResolveContext): Promise<ScanDraft> => {
+    const item = await guessed(ctx)
+    const [ultra, secret] = item.options
+    return { ...item, rarity: 'Common', options: [{ ...ultra, rarity: 'Common' }, secret] }
+  }
 
   it("under Auto, picks the code's rarity the name's look settles and drops the flag", async () => {
-    const item = await guessed()
-    expect(withRarityByLook(item, 'light', null)).toEqual({
+    const item = await commonOrSecret()
+    expect(withRarityByLook(item, LIGHT, null)).toEqual({
       ...item,
       rarity: 'Secret Rare',
       printingId: 12,
       flag: null
     })
-    expect(withRarityByLook(item, 'dark', null)).toMatchObject({
+    expect(withRarityByLook(item, PLAIN, null)).toEqual({ ...item, flag: null })
+    const ultraOrSecret = await guessed()
+    expect(withRarityByLook(ultraOrSecret, DARK, null)).toMatchObject({
       rarity: 'Ultra Rare',
       printingId: 11,
       flag: null
     })
   })
 
-  it('keeps the guess and its flag without a look', async () => {
+  it('keeps the guess and its flag without a settling look', async () => {
     const item = await guessed()
     expect(withRarityByLook(item, null, null)).toBe(item)
+    // Gold can read light in glare, so a light name doesn't rule out Ultra.
+    expect(withRarityByLook(item, LIGHT, null)).toBe(item)
+    const other = await commonOrSecret()
+    expect(withRarityByLook(other, { nameInk: 'light', nameTint: null }, null)).toBe(other)
+  })
+
+  it("switches to the rarity's printing that shows the draft's artwork", async () => {
+    const item = await commonOrSecret()
+    const secret = item.options[1]
+    const otherArt = { ...secret, imageIds: [999] }
+    const withArt = { ...secret, printingId: 15, imageIds: [101, 102] }
+    const draft = { ...item, options: [item.options[0], otherArt, withArt] }
+    expect(withRarityByLook(draft, LIGHT, null)).toMatchObject({ printingId: 15 })
   })
 
   it('leaves the rarity to New scans as when it names one', async () => {
     const chosen = await guessed({ ...noSet, defaultRarity: 'Secret Rare' })
-    expect(withRarityByLook(chosen, 'dark', 'Secret Rare')).toBe(chosen)
+    expect(withRarityByLook(chosen, DARK, 'Secret Rare')).toBe(chosen)
     const missing = await guessed({ ...noSet, defaultRarity: 'Common' })
-    expect(withRarityByLook(missing, 'light', 'Common')).toBe(missing)
+    expect(withRarityByLook(missing, DARK, 'Common')).toBe(missing)
   })
 
   it('leaves certain rarities and unpicked printings alone', async () => {
     const single = await recognized(raw({ codeTexts: ['SDY-EN006'] }))
-    expect(withRarityByLook(single, 'light', null)).toBe(single)
+    expect(withRarityByLook(single, LIGHT, null)).toBe(single)
     const unpicked = await recognized(raw({ art: [{ imageId: 101, distance: 20 }] }))
-    expect(withRarityByLook(unpicked, 'light', null)).toBe(unpicked)
+    expect(withRarityByLook(unpicked, LIGHT, null)).toBe(unpicked)
   })
 
   it('picks the rarity of a card from another set but keeps that flag', async () => {
-    const item = await guessed(withSet(SDY))
+    const item = await commonOrSecret(withSet(SDY))
     expect(item.flag).toBe('other-set')
-    expect(withRarityByLook(item, 'light', null)).toMatchObject({
+    expect(withRarityByLook(item, LIGHT, null)).toMatchObject({
       rarity: 'Secret Rare',
       printingId: 12,
       flag: 'other-set'

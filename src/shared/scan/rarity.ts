@@ -45,17 +45,25 @@ export function pickRarity(
 /** How a card's name reads on camera: its ink darker or lighter than the bar around it. */
 export type NameInk = 'dark' | 'light'
 
+/**
+ * The colour of a name's ink against its bar: gold (yellow, unlike the bar) or silver (light,
+ * far less saturated than the bar, or spread over many hues). Null when it is neither.
+ */
+export type NameTint = 'gold' | 'silver'
+
 /** What one frame shows of a card's foil. */
 export interface RarityCues {
   /** Null when the name couldn't be read. */
   nameInk: NameInk | null
+  nameTint: NameTint | null
 }
 
 /**
  * How a rarity's name is printed. Plain ink is black or white by frame. A gold foil name (Ultra,
- * Premium Gold) mirrors the room and reads dark on camera; a prismatic one (Secret, Starlight
- * and kin) scatters light and reads light. Rarities missing here, such as Rare, Ultimate,
- * Ghost, Collector's and the parallel foils, have no known look, so they are never ruled out.
+ * Premium Gold) mirrors the room and mostly reads dark on camera, but glare can make it read
+ * light; a prismatic one (Secret, Starlight and kin) scatters light and reads light and silver.
+ * Rarities missing here, such as Rare, Ultimate, Ghost, Collector's and the parallel foils, have
+ * no known look, so they are never ruled out.
  */
 const NAME_LOOKS: Record<string, 'plain' | 'gold' | 'prismatic'> = {
   Common: 'plain',
@@ -93,11 +101,30 @@ function plainInk(frameType: string): NameInk | null {
   return null
 }
 
+type Fit = 'fits' | 'out' | 'maybe'
+
+/**
+ * Whether a name that reads `cues` fits a rarity of `look`, rules it out, or can't tell, on a
+ * frame whose plain names read `plain`. Each call needs the ink's colour to agree with its
+ * polarity: gold fits only dark gold ink, prismatic only light silver ink. Plain ink is ruled
+ * out only by ink that is plainly foil. Gold is never ruled out, since glare can turn it light
+ * and on camera it mostly takes the bar's colour.
+ */
+function fit(look: 'plain' | 'gold' | 'prismatic', cues: RarityCues, plain: NameInk): Fit {
+  const { nameInk: ink, nameTint: tint } = cues
+  const gold = ink === 'dark' && tint === 'gold'
+  const prismatic = ink === 'light' && tint === 'silver'
+  if (look === 'gold') return gold ? 'fits' : 'maybe'
+  if (look === 'prismatic') return prismatic ? 'fits' : ink === 'dark' ? 'out' : 'maybe'
+  if (ink === plain) return 'fits'
+  return gold || prismatic ? 'out' : 'maybe'
+}
+
 /**
  * The rarity among `available` whose name looks like the one seen, on a card with frameType.
- * It is certain only when every other rarity is ruled out: rarities that look alike (Common and
- * Super Rare, Secret and Starlight, a rarity and its variants) are never told apart. Otherwise
- * it is the lowest tier, uncertain.
+ * It is certain only when it fits and every other rarity is ruled out: rarities that look alike
+ * (Common and Super Rare, Secret and Starlight, a rarity and its variants) are never told apart.
+ * Otherwise it is the lowest tier, uncertain.
  */
 export function pickRarityByCues(
   available: string[],
@@ -109,21 +136,32 @@ export function pickRarityByCues(
   const plain = plainInk(frameType)
   const looks = distinct.map((r) => NAME_LOOKS[baseOf(r)])
   if (cues.nameInk && plain && looks.every(Boolean)) {
-    const inkOf = { plain, gold: 'dark', prismatic: 'light' } as const
-    const fits = distinct.filter((_, i) => inkOf[looks[i]] === cues.nameInk)
-    if (fits.length === 1) return { rarity: fits[0], certain: true }
+    const fits = looks.map((look) => fit(look, cues, plain))
+    const chosen = fits.indexOf('fits')
+    if (chosen !== -1 && fits.every((f, i) => i === chosen || f === 'out'))
+      return { rarity: distinct[chosen], certain: true }
   }
   return { rarity: lowest(distinct), certain: false }
 }
 
-/**
- * The name's ink over the frames of one showing: what at least RARITY_MIN_AGREEMENT of the
- * readings say, once there are RARITY_MIN_READINGS of them. Unread frames don't count.
- */
-export function nameInkOver(readings: (NameInk | null)[]): NameInk | null {
-  const read = readings.filter((r): r is NameInk => r !== null)
-  if (read.length < RARITY_MIN_READINGS) return null
-  for (const ink of ['dark', 'light'] as const)
-    if (read.filter((r) => r === ink).length >= RARITY_MIN_AGREEMENT * read.length) return ink
+/** The value at least RARITY_MIN_AGREEMENT of `values` share, if any. */
+function agreed<T>(values: T[]): T | null {
+  for (const v of new Set(values))
+    if (values.filter((x) => x === v).length >= RARITY_MIN_AGREEMENT * values.length) return v
   return null
+}
+
+/**
+ * The cues over the frames of one showing: the ink at least RARITY_MIN_AGREEMENT of the
+ * readings show, once there are RARITY_MIN_READINGS of them, and the tint as many of those
+ * agree on. Unread frames don't count.
+ */
+export function cuesOver(readings: RarityCues[]): RarityCues {
+  const read = readings.filter((r) => r.nameInk !== null)
+  const ink = read.length < RARITY_MIN_READINGS ? null : agreed(read.map((r) => r.nameInk))
+  if (!ink) return { nameInk: null, nameTint: null }
+  return {
+    nameInk: ink,
+    nameTint: agreed(read.filter((r) => r.nameInk === ink).map((r) => r.nameTint))
+  }
 }

@@ -50,7 +50,7 @@ describe('createScanEngine', () => {
       art: [{ imageId: 1, distance: 3 }],
       codeBands: [band(10), band(0)],
       nameBand: null,
-      cues: { nameInk: 'dark' }
+      cues: { nameInk: 'dark', nameTint: null }
     })
     const engine = createScanEngine({ api, makeWorker: () => worker })
     await engine.init(null)
@@ -62,7 +62,7 @@ describe('createScanEngine', () => {
       art: [{ imageId: 1, distance: 3 }],
       codeTexts: [],
       nameText: null,
-      cues: { nameInk: 'dark' }
+      cues: { nameInk: 'dark', nameTint: null }
     })
     expect(api.ocr).not.toHaveBeenCalled()
 
@@ -70,7 +70,7 @@ describe('createScanEngine', () => {
     expect(read.codeTexts).toEqual(['LOB-EN005'])
     expect(read.quad).toEqual(quad)
     expect(read.nameText).toBeNull()
-    expect(read.cues).toEqual({ nameInk: 'dark' })
+    expect(read.cues).toEqual({ nameInk: 'dark', nameTint: null })
     expect(api.ocr).toHaveBeenCalledTimes(1)
     expect(api.ocr).toHaveBeenCalledWith([band(10)], 'code')
 

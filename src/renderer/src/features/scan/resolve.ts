@@ -1,5 +1,5 @@
 import type { Api } from '@shared/ipc'
-import { pickRarity, pickRarityByCues, type NameInk } from '@shared/scan/rarity'
+import { pickRarity, pickRarityByCues, type RarityCues } from '@shared/scan/rarity'
 import { setCodeCandidates } from '@shared/scan/setCode'
 import {
   ART_MATCH_DEPTH,
@@ -199,25 +199,26 @@ export async function resolveSignals(raw: RawSignals, ctx: ResolveContext): Prom
 }
 
 /**
- * The draft with the rarity its name's look picks, under Auto (no default rarity), when the
- * look settles which of its code's rarities it is: no longer flagged Check rarity. Unchanged
- * when the rarity was already certain, the user said what the stack is, or the look doesn't
- * settle it.
+ * The draft with the rarity its look picks, under Auto (no default rarity), when the look
+ * settles which of its code's rarities it is: no longer flagged Check rarity, and on the
+ * printing of that rarity showing the draft's artwork when there is one. Unchanged when the
+ * rarity was already certain, the user said what the stack is, or the look doesn't settle it.
  */
 export function withRarityByLook(
   item: ScanDraft,
-  nameInk: NameInk | null,
+  cues: RarityCues | null,
   defaultRarity: string | null
 ): ScanDraft {
   const current = item.options.find((p) => p.printingId === item.printingId)
-  if (!current || defaultRarity !== null || nameInk === null) return item
+  if (!current || defaultRarity !== null || !cues?.nameInk) return item
   const sameCode = item.options.filter(
     (p) => p.setCode === current.setCode && p.language === current.language
   )
   const available = sameCode.map((p) => p.rarity)
   if (pickRarity(available, null).certain) return item
-  const { rarity, certain } = pickRarityByCues(available, { nameInk }, current.frameType)
-  const printing = sameCode.find((p) => p.rarity === rarity)
+  const { rarity, certain } = pickRarityByCues(available, cues, current.frameType)
+  const ofRarity = sameCode.filter((p) => p.rarity === rarity)
+  const printing = ofRarity.find((p) => p.imageIds.includes(item.imageId)) ?? ofRarity[0]
   if (!certain || !printing) return item
   return {
     ...item,

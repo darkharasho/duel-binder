@@ -208,6 +208,10 @@ const ENTRY_REFS: Record<string, [count: number, kind: string]> = {
   ],
   'workers/portal/src/sync.ts': [5, SYNC],
   'src/main/catalog/apply.ts': [4, FK],
+  'src/main/catalog/switch.ts': [
+    4,
+    'live rows for the census; all rows incl. tombstones for the dangling check and pruning (FK)'
+  ],
   'src/main/cloud/localSync.ts': [11, SYNC],
   'src/main/db/schema.ts': [9, DDL],
   'workers/portal/src/migrate.ts': [10, DDL]

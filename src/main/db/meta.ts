@@ -14,11 +14,20 @@ export type MetaKey =
   | 'cloud_active_owner'
   /** The signed-in user's `Me` as JSON; absent when signed out. */
   | 'cloud_user'
+  /** Seq of the last server catalog change applied locally. */
+  | 'catalog_cursor'
+  /** Seq of the last change downloaded into `catalog_staging` during the switch. */
+  | 'catalog_staging_cursor'
+  /** When this desktop switched to the server's catalog (ISO); absent means not yet. */
+  | 'catalog_switched_at'
+  /** Path of the database copy taken just before the switch. */
+  | 'catalog_switch_backup'
+  /** Why the last switch attempt didn't finish, as JSON `{ reason, at, retry }`. */
+  | 'catalog_switch_failed'
 
 export function getMeta(db: SqlDb, key: MetaKey): string | null {
   const row = db.prepare('SELECT value FROM meta WHERE key = ?').get(key) as
-    | { value: string }
-    | undefined
+    { value: string } | undefined
   return row?.value ?? null
 }
 

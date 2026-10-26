@@ -135,6 +135,7 @@ export function createHttpApi(opts: HttpApiOptions = {}): Api {
       signIn: unavailable,
       signOut: unavailable,
       syncNow: unavailable,
+      unsynced: unavailable,
       onChange: noUnsubscribe
     }
   }

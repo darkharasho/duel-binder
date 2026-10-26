@@ -209,6 +209,20 @@ export interface AccountStatus {
   error: string | null
   /** The shown account's entries waiting for this computer's catalog to gain their printing. */
   pendingCount: number
+  /** The shown account's entries that can't sync (see `UnsyncedEntry`). */
+  unsyncedCount: number
+}
+
+/** A collection entry the server can't take, with why. */
+export interface UnsyncedEntry {
+  uid: string
+  name: string
+  setCode: string
+  setName: string
+  rarity: string
+  language: Language
+  quantity: number
+  reason: string
 }
 
 /** The eBay price service address shown in Settings. */

@@ -1,6 +1,7 @@
 import type { Language } from './languages'
 import type {
   AccountStatus,
+  UnsyncedEntry,
   AddEntryInput,
   BrowseFacets,
   BrowseFilters,
@@ -119,6 +120,8 @@ export interface Api {
     /** Also cancels a sign-in in progress. */
     signOut(): Promise<AccountStatus>
     syncNow(): Promise<AccountStatus>
+    /** The shown account's entries that can't sync. */
+    unsynced(): Promise<UnsyncedEntry[]>
     onChange(cb: (s: AccountStatus) => void): () => void
   }
 }
@@ -175,7 +178,8 @@ export const INVOKE_CHANNELS = [
   'account:status',
   'account:signIn',
   'account:signOut',
-  'account:syncNow'
+  'account:syncNow',
+  'account:unsynced'
 ] as const
 
 export type InvokeChannel = (typeof INVOKE_CHANNELS)[number]

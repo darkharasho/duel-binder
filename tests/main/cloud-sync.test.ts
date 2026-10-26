@@ -10,7 +10,11 @@ import { syncOnce } from '../../src/main/cloud/engine'
 import {
   accountState,
   ensureAccount,
+  listSyncIssues,
   pendingCount,
+  printingsToContribute,
+  recordSyncIssue,
+  syncIssueCount,
   setActiveOwner
 } from '../../src/main/cloud/localSync'
 import { addEntry, listEntries, removeEntry, updateEntry } from '../../src/main/repo/collection'
@@ -153,6 +157,7 @@ describe('syncOnce', () => {
       pushedLive: 0,
       pulled: 0,
       pending: 0,
+      unsynced: 0,
       changed: false
     })
   })
@@ -315,16 +320,162 @@ describe('syncOnce', () => {
     addEntry(a, { printingId: pid(a, 'SDY-006'), imageId: DM, quantity: 2 }, T1)
     const restore = hidePrinting(portal.serverDb, 'SDY-006')
 
-    expect(await sync(a)).toMatchObject({ pushed: 1, pushedLive: 0 })
+    // The contribute call fails (not an auth or offline error), so the run goes on without it.
+    const noContribute = client({
+      fetch: ((url, init) =>
+        String(url).includes('/api/catalog/contribute')
+          ? Promise.resolve(new Response('{}', { status: 400 }))
+          : portal.fetch(url, init)) as typeof fetch
+    })
+    expect(await sync(a, noContribute)).toMatchObject({ pushed: 1, pushedLive: 0, unsynced: 1 })
     expect(localRows(a)).toEqual([expect.objectContaining({ dirty: 1 })])
     expect(serverRows()).toEqual([])
+    expect(listSyncIssues(a, user)).toEqual([
+      expect.objectContaining({ reason: 'unknown-printing' })
+    ])
 
     restore()
-    expect(await sync(a)).toMatchObject({ pushed: 1, pushedLive: 1 })
+    expect(await sync(a)).toMatchObject({ pushed: 1, pushedLive: 1, unsynced: 0 })
     expect(localRows(a)).toEqual([expect.objectContaining({ dirty: 0, quantity: 2 })])
     expect(serverRows()).toEqual([
       expect.objectContaining({ uid: localRows(a)[0].uid, quantity: 2 })
     ])
+  })
+
+  it('contributes a printing the server lacks and pushes the entry in the same run', async () => {
+    const a = await desktop()
+    addEntry(a, { printingId: pid(a, 'SDY-006'), imageId: DM, quantity: 2 }, T1)
+    hidePrinting(portal.serverDb, 'SDY-006')
+
+    const out = await sync(a)
+    expect(out).toMatchObject({ pushedLive: 1, unsynced: 0 })
+    expect(localRows(a)).toEqual([expect.objectContaining({ dirty: 0, quantity: 2 })])
+    expect(serverRows()).toEqual([expect.objectContaining({ quantity: 2 })])
+    expect(
+      portal.serverDb
+        .prepare("SELECT contributed FROM card_printings WHERE set_code = 'SDY-006'")
+        .get()
+    ).toEqual({ contributed: 1 })
+  })
+
+  it('records an entry the server rejects and clears it once it syncs', async () => {
+    const a = await desktop()
+    addEntry(a, { printingId: pid(a, 'SDY-006'), imageId: DM, quantity: 2 }, T1)
+    // The server doesn't know the card at all, so it refuses the printing.
+    const card = (
+      a.prepare("SELECT card_id FROM card_printings WHERE set_code = 'SDY-006'").get() as {
+        card_id: number
+      }
+    ).card_id
+    const sv = portal.serverDb
+    sv.pragma('foreign_keys = OFF')
+    const saved = {
+      printings: sv.prepare('SELECT * FROM card_printings WHERE card_id = ?').all(card),
+      images: sv.prepare('SELECT * FROM card_images WHERE card_id = ?').all(card),
+      card: sv.prepare('SELECT * FROM cards WHERE id = ?').all(card)
+    }
+    sv.prepare('DELETE FROM card_printings WHERE card_id = ?').run(card)
+    sv.prepare('DELETE FROM card_images WHERE card_id = ?').run(card)
+    sv.prepare('DELETE FROM cards WHERE id = ?').run(card)
+
+    const first = await sync(a)
+    expect(first).toMatchObject({ unsynced: 1 })
+    expect(syncIssueCount(a, user)).toBe(1)
+    const [issue] = listSyncIssues(a, user)
+    expect(issue.reason).toBe('unknown-card')
+    expect(localRows(a)).toEqual([expect.objectContaining({ dirty: 1 })])
+    const since = (a.prepare('SELECT since FROM sync_issues').get() as { since: string }).since
+
+    // Still failing later keeps the original `since`.
+    await sync(a)
+    expect((a.prepare('SELECT since FROM sync_issues').get() as { since: string }).since).toBe(
+      since
+    )
+
+    // The catalog gains the card; the next run syncs the entry and clears the issue.
+    sv.pragma('foreign_keys = OFF')
+    for (const [table, rows] of [
+      ['cards', saved.card],
+      ['card_images', saved.images],
+      ['card_printings', saved.printings]
+    ] as const) {
+      for (const row of rows as Record<string, unknown>[]) {
+        const cols = Object.keys(row).filter((c) => c !== 'pkey')
+        sv.prepare(
+          `INSERT INTO ${table} (${cols.join(',')}) VALUES (${cols.map(() => '?').join(',')})`
+        ).run(...cols.map((c) => row[c]))
+      }
+    }
+    sv.pragma('foreign_keys = ON')
+    const second = await sync(a)
+    expect(second).toMatchObject({ unsynced: 0, pushedLive: 1 })
+    expect(syncIssueCount(a, user)).toBe(0)
+    expect(localRows(a)).toEqual([expect.objectContaining({ dirty: 0 })])
+  })
+
+  it('lets an offline or auth failure of contribute end the run', async () => {
+    const a = await desktop()
+    addEntry(a, { printingId: pid(a, 'SDY-006'), imageId: DM, quantity: 2 }, T1)
+    hidePrinting(portal.serverDb, 'SDY-006')
+    const failing = (status: number): CloudClient =>
+      client({
+        fetch: ((url, init) =>
+          String(url).includes('/api/catalog/contribute')
+            ? Promise.resolve(new Response('{}', { status }))
+            : portal.fetch(url, init)) as typeof fetch
+      })
+    await expect(sync(a, failing(401))).rejects.toBeInstanceOf(CloudAuthError)
+    await expect(sync(a, failing(503))).rejects.toBeInstanceOf(CloudOfflineError)
+    expect(localRows(a)).toEqual([expect.objectContaining({ dirty: 1 })])
+  })
+
+  it('lists sync issues with name, set and rarity', async () => {
+    const a = await desktop()
+    const id = pid(a, 'SDY-006')
+    addEntry(a, { printingId: id, imageId: DM, quantity: 3 }, T1)
+    const uid = localRows(a)[0].uid
+    recordSyncIssue(a, user, uid, 'k', 'unknown-card', T2)
+    recordSyncIssue(a, user, uid, 'k2', 'unknown-card', T3)
+    expect(listSyncIssues(a, user)).toEqual([
+      expect.objectContaining({
+        uid,
+        name: expect.any(String),
+        setCode: 'SDY-006',
+        setName: expect.any(String),
+        rarity: expect.any(String),
+        language: 'en',
+        quantity: 3,
+        reason: 'unknown-card'
+      })
+    ])
+    expect((a.prepare('SELECT since FROM sync_issues').get() as { since: string }).since).toBe(
+      T2.toISOString()
+    )
+    expect(listSyncIssues(a, user + 1)).toEqual([])
+  })
+
+  it('offers each printing once with every optional field explicit', async () => {
+    const a = await desktop()
+    const id = pid(a, 'SDY-006')
+    addEntry(a, { printingId: id, imageId: DM, quantity: 1 }, T1)
+    addEntry(a, { printingId: id, imageId: DM + 1, quantity: 1 }, T2)
+    const [one, two] = localRows(a).map((r) => r.uid)
+    const out = printingsToContribute(a, user, [one, two, 'nope'])
+    expect(out).toHaveLength(1)
+    expect(Object.keys(out[0]).sort()).toEqual(
+      [
+        'card_id',
+        'language',
+        'set_code',
+        'set_name',
+        'set_rarity',
+        'set_rarity_code',
+        'tcg_product_id',
+        'variant'
+      ].sort()
+    )
+    expect(out[0].variant).toBeNull()
+    expect(out[0].tcg_product_id).toBeNull()
   })
 
   it('a sync cut off after push resumes without duplicates', async () => {

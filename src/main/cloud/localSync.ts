@@ -1,6 +1,9 @@
 import { deleteMeta, getMeta, setMeta } from '../db/meta'
 import type { SqlDb } from '../db/sql'
 import { priceCandidates } from '../prices/refresh'
+import type { ContributedPrinting } from '../../shared/catalogFeed'
+import type { UnsyncedEntry } from '../../shared/types'
+import type { Language } from '../../shared/languages'
 import {
   MAX_NOTES,
   editTime,
@@ -134,11 +137,18 @@ export function dirtyEntries(
   return rows.map(toWire)
 }
 
-/** Marks a pushed row clean, unless it was edited again since `e` was read. */
+/** Marks a pushed row clean, unless it was edited again since `e` was read; a clean row has no sync issue. */
 export function markPushed(db: SqlDb, e: WireEntry): void {
-  db.prepare(
-    'UPDATE collection_entries SET dirty = 0 WHERE uid = ? AND updated_at = ? AND deleted_at IS ?'
-  ).run(e.uid, e.updatedAt, e.deletedAt)
+  const r = db
+    .prepare(
+      'UPDATE collection_entries SET dirty = 0 WHERE uid = ? AND updated_at = ? AND deleted_at IS ?'
+    )
+    .run(e.uid, e.updatedAt, e.deletedAt)
+  if (r.changes > 0)
+    db.prepare(
+      `DELETE FROM sync_issues WHERE uid = ?
+       AND owner_id = (SELECT owner_id FROM collection_entries WHERE uid = ?)`
+    ).run(e.uid, e.uid)
 }
 
 /**
@@ -344,4 +354,147 @@ export function applyPrices(db: SqlDb, prices: WirePrice[]): number {
   return db.transaction(() =>
     prices.reduce((n, p) => n + upsert.run(p.price, p.listingCount, p.checkedAt, p.pkey).changes, 0)
   )()
+}
+
+/** A printing to offer the server and the entries (uids) that sit on it. */
+interface ContributionGroup {
+  printing: ContributedPrinting
+  pkey: string
+  uids: string[]
+}
+
+/**
+ * The owner's entries among `uids`, grouped by printing so each is offered once. `missing` holds uids
+ * whose printing row isn't in this catalog (nothing to offer for them).
+ */
+export function contributionGroups(
+  db: SqlDb,
+  owner: number,
+  uids: string[]
+): { groups: ContributionGroup[]; missing: string[] } {
+  const find = db.prepare(
+    `SELECT p.id AS printing_id, p.pkey, p.card_id, p.set_name, p.set_code, p.set_rarity, p.set_rarity_code,
+       p.language, p.variant, p.tcg_product_id
+     FROM collection_entries e JOIN card_printings p ON p.id = e.printing_id
+     WHERE e.owner_id = ? AND e.uid = ?`
+  )
+  const groups = new Map<number, ContributionGroup>()
+  const missing: string[] = []
+  for (const uid of uids) {
+    const r = find.get(owner, uid) as
+      | {
+          printing_id: number
+          pkey: string
+          card_id: number
+          set_name: string
+          set_code: string
+          set_rarity: string
+          set_rarity_code: string | null
+          language: string
+          variant: string | null
+          tcg_product_id: number | null
+        }
+      | undefined
+    if (!r) {
+      missing.push(uid)
+      continue
+    }
+    const group = groups.get(r.printing_id)
+    if (group) group.uids.push(uid)
+    else
+      groups.set(r.printing_id, {
+        pkey: r.pkey,
+        printing: {
+          card_id: r.card_id,
+          set_name: r.set_name,
+          set_code: r.set_code,
+          set_rarity: r.set_rarity,
+          // The server rejects an omitted field, so an empty optional one is an explicit null.
+          set_rarity_code: r.set_rarity_code || null,
+          language: r.language,
+          variant: r.variant ?? null,
+          tcg_product_id: r.tcg_product_id ?? null
+        },
+        uids: [uid]
+      })
+  }
+  return { groups: [...groups.values()], missing }
+}
+
+/** The distinct printings of the owner's entries `uids`, in the shape the server's contribute takes. */
+export function printingsToContribute(
+  db: SqlDb,
+  owner: number,
+  uids: string[]
+): ContributedPrinting[] {
+  return contributionGroups(db, owner, uids).groups.map((g) => g.printing)
+}
+
+/** Notes that an entry can't sync; an issue already recorded for the uid keeps its `since`. */
+export function recordSyncIssue(
+  db: SqlDb,
+  owner: number,
+  uid: string,
+  pkey: string,
+  reason: string,
+  now: Date
+): void {
+  db.prepare(
+    `INSERT INTO sync_issues (owner_id, uid, pkey, reason, since) VALUES (?, ?, ?, ?, ?)
+     ON CONFLICT(owner_id, uid) DO UPDATE SET pkey = excluded.pkey, reason = excluded.reason`
+  ).run(owner, uid, pkey, reason, now.toISOString())
+}
+
+export function clearSyncIssue(db: SqlDb, owner: number, uid: string): void {
+  db.prepare('DELETE FROM sync_issues WHERE owner_id = ? AND uid = ?').run(owner, uid)
+}
+
+/** Forgets the owner's issues for uids not in `keep` (entries that synced, were removed or re-keyed). */
+export function pruneSyncIssues(db: SqlDb, owner: number, keep: ReadonlySet<string>): void {
+  db.prepare(
+    'DELETE FROM sync_issues WHERE owner_id = ? AND uid NOT IN (SELECT value FROM json_each(?))'
+  ).run(owner, JSON.stringify([...keep]))
+}
+
+export function syncIssueCount(db: SqlDb, owner: number): number {
+  const { n } = db
+    .prepare('SELECT COUNT(*) AS n FROM sync_issues WHERE owner_id = ?')
+    .get(owner) as {
+    n: number
+  }
+  return Number(n)
+}
+
+/** The owner's entries that can't sync, with what the user needs to recognise them, oldest issue first. */
+export function listSyncIssues(db: SqlDb, owner: number): UnsyncedEntry[] {
+  const rows = db
+    .prepare(
+      `SELECT i.uid, c.name, p.set_code, p.set_name, p.set_rarity, p.language, e.quantity, i.reason
+       FROM sync_issues i
+       JOIN collection_entries e ON e.uid = i.uid AND e.owner_id = i.owner_id
+       JOIN card_printings p ON p.id = e.printing_id
+       JOIN cards c ON c.id = p.card_id
+       WHERE i.owner_id = ?
+       ORDER BY i.since, c.name, i.uid`
+    )
+    .all(owner) as {
+    uid: string
+    name: string
+    set_code: string
+    set_name: string
+    set_rarity: string
+    language: Language
+    quantity: number
+    reason: string
+  }[]
+  return rows.map((r) => ({
+    uid: r.uid,
+    name: r.name,
+    setCode: r.set_code,
+    setName: r.set_name,
+    rarity: r.set_rarity,
+    language: r.language,
+    quantity: r.quantity,
+    reason: r.reason
+  }))
 }

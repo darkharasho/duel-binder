@@ -226,7 +226,8 @@ describe('account service', () => {
       localOwner: null,
       lastSyncedAt: null,
       error: null,
-      pendingCount: 0
+      pendingCount: 0,
+      unsyncedCount: 0
     })
     expect(service.isSignedIn()).toBe(false)
   })

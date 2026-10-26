@@ -11,7 +11,8 @@ const base: AccountStatus = {
   localOwner: null,
   lastSyncedAt: null,
   error: null,
-  pendingCount: 0
+  pendingCount: 0,
+  unsyncedCount: 0
 }
 const signedIn = (over: Partial<AccountStatus> = {}): AccountStatus => ({
   ...base,

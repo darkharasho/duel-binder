@@ -144,7 +144,8 @@ describe('createHandlers', () => {
       localOwner: 'alice',
       lastSyncedAt: null,
       error: null,
-      pendingCount: 0
+      pendingCount: 0,
+      unsyncedCount: 0
     }
     account.status.mockReturnValue(status)
     for (const m of ['signIn', 'signOut', 'syncNow'] as const) account[m].mockResolvedValue(status)

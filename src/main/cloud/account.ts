@@ -16,6 +16,7 @@ import {
   ensureAccount,
   hasLocalData,
   pendingCount,
+  syncIssueCount,
   setActiveOwner
 } from './localSync'
 import { createSyncScheduler, type SyncScheduler } from './scheduler'
@@ -135,7 +136,8 @@ export function createAccountService(deps: AccountDeps): AccountService {
       localOwner: owner === 0 ? null : accountName(db, owner) || null,
       lastSyncedAt: owner === 0 ? null : accountState(db, owner).syncedAt,
       error,
-      pendingCount: owner === 0 ? 0 : pendingCount(db, owner)
+      pendingCount: owner === 0 ? 0 : pendingCount(db, owner),
+      unsyncedCount: owner === 0 ? 0 : syncIssueCount(db, owner)
     }
   }
 

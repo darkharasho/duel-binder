@@ -15,7 +15,8 @@ const signedOut = {
   localOwner: null,
   lastSyncedAt: null,
   error: null,
-  pendingCount: 0
+  pendingCount: 0,
+  unsyncedCount: 0
 } as const
 
 const emptyStatus = { state: 'idle', lastSyncAt: null, dbVersion: null, cardCount: 1, error: null, blocked: null } as const
@@ -122,6 +123,7 @@ export function createMockApi(overrides: DeepPartial<Api> = {}): Api {
       signIn: vi.fn(async () => ({ ...signedOut })),
       signOut: vi.fn(async () => ({ ...signedOut })),
       syncNow: vi.fn(async () => ({ ...signedOut })),
+      unsynced: vi.fn(async () => []),
       onChange: vi.fn(() => () => {})
     }
   }

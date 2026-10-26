@@ -33,6 +33,7 @@ import type { PriceService } from '../prices/service'
 import { needsPrice, refreshIntlPrices } from '../prices/refresh'
 import { applyTcgPrices, refreshTcgPrices } from '../tcgplayer/prices'
 import type { AccountService } from '../cloud/account'
+import { activeOwner, listSyncIssues } from '../cloud/localSync'
 
 export interface WindowDeps {
   minimize(): void
@@ -207,7 +208,8 @@ export function createHandlers({
     'account:status': async () => account.status(),
     'account:signIn': async () => account.signIn(),
     'account:signOut': async () => account.signOut(),
-    'account:syncNow': async () => account.syncNow()
+    'account:syncNow': async () => account.syncNow(),
+    'account:unsynced': async () => listSyncIssues(db, activeOwner(db))
   }
 }
 

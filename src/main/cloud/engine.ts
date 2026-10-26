@@ -1,22 +1,27 @@
 import type Database from 'better-sqlite3'
 import { setMeta } from '../db/meta'
 import { recordSnapshot } from '../repo/stats'
+import { MAX_CONTRIBUTE, type ContributeResult } from '../../shared/catalogFeed'
 import { MAX_PULL, MAX_PUSH, editTime, type WireEntry } from '../../shared/cloud'
-import type { CloudClient } from './client'
+import { CloudAuthError, CloudOfflineError, type CloudClient } from './client'
 import {
   accountState,
   activeOwner,
   applyPending,
   applyPrices,
   applyRemote,
+  contributionGroups,
   dirtyEntries,
   dropEntry,
   markPushed,
   pendingCount,
+  pruneSyncIssues,
   purgeCleanTombstones,
+  recordSyncIssue,
   rekey,
   saveAccountState,
   stalePricePkeys,
+  syncIssueCount,
   tombstoneClean
 } from './localSync'
 
@@ -29,6 +34,8 @@ export interface SyncOutcome {
   pulled: number
   /** The owner's entries waiting for this computer's catalog to gain their printing. */
   pending: number
+  /** The owner's entries that can't sync (the server lacks their printing and wouldn't take it). */
+  unsynced: number
   /** Whether anything the user can see may have changed. */
   changed: boolean
 }
@@ -55,60 +62,116 @@ export async function syncOnce(
   const sent = new Map<string, string>()
   let pushed = 0
   let pushedLive = 0
-  for (;;) {
-    const batch = dirtyEntries(db, owner, MAX_PUSH, skip)
-    if (batch.length === 0) break
-    const fresh = batch.filter((e) => {
-      if (sent.get(e.uid) !== sameAs(e)) return true
-      skip.add(e.uid)
-      return false
-    })
-    if (fresh.length === 0) continue
+  /** Uids the server answered `unknown-printing` for, in this pass of the push loop. */
+  const unknown = new Set<string>()
+  const pushDirty = async (): Promise<void> => {
+    for (;;) {
+      const batch = dirtyEntries(db, owner, MAX_PUSH, skip)
+      if (batch.length === 0) break
+      const fresh = batch.filter((e) => {
+        if (sent.get(e.uid) !== sameAs(e)) return true
+        skip.add(e.uid)
+        return false
+      })
+      if (fresh.length === 0) continue
 
-    const results = await client.push(fresh)
-    pushed += fresh.length
-    // Recorded before the results are read, so a uid the server leaves out isn't pushed again this run.
-    for (const e of fresh) sent.set(e.uid, sameAs(e))
-    const byUid = new Map(fresh.map((e) => [e.uid, e]))
-    db.transaction(() => {
-      for (const r of results) {
-        const e = byUid.get(r.uid)
-        if (!e) continue
-        switch (r.status) {
-          case 'applied':
-            markPushed(db, e)
-            if (e.deletedAt === null) pushedLive++
-            break
-          case 'stale': {
-            const result = applyRemote(db, owner, r.current)
-            if (result === 'applied') changed = true
-            else if (result === 'kept-local') {
-              // An exact edit-time tie: the server keeps its row, so this computer takes it too.
+      const results = await client.push(fresh)
+      pushed += fresh.length
+      // Recorded before the results are read, so a uid the server leaves out isn't pushed again this run.
+      for (const e of fresh) sent.set(e.uid, sameAs(e))
+      const byUid = new Map(fresh.map((e) => [e.uid, e]))
+      db.transaction(() => {
+        for (const r of results) {
+          const e = byUid.get(r.uid)
+          if (!e) continue
+          switch (r.status) {
+            case 'applied':
               markPushed(db, e)
-              if (applyRemote(db, owner, r.current) === 'applied') changed = true
+              if (e.deletedAt === null) pushedLive++
+              break
+            case 'stale': {
+              const result = applyRemote(db, owner, r.current)
+              if (result === 'applied') changed = true
+              else if (result === 'kept-local') {
+                // An exact edit-time tie: the server keeps its row, so this computer takes it too.
+                markPushed(db, e)
+                if (applyRemote(db, owner, r.current) === 'applied') changed = true
+              }
+              break
             }
-            break
+            case 'merged':
+              // The server stored the pushed entry as a tombstone at its edit time; do the same here
+              // first (unless edited since), so the winner then lands without a key collision.
+              tombstoneClean(db, e, editTime(e))
+              applyRemote(db, owner, r.winner)
+              changed = true
+              break
+            case 'unknown-printing':
+              skip.add(e.uid)
+              unknown.add(e.uid)
+              break
+            case 'rejected':
+              // The uid belongs to another account: a tombstone has nothing to keep; a live entry gets a
+              // fresh uid and goes again this run.
+              if (e.deletedAt !== null) dropEntry(db, e.uid)
+              else rekey(db, e.uid)
+              break
           }
-          case 'merged':
-            // The server stored the pushed entry as a tombstone at its edit time; do the same here
-            // first (unless edited since), so the winner then lands without a key collision.
-            tombstoneClean(db, e, editTime(e))
-            applyRemote(db, owner, r.winner)
-            changed = true
-            break
-          case 'unknown-printing':
-            skip.add(e.uid)
-            break
-          case 'rejected':
-            // The uid belongs to another account: a tombstone has nothing to keep; a live entry gets a
-            // fresh uid and goes again this run.
-            if (e.deletedAt !== null) dropEntry(db, e.uid)
-            else rekey(db, e.uid)
-            break
         }
-      }
-    })()
+      })()
+    }
   }
+  await pushDirty()
+
+  // 1b. Offer the server the printings it lacks, push those entries again, and note what still can't sync.
+  const reasons = new Map<string, string>()
+  const pkeys = new Map<string, string>()
+  if (unknown.size > 0) {
+    const retry = new Set<string>()
+    const { groups, missing } = contributionGroups(db, owner, [...unknown])
+    for (const g of groups) for (const uid of g.uids) pkeys.set(uid, g.pkey)
+    for (const uid of missing) reasons.set(uid, 'unknown-printing')
+    for (let i = 0; i < groups.length; i += MAX_CONTRIBUTE) {
+      const chunk = groups.slice(i, i + MAX_CONTRIBUTE)
+      let results: ContributeResult[]
+      try {
+        results = await client.contribute(chunk.map((g) => g.printing))
+      } catch (err) {
+        if (err instanceof CloudAuthError || err instanceof CloudOfflineError) throw err
+        break // the rest stay recorded as unknown-printing
+      }
+      // Results answer the request rows in order; the pkey can be '' so it is never used to match.
+      chunk.forEach((g, j) => {
+        const r = results[j]
+        for (const uid of g.uids) {
+          if (r && r.status !== 'rejected') retry.add(uid)
+          else if (r) reasons.set(uid, r.reason ?? 'unknown-printing')
+        }
+      })
+    }
+    for (const uid of retry) {
+      unknown.delete(uid)
+      skip.delete(uid)
+      sent.delete(uid)
+    }
+    if (retry.size > 0) await pushDirty()
+  }
+  // Whatever is still unknown after the retry can't sync for now.
+  db.transaction(() => {
+    const keep = new Set<string>()
+    for (const uid of unknown) {
+      recordSyncIssue(
+        db,
+        owner,
+        uid,
+        pkeys.get(uid) ?? '',
+        reasons.get(uid) ?? 'unknown-printing',
+        now()
+      )
+      keep.add(uid)
+    }
+    pruneSyncIssues(db, owner, keep)
+  })()
 
   // 2. Pull. Each page and its cursor commit together.
   let pulled = 0
@@ -142,5 +205,12 @@ export async function syncOnce(
     if (changed && activeOwner(db) === owner) recordSnapshot(db, now())
   })()
 
-  return { pushed, pushedLive, pulled, pending: pendingCount(db, owner), changed }
+  return {
+    pushed,
+    pushedLive,
+    pulled,
+    pending: pendingCount(db, owner),
+    unsynced: syncIssueCount(db, owner),
+    changed
+  }
 }

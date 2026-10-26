@@ -176,7 +176,8 @@ const signedIn: AccountStatus = {
   localOwner: null,
   lastSyncedAt: null,
   error: null,
-  pendingCount: 0
+  pendingCount: 0,
+  unsyncedCount: 0
 }
 
 const navNames = (): (string | null)[] =>

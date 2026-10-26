@@ -23,6 +23,8 @@ export interface ScanPrinting {
 export type FingerprintStatus = {
   state: 'ready' | 'missing' | 'downloading' | 'error'
   count: number
+  /** Set by a refresh that wrote a new file to disk. */
+  updated?: true
 }
 
 /** A grayscale crop for OCR, 1 byte per pixel. */

@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { mkdtempSync, rmSync, readFileSync, writeFileSync, existsSync } from 'fs'
+import { mkdtempSync, rmSync, readFileSync, readdirSync, writeFileSync, existsSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { createFingerprintStore } from '../../src/main/scan/fingerprints'
@@ -24,8 +24,19 @@ describe('fingerprint store', () => {
   })
   afterEach(() => rmSync(dir, { recursive: true, force: true }))
 
-  const make = (fetch: typeof globalThis.fetch): ReturnType<typeof createFingerprintStore> =>
-    createFingerprintStore({ dir, portal: 'https://p.test', fetch, now })
+  const make = (
+    fetch: typeof globalThis.fetch,
+    timeoutMs?: number
+  ): ReturnType<typeof createFingerprintStore> =>
+    createFingerprintStore({ dir, portal: 'https://p.test', fetch, now, timeoutMs })
+
+  /** A fetch that never answers, but gives up when its signal aborts, as fetch does. */
+  const stalled = vi.fn<typeof globalThis.fetch>(
+    (_url, init) =>
+      new Promise<Response>((_resolve, reject) => {
+        init?.signal?.addEventListener('abort', () => reject(init.signal!.reason))
+      })
+  )
 
   it('is missing before anything is downloaded', async () => {
     const store = make(vi.fn())
@@ -37,7 +48,7 @@ describe('fingerprint store', () => {
     const bytes = body(3)
     const fetch = vi.fn(async () => ok(bytes))
     const store = make(fetch)
-    expect(await store.refresh()).toEqual({ state: 'ready', count: 3 })
+    expect(await store.refresh()).toEqual({ state: 'ready', count: 3, updated: true })
     expect(fetch).toHaveBeenCalledWith(
       'https://p.test/scan/fingerprints',
       expect.objectContaining({ headers: {} })
@@ -60,7 +71,7 @@ describe('fingerprint store', () => {
     const p = store.refresh()
     expect(store.status()).toEqual({ state: 'downloading', count: 0 })
     release(ok(body(1)))
-    expect(await p).toEqual({ state: 'ready', count: 1 })
+    expect(await p).toEqual({ state: 'ready', count: 1, updated: true })
   })
 
   it('does not fetch again within 24 hours unless forced', async () => {
@@ -138,5 +149,73 @@ describe('fingerprint store', () => {
     const [a, b] = await Promise.all([store.refresh(), store.refresh()])
     expect(fetch).toHaveBeenCalledTimes(1)
     expect(a).toEqual(b)
+  })
+
+  it('gives up on a stalled download after the timeout', async () => {
+    const store = make(stalled, 20)
+    expect(await store.refresh()).toEqual({ state: 'error', count: 0 })
+    expect(stalled.mock.calls[0][1]?.signal).toBeInstanceOf(AbortSignal)
+  })
+
+  it('keeps the file on disk when a download stalls', async () => {
+    const store = make(
+      vi.fn(async () => ok(body(2))),
+      20
+    )
+    await store.refresh()
+    const again = make(stalled, 20)
+    expect(await again.refresh({ force: true })).toEqual({ state: 'ready', count: 2 })
+    expect(await again.read()).not.toBeNull()
+  })
+
+  it('says when a refresh wrote a new file', async () => {
+    const fetch = vi.fn(async () => ok(body(2)))
+    const store = make(fetch)
+    expect(await store.refresh()).toEqual({ state: 'ready', count: 2, updated: true })
+    fetch.mockResolvedValueOnce(new Response(null, { status: 304 }))
+    expect(await store.refresh({ force: true })).toEqual({ state: 'ready', count: 2 })
+    // Within a day, nothing is fetched and nothing changes.
+    expect(await store.refresh()).toEqual({ state: 'ready', count: 2 })
+  })
+
+  it('keeps the file on disk when the server has none (404)', async () => {
+    const fetch = vi.fn(async () => ok(body(2)))
+    const store = make(fetch)
+    await store.refresh()
+    fetch.mockResolvedValueOnce(new Response('{}', { status: 404 }))
+    expect(await store.refresh({ force: true })).toEqual({ state: 'ready', count: 2 })
+    expect(await store.read()).not.toBeNull()
+  })
+
+  it('tries again on the next refresh after a failed one', async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>(async () => {
+      throw new Error('offline')
+    })
+    const store = make(fetch)
+    expect(await store.refresh()).toEqual({ state: 'error', count: 0 })
+    fetch.mockResolvedValueOnce(ok(body(1)))
+    expect(await store.refresh()).toEqual({ state: 'ready', count: 1, updated: true })
+    expect(fetch).toHaveBeenCalledTimes(2)
+  })
+
+  it('leaves no temporary file behind', async () => {
+    const store = make(vi.fn(async () => ok(body(1))))
+    await store.refresh()
+    expect(readdirSync(dir).sort()).toEqual(['fingerprints.bin', 'fingerprints.json'])
+  })
+
+  it('downloads again on the next refresh when the file on disk goes bad', async () => {
+    const fetch = vi.fn<typeof globalThis.fetch>(async () => ok(body(2)))
+    const store = make(fetch)
+    await store.refresh()
+    writeFileSync(join(dir, 'fingerprints.bin'), 'junk')
+    expect(await store.read()).toBeNull()
+    expect(store.status()).toEqual({ state: 'missing', count: 0 })
+    expect(existsSync(join(dir, 'fingerprints.json'))).toBe(false)
+    // Within the day: the bad file doesn't wait for tomorrow, and nothing stale is revalidated.
+    expect(await store.refresh()).toEqual({ state: 'ready', count: 2, updated: true })
+    expect(fetch).toHaveBeenCalledTimes(2)
+    expect(fetch.mock.calls[1][1]).toMatchObject({ headers: {} })
+    expect(await store.read()).not.toBeNull()
   })
 })

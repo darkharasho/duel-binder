@@ -505,6 +505,63 @@ describe('Scan page', () => {
     expect(screen.queryByText(/Artwork matching is unavailable/)).not.toBeInTheDocument()
   })
 
+  it('scans with the file on disk while the fingerprint refresh hangs', async () => {
+    stubCamera()
+    const fp = new ArrayBuffer(8)
+    const engine = fakeEngine(() => codeFrame('LOB-EN005'))
+    renderScan(engine, {
+      scan: {
+        fingerprints: vi.fn(async () => fp),
+        refreshFingerprints: vi.fn(() => new Promise<never>(() => {})),
+        printingsByCode: vi.fn(async () => [printing()])
+      }
+    })
+    await run(1000)
+    expect(engine.init).toHaveBeenCalledWith(fp)
+    expect(engine.analyze).toHaveBeenCalled()
+    expect(
+      within(screen.getByRole('list', { name: 'This session' })).getByText('Dark Magician')
+    ).toBeInTheDocument()
+  })
+
+  it('gives the engine the new file when a refresh downloads one', async () => {
+    stubCamera()
+    const old = new ArrayBuffer(8)
+    const fresh = new ArrayBuffer(16)
+    let file: ArrayBuffer | null = null
+    let finish!: () => void
+    const refreshFingerprints = vi.fn(
+      () =>
+        new Promise<{ state: 'ready'; count: number; updated: true }>((resolve) => {
+          finish = () => {
+            file = fresh
+            resolve({ state: 'ready', count: 2, updated: true })
+          }
+        })
+    )
+    file = old
+    const engine = fakeEngine()
+    renderScan(engine, { scan: { fingerprints: vi.fn(async () => file), refreshFingerprints } })
+    await run(500)
+    expect(engine.init.mock.calls).toEqual([[old]])
+    finish()
+    await run(500)
+    expect(engine.init.mock.calls).toEqual([[old], [fresh]])
+  })
+
+  it('keeps the engine as it is when a refresh finds nothing new', async () => {
+    stubCamera()
+    const engine = fakeEngine()
+    renderScan(engine, {
+      scan: {
+        fingerprints: vi.fn(async () => new ArrayBuffer(8)),
+        refreshFingerprints: vi.fn(async () => ({ state: 'ready' as const, count: 2 }))
+      }
+    })
+    await run(1000)
+    expect(engine.init).toHaveBeenCalledTimes(1)
+  })
+
   it('picking a set passes its image ids as candidates', async () => {
     stubCamera()
     const lob = { setName: 'Legend of Blue Eyes White Dragon', language: 'en' } as SetSummary

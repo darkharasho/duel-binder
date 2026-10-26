@@ -125,15 +125,18 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
     }
     reinit.current = init
     void (async () => {
-      // Offline or failed downloads still leave any file already on disk.
-      await api.scan.refreshFingerprints().catch(() => null)
-      if (!live) return
+      // Scanning starts at once with whatever file is on disk: set codes and names need no
+      // network, and a slow download mustn't hold them up.
       try {
         await init()
       } catch {
         loop.current.needsInit = true
       }
-      if (live) readyRef.current = true
+      if (!live) return
+      readyRef.current = true
+      // A newer file, once downloaded, goes to the engine between frames.
+      const refreshed = await api.scan.refreshFingerprints().catch(() => null)
+      if (live && refreshed?.updated) loop.current.needsInit = true
     })()
     return () => {
       live = false

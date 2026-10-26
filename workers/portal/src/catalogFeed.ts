@@ -4,12 +4,14 @@ import { CollectionError } from '../../../src/main/repo/collection'
 import { CATALOG_TABLES } from '../../../src/shared/catalogTables'
 import {
   MAX_CHANGES,
+  MAX_CONTRIBUTE,
   type CatalogChange,
   type CatalogChangesResponse,
   type CatalogTableName
 } from '../../../src/shared/catalogFeed'
 import type { AppDeps } from './app'
 import { currentUser } from './auth'
+import { contributePrintings } from './contribute'
 
 const json = (body: unknown, status = 200): Response =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
@@ -82,10 +84,20 @@ function wholeNumber(raw: string | null, what: string, min: number): number {
 }
 
 export async function catalogRoute(req: Request, deps: AppDeps, path: string): Promise<Response> {
-  if (path !== 'changes') return json({ error: 'Not found' }, 404)
-  if (req.method !== 'GET') return json({ error: 'method-not-allowed' }, 405)
+  if (path !== 'changes' && path !== 'contribute') return json({ error: 'Not found' }, 404)
+  if (req.method !== (path === 'changes' ? 'GET' : 'POST'))
+    return json({ error: 'method-not-allowed' }, 405)
   const user = await currentUser(req, deps)
   if (!user || user.kind !== 'desktop') return json({ error: 'signed-out' }, 401)
+
+  if (path === 'contribute') {
+    const body = (await req.json().catch(() => null)) as { printings?: unknown } | null
+    if (!body || !Array.isArray(body.printings)) return json({ error: 'bad-request' }, 400)
+    if (body.printings.length > MAX_CONTRIBUTE) return json({ error: 'too-many' }, 413)
+    const rows = body.printings
+    const results = deps.db.transaction(() => contributePrintings(deps.db, user.id, rows, deps.now()))()
+    return json({ results })
+  }
 
   try {
     const q = new URL(req.url).searchParams

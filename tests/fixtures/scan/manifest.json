@@ -1,0 +1,1456 @@
+{
+  "shots": [
+    {
+      "file": "46986414-0.jpg",
+      "imageId": 46986414,
+      "cardId": 46986414,
+      "name": "Dark Magician",
+      "setCode": "CT13-EN003",
+      "frame": "normal",
+      "quad": [
+        [
+          156.4,
+          327.8
+        ],
+        [
+          401.2,
+          367.5
+        ],
+        [
+          341.9,
+          707.1
+        ],
+        [
+          109.1,
+          681
+        ]
+      ],
+      "effect": "blur σ1.11"
+    },
+    {
+      "file": "46986414-1.jpg",
+      "imageId": 46986414,
+      "cardId": 46986414,
+      "name": "Dark Magician",
+      "setCode": "CT13-EN003",
+      "frame": "normal",
+      "quad": [
+        [
+          456.1,
+          175.1
+        ],
+        [
+          773.6,
+          180.5
+        ],
+        [
+          769.9,
+          652.5
+        ],
+        [
+          438.2,
+          644.3
+        ]
+      ],
+      "effect": "brightness ×0.88"
+    },
+    {
+      "file": "46986414-2.jpg",
+      "imageId": 46986414,
+      "cardId": 46986414,
+      "name": "Dark Magician",
+      "setCode": "CT13-EN003",
+      "frame": "normal",
+      "quad": [
+        [
+          916.8,
+          63.3
+        ],
+        [
+          1140.1,
+          43
+        ],
+        [
+          1162.3,
+          374.2
+        ],
+        [
+          941,
+          384.3
+        ]
+      ],
+      "effect": "glare r74 α0.66"
+    },
+    {
+      "file": "46986415-0.jpg",
+      "imageId": 46986415,
+      "cardId": 46986414,
+      "name": "Dark Magician",
+      "setCode": "CT13-EN003",
+      "frame": "normal",
+      "quad": [
+        [
+          338.6,
+          191.7
+        ],
+        [
+          604.6,
+          175.8
+        ],
+        [
+          621.4,
+          546.6
+        ],
+        [
+          370.7,
+          569.8
+        ]
+      ],
+      "effect": "blur σ1.29",
+      "artPasted": true
+    },
+    {
+      "file": "46986415-1.jpg",
+      "imageId": 46986415,
+      "cardId": 46986414,
+      "name": "Dark Magician",
+      "setCode": "CT13-EN003",
+      "frame": "normal",
+      "quad": [
+        [
+          832,
+          252.9
+        ],
+        [
+          1103.2,
+          218.9
+        ],
+        [
+          1138.7,
+          639.5
+        ],
+        [
+          846.5,
+          655.6
+        ]
+      ],
+      "effect": "brightness ×0.81",
+      "artPasted": true
+    },
+    {
+      "file": "46986415-2.jpg",
+      "imageId": 46986415,
+      "cardId": 46986414,
+      "name": "Dark Magician",
+      "setCode": "CT13-EN003",
+      "frame": "normal",
+      "quad": [
+        [
+          900,
+          318.4
+        ],
+        [
+          1111.9,
+          338.4
+        ],
+        [
+          1088.2,
+          654.8
+        ],
+        [
+          861.3,
+          632.3
+        ]
+      ],
+      "effect": "glare r58 α0.67",
+      "artPasted": true
+    },
+    {
+      "file": "89631139-0.jpg",
+      "imageId": 89631139,
+      "cardId": 89631139,
+      "name": "Blue-Eyes White Dragon",
+      "setCode": "CT13-EN008",
+      "frame": "normal",
+      "quad": [
+        [
+          134.5,
+          159.1
+        ],
+        [
+          460.4,
+          148.3
+        ],
+        [
+          491.6,
+          628.7
+        ],
+        [
+          149.5,
+          646.4
+        ]
+      ],
+      "effect": "blur σ0.24"
+    },
+    {
+      "file": "89631139-1.jpg",
+      "imageId": 89631139,
+      "cardId": 89631139,
+      "name": "Blue-Eyes White Dragon",
+      "setCode": "CT13-EN008",
+      "frame": "normal",
+      "quad": [
+        [
+          304.5,
+          171.2
+        ],
+        [
+          626.9,
+          175.9
+        ],
+        [
+          623.6,
+          642.4
+        ],
+        [
+          302.7,
+          643.9
+        ]
+      ],
+      "effect": "brightness ×0.63"
+    },
+    {
+      "file": "89631139-2.jpg",
+      "imageId": 89631139,
+      "cardId": 89631139,
+      "name": "Blue-Eyes White Dragon",
+      "setCode": "CT13-EN008",
+      "frame": "normal",
+      "quad": [
+        [
+          844.9,
+          313.1
+        ],
+        [
+          1084.4,
+          317.8
+        ],
+        [
+          1068.3,
+          656.3
+        ],
+        [
+          846.2,
+          641.4
+        ]
+      ],
+      "effect": "glare r69 α0.50"
+    },
+    {
+      "file": "40640057-0.jpg",
+      "imageId": 40640057,
+      "cardId": 40640057,
+      "name": "Kuriboh",
+      "setCode": "BROL-EN062",
+      "frame": "normal",
+      "quad": [
+        [
+          792.2,
+          202.7
+        ],
+        [
+          1087.5,
+          198.7
+        ],
+        [
+          1087.8,
+          637.8
+        ],
+        [
+          788.4,
+          632.8
+        ]
+      ],
+      "effect": "blur σ0.38"
+    },
+    {
+      "file": "40640057-1.jpg",
+      "imageId": 40640057,
+      "cardId": 40640057,
+      "name": "Kuriboh",
+      "setCode": "BROL-EN062",
+      "frame": "normal",
+      "quad": [
+        [
+          193.7,
+          178.2
+        ],
+        [
+          467.5,
+          189.9
+        ],
+        [
+          466.5,
+          596.3
+        ],
+        [
+          170.6,
+          587.8
+        ]
+      ],
+      "effect": "brightness ×1.06"
+    },
+    {
+      "file": "40640057-2.jpg",
+      "imageId": 40640057,
+      "cardId": 40640057,
+      "name": "Kuriboh",
+      "setCode": "BROL-EN062",
+      "frame": "normal",
+      "quad": [
+        [
+          203.1,
+          195.4
+        ],
+        [
+          509.3,
+          204
+        ],
+        [
+          501.5,
+          640
+        ],
+        [
+          202.7,
+          647.5
+        ]
+      ],
+      "effect": "glare r70 α0.57"
+    },
+    {
+      "file": "55144522-0.jpg",
+      "imageId": 55144522,
+      "cardId": 55144522,
+      "name": "Pot of Greed",
+      "setCode": "MP25-EN050",
+      "frame": "normal",
+      "quad": [
+        [
+          543.8,
+          94.9
+        ],
+        [
+          850.3,
+          103.9
+        ],
+        [
+          829.2,
+          524.6
+        ],
+        [
+          543.8,
+          536
+        ]
+      ],
+      "effect": "blur σ0.06"
+    },
+    {
+      "file": "55144522-1.jpg",
+      "imageId": 55144522,
+      "cardId": 55144522,
+      "name": "Pot of Greed",
+      "setCode": "MP25-EN050",
+      "frame": "normal",
+      "quad": [
+        [
+          499.1,
+          135.7
+        ],
+        [
+          790.3,
+          148.7
+        ],
+        [
+          757.1,
+          578.5
+        ],
+        [
+          479.5,
+          545.6
+        ]
+      ],
+      "effect": "brightness ×1.05"
+    },
+    {
+      "file": "55144522-2.jpg",
+      "imageId": 55144522,
+      "cardId": 55144522,
+      "name": "Pot of Greed",
+      "setCode": "MP25-EN050",
+      "frame": "normal",
+      "quad": [
+        [
+          632.1,
+          350.3
+        ],
+        [
+          881.2,
+          347.7
+        ],
+        [
+          875.2,
+          703.7
+        ],
+        [
+          640.9,
+          695.6
+        ]
+      ],
+      "effect": "glare r111 α0.80"
+    },
+    {
+      "file": "44095762-0.jpg",
+      "imageId": 44095762,
+      "cardId": 44095762,
+      "name": "Mirror Force",
+      "setCode": "BP01-EN048",
+      "frame": "normal",
+      "quad": [
+        [
+          705.1,
+          344.8
+        ],
+        [
+          939.7,
+          327.3
+        ],
+        [
+          955.5,
+          665.7
+        ],
+        [
+          733.3,
+          670.7
+        ]
+      ],
+      "effect": "blur σ0.60"
+    },
+    {
+      "file": "44095762-1.jpg",
+      "imageId": 44095762,
+      "cardId": 44095762,
+      "name": "Mirror Force",
+      "setCode": "BP01-EN048",
+      "frame": "normal",
+      "quad": [
+        [
+          171.7,
+          195.1
+        ],
+        [
+          401.7,
+          208.7
+        ],
+        [
+          386.1,
+          537.5
+        ],
+        [
+          160.2,
+          535
+        ]
+      ],
+      "effect": "brightness ×0.79"
+    },
+    {
+      "file": "44095762-2.jpg",
+      "imageId": 44095762,
+      "cardId": 44095762,
+      "name": "Mirror Force",
+      "setCode": "BP01-EN048",
+      "frame": "normal",
+      "quad": [
+        [
+          400.9,
+          84.2
+        ],
+        [
+          678.8,
+          81
+        ],
+        [
+          717.3,
+          488.9
+        ],
+        [
+          418.4,
+          509.7
+        ]
+      ],
+      "effect": "glare r105 α0.73"
+    },
+    {
+      "file": "16178681-0.jpg",
+      "imageId": 16178681,
+      "cardId": 16178681,
+      "name": "Odd-Eyes Pendulum Dragon",
+      "setCode": "CT12-EN001",
+      "frame": "pendulum",
+      "quad": [
+        [
+          633.8,
+          159.9
+        ],
+        [
+          973.4,
+          209.7
+        ],
+        [
+          901.6,
+          698.1
+        ],
+        [
+          567.3,
+          653.9
+        ]
+      ],
+      "effect": "blur σ1.28"
+    },
+    {
+      "file": "16178681-1.jpg",
+      "imageId": 16178681,
+      "cardId": 16178681,
+      "name": "Odd-Eyes Pendulum Dragon",
+      "setCode": "CT12-EN001",
+      "frame": "pendulum",
+      "quad": [
+        [
+          595.4,
+          43.5
+        ],
+        [
+          846.1,
+          44.6
+        ],
+        [
+          837.4,
+          416.1
+        ],
+        [
+          587.2,
+          405.6
+        ]
+      ],
+      "effect": "brightness ×1.20"
+    },
+    {
+      "file": "16178681-2.jpg",
+      "imageId": 16178681,
+      "cardId": 16178681,
+      "name": "Odd-Eyes Pendulum Dragon",
+      "setCode": "CT12-EN001",
+      "frame": "pendulum",
+      "quad": [
+        [
+          901,
+          88.2
+        ],
+        [
+          1153.6,
+          106.9
+        ],
+        [
+          1117.5,
+          477.6
+        ],
+        [
+          871.2,
+          448.6
+        ]
+      ],
+      "effect": "glare r129 α0.59"
+    },
+    {
+      "file": "1861629-0.jpg",
+      "imageId": 1861629,
+      "cardId": 1861629,
+      "name": "Decode Talker",
+      "setCode": "DUDE-EN023",
+      "frame": "link",
+      "quad": [
+        [
+          509.8,
+          180.4
+        ],
+        [
+          765,
+          155.1
+        ],
+        [
+          825.4,
+          527.9
+        ],
+        [
+          555.9,
+          567.5
+        ]
+      ],
+      "effect": "blur σ0.69"
+    },
+    {
+      "file": "1861629-1.jpg",
+      "imageId": 1861629,
+      "cardId": 1861629,
+      "name": "Decode Talker",
+      "setCode": "DUDE-EN023",
+      "frame": "link",
+      "quad": [
+        [
+          511.8,
+          128.8
+        ],
+        [
+          850.7,
+          153.6
+        ],
+        [
+          808.3,
+          644.6
+        ],
+        [
+          476.8,
+          615
+        ]
+      ],
+      "effect": "brightness ×0.66"
+    },
+    {
+      "file": "1861629-2.jpg",
+      "imageId": 1861629,
+      "cardId": 1861629,
+      "name": "Decode Talker",
+      "setCode": "DUDE-EN023",
+      "frame": "link",
+      "quad": [
+        [
+          595.6,
+          105.3
+        ],
+        [
+          918.8,
+          87.7
+        ],
+        [
+          966.2,
+          558.5
+        ],
+        [
+          635,
+          594.3
+        ]
+      ],
+      "effect": "glare r81 α0.73"
+    },
+    {
+      "file": "84013237-0.jpg",
+      "imageId": 84013237,
+      "cardId": 84013237,
+      "name": "Number 39: Utopia",
+      "setCode": "BP01-EN024",
+      "frame": "normal",
+      "quad": [
+        [
+          238,
+          206.5
+        ],
+        [
+          584.4,
+          208
+        ],
+        [
+          569.5,
+          692.9
+        ],
+        [
+          246.9,
+          683.7
+        ]
+      ],
+      "effect": "blur σ0.45"
+    },
+    {
+      "file": "84013237-1.jpg",
+      "imageId": 84013237,
+      "cardId": 84013237,
+      "name": "Number 39: Utopia",
+      "setCode": "BP01-EN024",
+      "frame": "normal",
+      "quad": [
+        [
+          326.6,
+          102.8
+        ],
+        [
+          650.1,
+          134.8
+        ],
+        [
+          587.6,
+          628
+        ],
+        [
+          244.5,
+          574.6
+        ]
+      ],
+      "effect": "brightness ×0.95"
+    },
+    {
+      "file": "84013237-2.jpg",
+      "imageId": 84013237,
+      "cardId": 84013237,
+      "name": "Number 39: Utopia",
+      "setCode": "BP01-EN024",
+      "frame": "normal",
+      "quad": [
+        [
+          841.6,
+          83.4
+        ],
+        [
+          1097.4,
+          99.9
+        ],
+        [
+          1112.1,
+          478
+        ],
+        [
+          835.6,
+          481.7
+        ]
+      ],
+      "effect": "glare r64 α0.53"
+    },
+    {
+      "file": "5405694-0.jpg",
+      "imageId": 5405694,
+      "cardId": 5405694,
+      "name": "Black Luster Soldier",
+      "setCode": "DT07-EN030",
+      "frame": "normal",
+      "quad": [
+        [
+          324.4,
+          94.9
+        ],
+        [
+          547.7,
+          58.6
+        ],
+        [
+          596.1,
+          399.3
+        ],
+        [
+          356.6,
+          426.6
+        ]
+      ],
+      "effect": "blur σ0.12"
+    },
+    {
+      "file": "5405694-1.jpg",
+      "imageId": 5405694,
+      "cardId": 5405694,
+      "name": "Black Luster Soldier",
+      "setCode": "DT07-EN030",
+      "frame": "normal",
+      "quad": [
+        [
+          354.3,
+          32.8
+        ],
+        [
+          661.8,
+          50.5
+        ],
+        [
+          659.2,
+          505.5
+        ],
+        [
+          329.2,
+          496.4
+        ]
+      ],
+      "effect": "brightness ×1.19"
+    },
+    {
+      "file": "5405694-2.jpg",
+      "imageId": 5405694,
+      "cardId": 5405694,
+      "name": "Black Luster Soldier",
+      "setCode": "DT07-EN030",
+      "frame": "normal",
+      "quad": [
+        [
+          12.8,
+          197.5
+        ],
+        [
+          314.8,
+          158.5
+        ],
+        [
+          357.8,
+          617.9
+        ],
+        [
+          53.7,
+          635.7
+        ]
+      ],
+      "effect": "glare r72 α0.57"
+    },
+    {
+      "file": "14558127-0.jpg",
+      "imageId": 14558127,
+      "cardId": 14558127,
+      "name": "Ash Blossom & Joyous Spring",
+      "setCode": "MP22-EN257",
+      "frame": "normal",
+      "quad": [
+        [
+          489.5,
+          225.5
+        ],
+        [
+          752.9,
+          185.7
+        ],
+        [
+          798.9,
+          577.8
+        ],
+        [
+          545,
+          595.7
+        ]
+      ],
+      "effect": "blur σ0.69"
+    },
+    {
+      "file": "14558127-1.jpg",
+      "imageId": 14558127,
+      "cardId": 14558127,
+      "name": "Ash Blossom & Joyous Spring",
+      "setCode": "MP22-EN257",
+      "frame": "normal",
+      "quad": [
+        [
+          119.5,
+          52.6
+        ],
+        [
+          382.8,
+          91
+        ],
+        [
+          350.7,
+          482.4
+        ],
+        [
+          65.5,
+          451.9
+        ]
+      ],
+      "effect": "brightness ×1.12"
+    },
+    {
+      "file": "14558127-2.jpg",
+      "imageId": 14558127,
+      "cardId": 14558127,
+      "name": "Ash Blossom & Joyous Spring",
+      "setCode": "MP22-EN257",
+      "frame": "normal",
+      "quad": [
+        [
+          377.9,
+          256.4
+        ],
+        [
+          642.2,
+          231.6
+        ],
+        [
+          682.7,
+          616.1
+        ],
+        [
+          416.9,
+          645.5
+        ]
+      ],
+      "effect": "glare r79 α0.50"
+    },
+    {
+      "file": "12580477-0.jpg",
+      "imageId": 12580477,
+      "cardId": 12580477,
+      "name": "Raigeki",
+      "setCode": "TN19-EN010",
+      "frame": "normal",
+      "quad": [
+        [
+          627.8,
+          50.4
+        ],
+        [
+          951.4,
+          18.3
+        ],
+        [
+          996,
+          492.5
+        ],
+        [
+          671.8,
+          521.2
+        ]
+      ],
+      "effect": "blur σ1.39"
+    },
+    {
+      "file": "12580477-1.jpg",
+      "imageId": 12580477,
+      "cardId": 12580477,
+      "name": "Raigeki",
+      "setCode": "TN19-EN010",
+      "frame": "normal",
+      "quad": [
+        [
+          815.3,
+          144.4
+        ],
+        [
+          1066.3,
+          123.8
+        ],
+        [
+          1113.9,
+          493.2
+        ],
+        [
+          845.6,
+          521.7
+        ]
+      ],
+      "effect": "brightness ×0.86"
+    },
+    {
+      "file": "12580477-2.jpg",
+      "imageId": 12580477,
+      "cardId": 12580477,
+      "name": "Raigeki",
+      "setCode": "TN19-EN010",
+      "frame": "normal",
+      "quad": [
+        [
+          610.2,
+          29.4
+        ],
+        [
+          835.3,
+          47.9
+        ],
+        [
+          813,
+          383.3
+        ],
+        [
+          574.6,
+          362.5
+        ]
+      ],
+      "effect": "glare r59 α0.51"
+    },
+    {
+      "file": "83764718-0.jpg",
+      "imageId": 83764718,
+      "cardId": 83764718,
+      "name": "Monster Reborn",
+      "setCode": "TN19-EN011",
+      "frame": "normal",
+      "quad": [
+        [
+          605.7,
+          89.8
+        ],
+        [
+          940,
+          44.1
+        ],
+        [
+          1005.8,
+          533.4
+        ],
+        [
+          670.6,
+          577.3
+        ]
+      ],
+      "effect": "blur σ0.79"
+    },
+    {
+      "file": "83764718-1.jpg",
+      "imageId": 83764718,
+      "cardId": 83764718,
+      "name": "Monster Reborn",
+      "setCode": "TN19-EN011",
+      "frame": "normal",
+      "quad": [
+        [
+          644.4,
+          144.4
+        ],
+        [
+          858.4,
+          163.5
+        ],
+        [
+          821.5,
+          475.1
+        ],
+        [
+          618,
+          445.2
+        ]
+      ],
+      "effect": "brightness ×0.77"
+    },
+    {
+      "file": "83764718-2.jpg",
+      "imageId": 83764718,
+      "cardId": 83764718,
+      "name": "Monster Reborn",
+      "setCode": "TN19-EN011",
+      "frame": "normal",
+      "quad": [
+        [
+          102.2,
+          343.5
+        ],
+        [
+          337.3,
+          353.5
+        ],
+        [
+          312.2,
+          697.7
+        ],
+        [
+          88.3,
+          673.7
+        ]
+      ],
+      "effect": "glare r89 α0.48"
+    },
+    {
+      "file": "44508094-0.jpg",
+      "imageId": 44508094,
+      "cardId": 44508094,
+      "name": "Stardust Dragon",
+      "setCode": "CT05-EN001",
+      "frame": "normal",
+      "quad": [
+        [
+          515.6,
+          44.2
+        ],
+        [
+          763.3,
+          62.4
+        ],
+        [
+          721.4,
+          436.5
+        ],
+        [
+          478.7,
+          399.3
+        ]
+      ],
+      "effect": "blur σ0.28"
+    },
+    {
+      "file": "44508094-1.jpg",
+      "imageId": 44508094,
+      "cardId": 44508094,
+      "name": "Stardust Dragon",
+      "setCode": "CT05-EN001",
+      "frame": "normal",
+      "quad": [
+        [
+          931.9,
+          285.7
+        ],
+        [
+          1202.6,
+          280.2
+        ],
+        [
+          1228,
+          680.8
+        ],
+        [
+          934.9,
+          691.2
+        ]
+      ],
+      "effect": "brightness ×1.15"
+    },
+    {
+      "file": "44508094-2.jpg",
+      "imageId": 44508094,
+      "cardId": 44508094,
+      "name": "Stardust Dragon",
+      "setCode": "CT05-EN001",
+      "frame": "normal",
+      "quad": [
+        [
+          816.7,
+          225.1
+        ],
+        [
+          1075.7,
+          245.3
+        ],
+        [
+          1041.9,
+          602.3
+        ],
+        [
+          798.6,
+          600.1
+        ]
+      ],
+      "effect": "glare r79 α0.52"
+    },
+    {
+      "file": "20409757-0.jpg",
+      "imageId": 20409757,
+      "cardId": 20409757,
+      "name": "Timegazer Magician",
+      "setCode": "LED6-EN050",
+      "frame": "pendulum",
+      "quad": [
+        [
+          893.7,
+          246.6
+        ],
+        [
+          1129.6,
+          246.5
+        ],
+        [
+          1121.2,
+          568.5
+        ],
+        [
+          903.4,
+          584
+        ]
+      ],
+      "effect": "blur σ0.74"
+    },
+    {
+      "file": "20409757-1.jpg",
+      "imageId": 20409757,
+      "cardId": 20409757,
+      "name": "Timegazer Magician",
+      "setCode": "LED6-EN050",
+      "frame": "pendulum",
+      "quad": [
+        [
+          155.7,
+          156.5
+        ],
+        [
+          427,
+          185.5
+        ],
+        [
+          383.7,
+          593.1
+        ],
+        [
+          95.3,
+          555.1
+        ]
+      ],
+      "effect": "brightness ×0.82"
+    },
+    {
+      "file": "20409757-2.jpg",
+      "imageId": 20409757,
+      "cardId": 20409757,
+      "name": "Timegazer Magician",
+      "setCode": "LED6-EN050",
+      "frame": "pendulum",
+      "quad": [
+        [
+          554.8,
+          29.5
+        ],
+        [
+          887.7,
+          14.6
+        ],
+        [
+          886.9,
+          531.1
+        ],
+        [
+          540.1,
+          518.7
+        ]
+      ],
+      "effect": "glare r106 α0.50"
+    },
+    {
+      "file": "86066372-0.jpg",
+      "imageId": 86066372,
+      "cardId": 86066372,
+      "name": "Accesscode Talker",
+      "setCode": "MP25-EN272",
+      "frame": "link",
+      "quad": [
+        [
+          407.7,
+          199.4
+        ],
+        [
+          728.7,
+          221.2
+        ],
+        [
+          692.6,
+          691
+        ],
+        [
+          373.2,
+          664.3
+        ]
+      ],
+      "effect": "blur σ0.47"
+    },
+    {
+      "file": "86066372-1.jpg",
+      "imageId": 86066372,
+      "cardId": 86066372,
+      "name": "Accesscode Talker",
+      "setCode": "MP25-EN272",
+      "frame": "link",
+      "quad": [
+        [
+          461.6,
+          190.3
+        ],
+        [
+          712.1,
+          169.7
+        ],
+        [
+          731.3,
+          527.4
+        ],
+        [
+          498.2,
+          532.1
+        ]
+      ],
+      "effect": "brightness ×0.71"
+    },
+    {
+      "file": "86066372-2.jpg",
+      "imageId": 86066372,
+      "cardId": 86066372,
+      "name": "Accesscode Talker",
+      "setCode": "MP25-EN272",
+      "frame": "link",
+      "quad": [
+        [
+          884.3,
+          251.2
+        ],
+        [
+          1107.7,
+          263.4
+        ],
+        [
+          1080.4,
+          597.6
+        ],
+        [
+          858.1,
+          573.3
+        ]
+      ],
+      "effect": "glare r56 α0.61"
+    }
+  ],
+  "distractors": [
+    {
+      "imageId": 111280,
+      "cardId": 111280,
+      "name": "Dark Magic Expanded"
+    },
+    {
+      "imageId": 2129638,
+      "cardId": 2129638,
+      "name": "Blue-Eyes Twin Burst Dragon"
+    },
+    {
+      "imageId": 1861630,
+      "cardId": 1861629,
+      "name": "Decode Talker"
+    },
+    {
+      "imageId": 1186447,
+      "cardId": 1186447,
+      "name": "Horoscope Sorcerer, the Stargazer Magician"
+    },
+    {
+      "imageId": 342673,
+      "cardId": 342673,
+      "name": "Dark Magician the Magician of Black Magic"
+    },
+    {
+      "imageId": 2783661,
+      "cardId": 2783661,
+      "name": "Majesty with Eyes of Blue"
+    },
+    {
+      "imageId": 2347477,
+      "cardId": 2347477,
+      "name": "Micro Coder"
+    },
+    {
+      "imageId": 1344018,
+      "cardId": 1344018,
+      "name": "Time Pendulumgraph"
+    },
+    {
+      "imageId": 1784686,
+      "cardId": 1784686,
+      "name": "The Eye of Timaeus"
+    },
+    {
+      "imageId": 8240199,
+      "cardId": 8240199,
+      "name": "Sage with Eyes of Blue"
+    },
+    {
+      "imageId": 6622715,
+      "cardId": 6622715,
+      "name": "Encode Talker"
+    },
+    {
+      "imageId": 9156135,
+      "cardId": 9156135,
+      "name": "Apprentice Magician"
+    },
+    {
+      "imageId": 2314238,
+      "cardId": 2314238,
+      "name": "Dark Magic Attack"
+    },
+    {
+      "imageId": 9433350,
+      "cardId": 9433350,
+      "name": "Malefic Blue-Eyes White Dragon"
+    },
+    {
+      "imageId": 7403341,
+      "cardId": 7403341,
+      "name": "Cynet Conflict"
+    },
+    {
+      "imageId": 11067666,
+      "cardId": 11067666,
+      "name": "White Wing Magician"
+    },
+    {
+      "imageId": 2501624,
+      "cardId": 2501624,
+      "name": "Dark Magician Girl the Magician's Apprentice"
+    },
+    {
+      "imageId": 11443677,
+      "cardId": 11443677,
+      "name": "Blue-Eyes Tyrant Dragon"
+    },
+    {
+      "imageId": 15844566,
+      "cardId": 15844566,
+      "name": "Powercode Talker"
+    },
+    {
+      "imageId": 12289247,
+      "cardId": 12289247,
+      "name": "Chronograph Sorcerer"
+    },
+    {
+      "imageId": 5829717,
+      "cardId": 5829717,
+      "name": "Dark Magician the Knight of Dragon Magic"
+    },
+    {
+      "imageId": 17655904,
+      "cardId": 17655904,
+      "name": "Burst Stream of Destruction"
+    },
+    {
+      "imageId": 30114823,
+      "cardId": 30114823,
+      "name": "Code Generator"
+    },
+    {
+      "imageId": 14513273,
+      "cardId": 14513273,
+      "name": "Supreme King Gate Magician"
+    },
+    {
+      "imageId": 7084129,
+      "cardId": 7084129,
+      "name": "Magician's Rod"
+    },
+    {
+      "imageId": 20654247,
+      "cardId": 20654247,
+      "name": "Blue-Eyes Chaos Dragon"
+    },
+    {
+      "imageId": 30822527,
+      "cardId": 30822527,
+      "name": "Decode Talker Extended"
+    },
+    {
+      "imageId": 14920218,
+      "cardId": 14920218,
+      "name": "Oafdragon Magician"
+    },
+    {
+      "imageId": 7922915,
+      "cardId": 7922915,
+      "name": "Magician Navigation"
+    },
+    {
+      "imageId": 21082832,
+      "cardId": 21082832,
+      "name": "Chaos Form"
+    }
+  ],
+  "swapped": []
+}

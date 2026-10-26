@@ -1,5 +1,6 @@
 import type { Api } from '../../../shared/ipc'
 import type { PortalChannel } from '../../../shared/portal'
+import { OFFLINE_MESSAGE } from '../../../shared/friends'
 import type { SyncStatus, UpdateStatus } from '../../../shared/types'
 
 export interface HttpApiOptions {
@@ -42,7 +43,7 @@ export function createHttpApi(opts: HttpApiOptions = {}): Api {
           credentials: 'same-origin'
         })
       } catch {
-        throw new Error('Could not reach Duel Binder. Check your connection and try again.')
+        throw new Error(OFFLINE_MESSAGE)
       }
       if (res.status === 401) {
         onSignedOut()
@@ -72,6 +73,15 @@ export function createHttpApi(opts: HttpApiOptions = {}): Api {
       update: call('collection:update'),
       remove: call('collection:remove'),
       facets: call('collection:facets')
+    },
+    friends: {
+      overview: call('friends:overview'),
+      request: call('friends:request'),
+      accept: call('friends:accept'),
+      ignore: call('friends:ignore'),
+      remove: call('friends:remove'),
+      collection: call('friends:collection'),
+      facets: call('friends:facets')
     },
     stats: { get: call('stats:get') },
     sets: {

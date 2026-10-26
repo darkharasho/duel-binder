@@ -12,6 +12,8 @@ import type {
   CollectionStats,
   EntryView,
   Facets,
+  FriendRequestResult,
+  FriendsOverview,
   PriceSettings,
   SetChecklist,
   SetSummary,
@@ -36,6 +38,16 @@ export interface Api {
     update(id: number, patch: UpdateEntryInput): Promise<EntryView>
     remove(id: number): Promise<void>
     facets(): Promise<Facets>
+  }
+  friends: {
+    overview(): Promise<FriendsOverview>
+    request(username: string): Promise<FriendRequestResult>
+    accept(userId: number): Promise<void>
+    ignore(userId: number): Promise<void>
+    remove(userId: number): Promise<void>
+    /** An accepted friend's live entries, notes always ''. */
+    collection(userId: number, f: CollectionFilters): Promise<EntryView[]>
+    facets(userId: number): Promise<Facets>
   }
   stats: {
     get(): Promise<CollectionStats>
@@ -103,6 +115,13 @@ export const INVOKE_CHANNELS = [
   'collection:update',
   'collection:remove',
   'collection:facets',
+  'friends:overview',
+  'friends:request',
+  'friends:accept',
+  'friends:ignore',
+  'friends:remove',
+  'friends:collection',
+  'friends:facets',
   'stats:get',
   'sets:list',
   'sets:checklist',

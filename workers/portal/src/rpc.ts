@@ -27,6 +27,7 @@ import { adjustPrinting, getChecklist, listSets } from '../../../src/main/repo/s
 import { getStats, recordSnapshot } from '../../../src/main/repo/stats'
 import type { AppDeps } from './app'
 import { currentUser } from './auth'
+import { FriendError, acceptFriend, areFriends, friendsOverview, ignoreFriend, removeFriend, requestFriend } from './friends'
 import { userScope } from './scope'
 
 type Params<T> = T extends (...args: infer A) => unknown ? A : never
@@ -39,11 +40,20 @@ type ChannelMethod<C extends InvokeChannel> = C extends `${infer N}:${infer M}`
     : never
   : never
 
+type RpcDeps = AppDeps & { userId: number }
+
 type Handler<C extends InvokeChannel> = (
-  deps: AppDeps,
+  deps: RpcDeps,
   scope: Scope,
   ...args: Params<ChannelMethod<C>>
 ) => unknown
+
+/** The validated id of an accepted friend of `me`; anyone else is refused. */
+function friendId(db: AppDeps['db'], me: number, id: unknown): number {
+  const friend = checkId(id, 'userId')
+  if (!areFriends(db, me, friend)) throw new FriendError("You aren't friends with this user")
+  return friend
+}
 
 // Arguments come off the wire untyped: every handler checks its own before use.
 const HANDLERS: { [C in PortalChannel]: Handler<C> } = {
@@ -88,6 +98,19 @@ const HANDLERS: { [C in PortalChannel]: Handler<C> } = {
     removeEntry(db, checkId(id, 'id'), now(), scope)
     recordSnapshot(db, now(), scope)
   },
+  'friends:overview': ({ db, userId }) => friendsOverview(db, userId),
+  'friends:request': ({ db, userId, now }, _s, username) =>
+    requestFriend(db, userId, checkString(username, 'username'), now()),
+  'friends:accept': ({ db, userId, now }, _s, id) =>
+    acceptFriend(db, userId, checkId(id, 'userId'), now()),
+  'friends:ignore': ({ db, userId }, _s, id) => ignoreFriend(db, userId, checkId(id, 'userId')),
+  'friends:remove': ({ db, userId }, _s, id) => removeFriend(db, userId, checkId(id, 'userId')),
+  'friends:collection': ({ db, userId }, _s, id, f) => {
+    const friend = friendId(db, userId, id)
+    const filters = checkObject(f, 'Filters') as unknown as CollectionFilters
+    return listEntries(db, filters, userScope(friend)).map((e) => ({ ...e, notes: '' }))
+  },
+  'friends:facets': ({ db, userId }, _s, id) => getFacets(db, userScope(friendId(db, userId, id))),
   'stats:get': ({ db }, scope) => getStats(db, scope)
 }
 
@@ -120,11 +143,11 @@ export async function rpcRoute(req: Request, deps: AppDeps, channel: string): Pr
 
   try {
     const handler = HANDLERS[channel as PortalChannel] as (
-      d: AppDeps,
+      d: RpcDeps,
       s: Scope,
       ...a: unknown[]
     ) => unknown
-    const result = handler(deps, userScope(user.id), ...args) ?? null
+    const result = handler({ ...deps, userId: user.id }, userScope(user.id), ...args) ?? null
     if (QUEUES_PRICES.has(channel)) await deps.prices.soon()
     return json({ result })
   } catch (e) {

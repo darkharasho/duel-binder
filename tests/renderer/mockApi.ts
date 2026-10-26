@@ -47,6 +47,15 @@ export function createMockApi(overrides: DeepPartial<Api> = {}): Api {
       remove: vi.fn(async () => undefined),
       facets: vi.fn(async () => ({ cardTypes: [], attributes: [], archetypes: [], setNames: [], rarities: [], languages: [] }))
     },
+    friends: {
+      overview: vi.fn(async () => ({ friends: [], incoming: [] })),
+      request: vi.fn(async () => ({ status: 'sent' as const })),
+      accept: vi.fn(async () => undefined),
+      ignore: vi.fn(async () => undefined),
+      remove: vi.fn(async () => undefined),
+      collection: vi.fn(async () => []),
+      facets: vi.fn(async () => ({ cardTypes: [], attributes: [], archetypes: [], setNames: [], rarities: [], languages: [] }))
+    },
     stats: {
       get: vi.fn(async () => ({
         totalCards: 0,

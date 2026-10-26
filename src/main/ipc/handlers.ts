@@ -56,6 +56,11 @@ export interface HandlerDeps {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type Handlers = Record<(typeof INVOKE_CHANNELS)[number], (...args: any[]) => Promise<unknown>>
 
+/** Temporary: friends channels are wired to the portal in a later task. */
+const notImplemented = (): never => {
+  throw new Error('Not implemented')
+}
+
 export function createHandlers({
   db,
   client,
@@ -110,6 +115,14 @@ export function createHandlers({
     },
     'collection:remove': async (id: number) => edited(snapshotAfter(removeEntry(db, id))),
     'collection:facets': async () => getFacets(db),
+    // Replaced by the real desktop implementations in a later task.
+    'friends:overview': async () => notImplemented(),
+    'friends:request': async () => notImplemented(),
+    'friends:accept': async () => notImplemented(),
+    'friends:ignore': async () => notImplemented(),
+    'friends:remove': async () => notImplemented(),
+    'friends:collection': async () => notImplemented(),
+    'friends:facets': async () => notImplemented(),
     'stats:get': async () => getStats(db),
     'sets:list': async () => listSets(db),
     'sets:checklist': async (setName: string, language: Language) =>

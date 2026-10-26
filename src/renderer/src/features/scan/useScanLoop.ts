@@ -236,9 +236,10 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
       l.busy = true
       try {
         if (l.needsInit) {
+          // Cleared first, so a newer file that arrives mid-init asks again.
+          l.needsInit = false
           try {
             await reinit.current?.()
-            l.needsInit = false
           } catch {
             fail()
             return
@@ -263,7 +264,6 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
         if (!live) return
         l.failures = 0
         l.lastFound = raw.found
-        setOutline(raw.found && raw.quad ? { quad: raw.quad, width, height } : null)
         const outcome = await resolveSignals(raw, {
           setName: o.setName,
           setPrintings,
@@ -272,6 +272,12 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
         }).catch(() => null)
         // The set changed mid-frame: this frame belongs to the old one.
         if (!outcome || !live || latest.current.setKey !== o.setKey) return
+        // Something card-shaped that is no card gets no outline either.
+        setOutline(
+          raw.found && raw.quad && outcome.kind !== 'none'
+            ? { quad: raw.quad, width, height }
+            : null
+        )
         const draft = tracker.current.push(performance.now(), withLook(outcome, raw.cues))
         show(outcome, draft)
         if (draft) {

@@ -325,6 +325,24 @@ describe('Scan page', () => {
     expect(svg.querySelector('polygon')).toHaveAttribute('points', '10,10 110,10 110,160 10,160')
   })
 
+  it('draws no outline round a card-shaped thing far from any artwork', async () => {
+    stubCamera()
+    const book: RawSignals = {
+      ...NOTHING,
+      found: true,
+      quad,
+      art: [{ imageId: 999, distance: 120 }]
+    }
+    const { container } = renderScan(
+      fakeEngine(() => book),
+      {
+        scan: { cardsForImages: vi.fn(async () => []) }
+      }
+    )
+    await run(500)
+    expect(container.querySelector('svg[preserveAspectRatio] polygon')).toBeNull()
+  })
+
   it('rarity dropdown changes the row', async () => {
     stubCamera()
     localStorage.setItem(SESSION_KEY, JSON.stringify([row()]))

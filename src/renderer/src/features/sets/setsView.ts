@@ -1,4 +1,5 @@
 import type { LanguageFilter } from '@shared/languages'
+import { setType, type SetType } from '@shared/setTypes'
 import { matchesLanguage } from '@/lib/languageFilter'
 import type {
   ChecklistCard,
@@ -64,18 +65,49 @@ export function setsHeader(
   return { started, total: sets.length, complete }
 }
 
+function passesProgress(s: SetSummary, filter: SetFilter, mode: CountMode): boolean {
+  const p = progressFor(s, mode)
+  if (filter === 'started') return p.owned > 0
+  if (filter === 'complete') return p.complete
+  return true
+}
+
 export function filterSets(
   sets: SetSummary[],
-  o: { filter: SetFilter; q: string; mode: CountMode; language: LanguageFilter }
+  o: {
+    filter: SetFilter
+    q: string
+    mode: CountMode
+    language: LanguageFilter
+    types: SetType[]
+  }
 ): SetSummary[] {
   const q = o.q.trim().toLowerCase()
   return sets.filter((s) => {
     if (!matchesLanguage(o.language, s.language)) return false
-    const p = progressFor(s, o.mode)
-    if (o.filter === 'started' && p.owned === 0) return false
-    if (o.filter === 'complete' && !p.complete) return false
+    if (!passesProgress(s, o.filter, o.mode)) return false
+    if (o.types.length > 0 && !o.types.includes(setType(s))) return false
     return !q || s.setName.toLowerCase().includes(q) || s.setCode.toLowerCase().includes(q)
   })
+}
+
+/** Sets per type after language and progress, ignoring search and the type filter. */
+export function typeCounts(
+  sets: SetSummary[],
+  o: { filter: SetFilter; mode: CountMode; language: LanguageFilter }
+): Record<SetType, number> {
+  const counts: Record<SetType, number> = { booster: 0, deck: 0, tin: 0, collection: 0, promo: 0 }
+  for (const s of sets) {
+    if (!matchesLanguage(o.language, s.language)) continue
+    if (!passesProgress(s, o.filter, o.mode)) continue
+    counts[setType(s)]++
+  }
+  return counts
+}
+
+/** One per ticked type, plus one when filter isn't 'all'. */
+export function activeFilterCount(types: SetType[], filter: SetFilter): number {
+  return types.length + (filter === 'all' ? 0 : 1)
 }
 
 export function sortSets(sets: SetSummary[], sort: SetSort, mode: CountMode): SetSummary[] {

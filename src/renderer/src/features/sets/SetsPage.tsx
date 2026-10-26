@@ -1,33 +1,35 @@
 import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { LayoutGrid, List, Search } from 'lucide-react'
+import { LayoutGrid, List, Search, SlidersHorizontal, X } from 'lucide-react'
 import type { Language } from '@shared/languages'
 import type { CardSearchResult, CountMode, SetSummary } from '@shared/types'
+import { SET_TYPES, type SetType } from '@shared/setTypes'
 import { coverArtUrl, setArtUrl, useArtWash } from '@/components/artWashContext'
-import { LanguageSelect } from '@/components/LanguageSelect'
 import { useMainScroll } from '@/components/mainScroll'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue
-} from '@/components/ui/select'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
-import { UnderlineTabs } from '@/components/UnderlineTabs'
 import { api, queryKeys } from '@/lib/api'
 import { matchesLanguage, useLanguageFilter } from '@/lib/languageFilter'
 import { SetChecklist } from './SetChecklist'
+import { SetsFilterPanel } from './SetsFilterPanel'
 import { SetsList } from './SetsList'
-import { filterSets, setsHeader, sortSets, type SetFilter, type SetSort } from './setsView'
+import {
+  activeFilterCount,
+  filterSets,
+  setsHeader,
+  sortSets,
+  typeCounts,
+  type SetFilter,
+  type SetSort
+} from './setsView'
 
 type View = 'grid' | 'list'
 const VIEW_KEY = 'sets.view'
 const MODE_KEY = 'sets.countMode'
 const FILTER_KEY = 'sets.filter'
+const TYPES_KEY = 'sets.types'
 
 function readView(): View {
   try {
@@ -62,17 +64,31 @@ function persist(key: string, value: string): void {
   }
 }
 
-const FILTERS = [
-  { value: 'all', label: 'All sets' },
-  { value: 'started', label: 'Started' },
-  { value: 'complete', label: 'Complete' }
-] as const satisfies readonly { value: SetFilter; label: string }[]
+function readTypes(): SetType[] {
+  try {
+    const raw: unknown = JSON.parse(localStorage.getItem(TYPES_KEY) ?? '[]')
+    if (!Array.isArray(raw)) return []
+    return SET_TYPES.map((t) => t.value).filter((v) => raw.includes(v))
+  } catch {
+    return []
+  }
+}
 
-const SORTS: { value: SetSort; label: string }[] = [
-  { value: 'date', label: 'Newest' },
-  { value: 'complete', label: 'Most complete' },
-  { value: 'name', label: 'Name' }
-]
+function Chip({ label, onRemove }: { label: string; onRemove: () => void }): React.JSX.Element {
+  return (
+    <span className="inline-flex items-center gap-1 rounded-full bg-white/[0.08] py-0.5 pl-2.5 pr-1 text-xs">
+      {label}
+      <button
+        type="button"
+        aria-label={`Remove ${label} filter`}
+        onClick={onRemove}
+        className="rounded-full p-0.5 hover:bg-white/10"
+      >
+        <X className="size-3" />
+      </button>
+    </span>
+  )
+}
 
 interface SetsPageProps {
   onAddCard: () => void
@@ -83,6 +99,8 @@ export function SetsPage({ onAddCard, onAddMissing }: SetsPageProps): React.JSX.
   const [view, setView] = useState<View>(readView)
   const [mode, setMode] = useState<CountMode>(readMode)
   const [filter, setFilterState] = useState<SetFilter>(readFilter)
+  const [types, setTypes] = useState<SetType[]>(readTypes)
+  const [panelOpen, setPanelOpen] = useState(false)
   const [q, setQ] = useState('')
   const [sort, setSort] = useState<SetSort>('date')
   const [openSet, setOpenSetState] = useState<{ setName: string; language: Language } | null>(null)
@@ -113,10 +131,23 @@ export function SetsPage({ onAddCard, onAddMissing }: SetsPageProps): React.JSX.
   const available = useMemo(() => [...new Set(all.map((s) => s.language))], [all])
   const header = setsHeader(inLanguage, mode)
   const visible = useMemo(
-    () => sortSets(filterSets(all, { filter, q, mode, language }), sort, mode),
-    [all, filter, q, mode, sort, language]
+    () => sortSets(filterSets(all, { filter, q, mode, language, types }), sort, mode),
+    [all, filter, q, mode, sort, language, types]
   )
 
+  const counts = useMemo(
+    () => typeCounts(all, { filter, mode, language }),
+    [all, filter, mode, language]
+  )
+  const activeCount = activeFilterCount(types, filter)
+  const changeTypes = (t: SetType[]): void => {
+    setTypes(t)
+    persist(TYPES_KEY, JSON.stringify(t))
+  }
+  const clearFilters = (): void => {
+    changeTypes([])
+    setFilter('all')
+  }
   const changeView = (v: string): void => {
     if (v !== 'grid' && v !== 'list') return
     setView(v)
@@ -160,7 +191,8 @@ export function SetsPage({ onAddCard, onAddMissing }: SetsPageProps): React.JSX.
     )
   }
 
-  const noneStarted = filter === 'started' && q.trim() === '' && header.started === 0
+  const noneStarted =
+    filter === 'started' && types.length === 0 && q.trim() === '' && header.started === 0
 
   return (
     <div className="space-y-4 p-8">
@@ -174,46 +206,44 @@ export function SetsPage({ onAddCard, onAddMissing }: SetsPageProps): React.JSX.
             </p>
           )}
         </div>
-        <div className="flex flex-wrap items-end gap-x-3 gap-y-2 border-b border-white/[0.08]">
-          <UnderlineTabs label="Show" value={filter} options={FILTERS} onChange={setFilter} />
-          <div className="ml-auto flex flex-wrap items-center gap-2 pb-2">
-            <div className="relative w-56">
-              <Search
-                className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
-                aria-hidden
-              />
-              <Input
-                value={q}
-                onChange={(e) => setQ(e.target.value)}
-                placeholder="Search sets by name or code"
-                aria-label="Search sets"
-                className="h-8 pl-8"
-              />
-            </div>
+        <div className="flex flex-wrap items-center gap-2 border-b border-white/[0.08] pb-2">
+          <div className="relative w-56">
+            <Search
+              className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+              aria-hidden
+            />
+            <Input
+              value={q}
+              onChange={(e) => setQ(e.target.value)}
+              placeholder="Search sets by name or code"
+              aria-label="Search sets"
+              className="h-8 pl-8"
+            />
+          </div>
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              aria-label={
+                activeCount > 0 ? `Filters & sort, ${activeCount} active` : 'Filters & sort'
+              }
+              onClick={() => setPanelOpen(true)}
+            >
+              <SlidersHorizontal />
+              Filters &amp; sort
+              {activeCount > 0 && (
+                <span className="ml-1 rounded-full bg-primary px-1.5 text-xs tabular-nums text-primary-foreground">
+                  {activeCount}
+                </span>
+              )}
+            </Button>
             <ToggleGroup
               type="single"
               variant="outline"
               size="sm"
-              value={mode}
-              onValueChange={changeMode}
+              value={view}
+              onValueChange={changeView}
             >
-              <ToggleGroupItem value="cards">Each card once</ToggleGroupItem>
-              <ToggleGroupItem value="rarities">Every rarity</ToggleGroupItem>
-            </ToggleGroup>
-            <LanguageSelect value={language} onChange={setLanguage} available={available} />
-            <Select value={sort} onValueChange={(v) => setSort(v as SetSort)}>
-              <SelectTrigger size="sm" aria-label="Sort by" className="w-36">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {SORTS.map((s) => (
-                  <SelectItem key={s.value} value={s.value}>
-                    {s.label}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <ToggleGroup type="single" variant="outline" size="sm" value={view} onValueChange={changeView}>
               <ToggleGroupItem value="list" aria-label="List view">
                 <List />
               </ToggleGroupItem>
@@ -223,7 +253,53 @@ export function SetsPage({ onAddCard, onAddMissing }: SetsPageProps): React.JSX.
             </ToggleGroup>
           </div>
         </div>
+        {activeCount > 0 && (
+          <div className="flex flex-wrap items-center gap-2">
+            {types.map((t) => {
+              const label = SET_TYPES.find((x) => x.value === t)?.label ?? t
+              return (
+                <Chip
+                  key={t}
+                  label={label}
+                  onRemove={() => changeTypes(types.filter((x) => x !== t))}
+                />
+              )
+            })}
+            {filter !== 'all' && (
+              <Chip
+                label={filter === 'started' ? 'Started' : 'Complete'}
+                onRemove={() => setFilter('all')}
+              />
+            )}
+            <Button variant="ghost" size="sm" onClick={clearFilters}>
+              Clear
+            </Button>
+          </div>
+        )}
       </PageHeader>
+
+      <SetsFilterPanel
+        open={panelOpen}
+        onOpenChange={setPanelOpen}
+        types={types}
+        onTypesChange={changeTypes}
+        counts={counts}
+        filter={filter}
+        onFilterChange={setFilter}
+        sort={sort}
+        onSortChange={setSort}
+        mode={mode}
+        onModeChange={changeMode}
+        language={language}
+        onLanguageChange={setLanguage}
+        availableLanguages={available}
+        onReset={() => {
+          changeTypes([])
+          setFilter('all')
+          setSort('date')
+          changeMode('cards')
+        }}
+      />
 
       {sets.isSuccess && visible.length === 0 ? (
         <div className="flex flex-col items-center gap-3 py-24 text-center">

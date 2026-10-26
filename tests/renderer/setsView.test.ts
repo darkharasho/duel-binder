@@ -4,6 +4,7 @@ import {
   bulkTiles,
   checklistTiles,
   filterBulkCards,
+  activeFilterCount,
   filterSets,
   filterTiles,
   patchSetSummary,
@@ -12,7 +13,8 @@ import {
   setsHeader,
   sortCards,
   sortSets,
-  sortTiles
+  sortTiles,
+  typeCounts
 } from '@/features/sets/setsView'
 import { rarityColor } from '@/lib/rarityColors'
 import { createSerialQueue } from '@/lib/serialQueue'
@@ -100,30 +102,60 @@ describe('filterSets', () => {
   it('filters by language, with all keeping every set', () => {
     const ja = mk({ language: 'ja', setName: 'JP Set', ownedCards: 1 })
     const mixed = [started, ja]
-    const o = { filter: 'all' as const, q: '', mode: 'cards' as const }
+    const o = { filter: 'all' as const, q: '', mode: 'cards' as const, types: [] }
     expect(filterSets(mixed, { ...o, language: 'ja' })).toEqual([ja])
-    expect(filterSets(mixed, { ...o, language: 'all' })).toEqual(mixed)
+    expect(filterSets(mixed, { ...o, language: 'all', types: [] })).toEqual(mixed)
   })
   it('started excludes untouched', () => {
-    expect(filterSets(all, { filter: 'started', q: '', mode: 'cards', language: 'all' })).toEqual([
-      complete,
-      started
-    ])
+    expect(
+      filterSets(all, { filter: 'started', q: '', mode: 'cards', language: 'all', types: [] })
+    ).toEqual([complete, started])
   })
   it('complete keeps only complete', () => {
-    expect(filterSets(all, { filter: 'complete', q: '', mode: 'cards', language: 'all' })).toEqual([
-      complete
-    ])
+    expect(
+      filterSets(all, { filter: 'complete', q: '', mode: 'cards', language: 'all', types: [] })
+    ).toEqual([complete])
   })
   it('matches code case-insensitively', () => {
-    expect(filterSets(all, { filter: 'all', q: 'mrd', mode: 'cards', language: 'all' })).toEqual([
-      started
-    ])
+    expect(
+      filterSets(all, { filter: 'all', q: 'mrd', mode: 'cards', language: 'all', types: [] })
+    ).toEqual([started])
   })
   it('matches name substring', () => {
-    expect(filterSets(all, { filter: 'all', q: 'RAID', mode: 'cards', language: 'all' })).toEqual([
-      started
-    ])
+    expect(
+      filterSets(all, { filter: 'all', q: 'RAID', mode: 'cards', language: 'all', types: [] })
+    ).toEqual([started])
+  })
+  it('filters by type, with none ticked keeping every type', () => {
+    const booster = mk({ setName: 'Phantom Nightmare', setCode: 'PHNI' })
+    const deck = mk({ setName: 'Structure Deck: Albaz Strike', setCode: 'SDAZ' })
+    const o = { filter: 'all' as const, q: '', mode: 'cards' as const, language: 'all' as const }
+    expect(filterSets([booster, deck], { ...o, types: ['deck'] })).toEqual([deck])
+    expect(filterSets([booster, deck], { ...o, types: [] })).toEqual([booster, deck])
+    expect(filterSets([booster, deck], { ...o, types: ['booster'], q: 'albaz' })).toEqual([])
+  })
+})
+
+describe('typeCounts', () => {
+  it('counts sets per type after progress, ignoring the type filter', () => {
+    const booster = mk({ setName: 'Phantom Nightmare', setCode: 'PHNI', ownedCards: 1 })
+    const deck = mk({ setName: 'Structure Deck: Albaz Strike', setCode: 'SDAZ' })
+    const o = { mode: 'cards' as const, language: 'all' as const }
+    expect(typeCounts([booster, deck], { ...o, filter: 'started' })).toEqual({
+      booster: 1,
+      deck: 0,
+      tin: 0,
+      collection: 0,
+      promo: 0
+    })
+    expect(typeCounts([booster, deck], { ...o, filter: 'all' }).deck).toBe(1)
+  })
+})
+
+describe('activeFilterCount', () => {
+  it('counts ticked types plus a non-default progress filter', () => {
+    expect(activeFilterCount([], 'all')).toBe(0)
+    expect(activeFilterCount(['deck', 'tin'], 'started')).toBe(3)
   })
 })
 

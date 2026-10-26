@@ -20,6 +20,7 @@ import {
   findCard,
   matchArt,
   rotate180,
+  toMat,
   warpCard,
   type Quad
 } from '../../src/renderer/src/features/scan/vision/detect'
@@ -316,6 +317,64 @@ describe('recognizeArt', () => {
       expect(recognizeArt(cv, emptyFrame(seed), index), `seed ${seed}`).toBeNull()
     }
   })
+})
+
+describe('a frame already in OpenCV', () => {
+  /** img at twice its size: a 4K camera's frame, where one leaked copy shows in the heap. */
+  const doubled = (img: RgbaImage): RgbaImage => {
+    const width = img.width * 2
+    const height = img.height * 2
+    const data = new Uint8ClampedArray(width * height * 4)
+    for (let y = 0; y < height; y++)
+      for (let x = 0; x < width; x++)
+        data.set(
+          img.data.subarray(
+            ((y >> 1) * img.width + (x >> 1)) * 4,
+            ((y >> 1) * img.width + (x >> 1)) * 4 + 4
+          ),
+          (y * width + x) * 4
+        )
+    return { width, height, data }
+  }
+
+  it('gives the same results as its pixels, and is left for the caller to free', () => {
+    const s = shots[0]
+    const img = frames.get(s.file)!
+    const mat = toMat(cv, img)
+    try {
+      expect(findCandidates(cv, mat)).toEqual(findCandidates(cv, img))
+      expect(warpCard(cv, mat, s.quad)).toEqual(warpCard(cv, img, s.quad))
+      expect(recognizeArt(cv, mat, index)).toEqual(recognizeArt(cv, img, index))
+      expect(mat.isDeleted()).toBe(false)
+    } finally {
+      mat.delete()
+    }
+  }, 60_000)
+
+  it('leaves nothing behind in the OpenCV heap, from pixels or a Mat', () => {
+    const img = doubled(frames.get(shots[0].file)!)
+    const empty = doubled(emptyFrame(1))
+    const round = (): void => {
+      for (const frame of [img, empty]) {
+        recognizeArt(cv, frame, index)
+        const mat = toMat(cv, frame)
+        try {
+          recognizeArt(cv, mat, index)
+          findCandidates(cv, mat)
+          warpCard(cv, mat, shots[0].quad, 1684)
+        } finally {
+          mat.delete()
+        }
+      }
+    }
+    // The WASM heap only ever grows, so its size shows whether anything was kept.
+    const heapSize = (): number => (cv as unknown as { HEAPU8: Uint8Array }).HEAPU8.length
+    round()
+    const heap = heapSize()
+    // A frame here is 14.7 MB: one copy kept per round would outgrow any slack within a few.
+    for (let i = 0; i < 12; i++) round()
+    expect(heapSize()).toBe(heap)
+  }, 120_000)
 })
 
 describe('warpCard', () => {

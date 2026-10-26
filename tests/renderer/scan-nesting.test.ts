@@ -35,6 +35,22 @@ describe('preferOuter', () => {
     expect(preferOuter([artAndText, rect(700, 100, 590, 860)])).toEqual(artAndText)
   })
 
+  it('keeps the card when the outer one is only its sleeve', () => {
+    // A sleeve: about 4.5% bigger per side and a little squarer (aspect 0.725), 1.18x the area.
+    const sleeve = rect(65, 75, 659, 909)
+    expect(preferOuter([card, sleeve])).toEqual(card)
+    // The card around its inner frame still wins over the sleeve around that.
+    expect(preferOuter([artAndText, card, sleeve])).toEqual(card)
+  })
+
+  it('takes the card around a frame that starts well below its top, though not much smaller', () => {
+    // From the type line down, 0.84 of the card's area: too little growth alone.
+    const belowName = rect(100, 238, 590, 722)
+    expect(preferOuter([belowName, card])).toEqual(card)
+    // Upside down, the inset is at the other end.
+    expect(preferOuter([rect(100, 100, 590, 722), card])).toEqual(card)
+  })
+
   it('allows corners just outside the outer one', () => {
     const tilted: Quad = [
       [101, 104],

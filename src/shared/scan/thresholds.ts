@@ -18,6 +18,18 @@ export const ART_MIN_MARGIN = 10
 export const ART_FAR_DISTANCE = 100
 /** Closest artworks fetched per frame, so a different card shows up past a card's alternate arts. */
 export const ART_MATCH_DEPTH = 20
+/**
+ * Without fingerprints, a card-shaped outline around the likeliest one replaces it only when it
+ * is at least this many times its area: a card is about 1.44-1.5x its art-and-text frame, while
+ * a sleeve is only about 1.18x the card in it.
+ */
+export const NEST_MIN_GROWTH = 1.3
+/**
+ * ...or when the likeliest one starts at least this share of the outer one's length in from one
+ * of its ends: a frame inside the card starts below the name bar, while a sleeve's end is only a
+ * few percent past the card's.
+ */
+export const NEST_MIN_END_INSET = 0.1
 /** Lowest name similarity (1 - levenshtein / maxLen) accepted. */
 export const NAME_MIN_SCORE = 0.8
 /** Best name score minus second-best score needed to trust the best. */

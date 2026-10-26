@@ -1,5 +1,6 @@
 import type { Mat } from '@techstark/opencv-js'
 import type { FingerprintIndex } from '@shared/scan/fingerprintFile'
+import { NEST_MIN_END_INSET, NEST_MIN_GROWTH } from '@shared/scan/thresholds'
 import type { RgbaImage } from '@shared/scan/types'
 import type { CV } from './cv'
 import {
@@ -8,6 +9,7 @@ import {
   SEARCH_WIDTH,
   dist,
   edgeMap,
+  frameWidth,
   orderCorners,
   outlineQuad,
   rankArt,
@@ -16,6 +18,8 @@ import {
   thicken,
   using,
   warpCard,
+  withMat,
+  type FrameSource,
   type Point,
   type Quad
 } from './detect'
@@ -320,8 +324,8 @@ function lineQuads(lines: Line[], thick: Mat, max: number): Quad[] {
  * Card outlines in a frame, likeliest first: the outline finder's pick (findCard), then quads
  * built from the lines in edges split by direction, then any more from the lines in all edges.
  */
-export function findCandidates(cv: CV, img: RgbaImage): Quad[] {
-  const scale = Math.min(1, SEARCH_WIDTH / img.width)
+export function findCandidates(cv: CV, img: FrameSource): Quad[] {
+  const scale = Math.min(1, SEARCH_WIDTH / frameWidth(img))
   const small = searchImage(cv, img, scale)
   return using([small], () => {
     const edges = edgeMap(cv, small)
@@ -377,20 +381,43 @@ function contains(outer: Quad, inner: Quad, tol: number): boolean {
 }
 
 /**
- * The first candidate, unless a later card-shaped one holds it whole and is at most
- * NEST_MAX_GROWTH times its area: then the largest such one. A card's own inner frames (the art
+ * The first candidate, unless a later card-shaped one holds it whole, is at most NEST_MAX_GROWTH
+ * times its area, and either is at least NEST_MIN_GROWTH times it or sits NEST_MIN_END_INSET
+ * beyond it at one end: then the largest such one. A card's own inner frames (the art
  * box, or the art and text boxes together) have crisp printed edges, while fingers over a held
- * card's sides cost its outline edge cover, so the inner frame can rank first.
+ * card's sides cost its outline edge cover, so the inner frame can rank first. A sleeve around
+ * the card is card-shaped too, but too close to the card's size, and to its ends, to be taken
+ * for it.
  */
+/**
+ * How far inner sits inside outer from outer's nearer short side, as a share of outer's length:
+ * the larger of its insets from either end, since the card may be upside down.
+ */
+function endInset(outer: Quad, inner: Quad): number {
+  const [p0, p1, p2, p3] = outer
+  // The short sides are the ends.
+  const ends: [Point, Point, Point, Point] =
+    dist(p0, p1) + dist(p2, p3) <= dist(p1, p2) + dist(p3, p0) ? [p0, p1, p2, p3] : [p1, p2, p3, p0]
+  const fromLine = ([ax, ay]: Point, [bx, by]: Point, [px, py]: Point): number =>
+    Math.abs((bx - ax) * (py - ay) - (by - ay) * (px - ax)) / (Math.hypot(bx - ax, by - ay) || 1)
+  const length = (fromLine(ends[0], ends[1], ends[2]) + fromLine(ends[0], ends[1], ends[3])) / 2
+  const top = Math.min(...inner.map((p) => fromLine(ends[0], ends[1], p)))
+  const bottom = Math.min(...inner.map((p) => fromLine(ends[2], ends[3], p)))
+  return Math.max(top, bottom) / (length || 1)
+}
+
 export function preferOuter(quads: readonly Quad[]): Quad | null {
   const [first] = quads
   if (!first) return null
   const tol = NEST_TOLERANCE * dist(first[0], first[2])
+  const least = NEST_MIN_GROWTH * area(first)
   const limit = NEST_MAX_GROWTH * area(first)
   let best = first
   for (const q of quads.slice(1)) {
     const a = area(q)
-    if (a > area(best) && a <= limit && cardShaped(q) && contains(q, first, tol)) best = q
+    // A sleeve hugs the card at its ends; a frame inside the card starts well below its top.
+    const grown = a <= limit && (a >= least || endInset(q, first) >= NEST_MIN_END_INSET)
+    if (a > area(best) && grown && cardShaped(q) && contains(q, first, tol)) best = q
   }
   return best
 }
@@ -404,7 +431,7 @@ export function preferOuter(quads: readonly Quad[]): Quad | null {
  */
 export function recognizeArt(
   cv: CV,
-  img: RgbaImage,
+  img: FrameSource,
   index: FingerprintIndex,
   candidates?: ReadonlySet<number>,
   k?: number
@@ -414,14 +441,17 @@ export function recognizeArt(
   upsideDown: boolean
   matches: { imageId: number; distance: number }[]
 } | null {
-  let best: { quad: Quad; distance: number } | null = null
-  for (const quad of findCandidates(cv, img)) {
-    const { matches } = rankArt(cv, warpCard(cv, img, quad, PICK_WIDTH), index, candidates)
-    const distance = matches[0]?.distance ?? Infinity
-    if (!best || distance < best.distance) best = { quad, distance }
-  }
-  if (!best) return null
-  const card = warpCard(cv, img, best.quad, CARD_W)
-  const { matches, upsideDown } = rankArt(cv, card, index, candidates, k)
-  return { quad: best.quad, card: upsideDown ? rotate180(card) : card, upsideDown, matches }
+  // Copied into OpenCV once for all the candidates' warps.
+  return withMat(cv, img, (frame) => {
+    let best: { quad: Quad; distance: number } | null = null
+    for (const quad of findCandidates(cv, frame)) {
+      const { matches } = rankArt(cv, warpCard(cv, frame, quad, PICK_WIDTH), index, candidates)
+      const distance = matches[0]?.distance ?? Infinity
+      if (!best || distance < best.distance) best = { quad, distance }
+    }
+    if (!best) return null
+    const card = warpCard(cv, frame, best.quad, CARD_W)
+    const { matches, upsideDown } = rankArt(cv, card, index, candidates, k)
+    return { quad: best.quad, card: upsideDown ? rotate180(card) : card, upsideDown, matches }
+  })
 }

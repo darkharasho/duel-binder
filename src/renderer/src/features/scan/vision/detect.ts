@@ -22,7 +22,16 @@ export const CARD_W = 842
 const CARD_H = 1228
 const TOP_MATCHES = 5
 
-function toMat(cv: CV, img: RgbaImage): Mat {
+/**
+ * A frame: its pixels, or the pixels already copied into OpenCV as an RGBA Mat, so a frame that
+ * is straightened many times is copied into the WASM heap only once. A Mat stays the caller's.
+ */
+export type FrameSource = RgbaImage | Mat
+
+const isMat = (src: FrameSource): src is Mat => 'cols' in src
+
+/** The pixels copied into a new RGBA Mat, for the caller to delete. */
+export function toMat(cv: CV, img: RgbaImage): Mat {
   const mat = new cv.Mat(img.height, img.width, cv.CV_8UC4)
   try {
     mat.data.set(img.data)
@@ -75,13 +84,20 @@ function aspect(q: Point[]): number {
   return Math.min(a, b) / Math.max(a, b)
 }
 
+/** The frame's width in pixels. */
+export const frameWidth = (src: FrameSource): number => (isMat(src) ? src.cols : src.width)
+
 /** img shrunk by scale (when below 1) and blurred, the frame edges are searched in. */
-export function searchImage(cv: CV, img: RgbaImage, scale: number): Mat {
-  const small = toMat(cv, img)
+export function searchImage(cv: CV, img: FrameSource, scale: number): Mat {
+  // A Mat is read from and left alone; pixels are copied in and worked on in place.
+  const small = isMat(img) ? new cv.Mat() : toMat(cv, img)
   try {
+    const from = isMat(img) ? img : small
     if (scale < 1) {
-      const size = new cv.Size(Math.round(img.width * scale), Math.round(img.height * scale))
-      cv.resize(small, small, size, 0, 0, cv.INTER_AREA)
+      const size = new cv.Size(Math.round(from.cols * scale), Math.round(from.rows * scale))
+      cv.resize(from, small, size, 0, 0, cv.INTER_AREA)
+    } else if (from !== small) {
+      from.copyTo(small)
     }
     cv.GaussianBlur(small, small, new cv.Size(5, 5), 0)
     return small
@@ -183,28 +199,38 @@ export function outlineQuad(cv: CV, edges: Mat, scale: number): Quad | null {
   })
 }
 
+/** fn given the frame as a Mat: the frame itself when it is one, else a copy deleted after. */
+export function withMat<T>(cv: CV, img: FrameSource, fn: (frame: Mat) => T): T {
+  if (isMat(img)) return fn(img)
+  const frame = toMat(cv, img)
+  return using([frame], () => fn(frame))
+}
+
 /** The card inside quad, straightened to width x (width * 1228 / 842). */
-export function warpCard(cv: CV, img: RgbaImage, quad: Quad, width = CARD_W): RgbaImage {
+export function warpCard(cv: CV, img: FrameSource, quad: Quad, width = CARD_W): RgbaImage {
   const height = Math.round((width * CARD_H) / CARD_W)
-  const src = toMat(cv, img)
-  const from = cv.matFromArray(4, 1, cv.CV_32FC2, quad.flat())
-  const to = cv.matFromArray(4, 1, cv.CV_32FC2, [0, 0, width, 0, width, height, 0, height])
-  const out = new cv.Mat()
-  return using([src, from, to, out], () => {
-    const m = cv.getPerspectiveTransform(from, to)
-    try {
-      cv.warpPerspective(
-        src,
-        out,
-        m,
-        new cv.Size(width, height),
-        cv.INTER_LINEAR,
-        cv.BORDER_REPLICATE
-      )
-    } finally {
-      m.delete()
-    }
-    return { width, height, data: new Uint8ClampedArray(out.data) }
+  return withMat(cv, img, (src) => {
+    const from = cv.matFromArray(4, 1, cv.CV_32FC2, quad.flat())
+    return using([from], () => {
+      const to = cv.matFromArray(4, 1, cv.CV_32FC2, [0, 0, width, 0, width, height, 0, height])
+      const out = new cv.Mat()
+      return using([to, out], () => {
+        const m = cv.getPerspectiveTransform(from, to)
+        try {
+          cv.warpPerspective(
+            src,
+            out,
+            m,
+            new cv.Size(width, height),
+            cv.INTER_LINEAR,
+            cv.BORDER_REPLICATE
+          )
+        } finally {
+          m.delete()
+        }
+        return { width, height, data: new Uint8ClampedArray(out.data) }
+      })
+    })
   })
 }
 

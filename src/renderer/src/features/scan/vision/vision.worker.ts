@@ -2,12 +2,13 @@
 // its art against the fingerprints and cutting out its text bands for OCR in main.
 import { decodeFingerprints, type FingerprintIndex } from '@shared/scan/fingerprintFile'
 import { ART_MATCH_DEPTH } from '@shared/scan/thresholds'
+import type { Mat } from '@techstark/opencv-js'
 import type { OcrBand, RgbaImage } from '@shared/scan/types'
 import type { ArtMatch, FrameSignals, WorkerReply, WorkerRequest } from '../engine'
 import { toBand } from './bands'
 import { findCandidates, preferOuter, recognizeArt } from './candidates'
 import { loadCv, type CV } from './cv'
-import { CARD_W, dist, rotate180, warpCard, type Quad } from './detect'
+import { CARD_W, dist, rotate180, toMat, using, warpCard, type Quad } from './detect'
 import { rarityCues } from './rarityCues'
 import { CODE_BANDS, NAME_BAND } from './regions'
 
@@ -46,9 +47,23 @@ function bandWidth(quad: Quad): number {
   return Math.round(Math.min(MAX_BAND_SCALE * CARD_W, Math.max(CARD_W, shown)))
 }
 
+/**
+ * The frame's signals. It's copied into OpenCV once, for finding the card and every warp of it,
+ * and freed whatever happens.
+ */
 function analyze(
   cv: CV,
   img: RgbaImage,
+  candidates: number[] | null,
+  wantBands: boolean
+): FrameSignals {
+  const frame = toMat(cv, img)
+  return using([frame], () => analyzeFrame(cv, frame, candidates, wantBands))
+}
+
+function analyzeFrame(
+  cv: CV,
+  img: Mat,
   candidates: number[] | null,
   wantBands: boolean
 ): FrameSignals {

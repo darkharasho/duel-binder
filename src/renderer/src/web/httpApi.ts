@@ -20,7 +20,8 @@ const SYNC_IDLE: SyncStatus = {
   lastSyncAt: null,
   dbVersion: null,
   cardCount: 1,
-  error: null
+  error: null,
+  blocked: null
 }
 const UPDATE_IDLE: UpdateStatus = { state: 'idle', mode: 'auto', version: null, error: null }
 

@@ -3,7 +3,8 @@ import { deleteMeta, getMeta, setMeta } from '../db/meta'
 import type { Me } from '../../shared/cloud'
 import { FRIENDS_SIGNED_OUT, OFFLINE_MESSAGE } from '../../shared/friends'
 import type { PortalChannel } from '../../shared/portal'
-import type { AccountStatus } from '../../shared/types'
+import type { AccountStatus, SyncStatus } from '../../shared/types'
+import type { CatalogService } from '../catalog/service'
 import { CloudAuthError, CloudOfflineError, type CloudClient } from './client'
 import { syncOnce } from './engine'
 import {
@@ -35,6 +36,10 @@ export interface AccountDeps {
   emit(s: AccountStatus): void
   emitDataChanged(): void
   isOnline(): boolean
+  /** The card catalog, brought up to date with the server's before each sync. */
+  catalog: CatalogService
+  /** The catalog changed: anything derived from it should be refreshed. */
+  onCatalogChanged(r: { imagesChanged: boolean }): void
   now?: () => Date
 }
 
@@ -46,6 +51,8 @@ export interface AccountService {
   isSignedIn(): boolean
   noteLocalEdit(): void
   catalogRefreshed(): void
+  /** A forced catalog update through the signed-in account; signed out, the status is unchanged. */
+  refreshCatalog(): Promise<SyncStatus>
   /**
    * Calls a portal channel as the signed-in account. Rejects with Error(FRIENDS_SIGNED_OUT) when signed out,
    * Error(OFFLINE_MESSAGE) when offline, Error(SERVER_SIGNED_OUT) after a 401 (and signs the account out).
@@ -81,6 +88,8 @@ export function createAccountService(deps: AccountDeps): AccountService {
   /** Cuts off this session's portal calls when the session ends. */
   let portalAbort = new AbortController()
   let meRefreshed = false
+  /** Whether this session's catalog update has gone through; the first one is forced. */
+  let catalogUpdated = false
   let stopped = false
   let signInAbort: AbortController | null = null
   let signingIn: Promise<AccountStatus> | null = null
@@ -161,6 +170,10 @@ export function createAccountService(deps: AccountDeps): AccountService {
     set('syncing', error)
     try {
       const client = deps.client(current, { signal: abort.signal })
+      // Before pushing, so entries on printings the server just added can push in this run.
+      await updateCatalog(client, !catalogUpdated)
+      if (mine !== session) return
+      catalogUpdated = true
       const outcome = await syncOnce(db, owner, client, now)
       if (mine !== session) return
       // Before me(), so a failing me() can't swallow them.
@@ -190,6 +203,18 @@ export function createAccountService(deps: AccountDeps): AccountService {
     } finally {
       if (runAbort === abort) runAbort = null
     }
+  }
+
+  /**
+   * Brings the catalog up to date; when it changed, applies waiting entries and tells the renderer.
+   * The catalog isn't any one account's, so a change counts even if the session ended meanwhile.
+   */
+  async function updateCatalog(client: CloudClient, force: boolean): Promise<void> {
+    const r = await deps.catalog.update(client, { force })
+    if (!r.changed) return
+    applyPending(db)
+    deps.emitDataChanged()
+    deps.onCatalogChanged({ imagesChanged: r.imagesChanged })
   }
 
   /** Revokes a token, keeping it for a later retry only when the portal couldn't be reached. */
@@ -223,6 +248,7 @@ export function createAccountService(deps: AccountDeps): AccountService {
     setMeta(db, 'cloud_user', JSON.stringify(user))
     endSession()
     meRefreshed = false
+    catalogUpdated = false
     set('idle')
     if (before !== user.id) deps.emitDataChanged()
     scheduler.start()
@@ -338,6 +364,19 @@ export function createAccountService(deps: AccountDeps): AccountService {
     catalogRefreshed() {
       if (applyPending(db).applied > 0) deps.emitDataChanged()
       if (token !== null) scheduler.poke()
+    },
+
+    async refreshCatalog() {
+      const current = token
+      if (current === null) return deps.catalog.status()
+      const mine = session
+      try {
+        await updateCatalog(deps.client(current, { signal: portalAbort.signal }), true)
+      } catch (e) {
+        if (mine === session && e instanceof CloudAuthError) serverSignedOut()
+        else if (!(e instanceof CloudOfflineError) && !(e instanceof CloudAuthError)) throw e
+      }
+      return deps.catalog.status()
     },
 
     async portal<T>(channel: PortalChannel, args: unknown[]): Promise<T> {

@@ -14,6 +14,7 @@ import icon from '../../resources/icon.png?asset'
 import { openDatabase } from './db/database'
 import { createYgoClient } from './ygo/client'
 import { refreshCatalog } from './sync/catalog'
+import { getSyncStatus } from './sync/sync'
 import { createPriceService } from './prices/service'
 import { refreshIntlPrices } from './prices/refresh'
 import { createYugipediaClient } from './yugipedia/client'
@@ -232,7 +233,14 @@ async function bootstrap(): Promise<void> {
       }),
     emit: (s: AccountStatus) => broadcast(ACCOUNT_CHANGED, s),
     emitDataChanged,
-    isOnline: () => net.isOnline()
+    isOnline: () => net.isOnline(),
+    // The self-built catalog sync still owns the catalog here; the server catalog service
+    // (createCatalogService) replaces this when the app is rewired to it.
+    catalog: {
+      status: () => getSyncStatus(db),
+      update: async () => ({ changed: false, imagesChanged: false })
+    },
+    onCatalogChanged: () => {}
   })
   app.on('before-quit', () => account.stop())
   const fingerprints = createFingerprintStore({ dir: join(userData, 'scan'), portal })

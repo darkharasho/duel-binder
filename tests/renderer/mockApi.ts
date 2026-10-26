@@ -18,7 +18,7 @@ const signedOut = {
   pendingCount: 0
 } as const
 
-const emptyStatus = { state: 'idle', lastSyncAt: null, dbVersion: null, cardCount: 1, error: null } as const
+const emptyStatus = { state: 'idle', lastSyncAt: null, dbVersion: null, cardCount: 1, error: null, blocked: null } as const
 
 export function createMockApi(overrides: DeepPartial<Api> = {}): Api {
   const base = {

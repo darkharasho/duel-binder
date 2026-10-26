@@ -10,6 +10,7 @@ const status = (o: object = {}) => ({
   dbVersion: null,
   cardCount: 100,
   error: null,
+  blocked: null,
   ...o
 })
 

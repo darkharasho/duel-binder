@@ -11,7 +11,8 @@ const synced = {
   lastSyncAt: '2026-10-20T12:00:00.000Z',
   dbVersion: '142.17',
   cardCount: 13000,
-  error: null
+  error: null,
+  blocked: null
 } as const
 
 describe('SettingsPage', () => {

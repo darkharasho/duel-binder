@@ -6,7 +6,8 @@ import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vite
 
 vi.mock('electron', () => ({ ipcMain: { handle: vi.fn() } }))
 
-import { getMeta } from '../../src/main/db/meta'
+import { createCatalogService, type CatalogService } from '../../src/main/catalog/service'
+import { getMeta, setMeta } from '../../src/main/db/meta'
 import {
   createAccountService,
   SERVER_SIGNED_OUT,
@@ -58,6 +59,8 @@ let pushGate: Promise<void> | null
 let nextSignIn: { token: string; user: Me } | null
 let emitted: AccountStatus[]
 let emitDataChanged: Mock<() => void>
+let onCatalogChanged: Mock<(r: { imagesChanged: boolean }) => void>
+let catalog: CatalogService
 const services: AccountService[] = []
 
 const pid = (d: Database.Database, code: string): number =>
@@ -84,6 +87,20 @@ const serverRows = (
       'SELECT uid, quantity, deleted_at FROM collection_entries WHERE user_id = ? ORDER BY server_seq'
     )
     .all(userId) as { uid: string; quantity: number; deleted_at: string | null }[]
+const catalogCalls = (): number =>
+  fetchSpy.mock.calls.filter(([input]) => String(input).includes('/api/catalog/changes')).length
+const firstCall = (path: string): number =>
+  fetchSpy.mock.calls.findIndex(([input]) => String(input).includes(path))
+const cardName = (d: Database.Database, id: number): string =>
+  (d.prepare('SELECT name FROM cards WHERE id = ?').get(id) as { name: string }).name
+
+/** Marks the desktop as already on the server's catalog, up to date with its feed. */
+function switchedAndCurrent(d: Database.Database): void {
+  const { seq } = portal.serverDb.prepare('SELECT seq FROM catalog_clock').get() as { seq: number }
+  setMeta(d, 'catalog_switched_at', '2026-10-24T00:00:00.000Z')
+  setMeta(d, 'catalog_cursor', String(seq))
+}
+
 const pushCalls = (): number =>
   fetchSpy.mock.calls.filter(([input]) => String(input).includes('/api/sync/push')).length
 
@@ -124,6 +141,8 @@ function makeService(): AccountService {
     emit: (s) => emitted.push(s),
     emitDataChanged,
     isOnline: () => online,
+    catalog,
+    onCatalogChanged,
     now: NOW
   })
   services.push(service)
@@ -147,6 +166,7 @@ beforeEach(async () => {
   alice = portal.addUser('alice')
   bob = portal.addUser('bob')
   db = await seededDb()
+  switchedAndCurrent(db)
   dir = mkdtempSync(join(tmpdir(), 'duel-binder-account-'))
   online = true
   unreachable = false
@@ -154,6 +174,14 @@ beforeEach(async () => {
   nextSignIn = null
   emitted = []
   emitDataChanged = vi.fn<() => void>()
+  onCatalogChanged = vi.fn<(r: { imagesChanged: boolean }) => void>()
+  catalog = createCatalogService({
+    db,
+    backupPath: () => join(dir, 'backups', 'pre-server-catalog.sqlite'),
+    emit: () => {},
+    now: NOW,
+    launchedAt: new Date('2026-10-25T19:00:00.000Z')
+  })
   fetchSpy = vi.fn<Fetch>(async (input: RequestInfo | URL, init?: RequestInit) => {
     if (unreachable) throw new TypeError('fetch failed')
     if (pushGate && String(input).includes('/api/sync/push')) {
@@ -454,6 +482,74 @@ describe('account service', () => {
     expect(service.status().pendingCount).toBe(0)
   })
 
+  it('updates the catalog before pushing', async () => {
+    // The server gains a printing this computer doesn't have, and a web entry on it.
+    portal.serverDb
+      .prepare(
+        "INSERT INTO card_printings (card_id, set_name, set_code, set_rarity, language) VALUES (?, 'Server Set', 'SRV-EN001', 'Common', 'en')"
+      )
+      .run(DM)
+    addEntry(
+      portal.serverDb,
+      { printingId: pid(portal.serverDb, 'SRV-EN001'), imageId: DM, quantity: 2 },
+      T1,
+      userScope(alice)
+    )
+    const service = makeService()
+    await signInAs(service, me(alice, 'alice'))
+
+    // The catalog was asked before any sync call, so the entry landed without waiting.
+    expect(firstCall('/api/catalog/changes')).toBeGreaterThanOrEqual(0)
+    expect(firstCall('/api/catalog/changes')).toBeLessThan(firstCall('/api/sync/'))
+    expect(onCatalogChanged).toHaveBeenCalledWith({ imagesChanged: false })
+    expect(service.status().pendingCount).toBe(0)
+    const [entry] = listEntries(db, ALL)
+    expect([entry.card.id, entry.quantity]).toEqual([DM, 2])
+
+    // A local edit on it pushes.
+    updateEntry(db, entry.id, { quantity: 5 }, T3)
+    await service.syncNow()
+    expect(serverRows(alice)).toEqual([expect.objectContaining({ quantity: 5 })])
+  })
+
+  it('a 401 during the catalog pull signs out and keeps the catalog', async () => {
+    const first = makeService()
+    await signInAs(first, me(alice, 'alice'))
+    first.stop()
+    const name = cardName(db, DM)
+    const cards = db.prepare('SELECT * FROM cards ORDER BY id').all()
+    portal.serverDb.prepare("UPDATE cards SET name = 'Renamed' WHERE id = ?").run(DM)
+    portal.serverDb.prepare('DELETE FROM sessions').run()
+    const catalogBefore = catalogCalls()
+    const pushesBefore = pushCalls()
+
+    const second = makeService()
+    second.start()
+    await vi.waitFor(() => expect(second.status().state).toBe('signed-out'))
+
+    expect(second.status().error).toBe(SERVER_SIGNED_OUT)
+    expect(catalogCalls()).toBe(catalogBefore + 1)
+    expect(pushCalls()).toBe(pushesBefore)
+    expect(cardName(db, DM)).toBe(name)
+    expect(db.prepare('SELECT * FROM cards ORDER BY id').all()).toEqual(cards)
+    expect(onCatalogChanged).not.toHaveBeenCalled()
+  })
+
+  it('refreshCatalog forces an update and returns the catalog status', async () => {
+    const service = makeService()
+    expect(await service.refreshCatalog()).toEqual(catalog.status())
+    expect(catalogCalls()).toBe(0)
+
+    await signInAs(service, me(alice, 'alice'))
+    portal.serverDb.prepare("UPDATE cards SET name = 'Renamed' WHERE id = ?").run(DM)
+    emitDataChanged.mockClear()
+    const s = await service.refreshCatalog()
+    expect(s).toMatchObject({ state: 'idle', blocked: null, error: null })
+    expect(cardName(db, DM)).toBe('Renamed')
+    expect(emitDataChanged).toHaveBeenCalledTimes(1)
+    expect(onCatalogChanged).toHaveBeenCalledWith({ imagesChanged: false })
+  })
+
   it('a run that pulls web edits tells the renderer', async () => {
     const service = makeService()
     await signInAs(service, me(alice, 'alice'))
@@ -533,6 +629,8 @@ describe('account service', () => {
       emit: (s) => emitted.push(s),
       emitDataChanged,
       isOnline: () => true,
+      catalog,
+      onCatalogChanged,
       now: NOW
     })
     services.push(service)
@@ -677,6 +775,8 @@ describe('account service', () => {
       emit: (s) => emitted.push(s),
       emitDataChanged,
       isOnline: () => true,
+      catalog,
+      onCatalogChanged,
       now: NOW
     })
     services.push(service)

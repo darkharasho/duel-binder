@@ -283,7 +283,8 @@ describe('AddCardDialog', () => {
           lastSyncAt: null,
           dbVersion: null,
           cardCount: 0,
-          error: null
+          error: null,
+          blocked: null
         })
       }
     })

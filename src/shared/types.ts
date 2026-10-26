@@ -194,6 +194,8 @@ export interface SyncStatus {
   dbVersion: string | null
   cardCount: number
   error: string | null
+  /** Why the switch to the server's catalog hasn't finished yet; null once it has (or before it's tried). */
+  blocked: string | null
 }
 
 /** The desktop's Duel Binder account, as the renderer sees it. Never carries the token. */

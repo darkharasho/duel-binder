@@ -21,6 +21,7 @@ const fakeAccount = (signedIn = false): FakeAccount => ({
   isSignedIn: vi.fn(() => signedIn),
   noteLocalEdit: vi.fn(),
   catalogRefreshed: vi.fn(),
+  refreshCatalog: vi.fn(),
   start: vi.fn(),
   stop: vi.fn(),
   portal: vi.fn()

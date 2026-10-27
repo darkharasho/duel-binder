@@ -1,4 +1,4 @@
-import type { ScanRow } from '@/features/scan/session'
+import type { ScanRow } from './session'
 
 /** The scanner's frosted glass: cards, chips and buttons over the blurred camera. */
 export const GLASS = 'border border-white/[0.13] bg-white/[0.07] backdrop-blur-xl'

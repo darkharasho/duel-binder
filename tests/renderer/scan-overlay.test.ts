@@ -44,6 +44,7 @@ const pull = (key: number, hit = false): Pull => ({
   name: `Card ${key}`,
   imageId: key,
   setCode: null,
+  setName: null,
   rarity: null,
   price: null,
   range: null,
@@ -57,6 +58,7 @@ describe('pullOf', () => {
       name: 'Dark Magician',
       imageId: 46986414,
       setCode: 'LOB-005',
+      setName: 'Legend of Blue Eyes',
       rarity: 'Ultra Rare',
       price: 12.5,
       range: null,
@@ -81,6 +83,7 @@ describe('pullOf', () => {
     expect(pullOf(d, 20, 1)).toMatchObject({
       name: 'Dark Magician',
       setCode: null,
+      setName: null,
       rarity: null,
       price: 50,
       range: { low: 2, high: 50 },

@@ -9,6 +9,7 @@ export interface Pull {
   name: string
   imageId: number
   setCode: string | null
+  setName: string | null
   rarity: string | null
   price: number | null
   /** Its printings' price range, under the assumed price when the printing isn't certain. */
@@ -31,13 +32,16 @@ function rangeOf(d: ScanDraft): Pull['range'] {
  * shows its options' price range; a Pick printing draft shows no set or rarity and is never a hit.
  */
 export function pullOf(d: ScanDraft, hitPrice: number, key: number): Pull {
-  const price = d.options.find((o) => o.printingId === d.printingId)?.price ?? null
+  const picked = d.options.find((o) => o.printingId === d.printingId)
+  const price = picked?.price ?? null
   const range = d.flag === 'pick-printing' || d.flag === 'check-rarity' ? rangeOf(d) : null
   const base = { key, name: d.name, imageId: d.imageId, price, range }
-  if (d.flag === 'pick-printing') return { ...base, setCode: null, rarity: null, hit: false }
+  if (d.flag === 'pick-printing')
+    return { ...base, setCode: null, setName: null, rarity: null, hit: false }
   return {
     ...base,
     setCode: d.setCode,
+    setName: picked?.setName ?? null,
     rarity: d.rarity,
     hit: price !== null && price >= hitPrice
   }

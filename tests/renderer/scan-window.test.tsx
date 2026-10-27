@@ -424,10 +424,13 @@ describe('Scan window', () => {
     while (pushedAt === 0) await run(50)
     const bar = screen.getByRole('status', { name: 'Pull' })
     expect(bar).toHaveTextContent('Dark Magician')
-    expect(bar).toHaveTextContent('LOB-EN005')
+    expect(bar).toHaveTextContent('LOB-EN005 · Legend of Blue Eyes White Dragon')
     expect(bar).toHaveTextContent('Ultra Rare')
     expect(bar).toHaveTextContent('$12.50')
     expect(screen.queryByLabelText('Hit')).not.toBeInTheDocument()
+    // The phone's "found it" glow, with its bubble on a card.
+    const burst = document.querySelector('[data-found-burst]')!
+    expect(burst).toHaveTextContent('Dark Magician')
     const fading = (): HTMLElement => screen.getByRole('status', { name: 'Pull' }).parentElement!
 
     await run(pushedAt + NORMAL_MS - 1 - Date.now())
@@ -458,6 +461,10 @@ describe('Scan window', () => {
     await run(1000)
     expect(drafts()).toHaveLength(2)
     expect(screen.getByLabelText('Hit')).toHaveTextContent('$12.50')
+    // A hit glows too, without the bubble: its banner already names it.
+    const burst = document.querySelector('[data-found-burst]')!
+    expect(burst).toBeInTheDocument()
+    expect(burst).not.toHaveTextContent('Dark Magician')
   })
 
   it('sends its state again with every settings message', async () => {

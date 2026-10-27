@@ -1,12 +1,18 @@
 import { memo, useMemo } from 'react'
-import { Minus, Plus, X } from 'lucide-react'
+import {
+  ChevronDownIcon,
+  MinusIcon,
+  PlusIcon,
+  StarIcon,
+  TriangleAlertIcon,
+  XIcon
+} from 'lucide-react'
 import { languageInfo } from '@shared/languages'
 import { CardArt } from '@/components/CardArt'
-import { Button } from '@/components/ui/button'
 import { formatUsd } from '@/lib/format'
-import { isPhone } from '@/lib/platform'
 import { cn } from '@/lib/utils'
 import type { ScanDraft } from './resolve'
+import { GLASS, priceOf } from './scanLook'
 import { SearchPicker, type PickerOption } from './SearchPicker'
 import type { ScanRow } from './session'
 
@@ -51,7 +57,10 @@ export interface ScanRowActions {
   remove(key: string): void
 }
 
-/** One entry on the scan session list. */
+const STEP =
+  'flex size-8 items-center justify-center rounded-full text-white/85 hover:bg-white/[0.1] active:bg-white/[0.14] disabled:opacity-40'
+
+/** One entry on the scan session list, as the phone's review shows it: a glass card. */
 export const ScanRowItem = memo(function ScanRowItem({
   row,
   actions,
@@ -65,85 +74,93 @@ export const ScanRowItem = memo(function ScanRowItem({
   disabled?: boolean
 }): React.JSX.Element {
   const choices = useMemo(() => choicesFor(row), [row])
-  // Rows saved before prices existed have no `price` key at all.
-  const price = row.options.find((o) => o.printingId === row.printingId)?.price
+  const price = priceOf(row)
   const { key } = row
   const { setPrinting } = actions
   const pick = useMemo(() => (v: string) => setPrinting(key, Number(v)), [key, setPrinting])
   return (
     <li
       className={cn(
-        'flex items-start gap-3 border-l-2 py-2 pl-3 pr-2 transition-colors duration-700',
-        row.flag ? 'border-amber-400' : 'border-transparent',
-        highlighted ? 'bg-emerald-400/10' : 'bg-transparent'
+        'flex gap-3 rounded-[20px] p-2.5 transition-colors duration-700',
+        GLASS,
+        row.flag && 'border-amber-400/45',
+        highlighted && 'bg-emerald-400/10'
       )}
     >
-      <CardArt imageId={row.imageId} size="small" alt="" className="w-10 shrink-0" />
-      <div className="min-w-0 flex-1 space-y-1">
-        {/* On a phone the name gets its own line; beside the code and price it was cut short. */}
-        <div className={cn('flex items-baseline gap-2', isPhone() && 'flex-wrap gap-y-0')}>
-          <span className={cn('truncate text-sm font-medium', isPhone() && 'basis-full')}>
-            {row.name}
-          </span>
-          {row.setCode && (
-            <span className="shrink-0 font-mono text-xs text-muted-foreground">{row.setCode}</span>
-          )}
+      <CardArt imageId={row.imageId} size="small" alt="" className="w-12 shrink-0 self-start" />
+      <div className="min-w-0 flex-1 text-[13px] leading-[18px]">
+        <p className="truncate text-[15px] font-semibold leading-5">{row.name}</p>
+        <p className="truncate text-muted-foreground">
+          {row.setCode && <span className="font-mono text-xs">{row.setCode}</span>}
+          {row.setCode && price != null && ' · '}
           {price != null && (
-            <span
-              aria-label={`Price of ${row.name}`}
-              className="ml-auto shrink-0 text-xs text-emerald-400 tabular-nums"
-            >
+            <span aria-label={`Price of ${row.name}`} className="text-emerald-400 tabular-nums">
               {formatUsd(price)}
             </span>
           )}
-        </div>
+        </p>
         <SearchPicker
           label={`Rarity for ${row.name}`}
           value={row.printingId === null ? null : String(row.printingId)}
           options={choices}
           onPick={pick}
-          placeholder="Choose a printing"
           searchPlaceholder="Search code, rarity or set…"
-          className="h-7 w-full max-w-72 px-2 text-xs"
           disabled={disabled}
+          className="mt-1.5 h-8 max-w-full justify-start gap-1.5 rounded-full border-white/[0.12] bg-white/[0.08] px-2.5 text-xs shadow-none dark:bg-white/[0.08] dark:hover:bg-white/[0.14]"
+          renderTrigger={(picked) => (
+            <>
+              <StarIcon aria-hidden className="size-3.5 shrink-0 text-white/60" />
+              <span className={cn('truncate', !picked && 'text-muted-foreground')}>
+                {picked ? picked.label : 'Choose a printing'}
+              </span>
+              <ChevronDownIcon aria-hidden className="size-3.5 shrink-0 opacity-60" />
+            </>
+          )}
         />
-        {row.flag && <p className="text-xs text-amber-300">{FLAG_TEXT[row.flag]}</p>}
-        {row.error && <p className="text-xs text-destructive">{row.error}</p>}
+        {row.flag && (
+          <p className="mt-1 flex items-center gap-1 text-xs text-amber-300">
+            <TriangleAlertIcon aria-hidden className="size-3.5 shrink-0" />
+            {FLAG_TEXT[row.flag]}
+          </p>
+        )}
+        {row.error && <p className="mt-1 text-xs text-destructive">{row.error}</p>}
       </div>
-      <div className="flex shrink-0 items-center gap-1">
-        <Button
-          variant="outline"
-          size="icon-xs"
-          disabled={disabled}
-          aria-label={`One fewer ${row.name}`}
-          onClick={() => actions.setQuantity(row.key, row.quantity - 1)}
-        >
-          <Minus />
-        </Button>
-        <span
-          aria-label={`Quantity of ${row.name}`}
-          className="w-6 text-center text-sm tabular-nums"
-        >
-          {row.quantity}
-        </span>
-        <Button
-          variant="outline"
-          size="icon-xs"
-          disabled={disabled}
-          aria-label={`One more ${row.name}`}
-          onClick={() => actions.setQuantity(row.key, row.quantity + 1)}
-        >
-          <Plus />
-        </Button>
-        <Button
-          variant="ghost"
-          size="icon-xs"
-          disabled={disabled}
+      <div className="flex shrink-0 flex-col items-end justify-between gap-1">
+        <button
+          type="button"
           aria-label={`Remove ${row.name}`}
+          disabled={disabled}
           onClick={() => actions.remove(row.key)}
+          className="-mr-1 -mt-1 flex size-8 items-center justify-center rounded-full text-white/55 hover:bg-white/[0.08] hover:text-white/85 disabled:opacity-40"
         >
-          <X />
-        </Button>
+          <XIcon aria-hidden className="size-4" />
+        </button>
+        <div className={cn('flex items-center rounded-full', GLASS)}>
+          <button
+            type="button"
+            aria-label={`One fewer ${row.name}`}
+            disabled={disabled}
+            onClick={() => actions.setQuantity(row.key, row.quantity - 1)}
+            className={STEP}
+          >
+            <MinusIcon aria-hidden className="size-4" />
+          </button>
+          <span
+            aria-label={`Quantity of ${row.name}`}
+            className="w-5 text-center text-sm font-semibold tabular-nums"
+          >
+            {row.quantity}
+          </span>
+          <button
+            type="button"
+            aria-label={`One more ${row.name}`}
+            disabled={disabled}
+            onClick={() => actions.setQuantity(row.key, row.quantity + 1)}
+            className={STEP}
+          >
+            <PlusIcon aria-hidden className="size-4" />
+          </button>
+        </div>
       </div>
     </li>
   )

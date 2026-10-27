@@ -102,3 +102,29 @@
     * { transition-duration: 0ms !important; animation-duration: 0ms !important; }
   }
 }
+
+/* The scanners' "found it" moment (FoundBurst, and the phone's last-scan card bump and drop). */
+@keyframes scan-glow {
+  0% { box-shadow: inset 0 0 0 3px rgb(134 217 166 / 0.95), inset 0 0 40px rgb(134 217 166 / 0.55); }
+  100% { box-shadow: inset 0 0 0 3px rgb(134 217 166 / 0), inset 0 0 40px rgb(134 217 166 / 0); }
+}
+@keyframes scan-spark {
+  0% { opacity: 0; transform: translate(-50%, -50%) scale(0.4); }
+  30% { opacity: 1; }
+  100% { opacity: 0; transform: translate(calc(-50% + var(--dx)), calc(-50% + var(--dy))) scale(1.15); }
+}
+@keyframes scan-pop {
+  0% { opacity: 0; transform: translateY(16px) scale(0.8); }
+  18% { opacity: 1; transform: translateY(0) scale(1.04); }
+  26% { transform: scale(1); }
+  80% { opacity: 1; transform: translateY(0); }
+  100% { opacity: 0; transform: translateY(-6px); }
+}
+@keyframes scan-bump {
+  50% { transform: scale(1.035); border-color: rgb(134 217 166 / 0.6); }
+}
+@keyframes scan-drop {
+  0% { opacity: 0; transform: translateY(-9rem) scale(1.8) rotate(6deg); }
+  60% { opacity: 1; }
+  100% { opacity: 1; transform: none; }
+}

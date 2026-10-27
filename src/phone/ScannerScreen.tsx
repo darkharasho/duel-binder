@@ -20,11 +20,11 @@ import type { ScanRow } from '@/features/scan/session'
 import { api, queryKeys } from '@/lib/api'
 import { formatUsd } from '@/lib/format'
 import { cn } from '@/lib/utils'
-import { FoundBurst } from './FoundBurst'
+import { FoundBurst } from '@/features/scan/FoundBurst'
 import { PhoneCamera } from './PhoneCamera'
 import { PickerSheet } from './PickerSheet'
 import { ReviewSheet } from './ReviewSheet'
-import { GLASS, priceOf } from './scanLook'
+import { GLASS, priceOf } from '@/features/scan/scanLook'
 
 /** Copies of the row's printing already in the collection, any condition; null while loading. */
 function useOwned(row: ScanRow): number | null {

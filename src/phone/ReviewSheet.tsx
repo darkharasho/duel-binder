@@ -16,7 +16,7 @@ import { plural } from '@/features/scan/scanText'
 import { formatUsd } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { PickerSheet } from './PickerSheet'
-import { GLASS, priceOf } from './scanLook'
+import { GLASS, priceOf } from '@/features/scan/scanLook'
 
 /** A drag shorter than this is a tap. */
 const TAP_PX = 8

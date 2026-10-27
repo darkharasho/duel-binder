@@ -113,7 +113,7 @@ describe('SettingsPage', () => {
   })
 
   describe('unsynced dialog states', () => {
-    const accountWith = (count: number, unsynced: () => Promise<never[]>) =>
+    const accountWith = (count: number, unsynced: () => Promise<never[]>): ReturnType<typeof createMockApi> =>
       createMockApi({
         account: {
           status: vi.fn(async () => ({

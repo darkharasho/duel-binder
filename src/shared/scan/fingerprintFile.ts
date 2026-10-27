@@ -1,7 +1,8 @@
 import { HASH_WORDS, hamming } from './fingerprint'
 
 // Format v1, little-endian: "DBFP", u8 version, u16 bits, u32 count,
-// then per record u32 imageId + 32 hash bytes, sorted by imageId.
+// then per record u32 imageId + 32 hash bytes, sorted by imageId. An id may repeat: a printing
+// scan of that artwork, kept as a second reference to it.
 const MAGIC = [0x44, 0x42, 0x46, 0x50]
 const VERSION = 1
 const BITS = HASH_WORDS * 32
@@ -35,7 +36,10 @@ export class FingerprintIndex {
     this.hashes = hashes
   }
 
-  /** The k closest images by Hamming distance, closest first, optionally limited to candidates. */
+  /**
+   * The k closest images by Hamming distance, closest first, optionally limited to candidates. An
+   * image id the file holds more than once is given once, at its closest.
+   */
   nearest(
     hash: Uint32Array,
     k: number,
@@ -55,6 +59,12 @@ export class FingerprintIndex {
         (distance > last.distance || (distance === last.distance && imageId > last.imageId))
       )
         continue
+      // An artwork with several references (its card art and printing scans) counts once.
+      const same = found.findIndex((f) => f.imageId === imageId)
+      if (same >= 0) {
+        if (found[same].distance <= distance) continue
+        found.splice(same, 1)
+      }
       let at = found.length
       while (
         at > 0 &&

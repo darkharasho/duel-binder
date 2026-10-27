@@ -77,6 +77,23 @@ describe('fingerprint file', () => {
     expect(idx.nearest(h1, 1, new Set())).toEqual([])
   })
 
+  it('gives an artwork with several references once, at its closest', () => {
+    const near = h1.slice()
+    near[0] ^= 0b11
+    const idx = decodeFingerprints(
+      encodeFingerprints([
+        { imageId: 5, hash: h2 },
+        { imageId: 5, hash: near },
+        { imageId: 5, hash: h1 },
+        { imageId: 9, hash: h2 }
+      ])
+    )
+    expect(idx.nearest(h1, 2)).toEqual([
+      { imageId: 5, distance: 0 },
+      { imageId: 9, distance: hamming(h1, 0, h2, 0) }
+    ])
+  })
+
   it('accepts an ArrayBuffer and writes the documented header', () => {
     const bytes = encodeFingerprints([{ imageId: 7, hash: h1 }])
     expect(String.fromCharCode(...bytes.slice(0, 4))).toBe('DBFP')

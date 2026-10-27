@@ -118,6 +118,7 @@ export function RipPage(): React.JSX.Element {
             sessionId={view.sessionId}
             packCount={view.packCount}
             setName={view.set.setName}
+            packArt={view.set}
             active={tab === 'open'}
             onDone={() =>
               setView({

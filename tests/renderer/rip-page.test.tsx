@@ -108,6 +108,16 @@ describe('RipPage', () => {
   })
 
   describe('with an opening in progress', () => {
+    // Reduced motion: the opener's tear and card moves happen at once.
+    beforeEach(() => {
+      const real = window.matchMedia
+      vi.spyOn(window, 'matchMedia').mockImplementation((q: string) => ({
+        ...real(q),
+        matches: q.includes('reduce')
+      }))
+    })
+    afterEach(() => vi.restoreAllMocks())
+
     const card = (slot: number): RipCard => ({
       pkey: `k${slot}`,
       cardId: slot,
@@ -143,7 +153,9 @@ describe('RipPage', () => {
       await userEvent.click(await screen.findByRole('button', { name: /Metal Raiders/ }))
       await userEvent.click(screen.getByRole('button', { name: packCount === 5 ? '5' : '1' }))
       await userEvent.click(screen.getByRole('button', { name: /rip \d+ packs?/i }))
-      await waitFor(() => expect(screen.getByRole('button', { name: /skip pack/i })).toBeEnabled())
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: /skip to the hit/i })).toBeEnabled()
+      )
       return openPack
     }
 
@@ -170,16 +182,34 @@ describe('RipPage', () => {
       renderWithProviders(<RipPage />, { api })
       await userEvent.click(await screen.findByRole('button', { name: /Metal Raiders/ }))
       await userEvent.click(screen.getByRole('button', { name: /rip 1 pack/i }))
-      await waitFor(() => expect(screen.getByRole('button', { name: /skip pack/i })).toBeEnabled())
-      await userEvent.click(screen.getByRole('button', { name: /skip pack/i }))
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: /skip to the hit/i })).toBeEnabled()
+      )
+      await userEvent.click(screen.getByRole('button', { name: /skip to the hit/i }))
       await userEvent.click(screen.getByRole('button', { name: /finish|next pack/i }))
       await screen.findByText('1 pack of Metal Raiders')
       return { api }
     }
 
+    it('shows the picked set on the sealed pack', async () => {
+      const api = createMockApi({
+        rip: {
+          sets: vi.fn(async () => [{ ...SETS[0], packImageKey: 'MRD-pack.png' }]),
+          start: vi.fn(async () => 9),
+          openPack: vi.fn(async () => [card(0), card(1)])
+        }
+      })
+      renderWithProviders(<RipPage />, { api })
+      await userEvent.click(await screen.findByRole('button', { name: /Metal Raiders/ }))
+      await userEvent.click(screen.getByRole('button', { name: /rip \d+ packs?/i }))
+      const pack = await screen.findByTestId('rip-pack')
+      expect(pack.querySelector('[data-testid="set-art-pack"]')).not.toBeNull()
+      expect(pack).toHaveTextContent('Metal Raiders')
+    })
+
     it('keeps its place across a trip to History', async () => {
       const openPack = await startOpening(5)
-      await userEvent.click(screen.getByRole('button', { name: /skip pack/i }))
+      await userEvent.click(screen.getByRole('button', { name: /skip to the hit/i }))
       await userEvent.click(screen.getByRole('button', { name: /next pack/i }))
       await waitFor(() => expect(screen.getByText(/pack 2 of 5/i)).toBeInTheDocument())
       expect(openPack).toHaveBeenCalledTimes(2)
@@ -200,7 +230,7 @@ describe('RipPage', () => {
 
     it('shows the summary when done, and Pick another set returns to the picker with the set selected', async () => {
       await startOpening(1)
-      await userEvent.click(screen.getByRole('button', { name: /skip pack/i }))
+      await userEvent.click(screen.getByRole('button', { name: /skip to the hit/i }))
       await userEvent.click(screen.getByRole('button', { name: /finish|next pack/i }))
       expect(await screen.findByText('1 pack of Metal Raiders')).toBeInTheDocument()
       await userEvent.click(screen.getByRole('button', { name: /pick another set/i }))

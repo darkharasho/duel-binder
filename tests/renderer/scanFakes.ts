@@ -139,6 +139,8 @@ export function fakeBridge(): {
   /** Delivers a message to the window, as main's relay would. */
   emit: (m: ToScanWindow) => void
   emitOpen: (open: boolean) => void
+  /** How many onMessage callbacks are registered right now. */
+  listening: () => number
   /** Every message the window has sent. */
   sent: ScanWindowMessage[]
 } {
@@ -162,6 +164,7 @@ export function fakeBridge(): {
     },
     emit: (m) => messageCbs.forEach((cb) => cb(m)),
     emitOpen: (b) => openCbs.forEach((cb) => cb(b)),
+    listening: () => messageCbs.size,
     sent
   }
 }

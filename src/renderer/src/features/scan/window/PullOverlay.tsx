@@ -11,7 +11,7 @@ function Bar({ pull }: { pull: Pull }): React.JSX.Element {
     <div
       role="status"
       aria-label="Pull"
-      className="absolute inset-x-0 bottom-0 flex items-center gap-[1.5vw] bg-black/75 px-[3vw] py-[1.5vw] text-white backdrop-blur-sm"
+      className="absolute inset-x-0 bottom-0 flex items-center gap-[1.5vw] bg-black/75 px-[3vw] py-[1.5vw] text-white"
     >
       <CardArt imageId={pull.imageId} size="small" alt="" className="w-[clamp(2.5rem,6vw,5rem)]" />
       <div className="min-w-0 flex-1">

@@ -90,9 +90,11 @@ function Scanner({
     setUnreadable
   }
   const serialized = JSON.stringify(state)
+  // Sent when it changes, and again with every settings message, so a main window that reloaded
+  // or remounted its hub after the last send still learns it.
   useEffect(() => {
     window.api.scanWindow.send({ kind: 'state', state: JSON.parse(serialized) as ScanWindowState })
-  }, [serialized])
+  }, [serialized, settings])
 
   // The outline in video pixels, worked out when the loop reports one (the video's size is only
   // known from the element).

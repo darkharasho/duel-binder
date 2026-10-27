@@ -432,21 +432,73 @@ describe('Scan window', () => {
   it('a counted pull shows the bar, then fades out', async () => {
     stubCamera()
     const engine = fakeEngine(() => codeFrame('LOB-EN005'))
+    // When the pull is pushed: the draft is sent in the same step.
+    let pushedAt = 0
+    bridge.scanWindow.send.mockImplementation((m) => {
+      bridge.sent.push(m)
+      if (m.kind === 'draft') pushedAt = Date.now()
+    })
     await renderWindow(engine, {
       scan: { printingsByCode: vi.fn(async () => [printing({ price: 12.5 })]) }
     })
-    await run(1000)
+    while (pushedAt === 0) await run(50)
     const bar = screen.getByRole('status', { name: 'Pull' })
     expect(bar).toHaveTextContent('Dark Magician')
     expect(bar).toHaveTextContent('LOB-EN005')
     expect(bar).toHaveTextContent('Ultra Rare')
     expect(bar).toHaveTextContent('$12.50')
     expect(screen.queryByLabelText('Hit')).not.toBeInTheDocument()
+    const fading = (): HTMLElement => screen.getByRole('status', { name: 'Pull' }).parentElement!
+
+    await run(pushedAt + NORMAL_MS - 1 - Date.now())
+    expect(fading()).toHaveClass('opacity-100')
     // The pull ends after NORMAL_MS, but its bar stays mounted while it fades.
-    await run(NORMAL_MS)
-    expect(screen.getByRole('status', { name: 'Pull' })).toBeInTheDocument()
-    await run(FADE_MS)
+    await run(1)
+    expect(fading()).toHaveClass('opacity-0')
+    await run(FADE_MS - 1)
+    expect(fading()).toHaveClass('opacity-0')
+    await run(1)
     expect(screen.queryByRole('status', { name: 'Pull' })).not.toBeInTheDocument()
+  })
+
+  it('a hit price changed in settings applies to the next pull', async () => {
+    stubCamera()
+    let card = true
+    const engine = fakeEngine(() => (card ? codeFrame('LOB-EN005') : NOTHING))
+    await renderWindow(engine, {
+      scan: { printingsByCode: vi.fn(async () => [printing({ price: 12.5 })]) }
+    })
+    await run(1000)
+    expect(drafts()).toHaveLength(1)
+    expect(screen.queryByLabelText('Hit')).not.toBeInTheDocument()
+    card = false
+    await run(1500)
+    settings({ hitPrice: 10 })
+    card = true
+    await run(1000)
+    expect(drafts()).toHaveLength(2)
+    expect(screen.getByLabelText('Hit')).toHaveTextContent('$12.50')
+  })
+
+  it('sends its state again with every settings message', async () => {
+    stubCamera()
+    await renderWindow(fakeEngine())
+    await run(500)
+    const states = (): number => bridge.sent.filter((m) => m.kind === 'state').length
+    const before = states()
+    expect(before).toBeGreaterThan(0)
+    settings({})
+    await run()
+    expect(states()).toBe(before + 1)
+    expect(lastState()).toMatchObject({ openDeviceId: 'cam1', cameraError: null })
+  })
+
+  it('stops listening for messages when it unmounts', async () => {
+    stubCamera()
+    const { unmount } = await renderWindow(fakeEngine())
+    expect(bridge.listening()).toBeGreaterThan(0)
+    unmount()
+    expect(bridge.listening()).toBe(0)
   })
 
   it('a pull at the hit price gets the hit moment', async () => {

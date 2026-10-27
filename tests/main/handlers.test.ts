@@ -186,6 +186,40 @@ describe('createHandlers', () => {
     expect(account.refreshCatalog).toHaveBeenCalledTimes(1)
   })
 
+  it('rip:start and rip:openPack work without telling the account service', async () => {
+    const { db, handlers, account } = await makeHandlers()
+    // A real layout (LOB = core-2002) filled by a handful of synthetic printings.
+    db.prepare(
+      "INSERT INTO sets (language, set_name, set_code, tcg_date) VALUES ('en', 'Rip Handler Set', 'LOB', '2002-03-08')"
+    ).run()
+    for (let i = 0; i < 9; i++) {
+      const id = 90000 + i
+      db.prepare(
+        `INSERT INTO cards (id, name, type, frame_type, race, "desc", updated_at) VALUES (?, ?, 'Normal Monster', 'normal', 'Warrior', '', '2026-10-01')`
+      ).run(id, `Rip Card ${i}`)
+      db.prepare('INSERT INTO card_images (image_id, card_id, sort_order) VALUES (?, ?, 0)').run(
+        id * 10,
+        id
+      )
+      db.prepare(
+        `INSERT INTO card_printings (card_id, set_name, set_code, set_rarity, language, contributed)
+         VALUES (?, 'Rip Handler Set', ?, ?, 'en', 0)`
+      ).run(id, `LOB-EN9${i}0`, i < 8 ? 'Common' : 'Rare')
+    }
+    const sets = (await handlers['rip:sets']()) as { setName: string }[]
+    expect(sets.map((s) => s.setName)).toContain('Rip Handler Set')
+    const id = (await handlers['rip:start']('Rip Handler Set', 2)) as number
+    const cards = (await handlers['rip:openPack'](id)) as unknown[]
+    expect(cards).toHaveLength(9)
+    const session = (await handlers['rip:session'](id)) as { packsOpened: number } | null
+    expect(session?.packsOpened).toBe(1)
+    const history = (await handlers['rip:history']()) as { packsOpened: number }
+    expect(history.packsOpened).toBe(1)
+    await expect(handlers['rip:session'](999999)).resolves.toBeNull()
+    await expect(handlers['rip:start']('Rip Handler Set', 0)).rejects.toThrow('Pack count')
+    expect(account.noteLocalEdit).not.toHaveBeenCalled()
+  })
+
   it('every Api method has a handler', async () => {
     const { handlers } = await makeHandlers()
     expect(Object.keys(handlers).sort()).toEqual([...INVOKE_CHANNELS].sort())

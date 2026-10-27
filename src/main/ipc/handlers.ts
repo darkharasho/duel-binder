@@ -11,6 +11,13 @@ import { checkOcrBands, type Ocr } from '../scan/ocr'
 import { cardLanguage } from '@shared/scan/cardLanguage'
 import type { AccountService } from '../cloud/account'
 import type { CatalogService } from '../catalog/service'
+import { openPack, ripHistory, ripSession, ripSets, startRip } from '../repo/rip'
+
+function wholeNumber(n: unknown, what: string): number {
+  if (typeof n !== 'number' || !Number.isInteger(n))
+    throw new Error(`${what} must be a whole number`)
+  return n
+}
 
 export interface WindowDeps {
   minimize(): void
@@ -85,6 +92,20 @@ export function createHandlers({
       checkOcrBands(bands)
       return cardLanguage(ocr, bands)
     },
+    // Rip is never synced, so none of these tell the account service about an edit.
+    'rip:sets': async () => ripSets(db),
+    'rip:start': async (setName: unknown, packCount: unknown) => {
+      if (typeof setName !== 'string') throw new Error('Set name must be a string')
+      return startRip(db, setName, wholeNumber(packCount, 'Pack count'), new Date())
+    },
+    'rip:openPack': async (sessionId: unknown) =>
+      openPack(db, wholeNumber(sessionId, 'Session id')),
+    'rip:session': async (id: unknown) => ripSession(db, wholeNumber(id, 'Session id')),
+    'rip:history': async (opts?: { sessionOffset?: number }) =>
+      ripHistory(db, {
+        sessionOffset:
+          opts?.sessionOffset === undefined ? undefined : wholeNumber(opts.sessionOffset, 'Offset')
+      }),
     'sync:status': async () => catalog.status(),
     'sync:run': async () => account.refreshCatalog(),
     'images:cacheSize': () => images.sizeBytes(),

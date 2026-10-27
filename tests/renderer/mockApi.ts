@@ -106,6 +106,19 @@ export function createMockApi(overrides: DeepPartial<Api> = {}): Api {
       onMessage: vi.fn(() => () => {}),
       onOpenChange: vi.fn(() => () => {})
     },
+    rip: {
+      sets: vi.fn(async () => []),
+      start: vi.fn(async () => 1),
+      openPack: vi.fn(async () => []),
+      session: vi.fn(async () => null),
+      history: vi.fn(async () => ({
+        packsOpened: 0,
+        cardsPulled: 0,
+        setsRipped: 0,
+        bestPulls: [],
+        sessions: []
+      }))
+    },
     window: {
       platform: 'linux',
       minimize: vi.fn(async () => undefined),

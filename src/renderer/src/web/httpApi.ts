@@ -129,6 +129,13 @@ export function createHttpApi(opts: HttpApiOptions = {}): Api {
       onMessage: noUnsubscribe,
       onOpenChange: noUnsubscribe
     },
+    rip: {
+      sets: unavailable,
+      start: unavailable,
+      openPack: unavailable,
+      session: unavailable,
+      history: unavailable
+    },
     stats: { get: call('stats:get') },
     sets: {
       list: call('sets:list'),

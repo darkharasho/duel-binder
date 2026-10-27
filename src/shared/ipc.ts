@@ -24,6 +24,7 @@ import type {
 import type { ScanWindowMessage } from './scanWindow'
 import type { FingerprintStatus, OcrBand, ScanPrinting } from './scan/types'
 import type { CardLanguage } from './scan/language'
+import type { RipCard, RipHistory, RipSessionDetail, RipSet } from './rip/types'
 
 /** The API exposed to the renderer as `window.api`. */
 export interface Api {
@@ -76,6 +77,14 @@ export interface Api {
     send(m: ScanWindowMessage): void
     onMessage(cb: (m: ScanWindowMessage) => void): () => void
     onOpenChange(cb: (open: boolean) => void): () => void
+  }
+  /** Simulated pack openings. Desktop only; never synced. */
+  rip: {
+    sets(): Promise<RipSet[]>
+    start(setName: string, packCount: number): Promise<number>
+    openPack(sessionId: number): Promise<RipCard[]>
+    session(id: number): Promise<RipSessionDetail | null>
+    history(opts?: { sessionOffset?: number }): Promise<RipHistory>
   }
   stats: {
     get(): Promise<CollectionStats>
@@ -171,6 +180,11 @@ export const INVOKE_CHANNELS = [
   'scanWindow:open',
   'scanWindow:isOpen',
   'scanWindow:toggleFullScreen',
+  'rip:sets',
+  'rip:start',
+  'rip:openPack',
+  'rip:session',
+  'rip:history',
   'stats:get',
   'sets:list',
   'sets:checklist',

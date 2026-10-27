@@ -99,3 +99,11 @@ Holding a hit up again to show it off is also a new showing under Scan's existin
 - There is only ever **one** camera opening, in the scan window.
 - Recognition, the counting rules, the list's behavior, adding to the collection and offline recognition are unchanged.
 - The camera's resolution and the remembered camera choice carry over from today's Scan.
+
+## Change (2026-10-26, after the first try): the scan window is added, not a replacement
+
+The owner, on trying it: "i want this as a net new so without the open scan window it should show the old scanner."
+
+- **Scan window closed:** the Scan page is today's scanner, unchanged — camera preview, outline, status, camera picker, set picker, New scans as, the list — plus the `Open scan window` button and the hit price. It scans in the page as before, and stops when the owner leaves the page.
+- **Scan window open:** the Scan page is the list plus controls, as described above, and the camera is in the scan window.
+- **One camera at a time:** opening the scan window stops the page's camera first; closing it brings the page's preview back if the owner is on Scan. The camera choice is shared.

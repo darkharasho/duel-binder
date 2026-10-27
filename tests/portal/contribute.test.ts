@@ -183,6 +183,17 @@ describe('POST /api/catalog/contribute', () => {
     expect(count('SELECT count(*) AS n FROM printing_contributions')).toBe(0)
   })
 
+  it('rejects a pipe, control characters and untrimmed or blank text in the text fields', async () => {
+    const fields = ['set_name', 'set_code', 'set_rarity', 'set_rarity_code', 'variant'] as const
+    const bad = ['A|B', 'A\u0000B', 'A\nB', 'A\u007fB', 'A\u0085B', ' A', 'A ', '   ', '']
+    const rows = fields.flatMap((f) => bad.map((v) => printing({ [f]: v })))
+    const r = await contribute(rows)
+    expect(r.map((x) => [x.status, x.reason])).toEqual(rows.map(() => ['rejected', 'bad-field']))
+    expect(count('SELECT count(*) AS n FROM printing_contributions')).toBe(0)
+    // Null optional fields are still fine.
+    expect((await contribute([printing({ set_rarity_code: null, variant: null })]))[0].status).toBe('added')
+  })
+
   it('one bad row does not stop the others; a repeated pkey in one request is exists', async () => {
     const r = await contribute([printing(), printing({ language: 'xx' }), printing()])
     expect(r.map((x) => x.status)).toEqual(['added', 'rejected', 'exists'])

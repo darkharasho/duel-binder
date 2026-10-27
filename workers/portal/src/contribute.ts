@@ -10,7 +10,13 @@ import {
 const DAY_MS = 86_400_000
 const LANGUAGE_CODES = new Set<string>(LANGUAGES.map((l) => l.code))
 
-const isText = (v: unknown): v is string => typeof v === 'string' && v.length >= 1 && v.length <= 200
+// No control characters (C0, DEL, C1) and no `|`, which joins the fields of a pkey: with it two
+// different printings could share one.
+// eslint-disable-next-line no-control-regex
+const FORBIDDEN = /[\u0000-\u001f\u007f-\u009f|]/
+/** Non-empty trimmed text of at most 200 characters. */
+const isText = (v: unknown): v is string =>
+  typeof v === 'string' && v.length >= 1 && v.length <= 200 && v.trim() === v && !FORBIDDEN.test(v)
 const isId = (v: unknown): v is number => typeof v === 'number' && Number.isSafeInteger(v) && v > 0
 
 type Checked = { row: ContributedPrinting } | { reason: 'bad-field' | 'bad-language' }
@@ -68,10 +74,11 @@ export function contributePrintings(
   const hasCard = db.prepare('SELECT 1 FROM cards WHERE id = ?')
   const keyOf = db.prepare(`SELECT ${PKEY_SQL} AS pkey`)
   const exists = db.prepare('SELECT 1 FROM card_printings WHERE pkey = ?')
+  // set_rarity_code is NOT NULL (default ''); the desktop sends null for an empty one.
   const insert = db.prepare(
     `INSERT INTO card_printings (card_id, set_name, set_code, set_rarity, set_rarity_code,
        language, variant, tcg_product_id, set_price, market_price, missing_from_api, contributed)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, NULL, 0, 1)`
+     VALUES (?, ?, ?, ?, COALESCE(?, ''), ?, ?, ?, NULL, NULL, 0, 1)`
   )
   const log = db.prepare(
     'INSERT INTO printing_contributions (printing_id, user_id, created_at) VALUES (?, ?, ?)'

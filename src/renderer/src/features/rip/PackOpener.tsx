@@ -604,7 +604,10 @@ export function PackOpener({
     else if (performance.now() < holdUntil.current) return
     else if (phase === 'hand') flipNext()
     // At the end a click or Space moves on: the next pack, or the summary after the last.
-    else if (phase === 'end' && (from === 'key' || performance.now() - endedAt.current >= END_CLICK_MS))
+    else if (
+      phase === 'end' &&
+      (from === 'key' || performance.now() - endedAt.current >= END_CLICK_MS)
+    )
       next()
   }
 

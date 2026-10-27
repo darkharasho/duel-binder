@@ -1,0 +1,4 @@
+/* The renderer's styles. Tailwind scans the build root (src/phone) by default; the phone also
+   renders the renderer's pages and components. */
+@import '../renderer/src/index.css';
+@source "../renderer/src";

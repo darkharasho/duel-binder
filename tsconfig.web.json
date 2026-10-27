@@ -8,6 +8,7 @@
     "tests/renderer/**/*",
     "src/preload/*.d.ts"
   ],
+  "exclude": ["tests/renderer/phone-*", "tests/renderer/phoneFakes.ts"],
   "compilerOptions": {
     "composite": true,
     "jsx": "react-jsx",

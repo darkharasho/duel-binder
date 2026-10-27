@@ -13,8 +13,8 @@ export function createSyncTriggers(deps: {
   sync(): Promise<unknown>
   online(): boolean
   on(event: 'online' | 'visible', cb: () => void): () => void
-  setTimer: typeof setTimeout
-  clearTimer: typeof clearTimeout
+  setTimer: (fn: () => void, ms: number) => ReturnType<typeof setTimeout>
+  clearTimer: (timer: ReturnType<typeof setTimeout>) => void
   /** Whether the page is on screen; the periodic sync skips while it isn't. Defaults to true. */
   visible?(): boolean
 }): { afterAdd(): void; dispose(): void } {

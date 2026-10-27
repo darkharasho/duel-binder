@@ -12,6 +12,7 @@ import { Input } from '@/components/ui/input'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { api, queryKeys } from '@/lib/api'
 import { matchesLanguage, useLanguageFilter } from '@/lib/languageFilter'
+import { isPhone } from '@/lib/platform'
 import { SetChecklist } from './SetChecklist'
 import { SetsFilterPanel } from './SetsFilterPanel'
 import { SetsList } from './SetsList'
@@ -96,7 +97,10 @@ interface SetsPageProps {
 }
 
 export function SetsPage({ onAddCard, onAddMissing }: SetsPageProps): React.JSX.Element {
-  const [view, setView] = useState<View>(readView)
+  const [storedView, setView] = useState<View>(readView)
+  // The phone is too narrow for the grid's columns, so it always lists sets in one column.
+  const phone = isPhone()
+  const view: View = phone ? 'list' : storedView
   const [mode, setMode] = useState<CountMode>(readMode)
   const [filter, setFilterState] = useState<SetFilter>(readFilter)
   const [types, setTypes] = useState<SetType[]>(readTypes)
@@ -207,7 +211,7 @@ export function SetsPage({ onAddCard, onAddMissing }: SetsPageProps): React.JSX.
           )}
         </div>
         <div className="flex flex-wrap items-center gap-2 border-b border-white/[0.08] pb-2">
-          <div className="relative w-56">
+          <div className="relative w-56 max-md:w-auto max-md:min-w-0 max-md:flex-1">
             <Search
               className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
               aria-hidden
@@ -237,20 +241,22 @@ export function SetsPage({ onAddCard, onAddMissing }: SetsPageProps): React.JSX.
                 </span>
               )}
             </Button>
-            <ToggleGroup
-              type="single"
-              variant="outline"
-              size="sm"
-              value={view}
-              onValueChange={changeView}
-            >
-              <ToggleGroupItem value="list" aria-label="List view">
-                <List />
-              </ToggleGroupItem>
-              <ToggleGroupItem value="grid" aria-label="Grid view">
-                <LayoutGrid />
-              </ToggleGroupItem>
-            </ToggleGroup>
+            {!phone && (
+              <ToggleGroup
+                type="single"
+                variant="outline"
+                size="sm"
+                value={view}
+                onValueChange={changeView}
+              >
+                <ToggleGroupItem value="list" aria-label="List view">
+                  <List />
+                </ToggleGroupItem>
+                <ToggleGroupItem value="grid" aria-label="Grid view">
+                  <LayoutGrid />
+                </ToggleGroupItem>
+              </ToggleGroup>
+            )}
           </div>
         </div>
         {activeCount > 0 && (

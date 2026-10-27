@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowDownAZ, ArrowLeft, ArrowUpAZ, Search } from 'lucide-react'
+import { ArrowDownAZ, ArrowLeft, ArrowUpAZ, Ellipsis, Search } from 'lucide-react'
 import { toast } from 'sonner'
 import type { Language } from '@shared/languages'
 import type {
@@ -18,6 +18,16 @@ import { LanguageTag } from '@/components/LanguageTag'
 import { PageHeader } from '@/components/PageHeader'
 import { listNav } from '@/components/panelNav'
 import { Button } from '@/components/ui/button'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger
+} from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
 import {
   Select,
@@ -31,6 +41,7 @@ import { TooltipProvider } from '@/components/ui/tooltip'
 import { UnderlineTabs } from '@/components/UnderlineTabs'
 import { EntryDetailPanel } from '@/features/collection/EntryDetailPanel'
 import { api, mutationInvalidationKeys, queryKeys } from '@/lib/api'
+import { isPhone } from '@/lib/platform'
 import { createSerialQueue } from '@/lib/serialQueue'
 import { cn } from '@/lib/utils'
 import { BulkMode } from './BulkMode'
@@ -289,6 +300,12 @@ export function SetChecklist({
   }
 
   const progress = progressFor(data.set, mode)
+  // On the phone the count mode and bulk add move into a "⋯" menu to fit the width.
+  const phone = isPhone()
+  const toggleBulk = (): void => {
+    setBulk(!bulk)
+    setFrozen(null)
+  }
 
   const open = (t: Tile): void => {
     setOpenKey(t.key)
@@ -325,9 +342,9 @@ export function SetChecklist({
           </div>
           <div className="flex flex-wrap items-end gap-3 border-b border-white/[0.08]">
             <UnderlineTabs label="Show" value={filter} options={FILTERS} onChange={setFilter} />
-            <div className="ml-auto flex flex-wrap items-center gap-3 pb-2">
+            <div className="ml-auto flex flex-wrap items-center gap-3 pb-2 max-md:ml-0 max-md:w-full max-md:gap-2">
               {!bulk && (
-                <div className="relative w-52">
+                <div className="relative w-52 max-md:w-full">
                   <Search
                     className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
                     aria-hidden
@@ -370,31 +387,53 @@ export function SetChecklist({
                   {sort.dir === 'asc' ? <ArrowUpAZ /> : <ArrowDownAZ />}
                 </Button>
               </div>
-              <ToggleGroup
-                type="single"
-                variant="outline"
-                size="sm"
-                value={mode}
-                onValueChange={(m) => {
-                  if (m === 'cards' || m === 'rarities') onModeChange(m)
-                }}
-              >
-                <ToggleGroupItem value="cards">Each card once</ToggleGroupItem>
-                <ToggleGroupItem value="rarities">Every rarity</ToggleGroupItem>
-              </ToggleGroup>
+              {!phone && (
+                <ToggleGroup
+                  type="single"
+                  variant="outline"
+                  size="sm"
+                  value={mode}
+                  onValueChange={(m) => {
+                    if (m === 'cards' || m === 'rarities') onModeChange(m)
+                  }}
+                >
+                  <ToggleGroupItem value="cards">Each card once</ToggleGroupItem>
+                  <ToggleGroupItem value="rarities">Every rarity</ToggleGroupItem>
+                </ToggleGroup>
+              )}
               {bulk && (
                 <span className="text-sm text-muted-foreground">Changes save as you click.</span>
               )}
-              <Button
-                variant={bulk ? 'default' : 'outline'}
-                size="sm"
-                onClick={() => {
-                  setBulk(!bulk)
-                  setFrozen(null)
-                }}
-              >
-                {bulk ? 'Done' : 'Bulk add'}
-              </Button>
+              {(!phone || bulk) && (
+                <Button variant={bulk ? 'default' : 'outline'} size="sm" onClick={toggleBulk}>
+                  {bulk ? 'Done' : 'Bulk add'}
+                </Button>
+              )}
+              {phone && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="icon-sm" aria-label="More tools">
+                      <Ellipsis />
+                    </Button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuLabel>Count</DropdownMenuLabel>
+                    <DropdownMenuRadioGroup
+                      value={mode}
+                      onValueChange={(m) => {
+                        if (m === 'cards' || m === 'rarities') onModeChange(m)
+                      }}
+                    >
+                      <DropdownMenuRadioItem value="cards">Each card once</DropdownMenuRadioItem>
+                      <DropdownMenuRadioItem value="rarities">Every rarity</DropdownMenuRadioItem>
+                    </DropdownMenuRadioGroup>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem onSelect={toggleBulk}>
+                      {bulk ? 'Done' : 'Bulk add'}
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
             </div>
           </div>
         </PageHeader>
@@ -432,7 +471,7 @@ export function SetChecklist({
         {bulk ? (
           <BulkMode cards={bulkCards} pending={pending} adjust={adjust} />
         ) : (
-          <ul className="grid grid-cols-[repeat(auto-fill,minmax(7.5rem,1fr))] gap-3">
+          <ul className="grid grid-cols-[repeat(auto-fill,minmax(7.5rem,1fr))] gap-3 max-md:grid-cols-3 max-md:gap-1.5">
             {tiles.map((t) => {
               const owned = t.owned > 0
               return (

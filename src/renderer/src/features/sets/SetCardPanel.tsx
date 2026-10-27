@@ -7,6 +7,7 @@ import type { PanelNav } from '@/components/panelNav'
 import { Button } from '@/components/ui/button'
 import { SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { api, queryKeys } from '@/lib/api'
+import { isPhone } from '@/lib/platform'
 import { BulkRow } from './BulkRow'
 
 interface SetCardPanelProps {
@@ -56,6 +57,19 @@ export function SetCardPanel({
     ? (copies.data ?? []).find((c) => c.printing.id === focus.defaultPrintingId)
     : undefined
 
+  const copiesSection = (
+    <section aria-label="Copies in this set" className="space-y-2">
+      <h3 className="text-sm font-medium">
+        {card.owned > 0 ? `You have ${card.owned}` : 'You have none yet'}
+      </h3>
+      {rarities.map((r) => (
+        <BulkRow key={r.rarity} card={card} rarity={r} busy={busy} onAdjust={onAdjust} showPrice />
+      ))}
+    </section>
+  )
+  // The phone's full-screen sheet is long, so its steppers come before the card text.
+  const phone = isPhone()
+
   return (
     <>
       <SheetHeader>
@@ -76,23 +90,9 @@ export function SetCardPanel({
           <PanelPrice entry={ownedEntry} price={price} label={priceLabel} />
         </div>
 
+        {phone && copiesSection}
         <CardDetails card={info} />
-
-        <section aria-label="Copies in this set" className="space-y-2">
-          <h3 className="text-sm font-medium">
-            {card.owned > 0 ? `You have ${card.owned}` : 'You have none yet'}
-          </h3>
-          {rarities.map((r) => (
-            <BulkRow
-              key={r.rarity}
-              card={card}
-              rarity={r}
-              busy={busy}
-              onAdjust={onAdjust}
-              showPrice
-            />
-          ))}
-        </section>
+        {!phone && copiesSection}
 
         {focus && (
           <Button

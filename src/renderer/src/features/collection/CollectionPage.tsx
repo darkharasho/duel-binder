@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from 'react'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
-import { LayoutGrid, SlidersHorizontal, Table2 } from 'lucide-react'
+import { ArrowLeft, LayoutGrid, SlidersHorizontal, Table2 } from 'lucide-react'
 import { LANGUAGES } from '@shared/languages'
 import type { CollectionFilters, EntryView, Friend, SortKey } from '@shared/types'
 import { cardArtUrl, useArtWash } from '@/components/artWashContext'
@@ -60,13 +60,16 @@ interface Props {
   /** Shows this friend's collection read-only instead of your own. */
   friend?: Friend
   onBackToMine?: () => void
+  /** Returns to the friend list; the phone passes it, as its binder replaces the list. */
+  onBackToFriends?: () => void
 }
 
 export function CollectionPage({
   initialEntryId,
   onAddCard,
   friend,
-  onBackToMine
+  onBackToMine,
+  onBackToFriends
 }: Props): React.JSX.Element {
   const [pageFilters, setFilters] = useState<CollectionFilters>(DEFAULT_FILTERS)
   const [languageFilter, setLanguageFilter] = useLanguageFilter()
@@ -228,7 +231,13 @@ export function CollectionPage({
           </header>
 
           {friend && (
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-3 max-md:flex-wrap max-md:gap-2">
+              {onBackToFriends && (
+                <Button variant="ghost" size="sm" onClick={onBackToFriends}>
+                  <ArrowLeft />
+                  All friends
+                </Button>
+              )}
               <p className="text-sm text-muted-foreground">
                 Viewing {friendName}&apos;s collection
               </p>
@@ -245,6 +254,7 @@ export function CollectionPage({
           <Sheet open={filtersOpen} onOpenChange={setFiltersOpen}>
             <SheetContent
               side="bottom"
+              data-layout="bottom-sheet"
               className="max-h-[85dvh] overflow-y-auto rounded-t-3xl border-white/[0.08] pb-[max(1rem,env(safe-area-inset-bottom))]"
             >
               <SheetHeader>

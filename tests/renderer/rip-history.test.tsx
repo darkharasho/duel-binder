@@ -148,8 +148,17 @@ describe('SessionSummary', () => {
     motion(false)
     const { unmount } = renderWithProviders(<SessionSummary session={detail()} />)
     expect(screen.getByTestId('rip-summary-rays')).toBeInTheDocument()
-    expect(screen.getAllByTestId('rip-summary-spark').length).toBeGreaterThan(0)
+    expect(screen.getAllByTestId('rip-summary-spark')).toHaveLength(12)
+    expect(screen.getByTestId('rip-summary-hero').innerHTML).toContain('rip-shake')
     unmount()
+    const big = renderWithProviders(
+      <SessionSummary session={detail({ packs: [[card('Super Rare', 0, 'Plain Super')]] })} />
+    )
+    expect(screen.getByTestId('rip-summary-hero')).toHaveAttribute('data-tier', 'big')
+    expect(screen.getByTestId('rip-summary-rays')).toBeInTheDocument()
+    expect(screen.getAllByTestId('rip-summary-spark')).toHaveLength(6)
+    expect(screen.getByTestId('rip-summary-hero').innerHTML).not.toContain('rip-shake')
+    big.unmount()
     renderWithProviders(
       <SessionSummary session={detail({ packs: [[card('Rare', 0, 'Plain Rare')]] })} />
     )
@@ -173,6 +182,11 @@ describe('SessionSummary', () => {
     expect(screen.queryByRole('button', { name: /rip \d+ more/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /pick another set/i })).not.toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: /see all cards/i }))
+    // The hero stays laid out (not display:none), so it doesn't replay when it comes back.
+    const stage = screen.getByTestId('rip-summary-fanfare')
+    expect(stage).toBeInTheDocument()
+    expect(stage).toHaveClass('invisible')
+    expect(stage).not.toHaveAttribute('hidden')
     expect(screen.getByText('Pack 1')).toBeInTheDocument()
     expect(screen.getByText('Pack 2')).toBeInTheDocument()
     expect(

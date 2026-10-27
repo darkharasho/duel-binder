@@ -694,18 +694,6 @@ export function PackOpener({
         actionable && 'cursor-pointer'
       )}
     >
-      {front && frontTier !== 'none' && (
-        <div
-          key={frontKey}
-          aria-hidden
-          data-testid="rip-bloom"
-          style={{
-            backgroundImage: `radial-gradient(circle at 50% 45%, ${hitColor}55 0%, transparent 62%)`
-          }}
-          className="pointer-events-none absolute inset-0 -z-10 animate-[rip-bloom_600ms_ease-out_both] motion-reduce:animate-none"
-        />
-      )}
-
       <div className="relative z-40 flex h-11 shrink-0 items-center justify-between gap-4 px-5 text-sm">
         <span className="min-w-0 truncate">
           <span className="font-semibold">
@@ -742,6 +730,21 @@ export function PackOpener({
           style={{ containerType: 'size' }}
           className="absolute inset-0"
         >
+          {front && frontTier !== 'none' && (
+            <div
+              key={frontKey}
+              aria-hidden
+              data-testid="rip-bloom"
+              style={{
+                width: `calc(${CARD_H} * 1.5)`,
+                height: `calc(${CARD_H} * 1.5)`,
+                left: `calc(${CARD_LEFT} + ${CARD_W} / 2 - ${CARD_H} * 0.75)`,
+                top: `calc(${CARD_TOP} + ${CARD_H} / 2 - ${CARD_H} * 0.75)`,
+                backgroundImage: `radial-gradient(circle, ${hitColor}55 0%, transparent 62%)`
+              }}
+              className="pointer-events-none absolute animate-[rip-bloom_600ms_ease-out_both] motion-reduce:animate-none"
+            />
+          )}
           {phase === 'error' ? (
             <div className="flex size-full flex-col items-center justify-center gap-3 text-sm">
               <p className="text-white/60">Couldn&apos;t open this pack.</p>

@@ -72,7 +72,7 @@ describe('statBoxes', () => {
   it('is ATK and LINK-N for a Link, nothing for a trap', () => {
     expect(statBoxes(row({ frameType: 'link', linkval: 4, atk: 3000, def: null }))).toEqual([
       { label: 'ATK', value: '3000' },
-      { label: 'LINK', value: 'LINK-4' }
+      { label: 'LINK', value: '4' }
     ])
     expect(statBoxes(row({ type: 'Trap Card', frameType: 'trap' }))).toEqual([])
   })

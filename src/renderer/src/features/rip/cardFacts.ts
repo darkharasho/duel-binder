@@ -51,11 +51,11 @@ export function levelLabel(row: InfoRow): string | null {
 /** A printed stat: "?" when it's unknown (stored as null or negative). */
 export const formatStat = (v: number | null): string => (v == null || v < 0 ? '?' : String(v))
 
-/** The stat boxes: ATK and DEF, ATK and LINK-N for a Link, none for spells and traps. */
+/** The stat boxes: ATK and DEF, ATK and LINK for a Link, none for spells and traps. */
 export function statBoxes(row: InfoRow): { label: string; value: string }[] {
   if (isSpellOrTrap(row)) return []
   const atk = { label: 'ATK', value: formatStat(row.atk) }
-  if (isLink(row)) return [atk, { label: 'LINK', value: `LINK-${row.linkval ?? '?'}` }]
+  if (isLink(row)) return [atk, { label: 'LINK', value: String(row.linkval ?? '?') }]
   return [atk, { label: 'DEF', value: formatStat(row.def) }]
 }
 

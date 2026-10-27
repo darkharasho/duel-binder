@@ -260,8 +260,12 @@ export function SessionSummary({
         {/* A size container, absolutely placed: a flex item with size containment reads 0 cqh. */}
         <div className="relative min-h-0 flex-1">
           <div style={{ containerType: 'size' }} className="absolute inset-0">
-            {/* Kept mounted under the card list, so coming back doesn't replay the landing. */}
-            <div hidden={showAll} className="size-full">
+            {/* Kept laid out, only invisible, under the card list: display:none would cancel
+                the animations, and showing it again would replay the whole fanfare. */}
+            <div
+              data-testid="rip-summary-fanfare"
+              className={cn('size-full', showAll && 'invisible')}
+            >
               {hero ? (
                 <Hero pull={hero} cards={all} />
               ) : (
@@ -273,7 +277,7 @@ export function SessionSummary({
             {showAll && (
               <div
                 data-testid="rip-summary-all"
-                className="flex size-full flex-col gap-4 overflow-y-auto px-5 py-2"
+                className="absolute inset-0 flex flex-col gap-4 overflow-y-auto px-5 py-2"
               >
                 {session.packs.map((pack, i) => (
                   <section key={i}>

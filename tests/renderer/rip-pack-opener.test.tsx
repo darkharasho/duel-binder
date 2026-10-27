@@ -894,7 +894,7 @@ describe('PackOpener', () => {
         within(info())
           .getAllByTestId('rip-stat')
           .map((s) => s.textContent)
-      ).toEqual(['ATK2300', 'LINKLINK-3'])
+      ).toEqual(['ATK2300', 'LINK3'])
       expect(info()).not.toHaveTextContent('DEF')
       space()
       await waitFor(() => expect(info()).toHaveTextContent('Warrior / Xyz'))

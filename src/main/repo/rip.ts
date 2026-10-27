@@ -1,5 +1,6 @@
 import type { SqlDb } from '../db/sql'
 import { listSets } from './sets'
+import { setPrefix } from '../../shared/sets'
 import { compareRarity, revealTier } from '../../shared/rip/rarity'
 import { RIP_SET_LAYOUTS, layoutFor } from '../../shared/rip/layouts'
 import { canFill, mulberry32, rollPack } from '../../shared/rip/roll'
@@ -90,13 +91,24 @@ export function startRip(
   if (!Number.isInteger(packCount) || packCount < 1 || packCount > MAX_PACKS) {
     throw new Error(`Pack count must be a whole number from 1 to ${MAX_PACKS}`)
   }
-  const set = ripSets(db, layouts).find((s) => s.setName === setName)
-  if (!set) throw new Error(`${setName} can't be ripped`)
+  // Validate only this set: building every set's summary (ownership counts, covers) costs ~1 s.
+  const row = db
+    .prepare(
+      `SELECT s.set_code AS s_code, MIN(p.set_code) AS min_code
+       FROM card_printings p LEFT JOIN sets s ON s.language = p.language AND s.set_name = p.set_name
+       WHERE p.language = 'en' AND p.contributed = 0 AND p.set_name = ?`
+    )
+    .get(setName) as { s_code: string | null; min_code: string | null } | undefined
+  const setCode = row?.s_code ?? (row?.min_code ? setPrefix(row.min_code) : null)
+  const layout = setCode ? layoutFor(setCode, layouts) : null
+  if (!setCode || !layout || !canFill(layout, ripPool(db, setName))) {
+    throw new Error(`${setName} can't be ripped`)
+  }
   const info = db
     .prepare(
       'INSERT INTO rip_sessions (set_name, set_code, pack_count, started_at) VALUES (?, ?, ?, ?)'
     )
-    .run(set.setName, set.setCode, packCount, now.toISOString())
+    .run(setName, setCode, packCount, now.toISOString())
   return Number(info.lastInsertRowid)
 }
 

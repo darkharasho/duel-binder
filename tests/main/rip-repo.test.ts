@@ -85,6 +85,8 @@ describe('rip repo', () => {
   it('rejects sets that cannot be ripped', () => {
     expect(() => startRip(db, OTHER, 1, now, LAYOUTS)).toThrow()
     expect(() => startRip(db, 'Nope', 1, now, LAYOUTS)).toThrow()
+    expect(() => startRip(db, SET, 1, now, {})).toThrow() // no layout for the set
+    expect(() => startRip(db, 'Fr Only', 1, now, LAYOUTS)).toThrow()
   })
 
   it('opens and saves packs up to the count', () => {

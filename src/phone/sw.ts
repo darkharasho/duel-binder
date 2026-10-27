@@ -26,9 +26,34 @@ const CACHE = 'scan-__SCAN_BUILD__'
 const IMAGES = 'scan-img'
 const IMAGE_LIMIT = 2000
 const PAGE = '/scan/'
+const CORES = '/app/scan/ocr/core/'
+
+/**
+ * The OCR core this phone's tesseract.js will load. It decides with wasm-feature-detect's
+ * relaxedSimd() and simd(); these are the same probe modules (wasm-feature-detect 1.x).
+ */
+function ocrCore(): string {
+  const valid = (bytes: number[]): boolean => {
+    try {
+      return WebAssembly.validate(new Uint8Array(bytes))
+    } catch {
+      return false
+    }
+  }
+  const relaxedSimd = valid([
+    0, 97, 115, 109, 1, 0, 0, 0, 1, 5, 1, 96, 0, 1, 123, 3, 2, 1, 0, 10, 15, 1, 13, 0, 65, 1, 253,
+    15, 65, 2, 253, 15, 253, 128, 2, 11
+  ])
+  const simd = valid([
+    0, 97, 115, 109, 1, 0, 0, 0, 1, 5, 1, 96, 0, 1, 123, 3, 2, 1, 0, 10, 10, 1, 8, 0, 65, 0, 253,
+    15, 253, 98, 11
+  ])
+  const variant = relaxedSimd ? 'relaxedsimd-' : simd ? 'simd-' : ''
+  return `${CORES}tesseract-core-${variant}lstm.wasm.js`
+}
 
 sw.addEventListener('install', (e) => {
-  e.waitUntil(caches.open(CACHE).then((c) => c.addAll([...PRECACHE, PAGE])))
+  e.waitUntil(caches.open(CACHE).then((c) => c.addAll([...PRECACHE, ocrCore(), PAGE])))
 })
 
 sw.addEventListener('activate', (e) => {
@@ -45,8 +70,16 @@ sw.addEventListener('activate', (e) => {
   )
 })
 
+/** The app's files: from the cache, else the network, kept for next time (and offline). */
 async function cacheFirst(req: Request): Promise<Response> {
-  return (await caches.match(req)) ?? fetch(req)
+  const hit = await caches.match(req)
+  if (hit) return hit
+  const res = await fetch(req)
+  if (res.ok) {
+    const copy = res.clone()
+    await caches.open(CACHE).then((c) => c.put(req, copy))
+  }
+  return res
 }
 
 async function networkFirstPage(req: Request): Promise<Response> {

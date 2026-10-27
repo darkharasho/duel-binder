@@ -10,17 +10,35 @@ import tailwindcss from '@tailwindcss/vite'
 const BASE = '/app/scan/'
 const PUBLIC_DIR = resolve('src/phone/public')
 const OCR_MODELS = ['eng', 'jpn', 'kor', 'chi_sim']
-/** The OCR models the service worker leaves for tesseract to fetch (and keep) on first use. */
-const NOT_PRECACHED = /^ocr\/lang\/(jpn|kor|chi_sim)\b/
+/**
+ * Built files the service worker doesn't install up front:
+ * - the non-English OCR models: tesseract fetches (and keeps) one on first use;
+ * - the three OCR cores: sw.ts installs only the one this phone's tesseract will load;
+ * - sqlite's OPFS proxy and Worker1 scripts: the data worker uses the SAH pool VFS, and the page
+ *   isn't cross-origin isolated, so sqlite never loads them;
+ * - the legacy .woff fonts: every browser that runs the app takes the .woff2.
+ * Anything under /app/scan/ that is fetched anyway is cached on first use.
+ */
+const NOT_PRECACHED = [
+  /^ocr\/lang\/(jpn|kor|chi_sim)\b/,
+  /^ocr\/core\//,
+  /^assets\/sqlite3-(worker1|opfs-async-proxy)-[^/]*\.js$/,
+  /\.woff$/
+]
 const { version } = JSON.parse(readFileSync(resolve('package.json'), 'utf8')) as { version: string }
 
 const STUB = '\0node-builtin-stub'
 
 /**
- * Fails the build when the app's own code (anything outside node_modules) imports a Node builtin,
- * Electron or better-sqlite3, naming the importer. Packages (OpenCV's Emscripten build) reach for
- * `fs` and `path` only inside their Node branch; those get an empty module, as Vite's own browser
- * stub would. Electron and better-sqlite3 fail from anywhere.
+ * Packages allowed to import Node builtins, which get an empty module: OpenCV's Emscripten build
+ * reaches for `fs` and `path` only inside its Node branch.
+ */
+const BUILTIN_STUB_IMPORTERS = [/[\\/]node_modules[\\/]@techstark[\\/]opencv-js[\\/]/]
+
+/**
+ * Fails the build when anything imports a Node builtin, Electron or better-sqlite3, naming the
+ * importer; only the packages in BUILTIN_STUB_IMPORTERS get an empty module for a builtin, with a
+ * warning naming each one.
  */
 export function noNodeBuiltins(): Plugin {
   return {
@@ -33,7 +51,10 @@ export function noNodeBuiltins(): Plugin {
         : bare.split('/')[0]!
       const native = name === 'electron' || name === 'better-sqlite3'
       if (!id.startsWith('node:') && !native && !builtinModules.includes(bare)) return null
-      if (!native && importer && /[\\/]node_modules[\\/]/.test(importer)) return `${STUB}:${bare}`
+      if (!native && importer && BUILTIN_STUB_IMPORTERS.some((re) => re.test(importer))) {
+        this.warn(`"${id}" is an empty module for ${importer} (its Node-only branch)`)
+        return `${STUB}:${bare}`
+      }
       throw new Error(`The phone build can't use "${id}" (imported by ${importer ?? 'an entry'})`)
     },
     load(id) {
@@ -100,7 +121,7 @@ const listFiles = (dir: string): string[] =>
 
 /**
  * Writes the precache list and the build hash into sw.js: every emitted file (and every public
- * file) but sw.js and the non-English OCR models. A new build changes sw.js, so phones update.
+ * file) but sw.js and NOT_PRECACHED. A new build changes sw.js, so phones update.
  */
 function precache(): Plugin {
   return {
@@ -115,7 +136,7 @@ function precache(): Plugin {
         const add = (name: string, body: string | Uint8Array): void => {
           if (name === 'sw.js') return
           hash.update(name).update(body)
-          if (!NOT_PRECACHED.test(name)) names.push(name)
+          if (!NOT_PRECACHED.some((re) => re.test(name))) names.push(name)
         }
         for (const file of Object.values(bundle))
           add(file.fileName, file.type === 'chunk' ? file.code : file.source)

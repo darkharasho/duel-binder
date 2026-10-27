@@ -1,6 +1,7 @@
 import { execFileSync } from 'node:child_process'
 import {
   existsSync,
+  mkdirSync,
   mkdtempSync,
   readdirSync,
   readFileSync,
@@ -31,11 +32,8 @@ let built: string[]
 const text = (rel: string): string => readFileSync(join(OUT, rel), 'utf8')
 
 beforeAll(() => {
-  // Vitest sets NODE_ENV=test, which would make Vite build in dev mode (import.meta.env.DEV).
-  execFileSync('npm', ['run', 'build:phone'], {
-    stdio: 'pipe',
-    env: { ...process.env, NODE_ENV: 'production' }
-  })
+  // Vitest's NODE_ENV=test is passed on: build:phone itself must pin production (no DEV demo).
+  execFileSync('npm', ['run', 'build:phone'], { stdio: 'pipe' })
   built = files(OUT).map((f) => relative(OUT, f).split('\\').join('/'))
 }, 180_000)
 
@@ -122,11 +120,19 @@ describe('phone build', () => {
       delete(r: unknown): Promise<boolean>
     }
 
-    /** Runs the built sw.js against fake caches and fetch, and returns its listeners. */
-    function loadSw(
-      existing: string[] = [],
-      net: { offline: boolean } = { offline: false }
-    ): {
+    /**
+     * Runs the built sw.js against fake caches and fetch, and returns its listeners. `wasm` stands
+     * in for WebAssembly.validate (the SIMD probes); the default is the real one.
+     */
+    function loadSw({
+      existing = [],
+      net = { offline: false },
+      wasm = (bytes: Uint8Array) => WebAssembly.validate(bytes as Uint8Array<ArrayBuffer>)
+    }: {
+      existing?: string[]
+      net?: { offline: boolean }
+      wasm?: (bytes: Uint8Array) => boolean
+    } = {}): {
       on: Record<string, Listener>
       caches: Map<string, FakeCache>
       fetched: string[]
@@ -175,7 +181,8 @@ describe('phone build', () => {
           if (net.offline) throw new TypeError('Failed to fetch')
           return { ok: true, clone: () => 'network copy', body: `network ${keyOf(r)}` }
         },
-        URL
+        URL,
+        WebAssembly: { validate: wasm }
       }
       runInNewContext(text('sw.js'), context)
       return { on, caches, fetched }
@@ -200,23 +207,66 @@ describe('phone build', () => {
       return response === null ? 'not handled' : await response
     }
 
-    it('install precaches every built file but the non-English OCR models, and /scan/', async () => {
-      const sw = loadSw()
+    const CORE = (variant: string): string =>
+      `/app/scan/ocr/core/tesseract-core-${variant}lstm.wasm.js`
+    /** What the precache leaves out (see NOT_PRECACHED in vite.phone.config.ts). */
+    const notPrecached = (f: string): boolean =>
+      f === 'sw.js' ||
+      /^ocr\/lang\/(jpn|kor|chi_sim)\b/.test(f) ||
+      f.startsWith('ocr/core/') ||
+      /^assets\/sqlite3-(worker1|opfs-async-proxy)-[^/]*\.js$/.test(f) ||
+      f.endsWith('.woff')
+    /** The relaxed-SIMD probe holds the relaxed opcode (0xfd 0x80 0x02); the SIMD one doesn't. */
+    const isRelaxedProbe = (b: Uint8Array): boolean =>
+      [...b].some((x, i) => x === 253 && b[i + 1] === 128 && b[i + 2] === 2)
+
+    async function installed(sw: ReturnType<typeof loadSw>): Promise<string[]> {
       await lifecycle(sw.on, 'install')
-      const [name] = [...sw.caches.keys()]
+      const name = [...sw.caches.keys()].find((n) => n !== 'scan-img')!
       expect(name).toMatch(/^scan-[0-9a-f]{8,}$/)
-      const added = sw.caches.get(name!)!.added
-      expect(added).toContain('/scan/')
-      for (const f of built.filter(
-        (f) => f !== 'sw.js' && !/^ocr\/lang\/(jpn|kor|chi_sim)/.test(f)
-      ))
-        expect(added, f).toContain(`/app/scan/${f}`)
-      for (const model of ['jpn', 'kor', 'chi_sim'])
-        expect(added.some((u) => u.includes(`ocr/lang/${model}`))).toBe(false)
+      return sw.caches.get(name)!.added
+    }
+
+    it('install precaches the app, one OCR core and /scan/, and leaves out unused files', async () => {
+      const added = await installed(loadSw({ wasm: () => true }))
+      const expected = built.filter((f) => !notPrecached(f)).map((f) => `/app/scan/${f}`)
+      expect([...added].sort()).toEqual([...expected, CORE('relaxedsimd-'), '/scan/'].sort())
+      expect(added.some((u) => u.endsWith('.woff'))).toBe(false)
+      expect(added.some((u) => /sqlite3-(worker1|opfs-async-proxy)/.test(u))).toBe(false)
+      // What it leaves out is still built: fetched (and cached) on first use.
+      expect(built.some((f) => f.endsWith('.woff'))).toBe(true)
+      expect(built.some((f) => f.startsWith('assets/sqlite3-worker1-'))).toBe(true)
+    })
+
+    it.each([
+      ['relaxed SIMD', () => true, 'relaxedsimd-'],
+      ['SIMD only', (b: Uint8Array) => !isRelaxedProbe(b), 'simd-'],
+      ['no SIMD', () => false, '']
+    ])('install picks the core tesseract will load: %s', async (_name, wasm, variant) => {
+      const added = await installed(loadSw({ wasm }))
+      expect(added.filter((u) => u.includes('/ocr/core/'))).toEqual([CORE(variant)])
+    })
+
+    it("install's probes agree with wasm-feature-detect, which tesseract.js uses", async () => {
+      const { simd, relaxedSimd } = await import('wasm-feature-detect')
+      const variant = (await relaxedSimd()) ? 'relaxedsimd-' : (await simd()) ? 'simd-' : ''
+      const added = await installed(loadSw())
+      expect(added.filter((u) => u.includes('/ocr/core/'))).toEqual([CORE(variant)])
+    })
+
+    it('app files that were not precached are cached on first use', async () => {
+      const sw = loadSw({ wasm: () => false })
+      await installed(sw)
+      const font = built.find((f) => f.endsWith('.woff'))!
+      for (const u of [CORE('simd-'), `/app/scan/${font}`]) {
+        expect(await fetchEvent(sw.on, u)).toMatchObject({ body: `network https://app.test${u}` })
+        expect(await fetchEvent(sw.on, u)).toBe('network copy')
+      }
+      expect(sw.fetched).toHaveLength(2)
     })
 
     it('activate deletes the old scan caches and keeps the image cache', async () => {
-      const sw = loadSw(['scan-old', 'scan-img', 'other'])
+      const sw = loadSw({ existing: ['scan-old', 'scan-img', 'other'] })
       await lifecycle(sw.on, 'install')
       await lifecycle(sw.on, 'activate')
       const names = [...sw.caches.keys()]
@@ -243,7 +293,7 @@ describe('phone build', () => {
 
     it('falls back to the cached page offline', async () => {
       const net = { offline: false }
-      const sw = loadSw([], net)
+      const sw = loadSw({ net })
       await lifecycle(sw.on, 'install')
       net.offline = true
       expect(await fetchEvent(sw.on, '/scan/', 'navigate')).toBe('cached /scan/')
@@ -256,6 +306,18 @@ describe('phone build', () => {
       expect(sw.caches.get('scan-img')!.entries.size).toBe(1)
       await fetchEvent(sw.on, '/img/small/123.jpg')
       expect(sw.fetched).toHaveLength(1)
+    })
+
+    it('keeps at most 2000 card images, dropping the oldest', async () => {
+      const sw = loadSw({ existing: ['scan-img'] })
+      const images = sw.caches.get('scan-img')!.entries
+      for (let i = 0; i < 2001; i++) images.set(`https://app.test/img/small/${i}.jpg`, 'old')
+      await fetchEvent(sw.on, '/img/small/new.jpg')
+      expect(images.size).toBe(2000)
+      expect(images.has('https://app.test/img/small/0.jpg')).toBe(false)
+      expect(images.has('https://app.test/img/small/1.jpg')).toBe(false)
+      expect(images.has('https://app.test/img/small/2.jpg')).toBe(true)
+      expect(images.has('https://app.test/img/small/new.jpg')).toBe(true)
     })
   })
 
@@ -274,6 +336,29 @@ describe('phone build', () => {
         })
       ).rejects.toThrow(/node:fs/)
       expect(existsSync(join(dir, 'dist'))).toBe(false)
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('a package outside the allow-list importing a Node builtin fails the build', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'phone-build-'))
+    try {
+      const pkg = join(dir, 'node_modules', 'some-pkg')
+      mkdirSync(pkg, { recursive: true })
+      writeFileSync(join(pkg, 'package.json'), '{"name":"some-pkg","main":"index.js"}')
+      writeFileSync(join(pkg, 'index.js'), "import fs from 'fs'\nexport default fs\n")
+      const entry = join(dir, 'entry.js')
+      writeFileSync(entry, "import fs from 'some-pkg'\nconsole.log(fs)\n")
+      await expect(
+        build({
+          configFile: false,
+          root: dir,
+          logLevel: 'silent',
+          plugins: [noNodeBuiltins()],
+          build: { write: false, rollupOptions: { input: entry } }
+        })
+      ).rejects.toThrow(/"fs" \(imported by [^)]*some-pkg/)
     } finally {
       rmSync(dir, { recursive: true, force: true })
     }

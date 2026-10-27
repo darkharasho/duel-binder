@@ -29,7 +29,7 @@ export const RIP_TIERS: readonly string[] = [
 const UNKNOWN_RANK = 0.5
 
 /** A rarity without its trailing variant, e.g. "Ultra Rare" for "Ultra Rare (Pharaoh's Rare)". */
-const baseOf = (r: string): string => r.replace(/\s*\(.*\)\s*$/, '')
+export const baseOf = (r: string): string => r.replace(/\s*\(.*\)\s*$/, '')
 
 /** Index of a rarity's base in RIP_TIERS, or -1 when it isn't a known tier. */
 const tierIndex = (r: string): number => RIP_TIERS.indexOf(baseOf(r))

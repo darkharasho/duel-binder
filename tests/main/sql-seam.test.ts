@@ -8,9 +8,11 @@ import { listSets } from '../../src/main/repo/sets'
 const root = join(__dirname, '../../src')
 const files = [
   ...readdirSync(join(root, 'main/repo')).map((f) => join(root, 'main/repo', f)),
-  ...['meta', 'schema', 'sql'].map((f) => join(root, 'main/db', `${f}.ts`)),
+  ...['meta', 'schema', 'sql', 'migrateSql'].map((f) => join(root, 'main/db', `${f}.ts`)),
   join(root, 'shared/setImages.ts'),
-  ...['client', 'refresh'].map((f) => join(root, 'main/prices', `${f}.ts`))
+  ...['client', 'refresh', 'candidates'].map((f) => join(root, 'main/prices', `${f}.ts`)),
+  ...['apply', 'upsert'].map((f) => join(root, 'main/catalog', `${f}.ts`)),
+  ...['engine', 'client', 'localSync'].map((f) => join(root, 'main/cloud', `${f}.ts`))
 ]
 
 describe('SqlDb seam', () => {

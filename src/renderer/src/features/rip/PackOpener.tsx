@@ -4,11 +4,13 @@ import { TiltCard } from '@/components/TiltCard'
 import { Button } from '@/components/ui/button'
 import { api, queryKeys } from '@/lib/api'
 import { cardImageSrc, setImageSrc } from '@/lib/images'
-import { rarityColor, rarityTextColor } from '@/lib/rarityColors'
+import { rarityColor } from '@/lib/rarityColors'
 import { cn } from '@/lib/utils'
 import { baseOf, compareRarity, revealTier } from '../../../../shared/rip/rarity'
 import type { RevealTier, RipCard, RipSet } from '../../../../shared/rip/types'
+import { CardInfo, RarityBadge } from './CardInfo'
 import { HoloCard } from './HoloCard'
+import { STAGE, prefersReducedMotion } from './stage'
 import { initialOpener, openerReducer } from './opener'
 
 /** How long a hit holds the front before the next move is taken, so a fast Space can't skip it. */
@@ -17,8 +19,8 @@ const HOLD_MS: Record<RevealTier, number> = { none: 0, rare: 300, big: 800, huge
 const TEAR_MS = 550
 /** The sent card flying down into the row; the stack moving up takes as long. */
 const SETTLE_MS = 420
-/** The outgoing caption's fade. */
-const CAPTION_OUT_MS = 200
+/** The outgoing info panel's fade. */
+const INFO_OUT_MS = 200
 /** Between cards when skipping to the hit. */
 const SKIP_STEP_MS = 330
 /** A beat on the next sealed pack before it tears itself open. */
@@ -32,19 +34,25 @@ const TIER_LEVEL: Record<RevealTier, number> = { none: 0, rare: 1, big: 2, huge:
 const GLOW_PX: Record<RevealTier, number> = { none: 0, rare: 26, big: 48, huge: 80 }
 const EASE = 'cubic-bezier(.25,.8,.25,1)'
 
+/** The info panel beside the front card: 400px where it fits, down to 280px in a narrow window. */
+const PANEL_W = 'clamp(280px, 100cqw - 440px, 400px)'
+/** Between the card and the panel. */
+const PANEL_GAP = 44
 /**
  * The front card's height, from the middle of the stage (a size container), the least of:
  * - its height less room above for the edges (7px a card, four deep) and a hit's scale-up, and
  *   below for the scale-up;
  * - 600px, so a big window doesn't blow the art up past its size;
- * - what leaves room beside it, in half the width, for the 44px gap, the 224px caption and a margin.
+ * - what leaves room across the width for the 44px gap, the panel and 32px margins each side.
  */
 // Wrapped in calc() so it's also usable where a bare min() isn't (and jsdom keeps it).
-const CARD_H = 'calc(min(100cqh - 58px, 600px, (50cqw - 280px) * 1228 / 421))'
+const CARD_H = `calc(min(100cqh - 58px, 600px, (100cqw - ${PANEL_GAP + 64}px - ${PANEL_W}) * 614 / 421))`
 /** Centred in the space left over, but never closer than 32px to the top bar. */
 const CARD_TOP = `calc(max(32px, (100cqh - ${CARD_H}) / 2))`
 /** Card width from its height (421×614). */
 const CARD_W = `calc(${CARD_H} * 421 / 614)`
+/** The card and panel side by side, centred together: the card sits left of centre. */
+const CARD_LEFT = `calc(50% - (${CARD_W} + ${PANEL_GAP}px + ${PANEL_W}) / 2)`
 
 /** The big hits' ring of sparkles, flying outward from round the card. */
 const SPARKS = Array.from({ length: 10 }, (_, i) => {
@@ -95,10 +103,6 @@ const CRIMP =
   'repeating-linear-gradient(90deg, rgb(255 255 255 / 0.55) 0 2px, rgb(0 0 0 / 0.14) 2px 4px), linear-gradient(180deg, #f4f5f8, #c9ccd3)'
 const SHEEN =
   'linear-gradient(110deg, transparent 38%, rgb(255 255 255 / 0.6) 50%, transparent 62%)'
-const STAGE = 'radial-gradient(ellipse at 50% 42%, #1f1f2a 0%, #0c0c11 72%)'
-
-const prefersReducedMotion = (): boolean =>
-  window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false
 
 /**
  * Space belongs to whatever has focus when that's an enabled control or a text field. A disabled
@@ -110,29 +114,6 @@ const ownsSpace = (target: EventTarget | null): boolean => {
     'input, textarea, select, button, a, [contenteditable=""], [contenteditable="true"], [role="button"]'
   )
   return control !== null && !control.matches(':disabled, [aria-disabled="true"]')
-}
-
-function RarityBadge({
-  rarity,
-  className
-}: {
-  rarity: string
-  className?: string
-}): React.JSX.Element {
-  return (
-    <span
-      style={{
-        backgroundColor: rarityColor(baseOf(rarity)),
-        color: rarityTextColor(baseOf(rarity))
-      }}
-      className={cn(
-        'rounded-full px-2.5 py-0.5 text-xs leading-none font-semibold shadow-sm',
-        className
-      )}
-    >
-      {rarity}
-    </span>
-  )
 }
 
 /** The set art a sealed pack shows; RipPage passes the picked set. */
@@ -336,30 +317,30 @@ function handTransform(depth: number, scale: number): string {
   return `translate(${7 * depth}px, ${-7 * depth}px) rotate(${1.4 * depth}deg) scale(${(1 - 0.015 * depth) * scale})`
 }
 
-/** Beside the front card: its rarity, name and set code. */
-function Caption({ card, outgoing }: { card: RipCard; outgoing?: boolean }): React.JSX.Element {
+/**
+ * Beside the front card: what it is (rarity, name, code, type, stats, text), as tall as the card.
+ * Clicks and scrolls in it stay here: they never move the hand on.
+ */
+function InfoPanel({ card, outgoing }: { card: RipCard; outgoing?: boolean }): React.JSX.Element {
   return (
     <div
-      data-testid={outgoing ? 'rip-caption-out' : 'rip-caption'}
+      data-testid={outgoing ? 'rip-info-out' : 'rip-info'}
       aria-hidden={outgoing || undefined}
+      onClick={(e) => e.stopPropagation()}
       style={{
-        left: `calc(50% + ${CARD_W} / 2 + 44px)`,
-        // Level with the card's lower part, wherever the card sits.
-        bottom: `calc(100cqh - ${CARD_TOP} - ${CARD_H} + 14px)`
+        left: `calc(${CARD_LEFT} + ${CARD_W} + ${PANEL_GAP}px)`,
+        top: CARD_TOP,
+        height: CARD_H,
+        width: PANEL_W
       }}
       className={cn(
-        'pointer-events-none absolute flex w-56 flex-col items-start gap-1.5 motion-reduce:animate-none',
+        'absolute flex flex-col justify-center motion-reduce:animate-none',
         outgoing
-          ? 'animate-[rip-caption-out_200ms_ease-in_forwards]'
-          : 'animate-[rip-caption_500ms_ease-out_both]'
+          ? 'pointer-events-none animate-[rip-caption-out_200ms_ease-in_forwards]'
+          : 'cursor-auto animate-[rip-caption_500ms_ease-out_both]'
       )}
     >
-      <RarityBadge
-        rarity={card.rarity}
-        className={cn(revealTier(card.rarity) === 'huge' && 'px-3 py-1 text-sm')}
-      />
-      <span className="text-[19px] leading-tight font-bold text-white">{card.name}</span>
-      <span className="text-xs text-white/55">{card.setCode}</span>
+      <CardInfo card={card} />
     </div>
   )
 }
@@ -439,8 +420,8 @@ export function PackOpener({
   const [tornPack, setTornPack] = useState(-1)
   const [strippedPack, setStrippedPack] = useState(-1)
   const [skippingPack, setSkippingPack] = useState(-1)
-  /** The caption of the card just sent, fading as the next one's comes in. */
-  const [outCaption, setOutCaption] = useState<{ card: RipCard; id: number } | null>(null)
+  /** The info of the card just sent, fading as the next one's comes in. */
+  const [outInfo, setOutInfo] = useState<{ card: RipCard; id: number } | null>(null)
   const [dragX, setDragX] = useState<number | null>(null)
   /** Set while a hit holds the moment; Next pack waits for it too. */
   const [holding, setHolding] = useState(0)
@@ -488,6 +469,13 @@ export function PackOpener({
           // Warm the art so each card is sharp the moment it comes to the front.
           for (const c of cards) {
             if (c.imageId != null) new Image().src = cardImageSrc('full', c.imageId)
+          }
+          // And the details, so the info panel is full the moment a card comes to the front.
+          for (const id of new Set(cards.map((c) => c.cardId))) {
+            void queryClient.prefetchQuery({
+              queryKey: queryKeys.card(id),
+              queryFn: () => api.cards.get(id)
+            })
           }
           if (alive.current) dispatch({ type: 'packLoaded', cards })
         },
@@ -550,8 +538,8 @@ export function PackOpener({
       const rect = frontEl.current?.getBoundingClientRect()
       flyFrom.current = rect ? { key: `${packIndex}-${sent.slot}`, rect } : null
       if (!reduced) {
-        setOutCaption({ card: sent, id })
-        later(CAPTION_OUT_MS, () => setOutCaption((c) => (c?.id === id ? null : c)))
+        setOutInfo({ card: sent, id })
+        later(INFO_OUT_MS, () => setOutInfo((c) => (c?.id === id ? null : c)))
       }
     }
     dispatch({ type: 'flip' })
@@ -601,7 +589,7 @@ export function PackOpener({
   const next = (): void => {
     if (phase !== 'end' || performance.now() < holdUntil.current) return
     cancelDrag()
-    setOutCaption(null)
+    setOutInfo(null)
     dispatch({ type: 'next' })
   }
 
@@ -792,8 +780,8 @@ export function PackOpener({
               {front && (
                 <div
                   key={packIndex}
-                  style={{ top: CARD_TOP, height: CARD_H, width: CARD_W }}
-                  className="absolute left-1/2 -translate-x-1/2 animate-[rip-rise_560ms_cubic-bezier(.25,.8,.25,1)_both] motion-reduce:animate-none"
+                  style={{ top: CARD_TOP, left: CARD_LEFT, height: CARD_H, width: CARD_W }}
+                  className="absolute animate-[rip-rise_560ms_cubic-bezier(.25,.8,.25,1)_both] motion-reduce:animate-none"
                 >
                   {hand.map((c, depth) => {
                     const isFront = depth === 0
@@ -874,11 +862,11 @@ export function PackOpener({
                 </div>
               )}
 
-              {/* The outgoing card's caption fades as it goes; the new one fades in after. */}
-              {outCaption && outCaption.card !== front && (
-                <Caption key={`out-${outCaption.id}`} card={outCaption.card} outgoing />
+              {/* The outgoing card's info fades as it goes; the new one fades in after. */}
+              {outInfo && outInfo.card !== front && (
+                <InfoPanel key={`out-${outInfo.id}`} card={outInfo.card} outgoing />
               )}
-              {front && <Caption key={frontKey} card={front} />}
+              {front && <InfoPanel key={frontKey} card={front} />}
             </>
           )}
         </div>

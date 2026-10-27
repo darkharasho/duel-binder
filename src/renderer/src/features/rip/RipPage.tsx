@@ -52,7 +52,7 @@ function SummaryView({
     )
   }
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex min-h-0 flex-1 flex-col gap-3">
       <SessionSummary
         session={q.data}
         onRipMore={onRipMore}
@@ -98,14 +98,14 @@ export function RipPage(): React.JSX.Element {
     }
   }
 
-  const opening = tab === 'open' && view.kind === 'opening'
+  // Opening and its summary fill the window below the header, so nothing's below the fold.
+  const filling = tab === 'open' && (view.kind === 'opening' || view.kind === 'summary')
 
   return (
     <div
       className={cn(
         'space-y-5 p-8 max-md:p-4',
-        // Opening fills the window below the header, so Finish is never below the fold.
-        opening && 'flex min-h-full flex-col space-y-0 gap-5 pb-4'
+        filling && 'flex min-h-full flex-col space-y-0 gap-5 pb-4'
       )}
     >
       <PageHeader>
@@ -120,7 +120,7 @@ export function RipPage(): React.JSX.Element {
       </PageHeader>
       {tab === 'history' && <HistoryTab />}
       {/* Kept mounted (hidden) on the History tab, so an opening in progress keeps its place. */}
-      <div hidden={tab !== 'open'} className={cn(opening && 'flex min-h-0 flex-1 flex-col')}>
+      <div hidden={tab !== 'open'} className={cn(filling && 'flex min-h-0 flex-1 flex-col')}>
         {view.kind === 'opening' ? (
           <PackOpener
             key={view.sessionId}

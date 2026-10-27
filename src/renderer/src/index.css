@@ -171,3 +171,16 @@
   0% { opacity: 1; transform: none; }
   100% { opacity: 0; transform: translateY(-6px); }
 }
+/* The summary's best pull: it lands, tilted, the rays turn behind it, and its kicker stamps in. */
+@keyframes rip-hero-land {
+  0% { opacity: 0; transform: scale(1.6) rotate(-12deg); }
+  45% { opacity: 1; }
+  100% { opacity: 1; transform: rotate(-3deg); }
+}
+@keyframes rip-rays {
+  to { transform: rotate(360deg); }
+}
+@keyframes rip-stamp {
+  0% { opacity: 0; transform: scale(1.8); }
+  100% { opacity: 1; transform: none; }
+}

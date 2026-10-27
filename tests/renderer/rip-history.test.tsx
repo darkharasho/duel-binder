@@ -2,7 +2,7 @@ import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { vi } from 'vitest'
 import { HistoryTab } from '@/features/rip/HistoryTab'
-import { SessionSummary, hitsLine } from '@/features/rip/SessionSummary'
+import { SessionSummary, hitsLine, rankedHits } from '@/features/rip/SessionSummary'
 import type {
   RipCard,
   RipHistory,
@@ -65,21 +65,63 @@ describe('hitsLine', () => {
   })
 })
 
+const realMatchMedia = window.matchMedia
+function motion(reduce: boolean): void {
+  vi.spyOn(window, 'matchMedia').mockImplementation((q: string) => ({
+    ...realMatchMedia(q),
+    matches: reduce && q.includes('reduce')
+  }))
+}
+
+describe('rankedHits', () => {
+  it('ranks the hits rarest first, ties in the order pulled, with their pack', () => {
+    const ranked = rankedHits([
+      [card('Common', 0, 'Kuriboh'), card('Secret Rare', 1, 'First Secret')],
+      [card('Rare', 0, 'A Rare'), card('Secret Rare', 1, 'Second Secret')]
+    ])
+    expect(ranked.map((p) => [p.card.name, p.pack])).toEqual([
+      ['First Secret', 1],
+      ['Second Secret', 2],
+      ['A Rare', 2]
+    ])
+  })
+  it('is empty without a Rare or better', () => {
+    expect(rankedHits([[card('Common', 0), card('Short Print', 1)]])).toEqual([])
+  })
+})
+
 describe('SessionSummary', () => {
-  it('shows the headline, hits and best pulls rarest first, without prices', async () => {
+  afterEach(() => vi.restoreAllMocks())
+
+  it('shows the headline, the best pull as the hero, tally chips and the other hits, without prices', async () => {
     const onRipMore = vi.fn()
     const onPickSet = vi.fn()
     const { container } = renderWithProviders(
       <SessionSummary session={detail()} onRipMore={onRipMore} onPickSet={onPickSet} />
     )
-    expect(screen.getByText('2 packs of Legend of Blue Eyes')).toBeInTheDocument()
-    expect(screen.getByText(/6 cards/)).toBeInTheDocument()
-    expect(screen.getByText('1 Secret · 1 Ultra · 2 Super')).toBeInTheDocument()
-    const best = screen.getByTestId('rip-summary-best')
-    const names = within(best)
-      .getAllByRole('img')
-      .map((i) => i.getAttribute('alt'))
-    expect(names).toEqual(['Blue-Eyes', 'Red-Eyes', 'Dark Magician', 'Gaia'])
+    expect(screen.getByTestId('rip-summary-headline')).toHaveTextContent(
+      '2 packs · Legend of Blue Eyes · 6 cards'
+    )
+    const hero = screen.getByTestId('rip-summary-hero')
+    expect(hero).toHaveAttribute('data-tier', 'huge')
+    expect(screen.getByTestId('rip-summary-hero-name')).toHaveTextContent('Blue-Eyes')
+    expect(within(hero).getByRole('img', { name: 'Blue-Eyes' })).toBeInTheDocument()
+    expect(hero).toHaveTextContent('LOB-EN000 · from pack 2')
+    expect(hero).toHaveTextContent(/best pull/i)
+    expect(screen.getAllByTestId('rip-summary-chip').map((c) => c.textContent)).toEqual([
+      '1 Secret',
+      '1 Ultra',
+      '2 Super',
+      '6 cards'
+    ])
+    // The rest of the hits, rarest first, the hero left out; Supers in the order pulled.
+    const others = screen.getByTestId('rip-summary-others')
+    expect(
+      within(others)
+        .getAllByRole('img')
+        .map((i) => i.getAttribute('alt'))
+    ).toEqual(['Red-Eyes', 'Dark Magician', 'Gaia'])
+    expect(others).toHaveTextContent('Ultra · Red-Eyes')
     expect(container.textContent).not.toMatch(/\$\d/)
     await userEvent.click(screen.getByRole('button', { name: /rip 2 more/i }))
     expect(onRipMore).toHaveBeenCalled()
@@ -87,24 +129,74 @@ describe('SessionSummary', () => {
     expect(onPickSet).toHaveBeenCalled()
   })
 
-  it('See all cards lists every card by pack', async () => {
+  it('on a tie the best pull is the earliest', () => {
+    const tied = [
+      [card('Common', 0, 'Kuriboh'), card('Ultra Rare', 1, 'Early Ultra')],
+      [card('Ultra Rare', 0, 'Late Ultra'), card('Super Rare', 1, 'Gaia')]
+    ]
+    renderWithProviders(<SessionSummary session={detail({ packs: tied })} />)
+    expect(screen.getByTestId('rip-summary-hero-name')).toHaveTextContent('Early Ultra')
+    expect(screen.getByTestId('rip-summary-hero')).toHaveTextContent('from pack 1')
+    expect(
+      within(screen.getByTestId('rip-summary-others'))
+        .getAllByRole('img')
+        .map((i) => i.getAttribute('alt'))
+    ).toEqual(['Late Ultra', 'Gaia'])
+  })
+
+  it('a huge hit gets rays and sparkles; a Rare just lands, with no rays or sparkles', () => {
+    motion(false)
+    const { unmount } = renderWithProviders(<SessionSummary session={detail()} />)
+    expect(screen.getByTestId('rip-summary-rays')).toBeInTheDocument()
+    expect(screen.getAllByTestId('rip-summary-spark').length).toBeGreaterThan(0)
+    unmount()
+    renderWithProviders(
+      <SessionSummary session={detail({ packs: [[card('Rare', 0, 'Plain Rare')]] })} />
+    )
+    expect(screen.getByTestId('rip-summary-hero')).toHaveAttribute('data-tier', 'rare')
+    expect(screen.getByTestId('rip-summary-bloom')).toBeInTheDocument()
+    expect(screen.queryByTestId('rip-summary-rays')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('rip-summary-spark')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('rip-summary-others')).not.toBeInTheDocument()
+  })
+
+  it('with reduced motion there are no sparkles and the card does not land', () => {
+    motion(true)
+    renderWithProviders(<SessionSummary session={detail()} />)
+    expect(screen.getByTestId('rip-summary-hero')).toBeInTheDocument()
+    expect(screen.queryByTestId('rip-summary-spark')).not.toBeInTheDocument()
+    expect(screen.getByTestId('rip-summary-card').className).toContain('motion-reduce:animate-none')
+  })
+
+  it('See all cards lists every card by pack, and Hide cards brings the hero back', async () => {
     renderWithProviders(<SessionSummary session={detail()} />)
     expect(screen.queryByRole('button', { name: /rip \d+ more/i })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /pick another set/i })).not.toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: /see all cards/i }))
     expect(screen.getByText('Pack 1')).toBeInTheDocument()
     expect(screen.getByText('Pack 2')).toBeInTheDocument()
-    expect(screen.getAllByRole('img', { name: 'Kuriboh' }).length).toBeGreaterThan(0)
+    expect(
+      within(screen.getByTestId('rip-summary-all')).getAllByRole('img', { name: 'Kuriboh' })
+    ).toHaveLength(1)
+    await userEvent.click(screen.getByRole('button', { name: /hide cards/i }))
+    expect(screen.queryByTestId('rip-summary-all')).not.toBeInTheDocument()
+    expect(screen.getByTestId('rip-summary-hero')).toBeVisible()
   })
 })
 
 describe('SessionSummary without hits', () => {
-  it('says so instead of showing a Common as the best pull', () => {
+  it('says so, with no hero or fanfare', () => {
     const commons = [[card('Common', 0, 'Kuriboh'), card('Short Print', 1, 'Mooyan')]]
     renderWithProviders(
       <SessionSummary session={detail({ packs: commons, best: commons[0][0] })} />
     )
     expect(screen.getByText('No hits this time.')).toBeInTheDocument()
-    expect(screen.queryByTestId('rip-summary-best')).not.toBeInTheDocument()
+    expect(screen.getByTestId('rip-summary-headline')).toHaveTextContent('2 packs')
+    expect(screen.queryByTestId('rip-summary-hero')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('rip-summary-rays')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('rip-summary-spark')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('rip-summary-others')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /see all cards/i })).toBeInTheDocument()
   })
 })
 
@@ -151,7 +243,10 @@ describe('HistoryTab', () => {
     expect(screen.getByText(/best pulls ever/i)).toBeInTheDocument()
     expect(container.textContent).not.toMatch(/\$\d/)
     await userEvent.click(screen.getByRole('button', { name: /Legend of Blue Eyes/ }))
-    expect(await screen.findByText('2 packs of Legend of Blue Eyes')).toBeInTheDocument()
+    expect(await screen.findByTestId('rip-summary-headline')).toHaveTextContent(
+      '2 packs · Legend of Blue Eyes'
+    )
+    expect(screen.getByTestId('rip-summary-hero-name')).toHaveTextContent('Blue-Eyes')
     expect(session).toHaveBeenCalledWith(3)
     expect(screen.queryByRole('button', { name: /pick another set/i })).not.toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: /back/i }))

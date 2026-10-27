@@ -187,7 +187,9 @@ describe('RipPage', () => {
       )
       await userEvent.click(screen.getByRole('button', { name: /skip to the hit/i }))
       await userEvent.click(screen.getByRole('button', { name: /finish|next pack/i }))
-      await screen.findByText('1 pack of Metal Raiders')
+      expect(await screen.findByTestId('rip-summary-headline')).toHaveTextContent(
+        '1 pack · Metal Raiders'
+      )
       return { api }
     }
 
@@ -234,7 +236,9 @@ describe('RipPage', () => {
       await startOpening(1)
       await userEvent.click(screen.getByRole('button', { name: /skip to the hit/i }))
       await userEvent.click(screen.getByRole('button', { name: /finish|next pack/i }))
-      expect(await screen.findByText('1 pack of Metal Raiders')).toBeInTheDocument()
+      expect(await screen.findByTestId('rip-summary-headline')).toHaveTextContent(
+        '1 pack · Metal Raiders'
+      )
       await userEvent.click(screen.getByRole('button', { name: /pick another set/i }))
       const tile = await screen.findByRole('button', { name: /Metal Raiders/ })
       expect(tile).toHaveAttribute('aria-pressed', 'true')

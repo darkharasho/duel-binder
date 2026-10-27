@@ -4,6 +4,7 @@ import { vi } from 'vitest'
 import { PackOpener } from '@/features/rip/PackOpener'
 import type { Api } from '@shared/ipc'
 import type { RipCard } from '../../src/shared/rip/types'
+import type { CardDetail, CardRow } from '../../src/shared/types'
 import { createMockApi, renderWithProviders } from './mockApi'
 
 const card = (rarity: string, slot: number, name = `Card ${slot}`): RipCard => ({
@@ -24,6 +25,71 @@ const nine = (): RipCard[] =>
   Array.from({ length: 9 }, (_, i) =>
     i === 4 ? card('Secret Rare', 4, 'Dark Magician') : card('Common', i)
   )
+
+const row = (id: number, over: Partial<CardRow>): CardRow => ({
+  id,
+  name: `Card ${id}`,
+  type: 'Effect Monster',
+  frameType: 'effect',
+  race: 'Spellcaster',
+  attribute: 'DARK',
+  level: 4,
+  linkval: null,
+  atk: 1500,
+  def: 1200,
+  archetype: null,
+  desc: 'Some effect.',
+  tcgplayerPrice: null,
+  ...over
+})
+/** Each card's details: a Fusion, a Quick-Play, a Link and an Xyz, by card id. */
+const ROWS: Record<number, CardRow> = {
+  0: row(0, {
+    type: 'Fusion Monster',
+    frameType: 'fusion',
+    race: 'Dragon',
+    attribute: 'LIGHT',
+    level: 12,
+    atk: 4500,
+    def: 3800,
+    desc: '"Blue-Eyes White Dragon" + "Blue-Eyes White Dragon" + "Blue-Eyes White Dragon"\nThis card is a beast.'
+  }),
+  1: row(1, {
+    type: 'Spell Card',
+    frameType: 'spell',
+    race: 'Quick-Play',
+    attribute: null,
+    level: null,
+    atk: null,
+    def: null,
+    desc: 'Destroy 1 card.'
+  }),
+  2: row(2, {
+    type: 'Link Monster',
+    frameType: 'link',
+    race: 'Cyberse',
+    attribute: 'EARTH',
+    level: null,
+    linkval: 3,
+    atk: 2300,
+    def: null,
+    desc: '2+ Effect Monsters\nLink effect.'
+  }),
+  3: row(3, {
+    type: 'XYZ Monster',
+    frameType: 'xyz',
+    race: 'Warrior',
+    attribute: 'FIRE',
+    level: 4,
+    atk: -1,
+    def: 2000,
+    desc: '2 Level 4 monsters\nXyz effect.'
+  })
+}
+const cardsGet = async (id: number): Promise<CardDetail | null> =>
+  ROWS[id] ? { card: ROWS[id], printings: [], images: [] } : null
+const four = (): RipCard[] => [0, 1, 2, 3].map((i) => card('Common', i))
+const info = (): HTMLElement => screen.getByTestId('rip-info')
 
 function deferred<T>(): { promise: Promise<T>; resolve: (v: T) => void } {
   let resolve!: (v: T) => void
@@ -47,7 +113,19 @@ function motion(reduce: boolean): void {
 
 function renderOpener(
   openPack: (id: number) => Promise<RipCard[]>,
-  { packCount = 3, onDone = vi.fn(), strict = false, active = true } = {}
+  {
+    packCount = 3,
+    onDone = vi.fn<(packs: RipCard[][]) => void>(),
+    strict = false,
+    active = true,
+    cardsGet
+  }: {
+    packCount?: number
+    onDone?: ReturnType<typeof vi.fn<(packs: RipCard[][]) => void>>
+    strict?: boolean
+    active?: boolean
+    cardsGet?: Api['cards']['get']
+  } = {}
 ): { api: Api; unmount: () => void; onDone: typeof onDone } {
   const ui = (
     <PackOpener
@@ -58,7 +136,10 @@ function renderOpener(
       active={active}
     />
   )
-  const api = createMockApi({ rip: { openPack: vi.fn(openPack) } })
+  const api = createMockApi({
+    rip: { openPack: vi.fn(openPack) },
+    ...(cardsGet && { cards: { get: vi.fn(cardsGet) } })
+  })
   if (strict) {
     // StrictMode at the root: React only double-runs mount effects for a root-level StrictMode.
     window.api = api
@@ -131,8 +212,8 @@ describe('PackOpener', () => {
     expect(screen.queryByTestId('rip-pack')).not.toBeInTheDocument()
     expect(front()).toContainElement(screen.getByRole('img', { name: 'Card 0' }))
     expect(count()).toBe('1 / 9')
-    expect(screen.getByTestId('rip-caption')).toHaveTextContent('Card 0')
-    expect(screen.getByTestId('rip-caption')).toHaveTextContent('LOB-EN000')
+    expect(screen.getByTestId('rip-info')).toHaveTextContent('Card 0')
+    expect(screen.getByTestId('rip-info')).toHaveTextContent('LOB-EN000')
   })
 
   it('clicking the pack tears it, with the strip flying off first', async () => {
@@ -337,13 +418,13 @@ describe('PackOpener', () => {
     space()
     await act(() => vi.advanceTimersByTimeAsync(550))
     space()
-    expect(screen.getByTestId('rip-caption-out')).toHaveTextContent('Card 0')
+    expect(screen.getByTestId('rip-info-out')).toHaveTextContent('Card 0')
     await act(() => vi.advanceTimersByTimeAsync(100))
     space()
     expect(count()).toBe('3 / 9')
     expect(screen.getAllByTestId('rip-row-card')).toHaveLength(2)
     await act(() => vi.advanceTimersByTimeAsync(1000))
-    expect(screen.queryByTestId('rip-caption-out')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('rip-info-out')).not.toBeInTheDocument()
     expect(screen.getAllByTestId('rip-row-card')).toHaveLength(2)
   })
 
@@ -434,9 +515,10 @@ describe('PackOpener', () => {
     space()
     const handBox = front().parentElement!
     expect(handBox.style.height).toContain('100cqh')
-    // Capped, and kept narrow enough to leave the caption room beside it.
+    // Capped, and kept narrow enough to leave the info panel room beside it.
     expect(handBox.style.height).toContain('600px')
-    expect(handBox.style.height).toContain('50cqw')
+    expect(handBox.style.height).toContain('100cqw')
+    expect(handBox.style.height).toContain('400px')
     // Placed from the stage height too. (jsdom mangles min()/max() inside calc(), so the 32px floor
     // can't be read back here; checked in Chrome instead.)
     expect(handBox.style.top).toContain('100cqh')
@@ -564,8 +646,8 @@ describe('PackOpener', () => {
     expect(front().querySelector('[data-holo]')).not.toBeNull()
     expect(screen.getByTestId('rip-bloom')).toBeInTheDocument()
     expect(screen.getAllByText('✦')).toHaveLength(10)
-    expect(screen.getByTestId('rip-caption')).toHaveTextContent('Dark Magician')
-    expect(screen.getByTestId('rip-caption')).toHaveTextContent('Secret Rare')
+    expect(screen.getByTestId('rip-info')).toHaveTextContent('Dark Magician')
+    expect(screen.getByTestId('rip-info')).toHaveTextContent('Secret Rare')
     expect(screen.getByTestId('rip-best')).toHaveTextContent('Secret Rare')
     expect(document.body.textContent).not.toMatch(/\$\d/)
     // The hit holds the moment: Space doesn't move on until it's had its time.
@@ -756,5 +838,101 @@ describe('PackOpener', () => {
     await act(async () => second.resolve(commons()))
     expect(api.rip.openPack).toHaveBeenCalledTimes(2)
     expect(error).not.toHaveBeenCalled()
+  })
+  describe('the info panel', () => {
+    it("fetches every card's details as the pack arrives", async () => {
+      const { api } = renderOpener(async () => four(), { cardsGet })
+      await loadedPack()
+      await waitFor(() => expect(api.cards.get).toHaveBeenCalledTimes(4))
+      expect(vi.mocked(api.cards.get).mock.calls.map(([id]) => id)).toEqual([0, 1, 2, 3])
+    })
+
+    it("shows a monster's attribute, type, level, ATK/DEF and text, materials apart", async () => {
+      renderOpener(async () => four(), { cardsGet })
+      await loadedPack()
+      space()
+      await waitFor(() => expect(within(info()).getByTestId('rip-type-line')).toBeInTheDocument())
+      expect(info()).toHaveTextContent('Card 0')
+      expect(info()).toHaveTextContent('LOB-EN000')
+      expect(within(info()).getByTestId('rip-attribute')).toHaveTextContent('LIGHT')
+      expect(within(info()).getByTestId('rip-type-line')).toHaveTextContent('Dragon / Fusion')
+      expect(within(info()).getByTestId('rip-type-line')).toHaveTextContent('★ Level 12')
+      expect(
+        within(info())
+          .getAllByTestId('rip-stat')
+          .map((s) => s.textContent)
+      ).toEqual(['ATK4500', 'DEF3800'])
+      expect(within(info()).getByTestId('rip-materials')).toHaveTextContent(
+        '"Blue-Eyes White Dragon" + "Blue-Eyes White Dragon" + "Blue-Eyes White Dragon"'
+      )
+      expect(within(info()).getByTestId('rip-desc')).toHaveTextContent('This card is a beast.')
+    })
+
+    it('updates as the front card changes: a spell has its type line and no stats', async () => {
+      renderOpener(async () => four(), { cardsGet })
+      await loadedPack()
+      space()
+      await waitFor(() => expect(info()).toHaveTextContent('Dragon / Fusion'))
+      space()
+      await waitFor(() => expect(info()).toHaveTextContent('Spell Card · Quick-Play'))
+      expect(info()).toHaveTextContent('Card 1')
+      expect(info()).not.toHaveTextContent('Dragon')
+      expect(within(info()).queryByTestId('rip-stat')).not.toBeInTheDocument()
+      expect(within(info()).queryByTestId('rip-attribute')).not.toBeInTheDocument()
+      expect(within(info()).getByTestId('rip-desc')).toHaveTextContent('Destroy 1 card.')
+    })
+
+    it('a Link shows LINK-N and no DEF; an Xyz shows its Rank and ? for an unknown ATK', async () => {
+      renderOpener(async () => four(), { cardsGet })
+      await loadedPack()
+      space()
+      space()
+      space()
+      await waitFor(() => expect(info()).toHaveTextContent('Cyberse / Link'))
+      expect(info()).toHaveTextContent('Link 3')
+      expect(
+        within(info())
+          .getAllByTestId('rip-stat')
+          .map((s) => s.textContent)
+      ).toEqual(['ATK2300', 'LINKLINK-3'])
+      expect(info()).not.toHaveTextContent('DEF')
+      space()
+      await waitFor(() => expect(info()).toHaveTextContent('Warrior / Xyz'))
+      expect(info()).toHaveTextContent('Rank 4')
+      expect(within(info()).getByTestId('rip-type-line')).not.toHaveTextContent('Level')
+      expect(
+        within(info())
+          .getAllByTestId('rip-stat')
+          .map((s) => s.textContent)
+      ).toEqual(['ATK?', 'DEF2000'])
+    })
+
+    it('shows the name and a quiet placeholder while the details load', async () => {
+      const details = deferred<CardDetail | null>()
+      renderOpener(async () => four(), { cardsGet: () => details.promise })
+      await loadedPack()
+      space()
+      expect(info()).toHaveTextContent('Card 0')
+      expect(within(info()).getByTestId('rip-info-loading')).toBeInTheDocument()
+      await act(async () => details.resolve({ card: ROWS[0], printings: [], images: [] }))
+      await waitFor(() => expect(info()).toHaveTextContent('Dragon / Fusion'))
+      expect(within(info()).queryByTestId('rip-info-loading')).not.toBeInTheDocument()
+    })
+
+    it('clicking or dragging in the panel does not move the hand on', async () => {
+      renderOpener(async () => four(), { cardsGet })
+      await loadedPack()
+      space()
+      await waitFor(() => expect(within(info()).getByTestId('rip-desc')).toBeInTheDocument())
+      fireEvent.click(info())
+      fireEvent.click(within(info()).getByTestId('rip-desc'))
+      const desc = within(info()).getByTestId('rip-desc')
+      fireEvent.pointerDown(desc, { clientX: 0, pointerId: 1, button: 0 })
+      fireEvent.pointerMove(desc, { clientX: 200, pointerId: 1, button: 0 })
+      fireEvent.pointerUp(desc, { clientX: 200, pointerId: 1, button: 0 })
+      fireEvent.click(desc)
+      expect(count()).toBe('1 / 4')
+      expect(info()).toHaveTextContent('Card 0')
+    })
   })
 })

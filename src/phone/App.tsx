@@ -4,8 +4,9 @@ import { Toaster } from '@/components/ui/sonner'
 import type { ScanEngine } from '@/features/scan/engine'
 import { ScanHubProvider } from '@/features/scan/ScanHub'
 import type { Me } from '../shared/cloud'
-import { UNSUPPORTED } from './copy'
+import { OPEN_ELSEWHERE, UNSUPPORTED } from './copy'
 import { PhoneContext, type PhoneSession } from './context'
+import { DB_OPEN_ELSEWHERE } from './data/openRetry'
 import type { PhoneStore } from './data/store'
 import { FirstRun } from './FirstRun'
 import { PhoneScreen } from './PhoneScreen'
@@ -15,12 +16,19 @@ import { SignIn } from './SignIn'
 type View =
   | { kind: 'loading' }
   | { kind: 'unsupported' }
+  | { kind: 'open-elsewhere' }
   | { kind: 'signed-out' }
   | { kind: 'first-run'; user: Me }
   | { kind: 'ready'; user: Me }
 
+/** The screen for the data worker's fatal message: another tab holds the database, or it can't run. */
+const fatalView = (message: string): View =>
+  message === DB_OPEN_ELSEWHERE ? { kind: 'open-elsewhere' } : { kind: 'unsupported' }
+const isFatal = (v: View): boolean => v.kind === 'unsupported' || v.kind === 'open-elsewhere'
+
 /**
- * The phone app: loading, then the unsupported screen (the data worker can't run here), sign-in,
+ * The phone app: loading, then a fatal screen (the data worker can't run here, or another tab has
+ * the app's data open), sign-in,
  * first run (the card data download) or the app itself. `onFatal` reports the data worker's
  * failure (see createPhoneRuntime). `engineFactory` is for tests; the scanner uses the real one.
  */
@@ -47,11 +55,8 @@ export function App({
   }, [])
 
   // A fatal wins over every other view, whenever it comes.
-  useEffect(() => onFatal(() => setView({ kind: 'unsupported' })), [onFatal])
-  const show = useCallback(
-    (next: View) => setView((v) => (v.kind === 'unsupported' ? v : next)),
-    []
-  )
+  useEffect(() => onFatal((message) => setView(fatalView(message))), [onFatal])
+  const show = useCallback((next: View) => setView((v) => (isFatal(v) ? v : next)), [])
 
   /** Where a signed-in user goes: first run until the catalog is filled, else the app. */
   const enter = useCallback(
@@ -70,9 +75,10 @@ export function App({
         if (!live) return
         if (account.state === 'signed-in') await enter(account.user)
         else show({ kind: 'signed-out' })
-      } catch {
+      } catch (e) {
         // The store can't read its own database: the worker's fatal says why.
-        if (live) setView({ kind: 'unsupported' })
+        if (live)
+          setView((v) => (isFatal(v) ? v : fatalView((e as Error | undefined)?.message ?? '')))
       }
     })()
     return () => {
@@ -117,6 +123,15 @@ export function App({
         <PhoneScreen>
           <p role="alert" className="max-w-sm text-base">
             {UNSUPPORTED}
+          </p>
+        </PhoneScreen>
+      )
+      break
+    case 'open-elsewhere':
+      screen = (
+        <PhoneScreen>
+          <p role="alert" className="max-w-sm text-base">
+            {OPEN_ELSEWHERE}
           </p>
         </PhoneScreen>
       )

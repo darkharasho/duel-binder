@@ -3,6 +3,8 @@
 export const UNSUPPORTED =
   "This browser can't run Duel Binder. On iPhone, update to iOS 17 or later; otherwise use Chrome or Safari."
 
+export const OPEN_ELSEWHERE = 'Duel Binder is open in another tab. Close it and try again.'
+
 export const SIGN_IN_COPY = 'Sign in with Discord to scan cards into your collection.'
 export const SIGN_IN_FAILED = "Sign-in didn't go through. Try again."
 export const SIGN_IN_URL = '/auth/discord/start?next=scan'

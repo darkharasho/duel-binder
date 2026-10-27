@@ -5,10 +5,12 @@ import {
   FIRST_RUN_CELLULAR,
   FIRST_RUN_SIZE,
   FIRST_RUN_STOPPED,
+  OPEN_ELSEWHERE,
   SIGN_IN_COPY,
   SIGN_IN_FAILED,
   UNSUPPORTED
 } from '../../src/phone/copy'
+import { DB_OPEN_ELSEWHERE } from '../../src/phone/data/openRetry'
 import { createPhoneRuntime, type WorkerLike } from '../../src/phone/runtime'
 import type { PhoneStore } from '../../src/phone/data/store'
 import { DELETE_WARNING } from '@/features/settings/accountText'
@@ -61,6 +63,27 @@ describe('phone app', () => {
     for (const l of listeners) l(new MessageEvent('message', { data: { fatal: 'no OPFS' } }))
     renderApp(rt.store, rt.onFatal)
     expect(await screen.findByText(UNSUPPORTED)).toBeInTheDocument()
+    rt.dispose()
+  })
+
+  it('says the app is open in another tab when the database is held there', async () => {
+    const listeners: ((e: MessageEvent) => void)[] = []
+    const worker: WorkerLike = {
+      postMessage: vi.fn(),
+      addEventListener: (_type: string, l: (e: MessageEvent) => void) => {
+        listeners.push(l)
+      }
+    }
+    const rt = createPhoneRuntime({ worker, ocr: fakeOcr() })
+    window.api = rt.api
+    renderApp(rt.store, rt.onFatal)
+    // After mount: the pending account() call fails with the same fatal, and must not win.
+    act(() => {
+      for (const l of listeners)
+        l(new MessageEvent('message', { data: { fatal: DB_OPEN_ELSEWHERE } }))
+    })
+    expect(await screen.findByText(OPEN_ELSEWHERE)).toBeInTheDocument()
+    expect(screen.queryByText(UNSUPPORTED)).not.toBeInTheDocument()
     rt.dispose()
   })
 

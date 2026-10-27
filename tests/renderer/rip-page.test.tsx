@@ -113,7 +113,21 @@ describe('RipPage', () => {
       const openPack = vi.fn(async () => [card(0), card(1)])
       renderWithProviders(<RipPage />, {
         api: createMockApi({
-          rip: { sets: vi.fn(async () => SETS), start: vi.fn(async () => 9), openPack }
+          rip: {
+            sets: vi.fn(async () => SETS),
+            start: vi.fn(async () => 9),
+            openPack,
+            session: vi.fn(async () => ({
+              id: 9,
+              setName: 'Metal Raiders',
+              setCode: 'MRD',
+              packCount: 1,
+              packsOpened: 1,
+              startedAt: '2026-10-20T15:00:00.000Z',
+              best: null,
+              packs: [[card(0), card(1)]]
+            }))
+          }
         })
       })
       await userEvent.click(await screen.findByRole('button', { name: /Metal Raiders/ }))
@@ -123,6 +137,36 @@ describe('RipPage', () => {
       return openPack
     }
 
+    const startOpeningWithSummary = async (): Promise<{
+      api: ReturnType<typeof createMockApi>
+    }> => {
+      const api = createMockApi({
+        rip: {
+          sets: vi.fn(async () => SETS),
+          start: vi.fn(async () => 9),
+          openPack: vi.fn(async () => [card(0), card(1)]),
+          session: vi.fn(async () => ({
+            id: 9,
+            setName: 'Metal Raiders',
+            setCode: 'MRD',
+            packCount: 1,
+            packsOpened: 1,
+            startedAt: '2026-10-20T15:00:00.000Z',
+            best: null,
+            packs: [[card(0), card(1)]]
+          }))
+        }
+      })
+      renderWithProviders(<RipPage />, { api })
+      await userEvent.click(await screen.findByRole('button', { name: /Metal Raiders/ }))
+      await userEvent.click(screen.getByRole('button', { name: /rip 1 pack/i }))
+      await waitFor(() => expect(screen.getByRole('button', { name: /skip pack/i })).toBeEnabled())
+      await userEvent.click(screen.getByRole('button', { name: /skip pack/i }))
+      await userEvent.click(screen.getByRole('button', { name: /finish|next pack/i }))
+      await screen.findByText('1 pack of Metal Raiders')
+      return { api }
+    }
+
     it('keeps its place across a trip to History', async () => {
       const openPack = await startOpening(5)
       await userEvent.click(screen.getByRole('button', { name: /skip pack/i }))
@@ -130,7 +174,7 @@ describe('RipPage', () => {
       await waitFor(() => expect(screen.getByText(/pack 2 of 5/i)).toBeInTheDocument())
       expect(openPack).toHaveBeenCalledTimes(2)
       await userEvent.click(screen.getByRole('radio', { name: 'History' }))
-      expect(screen.getByText(/rip history/i)).toBeInTheDocument()
+      expect(await screen.findByText(/nothing ripped yet/i)).toBeInTheDocument()
       await userEvent.click(screen.getByRole('radio', { name: 'Open packs' }))
       expect(screen.getByText(/pack 2 of 5/i)).toBeInTheDocument()
       expect(openPack).toHaveBeenCalledTimes(2)
@@ -144,13 +188,23 @@ describe('RipPage', () => {
       expect(screen.queryByRole('img', { name: 'Card 0' })).not.toBeInTheDocument()
     })
 
-    it('returns to the picker with the same set selected when done', async () => {
+    it('shows the summary when done, and Pick another set returns to the picker with the set selected', async () => {
       await startOpening(1)
       await userEvent.click(screen.getByRole('button', { name: /skip pack/i }))
       await userEvent.click(screen.getByRole('button', { name: /finish|next pack/i }))
+      expect(await screen.findByText('1 pack of Metal Raiders')).toBeInTheDocument()
+      await userEvent.click(screen.getByRole('button', { name: /pick another set/i }))
       const tile = await screen.findByRole('button', { name: /Metal Raiders/ })
       expect(tile).toHaveAttribute('aria-pressed', 'true')
       expect(screen.getByRole('button', { name: /rip \d+ packs?/i })).toBeInTheDocument()
+    })
+
+    it('Rip more starts the same set and count again', async () => {
+      const { api } = await startOpeningWithSummary()
+      await userEvent.click(screen.getByRole('button', { name: /rip 1 more/i }))
+      await waitFor(() => expect(api.rip.start).toHaveBeenCalledTimes(2))
+      expect(api.rip.start).toHaveBeenLastCalledWith('Metal Raiders', 1)
+      expect(await screen.findByText(/pack 1 of 1/i)).toBeInTheDocument()
     })
   })
 })

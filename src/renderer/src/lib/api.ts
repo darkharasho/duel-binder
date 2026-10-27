@@ -14,6 +14,8 @@ export const queryKeys = {
   stats: ['stats'] as const,
   sync: ['sync'] as const,
   ripSets: ['rip', 'sets'] as const,
+  ripHistory: ['rip', 'history'] as const,
+  ripSession: (id: number) => ['rip', 'session', id] as const,
   setsList: ['sets', 'list'] as const,
   setChecklist: (name: string, language: Language) =>
     ['sets', 'checklist', language, name] as const,

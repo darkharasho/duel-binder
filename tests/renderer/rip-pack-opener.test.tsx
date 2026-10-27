@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { vi } from 'vitest'
 import { PackOpener } from '@/features/rip/PackOpener'
 import type { Api } from '@shared/ipc'
@@ -40,7 +41,13 @@ function renderOpener(
   if (strict) {
     // StrictMode at the root: React only double-runs mount effects for a root-level StrictMode.
     window.api = api
-    return { api, unmount: render(ui, { reactStrictMode: true }).unmount, onDone }
+    return {
+      api,
+      unmount: render(<QueryClientProvider client={new QueryClient()}>{ui}</QueryClientProvider>, {
+        reactStrictMode: true
+      }).unmount,
+      onDone
+    }
   }
   return { ...renderWithProviders(ui, { api }), onDone }
 }

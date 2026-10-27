@@ -1,3 +1,4 @@
+import { useQueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { api } from '@/lib/api'
@@ -160,6 +161,7 @@ export function PackOpener({
 }: PackOpenerProps): React.JSX.Element {
   const [state, dispatch] = useReducer(openerReducer, packCount, initialOpener)
   const [error, setError] = useState(false)
+  const queryClient = useQueryClient()
   const alive = useRef(true)
   // The last pack index asked of main; -1 before the first. Guards against double opens.
   const requested = useRef(-1)
@@ -179,6 +181,8 @@ export function PackOpener({
       requested.current = index
       api.rip.openPack(sessionId).then(
         (cards) => {
+          // The pack is saved: keep History and the sets list fresh, even if we've since unmounted.
+          void queryClient.invalidateQueries({ queryKey: ['rip'] })
           if (alive.current) dispatch({ type: 'packLoaded', cards })
         },
         () => {
@@ -188,7 +192,7 @@ export function PackOpener({
         }
       )
     },
-    [sessionId, packCount]
+    [sessionId, packCount, queryClient]
   )
 
   useEffect(() => {

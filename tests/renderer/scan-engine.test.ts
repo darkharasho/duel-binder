@@ -49,7 +49,7 @@ describe('createScanEngine', () => {
       quad,
       art: [{ imageId: 1, distance: 3 }],
       codeBands: [band(10), band(0)],
-      nameBand: null,
+      nameBands: [],
       cues: { nameInk: 'dark', nameTint: null }
     })
     const engine = createScanEngine({ api, makeWorker: () => worker })
@@ -61,7 +61,7 @@ describe('createScanEngine', () => {
       quad,
       art: [{ imageId: 1, distance: 3 }],
       codeTexts: [],
-      nameText: null,
+      nameTexts: [],
       cues: { nameInk: 'dark', nameTint: null }
     })
     expect(api.ocr).not.toHaveBeenCalled()
@@ -69,7 +69,7 @@ describe('createScanEngine', () => {
     const read = await engine.analyze(frame(), { candidates: [1], wantText: true })
     expect(read.codeTexts).toEqual(['LOB-EN005'])
     expect(read.quad).toEqual(quad)
-    expect(read.nameText).toBeNull()
+    expect(read.nameTexts).toEqual([])
     expect(read.cues).toEqual({ nameInk: 'dark', nameTint: null })
     expect(api.ocr).toHaveBeenCalledTimes(1)
     expect(api.ocr).toHaveBeenCalledWith([band(10)], 'code')
@@ -81,13 +81,32 @@ describe('createScanEngine', () => {
     expect(worker.terminate).toHaveBeenCalled()
   })
 
+  it('reads every name band, the card either way up when the worker sends both', async () => {
+    const api = createMockApi().scan
+    vi.mocked(api.ocr).mockImplementation(async (bands) =>
+      bands.map((b) => (b.width === 7 ? 'DARK MAGICIAN' : b.width === 8 ? '' : 'NAIDIDVW'))
+    )
+    const { worker } = fakeWorker({
+      found: true,
+      quad: null,
+      art: [],
+      codeBands: [],
+      nameBands: [band(7), band(0), band(8), band(9)],
+      cues: null
+    })
+    const engine = createScanEngine({ api, makeWorker: () => worker })
+    const read = await engine.analyze(frame(), { candidates: null, wantText: true })
+    expect(read.nameTexts).toEqual(['DARK MAGICIAN', 'NAIDIDVW'])
+    expect(api.ocr).toHaveBeenCalledWith([band(7), band(8), band(9)], 'name')
+  })
+
   it('hands a camera bitmap to the worker without copying it', async () => {
     const { worker, posted } = fakeWorker({
       found: false,
       quad: null,
       art: [],
       codeBands: [],
-      nameBand: null,
+      nameBands: [],
       cues: null
     })
     const engine = createScanEngine({ api: createMockApi().scan, makeWorker: () => worker })
@@ -104,7 +123,7 @@ describe('createScanEngine', () => {
       quad: null,
       art: [],
       codeBands: [],
-      nameBand: null,
+      nameBands: [],
       cues: null
     })
     const engine = createScanEngine({ api: createMockApi().scan, makeWorker: () => worker })

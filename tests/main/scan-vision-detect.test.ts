@@ -28,6 +28,7 @@ import {
 import { ART_BOXES } from '../../src/renderer/src/features/scan/vision/regions'
 import {
   findCandidates,
+  preferOuter,
   recognizeArt
 } from '../../src/renderer/src/features/scan/vision/candidates'
 
@@ -377,6 +378,21 @@ describe('recognizeArt', () => {
         Math.max(...found.quad.map((p, i) => Math.hypot(p[0] - q[i][0], p[1] - q[i][1])))
       const turned = [quad[2], quad[3], quad[0], quad[1]]
       expect(Math.min(off(quad), off(turned)), `angle ${angle}`).toBeLessThan(0.03 * diagonal)
+    }
+  })
+
+  it('gives the likeliest outline, either way up, when no artwork is close enough', () => {
+    // An artwork missing from the fingerprints, as a new alternate art is: the closest match
+    // says nothing of where the card is or which way up.
+    const other = distractors[0].imageId
+    for (const s of shots.slice(0, 4)) {
+      const img = frames.get(s.file)!
+      const found = recognizeArt(cv, img, index, new Set([other]))!
+      expect(found.matches[0].distance, s.file).toBeGreaterThan(ART_MAX_DISTANCE)
+      expect(found.upsideDown, s.file).toBeNull()
+      const outline = preferOuter(findCandidates(cv, img))!
+      expect(found.quad, s.file).toEqual(outline)
+      expect(difference(found.card, warpCard(cv, img, outline)), s.file).toBe(0)
     }
   })
 

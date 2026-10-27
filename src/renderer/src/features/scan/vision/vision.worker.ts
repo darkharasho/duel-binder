@@ -26,7 +26,7 @@ const NOTHING: FrameSignals = {
   quad: null,
   art: [],
   codeBands: [],
-  nameBand: null,
+  nameBands: [],
   cues: null
 }
 
@@ -84,7 +84,7 @@ function analyzeFrame(
     if (!found) return NOTHING
     quad = found.quad
     art = found.matches
-    upright = found.card
+    upright = found.upsideDown === null ? null : found.card
     // Art is matched at CARD_W, the size it was tuned for; text is read at the card's own size.
     card = () => {
       const width = bandWidth(found.quad)
@@ -95,7 +95,7 @@ function analyzeFrame(
   } else {
     // No fingerprints: the candidate finder's likeliest outline (it holds up on real photos far
     // better than findCard alone), or the card around it when that is one of its inner frames.
-    // Read but not turned upright, so its foil isn't looked at.
+    // Not turned upright, so its foil isn't looked at and its text is read both ways.
     const likeliest = preferOuter(findCandidates(cv, img))
     if (!likeliest) return NOTHING
     quad = likeliest
@@ -103,15 +103,16 @@ function analyzeFrame(
   }
   // Read at CARD_W, the size the cues were tuned at.
   const cues = upright ? rarityCues(upright) : null
-  if (!wantBands) return { found: true, quad, art, codeBands: [], nameBand: null, cues }
+  if (!wantBands) return { found: true, quad, art, codeBands: [], nameBands: [], cues }
   const straight = card()
-  const name = toBand(straight, NAME_BAND)
+  // Not knowing which way up the card is, its text is read both ways.
+  const ways = upright ? [straight] : [straight, rotate180(straight)]
   return {
     found: true,
     quad,
     art,
-    codeBands: CODE_BANDS.map((box) => toBand(straight, box)).filter(hasPixels),
-    nameBand: hasPixels(name) ? name : null,
+    codeBands: ways.flatMap((c) => CODE_BANDS.map((box) => toBand(c, box))).filter(hasPixels),
+    nameBands: ways.map((c) => toBand(c, NAME_BAND)).filter(hasPixels),
     cues
   }
 }
@@ -147,7 +148,7 @@ async function handle(msg: WorkerRequest): Promise<void> {
   }
   try {
     const signals = analyze(await loadCv(), pixels(msg.image), msg.candidates, msg.wantBands)
-    const bands = signals.nameBand ? [...signals.codeBands, signals.nameBand] : signals.codeBands
+    const bands = [...signals.codeBands, ...signals.nameBands]
     scope.postMessage(
       { type: 'result', id: msg.id, signals },
       bands.map((b) => b.data.buffer as ArrayBuffer)

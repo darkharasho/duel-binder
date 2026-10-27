@@ -79,7 +79,7 @@ const raw = (r: Partial<RawSignals>): RawSignals => ({
   quad: null,
   art: [],
   codeTexts: [],
-  nameText: null,
+  nameTexts: [],
   cues: null,
   ...r
 })
@@ -106,9 +106,11 @@ describe('resolveSignals', () => {
 
   it('nothing gives unsure', async () => {
     expect(await resolveSignals(raw({}), noSet)).toEqual({ kind: 'unsure' })
-    expect(await resolveSignals(raw({ codeTexts: ['garbage'], nameText: 'zz' }), noSet)).toEqual({
-      kind: 'unsure'
-    })
+    expect(await resolveSignals(raw({ codeTexts: ['garbage'], nameTexts: ['zz'] }), noSet)).toEqual(
+      {
+        kind: 'unsure'
+      }
+    )
   })
 
   it('a card-shaped thing whose art is nothing like any card counts as nothing in view', async () => {
@@ -123,7 +125,7 @@ describe('resolveSignals', () => {
       via: 'code',
       cardId: 1
     })
-    expect(await recognized(raw({ art: far, nameText: 'Dark Magician' }))).toMatchObject({
+    expect(await recognized(raw({ art: far, nameTexts: ['Dark Magician'] }))).toMatchObject({
       via: 'name',
       cardId: 1
     })
@@ -273,7 +275,7 @@ describe('resolveSignals', () => {
   })
 
   it('name fallback within set', async () => {
-    const item = await recognized(raw({ nameText: 'Dark Magician' }), withSet(LOB))
+    const item = await recognized(raw({ nameTexts: ['Dark Magician'] }), withSet(LOB))
     expect(item).toMatchObject({
       via: 'name',
       cardId: 1,
@@ -285,7 +287,7 @@ describe('resolveSignals', () => {
   })
 
   it('name fallback outside the set assumes a printing, to be checked', async () => {
-    const item = await recognized(raw({ nameText: 'Dark Magician' }), withSet(SDY + ' 2'))
+    const item = await recognized(raw({ nameTexts: ['Dark Magician'] }), withSet(SDY + ' 2'))
     expect(item).toMatchObject({
       via: 'name',
       imageId: 101,
@@ -293,6 +295,11 @@ describe('resolveSignals', () => {
       rarity: 'Common',
       flag: 'pick-printing'
     })
+  })
+
+  it('tries each name read, as when the card was read both ways up', async () => {
+    const item = await recognized(raw({ nameTexts: ['zz', 'Dark Magician'] }))
+    expect(item).toMatchObject({ via: 'name', cardId: 1 })
   })
 })
 

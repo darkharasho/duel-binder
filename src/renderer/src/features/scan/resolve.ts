@@ -165,13 +165,16 @@ async function confidentArt(raw: RawSignals, ctx: ResolveContext): Promise<numbe
   return margin < ART_MIN_MARGIN ? null : cardId
 }
 
+/** The first name read, in order, that names a card. */
 async function byName(raw: RawSignals, ctx: ResolveContext): Promise<ScanDraft | null> {
-  if (!raw.nameText) return null
-  const match = await ctx.lookups.matchName(raw.nameText)
-  if (!match) return null
-  return (
-    inSet(match.cardId, raw.art, ctx, 'name') ?? anyPrinting(match.cardId, raw.art, ctx, 'name')
-  )
+  for (const text of raw.nameTexts) {
+    const match = await ctx.lookups.matchName(text)
+    if (!match) continue
+    return (
+      inSet(match.cardId, raw.art, ctx, 'name') ?? anyPrinting(match.cardId, raw.art, ctx, 'name')
+    )
+  }
+  return null
 }
 
 /**

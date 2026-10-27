@@ -29,7 +29,7 @@ export const NOTHING: RawSignals = {
   quad: null,
   art: [],
   codeTexts: [],
-  nameText: null,
+  nameTexts: [],
   cues: null
 }
 export const codeFrame = (code: string): RawSignals => ({
@@ -37,7 +37,7 @@ export const codeFrame = (code: string): RawSignals => ({
   quad,
   art: [],
   codeTexts: [code],
-  nameText: null,
+  nameTexts: [],
   cues: null
 })
 
@@ -55,7 +55,7 @@ export function fakeEngine(frame: (n: number) => RawSignals | Error = () => NOTH
     analyze: vi.fn(async (_img: ImageData, opts: { wantText: boolean }) => {
       const out = frame(n++)
       if (out instanceof Error) throw out
-      return opts.wantText ? out : { ...out, codeTexts: [], nameText: null }
+      return opts.wantText ? out : { ...out, codeTexts: [], nameTexts: [] }
     }),
     dispose: vi.fn()
   } as unknown as FakeEngine

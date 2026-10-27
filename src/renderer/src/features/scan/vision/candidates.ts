@@ -446,7 +446,10 @@ function aroundInnerFrame(quad: Quad): Quad[] {
  * straightened copy, and the one closest to any artwork is straightened at full size and matched
  * again. When none is close enough to accept, the card around each candidate taken for its inner
  * frame is tried too. card is that 842x1228 straightened card, turned the way up its art matched so the name
- * and code read, and matches its k closest artworks (rankArt's default when k is left out). Null
+ * and code read, and matches its k closest artworks (rankArt's default when k is left out). When
+ * even then none is close enough, the closest says nothing of where the card is or which way up
+ * (its artwork may be missing from the fingerprints, as a new alternate art is): quad and card are
+ * then the outline finder's likeliest (preferOuter), as it was filmed, and upsideDown is null. Null
  * when the frame holds no card-shaped outline.
  */
 export function recognizeArt(
@@ -458,7 +461,7 @@ export function recognizeArt(
 ): {
   quad: Quad
   card: RgbaImage
-  upsideDown: boolean
+  upsideDown: boolean | null
   matches: { imageId: number; distance: number }[]
 } | null {
   // Copied into OpenCV once for all the candidates' warps.
@@ -482,6 +485,15 @@ export function recognizeArt(
     }
     const card = warpCard(cv, frame, best.quad, CARD_W)
     const { matches, upsideDown } = rankArt(cv, card, index, candidates, k)
+    if ((matches[0]?.distance ?? Infinity) > ART_MAX_DISTANCE) {
+      const outline = preferOuter(quads) ?? best.quad
+      return {
+        quad: outline,
+        card: warpCard(cv, frame, outline, CARD_W),
+        upsideDown: null,
+        matches
+      }
+    }
     return { quad: best.quad, card: upsideDown ? rotate180(card) : card, upsideDown, matches }
   })
 }

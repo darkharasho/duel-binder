@@ -15,9 +15,12 @@ export interface FrameSignals {
   quad: Quad | null
   /** Closest artworks, closest first; empty without fingerprints. */
   art: ArtMatch[]
-  /** Only when bands were asked for, and never empty ones. */
+  /**
+   * Only when bands were asked for, and never empty ones. A card not known to be upright has
+   * its bands both ways up.
+   */
   codeBands: OcrBand[]
-  nameBand: OcrBand | null
+  nameBands: OcrBand[]
   /** What the card shows of its foil; null when it couldn't be turned upright to look. */
   cues: RarityCues | null
 }
@@ -47,7 +50,8 @@ export interface RawSignals {
   quad: Quad | null
   art: ArtMatch[]
   codeTexts: string[]
-  nameText: string | null
+  /** Every name band's read that isn't empty, in band order. */
+  nameTexts: string[]
   cues: RarityCues | null
 }
 
@@ -159,19 +163,19 @@ export function createScanEngine(deps: { api: Api['scan']; makeWorker: () => Wor
         }
       })
       const { found, quad, art, cues } = signals
-      if (!wantText || !found) return { found, quad, art, codeTexts: [], nameText: null, cues }
+      if (!wantText || !found) return { found, quad, art, codeTexts: [], nameTexts: [], cues }
       const codeBands = signals.codeBands.filter(hasPixels)
-      const nameBand = signals.nameBand && hasPixels(signals.nameBand) ? signals.nameBand : null
+      const nameBands = signals.nameBands.filter(hasPixels)
       const [codes, names] = await Promise.all([
         codeBands.length ? deps.api.ocr(codeBands, 'code') : [],
-        nameBand ? deps.api.ocr([nameBand], 'name') : []
+        nameBands.length ? deps.api.ocr(nameBands, 'name') : []
       ])
       return {
         found,
         quad,
         art,
         codeTexts: codes.map((t) => t.trim()).filter(Boolean),
-        nameText: names[0]?.trim() || null,
+        nameTexts: names.map((t) => t.trim()).filter(Boolean),
         cues
       }
     },

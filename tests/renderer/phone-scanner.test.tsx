@@ -155,7 +155,7 @@ describe('phone scanner', () => {
   // jsdom has no layout, so this pins the structure that makes the rows fit: the camera is the one
   // part of the column that shrinks, at 3:4 within whatever room is left, and every other row
   // keeps its height. (Checked by eye in Task 13 at 390x844 and 375x667.)
-  it('the camera gives way so the status line, pickers and Review bar always fit', async () => {
+  it('the camera gives way so the pickers and Review bar always fit', async () => {
     const store = fakeStore()
     installPhoneApi(store)
     const { container } = renderScanner(store)
@@ -175,7 +175,7 @@ describe('phone scanner', () => {
 
     const picker = screen.getByRole('combobox', { name: 'Set' })
     const rows = [...column.children].filter((c) => c !== camera)
-    for (const el of [review, picker, screen.getAllByRole('status').at(-1)!]) {
+    for (const el of [review, picker]) {
       expect(camera.contains(el)).toBe(false)
       const row = rows.find((r) => r.contains(el))!
       expect(row).toHaveClass('shrink-0')

@@ -280,6 +280,15 @@ describe('phone app', () => {
     expect(await screen.findByText('Offline · 2 waiting to sync')).toBeInTheDocument()
   })
 
+  it('status line stays hidden when all is synced', async () => {
+    const store = fakeStore()
+    installPhoneApi(store)
+    renderApp(store)
+    await screen.findByRole('navigation', { name: 'Tabs' })
+    await waitFor(() => expect(store.syncState).toHaveBeenCalled())
+    expect(screen.queryByText('All synced')).not.toBeInTheDocument()
+  })
+
   it('status line follows the sync state', async () => {
     const user = userEvent.setup()
     const store = fakeStore(

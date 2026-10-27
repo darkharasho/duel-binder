@@ -16,10 +16,27 @@ export interface PickerOption {
   label: string
   /** Lower-case text the search matches (every word must appear); the label when left out. */
   search?: string
+  /** The phone's picker sheet: a short code shown as a badge, the label without it, and a note. */
+  badge?: string
+  title?: string
+  note?: string
 }
 
 /** Options shown at once; the search narrows the rest down. */
 const MAX_SHOWN = 100
+
+/** The options matching every word of the query, at most MAX_SHOWN of them. */
+// eslint-disable-next-line react-refresh/only-export-components -- shared with the phone's picker sheet
+export function matchOptions(options: readonly PickerOption[], query: string): PickerOption[] {
+  const words = query.toLowerCase().split(/\s+/).filter(Boolean)
+  const shown: PickerOption[] = []
+  for (const o of options) {
+    if (shown.length >= MAX_SHOWN) break
+    const text = o.search ?? o.label.toLowerCase()
+    if (words.every((w) => text.includes(w))) shown.push(o)
+  }
+  return shown
+}
 
 /**
  * A dropdown with a search box, for long lists (sets, rarities, printings). The list exists only
@@ -107,13 +124,7 @@ function PickerList({
   onPick: (key: string) => void
 }): React.JSX.Element {
   const [query, setQuery] = useState('')
-  const words = query.toLowerCase().split(/\s+/).filter(Boolean)
-  const shown: PickerOption[] = []
-  for (const o of options) {
-    if (shown.length >= MAX_SHOWN) break
-    const text = o.search ?? o.label.toLowerCase()
-    if (words.every((w) => text.includes(w))) shown.push(o)
-  }
+  const shown = matchOptions(options, query)
   return (
     // cmdk names its search box after its own label, so the label is what gives it a name.
     <Command shouldFilter={false} label={searchPlaceholder} className="rounded-md">

@@ -1,7 +1,7 @@
 import { act, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Toaster } from '@/components/ui/sonner'
-import { ScanHubProvider } from '@/features/scan/ScanHub'
+import { ScanHubProvider, useScanHub } from '@/features/scan/ScanHub'
 import type { ScanRow } from '@/features/scan/session'
 import { PhoneContext } from '../../src/phone/context'
 import { ScannerScreen } from '../../src/phone/ScannerScreen'
@@ -45,11 +45,24 @@ afterEach(() => {
   window.api = undefined as never
 })
 
+/** Counts a pull of `row()` through the hub, as the scanner does on a match. */
+function FakePull(): React.JSX.Element {
+  const { count } = useScanHub()
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- the draft is the row without these
+  const { key, quantity, addedAt, ...draft } = row()
+  return (
+    <button type="button" onClick={() => count(draft)}>
+      Fake pull
+    </button>
+  )
+}
+
 function renderScanner(store: PhoneStore): ReturnType<typeof renderWithProviders> {
   const engine = fakeEngine()
   return renderWithProviders(
     <PhoneContext.Provider value={{ store, user: SETO, signedOut: () => {} }}>
       <ScanHubProvider>
+        <FakePull />
         <ScannerScreen engineFactory={() => engine} onClose={() => {}} onOpenSettings={() => {}} />
         <Toaster />
       </ScanHubProvider>
@@ -91,8 +104,8 @@ describe('phone scanner', () => {
 
     const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
     await user.click(screen.getByRole('button', { name: 'Review 3 scanned' }))
-    const list = screen.getByRole('region', { name: 'This session' })
-    await user.click(within(list).getByRole('button', { name: 'Add 3 cards to collection' }))
+    const list = screen.getByRole('region', { name: 'Review' })
+    await user.click(within(list).getByRole('button', { name: 'Add 3 cards' }))
     await settle()
 
     const adds = vi.mocked(store.invoke).mock.calls.filter(([c]) => c === 'collection:add')
@@ -345,11 +358,11 @@ describe('phone scanner', () => {
       renderScanner(store)
       expect(await screen.findByText('4 cards')).toBeInTheDocument()
       expect(screen.getByLabelText('Value of this scan')).toHaveTextContent('$21.25')
-      expect(screen.queryByRole('region', { name: 'This session' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('region', { name: 'Review' })).not.toBeInTheDocument()
       await user.click(screen.getByRole('button', { name: 'Review 4 scanned' }))
-      expect(screen.getByRole('region', { name: 'This session' })).toBeInTheDocument()
+      expect(screen.getByRole('region', { name: 'Review' })).toBeInTheDocument()
       await user.click(screen.getByRole('button', { name: 'Close review' }))
-      expect(screen.queryByRole('region', { name: 'This session' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('region', { name: 'Review' })).not.toBeInTheDocument()
     })
 
     it('says 1 card for one', async () => {
@@ -358,6 +371,106 @@ describe('phone scanner', () => {
       installPhoneApi(store)
       renderScanner(store)
       expect(await screen.findByText('1 card')).toBeInTheDocument()
+    })
+
+    it('the review sheet lists each card with its count, value, stepper and Clear', async () => {
+      const user = userEvent.setup()
+      localStorage.setItem(
+        SESSION_KEY,
+        JSON.stringify([
+          row({ quantity: 2, flag: 'check-rarity', options: [printing({ price: 10 })] }),
+          row({
+            key: 'c',
+            cardId: 3,
+            name: 'Kuriboh',
+            printingId: 103,
+            options: [printing({ printingId: 103 })]
+          })
+        ])
+      )
+      const store = fakeStore()
+      installPhoneApi(store)
+      renderScanner(store)
+      await user.click(await screen.findByRole('button', { name: 'Review 3 scanned' }))
+      const sheet = screen.getByRole('region', { name: 'Review' })
+      expect(sheet).toHaveTextContent('3 cards · 2 entries')
+      expect(within(sheet).getByLabelText('Value of the list')).toHaveTextContent('$20.00')
+      const items = within(sheet).getAllByRole('listitem')
+      expect(items).toHaveLength(2)
+      expect(items[0]).toHaveTextContent('Check rarity')
+      expect(
+        within(sheet).getByRole('combobox', { name: 'Rarity for Dark Magician' })
+      ).toHaveTextContent('Ultra Rare')
+
+      await user.click(within(sheet).getByRole('button', { name: 'One more Kuriboh' }))
+      expect(within(sheet).getByLabelText('Quantity of Kuriboh')).toHaveTextContent('2')
+      await user.click(within(sheet).getByRole('button', { name: 'One fewer Dark Magician' }))
+      expect(within(sheet).getByLabelText('Quantity of Dark Magician')).toHaveTextContent('1')
+      await user.click(within(sheet).getByRole('button', { name: 'Remove Kuriboh' }))
+      expect(within(sheet).getAllByRole('listitem')).toHaveLength(1)
+      expect(within(sheet).getByRole('button', { name: 'Add 1 card' })).toBeEnabled()
+
+      await user.click(within(sheet).getByRole('button', { name: 'Clear' }))
+      await user.click(await screen.findByRole('button', { name: 'Clear list' }))
+      expect(sheet).toHaveTextContent('Cards you scan show up here.')
+      expect(within(sheet).getByRole('button', { name: 'Add 0 cards' })).toBeDisabled()
+    })
+
+    it('a new scan pops the found bubble and buzzes; saved rows and count changes do not', async () => {
+      const vibrate = vi.fn()
+      vi.stubGlobal('navigator', Object.assign(Object.create(navigator), { vibrate }))
+      localStorage.setItem(SESSION_KEY, JSON.stringify([row({ addedAt: 5 })]))
+      const store = fakeStore()
+      installPhoneApi(store)
+      const { container } = renderScanner(store)
+      await screen.findByRole('region', { name: 'Last scan' })
+      expect(container.querySelector('[data-found-burst]')).toBeNull()
+      expect(vibrate).not.toHaveBeenCalled()
+
+      // Changing a count by hand isn't a scan.
+      const user = userEvent.setup()
+      await user.click(screen.getByRole('button', { name: 'Review 1 scanned' }))
+      const sheet = screen.getByRole('region', { name: 'Review' })
+      await user.click(within(sheet).getByRole('button', { name: 'One more Dark Magician' }))
+      expect(container.querySelector('[data-found-burst]')).toBeNull()
+      await user.click(screen.getByRole('button', { name: 'Close review' }))
+
+      // A repeat scan of a card already on the list counts as found too.
+      await user.click(screen.getByRole('button', { name: 'Fake pull' }))
+      const burst = container.querySelector('[data-found-burst]')!
+      expect(burst).toHaveTextContent('Dark Magician')
+      expect(burst).toHaveAttribute('aria-hidden', 'true')
+      expect(vibrate).toHaveBeenCalledTimes(1)
+      await user.click(screen.getByRole('button', { name: 'Fake pull' }))
+      expect(vibrate).toHaveBeenCalledTimes(2)
+      expect(screen.getByRole('button', { name: 'Review 4 scanned' })).toBeInTheDocument()
+    })
+
+    it('chips open a picker sheet with search, codes as badges, and the pick ticked', async () => {
+      const user = userEvent.setup()
+      const store = fakeStore()
+      installPhoneApi(store)
+      renderScanner(store)
+      await user.click(await screen.findByRole('combobox', { name: 'New scans as' }))
+      const sheet = screen.getByRole('dialog', { name: 'New scans as' })
+      expect(within(sheet).getByRole('option', { name: 'Auto' })).toHaveAttribute(
+        'aria-selected',
+        'true'
+      )
+      await user.type(within(sheet).getByRole('searchbox'), 'secret')
+      const options = within(sheet).getAllByRole('option')
+      expect(options.every((o) => /secret/i.test(o.textContent ?? ''))).toBe(true)
+      await user.click(options[0])
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+      expect(screen.getByRole('combobox', { name: 'New scans as' })).toHaveTextContent(
+        options[0].textContent!
+      )
+
+      await user.click(screen.getByRole('combobox', { name: 'Language' }))
+      const languages = screen.getByRole('dialog', { name: 'Language' })
+      expect(within(languages).getByRole('option', { name: /English/ })).toHaveTextContent('EN')
+      await user.click(within(languages).getByRole('button', { name: 'Close' }))
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     })
   })
 })

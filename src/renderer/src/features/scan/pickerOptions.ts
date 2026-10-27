@@ -2,6 +2,7 @@ import { useCallback, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { isLanguage, LANGUAGES, languageInfo, type Language } from '@shared/languages'
 import { RARITY_TIERS } from '@shared/scan/rarity'
+import { setPrefix } from '@shared/sets'
 import { api, queryKeys } from '@/lib/api'
 import { matchesLanguage, useLanguageFilter } from '@/lib/languageFilter'
 import { setLabel } from '@/lib/setLabels'
@@ -73,7 +74,14 @@ export function useScanPickers(): {
       const key = setKeyOf(s)
       const label = pickedLabel(s, withTag)
       byKey.set(key, { setName: s.setName, language: s.language })
-      options.push({ key, label, search: label.toLowerCase() })
+      options.push({
+        key,
+        label,
+        search: label.toLowerCase(),
+        badge: s.setCode ? setPrefix(s.setCode) : undefined,
+        title: s.setName,
+        note: withTag ? languageInfo(s.language).tag : undefined
+      })
     }
     return { options, byKey }
   }, [sets.data, language, withTag])
@@ -85,7 +93,8 @@ export function useScanPickers(): {
       ...LANGUAGES.filter((l) => l.code === language || present.has(l.code)).map((l) => ({
         key: l.code,
         label: l.label,
-        search: `${l.label} ${l.tag}`.toLowerCase()
+        search: `${l.label} ${l.tag}`.toLowerCase(),
+        badge: l.tag
       }))
     ]
   }, [sets.data, language])

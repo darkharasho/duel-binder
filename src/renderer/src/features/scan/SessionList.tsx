@@ -14,18 +14,10 @@ import { useScanHub } from './ScanHub'
 import { plural } from './scanText'
 import { ScanRowItem } from './ScanRowItem'
 
-/** The scanned-cards list with Clear and Add to collection; the same in both scan modes. */
-export function SessionList({ className }: { className?: string }): React.JSX.Element {
-  const { session, fresh } = useScanHub()
-  const [clearing, setClearing] = useState(false)
-
-  const { setPrinting, setQuantity, remove } = session
-  // Stable, so rows (memoized) don't re-render on every pull.
-  const rowActions = useMemo(
-    () => ({ setPrinting, setQuantity, remove }),
-    [setPrinting, setQuantity, remove]
-  )
-
+/** The copies Add would add, and Add itself with its toasts; shared with the phone's review. */
+// eslint-disable-next-line react-refresh/only-export-components -- shared with the phone's review
+export function useSessionCommit(): { addable: number; commit: () => Promise<void> } {
+  const { session } = useScanHub()
   const addable = session.rows
     .filter((r) => r.printingId !== null)
     .reduce((n, r) => n + r.quantity, 0)
@@ -36,6 +28,58 @@ export function SessionList({ className }: { className?: string }): React.JSX.El
     if (failed > 0)
       toast.error(`${plural(failed, 'entry', 'entries')} couldn't be added; see the list`)
   }
+  return { addable, commit }
+}
+
+/** Asks before clearing the list. */
+export function ClearSessionDialog({
+  open,
+  onOpenChange
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+}): React.JSX.Element {
+  const { session } = useScanHub()
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent showCloseButton={false} className="sm:max-w-sm">
+        <DialogHeader>
+          <DialogTitle>Clear this session?</DialogTitle>
+          <DialogDescription>
+            The scanned cards are removed from the list. Nothing is added to your collection.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Cancel
+          </Button>
+          <Button
+            variant="destructive"
+            onClick={() => {
+              session.clear()
+              onOpenChange(false)
+            }}
+          >
+            Clear list
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+/** The scanned-cards list with Clear and Add to collection; the same in both scan modes. */
+export function SessionList({ className }: { className?: string }): React.JSX.Element {
+  const { session, fresh } = useScanHub()
+  const [clearing, setClearing] = useState(false)
+  const { addable, commit } = useSessionCommit()
+
+  const { setPrinting, setQuantity, remove } = session
+  // Stable, so rows (memoized) don't re-render on every pull.
+  const rowActions = useMemo(
+    () => ({ setPrinting, setQuantity, remove }),
+    [setPrinting, setQuantity, remove]
+  )
 
   return (
     <>
@@ -92,30 +136,7 @@ export function SessionList({ className }: { className?: string }): React.JSX.El
         </footer>
       </section>
 
-      <Dialog open={clearing} onOpenChange={setClearing}>
-        <DialogContent showCloseButton={false} className="sm:max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Clear this session?</DialogTitle>
-            <DialogDescription>
-              The scanned cards are removed from the list. Nothing is added to your collection.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setClearing(false)}>
-              Cancel
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={() => {
-                session.clear()
-                setClearing(false)
-              }}
-            >
-              Clear list
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <ClearSessionDialog open={clearing} onOpenChange={setClearing} />
     </>
   )
 }

@@ -1,4 +1,4 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import {
   ArrowRightIcon,
@@ -15,84 +15,16 @@ import type { ScanEngine } from '@/features/scan/engine'
 import { useScanPickers, type PickerProps } from '@/features/scan/pickerOptions'
 import { choicesFor, FLAG_TEXT } from '@/features/scan/ScanRowItem'
 import { useScanHub } from '@/features/scan/ScanHub'
-import { SearchPicker, type PickerOption } from '@/features/scan/SearchPicker'
+import type { PickerOption } from '@/features/scan/SearchPicker'
 import type { ScanRow } from '@/features/scan/session'
-import { SessionList } from '@/features/scan/SessionList'
 import { api, queryKeys } from '@/lib/api'
 import { formatUsd } from '@/lib/format'
 import { cn } from '@/lib/utils'
+import { FoundBurst } from './FoundBurst'
 import { PhoneCamera } from './PhoneCamera'
-
-/** A drag shorter than this is a tap. */
-const TAP_PX = 8
-/** How far the handle is dragged down before it closes the sheet. */
-const SWITCH_PX = 48
-
-const GLASS = 'border border-white/[0.13] bg-white/[0.07] backdrop-blur-xl'
-
-/** Rows saved before prices existed have no `price` key at all. */
-const priceOf = (row: ScanRow): number | null | undefined =>
-  row.options.find((o) => o.printingId === row.printingId)?.price
-
-/** The full scanned list in a bottom sheet, closed by tapping or dragging its handle down. */
-function ReviewSheet({ onClose }: { onClose: () => void }): React.JSX.Element {
-  const [dy, setDy] = useState(0)
-  const start = useRef<number | null>(null)
-  const dragged = useRef(false)
-
-  const onPointerDown = (e: React.PointerEvent): void => {
-    start.current = e.clientY
-    dragged.current = false
-  }
-  const onPointerMove = (e: React.PointerEvent): void => {
-    if (start.current === null) return
-    const d = e.clientY - start.current
-    if (Math.abs(d) > TAP_PX) dragged.current = true
-    setDy(d)
-  }
-  const onPointerUp = (): void => {
-    if (start.current === null) return
-    if (dragged.current && dy > SWITCH_PX) onClose()
-    start.current = null
-    setDy(0)
-  }
-  const onClick = (): void => {
-    // A drag ends in a click too; only a tap closes.
-    if (dragged.current) {
-      dragged.current = false
-      return
-    }
-    onClose()
-  }
-
-  return (
-    <>
-      <div
-        aria-hidden
-        className="absolute inset-0 z-20 bg-black/50 animate-in fade-in"
-        onClick={onClose}
-      />
-      <div
-        style={dy > 0 ? { transform: `translateY(${dy}px)` } : undefined}
-        className="absolute inset-x-0 bottom-0 z-30 flex h-[85%] flex-col rounded-t-3xl pb-[env(safe-area-inset-bottom)] border-t border-white/[0.08] bg-background shadow-2xl animate-in slide-in-from-bottom duration-200"
-      >
-        <button
-          type="button"
-          aria-label="Close review"
-          onPointerDown={onPointerDown}
-          onPointerMove={onPointerMove}
-          onPointerUp={onPointerUp}
-          onPointerCancel={onPointerUp}
-          onClick={onClick}
-          className="flex h-8 shrink-0 touch-none items-center justify-center"
-        >
-          <span aria-hidden className="h-1.5 w-10 rounded-full bg-white/25" />
-        </button>
-        <SessionList className="mx-0 min-h-0 flex-1 rounded-none border-x-0 border-b-0" />
-      </div>
-    </>
-  )
-}
+import { PickerSheet } from './PickerSheet'
+import { ReviewSheet } from './ReviewSheet'
+import { GLASS, priceOf } from './scanLook'
 
 /** Copies of the row's printing already in the collection, any condition; null while loading. */
 function useOwned(row: ScanRow): number | null {
@@ -114,7 +46,7 @@ function ownedText(owned: number, quantity: number): string {
 const CARD = cn('flex min-h-28 shrink-0 gap-3 rounded-3xl p-2.5', GLASS)
 
 /** The newest row of the session, with its printing cycled or the row removed in place. */
-function LastScan({ row }: { row: ScanRow }): React.JSX.Element {
+function LastScan({ row, burst }: { row: ScanRow; burst: number }): React.JSX.Element {
   const { session } = useScanHub()
   const owned = useOwned(row)
   const choices = useMemo(() => choicesFor(row), [row])
@@ -129,8 +61,21 @@ function LastScan({ row }: { row: ScanRow }): React.JSX.Element {
   }
 
   return (
-    <section aria-label="Last scan" className={CARD}>
-      <CardArt imageId={row.imageId} size="small" alt="" className="w-14 shrink-0 self-start" />
+    <section
+      aria-label="Last scan"
+      // Keyed by the burst, so each new scan replays the bump and the art dropping in.
+      key={burst}
+      className={cn(CARD, burst > 0 && 'motion-safe:animate-[scan-bump_450ms_350ms_both]')}
+    >
+      <CardArt
+        imageId={row.imageId}
+        size="small"
+        alt=""
+        className={cn(
+          'w-14 shrink-0 self-start',
+          burst > 0 && 'motion-safe:animate-[scan-drop_500ms_ease-in_both]'
+        )}
+      />
       <div className="min-w-0 flex-1 text-[13px] leading-[18px]">
         <p className="truncate text-base font-semibold leading-5">{row.name}</p>
         {sub && <p className="truncate text-muted-foreground">{sub}</p>}
@@ -182,10 +127,11 @@ function LastScan({ row }: { row: ScanRow }): React.JSX.Element {
   )
 }
 
-/** A picker as a pill: its icon, its name, and what it's set to. */
+/** A picker as a pill: its icon, its name, and what it's set to; it opens a picker sheet. */
 function Chip({
   label,
   name,
+  title,
   icon: Icon,
   picker,
   shown,
@@ -193,30 +139,30 @@ function Chip({
 }: {
   label: string
   name: string
+  title: string
   icon: typeof StarIcon
   picker: PickerProps
   shown: (picked: PickerOption | undefined) => string
   searchPlaceholder: string
 }): React.JSX.Element {
+  const picked = picker.options.find((o) => o.key === picker.value)
   return (
-    <SearchPicker
+    <PickerSheet
       label={label}
+      title={title}
       value={picker.value}
       options={picker.options}
       onPick={picker.onPick}
       searchPlaceholder={searchPlaceholder}
       className={cn(
-        'h-[38px] max-w-[60vw] shrink-0 justify-start gap-1.5 rounded-full px-3.5 text-sm font-medium shadow-none dark:bg-white/[0.07] dark:hover:bg-white/[0.12]',
+        'h-[38px] max-w-[60vw] shrink-0 gap-1.5 rounded-full px-3.5 text-sm font-medium active:bg-white/[0.12]',
         GLASS
       )}
-      renderTrigger={(picked) => (
-        <>
-          <Icon aria-hidden className="size-4 shrink-0 text-white/55" />
-          <span className="sr-only">{name} </span>
-          <span className="truncate">{shown(picked)}</span>
-        </>
-      )}
-    />
+    >
+      <Icon aria-hidden className="size-4 shrink-0 text-white/55" />
+      <span className="sr-only">{name} </span>
+      <span className="truncate">{shown(picked)}</span>
+    </PickerSheet>
   )
 }
 
@@ -248,6 +194,20 @@ export function ScannerScreen({
   const value = priced.reduce((n, r) => n + priceOf(r)! * r.quantity, 0)
   const total = session.total
 
+  // A new scan is the newest row's time moving on (a repeat scan moves it too); removing a row
+  // or changing a printing doesn't. Counted while rendering, so the first one shows at once.
+  const stamp = last?.addedAt ?? 0
+  const [seen, setSeen] = useState(stamp)
+  const [burst, setBurst] = useState(0)
+  if (stamp !== seen) {
+    setSeen(stamp)
+    if (stamp > seen) setBurst(burst + 1)
+  }
+  useEffect(() => {
+    // A short buzz where the phone allows it (Android; iPhone browsers have no vibration).
+    if (burst > 0) navigator.vibrate?.(30)
+  }, [burst])
+
   return (
     <div className="relative isolate flex h-full min-h-0 w-full flex-col overflow-hidden pt-[env(safe-area-inset-top)]">
       <PhoneCamera engineFactory={engineFactory} className="px-6 pt-3">
@@ -267,10 +227,11 @@ export function ScannerScreen({
         >
           <SettingsIcon aria-hidden className="size-5" />
         </button>
+        {burst > 0 && last && <FoundBurst key={burst} name={last.name} price={priceOf(last)} />}
       </PhoneCamera>
       <div className="shrink-0 px-3.5 pt-3">
         {last ? (
-          <LastScan row={last} />
+          <LastScan row={last} burst={burst} />
         ) : (
           <section
             aria-label="Last scan"
@@ -284,6 +245,7 @@ export function ScannerScreen({
         <Chip
           label="Language"
           name="Language"
+          title="Language"
           icon={LanguagesIcon}
           picker={pickers.language}
           shown={(p) => (!p || p.key === 'all' ? 'All' : p.label)}
@@ -292,6 +254,7 @@ export function ScannerScreen({
         <Chip
           label="Set"
           name="Set"
+          title="Sets"
           icon={LayersIcon}
           picker={pickers.set}
           shown={(p) => (pickers.set.value === 'any' || !p ? 'Any set' : p.label)}
@@ -300,6 +263,7 @@ export function ScannerScreen({
         <Chip
           label="New scans as"
           name="Rarity"
+          title="New scans as"
           icon={StarIcon}
           picker={pickers.rarity}
           shown={(p) => (!p || p.key === 'auto' ? 'Auto rarity' : p.label)}

@@ -37,7 +37,10 @@ export function choicesFor(row: ScanRow): PickerOption[] {
     return {
       key: String(o.printingId),
       label,
-      search: `${o.setCode} ${o.rarity} ${o.setName} ${tag}`.toLowerCase()
+      search: `${o.setCode} ${o.rarity} ${o.setName} ${tag}`.toLowerCase(),
+      badge: o.setCode,
+      title: o.rarity,
+      note: languages ? tag : undefined
     }
   })
 }

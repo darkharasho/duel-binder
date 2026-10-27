@@ -107,7 +107,9 @@ export function PhoneShell({
   }
 
   return (
-    <div className="relative isolate flex h-dvh flex-col overflow-hidden bg-background text-foreground tabular-nums">
+    // Pinned to the screen's edges, not h-dvh: an iPhone home-screen app with a see-through status
+    // bar reports a dvh short of the screen, which left a bare strip along the bottom.
+    <div className="fixed inset-0 isolate flex flex-col overflow-hidden bg-background text-foreground tabular-nums">
       <ArtWash src={scan ? null : wash} />
       <main
         ref={mainRef}

@@ -7,7 +7,7 @@ import { defaultEngine, type ScanEngine } from '../engine'
 import type { ScanDraft } from '../resolve'
 import { useCamera } from '../useCamera'
 import { useScanLoop } from '../useScanLoop'
-import { outlineInVideo, pullOf } from './overlay'
+import { pullOf } from './overlay'
 import { PullOverlay } from './PullOverlay'
 import { useOverlay } from './useOverlay'
 
@@ -96,27 +96,6 @@ function Scanner({
     window.api.scanWindow.send({ kind: 'state', state: JSON.parse(serialized) as ScanWindowState })
   }, [serialized, settings])
 
-  // The outline in video pixels, worked out when the loop reports one (the video's size is only
-  // known from the element).
-  const loopOutline = loop.outline
-  const [drawn, setDrawn] = useState<{
-    points: [number, number][]
-    width: number
-    height: number
-  } | null>(null)
-  useEffect(() => {
-    const video = videoRef.current
-    setDrawn(
-      loopOutline && video
-        ? {
-            points: outlineInVideo(loopOutline, video.videoWidth, video.videoHeight),
-            width: video.videoWidth,
-            height: video.videoHeight
-          }
-        : null
-    )
-  }, [loopOutline])
-
   if (camera.error) return <CameraNotAvailable />
   return (
     <div
@@ -130,23 +109,6 @@ function Scanner({
         playsInline
         className="size-full object-cover object-center"
       />
-      {drawn && (
-        <svg
-          aria-hidden
-          viewBox={`0 0 ${drawn.width} ${drawn.height}`}
-          preserveAspectRatio="xMidYMid slice"
-          className="pointer-events-none absolute inset-0 size-full"
-        >
-          <polygon
-            points={drawn.points.map(([x, y]) => `${x},${y}`).join(' ')}
-            fill="none"
-            stroke="#34d399"
-            strokeWidth={3}
-            strokeLinejoin="round"
-            vectorEffect="non-scaling-stroke"
-          />
-        </svg>
-      )}
       <PullOverlay pull={overlay} />
     </div>
   )
@@ -161,7 +123,7 @@ function CameraNotAvailable(): React.JSX.Element {
 }
 
 /**
- * The scan window's whole page: the camera, the recognition loop, the outline and the pull
+ * The scan window's whole page: the camera, the recognition loop and the pull
  * overlays, with no app UI. It does nothing until the main window sends its settings.
  */
 export function ScanWindowApp({

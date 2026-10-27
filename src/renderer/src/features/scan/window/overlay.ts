@@ -1,6 +1,4 @@
-import { centreCrop } from '../crop'
 import type { ScanDraft } from '../resolve'
-import type { Quad } from '../vision/detect'
 
 export const NORMAL_MS = 4000
 export const HIT_MS = 8000
@@ -57,14 +55,4 @@ export function tickOverlay(s: OverlayState, now: number): OverlayState {
       : { showing: s.pending, until: now + NORMAL_MS, pending: null }
   }
   return NO_OVERLAY
-}
-
-/** The card outline in video pixels: the loop's quad is in centre-crop pixels. */
-export function outlineInVideo(
-  o: { quad: Quad; width: number; height: number },
-  videoWidth: number,
-  videoHeight: number
-): [number, number][] {
-  const { x, y } = centreCrop(videoWidth, videoHeight)
-  return o.quad.map(([px, py]) => [px + x, py + y])
 }

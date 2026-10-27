@@ -4,7 +4,6 @@ import {
   HIT_MS,
   NORMAL_MS,
   NO_OVERLAY,
-  outlineInVideo,
   pullOf,
   pushPull,
   tickOverlay,
@@ -150,17 +149,5 @@ describe('overlay state', () => {
   it('clears at until when nothing waits', () => {
     const s = pushPull(NO_OVERLAY, pull(1), 0)
     expect(tickOverlay(s, NORMAL_MS)).toEqual(NO_OVERLAY)
-  })
-})
-
-describe('outlineInVideo', () => {
-  it('adds the centre-crop offset to each point', () => {
-    const quad = [[0, 0], [10, 0], [10, 20], [0, 20]] as const
-    expect(outlineInVideo({ quad, width: 810, height: 1080 }, 1920, 1080)).toEqual([
-      [555, 0],
-      [565, 0],
-      [565, 20],
-      [555, 20]
-    ])
   })
 })

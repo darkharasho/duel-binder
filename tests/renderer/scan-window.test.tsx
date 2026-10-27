@@ -165,7 +165,7 @@ describe('Scan window', () => {
     expect(drafts()[0]).toMatchObject({ printingId: 101, rarity: 'Common', flag: 'check-rarity' })
   })
 
-  it('scans the centre crop and draws the outline in video space', async () => {
+  it('scans the centre crop and draws no outline on the video', async () => {
     stubCamera()
     const engine = fakeEngine(() => ({ ...NOTHING, found: true, quad }))
     const { container } = await renderWindow(engine)
@@ -174,28 +174,8 @@ describe('Scan window', () => {
     expect(grabbed).toHaveBeenLastCalledWith(expect.any(HTMLVideoElement), 140, 0, 360, 480)
     const frame = engine.analyze.mock.calls[0][0] as ImageBitmap
     expect([frame.width, frame.height]).toEqual([360, 480])
-    // The quad is in crop pixels; the crop starts 140 px into the video.
-    const svg = container.querySelector('svg[preserveAspectRatio]')!
-    expect(svg).toHaveAttribute('viewBox', '0 0 640 480')
-    expect(svg).toHaveAttribute('preserveAspectRatio', 'xMidYMid slice')
-    expect(svg.querySelector('polygon')).toHaveAttribute('points', '150,10 250,10 250,160 150,160')
-    expect(svg.querySelector('polygon')).toHaveAttribute('stroke', '#34d399')
-  })
-
-  it('draws no outline round a card-shaped thing far from any artwork', async () => {
-    stubCamera()
-    const book: RawSignals = {
-      ...NOTHING,
-      found: true,
-      quad,
-      art: [{ imageId: 999, distance: 120 }]
-    }
-    const { container } = await renderWindow(
-      fakeEngine(() => book),
-      { scan: { cardsForImages: vi.fn(async () => []) } }
-    )
-    await run(500)
-    expect(container.querySelector('svg[preserveAspectRatio] polygon')).toBeNull()
+    // Scanning is silent on stream: the card the loop found gets no outline.
+    expect(container.querySelector('svg, polygon')).toBeNull()
   })
 
   it('the video fills the window, is not mirrored, and double-click toggles full screen', async () => {

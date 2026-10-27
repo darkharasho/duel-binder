@@ -11,24 +11,29 @@ function Bar({ pull }: { pull: Pull }): React.JSX.Element {
     <div
       role="status"
       aria-label="Pull"
-      className="absolute inset-x-0 bottom-0 flex items-center gap-[1.5vw] bg-black/75 px-[3vw] py-[1.5vw] text-white"
+      className="absolute bottom-[3vw] left-[3vw] flex max-w-[min(70vw,48rem)] items-center gap-[1.2vw] rounded-[clamp(0.9rem,2vw,1.75rem)] bg-black/70 py-[1vw] pr-[2.2vw] pl-[1vw] text-white shadow-[0_4px_24px_rgba(0,0,0,0.45)] ring-1 ring-white/10"
     >
-      <CardArt imageId={pull.imageId} size="small" alt="" className="w-[clamp(2.5rem,6vw,5rem)]" />
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-[clamp(1rem,2.6vw,2.5rem)] leading-tight font-semibold">
+      <CardArt
+        imageId={pull.imageId}
+        size="small"
+        alt=""
+        className="w-[clamp(2.5rem,5.5vw,4.5rem)] shrink-0 overflow-hidden rounded-[clamp(0.3rem,0.6vw,0.6rem)]"
+      />
+      <div className="min-w-0">
+        <p className="truncate text-[clamp(1rem,2.4vw,2.25rem)] leading-tight font-semibold">
           {pull.name}
         </p>
+        {pull.price !== null && (
+          <p className="text-[clamp(1.2rem,3vw,2.75rem)] leading-tight font-bold text-emerald-400 tabular-nums">
+            {formatUsd(pull.price)}
+          </p>
+        )}
         {detail.length > 0 && (
-          <p className="truncate text-[clamp(0.8rem,1.6vw,1.5rem)] text-white/70">
+          <p className="truncate text-[clamp(0.75rem,1.4vw,1.3rem)] text-white/70">
             {detail.join(' · ')}
           </p>
         )}
       </div>
-      {pull.price !== null && (
-        <p className="text-[clamp(1.4rem,4vw,3.5rem)] leading-none font-bold text-emerald-400 tabular-nums">
-          {formatUsd(pull.price)}
-        </p>
-      )}
     </div>
   )
 }

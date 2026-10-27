@@ -252,7 +252,7 @@ export function ScannerScreen({
           type="button"
           aria-label="Settings"
           onClick={onOpenSettings}
-          className="absolute left-2.5 top-2.5 flex size-10 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur-md"
+          className="absolute left-2 top-2 flex size-11 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur-md"
         >
           <SettingsIcon aria-hidden className="size-5" />
         </button>

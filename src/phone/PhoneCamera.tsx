@@ -81,7 +81,7 @@ export function PhoneCamera({
               aria-pressed={torch.on}
               onClick={torch.toggle}
               className={cn(
-                'absolute right-2.5 top-2.5 flex size-10 items-center justify-center rounded-full backdrop-blur-md transition-colors',
+                'absolute right-2 top-2 flex size-11 items-center justify-center rounded-full backdrop-blur-md transition-colors',
                 torch.on ? 'bg-amber-300 text-black' : 'bg-black/45 text-white'
               )}
             >

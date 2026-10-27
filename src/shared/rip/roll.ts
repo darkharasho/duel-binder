@@ -59,24 +59,28 @@ function pickRarity(slot: PackSlot, index: RarityIndex, rand: () => number): str
 
 /**
  * Roll one pack. Each slot picks a rarity by weight, then a card uniformly by card id, then one of
- * that card's printings at the rarity uniformly. A card doesn't repeat within a slot unless its
- * rarity has run out of other cards. Throws when a slot's base rarity has no cards (see `canFill`).
+ * that card's printings at the rarity uniformly. A card doesn't repeat anywhere in the pack (per base
+ * rarity) unless its rarity has run out of unused cards. Throws when a slot's base rarity has no cards (see `canFill`).
  */
 export function rollPack(layout: PackLayout, pool: PoolCard[], rand: () => number): RipCard[] {
   const index = indexPool(pool)
   const pack: RipCard[] = []
+  /** Base rarity → card ids already in this pack. */
+  const used = new Map<string, Set<number>>()
   for (const slot of layout.slots) {
     if (!index.has(baseOf(slot.picks[0].rarity))) {
       throw new Error(`No ${slot.picks[0].rarity} cards to fill layout ${layout.id}`)
     }
-    const used = new Set<number>()
     for (let i = 0; i < slot.count; i++) {
-      const cards = index.get(pickRarity(slot, index, rand))!
+      const rarity = pickRarity(slot, index, rand)
+      const cards = index.get(rarity)!
+      let seen = used.get(rarity)
+      if (!seen) used.set(rarity, (seen = new Set()))
       const ids = [...cards.keys()]
-      const fresh = ids.filter((id) => !used.has(id))
+      const fresh = ids.filter((id) => !seen.has(id))
       const choices = fresh.length > 0 ? fresh : ids
       const cardId = choices[pickIndex(choices.length, rand)]
-      used.add(cardId)
+      seen.add(cardId)
       const printings = cards.get(cardId)!
       pack.push({ ...printings[pickIndex(printings.length, rand)], slot: pack.length })
     }

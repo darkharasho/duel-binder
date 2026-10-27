@@ -76,6 +76,26 @@ describe('rollPack', () => {
     }
   })
 
+  it('does not repeat a card anywhere in a pack when there are enough', () => {
+    // core-2010 shape: Commons are split over the fixed group, the SP slot and the foil-or-Common slot.
+    const l = RIP_LAYOUTS['core-2010']
+    const p = makePool({
+      Common: 60,
+      'Short Print': 4,
+      Rare: 20,
+      'Super Rare': 10,
+      'Ultra Rare': 8,
+      'Ultimate Rare': 8,
+      'Secret Rare': 6,
+      'Ghost Rare': 1
+    })
+    const rand = mulberry32(11)
+    for (let i = 0; i < 2000; i++) {
+      const pack = rollPack(l, p, rand)
+      expect(new Set(pack.map((c) => c.cardId)).size).toBe(pack.length)
+    }
+  })
+
   it('allows repeats when a rarity is too small', () => {
     const small = makePool({ Common: 2, Rare: 1, 'Super Rare': 1 })
     const pack = rollPack(layout, small, mulberry32(5))
@@ -164,6 +184,35 @@ describe('mulberry32', () => {
 })
 
 describe('layouts', () => {
+  it('Super Short Prints are no likelier per card than Short Prints', () => {
+    // LOB shape: 15 Short Print cards, 2 Super Short Print cards.
+    const l = RIP_LAYOUTS['core-2002']
+    const p = makePool({
+      Common: 60,
+      'Short Print': 15,
+      'Super Short Print': 2,
+      Rare: 20,
+      'Super Rare': 10,
+      'Ultra Rare': 10,
+      'Secret Rare': 2
+    })
+    const rand = mulberry32(21)
+    let sp = 0
+    let ssp = 0
+    for (let i = 0; i < 20_000; i++) {
+      for (const c of rollPack(l, p, rand)) {
+        if (c.rarity === 'Short Print') sp++
+        if (c.rarity === 'Super Short Print') ssp++
+      }
+    }
+    expect(ssp).toBeGreaterThan(0)
+    expect(ssp / 2).toBeLessThanOrEqual(sp / 15)
+    // Same check from the weights, for the most lopsided early set in the catalog (AST: 21 SP, 1 SSP).
+    const picks = l.slots.flatMap((s) => s.picks)
+    const w = (r: string): number => picks.find((x) => x.rarity === r)!.weight
+    expect(w('Super Short Print') / 1).toBeLessThanOrEqual(w('Short Print') / 21)
+  })
+
   it('every researched layout is sane', () => {
     for (const [id, l] of Object.entries(RIP_LAYOUTS)) {
       expect(l.id).toBe(id)

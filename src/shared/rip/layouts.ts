@@ -28,8 +28,10 @@ import type { PackLayout, PackSlot, SlotPick } from './types'
  * - Starlight and Quarter Century Secret Rare: Konami publishes no rate. Community estimates run from
  *   roughly 1:72 to 1:600 packs on small samples. We give each set's single chase foil the one
  *   documented chase rate, Konami's 1-in-288 for Ghost Rares, which Starlights took over from.
- * - Super Short Print: Kevin Tewart has said no such separate rarity exists, so SSPs get roughly the
- *   same per-card rate as Short Prints (early sets list about five times as many SPs as SSPs).
+ * - Super Short Print: Kevin Tewart has said no such separate rarity exists, and nothing documents a
+ *   rate. Collectors treat SSPs as scarcer, so the SSP weight is kept low enough that one SSP card is
+ *   never likelier than one SP card in any early set in the catalog. The worst case is AST, with
+ *   21 SP cards and 1 SSP: (1/3) / 21 ≈ 0.016 per SP card against 1/72 ≈ 0.014 for its SSP.
  *
  * Each pack is rolled on its own: no box guarantees. Rarity strings are YGOPRODeck set_rarity values;
  * rolling matches printings by base rarity, so "Ultra Rare (Overframe)" counts as an Ultra Rare.
@@ -50,8 +52,8 @@ function oneOf(base: string, odds: Record<string, number>): PackSlot {
 
 /** About 1 pack in 3 holds a Short Print, taking one Common's place. */
 const SHORT_PRINT = { 'Short Print': 1 / 3 }
-/** Early sets also have Super Short Prints; same per-card rate as SPs (see header). */
-const SHORT_PRINTS_EARLY = { 'Short Print': 1 / 3, 'Super Short Print': 1 / 15 }
+/** Early sets also have Super Short Prints: about 1 pack in 72, never likelier per card than an SP. */
+const SHORT_PRINTS_EARLY = { 'Short Print': 1 / 3, 'Super Short Print': 1 / 72 }
 /** Konami's documented 1-in-288 chase rate (Ghost Rare), reused for Starlight and QCSR. */
 const CHASE = 1 / 288
 

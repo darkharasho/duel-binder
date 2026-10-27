@@ -117,13 +117,19 @@ export function ScanHubProvider({ children }: { children: React.ReactNode }): Re
   useEffect(() => {
     let live = true
     const scanWindow = window.api.scanWindow
-    void scanWindow.isOpen().then((isOpen) => {
-      if (!live) return
-      setOpenKnown(true)
-      if (!isOpen) return
-      setOpen(true)
-      sendSettings()
-    })
+    // If main can't say, treat the window as closed so the page still gets its scanner.
+    void scanWindow.isOpen().then(
+      (isOpen) => {
+        if (!live) return
+        setOpenKnown(true)
+        if (!isOpen) return
+        setOpen(true)
+        sendSettings()
+      },
+      () => {
+        if (live) setOpenKnown(true)
+      }
+    )
     const offOpen = scanWindow.onOpenChange((isOpen) => {
       setOpenKnown(true)
       setOpen(isOpen)

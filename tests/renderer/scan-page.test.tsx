@@ -381,6 +381,14 @@ describe('Scan page', () => {
     expect(screen.queryByRole('button', { name: 'Pause' })).not.toBeInTheDocument()
   })
 
+  it("scans in place if main can't say whether the scan window is open", async () => {
+    bridge.scanWindow.isOpen.mockRejectedValueOnce(new Error('no answer'))
+    const { container } = await renderScan()
+    await run()
+    expect(container.querySelector('video')).toBeInTheDocument()
+    expect(camera.getUserMedia).toHaveBeenCalledTimes(1)
+  })
+
   it('opening the scan window stops the page camera first', async () => {
     const { container } = await renderScan()
     await run()

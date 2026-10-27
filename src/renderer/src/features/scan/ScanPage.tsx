@@ -223,7 +223,7 @@ export function ScanPage({
       ) : (
         <>
           <div className="mt-6 flex flex-wrap items-center gap-3">
-            <Button variant="outline" size="sm" onClick={() => void hub.openWindow()}>
+            <Button variant="outline" size="sm" onClick={() => void hub.openWindow().catch(() => undefined)}>
               {open ? 'Show scan window' : 'Open scan window'}
             </Button>
             <Button

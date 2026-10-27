@@ -143,8 +143,10 @@ export function ScanPage(): React.JSX.Element {
 
   const pickCamera = (id: string): void => {
     // A camera listed before permission has no id: open the default one.
-    setSettings({ deviceId: id.startsWith(UNNAMED_CAMERA) ? null : id })
-    hub.retryCamera()
+    const deviceId = id.startsWith(UNNAMED_CAMERA) ? null : id
+    setSettings({ deviceId })
+    // A different camera opens from the settings change; re-picking the current one retries it.
+    if (deviceId === settings.deviceId) hub.retryCamera()
   }
 
   const addable = session.rows
@@ -241,16 +243,20 @@ export function ScanPage(): React.JSX.Element {
             )}
           </div>
         ) : (
-          state && (
-            <div className="flex items-center gap-3">
-              <p role="status">{statusText(state.loop)}</p>
-              {state.loop.kind === 'stopped' && (
-                <Button variant="outline" size="xs" onClick={hub.retryScan}>
-                  Retry
-                </Button>
-              )}
-            </div>
-          )
+          <div className="flex items-center gap-3">
+            <p role="status">
+              {settings.paused
+                ? 'Paused'
+                : !state || state.openDeviceId === null
+                  ? 'Starting camera…'
+                  : statusText(state.loop)}
+            </p>
+            {!settings.paused && state?.loop.kind === 'stopped' && (
+              <Button variant="outline" size="xs" onClick={hub.retryScan}>
+                Retry
+              </Button>
+            )}
+          </div>
         )}
         {open && state?.setUnreadable && (
           <p className="text-xs text-muted-foreground">{SET_UNREADABLE}</p>

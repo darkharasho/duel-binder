@@ -9,7 +9,7 @@ export function useOverlay(): { overlay: Pull | null; push: (p: Pull) => void; c
   const clear = useCallback(() => setState(NO_OVERLAY), [])
 
   useEffect(() => {
-    if (!state.showing) return
+    if (!state.showing && !state.pending) return
     const timer = setTimeout(
       // Never earlier than `until`, so a timer that fires a millisecond early still expires it.
       () => setState((s) => tickOverlay(s, Math.max(Date.now(), s.until))),

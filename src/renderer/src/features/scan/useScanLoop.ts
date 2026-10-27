@@ -15,7 +15,6 @@ const FRAME_MS = 200
 /** Engine failures in a row before scanning stops; each waits twice as long as the last. */
 const MAX_FAILURES = 5
 const FIRST_BACKOFF_MS = 500
-const FLASH_MS = 120
 
 export type { ScanStatus }
 
@@ -41,7 +40,6 @@ export interface ScanLoop {
   outline: { quad: Quad; width: number; height: number } | null
   /** null until the engine has been given the fingerprint file (or found there is none). */
   artReady: boolean | null
-  flash: boolean
 }
 
 const sameStatus = (a: ScanStatus, b: ScanStatus): boolean =>
@@ -71,7 +69,6 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
   const [status, setStatusState] = useState<ScanStatus>({ kind: 'idle' })
   const [outline, setOutline] = useState<ScanLoop['outline']>(null)
   const [artReady, setArtReady] = useState<boolean | null>(null)
-  const [flash, setFlash] = useState(false)
 
   // The picked set's artworks, worked out once per set rather than per frame.
   const candidates = useMemo(
@@ -172,7 +169,6 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
   useEffect(() => {
     if (!opts.running) return
     let live = true
-    let flashTimer: ReturnType<typeof setTimeout> | undefined
     const l = loop.current
 
     const fail = (): void => {
@@ -278,12 +274,7 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
         )
         const draft = tracker.current.push(performance.now(), withLook(outcome, raw.cues))
         show(outcome, draft)
-        if (draft) {
-          latest.current.onDraft(draft)
-          setFlash(true)
-          clearTimeout(flashTimer)
-          flashTimer = setTimeout(() => setFlash(false), FLASH_MS)
-        }
+        if (draft) latest.current.onDraft(draft)
       } finally {
         l.busy = false
       }
@@ -293,12 +284,10 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
     return () => {
       live = false
       clearInterval(timer)
-      clearTimeout(flashTimer)
       l.lastFound = false
       setOutline(null)
-      setFlash(false)
     }
   }, [opts.running])
 
-  return { status, retry, outline, artReady, flash }
+  return { status, retry, outline, artReady }
 }

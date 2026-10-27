@@ -121,7 +121,7 @@ describe('Scan nav', () => {
   })
 
   it('a pull counted while on another page is on the list when you come back', async () => {
-    const { container } = renderWithProviders(<App />, {
+    renderWithProviders(<App />, {
       api: createMockApi({
         account: { status: vi.fn(async () => signedIn) },
         scanWindow: bridge.scanWindow
@@ -138,7 +138,6 @@ describe('Scan nav', () => {
     await u.click(screen.getByRole('button', { name: 'Scan' }))
     await screen.findByRole('heading', { name: 'Scan' })
     expect(screen.getByLabelText('Quantity of Dark Magician')).toHaveTextContent('1')
-    expect(container).toBeTruthy()
   })
 })
 
@@ -210,6 +209,11 @@ describe('Scan page', () => {
     expect(within(list).getByLabelText('Quantity of Dark Magician')).toHaveTextContent('1')
     const saved = JSON.parse(localStorage.getItem(SESSION_KEY)!) as ScanRow[]
     expect(saved[0]).toMatchObject({ printingId: 101, quantity: 1 })
+    expect(within(list).getByText('Dark Magician').closest('li')).toHaveClass('bg-emerald-400/10')
+    await run(1500)
+    expect(within(list).getByText('Dark Magician').closest('li')).not.toHaveClass(
+      'bg-emerald-400/10'
+    )
     act(() => bridge.emit({ kind: 'draft', draft: draft() }))
     expect(within(list).getByLabelText('Quantity of Dark Magician')).toHaveTextContent('2')
   })
@@ -241,30 +245,47 @@ describe('Scan page', () => {
     expect(lastSettings().paused).toBe(false)
   })
 
-  it("lists the scan window's cameras, and picking one sends it and asks it to retry", async () => {
+  it("lists the scan window's cameras; a different pick sends settings only, the current one retries", async () => {
+    const devices = [
+      { deviceId: 'cam1', label: 'Desk webcam' },
+      { deviceId: 'cam2', label: 'Laptop camera' },
+      { deviceId: '', label: '' }
+    ]
     renderScan()
-    await openWindow({
-      devices: [
-        { deviceId: 'cam1', label: 'Desk webcam' },
-        { deviceId: '', label: '' }
-      ]
-    })
+    await openWindow({ devices })
     const u = user()
     const picker = screen.getByRole('combobox', { name: 'Camera' })
     expect(picker).toHaveTextContent('Desk webcam')
     await u.click(picker)
     expect(screen.getAllByRole('option').map((o) => o.textContent)).toEqual([
       'Desk webcam',
-      'Camera 2'
+      'Laptop camera',
+      'Camera 3'
     ])
-    await u.click(screen.getByRole('option', { name: 'Camera 2' }))
-    expect(lastSettings().deviceId).toBeNull()
+    await u.click(screen.getByRole('option', { name: 'Laptop camera' }))
+    expect(lastSettings().deviceId).toBe('cam2')
+    // A different camera is opened by the settings change alone.
+    expect(bridge.sent.some((m) => m.kind === 'retryCamera')).toBe(false)
+
+    // Picking the current camera again after an error asks the window to retry it.
+    report({ devices, cameraError: 'lost', openDeviceId: null })
+    await u.click(screen.getByRole('combobox', { name: 'Camera' }))
+    await u.click(screen.getByRole('option', { name: 'Laptop camera' }))
+    expect(lastSettings().deviceId).toBe('cam2')
     expect(bridge.sent.at(-1)).toEqual({ kind: 'retryCamera' })
   })
 
   it("shows the scan window's status, camera errors with Try again, and Retry when stopped", async () => {
     renderScan()
     await openWindow()
+    expect(screen.getByRole('status')).toHaveTextContent('Hold a card up')
+    report({ openDeviceId: null })
+    expect(screen.getByRole('status')).toHaveTextContent('Starting camera…')
+    report({ openDeviceId: 'cam1' })
+    const u0 = user()
+    await u0.click(screen.getByRole('button', { name: 'Pause' }))
+    expect(screen.getByRole('status')).toHaveTextContent('Paused')
+    await u0.click(screen.getByRole('button', { name: 'Resume' }))
     expect(screen.getByRole('status')).toHaveTextContent('Hold a card up')
     report({ loop: { kind: 'unsure' } })
     expect(screen.getByText("Couldn't recognize this card")).toBeInTheDocument()

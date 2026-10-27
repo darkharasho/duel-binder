@@ -41,10 +41,21 @@ export function pushPull(s: OverlayState, p: Pull, now: number): OverlayState {
   return { showing: p, until: now + (p.hit ? HIT_MS : NORMAL_MS), pending: p.hit ? s.pending : null }
 }
 
-/** Expires what's showing at `until`; a waiting pull then shows for NORMAL_MS from now. */
+/**
+ * Expires what's showing at `until`. A hit with a normal pull waiting first shows nothing for
+ * FADE_MS (so it fades out); the waiting pull then shows for NORMAL_MS from that moment.
+ */
 export function tickOverlay(s: OverlayState, now: number): OverlayState {
-  if (!s.showing || now < s.until) return s
-  if (s.pending) return { showing: s.pending, until: now + NORMAL_MS, pending: null }
+  if (!s.showing) {
+    if (!s.pending || now < s.until) return s
+    return { showing: s.pending, until: now + NORMAL_MS, pending: null }
+  }
+  if (now < s.until) return s
+  if (s.pending) {
+    return s.showing.hit
+      ? { showing: null, until: s.until + FADE_MS, pending: s.pending }
+      : { showing: s.pending, until: now + NORMAL_MS, pending: null }
+  }
   return NO_OVERLAY
 }
 

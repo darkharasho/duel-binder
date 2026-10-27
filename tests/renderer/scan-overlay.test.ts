@@ -111,7 +111,21 @@ describe('overlay state', () => {
     expect(b.showing).toEqual(pull(1, true))
     expect(b.pending).toEqual(pull(2))
     expect(tickOverlay(b, HIT_MS - 1)).toBe(b)
-    expect(tickOverlay(b, HIT_MS)).toEqual({ showing: pull(2), until: HIT_MS + NORMAL_MS, pending: null })
+    // The hit fades out first; the waiting pull only shows after the gap.
+    const gap = tickOverlay(b, HIT_MS)
+    expect(gap).toEqual({ showing: null, until: HIT_MS + FADE_MS, pending: pull(2) })
+    expect(tickOverlay(gap, HIT_MS + FADE_MS - 1)).toBe(gap)
+    expect(tickOverlay(gap, HIT_MS + FADE_MS)).toEqual({
+      showing: pull(2),
+      until: HIT_MS + FADE_MS + NORMAL_MS,
+      pending: null
+    })
+  })
+
+  it('shows a pull pushed during the fade gap at once', () => {
+    const gap = tickOverlay(pushPull(pushPull(NO_OVERLAY, pull(1, true), 0), pull(2), 1000), HIT_MS)
+    const s = pushPull(gap, pull(3), HIT_MS + 100)
+    expect(s).toEqual({ showing: pull(3), until: HIT_MS + 100 + NORMAL_MS, pending: null })
   })
 
   it('keeps only the latest of two normals waiting behind a hit', () => {

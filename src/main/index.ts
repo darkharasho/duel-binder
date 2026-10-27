@@ -116,6 +116,8 @@ function createScanBrowserWindow(bounds: Rect | null): BrowserWindow {
     }
   })
 
+  // No menu bar at all, so Alt can't bring Electron's default one up over the stream.
+  win.removeMenu()
   win.on('page-title-updated', (event) => event.preventDefault())
   win.webContents.on('before-input-event', (event, input) => {
     if (input.type !== 'keyDown') return

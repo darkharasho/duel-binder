@@ -45,8 +45,19 @@ describe('HoloCard', () => {
     expect(layer.style.top).toBe('0px')
   })
 
-  it('Ultra Rare gets no holo', () => {
-    const { container } = render(<HoloCard card={card({})} size="small" />)
+  it('Super and Ultra Rare get the soft sheen over the art, unmasked', () => {
+    for (const rarity of ['Super Rare', 'Ultra Rare']) {
+      const { container, unmount } = render(<HoloCard card={card({ rarity })} size="full" />)
+      const layer = holo(container)!
+      expect(layer).toHaveAttribute('data-holo', 'soft')
+      expect(layer.style.top).toBe('18.1%')
+      expect(layer.style.maskImage).toBe('')
+      unmount()
+    }
+  })
+
+  it('a plain Rare gets no holo', () => {
+    const { container } = render(<HoloCard card={card({ rarity: 'Rare' })} size="small" />)
     expect(holo(container)).toBeNull()
   })
 

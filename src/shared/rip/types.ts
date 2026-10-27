@@ -2,7 +2,8 @@
 export type RevealTier = 'none' | 'rare' | 'big' | 'huge'
 
 /** Which holo treatment a card gets: none, foil over the art only, or foil over the whole card. */
-export type HoloKind = 'none' | 'art' | 'full'
+/** 'soft' is the gentler sheen over the art of the non-Secret foils. */
+export type HoloKind = 'none' | 'soft' | 'art' | 'full'
 
 /** Percent insets from each edge of a card frame, marking where the art sits. */
 export interface ArtBox {

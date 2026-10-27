@@ -59,7 +59,8 @@ export function revealTier(rarity: string): RevealTier {
 
 /**
  * Which holo treatment a card gets. Starlight is always full holo; Secret-family rarities are
- * foil over the art, or over the whole card when the variant is Overframe.
+ * foil over the art, or over the whole card when the variant is Overframe. Other foils (Super,
+ * Ultra, Ghost and the like) get a softer sheen over the art; a plain Rare gets none.
  */
 export function holoKind(rarity: string, variant: string | null): HoloKind {
   const base = baseOf(rarity)
@@ -67,7 +68,8 @@ export function holoKind(rarity: string, variant: string | null): HoloKind {
   if (base.includes('Secret')) {
     return `${rarity} ${variant ?? ''}`.includes('Overframe') ? 'full' : 'art'
   }
-  return 'none'
+  const tier = revealTier(rarity)
+  return tier === 'big' || tier === 'huge' ? 'soft' : 'none'
 }
 
 const DEFAULT_ART_BOX: ArtBox = { left: 11.9, top: 18.1, right: 11.9, bottom: 29.6 }

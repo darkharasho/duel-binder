@@ -73,8 +73,11 @@ describe('holoKind', () => {
     expect(holoKind('Platinum Secret Rare', null)).toBe('art')
     expect(holoKind('Secret Rare', 'Overframe')).toBe('full')
     expect(holoKind('Starlight Rare', null)).toBe('full')
-    expect(holoKind('Ultra Rare', null)).toBe('none')
-    expect(holoKind('Ghost Rare', null)).toBe('none')
+    expect(holoKind('Super Rare', null)).toBe('soft')
+    expect(holoKind('Ultra Rare', null)).toBe('soft')
+    expect(holoKind('Ghost Rare', null)).toBe('soft')
+    expect(holoKind('Rare', null)).toBe('none')
+    expect(holoKind('Common', null)).toBe('none')
   })
 
   it('treats an Overframe in the rarity text as full holo', () => {

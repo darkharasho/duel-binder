@@ -49,3 +49,40 @@ export interface PoolCard {
 export interface RipCard extends PoolCard {
   slot: number
 }
+
+/** A set Rip can open: English, with a researched layout and a pool that fills every slot. */
+export interface RipSet {
+  setName: string
+  setCode: string
+  tcgDate: string | null
+  imageKey: string | null
+  packImageKey: string | null
+  logoImageKey: string | null
+  coverImageId: number | null
+  layoutLabel: string
+}
+
+/** One rip session: a set opened for `packCount` packs, of which `packsOpened` have been saved. */
+export interface RipSessionSummary {
+  id: number
+  setName: string
+  setCode: string
+  packCount: number
+  packsOpened: number
+  startedAt: string
+  /** The session's rarest pull, or null before any pack is opened. */
+  best: RipCard | null
+}
+
+export interface RipSessionDetail extends RipSessionSummary {
+  /** Opened packs in order; each is its cards by slot. */
+  packs: RipCard[][]
+}
+
+export interface RipHistory {
+  packsOpened: number
+  cardsPulled: number
+  setsRipped: number
+  bestPulls: RipCard[]
+  sessions: RipSessionSummary[]
+}

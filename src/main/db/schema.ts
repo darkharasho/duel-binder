@@ -190,6 +190,20 @@ export const SCHEMA_V15_SERVER = `
 ALTER TABLE card_printings ADD COLUMN contributed INTEGER NOT NULL DEFAULT 0;
 `
 
+/**
+ * Rip (simulated pack openings): local history only, never synced. Pulls keep a snapshot of the
+ * card (no foreign key to the catalog) so history survives a catalog refresh. No prices.
+ */
+export const SCHEMA_V16 = `
+CREATE TABLE rip_sessions (id INTEGER PRIMARY KEY, set_name TEXT NOT NULL, set_code TEXT NOT NULL,
+  pack_count INTEGER NOT NULL, started_at TEXT NOT NULL);
+CREATE TABLE rip_pulls (session_id INTEGER NOT NULL REFERENCES rip_sessions(id) ON DELETE CASCADE,
+  pack INTEGER NOT NULL, slot INTEGER NOT NULL, pkey TEXT NOT NULL, card_id INTEGER NOT NULL,
+  name TEXT NOT NULL, set_code TEXT NOT NULL, rarity TEXT NOT NULL, variant TEXT, frame_type TEXT NOT NULL,
+  image_id INTEGER, PRIMARY KEY (session_id, pack, slot));
+CREATE INDEX ix_rip_pulls_rarity ON rip_pulls(rarity);
+`
+
 /** A printing's rarity as shown: "Starlight Rare (Extended Art)" for a labelled variant. */
 export const RARITY_LABEL = "p.set_rarity || COALESCE(' (' || p.variant || ')', '')"
 
@@ -209,6 +223,7 @@ export const MIGRATIONS: Migration[] = [
   { version: 12, sql: SCHEMA_V12, server: false },
   { version: 13, sql: SCHEMA_V13 },
   { version: 14, sql: SCHEMA_V14 },
-  { version: 15, sql: SCHEMA_V15, server: SCHEMA_V15_SERVER }
+  { version: 15, sql: SCHEMA_V15, server: SCHEMA_V15_SERVER },
+  { version: 16, sql: SCHEMA_V16, server: false }
 ]
 

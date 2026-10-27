@@ -356,7 +356,6 @@ describe('PackOpener', () => {
         onDone={vi.fn()}
         packArt={{
           setCode: 'BTB',
-          imageKey: null,
           packImageKey: 'BTB-pack.png',
           logoImageKey: 'BTB-logo.png',
           coverImageId: 12
@@ -371,10 +370,24 @@ describe('PackOpener', () => {
     for (const img of photos) expect(img).toHaveAttribute('src', 'ygo-img://set/BTB-pack.png')
     expect(within(screen.getByTestId('rip-pack-strip')).getByTestId('rip-pack-image')).toBeTruthy()
     expect(pack.querySelector('[data-testid="rip-pack-wrapper"]')).toBeNull()
-    // A broken photo falls back to the wrapper.
+    // The pack is the photo: no foil behind it, no crimps of ours, only the tear line cut.
+    expect(pack.querySelector('[data-testid="rip-pack-crimp"]')).toBeNull()
+    for (const face of pack.querySelectorAll<HTMLElement>('[data-testid="rip-pack-face"]')) {
+      expect(face.style.backgroundImage).toBe('')
+    }
+    expect(screen.getByTestId('rip-pack-strip').style.clipPath).toMatch(/^polygon\(0% 0%, 100% 0%/)
+    // The sheen is masked to the photo, so it only crosses the pack.
+    for (const sheen of pack.querySelectorAll<HTMLElement>('[data-testid="rip-pack-sheen"]')) {
+      expect(sheen.getAttribute('style')).toContain('mask-image: url("ygo-img://set/BTB-pack.png")')
+    }
+    // The box is cropped to the pack in the photo's square canvas.
+    expect(screen.getByTestId('rip-pack-box').style.width).toContain('0.6')
+    // A broken photo falls back to the wrapper, crimps and all.
     fireEvent.error(photos[0])
     expect(pack.querySelector('[data-testid="rip-pack-image"]')).toBeNull()
     expect(pack.querySelector('[data-testid="rip-pack-wrapper"]')).not.toBeNull()
+    expect(pack.querySelectorAll('[data-testid="rip-pack-crimp"]').length).toBeGreaterThan(0)
+    expect(screen.getByTestId('rip-pack-box').style.width).toContain('0.64')
   })
 
   it('without a pack photo the pack is a foil wrapper with the cover art and logo', async () => {
@@ -386,7 +399,6 @@ describe('PackOpener', () => {
         onDone={vi.fn()}
         packArt={{
           setCode: 'PHNI',
-          imageKey: null,
           packImageKey: null,
           logoImageKey: 'PHNI-logo.png',
           coverImageId: 12
@@ -417,15 +429,68 @@ describe('PackOpener', () => {
     renderOpener(async () => commons())
     await loadedPack()
     expect(screen.getByTestId('rip-middle').style.containerType).toBe('size')
+    // The pack is as tall as the card will be.
+    expect(screen.getByTestId('rip-pack-box').style.height).toContain('100cqh')
     space()
     const handBox = front().parentElement!
     expect(handBox.style.height).toContain('100cqh')
-    // Header line, counter, row and buttons all live inside the stage.
-    const stage = screen.getByTestId('rip-stage')
-    expect(stage).toContainElement(screen.getByText(/pack 1 of 3/i))
-    expect(stage).toContainElement(screen.getByTestId('rip-count'))
-    expect(stage).toContainElement(nextButton())
-    expect(stage).toContainElement(screen.getByTestId('rip-caption'))
+    // Capped, and kept narrow enough to leave the caption room beside it.
+    expect(handBox.style.height).toContain('600px')
+    expect(handBox.style.height).toContain('50cqw')
+    // Placed from the stage height too. (jsdom mangles min()/max() inside calc(), so the 32px floor
+    // can't be read back here; checked in Chrome instead.)
+    expect(handBox.style.top).toContain('100cqh')
+  })
+
+  it('a sent card flies down from the front into its place in the row', async () => {
+    motion(false)
+    vi.useFakeTimers()
+    const animate = vi.fn()
+    Element.prototype.animate = animate as unknown as Element['animate']
+    vi.spyOn(Element.prototype, 'getBoundingClientRect').mockImplementation(function (
+      this: Element
+    ) {
+      const front = this.getAttribute('data-testid') === 'rip-front'
+      return {
+        left: front ? 400 : 20,
+        top: front ? 60 : 520,
+        width: front ? 280 : 60,
+        height: front ? 408 : 87,
+        right: 0,
+        bottom: 0,
+        x: 0,
+        y: 0,
+        toJSON: () => ({})
+      } as DOMRect
+    })
+    try {
+      renderOpener(async () => nine())
+      await act(() => vi.advanceTimersByTimeAsync(0))
+      space()
+      await act(() => vi.advanceTimersByTimeAsync(550))
+      space()
+      expect(animate).toHaveBeenCalledTimes(1)
+      const [frames, options] = animate.mock.calls[0]
+      expect(frames).toEqual([
+        { transform: `translate(380px, -460px) scale(${280 / 60})` },
+        { transform: 'none' }
+      ])
+      expect(options).toMatchObject({ duration: 420 })
+    } finally {
+      delete (Element.prototype as { animate?: unknown }).animate
+    }
+  })
+
+  it('clicking a seen card in the row leaves the hand where it is', async () => {
+    renderOpener(async () => nine())
+    await loadedPack()
+    space()
+    space()
+    space()
+    expect(count()).toBe('3 / 9')
+    fireEvent.click(screen.getAllByTestId('rip-row-card')[0])
+    fireEvent.click(screen.getByTestId('rip-bottom'))
+    expect(count()).toBe('3 / 9')
   })
 
   it('with reduced motion the hand swaps without transitions', async () => {
@@ -436,7 +501,6 @@ describe('PackOpener', () => {
     for (const el of document.querySelectorAll<HTMLElement>('[data-hand-card]')) {
       expect(el.style.transition).toBe('none')
     }
-    expect(document.querySelector('[data-leaving]')).toBeNull()
   })
 
   it('edges show no holo, so a Starlight at the back stays a surprise', async () => {

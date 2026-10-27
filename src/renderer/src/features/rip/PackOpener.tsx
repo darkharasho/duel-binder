@@ -33,11 +33,16 @@ const GLOW_PX: Record<RevealTier, number> = { none: 0, rare: 26, big: 48, huge: 
 const EASE = 'cubic-bezier(.25,.8,.25,1)'
 
 /**
- * The front card's height: the middle of the stage less room above for the edges (7px a card,
- * four deep) and a hit's scale-up, and below for the scale-up. The middle is a size container.
+ * The front card's height, from the middle of the stage (a size container), the least of:
+ * - its height less room above for the edges (7px a card, four deep) and a hit's scale-up, and
+ *   below for the scale-up;
+ * - 600px, so a big window doesn't blow the art up past its size;
+ * - what leaves room beside it, in half the width, for the 44px gap, the 224px caption and a margin.
  */
-const CARD_H = 'calc(100cqh - 58px)'
-const CARD_TOP = '32px'
+// Wrapped in calc() so it's also usable where a bare min() isn't (and jsdom keeps it).
+const CARD_H = 'calc(min(100cqh - 58px, 600px, (50cqw - 280px) * 1228 / 421))'
+/** Centred in the space left over, but never closer than 32px to the top bar. */
+const CARD_TOP = `calc(max(32px, (100cqh - ${CARD_H}) / 2))`
 /** Card width from its height (421×614). */
 const CARD_W = `calc(${CARD_H} * 421 / 614)`
 
@@ -53,8 +58,10 @@ const SPARKS = Array.from({ length: 10 }, (_, i) => {
 })
 
 /**
- * The pack's outline, as percent of its box: crimped teeth along the top and bottom edges, and the
- * tear line 9% down, shared by the strip (above it) and the body (below it) so they meet exactly.
+ * The pack's outline, as percent of its box. The tear line is shared by the strip (above it) and
+ * the body (below it) so they meet exactly. The wrapper also gets crimped teeth top and bottom and
+ * tears 9% down; a pack photo has its own crimps, so it keeps its outline and tears just under the
+ * top seal, 6% down, clear of the KONAMI mark.
  */
 const TEETH = 18
 const teeth = (y: number, depth: number): string[] =>
@@ -62,11 +69,25 @@ const teeth = (y: number, depth: number): string[] =>
     { length: TEETH * 2 + 1 },
     (_, i) => `${((i / (TEETH * 2)) * 100).toFixed(2)}% ${i % 2 ? y + depth : y}%`
   )
-const TOP_EDGE = teeth(0, 1.4)
-const TEAR_LINE = teeth(9, -1.4)
-const BOTTOM_EDGE = teeth(100, -1.4)
-const STRIP_CLIP = `polygon(${[...TOP_EDGE, ...[...TEAR_LINE].reverse()].join(', ')})`
-const BODY_CLIP = `polygon(${[...TEAR_LINE, ...[...BOTTOM_EDGE].reverse()].join(', ')})`
+const polygon = (points: string[]): string => `polygon(${points.join(', ')})`
+const WRAPPER_TEAR = teeth(9, -1.4)
+const PHOTO_TEAR = teeth(6, -1.2)
+const CLIPS = {
+  wrapper: {
+    strip: polygon([...teeth(0, 1.4), ...[...WRAPPER_TEAR].reverse()]),
+    body: polygon([...WRAPPER_TEAR, ...[...teeth(100, -1.4)].reverse()])
+  },
+  photo: {
+    strip: polygon(['0% 0%', '100% 0%', ...[...PHOTO_TEAR].reverse()]),
+    body: polygon([...PHOTO_TEAR, '100% 100%', '0% 100%'])
+  }
+}
+/**
+ * Pack photos share a square canvas with the pack centred: about 0.55 of the width on Beyond the
+ * Brave, wider on some. The box crops to 0.6 of it so it fits the pack, not the empty canvas.
+ */
+const PHOTO_ASPECT = 0.6
+const WRAPPER_ASPECT = 0.64
 const FOIL =
   'linear-gradient(115deg, #e4e6eb 0%, #8e939d 16%, #f6f7f9 30%, #7a7f89 47%, #dfe2e8 63%, #969ba5 80%, #eef0f3 100%)'
 /** The crimped seals: pressed ridges in a lighter foil. */
@@ -115,10 +136,7 @@ function RarityBadge({
 }
 
 /** The set art a sealed pack shows; RipPage passes the picked set. */
-export type PackArt = Pick<
-  RipSet,
-  'setCode' | 'imageKey' | 'packImageKey' | 'logoImageKey' | 'coverImageId'
->
+export type PackArt = Pick<RipSet, 'setCode' | 'packImageKey' | 'logoImageKey' | 'coverImageId'>
 
 /**
  * Everything printed on the pack, filling its box. Drawn twice, once clipped to the strip and once
@@ -140,67 +158,95 @@ function PackFace({
   const cover =
     art?.coverImageId != null && !failed.cover ? cardImageSrc('cropped', art.coverImageId) : null
   const logo = art?.logoImageKey && !failed.logo ? setImageSrc(art.logoImageKey) : null
-  return (
-    <div className="absolute inset-0 overflow-hidden" style={{ backgroundImage: FOIL }}>
-      {packSrc ? (
+  if (packSrc) {
+    // The pack is the photo: no foil or crimps of ours, and the sheen only where the pack is.
+    const mask = `url("${packSrc}")`
+    return (
+      <div data-testid="rip-pack-face" className="absolute inset-0 overflow-hidden">
         <img
           src={packSrc}
           alt=""
           draggable={false}
           data-testid="rip-pack-image"
           onError={onPackError}
-          className="absolute inset-0 size-full"
+          className="absolute inset-0 size-full object-cover"
         />
-      ) : (
-        <div data-testid="rip-pack-wrapper" className="absolute inset-0">
-          {cover && (
+        <div
+          aria-hidden
+          data-testid="rip-pack-sheen"
+          style={{
+            backgroundImage: SHEEN,
+            backgroundSize: '300% 100%',
+            // Same placement as the photo's object-fit: cover.
+            maskImage: mask,
+            WebkitMaskImage: mask,
+            maskSize: 'cover',
+            WebkitMaskSize: 'cover',
+            maskPosition: 'center',
+            WebkitMaskPosition: 'center',
+            maskRepeat: 'no-repeat',
+            WebkitMaskRepeat: 'no-repeat'
+          }}
+          className="pointer-events-none absolute inset-0 mix-blend-overlay animate-[rip-sheen_4200ms_ease-in-out_infinite] motion-reduce:hidden"
+        />
+      </div>
+    )
+  }
+  return (
+    <div
+      data-testid="rip-pack-face"
+      className="absolute inset-0 overflow-hidden"
+      style={{ backgroundImage: FOIL }}
+    >
+      <div data-testid="rip-pack-wrapper" className="absolute inset-0">
+        {cover && (
+          <img
+            src={cover}
+            alt=""
+            draggable={false}
+            onError={() => setFailed((f) => ({ ...f, cover: true }))}
+            className="absolute inset-x-[5%] top-[4%] bottom-[4%] h-[92%] w-[90%] object-cover"
+          />
+        )}
+        {/* Foil showing round the art, and a sheen over it so it reads as printed on foil. */}
+        <div
+          aria-hidden
+          className="absolute inset-0"
+          style={{
+            backgroundImage:
+              'linear-gradient(180deg, rgb(255 255 255 / 0.18), transparent 30%, transparent 70%, rgb(0 0 0 / 0.35))'
+          }}
+        />
+        <div className="absolute inset-x-[8%] top-[10%] flex h-[26%] items-center justify-center">
+          {logo ? (
             <img
-              src={cover}
+              src={logo}
               alt=""
               draggable={false}
-              onError={() => setFailed((f) => ({ ...f, cover: true }))}
-              className="absolute inset-x-[5%] top-[4%] bottom-[4%] h-[92%] w-[90%] object-cover"
+              data-testid="rip-pack-logo"
+              onError={() => setFailed((f) => ({ ...f, logo: true }))}
+              className="max-h-full max-w-full object-contain drop-shadow-[0_4px_10px_rgb(0_0_0/0.7)]"
             />
-          )}
-          {/* Foil showing round the art, and a sheen over it so it reads as printed on foil. */}
-          <div
-            aria-hidden
-            className="absolute inset-0"
-            style={{
-              backgroundImage:
-                'linear-gradient(180deg, rgb(255 255 255 / 0.18), transparent 30%, transparent 70%, rgb(0 0 0 / 0.35))'
-            }}
-          />
-          <div className="absolute inset-x-[8%] top-[10%] flex h-[26%] items-center justify-center">
-            {logo ? (
-              <img
-                src={logo}
-                alt=""
-                draggable={false}
-                data-testid="rip-pack-logo"
-                onError={() => setFailed((f) => ({ ...f, logo: true }))}
-                className="max-h-full max-w-full object-contain drop-shadow-[0_4px_10px_rgb(0_0_0/0.7)]"
-              />
-            ) : (
-              <span className="text-center text-[clamp(1rem,7cqh,1.6rem)] leading-tight font-black tracking-tight text-white uppercase drop-shadow-[0_2px_8px_rgb(0_0_0/0.85)]">
-                {setName}
-              </span>
-            )}
-          </div>
-          {art?.setCode && (
-            <span className="absolute inset-x-0 bottom-[6%] text-center font-mono text-[11px] font-bold tracking-[0.2em] text-white/85 drop-shadow-[0_1px_3px_rgb(0_0_0/0.9)]">
-              {art.setCode}
+          ) : (
+            <span className="text-center text-[clamp(1rem,7cqh,1.6rem)] leading-tight font-black tracking-tight text-white uppercase drop-shadow-[0_2px_8px_rgb(0_0_0/0.85)]">
+              {setName}
             </span>
           )}
         </div>
-      )}
-      {/* Crimped seals; light over a photo of a pack, which has its own. */}
+        {art?.setCode && (
+          <span className="absolute inset-x-0 bottom-[6%] text-center font-mono text-[11px] font-bold tracking-[0.2em] text-white/85 drop-shadow-[0_1px_3px_rgb(0_0_0/0.9)]">
+            {art.setCode}
+          </span>
+        )}
+      </div>
+      {/* Crimped seals. */}
       {(['top-0', 'bottom-0'] as const).map((edge) => (
         <div
           key={edge}
           aria-hidden
+          data-testid="rip-pack-crimp"
           style={{ backgroundImage: CRIMP }}
-          className={cn('absolute inset-x-0 h-[14px]', edge, packSrc ? 'opacity-30' : 'opacity-95')}
+          className={cn('absolute inset-x-0 h-[14px] opacity-95', edge)}
         />
       ))}
       <div
@@ -230,6 +276,8 @@ function SealedPack({
   const packSrc = art?.packImageKey && !packFailed ? setImageSrc(art.packImageKey) : null
   const fail = (): void => setPackFailed(true)
   const face = <PackFace setName={setName} art={art} packSrc={packSrc} onPackError={fail} />
+  const clips = packSrc ? CLIPS.photo : CLIPS.wrapper
+  const aspect = packSrc ? PHOTO_ASPECT : WRAPPER_ASPECT
   return (
     <div
       data-testid="rip-pack"
@@ -248,27 +296,18 @@ function SealedPack({
         </span>
       )}
       <TiltCard maxTilt={8} glareClassName="hidden">
-        <div className="relative drop-shadow-[0_26px_40px_rgb(0_0_0/0.6)]">
-          {/* Sizes the pack: the photo at its own proportions, or a wrapper at a booster's. */}
-          {packSrc ? (
-            <img
-              src={packSrc}
-              alt=""
-              aria-hidden
-              draggable={false}
-              onError={fail}
-              style={{ height: CARD_H }}
-              className="invisible block w-auto max-w-none"
-            />
-          ) : (
-            <div style={{ height: CARD_H, width: `calc(${CARD_H} * 0.64)` }} />
-          )}
+        {/* As tall as the front card; sized up front, so nothing jumps while the photo loads. */}
+        <div
+          data-testid="rip-pack-box"
+          style={{ height: CARD_H, width: `calc(${CARD_H} * ${aspect})` }}
+          className="relative drop-shadow-[0_26px_40px_rgb(0_0_0/0.6)]"
+        >
           <div
             className={cn(
               'absolute inset-0',
               pending && 'animate-pulse motion-reduce:animate-none'
             )}
-            style={{ clipPath: BODY_CLIP }}
+            style={{ clipPath: clips.body }}
           >
             {face}
           </div>
@@ -276,7 +315,7 @@ function SealedPack({
             <div
               aria-hidden
               data-testid="rip-pack-strip"
-              style={{ clipPath: STRIP_CLIP }}
+              style={{ clipPath: clips.strip }}
               className={cn(
                 'absolute inset-0',
                 phase === 'tearing' &&
@@ -303,7 +342,11 @@ function Caption({ card, outgoing }: { card: RipCard; outgoing?: boolean }): Rea
     <div
       data-testid={outgoing ? 'rip-caption-out' : 'rip-caption'}
       aria-hidden={outgoing || undefined}
-      style={{ left: `calc(50% + ${CARD_W} / 2 + 44px)`, bottom: '40px' }}
+      style={{
+        left: `calc(50% + ${CARD_W} / 2 + 44px)`,
+        // Level with the card's lower part, wherever the card sits.
+        bottom: `calc(100cqh - ${CARD_TOP} - ${CARD_H} + 14px)`
+      }}
       className={cn(
         'pointer-events-none absolute flex w-56 flex-col items-start gap-1.5 motion-reduce:animate-none',
         outgoing
@@ -356,10 +399,9 @@ function RowCard({
   return (
     <li data-testid="rip-row-card" className="min-w-0 shrink basis-[66px] last:shrink-0">
       <div ref={ref} className="w-[60px] origin-top-left">
-        <div className="transition-transform duration-200 hover:-translate-y-1.5 motion-reduce:transition-none">
-          <div className="rounded-[4px] shadow-[0_6px_14px_rgb(0_0_0/0.5)]">
-            <HoloCard card={card} size="full" holo={false} />
-          </div>
+        {/* Just a record of what's been seen: no tilt or hover. */}
+        <div className="pointer-events-none rounded-[4px] shadow-[0_6px_14px_rgb(0_0_0/0.5)]">
+          <HoloCard card={card} size="full" holo={false} />
         </div>
       </div>
     </li>
@@ -842,7 +884,12 @@ export function PackOpener({
         </div>
       </div>
 
-      <div className="relative z-40 flex h-[112px] shrink-0 items-end gap-6 px-5 pb-3">
+      {/* Clicks here (a seen card, the hint) never move the hand on. */}
+      <div
+        data-testid="rip-bottom"
+        onClick={(e) => e.stopPropagation()}
+        className="relative z-40 flex h-[112px] shrink-0 items-end gap-6 px-5 pb-3"
+      >
         <ol
           aria-label="Seen cards"
           data-testid="rip-row"
@@ -865,7 +912,7 @@ export function PackOpener({
                 ? 'Click, Space or swipe to send the front card down'
                 : 'Click or press Space to tear the pack open'}
           </span>
-          <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
+          <div className="flex gap-2">
             <Button
               variant="outline"
               disabled={

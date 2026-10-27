@@ -93,7 +93,7 @@ export function ScanPage({
   )
 
   return (
-    <div className="p-8">
+    <div className="p-8 max-md:p-4">
       <PageHeader>
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="mr-auto text-2xl font-semibold tracking-tight">Scan</h1>

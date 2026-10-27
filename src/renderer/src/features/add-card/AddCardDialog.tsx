@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { ChevronLeft, XIcon } from 'lucide-react'
 import { toast } from 'sonner'
 import type { CardSearchResult, Printing } from '@shared/types'
 import { api, mutationInvalidationKeys, queryKeys } from '@/lib/api'
@@ -11,6 +12,7 @@ import { CardArt } from '@/components/CardArt'
 import { LanguageSelect } from '@/components/LanguageSelect'
 import { LanguageTag } from '@/components/LanguageTag'
 import { matchesLanguage, useLanguageFilter } from '@/lib/languageFilter'
+import { isPhone } from '@/lib/platform'
 import { useSyncStatus } from '@/components/useSyncStatus'
 import { Button } from '@/components/ui/button'
 import {
@@ -23,6 +25,7 @@ import {
 } from '@/components/ui/command'
 import {
   Dialog,
+  DialogClose,
   DialogContent,
   DialogDescription,
   DialogHeader,
@@ -214,6 +217,10 @@ export function AddCardDialog({
   }
 
   const downloading = sync?.cardCount === 0
+  // On the phone the dialog fills the screen, so its lists can grow to the space left.
+  const phone = isPhone()
+  const listClass = phone ? 'max-h-none flex-1' : 'max-h-80'
+  const commandClass = phone ? 'min-h-0 flex-1 rounded-none' : 'rounded-xl'
 
   return (
     <Dialog
@@ -223,16 +230,41 @@ export function AddCardDialog({
         onOpenChange(next)
       }}
     >
-      <DialogContent className="gap-0 overflow-hidden p-0 sm:max-w-xl" onKeyDown={onKeyDown}>
-        <DialogHeader className="sr-only">
-          <DialogTitle>Add card</DialogTitle>
-          <DialogDescription>
+      <DialogContent
+        className={
+          phone
+            ? 'inset-0 top-0 left-0 flex h-dvh max-w-none translate-x-0 translate-y-0 flex-col gap-0 overflow-hidden rounded-none border-0 p-0 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] data-[state=closed]:zoom-out-100 data-[state=open]:zoom-in-100 sm:max-w-none'
+            : 'gap-0 overflow-hidden p-0 sm:max-w-xl'
+        }
+        data-layout={phone ? 'full-screen' : undefined}
+        showCloseButton={!phone}
+        onKeyDown={onKeyDown}
+      >
+        <DialogHeader
+          className={phone ? 'flex-row items-center gap-1 border-b px-2 py-1' : 'sr-only'}
+        >
+          {phone && step !== 'search' && (
+            <Button variant="ghost" size="icon" aria-label="Back" onClick={goBack}>
+              <ChevronLeft />
+            </Button>
+          )}
+          <DialogTitle className={phone ? 'flex-1 px-2 text-base' : undefined}>
+            Add card
+          </DialogTitle>
+          <DialogDescription className={phone ? 'sr-only' : undefined}>
             Search for a card, then choose its printing, art and quantity.
           </DialogDescription>
+          {phone && (
+            <DialogClose asChild>
+              <Button variant="ghost" size="icon" aria-label="Close">
+                <XIcon />
+              </Button>
+            </DialogClose>
+          )}
         </DialogHeader>
 
         {card && step !== 'search' && (
-          <div className="flex items-center gap-3 border-b px-4 py-3 pr-10">
+          <div className={cn('flex items-center gap-3 border-b px-4 py-3', !phone && 'pr-10')}>
             <CardArt
               imageId={imageId ?? card.defaultImageId}
               printingId={
@@ -261,14 +293,14 @@ export function AddCardDialog({
                 : 'Card database is still downloading'}
             </p>
           ) : (
-            <Command shouldFilter={false} className="rounded-xl">
+            <Command shouldFilter={false} className={commandClass}>
               <CommandInput
                 autoFocus
                 placeholder="Search cards by name or set code…"
                 value={text}
                 onValueChange={setText}
               />
-              <CommandList className="max-h-80">
+              <CommandList className={listClass}>
                 {text.trim() !== '' && (!settled || search.isFetching) && (
                   <p className="py-6 text-center text-sm text-muted-foreground">Searching…</p>
                 )}
@@ -308,7 +340,7 @@ export function AddCardDialog({
           ))}
 
         {step === 'printing' && (
-          <Command className="rounded-xl" value={highlighted} onValueChange={setHighlight}>
+          <Command className={commandClass} value={highlighted} onValueChange={setHighlight}>
             <div className="flex items-center justify-end border-b px-3 py-2">
               <LanguageSelect
                 value={languageFilter}
@@ -317,7 +349,7 @@ export function AddCardDialog({
               />
             </div>
             <CommandInput autoFocus placeholder="Filter printings…" />
-            <CommandList className="max-h-80">
+            <CommandList className={listClass}>
               <CommandEmpty>
                 {detail.isLoading
                   ? 'Loading…'
@@ -352,9 +384,9 @@ export function AddCardDialog({
         )}
 
         {step === 'art' && (
-          <div className="p-4">
+          <div className={cn('p-4', phone && 'min-h-0 flex-1 overflow-y-auto')}>
             <p className="mb-3 text-sm text-muted-foreground">
-              Choose the artwork. Press Enter to continue.
+              {phone ? 'Choose the artwork.' : 'Choose the artwork. Press Enter to continue.'}
             </p>
             <div role="radiogroup" aria-label="Artwork" className="flex flex-wrap gap-3">
               {images.map((im, i) => (

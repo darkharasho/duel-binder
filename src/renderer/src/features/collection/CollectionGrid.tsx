@@ -15,7 +15,7 @@ interface Props {
 export function CollectionGrid({ entries, selectedId, onSelect }: Props): React.JSX.Element {
   return (
     <ul
-      className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-x-4 gap-y-6"
+      className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-x-4 gap-y-6 max-md:grid-cols-3 max-md:gap-x-2 max-md:gap-y-4"
       aria-label="Collection grid"
     >
       {entries.map((e) => (

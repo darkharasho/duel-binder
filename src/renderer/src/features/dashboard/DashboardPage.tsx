@@ -11,6 +11,7 @@ import { EntryValue, StaleBadge, displayTotal } from '@/features/collection/Entr
 import { api, queryKeys } from '@/lib/api'
 import { formatRelative, formatUsd } from '@/lib/format'
 import { RARITY_COLORS } from '@/lib/rarityColors'
+import { cn } from '@/lib/utils'
 import { ValueChart } from './ValueChart'
 
 interface Props {
@@ -105,10 +106,10 @@ function RecentlyAdded({
       ) : (
         <ul
           aria-label="Recently added"
-          className="-mx-1.5 grid gap-x-6 lg:grid-cols-2 xl:grid-cols-1"
+          className="-mx-1.5 grid gap-x-6 lg:grid-cols-2 xl:grid-cols-1 max-md:flex max-md:snap-x max-md:gap-x-2 max-md:overflow-x-auto max-md:overscroll-x-contain max-md:pb-1"
         >
           {entries.map((e) => (
-            <li key={e.id} className="min-w-0">
+            <li key={e.id} className="min-w-0 max-md:w-56 max-md:shrink-0 max-md:snap-start">
               <button
                 type="button"
                 onClick={() => onNavigate('collection', { entryId: e.id })}
@@ -147,6 +148,10 @@ const titleCase = (s: string): string =>
     .map((w) => w[0].toUpperCase() + w.slice(1))
     .join(' ')
 
+/** A stat on one line; under 768 px, a tile in a 2-column grid. */
+const statTile =
+  'flex gap-1.5 max-md:flex-wrap max-md:rounded-md max-md:border max-md:border-white/[0.06] max-md:bg-white/[0.03] max-md:px-3 max-md:py-2'
+
 const STALE_MS = 24 * 60 * 60 * 1000
 const isStale = (iso: string | null): boolean => {
   if (iso === null) return true
@@ -168,7 +173,7 @@ function Content({
       <div className="grid gap-x-12 gap-y-8 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
         <header className="self-end">
           <p className="text-[13px] text-foreground/75">Your collection is worth</p>
-          <p className="mt-1 text-5xl font-semibold tracking-tight tabular-nums">
+          <p className="mt-1 text-5xl font-semibold tracking-tight tabular-nums max-md:text-4xl">
             {formatUsd(stats.totalValue)}
           </p>
           {n > 0 && (
@@ -176,16 +181,16 @@ function Content({
               ≈ includes {n} approximate {n === 1 ? 'price' : 'prices'}
             </p>
           )}
-          <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-[13px] text-foreground/75">
-            <div className="flex gap-1.5">
+          <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-[13px] text-foreground/75 max-md:grid max-md:grid-cols-2 max-md:gap-2">
+            <div className={statTile}>
               <span className="font-semibold text-foreground">{stats.totalCards}</span>
               <span>Total cards</span>
             </div>
-            <div className="flex gap-1.5">
+            <div className={statTile}>
               <span className="font-semibold text-foreground">{stats.uniqueCards}</span>
               <span>Unique cards</span>
             </div>
-            <div className="flex items-baseline gap-1.5">
+            <div className={cn(statTile, 'items-baseline max-md:col-span-2')}>
               <span>Prices updated</span>
               <span className={stale ? 'text-amber-400' : undefined}>
                 {formatRelative(stats.pricesUpdatedAt)}
@@ -282,7 +287,7 @@ export function DashboardPage({ onNavigate, onAddCard }: Props): React.JSX.Eleme
 
   return (
     <TooltipProvider>
-      <div className="max-w-[1800px] space-y-10 px-8 pb-10 pt-3">
+      <div className="max-w-[1800px] space-y-10 px-8 pb-10 pt-3 max-md:space-y-8 max-md:px-4">
         <h1 className="sr-only">Dashboard</h1>
         {data && data.totalCards === 0 ? (
           <div className="flex flex-col items-start gap-3 py-16">

@@ -89,7 +89,7 @@ export function FriendsPage({ onBackToMine }: { onBackToMine: () => void }): Rea
 
   if (!available) {
     return (
-      <div className="space-y-4 p-8">
+      <div className="space-y-4 p-8 max-md:p-4">
         {header}
         <p className="text-sm text-muted-foreground">{FRIENDS_SIGNED_OUT}</p>
       </div>
@@ -100,7 +100,7 @@ export function FriendsPage({ onBackToMine }: { onBackToMine: () => void }): Rea
 
   const data = overview.data
   return (
-    <div className="space-y-4 p-8">
+    <div className="space-y-4 p-8 max-md:p-4">
       {header}
       <AddFriendForm />
       {overview.isError && (

@@ -169,7 +169,7 @@ export function BrowsePage({ onAddCard }: Props): React.JSX.Element {
   )
 
   return (
-    <div className="space-y-5 p-8">
+    <div className="space-y-5 p-8 max-md:p-4">
       <PageHeader>
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Browse</h1>

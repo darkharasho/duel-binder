@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from 'react'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
-import { LayoutGrid, Table2 } from 'lucide-react'
+import { LayoutGrid, SlidersHorizontal, Table2 } from 'lucide-react'
 import { LANGUAGES } from '@shared/languages'
 import type { CollectionFilters, EntryView, Friend, SortKey } from '@shared/types'
 import { cardArtUrl, useArtWash } from '@/components/artWashContext'
@@ -8,12 +8,20 @@ import { CardSheet } from '@/components/CardSheet'
 import { PageHeader } from '@/components/PageHeader'
 import { listNav } from '@/components/panelNav'
 import { Button } from '@/components/ui/button'
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle
+} from '@/components/ui/sheet'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { api, queryKeys } from '@/lib/api'
 import { formatRelative } from '@/lib/format'
 import { friendsErrorMessage } from '@/lib/friends'
 import { useLanguageFilter } from '@/lib/languageFilter'
+import { isPhone } from '@/lib/platform'
 import { CollectionGrid } from './CollectionGrid'
 import { CollectionTable } from './CollectionTable'
 import { EntryDetailPanel } from './EntryDetailPanel'
@@ -67,7 +75,11 @@ export function CollectionPage({
     () => ({ ...pageFilters, language: languageFilter === 'all' ? undefined : languageFilter }),
     [pageFilters, languageFilter]
   )
-  const [view, setView] = useState<View>(readView)
+  const [storedView, setView] = useState<View>(readView)
+  // The table needs desktop width, so the phone always shows the grid.
+  const phone = isPhone()
+  const view: View = phone ? 'grid' : storedView
+  const [filtersOpen, setFiltersOpen] = useState(false)
   const [selectedId, setSelectedId] = useState<number | null>(initialEntryId ?? null)
   const [resetCount, setResetCount] = useState(0)
   const [pickedCardId, setCardId] = useState<number | null>(null)
@@ -172,11 +184,21 @@ export function CollectionPage({
     (friend ? friend.cardCount > 0 : (stats.data?.uniqueCards ?? 0) > 0)
   const languageLabel = LANGUAGES.find((l) => l.code === languageFilter)?.label ?? ''
 
+  const filterBar = (
+    <FilterBar
+      key={resetCount}
+      filters={filters}
+      facets={facets.data}
+      onChange={onChange}
+      onClear={clear}
+    />
+  )
+
   return (
     <TooltipProvider>
-      <div className="space-y-4 p-8">
+      <div className="space-y-4 p-8 max-md:p-4">
         <PageHeader>
-          <header className="flex flex-wrap items-end justify-between gap-2">
+          <header className="flex flex-wrap items-end justify-between gap-2 max-md:flex-col max-md:items-start">
             <div>
               <h1 className="text-xl font-semibold">
                 {friend ? `${friendName}'s collection` : 'Collection'}
@@ -188,14 +210,21 @@ export function CollectionPage({
                 )}
               </p>
             </div>
-            <ToggleGroup type="single" variant="outline" value={view} onValueChange={changeView}>
-              <ToggleGroupItem value="grid" aria-label="Grid view">
-                <LayoutGrid />
-              </ToggleGroupItem>
-              <ToggleGroupItem value="table" aria-label="Table view">
-                <Table2 />
-              </ToggleGroupItem>
-            </ToggleGroup>
+            {phone ? (
+              <Button variant="outline" size="sm" onClick={() => setFiltersOpen(true)}>
+                <SlidersHorizontal />
+                Filters
+              </Button>
+            ) : (
+              <ToggleGroup type="single" variant="outline" value={view} onValueChange={changeView}>
+                <ToggleGroupItem value="grid" aria-label="Grid view">
+                  <LayoutGrid />
+                </ToggleGroupItem>
+                <ToggleGroupItem value="table" aria-label="Table view">
+                  <Table2 />
+                </ToggleGroupItem>
+              </ToggleGroup>
+            )}
           </header>
 
           {friend && (
@@ -209,14 +238,25 @@ export function CollectionPage({
             </div>
           )}
 
-          <FilterBar
-            key={resetCount}
-            filters={filters}
-            facets={facets.data}
-            onChange={onChange}
-            onClear={clear}
-          />
+          {!phone && filterBar}
         </PageHeader>
+
+        {phone && (
+          <Sheet open={filtersOpen} onOpenChange={setFiltersOpen}>
+            <SheetContent
+              side="bottom"
+              className="max-h-[85dvh] overflow-y-auto rounded-t-3xl border-white/[0.08] pb-[max(1rem,env(safe-area-inset-bottom))]"
+            >
+              <SheetHeader>
+                <SheetTitle>Filters</SheetTitle>
+                <SheetDescription className="sr-only">
+                  Search, filter and sort the collection
+                </SheetDescription>
+              </SheetHeader>
+              <div className="px-4">{filterBar}</div>
+            </SheetContent>
+          </Sheet>
+        )}
 
         {friend && entries.isError && !friendLoadFailed && (
           <p role="alert" className="mb-3 text-sm text-muted-foreground">

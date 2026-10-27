@@ -272,7 +272,7 @@ export function SetChecklist({
 
   if (data === null) {
     return (
-      <div className="space-y-4 p-8">
+      <div className="space-y-4 p-8 max-md:p-4">
         <BackButton onBack={onBack} />
         <p className="py-16 text-center text-lg font-medium">
           This set is no longer in the card data
@@ -282,7 +282,7 @@ export function SetChecklist({
   }
   if (!data) {
     return (
-      <div className="space-y-4 p-8">
+      <div className="space-y-4 p-8 max-md:p-4">
         <BackButton onBack={onBack} />
       </div>
     )
@@ -314,7 +314,7 @@ export function SetChecklist({
 
   return (
     <TooltipProvider>
-      <div className="space-y-4 p-8">
+      <div className="space-y-4 p-8 max-md:p-4">
         <PageHeader>
           <div className="flex flex-wrap items-center gap-2">
             <BackButton onBack={onBack} />

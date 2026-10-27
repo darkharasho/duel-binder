@@ -195,7 +195,7 @@ export function SetsPage({ onAddCard, onAddMissing }: SetsPageProps): React.JSX.
     filter === 'started' && types.length === 0 && q.trim() === '' && header.started === 0
 
   return (
-    <div className="space-y-4 p-8">
+    <div className="space-y-4 p-8 max-md:p-4">
       <PageHeader>
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Sets</h1>

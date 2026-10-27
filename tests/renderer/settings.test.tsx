@@ -2,6 +2,7 @@ import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { toast } from 'sonner'
 import { SettingsPage } from '@/features/settings/SettingsPage'
+import type { UnsyncedEntry } from '@shared/types'
 import { createMockApi, renderWithProviders } from './mockApi'
 
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() }, Toaster: () => null }))
@@ -53,7 +54,11 @@ describe('SettingsPage', () => {
 
   it('lists the cards that cannot sync when asked', async () => {
     const user = userEvent.setup()
-    const issue = (uid: string, reason: string, language: 'fr' | 'zh-hans' | 'en' = 'en') => ({
+    const issue = (
+      uid: string,
+      reason: string,
+      language: 'fr' | 'zh-hans' | 'en' = 'en'
+    ): UnsyncedEntry => ({
       uid,
       name: 'Dark Magician',
       setCode: 'LOB-005',

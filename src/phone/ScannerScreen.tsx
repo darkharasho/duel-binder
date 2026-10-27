@@ -62,12 +62,13 @@ function ReviewSheet(): React.JSX.Element {
   const label = `${session.total} scanned · Review`
   return (
     <>
+      {/* mb-8 here and pb-8 on the sheet keep both clear of the Scan button rising out of the tabs. */}
       <button
         type="button"
         aria-expanded={open}
         {...handle}
         style={!open && dy < 0 ? { transform: `translateY(${Math.max(dy, -80)}px)` } : undefined}
-        className="mx-3 mb-3 flex h-14 shrink-0 touch-none items-center justify-between rounded-2xl border border-white/[0.08] bg-card px-5 text-base font-medium shadow-lg active:bg-white/[0.06]"
+        className="mx-3 mb-8 flex h-14 shrink-0 touch-none items-center justify-between rounded-2xl border border-white/[0.08] bg-card px-5 text-base font-medium shadow-lg active:bg-white/[0.06]"
       >
         <span className="tabular-nums">{label}</span>
         <ChevronUpIcon aria-hidden className="size-5 text-muted-foreground" />
@@ -82,7 +83,7 @@ function ReviewSheet(): React.JSX.Element {
           />
           <div
             style={dy > 0 ? { transform: `translateY(${dy}px)` } : undefined}
-            className="absolute inset-x-0 bottom-0 z-30 flex h-[85%] flex-col rounded-t-3xl border-t border-white/[0.08] bg-background shadow-2xl animate-in slide-in-from-bottom duration-200"
+            className="absolute inset-x-0 bottom-0 z-30 flex h-[85%] flex-col rounded-t-3xl pb-8 border-t border-white/[0.08] bg-background shadow-2xl animate-in slide-in-from-bottom duration-200"
           >
             <button
               type="button"

@@ -4,6 +4,7 @@ import { languageInfo } from '@shared/languages'
 import { CardArt } from '@/components/CardArt'
 import { Button } from '@/components/ui/button'
 import { formatUsd } from '@/lib/format'
+import { isPhone } from '@/lib/platform'
 import { cn } from '@/lib/utils'
 import type { ScanDraft } from './resolve'
 import { SearchPicker, type PickerOption } from './SearchPicker'
@@ -74,8 +75,11 @@ export const ScanRowItem = memo(function ScanRowItem({
     >
       <CardArt imageId={row.imageId} size="small" alt="" className="w-10 shrink-0" />
       <div className="min-w-0 flex-1 space-y-1">
-        <div className="flex items-baseline gap-2">
-          <span className="truncate text-sm font-medium">{row.name}</span>
+        {/* On a phone the name gets its own line; beside the code and price it was cut short. */}
+        <div className={cn('flex items-baseline gap-2', isPhone() && 'flex-wrap gap-y-0')}>
+          <span className={cn('truncate text-sm font-medium', isPhone() && 'basis-full')}>
+            {row.name}
+          </span>
           {row.setCode && (
             <span className="shrink-0 font-mono text-xs text-muted-foreground">{row.setCode}</span>
           )}

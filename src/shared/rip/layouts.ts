@@ -1,5 +1,5 @@
-import { ripRank } from './rarity'
-import type { PackLayout, PackSlot, SlotPick } from './types'
+import { baseOf, revealTier, ripRank } from './rarity'
+import type { PackLayout, PackSlot, RevealTier, SlotPick } from './types'
 
 /*
  * Researched pack layouts for English (TCG) Core Booster sets, one per era.
@@ -182,6 +182,74 @@ const layouts: PackLayout[] = [
   }
 ]
 
+/*
+ * The 25th Anniversary Rarity Collections and Quarter Century Bonanza: all-foil packs where every
+ * card in the set comes in every rarity.
+ *
+ * Sources: Konami's product pages (yugioh-card.com/en/products/ra01/ and /ra02/,
+ * yugioh-card.com/eu/product/quarter-century-bonanza/), checked October 2026:
+ * - RA01: 5 cards — 2 Super; 1 Secret with a 1-in-4 chance of being Platinum or Quarter Century
+ *   Secret; 2 Ultra, each with a 1-in-6 chance of being a "Prismatic" Collector's or Ultimate Rare.
+ * - RA02: 9 cards — 3 Super, 2 Secret, 4 Ultra, with the same upgrade chances per card.
+ * - RA03: RA01's pack with one Super replaced by a guaranteed Platinum or Quarter Century Secret
+ *   from a separate pool of older cards (RA03-EN079 on, printed only in those two rarities); the
+ *   other slots draw from the 78-card main set.
+ * Judgement call: Konami doesn't say how an upgrade splits between its two rarities; we split it
+ * evenly. In these sets Super and Ultra are the floor, so they reveal like Commons, and a Secret
+ * like a Rare.
+ */
+const RA_SOURCE = 'Konami product pages for RA01, RA02 and Quarter Century Bonanza'
+const RA_TIERS: Partial<Record<string, RevealTier>> = {
+  'Super Rare': 'none',
+  'Ultra Rare': 'none',
+  'Secret Rare': 'rare'
+}
+const RA_SECRET = { 'Platinum Secret Rare': 1 / 8, 'Quarter Century Secret Rare': 1 / 8 }
+const RA_ULTRA = { "Collector's Rare": 1 / 12, 'Ultimate Rare': 1 / 12 }
+/** RA03's main set, and its pool of older cards in Platinum or Quarter Century only. */
+const RA03_MAIN = { from: 1, to: 78 }
+const RA03_NOSTALGIA = { from: 79 }
+
+layouts.push(
+  {
+    id: 'rarity-collection',
+    label: '25th Anniversary Rarity Collection',
+    source: `${RA_SOURCE}: 2 Super, 1 Secret (1 in 4 Platinum or QCSR), 2 Ultra (1 in 6 each Collector's or Ultimate); upgrades split evenly (no official split)`,
+    tiers: RA_TIERS,
+    slots: [
+      fixed('Super Rare', 2),
+      oneOf('Secret Rare', RA_SECRET),
+      { ...oneOf('Ultra Rare', RA_ULTRA), count: 2 }
+    ]
+  },
+  {
+    id: 'rarity-collection-2',
+    label: '25th Anniversary Rarity Collection II',
+    source: `${RA_SOURCE}: 3 Super, 2 Secret (1 in 4 each Platinum or QCSR), 4 Ultra (1 in 6 each Collector's or Ultimate); upgrades split evenly (no official split)`,
+    tiers: RA_TIERS,
+    slots: [
+      fixed('Super Rare', 3),
+      { ...oneOf('Secret Rare', RA_SECRET), count: 2 },
+      { ...oneOf('Ultra Rare', RA_ULTRA), count: 4 }
+    ]
+  },
+  {
+    id: 'quarter-century-bonanza',
+    label: 'Quarter Century Bonanza',
+    source: `${RA_SOURCE}: RA01's pack with one Super swapped for a guaranteed Platinum or QCSR from the older-card pool (RA03-EN079 on); upgrades split evenly (no official split)`,
+    tiers: RA_TIERS,
+    slots: [
+      { ...fixed('Super Rare'), numbers: RA03_MAIN },
+      { ...oneOf('Secret Rare', RA_SECRET), numbers: RA03_MAIN },
+      { ...oneOf('Ultra Rare', RA_ULTRA), count: 2, numbers: RA03_MAIN },
+      {
+        ...oneOf('Platinum Secret Rare', { 'Quarter Century Secret Rare': 1 / 2 }),
+        numbers: RA03_NOSTALGIA
+      }
+    ]
+  }
+)
+
 export const RIP_LAYOUTS: Record<string, PackLayout> = Object.fromEntries(
   layouts.map((l) => [l.id, l])
 )
@@ -200,7 +268,10 @@ const SETS_BY_LAYOUT: Record<string, string> = {
     'HSRD BOSH SHVI TDIL INOV RATE MACR COTD CIBR EXFO FLOD CYHO SOFU SAST DANE RIRA CHIM IGAS',
   'core-2020': 'ETCO ROTD PHRA BLVO LIOV DAMA BODE BACH DIFO POTE DABL PHHY CYAC',
   'core-2023': 'DUNE AGOV PHNI LEDE INFO ROTA SUDA ALIN',
-  'core-2025': 'DUAD DOOD BPRO BLZD CORI BETB'
+  'core-2025': 'DUAD DOOD BPRO BLZD CORI BETB',
+  'rarity-collection': 'RA01',
+  'rarity-collection-2': 'RA02',
+  'quarter-century-bonanza': 'RA03'
 }
 
 /** Set code prefix (e.g. "LOB") → layout id. */
@@ -221,6 +292,15 @@ export function layoutFor(
   const prefix = setCode.split('-')[0].trim().toUpperCase()
   const id = Object.hasOwn(map, prefix) ? map[prefix] : undefined
   return id !== undefined && Object.hasOwn(RIP_LAYOUTS, id) ? RIP_LAYOUTS[id] : null
+}
+
+/**
+ * How big a reveal a card gets: its rarity's usual tier, unless its set's layout says otherwise
+ * (a Super Rare is the floor of an all-foil set). `setCode` may be a prefix or a card code.
+ */
+export function tierFor(rarity: string, setCode?: string | null): RevealTier {
+  const own = setCode ? layoutFor(setCode)?.tiers?.[baseOf(rarity)] : undefined
+  return own ?? revealTier(rarity)
 }
 
 /** "Super Rare" → "Super"; plain "Rare" stays. */

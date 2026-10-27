@@ -244,6 +244,28 @@ describe('SessionSummary focus', () => {
   })
 })
 
+describe('SessionSummary of an all-foil set', () => {
+  it('the best pull is the upgrade, and Supers and Ultras are not hits', () => {
+    const ra = (rarity: string, slot: number, name: string): RipCard => ({
+      ...card(rarity, slot, name),
+      setCode: `RA01-EN00${slot}`
+    })
+    const p = [
+      [
+        ra('Super Rare', 0, 'Floor'),
+        ra('Ultra Rare', 1, 'Ultra'),
+        ra('Quarter Century Secret Rare', 2, 'Chase')
+      ]
+    ]
+    renderWithProviders(<SessionSummary session={detail({ packs: p, setCode: 'RA01' })} />)
+    expect(screen.getByTestId('rip-summary-hero-name')).toHaveTextContent('Chase')
+    expect(screen.getAllByTestId('rip-summary-chip').map((c) => c.textContent)).toEqual([
+      '1 Quarter Century Secret',
+      '3 cards'
+    ])
+  })
+})
+
 describe('SessionSummary without hits', () => {
   it('says so, with no hero or fanfare', () => {
     const commons = [[card('Common', 0, 'Kuriboh'), card('Short Print', 1, 'Mooyan')]]

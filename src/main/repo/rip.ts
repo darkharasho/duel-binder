@@ -1,10 +1,11 @@
 import type { SqlDb } from '../db/sql'
 import { listSets } from './sets'
 import { setPrefix } from '../../shared/sets'
-import { compareRarity, revealTier } from '../../shared/rip/rarity'
-import { RIP_SET_LAYOUTS, describeLayout, layoutFor } from '../../shared/rip/layouts'
+import { compareRarity } from '../../shared/rip/rarity'
+import { RIP_SET_LAYOUTS, describeLayout, layoutFor, tierFor } from '../../shared/rip/layouts'
 import { canFill, mulberry32, rollPack } from '../../shared/rip/roll'
 import type {
+  PackLayout,
   PoolCard,
   RipCard,
   RipHistory,
@@ -21,6 +22,13 @@ const MAX_PACKS = 100
 /** Products that share a core set's code but aren't core boosters, so have no researched layout. */
 const NOT_CORE =
   /Sneak Peek|Special Edition|Deluxe Edition|Super Edition|Advance Edition|25th Anniversary|Premiere!|Tin\b/
+
+/**
+ * A set with this layout that's really another product under the same code (a core set's Special
+ * Edition, say). Only core layouts are shared like that; the others name one product.
+ */
+const sharesCode = (setName: string, layout: PackLayout): boolean =>
+  layout.id.startsWith('core-') && NOT_CORE.test(setName)
 
 interface PoolRow {
   pkey: string
@@ -61,9 +69,10 @@ export function ripPool(db: SqlDb, setName: string): PoolCard[] {
 export function ripSets(db: SqlDb, layouts: LayoutMap = RIP_SET_LAYOUTS): RipSet[] {
   const out: RipSet[] = []
   for (const s of listSets(db)) {
-    if (s.language !== 'en' || NOT_CORE.test(s.setName)) continue
+    if (s.language !== 'en') continue
     const layout = layoutFor(s.setCode, layouts)
-    if (!layout || !canFill(layout, ripPool(db, s.setName))) continue
+    if (!layout || sharesCode(s.setName, layout) || !canFill(layout, ripPool(db, s.setName)))
+      continue
     out.push({
       setName: s.setName,
       setCode: s.setCode,
@@ -106,7 +115,12 @@ export function startRip(
     .get(setName) as { s_code: string | null; min_code: string | null } | undefined
   const setCode = row?.s_code ?? (row?.min_code ? setPrefix(row.min_code) : null)
   const layout = setCode ? layoutFor(setCode, layouts) : null
-  if (NOT_CORE.test(setName) || !setCode || !layout || !canFill(layout, ripPool(db, setName))) {
+  if (
+    !setCode ||
+    !layout ||
+    sharesCode(setName, layout) ||
+    !canFill(layout, ripPool(db, setName))
+  ) {
     throw new Error(`${setName} can't be ripped`)
   }
   const info = db
@@ -249,7 +263,7 @@ export function ripHistory(
     .prepare('SELECT * FROM rip_pulls ORDER BY session_id DESC, pack DESC, slot')
     .all() as PullRow[]
   const bestPulls = everything
-    .filter((r) => revealTier(r.rarity) !== 'none')
+    .filter((r) => tierFor(r.rarity, r.set_code) !== 'none')
     .sort((a, b) => compareRarity(a.rarity, b.rarity)) // stable: newest first within a rarity
     .slice(0, Math.max(0, bestLimit))
     .map(toCard)

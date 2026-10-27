@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { rarityColor } from '@/lib/rarityColors'
 import { cn } from '@/lib/utils'
-import { baseOf, compareRarity, revealTier } from '../../../../shared/rip/rarity'
+import { baseOf, compareRarity } from '../../../../shared/rip/rarity'
+import { tierFor } from '../../../../shared/rip/layouts'
 import type { RevealTier, RipCard, RipSessionDetail } from '../../../../shared/rip/types'
 import { CardInfo, RarityBadge } from './CardInfo'
 import { HoloCard } from './HoloCard'
@@ -15,7 +16,7 @@ const shortRarity = (rarity: string): string => baseOf(rarity).replace(/ Rare$/,
 export function hitCounts(cards: RipCard[]): { rarity: string; label: string; n: number }[] {
   const counts = new Map<string, { rarity: string; label: string; n: number }>()
   for (const c of cards) {
-    const tier = revealTier(c.rarity)
+    const tier = tierFor(c.rarity, c.setCode)
     if (tier !== 'big' && tier !== 'huge') continue
     const label = shortRarity(c.rarity)
     const entry = counts.get(label) ?? { rarity: c.rarity, label, n: 0 }
@@ -47,7 +48,7 @@ interface Pull {
 export function rankedHits(packs: RipCard[][]): Pull[] {
   return packs
     .flatMap((pack, i) => pack.map((card) => ({ card, pack: i + 1 })))
-    .filter((p) => revealTier(p.card.rarity) !== 'none')
+    .filter((p) => tierFor(p.card.rarity, p.card.setCode) !== 'none')
     .sort((a, b) => compareRarity(a.card.rarity, b.card.rarity))
 }
 
@@ -84,7 +85,7 @@ function Hero({
   onFocus: (card: RipCard) => void
 }): React.JSX.Element {
   const { card, pack } = pull
-  const tier = revealTier(card.rarity)
+  const tier = tierFor(card.rarity, card.setCode)
   const color = rarityColor(baseOf(card.rarity))
   const reduced = prefersReducedMotion()
   const rays = tier === 'big' || tier === 'huge'
@@ -253,7 +254,7 @@ function Focus({
     return () => window.removeEventListener('keydown', onKey)
   }, [onClose, onStep])
   const color = rarityColor(baseOf(card.rarity))
-  const tier = revealTier(card.rarity)
+  const tier = tierFor(card.rarity, card.setCode)
   return (
     <div
       role="dialog"
@@ -418,7 +419,7 @@ export function SessionSummary({
               className="flex h-[106px] gap-x-2 overflow-x-auto overflow-y-hidden pt-1.5 [scrollbar-width:thin]"
             >
               {others.map((card, i) => {
-                const hit = revealTier(card.rarity) !== 'none'
+                const hit = tierFor(card.rarity, card.setCode) !== 'none'
                 const color = rarityColor(baseOf(card.rarity))
                 const caption = hit ? `${shortRarity(card.rarity)} · ${card.name}` : card.name
                 return (

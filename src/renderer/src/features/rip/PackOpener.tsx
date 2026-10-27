@@ -6,7 +6,8 @@ import { api, queryKeys } from '@/lib/api'
 import { cardImageSrc, setImageSrc } from '@/lib/images'
 import { rarityColor } from '@/lib/rarityColors'
 import { cn } from '@/lib/utils'
-import { baseOf, compareRarity, revealTier } from '../../../../shared/rip/rarity'
+import { baseOf, compareRarity } from '../../../../shared/rip/rarity'
+import { tierFor } from '../../../../shared/rip/layouts'
 import type { RevealTier, RipCard, RipSet } from '../../../../shared/rip/types'
 import { CardInfo, RarityBadge } from './CardInfo'
 import { HoloCard } from './HoloCard'
@@ -543,7 +544,7 @@ export function PackOpener({
   const flipNext = (): void => {
     if (!cards || flipped >= cards.length) return
     cancelDrag()
-    const tier = revealTier(cards[flipped].rarity)
+    const tier = tierFor(cards[flipped].rarity, cards[flipped].setCode)
     const hold = reduced || tier === 'none' ? 0 : SETTLE_MS + HOLD_MS[tier]
     holdUntil.current = performance.now() + hold
     if (flipped + 1 === cards.length) endedAt.current = performance.now()
@@ -691,7 +692,7 @@ export function PackOpener({
     null
   )
   const lastPack = packIndex >= packCount - 1
-  const frontTier = front ? revealTier(front.rarity) : 'none'
+  const frontTier = front ? tierFor(front.rarity, front.setCode) : 'none'
   const hitColor = front ? rarityColor(baseOf(front.rarity)) : ''
   const frontKey = front ? `${packIndex}-${front.slot}` : ''
   const actionable =

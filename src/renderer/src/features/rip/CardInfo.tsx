@@ -2,7 +2,8 @@ import { useQuery } from '@tanstack/react-query'
 import { api, queryKeys } from '@/lib/api'
 import { rarityColor, rarityTextColor } from '@/lib/rarityColors'
 import { cn } from '@/lib/utils'
-import { baseOf, revealTier } from '../../../../shared/rip/rarity'
+import { baseOf } from '../../../../shared/rip/rarity'
+import { tierFor } from '../../../../shared/rip/layouts'
 import type { RipCard } from '../../../../shared/rip/types'
 import {
   attributeColor,
@@ -72,7 +73,7 @@ export function CardInfo({ card }: { card: RipCard }): React.JSX.Element {
     <div className="flex max-h-full min-h-0 w-full flex-col items-start gap-2.5">
       <RarityBadge
         rarity={card.rarity}
-        className={cn(revealTier(card.rarity) === 'huge' && 'px-3 py-1 text-sm')}
+        className={cn(tierFor(card.rarity, card.setCode) === 'huge' && 'px-3 py-1 text-sm')}
       />
       <div className="flex flex-col gap-0.5">
         <span className="text-2xl leading-tight font-bold text-white">{card.name}</span>

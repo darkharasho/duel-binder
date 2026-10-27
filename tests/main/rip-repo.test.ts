@@ -201,6 +201,29 @@ describe('rip repo', () => {
     expect(() => startRip(db, NAME, 1, now, LAYOUTS)).toThrow(/can't be ripped/)
   })
 
+  it('offers a 25th Anniversary Rarity Collection, and its Supers and Ultras are no best pulls', () => {
+    const NAME = '25th Anniversary Rarity Collection'
+    db.prepare(
+      "INSERT INTO sets (language, set_name, set_code, tcg_date) VALUES ('en', ?, 'RA01', '2023-11-03')"
+    ).run(NAME)
+    for (let n = 1; n <= 6; n++) {
+      const id = addCard(`RA Card ${n}`)
+      for (const r of ['Super Rare', 'Ultra Rare', 'Secret Rare', 'Platinum Secret Rare'])
+        addPrinting(id, NAME, `RA01-EN00${n}`, r)
+    }
+    const offered = ripSets(db).find((s) => s.setName === NAME)!
+    expect(offered.packLine).toBe(
+      '5 cards a pack · 2 Super + 1 Secret or better + 2 Ultra or better'
+    )
+    const id = startRip(db, NAME, 1, now)
+    expect(openPack(db, id, mulberry32(4))).toHaveLength(5)
+    // Supers and Ultras are the floor here; a Secret is a hit.
+    const best = ripHistory(db).bestPulls
+    expect(best.map((c) => c.rarity)).not.toContain('Super Rare')
+    expect(best.map((c) => c.rarity)).not.toContain('Ultra Rare')
+    expect(best.length).toBeGreaterThan(0)
+  })
+
   it('history lists only sessions with pulls', () => {
     const empty = startRip(db, SET, 2, now, LAYOUTS)
     const used = startRip(db, SET, 1, now, LAYOUTS)

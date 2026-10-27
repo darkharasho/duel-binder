@@ -23,6 +23,8 @@ export interface SlotPick {
 export interface PackSlot {
   count: number
   picks: SlotPick[]
+  /** Only cards numbered in this range (the digits ending the code, RA03-EN123 → 123), inclusive. */
+  numbers?: { from: number; to?: number }
 }
 
 /** A researched pack layout. Slots are listed low to high, so the rarest slot comes last. */
@@ -32,6 +34,11 @@ export interface PackLayout {
   slots: PackSlot[]
   /** Where the slot counts and odds came from. */
   source: string
+  /**
+   * How big a reveal a rarity gets in this product, where it differs from the usual (in an all-foil
+   * set a Super Rare is the floor, not a hit). By base rarity.
+   */
+  tiers?: Partial<Record<string, RevealTier>>
 }
 
 /** One printing a pack can hold. No prices, by design. */

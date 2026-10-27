@@ -30,10 +30,33 @@ function indexPool(pool: PoolCard[]): RarityIndex {
   return index
 }
 
-/** True when every slot's base rarity has at least one card in the pool. */
+/** The number ending a card code: "RA03-EN123" → 123; NaN without one. */
+const cardNumber = (code: string): number => Number(/(\d+)$/.exec(code)?.[1] ?? NaN)
+
+/** The part of the pool a slot draws from: all of it, or the cards in its number range. */
+function slotPool(slot: PackSlot, pool: PoolCard[]): PoolCard[] {
+  const range = slot.numbers
+  if (!range) return pool
+  return pool.filter((c) => {
+    const n = cardNumber(c.setCode)
+    return n >= range.from && n <= (range.to ?? Infinity)
+  })
+}
+
+/** Each slot's index, sharing one for the slots that draw from the whole pool. */
+function slotIndexes(layout: PackLayout, pool: PoolCard[]): RarityIndex[] {
+  let whole: RarityIndex | null = null
+  return layout.slots.map((slot) =>
+    slot.numbers ? indexPool(slotPool(slot, pool)) : (whole ??= indexPool(pool))
+  )
+}
+
+/** True when every slot's base rarity has at least one card in the slot's part of the pool. */
 export function canFill(layout: PackLayout, pool: PoolCard[]): boolean {
-  const index = indexPool(pool)
-  return layout.slots.every((slot) => (index.get(baseOf(slot.picks[0].rarity))?.size ?? 0) > 0)
+  const indexes = slotIndexes(layout, pool)
+  return layout.slots.every(
+    (slot, i) => (indexes[i].get(baseOf(slot.picks[0].rarity))?.size ?? 0) > 0
+  )
 }
 
 const pickIndex = (n: number, rand: () => number): number => Math.min(n - 1, Math.floor(rand() * n))
@@ -63,11 +86,12 @@ function pickRarity(slot: PackSlot, index: RarityIndex, rand: () => number): str
  * rarity) unless its rarity has run out of unused cards. Throws when a slot's base rarity has no cards (see `canFill`).
  */
 export function rollPack(layout: PackLayout, pool: PoolCard[], rand: () => number): RipCard[] {
-  const index = indexPool(pool)
+  const indexes = slotIndexes(layout, pool)
   const pack: RipCard[] = []
   /** Base rarity → card ids already in this pack. */
   const used = new Map<string, Set<number>>()
-  for (const slot of layout.slots) {
+  for (const [s, slot] of layout.slots.entries()) {
+    const index = indexes[s]
     if (!index.has(baseOf(slot.picks[0].rarity))) {
       throw new Error(`No ${slot.picks[0].rarity} cards to fill layout ${layout.id}`)
     }

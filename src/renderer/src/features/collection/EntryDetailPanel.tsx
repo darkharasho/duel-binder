@@ -96,7 +96,14 @@ function EntryEditor({
     update.mutate(patch)
   }
 
-  const choosable = printings.filter((p) => !p.missingFromApi || p.id === entry.printing.id)
+  // The card's printings leave out contributed ones, but this entry's own printing must be listed
+  // (contributed or not) or the picker shows nothing.
+  const withOwn = printings.some((p) => p.id === entry.printing.id)
+    ? printings
+    : [...printings, entry.printing].sort(
+        (a, b) => (a.setCode < b.setCode ? -1 : a.setCode > b.setCode ? 1 : a.id - b.id)
+      )
+  const choosable = withOwn.filter((p) => !p.missingFromApi || p.id === entry.printing.id)
 
   return (
     <div className="space-y-4">

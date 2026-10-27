@@ -1,15 +1,12 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { rarityColor } from '@/lib/rarityColors'
 import { cn } from '@/lib/utils'
 import { baseOf, compareRarity, revealTier } from '../../../../shared/rip/rarity'
 import type { RevealTier, RipCard, RipSessionDetail } from '../../../../shared/rip/types'
-import { RarityBadge } from './CardInfo'
+import { CardInfo, RarityBadge } from './CardInfo'
 import { HoloCard } from './HoloCard'
 import { STAGE, prefersReducedMotion } from './stage'
-
-/** Small hits shown along the bottom, after the best pull. */
-const OTHERS_SHOWN = 10
 
 const shortRarity = (rarity: string): string => baseOf(rarity).replace(/ Rare$/, '')
 
@@ -77,7 +74,15 @@ const sparks = (n: number): { left: string; top: string; dx: string; dy: string 
   })
 
 /** The best pull, big: it lands with as much fanfare as its rarity earns. */
-function Hero({ pull, cards }: { pull: Pull; cards: RipCard[] }): React.JSX.Element {
+function Hero({
+  pull,
+  cards,
+  onFocus
+}: {
+  pull: Pull
+  cards: RipCard[]
+  onFocus: (card: RipCard) => void
+}): React.JSX.Element {
   const { card, pack } = pull
   const tier = revealTier(card.rarity)
   const color = rarityColor(baseOf(card.rarity))
@@ -132,14 +137,17 @@ function Hero({ pull, cards }: { pull: Pull; cards: RipCard[] }): React.JSX.Elem
             style={{ transform: 'rotate(-3deg)' }}
             className="size-full animate-[rip-hero-land_900ms_cubic-bezier(.34,1.56,.64,1)_both] motion-reduce:animate-none"
           >
-            <div
-              className="rounded-[8px]"
+            <button
+              type="button"
+              aria-label={`Look at ${card.name}`}
+              onClick={() => onFocus(card)}
+              className="block w-full cursor-zoom-in rounded-[8px]"
               style={{
                 boxShadow: `0 0 ${tier === 'huge' ? 70 : 40}px ${color}, 0 30px 60px rgb(0 0 0 / 0.65)`
               }}
             >
               <HoloCard card={card} size="full" />
-            </div>
+            </button>
           </div>
         </div>
         {!reduced &&
@@ -213,6 +221,83 @@ function Hero({ pull, cards }: { pull: Pull; cards: RipCard[] }): React.JSX.Elem
   )
 }
 
+/** The focused card's height, from the overlay (a size container), like the opener's front card. */
+const FOCUS_H = 'calc(min(100cqh - 64px, 600px, (100cqw - 64px - 44px - 300px) * 614 / 421))'
+const FOCUS_W = `calc(${FOCUS_H} * 421 / 614)`
+
+/**
+ * One card, large, with what it is beside it, over the summary. A click outside it, Escape or the
+ * close button puts it away; the arrow keys step through the session's cards.
+ */
+function Focus({
+  card,
+  onClose,
+  onStep
+}: {
+  card: RipCard
+  onClose: () => void
+  onStep: (by: number) => void
+}): React.JSX.Element {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') onClose()
+      else if (e.key === 'ArrowRight') onStep(1)
+      else if (e.key === 'ArrowLeft') onStep(-1)
+      else return
+      e.preventDefault()
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [onClose, onStep])
+  const color = rarityColor(baseOf(card.rarity))
+  const tier = revealTier(card.rarity)
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label={card.name}
+      data-testid="rip-summary-focus"
+      onClick={onClose}
+      className="absolute inset-0 z-50 bg-black/75 backdrop-blur-sm duration-200 animate-in fade-in-0 motion-reduce:animate-none"
+    >
+      <div style={{ containerType: 'size' }} className="absolute inset-0">
+        <div className="flex size-full items-center justify-center gap-11 px-8">
+          <div
+            key={`${card.pkey}-${card.slot}`}
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              height: FOCUS_H,
+              width: FOCUS_W,
+              boxShadow:
+                tier === 'none'
+                  ? '0 30px 60px rgb(0 0 0 / 0.65)'
+                  : `0 0 ${tier === 'huge' ? 60 : tier === 'big' ? 40 : 24}px ${color}, 0 30px 60px rgb(0 0 0 / 0.65)`
+            }}
+            className="shrink-0 rounded-[8px] duration-300 animate-in zoom-in-90 fade-in-0 motion-reduce:animate-none"
+          >
+            <HoloCard card={card} size="full" />
+          </div>
+          <div
+            onClick={(e) => e.stopPropagation()}
+            style={{ height: FOCUS_H }}
+            className="flex w-[300px] shrink-0 flex-col justify-center"
+          >
+            <CardInfo card={card} />
+          </div>
+        </div>
+      </div>
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={onClose}
+        className="absolute top-2 right-3 text-white/70"
+      >
+        Close
+      </Button>
+    </div>
+  )
+}
+
 interface Props {
   session: RipSessionDetail
   onRipMore?: () => void
@@ -222,8 +307,9 @@ interface Props {
 }
 
 /**
- * What a session pulled, on a stage like the opener's: the best pull large with fanfare, the other
- * hits along the bottom, and every card by pack on demand. Fills the height it's given.
+ * What a session pulled, on a stage like the opener's: the best pull large with fanfare, every
+ * other card along the bottom (hits first), and every card by pack on demand. Clicking any card
+ * brings it up large with its details. Fills the height it's given.
  */
 export function SessionSummary({
   session,
@@ -232,10 +318,22 @@ export function SessionSummary({
   starting = false
 }: Props): React.JSX.Element {
   const [showAll, setShowAll] = useState(false)
+  const [focused, setFocused] = useState<RipCard | null>(null)
   const all = session.packs.flat()
   const hits = rankedHits(session.packs)
   const hero = hits[0] ?? null
-  const others = hits.slice(1, 1 + OTHERS_SHOWN)
+  // Every other card along the bottom: the rest of the hits rarest first, then the others as pulled.
+  const others = [
+    ...hits.slice(1).map((p) => p.card),
+    ...all.filter((c) => revealTier(c.rarity) === 'none')
+  ]
+  const order = hero ? [hero.card, ...others] : others
+  const step = (by: number): void =>
+    setFocused((f) => {
+      if (!f) return f
+      const i = order.indexOf(f)
+      return order[(i + by + order.length) % order.length]
+    })
   const packs = session.packsOpened
 
   return (
@@ -267,7 +365,7 @@ export function SessionSummary({
               className={cn('size-full', showAll && 'invisible')}
             >
               {hero ? (
-                <Hero pull={hero} cards={all} />
+                <Hero pull={hero} cards={all} onFocus={setFocused} />
               ) : (
                 <div className="flex size-full items-center justify-center">
                   <p className="text-sm text-white/60">No hits this time.</p>
@@ -284,9 +382,15 @@ export function SessionSummary({
                     <h3 className="mb-2 text-sm font-semibold">{`Pack ${i + 1}`}</h3>
                     <div className="flex flex-wrap gap-2">
                       {pack.map((c) => (
-                        <div key={c.slot} className="w-20">
+                        <button
+                          key={c.slot}
+                          type="button"
+                          aria-label={`Look at ${c.name}`}
+                          onClick={() => setFocused(c)}
+                          className="w-20 cursor-zoom-in"
+                        >
                           <HoloCard card={c} size="small" />
-                        </div>
+                        </button>
                       ))}
                     </div>
                   </section>
@@ -299,37 +403,56 @@ export function SessionSummary({
         {others.length > 0 && (
           <div className="shrink-0 px-5 pt-1 pb-3">
             <h3 className="mb-1.5 text-[11px] font-semibold tracking-wider text-white/45 uppercase">
-              Other hits
+              {hero ? 'Your other cards' : 'Your cards'}
             </h3>
-            {/* One line; what doesn't fit wraps out of sight (See all cards has every one). */}
+            {/* One line that scrolls sideways (the wheel scrolls it too). */}
             <ol
               data-testid="rip-summary-others"
-              className="flex h-[86px] flex-wrap gap-x-2 overflow-hidden"
+              onWheel={(e) => {
+                if (Math.abs(e.deltaY) > Math.abs(e.deltaX)) e.currentTarget.scrollLeft += e.deltaY
+              }}
+              className="flex h-[106px] gap-x-2 overflow-x-auto overflow-y-hidden pt-1.5 [scrollbar-width:thin]"
             >
-              {others.map(({ card }, i) => {
+              {others.map((card, i) => {
+                const hit = revealTier(card.rarity) !== 'none'
                 const color = rarityColor(baseOf(card.rarity))
-                const caption = `${shortRarity(card.rarity)} · ${card.name}`
+                const caption = hit ? `${shortRarity(card.rarity)} · ${card.name}` : card.name
                 return (
-                  <li
-                    key={`${card.pkey}-${i}`}
-                    title={`${card.rarity} · ${card.name}`}
-                    className="flex h-[86px] w-[84px] flex-col items-center gap-1"
-                  >
-                    <div
-                      className="w-[44px] rounded-[3px]"
-                      style={{ boxShadow: `0 0 12px ${color}aa, 0 4px 10px rgb(0 0 0 / 0.5)` }}
+                  <li key={`${card.pkey}-${i}`} className="shrink-0">
+                    <button
+                      type="button"
+                      aria-label={`Look at ${card.name}`}
+                      title={`${card.rarity} · ${card.name}`}
+                      onClick={() => setFocused(card)}
+                      className="group flex h-[86px] w-[72px] cursor-zoom-in flex-col items-center gap-1"
                     >
-                      <HoloCard card={card} size="small" holo={false} />
-                    </div>
-                    <span className="w-full truncate text-center text-[11px] text-white/75">
-                      {caption}
-                    </span>
+                      <div
+                        className="w-[44px] rounded-[3px] transition-transform duration-150 group-hover:-translate-y-1 motion-reduce:transition-none"
+                        style={{
+                          boxShadow: hit
+                            ? `0 0 12px ${color}aa, 0 4px 10px rgb(0 0 0 / 0.5)`
+                            : '0 4px 10px rgb(0 0 0 / 0.5)'
+                        }}
+                      >
+                        <HoloCard card={card} size="small" holo={false} />
+                      </div>
+                      <span
+                        className={cn(
+                          'w-full truncate text-center text-[11px]',
+                          hit ? 'text-white/80' : 'text-white/50'
+                        )}
+                      >
+                        {caption}
+                      </span>
+                    </button>
                   </li>
                 )
               })}
             </ol>
           </div>
         )}
+
+        {focused && <Focus card={focused} onClose={() => setFocused(null)} onStep={step} />}
       </div>
 
       <div className="flex shrink-0 flex-wrap justify-end gap-2">

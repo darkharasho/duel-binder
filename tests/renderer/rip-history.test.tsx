@@ -114,13 +114,13 @@ describe('SessionSummary', () => {
       '2 Super',
       '6 cards'
     ])
-    // The rest of the hits, rarest first, the hero left out; Supers in the order pulled.
+    // Every other card: the rest of the hits rarest first (Supers as pulled), then the others.
     const others = screen.getByTestId('rip-summary-others')
     expect(
       within(others)
         .getAllByRole('img')
         .map((i) => i.getAttribute('alt'))
-    ).toEqual(['Red-Eyes', 'Dark Magician', 'Gaia'])
+    ).toEqual(['Red-Eyes', 'Dark Magician', 'Gaia', 'Kuriboh', 'Mooyan'])
     expect(others).toHaveTextContent('Ultra · Red-Eyes')
     expect(container.textContent).not.toMatch(/\$\d/)
     await userEvent.click(screen.getByRole('button', { name: /rip 2 more/i }))
@@ -141,7 +141,7 @@ describe('SessionSummary', () => {
       within(screen.getByTestId('rip-summary-others'))
         .getAllByRole('img')
         .map((i) => i.getAttribute('alt'))
-    ).toEqual(['Late Ultra', 'Gaia'])
+    ).toEqual(['Late Ultra', 'Gaia', 'Kuriboh'])
   })
 
   it('a huge hit gets rays and sparkles; a Rare just lands, with no rays or sparkles', () => {
@@ -198,6 +198,51 @@ describe('SessionSummary', () => {
   })
 })
 
+describe('SessionSummary focus', () => {
+  it('clicking a card brings it up large with its details; arrows step, Escape closes', async () => {
+    renderWithProviders(<SessionSummary session={detail()} />)
+    expect(screen.queryByTestId('rip-summary-focus')).not.toBeInTheDocument()
+    await userEvent.click(
+      within(screen.getByTestId('rip-summary-others')).getByRole('button', {
+        name: 'Look at Kuriboh'
+      })
+    )
+    const focus = screen.getByTestId('rip-summary-focus')
+    expect(within(focus).getByRole('img', { name: 'Kuriboh' })).toBeInTheDocument()
+    expect(focus).toHaveTextContent('LOB-EN000')
+    // Clicking the card itself keeps it up.
+    await userEvent.click(within(focus).getByRole('img', { name: 'Kuriboh' }))
+    expect(screen.getByTestId('rip-summary-focus')).toBeInTheDocument()
+    await userEvent.keyboard('{ArrowRight}')
+    expect(within(focus).getByRole('img', { name: 'Mooyan' })).toBeInTheDocument()
+    // Past the last card it wraps round to the best pull.
+    await userEvent.keyboard('{ArrowRight}')
+    expect(within(focus).getByRole('img', { name: 'Blue-Eyes' })).toBeInTheDocument()
+    await userEvent.keyboard('{Escape}')
+    expect(screen.queryByTestId('rip-summary-focus')).not.toBeInTheDocument()
+  })
+
+  it('the best pull and the See all list open it too; a click outside closes it', async () => {
+    renderWithProviders(<SessionSummary session={detail()} />)
+    await userEvent.click(
+      within(screen.getByTestId('rip-summary-hero')).getByRole('button', {
+        name: 'Look at Blue-Eyes'
+      })
+    )
+    await userEvent.click(screen.getByTestId('rip-summary-focus'))
+    expect(screen.queryByTestId('rip-summary-focus')).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: /see all cards/i }))
+    await userEvent.click(
+      within(screen.getByTestId('rip-summary-all')).getByRole('button', { name: 'Look at Gaia' })
+    )
+    expect(
+      within(screen.getByTestId('rip-summary-focus')).getByRole('img', { name: 'Gaia' })
+    ).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Close' }))
+    expect(screen.queryByTestId('rip-summary-focus')).not.toBeInTheDocument()
+  })
+})
+
 describe('SessionSummary without hits', () => {
   it('says so, with no hero or fanfare', () => {
     const commons = [[card('Common', 0, 'Kuriboh'), card('Short Print', 1, 'Mooyan')]]
@@ -209,7 +254,11 @@ describe('SessionSummary without hits', () => {
     expect(screen.queryByTestId('rip-summary-hero')).not.toBeInTheDocument()
     expect(screen.queryByTestId('rip-summary-rays')).not.toBeInTheDocument()
     expect(screen.queryByTestId('rip-summary-spark')).not.toBeInTheDocument()
-    expect(screen.queryByTestId('rip-summary-others')).not.toBeInTheDocument()
+    expect(
+      within(screen.getByTestId('rip-summary-others'))
+        .getAllByRole('img')
+        .map((i) => i.getAttribute('alt'))
+    ).toEqual(['Kuriboh', 'Mooyan'])
     expect(screen.getByRole('button', { name: /see all cards/i })).toBeInTheDocument()
   })
 })

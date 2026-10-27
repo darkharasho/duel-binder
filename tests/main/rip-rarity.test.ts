@@ -84,6 +84,7 @@ describe('holoKind', () => {
 
 describe('artBox', () => {
   it('art box differs for pendulums', () => {
+    expect(artBox('effect_pendulum')).toEqual({ left: 6.4, top: 17.9, right: 6.4, bottom: 38.0 })
     expect(artBox('effect')).toEqual({ left: 11.9, top: 18.1, right: 11.9, bottom: 29.6 })
     expect(artBox('effect_pendulum')).not.toEqual(artBox('effect'))
   })

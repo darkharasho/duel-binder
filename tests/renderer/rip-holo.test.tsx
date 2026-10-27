@@ -54,7 +54,8 @@ describe('HoloCard', () => {
     const { container } = render(
       <HoloCard card={card({ rarity: 'Secret Rare', frameType: 'effect_pendulum' })} size="full" />
     )
-    expect(holo(container)!.style.left).toBe('6.6%')
+    expect(holo(container)!.style.left).toBe('6.4%')
+    expect(holo(container)!.style.bottom).toBe('38%')
   })
 
   it('shows the standard card image', () => {

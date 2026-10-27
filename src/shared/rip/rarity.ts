@@ -72,8 +72,8 @@ export function holoKind(rarity: string, variant: string | null): HoloKind {
 
 const DEFAULT_ART_BOX: ArtBox = { left: 11.9, top: 18.1, right: 11.9, bottom: 29.6 }
 
-/** Pendulum frames have a different layout. Approximate until measured against a cached image. */
-const PENDULUM_ART_BOX: ArtBox = { left: 6.6, top: 17.6, right: 6.6, bottom: 25.0 }
+/** Measured on a cached 813×1185 Pendulum image; the art stops at the top of the Pendulum effect box. */
+const PENDULUM_ART_BOX: ArtBox = { left: 6.4, top: 17.9, right: 6.4, bottom: 38.0 }
 
 /** Where the art sits on a card frame of this type, as percent insets from each edge. */
 export function artBox(frameType: string): ArtBox {

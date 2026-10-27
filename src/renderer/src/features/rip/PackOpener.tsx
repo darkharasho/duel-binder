@@ -36,10 +36,10 @@ const TIER_LEVEL: Record<RevealTier, number> = { none: 0, rare: 1, big: 2, huge:
 const GLOW_PX: Record<RevealTier, number> = { none: 0, rare: 26, big: 48, huge: 80 }
 const EASE = 'cubic-bezier(.25,.8,.25,1)'
 
-/** The info panel beside the front card: 400px where it fits, down to 280px in a narrow window. */
-const PANEL_W = 'clamp(280px, 100cqw - 440px, 400px)'
 /** Between the card and the panel. */
 const PANEL_GAP = 44
+/** The info panel's narrowest; the card moves left of centre rather than squeeze it more. */
+const PANEL_MIN = 280
 /**
  * The front card's height, from the middle of the stage (a size container), the least of:
  * - its height less room above for the edges (7px a card, four deep) and a hit's scale-up, and
@@ -48,13 +48,18 @@ const PANEL_GAP = 44
  * - what leaves room across the width for the 44px gap, the panel and 32px margins each side.
  */
 // Wrapped in calc() so it's also usable where a bare min() isn't (and jsdom keeps it).
-const CARD_H = `calc(min(100cqh - 58px, 600px, (100cqw - ${PANEL_GAP + 64}px - ${PANEL_W}) * 614 / 421))`
+const CARD_H = `calc(min(100cqh - 58px, 600px, (100cqw - ${PANEL_GAP + 64 + PANEL_MIN}px) * 614 / 421))`
 /** Centred in the space left over, but never closer than 32px to the top bar. */
 const CARD_TOP = `calc(max(32px, (100cqh - ${CARD_H}) / 2))`
 /** Card width from its height (421×614). */
 const CARD_W = `calc(${CARD_H} * 421 / 614)`
-/** The card and panel side by side, centred together: the card sits left of centre. */
-const CARD_LEFT = `calc(50% - (${CARD_W} + ${PANEL_GAP}px + ${PANEL_W}) / 2)`
+/** The panel takes the room right of the centred card, from 280px to 400px. */
+const PANEL_W = `clamp(${PANEL_MIN}px, 50cqw - ${CARD_W} / 2 - ${PANEL_GAP + 32}px, 400px)`
+/**
+ * The card centred, with the panel to its right; where that would push the panel past the 32px
+ * margin, the card moves left just enough.
+ */
+const CARD_LEFT = `calc(min(50% - ${CARD_W} / 2, 100% - 32px - ${PANEL_W} - ${PANEL_GAP}px - ${CARD_W}))`
 
 /** The big hits' ring of sparkles, flying outward from round the card. */
 const SPARKS = Array.from({ length: 10 }, (_, i) => {

@@ -35,3 +35,18 @@ export interface OcrBand {
   height: number
   data: Uint8Array
 }
+
+/** A card the scanner recognized, ready to go in the session list. */
+export interface ScanDraft {
+  cardId: number
+  name: string
+  imageId: number
+  /** Null only on rows saved before every scan came with a printing. */
+  printingId: number | null
+  setCode: string | null
+  rarity: string | null
+  /** The printings the user may switch to. */
+  options: ScanPrinting[]
+  flag: 'check-rarity' | 'pick-printing' | 'other-set' | null
+  via: 'code' | 'art' | 'name'
+}

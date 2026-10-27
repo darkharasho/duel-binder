@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } fro
 import { cuesOver, type RarityCues } from '@shared/scan/rarity'
 import { ABSENT_MS, RARITY_MAX_READINGS } from '@shared/scan/thresholds'
 import type { ScanPrinting } from '@shared/scan/types'
+import type { ScanStatus } from '@shared/scanWindow'
 import { api } from '@/lib/api'
 import { centreCrop } from './crop'
 import type { ScanEngine } from './engine'
@@ -16,11 +17,7 @@ const MAX_FAILURES = 5
 const FIRST_BACKOFF_MS = 500
 const FLASH_MS = 120
 
-export type ScanStatus =
-  | { kind: 'idle' }
-  | { kind: 'unsure' }
-  | { kind: 'added'; name: string; setCode: string | null }
-  | { kind: 'stopped' }
+export type { ScanStatus }
 
 export interface ScanLoopOptions {
   videoRef: RefObject<HTMLVideoElement | null>

@@ -40,6 +40,7 @@ const fakeAccount = (signedIn = false): FakeAccount => ({
 async function makeHandlers(opts: { signedIn?: boolean } = {}) {
   const db = await seededDb()
   const account = fakeAccount(opts.signedIn)
+  const scanWindow = { open: vi.fn(), isOpen: vi.fn(() => true), toggleFullScreen: vi.fn() }
   const catalog = { status: vi.fn(() => ({ ...CATALOG_STATUS })) }
   const handlers = createHandlers({
     db,
@@ -65,6 +66,7 @@ async function makeHandlers(opts: { signedIn?: boolean } = {}) {
       close: vi.fn(),
       isMaximized: () => false
     },
+    scanWindow,
     account: account as unknown as AccountService,
     fingerprints: {
       read: async () => null,
@@ -73,7 +75,7 @@ async function makeHandlers(opts: { signedIn?: boolean } = {}) {
     },
     ocr: { read: async () => [], dispose: async () => {} }
   })
-  return { db, handlers, account, catalog }
+  return { db, handlers, account, catalog, scanWindow }
 }
 
 describe('createHandlers', () => {
@@ -111,6 +113,15 @@ describe('createHandlers', () => {
     await expect(handlers['collection:update'](99_999, { quantity: 2 })).rejects.toThrow()
     await reads()
     expect(account.noteLocalEdit).toHaveBeenCalledTimes(4)
+  })
+
+  it('scanWindow handlers call the window manager', async () => {
+    const { handlers, scanWindow } = await makeHandlers()
+    await handlers['scanWindow:open']()
+    await handlers['scanWindow:toggleFullScreen']()
+    expect(scanWindow.open).toHaveBeenCalledTimes(1)
+    expect(scanWindow.toggleFullScreen).toHaveBeenCalledTimes(1)
+    await expect(handlers['scanWindow:isOpen']()).resolves.toBe(true)
   })
 
   it('scan:printingsByCode is wired to the catalog', async () => {

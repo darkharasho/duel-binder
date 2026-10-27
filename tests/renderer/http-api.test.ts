@@ -99,7 +99,7 @@ describe('createHttpApi', () => {
         expect(typeof (fn as (cb: () => void) => unknown)(() => {}), name).toBe('function')
       }
     }
-    expect(count).toBe(5)
+    expect(count).toBe(7)
   })
 
   it('account calls reject on the web without fetching', async () => {

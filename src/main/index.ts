@@ -1,4 +1,5 @@
-import { app, shell, BrowserWindow, dialog, net, session } from 'electron'
+import { app, shell, BrowserWindow, dialog, ipcMain, net, screen, session } from 'electron'
+import { readFileSync, writeFileSync } from 'fs'
 import { join, resolve } from 'path'
 import { autoUpdater } from 'electron-updater'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
@@ -6,6 +7,7 @@ import type { AccountStatus, SyncStatus, UpdateStatus } from '@shared/types'
 import {
   ACCOUNT_CHANGED,
   DATA_CHANGED,
+  SCAN_WINDOW_SEND,
   SYNC_PROGRESS,
   UPDATE_STATUS,
   WINDOW_MAXIMIZED
@@ -26,6 +28,7 @@ import { prepareLogo } from './images/prepareLogo'
 import { handleImageProtocol, registerImageScheme } from './images/protocol'
 import { createUpdater, updateMode, RELEASES_URL } from './updater'
 import { restrictPermissions } from './permissions'
+import { createScanWindowManager, type Rect, type ScanWindowManager } from './scanWindow'
 import { createHandlers, registerIpc, type AppDeps } from './ipc/handlers'
 import { seedFakeCollection } from './dev/fakeData'
 import { resolveUserData } from './userData'
@@ -68,9 +71,71 @@ if (fakeData)
 registerImageScheme()
 
 let mainWindow: BrowserWindow | null = null
+let scanWindows: ScanWindowManager | null = null
 let windowShown: Promise<void> = Promise.resolve()
 let markSeeded: () => void = () => {}
 const seeded = new Promise<void>((r) => (markSeeded = r))
+
+/** Never let a window navigate away from the app (e.g. a dropped file or link). */
+function guardNavigation(win: BrowserWindow): void {
+  const devUrl = is.dev ? process.env['ELECTRON_RENDERER_URL'] : undefined
+  win.webContents.on('will-navigate', (event, url) => {
+    if (devUrl && url.startsWith(devUrl)) return
+    event.preventDefault()
+  })
+
+  win.webContents.setWindowOpenHandler((details) => {
+    try {
+      if (new URL(details.url).protocol === 'https:') void shell.openExternal(details.url)
+    } catch {
+      // invalid URL: deny
+    }
+    return { action: 'deny' }
+  })
+}
+
+/** The scan window: the camera and the pull overlays, in a window the owner can share. */
+function createScanBrowserWindow(bounds: Rect | null): BrowserWindow {
+  const win = new BrowserWindow({
+    width: 1280,
+    height: 720,
+    ...(bounds ?? {}),
+    minWidth: 480,
+    minHeight: 270,
+    title: 'Duel Binder — Scan',
+    backgroundColor: '#000000',
+    autoHideMenuBar: true,
+    ...(process.platform === 'linux' ? { icon } : {}),
+    webPreferences: {
+      preload: join(__dirname, '../preload/index.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: true,
+      // A covered or minimized window keeps scanning.
+      backgroundThrottling: false
+    }
+  })
+
+  win.on('page-title-updated', (event) => event.preventDefault())
+  win.webContents.on('before-input-event', (event, input) => {
+    if (input.type !== 'keyDown') return
+    if (input.key === 'F11') {
+      win.setFullScreen(!win.isFullScreen())
+      event.preventDefault()
+    } else if (input.key === 'Escape' && win.isFullScreen()) {
+      win.setFullScreen(false)
+      event.preventDefault()
+    }
+  })
+  guardNavigation(win)
+
+  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
+    win.loadURL(process.env['ELECTRON_RENDERER_URL'] + '#scan')
+  } else {
+    win.loadFile(join(__dirname, '../renderer/index.html'), { hash: 'scan' })
+  }
+  return win
+}
 
 function createWindow(): void {
   const win = new BrowserWindow({
@@ -101,6 +166,7 @@ function createWindow(): void {
   mainWindow = win
   win.on('closed', () => {
     if (mainWindow === win) mainWindow = null
+    scanWindows?.close()
   })
   const sendMaximized = (): void => {
     if (!win.isDestroyed()) win.webContents.send(WINDOW_MAXIMIZED, win.isMaximized())
@@ -112,21 +178,7 @@ function createWindow(): void {
     win.show()
   })
 
-  // Never let the window navigate away from the app (e.g. a dropped file or link).
-  const devUrl = is.dev ? process.env['ELECTRON_RENDERER_URL'] : undefined
-  win.webContents.on('will-navigate', (event, url) => {
-    if (devUrl && url.startsWith(devUrl)) return
-    event.preventDefault()
-  })
-
-  win.webContents.setWindowOpenHandler((details) => {
-    try {
-      if (new URL(details.url).protocol === 'https:') void shell.openExternal(details.url)
-    } catch {
-      // invalid URL: deny
-    }
-    return { action: 'deny' }
-  })
+  guardNavigation(win)
 
   if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
     win.loadURL(process.env['ELECTRON_RENDERER_URL'])
@@ -277,6 +329,29 @@ async function bootstrap(): Promise<void> {
     isMaximized: () => mainWindow?.isMaximized() ?? false
   }
 
+  const boundsFile = join(userData, 'scan-window.json')
+  const scanWindow = createScanWindowManager({
+    create: createScanBrowserWindow,
+    mainWindow: () => mainWindow,
+    readBounds: () => {
+      try {
+        return JSON.parse(readFileSync(boundsFile, 'utf8'))
+      } catch {
+        return null
+      }
+    },
+    writeBounds: (r) => {
+      try {
+        writeFileSync(boundsFile, JSON.stringify(r))
+      } catch {
+        // the window just opens at the default size next time
+      }
+    },
+    workAreas: () => screen.getAllDisplays().map((d) => d.workArea)
+  })
+  scanWindows = scanWindow
+  ipcMain.on(SCAN_WINDOW_SEND, (e, m) => scanWindow.relay(e.sender.id, m))
+
   registerIpc(
     createHandlers({
       db,
@@ -284,6 +359,7 @@ async function bootstrap(): Promise<void> {
       catalog,
       app: appDeps,
       window: windowDeps,
+      scanWindow,
       account,
       fingerprints,
       ocr

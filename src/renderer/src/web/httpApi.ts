@@ -99,6 +99,14 @@ export function createHttpApi(opts: HttpApiOptions = {}): Api {
       refreshFingerprints: scanUnavailable,
       ocr: scanUnavailable
     },
+    scanWindow: {
+      open: unavailable,
+      isOpen: async () => false,
+      toggleFullScreen: unavailable,
+      send: () => {},
+      onMessage: noUnsubscribe,
+      onOpenChange: noUnsubscribe
+    },
     stats: { get: call('stats:get') },
     sets: {
       list: call('sets:list'),

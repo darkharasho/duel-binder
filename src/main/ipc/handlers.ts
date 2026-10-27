@@ -17,6 +17,7 @@ import {
   updateEntry
 } from '../repo/collection'
 import { adjustPrinting, getChecklist, listSets } from '../repo/sets'
+import type { ScanWindowManager } from '../scanWindow'
 import type { FingerprintStore } from '../scan/fingerprints'
 import { checkOcrBands, type Ocr } from '../scan/ocr'
 import {
@@ -54,6 +55,7 @@ export interface HandlerDeps {
   catalog: Pick<CatalogService, 'status'>
   app: AppDeps
   window: WindowDeps
+  scanWindow: Pick<ScanWindowManager, 'open' | 'isOpen' | 'toggleFullScreen'>
   account: AccountService
   fingerprints: FingerprintStore
   ocr: Ocr
@@ -71,6 +73,7 @@ export function createHandlers({
   catalog,
   app,
   window,
+  scanWindow,
   account,
   fingerprints,
   ocr
@@ -149,6 +152,9 @@ export function createHandlers({
     'window:toggleMaximize': async () => window.toggleMaximize(),
     'window:close': async () => window.close(),
     'window:isMaximized': async () => window.isMaximized(),
+    'scanWindow:open': async () => scanWindow.open(),
+    'scanWindow:isOpen': async () => scanWindow.isOpen(),
+    'scanWindow:toggleFullScreen': async () => scanWindow.toggleFullScreen(),
     'app:version': async () => app.version(),
     'app:openDataFolder': () => app.openDataFolder(),
     'app:backupDatabase': () => app.backupDatabase(),

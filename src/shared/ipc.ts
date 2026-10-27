@@ -21,6 +21,7 @@ import type {
   UpdateEntryInput,
   UpdateStatus
 } from './types'
+import type { ScanWindowMessage } from './scanWindow'
 import type { FingerprintStatus, OcrBand, ScanPrinting } from './scan/types'
 
 /** The API exposed to the renderer as `window.api`. */
@@ -63,6 +64,15 @@ export interface Api {
     fingerprints(): Promise<ArrayBuffer | null>
     refreshFingerprints(): Promise<FingerprintStatus>
     ocr(bands: OcrBand[], kind: 'code' | 'name'): Promise<string[]>
+  }
+  scanWindow: {
+    /** Opens the scan window, or brings it to the front. */
+    open(): Promise<void>
+    isOpen(): Promise<boolean>
+    toggleFullScreen(): Promise<void>
+    send(m: ScanWindowMessage): void
+    onMessage(cb: (m: ScanWindowMessage) => void): () => void
+    onOpenChange(cb: (open: boolean) => void): () => void
   }
   stats: {
     get(): Promise<CollectionStats>
@@ -149,6 +159,9 @@ export const INVOKE_CHANNELS = [
   'scan:fingerprints',
   'scan:refreshFingerprints',
   'scan:ocr',
+  'scanWindow:open',
+  'scanWindow:isOpen',
+  'scanWindow:toggleFullScreen',
   'stats:get',
   'sets:list',
   'sets:checklist',
@@ -182,6 +195,10 @@ export const UPDATE_STATUS = 'update:status'
 export const DATA_CHANGED = 'data:changed' // payload: void
 export const WINDOW_MAXIMIZED = 'window:maximized' // payload: boolean
 export const ACCOUNT_CHANGED = 'account:changed' // payload: AccountStatus
+export const SCAN_WINDOW_MESSAGE = 'scanWindow:message' // payload: ScanWindowMessage
+export const SCAN_WINDOW_OPEN = 'scanWindow:openChanged' // payload: boolean
+/** Renderer to main, via `ipcRenderer.send`; main relays it to the other window. */
+export const SCAN_WINDOW_SEND = 'scanWindow:send'
 
 // Compile-time check: INVOKE_CHANNELS must list exactly the invoke methods of Api.
 // Only methods returning a Promise count as invoke methods, so the event

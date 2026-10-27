@@ -1,0 +1,57 @@
+import type { Language } from './languages'
+import type { ScanDraft } from './scan/types'
+
+/** What the scan loop is doing; the scan window reports it, the Scan page words it. */
+export type ScanStatus =
+  | { kind: 'idle' }
+  | { kind: 'unsure' }
+  | { kind: 'added'; name: string; setCode: string | null }
+  | { kind: 'stopped' }
+
+/** What the main window tells the scan window to scan with. */
+export interface ScanWindowSettings {
+  deviceId: string | null
+  paused: boolean
+  set: { setName: string; language: Language } | null
+  defaultRarity: string | null
+  hitPrice: number
+}
+
+/** What the scan window reports back for the Scan page to show. */
+export interface ScanWindowState {
+  devices: { deviceId: string; label: string }[]
+  /** The camera actually open, from its track settings. */
+  openDeviceId: string | null
+  cameraError: 'denied' | 'none' | 'lost' | null
+  loop: ScanStatus
+  artReady: boolean | null
+  setUnreadable: boolean
+}
+
+export type ToScanWindow =
+  | { kind: 'settings'; settings: ScanWindowSettings }
+  | { kind: 'retryCamera' }
+  | { kind: 'retryScan' }
+
+export type FromScanWindow =
+  | { kind: 'ready' }
+  | { kind: 'state'; state: ScanWindowState }
+  | { kind: 'draft'; draft: ScanDraft }
+
+export type ScanWindowMessage = ToScanWindow | FromScanWindow
+
+const TO: readonly string[] = ['settings', 'retryCamera', 'retryScan']
+const FROM: readonly string[] = ['ready', 'state', 'draft']
+
+const kindOf = (v: unknown): unknown =>
+  typeof v === 'object' && v !== null ? (v as { kind?: unknown }).kind : undefined
+
+export const isToScanWindow = (v: unknown): v is ToScanWindow => {
+  const k = kindOf(v)
+  return typeof k === 'string' && TO.includes(k)
+}
+
+export const isFromScanWindow = (v: unknown): v is FromScanWindow => {
+  const k = kindOf(v)
+  return typeof k === 'string' && FROM.includes(k)
+}

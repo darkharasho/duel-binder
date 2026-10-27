@@ -3,11 +3,15 @@ import {
   ACCOUNT_CHANGED,
   DATA_CHANGED,
   INVOKE_CHANNELS,
+  SCAN_WINDOW_MESSAGE,
+  SCAN_WINDOW_OPEN,
+  SCAN_WINDOW_SEND,
   SYNC_PROGRESS,
   UPDATE_STATUS,
   WINDOW_MAXIMIZED,
   type Api
 } from '../shared/ipc'
+import type { ScanWindowMessage } from '../shared/scanWindow'
 import type { AccountStatus, SyncStatus, UpdateStatus } from '../shared/types'
 
 const invoke =
@@ -32,6 +36,9 @@ api.sync.onProgress = (cb: (s: SyncStatus) => void) => subscribe(SYNC_PROGRESS, 
 api.app.onUpdateStatus = (cb: (s: UpdateStatus) => void) => subscribe(UPDATE_STATUS, cb)
 api.app.onDataChanged = (cb: () => void) => subscribe<void>(DATA_CHANGED, () => cb())
 api.account.onChange = (cb: (s: AccountStatus) => void) => subscribe(ACCOUNT_CHANGED, cb)
+api.scanWindow.send = (m: ScanWindowMessage) => ipcRenderer.send(SCAN_WINDOW_SEND, m)
+api.scanWindow.onMessage = (cb: (m: ScanWindowMessage) => void) => subscribe(SCAN_WINDOW_MESSAGE, cb)
+api.scanWindow.onOpenChange = (cb: (open: boolean) => void) => subscribe(SCAN_WINDOW_OPEN, cb)
 api.window.platform = process.platform
 api.window.onMaximizedChange = (cb: (maximized: boolean) => void) => subscribe(WINDOW_MAXIMIZED, cb)
 

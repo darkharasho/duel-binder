@@ -6,7 +6,7 @@ import { baseOf, compareRarity, revealTier } from '../../../../shared/rip/rarity
 import type { RevealTier, RipCard, RipSessionDetail } from '../../../../shared/rip/types'
 import { CardInfo, RarityBadge } from './CardInfo'
 import { HoloCard } from './HoloCard'
-import { STAGE, prefersReducedMotion } from './stage'
+import { prefersReducedMotion } from './stage'
 
 const shortRarity = (rarity: string): string => baseOf(rarity).replace(/ Rare$/, '')
 
@@ -101,14 +101,16 @@ function Hero({
             aria-hidden
             data-testid="rip-summary-rays"
             style={{
-              width: `calc(${HERO_H} * 2.3)`,
-              height: `calc(${HERO_H} * 2.3)`,
-              left: `calc(50% - ${HERO_H} * 1.15)`,
-              top: `calc(50% - ${HERO_H} * 1.15)`,
+              // No bigger than the rays reach: the summary doesn't clip, so a bigger box would
+              // make the page scroll.
+              width: `calc(${HERO_H} * 1.4)`,
+              height: `calc(${HERO_H} * 1.4)`,
+              left: `calc(50% - ${HERO_H} * 0.7)`,
+              top: `calc(50% - ${HERO_H} * 0.7)`,
               opacity: tier === 'huge' ? 0.7 : 0.4,
               backgroundImage: `repeating-conic-gradient(from 0deg, ${color} 0deg 5deg, transparent 5deg 15deg)`,
-              maskImage: 'radial-gradient(circle, #000 18%, transparent 66%)',
-              WebkitMaskImage: 'radial-gradient(circle, #000 18%, transparent 66%)'
+              maskImage: 'radial-gradient(circle closest-side, #000 33%, transparent 96%)',
+              WebkitMaskImage: 'radial-gradient(circle closest-side, #000 33%, transparent 96%)'
             }}
             className="pointer-events-none absolute -z-10 animate-[rip-rays_40s_linear_infinite] motion-reduce:animate-none"
           />
@@ -121,7 +123,7 @@ function Hero({
             height: `calc(${HERO_H} * 1.8)`,
             left: `calc(50% - ${HERO_H} * 0.9)`,
             top: `calc(50% - ${HERO_H} * 0.9)`,
-            backgroundImage: `radial-gradient(circle, ${color}${tier === 'huge' ? '77' : '55'} 0%, transparent 65%)`
+            backgroundImage: `radial-gradient(circle closest-side, ${color}${tier === 'huge' ? '77' : '55'} 0%, transparent 65%)`
           }}
           className="pointer-events-none absolute -z-10 animate-[rip-bloom_800ms_ease-out_both] motion-reduce:animate-none"
         />
@@ -258,7 +260,7 @@ function Focus({
       aria-label={card.name}
       data-testid="rip-summary-focus"
       onClick={onClose}
-      className="absolute inset-0 z-50 bg-black/75 backdrop-blur-sm duration-200 animate-in fade-in-0 motion-reduce:animate-none"
+      className="absolute inset-0 z-50 rounded-xl bg-black/75 backdrop-blur-sm duration-200 animate-in fade-in-0 motion-reduce:animate-none"
     >
       <div style={{ containerType: 'size' }} className="absolute inset-0">
         <div className="flex size-full items-center justify-center gap-11 px-8">
@@ -307,8 +309,8 @@ interface Props {
 }
 
 /**
- * What a session pulled, on a stage like the opener's: the best pull large with fanfare, every
- * other card along the bottom (hits first), and every card by pack on demand. Clicking any card
+ * What a session pulled, on a stage like the opener's: the best pull large with fanfare, the rest
+ * of its pack along the bottom, and every card by pack on demand. Clicking any card
  * brings it up large with its details. Fills the height it's given.
  */
 export function SessionSummary({
@@ -322,12 +324,9 @@ export function SessionSummary({
   const all = session.packs.flat()
   const hits = rankedHits(session.packs)
   const hero = hits[0] ?? null
-  // Every other card along the bottom: the rest of the hits rarest first, then the others as pulled.
-  const others = [
-    ...hits.slice(1).map((p) => p.card),
-    ...all.filter((c) => revealTier(c.rarity) === 'none')
-  ]
-  const order = hero ? [hero.card, ...others] : others
+  // Along the bottom: the rest of the best pull's pack, in the order it came.
+  const others = hero ? session.packs[hero.pack - 1].filter((c) => c !== hero.card) : []
+  const order = hero ? [hero.card, ...others] : []
   const step = (by: number): void =>
     setFocused((f) => {
       if (!f) return f
@@ -338,12 +337,12 @@ export function SessionSummary({
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
+      {/* On the page itself, not a stage: only the hero's rays and bloom light it up. */}
       <div
         data-testid="rip-summary-stage"
-        style={{ backgroundImage: STAGE }}
-        className="relative isolate flex min-h-[460px] flex-1 flex-col overflow-hidden rounded-xl border border-white/[0.06]"
+        className="relative isolate flex min-h-[460px] flex-1 flex-col"
       >
-        <div className="flex h-11 shrink-0 items-center px-5 text-sm">
+        <div className="flex h-8 shrink-0 items-center text-sm">
           <h2 data-testid="rip-summary-headline" className="min-w-0 truncate font-normal">
             <span className="font-semibold">
               {packs} {packs === 1 ? 'pack' : 'packs'}
@@ -375,7 +374,7 @@ export function SessionSummary({
             {showAll && (
               <div
                 data-testid="rip-summary-all"
-                className="absolute inset-0 flex flex-col gap-4 overflow-y-auto px-5 py-2"
+                className="absolute inset-0 flex flex-col gap-4 overflow-y-auto py-2"
               >
                 {session.packs.map((pack, i) => (
                   <section key={i}>
@@ -401,9 +400,9 @@ export function SessionSummary({
         </div>
 
         {others.length > 0 && (
-          <div className="shrink-0 px-5 pt-1 pb-3">
+          <div className="shrink-0 pt-1">
             <h3 className="mb-1.5 text-[11px] font-semibold tracking-wider text-white/45 uppercase">
-              {hero ? 'Your other cards' : 'Your cards'}
+              {`The rest of pack ${hero!.pack}`}
             </h3>
             {/* One line that scrolls sideways (the wheel scrolls it too). */}
             <ol

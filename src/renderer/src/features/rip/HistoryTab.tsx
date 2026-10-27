@@ -31,7 +31,7 @@ function Stat({ label, value }: { label: string; value: number }): React.JSX.Ele
 function SessionDetail({ id, onBack }: { id: number; onBack: () => void }): React.JSX.Element {
   const q = useQuery({ queryKey: queryKeys.ripSession(id), queryFn: () => api.rip.session(id) })
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex min-h-0 flex-1 flex-col gap-4">
       <div>
         <Button variant="ghost" size="sm" onClick={onBack}>
           ← Back to history

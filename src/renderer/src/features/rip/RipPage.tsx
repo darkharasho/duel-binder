@@ -98,8 +98,10 @@ export function RipPage(): React.JSX.Element {
     }
   }
 
-  // Opening and its summary fill the window below the header, so nothing's below the fold.
-  const filling = tab === 'open' && (view.kind === 'opening' || view.kind === 'summary')
+  // Opening, its summary and History fill the window below the header, so a summary is never
+  // below the fold.
+  const filling =
+    tab === 'history' || (tab === 'open' && (view.kind === 'opening' || view.kind === 'summary'))
 
   return (
     <div

@@ -114,13 +114,14 @@ describe('SessionSummary', () => {
       '2 Super',
       '6 cards'
     ])
-    // Every other card: the rest of the hits rarest first (Supers as pulled), then the others.
+    // Along the bottom, the rest of the best pull's pack, in pack order.
     const others = screen.getByTestId('rip-summary-others')
+    expect(screen.getByText(/the rest of pack 2/i)).toBeInTheDocument()
     expect(
       within(others)
         .getAllByRole('img')
         .map((i) => i.getAttribute('alt'))
-    ).toEqual(['Red-Eyes', 'Dark Magician', 'Gaia', 'Kuriboh', 'Mooyan'])
+    ).toEqual(['Red-Eyes', 'Gaia'])
     expect(others).toHaveTextContent('Ultra · Red-Eyes')
     expect(container.textContent).not.toMatch(/\$\d/)
     await userEvent.click(screen.getByRole('button', { name: /rip 2 more/i }))
@@ -141,7 +142,7 @@ describe('SessionSummary', () => {
       within(screen.getByTestId('rip-summary-others'))
         .getAllByRole('img')
         .map((i) => i.getAttribute('alt'))
-    ).toEqual(['Late Ultra', 'Gaia', 'Kuriboh'])
+    ).toEqual(['Kuriboh'])
   })
 
   it('a huge hit gets rays and sparkles; a Rare just lands, with no rays or sparkles', () => {
@@ -204,17 +205,17 @@ describe('SessionSummary focus', () => {
     expect(screen.queryByTestId('rip-summary-focus')).not.toBeInTheDocument()
     await userEvent.click(
       within(screen.getByTestId('rip-summary-others')).getByRole('button', {
-        name: 'Look at Kuriboh'
+        name: 'Look at Red-Eyes'
       })
     )
     const focus = screen.getByTestId('rip-summary-focus')
-    expect(within(focus).getByRole('img', { name: 'Kuriboh' })).toBeInTheDocument()
-    expect(focus).toHaveTextContent('LOB-EN000')
+    expect(within(focus).getByRole('img', { name: 'Red-Eyes' })).toBeInTheDocument()
+    expect(focus).toHaveTextContent('LOB-EN001')
     // Clicking the card itself keeps it up.
-    await userEvent.click(within(focus).getByRole('img', { name: 'Kuriboh' }))
+    await userEvent.click(within(focus).getByRole('img', { name: 'Red-Eyes' }))
     expect(screen.getByTestId('rip-summary-focus')).toBeInTheDocument()
     await userEvent.keyboard('{ArrowRight}')
-    expect(within(focus).getByRole('img', { name: 'Mooyan' })).toBeInTheDocument()
+    expect(within(focus).getByRole('img', { name: 'Gaia' })).toBeInTheDocument()
     // Past the last card it wraps round to the best pull.
     await userEvent.keyboard('{ArrowRight}')
     expect(within(focus).getByRole('img', { name: 'Blue-Eyes' })).toBeInTheDocument()
@@ -254,11 +255,7 @@ describe('SessionSummary without hits', () => {
     expect(screen.queryByTestId('rip-summary-hero')).not.toBeInTheDocument()
     expect(screen.queryByTestId('rip-summary-rays')).not.toBeInTheDocument()
     expect(screen.queryByTestId('rip-summary-spark')).not.toBeInTheDocument()
-    expect(
-      within(screen.getByTestId('rip-summary-others'))
-        .getAllByRole('img')
-        .map((i) => i.getAttribute('alt'))
-    ).toEqual(['Kuriboh', 'Mooyan'])
+    expect(screen.queryByTestId('rip-summary-others')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: /see all cards/i })).toBeInTheDocument()
   })
 })

@@ -3,7 +3,7 @@ import type { SqlDb } from '../db/sql'
 import { priceCandidates } from '../prices/candidates'
 import type { ContributedPrinting } from '../../shared/catalogFeed'
 import type { UnsyncedEntry } from '../../shared/types'
-import type { Language } from '../../shared/languages'
+import { isLanguage } from '../../shared/languages'
 import {
   MAX_NOTES,
   editTime,
@@ -465,17 +465,25 @@ export function syncIssueCount(db: SqlDb, owner: number): number {
   return Number(n)
 }
 
-/** The owner's entries that can't sync, with what the user needs to recognise them, oldest issue first. */
+/**
+ * The owner's entries that can't sync, with what the user needs to recognise them, oldest issue
+ * first. Lists every entry `syncIssueCount` counts: one whose printing (or card) row is missing
+ * locally still shows, named through its image's card and with set details left blank.
+ */
 export function listSyncIssues(db: SqlDb, owner: number): UnsyncedEntry[] {
   const rows = db
     .prepare(
-      `SELECT i.uid, c.name, p.set_code, p.set_name, p.set_rarity, p.language, e.quantity, i.reason
+      `SELECT i.uid, COALESCE(c.name, ic.name, 'Unknown card') AS name,
+              COALESCE(p.set_code, '') AS set_code, COALESCE(p.set_name, '') AS set_name,
+              COALESCE(p.set_rarity, '') AS set_rarity, p.language, i.pkey, e.quantity, i.reason
        FROM sync_issues i
        JOIN collection_entries e ON e.uid = i.uid AND e.owner_id = i.owner_id AND e.deleted_at IS NULL
-       JOIN card_printings p ON p.id = e.printing_id
-       JOIN cards c ON c.id = p.card_id
+       LEFT JOIN card_printings p ON p.id = e.printing_id
+       LEFT JOIN cards c ON c.id = p.card_id
+       LEFT JOIN card_images im ON im.image_id = e.image_id
+       LEFT JOIN cards ic ON ic.id = im.card_id
        WHERE i.owner_id = ?
-       ORDER BY i.since, c.name, i.uid`
+       ORDER BY i.since, name, i.uid`
     )
     .all(owner) as {
     uid: string
@@ -483,18 +491,23 @@ export function listSyncIssues(db: SqlDb, owner: number): UnsyncedEntry[] {
     set_code: string
     set_name: string
     set_rarity: string
-    language: Language
+    language: string | null
+    pkey: string
     quantity: number
     reason: string
   }[]
-  return rows.map((r) => ({
-    uid: r.uid,
-    name: r.name,
-    setCode: r.set_code,
-    setName: r.set_name,
-    rarity: r.set_rarity,
-    language: r.language,
-    quantity: r.quantity,
-    reason: r.reason
-  }))
+  return rows.map((r) => {
+    // With no printing row, the pkey's first part is still the language.
+    const language = r.language ?? r.pkey.split('|')[0]
+    return {
+      uid: r.uid,
+      name: r.name,
+      setCode: r.set_code,
+      setName: r.set_name,
+      rarity: r.set_rarity,
+      language: isLanguage(language) ? language : 'en',
+      quantity: r.quantity,
+      reason: r.reason
+    }
+  })
 }

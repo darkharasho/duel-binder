@@ -486,6 +486,30 @@ describe('syncOnce', () => {
     expect(listSyncIssues(a, user + 1)).toEqual([])
   })
 
+  it('lists an issue whose entry has no local printing, so the list matches the count', async () => {
+    const a = await desktop()
+    addEntry(a, { printingId: pid(a, 'SDY-006'), imageId: DM, quantity: 2 }, T1)
+    const uid = localRows(a)[0].uid
+    recordSyncIssue(a, user, uid, 'fr|46986414|Gone Set|GONE-FR001|Rare', 'unknown-printing', T2)
+    a.pragma('foreign_keys = OFF')
+    a.prepare('UPDATE collection_entries SET printing_id = 999999 WHERE uid = ?').run(uid)
+    a.pragma('foreign_keys = ON')
+
+    expect(syncIssueCount(a, user)).toBe(1)
+    expect(listSyncIssues(a, user)).toEqual([
+      {
+        uid,
+        name: 'Dark Magician',
+        setCode: '',
+        setName: '',
+        rarity: '',
+        language: 'fr',
+        quantity: 2,
+        reason: 'unknown-printing'
+      }
+    ])
+  })
+
   it('offers each printing once with every optional field explicit', async () => {
     const a = await desktop()
     const id = pid(a, 'SDY-006')

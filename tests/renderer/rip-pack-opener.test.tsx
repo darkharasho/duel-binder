@@ -406,9 +406,11 @@ describe('PackOpener', () => {
         .map((img) => img.getAttribute('alt'))
     ).toEqual(['Card 0', 'Card 1', 'Card 2', 'Card 3', 'Card 5', 'Card 6', 'Card 7', 'Card 8'])
     expect(within(row).queryByRole('img', { name: 'Dark Magician' })).not.toBeInTheDocument()
-    // Space at the end is the next pack, which starts with an empty row.
+    // Space at the end is the next pack, sealed; torn, it starts with an empty row.
     space()
-    await waitFor(() => expect(count()).toBe('1 / 9'))
+    await loadedPack()
+    space()
+    expect(count()).toBe('1 / 9')
     expect(screen.queryAllByTestId('rip-row-card')).toHaveLength(0)
   })
 
@@ -683,7 +685,7 @@ describe('PackOpener', () => {
     expect(screen.getByText(/pack 2 of 3/i)).toBeInTheDocument()
   })
 
-  it('the next pack opens by itself once it has loaded', async () => {
+  it('the next pack waits sealed for its tear; torn early, its cards come out as they load', async () => {
     const second = deferred<RipCard[]>()
     const calls = [Promise.resolve(commons()), second.promise]
     const { api } = renderOpener(() => calls.shift() ?? new Promise(() => {}))
@@ -693,6 +695,8 @@ describe('PackOpener', () => {
     expect(screen.getByText(/pack 2 of 3/i)).toBeInTheDocument()
     expect(screen.getByTestId('rip-pack')).toBeInTheDocument()
     expect(screen.queryByTestId('rip-front')).not.toBeInTheDocument()
+    space()
+    expect(screen.queryByTestId('rip-front')).not.toBeInTheDocument()
     await act(async () => second.resolve([card('Rare', 5, 'Next One'), card('Common', 6)]))
     await waitFor(() => expect(screen.queryByTestId('rip-pack')).not.toBeInTheDocument())
     expect(front()).toContainElement(screen.getByRole('img', { name: 'Card 6' }))
@@ -700,7 +704,7 @@ describe('PackOpener', () => {
     expect(api.rip.openPack).toHaveBeenCalledTimes(2)
   })
 
-  it('under StrictMode the next pack opens once and tears itself once, after a beat', async () => {
+  it('under StrictMode the next pack opens once and waits sealed until torn', async () => {
     motion(false)
     vi.useFakeTimers()
     const { api } = renderOpener(async () => [card('Common', 0), card('Common', 1)], {
@@ -714,10 +718,9 @@ describe('PackOpener', () => {
     fireEvent.click(nextButton())
     await act(() => vi.advanceTimersByTimeAsync(0))
     expect(api.rip.openPack).toHaveBeenCalledTimes(2)
+    await act(() => vi.advanceTimersByTimeAsync(2000))
     expect(screen.getByTestId('rip-pack')).toHaveAttribute('data-phase', 'sealed')
-    await act(() => vi.advanceTimersByTimeAsync(349))
-    expect(screen.getByTestId('rip-pack')).toHaveAttribute('data-phase', 'sealed')
-    await act(() => vi.advanceTimersByTimeAsync(1))
+    fireEvent.click(screen.getByTestId('rip-stage'))
     expect(screen.getByTestId('rip-pack')).toHaveAttribute('data-phase', 'tearing')
     await act(() => vi.advanceTimersByTimeAsync(550))
     expect(count()).toBe('1 / 2')
@@ -726,7 +729,7 @@ describe('PackOpener', () => {
     expect(api.rip.openPack).toHaveBeenCalledTimes(2)
   })
 
-  it('unmounting during the auto-tear beat is quiet', async () => {
+  it('unmounting on the sealed next pack is quiet', async () => {
     motion(false)
     vi.useFakeTimers()
     const error = vi.spyOn(console, 'error')
@@ -763,6 +766,7 @@ describe('PackOpener', () => {
     await new Promise((r) => setTimeout(r, 50))
     expect(screen.getByTestId('rip-pack')).toHaveAttribute('data-phase', 'sealed')
     rerender(ui(true))
+    space()
     await waitFor(() => expect(count()).toBe('1 / 3'))
 
     // Animated skip, then hidden: it stops where it is until shown again.
@@ -807,10 +811,12 @@ describe('PackOpener', () => {
     space(skipButton())
     await waitFor(() => expect(screen.getByText(/pack 2 of 3/i)).toBeInTheDocument())
     expect(api.rip.openPack).toHaveBeenCalledTimes(2)
-    // The second pack opens itself; then Space on the disabled Next pack puts a card back.
-    await waitFor(() => expect(count()).toBe('1 / 3'))
+    // On the disabled Next pack, Space tears the second pack, then sends a card down.
+    await loadedPack()
     const next = nextButton()
     expect(next).toBeDisabled()
+    space(next)
+    await waitFor(() => expect(count()).toBe('1 / 3'))
     space(next)
     expect(count()).toBe('2 / 3')
   })
@@ -828,6 +834,8 @@ describe('PackOpener', () => {
     await loadedPack()
     fireEvent.click(skipButton())
     fireEvent.click(nextButton())
+    await loadedPack()
+    space()
     await waitFor(() => expect(count()).toBe('1 / 3'))
     fireEvent.click(skipButton())
     expect(nextButton()).toHaveTextContent('Finish')

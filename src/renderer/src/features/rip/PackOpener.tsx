@@ -25,8 +25,6 @@ const END_CLICK_MS = 500
 const INFO_OUT_MS = 200
 /** Between cards when skipping to the hit. */
 const SKIP_STEP_MS = 330
-/** A beat on the next sealed pack before it tears itself open. */
-const AUTO_TEAR_MS = 350
 /** How far a drag must go to send the front card on. */
 const SWIPE_PX = 60
 /** Cards visible behind the front one, as edges. */
@@ -570,18 +568,11 @@ export function PackOpener({
     if (strippedPack === packIndex && cards && flipped === 0) latestFlip.current()
   }, [strippedPack, packIndex, cards, flipped])
 
-  // Only the first pack needs tearing by hand; the rest tear themselves once loaded.
+  // Every pack is torn by hand (or by Skip to the hit).
   const latestTear = useRef(tear)
   useLayoutEffect(() => {
     latestTear.current = tear
   })
-  // Not while hidden on the History tab: the owner should see it.
-  const autoTear = active && packIndex > 0 && phase === 'sealed' && cards !== null
-  useEffect(() => {
-    if (!autoTear) return
-    const t = setTimeout(() => latestTear.current(), prefersReducedMotion() ? 0 : AUTO_TEAR_MS)
-    return () => clearTimeout(t)
-  }, [autoTear])
 
   // Skipping: tear if sealed, then each card down to the row in turn, stopping on the last.
   useEffect(() => {

@@ -19,7 +19,8 @@ const CATALOG_STATUS: SyncStatus = {
   dbVersion: null,
   cardCount: 3,
   error: null,
-  blocked: null
+  blocked: null,
+  blockedRetry: null
 }
 
 const fakeAccount = (signedIn = false): FakeAccount => ({

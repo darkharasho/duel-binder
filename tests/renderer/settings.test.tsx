@@ -12,7 +12,8 @@ const synced = {
   dbVersion: '142.17',
   cardCount: 13000,
   error: null,
-  blocked: null
+  blocked: null,
+  blockedRetry: null
 } as const
 
 describe('SettingsPage', () => {

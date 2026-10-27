@@ -69,7 +69,8 @@ describe('catalog service', () => {
     expect(service.status()).toMatchObject({
       state: 'idle',
       error: null,
-      blocked: "Couldn't reach the server to download card data"
+      blocked: "Couldn't reach the server to download card data",
+      blockedRetry: 'next-run'
     })
     expect(emitted.at(-1)?.blocked).toBe("Couldn't reach the server to download card data")
     expect(emitted.map((s) => s.state)).toEqual(['checking', 'downloading', 'idle'])
@@ -162,7 +163,12 @@ describe('catalog service', () => {
       imagesChanged: false
     })
     expect(call).not.toHaveBeenCalled()
-    expect(thisLaunch.status()).toMatchObject({ state: 'idle', blocked: reason, error: null })
+    expect(thisLaunch.status()).toMatchObject({
+      state: 'idle',
+      blocked: reason,
+      blockedRetry: 'next-launch',
+      error: null
+    })
 
     // The next launch tries again.
     const nextLaunch = makeService(new Date(NOW.getTime() + 3_600_000))
@@ -171,7 +177,7 @@ describe('catalog service', () => {
       imagesChanged: true
     })
     expect(call).toHaveBeenCalled()
-    expect(nextLaunch.status().blocked).toBeNull()
+    expect(nextLaunch.status()).toMatchObject({ blocked: null, blockedRetry: null })
   })
 
   it('shows an unexpected failure as an error and swallows it', async () => {

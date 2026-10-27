@@ -36,6 +36,7 @@ const status = (o: object = {}) => ({
   cardCount: 100,
   error: null,
   blocked: null,
+  blockedRetry: null,
   ...o
 })
 
@@ -148,15 +149,44 @@ describe('SyncBanner', () => {
     expect(screen.queryByText(/No card data yet/)).not.toBeInTheDocument()
   })
 
-  it('says offline with saved data when a sync failed but cards exist', async () => {
+  it('says card data could not update, not offline, when a sync failed but cards exist', async () => {
     const api = mockApi({
       sync: { status: async () => status({ state: 'error', error: 'HTTP 500', cardCount: 5, lastSyncAt: new Date().toISOString() }) }
     })
     await renderApp(api)
     expect(
+      await screen.findByText("Card data couldn't update — using saved card data")
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/Offline/)).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument()
+  })
+
+  it('says offline with saved data when the account is offline', async () => {
+    const api = mockApi({
+      sync: { status: async () => status({ cardCount: 5, lastSyncAt: new Date().toISOString() }) }
+    })
+    const signedIn = await api.account.status()
+    api.account.status = vi.fn(async () => ({ ...signedIn, state: 'offline' as const }))
+    await renderApp(api)
+    expect(
       await screen.findByText('Offline — using saved card data (prices updated just now)')
     ).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument()
+  })
+
+  it('says a census failure tries again after a restart, with no Retry', async () => {
+    const api = mockApi({
+      sync: {
+        status: async () =>
+          status({ blocked: "Your collection didn't match after updating card data", blockedRetry: 'next-launch' })
+      }
+    })
+    await renderApp(api)
+    expect(
+      await screen.findByText(
+        "Card data can't update right now: Your collection didn't match after updating card data. Duel Binder will try again after a restart."
+      )
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument()
   })
 
   it('asks to connect when the first sync failed with no cards', async () => {

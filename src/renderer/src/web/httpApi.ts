@@ -21,7 +21,8 @@ const SYNC_IDLE: SyncStatus = {
   dbVersion: null,
   cardCount: 1,
   error: null,
-  blocked: null
+  blocked: null,
+  blockedRetry: null
 }
 const UPDATE_IDLE: UpdateStatus = { state: 'idle', mode: 'auto', version: null, error: null }
 

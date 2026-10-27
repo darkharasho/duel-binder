@@ -284,7 +284,8 @@ describe('AddCardDialog', () => {
           dbVersion: null,
           cardCount: 0,
           error: null,
-          blocked: null
+          blocked: null,
+          blockedRetry: null
         })
       }
     })

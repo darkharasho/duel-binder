@@ -26,7 +26,8 @@ export function getSyncStatus(db: Database.Database): SyncStatus {
     dbVersion: getMeta(db, 'db_version'),
     cardCount: n,
     error: l?.error ?? null,
-    blocked: null
+    blocked: null,
+    blockedRetry: null
   }
 }
 

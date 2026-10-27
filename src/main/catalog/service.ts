@@ -63,13 +63,15 @@ export function createCatalogService(deps: CatalogServiceDeps): CatalogService {
 
   function status(): SyncStatus {
     const { n } = db.prepare('SELECT count(*) AS n FROM cards').get() as { n: number }
+    const failure = switched() ? null : switchFailure()
     return {
       state,
       lastSyncAt: getMeta(db, 'last_sync_at'),
       dbVersion: getMeta(db, 'db_version'),
       cardCount: n,
       error,
-      blocked: switched() ? null : (switchFailure()?.reason ?? null)
+      blocked: failure?.reason ?? null,
+      blockedRetry: failure?.retry ?? null
     }
   }
 

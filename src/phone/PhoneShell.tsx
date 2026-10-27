@@ -117,9 +117,6 @@ export function PhoneShell({
           scan ? 'overflow-hidden' : 'overflow-auto overscroll-contain'
         )}
       >
-        {!scan && (
-          <StatusLine className="sticky top-0 z-20 border-b border-white/[0.06] bg-background/80 backdrop-blur-xl" />
-        )}
         <ArtWashContext.Provider value={setWash}>
           <MainScrollContext.Provider value={scroll}>
             <PageSwitch
@@ -135,6 +132,11 @@ export function PhoneShell({
           </MainScrollContext.Provider>
         </ArtWashContext.Provider>
       </main>
+
+      {/* Only there while something waits or fails; pb-7 keeps it clear of the raised Scan button. */}
+      {!scan && (
+        <StatusLine className="relative z-30 shrink-0 border-t border-white/[0.06] bg-background/90 pb-7 backdrop-blur-xl" />
+      )}
 
       <nav
         aria-label="Tabs"

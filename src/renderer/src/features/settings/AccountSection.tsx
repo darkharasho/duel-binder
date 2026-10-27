@@ -14,7 +14,6 @@ import { formatRelative } from '@/lib/format'
 import { isWeb } from '@/lib/platform'
 import { fetchMe } from '@/web/account'
 import type { Me } from '@shared/cloud'
-import type { UnsyncedEntry } from '@shared/types'
 
 function Identity({ user }: { user: Me }): React.JSX.Element {
   const [avatarFailed, setAvatarFailed] = useState(false)
@@ -42,7 +41,7 @@ function UnsyncedNotice({ count }: { count: number }): React.JSX.Element {
   })
   return (
     <div className="flex items-center justify-between gap-4">
-      <p className="text-muted-foreground">{count} cards can&apos;t reach your account yet.</p>
+      <p className="text-muted-foreground">{count === 1 ? '1 card' : `${count} cards`} can&apos;t reach your account yet.</p>
       <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
         Show
       </Button>
@@ -56,9 +55,11 @@ function UnsyncedNotice({ count }: { count: number }): React.JSX.Element {
             <p className="text-sm text-muted-foreground">Loading…</p>
           ) : list.isError ? (
             <p className="text-sm text-destructive">Couldn&apos;t load the list</p>
+          ) : list.data.length === 0 ? (
+            <p className="text-sm text-muted-foreground">Nothing to show.</p>
           ) : (
             <ul className="max-h-96 space-y-3 overflow-y-auto text-sm">
-              {list.data.map((e: UnsyncedEntry) => (
+              {list.data.map((e) => (
                 <li key={e.uid} className="space-y-0.5">
                   <div className="flex justify-between gap-4">
                     <span className="font-medium">{e.name}</span>

@@ -90,6 +90,43 @@ describe('SettingsPage', () => {
     expect(dialog).toHaveTextContent('×2')
   })
 
+  describe('unsynced dialog states', () => {
+    const accountWith = (count: number, unsynced: () => Promise<never[]>) =>
+      createMockApi({
+        account: {
+          status: vi.fn(async () => ({
+            state: 'idle' as const,
+            user: { id: 1, username: 'seto', displayName: 'Seto', avatarUrl: null },
+            localOwner: 'Seto',
+            lastSyncedAt: null,
+            error: null,
+            pendingCount: 0,
+            unsyncedCount: count,
+            signInRequired: true
+          })),
+          unsynced
+        }
+      })
+
+    it('says nothing to show for an empty list, and uses singular copy for one card', async () => {
+      const user = userEvent.setup()
+      renderWithProviders(<SettingsPage />, { api: accountWith(1, async () => []) })
+      expect(await screen.findByText("1 card can't reach your account yet.")).toBeInTheDocument()
+      await user.click(screen.getByRole('button', { name: 'Show' }))
+      expect(await screen.findByText('Nothing to show.')).toBeInTheDocument()
+    })
+
+    it('says it could not load the list when the request fails', async () => {
+      const user = userEvent.setup()
+      const api = accountWith(2, async () => {
+        throw new Error('boom')
+      })
+      renderWithProviders(<SettingsPage />, { api })
+      await user.click(await screen.findByRole('button', { name: 'Show' }))
+      expect(await screen.findByText("Couldn't load the list")).toBeInTheDocument()
+    })
+  })
+
   it('shows the last sync error', async () => {
     const api = createMockApi({
       sync: { status: vi.fn(async () => ({ ...synced, state: 'error' as const, error: 'HTTP 500' })) }

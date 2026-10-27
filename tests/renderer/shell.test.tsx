@@ -128,6 +128,26 @@ describe('SyncBanner', () => {
     expect(run).toHaveBeenCalledTimes(1)
   })
 
+  it('shows downloading, not the blocked warning, while a download runs', async () => {
+    const api = mockApi({
+      sync: { status: async () => status({ state: 'downloading', blocked: 'Some reason' }) }
+    })
+    await renderApp(api)
+    expect(await screen.findByText('Downloading card database…')).toBeInTheDocument()
+    expect(screen.queryByText(/can't update right now/)).not.toBeInTheDocument()
+  })
+
+  it('shows the blocked warning, not the no-data message, when there are no cards', async () => {
+    const api = mockApi({
+      sync: { status: async () => status({ cardCount: 0, blocked: 'Some reason' }) }
+    })
+    await renderApp(api)
+    expect(
+      await screen.findByText("Card data can't update right now: Some reason. Duel Binder will try again.")
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/No card data yet/)).not.toBeInTheDocument()
+  })
+
   it('says offline with saved data when a sync failed but cards exist', async () => {
     const api = mockApi({
       sync: { status: async () => status({ state: 'error', error: 'HTTP 500', cardCount: 5, lastSyncAt: new Date().toISOString() }) }

@@ -1,32 +1,27 @@
+import type { RawSignals } from '@/features/scan/engine'
 import { act, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { AccountStatus, SetSummary } from '@shared/types'
-import type { ScanPrinting } from '@shared/scan/types'
 import App from '@/App'
 import { Toaster } from '@/components/ui/sonner'
-import type { RawSignals, ScanEngine } from '@/features/scan/engine'
 import { ScanPage } from '@/features/scan/ScanPage'
 import type { ScanRow } from '@/features/scan/session'
 import { createMockApi, renderWithProviders, type DeepPartial } from './mockApi'
 import type { Api } from '@shared/ipc'
+import {
+  NOTHING,
+  codeFrame,
+  fakeEngine,
+  printing,
+  quad,
+  stubCamera,
+  stubVideo,
+  type FakeEngine
+} from './scanFakes'
 
 const SESSION_KEY = 'scan.session.v1'
 // Wall-clock time, captured before any test fakes the timers (and performance with them).
 const realNow = performance.now.bind(performance)
-
-const printing = (o: Partial<ScanPrinting> = {}): ScanPrinting => ({
-  printingId: 101,
-  cardId: 1,
-  name: 'Dark Magician',
-  frameType: 'normal',
-  setName: 'Legend of Blue Eyes White Dragon',
-  setCode: 'LOB-EN005',
-  rarity: 'Ultra Rare',
-  language: 'en',
-  price: null,
-  imageIds: [46986414],
-  ...o
-})
 
 const row = (o: Partial<ScanRow> = {}): ScanRow => ({
   key: '101:46986414',
@@ -44,111 +39,12 @@ const row = (o: Partial<ScanRow> = {}): ScanRow => ({
   ...o
 })
 
-const quad = [
-  [10, 10],
-  [110, 10],
-  [110, 160],
-  [10, 160]
-] as const
-
-const NOTHING: RawSignals = {
-  found: false,
-  quad: null,
-  art: [],
-  codeTexts: [],
-  nameText: null,
-  cues: null
-}
-const codeFrame = (code: string): RawSignals => ({
-  found: true,
-  quad,
-  art: [],
-  codeTexts: [code],
-  nameText: null,
-  cues: null
-})
-
-type FakeEngine = ScanEngine & {
-  init: ReturnType<typeof vi.fn>
-  analyze: ReturnType<typeof vi.fn>
-  dispose: ReturnType<typeof vi.fn>
-}
-
-/** Answers frames with `frame(n)` (n counts from 0); text only when asked, as the real one. */
-function fakeEngine(frame: (n: number) => RawSignals | Error = () => NOTHING): FakeEngine {
-  let n = 0
-  return {
-    init: vi.fn(async () => undefined),
-    analyze: vi.fn(async (_img: ImageData, opts: { wantText: boolean }) => {
-      const out = frame(n++)
-      if (out instanceof Error) throw out
-      return opts.wantText ? out : { ...out, codeTexts: [], nameText: null }
-    }),
-    dispose: vi.fn()
-  } as unknown as FakeEngine
-}
-
-interface FakeTrack {
-  stop: ReturnType<typeof vi.fn>
-  end(): void
-}
-
-/** Stubs getUserMedia (resolving, or rejecting with a DOMException name) and the video/canvas bits. */
-function stubCamera(fail?: string): { track: FakeTrack; getUserMedia: ReturnType<typeof vi.fn> } {
-  const listeners: (() => void)[] = []
-  const track = {
-    kind: 'video',
-    stop: vi.fn(),
-    getSettings: () => ({ deviceId: 'cam1' }),
-    addEventListener: (type: string, cb: () => void) => {
-      if (type === 'ended') listeners.push(cb)
-    },
-    removeEventListener: () => {},
-    end: () => listeners.forEach((cb) => cb())
-  }
-  const stream = { getVideoTracks: () => [track], getTracks: () => [track] }
-  const getUserMedia = vi.fn(async () => {
-    if (fail) throw new DOMException('no', fail)
-    return stream
-  })
-  Object.defineProperty(navigator, 'mediaDevices', {
-    configurable: true,
-    value: {
-      getUserMedia,
-      enumerateDevices: vi.fn(async () =>
-        fail === 'NotFoundError'
-          ? []
-          : [{ deviceId: 'cam1', kind: 'videoinput', label: 'Desk webcam', groupId: 'g' }]
-      ),
-      addEventListener: () => {},
-      removeEventListener: () => {}
-    }
-  })
-  return { track, getUserMedia }
-}
-
 /** The camera frames grabbed, as createImageBitmap(video, x, y, w, h) calls. */
 let grabbed: ReturnType<typeof vi.fn>
 
 beforeEach(() => {
   localStorage.clear()
-  Object.defineProperty(HTMLMediaElement.prototype, 'readyState', {
-    configurable: true,
-    get: () => 4
-  })
-  Object.defineProperty(HTMLVideoElement.prototype, 'videoWidth', {
-    configurable: true,
-    get: () => 640
-  })
-  Object.defineProperty(HTMLVideoElement.prototype, 'videoHeight', {
-    configurable: true,
-    get: () => 480
-  })
-  grabbed = vi.fn(
-    async (_src: unknown, _x: number, _y: number, width: number, height: number) =>
-      ({ width, height, close: vi.fn() }) as unknown as ImageBitmap
-  )
-  vi.stubGlobal('createImageBitmap', grabbed)
+  grabbed = stubVideo()
 })
 
 afterEach(() => {

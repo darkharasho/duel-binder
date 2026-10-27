@@ -6,10 +6,16 @@ import '@fontsource/ibm-plex-mono/400.css'
 import '@fontsource/ibm-plex-mono/500.css'
 import './index.css'
 
-import { StrictMode } from 'react'
+import { StrictMode, Suspense, lazy } from 'react'
 import { createRoot } from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import App from './App'
+
+// The scan window is this same bundle at #scan: the camera and overlays, none of the app.
+// eslint-disable-next-line react-refresh/only-export-components -- an entry file, not hot-reloaded
+const ScanWindowApp = lazy(() =>
+  import('./features/scan/window/ScanWindowApp').then((m) => ({ default: m.ScanWindowApp }))
+)
 
 const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: 30_000, refetchOnWindowFocus: false } } })
 
@@ -19,7 +25,13 @@ document.documentElement.classList.add('dark')
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
-      <App />
+      {location.hash === '#scan' ? (
+        <Suspense fallback={null}>
+          <ScanWindowApp />
+        </Suspense>
+      ) : (
+        <App />
+      )}
     </QueryClientProvider>
   </StrictMode>
 )

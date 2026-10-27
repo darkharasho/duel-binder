@@ -227,7 +227,8 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
       const engine = engineRef.current
       const o = latest.current
       const video = o.videoRef.current
-      if (l.busy || l.stopped || !engine || !readyRef.current || document.hidden) return
+      // Not skipped while document.hidden: the scan window is often covered while streaming.
+      if (l.busy || l.stopped || !engine || !readyRef.current) return
       if (Date.now() < l.retryAt || o.setPrintings === undefined) return
       if (!video || video.readyState < 2) return
       l.busy = true

@@ -184,3 +184,7 @@ export function createScanEngine(deps: { api: Api['scan']; makeWorker: () => Wor
     }
   }
 }
+
+/** The real engine: the vision worker, with the main process's scan lookups. */
+export const defaultEngine = (): ScanEngine =>
+  createScanEngine({ api: window.api.scan, makeWorker: makeVisionWorker })

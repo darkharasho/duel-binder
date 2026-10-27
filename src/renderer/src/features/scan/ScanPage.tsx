@@ -22,7 +22,7 @@ import {
 } from '@/components/ui/select'
 import { api, queryKeys } from '@/lib/api'
 import { cn } from '@/lib/utils'
-import { createScanEngine, makeVisionWorker, type ScanEngine } from './engine'
+import { defaultEngine, type ScanEngine } from './engine'
 import type { ScanDraft } from './resolve'
 import { ScanRowItem } from './ScanRowItem'
 import { SearchPicker, type PickerOption } from './SearchPicker'
@@ -98,9 +98,6 @@ function statusText(s: ScanStatus): string {
       return 'Scanning stopped after repeated errors.'
   }
 }
-
-const defaultEngine = (): ScanEngine =>
-  createScanEngine({ api: window.api.scan, makeWorker: makeVisionWorker })
 
 /** Desktop only: scan cards held up to the webcam onto a list, then add the list. */
 export function ScanPage({

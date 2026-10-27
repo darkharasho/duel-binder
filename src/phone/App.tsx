@@ -27,6 +27,9 @@ const fatalView = (message: string): View =>
   message === DB_OPEN_ELSEWHERE ? { kind: 'open-elsewhere' } : { kind: 'unsupported' }
 const isFatal = (v: View): boolean => v.kind === 'unsupported' || v.kind === 'open-elsewhere'
 
+/** The bottom navigation is 4rem plus the safe area, and the Scan button rises above it. */
+const TOAST_OFFSET = { bottom: 'calc(5.5rem + env(safe-area-inset-bottom))' }
+
 /**
  * The phone app: loading, then a fatal screen (the data worker can't run here, or another tab has
  * the app's data open), sign-in,
@@ -171,7 +174,8 @@ export function App({
   return (
     <QueryClientProvider client={client}>
       {screen}
-      <Toaster />
+      {/* Above the bottom navigation and its raised Scan button, so a toast never covers a tab. */}
+      <Toaster offset={TOAST_OFFSET} mobileOffset={TOAST_OFFSET} />
     </QueryClientProvider>
   )
 }

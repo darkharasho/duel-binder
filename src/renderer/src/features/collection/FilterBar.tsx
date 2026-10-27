@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input'
 import { FacetMenu } from '@/components/FacetMenu'
 import { LanguageSelect } from '@/components/LanguageSelect'
 import { useLanguageFilter } from '@/lib/languageFilter'
+import { useSetNames } from '@/lib/setLabels'
 import {
   Select,
   SelectContent,
@@ -47,6 +48,7 @@ function parseLevel(v: string): number | undefined {
 export function FilterBar({ filters, facets, onChange, onClear }: Props): React.JSX.Element {
   const [text, setText] = useState(filters.q ?? '')
   const [language, setLanguage] = useLanguageFilter()
+  const setNames = useSetNames(language)
 
   // Debounce search text into the page's filter state.
   useEffect(() => {
@@ -72,9 +74,14 @@ export function FilterBar({ filters, facets, onChange, onClear }: Props): React.
         <FacetMenu
           key={key}
           label={label}
-          options={facets?.[key] ?? []}
+          options={
+            key === 'setNames'
+              ? (facets?.setNames ?? []).filter(setNames.inLanguage)
+              : (facets?.[key] ?? [])
+          }
           selected={filters[key] ?? []}
           onChange={(next) => onChange({ [key]: next })}
+          labelOf={key === 'setNames' ? setNames.labelOf : undefined}
         />
       ))}
       <LanguageSelect value={language} onChange={setLanguage} available={facets?.languages ?? []} />

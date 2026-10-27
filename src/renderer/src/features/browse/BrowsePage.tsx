@@ -30,6 +30,7 @@ import { EntryDetailPanel } from '@/features/collection/EntryDetailPanel'
 import { api, queryKeys } from '@/lib/api'
 import { formatUsd } from '@/lib/format'
 import { isPhone } from '@/lib/platform'
+import { useSetNames } from '@/lib/setLabels'
 import { BrowseCardPanel } from './BrowseCardPanel'
 
 const PAGE = 120
@@ -100,6 +101,8 @@ export function BrowsePage({ onAddCard }: Props): React.JSX.Element {
     return () => clearTimeout(t)
   }, [text, filters.q])
 
+  // Browse lists English printings only.
+  const setNames = useSetNames('en')
   const facets = useQuery({
     queryKey: queryKeys.browseFacets,
     queryFn: () => api.cards.browseFacets()
@@ -201,6 +204,7 @@ export function BrowsePage({ onAddCard }: Props): React.JSX.Element {
           options={facets.data?.[key] ?? []}
           selected={filters[key] ?? []}
           onChange={(next) => change({ [key]: next })}
+          labelOf={key === 'setNames' ? setNames.labelOf : undefined}
         />
       ))}
       <div className="flex items-center gap-1 text-[13px] text-foreground/80">

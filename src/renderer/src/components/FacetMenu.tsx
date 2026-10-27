@@ -16,12 +16,15 @@ export function FacetMenu({
   label,
   options,
   selected,
-  onChange
+  onChange,
+  labelOf = (opt) => opt
 }: {
   label: string
   options: string[]
   selected: string[]
   onChange: (next: string[] | undefined) => void
+  /** What an option reads as; searched too. Defaults to the option itself. */
+  labelOf?: (opt: string) => string
 }): React.JSX.Element {
   const [q, setQ] = useState('')
   // The selection as the menu opened; it stays on top (checked or not) so rows don't jump while clicking.
@@ -30,7 +33,7 @@ export function FacetMenu({
   const content = useRef<HTMLDivElement>(null)
   const needle = q.trim().toLowerCase()
   const matches = (
-    needle ? options.filter((o) => o.toLowerCase().includes(needle)) : options
+    needle ? options.filter((o) => labelOf(o).toLowerCase().includes(needle)) : options
   ).filter((o) => !pinned.includes(o))
   const shown = matches.slice(0, SHOWN_MAX)
 
@@ -44,7 +47,7 @@ export function FacetMenu({
         onChange(next.length > 0 ? next : undefined)
       }}
     >
-      {opt}
+      {labelOf(opt)}
     </DropdownMenuCheckboxItem>
   )
 

@@ -2,9 +2,9 @@ import { useCallback, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { isLanguage, LANGUAGES, languageInfo, type Language } from '@shared/languages'
 import { RARITY_TIERS } from '@shared/scan/rarity'
-import { setPrefix } from '@shared/sets'
 import { api, queryKeys } from '@/lib/api'
 import { matchesLanguage, useLanguageFilter } from '@/lib/languageFilter'
+import { setLabel } from '@/lib/setLabels'
 import { useScanHub } from './ScanHub'
 import type { PickerOption } from './SearchPicker'
 
@@ -23,9 +23,8 @@ interface PickedSet {
 const setKeyOf = (s: PickedSet): string => `${s.language}|${s.setName}`
 
 /** "MAMO - Magnificent Monsters", with the language tag when sets of every language are listed. */
-function setLabel(s: PickedSet & { setCode?: string }, withTag: boolean): string {
-  const code = s.setCode ? setPrefix(s.setCode) : ''
-  const name = code ? `${code} - ${s.setName}` : s.setName
+function pickedLabel(s: PickedSet & { setCode?: string }, withTag: boolean): string {
+  const name = setLabel(s.setName, s.setCode)
   return withTag ? `${name} · ${languageInfo(s.language).tag}` : name
 }
 
@@ -72,7 +71,7 @@ export function useScanPickers(): {
     const byKey = new Map<string, PickedSet>()
     for (const s of sorted) {
       const key = setKeyOf(s)
-      const label = setLabel(s, withTag)
+      const label = pickedLabel(s, withTag)
       byKey.set(key, { setName: s.setName, language: s.language })
       options.push({ key, label, search: label.toLowerCase() })
     }
@@ -100,7 +99,7 @@ export function useScanPickers(): {
             ...setOptions.options,
             {
               key: setKeyOf(picked),
-              label: setLabel(picked, withTag || !matchesLanguage(language, picked.language))
+              label: pickedLabel(picked, withTag || !matchesLanguage(language, picked.language))
             }
           ]
         : setOptions.options,

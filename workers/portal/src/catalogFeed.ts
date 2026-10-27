@@ -31,19 +31,27 @@ const FEED_COLUMNS = new Map(
  * merged by seq. At most `limit` come back; `more` says there are further changes after `cursor`.
  */
 export function catalogChanges(db: SqlDb, since: number, limit: number): CatalogChangesResponse {
-  // Find the page's last seq with an index-only query so full rows are read at most `limit` times.
+  // Find the page's last seq with index-only queries so full rows are read at most `limit` times.
   // Seqs come from one global clock, so they are unique across tables. Tombstones are left out
-  // of a from-scratch snapshot (since = 0).
-  const seqs = CATALOG_TABLES.map(
-    (t) => `SELECT catalog_seq AS seq FROM ${t.name} WHERE catalog_seq > ?`
-  )
-  if (since > 0) seqs.push('SELECT seq FROM catalog_tombstones WHERE seq > ?')
-  const edge = db
-    .prepare(`SELECT seq FROM (${seqs.join(' UNION ALL ')}) ORDER BY seq LIMIT 2 OFFSET ?`)
-    .all(...seqs.map(() => since), limit - 1) as { seq: number }[]
-  // No row at the edge: everything after `since` fits on this page.
-  const cutoff = edge.length ? edge[0].seq : Number.MAX_SAFE_INTEGER
-  const more = edge.length === 2
+  // of a from-scratch snapshot (since = 0). One query per table, not a UNION: Durable Object
+  // SQLite caps the terms in a compound SELECT. Each query stops below the smallest `limit + 1`
+  // seqs found so far, so tables whose seqs sit past the page read almost nothing.
+  const sources = CATALOG_TABLES.map((t) => [t.name, 'catalog_seq'])
+  if (since > 0) sources.push(['catalog_tombstones', 'seq'])
+  let first: number[] = []
+  for (const [table, col] of sources) {
+    const full = first.length > limit
+    const seqs = db
+      .prepare(
+        `SELECT ${col} AS seq FROM ${table} WHERE ${col} > ?${full ? ` AND ${col} < ?` : ''}
+         ORDER BY ${col} LIMIT ?`
+      )
+      .all(...(full ? [since, first[limit]] : [since]), limit + 1) as { seq: number }[]
+    first = [...first, ...seqs.map((r) => r.seq)].sort((a, b) => a - b).slice(0, limit + 1)
+  }
+  // Fewer than `limit` seqs: everything after `since` fits on this page.
+  const cutoff = first.length >= limit ? first[limit - 1] : Number.MAX_SAFE_INTEGER
+  const more = first.length > limit
 
   const changes: CatalogChange[] = []
   for (const t of CATALOG_TABLES) {
@@ -95,7 +103,9 @@ export async function catalogRoute(req: Request, deps: AppDeps, path: string): P
     if (!body || !Array.isArray(body.printings)) return json({ error: 'bad-request' }, 400)
     if (body.printings.length > MAX_CONTRIBUTE) return json({ error: 'too-many' }, 413)
     const rows = body.printings
-    const results = deps.db.transaction(() => contributePrintings(deps.db, user.id, rows, deps.now()))()
+    const results = deps.db.transaction(() =>
+      contributePrintings(deps.db, user.id, rows, deps.now())
+    )()
     return json({ results })
   }
 

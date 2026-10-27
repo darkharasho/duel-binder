@@ -137,6 +137,58 @@ describe('GET /api/catalog/changes', () => {
     expect(seen).toEqual([...seen].sort((x, y) => x - y))
   })
 
+  it('builds no compound SELECT (Durable Object SQLite caps its terms)', async () => {
+    const real = db
+    deps.db = new Proxy(real, {
+      get(target, prop) {
+        if (prop === 'prepare')
+          return (sql: string) => {
+            if (/\b(UNION|INTERSECT|EXCEPT)\b/i.test(sql))
+              throw new Error('too many terms in compound SELECT')
+            return target.prepare(sql)
+          }
+        const v = Reflect.get(target, prop) as unknown
+        return typeof v === 'function' ? (v as (...a: unknown[]) => unknown).bind(target) : v
+      }
+    })
+    const { cursor } = await feed(0, 5000)
+    real.prepare("UPDATE cards SET name = 'Renamed' WHERE id = (SELECT MIN(id) FROM cards)").run()
+    expect((await feed(0, 3)).more).toBe(true)
+    expect((await feed(cursor)).changes).toHaveLength(1)
+  })
+
+  it('pages stay exact when changes from many tables and deletions interleave', async () => {
+    const { cursor } = await feed(0, 5000)
+    const cards = db.prepare('SELECT id FROM cards ORDER BY id LIMIT 2').all() as { id: number }[]
+    const prints = db.prepare('SELECT id FROM card_printings ORDER BY id LIMIT 2').all() as {
+      id: number
+    }[]
+    expect(cards.length).toBe(2)
+    expect(prints.length).toBe(2)
+    for (let i = 0; i < 4; i++) {
+      db.prepare('UPDATE cards SET name = ? WHERE id = ?').run(`Interleaved ${i}`, cards[i % 2].id)
+      db.prepare('UPDATE card_printings SET set_price = ? WHERE id = ?').run(
+        `9.0${i}`,
+        prints[i % 2].id
+      )
+      db.prepare("INSERT INTO sets (language, set_name, set_code) VALUES ('en', ?, 'TMP')").run(
+        `Temp ${i}`
+      )
+      if (i % 2) db.prepare('DELETE FROM sets WHERE set_name = ?').run(`Temp ${i}`)
+    }
+    const whole = await feed(cursor, 5000)
+    expect(whole.more).toBe(false)
+    expect(whole.changes).toHaveLength(8)
+    expect(whole.changes.some((c) => 'deleted' in c)).toBe(true)
+    for (const limit of [1, 2, 5]) {
+      const paged = await drain(cursor, limit)
+      expect(
+        paged.map((c) => c.seq),
+        `limit ${limit}`
+      ).toEqual(whole.changes.map((c) => c.seq))
+    }
+  })
+
   it('printing rows carry pkey, server id and contributed', async () => {
     const all = await drain(0, 500)
     const p = all.find((c) => c.table === 'card_printings' && 'row' in c) as {

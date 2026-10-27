@@ -137,12 +137,10 @@ export function createHandlers({
     'sets:list': async () => listSets(db),
     'sets:checklist': async (setName: string, language: Language) =>
       getChecklist(db, setName, checkLanguage(language)),
-    'sets:adjust': async (
-      setName: string,
-      language: Language,
-      printingId: number,
-      delta: 1 | -1
-    ) => edited(snapshotAfter(adjustPrinting(db, setName, checkLanguage(language), printingId, delta))),
+    'sets:adjust': async (setName: string, language: Language, printingId: number, delta: 1 | -1) =>
+      edited(
+        snapshotAfter(adjustPrinting(db, setName, checkLanguage(language), printingId, delta))
+      ),
     'sync:status': async () => catalog.status(),
     'sync:run': async () => account.refreshCatalog(),
     'images:cacheSize': () => images.sizeBytes(),

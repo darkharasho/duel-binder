@@ -24,7 +24,7 @@ const DIRECT = [
 ]
 
 const IMPORT =
-  /(?:^|[\s;])(?:import|export)\s[^'"]*?from\s*['"]([^'"]+)['"]|(?:^|[\s;])import\s*['"]([^'"]+)['"]/g
+  /(?:^|[\s;])(?:import|export)\s[^'"]*?from\s*['"]([^'"]+)['"]|(?:^|[\s;])import\s*['"]([^'"]+)['"]|\bimport\s*\(\s*['"]([^'"]+)['"]/g
 
 function resolveTs(from: string, spec: string): string | null {
   const base = resolve(dirname(from), spec)
@@ -43,7 +43,7 @@ function reachable(entry: string): Set<string> {
     if (seen.has(file)) continue
     seen.add(file)
     for (const m of readFileSync(file, 'utf8').matchAll(IMPORT)) {
-      const spec = m[1] ?? m[2]
+      const spec = m[1] ?? m[2] ?? m[3]
       if (!spec.startsWith('.')) continue
       const target = resolveTs(file, spec)
       if (target === null || target.startsWith(`${DEV}/`)) continue

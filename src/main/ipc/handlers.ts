@@ -20,7 +20,7 @@ import { adjustPrinting, getChecklist, listSets } from '../repo/sets'
 import type { ScanWindowManager } from '../scanWindow'
 import type { FingerprintStore } from '../scan/fingerprints'
 import { checkOcrBands, type Ocr } from '../scan/ocr'
-import { cardLanguage } from '../scan/cardLanguage'
+import { cardLanguage } from '@shared/scan/cardLanguage'
 import {
   cardsForImages,
   matchName,

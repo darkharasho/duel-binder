@@ -3,8 +3,8 @@ import {
   scriptOf,
   type CardLanguage,
   type ScriptRead
-} from '../../shared/scan/language'
-import type { OcrBand } from '../../shared/scan/types'
+} from './language'
+import type { OcrBand } from './types'
 import type { Ocr, OcrModel } from './ocr'
 
 const SCRIPTS: [Exclude<ScriptRead['language'], 'en'>, OcrModel][] = [

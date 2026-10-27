@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 import { latinLanguageOf, scriptOf, type ScriptRead } from '../../src/shared/scan/language'
-import { cardLanguage } from '../../src/main/scan/cardLanguage'
-import type { Ocr, OcrModel } from '../../src/main/scan/ocr'
+import { cardLanguage } from '../../src/shared/scan/cardLanguage'
+import type { Ocr, OcrModel } from '../../src/shared/scan/ocr'
 import type { OcrBand } from '../../src/shared/scan/types'
 
 describe('latinLanguageOf', () => {

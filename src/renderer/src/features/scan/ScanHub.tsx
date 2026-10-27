@@ -17,11 +17,15 @@ export interface ScanHub {
   /** The row last counted, for 1.5 s, to highlight. */
   fresh: string | null
   open: boolean
+  /** False until the app has learnt whether the scan window is already open. */
+  openKnown: boolean
   /** Last state the open scan window reported; null while closed or before it reports. */
   state: ScanWindowState | null
   settings: ScanWindowSettings
   setSettings(patch: Partial<ScanWindowSettings>): void
-  openWindow(): void
+  /** Counts a pull onto the list and highlights its row; the one path for both scanners. */
+  count(draft: ScanDraft): void
+  openWindow(): Promise<void>
   retryCamera(): void
   retryScan(): void
 }
@@ -75,10 +79,21 @@ export function ScanHubProvider({ children }: { children: React.ReactNode }): Re
   const [settings, setSettingsState] = useState<ScanWindowSettings>(initialSettings)
   const settingsRef = useRef(settings)
   const [open, setOpen] = useState(false)
+  const [openKnown, setOpenKnown] = useState(false)
   const [state, setState] = useState<ScanWindowState | null>(null)
   const [fresh, setFresh] = useState<string | null>(null)
   const highlightTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const { add } = session
+
+  const count = useCallback(
+    (draft: ScanDraft): void => {
+      add(draft)
+      setFresh(rowKey(draft))
+      clearTimeout(highlightTimer.current)
+      highlightTimer.current = setTimeout(() => setFresh(null), HIGHLIGHT_MS)
+    },
+    [add]
+  )
 
   const sendSettings = useCallback((): void => {
     window.api.scanWindow.send({ kind: 'settings', settings: settingsRef.current })
@@ -103,11 +118,14 @@ export function ScanHubProvider({ children }: { children: React.ReactNode }): Re
     let live = true
     const scanWindow = window.api.scanWindow
     void scanWindow.isOpen().then((isOpen) => {
-      if (!live || !isOpen) return
+      if (!live) return
+      setOpenKnown(true)
+      if (!isOpen) return
       setOpen(true)
       sendSettings()
     })
     const offOpen = scanWindow.onOpenChange((isOpen) => {
+      setOpenKnown(true)
       setOpen(isOpen)
       if (isOpen) sendSettings()
       else {
@@ -119,13 +137,7 @@ export function ScanHubProvider({ children }: { children: React.ReactNode }): Re
       if (!isFromScanWindow(m)) return
       if (m.kind === 'ready') sendSettings()
       else if (m.kind === 'state') setState(m.state)
-      else {
-        const draft: ScanDraft = m.draft
-        add(draft)
-        setFresh(rowKey(draft))
-        clearTimeout(highlightTimer.current)
-        highlightTimer.current = setTimeout(() => setFresh(null), HIGHLIGHT_MS)
-      }
+      else count(m.draft)
     })
     return () => {
       live = false
@@ -133,21 +145,23 @@ export function ScanHubProvider({ children }: { children: React.ReactNode }): Re
       offMessage()
       clearTimeout(highlightTimer.current)
     }
-  }, [add, sendSettings, setSettings])
+  }, [count, sendSettings, setSettings])
 
   const hub = useMemo<ScanHub>(
     () => ({
       session,
       fresh,
       open,
+      openKnown,
       state,
       settings,
       setSettings,
-      openWindow: () => void window.api.scanWindow.open(),
+      count,
+      openWindow: () => window.api.scanWindow.open(),
       retryCamera: () => window.api.scanWindow.send({ kind: 'retryCamera' }),
       retryScan: () => window.api.scanWindow.send({ kind: 'retryScan' })
     }),
-    [session, fresh, open, state, settings, setSettings]
+    [session, fresh, open, openKnown, state, settings, setSettings, count]
   )
   return <HubContext.Provider value={hub}>{children}</HubContext.Provider>
 }

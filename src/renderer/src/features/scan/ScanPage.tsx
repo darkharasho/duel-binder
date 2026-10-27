@@ -1,19 +1,10 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { toast } from 'sonner'
 import { LANGUAGES, languageInfo, type Language } from '@shared/languages'
 import { RARITY_TIERS } from '@shared/scan/rarity'
-import type { ScanStatus, ScanWindowState } from '@shared/scanWindow'
+import type { ScanWindowState } from '@shared/scanWindow'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle
-} from '@/components/ui/dialog'
 import {
   Select,
   SelectContent,
@@ -22,8 +13,11 @@ import {
   SelectValue
 } from '@/components/ui/select'
 import { api, queryKeys } from '@/lib/api'
+import { defaultEngine, type ScanEngine } from './engine'
+import { InPageScanner, type InPageCamera } from './InPageScanner'
 import { useScanHub } from './ScanHub'
-import { ScanRowItem } from './ScanRowItem'
+import { NO_FINGERPRINTS, SET_UNREADABLE, statusText } from './scanText'
+import { SessionList } from './SessionList'
 import { SearchPicker, type PickerOption } from './SearchPicker'
 
 const ANY = 'any'
@@ -41,11 +35,6 @@ const CAMERA_MESSAGES: Record<NonNullable<ScanWindowState['cameraError']>, strin
   lost: "The camera stopped. Check it's connected, then pick it again."
 }
 
-const SET_UNREADABLE = "Couldn't load this set's cards, so cards are matched against every set."
-
-const NO_FINGERPRINTS =
-  'Artwork matching is unavailable until the artwork data downloads. Set codes and names still work.'
-
 interface PickedSet {
   setName: string
   language: Language
@@ -53,27 +42,32 @@ interface PickedSet {
 
 const setKeyOf = (s: PickedSet): string => `${s.language}|${s.setName}`
 
-const plural = (n: number, one: string, many: string): string => `${n} ${n === 1 ? one : many}`
-
-function statusText(s: ScanStatus): string {
-  switch (s.kind) {
-    case 'idle':
-      return 'Hold a card up'
-    case 'unsure':
-      return "Couldn't recognize this card"
-    case 'added':
-      return `${s.setCode ? `${s.name} ${s.setCode}` : s.name} · added, lower it to scan the next card`
-    case 'stopped':
-      return 'Scanning stopped after repeated errors.'
-  }
-}
-
-/** Desktop only: the scan list and the controls for the scan window, which does the scanning. */
-export function ScanPage(): React.JSX.Element {
+/**
+ * Desktop only. With the scan window closed the page scans in place (camera preview, status,
+ * list); with it open the page is the list and controls, and the window does the scanning.
+ */
+export function ScanPage({
+  engineFactory = defaultEngine
+}: {
+  engineFactory?: () => ScanEngine
+}): React.JSX.Element {
   const hub = useScanHub()
-  const { session, settings, setSettings, state, open, fresh } = hub
+  const { settings, setSettings, state, open, openKnown } = hub
   const picked = settings.set
-  const [clearing, setClearing] = useState(false)
+  const [local, setLocal] = useState<InPageCamera | null>(null)
+  // Set from the click until the window reports open: the page camera is released first.
+  const [handingOff, setHandingOff] = useState(false)
+  const inPage = openKnown && !open && !handingOff
+
+  // Once the window is open the handoff is over, so closing it brings the scanner back.
+  if (open && handingOff) setHandingOff(false)
+  // After the commit that unmounted the in-page scanner, so its camera is already stopped.
+  useEffect(() => {
+    if (!handingOff) return
+    hub.openWindow().catch(() => setHandingOff(false))
+    // Only when the handoff starts.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [handingOff])
 
   // Not refetched while scanning (focus or staleness); data-changed events still invalidate it.
   const sets = useQuery({
@@ -102,13 +96,6 @@ export function ScanPage(): React.JSX.Element {
     }
     return { options, byKey }
   }, [sets.data])
-
-  const { setPrinting, setQuantity, remove } = session
-  // Stable, so rows (memoized) don't re-render on every pull.
-  const rowActions = useMemo(
-    () => ({ setPrinting, setQuantity, remove }),
-    [setPrinting, setQuantity, remove]
-  )
 
   const { byKey } = setOptions
   // A remembered set missing from the list (still loading, say) still shows as picked.
@@ -146,28 +133,38 @@ export function ScanPage(): React.JSX.Element {
     const deviceId = id.startsWith(UNNAMED_CAMERA) ? null : id
     setSettings({ deviceId })
     // A different camera opens from the settings change; re-picking the current one retries it.
-    if (deviceId === settings.deviceId) hub.retryCamera()
+    if (inPage) local?.retry()
+    else if (deviceId === settings.deviceId) hub.retryCamera()
   }
 
-  const addable = session.rows
-    .filter((r) => r.printingId !== null)
-    .reduce((n, r) => n + r.quantity, 0)
-
-  const commit = async (): Promise<void> => {
-    const { cards, failed } = await session.commit()
-    if (cards > 0) toast.success(`Added ${plural(cards, 'card', 'cards')}`)
-    if (failed > 0)
-      toast.error(`${plural(failed, 'entry', 'entries')} couldn't be added; see the list`)
-  }
-
-  const devices = state?.devices ?? []
-  const openCamera = state?.openDeviceId ?? null
+  const devices = inPage ? (local?.devices ?? []) : (state?.devices ?? [])
+  const openCamera = inPage ? (local?.openDeviceId ?? '') : (state?.openDeviceId ?? null)
+  const cameraError = inPage ? (local?.error ?? null) : (state?.cameraError ?? null)
   // Shown as picked only when it's one of the listed cameras (ids are blank before permission),
   // and not while the camera is in error, so picking it again reopens it.
   const activeCamera =
-    state && !state.cameraError && devices.some((d) => d.deviceId === openCamera)
+    (inPage || state) && !cameraError && devices.some((d) => d.deviceId === openCamera)
       ? (openCamera ?? '')
       : ''
+
+  if (!openKnown) return <div className="p-8" />
+
+  const newScansAs = (
+    <>
+      <span className="text-sm text-muted-foreground">New scans as</span>
+      <SearchPicker
+        label="New scans as"
+        value={settings.defaultRarity ?? AUTO}
+        options={RARITY_OPTIONS}
+        onPick={pickRarity}
+        searchPlaceholder="Search rarities…"
+        className="w-48"
+      />
+    </>
+  )
+  const hitPrice = (
+    <HitPriceInput value={settings.hitPrice} onCommit={(hitPrice) => setSettings({ hitPrice })} />
+  )
 
   return (
     <div className="p-8">
@@ -185,7 +182,7 @@ export function ScanPage(): React.JSX.Element {
           <Select
             value={activeCamera}
             onValueChange={pickCamera}
-            disabled={!open || devices.length === 0}
+            disabled={(!inPage && !open) || devices.length === 0}
           >
             <SelectTrigger size="sm" aria-label="Camera" className="w-56">
               <SelectValue placeholder={devices.length ? 'Choose a camera' : 'No camera'} />
@@ -201,145 +198,86 @@ export function ScanPage(): React.JSX.Element {
         </div>
       </PageHeader>
 
-      <div className="mt-6 flex flex-wrap items-center gap-3">
-        <Button variant="outline" size="sm" onClick={hub.openWindow}>
-          {open ? 'Show scan window' : 'Open scan window'}
-        </Button>
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={!open || openCamera === null}
-          onClick={() => setSettings({ paused: !settings.paused })}
-        >
-          {settings.paused ? 'Resume' : 'Pause'}
-        </Button>
-        <span className="ml-3 text-sm text-muted-foreground">New scans as</span>
-        <SearchPicker
-          label="New scans as"
-          value={settings.defaultRarity ?? AUTO}
-          options={RARITY_OPTIONS}
-          onPick={pickRarity}
-          searchPlaceholder="Search rarities…"
-          className="w-48"
-        />
-        <HitPriceInput
-          value={settings.hitPrice}
-          onCommit={(hitPrice) => setSettings({ hitPrice })}
-        />
-      </div>
-
-      <div className="mt-3 flex flex-col gap-1 text-sm">
-        {!open ? (
-          <p className="text-muted-foreground">
-            The scan window is closed. Open it to start scanning.
-          </p>
-        ) : state?.cameraError ? (
-          <div className="flex items-center gap-3">
-            <p role="status">{CAMERA_MESSAGES[state.cameraError]}</p>
-            {state.cameraError !== 'denied' && (
-              <Button variant="outline" size="xs" onClick={hub.retryCamera}>
-                Try again
-              </Button>
-            )}
-          </div>
-        ) : (
-          <div className="flex items-center gap-3">
-            <p role="status">
-              {settings.paused
-                ? 'Paused'
-                : !state || state.openDeviceId === null
-                  ? 'Starting camera…'
-                  : statusText(state.loop)}
-            </p>
-            {!settings.paused && state?.loop.kind === 'stopped' && (
-              <Button variant="outline" size="xs" onClick={hub.retryScan}>
-                Retry
-              </Button>
-            )}
-          </div>
-        )}
-        {open && state?.setUnreadable && (
-          <p className="text-xs text-muted-foreground">{SET_UNREADABLE}</p>
-        )}
-        {open && state?.artReady === false && (
-          <p className="text-xs text-muted-foreground">{NO_FINGERPRINTS}</p>
-        )}
-      </div>
-
-      <section
-        aria-labelledby="scan-session-title"
-        className="mt-6 flex h-[calc(100vh-17rem)] min-h-72 min-w-0 flex-col rounded-lg border border-white/[0.08]"
-      >
-        <header className="flex items-baseline justify-between border-b border-white/[0.06] px-4 py-3">
-          <h2 id="scan-session-title" className="text-sm font-semibold">
-            This session
-          </h2>
-          <span className="text-xs text-muted-foreground tabular-nums">
-            {plural(session.total, 'card', 'cards')} ·{' '}
-            {plural(session.rows.length, 'entry', 'entries')}
-          </span>
-        </header>
-        <div className="min-h-0 flex-1 overflow-auto">
-          {session.rows.length === 0 ? (
-            <p className="px-4 py-8 text-sm text-muted-foreground">Cards you scan show up here.</p>
-          ) : (
-            <ul aria-label="This session" className="divide-y divide-white/[0.06]">
-              {session.rows.map((row) => (
-                <ScanRowItem
-                  key={row.key}
-                  row={row}
-                  actions={rowActions}
-                  highlighted={row.key === fresh}
-                  disabled={session.committing}
-                />
-              ))}
-            </ul>
-          )}
+      {inPage ? (
+        <div className="mt-6 flex gap-6">
+          <InPageScanner
+            engineFactory={engineFactory}
+            onCamera={setLocal}
+            controls={
+              <div className="flex flex-wrap items-center gap-3">
+                {newScansAs}
+                {hitPrice}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="ml-auto"
+                  onClick={() => setHandingOff(true)}
+                >
+                  Open scan window
+                </Button>
+              </div>
+            }
+          />
+          <SessionList className="h-[calc(100vh-15rem)] flex-1" />
         </div>
-        <footer className="flex items-center gap-2 border-t border-white/[0.06] p-3">
-          <Button
-            variant="ghost"
-            size="sm"
-            disabled={session.rows.length === 0 || session.committing}
-            onClick={() => setClearing(true)}
-          >
-            Clear
-          </Button>
-          <Button
-            size="sm"
-            className="ml-auto"
-            disabled={addable === 0 || session.committing}
-            onClick={() => void commit()}
-          >
-            Add {plural(addable, 'card', 'cards')} to collection
-          </Button>
-        </footer>
-      </section>
-
-      <Dialog open={clearing} onOpenChange={setClearing}>
-        <DialogContent showCloseButton={false} className="sm:max-w-sm">
-          <DialogHeader>
-            <DialogTitle>Clear this session?</DialogTitle>
-            <DialogDescription>
-              The scanned cards are removed from the list. Nothing is added to your collection.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setClearing(false)}>
-              Cancel
+      ) : (
+        <>
+          <div className="mt-6 flex flex-wrap items-center gap-3">
+            <Button variant="outline" size="sm" onClick={() => void hub.openWindow()}>
+              {open ? 'Show scan window' : 'Open scan window'}
             </Button>
             <Button
-              variant="destructive"
-              onClick={() => {
-                session.clear()
-                setClearing(false)
-              }}
+              variant="outline"
+              size="sm"
+              disabled={!open || openCamera === null}
+              onClick={() => setSettings({ paused: !settings.paused })}
             >
-              Clear list
+              {settings.paused ? 'Resume' : 'Pause'}
             </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+            <span className="ml-3" />
+            {newScansAs}
+            {hitPrice}
+          </div>
+
+          <div className="mt-3 flex flex-col gap-1 text-sm">
+            {!open ? (
+              <p className="text-muted-foreground">Opening the scan window…</p>
+            ) : state?.cameraError ? (
+              <div className="flex items-center gap-3">
+                <p role="status">{CAMERA_MESSAGES[state.cameraError]}</p>
+                {state.cameraError !== 'denied' && (
+                  <Button variant="outline" size="xs" onClick={hub.retryCamera}>
+                    Try again
+                  </Button>
+                )}
+              </div>
+            ) : (
+              <div className="flex items-center gap-3">
+                <p role="status">
+                  {settings.paused
+                    ? 'Paused'
+                    : !state || state.openDeviceId === null
+                      ? 'Starting camera…'
+                      : statusText(state.loop)}
+                </p>
+                {!settings.paused && state?.loop.kind === 'stopped' && (
+                  <Button variant="outline" size="xs" onClick={hub.retryScan}>
+                    Retry
+                  </Button>
+                )}
+              </div>
+            )}
+            {open && state?.setUnreadable && (
+              <p className="text-xs text-muted-foreground">{SET_UNREADABLE}</p>
+            )}
+            {open && state?.artReady === false && (
+              <p className="text-xs text-muted-foreground">{NO_FINGERPRINTS}</p>
+            )}
+          </div>
+
+          <SessionList className="mt-6 h-[calc(100vh-17rem)]" />
+        </>
+      )}
     </div>
   )
 }

@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import Database from 'better-sqlite3'
 import { PNG } from 'pngjs'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
 import { buildFingerprints } from '../../scripts/catalog/fingerprints'
 import { buildReferences, scanHash, wantsReference } from '../../scripts/catalog/references'
 import { openDatabase } from '../../src/main/db/database'
@@ -116,7 +116,10 @@ afterEach(() => {
 
 const FILES = ['ShiEn-BLGG-EN-StR-1E.png', 'ShiEn-BLGG-EN-ScR-1E.png', 'ShiEn-STOR-EN-UR-1E.png']
 
-function fakeYugipedia(files: string[] = FILES) {
+function fakeYugipedia(files: string[] = FILES): {
+  listPageImages: Mock<(titles: string[]) => Promise<Map<string, string[]>>>
+  fetchImageUrls: Mock<(names: string[]) => Promise<Map<string, string>>>
+} {
   return {
     listPageImages: vi.fn(async (titles: string[]) => new Map(titles.map((t) => [t, files]))),
     fetchImageUrls: vi.fn(
@@ -139,7 +142,8 @@ describe('buildReferences', () => {
     const yugipedia = fakeYugipedia()
     const requested: string[] = []
     const fetch = scans({ 'ShiEn-BLGG-EN-StR-1E.png': png(SCAN) }, requested)
-    const run = () => buildReferences({ work, cache, yugipedia, fetch, userAgent: 'test' })
+    const run = (): ReturnType<typeof buildReferences> =>
+      buildReferences({ work, cache, yugipedia, fetch, userAgent: 'test' })
     const first = await run()
     expect(first.entries).toEqual([{ imageId: 11, hash: SCAN_HASH }])
     expect(first).toMatchObject({ fetched: 1, failed: 1 })
@@ -159,7 +163,7 @@ describe('buildReferences', () => {
     const requested: string[] = []
     const fetch = scans({}, requested)
     let now = new Date('2026-01-01T00:00:00Z')
-    const run = () =>
+    const run = (): ReturnType<typeof buildReferences> =>
       buildReferences({ work, cache, yugipedia, fetch, userAgent: 'test', now: () => now })
     await run()
     expect(yugipedia.listPageImages).toHaveBeenCalledTimes(1)

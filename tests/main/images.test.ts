@@ -335,13 +335,28 @@ describe('images through the portal', () => {
     expect(await fs.readdir(path.join(dir, 'printings'))).toEqual([])
   })
 
-  it.each([401, 404])('does not cache a %i', async (status) => {
-    const fetchFn = vi.fn<Fetch>(async () => new Response('no', { status }))
+  it('does not cache a 401', async () => {
+    const fetchFn = vi.fn<Fetch>(async () => new Response('no', { status: 401 }))
     const cache = setup({ fetchFn })
     expect(await cache.get('small', 9)).toBeNull()
     expect(await cache.get('small', 9)).toBeNull()
     expect(await cache.getPrinting(5)).toBeNull()
     expect(await cache.getPrinting(5)).toBeNull()
+    expect(fetchFn).toHaveBeenCalledTimes(4)
+  })
+
+  it('remembers a printing photo 404 for the session only; card art 404s are asked again', async () => {
+    const fetchFn = vi.fn<Fetch>(async () => new Response('no', { status: 404 }))
+    const cache = setup({ fetchFn })
+    expect(await cache.get('small', 9)).toBeNull()
+    expect(await cache.get('small', 9)).toBeNull()
+    expect(fetchFn).toHaveBeenCalledTimes(2)
+    expect(await cache.getPrinting(5)).toBeNull()
+    expect(await cache.getPrinting(5)).toBeNull()
+    expect(fetchFn).toHaveBeenCalledTimes(3)
+    expect(await fs.readdir(path.join(dir, 'printings'))).toEqual([])
+    // A new session (a restart) asks again.
+    expect(await setup({ fetchFn }).getPrinting(5)).toBeNull()
     expect(fetchFn).toHaveBeenCalledTimes(4)
   })
 })

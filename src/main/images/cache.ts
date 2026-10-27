@@ -104,6 +104,11 @@ export function createImageCache(opts: {
   const fetchFn = opts.fetchFn ?? fetch
   const limit = opts.limit ?? defaultLimiter()
   const inFlight = new Map<string, Promise<string | null>>()
+  /**
+   * Printing photos the server answered 404 for, by key: not asked again this session (each ask
+   * spends image quota). Kept in memory only, so a restart asks again.
+   */
+  const missingPrintings = new Set<string>()
 
   const exists = (p: string): Promise<boolean> =>
     fs.stat(p).then(
@@ -115,7 +120,8 @@ export function createImageCache(opts: {
   async function download(
     source: ImageSource,
     finalPath: string | ((contentType: string) => string | null),
-    prepare?: (file: string) => Promise<void>
+    prepare?: (file: string) => Promise<void>,
+    notFound?: () => void
   ): Promise<string | null> {
     const tmpBase =
       typeof finalPath === 'string'
@@ -128,6 +134,7 @@ export function createImageCache(opts: {
         signal: AbortSignal.timeout(IMAGE_TIMEOUT_MS),
         ...(source.headers && { headers: source.headers })
       })
+      if (res.status === 404) notFound?.()
       if (!res.ok || !res.body) return null
       const contentType = (res.headers.get('content-type') ?? '').toLowerCase()
       if (!contentType.startsWith('image/')) return null
@@ -151,11 +158,12 @@ export function createImageCache(opts: {
     key: string,
     source: ImageSource,
     finalPath: string | ((contentType: string) => string | null),
-    prepare?: (file: string) => Promise<void>
+    prepare?: (file: string) => Promise<void>,
+    notFound?: () => void
   ): Promise<string | null> {
     let pending = inFlight.get(key)
     if (!pending) {
-      pending = limit(() => download(source, finalPath, prepare)).finally(() =>
+      pending = limit(() => download(source, finalPath, prepare, notFound)).finally(() =>
         inFlight.delete(key)
       )
       inFlight.set(key, pending)
@@ -213,12 +221,20 @@ export function createImageCache(opts: {
         return null
       }
       if (src === null || !src.key) return null
-      const base = path.join(opts.dir, 'printings', src.key)
+      const key = src.key
+      const base = path.join(opts.dir, 'printings', key)
       for (const ext of PRINTING_EXTS) if (await exists(`${base}.${ext}`)) return `${base}.${ext}`
-      return cached(`printing/${src.key}`, src, (ct) => {
-        const ext = PRINTING_EXT[ct.split(';')[0].trim()]
-        return ext ? `${base}.${ext}` : null
-      })
+      if (missingPrintings.has(key)) return null
+      return cached(
+        `printing/${key}`,
+        src,
+        (ct) => {
+          const ext = PRINTING_EXT[ct.split(';')[0].trim()]
+          return ext ? `${base}.${ext}` : null
+        },
+        undefined,
+        () => missingPrintings.add(key)
+      )
     },
 
     async sizeBytes() {

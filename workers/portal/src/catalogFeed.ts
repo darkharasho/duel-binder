@@ -30,23 +30,37 @@ const FEED_COLUMNS = new Map(
  * Rows changed after `since` from every catalog table, plus (only when `since > 0`) deletions,
  * merged by seq. At most `limit` come back; `more` says there are further changes after `cursor`.
  */
-export function catalogChanges(db: SqlDb, since: number, limit: number): CatalogChangesResponse {
+export function catalogChanges(
+  db: SqlDb,
+  since: number,
+  limit: number,
+  tables?: readonly CatalogTableName[]
+): CatalogChangesResponse {
+  const wanted = CATALOG_TABLES.filter(
+    (t) => !tables || tables.includes(t.name as CatalogTableName)
+  )
+  const marks = wanted.map(() => '?').join(', ')
   // Find the page's last seq with index-only queries so full rows are read at most `limit` times.
   // Seqs come from one global clock, so they are unique across tables. Tombstones are left out
   // of a from-scratch snapshot (since = 0). One query per table, not a UNION: Durable Object
   // SQLite caps the terms in a compound SELECT. Each query stops below the smallest `limit + 1`
   // seqs found so far, so tables whose seqs sit past the page read almost nothing.
-  const sources = CATALOG_TABLES.map((t) => [t.name, 'catalog_seq'])
+  const sources = wanted.map((t) => [t.name, 'catalog_seq'])
   if (since > 0) sources.push(['catalog_tombstones', 'seq'])
   let first: number[] = []
   for (const [table, col] of sources) {
     const full = first.length > limit
+    const inTables = table === 'catalog_tombstones' && tables ? ` AND tbl IN (${marks})` : ''
     const seqs = db
       .prepare(
-        `SELECT ${col} AS seq FROM ${table} WHERE ${col} > ?${full ? ` AND ${col} < ?` : ''}
+        `SELECT ${col} AS seq FROM ${table} WHERE ${col} > ?${full ? ` AND ${col} < ?` : ''}${inTables}
          ORDER BY ${col} LIMIT ?`
       )
-      .all(...(full ? [since, first[limit]] : [since]), limit + 1) as { seq: number }[]
+      .all(
+        ...(full ? [since, first[limit]] : [since]),
+        ...(inTables ? wanted.map((t) => t.name) : []),
+        limit + 1
+      ) as { seq: number }[]
     first = [...first, ...seqs.map((r) => r.seq)].sort((a, b) => a - b).slice(0, limit + 1)
   }
   // Fewer than `limit` seqs: everything after `since` fits on this page.
@@ -54,7 +68,7 @@ export function catalogChanges(db: SqlDb, since: number, limit: number): Catalog
   const more = first.length > limit
 
   const changes: CatalogChange[] = []
-  for (const t of CATALOG_TABLES) {
+  for (const t of wanted) {
     const rows = db
       .prepare(
         `SELECT catalog_seq AS seq, ${FEED_COLUMNS.get(t.name)} FROM ${t.name}
@@ -66,8 +80,16 @@ export function catalogChanges(db: SqlDb, since: number, limit: number): Catalog
   }
   if (since > 0) {
     const dead = db
-      .prepare('SELECT seq, tbl, key FROM catalog_tombstones WHERE seq > ? AND seq <= ?')
-      .all(since, cutoff) as { seq: number; tbl: string; key: string }[]
+      .prepare(
+        `SELECT seq, tbl, key FROM catalog_tombstones WHERE seq > ? AND seq <= ?${
+          tables ? ` AND tbl IN (${marks})` : ''
+        }`
+      )
+      .all(since, cutoff, ...(tables ? wanted.map((t) => t.name) : [])) as {
+      seq: number
+      tbl: string
+      key: string
+    }[]
     for (const d of dead)
       changes.push({
         seq: d.seq,
@@ -80,7 +102,8 @@ export function catalogChanges(db: SqlDb, since: number, limit: number): Catalog
     changes,
     cursor: changes.length ? changes[changes.length - 1].seq : since,
     more,
-    dbVersion: getMeta(db, 'db_version')
+    dbVersion: getMeta(db, 'db_version'),
+    latest: (db.prepare('SELECT seq FROM catalog_clock WHERE id = 1').get() as { seq: number }).seq
   }
 }
 
@@ -89,6 +112,18 @@ function wholeNumber(raw: string | null, what: string, min: number): number {
   if (!Number.isSafeInteger(n) || n < min)
     throw new CollectionError(`${what} must be a whole number of at least ${min}`)
   return n
+}
+
+function tablesParam(raw: string | null): CatalogTableName[] | undefined {
+  if (raw === null) return undefined
+  const known = new Set<string>(CATALOG_TABLES.map((t) => t.name))
+  const names = raw.split(',')
+  for (const n of names) {
+    if (!known.has(n)) throw new CollectionError(`tables has an unknown or empty name: "${n}"`)
+  }
+  if (new Set(names).size !== names.length)
+    throw new CollectionError('tables must not repeat a name')
+  return names as CatalogTableName[]
 }
 
 export async function catalogRoute(req: Request, deps: AppDeps, path: string): Promise<Response> {
@@ -115,7 +150,7 @@ export async function catalogRoute(req: Request, deps: AppDeps, path: string): P
     const limit = q.has('limit')
       ? Math.min(wholeNumber(q.get('limit'), 'limit', 1), MAX_CHANGES)
       : MAX_CHANGES
-    return json(catalogChanges(deps.db, since, limit))
+    return json(catalogChanges(deps.db, since, limit, tablesParam(q.get('tables'))))
   } catch (e) {
     if (e instanceof CollectionError) return json({ error: e.message }, 400)
     throw e

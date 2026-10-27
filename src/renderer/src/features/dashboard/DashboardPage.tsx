@@ -254,7 +254,7 @@ function Content({
         </section>
       )}
 
-      <div className="grid gap-10 lg:grid-cols-2 xl:grid-cols-3">
+      <div className="grid gap-10 lg:grid-cols-2 xl:grid-cols-3 max-md:grid-cols-1">
         <Breakdown
           title="By rarity"
           segments={stats.byRarity.map((r, i) => ({

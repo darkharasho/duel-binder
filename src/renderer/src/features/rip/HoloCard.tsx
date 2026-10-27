@@ -40,14 +40,13 @@ export function HoloCard({ card, size, className }: HoloCardProps): React.JSX.El
           data-holo={kind}
           className={cn(
             'pointer-events-none absolute opacity-75 mix-blend-color-dodge transition-[background-position] duration-100',
-            'motion-reduce:transition-none',
+            '[background-position:var(--glare-x,50%)_var(--glare-y,50%)] motion-reduce:[background-position:50%_50%] motion-reduce:transition-none',
             kind === 'full' && 'rounded-[6px]'
           )}
           style={{
             ...inset,
             backgroundImage: RAINBOW,
             backgroundSize: '300% 300%',
-            backgroundPosition: 'var(--glare-x, 50%) var(--glare-y, 50%)',
             maskImage: LINES,
             WebkitMaskImage: LINES
           }}

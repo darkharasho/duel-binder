@@ -30,6 +30,14 @@ describe('HoloCard', () => {
     expect(layer.style.bottom).toBe('29.6%')
   })
 
+  it('holo position is class-driven so reduced motion can pin it', () => {
+    const { container } = render(<HoloCard card={card({ rarity: 'Secret Rare' })} size="full" />)
+    const layer = holo(container)!
+    expect(layer.style.backgroundPosition).toBe('')
+    expect(layer.className).toContain('motion-reduce:[background-position:50%_50%]')
+    expect(layer.className).toContain('[background-position:var(--glare-x,50%)_var(--glare-y,50%)]')
+  })
+
   it('Starlight Rare gets a whole-card holo layer', () => {
     const { container } = render(<HoloCard card={card({ rarity: 'Starlight Rare' })} size="full" />)
     const layer = holo(container)!

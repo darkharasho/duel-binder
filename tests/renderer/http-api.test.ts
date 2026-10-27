@@ -110,4 +110,33 @@ describe('createHttpApi', () => {
     await expect(api.account.syncNow()).rejects.toThrow('Not available on the web')
     expect(fetch).not.toHaveBeenCalled()
   })
+
+  it('deleteAccount posts the confirmation with the cookie, then leaves the page', async () => {
+    const { api, fetch, onSignedOut } = setup(new Response(null, { status: 204 }))
+    await expect(api.account.deleteAccount()).resolves.toBeUndefined()
+    expect(fetch).toHaveBeenCalledWith('/api/account/delete', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: '{"confirm":"delete"}',
+      credentials: 'same-origin'
+    })
+    expect(onSignedOut).toHaveBeenCalledTimes(1)
+  })
+
+  it('deleteAccount rejects on a failure and stays on the page', async () => {
+    const { api, onSignedOut } = setup(reply(500, {}))
+    await expect(api.account.deleteAccount()).rejects.toThrow("Couldn't delete your account")
+    expect(onSignedOut).not.toHaveBeenCalled()
+  })
+
+  it('deleteAccount when signed out goes to the sign-in page', async () => {
+    const { api, onSignedOut } = setup(reply(401, { error: 'signed-out' }))
+    await expect(api.account.deleteAccount()).rejects.toThrow('Signed out')
+    expect(onSignedOut).toHaveBeenCalledTimes(1)
+  })
+
+  it('deleteAccount offline rejects with a readable error', async () => {
+    const { api } = setup(new TypeError('Failed to fetch'))
+    await expect(api.account.deleteAccount()).rejects.toThrow(/offline|connect/i)
+  })
 })

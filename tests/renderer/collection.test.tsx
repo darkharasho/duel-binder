@@ -1,7 +1,7 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { toast } from 'sonner'
-import type { CardDetail, CardRow, EntryView, Printing } from '@shared/types'
+import type { CardDetail, CardRow, EntryView, Printing, SetSummary } from '@shared/types'
 import { CollectionPage } from '@/features/collection/CollectionPage'
 import { createMockApi, renderWithProviders } from './mockApi'
 
@@ -124,6 +124,47 @@ describe('CollectionPage', () => {
     await waitFor(() =>
       expect(list).toHaveBeenLastCalledWith(expect.objectContaining({ language: undefined }))
     )
+  })
+
+  it('lists sets by code, only those in the chosen language', async () => {
+    const set = (setName: string, setCode: string, language: string): SetSummary =>
+      ({ setName, setCode, language }) as SetSummary
+    setup([dm, bew], {
+      collection: {
+        facets: async () => ({
+          cardTypes: [],
+          attributes: [],
+          archetypes: [],
+          setNames: ['Legend of Blue Eyes', 'Premium Pack 1', 'Unlisted Set'],
+          rarities: [],
+          languages: ['en', 'ja']
+        })
+      },
+      sets: {
+        list: async () => [
+          set('Legend of Blue Eyes', 'LOB', 'en'),
+          set('Legend of Blue Eyes', 'LOB-JP', 'ja'),
+          set('Premium Pack 1', 'PP01-JP', 'ja')
+        ]
+      }
+    })
+    await screen.findByText('Dark Magician')
+    const u = userEvent.setup()
+    await u.click(screen.getByRole('button', { name: 'Set' }))
+    const items = async (): Promise<(string | null)[]> =>
+      (await screen.findAllByRole('menuitemcheckbox')).map((o) => o.textContent)
+    // A set the sets list doesn't know yet still shows, by its bare name.
+    expect(await items()).toEqual(['LOB - Legend of Blue Eyes', 'Unlisted Set'])
+    await u.keyboard('{Escape}')
+
+    await u.click(screen.getByRole('combobox', { name: 'Language' }))
+    await u.click(await screen.findByRole('option', { name: 'Japanese' }))
+    await u.click(screen.getByRole('button', { name: 'Set' }))
+    expect(await items()).toEqual([
+      'LOB - Legend of Blue Eyes',
+      'PP01 - Premium Pack 1',
+      'Unlisted Set'
+    ])
   })
 
   it('offers Show all languages when only other-language cards are owned', async () => {

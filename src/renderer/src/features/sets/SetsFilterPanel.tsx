@@ -12,6 +12,7 @@ import {
   SheetTitle
 } from '@/components/ui/sheet'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
+import { isPhone } from '@/lib/platform'
 import type { SetFilter, SetSort } from './setsView'
 
 export interface SetsFilterPanelProps {
@@ -104,9 +105,19 @@ export function SetsFilterPanel(p: SetsFilterPanelProps): React.JSX.Element {
     p.onTypesChange(SET_TYPES.map((s) => s.value).filter((v) => next.has(v)))
   }
 
+  // On the phone the panel rises from the bottom, like the collection's filters.
+  const phone = isPhone()
   return (
     <Sheet open={p.open} onOpenChange={p.onOpenChange}>
-      <SheetContent side="right" className="w-80 gap-0 overflow-y-auto">
+      <SheetContent
+        side={phone ? 'bottom' : 'right'}
+        data-layout={phone ? 'bottom-sheet' : undefined}
+        className={
+          phone
+            ? 'max-h-[85dvh] gap-0 overflow-y-auto rounded-t-3xl border-white/[0.08] pb-[max(1rem,env(safe-area-inset-bottom))]'
+            : 'w-80 gap-0 overflow-y-auto'
+        }
+      >
         <SheetHeader>
           <SheetTitle>Filters &amp; sort</SheetTitle>
           <SheetDescription className="sr-only">Filter and sort the sets list</SheetDescription>

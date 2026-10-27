@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowDownAZ, ArrowUpAZ, Search } from 'lucide-react'
+import { ArrowDownAZ, ArrowUpAZ, Search, SlidersHorizontal } from 'lucide-react'
 import type { BrowseCard, BrowseFilters, BrowseSort, CardSearchResult } from '@shared/types'
 import { cardArtUrl, useArtWash } from '@/components/artWashContext'
 import { CardArt } from '@/components/CardArt'
@@ -18,10 +18,19 @@ import {
   SelectTrigger,
   SelectValue
 } from '@/components/ui/select'
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle
+} from '@/components/ui/sheet'
 import { UnderlineTabs } from '@/components/UnderlineTabs'
 import { EntryDetailPanel } from '@/features/collection/EntryDetailPanel'
 import { api, queryKeys } from '@/lib/api'
 import { formatUsd } from '@/lib/format'
+import { isPhone } from '@/lib/platform'
+import { useSetNames } from '@/lib/setLabels'
 import { BrowseCardPanel } from './BrowseCardPanel'
 
 const PAGE = 120
@@ -78,6 +87,9 @@ export function BrowsePage({ onAddCard }: Props): React.JSX.Element {
   const [selected, setSelected] = useState<{ cardId: number; entryId: number } | null>(null)
   // A card not owned yet opens with a stepper per printing instead of an entry editor.
   const [unowned, setUnowned] = useState<BrowseCard | null>(null)
+  // On the phone the facets wait in a bottom sheet behind one Filters button.
+  const phone = isPhone()
+  const [filtersOpen, setFiltersOpen] = useState(false)
   const qc = useQueryClient()
   const change = (patch: Partial<Filters>): void => setFilters((f) => ({ ...f, ...patch }))
 
@@ -89,6 +101,8 @@ export function BrowsePage({ onAddCard }: Props): React.JSX.Element {
     return () => clearTimeout(t)
   }, [text, filters.q])
 
+  // Browse lists English printings only.
+  const setNames = useSetNames('en')
   const facets = useQuery({
     queryKey: queryKeys.browseFacets,
     queryFn: () => api.cards.browseFacets()
@@ -168,8 +182,61 @@ export function BrowsePage({ onAddCard }: Props): React.JSX.Element {
     (c) => c.id
   )
 
+  const search = (
+    <div className="relative mr-1 max-md:min-w-0 max-md:flex-1">
+      <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+      <Input
+        type="search"
+        aria-label="Search cards"
+        placeholder="Search by name or set code…"
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        className="h-8 w-60 pl-8 max-md:w-full"
+      />
+    </div>
+  )
+  const facetFilters = (
+    <>
+      {FACETS.map(({ key, label }) => (
+        <FacetMenu
+          key={key}
+          label={label}
+          options={facets.data?.[key] ?? []}
+          selected={filters[key] ?? []}
+          onChange={(next) => change({ [key]: next })}
+          labelOf={key === 'setNames' ? setNames.labelOf : undefined}
+        />
+      ))}
+      <div className="flex items-center gap-1 text-[13px] text-foreground/80">
+        <span className="px-1">Level</span>
+        <Input
+          type="number"
+          aria-label="Level min"
+          placeholder="min"
+          value={filters.levelMin ?? ''}
+          onChange={(e) => change({ levelMin: parseLevel(e.target.value) })}
+          className="h-8 w-14 px-2 font-mono text-xs"
+        />
+        <span aria-hidden>–</span>
+        <Input
+          type="number"
+          aria-label="Level max"
+          placeholder="max"
+          value={filters.levelMax ?? ''}
+          onChange={(e) => change({ levelMax: parseLevel(e.target.value) })}
+          className="h-8 w-14 px-2 font-mono text-xs"
+        />
+      </div>
+      {filtered && (
+        <Button variant="ghost" size="sm" onClick={clear} className="text-muted-foreground">
+          Clear filters
+        </Button>
+      )}
+    </>
+  )
+
   return (
-    <div className="space-y-5 p-8">
+    <div className="space-y-5 p-8 max-md:p-4">
       <PageHeader>
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Browse</h1>
@@ -214,53 +281,33 @@ export function BrowsePage({ onAddCard }: Props): React.JSX.Element {
           </div>
         </div>
         <div className="flex flex-wrap items-center gap-1.5">
-          <div className="relative mr-1">
-            <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              type="search"
-              aria-label="Search cards"
-              placeholder="Search by name or set code…"
-              value={text}
-              onChange={(e) => setText(e.target.value)}
-              className="h-8 w-60 pl-8"
-            />
-          </div>
-          {FACETS.map(({ key, label }) => (
-            <FacetMenu
-              key={key}
-              label={label}
-              options={facets.data?.[key] ?? []}
-              selected={filters[key] ?? []}
-              onChange={(next) => change({ [key]: next })}
-            />
-          ))}
-          <div className="flex items-center gap-1 text-[13px] text-foreground/80">
-            <span className="px-1">Level</span>
-            <Input
-              type="number"
-              aria-label="Level min"
-              placeholder="min"
-              value={filters.levelMin ?? ''}
-              onChange={(e) => change({ levelMin: parseLevel(e.target.value) })}
-              className="h-8 w-14 px-2 font-mono text-xs"
-            />
-            <span aria-hidden>–</span>
-            <Input
-              type="number"
-              aria-label="Level max"
-              placeholder="max"
-              value={filters.levelMax ?? ''}
-              onChange={(e) => change({ levelMax: parseLevel(e.target.value) })}
-              className="h-8 w-14 px-2 font-mono text-xs"
-            />
-          </div>
-          {filtered && (
-            <Button variant="ghost" size="sm" onClick={clear} className="text-muted-foreground">
-              Clear filters
+          {search}
+          {phone ? (
+            <Button variant="outline" size="sm" onClick={() => setFiltersOpen(true)}>
+              <SlidersHorizontal />
+              Filters
             </Button>
+          ) : (
+            facetFilters
           )}
         </div>
       </PageHeader>
+
+      {phone && (
+        <Sheet open={filtersOpen} onOpenChange={setFiltersOpen}>
+          <SheetContent
+            side="bottom"
+            data-layout="bottom-sheet"
+            className="max-h-[85dvh] overflow-y-auto rounded-t-3xl border-white/[0.08] pb-[max(1rem,env(safe-area-inset-bottom))]"
+          >
+            <SheetHeader>
+              <SheetTitle>Filters</SheetTitle>
+              <SheetDescription className="sr-only">Filter the card list</SheetDescription>
+            </SheetHeader>
+            <div className="flex flex-wrap items-center gap-1.5 px-4">{facetFilters}</div>
+          </SheetContent>
+        </Sheet>
+      )}
 
       {pages.isSuccess && cards.length === 0 ? (
         <div className="flex flex-col items-start gap-3 py-16">
@@ -274,7 +321,7 @@ export function BrowsePage({ onAddCard }: Props): React.JSX.Element {
       ) : (
         <ul
           aria-label="All cards"
-          className="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-x-4 gap-y-6"
+          className="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-x-4 gap-y-6 max-md:grid-cols-3 max-md:gap-x-2 max-md:gap-y-4"
         >
           {cards.map((c) => (
             <li key={c.id}>

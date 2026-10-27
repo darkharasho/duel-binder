@@ -4,12 +4,14 @@ import { languageInfo } from '@shared/languages'
 import { CardArt } from '@/components/CardArt'
 import { Button } from '@/components/ui/button'
 import { formatUsd } from '@/lib/format'
+import { isPhone } from '@/lib/platform'
 import { cn } from '@/lib/utils'
 import type { ScanDraft } from './resolve'
 import { SearchPicker, type PickerOption } from './SearchPicker'
 import type { ScanRow } from './session'
 
-const FLAG_TEXT: Record<NonNullable<ScanDraft['flag']>, string> = {
+// eslint-disable-next-line react-refresh/only-export-components -- shared with the phone's last-scan card
+export const FLAG_TEXT: Record<NonNullable<ScanDraft['flag']>, string> = {
   'check-rarity': 'Check rarity',
   'pick-printing': 'Check printing',
   'other-set': 'From another set'
@@ -21,7 +23,8 @@ const FLAG_TEXT: Record<NonNullable<ScanDraft['flag']>, string> = {
  * picked for an art or name match can still be changed to another code. Each shows its code and
  * rarity, and its language when they differ; the search also matches the set's name.
  */
-function choicesFor(row: ScanRow): PickerOption[] {
+// eslint-disable-next-line react-refresh/only-export-components -- shared with the phone's last-scan card
+export function choicesFor(row: ScanRow): PickerOption[] {
   const own = row.options.filter((o) => o.cardId === row.cardId)
   const shown =
     row.via === 'code' && row.printingId !== null && row.flag !== 'pick-printing'
@@ -74,8 +77,11 @@ export const ScanRowItem = memo(function ScanRowItem({
     >
       <CardArt imageId={row.imageId} size="small" alt="" className="w-10 shrink-0" />
       <div className="min-w-0 flex-1 space-y-1">
-        <div className="flex items-baseline gap-2">
-          <span className="truncate text-sm font-medium">{row.name}</span>
+        {/* On a phone the name gets its own line; beside the code and price it was cut short. */}
+        <div className={cn('flex items-baseline gap-2', isPhone() && 'flex-wrap gap-y-0')}>
+          <span className={cn('truncate text-sm font-medium', isPhone() && 'basis-full')}>
+            {row.name}
+          </span>
           {row.setCode && (
             <span className="shrink-0 font-mono text-xs text-muted-foreground">{row.setCode}</span>
           )}

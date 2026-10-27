@@ -1,25 +1,44 @@
 import { describe, expect, it } from 'vitest'
 import { detectOs } from '../../workers/portal/src/site/os'
 import { formatSize, renderPage } from '../../workers/portal/src/site/page'
+import { renderPrivacy } from '../../workers/portal/src/site/privacy'
 import { pickDownloads, RELEASES_FALLBACK } from '../../workers/portal/src/site/releases'
 import { releaseV021 } from './fixtures/release'
 
 const downloads = pickDownloads(releaseV021)
 const appUrl = 'https://app.duelbinder.com'
-const page = (over: Partial<Parameters<typeof renderPage>[0]> = {}) =>
+const page = (over: Partial<Parameters<typeof renderPage>[0]> = {}): string =>
   renderPage({ downloads, os: null, appUrl, ...over })
 
 describe('detectOs', () => {
   it.each([
-    ['Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36', 'windows'],
-    ['Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15', 'mac'],
+    [
+      'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36',
+      'windows'
+    ],
+    [
+      'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15',
+      'mac'
+    ],
     ['Mozilla/5.0 (X11; Linux x86_64; rv:127.0) Gecko/20100101 Firefox/127.0', 'linux'],
-    ['Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 Chrome/126.0 Mobile Safari/537.36', null],
-    ['Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 Version/17.5 Mobile/15E148 Safari/604.1', null],
-    ['Mozilla/5.0 (iPad; CPU OS 17_5 like Mac OS X) AppleWebKit/605.1.15 Version/17.5 Mobile/15E148 Safari/604.1', null],
-    ['Mozilla/5.0 (X11; CrOS x86_64 14541.0.0) AppleWebKit/537.36 Chrome/126.0 Safari/537.36', null],
+    [
+      'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 Chrome/126.0 Mobile Safari/537.36',
+      null
+    ],
+    [
+      'Mozilla/5.0 (iPhone; CPU iPhone OS 17_5 like Mac OS X) AppleWebKit/605.1.15 Version/17.5 Mobile/15E148 Safari/604.1',
+      null
+    ],
+    [
+      'Mozilla/5.0 (iPad; CPU OS 17_5 like Mac OS X) AppleWebKit/605.1.15 Version/17.5 Mobile/15E148 Safari/604.1',
+      null
+    ],
+    [
+      'Mozilla/5.0 (X11; CrOS x86_64 14541.0.0) AppleWebKit/537.36 Chrome/126.0 Safari/537.36',
+      null
+    ],
     ['', null],
-    [null, null],
+    [null, null]
   ])('%s -> %s', (ua, os) => {
     expect(detectOs(ua)).toBe(os)
   })
@@ -38,13 +57,15 @@ describe('renderPage', () => {
     expect(html).toContain('<meta charset="utf-8">')
     expect(html).toContain('A binder for your <span class="nowrap">Yu-Gi-Oh!</span> collection.')
     expect(html).toContain(
-      "Log what you own by set, rarity and condition. Prices update on their own. It runs on your computer and works offline. Sign in with Discord to see your friends' binders on the web.",
+      "Log what you own by set, rarity and condition. Prices update on their own. It runs on your computer and works offline. Sign in with Discord to see your friends' binders on the web."
     )
   })
 
   it('labels the hero button by OS', () => {
     const win = downloads.windows!.url
-    expect(page({ os: 'windows' })).toContain(`<a class="btn pri" href="${win}">Download for Windows</a>`)
+    expect(page({ os: 'windows' })).toContain(
+      `<a class="btn pri" href="${win}">Download for Windows</a>`
+    )
     expect(page({ os: 'mac' })).toContain(`href="${downloads.mac!.url}">Download for macOS</a>`)
     expect(page({ os: 'linux' })).toContain(`href="${downloads.linux!.url}">Download for Linux</a>`)
     expect(page({ os: null })).toContain('<a class="btn pri" href="#download">Download</a>')
@@ -79,7 +100,9 @@ describe('renderPage', () => {
     expect(html).toMatch(new RegExp(`href="${appUrl}"[^>]*>Sign in</a>`))
     expect(html).toMatch(new RegExp(`href="${appUrl}"[^>]*>Open the web app</a>`))
     expect(html).toContain('href="https://github.com/darkharasho/duel-binder"')
-    expect(html).toContain('Duel Binder is not affiliated with Konami. Card data and images from YGOPRODeck.')
+    expect(html).toContain(
+      'Duel Binder is not affiliated with Konami. Card data and images from YGOPRODeck.'
+    )
   })
 
   it('has the feature rows, with Friends as text only', () => {
@@ -114,5 +137,34 @@ describe('renderPage', () => {
     expect(imgs[0]).toContain('/shots/collection.webp')
     expect(imgs[0]).not.toContain('loading="lazy"')
     for (const img of imgs.slice(1)) expect(img).toContain('loading="lazy"')
+  })
+})
+
+describe('renderPrivacy', () => {
+  it('privacy page renders and links home', () => {
+    const html = renderPrivacy({ appUrl })
+    expect(html).toContain('<meta charset="utf-8">')
+    expect(html).toContain('<link rel="stylesheet" href="/site.css">')
+    expect(html).toContain('<a class="brand" href="/">')
+    expect(html).toContain('<h1>Privacy</h1>')
+    for (const text of [
+      'Discord id, username, display name and avatar',
+      'your collection, notes and value history',
+      'friends and blocks',
+      'sign-in sessions',
+      'to sync and show your binder',
+      'Nothing is sold or used for ads.',
+      'There are no third-party trackers.',
+      'the camera picture is processed on your phone and never uploaded',
+      'Card images come through the portal',
+      'Discord avatars, yours and your friends’, come straight from Discord',
+      'the desktop app checks GitHub for updates',
+      'Settings → Delete account',
+      'https://github.com/darkharasho/duel-binder/issues'
+    ]) {
+      expect(html).toContain(text)
+    }
+    expect(html).toContain('<link rel="canonical" href="https://duelbinder.com/privacy">')
+    expect(html).not.toMatch(/<script/i)
   })
 })

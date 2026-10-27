@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input'
 import { FacetMenu } from '@/components/FacetMenu'
 import { LanguageSelect } from '@/components/LanguageSelect'
 import { useLanguageFilter } from '@/lib/languageFilter'
+import { useSetNames } from '@/lib/setLabels'
 import {
   Select,
   SelectContent,
@@ -47,6 +48,7 @@ function parseLevel(v: string): number | undefined {
 export function FilterBar({ filters, facets, onChange, onClear }: Props): React.JSX.Element {
   const [text, setText] = useState(filters.q ?? '')
   const [language, setLanguage] = useLanguageFilter()
+  const setNames = useSetNames(language)
 
   // Debounce search text into the page's filter state.
   useEffect(() => {
@@ -57,7 +59,7 @@ export function FilterBar({ filters, facets, onChange, onClear }: Props): React.
 
   return (
     <div className="flex flex-wrap items-center gap-1.5">
-      <div className="relative mr-1">
+      <div className="relative mr-1 max-md:mr-0 max-md:w-full">
         <Search className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
         <Input
           type="search"
@@ -65,23 +67,24 @@ export function FilterBar({ filters, facets, onChange, onClear }: Props): React.
           placeholder="Search collection…"
           value={text}
           onChange={(e) => setText(e.target.value)}
-          className="h-8 w-52 pl-8"
+          className="h-8 w-52 pl-8 max-md:w-full"
         />
       </div>
       {FACETS.map(({ key, label }) => (
         <FacetMenu
           key={key}
           label={label}
-          options={facets?.[key] ?? []}
+          options={
+            key === 'setNames'
+              ? (facets?.setNames ?? []).filter(setNames.inLanguage)
+              : (facets?.[key] ?? [])
+          }
           selected={filters[key] ?? []}
           onChange={(next) => onChange({ [key]: next })}
+          labelOf={key === 'setNames' ? setNames.labelOf : undefined}
         />
       ))}
-      <LanguageSelect
-        value={language}
-        onChange={setLanguage}
-        available={facets?.languages ?? []}
-      />
+      <LanguageSelect value={language} onChange={setLanguage} available={facets?.languages ?? []} />
       <div className="flex items-center gap-1 text-[13px] text-foreground/80">
         <span className="px-1">Level</span>
         <Input
@@ -103,26 +106,26 @@ export function FilterBar({ filters, facets, onChange, onClear }: Props): React.
         />
       </div>
       <div className="ml-auto flex items-center gap-1">
-      <Select value={filters.sort} onValueChange={(v) => onChange({ sort: v as SortKey })}>
-        <SelectTrigger size="sm" aria-label="Sort by" className="w-36">
-          <SelectValue />
-        </SelectTrigger>
-        <SelectContent>
-          {SORTS.map((s) => (
-            <SelectItem key={s.value} value={s.value}>
-              {s.label}
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-      <Button
-        variant="outline"
-        size="icon-sm"
-        aria-label={filters.dir === 'asc' ? 'Sort ascending' : 'Sort descending'}
-        onClick={() => onChange({ dir: filters.dir === 'asc' ? 'desc' : 'asc' })}
-      >
-        {filters.dir === 'asc' ? <ArrowUpAZ /> : <ArrowDownAZ />}
-      </Button>
+        <Select value={filters.sort} onValueChange={(v) => onChange({ sort: v as SortKey })}>
+          <SelectTrigger size="sm" aria-label="Sort by" className="w-36">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {SORTS.map((s) => (
+              <SelectItem key={s.value} value={s.value}>
+                {s.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Button
+          variant="outline"
+          size="icon-sm"
+          aria-label={filters.dir === 'asc' ? 'Sort ascending' : 'Sort descending'}
+          onClick={() => onChange({ dir: filters.dir === 'asc' ? 'desc' : 'asc' })}
+        >
+          {filters.dir === 'asc' ? <ArrowUpAZ /> : <ArrowDownAZ />}
+        </Button>
       </div>
       <Button variant="ghost" size="sm" onClick={onClear} className="text-muted-foreground">
         Clear filters

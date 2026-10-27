@@ -7,7 +7,8 @@ import type {
   CardDetail,
   ChecklistCard,
   EntryView,
-  Printing
+  Printing,
+  SetSummary
 } from '@shared/types'
 import { BrowsePage } from '@/features/browse/BrowsePage'
 import { toast } from 'sonner'
@@ -240,6 +241,35 @@ describe('BrowsePage', () => {
     expect(within(dm).getByText('×2')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Pot of Greed/ })).toHaveTextContent('Normal')
     expect(screen.getByText('2 cards')).toBeInTheDocument()
+  })
+
+  it('lists sets by their English code', async () => {
+    setup([card(1, 'Dark Magician')], 1, {
+      cards: {
+        browseFacets: async () => ({
+          cardTypes: [],
+          attributes: [],
+          races: [],
+          archetypes: [],
+          setNames: ['Legend of Blue Eyes White Dragon'],
+          rarities: []
+        })
+      },
+      sets: {
+        list: async () =>
+          [
+            { setName: 'Legend of Blue Eyes White Dragon', setCode: 'LOB-JP', language: 'ja' },
+            { setName: 'Legend of Blue Eyes White Dragon', setCode: 'LOB', language: 'en' }
+          ] as SetSummary[]
+      }
+    })
+    await screen.findByRole('button', { name: /Dark Magician/ })
+    await userEvent.click(screen.getByRole('button', { name: 'Set' }))
+    expect(
+      await screen.findByRole('menuitemcheckbox', {
+        name: 'LOB - Legend of Blue Eyes White Dragon'
+      })
+    ).toBeInTheDocument()
   })
 
   it('search, the owned tab and sort go to the query', async () => {

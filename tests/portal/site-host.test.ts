@@ -1,7 +1,11 @@
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it, vi, type Mock } from 'vitest'
 import { routeHost } from '../../workers/portal/src/site/host'
 import { handleSite } from '../../workers/portal/src/site/handler'
-import { pickDownloads, RELEASES_FALLBACK } from '../../workers/portal/src/site/releases'
+import {
+  pickDownloads,
+  RELEASES_FALLBACK,
+  type Downloads
+} from '../../workers/portal/src/site/releases'
 import { releaseV021 } from './fixtures/release'
 
 const SITE = 'https://duelbinder.com'
@@ -18,10 +22,46 @@ describe('routeHost', () => {
   })
   it('sends app-host /app/ paths straight to assets', () => {
     for (const p of ['/favicon.ico', '/favicon.svg', '/apple-touch-icon.png']) {
-      expect(routeHost(new URL(`https://app.duelbinder.com${p}`), SITE)).toEqual({ kind: 'app-asset' })
+      expect(routeHost(new URL(`https://app.duelbinder.com${p}`), SITE)).toEqual({
+        kind: 'app-asset'
+      })
     }
-    expect(routeHost(new URL('https://app.duelbinder.com/app/assets/x.js'), SITE)).toEqual({ kind: 'app-asset' })
+    expect(routeHost(new URL('https://app.duelbinder.com/app/assets/x.js'), SITE)).toEqual({
+      kind: 'app-asset'
+    })
     expect(routeHost(new URL('https://app.duelbinder.com/'), SITE)).toEqual({ kind: 'app' })
+  })
+  it("serves the phone app's files at /scan/<file> from the built /app/scan/<file>", () => {
+    for (const p of [
+      '/scan/assets/worker-abc.js',
+      '/scan/assets/sqlite3-abc.wasm',
+      '/scan/ocr/worker.min.js',
+      '/scan/ocr/core/tesseract-core-simd-lstm.wasm.js',
+      '/scan/index.html',
+      '/scan/icon-192.png'
+    ]) {
+      expect(routeHost(new URL(`https://app.duelbinder.com${p}`), SITE)).toEqual({
+        kind: 'scan-asset',
+        asset: `/app${p}`
+      })
+    }
+  })
+  it('leaves the /scan/ routes with their own headers to the app', () => {
+    for (const p of [
+      '/scan',
+      '/scan/',
+      '/scan/sw.js',
+      '/scan/manifest.webmanifest',
+      '/scan/fingerprints'
+    ]) {
+      expect(routeHost(new URL(`https://app.duelbinder.com${p}?x=1`), SITE)).toEqual({
+        kind: 'app'
+      })
+    }
+    // On the site host, /scan/ paths are the site's.
+    expect(routeHost(new URL('https://duelbinder.com/scan/assets/x.js'), SITE)).toEqual({
+      kind: 'site'
+    })
   })
   it('sends every other host to the app', () => {
     for (const u of [
@@ -34,8 +74,16 @@ describe('routeHost', () => {
   })
 })
 
-function deps(downloads = pickDownloads(releaseV021)) {
-  const assets = { fetch: vi.fn(async () => new Response('css', { status: 218 })) }
+function deps(downloads = pickDownloads(releaseV021)): {
+  assets: { fetch: Mock<(req: Request) => Promise<Response>> }
+  dl: Mock<() => Promise<Downloads>>
+  d: Parameters<typeof handleSite>[1]
+} {
+  const assets = {
+    fetch: vi.fn<(req: Request) => Promise<Response>>(
+      async () => new Response('css', { status: 218 })
+    )
+  }
   const dl = vi.fn(async () => downloads)
   return { assets, dl, d: { appUrl: 'https://app.duelbinder.com', assets, downloads: dl } }
 }
@@ -48,7 +96,9 @@ describe('handleSite', () => {
       expect(res.status).toBe(200)
       expect(res.headers.get('content-type')).toBe('text/html; charset=utf-8')
       expect(res.headers.get('cache-control')).toBe('private, max-age=300')
-      expect(await res.text()).toContain('A binder for your <span class="nowrap">Yu-Gi-Oh!</span> collection.')
+      expect(await res.text()).toContain(
+        'A binder for your <span class="nowrap">Yu-Gi-Oh!</span> collection.'
+      )
     }
   })
 
@@ -56,7 +106,10 @@ describe('handleSite', () => {
     const { d } = deps()
     const res = await handleSite(
       new Request('https://duelbinder.com/', {
-        headers: { 'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36' }
+        headers: {
+          'user-agent':
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120 Safari/537.36'
+        }
       }),
       d
     )
@@ -108,5 +161,26 @@ describe('handleSite', () => {
     const res = await handleSite(new Request('https://duelbinder.com/'), d)
     expect(res.status).toBe(200)
     expect(await res.text()).toContain(RELEASES_FALLBACK)
+  })
+
+  it('serves the privacy page on /privacy', async () => {
+    const { d, assets, dl } = deps()
+    const res = await handleSite(new Request('https://duelbinder.com/privacy'), d)
+    expect(res.status).toBe(200)
+    expect(res.headers.get('content-type')).toBe('text/html; charset=utf-8')
+    expect(await res.text()).toContain('<h1>Privacy</h1>')
+    expect(assets.fetch).not.toHaveBeenCalled()
+    expect(dl).not.toHaveBeenCalled()
+    const head = await handleSite(
+      new Request('https://duelbinder.com/privacy', { method: 'HEAD' }),
+      d
+    )
+    expect(head.status).toBe(200)
+    expect(await head.text()).toBe('')
+    const post = await handleSite(
+      new Request('https://duelbinder.com/privacy', { method: 'POST' }),
+      d
+    )
+    expect(post.status).toBe(405)
   })
 })

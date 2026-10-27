@@ -5,6 +5,7 @@ import { syncRoute } from './sync'
 import { catalogRoute } from './catalogFeed'
 import {
   exchangeDesktopCode,
+  exchangePhoneToken,
   finishSignIn,
   me,
   revokeDesktopToken,
@@ -17,6 +18,8 @@ import type { PrintingArtResolver } from '../../../src/main/yugipedia/artResolve
 import { imageRoute, type ImageBucket, type ImageQuota } from './images'
 import type { PriceQueue } from './prices'
 import { getFingerprints } from './scanFiles'
+import { phoneRoute } from './phonePage'
+import { deleteAccountRoute } from './account'
 
 /** Vars and secrets the request handlers read. */
 export interface Env {
@@ -52,6 +55,8 @@ const json = (body: unknown, status = 200): Response =>
 
 export async function handle(req: Request, deps: AppDeps): Promise<Response> {
   const url = new URL(req.url)
+  const phone = phoneRoute(req, deps)
+  if (phone) return phone
   if ((req.method === 'GET' || req.method === 'HEAD') && url.pathname === '/')
     return home(req, deps)
   if (req.method === 'GET' && url.pathname === '/api/health') return json({ ok: true })
@@ -63,9 +68,12 @@ export async function handle(req: Request, deps: AppDeps): Promise<Response> {
     return startDesktopSignIn(req, deps)
   if (req.method === 'POST' && url.pathname === '/auth/desktop/token')
     return exchangeDesktopCode(req, deps)
+  if (req.method === 'POST' && url.pathname === '/auth/phone/token')
+    return exchangePhoneToken(req, deps)
   if (req.method === 'POST' && url.pathname === '/auth/desktop/revoke')
     return revokeDesktopToken(req, deps)
   if (req.method === 'GET' && url.pathname === '/api/me') return me(req, deps)
+  if (url.pathname === '/api/account/delete') return deleteAccountRoute(req, deps)
   if (url.pathname.startsWith('/api/rpc/')) {
     let channel: string
     try {

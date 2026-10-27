@@ -5,6 +5,10 @@ const DAY_MS = 24 * 60 * 60 * 1000
 const SESSION_MAX_AGE = 30 * 24 * 60 * 60
 const STATE_MAX_AGE = 600
 const FAILED = '/?signin=failed'
+/** Where a web sign-in started with `?next=scan` lands, and where it lands when it fails. */
+const NEXT_COOKIE = 'signin_next'
+const SCAN_HOME = '/scan/'
+const SCAN_FAILED = '/scan/?signin=failed'
 /** Desktop tokens last a year and slide forward on use, at most once a day. */
 const DESKTOP_TTL_MS = 365 * DAY_MS
 const DESKTOP_SLIDE_BELOW_MS = 364 * DAY_MS
@@ -147,10 +151,12 @@ export function startSignIn(req: Request, deps: AppDeps): Response {
   const bounce = publicBounce(req, deps)
   if (bounce) return redirect(bounce, [])
   const state = randomToken()
-  return redirect(discordAuthorize(deps, state), [
-    cookie('oauth_state', state, STATE_MAX_AGE),
-    clearCookie('desktop_auth')
-  ])
+  const cookies = [cookie('oauth_state', state, STATE_MAX_AGE), clearCookie('desktop_auth')]
+  // `scan` is the only return path; any other value is ignored, and a leftover choice is dropped.
+  if (new URL(req.url).searchParams.get('next') === 'scan')
+    cookies.push(cookie(NEXT_COOKIE, 'scan', STATE_MAX_AGE))
+  else if (readCookie(req, NEXT_COOKIE) !== null) cookies.push(clearCookie(NEXT_COOKIE))
+  return redirect(discordAuthorize(deps, state), cookies)
 }
 
 interface DesktopAuth {
@@ -262,13 +268,16 @@ export async function finishSignIn(req: Request, deps: AppDeps): Promise<Respons
   const state = url.searchParams.get('state')
   const code = url.searchParams.get('code')
   const desktop = readDesktopAuth(req)
+  const toScan = !desktop && readCookie(req, NEXT_COOKIE) === 'scan'
   // Errors never carry Discord's details: the desktop app gets a fixed code, the browser a fixed page.
   const failed = desktop
     ? redirect(
         `http://127.0.0.1:${desktop.port}/callback?${new URLSearchParams({ error: 'signin-failed', state: desktop.state })}`,
         [clearCookie('oauth_state'), clearCookie('desktop_auth')]
       )
-    : redirect(FAILED, [clearCookie('oauth_state')])
+    : toScan
+      ? redirect(SCAN_FAILED, [clearCookie('oauth_state'), clearCookie(NEXT_COOKIE)])
+      : redirect(FAILED, [clearCookie('oauth_state')])
   if (url.searchParams.has('error') || !code || !state || state !== readCookie(req, 'oauth_state'))
     return failed
 
@@ -321,7 +330,9 @@ export async function finishSignIn(req: Request, deps: AppDeps): Promise<Respons
         new Date(now.getTime() + SESSION_MAX_AGE * 1000).toISOString()
       )
   })()
-  return redirect('/', [cookie('session', secret, SESSION_MAX_AGE), clearCookie('oauth_state')])
+  const signedIn = [cookie('session', secret, SESSION_MAX_AGE), clearCookie('oauth_state')]
+  if (toScan) return redirect(SCAN_HOME, [...signedIn, clearCookie(NEXT_COOKIE)])
+  return redirect('/', signedIn)
 }
 
 const jsonResponse = (status: number, body: unknown): Response =>
@@ -376,6 +387,49 @@ export async function exchangeDesktopCode(req: Request, deps: AppDeps): Promise<
   })()
   if (userId === null) return invalid
   return jsonResponse(200, { token, user: loadMe(deps, userId) })
+}
+
+/**
+ * True when the request's Origin is exactly PUBLIC_URL's. A cookie-authenticated request that
+ * changes something must pass this, so a cross-site page can't make it with the visitor's cookie.
+ */
+export function fromPublicOrigin(req: Request, deps: AppDeps): boolean {
+  return req.headers.get('origin') === new URL(deps.env.PUBLIC_URL).origin
+}
+
+/** The Set-Cookie value that removes the web `session` cookie. */
+export const clearSessionCookie = (): string => clearCookie('session')
+
+/** True when the request's media type is exactly application/json (parameters such as charset allowed). */
+function isJson(req: Request): boolean {
+  const type = req.headers.get('content-type')
+  return type !== null && type.split(';')[0].trim().toLowerCase() === 'application/json'
+}
+
+/**
+ * POST /auth/phone/token: the phone web app, same-origin and signed in with the web session cookie,
+ * trades it for a desktop-kind Bearer token (a year, sliding, revocable like desktop tokens).
+ * The Origin must be PUBLIC_URL's exactly and the body JSON, so a cross-site page can't mint one.
+ */
+export async function exchangePhoneToken(req: Request, deps: AppDeps): Promise<Response> {
+  if (!fromPublicOrigin(req, deps)) return jsonResponse(403, { error: 'bad-origin' })
+  if (!isJson(req)) return jsonResponse(415, { error: 'bad-content-type' })
+  const session = await findSession(req, deps)
+  if (!session || session.kind !== 'web') return jsonResponse(401, { error: 'signed-out' })
+
+  const now = deps.now()
+  const nowIso = now.toISOString()
+  const token = randomToken()
+  const tokenHash = await sha256Hex(token)
+  deps.db.transaction(() => {
+    pruneExpired(deps, nowIso)
+    deps.db
+      .prepare(
+        "INSERT INTO sessions (token_hash, user_id, kind, created_at, expires_at) VALUES (?, ?, 'desktop', ?, ?)"
+      )
+      .run(tokenHash, session.id, nowIso, new Date(now.getTime() + DESKTOP_TTL_MS).toISOString())
+  })()
+  return jsonResponse(200, { token, user: loadMe(deps, session.id) })
 }
 
 /** POST /auth/desktop/revoke with a desktop Bearer token: deletes that one session. */

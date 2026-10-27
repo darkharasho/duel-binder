@@ -1,7 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
-import { LANGUAGES, languageInfo, type Language } from '@shared/languages'
-import { RARITY_TIERS } from '@shared/scan/rarity'
+import { useEffect, useState } from 'react'
 import type { ScanWindowState } from '@shared/scanWindow'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
@@ -12,20 +9,14 @@ import {
   SelectTrigger,
   SelectValue
 } from '@/components/ui/select'
-import { api, queryKeys } from '@/lib/api'
 import { defaultEngine, type ScanEngine } from './engine'
 import { InPageScanner, type InPageCamera } from './InPageScanner'
 import { useScanHub } from './ScanHub'
 import { NO_FINGERPRINTS, SET_UNREADABLE, statusText } from './scanText'
 import { SessionList } from './SessionList'
-import { SearchPicker, type PickerOption } from './SearchPicker'
+import { SearchPicker } from './SearchPicker'
+import { useScanPickers } from './pickerOptions'
 
-const ANY = 'any'
-const AUTO = 'auto'
-const RARITY_OPTIONS: PickerOption[] = [
-  { key: AUTO, label: 'Auto' },
-  ...RARITY_TIERS.map((r) => ({ key: r, label: r }))
-]
 const UNNAMED_CAMERA = 'unnamed-camera-'
 
 const CAMERA_MESSAGES: Record<NonNullable<ScanWindowState['cameraError']>, string> = {
@@ -34,13 +25,6 @@ const CAMERA_MESSAGES: Record<NonNullable<ScanWindowState['cameraError']>, strin
   none: 'No camera found. Plug one in and reopen the scan window.',
   lost: "The camera stopped. Check it's connected, then pick it again."
 }
-
-interface PickedSet {
-  setName: string
-  language: Language
-}
-
-const setKeyOf = (s: PickedSet): string => `${s.language}|${s.setName}`
 
 /**
  * Desktop only. With the scan window closed the page scans in place (camera preview, status,
@@ -53,7 +37,6 @@ export function ScanPage({
 }): React.JSX.Element {
   const hub = useScanHub()
   const { settings, setSettings, state, open, openKnown } = hub
-  const picked = settings.set
   const [local, setLocal] = useState<InPageCamera | null>(null)
   // Set from the click until the window reports open: the page camera is released first.
   const [handingOff, setHandingOff] = useState(false)
@@ -69,64 +52,7 @@ export function ScanPage({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [handingOff])
 
-  // Not refetched while scanning (focus or staleness); data-changed events still invalidate it.
-  const sets = useQuery({
-    queryKey: queryKeys.setsList,
-    queryFn: () => api.sets.list(),
-    staleTime: Infinity,
-    refetchOnWindowFocus: false
-  })
-  const setOptions = useMemo(() => {
-    const order = new Map(LANGUAGES.map((l, i) => [l.code, i]))
-    const byName = new Intl.Collator('en').compare
-    const sorted = (sets.data ?? [])
-      .map((s) => ({ setName: s.setName, language: s.language }))
-      .sort(
-        (a, b) =>
-          byName(a.setName, b.setName) ||
-          (order.get(a.language) ?? 0) - (order.get(b.language) ?? 0)
-      )
-    const options: PickerOption[] = [{ key: ANY, label: 'Any set' }]
-    const byKey = new Map<string, PickedSet>()
-    for (const s of sorted) {
-      const key = setKeyOf(s)
-      const label = `${s.setName} · ${languageInfo(s.language).tag}`
-      byKey.set(key, s)
-      options.push({ key, label, search: label.toLowerCase() })
-    }
-    return { options, byKey }
-  }, [sets.data])
-
-  const { byKey } = setOptions
-  // A remembered set missing from the list (still loading, say) still shows as picked.
-  const pickedSetOptions = useMemo(
-    () =>
-      picked && !byKey.has(setKeyOf(picked))
-        ? [
-            ...setOptions.options,
-            {
-              key: setKeyOf(picked),
-              label: `${picked.setName} · ${languageInfo(picked.language).tag}`
-            }
-          ]
-        : setOptions.options,
-    [picked, byKey, setOptions.options]
-  )
-  const pickSet = useCallback(
-    (key: string): void => {
-      setSettings({
-        set: byKey.get(key) ?? (picked && key === setKeyOf(picked) ? picked : null)
-      })
-    },
-    [byKey, picked, setSettings]
-  )
-
-  const pickRarity = useCallback(
-    (value: string): void => {
-      setSettings({ defaultRarity: value === AUTO ? null : value })
-    },
-    [setSettings]
-  )
+  const pickers = useScanPickers()
 
   const pickCamera = (id: string): void => {
     // A camera listed before permission has no id: open the default one.
@@ -154,9 +80,9 @@ export function ScanPage({
       <span className="text-sm text-muted-foreground">New scans as</span>
       <SearchPicker
         label="New scans as"
-        value={settings.defaultRarity ?? AUTO}
-        options={RARITY_OPTIONS}
-        onPick={pickRarity}
+        value={pickers.rarity.value}
+        options={pickers.rarity.options}
+        onPick={pickers.rarity.onPick}
         searchPlaceholder="Search rarities…"
         className="w-48"
       />
@@ -167,15 +93,23 @@ export function ScanPage({
   )
 
   return (
-    <div className="p-8">
+    <div className="p-8 max-md:p-4">
       <PageHeader>
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="mr-auto text-2xl font-semibold tracking-tight">Scan</h1>
           <SearchPicker
+            label="Language"
+            value={pickers.language.value}
+            options={pickers.language.options}
+            onPick={pickers.language.onPick}
+            searchPlaceholder="Search languages…"
+            className="w-40"
+          />
+          <SearchPicker
             label="Set"
-            value={picked ? setKeyOf(picked) : ANY}
-            options={pickedSetOptions}
-            onPick={pickSet}
+            value={pickers.set.value}
+            options={pickers.set.options}
+            onPick={pickers.set.onPick}
             searchPlaceholder="Search sets…"
             className="w-72"
           />
@@ -223,7 +157,11 @@ export function ScanPage({
       ) : (
         <>
           <div className="mt-6 flex flex-wrap items-center gap-3">
-            <Button variant="outline" size="sm" onClick={() => void hub.openWindow().catch(() => undefined)}>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => void hub.openWindow().catch(() => undefined)}
+            >
               {open ? 'Show scan window' : 'Open scan window'}
             </Button>
             <Button

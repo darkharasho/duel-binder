@@ -33,15 +33,21 @@ describe('GET /api/catalog/changes', () => {
       }),
       deps
     )
-  const feed = async (since: number, limit?: number): Promise<CatalogChangesResponse> => {
-    const res = await get(`?since=${since}${limit ? `&limit=${limit}` : ''}`)
+  const feed = async (
+    since: number,
+    limit?: number,
+    tables?: string
+  ): Promise<CatalogChangesResponse> => {
+    const res = await get(
+      `?since=${since}${limit ? `&limit=${limit}` : ''}${tables ? `&tables=${tables}` : ''}`
+    )
     expect(res.status).toBe(200)
     return (await res.json()) as CatalogChangesResponse
   }
-  const drain = async (since: number, limit: number): Promise<CatalogChange[]> => {
+  const drain = async (since: number, limit: number, tables?: string): Promise<CatalogChange[]> => {
     const all: CatalogChange[] = []
     for (;;) {
-      const page = await feed(since, limit)
+      const page = await feed(since, limit, tables)
       all.push(...page.changes)
       since = page.cursor
       if (!page.more) return all
@@ -200,6 +206,51 @@ describe('GET /api/catalog/changes', () => {
     expect(p.row.id).toBe(real.id)
     expect(p.row.contributed).toBe(real.contributed)
     expect(p.row).not.toHaveProperty('catalog_seq')
+  })
+
+  it('tables limits rows and tombstones to the named tables', async () => {
+    const { cursor } = await feed(0, 5000)
+    db.prepare("UPDATE cards SET name = 'Renamed' WHERE id = (SELECT MIN(id) FROM cards)").run()
+    db.prepare(
+      "INSERT INTO sets (language, set_name, set_code) VALUES ('en', 'Doomed Set', 'DS')"
+    ).run()
+    db.prepare("DELETE FROM sets WHERE set_name = 'Doomed Set'").run()
+    const cards = await feed(cursor, undefined, 'cards')
+    expect(cards.changes.map((c) => c.table)).toEqual(['cards'])
+    const sets = await feed(cursor, undefined, 'sets,card_images')
+    expect(sets.changes).toHaveLength(1)
+    expect(sets.changes[0]).toMatchObject({ table: 'sets', deleted: ['en', 'Doomed Set'] })
+    db.prepare(
+      "INSERT INTO sets (language, set_name, set_code) VALUES ('en', 'Kept Set', 'KS')"
+    ).run()
+    const snapshot = await drain(0, 500, 'cards,sets')
+    expect(new Set(snapshot.map((c) => c.table))).toEqual(new Set(['cards', 'sets']))
+  })
+
+  it('paging with tables reaches every requested row exactly once', async () => {
+    const whole = await drain(0, 5000, 'cards,sets')
+    const paged = await drain(0, 2, 'cards,sets')
+    const key = (c: CatalogChange): string => `${c.seq}:${c.table}`
+    expect(paged.map(key)).toEqual(whole.map(key))
+    expect(new Set(paged.map(key)).size).toBe(paged.length)
+    expect(paged.length).toBeGreaterThan(2)
+  })
+
+  it('unknown, empty or repeated table names are a 400', async () => {
+    for (const t of ['nope', 'cards,', ',cards', 'cards,cards', 'cards,,sets', '']) {
+      const res = await get(`?since=0&tables=${t}`)
+      expect(res.status, t).toBe(400)
+      expect(await res.json()).toHaveProperty('error')
+    }
+  })
+
+  it('latest is the catalog clock', async () => {
+    const clock = (): number =>
+      (db.prepare('SELECT seq FROM catalog_clock').get() as { seq: number }).seq
+    expect((await feed(0, 2)).latest).toBe(clock())
+    expect((await feed(0, 2, 'cards')).latest).toBe(clock())
+    db.prepare("UPDATE cards SET name = 'X' WHERE id = (SELECT MIN(id) FROM cards)").run()
+    expect((await feed(0)).latest).toBe(clock())
   })
 
   it('rejects web sessions and missing tokens', async () => {

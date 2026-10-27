@@ -1,5 +1,6 @@
 import type {
   CatalogChangesResponse,
+  CatalogTableName,
   ContributedPrinting,
   ContributeResult
 } from '../../shared/catalogFeed'
@@ -34,8 +35,15 @@ export interface CloudClient {
   push(entries: WireEntry[]): Promise<PushResult[]>
   pull(cursor: number): Promise<PullResponse>
   prices(pkeys: string[]): Promise<PricesResponse>
-  /** One page of the catalog change feed after `since`; `limit` defaults to the server's page size. */
-  catalogChanges(since: number, limit?: number): Promise<CatalogChangesResponse>
+  /**
+   * One page of the catalog change feed after `since`; `limit` defaults to the server's page size,
+   * `tables` (default all) limits the feed to those tables.
+   */
+  catalogChanges(
+    since: number,
+    limit?: number,
+    tables?: readonly CatalogTableName[]
+  ): Promise<CatalogChangesResponse>
   /** Offers printings the catalog lacks; one result per printing. */
   contribute(printings: ContributedPrinting[]): Promise<ContributeResult[]>
   revoke(): Promise<void>
@@ -126,9 +134,11 @@ export function createCloudClient(opts: {
       (await call<PushResponse>('/api/sync/push', 'POST', { entries })).results,
     pull: (cursor) => call<PullResponse>(`/api/sync/pull?cursor=${cursor}`, 'GET'),
     prices: (pkeys) => call<PricesResponse>('/api/sync/prices', 'POST', { pkeys }),
-    catalogChanges: (since, limit) =>
+    catalogChanges: (since, limit, tables) =>
       call<CatalogChangesResponse>(
-        `/api/catalog/changes?since=${since}${limit === undefined ? '' : `&limit=${limit}`}`,
+        `/api/catalog/changes?since=${since}${limit === undefined ? '' : `&limit=${limit}`}${
+          tables ? `&tables=${tables.join(',')}` : ''
+        }`,
         'GET',
         undefined,
         true,

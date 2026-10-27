@@ -3,7 +3,7 @@ import type { Os } from './os'
 
 export interface PageView { downloads: Downloads; os: Os | null; appUrl: string }
 
-const REPO_URL = 'https://github.com/darkharasho/duel-binder'
+export const REPO_URL = 'https://github.com/darkharasho/duel-binder'
 const TITLE = 'Duel Binder — a binder for your Yu-Gi-Oh! collection'
 const DESCRIPTION =
   'Duel Binder is a desktop app for cataloging your Yu-Gi-Oh! collection by set, rarity and condition, with prices that update on their own.'
@@ -89,7 +89,7 @@ ${downloadRow('Linux', d.linux)}
 </table></section>`
 }
 
-function footer(): string {
+export function footer(): string {
   return `<footer><span>Duel Binder is not affiliated with Konami. Card data and images from YGOPRODeck.</span><a href="${REPO_URL}">GitHub</a></footer>`
 }
 

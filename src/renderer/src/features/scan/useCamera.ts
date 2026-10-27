@@ -23,14 +23,21 @@ function remember(deviceId: string): void {
 
 const stop = (s: MediaStream): void => s.getTracks().forEach((t) => t.stop())
 
-const constraints = (deviceId: string | null): MediaStreamConstraints => ({
+/** Which way the camera should face when no device is picked: the phone's rear camera. */
+export type CameraFacing = 'environment'
+
+const constraints = (deviceId: string | null, facing?: CameraFacing): MediaStreamConstraints => ({
   audio: false,
   video: {
     // 4K where the camera has it (a held card's set code is then about 14 px tall, not 7);
     // being ideal, not min, any lower resolution still opens.
     width: { ideal: 3840 },
     height: { ideal: 2160 },
-    ...(deviceId ? { deviceId: { exact: deviceId } } : {})
+    ...(deviceId
+      ? { deviceId: { exact: deviceId } }
+      : facing
+        ? { facingMode: { ideal: facing } }
+        : {})
   }
 })
 
@@ -42,16 +49,20 @@ const errorOf = (e: unknown): CameraError => {
 /**
  * The webcam stream for deviceId (null: the system default), at up to 3840x2160, and the
  * webcams there are. A device that opens is remembered for next time. `lost` means the stream
- * ended on its own (unplugged); `retry` opens the camera again.
+ * ended on its own (unplugged); `retry` opens the camera again. With `facing` and no deviceId,
+ * it asks for the camera facing that way (the phone's rear camera); desktop passes none.
  */
-export function useCamera(deviceId: string | null): {
+export function useCamera(
+  deviceId: string | null,
+  facing?: CameraFacing
+): {
   stream: MediaStream | null
   devices: MediaDeviceInfo[]
   error: CameraError | null
   retry: () => void
 } {
   const [attempt, setAttempt] = useState(0)
-  const key = `${deviceId ?? ''}#${attempt}`
+  const key = `${deviceId ?? ''}#${facing ?? ''}#${attempt}`
   // Results are tagged with the request they answer, so a new request starts out empty.
   const [opened, setOpened] = useState<{
     key: string
@@ -91,11 +102,11 @@ export function useCamera(deviceId: string | null): {
     let current: MediaStream | null = null
     const open = async (): Promise<MediaStream> => {
       try {
-        return await media.getUserMedia(constraints(deviceId))
+        return await media.getUserMedia(constraints(deviceId, facing))
       } catch (e) {
         // A remembered camera that's gone: fall back to the default one.
         if (deviceId && e instanceof DOMException && e.name === 'OverconstrainedError')
-          return media.getUserMedia(constraints(null))
+          return media.getUserMedia(constraints(null, facing))
         throw e
       }
     }
@@ -118,7 +129,7 @@ export function useCamera(deviceId: string | null): {
       live = false
       if (current) stop(current)
     }
-  }, [deviceId, key])
+  }, [deviceId, facing, key])
 
   const retry = useCallback(() => setAttempt((n) => n + 1), [])
   return { stream, devices, error, retry }

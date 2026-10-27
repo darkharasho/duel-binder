@@ -3,7 +3,7 @@ import { render, screen } from '@testing-library/react'
 import { CardArt } from '@/components/CardArt'
 import { cardArtUrl, coverArtUrl, setArtUrl } from '@/components/artWashContext'
 import { cardImageSrc, printingImageSrc, setImageSrc } from '@/lib/images'
-import { isMac, isWeb } from '@/lib/platform'
+import { isMac, isPhone, isWeb } from '@/lib/platform'
 import { createMockApi } from './mockApi'
 
 function usePlatformApi(platform: string): void {
@@ -23,6 +23,13 @@ describe('image URL helpers', () => {
     expect(cardImageSrc('small', 12)).toBe('/img/small/12')
     expect(cardImageSrc('cropped', 3)).toBe('/img/cropped/3')
     expect(printingImageSrc(5)).toBe('/img/printing/5')
+    expect(setImageSrc('LOB')).toBe('/img/set/LOB')
+  })
+
+  it('builds /img/ URLs on the phone, with no printing scans', () => {
+    usePlatformApi('phone')
+    expect(cardImageSrc('small', 12)).toBe('/img/small/12')
+    expect(printingImageSrc(5)).toBeNull()
     expect(setImageSrc('LOB')).toBe('/img/set/LOB')
   })
 
@@ -46,6 +53,16 @@ describe('platform helpers', () => {
     expect(isWeb()).toBe(true)
     usePlatformApi('linux')
     expect(isWeb()).toBe(false)
+  })
+
+  it('the phone counts as the web, and only the phone is the phone', () => {
+    usePlatformApi('phone')
+    expect(isWeb()).toBe(true)
+    expect(isPhone()).toBe(true)
+    usePlatformApi('web')
+    expect(isPhone()).toBe(false)
+    usePlatformApi('linux')
+    expect(isPhone()).toBe(false)
   })
 
   it('isMac is darwin on desktop and user-agent based on the web', () => {

@@ -129,6 +129,11 @@ export interface Api {
     syncNow(): Promise<AccountStatus>
     /** The shown account's entries that can't sync. */
     unsynced(): Promise<UnsyncedEntry[]>
+    /**
+     * Deletes the signed-in portal account and everything synced to it. The web signs out and
+     * leaves the page; the desktop app rejects (delete from app.duelbinder.com instead).
+     */
+    deleteAccount(): Promise<void>
     onChange(cb: (s: AccountStatus) => void): () => void
   }
 }
@@ -188,7 +193,8 @@ export const INVOKE_CHANNELS = [
   'account:signIn',
   'account:signOut',
   'account:syncNow',
-  'account:unsynced'
+  'account:unsynced',
+  'account:deleteAccount'
 ] as const
 
 export type InvokeChannel = (typeof INVOKE_CHANNELS)[number]

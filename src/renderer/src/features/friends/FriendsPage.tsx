@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button'
 import { api, queryKeys } from '@/lib/api'
 import { formatRelative } from '@/lib/format'
 import { friendsErrorMessage, useFriendsAvailable, useFriendsOverview } from '@/lib/friends'
+import { isPhone } from '@/lib/platform'
 import { FRIENDS_SIGNED_OUT } from '@shared/friends'
 import type { Friend, FriendUser } from '@shared/types'
 import { CollectionPage } from '../collection/CollectionPage'
@@ -34,6 +35,9 @@ function Avatar({ user }: { user: FriendUser }): React.JSX.Element {
 }
 
 type Confirming = { id: number; action: 'unfriend' | 'block' }
+
+const friendStats = (f: Friend): string =>
+  `${f.cardCount} ${f.cardCount === 1 ? 'card' : 'cards'} · Updated ${formatRelative(f.updatedAt)}`
 
 export function FriendsPage({ onBackToMine }: { onBackToMine: () => void }): React.JSX.Element {
   const qc = useQueryClient()
@@ -89,20 +93,29 @@ export function FriendsPage({ onBackToMine }: { onBackToMine: () => void }): Rea
 
   if (!available) {
     return (
-      <div className="space-y-4 p-8">
+      <div className="space-y-4 p-8 max-md:p-4">
         {header}
         <p className="text-sm text-muted-foreground">{FRIENDS_SIGNED_OUT}</p>
       </div>
     )
   }
 
-  if (viewing) return <CollectionPage friend={viewing} onBackToMine={onBackToMine} />
+  // On the phone the friend list and requests come first, and a friend's binder has a way back.
+  const phone = isPhone()
+  if (viewing)
+    return (
+      <CollectionPage
+        friend={viewing}
+        onBackToMine={onBackToMine}
+        onBackToFriends={phone ? () => setViewing(null) : undefined}
+      />
+    )
 
   const data = overview.data
   return (
-    <div className="space-y-4 p-8">
+    <div className="space-y-4 p-8 max-md:p-4">
       {header}
-      <AddFriendForm />
+      {!phone && <AddFriendForm />}
       {overview.isError && (
         <div className="space-y-2">
           <p role="alert" className="text-sm text-muted-foreground">
@@ -123,7 +136,7 @@ export function FriendsPage({ onBackToMine }: { onBackToMine: () => void }): Rea
           <h2 className="text-sm font-semibold">Requests</h2>
           <ul className="space-y-2">
             {data.incoming.map((r) => (
-              <li key={r.id} className="flex items-center gap-3">
+              <li key={r.id} className="flex items-center gap-3 max-md:flex-wrap">
                 <Avatar user={r} />
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm font-medium">{r.displayName ?? r.username}</div>
@@ -164,7 +177,7 @@ export function FriendsPage({ onBackToMine }: { onBackToMine: () => void }): Rea
         ) : (
           <ul className="space-y-2">
             {data.friends.map((f) => (
-              <li key={f.id} className="flex items-center gap-3">
+              <li key={f.id} className="flex items-center gap-3 max-md:flex-wrap">
                 <button
                   type="button"
                   onClick={() => setViewing(f)}
@@ -178,11 +191,17 @@ export function FriendsPage({ onBackToMine }: { onBackToMine: () => void }): Rea
                     <span className="block truncate text-xs text-muted-foreground">
                       @{f.username}
                     </span>
+                    {phone && (
+                      <span className="block truncate text-xs text-muted-foreground">
+                        {friendStats(f)}
+                      </span>
+                    )}
                   </span>
-                  <span className="ml-auto whitespace-nowrap text-xs text-muted-foreground">
-                    {f.cardCount} {f.cardCount === 1 ? 'card' : 'cards'} · Updated{' '}
-                    {formatRelative(f.updatedAt)}
-                  </span>
+                  {!phone && (
+                    <span className="ml-auto whitespace-nowrap text-xs text-muted-foreground">
+                      {friendStats(f)}
+                    </span>
+                  )}
                 </button>
                 {isConfirming(f.id, 'unfriend') ? (
                   confirmButtons(f, () => api.friends.remove(f.id))
@@ -204,6 +223,7 @@ export function FriendsPage({ onBackToMine }: { onBackToMine: () => void }): Rea
             ))}
           </ul>
         ))}
+      {phone && <AddFriendForm />}
       {data && data.blocked.length > 0 && (
         <section aria-label="Blocked" className="space-y-2">
           <h2 className="text-sm font-semibold">Blocked</h2>

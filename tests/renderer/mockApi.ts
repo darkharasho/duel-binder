@@ -130,6 +130,7 @@ export function createMockApi(overrides: DeepPartial<Api> = {}): Api {
       signOut: vi.fn(async () => ({ ...signedOut })),
       syncNow: vi.fn(async () => ({ ...signedOut })),
       unsynced: vi.fn(async () => []),
+      deleteAccount: vi.fn(async () => undefined),
       onChange: vi.fn(() => () => {})
     }
   }

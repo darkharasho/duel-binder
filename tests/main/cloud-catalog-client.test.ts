@@ -38,6 +38,21 @@ describe('catalog feed client calls', () => {
     expect(urls[1]).toBe(`${PORTAL}/api/catalog/changes?since=${page.cursor}`)
   })
 
+  it('sends tables as a comma list and reads latest', async () => {
+    const urls: string[] = []
+    const spy = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      urls.push(String(input))
+      return portal.fetch(input, init)
+    }) as unknown as typeof fetch
+    const client = createCloudClient({ baseUrl: PORTAL, token, fetch: spy })
+    const page = await client.catalogChanges(0, undefined, ['cards'])
+    expect(urls[0]).toBe(`${PORTAL}/api/catalog/changes?since=0&tables=cards`)
+    expect(page.changes.every((c) => c.table === 'cards')).toBe(true)
+    expect(page.latest).toBeGreaterThanOrEqual(page.cursor)
+    await client.catalogChanges(0, 5, ['cards', 'sets'])
+    expect(urls[1]).toBe(`${PORTAL}/api/catalog/changes?since=0&limit=5&tables=cards,sets`)
+  })
+
   it('contribute([]) resolves to an empty result list', async () => {
     const client = createCloudClient({ baseUrl: PORTAL, token, fetch: portal.fetch })
     expect(await client.contribute([])).toEqual([])

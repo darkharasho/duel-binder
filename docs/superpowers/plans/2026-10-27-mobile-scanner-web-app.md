@@ -45,6 +45,7 @@ The main thread installs a phone `window.api`, backed by the worker plus a brows
   - With fingerprints (0.5 MB) and the English OCR model (2.9 MB), the first-run data download is **about 14 MB**. The app code comes on top of that.
   - Stored on the phone it takes about 150 MB.
   - The first-run screen says "About 15 MB".
+  - Ruling after the final review: with the app's own files (about 9 MB on the wire) the first visit downloads about 20 MB, so both first-run strings say "about 20 MB" ("About 20 MB. Use Wi-Fi if you can." / "You're on mobile data. This download is about 20 MB."). The same review moved the build base to `/scan/` (files still built into `site/app/scan/`, served at `/scan/<file>`), so the app's Web Workers are inside the service worker's scope.
 - Copy rules: plain words, no jargon. These exact strings are used:
   - Sign-in: "Sign in with Discord to scan cards into your collection."
   - First run: "Downloading card data" + "About 15 MB. Use Wi-Fi if you can." On a cellular connection (`navigator.connection.type === 'cellular'`, where the browser exposes it) it says instead: "You're on mobile data. This download is about 15 MB."

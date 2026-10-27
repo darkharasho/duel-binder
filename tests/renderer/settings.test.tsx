@@ -200,3 +200,58 @@ describe('SettingsPage', () => {
     expect(api.images.clearCache).toHaveBeenCalled()
   })
 })
+
+describe('web account deletion', () => {
+  const seto = { id: 1, username: 'seto', displayName: 'Seto', avatarUrl: null }
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('delete asks first, then calls deleteAccount', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(seto), { status: 200 })))
+    const user = userEvent.setup()
+    const api = createMockApi({ window: { platform: 'web' } })
+    renderWithProviders(<SettingsPage />, { api })
+    await screen.findByText('Signed in as Seto')
+    await user.click(screen.getByRole('button', { name: 'Delete account' }))
+    const dialog = await screen.findByRole('dialog')
+    expect(
+      within(dialog).getByText(
+        'Delete your Duel Binder account? This removes your synced collection, friends and sign-ins on every device. Desktop apps keep their own copy and are signed out.'
+      )
+    ).toBeInTheDocument()
+    expect(api.account.deleteAccount).not.toHaveBeenCalled()
+
+    await user.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(api.account.deleteAccount).not.toHaveBeenCalled()
+
+    await user.click(screen.getByRole('button', { name: 'Delete account' }))
+    const again = await screen.findByRole('dialog')
+    await user.click(within(again).getByRole('button', { name: 'Delete account' }))
+    expect(api.account.deleteAccount).toHaveBeenCalledTimes(1)
+  })
+
+  it('shows why a delete failed and keeps the dialog open', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(JSON.stringify(seto), { status: 200 })))
+    const user = userEvent.setup()
+    const api = createMockApi({
+      window: { platform: 'web' },
+      account: { deleteAccount: vi.fn(async () => Promise.reject(new Error("Couldn't delete your account"))) }
+    })
+    renderWithProviders(<SettingsPage />, { api })
+    await screen.findByText('Signed in as Seto')
+    await user.click(screen.getByRole('button', { name: 'Delete account' }))
+    const dialog = await screen.findByRole('dialog')
+    await user.click(within(dialog).getByRole('button', { name: 'Delete account' }))
+    expect(await within(dialog).findByText("Couldn't delete your account")).toBeInTheDocument()
+  })
+
+  it('the desktop account section has no delete button', async () => {
+    const api = createMockApi({ window: { platform: 'linux' } })
+    renderWithProviders(<SettingsPage />, { api })
+    await screen.findByRole('button', { name: 'Sign in with Discord' })
+    expect(screen.queryByRole('button', { name: 'Delete account' })).not.toBeInTheDocument()
+  })
+})

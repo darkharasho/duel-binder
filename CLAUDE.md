@@ -11,11 +11,11 @@
 - Modern, clean, easy-to-use UI
 - Work offline with local data storage
 - Web portal, sync and friends' binders via the `workers/portal` Cloudflare Worker (marketing site at duelbinder.com, app at app.duelbinder.com)
+- Phone scanner at app.duelbinder.com/scan/ (home-screen web app; store apps later)
 
 ## Out of scope
 
 - Trading or marketplace features
-- Mobile version
 
 ## Suggested stack
 

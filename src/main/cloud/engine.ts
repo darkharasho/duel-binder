@@ -1,4 +1,4 @@
-import type Database from 'better-sqlite3'
+import type { SqlDb } from '../db/sql'
 import { setMeta } from '../db/meta'
 import { recordSnapshot } from '../repo/stats'
 import { MAX_CONTRIBUTE, type ContributeResult } from '../../shared/catalogFeed'
@@ -49,7 +49,7 @@ const sameAs = (e: WireEntry): string => JSON.stringify(e)
  * Throws CloudAuthError / CloudOfflineError from the client.
  */
 export async function syncOnce(
-  db: Database.Database,
+  db: SqlDb,
   owner: number,
   client: CloudClient,
   now: () => Date

@@ -1,0 +1,26 @@
+{
+  "extends": "@electron-toolkit/tsconfig/tsconfig.web.json",
+  "include": [
+    "src/renderer/src/env.d.ts",
+    "src/phone/**/*",
+    "src/renderer/src/**/*",
+    "src/shared/**/*",
+    "tests/renderer/phone-*",
+    "tests/renderer/phoneFakes.ts",
+    "tests/renderer/setup.ts",
+    "tests/main/phone-*",
+    "tests/main/wasm-sql.test.ts",
+    "vite.phone.config.ts"
+  ],
+  "compilerOptions": {
+    "composite": false,
+    "jsx": "react-jsx",
+    "resolveJsonModule": true,
+    "types": ["vitest/globals", "@testing-library/jest-dom", "node"],
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["src/renderer/src/*"],
+      "@shared/*": ["src/shared/*"]
+    }
+  }
+}

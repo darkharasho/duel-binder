@@ -15,6 +15,17 @@ export type CatalogTableName =
   | 'tcgplayer_groups'
   | 'tcgplayer_products'
 
+/** The catalog tables the phone downloads; the TCGplayer tables stay off it. */
+export const PHONE_TABLES: readonly CatalogTableName[] = [
+  'cards',
+  'card_images',
+  'card_printings',
+  'sets',
+  'pack_art',
+  'set_logos',
+  'konami_logos'
+]
+
 export type CatalogChange =
   | { seq: number; table: CatalogTableName; row: Record<string, string | number | null> }
   | { seq: number; table: CatalogTableName; deleted: (string | number | null)[] }
@@ -24,6 +35,8 @@ export interface CatalogChangesResponse {
   cursor: number
   more: boolean
   dbVersion: string | null
+  /** The catalog clock's seq: the newest change on the server, whatever tables were asked for. */
+  latest: number
 }
 
 export type ContributedPrinting = {

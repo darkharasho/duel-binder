@@ -17,7 +17,11 @@ interface Props {
 export function SetsList({ sets, mode, view, onOpen }: Props): React.JSX.Element {
   if (view === 'grid') {
     return (
-      <ul className="grid grid-cols-[repeat(auto-fill,minmax(170px,1fr))] gap-x-5 gap-y-7">
+      <ul
+        aria-label="Sets"
+        data-view="grid"
+        className="grid grid-cols-[repeat(auto-fill,minmax(170px,1fr))] gap-x-5 gap-y-7"
+      >
         {sets.map((s) => {
           const p = progressFor(s, mode)
           const started = p.owned > 0
@@ -71,7 +75,11 @@ export function SetsList({ sets, mode, view, onOpen }: Props): React.JSX.Element
     )
   }
   return (
-    <ul className="divide-y divide-white/[0.06] border-b border-white/[0.06]">
+    <ul
+      aria-label="Sets"
+      data-view="list"
+      className="divide-y divide-white/[0.06] border-b border-white/[0.06]"
+    >
       {sets.map((s) => {
         const p = progressFor(s, mode)
         const started = p.owned > 0
@@ -82,7 +90,7 @@ export function SetsList({ sets, mode, view, onOpen }: Props): React.JSX.Element
               data-started={started}
               onClick={() => onOpen(s.setName, s.language)}
               className={cn(
-                'flex w-full items-center gap-4 px-1 py-2.5 text-left transition-colors hover:bg-white/[0.03] focus-visible:outline-2 focus-visible:outline-ring',
+                'flex w-full items-center gap-4 px-1 py-2.5 text-left max-md:gap-3 transition-colors hover:bg-white/[0.03] focus-visible:outline-2 focus-visible:outline-ring',
                 !started && 'text-muted-foreground'
               )}
             >
@@ -107,14 +115,14 @@ export function SetsList({ sets, mode, view, onOpen }: Props): React.JSX.Element
                   {s.tcgDate && ` · ${formatMonthYear(s.tcgDate)}`}
                 </div>
               </div>
-              <div className="w-32 shrink-0">
+              <div className="w-32 shrink-0 max-md:w-14">
                 {started ? (
                   <SetProgress progress={p} className="h-[3px]" />
                 ) : (
                   <span className="text-xs">Not started</span>
                 )}
               </div>
-              <span className="w-24 shrink-0 text-right font-mono text-[13px]">
+              <span className="w-24 shrink-0 text-right font-mono text-[13px] max-md:w-auto max-md:text-xs">
                 {started ? `${p.owned} / ${p.total}` : `— / ${p.total}`}
                 {p.complete && (
                   <span aria-label="Complete" className="ml-1 text-complete">

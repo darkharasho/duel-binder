@@ -6,6 +6,7 @@ import {
   Dialog,
   DialogContent,
   DialogDescription,
+  DialogFooter,
   DialogHeader,
   DialogTitle
 } from '@/components/ui/dialog'
@@ -162,6 +163,56 @@ function DesktopAccount(): React.JSX.Element {
   )
 }
 
+const DELETE_WARNING =
+  'Delete your Duel Binder account? This removes your synced collection, friends and sign-ins on every device. Desktop apps keep their own copy and are signed out.'
+
+/** Web only: asks first, then deletes the portal account (the page then leaves for the front page). */
+function DeleteAccount(): React.JSX.Element {
+  const [open, setOpen] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const onOpenChange = (next: boolean): void => {
+    if (busy) return
+    setOpen(next)
+    setError(null)
+  }
+  const confirm = async (): Promise<void> => {
+    setBusy(true)
+    setError(null)
+    try {
+      // On success the page leaves, so the buttons stay disabled until it does.
+      await api.account.deleteAccount()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Couldn't delete your account")
+      setBusy(false)
+    }
+  }
+  return (
+    <>
+      <Button variant="destructive" size="sm" onClick={() => onOpenChange(true)}>
+        Delete account
+      </Button>
+      <Dialog open={open} onOpenChange={onOpenChange}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete account</DialogTitle>
+            <DialogDescription>{DELETE_WARNING}</DialogDescription>
+          </DialogHeader>
+          {error && <p className="text-sm text-destructive">{error}</p>}
+          <DialogFooter>
+            <Button variant="outline" disabled={busy} onClick={() => onOpenChange(false)}>
+              Cancel
+            </Button>
+            <Button variant="destructive" disabled={busy} onClick={() => void confirm()}>
+              Delete account
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  )
+}
+
 function WebAccount(): React.JSX.Element {
   const me = useQuery({ queryKey: ['me'], queryFn: () => fetchMe() })
 
@@ -180,11 +231,14 @@ function WebAccount(): React.JSX.Element {
   return (
     <div className="flex items-center justify-between gap-4 text-sm">
       <Identity user={me.data} />
-      <form method="post" action="/auth/logout">
-        <Button type="submit" variant="outline" size="sm">
-          Sign out
-        </Button>
-      </form>
+      <div className="flex items-center gap-2">
+        <form method="post" action="/auth/logout">
+          <Button type="submit" variant="outline" size="sm">
+            Sign out
+          </Button>
+        </form>
+        <DeleteAccount />
+      </div>
     </div>
   )
 }

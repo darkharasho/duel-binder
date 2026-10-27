@@ -170,7 +170,10 @@ export function createHandlers({
     'account:signIn': async () => account.signIn(),
     'account:signOut': async () => account.signOut(),
     'account:syncNow': async () => account.syncNow(),
-    'account:unsynced': async () => listSyncIssues(db, activeOwner(db))
+    'account:unsynced': async () => listSyncIssues(db, activeOwner(db)),
+    'account:deleteAccount': async () => {
+      throw new Error('Delete your account from app.duelbinder.com')
+    }
   }
 }
 

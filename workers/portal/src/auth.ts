@@ -389,6 +389,17 @@ export async function exchangeDesktopCode(req: Request, deps: AppDeps): Promise<
   return jsonResponse(200, { token, user: loadMe(deps, userId) })
 }
 
+/**
+ * True when the request's Origin is exactly PUBLIC_URL's. A cookie-authenticated request that
+ * changes something must pass this, so a cross-site page can't make it with the visitor's cookie.
+ */
+export function fromPublicOrigin(req: Request, deps: AppDeps): boolean {
+  return req.headers.get('origin') === new URL(deps.env.PUBLIC_URL).origin
+}
+
+/** The Set-Cookie value that removes the web `session` cookie. */
+export const clearSessionCookie = (): string => clearCookie('session')
+
 /** True when the request's media type is exactly application/json (parameters such as charset allowed). */
 function isJson(req: Request): boolean {
   const type = req.headers.get('content-type')
@@ -401,8 +412,7 @@ function isJson(req: Request): boolean {
  * The Origin must be PUBLIC_URL's exactly and the body JSON, so a cross-site page can't mint one.
  */
 export async function exchangePhoneToken(req: Request, deps: AppDeps): Promise<Response> {
-  if (req.headers.get('origin') !== new URL(deps.env.PUBLIC_URL).origin)
-    return jsonResponse(403, { error: 'bad-origin' })
+  if (!fromPublicOrigin(req, deps)) return jsonResponse(403, { error: 'bad-origin' })
   if (!isJson(req)) return jsonResponse(415, { error: 'bad-content-type' })
   const session = await findSession(req, deps)
   if (!session || session.kind !== 'web') return jsonResponse(401, { error: 'signed-out' })

@@ -169,6 +169,13 @@ describe('createHandlers', () => {
     }
   })
 
+  it('account:deleteAccount rejects', async () => {
+    const { handlers } = await makeHandlers({ signedIn: true })
+    await expect(handlers['account:deleteAccount']()).rejects.toThrow(
+      new Error('Delete your account from app.duelbinder.com')
+    )
+  })
+
   it('sync:status reports the catalog and sync:run refreshes it through the account', async () => {
     const { handlers, account, catalog } = await makeHandlers()
     await expect(handlers['sync:status']()).resolves.toEqual(CATALOG_STATUS)

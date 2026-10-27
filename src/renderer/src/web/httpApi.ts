@@ -35,6 +35,27 @@ export function createHttpApi(opts: HttpApiOptions = {}): Api {
   const doFetch = opts.fetch ?? ((...a: Parameters<typeof fetch>) => fetch(...a))
   const onSignedOut = opts.onSignedOut ?? ((): void => location.assign('/'))
 
+  /** POST /api/account/delete with the session cookie; on success the visitor is signed out and leaves. */
+  const deleteAccount = async (): Promise<void> => {
+    let res: Response
+    try {
+      res = await doFetch('/api/account/delete', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ confirm: 'delete' }),
+        credentials: 'same-origin'
+      })
+    } catch {
+      throw new Error(OFFLINE_MESSAGE)
+    }
+    if (res.status === 401) {
+      onSignedOut()
+      throw new Error('Signed out')
+    }
+    if (!res.ok) throw new Error("Couldn't delete your account")
+    onSignedOut()
+  }
+
   const call =
     (channel: PortalChannel) =>
     async (...args: unknown[]): Promise<never> => {
@@ -145,6 +166,7 @@ export function createHttpApi(opts: HttpApiOptions = {}): Api {
       signOut: unavailable,
       syncNow: unavailable,
       unsynced: unavailable,
+      deleteAccount,
       onChange: noUnsubscribe
     }
   }

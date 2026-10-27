@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { detectOs } from '../../workers/portal/src/site/os'
 import { formatSize, renderPage } from '../../workers/portal/src/site/page'
+import { renderPrivacy } from '../../workers/portal/src/site/privacy'
 import { pickDownloads, RELEASES_FALLBACK } from '../../workers/portal/src/site/releases'
 import { releaseV021 } from './fixtures/release'
 
@@ -114,5 +115,31 @@ describe('renderPage', () => {
     expect(imgs[0]).toContain('/shots/collection.webp')
     expect(imgs[0]).not.toContain('loading="lazy"')
     for (const img of imgs.slice(1)) expect(img).toContain('loading="lazy"')
+  })
+})
+
+describe('renderPrivacy', () => {
+  it('privacy page renders and links home', () => {
+    const html = renderPrivacy({ appUrl })
+    expect(html).toContain('<meta charset="utf-8">')
+    expect(html).toContain('<link rel="stylesheet" href="/site.css">')
+    expect(html).toContain('<a class="brand" href="/">')
+    expect(html).toContain('<h1>Privacy</h1>')
+    for (const text of [
+      'Discord id, username, display name and avatar',
+      'your collection, notes and value history',
+      'friends and blocks',
+      'sign-in sessions',
+      'to sync and show your binder',
+      'Nothing is sold or used for ads.',
+      'There are no third-party trackers.',
+      'Card images are fetched through the portal',
+      'Settings → Delete account',
+      'https://github.com/darkharasho/duel-binder/issues'
+    ]) {
+      expect(html).toContain(text)
+    }
+    expect(html).toContain('<link rel="canonical" href="https://duelbinder.com/privacy">')
+    expect(html).not.toMatch(/<script/i)
   })
 })

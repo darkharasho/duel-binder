@@ -110,6 +110,10 @@ describe('parseImageUrl', () => {
     expect(parseImageUrl('ygo-img://full/1')).toEqual({ size: 'full', id: 1 })
     expect(parseImageUrl('ygo-img://cropped/5')).toEqual({ size: 'cropped', id: 5 })
   })
+  it('ignores a query, e.g. ?now', () => {
+    expect(parseImageUrl('ygo-img://full/7?now')).toEqual({ size: 'full', id: 7 })
+    expect(parseSetImageUrl('ygo-img://set/abc?now')).toBe('abc')
+  })
   it('rejects malformed urls', () => {
     for (const u of ['ygo-img://huge/1', 'ygo-img://small/abc', 'ygo-img://small/0', 'ygo-img://small/-5', 'ygo-img://small/1.5', 'ygo-img://small/', 'ygo-img://small/1/2', 'ygo-img://small/1e3', 'nonsense'])
       expect(parseImageUrl(u), u).toBeNull()
@@ -132,6 +136,26 @@ describe('limiter', () => {
       ),
     )
     expect(max).toBe(4)
+  })
+
+  it('a priority job jumps the queue, and promote moves a queued one to the front', async () => {
+    const limit = createLimiter({ concurrency: 1, minIntervalMs: 0 })
+    const order: string[] = []
+    const job = (name: string) => async () => {
+      order.push(name)
+      await new Promise((r) => setTimeout(r, 1))
+    }
+    const all = Promise.all([
+      limit(job('a')),
+      limit(job('b')),
+      limit(job('c'), { key: 'c' }),
+      limit(job('d'), { priority: true })
+    ])
+    expect(limit.promote('c')).toBe(true)
+    expect(limit.promote('nope')).toBe(false)
+    await all
+    // a was already running; then the promoted c, the priority d, then b.
+    expect(order).toEqual(['a', 'c', 'd', 'b'])
   })
 
   it('spaces starts', async () => {
@@ -170,6 +194,31 @@ describe('set image keys', () => {
     expect(parseSetImageUrl('ygo-img://set/MRD/')).toBe('MRD')
     expect(parseSetImageUrl('ygo-img://set/..%2Fx')).toBeNull()
     expect(parseImageUrl('ygo-img://set/1')).toBeNull()
+  })
+})
+
+describe('image cache priority', () => {
+  it('a priority get downloads ahead of what is already queued, even if it was queued itself', async () => {
+    const started: string[] = []
+    const fetchFn = vi.fn(async (url: string) => {
+      started.push(url.match(/(\d+)\.jpg/)![1])
+      await new Promise((r) => setTimeout(r, 2))
+      return okResponse()
+    })
+    const cache = createImageCache({
+      sources: direct(),
+      dir,
+      fetchFn: fetchFn as unknown as typeof fetch,
+      limit: createLimiter({ concurrency: 1, minIntervalMs: 0 })
+    })
+    const gets = [1, 2, 3, 4].map((id) => cache.get('full', id))
+    await new Promise((r) => setTimeout(r, 0))
+    // 4 was queued without priority; asking again with priority moves it up. 5 is new.
+    gets.push(cache.get('full', 4, { priority: true }), cache.get('full', 5, { priority: true }))
+    await Promise.all(gets)
+    expect(started[0]).toBe('1')
+    expect(started.slice(1, 3).sort()).toEqual(['4', '5'])
+    expect(fetchFn).toHaveBeenCalledTimes(5)
   })
 })
 

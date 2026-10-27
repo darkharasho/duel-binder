@@ -12,6 +12,7 @@ import { CardInfo, RarityBadge } from './CardInfo'
 import { HoloCard } from './HoloCard'
 import { STAGE, prefersReducedMotion } from './stage'
 import { initialOpener, openerReducer } from './opener'
+import { loadArt } from './loadArt'
 
 /** How long a hit holds the front before the next move is taken, so a fast Space can't skip it. */
 const HOLD_MS: Record<RevealTier, number> = { none: 0, rare: 300, big: 800, huge: 1500 }
@@ -27,6 +28,10 @@ const INFO_OUT_MS = 200
 const SKIP_STEP_MS = 330
 /** How far a drag must go to send the front card on. */
 const SWIPE_PX = 60
+/** The pack stays shut until this many of its first cards' art is in, so none comes up blank. */
+const READY_CARDS = 3
+/** But no longer than this: offline, or a slow server, mustn't keep it shut. */
+const READY_WAIT_MS = 8000
 /** Cards visible behind the front one, as edges. */
 const EDGES = 4
 
@@ -143,7 +148,8 @@ function PackFace({
   const [failed, setFailed] = useState({ cover: false, logo: false })
   const cover =
     art?.coverImageId != null && !failed.cover ? cardImageSrc('cropped', art.coverImageId) : null
-  const logo = art?.logoImageKey && !failed.logo ? setImageSrc(art.logoImageKey) : null
+  const logo =
+    art?.logoImageKey && !failed.logo ? setImageSrc(art.logoImageKey, { now: true }) : null
   if (packSrc) {
     // The pack is the photo: no foil or crimps of ours, and the sheen only where the pack is.
     const mask = `url("${packSrc}")`
@@ -259,7 +265,8 @@ function SealedPack({
   pending: boolean
 }): React.JSX.Element {
   const [packFailed, setPackFailed] = useState(false)
-  const packSrc = art?.packImageKey && !packFailed ? setImageSrc(art.packImageKey) : null
+  const packSrc =
+    art?.packImageKey && !packFailed ? setImageSrc(art.packImageKey, { now: true }) : null
   const fail = (): void => setPackFailed(true)
   const face = <PackFace setName={setName} art={art} packSrc={packSrc} onPackError={fail} />
   const clips = packSrc ? CLIPS.photo : CLIPS.wrapper
@@ -472,10 +479,13 @@ export function PackOpener({
           // list: a pack never changes it, and refetching it blocks main for about a second.
           void queryClient.invalidateQueries({ queryKey: [...queryKeys.ripHistory] })
           void queryClient.invalidateQueries({ queryKey: ['rip', 'session'] })
-          // Warm the art so each card is sharp the moment it comes to the front.
-          for (const c of cards) {
-            if (c.imageId != null) new Image().src = cardImageSrc('full', c.imageId)
-          }
+          // The art, ahead of any other downloads: the first few before the pack opens, the rest
+          // while they come up.
+          const art = cards.flatMap((c) =>
+            c.imageId != null ? [cardImageSrc('full', c.imageId, { now: true })] : []
+          )
+          const ready = loadArt(art.slice(0, READY_CARDS), READY_WAIT_MS)
+          void loadArt(art.slice(READY_CARDS), READY_WAIT_MS)
           // And the details, so the info panel is full the moment a card comes to the front.
           for (const id of new Set(cards.map((c) => c.cardId))) {
             void queryClient.prefetchQuery({
@@ -483,7 +493,9 @@ export function PackOpener({
               queryFn: () => api.cards.get(id)
             })
           }
-          if (alive.current) dispatch({ type: 'packLoaded', cards })
+          void ready.then(() => {
+            if (alive.current) dispatch({ type: 'packLoaded', cards })
+          })
         },
         () => {
           if (!alive.current) return
@@ -828,23 +840,25 @@ export function PackOpener({
                         )}
                       >
                         <div
-                          style={{
-                            boxShadow:
-                              isFront && tier !== 'none'
-                                ? `0 0 ${GLOW_PX[tier]}px ${hitColor}, 0 26px 50px rgb(0 0 0 / 0.65)`
-                                : isFront
-                                  ? '0 26px 50px rgb(0 0 0 / 0.65)'
-                                  : '0 6px 14px rgb(0 0 0 / 0.4)'
-                          }}
                           className={cn(
-                            'rounded-[6px] transition-shadow duration-500 motion-reduce:transition-none',
                             isFront &&
                               (tier === 'big' || tier === 'huge') &&
                               'animate-[rip-shake_350ms_ease-in-out_250ms_2] motion-reduce:animate-none'
                           )}
                         >
                           {/* No sheen on the edges, so a Starlight at the back can't give itself away. */}
-                          <HoloCard card={c} size="full" holo={isFront} />
+                          <HoloCard
+                            card={c}
+                            size="full"
+                            holo={isFront}
+                            shadow={
+                              isFront && tier !== 'none'
+                                ? `0 0 ${GLOW_PX[tier]}px ${hitColor}, 0 26px 50px rgb(0 0 0 / 0.65)`
+                                : isFront
+                                  ? '0 26px 50px rgb(0 0 0 / 0.65)'
+                                  : '0 6px 14px rgb(0 0 0 / 0.4)'
+                            }
+                          />
                         </div>
                       </div>
                     )

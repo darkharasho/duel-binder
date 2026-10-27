@@ -7,6 +7,11 @@ import type { RipCard } from '../../src/shared/rip/types'
 import type { CardDetail, CardRow } from '../../src/shared/types'
 import { createMockApi, renderWithProviders } from './mockApi'
 
+// jsdom never loads images: the art is "in" at once.
+import { loadArt } from '@/features/rip/loadArt'
+
+vi.mock('@/features/rip/loadArt', () => ({ loadArt: vi.fn(async () => undefined) }))
+
 const card = (rarity: string, slot: number, name = `Card ${slot}`): RipCard => ({
   pkey: `k${slot}`,
   cardId: slot,
@@ -169,30 +174,37 @@ describe('PackOpener', () => {
     vi.useRealTimers()
   })
 
-  it('after a pack refreshes History and sessions, not the sets list, and preloads the art', async () => {
+  it('after a pack refreshes History and sessions, not the sets list, and loads the art first', async () => {
+    vi.mocked(loadArt).mockClear()
     const spy = vi.spyOn(QueryClient.prototype, 'invalidateQueries')
-    const srcs: string[] = []
-    const RealImage = window.Image
-    vi.stubGlobal(
-      'Image',
-      class {
-        set src(v: string) {
-          srcs.push(v)
-        }
-      }
-    )
-    try {
-      renderOpener(async () => commons())
-      await loadedPack()
-      const keys = spy.mock.calls.map(([f]) => f?.queryKey)
-      expect(keys).toEqual([
-        ['rip', 'history'],
-        ['rip', 'session']
-      ])
-      expect(srcs).toEqual(['ygo-img://full/0', 'ygo-img://full/1', 'ygo-img://full/2'])
-    } finally {
-      vi.stubGlobal('Image', RealImage)
-    }
+    renderOpener(async () => nine())
+    await loadedPack()
+    const keys = spy.mock.calls.map(([f]) => f?.queryKey)
+    expect(keys).toEqual([
+      ['rip', 'history'],
+      ['rip', 'session']
+    ])
+    // Ahead of other downloads (?now): the first three before the pack opens, then the rest.
+    const calls = vi.mocked(loadArt).mock.calls
+    expect(calls[0][0]).toEqual([
+      'ygo-img://full/0?now',
+      'ygo-img://full/1?now',
+      'ygo-img://full/2?now'
+    ])
+    expect(calls[1][0]).toHaveLength(6)
+  })
+
+  it("the pack stays shut until its first cards' art is in", async () => {
+    const art = deferred<undefined>()
+    vi.mocked(loadArt).mockImplementationOnce(() => art.promise)
+    renderOpener(async () => commons())
+    await act(async () => {})
+    // Torn early: the tear plays, and the cards wait for their art.
+    space()
+    expect(skipButton()).toBeDisabled()
+    expect(screen.queryByTestId('rip-front')).not.toBeInTheDocument()
+    await act(async () => art.resolve(undefined))
+    await waitFor(() => expect(screen.getByTestId('rip-front')).toBeInTheDocument())
   })
 
   it('opens the first pack once under StrictMode', async () => {
@@ -474,7 +486,7 @@ describe('PackOpener', () => {
     const photos = pack.querySelectorAll('[data-testid="rip-pack-image"]')
     // Once for the body, once for the strip.
     expect(photos).toHaveLength(2)
-    for (const img of photos) expect(img).toHaveAttribute('src', 'ygo-img://set/BTB-pack.png')
+    for (const img of photos) expect(img).toHaveAttribute('src', 'ygo-img://set/BTB-pack.png?now')
     expect(within(screen.getByTestId('rip-pack-strip')).getByTestId('rip-pack-image')).toBeTruthy()
     expect(pack.querySelector('[data-testid="rip-pack-wrapper"]')).toBeNull()
     // The pack is the photo: no foil behind it, no crimps of ours, only the tear line cut.
@@ -485,7 +497,9 @@ describe('PackOpener', () => {
     expect(screen.getByTestId('rip-pack-strip').style.clipPath).toMatch(/^polygon\(0% 0%, 100% 0%/)
     // The sheen is masked to the photo, so it only crosses the pack.
     for (const sheen of pack.querySelectorAll<HTMLElement>('[data-testid="rip-pack-sheen"]')) {
-      expect(sheen.getAttribute('style')).toContain('mask-image: url("ygo-img://set/BTB-pack.png")')
+      expect(sheen.getAttribute('style')).toContain(
+        'mask-image: url("ygo-img://set/BTB-pack.png?now")'
+      )
     }
     // The box is cropped to the pack in the photo's square canvas.
     expect(screen.getByTestId('rip-pack-box').style.width).toContain('0.6')
@@ -519,7 +533,7 @@ describe('PackOpener', () => {
     expect(body.querySelector('img[src="ygo-img://cropped/12"]')).not.toBeNull()
     expect(within(body).getByTestId('rip-pack-logo')).toHaveAttribute(
       'src',
-      'ygo-img://set/PHNI-logo.png'
+      'ygo-img://set/PHNI-logo.png?now'
     )
     expect(body).toHaveTextContent('PHNI')
     // The set name only stands in when there's no logo.

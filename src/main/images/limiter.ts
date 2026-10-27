@@ -1,8 +1,21 @@
-export type Limiter = <T>(fn: () => Promise<T>) => Promise<T>
+export interface Limiter {
+  /**
+   * Queues `fn`. A priority job goes ahead of everything waiting; a `key` lets it be promoted
+   * later.
+   */
+  <T>(fn: () => Promise<T>, opts?: { priority?: boolean; key?: string }): Promise<T>
+  /** Moves the queued job with this key to the front. False if it isn't waiting (or never was). */
+  promote(key: string): boolean
+}
+
+interface Job {
+  run: () => Promise<unknown>
+  key?: string
+}
 
 /** Runs at most `concurrency` tasks at once, starting them at least `minIntervalMs` apart. */
 export function createLimiter(opts: { concurrency: number; minIntervalMs: number }): Limiter {
-  const queue: Array<() => Promise<unknown>> = []
+  const queue: Job[] = []
   let active = 0
   let lastStart = -Infinity
   let timer: ReturnType<typeof setTimeout> | null = null
@@ -21,16 +34,28 @@ export function createLimiter(opts: { concurrency: number; minIntervalMs: number
       const job = queue.shift()!
       active++
       lastStart = Date.now()
-      void job().finally(() => {
+      void job.run().finally(() => {
         active--
         pump()
       })
     }
   }
 
-  return <T>(fn: () => Promise<T>): Promise<T> =>
+  const limit = (<T>(
+    fn: () => Promise<T>,
+    { priority = false, key }: { priority?: boolean; key?: string } = {}
+  ): Promise<T> =>
     new Promise<T>((resolve, reject) => {
-      queue.push(() => Promise.resolve().then(fn).then(resolve, reject))
+      const job: Job = { run: () => Promise.resolve().then(fn).then(resolve, reject), key }
+      if (priority) queue.unshift(job)
+      else queue.push(job)
       pump()
-    })
+    })) as Limiter
+  limit.promote = (key) => {
+    const i = queue.findIndex((j) => j.key === key)
+    if (i < 0) return false
+    queue.unshift(...queue.splice(i, 1))
+    return true
+  }
+  return limit
 }

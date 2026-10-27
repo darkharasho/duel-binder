@@ -6,6 +6,9 @@ import { clampPackCount } from '@/features/rip/SetPicker'
 import type { RipCard, RipSet } from '../../src/shared/rip/types'
 import { createMockApi, renderWithProviders } from './mockApi'
 
+// jsdom never loads images: the art is "in" at once.
+vi.mock('@/features/rip/loadArt', () => ({ loadArt: vi.fn(async () => undefined) }))
+
 const ripSet = (setName: string, setCode: string): RipSet => ({
   setName,
   setCode,
@@ -207,7 +210,7 @@ describe('RipPage', () => {
       const pack = await screen.findByTestId('rip-pack')
       expect(pack.querySelector(`[data-testid="rip-pack-image"]`)).toHaveAttribute(
         'src',
-        'ygo-img://set/MRD-pack.png'
+        'ygo-img://set/MRD-pack.png?now'
       )
     })
 

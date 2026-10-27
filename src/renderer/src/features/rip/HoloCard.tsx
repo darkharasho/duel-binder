@@ -17,13 +17,21 @@ interface HoloCardProps {
   className?: string
   /** False leaves the sheen off (e.g. a card that's only an edge in the hand). Default true. */
   holo?: boolean
+  /** A box-shadow (a hit's glow) on the card itself, so it leans with the card as it tilts. */
+  shadow?: string
 }
 
 /**
  * A pulled card, tilting with a glare; Secret-family cards shine over the art, Starlight over all,
  * and the other foils get a softer sheen over the art.
  */
-export function HoloCard({ card, size, className, holo = true }: HoloCardProps): React.JSX.Element {
+export function HoloCard({
+  card,
+  size,
+  className,
+  holo = true,
+  shadow
+}: HoloCardProps): React.JSX.Element {
   const kind = holoKind(card.rarity, card.variant)
   const showHolo = holo && kind !== 'none' && card.imageId != null
   const inset: React.CSSProperties =
@@ -40,7 +48,15 @@ export function HoloCard({ card, size, className, holo = true }: HoloCardProps):
       : { top: '0px', left: '0px', right: '0px', bottom: '0px' }
 
   return (
-    <TiltCard className={className}>
+    <TiltCard
+      className={className}
+      innerStyle={shadow ? { boxShadow: shadow } : undefined}
+      innerClassName={cn(
+        shadow &&
+          (size === 'full' ? 'rounded-[6px]' : 'rounded-[3px]') +
+            ' transition-[transform,box-shadow] motion-reduce:transition-none'
+      )}
+    >
       <CardArt imageId={card.imageId ?? 0} size={size} alt={card.name} className="w-full" />
       {showHolo && (
         <div

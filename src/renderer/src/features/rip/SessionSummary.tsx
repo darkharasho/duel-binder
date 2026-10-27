@@ -144,11 +144,12 @@ function Hero({
               aria-label={`Look at ${card.name}`}
               onClick={() => onFocus(card)}
               className="block w-full cursor-zoom-in rounded-[8px]"
-              style={{
-                boxShadow: `0 0 ${tier === 'huge' ? 70 : 40}px ${color}, 0 30px 60px rgb(0 0 0 / 0.65)`
-              }}
             >
-              <HoloCard card={card} size="full" />
+              <HoloCard
+                card={card}
+                size="full"
+                shadow={`0 0 ${tier === 'huge' ? 70 : 40}px ${color}, 0 30px 60px rgb(0 0 0 / 0.65)`}
+              />
             </button>
           </div>
         </div>
@@ -269,15 +270,19 @@ function Focus({
             onClick={(e) => e.stopPropagation()}
             style={{
               height: FOCUS_H,
-              width: FOCUS_W,
-              boxShadow:
+              width: FOCUS_W
+            }}
+            className="shrink-0 duration-300 animate-in zoom-in-90 fade-in-0 motion-reduce:animate-none"
+          >
+            <HoloCard
+              card={card}
+              size="full"
+              shadow={
                 tier === 'none'
                   ? '0 30px 60px rgb(0 0 0 / 0.65)'
                   : `0 0 ${tier === 'huge' ? 60 : tier === 'big' ? 40 : 24}px ${color}, 0 30px 60px rgb(0 0 0 / 0.65)`
-            }}
-            className="shrink-0 rounded-[8px] duration-300 animate-in zoom-in-90 fade-in-0 motion-reduce:animate-none"
-          >
-            <HoloCard card={card} size="full" />
+              }
+            />
           </div>
           <div
             onClick={(e) => e.stopPropagation()}
@@ -425,15 +430,17 @@ export function SessionSummary({
                       onClick={() => setFocused(card)}
                       className="group flex h-[86px] w-[72px] cursor-zoom-in flex-col items-center gap-1"
                     >
-                      <div
-                        className="w-[44px] rounded-[3px] transition-transform duration-150 group-hover:-translate-y-1 motion-reduce:transition-none"
-                        style={{
-                          boxShadow: hit
-                            ? `0 0 12px ${color}aa, 0 4px 10px rgb(0 0 0 / 0.5)`
-                            : '0 4px 10px rgb(0 0 0 / 0.5)'
-                        }}
-                      >
-                        <HoloCard card={card} size="small" holo={false} />
+                      <div className="w-[44px] transition-transform duration-150 group-hover:-translate-y-1 motion-reduce:transition-none">
+                        <HoloCard
+                          card={card}
+                          size="small"
+                          holo={false}
+                          shadow={
+                            hit
+                              ? `0 0 12px ${color}aa, 0 4px 10px rgb(0 0 0 / 0.5)`
+                              : '0 4px 10px rgb(0 0 0 / 0.5)'
+                          }
+                        />
                       </div>
                       <span
                         className={cn(

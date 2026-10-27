@@ -18,7 +18,7 @@ export { imageUrl, setImageUrl, type ImageSize }
 
 /** Parses `ygo-img://<size>/<id>`; null for unknown sizes or ids that aren't positive integers. */
 export function parseImageUrl(url: string): { size: ImageSize; id: number } | null {
-  const m = /^ygo-img:\/\/(small|full|cropped)\/(\d+)\/?$/.exec(url)
+  const m = /^ygo-img:\/\/(small|full|cropped)\/(\d+)\/?(?:\?.*)?$/.exec(url)
   if (!m) return null
   const id = Number(m[2])
   if (!Number.isSafeInteger(id) || id <= 0) return null
@@ -45,7 +45,7 @@ export function printingImageKey(url: string | null): string | null {
 
 /** Parses `ygo-img://set/<key>`; null when the key has characters outside the allowed set. */
 export function parseSetImageUrl(url: string): string | null {
-  return /^ygo-img:\/\/set\/([A-Za-z0-9_-]+)\/?$/.exec(url)?.[1] ?? null
+  return /^ygo-img:\/\/set\/([A-Za-z0-9_-]+)\/?(?:\?.*)?$/.exec(url)?.[1] ?? null
 }
 
 /** Parses `ygo-img://printing/<id>`; null unless the id is a positive integer. */
@@ -57,8 +57,9 @@ export function parsePrintingImageUrl(url: string): number | null {
 }
 
 export interface ImageCache {
-  get(size: ImageSize, id: number): Promise<string | null>
-  getSet(key: string): Promise<string | null>
+  /** `priority` downloads it ahead of what's already queued (an image someone's waiting on). */
+  get(size: ImageSize, id: number, opts?: { priority?: boolean }): Promise<string | null>
+  getSet(key: string, opts?: { priority?: boolean }): Promise<string | null>
   /** The scan of one printing; null when it has none. */
   getPrinting(printingId: number): Promise<string | null>
   sizeBytes(): Promise<number>
@@ -159,15 +160,17 @@ export function createImageCache(opts: {
     source: ImageSource,
     finalPath: string | ((contentType: string) => string | null),
     prepare?: (file: string) => Promise<void>,
-    notFound?: () => void
+    notFound?: () => void,
+    priority = false
   ): Promise<string | null> {
     let pending = inFlight.get(key)
     if (!pending) {
-      pending = limit(() => download(source, finalPath, prepare, notFound)).finally(() =>
-        inFlight.delete(key)
-      )
+      pending = limit(() => download(source, finalPath, prepare, notFound), {
+        priority,
+        key
+      }).finally(() => inFlight.delete(key))
       inFlight.set(key, pending)
-    }
+    } else if (priority) limit.promote(key)
     return pending
   }
 
@@ -175,7 +178,8 @@ export function createImageCache(opts: {
     source: () => ImageSource | null,
     key: string,
     finalPath: string,
-    prepare?: (file: string) => Promise<void>
+    prepare?: (file: string) => Promise<void>,
+    priority = false
   ): Promise<string | null> => {
     if (await exists(finalPath)) return finalPath
     let src: ImageSource | null
@@ -184,18 +188,20 @@ export function createImageCache(opts: {
     } catch {
       return null // e.g. the database is closed or busy; never reject the protocol handler
     }
-    return src === null ? null : cached(key, src, finalPath, prepare)
+    return src === null ? null : cached(key, src, finalPath, prepare, undefined, priority)
   }
 
   return {
-    get: (size, id) =>
+    get: (size, id, { priority = false } = {}) =>
       fromSource(
         () => opts.sources.card(size, id),
         `${size}/${id}`,
-        path.join(opts.dir, size, `${id}.jpg`)
+        path.join(opts.dir, size, `${id}.jpg`),
+        undefined,
+        priority
       ),
 
-    async getSet(key) {
+    async getSet(key, { priority = false } = {}) {
       if (!SET_KEY_RE.test(key)) return null
       if (key.startsWith('km-')) {
         if (!opts.prepareLogo) return null // shown only once its white is cut out
@@ -203,13 +209,16 @@ export function createImageCache(opts: {
           () => opts.sources.konami(key),
           `set/${key}`,
           path.join(opts.dir, 'sets', `${key}.png`),
-          opts.prepareLogo
+          opts.prepareLogo,
+          priority
         )
       }
       return fromSource(
         () => opts.sources.set(key),
         `set/${key}`,
-        path.join(opts.dir, 'sets', `${key}.jpg`)
+        path.join(opts.dir, 'sets', `${key}.jpg`),
+        undefined,
+        priority
       )
     },
 

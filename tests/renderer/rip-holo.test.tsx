@@ -56,6 +56,15 @@ describe('HoloCard', () => {
     }
   })
 
+  it('a glow goes on the part that tilts, so it leans with the card', () => {
+    const { container } = render(
+      <HoloCard card={card({ rarity: 'Super Rare' })} size="full" shadow="0 0 40px red" />
+    )
+    const tilting = container.querySelector<HTMLElement>('.group\\/tilt')!
+    expect(tilting.style.boxShadow).toBe('0 0 40px red')
+    expect((container.firstChild as HTMLElement).style.boxShadow).toBe('')
+  })
+
   it('a plain Rare gets no holo', () => {
     const { container } = render(<HoloCard card={card({ rarity: 'Rare' })} size="small" />)
     expect(holo(container)).toBeNull()

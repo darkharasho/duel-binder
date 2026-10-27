@@ -9,6 +9,9 @@ interface TiltCardProps {
   maxTilt?: number
   /** Rounds the glare to match the card's corners. */
   glareClassName?: string
+  /** On the part that tilts, e.g. a glow that should lean with the card. */
+  innerStyle?: React.CSSProperties
+  innerClassName?: string
 }
 
 /** Tilts its contents toward the mouse like a card held in the hand, with a glare that follows. */
@@ -16,7 +19,9 @@ export function TiltCard({
   children,
   className,
   maxTilt = 14,
-  glareClassName
+  glareClassName,
+  innerStyle,
+  innerClassName
 }: TiltCardProps): React.JSX.Element {
   const inner = useRef<HTMLDivElement>(null)
   const frame = useRef(0)
@@ -56,11 +61,13 @@ export function TiltCard({
     >
       <div
         ref={inner}
+        style={innerStyle}
         className={cn(
           'group/tilt relative transition-transform duration-500 ease-out',
           '[transform:rotateX(var(--tilt-x,0deg))_rotateY(var(--tilt-y,0deg))]',
           'data-[tilting]:duration-100 data-[tilting]:[transform:rotateX(var(--tilt-x,0deg))_rotateY(var(--tilt-y,0deg))_scale(1.05)]',
-          'motion-reduce:transform-none'
+          'motion-reduce:transform-none',
+          innerClassName
         )}
       >
         {children}

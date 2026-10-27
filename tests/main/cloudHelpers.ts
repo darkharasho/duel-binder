@@ -18,13 +18,16 @@ export async function inProcessPortal(): Promise<{
   desktopToken(userId: number): Promise<string>
   addUser(name: string): number
   priceQueue: { soon: Mock<() => Promise<void>> }
+  /** The portal's R2 stand-in (images, scan files). */
+  images: ReturnType<typeof memoryBucket>
 }> {
   const serverDb = await seededServerDb()
   const priceQueue = { soon: vi.fn<() => Promise<void>>(async () => {}) }
+  const images = memoryBucket()
   const deps: AppDeps = {
     db: serverDb,
     assets: { fetch: async () => new Response('nope', { status: 404 }) },
-    images: memoryBucket(),
+    images,
     printingArt: noPrintingArt,
     prices: priceQueue,
     env: {
@@ -66,6 +69,7 @@ export async function inProcessPortal(): Promise<{
       return token
     },
     addUser: (name) => addUser(serverDb, `discord-${++users}-${name}`, name),
-    priceQueue
+    priceQueue,
+    images
   }
 }

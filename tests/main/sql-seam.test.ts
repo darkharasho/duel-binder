@@ -13,7 +13,8 @@ const files = [
   ...['client', 'refresh', 'candidates'].map((f) => join(root, 'main/prices', `${f}.ts`)),
   ...['apply', 'upsert'].map((f) => join(root, 'main/catalog', `${f}.ts`)),
   ...['engine', 'client', 'localSync'].map((f) => join(root, 'main/cloud', `${f}.ts`)),
-  join(root, 'main/ipc/dataHandlers.ts')
+  join(root, 'main/ipc/dataHandlers.ts'),
+  join(root, 'phone/data/store.ts')
 ]
 
 describe('SqlDb seam', () => {

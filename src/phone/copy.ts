@@ -27,6 +27,8 @@ export function cardDataAge(lastSyncAt: string | null): string | null {
   return `Card data from ${d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`
 }
 
+export const SIGN_OUT_FAILED = "Couldn't sign out. Close the app, open it again and try again."
+
 /** The sign-out warning when adds haven't synced yet. */
 export function signOutWarning(waiting: number, name: string): string {
   return waiting === 1

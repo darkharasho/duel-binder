@@ -11,6 +11,7 @@ import type { PhoneStore } from './data/store'
 import { FirstRun } from './FirstRun'
 import { PhoneScreen } from './PhoneScreen'
 import { PhoneShell } from './PhoneShell'
+import { claimSavedScans } from './savedScans'
 import { SignIn } from './SignIn'
 
 type View =
@@ -62,6 +63,7 @@ export function App({
   const enter = useCallback(
     async (user: Me): Promise<void> => {
       const catalog = await store.catalog()
+      claimSavedScans(user.id)
       show(catalog.filled ? { kind: 'ready', user } : { kind: 'first-run', user })
     },
     [store, show]

@@ -11,8 +11,9 @@ import {
 } from '@/components/ui/dialog'
 import { DeleteAccount } from '@/features/settings/AccountSection'
 import { api } from '@/lib/api'
-import { PRIVACY_URL, cardDataAge, signOutWarning } from './copy'
+import { PRIVACY_URL, SIGN_OUT_FAILED, cardDataAge, signOutWarning } from './copy'
 import { CATALOG_KEY, SYNC_STATE_KEY, displayName, usePhone } from './context'
+import { forgetSavedScans } from './savedScans'
 import { SyncProblems } from './SyncProblems'
 
 /** Ends the web session too, so the cookie doesn't sign the phone straight back in. */
@@ -26,6 +27,11 @@ async function webLogout(): Promise<void> {
   } catch {
     // Offline: the cookie stays until it expires; the phone's own token is gone either way.
   }
+}
+
+const REFRESH_FAILED = {
+  cards: "Couldn't refresh the card data. Try again later.",
+  artwork: "Couldn't refresh the artwork data. Try again later."
 }
 
 type Refresh =
@@ -56,6 +62,7 @@ export function Settings(): React.JSX.Element {
   const name = displayName(user)
   const [warnWaiting, setWarnWaiting] = useState<number | null>(null)
   const [signingOut, setSigningOut] = useState(false)
+  const [signOutFailed, setSignOutFailed] = useState(false)
   const [refresh, setRefresh] = useState<Refresh>({ state: 'idle' })
   const [problemsOpen, setProblemsOpen] = useState(false)
 
@@ -65,37 +72,52 @@ export function Settings(): React.JSX.Element {
 
   const signOut = async (): Promise<void> => {
     setSigningOut(true)
+    setSignOutFailed(false)
     try {
       // The cookie goes first: the sign-in screen would otherwise trade it straight back.
       await webLogout()
       await api.account.signOut()
       signedOut()
+    } catch {
+      // The app's data stopped answering: say so rather than fail silently.
+      setSignOutFailed(true)
     } finally {
       setSigningOut(false)
     }
   }
   const askSignOut = async (): Promise<void> => {
-    const { waiting } = await store.syncState()
-    if (waiting > 0) setWarnWaiting(waiting)
+    const waiting = await store.syncState().then(
+      (s) => s.waiting,
+      () => null
+    )
+    if (waiting === null) setSignOutFailed(true)
+    else if (waiting > 0) setWarnWaiting(waiting)
     else await signOut()
   }
 
   const refreshData = async (): Promise<void> => {
     setRefresh({ state: 'running', step: 'Checking for new cards…' })
-    // Through the api, so the pages refetch when cards changed.
-    const status = await api.sync.run()
-    if (status.error) {
-      setRefresh({ state: 'error', message: "Couldn't refresh the card data. Try again later." })
-      return
+    let step: 'cards' | 'artwork' = 'cards'
+    try {
+      // Through the api, so the pages refetch when cards changed.
+      const status = await api.sync.run()
+      if (status.error) {
+        setRefresh({ state: 'error', message: REFRESH_FAILED.cards })
+        return
+      }
+      step = 'artwork'
+      setRefresh({ state: 'running', step: 'Checking the artwork data…' })
+      const fingerprints = await store.refreshFingerprints({ force: true })
+      void qc.invalidateQueries({ queryKey: CATALOG_KEY })
+      setRefresh(
+        fingerprints.state === 'error'
+          ? { state: 'error', message: REFRESH_FAILED.artwork }
+          : { state: 'done' }
+      )
+    } catch {
+      // The app's data stopped answering: the button comes back for another try.
+      setRefresh({ state: 'error', message: REFRESH_FAILED[step] })
     }
-    setRefresh({ state: 'running', step: 'Checking the artwork data…' })
-    const fingerprints = await store.refreshFingerprints({ force: true })
-    void qc.invalidateQueries({ queryKey: CATALOG_KEY })
-    setRefresh(
-      fingerprints.state === 'error'
-        ? { state: 'error', message: "Couldn't refresh the artwork data. Try again later." }
-        : { state: 'done' }
-    )
   }
 
   const problems = sync.data?.problems ?? 0
@@ -120,6 +142,11 @@ export function Settings(): React.JSX.Element {
             Sign out
           </button>
         </Group>
+        {signOutFailed && (
+          <p role="alert" className="px-4 text-[13px] text-destructive">
+            {SIGN_OUT_FAILED}
+          </p>
+        )}
       </section>
 
       <section aria-label="Card data" className="space-y-2">
@@ -165,6 +192,7 @@ export function Settings(): React.JSX.Element {
       <section aria-label="Delete account" className="flex justify-center pt-2">
         <DeleteAccount
           onDeleted={() => {
+            forgetSavedScans()
             void webLogout().finally(signedOut)
           }}
         />

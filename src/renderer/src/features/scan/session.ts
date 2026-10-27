@@ -52,6 +52,15 @@ function save(rows: ScanRow[]): void {
   }
 }
 
+/** Forgets the saved list of unsaved scans (a mounted session keeps its own copy until it changes). */
+export function clearSavedScans(): void {
+  try {
+    localStorage.removeItem(STORAGE_KEY)
+  } catch {
+    // Unavailable storage holds no list.
+  }
+}
+
 const messageOf = (err: unknown): string =>
   err instanceof Error ? err.message : 'Could not add card'
 

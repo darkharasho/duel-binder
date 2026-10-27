@@ -8,6 +8,7 @@ import {
   OPEN_ELSEWHERE,
   SIGN_IN_COPY,
   SIGN_IN_FAILED,
+  SIGN_OUT_FAILED,
   UNSUPPORTED
 } from '../../src/phone/copy'
 import { DB_OPEN_ELSEWHERE } from '../../src/phone/data/openRetry'
@@ -16,6 +17,24 @@ import type { PhoneStore } from '../../src/phone/data/store'
 import { DELETE_WARNING } from '@/features/settings/accountText'
 import { fakeEngine, stubCamera, stubVideo } from './scanFakes'
 import { SETO, fakeOcr, fakeStore, installPhoneApi, json, setOnline, stubFetch } from './phoneFakes'
+
+/** The phone scanner's saved list of unsaved scans, and whose they are (see savedScans.ts). */
+const SESSION_KEY = 'scan.session.v1'
+const OWNER_KEY = 'scan.session.owner'
+const savedScan = (): Record<string, unknown> => ({
+  key: '101:46986414',
+  cardId: 1,
+  name: 'Dark Magician',
+  imageId: 46986414,
+  printingId: 101,
+  setCode: 'LOB-EN005',
+  rarity: 'Ultra Rare',
+  options: [],
+  flag: null,
+  via: 'code',
+  quantity: 1,
+  addedAt: 1
+})
 
 type OnFatal = (cb: (message: string) => void) => () => void
 const noFatal: OnFatal = () => () => {}
@@ -371,6 +390,82 @@ describe('phone app', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Delete account' }))
     expect(await screen.findByText(SIGN_IN_COPY)).toBeInTheDocument()
     expect(store.deleteAccount).toHaveBeenCalledTimes(1)
+  })
+
+  it('delete account clears the unsaved scans on this phone', async () => {
+    const user = userEvent.setup()
+    localStorage.setItem(SESSION_KEY, JSON.stringify([savedScan()]))
+    localStorage.setItem(OWNER_KEY, String(SETO.id))
+    const store = fakeStore()
+    installPhoneApi(store)
+    renderApp(store)
+    await openSettings(user)
+    await user.click(screen.getByRole('button', { name: 'Delete account' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Delete account' })
+    await user.click(within(dialog).getByRole('button', { name: 'Delete account' }))
+    expect(await screen.findByText(SIGN_IN_COPY)).toBeInTheDocument()
+    expect(localStorage.getItem(SESSION_KEY)).toBeNull()
+    expect(localStorage.getItem(OWNER_KEY)).toBeNull()
+  })
+
+  it('keeps the unsaved scans when the same user signs back in', async () => {
+    localStorage.setItem(SESSION_KEY, JSON.stringify([savedScan()]))
+    localStorage.setItem(OWNER_KEY, String(SETO.id))
+    const store = fakeStore()
+    installPhoneApi(store)
+    renderApp(store)
+    await screen.findByRole('navigation', { name: 'Tabs' })
+    expect(JSON.parse(localStorage.getItem(SESSION_KEY)!)).toHaveLength(1)
+    expect(localStorage.getItem(OWNER_KEY)).toBe(String(SETO.id))
+  })
+
+  it('drops the unsaved scans when a different user signs in', async () => {
+    localStorage.setItem(SESSION_KEY, JSON.stringify([savedScan()]))
+    localStorage.setItem(OWNER_KEY, String(SETO.id + 1))
+    const store = fakeStore()
+    installPhoneApi(store)
+    renderApp(store)
+    await screen.findByRole('navigation', { name: 'Tabs' })
+    expect(localStorage.getItem(SESSION_KEY)).toBeNull()
+    expect(localStorage.getItem(OWNER_KEY)).toBe(String(SETO.id))
+  })
+
+  it('a sign-out that fails says so and can be tried again', async () => {
+    const user = userEvent.setup()
+    const store = fakeStore({
+      signOut: vi.fn(async () => {
+        throw new Error("The app's data worker didn't start")
+      })
+    })
+    installPhoneApi(store)
+    stubFetch({
+      '/api/me': () => json({ error: 'unauthorized' }, 401),
+      '/auth/logout': () => new Response(null, { status: 204 })
+    })
+    renderApp(store)
+    await openSettings(user)
+    await user.click(screen.getByRole('button', { name: 'Sign out' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent(SIGN_OUT_FAILED)
+    expect(screen.getByRole('button', { name: 'Sign out' })).toBeEnabled()
+    expect(screen.queryByText(SIGN_IN_COPY)).not.toBeInTheDocument()
+  })
+
+  it('a card data refresh that fails ends with an error and can be tried again', async () => {
+    const user = userEvent.setup()
+    const store = fakeStore({
+      refreshFingerprints: vi.fn(async (opts?: { force?: boolean }) => {
+        if (opts?.force) throw new Error("The app's data worker didn't start")
+        return { state: 'ready' as const, count: 1 }
+      })
+    })
+    installPhoneApi(store)
+    renderApp(store)
+    await openSettings(user)
+    await user.click(screen.getByRole('button', { name: 'Refresh card data' }))
+    expect(
+      await screen.findByText("Couldn't refresh the artwork data. Try again later.")
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Refresh card data' })).toBeEnabled()
   })
 
   it('a sync that finds the session ended returns to sign-in', async () => {

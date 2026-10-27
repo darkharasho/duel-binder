@@ -148,6 +148,7 @@ export function useScanSession(): {
     let added = 0
     let failed = 0
     let cards = 0
+    const unaddable = new Set(ref.current.filter((r) => r.printingId === null).map((r) => r.key))
     try {
       for (const row of ref.current.filter((r) => r.printingId !== null)) {
         try {
@@ -178,6 +179,8 @@ export function useScanSession(): {
       committingRef.current = false
       setCommitting(false)
     }
+    // A clean Add leaves an empty list: rows with no printing go too. Scans merged in meanwhile stay.
+    if (added > 0 && failed === 0) update((list) => list.filter((r) => !unaddable.has(r.key)))
     if (added > 0) {
       for (const queryKey of mutationInvalidationKeys) void qc.invalidateQueries({ queryKey })
     }

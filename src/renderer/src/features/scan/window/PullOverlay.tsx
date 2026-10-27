@@ -5,6 +5,14 @@ import { FADE_MS, type Pull } from './overlay'
 
 const fade = { transitionDuration: `${FADE_MS}ms`, animationDuration: `${FADE_MS}ms` }
 
+function Range({ range }: { range: NonNullable<Pull['range']> }): React.JSX.Element {
+  return (
+    <p className="text-[clamp(0.75rem,1.4vw,1.3rem)] text-emerald-200/80 tabular-nums">
+      {formatUsd(range.low)} – {formatUsd(range.high)}
+    </p>
+  )
+}
+
 function Bar({ pull }: { pull: Pull }): React.JSX.Element {
   const detail = [pull.setCode, pull.rarity].filter((s) => s !== null)
   return (
@@ -28,6 +36,7 @@ function Bar({ pull }: { pull: Pull }): React.JSX.Element {
             {formatUsd(pull.price)}
           </p>
         )}
+        {pull.range !== null && <Range range={pull.range} />}
         {detail.length > 0 && (
           <p className="truncate text-[clamp(0.75rem,1.4vw,1.3rem)] text-white/70">
             {detail.join(' · ')}
@@ -62,6 +71,7 @@ function Hit({ pull }: { pull: Pull }): React.JSX.Element {
           {formatUsd(pull.price)}
         </p>
       )}
+      {pull.range !== null && <Range range={pull.range} />}
     </div>
   )
 }

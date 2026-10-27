@@ -16,6 +16,8 @@ export interface ScanPrinting {
   setCode: string
   rarity: string
   language: Language
+  /** USD, this printing's own price; null when unknown. */
+  price: number | null
   /** The card's artworks, in sort order. */
   imageIds: number[]
 }

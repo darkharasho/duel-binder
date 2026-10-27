@@ -17,6 +17,7 @@ const opt = (printingId: number, rarity: string): ScanPrinting => ({
   setCode: `SET-EN00${printingId}`,
   rarity,
   language: 'en',
+  price: null,
   imageIds: [10]
 })
 const draft = (extra: Partial<ScanDraft> = {}): ScanDraft => ({

@@ -19,8 +19,20 @@ const LOB = 'Legend of Blue Eyes White Dragon'
 const SDY = 'Starter Deck: Yugi'
 
 // Dark Magician (card 1) has two artworks, Blue-Eyes (card 2) one.
-const DM = { cardId: 1, name: 'Dark Magician', frameType: 'normal', imageIds: [101, 102] }
-const BEWD = { cardId: 2, name: 'Blue-Eyes White Dragon', frameType: 'normal', imageIds: [201] }
+const DM = {
+  cardId: 1,
+  name: 'Dark Magician',
+  frameType: 'normal',
+  price: null,
+  imageIds: [101, 102]
+}
+const BEWD = {
+  cardId: 2,
+  name: 'Blue-Eyes White Dragon',
+  frameType: 'normal',
+  price: null,
+  imageIds: [201]
+}
 const PRINTINGS: ScanPrinting[] = [
   {
     ...DM,

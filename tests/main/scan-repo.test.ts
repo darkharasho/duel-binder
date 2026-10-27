@@ -127,4 +127,59 @@ describe('scan repo', () => {
     )
     expect(cardsForImages(db, [])).toEqual([])
   })
+
+  describe('price', () => {
+    const priceOf = (db: Database.Database, code: string, rarity: string): number | null =>
+      printingsByCode(db, code).find((r) => r.rarity === rarity)!.price
+    const setCols = (
+      db: Database.Database,
+      code: string,
+      rarity: string,
+      market: number | null,
+      set: number | null
+    ): number => {
+      const row = db
+        .prepare('SELECT id FROM card_printings WHERE set_code = ? AND set_rarity = ?')
+        .get(code, rarity) as { id: number }
+      db.prepare('UPDATE card_printings SET market_price = ?, set_price = ? WHERE id = ?').run(
+        market,
+        set,
+        row.id
+      )
+      return row.id
+    }
+    const ebay = (db: Database.Database, id: number, price: number): void => {
+      db.prepare(
+        "INSERT INTO intl_prices (printing_id, price, listing_count, checked_at) VALUES (?, ?, 1, '2026-01-01')"
+      ).run(id, price)
+    }
+
+    it("carries each printing's own price: market, then eBay, then set price", async () => {
+      const { db } = await scanDb()
+      const R = 'Ultra Rare (Extended Art)'
+      const id = setCols(db, 'LOB-EN005', R, 12.5, 3)
+      expect(priceOf(db, 'LOB-EN005', R)).toBe(12.5)
+      setCols(db, 'LOB-EN005', R, null, 3)
+      expect(priceOf(db, 'LOB-EN005', R)).toBe(3)
+      ebay(db, id, 7)
+      expect(priceOf(db, 'LOB-EN005', R)).toBe(7)
+    })
+
+    it('a non-English printing is priced from eBay only', async () => {
+      const { db } = await scanDb()
+      const id = setCols(db, 'LOB-FR005', 'Ultra Rare', 9, 3)
+      expect(priceOf(db, 'LOB-FR005', 'Ultra Rare')).toBeNull()
+      ebay(db, id, 4)
+      expect(priceOf(db, 'LOB-FR005', 'Ultra Rare')).toBe(4)
+    })
+
+    it('a zero or missing price is null', async () => {
+      const { db } = await scanDb()
+      const R = 'Ultra Rare (Extended Art)'
+      setCols(db, 'LOB-EN005', R, null, 0)
+      expect(priceOf(db, 'LOB-EN005', R)).toBeNull()
+      setCols(db, 'LOB-EN005', R, null, null)
+      expect(priceOf(db, 'LOB-EN005', R)).toBeNull()
+    })
+  })
 })

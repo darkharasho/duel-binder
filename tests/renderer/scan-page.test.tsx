@@ -23,6 +23,7 @@ const printing = (o: Partial<ScanPrinting> = {}): ScanPrinting => ({
   setCode: 'LOB-EN005',
   rarity: 'Ultra Rare',
   language: 'en',
+  price: null,
   imageIds: [46986414],
   ...o
 })

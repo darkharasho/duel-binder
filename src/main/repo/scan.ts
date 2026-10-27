@@ -3,6 +3,7 @@ import { getMeta } from '../db/meta'
 import { rarityRank } from '../../shared/scan/rarity'
 import { bestNameMatch, normalizeName, type NameEntry } from '../../shared/scan/names'
 import { LANGUAGES, type Language } from '../../shared/languages'
+import { parsePrice } from '../../shared/pricing'
 import type { ScanPrinting } from '../../shared/scan/types'
 
 interface PrintingRow {
@@ -14,11 +15,14 @@ interface PrintingRow {
   setCode: string
   rarity: string
   language: Language
+  rawPrice: number | null
 }
 
 const SELECT = `SELECT p.id AS printingId, p.card_id AS cardId, c.name AS name, c.frame_type AS frameType,
-  p.set_name AS setName, p.set_code AS setCode, p.set_rarity AS rarity, p.language AS language
-  FROM card_printings p JOIN cards c ON c.id = p.card_id`
+  p.set_name AS setName, p.set_code AS setCode, p.set_rarity AS rarity, p.language AS language,
+  CASE WHEN p.language = 'en' THEN COALESCE(p.market_price, ip.price, p.set_price) ELSE ip.price END AS rawPrice
+  FROM card_printings p JOIN cards c ON c.id = p.card_id
+  LEFT JOIN intl_prices ip ON ip.printing_id = p.id`
 const VISIBLE = 'p.contributed = 0'
 
 const languageRank = (l: Language): number => LANGUAGES.findIndex((x) => x.code === l)
@@ -42,7 +46,11 @@ function withImages(db: SqlDb, rows: PrintingRow[]): ScanPrinting[] {
     }
   }
   return rows
-    .map((r) => ({ ...r, imageIds: images.get(r.cardId) ?? [] }))
+    .map(({ rawPrice, ...r }) => ({
+      ...r,
+      price: parsePrice(rawPrice),
+      imageIds: images.get(r.cardId) ?? []
+    }))
     .sort(
       (a, b) =>
         a.setCode.localeCompare(b.setCode) ||

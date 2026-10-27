@@ -1,13 +1,12 @@
 import { useState } from 'react'
-import { useEffect } from 'react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
-import { api, queryKeys } from '@/lib/api'
+import { api } from '@/lib/api'
+import { useAccountStatus, useApplyAccountStatus } from '@/lib/account'
 import { formatRelative } from '@/lib/format'
 import { isWeb } from '@/lib/platform'
 import { fetchMe } from '@/web/account'
 import type { Me } from '@shared/cloud'
-import type { AccountStatus } from '@shared/types'
 
 function Identity({ user }: { user: Me }): React.JSX.Element {
   const [avatarFailed, setAvatarFailed] = useState(false)
@@ -27,16 +26,8 @@ export function AccountSection(): React.JSX.Element {
 }
 
 function DesktopAccount(): React.JSX.Element {
-  const qc = useQueryClient()
-  const status = useQuery({ queryKey: queryKeys.account, queryFn: () => api.account.status() })
-  useEffect(
-    () => api.account.onChange((s) => qc.setQueryData(queryKeys.account, s)),
-    [qc]
-  )
-  const apply = (p: Promise<AccountStatus>): void => {
-    p.then((s) => qc.setQueryData(queryKeys.account, s)).catch(() => qc.invalidateQueries({ queryKey: queryKeys.account }))
-  }
-  const s = status.data
+  const s = useAccountStatus()
+  const apply = useApplyAccountStatus()
   if (!s) return <p className="text-sm text-muted-foreground">Loading account…</p>
 
   const pending =

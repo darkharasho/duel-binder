@@ -2,7 +2,32 @@ import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import App from '@/App'
 import { CardArt } from '@/components/CardArt'
+import type { Api } from '@shared/ipc'
 import { createMockApi, renderWithProviders } from './mockApi'
+
+// Signed in, so the sign-in gate lets the shell through.
+const mockApi = (o: Parameters<typeof createMockApi>[0] = {}): Api =>
+  createMockApi({
+    ...o,
+    account: {
+      status: async () => ({
+        state: 'idle' as const,
+        user: { id: 1, username: 'seto', displayName: 'Seto', avatarUrl: null },
+        localOwner: 'Seto',
+        lastSyncedAt: null,
+        error: null,
+        pendingCount: 0,
+        unsyncedCount: 0,
+        signInRequired: true
+      })
+    }
+  })
+
+async function renderApp(api: Api = mockApi()): Promise<ReturnType<typeof renderWithProviders>> {
+  const result = renderWithProviders(<App />, { api })
+  await screen.findByRole('navigation', { name: 'Main' })
+  return result
+}
 
 const status = (o: object = {}) => ({
   state: 'idle' as const,
@@ -16,7 +41,7 @@ const status = (o: object = {}) => ({
 
 describe('AppShell', () => {
   it('navigation switches pages', async () => {
-    renderWithProviders(<App />)
+    await renderApp()
     expect(screen.getByRole('heading', { name: 'Dashboard' })).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Collection' }))
     expect(screen.getByRole('heading', { name: 'Collection' })).toBeInTheDocument()
@@ -26,7 +51,7 @@ describe('AppShell', () => {
   })
 
   it('Ctrl+K and the Add card button open the add flow', async () => {
-    renderWithProviders(<App />)
+    await renderApp()
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     fireEvent.keyDown(window, { key: 'k', ctrlKey: true })
     expect(await screen.findByPlaceholderText(/Search cards/)).toBeInTheDocument()
@@ -39,11 +64,11 @@ describe('AppShell', () => {
 
 describe('AppShell sets nav', () => {
   it('lists Sets between Collection and Settings and opens it', async () => {
-    renderWithProviders(<App />)
+    await renderApp()
     const names = within(screen.getByRole('navigation', { name: 'Main' }))
       .getAllByRole('button')
       .map((b) => b.textContent)
-    expect(names).toEqual(['Dashboard', 'Collection', 'Sets', 'Browse', 'Scan', 'Settings'])
+    expect(names).toEqual(['Dashboard', 'Collection', 'Sets', 'Browse', 'Scan', 'Friends', 'Settings'])
     await userEvent.click(screen.getByRole('button', { name: 'Sets' }))
     expect(screen.getByRole('heading', { name: 'Sets' })).toBeInTheDocument()
   })
@@ -52,8 +77,8 @@ describe('AppShell sets nav', () => {
 describe('data changed', () => {
   it('refetches the sets queries when main reports changed data', async () => {
     let fire: () => void = () => {}
-    const api = createMockApi({ app: { onDataChanged: vi.fn((cb) => ((fire = cb), () => {})) } })
-    renderWithProviders(<App />, { api })
+    const api = mockApi({ app: { onDataChanged: vi.fn((cb) => ((fire = cb), () => {})) } })
+    await renderApp(api)
     await userEvent.click(screen.getByRole('button', { name: 'Sets' }))
     await waitFor(() => expect(api.sets.list).toHaveBeenCalled())
     const before = vi.mocked(api.sets.list).mock.calls.length
@@ -63,8 +88,8 @@ describe('data changed', () => {
 
   it('also invalidates card detail queries', async () => {
     let fire: () => void = () => {}
-    const api = createMockApi({ app: { onDataChanged: vi.fn((cb) => ((fire = cb), () => {})) } })
-    const { client } = renderWithProviders(<App />, { api })
+    const api = mockApi({ app: { onDataChanged: vi.fn((cb) => ((fire = cb), () => {})) } })
+    const { client } = await renderApp(api)
     await waitFor(() => expect(api.app.onDataChanged).toHaveBeenCalled())
     const spy = vi.spyOn(client, 'invalidateQueries')
     act(() => fire())
@@ -75,8 +100,8 @@ describe('data changed', () => {
 describe('SyncBanner', () => {
   it('shows the first-run message and Retry runs a sync', async () => {
     const run = vi.fn(async () => status({ cardCount: 5 }))
-    const api = createMockApi({ sync: { status: async () => status({ cardCount: 0 }), run } })
-    renderWithProviders(<App />, { api })
+    const api = mockApi({ sync: { status: async () => status({ cardCount: 0 }), run } })
+    await renderApp(api)
     expect(await screen.findByText(/No card data yet/)).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Retry' }))
     expect(run).toHaveBeenCalledTimes(1)
@@ -84,10 +109,10 @@ describe('SyncBanner', () => {
   })
 
   it('says offline with saved data when a sync failed but cards exist', async () => {
-    const api = createMockApi({
+    const api = mockApi({
       sync: { status: async () => status({ state: 'error', error: 'HTTP 500', cardCount: 5, lastSyncAt: new Date().toISOString() }) }
     })
-    renderWithProviders(<App />, { api })
+    await renderApp(api)
     expect(
       await screen.findByText('Offline — using saved card data (prices updated just now)')
     ).toBeInTheDocument()
@@ -95,15 +120,15 @@ describe('SyncBanner', () => {
   })
 
   it('asks to connect when the first sync failed with no cards', async () => {
-    const api = createMockApi({ sync: { status: async () => status({ state: 'error', error: 'HTTP 500', cardCount: 0 }) } })
-    renderWithProviders(<App />, { api })
+    const api = mockApi({ sync: { status: async () => status({ state: 'error', error: 'HTTP 500', cardCount: 0 }) } })
+    await renderApp(api)
     expect(await screen.findByText(/Connect to the internet/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument()
   })
 
   it('shows progress while downloading', async () => {
-    const api = createMockApi({ sync: { status: async () => status({ state: 'downloading', cardCount: 0 }) } })
-    renderWithProviders(<App />, { api })
+    const api = mockApi({ sync: { status: async () => status({ state: 'downloading', cardCount: 0 }) } })
+    await renderApp(api)
     expect(await screen.findByText('Downloading card database…')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument()
   })

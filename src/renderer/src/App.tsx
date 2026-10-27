@@ -12,6 +12,9 @@ import { useFriendsAvailable } from '@/lib/friends'
 import { SettingsPage } from '@/features/settings/SettingsPage'
 import { useDataChanged } from '@/components/useDataChanged'
 import { isWeb } from '@/lib/platform'
+import { useAccountStatus } from '@/lib/account'
+import { SignInScreen } from '@/features/account/SignInScreen'
+import { TitleBar } from '@/components/TitleBar'
 import { useUpdateToasts } from '@/features/settings/useUpdateToasts'
 
 // Loaded on demand, so the web build (which has no Scan) never pulls in the vision worker.
@@ -31,6 +34,28 @@ function DesktopOnlyEffects(): null {
 }
 
 function App(): React.JSX.Element {
+  const web = isWeb()
+  const account = useAccountStatus()
+  if (!web) {
+    // Until the first status arrives show neither the gate nor the app, so neither flashes.
+    if (!account) {
+      return (
+        <div className="flex h-screen flex-col bg-background">
+          <TitleBar />
+        </div>
+      )
+    }
+    if (
+      account.signInRequired &&
+      (account.state === 'signed-out' || account.state === 'signing-in')
+    ) {
+      return <SignInScreen status={account} />
+    }
+  }
+  return <SignedInApp />
+}
+
+function SignedInApp(): React.JSX.Element {
   const [chosenPage, setPage] = useState<Page>('dashboard')
   const [entryId, setEntryId] = useState<number | undefined>()
   const [friendsKey, setFriendsKey] = useState(0)

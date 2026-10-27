@@ -224,6 +224,22 @@ describe('findCard', () => {
       expect(findCard(cv, emptyFrame(seed)), `seed ${seed}`).toBeNull()
   })
 
+  it('takes no outline with a card aspect ratio that is far from a rectangle', () => {
+    // As a magnetic case's edge and the card's text box made one in a real photo: two upright
+    // sides, one of them short, joined by a level side and a long slanted one.
+    const width = 1280
+    const height = 720
+    const data = new Uint8ClampedArray(width * height * 4)
+    const inside = (x: number, y: number): boolean =>
+      x >= 420 && x <= 700 && y <= 600 && y >= 520 - ((x - 420) * 370) / 280
+    for (let y = 0; y < height; y++)
+      for (let x = 0; x < width; x++) {
+        const v = inside(x, y) ? 220 : 40
+        data.set([v, v, v, 255], (y * width + x) * 4)
+      }
+    expect(findCard(cv, { width, height, data })).toBeNull()
+  })
+
   it('finds and matches cards held sideways or upside down', () => {
     const turns: [string, (img: RgbaImage) => RgbaImage][] = [
       ['clockwise', (img) => rotate90(img, true)],

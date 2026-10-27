@@ -3,6 +3,7 @@ import { decode } from 'jpeg-js'
 import { imageUrl } from '../../src/shared/imageSources'
 import { HASH_WORDS, artHash, fingerprintSource } from '../../src/shared/scan/fingerprint'
 import { encodeFingerprints } from '../../src/shared/scan/fingerprintFile'
+import { buildReferences, type ReferenceOptions } from './references'
 
 const DEFAULT_CONCURRENCY = 6
 const COMMIT_EVERY = 200
@@ -19,13 +20,18 @@ export interface FingerprintOptions {
   fetch?: typeof fetch
   concurrency?: number
   log?: (s: string) => void
+  /** Adds Yugipedia printing scans as extra references (see buildReferences); none without it. */
+  references?: Omit<ReferenceOptions, 'work' | 'cache' | 'log'>
 }
 
 export interface FingerprintResult {
   bytes: Uint8Array
   fetched: number
   failed: number
+  /** Every hash in the file, printing scans included. */
   count: number
+  /** Printing scans in the file, and how many were downloaded or failed this run. */
+  references: { count: number; fetched: number; failed: number }
 }
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
@@ -86,6 +92,8 @@ export async function buildFingerprints(opts: FingerprintOptions): Promise<Finge
       const drop = cache.prepare('DELETE FROM fp WHERE image_id = ?')
       cache.transaction(() => {
         for (const id of stale) drop.run(id)
+        // Printing scans are hashed again too.
+        cache.exec('DROP TABLE IF EXISTS ref_file')
         cache
           .prepare("INSERT OR REPLACE INTO meta (key, value) VALUES ('hash_version', ?)")
           .run(HASH_VERSION)
@@ -136,7 +144,25 @@ export async function buildFingerprints(opts: FingerprintOptions): Promise<Finge
       const bytes = new Uint8Array(row.hash)
       entries.push({ imageId: row.image_id, hash: new Uint32Array(bytes.buffer) })
     }
-    return { bytes: encodeFingerprints(entries), fetched, failed, count: entries.length }
+    // Printing scans are extras: trouble with them is logged and leaves the card art file as is.
+    const references = { count: 0, fetched: 0, failed: 0 }
+    if (opts.references) {
+      try {
+        const out = await buildReferences({ ...opts.references, work: opts.work, cache, log })
+        const own = out.entries.filter((e) => idSet.has(e.imageId))
+        entries.push(...own)
+        Object.assign(references, { count: own.length, fetched: out.fetched, failed: out.failed })
+      } catch (e) {
+        log(`Printing scans failed: ${e instanceof Error ? e.message : e}`)
+      }
+    }
+    return {
+      bytes: encodeFingerprints(entries),
+      fetched,
+      failed,
+      count: entries.length,
+      references
+    }
   } finally {
     cache.close()
   }

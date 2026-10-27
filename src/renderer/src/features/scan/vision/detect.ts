@@ -12,6 +12,12 @@ export type Quad = readonly [Point, Point, Point, Point]
 /** Short side over long side of a card (59 x 86 mm), and how far off a detection may be. */
 const CARD_ASPECT = 0.69
 const ASPECT_TOLERANCE = 0.08
+/**
+ * How far from a rectangle an outline may be: its opposite sides this close to parallel and its
+ * corners this close to square, which leaves room for a card tilted towards the camera.
+ */
+const OUTLINE_PARALLEL = (12 * Math.PI) / 180
+const OUTLINE_SQUARE = (20 * Math.PI) / 180
 /** Smallest card, as a share of the frame area. */
 export const MIN_AREA = 0.04
 /** Frames are searched at this width at most; corners are scaled back up. */
@@ -161,9 +167,34 @@ export function findCard(cv: CV, img: RgbaImage): Quad | null {
   return using([edges], () => outlineQuad(cv, edges, scale))
 }
 
+/** Angle between two line directions, in [0, pi/2]. */
+function angleBetween(a: number, b: number): number {
+  const d = Math.abs(a - b) % Math.PI
+  return Math.min(d, Math.PI - d)
+}
+
 /**
- * The largest convex four-sided outline with a card's aspect ratio in a thickened edge map of a
- * frame shrunk by scale, in full-frame coordinates.
+ * Whether four corners, in order round the outline, make a rectangle as seen at a slant: a
+ * case's edge and the card's text box can join into a four-sided hull of a card's aspect ratio
+ * with one side running across the card.
+ */
+function rectangular(pts: readonly Point[]): boolean {
+  const sides = pts.map((p, i) => {
+    const q = pts[(i + 1) % 4]
+    return Math.atan2(q[1] - p[1], q[0] - p[0])
+  })
+  return (
+    angleBetween(sides[0], sides[2]) <= OUTLINE_PARALLEL &&
+    angleBetween(sides[1], sides[3]) <= OUTLINE_PARALLEL &&
+    sides.every(
+      (d, i) => Math.abs(angleBetween(d, sides[(i + 1) % 4]) - Math.PI / 2) <= OUTLINE_SQUARE
+    )
+  )
+}
+
+/**
+ * The largest convex four-sided outline with a card's aspect ratio, near enough a rectangle, in a
+ * thickened edge map of a frame shrunk by scale, in full-frame coordinates.
  */
 export function outlineQuad(cv: CV, edges: Mat, scale: number): Quad | null {
   const contours = new cv.MatVector()
@@ -191,7 +222,7 @@ export function outlineQuad(cv: CV, edges: Mat, scale: number): Quad | null {
         approx.data32S[j * 2] / scale,
         approx.data32S[j * 2 + 1] / scale
       ])
-      if (Math.abs(aspect(pts) - CARD_ASPECT) > ASPECT_TOLERANCE) continue
+      if (Math.abs(aspect(pts) - CARD_ASPECT) > ASPECT_TOLERANCE || !rectangular(pts)) continue
       best = pts
       bestArea = area
     }

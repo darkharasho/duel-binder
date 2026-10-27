@@ -11,11 +11,17 @@ import { applyPhoneSchema } from './phoneSchema'
 
 const CACHE_LIMIT = 200
 
+/** The phone's database: the SqlDb seam, and whether a transaction is open on it. */
+export interface PhoneDb extends SqlDb {
+  /** True between a BEGIN (or a `transaction`) and its COMMIT or ROLLBACK. */
+  inTransaction(): boolean
+}
+
 /**
  * Wraps a sqlite-wasm oo1 database in the SqlDb seam with better-sqlite3's semantics: positional
  * parameters, `get` is undefined without a row, and `transaction` nests through savepoints.
  */
-export function wasmSql(db: Sqlite3Database): SqlDb {
+export function wasmSql(db: Sqlite3Database, capi: Sqlite3Static['capi']): PhoneDb {
   // Prepared statements live in wasm memory until finalized, so keep a small LRU instead of one per call.
   const cache = new Map<string, PreparedStatement>()
 
@@ -73,6 +79,8 @@ export function wasmSql(db: Sqlite3Database): SqlDb {
     exec(sql: string): void {
       db.exec(sql)
     },
+    // SQLite's own answer, so a plain BEGIN counts too.
+    inTransaction: () => capi.sqlite3_get_autocommit(db.pointer!) === 0,
     transaction<A extends unknown[], R>(fn: (...args: A) => R): (...args: A) => R {
       return (...args: A): R => {
         const level = depth++
@@ -101,7 +109,7 @@ export function wasmSql(db: Sqlite3Database): SqlDb {
 export function openWasmDb(
   sqlite3: Sqlite3Static,
   opts: { file?: string; poolUtil?: SAHPoolUtil }
-): SqlDb {
+): PhoneDb {
   let raw: Sqlite3Database
   if (opts.poolUtil) {
     if (!opts.file) throw new Error('openWasmDb needs a file name for the OPFS pool')
@@ -110,7 +118,7 @@ export function openWasmDb(
     raw = new sqlite3.oo1.DB(':memory:')
   }
   try {
-    const db = wasmSql(raw)
+    const db = wasmSql(raw, sqlite3.capi)
     db.exec('PRAGMA foreign_keys = ON')
     migrateSql(db)
     applyPhoneSchema(db)

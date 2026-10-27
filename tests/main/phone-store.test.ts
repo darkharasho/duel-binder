@@ -640,12 +640,80 @@ describe('phone store', () => {
       return real(input, init)
     }) as typeof fetch
     const fill = store.fillCatalog(() => {}).then(() => order.push('fill-done'))
-    const state = store.syncState().then(() => order.push('state'))
+    const sync = store.sync().then(() => order.push('sync'))
     await new Promise((r) => setTimeout(r, 10))
     expect(order).toEqual(['fill-started'])
     release()
-    await Promise.all([fill, state])
-    expect(order).toEqual(['fill-started', 'fill-done', 'state'])
+    await Promise.all([fill, sync])
+    expect(order).toEqual(['fill-started', 'fill-done', 'sync'])
+  })
+
+  it('reads answer while a slow sync waits on the network; writes wait for it', async () => {
+    await ready()
+    const pick = dmPick()
+    let release!: () => void
+    const gate = new Promise<void>((r) => (release = r))
+    let stalled = false
+    net = (async (input, init) => {
+      if (String(input).includes('/api/sync/')) {
+        stalled = true
+        await gate
+      }
+      return real(input, init)
+    }) as typeof fetch
+    const code = (
+      db.prepare('SELECT set_code FROM card_printings WHERE id = ?').get(pick.printingId) as {
+        set_code: string
+      }
+    ).set_code
+    const sync = store.sync()
+    await vi.waitFor(() => expect(stalled).toBe(true))
+    const added = add(pick).then(() => 'added')
+
+    // Every read the scanner and the pages make, answered while the sync hangs.
+    const reads = await Promise.race([
+      Promise.all([
+        store.account(),
+        store.catalog(),
+        store.syncState(),
+        store.syncProblems(),
+        store.fingerprints(),
+        store.invoke('scan:printingsByCode', [code]),
+        store.invoke('collection:list', [{}]),
+        store.invoke('stats:get', [])
+      ]),
+      new Promise<'timed out'>((r) => setTimeout(() => r('timed out'), 1000))
+    ])
+    if (reads === 'timed out') throw new Error('A read waited for the sync')
+    const [account, catalog, , , , found] = reads
+    expect(account.state).toBe('signed-in')
+    expect(catalog.filled).toBe(true)
+    expect((found as unknown[]).length).toBeGreaterThan(0)
+
+    // The add is a write: it waits for the sync to end.
+    expect(
+      await Promise.race([added, new Promise((r) => setTimeout(() => r('waiting'), 50))])
+    ).toBe('waiting')
+    release()
+    await sync
+    expect(await added).toBe('added')
+  })
+
+  it('a read never lands inside an open transaction', async () => {
+    await ready()
+    db.exec('BEGIN')
+    db.prepare("UPDATE phone_state SET value = ? WHERE key = 'user'").run(
+      JSON.stringify({ ...me, displayName: 'Mid-write' })
+    )
+    let answered = false
+    const account = store.account().then((a) => {
+      answered = true
+      return a
+    })
+    await new Promise((r) => setTimeout(r, 20))
+    expect(answered).toBe(false)
+    db.exec('ROLLBACK')
+    expect(await account).toEqual({ state: 'signed-in', user: me })
   })
 })
 

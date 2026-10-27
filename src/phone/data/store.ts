@@ -100,12 +100,41 @@ const RESET_TABLES = PHONE_TABLES.filter(
 )
 
 /**
+ * The data channels that only read. They answer at once, even while a sync or a download waits on
+ * the network; every other channel (the edits, and any new one) goes through the serial queue.
+ */
+const READ_CHANNELS: ReadonlySet<DataChannel> = new Set<DataChannel>([
+  'cards:search',
+  'cards:get',
+  'cards:browse',
+  'cards:browseFacets',
+  'collection:list',
+  'collection:forCard',
+  'collection:facets',
+  'scan:printingsByCode',
+  'scan:printingsForSet',
+  'scan:printingsForCards',
+  'scan:matchName',
+  'scan:cardsForImages',
+  'stats:get',
+  'sets:list',
+  'sets:checklist',
+  'account:unsynced'
+])
+
+/**
  * The phone's data: the account, the card catalog downloaded from the portal's change feed, the
- * collection (through the desktop's data handlers) and its sync, and the scan fingerprints. Every
- * method runs through one serial queue, so a catalog fill, a sync and an add never interleave.
+ * collection (through the desktop's data handlers) and its sync, and the scan fingerprints.
+ *
+ * Writes and network work (sign-in and out, account deletion, the catalog download and update,
+ * sync, the fingerprint download and the edits) run through one serial queue, so a catalog fill,
+ * a sync and an add never interleave. Reads don't wait for the queue: a slow connection mustn't
+ * hold up the scanner or a page. A read runs only while no transaction is open (`inTransaction`,
+ * when the database can tell), so it never lands between the statements of a write.
  */
 export function createPhoneStore(deps: {
-  db: SqlDb
+  /** `inTransaction` lets reads wait out an open transaction (see PhoneDb). */
+  db: SqlDb & { inTransaction?(): boolean }
   portal: string
   fetch: typeof fetch
   now?: () => Date
@@ -127,6 +156,24 @@ export function createPhoneStore(deps: {
     const run = queue.then(fn, fn)
     queue = run.catch(() => {})
     return run
+  }
+
+  /** Runs a read now, or as soon as no transaction is open; it never waits for the queue. */
+  function read<T>(fn: () => Promise<T> | T): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+      const attempt = (): void => {
+        if (db.inTransaction?.()) {
+          setTimeout(attempt, 0)
+          return
+        }
+        try {
+          resolve(fn())
+        } catch (e) {
+          reject(e)
+        }
+      }
+      attempt()
+    })
   }
 
   const getState = (key: StateKey): string | null =>
@@ -235,7 +282,8 @@ export function createPhoneStore(deps: {
    * Downloads the change feed for the phone tables from `catalog_cursor` to its end. Each page
    * commits with its cursor, so a failure resumes from the last page that landed. Foreign keys are
    * off meanwhile: a page may hold rows pointing at a row a later page brings (a card changed after
-   * its new printings is listed at its later seq). The serial queue keeps every other write out.
+   * its new printings is listed at its later seq). The serial queue keeps every other write out;
+   * reads may run between pages, and see each page's rows whole.
    * Returns whether anything changed.
    */
   async function pullCatalog(
@@ -332,7 +380,7 @@ export function createPhoneStore(deps: {
 
   return {
     account: () =>
-      serial(() => {
+      read(() => {
         const user = storedUser()
         return token() !== null && user !== null
           ? { state: 'signed-in', user }
@@ -405,7 +453,7 @@ export function createPhoneStore(deps: {
       }),
 
     catalog: () =>
-      serial(() => {
+      read(() => {
         const latest = getState('catalog_latest')
         return {
           filled: formatCurrent() && getState('catalog_filled') !== null,
@@ -451,17 +499,16 @@ export function createPhoneStore(deps: {
         return { ...syncStateNow(), changed }
       }),
 
-    syncState: () => serial(syncStateNow),
+    syncState: () => read(syncStateNow),
 
     // The same handler as the account:unsynced data channel, so both always agree.
-    syncProblems: () => serial(() => handlers['account:unsynced']() as Promise<UnsyncedEntry[]>),
+    syncProblems: () => read(() => handlers['account:unsynced']() as Promise<UnsyncedEntry[]>),
 
-    invoke: (channel, args) =>
-      serial(() => {
-        if (!(DATA_CHANNELS as readonly string[]).includes(channel))
-          throw new Error(`Unknown data channel: ${String(channel)}`)
-        return handlers[channel](...args)
-      }),
+    invoke: (channel, args) => {
+      if (!(DATA_CHANNELS as readonly string[]).includes(channel))
+        return Promise.reject(new Error(`Unknown data channel: ${String(channel)}`))
+      return (READ_CHANNELS.has(channel) ? read : serial)(() => handlers[channel](...args))
+    },
 
     portal: <T>(channel: PortalChannel, args: unknown[]) =>
       serial(() =>
@@ -478,7 +525,7 @@ export function createPhoneStore(deps: {
       ),
 
     fingerprints: () =>
-      serial(() => {
+      read(() => {
         const row = db.prepare('SELECT bytes FROM phone_files WHERE name = ?').get(FINGERPRINTS) as
           { bytes: Uint8Array } | undefined
         if (!row || fingerprintStatus().state !== 'ready') return null

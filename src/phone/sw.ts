@@ -11,7 +11,7 @@
 interface ExtendableEvent {
   waitUntil(p: Promise<unknown>): void
 }
-interface FetchEvent {
+interface FetchEvent extends ExtendableEvent {
   request: Request
   respondWith(r: Promise<Response>): void
 }
@@ -70,15 +70,36 @@ sw.addEventListener('activate', (e) => {
   )
 })
 
+/**
+ * Keeps a copy of a full (200) response in the background. A failed write (a quota error, say)
+ * only loses the copy: the response already fetched is returned either way.
+ */
+function keep(
+  e: ExtendableEvent,
+  cacheName: string,
+  req: Request,
+  res: Response,
+  after?: (cache: Cache) => Promise<unknown>
+): void {
+  if (res.status !== 200) return
+  const copy = res.clone()
+  e.waitUntil(
+    caches
+      .open(cacheName)
+      .then(async (cache) => {
+        await cache.put(req, copy)
+        await after?.(cache)
+      })
+      .catch(() => {})
+  )
+}
+
 /** The app's files: from the cache, else the network, kept for next time (and offline). */
-async function cacheFirst(req: Request): Promise<Response> {
-  const hit = await caches.match(req)
+async function cacheFirst(e: FetchEvent): Promise<Response> {
+  const hit = await caches.match(e.request)
   if (hit) return hit
-  const res = await fetch(req)
-  if (res.ok) {
-    const copy = res.clone()
-    await caches.open(CACHE).then((c) => c.put(req, copy))
-  }
+  const res = await fetch(e.request)
+  keep(e, CACHE, e.request, res)
   return res
 }
 
@@ -92,19 +113,18 @@ async function networkFirstPage(req: Request): Promise<Response> {
   }
 }
 
-async function cardImage(req: Request): Promise<Response> {
-  const cache = await caches.open(IMAGES)
-  const hit = await cache.match(req)
+/** Card images: from scan-img, else the network, keeping the newest IMAGE_LIMIT. */
+async function cardImage(e: FetchEvent): Promise<Response> {
+  const hit = await caches.match(e.request, { cacheName: IMAGES })
   if (hit) return hit
-  const res = await fetch(req)
-  if (res.ok) {
-    await cache.put(req, res.clone())
+  const res = await fetch(e.request)
+  keep(e, IMAGES, e.request, res, async (cache) => {
     // Keys come back oldest first: drop the oldest past the limit.
     const keys = await cache.keys()
     await Promise.all(
       keys.slice(0, Math.max(0, keys.length - IMAGE_LIMIT)).map((k) => cache.delete(k))
     )
-  }
+  })
   return res
 }
 
@@ -115,7 +135,7 @@ sw.addEventListener('fetch', (e) => {
   if (url.origin !== sw.location.origin) return
   const path = url.pathname
   if (req.mode === 'navigate' && path === PAGE) e.respondWith(networkFirstPage(req))
-  else if (path.startsWith('/app/scan/')) e.respondWith(cacheFirst(req))
-  else if (path.startsWith('/img/small/')) e.respondWith(cardImage(req))
+  else if (path.startsWith('/app/scan/')) e.respondWith(cacheFirst(e))
+  else if (path.startsWith('/img/small/')) e.respondWith(cardImage(e))
   // Everything else, /api/*, /auth/* and /scan/fingerprints among it, goes to the network.
 })

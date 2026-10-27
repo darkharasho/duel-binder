@@ -126,11 +126,12 @@ describe('phone build', () => {
      */
     function loadSw({
       existing = [],
-      net = { offline: false },
+      net = {},
       wasm = (bytes: Uint8Array) => WebAssembly.validate(bytes as Uint8Array<ArrayBuffer>)
     }: {
       existing?: string[]
-      net?: { offline: boolean }
+      /** `status` of every network response (default 200); `failPut` makes cache writes reject. */
+      net?: { offline?: boolean; status?: number; failPut?: boolean }
       wasm?: (bytes: Uint8Array) => boolean
     } = {}): {
       on: Record<string, Listener>
@@ -154,6 +155,7 @@ describe('phone build', () => {
         },
         match: async (r: unknown) => c.entries.get(new URL(keyOf(r), 'https://app.test').href),
         put: async (r: unknown, res: unknown) => {
+          if (net.failPut) throw new DOMException('Quota exceeded', 'QuotaExceededError')
           c.entries.set(new URL(keyOf(r), 'https://app.test').href, res)
         },
         keys: async () => [...c.entries.keys()].map((url) => ({ url })),
@@ -168,8 +170,9 @@ describe('phone build', () => {
           open: async (name: string) => cacheApi(open(name)),
           keys: async () => [...caches.keys()],
           delete: async (name: string) => caches.delete(name),
-          match: async (r: unknown) => {
-            for (const c of caches.values()) {
+          match: async (r: unknown, opts?: { cacheName?: string }) => {
+            const names = opts?.cacheName ? [opts.cacheName] : [...caches.keys()]
+            for (const c of names.map((n) => caches.get(n)).filter((c) => c !== undefined)) {
               const hit = await cacheApi(c).match(r)
               if (hit !== undefined) return hit
             }
@@ -179,7 +182,13 @@ describe('phone build', () => {
         fetch: async (r: unknown) => {
           fetched.push(keyOf(r))
           if (net.offline) throw new TypeError('Failed to fetch')
-          return { ok: true, clone: () => 'network copy', body: `network ${keyOf(r)}` }
+          const status = net.status ?? 200
+          return {
+            ok: status >= 200 && status < 300,
+            status,
+            clone: () => 'network copy',
+            body: `network ${keyOf(r)}`
+          }
         },
         URL,
         WebAssembly: { validate: wasm }
@@ -200,11 +209,17 @@ describe('phone build', () => {
       mode = 'no-cors'
     ): Promise<unknown> {
       let response: Promise<unknown> | null = null
+      const waits: Promise<unknown>[] = []
       on.fetch!({
         request: { url: new URL(url, 'https://app.test').href, mode, method: 'GET' },
-        respondWith: (p: Promise<unknown>) => (response = p)
+        respondWith: (p: Promise<unknown>) => (response = p),
+        waitUntil: (p: Promise<unknown>) => waits.push(p)
       })
-      return response === null ? 'not handled' : await response
+      if (response === null) return 'not handled'
+      const res = await response
+      // The background cache writes: they must never reject.
+      await Promise.all(waits)
+      return res
     }
 
     const CORE = (variant: string): string =>
@@ -247,11 +262,10 @@ describe('phone build', () => {
       expect(added.filter((u) => u.includes('/ocr/core/'))).toEqual([CORE(variant)])
     })
 
-    it("install's probes agree with wasm-feature-detect, which tesseract.js uses", async () => {
-      const { simd, relaxedSimd } = await import('wasm-feature-detect')
-      const variant = (await relaxedSimd()) ? 'relaxedsimd-' : (await simd()) ? 'simd-' : ''
+    it('install picks the relaxed-SIMD core with real WebAssembly (V8 has relaxed SIMD)', async () => {
+      // tesseract.js makes the same choice from the same probes (wasm-feature-detect 1.x).
       const added = await installed(loadSw())
-      expect(added.filter((u) => u.includes('/ocr/core/'))).toEqual([CORE(variant)])
+      expect(added.filter((u) => u.includes('/ocr/core/'))).toEqual([CORE('relaxedsimd-')])
     })
 
     it('app files that were not precached are cached on first use', async () => {
@@ -306,6 +320,20 @@ describe('phone build', () => {
       expect(sw.caches.get('scan-img')!.entries.size).toBe(1)
       await fetchEvent(sw.on, '/img/small/123.jpg')
       expect(sw.fetched).toHaveLength(1)
+    })
+
+    it.each([
+      ['a partial (206) response', { status: 206 }],
+      ['a cache write that fails', { failPut: true }]
+    ])('%s is still returned, and not kept', async (_name, net) => {
+      const sw = loadSw({ net, wasm: () => true })
+      await installed(sw)
+      for (const u of [CORE('simd-'), '/img/small/9.jpg']) {
+        expect(await fetchEvent(sw.on, u)).toMatchObject({ body: `network https://app.test${u}` })
+        expect(await fetchEvent(sw.on, u)).toMatchObject({ body: `network https://app.test${u}` })
+      }
+      expect(sw.fetched).toHaveLength(4)
+      expect(sw.caches.get('scan-img')?.entries.size ?? 0).toBe(0)
     })
 
     it('keeps at most 2000 card images, dropping the oldest', async () => {

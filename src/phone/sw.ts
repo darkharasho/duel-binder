@@ -1,5 +1,6 @@
 /**
- * The phone app's service worker, at /scan/sw.js with scope /scan/. The app's files are kept in
+ * The phone app's service worker, at /scan/sw.js with scope /scan/. The app's files (all under
+ * /scan/, so the data, vision and OCR Workers are in scope too) are kept in
  * `scan-<build>` so the app opens offline; card images go in `scan-img`; the API, sign-in and the
  * fingerprint file always use the network (the store handles being offline).
  *
@@ -26,7 +27,11 @@ const CACHE = 'scan-__SCAN_BUILD__'
 const IMAGES = 'scan-img'
 const IMAGE_LIMIT = 2000
 const PAGE = '/scan/'
-const CORES = '/app/scan/ocr/core/'
+/** How long the page waits on the network before the installed copy is shown. */
+const PAGE_WAIT_MS = 3000
+const CORES = '/scan/ocr/core/'
+/** Under /scan/ but not app files: always the network. */
+const NETWORK_ONLY = ['/scan/fingerprints']
 
 /**
  * The OCR core this phone's tesseract.js will load. It decides with wasm-feature-detect's
@@ -103,13 +108,31 @@ async function cacheFirst(e: FetchEvent): Promise<Response> {
   return res
 }
 
-async function networkFirstPage(req: Request): Promise<Response> {
+/**
+ * The page: the network, unless it fails or takes longer than PAGE_WAIT_MS on a stalled
+ * connection; then the page this build installed, if there is one. A slow fetch still runs to the
+ * end in the background, so the browser's update check for this worker gets its answer. The
+ * network's page isn't written over the installed one: it may belong to a newer build whose files
+ * this build's cache doesn't hold, and the newer service worker installs its own copy.
+ */
+async function networkFirstPage(e: FetchEvent): Promise<Response> {
+  const net = fetch(e.request)
+  e.waitUntil(net.catch(() => {}))
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const slow = new Promise<'slow'>((resolve) => {
+    timer = setTimeout(() => resolve('slow'), PAGE_WAIT_MS)
+  })
   try {
-    return await fetch(req)
+    const first = await Promise.race([net, slow])
+    if (first !== 'slow') return first
+    const cached = await caches.match(PAGE)
+    return cached ?? (await net)
   } catch (err) {
     const cached = await caches.match(PAGE)
     if (cached) return cached
     throw err
+  } finally {
+    clearTimeout(timer)
   }
 }
 
@@ -134,8 +157,9 @@ sw.addEventListener('fetch', (e) => {
   const url = new URL(req.url)
   if (url.origin !== sw.location.origin) return
   const path = url.pathname
-  if (req.mode === 'navigate' && path === PAGE) e.respondWith(networkFirstPage(req))
-  else if (path.startsWith('/app/scan/')) e.respondWith(cacheFirst(e))
+  if (path === PAGE) {
+    if (req.mode === 'navigate') e.respondWith(networkFirstPage(e))
+  } else if (path.startsWith('/scan/') && !NETWORK_ONLY.includes(path)) e.respondWith(cacheFirst(e))
   else if (path.startsWith('/img/small/')) e.respondWith(cardImage(e))
   // Everything else, /api/*, /auth/* and /scan/fingerprints among it, goes to the network.
 })

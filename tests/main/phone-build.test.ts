@@ -68,7 +68,9 @@ describe('phone build', () => {
       'content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content"'
     )
     expect(html).not.toMatch(/Content-Security-Policy/i)
-    expect(html).toMatch(/src="\/app\/scan\/assets\/index-[^"]+\.js"/)
+    // The app's files are under /scan/, the service worker's scope (see vite.phone.config.ts).
+    expect(html).toMatch(/src="\/scan\/assets\/index-[^"]+\.js"/)
+    expect(html).not.toContain('/app/scan/')
   })
 
   it('the page registers the service worker at /scan/sw.js with scope /scan/', () => {
@@ -103,7 +105,7 @@ describe('phone build', () => {
       display: 'standalone'
     })
     for (const icon of m.icons as { src: string }[])
-      expect(built).toContain(icon.src.replace('/app/scan/', ''))
+      expect(built).toContain(icon.src.replace(/^\/scan\//, ''))
   })
 
   describe('service worker', () => {
@@ -130,17 +132,26 @@ describe('phone build', () => {
       wasm = (bytes: Uint8Array) => WebAssembly.validate(bytes as Uint8Array<ArrayBuffer>)
     }: {
       existing?: string[]
-      /** `status` of every network response (default 200); `failPut` makes cache writes reject. */
-      net?: { offline?: boolean; status?: number; failPut?: boolean }
+      /**
+       * `status` of every network response (default 200); `failPut` makes cache writes reject;
+       * `stalled` holds every response until `release()` (a connection that is up but stuck).
+       */
+      net?: { offline?: boolean; status?: number; failPut?: boolean; stalled?: boolean }
       wasm?: (bytes: Uint8Array) => boolean
     } = {}): {
       on: Record<string, Listener>
       caches: Map<string, FakeCache>
       fetched: string[]
+      /** The timers the worker set, run by hand. */
+      timers: { fn: () => void; ms: number; cleared: boolean }[]
+      /** Lets the stalled responses through. */
+      release(): void
     } {
       const on: Record<string, Listener> = {}
       const caches = new Map<string, FakeCache>()
       const fetched: string[] = []
+      const timers: { fn: () => void; ms: number; cleared: boolean }[] = []
+      const stalled: (() => void)[] = []
       const open = (name: string): FakeCache => {
         let c = caches.get(name)
         if (!c) caches.set(name, (c = { added: [], entries: new Map() }))
@@ -181,6 +192,7 @@ describe('phone build', () => {
         },
         fetch: async (r: unknown) => {
           fetched.push(keyOf(r))
+          if (net.stalled) await new Promise<void>((resolve) => stalled.push(resolve))
           if (net.offline) throw new TypeError('Failed to fetch')
           const status = net.status ?? 200
           return {
@@ -191,10 +203,17 @@ describe('phone build', () => {
           }
         },
         URL,
-        WebAssembly: { validate: wasm }
+        WebAssembly: { validate: wasm },
+        setTimeout: (fn: () => void, ms: number) => timers.push({ fn, ms, cleared: false }) - 1,
+        clearTimeout: (id: number) => {
+          if (timers[id]) timers[id].cleared = true
+        }
       }
       runInNewContext(text('sw.js'), context)
-      return { on, caches, fetched }
+      const release = (): void => {
+        for (const go of stalled.splice(0)) go()
+      }
+      return { on, caches, fetched, timers, release }
     }
 
     async function lifecycle(on: Record<string, Listener>, type: string): Promise<void> {
@@ -203,11 +222,12 @@ describe('phone build', () => {
       await wait
     }
 
-    async function fetchEvent(
+    /** Dispatches a fetch event: its response promise (null if not handled) and its waitUntils. */
+    function dispatchFetch(
       on: Record<string, Listener>,
       url: string,
       mode = 'no-cors'
-    ): Promise<unknown> {
+    ): { response: Promise<unknown> | null; waits: Promise<unknown>[] } {
       let response: Promise<unknown> | null = null
       const waits: Promise<unknown>[] = []
       on.fetch!({
@@ -215,6 +235,15 @@ describe('phone build', () => {
         respondWith: (p: Promise<unknown>) => (response = p),
         waitUntil: (p: Promise<unknown>) => waits.push(p)
       })
+      return { response, waits }
+    }
+
+    async function fetchEvent(
+      on: Record<string, Listener>,
+      url: string,
+      mode = 'no-cors'
+    ): Promise<unknown> {
+      const { response, waits } = dispatchFetch(on, url, mode)
       if (response === null) return 'not handled'
       const res = await response
       // The background cache writes: they must never reject.
@@ -222,8 +251,7 @@ describe('phone build', () => {
       return res
     }
 
-    const CORE = (variant: string): string =>
-      `/app/scan/ocr/core/tesseract-core-${variant}lstm.wasm.js`
+    const CORE = (variant: string): string => `/scan/ocr/core/tesseract-core-${variant}lstm.wasm.js`
     /** What the precache leaves out (see NOT_PRECACHED in vite.phone.config.ts). */
     const notPrecached = (f: string): boolean =>
       f === 'sw.js' ||
@@ -244,7 +272,7 @@ describe('phone build', () => {
 
     it('install precaches the app, one OCR core and /scan/, and leaves out unused files', async () => {
       const added = await installed(loadSw({ wasm: () => true }))
-      const expected = built.filter((f) => !notPrecached(f)).map((f) => `/app/scan/${f}`)
+      const expected = built.filter((f) => !notPrecached(f)).map((f) => `/scan/${f}`)
       expect([...added].sort()).toEqual([...expected, CORE('relaxedsimd-'), '/scan/'].sort())
       expect(added.some((u) => u.endsWith('.woff'))).toBe(false)
       expect(added.some((u) => /sqlite3-(worker1|opfs-async-proxy)/.test(u))).toBe(false)
@@ -272,7 +300,7 @@ describe('phone build', () => {
       const sw = loadSw({ wasm: () => false })
       await installed(sw)
       const font = built.find((f) => f.endsWith('.woff'))!
-      for (const u of [CORE('simd-'), `/app/scan/${font}`]) {
+      for (const u of [CORE('simd-'), `/scan/${font}`]) {
         expect(await fetchEvent(sw.on, u)).toMatchObject({ body: `network https://app.test${u}` })
         expect(await fetchEvent(sw.on, u)).toBe('network copy')
       }
@@ -294,7 +322,7 @@ describe('phone build', () => {
       const sw = loadSw()
       await lifecycle(sw.on, 'install')
       const asset = built.find((f) => f.startsWith('assets/') && f.endsWith('.js'))!
-      expect(await fetchEvent(sw.on, `/app/scan/${asset}`)).toBe(`cached /app/scan/${asset}`)
+      expect(await fetchEvent(sw.on, `/scan/${asset}`)).toBe(`cached /scan/${asset}`)
       expect(sw.fetched).toEqual([])
 
       expect(await fetchEvent(sw.on, '/scan/', 'navigate')).toMatchObject({
@@ -303,6 +331,76 @@ describe('phone build', () => {
 
       for (const u of ['/api/sync', '/auth/discord', '/scan/fingerprints'])
         expect(await fetchEvent(sw.on, u)).toBe('not handled')
+    })
+
+    it("serves the page's Web Workers and their files from the cache offline", async () => {
+      // A Worker's requests go through the service worker whose scope holds the Worker's own URL,
+      // so the data, vision and OCR workers (and sqlite's wasm) must live under /scan/ too.
+      const net = { offline: false }
+      const sw = loadSw({ net, wasm: () => true })
+      const added = await installed(sw)
+      const needed = [
+        built.find((f) => /^assets\/worker-[^/]+\.js$/.test(f)),
+        built.find((f) => /^assets\/vision\.worker-[^/]+\.js$/.test(f)),
+        built.find((f) => /^assets\/sqlite3[^/]*\.wasm$/.test(f)),
+        'ocr/worker.min.js',
+        'ocr/lang/eng.traineddata.gz',
+        'manifest.webmanifest'
+      ]
+      net.offline = true
+      for (const f of needed) {
+        expect(f, String(needed)).toBeDefined()
+        expect(added).toContain(`/scan/${f}`)
+        expect(await fetchEvent(sw.on, `/scan/${f}`)).toBe(`cached /scan/${f}`)
+      }
+      expect(await fetchEvent(sw.on, CORE('relaxedsimd-'))).toBe(`cached ${CORE('relaxedsimd-')}`)
+      expect(sw.fetched).toEqual([])
+    })
+
+    it('the page is network first only for navigations; other /scan/ requests are not cached', async () => {
+      const sw = loadSw()
+      await lifecycle(sw.on, 'install')
+      expect(await fetchEvent(sw.on, '/scan/')).toBe('not handled')
+      expect(await fetchEvent(sw.on, '/scan/fingerprints')).toBe('not handled')
+    })
+
+    it('on a stalled connection, shows the installed page after 3 s and lets the fetch finish', async () => {
+      const net = { stalled: false }
+      const sw = loadSw({ net })
+      await lifecycle(sw.on, 'install')
+      net.stalled = true
+      const { response, waits } = dispatchFetch(sw.on, '/scan/', 'navigate')
+      let settled = false
+      void response!.then(() => (settled = true))
+      await Promise.resolve()
+      expect(settled).toBe(false)
+      const timer = sw.timers.find((t) => !t.cleared)!
+      expect(timer.ms).toBe(3000)
+      timer.fn()
+      expect(await response).toBe('cached /scan/')
+      // The network fetch is still kept alive, and it ends without an error.
+      expect(sw.fetched).toEqual(['https://app.test/scan/'])
+      sw.release()
+      await Promise.all(waits)
+    })
+
+    it('a page answered in time is the network one, and its timer is cleared', async () => {
+      const sw = loadSw()
+      await lifecycle(sw.on, 'install')
+      expect(await fetchEvent(sw.on, '/scan/', 'navigate')).toMatchObject({
+        body: 'network https://app.test/scan/'
+      })
+      expect(sw.timers.every((t) => t.cleared)).toBe(true)
+    })
+
+    it('on a stalled connection with nothing installed, waits for the network', async () => {
+      const net = { stalled: true }
+      const sw = loadSw({ net })
+      const { response } = dispatchFetch(sw.on, '/scan/', 'navigate')
+      await Promise.resolve()
+      sw.timers.find((t) => !t.cleared)!.fn()
+      sw.release()
+      expect(await response).toMatchObject({ body: 'network https://app.test/scan/' })
     })
 
     it('falls back to the cached page offline', async () => {

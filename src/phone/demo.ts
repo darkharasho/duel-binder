@@ -12,7 +12,7 @@ import { openWasmDb } from './data/wasmSql'
 import type { WorkerLike } from './runtime'
 
 /**
- * Dev only (`npm run dev:phone`, then /app/scan/?demo): the app on the sample cards, signed in
+ * Dev only (`npm run dev:phone`, then /scan/?demo): the app on the sample cards, signed in
  * with a few cards in the collection and no server, so every page can be looked at and
  * screenshotted. The store runs on the page, in memory, behind a MessageChannel in place of the
  * data worker. main.tsx loads this only when import.meta.env.DEV, so it never reaches the

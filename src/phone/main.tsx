@@ -37,7 +37,7 @@ async function start(): Promise<void> {
 
 void start()
 
-// The page is /scan/; the worker's file is there too (the portal serves it from /app/scan/sw.js).
+// The page, the service worker and every app file are under /scan/ (see vite.phone.config.ts).
 if (import.meta.env.PROD && 'serviceWorker' in navigator)
   navigator.serviceWorker.register('/scan/sw.js', { scope: '/scan/' }).catch((err: unknown) => {
     console.warn('Service worker registration failed:', err)

@@ -83,6 +83,8 @@ export default {
     }
     if (route.kind === 'redirect') return Response.redirect(route.location, 301)
     if (route.kind === 'app-asset') return env.ASSETS.fetch(req)
+    if (route.kind === 'scan-asset')
+      return env.ASSETS.fetch(new Request(new URL(route.asset, req.url), req))
     return env.STORE.get(env.STORE.idFromName('main')).fetch(req)
   }
 } satisfies ExportedHandler<WorkerEnv>

@@ -6,8 +6,13 @@ import { defineConfig, type Plugin } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 
-// The phone app, served by workers/portal at app.duelbinder.com/scan/ (its files under /app/scan/).
-const BASE = '/app/scan/'
+/**
+ * The phone app, at app.duelbinder.com/scan/. Its files are built into site/app/scan/, and the
+ * portal serves them at /scan/<file>: every file the page and its Web Workers load is then inside
+ * the service worker's /scan/ scope, so the app opens offline (a Worker's own requests go through
+ * the service worker whose scope holds the Worker's URL, not the page's).
+ */
+const BASE = '/scan/'
 const PUBLIC_DIR = resolve('src/phone/public')
 const OCR_MODELS = ['eng', 'jpn', 'kor', 'chi_sim']
 /**
@@ -17,7 +22,7 @@ const OCR_MODELS = ['eng', 'jpn', 'kor', 'chi_sim']
  * - sqlite's OPFS proxy and Worker1 scripts: the data worker uses the SAH pool VFS, and the page
  *   isn't cross-origin isolated, so sqlite never loads them;
  * - the legacy .woff fonts: every browser that runs the app takes the .woff2.
- * Anything under /app/scan/ that is fetched anyway is cached on first use.
+ * Anything under /scan/ that is fetched anyway is cached on first use.
  */
 const NOT_PRECACHED = [
   /^ocr\/lang\/(jpn|kor|chi_sim)\b/,

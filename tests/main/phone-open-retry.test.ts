@@ -21,7 +21,7 @@ describe('opening the phone database', () => {
   })
 
   it('tries again with growing waits while another tab lets go', async () => {
-    const sleep = vi.fn(async () => {})
+    const sleep = vi.fn<(ms: number) => Promise<void>>(async () => {})
     let tries = 0
     const open = vi.fn(async () => {
       if (++tries < 3) throw locked()
@@ -34,7 +34,7 @@ describe('opening the phone database', () => {
   })
 
   it('gives up with the lock error after the last wait', async () => {
-    const sleep = vi.fn(async () => {})
+    const sleep = vi.fn<(ms: number) => Promise<void>>(async () => {})
     const open = vi.fn(async () => {
       throw locked()
     })
@@ -44,7 +44,7 @@ describe('opening the phone database', () => {
   })
 
   it('does not retry any other failure', async () => {
-    const sleep = vi.fn(async () => {})
+    const sleep = vi.fn<(ms: number) => Promise<void>>(async () => {})
     const open = vi.fn(async () => {
       throw new Error('Missing required OPFS APIs.')
     })

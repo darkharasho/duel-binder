@@ -15,6 +15,13 @@ export const ART_BOXES = {
   pendulum: [0.034, 0.164, 0.966, 0.626]
 } as const satisfies Record<string, Box>
 
+/**
+ * The frame inside a card that its crisp printed edges make: from the art window's top to the
+ * text box's bottom, between the art window's sides. Measured on real webcam photos of black
+ * (Xyz) cards, where this frame is found and the card's own outline isn't.
+ */
+export const INNER_FRAME = [0.08, 0.16, 0.92, 0.96] as const satisfies Box
+
 /** Set code bands: under the art, and the bottom strip used by Pendulum, Link and overframe cards. */
 export const CODE_BANDS = [
   [0.05, 0.695, 0.95, 0.765],

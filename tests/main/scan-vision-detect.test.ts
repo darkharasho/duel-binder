@@ -22,8 +22,10 @@ import {
   rotate180,
   toMat,
   warpCard,
+  type Point,
   type Quad
 } from '../../src/renderer/src/features/scan/vision/detect'
+import { ART_BOXES } from '../../src/renderer/src/features/scan/vision/regions'
 import {
   findCandidates,
   recognizeArt
@@ -122,6 +124,57 @@ function emptyFrame(seed: number): RgbaImage {
     data[i * 4 + 3] = 255
   }
   return { width, height, data }
+}
+
+/**
+ * A black-framed (Xyz) card on a dark desk, turned by angle radians, with its art and a light
+ * text box under it: the card's own edge barely shows, while the art and text boxes stand out.
+ * quad is the card's outline in the frame.
+ */
+function blackFrameShot(art: RgbaImage, angle: number): { img: RgbaImage; quad: Quad } {
+  const rand = rng(7)
+  const width = 1280
+  const height = 720
+  const cardH = 560
+  const cardW = (cardH * 59) / 86
+  const [cx, cy] = [640, 360]
+  const [cos, sin] = [Math.cos(angle), Math.sin(angle)]
+  const toFrame = (u: number, v: number): Point => [
+    cx + (u - 0.5) * cardW * cos - (v - 0.5) * cardH * sin,
+    cy + (u - 0.5) * cardW * sin + (v - 0.5) * cardH * cos
+  ]
+  const [ax0, ay0, ax1, ay1] = ART_BOXES.normal
+  // The text box spans the art window's width, from just under it to near the card's bottom.
+  const text = [ax0, 0.74, ax1, 0.95]
+  const data = new Uint8ClampedArray(width * height * 4)
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      // Card coordinates of this pixel.
+      const dx = x - cx
+      const dy = y - cy
+      const u = (dx * cos + dy * sin) / cardW + 0.5
+      const v = (-dx * sin + dy * cos) / cardH + 0.5
+      const i = (y * width + x) * 4
+      const grain = (rand() - 0.5) * 8
+      let rgb = [22 + grain, 20 + grain, 24 + grain]
+      if (u >= 0 && u < 1 && v >= 0 && v < 1) {
+        rgb = [34 + grain, 32 + grain, 36 + grain]
+        if (u >= ax0 && u < ax1 && v >= ay0 && v < ay1) {
+          const px = Math.floor(((u - ax0) / (ax1 - ax0)) * art.width)
+          const py = Math.floor(((v - ay0) / (ay1 - ay0)) * art.height)
+          const j = (py * art.width + px) * 4
+          rgb = [art.data[j], art.data[j + 1], art.data[j + 2]]
+        } else if (u >= text[0] && u < text[2] && v >= text[1] && v < text[3]) {
+          rgb = [214 + grain, 210 + grain, 200 + grain]
+        }
+      }
+      data.set([...rgb, 255], i)
+    }
+  }
+  return {
+    img: { width, height, data },
+    quad: [toFrame(0, 0), toFrame(1, 0), toFrame(1, 1), toFrame(0, 1)]
+  }
 }
 
 /** Top matches for the card found in img, or none when no card is found. */
@@ -309,6 +362,22 @@ describe('recognizeArt', () => {
     const found = recognizeArt(cv, frames.get(shots[0].file)!, index, candidates)!
     expect(found.matches.length).toBeGreaterThan(0)
     expect(found.matches.every((r) => candidates.has(r.imageId))).toBe(true)
+  })
+
+  it('finds a black-framed card whose own edge barely shows against a dark desk', () => {
+    const imageId = 46986414
+    const art = load(join(DIR, 'cropped', `${imageId}.jpg`))
+    for (const angle of [0.05, Math.PI + 0.05]) {
+      const { img, quad } = blackFrameShot(art, angle)
+      const found = recognizeArt(cv, img, index)!
+      expect(found.matches[0].imageId, `angle ${angle}`).toBe(imageId)
+      expect(found.matches[0].distance, `angle ${angle}`).toBeLessThanOrEqual(ART_MAX_DISTANCE)
+      // The card's outline, either way round, rather than its art and text boxes.
+      const off = (q: readonly Point[]): number =>
+        Math.max(...found.quad.map((p, i) => Math.hypot(p[0] - q[i][0], p[1] - q[i][1])))
+      const turned = [quad[2], quad[3], quad[0], quad[1]]
+      expect(Math.min(off(quad), off(turned)), `angle ${angle}`).toBeLessThan(0.03 * diagonal)
+    }
   })
 
   it('finds no card on an empty textured background', () => {

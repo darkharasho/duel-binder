@@ -1,6 +1,6 @@
 import type { Mat } from '@techstark/opencv-js'
 import type { FingerprintIndex } from '@shared/scan/fingerprintFile'
-import { NEST_MIN_END_INSET, NEST_MIN_GROWTH } from '@shared/scan/thresholds'
+import { ART_MAX_DISTANCE, NEST_MIN_END_INSET, NEST_MIN_GROWTH } from '@shared/scan/thresholds'
 import type { RgbaImage } from '@shared/scan/types'
 import type { CV } from './cv'
 import {
@@ -23,7 +23,7 @@ import {
   type Point,
   type Quad
 } from './detect'
-import { ART_BOXES } from './regions'
+import { ART_BOXES, INNER_FRAME, type Box } from './regions'
 
 // Tuned on real webcam photos: cards held in hand, sleeved, foil or in toploaders, fingers over the
 // edges, a deck under the card and a wood-grain desk behind. A held card's outline seldom closes,
@@ -423,9 +423,29 @@ export function preferOuter(quads: readonly Quad[]): Quad | null {
 }
 
 /**
+ * The card's outline were quad its inner frame (INNER_FRAME), either way up: a black
+ * (Xyz) card's edge barely shows against a dark desk, palm or sleeve, so its outline may not be
+ * among the candidates while its inner frame is.
+ */
+function aroundInnerFrame(quad: Quad): Quad[] {
+  const at = homography(quad)
+  const [x0, y0, x1, y1] = INNER_FRAME
+  const ways: Box[] = [INNER_FRAME, [1 - x1, 1 - y1, 1 - x0, 1 - y0]]
+  return ways.map(([a, b, c, d]) => {
+    // The card's corners in the inner frame's unit square.
+    const u0 = -a / (c - a)
+    const u1 = (1 - a) / (c - a)
+    const v0 = -b / (d - b)
+    const v1 = (1 - b) / (d - b)
+    return [at(u0, v0), at(u1, v0), at(u1, v1), at(u0, v1)] as const
+  })
+}
+
+/**
  * The card in a frame and its closest artworks: each candidate outline is matched on a small
  * straightened copy, and the one closest to any artwork is straightened at full size and matched
- * again. card is that 842x1228 straightened card, turned the way up its art matched so the name
+ * again. When none is close enough to accept, the card around each candidate taken for its inner
+ * frame is tried too. card is that 842x1228 straightened card, turned the way up its art matched so the name
  * and code read, and matches its k closest artworks (rankArt's default when k is left out). Null
  * when the frame holds no card-shaped outline.
  */
@@ -443,13 +463,23 @@ export function recognizeArt(
 } | null {
   // Copied into OpenCV once for all the candidates' warps.
   return withMat(cv, img, (frame) => {
-    let best: { quad: Quad; distance: number } | null = null
-    for (const quad of findCandidates(cv, frame)) {
-      const { matches } = rankArt(cv, warpCard(cv, frame, quad, PICK_WIDTH), index, candidates)
-      const distance = matches[0]?.distance ?? Infinity
-      if (!best || distance < best.distance) best = { quad, distance }
+    const closest = (quads: Quad[]): { quad: Quad; distance: number } | null => {
+      let best: { quad: Quad; distance: number } | null = null
+      for (const quad of quads) {
+        const { matches } = rankArt(cv, warpCard(cv, frame, quad, PICK_WIDTH), index, candidates)
+        const distance = matches[0]?.distance ?? Infinity
+        if (!best || distance < best.distance) best = { quad, distance }
+      }
+      return best
     }
+    const quads = findCandidates(cv, frame)
+    let best = closest(quads)
     if (!best) return null
+    // No candidate matched: one may be a black card's inner frame rather than the card.
+    if (best.distance > ART_MAX_DISTANCE) {
+      const around = closest(quads.flatMap(aroundInnerFrame))
+      if (around && around.distance < best.distance) best = around
+    }
     const card = warpCard(cv, frame, best.quad, CARD_W)
     const { matches, upsideDown } = rankArt(cv, card, index, candidates, k)
     return { quad: best.quad, card: upsideDown ? rotate180(card) : card, upsideDown, matches }

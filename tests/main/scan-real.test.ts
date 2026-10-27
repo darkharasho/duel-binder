@@ -23,6 +23,11 @@ vi.mock('@techstark/opencv-js', async () => {
 
 /** Share of recognizable shots that must be accepted with the right card. */
 const MIN_ACCEPTED_CORRECT = 0.6
+/**
+ * ...and of those with a black (Xyz) frame, whose own edge barely shows against a dark desk, palm
+ * or sleeve.
+ */
+const MIN_ACCEPTED_CORRECT_XYZ = 0.4
 const FLAGS = ['sleeved', 'foil', 'cased', 'finger_on_art', 'angled'] as const
 
 interface Truth {
@@ -30,12 +35,14 @@ interface Truth {
   name: string | null
   cardId: number | null
   imageCandidates?: number[]
+  frameType?: string | null
   flags: string[]
 }
 
 interface Row {
   file: string
   name: string
+  frameType: string
   flags: string
   recognizable: boolean
   negative: boolean
@@ -95,6 +102,7 @@ describe.skipIf(!DIR)('recognizeArt on real webcam photos', () => {
       rows.push({
         file: t.file,
         name: t.name ?? '-',
+        frameType: t.frameType ?? '-',
         flags: t.flags.join(' '),
         recognizable:
           t.cardId !== null && !t.flags.includes('art_not_in_db') && !t.flags.includes('unsure'),
@@ -133,6 +141,15 @@ describe.skipIf(!DIR)('recognizeArt on real webcam photos', () => {
         })
       )
     )
+    const frameTypes = [...new Set(recognizable.map((r) => r.frameType))].sort()
+    console.table(
+      Object.fromEntries(
+        frameTypes.map((type) => {
+          const ofType = recognizable.filter((r) => r.frameType === type)
+          return [type, pct(ofType.filter((r) => r.accepted && r.correct).length, ofType.length)]
+        })
+      )
+    )
   }, 600_000)
 
   it('never accepts the wrong card', () => {
@@ -149,5 +166,11 @@ describe.skipIf(!DIR)('recognizeArt on real webcam photos', () => {
     const recognizable = rows.filter((r) => r.recognizable)
     const hits = recognizable.filter((r) => r.accepted && r.correct).length
     expect(hits).toBeGreaterThanOrEqual(MIN_ACCEPTED_CORRECT * recognizable.length)
+  })
+
+  it(`accepts the right card in at least ${MIN_ACCEPTED_CORRECT_XYZ * 100}% of recognizable Xyz shots`, () => {
+    const xyz = rows.filter((r) => r.recognizable && r.frameType === 'xyz')
+    const hits = xyz.filter((r) => r.accepted && r.correct).length
+    expect(hits).toBeGreaterThanOrEqual(MIN_ACCEPTED_CORRECT_XYZ * xyz.length)
   })
 })

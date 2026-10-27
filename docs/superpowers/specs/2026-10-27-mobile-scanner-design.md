@@ -9,10 +9,13 @@ iPhone Safari and it worked: card outlines, art matches and set-code reads, at u
 
 ## What it is
 
-Duel Binder's card scanner on a phone, for every Duel Binder user, not just the owner. It works
-like the desktop scan window: point the camera at cards, they build up in a list, you check each
-one (fix the printing or rarity if needed), then add them to your collection. Nothing is added
-without you confirming it.
+Duel Binder on a phone, for every Duel Binder user, not just the owner. The owner's call
+(2026-10-27): it's the full app, not just the camera. Dashboard, collection, browse, sets,
+friends and settings are all there, at the very least as working pages in a phone shell, and
+ideally laid out properly for a phone. The scanner is the reason it exists and gets the most
+care. It works like the desktop scan window: point the camera at cards, they build up in a
+list, you check each one (fix the printing or rarity if needed), then add them to your
+collection. Nothing is added without you confirming it.
 
 It ships two ways from one codebase, in this order (the owner's call):
 
@@ -32,6 +35,9 @@ scanner, sync or storage code.
 - Scan with the phone camera and get the same results the desktop scanner gives: art match,
   set-code and name reads, rarity, language, printing choice and price.
 - Review the scanned list and add the cards to your collection, as on desktop.
+- The rest of the app on the phone: dashboard, collection (view, edit, remove), browse, set
+  checklists, friends' binders and settings. These read the phone's own copy of the data, so
+  everything but friends works offline. Edits sync like adds.
 - **Works with no signal.** The phone keeps its own copy of the card data and recognition
   files. Cards added offline wait on the phone and sync to the account, and on to the desktop
   app, when it's back online. Nothing added offline is ever lost silently.
@@ -41,9 +47,11 @@ scanner, sync or storage code.
 
 ## Non-goals
 
-- Browsing or editing the collection on the phone. That stays in the web portal and desktop
-  app; the phone app is scan-and-add only for now.
-- Friends' binders, wishlists, decks, or anything else beyond scanning.
+- Features the desktop doesn't have (wishlists, decks and so on).
+- Desktop-only settings on the phone: updates, data folder, backups, image cache.
+- Printing-specific scans (the Yugipedia photo of an exact printing) on the phone in phase 1.
+  The phone's local printing ids differ from the server's, so phone cards show the card's
+  default art. My call; it can come later.
 - A condition field. The data model has none and desktop scanning doesn't set one.
 - Automatic store submission. CI uploads builds to TestFlight (and later Play's internal
   track); sending a version for review and releasing it stays a manual step for the owner.
@@ -143,6 +151,12 @@ scanner, sync or storage code.
 ## The phone screen
 
 My call, to be refined when we see it:
+
+- A bottom tab bar: Home (dashboard), Collection, Scan (in the middle), Sets, and More (Browse,
+  Friends, Settings). The desktop pages are reused. Phone layouts are added only below the
+  desktop window's minimum width, so the desktop app looks the same. Side panels (entry
+  details, a set's card panel) become full-screen sheets on a phone, and the add-card dialog
+  becomes full-screen.
 
 - Signed out: a sign-in screen.
 - Signed in, first run: a progress screen while the card data and recognition files download

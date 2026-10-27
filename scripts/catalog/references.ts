@@ -10,6 +10,8 @@ import { choosePrintingFile } from '../../src/main/yugipedia/printingArt'
 
 /** Scans downloaded per run; the rest wait for the next night. */
 const DEFAULT_MAX_DOWNLOADS = 600
+/** Card gallery pages asked for at once (the API's own limit). */
+const GALLERY_BATCH = 50
 /** A printing with no scan, or a scan that failed, is tried again after this long. */
 const RETRY_MS = 30 * 24 * 60 * 60 * 1000
 const RETRY_DELAYS_MS = [1000, 2000]
@@ -147,38 +149,38 @@ export async function buildReferences(opts: ReferenceOptions): Promise<Reference
     const row = known.get(p.id)
     return !row || (row.file === null && row.checked_at < retryBefore)
   })
-  const galleries = new Map<string, string[]>()
-  if (lookUp.length > 0) {
-    try {
-      const pages = await yugipedia.listPageImages([
-        ...new Set(lookUp.map((p) => `Card Gallery:${p.name}`))
-      ])
-      for (const [title, files] of pages) galleries.set(title, files)
-    } catch (e) {
-      // Yugipedia trouble: the printings already looked up still count; the rest wait.
-      log(`Printing scan lookup failed: ${e instanceof Error ? e.message : e}`)
-    }
-  }
-  const at = now().toISOString()
   const saveFile = cache.prepare(
     'INSERT OR REPLACE INTO ref_printing (printing_id, file, checked_at) VALUES (?, ?, ?)'
   )
-  cache.transaction(() => {
-    for (const p of lookUp) {
-      const files = galleries.get(`Card Gallery:${p.name}`)
-      // A gallery missing from the answer is left to look up again next run.
-      if (!files || !isLanguage(p.language)) continue
-      const file = choosePrintingFile(files, {
-        setCode: p.set_code,
-        language: p.language,
-        rarity: p.set_rarity,
-        rarityCode: p.set_rarity_code,
-        variant: p.variant
-      })
-      saveFile.run(p.id, file, at)
-      known.set(p.id, { printing_id: p.id, file, checked_at: at })
+  const titles = [...new Set(lookUp.map((p) => `Card Gallery:${p.name}`))]
+  // A batch at a time, each saved as it comes, so trouble partway keeps what came before.
+  for (let i = 0; i < titles.length; i += GALLERY_BATCH) {
+    const batch = new Set(titles.slice(i, i + GALLERY_BATCH))
+    let galleries: Map<string, string[]>
+    try {
+      galleries = await yugipedia.listPageImages([...batch])
+    } catch (e) {
+      log(`Printing scan lookup failed: ${e instanceof Error ? e.message : e}`)
+      break
     }
-  })()
+    const at = now().toISOString()
+    cache.transaction(() => {
+      for (const p of lookUp) {
+        const files = galleries.get(`Card Gallery:${p.name}`)
+        // A gallery missing from the answer is left to look up again next run.
+        if (!batch.has(`Card Gallery:${p.name}`) || !files || !isLanguage(p.language)) continue
+        const file = choosePrintingFile(files, {
+          setCode: p.set_code,
+          language: p.language,
+          rarity: p.set_rarity,
+          rarityCode: p.set_rarity_code,
+          variant: p.variant
+        })
+        saveFile.run(p.id, file, at)
+        known.set(p.id, { printing_id: p.id, file, checked_at: at })
+      }
+    })()
+  }
 
   // Each scan once: its file, and the card it shows.
   const scans = new Map<string, PrintingRow>()

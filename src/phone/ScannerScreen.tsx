@@ -67,7 +67,7 @@ function ReviewSheet(): React.JSX.Element {
         aria-expanded={open}
         {...handle}
         style={!open && dy < 0 ? { transform: `translateY(${Math.max(dy, -80)}px)` } : undefined}
-        className="mx-3 mb-3 mt-auto flex h-14 shrink-0 touch-none items-center justify-between rounded-2xl border border-white/[0.08] bg-card px-5 text-base font-medium shadow-lg active:bg-white/[0.06]"
+        className="mx-3 mb-3 flex h-14 shrink-0 touch-none items-center justify-between rounded-2xl border border-white/[0.08] bg-card px-5 text-base font-medium shadow-lg active:bg-white/[0.06]"
       >
         <span className="tabular-nums">{label}</span>
         <ChevronUpIcon aria-hidden className="size-5 text-muted-foreground" />
@@ -114,8 +114,7 @@ export function ScannerScreen({
   const pickers = useScanPickers()
   return (
     <div className="relative flex h-full min-h-0 flex-col overflow-hidden">
-      <div className="relative shrink-0">
-        <PhoneCamera engineFactory={engineFactory} />
+      <PhoneCamera engineFactory={engineFactory}>
         <button
           type="button"
           aria-label="Settings"
@@ -124,8 +123,8 @@ export function ScannerScreen({
         >
           <SettingsIcon aria-hidden className="size-5" />
         </button>
-      </div>
-      <StatusLine />
+      </PhoneCamera>
+      <StatusLine className="shrink-0" />
       <div className="flex shrink-0 gap-2 px-3 pb-3">
         <div className="flex min-w-0 flex-1 flex-col gap-1">
           <span aria-hidden className="px-1 text-[11px] text-muted-foreground">

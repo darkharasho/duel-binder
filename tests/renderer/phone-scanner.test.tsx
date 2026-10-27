@@ -151,4 +151,34 @@ describe('phone scanner', () => {
     expect(screen.getByRole('combobox', { name: 'New scans as' })).toHaveTextContent('Auto')
     expect(screen.getByRole('button', { name: 'Settings' })).toBeInTheDocument()
   })
+
+  // jsdom has no layout, so this pins the structure that makes the rows fit: the camera is the one
+  // part of the column that shrinks, at 3:4 within whatever room is left, and every other row
+  // keeps its height. (Checked by eye in Task 13 at 390x844 and 375x667.)
+  it('the camera gives way so the status line, pickers and Review bar always fit', async () => {
+    const store = fakeStore()
+    installPhoneApi(store)
+    const { container } = renderScanner(store)
+    const review = await screen.findByRole('button', { name: /0 scanned · Review/ })
+    const camera = screen.getByRole('region', { name: 'Camera' })
+    const column = camera.parentElement!
+    expect(camera).toHaveClass('min-h-0', 'flex-1')
+
+    const stage = camera.querySelector('[data-camera-stage]')!
+    expect(stage).toHaveClass('min-h-0', 'flex-1', '[container-type:size]')
+    const viewport = container.querySelector('video')!.parentElement!
+    expect(stage.contains(viewport)).toBe(true)
+    // 3:4 at the largest size that fits the stage, so the scanned crop is what the preview shows.
+    expect(viewport).toHaveClass('aspect-[3/4]', 'w-[min(100cqw,75cqh)]')
+    // The gear rides on the preview, not on a row of its own.
+    expect(viewport.contains(screen.getByRole('button', { name: 'Settings' }))).toBe(true)
+
+    const picker = screen.getByRole('combobox', { name: 'Set' })
+    const rows = [...column.children].filter((c) => c !== camera)
+    for (const el of [review, picker, screen.getAllByRole('status').at(-1)!]) {
+      expect(camera.contains(el)).toBe(false)
+      const row = rows.find((r) => r.contains(el))!
+      expect(row).toHaveClass('shrink-0')
+    }
+  })
 })

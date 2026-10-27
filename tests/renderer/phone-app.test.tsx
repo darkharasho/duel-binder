@@ -126,6 +126,20 @@ describe('phone app', () => {
     expect(screen.getByRole('button', { name: 'Review 0 scanned' })).toBeInTheDocument()
   })
 
+  it('the scanner is full screen and its × goes back to Home', async () => {
+    const user = userEvent.setup()
+    const store = fakeStore()
+    installPhoneApi(store)
+    renderApp(store)
+    const nav = await screen.findByRole('navigation', { name: 'Tabs' })
+    expect(nav).toHaveClass('hidden')
+
+    await user.click(screen.getByRole('button', { name: 'Close scanner' }))
+    expect(await screen.findByRole('heading', { name: 'Dashboard' })).toBeInTheDocument()
+    expect(tab('Home')).toHaveAttribute('aria-current', 'page')
+    expect(nav).not.toHaveClass('hidden')
+  })
+
   it('every tab opens its page', async () => {
     const user = userEvent.setup()
     const store = fakeStore()

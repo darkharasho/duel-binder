@@ -113,8 +113,11 @@ export function PhoneShell({
         ref={mainRef}
         data-main-scroll
         className={cn(
-          'min-h-0 flex-1 pt-[env(safe-area-inset-top)]',
-          scan ? 'overflow-hidden' : 'overflow-auto overscroll-contain'
+          'min-h-0 flex-1',
+          // The scanner is full screen and pads for the notch itself.
+          scan
+            ? 'overflow-hidden'
+            : 'overflow-auto overscroll-contain pt-[env(safe-area-inset-top)]'
         )}
       >
         <ArtWashContext.Provider value={setWash}>
@@ -124,6 +127,7 @@ export function PhoneShell({
               scan={
                 <ScannerScreen
                   engineFactory={engineFactory}
+                  onClose={() => go('dashboard')}
                   onOpenSettings={() => go('settings')}
                 />
               }
@@ -138,9 +142,13 @@ export function PhoneShell({
         <StatusLine className="relative z-30 shrink-0 border-t border-white/[0.06] bg-background/90 pb-7 backdrop-blur-xl" />
       )}
 
+      {/* The scanner is full screen; its × goes back to Home. */}
       <nav
         aria-label="Tabs"
-        className="relative z-40 shrink-0 border-t border-white/[0.08] bg-background/90 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl"
+        className={cn(
+          'relative z-40 shrink-0 border-t border-white/[0.08] bg-background/90 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl',
+          scan && 'hidden'
+        )}
       >
         <div className="mx-auto grid h-16 max-w-lg grid-cols-5 items-end">
           {TABS.map(({ page: p, label, icon: Icon }) =>

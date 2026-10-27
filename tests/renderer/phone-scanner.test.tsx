@@ -50,7 +50,7 @@ function renderScanner(store: PhoneStore): ReturnType<typeof renderWithProviders
   return renderWithProviders(
     <PhoneContext.Provider value={{ store, user: SETO, signedOut: () => {} }}>
       <ScanHubProvider>
-        <ScannerScreen engineFactory={() => engine} onOpenSettings={() => {}} />
+        <ScannerScreen engineFactory={() => engine} onClose={() => {}} onOpenSettings={() => {}} />
         <Toaster />
       </ScanHubProvider>
     </PhoneContext.Provider>,
@@ -143,12 +143,34 @@ describe('phone scanner', () => {
     expect(applyConstraints).toHaveBeenLastCalledWith({ advanced: [{ torch: false }] })
   })
 
-  it('shows the Set and New scans as pickers and a settings button', async () => {
+  it('shows the Language, Set and New scans as pickers and the close and settings buttons', async () => {
     const store = fakeStore()
     installPhoneApi(store)
     renderScanner(store)
-    expect(await screen.findByRole('combobox', { name: 'Set' })).toHaveTextContent('SetAny')
-    expect(screen.getByRole('combobox', { name: 'New scans as' })).toHaveTextContent('RarityAuto')
+    expect(await screen.findByRole('combobox', { name: 'Set' })).toHaveTextContent('Any set')
+    expect(screen.getByRole('combobox', { name: 'Language' })).toHaveTextContent('English')
+    expect(screen.getByRole('combobox', { name: 'New scans as' })).toHaveTextContent('Auto rarity')
+    expect(screen.getByRole('button', { name: 'Settings' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Close scanner' })).toBeInTheDocument()
+  })
+
+  it('keeps the close and settings buttons when the camera fails', async () => {
+    vi.stubGlobal('navigator', {
+      ...navigator,
+      mediaDevices: {
+        getUserMedia: vi.fn(async () => {
+          throw new DOMException('no camera', 'NotFoundError')
+        }),
+        enumerateDevices: vi.fn(async () => []),
+        addEventListener: vi.fn(),
+        removeEventListener: vi.fn()
+      }
+    })
+    const store = fakeStore()
+    installPhoneApi(store)
+    renderScanner(store)
+    expect(await screen.findByText("This phone's camera didn't open.")).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Close scanner' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Settings' })).toBeInTheDocument()
   })
 
@@ -166,7 +188,7 @@ describe('phone scanner', () => {
 
     const stage = camera.querySelector('[data-camera-stage]')!
     expect(stage).toHaveClass('min-h-0', 'flex-1', '[container-type:size]')
-    const viewport = container.querySelector('video')!.parentElement!
+    const viewport = container.querySelector('video:not([aria-hidden])')!.parentElement!
     expect(stage.contains(viewport)).toBe(true)
     // 3:4 at the largest size that fits the stage, so the scanned crop is what the preview shows.
     expect(viewport).toHaveClass('aspect-[3/4]', 'w-[min(100cqw,75cqh)]')

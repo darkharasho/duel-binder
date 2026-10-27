@@ -1,8 +1,10 @@
 import { useCallback, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { LANGUAGES, languageInfo, type Language } from '@shared/languages'
+import { isLanguage, LANGUAGES, languageInfo, type Language } from '@shared/languages'
 import { RARITY_TIERS } from '@shared/scan/rarity'
+import { setPrefix } from '@shared/sets'
 import { api, queryKeys } from '@/lib/api'
+import { matchesLanguage, useLanguageFilter } from '@/lib/languageFilter'
 import { useScanHub } from './ScanHub'
 import type { PickerOption } from './SearchPicker'
 
@@ -20,6 +22,13 @@ interface PickedSet {
 
 const setKeyOf = (s: PickedSet): string => `${s.language}|${s.setName}`
 
+/** "MAMO - Magnificent Monsters", with the language tag when sets of every language are listed. */
+function setLabel(s: PickedSet & { setCode?: string }, withTag: boolean): string {
+  const code = s.setCode ? setPrefix(s.setCode) : ''
+  const name = code ? `${code} - ${s.setName}` : s.setName
+  return withTag ? `${name} · ${languageInfo(s.language).tag}` : name
+}
+
 /** One SearchPicker's value, options and pick handler. */
 export interface PickerProps {
   value: string
@@ -28,12 +37,19 @@ export interface PickerProps {
 }
 
 /**
- * The scan "Set" and "New scans as" pickers, read from and written to the scan hub's settings.
+ * The scan "Language", "Set" and "New scans as" pickers. The language is the app's shared
+ * language filter and narrows the sets listed; the set and rarity are the scan hub's settings.
  * The same for the desktop Scan page and the phone scanner.
  */
-export function useScanPickers(): { set: PickerProps; rarity: PickerProps } {
+export function useScanPickers(): {
+  language: PickerProps
+  set: PickerProps
+  rarity: PickerProps
+} {
   const { settings, setSettings } = useScanHub()
+  const [language, setLanguage] = useLanguageFilter()
   const picked = settings.set
+  const withTag = language === 'all'
 
   // Not refetched while scanning (focus or staleness); data-changed events still invalidate it.
   const sets = useQuery({
@@ -46,7 +62,7 @@ export function useScanPickers(): { set: PickerProps; rarity: PickerProps } {
     const order = new Map(LANGUAGES.map((l, i) => [l.code, i]))
     const byName = new Intl.Collator('en').compare
     const sorted = (sets.data ?? [])
-      .map((s) => ({ setName: s.setName, language: s.language }))
+      .filter((s) => matchesLanguage(language, s.language))
       .sort(
         (a, b) =>
           byName(a.setName, b.setName) ||
@@ -56,12 +72,24 @@ export function useScanPickers(): { set: PickerProps; rarity: PickerProps } {
     const byKey = new Map<string, PickedSet>()
     for (const s of sorted) {
       const key = setKeyOf(s)
-      const label = `${s.setName} · ${languageInfo(s.language).tag}`
-      byKey.set(key, s)
+      const label = setLabel(s, withTag)
+      byKey.set(key, { setName: s.setName, language: s.language })
       options.push({ key, label, search: label.toLowerCase() })
     }
     return { options, byKey }
-  }, [sets.data])
+  }, [sets.data, language, withTag])
+
+  const languageOptions = useMemo(() => {
+    const present = new Set((sets.data ?? []).map((s) => s.language))
+    return [
+      { key: 'all', label: 'All languages' },
+      ...LANGUAGES.filter((l) => l.code === language || present.has(l.code)).map((l) => ({
+        key: l.code,
+        label: l.label,
+        search: `${l.label} ${l.tag}`.toLowerCase()
+      }))
+    ]
+  }, [sets.data, language])
 
   const { byKey } = setOptions
   // A remembered set missing from the list (still loading, say) still shows as picked.
@@ -72,11 +100,11 @@ export function useScanPickers(): { set: PickerProps; rarity: PickerProps } {
             ...setOptions.options,
             {
               key: setKeyOf(picked),
-              label: `${picked.setName} · ${languageInfo(picked.language).tag}`
+              label: setLabel(picked, withTag || !matchesLanguage(language, picked.language))
             }
           ]
         : setOptions.options,
-    [picked, byKey, setOptions.options]
+    [picked, byKey, setOptions.options, withTag, language]
   )
   const pickSet = useCallback(
     (key: string): void => {
@@ -87,6 +115,18 @@ export function useScanPickers(): { set: PickerProps; rarity: PickerProps } {
     [byKey, picked, setSettings]
   )
 
+  // A picked set follows to the new language where that language has it, else it's cleared.
+  const pickLanguage = useCallback(
+    (key: string): void => {
+      if (key !== 'all' && !isLanguage(key)) return
+      setLanguage(key)
+      if (!picked || key === 'all' || key === picked.language) return
+      const same = (sets.data ?? []).find((s) => s.language === key && s.setName === picked.setName)
+      setSettings({ set: same ? { setName: same.setName, language: same.language } : null })
+    },
+    [picked, sets.data, setLanguage, setSettings]
+  )
+
   const pickRarity = useCallback(
     (value: string): void => {
       setSettings({ defaultRarity: value === AUTO ? null : value })
@@ -95,6 +135,7 @@ export function useScanPickers(): { set: PickerProps; rarity: PickerProps } {
   )
 
   return {
+    language: { value: language, options: languageOptions, onPick: pickLanguage },
     set: { value: picked ? setKeyOf(picked) : ANY, options: pickedSetOptions, onPick: pickSet },
     rarity: { value: settings.defaultRarity ?? AUTO, options: RARITY_OPTIONS, onPick: pickRarity }
   }

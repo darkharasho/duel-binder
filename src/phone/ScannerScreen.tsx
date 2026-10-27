@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import {
   ArrowRightIcon,
   CopyIcon,
+  LanguagesIcon,
   LayersIcon,
   SettingsIcon,
   ShuffleIcon,
@@ -71,10 +72,9 @@ function ReviewSheet({ onClose }: { onClose: () => void }): React.JSX.Element {
         className="absolute inset-0 z-20 bg-black/50 animate-in fade-in"
         onClick={onClose}
       />
-      {/* pb-8 keeps the list clear of the Scan button rising out of the tabs. */}
       <div
         style={dy > 0 ? { transform: `translateY(${dy}px)` } : undefined}
-        className="absolute inset-x-0 bottom-0 z-30 flex h-[85%] flex-col rounded-t-3xl pb-8 border-t border-white/[0.08] bg-background shadow-2xl animate-in slide-in-from-bottom duration-200"
+        className="absolute inset-x-0 bottom-0 z-30 flex h-[85%] flex-col rounded-t-3xl pb-[env(safe-area-inset-bottom)] border-t border-white/[0.08] bg-background shadow-2xl animate-in slide-in-from-bottom duration-200"
       >
         <button
           type="button"
@@ -206,30 +206,34 @@ function Chip({
       onPick={picker.onPick}
       searchPlaceholder={searchPlaceholder}
       className={cn(
-        'h-[38px] max-w-[70%] shrink-0 justify-start gap-1.5 rounded-full px-3.5 text-sm font-medium shadow-none dark:bg-white/[0.07] dark:hover:bg-white/[0.12]',
+        'h-[38px] max-w-[60vw] shrink-0 justify-start gap-1.5 rounded-full px-3.5 text-sm font-medium shadow-none dark:bg-white/[0.07] dark:hover:bg-white/[0.12]',
         GLASS
       )}
       renderTrigger={(picked) => (
         <>
-          <Icon aria-hidden className="size-4 shrink-0" />
-          <span className="shrink-0">{name}</span>
-          <span className="truncate font-normal text-white/55">{shown(picked)}</span>
+          <Icon aria-hidden className="size-4 shrink-0 text-white/55" />
+          <span className="sr-only">{name} </span>
+          <span className="truncate">{shown(picked)}</span>
         </>
       )}
     />
   )
 }
 
+const ROUND = 'flex size-11 items-center justify-center rounded-full backdrop-blur-md'
+
 /**
- * The phone's Scan tab: the camera on top, the last card scanned under it, the set and rarity
- * chips, and the session's count and value with a button to the full list. The gear opens
- * Settings.
+ * The phone's scanner, full screen over the camera's own blurred picture: the camera on top, the
+ * last card scanned under it, the language, set and rarity chips, and the session's count and
+ * value with a button to the full list. The × goes back to Home; the gear opens Settings.
  */
 export function ScannerScreen({
   engineFactory,
+  onClose,
   onOpenSettings
 }: {
   engineFactory?: () => ScanEngine
+  onClose: () => void
   onOpenSettings: () => void
 }): React.JSX.Element {
   const { session } = useScanHub()
@@ -245,13 +249,21 @@ export function ScannerScreen({
   const total = session.total
 
   return (
-    <div className="relative flex h-full min-h-0 flex-col overflow-hidden">
+    <div className="relative isolate flex h-full min-h-0 w-full flex-col overflow-hidden pt-[env(safe-area-inset-top)]">
       <PhoneCamera engineFactory={engineFactory} className="px-6 pt-3">
+        <button
+          type="button"
+          aria-label="Close scanner"
+          onClick={onClose}
+          className={cn(ROUND, 'absolute left-2 top-2 bg-black/45 text-white')}
+        >
+          <XIcon aria-hidden className="size-5" />
+        </button>
         <button
           type="button"
           aria-label="Settings"
           onClick={onOpenSettings}
-          className="absolute left-2 top-2 flex size-11 items-center justify-center rounded-full bg-black/45 text-white backdrop-blur-md"
+          className={cn(ROUND, 'absolute right-2 top-2 bg-black/45 text-white')}
         >
           <SettingsIcon aria-hidden className="size-5" />
         </button>
@@ -268,13 +280,21 @@ export function ScannerScreen({
           </section>
         )}
       </div>
-      <div className="flex shrink-0 gap-2 overflow-x-auto px-3.5 pt-2.5">
+      <div className="flex min-w-0 shrink-0 gap-2 overflow-x-auto px-3.5 pt-2.5 [scrollbar-width:none]">
+        <Chip
+          label="Language"
+          name="Language"
+          icon={LanguagesIcon}
+          picker={pickers.language}
+          shown={(p) => (!p || p.key === 'all' ? 'All' : p.label)}
+          searchPlaceholder="Search languages…"
+        />
         <Chip
           label="Set"
           name="Set"
           icon={LayersIcon}
           picker={pickers.set}
-          shown={(p) => (pickers.set.value === 'any' || !p ? 'Any' : p.label)}
+          shown={(p) => (pickers.set.value === 'any' || !p ? 'Any set' : p.label)}
           searchPlaceholder="Search sets…"
         />
         <Chip
@@ -282,12 +302,11 @@ export function ScannerScreen({
           name="Rarity"
           icon={StarIcon}
           picker={pickers.rarity}
-          shown={(p) => p?.label ?? 'Auto'}
+          shown={(p) => (!p || p.key === 'auto' ? 'Auto rarity' : p.label)}
           searchPlaceholder="Search rarities…"
         />
       </div>
-      {/* mb-8 keeps the footer clear of the Scan button rising out of the tabs. */}
-      <div className="mb-8 flex shrink-0 items-center justify-between px-4 pt-3">
+      <div className="flex shrink-0 pb-[max(0.75rem,env(safe-area-inset-bottom))] items-center justify-between px-4 pt-3">
         <div>
           <p className="text-[11px] uppercase tracking-wide text-muted-foreground tabular-nums">
             {total} {total === 1 ? 'card' : 'cards'}

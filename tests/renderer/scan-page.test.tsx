@@ -253,7 +253,7 @@ describe('Scan page', () => {
     await openWindow()
     const u = user()
     await u.click(screen.getByRole('combobox', { name: 'Set' }))
-    await u.click(screen.getByRole('option', { name: 'Legend of Blue Eyes White Dragon · EN' }))
+    await u.click(screen.getByRole('option', { name: 'Legend of Blue Eyes White Dragon' }))
     expect(lastSettings().set).toEqual({
       setName: 'Legend of Blue Eyes White Dragon',
       language: 'en'
@@ -722,9 +722,13 @@ describe('Scan page', () => {
   })
 
   it('picking a set passes its image ids as candidates', async () => {
-    const lob = { setName: 'Legend of Blue Eyes White Dragon', language: 'en' } as SetSummary
-    const lobDe = { setName: 'Legend of Blue Eyes White Dragon', language: 'de' } as SetSummary
-    const mrd = { setName: 'Metal Raiders', language: 'en' } as SetSummary
+    const lob = {
+      setName: 'Legend of Blue Eyes White Dragon',
+      setCode: 'LOB',
+      language: 'en'
+    } as SetSummary
+    const lobDe = { ...lob, setCode: 'LOB-DE', language: 'de' } as SetSummary
+    const mrd = { setName: 'Metal Raiders', setCode: 'MRD', language: 'en' } as SetSummary
     const printingsForSet = vi.fn(async () => [
       printing({ imageIds: [46986414, 46986415] }),
       printing({ printingId: 103, cardId: 2, imageIds: [89631139] })
@@ -737,23 +741,30 @@ describe('Scan page', () => {
     await run(500)
     expect(engine.analyze.mock.calls[0][1]).toMatchObject({ candidates: null })
 
+    // English sets only, by their code, until another language is picked.
     const u = user()
     await u.click(screen.getByRole('combobox', { name: 'Set' }))
     expect(screen.getAllByRole('option').map((o) => o.textContent)).toEqual([
       'Any set',
-      'Legend of Blue Eyes White Dragon · EN',
-      'Legend of Blue Eyes White Dragon · DE',
-      'Metal Raiders · EN'
+      'LOB - Legend of Blue Eyes White Dragon',
+      'MRD - Metal Raiders'
     ])
-    await u.type(screen.getByPlaceholderText('Search sets…'), 'blue de')
+    await u.type(screen.getByPlaceholderText('Search sets…'), 'mrd')
+    expect(screen.getAllByRole('option').map((o) => o.textContent)).toEqual(['MRD - Metal Raiders'])
+    await u.keyboard('{Escape}')
+
+    await u.click(screen.getByRole('combobox', { name: 'Language' }))
+    await u.click(screen.getByRole('option', { name: 'German' }))
+    await u.click(screen.getByRole('combobox', { name: 'Set' }))
     expect(screen.getAllByRole('option').map((o) => o.textContent)).toEqual([
-      'Legend of Blue Eyes White Dragon · DE'
+      'Any set',
+      'LOB - Legend of Blue Eyes White Dragon'
     ])
-    await u.click(screen.getByRole('option', { name: 'Legend of Blue Eyes White Dragon · DE' }))
+    await u.click(screen.getByRole('option', { name: 'LOB - Legend of Blue Eyes White Dragon' }))
     await run(500)
     expect(printingsForSet).toHaveBeenCalledWith('Legend of Blue Eyes White Dragon', 'de')
     expect(screen.getByRole('combobox', { name: 'Set' })).toHaveTextContent(
-      'Legend of Blue Eyes White Dragon · DE'
+      'LOB - Legend of Blue Eyes White Dragon'
     )
     expect(engine.analyze.mock.calls.at(-1)?.[1]).toMatchObject({
       candidates: [46986414, 46986415, 89631139]
@@ -762,6 +773,37 @@ describe('Scan page', () => {
       setName: 'Legend of Blue Eyes White Dragon',
       language: 'de'
     })
+
+    // The set follows to a language that has it; every language tags each set with its own.
+    await u.click(screen.getByRole('combobox', { name: 'Language' }))
+    await u.click(screen.getByRole('option', { name: 'English' }))
+    expect(JSON.parse(localStorage.getItem('scan.set')!)).toEqual({
+      setName: 'Legend of Blue Eyes White Dragon',
+      language: 'en'
+    })
+    await u.click(screen.getByRole('combobox', { name: 'Language' }))
+    await u.click(screen.getByRole('option', { name: 'All languages' }))
+    expect(screen.getByRole('combobox', { name: 'Set' })).toHaveTextContent(
+      'LOB - Legend of Blue Eyes White Dragon · EN'
+    )
+  })
+
+  it('a picked set is cleared for a language without it', async () => {
+    localStorage.setItem('scan.set', JSON.stringify({ setName: 'Metal Raiders', language: 'en' }))
+    const mrd = { setName: 'Metal Raiders', setCode: 'MRD', language: 'en' } as SetSummary
+    const lobDe = {
+      setName: 'Legend of Blue Eyes White Dragon',
+      setCode: 'LOB-DE',
+      language: 'de'
+    } as SetSummary
+    await renderScan({ sets: { list: vi.fn(async () => [mrd, lobDe]) } })
+    await run()
+    const u = user()
+    expect(screen.getByRole('combobox', { name: 'Set' })).toHaveTextContent('MRD - Metal Raiders')
+    await u.click(screen.getByRole('combobox', { name: 'Language' }))
+    await u.click(screen.getByRole('option', { name: 'German' }))
+    expect(screen.getByRole('combobox', { name: 'Set' })).toHaveTextContent('Any set')
+    expect(JSON.parse(localStorage.getItem('scan.set') ?? 'null')).toBeNull()
   })
 
   it("a set whose cards can't be read scans as any set and says so", async () => {
@@ -814,7 +856,7 @@ describe('Scan page', () => {
 
     const u = user()
     await u.click(screen.getByRole('combobox', { name: 'Set' }))
-    await u.click(screen.getByRole('option', { name: 'Metal Raiders · EN' }))
+    await u.click(screen.getByRole('option', { name: 'Metal Raiders' }))
     await run(500)
     expect(screen.getByText('Scanning stopped after repeated errors.')).toBeInTheDocument()
 
@@ -879,7 +921,7 @@ describe('Scan page', () => {
     localStorage.setItem('scan.camera', 'cam9')
     await renderScan()
     await run()
-    expect(screen.getByRole('combobox', { name: 'Set' })).toHaveTextContent('Metal Raiders · EN')
+    expect(screen.getByRole('combobox', { name: 'Set' })).toHaveTextContent('Metal Raiders')
     expect(screen.getByLabelText('Hit price')).toHaveValue(50)
     act(() => bridge.emit({ kind: 'ready' }))
     expect(lastSettings()).toMatchObject({

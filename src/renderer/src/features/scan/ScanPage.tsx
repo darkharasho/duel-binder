@@ -98,6 +98,14 @@ export function ScanPage({
         <div className="flex flex-wrap items-center gap-3">
           <h1 className="mr-auto text-2xl font-semibold tracking-tight">Scan</h1>
           <SearchPicker
+            label="Language"
+            value={pickers.language.value}
+            options={pickers.language.options}
+            onPick={pickers.language.onPick}
+            searchPlaceholder="Search languages…"
+            className="w-40"
+          />
+          <SearchPicker
             label="Set"
             value={pickers.set.value}
             options={pickers.set.options}

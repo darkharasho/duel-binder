@@ -65,7 +65,6 @@ export function ScanViewport({
               />
             </svg>
           )}
-          {children}
           <div className="absolute inset-x-0 bottom-0 flex items-center gap-3 bg-black/70 px-4 py-2 text-sm text-white">
             <p role="status">{statusText(loop.status)}</p>
             {loop.status.kind === 'stopped' && (
@@ -76,6 +75,8 @@ export function ScanViewport({
           </div>
         </>
       )}
+      {/* Buttons laid over the picture stay when the camera fails, so there's a way out. */}
+      {children}
     </div>
   )
 }

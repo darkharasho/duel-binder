@@ -33,12 +33,17 @@ const SPARKS = [
 const prefersReducedMotion = (): boolean =>
   window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false
 
-/** Space belongs to whatever has focus when that's a control or a text field. */
-const ownsSpace = (target: EventTarget | null): boolean =>
-  target instanceof Element &&
-  target.closest(
+/**
+ * Space belongs to whatever has focus when that's an enabled control or a text field. A disabled
+ * one (Skip or Next just clicked, then disabled) can't take the key, so the opener does.
+ */
+const ownsSpace = (target: EventTarget | null): boolean => {
+  if (!(target instanceof Element)) return false
+  const control = target.closest(
     'input, textarea, select, button, a, [contenteditable=""], [contenteditable="true"], [role="button"]'
-  ) !== null
+  )
+  return control !== null && !control.matches(':disabled, [aria-disabled="true"]')
+}
 
 function RarityBadge({
   rarity,

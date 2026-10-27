@@ -96,6 +96,21 @@ describe('PackOpener', () => {
     expect(screen.queryByRole('img', { name: 'Card 0' })).not.toBeInTheDocument()
   })
 
+  it('Space on a disabled button still flips and moves on', async () => {
+    const { api } = renderOpener(async () => commons())
+    await loadedPack()
+    fireEvent.click(skipButton())
+    expect(skipButton()).toBeDisabled()
+    space(skipButton())
+    await waitFor(() => expect(screen.getByText(/pack 2 of 3/i)).toBeInTheDocument())
+    expect(api.rip.openPack).toHaveBeenCalledTimes(2)
+    await loadedPack()
+    const next = screen.getByRole('button', { name: /next pack/i })
+    expect(next).toBeDisabled()
+    space(next)
+    expect(screen.getByRole('img', { name: 'Card 0' })).toBeInTheDocument()
+  })
+
   it('a hit comes up large with its rarity and the best pull so far', async () => {
     renderOpener(async () => [card('Secret Rare', 0, 'Dark Magician'), card('Common', 1)])
     await loadedPack()

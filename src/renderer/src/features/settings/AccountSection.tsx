@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { LanguageTag } from '@/components/LanguageTag'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -31,6 +32,16 @@ function Identity({ user }: { user: Me }): React.JSX.Element {
 export function AccountSection(): React.JSX.Element {
   return isWeb() ? <WebAccount /> : <DesktopAccount />
 }
+
+const REASONS: Record<string, string> = {
+  'unknown-printing': "This printing isn't on the server yet",
+  'unknown-card': "This card isn't on the server",
+  'bad-field': 'The printing details were rejected',
+  'daily-limit': 'Daily limit reached; Duel Binder will try again tomorrow'
+}
+
+/** Why an entry can't sync, from the server's reason code. */
+const reasonText = (code: string): string => REASONS[code] ?? "Couldn't sync this card"
 
 function UnsyncedNotice({ count }: { count: number }): React.JSX.Element {
   const [open, setOpen] = useState(false)
@@ -65,10 +76,11 @@ function UnsyncedNotice({ count }: { count: number }): React.JSX.Element {
                     <span className="font-medium">{e.name}</span>
                     <span className="tabular-nums">×{e.quantity}</span>
                   </div>
-                  <div className="text-muted-foreground">
-                    {e.setCode} · {e.setName} · {e.rarity} · {e.language.toUpperCase()}
+                  <div className="flex items-center gap-1.5 text-muted-foreground">
+                    <span>{[e.setCode, e.setName, e.rarity].filter(Boolean).join(' · ')}</span>
+                    <LanguageTag language={e.language} />
                   </div>
-                  <div className="text-muted-foreground">{e.reason}</div>
+                  <div className="text-muted-foreground">{reasonText(e.reason)}</div>
                 </li>
               ))}
             </ul>

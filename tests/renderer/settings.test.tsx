@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { toast } from 'sonner'
 import { SettingsPage } from '@/features/settings/SettingsPage'
@@ -52,17 +52,22 @@ describe('SettingsPage', () => {
 
   it('lists the cards that cannot sync when asked', async () => {
     const user = userEvent.setup()
+    const issue = (uid: string, reason: string, language: 'fr' | 'zh-hans' | 'en' = 'en') => ({
+      uid,
+      name: 'Dark Magician',
+      setCode: 'LOB-005',
+      setName: 'Legend of Blue Eyes',
+      rarity: 'Ultra Rare',
+      language,
+      quantity: 2,
+      reason
+    })
     const unsynced = vi.fn(async () => [
-      {
-        uid: 'u1',
-        name: 'Dark Magician',
-        setCode: 'LOB-005',
-        setName: 'Legend of Blue Eyes',
-        rarity: 'Ultra Rare',
-        language: 'fr' as const,
-        quantity: 2,
-        reason: 'The server has no such printing'
-      }
+      issue('u1', 'unknown-printing', 'zh-hans'),
+      issue('u2', 'unknown-card', 'fr'),
+      issue('u3', 'bad-field'),
+      issue('u4', 'daily-limit'),
+      issue('u5', 'something-new')
     ])
     const api = createMockApi({
       account: {
@@ -84,10 +89,21 @@ describe('SettingsPage', () => {
     expect(unsynced).not.toHaveBeenCalled()
     await user.click(screen.getByRole('button', { name: 'Show' }))
     const dialog = await screen.findByRole('dialog')
-    for (const t of ['Dark Magician', 'LOB-005', 'Legend of Blue Eyes', 'Ultra Rare', 'The server has no such printing'])
+    for (const t of [
+      'Dark Magician',
+      'LOB-005 · Legend of Blue Eyes · Ultra Rare',
+      "This printing isn't on the server yet",
+      "This card isn't on the server",
+      'The printing details were rejected',
+      'Daily limit reached; Duel Binder will try again tomorrow',
+      "Couldn't sync this card",
+      '×2'
+    ])
       expect(dialog).toHaveTextContent(t)
-    expect(dialog).toHaveTextContent('FR')
-    expect(dialog).toHaveTextContent('×2')
+    // Language tags, not raw codes.
+    expect(within(dialog).getByText('SC')).toBeInTheDocument()
+    expect(within(dialog).getByText('FR')).toBeInTheDocument()
+    expect(dialog).not.toHaveTextContent(/ZH-HANS|unknown-printing|bad-field/i)
   })
 
   describe('unsynced dialog states', () => {

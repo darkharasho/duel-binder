@@ -495,7 +495,7 @@ describe('Scan window', () => {
     expect(screen.queryByRole('status', { name: 'Pull' })).not.toBeInTheDocument()
   })
 
-  it('a Pick printing pull shows only the name', async () => {
+  it('a Pick printing pull shows the name and its price range, never a hit', async () => {
     stubCamera()
     const engine = fakeEngine(() => ({
       ...NOTHING,
@@ -508,7 +508,7 @@ describe('Scan window', () => {
         cardsForImages: vi.fn(async () => [{ imageId: 46986414, cardId: 1 }]),
         printingsForCards: vi.fn(async () => [
           printing({ price: 50 }),
-          printing({ printingId: 102, setCode: 'SDY-006', rarity: 'Common', price: 50 })
+          printing({ printingId: 102, setCode: 'SDY-006', rarity: 'Common', price: 2 })
         ])
       }
     })
@@ -518,7 +518,7 @@ describe('Scan window', () => {
     expect(bar).toHaveTextContent('Dark Magician')
     expect(bar).not.toHaveTextContent('LOB-EN005')
     expect(bar).not.toHaveTextContent('Rare')
-    expect(bar).not.toHaveTextContent('$')
+    expect(bar).toHaveTextContent('$2.00 – $50.00')
     expect(screen.queryByLabelText('Hit')).not.toBeInTheDocument()
   })
 

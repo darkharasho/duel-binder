@@ -26,6 +26,7 @@ function Bar({ pull }: { pull: Pull }): React.JSX.Element {
         {pull.price !== null && (
           <p className="text-[clamp(1.2rem,3vw,2.75rem)] leading-tight font-bold text-emerald-400 tabular-nums">
             {formatUsd(pull.price)}
+            {pull.priceTo !== null && ` – ${formatUsd(pull.priceTo)}`}
           </p>
         )}
         {detail.length > 0 && (

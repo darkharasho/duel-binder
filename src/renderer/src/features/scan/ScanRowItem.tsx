@@ -3,6 +3,7 @@ import { Minus, Plus, X } from 'lucide-react'
 import { languageInfo } from '@shared/languages'
 import { CardArt } from '@/components/CardArt'
 import { Button } from '@/components/ui/button'
+import { formatUsd } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import type { ScanDraft } from './resolve'
 import { SearchPicker, type PickerOption } from './SearchPicker'
@@ -58,6 +59,8 @@ export const ScanRowItem = memo(function ScanRowItem({
   disabled?: boolean
 }): React.JSX.Element {
   const choices = useMemo(() => choicesFor(row), [row])
+  // Rows saved before prices existed have no `price` key at all.
+  const price = row.options.find((o) => o.printingId === row.printingId)?.price
   const { key } = row
   const { setPrinting } = actions
   const pick = useMemo(() => (v: string) => setPrinting(key, Number(v)), [key, setPrinting])
@@ -75,6 +78,14 @@ export const ScanRowItem = memo(function ScanRowItem({
           <span className="truncate text-sm font-medium">{row.name}</span>
           {row.setCode && (
             <span className="shrink-0 font-mono text-xs text-muted-foreground">{row.setCode}</span>
+          )}
+          {price != null && (
+            <span
+              aria-label={`Price of ${row.name}`}
+              className="ml-auto shrink-0 text-xs text-emerald-400 tabular-nums"
+            >
+              {formatUsd(price)}
+            </span>
           )}
         </div>
         <SearchPicker

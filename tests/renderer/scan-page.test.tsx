@@ -944,6 +944,79 @@ describe('Scan page', () => {
     expect(screen.getByRole('button', { name: 'Add 0 cards to collection' })).toBeDisabled()
   })
 
+  it('Add empties the whole list, rows without a printing too', async () => {
+    localStorage.setItem(
+      SESSION_KEY,
+      JSON.stringify([
+        row({ quantity: 2, flag: null }),
+        row({
+          key: 'c2:89631139',
+          cardId: 2,
+          name: 'Blue-Eyes White Dragon',
+          imageId: 89631139,
+          printingId: null,
+          setCode: null,
+          rarity: null,
+          flag: 'pick-printing'
+        })
+      ])
+    )
+    const add = vi.fn(async () => ({}) as never)
+    await renderScan({ collection: { add } })
+    await run()
+    await user().click(screen.getByRole('button', { name: 'Add 2 cards to collection' }))
+    await run(100)
+    expect(add).toHaveBeenCalledTimes(1)
+    expect(screen.queryByText('Dark Magician')).not.toBeInTheDocument()
+    expect(screen.queryByText('Blue-Eyes White Dragon')).not.toBeInTheDocument()
+    expect(screen.getByText('Cards you scan show up here.')).toBeInTheDocument()
+  })
+
+  it('Add keeps a row that failed, and the rest of the list', async () => {
+    localStorage.setItem(
+      SESSION_KEY,
+      JSON.stringify([
+        row({ quantity: 1, flag: null }),
+        row({
+          key: 'c2:89631139',
+          cardId: 2,
+          name: 'Blue-Eyes White Dragon',
+          imageId: 89631139,
+          printingId: null,
+          setCode: null,
+          rarity: null,
+          flag: 'pick-printing'
+        })
+      ])
+    )
+    const add = vi.fn(async () => {
+      throw new Error('Database is locked')
+    })
+    await renderScan({ collection: { add } })
+    await run()
+    await user().click(screen.getByRole('button', { name: 'Add 1 card to collection' }))
+    await run(100)
+    expect(screen.getByText('Dark Magician')).toBeInTheDocument()
+    expect(screen.getByText('Blue-Eyes White Dragon')).toBeInTheDocument()
+  })
+
+  it("a row shows its printing's price", async () => {
+    localStorage.setItem(
+      SESSION_KEY,
+      JSON.stringify([
+        row({
+          options: [
+            printing({ rarity: 'Common', price: 3.5 }),
+            printing({ printingId: 102, rarity: 'Rare', price: 40 })
+          ]
+        })
+      ])
+    )
+    await renderScan()
+    await run()
+    expect(screen.getByLabelText('Price of Dark Magician')).toHaveTextContent('$3.50')
+  })
+
   it("a row can't be changed while Add runs", async () => {
     localStorage.setItem(SESSION_KEY, JSON.stringify([row({ quantity: 2, flag: null })]))
     let finish!: () => void

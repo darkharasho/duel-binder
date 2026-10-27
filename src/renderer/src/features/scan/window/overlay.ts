@@ -11,18 +11,40 @@ export interface Pull {
   setCode: string | null
   rarity: string | null
   price: number | null
+  /** The top of a price range, for a pull whose printing isn't known; null for one price. */
+  priceTo: number | null
   hit: boolean
 }
 
-/** A Pick printing draft shows only its name and is never a hit; the price is the drafted printing's. */
+/**
+ * A Pick printing draft shows its name and the range of its printings' prices, and is never a
+ * hit; otherwise the price is the drafted printing's.
+ */
 export function pullOf(d: ScanDraft, hitPrice: number, key: number): Pull {
   const base = { key, name: d.name, imageId: d.imageId }
   if (d.flag === 'pick-printing') {
-    return { ...base, setCode: null, rarity: null, price: null, hit: false }
+    // Rows saved before prices existed have no `price` key at all.
+    const prices = d.options.flatMap((o) => (o.price == null ? [] : [o.price]))
+    const low = prices.length ? Math.min(...prices) : null
+    const high = prices.length ? Math.max(...prices) : null
+    return {
+      ...base,
+      setCode: null,
+      rarity: null,
+      price: low,
+      priceTo: high !== low ? high : null,
+      hit: false
+    }
   }
-  // Rows saved before prices existed have no `price` key at all.
   const price = d.options.find((o) => o.printingId === d.printingId)?.price ?? null
-  return { ...base, setCode: d.setCode, rarity: d.rarity, price, hit: price !== null && price >= hitPrice }
+  return {
+    ...base,
+    setCode: d.setCode,
+    rarity: d.rarity,
+    price,
+    priceTo: null,
+    hit: price !== null && price >= hitPrice
+  }
 }
 
 export interface OverlayState {

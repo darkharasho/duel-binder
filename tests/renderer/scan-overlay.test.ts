@@ -46,6 +46,7 @@ const pull = (key: number, hit = false): Pull => ({
   setCode: null,
   rarity: null,
   price: null,
+  priceTo: null,
   hit
 })
 
@@ -58,6 +59,7 @@ describe('pullOf', () => {
       setCode: 'LOB-005',
       rarity: 'Ultra Rare',
       price: 12.5,
+      priceTo: null,
       hit: false
     })
   })
@@ -66,10 +68,35 @@ describe('pullOf', () => {
     expect(pullOf(draft({}, { price: 20 }), 20, 1).hit).toBe(true)
   })
 
-  it('shows only the name for a pick-printing draft, never a hit', () => {
-    const p = pullOf(draft({ flag: 'pick-printing', printingId: null, setCode: null, rarity: null }, { price: 50 }), 20, 1)
-    expect(p).toMatchObject({ setCode: null, rarity: null, price: null, hit: false })
-    expect(p.name).toBe('Dark Magician')
+  it('shows the name and the price range of its printings for a pick-printing draft, never a hit', () => {
+    const d = draft({
+      flag: 'pick-printing',
+      setCode: 'LOB-005',
+      rarity: 'Ultra Rare',
+      options: [
+        printing({ price: 50 }),
+        printing({ printingId: 2, price: 2 }),
+        printing({ printingId: 3, language: 'de', price: null })
+      ]
+    })
+    expect(pullOf(d, 20, 1)).toMatchObject({
+      name: 'Dark Magician',
+      setCode: null,
+      rarity: null,
+      price: 2,
+      priceTo: 50,
+      hit: false
+    })
+  })
+
+  it('shows one price for a pick-printing draft whose priced printings agree', () => {
+    const d = draft({ flag: 'pick-printing' }, { price: 4 })
+    expect(pullOf(d, 1, 1)).toMatchObject({ price: 4, priceTo: null, hit: false })
+  })
+
+  it('shows no price for a pick-printing draft with no priced printing', () => {
+    const d = draft({ flag: 'pick-printing' }, { price: null })
+    expect(pullOf(d, 20, 1)).toMatchObject({ price: null, priceTo: null })
   })
 
   it('shows the picked rarity and its printing price for a check-rarity draft', () => {

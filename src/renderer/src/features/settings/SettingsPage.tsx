@@ -148,6 +148,10 @@ function DesktopSettings(): React.JSX.Element {
         </Button>
       </Section>
 
+      <Section title="Prices">
+        <p className="text-sm text-muted-foreground">Prices come from your Duel Binder account.</p>
+      </Section>
+
       <Section title="Image cache">
         <Row label="Size">{formatMb(cache.data ?? 0)}</Row>
         <Button variant="outline" size="sm" disabled={clear.isPending} onClick={() => clear.mutate()}>

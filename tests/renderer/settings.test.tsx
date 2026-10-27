@@ -44,6 +44,52 @@ describe('SettingsPage', () => {
     )
   })
 
+  it('says prices come from the account', async () => {
+    renderWithProviders(<SettingsPage />, { api: createMockApi() })
+    expect(await screen.findByText('Prices come from your Duel Binder account.')).toBeInTheDocument()
+    expect(screen.queryByText(/eBay/i)).not.toBeInTheDocument()
+  })
+
+  it('lists the cards that cannot sync when asked', async () => {
+    const user = userEvent.setup()
+    const unsynced = vi.fn(async () => [
+      {
+        uid: 'u1',
+        name: 'Dark Magician',
+        setCode: 'LOB-005',
+        setName: 'Legend of Blue Eyes',
+        rarity: 'Ultra Rare',
+        language: 'fr' as const,
+        quantity: 2,
+        reason: 'The server has no such printing'
+      }
+    ])
+    const api = createMockApi({
+      account: {
+        status: vi.fn(async () => ({
+          state: 'idle' as const,
+          user: { id: 1, username: 'seto', displayName: 'Seto', avatarUrl: null },
+          localOwner: 'Seto',
+          lastSyncedAt: null,
+          error: null,
+          pendingCount: 0,
+          unsyncedCount: 3,
+          signInRequired: true
+        })),
+        unsynced
+      }
+    })
+    renderWithProviders(<SettingsPage />, { api })
+    expect(await screen.findByText("3 cards can't reach your account yet.")).toBeInTheDocument()
+    expect(unsynced).not.toHaveBeenCalled()
+    await user.click(screen.getByRole('button', { name: 'Show' }))
+    const dialog = await screen.findByRole('dialog')
+    for (const t of ['Dark Magician', 'LOB-005', 'Legend of Blue Eyes', 'Ultra Rare', 'The server has no such printing'])
+      expect(dialog).toHaveTextContent(t)
+    expect(dialog).toHaveTextContent('FR')
+    expect(dialog).toHaveTextContent('×2')
+  })
+
   it('shows the last sync error', async () => {
     const api = createMockApi({
       sync: { status: vi.fn(async () => ({ ...synced, state: 'error' as const, error: 'HTTP 500' })) }

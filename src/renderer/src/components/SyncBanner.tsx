@@ -24,6 +24,8 @@ export function SyncBanner(): React.JSX.Element | null {
   if (isSyncing(status)) {
     message = 'Downloading card database…'
     showRetry = false
+  } else if (status.blocked) {
+    message = `Card data can't update right now: ${status.blocked}. Duel Binder will try again.`
   } else if (status.state === 'error') {
     message =
       status.cardCount > 0

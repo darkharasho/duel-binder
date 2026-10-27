@@ -387,6 +387,43 @@ describe('runSwitch', () => {
     expect(db.prepare('SELECT count(*) AS n FROM catalog_staging').get()).toEqual({ n: 3 })
   })
 
+  it('records a fixed reason, not the error text, for a non-offline download error', async () => {
+    const { db } = await oldDesktop()
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const broken = paged(3, (n) => {
+      if (n === 2) throw new Error('secret internal detail')
+    })
+    const outcome = await runSwitch(db, { client: broken, backupPath, now: () => NOW })
+    expect(outcome).toEqual({ state: 'pending', reason: "Couldn't download card data from the server" })
+    expect(failure(db)?.reason).toBe("Couldn't download card data from the server")
+    warn.mockRestore()
+  })
+
+  it('records a fixed reason, not the error text, for an unexpected apply error', async () => {
+    const { db } = await oldDesktop()
+    const entries = entriesSnapshot(db)
+    const catalog = db.prepare('SELECT * FROM card_printings ORDER BY id').all()
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const outcome = await runSwitch(db, {
+      client,
+      backupPath,
+      now: () => NOW,
+      afterApply: () => {
+        throw new Error('secret internal detail')
+      }
+    })
+    expect(outcome).toEqual({ state: 'pending', reason: "Couldn't update card data" })
+    expect(failure(db)).toEqual({
+      reason: "Couldn't update card data",
+      at: NOW.toISOString(),
+      retry: 'next-launch'
+    })
+    expect(entriesSnapshot(db)).toEqual(entries)
+    expect(db.prepare('SELECT * FROM card_printings ORDER BY id').all()).toEqual(catalog)
+    expect(getMeta(db, 'catalog_switched_at')).toBeNull()
+    warn.mockRestore()
+  })
+
   it('re-throws a sign-in error and records nothing', async () => {
     const { db } = await oldDesktop()
     const signedOut = paged(3, () => {

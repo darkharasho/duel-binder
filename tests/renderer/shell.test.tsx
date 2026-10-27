@@ -108,6 +108,26 @@ describe('SyncBanner', () => {
     await waitFor(() => expect(screen.queryByText(/No card data yet/)).not.toBeInTheDocument())
   })
 
+  it('shows why card data cannot update, with Retry, ahead of the offline message', async () => {
+    const run = vi.fn(async () => status())
+    const api = mockApi({
+      sync: {
+        status: async () =>
+          status({ state: 'error', error: 'x', blocked: "Couldn't back up your collection" }),
+        run
+      }
+    })
+    await renderApp(api)
+    expect(
+      await screen.findByText(
+        "Card data can't update right now: Couldn't back up your collection. Duel Binder will try again."
+      )
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/Offline/)).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Retry' }))
+    expect(run).toHaveBeenCalledTimes(1)
+  })
+
   it('says offline with saved data when a sync failed but cards exist', async () => {
     const api = mockApi({
       sync: { status: async () => status({ state: 'error', error: 'HTTP 500', cardCount: 5, lastSyncAt: new Date().toISOString() }) }

@@ -1,12 +1,20 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle
+} from '@/components/ui/dialog'
 import { api } from '@/lib/api'
 import { useAccountStatus, useApplyAccountStatus } from '@/lib/account'
 import { formatRelative } from '@/lib/format'
 import { isWeb } from '@/lib/platform'
 import { fetchMe } from '@/web/account'
 import type { Me } from '@shared/cloud'
+import type { UnsyncedEntry } from '@shared/types'
 
 function Identity({ user }: { user: Me }): React.JSX.Element {
   const [avatarFailed, setAvatarFailed] = useState(false)
@@ -25,6 +33,51 @@ export function AccountSection(): React.JSX.Element {
   return isWeb() ? <WebAccount /> : <DesktopAccount />
 }
 
+function UnsyncedNotice({ count }: { count: number }): React.JSX.Element {
+  const [open, setOpen] = useState(false)
+  const list = useQuery({
+    queryKey: ['account', 'unsynced', count],
+    queryFn: () => api.account.unsynced(),
+    enabled: open
+  })
+  return (
+    <div className="flex items-center justify-between gap-4">
+      <p className="text-muted-foreground">{count} cards can&apos;t reach your account yet.</p>
+      <Button variant="outline" size="sm" onClick={() => setOpen(true)}>
+        Show
+      </Button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Cards that can&apos;t sync</DialogTitle>
+            <DialogDescription>These stay on this computer until the server can take them.</DialogDescription>
+          </DialogHeader>
+          {list.isPending ? (
+            <p className="text-sm text-muted-foreground">Loading…</p>
+          ) : list.isError ? (
+            <p className="text-sm text-destructive">Couldn&apos;t load the list</p>
+          ) : (
+            <ul className="max-h-96 space-y-3 overflow-y-auto text-sm">
+              {list.data.map((e: UnsyncedEntry) => (
+                <li key={e.uid} className="space-y-0.5">
+                  <div className="flex justify-between gap-4">
+                    <span className="font-medium">{e.name}</span>
+                    <span className="tabular-nums">×{e.quantity}</span>
+                  </div>
+                  <div className="text-muted-foreground">
+                    {e.setCode} · {e.setName} · {e.rarity} · {e.language.toUpperCase()}
+                  </div>
+                  <div className="text-muted-foreground">{e.reason}</div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </DialogContent>
+      </Dialog>
+    </div>
+  )
+}
+
 function DesktopAccount(): React.JSX.Element {
   const s = useAccountStatus()
   const apply = useApplyAccountStatus()
@@ -36,6 +89,8 @@ function DesktopAccount(): React.JSX.Element {
         {s.pendingCount} cards from your account are waiting for newer card data. Refresh card data to bring them in.
       </p>
     ) : null
+
+  const unsynced = s.unsyncedCount > 0 ? <UnsyncedNotice count={s.unsyncedCount} /> : null
 
   if (s.state === 'signed-out') {
     return (
@@ -51,6 +106,7 @@ function DesktopAccount(): React.JSX.Element {
         )}
         {s.error && <p className="text-destructive">{s.error}</p>}
         {pending}
+        {unsynced}
         <Button size="sm" onClick={() => apply(api.account.signIn())}>
           Sign in with Discord
         </Button>
@@ -79,6 +135,7 @@ function DesktopAccount(): React.JSX.Element {
       )}
       {s.state === 'error' && <p className="text-destructive">Sync failed: {s.error}</p>}
       {pending}
+      {unsynced}
       <div className="flex items-center gap-2">
         <Button size="sm" disabled={s.state === 'syncing'} onClick={() => apply(api.account.syncNow())}>
           Sync now

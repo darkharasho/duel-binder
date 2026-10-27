@@ -28,6 +28,8 @@ export interface SwitchDeps {
 export const CENSUS_MISMATCH = "Your collection didn't match after updating card data"
 export const BACKUP_FAILED = "Couldn't back up your collection"
 const OFFLINE = "Couldn't reach the server to download card data"
+export const DOWNLOAD_FAILED = "Couldn't download card data from the server"
+export const APPLY_FAILED = "Couldn't update card data"
 
 /** Side tables the switch makes match the server; cards and card_images are never pruned. */
 const PRUNED_TABLES = [
@@ -148,7 +150,7 @@ export async function runSwitch(raw: Database.Database, deps: SwitchDeps): Promi
     return recordFailure(
       db,
       deps,
-      e instanceof CloudOfflineError ? OFFLINE : (e as Error).message || OFFLINE,
+      e instanceof CloudOfflineError ? OFFLINE : DOWNLOAD_FAILED,
       'next-run'
     )
   }
@@ -201,12 +203,7 @@ export async function runSwitch(raw: Database.Database, deps: SwitchDeps): Promi
     if (e instanceof CensusMismatchError)
       return recordFailure(db, deps, CENSUS_MISMATCH, 'next-launch')
     console.warn('Catalog switch: applying card data failed', e)
-    return recordFailure(
-      db,
-      deps,
-      `Couldn't update card data: ${(e as Error).message}`,
-      'next-launch'
-    )
+    return recordFailure(db, deps, APPLY_FAILED, 'next-launch')
   }
   return { state: 'done' }
 }

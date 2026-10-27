@@ -146,6 +146,8 @@ interface PackOpenerProps {
   setName: string
   /** Called once after the last pack, with every pack in the order opened. */
   onDone: (packs: RipCard[][]) => void
+  /** False while the opener is kept mounted but hidden; Space then does nothing. Default true. */
+  active?: boolean
 }
 
 /** Opens a rip session's packs one at a time; click or Space flips the next card. */
@@ -153,7 +155,8 @@ export function PackOpener({
   sessionId,
   packCount,
   setName,
-  onDone
+  onDone,
+  active = true
 }: PackOpenerProps): React.JSX.Element {
   const [state, dispatch] = useReducer(openerReducer, packCount, initialOpener)
   const [error, setError] = useState(false)
@@ -220,6 +223,7 @@ export function PackOpener({
   })
 
   useEffect(() => {
+    if (!active) return
     const onKey = (e: KeyboardEvent): void => {
       if (e.key !== ' ' || e.ctrlKey || e.metaKey || e.altKey || ownsSpace(e.target)) return
       e.preventDefault()
@@ -227,7 +231,7 @@ export function PackOpener({
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [])
+  }, [active])
 
   const retry = (): void => {
     setError(false)

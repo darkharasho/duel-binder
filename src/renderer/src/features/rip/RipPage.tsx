@@ -41,20 +41,25 @@ export function RipPage(): React.JSX.Element {
           className="border-b border-white/[0.08]"
         />
       </PageHeader>
-      {tab === 'history' ? (
+      {tab === 'history' && (
         <p className="text-sm text-muted-foreground">Your rip history will show up here.</p>
-      ) : view.kind === 'opening' ? (
-        <PackOpener
-          key={view.sessionId}
-          sessionId={view.sessionId}
-          packCount={view.packCount}
-          setName={view.set.setName}
-          // Task 8 shows the summary here; for now go back to the picker.
-          onDone={() => setView({ kind: 'picker' })}
-        />
-      ) : (
-        <SetPicker onRip={start} initialSetName={lastSetName} />
       )}
+      {/* Kept mounted (hidden) on the History tab, so an opening in progress keeps its place. */}
+      <div hidden={tab !== 'open'}>
+        {view.kind === 'opening' ? (
+          <PackOpener
+            key={view.sessionId}
+            sessionId={view.sessionId}
+            packCount={view.packCount}
+            setName={view.set.setName}
+            active={tab === 'open'}
+            // Task 8 shows the summary here; for now go back to the picker.
+            onDone={() => setView({ kind: 'picker' })}
+          />
+        ) : (
+          <SetPicker onRip={start} initialSetName={lastSetName} />
+        )}
+      </div>
     </div>
   )
 }

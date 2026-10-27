@@ -257,9 +257,142 @@ describe('PackOpener', () => {
     expect(count()).toBe('9 / 9')
     expect(front()).toContainElement(screen.getByRole('img', { name: 'Dark Magician' }))
     expect(skipButton()).toBeDisabled()
+    // The hit still holds the moment (420ms settle + 1500ms) before Next pack is offered.
+    expect(nextButton()).toBeDisabled()
+    for (let i = 0; i < 2; i++) await act(() => vi.advanceTimersByTimeAsync(1000))
     expect(nextButton()).toBeEnabled()
-    for (let i = 0; i < 3; i++) await act(() => vi.advanceTimersByTimeAsync(1000))
     expect(count()).toBe('9 / 9')
+  })
+
+  it('ignores Space, clicks and drags while skipping', async () => {
+    motion(false)
+    vi.useFakeTimers()
+    renderOpener(async () => nine())
+    await act(() => vi.advanceTimersByTimeAsync(0))
+    space()
+    await act(() => vi.advanceTimersByTimeAsync(550))
+    fireEvent.click(skipButton())
+    expect(count()).toBe('2 / 9')
+    space()
+    fireEvent.click(front())
+    const el = front()
+    fireEvent.pointerDown(el, { clientX: 100, pointerId: 1 })
+    fireEvent.pointerMove(el, { clientX: 200, pointerId: 1 })
+    expect(el.style.transform).not.toContain('translateX')
+    fireEvent.pointerUp(el, { clientX: 200, pointerId: 1 })
+    expect(count()).toBe('2 / 9')
+    await act(() => vi.advanceTimersByTimeAsync(330))
+    expect(count()).toBe('3 / 9')
+  })
+
+  it('Next pack waits out the hit, and clicking the hit at the end stays on it', async () => {
+    motion(false)
+    vi.useFakeTimers()
+    renderOpener(async () => [card('Common', 1), card('Ultra Rare', 0, 'Blue-Eyes')])
+    await act(() => vi.advanceTimersByTimeAsync(0))
+    space()
+    await act(() => vi.advanceTimersByTimeAsync(550))
+    space()
+    expect(count()).toBe('2 / 2')
+    // Focused, the enabled-looking button would take Space; it stays disabled through the hold.
+    expect(nextButton()).toBeDisabled()
+    fireEvent.click(nextButton())
+    await act(() => vi.advanceTimersByTimeAsync(1000))
+    expect(nextButton()).toBeDisabled()
+    await act(() => vi.advanceTimersByTimeAsync(300))
+    expect(nextButton()).toBeEnabled()
+    fireEvent.click(front())
+    fireEvent.click(screen.getByTestId('rip-stage'))
+    expect(screen.getByText(/pack 1 of 3/i)).toBeInTheDocument()
+    fireEvent.click(nextButton())
+    expect(screen.getByText(/pack 2 of 3/i)).toBeInTheDocument()
+  })
+
+  it('keeps the edges dark while the front card slides off', async () => {
+    motion(false)
+    vi.useFakeTimers()
+    renderOpener(async () => nine())
+    await act(() => vi.advanceTimersByTimeAsync(0))
+    space()
+    await act(() => vi.advanceTimersByTimeAsync(550))
+    space()
+    expect(document.querySelector('[data-leaving="out"]')).not.toBeNull()
+    const edges = document.querySelectorAll<HTMLElement>('[data-hand-card]:not([data-leaving])')
+    const behind = [...edges].filter((el) => el.dataset.handCard !== '0')
+    expect(behind).toHaveLength(4)
+    for (const el of behind) expect(el.style.filter).toContain('brightness(')
+    expect(document.querySelector<HTMLElement>('[data-leaving="out"]')!.style.filter).toBe('')
+  })
+
+  it('a quick second move lets the first card finish its slide', async () => {
+    motion(false)
+    vi.useFakeTimers()
+    renderOpener(async () => nine())
+    await act(() => vi.advanceTimersByTimeAsync(0))
+    space()
+    await act(() => vi.advanceTimersByTimeAsync(550))
+    space()
+    await act(() => vi.advanceTimersByTimeAsync(100))
+    space()
+    expect(count()).toBe('3 / 9')
+    expect(document.querySelectorAll('[data-leaving="out"]')).toHaveLength(2)
+    expect(screen.getAllByTestId('rip-caption-out')).toHaveLength(2)
+    await act(() => vi.advanceTimersByTimeAsync(200))
+    // Card 0's slide is over and it tucks in; Card 1 is still flying.
+    expect(document.querySelectorAll('[data-leaving="out"]')).toHaveLength(1)
+    expect(document.querySelectorAll('[data-leaving="tuck"]')).toHaveLength(1)
+    await act(() => vi.advanceTimersByTimeAsync(1000))
+    expect(document.querySelectorAll('[data-leaving]')).toHaveLength(0)
+    expect(screen.queryByTestId('rip-caption-out')).not.toBeInTheDocument()
+  })
+
+  it('with reduced motion the hand swaps without transitions', async () => {
+    renderOpener(async () => nine())
+    await loadedPack()
+    space()
+    space()
+    for (const el of document.querySelectorAll<HTMLElement>('[data-hand-card]')) {
+      expect(el.style.transition).toBe('none')
+    }
+    expect(document.querySelector('[data-leaving]')).toBeNull()
+  })
+
+  it('edges show no holo, so a Starlight at the back stays a surprise', async () => {
+    renderOpener(async () => [
+      card('Common', 0),
+      card('Common', 1),
+      card('Starlight Rare', 2, 'Starlight')
+    ])
+    await loadedPack()
+    space()
+    expect(document.querySelectorAll('[data-hand-card]')).toHaveLength(3)
+    expect(document.querySelector('[data-holo]')).toBeNull()
+    space()
+    space()
+    expect(front().querySelector('[data-holo]')).not.toBeNull()
+    expect(document.querySelectorAll('[data-holo]')).toHaveLength(1)
+  })
+
+  it('Space mid-drag leaves the new front card centred', async () => {
+    renderOpener(async () => nine())
+    await loadedPack()
+    space()
+    const el = front()
+    fireEvent.pointerDown(el, { clientX: 100, pointerId: 1 })
+    fireEvent.pointerMove(el, { clientX: 140, pointerId: 1 })
+    space()
+    expect(count()).toBe('2 / 9')
+    expect(front().style.transform).not.toContain('translateX')
+  })
+
+  it('a right-button drag does nothing', async () => {
+    renderOpener(async () => nine())
+    await loadedPack()
+    space()
+    const el = front()
+    fireEvent.pointerDown(el, { clientX: 100, pointerId: 1, button: 2 })
+    fireEvent.pointerMove(el, { clientX: 200, pointerId: 1, button: 2 })
+    expect(el.style.transform).not.toContain('translateX')
   })
 
   it('Skip to the hit is instant with reduced motion', async () => {
@@ -315,6 +448,83 @@ describe('PackOpener', () => {
     expect(api.rip.openPack).toHaveBeenCalledTimes(2)
   })
 
+  it('under StrictMode the next pack opens once and tears itself once, after a beat', async () => {
+    motion(false)
+    vi.useFakeTimers()
+    const { api } = renderOpener(async () => [card('Common', 0), card('Common', 1)], {
+      strict: true
+    })
+    await act(() => vi.advanceTimersByTimeAsync(0))
+    space()
+    await act(() => vi.advanceTimersByTimeAsync(550))
+    space()
+    await act(() => vi.advanceTimersByTimeAsync(800))
+    fireEvent.click(nextButton())
+    await act(() => vi.advanceTimersByTimeAsync(0))
+    expect(api.rip.openPack).toHaveBeenCalledTimes(2)
+    expect(screen.getByTestId('rip-pack')).toHaveAttribute('data-phase', 'sealed')
+    await act(() => vi.advanceTimersByTimeAsync(349))
+    expect(screen.getByTestId('rip-pack')).toHaveAttribute('data-phase', 'sealed')
+    await act(() => vi.advanceTimersByTimeAsync(1))
+    expect(screen.getByTestId('rip-pack')).toHaveAttribute('data-phase', 'tearing')
+    await act(() => vi.advanceTimersByTimeAsync(550))
+    expect(count()).toBe('1 / 2')
+    await act(() => vi.advanceTimersByTimeAsync(2000))
+    expect(count()).toBe('1 / 2')
+    expect(api.rip.openPack).toHaveBeenCalledTimes(2)
+  })
+
+  it('unmounting during the auto-tear beat is quiet', async () => {
+    motion(false)
+    vi.useFakeTimers()
+    const error = vi.spyOn(console, 'error')
+    const { unmount } = renderOpener(async () => commons())
+    await act(() => vi.advanceTimersByTimeAsync(0))
+    fireEvent.click(skipButton())
+    for (let i = 0; i < 4; i++) await act(() => vi.advanceTimersByTimeAsync(330))
+    fireEvent.click(nextButton())
+    await act(() => vi.advanceTimersByTimeAsync(0))
+    unmount()
+    await act(() => vi.advanceTimersByTimeAsync(5000))
+    expect(error).not.toHaveBeenCalled()
+  })
+
+  it('while hidden, the next pack waits sealed and a skip pauses', async () => {
+    const calls = [Promise.resolve(commons()), Promise.resolve(commons())]
+    const onDone = vi.fn()
+    const api = createMockApi({ rip: { openPack: vi.fn(() => calls.shift()!) } })
+    const ui = (active: boolean): React.JSX.Element => (
+      <PackOpener
+        sessionId={7}
+        packCount={3}
+        setName="Legend of Blue Eyes"
+        onDone={onDone}
+        active={active}
+      />
+    )
+    const { rerender } = renderWithProviders(ui(true), { api })
+    await loadedPack()
+    fireEvent.click(skipButton())
+    fireEvent.click(nextButton())
+    rerender(ui(false))
+    await waitFor(() => expect(skipButton()).toBeEnabled())
+    await new Promise((r) => setTimeout(r, 50))
+    expect(screen.getByTestId('rip-pack')).toHaveAttribute('data-phase', 'sealed')
+    rerender(ui(true))
+    await waitFor(() => expect(count()).toBe('1 / 3'))
+
+    // Animated skip, then hidden: it stops where it is until shown again.
+    motion(false)
+    rerender(ui(true)) // the opener reads the motion setting as it renders
+    fireEvent.click(skipButton())
+    expect(count()).toBe('2 / 3')
+    rerender(ui(false))
+    await new Promise((r) => setTimeout(r, 450))
+    expect(count()).toBe('2 / 3')
+    rerender(ui(true))
+    await waitFor(() => expect(count()).toBe('3 / 3'))
+  })
+
   it('next pack only once while loading', async () => {
     const second = deferred<RipCard[]>()
     const calls = [Promise.resolve(commons()), second.promise]
@@ -332,7 +542,7 @@ describe('PackOpener', () => {
   it('Space on a focused button is left to the button', async () => {
     renderOpener(async () => commons())
     await loadedPack()
-    space(skipButton())
+    expect(fireEvent.keyDown(skipButton(), { key: ' ', code: 'Space' })).toBe(true)
     expect(screen.getByTestId('rip-pack')).toBeInTheDocument()
     expect(screen.queryByTestId('rip-front')).not.toBeInTheDocument()
   })

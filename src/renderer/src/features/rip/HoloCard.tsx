@@ -12,12 +12,14 @@ interface HoloCardProps {
   card: RipCard
   size: 'small' | 'full'
   className?: string
+  /** False leaves the sheen off (e.g. a card that's only an edge in the hand). Default true. */
+  holo?: boolean
 }
 
 /** A pulled card, tilting with a glare; Secret-family cards shine over the art, Starlight over all. */
-export function HoloCard({ card, size, className }: HoloCardProps): React.JSX.Element {
+export function HoloCard({ card, size, className, holo = true }: HoloCardProps): React.JSX.Element {
   const kind = holoKind(card.rarity, card.variant)
-  const showHolo = kind !== 'none' && card.imageId != null
+  const showHolo = holo && kind !== 'none' && card.imageId != null
   const inset: React.CSSProperties =
     kind === 'art'
       ? (() => {

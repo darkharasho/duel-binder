@@ -162,3 +162,7 @@
   0%, 40% { opacity: 0; transform: translateY(8px); }
   100% { opacity: 1; transform: none; }
 }
+@keyframes rip-caption-out {
+  0% { opacity: 1; transform: none; }
+  100% { opacity: 0; transform: translateY(-6px); }
+}

@@ -107,8 +107,7 @@ export function PhoneShell({
   }
 
   return (
-    // Pinned to the top, as tall as --app-height (see screenHeight.ts), else the viewport.
-    <div className="fixed inset-x-0 top-0 isolate h-[var(--app-height,100%)] flex flex-col overflow-hidden bg-background text-foreground tabular-nums">
+    <div className="fixed inset-0 isolate flex flex-col overflow-hidden bg-background text-foreground tabular-nums">
       <ArtWash src={scan ? null : wash} />
       <main
         ref={mainRef}

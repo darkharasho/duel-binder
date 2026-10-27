@@ -10,7 +10,9 @@
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />
     <meta name="apple-mobile-web-app-title" content="Duel Binder" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <!-- "default", not black-translucent: iOS 26 sizes a black-translucent home-screen app short
+         by the status bar and never paints the strip left at the bottom (WebKit bug 301108). -->
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <title>Duel Binder</title>
     <!-- The page's CSP is the portal's header (PHONE_CSP); it has no meta tag. -->
     <link rel="manifest" href="/scan/manifest.webmanifest" vite-ignore />

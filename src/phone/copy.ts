@@ -10,8 +10,8 @@ export const SIGN_IN_FAILED = "Sign-in didn't go through. Try again."
 export const SIGN_IN_URL = '/auth/discord/start?next=scan'
 
 export const FIRST_RUN_TITLE = 'Downloading card data'
-export const FIRST_RUN_SIZE = 'About 15 MB. Use Wi-Fi if you can.'
-export const FIRST_RUN_CELLULAR = "You're on mobile data. This download is about 15 MB."
+export const FIRST_RUN_SIZE = 'About 20 MB. Use Wi-Fi if you can.'
+export const FIRST_RUN_CELLULAR = "You're on mobile data. This download is about 20 MB."
 export const FIRST_RUN_STOPPED = 'Download stopped. It will pick up where it left off.'
 
 export const STORAGE_WARNING =

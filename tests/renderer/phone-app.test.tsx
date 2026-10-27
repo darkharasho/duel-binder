@@ -201,6 +201,8 @@ describe('phone app', () => {
       await screen.findByRole('heading', { name: 'Downloading card data' })
     ).toBeInTheDocument()
     expect(screen.getByText(FIRST_RUN_SIZE)).toBeInTheDocument()
+    // The size covers the app's own files too (about 20 MB in all, measured).
+    expect(FIRST_RUN_SIZE).toBe('About 20 MB. Use Wi-Fi if you can.')
     await waitFor(() =>
       expect(screen.getByRole('progressbar')).toHaveAttribute('aria-valuenow', '25')
     )
@@ -223,6 +225,7 @@ describe('phone app', () => {
     installPhoneApi(store)
     renderApp(store)
     expect(await screen.findByText(FIRST_RUN_CELLULAR)).toBeInTheDocument()
+    expect(FIRST_RUN_CELLULAR).toBe("You're on mobile data. This download is about 20 MB.")
     expect(store.fillCatalog).not.toHaveBeenCalled()
     await user.click(screen.getByRole('button', { name: 'Download' }))
     expect(await screen.findByRole('navigation', { name: 'Tabs' })).toBeInTheDocument()

@@ -715,6 +715,37 @@ describe('phone store', () => {
     db.exec('ROLLBACK')
     expect(await account).toEqual({ state: 'signed-in', user: me })
   })
+
+  it("fills the value chart with the account's history from the portal, once a day", async () => {
+    const snap = portal.serverDb.prepare(
+      'INSERT INTO value_snapshots (user_id, date, total_value, total_cards) VALUES (?, ?, ?, ?)'
+    )
+    snap.run(userId, '2026-01-01', 10, 1)
+    snap.run(userId, '2026-01-02', 20, 2)
+    await ready()
+    const history = async (): Promise<{ date: string; totalValue: number }[]> =>
+      (
+        (await store.invoke('stats:get', [])) as {
+          valueHistory: { date: string; totalValue: number }[]
+        }
+      ).valueHistory
+    expect((await history()).slice(0, 2)).toEqual([
+      { date: '2026-01-01', totalValue: 10, totalCards: 1 },
+      { date: '2026-01-02', totalValue: 20, totalCards: 2 }
+    ])
+
+    // The phone's own day wins over the portal's; and the portal is asked once a day.
+    db.prepare('UPDATE value_snapshots SET total_value = 99 WHERE date = ?').run('2026-01-02')
+    snap.run(userId, '2026-01-03', 30, 3)
+    const asked = (): number => requests.filter((r) => r.url.endsWith('/api/rpc/stats:get')).length
+    expect(asked()).toBe(1)
+    await store.sync()
+    expect(asked()).toBe(1)
+    clock = new Date(clock.getTime() + 86_400_000)
+    await store.sync()
+    expect(asked()).toBe(2)
+    expect((await history()).slice(0, 3).map((p) => p.totalValue)).toEqual([10, 99, 30])
+  })
 })
 
 function phoneUids(...ids: number[]): string[] {

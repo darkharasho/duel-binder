@@ -25,7 +25,7 @@ import { FRIENDS_SIGNED_OUT, OFFLINE_MESSAGE } from '../../shared/friends'
 import type { PortalChannel } from '../../shared/portal'
 import { decodeFingerprints } from '../../shared/scan/fingerprintFile'
 import type { FingerprintStatus } from '../../shared/scan/types'
-import type { UnsyncedEntry } from '../../shared/types'
+import type { CollectionStats, UnsyncedEntry } from '../../shared/types'
 import { PHONE_FORMAT } from './phoneSchema'
 
 export type PhoneAccount = { state: 'signed-out' } | { state: 'signed-in'; user: Me }
@@ -86,6 +86,7 @@ type StateKey =
   | 'catalog_filled'
   | 'catalog_latest'
   | 'catalog_needs_finish'
+  | 'history_pulled'
 
 const DAY_MS = 24 * 60 * 60 * 1000
 /** The revoke on sign-out is best effort and gives up after this long. */
@@ -331,9 +332,37 @@ export function createPhoneStore(deps: {
    * Resolves whether anything the user can see may have changed.
    */
   async function syncNow(c: CloudClient): Promise<boolean> {
-    const { changed } = await syncOnce(db, activeOwner(db), c, now)
+    const owner = activeOwner(db)
+    const { changed } = await syncOnce(db, owner, c, now)
     if (getState('catalog_loaded') !== null) setState('catalog_filled', '1')
-    return changed
+    const pulled = await pullValueHistory(c, owner)
+    return changed || pulled
+  }
+
+  /**
+   * The account's value history from the portal, at most once a day. The phone records only the
+   * days it's used, so on its own the value chart starts the day it was set up. The phone's own
+   * days win. Best effort: a failure tries again on the next sync. Resolves whether it added a day.
+   */
+  async function pullValueHistory(c: CloudClient, owner: number): Promise<boolean> {
+    const mark = `${owner}:${now().toISOString().slice(0, 10)}`
+    if (getState('history_pulled') === mark) return false
+    let history: CollectionStats['valueHistory']
+    try {
+      history = (await c.rpc<CollectionStats>('stats:get', [])).valueHistory
+    } catch {
+      return false
+    }
+    let added = 0
+    db.transaction(() => {
+      const insert = db.prepare(
+        'INSERT OR IGNORE INTO value_snapshots (owner_id, date, total_value, total_cards) VALUES (?, ?, ?, ?)'
+      )
+      for (const p of history)
+        added += insert.run(owner, p.date, p.totalValue, p.totalCards).changes
+      setState('history_pulled', mark)
+    })()
+    return added > 0
   }
 
   function fingerprintStatus(failed = false): FingerprintStatus {

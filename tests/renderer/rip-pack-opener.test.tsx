@@ -250,7 +250,7 @@ describe('PackOpener', () => {
     }
     // The hit was in slot 4; it comes last.
     expect(front()).toContainElement(screen.getByRole('img', { name: 'Dark Magician' }))
-    expect(screen.getByText("That's the pack.")).toBeInTheDocument()
+    expect(screen.getByText(/That's the pack\./)).toBeInTheDocument()
   })
 
   it('a swipe on the front card sends it on; a short drag springs back', async () => {
@@ -325,7 +325,7 @@ describe('PackOpener', () => {
     expect(count()).toBe('3 / 9')
   })
 
-  it('Next pack waits out the hit, and clicking the hit at the end stays on it', async () => {
+  it('Next pack waits out the hit, then clicking the hit moves on', async () => {
     motion(false)
     vi.useFakeTimers()
     renderOpener(async () => [card('Common', 1), card('Ultra Rare', 0, 'Blue-Eyes')])
@@ -341,11 +341,35 @@ describe('PackOpener', () => {
     expect(nextButton()).toBeDisabled()
     await act(() => vi.advanceTimersByTimeAsync(300))
     expect(nextButton()).toBeEnabled()
+    expect(screen.getByText(/click for the next one/i)).toBeInTheDocument()
     fireEvent.click(front())
+    expect(screen.getByText(/pack 2 of 3/i)).toBeInTheDocument()
+  })
+
+  it('a quick double-click onto the last card does not skip past it', async () => {
+    vi.useFakeTimers()
+    renderOpener(async () => [card('Common', 1), card('Common', 0, 'Last')])
+    await act(() => vi.advanceTimersByTimeAsync(0))
+    space()
+    fireEvent.click(screen.getByTestId('rip-stage'))
+    expect(count()).toBe('2 / 2')
     fireEvent.click(screen.getByTestId('rip-stage'))
     expect(screen.getByText(/pack 1 of 3/i)).toBeInTheDocument()
-    fireEvent.click(nextButton())
+    await act(() => vi.advanceTimersByTimeAsync(500))
+    fireEvent.click(screen.getByTestId('rip-stage'))
     expect(screen.getByText(/pack 2 of 3/i)).toBeInTheDocument()
+  })
+
+  it('clicking the last card of the last pack finishes', async () => {
+    vi.useFakeTimers()
+    const onDone = vi.fn<(packs: RipCard[][]) => void>()
+    renderOpener(async () => [card('Common', 0)], { packCount: 1, onDone })
+    await act(() => vi.advanceTimersByTimeAsync(0))
+    space()
+    expect(screen.getByText(/click for your summary/i)).toBeInTheDocument()
+    await act(() => vi.advanceTimersByTimeAsync(500))
+    fireEvent.click(screen.getByTestId('rip-stage'))
+    expect(onDone).toHaveBeenCalledTimes(1)
   })
 
   it('a sent card goes down to the row, in the order seen', async () => {

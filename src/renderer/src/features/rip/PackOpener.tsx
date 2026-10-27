@@ -19,6 +19,8 @@ const HOLD_MS: Record<RevealTier, number> = { none: 0, rare: 300, big: 800, huge
 const TEAR_MS = 550
 /** The sent card flying down into the row; the stack moving up takes as long. */
 const SETTLE_MS = 420
+/** A click this soon after the last card arrives is the end of a double-click, not "move on". */
+const END_CLICK_MS = 500
 /** The outgoing info panel's fade. */
 const INFO_OUT_MS = 200
 /** Between cards when skipping to the hit. */
@@ -430,6 +432,7 @@ export function PackOpener({
   // The last pack index asked of main; -1 before the first. Guards against double opens.
   const requested = useRef(-1)
   const holdUntil = useRef(0)
+  const endedAt = useRef(0)
   const reported = useRef(false)
   const moveId = useRef(0)
   const drag = useRef<{ x: number; moved: boolean } | null>(null)
@@ -528,6 +531,7 @@ export function PackOpener({
     const tier = revealTier(cards[flipped].rarity)
     const hold = reduced || tier === 'none' ? 0 : SETTLE_MS + HOLD_MS[tier]
     holdUntil.current = performance.now() + hold
+    if (flipped + 1 === cards.length) endedAt.current = performance.now()
     const id = ++moveId.current
     if (hold > 0) {
       setHolding(id)
@@ -599,8 +603,9 @@ export function PackOpener({
     if (phase === 'sealed') tear()
     else if (performance.now() < holdUntil.current) return
     else if (phase === 'hand') flipNext()
-    // Clicking the hit at the end is admiring it, not leaving it: Next pack or Space moves on.
-    else if (phase === 'end' && from === 'key') next()
+    // At the end a click or Space moves on: the next pack, or the summary after the last.
+    else if (phase === 'end' && (from === 'key' || performance.now() - endedAt.current >= END_CLICK_MS))
+      next()
   }
 
   const skipToHit = (): void => {
@@ -678,7 +683,8 @@ export function PackOpener({
   const frontTier = front ? revealTier(front.rarity) : 'none'
   const hitColor = front ? rarityColor(baseOf(front.rarity)) : ''
   const frontKey = front ? `${packIndex}-${front.slot}` : ''
-  const actionable = !skipping && (phase === 'sealed' || phase === 'hand')
+  const actionable =
+    !skipping && (phase === 'sealed' || phase === 'hand' || (phase === 'end' && holding === 0))
   const hand = cards && front ? cards.slice(flipped - 1, flipped + EDGES) : []
 
   return (
@@ -898,7 +904,7 @@ export function PackOpener({
         <div className="flex shrink-0 flex-col items-end gap-2">
           <span className="text-xs text-white/55">
             {phase === 'end'
-              ? "That's the pack."
+              ? `That's the pack. Click for ${lastPack ? 'your summary' : 'the next one'}`
               : phase === 'hand'
                 ? 'Click, Space or swipe to send the front card down'
                 : 'Click or press Space to tear the pack open'}

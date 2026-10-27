@@ -1,7 +1,8 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useReducer, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
-import { api } from '@/lib/api'
+import { api, queryKeys } from '@/lib/api'
+import { cardImageSrc } from '@/lib/images'
 import { rarityColor, rarityTextColor } from '@/lib/rarityColors'
 import { cn } from '@/lib/utils'
 import { baseOf, compareRarity, revealTier } from '../../../../shared/rip/rarity'
@@ -181,8 +182,14 @@ export function PackOpener({
       requested.current = index
       api.rip.openPack(sessionId).then(
         (cards) => {
-          // The pack is saved: keep History and the sets list fresh, even if we've since unmounted.
-          void queryClient.invalidateQueries({ queryKey: ['rip'] })
+          // The pack is saved: keep History fresh, even if we've since unmounted. Not the sets
+          // list: a pack never changes it, and refetching it blocks main for about a second.
+          void queryClient.invalidateQueries({ queryKey: [...queryKeys.ripHistory] })
+          void queryClient.invalidateQueries({ queryKey: ['rip', 'session'] })
+          // Warm the reveal art so the card is sharp the moment it's turned.
+          for (const c of cards) {
+            if (c.imageId != null) new Image().src = cardImageSrc('full', c.imageId)
+          }
           if (alive.current) dispatch({ type: 'packLoaded', cards })
         },
         () => {

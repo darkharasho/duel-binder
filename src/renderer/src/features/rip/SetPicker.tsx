@@ -149,7 +149,9 @@ export function SetPicker({ onRip, initialSetName = null }: Props): React.JSX.El
         <div className="sticky bottom-4 z-10 flex flex-wrap items-center gap-x-6 gap-y-3 rounded-md border border-white/[0.08] bg-card/95 p-4 shadow-[0_8px_30px_rgb(0_0_0/0.6)] backdrop-blur">
           <div className="min-w-0 flex-1">
             <p className="truncate text-base font-semibold">{selected.setName}</p>
-            <p className="text-[13px] text-muted-foreground">{selected.layoutLabel}</p>
+            <p title={selected.layoutLabel} className="text-[13px] text-muted-foreground">
+              {selected.packLine}
+            </p>
           </div>
           <div className="flex items-center gap-2">
             {QUICK_PICKS.map((p) => (
@@ -210,7 +212,6 @@ export function SetPicker({ onRip, initialSetName = null }: Props): React.JSX.El
           )}
         </div>
       )}
-
     </div>
   )
 }

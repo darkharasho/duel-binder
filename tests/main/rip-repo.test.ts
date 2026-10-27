@@ -183,8 +183,32 @@ describe('rip repo', () => {
     expect(sets[0]).toMatchObject({
       setCode: 'TST',
       tcgDate: '2020-01-01',
-      layoutLabel: RIP_LAYOUTS['core-2020'].label
+      layoutLabel: RIP_LAYOUTS['core-2020'].label,
+      packLine: '9 cards a pack · 1 Super or better'
     })
     expect(ripSets(db, {})).toEqual([])
+  })
+
+  it('does not offer or start non-core products that share a core set code', () => {
+    const NAME = 'Rip Test Set (25th Anniversary Edition)'
+    db.prepare(
+      "INSERT INTO sets (language, set_name, set_code, tcg_date) VALUES ('en', ?, 'TST', '2021-01-01')"
+    ).run(NAME)
+    for (let i = 0; i < 10; i++)
+      addPrinting(addCard(`Anniv ${i}`), NAME, `TST-EN${500 + i}`, 'Common')
+    addPrinting(addCard('Anniv Super'), NAME, 'TST-EN600', 'Super Rare')
+    expect(ripSets(db, LAYOUTS).map((s) => s.setName)).toEqual([SET])
+    expect(() => startRip(db, NAME, 1, now, LAYOUTS)).toThrow(/can't be ripped/)
+  })
+
+  it('history lists only sessions with pulls', () => {
+    const empty = startRip(db, SET, 2, now, LAYOUTS)
+    const used = startRip(db, SET, 1, now, LAYOUTS)
+    openPack(db, used, mulberry32(3), LAYOUTS)
+    const h = ripHistory(db)
+    expect(h.sessions.map((s) => s.id)).toEqual([used])
+    expect(h.sessions.map((s) => s.id)).not.toContain(empty)
+    expect(h.packsOpened).toBe(1)
+    expect(h.setsRipped).toBe(1)
   })
 })

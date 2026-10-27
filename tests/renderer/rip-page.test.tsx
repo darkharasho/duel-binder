@@ -14,7 +14,8 @@ const ripSet = (setName: string, setCode: string): RipSet => ({
   packImageKey: null,
   logoImageKey: null,
   coverImageId: null,
-  layoutLabel: '9 cards: 8 Common, 1 Rare'
+  layoutLabel: 'Core Booster (2002–2004)',
+  packLine: '9 cards a pack · 1 Rare or better'
 })
 
 const SETS = [ripSet('Metal Raiders', 'MRD'), ripSet('Legend of Blue Eyes', 'LOB')]
@@ -43,6 +44,15 @@ describe('RipPage', () => {
     })
     renderWithProviders(<RipPage />, { api: createMockApi({ rip: { sets } }) })
     expect(await screen.findByText(/couldn.t load sets/i)).toBeInTheDocument()
+  })
+
+  it('describes the pack from its slots, with the era as a tooltip', async () => {
+    renderWithProviders(<RipPage />, {
+      api: createMockApi({ rip: { sets: vi.fn(async () => SETS) } })
+    })
+    await userEvent.click(await screen.findByRole('button', { name: /Metal Raiders/ }))
+    const line = screen.getByText('9 cards a pack · 1 Rare or better')
+    expect(line).toHaveAttribute('title', 'Core Booster (2002–2004)')
   })
 
   it('typing 500 shows 100, and the stepper holds at the bounds', async () => {

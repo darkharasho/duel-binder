@@ -97,6 +97,17 @@ describe('SessionSummary', () => {
   })
 })
 
+describe('SessionSummary without hits', () => {
+  it('says so instead of showing a Common as the best pull', () => {
+    const commons = [[card('Common', 0, 'Kuriboh'), card('Short Print', 1, 'Mooyan')]]
+    renderWithProviders(
+      <SessionSummary session={detail({ packs: commons, best: commons[0][0] })} />
+    )
+    expect(screen.getByText('No hits this time.')).toBeInTheDocument()
+    expect(screen.queryByTestId('rip-summary-best')).not.toBeInTheDocument()
+  })
+})
+
 describe('HistoryTab', () => {
   const history = (over: Partial<RipHistory> = {}): RipHistory => ({
     packsOpened: 7,
@@ -164,5 +175,21 @@ describe('HistoryTab', () => {
     await waitFor(() =>
       expect(screen.queryByRole('button', { name: /show more/i })).not.toBeInTheDocument()
     )
+  })
+
+  it('lists a session once when paging repeats it', async () => {
+    const mk = (id: number): RipSessionSummary => ({
+      ...history().sessions[0],
+      id,
+      setName: `Set ${id}`
+    })
+    const page1 = Array.from({ length: 50 }, (_, i) => mk(i + 1))
+    const hist = vi.fn(async (opts?: { sessionOffset?: number }) =>
+      history({ sessions: opts?.sessionOffset ? [mk(50)] : page1 })
+    )
+    renderWithProviders(<HistoryTab />, { api: createMockApi({ rip: { history: hist } }) })
+    await userEvent.click(await screen.findByRole('button', { name: /show more/i }))
+    await waitFor(() => expect(hist).toHaveBeenCalledTimes(2))
+    expect(screen.getAllByRole('button', { name: /Set 50/ })).toHaveLength(1)
   })
 })

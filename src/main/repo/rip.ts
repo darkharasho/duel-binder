@@ -2,7 +2,7 @@ import type { SqlDb } from '../db/sql'
 import { listSets } from './sets'
 import { setPrefix } from '../../shared/sets'
 import { compareRarity, revealTier } from '../../shared/rip/rarity'
-import { RIP_SET_LAYOUTS, layoutFor } from '../../shared/rip/layouts'
+import { RIP_SET_LAYOUTS, describeLayout, layoutFor } from '../../shared/rip/layouts'
 import { canFill, mulberry32, rollPack } from '../../shared/rip/roll'
 import type {
   PoolCard,
@@ -17,6 +17,10 @@ import type {
 type LayoutMap = Record<string, string>
 
 const MAX_PACKS = 100
+
+/** Products that share a core set's code but aren't core boosters, so have no researched layout. */
+const NOT_CORE =
+  /Sneak Peek|Special Edition|Deluxe Edition|Super Edition|Advance Edition|25th Anniversary|Premiere!|Tin\b/
 
 interface PoolRow {
   pkey: string
@@ -57,7 +61,7 @@ export function ripPool(db: SqlDb, setName: string): PoolCard[] {
 export function ripSets(db: SqlDb, layouts: LayoutMap = RIP_SET_LAYOUTS): RipSet[] {
   const out: RipSet[] = []
   for (const s of listSets(db)) {
-    if (s.language !== 'en') continue
+    if (s.language !== 'en' || NOT_CORE.test(s.setName)) continue
     const layout = layoutFor(s.setCode, layouts)
     if (!layout || !canFill(layout, ripPool(db, s.setName))) continue
     out.push({
@@ -68,7 +72,8 @@ export function ripSets(db: SqlDb, layouts: LayoutMap = RIP_SET_LAYOUTS): RipSet
       packImageKey: s.packImageKey,
       logoImageKey: s.logoImageKey,
       coverImageId: s.coverImageId,
-      layoutLabel: layout.label
+      layoutLabel: layout.label,
+      packLine: describeLayout(layout)
     })
   }
   return out.sort((a, b) =>
@@ -101,7 +106,7 @@ export function startRip(
     .get(setName) as { s_code: string | null; min_code: string | null } | undefined
   const setCode = row?.s_code ?? (row?.min_code ? setPrefix(row.min_code) : null)
   const layout = setCode ? layoutFor(setCode, layouts) : null
-  if (!setCode || !layout || !canFill(layout, ripPool(db, setName))) {
+  if (NOT_CORE.test(setName) || !setCode || !layout || !canFill(layout, ripPool(db, setName))) {
     throw new Error(`${setName} can't be ripped`)
   }
   const info = db
@@ -250,7 +255,11 @@ export function ripHistory(
     .map(toCard)
   const sessions = (
     db
-      .prepare('SELECT * FROM rip_sessions ORDER BY id DESC LIMIT ? OFFSET ?')
+      .prepare(
+        `SELECT * FROM rip_sessions s
+         WHERE EXISTS (SELECT 1 FROM rip_pulls r WHERE r.session_id = s.id)
+         ORDER BY id DESC LIMIT ? OFFSET ?`
+      )
       .all(Math.max(0, sessionLimit), Math.max(0, sessionOffset)) as SessionRow[]
   ).map((s) => summarise(s, pullsOf(db, s.id)))
   return {

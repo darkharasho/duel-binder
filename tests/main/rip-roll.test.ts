@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { layoutFor, RIP_LAYOUTS, RIP_SET_LAYOUTS } from '../../src/shared/rip/layouts'
+import {
+  describeLayout,
+  layoutFor,
+  RIP_LAYOUTS,
+  RIP_SET_LAYOUTS
+} from '../../src/shared/rip/layouts'
 import { canFill, mulberry32, rollPack } from '../../src/shared/rip/roll'
 import type { PackLayout, PoolCard } from '../../src/shared/rip/types'
 
@@ -241,5 +246,45 @@ describe('layouts', () => {
     const id = Object.keys(RIP_LAYOUTS)[0]
     expect(layoutFor('ZZZZ', { ZZZZ: id })).toBe(RIP_LAYOUTS[id])
     expect(layoutFor('LOB', {})).toBeNull()
+  })
+})
+
+describe('describeLayout', () => {
+  const lines: Record<string, string> = {
+    'core-2002': '9 cards a pack · 1 Rare or better',
+    'core-2004': '9 cards a pack · 1 Rare or better',
+    'core-2007': '9 cards a pack · 1 Rare or better',
+    'core-2008': '9 cards a pack · 1 Rare + 1 slot that can hit Super or better',
+    'core-2010': '9 cards a pack · 1 Rare + 1 slot that can hit Super or better',
+    'core-2016': '9 cards a pack · 1 Rare + 1 Super or better',
+    'core-2020': '9 cards a pack · 1 Super or better',
+    'core-2023': '9 cards a pack · 1 Super or better',
+    'core-2025': '9 cards a pack · 1 Super or better'
+  }
+  it('has an expected line for every layout', () => {
+    expect(Object.keys(lines).sort()).toEqual(Object.keys(RIP_LAYOUTS).sort())
+  })
+  for (const [id, line] of Object.entries(lines)) {
+    it(`describes ${id}`, () => expect(describeLayout(RIP_LAYOUTS[id])).toBe(line))
+  }
+  it('lists a fixed non-Common slot and skips Short Print upgrades', () => {
+    expect(
+      describeLayout({
+        id: 't',
+        label: 't',
+        source: 't',
+        slots: [
+          { count: 7, picks: [{ rarity: 'Common', weight: 1 }] },
+          {
+            count: 1,
+            picks: [
+              { rarity: 'Common', weight: 2 },
+              { rarity: 'Short Print', weight: 1 }
+            ]
+          },
+          { count: 2, picks: [{ rarity: 'Ultra Rare', weight: 1 }] }
+        ]
+      })
+    ).toBe('10 cards a pack · 2 Ultra')
   })
 })

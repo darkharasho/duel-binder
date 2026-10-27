@@ -59,7 +59,10 @@ export interface RipSet {
   packImageKey: string | null
   logoImageKey: string | null
   coverImageId: number | null
+  /** Era name, e.g. "Core Booster (2010–2015)"; shown as a tooltip. */
   layoutLabel: string
+  /** What's in a pack, e.g. "9 cards a pack · 1 Rare + 1 Super or better". */
+  packLine: string
 }
 
 /** One rip session: a set opened for `packCount` packs, of which `packsOpened` have been saved. */

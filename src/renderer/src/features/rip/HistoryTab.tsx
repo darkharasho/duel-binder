@@ -99,7 +99,10 @@ export function HistoryTab(): React.JSX.Element {
   if (q.isError) return <p className="text-sm text-destructive">Couldn&apos;t load your history.</p>
 
   const first = q.data.pages[0]
-  const sessions = q.data.pages.flatMap((p) => p.sessions)
+  // Offset paging can repeat a session when a new one lands between pages.
+  const sessions = [
+    ...new Map(q.data.pages.flatMap((p) => p.sessions).map((s) => [s.id, s])).values()
+  ]
   if (first.packsOpened === 0 && sessions.length === 0) {
     return (
       <p className="text-sm text-muted-foreground">

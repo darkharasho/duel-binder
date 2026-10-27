@@ -1,3 +1,4 @@
+import { ripRank } from './rarity'
 import type { PackLayout, PackSlot, SlotPick } from './types'
 
 /*
@@ -220,4 +221,33 @@ export function layoutFor(
   const prefix = setCode.split('-')[0].trim().toUpperCase()
   const id = Object.hasOwn(map, prefix) ? map[prefix] : undefined
   return id !== undefined && Object.hasOwn(RIP_LAYOUTS, id) ? RIP_LAYOUTS[id] : null
+}
+
+/** "Super Rare" → "Super"; plain "Rare" stays. */
+const shortRarity = (r: string): string => r.replace(/(.) Rare$/, '$1')
+
+/**
+ * A short line about what's in a pack, read off the slots: "9 cards a pack · 1 Rare + 1 Super or
+ * better". Commons and Short Prints aren't listed; a Common slot that can upgrade is "1 slot that
+ * can hit Super or better".
+ */
+export function describeLayout(layout: PackLayout): string {
+  const total = layout.slots.reduce((n, s) => n + s.count, 0)
+  const rare = ripRank('Rare')
+  const parts: string[] = []
+  for (const slot of layout.slots) {
+    const ranked = [...slot.picks].sort((a, b) => ripRank(a.rarity) - ripRank(b.rarity))
+    const floor = ranked[0].rarity
+    if (ripRank(floor) >= rare) {
+      parts.push(
+        slot.picks.length === 1
+          ? `${slot.count} ${shortRarity(floor)}`
+          : `${slot.count} ${shortRarity(floor)} or better`
+      )
+    } else {
+      const up = ranked.find((p) => ripRank(p.rarity) >= rare)
+      if (up) parts.push(`${slot.count} slot that can hit ${shortRarity(up.rarity)} or better`)
+    }
+  }
+  return [`${total} cards a pack`, parts.join(' + ')].filter(Boolean).join(' · ')
 }

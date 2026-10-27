@@ -45,11 +45,10 @@ export function SessionSummary({
   const [showAll, setShowAll] = useState(false)
   const all = session.packs.flat()
   const hits = hitsLine(all)
-  const ranked = [...all]
+  const best = [...all]
     .filter((c) => revealTier(c.rarity) !== 'none')
     .sort((a, b) => compareRarity(a.rarity, b.rarity))
     .slice(0, BEST_SHOWN)
-  const best = ranked.length === 0 && session.best ? [session.best] : ranked
   const packs = session.packsOpened
 
   return (

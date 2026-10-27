@@ -58,6 +58,33 @@ const loadedPack = async (): Promise<void> => {
 }
 
 describe('PackOpener', () => {
+  it('after a pack refreshes History and sessions, not the sets list, and preloads the art', async () => {
+    const spy = vi.spyOn(QueryClient.prototype, 'invalidateQueries')
+    const srcs: string[] = []
+    const RealImage = window.Image
+    vi.stubGlobal(
+      'Image',
+      class {
+        set src(v: string) {
+          srcs.push(v)
+        }
+      }
+    )
+    try {
+      renderOpener(async () => commons())
+      await loadedPack()
+      const keys = spy.mock.calls.map(([f]) => f?.queryKey)
+      expect(keys).toEqual([
+        ['rip', 'history'],
+        ['rip', 'session']
+      ])
+      expect(srcs).toEqual(['ygo-img://full/0', 'ygo-img://full/1', 'ygo-img://full/2'])
+    } finally {
+      vi.stubGlobal('Image', RealImage)
+      spy.mockRestore()
+    }
+  })
+
   it('opens the first pack once under StrictMode', async () => {
     const { api } = renderOpener(async () => commons(), { strict: true })
     await loadedPack()

@@ -702,139 +702,144 @@ export function PackOpener({
         </span>
       </div>
 
-      {/* The middle: a size container, so the card and pack can size themselves from its height. */}
-      <div
-        data-testid="rip-middle"
-        style={{ containerType: 'size' }}
-        className="relative min-h-0 flex-1"
-      >
-        {phase === 'error' ? (
-          <div className="flex size-full flex-col items-center justify-center gap-3 text-sm">
-            <p className="text-white/60">Couldn&apos;t open this pack.</p>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={(e) => {
-                e.stopPropagation()
-                retry()
-              }}
-            >
-              Try again
-            </Button>
-          </div>
-        ) : (
-          <>
-            {(phase === 'sealed' || phase === 'tearing') && (
-              <SealedPack
-                key={packIndex}
-                setName={setName}
-                art={packArt}
-                phase={phase}
-                pending={phase === 'tearing' && cards === null}
-              />
-            )}
-            {flipped === 1 && !reduced && (
-              <SealedPack
-                key={`${packIndex}-out`}
-                setName={setName}
-                art={packArt}
-                phase="leaving"
-                pending={false}
-              />
-            )}
-
-            {front && (
-              <div
-                key={packIndex}
-                style={{ top: CARD_TOP, height: CARD_H, width: CARD_W }}
-                className="absolute left-1/2 -translate-x-1/2 animate-[rip-rise_560ms_cubic-bezier(.25,.8,.25,1)_both] motion-reduce:animate-none"
+      {/*
+        The middle: a size container, so the card and pack can size themselves from its height.
+        It's absolutely placed in a flex slot: a flex item with size containment reads 0 for cqh.
+      */}
+      <div className="relative min-h-0 flex-1">
+        <div
+          data-testid="rip-middle"
+          style={{ containerType: 'size' }}
+          className="absolute inset-0"
+        >
+          {phase === 'error' ? (
+            <div className="flex size-full flex-col items-center justify-center gap-3 text-sm">
+              <p className="text-white/60">Couldn&apos;t open this pack.</p>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  retry()
+                }}
               >
-                {hand.map((c, depth) => {
-                  const isFront = depth === 0
-                  const tier = isFront ? frontTier : 'none'
-                  const scale = 1 + 0.04 * TIER_LEVEL[tier]
-                  let transform = handTransform(depth, scale)
-                  let transition = `transform ${SETTLE_MS}ms ${EASE}, filter ${SETTLE_MS}ms ${EASE}`
-                  if (isFront && dragX !== null) {
-                    transform = `translateX(${dragX}px) rotate(${dragX * 0.04}deg) scale(${scale})`
-                    transition = 'none'
-                  }
-                  // Reduced motion: the stack just swaps. Inline, as a class can't beat the style.
-                  if (reduced) transition = 'none'
-                  return (
-                    <div
-                      key={c.slot}
-                      ref={isFront ? frontEl : undefined}
-                      data-hand-card={depth}
-                      data-testid={isFront ? 'rip-front' : undefined}
-                      data-tier={isFront ? tier : undefined}
-                      aria-hidden={!isFront || undefined}
-                      onPointerDown={isFront ? onPointerDown : undefined}
-                      onPointerMove={isFront ? onPointerMove : undefined}
-                      onPointerUp={isFront ? onPointerUp : undefined}
-                      onPointerCancel={isFront ? cancelDrag : undefined}
-                      onDragStart={(e) => e.preventDefault()}
-                      style={{
-                        transform,
-                        transition,
-                        zIndex: 10 - depth,
-                        filter: isFront ? undefined : `brightness(${0.75 - 0.08 * depth})`
-                      }}
-                      className={cn(
-                        'absolute inset-0',
-                        isFront ? 'touch-pan-y' : 'pointer-events-none'
-                      )}
-                    >
+                Try again
+              </Button>
+            </div>
+          ) : (
+            <>
+              {(phase === 'sealed' || phase === 'tearing') && (
+                <SealedPack
+                  key={packIndex}
+                  setName={setName}
+                  art={packArt}
+                  phase={phase}
+                  pending={phase === 'tearing' && cards === null}
+                />
+              )}
+              {flipped === 1 && !reduced && (
+                <SealedPack
+                  key={`${packIndex}-out`}
+                  setName={setName}
+                  art={packArt}
+                  phase="leaving"
+                  pending={false}
+                />
+              )}
+
+              {front && (
+                <div
+                  key={packIndex}
+                  style={{ top: CARD_TOP, height: CARD_H, width: CARD_W }}
+                  className="absolute left-1/2 -translate-x-1/2 animate-[rip-rise_560ms_cubic-bezier(.25,.8,.25,1)_both] motion-reduce:animate-none"
+                >
+                  {hand.map((c, depth) => {
+                    const isFront = depth === 0
+                    const tier = isFront ? frontTier : 'none'
+                    const scale = 1 + 0.04 * TIER_LEVEL[tier]
+                    let transform = handTransform(depth, scale)
+                    let transition = `transform ${SETTLE_MS}ms ${EASE}, filter ${SETTLE_MS}ms ${EASE}`
+                    if (isFront && dragX !== null) {
+                      transform = `translateX(${dragX}px) rotate(${dragX * 0.04}deg) scale(${scale})`
+                      transition = 'none'
+                    }
+                    // Reduced motion: the stack just swaps. Inline, as a class can't beat the style.
+                    if (reduced) transition = 'none'
+                    return (
                       <div
+                        key={c.slot}
+                        ref={isFront ? frontEl : undefined}
+                        data-hand-card={depth}
+                        data-testid={isFront ? 'rip-front' : undefined}
+                        data-tier={isFront ? tier : undefined}
+                        aria-hidden={!isFront || undefined}
+                        onPointerDown={isFront ? onPointerDown : undefined}
+                        onPointerMove={isFront ? onPointerMove : undefined}
+                        onPointerUp={isFront ? onPointerUp : undefined}
+                        onPointerCancel={isFront ? cancelDrag : undefined}
+                        onDragStart={(e) => e.preventDefault()}
                         style={{
-                          boxShadow:
-                            isFront && tier !== 'none'
-                              ? `0 0 ${GLOW_PX[tier]}px ${hitColor}, 0 26px 50px rgb(0 0 0 / 0.65)`
-                              : isFront
-                                ? '0 26px 50px rgb(0 0 0 / 0.65)'
-                                : '0 6px 14px rgb(0 0 0 / 0.4)'
+                          transform,
+                          transition,
+                          zIndex: 10 - depth,
+                          filter: isFront ? undefined : `brightness(${0.75 - 0.08 * depth})`
                         }}
                         className={cn(
-                          'rounded-[6px] transition-shadow duration-500 motion-reduce:transition-none',
-                          isFront &&
-                            (tier === 'big' || tier === 'huge') &&
-                            'animate-[rip-shake_350ms_ease-in-out_250ms_2] motion-reduce:animate-none'
+                          'absolute inset-0',
+                          isFront ? 'touch-pan-y' : 'pointer-events-none'
                         )}
                       >
-                        {/* No sheen on the edges, so a Starlight at the back can't give itself away. */}
-                        <HoloCard card={c} size="full" holo={isFront} />
+                        <div
+                          style={{
+                            boxShadow:
+                              isFront && tier !== 'none'
+                                ? `0 0 ${GLOW_PX[tier]}px ${hitColor}, 0 26px 50px rgb(0 0 0 / 0.65)`
+                                : isFront
+                                  ? '0 26px 50px rgb(0 0 0 / 0.65)'
+                                  : '0 6px 14px rgb(0 0 0 / 0.4)'
+                          }}
+                          className={cn(
+                            'rounded-[6px] transition-shadow duration-500 motion-reduce:transition-none',
+                            isFront &&
+                              (tier === 'big' || tier === 'huge') &&
+                              'animate-[rip-shake_350ms_ease-in-out_250ms_2] motion-reduce:animate-none'
+                          )}
+                        >
+                          {/* No sheen on the edges, so a Starlight at the back can't give itself away. */}
+                          <HoloCard card={c} size="full" holo={isFront} />
+                        </div>
                       </div>
-                    </div>
-                  )
-                })}
-                {(frontTier === 'big' || frontTier === 'huge') &&
-                  SPARKS.map((s, i) => (
-                    <span
-                      key={`${frontKey}-${i}`}
-                      aria-hidden
-                      style={
-                        {
-                          left: s.left,
-                          top: s.top,
-                          '--dx': s.dx,
-                          '--dy': s.dy
-                        } as React.CSSProperties
-                      }
-                      className="pointer-events-none absolute z-30 text-2xl text-amber-200 drop-shadow-[0_0_6px_rgb(253_230_138_/_0.8)] animate-[scan-spark_1000ms_ease-out_250ms_both] motion-reduce:hidden"
-                    >
-                      ✦
-                    </span>
-                  ))}
-              </div>
-            )}
+                    )
+                  })}
+                  {(frontTier === 'big' || frontTier === 'huge') &&
+                    SPARKS.map((s, i) => (
+                      <span
+                        key={`${frontKey}-${i}`}
+                        aria-hidden
+                        style={
+                          {
+                            left: s.left,
+                            top: s.top,
+                            '--dx': s.dx,
+                            '--dy': s.dy
+                          } as React.CSSProperties
+                        }
+                        className="pointer-events-none absolute z-30 text-2xl text-amber-200 drop-shadow-[0_0_6px_rgb(253_230_138_/_0.8)] animate-[scan-spark_1000ms_ease-out_250ms_both] motion-reduce:hidden"
+                      >
+                        ✦
+                      </span>
+                    ))}
+                </div>
+              )}
 
-            {/* The outgoing card's caption fades as it goes; the new one fades in after. */}
-            {outCaption && outCaption.card !== front && (
-              <Caption key={`out-${outCaption.id}`} card={outCaption.card} outgoing />
-            )}
-            {front && <Caption key={frontKey} card={front} />}
-          </>
-        )}
+              {/* The outgoing card's caption fades as it goes; the new one fades in after. */}
+              {outCaption && outCaption.card !== front && (
+                <Caption key={`out-${outCaption.id}`} card={outCaption.card} outgoing />
+              )}
+              {front && <Caption key={frontKey} card={front} />}
+            </>
+          )}
+        </div>
       </div>
 
       <div className="relative z-40 flex h-[112px] shrink-0 items-end gap-6 px-5 pb-3">

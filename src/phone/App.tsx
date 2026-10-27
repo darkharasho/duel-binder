@@ -143,7 +143,7 @@ export function App({
         <SignIn
           store={store}
           onSignedIn={(u) => {
-            void enter(u).catch(() => setView({ kind: 'unsupported' }))
+            void enter(u).catch(() => show({ kind: 'unsupported' }))
           }}
         />
       )

@@ -25,6 +25,8 @@ const OCR_MODELS = ['eng', 'jpn', 'kor', 'chi_sim']
  * Anything under /scan/ that is fetched anyway is cached on first use.
  */
 const NOT_PRECACHED = [
+  // The page is cached as /scan/, with its CSP; the bare file would be a copy without it.
+  /^index\.html$/,
   /^ocr\/lang\/(jpn|kor|chi_sim)\b/,
   /^ocr\/core\//,
   /^assets\/sqlite3-(worker1|opfs-async-proxy)-[^/]*\.js$/,

@@ -255,6 +255,7 @@ describe('phone build', () => {
     /** What the precache leaves out (see NOT_PRECACHED in vite.phone.config.ts). */
     const notPrecached = (f: string): boolean =>
       f === 'sw.js' ||
+      f === 'index.html' ||
       /^ocr\/lang\/(jpn|kor|chi_sim)\b/.test(f) ||
       f.startsWith('ocr/core/') ||
       /^assets\/sqlite3-(worker1|opfs-async-proxy)-[^/]*\.js$/.test(f) ||

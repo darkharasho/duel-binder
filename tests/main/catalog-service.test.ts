@@ -192,9 +192,48 @@ describe('catalog service', () => {
     warn.mockRestore()
   })
 
-  it('finishes and announces pages that landed before the pull failed', async () => {
+  it('applies a card changed after its new printings, across pages', async () => {
     const service = makeService()
     await service.update(client, { force: true })
+    const cursor = Number(getMeta(db, 'catalog_cursor'))
+    const NEW = 99999999
+    portal.serverDb
+      .prepare(
+        `INSERT INTO cards (id, name, type, frame_type, race, "desc", updated_at)
+         VALUES (?, 'Brand New Card', 'Effect Monster', 'effect', 'Spellcaster', 'text', '2026-10-25')`
+      )
+      .run(NEW)
+    portal.serverDb
+      .prepare(
+        "INSERT INTO card_printings (card_id, set_name, set_code, set_rarity, language) VALUES (?, 'New Set', 'NEW-EN001', 'Common', 'en')"
+      )
+      .run(NEW)
+    // The next night re-stamps the card after its printing.
+    portal.serverDb.prepare("UPDATE cards SET tcgplayer_price = '1.23' WHERE id = ?").run(NEW)
+    const onePerPage: CloudClient = {
+      ...client,
+      catalogChanges: (since) => client.catalogChanges(since, 1)
+    }
+
+    expect(await service.update(onePerPage, { force: true })).toEqual({
+      changed: true,
+      imagesChanged: false
+    })
+
+    expect(service.status()).toMatchObject({ state: 'idle', error: null })
+    expect(cardName(db, NEW)).toBe('Brand New Card')
+    expect(
+      db.prepare('SELECT 1 FROM card_printings WHERE pkey = ?').get(`en|${NEW}|NEW-EN001|Common`)
+    ).toBeDefined()
+    expect(Number(getMeta(db, 'catalog_cursor'))).toBeGreaterThan(cursor)
+    expect(getMeta(db, 'catalog_staging_cursor')).toBeNull()
+    expect(db.prepare('SELECT count(*) AS n FROM catalog_staging').get()).toEqual({ n: 0 })
+  })
+
+  it('applies nothing from a pull that stopped, and resumes it from the staged pages', async () => {
+    const service = makeService()
+    await service.update(client, { force: true })
+    const cursor = getMeta(db, 'catalog_cursor')
     portal.serverDb.prepare("UPDATE cards SET name = 'Zorblax Renamed' WHERE id = ?").run(DM)
     portal.serverDb
       .prepare("UPDATE cards SET name = name || ' Again' WHERE id = (SELECT max(id) FROM cards)")
@@ -212,20 +251,55 @@ describe('catalog service', () => {
       CloudOfflineError
     )
     expect(n).toBe(2)
-    expect(cardName(db, DM)).toBe('Zorblax Renamed')
-    expect(getMeta(db, 'catalog_unannounced')).not.toBeNull()
+    // Page 1 is staged, not applied.
+    expect(cardName(db, DM)).not.toBe('Zorblax Renamed')
+    expect(getMeta(db, 'catalog_cursor')).toBe(cursor)
+    const staged = getMeta(db, 'catalog_staging_cursor')
+    expect(Number(staged)).toBeGreaterThan(Number(cursor))
+    expect(db.prepare('SELECT count(*) AS n FROM catalog_staging').get()).toEqual({ n: 1 })
+    expect(getMeta(db, 'catalog_unannounced')).toBeNull()
 
-    // Within the hour and unforced: reported without a network call.
-    const call = vi.fn(client.catalogChanges)
-    expect(await service.update({ ...client, catalogChanges: call })).toEqual({
+    // The next run carries on from the staged cursor and applies both pages together.
+    const sinces: number[] = []
+    const watching: CloudClient = {
+      ...client,
+      catalogChanges: (since) => {
+        sinces.push(since)
+        return client.catalogChanges(since, 1)
+      }
+    }
+    expect(await service.update(watching, { force: true })).toEqual({
       changed: true,
       imagesChanged: false
     })
-    expect(call).not.toHaveBeenCalled()
+    expect(sinces[0]).toBe(Number(staged))
+    expect(cardName(db, DM)).toBe('Zorblax Renamed')
     expect(
       db.prepare("SELECT count(*) AS n FROM cards_fts WHERE cards_fts MATCH 'zorblax'").get()
     ).toEqual({ n: 1 })
+    expect(getMeta(db, 'catalog_staging_cursor')).toBeNull()
+    expect(db.prepare('SELECT count(*) AS n FROM catalog_staging').get()).toEqual({ n: 0 })
     expect(getMeta(db, 'catalog_unannounced')).toBeNull()
+  })
+
+  it("takes the server's missing_from_api in a delta", async () => {
+    const service = makeService()
+    await service.update(client, { force: true })
+    const [a, b] = db
+      .prepare("SELECT pkey FROM card_printings WHERE language = 'en' ORDER BY id LIMIT 2")
+      .all() as { pkey: string }[]
+    const flag = 'UPDATE card_printings SET missing_from_api = ? WHERE pkey = ?'
+    db.prepare(flag).run(1, b.pkey)
+    portal.serverDb.prepare(flag).run(1, a.pkey)
+    // A change the desktop hasn't seen, so b is in the feed again with its server value 0.
+    portal.serverDb.prepare("UPDATE card_printings SET set_price = 9.99 WHERE pkey = ?").run(b.pkey)
+
+    await service.update(client, { force: true })
+
+    const missing = (pkey: string): unknown =>
+      db.prepare('SELECT missing_from_api AS m FROM card_printings WHERE pkey = ?').get(pkey)
+    expect(missing(a.pkey)).toEqual({ m: 1 })
+    expect(missing(b.pkey)).toEqual({ m: 0 })
   })
 
   it('a later update reports page 1 of a failed pull as changed', async () => {

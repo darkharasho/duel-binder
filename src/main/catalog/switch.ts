@@ -208,8 +208,11 @@ export async function runSwitch(raw: Database.Database, deps: SwitchDeps): Promi
   return { state: 'done' }
 }
 
-/** Applies every staged change in seq order, in batches. Must run inside a transaction. */
-function applyStaged(db: SqlDb): ApplyResult {
+/**
+ * Applies every staged change in seq order, in batches (the switch's snapshot, or a delta pull).
+ * Must run inside a transaction.
+ */
+export function applyStaged(db: SqlDb): ApplyResult {
   const total: ApplyResult = { applied: 0, cardsChanged: false, imagesChanged: false }
   const page = db.prepare('SELECT seq, row FROM catalog_staging WHERE seq > ? ORDER BY seq LIMIT ?')
   let after = -1

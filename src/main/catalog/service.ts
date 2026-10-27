@@ -3,8 +3,8 @@ import type { SqlDb } from '../db/sql'
 import { deleteMeta, getMeta, setMeta } from '../db/meta'
 import { CloudAuthError, CloudOfflineError, type CloudClient } from '../cloud/client'
 import type { SyncStatus } from '../../shared/types'
-import { applyChanges, finishApply } from './apply'
-import { runSwitch, type SwitchFailure } from './switch'
+import { finishApply } from './apply'
+import { applyStaged, runSwitch, type SwitchFailure } from './switch'
 
 export interface CatalogUpdate {
   changed: boolean
@@ -40,7 +40,7 @@ interface Unannounced {
 
 /**
  * The card catalog, kept in step with the server's: the one-time switch to the server's catalog
- * until it's done, then the change feed from `catalog_cursor`, a page per transaction with its cursor.
+ * until it's done, then the change feed from `catalog_cursor`, staged page by page and applied whole.
  */
 export function createCatalogService(deps: CatalogServiceDeps): CatalogService {
   const db: SqlDb = deps.db
@@ -133,16 +133,37 @@ export function createCatalogService(deps: CatalogServiceDeps): CatalogService {
     return { changed: true, imagesChanged: u.imagesChanged }
   }
 
-  /** Applies the change feed from `catalog_cursor` to its end, a page per transaction. */
+  /**
+   * Downloads the change feed from `catalog_cursor` (or, resuming, from `catalog_staging_cursor`)
+   * into `catalog_staging`, each page committing with its staging cursor; then, once the feed has
+   * no more, applies everything staged in seq order in one transaction that also advances
+   * `catalog_cursor` and clears staging. Applying page by page could fail a foreign key forever: a
+   * card changed after its new printings is listed at its later seq, on a later page.
+   */
   async function pullDeltas(client: CloudClient): Promise<void> {
-    let cursor = Number(getMeta(db, 'catalog_cursor') ?? 0)
+    let cursor = Number(
+      getMeta(db, 'catalog_staging_cursor') ?? getMeta(db, 'catalog_cursor') ?? 0
+    )
+    const stage = db.prepare(
+      'INSERT OR REPLACE INTO catalog_staging (seq, tbl, row) VALUES (?, ?, ?)'
+    )
     for (;;) {
       set('downloading')
       const page = await client.catalogChanges(cursor)
       if (page.more && page.cursor <= cursor) throw new Error('The catalog feed stopped advancing')
-      if (page.changes.length > 0) set('saving')
+      if (page.more) {
+        db.transaction(() => {
+          for (const c of page.changes) stage.run(c.seq, c.table, JSON.stringify(c))
+          setMeta(db, 'catalog_staging_cursor', String(page.cursor))
+        })()
+        cursor = page.cursor
+        continue
+      }
+      const anyStaged = db.prepare('SELECT 1 FROM catalog_staging LIMIT 1').get() !== undefined
+      if (page.changes.length > 0 || anyStaged) set('saving')
       db.transaction(() => {
-        const r = applyChanges(db, page.changes)
+        for (const c of page.changes) stage.run(c.seq, c.table, JSON.stringify(c))
+        const r = applyStaged(db)
         if (r.applied > 0)
           noteUnannounced({
             cardsChanged: r.cardsChanged,
@@ -151,9 +172,10 @@ export function createCatalogService(deps: CatalogServiceDeps): CatalogService {
           })
         setMeta(db, 'catalog_cursor', String(page.cursor))
         if (page.dbVersion !== null) setMeta(db, 'db_version', page.dbVersion)
+        db.exec('DELETE FROM catalog_staging')
+        deleteMeta(db, 'catalog_staging_cursor')
       })()
-      cursor = page.cursor
-      if (!page.more) break
+      break
     }
     setMeta(db, 'last_sync_at', now().toISOString())
   }

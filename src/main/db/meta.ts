@@ -16,7 +16,10 @@ export type MetaKey =
   | 'cloud_user'
   /** Seq of the last server catalog change applied locally. */
   | 'catalog_cursor'
-  /** Seq of the last change downloaded into `catalog_staging` during the switch. */
+  /**
+   * Seq of the last change downloaded into `catalog_staging`: the switch's snapshot until it's done,
+   * then a delta pull not yet applied.
+   */
   | 'catalog_staging_cursor'
   /** When this desktop switched to the server's catalog (ISO); absent means not yet. */
   | 'catalog_switched_at'

@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
-import { STORAGE_WARNING } from './copy'
 import { SYNC_STATE_KEY, usePhone } from './context'
 import { SyncProblems } from './SyncProblems'
 
@@ -23,34 +22,14 @@ function useOnline(): boolean {
   return online
 }
 
-/** Whether the browser has promised to keep this app's data; null while asking or unknown. */
-function usePersisted(): boolean | null {
-  const [persisted, setPersisted] = useState<boolean | null>(null)
-  useEffect(() => {
-    let live = true
-    navigator.storage
-      ?.persisted?.()
-      .then((p) => {
-        if (live) setPersisted(p)
-      })
-      .catch(() => undefined)
-    return () => {
-      live = false
-    }
-  }, [])
-  return persisted
-}
-
 /**
  * One line when the collection isn't in step with the server: offline, adds waiting, or entries it
- * can't take (which opens their list). Nothing shows when all is synced. While adds wait and the
- * browser hasn't promised to keep the data, it warns that the data may be cleared.
+ * can't take (which opens their list). Nothing shows when all is synced.
  */
 export function StatusLine({ className }: { className?: string }): React.JSX.Element | null {
   const { store } = usePhone()
   const qc = useQueryClient()
   const online = useOnline()
-  const persisted = usePersisted()
   const [problemsOpen, setProblemsOpen] = useState(false)
 
   const sync = useQuery({
@@ -104,9 +83,6 @@ export function StatusLine({ className }: { className?: string }): React.JSX.Ele
           </button>
         )}
       </div>
-      {persisted === false && waiting > 0 && (
-        <p className="mt-1 text-xs text-amber-200/80">{STORAGE_WARNING}</p>
-      )}
       <SyncProblems open={problemsOpen} onOpenChange={setProblemsOpen} />
     </div>
   )

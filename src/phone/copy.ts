@@ -14,9 +14,6 @@ export const FIRST_RUN_SIZE = 'About 20 MB. Use Wi-Fi if you can.'
 export const FIRST_RUN_CELLULAR = "You're on mobile data. This download is about 20 MB."
 export const FIRST_RUN_STOPPED = 'Download stopped. It will pick up where it left off.'
 
-export const STORAGE_WARNING =
-  "Your browser may clear this app's data. Sync before closing it for long."
-
 export const PRIVACY_URL = 'https://duelbinder.com/privacy'
 
 /** "Card data from Oct 27", from the catalog's last update; null before the first. */

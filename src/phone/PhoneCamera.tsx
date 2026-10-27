@@ -3,7 +3,6 @@ import { FlashlightIcon, FlashlightOffIcon } from 'lucide-react'
 import { defaultEngine, type ScanEngine } from '@/features/scan/engine'
 import { useScanHub } from '@/features/scan/ScanHub'
 import { ScanViewport } from '@/features/scan/ScanViewport'
-import { NO_FINGERPRINTS, SET_UNREADABLE } from '@/features/scan/scanText'
 import { useCamera, type CameraError } from '@/features/scan/useCamera'
 import { useHubScan } from '@/features/scan/useHubScan'
 import { cn } from '@/lib/utils'
@@ -58,7 +57,7 @@ export function PhoneCamera({
   const { settings } = useScanHub()
   const videoRef = useRef<HTMLVideoElement>(null)
   const camera = useCamera(settings.deviceId, 'environment')
-  const { loop, setUnreadable } = useHubScan({ videoRef, stream: camera.stream, engineFactory })
+  const { loop } = useHubScan({ videoRef, stream: camera.stream, engineFactory })
   const torch = useTorch(camera.stream)
 
   return (
@@ -94,12 +93,6 @@ export function PhoneCamera({
           )}
         </ScanViewport>
       </div>
-      {setUnreadable && (
-        <p className="shrink-0 px-4 pt-2 text-xs text-muted-foreground">{SET_UNREADABLE}</p>
-      )}
-      {loop.artReady === false && (
-        <p className="shrink-0 px-4 pt-2 text-xs text-muted-foreground">{NO_FINGERPRINTS}</p>
-      )}
     </section>
   )
 }

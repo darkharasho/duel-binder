@@ -21,7 +21,6 @@ import { api, queryKeys } from '@/lib/api'
 import { formatUsd } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { PhoneCamera } from './PhoneCamera'
-import { StatusLine } from './StatusLine'
 
 /** A drag shorter than this is a tap. */
 const TAP_PX = 8
@@ -257,7 +256,6 @@ export function ScannerScreen({
           <SettingsIcon aria-hidden className="size-5" />
         </button>
       </PhoneCamera>
-      <StatusLine className="shrink-0" />
       <div className="shrink-0 px-3.5 pt-3">
         {last ? (
           <LastScan row={last} />

@@ -275,8 +275,13 @@ describe('phone app', () => {
       {},
       { sync: { waiting: 2, problems: 0, lastSyncedAt: null, signedOut: false } }
     )
+    const user = userEvent.setup()
     installPhoneApi(store)
     renderApp(store)
+    // The Scan tab, where the app opens, keeps the room for the camera.
+    await screen.findByRole('region', { name: 'Last scan' })
+    expect(screen.queryByText('Offline · 2 waiting to sync')).not.toBeInTheDocument()
+    await user.click(tab('Home'))
     expect(await screen.findByText('Offline · 2 waiting to sync')).toBeInTheDocument()
   })
 
@@ -309,30 +314,11 @@ describe('phone app', () => {
     ])
     installPhoneApi(store)
     renderApp(store)
+    await user.click(await screen.findByRole('button', { name: 'Home' }))
     await user.click(await screen.findByRole('button', { name: "1 can't sync" }))
     const dialog = await screen.findByRole('dialog', { name: "Cards that can't sync" })
     expect(within(dialog).getByText('Dark Magician')).toBeInTheDocument()
     expect(within(dialog).getByText("This printing isn't on the server yet")).toBeInTheDocument()
-  })
-
-  it('warns that the browser may clear waiting adds when storage is not persistent', async () => {
-    Object.defineProperty(navigator, 'storage', {
-      configurable: true,
-      value: { persist: vi.fn(async () => false), persisted: vi.fn(async () => false) }
-    })
-    const store = fakeStore(
-      {},
-      { sync: { waiting: 1, problems: 0, lastSyncedAt: null, signedOut: false } }
-    )
-    installPhoneApi(store)
-    renderApp(store)
-    expect(await screen.findByText('1 waiting to sync')).toBeInTheDocument()
-    expect(
-      await screen.findByText(
-        "Your browser may clear this app's data. Sync before closing it for long."
-      )
-    ).toBeInTheDocument()
-    expect(navigator.storage.persist).toHaveBeenCalledTimes(1)
   })
 
   async function openSettings(user: ReturnType<typeof userEvent.setup>): Promise<void> {

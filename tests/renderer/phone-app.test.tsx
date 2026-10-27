@@ -123,7 +123,7 @@ describe('phone app', () => {
     installPhoneApi(store)
     renderApp(store)
     await waitFor(() => expect(tab('Scan')).toHaveAttribute('aria-current', 'page'))
-    expect(screen.getByRole('button', { name: /0 scanned · Review/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Review 0 scanned' })).toBeInTheDocument()
   })
 
   it('every tab opens its page', async () => {

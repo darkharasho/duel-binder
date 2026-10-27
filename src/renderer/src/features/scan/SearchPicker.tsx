@@ -34,7 +34,8 @@ export const SearchPicker = memo(function SearchPicker({
   placeholder = 'Choose…',
   searchPlaceholder = 'Search…',
   className,
-  disabled = false
+  disabled = false,
+  renderTrigger
 }: {
   /** The trigger's accessible name. */
   label: string
@@ -46,6 +47,8 @@ export const SearchPicker = memo(function SearchPicker({
   searchPlaceholder?: string
   className?: string
   disabled?: boolean
+  /** The trigger's contents in place of the picked label and chevron (the phone's chips). */
+  renderTrigger?: (picked: PickerOption | undefined) => React.ReactNode
 }): React.JSX.Element {
   const [open, setOpen] = useState(false)
   const picked = value === null ? undefined : options.find((o) => o.key === value)
@@ -62,10 +65,16 @@ export const SearchPicker = memo(function SearchPicker({
             className
           )}
         >
-          <span className={cn('truncate', !picked && 'text-muted-foreground')}>
-            {picked?.label ?? placeholder}
-          </span>
-          <ChevronDownIcon className="size-4 shrink-0 opacity-50" />
+          {renderTrigger ? (
+            renderTrigger(picked)
+          ) : (
+            <>
+              <span className={cn('truncate', !picked && 'text-muted-foreground')}>
+                {picked?.label ?? placeholder}
+              </span>
+              <ChevronDownIcon className="size-4 shrink-0 opacity-50" />
+            </>
+          )}
         </button>
       </Popover.Trigger>
       <Popover.Portal>

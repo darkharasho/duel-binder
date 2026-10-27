@@ -71,7 +71,7 @@ export function PhoneCamera({
           messages={CAMERA_MESSAGES}
           onRetryCamera={camera.retry}
           loop={loop}
-          className="aspect-[3/4] w-[min(100cqw,75cqh)]"
+          className="aspect-[3/4] w-[min(100cqw,75cqh)] rounded-3xl shadow-[0_10px_40px_rgba(0,0,0,0.4)]"
         >
           {children}
           {torch.available && (
@@ -81,8 +81,8 @@ export function PhoneCamera({
               aria-pressed={torch.on}
               onClick={torch.toggle}
               className={cn(
-                'absolute right-3 top-3 flex size-11 items-center justify-center rounded-full backdrop-blur-md transition-colors',
-                torch.on ? 'bg-amber-300 text-black' : 'bg-black/50 text-white'
+                'absolute right-2.5 top-2.5 flex size-10 items-center justify-center rounded-full backdrop-blur-md transition-colors',
+                torch.on ? 'bg-amber-300 text-black' : 'bg-black/45 text-white'
               )}
             >
               {torch.on ? (

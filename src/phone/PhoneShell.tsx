@@ -107,7 +107,10 @@ export function PhoneShell({
   }
 
   return (
-    <div className="fixed inset-0 isolate flex flex-col overflow-hidden bg-background text-foreground tabular-nums">
+    <div
+      data-phone-shell
+      className="fixed inset-0 isolate flex flex-col overflow-hidden bg-background text-foreground tabular-nums"
+    >
       <ArtWash src={scan ? null : wash} />
       <main
         ref={mainRef}

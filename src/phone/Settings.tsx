@@ -14,6 +14,7 @@ import { api } from '@/lib/api'
 import { PRIVACY_URL, SIGN_OUT_FAILED, cardDataAge, signOutWarning } from './copy'
 import { CATALOG_KEY, SYNC_STATE_KEY, displayName, usePhone } from './context'
 import { forgetSavedScans } from './savedScans'
+import { ScreenDetails } from './ScreenDetails'
 import { SyncProblems } from './SyncProblems'
 
 /** Ends the web session too, so the cookie doesn't sign the phone straight back in. */
@@ -187,6 +188,7 @@ export function Settings(): React.JSX.Element {
             </span>
           </Row>
         </Group>
+        <ScreenDetails />
       </section>
 
       <section aria-label="Delete account" className="flex justify-center pt-2">

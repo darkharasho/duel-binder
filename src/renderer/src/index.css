@@ -146,6 +146,11 @@
   0% { opacity: 0; transform: translateY(150px); }
   100% { opacity: 1; transform: none; }
 }
+/* The sealed pack's foil catching the light now and then. */
+@keyframes rip-sheen {
+  0% { background-position: 120% 0; }
+  45%, 100% { background-position: -20% 0; }
+}
 /* A hit: the stage blooms in its colour and the big ones shake. */
 @keyframes rip-bloom {
   0% { opacity: 0; }

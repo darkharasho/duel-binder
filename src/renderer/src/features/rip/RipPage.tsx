@@ -3,6 +3,7 @@ import { useRef, useState } from 'react'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
 import { UnderlineTabs } from '@/components/UnderlineTabs'
+import { cn } from '@/lib/utils'
 import { api, queryKeys } from '@/lib/api'
 import type { RipSet } from '../../../../shared/rip/types'
 import { HistoryTab } from './HistoryTab'
@@ -97,8 +98,16 @@ export function RipPage(): React.JSX.Element {
     }
   }
 
+  const opening = tab === 'open' && view.kind === 'opening'
+
   return (
-    <div className="space-y-5 p-8 max-md:p-4">
+    <div
+      className={cn(
+        'space-y-5 p-8 max-md:p-4',
+        // Opening fills the window below the header, so Finish is never below the fold.
+        opening && 'flex min-h-full flex-col space-y-0 gap-5 pb-4'
+      )}
+    >
       <PageHeader>
         <h1 className="text-2xl font-semibold tracking-tight">Rip</h1>
         <UnderlineTabs
@@ -111,7 +120,7 @@ export function RipPage(): React.JSX.Element {
       </PageHeader>
       {tab === 'history' && <HistoryTab />}
       {/* Kept mounted (hidden) on the History tab, so an opening in progress keeps its place. */}
-      <div hidden={tab !== 'open'}>
+      <div hidden={tab !== 'open'} className={cn(opening && 'flex min-h-0 flex-1 flex-col')}>
         {view.kind === 'opening' ? (
           <PackOpener
             key={view.sessionId}

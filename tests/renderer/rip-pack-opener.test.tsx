@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { vi } from 'vitest'
 import { PackOpener } from '@/features/rip/PackOpener'
@@ -159,7 +159,7 @@ describe('PackOpener', () => {
     expect(count()).toBe('1 / 3')
   })
 
-  it('each move to the back brings the next card to the front', async () => {
+  it('each move brings the next card to the front', async () => {
     renderOpener(async () => nine())
     await loadedPack()
     space()
@@ -172,27 +172,7 @@ describe('PackOpener', () => {
     expect(screen.getByText("That's the pack.")).toBeInTheDocument()
   })
 
-  it('the front card slides off and the stack moves up', async () => {
-    motion(false)
-    vi.useFakeTimers()
-    renderOpener(async () => nine())
-    await act(() => vi.advanceTimersByTimeAsync(0))
-    space()
-    await act(() => vi.advanceTimersByTimeAsync(550))
-    space()
-    expect(count()).toBe('2 / 9')
-    expect(front()).toContainElement(screen.getByRole('img', { name: 'Card 1' }))
-    // Card 0 is on its way out, off to the right and above everything.
-    const out = document.querySelector<HTMLElement>('[data-leaving="out"]')!
-    expect(out.style.transform).toContain('translate(380px, -30px)')
-    await act(() => vi.advanceTimersByTimeAsync(300))
-    expect(document.querySelector('[data-leaving="out"]')).toBeNull()
-    expect(document.querySelector<HTMLElement>('[data-leaving="tuck"]')!.style.zIndex).toBe('0')
-    await act(() => vi.advanceTimersByTimeAsync(420))
-    expect(document.querySelector('[data-leaving]')).toBeNull()
-  })
-
-  it('a swipe on the front card sends it back; a short drag springs back', async () => {
+  it('a swipe on the front card sends it on; a short drag springs back', async () => {
     renderOpener(async () => nine())
     await loadedPack()
     space()
@@ -220,28 +200,7 @@ describe('PackOpener', () => {
     expect(count()).toBe('4 / 9')
   })
 
-  it('keeps only the hand: the front card plus up to four edges behind it', async () => {
-    renderOpener(async () => nine())
-    await loadedPack()
-    space()
-    space()
-    space()
-    const hand = document.querySelectorAll('[data-hand-card]')
-    expect(hand).toHaveLength(5)
-    expect([...hand].map((el) => el.getAttribute('data-hand-card')).sort()).toEqual([
-      '0',
-      '1',
-      '2',
-      '3',
-      '4'
-    ])
-    // Only the front is a card you can see as such; the edges are decoration.
-    expect(screen.getAllByRole('img')).toHaveLength(1)
-    expect(screen.getByRole('img', { name: 'Card 2' })).toBeInTheDocument()
-    expect(screen.queryByRole('img', { name: 'Card 0' })).not.toBeInTheDocument()
-  })
-
-  it('Skip to the hit runs the cards to the back one by one and stops on the hit', async () => {
+  it('Skip to the hit sends the cards on one by one and stops on the hit', async () => {
     motion(false)
     vi.useFakeTimers()
     renderOpener(async () => nine())
@@ -308,23 +267,69 @@ describe('PackOpener', () => {
     expect(screen.getByText(/pack 2 of 3/i)).toBeInTheDocument()
   })
 
-  it('keeps the edges dark while the front card slides off', async () => {
-    motion(false)
-    vi.useFakeTimers()
+  it('a sent card goes down to the row, in the order seen', async () => {
     renderOpener(async () => nine())
-    await act(() => vi.advanceTimersByTimeAsync(0))
+    await loadedPack()
     space()
-    await act(() => vi.advanceTimersByTimeAsync(550))
+    expect(screen.queryAllByTestId('rip-row-card')).toHaveLength(0)
     space()
-    expect(document.querySelector('[data-leaving="out"]')).not.toBeNull()
-    const edges = document.querySelectorAll<HTMLElement>('[data-hand-card]:not([data-leaving])')
-    const behind = [...edges].filter((el) => el.dataset.handCard !== '0')
-    expect(behind).toHaveLength(4)
-    for (const el of behind) expect(el.style.filter).toContain('brightness(')
-    expect(document.querySelector<HTMLElement>('[data-leaving="out"]')!.style.filter).toBe('')
+    space()
+    const row = screen.getByRole('list', { name: /seen cards/i })
+    expect(
+      within(row)
+        .getAllByRole('img')
+        .map((img) => img.getAttribute('alt'))
+    ).toEqual(['Card 0', 'Card 1'])
+    expect(front()).toContainElement(screen.getByRole('img', { name: 'Card 2' }))
+    // The row is small, full-brightness art with no holo.
+    for (const el of within(row).getAllByTestId('rip-row-card')) {
+      expect(el.querySelector('[data-holo]')).toBeNull()
+      expect(el.querySelector<HTMLElement>('[style*="brightness"]')).toBeNull()
+    }
   })
 
-  it('a quick second move lets the first card finish its slide', async () => {
+  it('at the end the hit stays at the front and every other card is in the row', async () => {
+    renderOpener(async () => nine())
+    await loadedPack()
+    for (let i = 0; i < 9; i++) space()
+    expect(count()).toBe('9 / 9')
+    expect(front()).toContainElement(screen.getByRole('img', { name: 'Dark Magician' }))
+    const row = screen.getByRole('list', { name: /seen cards/i })
+    expect(
+      within(row)
+        .getAllByRole('img')
+        .map((img) => img.getAttribute('alt'))
+    ).toEqual(['Card 0', 'Card 1', 'Card 2', 'Card 3', 'Card 5', 'Card 6', 'Card 7', 'Card 8'])
+    expect(within(row).queryByRole('img', { name: 'Dark Magician' })).not.toBeInTheDocument()
+    // Space at the end is the next pack, which starts with an empty row.
+    space()
+    await waitFor(() => expect(count()).toBe('1 / 9'))
+    expect(screen.queryAllByTestId('rip-row-card')).toHaveLength(0)
+  })
+
+  it('keeps the hand to the front card and up to four edges, dimmed behind it', async () => {
+    renderOpener(async () => nine())
+    await loadedPack()
+    space()
+    space()
+    const hand = [...document.querySelectorAll<HTMLElement>('[data-hand-card]')]
+    expect(hand.map((el) => el.dataset.handCard)).toEqual(['0', '1', '2', '3', '4'])
+    expect(hand[0].style.filter).toBe('')
+    for (const el of hand.slice(1)) expect(el.style.filter).toContain('brightness(')
+    // Only the front and the row are cards to look at; the edges are decoration.
+    expect(screen.getAllByRole('img').map((img) => img.getAttribute('alt'))).toEqual([
+      'Card 1',
+      'Card 0'
+    ])
+    space()
+    space()
+    space()
+    space()
+    // Five left: the hit and the four before it.
+    expect(document.querySelectorAll('[data-hand-card]')).toHaveLength(4)
+  })
+
+  it('quick moves each land in the row', async () => {
     motion(false)
     vi.useFakeTimers()
     renderOpener(async () => nine())
@@ -332,18 +337,95 @@ describe('PackOpener', () => {
     space()
     await act(() => vi.advanceTimersByTimeAsync(550))
     space()
+    expect(screen.getByTestId('rip-caption-out')).toHaveTextContent('Card 0')
     await act(() => vi.advanceTimersByTimeAsync(100))
     space()
     expect(count()).toBe('3 / 9')
-    expect(document.querySelectorAll('[data-leaving="out"]')).toHaveLength(2)
-    expect(screen.getAllByTestId('rip-caption-out')).toHaveLength(2)
-    await act(() => vi.advanceTimersByTimeAsync(200))
-    // Card 0's slide is over and it tucks in; Card 1 is still flying.
-    expect(document.querySelectorAll('[data-leaving="out"]')).toHaveLength(1)
-    expect(document.querySelectorAll('[data-leaving="tuck"]')).toHaveLength(1)
+    expect(screen.getAllByTestId('rip-row-card')).toHaveLength(2)
     await act(() => vi.advanceTimersByTimeAsync(1000))
-    expect(document.querySelectorAll('[data-leaving]')).toHaveLength(0)
     expect(screen.queryByTestId('rip-caption-out')).not.toBeInTheDocument()
+    expect(screen.getAllByTestId('rip-row-card')).toHaveLength(2)
+  })
+
+  it("the pack is the set's pack photo when it has one, torn from the same picture", async () => {
+    renderWithProviders(
+      <PackOpener
+        sessionId={7}
+        packCount={1}
+        setName="Beyond the Brave"
+        onDone={vi.fn()}
+        packArt={{
+          setCode: 'BTB',
+          imageKey: null,
+          packImageKey: 'BTB-pack.png',
+          logoImageKey: 'BTB-logo.png',
+          coverImageId: 12
+        }}
+      />,
+      { api: createMockApi({ rip: { openPack: vi.fn(async () => commons()) } }) }
+    )
+    const pack = screen.getByTestId('rip-pack')
+    const photos = pack.querySelectorAll('[data-testid="rip-pack-image"]')
+    // Once for the body, once for the strip.
+    expect(photos).toHaveLength(2)
+    for (const img of photos) expect(img).toHaveAttribute('src', 'ygo-img://set/BTB-pack.png')
+    expect(within(screen.getByTestId('rip-pack-strip')).getByTestId('rip-pack-image')).toBeTruthy()
+    expect(pack.querySelector('[data-testid="rip-pack-wrapper"]')).toBeNull()
+    // A broken photo falls back to the wrapper.
+    fireEvent.error(photos[0])
+    expect(pack.querySelector('[data-testid="rip-pack-image"]')).toBeNull()
+    expect(pack.querySelector('[data-testid="rip-pack-wrapper"]')).not.toBeNull()
+  })
+
+  it('without a pack photo the pack is a foil wrapper with the cover art and logo', async () => {
+    renderWithProviders(
+      <PackOpener
+        sessionId={7}
+        packCount={1}
+        setName="Phantom Nightmare"
+        onDone={vi.fn()}
+        packArt={{
+          setCode: 'PHNI',
+          imageKey: null,
+          packImageKey: null,
+          logoImageKey: 'PHNI-logo.png',
+          coverImageId: 12
+        }}
+      />,
+      { api: createMockApi({ rip: { openPack: vi.fn(async () => commons()) } }) }
+    )
+    const body = screen
+      .getByTestId('rip-pack')
+      .querySelector<HTMLElement>('[data-testid="rip-pack-wrapper"]')!
+    expect(body.querySelector('img[src="ygo-img://cropped/12"]')).not.toBeNull()
+    expect(within(body).getByTestId('rip-pack-logo')).toHaveAttribute(
+      'src',
+      'ygo-img://set/PHNI-logo.png'
+    )
+    expect(body).toHaveTextContent('PHNI')
+    // The set name only stands in when there's no logo.
+    expect(body).not.toHaveTextContent('Phantom Nightmare')
+    expect(screen.getByTestId('rip-pack')).toHaveTextContent(/click to tear open/i)
+  })
+
+  it('without a logo the wrapper shows the set name', async () => {
+    renderOpener(async () => commons())
+    expect(screen.getAllByTestId('rip-pack-wrapper')[0]).toHaveTextContent('Legend of Blue Eyes')
+  })
+
+  it('the card and pack size from the stage height', async () => {
+    renderOpener(async () => commons())
+    await loadedPack()
+    expect(screen.getByTestId('rip-middle').style.containerType).toBe('size')
+    space()
+    const handBox = front().parentElement!
+    expect(handBox.style.height).toContain('100cqh')
+    // Header line, counter, row and buttons all live inside the stage.
+    const stage = screen.getByTestId('rip-stage')
+    expect(stage).toContainElement(screen.getByText(/pack 1 of 3/i))
+    expect(stage).toContainElement(screen.getByTestId('rip-count'))
+    expect(stage).toContainElement(nextButton())
+    expect(stage).toContainElement(screen.getByTestId('rip-caption'))
   })
 
   it('with reduced motion the hand swaps without transitions', async () => {

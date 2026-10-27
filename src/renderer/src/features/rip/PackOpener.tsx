@@ -1,13 +1,13 @@
 import { useQueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useLayoutEffect, useReducer, useRef, useState } from 'react'
+import { TiltCard } from '@/components/TiltCard'
 import { Button } from '@/components/ui/button'
 import { api, queryKeys } from '@/lib/api'
-import { cardImageSrc } from '@/lib/images'
+import { cardImageSrc, setImageSrc } from '@/lib/images'
 import { rarityColor, rarityTextColor } from '@/lib/rarityColors'
 import { cn } from '@/lib/utils'
 import { baseOf, compareRarity, revealTier } from '../../../../shared/rip/rarity'
 import type { RevealTier, RipCard, RipSet } from '../../../../shared/rip/types'
-import { SetArt } from '../sets/SetArt'
 import { HoloCard } from './HoloCard'
 import { initialOpener, openerReducer } from './opener'
 
@@ -15,15 +15,15 @@ import { initialOpener, openerReducer } from './opener'
 const HOLD_MS: Record<RevealTier, number> = { none: 0, rare: 300, big: 800, huge: 1500 }
 /** The torn strip's flight; the cards come out once it's gone (and the pack has loaded). */
 const TEAR_MS = 550
-/** The front card sliding off to the right... */
-const SLIDE_MS = 300
-/** ...then tucking in behind the stack. Also how long the stack takes to shuffle forward. */
+/** The sent card flying down into the row; the stack moving up takes as long. */
 const SETTLE_MS = 420
+/** The outgoing caption's fade. */
+const CAPTION_OUT_MS = 200
 /** Between cards when skipping to the hit. */
 const SKIP_STEP_MS = 330
 /** A beat on the next sealed pack before it tears itself open. */
 const AUTO_TEAR_MS = 350
-/** How far a drag must go to send the front card back. */
+/** How far a drag must go to send the front card on. */
 const SWIPE_PX = 60
 /** Cards visible behind the front one, as edges. */
 const EDGES = 4
@@ -31,6 +31,15 @@ const EDGES = 4
 const TIER_LEVEL: Record<RevealTier, number> = { none: 0, rare: 1, big: 2, huge: 3 }
 const GLOW_PX: Record<RevealTier, number> = { none: 0, rare: 26, big: 48, huge: 80 }
 const EASE = 'cubic-bezier(.25,.8,.25,1)'
+
+/**
+ * The front card's height: the middle of the stage less room above for the edges (7px a card,
+ * four deep) and a hit's scale-up, and below for the scale-up. The middle is a size container.
+ */
+const CARD_H = 'calc(100cqh - 58px)'
+const CARD_TOP = '32px'
+/** Card width from its height (421×614). */
+const CARD_W = `calc(${CARD_H} * 421 / 614)`
 
 /** The big hits' ring of sparkles, flying outward from round the card. */
 const SPARKS = Array.from({ length: 10 }, (_, i) => {
@@ -43,19 +52,28 @@ const SPARKS = Array.from({ length: 10 }, (_, i) => {
   }
 })
 
-/** The tear line: teeth along the strip's bottom edge, and the matching ones on the pack's top. */
-const TEETH = 15
-const zigzag = (from: number, to: number): string =>
+/**
+ * The pack's outline, as percent of its box: crimped teeth along the top and bottom edges, and the
+ * tear line 9% down, shared by the strip (above it) and the body (below it) so they meet exactly.
+ */
+const TEETH = 18
+const teeth = (y: number, depth: number): string[] =>
   Array.from(
     { length: TEETH * 2 + 1 },
-    (_, i) => `${(i / (TEETH * 2)) * 100}% ${i % 2 ? to : from}%`
+    (_, i) => `${((i / (TEETH * 2)) * 100).toFixed(2)}% ${i % 2 ? y + depth : y}%`
   )
-    .reverse()
-    .join(', ')
-const STRIP_CLIP = `polygon(0% 0%, 100% 0%, ${zigzag(100, 82)})`
-const BODY_CLIP = `polygon(${zigzag(0, 2).split(', ').reverse().join(', ')}, 100% 100%, 0% 100%)`
+const TOP_EDGE = teeth(0, 1.4)
+const TEAR_LINE = teeth(9, -1.4)
+const BOTTOM_EDGE = teeth(100, -1.4)
+const STRIP_CLIP = `polygon(${[...TOP_EDGE, ...[...TEAR_LINE].reverse()].join(', ')})`
+const BODY_CLIP = `polygon(${[...TEAR_LINE, ...[...BOTTOM_EDGE].reverse()].join(', ')})`
 const FOIL =
   'linear-gradient(115deg, #e4e6eb 0%, #8e939d 16%, #f6f7f9 30%, #7a7f89 47%, #dfe2e8 63%, #969ba5 80%, #eef0f3 100%)'
+/** The crimped seals: pressed ridges in a lighter foil. */
+const CRIMP =
+  'repeating-linear-gradient(90deg, rgb(255 255 255 / 0.55) 0 2px, rgb(0 0 0 / 0.14) 2px 4px), linear-gradient(180deg, #f4f5f8, #c9ccd3)'
+const SHEEN =
+  'linear-gradient(110deg, transparent 38%, rgb(255 255 255 / 0.6) 50%, transparent 62%)'
 const STAGE = 'radial-gradient(ellipse at 50% 42%, #1f1f2a 0%, #0c0c11 72%)'
 
 const prefersReducedMotion = (): boolean =>
@@ -102,7 +120,99 @@ export type PackArt = Pick<
   'setCode' | 'imageKey' | 'packImageKey' | 'logoImageKey' | 'coverImageId'
 >
 
-/** A sealed foil pack with a tear strip across its top. */
+/**
+ * Everything printed on the pack, filling its box. Drawn twice, once clipped to the strip and once
+ * to the body, so tearing the strip off tears the same picture.
+ */
+function PackFace({
+  setName,
+  art,
+  packSrc,
+  onPackError
+}: {
+  setName: string
+  art?: PackArt
+  /** The photo of the real pack, when the set has one: then the pack is that picture. */
+  packSrc: string | null
+  onPackError: () => void
+}): React.JSX.Element {
+  const [failed, setFailed] = useState({ cover: false, logo: false })
+  const cover =
+    art?.coverImageId != null && !failed.cover ? cardImageSrc('cropped', art.coverImageId) : null
+  const logo = art?.logoImageKey && !failed.logo ? setImageSrc(art.logoImageKey) : null
+  return (
+    <div className="absolute inset-0 overflow-hidden" style={{ backgroundImage: FOIL }}>
+      {packSrc ? (
+        <img
+          src={packSrc}
+          alt=""
+          draggable={false}
+          data-testid="rip-pack-image"
+          onError={onPackError}
+          className="absolute inset-0 size-full"
+        />
+      ) : (
+        <div data-testid="rip-pack-wrapper" className="absolute inset-0">
+          {cover && (
+            <img
+              src={cover}
+              alt=""
+              draggable={false}
+              onError={() => setFailed((f) => ({ ...f, cover: true }))}
+              className="absolute inset-x-[5%] top-[4%] bottom-[4%] h-[92%] w-[90%] object-cover"
+            />
+          )}
+          {/* Foil showing round the art, and a sheen over it so it reads as printed on foil. */}
+          <div
+            aria-hidden
+            className="absolute inset-0"
+            style={{
+              backgroundImage:
+                'linear-gradient(180deg, rgb(255 255 255 / 0.18), transparent 30%, transparent 70%, rgb(0 0 0 / 0.35))'
+            }}
+          />
+          <div className="absolute inset-x-[8%] top-[10%] flex h-[26%] items-center justify-center">
+            {logo ? (
+              <img
+                src={logo}
+                alt=""
+                draggable={false}
+                data-testid="rip-pack-logo"
+                onError={() => setFailed((f) => ({ ...f, logo: true }))}
+                className="max-h-full max-w-full object-contain drop-shadow-[0_4px_10px_rgb(0_0_0/0.7)]"
+              />
+            ) : (
+              <span className="text-center text-[clamp(1rem,7cqh,1.6rem)] leading-tight font-black tracking-tight text-white uppercase drop-shadow-[0_2px_8px_rgb(0_0_0/0.85)]">
+                {setName}
+              </span>
+            )}
+          </div>
+          {art?.setCode && (
+            <span className="absolute inset-x-0 bottom-[6%] text-center font-mono text-[11px] font-bold tracking-[0.2em] text-white/85 drop-shadow-[0_1px_3px_rgb(0_0_0/0.9)]">
+              {art.setCode}
+            </span>
+          )}
+        </div>
+      )}
+      {/* Crimped seals; light over a photo of a pack, which has its own. */}
+      {(['top-0', 'bottom-0'] as const).map((edge) => (
+        <div
+          key={edge}
+          aria-hidden
+          style={{ backgroundImage: CRIMP }}
+          className={cn('absolute inset-x-0 h-[14px]', edge, packSrc ? 'opacity-30' : 'opacity-95')}
+        />
+      ))}
+      <div
+        aria-hidden
+        style={{ backgroundImage: SHEEN, backgroundSize: '300% 100%' }}
+        className="pointer-events-none absolute inset-0 mix-blend-overlay animate-[rip-sheen_4200ms_ease-in-out_infinite] motion-reduce:hidden"
+      />
+    </div>
+  )
+}
+
+/** A sealed booster pack, as tall as the front card will be, with a tear strip across its top. */
 function SealedPack({
   setName,
   art,
@@ -116,73 +226,86 @@ function SealedPack({
   /** Torn but the cards haven't arrived yet. */
   pending: boolean
 }): React.JSX.Element {
+  const [packFailed, setPackFailed] = useState(false)
+  const packSrc = art?.packImageKey && !packFailed ? setImageSrc(art.packImageKey) : null
+  const fail = (): void => setPackFailed(true)
+  const face = <PackFace setName={setName} art={art} packSrc={packSrc} onPackError={fail} />
   return (
     <div
       data-testid="rip-pack"
       data-phase={phase}
       aria-hidden={phase === 'leaving' || undefined}
+      style={{ top: CARD_TOP }}
       className={cn(
-        'absolute top-[58px] left-1/2 -ml-[150px] h-[470px] w-[300px]',
+        'absolute left-1/2 -translate-x-1/2',
         phase === 'leaving' &&
           'pointer-events-none animate-[rip-pack-out_520ms_ease-in_both] motion-reduce:hidden'
       )}
     >
       {phase === 'sealed' && (
-        <span className="absolute inset-x-0 -top-9 text-center text-sm font-medium text-white/70 animate-[rip-bob_1600ms_ease-in-out_infinite] motion-reduce:animate-none">
+        <span className="absolute inset-x-0 -top-7 text-center text-sm font-medium whitespace-nowrap text-white/70 animate-[rip-bob_1600ms_ease-in-out_infinite] motion-reduce:animate-none">
           Click to tear open
         </span>
       )}
-      {phase !== 'leaving' && (
-        <div
-          aria-hidden
-          style={{ backgroundImage: FOIL, clipPath: STRIP_CLIP }}
-          className={cn(
-            'absolute inset-x-0 top-0 h-[44px] rounded-t-[10px]',
-            phase === 'tearing' &&
-              'animate-[rip-tear-strip_550ms_ease-in_forwards] motion-reduce:hidden'
-          )}
-        />
-      )}
-      <div
-        style={{ backgroundImage: FOIL, clipPath: BODY_CLIP }}
-        className={cn(
-          'absolute inset-x-0 top-[36px] bottom-0 rounded-b-[10px] shadow-[0_30px_60px_rgb(0_0_0/0.6)]',
-          pending && 'animate-pulse motion-reduce:animate-none'
-        )}
-      >
-        <div className="absolute inset-x-[16px] top-[30px] bottom-[56px] overflow-hidden rounded-[6px] shadow-[inset_0_0_0_1px_rgb(0_0_0/0.25)]">
-          {art ? (
-            <SetArt
-              imageKey={art.imageKey}
-              setCode={art.setCode}
-              packImageKey={art.packImageKey}
-              // The pack render wins over the logo; the logo only stands in when there's no pack.
-              logoImageKey={art.packImageKey ? null : art.logoImageKey}
-              coverImageId={art.coverImageId}
-              className="size-full rounded-none"
+      <TiltCard maxTilt={8} glareClassName="hidden">
+        <div className="relative drop-shadow-[0_26px_40px_rgb(0_0_0/0.6)]">
+          {/* Sizes the pack: the photo at its own proportions, or a wrapper at a booster's. */}
+          {packSrc ? (
+            <img
+              src={packSrc}
+              alt=""
+              aria-hidden
+              draggable={false}
+              onError={fail}
+              style={{ height: CARD_H }}
+              className="invisible block w-auto max-w-none"
             />
           ) : (
-            <div className="flex size-full items-center justify-center bg-zinc-800 p-4 text-center text-lg font-bold text-white/80">
-              {setName}
+            <div style={{ height: CARD_H, width: `calc(${CARD_H} * 0.64)` }} />
+          )}
+          <div
+            className={cn(
+              'absolute inset-0',
+              pending && 'animate-pulse motion-reduce:animate-none'
+            )}
+            style={{ clipPath: BODY_CLIP }}
+          >
+            {face}
+          </div>
+          {phase !== 'leaving' && (
+            <div
+              aria-hidden
+              data-testid="rip-pack-strip"
+              style={{ clipPath: STRIP_CLIP }}
+              className={cn(
+                'absolute inset-0',
+                phase === 'tearing' &&
+                  'animate-[rip-tear-strip_550ms_ease-in_forwards] motion-reduce:hidden'
+              )}
+            >
+              {face}
             </div>
           )}
         </div>
-        <span className="absolute inset-x-4 bottom-[18px] truncate text-center text-[11px] font-semibold tracking-[0.14em] text-zinc-800 uppercase">
-          {setName}
-        </span>
-      </div>
+      </TiltCard>
     </div>
   )
 }
 
-/** Under the front card: its rarity, name and set code. */
+/** Where each card in the hand sits: the front, or an edge behind it. */
+function handTransform(depth: number, scale: number): string {
+  return `translate(${7 * depth}px, ${-7 * depth}px) rotate(${1.4 * depth}deg) scale(${(1 - 0.015 * depth) * scale})`
+}
+
+/** Beside the front card: its rarity, name and set code. */
 function Caption({ card, outgoing }: { card: RipCard; outgoing?: boolean }): React.JSX.Element {
   return (
     <div
       data-testid={outgoing ? 'rip-caption-out' : 'rip-caption'}
       aria-hidden={outgoing || undefined}
+      style={{ left: `calc(50% + ${CARD_W} / 2 + 44px)`, bottom: '40px' }}
       className={cn(
-        'pointer-events-none absolute inset-x-0 bottom-3 flex flex-col items-center gap-1.5 px-6 text-center motion-reduce:animate-none',
+        'pointer-events-none absolute flex w-56 flex-col items-start gap-1.5 motion-reduce:animate-none',
         outgoing
           ? 'animate-[rip-caption-out_200ms_ease-in_forwards]'
           : 'animate-[rip-caption_500ms_ease-out_both]'
@@ -192,24 +315,55 @@ function Caption({ card, outgoing }: { card: RipCard; outgoing?: boolean }): Rea
         rarity={card.rarity}
         className={cn(revealTier(card.rarity) === 'huge' && 'px-3 py-1 text-sm')}
       />
-      <span className="max-w-full truncate text-[19px] leading-tight font-bold text-white">
-        {card.name}
-      </span>
+      <span className="text-[19px] leading-tight font-bold text-white">{card.name}</span>
       <span className="text-xs text-white/55">{card.setCode}</span>
     </div>
   )
 }
 
-/** Where each card in the hand sits: the front, the edges behind it, or sliding away. */
-function handTransform(depth: number, scale: number): string {
-  return `translate(${7 * depth}px, ${-7 * depth}px) rotate(${1.4 * depth}deg) scale(${(1 - 0.015 * depth) * scale})`
+/** Where a sent card flies from: the front card's box as it left. */
+interface FlyFrom {
+  key: string
+  rect: DOMRect
 }
 
-interface Leaving {
-  pack: number
+/** A seen card, small in the row; it flies down from the front when it arrives. */
+function RowCard({
+  card,
+  flyKey,
+  flyFromRef
+}: {
   card: RipCard
-  id: number
-  out: boolean
+  flyKey: string
+  flyFromRef: React.RefObject<FlyFrom | null>
+}): React.JSX.Element {
+  const ref = useRef<HTMLDivElement>(null)
+  useLayoutEffect(() => {
+    const from = flyFromRef.current
+    const el = ref.current
+    if (!el || from?.key !== flyKey) return
+    flyFromRef.current = null
+    const to = el.getBoundingClientRect()
+    if (!to.width || prefersReducedMotion()) return
+    const dx = from.rect.left - to.left
+    const dy = from.rect.top - to.top
+    const s = from.rect.width / to.width
+    el.animate?.(
+      [{ transform: `translate(${dx}px, ${dy}px) scale(${s})` }, { transform: 'none' }],
+      { duration: SETTLE_MS, easing: EASE }
+    )
+  }, [flyFromRef, flyKey])
+  return (
+    <li data-testid="rip-row-card" className="min-w-0 shrink basis-[66px] last:shrink-0">
+      <div ref={ref} className="w-[60px] origin-top-left">
+        <div className="transition-transform duration-200 hover:-translate-y-1.5 motion-reduce:transition-none">
+          <div className="rounded-[4px] shadow-[0_6px_14px_rgb(0_0_0/0.5)]">
+            <HoloCard card={card} size="full" holo={false} />
+          </div>
+        </div>
+      </div>
+    </li>
+  )
 }
 
 interface PackOpenerProps {
@@ -226,7 +380,8 @@ interface PackOpenerProps {
 
 /**
  * Opens a rip session's packs one at a time, like holding them: tear the pack, then look at the
- * front card and put it to the back to see the next. The hit is at the back, so it comes last.
+ * front card and send it down to the row to see the next. The hit is at the back, so it comes last.
+ * Fills the height it's given (the page makes it fill the window), sizing the cards to fit.
  */
 export function PackOpener({
   sessionId,
@@ -242,8 +397,8 @@ export function PackOpener({
   const [tornPack, setTornPack] = useState(-1)
   const [strippedPack, setStrippedPack] = useState(-1)
   const [skippingPack, setSkippingPack] = useState(-1)
-  /** Cards sliding off the front (out), then tucking in behind the stack; each on its own clock. */
-  const [leaving, setLeaving] = useState<Leaving[]>([])
+  /** The caption of the card just sent, fading as the next one's comes in. */
+  const [outCaption, setOutCaption] = useState<{ card: RipCard; id: number } | null>(null)
   const [dragX, setDragX] = useState<number | null>(null)
   /** Set while a hit holds the moment; Next pack waits for it too. */
   const [holding, setHolding] = useState(0)
@@ -253,10 +408,12 @@ export function PackOpener({
   const requested = useRef(-1)
   const holdUntil = useRef(0)
   const reported = useRef(false)
-  const leaveId = useRef(0)
+  const moveId = useRef(0)
   const drag = useRef<{ x: number; moved: boolean } | null>(null)
   const suppressClick = useRef(false)
   const timers = useRef(new Set<ReturnType<typeof setTimeout>>())
+  const frontEl = useRef<HTMLDivElement | null>(null)
+  const flyFrom = useRef<FlyFrom | null>(null)
 
   useEffect(() => {
     alive.current = true
@@ -334,28 +491,26 @@ export function PackOpener({
     setDragX(null)
   }
 
-  /** Turn the next card to the front; the one there now goes to the back. */
+  /** Bring the next card to the front; the one there now goes down to the row. */
   const flipNext = (): void => {
     if (!cards || flipped >= cards.length) return
     cancelDrag()
     const tier = revealTier(cards[flipped].rarity)
     const hold = reduced || tier === 'none' ? 0 : SETTLE_MS + HOLD_MS[tier]
     holdUntil.current = performance.now() + hold
-    const id = ++leaveId.current
+    const id = ++moveId.current
     if (hold > 0) {
       setHolding(id)
       later(hold, () => setHolding((h) => (h === id ? 0 : h)))
     } else setHolding(0)
-    if (flipped > 0 && !reduced) {
-      const card = cards[flipped - 1]
-      setLeaving((ls) => [
-        ...ls.filter((l) => l.card.slot !== card.slot),
-        { pack: packIndex, card, id, out: true }
-      ])
-      later(SLIDE_MS, () =>
-        setLeaving((ls) => ls.map((l) => (l.id === id ? { ...l, out: false } : l)))
-      )
-      later(SLIDE_MS + SETTLE_MS, () => setLeaving((ls) => ls.filter((l) => l.id !== id)))
+    if (flipped > 0) {
+      const sent = cards[flipped - 1]
+      const rect = frontEl.current?.getBoundingClientRect()
+      flyFrom.current = rect ? { key: `${packIndex}-${sent.slot}`, rect } : null
+      if (!reduced) {
+        setOutCaption({ card: sent, id })
+        later(CAPTION_OUT_MS, () => setOutCaption((c) => (c?.id === id ? null : c)))
+      }
     }
     dispatch({ type: 'flip' })
   }
@@ -389,7 +544,7 @@ export function PackOpener({
     return () => clearTimeout(t)
   }, [autoTear])
 
-  // Skipping: tear if sealed, then each card to the back in turn, stopping on the last.
+  // Skipping: tear if sealed, then each card down to the row in turn, stopping on the last.
   useEffect(() => {
     if (!skipping || !active) return
     if (phase === 'sealed') {
@@ -404,11 +559,11 @@ export function PackOpener({
   const next = (): void => {
     if (phase !== 'end' || performance.now() < holdUntil.current) return
     cancelDrag()
-    setLeaving([])
+    setOutCaption(null)
     dispatch({ type: 'next' })
   }
 
-  /** Space, a click or a swipe: tear, put the front card back, or (Space only) the next pack. */
+  /** Space, a click or a swipe: tear, send the front card on, or (Space only) the next pack. */
   const act = (from: 'key' | 'pointer'): void => {
     if (skipping) return
     if (phase === 'sealed') tear()
@@ -448,7 +603,7 @@ export function PackOpener({
     fetchPack(packIndex)
   }
 
-  // Dragging the front card sideways: it follows the pointer; far enough sends it back.
+  // Dragging the front card sideways: it follows the pointer; far enough sends it on.
   const onPointerDown = (e: React.PointerEvent): void => {
     if (e.button !== 0 || phase !== 'hand' || skipping) return
     drag.current = { x: e.clientX, moved: false }
@@ -464,11 +619,14 @@ export function PackOpener({
     if (!drag.current) return
     const { x, moved } = drag.current
     drag.current = null
-    setDragX(null)
-    if (!moved) return
+    if (!moved) {
+      setDragX(null)
+      return
+    }
     // A drag isn't a click as well.
     suppressClick.current = true
     if (Math.abs(e.clientX - x) >= SWIPE_PX) act('pointer')
+    else setDragX(null)
   }
   const onStageClick = (): void => {
     if (suppressClick.current) {
@@ -480,6 +638,7 @@ export function PackOpener({
 
   const revealed = cards ? cards.slice(0, flipped) : []
   const front = flipped > 0 ? revealed.at(-1)! : null
+  const row = revealed.slice(0, -1)
   const seen = [...state.opened.slice(0, cards ? -1 : undefined).flat(), ...revealed]
   const best = seen.reduce<RipCard | null>(
     (b, c) => (b === null || compareRarity(c.rarity, b.rarity) < 0 ? c : b),
@@ -490,44 +649,68 @@ export function PackOpener({
   const hitColor = front ? rarityColor(baseOf(front.rarity)) : ''
   const frontKey = front ? `${packIndex}-${front.slot}` : ''
   const actionable = !skipping && (phase === 'sealed' || phase === 'hand')
-  const leavingHere = leaving.filter((l) => l.pack === packIndex)
+  const hand = cards && front ? cards.slice(flipped - 1, flipped + EDGES) : []
 
   return (
-    <div className="flex flex-col gap-4">
-      <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-sm">
-        <span>
+    <div
+      data-testid="rip-stage"
+      onClick={onStageClick}
+      onPointerDownCapture={() => {
+        suppressClick.current = false
+      }}
+      style={{ backgroundImage: STAGE }}
+      className={cn(
+        'relative isolate flex min-h-[420px] flex-1 flex-col overflow-hidden rounded-xl border border-white/[0.06] select-none',
+        actionable && 'cursor-pointer'
+      )}
+    >
+      {front && frontTier !== 'none' && (
+        <div
+          key={frontKey}
+          aria-hidden
+          data-testid="rip-bloom"
+          style={{
+            backgroundImage: `radial-gradient(circle at 50% 45%, ${hitColor}55 0%, transparent 62%)`
+          }}
+          className="pointer-events-none absolute inset-0 -z-10 animate-[rip-bloom_600ms_ease-out_both] motion-reduce:animate-none"
+        />
+      )}
+
+      <div className="relative z-40 flex h-11 shrink-0 items-center justify-between gap-4 px-5 text-sm">
+        <span className="min-w-0 truncate">
           <span className="font-semibold">
             Pack {packIndex + 1} of {packCount}
           </span>
-          <span className="text-muted-foreground"> · {setName}</span>
+          <span className="text-white/55"> · {setName}</span>
         </span>
-        {best && (
-          <span
-            data-testid="rip-best"
-            className="flex min-w-0 items-center gap-2 text-muted-foreground"
-          >
-            Best so far
-            <RarityBadge rarity={best.rarity} />
-            <span className="truncate text-foreground">{best.name}</span>
-          </span>
-        )}
+        <span className="flex min-w-0 items-center gap-4">
+          {best && (
+            <span data-testid="rip-best" className="flex min-w-0 items-center gap-2 text-white/55">
+              Best so far
+              <RarityBadge rarity={best.rarity} />
+              <span className="truncate text-white">{best.name}</span>
+            </span>
+          )}
+          {front && (
+            <span
+              data-testid="rip-count"
+              className="text-xs font-medium text-white/60 tabular-nums"
+            >
+              {flipped} / {n}
+            </span>
+          )}
+        </span>
       </div>
 
+      {/* The middle: a size container, so the card and pack can size themselves from its height. */}
       <div
-        data-testid="rip-stage"
-        onClick={onStageClick}
-        onPointerDownCapture={() => {
-          suppressClick.current = false
-        }}
-        style={{ backgroundImage: STAGE }}
-        className={cn(
-          'relative isolate h-[620px] overflow-hidden rounded-xl border border-white/[0.06] select-none',
-          actionable && 'cursor-pointer'
-        )}
+        data-testid="rip-middle"
+        style={{ containerType: 'size' }}
+        className="relative min-h-0 flex-1"
       >
         {phase === 'error' ? (
           <div className="flex size-full flex-col items-center justify-center gap-3 text-sm">
-            <p className="text-muted-foreground">Couldn&apos;t open this pack.</p>
+            <p className="text-white/60">Couldn&apos;t open this pack.</p>
             <Button
               variant="outline"
               size="sm"
@@ -541,27 +724,6 @@ export function PackOpener({
           </div>
         ) : (
           <>
-            {front && frontTier !== 'none' && (
-              <div
-                key={frontKey}
-                aria-hidden
-                data-testid="rip-bloom"
-                style={{
-                  backgroundImage: `radial-gradient(circle at 50% 45%, ${hitColor}55 0%, transparent 62%)`
-                }}
-                className="pointer-events-none absolute inset-0 -z-10 animate-[rip-bloom_600ms_ease-out_both] motion-reduce:animate-none"
-              />
-            )}
-
-            {front && (
-              <span
-                data-testid="rip-count"
-                className="absolute top-4 right-5 text-xs font-medium text-white/60 tabular-nums"
-              >
-                {flipped} / {n}
-              </span>
-            )}
-
             {(phase === 'sealed' || phase === 'tearing') && (
               <SealedPack
                 key={packIndex}
@@ -571,7 +733,7 @@ export function PackOpener({
                 pending={phase === 'tearing' && cards === null}
               />
             )}
-            {flipped === 1 && leavingHere.length === 0 && !reduced && (
+            {flipped === 1 && !reduced && (
               <SealedPack
                 key={`${packIndex}-out`}
                 setName={setName}
@@ -581,30 +743,19 @@ export function PackOpener({
               />
             )}
 
-            {cards && front && (
+            {front && (
               <div
                 key={packIndex}
-                className="absolute top-[38px] left-1/2 -ml-[160px] h-[467px] w-[320px] animate-[rip-rise_560ms_cubic-bezier(.25,.8,.25,1)_both] motion-reduce:animate-none"
+                style={{ top: CARD_TOP, height: CARD_H, width: CARD_W }}
+                className="absolute left-1/2 -translate-x-1/2 animate-[rip-rise_560ms_cubic-bezier(.25,.8,.25,1)_both] motion-reduce:animate-none"
               >
-                {cards.map((c, i) => {
-                  const depth = (i - (flipped - 1) + n) % n
-                  const leave = leavingHere.find((l) => l.card.slot === c.slot)
-                  const isLeaving = leave !== undefined
-                  const flyingOut = leave?.out === true
-                  if (depth > EDGES && !isLeaving) return null
+                {hand.map((c, depth) => {
                   const isFront = depth === 0
                   const tier = isFront ? frontTier : 'none'
                   const scale = 1 + 0.04 * TIER_LEVEL[tier]
-                  let transform = handTransform(Math.min(depth, EDGES), scale)
-                  let transition = `transform ${SETTLE_MS}ms ${EASE}, filter ${SETTLE_MS}ms ${EASE}, box-shadow 600ms ease-out`
-                  let zIndex = 10 - depth
-                  if (flyingOut) {
-                    transform = 'translate(380px, -30px) rotate(14deg)'
-                    transition = `transform ${SLIDE_MS}ms ease-in`
-                    zIndex = 20
-                  } else if (isLeaving) {
-                    zIndex = 0
-                  } else if (isFront && dragX !== null) {
+                  let transform = handTransform(depth, scale)
+                  let transition = `transform ${SETTLE_MS}ms ${EASE}, filter ${SETTLE_MS}ms ${EASE}`
+                  if (isFront && dragX !== null) {
                     transform = `translateX(${dragX}px) rotate(${dragX * 0.04}deg) scale(${scale})`
                     transition = 'none'
                   }
@@ -613,11 +764,11 @@ export function PackOpener({
                   return (
                     <div
                       key={c.slot}
+                      ref={isFront ? frontEl : undefined}
                       data-hand-card={depth}
-                      data-leaving={isLeaving ? (flyingOut ? 'out' : 'tuck') : undefined}
-                      data-testid={isFront && !isLeaving ? 'rip-front' : undefined}
+                      data-testid={isFront ? 'rip-front' : undefined}
                       data-tier={isFront ? tier : undefined}
-                      aria-hidden={!isFront || isLeaving || undefined}
+                      aria-hidden={!isFront || undefined}
                       onPointerDown={isFront ? onPointerDown : undefined}
                       onPointerMove={isFront ? onPointerMove : undefined}
                       onPointerUp={isFront ? onPointerUp : undefined}
@@ -626,11 +777,8 @@ export function PackOpener({
                       style={{
                         transform,
                         transition,
-                        zIndex,
-                        filter:
-                          isFront || flyingOut
-                            ? undefined
-                            : `brightness(${0.75 - 0.08 * Math.min(depth, EDGES)})`
+                        zIndex: 10 - depth,
+                        filter: isFront ? undefined : `brightness(${0.75 - 0.08 * depth})`
                       }}
                       className={cn(
                         'absolute inset-0',
@@ -647,15 +795,14 @@ export function PackOpener({
                                 : '0 6px 14px rgb(0 0 0 / 0.4)'
                         }}
                         className={cn(
-                          'rounded-[6px] transition-shadow duration-500',
+                          'rounded-[6px] transition-shadow duration-500 motion-reduce:transition-none',
                           isFront &&
-                            !isLeaving &&
                             (tier === 'big' || tier === 'huge') &&
                             'animate-[rip-shake_350ms_ease-in-out_250ms_2] motion-reduce:animate-none'
                         )}
                       >
                         {/* No sheen on the edges, so a Starlight at the back can't give itself away. */}
-                        <HoloCard card={c} size="full" holo={isFront && !isLeaving} />
+                        <HoloCard card={c} size="full" holo={isFront} />
                       </div>
                     </div>
                   )
@@ -681,38 +828,56 @@ export function PackOpener({
               </div>
             )}
 
-            {/* The outgoing card's caption fades as it slides off; the new one fades in after. */}
-            {leavingHere
-              .filter((l) => l.out)
-              .map((l) => (
-                <Caption key={`out-${l.id}`} card={l.card} outgoing />
-              ))}
+            {/* The outgoing card's caption fades as it goes; the new one fades in after. */}
+            {outCaption && outCaption.card !== front && (
+              <Caption key={`out-${outCaption.id}`} card={outCaption.card} outgoing />
+            )}
             {front && <Caption key={frontKey} card={front} />}
           </>
         )}
       </div>
 
-      <div className="flex items-center justify-between gap-3">
-        <span className="text-xs text-muted-foreground">
-          {phase === 'end'
-            ? "That's the pack."
-            : phase === 'hand'
-              ? 'Click, Space or swipe to put the front card to the back'
-              : 'Click or press Space to tear the pack open'}
-        </span>
-        <div className="flex gap-2">
-          <Button
-            variant="outline"
-            disabled={
-              skipping || phase === 'error' || phase === 'done' || phase === 'end' || cards === null
-            }
-            onClick={skipToHit}
-          >
-            Skip to the hit
-          </Button>
-          <Button disabled={phase !== 'end' || holding !== 0} onClick={next}>
-            {lastPack ? 'Finish' : 'Next pack'}
-          </Button>
+      <div className="relative z-40 flex h-[112px] shrink-0 items-end gap-6 px-5 pb-3">
+        <ol
+          aria-label="Seen cards"
+          data-testid="rip-row"
+          className="flex min-w-0 flex-1 items-end pt-2"
+        >
+          {row.map((c) => (
+            <RowCard
+              key={`${packIndex}-${c.slot}`}
+              card={c}
+              flyKey={`${packIndex}-${c.slot}`}
+              flyFromRef={flyFrom}
+            />
+          ))}
+        </ol>
+        <div className="flex shrink-0 flex-col items-end gap-2">
+          <span className="text-xs text-white/55">
+            {phase === 'end'
+              ? "That's the pack."
+              : phase === 'hand'
+                ? 'Click, Space or swipe to send the front card down'
+                : 'Click or press Space to tear the pack open'}
+          </span>
+          <div className="flex gap-2" onClick={(e) => e.stopPropagation()}>
+            <Button
+              variant="outline"
+              disabled={
+                skipping ||
+                phase === 'error' ||
+                phase === 'done' ||
+                phase === 'end' ||
+                cards === null
+              }
+              onClick={skipToHit}
+            >
+              Skip to the hit
+            </Button>
+            <Button disabled={phase !== 'end' || holding !== 0} onClick={next}>
+              {lastPack ? 'Finish' : 'Next pack'}
+            </Button>
+          </div>
         </div>
       </div>
     </div>

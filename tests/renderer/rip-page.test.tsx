@@ -203,8 +203,10 @@ describe('RipPage', () => {
       await userEvent.click(await screen.findByRole('button', { name: /Metal Raiders/ }))
       await userEvent.click(screen.getByRole('button', { name: /rip \d+ packs?/i }))
       const pack = await screen.findByTestId('rip-pack')
-      expect(pack.querySelector('[data-testid="set-art-pack"]')).not.toBeNull()
-      expect(pack).toHaveTextContent('Metal Raiders')
+      expect(pack.querySelector(`[data-testid="rip-pack-image"]`)).toHaveAttribute(
+        'src',
+        'ygo-img://set/MRD-pack.png'
+      )
     })
 
     it('keeps its place across a trip to History', async () => {

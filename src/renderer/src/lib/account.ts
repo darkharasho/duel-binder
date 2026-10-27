@@ -9,6 +9,11 @@ import { isWeb } from './platform'
  * is loading, and always on the web (which has no desktop account).
  */
 export function useAccountStatus(): AccountStatus | undefined {
+  return useAccountState().status
+}
+
+/** useAccountStatus plus whether the status query failed (so the gate can still offer sign-in). */
+export function useAccountState(): { status: AccountStatus | undefined; failed: boolean } {
   const web = isWeb()
   const qc = useQueryClient()
   const status = useQuery({
@@ -20,7 +25,7 @@ export function useAccountStatus(): AccountStatus | undefined {
     if (web) return
     return api.account.onChange((s) => qc.setQueryData(queryKeys.account, s))
   }, [web, qc])
-  return web ? undefined : status.data
+  return { status: web ? undefined : status.data, failed: !web && status.isError && !status.data }
 }
 
 /** Runs an account action and stores the status it resolves to (refetching if it fails). */

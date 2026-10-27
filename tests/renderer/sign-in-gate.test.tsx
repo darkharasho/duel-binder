@@ -71,6 +71,30 @@ describe('sign-in gate', () => {
     expect(api.account.signOut).toHaveBeenCalledTimes(1)
   })
 
+  it('offers sign-in when the status cannot be loaded', async () => {
+    const api = createMockApi({
+      window: { platform: 'linux' },
+      account: { status: vi.fn(async () => Promise.reject(new Error('ipc down'))) }
+    })
+    renderWithProviders(<App />, { api })
+    expect(await screen.findByRole('button', { name: 'Sign in with Discord' })).toBeEnabled()
+  })
+
+  it('Cancel returns to a usable sign-in button', async () => {
+    const user = userEvent.setup()
+    const api = createMockApi({
+      window: { platform: 'linux' },
+      account: {
+        status: vi.fn(async () => ({ ...base, state: 'signing-in' as const })),
+        signOut: vi.fn(async () => ({ ...base }))
+      }
+    })
+    renderWithProviders(<App />, { api })
+    await user.click(await screen.findByRole('button', { name: 'Cancel' }))
+    expect(await screen.findByRole('button', { name: 'Sign in with Discord' })).toBeEnabled()
+    expect(screen.queryByRole('button', { name: 'Cancel' })).not.toBeInTheDocument()
+  })
+
   it('offline with a user shows the app', async () => {
     renderWithProviders(<App />, { api: make({ ...base, state: 'offline', user: seto }) })
     expect(await screen.findByRole('navigation', { name: 'Main' })).toBeInTheDocument()

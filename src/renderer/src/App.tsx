@@ -12,7 +12,7 @@ import { useFriendsAvailable } from '@/lib/friends'
 import { SettingsPage } from '@/features/settings/SettingsPage'
 import { useDataChanged } from '@/components/useDataChanged'
 import { isWeb } from '@/lib/platform'
-import { useAccountStatus } from '@/lib/account'
+import { useAccountState } from '@/lib/account'
 import { SignInScreen } from '@/features/account/SignInScreen'
 import { TitleBar } from '@/components/TitleBar'
 import { useUpdateToasts } from '@/features/settings/useUpdateToasts'
@@ -35,9 +35,10 @@ function DesktopOnlyEffects(): null {
 
 function App(): React.JSX.Element {
   const web = isWeb()
-  const account = useAccountStatus()
+  const { status: account, failed } = useAccountState()
   if (!web) {
     // Until the first status arrives show neither the gate nor the app, so neither flashes.
+    if (!account && failed) return <SignInScreen />
     if (!account) {
       return (
         <div className="flex h-screen flex-col bg-background">

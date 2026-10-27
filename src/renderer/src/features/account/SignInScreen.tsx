@@ -6,7 +6,7 @@ import { useApplyAccountStatus } from '@/lib/account'
 import type { AccountStatus } from '@shared/types'
 
 /** Full-window gate shown instead of the app while the desktop has no signed-in account. */
-export function SignInScreen({ status }: { status: AccountStatus }): React.JSX.Element {
+export function SignInScreen({ status }: { status?: AccountStatus }): React.JSX.Element {
   const apply = useApplyAccountStatus()
   return (
     <div className="flex h-screen flex-col bg-background text-foreground">
@@ -19,7 +19,7 @@ export function SignInScreen({ status }: { status: AccountStatus }): React.JSX.E
             Duel Binder keeps your collection and card data in your account. Sign in with Discord to
             continue.
           </p>
-          {status.state === 'signing-in' ? (
+          {status?.state === 'signing-in' ? (
             <div className="flex flex-col items-center gap-3">
               <p className="text-sm text-muted-foreground">Finish signing in in your browser…</p>
               <Button variant="outline" onClick={() => apply(api.account.signOut())}>
@@ -29,7 +29,7 @@ export function SignInScreen({ status }: { status: AccountStatus }): React.JSX.E
           ) : (
             <Button onClick={() => apply(api.account.signIn())}>Sign in with Discord</Button>
           )}
-          {status.error && <p className="text-sm text-destructive">{status.error}</p>}
+          {status?.error && <p className="text-sm text-destructive">{status.error}</p>}
         </div>
       </main>
     </div>

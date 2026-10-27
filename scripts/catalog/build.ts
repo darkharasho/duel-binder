@@ -17,7 +17,7 @@ import { version } from '../../package.json'
 import { openDatabase } from '../../src/main/db/database'
 import { refreshCatalog } from '../../src/main/sync/catalog'
 import { createYgoClient } from '../../src/main/ygo/client'
-import { createYugipediaClient } from '../../src/main/yugipedia/client'
+import { createYugipediaClient, type YugipediaClient } from '../../src/main/yugipedia/client'
 import { CATALOG_TABLES } from '../../src/shared/catalogTables'
 import { diffTable } from './diff'
 import { buildFingerprints, uploadFingerprints } from './fingerprints'
@@ -31,8 +31,10 @@ export interface JobOptions {
   full?: boolean
   dryRun?: boolean
   fetch?: typeof fetch
-  /** Fetches card art for fingerprints; defaults to `fetch`. */
+  /** Fetches card art and printing scans for fingerprints; defaults to `fetch`. */
   imageFetch?: typeof fetch
+  /** Finds printing scans for fingerprints; defaults to the live Yugipedia API. */
+  yugipedia?: Pick<YugipediaClient, 'listPageImages' | 'fetchImageUrls'>
   /** Refreshes the work database; defaults to `refreshCatalog` against the live APIs. */
   refresh?: (work: Database.Database) => Promise<unknown>
   log?: (line: string) => void
@@ -73,9 +75,16 @@ export async function runJob(opts: JobOptions): Promise<JobResult> {
         work,
         cachePath: join(opts.dir, 'fingerprints.sqlite'),
         fetch: opts.imageFetch ?? opts.fetch,
-        log
+        log,
+        references: {
+          yugipedia: opts.yugipedia ?? createYugipediaClient({ version }),
+          fetch: opts.imageFetch ?? opts.fetch,
+          userAgent: `DuelBinder/${version} (https://github.com/darkharasho/duel-binder)`
+        }
       })
+      const refs = out.references
       log(`Fingerprints: ${out.count} (${out.fetched} new, ${out.failed} failed)`)
+      log(`Printing scans: ${refs.count} (${refs.fetched} new, ${refs.failed} failed)`)
       if (upload) {
         await uploadFingerprints({ url: url!, token: token!, bytes: out.bytes, fetch: opts.fetch })
       }

@@ -244,6 +244,27 @@ describe('runSwitch', () => {
     expect(row).toEqual({ id: used.id, pkey: used.pkey, remote_id: null, missing_from_api: 1 })
   })
 
+  it("takes the server's missing_from_api for printings both have", async () => {
+    const { db } = await oldDesktop()
+    const [a, b] = db
+      .prepare(
+        "SELECT pkey FROM card_printings WHERE language = 'en' AND set_name <> 'Local Only Set' ORDER BY id LIMIT 2"
+      )
+      .all() as { pkey: string }[]
+    const flag = 'UPDATE card_printings SET missing_from_api = ? WHERE pkey = ?'
+    portal.serverDb.prepare(flag).run(1, a.pkey)
+    portal.serverDb.prepare(flag).run(0, b.pkey)
+    db.prepare(flag).run(0, a.pkey)
+    db.prepare(flag).run(1, b.pkey)
+
+    expect(await runSwitch(db, { client, backupPath, now: () => NOW })).toEqual({ state: 'done' })
+
+    const missing = (pkey: string): unknown =>
+      db.prepare('SELECT missing_from_api AS m FROM card_printings WHERE pkey = ?').get(pkey)
+    expect(missing(a.pkey)).toEqual({ m: 1 })
+    expect(missing(b.pkey)).toEqual({ m: 0 })
+  })
+
   it('drops desktop-only printings nobody uses', async () => {
     const { db, unused } = await oldDesktop()
     expect(await runSwitch(db, { client, backupPath, now: () => NOW })).toEqual({ state: 'done' })

@@ -1,7 +1,22 @@
 import type { SqlDb } from '../db/sql'
 import { CATALOG_TABLES } from '../../shared/catalogTables'
 import type { CatalogChange } from '../../shared/catalogFeed'
-import { upsertCatalogRow, type Scalar } from './upsert'
+import { prepared, upsertCatalogRow, type Scalar } from './upsert'
+
+const columnCache = new WeakMap<SqlDb, Map<string, Set<string>>>()
+
+/** The local table's column names, read once per database handle. */
+function localColumns(db: SqlDb, table: string): Set<string> {
+  let tables = columnCache.get(db)
+  if (!tables) columnCache.set(db, (tables = new Map()))
+  let cols = tables.get(table)
+  if (!cols) {
+    const info = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]
+    cols = new Set(info.map((c) => c.name))
+    tables.set(table, cols)
+  }
+  return cols
+}
 
 export interface ApplyResult {
   applied: number
@@ -22,24 +37,15 @@ export interface ApplyResult {
 export function applyChanges(db: SqlDb, changes: CatalogChange[]): ApplyResult {
   db.exec('PRAGMA defer_foreign_keys = ON')
   const result: ApplyResult = { applied: 0, cardsChanged: false, imagesChanged: false }
-  const columnCache = new Map<string, Set<string>>()
-  const localColumns = (table: string): Set<string> => {
-    let cols = columnCache.get(table)
-    if (!cols) {
-      const info = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]
-      cols = new Set(info.map((c) => c.name))
-      columnCache.set(table, cols)
-    }
-    return cols
-  }
-  const exists = (sql: string, ...params: Scalar[]): boolean => db.prepare(sql).get(...params) !== undefined
+  const exists = (sql: string, ...params: Scalar[]): boolean =>
+    prepared(db, sql).get(...params) !== undefined
 
   for (const change of changes) {
     const table = CATALOG_TABLES.find((t) => t.name === change.table)
     if (!table) continue
 
     if ('row' in change) {
-      const cols = localColumns(table.name)
+      const cols = localColumns(db, table.name)
       const row: Record<string, Scalar> = {}
       for (const [k, v] of Object.entries(change.row)) {
         if (!cols.has(k)) continue
@@ -59,21 +65,21 @@ export function applyChanges(db: SqlDb, changes: CatalogChange[]): ApplyResult {
 
     const key = change.deleted
     if (table.name === 'card_printings') {
-      const local = db.prepare('SELECT id FROM card_printings WHERE pkey = ?').get(key[0]) as
+      const local = prepared(db, 'SELECT id FROM card_printings WHERE pkey = ?').get(key[0]) as
         | { id: number }
         | undefined
       if (!local) continue
       if (exists('SELECT 1 FROM collection_entries WHERE printing_id = ? LIMIT 1', local.id)) {
-        db.prepare('UPDATE card_printings SET missing_from_api = 1 WHERE id = ?').run(local.id)
+        prepared(db, 'UPDATE card_printings SET missing_from_api = 1 WHERE id = ?').run(local.id)
       } else {
-        db.prepare('DELETE FROM card_printings WHERE id = ?').run(local.id)
+        prepared(db, 'DELETE FROM card_printings WHERE id = ?').run(local.id)
       }
       result.applied++
       continue
     }
     if (table.name === 'card_images') {
       if (exists('SELECT 1 FROM collection_entries WHERE image_id = ? LIMIT 1', key[0])) continue
-      if (db.prepare('DELETE FROM card_images WHERE image_id = ?').run(key[0]).changes > 0) {
+      if (prepared(db, 'DELETE FROM card_images WHERE image_id = ?').run(key[0]).changes > 0) {
         result.applied++
         result.imagesChanged = true
       }
@@ -94,14 +100,14 @@ export function applyChanges(db: SqlDb, changes: CatalogChange[]): ApplyResult {
         exists('SELECT 1 FROM card_printings WHERE card_id = ? LIMIT 1', id) ||
         exists('SELECT 1 FROM card_images WHERE card_id = ? LIMIT 1', id)
       if (used) continue
-      if (db.prepare('DELETE FROM cards WHERE id = ?').run(id).changes > 0) {
+      if (prepared(db, 'DELETE FROM cards WHERE id = ?').run(id).changes > 0) {
         result.applied++
         result.cardsChanged = true
       }
       continue
     }
     const where = table.key.map((k) => `"${k}" IS ?`).join(' AND ')
-    const n = db.prepare(`DELETE FROM ${table.name} WHERE ${where}`).run(...key).changes
+    const n = prepared(db, `DELETE FROM ${table.name} WHERE ${where}`).run(...key).changes
     if (n > 0) result.applied++
   }
   return result

@@ -127,6 +127,21 @@ describe('admin catalog loader', () => {
     expect(db.prepare('SELECT contributed FROM card_printings WHERE pkey = ?').get(pkey)).toEqual({ contributed: 0 })
   })
 
+  it('a source upsert un-flags a printing the source lists again, whatever the row says', async () => {
+    await loadCatalog()
+    const row = sourceRows('card_printings')[0]
+    const pkey = (source.prepare('SELECT pkey FROM card_printings LIMIT 1').get() as { pkey: string }).pkey
+    db.prepare('UPDATE card_printings SET missing_from_api = 1 WHERE pkey = ?').run(pkey)
+    const res = await call('/admin/catalog/rows', {
+      table: 'card_printings',
+      rows: [{ ...row, missing_from_api: 1 }]
+    })
+    expect(res.status).toBe(200)
+    expect(db.prepare('SELECT missing_from_api FROM card_printings WHERE pkey = ?').get(pkey)).toEqual({
+      missing_from_api: 0
+    })
+  })
+
   it('delete never removes a contributed printing', async () => {
     await loadCatalog()
     const pkey = (source.prepare('SELECT pkey FROM card_printings LIMIT 1').get() as { pkey: string }).pkey

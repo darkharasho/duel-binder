@@ -39,6 +39,7 @@ const printingChange = (p: P, extra: Record<string, string | number | null> = {}
     language: 'en',
     contributed: 0,
     set_price: '1.23',
+    missing_from_api: 0,
     ...extra
   }
 })
@@ -64,6 +65,18 @@ describe('applyChanges', () => {
       printing_id: number
     }
     expect(e.printing_id).toBe(p.id)
+  })
+
+  it("writes the server's missing_from_api on a pkey match", async () => {
+    const db = await seededDb()
+    const p = pickPrinting(db)
+    const missing = (): unknown =>
+      db.prepare('SELECT missing_from_api AS m FROM card_printings WHERE id = ?').get(p.id)
+
+    applyChanges(db, [printingChange(p, { missing_from_api: 1 })])
+    expect(missing()).toEqual({ m: 1 })
+    applyChanges(db, [printingChange(p, { missing_from_api: 0 })])
+    expect(missing()).toEqual({ m: 0 })
   })
 
   it('keeps a deleted printing that an entry still uses', async () => {

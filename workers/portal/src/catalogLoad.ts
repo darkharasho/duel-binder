@@ -70,10 +70,11 @@ function validateRow(table: CatalogTable, row: unknown): Record<string, string |
 function upsertRows(deps: AppDeps, table: CatalogTable, rows: unknown[]): void {
   const { db } = deps
   const valid = rows.map((r) => validateRow(table, r))
-  // A source upsert makes a contributed printing an ordinary catalog row again.
+  // A source upsert makes a contributed printing an ordinary catalog row again, and un-flags a
+  // printing the source lists again.
   const extra = table.name === 'card_printings' ? { contributed: 0 } : undefined
   db.transaction(() => {
-    for (const row of valid) upsertCatalogRow(db, table, row, extra)
+    for (const row of valid) upsertCatalogRow(db, table, row, extra, { clearMissing: true })
   })()
 }
 

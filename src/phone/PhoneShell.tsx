@@ -71,14 +71,14 @@ function useReadyChecks(): void {
 /**
  * The phone app once signed in and set up: the desktop's pages (the same page switch as the
  * desktop shell) above a bottom tab bar, with the status line at the top of each page. It opens
- * on Scan. `engineFactory` is for tests.
+ * on Home. `engineFactory` is for tests.
  */
 export function PhoneShell({
   engineFactory
 }: {
   engineFactory?: () => ScanEngine
 }): React.JSX.Element {
-  const pages = usePages('scan')
+  const pages = usePages('dashboard')
   const { page, onNavigate } = pages
   const [moreOpen, setMoreOpen] = useState(false)
   const requests = useFriendsOverview().data?.incoming.length ?? 0
@@ -107,9 +107,8 @@ export function PhoneShell({
   }
 
   return (
-    // Pinned to the screen's edges, not h-dvh: an iPhone home-screen app with a see-through status
-    // bar reports a dvh short of the screen, which left a bare strip along the bottom.
-    <div className="fixed inset-0 isolate flex flex-col overflow-hidden bg-background text-foreground tabular-nums">
+    // Pinned to the top, as tall as --app-height (see screenHeight.ts), else the viewport.
+    <div className="fixed inset-x-0 top-0 isolate h-[var(--app-height,100%)] flex flex-col overflow-hidden bg-background text-foreground tabular-nums">
       <ArtWash src={scan ? null : wash} />
       <main
         ref={mainRef}

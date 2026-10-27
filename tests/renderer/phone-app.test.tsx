@@ -118,12 +118,12 @@ describe('phone app', () => {
     expect(await screen.findByText(UNSUPPORTED)).toBeInTheDocument()
   })
 
-  it('opens on Scan', async () => {
+  it('opens on Home', async () => {
     const store = fakeStore()
     installPhoneApi(store)
     renderApp(store)
-    await waitFor(() => expect(tab('Scan')).toHaveAttribute('aria-current', 'page'))
-    expect(screen.getByRole('button', { name: 'Review 0 scanned' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Dashboard' })).toBeInTheDocument()
+    expect(tab('Home')).toHaveAttribute('aria-current', 'page')
   })
 
   it('the scanner is full screen and its × goes back to Home', async () => {
@@ -132,6 +132,7 @@ describe('phone app', () => {
     installPhoneApi(store)
     renderApp(store)
     const nav = await screen.findByRole('navigation', { name: 'Tabs' })
+    await user.click(tab('Scan'))
     expect(nav).toHaveClass('hidden')
 
     await user.click(screen.getByRole('button', { name: 'Close scanner' }))
@@ -241,7 +242,7 @@ describe('phone app', () => {
     )
     await act(async () => finish())
     expect(await screen.findByRole('navigation', { name: 'Tabs' })).toBeInTheDocument()
-    expect(tab('Scan')).toHaveAttribute('aria-current', 'page')
+    expect(tab('Home')).toHaveAttribute('aria-current', 'page')
     expect(store.refreshFingerprints).toHaveBeenCalled()
   })
 
@@ -292,11 +293,11 @@ describe('phone app', () => {
     const user = userEvent.setup()
     installPhoneApi(store)
     renderApp(store)
-    // The Scan tab, where the app opens, keeps the room for the camera.
+    expect(await screen.findByText('Offline · 2 waiting to sync')).toBeInTheDocument()
+    // The Scan tab keeps the room for the camera.
+    await user.click(tab('Scan'))
     await screen.findByRole('region', { name: 'Last scan' })
     expect(screen.queryByText('Offline · 2 waiting to sync')).not.toBeInTheDocument()
-    await user.click(tab('Home'))
-    expect(await screen.findByText('Offline · 2 waiting to sync')).toBeInTheDocument()
   })
 
   it('status line stays hidden when all is synced', async () => {

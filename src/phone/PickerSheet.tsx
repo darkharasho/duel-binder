@@ -95,7 +95,7 @@ function Sheet({
   }, [onClose])
 
   return (
-    <div className="dark fixed inset-0 z-50 text-foreground">
+    <div className="dark fixed inset-x-0 top-0 z-50 h-[var(--app-height,100%)] text-foreground">
       <div
         aria-hidden
         className="absolute inset-0 bg-black/45 animate-in fade-in"

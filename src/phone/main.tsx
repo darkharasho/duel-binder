@@ -11,6 +11,7 @@ import { createRoot } from 'react-dom/client'
 import { App } from './App'
 import { createBrowserOcr } from './ocr'
 import { createPhoneRuntime, type WorkerLike } from './runtime'
+import { fitScreen } from './screenHeight'
 
 /** The data worker; in dev, `?demo` swaps in the sample-data store (stripped from production). */
 async function dataWorker(): Promise<WorkerLike> {
@@ -35,6 +36,7 @@ async function start(): Promise<void> {
   )
 }
 
+fitScreen()
 void start()
 
 // The page, the service worker and every app file are under /scan/ (see vite.phone.config.ts).

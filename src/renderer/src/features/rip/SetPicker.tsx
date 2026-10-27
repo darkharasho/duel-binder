@@ -106,8 +106,47 @@ export function SetPicker({ onRip, initialSetName = null }: Props): React.JSX.El
         />
       </div>
 
+      {shown.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No sets match &ldquo;{q}&rdquo;.</p>
+      ) : (
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(170px,1fr))] gap-x-5 gap-y-7">
+          {shown.map((s) => (
+            <button
+              key={s.setName}
+              type="button"
+              aria-pressed={s.setName === selectedName}
+              onClick={() => {
+                setSelectedName(s.setName)
+                setError(null)
+              }}
+              className="group flex w-full flex-col gap-2.5 rounded-md text-left focus-visible:outline-2 focus-visible:outline-ring"
+            >
+              <SetArt
+                imageKey={s.imageKey}
+                packImageKey={s.packImageKey}
+                logoImageKey={s.logoImageKey}
+                coverImageId={s.coverImageId}
+                setCode={s.setCode}
+                className={cn(
+                  'aspect-[4/3] w-full rounded-[4px] shadow-[0_8px_20px_rgb(0_0_0/0.45)] transition-transform duration-200 group-hover:-translate-y-1',
+                  s.setName === selectedName && 'ring-2 ring-foreground'
+                )}
+              />
+              <div className="min-w-0 space-y-0.5">
+                <span title={s.setName} className="line-clamp-2 text-sm/5 font-semibold">
+                  {s.setName}
+                </span>
+                <p className="text-xs text-muted-foreground">
+                  {s.setCode}
+                  {s.tcgDate ? ` · ${formatMonthYear(s.tcgDate)}` : ''}
+                </p>
+              </div>
+            </button>
+          ))}
+        </div>
+      )}
       {selected && (
-        <div className="flex flex-wrap items-center gap-x-6 gap-y-3 rounded-md border border-white/[0.08] bg-card/60 p-4">
+        <div className="sticky bottom-4 z-10 flex flex-wrap items-center gap-x-6 gap-y-3 rounded-md border border-white/[0.08] bg-card/95 p-4 shadow-[0_8px_30px_rgb(0_0_0/0.6)] backdrop-blur">
           <div className="min-w-0 flex-1">
             <p className="truncate text-base font-semibold">{selected.setName}</p>
             <p className="text-[13px] text-muted-foreground">{selected.layoutLabel}</p>
@@ -172,45 +211,6 @@ export function SetPicker({ onRip, initialSetName = null }: Props): React.JSX.El
         </div>
       )}
 
-      {shown.length === 0 ? (
-        <p className="text-sm text-muted-foreground">No sets match &ldquo;{q}&rdquo;.</p>
-      ) : (
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(170px,1fr))] gap-x-5 gap-y-7">
-          {shown.map((s) => (
-            <button
-              key={s.setName}
-              type="button"
-              aria-pressed={s.setName === selectedName}
-              onClick={() => {
-                setSelectedName(s.setName)
-                setError(null)
-              }}
-              className="group flex w-full flex-col gap-2.5 rounded-md text-left focus-visible:outline-2 focus-visible:outline-ring"
-            >
-              <SetArt
-                imageKey={s.imageKey}
-                packImageKey={s.packImageKey}
-                logoImageKey={s.logoImageKey}
-                coverImageId={s.coverImageId}
-                setCode={s.setCode}
-                className={cn(
-                  'aspect-[4/3] w-full rounded-[4px] shadow-[0_8px_20px_rgb(0_0_0/0.45)] transition-transform duration-200 group-hover:-translate-y-1',
-                  s.setName === selectedName && 'ring-2 ring-foreground'
-                )}
-              />
-              <div className="min-w-0 space-y-0.5">
-                <span title={s.setName} className="line-clamp-2 text-sm/5 font-semibold">
-                  {s.setName}
-                </span>
-                <p className="text-xs text-muted-foreground">
-                  {s.setCode}
-                  {s.tcgDate ? ` · ${formatMonthYear(s.tcgDate)}` : ''}
-                </p>
-              </div>
-            </button>
-          ))}
-        </div>
-      )}
     </div>
   )
 }

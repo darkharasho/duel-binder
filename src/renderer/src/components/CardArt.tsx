@@ -29,17 +29,17 @@ function CardBack({ className, label }: { className?: string; label: string }): 
 
 /** The printing's scan, faded in over the default art; removed if the printing has none. */
 function PrintingScan({
-  printingId,
+  src,
   onLoaded
 }: {
-  printingId: number
+  src: string
   onLoaded: (loaded: boolean) => void
 }): React.JSX.Element | null {
   const [state, setState] = useState<'loading' | 'loaded' | 'failed'>('loading')
   if (state === 'failed') return null
   return (
     <img
-      src={printingImageSrc(printingId)}
+      src={src}
       alt=""
       aria-hidden
       data-testid="printing-scan"
@@ -64,7 +64,9 @@ function PrintingScan({
 export function CardArt({ imageId, size, alt, className, printingId }: CardArtProps): React.JSX.Element {
   const [failed, setFailed] = useState(false)
   const [scanShown, setScanShown] = useState<number | null>(null)
-  if (printingId == null) {
+  // No scan where there are no printing scans (the phone).
+  const scanSrc = printingId == null ? null : printingImageSrc(printingId)
+  if (printingId == null || scanSrc === null) {
     if (failed) return <CardBack className={className} label={alt} />
     return (
       <img
@@ -103,7 +105,7 @@ export function CardArt({ imageId, size, alt, className, printingId }: CardArtPr
       )}
       <PrintingScan
         key={printingId}
-        printingId={printingId}
+        src={scanSrc}
         onLoaded={(loaded) => setScanShown(loaded ? printingId : null)}
       />
     </span>

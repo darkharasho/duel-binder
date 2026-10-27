@@ -58,7 +58,8 @@ export interface PhoneStore {
   catalog(): Promise<CatalogState>
   fillCatalog(onProgress: (p: { cursor: number; latest: number }) => void): Promise<void>
   updateCatalog(opts?: { force?: boolean }): Promise<boolean>
-  sync(): Promise<PhoneSyncState>
+  /** Syncs the shown account; `changed` tells whether anything the user can see may have changed. */
+  sync(): Promise<PhoneSyncState & { changed: boolean }>
   syncState(): Promise<PhoneSyncState>
   syncProblems(): Promise<UnsyncedEntry[]>
   invoke(channel: DataChannel, args: unknown[]): Promise<unknown>
@@ -186,8 +187,11 @@ export function createPhoneStore(deps: {
         : Number(
             (
               db
+                // An entry the server can't take counts only in `problems`.
                 .prepare(
-                  'SELECT COUNT(*) AS n FROM collection_entries WHERE owner_id = ? AND dirty = 1'
+                  `SELECT COUNT(*) AS n FROM collection_entries e
+                   WHERE e.owner_id = ? AND e.dirty = 1 AND NOT EXISTS (
+                     SELECT 1 FROM sync_issues i WHERE i.owner_id = e.owner_id AND i.uid = e.uid)`
                 )
                 .get(owner) as { n: number }
             ).n
@@ -274,10 +278,14 @@ export function createPhoneStore(deps: {
     return changed
   }
 
-  /** One sync of the shown account; a success after the catalog download finishes first run. */
-  async function syncNow(c: CloudClient): Promise<void> {
-    await syncOnce(db, activeOwner(db), c, now)
+  /**
+   * One sync of the shown account; a success after the catalog download finishes first run.
+   * Resolves whether anything the user can see may have changed.
+   */
+  async function syncNow(c: CloudClient): Promise<boolean> {
+    const { changed } = await syncOnce(db, activeOwner(db), c, now)
     if (getState('catalog_loaded') !== null) setState('catalog_filled', '1')
+    return changed
   }
 
   function fingerprintStatus(failed = false): FingerprintStatus {
@@ -432,14 +440,15 @@ export function createPhoneStore(deps: {
 
     sync: () =>
       serial(async () => {
+        let changed = false
         if (token() !== null) {
           try {
-            await online(() => syncNow(signedInClient()))
+            changed = await online(() => syncNow(signedInClient()))
           } catch (e) {
             if (!(e instanceof CloudAuthError) && !(e instanceof CloudOfflineError)) throw e
           }
         }
-        return syncStateNow()
+        return { ...syncStateNow(), changed }
       }),
 
     syncState: () => serial(syncStateNow),

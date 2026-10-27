@@ -4,7 +4,7 @@ import sqlite3InitModule, { type Sqlite3Static } from '@sqlite.org/sqlite-wasm'
 import type { SqlDb } from '../../src/main/db/sql'
 import { getMeta } from '../../src/main/db/meta'
 import { CloudAuthError, CloudOfflineError, createCloudClient } from '../../src/main/cloud/client'
-import { activeOwner } from '../../src/main/cloud/localSync'
+import { activeOwner, recordSyncIssue } from '../../src/main/cloud/localSync'
 import { PHONE_TABLES } from '../../src/shared/catalogFeed'
 import type { Me } from '../../src/shared/cloud'
 import { encodeFingerprints } from '../../src/shared/scan/fingerprintFile'
@@ -291,6 +291,42 @@ describe('phone store', () => {
     expect(state).toMatchObject({ waiting: 0, problems: 0, signedOut: false })
     expect(state.lastSyncedAt).toBe(SERVER_NOW.toISOString())
     expect(serverEntries()).toEqual([{ uid, quantity: 1, deleted_at: null }])
+  })
+
+  it("an entry that can't sync counts as a problem, not as waiting", async () => {
+    await ready()
+    await add(dmPick())
+    await add(otherPick())
+    const [{ uid }] = phoneEntries()
+    recordSyncIssue(db, activeOwner(db), uid, 'k', 'unknown-printing', clock)
+    expect(await store.syncState()).toMatchObject({ waiting: 1, problems: 1 })
+  })
+
+  it('sync reports whether it changed what the user sees', async () => {
+    await ready()
+    expect(await store.sync()).toMatchObject({ changed: false })
+    const pkey = dmPick().pkey
+    const imageId = dmPick().imageId
+    const other = createCloudClient({
+      baseUrl: PORTAL,
+      token: await portal.desktopToken(userId),
+      fetch: portal.fetch
+    })
+    const at = '2026-10-24T10:00:00.000Z'
+    await other.push([
+      {
+        uid: crypto.randomUUID(),
+        pkey,
+        imageId,
+        quantity: 1,
+        notes: '',
+        createdAt: at,
+        updatedAt: at,
+        deletedAt: null
+      }
+    ])
+    expect(await store.sync()).toMatchObject({ changed: true })
+    expect(await store.sync()).toMatchObject({ changed: false })
   })
 
   it('an add made before a failed push syncs once on the next run', async () => {

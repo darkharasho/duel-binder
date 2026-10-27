@@ -69,9 +69,31 @@ describe('AppShell sets nav', () => {
     const names = within(screen.getByRole('navigation', { name: 'Main' }))
       .getAllByRole('button')
       .map((b) => b.textContent)
-    expect(names).toEqual(['Dashboard', 'Collection', 'Sets', 'Browse', 'Scan', 'Friends', 'Settings'])
+    expect(names).toEqual([
+      'Dashboard',
+      'Collection',
+      'Sets',
+      'Browse',
+      'Scan',
+      'Rip',
+      'Friends',
+      'Settings'
+    ])
     await userEvent.click(screen.getByRole('button', { name: 'Sets' }))
     expect(screen.getByRole('heading', { name: 'Sets' })).toBeInTheDocument()
+  })
+})
+
+describe('AppShell rip nav', () => {
+  it('opens the Rip page from the nav', async () => {
+    await renderApp()
+    await userEvent.click(screen.getByRole('button', { name: 'Rip' }))
+    expect(await screen.findByRole('heading', { name: 'Rip' })).toBeInTheDocument()
+  })
+
+  it('has no Rip item on the web', async () => {
+    await renderApp(mockApi({ window: { platform: 'web' } }))
+    expect(screen.queryByRole('button', { name: 'Rip' })).not.toBeInTheDocument()
   })
 })
 

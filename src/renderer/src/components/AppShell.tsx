@@ -9,7 +9,8 @@ import { MainScrollContext, type MainScroll } from './mainScroll'
 import { SyncBanner } from './SyncBanner'
 import { TitleBar } from './TitleBar'
 
-export type Page = 'dashboard' | 'collection' | 'browse' | 'scan' | 'friends' | 'sets' | 'settings'
+export type Page =
+  'dashboard' | 'collection' | 'browse' | 'scan' | 'rip' | 'friends' | 'sets' | 'settings'
 export type NavigateFn = (page: Page, opts?: { entryId?: number }) => void
 
 const NAV = [
@@ -18,6 +19,7 @@ const NAV = [
   { page: 'sets', label: 'Sets' },
   { page: 'browse', label: 'Browse' },
   { page: 'scan', label: 'Scan' },
+  { page: 'rip', label: 'Rip' },
   { page: 'friends', label: 'Friends' },
   { page: 'settings', label: 'Settings' }
 ] as const
@@ -75,7 +77,8 @@ export function AppShell({
           </div>
           <nav aria-label="Main" className="flex flex-col">
             {NAV.filter(
-              ({ page: p }) => (p !== 'friends' || friendsAvailable) && (p !== 'scan' || !isWeb())
+              ({ page: p }) =>
+                (p !== 'friends' || friendsAvailable) && ((p !== 'scan' && p !== 'rip') || !isWeb())
             ).map(({ page: p, label }) => (
               <button
                 key={p}

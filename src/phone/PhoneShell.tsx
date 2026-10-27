@@ -134,6 +134,7 @@ export function PhoneShell({
                   onOpenSettings={() => go('settings')}
                 />
               }
+              rip={null}
               settings={<Settings />}
             />
           </MainScrollContext.Provider>

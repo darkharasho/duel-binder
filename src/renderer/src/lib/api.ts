@@ -13,6 +13,7 @@ export const queryKeys = {
   facets: ['facets'] as const,
   stats: ['stats'] as const,
   sync: ['sync'] as const,
+  ripSets: ['rip', 'sets'] as const,
   setsList: ['sets', 'list'] as const,
   setChecklist: (name: string, language: Language) =>
     ['sets', 'checklist', language, name] as const,

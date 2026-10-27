@@ -539,10 +539,10 @@ describe('PackOpener', () => {
     space()
     const handBox = front().parentElement!
     expect(handBox.style.height).toContain('100cqh')
-    // Capped, and kept narrow enough to leave the info panel room beside it.
+    // Capped, and kept narrow enough to leave the gap, the narrowest panel and margins beside it.
     expect(handBox.style.height).toContain('600px')
     expect(handBox.style.height).toContain('100cqw')
-    expect(handBox.style.height).toContain('400px')
+    expect(handBox.style.height).toContain('388px')
     // Placed from the stage height too. (jsdom mangles min()/max() inside calc(), so the 32px floor
     // can't be read back here; checked in Chrome instead.)
     expect(handBox.style.top).toContain('100cqh')

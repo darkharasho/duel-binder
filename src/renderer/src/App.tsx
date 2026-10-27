@@ -1,16 +1,8 @@
-import { Suspense, lazy, useCallback, useEffect, useState } from 'react'
-import type { CardSearchResult } from '@shared/types'
-import { AppShell, type NavigateFn, type Page } from '@/components/AppShell'
+import { Suspense, lazy, useEffect } from 'react'
+import { AppShell } from '@/components/AppShell'
+import { PageSwitch, PagesAddCard, usePages } from '@/components/pageSwitch'
 import { Toaster } from '@/components/ui/sonner'
-import { AddCardDialog } from '@/features/add-card/AddCardDialog'
-import { DashboardPage } from '@/features/dashboard/DashboardPage'
-import { CollectionPage } from '@/features/collection/CollectionPage'
-import { BrowsePage } from '@/features/browse/BrowsePage'
-import { SetsPage } from '@/features/sets/SetsPage'
-import { FriendsPage } from '@/features/friends/FriendsPage'
-import { useFriendsAvailable } from '@/lib/friends'
 import { SettingsPage } from '@/features/settings/SettingsPage'
-import { useDataChanged } from '@/components/useDataChanged'
 import { isWeb } from '@/lib/platform'
 import { useAccountState } from '@/lib/account'
 import { SignInScreen } from '@/features/account/SignInScreen'
@@ -22,11 +14,6 @@ import { useUpdateToasts } from '@/features/settings/useUpdateToasts'
 const ScanPage = lazy(() =>
   import('@/features/scan/ScanPage').then((m) => ({ default: m.ScanPage }))
 )
-
-interface AddInitial {
-  card: CardSearchResult
-  printingId: number
-}
 
 /** Hooks that only make sense in the desktop app; kept in a component so the web build can skip them. */
 function DesktopOnlyEffects(): null {
@@ -69,26 +56,8 @@ function App(): React.JSX.Element {
 }
 
 function SignedInApp(): React.JSX.Element {
-  const [chosenPage, setPage] = useState<Page>('dashboard')
-  const [entryId, setEntryId] = useState<number | undefined>()
-  const [friendsKey, setFriendsKey] = useState(0)
-  const friendsAvailable = useFriendsAvailable()
-  // Desktop sign-out takes the Friends nav item away; don't leave its page showing.
-  const page: Page = chosenPage === 'friends' && !friendsAvailable ? 'dashboard' : chosenPage
-  const [addOpen, setAddOpen] = useState(false)
-  const [addInitial, setAddInitial] = useState<AddInitial | null>(null)
-  useDataChanged()
-
-  const openAdd = useCallback((initial: AddInitial | null = null): void => {
-    setAddInitial(initial)
-    setAddOpen(true)
-  }, [])
-
-  const onNavigate: NavigateFn = useCallback((next, opts) => {
-    setEntryId(opts?.entryId)
-    if (next === 'friends') setFriendsKey((k) => k + 1)
-    setPage(next)
-  }, [])
+  const pages = usePages('dashboard')
+  const { page, onNavigate, openAdd } = pages
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
@@ -105,36 +74,19 @@ function SignedInApp(): React.JSX.Element {
     <>
       {!isWeb() && <DesktopOnlyEffects />}
       <AppShell page={page} onNavigate={onNavigate} onAddCard={() => openAdd()}>
-        {page === 'dashboard' && (
-          <DashboardPage onNavigate={onNavigate} onAddCard={() => openAdd()} />
-        )}
-        {page === 'collection' && (
-          <CollectionPage
-            key={entryId ?? 'all'}
-            initialEntryId={entryId}
-            onAddCard={() => openAdd()}
-          />
-        )}
-        {page === 'browse' && (
-          <BrowsePage onAddCard={(card, printingId) => openAdd({ card, printingId })} />
-        )}
-        {page === 'sets' && (
-          <SetsPage
-            onAddCard={() => openAdd()}
-            onAddMissing={(card, printingId) => openAdd({ card, printingId })}
-          />
-        )}
-        {page === 'scan' && !isWeb() && (
-          <Suspense fallback={null}>
-            <ScanPage />
-          </Suspense>
-        )}
-        {page === 'friends' && (
-          <FriendsPage key={friendsKey} onBackToMine={() => onNavigate('collection')} />
-        )}
-        {page === 'settings' && <SettingsPage />}
+        <PageSwitch
+          pages={pages}
+          scan={
+            !isWeb() && (
+              <Suspense fallback={null}>
+                <ScanPage />
+              </Suspense>
+            )
+          }
+          settings={<SettingsPage />}
+        />
       </AppShell>
-      <AddCardDialog open={addOpen} onOpenChange={setAddOpen} initial={addInitial} />
+      <PagesAddCard pages={pages} />
       <Toaster />
     </>
   )

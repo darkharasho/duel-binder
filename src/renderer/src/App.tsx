@@ -15,6 +15,7 @@ import { isWeb } from '@/lib/platform'
 import { useAccountState } from '@/lib/account'
 import { SignInScreen } from '@/features/account/SignInScreen'
 import { TitleBar } from '@/components/TitleBar'
+import { ScanHubProvider } from '@/features/scan/ScanHub'
 import { useUpdateToasts } from '@/features/settings/useUpdateToasts'
 
 // Loaded on demand, so the web build (which has no Scan) never pulls in the vision worker.
@@ -33,7 +34,7 @@ function DesktopOnlyEffects(): null {
   return null
 }
 
-function App(): React.JSX.Element {
+function Gate(): React.JSX.Element {
   const web = isWeb()
   const { status: account, failed } = useAccountState()
   if (!web) {
@@ -54,6 +55,17 @@ function App(): React.JSX.Element {
     }
   }
   return <SignedInApp />
+}
+
+/** On desktop the hub sits above the sign-in gate, so it outlives every page and sign-in state. */
+function App(): React.JSX.Element {
+  return isWeb() ? (
+    <Gate />
+  ) : (
+    <ScanHubProvider>
+      <Gate />
+    </ScanHubProvider>
+  )
 }
 
 function SignedInApp(): React.JSX.Element {

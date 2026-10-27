@@ -1,23 +1,16 @@
-import type { RawSignals } from '@/features/scan/engine'
 import { act, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { AccountStatus, SetSummary } from '@shared/types'
+import type { ScanDraft } from '@shared/scan/types'
+import type { ScanWindowSettings, ScanWindowState } from '@shared/scanWindow'
 import App from '@/App'
 import { Toaster } from '@/components/ui/sonner'
+import { ScanHubProvider } from '@/features/scan/ScanHub'
 import { ScanPage } from '@/features/scan/ScanPage'
 import type { ScanRow } from '@/features/scan/session'
 import { createMockApi, renderWithProviders, type DeepPartial } from './mockApi'
 import type { Api } from '@shared/ipc'
-import {
-  NOTHING,
-  codeFrame,
-  fakeEngine,
-  printing,
-  quad,
-  stubCamera,
-  stubVideo,
-  type FakeEngine
-} from './scanFakes'
+import { fakeBridge, printing } from './scanFakes'
 
 const SESSION_KEY = 'scan.session.v1'
 // Wall-clock time, captured before any test fakes the timers (and performance with them).
@@ -39,12 +32,33 @@ const row = (o: Partial<ScanRow> = {}): ScanRow => ({
   ...o
 })
 
-/** The camera frames grabbed, as createImageBitmap(video, x, y, w, h) calls. */
-let grabbed: ReturnType<typeof vi.fn>
+const draft = (o: Partial<ScanDraft> = {}): ScanDraft => ({
+  cardId: 1,
+  name: 'Dark Magician',
+  imageId: 46986414,
+  printingId: 101,
+  setCode: 'LOB-EN005',
+  rarity: 'Ultra Rare',
+  options: [printing()],
+  flag: null,
+  via: 'code',
+  ...o
+})
+
+const STATE: ScanWindowState = {
+  devices: [{ deviceId: 'cam1', label: 'Desk webcam' }],
+  openDeviceId: 'cam1',
+  cameraError: null,
+  loop: { kind: 'idle' },
+  artReady: true,
+  setUnreadable: false
+}
+
+let bridge: ReturnType<typeof fakeBridge>
 
 beforeEach(() => {
   localStorage.clear()
-  grabbed = stubVideo()
+  bridge = fakeBridge()
 })
 
 afterEach(() => {
@@ -53,16 +67,13 @@ afterEach(() => {
   window.api = undefined as never
 })
 
-function renderScan(
-  engine: FakeEngine,
-  overrides: DeepPartial<Api> = {}
-): ReturnType<typeof renderWithProviders> {
+function renderScan(overrides: DeepPartial<Api> = {}): ReturnType<typeof renderWithProviders> {
   return renderWithProviders(
-    <>
-      <ScanPage engineFactory={() => engine} />
+    <ScanHubProvider>
+      <ScanPage />
       <Toaster />
-    </>,
-    { api: createMockApi(overrides) }
+    </ScanHubProvider>,
+    { api: createMockApi({ ...overrides, scanWindow: bridge.scanWindow }) }
   )
 }
 
@@ -85,7 +96,6 @@ const navNames = (): (string | null)[] =>
 
 describe('Scan nav', () => {
   it('nav shows Scan on desktop between Browse and Friends, not on web', async () => {
-    stubCamera()
     const { unmount } = renderWithProviders(<App />, {
       api: createMockApi({ account: { status: vi.fn(async () => signedIn) } })
     })
@@ -109,9 +119,30 @@ describe('Scan nav', () => {
     await screen.findByRole('button', { name: 'Friends' })
     expect(screen.queryByRole('button', { name: 'Scan' })).not.toBeInTheDocument()
   })
+
+  it('a pull counted while on another page is on the list when you come back', async () => {
+    const { container } = renderWithProviders(<App />, {
+      api: createMockApi({
+        account: { status: vi.fn(async () => signedIn) },
+        scanWindow: bridge.scanWindow
+      })
+    })
+    const u = userEvent.setup()
+    await u.click(await screen.findByRole('button', { name: 'Scan' }))
+    await screen.findByRole('heading', { name: 'Scan' })
+    await u.click(screen.getByRole('button', { name: 'Collection' }))
+    await screen.findByRole('heading', { name: 'Collection' })
+    expect(screen.queryByRole('heading', { name: 'Scan' })).not.toBeInTheDocument()
+
+    act(() => bridge.emit({ kind: 'draft', draft: draft() }))
+    await u.click(screen.getByRole('button', { name: 'Scan' }))
+    await screen.findByRole('heading', { name: 'Scan' })
+    expect(screen.getByLabelText('Quantity of Dark Magician')).toHaveTextContent('1')
+    expect(container).toBeTruthy()
+  })
 })
 
-/** Runs timers (the scan loop's interval, query and toast scheduling) inside act. */
+/** Runs timers (queries, toasts, the highlight) inside act. */
 const run = (ms = 0): Promise<void> =>
   act(async () => {
     await vi.advanceTimersByTimeAsync(ms)
@@ -119,6 +150,19 @@ const run = (ms = 0): Promise<void> =>
 
 const user = (): ReturnType<typeof userEvent.setup> =>
   userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+
+const report = (s: Partial<ScanWindowState> = {}): void =>
+  act(() => bridge.emit({ kind: 'state', state: { ...STATE, ...s } }))
+
+const openWindow = async (s: Partial<ScanWindowState> = {}): Promise<void> => {
+  act(() => bridge.emitOpen(true))
+  report(s)
+  await run()
+}
+
+const sentSettings = (): ScanWindowSettings[] =>
+  bridge.sent.flatMap((m) => (m.kind === 'settings' ? [m.settings] : []))
+const lastSettings = (): ScanWindowSettings => sentSettings().at(-1)!
 
 describe('Scan page', () => {
   beforeEach(() => {
@@ -130,122 +174,217 @@ describe('Scan page', () => {
     vi.useRealTimers()
   })
 
-  it('a recognized card appears in the list and the status bar', async () => {
-    stubCamera()
-    const engine = fakeEngine(() => codeFrame('LOB-EN005'))
-    renderScan(engine, { scan: { printingsByCode: vi.fn(async () => [printing()]) } })
-    expect(screen.getByText('Hold a card up')).toBeInTheDocument()
-    await run(1000)
+  it('Open scan window opens it, and says Show once open', async () => {
+    renderScan()
+    await run()
+    const u = user()
+    await u.click(screen.getByRole('button', { name: 'Open scan window' }))
+    expect(bridge.scanWindow.open).toHaveBeenCalledTimes(1)
+    act(() => bridge.emitOpen(true))
+    await u.click(screen.getByRole('button', { name: 'Show scan window' }))
+    expect(bridge.scanWindow.open).toHaveBeenCalledTimes(2)
+    expect(screen.queryByRole('button', { name: 'Open scan window' })).not.toBeInTheDocument()
+  })
+
+  it('learns the window is already open on mount, and gives it its settings', async () => {
+    bridge = fakeBridge(true)
+    localStorage.setItem('scan.defaultRarity', 'Secret Rare')
+    renderScan()
+    await run()
+    expect(screen.getByRole('button', { name: 'Show scan window' })).toBeInTheDocument()
+    expect(lastSettings()).toEqual({
+      deviceId: null,
+      paused: false,
+      set: null,
+      defaultRarity: 'Secret Rare',
+      hitPrice: 20
+    })
+  })
+
+  it('a pull from the scan window lands on the list and is highlighted for a moment', async () => {
+    renderScan()
+    await run()
+    act(() => bridge.emit({ kind: 'draft', draft: draft() }))
+    const list = screen.getByRole('list', { name: 'This session' })
+    expect(within(list).getByText('Dark Magician')).toBeInTheDocument()
+    expect(within(list).getByLabelText('Quantity of Dark Magician')).toHaveTextContent('1')
+    const saved = JSON.parse(localStorage.getItem(SESSION_KEY)!) as ScanRow[]
+    expect(saved[0]).toMatchObject({ printingId: 101, quantity: 1 })
+    act(() => bridge.emit({ kind: 'draft', draft: draft() }))
+    expect(within(list).getByLabelText('Quantity of Dark Magician')).toHaveTextContent('2')
+  })
+
+  it('sends settings when the scan window says it is ready, and on every change', async () => {
+    const lob = { setName: 'Legend of Blue Eyes White Dragon', language: 'en' } as SetSummary
+    renderScan({ sets: { list: vi.fn(async () => [lob]) } })
+    await run()
+    const before = sentSettings().length
+    act(() => bridge.emit({ kind: 'ready' }))
+    expect(sentSettings()).toHaveLength(before + 1)
+    expect(lastSettings()).toMatchObject({ set: null, paused: false, hitPrice: 20 })
+
+    await openWindow()
+    const u = user()
+    await u.click(screen.getByRole('combobox', { name: 'Set' }))
+    await u.click(screen.getByRole('option', { name: 'Legend of Blue Eyes White Dragon · EN' }))
+    expect(lastSettings().set).toEqual({
+      setName: 'Legend of Blue Eyes White Dragon',
+      language: 'en'
+    })
+    expect(JSON.parse(localStorage.getItem('scan.set')!)).toEqual(lastSettings().set)
+
+    await u.click(screen.getByRole('button', { name: 'Pause' }))
+    expect(lastSettings().paused).toBe(true)
+    expect(screen.getByRole('button', { name: 'Resume' })).toBeInTheDocument()
+    // Pause isn't remembered, and ends when the window closes.
+    act(() => bridge.emitOpen(false))
+    expect(lastSettings().paused).toBe(false)
+  })
+
+  it("lists the scan window's cameras, and picking one sends it and asks it to retry", async () => {
+    renderScan()
+    await openWindow({
+      devices: [
+        { deviceId: 'cam1', label: 'Desk webcam' },
+        { deviceId: '', label: '' }
+      ]
+    })
+    const u = user()
+    const picker = screen.getByRole('combobox', { name: 'Camera' })
+    expect(picker).toHaveTextContent('Desk webcam')
+    await u.click(picker)
+    expect(screen.getAllByRole('option').map((o) => o.textContent)).toEqual([
+      'Desk webcam',
+      'Camera 2'
+    ])
+    await u.click(screen.getByRole('option', { name: 'Camera 2' }))
+    expect(lastSettings().deviceId).toBeNull()
+    expect(bridge.sent.at(-1)).toEqual({ kind: 'retryCamera' })
+  })
+
+  it("shows the scan window's status, camera errors with Try again, and Retry when stopped", async () => {
+    renderScan()
+    await openWindow()
+    expect(screen.getByRole('status')).toHaveTextContent('Hold a card up')
+    report({ loop: { kind: 'unsure' } })
+    expect(screen.getByText("Couldn't recognize this card")).toBeInTheDocument()
+    report({ loop: { kind: 'added', name: 'Dark Magician', setCode: 'LOB-EN005' } })
     expect(
       screen.getByText('Dark Magician LOB-EN005 · added, lower it to scan the next card')
     ).toBeInTheDocument()
-    const list = screen.getByRole('list', { name: 'This session' })
-    expect(within(list).getByText('Dark Magician')).toBeInTheDocument()
-    expect(within(list).getByText('LOB-EN005')).toBeInTheDocument()
-    // Held still, it counts once.
-    await run(1000)
-    expect(within(list).getAllByRole('listitem')).toHaveLength(1)
-    expect(within(list).getByLabelText('Quantity of Dark Magician')).toHaveTextContent('1')
+
+    const u = user()
+    report({ loop: { kind: 'stopped' } })
+    expect(screen.getByText('Scanning stopped after repeated errors.')).toBeInTheDocument()
+    await u.click(screen.getByRole('button', { name: 'Retry' }))
+    expect(bridge.sent.at(-1)).toEqual({ kind: 'retryScan' })
+
+    report({ cameraError: 'denied', openDeviceId: null })
+    expect(
+      screen.getByText(
+        'Camera access was denied. Allow it in your system settings, then reopen the scan window.'
+      )
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Try again' })).not.toBeInTheDocument()
+
+    report({ cameraError: 'none', devices: [], openDeviceId: null })
+    expect(
+      screen.getByText('No camera found. Plug one in and reopen the scan window.')
+    ).toBeInTheDocument()
+    expect(screen.getByRole('combobox', { name: 'Camera' })).toBeDisabled()
+    await u.click(screen.getByRole('button', { name: 'Try again' }))
+    expect(bridge.sent.at(-1)).toEqual({ kind: 'retryCamera' })
+
+    report({ cameraError: 'lost', openDeviceId: null })
+    expect(
+      screen.getByText("The camera stopped. Check it's connected, then pick it again.")
+    ).toBeInTheDocument()
+    await u.click(screen.getByRole('button', { name: 'Try again' }))
+    expect(bridge.sent.at(-1)).toEqual({ kind: 'retryCamera' })
+    expect(screen.queryByText('Hold a card up')).not.toBeInTheDocument()
   })
 
-  it('a card-shaped thing far from any artwork counts as the card being lowered', async () => {
-    stubCamera()
-    // The card, then only the book behind it (frames 6-11), then the card again.
-    const book: RawSignals = {
-      ...NOTHING,
-      found: true,
-      quad,
-      art: [{ imageId: 999, distance: 120 }]
+  it("shows the scan window's notices", async () => {
+    renderScan()
+    await openWindow({ setUnreadable: true, artReady: false })
+    expect(
+      screen.getByText("Couldn't load this set's cards, so cards are matched against every set.")
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        'Artwork matching is unavailable until the artwork data downloads. Set codes and names still work.'
+      )
+    ).toBeInTheDocument()
+    report()
+    expect(screen.queryByText(/matched against every set/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Artwork matching is unavailable/)).not.toBeInTheDocument()
+  })
+
+  it('says the scan window is closed, and Pause is disabled', async () => {
+    renderScan()
+    await run()
+    expect(
+      screen.getByText('The scan window is closed. Open it to start scanning.')
+    ).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Pause' })).toBeDisabled()
+    expect(screen.getByRole('combobox', { name: 'Camera' })).toBeDisabled()
+
+    await openWindow()
+    expect(screen.getByRole('button', { name: 'Pause' })).toBeEnabled()
+    expect(screen.queryByText(/The scan window is closed/)).not.toBeInTheDocument()
+    // The window's state is gone once it closes.
+    act(() => bridge.emitOpen(false))
+    expect(screen.getByText(/The scan window is closed/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Pause' })).toBeDisabled()
+  })
+
+  it('hit price is remembered and rejects bad input', async () => {
+    renderScan()
+    await run()
+    const u = user()
+    const input = screen.getByLabelText('Hit price')
+    expect(input).toHaveValue(20)
+    await u.clear(input)
+    await u.type(input, '35')
+    await u.tab()
+    expect(localStorage.getItem('scan.hitPrice')).toBe('35')
+    expect(lastSettings().hitPrice).toBe(35)
+
+    for (const bad of ['', 'abc', '0', '-5']) {
+      await u.clear(input)
+      if (bad) await u.type(input, bad)
+      await u.tab()
+      expect(input).toHaveValue(35)
     }
-    const engine = fakeEngine((n) => (n >= 6 && n < 12 ? book : codeFrame('LOB-EN005')))
-    renderScan(engine, {
-      scan: {
-        printingsByCode: vi.fn(async () => [printing()]),
-        cardsForImages: vi.fn(async () => [])
-      }
+    expect(localStorage.getItem('scan.hitPrice')).toBe('35')
+    expect(lastSettings().hitPrice).toBe(35)
+
+    // Enter commits too.
+    await u.clear(input)
+    await u.type(input, '12.5{Enter}')
+    expect(lastSettings().hitPrice).toBe(12.5)
+    expect(localStorage.getItem('scan.hitPrice')).toBe('12.5')
+  })
+
+  it('starts from the remembered set, rarity and hit price', async () => {
+    localStorage.setItem('scan.set', JSON.stringify({ setName: 'Metal Raiders', language: 'en' }))
+    localStorage.setItem('scan.hitPrice', '50')
+    localStorage.setItem('scan.camera', 'cam9')
+    renderScan()
+    await run()
+    expect(screen.getByRole('combobox', { name: 'Set' })).toHaveTextContent('Metal Raiders · EN')
+    expect(screen.getByLabelText('Hit price')).toHaveValue(50)
+    act(() => bridge.emit({ kind: 'ready' }))
+    expect(lastSettings()).toMatchObject({
+      set: { setName: 'Metal Raiders', language: 'en' },
+      hitPrice: 50,
+      deviceId: 'cam9'
     })
-    await run(1200)
-    expect(screen.getByLabelText('Quantity of Dark Magician')).toHaveTextContent('1')
-    await run(1200)
-    expect(screen.queryByText("Couldn't recognize this card")).not.toBeInTheDocument()
-    await run(1200)
-    expect(screen.getByLabelText('Quantity of Dark Magician')).toHaveTextContent('2')
-  })
-
-  it("under Auto, a card's name that looks the same over its frames picks its rarity", async () => {
-    stubCamera()
-    // A Normal Monster's plain name is black, so one that reads light and silver is prismatic.
-    const engine = fakeEngine(() => ({
-      ...codeFrame('LOB-EN005'),
-      cues: { nameInk: 'light', nameTint: 'silver' }
-    }))
-    const both = [
-      printing({ rarity: 'Common' }),
-      printing({ printingId: 102, rarity: 'Secret Rare' })
-    ]
-    renderScan(engine, { scan: { printingsByCode: vi.fn(async () => both) } })
-    await run(1000)
-    const list = screen.getByRole('list', { name: 'This session' })
-    expect(within(list).getByText('Dark Magician')).toBeInTheDocument()
-    expect(within(list).queryByText('Check rarity')).not.toBeInTheDocument()
-    const saved = JSON.parse(localStorage.getItem(SESSION_KEY)!) as ScanRow[]
-    expect(saved[0]).toMatchObject({ printingId: 102, rarity: 'Secret Rare', flag: null })
-  })
-
-  it("flags the rarity when the name's look changes between frames", async () => {
-    stubCamera()
-    const engine = fakeEngine((n) => ({
-      ...codeFrame('LOB-EN005'),
-      cues: n % 2 ? { nameInk: 'light', nameTint: 'silver' } : { nameInk: 'dark', nameTint: null }
-    }))
-    const both = [
-      printing({ rarity: 'Common' }),
-      printing({ printingId: 102, rarity: 'Secret Rare' })
-    ]
-    renderScan(engine, { scan: { printingsByCode: vi.fn(async () => both) } })
-    await run(1000)
-    const list = screen.getByRole('list', { name: 'This session' })
-    expect(within(list).getByText('Check rarity')).toBeInTheDocument()
-    const saved = JSON.parse(localStorage.getItem(SESSION_KEY)!) as ScanRow[]
-    expect(saved[0]).toMatchObject({ printingId: 101, rarity: 'Common' })
-  })
-
-  it('scans the centre crop the preview shows and draws the outline in its space', async () => {
-    stubCamera()
-    const engine = fakeEngine(() => ({ ...NOTHING, found: true, quad }))
-    const { container } = renderScan(engine)
-    await run(500)
-    // The stubbed camera is 640x480: the preview shows its centre 360x480.
-    expect(grabbed).toHaveBeenLastCalledWith(expect.any(HTMLVideoElement), 140, 0, 360, 480)
-    const frame = engine.analyze.mock.calls[0][0] as ImageBitmap
-    expect([frame.width, frame.height]).toEqual([360, 480])
-    const svg = container.querySelector('svg[preserveAspectRatio]')!
-    expect(svg).toHaveAttribute('viewBox', '0 0 360 480')
-    expect(svg.querySelector('polygon')).toHaveAttribute('points', '10,10 110,10 110,160 10,160')
-  })
-
-  it('draws no outline round a card-shaped thing far from any artwork', async () => {
-    stubCamera()
-    const book: RawSignals = {
-      ...NOTHING,
-      found: true,
-      quad,
-      art: [{ imageId: 999, distance: 120 }]
-    }
-    const { container } = renderScan(
-      fakeEngine(() => book),
-      {
-        scan: { cardsForImages: vi.fn(async () => []) }
-      }
-    )
-    await run(500)
-    expect(container.querySelector('svg[preserveAspectRatio] polygon')).toBeNull()
   })
 
   it('rarity dropdown changes the row', async () => {
-    stubCamera()
     localStorage.setItem(SESSION_KEY, JSON.stringify([row()]))
-    renderScan(fakeEngine())
+    renderScan()
     await run()
     expect(screen.getByText('Check rarity')).toBeInTheDocument()
     const u = user()
@@ -263,7 +402,6 @@ describe('Scan page', () => {
   })
 
   it("a picked printing keeps the card's other printings to choose from", async () => {
-    stubCamera()
     const options = [
       printing({ printingId: 201, setCode: 'LOB-EN005', rarity: 'Ultra Rare' }),
       printing({ printingId: 202, setCode: 'SDY-006', rarity: 'Common', language: 'de' }),
@@ -283,7 +421,7 @@ describe('Scan page', () => {
         })
       ])
     )
-    renderScan(fakeEngine())
+    renderScan()
     await run()
     const u = user()
     await u.click(screen.getByRole('combobox', { name: 'Rarity for Dark Magician' }))
@@ -299,8 +437,7 @@ describe('Scan page', () => {
   })
 
   it('New scans as is searchable and remembered', async () => {
-    stubCamera()
-    renderScan(fakeEngine())
+    renderScan()
     await run()
     const u = user()
     const picker = screen.getByRole('combobox', { name: 'New scans as' })
@@ -318,10 +455,9 @@ describe('Scan page', () => {
   })
 
   it('Add calls collection.add and empties the list', async () => {
-    stubCamera()
     localStorage.setItem(SESSION_KEY, JSON.stringify([row({ quantity: 3, flag: null })]))
     const add = vi.fn(async () => ({}) as never)
-    renderScan(fakeEngine(), { collection: { add } })
+    renderScan({ collection: { add } })
     await run()
     await user().click(screen.getByRole('button', { name: 'Add 3 cards to collection' }))
     await run(100)
@@ -332,11 +468,10 @@ describe('Scan page', () => {
   })
 
   it("a row can't be changed while Add runs", async () => {
-    stubCamera()
     localStorage.setItem(SESSION_KEY, JSON.stringify([row({ quantity: 2, flag: null })]))
     let finish!: () => void
     const add = vi.fn(() => new Promise<never>((resolve) => (finish = () => resolve({} as never))))
-    renderScan(fakeEngine(), { collection: { add } })
+    renderScan({ collection: { add } })
     await run()
     const controls = (): HTMLElement[] => [
       screen.getByRole('combobox', { name: 'Rarity for Dark Magician' }),
@@ -355,7 +490,6 @@ describe('Scan page', () => {
   })
 
   it('Add is disabled when no row has a printing', async () => {
-    stubCamera()
     localStorage.setItem(
       SESSION_KEY,
       JSON.stringify([
@@ -368,16 +502,15 @@ describe('Scan page', () => {
         })
       ])
     )
-    renderScan(fakeEngine())
+    renderScan()
     await run()
     expect(screen.getByText('Check printing')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Add 0 cards to collection' })).toBeDisabled()
   })
 
   it('Clear asks first', async () => {
-    stubCamera()
     localStorage.setItem(SESSION_KEY, JSON.stringify([row()]))
-    renderScan(fakeEngine())
+    renderScan()
     await run()
     const u = user()
     await u.click(screen.getByRole('button', { name: 'Clear' }))
@@ -392,275 +525,30 @@ describe('Scan page', () => {
     expect(screen.queryByText('Dark Magician')).not.toBeInTheDocument()
   })
 
-  it('denied camera shows the message and keeps the list', async () => {
-    stubCamera('NotAllowedError')
-    localStorage.setItem(SESSION_KEY, JSON.stringify([row()]))
-    renderScan(fakeEngine())
-    await run()
-    expect(
-      screen.getByText(
-        'Camera access was denied. Allow it in your system settings, then reopen Scan.'
-      )
-    ).toBeInTheDocument()
-    await user().click(screen.getByRole('button', { name: 'One more Dark Magician' }))
-    expect(screen.getByLabelText('Quantity of Dark Magician')).toHaveTextContent('2')
-  })
-
-  it('no camera shows its message, and the picker still shows', async () => {
-    stubCamera('NotFoundError')
-    renderScan(fakeEngine())
-    await run()
-    expect(screen.getByText('No camera found. Plug one in and reopen Scan.')).toBeInTheDocument()
-    expect(screen.getByRole('combobox', { name: 'Camera' })).toHaveTextContent('No camera')
-  })
-
-  it('camera lost keeps list, and Try again brings the preview back', async () => {
-    const { track, getUserMedia } = stubCamera()
-    localStorage.setItem(SESSION_KEY, JSON.stringify([row()]))
-    const engine = fakeEngine()
-    renderScan(engine)
-    await run(500)
-    expect(engine.analyze).toHaveBeenCalled()
-    expect(screen.getByRole('combobox', { name: 'Camera' })).toHaveTextContent('Desk webcam')
-    act(() => track.end())
-    expect(
-      screen.getByText("The camera stopped. Check it's connected, then pick it again.")
-    ).toBeInTheDocument()
-    expect(screen.getByText('Dark Magician')).toBeInTheDocument()
-    expect(getUserMedia).toHaveBeenCalledTimes(1)
-
-    await user().click(screen.getByRole('button', { name: 'Try again' }))
-    await run()
-    expect(getUserMedia).toHaveBeenCalledTimes(2)
-    expect(screen.queryByText(/The camera stopped/)).not.toBeInTheDocument()
-    expect(screen.getByText('Hold a card up')).toBeInTheDocument()
-  })
-
-  it('picking the same camera again after it was lost reopens it', async () => {
-    const { track, getUserMedia } = stubCamera()
-    renderScan(fakeEngine())
-    await run()
-    act(() => track.end())
-    const u = user()
-    await u.click(screen.getByRole('combobox', { name: 'Camera' }))
-    await u.click(screen.getByRole('option', { name: 'Desk webcam' }))
-    await run()
-    expect(getUserMedia).toHaveBeenCalledTimes(2)
-    expect(screen.queryByText(/The camera stopped/)).not.toBeInTheDocument()
-  })
-
-  it('shows the no-fingerprints notice', async () => {
-    stubCamera()
-    const engine = fakeEngine()
-    const { unmount } = renderScan(engine)
-    await run()
-    expect(
-      screen.getByText(
-        'Artwork matching is unavailable until the artwork data downloads. Set codes and names still work.'
-      )
-    ).toBeInTheDocument()
-    expect(engine.init).toHaveBeenCalledWith(null)
-    unmount()
-
-    const fp = new ArrayBuffer(8)
-    const ready = fakeEngine()
-    renderScan(ready, { scan: { fingerprints: vi.fn(async () => fp) } })
-    await run()
-    expect(ready.init).toHaveBeenCalledWith(fp)
-    expect(screen.queryByText(/Artwork matching is unavailable/)).not.toBeInTheDocument()
-  })
-
-  it('scans with the file on disk while the fingerprint refresh hangs', async () => {
-    stubCamera()
-    const fp = new ArrayBuffer(8)
-    const engine = fakeEngine(() => codeFrame('LOB-EN005'))
-    renderScan(engine, {
-      scan: {
-        fingerprints: vi.fn(async () => fp),
-        refreshFingerprints: vi.fn(() => new Promise<never>(() => {})),
-        printingsByCode: vi.fn(async () => [printing()])
-      }
-    })
-    await run(1000)
-    expect(engine.init).toHaveBeenCalledWith(fp)
-    expect(engine.analyze).toHaveBeenCalled()
-    expect(
-      within(screen.getByRole('list', { name: 'This session' })).getByText('Dark Magician')
-    ).toBeInTheDocument()
-  })
-
-  it('gives the engine the new file when a refresh downloads one', async () => {
-    stubCamera()
-    const old = new ArrayBuffer(8)
-    const fresh = new ArrayBuffer(16)
-    let file: ArrayBuffer | null = null
-    let finish!: () => void
-    const refreshFingerprints = vi.fn(
-      () =>
-        new Promise<{ state: 'ready'; count: number; updated: true }>((resolve) => {
-          finish = () => {
-            file = fresh
-            resolve({ state: 'ready', count: 2, updated: true })
-          }
-        })
-    )
-    file = old
-    const engine = fakeEngine()
-    renderScan(engine, { scan: { fingerprints: vi.fn(async () => file), refreshFingerprints } })
-    await run(500)
-    expect(engine.init.mock.calls).toEqual([[old]])
-    finish()
-    await run(500)
-    expect(engine.init.mock.calls).toEqual([[old], [fresh]])
-  })
-
-  it('keeps the engine as it is when a refresh finds nothing new', async () => {
-    stubCamera()
-    const engine = fakeEngine()
-    renderScan(engine, {
-      scan: {
-        fingerprints: vi.fn(async () => new ArrayBuffer(8)),
-        refreshFingerprints: vi.fn(async () => ({ state: 'ready' as const, count: 2 }))
-      }
-    })
-    await run(1000)
-    expect(engine.init).toHaveBeenCalledTimes(1)
-  })
-
-  it('picking a set passes its image ids as candidates', async () => {
-    stubCamera()
-    const lob = { setName: 'Legend of Blue Eyes White Dragon', language: 'en' } as SetSummary
-    const lobDe = { setName: 'Legend of Blue Eyes White Dragon', language: 'de' } as SetSummary
-    const mrd = { setName: 'Metal Raiders', language: 'en' } as SetSummary
-    const printingsForSet = vi.fn(async () => [
-      printing({ imageIds: [46986414, 46986415] }),
-      printing({ printingId: 103, cardId: 2, imageIds: [89631139] })
-    ])
-    const engine = fakeEngine(() => codeFrame('LOB-EN005'))
-    renderScan(engine, {
-      sets: { list: vi.fn(async () => [mrd, lobDe, lob]) },
-      scan: { printingsForSet }
-    })
-    await run(500)
-    expect(engine.analyze.mock.calls[0][1]).toMatchObject({ candidates: null })
-
-    const u = user()
-    await u.click(screen.getByRole('combobox', { name: 'Set' }))
-    expect(screen.getAllByRole('option').map((o) => o.textContent)).toEqual([
-      'Any set',
-      'Legend of Blue Eyes White Dragon · EN',
-      'Legend of Blue Eyes White Dragon · DE',
-      'Metal Raiders · EN'
-    ])
-    await u.type(screen.getByPlaceholderText('Search sets…'), 'blue de')
-    expect(screen.getAllByRole('option').map((o) => o.textContent)).toEqual([
-      'Legend of Blue Eyes White Dragon · DE'
-    ])
-    await u.click(screen.getByRole('option', { name: 'Legend of Blue Eyes White Dragon · DE' }))
-    await run(500)
-    expect(printingsForSet).toHaveBeenCalledWith('Legend of Blue Eyes White Dragon', 'de')
-    expect(screen.getByRole('combobox', { name: 'Set' })).toHaveTextContent(
-      'Legend of Blue Eyes White Dragon · DE'
-    )
-    expect(engine.analyze.mock.calls.at(-1)?.[1]).toMatchObject({
-      candidates: [46986414, 46986415, 89631139]
-    })
-    expect(JSON.parse(localStorage.getItem('scan.set')!)).toEqual({
-      setName: 'Legend of Blue Eyes White Dragon',
-      language: 'de'
-    })
-  })
-
-  it("a set whose cards can't be read scans as any set and says so", async () => {
-    stubCamera()
-    localStorage.setItem('scan.set', JSON.stringify({ setName: 'Metal Raiders', language: 'en' }))
-    const engine = fakeEngine()
-    renderScan(engine, {
-      scan: {
-        printingsForSet: vi.fn(async () => {
-          throw new Error('db gone')
-        })
-      }
-    })
-    await run(1000)
-    expect(
-      screen.getByText("Couldn't load this set's cards, so cards are matched against every set.")
-    ).toBeInTheDocument()
-    expect(engine.analyze.mock.calls.at(-1)?.[1]).toMatchObject({ candidates: null })
-  })
-
-  it('re-inits the engine after a failed analysis', async () => {
-    stubCamera()
-    const engine = fakeEngine((n) => (n === 0 ? new Error('worker died') : NOTHING))
-    const { unmount } = renderScan(engine)
-    await run(2000)
-    expect(engine.analyze.mock.calls.length).toBeGreaterThanOrEqual(2)
-    expect(engine.init).toHaveBeenCalledTimes(2)
-    unmount()
-    expect(engine.dispose).toHaveBeenCalled()
-  })
-
-  it('stops after repeated failures, keeps stopped across a set change, and Retry resumes', async () => {
-    stubCamera()
-    let failing = true
-    const engine = fakeEngine(() => (failing ? new Error('worker died') : NOTHING))
-    renderScan(engine, {
-      sets: {
-        list: vi.fn(async () => [{ setName: 'Metal Raiders', language: 'en' } as SetSummary])
-      }
-    })
-    await run(30_000)
-    expect(screen.getByText('Scanning stopped after repeated errors.')).toBeInTheDocument()
-    const calls = engine.analyze.mock.calls.length
-    expect(calls).toBe(5)
-    await run(5000)
-    expect(engine.analyze.mock.calls.length).toBe(calls)
-
-    const u = user()
-    await u.click(screen.getByRole('combobox', { name: 'Set' }))
-    await u.click(screen.getByRole('option', { name: 'Metal Raiders · EN' }))
-    await run(500)
-    expect(screen.getByText('Scanning stopped after repeated errors.')).toBeInTheDocument()
-
-    failing = false
-    const inits = engine.init.mock.calls.length
-    await u.click(screen.getByRole('button', { name: 'Retry' }))
-    await run(500)
-    expect(engine.init.mock.calls.length).toBe(inits + 1)
-    expect(engine.analyze.mock.calls.length).toBeGreaterThan(calls)
-    expect(screen.getByText('Hold a card up')).toBeInTheDocument()
-  })
-
-  it('pausing stops analysis', async () => {
-    stubCamera()
-    const engine = fakeEngine()
-    renderScan(engine)
-    await run(500)
-    expect(engine.analyze).toHaveBeenCalled()
-    await user().click(screen.getByRole('button', { name: 'Pause' }))
-    const calls = engine.analyze.mock.calls.length
-    await run(1000)
-    expect(engine.analyze.mock.calls.length).toBe(calls)
-    expect(screen.getByRole('button', { name: 'Resume' })).toBeInTheDocument()
-  })
-
-  it('stays responsive with thousands of sets while frames come in', async () => {
-    stubCamera()
+  it('stays responsive with thousands of sets while pulls come in', async () => {
     const many = Array.from(
       { length: 7500 },
       (_, i) => ({ setName: `Set ${String(i).padStart(4, '0')}`, language: 'en' }) as SetSummary
     )
-    const engine = fakeEngine(() => ({ ...NOTHING, found: true, quad }))
-    renderScan(engine, { sets: { list: vi.fn(async () => many) } })
+    renderScan({ sets: { list: vi.fn(async () => many) } })
     await run()
     // Wall-clock time: the global performance is faked along with the timers.
     const started = realNow()
+    for (let i = 0; i < 50; i++) {
+      act(() =>
+        bridge.emit({
+          kind: 'draft',
+          draft: draft({ cardId: i + 1, printingId: 1000 + i, imageId: 5000 + i })
+        })
+      )
+    }
     await run(2000)
     const elapsed = realNow() - started
-    expect(engine.analyze.mock.calls.length).toBeGreaterThanOrEqual(9)
-    // Ten frames of updates (about 7 ms here; the old Select took about 570 ms and 5 s to mount).
-    // The closed set picker renders none of its 7,500 entries.
-    expect(elapsed).toBeLessThan(300)
+    expect(
+      within(screen.getByRole('list', { name: 'This session' })).getAllByRole('listitem')
+    ).toHaveLength(50)
+    // Fifty pulls' updates; the closed set picker renders none of its 7,500 entries.
+    expect(elapsed).toBeLessThan(2000)
     expect(screen.queryAllByRole('option')).toHaveLength(0)
   })
 })

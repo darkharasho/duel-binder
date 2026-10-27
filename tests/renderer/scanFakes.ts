@@ -1,6 +1,6 @@
 import { vi, type Mock } from 'vitest'
 import type { ScanPrinting } from '@shared/scan/types'
-import type { ScanWindowMessage, ToScanWindow } from '@shared/scanWindow'
+import type { ScanWindowMessage } from '@shared/scanWindow'
 import type { RawSignals, ScanEngine } from '@/features/scan/engine'
 
 export const printing = (o: Partial<ScanPrinting> = {}): ScanPrinting => ({
@@ -128,16 +128,18 @@ export function stubVideo(): ReturnType<typeof vi.fn> {
   return grabbed
 }
 
-/** A stand-in for window.api.scanWindow as the scan window sees it. */
-export function fakeBridge(): {
+/** A stand-in for window.api.scanWindow, for either window; `startOpen` is what isOpen() answers. */
+export function fakeBridge(startOpen = false): {
   scanWindow: {
+    open: Mock<() => Promise<void>>
+    isOpen: Mock<() => Promise<boolean>>
     send: Mock<(m: ScanWindowMessage) => void>
     onMessage: Mock<(cb: (m: ScanWindowMessage) => void) => () => void>
     onOpenChange: Mock<(cb: (open: boolean) => void) => () => void>
     toggleFullScreen: Mock<() => Promise<void>>
   }
   /** Delivers a message to the window, as main's relay would. */
-  emit: (m: ToScanWindow) => void
+  emit: (m: ScanWindowMessage) => void
   emitOpen: (open: boolean) => void
   /** How many onMessage callbacks are registered right now. */
   listening: () => number
@@ -149,6 +151,8 @@ export function fakeBridge(): {
   const sent: ScanWindowMessage[] = []
   return {
     scanWindow: {
+      open: vi.fn(async () => undefined),
+      isOpen: vi.fn(async () => startOpen),
       send: vi.fn((m: ScanWindowMessage) => {
         sent.push(m)
       }),

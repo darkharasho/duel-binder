@@ -49,7 +49,7 @@ ${section(
 )}
 ${section(
   'What is not done with it',
-  '<p>Nothing is sold or used for ads.</p><p>There are no third-party trackers.</p><p>Card images are fetched through the portal, so the sites that host them don’t see you. Your Discord avatar loads from Discord.</p>'
+  '<p>Nothing is sold or used for ads.</p><p>There are no third-party trackers.</p><p>When you scan cards, the camera picture is processed on your phone and never uploaded.</p><p>Card images are fetched through the portal, so the sites that host them don’t see you. Your Discord avatar loads from Discord.</p>'
 )}
 ${section(
   'Deleting your account',

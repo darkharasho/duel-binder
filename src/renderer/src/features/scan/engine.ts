@@ -21,6 +21,8 @@ export interface FrameSignals {
    */
   codeBands: OcrBand[]
   nameBands: OcrBand[]
+  /** The card's effect or flavour text as a block, for telling its language; only when it's upright. */
+  textBands: OcrBand[]
   /** What the card shows of its foil; null when it couldn't be turned upright to look. */
   cues: RarityCues | null
 }
@@ -52,6 +54,8 @@ export interface RawSignals {
   codeTexts: string[]
   /** Every name band's read that isn't empty, in band order. */
   nameTexts: string[]
+  /** The text bands, unread: reading them is slow, so it's left until a card's language is needed. */
+  textBands: OcrBand[]
   cues: RarityCues | null
 }
 
@@ -163,7 +167,8 @@ export function createScanEngine(deps: { api: Api['scan']; makeWorker: () => Wor
         }
       })
       const { found, quad, art, cues } = signals
-      if (!wantText || !found) return { found, quad, art, codeTexts: [], nameTexts: [], cues }
+      if (!wantText || !found)
+        return { found, quad, art, codeTexts: [], nameTexts: [], textBands: [], cues }
       const codeBands = signals.codeBands.filter(hasPixels)
       const nameBands = signals.nameBands.filter(hasPixels)
       const [codes, names] = await Promise.all([
@@ -176,6 +181,7 @@ export function createScanEngine(deps: { api: Api['scan']; makeWorker: () => Wor
         art,
         codeTexts: codes.map((t) => t.trim()).filter(Boolean),
         nameTexts: names.map((t) => t.trim()).filter(Boolean),
+        textBands: signals.textBands.filter(hasPixels),
         cues
       }
     },

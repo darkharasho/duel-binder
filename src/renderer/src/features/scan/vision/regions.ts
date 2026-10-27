@@ -30,6 +30,9 @@ export const CODE_BANDS = [
 
 export const NAME_BAND = [0.06, 0.04, 0.8, 0.105] as const satisfies Box
 
+/** The effect or flavour text, read whole to tell the card's language. */
+export const TEXT_BOX = [0.07, 0.765, 0.93, 0.905] as const satisfies Box
+
 /** Copies the part of img inside box. */
 export function crop(img: RgbaImage, box: Box): RgbaImage {
   const x0 = Math.max(0, Math.round(box[0] * img.width))

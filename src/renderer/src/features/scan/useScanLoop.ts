@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import { cuesOver, type RarityCues } from '@shared/scan/rarity'
-import { ABSENT_MS, RARITY_MAX_READINGS } from '@shared/scan/thresholds'
-import type { ScanPrinting } from '@shared/scan/types'
+import type { CardLanguage } from '@shared/scan/language'
+import { ABSENT_MS, LANGUAGE_MAX_READS, RARITY_MAX_READINGS } from '@shared/scan/thresholds'
+import type { OcrBand, ScanPrinting } from '@shared/scan/types'
 import type { ScanStatus } from '@shared/scanWindow'
 import { api } from '@/lib/api'
 import { centreCrop } from './crop'
@@ -95,6 +96,8 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
     absentSince: null as number | null,
     // What the card in view has shown of its foil in its latest frames.
     looks: { cardId: null as number | null, cues: [] as RarityCues[] },
+    // What the card in view's text has read as, and how many times it has been read.
+    language: { cardId: null as number | null, reads: 0, read: null as CardLanguage | null },
     status: { kind: 'idle' } as ScanStatus
   })
 
@@ -150,6 +153,7 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
     l.shown = null
     l.absentSince = null
     l.looks = { cardId: null, cues: [] }
+    l.language = { cardId: null, reads: 0, read: null }
     // Stopped stays stopped until Retry.
     if (l.stopped) return
     l.status = { kind: 'idle' }
@@ -219,6 +223,19 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
       }
     }
 
+    /**
+     * The language the card's text reads as. Reading it is slow, so a card's answer is kept while
+     * it stays in view, and a card whose text can't be told is tried on LANGUAGE_MAX_READS frames.
+     */
+    const languageOf = async (cardId: number, bands: OcrBand[]): Promise<CardLanguage | null> => {
+      if (l.language.cardId !== cardId) l.language = { cardId, reads: 0, read: null }
+      const known = l.language
+      if (known.read || known.reads >= LANGUAGE_MAX_READS || !bands.length) return known.read
+      known.reads++
+      known.read = await api.scan.language(bands).catch(() => null)
+      return known.read
+    }
+
     const tick = async (): Promise<void> => {
       const engine = engineRef.current
       const o = latest.current
@@ -262,6 +279,7 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
           setName: o.setName,
           setPrintings,
           defaultRarity: o.defaultRarity,
+          cardLanguage: (cardId) => languageOf(cardId, raw.textBands),
           lookups: api.scan
         }).catch(() => null)
         // The set changed mid-frame: this frame belongs to the old one.

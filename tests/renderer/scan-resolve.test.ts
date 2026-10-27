@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi, type Mock } from 'vitest'
 import {
   resolveSignals,
   withRarityByLook,
@@ -6,6 +6,7 @@ import {
   type ScanDraft
 } from '@/features/scan/resolve'
 import type { ArtMatch, RawSignals } from '@/features/scan/engine'
+import type { CardLanguage } from '@shared/scan/language'
 import type { ScanPrinting } from '@shared/scan/types'
 import {
   ART_FAR_DISTANCE,
@@ -80,6 +81,7 @@ const raw = (r: Partial<RawSignals>): RawSignals => ({
   art: [],
   codeTexts: [],
   nameTexts: [],
+  textBands: [],
   cues: null,
   ...r
 })
@@ -225,6 +227,61 @@ describe('resolveSignals', () => {
       lookups: { ...lookups, printingsForCards: async () => [de, ...PRINTINGS.slice(0, 3)] }
     })
     expect(item).toMatchObject({ printingId: 13, rarity: 'Common' })
+  })
+
+  describe('the language its text reads as', () => {
+    const foreign = (language: ScanPrinting['language'], printingId: number): ScanPrinting => ({
+      ...PRINTINGS[2],
+      printingId,
+      setCode: `AAA-${language.toUpperCase()}001`,
+      language
+    })
+    const printed = [
+      foreign('ja', 15),
+      foreign('zh-hant', 16),
+      foreign('de', 14),
+      ...PRINTINGS.slice(0, 3)
+    ]
+    const art = raw({ art: [{ imageId: 101, distance: 20 }] })
+    const read = (
+      language: CardLanguage | null,
+      options = printed
+    ): ResolveContext & { cardLanguage: Mock } => ({
+      ...noSet,
+      cardLanguage: vi.fn(async () => language),
+      lookups: { ...lookups, printingsForCards: async () => options }
+    })
+
+    it('assumes a printing in that language, offering every printing', async () => {
+      const ctx = read('ja')
+      const item = await recognized(art, ctx)
+      expect(item).toMatchObject({ printingId: 15, setCode: 'AAA-JA001', flag: 'pick-printing' })
+      expect(item.options).toHaveLength(6)
+      expect(ctx.cardLanguage).toHaveBeenCalledWith(1)
+    })
+
+    it('takes Chinese text for whichever Chinese the card was printed in', async () => {
+      expect(await recognized(art, read('zh'))).toMatchObject({ printingId: 16 })
+    })
+
+    it('stays with English when the text cannot be told or the card has no such printing', async () => {
+      expect(await recognized(art, read(null))).toMatchObject({ printingId: 13 })
+      expect(await recognized(art, read('ko'))).toMatchObject({ printingId: 13 })
+    })
+
+    it('does not read a card printed in one language', async () => {
+      const ctx = read('ja', PRINTINGS.slice(0, 3))
+      expect(await recognized(art, ctx)).toMatchObject({ printingId: 13 })
+      expect(ctx.cardLanguage).not.toHaveBeenCalled()
+    })
+
+    it('does not read a card whose code was read', async () => {
+      const ctx = read('ja')
+      expect(await recognized(raw({ codeTexts: ['SDY-EN006'] }), ctx)).toMatchObject({
+        printingId: 13
+      })
+      expect(ctx.cardLanguage).not.toHaveBeenCalled()
+    })
   })
 
   it('a card printed once is not flagged', async () => {

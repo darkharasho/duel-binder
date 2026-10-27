@@ -74,6 +74,16 @@ export function toBand(img: RgbaImage, box: Box, scale = 2): OcrBand {
 }
 
 /**
+ * The block of text in box on a straightened card, for reading whole: cropped, grayscale and
+ * contrast-stretched, at the card's own scale. Pure, so the vision worker can use it.
+ */
+export function toBlock(img: RgbaImage, box: Box): OcrBand {
+  const { width, height, data: px } = grayScaled(crop(img, box), 1)
+  stretch(px)
+  return { width, height, data: Uint8Array.from(px, Math.round) }
+}
+
+/**
  * The blobs of the longest line of text: character-sized blobs whose centres line up, without a
  * gap wider than two characters, plus the small marks (dashes, dots) between them. A band with
  * more than MAX_CHAR_BLOBS character-sized blobs is texture, not text, and finds nothing (the

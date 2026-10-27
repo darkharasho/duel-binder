@@ -5,12 +5,12 @@ import { ART_MATCH_DEPTH } from '@shared/scan/thresholds'
 import type { Mat } from '@techstark/opencv-js'
 import type { OcrBand, RgbaImage } from '@shared/scan/types'
 import type { ArtMatch, FrameSignals, WorkerReply, WorkerRequest } from '../engine'
-import { toBand } from './bands'
+import { toBand, toBlock } from './bands'
 import { findCandidates, preferOuter, recognizeArt } from './candidates'
 import { loadCv, type CV } from './cv'
 import { CARD_W, dist, rotate180, toMat, using, warpCard, type Quad } from './detect'
 import { rarityCues } from './rarityCues'
-import { CODE_BANDS, NAME_BAND } from './regions'
+import { CODE_BANDS, NAME_BAND, TEXT_BOX } from './regions'
 
 interface WorkerScope {
   onmessage: ((e: MessageEvent<WorkerRequest>) => void) | null
@@ -27,6 +27,7 @@ const NOTHING: FrameSignals = {
   art: [],
   codeBands: [],
   nameBands: [],
+  textBands: [],
   cues: null
 }
 
@@ -103,7 +104,8 @@ function analyzeFrame(
   }
   // Read at CARD_W, the size the cues were tuned at.
   const cues = upright ? rarityCues(upright) : null
-  if (!wantBands) return { found: true, quad, art, codeBands: [], nameBands: [], cues }
+  if (!wantBands)
+    return { found: true, quad, art, codeBands: [], nameBands: [], textBands: [], cues }
   const straight = card()
   // Not knowing which way up the card is, its text is read both ways.
   const ways = upright ? [straight] : [straight, rotate180(straight)]
@@ -113,6 +115,8 @@ function analyzeFrame(
     art,
     codeBands: ways.flatMap((c) => CODE_BANDS.map((box) => toBand(c, box))).filter(hasPixels),
     nameBands: ways.map((c) => toBand(c, NAME_BAND)).filter(hasPixels),
+    // Only a card whose art matched: read off a guessed outline, it reads as a language too often.
+    textBands: upright ? [toBlock(straight, TEXT_BOX)].filter(hasPixels) : [],
     cues
   }
 }
@@ -148,7 +152,7 @@ async function handle(msg: WorkerRequest): Promise<void> {
   }
   try {
     const signals = analyze(await loadCv(), pixels(msg.image), msg.candidates, msg.wantBands)
-    const bands = [...signals.codeBands, ...signals.nameBands]
+    const bands = [...signals.codeBands, ...signals.nameBands, ...signals.textBands]
     scope.postMessage(
       { type: 'result', id: msg.id, signals },
       bands.map((b) => b.data.buffer as ArrayBuffer)

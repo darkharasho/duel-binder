@@ -1,5 +1,6 @@
 import type { Api } from '@shared/ipc'
 import { LANGUAGES } from '@shared/languages'
+import type { CardLanguage } from '@shared/scan/language'
 import { pickRarity, pickRarityByCues, type RarityCues } from '@shared/scan/rarity'
 import { setCodeCandidates } from '@shared/scan/setCode'
 import {
@@ -22,6 +23,11 @@ export interface ResolveContext {
   /** The picked set's printings in its language; null when no set is picked. */
   setPrintings: ScanPrinting[] | null
   defaultRarity: string | null
+  /**
+   * The language the card's text reads as, for a card with printings in several languages and no
+   * code read; null when it can't be told. Without it, such a card is taken in its first language.
+   */
+  cardLanguage?: (cardId: number) => Promise<CardLanguage | null>
   lookups: Pick<
     Api['scan'],
     'printingsByCode' | 'printingsForCards' | 'matchName' | 'cardsForImages'
@@ -108,8 +114,9 @@ function inSet(
 
 /**
  * A card with no code read and no set to place it in: an assumed printing among all of its
- * printings, in the first language it has (English when it has one), of the rarity pickRarity
- * chooses there, flagged for the user to check unless the card was printed only once.
+ * printings, in the language its text reads as when it has printings in it, else in the first
+ * language it has (English when it has one), of the rarity pickRarity chooses there, flagged for
+ * the user to check unless the card was printed only once.
  */
 async function anyPrinting(
   cardId: number,
@@ -118,7 +125,14 @@ async function anyPrinting(
   via: 'art' | 'name'
 ): Promise<ScanDraft | null> {
   const options = await ctx.lookups.printingsForCards([cardId])
-  const language = LANGUAGES.find((l) => options.some((o) => o.language === l.code))?.code
+  const languages = LANGUAGES.filter((l) => options.some((o) => o.language === l.code))
+  const read = languages.length > 1 ? await ctx.cardLanguage?.(cardId) : null
+  // Chinese text is either form; its first one the card has.
+  const language = (
+    languages.find(
+      (l) => read && (l.code === read || (read === 'zh' && l.code.startsWith('zh')))
+    ) ?? languages[0]
+  )?.code
   const ofLanguage = options.filter((o) => o.language === language)
   if (!ofLanguage.length) return null
   const { printing } = choose(ofLanguage, ctx.defaultRarity)

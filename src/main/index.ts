@@ -36,7 +36,7 @@ import { captureShots } from './dev/capture'
 import { createAccountService } from './cloud/account'
 import { createCloudClient } from './cloud/client'
 import { createFingerprintStore } from './scan/fingerprints'
-import { createOcr, engLangPath } from './scan/ocr'
+import { createOcr } from './scan/ocr'
 import { portalUrl } from './cloud/config'
 import { signInWithBrowser } from './cloud/signIn'
 import { TokenStore, electronCipher } from './cloud/tokenStore'
@@ -317,7 +317,7 @@ async function bootstrap(): Promise<void> {
     signInRequired: !fakeData
   })
   app.on('before-quit', () => account.stop())
-  const ocr = createOcr({ langPath: engLangPath(app.isPackaged) })
+  const ocr = createOcr({ packaged: app.isPackaged })
   app.on('will-quit', () => void ocr.dispose().catch(() => {}))
 
   const windowDeps = {

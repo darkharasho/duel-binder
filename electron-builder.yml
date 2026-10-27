@@ -13,12 +13,14 @@ files:
   - '!{scripts,catalog-work,out/catalog}/**'
   - '!*.tsbuildinfo'
   - '!{components.json,vitest.config.mts}'
+  # Only the best_int models are read (langPath); the full-size ones would add ~50 MB.
+  - '!node_modules/@tesseract.js-data/{jpn,kor,chi_sim}/4.0.0/**'
 asarUnpack:
   - resources/**
   - '**/*.node'
   # tesseract reads its WebAssembly core and language data from disk.
   - node_modules/tesseract.js-core/**
-  - node_modules/@tesseract.js-data/eng/**
+  - node_modules/@tesseract.js-data/{eng,jpn,kor,chi_sim}/**
 win:
   target: nsis
   executableName: duel-binder

@@ -30,6 +30,7 @@ export const NOTHING: RawSignals = {
   art: [],
   codeTexts: [],
   nameTexts: [],
+  textBands: [],
   cues: null
 }
 export const codeFrame = (code: string): RawSignals => ({
@@ -38,6 +39,7 @@ export const codeFrame = (code: string): RawSignals => ({
   art: [],
   codeTexts: [code],
   nameTexts: [],
+  textBands: [],
   cues: null
 })
 

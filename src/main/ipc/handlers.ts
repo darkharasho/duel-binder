@@ -20,6 +20,7 @@ import { adjustPrinting, getChecklist, listSets } from '../repo/sets'
 import type { ScanWindowManager } from '../scanWindow'
 import type { FingerprintStore } from '../scan/fingerprints'
 import { checkOcrBands, type Ocr } from '../scan/ocr'
+import { cardLanguage } from '../scan/cardLanguage'
 import {
   cardsForImages,
   matchName,
@@ -135,6 +136,10 @@ export function createHandlers({
       if (kind !== 'code' && kind !== 'name') throw new Error(`Unknown OCR kind: ${String(kind)}`)
       checkOcrBands(bands)
       return ocr.read(bands, kind)
+    },
+    'scan:language': async (bands: unknown) => {
+      checkOcrBands(bands)
+      return cardLanguage(ocr, bands)
     },
     'stats:get': async () => getStats(db),
     'sets:list': async () => listSets(db),

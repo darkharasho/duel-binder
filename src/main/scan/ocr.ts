@@ -7,23 +7,31 @@ import type { OcrBand } from '@shared/scan/types'
 
 const CODE_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-'
 
+/** The tesseract models the app ships: English, and the scripts a card's language is told by. */
+export type OcrModel = 'eng' | 'jpn' | 'kor' | 'chi_sim'
+
 export interface Ocr {
   /** The text on each band, one line per band, in order. */
   read(bands: OcrBand[], kind: 'code' | 'name'): Promise<string[]>
+  /** The block of text on one band, read with model, and tesseract's confidence in it (0-100). */
+  readText(band: OcrBand, model: OcrModel): Promise<{ text: string; confidence: number }>
   dispose(): Promise<void>
 }
 
 /**
- * The folder of the installed `@tesseract.js-data/eng` model, `best_int` when it ships one. Packaged,
- * it's the copy electron-builder unpacks next to the asar, since tesseract reads it from disk.
+ * The folder of the installed `@tesseract.js-data/<model>` model, `best_int` when it ships one.
+ * Packaged, it's the copy electron-builder unpacks next to the asar, since tesseract reads it from
+ * disk.
  */
-export function engLangPath(packaged = false): string {
+export function langPath(model: OcrModel, packaged = false): string {
   const root = packaged
-    ? join(process.resourcesPath, 'app.asar.unpacked', 'node_modules', '@tesseract.js-data', 'eng')
-    : dirname(createRequire(import.meta.url).resolve('@tesseract.js-data/eng/package.json'))
+    ? join(process.resourcesPath, 'app.asar.unpacked', 'node_modules', '@tesseract.js-data', model)
+    : dirname(createRequire(import.meta.url).resolve(`@tesseract.js-data/${model}/package.json`))
   const bestInt = join(root, '4.0.0_best_int')
   return existsSync(bestInt) ? bestInt : join(root, '4.0.0')
 }
+
+export const engLangPath = (packaged = false): string => langPath('eng', packaged)
 
 /** A grayscale band as a binary PGM, which Leptonica reads without any codec. */
 function toPgm(band: OcrBand): Buffer {
@@ -63,33 +71,35 @@ export function checkOcrBands(bands: unknown): asserts bands is OcrBand[] {
   }
 }
 
+type Kind = 'code' | 'name' | 'text'
+
 interface Slot {
   worker: Promise<Worker>
   /** The kind the worker's parameters are set for. */
-  kind: 'code' | 'name' | null
+  kind: Kind | null
 }
 
 /**
- * Local OCR for the Scan page, with one tesseract worker created on first use. Everything is read
- * from disk: the language data from langPath and the core from the installed `tesseract.js-core`.
- * A read that fails or takes longer than timeoutMs throws away the worker; the next read starts a
- * fresh one.
+ * Local OCR for the Scan page, with one tesseract worker per model, each created on first use.
+ * Everything is read from disk: the language data from the installed `@tesseract.js-data` models
+ * and the core from the installed `tesseract.js-core`. A read that fails or takes longer than
+ * timeoutMs throws away its worker; the next read with that model starts a fresh one.
  */
-export function createOcr(opts: { langPath?: string; timeoutMs?: number } = {}): Ocr {
-  let current: Slot | null = null
-  // One worker and its parameters are shared, so reads run one at a time.
+export function createOcr(opts: { packaged?: boolean; timeoutMs?: number } = {}): Ocr {
+  const slots = new Map<OcrModel, Slot>()
+  // Reads run one at a time, so a worker's parameters stay put through a read.
   let queue: Promise<unknown> = Promise.resolve()
   let warned = false
 
-  const drop = (slot: Slot): void => {
-    if (current === slot) current = null
+  const drop = (model: OcrModel, slot: Slot): void => {
+    if (slots.get(model) === slot) slots.delete(model)
     slot.worker.then((w) => w.terminate()).catch(() => {})
   }
 
-  const start = (): Slot => {
+  const start = (model: OcrModel): Slot => {
     const slot: Slot = { kind: null, worker: Promise.resolve(null as unknown as Worker) }
-    slot.worker = createWorker('eng', OEM.LSTM_ONLY, {
-      langPath: opts.langPath ?? engLangPath(),
+    slot.worker = createWorker(model, OEM.LSTM_ONLY, {
+      langPath: langPath(model, opts.packaged),
       // Don't write a traineddata copy into the working directory.
       cacheMethod: 'none',
       gzip: true,
@@ -102,23 +112,29 @@ export function createOcr(opts: { langPath?: string; timeoutMs?: number } = {}):
     }).then((w) => {
       // The thread behind the worker; if it dies, start over on the next read.
       const thread = (w as unknown as { worker: NodeWorker }).worker
-      thread.on('error', () => drop(slot))
-      thread.on('exit', () => drop(slot))
+      thread.on('error', () => drop(model, slot))
+      thread.on('exit', () => drop(model, slot))
       return w
     })
-    slot.worker.catch(() => drop(slot))
+    slot.worker.catch(() => drop(model, slot))
+    slots.set(model, slot)
     return slot
   }
 
-  const run = async (slot: Slot, bands: OcrBand[], kind: 'code' | 'name'): Promise<string[]> => {
+  const ready = async (slot: Slot, kind: Kind): Promise<Worker> => {
     const w = await slot.worker
     if (slot.kind !== kind) {
       await w.setParameters({
-        tessedit_pageseg_mode: PSM.SINGLE_LINE,
+        tessedit_pageseg_mode: kind === 'text' ? PSM.SINGLE_BLOCK : PSM.SINGLE_LINE,
         tessedit_char_whitelist: kind === 'code' ? CODE_CHARS : ''
       })
       slot.kind = kind
     }
+    return w
+  }
+
+  const readLines = async (slot: Slot, bands: OcrBand[], kind: Kind): Promise<string[]> => {
+    const w = await ready(slot, kind)
     const out: string[] = []
     for (const band of bands) {
       if (!band.width || !band.height) {
@@ -131,33 +147,45 @@ export function createOcr(opts: { langPath?: string; timeoutMs?: number } = {}):
     return out
   }
 
-  const readNow = (bands: OcrBand[], kind: 'code' | 'name'): Promise<string[]> => {
-    const slot = (current ??= start())
-    let timer: ReturnType<typeof setTimeout> | undefined
-    const timeout = new Promise<never>((_, reject) => {
-      timer = setTimeout(
-        () => reject(new Error('OCR timed out')),
-        opts.timeoutMs ?? READ_TIMEOUT_MS
-      )
-    })
-    return Promise.race([run(slot, bands, kind), timeout])
-      .catch((err: unknown) => {
-        drop(slot)
-        throw err
+  const readBlock = async (
+    slot: Slot,
+    band: OcrBand
+  ): Promise<{ text: string; confidence: number }> => {
+    if (!band.width || !band.height) return { text: '', confidence: 0 }
+    const w = await ready(slot, 'text')
+    const { data } = await w.recognize(toPgm(band))
+    return { text: data.text.trim(), confidence: data.confidence }
+  }
+
+  /** job on model's worker, one at a time, throwing the worker away if it fails or stalls. */
+  const queued = <T>(model: OcrModel, job: (slot: Slot) => Promise<T>): Promise<T> => {
+    const result = queue.then(() => {
+      const slot = slots.get(model) ?? start(model)
+      let timer: ReturnType<typeof setTimeout> | undefined
+      const timeout = new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () => reject(new Error('OCR timed out')),
+          opts.timeoutMs ?? READ_TIMEOUT_MS
+        )
       })
-      .finally(() => clearTimeout(timer))
+      return Promise.race([job(slot), timeout])
+        .catch((err: unknown) => {
+          drop(model, slot)
+          throw err
+        })
+        .finally(() => clearTimeout(timer))
+    })
+    queue = result.catch(() => {})
+    return result
   }
 
   return {
-    read(bands, kind) {
-      const result = queue.then(() => readNow(bands, kind))
-      queue = result.catch(() => {})
-      return result
-    },
+    read: (bands, kind) => queued('eng', (slot) => readLines(slot, bands, kind)),
+    readText: (band, model) => queued(model, (slot) => readBlock(slot, band)),
     async dispose() {
-      const slot = current
-      current = null
-      if (slot) await slot.worker.then((w) => w.terminate()).catch(() => {})
+      const all = [...slots.values()]
+      slots.clear()
+      await Promise.all(all.map((slot) => slot.worker.then((w) => w.terminate()).catch(() => {})))
     }
   }
 }

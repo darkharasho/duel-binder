@@ -50,6 +50,7 @@ describe('createScanEngine', () => {
       art: [{ imageId: 1, distance: 3 }],
       codeBands: [band(10), band(0)],
       nameBands: [],
+      textBands: [],
       cues: { nameInk: 'dark', nameTint: null }
     })
     const engine = createScanEngine({ api, makeWorker: () => worker })
@@ -62,6 +63,7 @@ describe('createScanEngine', () => {
       art: [{ imageId: 1, distance: 3 }],
       codeTexts: [],
       nameTexts: [],
+      textBands: [],
       cues: { nameInk: 'dark', nameTint: null }
     })
     expect(api.ocr).not.toHaveBeenCalled()
@@ -92,12 +94,32 @@ describe('createScanEngine', () => {
       art: [],
       codeBands: [],
       nameBands: [band(7), band(0), band(8), band(9)],
+      textBands: [],
       cues: null
     })
     const engine = createScanEngine({ api, makeWorker: () => worker })
     const read = await engine.analyze(frame(), { candidates: null, wantText: true })
     expect(read.nameTexts).toEqual(['DARK MAGICIAN', 'NAIDIDVW'])
     expect(api.ocr).toHaveBeenCalledWith([band(7), band(8), band(9)], 'name')
+  })
+
+  it('passes the text bands on unread, without the empty ones', async () => {
+    const api = createMockApi().scan
+    vi.mocked(api.ocr).mockResolvedValue([])
+    const { worker } = fakeWorker({
+      found: true,
+      quad: null,
+      art: [],
+      codeBands: [],
+      nameBands: [],
+      textBands: [band(5), band(0)],
+      cues: null
+    })
+    const engine = createScanEngine({ api, makeWorker: () => worker })
+    const read = await engine.analyze(frame(), { candidates: null, wantText: true })
+    expect(read.textBands).toEqual([band(5)])
+    expect(api.ocr).not.toHaveBeenCalled()
+    expect(api.language).not.toHaveBeenCalled()
   })
 
   it('hands a camera bitmap to the worker without copying it', async () => {
@@ -107,6 +129,7 @@ describe('createScanEngine', () => {
       art: [],
       codeBands: [],
       nameBands: [],
+      textBands: [],
       cues: null
     })
     const engine = createScanEngine({ api: createMockApi().scan, makeWorker: () => worker })
@@ -124,6 +147,7 @@ describe('createScanEngine', () => {
       art: [],
       codeBands: [],
       nameBands: [],
+      textBands: [],
       cues: null
     })
     const engine = createScanEngine({ api: createMockApi().scan, makeWorker: () => worker })

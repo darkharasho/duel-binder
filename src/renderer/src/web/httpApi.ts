@@ -97,7 +97,8 @@ export function createHttpApi(opts: HttpApiOptions = {}): Api {
       cardsForImages: scanUnavailable,
       fingerprints: scanUnavailable,
       refreshFingerprints: scanUnavailable,
-      ocr: scanUnavailable
+      ocr: scanUnavailable,
+      language: scanUnavailable
     },
     scanWindow: {
       open: unavailable,

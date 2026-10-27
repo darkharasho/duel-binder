@@ -6,7 +6,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { bestNameMatch } from '../../src/shared/scan/names'
 import { setCodeCandidates } from '../../src/shared/scan/setCode'
 import type { RgbaImage } from '../../src/shared/scan/types'
-import { checkOcrBands, createOcr, engLangPath } from '../../src/main/scan/ocr'
+import { checkOcrBands, createOcr, engLangPath, langPath } from '../../src/main/scan/ocr'
 import { loadCv, type CV } from '../../src/renderer/src/features/scan/vision/cv'
 import { findCard, rotate180, warpCard } from '../../src/renderer/src/features/scan/vision/detect'
 import { CODE_BANDS, NAME_BAND } from '../../src/renderer/src/features/scan/vision/regions'
@@ -182,6 +182,12 @@ describe('ocr', () => {
 
   it('never reaches for the network', () => {
     expect(readFileSync('src/main/scan/ocr.ts', 'utf8')).not.toContain('http')
+  })
+
+  it.each(['eng', 'jpn', 'kor', 'chi_sim'] as const)('finds the installed %s model', (model) => {
+    const dir = langPath(model)
+    expect(dir.endsWith('4.0.0_best_int')).toBe(true)
+    expect(existsSync(join(dir, `${model}.traineddata.gz`))).toBe(true)
   })
 
   it('finds the installed English model', () => {

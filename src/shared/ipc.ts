@@ -23,6 +23,7 @@ import type {
 } from './types'
 import type { ScanWindowMessage } from './scanWindow'
 import type { FingerprintStatus, OcrBand, ScanPrinting } from './scan/types'
+import type { CardLanguage } from './scan/language'
 
 /** The API exposed to the renderer as `window.api`. */
 export interface Api {
@@ -64,6 +65,8 @@ export interface Api {
     fingerprints(): Promise<ArrayBuffer | null>
     refreshFingerprints(): Promise<FingerprintStatus>
     ocr(bands: OcrBand[], kind: 'code' | 'name'): Promise<string[]>
+    /** The language the card text on the bands reads as; null when it can't be told. */
+    language(bands: OcrBand[]): Promise<CardLanguage | null>
   }
   scanWindow: {
     /** Opens the scan window, or brings it to the front. */
@@ -159,6 +162,7 @@ export const INVOKE_CHANNELS = [
   'scan:fingerprints',
   'scan:refreshFingerprints',
   'scan:ocr',
+  'scan:language',
   'scanWindow:open',
   'scanWindow:isOpen',
   'scanWindow:toggleFullScreen',

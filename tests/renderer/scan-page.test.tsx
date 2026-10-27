@@ -508,6 +508,36 @@ describe('Scan page', () => {
     expect(saved[0]).toMatchObject({ printingId: 102, rarity: 'Secret Rare', flag: null })
   })
 
+  it('takes an art-matched card in the language its text reads as, reading it once', async () => {
+    const textBand = { width: 4, height: 1, data: new Uint8Array(4) }
+    const engine = fakeEngine(() => ({
+      ...NOTHING,
+      found: true,
+      quad,
+      art: [{ imageId: 46986414, distance: 5 }],
+      textBands: [textBand]
+    }))
+    const language = vi.fn(async () => 'ja' as const)
+    await renderScan(
+      {
+        scan: {
+          cardsForImages: vi.fn(async () => [{ imageId: 46986414, cardId: 1 }]),
+          printingsForCards: vi.fn(async () => [
+            printing(),
+            printing({ printingId: 102, setCode: 'LOB-JP005', language: 'ja' })
+          ]),
+          language
+        }
+      },
+      engine
+    )
+    await run(1500)
+    const saved = JSON.parse(localStorage.getItem(SESSION_KEY)!) as ScanRow[]
+    expect(saved[0]).toMatchObject({ printingId: 102, setCode: 'LOB-JP005', flag: 'pick-printing' })
+    expect(language).toHaveBeenCalledTimes(1)
+    expect(language).toHaveBeenCalledWith([textBand])
+  })
+
   it("flags the rarity when the name's look changes between frames", async () => {
     const engine = fakeEngine((n) => ({
       ...codeFrame('LOB-EN005'),

@@ -73,7 +73,11 @@ async function makeHandlers(opts: { signedIn?: boolean } = {}) {
       status: () => ({ state: 'missing', count: 0 }),
       refresh: async () => ({ state: 'missing', count: 0 })
     },
-    ocr: { read: async () => [], dispose: async () => {} }
+    ocr: {
+      read: async () => [],
+      readText: async () => ({ text: '', confidence: 0 }),
+      dispose: async () => {}
+    }
   })
   return { db, handlers, account, catalog, scanWindow }
 }

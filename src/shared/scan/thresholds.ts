@@ -70,3 +70,13 @@ export const RARITY_MIN_READINGS = 2
 export const RARITY_MIN_AGREEMENT = 0.8
 /** Latest readings of the card in view that are kept. */
 export const RARITY_MAX_READINGS = 10
+/** Common words of one language a read of a card's text needs before its language counts. */
+export const LANGUAGE_MIN_WORDS = 3
+/** Lowest OCR confidence (0-100) at which a read of a card's text names its script. */
+export const LANGUAGE_MIN_CONFIDENCE = 28
+/** OCR confidence the best script's read needs over every other script's. */
+export const LANGUAGE_MIN_MARGIN = 5
+/** Characters of its own script a non-Latin read needs, so garbage in it doesn't count. */
+export const LANGUAGE_MIN_SCRIPT_CHARS = 5
+/** Frames a card's text is read on to tell its language before it's taken in its first one. */
+export const LANGUAGE_MAX_READS = 3

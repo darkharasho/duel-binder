@@ -11,7 +11,6 @@ function section(heading: string, body: string): string {
   return `<section class="f"><div class="ft"><h2>${heading}</h2></div><div>${body}</div></section>`
 }
 
-// DRAFT: the owner has not read this page yet. Check every line before linking it anywhere.
 export function renderPrivacy(view: PrivacyView): string {
   return `<!doctype html>
 <html lang="en">
@@ -27,7 +26,6 @@ export function renderPrivacy(view: PrivacyView): string {
 <link rel="stylesheet" href="/site.css">
 </head>
 <body>
-<!-- DRAFT for the owner to read: not reviewed yet. -->
 <div class="wash" aria-hidden="true"><div></div></div>
 <nav><div class="wrap navin">
 <a class="brand" href="/">${MARK}Duel Binder</a>
@@ -49,7 +47,7 @@ ${section(
 )}
 ${section(
   'What is not done with it',
-  '<p>Nothing is sold or used for ads.</p><p>There are no third-party trackers.</p><p>When you scan cards, the camera picture is processed on your phone and never uploaded.</p><p>Card images are fetched through the portal, so the sites that host them don’t see you. Your Discord avatar loads from Discord.</p>'
+  '<p>Nothing is sold or used for ads.</p><p>There are no third-party trackers.</p><p>When you scan cards, the camera picture is processed on your phone and never uploaded.</p><p>Card images come through the portal, in every app and on the web, so the sites that host them don’t see you. Two things load from elsewhere: Discord avatars, yours and your friends’, come straight from Discord, and the desktop app checks GitHub for updates.</p>'
 )}
 ${section(
   'Deleting your account',

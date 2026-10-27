@@ -156,7 +156,9 @@ describe('renderPrivacy', () => {
       'Nothing is sold or used for ads.',
       'There are no third-party trackers.',
       'the camera picture is processed on your phone and never uploaded',
-      'Card images are fetched through the portal',
+      'Card images come through the portal',
+      'Discord avatars, yours and your friends’, come straight from Discord',
+      'the desktop app checks GitHub for updates',
       'Settings → Delete account',
       'https://github.com/darkharasho/duel-binder/issues'
     ]) {

@@ -141,6 +141,15 @@ export function PhoneShell({
         </ArtWashContext.Provider>
       </main>
 
+      {/* Behind the status bar, which the iOS app draws over the page: frosted like the page
+          header below it, so the cards scrolling up under the clock don't show through. */}
+      {!scan && (
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-x-0 top-0 z-30 h-[env(safe-area-inset-top)] bg-background/60 backdrop-blur-xl"
+        />
+      )}
+
       {/* Only there while something waits or fails; pb-7 keeps it clear of the raised Scan button. */}
       {!scan && (
         <StatusLine className="relative z-30 shrink-0 border-t border-white/[0.06] bg-background/90 pb-7 backdrop-blur-xl" />

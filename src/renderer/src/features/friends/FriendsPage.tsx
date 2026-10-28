@@ -172,7 +172,8 @@ export function FriendsPage({ onBackToMine }: { onBackToMine: () => void }): Rea
       {data &&
         (data.friends.length === 0 ? (
           <p className="text-sm text-muted-foreground">
-            No friends yet. Add one by their Discord username.
+            No friends yet. Add one by their Duel Binder username, shown under their name in
+            Settings.
           </p>
         ) : (
           <ul className="space-y-2">

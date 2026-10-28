@@ -32,6 +32,7 @@ function Identity({ user }: { user: Me }): React.JSX.Element {
         />
       )}
       <span>Signed in as {displayName ?? username}</span>
+      <span className="text-muted-foreground">@{username}</span>
     </div>
   )
 }

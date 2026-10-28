@@ -272,7 +272,7 @@ describe('phone layout', () => {
     renderWithProviders(<FriendsPage onBackToMine={() => {}} />, { api })
     // The friend list comes before the add-friend form.
     const pick = await screen.findByRole('button', { name: /Bob/ })
-    const add = screen.getByRole('textbox', { name: 'Discord username' })
+    const add = screen.getByRole('textbox', { name: 'Username' })
     expect(pick.compareDocumentPosition(add) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     await userEvent.click(pick)
     expect(await screen.findByLabelText('Collection grid')).toBeInTheDocument()

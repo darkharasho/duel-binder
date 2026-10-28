@@ -26,8 +26,8 @@ export function AddFriendForm(): React.JSX.Element {
         }}
       >
         <Input
-          aria-label="Discord username"
-          placeholder="Discord username"
+          aria-label="Username"
+          placeholder="Username"
           value={username}
           onChange={(e) => {
             setUsername(e.target.value)

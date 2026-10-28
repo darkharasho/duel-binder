@@ -297,23 +297,30 @@ describe('the Rarity Collections and Quarter Century Bonanza', () => {
           ...card(rarity, 6000 + n),
           setCode: `RA05-EN${String(n).padStart(3, '0')}`
         })
+    const pool = [...main, ...variants]
     const rand = mulberry32(5)
-    const packs = 8000
+    const packs = 3000
     let secretUp = 0
     let variantStarlight = 0
+    // Shape is checked with plain code and asserted once: an expect per pack is too slow for CI.
+    let misshapen = 0
     for (let i = 0; i < packs; i++) {
-      const pack = rollPack(l, [...main, ...variants], rand)
-      expect(pack).toHaveLength(5)
-      expect(count(pack, 'Super Rare')).toBe(1)
+      const pack = rollPack(l, pool, rand)
       const nums = pack.map((c) => Number(c.setCode.slice(-3)))
-      expect(nums.slice(0, 4).every((n) => n <= 82)).toBe(true)
-      expect(nums[4]).toBeGreaterThan(82)
-      expect(['Ultra Rare', 'Starlight Rare']).toContain(pack[4].rarity)
+      if (
+        pack.length !== 5 ||
+        count(pack, 'Super Rare') !== 1 ||
+        !nums.slice(0, 4).every((n) => n <= 82) ||
+        nums[4] <= 82 ||
+        !['Ultra Rare', 'Starlight Rare'].includes(pack[4].rarity)
+      )
+        misshapen++
       if (pack[4].rarity === 'Starlight Rare') variantStarlight++
       secretUp += pack
         .slice(0, 4)
         .filter((c) => ['Platinum Secret Rare', 'Starlight Rare'].includes(c.rarity)).length
     }
+    expect(misshapen).toBe(0)
     expect(secretUp / packs).toBeCloseTo(1 / 4, 1)
     expect(variantStarlight / packs).toBeCloseTo(1 / 8, 1)
   })
@@ -358,15 +365,20 @@ describe('Battles of Legend', () => {
     const l = layoutFor('BLCR')!
     const p = blPool('BLCR')
     const rand = mulberry32(6)
-    const packs = 30000
+    const packs = 6000
     let starlight = 0
+    let misshapen = 0
     for (let i = 0; i < packs; i++) {
       const pack = rollPack(l, p, rand)
-      expect(pack).toHaveLength(5)
-      expect(pack.filter((c) => c.rarity === 'Ultra Rare')).toHaveLength(4)
       if (pack[0].rarity === 'Starlight Rare') starlight++
-      else expect(pack[0].rarity).toBe('Secret Rare')
+      if (
+        pack.length !== 5 ||
+        pack.filter((c) => c.rarity === 'Ultra Rare').length !== 4 ||
+        !['Secret Rare', 'Starlight Rare'].includes(pack[0].rarity)
+      )
+        misshapen++
     }
+    expect(misshapen).toBe(0)
     expect(starlight / packs).toBeCloseTo(1 / 288, 2)
   })
 

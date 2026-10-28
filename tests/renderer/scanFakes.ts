@@ -122,6 +122,11 @@ export function stubVideo(): ReturnType<typeof vi.fn> {
     configurable: true,
     get: () => 480
   })
+  // A live camera's picture moves with the clock.
+  Object.defineProperty(HTMLMediaElement.prototype, 'currentTime', {
+    configurable: true,
+    get: () => Date.now() / 1000
+  })
   const grabbed = vi.fn(
     async (_src: unknown, _x: number, _y: number, width: number, height: number) =>
       ({ width, height, close: vi.fn() }) as unknown as ImageBitmap

@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vite
 import { buildFingerprints } from '../../scripts/catalog/fingerprints'
 import { buildReferences, scanHash, wantsReference } from '../../scripts/catalog/references'
 import { openDatabase } from '../../src/main/db/database'
+import { NEW_ART_VARIANT } from '../../src/main/yugipedia/parse'
 import { ART_BOXES, crop } from '../../src/renderer/src/features/scan/vision/regions'
 import { artHash } from '../../src/shared/scan/fingerprint'
 import { decodeFingerprints } from '../../src/shared/scan/fingerprintFile'
@@ -21,6 +22,8 @@ describe('wantsReference', () => {
     ['Prismatic Secret Rare', 'Alternate Art', true],
     ['Platinum Secret Rare (7th Art)', null, true],
     ['Ultra Rare (Overframe)', '', true],
+    ['Ultra Rare', NEW_ART_VARIANT, true],
+    ['Prismatic Secret Rare', NEW_ART_VARIANT, true],
     ['Super Rare', null, false],
     ['Secret Rare', '', false],
     ['Rare (Green)', null, false],
@@ -158,6 +161,42 @@ describe('buildReferences', () => {
     expect(yugipedia.listPageImages).toHaveBeenCalledTimes(1)
   })
 
+  describe('a scan like none of its artworks', () => {
+    /** SCAN_HASH with its first `bits` bits flipped: that far from the scan. */
+    const flipped = (bits: number): Uint32Array => {
+      const h = SCAN_HASH.slice()
+      for (let i = 0; i < bits; i++) h[i >> 5] ^= 1 << (i & 31)
+      return h
+    }
+    const setArt = (id: number, h: Uint32Array): void => {
+      cache
+        .prepare('UPDATE fp SET hash = ? WHERE image_id = ?')
+        .run(Buffer.from(h.buffer, h.byteOffset, h.byteLength), id)
+    }
+    const run = (): ReturnType<typeof buildReferences> =>
+      buildReferences({
+        work,
+        cache,
+        yugipedia: fakeYugipedia(['ShiEn-BLGG-EN-StR-1E.png']),
+        fetch: scans({ 'ShiEn-BLGG-EN-StR-1E.png': png(SCAN) }),
+        userAgent: 'test'
+      })
+
+    it("goes under the card's first artwork, not the least unlike one", async () => {
+      // BLMM's Blue-Eyes: an art YGOPRODeck doesn't have, 122 from the art it was filed under.
+      setArt(10, flipped(140))
+      setArt(11, flipped(122))
+      expect((await run()).entries).toEqual([{ imageId: 10, hash: SCAN_HASH }])
+    })
+
+    it('still goes under the closest artwork when that one is close enough', async () => {
+      // A foil or overframe of the second art, a little further off than a plain scan.
+      setArt(10, flipped(130))
+      setArt(11, flipped(96))
+      expect((await run()).entries).toEqual([{ imageId: 11, hash: SCAN_HASH }])
+    })
+  })
+
   it('takes Japanese printings too, and no other language', async () => {
     const add = work.prepare(
       `INSERT INTO card_printings (card_id, set_name, set_code, set_rarity, set_rarity_code, language, variant)
@@ -177,6 +216,38 @@ describe('buildReferences', () => {
     })
     expect(requested).toContain('ShiEn-LOCR-JP-UR-EA.png')
     expect(requested).not.toContain('ShiEn-LOCR-KR-UR-UE-EA.png')
+    expect(result.entries).toContainEqual({ imageId: 11, hash: SCAN_HASH })
+  })
+
+  it('fetches the plain scan of a New artwork printing, and not of a plain reprint', async () => {
+    const add = work.prepare(
+      `INSERT INTO card_printings (card_id, set_name, set_code, set_rarity, set_rarity_code, language, variant)
+       VALUES (1, 'Limit Over Collection: The Rivals', ?, ?, '', 'ja', ?)`
+    )
+    add.run('LOCR-JP032', 'Ultra Rare', NEW_ART_VARIANT)
+    add.run('LOCR-JP032', 'Secret Rare', NEW_ART_VARIANT)
+    add.run('LOCR-JP039', 'Super Rare', null)
+    const files = [
+      ...FILES,
+      'ShiEn-LOCR-JP-UR.png',
+      'ShiEn-LOCR-JP-ScR.png',
+      'ShiEn-LOCR-JP-SR.png',
+      'ShiEn-LOCR-KR-UR.png'
+    ]
+    const requested: string[] = []
+    const fetch = scans({ 'ShiEn-LOCR-JP-UR.png': png(SCAN) }, requested)
+    const result = await buildReferences({
+      work,
+      cache,
+      yugipedia: fakeYugipedia(files),
+      fetch,
+      userAgent: 'test'
+    })
+    expect(requested).toEqual(
+      expect.arrayContaining(['ShiEn-LOCR-JP-UR.png', 'ShiEn-LOCR-JP-ScR.png'])
+    )
+    expect(requested).not.toContain('ShiEn-LOCR-JP-SR.png')
+    expect(requested).not.toContain('ShiEn-LOCR-KR-UR.png')
     expect(result.entries).toContainEqual({ imageId: 11, hash: SCAN_HASH })
   })
 

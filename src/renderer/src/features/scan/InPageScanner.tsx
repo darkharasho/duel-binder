@@ -9,7 +9,8 @@ import { useHubScan } from './useHubScan'
 const CAMERA_MESSAGES: Record<CameraError, string> = {
   denied: 'Camera access was denied. Allow it in your system settings, then reopen Scan.',
   none: 'No camera found. Plug one in and reopen Scan.',
-  lost: "The camera stopped. Check it's connected, then pick it again."
+  lost: "The camera stopped. Check it's connected, then pick it again.",
+  busy: 'The camera is in use by another app. Close it there, then try again.'
 }
 
 /** What the page's camera picker needs from the in-page camera. */
@@ -38,7 +39,12 @@ export function InPageScanner({
   const { settings } = useScanHub()
   const videoRef = useRef<HTMLVideoElement>(null)
   const camera = useCamera(settings.deviceId)
-  const { loop, setUnreadable } = useHubScan({ videoRef, stream: camera.stream, engineFactory })
+  const { loop, setUnreadable } = useHubScan({
+    videoRef,
+    stream: camera.stream,
+    engineFactory,
+    onStalled: camera.retry
+  })
 
   const { devices, error, retry, stream } = camera
   const openDeviceId =

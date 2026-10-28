@@ -76,6 +76,11 @@ export interface AddEntryInput {
   printingId: number
   imageId: number
   quantity: number
+  /**
+   * Names this add, so sending it again (its reply was lost, the page reloaded mid-add) returns
+   * the first result instead of adding the copies twice.
+   */
+  requestId?: string
 }
 
 export interface UpdateEntryInput {

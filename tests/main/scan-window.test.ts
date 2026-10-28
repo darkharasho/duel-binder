@@ -11,14 +11,21 @@ interface Fake extends ScanWindowLike {
   sends: Send[]
   minimized: boolean
   fire(event: 'close' | 'closed'): void
+  crash(reason?: string): void
 }
 
 function fakeWindow(id: number, bounds: Rect = { x: 10, y: 20, width: 800, height: 450 }): Fake {
   const handlers: Record<string, (() => void)[]> = {}
+  const gone: ((e: unknown, d: { reason: string }) => void)[] = []
   const w: Fake = {
     sends: [],
     minimized: false,
-    webContents: { id, send: (c, p) => void w.sends.push([c, p]) },
+    webContents: {
+      id,
+      send: (c, p) => void w.sends.push([c, p]),
+      reload: vi.fn(),
+      on: (_event, cb) => void gone.push(cb)
+    },
     isDestroyed: () => false,
     isMinimized: () => w.minimized,
     restore: vi.fn(() => void (w.minimized = false)),
@@ -28,7 +35,8 @@ function fakeWindow(id: number, bounds: Rect = { x: 10, y: 20, width: 800, heigh
     setFullScreen: vi.fn(),
     getNormalBounds: () => bounds,
     on: (event, cb) => void (handlers[event] ??= []).push(cb),
-    fire: (event) => handlers[event]?.forEach((cb) => cb())
+    fire: (event) => handlers[event]?.forEach((cb) => cb()),
+    crash: (reason = 'crashed') => gone.forEach((cb) => cb({}, { reason }))
   }
   return w
 }
@@ -44,17 +52,35 @@ function setup(saved: unknown = null) {
   const create = vi.fn<(bounds: Rect | null) => ScanWindowLike>(() => scan)
   const writeBounds = vi.fn()
   const mainRef: { win: Fake | null } = { win: main }
+  const clock = { now: 0 }
   const manager = createScanWindowManager({
     create,
     mainWindow: () => mainRef.win,
     readBounds: () => saved,
     writeBounds,
-    workAreas: () => [SCREEN]
+    workAreas: () => [SCREEN],
+    now: () => clock.now
   })
-  return { main, scan, create, writeBounds, manager, mainRef }
+  return { main, scan, create, writeBounds, manager, mainRef, clock }
 }
 
 describe('scan window manager', () => {
+  it('reloads a scan window whose page crashed, and closes one that keeps crashing', () => {
+    const { manager, scan, clock } = setup()
+    manager.open()
+    scan.crash('clean-exit')
+    expect(scan.webContents.reload).not.toHaveBeenCalled()
+    scan.crash()
+    expect(scan.webContents.reload).toHaveBeenCalledTimes(1)
+    clock.now = 61_000
+    scan.crash('oom')
+    expect(scan.webContents.reload).toHaveBeenCalledTimes(2)
+    clock.now = 70_000
+    scan.crash()
+    expect(scan.webContents.reload).toHaveBeenCalledTimes(2)
+    expect(scan.close).toHaveBeenCalledTimes(1)
+  })
+
   it('open creates the window once and brings it to the front after that', () => {
     const { manager, create, scan } = setup()
     manager.open()

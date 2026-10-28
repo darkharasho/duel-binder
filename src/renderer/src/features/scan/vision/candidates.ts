@@ -1,6 +1,16 @@
 import type { Mat } from '@techstark/opencv-js'
 import type { FingerprintIndex } from '@shared/scan/fingerprintFile'
-import { ART_MAX_DISTANCE, NEST_MIN_END_INSET, NEST_MIN_GROWTH } from '@shared/scan/thresholds'
+import {
+  ART_BOX_JITTER,
+  ART_MAX_DISTANCE,
+  HOLDER_EVENNESS,
+  HOLDER_CLEAR_SIDES,
+  HOLDER_MAX_BORDER,
+  HOLDER_MAX_CONTRAST,
+  HOLDER_MIN_BORDER,
+  NEST_MIN_END_INSET,
+  NEST_MIN_GROWTH
+} from '@shared/scan/thresholds'
 import type { RgbaImage } from '@shared/scan/types'
 import type { CV } from './cv'
 import {
@@ -70,6 +80,9 @@ const PLAIN_CANDIDATES = 3
  */
 const NEST_MAX_GROWTH = 1.6
 const NEST_TOLERANCE = 0.02
+/** Points sampled along each side of a holder's border, and how far outside it the desk is read. */
+const BORDER_SAMPLES = 9
+const BORDER_OUTSIDE = 0.02
 /** Width candidates are straightened to for choosing between them. */
 const PICK_WIDTH = 210
 
@@ -201,8 +214,8 @@ function intersect(a: Line, b: Line): Point | null {
   return [(a.rho * b.ny - b.rho * a.ny) / det, (a.nx * b.rho - b.nx * a.rho) / det]
 }
 
-/** Maps a point of the unit square onto quad (corner i of the square goes to quad[i]). */
-function homography(quad: Quad): (u: number, v: number) => Point {
+/** The homography taking the unit square's corners onto quad's, row-major with its last entry 1. */
+function squareTo(quad: Quad): number[] {
   const square = [
     [0, 0],
     [1, 0],
@@ -227,11 +240,144 @@ function homography(quad: Quad): (u: number, v: number) => Point {
       for (let k = c; k < 9; k++) a[r][k] -= f * a[c][k]
     }
   }
-  const h = a.map((row, i) => row[8] / row[i])
-  return (u, v) => {
-    const d = h[6] * u + h[7] * v + 1
-    return [(h[0] * u + h[1] * v + h[2]) / d, (h[3] * u + h[4] * v + h[5]) / d]
+  return [...a.map((row, i) => row[8] / row[i]), 1]
+}
+
+const project = (h: number[], x: number, y: number): Point => {
+  const d = h[6] * x + h[7] * y + h[8]
+  return [(h[0] * x + h[1] * y + h[2]) / d, (h[3] * x + h[4] * y + h[5]) / d]
+}
+
+/** Maps a point of the unit square onto quad (corner i of the square goes to quad[i]). */
+function homography(quad: Quad): (u: number, v: number) => Point {
+  const h = squareTo(quad)
+  return (u, v) => project(h, u, v)
+}
+
+/** Maps a point of the frame into quad's unit square: homography's inverse. */
+function intoSquare(quad: Quad): (x: number, y: number) => Point {
+  const [a, b, c, d, e, f, g, h, i] = squareTo(quad)
+  // The adjugate is the inverse up to scale, which a homography ignores.
+  const inv = [
+    e * i - f * h,
+    c * h - b * i,
+    b * f - c * e,
+    f * g - d * i,
+    a * i - c * g,
+    c * d - a * f,
+    d * h - e * g,
+    b * g - a * h,
+    a * e - b * d
+  ]
+  return (x, y) => project(inv, x, y)
+}
+
+/**
+ * The gap between outer's sides and inner's, in outer's widths (its short side), on each of its
+ * four sides: inner's corners measured in outer's own straightened frame, so a slanted view of
+ * the two doesn't skew it. Negative where inner pokes out.
+ */
+function insets(outer: Quad, inner: Quad): number[] {
+  const at = intoSquare(outer)
+  const pts = inner.map(([x, y]) => at(x, y))
+  const us = pts.map((p) => p[0])
+  const vs = pts.map((p) => p[1])
+  // orderCorners puts a short side first: u runs across the width, v along the length.
+  const length =
+    (dist(outer[1], outer[2]) + dist(outer[3], outer[0])) /
+    (dist(outer[0], outer[1]) + dist(outer[2], outer[3]) || 1)
+  return [
+    Math.min(...us),
+    1 - Math.max(...us),
+    Math.min(...vs) * length,
+    (1 - Math.max(...vs)) * length
+  ]
+}
+
+/** An RGB pixel of the frame at full-frame coordinates (x, y), clamped to its edges. */
+type Sampler = (x: number, y: number) => readonly [number, number, number]
+
+/** A Sampler reading an RGBA image shrunk by scale. */
+function sampler(img: Mat, scale: number): Sampler {
+  const { cols, rows } = img
+  const d = img.data
+  return (x, y) => {
+    const xi = Math.min(cols - 1, Math.max(0, Math.round(x * scale)))
+    const yi = Math.min(rows - 1, Math.max(0, Math.round(y * scale)))
+    const i = (yi * cols + xi) * 4
+    return [d[i], d[i + 1], d[i + 2]]
   }
+}
+
+/**
+ * For each side (as insets orders them), how far the band between outer and inner differs in
+ * colour from what lies just outside outer: the median over points along the side of the mean
+ * absolute difference per channel. A clear case's border shows the desk or hand behind it, as
+ * outside it does; a card's printed frame round its inner boxes is its own colour.
+ */
+function borderContrast(pixel: Sampler, outer: Quad, inner: Quad): number[] {
+  const at = homography(outer)
+  const gaps = insets(outer, inner)
+  // Insets are in outer's widths; v runs along its length.
+  const length =
+    (dist(outer[1], outer[2]) + dist(outer[3], outer[0])) /
+    (dist(outer[0], outer[1]) + dist(outer[2], outer[3]) || 1)
+  const sides: ((t: number, w: number) => Point)[] = [
+    (t, w) => at(w, t),
+    (t, w) => at(1 - w, t),
+    (t, w) => at(t, w / length),
+    (t, w) => at(t, 1 - w / length)
+  ]
+  return gaps.map((gap, k) => {
+    const diffs: number[] = []
+    for (let i = 0; i < BORDER_SAMPLES; i++) {
+      const t = 0.15 + (0.7 * (i + 0.5)) / BORDER_SAMPLES
+      const a = pixel(...sides[k](t, gap / 2))
+      const b = pixel(...sides[k](t, -gap / 2 - BORDER_OUTSIDE))
+      diffs.push((Math.abs(a[0] - b[0]) + Math.abs(a[1] - b[1]) + Math.abs(a[2] - b[2])) / 3)
+    }
+    diffs.sort((x, y) => x - y)
+    return diffs[diffs.length >> 1]
+  })
+}
+
+/**
+ * Whether outer is a case (or toploader) holding the card inner: a border of even width all
+ * round (insets), see-through on at least HOLDER_CLEAR_SIDES sides (borderContrast). A card's own
+ * inner frames sit about four times deeper below its top than above its bottom, and the card's
+ * printed frame round them is its own colour, so the card isn't taken for their holder.
+ */
+function holds(outer: Quad, inner: Quad, pixel: Sampler): boolean {
+  const gaps = insets(outer, inner)
+  const least = Math.min(...gaps)
+  const most = Math.max(...gaps)
+  if (
+    least < HOLDER_MIN_BORDER ||
+    most > HOLDER_MAX_BORDER ||
+    most > HOLDER_EVENNESS * least ||
+    !cardShaped(inner)
+  )
+    return false
+  const clear = borderContrast(pixel, outer, inner).filter((d) => d <= HOLDER_MAX_CONTRAST)
+  return clear.length >= HOLDER_CLEAR_SIDES
+}
+
+/**
+ * quads with every one that holds a later one (holds) moved to just after the last card it
+ * holds: the outline finder's pick is often a case's crisp, closed rim rather than the card in it.
+ */
+function cardsBeforeHolders(quads: readonly Quad[], pixel: Sampler): Quad[] {
+  const out = [...quads]
+  for (let i = 0; i < out.length; i++) {
+    let last = -1
+    for (let j = i + 1; j < out.length; j++) if (holds(out[i], out[j], pixel)) last = j
+    if (last < 0) continue
+    // Holding is strict nesting, so a holder only ever moves later and this ends.
+    const [holder] = out.splice(i, 1)
+    out.splice(last, 0, holder)
+    i--
+  }
+  return out
 }
 
 const sameQuad = (a: Quad, b: Quad): boolean =>
@@ -348,7 +494,10 @@ export function findCandidates(cv: CV, img: FrameSource): Quad[] {
         const quads = [...split, ...plain].map(
           (q) => q.map(([x, y]) => [x / scale, y / scale]) as unknown as Quad
         )
-        return outline ? [outline, ...quads.filter((q) => !sameQuad(q, outline))] : quads
+        return cardsBeforeHolders(
+          outline ? [outline, ...quads.filter((q) => !sameQuad(q, outline))] : quads,
+          sampler(small, scale)
+        )
       })
     })
   })
@@ -484,7 +633,7 @@ export function recognizeArt(
       if (around && around.distance < best.distance) best = around
     }
     const card = warpCard(cv, frame, best.quad, CARD_W)
-    const { matches, upsideDown } = rankArt(cv, card, index, candidates, k)
+    const { matches, upsideDown } = rankArt(cv, card, index, candidates, k, ART_BOX_JITTER)
     if ((matches[0]?.distance ?? Infinity) > ART_MAX_DISTANCE) {
       const outline = preferOuter(quads) ?? best.quad
       return {

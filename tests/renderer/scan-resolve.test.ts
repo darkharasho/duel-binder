@@ -384,7 +384,8 @@ describe('withRarityByLook', () => {
       printingId: 12,
       flag: null
     })
-    expect(withRarityByLook(item, PLAIN, null)).toEqual({ ...item, flag: null })
+    // A Normal Monster's pale bar can make a prismatic name read dark, so dark ink doesn't settle it.
+    expect(withRarityByLook(item, PLAIN, null)).toBe(item)
     const ultraOrSecret = await guessed()
     expect(withRarityByLook(ultraOrSecret, DARK, null)).toMatchObject({
       rarity: 'Ultra Rare',
@@ -393,11 +394,18 @@ describe('withRarityByLook', () => {
     })
   })
 
+  it('rules smooth Ultra gold out by a light silver name on a black-name frame', async () => {
+    expect(withRarityByLook(await guessed(), LIGHT, null)).toMatchObject({
+      rarity: 'Secret Rare',
+      flag: null
+    })
+  })
+
   it('keeps the guess and its flag without a settling look', async () => {
     const item = await guessed()
     expect(withRarityByLook(item, null, null)).toBe(item)
-    // Gold can read light in glare, so a light name doesn't rule out Ultra.
-    expect(withRarityByLook(item, LIGHT, null)).toBe(item)
+    // Gold can read light in glare, so a light name alone doesn't rule out Ultra...
+    expect(withRarityByLook(item, { nameInk: 'light', nameTint: null }, null)).toBe(item)
     const other = await commonOrSecret()
     expect(withRarityByLook(other, { nameInk: 'light', nameTint: null }, null)).toBe(other)
   })

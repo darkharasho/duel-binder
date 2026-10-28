@@ -42,15 +42,16 @@ async function makeHandlers(opts: { signedIn?: boolean } = {}) {
   const account = fakeAccount(opts.signedIn)
   const scanWindow = { open: vi.fn(), isOpen: vi.fn(() => true), toggleFullScreen: vi.fn() }
   const catalog = { status: vi.fn(() => ({ ...CATALOG_STATUS })) }
+  const images = {
+    get: vi.fn(),
+    getSet: vi.fn(async () => null),
+    getPrinting: vi.fn(),
+    sizeBytes: async () => 0,
+    clear: async () => {}
+  }
   const handlers = createHandlers({
     db,
-    images: {
-      get: vi.fn(),
-      getSet: vi.fn(),
-      getPrinting: vi.fn(),
-      sizeBytes: async () => 0,
-      clear: async () => {}
-    },
+    images,
     catalog,
     app: {
       version: () => '0.0.0',
@@ -79,7 +80,7 @@ async function makeHandlers(opts: { signedIn?: boolean } = {}) {
       dispose: async () => {}
     }
   })
-  return { db, handlers, account, catalog, scanWindow }
+  return { db, handlers, account, catalog, scanWindow, images }
 }
 
 describe('createHandlers', () => {
@@ -218,6 +219,13 @@ describe('createHandlers', () => {
     await expect(handlers['rip:session'](999999)).resolves.toBeNull()
     await expect(handlers['rip:start']('Rip Handler Set', 0)).rejects.toThrow('Pack count')
     expect(account.noteLocalEdit).not.toHaveBeenCalled()
+  })
+
+  it("rip:packWrappers fetches the pack photo first, and is null when there isn't one", async () => {
+    const { handlers, images } = await makeHandlers()
+    await expect(handlers['rip:packWrappers']('yc-abc')).resolves.toBeNull()
+    expect(images.getSet).toHaveBeenCalledWith('yc-abc', { priority: true })
+    await expect(handlers['rip:packWrappers'](5)).rejects.toThrow('Pack image key')
   })
 
   it('every Api method has a handler', async () => {

@@ -118,7 +118,8 @@ export function createMockApi(overrides: DeepPartial<Api> = {}): Api {
         setsRipped: 0,
         bestPulls: [],
         sessions: []
-      }))
+      })),
+      packWrappers: vi.fn(async () => null)
     },
     window: {
       platform: 'linux',

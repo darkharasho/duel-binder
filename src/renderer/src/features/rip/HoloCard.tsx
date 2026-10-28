@@ -4,10 +4,6 @@ import { cn } from '@/lib/utils'
 import { artBox, holoKind, isStarlight, nameBox, nameInk } from '../../../../shared/rip/rarity'
 import type { ArtBox, RipCard } from '../../../../shared/rip/types'
 
-/** The softer foil: a pale, faintly rainbow band of light that follows the tilt. */
-const SHEEN =
-  'linear-gradient(115deg, transparent 25%, rgb(255 255 255 / 0.55) 42%, rgb(170 220 255 / 0.5) 48%, rgb(255 190 240 / 0.45) 54%, rgb(255 255 255 / 0.4) 60%, transparent 76%)'
-
 const WHOLE_CARD: React.CSSProperties = { top: '0px', left: '0px', right: '0px', bottom: '0px' }
 
 const insetOf = (b: ArtBox): React.CSSProperties => ({
@@ -28,10 +24,10 @@ interface HoloCardProps {
 }
 
 /**
- * A pulled card, tilting with a glare. Secret-family cards get a fine crosshatch foil over the
- * art and Starlight a glittery prismatic foil over the whole card, both with a foil name; these
- * (the rip-foil classes in index.css) stay faint until the pointer's glare band crosses them.
- * The other foils get a softer sheen over the art.
+ * A pulled card, tilting with a glare. Every foil gets the same crosshatch rainbow (the rip-foil
+ * classes in index.css), faint at rest and flashing where the pointer's glare band crosses it:
+ * over the art for Secret and the softer foils, over the whole card for Starlight. Secret and
+ * Starlight also get a foil name.
  */
 export function HoloCard({
   card,
@@ -57,39 +53,28 @@ export function HoloCard({
       )}
     >
       <CardArt imageId={card.imageId ?? 0} size={size} alt={card.name} className="w-full" />
-      {showHolo &&
-        (kind === 'soft' ? (
+      {showHolo && (
+        <>
+          {starlight && (
+            <div
+              aria-hidden
+              data-foil="prism"
+              className={cn('rip-foil rip-foil-prism', rounded)}
+              style={inset}
+            />
+          )}
           <div
             aria-hidden
             data-holo={kind}
+            data-foil={starlight ? 'starlight' : kind === 'soft' ? 'soft' : 'secret'}
             className={cn(
-              'pointer-events-none absolute mix-blend-color-dodge transition-[background-position] duration-100',
-              'opacity-60',
-              '[background-position:var(--glare-x,50%)_var(--glare-y,50%)] motion-reduce:[background-position:50%_50%] motion-reduce:transition-none'
+              'rip-foil',
+              starlight ? 'rip-foil-starlight' : 'rip-foil-secret',
+              rounded
             )}
-            style={{ ...inset, backgroundImage: SHEEN, backgroundSize: '250% 250%' }}
+            style={inset}
           />
-        ) : (
-          <>
-            {starlight && (
-              <div
-                aria-hidden
-                data-foil="prism"
-                className={cn('rip-foil rip-foil-prism', rounded)}
-                style={inset}
-              />
-            )}
-            <div
-              aria-hidden
-              data-holo={kind}
-              data-foil={starlight ? 'starlight' : 'secret'}
-              className={cn(
-                'rip-foil',
-                starlight ? 'rip-foil-starlight' : 'rip-foil-secret',
-                rounded
-              )}
-              style={inset}
-            />
+          {kind !== 'soft' && (
             <div
               aria-hidden
               data-foil="name"
@@ -97,8 +82,9 @@ export function HoloCard({
               className="rip-foil rip-foil-name"
               style={insetOf(nameBox())}
             />
-          </>
-        ))}
+          )}
+        </>
+      )}
     </TiltCard>
   )
 }

@@ -200,11 +200,11 @@
   /* The glare band: a soft diagonal stripe through the pointer, with a faint floor either side. */
   --band: linear-gradient(
     115deg,
-    rgb(0 0 0 / var(--floor)) 34%,
-    rgb(0 0 0 / 0.55) 44%,
+    rgb(0 0 0 / var(--floor)) 28%,
+    rgb(0 0 0 / 0.7) 42%,
     #000 50%,
-    rgb(0 0 0 / 0.55) 56%,
-    rgb(0 0 0 / var(--floor)) 66%
+    rgb(0 0 0 / 0.7) 58%,
+    rgb(0 0 0 / var(--floor)) 72%
   );
   mask-image: var(--band);
   -webkit-mask-image: var(--band);
@@ -215,10 +215,15 @@
   -webkit-mask-position: calc(75% - var(--fx) / 2) calc(75% - var(--fy) / 2);
 }
 
-/* Secret: a fine, low-contrast crosshatch under a dark rainbow that only shows where it's lit. */
-.rip-foil-secret {
-  --floor: 0.12;
-  opacity: 0.5;
+/*
+ * The foil every foiled rarity shares: a fine crosshatch under a dark rainbow, which shows faintly
+ * at rest and flashes in rainbow where the glare band crosses it. Secret and the softer foils carry
+ * it over the art, Starlight over the whole card (with the prism below, for the frame).
+ */
+.rip-foil-secret,
+.rip-foil-starlight {
+  --floor: 0.45;
+  opacity: 0.85;
   background-image:
     repeating-linear-gradient(45deg, #fff 0 1px, #c4c4c4 1px 3px),
     repeating-linear-gradient(-45deg, #fff 0 1px, #c4c4c4 1px 3px),
@@ -237,37 +242,10 @@
   background-position: 0 0, 0 0, var(--fx) var(--fy);
   background-blend-mode: multiply;
 }
-
-/*
- * Starlight: glitter (three dot grids of odd sizes, so they never line up into a pattern) and fine
- * lines radiating from below the card, over a repeating prismatic sheen.
- */
-.rip-foil-starlight {
-  --floor: 0.2;
-  opacity: 0.5;
-  background-image:
-    radial-gradient(circle at 20% 30%, rgb(255 255 255 / 0.9) 0 0.6px, transparent 1.2px),
-    radial-gradient(circle at 65% 70%, rgb(255 255 255 / 0.7) 0 0.5px, transparent 1px),
-    radial-gradient(circle at 40% 55%, rgb(255 255 255 / 0.8) 0 0.8px, transparent 1.4px),
-    repeating-conic-gradient(from 0deg at 20% 120%, #fff 0deg 0.25deg, #b4b4b4 0.25deg 1deg),
-    repeating-linear-gradient(
-      115deg,
-      hsl(0 85% 40%),
-      hsl(45 85% 38%),
-      hsl(110 70% 34%),
-      hsl(185 75% 36%),
-      hsl(230 80% 44%),
-      hsl(290 75% 42%),
-      hsl(360 85% 40%) 33.3%
-    );
-  background-size: 7px 11px, 13px 17px, 19px 23px, auto, 300% 300%;
-  background-position: 0 0, 0 0, 0 0, 0 0, var(--fx) var(--fy);
-  background-blend-mode: screen, screen, screen, multiply, normal;
-}
 /* Color-dodge can't tint white, so a pale prism multiplied in shows the sheen on the frame too. */
 .rip-foil-prism {
-  --floor: 0;
-  opacity: 0.35;
+  --floor: 0.15;
+  opacity: 0.5;
   mix-blend-mode: multiply;
   background-image: repeating-linear-gradient(
     115deg,
@@ -285,8 +263,8 @@
 
 /* The name in foil lettering: silver shot with rainbow, sliding with the pointer. */
 .rip-foil-name {
-  --floor: 0.45;
-  opacity: 0.6;
+  --floor: 0.6;
+  opacity: 0.75;
   mix-blend-mode: lighten;
   background-image: linear-gradient(
     100deg,
@@ -322,17 +300,15 @@
   );
 }
 
-[data-tilting] .rip-foil-secret {
-  opacity: 0.9;
-}
+[data-tilting] .rip-foil-secret,
 [data-tilting] .rip-foil-starlight {
-  opacity: 0.85;
+  opacity: 1;
 }
 [data-tilting] .rip-foil-prism {
-  opacity: 0.7;
+  opacity: 0.85;
 }
 [data-tilting] .rip-foil-name {
-  opacity: 0.95;
+  opacity: 1;
 }
 
 @media (prefers-reduced-motion: reduce) {

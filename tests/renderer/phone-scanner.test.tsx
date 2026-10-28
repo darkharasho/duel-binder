@@ -358,6 +358,8 @@ describe('phone scanner', () => {
       renderScanner(store)
       expect(await screen.findByText('4 cards')).toBeInTheDocument()
       expect(screen.getByLabelText('Value of this scan')).toHaveTextContent('$21.25')
+      // Kuriboh has no price: left out of the value and said so, not counted as $0.
+      expect(screen.getByText('1 with no price')).toBeInTheDocument()
       expect(screen.queryByRole('region', { name: 'Review' })).not.toBeInTheDocument()
       await user.click(screen.getByRole('button', { name: 'Review 4 scanned' }))
       expect(screen.getByRole('region', { name: 'Review' })).toBeInTheDocument()
@@ -395,6 +397,7 @@ describe('phone scanner', () => {
       const sheet = screen.getByRole('region', { name: 'Review' })
       expect(sheet).toHaveTextContent('3 cards · 2 entries')
       expect(within(sheet).getByLabelText('Value of the list')).toHaveTextContent('$20.00')
+      expect(sheet).toHaveTextContent('1 card with no price')
       const items = within(sheet).getAllByRole('listitem')
       expect(items).toHaveLength(2)
       expect(items[0]).toHaveTextContent('Check rarity')

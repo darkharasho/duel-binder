@@ -172,7 +172,13 @@ export interface CollectionStats {
   uniqueCards: number
   totalValue: number
   approximateCount: number
-  byRarity: { rarity: string; count: number; value: number }[]
+  /**
+   * Copies with no price at all (left out of totalValue, never counted as $0). Optional: a server that
+   * predates it doesn't send it.
+   */
+  unpricedCount?: number
+  /** `unpriced`: copies of the rarity with no price (optional, as unpricedCount). */
+  byRarity: { rarity: string; count: number; value: number; unpriced?: number }[]
   byFrameType: { frameType: string; count: number }[]
   topEntries: EntryView[]
   /** The dearest single copies: entries by unit price. */

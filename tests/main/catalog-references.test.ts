@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vite
 import { buildFingerprints } from '../../scripts/catalog/fingerprints'
 import { buildReferences, scanHash, wantsReference } from '../../scripts/catalog/references'
 import { openDatabase } from '../../src/main/db/database'
+import { NEW_ART_VARIANT } from '../../src/main/yugipedia/parse'
 import { ART_BOXES, crop } from '../../src/renderer/src/features/scan/vision/regions'
 import { artHash } from '../../src/shared/scan/fingerprint'
 import { decodeFingerprints } from '../../src/shared/scan/fingerprintFile'
@@ -21,6 +22,8 @@ describe('wantsReference', () => {
     ['Prismatic Secret Rare', 'Alternate Art', true],
     ['Platinum Secret Rare (7th Art)', null, true],
     ['Ultra Rare (Overframe)', '', true],
+    ['Ultra Rare', NEW_ART_VARIANT, true],
+    ['Prismatic Secret Rare', NEW_ART_VARIANT, true],
     ['Super Rare', null, false],
     ['Secret Rare', '', false],
     ['Rare (Green)', null, false],
@@ -177,6 +180,38 @@ describe('buildReferences', () => {
     })
     expect(requested).toContain('ShiEn-LOCR-JP-UR-EA.png')
     expect(requested).not.toContain('ShiEn-LOCR-KR-UR-UE-EA.png')
+    expect(result.entries).toContainEqual({ imageId: 11, hash: SCAN_HASH })
+  })
+
+  it('fetches the plain scan of a New artwork printing, and not of a plain reprint', async () => {
+    const add = work.prepare(
+      `INSERT INTO card_printings (card_id, set_name, set_code, set_rarity, set_rarity_code, language, variant)
+       VALUES (1, 'Limit Over Collection: The Rivals', ?, ?, '', 'ja', ?)`
+    )
+    add.run('LOCR-JP032', 'Ultra Rare', NEW_ART_VARIANT)
+    add.run('LOCR-JP032', 'Secret Rare', NEW_ART_VARIANT)
+    add.run('LOCR-JP039', 'Super Rare', null)
+    const files = [
+      ...FILES,
+      'ShiEn-LOCR-JP-UR.png',
+      'ShiEn-LOCR-JP-ScR.png',
+      'ShiEn-LOCR-JP-SR.png',
+      'ShiEn-LOCR-KR-UR.png'
+    ]
+    const requested: string[] = []
+    const fetch = scans({ 'ShiEn-LOCR-JP-UR.png': png(SCAN) }, requested)
+    const result = await buildReferences({
+      work,
+      cache,
+      yugipedia: fakeYugipedia(files),
+      fetch,
+      userAgent: 'test'
+    })
+    expect(requested).toEqual(
+      expect.arrayContaining(['ShiEn-LOCR-JP-UR.png', 'ShiEn-LOCR-JP-ScR.png'])
+    )
+    expect(requested).not.toContain('ShiEn-LOCR-JP-SR.png')
+    expect(requested).not.toContain('ShiEn-LOCR-KR-UR.png')
     expect(result.entries).toContainEqual({ imageId: 11, hash: SCAN_HASH })
   })
 

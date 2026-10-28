@@ -31,7 +31,9 @@ const COLOUR = /^(red|blue|green|purple|silver|bronze|gold|yellow|orange|white|p
 
 /**
  * Whether a printing looks unlike its card's art from YGOPRODeck: an alternate or overframe art
- * (named in its variant or in brackets after its rarity), or a foil that changes the picture.
+ * (named in its variant or in brackets after its rarity), a printing its set list marks "New
+ * artwork" (variant NEW_ART_VARIANT, e.g. LOCR-JP029–038, an art YGOPRODeck doesn't have yet), or a
+ * foil that changes the picture.
  */
 export function wantsReference(rarity: string, variant: string | null): boolean {
   if (FOIL.test(rarity.trim())) return true

@@ -8,6 +8,7 @@ import './phone.css'
 
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
+import { isNativeApp } from '@/lib/portal'
 import { App } from './App'
 import { createBrowserOcr } from './ocr'
 import { createPhoneRuntime, type WorkerLike } from './runtime'
@@ -38,7 +39,8 @@ async function start(): Promise<void> {
 void start()
 
 // The page, the service worker and every app file are under /scan/ (see vite.phone.config.ts).
-if (import.meta.env.PROD && 'serviceWorker' in navigator)
+// The iOS app ships its files inside the app and has no service worker.
+if (import.meta.env.PROD && !isNativeApp() && 'serviceWorker' in navigator)
   navigator.serviceWorker.register('/scan/sw.js', { scope: '/scan/' }).catch((err: unknown) => {
     console.warn('Service worker registration failed:', err)
   })

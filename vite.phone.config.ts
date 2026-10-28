@@ -13,6 +13,12 @@ import tailwindcss from '@tailwindcss/vite'
  * the service worker whose scope holds the Worker's URL, not the page's).
  */
 const BASE = '/scan/'
+/**
+ * `--mode ios` builds the same app for the iOS shell (capacitor.config.ts): its files load from
+ * capacitor://localhost/, so they sit at the root of out/ios-web, there is no service worker, and
+ * the app calls the portal at IOS_PORTAL with its Bearer token (src/renderer/src/lib/portal.ts).
+ */
+const IOS_PORTAL = 'https://app.duelbinder.com'
 const PUBLIC_DIR = resolve('src/phone/public')
 const OCR_MODELS = ['eng', 'jpn', 'kor', 'chi_sim']
 /**
@@ -75,23 +81,23 @@ export function noNodeBuiltins(): Plugin {
  * src/phone/ocr.ts), and the page's CSP blocks other origins anyway; pointing the fallbacks at a
  * path of the app's own that doesn't exist makes a missed one fail plainly, on this origin.
  */
-const noCdn = (code: string): string =>
-  code.replaceAll('https://cdn.jsdelivr.net/npm/', `${BASE}no-cdn/`)
+const noCdn = (code: string, base: string): string =>
+  code.replaceAll('https://cdn.jsdelivr.net/npm/', `${base}no-cdn/`)
 
-function tesseractWithoutCdn(): Plugin {
+function tesseractWithoutCdn(base: string): Plugin {
   return {
     name: 'tesseract-without-cdn',
     transform: {
       filter: { id: /[\\/]node_modules[\\/]tesseract\.js[\\/]/ },
       handler(code) {
-        return code.includes('cdn.jsdelivr.net') ? { code: noCdn(code), map: null } : null
+        return code.includes('cdn.jsdelivr.net') ? { code: noCdn(code, base), map: null } : null
       }
     }
   }
 }
 
 /** The tesseract worker, cores and language data, as the app's own files (see src/phone/ocr.ts). */
-function ocrAssets(): Plugin {
+function ocrAssets(base: string): Plugin {
   const mod = (path: string): string => resolve('node_modules', path)
   const files: Record<string, string> = {
     'ocr/worker.min.js': mod('tesseract.js/dist/worker.min.js')
@@ -113,7 +119,7 @@ function ocrAssets(): Plugin {
           type: 'asset',
           fileName,
           source: path.endsWith('worker.min.js')
-            ? noCdn(readFileSync(path, 'utf8'))
+            ? noCdn(readFileSync(path, 'utf8'), base)
             : readFileSync(path)
         })
     }
@@ -163,35 +169,55 @@ function precache(): Plugin {
   }
 }
 
-export default defineConfig({
-  root: resolve('src/phone'),
-  base: BASE,
-  publicDir: PUBLIC_DIR,
-  resolve: {
-    alias: {
-      '@': resolve('src/renderer/src'),
-      '@shared': resolve('src/shared')
-    }
-  },
-  define: { __APP_VERSION__: JSON.stringify(version) },
-  plugins: [
-    noNodeBuiltins(),
-    react(),
-    tailwindcss(),
-    tesseractWithoutCdn(),
-    ocrAssets(),
-    precache()
-  ],
-  optimizeDeps: { exclude: ['@sqlite.org/sqlite-wasm'] },
-  worker: { format: 'es', plugins: () => [noNodeBuiltins()] },
-  build: {
-    outDir: resolve('workers/portal/site/app/scan'),
-    emptyOutDir: true,
-    rollupOptions: {
-      input: { index: resolve('src/phone/index.html'), sw: resolve('src/phone/sw.ts') },
-      output: {
-        // The service worker keeps one URL (/scan/sw.js maps to it); everything else is hashed.
-        entryFileNames: (chunk) => (chunk.name === 'sw' ? 'sw.js' : 'assets/[name]-[hash].js')
+/** The iOS page has no web manifest or icons to link: the shell is the app. */
+function withoutWebAppLinks(): Plugin {
+  return {
+    name: 'without-web-app-links',
+    transformIndexHtml: (html) =>
+      html.replace(/^\s*<link rel="(manifest|icon|apple-touch-icon)"[^>]*>\n/gm, '')
+  }
+}
+
+export default defineConfig(({ mode }) => {
+  const ios = mode === 'ios'
+  const base = ios ? '/' : BASE
+  return {
+    root: resolve('src/phone'),
+    base,
+    // The public files are the service worker's and the home-screen icons; the iOS app has neither.
+    publicDir: ios ? false : PUBLIC_DIR,
+    resolve: {
+      alias: {
+        '@': resolve('src/renderer/src'),
+        '@shared': resolve('src/shared')
+      }
+    },
+    define: {
+      __APP_VERSION__: JSON.stringify(version),
+      'import.meta.env.VITE_PORTAL_ORIGIN': JSON.stringify(ios ? IOS_PORTAL : '')
+    },
+    plugins: [
+      noNodeBuiltins(),
+      react(),
+      tailwindcss(),
+      tesseractWithoutCdn(base),
+      ocrAssets(base),
+      ios ? withoutWebAppLinks() : precache()
+    ],
+    optimizeDeps: { exclude: ['@sqlite.org/sqlite-wasm'] },
+    worker: { format: 'es', plugins: () => [noNodeBuiltins()] },
+    build: {
+      outDir: ios ? resolve('out/ios-web') : resolve('workers/portal/site/app/scan'),
+      emptyOutDir: true,
+      rollupOptions: {
+        input: {
+          index: resolve('src/phone/index.html'),
+          ...(ios ? {} : { sw: resolve('src/phone/sw.ts') })
+        },
+        output: {
+          // The service worker keeps one URL (/scan/sw.js maps to it); everything else is hashed.
+          entryFileNames: (chunk) => (chunk.name === 'sw' ? 'sw.js' : 'assets/[name]-[hash].js')
+        }
       }
     }
   }

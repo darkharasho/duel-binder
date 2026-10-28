@@ -1,7 +1,9 @@
 import { isPhone, isWeb } from '@/lib/platform'
+import { PORTAL_ORIGIN } from '@/lib/portal'
 
 /** The only place image URLs are built: `ygo-img://` on desktop, the Worker's `/img/` on the web. */
-const imageSrc = (path: string): string => (isWeb() ? `/img/${path}` : `ygo-img://${path}`)
+const imageSrc = (path: string): string =>
+  isWeb() ? `${PORTAL_ORIGIN}/img/${path}` : `ygo-img://${path}`
 
 /** `now` (desktop only): someone's waiting on it, so the app downloads it ahead of its queue. */
 const now = (opts?: { now?: boolean }): string => (opts?.now && !isWeb() ? '?now' : '')

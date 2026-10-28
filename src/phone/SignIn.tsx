@@ -1,10 +1,15 @@
 import { useState } from 'react'
+import { isNativeApp } from '@/lib/portal'
 import { fetchMe } from '@/web/account'
 import type { Me } from '../shared/cloud'
 import { SIGN_IN_COPY, SIGN_IN_FAILED, SIGN_IN_URL } from './copy'
+import { nativeSignIn, SignInCancelled } from './nativeSignIn'
 import type { PhoneStore } from './data/store'
 import { PhoneScreen } from './PhoneScreen'
 import { useMounted, useOnce } from './useOnce'
+
+const DISCORD_BUTTON =
+  'flex h-12 w-full max-w-xs items-center justify-center rounded-xl bg-[#5865F2] text-base font-semibold text-white transition-opacity active:opacity-80'
 
 /**
  * Trades the web session cookie for the phone's own token (POST /auth/phone/token, same origin,
@@ -28,6 +33,7 @@ async function exchangeCookie(): Promise<{ token: string; user: Me } | null> {
 /**
  * Signed out. A web session already open in this browser signs the phone in without a click;
  * otherwise it offers Discord sign-in, which comes back to /scan/ (or /scan/?signin=failed).
+ * The iOS app has no web session: its button opens the system sign-in sheet (nativeSignIn).
  */
 export function SignIn({
   store,
@@ -36,11 +42,29 @@ export function SignIn({
   store: PhoneStore
   onSignedIn: (user: Me) => void
 }): React.JSX.Element {
-  const [checking, setChecking] = useState(true)
-  const failed = new URLSearchParams(window.location.search).get('signin') === 'failed'
+  const native = isNativeApp()
+  const [checking, setChecking] = useState(!native)
+  const [nativeFailed, setNativeFailed] = useState(false)
+  const failed =
+    nativeFailed || new URLSearchParams(window.location.search).get('signin') === 'failed'
 
   const mounted = useMounted()
+  const signInNative = async (): Promise<void> => {
+    setNativeFailed(false)
+    setChecking(true)
+    try {
+      const signedIn = await nativeSignIn()
+      if (!mounted.current) return
+      await store.signIn(signedIn.token, signedIn.user)
+      if (mounted.current) onSignedIn(signedIn.user)
+      return
+    } catch (e) {
+      if (mounted.current && !(e instanceof SignInCancelled)) setNativeFailed(true)
+    }
+    if (mounted.current) setChecking(false)
+  }
   useOnce(() => {
+    if (native) return
     void (async () => {
       try {
         const signedIn = await exchangeCookie()
@@ -72,11 +96,12 @@ export function SignIn({
         <p role="status" className="flex h-12 items-center text-sm text-muted-foreground">
           Checking sign-in…
         </p>
+      ) : native ? (
+        <button type="button" onClick={() => void signInNative()} className={DISCORD_BUTTON}>
+          Sign in with Discord
+        </button>
       ) : (
-        <a
-          href={SIGN_IN_URL}
-          className="flex h-12 w-full max-w-xs items-center justify-center rounded-xl bg-[#5865F2] text-base font-semibold text-white transition-opacity active:opacity-80"
-        >
+        <a href={SIGN_IN_URL} className={DISCORD_BUTTON}>
           Sign in with Discord
         </a>
       )}

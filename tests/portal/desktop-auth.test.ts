@@ -189,6 +189,51 @@ describe('desktop sign-in and bearer tokens', () => {
     expect(rawCookie(res, 'desktop_auth')).toMatch(/Max-Age=0/)
   })
 
+  const iosStartPath = (state = STATE, challenge = CHALLENGE): string =>
+    `/auth/desktop/start?app=ios&state=${state}&challenge=${challenge}`
+  async function iosCallback(): Promise<Response> {
+    const start = await get(iosStartPath())
+    const oauthState = cookieOf(start, 'oauth_state')!
+    const desktop = cookieOf(start, 'desktop_auth')!
+    return get(`/auth/discord/callback?code=c&state=${oauthState}`, {
+      cookie: `oauth_state=${oauthState}; desktop_auth=${desktop}`
+    })
+  }
+
+  it('the iOS app starts the desktop flow without a port', async () => {
+    const res = await get(iosStartPath())
+    expect(res.status).toBe(302)
+    expect(cookieOf(res, 'desktop_auth')).toBe(`ios.${STATE}.${CHALLENGE}`)
+    for (const path of [
+      `/auth/desktop/start?app=android&state=${STATE}&challenge=${CHALLENGE}`,
+      `/auth/desktop/start?app=ios&port=53682&state=${STATE}&challenge=${CHALLENGE}`,
+      iosStartPath('short')
+    ]) {
+      const bad = await get(path)
+      expect(bad.status, path).toBe(400)
+      expect(bad.headers.getSetCookie()).toEqual([])
+    }
+  })
+
+  it("the iOS app's code comes back on its own URL scheme and trades like a desktop code", async () => {
+    const res = await iosCallback()
+    expect(res.status).toBe(302)
+    const loc = new URL(res.headers.get('location')!)
+    expect(loc.protocol + loc.host + loc.pathname).toBe('duelbinder:auth/callback')
+    expect(loc.searchParams.get('state')).toBe(STATE)
+    const code = loc.searchParams.get('code')!
+    const token = await post('/auth/desktop/token', { code, verifier: VERIFIER })
+    expect(token.status).toBe(200)
+  })
+
+  it('a failed iOS sign-in tells the app on its URL scheme', async () => {
+    tokenStatus = 500
+    const res = await iosCallback()
+    expect(res.headers.get('location')).toBe(
+      `duelbinder://auth/callback?error=signin-failed&state=${STATE}`
+    )
+  })
+
   it('token exchange returns a desktop token for the right verifier only', async () => {
     const code = await desktopCode()
     const wrong = await post('/auth/desktop/token', { code, verifier: VERIFIER + 'x' })
@@ -268,7 +313,8 @@ describe('desktop sign-in and bearer tokens', () => {
     for (const forged of [
       `53682.evil.com/x.${CHALLENGE}`,
       `53682.${STATE}.${CHALLENGE}.extra`,
-      `80.${STATE}.${CHALLENGE}`
+      `80.${STATE}.${CHALLENGE}`,
+      `android.${STATE}.${CHALLENGE}`
     ]) {
       const start = await get('/auth/discord/start')
       const oauthState = cookieOf(start, 'oauth_state')!

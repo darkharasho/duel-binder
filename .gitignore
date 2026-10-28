@@ -12,3 +12,4 @@ out
 .wrangler
 workers/portal/site/app/
 catalog-work/
+*.p8

@@ -24,17 +24,42 @@ const SERVER_6_TABLES: FrozenTable[] = [
     name: 'cards',
     key: ['id'],
     columns: [
-      'id', 'name', 'type', 'frame_type', 'race', 'attribute', 'level', 'linkval', 'atk', 'def',
-      'archetype', 'desc', 'tcgplayer_price', 'updated_at'
+      'id',
+      'name',
+      'type',
+      'frame_type',
+      'race',
+      'attribute',
+      'level',
+      'linkval',
+      'atk',
+      'def',
+      'archetype',
+      'desc',
+      'tcgplayer_price',
+      'updated_at'
     ]
   },
-  { name: 'card_images', key: ['image_id'], columns: ['image_id', 'card_id', 'sort_order', 'missing_from_api'] },
+  {
+    name: 'card_images',
+    key: ['image_id'],
+    columns: ['image_id', 'card_id', 'sort_order', 'missing_from_api']
+  },
   {
     name: 'card_printings',
     key: ['pkey'],
     columns: [
-      'card_id', 'set_name', 'set_code', 'set_rarity', 'set_rarity_code', 'set_price',
-      'missing_from_api', 'language', 'tcg_product_id', 'variant', 'market_price'
+      'card_id',
+      'set_name',
+      'set_code',
+      'set_rarity',
+      'set_rarity_code',
+      'set_price',
+      'missing_from_api',
+      'language',
+      'tcg_product_id',
+      'variant',
+      'market_price'
     ],
     extra: ['contributed']
   },
@@ -42,7 +67,13 @@ const SERVER_6_TABLES: FrozenTable[] = [
     name: 'sets',
     key: ['language', 'set_name'],
     columns: [
-      'language', 'set_name', 'set_code', 'tcg_date', 'image_url', 'image_key', 'list_rows',
+      'language',
+      'set_name',
+      'set_code',
+      'tcg_date',
+      'image_url',
+      'image_key',
+      'list_rows',
       'unmatched_rows'
     ]
   },
@@ -78,7 +109,9 @@ function catalogFeedSteps(tables: FrozenTable[]): ServerStep[] {
     sql: [
       'CREATE TABLE catalog_clock (id INTEGER PRIMARY KEY CHECK (id = 1), seq INTEGER NOT NULL);',
       'INSERT INTO catalog_clock (id, seq) VALUES (1, 0);',
-      ...tables.map((t) => `ALTER TABLE ${t.name} ADD COLUMN catalog_seq INTEGER NOT NULL DEFAULT 0;`),
+      ...tables.map(
+        (t) => `ALTER TABLE ${t.name} ADD COLUMN catalog_seq INTEGER NOT NULL DEFAULT 0;`
+      ),
       'CREATE TABLE catalog_tombstones (seq INTEGER PRIMARY KEY, tbl TEXT NOT NULL, key TEXT NOT NULL);',
       `CREATE TABLE printing_contributions (printing_id INTEGER PRIMARY KEY REFERENCES card_printings(id) ON DELETE CASCADE,
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, created_at TEXT NOT NULL);`,
@@ -197,7 +230,17 @@ CREATE TABLE friend_blocks (
 CREATE INDEX ix_friend_blocks_blocked ON friend_blocks(blocked_id);
 `
   },
-  ...catalogFeedSteps(SERVER_6_TABLES)
+  ...catalogFeedSteps(SERVER_6_TABLES),
+  {
+    // Apple refresh tokens, kept only so deleting an account can revoke its Sign in with Apple.
+    name: 'server-7',
+    sql: `
+CREATE TABLE apple_tokens (
+  user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  refresh_token TEXT NOT NULL,
+  updated_at TEXT NOT NULL);
+`
+  }
 ]
 
 /**

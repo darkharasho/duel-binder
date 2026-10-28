@@ -21,10 +21,11 @@ import type { PriceQueue } from './prices'
 import { getFingerprints } from './scanFiles'
 import { phoneRoute } from './phonePage'
 import { deleteAccountRoute } from './account'
+import type { AppleSignInEnv } from './apple'
 import { appPreflight, withAppCors } from './appCors'
 
 /** Vars and secrets the request handlers read. */
-export interface Env {
+export interface Env extends AppleSignInEnv {
   PUBLIC_URL: string
   /** The marketing site, e.g. https://duelbinder.com; the app host borrows its stylesheet. */
   SITE_URL: string

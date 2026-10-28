@@ -1,6 +1,6 @@
 import type { Me } from '../../../src/shared/cloud'
 import type { AppDeps } from './app'
-import { verifyAppleIdentityToken } from './apple'
+import { appleRefreshToken, verifyAppleIdentityToken } from './apple'
 
 const DAY_MS = 24 * 60 * 60 * 1000
 const SESSION_MAX_AGE = 30 * 24 * 60 * 60
@@ -415,6 +415,8 @@ export async function exchangeDesktopCode(req: Request, deps: AppDeps): Promise<
 const APPLE_ID_PREFIX = 'apple:'
 const NONCE_RE = /^[A-Za-z0-9_-]{16,128}$/
 const MAX_NAME_LEN = 64
+/** Apple's authorization codes are short; anything longer isn't one. */
+const MAX_APPLE_CODE_LEN = 512
 const USERNAME_ALPHABET = 'abcdefghijkmnpqrstuvwxyz23456789'
 
 function appleUsername(deps: AppDeps): string {
@@ -436,10 +438,12 @@ function appleName(given: unknown, family: unknown): string | null {
 }
 
 /**
- * POST /auth/apple/token `{ identityToken, nonce, givenName?, familyName? }`: the iOS app's Sign in
- * with Apple. A valid identity token (apple.ts) signs in its Apple account, made on first use, and
- * gets a desktop-kind Bearer token like the Discord sign-in's. The name, which Apple sends only
- * the first time, fills an empty display name and never overwrites one.
+ * POST /auth/apple/token `{ identityToken, nonce, authorizationCode?, givenName?, familyName? }`:
+ * the iOS app's Sign in with Apple. A valid identity token (apple.ts) signs in its Apple account,
+ * made on first use, and gets a desktop-kind Bearer token like the Discord sign-in's. The name,
+ * which Apple sends only the first time, fills an empty display name and never overwrites one.
+ * The authorization code is traded for a refresh token, kept so deleting the account can revoke
+ * it; a failed trade doesn't stop the sign-in.
  */
 export async function exchangeAppleToken(req: Request, deps: AppDeps): Promise<Response> {
   const invalid = jsonResponse(400, { error: 'invalid-token' })
@@ -450,7 +454,10 @@ export async function exchangeAppleToken(req: Request, deps: AppDeps): Promise<R
   } catch {
     return invalid
   }
-  const { identityToken, nonce, givenName, familyName } = (body ?? {}) as Record<string, unknown>
+  const { identityToken, nonce, authorizationCode, givenName, familyName } = (body ?? {}) as Record<
+    string,
+    unknown
+  >
   if (typeof identityToken !== 'string' || typeof nonce !== 'string' || !NONCE_RE.test(nonce))
     return invalid
   let sub: string | null
@@ -460,6 +467,14 @@ export async function exchangeAppleToken(req: Request, deps: AppDeps): Promise<R
     sub = null
   }
   if (!sub) return invalid
+  let refreshToken: string | null = null
+  if (typeof authorizationCode === 'string' && authorizationCode.length <= MAX_APPLE_CODE_LEN) {
+    try {
+      refreshToken = await appleRefreshToken(authorizationCode, sub, deps)
+    } catch (err) {
+      console.warn('Apple code exchange failed', err)
+    }
+  }
 
   const appleId = APPLE_ID_PREFIX + sub
   const name = appleName(givenName, familyName)
@@ -497,6 +512,14 @@ export async function exchangeAppleToken(req: Request, deps: AppDeps): Promise<R
         "INSERT INTO sessions (token_hash, user_id, kind, created_at, expires_at) VALUES (?, ?, 'desktop', ?, ?)"
       )
       .run(tokenHash, id, nowIso, new Date(now.getTime() + DESKTOP_TTL_MS).toISOString())
+    if (refreshToken)
+      deps.db
+        .prepare(
+          `INSERT INTO apple_tokens (user_id, refresh_token, updated_at) VALUES (?, ?, ?)
+           ON CONFLICT (user_id) DO UPDATE SET refresh_token = excluded.refresh_token,
+             updated_at = excluded.updated_at`
+        )
+        .run(id, refreshToken, nowIso)
     return id
   })()
   return jsonResponse(200, { token, user: loadMe(deps, userId) })

@@ -110,3 +110,110 @@ export async function verifyAppleIdentityToken(
   if (typeof claims.nonce !== 'string' || claims.nonce !== (await sha256Hex(nonce))) return null
   return claims.sub
 }
+
+export const APPLE_TOKEN_URL = 'https://appleid.apple.com/auth/token'
+export const APPLE_REVOKE_URL = 'https://appleid.apple.com/auth/revoke'
+
+/**
+ * The Sign in with Apple key (developer portal > Keys) the Worker signs its client secret with.
+ * All three are Worker secrets; while any is unset, no refresh token is kept and none is revoked.
+ */
+export interface AppleSignInEnv {
+  APPLE_TEAM_ID?: string
+  APPLE_SIGNIN_KEY_ID?: string
+  /** The key's .p8 file: a PKCS#8 PEM. */
+  APPLE_SIGNIN_KEY?: string
+}
+
+interface AppleDeps {
+  env: AppleSignInEnv
+  fetch: typeof fetch
+  now: () => Date
+}
+
+const toBase64Url = (bytes: Uint8Array): string =>
+  btoa(String.fromCharCode(...bytes))
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '')
+
+const jsonPart = (v: unknown): string => toBase64Url(new TextEncoder().encode(JSON.stringify(v)))
+
+/**
+ * The client secret Apple's token and revoke endpoints want: an ES256 JWT from the team, for the
+ * app, signed with the Sign in with Apple key. Null while the key isn't configured.
+ */
+export async function appleClientSecret(deps: AppleDeps): Promise<string | null> {
+  const { APPLE_TEAM_ID: team, APPLE_SIGNIN_KEY_ID: kid, APPLE_SIGNIN_KEY: pem } = deps.env
+  if (!team || !kid || !pem) return null
+  const der = fromBase64Url(pem.replace(/-----[^-]+-----/g, '').replace(/\s+/g, ''))
+  const key = await crypto.subtle.importKey(
+    'pkcs8',
+    der,
+    { name: 'ECDSA', namedCurve: 'P-256' },
+    false,
+    ['sign']
+  )
+  const iat = Math.floor(deps.now().getTime() / 1000)
+  const input = `${jsonPart({ alg: 'ES256', kid })}.${jsonPart({
+    iss: team,
+    iat,
+    exp: iat + 300,
+    aud: APPLE_ISSUER,
+    sub: APPLE_AUDIENCE
+  })}`
+  // WebCrypto's ECDSA signature is r || s, the form a JWT uses.
+  const sig = await crypto.subtle.sign(
+    { name: 'ECDSA', hash: 'SHA-256' },
+    key,
+    new TextEncoder().encode(input)
+  )
+  return `${input}.${toBase64Url(new Uint8Array(sig))}`
+}
+
+/**
+ * Trades the one-time authorization code from the sign-in sheet for a refresh token, the only
+ * thing Apple's revoke endpoint accepts for good. Null when the key isn't configured, Apple
+ * refuses, or the token Apple returns belongs to another Apple account than `sub`.
+ */
+export async function appleRefreshToken(
+  code: string,
+  sub: string,
+  deps: AppleDeps
+): Promise<string | null> {
+  const secret = await appleClientSecret(deps)
+  if (!secret) return null
+  const res = await deps.fetch(APPLE_TOKEN_URL, {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      client_id: APPLE_AUDIENCE,
+      client_secret: secret,
+      code,
+      grant_type: 'authorization_code'
+    })
+  })
+  if (!res.ok) return null
+  const body = (await res.json()) as { refresh_token?: unknown; id_token?: unknown }
+  if (typeof body.refresh_token !== 'string' || typeof body.id_token !== 'string') return null
+  // Straight from Apple over TLS, so its claims need no signature check.
+  const claims = decodeJson(body.id_token.split('.')[1] ?? '') as { sub?: unknown }
+  return claims.sub === sub ? body.refresh_token : null
+}
+
+/** Revokes a refresh token, ending the app's Sign in with Apple link to the account. */
+export async function revokeAppleToken(refreshToken: string, deps: AppleDeps): Promise<boolean> {
+  const secret = await appleClientSecret(deps)
+  if (!secret) return false
+  const res = await deps.fetch(APPLE_REVOKE_URL, {
+    method: 'POST',
+    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({
+      client_id: APPLE_AUDIENCE,
+      client_secret: secret,
+      token: refreshToken,
+      token_type_hint: 'refresh_token'
+    })
+  })
+  return res.ok
+}

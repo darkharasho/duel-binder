@@ -10,9 +10,12 @@ import { PORTAL_ORIGIN } from '@/lib/portal'
  */
 interface WebAuthPlugin {
   start(options: { url: string; callbackScheme: string }): Promise<{ url: string }>
-  appleSignIn(options: {
-    nonce: string
-  }): Promise<{ identityToken: string; givenName?: string; familyName?: string }>
+  appleSignIn(options: { nonce: string }): Promise<{
+    identityToken: string
+    authorizationCode?: string
+    givenName?: string
+    familyName?: string
+  }>
 }
 const WebAuth = registerPlugin<WebAuthPlugin>('WebAuth')
 
@@ -85,7 +88,8 @@ export async function nativeSignIn(
 /**
  * Sign in with Apple for the iOS app: the system's Apple sheet signs a token for a random nonce
  * (Apple gets its SHA-256), which the portal checks and trades, with the nonce and the name Apple
- * shares on the first sign-in, for the app's Bearer token. Rejects like nativeSignIn.
+ * shares on the first sign-in, for the app's Bearer token. The authorization code goes along so
+ * the portal can revoke the Apple sign-in when the account is deleted. Rejects like nativeSignIn.
  */
 export async function appleSignIn(
   deps: { appleSignIn?: WebAuthPlugin['appleSignIn']; fetch?: typeof fetch } = {}
@@ -100,6 +104,7 @@ export async function appleSignIn(
   const apple = await sheet(() => open({ nonce: hashed }))
   return tradeForToken(deps.fetch ?? fetch, '/auth/apple/token', {
     identityToken: apple.identityToken,
+    authorizationCode: apple.authorizationCode,
     nonce,
     givenName: apple.givenName,
     familyName: apple.familyName

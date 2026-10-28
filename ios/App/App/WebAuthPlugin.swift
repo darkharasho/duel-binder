@@ -13,7 +13,7 @@ class MainViewController: CAPBridgeViewController {
 /// - `WebAuth.start({ url, callbackScheme })`: opens the sign-in page in the system's sign-in sheet
 ///   and resolves with the URL it ends at on `callbackScheme`.
 /// - `WebAuth.appleSignIn({ nonce })`: Sign in with Apple, asking for the name; resolves with
-///   `{ identityToken, givenName?, familyName? }`. `nonce` is the SHA-256 of the app's random value.
+///   `{ identityToken, authorizationCode?, givenName?, familyName? }`. `nonce` is the SHA-256 of the app's random value.
 @objc(WebAuthPlugin)
 public class WebAuthPlugin: CAPPlugin, CAPBridgedPlugin, ASWebAuthenticationPresentationContextProviding,
     ASAuthorizationControllerDelegate, ASAuthorizationControllerPresentationContextProviding {
@@ -93,6 +93,9 @@ public class WebAuthPlugin: CAPPlugin, CAPBridgedPlugin, ASWebAuthenticationPres
             return
         }
         var result: [String: Any] = ["identityToken": token]
+        if let code = credential.authorizationCode.flatMap({ String(data: $0, encoding: .utf8) }) {
+            result["authorizationCode"] = code
+        }
         if let given = credential.fullName?.givenName { result["givenName"] = given }
         if let family = credential.fullName?.familyName { result["familyName"] = family }
         call.resolve(result)

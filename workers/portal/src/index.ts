@@ -61,6 +61,7 @@ export class Store extends DurableObject<WorkerEnv> {
       printingArt: this.printingArt,
       prices: this.prices,
       env: this.env,
+      storageBytes: () => this.ctx.storage.sql.databaseSize,
       now: () => new Date(),
       fetch: (input, init) => fetch(input, init)
     })

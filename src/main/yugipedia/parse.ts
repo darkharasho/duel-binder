@@ -6,6 +6,11 @@ export interface SetListRow {
   rarities: string[]
   /** The row's art variant from `// description::(...)`, e.g. "Overframe"; absent for the plain card. */
   variant?: string
+  /**
+   * The row's print note (4th field, or the list's `print=`) says "New artwork": the printing shows
+   * an art YGOPRODeck doesn't have yet. Absent otherwise.
+   */
+  newArt?: true
 }
 export interface ParsedSetList {
   setPage: string | null
@@ -75,6 +80,10 @@ function variantFromComment(comment: string): string | undefined {
   return note[0].toUpperCase() + note.slice(1)
 }
 
+/** The variant stored for a plain printing whose set list marks it "New artwork". */
+export const NEW_ART_VARIANT = 'New artwork'
+const NEW_ART = /^new art(work)?$/i
+
 const SET_LIST_OPEN = /\{\{[Ss]et list\|/
 
 export function parseSetList(wikitext: string): ParsedSetList | null {
@@ -103,6 +112,7 @@ export function parseSetList(wikitext: string): ParsedSetList | null {
         .map((s) => s.trim())
         .includes('noabbr') ?? false
     const fallback = splitRarities(params.get('rarities'))
+    const listPrint = params.get('print') ?? ''
     i++
     for (; i < lines.length; i++) {
       let line = lines[i].trim()
@@ -127,7 +137,10 @@ export function parseSetList(wikitext: string): ParsedSetList | null {
         if (name !== '') {
           const own = splitRarities(fields[1])
           const rarities = own.length ? own : fallback.length ? fallback : ['Common']
-          rows.push(variant ? { code, name, rarities, variant } : { code, name, rarities })
+          const row: SetListRow = { code, name, rarities }
+          if (variant) row.variant = variant
+          if (NEW_ART.test(fields[2] || listPrint)) row.newArt = true
+          rows.push(row)
         }
       }
       if (closes) {

@@ -5,6 +5,7 @@ import { getMeta, setMeta } from '../db/meta'
 import type { YugipediaClient } from '../yugipedia/client'
 import {
   listTitleParts,
+  NEW_ART_VARIANT,
   normalizeRarity,
   parseInfobox,
   parseSetList,
@@ -106,7 +107,9 @@ interface IntlPrinting {
  * One printing per row and rarity, keyed like the English art variants: a variant whose code and
  * rarity a plain row also has becomes "<rarity> (<variant>)" (an overframe Ultra Rare beside the
  * plain one); otherwise it keeps the bare rarity with the variant in `variant` (an overframe-only
- * Prismatic Secret Rare), so a printing stored before variants were read keeps its row.
+ * Prismatic Secret Rare), so a printing stored before variants were read keeps its row. A plain row
+ * the list marks "New artwork" keeps its bare rarity too, with NEW_ART_VARIANT in `variant`, so its
+ * printing scan is fingerprinted (YGOPRODeck only has the old art).
  */
 function listPrintings(matched: { cardId: number; row: SetListRow }[]): IntlPrinting[] {
   const out: IntlPrinting[] = []
@@ -120,8 +123,9 @@ function listPrintings(matched: { cardId: number; row: SetListRow }[]): IntlPrin
   // Plain rows first, so they claim the bare rarity before any variant does.
   for (const { cardId, row } of matched) {
     if (row.variant) continue
+    const variant = row.newArt ? NEW_ART_VARIANT : null
     for (const r of row.rarities)
-      add({ cardId, setCode: row.code, setRarity: normalizeRarity(r), variant: null })
+      add({ cardId, setCode: row.code, setRarity: normalizeRarity(r), variant })
   }
   for (const { cardId, row } of matched) {
     const variant = row.variant

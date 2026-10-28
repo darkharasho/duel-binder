@@ -3,6 +3,7 @@ import { setMeta, type MetaKey } from '../../../src/main/db/meta'
 import type { AppDeps } from './app'
 import { upsertCatalogRow } from '../../../src/main/catalog/upsert'
 import { putFingerprints, rollbackFingerprints } from './scanFiles'
+import { isAdmin } from './auth'
 import { collectStats } from './stats'
 
 const MAX_ITEMS = 5000
@@ -122,8 +123,14 @@ function finish(deps: AppDeps, body: Record<string, unknown>): void {
 
 /** Handles every `/admin/*` request. */
 export async function adminRoute(req: Request, deps: AppDeps): Promise<Response> {
-  if (!(await authorized(req, deps))) return json({ error: 'Unauthorized' }, 401)
   const path = new URL(req.url).pathname
+  // The dashboard reads stats with the admin's session; scripts and curl use the token.
+  if (req.method === 'GET' && path === '/admin/stats') {
+    if (!(await authorized(req, deps)) && !(await isAdmin(req, deps)))
+      return json({ error: 'Unauthorized' }, 401)
+    return json(collectStats(deps))
+  }
+  if (!(await authorized(req, deps))) return json({ error: 'Unauthorized' }, 401)
 
   if (req.method === 'GET' && path === '/admin/catalog/status') {
     const counts: Record<string, number> = {}
@@ -134,8 +141,6 @@ export async function adminRoute(req: Request, deps: AppDeps): Promise<Response>
     }
     return json({ counts })
   }
-
-  if (req.method === 'GET' && path === '/admin/stats') return json(collectStats(deps))
 
   if (req.method === 'GET' && path === '/admin/catalog/pkeys') {
     const q = new URL(req.url).searchParams

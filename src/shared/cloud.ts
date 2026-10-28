@@ -15,6 +15,8 @@ export interface Me {
   username: string
   displayName: string | null
   avatarUrl: string | null
+  /** Set only by `GET /api/me`, and only for the ADMIN_DISCORD_ID account. */
+  admin?: true
 }
 
 /** One collection entry as the sync protocol carries it. Times are ISO 8601 in `toISOString()` form. */

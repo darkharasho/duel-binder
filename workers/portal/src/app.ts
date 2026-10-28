@@ -9,6 +9,7 @@ import {
   exchangeDesktopCode,
   exchangePhoneToken,
   finishSignIn,
+  isAdmin,
   me,
   revokeDesktopToken,
   signOut,
@@ -35,6 +36,8 @@ export interface Env extends AppleSignInEnv {
   DISCORD_CLIENT_SECRET: string
   /** Worker secret guarding /admin/*; unset or empty rejects every admin request. */
   ADMIN_TOKEN: string
+  /** The one Discord account whose session opens the /admin dashboard; unset means none does. */
+  ADMIN_DISCORD_ID?: string
   /** The eBay price Worker the price alarm asks. */
   PRICE_WORKER_URL: string
 }
@@ -103,7 +106,8 @@ async function route(req: Request, deps: AppDeps): Promise<Response> {
     return imageRoute(req, deps, url.pathname.slice('/img/'.length))
   if (req.method === 'GET' && url.pathname === '/scan/fingerprints')
     return getFingerprints(req, deps)
-  if (req.method === 'GET' && url.pathname === '/admin') return adminPage()
+  if (req.method === 'GET' && url.pathname === '/admin')
+    return (await isAdmin(req, deps)) ? adminPage() : json({ error: 'Not found' }, 404)
   if (url.pathname.startsWith('/admin/')) return adminRoute(req, deps)
   return json({ error: 'Not found' }, 404)
 }

@@ -131,6 +131,20 @@ export async function currentUser(req: Request, deps: AppDeps): Promise<SessionU
   return session ? { id: session.id, kind: session.kind } : null
 }
 
+function isAdminUser(deps: AppDeps, userId: number): boolean {
+  const admin = deps.env.ADMIN_DISCORD_ID
+  if (!admin) return false
+  const row = deps.db.prepare('SELECT discord_id FROM users WHERE id = ?').get(userId) as
+    { discord_id: string } | undefined
+  return row?.discord_id === admin
+}
+
+/** Whether the request is signed in as the ADMIN_DISCORD_ID account. */
+export async function isAdmin(req: Request, deps: AppDeps): Promise<boolean> {
+  const user = await currentUser(req, deps)
+  return user !== null && isAdminUser(deps, user.id)
+}
+
 /** The PUBLIC_URL address of this request, or null when the request is already on it. */
 function publicBounce(req: Request, deps: AppDeps): string | null {
   // The state cookie must be set on the host Discord sends the user back to (PUBLIC_URL).
@@ -632,6 +646,8 @@ export async function me(req: Request, deps: AppDeps): Promise<Response> {
     200,
     [],
     { 'content-type': 'application/json' },
-    JSON.stringify(loadMe(deps, user.id))
+    JSON.stringify(
+      isAdminUser(deps, user.id) ? { ...loadMe(deps, user.id), admin: true } : loadMe(deps, user.id)
+    )
   )
 }

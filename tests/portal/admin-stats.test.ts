@@ -119,23 +119,51 @@ describe('GET /admin/stats', () => {
     const body = (await (await stats()).json()) as Stats
     expect(body.active).toEqual({ day: 1, week: 1, month: 1 })
   })
-})
 
-describe('GET /admin', () => {
-  it('serves the dashboard shell with a nonce CSP and no data or token', async () => {
-    const deps = { env: {} } as unknown as AppDeps
-    const res = await handle(new Request(BASE + '/admin'), deps)
-    expect(res.status).toBe(200)
-    expect(res.headers.get('cache-control')).toBe('no-store')
-    const csp = res.headers.get('content-security-policy') ?? ''
+  const asCookie = (path: string, token: string | null): Promise<Response> =>
+    handle(new Request(BASE + path, { headers: token ? { cookie: `session=${token}` } : {} }), deps)
+
+  it('opens the dashboard and stats only to the ADMIN_DISCORD_ID session', async () => {
+    deps.env.ADMIN_DISCORD_ID = '999'
+    const owner = addUser(db, '999', 'owner')
+    const other = addUser(db, '111', 'alice')
+    addSession(owner, 'tok-owner', 'web')
+    addSession(other, 'tok-other', 'web')
+
+    for (const token of [null, 'tok-other']) {
+      expect((await asCookie('/admin', token)).status).toBe(404)
+      expect((await asCookie('/admin/stats', token)).status).toBe(401)
+      // Other admin routes stay token-only, even for the owner.
+      expect((await asCookie('/admin/catalog/status', 'tok-owner')).status).toBe(401)
+    }
+    expect((await asCookie('/admin/stats', 'tok-owner')).status).toBe(200)
+
+    const page = await asCookie('/admin', 'tok-owner')
+    expect(page.status).toBe(200)
+    expect(page.headers.get('cache-control')).toBe('no-store')
+    const csp = page.headers.get('content-security-policy') ?? ''
     const nonce = /script-src 'nonce-([0-9a-f]+)'/.exec(csp)?.[1]
     expect(nonce).toBeTruthy()
     expect(csp).toContain("connect-src 'self'")
-    const html = await res.text()
+    const html = await page.text()
     const script = new RegExp(`<script nonce="${nonce}">([\\s\\S]*)</script>`).exec(html)?.[1]
     // The inline script must at least parse; it only runs in a browser.
     expect(() => new Function(script ?? 'throw 0')).not.toThrow()
     expect(html).toContain("fetch('/admin/stats'")
-    expect(html).not.toContain(TOKEN)
+  })
+
+  it('flags only the owner as admin in /api/me, and nobody when unset', async () => {
+    const owner = addUser(db, '999', 'owner')
+    const other = addUser(db, '111', 'alice')
+    addSession(owner, 'tok-owner', 'web')
+    addSession(other, 'tok-other', 'web')
+    const meOf = async (token: string): Promise<Stats> =>
+      (await (await asCookie('/api/me', token)).json()) as Stats
+
+    expect((await meOf('tok-owner')).admin).toBeUndefined()
+    expect((await asCookie('/admin', 'tok-owner')).status).toBe(404)
+    deps.env.ADMIN_DISCORD_ID = '999'
+    expect((await meOf('tok-owner')).admin).toBe(true)
+    expect((await meOf('tok-other')).admin).toBeUndefined()
   })
 })

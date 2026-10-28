@@ -1,6 +1,6 @@
 /**
- * GET /admin: the owner's dashboard. The page itself is public and holds no data; it asks for the
- * ADMIN_TOKEN, keeps it in this browser's localStorage, and reads GET /admin/stats with it.
+ * GET /admin: the owner's dashboard, served only to the ADMIN_DISCORD_ID session (see app.ts). It
+ * holds no data itself and reads GET /admin/stats with that session's cookie.
  * It loads only when asked: each stats read counts every table, and free-plan row reads are capped daily.
  */
 
@@ -19,10 +19,8 @@ h2{font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;le
 .at{color:var(--muted);font-size:12px}
 button{height:32px;padding:0 14px;border-radius:6px;border:1px solid rgb(255 255 255 / 14%);background:none;color:var(--fg);font:inherit;font-size:13px;cursor:pointer}
 button:hover{background:rgb(255 255 255 / 5%)}
-button.pri{background:var(--fg);color:var(--bg);border-color:var(--fg)}
-input{height:36px;padding:0 12px;border-radius:6px;border:1px solid rgb(255 255 255 / 14%);background:var(--card);color:var(--fg);font:inherit;width:100%}
-form.token{max-width:380px;margin:12vh auto 0;display:grid;gap:12px}
-.err{color:#f87171;font-size:13px;min-height:20px;margin:0}
+header a{font-size:13px;color:var(--muted);text-decoration:none}
+header a:hover{color:var(--fg)}
 .tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:12px}
 .tile,.panel{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:16px}
 .tile .n{font-size:28px;font-weight:600;letter-spacing:-.02em}
@@ -39,7 +37,6 @@ td.v{text-align:right;font-weight:500}
 `
 
 const SCRIPT = `
-const KEY = 'duel-binder-admin-token'
 const $ = (id) => document.getElementById(id)
 const FREE = ${FREE_STORAGE_BYTES}
 const n = (v) => (v ?? 0).toLocaleString()
@@ -115,18 +112,10 @@ function render(s) {
 }
 
 async function load() {
-  const token = localStorage.getItem(KEY)
-  $('form').hidden = !!token
-  $('dash').hidden = !token
-  if (!token) return
   $('refresh').disabled = true
   try {
-    const res = await fetch('/admin/stats', { headers: { authorization: 'Bearer ' + token } })
-    if (res.status === 401) {
-      localStorage.removeItem(KEY)
-      $('err').textContent = 'That token was not accepted.'
-      return load()
-    }
+    const res = await fetch('/admin/stats', { credentials: 'same-origin' })
+    if (res.status === 401) throw new Error('Signed out. Sign in again from the front page.')
     if (!res.ok) throw new Error('The portal answered ' + res.status)
     render(await res.json())
   } catch (e) {
@@ -136,20 +125,7 @@ async function load() {
   }
 }
 
-$('form').addEventListener('submit', (e) => {
-  e.preventDefault()
-  const v = $('token').value.trim()
-  if (!v) return
-  localStorage.setItem(KEY, v)
-  $('token').value = ''
-  $('err').textContent = ''
-  load()
-})
 $('refresh').addEventListener('click', load)
-$('forget').addEventListener('click', () => {
-  localStorage.removeItem(KEY)
-  load()
-})
 load()
 `
 
@@ -180,18 +156,10 @@ export function adminPage(): Response {
 </head>
 <body>
 <main>
-<form id="form" class="token" hidden>
-<h1>Duel Binder admin</h1>
-<input id="token" type="password" placeholder="Admin token" autocomplete="current-password" aria-label="Admin token">
-<button class="pri" type="submit">Open dashboard</button>
-<p id="err" class="err"></p>
-</form>
-<div id="dash" hidden>
 <header><h1>Duel Binder</h1><span class="at" id="at"></span><span class="grow"></span>
-<button id="refresh" type="button">Refresh</button><button id="forget" type="button">Forget token</button></header>
+<a href="/">Back to the app</a><button id="refresh" type="button">Refresh</button></header>
 <div class="tiles" id="tiles"></div>
 <div class="grid" id="panels"></div>
-</div>
 </main>
 <script nonce="${nonce}">${SCRIPT}</script>
 </body>

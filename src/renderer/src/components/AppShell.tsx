@@ -1,8 +1,10 @@
 import { useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import logo from '@/assets/logo.svg'
 import { useFriendsAvailable, useFriendsOverview } from '@/lib/friends'
 import { isMac, isWeb } from '@/lib/platform'
 import { cn } from '@/lib/utils'
+import { fetchMe } from '@/web/account'
 import { ArtWash } from './ArtWash'
 import { ArtWashContext } from './artWashContext'
 import { MainScrollContext, type MainScroll } from './mainScroll'
@@ -50,6 +52,8 @@ export function AppShell({
     []
   )
   const [wash, setWash] = useState<string | null>(null)
+  // Shares the account section's query; the portal flags only the owner's account as admin.
+  const me = useQuery({ queryKey: ['me'], queryFn: () => fetchMe(), enabled: isWeb() })
   // Each page opens at its top, not wherever the previous page was scrolled to.
   useLayoutEffect(() => {
     scroll.set(0)
@@ -114,6 +118,15 @@ export function AppShell({
               </button>
             ))}
           </nav>
+          {me.data?.admin && (
+            <a
+              href="/admin"
+              className="-mt-4 flex items-center gap-2 rounded-sm py-1.5 text-sm text-muted-foreground transition-colors duration-150 hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
+            >
+              <span aria-hidden className="size-1.5 rounded-full bg-transparent" />
+              Admin
+            </a>
+          )}
           <button
             type="button"
             onClick={onAddCard}

@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import type { Language } from '@shared/languages'
 import { isToScanWindow, type ScanWindowSettings, type ScanWindowState } from '@shared/scanWindow'
 import { api } from '@/lib/api'
+import { cn } from '@/lib/utils'
 import { defaultEngine, type ScanEngine } from '../engine'
 import type { ScanDraft } from '../resolve'
 import { useCamera } from '../useCamera'
@@ -99,15 +100,20 @@ function Scanner({
   if (camera.error) return <CameraNotAvailable />
   return (
     <div
-      className="absolute inset-0 bg-black"
+      className="absolute inset-0 overflow-hidden bg-black"
       onDoubleClick={() => void window.api.scanWindow.toggleFullScreen()}
     >
+      {/* The zoom only changes what the window shows; recognition still reads the whole frame. */}
       <video
         ref={videoRef}
         autoPlay
         muted
         playsInline
-        className="size-full object-cover object-center"
+        className={cn(
+          'size-full object-center',
+          settings.fit === 'whole' ? 'object-contain' : 'object-cover'
+        )}
+        style={settings.zoom > 1 ? { transform: `scale(${settings.zoom})` } : undefined}
       />
       <PullOverlay pull={overlay} />
     </div>

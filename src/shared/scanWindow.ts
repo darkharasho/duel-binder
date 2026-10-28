@@ -15,7 +15,14 @@ export interface ScanWindowSettings {
   set: { setName: string; language: Language } | null
   defaultRarity: string | null
   hitPrice: number
+  /** How the camera fills the window: cropped to fill it, or the whole picture, letterboxed. */
+  fit: ScanFit
+  /** How far the picture is zoomed in on its centre, one of SCAN_ZOOMS (1 is not at all). */
+  zoom: number
 }
+
+export type ScanFit = 'fill' | 'whole'
+export const SCAN_ZOOMS = [1, 1.25, 1.5, 2, 2.5, 3] as const
 
 /** What the scan window reports back for the Scan page to show. */
 export interface ScanWindowState {

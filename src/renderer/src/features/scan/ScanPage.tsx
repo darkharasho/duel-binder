@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import type { ScanWindowState } from '@shared/scanWindow'
+import { SCAN_ZOOMS, type ScanFit, type ScanWindowState } from '@shared/scanWindow'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
 import {
@@ -172,6 +172,33 @@ export function ScanPage({
             >
               {settings.paused ? 'Resume' : 'Pause'}
             </Button>
+            <Select
+              value={settings.fit}
+              onValueChange={(fit) => setSettings({ fit: fit as ScanFit })}
+            >
+              <SelectTrigger size="sm" aria-label="Picture" className="w-40">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="fill">Fill the window</SelectItem>
+                <SelectItem value="whole">Whole picture</SelectItem>
+              </SelectContent>
+            </Select>
+            <Select
+              value={String(settings.zoom)}
+              onValueChange={(zoom) => setSettings({ zoom: Number(zoom) })}
+            >
+              <SelectTrigger size="sm" aria-label="Zoom" className="w-28">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {SCAN_ZOOMS.map((z) => (
+                  <SelectItem key={z} value={String(z)}>
+                    {z === 1 ? 'No zoom' : `${z}× zoom`}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             <span className="ml-3" />
             {newScansAs}
             {hitPrice}

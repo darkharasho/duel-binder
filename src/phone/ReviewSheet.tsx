@@ -8,6 +8,7 @@ import {
   XIcon
 } from 'lucide-react'
 import { CardArt } from '@/components/CardArt'
+import { useScanLanguage } from '@/features/scan/pickerOptions'
 import { useScanHub } from '@/features/scan/ScanHub'
 import { choicesFor, FLAG_TEXT } from '@/features/scan/ScanRowItem'
 import type { ScanRow } from '@/features/scan/session'
@@ -29,7 +30,8 @@ const STEP =
 /** One scanned card: art, code and price, its printing, how many, and remove. */
 function ReviewRow({ row, disabled }: { row: ScanRow; disabled: boolean }): React.JSX.Element {
   const { session } = useScanHub()
-  const choices = useMemo(() => choicesFor(row), [row])
+  const language = useScanLanguage()
+  const choices = useMemo(() => choicesFor(row, language), [row, language])
   const price = priceOf(row)
   const picked = choices.find((c) => c.key === String(row.printingId))
   return (

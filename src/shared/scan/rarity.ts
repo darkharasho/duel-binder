@@ -47,6 +47,9 @@ export function pickRarity(
   if (distinct.length === 1) return { rarity: distinct[0], certain: true }
   if (preferred !== null && distinct.includes(preferred))
     return { rarity: preferred, certain: true }
+  // A printing labelled with its variant ("Ultra Rare (New artwork)") when it is the only one.
+  const ofBase = distinct.filter((r) => preferred !== null && baseOf(r) === preferred)
+  if (ofBase.length === 1) return { rarity: ofBase[0], certain: true }
   return { rarity: lowest(distinct), certain: false }
 }
 

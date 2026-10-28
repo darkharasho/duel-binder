@@ -15,8 +15,12 @@ import type { ArtMatch, RawSignals } from './engine'
 
 export type { ScanDraft } from '@shared/scan/types'
 
+/**
+ * A frame's outcome. A `none` with `far` is something card-shaped whose art matched nothing
+ * close, rather than nothing in view.
+ */
 export type ScanOutcome =
-  { kind: 'none' } | { kind: 'unsure' } | { kind: 'recognized'; item: ScanDraft }
+  { kind: 'none'; far?: true } | { kind: 'unsure' } | { kind: 'recognized'; item: ScanDraft }
 
 export interface ResolveContext {
   setName: string | null
@@ -213,7 +217,7 @@ export async function resolveSignals(raw: RawSignals, ctx: ResolveContext): Prom
     (await byName(raw, ctx))
   if (item) return { kind: 'recognized', item }
   const [top] = raw.art
-  return top && top.distance > ART_FAR_DISTANCE ? { kind: 'none' } : { kind: 'unsure' }
+  return top && top.distance > ART_FAR_DISTANCE ? { kind: 'none', far: true } : { kind: 'unsure' }
 }
 
 /**

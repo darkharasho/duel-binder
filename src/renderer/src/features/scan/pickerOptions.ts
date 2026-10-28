@@ -29,6 +29,17 @@ function pickedLabel(s: PickedSet & { setCode?: string }, withTag: boolean): str
   return withTag ? `${name} · ${languageInfo(s.language).tag}` : name
 }
 
+/**
+ * The language the scanner is set to, which narrows each scanned row's printing dropdown: the
+ * Language picked on the Scan page, or under "All languages" the picked set's language; null
+ * under "All languages" with any set, when every language is listed.
+ */
+export function useScanLanguage(): Language | null {
+  const { settings } = useScanHub()
+  const [language] = useLanguageFilter()
+  return language !== 'all' ? language : (settings.set?.language ?? null)
+}
+
 /** One SearchPicker's value, options and pick handler. */
 export interface PickerProps {
   value: string

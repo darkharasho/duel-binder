@@ -70,7 +70,18 @@ async function renderWindow(
   return result
 }
 
-const drafts = (): ScanDraft[] => bridge.sent.flatMap((m) => (m.kind === 'draft' ? [m.draft] : []))
+/** Each pull sent, once: a pull not yet acknowledged is sent again. */
+const drafts = (): ScanDraft[] => [
+  ...new Map(
+    bridge.sent.flatMap((m) => (m.kind === 'draft' ? [[m.id, m.draft] as const] : []))
+  ).values()
+]
+/** How many times anything was sent for a pull, by id. */
+const sends = (): Map<string, number> => {
+  const n = new Map<string, number>()
+  for (const m of bridge.sent) if (m.kind === 'draft') n.set(m.id, (n.get(m.id) ?? 0) + 1)
+  return n
+}
 
 const lastState = (): ScanWindowState => {
   const states = bridge.sent.flatMap((m) => (m.kind === 'state' ? [m.state] : []))
@@ -110,6 +121,44 @@ describe('Scan window', () => {
     await run(1000)
     expect(drafts()).toHaveLength(1)
     expect(lastState().loop).toEqual({ kind: 'added', name: 'Dark Magician', setCode: 'LOB-EN005' })
+  })
+
+  it('resends a pull until the main window acknowledges it', async () => {
+    stubCamera()
+    const engine = fakeEngine(() => codeFrame('LOB-EN005'))
+    await renderWindow(engine, { scan: { printingsByCode: vi.fn(async () => [printing()]) } })
+    await run(1000)
+    const [id] = [...sends().keys()]
+    expect(sends().get(id)).toBe(1)
+    await run(2000)
+    expect(sends().get(id)).toBe(2)
+    act(() => bridge.emit({ kind: 'ack', id }))
+    await run(4000)
+    expect(sends().get(id)).toBe(2)
+    expect(drafts()).toHaveLength(1)
+  })
+
+  it('a pull left unacknowledged when the window closed goes once the hub is listening', async () => {
+    stubCamera()
+    const engine = fakeEngine(() => codeFrame('LOB-EN005'))
+    const { unmount } = await renderWindow(engine, {
+      scan: { printingsByCode: vi.fn(async () => [printing()]) }
+    })
+    await run(1000)
+    const [id] = [...sends().keys()]
+    unmount()
+
+    bridge = fakeBridge()
+    stubCamera()
+    await renderWindow(
+      fakeEngine(() => NOTHING),
+      {},
+      null
+    )
+    expect(sends().size).toBe(0)
+    act(() => bridge.emit({ kind: 'settings', settings: SETTINGS }))
+    expect(sends().get(id)).toBe(1)
+    expect(drafts()[0]).toMatchObject({ name: 'Dark Magician' })
   })
 
   it('a card-shaped thing far from any artwork counts as the card being lowered', async () => {

@@ -2,7 +2,7 @@ import { CATALOG_TABLES, type CatalogTable } from '../../../src/shared/catalogTa
 import { setMeta, type MetaKey } from '../../../src/main/db/meta'
 import type { AppDeps } from './app'
 import { upsertCatalogRow } from '../../../src/main/catalog/upsert'
-import { putFingerprints } from './scanFiles'
+import { putFingerprints, rollbackFingerprints } from './scanFiles'
 
 const MAX_ITEMS = 5000
 const META_KEYS: MetaKey[] = ['db_version', 'last_sync_at']
@@ -145,6 +145,9 @@ export async function adminRoute(req: Request, deps: AppDeps): Promise<Response>
   }
 
   if (req.method === 'PUT' && path === '/admin/scan/fingerprints') return putFingerprints(req, deps)
+  if (req.method === 'POST' && path === '/admin/scan/fingerprints/rollback') {
+    return rollbackFingerprints(deps)
+  }
 
   const handlers: Record<string, (body: Record<string, unknown>) => void> = {
     '/admin/catalog/rows': (b) => upsertRows(deps, tableOf(b), listOf(b.rows, 'rows')),

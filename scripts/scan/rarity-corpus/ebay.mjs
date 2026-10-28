@@ -9,7 +9,8 @@
 //   node scripts/scan/rarity-corpus/ebay.mjs [--db /tmp/rc-catalog.db] [--out ~/rarity-corpus/ebay]
 //        [--target 60] [--max-searches 1400] [--only "Starlight Rare,Ghost Rare"]
 //
-// Credentials: EBAY_PROD_APP_ID / EBAY_PROD_CERT_ID from the repo's .env (or the environment).
+// Credentials: EBAY_PROD_APP_ID / EBAY_PROD_CERT_ID from the repo's .env, the file EBAY_ENV_FILE
+// names, or the environment.
 // They are only sent to eBay's OAuth endpoint and are never logged or written anywhere.
 //
 // How it works, per target rarity:
@@ -84,8 +85,9 @@ function loadCreds() {
   const env = { ...process.env }
   const envFile = [
     path.join(repoRoot, '.env'),
-    '/var/home/mstephens/Documents/GitHub/duel-binder/.env'
-  ].find((p) => fs.existsSync(p))
+    // A worktree has no .env of its own: point EBAY_ENV_FILE at the main checkout's.
+    process.env.EBAY_ENV_FILE
+  ].find((p) => p && fs.existsSync(p))
   if (envFile) {
     for (const line of fs.readFileSync(envFile, 'utf8').split('\n')) {
       const m = line.match(/^\s*(?:export\s+)?([A-Z0-9_]+)\s*=\s*(.*)\s*$/)

@@ -2,7 +2,7 @@ import { promises as fs } from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createLimiter } from '../../src/main/images/limiter'
+import { createLimiter, type Limiter } from '../../src/main/images/limiter'
 import type { ImageSources } from '../../src/main/images/cache'
 import { portalImageSources } from '../../src/main/images/portalSources'
 import { createImageCache, imageUrl, parseImageUrl, parsePrintingImageUrl, parseSetImageUrl, setImageKey, setImageUrl, yugipediaImageKey } from '../../src/main/images/cache'
@@ -199,22 +199,45 @@ describe('set image keys', () => {
 
 describe('image cache priority', () => {
   it('a priority get downloads ahead of what is already queued, even if it was queued itself', async () => {
+    // Each get checks the disk before queueing, so gets join the queue in no fixed order. The test
+    // waits on what's queued rather than on timing: 1 holds the only slot until the end.
+    let release!: () => void
+    const gate = new Promise<void>((r) => (release = r))
     const started: string[] = []
     const fetchFn = vi.fn(async (url: string) => {
       started.push(url.match(/(\d+)\.jpg/)![1])
-      await new Promise((r) => setTimeout(r, 2))
+      await gate
       return okResponse()
     })
+    const real = createLimiter({ concurrency: 1, minIntervalMs: 0 })
+    let queued = 0
+    let promoted = 0
+    const limit = Object.assign(
+      <T,>(fn: () => Promise<T>, o?: { priority?: boolean; key?: string }) => {
+        queued++
+        return real(fn, o)
+      },
+      {
+        promote: (key: string) => {
+          promoted++
+          return real.promote(key)
+        }
+      }
+    ) as Limiter
     const cache = createImageCache({
       sources: direct(),
       dir,
       fetchFn: fetchFn as unknown as typeof fetch,
-      limit: createLimiter({ concurrency: 1, minIntervalMs: 0 })
+      limit
     })
-    const gets = [1, 2, 3, 4].map((id) => cache.get('full', id))
-    await new Promise((r) => setTimeout(r, 0))
+    const gets = [cache.get('full', 1)]
+    await vi.waitFor(() => expect(started).toEqual(['1']))
+    gets.push(...[2, 3, 4].map((id) => cache.get('full', id)))
+    await vi.waitFor(() => expect(queued).toBe(4))
     // 4 was queued without priority; asking again with priority moves it up. 5 is new.
     gets.push(cache.get('full', 4, { priority: true }), cache.get('full', 5, { priority: true }))
+    await vi.waitFor(() => expect([queued, promoted]).toEqual([5, 1]))
+    release()
     await Promise.all(gets)
     expect(started[0]).toBe('1')
     expect(started.slice(1, 3).sort()).toEqual(['4', '5'])

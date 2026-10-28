@@ -48,6 +48,26 @@ function setup(
 describe('useScanSession', () => {
   beforeEach(() => localStorage.clear())
 
+  it('refreshPrices fills in missing prices and keeps the ones shown', async () => {
+    const { result } = setup()
+    act(() =>
+      result.current.add(
+        draft({ options: [{ ...opt(101, 'Common'), price: 2 }, opt(102, 'Rare')] })
+      )
+    )
+    const printingsForCards = vi.fn(async () => [
+      { ...opt(101, 'Common'), price: 9 },
+      { ...opt(102, 'Rare'), price: 4 }
+    ])
+    window.api.scan.printingsForCards = printingsForCards
+    await act(() => result.current.refreshPrices())
+    expect(printingsForCards).toHaveBeenCalledWith([1])
+    expect(result.current.rows[0].options.map((o) => o.price)).toEqual([2, 4])
+    // Every price known: nothing to ask.
+    await act(() => result.current.refreshPrices())
+    expect(printingsForCards).toHaveBeenCalledTimes(1)
+  })
+
   it('merges repeat scans', () => {
     const { result } = setup()
     act(() => result.current.add(draft()))

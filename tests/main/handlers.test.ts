@@ -34,7 +34,8 @@ const fakeAccount = (signedIn = false): FakeAccount => ({
   refreshCatalog: vi.fn(),
   start: vi.fn(),
   stop: vi.fn(),
-  portal: vi.fn()
+  portal: vi.fn(),
+  requestPrices: vi.fn(async () => {})
 })
 
 async function makeHandlers(opts: { signedIn?: boolean } = {}) {
@@ -168,6 +169,12 @@ describe('createHandlers', () => {
       await expect(handlers[`account:${m}`]()).resolves.toEqual(status)
       expect(account[m]).toHaveBeenCalledTimes(1)
     }
+  })
+
+  it('prices:request goes to the account service', async () => {
+    const { handlers, account } = await makeHandlers({ signedIn: true })
+    await expect(handlers['prices:request']([3, 4])).resolves.toBeUndefined()
+    expect(account.requestPrices).toHaveBeenCalledWith([3, 4])
   })
 
   it('account:deleteAccount rejects', async () => {

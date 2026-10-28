@@ -36,6 +36,33 @@ function renderChecklist(
 }
 
 describe('SetChecklist', () => {
+  it("asks for an OCG set's unpriced printings to be priced", async () => {
+    const request = vi.fn(async () => {})
+    const api = createMockApi({
+      sets: {
+        checklist: async () => ({
+          ...metalRaidersChecklist,
+          set: { ...metalRaidersChecklist.set, language: 'ja' as const }
+        })
+      },
+      prices: { request }
+    })
+    renderWithProviders(
+      <SetChecklist
+        setName="Metal Raiders"
+        language="ja"
+        mode="cards"
+        onModeChange={() => {}}
+        onBack={() => {}}
+        onAddMissing={() => {}}
+      />,
+      { api }
+    )
+    // Only Beta Knight's Common has no price.
+    await waitFor(() => expect(request).toHaveBeenCalledWith([PRINTING.beta]), { timeout: 3000 })
+    expect(request).toHaveBeenCalledTimes(1)
+  })
+
   it('shows the language tag and the unmatched-rows note', async () => {
     renderChecklist({
       checklist: {

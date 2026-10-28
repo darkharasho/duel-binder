@@ -42,27 +42,36 @@ export interface AlarmStorage {
 }
 
 export interface PriceQueue {
-  /** Arm the alarm PRICE_SOON_MS ahead unless one is already due sooner. */
-  soon(): Promise<void>
+  /**
+   * Arm the alarm PRICE_SOON_MS ahead unless one is already due sooner. `paced` (price requests, which
+   * come often) also keeps an alarm due within PRICE_MORE_MS, so requests never run the alarm faster
+   * than its batch pacing.
+   */
+  soon(opts?: { paced?: boolean }): Promise<void>
 }
 
 /**
- * Arms the alarm at `at` unless one is already set at or before it. A time at or before `nowMs` counts as no
+ * Arms the alarm at `at` unless one is already set at or before it (or at or before `keepWithin`). A time at or before `nowMs` counts as no
  * alarm: inside an alarm handler `getAlarm()` may still return the alarm that is firing.
  */
-async function armBy(storage: AlarmStorage, at: number, nowMs: number): Promise<void> {
+async function armBy(
+  storage: AlarmStorage,
+  at: number,
+  nowMs: number,
+  keepWithin = at
+): Promise<void> {
   const current = await storage.getAlarm()
-  if (current !== null && current > nowMs && current <= at) return
+  if (current !== null && current > nowMs && current <= Math.max(at, keepWithin)) return
   await storage.setAlarm(at)
 }
 
 export function alarmQueue(storage: AlarmStorage, now: () => number): PriceQueue {
   return {
     // Never rejects: a write that succeeded must not fail because the alarm could not be armed.
-    async soon() {
+    async soon(opts) {
       try {
         const t = now()
-        await armBy(storage, t + PRICE_SOON_MS, t)
+        await armBy(storage, t + PRICE_SOON_MS, t, opts?.paced ? t + PRICE_MORE_MS : undefined)
       } catch (e) {
         console.error('Price alarm could not be queued', e)
       }

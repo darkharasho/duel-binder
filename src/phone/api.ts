@@ -80,7 +80,7 @@ type DataPart<N extends DataNamespace> = Pick<Api[N], MethodOf<DataChannel, N> &
 export function createPhoneApi(deps: {
   store: PhoneStore
   ocr: Ocr
-  triggers: { afterAdd(): void }
+  triggers: { afterAdd(): void; afterPriceRequest(): void }
   events: PhoneEvents
 }): Api {
   const { store, ocr, triggers, events } = deps
@@ -170,9 +170,10 @@ export function createPhoneApi(deps: {
     accountRun = { state: 'syncing', error: null }
     await emitAccount().catch(() => {})
     try {
-      const { changed } = await store.sync()
+      const { changed, awaitingPrices } = await store.sync()
       accountRun = { state: 'idle', error: null }
       if (changed) events.emit('dataChanged')
+      if (awaitingPrices) triggers.afterPriceRequest()
     } catch (e) {
       accountRun = { state: 'error', error: e instanceof Error ? e.message : String(e) }
     }
@@ -229,6 +230,11 @@ export function createPhoneApi(deps: {
       packWrappers: unavailable
     },
     stats: dataPart('stats'),
+    prices: {
+      request: async (printingIds) => {
+        if ((await store.requestPrices(printingIds)) > 0) triggers.afterPriceRequest()
+      }
+    },
     sets: dataPart('sets'),
     sync: {
       status: syncStatus,

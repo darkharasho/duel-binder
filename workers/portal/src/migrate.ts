@@ -257,6 +257,17 @@ CREATE INDEX ix_price_request_log_day ON price_request_log(day);
     // When each user last made a signed-in request, to the hour; feeds /admin/stats active counts.
     name: 'server-9',
     sql: 'ALTER TABLE users ADD COLUMN last_seen_at TEXT;'
+  },
+  {
+    // Anonymous usage: per-day event totals by platform, with nothing that names a user or device.
+    name: 'server-10',
+    sql: `CREATE TABLE usage_daily (
+      day TEXT NOT NULL,
+      platform TEXT NOT NULL,
+      event TEXT NOT NULL,
+      count INTEGER NOT NULL,
+      PRIMARY KEY (day, platform, event)
+    ) WITHOUT ROWID;`
   }
 ]
 

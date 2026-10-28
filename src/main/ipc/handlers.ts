@@ -108,6 +108,7 @@ export function createHandlers({
           opts?.sessionOffset === undefined ? undefined : wholeNumber(opts.sessionOffset, 'Offset')
       }),
     'prices:request': (printingIds: unknown) => account.requestPrices(printingIds),
+    'usage:report': (events: unknown) => account.reportUsage(events),
     'rip:packWrappers': async (key: unknown) => {
       if (typeof key !== 'string') throw new Error('Pack image key must be a string')
       // Ahead of the queue, like the pack's own <img>: the pack waits on it.

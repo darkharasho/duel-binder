@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { api, mutationInvalidationKeys } from '@/lib/api'
+import { track } from '@/lib/usage'
 import type { ScanDraft } from './resolve'
 
 export interface ScanRow extends ScanDraft {
@@ -218,6 +219,7 @@ export function useScanSession(): {
           })
           added++
           cards += row.quantity
+          track('scan:add')
           // Scans merged in meanwhile stay: take off only what was added.
           update((list) =>
             list.flatMap((r) =>

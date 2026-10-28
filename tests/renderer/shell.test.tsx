@@ -5,6 +5,7 @@ import { CardArt } from '@/components/CardArt'
 import type { Api } from '@shared/ipc'
 import type { EntryView } from '@shared/types'
 import { createMockApi, renderWithProviders } from './mockApi'
+import { flushUsage, resetUsage } from '@/lib/usage'
 
 // Signed in, so the sign-in gate lets the shell through.
 const mockApi = (o: Parameters<typeof createMockApi>[0] = {}): Api =>
@@ -50,6 +51,16 @@ describe('AppShell', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Settings' }))
     expect(screen.getByRole('heading', { name: 'Settings' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Settings' })).toHaveAttribute('aria-current', 'page')
+  })
+
+  it('counts the open and each page shown toward the anonymous usage report', async () => {
+    resetUsage()
+    const api = mockApi()
+    await renderApp(api)
+    await userEvent.click(screen.getByRole('button', { name: 'Sets' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Dashboard' }))
+    flushUsage()
+    expect(api.usage.report).toHaveBeenCalledWith({ open: 1, 'page:dashboard': 2, 'page:sets': 1 })
   })
 
   it('Ctrl+K and the Add card button open the add flow', async () => {

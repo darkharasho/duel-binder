@@ -1,4 +1,5 @@
 import type { SqlDb } from '../../main/db/sql'
+import type { UsageReport } from '../../shared/usage'
 import { getMeta, setMeta } from '../../main/db/meta'
 import { applyChanges, finishApply } from '../../main/catalog/apply'
 import {
@@ -74,6 +75,8 @@ export interface PhoneStore {
    * only rejects ids that aren't a list of whole numbers).
    */
   requestPrices(printingIds: number[]): Promise<number>
+  /** Sends anonymous usage totals when signed in; drops them otherwise. Never rejects. */
+  reportUsage(report: UsageReport): Promise<void>
   fingerprints(): Promise<ArrayBuffer | null>
   refreshFingerprints(opts?: { force?: boolean }): Promise<FingerprintStatus>
 }
@@ -562,6 +565,16 @@ export function createPhoneStore(deps: {
           }
         })
       ),
+
+    reportUsage: async (report) => {
+      const t = token()
+      if (t === null) return
+      try {
+        await client(t, PORTAL_TIMEOUT_MS).usage(report)
+      } catch {
+        // Best effort: a lost batch only undercounts.
+      }
+    },
 
     requestPrices: async (printingIds) => {
       const ids = checkPrintingIds(printingIds)

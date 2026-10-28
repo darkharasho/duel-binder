@@ -1,5 +1,6 @@
 import type { SqlDb } from '../../../src/main/db/sql'
 import { adminPage } from './adminPage'
+import { reportUsage } from './usage'
 import { adminRoute } from './catalogLoad'
 import { rpcRoute } from './rpc'
 import { syncRoute } from './sync'
@@ -89,6 +90,7 @@ async function route(req: Request, deps: AppDeps): Promise<Response> {
     return revokeDesktopToken(req, deps)
   if (req.method === 'GET' && url.pathname === '/api/me') return me(req, deps)
   if (url.pathname === '/api/account/delete') return deleteAccountRoute(req, deps)
+  if (url.pathname === '/api/usage') return reportUsage(req, deps)
   if (url.pathname.startsWith('/api/rpc/')) {
     let channel: string
     try {

@@ -33,6 +33,11 @@ td.v{text-align:right;font-weight:500}
 .bar{height:8px;border-radius:4px;background:rgb(255 255 255 / 8%);overflow:hidden;margin:8px 0 4px}
 .bar div{height:100%;background:var(--accent)}
 .note{color:var(--muted);font-size:12px;margin:4px 0 0}
+.wide{margin-top:12px}
+.chart{display:flex;align-items:flex-end;gap:3px;height:80px;margin-bottom:16px}
+.chart div{flex:1;min-height:2px;background:var(--accent);border-radius:2px 2px 0 0;opacity:.85}
+th{padding:6px 0;text-align:right;font-size:12px;font-weight:500;color:var(--muted)}
+th:first-child{text-align:left}
 [hidden]{display:none!important}
 `
 
@@ -108,7 +113,48 @@ function render(s) {
     ]),
     panel('Storage', Object.entries(s.storage.rows).map(([k, v]) => [k, n(v) + ' rows']), usage)
   )
+  renderUsage(s.usage)
   $('at').textContent = 'Updated ' + new Date(s.at).toLocaleString()
+}
+
+const PLATFORMS = ['desktop', 'web', 'phone', 'ios']
+
+function renderUsage(u) {
+  const p = el('section', null, 'panel wide')
+  p.append(el('h2', 'Usage since ' + u.since + ' (anonymous)'))
+  const max = Math.max(1, ...u.opensByDay.map((d) => d.count))
+  const chart = el('div', null, 'chart')
+  for (const d of u.opensByDay) {
+    const bar = el('div')
+    bar.style.height = Math.max(2, (d.count / max) * 100) + '%'
+    bar.title = d.day + ': ' + n(d.count) + ' opens'
+    chart.append(bar)
+  }
+  if (u.opensByDay.length) p.append(el('p', 'App opens per day', 'note'), chart)
+
+  const byEvent = new Map()
+  for (const t of u.totals) {
+    const row = byEvent.get(t.event) ?? {}
+    row[t.platform] = t.count
+    byEvent.set(t.event, row)
+  }
+  const table = el('table')
+  const head = el('tr')
+  for (const h of ['Event', ...PLATFORMS, 'Total']) head.append(el('th', h))
+  table.append(head)
+  for (const [event, row] of byEvent) {
+    const tr = el('tr')
+    tr.append(el('td', event))
+    let total = 0
+    for (const pl of PLATFORMS) {
+      total += row[pl] ?? 0
+      tr.append(el('td', row[pl] ? n(row[pl]) : '–', 'v'))
+    }
+    tr.append(el('td', n(total), 'v'))
+    table.append(tr)
+  }
+  p.append(byEvent.size ? table : el('p', 'Nothing reported yet.', 'note'))
+  $('usage').replaceChildren(p)
 }
 
 async function load() {
@@ -160,6 +206,7 @@ export function adminPage(): Response {
 <a href="/">Back to the app</a><button id="refresh" type="button">Refresh</button></header>
 <div class="tiles" id="tiles"></div>
 <div class="grid" id="panels"></div>
+<div id="usage"></div>
 </main>
 <script nonce="${nonce}">${SCRIPT}</script>
 </body>

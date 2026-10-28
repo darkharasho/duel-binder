@@ -35,7 +35,8 @@ const fakeAccount = (signedIn = false): FakeAccount => ({
   start: vi.fn(),
   stop: vi.fn(),
   portal: vi.fn(),
-  requestPrices: vi.fn(async () => {})
+  requestPrices: vi.fn(async () => {}),
+  reportUsage: vi.fn(async () => {})
 })
 
 async function makeHandlers(opts: { signedIn?: boolean } = {}) {

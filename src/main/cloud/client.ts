@@ -4,6 +4,7 @@ import type {
   ContributedPrinting,
   ContributeResult
 } from '../../shared/catalogFeed'
+import type { UsageReport } from '../../shared/usage'
 import type {
   Me,
   PriceRequestResponse,
@@ -50,6 +51,8 @@ export interface CloudClient {
   /** Offers printings the catalog lacks; one result per printing. */
   contribute(printings: ContributedPrinting[]): Promise<ContributeResult[]>
   revoke(): Promise<void>
+  /** Adds anonymous event totals to the portal's daily counters. */
+  usage(report: UsageReport): Promise<void>
   /** Calls a portal RPC channel; resolves to its result. */
   rpc<T>(channel: PortalChannel, args: unknown[]): Promise<T>
 }
@@ -156,6 +159,7 @@ export function createCloudClient(opts: {
         })
       ).results,
     revoke: () => call<void>('/auth/desktop/revoke', 'POST', undefined, false),
+    usage: (report) => call<void>('/api/usage', 'POST', report, false),
     rpc: async <T>(channel: PortalChannel, args: unknown[]) =>
       (await call<{ result: T }>(`/api/rpc/${channel}`, 'POST', { args })).result
   }

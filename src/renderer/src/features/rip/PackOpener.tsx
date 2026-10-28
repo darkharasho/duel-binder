@@ -3,6 +3,7 @@ import { useCallback, useEffect, useLayoutEffect, useReducer, useRef, useState }
 import { TiltCard } from '@/components/TiltCard'
 import { Button } from '@/components/ui/button'
 import { api, queryKeys } from '@/lib/api'
+import { track } from '@/lib/usage'
 import { cardImageSrc, setImageSrc } from '@/lib/images'
 import { rarityColor } from '@/lib/rarityColors'
 import { cn } from '@/lib/utils'
@@ -538,6 +539,7 @@ export function PackOpener({
       requested.current = index
       api.rip.openPack(sessionId).then(
         (cards) => {
+          track('rip:pack')
           // The pack is saved: keep History fresh, even if we've since unmounted. Not the sets
           // list: a pack never changes it, and refetching it blocks main for about a second.
           void queryClient.invalidateQueries({ queryKey: [...queryKeys.ripHistory] })

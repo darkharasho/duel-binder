@@ -4,6 +4,7 @@ import { ChevronLeft, XIcon } from 'lucide-react'
 import { toast } from 'sonner'
 import type { CardSearchResult, Printing } from '@shared/types'
 import { api, mutationInvalidationKeys, queryKeys } from '@/lib/api'
+import { track } from '@/lib/usage'
 import { priceFor } from '@shared/pricing'
 import { LANGUAGES, type LanguageFilter } from '@shared/languages'
 import { ValueText } from '@/features/collection/EntryValue'
@@ -142,6 +143,7 @@ export function AddCardDialog({
     onSuccess: () => {
       for (const queryKey of mutationInvalidationKeys) void qc.invalidateQueries({ queryKey })
       toast.success(`Added ${qty} × ${card!.name} (${printing!.setCode})`)
+      track('card:add')
       reset()
     },
     onError: (err) => toast.error(err instanceof Error ? err.message : 'Could not add card')

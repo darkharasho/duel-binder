@@ -112,6 +112,7 @@ export function fakeStore(
       channel === 'friends:overview' ? { friends: [], incoming: [], blocked: [] } : []
     ) as PhoneStore['portal'],
     requestPrices: vi.fn(async () => 0),
+    reportUsage: vi.fn(async () => {}),
     fingerprints: vi.fn(async () => null),
     refreshFingerprints: vi.fn(async () => ({ state: 'ready' as const, count: 3 })),
     ...over

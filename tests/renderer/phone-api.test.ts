@@ -42,6 +42,7 @@ function fakeStore(over: Partial<PhoneStore> = {}): PhoneStore {
     invoke: vi.fn(async () => 'ok'),
     portal: vi.fn(async () => 'portal') as PhoneStore['portal'],
     requestPrices: vi.fn(async () => 0),
+    reportUsage: vi.fn(async () => {}),
     fingerprints: vi.fn(async () => null),
     refreshFingerprints: vi.fn(async () => ({ state: 'ready' as const, count: 3 })),
     ...over

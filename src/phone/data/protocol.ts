@@ -24,6 +24,7 @@ export const STORE_METHODS = [
   'invoke',
   'portal',
   'requestPrices',
+  'reportUsage',
   'fingerprints',
   'refreshFingerprints'
 ] as const satisfies readonly (keyof PhoneStore)[]

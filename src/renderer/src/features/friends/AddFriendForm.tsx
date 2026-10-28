@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { api, queryKeys } from '@/lib/api'
+import { track } from '@/lib/usage'
 import { friendsErrorMessage } from '@/lib/friends'
 
 export function AddFriendForm(): React.JSX.Element {
@@ -11,6 +12,7 @@ export function AddFriendForm(): React.JSX.Element {
   const request = useMutation({
     mutationFn: (name: string) => api.friends.request(name),
     onSuccess: () => {
+      track('friend:request')
       setUsername('')
       void qc.invalidateQueries({ queryKey: queryKeys.friends })
     }

@@ -1,4 +1,5 @@
 import type { SqlDb } from '../../../src/main/db/sql'
+import { adminPage } from './adminPage'
 import { adminRoute } from './catalogLoad'
 import { rpcRoute } from './rpc'
 import { syncRoute } from './sync'
@@ -102,6 +103,7 @@ async function route(req: Request, deps: AppDeps): Promise<Response> {
     return imageRoute(req, deps, url.pathname.slice('/img/'.length))
   if (req.method === 'GET' && url.pathname === '/scan/fingerprints')
     return getFingerprints(req, deps)
+  if (req.method === 'GET' && url.pathname === '/admin') return adminPage()
   if (url.pathname.startsWith('/admin/')) return adminRoute(req, deps)
   return json({ error: 'Not found' }, 404)
 }

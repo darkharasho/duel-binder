@@ -219,6 +219,46 @@ describe('phone store', () => {
     expect(err.message).toBe('Could not reach Duel Binder. Check your connection and try again.')
   })
 
+  it('asks for prices, then syncs them in; nothing signed out or offline', async () => {
+    portal.serverDb
+      .prepare(
+        `INSERT INTO card_printings (card_id, language, set_name, set_code, set_rarity)
+         VALUES (?, 'ja', 'Test Set', 'TST-JP001', 'Ultra Rare')`
+      )
+      .run(DM)
+    const asks = (): number =>
+      requests.filter((r) => r.url.endsWith('/api/sync/price-requests')).length
+    await expect(store.requestPrices([1])).resolves.toBe(0)
+    await ready()
+    const id = (
+      db.prepare("SELECT id FROM card_printings WHERE set_code = 'TST-JP001'").get() as {
+        id: number
+      }
+    ).id
+    net = offline
+    await expect(store.requestPrices([id])).resolves.toBe(0)
+    expect(asks()).toBe(1)
+    net = real
+
+    await expect(store.requestPrices([id])).resolves.toBe(1)
+    expect(portal.serverDb.prepare('SELECT COUNT(*) AS n FROM price_requests').get()).toEqual({
+      n: 1
+    })
+    expect((await store.sync()).awaitingPrices).toBe(true)
+
+    portal.serverDb
+      .prepare(
+        `INSERT INTO intl_prices (printing_id, price, listing_count, checked_at)
+         SELECT id, 6.5, 3, ? FROM card_printings WHERE set_code = 'TST-JP001'`
+      )
+      .run(clock.toISOString())
+    const after = await store.sync()
+    expect(after).toMatchObject({ changed: true, awaitingPrices: false })
+    expect(db.prepare('SELECT price FROM intl_prices WHERE printing_id = ?').get(id)).toEqual({
+      price: 6.5
+    })
+  })
+
   it('resumes a fill after a failed page', async () => {
     await store.signIn(token, me)
     const cursors: number[] = []

@@ -89,6 +89,14 @@ export interface Api {
   stats: {
     get(): Promise<CollectionStats>
   }
+  prices: {
+    /**
+     * Asks for eBay prices for printings on screen that have none: the portal prices the non-English
+     * ones about a minute later and a sync brings them in (`app.onDataChanged`). Fire and forget: does
+     * nothing signed out, offline or on the web.
+     */
+    request(printingIds: number[]): Promise<void>
+  }
   sets: {
     list(): Promise<SetSummary[]>
     checklist(setName: string, language: Language): Promise<SetChecklist | null>
@@ -186,6 +194,7 @@ export const INVOKE_CHANNELS = [
   'rip:session',
   'rip:history',
   'stats:get',
+  'prices:request',
   'sets:list',
   'sets:checklist',
   'sets:adjust',

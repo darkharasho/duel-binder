@@ -106,6 +106,7 @@ export function createHandlers({
         sessionOffset:
           opts?.sessionOffset === undefined ? undefined : wholeNumber(opts.sessionOffset, 'Offset')
       }),
+    'prices:request': (printingIds: unknown) => account.requestPrices(printingIds),
     'sync:status': async () => catalog.status(),
     'sync:run': async () => account.refreshCatalog(),
     'images:cacheSize': () => images.sizeBytes(),

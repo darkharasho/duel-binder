@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { createSyncTriggers } from '../../src/phone/syncTriggers'
+import { PRICE_DELAY_MS, createSyncTriggers } from '../../src/phone/syncTriggers'
 
 type Event = 'online' | 'visible'
 
@@ -144,5 +144,29 @@ describe('sync triggers', () => {
     await vi.advanceTimersByTimeAsync(10 * 60_000)
     expect(spy).not.toHaveBeenCalled()
     expect([...listeners.values()].every((s) => s.size === 0)).toBe(true)
+  })
+
+  it('a price request syncs once after PRICE_DELAY_MS, however many come meanwhile', async () => {
+    const { spy, triggers } = setup()
+    triggers.afterPriceRequest()
+    await vi.advanceTimersByTimeAsync(PRICE_DELAY_MS - 1000)
+    triggers.afterPriceRequest()
+    await vi.advanceTimersByTimeAsync(999)
+    expect(spy).not.toHaveBeenCalled()
+    await vi.advanceTimersByTimeAsync(1)
+    expect(spy).toHaveBeenCalledTimes(1)
+    // Once it has run, the next request waits again.
+    triggers.afterPriceRequest()
+    await vi.advanceTimersByTimeAsync(PRICE_DELAY_MS)
+    expect(spy).toHaveBeenCalledTimes(2)
+    triggers.dispose()
+  })
+
+  it('a pending price sync is dropped on dispose', async () => {
+    const { spy, triggers } = setup()
+    triggers.afterPriceRequest()
+    triggers.dispose()
+    await vi.advanceTimersByTimeAsync(PRICE_DELAY_MS)
+    expect(spy).not.toHaveBeenCalled()
   })
 })

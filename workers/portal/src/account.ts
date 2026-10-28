@@ -14,7 +14,7 @@ const json = (body: unknown, status: number): Response =>
  * everything the server keeps for them, in one transaction:
  * - `collection_entries` and `value_snapshots` don't cascade from `users`, so they go first;
  * - deleting the `users` row cascades to sessions, desktop_codes, friendships,
- *   friend_request_log, friend_blocks and printing_contributions (foreign keys are always on
+ *   friend_request_log, friend_blocks, printing_contributions and price_request_log (foreign keys are always on
  *   in a Durable Object).
  * One statement per table: Durable Object SQLite rejects large compound queries.
  * A Sign in with Apple account's refresh token is then revoked with Apple, as App Review asks;

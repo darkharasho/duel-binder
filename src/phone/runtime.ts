@@ -59,7 +59,10 @@ export function createPhoneRuntime(deps: {
   const api = createPhoneApi({
     store,
     ocr: deps.ocr,
-    triggers: { afterAdd: () => triggers.afterAdd() },
+    triggers: {
+      afterAdd: () => triggers.afterAdd(),
+      afterPriceRequest: () => triggers.afterPriceRequest()
+    },
     events
   })
   const triggers = createSyncTriggers({

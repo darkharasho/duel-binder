@@ -8,6 +8,7 @@ import {
   type ScanWindowSettings,
   type ScanWindowState
 } from '@shared/scanWindow'
+import { unpricedIntl, useRequestPrices } from '@/lib/priceRequests'
 import type { ScanDraft } from './resolve'
 import { rowKey, useScanSession } from './session'
 import { rememberedCamera } from './useCamera'
@@ -98,7 +99,23 @@ export function ScanHubProvider({ children }: { children: React.ReactNode }): Re
   const [state, setState] = useState<ScanWindowState | null>(null)
   const [fresh, setFresh] = useState<string | null>(null)
   const highlightTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
-  const { add } = session
+  const { add, refreshPrices } = session
+
+  // Unpriced non-English pulls on the list: ask for their prices, and fill them in as syncs bring them.
+  useRequestPrices(
+    unpricedIntl(
+      session.rows.flatMap((r) => r.options.filter((o) => o.printingId === r.printingId))
+    )
+  )
+  useEffect(
+    () =>
+      window.api.app.onDataChanged(() => {
+        refreshPrices().catch(() => {
+          // A failed read leaves the prices as they were; the next sync tries again.
+        })
+      }),
+    [refreshPrices]
+  )
 
   const count = useCallback(
     (draft: ScanDraft): void => {

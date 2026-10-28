@@ -8,19 +8,32 @@ import { defaultEngine, type ScanEngine } from '../engine'
 import type { ScanDraft } from '../resolve'
 import { useCamera } from '../useCamera'
 import { useScanLoop } from '../useScanLoop'
+import { createOutbox, type Outbox } from './outbox'
 import { pullOf } from './overlay'
 import { PullOverlay } from './PullOverlay'
 import { useOverlay } from './useOverlay'
 
 const WINDOW_TITLE = 'Duel Binder — Scan'
 const ANY = 'any'
+/** How often pulls the main window hasn't acknowledged are sent again. */
+const RESEND_MS = 2000
+
+const sendDraft = (id: string, draft: ScanDraft): void =>
+  window.api.scanWindow.send({ kind: 'draft', id, draft })
+
+/** Sends every pull still waiting for its acknowledgement. */
+const flush = (outbox: Outbox): void => {
+  for (const { id, draft } of outbox.pending()) sendDraft(id, draft)
+}
 
 function Scanner({
   settings,
-  engineFactory
+  engineFactory,
+  outbox
 }: {
   settings: ScanWindowSettings
   engineFactory: () => ScanEngine
+  outbox: Outbox
 }): React.JSX.Element {
   const videoRef = useRef<HTMLVideoElement>(null)
   const camera = useCamera(settings.deviceId)
@@ -45,10 +58,10 @@ function Scanner({
 
   const onDraft = useCallback(
     (draft: ScanDraft) => {
-      window.api.scanWindow.send({ kind: 'draft', draft })
+      sendDraft(outbox.put(draft), draft)
       push(pullOf(draft, hitPrice.current, pulls.current++))
     },
-    [push]
+    [push, outbox]
   )
   const loop = useScanLoop({
     videoRef,
@@ -139,16 +152,28 @@ export function ScanWindowApp({
   engineFactory?: () => ScanEngine
 }): React.JSX.Element {
   const [settings, setSettings] = useState<ScanWindowSettings | null>(null)
+  const [outbox] = useState(createOutbox)
 
   useEffect(() => {
     document.title = WINDOW_TITLE
     const off = window.api.scanWindow.onMessage((m) => {
-      if (isToScanWindow(m) && m.kind === 'settings') setSettings(m.settings)
+      if (!isToScanWindow(m)) return
+      if (m.kind === 'ack') outbox.ack(m.id)
+      else if (m.kind === 'settings') {
+        setSettings(m.settings)
+        // Settings mean the hub is listening: pulls left from before it (re)loaded, or from a
+        // scan window that closed or crashed with them unacknowledged, go now.
+        flush(outbox)
+      }
     })
+    const resend = setInterval(() => flush(outbox), RESEND_MS)
     window.api.scanWindow.send({ kind: 'ready' })
-    return off
-  }, [])
+    return () => {
+      off()
+      clearInterval(resend)
+    }
+  }, [outbox])
 
   if (settings === null) return <div className="absolute inset-0 bg-black" />
-  return <Scanner settings={settings} engineFactory={engineFactory} />
+  return <Scanner settings={settings} engineFactory={engineFactory} outbox={outbox} />
 }

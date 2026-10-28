@@ -51,6 +51,10 @@ export type DataChannel = (typeof DATA_CHANNELS)[number]
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Handler = (...args: any[]) => Promise<unknown>
 
+/** How long, and how many, named adds are remembered to answer a repeat. */
+const REPEAT_ADD_MS = 30 * 60_000
+const MAX_REMEMBERED_ADDS = 500
+
 export function createDataHandlers({
   db,
   onEdit
@@ -68,6 +72,16 @@ export function createDataHandlers({
     onEdit()
     return result
   }
+  // Named adds already done, with what they returned, oldest first.
+  const doneAdds = new Map<string, { at: number; result: unknown }>()
+  const rememberAdd = (id: string, result: unknown): void => {
+    const now = Date.now()
+    for (const [key, { at }] of doneAdds) {
+      if (doneAdds.size < MAX_REMEMBERED_ADDS && now - at < REPEAT_ADD_MS) break
+      doneAdds.delete(key)
+    }
+    doneAdds.set(id, { at: now, result })
+  }
   return {
     'cards:search': async (q: string) => searchCards(db, q),
     'cards:get': async (cardId: number) => getCardDetail(db, cardId),
@@ -77,7 +91,13 @@ export function createDataHandlers({
     'collection:forCard': async (cardId: number) => entriesForCard(db, cardId),
     'collection:add': async (input) => {
       checkNotesLength(input)
-      return edited(snapshotAfter(addEntry(db, input)))
+      const id: unknown = input?.requestId
+      if (typeof id !== 'string') return edited(snapshotAfter(addEntry(db, input)))
+      const done = doneAdds.get(id)
+      if (done && Date.now() - done.at < REPEAT_ADD_MS) return done.result
+      const result = edited(snapshotAfter(addEntry(db, input)))
+      rememberAdd(id, result)
+      return result
     },
     'collection:update': async (id: number, patch) => {
       checkNotesLength(patch)

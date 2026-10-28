@@ -39,15 +39,18 @@ export type ToScanWindow =
   | { kind: 'settings'; settings: ScanWindowSettings }
   | { kind: 'retryCamera' }
   | { kind: 'retryScan' }
+  /** The draft with this id is on the list; the scan window stops resending it. */
+  | { kind: 'ack'; id: string }
 
 export type FromScanWindow =
   | { kind: 'ready' }
   | { kind: 'state'; state: ScanWindowState }
-  | { kind: 'draft'; draft: ScanDraft }
+  /** A pull to count. Resent until acknowledged, so the same id can arrive more than once. */
+  | { kind: 'draft'; id: string; draft: ScanDraft }
 
 export type ScanWindowMessage = ToScanWindow | FromScanWindow
 
-const TO: readonly string[] = ['settings', 'retryCamera', 'retryScan']
+const TO: readonly string[] = ['settings', 'retryCamera', 'retryScan', 'ack']
 const FROM: readonly string[] = ['ready', 'state', 'draft']
 
 const kindOf = (v: unknown): unknown =>

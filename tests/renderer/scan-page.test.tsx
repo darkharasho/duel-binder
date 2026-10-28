@@ -1077,6 +1077,7 @@ describe('Scan page', () => {
   })
 
   it("a picked printing keeps the card's other printings to choose from", async () => {
+    localStorage.setItem('language.filter', 'all')
     const options = [
       printing({ printingId: 201, setCode: 'LOB-EN005', rarity: 'Ultra Rare' }),
       printing({ printingId: 202, setCode: 'SDY-006', rarity: 'Common', language: 'de' }),
@@ -1109,6 +1110,112 @@ describe('Scan page', () => {
     await u.click(screen.getByRole('option', { name: 'SDY-006 · Common · DE' }))
     await u.click(screen.getByRole('combobox', { name: 'Rarity for Dark Magician' }))
     expect(screen.getAllByRole('option')).toHaveLength(2)
+  })
+
+  it("the printing dropdown lists the scan language's printings, keeping the row's own", async () => {
+    const options = [
+      printing({ printingId: 201, setCode: 'LOB-EN005', rarity: 'Ultra Rare' }),
+      printing({ printingId: 202, setCode: 'SDY-006', rarity: 'Common', language: 'de' }),
+      printing({ printingId: 203, setCode: 'LOB-JP005', rarity: 'Rare', language: 'ja' }),
+      printing({ printingId: 204, setCode: 'SDY-EN006', rarity: 'Common' })
+    ]
+    localStorage.setItem(
+      SESSION_KEY,
+      JSON.stringify([
+        row({
+          key: 'c1:46986414',
+          printingId: 202,
+          setCode: 'SDY-006',
+          rarity: 'Common',
+          flag: null,
+          via: 'art',
+          options
+        })
+      ])
+    )
+    const lobJp = { setName: 'Legend of Blue Eyes White Dragon', language: 'ja' } as SetSummary
+    await renderScan({ sets: { list: vi.fn(async () => [lobJp]) } })
+    await run()
+    const u = user()
+    const picker = (): HTMLElement =>
+      screen.getByRole('combobox', { name: 'Rarity for Dark Magician' })
+    const listed = (): (string | null)[] => screen.getAllByRole('option').map((o) => o.textContent)
+    // English is picked (the default): English printings, and the German one the row is on.
+    await u.click(picker())
+    expect(listed()).toEqual([
+      'LOB-EN005 · Ultra Rare · EN',
+      'SDY-006 · Common · DE',
+      'SDY-EN006 · Common · EN'
+    ])
+    await u.keyboard('{Escape}')
+
+    // Picking Japanese on the Scan page narrows it to Japanese, still keeping the row's own.
+    await u.click(screen.getByRole('combobox', { name: 'Language' }))
+    await u.click(screen.getByRole('option', { name: /Japanese/ }))
+    await u.click(picker())
+    expect(listed()).toEqual(['SDY-006 · Common · DE', 'LOB-JP005 · Rare · JP'])
+  })
+
+  it("under All languages the dropdown follows the picked set's language", async () => {
+    localStorage.setItem('language.filter', 'all')
+    localStorage.setItem(
+      'scan.set',
+      JSON.stringify({ setName: 'Legend of Blue Eyes White Dragon', language: 'ja' })
+    )
+    const options = [
+      printing({ printingId: 201, setCode: 'LOB-EN005', rarity: 'Ultra Rare' }),
+      printing({ printingId: 203, setCode: 'LOB-JP005', rarity: 'Rare', language: 'ja' }),
+      printing({ printingId: 205, setCode: 'SDJ-JP001', rarity: 'Common', language: 'ja' })
+    ]
+    localStorage.setItem(
+      SESSION_KEY,
+      JSON.stringify([
+        row({
+          key: 'c1:46986414',
+          printingId: 203,
+          setCode: 'LOB-JP005',
+          rarity: 'Rare',
+          flag: null,
+          via: 'art',
+          options
+        })
+      ])
+    )
+    await renderScan()
+    await run()
+    const u = user()
+    await u.click(screen.getByRole('combobox', { name: 'Rarity for Dark Magician' }))
+    expect(screen.getAllByRole('option').map((o) => o.textContent)).toEqual([
+      'LOB-JP005 · Rare',
+      'SDJ-JP001 · Common'
+    ])
+    await u.keyboard('{Escape}')
+
+    // With any set, every language is listed.
+    await u.click(screen.getByRole('combobox', { name: 'Set' }))
+    await u.click(screen.getByRole('option', { name: 'Any set' }))
+    await u.click(screen.getByRole('combobox', { name: 'Rarity for Dark Magician' }))
+    expect(screen.getAllByRole('option')).toHaveLength(3)
+  })
+
+  it('a code read in another language still lists its rarities', async () => {
+    const options = [
+      printing({ printingId: 301, setCode: 'LOCR-JP036', rarity: 'Common', language: 'ja' }),
+      printing({ printingId: 302, setCode: 'LOCR-JP036', rarity: 'Secret Rare', language: 'ja' }),
+      printing({ printingId: 303, setCode: 'LOCR-EN036', rarity: 'Common' })
+    ]
+    localStorage.setItem(
+      SESSION_KEY,
+      JSON.stringify([row({ printingId: 301, setCode: 'LOCR-JP036', options })])
+    )
+    await renderScan()
+    await run()
+    const u = user()
+    await u.click(screen.getByRole('combobox', { name: 'Rarity for Dark Magician' }))
+    expect(screen.getAllByRole('option').map((o) => o.textContent)).toEqual([
+      'LOCR-JP036 · Common',
+      'LOCR-JP036 · Secret Rare'
+    ])
   })
 
   it('New scans as is searchable and remembered', async () => {

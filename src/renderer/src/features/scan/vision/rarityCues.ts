@@ -14,6 +14,7 @@ import {
 import type { RgbaImage } from '@shared/scan/types'
 import { findTextLine, inkContrast, type TextLine } from './bands'
 import { surface } from './foil'
+import { rarityFeatures } from './rarityFeatures'
 import { crop, NAME_BAND } from './regions'
 
 const NOTHING: RarityCues = { nameInk: null, nameTint: null, nameContrast: null }
@@ -91,8 +92,25 @@ function tintOf(band: RgbaImage, line: TextLine): NameTint | null {
  * card foil all over, such as a Starlight, from one whose frame is plain card stock.
  */
 export function rarityCues(card: RgbaImage): RarityCues {
+  return rarityLook(card, false).cues
+}
+
+/**
+ * rarityCues, and with `features` the card's look measured region by region for the look model
+ * (rarityFeatures; LOOK_FEATURES order). The scan worker doesn't measure them: the model isn't
+ * used by the app (see shared/scan/look.ts), only by the evaluation scripts.
+ */
+export function rarityLook(
+  card: RgbaImage,
+  features: boolean
+): { cues: RarityCues; features: number[] | null } {
   const band = crop(card, NAME_BAND)
-  return { ...nameCues(band, findTextLine(card, NAME_BAND, 1)), surface: surface(card) }
+  const line = findTextLine(card, NAME_BAND, 1)
+  const name = nameCues(band, line)
+  return {
+    cues: { ...name, surface: surface(card) },
+    features: features ? rarityFeatures(card, name.nameInk ? line : null, band) : null
+  }
 }
 
 /**

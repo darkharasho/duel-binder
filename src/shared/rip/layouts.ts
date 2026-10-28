@@ -361,6 +361,27 @@ layouts.push(
   }
 )
 
+/*
+ * Legendary Duelists (LEDU, LED2–LED9, LD10). Konami's product pages and Yugipedia give only
+ * "5 cards per pack" and the set totals (about 30 Commons, 10 Rares, 8 Super, 9 Ultra). No source
+ * spells out the slots, so this is a judgement call: 10 Rares and ~17 foils in every set mean each
+ * pack holds a Rare and a foil, which leaves 3 Commons. Ultra takes the foil slot 1 in 3, the
+ * 12 Ultras a box that openings report. LED7–LD10 have one Ghost Rare, at Konami's 1:288; sets
+ * without one fold that chance into the Super.
+ * The Season 1–3 sets (LDS1–LDS3) are boxed collections of 18-card packs, so they get no layout.
+ */
+layouts.push({
+  id: 'legendary-duelists',
+  label: 'Legendary Duelists',
+  source:
+    'Konami product pages and Yugipedia (5 cards per pack, set totals only); 3 Commons + 1 Rare + 1 Super, Ultra 1 in 3 (inferred, no official split); Ghost Rare at the 1:288 chase rate',
+  slots: [
+    fixed('Common', 3),
+    fixed('Rare'),
+    oneOf('Super Rare', { 'Ultra Rare': 1 / 3, 'Ghost Rare': CHASE })
+  ]
+})
+
 export const RIP_LAYOUTS: Record<string, PackLayout> = Object.fromEntries(
   layouts.map((l) => [l.id, l])
 )
@@ -389,7 +410,8 @@ const SETS_BY_LAYOUT: Record<string, string> = {
   'battles-of-legend-armageddon': 'BLAR',
   'battles-of-legend-starlight': 'BLCR BLGG',
   'battles-of-legend-quarter-century': 'BLMR BLTR',
-  'battles-of-legend-monster-mayhem': 'BLMM'
+  'battles-of-legend-monster-mayhem': 'BLMM',
+  'legendary-duelists': 'LEDU LED2 LED3 LED4 LED5 LED6 LED7 LED8 LED9 LD10'
 }
 
 /** Set code prefix (e.g. "LOB") → layout id. */

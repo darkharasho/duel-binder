@@ -402,6 +402,59 @@ describe('Battles of Legend', () => {
   })
 })
 
+describe('Legendary Duelists', () => {
+  /** An LED-style set: 30 Commons, 10 Rares, 8 Super, 9 Ultra and, if `ghost`, one Ghost Rare. */
+  function ledPool(ghost: boolean): PoolCard[] {
+    return makePool({
+      Common: 30,
+      Rare: 10,
+      'Super Rare': 8,
+      'Ultra Rare': 9,
+      'Ghost Rare': ghost ? 1 : 0
+    })
+  }
+
+  it('map the booster sets to one layout; the Season boxes get none', () => {
+    for (const code of ['LEDU', 'LED2', 'LED6', 'LED9', 'LD10'])
+      expect(layoutFor(code)!.id).toBe('legendary-duelists')
+    expect(layoutFor('LDS1')).toBeNull()
+    expect(layoutFor('LDS3')).toBeNull()
+  })
+
+  it('3 Commons, 1 Rare and a Super that turns Ultra 1 in 3 (rarely Ghost)', () => {
+    const l = layoutFor('LED7')!
+    const p = ledPool(true)
+    const rand = mulberry32(8)
+    const packs = 6000
+    let ultra = 0
+    let ghost = 0
+    let misshapen = 0
+    for (let i = 0; i < packs; i++) {
+      const pack = rollPack(l, p, rand)
+      const foil = pack[4].rarity
+      if (foil === 'Ultra Rare') ultra++
+      if (foil === 'Ghost Rare') ghost++
+      if (
+        pack.length !== 5 ||
+        pack.slice(0, 3).some((c) => c.rarity !== 'Common') ||
+        pack[3].rarity !== 'Rare' ||
+        !['Super Rare', 'Ultra Rare', 'Ghost Rare'].includes(foil)
+      )
+        misshapen++
+    }
+    expect(misshapen).toBe(0)
+    expect(ultra / packs).toBeCloseTo(1 / 3, 1)
+    expect(ghost / packs).toBeCloseTo(1 / 288, 2)
+  })
+
+  it('a set without a Ghost Rare still fills every pack', () => {
+    const p = ledPool(false)
+    expect(canFill(layoutFor('LEDU')!, p)).toBe(true)
+    const rand = mulberry32(9)
+    for (let i = 0; i < 300; i++) expect(rollPack(layoutFor('LEDU')!, p, rand)).toHaveLength(5)
+  })
+})
+
 describe('canFill', () => {
   it('is true when every base rarity has a card', () => {
     expect(canFill(layout, pool)).toBe(true)
@@ -511,6 +564,7 @@ describe('describeLayout', () => {
     'battles-of-legend-starlight': '5 cards a pack · 1 Secret or better + 4 Ultra',
     'battles-of-legend-quarter-century': '5 cards a pack · 1 Secret or better + 4 Ultra',
     'battles-of-legend-monster-mayhem': '5 cards a pack · 1 Secret or better + 1 Ultra + 3 Ultra',
+    'legendary-duelists': '5 cards a pack · 1 Rare + 1 Super or better',
     'core-2023': '9 cards a pack · 1 Super or better',
     'core-2025': '9 cards a pack · 1 Super or better'
   }

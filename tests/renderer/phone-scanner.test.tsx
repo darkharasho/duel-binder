@@ -110,8 +110,14 @@ describe('phone scanner', () => {
 
     const adds = vi.mocked(store.invoke).mock.calls.filter(([c]) => c === 'collection:add')
     expect(adds).toEqual([
-      ['collection:add', [{ printingId: 101, imageId: 46986414, quantity: 1 }]],
-      ['collection:add', [{ printingId: 102, imageId: 46986414, quantity: 2 }]]
+      [
+        'collection:add',
+        [{ printingId: 101, imageId: 46986414, quantity: 1, requestId: expect.any(String) }]
+      ],
+      [
+        'collection:add',
+        [{ printingId: 102, imageId: 46986414, quantity: 2, requestId: expect.any(String) }]
+      ]
     ])
     expect(store.sync).not.toHaveBeenCalled()
     await settle(2_000)

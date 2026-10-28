@@ -17,8 +17,14 @@ const RARITY_KEY = 'scan.defaultRarity'
 const HIT_PRICE_KEY = 'scan.hitPrice'
 const FIT_KEY = 'scan.fit'
 const ZOOM_KEY = 'scan.zoom'
+const SEEN_KEY = 'scan.drafts.seen'
 const DEFAULT_HIT_PRICE = 20
 const HIGHLIGHT_MS = 1500
+/** Ids of counted scan-window pulls kept, to drop resends; far more than are ever in flight. */
+const MAX_SEEN = 500
+/** Tries at asking main whether the scan window is open, and the wait between them. */
+const IS_OPEN_TRIES = 3
+const IS_OPEN_RETRY_MS = 500
 
 export interface ScanHub {
   session: ReturnType<typeof useScanSession>
@@ -83,6 +89,38 @@ const initialSettings = (): ScanWindowSettings => ({
   zoom: read(ZOOM_KEY, parseZoom) ?? 1
 })
 
+/**
+ * The scan-window pulls already counted. The window resends a pull until it's acknowledged, so
+ * the same one can arrive twice; kept in storage so a resend after this window reloads is
+ * dropped too.
+ */
+function createSeen(): { has(id: string): boolean; add(id: string): void } {
+  let ids: string[] =
+    read(SEEN_KEY, (raw) => {
+      const v: unknown = JSON.parse(raw)
+      return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : null
+    }) ?? []
+  return {
+    has: (id) => ids.includes(id),
+    add(id) {
+      ids = [...ids, id].slice(-MAX_SEEN)
+      write(SEEN_KEY, JSON.stringify(ids))
+    }
+  }
+}
+
+/** Asks main whether the scan window is open, a few times before giving up. */
+async function askIsOpen(): Promise<boolean> {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await window.api.scanWindow.isOpen()
+    } catch (err) {
+      if (attempt >= IS_OPEN_TRIES) throw err
+      await new Promise((r) => setTimeout(r, IS_OPEN_RETRY_MS))
+    }
+  }
+}
+
 const HubContext = createContext<ScanHub | null>(null)
 
 /**
@@ -98,6 +136,7 @@ export function ScanHubProvider({ children }: { children: React.ReactNode }): Re
   const [state, setState] = useState<ScanWindowState | null>(null)
   const [fresh, setFresh] = useState<string | null>(null)
   const highlightTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
+  const [seen] = useState(createSeen)
   const { add } = session
 
   const count = useCallback(
@@ -134,8 +173,9 @@ export function ScanHubProvider({ children }: { children: React.ReactNode }): Re
   useEffect(() => {
     let live = true
     const scanWindow = window.api.scanWindow
-    // If main can't say, treat the window as closed so the page still gets its scanner.
-    void scanWindow.isOpen().then(
+    // If main can't say, treat the window as closed so the page still gets its scanner; a
+    // message from the window (below) still proves it open, so the two never both count.
+    void askIsOpen().then(
       (isOpen) => {
         if (!live) return
         setOpenKnown(true)
@@ -158,9 +198,22 @@ export function ScanHubProvider({ children }: { children: React.ReactNode }): Re
     })
     const offMessage = scanWindow.onMessage((m) => {
       if (!isFromScanWindow(m)) return
-      if (m.kind === 'ready') sendSettings()
-      else if (m.kind === 'state') setState(m.state)
-      else count(m.draft)
+      // Only an open scan window sends anything.
+      setOpenKnown(true)
+      setOpen(true)
+      if (m.kind === 'ready') {
+        // A window that (re)loaded, after a crash say, hasn't reported yet: what it said last is stale.
+        setState(null)
+        sendSettings()
+      } else if (m.kind === 'state') setState(m.state)
+      else {
+        if (!seen.has(m.id)) {
+          seen.add(m.id)
+          count(m.draft)
+        }
+        // Acknowledged once it's on the list (saved there), and again for every resend.
+        scanWindow.send({ kind: 'ack', id: m.id })
+      }
     })
     return () => {
       live = false
@@ -168,7 +221,7 @@ export function ScanHubProvider({ children }: { children: React.ReactNode }): Re
       offMessage()
       clearTimeout(highlightTimer.current)
     }
-  }, [count, sendSettings, setSettings])
+  }, [count, sendSettings, setSettings, seen])
 
   const hub = useMemo<ScanHub>(
     () => ({

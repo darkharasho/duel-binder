@@ -211,6 +211,8 @@ describe('runJob', () => {
       url: 'https://portal.example',
       token: 'tok',
       fetch: portal,
+      // The real gate runs OpenCV over the scan fixtures; this test is about the upload order.
+      checkAccuracy: async () => ({ shots: 1, right: 1, wrong: [], missed: [] }),
       refresh: async () => {},
       log: (l) => lines.push(l)
     })

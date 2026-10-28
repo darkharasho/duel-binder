@@ -19,6 +19,11 @@ const RETRY_DELAYS_MS = [1000, 2000]
 const CARD_RATIO = 59 / 86
 const RATIO_TOLERANCE = 0.05
 
+/**
+ * Printings whose scans are wanted: English, and Japanese for the OCG-only sets (Limit Over
+ * Collection and the like) whose overframe arts and foils have no English printing to stand in.
+ */
+const REFERENCE_LANGUAGES = ['en', 'ja'] as const
 /** Foils whose shine changes how the art looks, so the plain art matches them poorly. */
 const FOIL = /^(starlight|ghost|collector's) rare/i
 /** Variants that only change the foil colour of the name, not the art. */
@@ -130,7 +135,8 @@ export async function buildReferences(opts: ReferenceOptions): Promise<Reference
         `SELECT p.id, p.card_id, c.name, c.frame_type, p.set_code, p.language, p.set_rarity,
            p.set_rarity_code, p.variant
          FROM card_printings p JOIN cards c ON c.id = p.card_id
-         WHERE p.language = 'en' AND p.set_code <> ''`
+         WHERE p.language IN (${REFERENCE_LANGUAGES.map((l) => `'${l}'`).join(', ')})
+           AND p.set_code <> ''`
       )
       .all() as PrintingRow[]
   ).filter((p) => wantsReference(p.set_rarity, p.variant))

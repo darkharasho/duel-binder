@@ -158,6 +158,28 @@ describe('buildReferences', () => {
     expect(yugipedia.listPageImages).toHaveBeenCalledTimes(1)
   })
 
+  it('takes Japanese printings too, and no other language', async () => {
+    const add = work.prepare(
+      `INSERT INTO card_printings (card_id, set_name, set_code, set_rarity, set_rarity_code, language, variant)
+       VALUES (1, 'Limit Over Collection: The Rivals', ?, 'Ultra Rare (Overframe)', '', ?, NULL)`
+    )
+    add.run('LOCR-JP016', 'ja')
+    add.run('LOCR-KR016', 'ko')
+    const files = [...FILES, 'ShiEn-LOCR-JP-UR-EA.png', 'ShiEn-LOCR-KR-UR-UE-EA.png']
+    const requested: string[] = []
+    const fetch = scans({ 'ShiEn-LOCR-JP-UR-EA.png': png(SCAN) }, requested)
+    const result = await buildReferences({
+      work,
+      cache,
+      yugipedia: fakeYugipedia(files),
+      fetch,
+      userAgent: 'test'
+    })
+    expect(requested).toContain('ShiEn-LOCR-JP-UR-EA.png')
+    expect(requested).not.toContain('ShiEn-LOCR-KR-UR-UE-EA.png')
+    expect(result.entries).toContainEqual({ imageId: 11, hash: SCAN_HASH })
+  })
+
   it('looks again, a month on, for a printing with no scan or a scan that failed', async () => {
     const yugipedia = fakeYugipedia(['ShiEn-BLGG-EN-StR-1E.png'])
     const requested: string[] = []

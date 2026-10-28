@@ -4,6 +4,9 @@ import {
   canonicalRarity,
   compareRarity,
   holoKind,
+  isStarlight,
+  nameBox,
+  nameInk,
   revealTier,
   RIP_TIERS,
   ripRank
@@ -100,6 +103,35 @@ describe('artBox', () => {
     expect(artBox('effect_pendulum')).toEqual({ left: 6.4, top: 17.9, right: 6.4, bottom: 38.0 })
     expect(artBox('effect')).toEqual({ left: 11.9, top: 18.1, right: 11.9, bottom: 29.6 })
     expect(artBox('effect_pendulum')).not.toEqual(artBox('effect'))
+  })
+})
+
+describe('nameBox and nameInk', () => {
+  it('the name strip sits at the top, clear of the attribute icon', () => {
+    const b = nameBox()
+    expect(b.top).toBeLessThan(5)
+    expect(b.bottom).toBeGreaterThan(85)
+    expect(b.right).toBeGreaterThan(b.left)
+  })
+
+  it('white names on Xyz, Link, Spell and Trap frames, black on the rest', () => {
+    expect(nameInk('xyz')).toBe('light')
+    expect(nameInk('xyz_pendulum')).toBe('light')
+    expect(nameInk('link')).toBe('light')
+    expect(nameInk('spell')).toBe('light')
+    expect(nameInk('trap')).toBe('light')
+    expect(nameInk('synchro')).toBe('dark')
+    expect(nameInk('effect_pendulum')).toBe('dark')
+    expect(nameInk('fusion')).toBe('dark')
+  })
+})
+
+describe('isStarlight', () => {
+  it('only Starlight, with or without a variant', () => {
+    expect(isStarlight('Starlight Rare')).toBe(true)
+    expect(isStarlight('Starlight Rare (Alternate Art)')).toBe(true)
+    expect(isStarlight('Secret Rare')).toBe(false)
+    expect(isStarlight('Starfoil Rare')).toBe(false)
   })
 })
 

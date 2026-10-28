@@ -184,3 +184,161 @@
   0% { opacity: 0; transform: scale(1.8); }
   100% { opacity: 1; transform: none; }
 }
+
+/*
+ * Rip foils. TiltCard sets --glare-x/--glare-y (the pointer, 0–100%) and [data-tilting] while the
+ * card is held. Each foil is faint at rest and lights up in a diagonal band that follows the
+ * pointer, the way a real foil only flashes where the light catches it.
+ */
+.rip-foil {
+  --fx: var(--glare-x, 50%);
+  --fy: var(--glare-y, 50%);
+  position: absolute;
+  pointer-events: none;
+  mix-blend-mode: color-dodge;
+  transition: opacity 300ms ease-out;
+  /* The glare band: a soft diagonal stripe through the pointer, with a faint floor either side. */
+  --band: linear-gradient(
+    115deg,
+    rgb(0 0 0 / var(--floor)) 34%,
+    rgb(0 0 0 / 0.55) 44%,
+    #000 50%,
+    rgb(0 0 0 / 0.55) 56%,
+    rgb(0 0 0 / var(--floor)) 66%
+  );
+  mask-image: var(--band);
+  -webkit-mask-image: var(--band);
+  mask-size: 300% 300%;
+  -webkit-mask-size: 300% 300%;
+  /* 75% − half the pointer puts the band's middle under the pointer at any position. */
+  mask-position: calc(75% - var(--fx) / 2) calc(75% - var(--fy) / 2);
+  -webkit-mask-position: calc(75% - var(--fx) / 2) calc(75% - var(--fy) / 2);
+}
+
+/* Secret: a fine, low-contrast crosshatch under a dark rainbow that only shows where it's lit. */
+.rip-foil-secret {
+  --floor: 0.12;
+  opacity: 0.5;
+  background-image:
+    repeating-linear-gradient(45deg, #fff 0 1px, #c4c4c4 1px 3px),
+    repeating-linear-gradient(-45deg, #fff 0 1px, #c4c4c4 1px 3px),
+    linear-gradient(
+      115deg,
+      hsl(0 85% 52%),
+      hsl(40 85% 50%),
+      hsl(80 70% 46%),
+      hsl(170 75% 46%),
+      hsl(215 80% 54%),
+      hsl(275 70% 54%),
+      hsl(330 80% 52%),
+      hsl(360 85% 52%)
+    );
+  background-size: auto, auto, 400% 400%;
+  background-position: 0 0, 0 0, var(--fx) var(--fy);
+  background-blend-mode: multiply;
+}
+
+/*
+ * Starlight: glitter (three dot grids of odd sizes, so they never line up into a pattern) and fine
+ * lines radiating from below the card, over a repeating prismatic sheen.
+ */
+.rip-foil-starlight {
+  --floor: 0.2;
+  opacity: 0.5;
+  background-image:
+    radial-gradient(circle at 20% 30%, rgb(255 255 255 / 0.9) 0 0.6px, transparent 1.2px),
+    radial-gradient(circle at 65% 70%, rgb(255 255 255 / 0.7) 0 0.5px, transparent 1px),
+    radial-gradient(circle at 40% 55%, rgb(255 255 255 / 0.8) 0 0.8px, transparent 1.4px),
+    repeating-conic-gradient(from 0deg at 20% 120%, #fff 0deg 0.25deg, #b4b4b4 0.25deg 1deg),
+    repeating-linear-gradient(
+      115deg,
+      hsl(0 85% 40%),
+      hsl(45 85% 38%),
+      hsl(110 70% 34%),
+      hsl(185 75% 36%),
+      hsl(230 80% 44%),
+      hsl(290 75% 42%),
+      hsl(360 85% 40%) 33.3%
+    );
+  background-size: 7px 11px, 13px 17px, 19px 23px, auto, 300% 300%;
+  background-position: 0 0, 0 0, 0 0, 0 0, var(--fx) var(--fy);
+  background-blend-mode: screen, screen, screen, multiply, normal;
+}
+/* Color-dodge can't tint white, so a pale prism multiplied in shows the sheen on the frame too. */
+.rip-foil-prism {
+  --floor: 0;
+  opacity: 0.35;
+  mix-blend-mode: multiply;
+  background-image: repeating-linear-gradient(
+    115deg,
+    hsl(0 90% 84%),
+    hsl(45 90% 82%),
+    hsl(110 75% 82%),
+    hsl(185 80% 82%),
+    hsl(230 85% 86%),
+    hsl(290 80% 86%),
+    hsl(360 90% 84%) 33.3%
+  );
+  background-size: 300% 300%;
+  background-position: var(--fx) var(--fy);
+}
+
+/* The name in foil lettering: silver shot with rainbow, sliding with the pointer. */
+.rip-foil-name {
+  --floor: 0.45;
+  opacity: 0.6;
+  mix-blend-mode: lighten;
+  background-image: linear-gradient(
+    100deg,
+    #8e8e96,
+    hsl(0 55% 62%),
+    hsl(50 55% 60%),
+    #b8bbc4,
+    hsl(160 45% 58%),
+    hsl(210 60% 66%),
+    #9a9aa3,
+    hsl(280 50% 66%),
+    hsl(330 55% 64%),
+    #8e8e96
+  );
+  background-size: 300% 100%;
+  background-position: var(--fx) 50%;
+}
+/* White names (Xyz, Spell, Trap) take the foil by darkening, so the frame around them stays put. */
+.rip-foil-name[data-ink='light'] {
+  mix-blend-mode: multiply;
+  background-image: linear-gradient(
+    100deg,
+    #d4d4da,
+    hsl(0 70% 82%),
+    hsl(50 70% 80%),
+    #eceef2,
+    hsl(160 60% 80%),
+    hsl(210 75% 84%),
+    #dcdce2,
+    hsl(280 65% 85%),
+    hsl(330 70% 84%),
+    #d4d4da
+  );
+}
+
+[data-tilting] .rip-foil-secret {
+  opacity: 0.9;
+}
+[data-tilting] .rip-foil-starlight {
+  opacity: 0.85;
+}
+[data-tilting] .rip-foil-prism {
+  opacity: 0.7;
+}
+[data-tilting] .rip-foil-name {
+  opacity: 0.95;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rip-foil {
+    --fx: 50%;
+    --fy: 50%;
+    transition: none;
+  }
+}

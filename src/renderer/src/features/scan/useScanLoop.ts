@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react'
+import type { LookModel } from '@shared/scan/look'
 import { cuesOver, type RarityCues } from '@shared/scan/rarity'
 import type { CardLanguage } from '@shared/scan/language'
 import { ABSENT_MS, LANGUAGE_MAX_READS, RARITY_MAX_READINGS } from '@shared/scan/thresholds'
@@ -7,7 +8,13 @@ import type { ScanStatus } from '@shared/scanWindow'
 import { api } from '@/lib/api'
 import { centreCrop } from './crop'
 import type { ScanEngine } from './engine'
-import { resolveSignals, withRarityByLook, type ScanDraft, type ScanOutcome } from './resolve'
+import {
+  describeLook,
+  resolveSignals,
+  withRarityByLook,
+  type ScanDraft,
+  type ScanOutcome
+} from './resolve'
 import { createShowingTracker } from './tracker'
 import type { Quad } from './vision/detect'
 
@@ -30,6 +37,12 @@ export interface ScanLoopOptions {
   /** The picked set's printings; null for any set, undefined while they load. */
   setPrintings: ScanPrinting[] | null | undefined
   defaultRarity: string | null
+  /**
+   * The rarity look model, to read a rarity by after the name and frame rules can't, or null for
+   * the rules alone. The phone scanner passes it; the desktop webcam, where it gains nothing,
+   * doesn't. With it, the worker measures each frame's look features too.
+   */
+  lookModel?: LookModel | null
   onDraft: (d: ScanDraft) => void
 }
 
@@ -94,8 +107,10 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
     lastFound: false,
     shown: null as number | null,
     absentSince: null as number | null,
-    // What the card in view has shown of its foil in its latest frames.
-    looks: { cardId: null as number | null, cues: [] as RarityCues[] },
+    // What the card in view has shown of its foil in its latest frames, and their look features.
+    looks: { cardId: null as number | null, cues: [] as RarityCues[], frames: [] as number[][] },
+    // In development, the look model's last reading logged, so each change is logged once.
+    lookLogged: '',
     // What the card in view's text has read as, and how many times it has been read.
     language: { cardId: null as number | null, reads: 0, read: null as CardLanguage | null },
     status: { kind: 'idle' } as ScanStatus
@@ -152,7 +167,7 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
     l.lastFound = false
     l.shown = null
     l.absentSince = null
-    l.looks = { cardId: null, cues: [] }
+    l.looks = { cardId: null, cues: [], frames: [] }
     l.language = { cardId: null, reads: 0, read: null }
     // Stopped stays stopped until Retry.
     if (l.stopped) return
@@ -210,16 +225,30 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
      * The outcome with the rarity its card's look picks over the latest frames it has been
      * recognized in, so the draft that counts carries what all of them saw.
      */
-    const withLook = (outcome: ScanOutcome, cues: RarityCues | null): ScanOutcome => {
-      if (outcome.kind === 'none') l.looks = { cardId: null, cues: [] }
+    const withLook = (
+      outcome: ScanOutcome,
+      cues: RarityCues | null,
+      features: number[] | null
+    ): ScanOutcome => {
+      if (outcome.kind === 'none') l.looks = { cardId: null, cues: [], frames: [] }
       if (outcome.kind !== 'recognized') return outcome
       const { cardId } = outcome.item
-      if (l.looks.cardId !== cardId) l.looks = { cardId, cues: [] }
+      if (l.looks.cardId !== cardId) l.looks = { cardId, cues: [], frames: [] }
       if (cues) l.looks.cues = [...l.looks.cues, cues].slice(-RARITY_MAX_READINGS)
-      const look = cuesOver(l.looks.cues)
+      if (features) l.looks.frames = [...l.looks.frames, features].slice(-RARITY_MAX_READINGS)
+      const over = cuesOver(l.looks.cues)
+      const { lookModel, defaultRarity } = latest.current
+      const look = lookModel ? { model: lookModel, frames: l.looks.frames } : null
+      if (import.meta.env.DEV && look && defaultRarity === null) {
+        const reading = JSON.stringify(describeLook(outcome.item, over, look))
+        if (reading !== l.lookLogged) {
+          l.lookLogged = reading
+          console.debug('[scan] rarity look', reading)
+        }
+      }
       return {
         ...outcome,
-        item: withRarityByLook(outcome.item, look, latest.current.defaultRarity)
+        item: withRarityByLook(outcome.item, over, defaultRarity, look)
       }
     }
 
@@ -267,7 +296,11 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
         const candidates = o.candidates
         let raw
         try {
-          raw = await engine.analyze(frame, { candidates, wantText: l.lastFound })
+          raw = await engine.analyze(frame, {
+            candidates,
+            wantText: l.lastFound,
+            wantLook: !!o.lookModel
+          })
         } catch {
           if (live) fail()
           return
@@ -290,7 +323,7 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
             ? { quad: raw.quad, width, height }
             : null
         )
-        const draft = tracker.current.push(performance.now(), withLook(outcome, raw.cues))
+        const draft = tracker.current.push(performance.now(), withLook(outcome, raw.cues, raw.look))
         show(outcome, draft)
         if (draft) latest.current.onDraft(draft)
       } finally {

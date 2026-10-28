@@ -10,11 +10,13 @@ import { decode } from 'jpeg-js'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
 import { artHash, fingerprintSource } from '../../src/shared/scan/fingerprint'
 import { decodeFingerprints, encodeFingerprints } from '../../src/shared/scan/fingerprintFile'
-import { pickRarityByCues, type NameInk, type NameTint } from '../../src/shared/scan/rarity'
+import { pickRarityByLook } from '../../src/shared/scan/look'
+import { LOOK_MODEL } from '../../src/shared/scan/lookModel'
+import { pickRarityByCues, type RarityCues } from '../../src/shared/scan/rarity'
 import type { RgbaImage } from '../../src/shared/scan/types'
 import { loadCv } from '../../src/renderer/src/features/scan/vision/cv'
 import { recognizeArt } from '../../src/renderer/src/features/scan/vision/candidates'
-import { rarityCues } from '../../src/renderer/src/features/scan/vision/rarityCues'
+import { rarityLook } from '../../src/renderer/src/features/scan/vision/rarityCues'
 
 // Same reason as in scan-vision-detect.test.ts: hand vitest the plain OpenCV module.
 vi.mock('@techstark/opencv-js', async () => {
@@ -46,13 +48,13 @@ interface Truth {
   frameType: string | null
 }
 
-interface Shot {
+interface Shot extends RarityCues {
   file: string
   rarity: string
   frameType: string
   available: string[]
-  nameInk: NameInk | null
-  nameTint: NameTint | null
+  /** The look model's features, as the phone scanner's worker measures them. */
+  features: number[]
 }
 
 const DIR = process.env.SCAN_REAL_DIR
@@ -100,11 +102,8 @@ describe.skipIf(!LABELS || !existsSync(LABELS))('rarity from the look of real ph
         unrecognized++
         continue
       }
-      const shot = {
-        ...label,
-        frameType: t.frameType,
-        ...rarityCues(found.card)
-      }
+      const { cues, features } = rarityLook(found.card, true)
+      const shot = { ...label, frameType: t.frameType, ...cues, features: features! }
       shots.push(shot)
       for (const rival of RIVALS.filter((r) => r !== label.rarity)) {
         const { rarity, certain } = pickRarityByCues([label.rarity, rival], shot, shot.frameType)
@@ -114,7 +113,8 @@ describe.skipIf(!LABELS || !existsSync(LABELS))('rarity from the look of real ph
         pairs.set(key, counts)
       }
     }
-    console.table(shots)
+    // Without the look features: 83 numbers a shot.
+    console.table(shots.map((s) => ({ ...s, features: s.features.length })))
     console.table(Object.fromEntries(pairs))
     console.log(`not recognized: ${unrecognized}`)
   }, 600_000)
@@ -137,5 +137,26 @@ describe.skipIf(!LABELS || !existsSync(LABELS))('rarity from the look of real ph
     const declined = all.reduce((n, c) => n + c.declined, 0)
     console.log(`pairs: right ${pct(right, right + wrong)}, declined ${declined}`)
     expect(right).toBeGreaterThanOrEqual(MIN_PRECISION * (right + wrong))
+  })
+
+  // The phone scanner's path: the rules, then the look model where they abstain. These are
+  // desktop webcam shots, where the model adds nothing, which is why the desktop keeps to the
+  // rules: on the owner's set it made one pick the rules didn't, and that one was wrong (a cased
+  // Secret Rare, shot_0116, read as Starlight at p 0.9998). Held to the same bar as the rules.
+  it(`with the look model after the rules (the phone path), is right ${MIN_PRECISION * 100}% of the time it is sure`, () => {
+    const picks = shots.map((s) => ({
+      ...s,
+      rules: pickRarityByCues(s.available, s, s.frameType),
+      pick: pickRarityByLook(LOOK_MODEL, s.available, s, [s.features], s.frameType)
+    }))
+    const sure = picks.filter((p) => p.pick.certain)
+    const right = sure.filter((p) => p.pick.rarity === p.rarity)
+    const added = sure.filter((p) => !p.rules.certain)
+    for (const p of added.filter((a) => a.pick.rarity !== a.rarity))
+      console.log(`look model wrong: ${p.file} ${p.rarity} picked as ${p.pick.rarity}`)
+    console.log(
+      `phone path: right ${pct(right.length, sure.length)}, ${added.length} beyond the rules`
+    )
+    expect(right.length).toBeGreaterThanOrEqual(MIN_PRECISION * sure.length)
   })
 })

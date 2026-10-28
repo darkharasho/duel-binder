@@ -9,7 +9,7 @@ import { toBand, toBlock } from './bands'
 import { findCandidates, preferOuter, recognizeArt } from './candidates'
 import { loadCv, type CV } from './cv'
 import { CARD_W, dist, rotate180, toMat, using, warpCard, type Quad } from './detect'
-import { rarityCues } from './rarityCues'
+import { rarityLook } from './rarityCues'
 import { CODE_BANDS, NAME_BAND, TEXT_BOX } from './regions'
 
 interface WorkerScope {
@@ -28,7 +28,8 @@ const NOTHING: FrameSignals = {
   codeBands: [],
   nameBands: [],
   textBands: [],
-  cues: null
+  cues: null,
+  look: null
 }
 
 let index: FingerprintIndex | null = null
@@ -56,17 +57,19 @@ function analyze(
   cv: CV,
   img: RgbaImage,
   candidates: number[] | null,
-  wantBands: boolean
+  wantBands: boolean,
+  wantLook: boolean
 ): FrameSignals {
   const frame = toMat(cv, img)
-  return using([frame], () => analyzeFrame(cv, frame, candidates, wantBands))
+  return using([frame], () => analyzeFrame(cv, frame, candidates, wantBands, wantLook))
 }
 
 function analyzeFrame(
   cv: CV,
   img: Mat,
   candidates: number[] | null,
-  wantBands: boolean
+  wantBands: boolean,
+  wantLook: boolean
 ): FrameSignals {
   let quad: Quad
   let art: ArtMatch[] = []
@@ -102,10 +105,12 @@ function analyzeFrame(
     quad = likeliest
     card = () => warpCard(cv, img, likeliest, bandWidth(likeliest))
   }
-  // Read at CARD_W, the size the cues were tuned at.
-  const cues = upright ? rarityCues(upright) : null
+  // Read at CARD_W, the size the cues and the look model were tuned at.
+  const { cues, features: look } = upright
+    ? rarityLook(upright, wantLook)
+    : { cues: null, features: null }
   if (!wantBands)
-    return { found: true, quad, art, codeBands: [], nameBands: [], textBands: [], cues }
+    return { found: true, quad, art, codeBands: [], nameBands: [], textBands: [], cues, look }
   const straight = card()
   // Not knowing which way up the card is, its text is read both ways.
   const ways = upright ? [straight] : [straight, rotate180(straight)]
@@ -117,7 +122,8 @@ function analyzeFrame(
     nameBands: ways.map((c) => toBand(c, NAME_BAND)).filter(hasPixels),
     // Only a card whose art matched: read off a guessed outline, it reads as a language too often.
     textBands: upright ? [toBlock(straight, TEXT_BOX)].filter(hasPixels) : [],
-    cues
+    cues,
+    look
   }
 }
 
@@ -151,7 +157,13 @@ async function handle(msg: WorkerRequest): Promise<void> {
     return
   }
   try {
-    const signals = analyze(await loadCv(), pixels(msg.image), msg.candidates, msg.wantBands)
+    const signals = analyze(
+      await loadCv(),
+      pixels(msg.image),
+      msg.candidates,
+      msg.wantBands,
+      msg.wantLook
+    )
     const bands = [...signals.codeBands, ...signals.nameBands, ...signals.textBands]
     scope.postMessage(
       { type: 'result', id: msg.id, signals },

@@ -97,8 +97,8 @@ export function rarityCues(card: RgbaImage): RarityCues {
 
 /**
  * rarityCues, and with `features` the card's look measured region by region for the look model
- * (rarityFeatures; LOOK_FEATURES order). The scan worker doesn't measure them: the model isn't
- * used by the app (see shared/scan/look.ts), only by the evaluation scripts.
+ * (rarityFeatures; LOOK_FEATURES order), about 3.7 ms more. The scan worker measures them only
+ * when asked (wantLook), which the phone scanner does: see shared/scan/look.ts.
  */
 export function rarityLook(
   card: RgbaImage,

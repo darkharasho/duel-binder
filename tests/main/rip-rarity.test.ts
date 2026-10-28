@@ -32,6 +32,13 @@ describe('ripRank', () => {
     expect(sorted).toEqual(['Starlight Rare', 'Secret Rare', 'Rare', 'Common'])
   })
 
+  it('places the Gold Series rarities: Gold Secret above Secret, Ghost/Gold above Ghost', () => {
+    expect(ripRank('Gold Secret Rare')).toBeGreaterThan(ripRank('Secret Rare'))
+    expect(ripRank('Gold Secret Rare')).toBeGreaterThan(ripRank('Premium Gold Rare'))
+    expect(ripRank('Ghost/Gold Rare')).toBeGreaterThan(ripRank('Ghost Rare'))
+    expect(ripRank('Ghost/Gold Rare')).toBeGreaterThan(ripRank('Gold Rare'))
+  })
+
   it('lists the tiers lowest to highest', () => {
     expect(RIP_TIERS[0]).toBe('Common')
     expect(RIP_TIERS[RIP_TIERS.length - 1]).toBe('10000 Secret Rare')
@@ -77,6 +84,8 @@ describe('holoKind', () => {
     expect(holoKind('Super Rare', null)).toBe('soft')
     expect(holoKind('Ultra Rare', null)).toBe('soft')
     expect(holoKind('Ghost Rare', null)).toBe('soft')
+    expect(holoKind('Gold Secret Rare', null)).toBe('art')
+    expect(holoKind('Ghost/Gold Rare', null)).toBe('soft')
     expect(holoKind('Rare', null)).toBe('none')
     expect(holoKind('Common', null)).toBe('none')
   })

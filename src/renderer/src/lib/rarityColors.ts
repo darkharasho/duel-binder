@@ -12,7 +12,10 @@ export const RARITY_COLORS: Record<string, string> = {
   'Prismatic Secret Rare': '#f0b4d0',
   'Quarter Century Secret Rare': '#e6a96b',
   'Ultimate Rare': '#c9a35c',
-  'Gold Rare': '#d4a93c'
+  'Gold Rare': '#d4a93c',
+  'Premium Gold Rare': '#e3b94f',
+  'Gold Secret Rare': '#f1d27a',
+  'Ghost/Gold Rare': '#ddd3a8'
 }
 
 export function rarityColor(rarity: string): string {

@@ -402,6 +402,86 @@ layouts.push({
   ]
 })
 
+/*
+ * The Gold Series line. Yugipedia's set pages (checked October 2026) give every pack's contents:
+ * - Gold Series (GLD1) to Gold Series 4: Pyramids Edition: 25 cards a pack, 22 Commons and 3 Gold
+ *   Rares (GLD1's page gives only the 25; with 18 Gold Rares and 27 Commons it matches the rest).
+ * - Gold Series: Haunted Mine: 22 Commons, 2 Gold Rares and 1 Ghost/Gold Rare.
+ * - Premium Gold (North American 5-card mini-packs; other regions sold one 15-card pack):
+ *   2 Gold Secrets (001–032), 1 Gold Rare new to gold (033–050), 2 Gold Rare reprints (051 on).
+ * - Premium Gold: Return of the Bling (US mini-packs): 2 Gold Secrets (001–021), 2 Gold Rares new
+ *   to gold (022–069), 1 reprint from the earlier Gold Series (070 on).
+ * - Premium Gold: Infinite Gold: 2 Gold Secrets and 3 Gold Rares.
+ * - Maximum Gold and Maximum Gold: El Dorado: 7 cards a pack, 2 Premium Gold Rares and 5
+ *   gold-letter Rares.
+ * Every slot is fixed, so there are no odds to judge. The scarcer gold in each product reveals like
+ * a Rare and its floor like a Common; Haunted Mine's Ghost/Gold is its one big hit.
+ */
+const GOLD_SOURCE = 'Yugipedia set pages for the Gold Series, Premium Gold and Maximum Gold sets'
+const PREMIUM_GOLD_TIERS: Partial<Record<string, RevealTier>> = {
+  'Gold Rare': 'none',
+  'Gold Secret Rare': 'rare'
+}
+/** 22 Commons and 3 golds, the last of which can be `last`. */
+const goldSeries = (last: string): PackSlot[] => [
+  fixed('Common', 22),
+  fixed('Gold Rare', last === 'Gold Rare' ? 3 : 2),
+  ...(last === 'Gold Rare' ? [] : [fixed(last)])
+]
+
+layouts.push(
+  {
+    id: 'gold-series',
+    label: 'Gold Series',
+    source: `${GOLD_SOURCE}: 22 Commons + 3 Gold Rares`,
+    tiers: { 'Gold Rare': 'rare' },
+    slots: goldSeries('Gold Rare')
+  },
+  {
+    id: 'gold-series-haunted-mine',
+    label: 'Gold Series: Haunted Mine',
+    source: `${GOLD_SOURCE}: 22 Commons + 2 Gold Rares + 1 Ghost/Gold Rare`,
+    tiers: { 'Gold Rare': 'rare', 'Ghost/Gold Rare': 'big' },
+    slots: goldSeries('Ghost/Gold Rare')
+  },
+  {
+    id: 'premium-gold',
+    label: 'Premium Gold',
+    source: `${GOLD_SOURCE}: 1 Gold Rare new to gold (033–050), 2 Gold Rare reprints (051 on), 2 Gold Secrets (North American mini-pack)`,
+    tiers: PREMIUM_GOLD_TIERS,
+    slots: [
+      { ...fixed('Gold Rare'), numbers: { from: 33, to: 50 } },
+      { ...fixed('Gold Rare', 2), numbers: { from: 51 } },
+      fixed('Gold Secret Rare', 2)
+    ]
+  },
+  {
+    id: 'premium-gold-return-of-the-bling',
+    label: 'Premium Gold: Return of the Bling',
+    source: `${GOLD_SOURCE}: 2 Gold Rares new to gold (022–069), 1 Gold Series reprint (070 on), 2 Gold Secrets (US mini-pack)`,
+    tiers: PREMIUM_GOLD_TIERS,
+    slots: [
+      { ...fixed('Gold Rare', 2), numbers: { from: 22, to: 69 } },
+      { ...fixed('Gold Rare'), numbers: { from: 70 } },
+      fixed('Gold Secret Rare', 2)
+    ]
+  },
+  {
+    id: 'premium-gold-infinite-gold',
+    label: 'Premium Gold: Infinite Gold',
+    source: `${GOLD_SOURCE}: 3 Gold Rares + 2 Gold Secrets`,
+    tiers: PREMIUM_GOLD_TIERS,
+    slots: [fixed('Gold Rare', 3), fixed('Gold Secret Rare', 2)]
+  },
+  {
+    id: 'maximum-gold',
+    label: 'Maximum Gold',
+    source: `${GOLD_SOURCE}: 5 Rares + 2 Premium Gold Rares`,
+    tiers: { Rare: 'none', 'Premium Gold Rare': 'rare' },
+    slots: [fixed('Rare', 5), fixed('Premium Gold Rare', 2)]
+  }
+)
+
 export const RIP_LAYOUTS: Record<string, PackLayout> = Object.fromEntries(
   layouts.map((l) => [l.id, l])
 )
@@ -432,7 +512,13 @@ const SETS_BY_LAYOUT: Record<string, string> = {
   'battles-of-legend-quarter-century': 'BLMR BLTR',
   'battles-of-legend-monster-mayhem': 'BLMM',
   'legendary-duelists': 'LEDU LED2 LED3 LED4 LED5 LED6 LED7 LED8 LED9 LD10',
-  'duelist-pack': 'DP1 DP2 DP03 DP04 DP05 DP06 DP07 DP08 DP09 DP10 DP11 DPYG DPKB DPBC DPRP DPDG'
+  'duelist-pack': 'DP1 DP2 DP03 DP04 DP05 DP06 DP07 DP08 DP09 DP10 DP11 DPYG DPKB DPBC DPRP DPDG',
+  'gold-series': 'GLD1 GLD2 GLD3 GLD4',
+  'gold-series-haunted-mine': 'GLD5',
+  'premium-gold': 'PGLD',
+  'premium-gold-return-of-the-bling': 'PGL2',
+  'premium-gold-infinite-gold': 'PGL3',
+  'maximum-gold': 'MAGO MGED'
 }
 
 /** Set code prefix (e.g. "LOB") → layout id. */
@@ -470,25 +556,31 @@ const shortRarity = (r: string): string => r.replace(/(.) Rare$/, '$1')
 /**
  * A short line about what's in a pack, read off the slots: "9 cards a pack · 1 Rare + 1 Super or
  * better". Commons and Short Prints aren't listed; a Common slot that can upgrade is "1 slot that
- * can hit Super or better".
+ * can hit Super or better". Neighbouring slots that read the same are counted together.
  */
 export function describeLayout(layout: PackLayout): string {
   const total = layout.slots.reduce((n, s) => n + s.count, 0)
   const rare = ripRank('Rare')
-  const parts: string[] = []
+  /** Each listed slot as a count and the words after it; neighbours with the same words merge. */
+  const parts: { count: number; text: string }[] = []
+  const add = (count: number, text: string): void => {
+    const last = parts[parts.length - 1]
+    if (last?.text === text) last.count += count
+    else parts.push({ count, text })
+  }
   for (const slot of layout.slots) {
     const ranked = [...slot.picks].sort((a, b) => ripRank(a.rarity) - ripRank(b.rarity))
     const floor = ranked[0].rarity
     if (ripRank(floor) >= rare) {
-      parts.push(
-        slot.picks.length === 1
-          ? `${slot.count} ${shortRarity(floor)}`
-          : `${slot.count} ${shortRarity(floor)} or better`
+      add(
+        slot.count,
+        slot.picks.length === 1 ? shortRarity(floor) : `${shortRarity(floor)} or better`
       )
     } else {
       const up = ranked.find((p) => ripRank(p.rarity) >= rare)
-      if (up) parts.push(`${slot.count} slot that can hit ${shortRarity(up.rarity)} or better`)
+      if (up) add(slot.count, `slot that can hit ${shortRarity(up.rarity)} or better`)
     }
   }
-  return [`${total} cards a pack`, parts.join(' + ')].filter(Boolean).join(' · ')
+  const listed = parts.map((p) => `${p.count} ${p.text}`).join(' + ')
+  return [`${total} cards a pack`, listed].filter(Boolean).join(' · ')
 }

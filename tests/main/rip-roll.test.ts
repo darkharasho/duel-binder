@@ -488,6 +488,110 @@ describe('Duelist Packs', () => {
   })
 })
 
+describe('Gold Series', () => {
+  /** A set numbered from 001: `bands` in order, each `[rarity, how many]`. */
+  function numbered(code: string, bands: [string, number][]): PoolCard[] {
+    const out: PoolCard[] = []
+    let n = 0
+    for (const [rarity, count] of bands) {
+      for (let i = 0; i < count; i++) {
+        n++
+        out.push({ ...card(rarity, 9000 + n), setCode: `${code}-EN${String(n).padStart(3, '0')}` })
+      }
+    }
+    return out
+  }
+
+  it('map each product line to its layout', () => {
+    for (const code of ['GLD1', 'GLD2', 'GLD3', 'GLD4'])
+      expect(layoutFor(code)!.id).toBe('gold-series')
+    expect(layoutFor('GLD5')!.id).toBe('gold-series-haunted-mine')
+    expect(layoutFor('PGLD')!.id).toBe('premium-gold')
+    expect(layoutFor('PGL2')!.id).toBe('premium-gold-return-of-the-bling')
+    expect(layoutFor('PGL3')!.id).toBe('premium-gold-infinite-gold')
+    expect(layoutFor('MAGO')!.id).toBe('maximum-gold')
+    expect(layoutFor('MGED')!.id).toBe('maximum-gold')
+  })
+
+  it('GLD1: 22 different Commons and 3 Gold Rares, from only 27 Commons', () => {
+    const p = makePool({ Common: 27, 'Gold Rare': 18 })
+    const rand = mulberry32(11)
+    for (let i = 0; i < 200; i++) {
+      const pack = rollPack(layoutFor('GLD1')!, p, rand)
+      expect(pack).toHaveLength(25)
+      expect(new Set(pack.map((c) => c.cardId)).size).toBe(25)
+      expect(pack.filter((c) => c.rarity === 'Gold Rare')).toHaveLength(3)
+    }
+  })
+
+  it('Haunted Mine: 22 Commons, 2 Gold Rares and a Ghost/Gold Rare', () => {
+    const p = makePool({ Common: 37, 'Gold Rare': 12, 'Ghost/Gold Rare': 6 })
+    const rand = mulberry32(12)
+    for (let i = 0; i < 200; i++) {
+      const pack = rollPack(layoutFor('GLD5')!, p, rand)
+      expect(pack.map((c) => c.rarity)).toEqual([
+        ...Array(22).fill('Common'),
+        'Gold Rare',
+        'Gold Rare',
+        'Ghost/Gold Rare'
+      ])
+    }
+  })
+
+  it('Premium Gold: 2 Gold Secrets, 1 Gold Rare from 033–050, 2 from 051 on', () => {
+    const p = numbered('PGLD', [
+      ['Gold Secret Rare', 32],
+      ['Gold Rare', 58]
+    ])
+    const rand = mulberry32(13)
+    for (let i = 0; i < 300; i++) {
+      const pack = rollPack(layoutFor('PGLD')!, p, rand)
+      const nums = pack.map((c) => Number(c.setCode.slice(-3)))
+      expect(nums[0]).toBeGreaterThanOrEqual(33)
+      expect(nums[0]).toBeLessThanOrEqual(50)
+      expect(nums.slice(1, 3).every((n) => n >= 51)).toBe(true)
+      expect(pack.slice(3).every((c) => c.rarity === 'Gold Secret Rare')).toBe(true)
+    }
+  })
+
+  it('Return of the Bling: 2 new Gold Rares from 022–069, 1 reprint from 070 on, 2 Gold Secrets', () => {
+    const p = numbered('PGL2', [
+      ['Gold Secret Rare', 21],
+      ['Gold Rare', 70]
+    ])
+    const rand = mulberry32(14)
+    for (let i = 0; i < 300; i++) {
+      const nums = rollPack(layoutFor('PGL2')!, p, rand).map((c) => Number(c.setCode.slice(-3)))
+      expect(nums.slice(0, 2).every((n) => n >= 22 && n <= 69)).toBe(true)
+      expect(nums[2]).toBeGreaterThanOrEqual(70)
+      expect(nums.slice(3).every((n) => n <= 21)).toBe(true)
+    }
+  })
+
+  it('Maximum Gold: 5 Rares and 2 Premium Gold Rares, alternate arts counted as Premium Gold', () => {
+    const p = [
+      ...makePool({ Rare: 110, 'Premium Gold Rare': 48 }),
+      card('Premium Gold Rare (Alternate Art)')
+    ]
+    const rand = mulberry32(15)
+    for (let i = 0; i < 300; i++) {
+      const pack = rollPack(layoutFor('MAGO')!, p, rand)
+      expect(pack.slice(0, 5).every((c) => c.rarity === 'Rare')).toBe(true)
+      expect(pack.slice(5).every((c) => c.rarity.startsWith('Premium Gold Rare'))).toBe(true)
+    }
+  })
+
+  it('reveal the floor quietly and the scarcer gold as the hit', () => {
+    expect(tierFor('Common', 'GLD1')).toBe('none')
+    expect(tierFor('Gold Rare', 'GLD1')).toBe('rare')
+    expect(tierFor('Ghost/Gold Rare', 'GLD5')).toBe('big')
+    expect(tierFor('Gold Rare', 'PGLD')).toBe('none')
+    expect(tierFor('Gold Secret Rare', 'PGL3')).toBe('rare')
+    expect(tierFor('Rare', 'MAGO')).toBe('none')
+    expect(tierFor('Premium Gold Rare (Alternate Art)', 'MGED')).toBe('rare')
+  })
+})
+
 describe('canFill', () => {
   it('is true when every base rarity has a card', () => {
     expect(canFill(layout, pool)).toBe(true)
@@ -590,15 +694,20 @@ describe('describeLayout', () => {
       '5 cards a pack · 1 Super + 1 Secret or better + 2 Ultra or better + 1 Platinum Secret or better',
     'quarter-century-stampede':
       '5 cards a pack · 1 Super + 1 Secret or better + 2 Ultra or better + 1 Platinum Secret or better',
-    'rarity-collection-5':
-      '5 cards a pack · 1 Super + 1 Secret or better + 2 Ultra or better + 1 Ultra or better',
+    'rarity-collection-5': '5 cards a pack · 1 Super + 1 Secret or better + 3 Ultra or better',
     'battles-of-legend': '5 cards a pack · 1 Secret + 4 Ultra',
     'battles-of-legend-armageddon': '5 cards a pack · 1 Secret or better + 4 Ultra',
     'battles-of-legend-starlight': '5 cards a pack · 1 Secret or better + 4 Ultra',
     'battles-of-legend-quarter-century': '5 cards a pack · 1 Secret or better + 4 Ultra',
-    'battles-of-legend-monster-mayhem': '5 cards a pack · 1 Secret or better + 1 Ultra + 3 Ultra',
+    'battles-of-legend-monster-mayhem': '5 cards a pack · 1 Secret or better + 4 Ultra',
     'legendary-duelists': '5 cards a pack · 1 Rare + 1 Super or better',
     'duelist-pack': '5 cards a pack · 1 Rare or better',
+    'gold-series': '25 cards a pack · 3 Gold',
+    'gold-series-haunted-mine': '25 cards a pack · 2 Gold + 1 Ghost/Gold',
+    'premium-gold': '5 cards a pack · 3 Gold + 2 Gold Secret',
+    'premium-gold-return-of-the-bling': '5 cards a pack · 3 Gold + 2 Gold Secret',
+    'premium-gold-infinite-gold': '5 cards a pack · 3 Gold + 2 Gold Secret',
+    'maximum-gold': '7 cards a pack · 5 Rare + 2 Premium Gold',
     'core-2023': '9 cards a pack · 1 Super or better',
     'core-2025': '9 cards a pack · 1 Super or better'
   }

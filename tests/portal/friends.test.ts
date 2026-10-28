@@ -103,7 +103,7 @@ describe('friends', () => {
     )
     expect(() => requestFriend(db, alice, 'Alice', NOW)).toThrow(new FriendError("That's you"))
     expect(() => requestFriend(db, alice, '   ', NOW)).toThrow(
-      new FriendError('Enter a Discord username')
+      new FriendError('Enter a username')
     )
     befriend()
     expect(() => requestFriend(db, alice, 'bob', NOW)).toThrow(

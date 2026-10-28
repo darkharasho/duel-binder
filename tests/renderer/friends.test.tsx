@@ -138,7 +138,7 @@ describe('friends page', () => {
     renderWithProviders(<FriendsPage onBackToMine={() => {}} />, { api })
     const send = screen.getByRole('button', { name: 'Send request' })
     expect(send).toBeDisabled()
-    await user.type(screen.getByRole('textbox', { name: 'Discord username' }), 'bob')
+    await user.type(screen.getByRole('textbox', { name: 'Username' }), 'bob')
     await user.click(send)
     expect(api.friends.request).toHaveBeenCalledWith('bob')
     expect(await screen.findByText('Request sent')).toBeInTheDocument()
@@ -153,7 +153,7 @@ describe('friends page', () => {
       }
     )
     renderWithProviders(<FriendsPage onBackToMine={() => {}} />, { api })
-    await user.type(screen.getByRole('textbox', { name: 'Discord username' }), 'bob')
+    await user.type(screen.getByRole('textbox', { name: 'Username' }), 'bob')
     await user.click(screen.getByRole('button', { name: 'Send request' }))
     expect(await screen.findByText("You're now friends with Bob")).toBeInTheDocument()
   })
@@ -171,7 +171,7 @@ describe('friends page', () => {
       }
     )
     renderWithProviders(<FriendsPage onBackToMine={() => {}} />, { api })
-    await user.type(screen.getByRole('textbox', { name: 'Discord username' }), 'bob')
+    await user.type(screen.getByRole('textbox', { name: 'Username' }), 'bob')
     await user.click(screen.getByRole('button', { name: 'Send request' }))
     expect(await screen.findByText('No Duel Binder user called "bob"')).toBeInTheDocument()
   })
@@ -284,7 +284,7 @@ describe('friends page', () => {
       api: make({ friends: [], incoming: [], blocked: [] })
     })
     expect(
-      await screen.findByText('No friends yet. Add one by their Discord username.')
+      await screen.findByText('No friends yet. Add one by their Duel Binder username, shown under their name in Settings.')
     ).toBeInTheDocument()
   })
 
@@ -301,7 +301,7 @@ describe('friends page', () => {
     expect(await screen.findByText(OFFLINE_MESSAGE)).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Retry' }))
     expect(
-      await screen.findByText('No friends yet. Add one by their Discord username.')
+      await screen.findByText('No friends yet. Add one by their Duel Binder username, shown under their name in Settings.')
     ).toBeInTheDocument()
   })
 

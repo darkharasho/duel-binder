@@ -255,10 +255,11 @@ function Content({
               See all
             </button>
           </div>
-          {/* One row of as many as fit, stretched to the full width; the rest sit in zero-height rows, clipped. */}
-          <ul className="-mx-1 grid auto-rows-[0] grid-cols-[repeat(auto-fit,minmax(7rem,1fr))] grid-rows-[auto] gap-x-2 overflow-hidden">
+          {/* One row of as many as fit, stretched to the full width; the rest sit in zero-height rows, clipped.
+              On a phone, all ten in a row that swipes sideways, edge to edge. */}
+          <ul className="-mx-1 grid auto-rows-[0] grid-cols-[repeat(auto-fit,minmax(7rem,1fr))] grid-rows-[auto] gap-x-2 overflow-hidden max-md:-mx-4 max-md:flex max-md:snap-x max-md:snap-mandatory max-md:scroll-px-3 max-md:overflow-x-auto max-md:overscroll-x-contain max-md:px-3 max-md:[scrollbar-width:none]">
             {top.slice(0, 10).map((e) => (
-              <li key={e.id} className="min-w-0">
+              <li key={e.id} className="min-w-0 max-md:w-28 max-md:shrink-0 max-md:snap-start">
                 <button
                   type="button"
                   onClick={() => onNavigate('collection', { entryId: e.id })}

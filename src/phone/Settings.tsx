@@ -136,6 +136,7 @@ export function Settings(): React.JSX.Element {
           <Row>
             {user.avatarUrl && <img src={user.avatarUrl} alt="" className="size-8 rounded-full" />}
             <span>Signed in as {name}</span>
+            <span className="text-muted-foreground">@{user.username}</span>
           </Row>
           <button
             type="button"

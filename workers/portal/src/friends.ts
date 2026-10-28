@@ -91,7 +91,7 @@ export function requestFriend(
   now: Date
 ): FriendRequestResult {
   const name = username.trim()
-  if (!name) throw new FriendError('Enter a Discord username')
+  if (!name) throw new FriendError('Enter a username')
   const target = db
     .prepare(
       'SELECT id, discord_id, username, display_name, avatar FROM users WHERE username = ? COLLATE NOCASE'

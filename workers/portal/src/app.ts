@@ -20,6 +20,7 @@ import type { PriceQueue } from './prices'
 import { getFingerprints } from './scanFiles'
 import { phoneRoute } from './phonePage'
 import { deleteAccountRoute } from './account'
+import { appPreflight, withAppCors } from './appCors'
 
 /** Vars and secrets the request handlers read. */
 export interface Env {
@@ -54,6 +55,10 @@ const json = (body: unknown, status = 200): Response =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
 
 export async function handle(req: Request, deps: AppDeps): Promise<Response> {
+  return appPreflight(req) ?? withAppCors(req, await route(req, deps))
+}
+
+async function route(req: Request, deps: AppDeps): Promise<Response> {
   const url = new URL(req.url)
   const phone = phoneRoute(req, deps)
   if (phone) return phone

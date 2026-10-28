@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/dialog'
 import { DeleteAccount } from '@/features/settings/AccountSection'
 import { api } from '@/lib/api'
+import { isNativeApp } from '@/lib/portal'
 import { PRIVACY_URL, SIGN_OUT_FAILED, cardDataAge, signOutWarning } from './copy'
 import { CATALOG_KEY, SYNC_STATE_KEY, displayName, usePhone } from './context'
 import { forgetSavedScans } from './savedScans'
@@ -19,6 +20,8 @@ import { SyncProblems } from './SyncProblems'
 
 /** Ends the web session too, so the cookie doesn't sign the phone straight back in. */
 async function webLogout(): Promise<void> {
+  // The iOS app never had a web session.
+  if (isNativeApp()) return
   try {
     await fetch('/auth/logout', {
       method: 'POST',

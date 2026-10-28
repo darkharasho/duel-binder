@@ -159,8 +159,12 @@ export function startSignIn(req: Request, deps: AppDeps): Response {
   return redirect(discordAuthorize(deps, state), cookies)
 }
 
+/** The iOS app's sign-in ends at its own URL scheme instead of a loopback port. */
+const IOS_CALLBACK = 'duelbinder://auth/callback'
+
 interface DesktopAuth {
-  port: number
+  /** The desktop app's loopback port, or 'ios' for the iOS app. */
+  port: number | 'ios'
   state: string
   challenge: string
 }
@@ -171,7 +175,9 @@ function checkDesktopAuth(
   challenge: string | null
 ): DesktopAuth | null {
   if (port === null || state === null || challenge === null) return null
-  if (!PORT_RE.test(port) || !STATE_RE.test(state) || !CHALLENGE_RE.test(challenge)) return null
+  if (!STATE_RE.test(state) || !CHALLENGE_RE.test(challenge)) return null
+  if (port === 'ios') return { port, state, challenge }
+  if (!PORT_RE.test(port)) return null
   const n = Number(port)
   return n >= 1024 && n <= 65535 ? { port: n, state, challenge } : null
 }
@@ -181,10 +187,21 @@ function readDesktopAuth(req: Request): DesktopAuth | null {
   return parts?.length === 3 ? checkDesktopAuth(parts[0], parts[1], parts[2]) : null
 }
 
-/** GET /auth/desktop/start: the desktop app's browser sign-in, which ends at its loopback listener. */
+/** Where the desktop flow hands back its code or error: the loopback listener, or the iOS app. */
+function desktopCallback(desktop: DesktopAuth, params: Record<string, string>): string {
+  const base = desktop.port === 'ios' ? IOS_CALLBACK : `http://127.0.0.1:${desktop.port}/callback`
+  return `${base}?${new URLSearchParams({ ...params, state: desktop.state })}`
+}
+
+/**
+ * GET /auth/desktop/start: the desktop app's browser sign-in, which ends at its loopback listener
+ * (`?port=`), or the iOS app's, which ends at its URL scheme (`?app=ios`, no port).
+ */
 export function startDesktopSignIn(req: Request, deps: AppDeps): Response {
   const q = new URL(req.url).searchParams
-  const auth = checkDesktopAuth(q.get('port'), q.get('state'), q.get('challenge'))
+  const app = q.get('app')
+  const port = app === null ? q.get('port') : app === 'ios' && !q.has('port') ? 'ios' : null
+  const auth = checkDesktopAuth(port, q.get('state'), q.get('challenge'))
   if (!auth) {
     return respond(
       400,
@@ -271,10 +288,10 @@ export async function finishSignIn(req: Request, deps: AppDeps): Promise<Respons
   const toScan = !desktop && readCookie(req, NEXT_COOKIE) === 'scan'
   // Errors never carry Discord's details: the desktop app gets a fixed code, the browser a fixed page.
   const failed = desktop
-    ? redirect(
-        `http://127.0.0.1:${desktop.port}/callback?${new URLSearchParams({ error: 'signin-failed', state: desktop.state })}`,
-        [clearCookie('oauth_state'), clearCookie('desktop_auth')]
-      )
+    ? redirect(desktopCallback(desktop, { error: 'signin-failed' }), [
+        clearCookie('oauth_state'),
+        clearCookie('desktop_auth')
+      ])
     : toScan
       ? redirect(SCAN_FAILED, [clearCookie('oauth_state'), clearCookie(NEXT_COOKIE)])
       : redirect(FAILED, [clearCookie('oauth_state')])
@@ -310,10 +327,10 @@ export async function finishSignIn(req: Request, deps: AppDeps): Promise<Respons
           new Date(now.getTime() + DESKTOP_CODE_TTL_MS).toISOString()
         )
     })()
-    return redirect(
-      `http://127.0.0.1:${desktop.port}/callback?${new URLSearchParams({ code: secret, state: desktop.state })}`,
-      [clearCookie('oauth_state'), clearCookie('desktop_auth')]
-    )
+    return redirect(desktopCallback(desktop, { code: secret }), [
+      clearCookie('oauth_state'),
+      clearCookie('desktop_auth')
+    ])
   }
 
   deps.db.transaction(() => {

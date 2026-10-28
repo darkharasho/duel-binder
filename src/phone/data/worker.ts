@@ -1,4 +1,5 @@
 import sqlite3InitModule from '@sqlite.org/sqlite-wasm'
+import { PORTAL_ORIGIN } from '@/lib/portal'
 import { DB_OPEN_ELSEWHERE, isOpenElsewhere, openWithRetry } from './openRetry'
 import { exposeStore, type MessagePortLike, type StoreFatal } from './protocol'
 import { createPhoneStore } from './store'
@@ -41,7 +42,7 @@ async function main(): Promise<void> {
     })
     const store = createPhoneStore({
       db,
-      portal: scope.location.origin,
+      portal: PORTAL_ORIGIN || scope.location.origin,
       fetch: (...a: Parameters<typeof fetch>) => fetch(...a)
     })
     scope.removeEventListener('message', hold)

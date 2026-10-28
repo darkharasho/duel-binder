@@ -1,4 +1,4 @@
-import { createHash, generateKeyPairSync, sign, type KeyObject } from 'node:crypto'
+import { createHash, generateKeyPairSync, sign, verify, type KeyObject } from 'node:crypto'
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import Database from 'better-sqlite3'
 import { memoryBucket, noPrintingArt, noPrices } from './helpers'
@@ -8,6 +8,8 @@ import {
   APPLE_AUDIENCE,
   APPLE_ISSUER,
   APPLE_KEYS_URL,
+  APPLE_REVOKE_URL,
+  APPLE_TOKEN_URL,
   resetAppleKeys
 } from '../../workers/portal/src/apple'
 
@@ -21,6 +23,9 @@ const sha256Hex = (s: string): string => createHash('sha256').update(s).digest('
 let appleKey: KeyObject
 let otherKey: KeyObject
 let jwks: unknown
+/** The Sign in with Apple key the Worker signs its client secret with. */
+let signinKey: KeyObject
+let signinPem: string
 
 function identityToken(
   claims: Record<string, unknown> = {},
@@ -44,27 +49,56 @@ describe('Sign in with Apple', () => {
   let db: Database.Database
   let deps: AppDeps
   let keyFetches: number
+  /** Form bodies posted to Apple's token and revoke endpoints. */
+  let tokenCalls: URLSearchParams[]
+  let revokeCalls: URLSearchParams[]
+  /** What Apple's token endpoint answers. */
+  let tokenReply: () => Response
 
   beforeAll(() => {
     appleKey = generateKeyPairSync('rsa', { modulusLength: 2048 }).privateKey
     otherKey = generateKeyPairSync('rsa', { modulusLength: 2048 }).privateKey
     const pub = appleKey.export({ format: 'jwk' })
     jwks = { keys: [{ kty: 'RSA', kid: 'k1', alg: 'RS256', use: 'sig', n: pub.n, e: pub.e }] }
+    const ec = generateKeyPairSync('ec', { namedCurve: 'prime256v1' })
+    signinKey = ec.publicKey
+    signinPem = ec.privateKey.export({ format: 'pem', type: 'pkcs8' }).toString()
   })
 
   beforeEach(() => {
     resetAppleKeys()
     keyFetches = 0
+    tokenCalls = []
+    revokeCalls = []
+    tokenReply = () =>
+      new Response(
+        JSON.stringify({
+          refresh_token: 'rt-1',
+          access_token: 'at-1',
+          id_token: `${b64url({ alg: 'RS256' })}.${b64url({ sub: '000123.abc' })}.sig`
+        }),
+        { status: 200 }
+      )
     db = new Database(':memory:')
     db.pragma('foreign_keys = ON')
     migrateServer(db)
-    const fetchMock = vi.fn(async (input: RequestInfo | URL): Promise<Response> => {
-      if (String(input) === APPLE_KEYS_URL) {
-        keyFetches++
-        return new Response(JSON.stringify(jwks), { status: 200 })
+    const fetchMock = vi.fn(
+      async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+        if (String(input) === APPLE_KEYS_URL) {
+          keyFetches++
+          return new Response(JSON.stringify(jwks), { status: 200 })
+        }
+        if (String(input) === APPLE_TOKEN_URL) {
+          tokenCalls.push(new URLSearchParams(init?.body as URLSearchParams))
+          return tokenReply()
+        }
+        if (String(input) === APPLE_REVOKE_URL) {
+          revokeCalls.push(new URLSearchParams(init?.body as URLSearchParams))
+          return new Response(null, { status: 200 })
+        }
+        return new Response('?', { status: 404 })
       }
-      return new Response('?', { status: 404 })
-    })
+    )
     deps = {
       db,
       assets: { fetch: async () => new Response('nope', { status: 404 }) },
@@ -179,5 +213,130 @@ describe('Sign in with Apple', () => {
       { origin: 'capacitor://localhost' }
     )
     expect(res.headers.get('access-control-allow-origin')).toBe('capacitor://localhost')
+  })
+
+  describe('revoking on account delete', () => {
+    const withAppleKey = (): void => {
+      deps.env = {
+        ...deps.env,
+        APPLE_TEAM_ID: 'TEAM123456',
+        APPLE_SIGNIN_KEY_ID: 'KEY1234567',
+        APPLE_SIGNIN_KEY: signinPem
+      }
+    }
+    const signInWithCode = async (): Promise<string> => {
+      const res = await signIn({
+        identityToken: identityToken(),
+        nonce: NONCE,
+        authorizationCode: 'c0de'
+      })
+      expect(res.status).toBe(200)
+      return ((await res.json()) as { token: string }).token
+    }
+    const deleteAccount = (token: string): Promise<Response> =>
+      handle(
+        new Request(`${BASE}/api/account/delete`, {
+          method: 'POST',
+          headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+          body: JSON.stringify({ confirm: 'delete' })
+        }),
+        deps
+      )
+    const storedToken = (): unknown =>
+      (db.prepare('SELECT refresh_token FROM apple_tokens').get() as { refresh_token: string })
+        ?.refresh_token
+
+    it('keeps the refresh token from the sign-in and revokes it when the account is deleted', async () => {
+      withAppleKey()
+      const token = await signInWithCode()
+      expect(storedToken()).toBe('rt-1')
+
+      const [trade] = tokenCalls
+      expect(trade.get('code')).toBe('c0de')
+      expect(trade.get('grant_type')).toBe('authorization_code')
+      expect(trade.get('client_id')).toBe(APPLE_AUDIENCE)
+      // The client secret is an ES256 JWT signed with the Sign in with Apple key.
+      const [head, body, sig] = trade.get('client_secret')!.split('.')
+      expect(JSON.parse(Buffer.from(head, 'base64url').toString())).toEqual({
+        alg: 'ES256',
+        kid: 'KEY1234567'
+      })
+      expect(JSON.parse(Buffer.from(body, 'base64url').toString())).toEqual({
+        iss: 'TEAM123456',
+        iat: nowSec,
+        exp: nowSec + 300,
+        aud: APPLE_ISSUER,
+        sub: APPLE_AUDIENCE
+      })
+      expect(
+        verify(
+          'sha256',
+          Buffer.from(`${head}.${body}`),
+          { key: signinKey, dsaEncoding: 'ieee-p1363' },
+          Buffer.from(sig, 'base64url')
+        )
+      ).toBe(true)
+
+      expect((await deleteAccount(token)).status).toBe(204)
+      expect(revokeCalls).toHaveLength(1)
+      expect(revokeCalls[0].get('token')).toBe('rt-1')
+      expect(revokeCalls[0].get('token_type_hint')).toBe('refresh_token')
+      expect(db.prepare('SELECT count(*) AS n FROM apple_tokens').get()).toEqual({ n: 0 })
+    })
+
+    it('replaces the kept token on a later sign-in', async () => {
+      withAppleKey()
+      await signInWithCode()
+      tokenReply = () =>
+        new Response(
+          JSON.stringify({
+            refresh_token: 'rt-2',
+            id_token: `${b64url({})}.${b64url({ sub: '000123.abc' })}.sig`
+          }),
+          { status: 200 }
+        )
+      await signInWithCode()
+      expect(storedToken()).toBe('rt-2')
+    })
+
+    it('signs in without keeping a token when the key is unset or Apple refuses', async () => {
+      await signInWithCode()
+      expect(tokenCalls).toHaveLength(0)
+      expect(storedToken()).toBeUndefined()
+
+      withAppleKey()
+      tokenReply = () => new Response('{"error":"invalid_grant"}', { status: 400 })
+      await signInWithCode()
+      expect(storedToken()).toBeUndefined()
+    })
+
+    it("doesn't keep a token Apple issued for another Apple account", async () => {
+      withAppleKey()
+      tokenReply = () =>
+        new Response(
+          JSON.stringify({
+            refresh_token: 'rt-other',
+            id_token: `${b64url({})}.${b64url({ sub: 'someone.else' })}.sig`
+          }),
+          { status: 200 }
+        )
+      await signInWithCode()
+      expect(storedToken()).toBeUndefined()
+    })
+
+    it('deletes the account even when the revoke fails', async () => {
+      withAppleKey()
+      const token = await signInWithCode()
+      const fetchMock = deps.fetch
+      deps.fetch = (async (input: RequestInfo | URL, init?: RequestInit) =>
+        String(input) === APPLE_REVOKE_URL
+          ? new Response(null, { status: 500 })
+          : fetchMock(input, init)) as typeof fetch
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+      expect((await deleteAccount(token)).status).toBe(204)
+      expect(db.prepare('SELECT count(*) AS n FROM users').get()).toEqual({ n: 0 })
+      expect(warn).toHaveBeenCalled()
+      warn.mockRestore()
+    })
   })
 })

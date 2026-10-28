@@ -67,9 +67,10 @@ describe('nativeSignIn', () => {
 })
 
 describe('appleSignIn', () => {
-  it('hands Apple the nonce hash and the portal the nonce, token and name', async () => {
+  it('hands Apple the nonce hash and the portal the nonce, token, code and name', async () => {
     const open = vi.fn<AppleSheet>(async () => ({
       identityToken: 'id.tok.en',
+      authorizationCode: 'c0de',
       givenName: 'Seto',
       familyName: 'Kaiba'
     }))
@@ -85,6 +86,7 @@ describe('appleSignIn', () => {
     const body = JSON.parse(init!.body as string) as Record<string, string>
     expect(body).toMatchObject({
       identityToken: 'id.tok.en',
+      authorizationCode: 'c0de',
       givenName: 'Seto',
       familyName: 'Kaiba'
     })

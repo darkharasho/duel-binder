@@ -1,7 +1,7 @@
 // Fits and evaluates the look model (src/shared/scan/look.ts) on the cues and features dump.mjs
 // measured.
 //
-//   node out/rarity/fit-look.mjs --train <dump.jsonl>... --test <dump.jsonl>...
+//   node out/rarity/fit-look.mjs --train <dump.jsonl>... --test <dump.jsonl>... [--eval <dump.jsonl>...]
 //        [--l2 0.01] [--mode full|options] [--folds 5] [--steps 400] [--ebay-weight 1]
 //        [--min-p 0.99] [--drop name.,art.] [--loco] [--list <source>...]
 //        [--outcomes <out.jsonl>] [--json <scores.jsonl>] [--write <lookModel.ts>]
@@ -14,6 +14,10 @@
 // threshold (--min-p, else the lowest one giving 99% precision on held-out eBay photos) is
 // reported per source with round 1's rules alone and with the model after them, guarded as
 // look.ts guards it (lookCandidate).
+//
+// --eval dumps are scored like the train dumps, held out by card fold, but never fitted on: copies
+// of train images under other conditions (say eBay photos shrunk to a phone camera's frame) are
+// scored by the model that didn't see their card, and the fitted model is the same as without them.
 //
 // Multi-frame: the degraded copies of one image (sources ending -deg, -deg2...) stand in for the
 // frames of one showing; their held-out scores are averaged (mean log-odds) and decided once.
@@ -229,10 +233,11 @@ function asModel(f: Fitted, temperature: number, minProbability: number): LookMo
 
 const train = load(list('--train'))
 const test = load(list('--test'))
+const evaluated = load(list('--eval'))
 const multi = (r: Row): boolean => familiesOf(r).length > 1
 
 // Held-out scores for the train rows, by card folds.
-const groups = [...new Set(train.map((r) => r.group))]
+const groups = [...new Set([...train, ...evaluated].map((r) => r.group))]
 const foldOf = new Map<string, number>()
 // A deterministic shuffle of the cards, so folds don't follow source order.
 const hash = (s: string): number => {
@@ -246,7 +251,8 @@ let classes: string[] = []
 for (let k = 0; k < FOLDS; k++) {
   const f = fit(train.filter((r) => foldOf.get(r.group) !== k))
   classes = f.classes
-  for (const r of train) if (foldOf.get(r.group) === k) held.set(r, scoresOf(f, r))
+  for (const r of [...train, ...evaluated])
+    if (foldOf.get(r.group) === k) held.set(r, scoresOf(f, r))
   console.error(`fold ${k + 1}/${FOLDS}`)
 }
 // With --loco, the test rows are fitted on too, each card's scored by a model fitted without it.
@@ -313,7 +319,7 @@ interface Outcome {
   d: Decision
 }
 const outcomes: Outcome[] = []
-for (const r of [...train, ...test]) {
+for (const r of [...train, ...evaluated, ...test]) {
   if (!multi(r)) continue
   outcomes.push({
     key: r.key,

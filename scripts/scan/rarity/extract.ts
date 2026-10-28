@@ -19,7 +19,8 @@ import { encode } from 'jpeg-js'
 import { decodeFingerprints } from '@shared/scan/fingerprintFile'
 import { ART_MAX_DISTANCE } from '@shared/scan/thresholds'
 import type { RgbaImage } from '@shared/scan/types'
-import { loadCv } from '../../../src/renderer/src/features/scan/vision/cv'
+import { loadCv, type CV } from '../../../src/renderer/src/features/scan/vision/cv'
+import { toMat } from '../../../src/renderer/src/features/scan/vision/detect'
 import { recognizeArt } from '../../../src/renderer/src/features/scan/vision/candidates'
 import { degrade } from './degrade'
 import { loadImage } from './load'
@@ -31,6 +32,11 @@ interface Job {
   degradeSeed?: number
   /** Longest side to shrink the photo to first, e.g. to a webcam-sized card. */
   fitMax?: number
+  /**
+   * A frame to shrink the photo to fit first, [width, height] either way round, by area
+   * averaging: [1080, 1440] is a phone camera's 1080p stream cropped to the scanner's 3:4.
+   */
+  fitBox?: [number, number]
 }
 
 /** Shrinks a photo past 1920 px wide by whole-pixel box averaging, as a webcam frame would be. */
@@ -50,6 +56,28 @@ function fit(img: RgbaImage, max = 1920): RgbaImage {
         data[(y * width + x) * 4 + c] = s / (f * f)
       }
   return { width, height, data }
+}
+
+/** Shrinks a photo to fit within box (either way round) with OpenCV's area resampling. */
+function fitBox(cv: CV, img: RgbaImage, box: [number, number]): RgbaImage {
+  const [short, long] = [Math.min(...box), Math.max(...box)]
+  const scale = Math.min(
+    1,
+    long / Math.max(img.width, img.height),
+    short / Math.min(img.width, img.height)
+  )
+  if (scale >= 1) return img
+  const src = toMat(cv, img)
+  const dst = new cv.Mat()
+  try {
+    const width = Math.round(img.width * scale)
+    const height = Math.round(img.height * scale)
+    cv.resize(src, dst, new cv.Size(width, height), 0, 0, cv.INTER_AREA)
+    return { width, height, data: new Uint8ClampedArray(dst.data) }
+  } finally {
+    src.delete()
+    dst.delete()
+  }
 }
 
 async function main(): Promise<void> {
@@ -84,7 +112,8 @@ async function main(): Promise<void> {
     let distance: number | null = null
     let error: string | undefined
     try {
-      let img = fit(loadImage(job.path), job.fitMax)
+      let img = loadImage(job.path)
+      img = job.fitBox ? fitBox(cv, img, job.fitBox) : fit(img, job.fitMax)
       if (job.degradeSeed !== undefined) {
         const d = degrade(cv, img, job.degradeSeed)
         img = d.frame

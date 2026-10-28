@@ -29,7 +29,7 @@ export interface ScanWindowState {
   devices: { deviceId: string; label: string }[]
   /** The camera actually open, from its track settings. */
   openDeviceId: string | null
-  cameraError: 'denied' | 'none' | 'lost' | null
+  cameraError: 'denied' | 'none' | 'lost' | 'busy' | null
   loop: ScanStatus
   artReady: boolean | null
   setUnreadable: boolean

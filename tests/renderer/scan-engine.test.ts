@@ -168,6 +168,61 @@ describe('createScanEngine', () => {
     )
   })
 
+  it('a worker that stops answering a frame is thrown away and the next call starts a new one', async () => {
+    const silent = { postMessage: vi.fn(), terminate: vi.fn() } as unknown as Worker
+    const { worker: live } = fakeWorker({
+      found: false,
+      quad: null,
+      art: [],
+      codeBands: [],
+      nameBands: [],
+      textBands: [],
+      cues: null
+    })
+    const made = [silent, live]
+    const engine = createScanEngine({
+      api: createMockApi().scan,
+      makeWorker: () => made.shift()!,
+      timeouts: { frameMs: 20 }
+    })
+    await expect(engine.analyze(frame(), { candidates: null, wantText: false })).rejects.toThrow(
+      'stopped answering'
+    )
+    expect(silent.terminate).toHaveBeenCalled()
+    await engine.init(null)
+    const next = await engine.analyze(frame(), { candidates: null, wantText: false })
+    expect(next.found).toBe(false)
+  })
+
+  it('a hung init rejects instead of waiting forever', async () => {
+    const silent = { postMessage: vi.fn(), terminate: vi.fn() } as unknown as Worker
+    const engine = createScanEngine({
+      api: createMockApi().scan,
+      makeWorker: () => silent,
+      timeouts: { initMs: 20 }
+    })
+    await expect(engine.init(null)).rejects.toThrow('stopped answering')
+    expect(silent.terminate).toHaveBeenCalled()
+  })
+
+  it('a failed text read counts as nothing read and keeps the art', async () => {
+    const api = createMockApi().scan
+    vi.mocked(api.ocr).mockRejectedValue(new Error('OCR timed out'))
+    const { worker } = fakeWorker({
+      found: true,
+      quad: null,
+      art: [{ imageId: 1, distance: 3 }],
+      codeBands: [band(10)],
+      nameBands: [band(10)],
+      textBands: [],
+      cues: null
+    })
+    const engine = createScanEngine({ api, makeWorker: () => worker })
+    await engine.init(null)
+    const out = await engine.analyze(frame(), { candidates: null, wantText: true })
+    expect(out).toMatchObject({ art: [{ imageId: 1, distance: 3 }], codeTexts: [], nameTexts: [] })
+  })
+
   it("closes a camera bitmap it couldn't hand to the worker", async () => {
     const throwing = {
       postMessage: () => {

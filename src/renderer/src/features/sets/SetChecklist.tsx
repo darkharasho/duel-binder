@@ -11,6 +11,7 @@ import type {
   SetSummary
 } from '@shared/types'
 import { CardArt } from '@/components/CardArt'
+import { checklistUnpriced, useRequestPrices } from '@/lib/priceRequests'
 import { CardSheet } from '@/components/CardSheet'
 import { TiltCard } from '@/components/TiltCard'
 import { coverArtUrl, setArtUrl, useArtWash } from '@/components/artWashContext'
@@ -158,6 +159,8 @@ export function SetChecklist({
     queryFn: () => api.sets.checklist(setName, language)
   })
   const data = checklist.data
+  // An OCG set's unpriced printings: the portal prices them and they show after the next sync.
+  useRequestPrices(useMemo(() => checklistUnpriced(data), [data]))
   useArtWash(
     data?.set.coverImageId
       ? coverArtUrl(data.set.coverImageId)

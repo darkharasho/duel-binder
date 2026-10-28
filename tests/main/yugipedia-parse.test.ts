@@ -69,6 +69,41 @@ describe('parseSetList', () => {
     ])
   })
 
+  it('flags rows whose print note (4th field) is New artwork, with the list print= as fallback', () => {
+    const r = parseSetList(
+      [
+        '{{Set list|region=JP|print=Reprint|',
+        'LOCR-JP028; Perfectron Hydradrive Dragon; Ultra Rare, Secret Rare; New',
+        'LOCR-JP029; Thunder King, the Lightningstrike Kaiju; Ultra Rare, Secret Rare; New artwork ',
+        'LOCR-JP030; Rescue-ACE Turbulence; UR; new art // description::(extended art)',
+        'LOCR-JP039; PSY-Frame Driver; Super Rare',
+        'LOCR-JP040; Some Card; Super Rare; Reprint',
+        '}}',
+        '{{Set list|region=JP|print=New artwork|',
+        'X-001; Other Card; UR',
+        'X-002; Another Card; UR; Reprint',
+        '}}'
+      ].join('\n')
+    )!
+    expect(r.rows.map((x) => [x.code, x.newArt ?? false, x.variant])).toEqual([
+      ['LOCR-JP028', false, undefined],
+      ['LOCR-JP029', true, undefined],
+      ['LOCR-JP030', true, 'Overframe'],
+      ['LOCR-JP039', false, undefined],
+      ['LOCR-JP040', false, undefined],
+      ['X-001', true, undefined],
+      ['X-002', false, undefined]
+    ])
+    expect('newArt' in r.rows[0]).toBe(false)
+  })
+
+  it('reads the print note on uncoded (noabbr) rows', () => {
+    const r = parseSetList(
+      '{{Set list|region=JP|options=noabbr|\nZoa; UR; New artwork\nKuriboh; C; Reprint\n}}'
+    )!
+    expect(r.rows.map((x) => x.newArt ?? false)).toEqual([true, false])
+  })
+
   it('maps rarity codes confirmed on Yugipedia', () => {
     expect(normalizeRarity('MLR')).toBe('Millennium Rare')
     expect(normalizeRarity('GMR')).toBe('Grand Master Rare')

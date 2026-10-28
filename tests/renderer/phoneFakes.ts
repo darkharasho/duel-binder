@@ -101,7 +101,7 @@ export function fakeStore(
       state.catalog = { ...state.catalog, filled: true }
     }),
     updateCatalog: vi.fn(async () => false),
-    sync: vi.fn(async () => ({ ...state.sync, changed: false })),
+    sync: vi.fn(async () => ({ ...state.sync, changed: false, awaitingPrices: false })),
     syncState: vi.fn(async () => state.sync),
     syncProblems: vi.fn(async () => []),
     invoke: vi.fn(async (channel: DataChannel, args: unknown[]) => {
@@ -111,6 +111,7 @@ export function fakeStore(
     portal: vi.fn(async (channel: string) =>
       channel === 'friends:overview' ? { friends: [], incoming: [], blocked: [] } : []
     ) as PhoneStore['portal'],
+    requestPrices: vi.fn(async () => 0),
     fingerprints: vi.fn(async () => null),
     refreshFingerprints: vi.fn(async () => ({ state: 'ready' as const, count: 3 })),
     ...over
@@ -130,7 +131,12 @@ export function installPhoneApi(
   afterAdd: () => void = () => {}
 ): { api: Api; events: PhoneEvents } {
   const events = createPhoneEvents()
-  const api = createPhoneApi({ store, ocr: fakeOcr(), triggers: { afterAdd }, events })
+  const api = createPhoneApi({
+    store,
+    ocr: fakeOcr(),
+    triggers: { afterAdd, afterPriceRequest: () => {} },
+    events
+  })
   window.api = api
   return { api, events }
 }

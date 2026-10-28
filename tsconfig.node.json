@@ -1,7 +1,7 @@
 {
   "extends": "@electron-toolkit/tsconfig/tsconfig.node.json",
-  "include": ["electron.vite.config.*", "vitest.config.mts", "src/main/**/*", "src/preload/**/*", "src/shared/**/*", "tests/main/**/*", "workers/portal/src/**/*", "tests/portal/**/*", "scripts/**/*", "capacitor.config.ts"],
-  "exclude": ["workers/portal/src/index.ts", "workers/portal/src/doSql.ts", "tests/main/phone-*", "tests/main/wasm-sql.test.ts"],
+  "include": ["electron.vite.config.*", "vitest.config.mts", "src/main/**/*", "src/preload/**/*", "src/shared/**/*", "tests/main/**/*", "workers/portal/src/**/*", "tests/portal/**/*", "scripts/**/*", "capacitor.config.ts", "src/renderer/src/env.d.ts"],
+  "exclude": ["workers/portal/src/index.ts", "workers/portal/src/doSql.ts", "tests/main/phone-*", "tests/main/wasm-sql.test.ts", "tests/main/scan-code-real.test.ts"],
   "compilerOptions": {
     "composite": true,
     "types": ["electron-vite/node", "vitest/globals"],

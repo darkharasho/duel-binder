@@ -31,7 +31,8 @@ export const NOTHING: RawSignals = {
   codeTexts: [],
   nameTexts: [],
   textBands: [],
-  cues: null
+  cues: null,
+  look: null
 }
 export const codeFrame = (code: string): RawSignals => ({
   found: true,
@@ -40,7 +41,8 @@ export const codeFrame = (code: string): RawSignals => ({
   codeTexts: [code],
   nameTexts: [],
   textBands: [],
-  cues: null
+  cues: null,
+  look: null
 })
 
 export type FakeEngine = ScanEngine & {
@@ -121,6 +123,11 @@ export function stubVideo(): ReturnType<typeof vi.fn> {
   Object.defineProperty(HTMLVideoElement.prototype, 'videoHeight', {
     configurable: true,
     get: () => 480
+  })
+  // A live camera's picture moves with the clock.
+  Object.defineProperty(HTMLMediaElement.prototype, 'currentTime', {
+    configurable: true,
+    get: () => Date.now() / 1000
   })
   const grabbed = vi.fn(
     async (_src: unknown, _x: number, _y: number, width: number, height: number) =>

@@ -7,6 +7,7 @@ import {
 } from '@/features/scan/resolve'
 import type { ArtMatch, RawSignals } from '@/features/scan/engine'
 import type { CardLanguage } from '@shared/scan/language'
+import { LOOK_FEATURES, type LookModel } from '@shared/scan/look'
 import type { ScanPrinting } from '@shared/scan/types'
 import {
   ART_FAR_DISTANCE,
@@ -83,6 +84,7 @@ const raw = (r: Partial<RawSignals>): RawSignals => ({
   nameTexts: [],
   textBands: [],
   cues: null,
+  look: null,
   ...r
 })
 const noSet = { setName: null, setPrintings: null, defaultRarity: null, lookups }
@@ -118,9 +120,10 @@ describe('resolveSignals', () => {
   it('a card-shaped thing whose art is nothing like any card counts as nothing in view', async () => {
     // A book or the deck on the desk: its closest artwork is far off, and nothing reads.
     const far = [{ imageId: 201, distance: ART_FAR_DISTANCE + 1 }]
-    expect(await resolveSignals(raw({ art: far }), noSet)).toEqual({ kind: 'none' })
+    expect(await resolveSignals(raw({ art: far }), noSet)).toEqual({ kind: 'none', far: true })
     expect(await resolveSignals(raw({ art: far, codeTexts: ['garbage'] }), withSet(LOB))).toEqual({
-      kind: 'none'
+      kind: 'none',
+      far: true
     })
     // A code or name read still counts it.
     expect(await recognized(raw({ art: far, codeTexts: ['SDY-EN006'] }))).toMatchObject({
@@ -383,7 +386,8 @@ describe('withRarityByLook', () => {
       printingId: 12,
       flag: null
     })
-    expect(withRarityByLook(item, PLAIN, null)).toEqual({ ...item, flag: null })
+    // A Normal Monster's pale bar can make a prismatic name read dark, so dark ink doesn't settle it.
+    expect(withRarityByLook(item, PLAIN, null)).toBe(item)
     const ultraOrSecret = await guessed()
     expect(withRarityByLook(ultraOrSecret, DARK, null)).toMatchObject({
       rarity: 'Ultra Rare',
@@ -392,11 +396,18 @@ describe('withRarityByLook', () => {
     })
   })
 
+  it('rules smooth Ultra gold out by a light silver name on a black-name frame', async () => {
+    expect(withRarityByLook(await guessed(), LIGHT, null)).toMatchObject({
+      rarity: 'Secret Rare',
+      flag: null
+    })
+  })
+
   it('keeps the guess and its flag without a settling look', async () => {
     const item = await guessed()
     expect(withRarityByLook(item, null, null)).toBe(item)
-    // Gold can read light in glare, so a light name doesn't rule out Ultra.
-    expect(withRarityByLook(item, LIGHT, null)).toBe(item)
+    // Gold can read light in glare, so a light name alone doesn't rule out Ultra...
+    expect(withRarityByLook(item, { nameInk: 'light', nameTint: null }, null)).toBe(item)
     const other = await commonOrSecret()
     expect(withRarityByLook(other, { nameInk: 'light', nameTint: null }, null)).toBe(other)
   })
@@ -431,6 +442,122 @@ describe('withRarityByLook', () => {
       rarity: 'Secret Rare',
       printingId: 12,
       flag: 'other-set'
+    })
+  })
+})
+
+describe('withRarityByLook with the look model (the phone scanner)', () => {
+  const at = LOOK_FEATURES.indexOf('art.chromaFine')
+  /**
+   * A model that reads one feature, the art's colour noise: Secret Rare rises with it and
+   * Starlight faster, Ultimate stays. At its threshold, 0.99.
+   */
+  const MODEL: LookModel = {
+    features: LOOK_FEATURES,
+    logOffset: LOOK_FEATURES.map(() => 0),
+    mean: LOOK_FEATURES.map(() => 0),
+    spread: LOOK_FEATURES.map(() => 1),
+    classes: ['Secret Rare', 'Starlight Rare', 'Ultimate Rare'],
+    weights: [4, 6, 0].map((w) => LOOK_FEATURES.map((_, j) => (j === at ? w : 0))),
+    bias: [0, -4, 0],
+    temperature: 1,
+    minProbability: 0.99
+  }
+  /** One frame's features, with the art's colour noise at v. */
+  const frame = (v: number): number[] => LOOK_FEATURES.map((_, j) => (j === at ? v : 0))
+  const look = (...frames: number[][]): { model: LookModel; frames: number[][] } => ({
+    model: MODEL,
+    frames
+  })
+  const LIGHT = { nameInk: 'light', nameTint: 'silver', nameContrast: -0.3 } as const
+
+  /**
+   * LOB-EN005 as if printed in `rarities` (printings 11, 12...) on a frameType frame. A light
+   * silver name fits Secret and Starlight but tells neither from Ultimate, whose name has no
+   * known look, so the rules alone can't pick.
+   */
+  const draft = async (rarities: string[], frameType = 'normal'): Promise<ScanDraft> => {
+    const item = await recognized(raw({ codeTexts: ['LOB-EN005'] }))
+    const [first] = item.options
+    const options = rarities.map((rarity, i) => ({
+      ...first,
+      printingId: 11 + i,
+      rarity,
+      frameType
+    }))
+    return { ...item, printingId: 11, rarity: rarities[0], options, flag: 'check-rarity' }
+  }
+  const secretOrUltimate = (): Promise<ScanDraft> => draft(['Ultimate Rare', 'Secret Rare'])
+
+  it('picks what the model is sure of when the rules abstain', async () => {
+    const item = await secretOrUltimate()
+    expect(withRarityByLook(item, LIGHT, null)).toBe(item)
+    expect(withRarityByLook(item, LIGHT, null, look(frame(2)))).toEqual({
+      ...item,
+      printingId: 12,
+      rarity: 'Secret Rare',
+      flag: null
+    })
+  })
+
+  it('without the model, as on the desktop webcam, keeps to the rules', async () => {
+    const item = await secretOrUltimate()
+    expect(withRarityByLook(item, LIGHT, null, null)).toBe(item)
+    // The rules still pick where they can, with or without it.
+    const ultraOrSecret = await draft(['Ultra Rare', 'Secret Rare'])
+    for (const l of [null, look(frame(-5))])
+      expect(withRarityByLook(ultraOrSecret, LIGHT, null, l)).toMatchObject({
+        rarity: 'Secret Rare',
+        flag: null
+      })
+  })
+
+  it('keeps the guess and its flag when the model is not sure enough or has no frames', async () => {
+    const item = await secretOrUltimate()
+    // Secret against Ultimate at e^1.2 : 1, about 0.77.
+    expect(withRarityByLook(item, LIGHT, null, look(frame(0.3)))).toBe(item)
+    // A glared frame pulls a showing's mean below the threshold.
+    expect(withRarityByLook(item, LIGHT, null, look(frame(2), frame(-1.5)))).toBe(item)
+    expect(withRarityByLook(item, LIGHT, null, look())).toBe(item)
+  })
+
+  describe('makes no wrong pick the guards stop', () => {
+    it('when the name was not read, so nothing positively fits the pick', async () => {
+      const item = await secretOrUltimate()
+      const unread = { nameInk: null, nameTint: null, nameContrast: null }
+      expect(withRarityByLook(item, unread, null, look(frame(3)))).toBe(item)
+    })
+
+    it('when the name rules the pick out', async () => {
+      // Plain black ink well darker than an Effect bar: not a prismatic Secret, whatever the model says.
+      const item = await draft(['Ultimate Rare', 'Secret Rare'], 'effect')
+      const black = { nameInk: 'dark', nameTint: null, nameContrast: 0.35 } as const
+      expect(withRarityByLook(item, black, null, look(frame(3)))).toBe(item)
+      expect(withRarityByLook(item, LIGHT, null, look(frame(3)))).toMatchObject({
+        rarity: 'Secret Rare'
+      })
+    })
+
+    it('when a Link frame would be taken for a whole-card foil', async () => {
+      // Sure of Starlight (e^6 : 1 over Secret) on both, but a Link frame's pattern reads as glitter.
+      const onEffect = await draft(['Secret Rare', 'Starlight Rare'], 'effect')
+      expect(withRarityByLook(onEffect, LIGHT, null, look(frame(5)))).toMatchObject({
+        rarity: 'Starlight Rare'
+      })
+      const onLink = await draft(['Secret Rare', 'Starlight Rare'], 'link')
+      expect(withRarityByLook(onLink, LIGHT, null, look(frame(5)))).toBe(onLink)
+    })
+
+    it('when art runs over the frame, or a rarity is one the model does not know', async () => {
+      const overframe = await draft(['Secret Rare', 'Secret Rare (Overframe)'])
+      expect(withRarityByLook(overframe, LIGHT, null, look(frame(5)))).toBe(overframe)
+      const ghost = await draft(['Ghost Rare', 'Secret Rare'])
+      expect(withRarityByLook(ghost, LIGHT, null, look(frame(5)))).toBe(ghost)
+    })
+
+    it('when the user said what the stack is', async () => {
+      const item = await secretOrUltimate()
+      expect(withRarityByLook(item, LIGHT, 'Ultimate Rare', look(frame(3)))).toBe(item)
     })
   })
 })

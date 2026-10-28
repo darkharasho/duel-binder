@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { FlashlightIcon, FlashlightOffIcon } from 'lucide-react'
+import type { LookModel } from '@shared/scan/look'
+import { LOOK_MODEL } from '@shared/scan/lookModel'
 import { defaultEngine, type ScanEngine } from '@/features/scan/engine'
 import { useScanHub } from '@/features/scan/ScanHub'
 import { ScanViewport } from '@/features/scan/ScanViewport'
@@ -10,7 +12,8 @@ import { cn } from '@/lib/utils'
 const CAMERA_MESSAGES: Record<CameraError, string> = {
   denied: 'Duel Binder needs the camera to scan. Allow it for this site in your browser settings.',
   none: "This phone's camera didn't open.",
-  lost: 'The camera stopped.'
+  lost: 'The camera stopped.',
+  busy: 'The camera is in use by another app.'
 }
 
 /** The video track's torch, where the browser offers one (Chrome on Android; not iPhone). */
@@ -70,20 +73,32 @@ function CameraBackdrop({ stream }: { stream: MediaStream | null }): React.JSX.E
  * where that fits, else narrower, always 3:4 (the scanned crop is what the preview shows).
  * `children` sit on the preview; the flashlight, where there is one, sits left of a top-right
  * child. Behind it all, the camera's picture blurred. Pulls are counted through the hub.
+ *
+ * Unlike the desktop's scanners, it reads rarity with the look model after the name and frame
+ * rules (useScanLoop's lookModel): it was fitted and tested on photos the size of a phone
+ * camera's, and gains nothing on a desktop webcam. `lookModel` is for tests.
  */
 export function PhoneCamera({
   engineFactory = defaultEngine,
+  lookModel = LOOK_MODEL,
   className,
   children
 }: {
   engineFactory?: () => ScanEngine
+  lookModel?: LookModel | null
   className?: string
   children?: React.ReactNode
 }): React.JSX.Element {
   const { settings } = useScanHub()
   const videoRef = useRef<HTMLVideoElement>(null)
   const camera = useCamera(settings.deviceId, 'environment')
-  const { loop } = useHubScan({ videoRef, stream: camera.stream, engineFactory })
+  const { loop } = useHubScan({
+    videoRef,
+    stream: camera.stream,
+    engineFactory,
+    lookModel,
+    onStalled: camera.retry
+  })
   const torch = useTorch(camera.stream)
 
   return (

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from 'react'
+import type { LookModel } from '@shared/scan/look'
 import { cuesOver, type RarityCues } from '@shared/scan/rarity'
 import type { CardLanguage } from '@shared/scan/language'
 import { ABSENT_MS, LANGUAGE_MAX_READS, RARITY_MAX_READINGS } from '@shared/scan/thresholds'
@@ -7,7 +8,13 @@ import type { ScanStatus } from '@shared/scanWindow'
 import { api } from '@/lib/api'
 import { centreCrop } from './crop'
 import type { ScanEngine } from './engine'
-import { resolveSignals, withRarityByLook, type ScanDraft, type ScanOutcome } from './resolve'
+import {
+  describeLook,
+  resolveSignals,
+  withRarityByLook,
+  type ScanDraft,
+  type ScanOutcome
+} from './resolve'
 import { createShowingTracker } from './tracker'
 import type { Quad } from './vision/detect'
 
@@ -16,6 +23,29 @@ const FRAME_MS = 200
 /** Engine failures in a row before scanning stops; each waits twice as long as the last. */
 const MAX_FAILURES = 5
 const FIRST_BACKOFF_MS = 500
+/**
+ * Budgets for the main-process calls a frame waits on, so a call that never settles can't hold
+ * the loop (which skips frames while one is in flight) forever. Telling a card's language reads
+ * up to three models, each maybe starting cold, so it gets the most; past it the language counts
+ * as unknown.
+ */
+const FINGERPRINTS_TIMEOUT_MS = 20_000
+const LOOKUP_TIMEOUT_MS = 30_000
+const LANGUAGE_TIMEOUT_MS = 20_000
+/**
+ * A shown camera whose picture hasn't moved for this long is taken as frozen (a stream the
+ * system muted in the background, or one that died without ending) and handed to onStalled.
+ */
+const STALL_MS = 5000
+
+/** p, or a rejection once ms pass. */
+function within<T>(p: Promise<T>, ms: number): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error('Timed out')), ms)
+  })
+  return Promise.race([p, timeout]).finally(() => clearTimeout(timer))
+}
 
 export type { ScanStatus }
 
@@ -30,7 +60,15 @@ export interface ScanLoopOptions {
   /** The picked set's printings; null for any set, undefined while they load. */
   setPrintings: ScanPrinting[] | null | undefined
   defaultRarity: string | null
+  /**
+   * The rarity look model, to read a rarity by after the name and frame rules can't, or null for
+   * the rules alone. The phone scanner passes it; the desktop webcam, where it gains nothing,
+   * doesn't. With it, the worker measures each frame's look features too.
+   */
+  lookModel?: LookModel | null
   onDraft: (d: ScanDraft) => void
+  /** The camera's picture stopped moving; reopening the camera is the cure. */
+  onStalled?: () => void
 }
 
 export interface ScanLoop {
@@ -94,8 +132,13 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
     lastFound: false,
     shown: null as number | null,
     absentSince: null as number | null,
-    // What the card in view has shown of its foil in its latest frames.
-    looks: { cardId: null as number | null, cues: [] as RarityCues[] },
+    // When the video's picture last moved, to tell a frozen camera.
+    videoTime: -1,
+    movedAt: 0,
+    // What the card in view has shown of its foil in its latest frames, and their look features.
+    looks: { cardId: null as number | null, cues: [] as RarityCues[], frames: [] as number[][] },
+    // In development, the look model's last reading logged, so each change is logged once.
+    lookLogged: '',
     // What the card in view's text has read as, and how many times it has been read.
     language: { cardId: null as number | null, reads: 0, read: null as CardLanguage | null },
     status: { kind: 'idle' } as ScanStatus
@@ -115,7 +158,11 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
     engineRef.current = engine
     readyRef.current = false
     const init = async (): Promise<void> => {
-      const fp = await api.scan.fingerprints().catch(() => null)
+      // Only a hang fails the init (and is retried); a file that can't be read means no art.
+      const fp = await within(
+        api.scan.fingerprints().catch(() => null),
+        FINGERPRINTS_TIMEOUT_MS
+      )
       if (!live) return
       setArtReady(fp !== null)
       await engine.init(fp)
@@ -152,7 +199,7 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
     l.lastFound = false
     l.shown = null
     l.absentSince = null
-    l.looks = { cardId: null, cues: [] }
+    l.looks = { cardId: null, cues: [], frames: [] }
     l.language = { cardId: null, reads: 0, read: null }
     // Stopped stays stopped until Retry.
     if (l.stopped) return
@@ -175,10 +222,17 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
     let live = true
     const l = loop.current
 
-    const fail = (): void => {
+    /**
+     * Counts a failed frame. An engine failure gives the engine its fingerprints again first; a
+     * failed lookup only counts, so a main process that keeps failing stops scanning visibly
+     * rather than leaving a live camera that never finds anything.
+     */
+    const fail = ({ reinit = true } = {}): void => {
       l.failures++
-      l.needsInit = true
-      l.lastFound = false
+      if (reinit) {
+        l.needsInit = true
+        l.lastFound = false
+      }
       if (l.failures >= MAX_FAILURES) {
         l.stopped = true
         setStatus({ kind: 'stopped' })
@@ -210,16 +264,30 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
      * The outcome with the rarity its card's look picks over the latest frames it has been
      * recognized in, so the draft that counts carries what all of them saw.
      */
-    const withLook = (outcome: ScanOutcome, cues: RarityCues | null): ScanOutcome => {
-      if (outcome.kind === 'none') l.looks = { cardId: null, cues: [] }
+    const withLook = (
+      outcome: ScanOutcome,
+      cues: RarityCues | null,
+      features: number[] | null
+    ): ScanOutcome => {
+      if (outcome.kind === 'none') l.looks = { cardId: null, cues: [], frames: [] }
       if (outcome.kind !== 'recognized') return outcome
       const { cardId } = outcome.item
-      if (l.looks.cardId !== cardId) l.looks = { cardId, cues: [] }
+      if (l.looks.cardId !== cardId) l.looks = { cardId, cues: [], frames: [] }
       if (cues) l.looks.cues = [...l.looks.cues, cues].slice(-RARITY_MAX_READINGS)
-      const look = cuesOver(l.looks.cues)
+      if (features) l.looks.frames = [...l.looks.frames, features].slice(-RARITY_MAX_READINGS)
+      const over = cuesOver(l.looks.cues)
+      const { lookModel, defaultRarity } = latest.current
+      const look = lookModel ? { model: lookModel, frames: l.looks.frames } : null
+      if (import.meta.env.DEV && look && defaultRarity === null) {
+        const reading = JSON.stringify(describeLook(outcome.item, over, look))
+        if (reading !== l.lookLogged) {
+          l.lookLogged = reading
+          console.debug('[scan] rarity look', reading)
+        }
+      }
       return {
         ...outcome,
-        item: withRarityByLook(outcome.item, look, latest.current.defaultRarity)
+        item: withRarityByLook(outcome.item, over, defaultRarity, look)
       }
     }
 
@@ -232,14 +300,28 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
       const known = l.language
       if (known.read || known.reads >= LANGUAGE_MAX_READS || !bands.length) return known.read
       known.reads++
-      known.read = await api.scan.language(bands).catch(() => null)
+      known.read = await within(api.scan.language(bands), LANGUAGE_TIMEOUT_MS).catch(() => null)
       return known.read
+    }
+
+    /** Calls onStalled when the shown camera's picture hasn't moved for STALL_MS. */
+    const watch = (video: HTMLVideoElement | null): void => {
+      const now = Date.now()
+      // Hidden, the picture may rightly stand still; the clock starts again once shown.
+      if (!video || document.visibilityState !== 'visible' || video.currentTime !== l.videoTime) {
+        l.videoTime = video?.currentTime ?? -1
+        l.movedAt = now
+      } else if (now - l.movedAt >= STALL_MS) {
+        l.movedAt = now
+        latest.current.onStalled?.()
+      }
     }
 
     const tick = async (): Promise<void> => {
       const engine = engineRef.current
       const o = latest.current
       const video = o.videoRef.current
+      watch(video)
       // Not skipped while document.hidden: the scan window is often covered while streaming.
       if (l.busy || l.stopped || !engine || !readyRef.current) return
       if (Date.now() < l.retryAt || o.setPrintings === undefined) return
@@ -267,30 +349,43 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
         const candidates = o.candidates
         let raw
         try {
-          raw = await engine.analyze(frame, { candidates, wantText: l.lastFound })
+          raw = await engine.analyze(frame, {
+            candidates,
+            wantText: l.lastFound,
+            wantLook: !!o.lookModel
+          })
         } catch {
           if (live) fail()
           return
         }
         if (!live) return
-        l.failures = 0
         l.lastFound = raw.found
-        const outcome = await resolveSignals(raw, {
-          setName: o.setName,
-          setPrintings,
-          defaultRarity: o.defaultRarity,
-          cardLanguage: (cardId) => languageOf(cardId, raw.textBands),
-          lookups: api.scan
-        }).catch(() => null)
+        let outcome: ScanOutcome
+        try {
+          outcome = await within(
+            resolveSignals(raw, {
+              setName: o.setName,
+              setPrintings,
+              defaultRarity: o.defaultRarity,
+              cardLanguage: (cardId) => languageOf(cardId, raw.textBands),
+              lookups: api.scan
+            }),
+            LOOKUP_TIMEOUT_MS
+          )
+        } catch {
+          if (live) fail({ reinit: false })
+          return
+        }
+        l.failures = 0
         // The set changed mid-frame: this frame belongs to the old one.
-        if (!outcome || !live || latest.current.setKey !== o.setKey) return
+        if (!live || latest.current.setKey !== o.setKey) return
         // Something card-shaped that is no card gets no outline either.
         setOutline(
           raw.found && raw.quad && outcome.kind !== 'none'
             ? { quad: raw.quad, width, height }
             : null
         )
-        const draft = tracker.current.push(performance.now(), withLook(outcome, raw.cues))
+        const draft = tracker.current.push(performance.now(), withLook(outcome, raw.cues, raw.look))
         show(outcome, draft)
         if (draft) latest.current.onDraft(draft)
       } finally {
@@ -298,6 +393,7 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
       }
     }
 
+    l.movedAt = Date.now()
     const timer = setInterval(() => void tick(), FRAME_MS)
     return () => {
       live = false

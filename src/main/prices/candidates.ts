@@ -1,10 +1,16 @@
 import type { Language } from '../../shared/languages'
 import type { SqlDb } from '../db/sql'
 
-// Which owned printings are due an eBay price. Only reads the database: the desktop sends these to
-// the server for pricing, and the price refresh (./refresh) looks them up.
+// Which printings are due an eBay price: owned ones, and ones someone asked to have priced. Only reads
+// the database: the desktop sends these to the server for pricing, and the price refresh (./refresh)
+// looks them up.
 
 export const PRICE_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000
+/**
+ * A price request keeps a printing wanted this long. The same as PRICE_INTERVAL_MS: a requested
+ * printing is priced once, and its price isn't refreshed unless someone asks again (or owns it).
+ */
+export const REQUEST_WINDOW_MS = PRICE_INTERVAL_MS
 
 export interface PriceCandidate {
   id: number
@@ -15,6 +21,12 @@ export interface PriceCandidate {
   rarity: string
   lang: Language
 }
+
+// Owned by anyone: deliberately global across desktop owners and server users; tombstones don't count.
+const OWNED =
+  'EXISTS (SELECT 1 FROM collection_entries e WHERE e.printing_id = p.id AND e.deleted_at IS NULL)'
+const REQUESTED =
+  'EXISTS (SELECT 1 FROM price_requests r WHERE r.printing_id = p.id AND r.requested_at >= ?)'
 
 /** WHERE clause and params shared by the candidate list and its count. */
 function candidateFilter(
@@ -31,10 +43,8 @@ function candidateFilter(
   }
   // English printings with a TCGplayer market price don't need eBay's.
   where.push("(p.language <> 'en' OR p.market_price IS NULL)")
-  // Owned by anyone: deliberately global across desktop owners and server users; tombstones don't count.
-  where.push(
-    'EXISTS (SELECT 1 FROM collection_entries e WHERE e.printing_id = p.id AND e.deleted_at IS NULL)'
-  )
+  where.push(`(${OWNED} OR ${REQUESTED})`)
+  params.push(new Date(now.getTime() - REQUEST_WINDOW_MS).toISOString())
   return { where: where.join(' AND '), params }
 }
 
@@ -44,8 +54,9 @@ const CANDIDATE_FROM = `FROM card_printings p
        LEFT JOIN intl_prices ip ON ip.printing_id = p.id`
 
 /**
- * Owned printings (every language, English only without a TCGplayer market price) with no eBay price or one older than 7 days, never-priced first
- * (optionally only `printingIds`, at most `limit`).
+ * Owned or recently requested printings (every language, English only without a TCGplayer market
+ * price) with no eBay price or one older than 7 days (optionally only `printingIds`, at most `limit`).
+ * Owned printings come first, so requests never hold up a collection's prices; then never-priced first.
  */
 export function priceCandidates(
   db: SqlDb,
@@ -65,7 +76,7 @@ export function priceCandidates(
       `SELECT p.id, p.pkey, p.set_code AS code, c.name, p.set_name AS "set", p.set_rarity AS rarity, p.language AS lang
        ${CANDIDATE_FROM}
        WHERE ${f.where}
-       ORDER BY ip.printing_id IS NULL DESC, ip.checked_at, p.id
+       ORDER BY ${OWNED} DESC, ip.printing_id IS NULL DESC, ip.checked_at, p.id
        ${limit}`
     )
     .all(...params) as PriceCandidate[]

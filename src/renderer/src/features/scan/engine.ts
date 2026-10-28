@@ -25,6 +25,11 @@ export interface FrameSignals {
   textBands: OcrBand[]
   /** What the card shows of its foil; null when it couldn't be turned upright to look. */
   cues: RarityCues | null
+  /**
+   * The card's look for the rarity look model (rarityFeatures, LOOK_FEATURES order): only when
+   * asked for (wantLook) and the card was turned upright, else null.
+   */
+  look: number[] | null
 }
 
 /** Messages to the vision worker. Frames are answered in the order they're sent. */
@@ -37,6 +42,8 @@ export type WorkerRequest =
       image: RgbaImage | ImageBitmap
       candidates: number[] | null
       wantBands: boolean
+      /** Measure the card's look for the rarity look model too (about 3.7 ms more a frame). */
+      wantLook: boolean
     }
 
 /** Messages from it: `ready` answers `init`, and an error with no id is init's. */
@@ -57,6 +64,7 @@ export interface RawSignals {
   /** The text bands, unread: reading them is slow, so it's left until a card's language is needed. */
   textBands: OcrBand[]
   cues: RarityCues | null
+  look: number[] | null
 }
 
 export interface ScanEngine {
@@ -64,11 +72,12 @@ export interface ScanEngine {
   init(fp: ArrayBuffer | null): Promise<void>
   /**
    * The frame is handed to the worker, so it can't be used afterwards. A camera frame is best
-   * an ImageBitmap: the worker reads its pixels, so the UI thread never copies them.
+   * an ImageBitmap: the worker reads its pixels, so the UI thread never copies them. `wantLook`
+   * measures the card's look for the rarity look model as well.
    */
   analyze(
     frame: ImageBitmap | ImageData,
-    opts: { candidates: number[] | null; wantText: boolean }
+    opts: { candidates: number[] | null; wantText: boolean; wantLook?: boolean }
   ): Promise<RawSignals>
   /** Stops the worker and rejects pending calls; init and analyze reject afterwards. */
   dispose(): void
@@ -78,6 +87,14 @@ interface Waiter<T> {
   resolve(value: T): void
   reject(error: Error): void
 }
+
+/**
+ * How long the worker may take to answer before it's taken as hung: loading OpenCV and the
+ * fingerprints, and one frame. A hung worker is thrown away like a crashed one, so the scan
+ * loop's retry starts a fresh one instead of waiting forever.
+ */
+const INIT_TIMEOUT_MS = 45_000
+const FRAME_TIMEOUT_MS = 10_000
 
 /** The vision worker, bundled by Vite. */
 export const makeVisionWorker = (): Worker =>
@@ -89,17 +106,48 @@ const hasPixels = (b: OcrBand): boolean => b.width > 0 && b.height > 0
  * Runs the vision worker over camera frames and reads the text bands it cuts out through
  * `api.ocr`, only when wantText. The worker starts on first use.
  */
-export function createScanEngine(deps: { api: Api['scan']; makeWorker: () => Worker }): ScanEngine {
+export function createScanEngine(deps: {
+  api: Api['scan']
+  makeWorker: () => Worker
+  timeouts?: { initMs?: number; frameMs?: number }
+}): ScanEngine {
   let worker: Worker | null = null
   let disposed = false
   let nextId = 1
   const inits: Waiter<void>[] = []
   const frames = new Map<number, Waiter<FrameSignals>>()
+  const initMs = deps.timeouts?.initMs ?? INIT_TIMEOUT_MS
+  const frameMs = deps.timeouts?.frameMs ?? FRAME_TIMEOUT_MS
 
   const failAll = (error: Error): void => {
     for (const w of inits.splice(0)) w.reject(error)
     for (const w of frames.values()) w.reject(error)
     frames.clear()
+  }
+
+  /** Throws the worker away with everything it owes; the next call starts a new one. */
+  const kill = (w: Worker, error: Error): void => {
+    failAll(error)
+    w.terminate()
+    if (worker === w) worker = null
+  }
+
+  /** waiter, settled as a hang (killing the worker) unless it's answered within ms. */
+  const watched = <T>(waiter: Waiter<T>, ms: number): Waiter<T> => {
+    const w = worker
+    const timer = setTimeout(() => {
+      if (w && worker === w) kill(w, new Error('The scan worker stopped answering'))
+    }, ms)
+    return {
+      resolve: (v) => {
+        clearTimeout(timer)
+        waiter.resolve(v)
+      },
+      reject: (e) => {
+        clearTimeout(timer)
+        waiter.reject(e)
+      }
+    }
   }
 
   const start = (): Worker => {
@@ -121,11 +169,7 @@ export function createScanEngine(deps: { api: Api['scan']; makeWorker: () => Wor
       }
     }
     // A dead worker takes its pending frames with it; the next call starts a new one.
-    w.onerror = (e) => {
-      failAll(new Error(e.message || 'The scan worker failed'))
-      w.terminate()
-      if (worker === w) worker = null
-    }
+    w.onerror = (e) => kill(w, new Error(e.message || 'The scan worker failed'))
     w.onmessageerror = () => failAll(new Error('A scan worker reply could not be read'))
     worker = w
     return w
@@ -140,25 +184,25 @@ export function createScanEngine(deps: { api: Api['scan']; makeWorker: () => Wor
         try {
           // Handed over rather than copied: it's a few MB, and the caller reads a fresh one each time.
           send({ type: 'init', fingerprints: fp }, fp ? [fp] : [])
-          inits.push({ resolve, reject })
+          inits.push(watched({ resolve, reject }, initMs))
         } catch (e) {
           reject(e instanceof Error ? e : new Error(String(e)))
         }
       })
     },
 
-    async analyze(frame, { candidates, wantText }) {
+    async analyze(frame, { candidates, wantText, wantLook = false }) {
       const id = nextId++
       const signals = await new Promise<FrameSignals>((resolve, reject) => {
-        frames.set(id, { resolve, reject })
         const bitmap = !('data' in frame)
         const image: RgbaImage | ImageBitmap = bitmap
           ? frame
           : { width: frame.width, height: frame.height, data: frame.data }
         try {
-          send({ type: 'frame', id, image, candidates, wantBands: wantText }, [
+          send({ type: 'frame', id, image, candidates, wantBands: wantText, wantLook }, [
             bitmap ? frame : (frame.data.buffer as ArrayBuffer)
           ])
+          frames.set(id, watched({ resolve, reject }, frameMs))
         } catch (e) {
           frames.delete(id)
           // Never handed over, so it's still ours to free.
@@ -166,15 +210,16 @@ export function createScanEngine(deps: { api: Api['scan']; makeWorker: () => Wor
           reject(e instanceof Error ? e : new Error(String(e)))
         }
       })
-      const { found, quad, art, cues } = signals
+      const { found, quad, art, cues, look } = signals
       if (!wantText || !found)
-        return { found, quad, art, codeTexts: [], nameTexts: [], textBands: [], cues }
+        return { found, quad, art, codeTexts: [], nameTexts: [], textBands: [], cues, look }
       const codeBands = signals.codeBands.filter(hasPixels)
       const nameBands = signals.nameBands.filter(hasPixels)
-      const [codes, names] = await Promise.all([
-        codeBands.length ? deps.api.ocr(codeBands, 'code') : [],
-        nameBands.length ? deps.api.ocr(nameBands, 'name') : []
-      ])
+      // Text is a helper to the art: a failed or timed-out read counts as nothing read, so OCR
+      // trouble never stops art matching.
+      const read = (bands: OcrBand[], kind: 'code' | 'name'): Promise<string[]> =>
+        bands.length ? deps.api.ocr(bands, kind).catch(() => []) : Promise.resolve([])
+      const [codes, names] = await Promise.all([read(codeBands, 'code'), read(nameBands, 'name')])
       return {
         found,
         quad,
@@ -182,7 +227,8 @@ export function createScanEngine(deps: { api: Api['scan']; makeWorker: () => Wor
         codeTexts: codes.map((t) => t.trim()).filter(Boolean),
         nameTexts: names.map((t) => t.trim()).filter(Boolean),
         textBands: signals.textBands.filter(hasPixels),
-        cues
+        cues,
+        look
       }
     },
 

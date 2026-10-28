@@ -10,7 +10,7 @@ const band = (width: number): OcrBand => ({
 })
 
 interface Posted {
-  msg: { type: string; wantBands?: boolean }
+  msg: { type: string; wantBands?: boolean; wantLook?: boolean }
   transfer?: Transferable[]
 }
 
@@ -35,7 +35,7 @@ const frame = (): ImageData =>
   ({ width: 1, height: 1, data: new Uint8ClampedArray(4) }) as unknown as ImageData
 
 describe('createScanEngine', () => {
-  it('reads text only when asked, skipping empty bands', async () => {
+  it('reads text only when asked, skipping empty bands, and passes the look on', async () => {
     const api = createMockApi().scan
     vi.mocked(api.ocr).mockResolvedValue(['LOB-EN005'])
     const quad = [
@@ -51,7 +51,8 @@ describe('createScanEngine', () => {
       codeBands: [band(10), band(0)],
       nameBands: [],
       textBands: [],
-      cues: { nameInk: 'dark', nameTint: null }
+      cues: { nameInk: 'dark', nameTint: null },
+      look: [0.25, 0.5]
     })
     const engine = createScanEngine({ api, makeWorker: () => worker })
     await engine.init(null)
@@ -64,20 +65,24 @@ describe('createScanEngine', () => {
       codeTexts: [],
       nameTexts: [],
       textBands: [],
-      cues: { nameInk: 'dark', nameTint: null }
+      cues: { nameInk: 'dark', nameTint: null },
+      look: [0.25, 0.5]
     })
     expect(api.ocr).not.toHaveBeenCalled()
 
-    const read = await engine.analyze(frame(), { candidates: [1], wantText: true })
+    const read = await engine.analyze(frame(), { candidates: [1], wantText: true, wantLook: true })
     expect(read.codeTexts).toEqual(['LOB-EN005'])
     expect(read.quad).toEqual(quad)
     expect(read.nameTexts).toEqual([])
     expect(read.cues).toEqual({ nameInk: 'dark', nameTint: null })
+    expect(read.look).toEqual([0.25, 0.5])
     expect(api.ocr).toHaveBeenCalledTimes(1)
     expect(api.ocr).toHaveBeenCalledWith([band(10)], 'code')
 
     const frames = posted.filter((p) => p.msg.type === 'frame')
     expect(frames.map((p) => p.msg.wantBands)).toEqual([false, true])
+    // The look features are measured only when asked for: the phone scanner does, the desktop doesn't.
+    expect(frames.map((p) => p.msg.wantLook)).toEqual([false, true])
     expect(frames[0].transfer).toHaveLength(1)
     engine.dispose()
     expect(worker.terminate).toHaveBeenCalled()
@@ -95,7 +100,8 @@ describe('createScanEngine', () => {
       codeBands: [],
       nameBands: [band(7), band(0), band(8), band(9)],
       textBands: [],
-      cues: null
+      cues: null,
+      look: null
     })
     const engine = createScanEngine({ api, makeWorker: () => worker })
     const read = await engine.analyze(frame(), { candidates: null, wantText: true })
@@ -113,7 +119,8 @@ describe('createScanEngine', () => {
       codeBands: [],
       nameBands: [],
       textBands: [band(5), band(0)],
-      cues: null
+      cues: null,
+      look: null
     })
     const engine = createScanEngine({ api, makeWorker: () => worker })
     const read = await engine.analyze(frame(), { candidates: null, wantText: true })
@@ -130,7 +137,8 @@ describe('createScanEngine', () => {
       codeBands: [],
       nameBands: [],
       textBands: [],
-      cues: null
+      cues: null,
+      look: null
     })
     const engine = createScanEngine({ api: createMockApi().scan, makeWorker: () => worker })
     const bitmap = { width: 810, height: 1080, close: vi.fn() } as unknown as ImageBitmap
@@ -148,7 +156,8 @@ describe('createScanEngine', () => {
       codeBands: [],
       nameBands: [],
       textBands: [],
-      cues: null
+      cues: null,
+      look: null
     })
     const engine = createScanEngine({ api: createMockApi().scan, makeWorker: () => worker })
     const fp = new ArrayBuffer(16)
@@ -166,6 +175,63 @@ describe('createScanEngine', () => {
     await expect(engine.analyze(frame(), { candidates: null, wantText: false })).rejects.toThrow(
       'disposed'
     )
+  })
+
+  it('a worker that stops answering a frame is thrown away and the next call starts a new one', async () => {
+    const silent = { postMessage: vi.fn(), terminate: vi.fn() } as unknown as Worker
+    const { worker: live } = fakeWorker({
+      found: false,
+      quad: null,
+      art: [],
+      codeBands: [],
+      nameBands: [],
+      textBands: [],
+      cues: null,
+      look: null
+    })
+    const made = [silent, live]
+    const engine = createScanEngine({
+      api: createMockApi().scan,
+      makeWorker: () => made.shift()!,
+      timeouts: { frameMs: 20 }
+    })
+    await expect(engine.analyze(frame(), { candidates: null, wantText: false })).rejects.toThrow(
+      'stopped answering'
+    )
+    expect(silent.terminate).toHaveBeenCalled()
+    await engine.init(null)
+    const next = await engine.analyze(frame(), { candidates: null, wantText: false })
+    expect(next.found).toBe(false)
+  })
+
+  it('a hung init rejects instead of waiting forever', async () => {
+    const silent = { postMessage: vi.fn(), terminate: vi.fn() } as unknown as Worker
+    const engine = createScanEngine({
+      api: createMockApi().scan,
+      makeWorker: () => silent,
+      timeouts: { initMs: 20 }
+    })
+    await expect(engine.init(null)).rejects.toThrow('stopped answering')
+    expect(silent.terminate).toHaveBeenCalled()
+  })
+
+  it('a failed text read counts as nothing read and keeps the art', async () => {
+    const api = createMockApi().scan
+    vi.mocked(api.ocr).mockRejectedValue(new Error('OCR timed out'))
+    const { worker } = fakeWorker({
+      found: true,
+      quad: null,
+      art: [{ imageId: 1, distance: 3 }],
+      codeBands: [band(10)],
+      nameBands: [band(10)],
+      textBands: [],
+      cues: null,
+      look: null
+    })
+    const engine = createScanEngine({ api, makeWorker: () => worker })
+    await engine.init(null)
+    const out = await engine.analyze(frame(), { candidates: null, wantText: true })
+    expect(out).toMatchObject({ art: [{ imageId: 1, distance: 3 }], codeTexts: [], nameTexts: [] })
   })
 
   it("closes a camera bitmap it couldn't hand to the worker", async () => {

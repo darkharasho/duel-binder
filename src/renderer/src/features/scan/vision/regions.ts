@@ -22,9 +22,15 @@ export const ART_BOXES = {
  */
 export const INNER_FRAME = [0.08, 0.16, 0.92, 0.96] as const satisfies Box
 
-/** Set code bands: under the art, and the bottom strip used by Pendulum, Link and overframe cards. */
+/**
+ * Set code bands: under the art, and the bottom strip used by Pendulum cards. The first is the
+ * code's own strip, 0.72–0.74 on normal, Link, Xyz and overframe cards alike, with room for an
+ * outline a little off: kept clear of the text box's light inside and most of the art, since the
+ * band's contrast is stretched over all of it, and with those in it navy code ink on a blue Link
+ * frame fell under the ink threshold.
+ */
 export const CODE_BANDS = [
-  [0.05, 0.695, 0.95, 0.765],
+  [0.04, 0.705, 0.96, 0.755],
   [0.04, 0.885, 0.96, 0.955]
 ] as const satisfies readonly Box[]
 

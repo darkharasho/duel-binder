@@ -21,6 +21,8 @@ import type { Me } from '../../src/shared/cloud'
 import { FRIENDS_SIGNED_OUT, OFFLINE_MESSAGE } from '../../src/shared/friends'
 import type { AccountStatus } from '../../src/shared/types'
 import { userScope } from '../../workers/portal/src/scope'
+import { runPriceAlarm } from '../../workers/portal/src/prices'
+import type { PriceClient } from '../../src/main/prices/client'
 import { inProcessPortal, PORTAL } from './cloudHelpers'
 import { seededDb } from './helpers'
 
@@ -830,5 +832,78 @@ describe('account portal calls', () => {
     expect(service.isSignedIn()).toBe(false)
     expect(new TokenStore(tokenFile(), fakeCipher).get()).toBeNull()
     expect(token).toBeTruthy()
+  })
+})
+
+describe('price requests', () => {
+  const requestCalls = (): number =>
+    fetchSpy.mock.calls.filter(([input]) => String(input).includes('/api/sync/price-requests'))
+      .length
+  /** A Japanese printing nobody owns, in both catalogs (same pkey); its desktop id. */
+  function japanesePrinting(): number {
+    const insert = `INSERT INTO card_printings (card_id, language, set_name, set_code, set_rarity)
+      VALUES (${DM}, 'ja', 'Legend of Blue Eyes White Dragon', 'LB-01', 'Ultra Rare') RETURNING id`
+    portal.serverDb.prepare(insert).get()
+    switchedAndCurrent(db)
+    return (db.prepare(insert).get() as { id: number }).id
+  }
+  const serverRequests = (): number =>
+    (portal.serverDb.prepare('SELECT COUNT(*) AS n FROM price_requests').get() as { n: number }).n
+  const localRequests = (): number =>
+    (db.prepare('SELECT COUNT(*) AS n FROM price_requests').get() as { n: number }).n
+
+  it('does nothing signed out or offline', async () => {
+    const id = japanesePrinting()
+    const service = makeService()
+    await service.requestPrices([id])
+    await signInAs(service, me(alice, 'alice'))
+    online = false
+    await service.requestPrices([id])
+    expect(requestCalls()).toBe(0)
+    expect(localRequests()).toBe(0)
+  })
+
+  it('asks once, and the price the portal finds comes down with the next sync', async () => {
+    const id = japanesePrinting()
+    const service = makeService()
+    await signInAs(service, me(alice, 'alice'))
+    // English printings and unknown ids are never sent.
+    await service.requestPrices([pid(db, 'LOB-EN005'), 999_999])
+    expect(requestCalls()).toBe(0)
+
+    await service.requestPrices([id])
+    expect(requestCalls()).toBe(1)
+    expect(serverRequests()).toBe(1)
+    expect(portal.priceQueue.soon).toHaveBeenCalledWith({ paced: true })
+    // Seen again within hours: not asked again.
+    await service.requestPrices([id])
+    expect(requestCalls()).toBe(1)
+
+    // The portal's price alarm finds it...
+    const lookup = vi.fn(async () => ({
+      price: 11,
+      listingCount: 5,
+      checkedAt: '2026-10-25T20:00:30.000Z'
+    }))
+    const storage = {
+      alarm: null as number | null,
+      getAlarm: async () => null,
+      setAlarm: async () => {}
+    }
+    await runPriceAlarm(portal.serverDb, { lookup } as unknown as PriceClient, storage, () => NOW())
+    expect(lookup).toHaveBeenCalledTimes(1)
+    // ...and the next sync brings it to this computer, telling the renderer.
+    emitDataChanged.mockClear()
+    await service.syncNow()
+    expect(db.prepare('SELECT price FROM intl_prices WHERE printing_id = ?').get(id)).toEqual({
+      price: 11
+    })
+    expect(emitDataChanged).toHaveBeenCalled()
+  })
+
+  it('rejects ids that are not a list of whole numbers', async () => {
+    const service = makeService()
+    await expect(service.requestPrices('1')).rejects.toThrow(/Printing ids/)
+    await expect(service.requestPrices([1.5])).rejects.toThrow(/Printing ids/)
   })
 })

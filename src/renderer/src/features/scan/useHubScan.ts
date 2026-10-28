@@ -1,6 +1,7 @@
 import { useEffect, type RefObject } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import type { Language } from '@shared/languages'
+import type { LookModel } from '@shared/scan/look'
 import { api } from '@/lib/api'
 import type { ScanEngine } from './engine'
 import { useScanHub } from './ScanHub'
@@ -11,16 +12,22 @@ const ANY = 'any'
 /**
  * Scans `stream` (shown in `videoRef`) with the hub's settings, counting pulls through the hub:
  * the in-page scanner of the desktop Scan page and the phone scanner. `setUnreadable`: the picked
- * set's printings couldn't be read, so cards are matched against every set.
+ * set's printings couldn't be read, so cards are matched against every set. `lookModel`: the
+ * rarity look model, which only the phone scanner uses (see useScanLoop).
  */
 export function useHubScan({
   videoRef,
   stream,
-  engineFactory
+  engineFactory,
+  lookModel = null,
+  onStalled
 }: {
   videoRef: RefObject<HTMLVideoElement | null>
   stream: MediaStream | null
   engineFactory: () => ScanEngine
+  lookModel?: LookModel | null
+  /** The camera's picture froze; see useScanLoop. */
+  onStalled?: () => void
 }): { loop: ScanLoop; setUnreadable: boolean } {
   const { settings, count } = useScanHub()
   const picked = settings.set
@@ -43,7 +50,9 @@ export function useHubScan({
     setKey: scanSet ? `${scanSet.language}|${scanSet.setName}` : ANY,
     setPrintings: scanSet === null ? null : setPrintings.data,
     defaultRarity: settings.defaultRarity,
-    onDraft: count
+    lookModel,
+    onDraft: count,
+    onStalled
   })
 
   useEffect(() => {

@@ -17,12 +17,12 @@ export async function inProcessPortal(): Promise<{
   fetch: typeof fetch
   desktopToken(userId: number): Promise<string>
   addUser(name: string): number
-  priceQueue: { soon: Mock<() => Promise<void>> }
+  priceQueue: { soon: Mock<(opts?: { paced?: boolean }) => Promise<void>> }
   /** The portal's R2 stand-in (images, scan files). */
   images: ReturnType<typeof memoryBucket>
 }> {
   const serverDb = await seededServerDb()
-  const priceQueue = { soon: vi.fn<() => Promise<void>>(async () => {}) }
+  const priceQueue = { soon: vi.fn<(opts?: { paced?: boolean }) => Promise<void>>(async () => {}) }
   const images = memoryBucket()
   const deps: AppDeps = {
     db: serverDb,

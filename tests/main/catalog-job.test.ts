@@ -13,6 +13,7 @@ import type { YugipediaClient } from '../../src/main/yugipedia/client'
 import { CATALOG_TABLES, type CatalogTable } from '../../src/shared/catalogTables'
 import { diffTable } from '../../scripts/catalog/diff'
 import { uploadCatalog } from '../../scripts/catalog/upload'
+import type { AccuracyReport } from '../../scripts/catalog/accuracy'
 import { runJob } from '../../scripts/catalog/build'
 import fixture from '../fixtures/cardinfo.sample.json'
 
@@ -175,6 +176,8 @@ function recordingFetch(respond: (call: Call, n: number) => Response): {
 const noImages = (async () => new Response('', { status: 404 })) as typeof fetch
 
 const ok = (): Response => Response.json({ ok: true })
+/** An accuracy gate that passes, so jobs over the tiny fixture catalog upload their fingerprints. */
+const passing = async (): Promise<AccuracyReport> => ({ shots: 1, right: 1, wrong: [], missed: [] })
 
 describe('refreshCatalog', () => {
   it('refreshCatalog runs the same steps desktop startup ran', async () => {
@@ -239,7 +242,10 @@ describe('refreshCatalog', () => {
     expect(webFetch.mock.calls.some(([u]) => String(u).endsWith('/prices'))).toBe(false)
     await refreshCatalog(db, { ...deps, tcgPrices: 'all' })
     expect(
-      db.prepare("SELECT market_price FROM card_printings WHERE set_code = 'LOB-EN005'").pluck().get()
+      db
+        .prepare("SELECT market_price FROM card_printings WHERE set_code = 'LOB-EN005'")
+        .pluck()
+        .get()
     ).toBe(1234.5)
     db.close()
   })
@@ -401,6 +407,7 @@ describe('uploadCatalog', () => {
         token: TOKEN,
         fetch,
         imageFetch: noImages,
+        checkAccuracy: passing,
         refresh: async () => {},
         log: () => {}
       })
@@ -428,6 +435,7 @@ describe('uploadCatalog', () => {
       token: TOKEN,
       fetch,
       imageFetch: noImages,
+      checkAccuracy: passing,
       refresh: async () => {},
       log: () => {}
     })
@@ -451,18 +459,115 @@ describe('uploadCatalog', () => {
     const { fetch } = recordingFetch((call) =>
       call.path === '/admin/scan/fingerprints' ? new Response('', { status: 404 }) : ok()
     )
-    const lines: string[] = []
-    await runJob({
+    const { problems } = await runJob({
       dir,
       url: URL_BASE,
       token: TOKEN,
       fetch,
       imageFetch: noImages,
+      checkAccuracy: passing,
       refresh: async () => {},
-      log: (l) => lines.push(l)
+      log: () => {}
     })
     expect(existsSync(join(dir, 'base.sqlite'))).toBe(true)
-    expect(lines.some((l) => l.startsWith('Fingerprints failed: ') && l.includes('404'))).toBe(true)
+    expect(problems).toHaveLength(1)
+    expect(problems[0]).toMatch(/^Fingerprints failed: .*404/)
+  })
+
+  it('a fingerprint file that fails the accuracy gate is held back, and the catalog still uploads', async () => {
+    ;(await workDb()).close()
+    const { fetch, calls } = recordingFetch(ok)
+    const { problems } = await runJob({
+      dir,
+      url: URL_BASE,
+      token: TOKEN,
+      fetch,
+      imageFetch: noImages,
+      checkAccuracy: async () => ({
+        shots: 2,
+        right: 1,
+        wrong: ['1.jpg (Dark Magician) as Dark Magician Girl (38033121)'],
+        missed: []
+      }),
+      refresh: async () => {},
+      log: () => {}
+    })
+    expect(calls.map((c) => c.path)).toContain('/admin/catalog/finish')
+    expect(calls.map((c) => c.path)).not.toContain('/admin/scan/fingerprints')
+    expect(existsSync(join(dir, 'base.sqlite'))).toBe(true)
+    expect(problems).toEqual([
+      'Fingerprints held back: took 1 shot(s) for the wrong card: 1.jpg (Dark Magician) as Dark Magician Girl (38033121)'
+    ])
+  })
+
+  it('a failed card sync is reported as a problem without stopping the upload', async () => {
+    ;(await workDb()).close()
+    const { fetch, calls } = recordingFetch(ok)
+    const { problems } = await runJob({
+      dir,
+      url: URL_BASE,
+      token: TOKEN,
+      fetch,
+      imageFetch: noImages,
+      checkAccuracy: passing,
+      refresh: async (_work, onProblem) => onProblem('Card sync failed: HTTP 500'),
+      log: () => {}
+    })
+    expect(problems).toEqual(['Card sync failed: HTTP 500'])
+    expect(calls.some((c) => c.path === '/admin/catalog/finish')).toBe(true)
+  })
+
+  it('refuses to upload a refresh that deletes a large share of a table', async () => {
+    const work = await workDb()
+    const group = work.prepare(
+      "INSERT INTO tcgplayer_groups (group_id, modified_on, name) VALUES (?, 'a', ?)"
+    )
+    for (let i = 0; i < 200; i++) group.run(1000 + i, `Group ${i}`)
+    snapshot(work).close()
+    work.prepare('DELETE FROM tcgplayer_groups WHERE group_id >= 1100').run()
+    work.close()
+
+    const { fetch, calls } = recordingFetch(ok)
+    const job = {
+      dir,
+      url: URL_BASE,
+      token: TOKEN,
+      fetch,
+      imageFetch: noImages,
+      checkAccuracy: passing,
+      log: () => {}
+    }
+    await expect(runJob({ ...job, refresh: async () => {} })).rejects.toThrow(
+      /tcgplayer_groups would lose 100 of 200 rows/
+    )
+    expect(calls).toEqual([])
+
+    const out = await runJob({ ...job, refresh: async () => {}, allowShrink: true })
+    expect(out.uploaded?.deleted).toBe(100)
+  })
+
+  it('a small, ordinary shrink uploads without the override', async () => {
+    const work = await workDb()
+    const group = work.prepare(
+      "INSERT INTO tcgplayer_groups (group_id, modified_on, name) VALUES (?, 'a', ?)"
+    )
+    for (let i = 0; i < 200; i++) group.run(1000 + i, `Group ${i}`)
+    snapshot(work).close()
+    work.prepare('DELETE FROM tcgplayer_groups WHERE group_id >= 1190').run()
+    work.close()
+
+    const { fetch } = recordingFetch(ok)
+    const out = await runJob({
+      dir,
+      url: URL_BASE,
+      token: TOKEN,
+      fetch,
+      imageFetch: noImages,
+      checkAccuracy: passing,
+      refresh: async () => {},
+      log: () => {}
+    })
+    expect(out.uploaded?.deleted).toBe(10)
   })
 
   it('a dry run counts changes without uploading or writing base', async () => {
@@ -473,6 +578,7 @@ describe('uploadCatalog', () => {
       dryRun: true,
       fetch,
       imageFetch: noImages,
+      checkAccuracy: passing,
       refresh: async () => {},
       log: () => {}
     })

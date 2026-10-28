@@ -204,6 +204,17 @@ CREATE TABLE rip_pulls (session_id INTEGER NOT NULL REFERENCES rip_sessions(id) 
 CREATE INDEX ix_rip_pulls_rarity ON rip_pulls(rarity);
 `
 
+/**
+ * Printings someone asked to have priced (eBay, see src/main/prices/candidates). On the portal: any
+ * user's request, so the price alarm prices printings nobody owns yet. On a desktop or phone: what
+ * this device asked for, so it doesn't ask again for a while and its sync pulls their prices.
+ */
+export const SCHEMA_V17 = `
+CREATE TABLE price_requests (printing_id INTEGER PRIMARY KEY REFERENCES card_printings(id) ON DELETE CASCADE,
+  requested_at TEXT NOT NULL);
+CREATE INDEX ix_price_requests_at ON price_requests(requested_at);
+`
+
 /** A printing's rarity as shown: "Starlight Rare (Extended Art)" for a labelled variant. */
 export const RARITY_LABEL = "p.set_rarity || COALESCE(' (' || p.variant || ')', '')"
 
@@ -224,6 +235,7 @@ export const MIGRATIONS: Migration[] = [
   { version: 13, sql: SCHEMA_V13 },
   { version: 14, sql: SCHEMA_V14 },
   { version: 15, sql: SCHEMA_V15, server: SCHEMA_V15_SERVER },
-  { version: 16, sql: SCHEMA_V16, server: false }
+  { version: 16, sql: SCHEMA_V16, server: false },
+  { version: 17, sql: SCHEMA_V17 }
 ]
 

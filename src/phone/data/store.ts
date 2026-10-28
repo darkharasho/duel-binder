@@ -19,6 +19,7 @@ import {
   syncIssueCount
 } from '../../main/cloud/localSync'
 import { createDataHandlers, DATA_CHANNELS, type DataChannel } from '../../main/ipc/dataHandlers'
+import { awaitingPrices, checkPrintingIds, requestPrices } from '../../main/cloud/priceRequests'
 import { PHONE_TABLES } from '../../shared/catalogFeed'
 import type { Me } from '../../shared/cloud'
 import { FRIENDS_SIGNED_OUT, OFFLINE_MESSAGE } from '../../shared/friends'
@@ -58,12 +59,21 @@ export interface PhoneStore {
   catalog(): Promise<CatalogState>
   fillCatalog(onProgress: (p: { cursor: number; latest: number }) => void): Promise<void>
   updateCatalog(opts?: { force?: boolean }): Promise<boolean>
-  /** Syncs the shown account; `changed` tells whether anything the user can see may have changed. */
-  sync(): Promise<PhoneSyncState & { changed: boolean }>
+  /**
+   * Syncs the shown account; `changed` tells whether anything the user can see may have changed,
+   * `awaitingPrices` whether printings asked for a moment ago still wait for a price (sync again soon).
+   */
+  sync(): Promise<PhoneSyncState & { changed: boolean; awaitingPrices: boolean }>
   syncState(): Promise<PhoneSyncState>
   syncProblems(): Promise<UnsyncedEntry[]>
   invoke(channel: DataChannel, args: unknown[]): Promise<unknown>
   portal<T>(channel: PortalChannel, args: unknown[]): Promise<T>
+  /**
+   * Asks the portal to price the unpriced non-English printings among these (see requestPrices in
+   * main/cloud/priceRequests); resolves how many it queued. Signed out, offline or failed: 0 (it
+   * only rejects ids that aren't a list of whole numbers).
+   */
+  requestPrices(printingIds: number[]): Promise<number>
   fingerprints(): Promise<ArrayBuffer | null>
   refreshFingerprints(opts?: { force?: boolean }): Promise<FingerprintStatus>
 }
@@ -525,7 +535,7 @@ export function createPhoneStore(deps: {
             if (!(e instanceof CloudAuthError) && !(e instanceof CloudOfflineError)) throw e
           }
         }
-        return { ...syncStateNow(), changed }
+        return { ...syncStateNow(), changed, awaitingPrices: awaitingPrices(db, now()) }
       }),
 
     syncState: () => read(syncStateNow),
@@ -552,6 +562,20 @@ export function createPhoneStore(deps: {
           }
         })
       ),
+
+    requestPrices: async (printingIds) => {
+      const ids = checkPrintingIds(printingIds)
+      return serial(async () => {
+        const t = token()
+        if (t === null) return 0
+        try {
+          return await online(() => requestPrices(db, client(t, PORTAL_TIMEOUT_MS), ids, now()))
+        } catch {
+          // Fire and forget: offline or a failed call asks again on the next view.
+          return 0
+        }
+      })
+    },
 
     fingerprints: () =>
       read(() => {

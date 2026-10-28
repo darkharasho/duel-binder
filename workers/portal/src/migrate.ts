@@ -240,6 +240,18 @@ CREATE TABLE apple_tokens (
   refresh_token TEXT NOT NULL,
   updated_at TEXT NOT NULL);
 `
+  },
+  {
+    // How many printings each user asked to have priced each (UTC) day; see priceRequests.ts.
+    name: 'server-8',
+    sql: `
+CREATE TABLE price_request_log (
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  day TEXT NOT NULL,
+  count INTEGER NOT NULL,
+  PRIMARY KEY (user_id, day));
+CREATE INDEX ix_price_request_log_day ON price_request_log(day);
+`
   }
 ]
 

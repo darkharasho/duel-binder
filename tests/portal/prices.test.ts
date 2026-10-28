@@ -192,6 +192,23 @@ describe('server eBay prices', () => {
     expect(none.alarm).toBe(T + PRICE_SOON_MS)
   })
 
+  it('a paced soon() keeps an alarm due within a minute, so requests keep the batch pacing', async () => {
+    const batching = fakeStorage(T + PRICE_MORE_MS)
+    await alarmQueue(batching, () => T).soon({ paced: true })
+    expect(batching.alarm).toBe(T + PRICE_MORE_MS)
+    // An unpaced one (a collection write) still brings it forward.
+    await alarmQueue(batching, () => T).soon()
+    expect(batching.alarm).toBe(T + PRICE_SOON_MS)
+
+    const idle = fakeStorage(T + PRICE_IDLE_MS)
+    await alarmQueue(idle, () => T).soon({ paced: true })
+    expect(idle.alarm).toBe(T + PRICE_SOON_MS)
+
+    const none = fakeStorage()
+    await alarmQueue(none, () => T).soon({ paced: true })
+    expect(none.alarm).toBe(T + PRICE_SOON_MS)
+  })
+
   describe('through the web', () => {
     let deps: AppDeps
     let soon: ReturnType<typeof vi.fn<() => Promise<void>>>

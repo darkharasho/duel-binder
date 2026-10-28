@@ -1,6 +1,7 @@
 import type { Api } from '@shared/ipc'
 import { LANGUAGES } from '@shared/languages'
 import type { CardLanguage } from '@shared/scan/language'
+import { lookCandidate, pickRarityByLook, type LookModel } from '@shared/scan/look'
 import { pickRarity, pickRarityByCues, type RarityCues } from '@shared/scan/rarity'
 import { setCodeCandidates } from '@shared/scan/setCode'
 import {
@@ -15,8 +16,12 @@ import type { ArtMatch, RawSignals } from './engine'
 
 export type { ScanDraft } from '@shared/scan/types'
 
+/**
+ * A frame's outcome. A `none` with `far` is something card-shaped whose art matched nothing
+ * close, rather than nothing in view.
+ */
 export type ScanOutcome =
-  { kind: 'none' } | { kind: 'unsure' } | { kind: 'recognized'; item: ScanDraft }
+  { kind: 'none'; far?: true } | { kind: 'unsure' } | { kind: 'recognized'; item: ScanDraft }
 
 export interface ResolveContext {
   setName: string | null
@@ -213,7 +218,16 @@ export async function resolveSignals(raw: RawSignals, ctx: ResolveContext): Prom
     (await byName(raw, ctx))
   if (item) return { kind: 'recognized', item }
   const [top] = raw.art
-  return top && top.distance > ART_FAR_DISTANCE ? { kind: 'none' } : { kind: 'unsure' }
+  return top && top.distance > ART_FAR_DISTANCE ? { kind: 'none', far: true } : { kind: 'unsure' }
+}
+
+/**
+ * The rarity look model and what it has to go on for a showing: each frame's look features
+ * (rarityFeatures), the latest RARITY_MAX_READINGS of them.
+ */
+export interface LookInput {
+  model: LookModel
+  frames: readonly (readonly number[])[]
 }
 
 /**
@@ -221,20 +235,27 @@ export async function resolveSignals(raw: RawSignals, ctx: ResolveContext): Prom
  * settles which of its code's rarities it is: no longer flagged Check rarity, and on the
  * printing of that rarity showing the draft's artwork when there is one. Unchanged when the
  * rarity was already certain, the user said what the stack is, or the look doesn't settle it.
+ *
+ * The look is the name and frame rules (pickRarityByCues), and with `look` (the phone scanner
+ * only) the look model after them where they can't decide, under its guards and threshold
+ * (pickRarityByLook). Without it, as on the desktop webcam, the rules alone.
  */
 export function withRarityByLook(
   item: ScanDraft,
   cues: RarityCues | null,
-  defaultRarity: string | null
+  defaultRarity: string | null,
+  look: LookInput | null = null
 ): ScanDraft {
   const current = item.options.find((p) => p.printingId === item.printingId)
-  if (!current || defaultRarity !== null || !cues?.nameInk) return item
+  if (!current || defaultRarity !== null || !cues || (!cues.nameInk && !cues.surface)) return item
   const sameCode = item.options.filter(
     (p) => p.setCode === current.setCode && p.language === current.language
   )
   const available = sameCode.map((p) => p.rarity)
   if (pickRarity(available, null).certain) return item
-  const { rarity, certain } = pickRarityByCues(available, cues, current.frameType)
+  const { rarity, certain } = look
+    ? pickRarityByLook(look.model, available, cues, look.frames, current.frameType)
+    : pickRarityByCues(available, cues, current.frameType)
   const ofRarity = sameCode.filter((p) => p.rarity === rarity)
   const printing = ofRarity.find((p) => p.imageIds.includes(item.imageId)) ?? ofRarity[0]
   if (!certain || !printing) return item
@@ -243,5 +264,40 @@ export function withRarityByLook(
     printingId: printing.printingId,
     rarity,
     flag: item.flag === 'check-rarity' ? null : item.flag
+  }
+}
+
+/**
+ * For checking the look model on real phone frames in development: the rules' pick and the
+ * model's candidate (with its probability and whether the guards allow it) among the draft's
+ * code's rarities, or null when withRarityByLook wouldn't consult them.
+ */
+export function describeLook(
+  item: ScanDraft,
+  cues: RarityCues | null,
+  look: LookInput
+): Record<string, unknown> | null {
+  const current = item.options.find((p) => p.printingId === item.printingId)
+  if (!current || !cues) return null
+  const available = item.options
+    .filter((p) => p.setCode === current.setCode && p.language === current.language)
+    .map((p) => p.rarity)
+  if (pickRarity(available, null).certain) return null
+  const rules = pickRarityByCues(available, cues, current.frameType)
+  const candidate = lookCandidate(look.model, available, cues, look.frames, current.frameType)
+  return {
+    card: item.name,
+    setCode: current.setCode,
+    available,
+    frames: look.frames.length,
+    rules: rules.certain ? rules.rarity : null,
+    look: candidate && {
+      rarity: candidate.rarity,
+      probability: Math.round(candidate.probability * 1e4) / 1e4,
+      runnerUp: candidate.runnerUp,
+      allowed: candidate.allowed,
+      picks:
+        !rules.certain && candidate.allowed && candidate.probability >= look.model.minProbability
+    }
   }
 }

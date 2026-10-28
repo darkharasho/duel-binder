@@ -3,6 +3,7 @@ import { afterEach, beforeEach, expect, test, vi } from 'vitest'
 import { PriceUnavailableError, createPriceClient, type PriceClient } from '../../src/main/prices/client'
 import { PRICE_INTERVAL_MS, needsPrice, refreshIntlPrices } from '../../src/main/prices/refresh'
 import { PRICE_WORKER_URL, priceWorkerUrl } from '../../src/main/prices/config'
+import { REQUEST_WINDOW_MS, countCandidates, priceCandidates } from '../../src/main/prices/candidates'
 import { getMeta } from '../../src/main/db/meta'
 import { addEntry } from '../../src/main/repo/collection'
 import { seededDb } from './helpers'
@@ -219,4 +220,63 @@ test('an English printing with a TCGplayer market price never asks eBay', async 
   expect(needsPrice(db, en, NOW)).toBe(false)
   await refreshIntlPrices(db, client, { now: NOW })
   expect(lookup).not.toHaveBeenCalled()
+})
+
+function unowned(code: string, lang: string): number {
+  return (
+    db
+      .prepare(
+        `INSERT INTO card_printings (card_id, language, set_name, set_code, set_rarity)
+         VALUES (46986414, ?, 'LOB', ?, 'Ultra Rare') RETURNING id`
+      )
+      .get(lang, code) as { id: number }
+  ).id
+}
+const request = (id: number, at: string): void => {
+  db.prepare('INSERT INTO price_requests (printing_id, requested_at) VALUES (?, ?)').run(id, at)
+}
+
+test('a printing requested in the last 7 days is a candidate; an older request is not', () => {
+  const recent = unowned('LB-JP01', 'ja')
+  const old = unowned('LB-JP02', 'ja')
+  unowned('LB-JP03', 'ja') // never requested
+  request(recent, ago(6))
+  request(old, ago(8))
+  expect(REQUEST_WINDOW_MS).toBe(PRICE_INTERVAL_MS)
+  expect(priceCandidates(db, NOW).map((c) => c.id)).toEqual([recent])
+  expect(countCandidates(db, NOW)).toBe(1)
+})
+
+test('a requested printing priced since the request is not a candidate again', () => {
+  const id = unowned('LB-JP01', 'ja')
+  request(id, ago(1))
+  db.prepare('INSERT INTO intl_prices (printing_id, price, listing_count, checked_at) VALUES (?, 2, 3, ?)').run(
+    id,
+    ago(0.5)
+  )
+  expect(priceCandidates(db, NOW)).toEqual([])
+})
+
+test('owned printings come before requested ones, even stale owned before never-priced requested', () => {
+  const requested = unowned('LB-JP01', 'ja')
+  request(requested, ago(0))
+  const staleOwned = owned('LB-JP02', 'ja')
+  db.prepare('INSERT INTO intl_prices (printing_id, price, listing_count, checked_at) VALUES (?, 1, 1, ?)').run(
+    staleOwned,
+    ago(9)
+  )
+  const newOwned = owned('LB-JP03', 'ja')
+  expect(priceCandidates(db, NOW).map((c) => c.id)).toEqual([newOwned, staleOwned, requested])
+  // A batch of 2 holds only the owned ones; the requested one waits for the next batch.
+  expect(priceCandidates(db, NOW, { limit: 2 }).map((c) => c.id)).toEqual([newOwned, staleOwned])
+  expect(countCandidates(db, NOW)).toBe(3)
+})
+
+test('the refresh prices a requested printing nobody owns', async () => {
+  const id = unowned('LB-JP01', 'ja')
+  request(id, ago(0))
+  const { client, lookup } = fakeClient()
+  await expect(refreshIntlPrices(db, client, { now: NOW })).resolves.toEqual({ updated: 1, failed: 0, remaining: 0 })
+  expect(lookup.mock.calls[0][0]).toMatchObject({ code: 'LB-JP01', lang: 'ja' })
+  expect(row(id)?.price).toBe(9)
 })

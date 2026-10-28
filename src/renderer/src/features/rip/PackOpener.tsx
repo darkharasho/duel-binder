@@ -1,4 +1,4 @@
-import { useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCallback, useEffect, useLayoutEffect, useReducer, useRef, useState } from 'react'
 import { TiltCard } from '@/components/TiltCard'
 import { Button } from '@/components/ui/button'
@@ -8,7 +8,7 @@ import { rarityColor } from '@/lib/rarityColors'
 import { cn } from '@/lib/utils'
 import { baseOf, compareRarity } from '../../../../shared/rip/rarity'
 import { tierFor } from '../../../../shared/rip/layouts'
-import type { RevealTier, RipCard, RipSet } from '../../../../shared/rip/types'
+import type { PackWrappers, RevealTier, RipCard, RipSet } from '../../../../shared/rip/types'
 import { CardInfo, RarityBadge } from './CardInfo'
 import { HoloCard } from './HoloCard'
 import { STAGE, prefersReducedMotion } from './stage'
@@ -107,6 +107,27 @@ const CLIPS = {
  */
 const PHOTO_ASPECT = 0.6
 const WRAPPER_ASPECT = 0.64
+/** A wrapper cut from a two-pack photo fills this much of the box, about as much as a single pack. */
+const CUT_FILL = 0.96
+
+/** One wrapper of a pack photo that shows more than one. */
+type PackCut = { photo: PackWrappers; wrapper: PackWrappers['wrappers'][number] }
+
+/**
+ * Where the photo goes, as percents of the box, so the one wrapper shown sits centred in it and
+ * the other is cut off. The photo and its sheen both take this, so they stay on the same wrapper.
+ */
+function cutFrame({ photo, wrapper: w }: PackCut): React.CSSProperties {
+  // Box heights per photo pixel.
+  const k = CUT_FILL * Math.min(1 / w.height, PHOTO_ASPECT / w.width)
+  const pct = (n: number): string => `${(n * 100).toFixed(2)}%`
+  return {
+    left: pct(0.5 - ((w.x + w.width / 2) * k) / PHOTO_ASPECT),
+    top: pct(0.5 - (w.y + w.height / 2) * k),
+    width: pct((photo.width * k) / PHOTO_ASPECT),
+    height: pct(photo.height * k)
+  }
+}
 const FOIL =
   'linear-gradient(115deg, #e4e6eb 0%, #8e939d 16%, #f6f7f9 30%, #7a7f89 47%, #dfe2e8 63%, #969ba5 80%, #eef0f3 100%)'
 /** The crimped seals: pressed ridges in a lighter foil. */
@@ -138,12 +159,18 @@ function PackFace({
   setName,
   art,
   packSrc,
+  cut,
+  measuring,
   onPackError
 }: {
   setName: string
   art?: PackArt
   /** The photo of the real pack, when the set has one: then the pack is that picture. */
   packSrc: string | null
+  /** When the photo shows more than one wrapper, the one this pack is. */
+  cut: PackCut | null
+  /** Still finding out whether it does; the photo stays hidden so no other wrapper flashes up. */
+  measuring: boolean
   onPackError: () => void
 }): React.JSX.Element {
   const [failed, setFailed] = useState({ cover: false, logo: false })
@@ -154,15 +181,20 @@ function PackFace({
   if (packSrc) {
     // The pack is the photo: no foil or crimps of ours, and the sheen only where the pack is.
     const mask = `url("${packSrc}")`
+    const frame = cut ? cutFrame(cut) : null
     return (
-      <div data-testid="rip-pack-face" className="absolute inset-0 overflow-hidden">
+      <div
+        data-testid="rip-pack-face"
+        className={cn('absolute inset-0 overflow-hidden', measuring && 'invisible')}
+      >
         <img
           src={packSrc}
           alt=""
           draggable={false}
           data-testid="rip-pack-image"
           onError={onPackError}
-          className="absolute inset-0 size-full object-cover"
+          style={frame ?? undefined}
+          className={cn('absolute', frame ? 'max-w-none' : 'inset-0 size-full object-cover')}
         />
         <div
           aria-hidden
@@ -170,17 +202,24 @@ function PackFace({
           style={{
             backgroundImage: SHEEN,
             backgroundSize: '300% 100%',
-            // Same placement as the photo's object-fit: cover.
             maskImage: mask,
             WebkitMaskImage: mask,
-            maskSize: 'cover',
-            WebkitMaskSize: 'cover',
-            maskPosition: 'center',
-            WebkitMaskPosition: 'center',
             maskRepeat: 'no-repeat',
-            WebkitMaskRepeat: 'no-repeat'
+            WebkitMaskRepeat: 'no-repeat',
+            // Same placement as the photo: cut to its wrapper, or its object-fit: cover.
+            ...(frame
+              ? { ...frame, maskSize: '100% 100%', WebkitMaskSize: '100% 100%' }
+              : {
+                  maskSize: 'cover',
+                  WebkitMaskSize: 'cover',
+                  maskPosition: 'center',
+                  WebkitMaskPosition: 'center'
+                })
           }}
-          className="pointer-events-none absolute inset-0 mix-blend-overlay animate-[rip-sheen_4200ms_ease-in-out_infinite] motion-reduce:hidden"
+          className={cn(
+            'pointer-events-none absolute mix-blend-overlay animate-[rip-sheen_4200ms_ease-in-out_infinite] motion-reduce:hidden',
+            !frame && 'inset-0'
+          )}
         />
       </div>
     )
@@ -255,11 +294,15 @@ function PackFace({
 function SealedPack({
   setName,
   art,
+  cut,
+  measuring,
   phase,
   pending
 }: {
   setName: string
   art?: PackArt
+  cut: PackCut | null
+  measuring: boolean
   /** sealed: waiting for a tear. tearing: the strip is off. leaving: dropping away as cards rise. */
   phase: 'sealed' | 'tearing' | 'leaving'
   /** Torn but the cards haven't arrived yet. */
@@ -269,7 +312,16 @@ function SealedPack({
   const packSrc =
     art?.packImageKey && !packFailed ? setImageSrc(art.packImageKey, { now: true }) : null
   const fail = (): void => setPackFailed(true)
-  const face = <PackFace setName={setName} art={art} packSrc={packSrc} onPackError={fail} />
+  const face = (
+    <PackFace
+      setName={setName}
+      art={art}
+      packSrc={packSrc}
+      cut={cut}
+      measuring={measuring}
+      onPackError={fail}
+    />
+  )
   const clips = packSrc ? CLIPS.photo : CLIPS.wrapper
   const aspect = packSrc ? PHOTO_ASPECT : WRAPPER_ASPECT
   return (
@@ -451,6 +503,16 @@ export function PackOpener({
   const timers = useRef(new Set<ReturnType<typeof setTimeout>>())
   const frontEl = useRef<HTMLDivElement | null>(null)
   const flyFrom = useRef<FlyFrom | null>(null)
+  // A photo with two wrappers (1st Edition and Unlimited, say) is one of them, rolled each pack.
+  const [rolls] = useState(() => Array.from({ length: packCount }, () => Math.random()))
+  const packKey = packArt?.packImageKey ?? null
+  const wrappersQuery = useQuery({
+    queryKey: queryKeys.ripPackWrappers(packKey ?? ''),
+    queryFn: () => api.rip.packWrappers(packKey!),
+    enabled: packKey !== null,
+    staleTime: Infinity,
+    retry: false
+  })
 
   useEffect(() => {
     alive.current = true
@@ -698,6 +760,15 @@ export function PackOpener({
   const actionable =
     !skipping && (phase === 'sealed' || phase === 'hand' || (phase === 'end' && holding === 0))
   const hand = cards && front ? cards.slice(flipped - 1, flipped + EDGES) : []
+  const photo = wrappersQuery.data ?? null
+  const cut = photo
+    ? {
+        photo,
+        wrapper: photo.wrappers[Math.floor((rolls[packIndex] ?? 0) * photo.wrappers.length)]
+      }
+    : null
+  // A failed measure leaves the photo whole, as before.
+  const measuring = packKey !== null && wrappersQuery.isPending
 
   return (
     <div
@@ -784,6 +855,8 @@ export function PackOpener({
                   key={packIndex}
                   setName={setName}
                   art={packArt}
+                  cut={cut}
+                  measuring={measuring}
                   phase={phase}
                   pending={phase === 'tearing' && cards === null}
                 />
@@ -793,6 +866,8 @@ export function PackOpener({
                   key={`${packIndex}-out`}
                   setName={setName}
                   art={packArt}
+                  cut={cut}
+                  measuring={measuring}
                   phase="leaving"
                   pending={false}
                 />

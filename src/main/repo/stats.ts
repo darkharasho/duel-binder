@@ -10,20 +10,24 @@ const RECENT_ENTRY_LIMIT = 8
 export function getStats(db: SqlDb, scope: Scope = LOCAL): CollectionStats {
   const entries = listEntries(db, { sort: 'value', dir: 'desc' }, scope)
   const cardIds = new Set<number>()
-  const rarities = new Map<string, { count: number; value: number }>()
+  const rarities = new Map<string, { count: number; value: number; unpriced: number }>()
   const frames = new Map<string, number>()
   let totalCards = 0
   let totalValue = 0
   let approximateCount = 0
+  let unpricedCount = 0
 
   for (const e of entries) {
     totalCards += e.quantity
     totalValue += e.totalValue
     if (e.priceApproximate) approximateCount++
+    // No price (eBay pending, no listings, service down): left out of the value, not counted as $0.
+    if (e.unitPrice === null) unpricedCount += e.quantity
     cardIds.add(e.card.id)
-    const r = rarities.get(e.printing.setRarity) ?? { count: 0, value: 0 }
+    const r = rarities.get(e.printing.setRarity) ?? { count: 0, value: 0, unpriced: 0 }
     r.count += e.quantity
     r.value += e.totalValue
+    if (e.unitPrice === null) r.unpriced += e.quantity
     rarities.set(e.printing.setRarity, r)
     frames.set(e.card.frameType, (frames.get(e.card.frameType) ?? 0) + e.quantity)
   }
@@ -33,6 +37,7 @@ export function getStats(db: SqlDb, scope: Scope = LOCAL): CollectionStats {
     uniqueCards: cardIds.size,
     totalValue,
     approximateCount,
+    unpricedCount,
     byRarity: [...rarities]
       .map(([rarity, v]) => ({ rarity, ...v }))
       .sort((a, b) => b.value - a.value),

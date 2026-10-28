@@ -134,7 +134,8 @@ export function createHttpApi(opts: HttpApiOptions = {}): Api {
       start: unavailable,
       openPack: unavailable,
       session: unavailable,
-      history: unavailable
+      history: unavailable,
+      packWrappers: unavailable
     },
     stats: { get: call('stats:get') },
     sets: {

@@ -225,7 +225,8 @@ export function createPhoneApi(deps: {
       start: unavailable,
       openPack: unavailable,
       session: unavailable,
-      history: unavailable
+      history: unavailable,
+      packWrappers: unavailable
     },
     stats: dataPart('stats'),
     sets: dataPart('sets'),

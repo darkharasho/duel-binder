@@ -120,3 +120,22 @@ describe('GET /admin/stats', () => {
     expect(body.active).toEqual({ day: 1, week: 1, month: 1 })
   })
 })
+
+describe('GET /admin', () => {
+  it('serves the dashboard shell with a nonce CSP and no data or token', async () => {
+    const deps = { env: {} } as unknown as AppDeps
+    const res = await handle(new Request(BASE + '/admin'), deps)
+    expect(res.status).toBe(200)
+    expect(res.headers.get('cache-control')).toBe('no-store')
+    const csp = res.headers.get('content-security-policy') ?? ''
+    const nonce = /script-src 'nonce-([0-9a-f]+)'/.exec(csp)?.[1]
+    expect(nonce).toBeTruthy()
+    expect(csp).toContain("connect-src 'self'")
+    const html = await res.text()
+    const script = new RegExp(`<script nonce="${nonce}">([\\s\\S]*)</script>`).exec(html)?.[1]
+    // The inline script must at least parse; it only runs in a browser.
+    expect(() => new Function(script ?? 'throw 0')).not.toThrow()
+    expect(html).toContain("fetch('/admin/stats'")
+    expect(html).not.toContain(TOKEN)
+  })
+})

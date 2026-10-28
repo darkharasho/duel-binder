@@ -183,7 +183,7 @@ const layouts: PackLayout[] = [
 ]
 
 /*
- * The 25th Anniversary Rarity Collections and Quarter Century Bonanza: all-foil packs where every
+ * The Rarity Collections and Quarter Century sets: all-foil packs where every
  * card in the set comes in every rarity.
  *
  * Sources: Konami's product pages (yugioh-card.com/en/products/ra01/ and /ra02/,
@@ -194,11 +194,20 @@ const layouts: PackLayout[] = [
  * - RA03: RA01's pack with one Super replaced by a guaranteed Platinum or Quarter Century Secret
  *   from a separate pool of older cards (RA03-EN079 on, printed only in those two rarities); the
  *   other slots draw from the 78-card main set.
- * Judgement call: Konami doesn't say how an upgrade splits between its two rarities; we split it
- * evenly. In these sets Super and Ultra are the floor, so they reveal like Commons, and a Secret
- * like a Rare.
+ * - RA04 (Quarter Century Stampede): RA03's pack again, from a 105-card main set, with the older
+ *   cards from RA04-EN106 on. Konami's own page is gone; retailer and news copies of the
+ *   announcement (e.g. yugiohmeta.com, Dec 2024) give the makeup.
+ * - RA05 (Rarity Collection 5, yugioh-card.com/eu/product/rarity-collection-5/): 1 Super, 1 Secret
+ *   with a 1-in-4 chance of being Platinum or Starlight, 2 Ultra as before, all from the 82-card
+ *   main set; then a 5th card, "always Ultra or Starlight", from 68 new variant arts (RA05-EN083 on).
+ * Judgement calls: Konami doesn't say how an upgrade splits between its two rarities; we split it
+ * evenly. Nor does it give a Starlight rate for RA05's 5th card; we use 1 in 8, a Secret's chance
+ * of turning Starlight. In these sets Super and Ultra are the floor, so they reveal like Commons,
+ * and a Secret like a Rare.
  */
 const RA_SOURCE = 'Konami product pages for RA01, RA02 and Quarter Century Bonanza'
+const RA_SOURCE_LATER =
+  'Konami EU product page for Rarity Collection 5; retailer and news copies of the Quarter Century Stampede announcement'
 const RA_TIERS: Partial<Record<string, RevealTier>> = {
   'Super Rare': 'none',
   'Ultra Rare': 'none',
@@ -209,6 +218,22 @@ const RA_ULTRA = { "Collector's Rare": 1 / 12, 'Ultimate Rare': 1 / 12 }
 /** RA03's main set, and its pool of older cards in Platinum or Quarter Century only. */
 const RA03_MAIN = { from: 1, to: 78 }
 const RA03_NOSTALGIA = { from: 79 }
+/** RA04 is RA03 again, with a 105-card main set. */
+const RA04_MAIN = { from: 1, to: 105 }
+const RA04_NOSTALGIA = { from: 106 }
+/** RA05's main set, and its pool of new variant arts (Ultra or Starlight only) for the 5th card. */
+const RA05_MAIN = { from: 1, to: 82 }
+const RA05_VARIANTS = { from: 83 }
+/** The 4 cards from a Quarter Century set's main pool, then its guaranteed older card. */
+const quarterCentury = (main: PackSlot['numbers'], nostalgia: PackSlot['numbers']): PackSlot[] => [
+  { ...fixed('Super Rare'), numbers: main },
+  { ...oneOf('Secret Rare', RA_SECRET), numbers: main },
+  { ...oneOf('Ultra Rare', RA_ULTRA), count: 2, numbers: main },
+  {
+    ...oneOf('Platinum Secret Rare', { 'Quarter Century Secret Rare': 1 / 2 }),
+    numbers: nostalgia
+  }
+]
 
 layouts.push(
   {
@@ -238,14 +263,28 @@ layouts.push(
     label: 'Quarter Century Bonanza',
     source: `${RA_SOURCE}: RA01's pack with one Super swapped for a guaranteed Platinum or QCSR from the older-card pool (RA03-EN079 on); upgrades split evenly (no official split)`,
     tiers: RA_TIERS,
+    slots: quarterCentury(RA03_MAIN, RA03_NOSTALGIA)
+  },
+  {
+    id: 'quarter-century-stampede',
+    label: 'Quarter Century Stampede',
+    source: `${RA_SOURCE_LATER}: Quarter Century Bonanza's pack, from a 105-card main set, with the guaranteed card from the older-card pool (RA04-EN106 on); upgrades split evenly (no official split)`,
+    tiers: RA_TIERS,
+    slots: quarterCentury(RA04_MAIN, RA04_NOSTALGIA)
+  },
+  {
+    id: 'rarity-collection-5',
+    label: 'Rarity Collection 5',
+    source: `${RA_SOURCE_LATER}: 1 Super, 1 Secret (1 in 4 Platinum or Starlight), 2 Ultra (1 in 6 each Collector's or Ultimate) from the first 82, then 1 Ultra or Starlight from the variant-art pool (RA05-EN083 on). Konami gives no rate for a Starlight in the variant slot; we use 1 in 8, a Secret's chance of turning Starlight. Upgrades split evenly (no official split)`,
+    tiers: RA_TIERS,
     slots: [
-      { ...fixed('Super Rare'), numbers: RA03_MAIN },
-      { ...oneOf('Secret Rare', RA_SECRET), numbers: RA03_MAIN },
-      { ...oneOf('Ultra Rare', RA_ULTRA), count: 2, numbers: RA03_MAIN },
+      { ...fixed('Super Rare'), numbers: RA05_MAIN },
       {
-        ...oneOf('Platinum Secret Rare', { 'Quarter Century Secret Rare': 1 / 2 }),
-        numbers: RA03_NOSTALGIA
-      }
+        ...oneOf('Secret Rare', { 'Platinum Secret Rare': 1 / 8, 'Starlight Rare': 1 / 8 }),
+        numbers: RA05_MAIN
+      },
+      { ...oneOf('Ultra Rare', RA_ULTRA), count: 2, numbers: RA05_MAIN },
+      { ...oneOf('Ultra Rare', { 'Starlight Rare': 1 / 8 }), numbers: RA05_VARIANTS }
     ]
   }
 )
@@ -271,7 +310,9 @@ const SETS_BY_LAYOUT: Record<string, string> = {
   'core-2025': 'DUAD DOOD BPRO BLZD CORI BETB',
   'rarity-collection': 'RA01',
   'rarity-collection-2': 'RA02',
-  'quarter-century-bonanza': 'RA03'
+  'quarter-century-bonanza': 'RA03',
+  'quarter-century-stampede': 'RA04',
+  'rarity-collection-5': 'RA05'
 }
 
 /** Set code prefix (e.g. "LOB") → layout id. */

@@ -31,6 +31,16 @@ const UNKNOWN_RANK = 0.5
 /** A rarity without its trailing variant, e.g. "Ultra Rare" for "Ultra Rare (Pharaoh's Rare)". */
 export const baseOf = (r: string): string => r.replace(/\s*\(.*\)\s*$/, '')
 
+/**
+ * A rarity with its base spelled as in RIP_TIERS, whatever the source's capitalisation
+ * ("PLatinum Secret Rare" → "Platinum Secret Rare"). Unknown rarities come back unchanged.
+ */
+export function canonicalRarity(r: string): string {
+  const base = baseOf(r)
+  const known = RIP_TIERS.find((t) => t.toLowerCase() === base.toLowerCase())
+  return known ? known + r.slice(base.length) : r
+}
+
 /** Index of a rarity's base in RIP_TIERS, or -1 when it isn't a known tier. */
 const tierIndex = (r: string): number => RIP_TIERS.indexOf(baseOf(r))
 

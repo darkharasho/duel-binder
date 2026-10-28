@@ -78,6 +78,11 @@ describe('rip repo', () => {
     expect(ultra.pkey).toBe(`en|${ultra.cardId}|TST-EN300|Ultra Rare`)
   })
 
+  it("pool fixes a rarity's capitalisation, so a typo still rolls and ranks", () => {
+    addPrinting(addCard('Typo Card'), 'Typo Set', 'TYP-EN001', 'PLatinum Secret Rare')
+    expect(ripPool(db, 'Typo Set')[0].rarity).toBe('Platinum Secret Rare')
+  })
+
   it('rejects bad pack counts', () => {
     for (const n of [0, 101, 2.5, NaN]) expect(() => startRip(db, SET, n, now, LAYOUTS)).toThrow()
   })

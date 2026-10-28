@@ -223,6 +223,8 @@ describe('the Rarity Collections and Quarter Century Bonanza', () => {
     expect(layoutFor('RA01')!.id).toBe('rarity-collection')
     expect(layoutFor('RA02')!.id).toBe('rarity-collection-2')
     expect(layoutFor('RA03')!.id).toBe('quarter-century-bonanza')
+    expect(layoutFor('RA04')!.id).toBe('quarter-century-stampede')
+    expect(layoutFor('RA05')!.id).toBe('rarity-collection-5')
     expect(describeLayout(layoutFor('RA01')!)).toBe(
       '5 cards a pack · 2 Super + 1 Secret or better + 2 Ultra or better'
     )
@@ -265,6 +267,55 @@ describe('the Rarity Collections and Quarter Century Bonanza', () => {
       expect(['Platinum Secret Rare', 'Quarter Century Secret Rare']).toContain(special.rarity)
       expect(count(pack, 'Super Rare')).toBe(1)
     }
+  })
+
+  it('RA04: one guaranteed Platinum or QCSR from 106 on; the rest only from the first 105', () => {
+    const l = layoutFor('RA04')!
+    const p = raPool('RA04', 105, 191)
+    const rand = mulberry32(4)
+    for (let i = 0; i < 500; i++) {
+      const pack = rollPack(l, p, rand)
+      expect(pack).toHaveLength(5)
+      const nums = pack.map((c) => Number(c.setCode.slice(-3)))
+      expect(nums.filter((n) => n > 105)).toHaveLength(1)
+      expect(['Platinum Secret Rare', 'Quarter Century Secret Rare']).toContain(
+        pack[nums.findIndex((n) => n > 105)].rarity
+      )
+      expect(count(pack, 'Super Rare')).toBe(1)
+    }
+  })
+
+  it('RA05: 4 from the first 82 (Secret 1 in 4 Platinum or Starlight), then an Ultra or Starlight from 83 on', () => {
+    const l = layoutFor('RA05')!
+    const main = raPool('RA05', 82).map((c) =>
+      c.rarity === 'Quarter Century Secret Rare' ? { ...c, rarity: 'Starlight Rare' } : c
+    )
+    const variants: PoolCard[] = []
+    for (let n = 83; n <= 150; n++)
+      for (const rarity of ['Ultra Rare', 'Starlight Rare'])
+        variants.push({
+          ...card(rarity, 6000 + n),
+          setCode: `RA05-EN${String(n).padStart(3, '0')}`
+        })
+    const rand = mulberry32(5)
+    const packs = 8000
+    let secretUp = 0
+    let variantStarlight = 0
+    for (let i = 0; i < packs; i++) {
+      const pack = rollPack(l, [...main, ...variants], rand)
+      expect(pack).toHaveLength(5)
+      expect(count(pack, 'Super Rare')).toBe(1)
+      const nums = pack.map((c) => Number(c.setCode.slice(-3)))
+      expect(nums.slice(0, 4).every((n) => n <= 82)).toBe(true)
+      expect(nums[4]).toBeGreaterThan(82)
+      expect(['Ultra Rare', 'Starlight Rare']).toContain(pack[4].rarity)
+      if (pack[4].rarity === 'Starlight Rare') variantStarlight++
+      secretUp += pack
+        .slice(0, 4)
+        .filter((c) => ['Platinum Secret Rare', 'Starlight Rare'].includes(c.rarity)).length
+    }
+    expect(secretUp / packs).toBeCloseTo(1 / 4, 1)
+    expect(variantStarlight / packs).toBeCloseTo(1 / 8, 1)
   })
 
   it('count Super and Ultra as plain cards, Secret as a small hit, upgrades as big ones', () => {
@@ -379,6 +430,10 @@ describe('describeLayout', () => {
     'rarity-collection-2': '9 cards a pack · 3 Super + 2 Secret or better + 4 Ultra or better',
     'quarter-century-bonanza':
       '5 cards a pack · 1 Super + 1 Secret or better + 2 Ultra or better + 1 Platinum Secret or better',
+    'quarter-century-stampede':
+      '5 cards a pack · 1 Super + 1 Secret or better + 2 Ultra or better + 1 Platinum Secret or better',
+    'rarity-collection-5':
+      '5 cards a pack · 1 Super + 1 Secret or better + 2 Ultra or better + 1 Ultra or better',
     'core-2023': '9 cards a pack · 1 Super or better',
     'core-2025': '9 cards a pack · 1 Super or better'
   }

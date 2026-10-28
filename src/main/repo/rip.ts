@@ -1,7 +1,7 @@
 import type { SqlDb } from '../db/sql'
 import { listSets } from './sets'
 import { setPrefix } from '../../shared/sets'
-import { compareRarity } from '../../shared/rip/rarity'
+import { canonicalRarity, compareRarity } from '../../shared/rip/rarity'
 import { RIP_SET_LAYOUTS, describeLayout, layoutFor, tierFor } from '../../shared/rip/layouts'
 import { canFill, mulberry32, rollPack } from '../../shared/rip/roll'
 import type {
@@ -41,7 +41,10 @@ interface PoolRow {
   image_id: number | null
 }
 
-/** Every visible English printing of a set, each with its card's first image. No prices. */
+/**
+ * Every visible English printing of a set, each with its card's first image. No prices. Rarities are
+ * respelled to Rip's own (YGOPRODeck has "PLatinum Secret Rare" in RA05).
+ */
 export function ripPool(db: SqlDb, setName: string): PoolCard[] {
   const rows = db
     .prepare(
@@ -58,7 +61,7 @@ export function ripPool(db: SqlDb, setName: string): PoolCard[] {
     cardId: r.card_id,
     name: r.name,
     setCode: r.set_code,
-    rarity: r.set_rarity,
+    rarity: canonicalRarity(r.set_rarity),
     variant: r.variant,
     frameType: r.frame_type,
     imageId: r.image_id

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   artBox,
+  canonicalRarity,
   compareRarity,
   holoKind,
   revealTier,
@@ -90,5 +91,14 @@ describe('artBox', () => {
     expect(artBox('effect_pendulum')).toEqual({ left: 6.4, top: 17.9, right: 6.4, bottom: 38.0 })
     expect(artBox('effect')).toEqual({ left: 11.9, top: 18.1, right: 11.9, bottom: 29.6 })
     expect(artBox('effect_pendulum')).not.toEqual(artBox('effect'))
+  })
+})
+
+describe('canonicalRarity', () => {
+  it("fixes a known rarity's capitalisation and keeps its variant", () => {
+    expect(canonicalRarity('PLatinum Secret Rare')).toBe('Platinum Secret Rare')
+    expect(canonicalRarity('ultra rare (Stamp)')).toBe('Ultra Rare (Stamp)')
+    expect(canonicalRarity('Secret Rare')).toBe('Secret Rare')
+    expect(canonicalRarity('force-SMW')).toBe('force-SMW')
   })
 })

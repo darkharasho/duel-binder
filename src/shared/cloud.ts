@@ -66,6 +66,17 @@ export interface PricesResponse {
   status: string | null
 }
 
+/** Most printing keys one price request (POST /api/sync/price-requests) may send. */
+export const MAX_PRICE_REQUEST = 200
+
+/** The answer to a price request. */
+export interface PriceRequestResponse {
+  /** Printings newly queued for an eBay price; they show up in a sync about a minute later. */
+  queued: number
+  /** Some printings weren't queued because a daily request limit was reached. */
+  capped: boolean
+}
+
 /** When the entry was last edited: the later of its update and delete times. */
 export function editTime(e: Pick<WireEntry, 'updatedAt' | 'deletedAt'>): string {
   if (e.deletedAt === null) return e.updatedAt

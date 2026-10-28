@@ -22,7 +22,7 @@ export function needsPrice(db: SqlDb, printingId: number, now = new Date()): boo
 }
 
 /**
- * Looks up eBay asking prices for owned printings (see priceCandidates) with no price row or one older than 7 days
+ * Looks up eBay asking prices for owned or requested printings (see priceCandidates) with no price row or one older than 7 days
  * (optionally only `printingIds`, at most `limit`, never-priced first). `remaining` counts the candidates left
  * past `limit`. Sequential. Never rejects.
  */

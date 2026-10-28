@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { api, mutationInvalidationKeys } from '@/lib/api'
 import type { ScanDraft } from './resolve'
@@ -73,6 +73,11 @@ export function useScanSession(): {
   setQuantity(key: string, q: number): void
   remove(key: string): void
   clear(): void
+  /**
+   * Fills in prices that have arrived since the rows were scanned (a price asked for by
+   * useRequestPrices comes down with a sync). Prices already shown are kept.
+   */
+  refreshPrices(): Promise<void>
   /** Rows added and failed, and the cards (copies) the added rows held. */
   commit(): Promise<{ added: number; failed: number; cards: number }>
 } {
@@ -88,6 +93,19 @@ export function useScanSession(): {
     ref.current = next
     save(next)
     setRows(next)
+  }, [])
+
+  // Another tab (the home-screen app and a browser tab, say) changed the saved list: take it up,
+  // or this tab's next change would write its stale copy over that tab's scans.
+  useEffect(() => {
+    const onStorage = (e: StorageEvent): void => {
+      if (e.key !== STORAGE_KEY && e.key !== null) return
+      const next = load()
+      ref.current = next
+      setRows(next)
+    }
+    window.addEventListener('storage', onStorage)
+    return () => window.removeEventListener('storage', onStorage)
   }, [])
 
   const add = useCallback(
@@ -146,6 +164,34 @@ export function useScanSession(): {
 
   const clear = useCallback((): void => update(() => []), [update])
 
+  const refreshPrices = useCallback(async (): Promise<void> => {
+    const cardIds = [
+      ...new Set(
+        ref.current.filter((r) => r.options.some((o) => o.price == null)).map((r) => r.cardId)
+      )
+    ]
+    if (cardIds.length === 0) return
+    const fresh = new Map(
+      (await api.scan.printingsForCards(cardIds)).map((p) => [p.printingId, p.price])
+    )
+    update((list) => {
+      let changed = false
+      const next = list.map((r) => {
+        let filled = false
+        const options = r.options.map((o) => {
+          const price = o.price == null ? fresh.get(o.printingId) : null
+          if (price == null) return o
+          filled = true
+          return { ...o, price }
+        })
+        if (!filled) return r
+        changed = true
+        return { ...r, options }
+      })
+      return changed ? next : list
+    })
+  }, [update])
+
   const commit = useCallback(async (): Promise<{
     added: number
     failed: number
@@ -164,7 +210,11 @@ export function useScanSession(): {
           await api.collection.add({
             printingId: row.printingId!,
             imageId: row.imageId,
-            quantity: row.quantity
+            quantity: row.quantity,
+            // This row as it stands: if the add landed but its reply didn't (the page reloaded
+            // mid-Add), adding it again is answered without adding the copies twice. A scan or
+            // edit since changes the row, and so the id.
+            requestId: `${row.key}@${row.addedAt}x${row.quantity}`
           })
           added++
           cards += row.quantity
@@ -197,5 +247,16 @@ export function useScanSession(): {
   }, [qc, update])
 
   const total = rows.reduce((n, r) => n + r.quantity, 0)
-  return { rows, total, committing, add, setPrinting, setQuantity, remove, clear, commit }
+  return {
+    rows,
+    total,
+    committing,
+    add,
+    setPrinting,
+    setQuantity,
+    remove,
+    clear,
+    refreshPrices,
+    commit
+  }
 }

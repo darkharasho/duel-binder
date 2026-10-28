@@ -29,7 +29,8 @@ function fakeStore(over: Partial<PhoneStore> = {}): PhoneStore {
       problems: 0,
       lastSyncedAt: '2026-10-27T11:00:00.000Z',
       signedOut: false,
-      changed: false
+      changed: false,
+      awaitingPrices: false
     })),
     syncState: vi.fn(async () => ({
       waiting: 2,
@@ -40,6 +41,7 @@ function fakeStore(over: Partial<PhoneStore> = {}): PhoneStore {
     syncProblems: vi.fn(async () => []),
     invoke: vi.fn(async () => 'ok'),
     portal: vi.fn(async () => 'portal') as PhoneStore['portal'],
+    requestPrices: vi.fn(async () => 0),
     fingerprints: vi.fn(async () => null),
     refreshFingerprints: vi.fn(async () => ({ state: 'ready' as const, count: 3 })),
     ...over
@@ -64,10 +66,10 @@ function setup(
   api: Api
   store: PhoneStore
   ocr: Ocr
-  triggers: { afterAdd: ReturnType<typeof vi.fn> }
+  triggers: { afterAdd: ReturnType<typeof vi.fn>; afterPriceRequest: ReturnType<typeof vi.fn> }
   events: PhoneEvents
 } {
-  const triggers = { afterAdd: vi.fn() }
+  const triggers = { afterAdd: vi.fn(), afterPriceRequest: vi.fn() }
   const events = createPhoneEvents()
   const api = createPhoneApi({ store, ocr, triggers, events })
   return { api, store, ocr, triggers, events }
@@ -290,6 +292,34 @@ describe('phone api', () => {
     expect(store.sync).toHaveBeenCalledTimes(1)
     expect(states).toEqual(['syncing', 'idle'])
     expect(changed).toHaveBeenCalledTimes(1)
+  })
+
+  it('prices.request asks the store and syncs shortly after only when something was queued', async () => {
+    const store = fakeStore()
+    const { api, triggers } = setup(store)
+    await api.prices.request([7, 8])
+    expect(store.requestPrices).toHaveBeenCalledWith([7, 8])
+    expect(triggers.afterPriceRequest).not.toHaveBeenCalled()
+    ;(store.requestPrices as ReturnType<typeof vi.fn>).mockResolvedValue(2)
+    await api.prices.request([9])
+    expect(triggers.afterPriceRequest).toHaveBeenCalledTimes(1)
+  })
+
+  it('a sync that leaves requested prices on their way syncs again shortly', async () => {
+    const store = fakeStore()
+    const { api, triggers } = setup(store)
+    await api.account.syncNow()
+    expect(triggers.afterPriceRequest).not.toHaveBeenCalled()
+    ;(store.sync as ReturnType<typeof vi.fn>).mockResolvedValue({
+      waiting: 0,
+      problems: 0,
+      lastSyncedAt: 'x',
+      signedOut: false,
+      changed: false,
+      awaitingPrices: true
+    })
+    await api.account.syncNow()
+    expect(triggers.afterPriceRequest).toHaveBeenCalledTimes(1)
   })
 
   it('account.unsynced and deleteAccount go to the store', async () => {

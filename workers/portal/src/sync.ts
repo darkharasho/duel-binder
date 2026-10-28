@@ -5,6 +5,7 @@ import { CollectionError } from '../../../src/main/repo/collection'
 import { recordSnapshot } from '../../../src/main/repo/stats'
 import {
   FUTURE_SKEW_MS,
+  MAX_PRICE_REQUEST,
   MAX_PULL,
   MAX_PUSH,
   editTime,
@@ -19,6 +20,7 @@ import {
 } from '../../../src/shared/cloud'
 import type { AppDeps } from './app'
 import { currentUser } from './auth'
+import { requestPrices } from './priceRequests'
 import { NEXT_SEQ, userScope } from './scope'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
@@ -249,9 +251,22 @@ async function readJson(req: Request): Promise<unknown> {
   }
 }
 
-/** POST /api/sync/push, GET /api/sync/pull and POST /api/sync/prices; desktop tokens only. */
+/** Checks a body's `pkeys`: an array of strings of at most MAX_PKEY characters. */
+function checkPkeys(body: unknown): string[] {
+  const pkeys = (body as { pkeys?: unknown } | null)?.pkeys
+  if (!Array.isArray(pkeys) || !pkeys.every((k) => typeof k === 'string' && k.length <= MAX_PKEY))
+    throw new CollectionError(`pkeys must be an array of strings of at most ${MAX_PKEY} characters`)
+  return pkeys as string[]
+}
+
+const POST_PATHS: ReadonlySet<string> = new Set(['push', 'prices', 'price-requests'])
+
+/**
+ * POST /api/sync/push, GET /api/sync/pull, POST /api/sync/prices and POST /api/sync/price-requests;
+ * desktop tokens only (the phone app has one too).
+ */
 export async function syncRoute(req: Request, deps: AppDeps, path: string): Promise<Response> {
-  const method = path === 'pull' ? 'GET' : path === 'push' || path === 'prices' ? 'POST' : null
+  const method = path === 'pull' ? 'GET' : POST_PATHS.has(path) ? 'POST' : null
   if (!method) return json({ error: 'Not found' }, 404)
   if (req.method !== method) return json({ error: 'method-not-allowed' }, 405)
   const user = await currentUser(req, deps)
@@ -277,11 +292,16 @@ export async function syncRoute(req: Request, deps: AppDeps, path: string): Prom
       return json({ results })
     }
 
-    const pkeys = (body as { pkeys?: unknown } | null)?.pkeys
-    if (!Array.isArray(pkeys) || !pkeys.every((k) => typeof k === 'string' && k.length <= MAX_PKEY))
-      throw new CollectionError(
-        `pkeys must be an array of strings of at most ${MAX_PKEY} characters`
-      )
+    const pkeys = checkPkeys(body)
+    if (path === 'price-requests') {
+      if (pkeys.length > MAX_PRICE_REQUEST) return json({ error: 'too-many' }, 413)
+      const result = requestPrices(deps.db, user.id, pkeys, deps.now())
+      // Paced: requests come with every page view, and mustn't run the alarm faster than its batches.
+      // While the eBay Worker is failing, the alarm's own hour-long backoff picks them up.
+      if (result.queued > 0 && getMeta(deps.db, 'price_service_status') !== 'unavailable')
+        await deps.prices.soon({ paced: true })
+      return json(result)
+    }
     if (pkeys.length > MAX_PULL) return json({ error: 'too-many' }, 413)
     return json(pricesFor(deps.db, pkeys))
   } catch (e) {

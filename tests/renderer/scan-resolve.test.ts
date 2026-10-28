@@ -120,9 +120,10 @@ describe('resolveSignals', () => {
   it('a card-shaped thing whose art is nothing like any card counts as nothing in view', async () => {
     // A book or the deck on the desk: its closest artwork is far off, and nothing reads.
     const far = [{ imageId: 201, distance: ART_FAR_DISTANCE + 1 }]
-    expect(await resolveSignals(raw({ art: far }), noSet)).toEqual({ kind: 'none' })
+    expect(await resolveSignals(raw({ art: far }), noSet)).toEqual({ kind: 'none', far: true })
     expect(await resolveSignals(raw({ art: far, codeTexts: ['garbage'] }), withSet(LOB))).toEqual({
-      kind: 'none'
+      kind: 'none',
+      far: true
     })
     // A code or name read still counts it.
     expect(await recognized(raw({ art: far, codeTexts: ['SDY-EN006'] }))).toMatchObject({

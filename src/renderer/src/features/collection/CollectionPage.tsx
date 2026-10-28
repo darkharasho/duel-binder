@@ -112,9 +112,19 @@ export function CollectionPage({
 
   // An entry opened by id (initialEntryId) resolves its card once the list has loaded;
   // persist it so later filtering that excludes the entry does not unmount the panel.
+  // The dashboard ranks every language, so an entry the language filter hides resolves
+  // from the unfiltered list instead.
+  const unfilteredEntries = useQuery({
+    queryKey: queryKeys.entries(DEFAULT_FILTERS),
+    queryFn: () => api.collection.list(DEFAULT_FILTERS),
+    enabled: !friend && initialEntryId !== undefined && pickedCardId === null
+  })
   const resolvedCardId =
     pickedCardId === null && selectedId !== null
-      ? entries.data?.find((e) => e.id === selectedId)?.card.id
+      ? (
+          entries.data?.find((e) => e.id === selectedId) ??
+          unfilteredEntries.data?.find((e) => e.id === selectedId)
+        )?.card.id
       : undefined
   if (resolvedCardId !== undefined) setCardId(resolvedCardId)
   const cardId = pickedCardId ?? resolvedCardId ?? null

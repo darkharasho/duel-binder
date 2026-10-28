@@ -42,6 +42,17 @@ const colorFor = (map: Record<string, string>, key: string, i: number): string =
   (key.includes('_') ? map[key.split('_')[0]] : undefined) ??
   FALLBACK[i % FALLBACK.length]
 
+/**
+ * A rarity's legend text. Copies with no price are never shown as $0: a rarity with none priced reads
+ * "No price", a partly priced one says how many copies its amount leaves out.
+ */
+function rarityText(r: CollectionStats['byRarity'][number]): string {
+  const unpriced = r.unpriced ?? 0
+  if (unpriced >= r.count && r.count > 0) return `No price · ${r.count}`
+  const note = unpriced > 0 ? ` (${unpriced} no price)` : ''
+  return `${formatUsd(r.value)} · ${r.count}${note}`
+}
+
 interface Segment {
   label: string
   amount: number
@@ -56,17 +67,19 @@ function Breakdown({ title, segments }: { title: string; segments: Segment[] }):
   return (
     <section>
       <h2 className="mb-3 text-sm font-semibold">{title}</h2>
-      {sorted.length === 0 || total === 0 ? (
+      {sorted.length === 0 ? (
         <p className="text-sm text-muted-foreground">No data yet</p>
       ) : (
         <>
+          {/* No bar when every amount is 0 (e.g. only unpriced cards); the legend still lists them. */}
           <div aria-hidden className="mb-3 flex h-2.5 overflow-hidden rounded-[2px] bg-white/5">
-            {sorted.map((s) => (
-              <div
-                key={s.label}
-                style={{ width: `${(s.amount / total) * 100}%`, background: s.color }}
-              />
-            ))}
+            {total > 0 &&
+              sorted.map((s) => (
+                <div
+                  key={s.label}
+                  style={{ width: `${(s.amount / total) * 100}%`, background: s.color }}
+                />
+              ))}
           </div>
           <ul
             aria-label={title}
@@ -184,6 +197,7 @@ function Content({
   onNavigate: NavigateFn
 }): React.JSX.Element {
   const n = stats.approximateCount
+  const unpriced = stats.unpricedCount ?? 0
   const stale = isStale(stats.pricesUpdatedAt)
   // Most valuable by an entry's total (price × copies) or by one copy's price.
   const [mostBy, setMostByState] = useState<MostBy>(readMostBy)
@@ -207,6 +221,11 @@ function Content({
           {n > 0 && (
             <p className="mt-1 text-xs text-muted-foreground tabular-nums">
               ≈ includes {n} approximate {n === 1 ? 'price' : 'prices'}
+            </p>
+          )}
+          {unpriced > 0 && (
+            <p className="mt-1 text-xs text-muted-foreground tabular-nums">
+              Leaves out {unpriced} {unpriced === 1 ? 'card' : 'cards'} with no price yet
             </p>
           )}
           <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-[13px] text-foreground/75 max-md:grid max-md:grid-cols-2 max-md:gap-2">
@@ -301,7 +320,7 @@ function Content({
           segments={stats.byRarity.map((r, i) => ({
             label: r.rarity,
             amount: r.value,
-            text: `${formatUsd(r.value)} · ${r.count}`,
+            text: rarityText(r),
             color: colorFor(RARITY_COLORS, r.rarity, i)
           }))}
         />

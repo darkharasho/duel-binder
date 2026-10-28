@@ -176,6 +176,41 @@ describe('refreshIntlSets', () => {
     ])
   })
 
+  it('a New artwork row keeps its bare rarities, with the variant New artwork', async () => {
+    const card = db.prepare("SELECT id FROM cards WHERE name = 'Dark Magician'").get() as {
+      id: number
+    }
+    const stored = (
+      db
+        .prepare(
+          `INSERT INTO card_printings (card_id, language, set_name, set_code, set_rarity, set_rarity_code,
+             set_price, missing_from_api)
+           VALUES (?, 'ja', 'Legend of Blue Eyes White Dragon', 'LB-05', 'Ultra Rare', '', NULL, 0)
+           RETURNING id`
+        )
+        .get(card.id) as { id: number }
+    ).id
+    const f = fake({
+      [LB]: listPage([
+        'LB-05; Dark Magician; Ultra Rare, Secret Rare; New artwork',
+        'LB-05; Dark Magician; Prismatic Secret Rare; New artwork // description::(extended art)'
+      ])
+    })
+    await refreshIntlSets(db, f.client, NOW)
+    const rows = db
+      .prepare(
+        `SELECT p.id, p.set_rarity, p.variant, ${RARITY_LABEL} AS label FROM card_printings p
+         WHERE p.language = 'ja' ORDER BY label`
+      )
+      .all() as { id: number; set_rarity: string; variant: string | null; label: string }[]
+    expect(rows.map(({ set_rarity, variant }) => [set_rarity, variant])).toEqual([
+      ['Prismatic Secret Rare', 'Overframe'],
+      ['Secret Rare', 'New artwork'],
+      ['Ultra Rare', 'New artwork']
+    ])
+    expect(rows.find((r) => r.set_rarity === 'Ultra Rare')!.id).toBe(stored)
+  })
+
   it('a merged printing from before variants keeps its id and stays current', async () => {
     const card = db.prepare("SELECT id FROM cards WHERE name = 'Dark Magician'").get() as {
       id: number

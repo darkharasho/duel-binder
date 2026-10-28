@@ -20,6 +20,7 @@ const as = (d: Partial<ScanDraft>): ScanOutcome => ({
 })
 const NONE: ScanOutcome = { kind: 'none' }
 const UNSURE: ScanOutcome = { kind: 'unsure' }
+const FAR: ScanOutcome = { kind: 'none', far: true }
 
 /** Pushes outcomes 100 ms apart from start and returns the card ids counted. */
 function run(
@@ -94,5 +95,44 @@ describe('createShowingTracker', () => {
     expect(run(t, [seen(1), seen(1)])).toEqual([1])
     t.reset()
     expect(run(t, [seen(1), seen(1)], 300)).toEqual([1])
+  })
+
+  it('a single far-art frame right after a recognized one keeps the streak', () => {
+    const t = createShowingTracker({ stableFrames: 2, absentMs: 600 })
+    expect(run(t, [seen(1), FAR, seen(1)])).toEqual([1])
+  })
+
+  it('a far-art frame after an unsure one still keeps the streak', () => {
+    const t = createShowingTracker({ stableFrames: 2, absentMs: 600 })
+    expect(run(t, [seen(1), UNSURE, FAR, seen(1)])).toEqual([1])
+  })
+
+  it('two far-art frames in a row break the streak', () => {
+    const t = createShowingTracker({ stableFrames: 2, absentMs: 600 })
+    expect(run(t, [seen(1), FAR, FAR, seen(1)])).toEqual([])
+  })
+
+  it('far-art frames with nothing recognized just before are none, absence included', () => {
+    const t = createShowingTracker({ stableFrames: 2, absentMs: 600 })
+    const fars = Array<ScanOutcome>(7).fill(FAR)
+    expect(run(t, [seen(1), seen(1), NONE, ...fars, seen(1), seen(1)])).toEqual([1, 1])
+  })
+
+  it('a plain none frame after a recognized one still breaks the streak', () => {
+    const t = createShowingTracker({ stableFrames: 2, absentMs: 600 })
+    expect(run(t, [seen(1), NONE, seen(1)])).toEqual([])
+  })
+
+  it('a held card flickering with far-art frames counts once', () => {
+    const t = createShowingTracker({ stableFrames: 2, absentMs: 600 })
+    const flicker = Array.from({ length: 30 }, (_, i) => (i % 2 ? FAR : seen(1)))
+    expect(run(t, flicker)).toEqual([1])
+  })
+
+  it('a held card that keeps reading far art counts again only after a real absence', () => {
+    const t = createShowingTracker({ stableFrames: 2, absentMs: 600 })
+    const fars = Array<ScanOutcome>(8).fill(FAR)
+    expect(run(t, [seen(1), seen(1), ...fars, seen(1), seen(1)])).toEqual([1, 1])
+    expect(run(t, [seen(1), FAR, FAR, FAR, seen(1), seen(1)], 5000)).toEqual([])
   })
 })

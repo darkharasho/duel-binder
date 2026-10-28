@@ -4,6 +4,8 @@ import { describe, expect, it } from 'vitest'
 import { doSql } from '../src/doSql'
 import type { SqlDb } from '../../../src/main/db/sql'
 import { searchCards } from '../../../src/main/repo/cards'
+import { countCandidates, priceCandidates } from '../../../src/main/prices/candidates'
+import { requestPrices } from '../src/priceRequests'
 
 /** Run `fn` against a fresh, migrated Store's SQLite through the doSql adapter. */
 function inStore<R>(name: string, fn: (db: SqlDb) => R): Promise<R> {
@@ -91,5 +93,36 @@ describe('Store Durable Object SQLite', () => {
       return { before, after: seq() }
     })
     expect(seqs).toEqual({ before: 5, after: 6 })
+  })
+
+  it('price requests and the candidate query run on DO', async () => {
+    const out = await inStore('price-requests', (db) => {
+      insertCard(db, 1, 'A')
+      db.exec(`
+        INSERT INTO users (id, discord_id, username, created_at, updated_at) VALUES (1, 'd1', 'one', 'x', 'x');
+        INSERT INTO card_printings (id, card_id, language, set_name, set_code, set_rarity)
+          VALUES (7, 1, 'ja', 'S', 'S-JP001', 'Rare'), (8, 1, 'ja', 'S', 'S-JP002', 'Rare');
+        INSERT INTO card_images (image_id, card_id, sort_order) VALUES (1, 1, 0);
+        INSERT INTO collection_entries (id, user_id, uid, printing_id, image_id, quantity, created_at, updated_at, server_seq)
+          VALUES (1, 1, 'a', 8, 1, 1, 'x', 'x', 1);
+      `)
+      const pkey = (db.prepare('SELECT pkey FROM card_printings WHERE id = 7').get() as { pkey: string })
+        .pkey
+      const now = new Date('2026-10-24T12:00:00.000Z')
+      const first = requestPrices(db, 1, [pkey], now)
+      const again = requestPrices(db, 1, [pkey], now)
+      return {
+        first,
+        again,
+        candidates: priceCandidates(db, now).map((c) => c.id),
+        count: countCandidates(db, now)
+      }
+    })
+    expect(out).toEqual({
+      first: { queued: 1, capped: false },
+      again: { queued: 0, capped: false },
+      candidates: [8, 7],
+      count: 2
+    })
   })
 })

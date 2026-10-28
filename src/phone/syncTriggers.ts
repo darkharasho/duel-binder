@@ -1,11 +1,13 @@
 /** A sync runs this long after the last local edit, so a run of adds goes up together. */
 export const EDIT_DELAY_MS = 2_000
+/** A sync runs this long after asking for prices (and again while they're still on their way). */
+export const PRICE_DELAY_MS = 30_000
 /** While the app is on screen, it syncs this often. */
 export const PERIOD_MS = 5 * 60_000
 
 /**
- * When the phone syncs: shortly after the last local edit, on coming back online, on becoming
- * visible, and every PERIOD_MS while visible. One sync runs at a time; any trigger during a sync
+ * When the phone syncs: shortly after the last local edit, PRICE_DELAY_MS after asking for prices,
+ * on coming back online, on becoming visible, and every PERIOD_MS while visible. One sync runs at a time; any trigger during a sync
  * schedules exactly one more run after it. Edits and the timer don't sync while offline (the
  * online event catches up).
  */
@@ -17,12 +19,13 @@ export function createSyncTriggers(deps: {
   clearTimer: (timer: ReturnType<typeof setTimeout>) => void
   /** Whether the page is on screen; the periodic sync skips while it isn't. Defaults to true. */
   visible?(): boolean
-}): { afterAdd(): void; dispose(): void } {
+}): { afterAdd(): void; afterPriceRequest(): void; dispose(): void } {
   const visible = deps.visible ?? ((): boolean => true)
   let running = false
   let again = false
   let disposed = false
   let editTimer: ReturnType<typeof setTimeout> | undefined
+  let priceTimer: ReturnType<typeof setTimeout> | undefined
   let periodTimer: ReturnType<typeof setTimeout> | undefined
 
   const run = (): void => {
@@ -69,9 +72,18 @@ export function createSyncTriggers(deps: {
         whenOnline()
       }, EDIT_DELAY_MS)
     },
+    afterPriceRequest() {
+      // An earlier one already waiting covers this request too.
+      if (disposed || priceTimer !== undefined) return
+      priceTimer = deps.setTimer(() => {
+        priceTimer = undefined
+        whenOnline()
+      }, PRICE_DELAY_MS)
+    },
     dispose() {
       disposed = true
       if (editTimer !== undefined) deps.clearTimer(editTimer)
+      if (priceTimer !== undefined) deps.clearTimer(priceTimer)
       if (periodTimer !== undefined) deps.clearTimer(periodTimer)
       for (const off of unsubscribe) off()
     }

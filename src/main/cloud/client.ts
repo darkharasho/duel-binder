@@ -6,6 +6,7 @@ import type {
 } from '../../shared/catalogFeed'
 import type {
   Me,
+  PriceRequestResponse,
   PricesResponse,
   PullResponse,
   PushResponse,
@@ -35,6 +36,8 @@ export interface CloudClient {
   push(entries: WireEntry[]): Promise<PushResult[]>
   pull(cursor: number): Promise<PullResponse>
   prices(pkeys: string[]): Promise<PricesResponse>
+  /** Asks the server to price these printings (at most MAX_PRICE_REQUEST); see requestPrices. */
+  requestPrices(pkeys: string[]): Promise<PriceRequestResponse>
   /**
    * One page of the catalog change feed after `since`; `limit` defaults to the server's page size,
    * `tables` (default all) limits the feed to those tables.
@@ -134,6 +137,8 @@ export function createCloudClient(opts: {
       (await call<PushResponse>('/api/sync/push', 'POST', { entries })).results,
     pull: (cursor) => call<PullResponse>(`/api/sync/pull?cursor=${cursor}`, 'GET'),
     prices: (pkeys) => call<PricesResponse>('/api/sync/prices', 'POST', { pkeys }),
+    requestPrices: (pkeys) =>
+      call<PriceRequestResponse>('/api/sync/price-requests', 'POST', { pkeys }),
     catalogChanges: (since, limit, tables) =>
       call<CatalogChangesResponse>(
         `/api/catalog/changes?since=${since}${limit === undefined ? '' : `&limit=${limit}`}${

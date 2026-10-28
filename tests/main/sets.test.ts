@@ -336,6 +336,24 @@ describe('language-aware sets', () => {
     expect(getChecklist(db, 'Starter Deck', 'ja')).toBeNull()
   })
 
+  it('prices Japanese printings by their eBay price, never the English card price', async () => {
+    const { db, jaUltra } = await withJapanese()
+    db.prepare('UPDATE cards SET tcgplayer_price = 0.16').run()
+    db.prepare(
+      `INSERT INTO intl_prices (printing_id, price, listing_count, checked_at)
+       VALUES (?, 7.5, 12, '2026-10-20T00:00:00.000Z')`
+    ).run(jaUltra)
+    const [alpha, beta] = getChecklist(db, MRD, 'ja')!.cards
+    expect(alpha.price).toBe(7.5)
+    expect(alpha.rarities.find((r) => r.rarity === 'Ultra Rare')!.price).toBe(7.5)
+    // No eBay price yet: unknown (null), not the English card's $0.16.
+    expect(alpha.rarities.find((r) => r.rarity === 'Secret Rare')!.price).toBeNull()
+    expect(beta.price).toBeNull()
+    // English still falls back to the card's TCGplayer price.
+    db.prepare('UPDATE card_printings SET set_price = NULL, market_price = NULL').run()
+    expect(getChecklist(db, MRD, 'en')!.cards[0].price).toBe(0.16)
+  })
+
   it('adjustPrinting refuses a printing from the other language', async () => {
     const { db, jaUltra } = await withJapanese()
     expect(() => adjustPrinting(db, MRD, 'en', jaUltra, 1)).toThrow(CollectionError)

@@ -86,6 +86,7 @@ export function createMockApi(overrides: DeepPartial<Api> = {}): Api {
         pricesUpdatedAt: null
       }))
     },
+    prices: { request: vi.fn(async () => undefined) },
     sets: {
       list: vi.fn(async () => []),
       checklist: vi.fn(async () => null),
@@ -118,7 +119,8 @@ export function createMockApi(overrides: DeepPartial<Api> = {}): Api {
         setsRipped: 0,
         bestPulls: [],
         sessions: []
-      }))
+      })),
+      packWrappers: vi.fn(async () => null)
     },
     window: {
       platform: 'linux',

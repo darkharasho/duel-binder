@@ -164,6 +164,13 @@ function latest(entries: EntryDbRow[]): number | null {
   return best?.id ?? null
 }
 
+/**
+ * A checklist printing's own price. English: TCGplayer market, then YGOPRODeck's set price. Other
+ * languages: only their eBay price (intl_prices), never the English card's TCGplayer price, which is a
+ * different product (an OCG Prismatic Secret is not a $0.16 TCG common); unpriced stays null.
+ */
+const PRINTING_PRICE = `CASE WHEN p.language = 'en' THEN COALESCE(p.market_price, p.set_price) ELSE ip.price END`
+
 /** The dearest printing price among the rows; null when none has one. */
 function maxPrice(rows: PrintingDbRow[]): number | null {
   const prices = rows.map((r) => r.set_price).filter((v): v is number => v !== null && v > 0)
@@ -185,11 +192,13 @@ function checklistCards(
   const printings = db
     .prepare(
       `SELECT p.id, p.card_id, p.set_code, ${RARITY_LABEL} AS set_rarity, c.name, c.type,
-              COALESCE(p.market_price, p.set_price) AS set_price,
-              c.tcgplayer_price AS card_price, c.atk, c.def, COALESCE(c.level, c.linkval) AS level,
+              ${PRINTING_PRICE} AS set_price,
+              CASE WHEN p.language = 'en' THEN c.tcgplayer_price END AS card_price,
+              c.atk, c.def, COALESCE(c.level, c.linkval) AS level,
               (SELECT i.image_id FROM card_images i WHERE i.card_id = c.id
                ORDER BY i.sort_order, i.image_id LIMIT 1) AS image_id
        FROM card_printings p JOIN cards c ON c.id = p.card_id
+       LEFT JOIN intl_prices ip ON ip.printing_id = p.id
        WHERE p.contributed = 0 AND p.language = ? AND p.set_name = ?${cardFilter}`
     )
     .all(...params) as PrintingDbRow[]

@@ -19,6 +19,12 @@ import {
   syncIssueCount,
   setActiveOwner
 } from './localSync'
+import {
+  PRICE_REQUEST_FOLLOW_UP_MS,
+  awaitingPrices,
+  checkPrintingIds,
+  requestPrices
+} from './priceRequests'
 import { createSyncScheduler, type SyncScheduler } from './scheduler'
 import type { TokenStore } from './tokenStore'
 
@@ -61,6 +67,12 @@ export interface AccountService {
    * Error(OFFLINE_MESSAGE) when offline, Error(SERVER_SIGNED_OUT) after a 401 (and signs the account out).
    */
   portal<T>(channel: PortalChannel, args: unknown[]): Promise<T>
+  /**
+   * Asks the portal to price these printings (the unpriced non-English ones not asked for lately), then
+   * syncs shortly after to bring the prices in. Fire and forget: does nothing signed out or offline, and
+   * never rejects (except for ids that aren't a list of whole numbers).
+   */
+  requestPrices(printingIds: unknown): Promise<void>
   start(): void
   stop(): void
 }
@@ -186,6 +198,8 @@ export function createAccountService(deps: AccountDeps): AccountService {
       if (outcome.changed) deps.emitDataChanged()
       // The server prices newly pushed cards shortly; sync once more to bring them in.
       if (outcome.pushedLive > 0) scheduler.poke(PRICE_FOLLOW_UP_MS)
+      // Printings asked for a moment ago still have no price: look again shortly.
+      if (awaitingPrices(db, now())) scheduler.poke(PRICE_REQUEST_FOLLOW_UP_MS)
       if (!meRefreshed) {
         const me = await client.me()
         if (mine !== session) return
@@ -408,6 +422,26 @@ export function createAccountService(deps: AccountDeps): AccountService {
       // The account changed while the call was in flight: its result belongs to the previous session.
       if (mine !== session) throw new Error(FRIENDS_SIGNED_OUT)
       return result
+    },
+
+    async requestPrices(printingIds: unknown): Promise<void> {
+      const ids = checkPrintingIds(printingIds)
+      const current = token
+      if (current === null || stopped || !deps.isOnline()) return
+      const mine = session
+      try {
+        const queued = await requestPrices(
+          db,
+          deps.client(current, { signal: portalAbort.signal, timeoutMs: PORTAL_TIMEOUT_MS }),
+          ids,
+          now()
+        )
+        if (queued > 0 && mine === session) scheduler.poke(PRICE_REQUEST_FOLLOW_UP_MS)
+      } catch (e) {
+        if (mine === session && e instanceof CloudAuthError) serverSignedOut()
+        else if (!(e instanceof CloudOfflineError) && !(e instanceof CloudAuthError))
+          console.warn('Price request failed', e instanceof Error ? e.message : String(e))
+      }
     },
 
     start() {

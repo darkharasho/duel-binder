@@ -8,6 +8,7 @@ import {
   XIcon
 } from 'lucide-react'
 import { CardArt } from '@/components/CardArt'
+import { useScanLanguage } from '@/features/scan/pickerOptions'
 import { useScanHub } from '@/features/scan/ScanHub'
 import { choicesFor, FLAG_TEXT } from '@/features/scan/ScanRowItem'
 import type { ScanRow } from '@/features/scan/session'
@@ -16,7 +17,7 @@ import { plural } from '@/features/scan/scanText'
 import { formatUsd } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { PickerSheet } from './PickerSheet'
-import { GLASS, priceOf } from '@/features/scan/scanLook'
+import { GLASS, listValue, priceOf } from '@/features/scan/scanLook'
 
 /** A drag shorter than this is a tap. */
 const TAP_PX = 8
@@ -29,7 +30,8 @@ const STEP =
 /** One scanned card: art, code and price, its printing, how many, and remove. */
 function ReviewRow({ row, disabled }: { row: ScanRow; disabled: boolean }): React.JSX.Element {
   const { session } = useScanHub()
-  const choices = useMemo(() => choicesFor(row), [row])
+  const language = useScanLanguage()
+  const choices = useMemo(() => choicesFor(row, language), [row, language])
   const price = priceOf(row)
   const picked = choices.find((c) => c.key === String(row.printingId))
   return (
@@ -123,8 +125,7 @@ export function ReviewSheet({ onClose }: { onClose: () => void }): React.JSX.Ele
   const start = useRef<number | null>(null)
   const dragged = useRef(false)
 
-  const priced = session.rows.filter((r) => priceOf(r) != null)
-  const value = priced.reduce((n, r) => n + priceOf(r)! * r.quantity, 0)
+  const { value, priced, unpriced } = listValue(session.rows)
 
   const onPointerDown = (e: React.PointerEvent): void => {
     start.current = e.clientY
@@ -187,12 +188,17 @@ export function ReviewSheet({ onClose }: { onClose: () => void }): React.JSX.Ele
               {plural(session.total, 'card', 'cards')} ·{' '}
               {plural(session.rows.length, 'entry', 'entries')}
             </p>
-            {priced.length > 0 && (
+            {priced > 0 && (
               <p
                 aria-label="Value of the list"
                 className="text-xl font-bold leading-7 tabular-nums"
               >
                 {formatUsd(value)}
+              </p>
+            )}
+            {priced > 0 && unpriced > 0 && (
+              <p className="text-xs text-muted-foreground tabular-nums">
+                {plural(unpriced, 'card', 'cards')} with no price
               </p>
             )}
           </div>

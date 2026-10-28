@@ -99,6 +99,39 @@ describe('DashboardPage', () => {
     expect(await screen.findByText('≈ includes 3 approximate prices')).toBeInTheDocument()
   })
 
+  it('says how many cards the value leaves out for having no price', async () => {
+    const { unmount } = renderWithProviders(<DashboardPage onNavigate={vi.fn()} />, {
+      api: createMockApi({ stats: { get: async () => stats() } })
+    })
+    await screen.findByText('$31.74')
+    expect(screen.queryByText(/no price yet/)).not.toBeInTheDocument()
+    unmount()
+    setup(stats({ unpricedCount: 4 }))
+    expect(await screen.findByText('Leaves out 4 cards with no price yet')).toBeInTheDocument()
+  })
+
+  it('a rarity with no prices reads "No price", never $0.00', async () => {
+    setup(
+      stats({
+        byRarity: [
+          { rarity: 'Ultra Rare', count: 4, value: 27.74, unpriced: 1 },
+          { rarity: 'Prismatic Secret Rare', count: 3, value: 0, unpriced: 3 }
+        ]
+      })
+    )
+    const items = (await screen.findByRole('list', { name: 'By rarity' })).querySelectorAll('li')
+    expect(items[0]).toHaveTextContent('$27.74 · 4 (1 no price)')
+    expect(items[1]).toHaveTextContent('Prismatic Secret Rare')
+    expect(items[1]).toHaveTextContent('No price · 3')
+    expect(items[1]).not.toHaveTextContent('$0.00')
+  })
+
+  it('lists rarities even when none has a price', async () => {
+    setup(stats({ byRarity: [{ rarity: 'Secret Rare', count: 2, value: 0, unpriced: 2 }] }))
+    const items = (await screen.findByRole('list', { name: 'By rarity' })).querySelectorAll('li')
+    expect(items[0]).toHaveTextContent('No price · 2')
+  })
+
   it('renders breakdowns sorted descending', async () => {
     setup(stats())
     const rarity = await screen.findByRole('list', { name: 'By rarity' })

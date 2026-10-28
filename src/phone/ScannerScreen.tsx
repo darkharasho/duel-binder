@@ -12,7 +12,7 @@ import {
 } from 'lucide-react'
 import { CardArt } from '@/components/CardArt'
 import type { ScanEngine } from '@/features/scan/engine'
-import { useScanPickers, type PickerProps } from '@/features/scan/pickerOptions'
+import { useScanLanguage, useScanPickers, type PickerProps } from '@/features/scan/pickerOptions'
 import { choicesFor, FLAG_TEXT } from '@/features/scan/ScanRowItem'
 import { useScanHub } from '@/features/scan/ScanHub'
 import type { PickerOption } from '@/features/scan/SearchPicker'
@@ -24,7 +24,7 @@ import { FoundBurst } from '@/features/scan/FoundBurst'
 import { PhoneCamera } from './PhoneCamera'
 import { PickerSheet } from './PickerSheet'
 import { ReviewSheet } from './ReviewSheet'
-import { GLASS, priceOf } from '@/features/scan/scanLook'
+import { GLASS, listValue, priceOf } from '@/features/scan/scanLook'
 
 /** Copies of the row's printing already in the collection, any condition; null while loading. */
 function useOwned(row: ScanRow): number | null {
@@ -49,7 +49,8 @@ const CARD = cn('flex min-h-28 shrink-0 gap-3 rounded-3xl p-2.5', GLASS)
 function LastScan({ row, burst }: { row: ScanRow; burst: number }): React.JSX.Element {
   const { session } = useScanHub()
   const owned = useOwned(row)
-  const choices = useMemo(() => choicesFor(row), [row])
+  const language = useScanLanguage()
+  const choices = useMemo(() => choicesFor(row, language), [row, language])
   const at = choices.findIndex((c) => c.key === String(row.printingId))
   const printing = row.options.find((o) => o.printingId === row.printingId)
   const price = priceOf(row)
@@ -190,8 +191,7 @@ export function ScannerScreen({
     (a, r) => (a === null || r.addedAt > a.addedAt ? r : a),
     null
   )
-  const priced = session.rows.filter((r) => priceOf(r) != null)
-  const value = priced.reduce((n, r) => n + priceOf(r)! * r.quantity, 0)
+  const { value, priced, unpriced } = listValue(session.rows)
   const total = session.total
 
   // A new scan is the newest row's time moving on (a repeat scan moves it too); removing a row
@@ -275,12 +275,17 @@ export function ScannerScreen({
           <p className="text-[11px] uppercase tracking-wide text-muted-foreground tabular-nums">
             {total} {total === 1 ? 'card' : 'cards'}
           </p>
-          {priced.length > 0 && (
+          {priced > 0 && (
             <p
               aria-label="Value of this scan"
               className="text-[21px] font-bold leading-7 tabular-nums"
             >
               {formatUsd(value)}
+            </p>
+          )}
+          {priced > 0 && unpriced > 0 && (
+            <p className="text-[11px] text-muted-foreground tabular-nums">
+              {unpriced} with no price
             </p>
           )}
         </div>

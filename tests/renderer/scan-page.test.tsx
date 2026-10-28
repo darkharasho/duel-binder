@@ -872,6 +872,56 @@ describe('Scan page', () => {
     expect(screen.getByText('Hold a card up')).toBeInTheDocument()
   })
 
+  it('stops visibly when card lookups keep failing, without re-initing the engine', async () => {
+    const engine = fakeEngine(() => codeFrame('LOB-EN005'))
+    await renderScan(
+      {
+        scan: {
+          printingsByCode: vi.fn(async () => {
+            throw new Error('db gone')
+          })
+        }
+      },
+      engine
+    )
+    await run(30_000)
+    expect(screen.getByText('Scanning stopped after repeated errors.')).toBeInTheDocument()
+    expect(engine.init).toHaveBeenCalledTimes(1)
+  })
+
+  it('a lookup that never answers times out and scanning carries on', async () => {
+    let hang = true
+    const printingsByCode = vi.fn(() =>
+      hang ? new Promise<never>(() => {}) : Promise.resolve([printing()])
+    )
+    const engine = fakeEngine(() => codeFrame('LOB-EN005'))
+    await renderScan({ scan: { printingsByCode } }, engine)
+    await run(1000)
+    const stuck = engine.analyze.mock.calls.length
+    await run(20_000)
+    // Held by the lookup in flight.
+    expect(engine.analyze.mock.calls.length).toBe(stuck)
+    hang = false
+    await run(15_000)
+    expect(engine.analyze.mock.calls.length).toBeGreaterThan(stuck)
+    expect(screen.getByText(/Dark Magician LOB-EN005 · added/)).toBeInTheDocument()
+  })
+
+  it('reopens a camera whose picture froze', async () => {
+    await renderScan()
+    await run(1000)
+    expect(camera.getUserMedia).toHaveBeenCalledTimes(1)
+    Object.defineProperty(HTMLMediaElement.prototype, 'currentTime', {
+      configurable: true,
+      get: () => 12
+    })
+    await run(4000)
+    expect(camera.getUserMedia).toHaveBeenCalledTimes(1)
+    await run(2000)
+    expect(camera.getUserMedia).toHaveBeenCalledTimes(2)
+    expect(camera.track.stop).toHaveBeenCalled()
+  })
+
   it('stays responsive with thousands of sets while frames come in', async () => {
     const many = Array.from(
       { length: 7500 },

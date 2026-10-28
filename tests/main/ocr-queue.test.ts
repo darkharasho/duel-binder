@@ -69,6 +69,25 @@ describe('createOcrQueue', () => {
     expect(f.worker.terminate).toHaveBeenCalled()
   })
 
+  it('a slow start is not counted against the read timeout', async () => {
+    const f = fake()
+    const slowStart = vi.fn(async (m: OcrModel, onDead: () => void) => {
+      await new Promise((r) => setTimeout(r, 40))
+      return f.start(m, onDead)
+    })
+    const ocr = createOcrQueue({ start: slowStart, timeoutMs: 20 })
+    expect(await ocr.read([band(1)], 'code')).toEqual(['t1'])
+    expect(slowStart).toHaveBeenCalledTimes(1)
+  })
+
+  it('a start past startTimeoutMs rejects and the next read starts afresh', async () => {
+    const start = vi.fn(() => new Promise<OcrWorker>(() => {}))
+    const ocr = createOcrQueue({ start, startTimeoutMs: 20 })
+    await expect(ocr.read([band(1)], 'code')).rejects.toThrow('OCR start timed out')
+    await expect(ocr.read([band(1)], 'code')).rejects.toThrow('OCR start timed out')
+    expect(start).toHaveBeenCalledTimes(2)
+  })
+
   it('onDead drops the worker', async () => {
     const f = fake()
     const ocr = createOcrQueue({ start: f.start })

@@ -34,6 +34,9 @@ h1{font-size:44px;line-height:1.08;font-weight:600;letter-spacing:-.02em;margin:
 section.f{display:grid;grid-template-columns:300px 1fr;gap:56px;padding:56px 0;border-top:1px solid var(--line);scroll-margin-top:60px}
 section.f h2{font-size:20px;font-weight:600;margin:0 0 10px;letter-spacing:-.01em}
 section.f p{font-size:14px;line-height:1.6;color:rgb(236 235 232 / 70%);margin:0}
+section.f p+p{margin-top:10px}
+section.f a{text-decoration:underline;text-underline-offset:2px}
+footer .links{display:flex;gap:16px}
 table{width:100%;border-collapse:collapse;font-size:14px}
 td{padding:14px 0;border-top:1px solid var(--line);vertical-align:middle}
 tr:first-child td{border-top:0;padding-top:0}

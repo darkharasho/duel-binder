@@ -183,4 +183,14 @@ describe('handleSite', () => {
     )
     expect(post.status).toBe(405)
   })
+
+  it('serves the terms page on /terms', async () => {
+    const { d, assets, dl } = deps()
+    const res = await handleSite(new Request('https://duelbinder.com/terms'), d)
+    expect(res.status).toBe(200)
+    expect(res.headers.get('content-type')).toBe('text/html; charset=utf-8')
+    expect(await res.text()).toContain('<h1>Terms of Service</h1>')
+    expect(assets.fetch).not.toHaveBeenCalled()
+    expect(dl).not.toHaveBeenCalled()
+  })
 })

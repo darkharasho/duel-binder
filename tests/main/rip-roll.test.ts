@@ -330,6 +330,66 @@ describe('the Rarity Collections and Quarter Century Bonanza', () => {
   })
 })
 
+describe('Battles of Legend', () => {
+  /** A BL-style pool: 001–047 Secret (with Starlight), 048–098 emblazoned Ultra, 099–150 Ultra. */
+  function blPool(code: string): PoolCard[] {
+    const out: PoolCard[] = []
+    for (let n = 1; n <= 150; n++) {
+      const rarities = n <= 47 ? ['Secret Rare', 'Starlight Rare'] : ['Ultra Rare']
+      for (const rarity of rarities)
+        out.push({ ...card(rarity, 7000 + n), setCode: `${code}-EN${String(n).padStart(3, '0')}` })
+    }
+    return out
+  }
+
+  it('map to their own layouts', () => {
+    expect(layoutFor('BLLR')!.id).toBe('battles-of-legend')
+    expect(layoutFor('BLHR')!.id).toBe('battles-of-legend')
+    expect(layoutFor('BLAR')!.id).toBe('battles-of-legend-armageddon')
+    expect(layoutFor('BLCR')!.id).toBe('battles-of-legend-starlight')
+    expect(layoutFor('BLGG')!.id).toBe('battles-of-legend-starlight')
+    expect(layoutFor('BLTR')!.id).toBe('battles-of-legend-quarter-century')
+    expect(layoutFor('BLMM')!.id).toBe('battles-of-legend-monster-mayhem')
+    // Chapter 1 is a boxed set, not packs.
+    expect(layoutFor('BLC1')).toBeNull()
+  })
+
+  it('1 Secret (rarely a chase foil) and 4 Ultra', () => {
+    const l = layoutFor('BLCR')!
+    const p = blPool('BLCR')
+    const rand = mulberry32(6)
+    const packs = 30000
+    let starlight = 0
+    for (let i = 0; i < packs; i++) {
+      const pack = rollPack(l, p, rand)
+      expect(pack).toHaveLength(5)
+      expect(pack.filter((c) => c.rarity === 'Ultra Rare')).toHaveLength(4)
+      if (pack[0].rarity === 'Starlight Rare') starlight++
+      else expect(pack[0].rarity).toBe('Secret Rare')
+    }
+    expect(starlight / packs).toBeCloseTo(1 / 288, 2)
+  })
+
+  it('Monster Mayhem: one emblazoned Ultra from 048–098, the other three from 099 on', () => {
+    const l = layoutFor('BLMM')!
+    const p = blPool('BLMM')
+    const rand = mulberry32(7)
+    for (let i = 0; i < 500; i++) {
+      const nums = rollPack(l, p, rand).map((c) => Number(c.setCode.slice(-3)))
+      expect(nums[1]).toBeGreaterThanOrEqual(48)
+      expect(nums[1]).toBeLessThanOrEqual(98)
+      expect(nums.slice(2).every((n) => n >= 99)).toBe(true)
+    }
+  })
+
+  it('count Ultra as plain cards, Secret as a small hit, chase foils as big ones', () => {
+    expect(tierFor('Ultra Rare', 'BLMR')).toBe('none')
+    expect(tierFor('Secret Rare', 'BLMR')).toBe('rare')
+    expect(tierFor('Quarter Century Secret Rare', 'BLMR')).toBe('huge')
+    expect(tierFor('10000 Secret Rare', 'BLAR')).toBe('huge')
+  })
+})
+
 describe('canFill', () => {
   it('is true when every base rarity has a card', () => {
     expect(canFill(layout, pool)).toBe(true)
@@ -434,6 +494,11 @@ describe('describeLayout', () => {
       '5 cards a pack · 1 Super + 1 Secret or better + 2 Ultra or better + 1 Platinum Secret or better',
     'rarity-collection-5':
       '5 cards a pack · 1 Super + 1 Secret or better + 2 Ultra or better + 1 Ultra or better',
+    'battles-of-legend': '5 cards a pack · 1 Secret + 4 Ultra',
+    'battles-of-legend-armageddon': '5 cards a pack · 1 Secret or better + 4 Ultra',
+    'battles-of-legend-starlight': '5 cards a pack · 1 Secret or better + 4 Ultra',
+    'battles-of-legend-quarter-century': '5 cards a pack · 1 Secret or better + 4 Ultra',
+    'battles-of-legend-monster-mayhem': '5 cards a pack · 1 Secret or better + 1 Ultra + 3 Ultra',
     'core-2023': '9 cards a pack · 1 Super or better',
     'core-2025': '9 cards a pack · 1 Super or better'
   }

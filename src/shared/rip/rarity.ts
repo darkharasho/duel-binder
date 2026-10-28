@@ -22,7 +22,8 @@ export const RIP_TIERS: readonly string[] = [
   'Prismatic Secret Rare',
   'Platinum Secret Rare',
   'Quarter Century Secret Rare',
-  'Starlight Rare'
+  'Starlight Rare',
+  '10000 Secret Rare'
 ]
 
 /** Rank for a rarity not in RIP_TIERS: just above Common, below Short Print. */

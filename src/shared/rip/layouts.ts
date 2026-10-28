@@ -289,6 +289,78 @@ layouts.push(
   }
 )
 
+/*
+ * Battles of Legend: 5-card all-foil packs, 1 Secret and 4 Ultra, every set from Light's Revenge
+ * (2017) on. Chapter 1 is a boxed set, not booster packs, so it has no layout.
+ *
+ * Sources: Konami product pages (yugioh-card.com/eu/product/battles-of-legend-monstrous-revenge/,
+ * …-monster-mayhem/, …-glorious-gallery/), checked October 2026, and retailer copies of the older
+ * announcements, which all give the same 1 Secret + 4 Ultra:
+ * - Monster Mayhem: "1 Secret Rare, 1 emblazoned Ultra Rare (always a Dragonmaid, P.U.N.K., or
+ *   Orcust-themed card), 3 other Ultra Rares". The emblazoned cards are BLMM-EN048 to EN098 (51,
+ *   as Konami counts them); the other Ultras are all numbered after them.
+ * - Chase foils: Starlight (Armageddon's Number 39: Utopia, Crystal Revenge, Monster Mayhem,
+ *   Glorious Gallery), Quarter Century Secret (Monstrous and Terminal Revenge) and Armageddon's
+ *   10000 Secret Ten Thousand Dragon. Konami gives no rate; for Monster Mayhem it says Starlights
+ *   come "at about the same rate" as Quarter Century Secrets had. We use the 1-in-288 chase rate
+ *   for each, as for the Core Boosters.
+ * Judgement call: Konami doesn't say which card a chase foil replaces; we put it in the Secret's
+ * place. As in the Rarity Collections, Ultra is the floor and reveals like a Common, a Secret like
+ * a Rare.
+ */
+const BL_SOURCE =
+  "Konami product pages for Monstrous Revenge, Monster Mayhem and Glorious Gallery; retailer copies of the earlier sets' announcements"
+/** 1 Secret, which can turn into one of `chase`, and 4 Ultra. */
+const battlesOfLegend = (chase: Record<string, number> = {}): PackSlot[] => [
+  oneOf('Secret Rare', chase),
+  fixed('Ultra Rare', 4)
+]
+/** Monster Mayhem's emblazoned Dragonmaid, P.U.N.K. and Orcust Ultras, and the Ultras after them. */
+const BLMM_EMBLAZONED = { from: 48, to: 98 }
+const BLMM_OTHER_ULTRA = { from: 99 }
+
+layouts.push(
+  {
+    id: 'battles-of-legend',
+    label: 'Battles of Legend',
+    source: `${BL_SOURCE}: 1 Secret + 4 Ultra`,
+    tiers: RA_TIERS,
+    slots: battlesOfLegend()
+  },
+  {
+    id: 'battles-of-legend-armageddon',
+    label: 'Battles of Legend: Armageddon',
+    source: `${BL_SOURCE}: 1 Secret + 4 Ultra; the Starlight Utopia and the 10000 Secret Ten Thousand Dragon each at the 1:288 chase rate (no official figure)`,
+    tiers: RA_TIERS,
+    slots: battlesOfLegend({ 'Starlight Rare': CHASE, '10000 Secret Rare': CHASE })
+  },
+  {
+    id: 'battles-of-legend-starlight',
+    label: 'Battles of Legend (Starlight)',
+    source: `${BL_SOURCE}: 1 Secret + 4 Ultra; Starlight at the 1:288 chase rate (no official figure)`,
+    tiers: RA_TIERS,
+    slots: battlesOfLegend({ 'Starlight Rare': CHASE })
+  },
+  {
+    id: 'battles-of-legend-quarter-century',
+    label: 'Battles of Legend (Quarter Century)',
+    source: `${BL_SOURCE}: 1 Secret + 4 Ultra; Quarter Century Secret at the 1:288 chase rate (no official figure)`,
+    tiers: RA_TIERS,
+    slots: battlesOfLegend({ 'Quarter Century Secret Rare': CHASE })
+  },
+  {
+    id: 'battles-of-legend-monster-mayhem',
+    label: 'Battles of Legend: Monster Mayhem',
+    source: `${BL_SOURCE}: 1 Secret, 1 emblazoned Ultra (BLMM-EN048 to EN098), 3 other Ultra; Starlight at the 1:288 chase rate (no official figure)`,
+    tiers: RA_TIERS,
+    slots: [
+      oneOf('Secret Rare', { 'Starlight Rare': CHASE }),
+      { ...fixed('Ultra Rare'), numbers: BLMM_EMBLAZONED },
+      { ...fixed('Ultra Rare', 3), numbers: BLMM_OTHER_ULTRA }
+    ]
+  }
+)
+
 export const RIP_LAYOUTS: Record<string, PackLayout> = Object.fromEntries(
   layouts.map((l) => [l.id, l])
 )
@@ -312,7 +384,12 @@ const SETS_BY_LAYOUT: Record<string, string> = {
   'rarity-collection-2': 'RA02',
   'quarter-century-bonanza': 'RA03',
   'quarter-century-stampede': 'RA04',
-  'rarity-collection-5': 'RA05'
+  'rarity-collection-5': 'RA05',
+  'battles-of-legend': 'BLLR BLRR BLHR',
+  'battles-of-legend-armageddon': 'BLAR',
+  'battles-of-legend-starlight': 'BLCR BLGG',
+  'battles-of-legend-quarter-century': 'BLMR BLTR',
+  'battles-of-legend-monster-mayhem': 'BLMM'
 }
 
 /** Set code prefix (e.g. "LOB") → layout id. */

@@ -34,7 +34,7 @@ describe('ripRank', () => {
 
   it('lists the tiers lowest to highest', () => {
     expect(RIP_TIERS[0]).toBe('Common')
-    expect(RIP_TIERS[RIP_TIERS.length - 1]).toBe('Starlight Rare')
+    expect(RIP_TIERS[RIP_TIERS.length - 1]).toBe('10000 Secret Rare')
   })
 })
 

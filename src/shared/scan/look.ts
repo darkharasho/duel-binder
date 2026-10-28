@@ -3,10 +3,12 @@
 // frame rules (rarity.ts) and only where they positively fit its pick. Fitted and evaluated by
 // scripts/scan/rarity/fit-look.ts; its numbers live in lookModel.ts.
 //
-// Not used by the app. Held out by card, at its threshold it made no wrong pick on any source
-// and raised the pick rate on eBay photos from 8% to 13% and on degraded scans from 2-3% to 4-7%,
-// but on the owner's webcam shots it picked no more than the rules (5 of 81): its probabilities
-// run high on webcam frames, where glitter doesn't show. It waits for more webcam data.
+// Used by the phone scanner only (src/phone/PhoneCamera.tsx passes LOOK_MODEL to useScanLoop).
+// Held out by card, at its threshold it made no wrong pick on any source and raised the pick
+// rate on eBay photos (mostly phone photos, the size of a phone camera's 3:4 crop) from 8% to 13%
+// and on degraded scans from 2-3% to 4-7%, but on the owner's desktop webcam shots it picked no
+// more than the rules (5 of 81): its probabilities run high on webcam frames, where glitter
+// doesn't show. So the desktop's in-page scanner and scan window keep to the rules.
 import { pickRarityByCues, rarityFits, type RarityCues } from './rarity'
 
 /** The regions measured, in vector order. */

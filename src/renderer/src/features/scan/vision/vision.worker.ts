@@ -48,7 +48,14 @@ async function handle(msg: WorkerRequest): Promise<void> {
     return
   }
   try {
-    const signals = analyze(await loadCv(), pixels(msg.image), index, msg.candidates, msg.wantBands)
+    const signals = analyze(
+      await loadCv(),
+      pixels(msg.image),
+      index,
+      msg.candidates,
+      msg.wantBands,
+      msg.wantLook
+    )
     const bands = [...signals.codeBands, ...signals.nameBands, ...signals.textBands]
     scope.postMessage(
       { type: 'result', id: msg.id, signals },

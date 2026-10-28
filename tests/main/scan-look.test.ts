@@ -11,6 +11,7 @@ import { LOOK_MODEL } from '../../src/shared/scan/lookModel'
 import type { RarityCues } from '../../src/shared/scan/rarity'
 import type { RgbaImage } from '../../src/shared/scan/types'
 import { findTextLine } from '../../src/renderer/src/features/scan/vision/bands'
+import { rarityLook } from '../../src/renderer/src/features/scan/vision/rarityCues'
 import { TEXT_AREA } from '../../src/renderer/src/features/scan/vision/foil'
 import { rarityFeatures } from '../../src/renderer/src/features/scan/vision/rarityFeatures'
 import { crop, NAME_BAND } from '../../src/renderer/src/features/scan/vision/regions'
@@ -204,5 +205,31 @@ describe('rarityFeatures', () => {
     const blue = measure(card([0.8, 0.9, 1]))
     for (const name of ['frame.a', 'frame.b', 'frame.sat', 'art.l', 'name.barSat'])
       expect(Math.abs(blue[at(name)] - plain[at(name)])).toBeLessThan(0.03)
+  })
+})
+
+describe('the fitted model on the phone path', () => {
+  // The synthetic card is plain card stock with black ink: whatever its code's other rarity, the
+  // rules then the shipped model (as the phone scanner runs them) take it for Common or abstain.
+  const FOILS = [
+    'Super Rare',
+    'Ultra Rare',
+    'Secret Rare',
+    'Starlight Rare',
+    'Quarter Century Secret Rare',
+    "Collector's Rare"
+  ]
+
+  it('never picks a foil for a plain card, under a blue cast or not, on one frame or several', () => {
+    for (const img of [card(), card([0.8, 0.9, 1])]) {
+      const { cues: c, features } = rarityLook(img, true)
+      expect(features).toHaveLength(LOOK_FEATURES.length)
+      for (const frameType of ['effect', 'normal'])
+        for (const foil of FOILS)
+          for (const frames of [[features!], [features!, features!, features!]]) {
+            const pick = pickRarityByLook(LOOK_MODEL, ['Common', foil], c, frames, frameType)
+            if (pick.certain) expect(pick.rarity).toBe('Common')
+          }
+    }
   })
 })

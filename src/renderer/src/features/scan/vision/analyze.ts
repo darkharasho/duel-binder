@@ -9,7 +9,7 @@ import { toBand, toBlock } from './bands'
 import { findCandidates, preferOuter, recognizeArt } from './candidates'
 import type { CV } from './cv'
 import { CARD_W, dist, rotate180, toMat, using, warpCard, type Quad } from './detect'
-import { rarityCues } from './rarityCues'
+import { rarityLook } from './rarityCues'
 import { CODE_BANDS, NAME_BAND, TEXT_BOX } from './regions'
 
 /** How far past CARD_W a card is straightened for reading its text. */
@@ -22,7 +22,8 @@ const NOTHING: FrameSignals = {
   codeBands: [],
   nameBands: [],
   textBands: [],
-  cues: null
+  cues: null,
+  look: null
 }
 
 const hasPixels = (b: OcrBand): boolean => b.width > 0 && b.height > 0
@@ -38,18 +39,20 @@ function bandWidth(quad: Quad): number {
 }
 
 /**
- * The frame's signals, matched against index (null: no art matching). It's copied into OpenCV
- * once, for finding the card and every warp of it, and freed whatever happens.
+ * The frame's signals, matched against index (null: no art matching), with the look model's
+ * features when wantLook. It's copied into OpenCV once, for finding the card and every warp of
+ * it, and freed whatever happens.
  */
 export function analyze(
   cv: CV,
   img: RgbaImage,
   index: FingerprintIndex | null,
   candidates: number[] | null,
-  wantBands: boolean
+  wantBands: boolean,
+  wantLook = false
 ): FrameSignals {
   const frame = toMat(cv, img)
-  return using([frame], () => analyzeFrame(cv, frame, index, candidates, wantBands))
+  return using([frame], () => analyzeFrame(cv, frame, index, candidates, wantBands, wantLook))
 }
 
 function analyzeFrame(
@@ -57,7 +60,8 @@ function analyzeFrame(
   img: Mat,
   index: FingerprintIndex | null,
   candidates: number[] | null,
-  wantBands: boolean
+  wantBands: boolean,
+  wantLook: boolean
 ): FrameSignals {
   let quad: Quad
   let art: ArtMatch[] = []
@@ -93,10 +97,12 @@ function analyzeFrame(
     quad = likeliest
     card = () => warpCard(cv, img, likeliest, bandWidth(likeliest))
   }
-  // Read at CARD_W, the size the cues were tuned at.
-  const cues = upright ? rarityCues(upright) : null
+  // Read at CARD_W, the size the cues and the look model were tuned at.
+  const { cues, features: look } = upright
+    ? rarityLook(upright, wantLook)
+    : { cues: null, features: null }
   if (!wantBands)
-    return { found: true, quad, art, codeBands: [], nameBands: [], textBands: [], cues }
+    return { found: true, quad, art, codeBands: [], nameBands: [], textBands: [], cues, look }
   const straight = card()
   // Not knowing which way up the card is, its text is read both ways.
   const ways = upright ? [straight] : [straight, rotate180(straight)]
@@ -108,6 +114,7 @@ function analyzeFrame(
     nameBands: ways.map((c) => toBand(c, NAME_BAND)).filter(hasPixels),
     // Only a card whose art matched: read off a guessed outline, it reads as a language too often.
     textBands: upright ? [toBlock(straight, TEXT_BOX)].filter(hasPixels) : [],
-    cues
+    cues,
+    look
   }
 }

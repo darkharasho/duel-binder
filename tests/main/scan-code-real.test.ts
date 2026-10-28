@@ -189,7 +189,8 @@ describe.skipIf(!DB || !FP || (!REAL && !SCANS))('set codes read on real photos 
           codeTexts,
           nameTexts: names.map((c) => c.trim()).filter(Boolean),
           textBands: [],
-          cues: null
+          cues: null,
+          look: null
         },
         ctx
       )

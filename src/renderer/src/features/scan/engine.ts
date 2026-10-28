@@ -25,6 +25,11 @@ export interface FrameSignals {
   textBands: OcrBand[]
   /** What the card shows of its foil; null when it couldn't be turned upright to look. */
   cues: RarityCues | null
+  /**
+   * The card's look for the rarity look model (rarityFeatures, LOOK_FEATURES order): only when
+   * asked for (wantLook) and the card was turned upright, else null.
+   */
+  look: number[] | null
 }
 
 /** Messages to the vision worker. Frames are answered in the order they're sent. */
@@ -37,6 +42,8 @@ export type WorkerRequest =
       image: RgbaImage | ImageBitmap
       candidates: number[] | null
       wantBands: boolean
+      /** Measure the card's look for the rarity look model too (about 3.7 ms more a frame). */
+      wantLook: boolean
     }
 
 /** Messages from it: `ready` answers `init`, and an error with no id is init's. */
@@ -57,6 +64,7 @@ export interface RawSignals {
   /** The text bands, unread: reading them is slow, so it's left until a card's language is needed. */
   textBands: OcrBand[]
   cues: RarityCues | null
+  look: number[] | null
 }
 
 export interface ScanEngine {
@@ -64,11 +72,12 @@ export interface ScanEngine {
   init(fp: ArrayBuffer | null): Promise<void>
   /**
    * The frame is handed to the worker, so it can't be used afterwards. A camera frame is best
-   * an ImageBitmap: the worker reads its pixels, so the UI thread never copies them.
+   * an ImageBitmap: the worker reads its pixels, so the UI thread never copies them. `wantLook`
+   * measures the card's look for the rarity look model as well.
    */
   analyze(
     frame: ImageBitmap | ImageData,
-    opts: { candidates: number[] | null; wantText: boolean }
+    opts: { candidates: number[] | null; wantText: boolean; wantLook?: boolean }
   ): Promise<RawSignals>
   /** Stops the worker and rejects pending calls; init and analyze reject afterwards. */
   dispose(): void
@@ -182,7 +191,7 @@ export function createScanEngine(deps: {
       })
     },
 
-    async analyze(frame, { candidates, wantText }) {
+    async analyze(frame, { candidates, wantText, wantLook = false }) {
       const id = nextId++
       const signals = await new Promise<FrameSignals>((resolve, reject) => {
         const bitmap = !('data' in frame)
@@ -190,7 +199,7 @@ export function createScanEngine(deps: {
           ? frame
           : { width: frame.width, height: frame.height, data: frame.data }
         try {
-          send({ type: 'frame', id, image, candidates, wantBands: wantText }, [
+          send({ type: 'frame', id, image, candidates, wantBands: wantText, wantLook }, [
             bitmap ? frame : (frame.data.buffer as ArrayBuffer)
           ])
           frames.set(id, watched({ resolve, reject }, frameMs))
@@ -201,9 +210,9 @@ export function createScanEngine(deps: {
           reject(e instanceof Error ? e : new Error(String(e)))
         }
       })
-      const { found, quad, art, cues } = signals
+      const { found, quad, art, cues, look } = signals
       if (!wantText || !found)
-        return { found, quad, art, codeTexts: [], nameTexts: [], textBands: [], cues }
+        return { found, quad, art, codeTexts: [], nameTexts: [], textBands: [], cues, look }
       const codeBands = signals.codeBands.filter(hasPixels)
       const nameBands = signals.nameBands.filter(hasPixels)
       // Text is a helper to the art: a failed or timed-out read counts as nothing read, so OCR
@@ -218,7 +227,8 @@ export function createScanEngine(deps: {
         codeTexts: codes.map((t) => t.trim()).filter(Boolean),
         nameTexts: names.map((t) => t.trim()).filter(Boolean),
         textBands: signals.textBands.filter(hasPixels),
-        cues
+        cues,
+        look
       }
     },
 

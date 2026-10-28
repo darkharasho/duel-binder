@@ -72,7 +72,8 @@ export async function checkAccuracy(
         codeTexts: [],
         nameTexts: [],
         textBands: [],
-        cues: null
+        cues: null,
+        look: null
       },
       { setName: null, setPrintings: null, defaultRarity: null, lookups }
     )

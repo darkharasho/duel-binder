@@ -31,7 +31,8 @@ export const NOTHING: RawSignals = {
   codeTexts: [],
   nameTexts: [],
   textBands: [],
-  cues: null
+  cues: null,
+  look: null
 }
 export const codeFrame = (code: string): RawSignals => ({
   found: true,
@@ -40,7 +41,8 @@ export const codeFrame = (code: string): RawSignals => ({
   codeTexts: [code],
   nameTexts: [],
   textBands: [],
-  cues: null
+  cues: null,
+  look: null
 })
 
 export type FakeEngine = ScanEngine & {

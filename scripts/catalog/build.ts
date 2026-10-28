@@ -10,7 +10,8 @@
  * touching the base. A refresh that would delete more than a sliver of any table (see
  * `findShrinks`) is refused unless --allow-shrink is passed, since every client applies the
  * deletes. Problems that don't stop the upload (a failed card sync, a failed fingerprint build)
- * end the run with a non-zero exit so the workflow shows red.
+ * end the run with a non-zero exit so the workflow shows red. So does a fingerprint file that fails
+ * the accuracy gate (see accuracy.ts), which is held back while clients keep the last one.
  */
 import { existsSync, mkdirSync, renameSync, rmSync } from 'node:fs'
 import { join, resolve } from 'node:path'
@@ -22,6 +23,7 @@ import { refreshCatalog } from '../../src/main/sync/catalog'
 import { createYgoClient } from '../../src/main/ygo/client'
 import { createYugipediaClient, type YugipediaClient } from '../../src/main/yugipedia/client'
 import { CATALOG_TABLES } from '../../src/shared/catalogTables'
+import { accuracyProblem, checkAccuracy, type AccuracyReport } from './accuracy'
 import { diffTable } from './diff'
 import { buildFingerprints, uploadFingerprints } from './fingerprints'
 import { uploadCatalog } from './upload'
@@ -42,6 +44,8 @@ export interface JobOptions {
   refresh?: (work: Database.Database, onProblem: (p: string) => void) => Promise<unknown>
   /** Uploads deletes beyond the shrink limit. */
   allowShrink?: boolean
+  /** Checks a new fingerprint file before it is uploaded; defaults to `checkAccuracy`. */
+  checkAccuracy?: (work: Database.Database, bytes: Uint8Array) => Promise<AccuracyReport>
   log?: (line: string) => void
 }
 
@@ -119,6 +123,13 @@ export async function runJob(opts: JobOptions): Promise<JobResult> {
       const refs = out.references
       log(`Fingerprints: ${out.count} (${out.fetched} new, ${out.failed} failed)`)
       log(`Printing scans: ${refs.count} (${refs.fetched} new, ${refs.failed} failed)`)
+      const report = await (opts.checkAccuracy ?? checkAccuracy)(work, out.bytes)
+      log(`Accuracy: ${report.right} of ${report.shots} shots right, ${report.wrong.length} wrong`)
+      const failed = accuracyProblem(report)
+      if (failed) {
+        problem(`Fingerprints held back: ${failed}`)
+        return
+      }
       if (upload) {
         await uploadFingerprints({ url: url!, token: token!, bytes: out.bytes, fetch: opts.fetch })
       }

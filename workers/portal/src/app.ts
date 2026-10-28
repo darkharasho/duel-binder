@@ -4,6 +4,7 @@ import { rpcRoute } from './rpc'
 import { syncRoute } from './sync'
 import { catalogRoute } from './catalogFeed'
 import {
+  exchangeAppleToken,
   exchangeDesktopCode,
   exchangePhoneToken,
   finishSignIn,
@@ -73,6 +74,8 @@ async function route(req: Request, deps: AppDeps): Promise<Response> {
     return startDesktopSignIn(req, deps)
   if (req.method === 'POST' && url.pathname === '/auth/desktop/token')
     return exchangeDesktopCode(req, deps)
+  if (req.method === 'POST' && url.pathname === '/auth/apple/token')
+    return exchangeAppleToken(req, deps)
   if (req.method === 'POST' && url.pathname === '/auth/phone/token')
     return exchangePhoneToken(req, deps)
   if (req.method === 'POST' && url.pathname === '/auth/desktop/revoke')

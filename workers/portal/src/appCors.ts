@@ -9,7 +9,8 @@ const BEARER_ROUTES = [
   /^\/api\//,
   /^\/img\//,
   /^\/scan\/fingerprints$/,
-  /^\/auth\/desktop\/(token|revoke)$/
+  /^\/auth\/desktop\/(token|revoke)$/,
+  /^\/auth\/apple\/token$/
 ]
 
 const opensTo = (req: Request): boolean =>

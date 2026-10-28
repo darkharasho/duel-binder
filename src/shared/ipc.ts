@@ -1,3 +1,4 @@
+import type { UsageCounts } from './usage'
 import type { Language } from './languages'
 import type {
   AccountStatus,
@@ -127,6 +128,10 @@ export interface Api {
     isMaximized(): Promise<boolean>
     onMaximizedChange(cb: (maximized: boolean) => void): () => void
   }
+  usage: {
+    /** Sends anonymous event totals; never rejects, and drops them when signed out or offline. */
+    report(events: UsageCounts): Promise<void>
+  }
   app: {
     version(): Promise<string>
     openDataFolder(): Promise<void>
@@ -209,6 +214,7 @@ export const INVOKE_CHANNELS = [
   'window:toggleMaximize',
   'window:close',
   'window:isMaximized',
+  'usage:report',
   'app:version',
   'app:openDataFolder',
   'app:backupDatabase',

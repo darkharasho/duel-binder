@@ -140,6 +140,22 @@ export function createHttpApi(opts: HttpApiOptions = {}): Api {
     stats: { get: call('stats:get') },
     // Not on the web (yet): the desktop and phone ask, by printing key, for what their screens show.
     prices: { request: async () => {} },
+    usage: {
+      report: async (events) => {
+        try {
+          // keepalive: the last batch is often sent as the tab closes.
+          await doFetch('/api/usage', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ platform: 'web', events }),
+            credentials: 'same-origin',
+            keepalive: true
+          })
+        } catch {
+          // Best effort: a lost batch only undercounts.
+        }
+      }
+    },
     sets: {
       list: call('sets:list'),
       checklist: call('sets:checklist'),

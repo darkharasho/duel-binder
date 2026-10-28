@@ -1,6 +1,7 @@
 import { detectOs } from './os'
 import { renderPage } from './page'
 import { renderPrivacy } from './privacy'
+import { renderTerms } from './terms'
 import type { Downloads } from './releases'
 
 const NO_DOWNLOADS: Downloads = { version: null, windows: null, mac: null, linux: null }
@@ -22,11 +23,13 @@ export async function handleSite(req: Request, deps: SiteDeps): Promise<Response
   }
   // The built web app lives under /app/ and belongs to the app host only.
   if (url.pathname.startsWith('/app/')) return new Response('Not Found', { status: 404 })
-  if (url.pathname !== '/' && url.pathname !== '/privacy') return deps.assets.fetch(req)
+  if (url.pathname !== '/' && url.pathname !== '/privacy' && url.pathname !== '/terms')
+    return deps.assets.fetch(req)
   if (req.method !== 'GET' && req.method !== 'HEAD') {
     return new Response('Method Not Allowed', { status: 405, headers: { allow: 'GET, HEAD' } })
   }
   if (url.pathname === '/privacy') return html(req, renderPrivacy({ appUrl: deps.appUrl }))
+  if (url.pathname === '/terms') return html(req, renderTerms({ appUrl: deps.appUrl }))
   let downloads = NO_DOWNLOADS
   try {
     downloads = await deps.downloads()

@@ -1,4 +1,5 @@
 import { DATA_CHANNELS, type DataChannel } from '../main/ipc/dataHandlers'
+import { isNativeApp } from '../renderer/src/lib/portal'
 import type { Api } from '../shared/ipc'
 import type { PortalChannel } from '../shared/portal'
 import { cardLanguage } from '../shared/scan/cardLanguage'
@@ -242,6 +243,9 @@ export function createPhoneApi(deps: {
       onProgress: (cb) => events.on('syncStatus', cb)
     },
     images: { cacheSize: async () => 0, clearCache: async () => {} },
+    usage: {
+      report: (events) => store.reportUsage({ platform: isNativeApp() ? 'ios' : 'phone', events })
+    },
     window: {
       platform: 'phone',
       minimize: async () => {},

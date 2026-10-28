@@ -1,4 +1,5 @@
 import type Database from 'better-sqlite3'
+import { checkUsageReport } from '../../shared/usage'
 import { deleteMeta, getMeta, setMeta } from '../db/meta'
 import type { Me } from '../../shared/cloud'
 import { FRIENDS_SIGNED_OUT, OFFLINE_MESSAGE } from '../../shared/friends'
@@ -73,6 +74,8 @@ export interface AccountService {
    * never rejects (except for ids that aren't a list of whole numbers).
    */
   requestPrices(printingIds: unknown): Promise<void>
+  /** Sends anonymous usage totals when signed in and online; drops them otherwise. Never rejects. */
+  reportUsage(events: unknown): Promise<void>
   start(): void
   stop(): void
 }
@@ -441,6 +444,19 @@ export function createAccountService(deps: AccountDeps): AccountService {
         if (mine === session && e instanceof CloudAuthError) serverSignedOut()
         else if (!(e instanceof CloudOfflineError) && !(e instanceof CloudAuthError))
           console.warn('Price request failed', e instanceof Error ? e.message : String(e))
+      }
+    },
+
+    async reportUsage(events: unknown): Promise<void> {
+      const current = token
+      if (current === null || stopped || !deps.isOnline()) return
+      try {
+        const report = checkUsageReport({ platform: 'desktop', events })
+        await deps
+          .client(current, { signal: portalAbort.signal, timeoutMs: PORTAL_TIMEOUT_MS })
+          .usage(report)
+      } catch {
+        // Counts are best effort: a lost batch only undercounts.
       }
     },
 

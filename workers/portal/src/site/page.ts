@@ -90,7 +90,7 @@ ${downloadRow('Linux', d.linux)}
 }
 
 export function footer(): string {
-  return `<footer><span>Duel Binder is not affiliated with Konami. Card data and images from YGOPRODeck.</span><a href="${REPO_URL}">GitHub</a></footer>`
+  return `<footer><span>Duel Binder is not affiliated with Konami. Card data and images from YGOPRODeck.</span><span class="links"><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="${REPO_URL}">GitHub</a></span></footer>`
 }
 
 export function renderPage(view: PageView): string {

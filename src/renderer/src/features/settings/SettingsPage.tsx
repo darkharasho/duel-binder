@@ -7,6 +7,7 @@ import { api, queryKeys } from '@/lib/api'
 import { formatRelative } from '@/lib/format'
 import { isWeb } from '@/lib/platform'
 import { AccountSection } from './AccountSection'
+import { UsageToggle } from './UsageToggle'
 import type { UpdateStatus } from '@shared/types'
 
 function Section({ title, children }: { title: string; children: React.ReactNode }): React.JSX.Element {
@@ -172,6 +173,18 @@ function DesktopSettings(): React.JSX.Element {
         </div>
       </Section>
 
+      <Section title="Privacy">
+        <UsageToggle />
+        <a
+          href="https://duelbinder.com/privacy"
+          target="_blank"
+          rel="noreferrer"
+          className="inline-block text-sm text-muted-foreground underline underline-offset-2 hover:text-foreground"
+        >
+          Privacy policy
+        </a>
+      </Section>
+
       <AboutSection />
     </div>
   )
@@ -184,6 +197,18 @@ function WebSettings(): React.JSX.Element {
       <Section title="Account">
         <AccountSection />
       </Section>
+      <Section title="Privacy">
+        <UsageToggle />
+        <a
+          href="https://duelbinder.com/privacy"
+          target="_blank"
+          rel="noreferrer"
+          className="inline-block text-sm text-muted-foreground underline underline-offset-2 hover:text-foreground"
+        >
+          Privacy policy
+        </a>
+      </Section>
+
       <AboutSection />
     </div>
   )

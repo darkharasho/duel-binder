@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { detectOs } from '../../workers/portal/src/site/os'
 import { formatSize, renderPage } from '../../workers/portal/src/site/page'
 import { renderPrivacy } from '../../workers/portal/src/site/privacy'
+import { renderTerms } from '../../workers/portal/src/site/terms'
 import { pickDownloads, RELEASES_FALLBACK } from '../../workers/portal/src/site/releases'
 import { releaseV021 } from './fixtures/release'
 
@@ -103,6 +104,8 @@ describe('renderPage', () => {
     expect(html).toContain(
       'Duel Binder is not affiliated with Konami. Card data and images from YGOPRODeck.'
     )
+    expect(html).toContain('<a href="/privacy">Privacy</a>')
+    expect(html).toContain('<a href="/terms">Terms</a>')
   })
 
   it('has the feature rows, with Friends as text only', () => {
@@ -160,11 +163,36 @@ describe('renderPrivacy', () => {
       'Discord avatars, yours and your friends’, come straight from Discord',
       'the desktop app checks GitHub for updates',
       'Settings → Delete account',
-      'https://github.com/darkharasho/duel-binder/issues'
+      'https://github.com/darkharasho/duel-binder/issues',
+      'only for the <code>identify</code> scope',
+      'when your account last used the portal, to the hour',
+      'Anonymous usage counts',
+      'You can turn them off in Settings',
+      'The portal runs on Cloudflare',
+      'Last updated'
     ]) {
       expect(html).toContain(text)
     }
     expect(html).toContain('<link rel="canonical" href="https://duelbinder.com/privacy">')
+    expect(html).not.toMatch(/<script/i)
+  })
+})
+
+describe('renderTerms', () => {
+  it('terms page renders, links the privacy policy and has the footer links', () => {
+    const html = renderTerms({ appUrl })
+    expect(html).toContain('<h1>Terms of Service</h1>')
+    expect(html).toContain('<link rel="canonical" href="https://duelbinder.com/terms">')
+    for (const text of [
+      '<a href="/privacy">privacy policy</a>',
+      'not affiliated with or endorsed by Konami',
+      'Settings → Delete account',
+      'provided “as is”',
+      'Acceptable use',
+      'https://github.com/darkharasho/duel-binder/issues',
+      '<a href="/terms">Terms</a>'
+    ])
+      expect(html).toContain(text)
     expect(html).not.toMatch(/<script/i)
   })
 })

@@ -1,9 +1,10 @@
-import { useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import logo from '@/assets/logo.svg'
 import { useFriendsAvailable, useFriendsOverview } from '@/lib/friends'
 import { isMac, isWeb } from '@/lib/platform'
 import { cn } from '@/lib/utils'
+import { track, trackOpen } from '@/lib/usage'
 import { fetchMe } from '@/web/account'
 import { ArtWash } from './ArtWash'
 import { ArtWashContext } from './artWashContext'
@@ -58,6 +59,8 @@ export function AppShell({
   useLayoutEffect(() => {
     scroll.set(0)
   }, [page, scroll])
+  useEffect(() => trackOpen(), [])
+  useEffect(() => track(`page:${page}`), [page])
   return (
     <div className="group/shell relative isolate flex h-screen flex-col overflow-hidden bg-background text-foreground tabular-nums">
       <ArtWash src={wash} />

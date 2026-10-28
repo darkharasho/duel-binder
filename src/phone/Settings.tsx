@@ -10,6 +10,7 @@ import {
   DialogTitle
 } from '@/components/ui/dialog'
 import { DeleteAccount } from '@/features/settings/AccountSection'
+import { UsageToggle } from '@/features/settings/UsageToggle'
 import { api } from '@/lib/api'
 import { isNativeApp } from '@/lib/portal'
 import { PRIVACY_URL, SIGN_OUT_FAILED, cardDataAge, signOutWarning } from './copy'
@@ -186,6 +187,7 @@ export function Settings(): React.JSX.Element {
           <a href={PRIVACY_URL} target="_blank" rel="noreferrer" className={rowButton}>
             Privacy
           </a>
+          <UsageToggle className="flex min-h-12 items-start gap-3 px-4 py-3 text-[15px]" />
           <Row>
             <span className="text-muted-foreground">
               {[age, version.data ? `Version ${version.data}` : null].filter(Boolean).join(' · ')}

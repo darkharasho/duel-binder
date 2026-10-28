@@ -13,7 +13,8 @@ const COUNTED_TABLES = [
   'value_snapshots',
   'friendships',
   'printing_contributions',
-  'catalog_tombstones'
+  'catalog_tombstones',
+  'usage_daily'
 ]
 
 /** Users, activity, collections, friends and storage, for GET /admin/stats. */
@@ -88,6 +89,22 @@ export function collectStats(deps: AppDeps): Record<string, unknown> {
         'SELECT COALESCE(SUM(count), 0) AS n FROM price_request_log WHERE day >= ?',
         since(7).slice(0, 10)
       )
+    },
+    // Anonymous app usage over the last 30 days; see src/shared/usage.ts.
+    usage: {
+      since: since(30).slice(0, 10),
+      totals: db
+        .prepare(
+          `SELECT event, platform, SUM(count) AS count FROM usage_daily WHERE day >= ?
+           GROUP BY event, platform ORDER BY event, platform`
+        )
+        .all(since(30).slice(0, 10)) as { event: string; platform: string; count: number }[],
+      opensByDay: db
+        .prepare(
+          `SELECT day, SUM(count) AS count FROM usage_daily WHERE event = 'open' AND day >= ?
+           GROUP BY day ORDER BY day`
+        )
+        .all(since(30).slice(0, 10)) as { day: string; count: number }[]
     },
     storage: {
       databaseBytes: deps.storageBytes?.() ?? null,

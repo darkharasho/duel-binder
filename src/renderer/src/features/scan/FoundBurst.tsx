@@ -12,7 +12,7 @@ const SPARKS = [
 ]
 
 /**
- * The "found it" moment laid over the camera preview: a green glow around it, a few sparkles,
+ * The "found it" moment laid over the camera preview: a gold glow around it, a few sparkles,
  * and a bubble with the card's name and price that pops up and fades. Remount it (a new key) to
  * replay it. Only decoration: the scan status already says what was added. `stream` is the scan
  * window's: sized to the window, the bubble at the top (the last-scan card is at the bottom).
@@ -56,7 +56,7 @@ export function FoundBurst({
         >
           <div
             className={cn(
-              'flex min-w-0 items-center rounded-full border border-emerald-300/40 bg-black/70 font-semibold text-white shadow-lg backdrop-blur-md animate-[scan-pop_1800ms_both]',
+              'flex min-w-0 items-center rounded-full border border-amber-300/40 bg-black/70 font-semibold text-white shadow-lg backdrop-blur-md animate-[scan-pop_1800ms_both]',
               stream
                 ? 'gap-[0.8vw] py-[0.6vw] pr-[1.4vw] pl-[0.6vw] text-[clamp(0.9rem,1.9vw,1.9rem)]'
                 : 'gap-2 py-1.5 pr-3 pl-1.5 text-[13px]'

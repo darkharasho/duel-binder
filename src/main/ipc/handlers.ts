@@ -12,6 +12,7 @@ import { cardLanguage } from '@shared/scan/cardLanguage'
 import type { AccountService } from '../cloud/account'
 import type { CatalogService } from '../catalog/service'
 import { openPack, ripHistory, ripSession, ripSets, startRip } from '../repo/rip'
+import { readPackWrappers } from '../images/packWrappers'
 
 function wholeNumber(n: unknown, what: string): number {
   if (typeof n !== 'number' || !Number.isInteger(n))
@@ -106,6 +107,12 @@ export function createHandlers({
         sessionOffset:
           opts?.sessionOffset === undefined ? undefined : wholeNumber(opts.sessionOffset, 'Offset')
       }),
+    'rip:packWrappers': async (key: unknown) => {
+      if (typeof key !== 'string') throw new Error('Pack image key must be a string')
+      // Ahead of the queue, like the pack's own <img>: the pack waits on it.
+      const file = await images.getSet(key, { priority: true })
+      return file ? readPackWrappers(file) : null
+    },
     'sync:status': async () => catalog.status(),
     'sync:run': async () => account.refreshCatalog(),
     'images:cacheSize': () => images.sizeBytes(),

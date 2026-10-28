@@ -10,7 +10,15 @@ export interface Rect {
 
 /** The BrowserWindow surface used here; a fake in tests. */
 export interface ScanWindowLike {
-  webContents: { id: number; send(channel: string, payload: unknown): void }
+  webContents: {
+    id: number
+    send(channel: string, payload: unknown): void
+    reload(): void
+    on(
+      event: 'render-process-gone',
+      cb: (event: unknown, details: { reason: string }) => void
+    ): unknown
+  }
   isDestroyed(): boolean
   isMinimized(): boolean
   restore(): void
@@ -23,6 +31,8 @@ export interface ScanWindowLike {
 }
 
 const MIN_OVERLAP = 100
+/** A scan window that crashes again this soon after a reload is closed rather than reloaded. */
+const CRASH_LOOP_MS = 60_000
 
 const isRect = (v: unknown): v is Rect => {
   if (typeof v !== 'object' || v === null) return false
@@ -56,7 +66,9 @@ export function createScanWindowManager(deps: {
   readBounds(): unknown
   writeBounds(r: Rect): void
   workAreas(): Rect[]
+  now?(): number
 }): ScanWindowManager {
+  const now = deps.now ?? Date.now
   let win: ScanWindowLike | null = null
 
   const live = (w: ScanWindowLike | null): w is ScanWindowLike => !!w && !w.isDestroyed()
@@ -80,6 +92,17 @@ export function createScanWindowManager(deps: {
       created.on('closed', () => {
         if (win === created) win = null
         tellMain(false)
+      })
+      // A crashed page would leave the window open and blank, and the Scan page showing what it
+      // said last. Reloaded, it scans again and resends any pull it hadn't heard was counted; one
+      // that keeps crashing is closed, so the page scans in place instead.
+      let crashedAt: number | null = null
+      created.webContents.on('render-process-gone', (_e, { reason }) => {
+        if (reason === 'clean-exit' || created.isDestroyed()) return
+        const at = now()
+        if (crashedAt !== null && at - crashedAt < CRASH_LOOP_MS) created.close()
+        else created.webContents.reload()
+        crashedAt = at
       })
       tellMain(true)
     },

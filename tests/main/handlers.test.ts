@@ -42,15 +42,16 @@ async function makeHandlers(opts: { signedIn?: boolean } = {}) {
   const account = fakeAccount(opts.signedIn)
   const scanWindow = { open: vi.fn(), isOpen: vi.fn(() => true), toggleFullScreen: vi.fn() }
   const catalog = { status: vi.fn(() => ({ ...CATALOG_STATUS })) }
+  const images = {
+    get: vi.fn(),
+    getSet: vi.fn(async () => null),
+    getPrinting: vi.fn(),
+    sizeBytes: async () => 0,
+    clear: async () => {}
+  }
   const handlers = createHandlers({
     db,
-    images: {
-      get: vi.fn(),
-      getSet: vi.fn(),
-      getPrinting: vi.fn(),
-      sizeBytes: async () => 0,
-      clear: async () => {}
-    },
+    images,
     catalog,
     app: {
       version: () => '0.0.0',
@@ -79,7 +80,7 @@ async function makeHandlers(opts: { signedIn?: boolean } = {}) {
       dispose: async () => {}
     }
   })
-  return { db, handlers, account, catalog, scanWindow }
+  return { db, handlers, account, catalog, scanWindow, images }
 }
 
 describe('createHandlers', () => {
@@ -220,6 +221,13 @@ describe('createHandlers', () => {
     expect(account.noteLocalEdit).not.toHaveBeenCalled()
   })
 
+  it("rip:packWrappers fetches the pack photo first, and is null when there isn't one", async () => {
+    const { handlers, images } = await makeHandlers()
+    await expect(handlers['rip:packWrappers']('yc-abc')).resolves.toBeNull()
+    expect(images.getSet).toHaveBeenCalledWith('yc-abc', { priority: true })
+    await expect(handlers['rip:packWrappers'](5)).rejects.toThrow('Pack image key')
+  })
+
   it('every Api method has a handler', async () => {
     const { handlers } = await makeHandlers()
     expect(Object.keys(handlers).sort()).toEqual([...INVOKE_CHANNELS].sort())
@@ -245,6 +253,27 @@ describe('createHandlers', () => {
       n: number
     }[]
     expect(today).toEqual([{ n: 2 }])
+  })
+
+  it('a named add sent again returns the first result without adding twice', async () => {
+    const { db, handlers } = await makeHandlers()
+    const printing = db
+      .prepare(
+        'SELECT p.id AS printingId, i.image_id AS imageId FROM card_printings p JOIN card_images i ON i.card_id = p.card_id LIMIT 1'
+      )
+      .get() as { printingId: number; imageId: number }
+    const input = { ...printing, quantity: 2, requestId: 'row@1x2' }
+    const first = (await handlers['collection:add'](input)) as { id: number; quantity: number }
+    const again = (await handlers['collection:add'](input)) as { id: number; quantity: number }
+    expect(again).toEqual(first)
+    const other = (await handlers['collection:add']({ ...input, requestId: 'row@2x2' })) as {
+      quantity: number
+    }
+    expect(other.quantity).toBe(4)
+    const unnamed = (await handlers['collection:add']({ ...printing, quantity: 1 })) as {
+      quantity: number
+    }
+    expect(unnamed.quantity).toBe(5)
   })
 
   it('desktop notes are capped at 2000', async () => {

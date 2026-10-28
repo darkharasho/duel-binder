@@ -24,7 +24,7 @@ import { FoundBurst } from '@/features/scan/FoundBurst'
 import { PhoneCamera } from './PhoneCamera'
 import { PickerSheet } from './PickerSheet'
 import { ReviewSheet } from './ReviewSheet'
-import { GLASS, priceOf } from '@/features/scan/scanLook'
+import { GLASS, listValue, priceOf } from '@/features/scan/scanLook'
 
 /** Copies of the row's printing already in the collection, any condition; null while loading. */
 function useOwned(row: ScanRow): number | null {
@@ -191,8 +191,7 @@ export function ScannerScreen({
     (a, r) => (a === null || r.addedAt > a.addedAt ? r : a),
     null
   )
-  const priced = session.rows.filter((r) => priceOf(r) != null)
-  const value = priced.reduce((n, r) => n + priceOf(r)! * r.quantity, 0)
+  const { value, priced, unpriced } = listValue(session.rows)
   const total = session.total
 
   // A new scan is the newest row's time moving on (a repeat scan moves it too); removing a row
@@ -276,12 +275,17 @@ export function ScannerScreen({
           <p className="text-[11px] uppercase tracking-wide text-muted-foreground tabular-nums">
             {total} {total === 1 ? 'card' : 'cards'}
           </p>
-          {priced.length > 0 && (
+          {priced > 0 && (
             <p
               aria-label="Value of this scan"
               className="text-[21px] font-bold leading-7 tabular-nums"
             >
               {formatUsd(value)}
+            </p>
+          )}
+          {priced > 0 && unpriced > 0 && (
+            <p className="text-[11px] text-muted-foreground tabular-nums">
+              {unpriced} with no price
             </p>
           )}
         </div>

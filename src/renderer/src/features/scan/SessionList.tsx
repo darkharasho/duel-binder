@@ -13,7 +13,7 @@ import { formatUsd } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { useScanLanguage } from './pickerOptions'
 import { useScanHub } from './ScanHub'
-import { GLASS, priceOf } from './scanLook'
+import { GLASS, listValue } from './scanLook'
 import { plural } from './scanText'
 import { ScanRowItem } from './ScanRowItem'
 
@@ -87,8 +87,7 @@ export function SessionList({ className }: { className?: string }): React.JSX.El
     () => ({ setPrinting, setQuantity, remove }),
     [setPrinting, setQuantity, remove]
   )
-  const priced = session.rows.filter((r) => priceOf(r) != null)
-  const value = priced.reduce((n, r) => n + priceOf(r)! * r.quantity, 0)
+  const { value, priced, unpriced } = listValue(session.rows)
 
   return (
     <>
@@ -111,12 +110,17 @@ export function SessionList({ className }: { className?: string }): React.JSX.El
               {plural(session.total, 'card', 'cards')} ·{' '}
               {plural(session.rows.length, 'entry', 'entries')}
             </p>
-            {priced.length > 0 && (
+            {priced > 0 && (
               <p
                 aria-label="Value of the list"
                 className="text-xl font-bold leading-7 tabular-nums"
               >
                 {formatUsd(value)}
+              </p>
+            )}
+            {priced > 0 && unpriced > 0 && (
+              <p className="text-xs text-muted-foreground tabular-nums">
+                {plural(unpriced, 'card', 'cards')} with no price
               </p>
             )}
           </div>

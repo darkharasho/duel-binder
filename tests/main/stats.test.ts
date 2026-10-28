@@ -19,6 +19,7 @@ test('empty collection', () => {
     uniqueCards: 0,
     totalValue: 0,
     approximateCount: 0,
+    unpricedCount: 0,
     byRarity: [],
     byFrameType: [],
     topEntries: [],
@@ -106,6 +107,31 @@ test('totals include eBay prices and approximateCount excludes them', () => {
   const s = getStats(db)
   expect(s.totalValue).toBeCloseTo(25 + 5.12)
   expect(s.approximateCount).toBe(0)
+})
+
+test('copies with no price are counted as unpriced, not as $0', () => {
+  const ins = db.prepare(
+    `INSERT INTO card_printings (card_id, language, set_name, set_code, set_rarity)
+     VALUES (46986414, 'ja', 'Limit Over Collection: The Rivals', ?, 'Prismatic Secret Rare') RETURNING id`
+  )
+  const pending = (ins.get('LOCR-JP036') as { id: number }).id
+  const noListings = (ins.get('LOCR-JP037') as { id: number }).id
+  db.prepare(
+    `INSERT INTO intl_prices (printing_id, price, listing_count, checked_at) VALUES (?, NULL, 0, '2026-10-20T00:00:00.000Z')`
+  ).run(noListings)
+  addEntry(db, { printingId: pending, imageId: 46986414, quantity: 2 })
+  addEntry(db, { printingId: noListings, imageId: 46986414, quantity: 1 })
+  addEntry(db, { printingId: pid('LOB-EN005'), imageId: 46986414, quantity: 1 })
+  const s = getStats(db)
+  expect(s.totalValue).toBeCloseTo(5.12)
+  expect(s.unpricedCount).toBe(3)
+  expect(s.byRarity.find((r) => r.rarity === 'Prismatic Secret Rare')).toEqual({
+    rarity: 'Prismatic Secret Rare',
+    count: 3,
+    value: 0,
+    unpriced: 3
+  })
+  expect(s.byRarity.find((r) => r.rarity !== 'Prismatic Secret Rare')!.unpriced).toBe(0)
 })
 
 test('recentEntries are newest first, capped at 8', () => {

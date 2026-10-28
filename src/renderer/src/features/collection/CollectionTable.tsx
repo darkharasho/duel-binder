@@ -27,7 +27,12 @@ const features = tableFeatures({})
 const helper = createColumnHelper<typeof features, EntryView>()
 
 /** Which columns drive the (server-side) sort. */
-const SORT_BY: Record<string, SortKey> = { name: 'name', quantity: 'quantity', total: 'value' }
+const SORT_BY: Record<string, SortKey> = {
+  name: 'name',
+  quantity: 'quantity',
+  unitPrice: 'unitPrice',
+  total: 'value'
+}
 
 const columns = helper.columns([
   helper.display({

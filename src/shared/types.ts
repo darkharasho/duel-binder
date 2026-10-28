@@ -85,7 +85,8 @@ export interface UpdateEntryInput {
   imageId?: number
 }
 
-export type SortKey = 'name' | 'value' | 'quantity' | 'added'
+/** 'value' is an entry's total (price × quantity); 'unitPrice' is one copy's price. */
+export type SortKey = 'name' | 'value' | 'unitPrice' | 'quantity' | 'added'
 
 export interface CollectionFilters {
   q?: string
@@ -174,6 +175,8 @@ export interface CollectionStats {
   byRarity: { rarity: string; count: number; value: number }[]
   byFrameType: { frameType: string; count: number }[]
   topEntries: EntryView[]
+  /** The dearest single copies: entries by unit price. */
+  topSingles: EntryView[]
   /** Newest additions first. */
   recentEntries: EntryView[]
   /** One point per day the value was recorded, oldest first. */

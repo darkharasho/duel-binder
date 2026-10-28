@@ -33,9 +33,17 @@ export function getStats(db: SqlDb, scope: Scope = LOCAL): CollectionStats {
     uniqueCards: cardIds.size,
     totalValue,
     approximateCount,
-    byRarity: [...rarities].map(([rarity, v]) => ({ rarity, ...v })).sort((a, b) => b.value - a.value),
-    byFrameType: [...frames].map(([frameType, count]) => ({ frameType, count })).sort((a, b) => b.count - a.count),
+    byRarity: [...rarities]
+      .map(([rarity, v]) => ({ rarity, ...v }))
+      .sort((a, b) => b.value - a.value),
+    byFrameType: [...frames]
+      .map(([frameType, count]) => ({ frameType, count }))
+      .sort((a, b) => b.count - a.count),
     topEntries: entries.slice(0, TOP_ENTRY_LIMIT),
+    // Stable sort: equal prices keep the higher total first.
+    topSingles: [...entries]
+      .sort((a, b) => (b.unitPrice ?? 0) - (a.unitPrice ?? 0))
+      .slice(0, TOP_ENTRY_LIMIT),
     recentEntries: [...entries]
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id - a.id)
       .slice(0, RECENT_ENTRY_LIMIT),
@@ -50,7 +58,8 @@ export function getStats(db: SqlDb, scope: Scope = LOCAL): CollectionStats {
 }
 
 const pad = (n: number): string => String(n).padStart(2, '0')
-const localDate = (d: Date): string => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+const localDate = (d: Date): string =>
+  `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 
 /** Upserts today's (local date) total value and card count. */
 export function recordSnapshot(db: SqlDb, now = new Date(), scope: Scope = LOCAL): void {

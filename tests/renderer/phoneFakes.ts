@@ -26,6 +26,7 @@ const FIXTURES: DeepPartial<Api> = {
       byRarity: [],
       byFrameType: [],
       topEntries: [],
+      topSingles: [],
       recentEntries: [],
       valueHistory: [],
       pricesUpdatedAt: null

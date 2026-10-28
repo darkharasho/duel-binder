@@ -177,6 +177,7 @@ describe('CollectionPage', () => {
       byFrameType: [],
       topEntries: [],
       recentEntries: [],
+      topSingles: [],
       valueHistory: [],
       pricesUpdatedAt: null
     }
@@ -218,11 +219,23 @@ describe('CollectionPage', () => {
     )
   })
 
+  it('sort by unit price desc calls list with { sort: unitPrice, dir: desc }', async () => {
+    localStorage.setItem('collection.view', 'table')
+    const { list } = setup()
+    await screen.findByText('Dark Magician')
+    await userEvent.click(screen.getByRole('button', { name: 'Unit price' }))
+    await waitFor(() =>
+      expect(list).toHaveBeenLastCalledWith(
+        expect.objectContaining({ sort: 'unitPrice', dir: 'desc' })
+      )
+    )
+  })
+
   it('sort select and direction toggle drive the same state', async () => {
     const { list } = setup()
     await screen.findByText('Dark Magician')
     await userEvent.click(screen.getByRole('combobox', { name: 'Sort by' }))
-    await userEvent.click(await screen.findByRole('option', { name: 'Value' }))
+    await userEvent.click(await screen.findByRole('option', { name: 'Total value' }))
     await userEvent.click(screen.getByRole('button', { name: 'Sort descending' }))
     await waitFor(() =>
       expect(list).toHaveBeenLastCalledWith(expect.objectContaining({ sort: 'value', dir: 'asc' }))

@@ -21,7 +21,8 @@ test('empty collection', () => {
     approximateCount: 0,
     byRarity: [],
     byFrameType: [],
-    topEntries: []
+    topEntries: [],
+    topSingles: []
   })
   expect(Number.isNaN(s.totalValue)).toBe(false)
   expect(s.pricesUpdatedAt).toBe('2026-10-23T12:00:00.000Z')
@@ -37,6 +38,8 @@ test('totals', () => {
   expect(s.totalValue).toBeCloseTo(10.24 + 7.5 + 14)
   expect(s.approximateCount).toBe(1)
   expect(s.topEntries[0].totalValue).toBeCloseTo(14)
+  // By one copy's price the single Dark Magician (7.50) beats four Pots of Greed (3.50 each).
+  expect(s.topSingles.map((e) => e.unitPrice)).toEqual([7.5, 5.12, 3.5])
   const values = s.byRarity.map((r) => r.value)
   expect(values).toEqual([...values].sort((a, b) => b - a))
   expect(s.byRarity.reduce((n, r) => n + r.count, 0)).toBe(7)

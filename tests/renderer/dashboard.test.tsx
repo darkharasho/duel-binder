@@ -62,6 +62,7 @@ const stats = (o: Partial<CollectionStats> = {}): CollectionStats => ({
     { frameType: 'normal', count: 9 }
   ],
   topEntries: [entry(1, 'Dark Magician'), entry(2, 'Blue-Eyes White Dragon')],
+  topSingles: [entry(2, 'Blue-Eyes White Dragon'), entry(1, 'Dark Magician')],
   recentEntries: [],
   valueHistory: [],
   pricesUpdatedAt: null,
@@ -163,6 +164,35 @@ describe('DashboardPage', () => {
     const unpriced = screen.getByRole('button', { name: /Blue-Eyes White Dragon/ })
     expect(within(unpriced).getByText('No price')).toBeInTheDocument()
     expect(within(unpriced).queryByText('—')).not.toBeInTheDocument()
+  })
+
+  it('most valuable switches to the dearest single copies and remembers it', async () => {
+    localStorage.removeItem('dashboard.mostValuableBy')
+    const many = entry(1, 'Dark Magician', { quantity: 3, unitPrice: 10, totalValue: 30 })
+    const dear = entry(2, 'Blue-Eyes White Dragon', { unitPrice: 25, totalValue: 25 })
+    const { unmount } = renderWithProviders(<DashboardPage onNavigate={vi.fn()} />, {
+      api: createMockApi({
+        stats: { get: async () => stats({ topEntries: [many, dear], topSingles: [dear, many] }) }
+      })
+    })
+    const names = (): string[] =>
+      screen
+        .getAllByRole('button', { name: /Dark Magician|Blue-Eyes/ })
+        .map((b) => b.textContent ?? '')
+    await screen.findByRole('button', { name: /Dark Magician/ })
+    expect(names()[0]).toMatch(/Dark Magician/)
+    expect(
+      within(screen.getByRole('button', { name: /Dark Magician/ })).getByText('$30.00')
+    ).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('radio', { name: 'Single' }))
+    expect(names()[0]).toMatch(/Blue-Eyes/)
+    expect(
+      within(screen.getByRole('button', { name: /Dark Magician/ })).getByText('$10.00')
+    ).toBeInTheDocument()
+    expect(localStorage.getItem('dashboard.mostValuableBy')).toBe('single')
+    unmount()
+    localStorage.removeItem('dashboard.mostValuableBy')
   })
 
   it('top entry click navigates', async () => {

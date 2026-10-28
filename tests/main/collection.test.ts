@@ -31,11 +31,15 @@ test('add then add again increments', () => {
 })
 
 test.each([0, -1, 1.5])('rejects quantity %s', (quantity) => {
-  expect(() => addEntry(db, { printingId: pid('LOB-EN005'), imageId: 46986414, quantity })).toThrow(CollectionError)
+  expect(() => addEntry(db, { printingId: pid('LOB-EN005'), imageId: 46986414, quantity })).toThrow(
+    CollectionError
+  )
 })
 
 test('rejects image from another card', () => {
-  expect(() => addEntry(db, { printingId: pid('LOB-EN119'), imageId: 46986414, quantity: 1 })).toThrow(CollectionError)
+  expect(() =>
+    addEntry(db, { printingId: pid('LOB-EN119'), imageId: 46986414, quantity: 1 })
+  ).toThrow(CollectionError)
 })
 
 test('entry value uses set price', () => {
@@ -55,7 +59,11 @@ test('entry with no price at all', () => {
       `INSERT INTO card_printings (card_id, set_name, set_code, set_rarity, set_price) VALUES (18144506, 'X', 'XXX-001', 'Common', NULL)`
     )
     .run()
-  const e = addEntry(db, { printingId: Number(info.lastInsertRowid), imageId: 18144506, quantity: 3 })
+  const e = addEntry(db, {
+    printingId: Number(info.lastInsertRowid),
+    imageId: 18144506,
+    quantity: 3
+  })
   expect(e.unitPrice).toBeNull()
   expect(e.totalValue).toBe(0)
   expect(e.priceApproximate).toBe(true)
@@ -94,20 +102,30 @@ test('update validates and edits in place', () => {
   expect(() => updateEntry(db, a.id, { quantity: 0 })).toThrow(CollectionError)
   expect(() => updateEntry(db, a.id, { imageId: 55144522 })).toThrow(CollectionError)
   expect(() => updateEntry(db, 9999, { quantity: 2 })).toThrow(CollectionError)
-  expect(updateEntry(db, a.id, { quantity: 4, notes: 'hi' })).toMatchObject({ id: a.id, quantity: 4, notes: 'hi' })
+  expect(updateEntry(db, a.id, { quantity: 4, notes: 'hi' })).toMatchObject({
+    id: a.id,
+    quantity: 4,
+    notes: 'hi'
+  })
 })
 
 test('filters and sorting', () => {
   addEntry(db, { printingId: pid('LOB-EN005'), imageId: 46986414, quantity: 1 })
   addEntry(db, { printingId: pid('SDY-006'), imageId: 46986414, quantity: 1 })
   addEntry(db, { printingId: pid('LOB-EN119'), imageId: 55144522, quantity: 1 })
-  expect(listEntries(db, { ...all, rarities: ['Rare'] }).map((e) => e.card.name)).toEqual(['Pot of Greed'])
+  expect(listEntries(db, { ...all, rarities: ['Rare'] }).map((e) => e.card.name)).toEqual([
+    'Pot of Greed'
+  ])
   expect(listEntries(db, { ...all, q: 'magician' })).toHaveLength(2)
-  expect(listEntries(db, { ...all, q: 'lob-en1' }).map((e) => e.card.name)).toEqual(['Pot of Greed'])
+  expect(listEntries(db, { ...all, q: 'lob-en1' }).map((e) => e.card.name)).toEqual([
+    'Pot of Greed'
+  ])
   expect(() => listEntries(db, { ...all, q: '"(*' })).not.toThrow()
   const byValue = listEntries(db, { sort: 'value', dir: 'desc' }).map((e) => e.totalValue)
   expect(byValue).toEqual([...byValue].sort((x, y) => y - x))
   expect(byValue[0]).toBe(7.5)
+  const byUnit = listEntries(db, { sort: 'unitPrice', dir: 'desc' }).map((e) => e.unitPrice ?? 0)
+  expect(byUnit).toEqual([...byUnit].sort((x, y) => y - x))
   expect(entriesForCard(db, 46986414)).toHaveLength(2)
 })
 
@@ -124,7 +142,9 @@ test('remove tombstones for a signed-in owner', () => {
   const a = addEntry(db, { printingId: pid('LOB-EN005'), imageId: 46986414, quantity: 1 })
   removeEntry(db, a.id, new Date('2026-10-25T12:00:00.000Z'))
   expect(getEntry(db, a.id)).toBeNull()
-  expect(db.prepare('SELECT deleted_at, dirty FROM collection_entries WHERE id = ?').get(a.id)).toEqual({
+  expect(
+    db.prepare('SELECT deleted_at, dirty FROM collection_entries WHERE id = ?').get(a.id)
+  ).toEqual({
     deleted_at: '2026-10-25T12:00:00.000Z',
     dirty: 1
   })
@@ -191,7 +211,9 @@ test('a ja entry with no price row is pending when the service is ok, else unava
 })
 
 test('a ja printing never uses the card tcgplayer price', () => {
-  const tcg = db.prepare('SELECT tcgplayer_price AS p FROM cards WHERE id = 46986414').get() as { p: unknown }
+  const tcg = db.prepare('SELECT tcgplayer_price AS p FROM cards WHERE id = 46986414').get() as {
+    p: unknown
+  }
   expect(Number(tcg.p)).toBeGreaterThan(0)
   const e = addEntry(db, { printingId: jaPrinting(), imageId: 46986414, quantity: 1 })
   expect(e.unitPrice).toBeNull()
@@ -226,10 +248,18 @@ test('an English entry with an eBay row uses the eBay price', () => {
 
 test('an English entry with a null eBay price falls back to set_price', () => {
   const id = pid('LOB-EN005')
-  const expected = (db.prepare('SELECT set_price AS p FROM card_printings WHERE id = ?').get(id) as { p: number | null }).p
+  const expected = (
+    db.prepare('SELECT set_price AS p FROM card_printings WHERE id = ?').get(id) as {
+      p: number | null
+    }
+  ).p
   setPrice(id, null)
   const e = addEntry(db, { printingId: id, imageId: 46986414, quantity: 1 })
-  expect(e).toMatchObject({ priceSource: 'ygoprodeck', priceListingCount: null, noPriceReason: null })
+  expect(e).toMatchObject({
+    priceSource: 'ygoprodeck',
+    priceListingCount: null,
+    noPriceReason: null
+  })
   expect(e.unitPrice).toBe(expected === null ? e.unitPrice : Number(expected))
   expect(e.unitPrice).not.toBeNull()
 })
@@ -268,8 +298,12 @@ test('language filter and facets', () => {
     .get() as { id: number }
   addEntry(db, { printingId: ja.id, imageId: 46986414, quantity: 1 })
   addEntry(db, { printingId: pid('LOB-EN005'), imageId: 46986414, quantity: 1 })
-  expect(listEntries(db, { ...all, language: 'ja' }).map((e) => e.printing.language)).toEqual(['ja'])
-  expect(listEntries(db, { ...all, language: 'en' }).map((e) => e.printing.language)).toEqual(['en'])
+  expect(listEntries(db, { ...all, language: 'ja' }).map((e) => e.printing.language)).toEqual([
+    'ja'
+  ])
+  expect(listEntries(db, { ...all, language: 'en' }).map((e) => e.printing.language)).toEqual([
+    'en'
+  ])
   expect(listEntries(db, all)).toHaveLength(2)
   expect(getFacets(db).languages).toEqual(['en', 'ja'])
 })

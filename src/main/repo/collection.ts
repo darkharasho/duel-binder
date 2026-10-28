@@ -237,6 +237,8 @@ export function listEntries(db: SqlDb, f: CollectionFilters, scope: Scope = LOCA
     switch (f.sort) {
       case 'value':
         return e.totalValue
+      case 'unitPrice':
+        return e.unitPrice ?? 0
       case 'quantity':
         return e.quantity
       case 'added':

@@ -27,7 +27,8 @@ const FACETS: { key: ListKey; label: string }[] = [
 
 const SORTS: { value: SortKey; label: string }[] = [
   { value: 'name', label: 'Name' },
-  { value: 'value', label: 'Value' },
+  { value: 'value', label: 'Total value' },
+  { value: 'unitPrice', label: 'Single value' },
   { value: 'quantity', label: 'Quantity' },
   { value: 'added', label: 'Date added' }
 ]

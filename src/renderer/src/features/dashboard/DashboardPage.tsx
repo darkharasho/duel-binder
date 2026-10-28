@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import type { CollectionStats, EntryView } from '@shared/types'
 import type { NavigateFn } from '@/components/AppShell'
@@ -7,6 +8,7 @@ import { TiltCard } from '@/components/TiltCard'
 import { scanFor } from '@/components/scanFor'
 import { Button } from '@/components/ui/button'
 import { TooltipProvider } from '@/components/ui/tooltip'
+import { UnderlineTabs } from '@/components/UnderlineTabs'
 import { EntryValue, StaleBadge, displayTotal } from '@/features/collection/EntryValue'
 import { api, queryKeys } from '@/lib/api'
 import { formatRelative, formatUsd } from '@/lib/format'
@@ -159,6 +161,21 @@ const isStale = (iso: string | null): boolean => {
   return Number.isNaN(t) || Date.now() - t > STALE_MS
 }
 
+type MostBy = 'total' | 'single'
+const MOST_BY_KEY = 'dashboard.mostValuableBy'
+const MOST_BY_OPTIONS = [
+  { value: 'total', label: 'Total' },
+  { value: 'single', label: 'Single' }
+] as const
+
+function readMostBy(): MostBy {
+  try {
+    return localStorage.getItem(MOST_BY_KEY) === 'single' ? 'single' : 'total'
+  } catch {
+    return 'total'
+  }
+}
+
 function Content({
   stats,
   onNavigate
@@ -168,6 +185,17 @@ function Content({
 }): React.JSX.Element {
   const n = stats.approximateCount
   const stale = isStale(stats.pricesUpdatedAt)
+  // Most valuable by an entry's total (price × copies) or by one copy's price.
+  const [mostBy, setMostByState] = useState<MostBy>(readMostBy)
+  const setMostBy = (v: MostBy): void => {
+    setMostByState(v)
+    try {
+      localStorage.setItem(MOST_BY_KEY, v)
+    } catch {
+      /* storage unavailable: the choice just isn't remembered */
+    }
+  }
+  const top = mostBy === 'single' ? stats.topSingles : stats.topEntries
   return (
     <>
       <div className="grid gap-x-12 gap-y-8 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
@@ -209,7 +237,16 @@ function Content({
       {stats.topEntries.length > 0 && (
         <section>
           <div className="mb-3 flex items-baseline justify-between">
-            <h2 className="text-sm font-semibold">Most valuable</h2>
+            <div className="flex items-baseline gap-4">
+              <h2 className="text-sm font-semibold">Most valuable</h2>
+              <UnderlineTabs
+                label="Most valuable by"
+                value={mostBy}
+                options={MOST_BY_OPTIONS}
+                onChange={setMostBy}
+                className="gap-3 [&>*]:pb-0.5 [&>*]:text-[13px]"
+              />
+            </div>
             <button
               type="button"
               onClick={() => onNavigate('collection')}
@@ -220,7 +257,7 @@ function Content({
           </div>
           {/* One row of as many as fit, stretched to the full width; the rest sit in zero-height rows, clipped. */}
           <ul className="-mx-1 grid auto-rows-[0] grid-cols-[repeat(auto-fit,minmax(7rem,1fr))] grid-rows-[auto] gap-x-2 overflow-hidden">
-            {stats.topEntries.slice(0, 10).map((e) => (
+            {top.slice(0, 10).map((e) => (
               <li key={e.id} className="min-w-0">
                 <button
                   type="button"
@@ -243,7 +280,10 @@ function Content({
                       {e.quantity > 1 && ` ×${e.quantity}`}
                     </span>
                     <span className="block font-mono text-[11px]">
-                      <EntryValue entry={e} amount={displayTotal(e)} />
+                      <EntryValue
+                        entry={e}
+                        amount={mostBy === 'single' ? e.unitPrice : displayTotal(e)}
+                      />
                     </span>
                     <StaleBadge entry={e} />
                   </span>

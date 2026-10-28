@@ -66,6 +66,9 @@ const STATE: ScanWindowState = {
 }
 
 let bridge: ReturnType<typeof fakeBridge>
+let draftIds = 0
+/** A fresh id for a scan-window pull, as the window gives each. */
+const nextId = (): string => `pull-${++draftIds}`
 /** The camera frames grabbed, as createImageBitmap(video, x, y, w, h) calls. */
 let grabbed: ReturnType<typeof vi.fn>
 let camera: ReturnType<typeof stubCamera>
@@ -158,7 +161,7 @@ describe('Scan nav', () => {
     await screen.findByRole('heading', { name: 'Collection' })
     expect(screen.queryByRole('heading', { name: 'Scan' })).not.toBeInTheDocument()
 
-    act(() => bridge.emit({ kind: 'draft', draft: draft() }))
+    act(() => bridge.emit({ kind: 'draft', id: nextId(), draft: draft() }))
     await u.click(screen.getByRole('button', { name: 'Scan' }))
     await screen.findByRole('heading', { name: 'Scan' })
     expect(screen.getByLabelText('Quantity of Dark Magician')).toHaveTextContent('1')
@@ -229,7 +232,7 @@ describe('Scan page', () => {
   it('a pull from the scan window lands on the list and is highlighted for a moment', async () => {
     await renderScan()
     await openWindow()
-    act(() => bridge.emit({ kind: 'draft', draft: draft() }))
+    act(() => bridge.emit({ kind: 'draft', id: nextId(), draft: draft() }))
     const list = screen.getByRole('list', { name: 'This session' })
     expect(within(list).getByText('Dark Magician')).toBeInTheDocument()
     expect(within(list).getByLabelText('Quantity of Dark Magician')).toHaveTextContent('1')
@@ -240,8 +243,42 @@ describe('Scan page', () => {
     expect(within(list).getByText('Dark Magician').closest('li')).not.toHaveClass(
       'bg-emerald-400/10'
     )
-    act(() => bridge.emit({ kind: 'draft', draft: draft() }))
+    act(() => bridge.emit({ kind: 'draft', id: nextId(), draft: draft() }))
     expect(within(list).getByLabelText('Quantity of Dark Magician')).toHaveTextContent('2')
+  })
+
+  it('counts a resent pull once and acknowledges every copy', async () => {
+    await renderScan()
+    await openWindow()
+    act(() => bridge.emit({ kind: 'draft', id: 'p1', draft: draft() }))
+    act(() => bridge.emit({ kind: 'draft', id: 'p1', draft: draft() }))
+    expect(screen.getByLabelText('Quantity of Dark Magician')).toHaveTextContent('1')
+    expect(bridge.sent.filter((m) => m.kind === 'ack')).toEqual([
+      { kind: 'ack', id: 'p1' },
+      { kind: 'ack', id: 'p1' }
+    ])
+  })
+
+  it('drops a pull resent after the main window reloads', async () => {
+    const { unmount } = await renderScan()
+    await openWindow()
+    act(() => bridge.emit({ kind: 'draft', id: 'p1', draft: draft() }))
+    unmount()
+    bridge = fakeBridge(true)
+    await renderScan()
+    await run()
+    act(() => bridge.emit({ kind: 'draft', id: 'p1', draft: draft() }))
+    expect(screen.getByLabelText('Quantity of Dark Magician')).toHaveTextContent('1')
+    expect(bridge.sent.at(-1)).toEqual({ kind: 'ack', id: 'p1' })
+  })
+
+  it('forgets what a scan window that reloaded reported before', async () => {
+    await renderScan()
+    await openWindow({ loop: { kind: 'added', name: 'Dark Magician', setCode: 'LOB-005' } })
+    expect(screen.getByText(/Dark Magician/)).toBeInTheDocument()
+    act(() => bridge.emit({ kind: 'ready' }))
+    await run()
+    expect(screen.queryByText(/Dark Magician/)).not.toBeInTheDocument()
   })
 
   it('sends settings when the scan window says it is ready, and on every change', async () => {
@@ -385,11 +422,27 @@ describe('Scan page', () => {
   })
 
   it("scans in place if main can't say whether the scan window is open", async () => {
-    bridge.scanWindow.isOpen.mockRejectedValueOnce(new Error('no answer'))
+    bridge.scanWindow.isOpen.mockRejectedValue(new Error('no answer'))
     const { container } = await renderScan()
-    await run()
+    await run(1000)
+    expect(bridge.scanWindow.isOpen).toHaveBeenCalledTimes(3)
     expect(container.querySelector('video')).toBeInTheDocument()
     expect(camera.getUserMedia).toHaveBeenCalledTimes(1)
+    // Then the window speaks up: it is open, so the page stops its own scanner.
+    report()
+    await run()
+    expect(container.querySelector('video')).not.toBeInTheDocument()
+    expect(camera.track.stop).toHaveBeenCalled()
+  })
+
+  it('asks main again when it fails to say whether the scan window is open', async () => {
+    bridge = fakeBridge(true)
+    bridge.scanWindow.isOpen.mockRejectedValueOnce(new Error('no answer'))
+    const { container } = await renderScan()
+    await run(500)
+    expect(container.querySelector('video')).not.toBeInTheDocument()
+    expect(camera.getUserMedia).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: 'Show scan window' })).toBeInTheDocument()
   })
 
   it('opening the scan window stops the page camera first', async () => {
@@ -872,6 +925,56 @@ describe('Scan page', () => {
     expect(screen.getByText('Hold a card up')).toBeInTheDocument()
   })
 
+  it('stops visibly when card lookups keep failing, without re-initing the engine', async () => {
+    const engine = fakeEngine(() => codeFrame('LOB-EN005'))
+    await renderScan(
+      {
+        scan: {
+          printingsByCode: vi.fn(async () => {
+            throw new Error('db gone')
+          })
+        }
+      },
+      engine
+    )
+    await run(30_000)
+    expect(screen.getByText('Scanning stopped after repeated errors.')).toBeInTheDocument()
+    expect(engine.init).toHaveBeenCalledTimes(1)
+  })
+
+  it('a lookup that never answers times out and scanning carries on', async () => {
+    let hang = true
+    const printingsByCode = vi.fn(() =>
+      hang ? new Promise<never>(() => {}) : Promise.resolve([printing()])
+    )
+    const engine = fakeEngine(() => codeFrame('LOB-EN005'))
+    await renderScan({ scan: { printingsByCode } }, engine)
+    await run(1000)
+    const stuck = engine.analyze.mock.calls.length
+    await run(20_000)
+    // Held by the lookup in flight.
+    expect(engine.analyze.mock.calls.length).toBe(stuck)
+    hang = false
+    await run(15_000)
+    expect(engine.analyze.mock.calls.length).toBeGreaterThan(stuck)
+    expect(screen.getByText(/Dark Magician LOB-EN005 · added/)).toBeInTheDocument()
+  })
+
+  it('reopens a camera whose picture froze', async () => {
+    await renderScan()
+    await run(1000)
+    expect(camera.getUserMedia).toHaveBeenCalledTimes(1)
+    Object.defineProperty(HTMLMediaElement.prototype, 'currentTime', {
+      configurable: true,
+      get: () => 12
+    })
+    await run(4000)
+    expect(camera.getUserMedia).toHaveBeenCalledTimes(1)
+    await run(2000)
+    expect(camera.getUserMedia).toHaveBeenCalledTimes(2)
+    expect(camera.track.stop).toHaveBeenCalled()
+  })
+
   it('stays responsive with thousands of sets while frames come in', async () => {
     const many = Array.from(
       { length: 7500 },
@@ -974,6 +1077,7 @@ describe('Scan page', () => {
   })
 
   it("a picked printing keeps the card's other printings to choose from", async () => {
+    localStorage.setItem('language.filter', 'all')
     const options = [
       printing({ printingId: 201, setCode: 'LOB-EN005', rarity: 'Ultra Rare' }),
       printing({ printingId: 202, setCode: 'SDY-006', rarity: 'Common', language: 'de' }),
@@ -1008,6 +1112,112 @@ describe('Scan page', () => {
     expect(screen.getAllByRole('option')).toHaveLength(2)
   })
 
+  it("the printing dropdown lists the scan language's printings, keeping the row's own", async () => {
+    const options = [
+      printing({ printingId: 201, setCode: 'LOB-EN005', rarity: 'Ultra Rare' }),
+      printing({ printingId: 202, setCode: 'SDY-006', rarity: 'Common', language: 'de' }),
+      printing({ printingId: 203, setCode: 'LOB-JP005', rarity: 'Rare', language: 'ja' }),
+      printing({ printingId: 204, setCode: 'SDY-EN006', rarity: 'Common' })
+    ]
+    localStorage.setItem(
+      SESSION_KEY,
+      JSON.stringify([
+        row({
+          key: 'c1:46986414',
+          printingId: 202,
+          setCode: 'SDY-006',
+          rarity: 'Common',
+          flag: null,
+          via: 'art',
+          options
+        })
+      ])
+    )
+    const lobJp = { setName: 'Legend of Blue Eyes White Dragon', language: 'ja' } as SetSummary
+    await renderScan({ sets: { list: vi.fn(async () => [lobJp]) } })
+    await run()
+    const u = user()
+    const picker = (): HTMLElement =>
+      screen.getByRole('combobox', { name: 'Rarity for Dark Magician' })
+    const listed = (): (string | null)[] => screen.getAllByRole('option').map((o) => o.textContent)
+    // English is picked (the default): English printings, and the German one the row is on.
+    await u.click(picker())
+    expect(listed()).toEqual([
+      'LOB-EN005 · Ultra Rare · EN',
+      'SDY-006 · Common · DE',
+      'SDY-EN006 · Common · EN'
+    ])
+    await u.keyboard('{Escape}')
+
+    // Picking Japanese on the Scan page narrows it to Japanese, still keeping the row's own.
+    await u.click(screen.getByRole('combobox', { name: 'Language' }))
+    await u.click(screen.getByRole('option', { name: /Japanese/ }))
+    await u.click(picker())
+    expect(listed()).toEqual(['SDY-006 · Common · DE', 'LOB-JP005 · Rare · JP'])
+  })
+
+  it("under All languages the dropdown follows the picked set's language", async () => {
+    localStorage.setItem('language.filter', 'all')
+    localStorage.setItem(
+      'scan.set',
+      JSON.stringify({ setName: 'Legend of Blue Eyes White Dragon', language: 'ja' })
+    )
+    const options = [
+      printing({ printingId: 201, setCode: 'LOB-EN005', rarity: 'Ultra Rare' }),
+      printing({ printingId: 203, setCode: 'LOB-JP005', rarity: 'Rare', language: 'ja' }),
+      printing({ printingId: 205, setCode: 'SDJ-JP001', rarity: 'Common', language: 'ja' })
+    ]
+    localStorage.setItem(
+      SESSION_KEY,
+      JSON.stringify([
+        row({
+          key: 'c1:46986414',
+          printingId: 203,
+          setCode: 'LOB-JP005',
+          rarity: 'Rare',
+          flag: null,
+          via: 'art',
+          options
+        })
+      ])
+    )
+    await renderScan()
+    await run()
+    const u = user()
+    await u.click(screen.getByRole('combobox', { name: 'Rarity for Dark Magician' }))
+    expect(screen.getAllByRole('option').map((o) => o.textContent)).toEqual([
+      'LOB-JP005 · Rare',
+      'SDJ-JP001 · Common'
+    ])
+    await u.keyboard('{Escape}')
+
+    // With any set, every language is listed.
+    await u.click(screen.getByRole('combobox', { name: 'Set' }))
+    await u.click(screen.getByRole('option', { name: 'Any set' }))
+    await u.click(screen.getByRole('combobox', { name: 'Rarity for Dark Magician' }))
+    expect(screen.getAllByRole('option')).toHaveLength(3)
+  })
+
+  it('a code read in another language still lists its rarities', async () => {
+    const options = [
+      printing({ printingId: 301, setCode: 'LOCR-JP036', rarity: 'Common', language: 'ja' }),
+      printing({ printingId: 302, setCode: 'LOCR-JP036', rarity: 'Secret Rare', language: 'ja' }),
+      printing({ printingId: 303, setCode: 'LOCR-EN036', rarity: 'Common' })
+    ]
+    localStorage.setItem(
+      SESSION_KEY,
+      JSON.stringify([row({ printingId: 301, setCode: 'LOCR-JP036', options })])
+    )
+    await renderScan()
+    await run()
+    const u = user()
+    await u.click(screen.getByRole('combobox', { name: 'Rarity for Dark Magician' }))
+    expect(screen.getAllByRole('option').map((o) => o.textContent)).toEqual([
+      'LOCR-JP036 · Common',
+      'LOCR-JP036 · Secret Rare'
+    ])
+  })
+
   it('New scans as is searchable and remembered', async () => {
     await renderScan()
     await run()
@@ -1033,7 +1243,12 @@ describe('Scan page', () => {
     await run()
     await user().click(screen.getByRole('button', { name: 'Add 3 cards to collection' }))
     await run(100)
-    expect(add).toHaveBeenCalledWith({ printingId: 101, imageId: 46986414, quantity: 3 })
+    expect(add).toHaveBeenCalledWith({
+      printingId: 101,
+      imageId: 46986414,
+      quantity: 3,
+      requestId: expect.any(String)
+    })
     expect(screen.getByText('Added 3 cards')).toBeInTheDocument()
     expect(screen.queryByText('Dark Magician')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Add 0 cards to collection' })).toBeDisabled()
@@ -1183,6 +1398,7 @@ describe('Scan page', () => {
       act(() =>
         bridge.emit({
           kind: 'draft',
+          id: nextId(),
           draft: draft({ cardId: i + 1, printingId: 1000 + i, imageId: 5000 + i })
         })
       )

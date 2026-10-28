@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { api, mutationInvalidationKeys } from '@/lib/api'
 import type { ScanDraft } from './resolve'
@@ -90,6 +90,19 @@ export function useScanSession(): {
     setRows(next)
   }, [])
 
+  // Another tab (the home-screen app and a browser tab, say) changed the saved list: take it up,
+  // or this tab's next change would write its stale copy over that tab's scans.
+  useEffect(() => {
+    const onStorage = (e: StorageEvent): void => {
+      if (e.key !== STORAGE_KEY && e.key !== null) return
+      const next = load()
+      ref.current = next
+      setRows(next)
+    }
+    window.addEventListener('storage', onStorage)
+    return () => window.removeEventListener('storage', onStorage)
+  }, [])
+
   const add = useCallback(
     (d: ScanDraft): void =>
       update((list) => {
@@ -164,7 +177,11 @@ export function useScanSession(): {
           await api.collection.add({
             printingId: row.printingId!,
             imageId: row.imageId,
-            quantity: row.quantity
+            quantity: row.quantity,
+            // This row as it stands: if the add landed but its reply didn't (the page reloaded
+            // mid-Add), adding it again is answered without adding the copies twice. A scan or
+            // edit since changes the row, and so the id.
+            requestId: `${row.key}@${row.addedAt}x${row.quantity}`
           })
           added++
           cards += row.quantity

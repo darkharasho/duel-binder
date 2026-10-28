@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import App from '@/App'
 import { CardArt } from '@/components/CardArt'
 import type { Api } from '@shared/ipc'
+import type { EntryView } from '@shared/types'
 import { createMockApi, renderWithProviders } from './mockApi'
 
 // Signed in, so the sign-in gate lets the shell through.
@@ -81,6 +82,94 @@ describe('AppShell sets nav', () => {
     ])
     await userEvent.click(screen.getByRole('button', { name: 'Sets' }))
     expect(screen.getByRole('heading', { name: 'Sets' })).toBeInTheDocument()
+  })
+})
+
+const entry = (id: number, name: string, language: 'en' | 'ja' = 'en'): EntryView => ({
+  id,
+  quantity: 2,
+  notes: '',
+  createdAt: '2026-01-01T00:00:00Z',
+  updatedAt: '2026-01-01T00:00:00Z',
+  card: {
+    id: 100 + id,
+    name,
+    type: 'Normal Monster',
+    frameType: 'normal',
+    race: 'Spellcaster',
+    attribute: 'DARK',
+    level: 7,
+    linkval: null,
+    atk: 2500,
+    def: 2100,
+    archetype: null,
+    desc: '',
+    tcgplayerPrice: 1
+  },
+  printing: {
+    id,
+    cardId: 100 + id,
+    setName: 'Legend of Blue Eyes',
+    setCode: `LOB-EN00${id}`,
+    setRarity: 'Ultra Rare',
+    setRarityCode: '(UR)',
+    language,
+    setPrice: 10,
+    missingFromApi: false
+  },
+  imageId: 100 + id,
+  originalArt: true,
+  unitPrice: 10,
+  priceApproximate: false,
+  priceSource: 'ygoprodeck',
+  priceCheckedAt: null,
+  priceListingCount: null,
+  noPriceReason: null,
+  totalValue: 20
+})
+
+describe('dashboard most valuable', () => {
+  // The Collection page filters to English by default; the dashboard ranks every language.
+  it('opens the clicked card in the Collection page, even outside the language filter', async () => {
+    const dm = entry(1, 'Dark Magician')
+    const bew = entry(2, 'Blue-Eyes White Dragon', 'ja')
+    const entries = [dm, bew]
+    await renderApp(
+      mockApi({
+        stats: {
+          get: async () => ({
+            totalCards: 4,
+            uniqueCards: 2,
+            totalValue: 40,
+            approximateCount: 0,
+            byRarity: [],
+            byFrameType: [],
+            topEntries: [bew, dm],
+            topSingles: [bew, dm],
+            recentEntries: [],
+            valueHistory: [],
+            pricesUpdatedAt: null
+          })
+        },
+        collection: {
+          list: async (f: { language?: string }) =>
+            entries.filter((e) => !f.language || e.printing.language === f.language),
+          forCard: async (cardId: number) => entries.filter((e) => e.card.id === cardId)
+        },
+        cards: {
+          get: async (id: number) => ({
+            card: entries.find((e) => e.card.id === id)!.card,
+            printings: [],
+            images: []
+          })
+        }
+      })
+    )
+    const most = (await screen.findByRole('heading', { name: 'Most valuable' })).closest('section')!
+    await userEvent.click(within(most).getByRole('button', { name: /Blue-Eyes White Dragon/ }))
+    const dialog = await screen.findByRole('dialog')
+    expect(await within(dialog).findByText('Blue-Eyes White Dragon')).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Collection', hidden: true })).toBeInTheDocument()
   })
 })
 

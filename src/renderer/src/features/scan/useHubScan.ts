@@ -16,11 +16,14 @@ const ANY = 'any'
 export function useHubScan({
   videoRef,
   stream,
-  engineFactory
+  engineFactory,
+  onStalled
 }: {
   videoRef: RefObject<HTMLVideoElement | null>
   stream: MediaStream | null
   engineFactory: () => ScanEngine
+  /** The camera's picture froze; see useScanLoop. */
+  onStalled?: () => void
 }): { loop: ScanLoop; setUnreadable: boolean } {
   const { settings, count } = useScanHub()
   const picked = settings.set
@@ -43,7 +46,8 @@ export function useHubScan({
     setKey: scanSet ? `${scanSet.language}|${scanSet.setName}` : ANY,
     setPrintings: scanSet === null ? null : setPrintings.data,
     defaultRarity: settings.defaultRarity,
-    onDraft: count
+    onDraft: count,
+    onStalled
   })
 
   useEffect(() => {

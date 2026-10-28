@@ -33,6 +33,21 @@ const MAX_BANDS = 8
 const MAX_SIDE = 4096
 const MAX_PIXELS = 4_000_000
 const READ_TIMEOUT_MS = 10_000
+/**
+ * Starting a worker loads its model, which can take far longer than a read on a slow machine.
+ * It gets its own budget: counted against the read's, a cold start would time out, be thrown
+ * away and start over on every read.
+ */
+const START_TIMEOUT_MS = 60_000
+
+/** p, or a rejection with message once ms pass. */
+function within<T>(p: Promise<T>, ms: number, message: string): Promise<T> {
+  let timer: ReturnType<typeof setTimeout> | undefined
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => reject(new Error(message)), ms)
+  })
+  return Promise.race([p, timeout]).finally(() => clearTimeout(timer))
+}
 
 /**
  * Throws unless bands is what the renderer may send: at most MAX_BANDS grayscale bands, each a
@@ -71,13 +86,15 @@ const PSM_LINE = '7'
 const PSM_BLOCK = '6'
 
 /**
- * The OCR queue, with one worker per model, each created on first use by opts.start. A read that
- * fails or takes longer than timeoutMs throws away its worker, and so does start's onDead; the
- * next read with that model starts a fresh one.
+ * The OCR queue, with one worker per model, each created on first use by opts.start. A worker
+ * that takes longer than startTimeoutMs to start, a read that fails or takes longer than
+ * timeoutMs (not counting the start), and start's onDead all throw the worker away; the next
+ * read with that model starts a fresh one.
  */
 export function createOcrQueue(opts: {
   start(model: OcrModel, onDead: () => void): Promise<OcrWorker>
   timeoutMs?: number
+  startTimeoutMs?: number
 }): Ocr {
   const slots = new Map<OcrModel, Slot>()
   // Reads run one at a time, so a worker's parameters stay put through a read.
@@ -133,21 +150,15 @@ export function createOcrQueue(opts: {
 
   /** job on model's worker, one at a time, throwing the worker away if it fails or stalls. */
   const queued = <T>(model: OcrModel, job: (slot: Slot) => Promise<T>): Promise<T> => {
-    const result = queue.then(() => {
+    const result = queue.then(async () => {
       const slot = slots.get(model) ?? start(model)
-      let timer: ReturnType<typeof setTimeout> | undefined
-      const timeout = new Promise<never>((_, reject) => {
-        timer = setTimeout(
-          () => reject(new Error('OCR timed out')),
-          opts.timeoutMs ?? READ_TIMEOUT_MS
-        )
-      })
-      return Promise.race([job(slot), timeout])
-        .catch((err: unknown) => {
-          drop(model, slot)
-          throw err
-        })
-        .finally(() => clearTimeout(timer))
+      try {
+        await within(slot.worker, opts.startTimeoutMs ?? START_TIMEOUT_MS, 'OCR start timed out')
+        return await within(job(slot), opts.timeoutMs ?? READ_TIMEOUT_MS, 'OCR timed out')
+      } catch (err) {
+        drop(model, slot)
+        throw err
+      }
     })
     queue = result.catch(() => {})
     return result

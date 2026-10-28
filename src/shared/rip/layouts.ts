@@ -382,6 +382,26 @@ layouts.push({
   ]
 })
 
+/*
+ * Duelist Packs (DP1–DP11, DPYG, DPKB, DPBC, DPRP, DPDG). Konami's product pages for Duelist
+ * Pack: Yugi and Duelist Pack: Kaiba (archived) give the split: 4 Commons (4:1) and a Rare (1:1),
+ * with Super 1:5, Ultra 1:15 and, in Kaiba, Ultimate 1:24. The other packs from DP1 to Crow have
+ * the same 30-card mix; Battle City, Rivals of the Pharaoh and Dimensional Guardians (2015–2017)
+ * keep 5 cards a pack but no rate survives, so they reuse Konami's figures. Yugipedia's "Ultra
+ * Rare" page gives 1:6 for Duelist Packs without a source; Konami's own 1:15 wins. Packs without
+ * Ultimates fold that chance into the Rare. The Duelist Pack Collection Tins and DPK aren't packs.
+ */
+layouts.push({
+  id: 'duelist-pack',
+  label: 'Duelist Pack',
+  source:
+    'Konami product pages for Duelist Pack: Yugi and Kaiba (archived): 4 Commons + 1 Rare; Super 1:5, Ultra 1:15, Ultimate 1:24 (Kaiba). Later packs reuse these (no official figure)',
+  slots: [
+    fixed('Common', 4),
+    oneOf('Rare', { 'Super Rare': 1 / 5, 'Ultra Rare': 1 / 15, 'Ultimate Rare': 1 / 24 })
+  ]
+})
+
 export const RIP_LAYOUTS: Record<string, PackLayout> = Object.fromEntries(
   layouts.map((l) => [l.id, l])
 )
@@ -411,7 +431,8 @@ const SETS_BY_LAYOUT: Record<string, string> = {
   'battles-of-legend-starlight': 'BLCR BLGG',
   'battles-of-legend-quarter-century': 'BLMR BLTR',
   'battles-of-legend-monster-mayhem': 'BLMM',
-  'legendary-duelists': 'LEDU LED2 LED3 LED4 LED5 LED6 LED7 LED8 LED9 LD10'
+  'legendary-duelists': 'LEDU LED2 LED3 LED4 LED5 LED6 LED7 LED8 LED9 LD10',
+  'duelist-pack': 'DP1 DP2 DP03 DP04 DP05 DP06 DP07 DP08 DP09 DP10 DP11 DPYG DPKB DPBC DPRP DPDG'
 }
 
 /** Set code prefix (e.g. "LOB") → layout id. */

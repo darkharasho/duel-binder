@@ -455,6 +455,39 @@ describe('Legendary Duelists', () => {
   })
 })
 
+describe('Duelist Packs', () => {
+  it('map the booster sets to one layout; tins and DPK get none', () => {
+    for (const code of ['DP1', 'DP03', 'DP11', 'DPYG', 'DPKB', 'DPDG'])
+      expect(layoutFor(code)!.id).toBe('duelist-pack')
+    expect(layoutFor('DPCT')).toBeNull()
+    expect(layoutFor('DPK')).toBeNull()
+  })
+
+  it("4 Commons and a Rare: Super 1 in 5, Ultra 1 in 15, Kaiba's Ultimate 1 in 24", () => {
+    const l = layoutFor('DPKB')!
+    const p = makePool({
+      Common: 19,
+      Rare: 8,
+      'Super Rare': 5,
+      'Ultra Rare': 3,
+      'Ultimate Rare': 5
+    })
+    const rand = mulberry32(10)
+    const packs = 6000
+    const top: Record<string, number> = {}
+    let misshapen = 0
+    for (let i = 0; i < packs; i++) {
+      const pack = rollPack(l, p, rand)
+      top[pack[4].rarity] = (top[pack[4].rarity] ?? 0) + 1
+      if (pack.length !== 5 || pack.slice(0, 4).some((c) => c.rarity !== 'Common')) misshapen++
+    }
+    expect(misshapen).toBe(0)
+    expect(top['Super Rare'] / packs).toBeCloseTo(1 / 5, 1)
+    expect(top['Ultra Rare'] / packs).toBeCloseTo(1 / 15, 1)
+    expect(top['Ultimate Rare'] / packs).toBeCloseTo(1 / 24, 1)
+  })
+})
+
 describe('canFill', () => {
   it('is true when every base rarity has a card', () => {
     expect(canFill(layout, pool)).toBe(true)
@@ -565,6 +598,7 @@ describe('describeLayout', () => {
     'battles-of-legend-quarter-century': '5 cards a pack · 1 Secret or better + 4 Ultra',
     'battles-of-legend-monster-mayhem': '5 cards a pack · 1 Secret or better + 1 Ultra + 3 Ultra',
     'legendary-duelists': '5 cards a pack · 1 Rare + 1 Super or better',
+    'duelist-pack': '5 cards a pack · 1 Rare or better',
     'core-2023': '9 cards a pack · 1 Super or better',
     'core-2025': '9 cards a pack · 1 Super or better'
   }

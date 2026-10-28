@@ -64,15 +64,17 @@ export function surfaceScore(r: SurfaceReading, frameType: string): number {
 }
 
 /**
- * At or above this the frame reads as foil. Set high: no plain card of the eBay photos, webcam
- * shots or degraded scans scored above it, against about a third of the whole-card foils of the
- * eBay photos and degraded scans (and none of the webcam shots, whose glitter the camera loses).
+ * At or above this the frame reads as foil. Set high: 1 of about 1,700 plain cards over the eBay
+ * photos, webcam shots and clean and degraded scans scored above it (a clean scan), against
+ * about a third of the whole-card foils of the eBay photos and degraded scans and none of the
+ * webcam shots, whose glitter a 1080p webcam under room light doesn't pick up.
  */
 export const SURFACE_FOIL_MIN = 3
 /**
- * At or below this the frame reads as plain card stock. Set low: 1 of about 400 whole-card foils
- * over the eBay photos, webcam shots and degraded scans scored below it, against about a sixth of
- * the plain cards (a twentieth of the webcam shots, which score higher overall).
+ * At or below this the frame reads as plain card stock (never on an Xyz frame). Set low: 2 of
+ * about 600 whole-card foils over the same sets scored below it, against about a tenth of the
+ * plain cards of the eBay photos, a few percent of the degraded scans' and none of the webcam
+ * shots', which score higher overall.
  */
 export const SURFACE_PLAIN_MAX = -3.5
 

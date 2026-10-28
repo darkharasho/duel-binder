@@ -30,6 +30,32 @@ export const NEST_MIN_GROWTH = 1.3
  * few percent past the card's.
  */
 export const NEST_MIN_END_INSET = 0.1
+/**
+ * Share of its size by which the straightened card's art box is also tried grown, shrunk and moved
+ * (see jittered), for the card the outline finder settled on: an outline a few percent off, as a
+ * case's or sleeve's edge makes, moves the art box as far and costs the hash dozens of bits.
+ */
+export const ART_BOX_JITTER = 0.03
+/**
+ * A card-shaped outline round another counts as a case or toploader holding it (and goes after
+ * it among the candidates) when the border between them is at least this many card widths on
+ * every side (a sleeve's or the card's own printed edge is thinner)...
+ */
+export const HOLDER_MIN_BORDER = 0.02
+/** ...at most this many... */
+export const HOLDER_MAX_BORDER = 0.35
+/**
+ * ...and its widest side at most this many times its narrowest: a case's border is the same all
+ * round, while a card's art-and-text frame sits about four times deeper below its top than above
+ * its bottom.
+ */
+export const HOLDER_EVENNESS = 2.5
+/**
+ * ...and the border is see-through: on at least HOLDER_CLEAR_SIDES sides it differs from what
+ * lies just outside by at most this much (mean absolute difference per channel, 0-255).
+ */
+export const HOLDER_MAX_CONTRAST = 45
+export const HOLDER_CLEAR_SIDES = 2
 /** Lowest name similarity (1 - levenshtein / maxLen) accepted. */
 export const NAME_MIN_SCORE = 0.8
 /** Best name score minus second-best score needed to trust the best. */

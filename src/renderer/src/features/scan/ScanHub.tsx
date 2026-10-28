@@ -1,7 +1,13 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { isLanguage } from '@shared/languages'
 import { RARITY_TIERS } from '@shared/scan/rarity'
-import { isFromScanWindow, type ScanWindowSettings, type ScanWindowState } from '@shared/scanWindow'
+import {
+  SCAN_ZOOMS,
+  isFromScanWindow,
+  type ScanFit,
+  type ScanWindowSettings,
+  type ScanWindowState
+} from '@shared/scanWindow'
 import type { ScanDraft } from './resolve'
 import { rowKey, useScanSession } from './session'
 import { rememberedCamera } from './useCamera'
@@ -9,6 +15,8 @@ import { rememberedCamera } from './useCamera'
 const SET_KEY = 'scan.set'
 const RARITY_KEY = 'scan.defaultRarity'
 const HIT_PRICE_KEY = 'scan.hitPrice'
+const FIT_KEY = 'scan.fit'
+const ZOOM_KEY = 'scan.zoom'
 const DEFAULT_HIT_PRICE = 20
 const HIGHLIGHT_MS = 1500
 
@@ -60,12 +68,19 @@ const parseHitPrice = (raw: string): number | null => {
   return Number.isFinite(n) && n > 0 ? n : null
 }
 
+const parseZoom = (raw: string): number | null => {
+  const n = Number(raw)
+  return (SCAN_ZOOMS as readonly number[]).includes(n) ? n : null
+}
+
 const initialSettings = (): ScanWindowSettings => ({
   deviceId: rememberedCamera(),
   paused: false,
   set: read(SET_KEY, parseSet),
   defaultRarity: read(RARITY_KEY, (r) => (RARITY_TIERS.includes(r) ? r : null)),
-  hitPrice: read(HIT_PRICE_KEY, parseHitPrice) ?? DEFAULT_HIT_PRICE
+  hitPrice: read(HIT_PRICE_KEY, parseHitPrice) ?? DEFAULT_HIT_PRICE,
+  fit: read(FIT_KEY, (f): ScanFit | null => (f === 'whole' || f === 'fill' ? f : null)) ?? 'fill',
+  zoom: read(ZOOM_KEY, parseZoom) ?? 1
 })
 
 const HubContext = createContext<ScanHub | null>(null)
@@ -106,6 +121,8 @@ export function ScanHubProvider({ children }: { children: React.ReactNode }): Re
       if ('set' in patch) write(SET_KEY, next.set ? JSON.stringify(next.set) : null)
       if ('defaultRarity' in patch) write(RARITY_KEY, next.defaultRarity)
       if ('hitPrice' in patch) write(HIT_PRICE_KEY, String(next.hitPrice))
+      if ('fit' in patch) write(FIT_KEY, next.fit)
+      if ('zoom' in patch) write(ZOOM_KEY, String(next.zoom))
       setSettingsState(next)
       // Sent now, not from an effect, so a retry sent right after reaches the window after it.
       // Main drops it while no window is open.

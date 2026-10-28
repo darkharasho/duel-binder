@@ -220,7 +220,9 @@ describe('Scan page', () => {
       paused: false,
       set: null,
       defaultRarity: 'Secret Rare',
-      hitPrice: 20
+      hitPrice: 20,
+      fit: 'fill',
+      zoom: 1
     })
   })
 
@@ -914,6 +916,26 @@ describe('Scan page', () => {
     await u.type(input, '12.5{Enter}')
     expect(lastSettings().hitPrice).toBe(12.5)
     expect(localStorage.getItem('scan.hitPrice')).toBe('12.5')
+  })
+
+  it('starts from the remembered picture fit and zoom, and sends them to the window', async () => {
+    bridge = fakeBridge(true)
+    localStorage.setItem('scan.fit', 'whole')
+    localStorage.setItem('scan.zoom', '1.5')
+    await renderScan()
+    await run()
+    expect(screen.getByRole('combobox', { name: 'Picture' })).toHaveTextContent('Whole picture')
+    expect(screen.getByRole('combobox', { name: 'Zoom' })).toHaveTextContent('1.5× zoom')
+    act(() => bridge.emit({ kind: 'ready' }))
+    expect(lastSettings()).toMatchObject({ fit: 'whole', zoom: 1.5 })
+  })
+
+  it("ignores a remembered zoom it doesn't offer", async () => {
+    bridge = fakeBridge(true)
+    localStorage.setItem('scan.zoom', '7')
+    await renderScan()
+    await run()
+    expect(screen.getByRole('combobox', { name: 'Zoom' })).toHaveTextContent('No zoom')
   })
 
   it('starts from the remembered set, rarity and hit price', async () => {

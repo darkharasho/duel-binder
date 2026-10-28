@@ -24,7 +24,9 @@ const SETTINGS: ScanWindowSettings = {
   paused: false,
   set: null,
   defaultRarity: null,
-  hitPrice: 20
+  hitPrice: 20,
+  fit: 'fill',
+  zoom: 1
 }
 
 let grabbed: ReturnType<typeof vi.fn>
@@ -537,5 +539,20 @@ describe('Scan window', () => {
     expect(screen.queryAllByRole('button')).toEqual([])
     expect(screen.queryByText('Hold a card up')).not.toBeInTheDocument()
     expect(screen.queryByText(/./)).not.toBeInTheDocument()
+  })
+
+  describe('picture', () => {
+    it('fills the window by default, or shows the whole picture, zoomed on its centre', async () => {
+      stubCamera()
+      await renderWindow(fakeEngine(() => NOTHING))
+      const video = document.querySelector('video')!
+      expect(video).toHaveClass('object-cover')
+      expect(video.style.transform).toBe('')
+
+      settings({ fit: 'whole', zoom: 2 })
+      await run()
+      expect(video).toHaveClass('object-contain')
+      expect(video.style.transform).toBe('scale(2)')
+    })
   })
 })

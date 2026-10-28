@@ -158,6 +158,42 @@ describe('buildReferences', () => {
     expect(yugipedia.listPageImages).toHaveBeenCalledTimes(1)
   })
 
+  describe('a scan like none of its artworks', () => {
+    /** SCAN_HASH with its first `bits` bits flipped: that far from the scan. */
+    const flipped = (bits: number): Uint32Array => {
+      const h = SCAN_HASH.slice()
+      for (let i = 0; i < bits; i++) h[i >> 5] ^= 1 << (i & 31)
+      return h
+    }
+    const setArt = (id: number, h: Uint32Array): void => {
+      cache
+        .prepare('UPDATE fp SET hash = ? WHERE image_id = ?')
+        .run(Buffer.from(h.buffer, h.byteOffset, h.byteLength), id)
+    }
+    const run = (): ReturnType<typeof buildReferences> =>
+      buildReferences({
+        work,
+        cache,
+        yugipedia: fakeYugipedia(['ShiEn-BLGG-EN-StR-1E.png']),
+        fetch: scans({ 'ShiEn-BLGG-EN-StR-1E.png': png(SCAN) }),
+        userAgent: 'test'
+      })
+
+    it("goes under the card's first artwork, not the least unlike one", async () => {
+      // BLMM's Blue-Eyes: an art YGOPRODeck doesn't have, 122 from the art it was filed under.
+      setArt(10, flipped(140))
+      setArt(11, flipped(122))
+      expect((await run()).entries).toEqual([{ imageId: 10, hash: SCAN_HASH }])
+    })
+
+    it('still goes under the closest artwork when that one is close enough', async () => {
+      // A foil or overframe of the second art, a little further off than a plain scan.
+      setArt(10, flipped(130))
+      setArt(11, flipped(96))
+      expect((await run()).entries).toEqual([{ imageId: 11, hash: SCAN_HASH }])
+    })
+  })
+
   it('takes Japanese printings too, and no other language', async () => {
     const add = work.prepare(
       `INSERT INTO card_printings (card_id, set_name, set_code, set_rarity, set_rarity_code, language, variant)

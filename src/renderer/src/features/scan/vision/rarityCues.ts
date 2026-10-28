@@ -12,10 +12,12 @@ import {
   NAME_SILVER_MIN_HUE_SPREAD
 } from '@shared/scan/thresholds'
 import type { RgbaImage } from '@shared/scan/types'
-import { findTextLine, type TextLine } from './bands'
+import { findTextLine, inkContrast, type TextLine } from './bands'
+import { surface } from './foil'
+import { rarityFeatures } from './rarityFeatures'
 import { crop, NAME_BAND } from './regions'
 
-const NOTHING: RarityCues = { nameInk: null, nameTint: null }
+const NOTHING: RarityCues = { nameInk: null, nameTint: null, nameContrast: null }
 
 /** Pixels below this saturation have no hue worth counting in the spread. */
 const HUED = 0.2
@@ -85,17 +87,40 @@ function tintOf(band: RgbaImage, line: TextLine): NameTint | null {
 }
 
 /**
- * What a straightened, upright card shows of its foil: whether its name reads as ink darker or
- * lighter than the bar, and whether that ink is gold or silver. A reading counts only when it is
- * a line of text as tall as a name and starting where names start, and far more of it than of
- * the other ink, so a glint, a blurred frame or a misplaced band reads as nothing.
- *
- * On webcam photos the name is the cue that holds up. Sparkle in the art or across the card,
- * which would tell Super from Common or Starlight from Secret, is lost to the camera's blur and
- * JPEG.
+ * What a straightened, upright card shows of its foil: how its name reads (nameCues) and how
+ * textured its frame is beside the artwork against its effect text (surface), which tells a
+ * card foil all over, such as a Starlight, from one whose frame is plain card stock.
  */
 export function rarityCues(card: RgbaImage): RarityCues {
+  return rarityLook(card, false).cues
+}
+
+/**
+ * rarityCues, and with `features` the card's look measured region by region for the look model
+ * (rarityFeatures; LOOK_FEATURES order). The scan worker doesn't measure them: the model isn't
+ * used by the app (see shared/scan/look.ts), only by the evaluation scripts.
+ */
+export function rarityLook(
+  card: RgbaImage,
+  features: boolean
+): { cues: RarityCues; features: number[] | null } {
+  const band = crop(card, NAME_BAND)
   const line = findTextLine(card, NAME_BAND, 1)
+  const name = nameCues(band, line)
+  return {
+    cues: { ...name, surface: surface(card) },
+    features: features ? rarityFeatures(card, name.nameInk ? line : null, band) : null
+  }
+}
+
+/**
+ * Whether a card's name, the line found on its band, reads as ink darker or lighter than the
+ * bar, by how much, and whether that ink is gold or silver. A reading counts only when it is a
+ * line of text as tall as a name and starting where names start, and far more of it than of the other ink, so a glint, a blurred frame or a
+ * misplaced band reads as nothing. On webcam frames the ink's colour is mostly the bar's (the
+ * camera keeps colour at a quarter of the resolution), so gold is seldom told.
+ */
+function nameCues(band: RgbaImage, line: TextLine | null): RarityCues {
   if (!line || line.blobs.length < NAME_INK_MIN_BLOBS) return NOTHING
   const left = Math.min(...line.blobs.map((b) => b.x0))
   const top = Math.min(...line.blobs.map((b) => b.y0))
@@ -107,6 +132,7 @@ export function rarityCues(card: RgbaImage): RarityCues {
   if (!fits) return NOTHING
   return {
     nameInk: line.sign === 1 ? 'dark' : 'light',
-    nameTint: tintOf(crop(card, NAME_BAND), line)
+    nameTint: tintOf(band, line),
+    nameContrast: inkContrast(band, line)
   }
 }

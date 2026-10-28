@@ -23,7 +23,8 @@ const CAMERA_MESSAGES: Record<NonNullable<ScanWindowState['cameraError']>, strin
   denied:
     'Camera access was denied. Allow it in your system settings, then reopen the scan window.',
   none: 'No camera found. Plug one in and reopen the scan window.',
-  lost: "The camera stopped. Check it's connected, then pick it again."
+  lost: "The camera stopped. Check it's connected, then pick it again.",
+  busy: 'The camera is in use by another app. Close it there, then try again.'
 }
 
 /**

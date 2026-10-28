@@ -24,7 +24,7 @@ import type {
 import type { ScanWindowMessage } from './scanWindow'
 import type { FingerprintStatus, OcrBand, ScanPrinting } from './scan/types'
 import type { CardLanguage } from './scan/language'
-import type { RipCard, RipHistory, RipSessionDetail, RipSet } from './rip/types'
+import type { PackWrappers, RipCard, RipHistory, RipSessionDetail, RipSet } from './rip/types'
 
 /** The API exposed to the renderer as `window.api`. */
 export interface Api {
@@ -85,6 +85,8 @@ export interface Api {
     openPack(sessionId: number): Promise<RipCard[]>
     session(id: number): Promise<RipSessionDetail | null>
     history(opts?: { sessionOffset?: number }): Promise<RipHistory>
+    /** Where the wrappers are in a set's pack photo (`packImageKey`); null when it shows one. */
+    packWrappers(packImageKey: string): Promise<PackWrappers | null>
   }
   stats: {
     get(): Promise<CollectionStats>
@@ -193,6 +195,7 @@ export const INVOKE_CHANNELS = [
   'rip:openPack',
   'rip:session',
   'rip:history',
+  'rip:packWrappers',
   'stats:get',
   'prices:request',
   'sets:list',

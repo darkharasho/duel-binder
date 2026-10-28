@@ -511,6 +511,102 @@ describe('PackOpener', () => {
     expect(screen.getByTestId('rip-pack-box').style.width).toContain('0.64')
   })
 
+  /** Battles of Legend: Monster Mayhem's photo: a 1st Edition and an Unlimited wrapper. */
+  const TWO_WRAPPERS = {
+    width: 550,
+    height: 550,
+    wrappers: [
+      { x: 10, y: 44, width: 255, height: 463 },
+      { x: 289, y: 44, width: 255, height: 463 }
+    ]
+  }
+  const renderPhoto = (
+    packWrappers: Api['rip']['packWrappers'],
+    packCount = 1
+  ): ReturnType<typeof renderWithProviders> =>
+    renderWithProviders(
+      <PackOpener
+        sessionId={7}
+        packCount={packCount}
+        setName="Battles of Legend: Monster Mayhem"
+        onDone={vi.fn()}
+        packArt={{
+          setCode: 'BLMM',
+          packImageKey: 'yc-blmm',
+          logoImageKey: null,
+          coverImageId: null
+        }}
+      />,
+      {
+        api: createMockApi({
+          rip: { openPack: vi.fn(async () => commons()), packWrappers: vi.fn(packWrappers) }
+        })
+      }
+    )
+  /** The photo and its sheen, in the strip and the body. */
+  const photoLayers = (): HTMLElement[] => [
+    ...screen
+      .getByTestId('rip-pack')
+      .querySelectorAll<HTMLElement>(
+        '[data-testid="rip-pack-image"], [data-testid="rip-pack-sheen"]'
+      )
+  ]
+
+  it('a photo of two wrappers shows one, the same one on every layer, rolled again each pack', async () => {
+    // Pack 1 rolls the right-hand wrapper, pack 2 the left.
+    vi.spyOn(Math, 'random').mockReturnValueOnce(0.9).mockReturnValueOnce(0.1)
+    const measured = deferred<typeof TWO_WRAPPERS>()
+    renderPhoto(() => measured.promise, 2)
+    // Hidden until it's known which wrapper to show, so the whole photo never flashes up.
+    for (const face of screen.getAllByTestId('rip-pack-face')) expect(face).toHaveClass('invisible')
+    await act(async () => measured.resolve(TWO_WRAPPERS))
+    for (const face of screen.getAllByTestId('rip-pack-face'))
+      expect(face).not.toHaveClass('invisible')
+    // Scaled so a wrapper fills 0.96 of the box's height, and moved so the right one is centred.
+    const right = { left: '-93.93%', top: '-7.12%', width: '190.06%', height: '114.04%' }
+    expect(photoLayers()).toHaveLength(4)
+    for (const layer of photoLayers()) expect(layer.style).toMatchObject(right)
+    for (const sheen of screen.getAllByTestId('rip-pack-sheen')) {
+      expect(sheen.style.maskSize).toBe('100% 100%')
+      expect(sheen).not.toHaveClass('inset-0')
+    }
+    expect(screen.getAllByTestId('rip-pack-image')[0]).not.toHaveClass('object-cover')
+
+    space()
+    await loadedPack()
+    fireEvent.click(skipButton())
+    fireEvent.click(nextButton())
+    await waitFor(() => expect(screen.getByText(/pack 2 of 2/i)).toBeInTheDocument())
+    for (const layer of photoLayers())
+      expect(layer.style).toMatchObject({ ...right, left: '2.48%' })
+  })
+
+  it('a photo of one wrapper is shown whole, as before', async () => {
+    renderPhoto(async () => null)
+    await waitFor(() =>
+      expect(screen.getAllByTestId('rip-pack-face')[0]).not.toHaveClass('invisible')
+    )
+    for (const img of screen.getAllByTestId('rip-pack-image')) {
+      expect(img).toHaveClass('inset-0', 'size-full', 'object-cover')
+      expect(img.getAttribute('style')).toBeNull()
+    }
+    for (const sheen of screen.getAllByTestId('rip-pack-sheen')) {
+      expect(sheen).toHaveClass('inset-0')
+      expect(sheen.style.maskSize).toBe('cover')
+      expect(sheen.style.left).toBe('')
+    }
+  })
+
+  it("a photo that can't be measured is shown whole", async () => {
+    renderPhoto(async () => {
+      throw new Error('unreadable')
+    })
+    await waitFor(() =>
+      expect(screen.getAllByTestId('rip-pack-face')[0]).not.toHaveClass('invisible')
+    )
+    expect(screen.getAllByTestId('rip-pack-image')[0]).toHaveClass('object-cover')
+  })
+
   it('without a pack photo the pack is a foil wrapper with the cover art and logo', async () => {
     renderWithProviders(
       <PackOpener

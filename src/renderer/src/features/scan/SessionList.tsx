@@ -11,6 +11,7 @@ import {
 } from '@/components/ui/dialog'
 import { formatUsd } from '@/lib/format'
 import { cn } from '@/lib/utils'
+import { useScanLanguage } from './pickerOptions'
 import { useScanHub } from './ScanHub'
 import { GLASS, listValue } from './scanLook'
 import { plural } from './scanText'
@@ -78,6 +79,7 @@ export function SessionList({ className }: { className?: string }): React.JSX.El
   const { session, fresh } = useScanHub()
   const [clearing, setClearing] = useState(false)
   const { addable, commit } = useSessionCommit()
+  const language = useScanLanguage()
 
   const { setPrinting, setQuantity, remove } = session
   // Stable, so rows (memoized) don't re-render on every pull.
@@ -135,6 +137,7 @@ export function SessionList({ className }: { className?: string }): React.JSX.El
                   key={row.key}
                   row={row}
                   actions={rowActions}
+                  language={language}
                   highlighted={row.key === fresh}
                   disabled={session.committing}
                 />

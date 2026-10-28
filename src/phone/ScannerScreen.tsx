@@ -12,7 +12,7 @@ import {
 } from 'lucide-react'
 import { CardArt } from '@/components/CardArt'
 import type { ScanEngine } from '@/features/scan/engine'
-import { useScanPickers, type PickerProps } from '@/features/scan/pickerOptions'
+import { useScanLanguage, useScanPickers, type PickerProps } from '@/features/scan/pickerOptions'
 import { choicesFor, FLAG_TEXT } from '@/features/scan/ScanRowItem'
 import { useScanHub } from '@/features/scan/ScanHub'
 import type { PickerOption } from '@/features/scan/SearchPicker'
@@ -49,7 +49,8 @@ const CARD = cn('flex min-h-28 shrink-0 gap-3 rounded-3xl p-2.5', GLASS)
 function LastScan({ row, burst }: { row: ScanRow; burst: number }): React.JSX.Element {
   const { session } = useScanHub()
   const owned = useOwned(row)
-  const choices = useMemo(() => choicesFor(row), [row])
+  const language = useScanLanguage()
+  const choices = useMemo(() => choicesFor(row, language), [row, language])
   const at = choices.findIndex((c) => c.key === String(row.printingId))
   const printing = row.options.find((o) => o.printingId === row.printingId)
   const price = priceOf(row)

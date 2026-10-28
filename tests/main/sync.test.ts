@@ -159,6 +159,26 @@ test('getSyncStatus is live mid-sync and keeps the last error until the next suc
   expect(getSyncStatus(db)).toMatchObject({ state: 'idle', error: null })
 })
 
+test('a payload far smaller than the stored catalog is refused and prunes nothing', async () => {
+  const many = Array.from({ length: 120 }, (_, i) => ({
+    ...cards[0],
+    id: 9_000_000 + i,
+    name: `Card ${i}`,
+    card_images: [{ id: 9_000_000 + i }]
+  })) as ApiCard[]
+  await runSync(db, okClient(many), () => {}, NOW)
+  expect(count('cards')).toBe(120)
+  const later = new Date(NOW.getTime() + 25 * HOUR)
+  const status = await runSync(db, okClient(many.slice(0, 60)), () => {}, later)
+  expect(status.state).toBe('error')
+  expect(status.error).toMatch(/truncated/)
+  expect(count('card_images')).toBe(120)
+  expect(getMeta(db, 'last_sync_at')).toBe(NOW.toISOString())
+  // A small, real shrink still goes through.
+  expect((await runSync(db, okClient(many.slice(0, 115)), () => {}, later)).state).toBe('idle')
+  expect(count('card_images')).toBe(115)
+})
+
 test('malformed API records are skipped without failing the sync', async () => {
   const bad = [
     { id: 1, name: 'No Strings' },

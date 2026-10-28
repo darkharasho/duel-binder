@@ -14,7 +14,9 @@ export interface ShowingTracker {
  * is still one showing, and never counts again while shown. It counts again only after nothing
  * has been in view, in consecutive `none` frames, for absentMs, or once a different card has
  * counted. Unsure frames neither build nor break a streak, but they break an absence, since a
- * card is in view.
+ * card is in view. A card whose art matches poorly (a holo, a full-art print, a case's glare)
+ * flickers between recognized and far-art `none` frames, so one far-art `none` right after a
+ * recognized frame counts as unsure; a second in a row is a real `none`.
  */
 export function createShowingTracker(
   opts: { stableFrames?: number; absentMs?: number } = {}
@@ -25,6 +27,8 @@ export function createShowingTracker(
   let streak = 0
   let shown: number | null = null
   let absentSince: number | null = null
+  // A card was recognized, and no `none` frame has come since.
+  let justSeen = false
 
   const clearStreak = (): void => {
     streakOf = null
@@ -33,17 +37,24 @@ export function createShowingTracker(
 
   return {
     push(now, outcome) {
+      if (outcome.kind === 'none' && outcome.far && justSeen) {
+        justSeen = false
+        absentSince = null
+        return null
+      }
       if (outcome.kind === 'unsure') {
         absentSince = null
         return null
       }
       if (outcome.kind === 'none') {
+        justSeen = false
         clearStreak()
         absentSince ??= now
         if (now - absentSince >= absentMs) shown = null
         return null
       }
       absentSince = null
+      justSeen = true
       const { cardId } = outcome.item
       if (cardId === shown) {
         clearStreak()
@@ -59,6 +70,7 @@ export function createShowingTracker(
 
     reset() {
       clearStreak()
+      justSeen = false
       shown = null
       absentSince = null
     }

@@ -3,6 +3,7 @@ import { decode as decodeJpeg } from 'jpeg-js'
 import { PNG } from 'pngjs'
 import { ART_BOXES, crop } from '../../src/renderer/src/features/scan/vision/regions'
 import { HASH_WORDS, artHash, hamming } from '../../src/shared/scan/fingerprint'
+import { ART_FAR_DISTANCE } from '../../src/shared/scan/thresholds'
 import type { RgbaImage } from '../../src/shared/scan/types'
 import { isLanguage } from '../../src/shared/languages'
 import type { YugipediaClient } from '../../src/main/yugipedia/client'
@@ -18,6 +19,11 @@ const RETRY_DELAYS_MS = [1000, 2000]
 /** Width over height of a card; a file far from it is art or a photo, not a scan of the card. */
 const CARD_RATIO = 59 / 86
 const RATIO_TOLERANCE = 0.05
+/**
+ * Furthest a scan may be from an artwork and still be taken for it. Scans of the same art, foils
+ * and overframes included, sit within about 100 of it; unrelated arts sit around 128 (of 256).
+ */
+const SAME_ART_MAX_DISTANCE = ART_FAR_DISTANCE
 
 /**
  * Printings whose scans are wanted: English, and Japanese for the OCG-only sets (Limit Over
@@ -31,7 +37,9 @@ const COLOUR = /^(red|blue|green|purple|silver|bronze|gold|yellow|orange|white|p
 
 /**
  * Whether a printing looks unlike its card's art from YGOPRODeck: an alternate or overframe art
- * (named in its variant or in brackets after its rarity), or a foil that changes the picture.
+ * (named in its variant or in brackets after its rarity), a printing its set list marks "New
+ * artwork" (variant NEW_ART_VARIANT, e.g. LOCR-JP029–038, an art YGOPRODeck doesn't have yet), or a
+ * foil that changes the picture.
  */
 export function wantsReference(rarity: string, variant: string | null): boolean {
   if (FOIL.test(rarity.trim())) return true
@@ -114,9 +122,10 @@ async function download(
 
 /**
  * Yugipedia's scans of the printings wantsReference picks, as extra art references: each scan's
- * art-box hash under the image id of its card's closest artwork, so the scanner takes a photo
- * of that printing for its card. Which scan each printing has is looked up once (again after
- * RETRY_MS when it had none), and each scan is downloaded once, up to maxDownloads per run.
+ * art-box hash under the image id of its card's closest artwork (its first when none is close),
+ * so the scanner takes a photo of that printing for its card. Which scan each printing has is
+ * looked up once (again after RETRY_MS when it had none), and each scan is downloaded once, up to
+ * maxDownloads per run.
  */
 export async function buildReferences(opts: ReferenceOptions): Promise<ReferenceResult> {
   const { work, cache, yugipedia } = opts
@@ -242,7 +251,9 @@ export async function buildReferences(opts: ReferenceOptions): Promise<Reference
     }
   }
 
-  // Each scan goes under its card's closest artwork, so a match shows the art it looks like.
+  // Each scan goes under its card's closest artwork, so a match shows the art it looks like. A
+  // scan like none of them (an artwork YGOPRODeck doesn't have, such as BLMM's Blue-Eyes) goes
+  // under the first, the one the app shows a printing's own photo for, not a stranger's art.
   const artOf = work
     .prepare('SELECT image_id FROM card_images WHERE card_id = ? ORDER BY sort_order, image_id')
     .pluck()
@@ -263,6 +274,7 @@ export async function buildReferences(opts: ReferenceOptions): Promise<Reference
       const d = hamming(hash, 0, new Uint32Array(new Uint8Array(art).buffer), 0)
       if (d < bestDistance) [best, bestDistance] = [id, d]
     }
+    if (bestDistance > SAME_ART_MAX_DISTANCE) best = images[0]
     entries.push({ imageId: best, hash })
   }
   return { entries, fetched, failed }

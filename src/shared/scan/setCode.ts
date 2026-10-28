@@ -68,24 +68,58 @@ function parseUndashed(text: string): Parts | null {
 }
 
 /**
+ * The Japanese reading of a dashed code whose "JP" was misread: the J as T, I, L or 1, or lost
+ * (`LOCR-TPO3S`, `LOCR-IPO36`, `LOCR-PO34`). The number must read as digits. Null otherwise.
+ */
+function jpParts(text: string): Parts | null {
+  const m = DASHED.exec(text.toUpperCase())
+  const r = m && /^\s*[TIL1]?P\s*([A-Z0-9]{2,4})/.exec(m[2])
+  if (!m || !r) return null
+  // The number may run into following text, so shorter ones are tried.
+  for (let len = r[1].length; len >= 2; len--) {
+    const number = toDigits(r[1].slice(0, len))
+    if (/^\d+$/.test(number)) return { prefix: m[1], region: 'JP', number }
+  }
+  return null
+}
+
+/**
+ * Three-digit readings of a four-digit number, for a read with an extra 0 or O (`JP0O35` for
+ * `JP035`): each 0 left out, then the first three digits.
+ */
+function shorterNumbers(number: string): string[] {
+  if (!/^\d{4}$/.test(number)) return []
+  const out: string[] = []
+  for (let i = 0; i < 4; i++)
+    if (number[i] === '0') out.push(number.slice(0, i) + number.slice(i + 1))
+  out.push(number.slice(0, 3))
+  return out
+}
+
+/**
  * parseSetCode first, then the same code with prefix zeros read as O, and with a prefix O next to
  * a digit read as zero (`BPO1` → `BP01`). If the number part starts with a letter that could be a
- * misread digit, the digit readings follow. Try them in order.
+ * misread digit, the digit readings follow; a four-digit number is then tried as three digits. Last
+ * come the JP readings of a misread region (see jpParts). Try them in order.
  */
 export function setCodeCandidates(text: string): string[] {
   const p = parts(text)
-  if (!p) return []
+  const jp = jpParts(text)
+  if (!p && !jp) return []
   const withPrefixAlt = (prefix: string, tail: string): string[] => {
     const nearDigit = prefix.replace(/O(?=\d)|(?<=\d)O/g, '0')
     return [prefix + tail, prefix.replace(/0/g, 'O') + tail, nearDigit + tail]
   }
-  const lead = DIGIT_FIX[p.number[0]]
-  const forms = (region: string): string[] => {
-    const out = withPrefixAlt(p.prefix, `-${region}${p.number}`)
-    if (lead) out.push(...withPrefixAlt(p.prefix, `-${region}${lead}${p.number.slice(1)}`))
+  const forms = ({ prefix, number }: Parts, region: string): string[] => {
+    const lead = DIGIT_FIX[number[0]]
+    const out = withPrefixAlt(prefix, `-${region}${number}`)
+    if (lead) out.push(...withPrefixAlt(prefix, `-${region}${lead}${number.slice(1)}`))
+    for (const n of shorterNumbers(number)) out.push(...withPrefixAlt(prefix, `-${region}${n}`))
     return out
   }
+  const out: string[] = []
   // A regionless code is tried as written first (old Japanese codes), then as English.
-  const out = p.region ? forms(p.region) : [...forms(''), ...forms('EN')]
+  if (p) out.push(...(p.region ? forms(p, p.region) : [...forms(p, ''), ...forms(p, 'EN')]))
+  if (jp) out.push(...forms(jp, 'JP'))
   return [...new Set(out)]
 }

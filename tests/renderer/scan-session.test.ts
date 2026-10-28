@@ -139,7 +139,12 @@ describe('useScanSession', () => {
       out = await result.current.commit()
     })
     expect(out).toEqual({ added: 1, failed: 1, cards: 1 })
-    expect(add).toHaveBeenNthCalledWith(1, { printingId: 101, imageId: 10, quantity: 1 })
+    expect(add).toHaveBeenNthCalledWith(1, {
+      printingId: 101,
+      imageId: 10,
+      quantity: 1,
+      requestId: expect.stringMatching(/^101:10@\d+x1$/)
+    })
     expect(result.current.rows).toHaveLength(1)
     expect(result.current.rows[0]).toMatchObject({ key: '201:20', error: 'boom' })
   })
@@ -193,6 +198,47 @@ describe('useScanSession', () => {
     })
     expect(result.current.rows).toHaveLength(1)
     expect(result.current.rows[0].quantity).toBe(1)
+  })
+
+  it('names each add after the row as it stands, so a retry of the same row is the same add', async () => {
+    const add = vi.fn().mockRejectedValueOnce(new Error('lost reply')).mockResolvedValue({})
+    const { result } = setup(add)
+    act(() => result.current.add(draft()))
+    await act(async () => void (await result.current.commit()))
+    await act(async () => void (await result.current.commit()))
+    const ids = add.mock.calls.map(([input]) => (input as { requestId: string }).requestId)
+    expect(ids[0]).toBe(ids[1])
+
+    act(() => result.current.add(draft()))
+    act(() => result.current.setQuantity('101:10', 3))
+    await act(async () => void (await result.current.commit()))
+    expect((add.mock.calls[2][0] as { requestId: string }).requestId).not.toBe(ids[0])
+  })
+
+  it("takes up the list another tab saved, so its next change doesn't write over it", () => {
+    const { result } = setup()
+    act(() => result.current.add(draft()))
+    const other = [
+      ...JSON.parse(localStorage.getItem(KEY)!),
+      {
+        ...draft({ cardId: 2, printingId: 201, imageId: 20 }),
+        key: '201:20',
+        quantity: 4,
+        addedAt: 1
+      }
+    ]
+    localStorage.setItem(KEY, JSON.stringify(other))
+    act(() => window.dispatchEvent(new StorageEvent('storage', { key: KEY })))
+    expect(result.current.rows.map((r) => [r.key, r.quantity])).toEqual([
+      ['101:10', 1],
+      ['201:20', 4]
+    ])
+    act(() => result.current.add(draft()))
+    const saved = JSON.parse(localStorage.getItem(KEY)!) as { key: string; quantity: number }[]
+    expect(saved.map((r) => [r.key, r.quantity])).toEqual([
+      ['101:10', 2],
+      ['201:20', 4]
+    ])
   })
 
   it('ignores non-finite quantities and floors the rest', () => {

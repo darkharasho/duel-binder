@@ -1,15 +1,17 @@
 import { TiltCard } from '@/components/TiltCard'
 import { CardArt } from '@/components/CardArt'
 import { cn } from '@/lib/utils'
-import { artBox, holoKind } from '../../../../shared/rip/rarity'
-import type { RipCard } from '../../../../shared/rip/types'
+import { artBox, holoKind, isStarlight, nameBox, nameInk } from '../../../../shared/rip/rarity'
+import type { ArtBox, RipCard } from '../../../../shared/rip/types'
 
-const RAINBOW =
-  'linear-gradient(115deg, #ff5f6d, #ffc371, #f7ff6a, #6dff9c, #5ad7ff, #8b7bff, #ff6ad5, #ff5f6d)'
-const LINES = 'repeating-linear-gradient(135deg, #000 0 1.2px, transparent 1.2px 3.4px)'
-/** The softer foil: a pale, faintly rainbow band of light that follows the tilt. */
-const SHEEN =
-  'linear-gradient(115deg, transparent 25%, rgb(255 255 255 / 0.55) 42%, rgb(170 220 255 / 0.5) 48%, rgb(255 190 240 / 0.45) 54%, rgb(255 255 255 / 0.4) 60%, transparent 76%)'
+const WHOLE_CARD: React.CSSProperties = { top: '0px', left: '0px', right: '0px', bottom: '0px' }
+
+const insetOf = (b: ArtBox): React.CSSProperties => ({
+  top: `${b.top}%`,
+  left: `${b.left}%`,
+  right: `${b.right}%`,
+  bottom: `${b.bottom}%`
+})
 
 interface HoloCardProps {
   card: RipCard
@@ -22,8 +24,10 @@ interface HoloCardProps {
 }
 
 /**
- * A pulled card, tilting with a glare; Secret-family cards shine over the art, Starlight over all,
- * and the other foils get a softer sheen over the art.
+ * A pulled card, tilting with a glare. Every foil gets the same crosshatch rainbow (the rip-foil
+ * classes in index.css), faint at rest and flashing where the pointer's glare band crosses it:
+ * over the art for Secret and the softer foils, over the whole card for Starlight. Secret and
+ * Starlight also get a foil name.
  */
 export function HoloCard({
   card,
@@ -34,18 +38,9 @@ export function HoloCard({
 }: HoloCardProps): React.JSX.Element {
   const kind = holoKind(card.rarity, card.variant)
   const showHolo = holo && kind !== 'none' && card.imageId != null
-  const inset: React.CSSProperties =
-    kind === 'art' || kind === 'soft'
-      ? (() => {
-          const b = artBox(card.frameType)
-          return {
-            top: `${b.top}%`,
-            left: `${b.left}%`,
-            right: `${b.right}%`,
-            bottom: `${b.bottom}%`
-          }
-        })()
-      : { top: '0px', left: '0px', right: '0px', bottom: '0px' }
+  const inset = kind === 'full' ? WHOLE_CARD : insetOf(artBox(card.frameType))
+  const starlight = isStarlight(card.rarity)
+  const rounded = kind === 'full' && 'rounded-[6px]'
 
   return (
     <TiltCard
@@ -59,27 +54,36 @@ export function HoloCard({
     >
       <CardArt imageId={card.imageId ?? 0} size={size} alt={card.name} className="w-full" />
       {showHolo && (
-        <div
-          aria-hidden
-          data-holo={kind}
-          className={cn(
-            'pointer-events-none absolute mix-blend-color-dodge transition-[background-position] duration-100',
-            kind === 'soft' ? 'opacity-60' : 'opacity-75',
-            '[background-position:var(--glare-x,50%)_var(--glare-y,50%)] motion-reduce:[background-position:50%_50%] motion-reduce:transition-none',
-            kind === 'full' && 'rounded-[6px]'
+        <>
+          {starlight && (
+            <div
+              aria-hidden
+              data-foil="prism"
+              className={cn('rip-foil rip-foil-prism', rounded)}
+              style={inset}
+            />
           )}
-          style={
-            kind === 'soft'
-              ? { ...inset, backgroundImage: SHEEN, backgroundSize: '250% 250%' }
-              : {
-                  ...inset,
-                  backgroundImage: RAINBOW,
-                  backgroundSize: '300% 300%',
-                  maskImage: LINES,
-                  WebkitMaskImage: LINES
-                }
-          }
-        />
+          <div
+            aria-hidden
+            data-holo={kind}
+            data-foil={starlight ? 'starlight' : kind === 'soft' ? 'soft' : 'secret'}
+            className={cn(
+              'rip-foil',
+              starlight ? 'rip-foil-starlight' : 'rip-foil-secret',
+              rounded
+            )}
+            style={inset}
+          />
+          {kind !== 'soft' && (
+            <div
+              aria-hidden
+              data-foil="name"
+              data-ink={nameInk(card.frameType)}
+              className="rip-foil rip-foil-name"
+              style={insetOf(nameBox())}
+            />
+          )}
+        </>
       )}
     </TiltCard>
   )

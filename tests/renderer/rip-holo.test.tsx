@@ -30,28 +30,63 @@ describe('HoloCard', () => {
     expect(layer.style.bottom).toBe('29.6%')
   })
 
-  it('holo position is class-driven so reduced motion can pin it', () => {
+  it('Secret foil is drawn by the stylesheet, so the glare and reduced motion drive it there', () => {
     const { container } = render(<HoloCard card={card({ rarity: 'Secret Rare' })} size="full" />)
     const layer = holo(container)!
+    expect(layer).toHaveAttribute('data-foil', 'secret')
+    expect(layer).toHaveClass('rip-foil', 'rip-foil-secret')
+    expect(layer.style.backgroundImage).toBe('')
     expect(layer.style.backgroundPosition).toBe('')
-    expect(layer.className).toContain('motion-reduce:[background-position:50%_50%]')
-    expect(layer.className).toContain('[background-position:var(--glare-x,50%)_var(--glare-y,50%)]')
+    expect(layer.style.maskImage).toBe('')
   })
 
-  it('Starlight Rare gets a whole-card holo layer', () => {
+  it('Secret Rare also gets a foil name, inked to suit the frame', () => {
+    const { container } = render(<HoloCard card={card({ rarity: 'Secret Rare' })} size="full" />)
+    const name = container.querySelector<HTMLElement>('[data-foil="name"]')!
+    expect(name).toHaveClass('rip-foil', 'rip-foil-name')
+    expect(name).toHaveAttribute('data-ink', 'dark')
+    expect(name.style.top).toBe('4.1%')
+    expect(name.style.right).toBe('17.8%')
+
+    const { container: xyz } = render(
+      <HoloCard card={card({ rarity: 'Secret Rare', frameType: 'xyz' })} size="full" />
+    )
+    expect(xyz.querySelector('[data-foil="name"]')).toHaveAttribute('data-ink', 'light')
+  })
+
+  it('Starlight Rare gets the foil and the prism over the whole card', () => {
     const { container } = render(<HoloCard card={card({ rarity: 'Starlight Rare' })} size="full" />)
     const layer = holo(container)!
     expect(layer).toHaveAttribute('data-holo', 'full')
+    expect(layer).toHaveAttribute('data-foil', 'starlight')
+    expect(layer).toHaveClass('rip-foil-starlight', 'rounded-[6px]')
     expect(layer.style.top).toBe('0px')
+    const prism = container.querySelector<HTMLElement>('[data-foil="prism"]')!
+    expect(prism).toHaveClass('rip-foil-prism')
+    expect(prism.style.bottom).toBe('0px')
+    expect(container.querySelector('[data-foil="name"]')).not.toBeNull()
   })
 
-  it('Super and Ultra Rare get the soft sheen over the art, unmasked', () => {
+  it('an Overframe Secret keeps the Secret foil, over the whole card', () => {
+    const { container } = render(
+      <HoloCard card={card({ rarity: 'Secret Rare', variant: 'Overframe' })} size="full" />
+    )
+    const layer = holo(container)!
+    expect(layer).toHaveAttribute('data-foil', 'secret')
+    expect(layer.style.top).toBe('0px')
+    expect(container.querySelector('[data-foil="prism"]')).toBeNull()
+  })
+
+  it('Super and Ultra Rare get the same foil over the art, without a foil name', () => {
     for (const rarity of ['Super Rare', 'Ultra Rare']) {
       const { container, unmount } = render(<HoloCard card={card({ rarity })} size="full" />)
       const layer = holo(container)!
       expect(layer).toHaveAttribute('data-holo', 'soft')
+      expect(layer).toHaveAttribute('data-foil', 'soft')
+      expect(layer).toHaveClass('rip-foil', 'rip-foil-secret')
       expect(layer.style.top).toBe('18.1%')
-      expect(layer.style.maskImage).toBe('')
+      expect(layer.style.backgroundImage).toBe('')
+      expect(container.querySelector('[data-foil="name"]')).toBeNull()
       unmount()
     }
   })

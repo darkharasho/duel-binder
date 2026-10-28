@@ -94,3 +94,21 @@ const PENDULUM_ART_BOX: ArtBox = { left: 6.4, top: 17.9, right: 6.4, bottom: 38.
 export function artBox(frameType: string): ArtBox {
   return frameType.includes('pendulum') ? PENDULUM_ART_BOX : DEFAULT_ART_BOX
 }
+
+/** The name strip, measured on the same 813×1185 image; it stops short of the attribute icon. */
+const NAME_BOX: ArtBox = { left: 5.7, top: 4.1, right: 17.8, bottom: 88.9 }
+
+/** Where the card's name sits, as percent insets from each edge. The same on every frame. */
+export function nameBox(): ArtBox {
+  return NAME_BOX
+}
+
+/** Whether the name is printed in white (Xyz, Link, Spell and Trap frames) or in black. */
+export function nameInk(frameType: string): 'light' | 'dark' {
+  return /xyz|link|spell|trap/.test(frameType) ? 'light' : 'dark'
+}
+
+/** Starlight gets a glittery, radiating foil over the whole card instead of the Secret crosshatch. */
+export function isStarlight(rarity: string): boolean {
+  return baseOf(rarity).includes('Starlight')
+}

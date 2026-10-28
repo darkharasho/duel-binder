@@ -13,6 +13,10 @@ on:
         description: Upload every row, ignoring the last uploaded snapshot
         type: boolean
         default: false
+      allow_shrink:
+        description: Upload even if a table loses more than 2% of its rows (check upstream first)
+        type: boolean
+        default: false
 
 concurrency:
   group: catalog
@@ -59,7 +63,10 @@ jobs:
           key: catalog-base-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: catalog-base-
       - name: Refresh and upload
-        run: npm run catalog:job -- ${{ inputs.full && '--full' || '' }}
+        run: >-
+          npm run catalog:job --
+          ${{ inputs.full && '--full' || '' }}
+          ${{ inputs.allow_shrink && '--allow-shrink' || '' }}
       - name: Parity check
         continue-on-error: false
         run: npm run catalog:parity

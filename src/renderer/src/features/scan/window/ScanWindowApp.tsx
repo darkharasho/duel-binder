@@ -58,7 +58,8 @@ function Scanner({
     setKey: scanSet ? `${scanSet.language}|${scanSet.setName}` : ANY,
     setPrintings: scanSet === null ? null : setPrintings.data,
     defaultRarity: settings.defaultRarity,
-    onDraft
+    onDraft,
+    onStalled: camera.retry
   })
 
   useEffect(() => {

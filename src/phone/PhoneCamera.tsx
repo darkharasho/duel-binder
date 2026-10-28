@@ -10,7 +10,8 @@ import { cn } from '@/lib/utils'
 const CAMERA_MESSAGES: Record<CameraError, string> = {
   denied: 'Duel Binder needs the camera to scan. Allow it for this site in your browser settings.',
   none: "This phone's camera didn't open.",
-  lost: 'The camera stopped.'
+  lost: 'The camera stopped.',
+  busy: 'The camera is in use by another app.'
 }
 
 /** The video track's torch, where the browser offers one (Chrome on Android; not iPhone). */
@@ -83,7 +84,12 @@ export function PhoneCamera({
   const { settings } = useScanHub()
   const videoRef = useRef<HTMLVideoElement>(null)
   const camera = useCamera(settings.deviceId, 'environment')
-  const { loop } = useHubScan({ videoRef, stream: camera.stream, engineFactory })
+  const { loop } = useHubScan({
+    videoRef,
+    stream: camera.stream,
+    engineFactory,
+    onStalled: camera.retry
+  })
   const torch = useTorch(camera.stream)
 
   return (

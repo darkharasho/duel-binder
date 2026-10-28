@@ -1,5 +1,9 @@
 import { surfaceLook, surfaceOver, type SurfaceLook, type SurfaceReading } from './surface'
-import { RARITY_MIN_AGREEMENT, RARITY_MIN_READINGS } from './thresholds'
+import {
+  NAME_PRISMATIC_MAX_DARK_CONTRAST,
+  RARITY_MIN_AGREEMENT,
+  RARITY_MIN_READINGS
+} from './thresholds'
 
 /** Lowest to highest. Variants like "Ultra Rare (Extended Art)" rank just after their base. */
 export const RARITY_TIERS: readonly string[] = [
@@ -60,6 +64,11 @@ export interface RarityCues {
   /** Null when the name couldn't be read. */
   nameInk: NameInk | null
   nameTint: NameTint | null
+  /**
+   * How much darker the name's ink is than the bar around it, in luma from 0 to 1 (negative when
+   * lighter); null or undefined when the name couldn't be read.
+   */
+  nameContrast?: number | null
   /** The texture of the frame beside the artwork and of the effect text; null when unmeasured. */
   surface?: SurfaceReading | null
 }
@@ -111,7 +120,8 @@ function plainInk(frameType: string): NameInk | null {
   return null
 }
 
-type Fit = 'fits' | 'out' | 'maybe'
+/** Whether a look fits a rarity, rules it out, or can't tell. */
+export type Fit = 'fits' | 'out' | 'maybe'
 
 /**
  * Frames whose name bar is pale (white, grey or yellow): a prismatic name on them reads darker
@@ -131,7 +141,9 @@ const ALWAYS_WHITE_NAME_FRAMES = new Set(['xyz', 'xyz_pendulum', 'link'])
  * reads light and silver where plain names are black, since glare can turn gold light and on
  * camera it mostly takes the bar's colour. On Xyz and Link frames, whose plain names are white on
  * every print, a dark name can only be foil mirroring the room: gold fits it and plain is ruled
- * out (as prismatic is by a dark name, on a pale bar only when it reads gold).
+ * out. A dark name rules prismatic out when it reads gold, or elsewhere than on a pale bar when
+ * it is far darker than the bar (NAME_PRISMATIC_MAX_DARK_CONTRAST): a prismatic name that reads
+ * dark, as about 1 in 12 do on orange and other dark-name frames, is never that much darker.
  */
 function fit(look: NameLook, cues: RarityCues, plain: NameInk, frameType: string): Fit {
   const { nameInk: ink, nameTint: tint } = cues
@@ -143,7 +155,10 @@ function fit(look: NameLook, cues: RarityCues, plain: NameInk, frameType: string
   if (look === 'prismatic')
     return prismatic
       ? 'fits'
-      : ink === 'dark' && (gold || !PALE_BARS.has(frameType))
+      : ink === 'dark' &&
+          (gold ||
+            (!PALE_BARS.has(frameType) &&
+              (cues.nameContrast ?? 0) >= NAME_PRISMATIC_MAX_DARK_CONTRAST))
         ? 'out'
         : 'maybe'
   if (darkOnWhite) return 'out'
@@ -175,11 +190,40 @@ const SURFACE_LOOKS: Record<string, SurfaceLook> = {
 const OVER_FRAME = /overframe|full art/i
 
 /**
- * The rarity among `available` whose look fits the one seen, on a card with frameType. Its name
- * and its frame beside the artwork are each checked, and either can rule a rarity out. It is
- * certain only when it fits at least one, neither rules it out, and every other rarity is ruled
- * out: rarities that look alike (Common and Super Rare, a rarity and its variants) are never told
- * apart. Otherwise it is the lowest tier, uncertain.
+ * How each distinct rarity in `available` fits the look seen on a card with frameType. Its name
+ * and its frame beside the artwork are each checked, and either can rule a rarity out: 'out'
+ * when either does, else 'fits' when either fits it, else 'maybe'.
+ */
+export function rarityFits(
+  available: string[],
+  cues: RarityCues,
+  frameType: string
+): { rarity: string; fit: Fit }[] {
+  const distinct = [...new Set(available)]
+  const plain = plainInk(frameType)
+  // A frame is read only on a shot whose name was read too: one too blurred or glared for that
+  // can hide a Starlight's glitter.
+  const frame =
+    !cues.nameInk || distinct.some((r) => OVER_FRAME.test(r))
+      ? null
+      : surfaceLook(cues.surface ?? null, frameType)
+  return distinct.map((r) => {
+    const nameLook = NAME_LOOKS[baseOf(r)]
+    const surface = r === baseOf(r) ? SURFACE_LOOKS[r] : undefined
+    const fits: Fit[] = [
+      cues.nameInk && plain && nameLook ? fit(nameLook, cues, plain, frameType) : 'maybe',
+      frame && surface ? (frame === surface ? 'fits' : 'out') : 'maybe'
+    ]
+    const verdict: Fit = fits.includes('out') ? 'out' : fits.includes('fits') ? 'fits' : 'maybe'
+    return { rarity: r, fit: verdict }
+  })
+}
+
+/**
+ * The rarity among `available` whose look fits the one seen, on a card with frameType (see
+ * rarityFits). It is certain only when it fits and every other rarity is ruled out: rarities that
+ * look alike (Common and Super Rare, a rarity and its variants) are never told apart. Otherwise
+ * it is the lowest tier, uncertain.
  */
 export function pickRarityByCues(
   available: string[],
@@ -188,24 +232,9 @@ export function pickRarityByCues(
 ): { rarity: string; certain: boolean } {
   const distinct = [...new Set(available)]
   if (distinct.length === 1) return { rarity: distinct[0], certain: true }
-  const plain = plainInk(frameType)
-  // A frame is read only on a shot whose name was read too: one too blurred or glared for that
-  // can hide a Starlight's glitter.
-  const frame =
-    !cues.nameInk || distinct.some((r) => OVER_FRAME.test(r))
-      ? null
-      : surfaceLook(cues.surface ?? null, frameType)
-  const fits = distinct.map((r): Fit[] => {
-    const nameLook = NAME_LOOKS[baseOf(r)]
-    const surface = r === baseOf(r) ? SURFACE_LOOKS[r] : undefined
-    return [
-      cues.nameInk && plain && nameLook ? fit(nameLook, cues, plain, frameType) : 'maybe',
-      frame && surface ? (frame === surface ? 'fits' : 'out') : 'maybe'
-    ]
-  })
-  const out = fits.map((f) => f.includes('out'))
-  const chosen = fits.findIndex((f, i) => !out[i] && f.includes('fits'))
-  if (chosen !== -1 && out.every((o, i) => i === chosen || o))
+  const fits = rarityFits(distinct, cues, frameType)
+  const chosen = fits.findIndex((f) => f.fit === 'fits')
+  if (chosen !== -1 && fits.every((f, i) => i === chosen || f.fit === 'out'))
     return { rarity: distinct[chosen], certain: true }
   return { rarity: lowest(distinct), certain: false }
 }
@@ -220,8 +249,8 @@ function agreed<T>(values: T[]): T | null {
 /**
  * The cues over the frames of one showing: the ink at least RARITY_MIN_AGREEMENT of the
  * readings show, once there are RARITY_MIN_READINGS of them, and the tint as many of those
- * agree on; and the median surface of the frames that measured one, once there are
- * RARITY_MIN_READINGS of those. Unread frames don't count.
+ * agree on, with the median contrast of those that show it; and the median surface of the frames
+ * that measured one, once there are RARITY_MIN_READINGS of those. Unread frames don't count.
  */
 export function cuesOver(readings: RarityCues[]): RarityCues {
   const surfaces = readings.flatMap((r) => (r.surface ? [r.surface] : []))
@@ -229,9 +258,20 @@ export function cuesOver(readings: RarityCues[]): RarityCues {
   const read = readings.filter((r) => r.nameInk !== null)
   const ink = read.length < RARITY_MIN_READINGS ? null : agreed(read.map((r) => r.nameInk))
   if (!ink) return { nameInk: null, nameTint: null, surface }
+  const agreeing = read.filter((r) => r.nameInk === ink)
+  const contrasts = agreeing.flatMap((r) =>
+    typeof r.nameContrast === 'number' ? [r.nameContrast] : []
+  )
   return {
     nameInk: ink,
-    nameTint: agreed(read.filter((r) => r.nameInk === ink).map((r) => r.nameTint)),
+    nameTint: agreed(agreeing.map((r) => r.nameTint)),
+    nameContrast: contrasts.length ? median(contrasts) : null,
     surface
   }
+}
+
+function median(values: number[]): number {
+  const sorted = [...values].sort((a, b) => a - b)
+  const mid = sorted.length >> 1
+  return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2
 }

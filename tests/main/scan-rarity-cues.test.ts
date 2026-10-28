@@ -11,13 +11,17 @@ import type { RgbaImage } from '../../src/shared/scan/types'
 import { rarityCues } from '../../src/renderer/src/features/scan/vision/rarityCues'
 import { NAME_BAND } from '../../src/renderer/src/features/scan/vision/regions'
 
+/** A dark name reads this much darker than its bar unless said otherwise: plainly black ink. */
+const BLACK_INK = 0.3
+
 const pick = (
   available: string[],
   nameInk: NameInk | null,
   frameType: string,
-  nameTint: NameTint | null = null
+  nameTint: NameTint | null = null,
+  nameContrast: number | null = nameInk === 'dark' ? BLACK_INK : null
 ): ReturnType<typeof pickRarityByCues> =>
-  pickRarityByCues(available, { nameInk, nameTint }, frameType)
+  pickRarityByCues(available, { nameInk, nameTint, nameContrast }, frameType)
 
 describe('pickRarityByCues', () => {
   it('picks gold only when the ink reads dark and is gold-coloured', () => {
@@ -208,6 +212,20 @@ describe('pickRarityByCues by the name alone', () => {
     expect(pick(['Super Rare', 'Ultra Rare'], 'dark', 'spell').certain).toBe(false)
   })
 
+  it('rules prismatic out by a dark name only when it is far darker than the bar', () => {
+    const options = ['Common', 'Secret Rare', 'Starlight Rare']
+    expect(pick(options, 'dark', 'effect', null, 0.3)).toEqual({ rarity: 'Common', certain: true })
+    // A prismatic name reading dark is never that much darker: TCGplayer's Lunalight Yellow
+    // Marten Starlight read 0.1 and was taken for Common.
+    expect(pick(options, 'dark', 'effect', null, 0.1).certain).toBe(false)
+    expect(pick(options, 'dark', 'effect', null, null).certain).toBe(false)
+    // A gold name rules prismatic out whatever its contrast.
+    expect(pick(['Ultra Rare', 'Secret Rare'], 'dark', 'effect', 'gold', 0.05)).toEqual({
+      rarity: 'Ultra Rare',
+      certain: true
+    })
+  })
+
   it("doesn't rule prismatic out by a dark name on a pale bar", () => {
     expect(pick(['Common', 'Secret Rare'], 'dark', 'synchro').certain).toBe(false)
     expect(pick(['Common', 'Secret Rare'], 'dark', 'normal').certain).toBe(false)
@@ -226,6 +244,7 @@ describe('cuesOver', () => {
   const none = { nameInk: null, nameTint: null, surface: null }
   const out = (nameInk: NameInk | null, nameTint: NameTint | null = null): RarityCues => ({
     ...c(nameInk, nameTint),
+    nameContrast: null,
     surface: null
   })
 
@@ -259,6 +278,18 @@ describe('cuesOver', () => {
       nameTint: null,
       surface: { frameFloor: 2, frameCoarse: 1, textEdges: 20, textFine: 5 }
     })
+  })
+
+  it('takes the median contrast of the frames that agree on the ink', () => {
+    const at = (nameInk: NameInk, nameContrast: number): RarityCues => ({
+      nameInk,
+      nameTint: null,
+      nameContrast
+    })
+    const three = [at('dark', 0.3), at('dark', 0.1), at('dark', 0.25)]
+    expect(cuesOver(three).nameContrast).toBe(0.25)
+    const five = [...three, at('dark', 0.2), at('light', -0.3)]
+    expect(cuesOver(five).nameContrast).toBe(0.225)
   })
 
   it('keeps a tint only when the frames that agree on the ink agree on it too', () => {
@@ -326,6 +357,15 @@ describe('rarityCues', () => {
   it('reads plain black and white names', () => {
     expect(name(rarityCues(card(ORANGE, () => BLACK)))).toEqual({ nameInk: 'dark', nameTint: null })
     expect(rarityCues(card(TEAL, () => WHITE)).nameInk).toBe('light')
+  })
+
+  it('tells how much darker the name is than its bar', () => {
+    // Orange bar luma about 128, black ink about 21.
+    const black = rarityCues(card(ORANGE, () => BLACK)).nameContrast!
+    expect(black).toBeGreaterThan(0.35)
+    expect(black).toBeLessThan(0.45)
+    expect(rarityCues(card(TEAL, () => WHITE)).nameContrast).toBeLessThan(-0.3)
+    expect(rarityCues(card(ORANGE, () => null)).nameContrast).toBeNull()
   })
 
   it('reads a dim gold name that takes the bar colour as dark but not gold', () => {

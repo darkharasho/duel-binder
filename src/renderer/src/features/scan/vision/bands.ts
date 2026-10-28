@@ -45,6 +45,81 @@ export function findTextLine(img: RgbaImage, box: Box, scale = 2): TextLine | nu
     : { width, height, sign: -1, blobs: light, rivalBlobs: dark.length }
 }
 
+/** A name line's ink, the ink dilated by 2 px (its halo), and the box around the line. */
+export interface Strokes {
+  ink: Uint8Array
+  halo: Uint8Array
+  x0: number
+  x1: number
+  y0: number
+  y1: number
+}
+
+export function strokes(band: RgbaImage, line: TextLine): Strokes {
+  const { width } = band
+  const ink = new Uint8Array(width * band.height)
+  let x0 = width
+  let x1 = 0
+  let y0 = band.height
+  let y1 = 0
+  for (const blob of line.blobs) {
+    for (const p of blob.pixels) ink[p] = 1
+    x0 = Math.min(x0, blob.x0)
+    x1 = Math.max(x1, blob.x1)
+    y0 = Math.min(y0, blob.y0)
+    y1 = Math.max(y1, blob.y1)
+  }
+  // Dilated along rows, then columns: the colour a camera bleeds around thin strokes.
+  const rows = new Uint8Array(ink.length)
+  for (let y = y0; y <= y1; y++)
+    for (let x = x0; x <= x1; x++)
+      for (let d = -2; d <= 2; d++) {
+        const xx = x + d
+        if (xx >= x0 && xx <= x1 && ink[y * width + xx]) {
+          rows[y * width + x] = 1
+          break
+        }
+      }
+  const halo = new Uint8Array(ink.length)
+  for (let y = y0; y <= y1; y++)
+    for (let x = x0; x <= x1; x++)
+      for (let d = -2; d <= 2; d++) {
+        const yy = y + d
+        if (yy >= y0 && yy <= y1 && rows[yy * width + x]) {
+          halo[y * width + x] = 1
+          break
+        }
+      }
+  return { ink, halo, x0, x1, y0, y1 }
+}
+
+/**
+ * How much darker a name line's ink is than the bar around it (the line's box less the ink and
+ * its halo), in luma 0-1 as the camera gave it; negative when lighter. Null without ink or bar.
+ */
+export function inkContrast(band: RgbaImage, line: TextLine): number | null {
+  if (!line.blobs.length) return null
+  const { ink, halo, x0, x1, y0, y1 } = strokes(band, line)
+  const { width, data } = band
+  let inkL = 0
+  let inks = 0
+  let barL = 0
+  let bars = 0
+  for (let y = y0; y <= y1; y++)
+    for (let x = x0; x <= x1; x++) {
+      const p = y * width + x
+      const l = 0.299 * data[p * 4] + 0.587 * data[p * 4 + 1] + 0.114 * data[p * 4 + 2]
+      if (ink[p]) {
+        inkL += l
+        inks++
+      } else if (!halo[p]) {
+        barL += l
+        bars++
+      }
+    }
+  return inks && bars ? (barL / bars - inkL / inks) / 255 : null
+}
+
 /**
  * The text in box on a straightened card, ready for OCR: cropped, grayscale, scaled up `scale`
  * times and contrast-stretched, then cut down to its longest line of text, drawn black on white

@@ -64,6 +64,13 @@ export const NAME_SILVER_MAX_SATURATION_RATIO = 0.65
 export const NAME_SILVER_MAX_SATURATION = 0.1
 /** ...or its coloured pixels spread over hues this much (1 - mean resultant length). */
 export const NAME_SILVER_MIN_HUE_SPREAD = 0.35
+/**
+ * A dark name rules prismatic out (off pale bars) only when its ink is at least this much darker
+ * than the bar, in luma 0-1. Of 30 prismatic names that read dark on dark-name frames over the
+ * eBay photos, TCGplayer and Yugipedia scans and their degraded copies, none reached it (the
+ * darkest 0.207); 182 of 335 plain names there did.
+ */
+export const NAME_PRISMATIC_MAX_DARK_CONTRAST = 0.21
 /** Frames of one showing that must read the name's ink before it decides the rarity. */
 export const RARITY_MIN_READINGS = 2
 /** Share of those readings that must agree. */

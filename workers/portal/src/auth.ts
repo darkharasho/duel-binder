@@ -14,6 +14,7 @@ const SCAN_FAILED = '/scan/?signin=failed'
 const DESKTOP_TTL_MS = 365 * DAY_MS
 const DESKTOP_SLIDE_BELOW_MS = 364 * DAY_MS
 const DESKTOP_CODE_TTL_MS = 120_000
+const LAST_SEEN_EVERY_MS = 60 * 60 * 1000
 const PORT_RE = /^\d{4,5}$/
 const STATE_RE = /^[A-Za-z0-9_-]{16,128}$/
 const CHALLENGE_RE = /^[A-Za-z0-9_-]{43}$/
@@ -115,6 +116,12 @@ async function findSession(
       .prepare('UPDATE sessions SET expires_at = ? WHERE token_hash = ?')
       .run(new Date(now.getTime() + DESKTOP_TTL_MS).toISOString(), tokenHash)
   }
+  // Only writes when the stamp is an hour stale, so most requests just read the row.
+  deps.db
+    .prepare(
+      'UPDATE users SET last_seen_at = ? WHERE id = ? AND (last_seen_at IS NULL OR last_seen_at < ?)'
+    )
+    .run(now.toISOString(), row.user_id, new Date(now.getTime() - LAST_SEEN_EVERY_MS).toISOString())
   return { id: row.user_id, kind: found.kind, tokenHash }
 }
 

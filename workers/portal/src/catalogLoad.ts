@@ -3,6 +3,7 @@ import { setMeta, type MetaKey } from '../../../src/main/db/meta'
 import type { AppDeps } from './app'
 import { upsertCatalogRow } from '../../../src/main/catalog/upsert'
 import { putFingerprints, rollbackFingerprints } from './scanFiles'
+import { collectStats } from './stats'
 
 const MAX_ITEMS = 5000
 const META_KEYS: MetaKey[] = ['db_version', 'last_sync_at']
@@ -133,6 +134,8 @@ export async function adminRoute(req: Request, deps: AppDeps): Promise<Response>
     }
     return json({ counts })
   }
+
+  if (req.method === 'GET' && path === '/admin/stats') return json(collectStats(deps))
 
   if (req.method === 'GET' && path === '/admin/catalog/pkeys') {
     const q = new URL(req.url).searchParams

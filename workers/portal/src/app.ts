@@ -49,6 +49,8 @@ export interface AppDeps {
   /** Queues an eBay price run after a write. */
   prices: PriceQueue
   env: Env
+  /** Bytes the database takes on disk; absent outside a Durable Object. */
+  storageBytes?: () => number
   now: () => Date
   fetch: typeof fetch
 }

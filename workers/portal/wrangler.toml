@@ -39,3 +39,7 @@ SITE_URL = "https://duelbinder.com"
 PUBLIC_URL = "https://app.duelbinder.com"
 DISCORD_CLIENT_ID = "1563797080420655266"
 PRICE_WORKER_URL = "https://ygo-ebay-prices.project96.workers.dev"
+
+# Workers Logs: request logs and console output, searchable in the dashboard for a few days.
+[observability]
+enabled = true

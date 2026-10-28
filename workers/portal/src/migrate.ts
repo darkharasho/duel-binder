@@ -252,6 +252,11 @@ CREATE TABLE price_request_log (
   PRIMARY KEY (user_id, day));
 CREATE INDEX ix_price_request_log_day ON price_request_log(day);
 `
+  },
+  {
+    // When each user last made a signed-in request, to the hour; feeds /admin/stats active counts.
+    name: 'server-9',
+    sql: 'ALTER TABLE users ADD COLUMN last_seen_at TEXT;'
   }
 ]
 

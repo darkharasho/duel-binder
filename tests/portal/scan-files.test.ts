@@ -52,6 +52,31 @@ describe('scan fingerprint file', () => {
       }),
       deps
     )
+  const putForced = (bytes: Uint8Array): Promise<Response> =>
+    handle(
+      new Request(`${BASE}/admin/scan/fingerprints?force=1`, {
+        method: 'PUT',
+        headers: { 'content-type': 'application/octet-stream', authorization: `Bearer ${TOKEN}` },
+        body: bytes as unknown as BodyInit
+      }),
+      deps
+    )
+  const rollback = (): Promise<Response> =>
+    handle(
+      new Request(`${BASE}/admin/scan/fingerprints/rollback`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${TOKEN}` }
+      }),
+      deps
+    )
+  /** A file of `n` records with ids 1..n. */
+  const file = (n: number, fill = 5): Uint8Array =>
+    encodeFingerprints(
+      Array.from({ length: n }, (_, i) => ({
+        imageId: i + 1,
+        hash: new Uint32Array(HASH_WORDS).fill(fill)
+      }))
+    )
   const get = (headers: Record<string, string> = {}): Promise<Response> =>
     handle(new Request(`${BASE}/scan/fingerprints`, { headers }), deps)
 
@@ -94,9 +119,49 @@ describe('scan fingerprint file', () => {
   it('serves the new bytes after a replacement', async () => {
     await put(body)
     const etag = (await get()).headers.get('etag')!
-    await put(encodeFingerprints([]))
+    expect((await put(file(2, 0xabc))).status).toBe(200)
     const res = await get({ 'if-none-match': etag })
     expect(res.status).toBe(200)
+  })
+
+  it('rejects an empty file', async () => {
+    const res = await put(encodeFingerprints([]))
+    expect(res.status).toBe(400)
+    expect(bucket.store.size).toBe(0)
+  })
+
+  it('refuses a file that shrinks the index past 10% unless forced', async () => {
+    await put(file(100))
+    const smaller = file(80)
+    const res = await put(smaller)
+    expect(res.status).toBe(409)
+    expect(await res.json()).toMatchObject({ had: 100, count: 80 })
+    expect(new Uint8Array(await (await get()).arrayBuffer())).toEqual(file(100))
+
+    expect((await put(file(95))).status).toBe(200)
+    expect((await putForced(smaller)).status).toBe(200)
+    expect(new Uint8Array(await (await get()).arrayBuffer())).toEqual(smaller)
+  })
+
+  it('keeps the replaced file and rolls back to it', async () => {
+    expect((await rollback()).status).toBe(404)
+    await put(file(10))
+    await put(file(12))
+    const res = await rollback()
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ ok: true, count: 10 })
+    expect(new Uint8Array(await (await get()).arrayBuffer())).toEqual(file(10))
+    // Rolling back again undoes the rollback.
+    await rollback()
+    expect(new Uint8Array(await (await get()).arrayBuffer())).toEqual(file(12))
+  })
+
+  it('rejects a rollback without the admin token', async () => {
+    const res = await handle(
+      new Request(`${BASE}/admin/scan/fingerprints/rollback`, { method: 'POST' }),
+      deps
+    )
+    expect(res.status).toBe(401)
   })
 
   it('answers 404 before any upload', async () => {

@@ -7,6 +7,14 @@ import { mapApiCard, type ApiCard } from '../ygo/mapCard'
 
 export const SYNC_INTERVAL_MS = 24 * 60 * 60 * 1000
 
+/**
+ * A payload holding fewer than this share of the cards already stored is taken as a truncated
+ * response and refused, since saving it would prune every card image and printing it left out.
+ * Only applies once the catalog is big enough for the share to mean something.
+ */
+export const MIN_PAYLOAD_SHARE = 0.9
+const MIN_GUARDED_CARDS = 100
+
 export function shouldSync(lastSyncAt: string | null, now: Date): boolean {
   if (!lastSyncAt) return true
   const last = Date.parse(lastSyncAt)
@@ -91,6 +99,12 @@ function saveCards(
     (c) => c && Number.isInteger(c.id) && typeof c.name === 'string' && c.name !== ''
   )
   if (valid.length === 0) throw new Error('The card database response contained no cards')
+  const { stored } = db.prepare('SELECT count(*) AS stored FROM cards').get() as { stored: number }
+  if (stored >= MIN_GUARDED_CARDS && valid.length < stored * MIN_PAYLOAD_SHARE) {
+    throw new Error(
+      `The card database response looks truncated (${valid.length} cards, ${stored} stored)`
+    )
+  }
 
   const upsertCard = db.prepare(`
     INSERT INTO cards (id, name, type, frame_type, race, attribute, level, linkval, atk, def, archetype,

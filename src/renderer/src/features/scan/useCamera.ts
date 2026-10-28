@@ -1,6 +1,10 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
-export type CameraError = 'denied' | 'none' | 'lost'
+/** `busy`: the camera is there but held by something else (another app, or the other scanner). */
+export type CameraError = 'denied' | 'none' | 'lost' | 'busy'
+
+/** Waits before each automatic retry of a busy camera; after the last, Try again is up to the user. */
+const BUSY_RETRY_MS = [500, 1500, 4000]
 
 const CAMERA_KEY = 'scan.camera'
 
@@ -43,7 +47,11 @@ const constraints = (deviceId: string | null, facing?: CameraFacing): MediaStrea
 
 const errorOf = (e: unknown): CameraError => {
   const name = e instanceof Error || e instanceof DOMException ? e.name : ''
-  return name === 'NotAllowedError' || name === 'SecurityError' ? 'denied' : 'none'
+  if (name === 'NotAllowedError' || name === 'SecurityError') return 'denied'
+  // Chromium's names for a device another process (or window) still holds.
+  if (name === 'NotReadableError' || name === 'AbortError' || name === 'TrackStartError')
+    return 'busy'
+  return 'none'
 }
 
 /**
@@ -51,6 +59,10 @@ const errorOf = (e: unknown): CameraError => {
  * webcams there are. A device that opens is remembered for next time. `lost` means the stream
  * ended on its own (unplugged); `retry` opens the camera again. With `facing` and no deviceId,
  * it asks for the camera facing that way (the phone's rear camera); desktop passes none.
+ *
+ * It recovers on its own where it can: a busy camera is tried again a few times, a missing or
+ * lost one again when a device is plugged in, and a stream the system ended or muted while the
+ * app was in the background (phones, sleep) is reopened when the app is shown again.
  */
 export function useCamera(
   deviceId: string | null,
@@ -74,6 +86,12 @@ export function useCamera(
   const current = opened?.key === key ? opened : null
   const stream = current?.stream ?? null
   const error: CameraError | null = supported ? (current?.error ?? null) : 'none'
+  const retry = useCallback(() => setAttempt((n) => n + 1), [])
+  // For the device and visibility listeners, which outlive a render.
+  const now = useRef({ stream, error })
+  useEffect(() => {
+    now.current = { stream, error }
+  })
 
   useEffect(() => {
     const media = navigator.mediaDevices
@@ -87,13 +105,41 @@ export function useCamera(
         })
         .catch(() => undefined)
     }
+    const changed = (): void => {
+      list()
+      // A camera plugged (back) in: try it, unless the user has said no.
+      const e = now.current.error
+      if (e === 'lost' || e === 'none' || e === 'busy') retry()
+    }
     list()
-    media.addEventListener?.('devicechange', list)
+    media.addEventListener?.('devicechange', changed)
     return () => {
       live = false
-      media.removeEventListener?.('devicechange', list)
+      media.removeEventListener?.('devicechange', changed)
     }
-  }, [stream])
+  }, [stream, retry])
+
+  // A busy camera is often freed a moment later (the other scanner letting go of it).
+  const busyTries = useRef(0)
+  useEffect(() => {
+    if (stream) busyTries.current = 0
+    if (error !== 'busy' || busyTries.current >= BUSY_RETRY_MS.length) return
+    const timer = setTimeout(retry, BUSY_RETRY_MS[busyTries.current++])
+    return () => clearTimeout(timer)
+  }, [error, stream, retry])
+
+  // Back from the background or sleep: a stream ended or muted meanwhile is opened again.
+  useEffect(() => {
+    if (typeof document === 'undefined') return
+    const shown = (): void => {
+      if (document.visibilityState !== 'visible') return
+      const { stream: s, error: e } = now.current
+      const track = s?.getVideoTracks()[0]
+      if (e === 'lost' || (track && (track.readyState === 'ended' || track.muted))) retry()
+    }
+    document.addEventListener('visibilitychange', shown)
+    return () => document.removeEventListener('visibilitychange', shown)
+  }, [retry])
 
   useEffect(() => {
     const media = navigator.mediaDevices
@@ -131,6 +177,5 @@ export function useCamera(
     }
   }, [deviceId, facing, key])
 
-  const retry = useCallback(() => setAttempt((n) => n + 1), [])
   return { stream, devices, error, retry }
 }

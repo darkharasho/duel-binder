@@ -297,14 +297,33 @@ function hashBox(cv: CV, card: Mat, box: Box): Uint32Array {
 }
 
 /**
+ * box grown and shrunk by jitter (a share of its size) at its bottom-right, and moved in and out
+ * by it at its top-left: an outline a few percent off (a case's or sleeve's edge taken for part of
+ * the card's, glare over a corner) puts the art box as far off, which costs the hash about 20 bits
+ * per percent.
+ */
+export function jittered(box: Box, jitter: number): Box[] {
+  const w = box[2] - box[0]
+  const h = box[3] - box[1]
+  return [-jitter, jitter].flatMap((s): Box[] => [
+    [box[0], box[1], Math.min(1, box[2] + w * s), Math.min(1, box[3] + h * s)],
+    [Math.max(0, box[0] + w * s), Math.max(0, box[1] + h * s), box[2], box[3]]
+  ])
+}
+
+/**
  * A straightened card's k closest artworks, and whether the best of them matched it upside down.
+ * With jitter, the art box and way up that came closest to any artwork is tried again a little off
+ * (jittered), keeping each image's best distance: four more hashes and lookups rather than
+ * sixteen for every box both ways up.
  */
 export function rankArt(
   cv: CV,
   card: RgbaImage,
   index: FingerprintIndex,
   candidates?: ReadonlySet<number>,
-  k = TOP_MATCHES
+  k = TOP_MATCHES,
+  jitter = 0
 ): { matches: { imageId: number; distance: number }[]; upsideDown: boolean } {
   const upright = toMat(cv, card)
   const flipped = new cv.Mat()
@@ -312,16 +331,20 @@ export function rankArt(
     // Flipping both axes turns the card 180 degrees.
     cv.flip(upright, flipped, -1)
     const best = new Map<number, { distance: number; upsideDown: boolean }>()
-    for (const mat of [upright, flipped]) {
-      for (const box of Object.values(ART_BOXES)) {
-        const hash = hashBox(cv, mat, box)
-        for (const { imageId, distance } of index.nearest(hash, k, candidates)) {
-          const prev = best.get(imageId)
-          if (prev === undefined || distance < prev.distance)
-            best.set(imageId, { distance, upsideDown: mat === flipped })
-        }
+    let closest: { mat: Mat; box: Box; distance: number } | null = null
+    const look = (mat: Mat, box: Box): void => {
+      const found = index.nearest(hashBox(cv, mat, box), k, candidates)
+      for (const { imageId, distance } of found) {
+        const prev = best.get(imageId)
+        if (prev === undefined || distance < prev.distance)
+          best.set(imageId, { distance, upsideDown: mat === flipped })
       }
+      if (found[0] && (!closest || found[0].distance < closest.distance))
+        closest = { mat, box, distance: found[0].distance }
     }
+    for (const mat of [upright, flipped]) for (const box of Object.values(ART_BOXES)) look(mat, box)
+    const around = closest as { mat: Mat; box: Box } | null
+    if (jitter && around) for (const box of jittered(around.box, jitter)) look(around.mat, box)
     const ranked = [...best]
       .map(([imageId, m]) => ({ imageId, ...m }))
       .sort((a, b) => a.distance - b.distance || a.imageId - b.imageId)

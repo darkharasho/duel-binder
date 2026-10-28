@@ -1,6 +1,7 @@
 import type { RefObject } from 'react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
+import { CardOutline } from './CardOutline'
 import { statusText } from './scanText'
 import type { CameraError } from './useCamera'
 import type { ScanLoop } from './useScanLoop'
@@ -49,21 +50,12 @@ export function ScanViewport({
             className="h-full w-full object-cover object-center"
           />
           {outline && (
-            <svg
-              aria-hidden
-              viewBox={`0 0 ${outline.width} ${outline.height}`}
-              preserveAspectRatio="xMidYMid slice"
-              className="pointer-events-none absolute inset-0 h-full w-full"
-            >
-              <polygon
-                points={outline.quad.map(([x, y]) => `${x},${y}`).join(' ')}
-                fill="none"
-                stroke="#34d399"
-                strokeWidth={3}
-                strokeLinejoin="round"
-                vectorEffect="non-scaling-stroke"
-              />
-            </svg>
+            <CardOutline
+              quad={outline.quad}
+              width={outline.width}
+              height={outline.height}
+              locked={loop.status.kind === 'added'}
+            />
           )}
           <div className="absolute inset-x-0 bottom-0 flex items-center gap-3 bg-black/70 px-4 py-2 text-sm text-white">
             <p role="status">{statusText(loop.status)}</p>

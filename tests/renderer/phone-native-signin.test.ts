@@ -1,10 +1,13 @@
 import { createHash } from 'node:crypto'
 import { describe, expect, it, vi, type Mock } from 'vitest'
-import { nativeSignIn, SignInCancelled } from '../../src/phone/nativeSignIn'
+import { appleSignIn, nativeSignIn, SignInCancelled } from '../../src/phone/nativeSignIn'
 
 const USER = { id: 1, username: 'kaiba', displayName: 'Seto', avatarUrl: null }
 
 type Start = (o: { url: string; callbackScheme: string }) => Promise<{ url: string }>
+type AppleSheet = (o: {
+  nonce: string
+}) => Promise<{ identityToken: string; givenName?: string; familyName?: string }>
 type TokenFetch = (url: string, init?: RequestInit) => Promise<Response>
 
 /** A sign-in sheet that ends on the app's scheme with `params` (the start URL's state, unless given). */
@@ -60,5 +63,46 @@ describe('nativeSignIn', () => {
       throw Object.assign(new Error('closed'), { code: 'CANCELLED' })
     })
     await expect(nativeSignIn({ start })).rejects.toBeInstanceOf(SignInCancelled)
+  })
+})
+
+describe('appleSignIn', () => {
+  it('hands Apple the nonce hash and the portal the nonce, token and name', async () => {
+    const open = vi.fn<AppleSheet>(async () => ({
+      identityToken: 'id.tok.en',
+      givenName: 'Seto',
+      familyName: 'Kaiba'
+    }))
+    const fetch = tokenFetch()
+    const result = await appleSignIn({
+      appleSignIn: open,
+      fetch: fetch as unknown as typeof globalThis.fetch
+    })
+    expect(result).toEqual({ token: 'tok', user: USER })
+
+    const [url, init] = fetch.mock.calls[0]
+    expect(url).toBe('/auth/apple/token')
+    const body = JSON.parse(init!.body as string) as Record<string, string>
+    expect(body).toMatchObject({
+      identityToken: 'id.tok.en',
+      givenName: 'Seto',
+      familyName: 'Kaiba'
+    })
+    expect(body.nonce).toMatch(/^[A-Za-z0-9_-]{32}$/)
+    expect(open.mock.calls[0][0].nonce).toBe(createHash('sha256').update(body.nonce).digest('hex'))
+  })
+
+  it('a closed Apple sheet is a cancel; a refused token is a failure', async () => {
+    const closed = vi.fn<AppleSheet>(async () => {
+      throw Object.assign(new Error('closed'), { code: 'CANCELLED' })
+    })
+    await expect(appleSignIn({ appleSignIn: closed })).rejects.toBeInstanceOf(SignInCancelled)
+    const open = vi.fn<AppleSheet>(async () => ({ identityToken: 't' }))
+    await expect(
+      appleSignIn({
+        appleSignIn: open,
+        fetch: tokenFetch(400) as unknown as typeof globalThis.fetch
+      })
+    ).rejects.toThrow('signin-failed')
   })
 })

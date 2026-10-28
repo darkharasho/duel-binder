@@ -39,7 +39,7 @@ export function renderPrivacy(view: PrivacyView): string {
 </header>
 ${section(
   'What is stored',
-  '<p>When you sign in with Discord, the portal stores your Discord id, username, display name and avatar; your collection, notes and value history; your friends and blocks; and your sign-in sessions.</p>'
+  '<p>When you sign in with Discord, the portal stores your Discord id, username, display name and avatar. When you sign in with Apple, in the iPhone app, it stores Apple’s id for your account and, if you share it, your name; not your email. Either way it also stores your collection, notes and value history; your friends and blocks; and your sign-in sessions.</p>'
 )}
 ${section(
   'Why',

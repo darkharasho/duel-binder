@@ -6,6 +6,8 @@ export const UNSUPPORTED =
 export const OPEN_ELSEWHERE = 'Duel Binder is open in another tab. Close it and try again.'
 
 export const SIGN_IN_COPY = 'Sign in with Discord to scan cards into your collection.'
+/** The iOS app's, which also offers Sign in with Apple. */
+export const NATIVE_SIGN_IN_COPY = 'Sign in to scan cards into your collection.'
 export const SIGN_IN_FAILED = "Sign-in didn't go through. Try again."
 export const SIGN_IN_URL = '/auth/discord/start?next=scan'
 

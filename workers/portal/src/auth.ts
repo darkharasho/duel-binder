@@ -1,5 +1,6 @@
 import type { Me } from '../../../src/shared/cloud'
 import type { AppDeps } from './app'
+import { verifyAppleIdentityToken } from './apple'
 
 const DAY_MS = 24 * 60 * 60 * 1000
 const SESSION_MAX_AGE = 30 * 24 * 60 * 60
@@ -403,6 +404,101 @@ export async function exchangeDesktopCode(req: Request, deps: AppDeps): Promise<
     return row.user_id
   })()
   if (userId === null) return invalid
+  return jsonResponse(200, { token, user: loadMe(deps, userId) })
+}
+
+/**
+ * Apple accounts have no Discord id: their `discord_id` is `apple:` and Apple's user id, which
+ * can't clash with a Discord id (all digits). Their username is `duelist-` and random letters,
+ * which can't clash with a Discord username either (Discord doesn't allow hyphens).
+ */
+const APPLE_ID_PREFIX = 'apple:'
+const NONCE_RE = /^[A-Za-z0-9_-]{16,128}$/
+const MAX_NAME_LEN = 64
+const USERNAME_ALPHABET = 'abcdefghijkmnpqrstuvwxyz23456789'
+
+function appleUsername(deps: AppDeps): string {
+  const taken = deps.db.prepare('SELECT 1 FROM users WHERE username = ? COLLATE NOCASE')
+  for (;;) {
+    const letters = [...crypto.getRandomValues(new Uint8Array(8))]
+      .map((b) => USERNAME_ALPHABET[b % USERNAME_ALPHABET.length])
+      .join('')
+    const name = `duelist-${letters}`
+    if (!taken.get(name)) return name
+  }
+}
+
+/** The name Apple shares on the first sign-in only (and only if the person allows it), or null. */
+function appleName(given: unknown, family: unknown): string | null {
+  const part = (v: unknown): string => (typeof v === 'string' ? v.trim() : '')
+  const name = [part(given), part(family)].filter(Boolean).join(' ').slice(0, MAX_NAME_LEN)
+  return name || null
+}
+
+/**
+ * POST /auth/apple/token `{ identityToken, nonce, givenName?, familyName? }`: the iOS app's Sign in
+ * with Apple. A valid identity token (apple.ts) signs in its Apple account, made on first use, and
+ * gets a desktop-kind Bearer token like the Discord sign-in's. The name, which Apple sends only
+ * the first time, fills an empty display name and never overwrites one.
+ */
+export async function exchangeAppleToken(req: Request, deps: AppDeps): Promise<Response> {
+  const invalid = jsonResponse(400, { error: 'invalid-token' })
+  if (!isJson(req)) return jsonResponse(415, { error: 'bad-content-type' })
+  let body: unknown
+  try {
+    body = await req.json()
+  } catch {
+    return invalid
+  }
+  const { identityToken, nonce, givenName, familyName } = (body ?? {}) as Record<string, unknown>
+  if (typeof identityToken !== 'string' || typeof nonce !== 'string' || !NONCE_RE.test(nonce))
+    return invalid
+  let sub: string | null
+  try {
+    sub = await verifyAppleIdentityToken(identityToken, nonce, deps)
+  } catch {
+    sub = null
+  }
+  if (!sub) return invalid
+
+  const appleId = APPLE_ID_PREFIX + sub
+  const name = appleName(givenName, familyName)
+  const now = deps.now()
+  const nowIso = now.toISOString()
+  const token = randomToken()
+  const tokenHash = await sha256Hex(token)
+  const userId = deps.db.transaction((): number => {
+    pruneExpired(deps, nowIso)
+    const found = deps.db.prepare('SELECT id FROM users WHERE discord_id = ?').get(appleId) as
+      { id: number } | undefined
+    let id: number
+    if (found) {
+      id = found.id
+      deps.db
+        .prepare(
+          'UPDATE users SET display_name = COALESCE(display_name, ?), updated_at = ? WHERE id = ?'
+        )
+        .run(name, nowIso, id)
+    } else {
+      deps.db
+        .prepare(
+          `INSERT INTO users (discord_id, username, display_name, avatar, created_at, updated_at)
+           VALUES (?, ?, ?, NULL, ?, ?)`
+        )
+        .run(appleId, appleUsername(deps), name, nowIso, nowIso)
+      id = (
+        deps.db.prepare('SELECT id FROM users WHERE discord_id = ?').get(appleId) as {
+          id: number
+        }
+      ).id
+    }
+    deps.db
+      .prepare(
+        "INSERT INTO sessions (token_hash, user_id, kind, created_at, expires_at) VALUES (?, ?, 'desktop', ?, ?)"
+      )
+      .run(tokenHash, id, nowIso, new Date(now.getTime() + DESKTOP_TTL_MS).toISOString())
+    return id
+  })()
   return jsonResponse(200, { token, user: loadMe(deps, userId) })
 }
 

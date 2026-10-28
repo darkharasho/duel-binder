@@ -13,6 +13,7 @@ import {
 } from '@shared/scan/thresholds'
 import type { RgbaImage } from '@shared/scan/types'
 import { findTextLine, type TextLine } from './bands'
+import { surface } from './foil'
 import { crop, NAME_BAND } from './regions'
 
 const NOTHING: RarityCues = { nameInk: null, nameTint: null }
@@ -85,16 +86,22 @@ function tintOf(band: RgbaImage, line: TextLine): NameTint | null {
 }
 
 /**
- * What a straightened, upright card shows of its foil: whether its name reads as ink darker or
- * lighter than the bar, and whether that ink is gold or silver. A reading counts only when it is
- * a line of text as tall as a name and starting where names start, and far more of it than of
- * the other ink, so a glint, a blurred frame or a misplaced band reads as nothing.
- *
- * On webcam photos the name is the cue that holds up. Sparkle in the art or across the card,
- * which would tell Super from Common or Starlight from Secret, is lost to the camera's blur and
- * JPEG.
+ * What a straightened, upright card shows of its foil: how its name reads (nameCues) and how
+ * textured its frame is beside the artwork against its effect text (surface), which tells a
+ * card foil all over, such as a Starlight, from one whose frame is plain card stock.
  */
 export function rarityCues(card: RgbaImage): RarityCues {
+  return { ...nameCues(card), surface: surface(card) }
+}
+
+/**
+ * Whether a card's name reads as ink darker or lighter than the bar, and whether that ink is
+ * gold or silver. A reading counts only when it is a line of text as tall as a name and starting
+ * where names start, and far more of it than of the other ink, so a glint, a blurred frame or a
+ * misplaced band reads as nothing. On webcam frames the ink's colour is mostly the bar's (the
+ * camera keeps colour at a quarter of the resolution), so gold is seldom told.
+ */
+function nameCues(card: RgbaImage): RarityCues {
   const line = findTextLine(card, NAME_BAND, 1)
   if (!line || line.blobs.length < NAME_INK_MIN_BLOBS) return NOTHING
   const left = Math.min(...line.blobs.map((b) => b.x0))

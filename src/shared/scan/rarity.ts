@@ -1,3 +1,4 @@
+import { surfaceLook, surfaceOver, type SurfaceLook, type SurfaceReading } from './surface'
 import { RARITY_MIN_AGREEMENT, RARITY_MIN_READINGS } from './thresholds'
 
 /** Lowest to highest. Variants like "Ultra Rare (Extended Art)" rank just after their base. */
@@ -19,6 +20,9 @@ export const RARITY_TIERS: readonly string[] = [
 
 /** A rarity without its variant, e.g. "Ultra Rare" for "Ultra Rare (Extended Art)". */
 const baseOf = (r: string): string => r.replace(/\s*\(.*\)\s*$/, '')
+
+/** A rarity without its variant: "Ultra Rare" for "Ultra Rare (Overframe)". */
+export const rarityFamily = baseOf
 
 export function rarityRank(r: string): number {
   const exact = RARITY_TIERS.indexOf(r)
@@ -56,21 +60,27 @@ export interface RarityCues {
   /** Null when the name couldn't be read. */
   nameInk: NameInk | null
   nameTint: NameTint | null
+  /** The texture of the frame beside the artwork and of the effect text; null when unmeasured. */
+  surface?: SurfaceReading | null
 }
+
+type NameLook = 'plain' | 'gold' | 'smooth gold' | 'prismatic'
 
 /**
  * How a rarity's name is printed. Plain ink is black or white by frame. A gold foil name (Ultra,
  * Premium Gold) mirrors the room and mostly reads dark on camera, but glare can make it read
  * light; a prismatic one (Secret, Starlight and kin) scatters light and reads light and silver.
- * Rarities missing here, such as Rare, Ultimate, Ghost, Collector's and the parallel foils, have
- * no known look, so they are never ruled out.
+ * An Ultra's smooth gold, unlike Premium Gold's glittery one, never read light and silver on a
+ * dark-name frame in about 250 photos and scans, where prismatic names mostly do. Rarities
+ * missing here, such as Rare, Ultimate, Ghost, Collector's and the parallel foils, have no known
+ * look, so they are never ruled out.
  */
-const NAME_LOOKS: Record<string, 'plain' | 'gold' | 'prismatic'> = {
+const NAME_LOOKS: Record<string, NameLook> = {
   Common: 'plain',
   'Short Print': 'plain',
   'Super Short Print': 'plain',
   'Super Rare': 'plain',
-  'Ultra Rare': 'gold',
+  'Ultra Rare': 'smooth gold',
   'Premium Gold Rare': 'gold',
   'Secret Rare': 'prismatic',
   'Prismatic Secret Rare': 'prismatic',
@@ -104,27 +114,72 @@ function plainInk(frameType: string): NameInk | null {
 type Fit = 'fits' | 'out' | 'maybe'
 
 /**
+ * Frames whose name bar is pale (white, grey or yellow): a prismatic name on them reads darker
+ * than the bar about half the time on camera (10 of 18 Synchro cards in the eBay and webcam
+ * shots), so a dark name there doesn't rule prismatic out.
+ */
+const PALE_BARS = new Set(['synchro', 'synchro_pendulum', 'token', 'normal', 'normal_pendulum'])
+
+/** Frames whose plain names are white on every print, old or new: a dark name there is foil. */
+const ALWAYS_WHITE_NAME_FRAMES = new Set(['xyz', 'xyz_pendulum', 'link'])
+
+/**
  * Whether a name that reads `cues` fits a rarity of `look`, rules it out, or can't tell, on a
  * frame whose plain names read `plain`. Each call needs the ink's colour to agree with its
  * polarity: gold fits only dark gold ink, prismatic only light silver ink. Plain ink is ruled
- * out only by ink that is plainly foil. Gold is never ruled out, since glare can turn it light
- * and on camera it mostly takes the bar's colour.
+ * out only by ink that is plainly foil. Gold is ruled out only when smooth (Ultra) and the name
+ * reads light and silver where plain names are black, since glare can turn gold light and on
+ * camera it mostly takes the bar's colour. On Xyz and Link frames, whose plain names are white on
+ * every print, a dark name can only be foil mirroring the room: gold fits it and plain is ruled
+ * out (as prismatic is by a dark name, on a pale bar only when it reads gold).
  */
-function fit(look: 'plain' | 'gold' | 'prismatic', cues: RarityCues, plain: NameInk): Fit {
+function fit(look: NameLook, cues: RarityCues, plain: NameInk, frameType: string): Fit {
   const { nameInk: ink, nameTint: tint } = cues
+  const darkOnWhite = ink === 'dark' && ALWAYS_WHITE_NAME_FRAMES.has(frameType)
   const gold = ink === 'dark' && tint === 'gold'
   const prismatic = ink === 'light' && tint === 'silver'
-  if (look === 'gold') return gold ? 'fits' : 'maybe'
-  if (look === 'prismatic') return prismatic ? 'fits' : ink === 'dark' ? 'out' : 'maybe'
+  if (look === 'smooth gold' && prismatic && plain === 'dark') return 'out'
+  if (look === 'gold' || look === 'smooth gold') return gold || darkOnWhite ? 'fits' : 'maybe'
+  if (look === 'prismatic')
+    return prismatic
+      ? 'fits'
+      : ink === 'dark' && (gold || !PALE_BARS.has(frameType))
+        ? 'out'
+        : 'maybe'
+  if (darkOnWhite) return 'out'
   if (ink === plain) return 'fits'
   return gold || prismatic ? 'out' : 'maybe'
 }
 
 /**
- * The rarity among `available` whose name looks like the one seen, on a card with frameType.
- * It is certain only when it fits and every other rarity is ruled out: rarities that look alike
- * (Common and Super Rare, Secret and Starlight, a rarity and its variants) are never told apart.
- * Otherwise it is the lowest tier, uncertain.
+ * How a rarity's frame beside the artwork reads: foil for the rarities that are foil all over
+ * (Starlight, Quarter Century Secret), plain card stock for those whose foil stays on the name
+ * and artwork. Rarities missing here, such as Platinum Secret (whose frame is textured too),
+ * Collector's, Ultimate and Gold, are never ruled out by it; nor are variants such as Overframe.
+ */
+const SURFACE_LOOKS: Record<string, SurfaceLook> = {
+  Common: 'plain',
+  'Short Print': 'plain',
+  'Super Short Print': 'plain',
+  Rare: 'plain',
+  'Super Rare': 'plain',
+  'Ultra Rare': 'plain',
+  'Secret Rare': 'plain',
+  'Prismatic Secret Rare': 'plain',
+  'Ghost Rare': 'plain',
+  'Starlight Rare': 'foil',
+  'Quarter Century Secret Rare': 'foil'
+}
+
+/** Artwork run over the frame reads as a foil frame, so with such an option the frame isn't read. */
+const OVER_FRAME = /overframe|full art/i
+
+/**
+ * The rarity among `available` whose look fits the one seen, on a card with frameType. Its name
+ * and its frame beside the artwork are each checked, and either can rule a rarity out. It is
+ * certain only when it fits at least one, neither rules it out, and every other rarity is ruled
+ * out: rarities that look alike (Common and Super Rare, a rarity and its variants) are never told
+ * apart. Otherwise it is the lowest tier, uncertain.
  */
 export function pickRarityByCues(
   available: string[],
@@ -134,13 +189,24 @@ export function pickRarityByCues(
   const distinct = [...new Set(available)]
   if (distinct.length === 1) return { rarity: distinct[0], certain: true }
   const plain = plainInk(frameType)
-  const looks = distinct.map((r) => NAME_LOOKS[baseOf(r)])
-  if (cues.nameInk && plain && looks.every(Boolean)) {
-    const fits = looks.map((look) => fit(look, cues, plain))
-    const chosen = fits.indexOf('fits')
-    if (chosen !== -1 && fits.every((f, i) => i === chosen || f === 'out'))
-      return { rarity: distinct[chosen], certain: true }
-  }
+  // A frame is read only on a shot whose name was read too: one too blurred or glared for that
+  // can hide a Starlight's glitter.
+  const frame =
+    !cues.nameInk || distinct.some((r) => OVER_FRAME.test(r))
+      ? null
+      : surfaceLook(cues.surface ?? null, frameType)
+  const fits = distinct.map((r): Fit[] => {
+    const nameLook = NAME_LOOKS[baseOf(r)]
+    const surface = r === baseOf(r) ? SURFACE_LOOKS[r] : undefined
+    return [
+      cues.nameInk && plain && nameLook ? fit(nameLook, cues, plain, frameType) : 'maybe',
+      frame && surface ? (frame === surface ? 'fits' : 'out') : 'maybe'
+    ]
+  })
+  const out = fits.map((f) => f.includes('out'))
+  const chosen = fits.findIndex((f, i) => !out[i] && f.includes('fits'))
+  if (chosen !== -1 && out.every((o, i) => i === chosen || o))
+    return { rarity: distinct[chosen], certain: true }
   return { rarity: lowest(distinct), certain: false }
 }
 
@@ -154,14 +220,18 @@ function agreed<T>(values: T[]): T | null {
 /**
  * The cues over the frames of one showing: the ink at least RARITY_MIN_AGREEMENT of the
  * readings show, once there are RARITY_MIN_READINGS of them, and the tint as many of those
- * agree on. Unread frames don't count.
+ * agree on; and the median surface of the frames that measured one, once there are
+ * RARITY_MIN_READINGS of those. Unread frames don't count.
  */
 export function cuesOver(readings: RarityCues[]): RarityCues {
+  const surfaces = readings.flatMap((r) => (r.surface ? [r.surface] : []))
+  const surface = surfaces.length < RARITY_MIN_READINGS ? null : surfaceOver(surfaces)
   const read = readings.filter((r) => r.nameInk !== null)
   const ink = read.length < RARITY_MIN_READINGS ? null : agreed(read.map((r) => r.nameInk))
-  if (!ink) return { nameInk: null, nameTint: null }
+  if (!ink) return { nameInk: null, nameTint: null, surface }
   return {
     nameInk: ink,
-    nameTint: agreed(read.filter((r) => r.nameInk === ink).map((r) => r.nameTint))
+    nameTint: agreed(read.filter((r) => r.nameInk === ink).map((r) => r.nameTint)),
+    surface
   }
 }

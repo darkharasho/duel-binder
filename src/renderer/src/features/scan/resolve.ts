@@ -228,7 +228,7 @@ export function withRarityByLook(
   defaultRarity: string | null
 ): ScanDraft {
   const current = item.options.find((p) => p.printingId === item.printingId)
-  if (!current || defaultRarity !== null || !cues?.nameInk) return item
+  if (!current || defaultRarity !== null || !cues || (!cues.nameInk && !cues.surface)) return item
   const sameCode = item.options.filter(
     (p) => p.setCode === current.setCode && p.language === current.language
   )

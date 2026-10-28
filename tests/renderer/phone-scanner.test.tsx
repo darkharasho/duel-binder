@@ -110,8 +110,14 @@ describe('phone scanner', () => {
 
     const adds = vi.mocked(store.invoke).mock.calls.filter(([c]) => c === 'collection:add')
     expect(adds).toEqual([
-      ['collection:add', [{ printingId: 101, imageId: 46986414, quantity: 1 }]],
-      ['collection:add', [{ printingId: 102, imageId: 46986414, quantity: 2 }]]
+      [
+        'collection:add',
+        [{ printingId: 101, imageId: 46986414, quantity: 1, requestId: expect.any(String) }]
+      ],
+      [
+        'collection:add',
+        [{ printingId: 102, imageId: 46986414, quantity: 2, requestId: expect.any(String) }]
+      ]
     ])
     expect(store.sync).not.toHaveBeenCalled()
     await settle(2_000)
@@ -417,6 +423,36 @@ describe('phone scanner', () => {
       await user.click(await screen.findByRole('button', { name: 'Clear list' }))
       expect(sheet).toHaveTextContent('Cards you scan show up here.')
       expect(within(sheet).getByRole('button', { name: 'Add 0 cards' })).toBeDisabled()
+    })
+
+    it("the review's printing picker lists the scan language's printings, keeping the row's own", async () => {
+      const user = userEvent.setup()
+      localStorage.setItem('language.filter', 'ja')
+      localStorage.setItem(
+        SESSION_KEY,
+        JSON.stringify([
+          row({
+            via: 'art',
+            options: [
+              printing(),
+              printing({ printingId: 102, setCode: 'LOB-JP005', rarity: 'Rare', language: 'ja' }),
+              printing({ printingId: 103, setCode: 'SDY-006', rarity: 'Common', language: 'de' })
+            ]
+          })
+        ])
+      )
+      const store = fakeStore()
+      installPhoneApi(store)
+      renderScanner(store)
+      await user.click(await screen.findByRole('button', { name: 'Review 1 scanned' }))
+      const sheet = screen.getByRole('region', { name: 'Review' })
+      await user.click(within(sheet).getByRole('combobox', { name: 'Rarity for Dark Magician' }))
+      const picker = screen.getByRole('dialog', { name: 'Printing' })
+      expect(
+        within(picker)
+          .getAllByRole('option')
+          .map((o) => o.textContent)
+      ).toEqual(['LOB-EN005Ultra RareEN', 'LOB-JP005RareJP'])
     })
 
     it('a new scan pops the found bubble and buzzes; saved rows and count changes do not', async () => {

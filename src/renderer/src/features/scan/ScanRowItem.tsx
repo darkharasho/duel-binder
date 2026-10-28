@@ -7,7 +7,7 @@ import {
   TriangleAlertIcon,
   XIcon
 } from 'lucide-react'
-import { languageInfo } from '@shared/languages'
+import { languageInfo, type Language } from '@shared/languages'
 import { CardArt } from '@/components/CardArt'
 import { formatUsd } from '@/lib/format'
 import { cn } from '@/lib/utils'
@@ -28,14 +28,22 @@ export const FLAG_TEXT: Record<NonNullable<ScanDraft['flag']>, string> = {
  * when the code was read off the card, else every printing it was matched to, so a printing
  * picked for an art or name match can still be changed to another code. Each shows its code and
  * rarity, and its language when they differ; the search also matches the set's name.
+ *
+ * With a scan language (see useScanLanguage), only printings in it are listed, plus the row's own
+ * printing whatever its language. When none are in it, as for a Japanese code read under English,
+ * every one is listed. A code read is already one language, being one set code.
  */
 // eslint-disable-next-line react-refresh/only-export-components -- shared with the phone's last-scan card
-export function choicesFor(row: ScanRow): PickerOption[] {
+export function choicesFor(row: ScanRow, language: Language | null): PickerOption[] {
   const own = row.options.filter((o) => o.cardId === row.cardId)
-  const shown =
+  const matched =
     row.via === 'code' && row.printingId !== null && row.flag !== 'pick-printing'
       ? own.filter((o) => o.setCode === row.setCode)
       : own
+  const inLanguage = matched.some((o) => o.language === language)
+  const shown = inLanguage
+    ? matched.filter((o) => o.language === language || o.printingId === row.printingId)
+    : matched
   const languages = new Set(shown.map((o) => o.language)).size > 1
   return shown.map((o) => {
     const tag = languageInfo(o.language).tag
@@ -64,16 +72,19 @@ const STEP =
 export const ScanRowItem = memo(function ScanRowItem({
   row,
   actions,
+  language,
   highlighted = false,
   disabled = false
 }: {
   row: ScanRow
   actions: ScanRowActions
+  /** The scan language the printing dropdown is narrowed to; null lists every language. */
+  language: Language | null
   highlighted?: boolean
   /** While the list is being added to the collection, rows can't change under it. */
   disabled?: boolean
 }): React.JSX.Element {
-  const choices = useMemo(() => choicesFor(row), [row])
+  const choices = useMemo(() => choicesFor(row, language), [row, language])
   const price = priceOf(row)
   const { key } = row
   const { setPrinting } = actions

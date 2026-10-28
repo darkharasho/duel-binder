@@ -58,7 +58,14 @@ export interface RipCard extends PoolCard {
   slot: number
 }
 
-/** A set Rip can open: English, with a researched layout and a pool that fills every slot. */
+/** A pack photo with more than one wrapper side by side: its size, and each wrapper's box in it. */
+export interface PackWrappers {
+  width: number
+  height: number
+  wrappers: { x: number; y: number; width: number; height: number }[]
+}
+
+/** A set Rip can open:English, with a researched layout and a pool that fills every slot. */
 export interface RipSet {
   setName: string
   setCode: string

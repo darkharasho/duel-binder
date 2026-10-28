@@ -118,9 +118,10 @@ describe('resolveSignals', () => {
   it('a card-shaped thing whose art is nothing like any card counts as nothing in view', async () => {
     // A book or the deck on the desk: its closest artwork is far off, and nothing reads.
     const far = [{ imageId: 201, distance: ART_FAR_DISTANCE + 1 }]
-    expect(await resolveSignals(raw({ art: far }), noSet)).toEqual({ kind: 'none' })
+    expect(await resolveSignals(raw({ art: far }), noSet)).toEqual({ kind: 'none', far: true })
     expect(await resolveSignals(raw({ art: far, codeTexts: ['garbage'] }), withSet(LOB))).toEqual({
-      kind: 'none'
+      kind: 'none',
+      far: true
     })
     // A code or name read still counts it.
     expect(await recognized(raw({ art: far, codeTexts: ['SDY-EN006'] }))).toMatchObject({
@@ -383,7 +384,8 @@ describe('withRarityByLook', () => {
       printingId: 12,
       flag: null
     })
-    expect(withRarityByLook(item, PLAIN, null)).toEqual({ ...item, flag: null })
+    // A Normal Monster's pale bar can make a prismatic name read dark, so dark ink doesn't settle it.
+    expect(withRarityByLook(item, PLAIN, null)).toBe(item)
     const ultraOrSecret = await guessed()
     expect(withRarityByLook(ultraOrSecret, DARK, null)).toMatchObject({
       rarity: 'Ultra Rare',
@@ -392,11 +394,18 @@ describe('withRarityByLook', () => {
     })
   })
 
+  it('rules smooth Ultra gold out by a light silver name on a black-name frame', async () => {
+    expect(withRarityByLook(await guessed(), LIGHT, null)).toMatchObject({
+      rarity: 'Secret Rare',
+      flag: null
+    })
+  })
+
   it('keeps the guess and its flag without a settling look', async () => {
     const item = await guessed()
     expect(withRarityByLook(item, null, null)).toBe(item)
-    // Gold can read light in glare, so a light name doesn't rule out Ultra.
-    expect(withRarityByLook(item, LIGHT, null)).toBe(item)
+    // Gold can read light in glare, so a light name alone doesn't rule out Ultra...
+    expect(withRarityByLook(item, { nameInk: 'light', nameTint: null }, null)).toBe(item)
     const other = await commonOrSecret()
     expect(withRarityByLook(other, { nameInk: 'light', nameTint: null }, null)).toBe(other)
   })

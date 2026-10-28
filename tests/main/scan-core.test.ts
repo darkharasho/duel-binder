@@ -162,6 +162,31 @@ describe('set codes', () => {
     expect(setCodeCandidates('DTO7-EN030')).toEqual(['DTO7-EN030', 'DT07-EN030'])
   })
 
+  it('setCodeCandidates tries JP, after the code as read, when the J of JP was misread', () => {
+    // J read as T: no valid region, so JP is the only reading.
+    expect(setCodeCandidates('LOCR-TPO3S')).toEqual(['LOCR-JP035'])
+    // J read as I (an old Italian region) or 1, or lost (P, an old Portuguese region).
+    const ip = setCodeCandidates('LOCR-IPO36')
+    expect(ip[0]).toBe('LOCR-IP036')
+    expect(ip).toContain('LOCR-JP036')
+    expect(ip.indexOf('LOCR-JP036')).toBeGreaterThan(0)
+    expect(setCodeCandidates('LOCR-1PO37')).toContain('LOCR-JP037')
+    expect(setCodeCandidates('LOCR-LP038')).toContain('LOCR-JP038')
+    const p = setCodeCandidates('LOCR-PO34')
+    expect(p.slice(0, 2)).toEqual(['LOCR-PO34', 'LOCR-P034'])
+    expect(p).toContain('LOCR-JP034')
+    expect(p.indexOf('LOCR-JP034')).toBeGreaterThan(p.indexOf('LOCR-P034'))
+    // Codes that read fine get no JP guesses.
+    expect(setCodeCandidates('LOCR-JP035')).toEqual(['LOCR-JP035'])
+    expect(setCodeCandidates('LOB-EN005')).toEqual(['LOB-EN005'])
+    expect(setCodeCandidates('SDK-PT001').some((c) => c.includes('-JP'))).toBe(false)
+  })
+
+  it('setCodeCandidates tries three digits after a four-digit read with an extra 0 or O', () => {
+    expect(setCodeCandidates('LOCR-JP0O3S')).toEqual(['LOCR-JP0035', 'LOCR-JP035', 'LOCR-JP003'])
+    expect(setCodeCandidates('LOCR-JP0351')).toEqual(['LOCR-JP0351', 'LOCR-JP351', 'LOCR-JP035'])
+  })
+
   it('setPrefix returns the part before the dash', () => {
     expect(setPrefix('MP19-EN001')).toBe('MP19')
   })
@@ -179,6 +204,21 @@ describe('rarity', () => {
       certain: false
     })
     expect(pickRarity(['Rare', 'Rare'], null)).toEqual({ rarity: 'Rare', certain: true })
+  })
+
+  it('takes the one printing labelled with a variant of the preferred rarity', () => {
+    const newArt = ['Ultra Rare (New artwork)', 'Secret Rare (New artwork)']
+    expect(pickRarity(newArt, 'Secret Rare')).toEqual({
+      rarity: 'Secret Rare (New artwork)',
+      certain: true
+    })
+    // The plain printing wins over its variant, and two variants of it are a guess.
+    expect(pickRarity(['Ultra Rare', 'Ultra Rare (Overframe)'], 'Ultra Rare').rarity).toBe(
+      'Ultra Rare'
+    )
+    expect(
+      pickRarity(['Ultra Rare (Overframe)', 'Ultra Rare (Manga-Style)'], 'Ultra Rare').certain
+    ).toBe(false)
   })
 
   it('ranks variants after their base and unknowns last', () => {

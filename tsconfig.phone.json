@@ -10,6 +10,7 @@
     "tests/renderer/setup.ts",
     "tests/main/phone-*",
     "tests/main/wasm-sql.test.ts",
+    "tests/main/scan-code-real.test.ts",
     "vite.phone.config.ts"
   ],
   "compilerOptions": {

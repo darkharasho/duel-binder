@@ -12,7 +12,8 @@ export const SWEEP_BATCH = 10
 /** The Asian languages the sweep covers; the same values the price Worker's /v1/set accepts. */
 export const SWEEP_LANGUAGES = ['ja', 'ko', 'zh-hans', 'zh-hant', 'ae'] as const
 
-const WEEK_MS = 7 * 24 * 3600 * 1000
+const DAY_MS = 24 * 3600 * 1000
+const WEEK_MS = 7 * DAY_MS
 const TIMEOUT_MS = 60_000
 
 export interface SetEntry {
@@ -94,19 +95,17 @@ export function refreshSweepQueue(db: SqlDb, now: Date): number {
   const today = utcDay(now)
   if (getMeta(db, 'price_sweeps_listed_at') === today) return 0
   const codes = db.prepare(
-    'SELECT DISTINCT set_name, set_code FROM card_printings WHERE language = ?'
-  )
-  const owned = db.prepare(
-    `SELECT DISTINCT p.set_code AS set_code FROM card_printings p
-     JOIN collection_entries e ON e.printing_id = p.id AND e.deleted_at IS NULL
-     WHERE p.language = ?`
+    `SELECT set_name, set_code,
+       MAX(EXISTS (SELECT 1 FROM collection_entries e WHERE e.printing_id = p.id AND e.deleted_at IS NULL)) AS owned
+     FROM card_printings p WHERE language = ? GROUP BY set_name, set_code`
   )
   const dates = db.prepare(
     'SELECT set_name, MAX(tcg_date) AS d FROM sets WHERE language = ? GROUP BY set_name'
   )
   const upsert = db.prepare(
     `INSERT INTO price_sweeps (key, language, owned, released) VALUES (?, ?, ?, ?)
-     ON CONFLICT(key, language) DO UPDATE SET owned = excluded.owned, released = excluded.released`
+     ON CONFLICT(key, language) DO UPDATE SET owned = excluded.owned, released = excluded.released
+     WHERE price_sweeps.owned IS NOT excluded.owned OR price_sweeps.released IS NOT excluded.released`
   )
   let n = 0
   db.transaction(() => {
@@ -114,13 +113,12 @@ export function refreshSweepQueue(db: SqlDb, now: Date): number {
       const released = new Map<string, string>()
       for (const r of dates.all(language) as { set_name: string; d: string | null }[])
         if (r.d) released.set(r.set_name, r.d)
-      const ownedKeys = new Set(
-        (owned.all(language) as { set_code: string }[]).map((r) => sweepKey(r.set_code))
-      )
+      const ownedKeys = new Set<string>()
       const keys = new Map<string, string | null>()
-      for (const r of codes.all(language) as { set_name: string; set_code: string }[]) {
+      for (const r of codes.all(language) as { set_name: string; set_code: string; owned: number }[]) {
         const key = sweepKey(r.set_code)
         if (!key) continue
+        if (r.owned) ownedKeys.add(key)
         const d = released.get(r.set_name) ?? null
         const prev = keys.get(key) ?? null
         keys.set(key, d !== null && (prev === null || d > prev) ? d : prev)
@@ -134,6 +132,14 @@ export function refreshSweepQueue(db: SqlDb, now: Date): number {
   })()
   return n
 }
+
+/**
+ * A prefix's printings. The unary plus keeps the planner off idx_printings_lang_set (which, with no
+ * ANALYZE stats, reads the whole language) and on the NOCASE set-code index that LIKE can use.
+ */
+export const ASSIGN_PRINTINGS_SQL = `SELECT p.id AS id, p.set_code AS code, p.set_rarity AS rarity, ip.checked_at AS checkedAt
+  FROM card_printings p LEFT JOIN intl_prices ip ON ip.printing_id = p.id
+  WHERE +p.language = ? AND p.set_code LIKE ?`
 
 /**
  * Writes a prefix's sweep result onto its printings. A one-printing code takes its rarity price when
@@ -156,11 +162,7 @@ export function assignSweep(
   const checkedAt = result.checkedAt ?? now.toISOString()
   const rows = (
     db
-      .prepare(
-        `SELECT p.id AS id, p.set_code AS code, p.set_rarity AS rarity, ip.checked_at AS checkedAt
-         FROM card_printings p LEFT JOIN intl_prices ip ON ip.printing_id = p.id
-         WHERE p.language = ? AND p.set_code LIKE ?`
-      )
+      .prepare(ASSIGN_PRINTINGS_SQL)
       .all(language, `${key}%`) as { id: number; code: string; rarity: string; checkedAt: string | null }[]
   ).filter((r) => sweepKey(r.code).toUpperCase() === key.toUpperCase())
 
@@ -248,10 +250,11 @@ export async function runSweep(
     if (used >= SWEEP_DAILY_CALLS) break
     try {
       const result = await client.set(key, language)
-      assignSweep(db, key, language, result, now)
+      // Spent as soon as the search returned, even if writing it fails.
       const spent = result.calls ?? 1
       used += spent
       calls += spent
+      assignSweep(db, key, language, result, now)
       swept++
     } catch (e) {
       if (e instanceof SweepRateLimited) {
@@ -260,6 +263,10 @@ export async function runSweep(
         break
       }
       console.error('Set sweep failed', key, language, e instanceof Error ? e.message : '')
+      // Back off: due again in about a day, so a permanent failure can't hold the head of the queue.
+      db.prepare(
+        'UPDATE price_sweeps SET swept_at = ? WHERE key = ? AND language = ?'
+      ).run(new Date(now.getTime() - 6 * DAY_MS).toISOString(), key, language)
     }
   }
   setMeta(db, 'sweep_calls_day', `${today}:${used}`)

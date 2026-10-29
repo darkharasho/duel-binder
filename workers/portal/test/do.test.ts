@@ -6,6 +6,7 @@ import type { SqlDb } from '../../../src/main/db/sql'
 import { searchCards } from '../../../src/main/repo/cards'
 import { countCandidates, priceCandidates } from '../../../src/main/prices/candidates'
 import { requestPrices } from '../src/priceRequests'
+import { assignSweep, refreshSweepQueue } from '../src/sweep'
 
 /** Run `fn` against a fresh, migrated Store's SQLite through the doSql adapter. */
 function inStore<R>(name: string, fn: (db: SqlDb) => R): Promise<R> {
@@ -124,5 +125,46 @@ describe('Store Durable Object SQLite', () => {
       candidates: [8, 7],
       count: 2
     })
+  })
+
+  it('the set sweep queue and assignment run on DO SQLite', async () => {
+    const out = await inStore('sweep', (db) => {
+      insertCard(db, 1, 'A')
+      const add = (code: string, rarity: string, lang: string): void => {
+        db.prepare(
+          `INSERT INTO card_printings (card_id, set_name, set_code, set_rarity, language) VALUES (1, 'Set', ?, ?, ?)`
+        ).run(code, rarity, lang)
+      }
+      add('CORI-JP001', 'Ultra Rare', 'ja')
+      add('CORI-JP001', 'Secret Rare', 'ja')
+      add('CORI-JP002', 'Common', 'ja')
+      add('CORI-DE001', 'Common', 'de')
+      const now = new Date('2026-10-28T12:00:00.000Z')
+      const listed = refreshSweepQueue(db, now)
+      const again = refreshSweepQueue(db, now)
+      const res = assignSweep(
+        db,
+        'CORI-JP',
+        'ja',
+        {
+          codes: {
+            'CORI-JP001': { all: { price: 9, listingCount: 4 }, byRarity: { 'Ultra Rare': { price: 7, listingCount: 3 } } },
+            'CORI-JP002': { all: { price: 1, listingCount: 2 }, byRarity: {} }
+          },
+          calls: 2,
+          checkedAt: now.toISOString()
+        },
+        now
+      )
+      const prices = db.prepare('SELECT price, price_seq FROM intl_prices ORDER BY price').all() as { price: number; price_seq: number }[]
+      const sweep = db.prepare('SELECT key, language, swept_at, calls FROM price_sweeps').all()
+      return { listed, again, res, prices, sweep }
+    })
+    expect(out.listed).toBe(1)
+    expect(out.again).toBe(0)
+    expect(out.res).toEqual({ priced: 2, skipped: 1 })
+    expect(out.prices.map((p) => p.price)).toEqual([1, 7])
+    expect(out.prices.every((p) => p.price_seq > 0)).toBe(true)
+    expect(out.sweep).toEqual([{ key: 'CORI-JP', language: 'ja', swept_at: '2026-10-28T12:00:00.000Z', calls: 2 }])
   })
 })

@@ -6,6 +6,7 @@ import {
   SWEEP_DAILY_CALLS,
   SWEEP_RESERVE,
   SweepRateLimited,
+  ASSIGN_PRINTINGS_SQL,
   assignSweep,
   refreshSweepQueue,
   runSweep,
@@ -214,6 +215,22 @@ describe('set sweep', () => {
     })
   })
 
+  it('the prefix lookup plans on the set-code index without stats', () => {
+    const plan = db.prepare(`EXPLAIN QUERY PLAN ${ASSIGN_PRINTINGS_SQL}`).all('ja', 'CORI-JP%') as { detail: string }[]
+    const text = plan.map((r) => r.detail).join('\n')
+    expect(text).toContain('idx_printings_set_code')
+    expect(text).not.toContain('idx_printings_lang_set')
+  })
+
+  it('the daily listing leaves unchanged rows alone', () => {
+    refreshSweepQueue(db, NOW)
+    const before = (db.prepare('SELECT total_changes() AS n').get() as { n: number }).n
+    refreshSweepQueue(db, new Date(NOW.getTime() + DAY))
+    const after = (db.prepare('SELECT total_changes() AS n').get() as { n: number }).n
+    // Only the meta day moves.
+    expect(after - before).toBe(1)
+  })
+
   describe('runSweep', () => {
     function fakeClient(remaining: number | null = 4000, impl?: (key: string) => Promise<SetResult>) {
       const set = vi.fn(impl ? (k: string) => impl(k) : async () => result({}))
@@ -287,6 +304,35 @@ describe('set sweep', () => {
       expect(Number(getMeta(db, 'sweep_calls_day')!.split(':')[1])).toBe(SWEEP_DAILY_CALLS + 1)
     })
 
+    it('a failing prefix backs off and does not block the next one on the following run', async () => {
+      refreshSweepQueue(db, NOW)
+      // LODT-JP (owned) sorts first and always fails.
+      const { client, set } = fakeClient(4000, async (k) => {
+        if (k === 'LODT-JP') throw new Error('400')
+        return result({})
+      })
+      await runSweep(db, client, NOW)
+      expect(sweepRow('LODT-JP').swept_at).toBe(ago(6))
+      expect(sweepRow('CORI-JP').swept_at).not.toBeNull()
+      set.mockClear()
+      // Nothing due the next hour; a day later the failed prefix is retried.
+      await runSweep(db, client, new Date(NOW.getTime() + 3600_000))
+      expect(set).not.toHaveBeenCalled()
+      await runSweep(db, client, new Date(NOW.getTime() + 2 * DAY))
+      expect(set.mock.calls.map((c) => c[0])).toEqual(['LODT-JP'])
+    })
+
+    it('counts calls spent even when writing the result throws', async () => {
+      refreshSweepQueue(db, NOW)
+      db.exec('DROP TABLE intl_prices')
+      const { client } = fakeClient(4000, async () =>
+        result({ 'CORI-JP002': { all: entry(5), byRarity: {} } }, NOW.toISOString(), 3)
+      )
+      const out = await runSweep(db, client, NOW)
+      expect(out.swept).toBe(0)
+      expect(getMeta(db, 'sweep_calls_day')).toBe('2026-10-28:6')
+    })
+
     it('an error from one prefix does not lose the others already swept', async () => {
       refreshSweepQueue(db, NOW)
       const { client } = fakeClient(4000, async (k) => {
@@ -296,7 +342,7 @@ describe('set sweep', () => {
       const out = await runSweep(db, client, NOW)
       expect(out.swept).toBe(1)
       expect(sweepRow('LODT-JP').swept_at).not.toBeNull()
-      expect(sweepRow('CORI-JP').swept_at).toBeNull()
+      expect(sweepRow('CORI-JP').swept_at).toBe(ago(6))
     })
   })
 

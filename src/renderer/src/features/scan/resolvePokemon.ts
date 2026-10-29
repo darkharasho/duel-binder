@@ -113,7 +113,9 @@ async function draft(
     options,
     flag: options.length === 1 || named?.length === 1 ? null : 'pick-printing',
     via,
-    game: 'pkm'
+    game: 'pkm',
+    // Priced as the raw card either way; the key is left out for a bare one.
+    ...(raw.slab ? { slab: true as const } : {})
   }
 }
 

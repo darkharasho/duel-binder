@@ -29,6 +29,8 @@ export interface FrameSignals {
   cues: RarityCues | null
   /** A Pokémon card's foil cues for its version; null for other games or a card not turned upright. */
   version?: VersionCues | null
+  /** Pokémon only: the card is in a graded slab (its label block shows above it). */
+  slab?: boolean
   /**
    * The card's look for the rarity look model (rarityFeatures, LOOK_FEATURES order): only when
    * asked for (wantLook) and the card was turned upright, else null.
@@ -69,6 +71,7 @@ export interface RawSignals {
   textBands: OcrBand[]
   cues: RarityCues | null
   version?: VersionCues | null
+  slab?: boolean
   look: number[] | null
 }
 
@@ -217,7 +220,7 @@ export function createScanEngine(deps: {
           reject(e instanceof Error ? e : new Error(String(e)))
         }
       })
-      const { found, quad, art, cues, version, look } = signals
+      const { found, quad, art, cues, version, slab, look } = signals
       if (!wantText || !found)
         return {
           found,
@@ -228,6 +231,7 @@ export function createScanEngine(deps: {
           textBands: [],
           cues,
           version,
+          slab,
           look
         }
       const codeBands = signals.codeBands.filter(hasPixels)
@@ -246,6 +250,7 @@ export function createScanEngine(deps: {
         textBands: signals.textBands.filter(hasPixels),
         cues,
         version,
+        slab,
         look
       }
     },

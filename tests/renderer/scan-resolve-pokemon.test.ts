@@ -436,4 +436,12 @@ describe('Pokémon version cues (rule 7)', () => {
       expect(out).toMatchObject({ flag: 'pick-printing', printingId: 900 })
     }
   })
+
+  it('slab flag rides on the draft', async () => {
+    const art = [{ imageId: 101, distance: 30 }]
+    expect(await recognized(raw({ art, slab: true }), pkm('en'))).toMatchObject({ slab: true })
+    const bare = await recognized(raw({ art, slab: false }), pkm('en'))
+    expect('slab' in bare).toBe(false)
+    expect('slab' in (await recognized(raw({ art }), pkm('en')))).toBe(false)
+  })
 })

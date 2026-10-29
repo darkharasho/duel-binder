@@ -128,3 +128,25 @@ export const VERSION_ART_FOIL_MIN = 6
 export const VERSION_OTHER_RATIO = 2
 /** ...and this many times as textured as the card's text box, which noise and detail hit too. */
 export const VERSION_REFERENCE_RATIO = 1.5
+
+// A graded slab's label block, untuned until real photos (Task 13). Boxes are in card widths and
+// heights from the card's top-left corner (u across, v down), so they hold at any distance.
+/** The label block sits above the card: v from here... */
+export const SLAB_LABEL_V = [-0.26, -0.06] as const
+/** ...and u from here (a label is about as wide as the card). */
+export const SLAB_LABEL_U = [0.08, 0.92] as const
+/** A label sample at least this bright (luma 0-255) counts as the label's paper... */
+export const SLAB_LABEL_MIN_BRIGHT = 170
+/** ...and this share of the label box must be paper. */
+export const SLAB_LABEL_MIN_PAPER_SHARE = 0.6
+/**
+ * Text is where a row of the label box flips between paper and a sample this much darker, at
+ * least this many times over the whole box (a plain strip, or a margin, flips none).
+ */
+export const SLAB_INK_DARKER_BY = 80
+export const SLAB_TEXT_MIN_FLIPS = 12
+/**
+ * The label's paper must be this much brighter (luma) than the holder beside it and the strip
+ * above it, which is plastic over the desk: a bright desk or a card sleeve's glare isn't a label.
+ */
+export const SLAB_MIN_CONTRAST = 40

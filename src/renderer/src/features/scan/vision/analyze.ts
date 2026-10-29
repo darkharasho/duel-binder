@@ -10,6 +10,7 @@ import { toBand, toBlock } from './bands'
 import { findCandidates, preferOuter, recognizeArt } from './candidates'
 import type { CV } from './cv'
 import { CARD_W, dist, rotate180, toMat, using, warpCard, type Quad } from './detect'
+import { isSlab } from './holder'
 import { pokemonVersionCues } from './pokemonVersion'
 import { rarityLook } from './rarityCues'
 
@@ -109,6 +110,8 @@ function analyzeFrame(
   const { cues, features: look } =
     upright && profile.rarityLook ? rarityLook(upright, wantLook) : { cues: null, features: null }
   const version = upright ? pokemonVersionCues(upright, profile) : null
+  // Pokémon only (a graded slab changes how it's priced); Yu-Gi-Oh's signals carry no slab key.
+  const slab = profile.foil ? isSlab(cv, img, quad) : undefined
   if (!wantBands)
     return {
       found: true,
@@ -119,6 +122,7 @@ function analyzeFrame(
       textBands: [],
       cues,
       version,
+      ...(slab === undefined ? {} : { slab }),
       look
     }
   const straight = card()
@@ -136,6 +140,7 @@ function analyzeFrame(
     textBands: upright ? [toBlock(straight, profile.textBox)].filter(hasPixels) : [],
     cues,
     version,
+    ...(slab === undefined ? {} : { slab }),
     look
   }
 }

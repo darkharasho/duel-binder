@@ -95,7 +95,7 @@ describe('v0.20 client against the multi-game portal', () => {
     const ygo = printing('ygo')
     const pkm = printing('pkm')
 
-    // The owner's account holds one entry in each game (Pokémon pushed by a newer client).
+    // The owner's account holds one entry in each game (pushed without a game header; the server works out the game from the printing key).
     const y = entry(ygo)
     const p = entry(pkm)
     await push([y, p])
@@ -140,10 +140,46 @@ describe('v0.20 client against the multi-game portal', () => {
     expect(feedRes.status).toBe(200)
     const feedText = await feedRes.text()
     const feed = JSON.parse(feedText) as CatalogChangesResponse
-    expect(feed).toBeTruthy()
+    // Positive: the Yu-Gi-Oh! rows are there, in their pre-Pokémon shape.
+    const rows = (table: string): Record<string, unknown>[] =>
+      feed.changes.flatMap((c) => (c.table === table && 'row' in c ? [c.row] : []))
+    const darkMagician = rows('cards').find((r) => r.name === 'Dark Magician')
+    expect(darkMagician).toBeDefined()
+    expect(Object.keys(darkMagician!)).toEqual([
+      'id', 'name', 'type', 'frame_type', 'race', 'attribute', 'level', 'linkval', 'atk', 'def',
+      'archetype', 'desc', 'tcgplayer_price', 'updated_at'
+    ])
+    const ygoPrinting = rows('card_printings').find((r) => r.pkey === ygo.pkey)
+    expect(ygoPrinting).toBeDefined()
+    expect(Object.keys(ygoPrinting!)).toEqual([
+      'id', 'pkey', 'card_id', 'set_name', 'set_code', 'set_rarity', 'set_rarity_code',
+      'set_price', 'missing_from_api', 'language', 'tcg_product_id', 'variant', 'market_price',
+      'contributed'
+    ])
+    expect(rows('pokemon_cards')).toEqual([])
     expect(feedText).not.toContain('"game"')
     expect(feedText).not.toContain('Pikachu')
     expect(feedText).not.toContain('ピカチュウ')
+
+    // The exclusion means something: Pokémon rows sit inside the range this feed covered.
+    const pkmMaxSeq = Math.max(
+      ...['cards', 'card_printings'].map(
+        (t) =>
+          (
+            db.prepare(`SELECT MAX(catalog_seq) AS s FROM ${t} WHERE game = 'pkm'`).get() as {
+              s: number
+            }
+          ).s
+      )
+    )
+    expect(pkmMaxSeq).toBeGreaterThan(0)
+    expect(pkmMaxSeq).toBeLessThanOrEqual(feed.latest)
+    expect(feed.more).toBe(false)
+    // The legacy cursor stays at its last Yu-Gi-Oh! change (byte-identical to before); asking
+    // again from there still yields nothing, though Pokémon seqs lie up to `latest`.
+    const rest = (await (await send(`/api/catalog/changes?since=${feed.cursor}`)).json()) as CatalogChangesResponse
+    expect(rest.changes).toEqual([])
+    expect(rest.more).toBe(false)
 
     // The Pokémon entry is exactly as it was: same server_seq, not deleted.
     expect(pkmRows()).toEqual(pkmBefore)

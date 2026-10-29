@@ -355,9 +355,10 @@ export function DashboardPage({ onNavigate, onAddCard }: Props): React.JSX.Eleme
     <TooltipProvider>
       <div className="max-w-[1800px] space-y-10 px-8 pb-10 pt-3 max-md:space-y-8 max-md:px-4">
         <h1 className="sr-only">Dashboard</h1>
-        {/* Home has no page header, so the phone's game chip sits at its top right. */}
+        {/* Home has no page header, so the phone's game chip sits at its top right. The stats
+            below are pulled up under it, so it's raised above them or they take its taps. */}
         {phoneChip && (
-          <div className="-mb-6 flex justify-end">
+          <div className="relative z-10 -mb-6 flex justify-end">
             <GameChip />
           </div>
         )}

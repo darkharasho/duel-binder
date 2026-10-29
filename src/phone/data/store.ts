@@ -569,7 +569,13 @@ export function createPhoneStore(deps: {
           if (token() === null || !formatCurrent() || getState('catalog_loaded') === null)
             return false
           const last = Date.parse(getMeta(db, 'last_sync_at') ?? '')
-          if (!force && !Number.isNaN(last) && now().getTime() - last < DAY_MS) return false
+          // A game with no cards here yet (its catalog wasn't up at the day's check) skips the
+          // daily limit, so new card data for a game reaches the phone on the next launch.
+          const empty = games().some(
+            (g) => db.prepare('SELECT 1 FROM cards WHERE game = ? LIMIT 1').get(g) === undefined
+          )
+          if (!force && !empty && !Number.isNaN(last) && now().getTime() - last < DAY_MS)
+            return false
           return pullCatalog(signedInClient(), () => {})
         })
       ),

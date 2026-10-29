@@ -65,7 +65,7 @@ export function variantLabel(v: TdVariant): string {
 export interface PkmVersion { label: string; productId: number | null; subTypeName: string | null; price: number | null }
 
 interface Source { productId: number; subTypeName: string; price: number | null }
-interface Entry { sources: Map<string, Source>; candidates: Set<number> }
+interface Entry { sources: Map<string, Source>; candidates: Set<number>; ambiguous: boolean }
 
 const usablePrice = (p: number | null): number | null =>
   typeof p === 'number' && Number.isFinite(p) && p > 0 ? p : null
@@ -76,7 +76,9 @@ const usablePrice = (p: number | null): number | null =>
  * finite marketPrice, else null; there is no fallback to another subtype or product. A label two
  * different (product, subtype) rows would share is kept once, unpriced and with no product, and
  * reported. A version only TCGdex knows has no price; it keeps the product its variant points at, or
- * the only matched product with its subtype. With no versions at all the card gets a single Normal.
+ * the only matched product with its subtype. A product reached under more than one variant subtype
+ * (after versionSubtype, so none and "unlimited" are one) gives no product or price to any version
+ * it touches, and is reported once. With no versions at all the card gets a single Normal.
  * Sorted by label.
  */
 export function cardVersions(
@@ -88,8 +90,24 @@ export function cardVersions(
   const entries = new Map<string, Entry>()
   const entry = (label: string): Entry => {
     let e = entries.get(label)
-    if (!e) entries.set(label, (e = { sources: new Map(), candidates: new Set() }))
+    if (!e) entries.set(label, (e = { sources: new Map(), candidates: new Set(), ambiguous: false }))
     return e
+  }
+
+  // A product reached under more than one version subtype can't say which printing its rows price:
+  // its versions keep their labels (they're stable) but get no product, subtype or price.
+  const subtypesOf = new Map<number, Set<string | null>>()
+  for (const { product, variantSubtype } of matched) {
+    const subs = subtypesOf.get(product.productId) ?? new Set<string | null>()
+    subs.add(versionSubtype(variantSubtype))
+    subtypesOf.set(product.productId, subs)
+  }
+  const ambiguous = new Set<number>()
+  for (const [id, subs] of subtypesOf) {
+    if (subs.size < 2) continue
+    ambiguous.add(id)
+    const names = [...subs].map((x) => (x === null ? '(none)' : JSON.stringify(x))).join(', ')
+    problems.push(`${card.id}: TCGplayer product ${id} is reached under several variant subtypes (${names}); its versions are left unpriced`)
   }
 
   for (const { product, variantSubtype } of matched) {
@@ -101,6 +119,10 @@ export function cardVersions(
       }
       const label = prefix(sub) + canonicalLabel(name)
       const key = `${product.productId}\u0000${name}`
+      if (ambiguous.has(product.productId)) {
+        entry(label).ambiguous = true
+        continue
+      }
       const sources = entry(label).sources
       const price = usablePrice(row.marketPrice)
       const seen = sources.get(key)
@@ -123,12 +145,14 @@ export function cardVersions(
     const own = typeof id === 'number'
       ? matched.filter((m) => m.product.productId === id && versionSubtype(m.variantSubtype) === sub)
       : matched.filter((m) => versionSubtype(m.variantSubtype) === sub)
-    for (const m of own) e.candidates.add(m.product.productId)
+    for (const m of own) if (!ambiguous.has(m.product.productId)) e.candidates.add(m.product.productId)
   }
 
   const versions: PkmVersion[] = []
   for (const [label, e] of entries) {
-    if (e.sources.size > 1) {
+    if (e.ambiguous) {
+      versions.push({ label, productId: null, subTypeName: null, price: null })
+    } else if (e.sources.size > 1) {
       const pairs = [...e.sources.values()].map((s) => `${s.productId} "${s.subTypeName}"`).join(', ')
       problems.push(`${card.id}: version "${label}" comes from several TCGplayer rows (${pairs}); left unpriced`)
       versions.push({ label, productId: null, subTypeName: null, price: null })

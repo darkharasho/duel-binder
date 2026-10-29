@@ -204,6 +204,32 @@ describe('cardVersions', () => {
     ])
     expect(problems).toEqual([])
   })
+  it('leaves every version of a product reached under two variant subtypes unpriced', () => {
+    const base = card(EN, 'base1-4')
+    const c: TdCard = {
+      ...base,
+      variants_detailed: [
+        { type: 'holo', subtype: 'unlimited', thirdParty: { tcgplayer: 42382 } },
+        { type: 'holo', subtype: '1999-2000-copyright', thirdParty: { tcgplayer: 42382 } }
+      ]
+    }
+    const match = matchProducts(c, 604, inGroup(EN, 604), EN.productById)
+    expect(match.products.map((p) => [p.product.productId, p.variantSubtype])).toEqual([[42382, null], [42382, '1999-2000-copyright']])
+    const { versions, problems } = cardVersions(c, match.products, EN.prices)
+    expect(versions).toEqual([
+      { label: '1999 2000 Copyright Holofoil', productId: null, subTypeName: null, price: null },
+      { label: 'Holofoil', productId: null, subTypeName: null, price: null }
+    ])
+    expect(problems).toHaveLength(1)
+    expect(problems[0]).toContain('42382')
+  })
+  it('treats no subtype and unlimited as one subtype for the same product', () => {
+    const p = prod(1, 9, null)
+    const prices = new Map([[1, [{ productId: 1, subTypeName: 'Holofoil', marketPrice: 4 }]]])
+    const r = cardVersions(brief({ variants_detailed: [{ type: 'holo' }] }), [{ product: p, variantSubtype: null }, { product: p, variantSubtype: 'unlimited' }], prices)
+    expect(r.versions).toEqual([{ label: 'Holofoil', productId: 1, subTypeName: 'Holofoil', price: 4 }])
+    expect(r.problems).toEqual([])
+  })
   it('keeps the no-rarity variant of PMCG1-001 unpriced', () => {
     const { versions } = versionsOf(JA, 'PMCG1-001')
     expect(versions).toEqual([

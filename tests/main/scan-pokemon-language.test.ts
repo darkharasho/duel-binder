@@ -23,6 +23,9 @@ describe('pokemonLanguage', () => {
     ],
     // Read off a real photo of an English card (Grubbin): few of latinLanguageOf's words.
     ['x) dtnng shot LA\nFlip 3 coin. If ads, your opponents Acove Pokémen is\nnow Panlyzed', 'en'],
+    // Read off real photos of English cards: words a blurred read gets a letter wrong.
+    [') String Shot [ ip » cain. If Iveads, your oppanent’s Acove Pokémen | ow Paralyzed', 'en'],
+    ['y Best Punch 4 ip a coin. If walls, his areack does nothing,', 'en'],
     ['HP', null],
     ['', null]
   ] as const)('%s reads as %s', (text, language) => {
@@ -35,6 +38,13 @@ describe('pokemonLanguage', () => {
         'Si cette carte est dans votre main, vous pouvez la mettre sur le terrain de votre adversaire.'
       )
     ).toBe('other')
+  })
+
+  it('does not take European words a letter off English ones for English', () => {
+    // Attacke, activo, energia, dommage: none counts as attack, active, energy or damage.
+    expect(pokemonLanguage('Glumanda KP 60 Attacke Kratzer Energie Schaden aktiv')).not.toBe('en')
+    expect(pokemonLanguage('Charmander PS 60 activo energia daño ataques')).not.toBe('en')
+    expect(pokemonLanguage('Salamèche PV 60 dommage énergie attaque actif')).not.toBe('en')
   })
 
   it('does not take short French or German reads for English', () => {

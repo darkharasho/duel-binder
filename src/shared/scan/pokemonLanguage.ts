@@ -25,9 +25,48 @@ const ENGLISH = new Set(
     "weakness retreat basic stage evolves energy damage attack opponent's your this ability " +
     // The words of attacks' text, as a blurred read keeps them ("opponent's" as "opponents").
     'opponents flip coin coins heads tails during prevent discard attached attacks effects ' +
-    'next turn more less does done takes benched active'
+    'next turn more less does done takes benched active nothing paralyzed poisoned confused ' +
+    'asleep burned shuffle remaining'
   ).split(' ')
 )
+
+/**
+ * The English words a read may get one letter wrong in and still count ("oppanent's"): long
+ * ones no European card word comes within a letter of. Attack(s), active and energy are left
+ * out: German Attacke, Spanish activo and energía are a letter or two off.
+ */
+const FUZZY = [
+  "opponent's",
+  'opponent',
+  'opponents',
+  'damage',
+  'during',
+  'prevent',
+  'discard',
+  'attached',
+  'weakness',
+  'retreat',
+  'benched',
+  'effects',
+  'nothing',
+  'paralyzed',
+  'poisoned',
+  'confused',
+  'shuffle',
+  'remaining'
+]
+
+/** Whether a and b are at most one letter added, dropped or changed apart. */
+function oneOff(a: string, b: string): boolean {
+  if (Math.abs(a.length - b.length) > 1) return false
+  let i = 0
+  while (i < a.length && i < b.length && a[i] === b[i]) i++
+  const [x, y] = [a.slice(i), b.slice(i)]
+  return x.slice(1) === y.slice(1) || x.slice(1) === y || x === y.slice(1)
+}
+
+const englishWord = (w: string): boolean =>
+  ENGLISH.has(w) || (w.length >= 6 && FUZZY.some((f) => oneOff(w, f)))
 
 /**
  * Words of Japanese Pokémon card text, written in kana as Chinese never is, three kana or more so
@@ -58,7 +97,12 @@ function japaneseWords(text: string): number {
 
 /** The English Pokémon card words in a read, counted as often as they come. */
 const englishWords = (text: string): number =>
-  (text.toLowerCase().match(/[a-z']+/g) ?? []).filter((w) => ENGLISH.has(w)).length
+  (
+    text
+      .toLowerCase()
+      .replace(/’/g, "'")
+      .match(/[a-z']+/g) ?? []
+  ).filter(englishWord).length
 
 /**
  * The language a read of a Pokémon card's text is in, of those the catalog has.

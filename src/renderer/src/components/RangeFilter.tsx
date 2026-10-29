@@ -12,16 +12,19 @@ function parseBound(v: string): number | undefined {
 export function RangeFilter({
   filter,
   values,
-  onChange
+  onChange,
+  showLabel = true
 }: {
   filter: FilterDef & { key: RangeKey }
   values: Partial<Record<RangeField, number>>
   onChange: (patch: Partial<Record<RangeField, number | undefined>>) => void
+  /** False where a heading already names the range (the phone's filter sheet). */
+  showLabel?: boolean
 }): React.JSX.Element {
   const { min, max } = RANGE_FIELDS[filter.key]
   return (
     <div className="flex items-center gap-1 text-[13px] text-foreground/80">
-      <span className="px-1">{filter.label}</span>
+      {showLabel && <span className="px-1">{filter.label}</span>}
       <Input
         type="number"
         aria-label={`${filter.label} min`}

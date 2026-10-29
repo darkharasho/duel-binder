@@ -116,14 +116,45 @@ describe('phone layout', () => {
     expect(screen.queryByRole('table')).not.toBeInTheDocument()
   })
 
-  it('collection filters open from one Filters button as a bottom sheet', async () => {
+  it('collection keeps search on the page and the facets in a Filters sheet', async () => {
     renderWithProviders(<CollectionPage />, { api: phoneApi() })
     await screen.findByLabelText('Collection grid')
+    // Search sits on the page itself, so opening the filters never raises the keyboard.
+    expect(screen.getByRole('searchbox', { name: 'Search collection' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Card type' })).not.toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Filters' }))
     const sheet = await screen.findByRole('dialog', { name: 'Filters' })
-    expect(within(sheet).getByRole('searchbox', { name: 'Search collection' })).toBeInTheDocument()
-    expect(within(sheet).getByRole('button', { name: /Card type/ })).toBeInTheDocument()
+    expect(sheet).toHaveAttribute('data-layout', 'bottom-sheet')
+    expect(within(sheet).queryByRole('searchbox')).not.toBeInTheDocument()
+    expect(within(sheet).queryByRole('textbox')).not.toBeInTheDocument()
+    for (const facet of ['Card type', 'Attribute', 'Archetype', 'Set', 'Rarity']) {
+      expect(within(sheet).getByRole('button', { name: facet })).toBeInTheDocument()
+    }
+    expect(within(sheet).getByRole('combobox', { name: 'Language' })).toBeInTheDocument()
+    expect(within(sheet).getByLabelText('Level min')).toBeInTheDocument()
+    expect(within(sheet).getByRole('radio', { name: 'Date added' })).toBeChecked()
+    expect(within(sheet).getByRole('button', { name: 'Sort descending' })).toBeInTheDocument()
+    expect(within(sheet).getByRole('button', { name: 'Clear filters' })).toBeInTheDocument()
+    // Nothing in the sheet takes focus on opening.
+    expect(sheet.contains(document.activeElement)).toBe(false)
+  })
+
+  it('collection shows a count and removable chips for active phone filters', async () => {
+    renderWithProviders(<CollectionPage />, { api: phoneApi() })
+    await screen.findByLabelText('Collection grid')
+    await userEvent.click(screen.getByRole('button', { name: 'Filters' }))
+    const sheet = await screen.findByRole('dialog', { name: 'Filters' })
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Card type' }))
+    await userEvent.click(await screen.findByRole('menuitemcheckbox', { name: 'Normal Monster' }))
+    await userEvent.keyboard('{Escape}')
+    await userEvent.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
+    expect(screen.getByRole('button', { name: 'Filters, 1 active' })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Remove Normal Monster filter' }))
+    expect(screen.getByRole('button', { name: 'Filters' })).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: 'Remove Normal Monster filter' })
+    ).not.toBeInTheDocument()
   })
 
   it('add card dialog is full-screen on the phone', async () => {
@@ -250,6 +281,8 @@ describe('phone layout', () => {
     expect(sheet).toHaveAttribute('data-layout', 'bottom-sheet')
     expect(within(sheet).getByRole('button', { name: /Card type/ })).toBeInTheDocument()
     expect(within(sheet).getByLabelText('Level min')).toBeInTheDocument()
+    // Nothing in the sheet takes focus on opening.
+    expect(sheet.contains(document.activeElement)).toBe(false)
     await userEvent.keyboard('{Escape}')
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
     // Card details open full-screen.

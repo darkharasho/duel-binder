@@ -27,36 +27,160 @@ export interface ImageBucket {
   ): Promise<unknown>
 }
 
-/** A per-user budget for upstream fetches made on that user's behalf. */
-export interface ImageQuota {
-  /** Spends one fetch; false when the user's budget for the current window is gone. */
-  take(userId: number): boolean
-  /** Milliseconds until the user's current window ends; 0 when none is open. */
-  retryAfterMs(userId: number): number
+/** A per-key budget for upstream fetches: keyed by user id when signed in, by client address when not. */
+export interface ImageQuota<K = number> {
+  /** Spends one fetch; false when the key's budget for the current window is gone. */
+  take(key: K): boolean
+  /** Milliseconds until the key's current window ends; 0 when none is open. */
+  retryAfterMs(key: K): number
+  /** True when the key's budget for the current window is gone; spends nothing and opens no window. */
+  exhausted(key: K): boolean
 }
 
-/** In-memory fixed-window quota; a window opens on a user's first take. */
-export function createImageQuota(
+export interface QuotaOptions {
+  limit: number
+  windowMs: number
+  /**
+   * Hard cap on tracked keys. When set, expired windows are swept at most once a minute and a
+   * new key past the cap evicts the oldest-opened one. Unset (the signed-in quota) never evicts.
+   */
+  maxKeys?: number
+}
+
+const QUOTA_SWEEP_EVERY_MS = 60_000
+
+/** In-memory fixed-window quota; a window opens on a key's first take. */
+export function createImageQuota<K = number>(
   now: () => number,
-  opts: { limit: number; windowMs: number } = { limit: 1000, windowMs: 3_600_000 }
-): ImageQuota {
-  const windows = new Map<number, { end: number; used: number }>()
-  const current = (userId: number): { end: number; used: number } | undefined => {
-    const w = windows.get(userId)
+  opts: QuotaOptions = { limit: 1000, windowMs: 3_600_000 }
+): ImageQuota<K> {
+  const windows = new Map<K, { end: number; used: number }>()
+  let lastSweep = -Infinity
+  const current = (key: K): { end: number; used: number } | undefined => {
+    const w = windows.get(key)
     if (w && w.end > now()) return w
-    windows.delete(userId)
+    windows.delete(key)
     return undefined
   }
+  const open = (key: K): { end: number; used: number } => {
+    const t = now()
+    if (opts.maxKeys !== undefined) {
+      if (t - lastSweep >= QUOTA_SWEEP_EVERY_MS) {
+        lastSweep = t
+        for (const [k, w] of windows) if (w.end <= t) windows.delete(k)
+      }
+      // Map order is insertion order, and a key is only re-inserted once its window has expired.
+      while (windows.size >= opts.maxKeys) windows.delete(windows.keys().next().value as K)
+    }
+    const w = { end: t + opts.windowMs, used: 0 }
+    windows.set(key, w)
+    return w
+  }
   return {
-    take(userId) {
-      const w = current(userId) ?? { end: now() + opts.windowMs, used: 0 }
-      windows.set(userId, w)
+    take(key) {
+      const w = current(key) ?? open(key)
       if (w.used >= opts.limit) return false
       w.used += 1
       return true
     },
-    retryAfterMs: (userId) => Math.max(0, (current(userId)?.end ?? 0) - now())
+    retryAfterMs: (key) => Math.max(0, (current(key)?.end ?? 0) - now()),
+    exhausted: (key) => (current(key)?.used ?? 0) >= opts.limit
   }
+}
+
+/** Upstream card-art fetches one signed-out client address may cause per hour (the iOS app's <img> requests carry no session). */
+export const ANON_IMAGE_LIMIT = 300
+/** Upstream card-art fetches all signed-out clients together may cause per hour. */
+export const ANON_IMAGE_GLOBAL_LIMIT = 5000
+/** Client addresses the signed-out quota tracks at once; the oldest window is dropped past this. */
+export const ANON_IMAGE_MAX_KEYS = 20_000
+
+const GLOBAL = '*'
+
+/**
+ * The signed-out card-art quota: a per-address budget under one shared hourly ceiling. A fetch
+ * spends from both only when neither is gone, so a full ceiling opens no per-address windows.
+ */
+export function createAnonImageQuota(
+  now: () => number,
+  opts: { perAddress?: number; global?: number; maxKeys?: number } = {}
+): ImageQuota<string> {
+  const windowMs = 3_600_000
+  const perAddress = createImageQuota<string>(now, {
+    limit: opts.perAddress ?? ANON_IMAGE_LIMIT,
+    windowMs,
+    maxKeys: opts.maxKeys ?? ANON_IMAGE_MAX_KEYS
+  })
+  const global = createImageQuota<string>(now, { limit: opts.global ?? ANON_IMAGE_GLOBAL_LIMIT, windowMs })
+  const exhausted = (key: string): boolean => perAddress.exhausted(key) || global.exhausted(GLOBAL)
+  return {
+    take(key) {
+      if (exhausted(key)) return false
+      perAddress.take(key)
+      global.take(GLOBAL)
+      return true
+    },
+    // The later of the two limits that is in force.
+    retryAfterMs: (key) =>
+      Math.max(
+        perAddress.exhausted(key) ? perAddress.retryAfterMs(key) : 0,
+        global.exhausted(GLOBAL) ? global.retryAfterMs(GLOBAL) : 0
+      ),
+    exhausted
+  }
+}
+
+/** R2 keys whose upstream fetch recently failed, so signed-out requests don't refetch them every time. */
+export interface MissCache {
+  has(key: string): boolean
+  add(key: string): void
+}
+
+export const ANON_MISS_TTL_MS = 3_600_000
+export const ANON_MISS_MAX_KEYS = 10_000
+
+/** Bounded in-memory miss list; past `maxKeys` the oldest entry is dropped. */
+export function createMissCache(
+  now: () => number,
+  opts: { ttlMs: number; maxKeys: number } = { ttlMs: ANON_MISS_TTL_MS, maxKeys: ANON_MISS_MAX_KEYS }
+): MissCache {
+  const until = new Map<string, number>()
+  return {
+    has(key) {
+      const end = until.get(key)
+      if (end === undefined) return false
+      if (end > now()) return true
+      until.delete(key)
+      return false
+    },
+    add(key) {
+      until.delete(key) // re-insert at the back, so the order stays oldest first
+      while (until.size >= opts.maxKeys) until.delete(until.keys().next().value as string)
+      until.set(key, now() + opts.ttlMs)
+    }
+  }
+}
+
+/**
+ * The quota key for a signed-out request: the address Cloudflare reports, IPv4-mapped IPv6
+ * unwrapped, and other IPv6 cut to its /56 so one site can't rotate through its own prefix.
+ * Null when the header is missing.
+ */
+export function clientAddressKey(req: Request): string | null {
+  const ip = req.headers.get('cf-connecting-ip')?.trim().toLowerCase()
+  if (!ip) return null
+  if (!ip.includes(':')) return ip
+  const mapped = /^(?:0{0,4}:){1,6}ffff:(\d{1,3}(?:\.\d{1,3}){3})$/.exec(ip)
+  if (mapped) return mapped[1]
+  const [head, tail = ''] = ip.split('::')
+  const left = head ? head.split(':') : []
+  const right = tail ? tail.split(':') : []
+  const groups = ip.includes('::')
+    ? [...left, ...Array<string>(Math.max(0, 8 - left.length - right.length)).fill('0'), ...right]
+    : left
+  const g = groups.slice(0, 4).map((x) => parseInt(x || '0', 16) || 0)
+  g[3] &= 0xff00
+  return `${g.map((x) => x.toString(16)).join(':')}::/56`
 }
 
 const IMAGE_TIMEOUT_MS = 30_000
@@ -101,6 +225,8 @@ interface Target {
   cache: string
   /** Spend the quota before `source` runs, because resolving it already calls upstream. */
   meterFirst?: boolean
+  /** A fixed YGOPRODeck card image: signed-out requests may fill it too, under the per-address quota. */
+  anonymous?: boolean
 }
 
 const fixed =
@@ -119,7 +245,8 @@ function resolve(deps: AppDeps, path: string): Target | null {
     return {
       key: `card/${kind satisfies ImageSize}/${n}`,
       source: fixed(imageUrl(kind, n)),
-      cache: CARD_CACHE
+      cache: CARD_CACHE,
+      anonymous: true
     }
   }
   if (kind === 'set') {
@@ -180,6 +307,15 @@ export async function imageRoute(req: Request, deps: AppDeps, path: string): Pro
   return locked(await serve(req, deps, path))
 }
 
+/** One requester's slice of a quota. */
+interface Meter {
+  take(): boolean
+  retryAfterMs(): number
+}
+
+const metered = <K>(quota: ImageQuota<K> | undefined, key: K): Meter | null =>
+  quota ? { take: () => quota.take(key), retryAfterMs: () => quota.retryAfterMs(key) } : null
+
 async function serve(req: Request, deps: AppDeps, path: string): Promise<Response> {
   if (req.method !== 'GET' && req.method !== 'HEAD') {
     return new Response('Method not allowed', { status: 405, headers: { allow: 'GET, HEAD' } })
@@ -195,13 +331,23 @@ async function serve(req: Request, deps: AppDeps, path: string): Promise<Respons
   const stored = await deps.images.get(target.key).catch(() => null) // a failing bucket is a miss
   if (stored) return reply(stored.body, stored.httpMetadata?.contentType ?? 'image/jpeg')
 
-  // Only signed-in users may make the portal fetch from upstream; stored artwork stays public.
+  // Signed-in users may make the portal fetch from upstream; signed-out requests (the iOS app's
+  // plain <img> tags) only for known card images, metered per client address. Stored artwork stays public.
   const user = await currentUser(req, deps)
-  if (!user) return notFound()
+  let meter: Meter | null
+  if (user) {
+    meter = metered(deps.imageQuota, user.id)
+  } else {
+    if (!target.anonymous) return notFound()
+    const address = clientAddressKey(req)
+    if (address === null) return notFound()
+    if (deps.anonMisses?.has(target.key)) return notFound()
+    meter = metered(deps.anonImageQuota, address)
+  }
 
   const overQuota = (): Response | null => {
-    if (!deps.imageQuota || deps.imageQuota.take(user.id)) return null
-    const seconds = Math.max(1, Math.ceil(deps.imageQuota.retryAfterMs(user.id) / 1000))
+    if (!meter || meter.take()) return null
+    const seconds = Math.max(1, Math.ceil(meter.retryAfterMs() / 1000))
     return new Response('Too many requests', { status: 429, headers: { 'retry-after': String(seconds) } })
   }
 
@@ -213,6 +359,12 @@ async function serve(req: Request, deps: AppDeps, path: string): Promise<Respons
   const late = target.meterFirst ? null : overQuota()
   if (late) return late
 
+  // A failed fetch of signed-out-servable art is remembered, so signed-out callers stop refetching it.
+  const miss = (): Response => {
+    if (target.anonymous) deps.anonMisses?.add(target.key)
+    return notFound()
+  }
+
   let bytes: ArrayBuffer
   let contentType: string
   try {
@@ -222,13 +374,13 @@ async function serve(req: Request, deps: AppDeps, path: string): Promise<Respons
       ...(source.headers && { headers: source.headers })
     })
     contentType = mediaType(res.headers.get('content-type') ?? '')
-    if (!res.ok || !IMAGE_TYPES.has(contentType)) return notFound()
-    if (Number(res.headers.get('content-length') ?? 0) > MAX_IMAGE_BYTES) return notFound()
+    if (!res.ok || !IMAGE_TYPES.has(contentType)) return miss()
+    if (Number(res.headers.get('content-length') ?? 0) > MAX_IMAGE_BYTES) return miss()
     bytes = await res.arrayBuffer()
   } catch {
-    return notFound()
+    return miss()
   }
-  if (bytes.byteLength === 0 || bytes.byteLength > MAX_IMAGE_BYTES) return notFound()
+  if (bytes.byteLength === 0 || bytes.byteLength > MAX_IMAGE_BYTES) return miss()
   await deps.images.put(target.key, bytes, { httpMetadata: { contentType } }).catch(() => undefined) // still serve what was fetched
   return reply(bytes, contentType)
 }

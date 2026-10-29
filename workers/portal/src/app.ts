@@ -19,7 +19,7 @@ import {
 } from './auth'
 import { home } from './home'
 import type { PrintingArtResolver } from '../../../src/main/yugipedia/artResolver'
-import { imageRoute, type ImageBucket, type ImageQuota } from './images'
+import { imageRoute, type ImageBucket, type ImageQuota, type MissCache } from './images'
 import type { PriceQueue } from './prices'
 import { getFingerprints } from './scanFiles'
 import { phoneRoute } from './phonePage'
@@ -50,6 +50,10 @@ export interface AppDeps {
   images: ImageBucket
   /** Caps upstream image fetches per user; absent means unlimited. */
   imageQuota?: ImageQuota
+  /** Caps signed-out upstream card-image fetches per client address; absent means unlimited. */
+  anonImageQuota?: ImageQuota<string>
+  /** Card images whose upstream fetch recently failed; signed-out misses on them answer 404 without fetching. */
+  anonMisses?: MissCache
   printingArt: PrintingArtResolver
   /** Queues an eBay price run after a write. */
   prices: PriceQueue

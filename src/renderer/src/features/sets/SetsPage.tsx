@@ -18,11 +18,14 @@ import { isPhone } from '@/lib/platform'
 import { SetChecklist } from './SetChecklist'
 import { SetsFilterPanel } from './SetsFilterPanel'
 import { SetsList } from './SetsList'
+import { UpcomingSets } from './UpcomingSets'
+import { useUpcomingCutoff } from './useUpcomingCutoff'
 import {
   activeFilterCount,
   filterSets,
   setsHeader,
   sortSets,
+  splitUpcoming,
   typeCounts,
   type SetFilter,
   type SetSort
@@ -34,6 +37,7 @@ const MODE_KEY = 'sets.countMode'
 const FILTER_KEY = 'sets.filter'
 /** Set types are each game's own, so each game keeps its own; Yu-Gi-Oh! keeps the original key. */
 const typesKey = (game: GameId): string => (game === 'ygo' ? 'sets.types' : `sets.types:${game}`)
+const UPCOMING_KEY = 'sets.upcomingOpen'
 
 function readView(): View {
   try {
@@ -57,6 +61,14 @@ function readFilter(): SetFilter {
     return f === 'started' || f === 'complete' ? f : 'all'
   } catch {
     return 'all'
+  }
+}
+
+function readUpcomingOpen(): boolean {
+  try {
+    return localStorage.getItem(UPCOMING_KEY) === 'open'
+  } catch {
+    return false
   }
 }
 
@@ -110,7 +122,10 @@ export function SetsPage({ onAddCard, onAddMissing }: SetsPageProps): React.JSX.
   const { game } = useGame()
   const [types, setTypes] = useState<SetType[]>(() => readTypes(game))
   const [panelOpen, setPanelOpen] = useState(false)
+  const [upcomingOpen, setUpcomingOpenState] = useState(readUpcomingOpen)
   const [q, setQ] = useState('')
+  // Collapsing the banner while a search forces it open lasts until the search changes.
+  const [searchCollapsed, setSearchCollapsed] = useState(false)
   const [sort, setSort] = useState<SetSort>('date')
   const [openSet, setOpenSetState] = useState<{ setName: string; language: Language } | null>(null)
   const main = useMainScroll()
@@ -139,9 +154,15 @@ export function SetsPage({ onAddCard, onAddMissing }: SetsPageProps): React.JSX.
   )
   const available = useMemo(() => [...new Set(all.map((s) => s.language))], [all])
   const header = setsHeader(inLanguage, mode)
-  const visible = useMemo(
-    () => sortSets(filterSets(all, { filter, q, mode, language, types, game }), sort, mode),
-    [all, filter, q, mode, sort, language, types, game]
+  // Sets more than a month out (and not started) wait under the upcoming banner.
+  const cutoff = useUpcomingCutoff(sets.dataUpdatedAt)
+  const { current: visible, upcoming } = useMemo(
+    () =>
+      splitUpcoming(
+        sortSets(filterSets(all, { filter, q, mode, language, types, game }), sort, mode),
+        cutoff
+      ),
+    [all, filter, q, mode, sort, language, types, game, cutoff]
   )
 
   const counts = useMemo(
@@ -166,6 +187,17 @@ export function SetsPage({ onAddCard, onAddMissing }: SetsPageProps): React.JSX.
     if (m !== 'cards' && m !== 'rarities') return
     setMode(m)
     persist(MODE_KEY, m)
+  }
+  // A search that only matches upcoming sets shows them open, without touching the saved choice.
+  const searchForcesOpen = q.trim() !== '' && visible.length === 0 && upcoming.length > 0
+  const upcomingShown = searchForcesOpen ? !searchCollapsed : upcomingOpen
+  const setUpcomingOpen = (open: boolean): void => {
+    if (searchForcesOpen) {
+      setSearchCollapsed(!open)
+      return
+    }
+    setUpcomingOpenState(open)
+    persist(UPCOMING_KEY, open ? 'open' : 'closed')
   }
   const setFilter = (f: SetFilter): void => {
     setFilterState(f)
@@ -223,7 +255,10 @@ export function SetsPage({ onAddCard, onAddMissing }: SetsPageProps): React.JSX.
             />
             <Input
               value={q}
-              onChange={(e) => setQ(e.target.value)}
+              onChange={(e) => {
+                setQ(e.target.value)
+                setSearchCollapsed(false)
+              }}
               placeholder="Search sets by name or code"
               aria-label="Search sets"
               className="h-8 pl-8"
@@ -312,22 +347,35 @@ export function SetsPage({ onAddCard, onAddMissing }: SetsPageProps): React.JSX.
         }}
       />
 
+      <UpcomingSets
+        sets={upcoming}
+        cutoff={cutoff}
+        open={upcomingShown}
+        onOpenChange={setUpcomingOpen}
+        mode={mode}
+        view={view}
+        onOpen={(setName, language) => setOpenSet({ setName, language })}
+      />
+
       {sets.isSuccess && visible.length === 0 ? (
-        <div className="flex flex-col items-center gap-3 py-24 text-center">
-          {noneStarted ? (
-            <>
-              <p className="text-lg font-medium">You haven&apos;t started any sets yet</p>
-              <div className="flex gap-2">
-                <Button variant="outline" onClick={() => setFilter('all')}>
-                  Show all sets
-                </Button>
-                <Button onClick={onAddCard}>Add card</Button>
-              </div>
-            </>
-          ) : (
-            <p className="text-lg font-medium">No sets match</p>
-          )}
-        </div>
+        // Only upcoming sets match: the banner above is the whole answer.
+        upcoming.length > 0 ? null : (
+          <div className="flex flex-col items-center gap-3 py-24 text-center">
+            {noneStarted ? (
+              <>
+                <p className="text-lg font-medium">You haven&apos;t started any sets yet</p>
+                <div className="flex gap-2">
+                  <Button variant="outline" onClick={() => setFilter('all')}>
+                    Show all sets
+                  </Button>
+                  <Button onClick={onAddCard}>Add card</Button>
+                </div>
+              </>
+            ) : (
+              <p className="text-lg font-medium">No sets match</p>
+            )}
+          </div>
+        )
       ) : (
         <SetsList
           sets={visible}

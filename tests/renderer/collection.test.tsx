@@ -115,6 +115,18 @@ describe('CollectionPage', () => {
     expect(localStorage.getItem('collection.view')).toBe('table')
   })
 
+  it('keeps the desktop filter row on the page, with no Filters sheet', async () => {
+    setup()
+    await screen.findByText('Dark Magician')
+    expect(screen.getByRole('searchbox', { name: 'Search collection' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Card type' })).toBeInTheDocument()
+    expect(screen.getByRole('combobox', { name: 'Sort by' })).toBeInTheDocument()
+    expect(screen.getByLabelText('Level min')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Clear filters' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Filters/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
   it('sends the shared language filter (English by default) and All languages clears it', async () => {
     const { list } = setup()
     await screen.findByText('Dark Magician')

@@ -3,7 +3,7 @@ import { KONAMI_LOGO_PREFIX, PACK_ART_PREFIX, YUGIPEDIA_IMAGE_PREFIX } from '../
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { handle, type AppDeps } from '../../workers/portal/src/app'
 import { TCGPLAYER_IMAGE_PREFIX } from '../../src/main/tcgplayer/catalog'
-import { createImageQuota } from '../../workers/portal/src/images'
+import { ANON_IMAGE_LIMIT, clientAddressKey, createAnonImageQuota, createImageQuota } from '../../workers/portal/src/images'
 import { addUser, memoryBucket, noPrices, seededServerDb } from './helpers'
 
 const BASE = 'https://app.test'
@@ -54,6 +54,13 @@ describe('image route', () => {
   const get = (path: string, method = 'GET') =>
     handle(new Request(`${BASE}/img/${path}`, { method, headers: { cookie } }), deps)
   const getAnon = (path: string) => handle(new Request(`${BASE}/img/${path}`), deps)
+  const getFrom = (ip: string, path: string, withCookie = false) =>
+    handle(
+      new Request(`${BASE}/img/${path}`, {
+        headers: { 'cf-connecting-ip': ip, ...(withCookie && { cookie }) }
+      }),
+      deps
+    )
 
   it('serves a card image from upstream once, then from R2', async () => {
     const first = await get(`small/${imageId}`)
@@ -71,7 +78,7 @@ describe('image route', () => {
     expect(upstream).toHaveBeenCalledTimes(1)
   })
 
-  it('signed-out R2 miss answers 404 without any upstream call', async () => {
+  it('signed-out R2 miss with no client address answers 404 without any upstream call', async () => {
     printingUrl = `${YUGIPEDIA_IMAGE_PREFIX}x.jpg`
     for (const path of [`small/${imageId}`, 'printing/1']) {
       const res = await getAnon(path)
@@ -89,6 +96,100 @@ describe('image route', () => {
     const res = await getAnon(`small/${imageId}`)
     expect(res.status).toBe(200)
     expect(upstream).not.toHaveBeenCalled()
+  })
+
+  describe('signed-out card art (iOS app)', () => {
+    const IP = '203.0.113.7'
+
+    it('fetches a known small/full/cropped image upstream, stores it and answers 200', async () => {
+      for (const kind of ['small', 'full', 'cropped']) {
+        const res = await getFrom(IP, `${kind}/${imageId}`)
+        expect(res.status).toBe(200)
+        expect(res.headers.get('content-type')).toBe('image/jpeg')
+        expect(res.headers.get('cache-control')).toBe('public, max-age=31536000, immutable')
+        expect(new Uint8Array(await res.arrayBuffer())).toEqual(JPEG)
+        expect(bucket.store.has(`card/${kind}/${imageId}`)).toBe(true)
+      }
+      expect(upstream.mock.calls.map((c) => c[0])).toEqual([
+        `https://images.ygoprodeck.com/images/cards_small/${imageId}.jpg`,
+        `https://images.ygoprodeck.com/images/cards/${imageId}.jpg`,
+        `https://images.ygoprodeck.com/images/cards_cropped/${imageId}.jpg`
+      ])
+      expect((await getFrom(IP, `small/${imageId}`)).status).toBe(200) // now an R2 hit
+      expect(upstream).toHaveBeenCalledTimes(3)
+    })
+
+    it('unknown or malformed ids answer 404 without fetching', async () => {
+      for (const path of ['small/999999999', 'full/abc', 'cropped/0', 'huge/1']) {
+        expect((await getFrom(IP, path)).status).toBe(404)
+      }
+      expect(upstream).not.toHaveBeenCalled()
+    })
+
+    it('printing, set and konami misses still need a session', async () => {
+      printingUrl = `${YUGIPEDIA_IMAGE_PREFIX}x.jpg`
+      db.prepare("INSERT INTO konami_logos (set_name, image_url, image_key) VALUES ('Set', ?, 'km-abc')").run(
+        `${KONAMI_LOGO_PREFIX}logos/a.png`
+      )
+      db.prepare("INSERT INTO sets (language, set_name, set_code, image_url, image_key) VALUES ('en', 'Cover Set', 'CVR', ?, 'yp-abc123')").run(
+        'https://ms.yugipedia.com/a/ab/Cover.png'
+      )
+      for (const path of ['printing/1', 'set/LOB', 'set/yp-abc123', 'konami/km-abc']) {
+        const res = await getFrom(IP, path)
+        expect(res.status).toBe(404)
+      }
+      expect(upstream).not.toHaveBeenCalled()
+      expect(printingArt.url).not.toHaveBeenCalled()
+      expect(bucket.store.size).toBe(0)
+    })
+
+    it('meters each address separately from signed-in users', async () => {
+      let t = 1_000_000
+      deps.anonImageQuota = createImageQuota<string>(() => t, { limit: 2, windowMs: 3_600_000 })
+      deps.imageQuota = createImageQuota(() => t, { limit: 2, windowMs: 3_600_000 })
+      const ids = (db.prepare('SELECT image_id FROM card_images LIMIT 4').all() as { image_id: number }[]).map((r) => r.image_id)
+      expect(ids.length).toBe(4)
+      expect((await getFrom(IP, `small/${ids[0]}`)).status).toBe(200)
+      expect((await getFrom(IP, `small/${ids[1]}`)).status).toBe(200)
+      const limited = await getFrom(IP, `small/${ids[2]}`)
+      expect(limited.status).toBe(429)
+      expect(await limited.text()).toBe('Too many requests')
+      expect(limited.headers.get('retry-after')).toBe('3600')
+      expect(limited.headers.get('x-content-type-options')).toBe('nosniff')
+      expect(upstream).toHaveBeenCalledTimes(2)
+      // Stored art stays free.
+      expect((await getFrom(IP, `small/${ids[0]}`)).status).toBe(200)
+      // Another address has its own budget.
+      expect((await getFrom('198.51.100.9', `small/${ids[2]}`)).status).toBe(200)
+      // A signed-in user from the same address spends their own quota, untouched by the anonymous one.
+      expect((await getFrom(IP, `full/${ids[3]}`, true)).status).toBe(200)
+      expect((await getFrom(IP, `cropped/${ids[3]}`, true)).status).toBe(200)
+      expect((await getFrom(IP, `full/${ids[2]}`, true)).status).toBe(429)
+      expect(upstream).toHaveBeenCalledTimes(5)
+      // The window rolls over.
+      t += 3_600_000
+      expect((await getFrom(IP, `small/${ids[2]}`)).status).toBe(200)
+    })
+
+    it('the Worker default allows ANON_IMAGE_LIMIT fetches per address per hour', () => {
+      let t = 0
+      const quota = createAnonImageQuota(() => t)
+      for (let i = 0; i < ANON_IMAGE_LIMIT; i++) expect(quota.take(IP)).toBe(true)
+      expect(quota.take(IP)).toBe(false)
+      expect(quota.take('198.51.100.9')).toBe(true)
+      t = 3_600_000
+      expect(quota.take(IP)).toBe(true)
+    })
+
+    it('groups IPv6 addresses by /64', () => {
+      const key = (ip: string) => clientAddressKey(new Request(BASE, { headers: { 'cf-connecting-ip': ip } }))
+      expect(key('203.0.113.7')).toBe('203.0.113.7')
+      expect(key('2001:db8:0:1::1')).toBe('2001:db8:0:1::/64')
+      expect(key('2001:DB8:0000:0001:aaaa:bbbb:cccc:dddd')).toBe('2001:db8:0:1::/64')
+      expect(key('2001:db8::5')).toBe('2001:db8:0:0::/64')
+      expect(key('::1')).toBe('0:0:0:0::/64')
+      expect(clientAddressKey(new Request(BASE))).toBeNull()
+    })
   })
 
   it('uses the full and cropped folders', async () => {

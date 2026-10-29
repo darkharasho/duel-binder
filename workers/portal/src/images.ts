@@ -27,36 +27,67 @@ export interface ImageBucket {
   ): Promise<unknown>
 }
 
-/** A per-user budget for upstream fetches made on that user's behalf. */
-export interface ImageQuota {
-  /** Spends one fetch; false when the user's budget for the current window is gone. */
-  take(userId: number): boolean
-  /** Milliseconds until the user's current window ends; 0 when none is open. */
-  retryAfterMs(userId: number): number
+/** A per-key budget for upstream fetches: keyed by user id when signed in, by client address when not. */
+export interface ImageQuota<K = number> {
+  /** Spends one fetch; false when the key's budget for the current window is gone. */
+  take(key: K): boolean
+  /** Milliseconds until the key's current window ends; 0 when none is open. */
+  retryAfterMs(key: K): number
 }
 
-/** In-memory fixed-window quota; a window opens on a user's first take. */
-export function createImageQuota(
+/** Past this many tracked keys, a take first drops every expired window, so a stream of new addresses can't grow the map forever. */
+const QUOTA_SWEEP_AT = 10_000
+
+/** In-memory fixed-window quota; a window opens on a key's first take. */
+export function createImageQuota<K = number>(
   now: () => number,
   opts: { limit: number; windowMs: number } = { limit: 1000, windowMs: 3_600_000 }
-): ImageQuota {
-  const windows = new Map<number, { end: number; used: number }>()
-  const current = (userId: number): { end: number; used: number } | undefined => {
-    const w = windows.get(userId)
+): ImageQuota<K> {
+  const windows = new Map<K, { end: number; used: number }>()
+  const current = (key: K): { end: number; used: number } | undefined => {
+    const w = windows.get(key)
     if (w && w.end > now()) return w
-    windows.delete(userId)
+    windows.delete(key)
     return undefined
   }
   return {
-    take(userId) {
-      const w = current(userId) ?? { end: now() + opts.windowMs, used: 0 }
-      windows.set(userId, w)
+    take(key) {
+      if (windows.size >= QUOTA_SWEEP_AT) {
+        const t = now()
+        for (const [k, w] of windows) if (w.end <= t) windows.delete(k)
+      }
+      const w = current(key) ?? { end: now() + opts.windowMs, used: 0 }
+      windows.set(key, w)
       if (w.used >= opts.limit) return false
       w.used += 1
       return true
     },
-    retryAfterMs: (userId) => Math.max(0, (current(userId)?.end ?? 0) - now())
+    retryAfterMs: (key) => Math.max(0, (current(key)?.end ?? 0) - now())
   }
+}
+
+/** Upstream card-art fetches one signed-out client address may cause per hour (the iOS app's <img> requests carry no session). */
+export const ANON_IMAGE_LIMIT = 300
+
+/** The anonymous card-art quota the Worker uses. */
+export const createAnonImageQuota = (now: () => number): ImageQuota<string> =>
+  createImageQuota<string>(now, { limit: ANON_IMAGE_LIMIT, windowMs: 3_600_000 })
+
+/**
+ * The quota key for a signed-out request: the address Cloudflare reports, with IPv6 cut to
+ * its /64 so one host can't rotate through its own prefix. Null when the header is missing.
+ */
+export function clientAddressKey(req: Request): string | null {
+  const ip = req.headers.get('cf-connecting-ip')?.trim().toLowerCase()
+  if (!ip) return null
+  if (!ip.includes(':')) return ip
+  const [head, tail = ''] = ip.split('::')
+  const left = head ? head.split(':') : []
+  const right = tail ? tail.split(':') : []
+  const groups = ip.includes('::')
+    ? [...left, ...Array<string>(Math.max(0, 8 - left.length - right.length)).fill('0'), ...right]
+    : left
+  return `${groups.slice(0, 4).map((g) => g.replace(/^0+(?=.)/, '')).join(':')}::/64`
 }
 
 const IMAGE_TIMEOUT_MS = 30_000
@@ -101,6 +132,8 @@ interface Target {
   cache: string
   /** Spend the quota before `source` runs, because resolving it already calls upstream. */
   meterFirst?: boolean
+  /** A fixed YGOPRODeck card image: signed-out requests may fill it too, under the per-address quota. */
+  anonymous?: boolean
 }
 
 const fixed =
@@ -119,7 +152,8 @@ function resolve(deps: AppDeps, path: string): Target | null {
     return {
       key: `card/${kind satisfies ImageSize}/${n}`,
       source: fixed(imageUrl(kind, n)),
-      cache: CARD_CACHE
+      cache: CARD_CACHE,
+      anonymous: true
     }
   }
   if (kind === 'set') {
@@ -180,6 +214,15 @@ export async function imageRoute(req: Request, deps: AppDeps, path: string): Pro
   return locked(await serve(req, deps, path))
 }
 
+/** One requester's slice of a quota. */
+interface Meter {
+  take(): boolean
+  retryAfterMs(): number
+}
+
+const metered = <K>(quota: ImageQuota<K> | undefined, key: K): Meter | null =>
+  quota ? { take: () => quota.take(key), retryAfterMs: () => quota.retryAfterMs(key) } : null
+
 async function serve(req: Request, deps: AppDeps, path: string): Promise<Response> {
   if (req.method !== 'GET' && req.method !== 'HEAD') {
     return new Response('Method not allowed', { status: 405, headers: { allow: 'GET, HEAD' } })
@@ -195,13 +238,22 @@ async function serve(req: Request, deps: AppDeps, path: string): Promise<Respons
   const stored = await deps.images.get(target.key).catch(() => null) // a failing bucket is a miss
   if (stored) return reply(stored.body, stored.httpMetadata?.contentType ?? 'image/jpeg')
 
-  // Only signed-in users may make the portal fetch from upstream; stored artwork stays public.
+  // Signed-in users may make the portal fetch from upstream; signed-out requests (the iOS app's
+  // plain <img> tags) only for known card images, metered per client address. Stored artwork stays public.
   const user = await currentUser(req, deps)
-  if (!user) return notFound()
+  let meter: Meter | null
+  if (user) {
+    meter = metered(deps.imageQuota, user.id)
+  } else {
+    if (!target.anonymous) return notFound()
+    const address = clientAddressKey(req)
+    if (address === null) return notFound()
+    meter = metered(deps.anonImageQuota, address)
+  }
 
   const overQuota = (): Response | null => {
-    if (!deps.imageQuota || deps.imageQuota.take(user.id)) return null
-    const seconds = Math.max(1, Math.ceil(deps.imageQuota.retryAfterMs(user.id) / 1000))
+    if (!meter || meter.take()) return null
+    const seconds = Math.max(1, Math.ceil(meter.retryAfterMs() / 1000))
     return new Response('Too many requests', { status: 429, headers: { 'retry-after': String(seconds) } })
   }
 

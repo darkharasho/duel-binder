@@ -50,6 +50,8 @@ export interface AppDeps {
   images: ImageBucket
   /** Caps upstream image fetches per user; absent means unlimited. */
   imageQuota?: ImageQuota
+  /** Caps signed-out upstream card-image fetches per client address; absent means unlimited. */
+  anonImageQuota?: ImageQuota<string>
   printingArt: PrintingArtResolver
   /** Queues an eBay price run after a write. */
   prices: PriceQueue

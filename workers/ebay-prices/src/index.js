@@ -6,6 +6,7 @@ import {
   namesOtherRarity,
   askingPrice
 } from './price.js'
+import { setPrices } from './set.js'
 
 const OAUTH_URL = 'https://api.ebay.com/identity/v1/oauth2/token'
 const BROWSE_URL = 'https://api.ebay.com/buy/browse/v1/item_summary/search'
@@ -14,6 +15,11 @@ const OAUTH_BODY =
 const CACHE_TTL = 604800
 const ATTEMPTS = 3
 const MAX_FIELD = 200
+const QUOTA_URL =
+  'https://api.ebay.com/developer/analytics/v1_beta/rate_limit/?api_context=buy&api_name=browse'
+const SET_PAGE = 200
+const SET_MAX_PAGES = 3
+const SET_LANGS = new Set(['ja', 'ko', 'zh-hans', 'zh-hant', 'ae'])
 // 'ygo-collection-tracker' is what app versions before the Duel Binder rename send.
 const CLIENTS = new Set(['duel-binder', 'ygo-collection-tracker'])
 
@@ -72,15 +78,18 @@ async function getToken(env) {
   return cachedToken.value
 }
 
-async function search(env, query) {
+async function search(env, query, { offset = 0, limit = 50 } = {}) {
   const token = await getToken(env)
-  const params = new URLSearchParams({ q: query, category_ids: '31395', limit: '50' })
+  const params = new URLSearchParams({ q: query, category_ids: '31395', limit: String(limit) })
+  if (offset) params.set('offset', String(offset))
   const res = await fetchWithRetry(`${BROWSE_URL}?${params}`, {
     headers: { Authorization: `Bearer ${token}`, 'X-EBAY-C-MARKETPLACE-ID': 'EBAY_US' }
   })
   if (!res || res.status !== 200) {
     if (res && res.status === 401) cachedToken = null
-    throw new Error(`search ${res ? res.status : 'network'}`)
+    const err = new Error(`search ${res ? res.status : 'network'}`)
+    err.status = res?.status
+    throw err
   }
   const data = await res.json().catch(() => null)
   if (!data) throw new Error('search malformed')
@@ -123,10 +132,66 @@ async function lookup(env, params) {
   }
 }
 
+async function lookupSet(env, key, lang) {
+  const query = buildQuery({ code: key, lang })
+  const items = []
+  let calls = 0
+  for (let page = 0; page < SET_MAX_PAGES; page++) {
+    const got = await search(env, query, { offset: page * SET_PAGE, limit: SET_PAGE })
+    calls++
+    items.push(...got)
+    if (got.length < SET_PAGE) break
+  }
+  return { ...setPrices(items, key), calls, checkedAt: new Date().toISOString() }
+}
+
+// Remaining Browse calls for the day; null fields on any failure.
+async function lookupQuota(env) {
+  try {
+    const token = await getToken(env)
+    const res = await fetchWithRetry(QUOTA_URL, { headers: { Authorization: `Bearer ${token}` } })
+    if (!res || res.status !== 200) throw new Error('quota')
+    const data = await res.json()
+    const limit = data.rateLimits
+      ?.flatMap((l) => l.resources ?? [])
+      .find((r) => r.name === 'buy.browse')?.rates?.[0]
+    const remaining = Number(limit?.remaining)
+    if (limit?.remaining == null || !Number.isFinite(remaining)) throw new Error('quota')
+    return { remaining, resetAt: limit.reset ?? null }
+  } catch {
+    return { remaining: null, resetAt: null }
+  }
+}
+
 export default {
   async fetch(request, env, ctx) {
     if (request.method !== 'GET') return respond({ error: 'method not allowed' }, 405)
     const url = new URL(request.url)
+    const clientOk = CLIENTS.has(request.headers.get('X-Client'))
+    if (url.pathname === '/v1/quota') {
+      if (!clientOk) return respond({ error: 'bad request' }, 400)
+      return respond(await lookupQuota(env))
+    }
+    if (url.pathname === '/v1/set') {
+      const key = (url.searchParams.get('key') ?? '').trim().toUpperCase()
+      const lang = url.searchParams.get('lang') ?? ''
+      if (!clientOk || !SET_LANGS.has(lang) || !key || key.length > MAX_FIELD) {
+        return respond({ error: 'bad request' }, 400)
+      }
+      try {
+        return respond(await lookupSet(env, key, lang))
+      } catch (e) {
+        if (e?.status === 429) return respond({ error: 'rate limited' }, 429)
+        console.error(
+          'ebay set failed',
+          String(e?.message ?? '')
+            .split(' ')
+            .slice(0, 2)
+            .join(' ')
+        )
+        return respond({ error: 'upstream' }, 502)
+      }
+    }
     if (url.pathname !== '/v1/price') return respond({ error: 'not found' }, 404)
 
     const q = url.searchParams

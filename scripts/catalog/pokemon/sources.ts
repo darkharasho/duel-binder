@@ -24,21 +24,40 @@ export function createPokemonSources(opts: PokemonSourcesOpts): PokemonSources &
     retryDelayMs: opts.retryDelayMs,
     log: opts.log
   }
+  /**
+   * Promise.all over `items`, except that the first failure stops the requests still queued: the
+   * night's Pokémon refresh is abandoned anyway, and thousands of card requests would otherwise
+   * keep hitting TCGdex (and the closed cache) after the step had given up.
+   */
+  const allOrNothing = async <T, R>(
+    items: T[],
+    fn: (item: T, o: GetJsonOpts) => Promise<R>
+  ): Promise<R[]> => {
+    const ac = new AbortController()
+    const oo = { ...o, signal: ac.signal }
+    return Promise.all(
+      items.map((x) =>
+        fn(x, oo).catch((e: unknown) => {
+          ac.abort()
+          throw e
+        })
+      )
+    )
+  }
   return {
     async sets(lang) {
       const list = await tcgdexSetList(lang, o)
-      return Promise.all(list.map((s) => tcgdexSet(lang, s.id, o)))
+      return allOrNothing(list, (s, oo) => tcgdexSet(lang, s.id, oo))
     },
     async cards(lang, ids) {
       const t = now().getTime()
-      const out = await Promise.all(ids.map(async (id): Promise<TdCard> => {
+      return allOrNothing(ids, async (id, oo): Promise<TdCard> => {
         const hit = cache.get(lang, id)
         if (hit && cardIsUsable(hit.card, hit.fetchedAt, t)) return hit.card
-        const card = await tcgdexCard(lang, id, o)
+        const card = await tcgdexCard(lang, id, oo)
         cache.put(lang, id, card, t)
         return card
-      }))
-      return out
+      })
     },
     groups: (lang) => tcgcsvGroups(lang, o),
     products: (lang, groupId) => tcgcsvProducts(lang, groupId, o),

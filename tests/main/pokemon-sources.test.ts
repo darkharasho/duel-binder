@@ -163,6 +163,29 @@ describe('pokemon sources', () => {
     s.close()
   })
 
+  it('stops fetching the rest of the cards once one fails', async () => {
+    const fake = fakeFetch({ delayMs: 5 }); const s = make(fake)
+    const ids = Array.from({ length: 40 }, (_, i) => `nope-${i}`)
+    await expect(s.cards('en', ids)).rejects.toThrow(/404/)
+    // Let anything still queued run, as the job's process would.
+    await new Promise((r) => setTimeout(r, 100))
+    // The four in flight, plus at most one whose slot opened before the abort landed.
+    expect(fake.calls.filter((c) => c.url.includes('/en/cards/nope-')).length).toBeLessThanOrEqual(5)
+    s.close()
+  })
+
+  it('stops fetching the rest of the sets once one fails', async () => {
+    const fake = fakeFetch({ delayMs: 5 })
+    const list = Array.from({ length: 40 }, (_, i) => ({ id: `gone${i}`, name: `Gone ${i}` }))
+    const wrapped = ((u: RequestInfo | URL, i?: RequestInit) =>
+      /\/v2\/en\/sets$/.test(String(u)) ? Promise.resolve(json(list)) : fake.fetch(u, i)) as typeof fetch
+    const s = make({ ...fake, fetch: wrapped })
+    await expect(s.sets('en')).rejects.toThrow(/404/)
+    await new Promise((r) => setTimeout(r, 100))
+    expect(fake.calls.filter((c) => c.url.includes('/en/sets/gone')).length).toBeLessThanOrEqual(5)
+    s.close()
+  })
+
   it('fetches every set of the list in full', async () => {
     const s = make(fakeFetch())
     const sets = await s.sets('ja')

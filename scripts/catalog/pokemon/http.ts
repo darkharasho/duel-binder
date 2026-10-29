@@ -39,13 +39,16 @@ export interface GetJsonOpts {
   /** Base backoff; attempt n (0-based) waits base * 2^n. */
   retryDelayMs?: number
   log?: (l: string) => void
+  /** Once aborted, a request still waiting for its slot or a retry throws without fetching. */
+  signal?: AbortSignal
 }
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
 
 /**
  * GET a URL as JSON. Network errors, 429 and 5xx are retried (MAX_ATTEMPTS in all, with backoff);
- * any other failure, or the last retryable one, throws.
+ * any other failure, or the last retryable one, throws. With an aborted `signal` it throws without
+ * fetching.
  */
 export function getJson<T>(url: string, opts: GetJsonOpts): Promise<T> {
   const base = opts.retryDelayMs ?? DEFAULT_RETRY_DELAY_MS
@@ -53,6 +56,7 @@ export function getJson<T>(url: string, opts: GetJsonOpts): Promise<T> {
     let lastErr: Error | undefined
     for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
       if (attempt > 0) await sleep(retryDelay(base, attempt))
+      if (opts.signal?.aborted) throw new Error(`GET ${url} not sent: an earlier request failed`)
       let res: Response
       try {
         res = await opts.fetch(url, { headers: { 'User-Agent': opts.userAgent, Accept: 'application/json' } })

@@ -108,16 +108,18 @@ async function draft(
 
 /**
  * What a frame shows of a Pokémon card, named only when art, number and language agree on one
- * card. A Chinese (or any other uncatalogued) card shares its art and often its number with a
- * Japanese or English twin, so text read as another language is always `unsure`.
+ * card. A Chinese, European (or any other uncatalogued) card shares its art and often its number
+ * with a Japanese or English twin, so a card is named only in a language read as English or
+ * Japanese; anything else, unread included, is `unsure`.
  *
- * - With a collector number read: the art's cards that carry it, in the read language when it
- *   was read. With no art close, the number's card needs a name read that agrees and the
- *   language read. One card is named, `via: 'code'`.
- * - Without: the art's cards in the read language, which has to have been read; one is named.
+ * - With a collector number read: the art's cards that carry it, or with no art close, the
+ *   number's cards a name read agrees with; one of them in the read language is named,
+ *   `via: 'code'`.
+ * - Without: the art's cards; one of them in the read language is named.
  * - Nothing at all, and the closest artwork past ART_FAR_DISTANCE: `none`, far.
  *
- * The language is read only once there's a card to name, and at most once.
+ * The language is read only once there's a card to name, and at most once; a read that fails
+ * counts as unread.
  */
 export async function resolvePokemonSignals(
   raw: RawSignals,
@@ -127,7 +129,9 @@ export async function resolvePokemonSignals(
   const unsure: ScanOutcome = { kind: 'unsure' }
   let read: Promise<Read> | null = null
   const language = (): Promise<Read> =>
-    (read ??= ctx.readLanguage ? ctx.readLanguage() : Promise.resolve(null))
+    (read ??= Promise.resolve()
+      .then(() => ctx.readLanguage?.() ?? null)
+      .catch(() => null))
 
   const group = await artGroup(raw, ctx)
   if (group === null) return unsure
@@ -146,10 +150,8 @@ export async function resolvePokemonSignals(
     )
     if (!cards.length) return unsure
     const lang = await language()
-    if (lang === 'other' || (lang === null && !group.length)) return unsure
-    const ids = unique(
-      cards.filter((p) => lang === null || p.language === lang).map((p) => p.cardId)
-    )
+    if (lang === null || lang === 'other') return unsure
+    const ids = unique(cards.filter((p) => p.language === lang).map((p) => p.cardId))
     return ids.length === 1 ? named(ids[0], 'code') : unsure
   }
 

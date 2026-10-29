@@ -208,17 +208,22 @@ describe('resolvePokemonSignals', () => {
       printingId: 11,
       game: 'pkm'
     })
-    // An unread language doesn't stop the number when the art agrees.
     expect(
-      await recognized(raw({ art: reprints, codeTexts: ['201/182'] }), pkm(null))
+      await recognized(raw({ art: reprints, codeTexts: ['201/182'] }), pkm('en'))
     ).toMatchObject({ cardId: 3, via: 'code' })
+    // Not with the language unread: Traditional Chinese and European prints share number and art.
+    expect(await resolveSignals(raw({ art: reprints, codeTexts: ['201/182'] }), pkm(null))).toEqual(
+      { kind: 'unsure' }
+    )
   })
 
   it('number and art disagree is unsure', async () => {
     const art = [{ imageId: 101, distance: 20 }]
-    expect(await resolveSignals(raw({ art, codeTexts: ['026/165'] }), pkm('en'))).toEqual({
+    const ctx = pkm('en')
+    expect(await resolveSignals(raw({ art, codeTexts: ['026/165'] }), ctx)).toEqual({
       kind: 'unsure'
     })
+    expect(ctx.readLanguage).not.toHaveBeenCalled()
   })
 
   it('number alone needs the name to agree', async () => {
@@ -267,18 +272,29 @@ describe('resolvePokemonSignals', () => {
   })
 
   it('art past the far distance is nothing in view; a near miss is unsure', async () => {
+    const ctx = pkm('en')
     expect(
-      await resolveSignals(
-        raw({ art: [{ imageId: 101, distance: ART_FAR_DISTANCE + 1 }] }),
-        pkm('en')
-      )
+      await resolveSignals(raw({ art: [{ imageId: 101, distance: ART_FAR_DISTANCE + 1 }] }), ctx)
     ).toEqual({ kind: 'none', far: true })
     expect(
-      await resolveSignals(
-        raw({ art: [{ imageId: 101, distance: ART_MAX_DISTANCE + 1 }] }),
-        pkm('en')
-      )
+      await resolveSignals(raw({ art: [{ imageId: 101, distance: ART_MAX_DISTANCE + 1 }] }), ctx)
     ).toEqual({ kind: 'unsure' })
+    // An empty art group and no number has nothing to name.
+    expect(await resolveSignals(raw({}), ctx)).toEqual({ kind: 'unsure' })
+    expect(ctx.readLanguage).not.toHaveBeenCalled()
+  })
+
+  it('a language read that fails is unread: unsure, not a throw', async () => {
+    const ctx: ResolveContext = {
+      ...pkm('en'),
+      readLanguage: async () => {
+        throw new Error('OCR failed')
+      }
+    }
+    expect(await resolveSignals(raw({ art: twins }), ctx)).toEqual({ kind: 'unsure' })
+    expect(await resolveSignals(raw({ art: twins, codeTexts: ['045/193'] }), ctx)).toEqual({
+      kind: 'unsure'
+    })
   })
 
   it('an artwork missing from the catalog in the art group is unsure', async () => {

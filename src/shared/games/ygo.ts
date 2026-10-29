@@ -7,6 +7,7 @@ export const YGO: GameDef = {
   color: '#c9a24b',
   features: { scan: true, rip: true },
   crossLanguagePriceFallback: true,
+  priceRule: 'ygo',
   access: 'everyone',
   vocab: {
     cardId: 'Passcode',

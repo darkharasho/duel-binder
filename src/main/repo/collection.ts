@@ -8,6 +8,7 @@ import { getMeta } from '../db/meta'
 import { LOCAL, scopeGame, type Scope } from './scope'
 import { pokemonFacets, pokemonWhere } from './pkmFilters'
 import { enTwinPrice } from './enTwin'
+import { marketOnlyGame, SET_PRICE } from './priceRule'
 import { buildFtsQuery, rowToCard, rowToPrinting, type CardDbRow, type PrintingDbRow } from './cards'
 
 export class CollectionError extends Error {
@@ -34,7 +35,7 @@ const select = (scope: Scope): string => `
                         ORDER BY ci.sort_order, ci.image_id LIMIT 1) AS e_original_art,
          c.id AS id, c.name, c.type, c.frame_type, c.race, c.attribute, c.level, c.linkval, c.atk, c.def,
          c.archetype, c.desc, c.tcgplayer_price,
-         p.id AS p_id, p.card_id, p.set_name, p.set_code, ${RARITY_LABEL} AS set_rarity, p.set_rarity_code, p.set_price,
+         p.id AS p_id, p.card_id, p.set_name, p.set_code, ${RARITY_LABEL} AS set_rarity, p.set_rarity_code, ${SET_PRICE} AS set_price,
          p.market_price, ${enTwinPrice(scope.game)} AS en_twin_price, p.game AS p_game,
          p.missing_from_api, p.language,
          ip.printing_id AS ip_id, ip.price AS ip_price, ip.checked_at AS ip_checked_at,
@@ -55,9 +56,10 @@ function toView(r: EntryDbRow, priceStatus: string | null): EntryView {
   // eBay and YGOPRODeck prices are Yu-Gi-Oh! only for now: another game's unpriced copy has no price
   // and no source, never a YGOPRODeck label or an eBay "checking" that never comes.
   const ygo = r.p_game === 'ygo'
-  const market = english ? ((r.market_price as number | null) ?? null) : null
-  const twin = !english && ebayPrice === null ? ((r.en_twin_price as number | null) ?? null) : null
-  const ebay = market === null && twin === null && (english || !ygo ? ebayPrice !== null : true)
+  const marketOnly = marketOnlyGame(r.p_game)
+  const market = english || marketOnly ? ((r.market_price as number | null) ?? null) : null
+  const twin = !english && !marketOnly && ebayPrice === null ? ((r.en_twin_price as number | null) ?? null) : null
+  const ebay = !marketOnly && market === null && twin === null && (english || !ygo ? ebayPrice !== null : true)
   let unitPrice: number | null
   let approximate: boolean
   let noPriceReason: EntryView['noPriceReason'] = null

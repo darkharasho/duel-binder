@@ -7,6 +7,7 @@ export const PKM: GameDef = {
   color: '#e0483d',
   features: { scan: false, rip: false },
   crossLanguagePriceFallback: false,
+  priceRule: 'marketOnly',
   access: 'owner',
   vocab: {
     cardId: 'Card',

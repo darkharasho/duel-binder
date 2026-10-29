@@ -25,6 +25,8 @@ export interface GameDef {
   color: string
   features: { scan: boolean; rip: boolean }
   crossLanguagePriceFallback: boolean
+  /** 'ygo': market, eBay, twin and set-price fallbacks. 'marketOnly': the printing's own market price, any language. */
+  priceRule: 'ygo' | 'marketOnly'
   access: 'everyone' | 'owner'
   vocab: GameVocab
   filters: FilterDef[]

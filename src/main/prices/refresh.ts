@@ -1,6 +1,7 @@
 import { setMeta } from '../db/meta'
 import type { SqlDb } from '../db/sql'
 import type { PriceClient } from './client'
+import { isMarketOnly } from '../repo/priceRule'
 import { countCandidates, PRICE_INTERVAL_MS, priceCandidates } from './candidates'
 
 export { PRICE_INTERVAL_MS, priceCandidates, type PriceCandidate } from './candidates'
@@ -13,7 +14,7 @@ export function needsPrice(db: SqlDb, printingId: number, now = new Date()): boo
   const cutoff = new Date(now.getTime() - PRICE_INTERVAL_MS).toISOString()
   const row = db
     .prepare(
-      `SELECT ip.checked_at AS checkedAt, p.language = 'en' AND p.market_price IS NOT NULL AS priced
+      `SELECT ip.checked_at AS checkedAt, (p.language = 'en' OR ${isMarketOnly}) AND p.market_price IS NOT NULL AS priced
        FROM card_printings p LEFT JOIN intl_prices ip ON ip.printing_id = p.id WHERE p.id = ?`
     )
     .get(printingId) as { checkedAt: string | null; priced: number } | undefined

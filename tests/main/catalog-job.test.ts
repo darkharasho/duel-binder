@@ -570,6 +570,25 @@ describe('uploadCatalog', () => {
     expect(out.uploaded?.deleted).toBe(10)
   })
 
+  it('--refresh-sets re-reads the set lists before their weekly timer', async () => {
+    const db = await workDb()
+    setMeta(db, 'intl_sets_synced_at', NOW.toISOString())
+    db.close()
+    let stamp: string | null = 'unread'
+    await runJob({
+      dir,
+      dryRun: true,
+      refreshSets: true,
+      imageFetch: noImages,
+      checkAccuracy: passing,
+      refresh: async (work) => {
+        stamp = getMeta(work, 'intl_sets_synced_at')
+      },
+      log: () => {}
+    })
+    expect(stamp).toBeNull()
+  })
+
   it('a dry run counts changes without uploading or writing base', async () => {
     ;(await workDb()).close()
     const { fetch, calls } = recordingFetch(ok)

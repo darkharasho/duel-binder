@@ -17,6 +17,10 @@ on:
         description: Upload even if a table loses more than 2% of its rows (check upstream first)
         type: boolean
         default: false
+      refresh_sets:
+        description: Re-read the non-English set lists now instead of on their weekly timer
+        type: boolean
+        default: false
 
 concurrency:
   group: catalog
@@ -67,6 +71,7 @@ jobs:
           npm run catalog:job --
           ${{ inputs.full && '--full' || '' }}
           ${{ inputs.allow_shrink && '--allow-shrink' || '' }}
+          ${{ inputs.refresh_sets && '--refresh-sets' || '' }}
       - name: Parity check
         continue-on-error: false
         run: npm run catalog:parity

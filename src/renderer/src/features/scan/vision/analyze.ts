@@ -101,7 +101,7 @@ function analyzeFrame(
     // No fingerprints: the candidate finder's likeliest outline (it holds up on real photos far
     // better than findCard alone), or the card around it when that is one of its inner frames.
     // Not turned upright, so its foil isn't looked at and its text is read both ways.
-    const likeliest = preferOuter(findCandidates(cv, img))
+    const likeliest = preferOuter(findCandidates(cv, img, profile))
     if (!likeliest) return NOTHING
     quad = likeliest
     card = () => warpCard(cv, img, likeliest, bandWidth(likeliest))

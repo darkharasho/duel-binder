@@ -16,6 +16,7 @@ describe('scan profiles', () => {
     const ygo = scanProfile('ygo')
     expect(ygo.game).toBe('ygo')
     expect(ygo.artBoxes).toEqual(Object.values(ART_BOXES))
+    expect(ygo.windows).toEqual(Object.values(ART_BOXES))
     expect(ygo.codeBands).toEqual(CODE_BANDS)
     expect(ygo.nameBand).toEqual(NAME_BAND)
     expect(ygo.textBox).toEqual(TEXT_BOX)
@@ -31,6 +32,19 @@ describe('scan profiles', () => {
       expect(p.codeBands.length).toBeGreaterThan(0)
       for (const b of [...p.artBoxes, ...p.codeBands, p.nameBand, p.textBox])
         expect(inside(b)).toBe(true)
+    }
+  })
+
+  it("pkm outlines are scored by Pokémon art windows, each round the art box's middle", () => {
+    const pkm = scanProfile('pkm')
+    const [art] = pkm.artBoxes
+    expect(pkm.windows.length).toBeGreaterThan(0)
+    for (const w of pkm.windows) {
+      expect(inside(w)).toBe(true)
+      // Yu-Gi-Oh's window runs to 0.72, into a Pokémon card's attacks.
+      expect(w[3]).toBeLessThan(0.6)
+      expect(w[0] < art[0] + 0.05 && w[2] > art[2] - 0.05).toBe(true)
+      expect(w[1] < (art[1] + art[3]) / 2 && w[3] > (art[1] + art[3]) / 2).toBe(true)
     }
   })
 

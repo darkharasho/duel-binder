@@ -34,7 +34,7 @@ import {
   type Point,
   type Quad
 } from './detect'
-import { ART_BOXES, INNER_FRAME, type Box } from './regions'
+import { INNER_FRAME, type Box } from './regions'
 
 // Tuned on real webcam photos: cards held in hand, sleeved, foil or in toploaders, fingers over the
 // edges, a deck under the card and a wood-grain desk behind. A held card's outline seldom closes,
@@ -389,7 +389,7 @@ const sameQuad = (a: Quad, b: Quad): boolean =>
  * angles, with a card's aspect ratio and edges along every side, scored by how much of their
  * outline and of their art window's border lies on the thickened edges.
  */
-function lineQuads(lines: Line[], thick: Mat, max: number): Quad[] {
+function lineQuads(lines: Line[], thick: Mat, max: number, windows: readonly Box[]): Quad[] {
   const w = thick.cols
   const h = thick.rows
   const td = thick.data
@@ -440,10 +440,10 @@ function lineQuads(lines: Line[], thick: Mat, max: number): Quad[] {
       if (sideA * sideB < MIN_AREA * w * h) continue
       const sides = sideCover(q)
       if (Math.min(...sides) < MIN_SIDE_COVER) continue
-      // The art window's border, either way up and for either frame.
+      // The art window's border, either way up and for each of the game's frames.
       const at = homography(q)
       let art = 0
-      for (const b of Object.values(ART_BOXES)) {
+      for (const b of windows) {
         for (const box of [b, [1 - b[2], 1 - b[3], 1 - b[0], 1 - b[1]]]) {
           const window = [
             at(box[0], box[1]),
@@ -469,9 +469,14 @@ function lineQuads(lines: Line[], thick: Mat, max: number): Quad[] {
 
 /**
  * Card outlines in a frame, likeliest first: the outline finder's pick (findCard), then quads
- * built from the lines in edges split by direction, then any more from the lines in all edges.
+ * built from the lines in edges split by direction, then any more from the lines in all edges,
+ * those scored by profile's art windows.
  */
-export function findCandidates(cv: CV, img: FrameSource): Quad[] {
+export function findCandidates(
+  cv: CV,
+  img: FrameSource,
+  profile: ScanProfile = SCAN_PROFILES.ygo
+): Quad[] {
   const scale = Math.min(1, SEARCH_WIDTH / frameWidth(img))
   const small = searchImage(cv, img, scale)
   return using([small], () => {
@@ -482,12 +487,14 @@ export function findCandidates(cv: CV, img: FrameSource): Quad[] {
         const split = lineQuads(
           mergeLines(splitSegments(cv, small, edges)),
           thick,
-          SPLIT_CANDIDATES
+          SPLIT_CANDIDATES,
+          profile.windows
         )
         const plain = lineQuads(
           mergeLines(segments(cv, edges)),
           thick,
-          PLAIN_CANDIDATES + split.length
+          PLAIN_CANDIDATES + split.length,
+          profile.windows
         )
           .filter((q) => !split.some((k) => sameQuad(q, k)))
           .slice(0, PLAIN_CANDIDATES)
@@ -634,7 +641,7 @@ export function recognizeArt(
       }
       return best
     }
-    const quads = findCandidates(cv, frame)
+    const quads = findCandidates(cv, frame, profile)
     let best = closest(quads)
     if (!best) return null
     // No candidate matched: one may be a black card's inner frame rather than the card.

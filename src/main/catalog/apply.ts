@@ -1,6 +1,8 @@
 import type { SqlDb } from '../db/sql'
-import { LEGACY_CATALOG_TABLES } from '../../shared/catalogTables'
+import { CATALOG_TABLES } from '../../shared/catalogTables'
 import type { CatalogChange } from '../../shared/catalogFeed'
+import type { GameId } from '../../shared/games'
+import type { MetaKey } from '../db/meta'
 import { prepared, upsertCatalogRow, type Scalar } from './upsert'
 
 const columnCache = new WeakMap<SqlDb, Map<string, Set<string>>>()
@@ -18,6 +20,14 @@ function localColumns(db: SqlDb, table: string): Set<string> {
   return cols
 }
 
+/** Where the catalog feed of `game` has got to (the Yu-Gi-Oh! key predates games). */
+export const catalogCursorKey = (game: GameId): MetaKey =>
+  game === 'ygo' ? 'catalog_cursor' : `catalog_cursor:${game}`
+
+/** Where a staged, not yet applied pull of `game` has got to. */
+export const catalogStagingKey = (game: GameId): MetaKey =>
+  game === 'ygo' ? 'catalog_staging_cursor' : `catalog_staging_cursor:${game}`
+
 export interface ApplyResult {
   applied: number
   cardsChanged: boolean
@@ -25,10 +35,11 @@ export interface ApplyResult {
 }
 
 /**
- * Applies feed changes in the order given. The caller owns the transaction. Nothing here may
- * lose or re-point a collection entry: a tombstone for a row an entry (any owner, live or
- * tombstoned) still depends on is skipped, or for printings the row is kept and flagged
- * `missing_from_api`.
+ * Applies feed changes in the order given: a per-game feed's, or the legacy feed's (no `game`
+ * column, `sets` tombstones keyed [language, set_name]), whose rows are all Yu-Gi-Oh!. The caller
+ * owns the transaction. Nothing here may lose or re-point a collection entry: a tombstone for a
+ * row an entry (any owner, live or tombstoned) still depends on is skipped, or for printings the
+ * row is kept and flagged `missing_from_api`.
  *
  * Must run inside a transaction: it defers foreign-key checks to commit, because a snapshot
  * lists each row at its latest seq, so a printing or image can arrive before its (later
@@ -39,9 +50,19 @@ export function applyChanges(db: SqlDb, changes: CatalogChange[]): ApplyResult {
   const result: ApplyResult = { applied: 0, cardsChanged: false, imagesChanged: false }
   const exists = (sql: string, ...params: Scalar[]): boolean =>
     prepared(db, sql).get(...params) !== undefined
+  /** Whether any collection entry (any owner, live or tombstoned) is of card `id`. */
+  const owned = (id: Scalar): boolean =>
+    exists(
+      'SELECT 1 FROM collection_entries e JOIN card_printings p ON p.id = e.printing_id WHERE p.card_id = ? LIMIT 1',
+      id
+    ) ||
+    exists(
+      'SELECT 1 FROM collection_entries e JOIN card_images i ON i.image_id = e.image_id WHERE i.card_id = ? LIMIT 1',
+      id
+    )
 
   for (const change of changes) {
-    const table = LEGACY_CATALOG_TABLES.find((t) => t.name === change.table)
+    const table = CATALOG_TABLES.find((t) => t.name === change.table)
     if (!table) continue
 
     if ('row' in change) {
@@ -52,6 +73,7 @@ export function applyChanges(db: SqlDb, changes: CatalogChange[]): ApplyResult {
         if (table.name === 'card_printings' && (k === 'id' || k === 'pkey')) continue
         row[k] = v
       }
+      if (table.columns.includes('game')) row.game ??= 'ygo'
       const extra: Record<string, Scalar> =
         table.name === 'card_printings'
           ? { remote_id: change.row.id ?? null, contributed: change.row.contributed ?? 0 }
@@ -63,7 +85,11 @@ export function applyChanges(db: SqlDb, changes: CatalogChange[]): ApplyResult {
       continue
     }
 
-    const key = change.deleted
+    const key =
+      table.name === 'sets' && change.deleted.length === 2
+        ? ['ygo', ...change.deleted]
+        : change.deleted
+    if (key.length !== table.key.length) continue
     if (table.name === 'card_printings') {
       const local = prepared(db, 'SELECT id FROM card_printings WHERE pkey = ?').get(key[0]) as
         | { id: number }
@@ -85,17 +111,12 @@ export function applyChanges(db: SqlDb, changes: CatalogChange[]): ApplyResult {
       }
       continue
     }
+    // An entry of a card keeps the card's Pokémon details too.
+    if (table.name === 'pokemon_cards' && owned(key[0])) continue
     if (table.name === 'cards') {
       const id = key[0]
       const used =
-        exists(
-          'SELECT 1 FROM collection_entries e JOIN card_printings p ON p.id = e.printing_id WHERE p.card_id = ? LIMIT 1',
-          id
-        ) ||
-        exists(
-          'SELECT 1 FROM collection_entries e JOIN card_images i ON i.image_id = e.image_id WHERE i.card_id = ? LIMIT 1',
-          id
-        ) ||
+        owned(id) ||
         // a kept (flagged) printing or image still points at the card
         exists('SELECT 1 FROM card_printings WHERE card_id = ? LIMIT 1', id) ||
         exists('SELECT 1 FROM card_images WHERE card_id = ? LIMIT 1', id)

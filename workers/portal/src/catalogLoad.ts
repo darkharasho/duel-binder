@@ -1,4 +1,5 @@
-import { LEGACY_CATALOG_TABLES, type CatalogTable } from '../../../src/shared/catalogTables'
+import { CATALOG_TABLES, type CatalogTable } from '../../../src/shared/catalogTables'
+import { gameOfId, isGameId } from '../../../src/shared/games'
 import { setMeta, type MetaKey } from '../../../src/main/db/meta'
 import type { AppDeps } from './app'
 import { upsertCatalogRow } from '../../../src/main/catalog/upsert'
@@ -40,7 +41,7 @@ const isScalar = (v: unknown): v is string | number | null =>
   v === null || typeof v === 'string' || typeof v === 'number'
 
 function tableOf(body: Record<string, unknown>): CatalogTable {
-  const table = LEGACY_CATALOG_TABLES.find((t) => t.name === body.table)
+  const table = CATALOG_TABLES.find((t) => t.name === body.table)
   if (!table) throw new BadRequest('Unknown table')
   return table
 }
@@ -63,10 +64,33 @@ function validateRow(table: CatalogTable, row: unknown): Record<string, string |
     table.name === 'card_printings'
       ? ['language', 'card_id', 'set_name', 'set_code', 'set_rarity']
       : table.key
+  if (table.columns.includes('game')) {
+    // A row without a game (the nightly job's) is a Yu-Gi-Oh! one.
+    out.game ??= 'ygo'
+    if (typeof out.game !== 'string' || !isGameId(out.game)) throw new BadRequest('Unknown game')
+  }
   for (const k of required) {
     if (out[k] === undefined || out[k] === null) throw new BadRequest(`Missing key column ${k}`)
   }
+  // A card's id says its game; a row must agree with it.
+  const id = out[table.name === 'cards' ? 'id' : 'card_id']
+  const game = table.name === 'pokemon_cards' ? 'pkm' : out.game
+  if (typeof id === 'number' && game !== undefined && gameOfId(id) !== game)
+    throw new BadRequest(`The id ${id} is not a ${String(game)} id`)
   return out
+}
+
+/**
+ * A delete key as the table keys it. A `sets` key may also be the legacy [language, set_name],
+ * which names the Yu-Gi-Oh! set.
+ */
+function keyOf(table: CatalogTable, k: unknown): (string | number | null)[] {
+  const legacySets = table.name === 'sets' && Array.isArray(k) && k.length === 2
+  const key: unknown = legacySets ? ['ygo', ...(k as unknown[])] : k
+  if (!Array.isArray(key) || key.length !== table.key.length || !key.every(isScalar)) {
+    throw new BadRequest('Each key must be an array matching the table key')
+  }
+  return key
 }
 
 function upsertRows(deps: AppDeps, table: CatalogTable, rows: unknown[]): void {
@@ -82,13 +106,8 @@ function upsertRows(deps: AppDeps, table: CatalogTable, rows: unknown[]): void {
 
 function deleteKeys(deps: AppDeps, table: CatalogTable, keys: unknown[]): void {
   const { db } = deps
-  for (const k of keys) {
-    if (!Array.isArray(k) || k.length !== table.key.length || !k.every(isScalar)) {
-      throw new BadRequest('Each key must be an array matching the table key')
-    }
-  }
+  const tuples = keys.map((k) => keyOf(table, k))
   if (table.name === 'cards' || table.name === 'card_images') return
-  const tuples = keys as (string | number | null)[][]
   db.transaction(() => {
     for (const k of tuples) {
       if (table.name === 'card_printings') {
@@ -134,7 +153,7 @@ export async function adminRoute(req: Request, deps: AppDeps): Promise<Response>
 
   if (req.method === 'GET' && path === '/admin/catalog/status') {
     const counts: Record<string, number> = {}
-    for (const t of LEGACY_CATALOG_TABLES) {
+    for (const t of CATALOG_TABLES) {
       counts[t.name] = (
         deps.db.prepare(`SELECT COUNT(*) AS n FROM ${t.name}`).get() as { n: number }
       ).n

@@ -1,9 +1,12 @@
 import { createHash } from 'node:crypto'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import type Database from 'better-sqlite3'
 import { handle, type AppDeps } from '../../workers/portal/src/app'
 import type { CatalogChangesResponse } from '../../src/shared/catalogFeed'
 import { addUser, seededServerDb, memoryBucket, noPrintingArt } from './helpers'
+import { seedPokemon, SHARED_SET_NAME } from '../fixtures/pokemon'
 
 const BASE = 'https://portal.test'
 const NOW = new Date('2026-10-24T12:00:00.000Z')
@@ -21,7 +24,13 @@ export async function legacyFeedBodies(
   const alice = addUser(db, '1', 'alice')
   db.prepare(
     'INSERT INTO sessions (token_hash, user_id, kind, created_at, expires_at) VALUES (?, ?, ?, ?, ?)'
-  ).run(sha256Hex('alice-desktop-token'), alice, 'desktop', NOW.toISOString(), '2099-01-01T00:00:00.000Z')
+  ).run(
+    sha256Hex('alice-desktop-token'),
+    alice,
+    'desktop',
+    NOW.toISOString(),
+    '2099-01-01T00:00:00.000Z'
+  )
   const deps = {
     db,
     images: memoryBucket(),
@@ -49,8 +58,12 @@ export async function legacyFeedBodies(
   const base = (db.prepare('SELECT seq FROM catalog_clock').get() as { seq: number }).seq
   db.prepare("UPDATE cards SET name = 'Renamed' WHERE id = ?").run(card.id)
   db.prepare("UPDATE card_printings SET set_price = '9.99' WHERE id = ?").run(printing.id)
-  db.prepare("INSERT INTO sets (language, set_name, set_code) VALUES ('en', 'Doomed Set', 'DS')").run()
-  db.prepare("INSERT INTO sets (language, set_name, set_code) VALUES ('de', 'Kept Set', 'KS')").run()
+  db.prepare(
+    "INSERT INTO sets (language, set_name, set_code) VALUES ('en', 'Doomed Set', 'DS')"
+  ).run()
+  db.prepare(
+    "INSERT INTO sets (language, set_name, set_code) VALUES ('de', 'Kept Set', 'KS')"
+  ).run()
   db.prepare("DELETE FROM sets WHERE set_name = 'Doomed Set'").run()
   await afterYgo?.()
 
@@ -73,5 +86,32 @@ describe('legacy catalog feed', () => {
   it('is byte-identical to the feed before games', async () => {
     const bodies = await legacyFeedBodies(await seededServerDb())
     await expect(bodies.join('\n') + '\n').toMatchFileSnapshot('fixtures/legacy-catalog-feed.txt')
+  })
+})
+
+describe('legacy catalog feed with Pokémon in the catalog', () => {
+  it('is unchanged but for the clock, whatever Pokémon rows and deletes come after', async () => {
+    const db = await seededServerDb()
+    const bodies = await legacyFeedBodies(db, async () => {
+      seedPokemon(db)
+      db.prepare(
+        "INSERT INTO sets (game, language, set_name, set_code) VALUES ('pkm', 'en', 'Doomed Set', 'DS')"
+      ).run()
+      db.prepare("DELETE FROM sets WHERE game = 'pkm' AND set_name = 'Doomed Set'").run()
+      db.prepare("DELETE FROM sets WHERE game = 'pkm' AND set_name = ?").run(SHARED_SET_NAME)
+      db.prepare(
+        'DELETE FROM pokemon_cards WHERE rowid = (SELECT MIN(rowid) FROM pokemon_cards)'
+      ).run()
+    })
+    const snapshot = readFileSync(join(__dirname, 'fixtures/legacy-catalog-feed.txt'), 'utf8')
+      .trimEnd()
+      .split('\n')
+    const withoutClock = (body: string): unknown => {
+      const page: Partial<CatalogChangesResponse> = JSON.parse(body)
+      delete page.latest
+      return page
+    }
+    expect(bodies.map(withoutClock)).toEqual(snapshot.map(withoutClock))
+    for (const b of bodies) expect(b).not.toContain('"game"')
   })
 })

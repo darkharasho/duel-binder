@@ -5,6 +5,7 @@ import { addEntry } from '../../src/main/repo/collection'
 import { searchCards } from '../../src/main/repo/cards'
 import type { CatalogChange } from '../../src/shared/catalogFeed'
 import { seededDb } from './helpers'
+import { seedPokemon } from '../fixtures/pokemon'
 
 interface P {
   id: number
@@ -204,6 +205,61 @@ describe('applyChanges', () => {
       const db = await seededDb()
       expect(() => db.transaction(() => applyChanges(db, batch(db, false)))()).toThrow(/FOREIGN KEY/)
       expect(count(db)).toEqual([0, 0, 0])
+    })
+  })
+  describe('per game', () => {
+    const setGames = (db: Database.Database, name: string): unknown =>
+      db.prepare('SELECT game FROM sets WHERE set_name = ? ORDER BY game').all(name)
+    const twoSets = async (): Promise<Database.Database> => {
+      const db = await seededDb()
+      db.prepare(
+        `INSERT INTO sets (game, language, set_name, set_code)
+         VALUES ('ygo', 'en', 'Twin Set', 'TW'), ('pkm', 'en', 'Twin Set', 'TW')`
+      ).run()
+      return db
+    }
+
+    it('a Pokémon sets tombstone deletes only the Pokémon set', async () => {
+      const db = await twoSets()
+      applyChanges(db, [{ seq: 1, table: 'sets', deleted: ['pkm', 'en', 'Twin Set'] }])
+      expect(setGames(db, 'Twin Set')).toEqual([{ game: 'ygo' }])
+    })
+
+    it('a legacy two-part sets tombstone deletes only the Yu-Gi-Oh! set', async () => {
+      const db = await twoSets()
+      applyChanges(db, [{ seq: 1, table: 'sets', deleted: ['en', 'Twin Set'] }])
+      expect(setGames(db, 'Twin Set')).toEqual([{ game: 'pkm' }])
+    })
+
+    it('a legacy sets row (no game) lands as Yu-Gi-Oh! beside a same-named Pokémon one', async () => {
+      const db = await twoSets()
+      applyChanges(db, [
+        { seq: 1, table: 'sets', row: { language: 'en', set_name: 'Twin Set', set_code: 'NEW' } }
+      ])
+      expect(
+        db
+          .prepare("SELECT game, set_code FROM sets WHERE set_name = 'Twin Set' ORDER BY game")
+          .all()
+      ).toEqual([
+        { game: 'pkm', set_code: 'TW' },
+        { game: 'ygo', set_code: 'NEW' }
+      ])
+    })
+
+    it("keeps a Pokémon card's details while an entry is of the card", async () => {
+      const db = await seededDb()
+      const { cardIds, printingIds } = seedPokemon(db)
+      db.prepare(
+        `INSERT INTO collection_entries (uid, printing_id, image_id, quantity, created_at, updated_at)
+         VALUES ('pkm-entry', ?, ?, 1, 'x', 'x')`
+      ).run(printingIds[0], cardIds[0])
+      applyChanges(
+        db,
+        cardIds.map((id, i) => ({ seq: i + 1, table: 'pokemon_cards' as const, deleted: [id] }))
+      )
+      expect(db.prepare('SELECT card_id FROM pokemon_cards').all()).toEqual([
+        { card_id: cardIds[0] }
+      ])
     })
   })
 })

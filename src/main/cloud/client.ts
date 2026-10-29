@@ -46,12 +46,14 @@ export interface CloudClient {
   requestPrices(pkeys: string[]): Promise<PriceRequestResponse>
   /**
    * One page of the catalog change feed after `since`; `limit` defaults to the server's page size,
-   * `tables` (default all) limits the feed to those tables.
+   * `tables` (default all) limits the feed to those tables. With a `game`, the feed of that game;
+   * without one, the legacy (Yu-Gi-Oh! only, pre-games) feed.
    */
   catalogChanges(
     since: number,
     limit?: number,
-    tables?: readonly CatalogTableName[]
+    tables?: readonly CatalogTableName[],
+    game?: GameId
   ): Promise<CatalogChangesResponse>
   /** Offers printings the catalog lacks; one result per printing. */
   contribute(printings: ContributedPrinting[]): Promise<ContributeResult[]>
@@ -150,11 +152,11 @@ export function createCloudClient(opts: {
       call<PriceChangesResponse>(`/api/sync/price-changes?since=${since}&game=${game}`, 'GET'),
     requestPrices: (pkeys) =>
       call<PriceRequestResponse>('/api/sync/price-requests', 'POST', { pkeys }),
-    catalogChanges: (since, limit, tables) =>
+    catalogChanges: (since, limit, tables, game) =>
       call<CatalogChangesResponse>(
         `/api/catalog/changes?since=${since}${limit === undefined ? '' : `&limit=${limit}`}${
           tables ? `&tables=${tables.join(',')}` : ''
-        }`,
+        }${game ? `&game=${game}` : ''}`,
         'GET',
         undefined,
         true,

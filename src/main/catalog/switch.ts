@@ -4,8 +4,9 @@ import type Database from 'better-sqlite3'
 import type { SqlDb } from '../db/sql'
 import { deleteMeta, getMeta, setMeta } from '../db/meta'
 import { CloudAuthError, CloudOfflineError, type CloudClient } from '../cloud/client'
-import { LEGACY_CATALOG_TABLES } from '../../shared/catalogTables'
+import { CATALOG_TABLES } from '../../shared/catalogTables'
 import type { CatalogChange } from '../../shared/catalogFeed'
+import type { GameId } from '../../shared/games'
 import { applyChanges, finishApply, type ApplyResult } from './apply'
 
 export type SwitchOutcome = { state: 'done' } | { state: 'pending'; reason: string }
@@ -129,15 +130,12 @@ export async function runSwitch(raw: Database.Database, deps: SwitchDeps): Promi
   deps.onProgress?.('downloading')
   let cursor = Number(getMeta(db, 'catalog_staging_cursor') ?? 0)
   let dbVersion: string | null = null
-  const stage = db.prepare(
-    'INSERT OR REPLACE INTO catalog_staging (seq, tbl, row) VALUES (?, ?, ?)'
-  )
   try {
     for (;;) {
-      const page = await deps.client.catalogChanges(cursor)
+      const page = await deps.client.catalogChanges(cursor, undefined, undefined, 'ygo')
       if (page.more && page.cursor <= cursor) throw new Error('The catalog feed stopped advancing')
       db.transaction(() => {
-        for (const c of page.changes) stage.run(c.seq, c.table, JSON.stringify(c))
+        stageChanges(db, page.changes, 'ygo')
         setMeta(db, 'catalog_staging_cursor', String(page.cursor))
       })()
       cursor = page.cursor
@@ -176,7 +174,7 @@ export async function runSwitch(raw: Database.Database, deps: SwitchDeps): Promi
       // Entries already dangling in an old database stay as they are and never block the switch;
       // only a reference this switch breaks fails it.
       const danglingBefore = danglingEntries(db)
-      const result = applyStaged(db)
+      const result = applyStaged(db, 'ygo')
       pruneUnlisted(db)
       finishApply(db, result)
       deps.afterApply?.(db)
@@ -195,7 +193,7 @@ export async function runSwitch(raw: Database.Database, deps: SwitchDeps): Promi
       setMeta(db, 'catalog_switched_at', at)
       setMeta(db, 'last_sync_at', at)
       if (dbVersion !== null) setMeta(db, 'db_version', dbVersion)
-      db.exec('DELETE FROM catalog_staging')
+      clearStaged(db, 'ygo')
       deleteMeta(db, 'catalog_staging_cursor')
       deleteMeta(db, 'catalog_switch_failed')
     })()
@@ -209,15 +207,36 @@ export async function runSwitch(raw: Database.Database, deps: SwitchDeps): Promi
 }
 
 /**
- * Applies every staged change in seq order, in batches (the switch's snapshot, or a delta pull).
- * Must run inside a transaction.
+ * A staged change's game. It rides in the staged JSON; a change staged before games has none and
+ * is a Yu-Gi-Oh! one.
  */
-export function applyStaged(db: SqlDb): ApplyResult {
+const STAGED_GAME = "COALESCE(json_extract(row, '$.game'), 'ygo')"
+
+/** Stages changes from `game`'s feed. */
+export function stageChanges(db: SqlDb, changes: CatalogChange[], game: GameId): void {
+  const stage = db.prepare(
+    'INSERT OR REPLACE INTO catalog_staging (seq, tbl, row) VALUES (?, ?, ?)'
+  )
+  for (const c of changes) stage.run(c.seq, c.table, JSON.stringify({ ...c, game }))
+}
+
+/** Drops `game`'s staged changes; another game's staged pull stays. */
+export function clearStaged(db: SqlDb, game: GameId): void {
+  db.prepare(`DELETE FROM catalog_staging WHERE ${STAGED_GAME} = ?`).run(game)
+}
+
+/**
+ * Applies every staged change of `game` in seq order, in batches (the switch's snapshot, or a
+ * delta pull). Must run inside a transaction.
+ */
+export function applyStaged(db: SqlDb, game: GameId): ApplyResult {
   const total: ApplyResult = { applied: 0, cardsChanged: false, imagesChanged: false }
-  const page = db.prepare('SELECT seq, row FROM catalog_staging WHERE seq > ? ORDER BY seq LIMIT ?')
+  const page = db.prepare(
+    `SELECT seq, row FROM catalog_staging WHERE seq > ? AND ${STAGED_GAME} = ? ORDER BY seq LIMIT ?`
+  )
   let after = -1
   for (;;) {
-    const rows = page.all(after, APPLY_BATCH) as { seq: number; row: string }[]
+    const rows = page.all(after, game, APPLY_BATCH) as { seq: number; row: string }[]
     if (rows.length === 0) break
     const r = applyChanges(
       db,
@@ -236,6 +255,7 @@ export function applyStaged(db: SqlDb): ApplyResult {
  * `remote_id`) are deleted unless an entry of any owner, live or tombstoned, uses them; those are
  * kept and flagged `missing_from_api`. Side-table rows whose key no staged row carries are deleted;
  * no table holds a foreign key to these side tables (see schema.ts), so no entry can depend on them.
+ * The snapshot is Yu-Gi-Oh!'s, so only Yu-Gi-Oh! side rows are judged by it.
  */
 function pruneUnlisted(db: SqlDb): void {
   db.exec(
@@ -247,24 +267,24 @@ function pruneUnlisted(db: SqlDb): void {
      WHERE remote_id IS NULL AND NOT EXISTS (SELECT 1 FROM collection_entries e WHERE e.printing_id = card_printings.id)`
   )
   for (const name of PRUNED_TABLES) {
-    const table = LEGACY_CATALOG_TABLES.find((t) => t.name === name)
+    const table = CATALOG_TABLES.find((t) => t.name === name)
     if (!table) continue
+    const byGame = table.columns.includes('game')
+    // A legacy row (no game) is a Yu-Gi-Oh! one.
     const keyOf = (row: Record<string, unknown>): string =>
-      JSON.stringify(table.key.map((k) => row[k] ?? null))
+      JSON.stringify(table.key.map((k) => row[k] ?? (k === 'game' ? 'ygo' : null)))
     const listed = new Set<string>()
-    for (const { row } of db.prepare('SELECT row FROM catalog_staging WHERE tbl = ?').all(name) as {
-      row: string
-    }[]) {
+    for (const { row } of db
+      .prepare(`SELECT row FROM catalog_staging WHERE tbl = ? AND ${STAGED_GAME} = 'ygo'`)
+      .all(name) as { row: string }[]) {
       const change = JSON.parse(row) as CatalogChange
       if ('row' in change) listed.add(keyOf(change.row))
     }
     const cols = table.key.map((k) => `"${k}"`).join(', ')
     const where = table.key.map((k) => `"${k}" IS ?`).join(' AND ')
     const drop = db.prepare(`DELETE FROM ${name} WHERE ${where}`)
-    for (const local of db.prepare(`SELECT ${cols} FROM ${name}`).all() as Record<
-      string,
-      unknown
-    >[]) {
+    const ygoRows = `SELECT ${cols} FROM ${name}${byGame ? " WHERE game = 'ygo'" : ''}`
+    for (const local of db.prepare(ygoRows).all() as Record<string, unknown>[]) {
       if (!listed.has(keyOf(local))) drop.run(...table.key.map((k) => local[k]))
     }
   }

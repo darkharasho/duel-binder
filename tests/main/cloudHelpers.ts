@@ -12,7 +12,7 @@ export const SERVER_NOW = new Date('2026-10-26T00:00:00.000Z')
  * The portal Worker in-process over a seeded server database. `fetch` routes `https://portal.test/*`
  * into `handle()`; a request to any other host throws (so a sync that reaches for it fails).
  */
-export async function inProcessPortal(): Promise<{
+export async function inProcessPortal(env: Partial<AppDeps['env']> = {}): Promise<{
   serverDb: Database.Database
   fetch: typeof fetch
   desktopToken(userId: number): Promise<string>
@@ -36,7 +36,8 @@ export async function inProcessPortal(): Promise<{
       DISCORD_CLIENT_ID: 'c',
       DISCORD_CLIENT_SECRET: 's',
       ADMIN_TOKEN: 'a',
-      PRICE_WORKER_URL: 'https://prices.test'
+      PRICE_WORKER_URL: 'https://prices.test',
+      ...env
     },
     now: () => SERVER_NOW,
     fetch: (async (input: RequestInfo | URL) => {

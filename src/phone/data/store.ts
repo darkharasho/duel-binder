@@ -1,14 +1,14 @@
 import type { SqlDb } from '../../main/db/sql'
 import type { UsageReport } from '../../shared/usage'
-import { getMeta, setMeta } from '../../main/db/meta'
-import { applyChanges, finishApply } from '../../main/catalog/apply'
+import { deleteMeta, getMeta, setMeta } from '../../main/db/meta'
+import { applyChanges, catalogCursorKey, finishApply } from '../../main/catalog/apply'
 import {
   CloudAuthError,
   CloudOfflineError,
   createCloudClient,
   type CloudClient
 } from '../../main/cloud/client'
-import { syncOnce } from '../../main/cloud/engine'
+import { syncedGames, syncOnce } from '../../main/cloud/engine'
 import {
   accountState,
   activeOwner,
@@ -23,6 +23,7 @@ import { createDataHandlers, DATA_CHANNELS, type DataChannel } from '../../main/
 import { awaitingPrices, checkPrintingIds, requestPrices } from '../../main/cloud/priceRequests'
 import { PHONE_TABLES } from '../../shared/catalogFeed'
 import type { Me } from '../../shared/cloud'
+import type { GameId } from '../../shared/games'
 import { FRIENDS_SIGNED_OUT, OFFLINE_MESSAGE } from '../../shared/friends'
 import type { PortalChannel } from '../../shared/portal'
 import { decodeFingerprints } from '../../shared/scan/fingerprintFile'
@@ -284,6 +285,7 @@ export function createPhoneStore(deps: {
       for (const t of RESET_TABLES) db.exec(`DELETE FROM ${t}`)
       finishApply(db, { applied: 1, cardsChanged: true, imagesChanged: true })
       setMeta(db, 'catalog_cursor', '0')
+      deleteMeta(db, 'catalog_cursor:pkm')
       for (const k of [
         'catalog_loaded',
         'catalog_filled',
@@ -296,10 +298,11 @@ export function createPhoneStore(deps: {
   }
 
   /**
-   * Downloads the change feed for the phone tables from `catalog_cursor` to its end. Each page
-   * commits with its cursor, so a failure resumes from the last page that landed. Foreign keys are
-   * off meanwhile: a page may hold rows pointing at a row a later page brings (a card changed after
-   * its new printings is listed at its later seq). The serial queue keeps every other write out;
+   * Downloads the change feed for the phone tables of each of the account's games from that
+   * game's cursor to its end (a game never pulled starts from 0). Each page commits with its
+   * cursor, so a failure resumes from the last page that landed. Progress follows the Yu-Gi-Oh!
+   * feed. Foreign keys are off meanwhile: a page may hold rows pointing at a row a later page brings
+   * (a card changed after its new printings is listed at its later seq). The serial queue keeps every other write out;
    * reads may run between pages, and see each page's rows whole.
    * Returns whether anything changed.
    */
@@ -308,25 +311,31 @@ export function createPhoneStore(deps: {
     onProgress: (p: { cursor: number; latest: number }) => void
   ): Promise<boolean> {
     let changed = false
-    let cursor = Number(getMeta(db, 'catalog_cursor') ?? 0)
-    db.exec('PRAGMA foreign_keys = OFF')
-    try {
+    const pass = async (game: GameId): Promise<void> => {
+      const key = catalogCursorKey(game)
+      let cursor = Number(getMeta(db, key) ?? 0)
       for (;;) {
-        const page = await c.catalogChanges(cursor, undefined, PHONE_TABLES)
+        const page = await c.catalogChanges(cursor, undefined, PHONE_TABLES, game)
         if (page.more && page.cursor <= cursor)
           throw new Error('The catalog feed stopped advancing')
         db.transaction(() => {
           const r = applyChanges(db, page.changes)
           if (r.applied > 0) changed = true
           if (r.cardsChanged) setState('catalog_needs_finish', '1')
-          setMeta(db, 'catalog_cursor', String(page.cursor))
-          setState('catalog_latest', String(page.latest))
+          setMeta(db, key, String(page.cursor))
+          if (game === 'ygo') setState('catalog_latest', String(page.latest))
           if (page.dbVersion !== null) setMeta(db, 'db_version', page.dbVersion)
         })()
         cursor = page.cursor
-        onProgress({ cursor, latest: page.latest })
+        if (game === 'ygo') onProgress({ cursor, latest: page.latest })
         if (!page.more) break
       }
+    }
+    db.exec('PRAGMA foreign_keys = OFF')
+    try {
+      // Yu-Gi-Oh! first, which every account has; then the account's other games.
+      await pass('ygo')
+      for (const game of await syncedGames(c)) if (game !== 'ygo') await pass(game)
     } finally {
       db.exec('PRAGMA foreign_keys = ON')
     }

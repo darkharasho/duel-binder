@@ -235,6 +235,17 @@ describe('runSwitch', () => {
     ).toEqual({ n: 1 })
   })
 
+  it('prunes only Yu-Gi-Oh! sets, keeping a same-named Pokémon set', async () => {
+    const { db } = await oldDesktop()
+    db.prepare(
+      "INSERT INTO sets (game, language, set_name, set_code) VALUES ('pkm', 'en', 'Old Set', 'OLD')"
+    ).run()
+    expect(await runSwitch(db, { client, backupPath, now: () => NOW })).toEqual({ state: 'done' })
+    expect(db.prepare("SELECT game FROM sets WHERE set_name = 'Old Set'").all()).toEqual([
+      { game: 'pkm' }
+    ])
+  })
+
   it('keeps a desktop-only printing an entry uses, flagged', async () => {
     const { db, used } = await oldDesktop()
     expect(await runSwitch(db, { client, backupPath, now: () => NOW })).toEqual({ state: 'done' })

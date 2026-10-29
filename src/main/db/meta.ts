@@ -14,13 +14,17 @@ export type MetaKey =
   | 'cloud_active_owner'
   /** The signed-in user's `Me` as JSON; absent when signed out. */
   | 'cloud_user'
-  /** Seq of the last server catalog change applied locally. */
+  /** Seq of the last server catalog change applied locally (Yu-Gi-Oh!). */
   | 'catalog_cursor'
+  /** The same for Pokémon; absent means its feed starts from 0. */
+  | 'catalog_cursor:pkm'
   /**
    * Seq of the last change downloaded into `catalog_staging`: the switch's snapshot until it's done,
-   * then a delta pull not yet applied.
+   * then a delta pull not yet applied (Yu-Gi-Oh!).
    */
   | 'catalog_staging_cursor'
+  /** The same for a Pokémon delta pull. */
+  | 'catalog_staging_cursor:pkm'
   /** When this desktop switched to the server's catalog (ISO); absent means not yet. */
   | 'catalog_switched_at'
   /** Path of the database copy taken just before the switch. */

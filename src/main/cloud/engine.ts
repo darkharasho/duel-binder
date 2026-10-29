@@ -49,7 +49,7 @@ const sameAs = (e: WireEntry): string => JSON.stringify(e)
  * The games the account may sync, from `me()`. An old server leaves `games` out, which means
  * Yu-Gi-Oh! only; so does a failing `me()` (other than signed-out), so the rest of the run goes on.
  */
-async function syncedGames(client: CloudClient): Promise<GameId[]> {
+export async function syncedGames(client: CloudClient): Promise<GameId[]> {
   try {
     const games = (await client.me()).games?.filter(isGameId) ?? []
     return games.includes('ygo') ? games : ['ygo', ...games]
@@ -213,7 +213,8 @@ export async function syncOnce(
 
   // 3. Every price change the server has made in each game, then prices for printings whose local
   // price is missing or stale (a printing the server hasn't priced yet).
-  for (const game of games) if ((await pullPriceChanges(db, client, owner, game)) > 0) changed = true
+  for (const game of games)
+    if ((await pullPriceChanges(db, client, owner, game)) > 0) changed = true
   // Asked even with no keys, to keep price_service_status current.
   const { prices, status } = await client.prices(stalePricePkeys(db, now(), MAX_PULL))
   db.transaction(() => {

@@ -11,6 +11,7 @@ import {
   type ContributedPrinting
 } from '../../src/shared/catalogFeed'
 import { addUser, seededServerDb, memoryBucket, noPrintingArt } from './helpers'
+import { seedPokemon } from '../fixtures/pokemon'
 
 const BASE = 'https://portal.test'
 const NOW = new Date('2026-10-24T12:00:00.000Z')
@@ -297,5 +298,30 @@ describe('POST /api/catalog/contribute', () => {
       deps
     )
     expect(get.status).toBe(405)
+  })
+
+  it('stores a Pokémon printing only for a user allowed Pokémon, and with its game', async () => {
+    const [pikachu] = seedPokemon(db).cardIds
+    const pkm = printing({ card_id: pikachu, set_code: 'PAL 999/193', set_rarity: 'Holo' })
+    const pkmCount = "SELECT count(*) AS n FROM card_printings WHERE set_code = 'PAL 999/193'"
+
+    // alice is not the owner: the Pokémon row is refused, the Yu-Gi-Oh! one beside it still lands.
+    const refused = await contribute([pkm, printing()])
+    expect(refused[0]).toMatchObject({ status: 'rejected', reason: 'unknown-card' })
+    expect(refused[1]).toMatchObject({ status: 'added' })
+    expect(count(pkmCount)).toBe(0)
+    expect(count('SELECT count(*) AS n FROM printing_contributions')).toBe(1)
+    expect(
+      db.prepare("SELECT game FROM card_printings WHERE set_code = 'DESK-EN001'").get()
+    ).toEqual({ game: 'ygo' })
+
+    deps.env = { ADMIN_DISCORD_ID: '1' } as AppDeps['env']
+    const added = await contribute([pkm])
+    expect(added[0]).toMatchObject({ status: 'added' })
+    expect(
+      db
+        .prepare(`SELECT game, contributed FROM card_printings WHERE set_code = 'PAL 999/193'`)
+        .get()
+    ).toEqual({ game: 'pkm', contributed: 1 })
   })
 })

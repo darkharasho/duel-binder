@@ -6,6 +6,7 @@ import {
   type ContributeResult,
   type ContributedPrinting
 } from '../../../src/shared/catalogFeed'
+import type { GameId } from '../../../src/shared/games'
 
 const DAY_MS = 86_400_000
 const LANGUAGE_CODES = new Set<string>(LANGUAGES.map((l) => l.code))
@@ -54,13 +55,15 @@ function check(raw: unknown): Checked {
 
 /**
  * Adds printings that exist only on a desktop, marked `contributed`. Each row is judged on its
- * own. The pkey is always computed here; prices are never taken from the client.
+ * own. The pkey is always computed here; prices are never taken from the client. A printing takes
+ * its card's game, and a card of a game outside `games` (the user's) is treated as unknown.
  */
 export function contributePrintings(
   db: SqlDb,
   userId: number,
   rows: unknown[],
-  now: Date
+  now: Date,
+  games: readonly GameId[]
 ): ContributeResult[] {
   const nowIso = now.toISOString()
   const since = new Date(now.getTime() - DAY_MS).toISOString()
@@ -71,14 +74,14 @@ export function contributePrintings(
   ).n
   let addedNow = 0
 
-  const hasCard = db.prepare('SELECT 1 FROM cards WHERE id = ?')
+  const cardGame = db.prepare('SELECT game FROM cards WHERE id = ?')
   const keyOf = db.prepare(`SELECT ${PKEY_SQL} AS pkey`)
   const exists = db.prepare('SELECT 1 FROM card_printings WHERE pkey = ?')
   // set_rarity_code is NOT NULL (default ''); the desktop sends null for an empty one.
   const insert = db.prepare(
     `INSERT INTO card_printings (card_id, set_name, set_code, set_rarity, set_rarity_code,
-       language, variant, tcg_product_id, set_price, market_price, missing_from_api, contributed)
-     VALUES (?, ?, ?, ?, COALESCE(?, ''), ?, ?, ?, NULL, NULL, 0, 1)`
+       language, variant, tcg_product_id, set_price, market_price, missing_from_api, contributed, game)
+     VALUES (?, ?, ?, ?, COALESCE(?, ''), ?, ?, ?, NULL, NULL, 0, 1, ?)`
   )
   const log = db.prepare(
     'INSERT INTO printing_contributions (printing_id, user_id, created_at) VALUES (?, ?, ?)'
@@ -88,7 +91,9 @@ export function contributePrintings(
     const checked = check(raw)
     if (!('row' in checked)) return { pkey: '', status: 'rejected', reason: checked.reason }
     const p = checked.row
-    if (!hasCard.get(p.card_id)) return { pkey: '', status: 'rejected', reason: 'unknown-card' }
+    const card = cardGame.get(p.card_id) as { game: GameId } | undefined
+    if (!card || !games.includes(card.game))
+      return { pkey: '', status: 'rejected', reason: 'unknown-card' }
 
     const { language: l, card_id: c, set_name: n, set_code: s, set_rarity: r } = p
     const { pkey } = keyOf.get(l, c, s, r, l, c, n, s, r) as { pkey: string }
@@ -97,7 +102,7 @@ export function contributePrintings(
       return { pkey, status: 'rejected', reason: 'daily-limit' }
 
     const id = insert.run(
-      c, n, s, r, p.set_rarity_code, l, p.variant, p.tcg_product_id
+      c, n, s, r, p.set_rarity_code, l, p.variant, p.tcg_product_id, card.game
     ).lastInsertRowid
     log.run(Number(id), userId, nowIso)
     addedNow++

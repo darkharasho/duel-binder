@@ -7,8 +7,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { runJob } from '../../scripts/catalog/build'
 import { buildFingerprints, uploadFingerprints } from '../../scripts/catalog/fingerprints'
 import { openDatabase } from '../../src/main/db/database'
+import { scanProfile } from '../../src/shared/scan/profiles'
 import { artHash, fingerprintSource } from '../../src/shared/scan/fingerprint'
 import { decodeFingerprints } from '../../src/shared/scan/fingerprintFile'
+import { pokemonId } from '../../src/shared/games'
 import type { RgbaImage } from '../../src/shared/scan/types'
 
 let dir: string
@@ -211,7 +213,13 @@ describe('uploadFingerprints', () => {
   it('throws on a non-2xx response', async () => {
     const fetch = (async () => new Response('nope', { status: 403 })) as typeof globalThis.fetch
     await expect(
-      uploadFingerprints({ url: 'https://p.example', token: 't', bytes: new Uint8Array(4), game: 'ygo', fetch })
+      uploadFingerprints({
+        url: 'https://p.example',
+        token: 't',
+        bytes: new Uint8Array(4),
+        game: 'ygo',
+        fetch
+      })
     ).rejects.toThrow(/403/)
   })
 })
@@ -273,5 +281,70 @@ describe('fingerprintSource', () => {
   it('keeps any other frame whole', () => {
     const square = art(624, 624)
     expect(fingerprintSource(square, 'link')).toBe(square)
+  })
+})
+
+describe('buildFingerprints for Pokémon', () => {
+  it('pkm build hashes full-card art and writes v2', async () => {
+    const sources = ['en/sv03-045', 'ja/SV1S-001']
+    const bases = [
+      'https://assets.tcgdex.net/en/sv/sv03/045',
+      'https://assets.tcgdex.net/ja/SV/SV1S/001'
+    ]
+    const ids: number[] = []
+    sources.forEach((sourceId, i) => {
+      const cardId = pokemonId(sourceId)
+      const imageId = pokemonId(`${sourceId}#img`)
+      ids.push(imageId)
+      work
+        .prepare(
+          `INSERT INTO cards (id, name, type, frame_type, race, "desc", updated_at, game)
+           VALUES (?, 'P', 'Pokemon', 'pokemon', '', '', '2026-01-01', 'pkm')`
+        )
+        .run(cardId)
+      work
+        .prepare(
+          "INSERT INTO card_images (image_id, card_id, sort_order, game) VALUES (?, ?, 0, 'pkm')"
+        )
+        .run(imageId, cardId)
+      work
+        .prepare(
+          `INSERT INTO pokemon_cards (card_id, category, source_id, image_url) VALUES (?, 'Pokemon', ?, ?)`
+        )
+        .run(cardId, sourceId, bases[i])
+    })
+    const urls: string[] = []
+    const fetchFn = (async (input: string | URL | Request) => {
+      urls.push(String(input))
+      return new Response((urls.length % 2 ? jpeg(false) : jpeg(true)) as BodyInit)
+    }) as typeof fetch
+    const out = await buildFingerprints({
+      work,
+      cachePath: join(dir, 'fingerprints-pkm.sqlite'),
+      fetch: fetchFn,
+      game: 'pkm'
+    })
+    expect(out).toMatchObject({ count: 2, fetched: 2, failed: 0 })
+    expect(out.bytes[4]).toBe(2)
+    const index = decodeFingerprints(out.bytes)
+    // The fetch answers the first request with the x ramp and the second with the y ramp.
+    const hashOf = (bytes: Uint8Array): Uint32Array =>
+      artHash(
+        fingerprintSource(
+          decode(bytes, { useTArray: true, formatAsRGBA: true }),
+          'pokemon',
+          scanProfile('pkm')
+        )
+      )
+    expect(index.nearest(hashOf(jpeg(false)), 1)[0].distance).toBe(0)
+    expect(index.nearest(hashOf(jpeg(true)), 1)[0].distance).toBe(0)
+    expect(
+      [
+        index.nearest(hashOf(jpeg(false)), 1)[0].imageId,
+        index.nearest(hashOf(jpeg(true)), 1)[0].imageId
+      ].sort()
+    ).toEqual([...ids].sort())
+    expect(urls.sort()).toEqual(bases.map((b) => `${b}/low.jpg`).sort())
+    expect(urls.some((u) => u.includes('ygoprodeck'))).toBe(false)
   })
 })

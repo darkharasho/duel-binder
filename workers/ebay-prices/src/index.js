@@ -4,6 +4,7 @@ import {
   titleMatches,
   isSingleCard,
   namesOtherRarity,
+  namesLongerRarity,
   askingPrice
 } from './price.js'
 import { setPrices } from './set.js'
@@ -18,7 +19,7 @@ const MAX_FIELD = 200
 const QUOTA_URL =
   'https://api.ebay.com/developer/analytics/v1_beta/rate_limit/?api_context=buy&api_name=browse'
 const SET_PAGE = 200
-const SET_MAX_PAGES = 3
+const SET_MAX_PAGES = 5
 const SET_LANGS = new Set(['ja', 'ko', 'zh-hans', 'zh-hant', 'ae'])
 // 'ygo-collection-tracker' is what app versions before the Duel Binder rename send.
 const CLIENTS = new Set(['duel-binder', 'ygo-collection-tracker'])
@@ -97,12 +98,15 @@ async function search(env, query, { offset = 0, limit = 50 } = {}) {
 }
 
 function matchingPrices(items, ref, { otherRarities = true } = {}) {
+  // The first pass also drops listings naming a longer rarity that contains the requested one.
   return items
     .filter(
       (i) =>
         titleMatches(i.title, ref) &&
         isSingleCard(i.title) &&
-        (otherRarities || !namesOtherRarity(i.title, ref.rarity)) &&
+        (otherRarities
+          ? !namesLongerRarity(i.title, ref.rarity)
+          : !namesOtherRarity(i.title, ref.rarity)) &&
         i.price?.currency === 'USD'
     )
     .map((i) => Number.parseFloat(i.price.value))

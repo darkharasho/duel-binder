@@ -50,6 +50,7 @@ const RARITY_PHRASES = [
   'ghost rare',
   'ultimate rare',
   "collector's rare",
+  'extra secret rare',
   'secret rare',
   'ultra rare',
   'super rare',
@@ -63,6 +64,14 @@ export function namesOtherRarity(title, rarity) {
   const t = String(title).toLowerCase()
   const r = String(rarity).toLowerCase()
   return RARITY_PHRASES.some((phrase) => t.includes(phrase) && !r.includes(phrase))
+}
+
+/** True when the title names a longer rarity that contains the requested one ("Quarter Century Secret Rare" for a Secret Rare). */
+export function namesLongerRarity(title, rarity) {
+  const t = String(title).toLowerCase()
+  const r = String(rarity).toLowerCase()
+  if (r === '') return false
+  return RARITY_PHRASES.some((phrase) => t.includes(phrase) && phrase.includes(r) && phrase !== r)
 }
 
 function median(sorted) {

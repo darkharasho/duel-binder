@@ -39,7 +39,11 @@ export const RARITY_ALIASES = Object.freeze({
   'Secret Rare': 'Secret Rare',
   'Ultra Rare': 'Ultra Rare',
   'Super Rare': 'Super Rare',
-  'Gold Rare': 'Gold Rare'
+  'Gold Rare': 'Gold Rare',
+  'Extra Secret Rare': 'Extra Secret Rare',
+  'Rare Parallel Rare': 'Rare Parallel Rare',
+  'Short Print': 'Short Print',
+  'Super Short Print': 'Super Short Print'
 })
 
 const escape = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')

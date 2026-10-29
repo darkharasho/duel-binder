@@ -202,6 +202,29 @@ describe('GET /v1/price', () => {
     expect(body).toMatchObject({ price: 11, listingCount: 2, rarityFallback: true })
   })
 
+  it('prices a Secret Rare from Secret Rare listings, not pricier Secret variants', async () => {
+    const mk = (title, value) => ({ title, price: { value, currency: 'USD' } })
+    vi.stubGlobal(
+      'fetch',
+      makeFetch([
+        json({
+          itemSummaries: [
+            mk('LOB-DE001 Secret Rare', '3'),
+            mk('LOB-DE001 Secret Rare NM', '3'),
+            mk('LOB-DE001 Quarter Century Secret Rare', '30'),
+            mk('LOB-DE001 Quarter Century Secret Rare NM', '30'),
+            mk('LOB-DE001 Extra Secret Rare', '30')
+          ]
+        })
+      ])
+    )
+    const res = await worker.fetch(
+      req(URL_OK.replace('Ultra%20Rare', 'Secret%20Rare'), undefined),
+      env
+    )
+    expect(await res.json()).toMatchObject({ price: 3, listingCount: 2, rarityFallback: false })
+  })
+
   it('returns 502 when OAuth fails and leaks no secrets', async () => {
     vi.stubGlobal(
       'fetch',
@@ -371,11 +394,11 @@ describe('GET /v1/set', () => {
     expect(q).toBe('CORI-JP')
   })
 
-  it('stops at three pages', async () => {
-    const f = makeFetch([json(page(200)), json(page(200)), json(page(200)), json(page(200))])
+  it('stops at five pages', async () => {
+    const f = makeFetch(Array.from({ length: 6 }, () => json(page(200))))
     vi.stubGlobal('fetch', f)
     const body = await (await settle(worker.fetch(req(SET_URL), env))).json()
-    expect(body.calls).toBe(3)
+    expect(body.calls).toBe(5)
   })
 
   it('rejects English', async () => {

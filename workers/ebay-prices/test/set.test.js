@@ -53,6 +53,15 @@ describe('parseListing', () => {
     )
   })
 
+  it('reads the newer spelled-out names', () => {
+    expect(parseListing('RC04-JP021 Extra Secret Rare', 'RC04-JP').rarity).toBe('Extra Secret Rare')
+    expect(parseListing('RC04-JP021 Rare Parallel Rare', 'RC04-JP').rarity).toBe(
+      'Rare Parallel Rare'
+    )
+    expect(parseListing('RC04-JP021 Super Short Print', 'RC04-JP').rarity).toBe('Super Short Print')
+    expect(parseListing('RC04-JP021 Short Print', 'RC04-JP').rarity).toBe('Short Print')
+  })
+
   it('gives a null code when the key is absent', () => {
     expect(parseListing('Blue-Eyes White Dragon', 'CORI-JP')).toEqual({ code: null, rarity: null })
   })

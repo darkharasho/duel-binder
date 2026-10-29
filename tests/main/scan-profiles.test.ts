@@ -17,6 +17,7 @@ describe('scan profiles', () => {
     expect(ygo.game).toBe('ygo')
     expect(ygo.artBoxes).toEqual(Object.values(ART_BOXES))
     expect(ygo.windows).toEqual(Object.values(ART_BOXES))
+    expect(ygo.windowArt).toBe(false)
     expect(ygo.codeBands).toEqual(CODE_BANDS)
     expect(ygo.nameBand).toEqual(NAME_BAND)
     expect(ygo.textBox).toEqual(TEXT_BOX)

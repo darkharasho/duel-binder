@@ -17,6 +17,7 @@ import {
 import { scanProfile } from '../../src/shared/scan/profiles'
 import type { RgbaImage } from '../../src/shared/scan/types'
 import { analyze } from '../../src/renderer/src/features/scan/vision/analyze'
+import { windowArtBoxes } from '../../src/renderer/src/features/scan/vision/artWindow'
 import { loadCv, type CV } from '../../src/renderer/src/features/scan/vision/cv'
 import {
   CARD_H,
@@ -29,7 +30,7 @@ import {
   type Point,
   type Quad
 } from '../../src/renderer/src/features/scan/vision/detect'
-import { ART_BOXES, crop } from '../../src/renderer/src/features/scan/vision/regions'
+import { ART_BOXES, crop, type Box } from '../../src/renderer/src/features/scan/vision/regions'
 import {
   findCandidates,
   preferOuter,
@@ -537,6 +538,23 @@ describe('the Pokémon profile', () => {
     const stored = artHash(fingerprintSource(img, 'pokemon', pkm))
     const seen = artHash(crop(resized(img, CARD_W, CARD_H), pkm.artBoxes[0]))
     expect(hamming(stored, 0, seen, 0)).toBeLessThanOrEqual(20)
+  })
+
+  it('places the pkm art box on the art window of a card straightened by its inner frame', () => {
+    const stored = artHash(fingerprintSource(reference(), 'pokemon', pkm))
+    const distance = (card: RgbaImage, box: Box): number =>
+      hamming(stored, 0, artHash(crop(card, box)), 0)
+    const card = resized(reference(), CARD_W, CARD_H)
+    // A card held over a deck is often found by the inner edge of its border, a few percent in,
+    // with the deck's card edge below: straightened from there, the art box is that far off and
+    // the hash says nothing.
+    const inner = resized(crop(card, [0.037, 0.04, 0.963, 0.985]), CARD_W, CARD_H)
+    expect(distance(inner, pkm.artBoxes[0])).toBeGreaterThan(ART_MAX_DISTANCE)
+    const found = (img: RgbaImage): number =>
+      Math.min(...windowArtBoxes(img, pkm).map((b) => distance(img, b)))
+    expect(found(inner)).toBeLessThanOrEqual(30)
+    // A card straightened by its own outline still matches where it is.
+    expect(found(card)).toBeLessThanOrEqual(20)
   })
 
   it('a Yu-Gi-Oh reference is left as it was', () => {

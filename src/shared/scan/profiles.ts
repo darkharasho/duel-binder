@@ -14,6 +14,11 @@ export interface ScanProfile {
    * in the frame (each tried either way up).
    */
   windows: readonly Box[]
+  /**
+   * Whether the art box is also tried where one of the windows is found on the card
+   * (artWindow.ts): a few percent off, the art hash says nothing.
+   */
+  windowArt: boolean
   /** Where the set code or collector number may be read. */
   codeBands: readonly Box[]
   nameBand: Box
@@ -46,6 +51,7 @@ export const SCAN_PROFILES: Record<GameId, ScanProfile> = {
     game: 'ygo',
     artBoxes: Object.values(ART_BOXES),
     windows: Object.values(ART_BOXES),
+    windowArt: false,
     codeBands: CODE_BANDS,
     nameBand: NAME_BAND,
     textBox: TEXT_BOX,
@@ -71,6 +77,7 @@ export const SCAN_PROFILES: Record<GameId, ScanProfile> = {
       // XY Trainers (xy1 120).
       [0.097, 0.156, 0.9, 0.524]
     ],
+    windowArt: true,
     codeBands: [
       // The collector number ("045/197", after the regulation mark and set badge), bottom left on
       // Sword & Shield and later cards, Japanese ones included: 0.94–0.968, between the

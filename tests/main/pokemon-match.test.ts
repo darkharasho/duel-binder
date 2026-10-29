@@ -176,6 +176,13 @@ describe('labels', () => {
     expect(canonicalLabel('1st Edition Holofoil')).toBe('1st Edition Holofoil')
     expect(canonicalLabel('Something New')).toBe('Something New')
   })
+  it('reads the 1st-edition stamp however TCGdex spells it ("1st edition", "1st Edition")', () => {
+    expect(variantLabel({ type: 'normal', stamp: ['1st edition'] })).toBe('1st Edition')
+    expect(variantLabel({ type: 'normal', stamp: ['1st Edition'] })).toBe('1st Edition')
+    expect(variantLabel({ type: 'holo', stamp: ['1st edition'] })).toBe('1st Edition Holofoil')
+    const c = brief({ variants_detailed: [{ type: 'normal', stamp: ['1st edition'] }] })
+    expect(cardVersions(c, [], new Map()).problems).toEqual([])
+  })
   it('maps TCGdex variants to the same vocabulary', () => {
     expect(variantLabel({ type: 'normal' })).toBe('Normal')
     expect(variantLabel({ type: 'holo' })).toBe('Holofoil')

@@ -49,7 +49,8 @@ export function canonicalLabel(subTypeName: string): string {
 /** A variant's label without its subtype prefix, and whether it is in the table. */
 function variantBase(v: TdVariant): { label: string; known: boolean } {
   const type = v.type.trim().toLowerCase()
-  const stamps = (v.stamp ?? []).map((s) => s.trim().toLowerCase()).filter(Boolean)
+  // TCGdex spells one stamp several ways ("1st-edition", "1st edition", "1st Edition").
+  const stamps = (v.stamp ?? []).map((s) => s.trim().toLowerCase().replace(/[\s_]+/g, '-')).filter(Boolean)
   if (stamps.length === 0 && TYPES[type]) return { label: TYPES[type], known: true }
   if (stamps.length === 1 && stamps[0] === '1st-edition' && FIRST_EDITION[type]) {
     return { label: FIRST_EDITION[type], known: true }

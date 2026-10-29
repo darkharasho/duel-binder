@@ -28,6 +28,17 @@ export interface TcgPricesResult {
 const MIN_MOVE_USD = 0.05
 const MIN_MOVE_SHARE = 0.02
 
+/**
+ * Whether a stored price should be rewritten: it appeared, disappeared, or moved by at least both
+ * MIN_MOVE_USD and MIN_MOVE_SHARE of the old price. Equal prices (both null included) never move.
+ */
+export function movedEnough(old: number | null, next: number | null): boolean {
+  if (old === next) return false
+  if (old === null || next === null) return true
+  const move = Math.abs(next - old)
+  return move >= MIN_MOVE_USD && move >= old * MIN_MOVE_SHARE
+}
+
 /** One product's price across its editions (see EDITIONS); null when none has a market price. */
 export function pickMarketPrice(rows: PriceRow[]): number | null {
   const rank = (r: PriceRow): number => {
@@ -187,11 +198,7 @@ export function applyTcgPrices(db: Database.Database, groups?: number[]): number
       const price = usable
         ? ((priceOf.get(match.product_id) as { price: number } | undefined)?.price ?? null)
         : null
-      if (price === old) continue
-      if (price !== null && old !== null) {
-        const move = Math.abs(price - old)
-        if (move < MIN_MOVE_USD || move < old * MIN_MOVE_SHARE) continue
-      }
+      if (!movedEnough(old, price)) continue
       update.run(price, id)
       changed++
     }

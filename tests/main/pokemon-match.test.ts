@@ -1,0 +1,284 @@
+import { describe, it, expect } from 'vitest'
+import { readFileSync, readdirSync } from 'node:fs'
+import { join } from 'node:path'
+import { matchGroup, matchProducts } from '../../scripts/catalog/pokemon/match'
+import { cardVersions, canonicalLabel, variantLabel } from '../../scripts/catalog/pokemon/versions'
+import type { TcGroup, TcPrice, TcProduct, TdCard, TdSet } from '../../scripts/catalog/pokemon/types'
+import { movedEnough } from '../../src/main/tcgplayer/prices'
+
+const FIX = join(__dirname, '..', 'fixtures', 'pokemon')
+const read = <T>(p: string): T => JSON.parse(readFileSync(join(FIX, p), 'utf8')) as T
+
+type Cat = '3' | '85'
+const groups = (cat: Cat): TcGroup[] =>
+  read<{ results: { groupId: number; name: string; abbreviation?: string | null }[] }>(`tcgcsv/${cat}/groups.json`)
+    .results.map((g) => ({ groupId: g.groupId, name: g.name, abbreviation: g.abbreviation ?? null }))
+
+/** Every fixture product of a category, mapped the way tcgcsvProducts maps them. */
+function allProducts(cat: Cat): TcProduct[] {
+  const out: TcProduct[] = []
+  for (const f of readdirSync(join(FIX, 'tcgcsv', cat)).filter((n) => n.startsWith('products-'))) {
+    const rows = read<{ results: { productId: number; groupId: number; name: string; imageUrl?: string; extendedData?: { name: string; value: string }[] }[] }>(`tcgcsv/${cat}/${f}`).results
+    for (const p of rows) {
+      out.push({
+        productId: p.productId, groupId: p.groupId, name: p.name, imageUrl: p.imageUrl,
+        number: p.extendedData?.find((e) => e.name === 'Number')?.value ?? null
+      })
+    }
+  }
+  return out
+}
+
+function allPrices(cat: Cat): Map<number, TcPrice[]> {
+  const m = new Map<number, TcPrice[]>()
+  for (const f of readdirSync(join(FIX, 'tcgcsv', cat)).filter((n) => n.startsWith('prices-'))) {
+    for (const p of read<{ results: { productId: number; subTypeName: string; marketPrice?: number | null }[] }>(`tcgcsv/${cat}/${f}`).results) {
+      const row = { productId: p.productId, subTypeName: p.subTypeName, marketPrice: p.marketPrice ?? null }
+      m.set(p.productId, [...(m.get(p.productId) ?? []), row])
+    }
+  }
+  return m
+}
+
+interface Lang { cat: Cat; dir: 'en' | 'ja'; products: TcProduct[]; productById: Map<number, TcProduct>; productGroup: Map<number, number>; prices: Map<number, TcPrice[]>; groups: TcGroup[] }
+function lang(dir: 'en' | 'ja'): Lang {
+  const cat: Cat = dir === 'en' ? '3' : '85'
+  const products = allProducts(cat)
+  return {
+    cat, dir, products, groups: groups(cat), prices: allPrices(cat),
+    productById: new Map(products.map((p) => [p.productId, p])),
+    productGroup: new Map(products.map((p) => [p.productId, p.groupId]))
+  }
+}
+const EN = lang('en')
+const JA = lang('ja')
+
+const set = (l: Lang, id: string): TdSet => read<TdSet>(`${l.dir}/set-${id}.json`)
+const card = (l: Lang, id: string): TdCard => read<TdCard>(`${l.dir}/card-${id}.json`)
+const setCards = (l: Lang, id: string): TdCard[] => set(l, id).cards.map((c) => card(l, c.id))
+const inGroup = (l: Lang, g: number | null): TcProduct[] => l.products.filter((p) => p.groupId === g)
+const group = (l: Lang, setId: string): number | null => matchGroup(set(l, setId), setCards(l, setId), l.groups, l.productGroup)
+
+function versionsOf(l: Lang, id: string, prices = l.prices): ReturnType<typeof cardVersions> & { match: ReturnType<typeof matchProducts> } {
+  const c = card(l, id)
+  const g = group(l, c.set.id)
+  const match = matchProducts(c, g, inGroup(l, g), l.productById)
+  return { ...cardVersions(c, match.products, prices), match }
+}
+
+const prod = (productId: number, groupId: number, number: string | null): TcProduct => ({ productId, groupId, name: `P${productId}`, number })
+const brief = (over: Partial<TdCard>): TdCard => ({ id: 'x-001', localId: '001', name: 'X', set: { id: 'x', name: 'X' }, ...over })
+
+describe('matchGroup', () => {
+  it('votes by product ids (sv01 → 22873)', () => {
+    expect(group(EN, 'sv01')).toBe(22873)
+  })
+  it('votes with variant ids only (PMCG1 → 23721 via 575571)', () => {
+    expect(group(JA, 'PMCG1')).toBe(23721)
+  })
+  it('votes with card-level ids (M1L → 24399, SV1S → 23605)', () => {
+    expect(group(JA, 'M1L')).toBe(24399)
+    expect(group(JA, 'SV1S')).toBe(23605)
+  })
+  it('falls back to the abbreviation, case insensitive, using the set id when TCGdex has none (M4 → 24653)', () => {
+    expect(group(JA, 'M4')).toBe(24653)
+  })
+  it('falls back to the normalized name, stripping a leading code', () => {
+    const s: TdSet = { id: 'zz9', name: 'Ninja-Spinner!', cards: [] }
+    expect(matchGroup(s, [], JA.groups, JA.productGroup)).toBe(24653)
+  })
+  it('returns null when nothing matches', () => {
+    const s: TdSet = { id: 'nope', name: 'No Such Set', abbreviation: { official: 'NSS' }, cards: [] }
+    expect(matchGroup(s, [], JA.groups, JA.productGroup)).toBeNull()
+  })
+  it('refuses a vote below half and a non-unique name hit', () => {
+    const gs: TcGroup[] = [
+      { groupId: 1, name: 'A: Same', abbreviation: 'AA' },
+      { groupId: 2, name: 'B: Same', abbreviation: 'aa' },
+      { groupId: 3, name: 'Other', abbreviation: null }
+    ]
+    const pg = new Map([[10, 1], [11, 2], [12, 3], [13, 1]])
+    const cards = [10, 11, 12].map((t, i) => brief({ id: `s-${i}`, thirdParty: { tcgplayer: t } }))
+    // 1 of 3 each: no vote. Abbreviation 'AA' hits two groups. Name 'Same' hits two groups.
+    expect(matchGroup({ id: 's', name: 'Same', abbreviation: { official: 'AA' }, cards: [] }, cards, gs, pg)).toBeNull()
+    // Two of three in group 1: vote wins.
+    const two = [10, 13, 12].map((t, i) => brief({ id: `s-${i}`, thirdParty: { tcgplayer: t } }))
+    expect(matchGroup({ id: 's', name: 'Same', cards: [] }, two, gs, pg)).toBe(1)
+  })
+  it('counts ids missing from every group against the vote', () => {
+    const gs: TcGroup[] = [{ groupId: 1, name: 'G', abbreviation: null }]
+    const cards = [10, 98, 99].map((t, i) => brief({ id: `s-${i}`, thirdParty: { tcgplayer: t } }))
+    expect(matchGroup({ id: 's', name: 'Nope', cards: [] }, cards, gs, new Map([[10, 1]]))).toBeNull()
+  })
+})
+
+describe('matchProducts', () => {
+  it('fills by number when the card has no ids (M4-001 → Weedle 683652)', () => {
+    const c = card(JA, 'M4-001')
+    const r = matchProducts(c, 24653, inGroup(JA, 24653), JA.productById)
+    expect(r.products.map((p) => [p.product.productId, p.variantSubtype])).toEqual([[683652, null]])
+    expect(r.problems).toEqual([])
+  })
+  it('gives no match when two products share the number', () => {
+    const ps = [prod(1, 9, '001/083'), prod(2, 9, '1/083'), prod(3, 9, null)]
+    const r = matchProducts(brief({}), 9, ps, new Map(ps.map((p) => [p.productId, p])))
+    expect(r.products).toEqual([])
+  })
+  it('compares non-numeric numbers as exact strings', () => {
+    const ps = [prod(1, 9, 'TG01/TG30'), prod(2, 9, 'TG1/TG30')]
+    const r = matchProducts(brief({ localId: 'TG01' }), 9, ps, new Map(ps.map((p) => [p.productId, p])))
+    expect(r.products.map((p) => p.product.productId)).toEqual([1])
+  })
+  it('never number-fills without a group', () => {
+    const ps = [prod(1, 9, '001/083')]
+    expect(matchProducts(brief({}), null, ps, new Map(ps.map((p) => [p.productId, p]))).products).toEqual([])
+  })
+  it('rejects an id whose Number disagrees with localId, with a problem', () => {
+    const p = prod(5, 9, '005/083')
+    const r = matchProducts(brief({ thirdParty: { tcgplayer: 5 } }), 9, [p], new Map([[5, p]]))
+    expect(r.products).toEqual([])
+    expect(r.problems).toHaveLength(1)
+    expect(r.problems[0]).toContain('5')
+  })
+  it('uses variant ids with their subtypes, deduplicated (base1-4)', () => {
+    const r = matchProducts(card(EN, 'base1-4'), 604, inGroup(EN, 604), EN.productById)
+    expect(r.products.map((p) => [p.product.productId, p.variantSubtype])).toEqual([[42382, null], [106999, 'shadowless']])
+  })
+  it('uses the card-level id when the variants have none (M1L-001 → 647110)', () => {
+    const r = matchProducts(card(JA, 'M1L-001'), 24399, inGroup(JA, 24399), JA.productById)
+    expect(r.products.map((p) => p.product.productId)).toEqual([647110])
+  })
+  it('reports an id that is in no product list (PMCG1-001 576998)', () => {
+    const r = matchProducts(card(JA, 'PMCG1-001'), 23721, inGroup(JA, 23721), JA.productById)
+    expect(r.products.map((p) => p.product.productId)).toEqual([575571])
+    expect(r.problems.some((p) => p.includes('576998'))).toBe(true)
+  })
+})
+
+describe('labels', () => {
+  it('maps TCGplayer subtypes to the canonical vocabulary', () => {
+    expect(canonicalLabel('Unlimited Holofoil')).toBe('Holofoil')
+    expect(canonicalLabel('Unlimited')).toBe('Normal')
+    expect(canonicalLabel('Normal')).toBe('Normal')
+    expect(canonicalLabel('Reverse Holofoil')).toBe('Reverse Holofoil')
+    expect(canonicalLabel('1st Edition')).toBe('1st Edition')
+    expect(canonicalLabel('1st Edition Holofoil')).toBe('1st Edition Holofoil')
+    expect(canonicalLabel('Something New')).toBe('Something New')
+  })
+  it('maps TCGdex variants to the same vocabulary', () => {
+    expect(variantLabel({ type: 'normal' })).toBe('Normal')
+    expect(variantLabel({ type: 'holo' })).toBe('Holofoil')
+    expect(variantLabel({ type: 'reverse' })).toBe('Reverse Holofoil')
+    expect(variantLabel({ type: 'normal', stamp: ['1st-edition'] })).toBe('1st Edition')
+    expect(variantLabel({ type: 'holo', stamp: ['1st-edition'] })).toBe('1st Edition Holofoil')
+    expect(variantLabel({ type: 'holo', subtype: 'unlimited' })).toBe('Holofoil')
+    expect(variantLabel({ type: 'holo', subtype: 'shadowless', stamp: ['1st-edition'] })).toBe('Shadowless 1st Edition Holofoil')
+    expect(variantLabel({ type: 'normal', subtype: 'no-rarity' })).toBe('No Rarity Normal')
+  })
+})
+
+describe('cardVersions', () => {
+  it('prices sv01-001 per subtype, sorted by label', () => {
+    const { versions } = versionsOf(EN, 'sv01-001')
+    expect(versions).toEqual([
+      { label: 'Normal', productId: 487828, subTypeName: 'Normal', price: 0.12 },
+      { label: 'Reverse Holofoil', productId: 487828, subTypeName: 'Reverse Holofoil', price: 0.22 }
+    ])
+  })
+  it('adds a Holofoil that TCGdex lists only as normal (SV1S-001)', () => {
+    const prices = new Map(JA.prices)
+    prices.set(567118, [...(prices.get(567118) ?? []), { productId: 567118, subTypeName: 'Holofoil', marketPrice: 0.3 }])
+    const { versions } = versionsOf(JA, 'SV1S-001', prices)
+    expect(versions).toEqual([
+      { label: 'Holofoil', productId: 567118, subTypeName: 'Holofoil', price: 0.3 },
+      { label: 'Normal', productId: 567118, subTypeName: 'Normal', price: 0.15 }
+    ])
+  })
+  it('prefixes shadowless versions of base1-4 and prices each from its own product', () => {
+    const { versions, problems } = versionsOf(EN, 'base1-4')
+    expect(versions).toEqual([
+      { label: '1999 2000 Copyright Holofoil', productId: null, subTypeName: null, price: null },
+      { label: 'Holofoil', productId: 42382, subTypeName: 'Holofoil', price: 954.65 },
+      { label: 'Shadowless 1st Edition Holofoil', productId: 106999, subTypeName: '1st Edition Holofoil', price: null },
+      { label: 'Shadowless Holofoil', productId: 106999, subTypeName: 'Unlimited Holofoil', price: 2172.24 }
+    ])
+    expect(problems).toEqual([])
+  })
+  it('keeps the no-rarity variant of PMCG1-001 unpriced', () => {
+    const { versions } = versionsOf(JA, 'PMCG1-001')
+    expect(versions).toEqual([
+      { label: 'No Rarity Normal', productId: null, subTypeName: null, price: null },
+      { label: 'Normal', productId: 575571, subTypeName: 'Normal', price: 6.98 }
+    ])
+  })
+  it('leaves a label two products share unpriced, with one problem', () => {
+    const a = prod(1, 9, '001/010')
+    const b = prod(2, 9, '001/010')
+    const prices = new Map([
+      [1, [{ productId: 1, subTypeName: 'Holofoil', marketPrice: 1 }]],
+      [2, [{ productId: 2, subTypeName: 'Holofoil', marketPrice: 2 }]]
+    ])
+    const c = brief({ variants_detailed: [{ type: 'holo' }] })
+    const { versions, problems } = cardVersions(c, [{ product: a, variantSubtype: null }, { product: b, variantSubtype: null }], prices)
+    expect(versions).toEqual([{ label: 'Holofoil', productId: null, subTypeName: null, price: null }])
+    expect(problems).toHaveLength(1)
+  })
+  it('gives an unmatched card its TCGdex versions with no price', () => {
+    const c = brief({ variants_detailed: [{ type: 'normal' }, { type: 'reverse' }] })
+    expect(cardVersions(c, [], new Map()).versions).toEqual([
+      { label: 'Normal', productId: null, subTypeName: null, price: null },
+      { label: 'Reverse Holofoil', productId: null, subTypeName: null, price: null }
+    ])
+  })
+  it('never takes a price from another subtype', () => {
+    const p = prod(1, 9, '001/010')
+    const prices = new Map([[1, [{ productId: 1, subTypeName: 'Normal', marketPrice: 5 }]]])
+    const c = brief({ variants_detailed: [{ type: 'normal' }, { type: 'reverse' }] })
+    expect(cardVersions(c, [{ product: p, variantSubtype: null }], prices).versions).toEqual([
+      { label: 'Normal', productId: 1, subTypeName: 'Normal', price: 5 },
+      { label: 'Reverse Holofoil', productId: 1, subTypeName: null, price: null }
+    ])
+  })
+  it('only takes a positive finite market price', () => {
+    const p = prod(1, 9, null)
+    for (const marketPrice of [null, 0, -1, Number.NaN, Number.POSITIVE_INFINITY]) {
+      const prices = new Map([[1, [{ productId: 1, subTypeName: 'Normal', marketPrice }]]])
+      expect(cardVersions(brief({}), [{ product: p, variantSubtype: null }], prices).versions[0].price).toBeNull()
+    }
+  })
+  it('reports a subtype outside the table and labels it verbatim', () => {
+    const p = prod(1, 9, null)
+    const prices = new Map([[1, [{ productId: 1, subTypeName: 'Cosmos Holofoil', marketPrice: 3 }]]])
+    const r = cardVersions(brief({}), [{ product: p, variantSubtype: null }], prices)
+    expect(r.versions).toEqual([{ label: 'Cosmos Holofoil', productId: 1, subTypeName: 'Cosmos Holofoil', price: 3 }])
+    expect(r.problems).toHaveLength(1)
+  })
+  it('gives a card with no variants and no products a single Normal', () => {
+    expect(cardVersions(brief({}), [], new Map()).versions).toEqual([
+      { label: 'Normal', productId: null, subTypeName: null, price: null }
+    ])
+  })
+  it('gives the same labels whether a card is matched or not', () => {
+    for (const [l, id] of [[EN, 'sv01-001'], [EN, 'base1-4'], [JA, 'PMCG1-001'], [JA, 'SV1S-008'], [JA, 'M4-001']] as const) {
+      const c = card(l, id)
+      const matched = versionsOf(l, id).versions.map((v) => v.label)
+      const unmatched = cardVersions(c, [], new Map()).versions.map((v) => v.label)
+      for (const label of unmatched) expect(matched).toContain(label)
+    }
+  })
+})
+
+describe('movedEnough', () => {
+  it('follows MIN_MOVE_USD and MIN_MOVE_SHARE', () => {
+    expect(movedEnough(1.0, 1.03)).toBe(false)
+    expect(movedEnough(1.0, 1.1)).toBe(true)
+    expect(movedEnough(100, 101)).toBe(false) // over 5 cents, under 2%
+    expect(movedEnough(100, 103)).toBe(true)
+    expect(movedEnough(1, 1)).toBe(false)
+  })
+  it('treats appearing and disappearing prices as moves', () => {
+    expect(movedEnough(null, 1)).toBe(true)
+    expect(movedEnough(1, null)).toBe(true)
+    expect(movedEnough(null, null)).toBe(false)
+  })
+})

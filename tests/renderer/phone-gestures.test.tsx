@@ -105,10 +105,78 @@ describe('phone card swipes', () => {
     expect(nav.next).not.toHaveBeenCalled()
   })
 
-  it('hides the arrows on the phone', () => {
-    renderSheet('phone', { prev: vi.fn(), next: vi.fn() })
-    expect(screen.queryByRole('button', { name: 'Next card' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Previous card' })).not.toBeInTheDocument()
+  it('keeps the arrows on the phone for screen readers only', () => {
+    const nav = { prev: vi.fn(), next: vi.fn() }
+    renderSheet('phone', nav)
+    const next = screen.getByRole('button', { name: 'Next card' })
+    const prev = screen.getByRole('button', { name: 'Previous card' })
+    expect(next).toHaveClass('sr-only')
+    expect(prev).toHaveClass('sr-only')
+    fireEvent.click(next)
+    expect(nav.next).toHaveBeenCalledTimes(1)
+  })
+
+  it('a second finger mid-swipe settles the card back', () => {
+    const nav = { prev: vi.fn(), next: vi.fn() }
+    renderSheet('phone', nav)
+    const page = screen.getByRole('slider', { name: 'Slider' }).parentElement!
+    const sheet = screen.getByRole('dialog')
+    const one = (x: number): { touches: object[]; changedTouches: object[] } => ({
+      touches: [{ clientX: x, clientY: 300 }],
+      changedTouches: [{ clientX: x, clientY: 300 }]
+    })
+    fireEvent.touchStart(sheet, one(700))
+    fireEvent.touchMove(sheet, one(650))
+    fireEvent.touchMove(sheet, one(500))
+    expect(page.style.transform).toBe('translateX(-200px)')
+    fireEvent.touchStart(sheet, {
+      touches: [
+        { clientX: 500, clientY: 300 },
+        { clientX: 200, clientY: 300 }
+      ],
+      changedTouches: [{ clientX: 200, clientY: 300 }]
+    })
+    expect(page.style.transform).toBe('')
+    expect(nav.next).not.toHaveBeenCalled()
+  })
+
+  it('the same for an edge swipe: a second finger settles the sheet back', () => {
+    const { onClose, sheet } = renderSheet('phone', undefined)
+    const one = (x: number): { touches: object[]; changedTouches: object[] } => ({
+      touches: [{ clientX: x, clientY: 300 }],
+      changedTouches: [{ clientX: x, clientY: 300 }]
+    })
+    fireEvent.touchStart(sheet, one(10))
+    fireEvent.touchMove(sheet, one(60))
+    fireEvent.touchMove(sheet, one(210))
+    expect(sheet.style.transform).toBe('translateX(200px)')
+    fireEvent.touchStart(sheet, {
+      touches: [
+        { clientX: 210, clientY: 300 },
+        { clientX: 400, clientY: 300 }
+      ],
+      changedTouches: [{ clientX: 400, clientY: 300 }]
+    })
+    expect(sheet.style.transform).toBe('')
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
+  it('a swipe in a row that scrolls sideways is the row’s', () => {
+    const nav = { prev: vi.fn(), next: vi.fn() }
+    renderWithProviders(
+      <CardSheet onClose={vi.fn()}>
+        <PanelCardArt imageId={101} alt="Dark Magician" nav={nav} />
+        <div data-testid="row" className="flex max-md:overflow-x-auto">
+          <span>wide</span>
+        </div>
+      </CardSheet>,
+      { api: createMockApi({ window: { platform: 'phone' } }) }
+    )
+    const row = screen.getByTestId('row')
+    Object.defineProperty(row, 'scrollWidth', { value: 900 })
+    Object.defineProperty(row, 'clientWidth', { value: 300 })
+    swipe(screen.getByText('wide'), [700, 300], [100, 300])
+    expect(nav.next).not.toHaveBeenCalled()
   })
 
   it('keeps the arrows on desktop, and swipes do nothing there', () => {

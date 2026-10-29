@@ -64,12 +64,14 @@ export function CardSheet({
   }, [])
   const leaving = useRef<ReturnType<typeof setTimeout>>(undefined)
   useEffect(() => () => clearTimeout(leaving.current), [])
+  // Touches are ignored while the sheet slides away after a swipe back.
+  const [isLeaving, setLeaving] = useState(false)
 
   const stepFor = (dx: number): (() => void) | undefined =>
     dx < 0 ? nav.current?.next : nav.current?.prev
 
   useSwipe(sheet, {
-    enabled: phone,
+    enabled: phone && !isLeaving,
     onDrag: (zone, dx) => {
       if (zone === 'edge') place(sheet, Math.max(0, dx))
       else place(page.current, stepFor(dx) ? dx : rubberBand(dx))
@@ -80,6 +82,7 @@ export function CardSheet({
         if (dx <= 0 || !passed(dx, velocity, width, BACK_SHARE)) return settle(sheet)
         if (prefersReducedMotion() || !sheet) return onClose()
         slideAway(sheet, width)
+        setLeaving(true)
         leaving.current = setTimeout(onClose, 220)
         return
       }
@@ -99,7 +102,7 @@ export function CardSheet({
           ref={setSheet}
           data-layout="full-screen"
           showCloseButton={false}
-          className="inset-0 h-dvh w-full max-w-none gap-0 overflow-y-auto overscroll-contain border-0 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] sm:max-w-none"
+          className="inset-0 h-dvh w-full max-w-none touch-pan-y gap-0 overflow-x-hidden overflow-y-auto overscroll-contain border-0 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] sm:max-w-none"
         >
           <div className="sticky top-0 z-10 bg-background/80 px-2 py-1 backdrop-blur-xl">
             <Button variant="ghost" onClick={onClose}>

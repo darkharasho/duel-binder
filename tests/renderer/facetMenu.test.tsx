@@ -30,6 +30,20 @@ describe('FacetMenu', () => {
     expect(rows()).toEqual(['Ultra Rare'])
   })
 
+  it('on the phone leaves its search box unfocused, so no keyboard covers the options', async () => {
+    const before = window.api
+    window.api = { window: { platform: 'phone' } } as typeof window.api
+    try {
+      render(<Harness />)
+      await userEvent.click(screen.getByRole('button', { name: 'Rarity' }))
+      const search = await screen.findByRole('textbox', { name: 'Search rarity' })
+      await new Promise((r) => requestAnimationFrame(() => setTimeout(r, 20)))
+      expect(search).not.toHaveFocus()
+    } finally {
+      window.api = before
+    }
+  })
+
   it('lists the selection first when opened', async () => {
     render(<Harness initial={['Ultra Rare', 'Rare']} />)
     await userEvent.click(screen.getByRole('button', { name: 'Rarity' }))

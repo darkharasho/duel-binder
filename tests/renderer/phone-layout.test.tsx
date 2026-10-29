@@ -281,6 +281,8 @@ describe('phone layout', () => {
     expect(sheet).toHaveAttribute('data-layout', 'bottom-sheet')
     expect(within(sheet).getByRole('button', { name: /Card type/ })).toBeInTheDocument()
     expect(within(sheet).getByLabelText('Level min')).toBeInTheDocument()
+    // Nothing in the sheet takes focus on opening.
+    expect(sheet.contains(document.activeElement)).toBe(false)
     await userEvent.keyboard('{Escape}')
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
     // Card details open full-screen.

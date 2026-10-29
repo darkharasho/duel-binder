@@ -6,7 +6,7 @@ export type SwipeZone = 'edge' | 'body'
 export interface SwipeHandlers {
   /** No gestures are tracked while false. */
   enabled?: boolean
-  /** Width of the left-edge zone in px. Defaults to 24. */
+  /** Width of the left-edge zone in px, from the viewport's left. Defaults to 32. */
   edgeWidth?: number
   /** Which zones to track; a touch in another zone is left to the browser. */
   zones?: readonly SwipeZone[]
@@ -30,12 +30,22 @@ function ownsHorizontalDrag(target: EventTarget | null, root: HTMLElement): bool
   if (!(target instanceof Element)) return false
   if (target.closest(OWNS_DRAG)) return true
   for (let el: Element | null = target; el && el !== root; el = el.parentElement) {
-    if (el.scrollWidth > el.clientWidth) {
-      const overflow = getComputedStyle(el).overflowX
-      if (overflow === 'auto' || overflow === 'scroll') return true
-    }
+    if (el.scrollWidth > el.clientWidth + 1 && scrollsSideways(el)) return true
   }
   return false
+}
+
+/** An `overflow-x-auto`/`-scroll` class (any variant) or inline overflow-x. */
+const SIDEWAYS_CLASS = /(^|:)overflow-x-(auto|scroll)$/
+
+/**
+ * Whether `el` itself asks to scroll sideways. Computed style can't tell: a vertical scroller's
+ * overflow-x computes to auto too, so this reads the element's own class and inline style.
+ */
+function scrollsSideways(el: Element): boolean {
+  const inline = el instanceof HTMLElement ? el.style.overflowX : ''
+  if (inline === 'auto' || inline === 'scroll') return true
+  return [...el.classList].some((c) => SIDEWAYS_CLASS.test(c))
 }
 
 export const prefersReducedMotion = (): boolean =>
@@ -67,13 +77,14 @@ export function useSwipe(el: HTMLElement | null, handlers: SwipeHandlers): void 
     } | null = null
 
     const start = (e: TouchEvent): void => {
-      track = null
+      // A second finger ends the swipe under way, settling whatever it had moved.
+      if (track) cancel()
       if (e.touches.length !== 1) return
       const t = e.touches[0]
       const h = latest.current
       const zones = h.zones ?? ['edge', 'body']
-      const left = el.getBoundingClientRect().left
-      const zone: SwipeZone = t.clientX - left <= (h.edgeWidth ?? 24) ? 'edge' : 'body'
+      // Measured from the viewport, so the zone holds still while the element slides in.
+      const zone: SwipeZone = t.clientX <= (h.edgeWidth ?? 32) ? 'edge' : 'body'
       if (!zones.includes(zone)) return
       if (zone === 'body' && ownsHorizontalDrag(e.target, el)) return
       track = {

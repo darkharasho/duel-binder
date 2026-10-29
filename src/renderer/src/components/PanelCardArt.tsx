@@ -18,11 +18,14 @@ interface PanelCardArtProps {
 function NavArrow({
   dir,
   step,
-  large
+  large,
+  srOnly
 }: {
   dir: 'prev' | 'next'
   step: (() => void) | undefined
   large?: boolean
+  /** Kept for screen readers (whose swipes never reach the page) but not shown. */
+  srOnly?: boolean
 }): React.JSX.Element {
   const Icon = dir === 'prev' ? ChevronLeft : ChevronRight
   return (
@@ -32,7 +35,11 @@ function NavArrow({
       aria-label={dir === 'prev' ? 'Previous card' : 'Next card'}
       disabled={!step}
       onClick={step}
-      className={cn('pointer-events-auto shrink-0 rounded-full', large && '[&_svg]:size-5')}
+      className={cn(
+        'pointer-events-auto shrink-0 rounded-full',
+        large && '[&_svg]:size-5',
+        srOnly && 'sr-only'
+      )}
     >
       <Icon />
     </Button>
@@ -51,12 +58,14 @@ export function PanelCardArt({
 }: PanelCardArtProps): React.JSX.Element {
   usePanelNavKeys(nav)
   useSwipeNav(nav)
-  // The phone steps by swiping across the card (CardSheet), so it shows no arrows.
-  const arrows = isPhone() ? undefined : nav
+  // The phone steps by swiping across the card (CardSheet), so its arrows are only for
+  // screen readers; the large layout leaves them to the small one there.
+  const phone = isPhone()
+  const arrows = phone ? undefined : nav
   return (
     <>
       <div className="flex items-center justify-center gap-3 min-[900px]:hidden">
-        {arrows && <NavArrow dir="prev" step={arrows.prev} />}
+        {nav && <NavArrow dir="prev" step={nav.prev} srOnly={phone} />}
         <TiltCard className="w-48">
           <CardArt
             imageId={imageId}
@@ -66,7 +75,7 @@ export function PanelCardArt({
             className="w-full"
           />
         </TiltCard>
-        {arrows && <NavArrow dir="next" step={arrows.next} />}
+        {nav && <NavArrow dir="next" step={nav.next} srOnly={phone} />}
       </div>
       {/* Portalled out of the sliding panel so it isn't moved by the panel's transform. */}
       <SheetPortal>

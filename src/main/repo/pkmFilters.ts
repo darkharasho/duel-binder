@@ -53,7 +53,7 @@ export function pokemonFacets(
   scope: Scope,
   cardIds: string | null
 ): { pkmCategories: string[]; pkmTypes: string[]; pkmStages: string[] } {
-  const src = `SELECT pc.* FROM pokemon_cards pc JOIN cards c ON c.id = pc.card_id AND c.game = ${scope.game}${
+  const src = `SELECT pc.* FROM pokemon_cards pc JOIN cards c ON c.id = pc.card_id AND +c.game = ${scope.game}${
     cardIds ? ` WHERE pc.card_id IN (${cardIds})` : ''
   }`
   const values = (sql: string): string[] =>

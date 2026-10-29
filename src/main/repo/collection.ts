@@ -30,7 +30,7 @@ interface EntryDbRow {
 const select = (scope: Scope): string => `
   SELECT e.id AS e_id, e.quantity AS e_quantity, e.notes AS e_notes, e.created_at AS e_created_at,
          e.updated_at AS e_updated_at, e.image_id AS e_image_id,
-         e.image_id IS (SELECT ci.image_id FROM card_images ci WHERE ci.card_id = c.id AND ci.game = ${scope.game}
+         e.image_id IS (SELECT ci.image_id FROM card_images ci WHERE ci.card_id = c.id AND +ci.game = ${scope.game}
                         ORDER BY ci.sort_order, ci.image_id LIMIT 1) AS e_original_art,
          c.id AS id, c.name, c.type, c.frame_type, c.race, c.attribute, c.level, c.linkval, c.atk, c.def,
          c.archetype, c.desc, c.tcgplayer_price,
@@ -40,8 +40,8 @@ const select = (scope: Scope): string => `
          ip.printing_id AS ip_id, ip.price AS ip_price, ip.checked_at AS ip_checked_at,
          ip.listing_count AS ip_listing_count
   FROM collection_entries e
-  JOIN card_printings p ON p.id = e.printing_id AND p.game = ${scope.game}
-  JOIN cards c ON c.id = p.card_id AND c.game = ${scope.game}
+  JOIN card_printings p ON p.id = e.printing_id AND +p.game = ${scope.game}
+  JOIN cards c ON c.id = p.card_id AND +c.game = ${scope.game}
   LEFT JOIN intl_prices ip ON ip.printing_id = p.id`
 
 function toView(r: EntryDbRow, priceStatus: string | null): EntryView {
@@ -114,11 +114,11 @@ function assertQuantity(q: number): void {
 }
 
 function assertLink(db: SqlDb, printingId: number, imageId: number, scope: Scope): void {
-  const p = db.prepare(`SELECT card_id FROM card_printings WHERE id = ? AND game = ${scope.game}`).get(printingId) as
+  const p = db.prepare(`SELECT card_id FROM card_printings WHERE id = ? AND +game = ${scope.game}`).get(printingId) as
     | { card_id: number }
     | undefined
   if (!p) throw new CollectionError(`Printing ${printingId} not found`)
-  const img = db.prepare(`SELECT card_id FROM card_images WHERE image_id = ? AND game = ${scope.game}`).get(imageId) as
+  const img = db.prepare(`SELECT card_id FROM card_images WHERE image_id = ? AND +game = ${scope.game}`).get(imageId) as
     | { card_id: number }
     | undefined
   if (!img || img.card_id !== p.card_id) throw new CollectionError('Image does not belong to the printing’s card')
@@ -288,8 +288,8 @@ export function getFacets(db: SqlDb, scope: Scope = LOCAL): Facets {
       db
         .prepare(
           `SELECT DISTINCT ${col} AS v FROM collection_entries e
-           JOIN card_printings p ON p.id = e.printing_id AND p.game = ${scope.game}
-           JOIN cards c ON c.id = p.card_id AND c.game = ${scope.game}
+           JOIN card_printings p ON p.id = e.printing_id AND +p.game = ${scope.game}
+           JOIN cards c ON c.id = p.card_id AND +c.game = ${scope.game}
            WHERE ${scope.where('e')} AND ${col} IS NOT NULL AND ${col} <> '' ORDER BY ${col}`
         )
         .all() as { v: string }[]
@@ -307,7 +307,7 @@ export function getFacets(db: SqlDb, scope: Scope = LOCAL): Facets {
       ? pokemonFacets(
           db,
           scope,
-          `SELECT p.card_id FROM collection_entries e JOIN card_printings p ON p.id = e.printing_id AND p.game = ${scope.game} WHERE ${scope.where('e')}`
+          `SELECT p.card_id FROM collection_entries e JOIN card_printings p ON p.id = e.printing_id AND +p.game = ${scope.game} WHERE ${scope.where('e')}`
         )
       : {})
   }

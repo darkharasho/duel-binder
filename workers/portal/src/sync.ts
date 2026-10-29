@@ -301,7 +301,7 @@ export function priceChanges(
     .prepare(
       `SELECT p.pkey, ip.price, ip.listing_count AS listingCount, ip.checked_at AS checkedAt, ip.price_seq AS seq
        FROM intl_prices ip JOIN card_printings p ON p.id = ip.printing_id
-       WHERE ip.price_seq > ? AND p.game = ? ORDER BY ip.price_seq LIMIT ?`
+       WHERE ip.price_seq > ? AND +p.game = ? ORDER BY ip.price_seq LIMIT ?`
     )
     .all(since, game, limit + 1) as PriceChange[]
   const prices = rows.slice(0, limit)

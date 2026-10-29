@@ -16,7 +16,10 @@ export interface EntryInsert {
 export interface Scope {
   /**
    * SQL expression for the game being shown ('ygo' or 'pkm'). Every catalog query filters
-   * `<table>.game = <game>`, so a call only ever sees one game.
+   * `+<table>.game = <game>`, so a call only ever sees one game. The unary `+` on `cards`,
+   * `card_printings` and `card_images` keeps the server's `ix_*_game_seq` indexes (meant only for
+   * the per-game catalog feed) out of these plans: without ANALYZE stats the planner would walk
+   * every row of the game through them instead of using the query's real index.
    */
   game: string
   /** SQL predicate limiting `alias` (a collection_entries alias) to this owner's live rows of the game. */

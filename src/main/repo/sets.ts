@@ -66,14 +66,14 @@ const coversSql = (scope: Scope): string => `
         WHEN p.set_rarity LIKE '%Super%' THEN 8
         WHEN p.set_rarity LIKE '%Rare%' THEN 9
         ELSE 10 END) AS rank
-    FROM card_printings p WHERE p.game = ${scope.game} AND p.missing_from_api = 0 AND p.contributed = 0 %WHERE%
+    FROM card_printings p WHERE +p.game = ${scope.game} AND p.missing_from_api = 0 AND p.contributed = 0 %WHERE%
     GROUP BY p.language, p.set_name, p.card_id),
   ranked AS (
     SELECT *, ROW_NUMBER() OVER (PARTITION BY language, set_name
       ORDER BY rank, code LIKE '%000', code, card_id) AS rn
     FROM per_card)
   SELECT r.language, r.set_name,
-    (SELECT ci.image_id FROM card_images ci WHERE ci.card_id = r.card_id AND ci.game = ${scope.game}
+    (SELECT ci.image_id FROM card_images ci WHERE ci.card_id = r.card_id AND +ci.game = ${scope.game}
      ORDER BY ci.sort_order, ci.image_id LIMIT 1) AS image_id
   FROM ranked r WHERE r.rn = 1`
 
@@ -126,7 +126,7 @@ export function findSetImageUrl(db: SqlDb, key: string): string | null {
 
 export function listSets(db: SqlDb, scope: Scope = LOCAL): SetSummary[] {
   const covers = coverImages(db, scope)
-  return (db.prepare(`${summary(scope)} WHERE p.game = ${scope.game} AND p.contributed = 0 GROUP BY p.language, p.set_name ORDER BY p.set_name, p.language <> 'en', p.language`).all() as SummaryDbRow[]).map((r) => toSummary(r, covers))
+  return (db.prepare(`${summary(scope)} WHERE +p.game = ${scope.game} AND p.contributed = 0 GROUP BY p.language, p.set_name ORDER BY p.set_name, p.language <> 'en', p.language`).all() as SummaryDbRow[]).map((r) => toSummary(r, covers))
 }
 
 interface PrintingDbRow {
@@ -200,17 +200,17 @@ function checklistCards(
               ${printingPrice(scope)} AS set_price,
               CASE WHEN p.language = 'en' THEN c.tcgplayer_price END AS card_price,
               c.atk, c.def, COALESCE(c.level, c.linkval) AS level,
-              (SELECT i.image_id FROM card_images i WHERE i.card_id = c.id AND i.game = ${scope.game}
+              (SELECT i.image_id FROM card_images i WHERE i.card_id = c.id AND +i.game = ${scope.game}
                ORDER BY i.sort_order, i.image_id LIMIT 1) AS image_id
-       FROM card_printings p JOIN cards c ON c.id = p.card_id AND c.game = ${scope.game}
+       FROM card_printings p JOIN cards c ON c.id = p.card_id AND +c.game = ${scope.game}
        LEFT JOIN intl_prices ip ON ip.printing_id = p.id
-       WHERE p.game = ${scope.game} AND p.contributed = 0 AND p.language = ? AND p.set_name = ?${cardFilter}`
+       WHERE +p.game = ${scope.game} AND p.contributed = 0 AND p.language = ? AND p.set_name = ?${cardFilter}`
     )
     .all(...params) as PrintingDbRow[]
   const entries = db
     .prepare(
       `SELECT e.id, e.printing_id, e.quantity, e.updated_at
-       FROM collection_entries e JOIN card_printings p ON p.id = e.printing_id AND p.game = ${scope.game}
+       FROM collection_entries e JOIN card_printings p ON p.id = e.printing_id AND +p.game = ${scope.game}
        WHERE ${scope.where('e')} AND p.language = ? AND p.set_name = ?${cardFilter}`
     )
     .all(...params) as EntryDbRow[]
@@ -297,7 +297,7 @@ export function getChecklist(
   scope: Scope = LOCAL
 ): SetChecklist | null {
   const row = db
-    .prepare(`${summary(scope)} WHERE p.game = ${scope.game} AND p.contributed = 0 AND p.language = ? AND p.set_name = ? GROUP BY p.language, p.set_name`)
+    .prepare(`${summary(scope)} WHERE +p.game = ${scope.game} AND p.contributed = 0 AND p.language = ? AND p.set_name = ? GROUP BY p.language, p.set_name`)
     .get(language, setName) as SummaryDbRow | undefined
   if (!row) return null
   return { set: toSummary(row, coverImages(db, scope, { language, setName })), cards: checklistCards(db, setName, language, undefined, scope) }
@@ -320,13 +320,13 @@ export function adjustPrinting(
   if (delta !== 1 && delta !== -1) throw new CollectionError('Adjustment must be +1 or -1')
   return db.transaction(() => {
     const p = db
-      .prepare(`SELECT card_id, set_name, language FROM card_printings WHERE id = ? AND game = ${scope.game}`)
+      .prepare(`SELECT card_id, set_name, language FROM card_printings WHERE id = ? AND +game = ${scope.game}`)
       .get(printingId) as { card_id: number; set_name: string; language: Language } | undefined
     if (!p || p.set_name !== setName || p.language !== language)
       throw new CollectionError(`Printing ${printingId} is not in ${setName} (${language})`)
     const original = db
       .prepare(
-        `SELECT image_id FROM card_images WHERE card_id = ? AND game = ${scope.game}
+        `SELECT image_id FROM card_images WHERE card_id = ? AND +game = ${scope.game}
          ORDER BY sort_order, image_id LIMIT 1`
       )
       .get(p.card_id) as { image_id: number } | undefined

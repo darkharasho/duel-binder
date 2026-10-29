@@ -12,13 +12,13 @@ const escapeLike = (s: string): string => s.replace(/[\\%_]/g, (c) => `\\${c}`)
 const base = (scope: Scope): string => `
   WITH owned AS (
     SELECT p.card_id, SUM(e.quantity) AS n FROM collection_entries e
-    JOIN card_printings p ON p.id = e.printing_id AND p.game = ${scope.game} WHERE ${scope.where('e')}
+    JOIN card_printings p ON p.id = e.printing_id AND +p.game = ${scope.game} WHERE ${scope.where('e')}
     GROUP BY p.card_id
   ),
   released AS (
     SELECT p.card_id, MIN(s.tcg_date) AS d FROM card_printings p
     JOIN sets s ON s.game = p.game AND s.language = 'en' AND s.set_name = p.set_name
-    WHERE p.game = ${scope.game} AND p.language = 'en' AND p.contributed = 0 AND s.tcg_date IS NOT NULL
+    WHERE +p.game = ${scope.game} AND p.language = 'en' AND p.contributed = 0 AND s.tcg_date IS NOT NULL
     GROUP BY p.card_id
   )
   SELECT c.id, c.name, c.type, c.frame_type, c.attribute, c.race, c.level, c.linkval, c.atk, c.def,
@@ -65,7 +65,7 @@ function sortSql(sort: string, game: string): string {
 }
 
 function whereClause(db: SqlDb, f: BrowseFilters, scope: Scope): { sql: string; params: unknown[] } {
-  const where: string[] = [`c.game = ${scope.game}`]
+  const where: string[] = [`+c.game = ${scope.game}`]
   const params: unknown[] = []
   const inList = (col: string, values?: string[]): void => {
     if (values?.length) {
@@ -77,7 +77,7 @@ function whereClause(db: SqlDb, f: BrowseFilters, scope: Scope): { sql: string; 
   if (text) {
     const fts = buildFtsQuery(text)
     const parts = [
-      `c.id IN (SELECT card_id FROM card_printings WHERE game = ${scope.game} AND contributed = 0 AND set_code LIKE ? ESCAPE '\\')`
+      `c.id IN (SELECT card_id FROM card_printings WHERE +game = ${scope.game} AND contributed = 0 AND set_code LIKE ? ESCAPE '\\')`
     ]
     params.push(`${escapeLike(text)}%`)
     if (fts) {
@@ -100,7 +100,7 @@ function whereClause(db: SqlDb, f: BrowseFilters, scope: Scope): { sql: string; 
   const printingFilter = (col: string, values?: string[]): void => {
     if (!values?.length) return
     where.push(
-      `c.id IN (SELECT card_id FROM card_printings WHERE game = ${scope.game} AND contributed = 0 AND language = 'en' AND ${col} IN (${values
+      `c.id IN (SELECT card_id FROM card_printings WHERE +game = ${scope.game} AND contributed = 0 AND language = 'en' AND ${col} IN (${values
         .map(() => '?')
         .join(',')}))`
     )
@@ -132,11 +132,11 @@ export function browseCards(db: SqlDb, f: BrowseFilters, scope: Scope = LOCAL): 
   const rows = db
     .prepare(
       `SELECT page.*,
-         COALESCE((SELECT image_id FROM card_images WHERE card_id = page.id AND game = ${scope.game}
+         COALESCE((SELECT image_id FROM card_images WHERE card_id = page.id AND +game = ${scope.game}
            ORDER BY sort_order, image_id LIMIT 1), page.id) AS image_id,
          (SELECT p.id FROM card_printings p
            LEFT JOIN sets s ON s.game = p.game AND s.language = 'en' AND s.set_name = p.set_name
-           WHERE p.card_id = page.id AND p.game = ${scope.game} AND p.language = 'en' AND p.contributed = 0
+           WHERE p.card_id = page.id AND +p.game = ${scope.game} AND p.language = 'en' AND p.contributed = 0
            ORDER BY s.tcg_date IS NULL, s.tcg_date, p.id LIMIT 1) AS default_printing_id
        FROM (${base(scope)}${sql} ORDER BY ${sortCol} IS NULL, ${sortCol} ${dir}, c.name COLLATE NOCASE, c.id
          LIMIT ? OFFSET ?) page`
@@ -146,7 +146,7 @@ export function browseCards(db: SqlDb, f: BrowseFilters, scope: Scope = LOCAL): 
     .prepare(
       `SELECT count(*) AS n FROM cards c
        LEFT JOIN (SELECT p.card_id, SUM(e.quantity) AS n FROM collection_entries e
-         JOIN card_printings p ON p.id = e.printing_id AND p.game = ${scope.game} WHERE ${scope.where('e')}
+         JOIN card_printings p ON p.id = e.printing_id AND +p.game = ${scope.game} WHERE ${scope.where('e')}
          GROUP BY p.card_id) o ON o.card_id = c.id${sql}`
     )
     .get(...params) as { n: number }
@@ -178,7 +178,7 @@ export function browseFacets(db: SqlDb, scope: Scope = LOCAL): BrowseFacets {
     (db.prepare(sql).all() as { v: string }[]).map((r) => r.v)
   const col = (c: string): string[] =>
     distinct(
-      `SELECT DISTINCT ${c} AS v FROM cards WHERE game = ${scope.game} AND ${c} IS NOT NULL AND ${c} <> ''
+      `SELECT DISTINCT ${c} AS v FROM cards WHERE +game = ${scope.game} AND ${c} IS NOT NULL AND ${c} <> ''
        ORDER BY ${c}`
     )
   const pkm = scopeGame(db, scope) === 'pkm'
@@ -188,12 +188,12 @@ export function browseFacets(db: SqlDb, scope: Scope = LOCAL): BrowseFacets {
     races: pkm ? [] : col('race'),
     archetypes: pkm ? [] : col('archetype'),
     setNames: distinct(
-      `SELECT DISTINCT set_name AS v FROM card_printings WHERE game = ${scope.game} AND contributed = 0 AND language = 'en'
+      `SELECT DISTINCT set_name AS v FROM card_printings WHERE +game = ${scope.game} AND contributed = 0 AND language = 'en'
        ORDER BY set_name`
     ),
     rarities: distinct(
       `SELECT DISTINCT set_rarity AS v FROM card_printings
-       WHERE game = ${scope.game} AND contributed = 0 AND language = 'en' AND set_rarity <> ''
+       WHERE +game = ${scope.game} AND contributed = 0 AND language = 'en' AND set_rarity <> ''
        ORDER BY set_rarity`
     ),
     ...(pkm ? pokemonFacets(db, scope, null) : {})

@@ -44,7 +44,7 @@ function candidateFilter(
     params.push(...printingIds)
   }
   // The eBay query builder is Yu-Gi-Oh!-specific, so only Yu-Gi-Oh! printings are priced there.
-  where.push("p.game = 'ygo'")
+  where.push("+p.game = 'ygo'")
   // English printings with a TCGplayer market price don't need eBay's.
   where.push("(p.language <> 'en' OR p.market_price IS NULL)")
   where.push(WANTED)

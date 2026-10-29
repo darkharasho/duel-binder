@@ -85,14 +85,14 @@ export function searchCards(db: SqlDb, q: string, limit = 20, scope: Scope = LOC
       results.push(r)
     }
   }
-  const defaultImage = `COALESCE((SELECT image_id FROM card_images WHERE card_id = c.id AND game = ${scope.game} AND sort_order = 0), c.id)`
+  const defaultImage = `COALESCE((SELECT image_id FROM card_images WHERE card_id = c.id AND +game = ${scope.game} AND sort_order = 0), c.id)`
 
   if (text.includes('-') && !/\s/.test(text)) {
     const rows = db
       .prepare(
         `SELECT c.id, c.name, c.type, ${defaultImage} AS default_image_id, p.set_code AS matched
-         FROM card_printings p JOIN cards c ON c.id = p.card_id AND c.game = ${scope.game}
-         WHERE p.game = ${scope.game} AND p.contributed = 0 AND p.set_code LIKE ? ESCAPE '\\'
+         FROM card_printings p JOIN cards c ON c.id = p.card_id AND +c.game = ${scope.game}
+         WHERE +p.game = ${scope.game} AND p.contributed = 0 AND p.set_code LIKE ? ESCAPE '\\'
          ORDER BY p.set_code, p.id LIMIT ?`
       )
       .all(`${escapeLike(text)}%`, limit) as DbHit[]
@@ -105,7 +105,7 @@ export function searchCards(db: SqlDb, q: string, limit = 20, scope: Scope = LOC
       .prepare(
         `SELECT c.id, c.name, c.type, ${defaultImage} AS default_image_id, NULL AS matched
          FROM cards_fts JOIN cards c ON c.id = cards_fts.rowid
-         WHERE cards_fts MATCH ? AND c.game = ${scope.game} ORDER BY bm25(cards_fts), c.name LIMIT ?`
+         WHERE cards_fts MATCH ? AND +c.game = ${scope.game} ORDER BY bm25(cards_fts), c.name LIMIT ?`
       )
       .all(fts, limit) as DbHit[]
     rows.forEach((r) => push(toResult(r)))
@@ -130,7 +130,7 @@ const toResult = (r: DbHit): CardSearchResult => ({
 })
 
 export function getCardDetail(db: SqlDb, cardId: number, scope: Scope = LOCAL): CardDetail | null {
-  const row = db.prepare(`SELECT * FROM cards WHERE id = ? AND game = ${scope.game}`).get(cardId) as
+  const row = db.prepare(`SELECT * FROM cards WHERE id = ? AND +game = ${scope.game}`).get(cardId) as
     | CardDbRow
     | undefined
   if (!row) return null
@@ -139,14 +139,14 @@ export function getCardDetail(db: SqlDb, cardId: number, scope: Scope = LOCAL): 
       .prepare(
         `SELECT p.id, p.card_id, p.set_name, p.set_code, ${RARITY_LABEL} AS set_rarity, p.set_rarity_code,
                 p.set_price, p.market_price, p.missing_from_api, p.language
-         FROM card_printings p WHERE p.card_id = ? AND p.game = ${scope.game} AND p.contributed = 0 ORDER BY p.set_code, p.id`
+         FROM card_printings p WHERE p.card_id = ? AND +p.game = ${scope.game} AND p.contributed = 0 ORDER BY p.set_code, p.id`
       )
       .all(cardId) as PrintingDbRow[]
   ).map(rowToPrinting)
   const images = (
     db
       .prepare(
-        `SELECT image_id, card_id, sort_order FROM card_images WHERE card_id = ? AND game = ${scope.game}
+        `SELECT image_id, card_id, sort_order FROM card_images WHERE card_id = ? AND +game = ${scope.game}
          ORDER BY sort_order`
       )
       .all(cardId) as { image_id: number; card_id: number; sort_order: number }[]

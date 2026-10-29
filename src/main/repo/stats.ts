@@ -12,7 +12,7 @@ function pokemonCategories(db: SqlDb, scope: Scope): [string, number][] {
   const rows = db
     .prepare(
       `SELECT pc.category AS category, SUM(e.quantity) AS n FROM collection_entries e
-       JOIN card_printings p ON p.id = e.printing_id AND p.game = ${scope.game}
+       JOIN card_printings p ON p.id = e.printing_id AND +p.game = ${scope.game}
        JOIN pokemon_cards pc ON pc.card_id = p.card_id
        WHERE ${scope.where('e')} GROUP BY pc.category`
     )

@@ -23,9 +23,9 @@ interface PrintingRow {
 const select = (scope: Scope): string => `SELECT p.id AS printingId, p.card_id AS cardId, c.name AS name, c.frame_type AS frameType,
   p.set_name AS setName, p.set_code AS setCode, p.set_rarity AS rarity, p.language AS language,
   CASE WHEN p.language = 'en' THEN COALESCE(p.market_price, ip.price, p.set_price) ELSE COALESCE(ip.price, ${enTwinPrice(scope.game)}) END AS rawPrice
-  FROM card_printings p JOIN cards c ON c.id = p.card_id AND c.game = ${scope.game}
+  FROM card_printings p JOIN cards c ON c.id = p.card_id AND +c.game = ${scope.game}
   LEFT JOIN intl_prices ip ON ip.printing_id = p.id
-  WHERE p.game = ${scope.game} AND p.contributed = 0`
+  WHERE +p.game = ${scope.game} AND p.contributed = 0`
 
 const languageRank = (l: Language): number => LANGUAGES.findIndex((x) => x.code === l)
 
@@ -38,7 +38,7 @@ function withImages(db: SqlDb, rows: PrintingRow[], scope: Scope): ScanPrinting[
     const found = db
       .prepare(
         `SELECT card_id AS cardId, image_id AS imageId FROM card_images
-         WHERE game = ${scope.game} AND card_id IN (${chunk.map(() => '?').join(',')})
+         WHERE +game = ${scope.game} AND card_id IN (${chunk.map(() => '?').join(',')})
          ORDER BY card_id, sort_order`
       )
       .all(...chunk) as { cardId: number; imageId: number }[]
@@ -110,7 +110,7 @@ export function cardsForImages(
       ...(db
         .prepare(
           `SELECT image_id AS imageId, card_id AS cardId FROM card_images
-           WHERE game = ${scope.game} AND image_id IN (${chunk.map(() => '?').join(',')})`
+           WHERE +game = ${scope.game} AND image_id IN (${chunk.map(() => '?').join(',')})`
         )
         .all(...chunk) as { imageId: number; cardId: number }[])
     )

@@ -122,7 +122,9 @@ export const LANGUAGE_MAX_READS = 3
 export const VERSION_FRAME_FOIL_MIN = 2
 /** ...and at most this as a plain frame. */
 export const VERSION_FRAME_PLAIN_MAX = 0.6
-/** An art-window texture at least this reads as foil on the art (holo)... */
-export const VERSION_ART_FOIL_MIN = 12
-/** ...and at most this as flat art, which a reverse holo is only named over. */
-export const VERSION_ART_PLAIN_MAX = 3
+/** An art-window texture at least this reads as foil on the art (holo). */
+export const VERSION_ART_FOIL_MIN = 6
+/** The foiled region must be this many times as textured as the other (frame against art). */
+export const VERSION_OTHER_RATIO = 2
+/** ...and this many times as textured as the card's text box, which noise and detail hit too. */
+export const VERSION_REFERENCE_RATIO = 1.5

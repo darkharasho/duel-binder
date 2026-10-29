@@ -101,8 +101,8 @@ async function draft(
           options.map((o) => o.rarity)
         )
       : null
-  const named = label === null ? null : options.find((o) => o.rarity === label)
-  const chosen = named ?? printing
+  const named = label === null ? null : options.filter((o) => o.rarity === label)
+  const chosen = named?.length === 1 ? named[0] : printing
   return {
     cardId,
     name: printing.name,
@@ -111,7 +111,7 @@ async function draft(
     setCode: chosen.setCode,
     rarity: chosen.rarity,
     options,
-    flag: options.length === 1 || named ? null : 'pick-printing',
+    flag: options.length === 1 || named?.length === 1 ? null : 'pick-printing',
     via,
     game: 'pkm'
   }

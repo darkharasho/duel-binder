@@ -18,9 +18,10 @@ export interface ScanProfile {
   rarityLook: boolean
   /**
    * Where a version's foil shows, when the game prices versions by it: strips of frame (a reverse
-   * holo's foil covers them, a holo's doesn't) and the art window (a holo's foil covers it).
+   * holo's foil covers them, a holo's doesn't), the art window (a holo's foil covers it) and a
+   * reference region on the same card, to tell foil from sensor noise and detailed print.
    */
-  foil: { frame: readonly Box[]; art: Box } | null
+  foil: { frame: readonly Box[]; art: Box; reference: Box } | null
 }
 
 /**
@@ -71,7 +72,9 @@ export const SCAN_PROFILES: Record<GameId, ScanProfile> = {
         [0.04, 0.2, 0.075, 0.88],
         [0.925, 0.2, 0.96, 0.88]
       ],
-      art: PKM_ART
+      art: PKM_ART,
+      // The attacks' text, like textBox.
+      reference: [0.07, 0.57, 0.93, 0.8]
     }
   }
 }

@@ -392,6 +392,7 @@ describe('Pokémon version cues (rule 7)', () => {
   const sure = (frame: number, art: number): RawSignals['version'] => ({
     frame,
     art,
+    reference: 0,
     firstEdition: 'unknown'
   })
 
@@ -408,5 +409,31 @@ describe('Pokémon version cues (rule 7)', () => {
   it('an undecided cue keeps pick-printing on the cheapest', async () => {
     const out = await recognized(raw({ art, version: sure(0.1, 0.1) }), pkm('en'))
     expect(out).toMatchObject({ flag: 'pick-printing', printingId: 42 })
+  })
+
+  /** Card 4 with its versions replaced by labels (priced 2, 3, ...). */
+  const withVersions = (labels: string[]): ResolveContext => {
+    const ctx = pkm('en')
+    const [base] = PKM.filter((p) => p.cardId === 4)
+    return {
+      ...ctx,
+      lookups: {
+        ...ctx.lookups,
+        printingsForCards: async (ids) =>
+          ids[0] === 4
+            ? labels.map((rarity, i) => ({ ...base, printingId: 900 + i, rarity, price: 2 + i }))
+            : ctx.lookups.printingsForCards(ids)
+      }
+    }
+  }
+
+  it('a 1st Edition twin or a repeated label keeps pick-printing', async () => {
+    for (const labels of [
+      ['Reverse Holofoil', '1st Edition Reverse Holofoil'],
+      ['Reverse Holofoil', 'Reverse Holofoil']
+    ]) {
+      const out = await recognized(raw({ art, version: sure(99, 0) }), withVersions(labels))
+      expect(out).toMatchObject({ flag: 'pick-printing', printingId: 900 })
+    }
   })
 })

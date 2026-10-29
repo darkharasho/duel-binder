@@ -3,7 +3,6 @@ import { describe, expect, it } from 'vitest'
 import { scanProfile } from '../../src/shared/scan/profiles'
 import {
   VERSION_ART_FOIL_MIN,
-  VERSION_ART_PLAIN_MAX,
   VERSION_FRAME_FOIL_MIN,
   VERSION_FRAME_PLAIN_MAX
 } from '../../src/shared/scan/thresholds'
@@ -14,11 +13,16 @@ import {
   type VersionCues
 } from '../../src/renderer/src/features/scan/vision/pokemonVersion'
 
-const cues = (frame: number, art: number): VersionCues => ({ frame, art, firstEdition: 'unknown' })
+const cues = (frame: number, art: number, reference = 0): VersionCues => ({
+  frame,
+  art,
+  reference,
+  firstEdition: 'unknown'
+})
 const FRAME_HIGH = VERSION_FRAME_FOIL_MIN * 2
 const FRAME_LOW = VERSION_FRAME_PLAIN_MAX / 2
 const ART_HIGH = VERSION_ART_FOIL_MIN * 2
-const ART_LOW = VERSION_ART_PLAIN_MAX / 2
+const ART_LOW = 0
 
 describe('pokemonVersion', () => {
   it('frame foil picks Reverse Holofoil', () => {
@@ -44,9 +48,23 @@ describe('pokemonVersion', () => {
     expect(pokemonVersion(cues(FRAME_LOW, ART_HIGH), ['Normal', 'Reverse Holofoil'])).toBeNull()
   })
 
-  it('never names a version that has a 1st Edition twin, as the stamp is not read', () => {
+  it('never names a version with a stamped twin, as the stamp is not read', () => {
+    const art = cues(FRAME_LOW, ART_HIGH)
+    const frame = cues(FRAME_HIGH, ART_LOW)
+    expect(pokemonVersion(art, ['Holofoil', '1st Edition Holofoil'])).toBeNull()
+    expect(pokemonVersion(art, ['Holofoil', 'Pokémon Center Stamp Holofoil'])).toBeNull()
+    expect(pokemonVersion(frame, ['Reverse Holofoil', '1st Edition Reverse Holofoil'])).toBeNull()
+  })
+
+  it("a foil no more than the card's own text box is noise or detail, not foil", () => {
+    const both = ['Normal', 'Holofoil', 'Reverse Holofoil']
+    expect(pokemonVersion(cues(FRAME_HIGH, ART_LOW, FRAME_HIGH), both)).toBeNull()
+    expect(pokemonVersion(cues(FRAME_LOW, ART_HIGH, ART_HIGH), both)).toBeNull()
+  })
+
+  it('a frame not well over the art is not reverse foil', () => {
     expect(
-      pokemonVersion(cues(FRAME_LOW, ART_HIGH), ['Holofoil', '1st Edition Holofoil'])
+      pokemonVersion(cues(FRAME_HIGH, FRAME_HIGH * 0.8), ['Normal', 'Reverse Holofoil'])
     ).toBeNull()
   })
 })
@@ -86,6 +104,16 @@ describe('pokemonVersionCues', () => {
     const c = pokemonVersionCues(card([art]), profile)!
     expect(c.art).toBeGreaterThan(c.frame)
     expect(pokemonVersion(c, ['Normal', 'Holofoil'])).toBe('Holofoil')
+  })
+
+  it('detailed art on a plain frame, with an equally detailed text box, names nothing', () => {
+    const c = pokemonVersionCues(card([art, profile.foil!.reference]), profile)!
+    expect(pokemonVersion(c, ['Normal', 'Holofoil', 'Reverse Holofoil'])).toBeNull()
+  })
+
+  it('noise all over the card names nothing', () => {
+    const c = pokemonVersionCues(card([[0, 0, 1, 1]]), profile)!
+    expect(pokemonVersion(c, ['Normal', 'Holofoil', 'Reverse Holofoil'])).toBeNull()
   })
 
   it('a plain card names nothing, and the stamp is not read', () => {

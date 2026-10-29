@@ -8,6 +8,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu'
+import { isPhone } from '@/lib/platform'
 
 const SHOWN_MAX = 200
 
@@ -56,8 +57,9 @@ export function FacetMenu({
       onOpenChange={(open) => {
         if (!open) return setQ('')
         setPinned(selected)
-        // After the menu has taken focus itself on opening.
-        requestAnimationFrame(() => search.current?.focus())
+        // After the menu has taken focus itself on opening. Not on the phone, where focusing
+        // the box would raise the keyboard over the options; a tap on it searches there.
+        if (!isPhone()) requestAnimationFrame(() => search.current?.focus())
       }}
     >
       <DropdownMenuTrigger asChild>

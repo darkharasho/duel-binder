@@ -26,7 +26,8 @@ import { CollectionGrid } from './CollectionGrid'
 import { CollectionTable } from './CollectionTable'
 import { EntryDetailPanel } from './EntryDetailPanel'
 import { FriendEntryPanel } from '../friends/FriendEntryPanel'
-import { FilterBar } from './FilterBar'
+import { CollectionSearch, FilterBar, FilterChips, FilterSheetBody } from './FilterBar'
+import { activeFilterCount } from './filterFacets'
 
 type View = 'grid' | 'table'
 const VIEW_KEY = 'collection.view'
@@ -138,6 +139,17 @@ export function CollectionPage({
     setFilters(DEFAULT_FILTERS)
     setResetCount((n) => n + 1)
   }, [])
+  // The phone's filter sheet and chips clear the facets, leaving the search and sort be.
+  const clearFacets = useCallback(
+    () =>
+      setFilters((f) => ({
+        ...DEFAULT_FILTERS,
+        q: f.q,
+        sort: f.sort,
+        dir: f.dir
+      })),
+    []
+  )
 
   const changeView = (v: string): void => {
     if (v !== 'grid' && v !== 'table') return
@@ -190,22 +202,13 @@ export function CollectionPage({
   // The collection tints the page with its first card in the current order.
   useArtWash(list[0] ? cardArtUrl(list[0].imageId) : null)
   const filtered = hasActiveFilters(filters)
+  const activeCount = activeFilterCount(filters)
   // Entries exist, but the language filter alone hides them all.
   const hiddenByLanguage =
     !filtered &&
     languageFilter !== 'all' &&
     (friend ? friend.cardCount > 0 : (stats.data?.uniqueCards ?? 0) > 0)
   const languageLabel = LANGUAGES.find((l) => l.code === languageFilter)?.label ?? ''
-
-  const filterBar = (
-    <FilterBar
-      key={resetCount}
-      filters={filters}
-      facets={facets.data}
-      onChange={onChange}
-      onClear={clear}
-    />
-  )
 
   return (
     <TooltipProvider>
@@ -223,12 +226,7 @@ export function CollectionPage({
                 )}
               </p>
             </div>
-            {phone ? (
-              <Button variant="outline" size="sm" onClick={() => setFiltersOpen(true)}>
-                <SlidersHorizontal />
-                Filters
-              </Button>
-            ) : (
+            {!phone && (
               <ToggleGroup type="single" variant="outline" value={view} onValueChange={changeView}>
                 <ToggleGroupItem value="grid" aria-label="Grid view">
                   <LayoutGrid />
@@ -257,7 +255,41 @@ export function CollectionPage({
             </div>
           )}
 
-          {!phone && filterBar}
+          {phone ? (
+            <>
+              <div className="flex items-center gap-2">
+                <CollectionSearch
+                  key={resetCount}
+                  filters={filters}
+                  onChange={onChange}
+                  className="relative min-w-0 flex-1"
+                />
+                <Button
+                  variant="outline"
+                  size="sm"
+                  aria-label={activeCount > 0 ? `Filters, ${activeCount} active` : 'Filters'}
+                  onClick={() => setFiltersOpen(true)}
+                >
+                  <SlidersHorizontal />
+                  Filters
+                  {activeCount > 0 && (
+                    <span className="ml-1 rounded-full bg-primary px-1.5 text-xs tabular-nums text-primary-foreground">
+                      {activeCount}
+                    </span>
+                  )}
+                </Button>
+              </div>
+              <FilterChips filters={filters} onChange={onChange} onClear={clearFacets} />
+            </>
+          ) : (
+            <FilterBar
+              key={resetCount}
+              filters={filters}
+              facets={facets.data}
+              onChange={onChange}
+              onClear={clear}
+            />
+          )}
         </PageHeader>
 
         {phone && (
@@ -265,15 +297,22 @@ export function CollectionPage({
             <SheetContent
               side="bottom"
               data-layout="bottom-sheet"
-              className="max-h-[85dvh] overflow-y-auto rounded-t-3xl border-white/[0.08] pb-[max(1rem,env(safe-area-inset-bottom))]"
+              className="max-h-[85dvh] gap-0 overflow-y-auto rounded-t-3xl border-white/[0.08] pb-[max(1rem,env(safe-area-inset-bottom))]"
+              // Nothing takes focus on opening, so no field raises the keyboard over the sheet.
+              onOpenAutoFocus={(e) => e.preventDefault()}
             >
               <SheetHeader>
                 <SheetTitle>Filters</SheetTitle>
                 <SheetDescription className="sr-only">
-                  Search, filter and sort the collection
+                  Filter and sort the collection
                 </SheetDescription>
               </SheetHeader>
-              <div className="px-4">{filterBar}</div>
+              <FilterSheetBody
+                filters={filters}
+                facets={facets.data}
+                onChange={onChange}
+                onClear={clearFacets}
+              />
             </SheetContent>
           </Sheet>
         )}

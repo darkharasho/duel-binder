@@ -143,6 +143,10 @@ export function BrowsePage({ onAddCard }: Props): React.JSX.Element {
     filters.levelMin !== undefined ||
     filters.levelMax !== undefined ||
     filters.owned !== 'all'
+  // What the phone's Filters button counts: facet values and a level range, not the search.
+  const activeCount =
+    FACETS.reduce((n, { key }) => n + (filters[key]?.length ?? 0), 0) +
+    (filters.levelMin !== undefined || filters.levelMax !== undefined ? 1 : 0)
   const clear = (): void => {
     setFilters({ ...DEFAULTS, sort: filters.sort, dir: filters.dir })
     setText('')
@@ -283,9 +287,19 @@ export function BrowsePage({ onAddCard }: Props): React.JSX.Element {
         <div className="flex flex-wrap items-center gap-1.5">
           {search}
           {phone ? (
-            <Button variant="outline" size="sm" onClick={() => setFiltersOpen(true)}>
+            <Button
+              variant="outline"
+              size="sm"
+              aria-label={activeCount > 0 ? `Filters, ${activeCount} active` : 'Filters'}
+              onClick={() => setFiltersOpen(true)}
+            >
               <SlidersHorizontal />
               Filters
+              {activeCount > 0 && (
+                <span className="ml-1 rounded-full bg-primary px-1.5 text-xs tabular-nums text-primary-foreground">
+                  {activeCount}
+                </span>
+              )}
             </Button>
           ) : (
             facetFilters
@@ -299,6 +313,8 @@ export function BrowsePage({ onAddCard }: Props): React.JSX.Element {
             side="bottom"
             data-layout="bottom-sheet"
             className="max-h-[85dvh] overflow-y-auto rounded-t-3xl border-white/[0.08] pb-[max(1rem,env(safe-area-inset-bottom))]"
+            // Nothing takes focus on opening, so no field raises the keyboard over the sheet.
+            onOpenAutoFocus={(e) => e.preventDefault()}
           >
             <SheetHeader>
               <SheetTitle>Filters</SheetTitle>

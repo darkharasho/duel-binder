@@ -46,3 +46,35 @@ export function diffTable(
     work.exec('DETACH DATABASE base')
   }
 }
+
+/** Whether rows of `t` carry a `game` column (a table both games use). */
+export const hasGameColumn = (t: CatalogTable): boolean => t.games.length > 1
+
+/**
+ * How many rows `base` has that `work` lacks (by key), per game of the deleted base row. Tables
+ * without a `game` column count everything under their one game.
+ */
+export function deletesByGame(
+  work: Database.Database,
+  base: Database.Database | null,
+  t: CatalogTable
+): Record<string, number> {
+  const out: Record<string, number> = Object.fromEntries(t.games.map((g) => [g, 0]))
+  if (!base) return out
+  if (base.memory) throw new Error('deletesByGame needs a file-backed base database')
+  const same = t.key.map((k) => `w.${quote(k)} = b.${quote(k)}`).join(' AND ')
+  const game = hasGameColumn(t) ? 'b.game' : `'${t.games[0]}'`
+  work.prepare('ATTACH DATABASE ? AS base').run(base.name)
+  try {
+    const rows = work
+      .prepare(
+        `SELECT ${game} AS game, count(*) AS n FROM base.${t.name} b
+         WHERE NOT EXISTS (SELECT 1 FROM main.${t.name} w WHERE ${same}) GROUP BY 1`
+      )
+      .all() as { game: string; n: number }[]
+    for (const r of rows) out[r.game] = (out[r.game] ?? 0) + r.n
+    return out
+  } finally {
+    work.exec('DETACH DATABASE base')
+  }
+}

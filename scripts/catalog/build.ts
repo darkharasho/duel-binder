@@ -24,9 +24,9 @@ import { deleteMeta } from '../../src/main/db/meta'
 import { refreshCatalog } from '../../src/main/sync/catalog'
 import { createYgoClient } from '../../src/main/ygo/client'
 import { createYugipediaClient, type YugipediaClient } from '../../src/main/yugipedia/client'
-import { LEGACY_CATALOG_TABLES } from '../../src/shared/catalogTables'
+import { CATALOG_TABLES } from '../../src/shared/catalogTables'
 import { accuracyProblem, checkAccuracy, type AccuracyReport } from './accuracy'
-import { diffTable } from './diff'
+import { deletesByGame, diffTable, hasGameColumn } from './diff'
 import { buildFingerprints, uploadFingerprints } from './fingerprints'
 import { uploadCatalog } from './upload'
 
@@ -65,15 +65,27 @@ export interface JobResult {
 export const SHRINK_MIN_ROWS = 50
 export const SHRINK_SHARE = 0.02
 
-/** Tables whose diff against `base` deletes more rows than the shrink limit allows. */
+/**
+ * Tables whose diff against `base` deletes more rows of a game than the shrink limit allows. The
+ * limit and the count are per game, so a game's rows can't hide in another game's headroom.
+ */
 export function findShrinks(work: Database.Database, base: Database.Database | null): string[] {
   if (!base) return []
   const out: string[] = []
-  for (const t of LEGACY_CATALOG_TABLES) {
-    const { n } = base.prepare(`SELECT count(*) AS n FROM ${t.name}`).get() as { n: number }
-    const { deletes } = diffTable(work, base, t)
-    if (deletes.length > Math.max(SHRINK_MIN_ROWS, n * SHRINK_SHARE)) {
-      out.push(`${t.name} would lose ${deletes.length} of ${n} rows`)
+  for (const t of CATALOG_TABLES) {
+    const deletes = deletesByGame(work, base, t)
+    for (const game of t.games) {
+      const n = hasGameColumn(t)
+        ? (
+            base.prepare(`SELECT count(*) AS n FROM ${t.name} WHERE game = ?`).get(game) as {
+              n: number
+            }
+          ).n
+        : (base.prepare(`SELECT count(*) AS n FROM ${t.name}`).get() as { n: number }).n
+      const lost = deletes[game] ?? 0
+      if (lost > Math.max(SHRINK_MIN_ROWS, n * SHRINK_SHARE)) {
+        out.push(`${t.name} (${game}) would lose ${lost} of ${n} rows`)
+      }
     }
   }
   return out
@@ -157,10 +169,17 @@ export async function runJob(opts: JobOptions): Promise<JobResult> {
 
     if (opts.dryRun) {
       const counts: NonNullable<JobResult['counts']> = {}
-      for (const t of LEGACY_CATALOG_TABLES) {
+      for (const t of CATALOG_TABLES) {
         const d = diffTable(work, base, t)
-        counts[t.name] = { upserts: d.upserts.length, deletes: d.deletes.length }
-        log(`${t.name}: ${d.upserts.length} upserts, ${d.deletes.length} deletes`)
+        const lost = deletesByGame(work, base, t)
+        for (const game of t.games) {
+          const name = t.games.length > 1 ? `${t.name}:${game}` : t.name
+          const upserts = hasGameColumn(t)
+            ? d.upserts.filter((r) => r['game'] === game).length
+            : d.upserts.length
+          counts[name] = { upserts, deletes: lost[game] ?? 0 }
+          log(`${name}: ${upserts} upserts, ${lost[game] ?? 0} deletes`)
+        }
       }
       await fingerprint(false)
       return { counts, uploaded: null, problems }

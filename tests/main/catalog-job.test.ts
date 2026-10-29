@@ -10,11 +10,11 @@ import { runSync } from '../../src/main/sync/sync'
 import type { YgoClient } from '../../src/main/ygo/client'
 import type { ApiCard } from '../../src/main/ygo/mapCard'
 import type { YugipediaClient } from '../../src/main/yugipedia/client'
-import { LEGACY_CATALOG_TABLES, type CatalogTable } from '../../src/shared/catalogTables'
+import { CATALOG_TABLES, LEGACY_CATALOG_TABLES, type CatalogTable } from '../../src/shared/catalogTables'
 import { diffTable } from '../../scripts/catalog/diff'
 import { uploadCatalog } from '../../scripts/catalog/upload'
 import type { AccuracyReport } from '../../scripts/catalog/accuracy'
-import { runJob } from '../../scripts/catalog/build'
+import { findShrinks, runJob } from '../../scripts/catalog/build'
 import fixture from '../fixtures/cardinfo.sample.json'
 
 const NOW = new Date('2026-10-23T12:00:00.000Z')
@@ -538,7 +538,7 @@ describe('uploadCatalog', () => {
       log: () => {}
     }
     await expect(runJob({ ...job, refresh: async () => {} })).rejects.toThrow(
-      /tcgplayer_groups would lose 100 of 200 rows/
+      /tcgplayer_groups \(ygo\) would lose 100 of 200 rows/
     )
     expect(calls).toEqual([])
 
@@ -601,8 +601,121 @@ describe('uploadCatalog', () => {
       refresh: async () => {},
       log: () => {}
     })
-    expect(out.counts?.cards).toEqual({ upserts: 3, deletes: 0 })
+    expect(out.counts?.['cards:ygo']).toEqual({ upserts: 3, deletes: 0 })
+    expect(out.counts?.['cards:pkm']).toEqual({ upserts: 0, deletes: 0 })
+    expect(out.counts?.pack_art).toBeDefined()
+    expect(out.counts?.pokemon_cards).toEqual({ upserts: 0, deletes: 0 })
     expect(calls).toEqual([])
     expect(existsSync(join(dir, 'base.sqlite'))).toBe(false)
+  })
+})
+
+/** One Pokémon card with an image, printing, set and pokemon_cards row. */
+function addPokemon(db: Database.Database, id = 900001): void {
+  db.prepare(
+    `INSERT INTO cards (id, name, type, frame_type, race, "desc", updated_at, game)
+     VALUES (?, 'Pikachu', 'Pokémon', 'pokemon', '', '', 'x', 'pkm')`
+  ).run(id)
+  db.prepare(
+    "INSERT INTO card_images (image_id, card_id, sort_order, game) VALUES (?, ?, 0, 'pkm')"
+  ).run(id, id)
+  db.prepare(
+    `INSERT INTO card_printings (card_id, set_name, set_code, set_rarity, language, game)
+     VALUES (?, 'Base Set', 'BS-58', 'Common', 'en', 'pkm')`
+  ).run(id)
+  db.prepare(
+    "INSERT INTO sets (game, language, set_name, set_code) VALUES ('pkm', 'en', 'Base Set', 'BS')"
+  ).run()
+  db.prepare(
+    `INSERT INTO pokemon_cards (card_id, category, hp, source_id, image_url, local_name)
+     VALUES (?, 'Pokemon', 60, 'base1-58', 'https://img/x', 'Pikachu')`
+  ).run(id)
+}
+
+describe('game-aware catalog job', () => {
+  it('uploads Pokémon rows with game pkm', async () => {
+    const work = openDatabase(join(dir, 'work.sqlite'))
+    addPokemon(work)
+    const { fetch, calls } = recordingFetch(ok)
+    await uploadCatalog({ url: URL_BASE, token: TOKEN, work, base: null, fetch })
+    const rows = (t: string): Record<string, unknown>[] =>
+      calls.filter((c) => c.body.table === t).flatMap((c) => c.body.rows as Record<string, unknown>[])
+    for (const t of ['cards', 'card_images', 'card_printings', 'sets']) {
+      expect(rows(t), t).toHaveLength(1)
+      expect(rows(t)[0]).toMatchObject({ game: 'pkm' })
+    }
+    expect(rows('pokemon_cards')).toEqual([
+      expect.objectContaining({ card_id: 900001, source_id: 'base1-58', local_name: 'Pikachu' })
+    ])
+    expect(rows('pokemon_cards')[0]).not.toHaveProperty('game')
+    work.close()
+  })
+
+  it('Yu-Gi-Oh-only work uploads the legacy bodies plus game ygo', async () => {
+    const work = await workDb()
+    const { fetch, calls } = recordingFetch(ok)
+    await uploadCatalog({ url: URL_BASE, token: TOKEN, work, base: null, fetch })
+    const seen = new Set<string>()
+    for (const c of calls.filter((x) => x.path === '/admin/catalog/rows')) {
+      const t = c.body.table!
+      seen.add(t)
+      const legacy = table(t)
+      const expected = diffTable(work, null, legacy).upserts
+      const stripped = (c.body.rows as Record<string, unknown>[]).map((r) => {
+        const { game, ...rest } = r
+        if (CATALOG_TABLES.find((x) => x.name === t)!.games.length > 1) expect(game).toBe('ygo')
+        return rest
+      })
+      expect(stripped, t).toEqual(expected)
+    }
+    expect(seen.has('pokemon_cards')).toBe(false)
+    work.close()
+  })
+
+  async function shrinkBase(): Promise<Database.Database> {
+    const work = openDatabase(join(dir, 'work.sqlite'))
+    work.prepare(
+      `INSERT INTO cards (id, name, type, frame_type, race, "desc", updated_at, game)
+       VALUES (1, 'A', 'Spell Card', 'spell', 'Normal', '', 'x', 'ygo'),
+              (2, 'B', 'Pokémon', 'pokemon', '', '', 'x', 'pkm')`
+    ).run()
+    const ins = work.prepare(
+      `INSERT INTO card_printings (card_id, set_name, set_code, set_rarity, language, game)
+       VALUES (?, 'S', ?, 'Common', 'en', ?)`
+    )
+    work.transaction(() => {
+      for (let i = 0; i < 3000; i++) ins.run(1, `Y-${i}`, 'ygo')
+      for (let i = 0; i < 100; i++) ins.run(2, `P-${i}`, 'pkm')
+    })()
+    snapshot(work).close()
+    return work
+  }
+
+  it('refuses 60 pkm deletes of 100 that a whole-table count would allow', async () => {
+    const work = await shrinkBase()
+    work.prepare("DELETE FROM card_printings WHERE game = 'pkm' AND set_code IN (SELECT set_code FROM card_printings WHERE game = 'pkm' ORDER BY set_code LIMIT 60)").run()
+    const base = openDatabase(join(dir, 'base.sqlite'))
+    expect(findShrinks(work, base)).toEqual(['card_printings (pkm) would lose 60 of 100 rows'])
+    base.close()
+    work.close()
+  })
+
+  it('allows 40 ygo deletes of 3000', async () => {
+    const work = await shrinkBase()
+    work.prepare("DELETE FROM card_printings WHERE game = 'ygo' AND set_code IN (SELECT set_code FROM card_printings WHERE game = 'ygo' ORDER BY set_code LIMIT 40)").run()
+    const base = openDatabase(join(dir, 'base.sqlite'))
+    expect(findShrinks(work, base)).toEqual([])
+    base.close()
+    work.close()
+  })
+
+  it('a first pkm upload is never a shrink', async () => {
+    const work = await workDb()
+    snapshot(work).close()
+    addPokemon(work)
+    const base = openDatabase(join(dir, 'base.sqlite'))
+    expect(findShrinks(work, base)).toEqual([])
+    base.close()
+    work.close()
   })
 })

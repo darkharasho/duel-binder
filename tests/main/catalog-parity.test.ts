@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { missingPkeys } from '../../scripts/catalog/parity'
+import { missingPkeys, missingPkeysByGame } from '../../scripts/catalog/parity'
 import { seededDb } from './helpers'
 
 type Page = { pkeys: string[]; more: boolean }
@@ -39,5 +39,22 @@ describe('catalog parity', () => {
       .map((r) => r.pkey)
       .sort()
     expect(await missingPkeys(db, async () => ({ pkeys: all, more: false }))).toEqual([])
+  })
+
+  it('compares per game and reports a missing Pokémon printing', async () => {
+    const db = await seededDb()
+    db.prepare(
+      `INSERT INTO cards (id, name, type, frame_type, race, "desc", updated_at, game)
+       VALUES (900001, 'Pikachu', 'Pokémon', 'pokemon', '', '', 'x', 'pkm')`
+    ).run()
+    db.prepare(
+      `INSERT INTO card_printings (card_id, set_name, set_code, set_rarity, language, game)
+       VALUES (900001, 'Base Set', 'BS-58', 'Common', 'en', 'pkm')`
+    ).run()
+    const ygo = (
+      db.prepare("SELECT pkey FROM card_printings WHERE game = 'ygo'").all() as { pkey: string }[]
+    ).map((r) => r.pkey)
+    const missing = await missingPkeysByGame(db, async () => ({ pkeys: ygo, more: false }))
+    expect(missing).toEqual({ ygo: [], pkm: ['en|900001|BS-58|Common'] })
   })
 })

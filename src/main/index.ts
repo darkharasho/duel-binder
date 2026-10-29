@@ -363,6 +363,7 @@ async function bootstrap(): Promise<void> {
       window: windowDeps,
       scanWindow,
       account,
+      emitDataChanged,
       fingerprints,
       ocr
     })

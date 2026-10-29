@@ -9,6 +9,7 @@ import {
   type CloudClient
 } from '../../main/cloud/client'
 import { syncedGames, syncOnce } from '../../main/cloud/engine'
+import { activeGame, checkActiveGame, reportingMe, withGamesOf } from '../../main/cloud/activeGame'
 import {
   accountState,
   activeOwner,
@@ -22,7 +23,7 @@ import {
 import { createDataHandlers, DATA_CHANNELS, type DataChannel } from '../../main/ipc/dataHandlers'
 import { awaitingPrices, checkPrintingIds, requestPrices } from '../../main/cloud/priceRequests'
 import { PHONE_TABLES } from '../../shared/catalogFeed'
-import type { Me } from '../../shared/cloud'
+import { gamesOf, type Me } from '../../shared/cloud'
 import type { GameId } from '../../shared/games'
 import { FRIENDS_SIGNED_OUT, OFFLINE_MESSAGE } from '../../shared/friends'
 import type { PortalChannel } from '../../shared/portal'
@@ -137,7 +138,9 @@ const READ_CHANNELS: ReadonlySet<DataChannel> = new Set<DataChannel>([
   'account:unsynced',
   'rip:sets',
   'rip:session',
-  'rip:history'
+  'rip:history',
+  'games:available',
+  'games:active'
 ])
 
 /**
@@ -165,7 +168,10 @@ export function createPhoneStore(deps: {
   const handlers = createDataHandlers({
     db,
     // Waiting edits are counted from the dirty rows; the caller decides when to sync.
-    onEdit: () => {}
+    onEdit: () => {},
+    availableGames: () => games(),
+    // The phone Api reloads the pages after a switch.
+    onGameChanged: () => {}
   })
 
   let queue: Promise<unknown> = Promise.resolve()
@@ -219,20 +225,44 @@ export function createPhoneStore(deps: {
     }
   }
 
+  /** The signed-in account's games, as its last `me` gave them; signed out, `['ygo']`. */
+  const games = (): GameId[] => (token() === null ? ['ygo'] : gamesOf(storedUser()))
+  /** Whether the game shown fell back to 'ygo' since the last sync reported; it counts as a change. */
+  let gameReset = false
+  /** After an account change: a game the account can't use stops being shown. */
+  const recheckGame = (): void => {
+    if (checkActiveGame(db, games())) gameReset = true
+  }
+  // Before any page reads: the stored game must be one this account may use.
+  checkActiveGame(db, games())
+
   const formatCurrent = (): boolean => Number(getState('format') ?? 0) >= PHONE_FORMAT
 
   const client = (t: string, timeoutMs?: number): CloudClient =>
     createCloudClient({ baseUrl: base, token: t, fetch: doFetch, timeoutMs })
 
-  /** Signed in: a client with the stored token. Signed out: CloudAuthError. */
+  /**
+   * Signed in: a client with the stored token, whose every `me()` refreshes the stored account's
+   * games. Signed out: CloudAuthError.
+   */
   const signedInClient = (): CloudClient => {
     const t = token()
     if (t === null) throw new CloudAuthError('Not signed in')
-    return client(t)
+    return reportingMe(client(t), (me) => {
+      const user = storedUser()
+      if (token() !== t || user?.id !== me.id) return
+      const next = withGamesOf(user, me)
+      if (next === null) return
+      setState('user', JSON.stringify(next))
+      recheckGame()
+    })
   }
 
   /** The server no longer knows the token: forget it, keep every row and the user's name. */
-  const serverSignedOut = (): void => deleteState('token')
+  const serverSignedOut = (): void => {
+    deleteState('token')
+    recheckGame()
+  }
 
   /** Runs a call to the portal; a 401 signs the phone out before the error goes on. */
   async function online<T>(fn: () => Promise<T>): Promise<T> {
@@ -452,6 +482,7 @@ export function createPhoneStore(deps: {
           if (accountState(db, user.id).syncedAt === null) deleteState('catalog_filled')
           setState('token', newToken)
           setState('user', JSON.stringify(user))
+          recheckGame()
         })()
       }),
 
@@ -465,6 +496,7 @@ export function createPhoneStore(deps: {
             // Best effort: offline, the token stays valid on the server until it expires.
           }
           deleteState('token')
+          recheckGame()
         }
         return { waiting: syncStateNow().waiting }
       }),
@@ -504,6 +536,7 @@ export function createPhoneStore(deps: {
           setActiveOwner(db, 0)
           deleteState('token')
           deleteState('user')
+          recheckGame()
         })()
       }),
 
@@ -551,6 +584,9 @@ export function createPhoneStore(deps: {
             if (!(e instanceof CloudAuthError) && !(e instanceof CloudOfflineError)) throw e
           }
         }
+        // A sign-out by the server, or a refreshed `me`, may have changed the game shown.
+        if (gameReset) changed = true
+        gameReset = false
         return { ...syncStateNow(), changed, awaitingPrices: awaitingPrices(db, now()) }
       }),
 
@@ -571,7 +607,7 @@ export function createPhoneStore(deps: {
           const t = token()
           if (t === null) throw new Error(FRIENDS_SIGNED_OUT)
           try {
-            return await client(t, PORTAL_TIMEOUT_MS).rpc<T>(channel, args)
+            return await client(t, PORTAL_TIMEOUT_MS).rpc<T>(channel, args, activeGame(db, games()))
           } catch (e) {
             if (e instanceof CloudOfflineError) throw new CloudOfflineError(OFFLINE_MESSAGE)
             throw e

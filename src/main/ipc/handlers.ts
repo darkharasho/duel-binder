@@ -38,6 +38,8 @@ export interface HandlerDeps {
   window: WindowDeps
   scanWindow: Pick<ScanWindowManager, 'open' | 'isOpen' | 'toggleFullScreen'>
   account: AccountService
+  /** Tells every window that the data shown changed. */
+  emitDataChanged(): void
   fingerprints: FingerprintStore
   ocr: Ocr
 }
@@ -56,11 +58,17 @@ export function createHandlers({
   window,
   scanWindow,
   account,
+  emitDataChanged,
   fingerprints,
   ocr
 }: HandlerDeps): Handlers {
   return {
-    ...createDataHandlers({ db, onEdit: () => account.noteLocalEdit() }),
+    ...createDataHandlers({
+      db,
+      onEdit: () => account.noteLocalEdit(),
+      availableGames: () => account.games(),
+      onGameChanged: emitDataChanged
+    }),
     'friends:overview': async () => account.portal('friends:overview', []),
     'friends:request': async (username: string) => account.portal('friends:request', [username]),
     'friends:accept': async (userId: number) => account.portal('friends:accept', [userId]),

@@ -674,6 +674,15 @@ describe('createCloudClient', () => {
     expect(await calls[0].text()).toBe('{"args":[]}')
   })
 
+  it('rpc names its game in x-duel-game, and sends none without one', async () => {
+    const { calls, f } = recorder(() => Response.json({ result: null }))
+    const c = createCloudClient({ baseUrl: PORTAL, token: 'tok', fetch: f })
+    await c.rpc('friends:overview', [], 'pkm')
+    await c.rpc('friends:overview', [])
+    expect(calls.map((r) => r.headers.get('x-duel-game'))).toEqual(['pkm', null])
+    expect(calls[0].headers.get('authorization')).toBe('Bearer tok')
+  })
+
   it('rpc rejects with the portal error message on a 400', async () => {
     const { f } = recorder(() => Response.json({ error: 'x' }, { status: 400 }))
     const c = createCloudClient({ baseUrl: PORTAL, token: 't', fetch: f })

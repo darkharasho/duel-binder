@@ -39,6 +39,8 @@ export type MetaKey =
   | 'sweep_calls_day'
   /** Seq of the last server price change applied from the price change feed. */
   | 'price_feed_cursor'
+  /** The game this device shows ('ygo' or 'pkm'); absent means 'ygo'. Read in SQL as ACTIVE_GAME. */
+  | 'active_game'
 
 export function getMeta(db: SqlDb, key: MetaKey): string | null {
   const row = db.prepare('SELECT value FROM meta WHERE key = ?').get(key) as

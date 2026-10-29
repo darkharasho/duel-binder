@@ -2,8 +2,8 @@ import type { SqlDb } from '../db/sql'
 import { setMeta } from '../db/meta'
 import { recordSnapshot } from '../repo/stats'
 import { MAX_CONTRIBUTE, type ContributeResult } from '../../shared/catalogFeed'
-import { MAX_PULL, MAX_PUSH, editTime, type WireEntry } from '../../shared/cloud'
-import { isGameId, type GameId } from '../../shared/games'
+import { MAX_PULL, MAX_PUSH, editTime, gamesOf, type WireEntry } from '../../shared/cloud'
+import type { GameId } from '../../shared/games'
 import { CloudAuthError, CloudOfflineError, type CloudClient } from './client'
 import {
   activeOwner,
@@ -51,8 +51,7 @@ const sameAs = (e: WireEntry): string => JSON.stringify(e)
  */
 export async function syncedGames(client: CloudClient): Promise<GameId[]> {
   try {
-    const games = (await client.me()).games?.filter(isGameId) ?? []
-    return games.includes('ygo') ? games : ['ygo', ...games]
+    return gamesOf(await client.me())
   } catch (e) {
     if (e instanceof CloudAuthError) throw e
     return ['ygo']

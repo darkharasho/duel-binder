@@ -1,11 +1,13 @@
 import type Database from 'better-sqlite3'
 import { checkUsageReport } from '../../shared/usage'
 import { deleteMeta, getMeta, setMeta } from '../db/meta'
-import type { Me } from '../../shared/cloud'
+import { gamesOf, type Me } from '../../shared/cloud'
 import { FRIENDS_SIGNED_OUT, OFFLINE_MESSAGE } from '../../shared/friends'
 import type { PortalChannel } from '../../shared/portal'
 import type { AccountStatus, SyncStatus } from '../../shared/types'
 import type { CatalogService } from '../catalog/service'
+import type { GameId } from '../../shared/games'
+import { activeGame, checkActiveGame, reportingMe, withGamesOf } from './activeGame'
 import { CloudAuthError, CloudOfflineError, type CloudClient } from './client'
 import { syncOnce } from './engine'
 import {
@@ -59,6 +61,8 @@ export interface AccountService {
   signOut(): Promise<AccountStatus>
   syncNow(): Promise<AccountStatus>
   isSignedIn(): boolean
+  /** The signed-in account's games, as its last `me` gave them (kept for offline use); signed out, `['ygo']`. */
+  games(): GameId[]
   noteLocalEdit(): void
   catalogRefreshed(): void
   /** A forced catalog update through the signed-in account; signed out, the status is unchanged. */
@@ -159,6 +163,28 @@ export function createAccountService(deps: AccountDeps): AccountService {
     }
   }
 
+  const games = (): GameId[] => (token === null ? ['ygo'] : gamesOf(storedUser()))
+
+  /** After an account change: a game the account can't use stops being shown. */
+  function recheckGame(): void {
+    if (checkActiveGame(db, games())) deps.emitDataChanged()
+  }
+  // Before any page reads: the stored game must be one this account may use.
+  checkActiveGame(db, games())
+
+  /** A client of this session whose every `me()` refreshes the cached account's games. */
+  function sessionClient(t: string, opts?: ClientOptions): CloudClient {
+    const mine = session
+    return reportingMe(deps.client(t, opts), (me) => {
+      const user = storedUser()
+      if (mine !== session || token === null || user?.id !== me.id) return
+      const next = withGamesOf(user, me)
+      if (next === null) return
+      setMeta(db, 'cloud_user', JSON.stringify(next))
+      recheckGame()
+    })
+  }
+
   function set(next: State, nextError: string | null = null): void {
     state = next
     error = nextError
@@ -170,6 +196,7 @@ export function createAccountService(deps: AccountDeps): AccountService {
     token = null
     tokens.clear()
     deleteMeta(db, 'cloud_user')
+    recheckGame()
   }
 
   /** The server no longer knows this token: nothing to revoke, and no further runs. */
@@ -189,7 +216,7 @@ export function createAccountService(deps: AccountDeps): AccountService {
     runAbort = abort
     set('syncing', error)
     try {
-      const client = deps.client(current, { signal: abort.signal })
+      const client = sessionClient(current, { signal: abort.signal })
       // Before pushing, so entries on printings the server just added can push in this run.
       await updateCatalog(client, !catalogUpdated)
       if (mine !== session) return
@@ -269,11 +296,12 @@ export function createAccountService(deps: AccountDeps): AccountService {
     tokens.set(newToken)
     token = newToken
     setMeta(db, 'cloud_user', JSON.stringify(user))
+    const gameReset = checkActiveGame(db, games())
     endSession()
     meRefreshed = false
     catalogUpdated = false
     set('idle')
-    if (before !== user.id) deps.emitDataChanged()
+    if (before !== user.id || gameReset) deps.emitDataChanged()
     scheduler.start()
   }
 
@@ -360,6 +388,7 @@ export function createAccountService(deps: AccountDeps): AccountService {
   return {
     status,
     isSignedIn: () => token !== null,
+    games,
 
     signIn,
 
@@ -394,7 +423,7 @@ export function createAccountService(deps: AccountDeps): AccountService {
       if (current === null) return deps.catalog.status()
       const mine = session
       try {
-        await updateCatalog(deps.client(current, { signal: portalAbort.signal }), true)
+        await updateCatalog(sessionClient(current, { signal: portalAbort.signal }), true)
       } catch (e) {
         if (mine === session && e instanceof CloudAuthError) serverSignedOut()
         else if (!(e instanceof CloudOfflineError) && !(e instanceof CloudAuthError)) throw e
@@ -411,7 +440,7 @@ export function createAccountService(deps: AccountDeps): AccountService {
       try {
         result = await deps
           .client(current, { signal, timeoutMs: PORTAL_TIMEOUT_MS })
-          .rpc<T>(channel, args)
+          .rpc<T>(channel, args, activeGame(db, games()))
       } catch (e) {
         // The account changed during the call (a newer sign-in keeps its own token): nothing here concerns it.
         if (mine !== session) throw new Error(FRIENDS_SIGNED_OUT, { cause: e })

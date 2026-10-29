@@ -15,6 +15,7 @@ import type {
   PushResult,
   WireEntry
 } from '../../shared/cloud'
+import { GAME_HEADER } from '../../shared/cloud'
 import type { GameId } from '../../shared/games'
 import type { PortalChannel } from '../../shared/portal'
 
@@ -60,8 +61,8 @@ export interface CloudClient {
   revoke(): Promise<void>
   /** Adds anonymous event totals to the portal's daily counters. */
   usage(report: UsageReport): Promise<void>
-  /** Calls a portal RPC channel; resolves to its result. */
-  rpc<T>(channel: PortalChannel, args: unknown[]): Promise<T>
+  /** Calls a portal RPC channel for `game` (default: none sent, which the server takes as Yu-Gi-Oh!). */
+  rpc<T>(channel: PortalChannel, args: unknown[], game?: GameId): Promise<T>
 }
 
 const DEFAULT_TIMEOUT_MS = 30_000
@@ -87,9 +88,13 @@ export function createCloudClient(opts: {
     method: string,
     body?: unknown,
     parse = true,
-    callTimeoutMs = timeoutMs
+    callTimeoutMs = timeoutMs,
+    extraHeaders: Record<string, string> = {}
   ): Promise<T> {
-    const headers: Record<string, string> = { authorization: `Bearer ${opts.token}` }
+    const headers: Record<string, string> = {
+      ...extraHeaders,
+      authorization: `Bearer ${opts.token}`
+    }
     if (body !== undefined) headers['content-type'] = 'application/json'
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), callTimeoutMs)
@@ -170,7 +175,16 @@ export function createCloudClient(opts: {
       ).results,
     revoke: () => call<void>('/auth/desktop/revoke', 'POST', undefined, false),
     usage: (report) => call<void>('/api/usage', 'POST', report, false),
-    rpc: async <T>(channel: PortalChannel, args: unknown[]) =>
-      (await call<{ result: T }>(`/api/rpc/${channel}`, 'POST', { args })).result
+    rpc: async <T>(channel: PortalChannel, args: unknown[], game?: GameId) =>
+      (
+        await call<{ result: T }>(
+          `/api/rpc/${channel}`,
+          'POST',
+          { args },
+          true,
+          timeoutMs,
+          game ? { [GAME_HEADER]: game } : {}
+        )
+      ).result
   }
 }

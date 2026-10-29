@@ -29,6 +29,7 @@ const fakeAccount = (signedIn = false): FakeAccount => ({
   signOut: vi.fn(),
   syncNow: vi.fn(),
   isSignedIn: vi.fn(() => signedIn),
+  games: vi.fn(() => ['ygo' as const]),
   noteLocalEdit: vi.fn(),
   catalogRefreshed: vi.fn(),
   refreshCatalog: vi.fn(),
@@ -71,6 +72,7 @@ async function makeHandlers(opts: { signedIn?: boolean } = {}) {
     },
     scanWindow,
     account: account as unknown as AccountService,
+    emitDataChanged: vi.fn(),
     fingerprints: {
       read: async () => null,
       status: () => ({ state: 'missing', count: 0 }),

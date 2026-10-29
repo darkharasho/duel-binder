@@ -1,3 +1,5 @@
+import { GAME_HEADER, gamesOf, type Me } from '../../../shared/cloud'
+import { isGameId, type GameId } from '../../../shared/games'
 import type { Api } from '../../../shared/ipc'
 import type { PortalChannel } from '../../../shared/portal'
 import { OFFLINE_MESSAGE } from '../../../shared/friends'
@@ -7,7 +9,12 @@ export interface HttpApiOptions {
   fetch?: typeof fetch
   /** Called on a 401; the default sends the visitor to the sign-in page. */
   onSignedOut?: () => void
+  /** Where the game shown is remembered; defaults to `localStorage`. */
+  storage?: Pick<Storage, 'getItem' | 'setItem'>
 }
+
+/** The `localStorage` key of the game this browser shows. */
+export const GAME_KEY = 'duel-binder.game'
 
 const unavailable = (): Promise<never> => Promise.reject(new Error('Not available on the web'))
 const scanUnavailable = (): Promise<never> =>
@@ -34,6 +41,69 @@ const UPDATE_IDLE: UpdateStatus = { state: 'idle', mode: 'auto', version: null, 
 export function createHttpApi(opts: HttpApiOptions = {}): Api {
   const doFetch = opts.fetch ?? ((...a: Parameters<typeof fetch>) => fetch(...a))
   const onSignedOut = opts.onSignedOut ?? ((): void => location.assign('/'))
+  const storage = (): Pick<Storage, 'getItem' | 'setItem'> => opts.storage ?? localStorage
+  const dataListeners = new Set<() => void>()
+
+  /** The last game stored, for when storage can't be read. */
+  let remembered: GameId = 'ygo'
+  /** The game remembered in this browser; anything else counts as Yu-Gi-Oh!. */
+  const storedGame = (): GameId => {
+    let value: string | null
+    try {
+      value = storage().getItem(GAME_KEY)
+    } catch {
+      // Storage blocked: the choice lasts until the page reloads.
+      return remembered
+    }
+    return isGameId(value) ? value : 'ygo'
+  }
+  const storeGame = (game: GameId): void => {
+    remembered = game
+    try {
+      storage().setItem(GAME_KEY, game)
+    } catch {
+      // Storage blocked or full: see storedGame.
+    }
+  }
+
+  /** The signed-in account's games from `GET /api/me`, asked once; a failed ask is asked again next time. */
+  let gamesAsked: Promise<GameId[]> | null = null
+  const availableGames = (): Promise<GameId[]> => {
+    gamesAsked ??= (async () => {
+      let res: Response
+      try {
+        res = await doFetch('/api/me', { credentials: 'same-origin' })
+      } catch {
+        throw new Error(OFFLINE_MESSAGE)
+      }
+      if (res.status === 401) {
+        onSignedOut()
+        throw new Error('Signed out')
+      }
+      if (!res.ok) throw new Error(`Request failed (${res.status})`)
+      const me = (await res.json().catch(() => null)) as Me | null
+      return gamesOf(me)
+    })()
+    gamesAsked.catch(() => {
+      gamesAsked = null
+    })
+    return gamesAsked
+  }
+  const activeGame = async (): Promise<GameId> => {
+    const available = await availableGames()
+    const game = storedGame()
+    if (available.includes(game)) return game
+    storeGame('ygo')
+    return 'ygo'
+  }
+  const setActiveGame = async (game: GameId): Promise<void> => {
+    const available = await availableGames()
+    if (!isGameId(game) || !available.includes(game))
+      throw new Error(`${String(game)} isn't available on this account`)
+    const before = storedGame()
+    storeGame(game)
+    if (game !== before) for (const cb of [...dataListeners]) cb()
+  }
 
   /** POST /api/account/delete with the session cookie; on success the visitor is signed out and leaves. */
   const deleteAccount = async (): Promise<void> => {
@@ -63,7 +133,7 @@ export function createHttpApi(opts: HttpApiOptions = {}): Api {
       try {
         res = await doFetch(`/api/rpc/${encodeURIComponent(channel).replace('%3A', ':')}`, {
           method: 'POST',
-          headers: { 'content-type': 'application/json' },
+          headers: { 'content-type': 'application/json', [GAME_HEADER]: storedGame() },
           body: JSON.stringify({ args }),
           credentials: 'same-origin'
         })
@@ -161,6 +231,7 @@ export function createHttpApi(opts: HttpApiOptions = {}): Api {
       checklist: call('sets:checklist'),
       adjust: call('sets:adjust')
     },
+    games: { available: availableGames, active: activeGame, setActive: setActiveGame },
     sync: {
       status: async () => SYNC_IDLE,
       run: async () => SYNC_IDLE,
@@ -183,7 +254,12 @@ export function createHttpApi(opts: HttpApiOptions = {}): Api {
       applyUpdate: unavailable,
       updateStatus: async () => UPDATE_IDLE,
       onUpdateStatus: noUnsubscribe,
-      onDataChanged: noUnsubscribe
+      onDataChanged: (cb) => {
+        dataListeners.add(cb)
+        return () => {
+          dataListeners.delete(cb)
+        }
+      }
     },
     // The web is always signed in through its own session; desktop sign-in and sync don't apply.
     account: {

@@ -1,4 +1,4 @@
-import type { GameId } from './games'
+import { isGameId, type GameId } from './games'
 
 /** Limits shared by the desktop sync client and the server's sync endpoints. */
 
@@ -23,6 +23,15 @@ export interface Me {
   admin?: true
   /** The games this account may use. Old servers leave it out, which means `['ygo']`. */
   games?: GameId[]
+}
+
+/**
+ * The games an account may use, from its `me`: Yu-Gi-Oh! always, then the others it lists. Signed
+ * out (null) or an old server's `me` (no `games`) means Yu-Gi-Oh! only.
+ */
+export function gamesOf(me: Me | null): GameId[] {
+  const games = me?.games?.filter(isGameId) ?? []
+  return games.includes('ygo') ? games : ['ygo', ...games]
 }
 
 /** One collection entry as the sync protocol carries it. Times are ISO 8601 in `toISOString()` form. */

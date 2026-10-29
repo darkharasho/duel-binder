@@ -215,6 +215,15 @@ CREATE TABLE price_requests (printing_id INTEGER PRIMARY KEY REFERENCES card_pri
 CREATE INDEX ix_price_requests_at ON price_requests(requested_at);
 `
 
+/**
+ * Entries by printing, for "does anyone own this printing" (src/main/prices/candidates). Without it each
+ * sync's price lookup scanned the collection once per catalog printing, freezing the app for seconds to
+ * minutes. The portal has had the same index since server-2, hence `server: false`.
+ */
+export const SCHEMA_V18 = `
+CREATE INDEX ix_entries_printing_live ON collection_entries(printing_id) WHERE deleted_at IS NULL;
+`
+
 /** A printing's rarity as shown: "Starlight Rare (Extended Art)" for a labelled variant. */
 export const RARITY_LABEL = "p.set_rarity || COALESCE(' (' || p.variant || ')', '')"
 
@@ -236,6 +245,7 @@ export const MIGRATIONS: Migration[] = [
   { version: 14, sql: SCHEMA_V14 },
   { version: 15, sql: SCHEMA_V15, server: SCHEMA_V15_SERVER },
   { version: 16, sql: SCHEMA_V16, server: false },
-  { version: 17, sql: SCHEMA_V17 }
+  { version: 17, sql: SCHEMA_V17 },
+  { version: 18, sql: SCHEMA_V18, server: false }
 ]
 

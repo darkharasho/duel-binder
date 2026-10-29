@@ -280,3 +280,26 @@ test('the refresh prices a requested printing nobody owns', async () => {
   expect(lookup.mock.calls[0][0]).toMatchObject({ code: 'LB-JP01', lang: 'ja' })
   expect(row(id)?.price).toBe(9)
 })
+
+test('candidates look printings up from what is owned or asked for, never scanning per printing', async () => {
+  // The catalog has ~340k printings: a full scan of it, or of the collection once per printing,
+  // froze the desktop's main process for tens of seconds on every sync.
+  const db = await seededDb()
+  const seen: string[] = []
+  const prepare = db.prepare.bind(db)
+  db.prepare = ((sql: string) => {
+    seen.push(sql)
+    return prepare(sql)
+  }) as typeof db.prepare
+  priceCandidates(db, NOW, { limit: 10 })
+  countCandidates(db, NOW)
+  db.prepare = prepare
+  expect(seen).toHaveLength(2)
+  for (const sql of seen) {
+    const params = (sql.match(/\?/g) ?? []).map(() => '')
+    const plan = (db.prepare(`EXPLAIN QUERY PLAN ${sql}`).all(...params) as { detail: string }[]).map(
+      (r) => r.detail
+    )
+    expect(plan.filter((d) => /^SCAN (p|e)\b/.test(d)), plan.join('\n')).toEqual([])
+  }
+})

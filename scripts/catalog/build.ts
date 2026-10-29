@@ -171,7 +171,13 @@ export async function runJob(opts: JobOptions): Promise<JobResult> {
         return
       }
       if (upload) {
-        await uploadFingerprints({ url: url!, token: token!, bytes: out.bytes, fetch: opts.fetch })
+        await uploadFingerprints({
+          url: url!,
+          token: token!,
+          bytes: out.bytes,
+          game: 'ygo',
+          fetch: opts.fetch
+        })
       }
     } catch (e) {
       problem(`Fingerprints failed: ${e instanceof Error ? e.message : e}`)

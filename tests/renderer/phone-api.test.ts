@@ -190,10 +190,10 @@ describe('phone api', () => {
 
   it('scan fingerprints go to the store', async () => {
     const { api, store } = setup()
-    await api.scan.fingerprints()
-    await expect(api.scan.refreshFingerprints()).resolves.toEqual({ state: 'ready', count: 3 })
+    await api.scan.fingerprints('ygo')
+    await expect(api.scan.refreshFingerprints('ygo')).resolves.toEqual({ state: 'ready', count: 3 })
     expect(store.fingerprints).toHaveBeenCalled()
-    expect(store.refreshFingerprints).toHaveBeenCalled()
+    expect(store.refreshFingerprints).toHaveBeenCalledWith({ game: 'ygo' })
   })
 
   it('scanWindow.isOpen is false', async () => {

@@ -65,8 +65,8 @@ export interface Api {
     matchName(text: string): Promise<{ cardId: number; name: string; score: number } | null>
     /** The card of each artwork id that is in the catalog. */
     cardsForImages(imageIds: number[]): Promise<{ imageId: number; cardId: number }[]>
-    fingerprints(): Promise<ArrayBuffer | null>
-    refreshFingerprints(): Promise<FingerprintStatus>
+    fingerprints(game: GameId): Promise<ArrayBuffer | null>
+    refreshFingerprints(game: GameId, opts?: { force?: boolean }): Promise<FingerprintStatus>
     ocr(bands: OcrBand[], kind: 'code' | 'name'): Promise<string[]>
     /** The language the card text on the bands reads as; null when it can't be told. */
     language(bands: OcrBand[]): Promise<CardLanguage | null>

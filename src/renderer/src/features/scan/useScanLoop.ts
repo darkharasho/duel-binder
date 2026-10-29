@@ -160,7 +160,7 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
     const init = async (): Promise<void> => {
       // Only a hang fails the init (and is retried); a file that can't be read means no art.
       const fp = await within(
-        api.scan.fingerprints().catch(() => null),
+        api.scan.fingerprints('ygo').catch(() => null),
         FINGERPRINTS_TIMEOUT_MS
       )
       if (!live) return
@@ -179,7 +179,7 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
       if (!live) return
       readyRef.current = true
       // A newer file, once downloaded, goes to the engine between frames.
-      const refreshed = await api.scan.refreshFingerprints().catch(() => null)
+      const refreshed = await api.scan.refreshFingerprints('ygo').catch(() => null)
       if (live && refreshed?.updated) loop.current.needsInit = true
     })()
     return () => {

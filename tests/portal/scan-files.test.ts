@@ -164,6 +164,59 @@ describe('scan fingerprint file', () => {
     expect(res.status).toBe(401)
   })
 
+  it('no game query serves the ygo file unchanged; pkm has its own file', async () => {
+    await put(file(10))
+    const legacy = await get()
+    const explicit = await handle(new Request(`${BASE}/scan/fingerprints?game=ygo`), deps)
+    expect(new Uint8Array(await explicit.arrayBuffer())).toEqual(file(10))
+    expect(explicit.headers.get('etag')).toBe(legacy.headers.get('etag'))
+    const pkmGet = (): Promise<Response> =>
+      handle(new Request(`${BASE}/scan/fingerprints?game=pkm`), deps)
+    expect((await pkmGet()).status).toBe(404)
+
+    const putPkm = (bytes: Uint8Array, extra = ''): Promise<Response> =>
+      handle(
+        new Request(`${BASE}/admin/scan/fingerprints?game=pkm${extra}`, {
+          method: 'PUT',
+          headers: { authorization: `Bearer ${TOKEN}` },
+          body: bytes as unknown as BodyInit
+        }),
+        deps
+      )
+    expect((await putPkm(file(100, 9))).status).toBe(200)
+    expect(bucket.store.has('scan/pkm/fingerprints.bin')).toBe(true)
+    expect(new Uint8Array(await (await pkmGet()).arrayBuffer())).toEqual(file(100, 9))
+    // The ygo object is untouched.
+    expect(new Uint8Array(await (await get()).arrayBuffer())).toEqual(file(10))
+    // The shrink guard is per game: 80 < 90% of pkm's 100, though it is far above ygo's 10.
+    expect((await putPkm(file(80, 9))).status).toBe(409)
+    expect((await putPkm(file(95, 9))).status).toBe(200)
+    expect(bucket.store.has('scan/pkm/fingerprints.prev.bin')).toBe(true)
+    const back = await handle(
+      new Request(`${BASE}/admin/scan/fingerprints/rollback?game=pkm`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${TOKEN}` }
+      }),
+      deps
+    )
+    expect(await back.json()).toEqual({ ok: true, count: 100 })
+    expect(new Uint8Array(await (await get()).arrayBuffer())).toEqual(file(10))
+  })
+
+  it('refuses an unknown game', async () => {
+    expect((await handle(new Request(`${BASE}/scan/fingerprints?game=xx`), deps)).status).toBe(400)
+    const res = await handle(
+      new Request(`${BASE}/admin/scan/fingerprints?game=xx`, {
+        method: 'PUT',
+        headers: { authorization: `Bearer ${TOKEN}` },
+        body: file(2) as unknown as BodyInit
+      }),
+      deps
+    )
+    expect(res.status).toBe(400)
+    expect(bucket.store.size).toBe(0)
+  })
+
   it('answers 404 before any upload', async () => {
     const res = await get()
     expect(res.status).toBe(404)

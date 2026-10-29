@@ -211,7 +211,7 @@ describe('uploadFingerprints', () => {
   it('throws on a non-2xx response', async () => {
     const fetch = (async () => new Response('nope', { status: 403 })) as typeof globalThis.fetch
     await expect(
-      uploadFingerprints({ url: 'https://p.example', token: 't', bytes: new Uint8Array(4), fetch })
+      uploadFingerprints({ url: 'https://p.example', token: 't', bytes: new Uint8Array(4), game: 'ygo', fetch })
     ).rejects.toThrow(/403/)
   })
 })

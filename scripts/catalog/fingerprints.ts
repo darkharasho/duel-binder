@@ -1,5 +1,6 @@
 import Database from 'better-sqlite3'
 import { decode } from 'jpeg-js'
+import type { GameId } from '../../src/shared/games'
 import { imageUrl } from '../../src/shared/imageSources'
 import { HASH_WORDS, artHash, fingerprintSource } from '../../src/shared/scan/fingerprint'
 import { encodeFingerprints } from '../../src/shared/scan/fingerprintFile'
@@ -177,6 +178,7 @@ export interface UploadFingerprintsOptions {
   url: string
   token: string
   bytes: Uint8Array
+  game: GameId
   fetch?: typeof fetch
 }
 
@@ -184,7 +186,8 @@ export interface UploadFingerprintsOptions {
 export async function uploadFingerprints(opts: UploadFingerprintsOptions): Promise<number> {
   const fetchFn = opts.fetch ?? fetch
   const path = '/admin/scan/fingerprints'
-  const res = await fetchFn(`${opts.url.replace(/\/+$/, '')}${path}`, {
+  const query = opts.game === 'ygo' ? '' : `?game=${opts.game}`
+  const res = await fetchFn(`${opts.url.replace(/\/+$/, '')}${path}${query}`, {
     method: 'PUT',
     headers: {
       authorization: `Bearer ${opts.token}`,

@@ -31,6 +31,7 @@ import { useFriendsOverview } from '@/lib/friends'
 import { GameProvider, pageInGame, useGame } from '@/lib/game'
 import { cn } from '@/lib/utils'
 import { usePhone } from './context'
+import { refreshAllFingerprints } from './refreshFingerprints'
 import { ScannerScreen } from './ScannerScreen'
 import { Settings } from './Settings'
 import { StatusLine } from './StatusLine'
@@ -73,7 +74,7 @@ function useReadyChecks(): void {
         void qc.invalidateQueries({ queryKey: ['card'] })
       })
       .catch(() => undefined)
-    void store.refreshFingerprints().catch(() => undefined)
+    void refreshAllFingerprints(store).catch(() => undefined)
   }, [store, qc])
 }
 

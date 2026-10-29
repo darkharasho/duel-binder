@@ -73,11 +73,7 @@ async function makeHandlers(opts: { signedIn?: boolean } = {}) {
     scanWindow,
     account: account as unknown as AccountService,
     emitDataChanged: vi.fn(),
-    fingerprints: {
-      read: async () => null,
-      status: () => ({ state: 'missing', count: 0 }),
-      refresh: async () => ({ state: 'missing', count: 0 })
-    },
+    fingerprints: { ygo: noFingerprints, pkm: noFingerprints },
     ocr: {
       read: async () => [],
       readText: async () => ({ text: '', confidence: 0 }),
@@ -85,6 +81,12 @@ async function makeHandlers(opts: { signedIn?: boolean } = {}) {
     }
   })
   return { db, handlers, account, catalog, scanWindow, images }
+}
+
+const noFingerprints = {
+  read: async () => null,
+  status: () => ({ state: 'missing' as const, count: 0 }),
+  refresh: async () => ({ state: 'missing' as const, count: 0 })
 }
 
 describe('createHandlers', () => {

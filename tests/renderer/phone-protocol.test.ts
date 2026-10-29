@@ -30,7 +30,7 @@ describe('phone store protocol', () => {
   it('an ArrayBuffer value arrives whole and is moved, not copied', async () => {
     const buffer = new Uint8Array([1, 2, 3]).buffer
     const client = pair({ fingerprints: async () => buffer })
-    const got = await client.fingerprints()
+    const got = await client.fingerprints('ygo')
     expect([...new Uint8Array(got!)]).toEqual([1, 2, 3])
     expect(buffer.byteLength).toBe(0)
   })

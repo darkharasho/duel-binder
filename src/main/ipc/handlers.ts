@@ -8,6 +8,7 @@ import { createDataHandlers } from './dataHandlers'
 import type { ScanWindowManager } from '../scanWindow'
 import type { FingerprintStore } from '../scan/fingerprints'
 import { checkOcrBands, type Ocr } from '../scan/ocr'
+import type { GameId } from '@shared/games'
 import { cardLanguage } from '@shared/scan/cardLanguage'
 import type { AccountService } from '../cloud/account'
 import type { CatalogService } from '../catalog/service'
@@ -40,7 +41,7 @@ export interface HandlerDeps {
   account: AccountService
   /** Tells every window that the data shown changed. */
   emitDataChanged(): void
-  fingerprints: FingerprintStore
+  fingerprints: Record<GameId, FingerprintStore>
   ocr: Ocr
 }
 
@@ -83,8 +84,8 @@ export function createHandlers({
         originalArt: false
       })),
     'friends:facets': async (userId: number) => account.portal('friends:facets', [userId]),
-    'scan:fingerprints': () => fingerprints.read(),
-    'scan:refreshFingerprints': () => fingerprints.refresh(),
+    'scan:fingerprints': (game: GameId) => fingerprints[game].read(),
+    'scan:refreshFingerprints': (game: GameId, opts?: { force?: boolean }) => fingerprints[game].refresh(opts),
     'scan:ocr': async (bands: unknown, kind: 'code' | 'name') => {
       if (kind !== 'code' && kind !== 'name') throw new Error(`Unknown OCR kind: ${String(kind)}`)
       checkOcrBands(bands)

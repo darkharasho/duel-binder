@@ -210,8 +210,8 @@ export function createPhoneApi(deps: {
     },
     scan: {
       ...dataPart('scan'),
-      fingerprints: () => store.fingerprints(),
-      refreshFingerprints: () => store.refreshFingerprints(),
+      fingerprints: (game) => store.fingerprints(game),
+      refreshFingerprints: (game, opts) => store.refreshFingerprints({ game, ...opts }),
       ocr: async (bands, kind) => {
         if (kind !== 'code' && kind !== 'name') throw new Error(`Unknown OCR kind: ${String(kind)}`)
         checkOcrBands(bands)

@@ -28,7 +28,7 @@ describe('fingerprint store', () => {
     fetch: typeof globalThis.fetch,
     timeoutMs?: number
   ): ReturnType<typeof createFingerprintStore> =>
-    createFingerprintStore({ dir, portal: 'https://p.test', fetch, now, timeoutMs })
+    createFingerprintStore({ dir, portal: 'https://p.test', game: 'ygo', fetch, now, timeoutMs })
 
   /** A fetch that never answers, but gives up when its signal aborts, as fetch does. */
   const stalled = vi.fn<typeof globalThis.fetch>(
@@ -42,6 +42,31 @@ describe('fingerprint store', () => {
     const store = make(vi.fn())
     expect(store.status()).toEqual({ state: 'missing', count: 0 })
     expect(await store.read()).toBeNull()
+  })
+
+  it('pkm store uses its own files', async () => {
+    const urls: string[] = []
+    const fetch = vi.fn(async (url: string | URL | Request) => {
+      urls.push(String(url))
+      return ok(body(2))
+    })
+    const pkm = createFingerprintStore({
+      dir,
+      portal: 'https://p.test',
+      game: 'pkm',
+      fetch: fetch as unknown as typeof globalThis.fetch,
+      now
+    })
+    expect(await pkm.refresh()).toEqual({ state: 'ready', count: 2, updated: true })
+    expect(urls).toEqual(['https://p.test/scan/fingerprints?game=pkm'])
+    expect(existsSync(join(dir, 'fingerprints-pkm.bin'))).toBe(true)
+    expect(existsSync(join(dir, 'fingerprints-pkm.json'))).toBe(true)
+    expect(existsSync(join(dir, 'fingerprints.bin'))).toBe(false)
+
+    const ygo = make(fetch as unknown as typeof globalThis.fetch)
+    expect(ygo.status()).toEqual({ state: 'missing', count: 0 })
+    await ygo.refresh()
+    expect(urls.at(-1)).toBe('https://p.test/scan/fingerprints')
   })
 
   it('downloads a fresh file and becomes ready', async () => {

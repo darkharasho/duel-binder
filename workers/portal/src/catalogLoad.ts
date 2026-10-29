@@ -176,7 +176,7 @@ export async function adminRoute(req: Request, deps: AppDeps): Promise<Response>
 
   if (req.method === 'PUT' && path === '/admin/scan/fingerprints') return putFingerprints(req, deps)
   if (req.method === 'POST' && path === '/admin/scan/fingerprints/rollback') {
-    return rollbackFingerprints(deps)
+    return rollbackFingerprints(req, deps)
   }
 
   const handlers: Record<string, (body: Record<string, unknown>) => void> = {

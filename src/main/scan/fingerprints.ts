@@ -2,6 +2,7 @@ import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'fs'
 import { readFile } from 'fs/promises'
 import { join } from 'path'
 import { decodeFingerprints } from '@shared/scan/fingerprintFile'
+import type { GameId } from '@shared/games'
 import type { FingerprintStatus } from '@shared/scan/types'
 
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -21,20 +22,27 @@ export interface FingerprintStore {
   refresh(opts?: { force?: boolean }): Promise<FingerprintStatus>
 }
 
-/** The card-art fingerprint file, downloaded from the portal and kept in `dir` (`<userData>/scan`). */
+/**
+ * One game's card-art fingerprint file, downloaded from the portal and kept in `dir`
+ * (`<userData>/scan`). Yu-Gi-Oh!'s files keep their original names.
+ */
 export function createFingerprintStore(opts: {
   dir: string
   portal: string
+  game: GameId
   fetch?: typeof fetch
   now?: () => Date
   timeoutMs?: number
 }): FingerprintStore {
-  const { dir, portal } = opts
+  const { dir, portal, game } = opts
   const doFetch = opts.fetch ?? fetch
   const now = opts.now ?? ((): Date => new Date())
   const timeoutMs = opts.timeoutMs ?? DOWNLOAD_TIMEOUT_MS
-  const binPath = join(dir, 'fingerprints.bin')
-  const metaPath = join(dir, 'fingerprints.json')
+  const stem = game === 'ygo' ? 'fingerprints' : `fingerprints-${game}`
+  const url =
+    game === 'ygo' ? `${portal}/scan/fingerprints` : `${portal}/scan/fingerprints?game=${game}`
+  const binPath = join(dir, `${stem}.bin`)
+  const metaPath = join(dir, `${stem}.json`)
 
   const loadMeta = (): Meta | null => {
     try {
@@ -66,7 +74,7 @@ export function createFingerprintStore(opts: {
   async function download(): Promise<boolean> {
     const headers: Record<string, string> = meta?.etag ? { 'If-None-Match': meta.etag } : {}
     // The timeout covers the body too: arrayBuffer() rejects once the signal aborts.
-    const res = await doFetch(`${portal}/scan/fingerprints`, {
+    const res = await doFetch(url, {
       headers,
       signal: AbortSignal.timeout(timeoutMs)
     })

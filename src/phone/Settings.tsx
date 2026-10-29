@@ -16,6 +16,7 @@ import { isNativeApp } from '@/lib/portal'
 import { PRIVACY_URL, SIGN_OUT_FAILED, cardDataAge, signOutWarning } from './copy'
 import { CATALOG_KEY, SYNC_STATE_KEY, displayName, usePhone } from './context'
 import { forgetSavedScans } from './savedScans'
+import { refreshAllFingerprints } from './refreshFingerprints'
 import { ScreenDetails } from './ScreenDetails'
 import { SyncProblems } from './SyncProblems'
 
@@ -112,7 +113,7 @@ export function Settings(): React.JSX.Element {
       }
       step = 'artwork'
       setRefresh({ state: 'running', step: 'Checking the artwork data…' })
-      const fingerprints = await store.refreshFingerprints({ force: true })
+      const fingerprints = await refreshAllFingerprints(store, { force: true })
       void qc.invalidateQueries({ queryKey: CATALOG_KEY })
       setRefresh(
         fingerprints.state === 'error'

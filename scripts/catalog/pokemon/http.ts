@@ -1,6 +1,14 @@
 export const REPO_URL = 'https://github.com/darkharasho/duel-binder'
 export const MAX_CONCURRENCY = 4
-export const MAX_ATTEMPTS = 3
+/**
+ * Five attempts, waiting 2, 4, 8 and 16 s between them: TCGdex answers 503 for a few seconds at a
+ * time under load, and one request that gives up abandons the whole night's Pokémon refresh.
+ */
+export const MAX_ATTEMPTS = 5
+export const DEFAULT_RETRY_DELAY_MS = 2000
+
+/** The wait before attempt `attempt` (1-based retries): base * 2^(attempt - 1). */
+export const retryDelay = (base: number, attempt: number): number => base * 2 ** (attempt - 1)
 
 export type Limiter = <T>(fn: () => Promise<T>) => Promise<T>
 
@@ -36,15 +44,15 @@ export interface GetJsonOpts {
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
 
 /**
- * GET a URL as JSON. Network errors, 429 and 5xx are retried (3 attempts in all, with backoff);
+ * GET a URL as JSON. Network errors, 429 and 5xx are retried (MAX_ATTEMPTS in all, with backoff);
  * any other failure, or the last retryable one, throws.
  */
 export function getJson<T>(url: string, opts: GetJsonOpts): Promise<T> {
-  const base = opts.retryDelayMs ?? 500
+  const base = opts.retryDelayMs ?? DEFAULT_RETRY_DELAY_MS
   return opts.limiter(async () => {
     let lastErr: Error | undefined
     for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
-      if (attempt > 0) await sleep(base * 2 ** (attempt - 1))
+      if (attempt > 0) await sleep(retryDelay(base, attempt))
       let res: Response
       try {
         res = await opts.fetch(url, { headers: { 'User-Agent': opts.userAgent, Accept: 'application/json' } })

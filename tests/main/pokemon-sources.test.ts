@@ -3,6 +3,7 @@ import { mkdtempSync, rmSync, readFileSync, existsSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createPokemonSources } from '../../scripts/catalog/pokemon/sources'
+import { DEFAULT_RETRY_DELAY_MS, MAX_ATTEMPTS, retryDelay } from '../../scripts/catalog/pokemon/http'
 
 const FIX = join(__dirname, '..', 'fixtures', 'pokemon')
 const read = (p: string): unknown => JSON.parse(readFileSync(join(FIX, p), 'utf8'))
@@ -126,14 +127,27 @@ describe('pokemon sources', () => {
     s.close()
   })
 
-  it('retries a 503 once and succeeds; three 503s throw', async () => {
+  it('retries a 503 once and succeeds; five 503s throw', async () => {
     const fake = fakeFetch(); fake.fail.set('/en/cards/sv01-002', 1)
     const s = make(fake)
     await expect(s.cards('en', ['sv01-002'])).resolves.toHaveLength(1)
     expect(fake.calls.filter((c) => c.url.endsWith('/en/cards/sv01-002'))).toHaveLength(2)
-    fake.fail.set('/en/cards/sv01-003', 3)
+    fake.fail.set('/en/cards/sv01-003', 5)
     await expect(s.cards('en', ['sv01-003'])).rejects.toThrow(/503/)
+    expect(fake.calls.filter((c) => c.url.endsWith('/en/cards/sv01-003'))).toHaveLength(5)
     s.close()
+  })
+
+  it('rides out a burst of four 503s (TCGdex sheds load for a few seconds at a time)', async () => {
+    const fake = fakeFetch(); fake.fail.set('/en/cards/sv01-002', 4)
+    const s = make(fake)
+    await expect(s.cards('en', ['sv01-002'])).resolves.toHaveLength(1)
+    s.close()
+  })
+
+  it('waits about half a minute in all by default before giving up', () => {
+    const waits = Array.from({ length: MAX_ATTEMPTS - 1 }, (_, i) => retryDelay(DEFAULT_RETRY_DELAY_MS, i + 1))
+    expect(waits.reduce((a, b) => a + b, 0)).toBeGreaterThanOrEqual(25_000)
   })
 
   it('retries network errors and 429, but not a 404', async () => {

@@ -1,7 +1,8 @@
 import type { SqlDb } from '../db/sql'
 import type { BrowseCard, BrowseFacets, BrowseFilters, BrowsePage } from '../../shared/types'
 import { buildFtsQuery } from './cards'
-import { LOCAL, type Scope } from './scope'
+import { LOCAL, scopeGame, type Scope } from './scope'
+import { pokemonFacets, pokemonWhere } from './pkmFilters'
 
 const MAX_LIMIT = 200
 
@@ -50,10 +51,20 @@ const SORT_SQL: Record<BrowseFilters['sort'], string> = {
   price: 'c.tcgplayer_price',
   atk: 'c.atk',
   def: 'c.def',
-  level: 'COALESCE(c.level, c.linkval)'
+  level: 'COALESCE(c.level, c.linkval)',
+  hp: '(SELECT hp FROM pokemon_cards WHERE card_id = c.id)'
 }
 
-function whereClause(f: BrowseFilters, scope: Scope): { sql: string; params: unknown[] } {
+const YGO_ONLY_SORTS = ['atk', 'def', 'level']
+
+/** A sort that doesn't exist on the game (or isn't known at all) sorts by name. */
+function sortSql(sort: string, game: string): string {
+  if (!Object.hasOwn(SORT_SQL, sort)) return SORT_SQL.name
+  if (game === 'pkm' ? YGO_ONLY_SORTS.includes(sort) : sort === 'hp') return SORT_SQL.name
+  return SORT_SQL[sort as BrowseFilters['sort']]
+}
+
+function whereClause(db: SqlDb, f: BrowseFilters, scope: Scope): { sql: string; params: unknown[] } {
   const where: string[] = [`c.game = ${scope.game}`]
   const params: unknown[] = []
   const inList = (col: string, values?: string[]): void => {
@@ -75,10 +86,17 @@ function whereClause(f: BrowseFilters, scope: Scope): { sql: string; params: unk
     }
     where.push(`(${parts.join(' OR ')})`)
   }
-  inList('c.type', f.cardTypes)
-  inList('c.attribute', f.attributes)
-  inList('c.race', f.races)
-  inList('c.archetype', f.archetypes)
+  const pkm = scopeGame(db, scope) === 'pkm'
+  if (pkm) {
+    const p = pokemonWhere(f)
+    where.push(...p.where)
+    params.push(...p.params)
+  } else {
+    inList('c.type', f.cardTypes)
+    inList('c.attribute', f.attributes)
+    inList('c.race', f.races)
+    inList('c.archetype', f.archetypes)
+  }
   const printingFilter = (col: string, values?: string[]): void => {
     if (!values?.length) return
     where.push(
@@ -90,11 +108,11 @@ function whereClause(f: BrowseFilters, scope: Scope): { sql: string; params: unk
   }
   printingFilter('set_name', f.setNames)
   printingFilter('set_rarity', f.rarities)
-  if (f.levelMin !== undefined) {
+  if (!pkm && f.levelMin !== undefined) {
     where.push('COALESCE(c.level, c.linkval) >= ?')
     params.push(f.levelMin)
   }
-  if (f.levelMax !== undefined) {
+  if (!pkm && f.levelMax !== undefined) {
     where.push('COALESCE(c.level, c.linkval) <= ?')
     params.push(f.levelMax)
   }
@@ -105,8 +123,8 @@ function whereClause(f: BrowseFilters, scope: Scope): { sql: string; params: unk
 
 /** One page of every card in the database, filtered and sorted. Cards missing the sort value go last. */
 export function browseCards(db: SqlDb, f: BrowseFilters, scope: Scope = LOCAL): BrowsePage {
-  const { sql, params } = whereClause(f, scope)
-  const sortCol = Object.hasOwn(SORT_SQL, f.sort) ? SORT_SQL[f.sort] : SORT_SQL.name
+  const { sql, params } = whereClause(db, f, scope)
+  const sortCol = sortSql(f.sort, scopeGame(db, scope))
   const dir = f.dir === 'desc' ? 'DESC' : 'ASC'
   const limit = Math.min(Math.max(1, Math.floor(f.limit ?? 120)), MAX_LIMIT)
   const offset = Math.max(0, Math.floor(f.offset ?? 0))
@@ -163,11 +181,12 @@ export function browseFacets(db: SqlDb, scope: Scope = LOCAL): BrowseFacets {
       `SELECT DISTINCT ${c} AS v FROM cards WHERE game = ${scope.game} AND ${c} IS NOT NULL AND ${c} <> ''
        ORDER BY ${c}`
     )
+  const pkm = scopeGame(db, scope) === 'pkm'
   return {
-    cardTypes: col('type'),
-    attributes: col('attribute'),
-    races: col('race'),
-    archetypes: col('archetype'),
+    cardTypes: pkm ? [] : col('type'),
+    attributes: pkm ? [] : col('attribute'),
+    races: pkm ? [] : col('race'),
+    archetypes: pkm ? [] : col('archetype'),
     setNames: distinct(
       `SELECT DISTINCT set_name AS v FROM card_printings WHERE game = ${scope.game} AND contributed = 0 AND language = 'en'
        ORDER BY set_name`
@@ -176,6 +195,7 @@ export function browseFacets(db: SqlDb, scope: Scope = LOCAL): BrowseFacets {
       `SELECT DISTINCT set_rarity AS v FROM card_printings
        WHERE game = ${scope.game} AND contributed = 0 AND language = 'en' AND set_rarity <> ''
        ORDER BY set_rarity`
-    )
+    ),
+    ...(pkm ? pokemonFacets(db, scope, null) : {})
   }
 }

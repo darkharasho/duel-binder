@@ -2,10 +2,23 @@ import type { SqlDb } from '../db/sql'
 import type { CollectionStats, ValuePoint } from '../../shared/types'
 import { getMeta } from '../db/meta'
 import { listEntries } from './collection'
-import { LOCAL, type Scope } from './scope'
+import { LOCAL, scopeGame, type Scope } from './scope'
 
 const TOP_ENTRY_LIMIT = 10
 const RECENT_ENTRY_LIMIT = 8
+
+/** Owned copies per Pokémon category (Pokémon/Trainer/Energy): the Pokémon stand-in for frame types. */
+function pokemonCategories(db: SqlDb, scope: Scope): [string, number][] {
+  const rows = db
+    .prepare(
+      `SELECT pc.category AS category, SUM(e.quantity) AS n FROM collection_entries e
+       JOIN card_printings p ON p.id = e.printing_id AND p.game = ${scope.game}
+       JOIN pokemon_cards pc ON pc.card_id = p.card_id
+       WHERE ${scope.where('e')} GROUP BY pc.category`
+    )
+    .all() as { category: string; n: number }[]
+  return rows.map((r) => [r.category, r.n])
+}
 
 export function getStats(db: SqlDb, scope: Scope = LOCAL): CollectionStats {
   const entries = listEntries(db, { sort: 'value', dir: 'desc' }, scope)
@@ -41,7 +54,7 @@ export function getStats(db: SqlDb, scope: Scope = LOCAL): CollectionStats {
     byRarity: [...rarities]
       .map(([rarity, v]) => ({ rarity, ...v }))
       .sort((a, b) => b.value - a.value),
-    byFrameType: [...frames]
+    byFrameType: (scopeGame(db, scope) === 'pkm' ? pokemonCategories(db, scope) : [...frames])
       .map(([frameType, count]) => ({ frameType, count }))
       .sort((a, b) => b.count - a.count),
     topEntries: entries.slice(0, TOP_ENTRY_LIMIT),

@@ -5,7 +5,8 @@ import { LANGUAGES } from '../../shared/languages'
 import { priceFor } from '../../shared/pricing'
 import type { AddEntryInput, CollectionFilters, EntryView, Facets, UpdateEntryInput } from '../../shared/types'
 import { getMeta } from '../db/meta'
-import { LOCAL, type Scope } from './scope'
+import { LOCAL, scopeGame, type Scope } from './scope'
+import { pokemonFacets, pokemonWhere } from './pkmFilters'
 import { EN_TWIN_PRICE } from './enTwin'
 import { buildFtsQuery, rowToCard, rowToPrinting, type CardDbRow, type PrintingDbRow } from './cards'
 
@@ -216,22 +217,29 @@ export function listEntries(db: SqlDb, f: CollectionFilters, scope: Scope = LOCA
     }
     where.push(`(${parts.join(' OR ')})`)
   }
-  inList('c.type', f.cardTypes)
-  inList('c.attribute', f.attributes)
-  inList('c.archetype', f.archetypes)
+  // Each game has its own card filters; the other game's are ignored.
+  if (scopeGame(db, scope) === 'pkm') {
+    const pkm = pokemonWhere(f)
+    where.push(...pkm.where)
+    params.push(...pkm.params)
+  } else {
+    inList('c.type', f.cardTypes)
+    inList('c.attribute', f.attributes)
+    inList('c.archetype', f.archetypes)
+    if (f.levelMin !== undefined) {
+      where.push('COALESCE(c.level, c.linkval) >= ?')
+      params.push(f.levelMin)
+    }
+    if (f.levelMax !== undefined) {
+      where.push('COALESCE(c.level, c.linkval) <= ?')
+      params.push(f.levelMax)
+    }
+  }
   inList('p.set_name', f.setNames)
   inList('p.set_rarity', f.rarities)
   if (f.language) {
     where.push('p.language = ?')
     params.push(f.language)
-  }
-  if (f.levelMin !== undefined) {
-    where.push('COALESCE(c.level, c.linkval) >= ?')
-    params.push(f.levelMin)
-  }
-  if (f.levelMax !== undefined) {
-    where.push('COALESCE(c.level, c.linkval) <= ?')
-    params.push(f.levelMax)
   }
   const status = getMeta(db, 'price_service_status')
   const sql = `${select(scope)} WHERE ${where.join(' AND ')}`
@@ -281,12 +289,20 @@ export function getFacets(db: SqlDb, scope: Scope = LOCAL): Facets {
         .all() as { v: string }[]
     ).map((r) => r.v)
   const owned = new Set(distinct('p.language'))
+  const pkm = scopeGame(db, scope) === 'pkm'
   return {
-    cardTypes: distinct('c.type'),
-    attributes: distinct('c.attribute'),
-    archetypes: distinct('c.archetype'),
+    cardTypes: pkm ? [] : distinct('c.type'),
+    attributes: pkm ? [] : distinct('c.attribute'),
+    archetypes: pkm ? [] : distinct('c.archetype'),
     setNames: distinct('p.set_name'),
     rarities: distinct('p.set_rarity'),
-    languages: LANGUAGES.map((l) => l.code).filter((code) => owned.has(code))
+    languages: LANGUAGES.map((l) => l.code).filter((code) => owned.has(code)),
+    ...(pkm
+      ? pokemonFacets(
+          db,
+          scope,
+          `SELECT p.card_id FROM collection_entries e JOIN card_printings p ON p.id = e.printing_id AND p.game = ${scope.game} WHERE ${scope.where('e')}`
+        )
+      : {})
   }
 }

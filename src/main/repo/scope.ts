@@ -1,4 +1,5 @@
 import type { SqlDb } from '../db/sql'
+import { isGameId, type GameId } from '../../shared/games'
 
 export interface EntryInsert {
   printingId: number
@@ -47,6 +48,12 @@ export const ACTIVE_OWNER =
 /** SQL for the game the desktop or phone is showing: the `active_game` meta value, or 'ygo'. */
 export const ACTIVE_GAME =
   "(SELECT COALESCE((SELECT value FROM meta WHERE key = 'active_game'), 'ygo'))"
+
+/** The game a scope shows, resolved to 'ygo' or 'pkm' for code that picks game-specific filters. */
+export function scopeGame(db: SqlDb, scope: Scope): GameId {
+  const { game } = db.prepare(`SELECT ${scope.game} AS game`).get() as { game: string }
+  return isGameId(game) ? game : 'ygo'
+}
 
 /**
  * The active owner's collection of one game on this device. `game` is trusted SQL: ACTIVE_GAME or a

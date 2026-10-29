@@ -91,7 +91,7 @@ describe('game-scoped repo queries', () => {
     const list = listEntries(db, ALL)
     expect(list.map((e) => [e.card.id, e.quantity])).toEqual([[pkm.cardIds[0], 3]])
 
-    expect(getFacets(db).cardTypes).toEqual(['Pokémon'])
+    expect(getFacets(db).cardTypes).toEqual([])
     expect(searchCards(db, 'dragon')).toEqual([])
     expect(searchCards(db, 'Pikachu').map((r) => r.id)).toEqual([pkm.cardIds[0]])
 
@@ -101,7 +101,7 @@ describe('game-scoped repo queries', () => {
     expect(browse.cards.find((c) => c.id === pkm.cardIds[0])?.owned).toBe(3)
 
     const facets = browseFacets(db)
-    expect(facets.cardTypes).toEqual(['Pokémon'])
+    expect(facets.cardTypes).toEqual([])
     expect(facets.setNames).toEqual([SHARED_SET_NAME])
     expect(facets.rarities).toEqual(['Normal', 'Reverse Holo'])
 

@@ -129,6 +129,17 @@ describe('matchProducts', () => {
     const r = matchProducts(brief({ localId: 'TG01' }), 9, ps, new Map(ps.map((p) => [p.productId, p])))
     expect(r.products.map((p) => p.product.productId)).toEqual([1])
   })
+  it('ignores leading zeros before a letter suffix (ecard2-50a is TCGplayer 050a/147), and keeps the suffix', () => {
+    const p = prod(85813, 9, '050a/147')
+    const byId = new Map([[85813, p]])
+    const a = matchProducts(brief({ id: 'ecard2-50a', localId: '50a', thirdParty: { tcgplayer: 85813 } }), 9, [p], byId)
+    expect(a.products.map((m) => m.product.productId)).toEqual([85813])
+    expect(a.problems).toEqual([])
+    const b = matchProducts(brief({ id: 'ecard2-50b', localId: '50b', thirdParty: { tcgplayer: 85813 } }), 9, [p], byId)
+    expect(b.products).toEqual([])
+    expect(b.problems).toHaveLength(1)
+    expect(matchProducts(brief({ localId: '50a' }), 9, [p], byId).products.map((m) => m.product.productId)).toEqual([85813])
+  })
   it('never number-fills without a group', () => {
     const ps = [prod(1, 9, '001/083')]
     expect(matchProducts(brief({}), null, ps, new Map(ps.map((p) => [p.productId, p]))).products).toEqual([])

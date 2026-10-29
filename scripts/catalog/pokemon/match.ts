@@ -77,12 +77,18 @@ export function matchGroup(
 /** The collector number of a TCGCSV Number ("001/083" → "001"). */
 const numberPart = (n: string): string => n.split('/')[0].trim()
 
-/** Whether a card's localId and a product's number part name the same card. */
+/** Digits with an optional letter suffix, such as "050a". */
+const NUMBER_RE = /^(\d+)([a-z]*)$/i
+
+/**
+ * Whether a card's localId and a product's number part name the same card: numbers compared as
+ * numbers, keeping any letter suffix ("50a" is "050a", not "050b"), else exact strings.
+ */
 function sameNumber(localId: string, number: string): boolean {
-  const a = localId.trim()
-  const b = numberPart(number)
-  if (/^\d+$/.test(a) && /^\d+$/.test(b)) return parseInt(a, 10) === parseInt(b, 10)
-  return a === b
+  const a = NUMBER_RE.exec(localId.trim())
+  const b = NUMBER_RE.exec(numberPart(number))
+  if (a && b) return parseInt(a[1], 10) === parseInt(b[1], 10) && a[2].toLowerCase() === b[2].toLowerCase()
+  return localId.trim() === numberPart(number)
 }
 
 export interface MatchedProduct { product: TcProduct; variantSubtype: string | null }

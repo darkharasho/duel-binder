@@ -14,7 +14,9 @@ import {
   sortCards,
   sortSets,
   sortTiles,
-  typeCounts
+  typeCounts,
+  upcomingCutoff,
+  isUpcoming
 } from '@/features/sets/setsView'
 import { rarityColor } from '@/lib/rarityColors'
 import { createSerialQueue } from '@/lib/serialQueue'
@@ -408,5 +410,36 @@ describe('rarityColor', () => {
   it('maps known rarities and falls back to grey', () => {
     expect(rarityColor('Secret Rare')).toBe('#c8b6ff')
     expect(rarityColor('Mystery')).toBe('#9ca3af')
+  })
+})
+
+describe('upcoming sets', () => {
+  const base = {
+    language: 'en',
+    setName: 'S',
+    setCode: 'S',
+    imageKey: null,
+    packImageKey: null,
+    logoImageKey: null,
+    coverImageId: null,
+    totalCards: 1,
+    ownedCards: 0,
+    totalRarities: 1,
+    ownedRarities: 0,
+    listRows: null,
+    unmatchedRows: null
+  } as const
+
+  it('cutoff is 30 local days after today, across month and year ends', () => {
+    expect(upcomingCutoff(new Date(2026, 9, 29, 23, 59))).toBe('2026-11-28')
+    expect(upcomingCutoff(new Date(2026, 11, 15, 0, 1))).toBe('2027-01-14')
+  })
+
+  it('only unstarted sets dated after the cutoff are upcoming', () => {
+    const cut = '2026-11-28'
+    expect(isUpcoming({ ...base, tcgDate: '2026-11-28' }, cut)).toBe(false)
+    expect(isUpcoming({ ...base, tcgDate: '2026-11-29' }, cut)).toBe(true)
+    expect(isUpcoming({ ...base, tcgDate: null }, cut)).toBe(false)
+    expect(isUpcoming({ ...base, tcgDate: '2027-01-01', ownedCards: 1 }, cut)).toBe(false)
   })
 })

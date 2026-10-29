@@ -16,11 +16,14 @@ import { isPhone } from '@/lib/platform'
 import { SetChecklist } from './SetChecklist'
 import { SetsFilterPanel } from './SetsFilterPanel'
 import { SetsList } from './SetsList'
+import { UpcomingSets } from './UpcomingSets'
 import {
   activeFilterCount,
   filterSets,
   setsHeader,
   sortSets,
+  splitUpcoming,
+  upcomingCutoff,
   typeCounts,
   type SetFilter,
   type SetSort
@@ -31,6 +34,7 @@ const VIEW_KEY = 'sets.view'
 const MODE_KEY = 'sets.countMode'
 const FILTER_KEY = 'sets.filter'
 const TYPES_KEY = 'sets.types'
+const UPCOMING_KEY = 'sets.upcomingOpen'
 
 function readView(): View {
   try {
@@ -54,6 +58,14 @@ function readFilter(): SetFilter {
     return f === 'started' || f === 'complete' ? f : 'all'
   } catch {
     return 'all'
+  }
+}
+
+function readUpcomingOpen(): boolean {
+  try {
+    return localStorage.getItem(UPCOMING_KEY) === 'open'
+  } catch {
+    return false
   }
 }
 
@@ -105,6 +117,7 @@ export function SetsPage({ onAddCard, onAddMissing }: SetsPageProps): React.JSX.
   const [filter, setFilterState] = useState<SetFilter>(readFilter)
   const [types, setTypes] = useState<SetType[]>(readTypes)
   const [panelOpen, setPanelOpen] = useState(false)
+  const [upcomingOpen, setUpcomingOpenState] = useState(readUpcomingOpen)
   const [q, setQ] = useState('')
   const [sort, setSort] = useState<SetSort>('date')
   const [openSet, setOpenSetState] = useState<{ setName: string; language: Language } | null>(null)
@@ -134,9 +147,15 @@ export function SetsPage({ onAddCard, onAddMissing }: SetsPageProps): React.JSX.
   )
   const available = useMemo(() => [...new Set(all.map((s) => s.language))], [all])
   const header = setsHeader(inLanguage, mode)
-  const visible = useMemo(
-    () => sortSets(filterSets(all, { filter, q, mode, language, types }), sort, mode),
-    [all, filter, q, mode, sort, language, types]
+  // Sets more than a month out (and not started) wait under the upcoming banner.
+  const cutoff = upcomingCutoff()
+  const { current: visible, upcoming } = useMemo(
+    () =>
+      splitUpcoming(
+        sortSets(filterSets(all, { filter, q, mode, language, types }), sort, mode),
+        cutoff
+      ),
+    [all, filter, q, mode, sort, language, types, cutoff]
   )
 
   const counts = useMemo(
@@ -161,6 +180,10 @@ export function SetsPage({ onAddCard, onAddMissing }: SetsPageProps): React.JSX.
     if (m !== 'cards' && m !== 'rarities') return
     setMode(m)
     persist(MODE_KEY, m)
+  }
+  const setUpcomingOpen = (open: boolean): void => {
+    setUpcomingOpenState(open)
+    persist(UPCOMING_KEY, open ? 'open' : 'closed')
   }
   const setFilter = (f: SetFilter): void => {
     setFilterState(f)
@@ -307,22 +330,35 @@ export function SetsPage({ onAddCard, onAddMissing }: SetsPageProps): React.JSX.
         }}
       />
 
+      <UpcomingSets
+        sets={upcoming}
+        cutoff={cutoff}
+        open={upcomingOpen}
+        onOpenChange={setUpcomingOpen}
+        mode={mode}
+        view={view}
+        onOpen={(setName, language) => setOpenSet({ setName, language })}
+      />
+
       {sets.isSuccess && visible.length === 0 ? (
-        <div className="flex flex-col items-center gap-3 py-24 text-center">
-          {noneStarted ? (
-            <>
-              <p className="text-lg font-medium">You haven&apos;t started any sets yet</p>
-              <div className="flex gap-2">
-                <Button variant="outline" onClick={() => setFilter('all')}>
-                  Show all sets
-                </Button>
-                <Button onClick={onAddCard}>Add card</Button>
-              </div>
-            </>
-          ) : (
-            <p className="text-lg font-medium">No sets match</p>
-          )}
-        </div>
+        // Only upcoming sets match: the banner above is the whole answer.
+        upcoming.length > 0 ? null : (
+          <div className="flex flex-col items-center gap-3 py-24 text-center">
+            {noneStarted ? (
+              <>
+                <p className="text-lg font-medium">You haven&apos;t started any sets yet</p>
+                <div className="flex gap-2">
+                  <Button variant="outline" onClick={() => setFilter('all')}>
+                    Show all sets
+                  </Button>
+                  <Button onClick={onAddCard}>Add card</Button>
+                </div>
+              </>
+            ) : (
+              <p className="text-lg font-medium">No sets match</p>
+            )}
+          </div>
+        )
       ) : (
         <SetsList
           sets={visible}

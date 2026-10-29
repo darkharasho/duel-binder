@@ -112,10 +112,9 @@ price as a fallback for European printings.
   marker that YGOPRODeck prices use.
 - **One rule everywhere.** The binder, checklist, scan, stats and collection value all use the same
   rule. Collection value includes estimates, like today's approximate English prices.
-- **The mapping is computed when the catalog changes, not on every read.** A stored English-match
-  id or a small mapping table, indexed, keeps every read a point lookup. The builder picks the
-  mechanism, but it must be the same on desktop (`schema.ts` MIGRATIONS) and portal
-  (`SERVER_STEPS`). If it lives on `collection_entries`, mind the `server: false` rule.
+- **Every read is a point lookup** (plan's call). A scalar subquery on the existing unique partial
+  index `ux_printings_en (card_id, set_code, set_rarity) WHERE language = 'en'`, with the
+  region-swapped code, needs no stored mapping and no migration on either store.
 - **Asian printings never use this fallback.** Their prices differ too much.
 
 ### 2. Weekly set sweep (Asian printings)
@@ -143,8 +142,10 @@ price as a fallback for European printings.
     or there was no row. That keeps weekly writes and client deltas proportional to real price
     changes.
   - **A sweep never erases a price** (my call). Finding nothing, or only ambiguous listings, leaves
-    any existing row untouched. `intl_prices` gains a `source` column ('card' | 'sweep'). A 'card'
-    row newer than the sweep is kept even if the sweep found a different price.
+    any existing row untouched. A row checked after the prefix's previous sweep came from a
+    per-card lookup, and the sweep keeps it. (No `source` column is needed.) An unchanged price
+    moves only `checked_at`, and the price feed's seq bumps only when the price or listing count
+    changes.
   - **Per-card lookups still cover what the sweep can't** (my call). `priceCandidates` keeps
     treating an owned or requested printing with no fresh price row as a candidate, whether or not
     its prefix was swept. So owned multi-rarity cards the sweep couldn't separate still get the

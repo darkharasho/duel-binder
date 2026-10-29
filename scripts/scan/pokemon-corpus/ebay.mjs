@@ -9,6 +9,12 @@
 // Usage:
 //   node scripts/scan/pokemon-corpus/ebay.mjs [--db ~/scan-capture/pkm-work/catalog.sqlite]
 //        [--out ~/scan-capture/ebay-pkm] [--target 400] [--max-searches 600]
+//        [--queries <file.json>]
+//
+// --queries replaces the built-in per-set searches with a file's: a JSON array of
+// { query, lang: 'en' | 'ja', holderHint?: 'slab' | 'toploader' }, e.g. stamped and special
+// printings ("pokemon prerelease stamp"). Every filter below still applies. Each manifest row then
+// carries a stampHint, the special printing the query names (Prerelease, Staff, 1st Edition, ...).
 //
 // The catalog is the one scripts/scan/pokemon-corpus/prep.ts builds. Credentials:
 // EBAY_PROD_APP_ID / EBAY_PROD_CERT_ID from the repo's .env, the file EBAY_ENV_FILE names, or the
@@ -53,6 +59,7 @@ const DB_PATH = home(arg('db', '~/scan-capture/pkm-work/catalog.sqlite'))
 const OUT = home(arg('out', '~/scan-capture/ebay-pkm'))
 const TARGET = Number(arg('target', 400))
 const MAX_SEARCHES = Number(arg('max-searches', 600))
+const QUERIES_FILE = arg('queries', null)
 /** Shares of TARGET: Japanese photos, and slabs and toploaders at most. */
 const JA_SHARE = 0.35
 const SLAB_SHARE = 0.2
@@ -238,6 +245,30 @@ function imageSize(buf) {
   return { width: null, height: null, format: 'unknown' }
 }
 
+/** Special printings a query can name, in the order tried; the first match is the stampHint. */
+const STAMP_HINTS = [
+  ['Trick or Trade', /trick or treat|trick or trade|halloween|pumpkin/],
+  ['Prerelease', /pre ?release/],
+  ['Staff', /\bstaff\b/],
+  ['Pokemon Center', /pokemon center/],
+  ['25th Celebration', /25th|celebrations/],
+  ['30th Celebration', /30th/],
+  ['Classic Collection', /classic collection/],
+  ['1st Edition', /1st ed|first edition/],
+  ['Shadowless', /shadowless/],
+  ['Cosmos Holo', /cosmos/],
+  ["McDonald's", /mcdonalds?/],
+  ['League', /\bleague\b/],
+  ['World Championships', /world championships?|worlds/],
+  ['Snowflake', /snowflake/],
+  ['Countdown Calendar', /countdown calendar/],
+  ['Set Logo Reverse', /logo/]
+]
+const stampOf = (query) => {
+  const q = norm(query)
+  return STAMP_HINTS.find(([, re]) => re.test(q))?.[0] ?? null
+}
+
 const bigImage = (url) => url.replace(/s-l\d+(\.\w+)/, 's-l1600$1')
 
 // ---------- catalog ----------
@@ -383,7 +414,7 @@ function drop(entry, why) {
   } else if (!entry.dropped) entry.dropped = why
 }
 
-async function downloadImage(item, ev, query) {
+async function downloadImage(item, ev, query, stampHint) {
   const imageUrl = bigImage(item.image.imageUrl)
   const prior = byImageUrl.get(imageUrl) || byImageUrl.get(item.image.imageUrl)
   if (prior) {
@@ -436,6 +467,7 @@ async function downloadImage(item, ev, query) {
     versions: ev.card.versions,
     versionHint: [...new Set(norm(item.title).match(VERSION_WORDS) ?? [])].join(', ') || null,
     holderHint: ev.holderHint,
+    ...(QUERIES_FILE ? { stampHint } : {}),
     sha1: h,
     width: size.width,
     height: size.height,
@@ -467,6 +499,18 @@ const shuffled = (xs, salt) =>
     .map((e) => e.x)
 
 function queries() {
+  if (QUERIES_FILE) {
+    const rows = JSON.parse(fs.readFileSync(home(QUERIES_FILE), 'utf8'))
+    return shuffled(
+      rows.map((r) => ({
+        q: r.query,
+        kind: r.holderHint ?? r.lang,
+        lang: r.lang,
+        stampHint: stampOf(r.query)
+      })),
+      'queries'
+    )
+  }
   const ascii = (s) => /^[\x20-\x7e]+$/.test(s)
   const en = sets
     .filter((s) => s.language === 'en')
@@ -501,11 +545,11 @@ async function main() {
   const creds = loadCreds()
   const reasons = {}
   let failures = 0
-  for (const { q, kind } of queries()) {
+  for (const { q, kind, lang, stampHint } of queries()) {
     if (manifest.length >= TARGET) break
     // A kind whose share is full needs no more searches.
     const probe = {
-      language: kind === 'ja' ? 'ja' : 'en',
+      language: (lang ?? kind) === 'ja' ? 'ja' : 'en',
       holderHint: kind === 'slab' || kind === 'toploader' ? kind : null
     }
     if (!room(probe)) continue
@@ -553,7 +597,9 @@ async function main() {
     // Two downloads at a time.
     for (let i = 0; i < queue.length; i += 2) {
       const batch = queue.slice(i, i + 2).filter(({ ev }) => room(ev))
-      const results = await Promise.all(batch.map(({ item, ev }) => downloadImage(item, ev, q)))
+      const results = await Promise.all(
+        batch.map(({ item, ev }) => downloadImage(item, ev, q, stampHint))
+      )
       for (const r of results) reasons[r] = (reasons[r] ?? 0) + 1
     }
     save()

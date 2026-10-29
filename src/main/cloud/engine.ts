@@ -12,6 +12,7 @@ import {
   applyRemote,
   contributionGroups,
   dirtyEntries,
+  pullPriceChanges,
   dropEntry,
   markPushed,
   pendingCount,
@@ -190,7 +191,9 @@ export async function syncOnce(
     if (!page.more || page.entries.length === 0) break
   }
 
-  // 3. Prices the server holds for printings whose local price is missing or stale.
+  // 3. Every price change the server has made, then prices for printings whose local price is
+  // missing or stale (a printing the server hasn't priced yet).
+  if ((await pullPriceChanges(db, client)) > 0) changed = true
   // Asked even with no keys, to keep price_service_status current.
   const { prices, status } = await client.prices(stalePricePkeys(db, now(), MAX_PULL))
   db.transaction(() => {

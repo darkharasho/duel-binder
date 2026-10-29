@@ -7,6 +7,7 @@ import type {
 import type { UsageReport } from '../../shared/usage'
 import type {
   Me,
+  PriceChangesResponse,
   PriceRequestResponse,
   PricesResponse,
   PullResponse,
@@ -37,6 +38,8 @@ export interface CloudClient {
   push(entries: WireEntry[]): Promise<PushResult[]>
   pull(cursor: number): Promise<PullResponse>
   prices(pkeys: string[]): Promise<PricesResponse>
+  /** One page of server price changes after `since` (the price change feed). */
+  priceChanges(since: number): Promise<PriceChangesResponse>
   /** Asks the server to price these printings (at most MAX_PRICE_REQUEST); see requestPrices. */
   requestPrices(pkeys: string[]): Promise<PriceRequestResponse>
   /**
@@ -140,6 +143,8 @@ export function createCloudClient(opts: {
       (await call<PushResponse>('/api/sync/push', 'POST', { entries })).results,
     pull: (cursor) => call<PullResponse>(`/api/sync/pull?cursor=${cursor}`, 'GET'),
     prices: (pkeys) => call<PricesResponse>('/api/sync/prices', 'POST', { pkeys }),
+    priceChanges: (since) =>
+      call<PriceChangesResponse>(`/api/sync/price-changes?since=${since}`, 'GET'),
     requestPrices: (pkeys) =>
       call<PriceRequestResponse>('/api/sync/price-requests', 'POST', { pkeys }),
     catalogChanges: (since, limit, tables) =>

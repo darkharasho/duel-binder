@@ -1,5 +1,6 @@
 import { deleteMeta, getMeta, setMeta } from '../db/meta'
 import type { SqlDb } from '../db/sql'
+import type { CloudClient } from './client'
 import { priceCandidates } from '../prices/candidates'
 import type { ContributedPrinting } from '../../shared/catalogFeed'
 import type { UnsyncedEntry } from '../../shared/types'
@@ -352,6 +353,28 @@ export function applyPrices(db: SqlDb, prices: WirePrice[]): number {
   return db.transaction(() =>
     prices.reduce((n, p) => n + upsert.run(p.price, p.listingCount, p.checkedAt, p.pkey).changes, 0)
   )()
+}
+
+/**
+ * Applies the server's price change feed from the saved cursor, page by page; each page and its
+ * cursor commit together. Returns rows written.
+ */
+export async function pullPriceChanges(
+  db: SqlDb,
+  client: Pick<CloudClient, 'priceChanges'>
+): Promise<number> {
+  let cursor = Number(getMeta(db, 'price_feed_cursor') ?? 0)
+  let applied = 0
+  for (;;) {
+    const page = await client.priceChanges(cursor)
+    db.transaction(() => {
+      applied += applyPrices(db, page.prices)
+      setMeta(db, 'price_feed_cursor', String(page.cursor))
+    })()
+    cursor = page.cursor
+    if (!page.more || page.prices.length === 0) break
+  }
+  return applied
 }
 
 /** A printing to offer the server and the entries (uids) that sit on it. */

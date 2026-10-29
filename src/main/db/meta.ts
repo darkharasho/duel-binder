@@ -33,6 +33,8 @@ export type MetaKey =
   | 'price_sweeps_listed_at'
   /** The portal's eBay sweep calls for one UTC day, as `YYYY-MM-DD:N`. */
   | 'sweep_calls_day'
+  /** Seq of the last server price change applied from the price change feed. */
+  | 'price_feed_cursor'
 
 export function getMeta(db: SqlDb, key: MetaKey): string | null {
   const row = db.prepare('SELECT value FROM meta WHERE key = ?').get(key) as

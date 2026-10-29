@@ -717,6 +717,33 @@ describe('phone store', () => {
     expect(Number(getMeta(db, 'catalog_cursor:pkm'))).toBe(pkmCursor)
   })
 
+  it("a game whose feed was empty at the day's check is pulled again the same day", async () => {
+    portal.serverDb.close()
+    portal = await inProcessPortal({ ADMIN_DISCORD_ID: 'discord-1-alice' })
+    userId = portal.addUser('alice')
+    token = await portal.desktopToken(userId)
+    me = { ...me, id: userId }
+    const pkmCards = (): number =>
+      Number(
+        (db.prepare("SELECT COUNT(*) AS n FROM cards WHERE game = 'pkm'").get() as { n: number }).n
+      )
+
+    // The account has Pokémon before its catalog is up: the day's check finds nothing.
+    await ready()
+    expect(pkmCards()).toBe(0)
+
+    // The catalog goes up an hour later; the next launch's unforced check brings it down.
+    seedPokemon(portal.serverDb)
+    clock = new Date(SERVER_NOW.getTime() + 3_600_000)
+    expect(await store.updateCatalog()).toBe(true)
+    expect(pkmCards()).toBe(2)
+
+    // Once it has rows, the daily limit holds again.
+    requests = []
+    expect(await store.updateCatalog()).toBe(false)
+    expect(catalogRequests()).toEqual([])
+  })
+
   it('runs one call at a time', async () => {
     await store.signIn(token, me)
     const order: string[] = []

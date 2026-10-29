@@ -29,7 +29,7 @@ const client = (
   pages: PriceChangesResponse[]
 ): { client: Pick<CloudClient, 'priceChanges'>; ask: ReturnType<typeof vi.fn> } => {
   const queue = [...pages]
-  const ask = vi.fn(async (_since: number) => queue.shift()!)
+  const ask = vi.fn<(since: number) => Promise<PriceChangesResponse>>(async () => queue.shift()!)
   return { client: { priceChanges: ask }, ask }
 }
 const stored = (): number =>
@@ -57,6 +57,33 @@ describe('pullPriceChanges', () => {
       { pkey: k2, price: 2.5 }
     ])
     expect(getMeta(db, 'price_feed_cursor')).toBe('9')
+  })
+
+  it('never erases a local price with a server null', async () => {
+    const [k1] = pkeys()
+    const id = (
+      db.prepare('SELECT id FROM card_printings WHERE pkey = ?').get(k1) as { id: number }
+    ).id
+    db.prepare(
+      'INSERT INTO intl_prices (printing_id, price, listing_count, checked_at) VALUES (?, 4, 3, ?)'
+    ).run(id, '2026-10-20T00:00:00.000Z')
+    const { client: c } = client([
+      {
+        prices: [{ pkey: k1, price: null, listingCount: 0, checkedAt: T, seq: 7 }],
+        cursor: 7,
+        more: false
+      }
+    ])
+    await pullPriceChanges(db, c)
+    expect(
+      db
+        .prepare('SELECT price, listing_count, checked_at FROM intl_prices WHERE printing_id = ?')
+        .get(id)
+    ).toEqual({
+      price: 4,
+      listing_count: 3,
+      checked_at: T
+    })
   })
 
   it('resumes from the saved cursor', async () => {

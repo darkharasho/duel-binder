@@ -341,12 +341,14 @@ export function stalePricePkeys(db: SqlDb, now: Date, limit: number): string[] {
   return priceCandidates(db, now, { limit }).map((c) => c.pkey)
 }
 
-/** Stores server prices for printings this computer knows, where fresher than the local price; returns rows written. */
+/** Stores server prices for printings this computer knows, where fresher than the local price; a server null never erases a local price. Returns rows written. */
 export function applyPrices(db: SqlDb, prices: WirePrice[]): number {
   const upsert = db.prepare(
     `INSERT INTO intl_prices (printing_id, price, listing_count, checked_at)
      SELECT p.id, ?, ?, ? FROM card_printings p WHERE p.pkey = ?
-     ON CONFLICT(printing_id) DO UPDATE SET price = excluded.price, listing_count = excluded.listing_count,
+     ON CONFLICT(printing_id) DO UPDATE SET price = COALESCE(excluded.price, intl_prices.price),
+       listing_count = CASE WHEN excluded.price IS NULL AND intl_prices.price IS NOT NULL
+         THEN intl_prices.listing_count ELSE excluded.listing_count END,
        checked_at = excluded.checked_at
      WHERE julianday(excluded.checked_at) > julianday(intl_prices.checked_at)`
   )

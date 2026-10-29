@@ -45,6 +45,8 @@ export const RARITY_ALIASES = Object.freeze({
   // 25th alone is the anniversary, not the rarity.
   '25th Secret Rare': 'Quarter Century Secret Rare',
   '25th Secret': 'Quarter Century Secret Rare',
+  '25th Anniversary Secret Rare': 'Quarter Century Secret Rare',
+  '25th Anniversary Secret': 'Quarter Century Secret Rare',
   // Every catalog rarity (ja, ko, zh, ae) that contains a shorter alias maps to itself, so it is never
   // read as that inner rarity ("Gold Secret Rare" is not "Secret Rare").
   'Secret Parallel Rare': 'Secret Parallel Rare',

@@ -114,6 +114,9 @@ describe('parseListing', () => {
     expect(parseListing('RC04-JP001 Dragon 25th Secret Rare', 'RC04-JP').rarity).toBe(
       'Quarter Century Secret Rare'
     )
+    expect(parseListing('RC04-JP001 Dragon 25th Anniversary Secret Rare', 'RC04-JP').rarity).toBe(
+      'Quarter Century Secret Rare'
+    )
   })
 
   it('gives a null code when the key is absent', () => {

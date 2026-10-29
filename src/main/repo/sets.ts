@@ -6,7 +6,7 @@ import type { Language } from '../../shared/languages'
 import { setImageKey } from '../../shared/setImages'
 import { addEntry, CollectionError } from './collection'
 import { LOCAL, type Scope } from './scope'
-import { EN_TWIN_PRICE } from './enTwin'
+import { enTwinPrice } from './enTwin'
 
 interface SummaryDbRow {
   language: Language
@@ -173,7 +173,8 @@ function latest(entries: EntryDbRow[]): number | null {
  * Asian languages: only their eBay price, never the English card's TCGplayer price, which is a different
  * product (an OCG Prismatic Secret is not a $0.16 TCG common); unpriced stays null.
  */
-const PRINTING_PRICE = `CASE WHEN p.language = 'en' THEN COALESCE(p.market_price, p.set_price) ELSE COALESCE(ip.price, ${EN_TWIN_PRICE}) END`
+const printingPrice = (scope: Scope): string =>
+  `CASE WHEN p.language = 'en' THEN COALESCE(p.market_price, p.set_price) ELSE COALESCE(ip.price, ${enTwinPrice(scope.game)}) END`
 
 /** The dearest printing price among the rows; null when none has one. */
 function maxPrice(rows: PrintingDbRow[]): number | null {
@@ -196,7 +197,7 @@ function checklistCards(
   const printings = db
     .prepare(
       `SELECT p.id, p.card_id, p.set_code, ${RARITY_LABEL} AS set_rarity, c.name, c.type,
-              ${PRINTING_PRICE} AS set_price,
+              ${printingPrice(scope)} AS set_price,
               CASE WHEN p.language = 'en' THEN c.tcgplayer_price END AS card_price,
               c.atk, c.def, COALESCE(c.level, c.linkval) AS level,
               (SELECT i.image_id FROM card_images i WHERE i.card_id = c.id AND i.game = ${scope.game}

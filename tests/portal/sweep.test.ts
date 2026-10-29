@@ -262,6 +262,44 @@ describe('set sweep', () => {
     expect(after - before).toBe(1)
   })
 
+  describe('Pokémon printings', () => {
+    const PKM_CARD = 2 ** 40 + 1
+    function pkmPrinting(tag: string, code: string, setName: string): void {
+      const r = db
+        .prepare(
+          `INSERT INTO card_printings (game, card_id, set_name, set_code, set_rarity, language) VALUES ('pkm', ?, ?, ?, 'Normal', 'ja')`
+        )
+        .run(PKM_CARD, setName, code)
+      ids[tag] = Number(r.lastInsertRowid)
+    }
+
+    beforeEach(() => {
+      db.prepare(
+        `INSERT INTO cards (id, game, name, type, frame_type, race, "desc", updated_at) VALUES (?, 'pkm', 'P', 'Pokémon', 'pokemon', '', '', '')`
+      ).run(PKM_CARD)
+      db.prepare(`INSERT INTO card_images (image_id, game, card_id, sort_order) VALUES (?, 'pkm', ?, 0)`).run(PKM_CARD, PKM_CARD)
+      db.prepare(`INSERT INTO sets (game, language, set_name, set_code, tcg_date) VALUES ('pkm', 'ja', 'Clay Burst', 'SV2D-JP', '2026-06-01')`).run()
+      pkmPrinting('pkmOwn', 'SV2D-JP030', 'Clay Burst')
+      // Shares a Yu-Gi-Oh! code: it must neither be priced nor make CORI-JP002 a multi-printing code.
+      pkmPrinting('pkmTwin', 'CORI-JP002', 'Clay Burst')
+      db.prepare(
+        `INSERT INTO collection_entries (user_id, uid, game, printing_id, image_id, quantity, created_at, updated_at, server_seq) VALUES (1, 'u2', 'pkm', ?, ?, 1, '', '', 2)`
+      ).run(ids.pkmOwn, PKM_CARD)
+    })
+
+    it('are never listed for the sweep', () => {
+      expect(refreshSweepQueue(db, NOW)).toBe(2)
+      expect(sweepRow('SV2D-JP')).toBeUndefined()
+    })
+
+    it('are never priced by a sweep, and leave Yu-Gi-Oh! codes alone', () => {
+      seedQueue('CORI-JP')
+      assignSweep(db, 'CORI-JP', 'ja', result({ 'CORI-JP002': { all: entry(1.5), byRarity: {} } }), NOW)
+      expect(row('c2')).toMatchObject({ price: 1.5 })
+      expect(row('pkmTwin')).toBeUndefined()
+    })
+  })
+
   describe('runSweep', () => {
     function fakeClient(remaining: number | null = 4000, impl?: (key: string) => Promise<SetResult>) {
       const set = vi.fn(impl ? (k: string) => impl(k) : async () => result({}))

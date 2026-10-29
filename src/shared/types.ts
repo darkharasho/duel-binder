@@ -64,7 +64,8 @@ export interface EntryView {
   originalArt: boolean
   unitPrice: number | null
   priceApproximate: boolean
-  priceSource: 'tcgplayer' | 'ygoprodeck' | 'ebay'
+  /** null: no price from any source the entry's game has (Pokémon has only TCGplayer for now). */
+  priceSource: 'tcgplayer' | 'ygoprodeck' | 'ebay' | null
   priceCheckedAt: string | null
   /** eBay listings behind the asking price (non-English copies only). */
   priceListingCount: number | null

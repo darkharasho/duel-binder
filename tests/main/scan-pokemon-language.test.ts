@@ -75,4 +75,30 @@ describe('pokemonLanguageOfReads', () => {
   ] as const)('%j → %s', (reads, expected) => {
     expect(pokemonLanguageOfReads(reads)).toBe(expected)
   })
+
+  // Read off a real photo of an English card (Bronzong, PAL-era text box).
+  const BRONZONG_ENG = [
+    ') Gentle Slap 40',
+    '(2) ® Metal Block 120',
+    'uring your opponents next turn, this Pokémen takes',
+    ')0 less damage fram arcacks from Evelution Pokémon',
+    'fier opplying Weokness and Resmtonce)'
+  ].join('\n')
+  const BRONZONG_JPN = [
+    'り Gentle 3Slap 40',
+    'ウキ Metal Block 120',
+    'り uring 7SUr opPonent next turm hls Pok6men takes',
+    '90 less dammge rom arccks frem Evolurtien Pokemon',
+    'が opPymg Weokncss an Aeggrancw)'
+  ].join('\n')
+
+  it('takes the Japanese model reading English text, with stray kana, for no other script', () => {
+    expect(pokemonLanguageOfReads({ jpn: BRONZONG_JPN, eng: BRONZONG_ENG })).toBe('en')
+  })
+
+  it('still takes a mostly Latin Japanese-model read in a European language for other', () => {
+    const fr =
+      'Si cette carte est dans votre main, vous pouvez la mettre sur le terrain de votre adversaire. ぅ て'
+    expect(pokemonLanguageOfReads({ jpn: fr, eng: BRONZONG_ENG })).toBe('other')
+  })
 })

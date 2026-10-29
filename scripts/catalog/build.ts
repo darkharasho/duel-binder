@@ -3,13 +3,14 @@
  * desktop app does, uploads what changed since catalog-work/base.sqlite (the last snapshot the
  * portal accepted), then makes work the new base.
  *
- *   npm run catalog:job [-- --full | --dry-run | --allow-shrink]
+ *   npm run catalog:job [-- --full | --dry-run | --allow-shrink | --refresh-sets]
  *
  * Env: PORTAL_URL, PORTAL_ADMIN_TOKEN (not needed for --dry-run). --full ignores the base and
  * uploads every row; --dry-run refreshes and prints per-table counts without uploading or
  * touching the base. A refresh that would delete more than a sliver of any table (see
  * `findShrinks`) is refused unless --allow-shrink is passed, since every client applies the
- * deletes. Problems that don't stop the upload (a failed card sync, a failed fingerprint build)
+ * deletes. --refresh-sets re-reads the non-English set lists now instead of on their weekly timer.
+ * Problems that don't stop the upload (a failed card sync, a failed fingerprint build)
  * end the run with a non-zero exit so the workflow shows red. So does a fingerprint file that fails
  * the accuracy gate (see accuracy.ts), which is held back while clients keep the last one.
  */
@@ -19,6 +20,7 @@ import { pathToFileURL } from 'node:url'
 import type Database from 'better-sqlite3'
 import { version } from '../../package.json'
 import { openDatabase } from '../../src/main/db/database'
+import { deleteMeta } from '../../src/main/db/meta'
 import { refreshCatalog } from '../../src/main/sync/catalog'
 import { createYgoClient } from '../../src/main/ygo/client'
 import { createYugipediaClient, type YugipediaClient } from '../../src/main/yugipedia/client'
@@ -44,6 +46,8 @@ export interface JobOptions {
   refresh?: (work: Database.Database, onProblem: (p: string) => void) => Promise<unknown>
   /** Uploads deletes beyond the shrink limit. */
   allowShrink?: boolean
+  /** Re-reads the non-English set lists now instead of waiting for their weekly timer. */
+  refreshSets?: boolean
   /** Checks a new fingerprint file before it is uploaded; defaults to `checkAccuracy`. */
   checkAccuracy?: (work: Database.Database, bytes: Uint8Array) => Promise<AccuracyReport>
   log?: (line: string) => void
@@ -138,6 +142,7 @@ export async function runJob(opts: JobOptions): Promise<JobResult> {
     }
   }
   try {
+    if (opts.refreshSets) deleteMeta(work, 'intl_sets_synced_at')
     await refresh(work, problem)
     base = !opts.full && existsSync(basePath) ? openDatabase(basePath) : null
     log(base ? 'Diffing against the last uploaded snapshot' : 'No base snapshot: every row is new')
@@ -190,7 +195,7 @@ export async function runJob(opts: JobOptions): Promise<JobResult> {
 
 async function main(): Promise<void> {
   const args = process.argv.slice(2)
-  const flags = ['--full', '--dry-run', '--allow-shrink']
+  const flags = ['--full', '--dry-run', '--allow-shrink', '--refresh-sets']
   const unknown = args.filter((a) => !flags.includes(a))
   if (unknown.length > 0) throw new Error(`Unknown argument(s): ${unknown.join(' ')}`)
   const { problems } = await runJob({
@@ -199,7 +204,8 @@ async function main(): Promise<void> {
     token: process.env['PORTAL_ADMIN_TOKEN'],
     full: args.includes('--full'),
     dryRun: args.includes('--dry-run'),
-    allowShrink: args.includes('--allow-shrink')
+    allowShrink: args.includes('--allow-shrink'),
+    refreshSets: args.includes('--refresh-sets')
   })
   for (const p of problems) console.log(`::error::${p}`)
   if (problems.length > 0) process.exitCode = 1

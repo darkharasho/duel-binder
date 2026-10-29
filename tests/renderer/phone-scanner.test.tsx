@@ -327,6 +327,23 @@ describe('phone scanner', () => {
       expect(saved.map((r) => r.printingId)).toEqual([101])
     })
 
+    it('words the cycle button as versions for a Pokémon card', async () => {
+      localStorage.setItem(
+        SESSION_KEY,
+        JSON.stringify([row({ game: 'pkm', via: 'art', options: three })])
+      )
+      const store = fakeStore()
+      installPhoneApi(store)
+      renderScanner(store)
+      const card = await screen.findByRole('region', { name: 'Last scan' })
+      expect(
+        within(card).getByRole('button', { name: 'Next version of Dark Magician' })
+      ).toHaveTextContent('1/3')
+      expect(
+        within(card).queryByRole('button', { name: 'Next printing of Dark Magician' })
+      ).not.toBeInTheDocument()
+    })
+
     it('removes the row', async () => {
       const user = userEvent.setup()
       localStorage.setItem(SESSION_KEY, JSON.stringify([row()]))

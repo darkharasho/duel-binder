@@ -194,7 +194,7 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
       try {
         await init()
       } catch {
-        loop.current.needsInit = true
+        if (live) loop.current.needsInit = true
       }
       if (!live) return
       readyRef.current = true
@@ -428,7 +428,8 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
             LOOKUP_TIMEOUT_MS
           )
         } catch {
-          if (live) fail({ reinit: false })
+          // An engine thrown away for another game owes nothing.
+          if (live && engineRef.current === engine) fail({ reinit: false })
           return
         }
         l.failures = 0

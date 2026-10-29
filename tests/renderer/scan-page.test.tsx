@@ -1517,3 +1517,90 @@ describe('Pokémon on the Scan page', () => {
     expect(screen.queryByText('New scans as')).not.toBeInTheDocument()
   })
 })
+
+describe('The hub with two games', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    vi.stubGlobal('jest', { advanceTimersByTime: (ms: number) => vi.advanceTimersByTime(ms) })
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  /** The hub alone, on a mock api whose active game `switchTo` changes (and announces). */
+  async function renderHub(
+    start: 'ygo' | 'pkm'
+  ): Promise<{ switchTo(g: 'ygo' | 'pkm'): Promise<void>; seen: () => ScanWindowSettings | null }> {
+    let active: 'ygo' | 'pkm' = start
+    const changed: (() => void)[] = []
+    const api = createMockApi({
+      scanWindow: bridge.scanWindow,
+      games: {
+        available: vi.fn(async () => ['ygo', 'pkm'] as never),
+        active: vi.fn(async () => active)
+      },
+      app: {
+        onDataChanged: vi.fn((cb: () => void) => {
+          changed.push(cb)
+          return () => {}
+        })
+      }
+    })
+    renderWithProviders(
+      <ScanHubProvider>
+        <p>hub</p>
+      </ScanHubProvider>,
+      { api }
+    )
+    await run()
+    return {
+      async switchTo(g) {
+        active = g
+        await act(async () => {
+          for (const cb of changed) cb()
+          await vi.advanceTimersByTimeAsync(0)
+        })
+      },
+      seen: () => {
+        const m = bridge.sent.findLast((x) => x.kind === 'settings')
+        return m?.kind === 'settings' ? m.settings : null
+      }
+    }
+  }
+
+  const pkmDraft = (): ScanDraft => draft({ game: 'pkm', cardId: 5, imageId: 500, printingId: 501 })
+
+  it('hub leaves other-game drafts unacked', async () => {
+    const hub = await renderHub('ygo')
+    act(() => bridge.emit({ kind: 'ready' }))
+    act(() => bridge.emit({ kind: 'draft', id: 'k1', draft: pkmDraft() }))
+    expect(bridge.sent.filter((m) => m.kind === 'ack')).toEqual([])
+    expect(localStorage.getItem(SESSION_KEY)).toBeNull()
+
+    await hub.switchTo('pkm')
+    // The window sends an unacked pull again.
+    act(() => bridge.emit({ kind: 'draft', id: 'k1', draft: pkmDraft() }))
+    expect(bridge.sent.filter((m) => m.kind === 'ack')).toEqual([{ kind: 'ack', id: 'k1' }])
+    expect(JSON.parse(localStorage.getItem(SESSION_KEY)!)).toHaveLength(1)
+
+    // And a Yu-Gi-Oh! draft now waits for Yu-Gi-Oh!.
+    act(() => bridge.emit({ kind: 'draft', id: 'k2', draft: draft() }))
+    expect(bridge.sent.filter((m) => m.kind === 'ack')).toHaveLength(1)
+  })
+
+  it('remembers the picked set per game', async () => {
+    const mrd = { setName: 'Metal Raiders', language: 'en' }
+    localStorage.setItem('scan.set', JSON.stringify(mrd))
+    const hub = await renderHub('ygo')
+    act(() => bridge.emit({ kind: 'ready' }))
+    expect(hub.seen()?.set).toEqual(mrd)
+
+    // Pokémon doesn't inherit the Yu-Gi-Oh! set.
+    await hub.switchTo('pkm')
+    expect(hub.seen()?.set).toBeNull()
+    expect(JSON.parse(localStorage.getItem('scan.set')!)).toEqual(mrd)
+
+    await hub.switchTo('ygo')
+    expect(hub.seen()?.set).toEqual(mrd)
+  })
+})

@@ -23,8 +23,10 @@ export const priceOf = (row: ScanRow): number | null | undefined => {
     : row.options.find((o) => o.printingId === printingId)?.price
 }
 
-/** The lowest and highest of the row's prices, when they differ; for a version still to pick. */
-export function priceRange(row: ScanRow): { low: number; high: number } | null {
+/** The lowest and highest of the card's option prices, when they differ; for a version or printing still to pick. */
+export function priceRange(
+  row: Pick<ScanDraft, 'cardId' | 'options'>
+): { low: number; high: number } | null {
   const prices = row.options.flatMap((o) =>
     o.cardId === row.cardId && o.price != null ? [o.price] : []
   )

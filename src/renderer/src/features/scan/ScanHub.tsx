@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
+import type { GameId } from '@shared/games/types'
 import { isLanguage } from '@shared/languages'
 import { RARITY_TIERS } from '@shared/scan/rarity'
 import {
@@ -8,12 +9,14 @@ import {
   type ScanWindowSettings,
   type ScanWindowState
 } from '@shared/scanWindow'
+import { api } from '@/lib/api'
 import { unpricedIntl, useRequestPrices } from '@/lib/priceRequests'
 import type { ScanDraft } from './resolve'
 import { rowKey, useScanSession } from './session'
 import { rememberedCamera } from './useCamera'
 
-const SET_KEY = 'scan.set'
+/** Yu-Gi-Oh!'s keeps the key it always had, so an existing pick survives. */
+const setKeyOf = (game: GameId): string => (game === 'ygo' ? 'scan.set' : `scan.set.${game}`)
 const RARITY_KEY = 'scan.defaultRarity'
 const HIT_PRICE_KEY = 'scan.hitPrice'
 const FIT_KEY = 'scan.fit'
@@ -83,7 +86,7 @@ const parseZoom = (raw: string): number | null => {
 const initialSettings = (): ScanWindowSettings => ({
   deviceId: rememberedCamera(),
   paused: false,
-  set: read(SET_KEY, parseSet),
+  set: read(setKeyOf('ygo'), parseSet),
   defaultRarity: read(RARITY_KEY, (r) => (RARITY_TIERS.includes(r) ? r : null)),
   hitPrice: read(HIT_PRICE_KEY, parseHitPrice) ?? DEFAULT_HIT_PRICE,
   fit: read(FIT_KEY, (f): ScanFit | null => (f === 'whole' || f === 'fill' ? f : null)) ?? 'fill',
@@ -122,6 +125,38 @@ async function askIsOpen(): Promise<boolean> {
   }
 }
 
+/**
+ * The game shown, kept up as the app switches it. The hub sits above the pages (above the game
+ * provider, on desktop), so it asks for itself, on the triggers the provider reads again on.
+ */
+function useActiveGame(): GameId {
+  const [game, setGame] = useState<GameId>('ygo')
+  useEffect(() => {
+    let live = true
+    let reads = 0
+    const read = (): void => {
+      const n = ++reads
+      api.games.active().then(
+        (g) => {
+          if (live && n === reads) setGame(g === 'pkm' ? 'pkm' : 'ygo')
+        },
+        () => {
+          // Unreadable: the game stays as it was.
+        }
+      )
+    }
+    read()
+    const offData = api.app.onDataChanged(read)
+    const offAccount = api.account.onChange(read)
+    return () => {
+      live = false
+      offData()
+      offAccount()
+    }
+  }, [])
+  return game
+}
+
 const HubContext = createContext<ScanHub | null>(null)
 
 /**
@@ -130,6 +165,8 @@ const HubContext = createContext<ScanHub | null>(null)
  */
 export function ScanHubProvider({ children }: { children: React.ReactNode }): React.JSX.Element {
   const session = useScanSession()
+  const game = useActiveGame()
+  const gameRef = useRef<GameId>('ygo')
   const [settings, setSettingsState] = useState<ScanWindowSettings>(initialSettings)
   const settingsRef = useRef(settings)
   const [open, setOpen] = useState(false)
@@ -174,7 +211,8 @@ export function ScanHubProvider({ children }: { children: React.ReactNode }): Re
     (patch: Partial<ScanWindowSettings>): void => {
       const next = { ...settingsRef.current, ...patch }
       settingsRef.current = next
-      if ('set' in patch) write(SET_KEY, next.set ? JSON.stringify(next.set) : null)
+      if ('set' in patch)
+        write(setKeyOf(gameRef.current), next.set ? JSON.stringify(next.set) : null)
       if ('defaultRarity' in patch) write(RARITY_KEY, next.defaultRarity)
       if ('hitPrice' in patch) write(HIT_PRICE_KEY, String(next.hitPrice))
       if ('fit' in patch) write(FIT_KEY, next.fit)
@@ -186,6 +224,13 @@ export function ScanHubProvider({ children }: { children: React.ReactNode }): Re
     },
     [sendSettings]
   )
+
+  // Each game has its own picked set: a set of the other game would find nothing here.
+  useEffect(() => {
+    if (gameRef.current === game) return
+    gameRef.current = game
+    setSettings({ set: read(setKeyOf(game), parseSet) })
+  }, [game, setSettings])
 
   useEffect(() => {
     let live = true
@@ -224,6 +269,9 @@ export function ScanHubProvider({ children }: { children: React.ReactNode }): Re
         sendSettings()
       } else if (m.kind === 'state') setState(m.state)
       else {
+        // A pull of the other game waits, unacknowledged (so the window sends it again), until
+        // that game is the one shown.
+        if ((m.draft.game ?? 'ygo') !== gameRef.current) return
         if (!seen.has(m.id)) {
           seen.add(m.id)
           count(m.draft)

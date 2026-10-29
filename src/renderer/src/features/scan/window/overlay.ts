@@ -1,4 +1,5 @@
 import type { ScanDraft } from '../resolve'
+import { priceRange, versionToPick } from '../scanLook'
 
 export const NORMAL_MS = 4000
 export const HIT_MS = 8000
@@ -14,28 +15,22 @@ export interface Pull {
   price: number | null
   /** Its printings' price range, under the assumed price when the printing isn't certain. */
   range: { low: number; high: number } | null
+  /** A graded slab, priced as the raw card. */
+  raw: boolean
   hit: boolean
-}
-
-/** The lowest and highest of the options' prices, when they differ. */
-function rangeOf(d: ScanDraft): Pull['range'] {
-  // Rows saved before prices existed have no `price` key at all.
-  const prices = d.options.flatMap((o) => (o.price == null ? [] : [o.price]))
-  if (!prices.length) return null
-  const low = Math.min(...prices)
-  const high = Math.max(...prices)
-  return low === high ? null : { low, high }
 }
 
 /**
  * A pull shows the drafted printing's price. A draft whose printing or rarity isn't certain also
  * shows its options' price range; a Pick printing draft shows no set or rarity and is never a hit.
+ * A Pokémon card whose version is unsure shows only the range: its drafted printing is a
+ * placeholder, so its price is no one version's.
  */
 export function pullOf(d: ScanDraft, hitPrice: number, key: number): Pull {
   const picked = d.options.find((o) => o.printingId === d.printingId)
-  const price = picked?.price ?? null
-  const range = d.flag === 'pick-printing' || d.flag === 'check-rarity' ? rangeOf(d) : null
-  const base = { key, name: d.name, imageId: d.imageId, price, range }
+  const price = versionToPick(d) ? null : (picked?.price ?? null)
+  const range = d.flag === 'pick-printing' || d.flag === 'check-rarity' ? priceRange(d) : null
+  const base = { key, name: d.name, imageId: d.imageId, price, range, raw: d.slab === true }
   if (d.flag === 'pick-printing')
     return { ...base, setCode: null, setName: null, rarity: null, hit: false }
   return {

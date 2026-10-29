@@ -4,7 +4,8 @@ import type { ScanDraft } from '@shared/scan/types'
 import type { ScanWindowSettings, ScanWindowState } from '@shared/scanWindow'
 import type { RawSignals } from '@/features/scan/engine'
 import { ScanWindowApp } from '@/features/scan/window/ScanWindowApp'
-import { FADE_MS, NORMAL_MS } from '@/features/scan/window/overlay'
+import { FADE_MS, NORMAL_MS, type Pull } from '@/features/scan/window/overlay'
+import { PullOverlay } from '@/features/scan/window/PullOverlay'
 import { createMockApi, renderWithProviders, type DeepPartial } from './mockApi'
 import type { Api } from '@shared/ipc'
 import {
@@ -667,5 +668,45 @@ describe('Scan window and the game', () => {
     expect(factory).toHaveBeenCalledTimes(2)
     expect(factory).toHaveBeenLastCalledWith('ygo')
     expect(api.scan.fingerprints).toHaveBeenLastCalledWith('ygo')
+  })
+})
+
+describe('PullOverlay for Pokémon pulls', () => {
+  const pull = (o: Partial<Pull> = {}): Pull => ({
+    key: 1,
+    name: 'Pikachu',
+    imageId: 500,
+    setCode: null,
+    setName: null,
+    rarity: null,
+    price: null,
+    range: null,
+    raw: false,
+    hit: false,
+    ...o
+  })
+
+  it('pkm pick-printing pull shows range and is never a hit', () => {
+    renderWithProviders(<PullOverlay pull={pull({ range: { low: 2, high: 45 } })} />, {
+      api: createMockApi()
+    })
+    const bar = screen.getByRole('status', { name: 'Pull' })
+    expect(bar).toHaveTextContent('$2.00 – $45.00')
+    // No lone price beside the range.
+    expect(bar.textContent?.match(/\$/g)).toHaveLength(2)
+    expect(screen.queryByLabelText('Hit')).not.toBeInTheDocument()
+  })
+
+  it('slab pull shows Raw and can be a hit', () => {
+    const { rerender } = renderWithProviders(
+      <PullOverlay pull={pull({ price: 120, raw: true, hit: true })} />,
+      { api: createMockApi() }
+    )
+    expect(screen.getByLabelText('Hit')).toHaveTextContent('$120.00')
+    expect(screen.getByLabelText('Hit')).toHaveTextContent('Raw')
+    rerender(<PullOverlay pull={pull({ key: 2, price: 5, raw: true })} />)
+    expect(screen.getByRole('status', { name: 'Pull' })).toHaveTextContent('Raw')
+    rerender(<PullOverlay pull={pull({ key: 3, price: 5 })} />)
+    expect(screen.getByRole('status', { name: 'Pull' })).not.toHaveTextContent('Raw')
   })
 })

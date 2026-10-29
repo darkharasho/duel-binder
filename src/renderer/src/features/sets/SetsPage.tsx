@@ -17,13 +17,13 @@ import { SetChecklist } from './SetChecklist'
 import { SetsFilterPanel } from './SetsFilterPanel'
 import { SetsList } from './SetsList'
 import { UpcomingSets } from './UpcomingSets'
+import { useUpcomingCutoff } from './useUpcomingCutoff'
 import {
   activeFilterCount,
   filterSets,
   setsHeader,
   sortSets,
   splitUpcoming,
-  upcomingCutoff,
   typeCounts,
   type SetFilter,
   type SetSort
@@ -119,6 +119,8 @@ export function SetsPage({ onAddCard, onAddMissing }: SetsPageProps): React.JSX.
   const [panelOpen, setPanelOpen] = useState(false)
   const [upcomingOpen, setUpcomingOpenState] = useState(readUpcomingOpen)
   const [q, setQ] = useState('')
+  // Collapsing the banner while a search forces it open lasts until the search changes.
+  const [searchCollapsed, setSearchCollapsed] = useState(false)
   const [sort, setSort] = useState<SetSort>('date')
   const [openSet, setOpenSetState] = useState<{ setName: string; language: Language } | null>(null)
   const main = useMainScroll()
@@ -148,7 +150,7 @@ export function SetsPage({ onAddCard, onAddMissing }: SetsPageProps): React.JSX.
   const available = useMemo(() => [...new Set(all.map((s) => s.language))], [all])
   const header = setsHeader(inLanguage, mode)
   // Sets more than a month out (and not started) wait under the upcoming banner.
-  const cutoff = upcomingCutoff()
+  const cutoff = useUpcomingCutoff(sets.dataUpdatedAt)
   const { current: visible, upcoming } = useMemo(
     () =>
       splitUpcoming(
@@ -181,7 +183,14 @@ export function SetsPage({ onAddCard, onAddMissing }: SetsPageProps): React.JSX.
     setMode(m)
     persist(MODE_KEY, m)
   }
+  // A search that only matches upcoming sets shows them open, without touching the saved choice.
+  const searchForcesOpen = q.trim() !== '' && visible.length === 0 && upcoming.length > 0
+  const upcomingShown = searchForcesOpen ? !searchCollapsed : upcomingOpen
   const setUpcomingOpen = (open: boolean): void => {
+    if (searchForcesOpen) {
+      setSearchCollapsed(!open)
+      return
+    }
     setUpcomingOpenState(open)
     persist(UPCOMING_KEY, open ? 'open' : 'closed')
   }
@@ -241,7 +250,10 @@ export function SetsPage({ onAddCard, onAddMissing }: SetsPageProps): React.JSX.
             />
             <Input
               value={q}
-              onChange={(e) => setQ(e.target.value)}
+              onChange={(e) => {
+                setQ(e.target.value)
+                setSearchCollapsed(false)
+              }}
               placeholder="Search sets by name or code"
               aria-label="Search sets"
               className="h-8 pl-8"
@@ -333,7 +345,7 @@ export function SetsPage({ onAddCard, onAddMissing }: SetsPageProps): React.JSX.
       <UpcomingSets
         sets={upcoming}
         cutoff={cutoff}
-        open={upcomingOpen}
+        open={upcomingShown}
         onOpenChange={setUpcomingOpen}
         mode={mode}
         view={view}

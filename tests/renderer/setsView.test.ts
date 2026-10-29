@@ -16,7 +16,8 @@ import {
   sortTiles,
   typeCounts,
   upcomingCutoff,
-  isUpcoming
+  isUpcoming,
+  splitUpcoming
 } from '@/features/sets/setsView'
 import { rarityColor } from '@/lib/rarityColors'
 import { createSerialQueue } from '@/lib/serialQueue'
@@ -441,5 +442,18 @@ describe('upcoming sets', () => {
     expect(isUpcoming({ ...base, tcgDate: '2026-11-29' }, cut)).toBe(true)
     expect(isUpcoming({ ...base, tcgDate: null }, cut)).toBe(false)
     expect(isUpcoming({ ...base, tcgDate: '2027-01-01', ownedCards: 1 }, cut)).toBe(false)
+    expect(isUpcoming({ ...base, tcgDate: '2027-01-01', ownedRarities: 1 }, cut)).toBe(false)
+  })
+
+  it('splitUpcoming keeps each side in the given order', () => {
+    const a = { ...base, setName: 'A', tcgDate: '2027-02-01' }
+    const b = { ...base, setName: 'B', tcgDate: '2020-01-01' }
+    const c = { ...base, setName: 'C', tcgDate: '2027-01-01' }
+    const d = { ...base, setName: 'D', tcgDate: null }
+    const e = { ...base, setName: 'E', tcgDate: '2027-03-01', ownedRarities: 2 }
+    const { current, upcoming } = splitUpcoming([a, b, c, d, e], '2026-11-28')
+    expect(current.map((s) => s.setName)).toEqual(['B', 'D', 'E'])
+    expect(upcoming.map((s) => s.setName)).toEqual(['A', 'C'])
+    expect(splitUpcoming([], '2026-11-28')).toEqual({ current: [], upcoming: [] })
   })
 })

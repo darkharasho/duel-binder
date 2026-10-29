@@ -126,7 +126,9 @@ async function planLanguage(
     if (productById.has(p.productId)) continue
     productById.set(p.productId, p)
     productGroup.set(p.productId, p.groupId)
-    inGroup.set(p.groupId, [...(inGroup.get(p.groupId) ?? []), p])
+    const list = inGroup.get(p.groupId)
+    if (list) list.push(p)
+    else inGroup.set(p.groupId, [p])
   }
   log(`Pokémon ${lang}: ${groups.length} TCGCSV groups, ${productById.size} products`)
 
@@ -167,8 +169,11 @@ async function planLanguage(
     for (const c of s.cards) for (const m of c.products) priceGroups.add(m.product.groupId)
   const priceLists = await Promise.all([...priceGroups].map((g) => sources.prices(lang, g)))
   const prices = new Map<number, TcPrice[]>()
-  for (const row of priceLists.flat())
-    prices.set(row.productId, [...(prices.get(row.productId) ?? []), row])
+  for (const row of priceLists.flat()) {
+    const list = prices.get(row.productId)
+    if (list) list.push(row)
+    else prices.set(row.productId, [row])
+  }
 
   let versions = 0
   let priced = 0

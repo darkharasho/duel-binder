@@ -81,9 +81,12 @@ jobs:
           VERSION=$(node -p "require('./package.json').version")
           ARCHIVE="$RUNNER_TEMP/App.xcarchive"
 
+          # Archive unsigned and sign only at export (distribution, cloud-managed): signing the
+          # archive made a new Apple Development certificate on every fresh runner until the
+          # account hit Apple's certificate limit.
           xcodebuild -project "$PROJECT" -scheme App -configuration Release \
-            -destination 'generic/platform=iOS' -archivePath "$ARCHIVE" "${AUTH[@]}" \
-            DEVELOPMENT_TEAM="$TEAM_ID" CODE_SIGN_STYLE=Automatic \
+            -destination 'generic/platform=iOS' -archivePath "$ARCHIVE" \
+            DEVELOPMENT_TEAM="$TEAM_ID" CODE_SIGNING_ALLOWED=NO \
             MARKETING_VERSION="$VERSION" CURRENT_PROJECT_VERSION="$GITHUB_RUN_NUMBER" \
             archive
 

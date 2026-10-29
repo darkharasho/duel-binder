@@ -111,7 +111,7 @@ const HANDLERS: { [C in PortalChannel]: Handler<C> } = {
     removeEntry(db, checkId(id, 'id'), now(), scope)
     recordSnapshot(db, now(), scope)
   },
-  'friends:overview': ({ db, userId }) => friendsOverview(db, userId),
+  'friends:overview': ({ db, userId, game }) => friendsOverview(db, userId, game),
   'friends:request': ({ db, userId, now }, _s, username) =>
     requestFriend(db, userId, checkString(username, 'username'), now()),
   'friends:accept': ({ db, userId, now }, _s, id) =>

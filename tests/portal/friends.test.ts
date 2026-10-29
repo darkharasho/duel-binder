@@ -38,16 +38,16 @@ describe('friends', () => {
 
   it('sends a request by trimmed, case-insensitive username', () => {
     expect(requestFriend(db, alice, '  BOB ', NOW)).toEqual({ status: 'sent' })
-    expect(friendsOverview(db, bob).incoming).toEqual([
+    expect(friendsOverview(db, bob, 'ygo').incoming).toEqual([
       expect.objectContaining({ id: alice, username: 'alice', sentAt: NOW.toISOString() })
     ])
-    expect(friendsOverview(db, alice)).toEqual({ friends: [], incoming: [], blocked: [] })
+    expect(friendsOverview(db, alice, 'ygo')).toEqual({ friends: [], incoming: [], blocked: [] })
   })
 
   it('a repeated request stays a single request', () => {
     requestFriend(db, alice, 'bob', NOW)
     expect(requestFriend(db, alice, 'bob', NOW)).toEqual({ status: 'sent' })
-    expect(friendsOverview(db, bob).incoming).toHaveLength(1)
+    expect(friendsOverview(db, bob, 'ygo').incoming).toHaveLength(1)
   })
 
   it('a crossed request accepts the friendship', () => {
@@ -61,7 +61,7 @@ describe('friends', () => {
       [alice, bob],
       [bob, alice]
     ]) {
-      const o = friendsOverview(db, me)
+      const o = friendsOverview(db, me, 'ygo')
       expect(o.friends.map((f) => f.id)).toEqual([other])
       expect(o.incoming).toEqual([])
     }
@@ -70,8 +70,8 @@ describe('friends', () => {
   it('accepting makes both sides friends; with no request it throws', () => {
     requestFriend(db, alice, 'bob', NOW)
     acceptFriend(db, bob, alice, NOW)
-    expect(friendsOverview(db, alice).friends.map((f) => f.id)).toEqual([bob])
-    expect(friendsOverview(db, bob).friends.map((f) => f.id)).toEqual([alice])
+    expect(friendsOverview(db, alice, 'ygo').friends.map((f) => f.id)).toEqual([bob])
+    expect(friendsOverview(db, bob, 'ygo').friends.map((f) => f.id)).toEqual([alice])
     expect(() => acceptFriend(db, bob, carol, NOW)).toThrow(FriendError)
     expect(() => acceptFriend(db, alice, bob, NOW)).toThrow(FriendError)
   })
@@ -79,10 +79,10 @@ describe('friends', () => {
   it('ignoring removes the request and lets it be sent again', () => {
     requestFriend(db, alice, 'bob', NOW)
     ignoreFriend(db, bob, alice)
-    expect(friendsOverview(db, bob).incoming).toEqual([])
-    expect(friendsOverview(db, alice)).toEqual({ friends: [], incoming: [], blocked: [] })
+    expect(friendsOverview(db, bob, 'ygo').incoming).toEqual([])
+    expect(friendsOverview(db, alice, 'ygo')).toEqual({ friends: [], incoming: [], blocked: [] })
     requestFriend(db, alice, 'bob', NOW)
-    expect(friendsOverview(db, bob).incoming).toHaveLength(1)
+    expect(friendsOverview(db, bob, 'ygo').incoming).toHaveLength(1)
   })
 
   it('either side can end a friendship', () => {
@@ -94,7 +94,7 @@ describe('friends', () => {
     befriend()
     removeFriend(db, bob, alice)
     expect(areFriends(db, alice, bob)).toBe(false)
-    expect(friendsOverview(db, alice).friends).toEqual([])
+    expect(friendsOverview(db, alice, 'ygo').friends).toEqual([])
   })
 
   it('rejects bad requests with clear messages', () => {
@@ -155,12 +155,12 @@ describe('friends', () => {
       .map((r) => r.updated_at)
       .sort()
       .at(-1)
-    const [f] = friendsOverview(db, alice).friends
+    const [f] = friendsOverview(db, alice, 'ygo').friends
     expect(f.cardCount).toBe(5)
     expect(f.updatedAt).toBe(latest)
 
     befriend2(carol)
-    expect(friendsOverview(db, alice).friends.find((x) => x.id === carol)).toMatchObject({
+    expect(friendsOverview(db, alice, 'ygo').friends.find((x) => x.id === carol)).toMatchObject({
       cardCount: 0,
       updatedAt: null
     })
@@ -174,10 +174,10 @@ describe('friends', () => {
   it('builds the avatar URL only when an avatar is set', () => {
     befriend()
     db.prepare("UPDATE users SET avatar = 'abc' WHERE id = ?").run(bob)
-    expect(friendsOverview(db, alice).friends[0].avatarUrl).toBe(
+    expect(friendsOverview(db, alice, 'ygo').friends[0].avatarUrl).toBe(
       'https://cdn.discordapp.com/avatars/d-bob/abc.png'
     )
-    expect(friendsOverview(db, bob).friends[0].avatarUrl).toBeNull()
+    expect(friendsOverview(db, bob, 'ygo').friends[0].avatarUrl).toBeNull()
   })
 
   it('sorts friends by display name and incoming newest first', () => {
@@ -187,25 +187,25 @@ describe('friends', () => {
     acceptFriend(db, bob, alice, NOW)
     requestFriend(db, alice, 'carol', NOW)
     acceptFriend(db, carol, alice, NOW)
-    expect(friendsOverview(db, alice).friends.map((f) => f.id)).toEqual([carol, bob])
+    expect(friendsOverview(db, alice, 'ygo').friends.map((f) => f.id)).toEqual([carol, bob])
 
     requestFriend(db, bob, 'carol', new Date('2026-10-25T13:00:00.000Z'))
     const dave = addUser(db, 'd-dave', 'dave')
     requestFriend(db, dave, 'carol', new Date('2026-10-25T14:00:00.000Z'))
-    expect(friendsOverview(db, carol).incoming.map((r) => r.id)).toEqual([dave, bob])
+    expect(friendsOverview(db, carol, 'ygo').incoming.map((r) => r.id)).toEqual([dave, bob])
   })
 
   it('shows the username when the display name is blank, and sorts by it', () => {
     db.prepare("UPDATE users SET display_name = '' WHERE id = ?").run(bob)
     db.prepare("UPDATE users SET display_name = 'Amy' WHERE id = ?").run(carol)
     requestFriend(db, alice, 'bob', NOW)
-    expect(friendsOverview(db, bob).incoming).toEqual([
+    expect(friendsOverview(db, bob, 'ygo').incoming).toEqual([
       expect.objectContaining({ id: alice, displayName: null })
     ])
     acceptFriend(db, bob, alice, NOW)
     requestFriend(db, alice, 'carol', NOW)
     acceptFriend(db, carol, alice, NOW)
-    const friends = friendsOverview(db, alice).friends
+    const friends = friendsOverview(db, alice, 'ygo').friends
     expect(friends.map((f) => [f.id, f.displayName])).toEqual([
       [carol, 'Amy'],
       [bob, null]
@@ -238,29 +238,29 @@ describe('friends', () => {
       befriend()
       blockUser(db, alice, bob, NOW)
       expect(areFriends(db, alice, bob)).toBe(false)
-      expect(friendsOverview(db, alice)).toEqual({
+      expect(friendsOverview(db, alice, 'ygo')).toEqual({
         friends: [],
         incoming: [],
         blocked: [expect.objectContaining({ id: bob, username: 'bob' })]
       })
-      expect(friendsOverview(db, bob).blocked).toEqual([])
+      expect(friendsOverview(db, bob, 'ygo').blocked).toEqual([])
     })
 
     it('drops a pending request either way', () => {
       requestFriend(db, bob, 'alice', NOW)
       blockUser(db, alice, bob, NOW)
-      expect(friendsOverview(db, alice).incoming).toEqual([])
+      expect(friendsOverview(db, alice, 'ygo').incoming).toEqual([])
       unblockUser(db, alice, bob)
       requestFriend(db, alice, 'bob', NOW)
       blockUser(db, alice, bob, NOW)
-      expect(friendsOverview(db, bob).incoming).toEqual([])
+      expect(friendsOverview(db, bob, 'ygo').incoming).toEqual([])
     })
 
     it("tells the blocked person it was sent, but delivers nothing and doesn't count it", () => {
       blockUser(db, alice, bob, NOW)
       for (let i = 0; i <= DAILY_REQUEST_LIMIT; i++)
         expect(requestFriend(db, bob, 'alice', NOW)).toEqual({ status: 'sent' })
-      expect(friendsOverview(db, alice).incoming).toEqual([])
+      expect(friendsOverview(db, alice, 'ygo').incoming).toEqual([])
       expect(requestFriend(db, bob, 'carol', NOW)).toEqual({ status: 'sent' })
     })
 
@@ -270,7 +270,7 @@ describe('friends', () => {
         "You've blocked bob. Unblock them first."
       )
       unblockUser(db, alice, bob)
-      expect(friendsOverview(db, alice).blocked).toEqual([])
+      expect(friendsOverview(db, alice, 'ygo').blocked).toEqual([])
       expect(areFriends(db, alice, bob)).toBe(false)
       expect(requestFriend(db, alice, 'bob', NOW)).toEqual({ status: 'sent' })
     })
@@ -278,7 +278,7 @@ describe('friends', () => {
     it('blocking twice is fine; self and unknown users are refused', () => {
       blockUser(db, alice, bob, NOW)
       blockUser(db, alice, bob, NOW)
-      expect(friendsOverview(db, alice).blocked).toHaveLength(1)
+      expect(friendsOverview(db, alice, 'ygo').blocked).toHaveLength(1)
       expect(() => blockUser(db, alice, alice, NOW)).toThrow(FriendError)
       expect(() => blockUser(db, alice, 9999, NOW)).toThrow(FriendError)
     })
@@ -288,7 +288,7 @@ describe('friends', () => {
       blockUser(db, bob, alice, NOW)
       unblockUser(db, alice, bob)
       expect(requestFriend(db, alice, 'bob', NOW)).toEqual({ status: 'sent' })
-      expect(friendsOverview(db, bob).incoming).toEqual([])
+      expect(friendsOverview(db, bob, 'ygo').incoming).toEqual([])
     })
   })
 })

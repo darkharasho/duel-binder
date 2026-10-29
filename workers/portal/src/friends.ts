@@ -7,6 +7,7 @@ import type {
   FriendsOverview,
   FriendUser
 } from '../../../src/shared/types'
+import type { GameId } from '../../../src/shared/games'
 import { avatarUrl } from './auth'
 
 /** A friend-request problem the caller can fix; rpc.ts answers it as a 400. */
@@ -32,7 +33,8 @@ const toUser = (r: UserRow): FriendUser => ({
   avatarUrl: avatarUrl(r.discord_id, r.avatar)
 })
 
-export function friendsOverview(db: SqlDb, me: number): FriendsOverview {
+/** `me`'s friends, requests and blocks; each friend's card count and latest change are for `game` only. */
+export function friendsOverview(db: SqlDb, me: number, game: GameId): FriendsOverview {
   const friends = (
     db
       .prepare(
@@ -44,14 +46,15 @@ export function friendsOverview(db: SqlDb, me: number): FriendsOverview {
                              SUM(CASE WHEN deleted_at IS NULL THEN quantity ELSE 0 END) AS cards,
                              MAX(updated_at) AS updated
                         FROM collection_entries
-                       WHERE user_id IN (SELECT CASE WHEN requester_id = ? THEN addressee_id ELSE requester_id END
+                       WHERE game = ?
+                         AND user_id IN (SELECT CASE WHEN requester_id = ? THEN addressee_id ELSE requester_id END
                                            FROM friendships
                                           WHERE status = 'accepted' AND ? IN (requester_id, addressee_id))
                        GROUP BY user_id) c ON c.user_id = u.id
           WHERE f.status = 'accepted' AND ? IN (f.requester_id, f.addressee_id)
           ORDER BY COALESCE(NULLIF(u.display_name, ''), u.username) COLLATE NOCASE, u.id`
       )
-      .all(me, me, me, me) as (UserRow & { cards: number; updated: string | null })[]
+      .all(me, game, me, me, me) as (UserRow & { cards: number; updated: string | null })[]
   ).map((r): Friend => ({ ...toUser(r), cardCount: r.cards, updatedAt: r.updated }))
   const incoming = (
     db

@@ -5,7 +5,8 @@ import { addEntry } from '../../src/main/repo/collection'
 import { userScope } from '../../workers/portal/src/scope'
 import { GAME_HEADER } from '../../src/shared/cloud'
 import { addUser, seededServerDb, memoryBucket, noPrintingArt, noPrices } from './helpers'
-import { seedPokemon } from '../fixtures/pokemon'
+import { SHARED_SET_NAME, seedPokemon } from '../fixtures/pokemon'
+import type { Facets, FriendsOverview } from '../../src/shared/types'
 
 const BASE = 'https://portal.test'
 const NOW = new Date('2026-10-24T12:00:00.000Z')
@@ -196,6 +197,32 @@ describe('per-user game access', () => {
       expect(ygo.result.map((e) => e.quantity)).toEqual([2])
       const facets = await rpc('friends:facets', [bob], co, 'pkm')
       expect(facets.status).toBe(200)
+      const pf = ((await facets.json()) as { result: Facets }).result
+      expect(pf.pkmTypes).toEqual(['Lightning'])
+      expect(pf.setNames).toEqual([SHARED_SET_NAME])
+      const yf = ((await (await rpc('friends:facets', [bob], co)).json()) as { result: Facets })
+        .result
+      expect(yf.pkmTypes).toBeUndefined()
+    })
+
+    it("count only the caller's header game in the overview", async () => {
+      const LATER = new Date(NOW.getTime() + 60_000)
+      addEntry(db, pkmInput(1), LATER, userScope(owner, 'pkm'))
+      const friendOf = async (
+        cookie: string,
+        game?: string
+      ): Promise<{ cardCount: number; updatedAt: string | null }> => {
+        const body = (await (await rpc('friends:overview', [], cookie, game)).json()) as {
+          result: FriendsOverview
+        }
+        return body.result.friends[0]
+      }
+      // Bob (no Pokémon) sees only the owner's Yu-Gi-Oh! rows: not the 7 + 1 Pokémon, not LATER.
+      expect(await friendOf(cb)).toMatchObject({ cardCount: 2, updatedAt: NOW.toISOString() })
+      // The owner sees bob's Pokémon rows only under pkm, and only his Yu-Gi-Oh! ones without it.
+      expect(await friendOf(co, 'pkm')).toMatchObject({ cardCount: 4 })
+      expect(await friendOf(co)).toMatchObject({ cardCount: 2 })
+      expect((await rpc('friends:overview', [], cb, 'pkm')).status).toBe(403)
     })
 
     it("refuse a game the caller isn't allowed", async () => {

@@ -5,6 +5,8 @@ import { adjustPrinting, getChecklist } from '../../src/main/repo/sets'
 import { getStats, recordSnapshot } from '../../src/main/repo/stats'
 import { userScope } from '../../workers/portal/src/scope'
 import { addUser, seededServerDb } from './helpers'
+import { SHARED_SET_NAME, seedPokemon } from '../fixtures/pokemon'
+import type { GameId } from '../../src/shared/games'
 
 const now = new Date('2026-10-24T12:00:00.000Z')
 const ALL = { sort: 'name', dir: 'asc' } as const
@@ -125,6 +127,39 @@ describe('owner scope', () => {
     expect(rows).toEqual([{ user_id: u1, total_cards: 2 }])
     expect(getStats(db, userScope(u2)).totalCards).toBe(0)
     expect(getStats(db, userScope(u1)).totalCards).toBe(2)
+  })
+
+  it('userScope(id, pkm) reads and writes only Pokémon rows', () => {
+    const pkm = seedPokemon(db)
+    const ygo = userScope(u1, 'ygo')
+    const poke = userScope(u1, 'pkm')
+    addEntry(db, input(2), now, ygo)
+    const e = addEntry(db, { printingId: pkm.printingIds[0], imageId: pkm.cardIds[0], quantity: 5 }, now, poke)
+    expect(db.prepare('SELECT game FROM collection_entries WHERE id = ?').get(e.id)).toEqual({ game: 'pkm' })
+    expect(listEntries(db, ALL, poke).map((x) => [x.card.id, x.quantity])).toEqual([[pkm.cardIds[0], 5]])
+    expect(listEntries(db, ALL, ygo).map((x) => x.quantity)).toEqual([2])
+    expect(listEntries(db, ALL, userScope(u1)).map((x) => x.quantity)).toEqual([2])
+    expect(getStats(db, poke).totalCards).toBe(5)
+    expect(getStats(db, ygo).totalCards).toBe(2)
+    expect(getChecklist(db, SHARED_SET_NAME, 'en', poke)!.cards.map((c) => c.cardId)).toEqual([pkm.cardIds[0]])
+    // A printing of the other game is not found through this scope.
+    expect(() => addEntry(db, input(1), now, poke)).toThrow()
+    removeEntry(db, e.id, now, ygo)
+    expect(listEntries(db, ALL, poke)).toHaveLength(1)
+
+    recordSnapshot(db, now, ygo)
+    recordSnapshot(db, now, poke)
+    const rows = db.prepare('SELECT game, total_cards FROM value_snapshots WHERE user_id = ? ORDER BY game').all(u1)
+    expect(rows).toEqual([
+      { game: 'pkm', total_cards: 5 },
+      { game: 'ygo', total_cards: 2 }
+    ])
+    expect(getStats(db, poke).valueHistory.map((v) => v.totalCards)).toEqual([5])
+  })
+
+  it('userScope rejects an unknown game', () => {
+    expect(() => userScope(u1, 'mtg' as GameId)).toThrow()
+    expect(() => userScope(u1, "ygo' OR 1 --" as GameId)).toThrow()
   })
 
   it('userScope rejects a non-integer id', () => {

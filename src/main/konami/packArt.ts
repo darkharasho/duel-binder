@@ -97,7 +97,7 @@ export async function refreshPackArt(
     }
   }
 
-  const sets = db.prepare("SELECT set_name, set_code FROM sets WHERE language = 'en'").all() as {
+  const sets = db.prepare("SELECT set_name, set_code FROM sets WHERE game = 'ygo' AND language = 'en'").all() as {
     set_name: string
     set_code: string
   }[]

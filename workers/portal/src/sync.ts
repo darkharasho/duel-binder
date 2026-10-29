@@ -119,7 +119,7 @@ export function applyPush(
   entries: WireEntry[],
   now: Date
 ): { results: PushResult[]; wroteLive: boolean } {
-  const scope = userScope(userId)
+  const scope = userScope(userId, 'ygo')
   const findPrinting = db.prepare(
     `SELECT p.id FROM card_printings p JOIN card_images i ON i.card_id = p.card_id AND i.image_id = ?
      WHERE p.pkey = ?`

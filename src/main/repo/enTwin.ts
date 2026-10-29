@@ -28,9 +28,9 @@ const TWIN_CODE = `CASE
 END`
 
 /**
- * The English twin's TCGplayer market price (same card, rarity and set number), or NULL. A scalar
+ * The English twin's TCGplayer market price (same game, card, rarity and set number), or NULL. A scalar
  * subquery over alias `p`; it hits ux_printings_en (card_id, set_code, set_rarity), a point lookup.
  */
 export const EN_TWIN_PRICE = `(SELECT en.market_price FROM card_printings en
-  WHERE p.language IN ('de','fr','it','es','pt') AND en.language = 'en' AND en.card_id = p.card_id
+  WHERE p.language IN ('de','fr','it','es','pt') AND en.language = 'en' AND en.game = p.game AND en.card_id = p.card_id
     AND en.set_rarity = p.set_rarity AND en.set_code = ${TWIN_CODE})`

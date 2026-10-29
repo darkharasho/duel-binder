@@ -26,7 +26,7 @@ export function shouldSync(lastSyncAt: string | null, now: Date): boolean {
 const live = new WeakMap<Database.Database, { state: SyncStatus['state']; error: string | null }>()
 
 export function getSyncStatus(db: Database.Database): SyncStatus {
-  const { n } = db.prepare('SELECT count(*) AS n FROM cards').get() as { n: number }
+  const { n } = db.prepare("SELECT count(*) AS n FROM cards WHERE game = 'ygo'").get() as { n: number }
   const l = live.get(db)
   return {
     state: l?.state ?? 'idle',
@@ -99,7 +99,7 @@ function saveCards(
     (c) => c && Number.isInteger(c.id) && typeof c.name === 'string' && c.name !== ''
   )
   if (valid.length === 0) throw new Error('The card database response contained no cards')
-  const { stored } = db.prepare('SELECT count(*) AS stored FROM cards').get() as { stored: number }
+  const { stored } = db.prepare("SELECT count(*) AS stored FROM cards WHERE game = 'ygo'").get() as { stored: number }
   if (stored >= MIN_GUARDED_CARDS && valid.length < stored * MIN_PAYLOAD_SHARE) {
     throw new Error(
       `The card database response looks truncated (${valid.length} cards, ${stored} stored)`
@@ -152,9 +152,9 @@ function saveCards(
       'id',
       'printing_id',
       seenPrintings,
-      "language = 'en' AND tcg_product_id IS NULL"
+      "game = 'ygo' AND language = 'en' AND tcg_product_id IS NULL"
     )
-    prune(db, 'card_images', 'image_id', 'image_id', seenImages)
+    prune(db, 'card_images', 'image_id', 'image_id', seenImages, "game = 'ygo'")
     db.exec(`INSERT INTO cards_fts(cards_fts) VALUES('rebuild')`)
     setMeta(db, 'last_sync_at', nowIso)
     setMeta(db, 'db_version', dbVersion)

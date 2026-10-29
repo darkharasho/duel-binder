@@ -254,7 +254,7 @@ export function saveTcgVariants(db: Database.Database): { saved: number; added: 
   )
   const printings = db.prepare(
     `SELECT card_id, set_name, set_code, set_rarity, set_rarity_code FROM card_printings
-     WHERE language = 'en' AND tcg_product_id IS NULL AND set_code = ? COLLATE NOCASE`
+     WHERE game = 'ygo' AND language = 'en' AND tcg_product_id IS NULL AND set_code = ? COLLATE NOCASE`
   )
   const upsert = db.prepare(
     `INSERT INTO card_printings (card_id, set_name, set_code, set_rarity, set_rarity_code, set_price,
@@ -305,7 +305,7 @@ export function saveTcgVariants(db: Database.Database): { saved: number; added: 
     const plain = db
       .prepare(
         `SELECT id, set_code, set_rarity, variant FROM card_printings
-       WHERE language = 'en' AND tcg_product_id IS NULL AND set_code <> ''`
+       WHERE game = 'ygo' AND language = 'en' AND tcg_product_id IS NULL AND set_code <> ''`
       )
       .all() as { id: number; set_code: string; set_rarity: string; variant: string | null }[]
     for (const p of plain) {
@@ -315,7 +315,7 @@ export function saveTcgVariants(db: Database.Database): { saved: number; added: 
       if (variant !== p.variant) labelled.run(variant, p.id)
     }
     const stale = (
-      db.prepare('SELECT id FROM card_printings WHERE tcg_product_id IS NOT NULL').all() as {
+      db.prepare("SELECT id FROM card_printings WHERE game = 'ygo' AND tcg_product_id IS NOT NULL").all() as {
         id: number
       }[]
     ).filter((r) => !seen.has(r.id))
@@ -350,7 +350,7 @@ function saveMissingPrintings(db: Database.Database, seen: Set<number>): number 
     (
       db
         .prepare(
-          "SELECT DISTINCT upper(set_code) AS code FROM card_printings WHERE language = 'en' AND tcg_product_id IS NULL"
+          "SELECT DISTINCT upper(set_code) AS code FROM card_printings WHERE game = 'ygo' AND language = 'en' AND tcg_product_id IS NULL"
         )
         .all() as { code: string }[]
     ).map((r) => r.code)
@@ -370,27 +370,27 @@ function saveMissingPrintings(db: Database.Database, seen: Set<number>): number 
   }
   if (byCode.size === 0) return 0
 
-  const named = db.prepare('SELECT id FROM cards WHERE name = ? COLLATE NOCASE')
+  const named = db.prepare("SELECT id FROM cards WHERE game = 'ygo' AND name = ? COLLATE NOCASE")
   const abroad = db.prepare(
     `SELECT DISTINCT card_id FROM card_printings
-     WHERE language <> 'en' AND set_code IN (${OTHER_LANGUAGES.map(() => '?').join(', ')}) COLLATE NOCASE`
+     WHERE game = 'ygo' AND language <> 'en' AND set_code IN (${OTHER_LANGUAGES.map(() => '?').join(', ')}) COLLATE NOCASE`
   )
   const setNames = db.prepare(
-    "SELECT DISTINCT set_name FROM card_printings WHERE language = 'en' AND set_code LIKE ? AND set_name <> ''"
+    "SELECT DISTINCT set_name FROM card_printings WHERE game = 'ygo' AND language = 'en' AND set_code LIKE ? AND set_name <> ''"
   )
   const rarityCodes = new Map(
     (
       db
         .prepare(
           `SELECT set_rarity, set_rarity_code FROM card_printings
-           WHERE language = 'en' AND set_rarity_code <> ''
+           WHERE game = 'ygo' AND language = 'en' AND set_rarity_code <> ''
            GROUP BY set_rarity, set_rarity_code ORDER BY count(*)`
         )
         .all() as { set_rarity: string; set_rarity_code: string }[]
     ).map((r) => [r.set_rarity, r.set_rarity_code])
   )
   const existing = db.prepare(
-    "SELECT 1 FROM card_printings WHERE language = 'en' AND card_id = ? AND set_code = ? AND set_rarity = ?"
+    "SELECT 1 FROM card_printings WHERE game = 'ygo' AND language = 'en' AND card_id = ? AND set_code = ? AND set_rarity = ?"
   )
   const upsert = db.prepare(
     `INSERT INTO card_printings (card_id, set_name, set_code, set_rarity, set_rarity_code, set_price,

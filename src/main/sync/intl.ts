@@ -193,7 +193,7 @@ async function run(
   console.info(`Yugipedia: ${jobs.length} non-English set lists to sync`)
 
   const cardIds = new Map<string, number>()
-  const cardRows = db.prepare('SELECT id, name FROM cards ORDER BY id').all() as {
+  const cardRows = db.prepare("SELECT id, name FROM cards WHERE game = 'ygo' ORDER BY id").all() as {
     id: number
     name: string
   }[]
@@ -216,7 +216,9 @@ async function run(
       tcg_date = CASE WHEN @keepDate THEN sets.tcg_date ELSE excluded.tcg_date END,
       image_url = CASE WHEN @keepImage THEN sets.image_url ELSE excluded.image_url END,
       image_key = CASE WHEN @keepImage THEN sets.image_key ELSE excluded.image_key END, list_rows = excluded.list_rows, unmatched_rows = excluded.unmatched_rows`)
-  const existing = db.prepare('SELECT id FROM card_printings WHERE language = ? AND set_name = ?')
+  const existing = db.prepare(
+    "SELECT id FROM card_printings WHERE game = 'ygo' AND language = ? AND set_name = ?"
+  )
 
   const unmatchedExamples: string[] = []
   const seenSets = new Set<string>()
@@ -224,10 +226,10 @@ async function run(
   // Sets not stored yet go first, so an interrupted first sync fills in rather than starting over;
   // within that, sets with no English release (e.g. Limit Over Collection) first, then Asian-market
   // lists before European ones.
-  const storedSet = db.prepare('SELECT 1 FROM sets WHERE language = ? AND set_name = ?')
+  const storedSet = db.prepare("SELECT 1 FROM sets WHERE game = 'ygo' AND language = ? AND set_name = ?")
   const englishSets = new Set(
     (
-      db.prepare("SELECT DISTINCT set_name FROM card_printings WHERE language = 'en'").all() as {
+      db.prepare("SELECT DISTINCT set_name FROM card_printings WHERE game = 'ygo' AND language = 'en'").all() as {
         set_name: string
       }[]
     ).map((r) => r.set_name.toLowerCase())
@@ -341,7 +343,7 @@ async function run(
   if (result.ok) {
     // Only languages in this run's listing: another language may simply not be listed right now.
     const langs = [...new Set(jobs.map((j) => j.language))]
-    const inLangs = `language IN (${langs.map(() => '?').join(', ')})`
+    const inLangs = `game = 'ygo' AND language IN (${langs.map(() => '?').join(', ')})`
     db.transaction(() => {
       const gone = (
         db.prepare(`SELECT language, set_name FROM sets WHERE ${inLangs}`).all(...langs) as {
@@ -358,7 +360,7 @@ async function run(
         db,
         orphanPrintings.map((r) => r.id)
       )
-      const delSet = db.prepare('DELETE FROM sets WHERE language = ? AND set_name = ?')
+      const delSet = db.prepare("DELETE FROM sets WHERE game = 'ygo' AND language = ? AND set_name = ?")
       for (const r of gone) delSet.run(r.language, r.set_name)
       setMeta(db, 'intl_sets_synced_at', now.toISOString())
     })()

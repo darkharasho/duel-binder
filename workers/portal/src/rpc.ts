@@ -67,11 +67,11 @@ function friendId(db: AppDeps['db'], me: number, id: unknown): number {
 
 // Arguments come off the wire untyped: every handler checks its own before use.
 const HANDLERS: { [C in PortalChannel]: Handler<C> } = {
-  'cards:search': ({ db }, _s, q) => searchCards(db, checkString(q, 'q')),
-  'cards:get': ({ db }, _s, cardId) => getCardDetail(db, checkId(cardId, 'cardId')),
+  'cards:search': ({ db }, scope, q) => searchCards(db, checkString(q, 'q'), undefined, scope),
+  'cards:get': ({ db }, scope, cardId) => getCardDetail(db, checkId(cardId, 'cardId'), scope),
   'cards:browse': ({ db }, scope, f) =>
     browseCards(db, checkObject(f, 'Filters') as unknown as BrowseFilters, scope),
-  'cards:browseFacets': ({ db }) => browseFacets(db),
+  'cards:browseFacets': ({ db }, scope) => browseFacets(db, scope),
   'sets:list': ({ db }, scope) => listSets(db, scope),
   'sets:checklist': ({ db }, scope, setName, language) =>
     getChecklist(db, checkString(setName, 'setName'), checkLanguage(language), scope),
@@ -122,9 +122,9 @@ const HANDLERS: { [C in PortalChannel]: Handler<C> } = {
   'friends:collection': ({ db, userId }, _s, id, f) => {
     const friend = friendId(db, userId, id)
     const filters = checkObject(f, 'Filters') as unknown as CollectionFilters
-    return listEntries(db, filters, userScope(friend)).map((e) => ({ ...e, notes: '' }))
+    return listEntries(db, filters, userScope(friend, 'ygo')).map((e) => ({ ...e, notes: '' }))
   },
-  'friends:facets': ({ db, userId }, _s, id) => getFacets(db, userScope(friendId(db, userId, id))),
+  'friends:facets': ({ db, userId }, _s, id) => getFacets(db, userScope(friendId(db, userId, id), 'ygo')),
   'stats:get': ({ db }, scope) => getStats(db, scope)
 }
 
@@ -165,7 +165,7 @@ export async function rpcRoute(req: Request, deps: AppDeps, channel: string): Pr
       s: Scope,
       ...a: unknown[]
     ) => unknown
-    const result = handler({ ...deps, userId: user.id }, userScope(user.id), ...args) ?? null
+    const result = handler({ ...deps, userId: user.id }, userScope(user.id, 'ygo'), ...args) ?? null
     if (QUEUES_PRICES.has(channel)) await deps.prices.soon()
     return json({ result })
   } catch (e) {

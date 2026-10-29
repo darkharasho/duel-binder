@@ -6,6 +6,7 @@ import { LANGUAGES, type Language } from '../../shared/languages'
 import { parsePrice } from '../../shared/pricing'
 import type { ScanPrinting } from '../../shared/scan/types'
 import { EN_TWIN_PRICE } from './enTwin'
+import { LOCAL, type Scope } from './scope'
 
 interface PrintingRow {
   printingId: number
@@ -19,17 +20,17 @@ interface PrintingRow {
   rawPrice: number | null
 }
 
-const SELECT = `SELECT p.id AS printingId, p.card_id AS cardId, c.name AS name, c.frame_type AS frameType,
+const select = (scope: Scope): string => `SELECT p.id AS printingId, p.card_id AS cardId, c.name AS name, c.frame_type AS frameType,
   p.set_name AS setName, p.set_code AS setCode, p.set_rarity AS rarity, p.language AS language,
   CASE WHEN p.language = 'en' THEN COALESCE(p.market_price, ip.price, p.set_price) ELSE COALESCE(ip.price, ${EN_TWIN_PRICE}) END AS rawPrice
-  FROM card_printings p JOIN cards c ON c.id = p.card_id
-  LEFT JOIN intl_prices ip ON ip.printing_id = p.id`
-const VISIBLE = 'p.contributed = 0'
+  FROM card_printings p JOIN cards c ON c.id = p.card_id AND c.game = ${scope.game}
+  LEFT JOIN intl_prices ip ON ip.printing_id = p.id
+  WHERE p.game = ${scope.game} AND p.contributed = 0`
 
 const languageRank = (l: Language): number => LANGUAGES.findIndex((x) => x.code === l)
 
 /** Attaches each card's artwork ids and sorts by set code, then language, then rarity tier. */
-function withImages(db: SqlDb, rows: PrintingRow[]): ScanPrinting[] {
+function withImages(db: SqlDb, rows: PrintingRow[], scope: Scope): ScanPrinting[] {
   const ids = [...new Set(rows.map((r) => r.cardId))]
   const images = new Map<number, number[]>()
   for (let i = 0; i < ids.length; i += 500) {
@@ -37,7 +38,8 @@ function withImages(db: SqlDb, rows: PrintingRow[]): ScanPrinting[] {
     const found = db
       .prepare(
         `SELECT card_id AS cardId, image_id AS imageId FROM card_images
-         WHERE card_id IN (${chunk.map(() => '?').join(',')}) ORDER BY card_id, sort_order`
+         WHERE game = ${scope.game} AND card_id IN (${chunk.map(() => '?').join(',')})
+         ORDER BY card_id, sort_order`
       )
       .all(...chunk) as { cardId: number; imageId: number }[]
     for (const f of found) {
@@ -61,38 +63,44 @@ function withImages(db: SqlDb, rows: PrintingRow[]): ScanPrinting[] {
     )
 }
 
-export function printingsByCode(db: SqlDb, code: string): ScanPrinting[] {
+export function printingsByCode(db: SqlDb, code: string, scope: Scope = LOCAL): ScanPrinting[] {
   const rows = db
-    .prepare(`${SELECT} WHERE ${VISIBLE} AND p.set_code = ? COLLATE NOCASE`)
+    .prepare(`${select(scope)} AND p.set_code = ? COLLATE NOCASE`)
     .all(code) as PrintingRow[]
-  return withImages(db, rows)
+  return withImages(db, rows, scope)
 }
 
-export function printingsForSet(db: SqlDb, setName: string, language: Language): ScanPrinting[] {
+export function printingsForSet(
+  db: SqlDb,
+  setName: string,
+  language: Language,
+  scope: Scope = LOCAL
+): ScanPrinting[] {
   const rows = db
-    .prepare(`${SELECT} WHERE ${VISIBLE} AND p.set_name = ? AND p.language = ?`)
+    .prepare(`${select(scope)} AND p.set_name = ? AND p.language = ?`)
     .all(setName, language) as PrintingRow[]
-  return withImages(db, rows)
+  return withImages(db, rows, scope)
 }
 
-export function printingsForCards(db: SqlDb, cardIds: number[]): ScanPrinting[] {
+export function printingsForCards(db: SqlDb, cardIds: number[], scope: Scope = LOCAL): ScanPrinting[] {
   const ids = [...new Set(cardIds)]
   const rows: PrintingRow[] = []
   for (let i = 0; i < ids.length; i += 500) {
     const chunk = ids.slice(i, i + 500)
     rows.push(
       ...(db
-        .prepare(`${SELECT} WHERE ${VISIBLE} AND p.card_id IN (${chunk.map(() => '?').join(',')})`)
+        .prepare(`${select(scope)} AND p.card_id IN (${chunk.map(() => '?').join(',')})`)
         .all(...chunk) as PrintingRow[])
     )
   }
-  return withImages(db, rows)
+  return withImages(db, rows, scope)
 }
 
 /** The card of each known artwork, by image id; unknown ids are left out. */
 export function cardsForImages(
   db: SqlDb,
-  imageIds: number[]
+  imageIds: number[],
+  scope: Scope = LOCAL
 ): { imageId: number; cardId: number }[] {
   const ids = [...new Set(imageIds)]
   const out: { imageId: number; cardId: number }[] = []
@@ -102,7 +110,7 @@ export function cardsForImages(
       ...(db
         .prepare(
           `SELECT image_id AS imageId, card_id AS cardId FROM card_images
-           WHERE image_id IN (${chunk.map(() => '?').join(',')})`
+           WHERE game = ${scope.game} AND image_id IN (${chunk.map(() => '?').join(',')})`
         )
         .all(...chunk) as { imageId: number; cardId: number }[])
     )
@@ -110,24 +118,29 @@ export function cardsForImages(
   return out.sort((a, b) => a.imageId - b.imageId)
 }
 
-// The name list, normalized for matching, is rebuilt only when the catalog version changes.
-const nameCache = new WeakMap<object, { version: string | null; names: NameEntry[] }>()
+// The game's name list, normalized for matching, is rebuilt only when the catalog version or game changes.
+const nameCache = new WeakMap<object, { version: string | null; game: string; names: NameEntry[] }>()
 
-function cardNames(db: SqlDb): NameEntry[] {
+function cardNames(db: SqlDb, scope: Scope): NameEntry[] {
   const version = getMeta(db, 'db_version')
+  const { game } = db.prepare(`SELECT ${scope.game} AS game`).get() as { game: string }
   const hit = nameCache.get(db)
-  if (hit && hit.version === version) return hit.names
-  const rows = db.prepare('SELECT id, name FROM cards').all() as { id: number; name: string }[]
+  if (hit && hit.version === version && hit.game === game) return hit.names
+  const rows = db.prepare('SELECT id, name FROM cards WHERE game = ?').all(game) as {
+    id: number
+    name: string
+  }[]
   const names = rows.map((r) => ({ ...r, norm: normalizeName(r.name) }))
-  nameCache.set(db, { version, names })
+  nameCache.set(db, { version, game, names })
   return names
 }
 
 export function matchName(
   db: SqlDb,
-  text: string
+  text: string,
+  scope: Scope = LOCAL
 ): { cardId: number; name: string; score: number } | null {
-  const names = cardNames(db)
+  const names = cardNames(db, scope)
   const best = bestNameMatch(text, names)
   if (!best) return null
   const name = names.find((n) => n.id === best.id)?.name

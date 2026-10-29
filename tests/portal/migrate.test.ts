@@ -127,7 +127,7 @@ function serverBefore12(): Database.Database {
   const db = freshDb()
   runSteps(db, [
     ...MIGRATIONS.filter((m) => m.version <= 18),
-    ...SERVER_STEPS.filter((s) => s.name !== 'server-12')
+    ...SERVER_STEPS.filter((s) => s.name !== 'server-12' && s.name !== 'server-13')
   ])
   db.exec(`
     INSERT INTO users (id, discord_id, username, created_at, updated_at) VALUES (1, 'd1', 'one', 'x', 'x');
@@ -227,6 +227,54 @@ describe('server-12 (game columns)', () => {
     expect(rows(db, 'SELECT tbl, game, key FROM catalog_tombstones ORDER BY seq')).toEqual([
       { tbl: 'card_printings', game: 'pkm', key: JSON.stringify([pkey]) },
       { tbl: 'sets', game: 'pkm', key: JSON.stringify(['pkm', 'ja', 'クレイバースト']) }
+    ])
+    db.close()
+  })
+})
+
+describe('server-13 (pokemon_cards image_url and local_name)', () => {
+  const cols = (db: Database.Database): string[] =>
+    (db.prepare('PRAGMA table_info(pokemon_cards)').all() as { name: string }[]).map((c) => c.name)
+
+  it('a fresh server and one upgraded from server-12 both end with both columns', () => {
+    const fresh = freshDb()
+    migrateServer(fresh)
+    const old = freshDb()
+    runSteps(old, [...MIGRATIONS, ...SERVER_STEPS.filter((s) => s.name !== 'server-13')])
+    expect(cols(old)).not.toContain('image_url')
+    seedPokemon(old)
+    migrateServer(old)
+    for (const db of [fresh, old]) expect(cols(db)).toEqual(expect.arrayContaining(['image_url', 'local_name']))
+    expect(rows(old, 'SELECT image_url, local_name FROM pokemon_cards')).toEqual([
+      { image_url: null, local_name: null },
+      { image_url: null, local_name: null }
+    ])
+    fresh.close()
+    old.close()
+  })
+
+  it('a change to image_url alone raises the row catalog_seq', () => {
+    const db = freshDb()
+    migrateServer(db)
+    const { cardIds } = seedPokemon(db)
+    const seqOf = (): number =>
+      (db.prepare('SELECT catalog_seq AS s FROM pokemon_cards WHERE card_id = ?').get(cardIds[0]) as { s: number }).s
+    const before = seqOf()
+    db.prepare("UPDATE pokemon_cards SET image_url = 'x' WHERE card_id = ?").run(cardIds[0])
+    const mid = seqOf()
+    expect(mid).toBeGreaterThan(before)
+    db.prepare("UPDATE pokemon_cards SET local_name = 'y' WHERE card_id = ?").run(cardIds[0])
+    expect(seqOf()).toBeGreaterThan(mid)
+    db.close()
+  })
+
+  it('deleting a row writes a tombstone for game pkm', () => {
+    const db = freshDb()
+    migrateServer(db)
+    const { cardIds } = seedPokemon(db)
+    db.prepare('DELETE FROM pokemon_cards WHERE card_id = ?').run(cardIds[0])
+    expect(rows(db, 'SELECT tbl, game, key FROM catalog_tombstones')).toEqual([
+      { tbl: 'pokemon_cards', game: 'pkm', key: JSON.stringify([cardIds[0]]) }
     ])
     db.close()
   })

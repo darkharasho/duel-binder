@@ -15,6 +15,19 @@ export interface CardRow {
   archetype: string | null
   desc: string
   tcgplayerPrice: number | null
+  /** A Pokémon card's own facts (from pokemon_cards); absent on Yu-Gi-Oh!. */
+  pokemon?: PokemonFacts
+}
+
+export interface PokemonFacts {
+  category: string
+  hp: number | null
+  types: string[]
+  stage: string | null
+  rarity: string | null
+  illustrator: string | null
+  /** The card's Japanese name, when it has one. */
+  localName: string | null
 }
 
 export interface Printing {
@@ -108,6 +121,7 @@ export interface CollectionFilters {
   pkmCategories?: string[]
   pkmTypes?: string[]
   pkmStages?: string[]
+  pkmRarities?: string[]
   hpMin?: number
   hpMax?: number
   sort: SortKey
@@ -133,6 +147,7 @@ export interface BrowseFilters {
   pkmCategories?: string[]
   pkmTypes?: string[]
   pkmStages?: string[]
+  pkmRarities?: string[]
   hpMin?: number
   hpMax?: number
   sort: BrowseSort
@@ -179,6 +194,7 @@ export interface BrowseFacets {
   pkmCategories?: string[]
   pkmTypes?: string[]
   pkmStages?: string[]
+  pkmRarities?: string[]
 }
 
 export interface Facets {
@@ -192,6 +208,7 @@ export interface Facets {
   pkmCategories?: string[]
   pkmTypes?: string[]
   pkmStages?: string[]
+  pkmRarities?: string[]
 }
 
 export interface CollectionStats {

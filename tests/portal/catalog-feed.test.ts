@@ -478,6 +478,11 @@ describe('per-game catalog feed', () => {
     }
     expect(got.sort()).toEqual(expected.sort())
     expect(expected.filter((k) => k.startsWith('pokemon_cards:'))).toHaveLength(2)
+    const details = all.filter((c) => c.table === 'pokemon_cards')
+    expect(details).toHaveLength(2)
+    for (const c of details) {
+      expect('row' in c && 'image_url' in c.row && 'local_name' in c.row).toBe(true)
+    }
   })
 
   it('game=ygo serves only Yu-Gi-Oh! rows, with their game', async () => {

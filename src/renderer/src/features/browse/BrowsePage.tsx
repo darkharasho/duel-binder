@@ -40,7 +40,7 @@ import { BrowseCardPanel } from './BrowseCardPanel'
 const PAGE = 120
 
 type GameKey =
-  'cardTypes' | 'attributes' | 'races' | 'archetypes' | 'pkmCategories' | 'pkmTypes' | 'pkmStages'
+  'cardTypes' | 'attributes' | 'races' | 'archetypes' | 'pkmCategories' | 'pkmTypes' | 'pkmStages' | 'pkmRarities'
 type ListKey = GameKey | 'setNames' | 'rarities'
 type Filters = Omit<BrowseFilters, 'offset' | 'limit'>
 
@@ -51,7 +51,8 @@ const GAME_KEYS: readonly string[] = [
   'archetypes',
   'pkmCategories',
   'pkmTypes',
-  'pkmStages'
+  'pkmStages',
+  'pkmRarities'
 ] satisfies GameKey[]
 
 /** Browse's own names for some of the games' filters. */

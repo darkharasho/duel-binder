@@ -78,6 +78,29 @@ function imageFetch(requested: string[] = []): typeof fetch {
 }
 
 describe('buildFingerprints', () => {
+  it('leaves Pokémon art out: it is not on YGOPRODeck and the scanner is Yu-Gi-Oh only', async () => {
+    const pkm = 2 ** 40 + 5
+    work
+      .prepare(
+        `INSERT INTO cards (id, name, type, frame_type, race, "desc", updated_at, game)
+         VALUES (?, 'Pikachu', 'Pokemon', 'pokemon', '', '', '2026-01-01', 'pkm')`
+      )
+      .run(pkm)
+    work
+      .prepare(
+        "INSERT INTO card_images (image_id, card_id, sort_order, game) VALUES (?, ?, 0, 'pkm')"
+      )
+      .run(pkm + 1, pkm)
+    const requested: string[] = []
+    const out = await buildFingerprints({
+      work,
+      cachePath: join(dir, 'fingerprints.sqlite'),
+      fetch: imageFetch(requested)
+    })
+    expect(requested.sort()).toEqual(['1', '2', '3'])
+    expect(out).toMatchObject({ count: 2, fetched: 2, failed: 1 })
+  })
+
   it('hashes new images, reuses the cache, and skips failures until next time', async () => {
     const cachePath = join(dir, 'fingerprints.sqlite')
     const requested: string[] = []
@@ -208,6 +231,7 @@ describe('runJob', () => {
     }) as typeof fetch
     const lines: string[] = []
     await runJob({
+      pokemon: async () => ({ reports: [], error: null }),
       dir,
       url: 'https://portal.example',
       token: 'tok',

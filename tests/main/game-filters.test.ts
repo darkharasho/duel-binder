@@ -3,6 +3,7 @@ import type Database from 'better-sqlite3'
 import { seededDb } from './helpers'
 import { seedPokemon } from '../fixtures/pokemon'
 import { pokemonId } from '../../src/shared/games'
+import { searchCards } from '../../src/main/repo/cards'
 import { addEntry, getFacets, listEntries } from '../../src/main/repo/collection'
 import { browseCards, browseFacets } from '../../src/main/repo/browse'
 import { getStats } from '../../src/main/repo/stats'
@@ -26,6 +27,9 @@ function addPokemonCard(
     hp: number | null
     types: string[]
     stage: string | null
+    rarity?: string
+    setCode?: string
+    localName?: string
   }
 ): { cardId: number; printingId: number } {
   const id = pokemonId(o.source)
@@ -37,15 +41,15 @@ function addPokemonCard(
     "INSERT INTO card_images (image_id, game, card_id, sort_order) VALUES (?, 'pkm', ?, 0)"
   ).run(id, id)
   db.prepare(
-    `INSERT INTO pokemon_cards (card_id, category, hp, types, stage, rarity, illustrator, source_id)
-     VALUES (?, ?, ?, ?, ?, 'Common', 'x', ?)`
-  ).run(id, o.category, o.hp, JSON.stringify(o.types), o.stage, o.source)
+    `INSERT INTO pokemon_cards (card_id, category, hp, types, stage, rarity, illustrator, source_id, local_name)
+     VALUES (?, ?, ?, ?, ?, ?, 'x', ?, ?)`
+  ).run(id, o.category, o.hp, JSON.stringify(o.types), o.stage, o.rarity ?? 'Common', o.source, o.localName ?? null)
   const r = db
     .prepare(
       `INSERT INTO card_printings (game, card_id, language, set_name, set_code, set_rarity)
-       VALUES ('pkm', ?, 'en', 'Test Set', 'TST 001/001', 'Normal')`
+       VALUES ('pkm', ?, 'en', 'Test Set', ?, 'Normal')`
     )
-    .run(id)
+    .run(id, o.setCode ?? 'TST 001/001')
   return { cardId: id, printingId: Number(r.lastInsertRowid) }
 }
 
@@ -113,6 +117,87 @@ describe('per-game filters and facets', () => {
       expect(names(listEntries(db, { ...ALL, hpMin: 100 }))).toEqual(['Charizard'])
       expect(names(listEntries(db, { ...ALL, hpMax: 60 }))).toEqual(['Pikachu'])
       expect(browseNames({ hpMin: 65, hpMax: 100 })).toEqual(['ピカチュウ'])
+    })
+
+    it('pkmRarities lists the seeded rarities and filters', () => {
+      addPokemonCard(db, {
+        source: 't-rare',
+        name: 'Gyarados',
+        category: 'Pokémon',
+        hp: 180,
+        types: ['Water'],
+        stage: 'Stage 1',
+        rarity: 'Double Rare'
+      })
+      expect(browseFacets(db).pkmRarities).toEqual(['Common', 'Double Rare'])
+      expect(getFacets(db).pkmRarities).toEqual(['Common'])
+      expect(browseNames({ pkmRarities: ['Double Rare'] })).toEqual(['Gyarados'])
+      expect(browseNames({ pkmRarities: ['Common'] })).not.toContain('Gyarados')
+      expect(names(listEntries(db, { ...ALL, pkmRarities: ['Double Rare'] }))).toEqual([])
+      expect(names(listEntries(db, { ...ALL, pkmRarities: ['Common'] }))).toHaveLength(3)
+    })
+
+    describe('search', () => {
+      beforeEach(() => {
+        const pineco = addPokemonCard(db, {
+          source: 't-pineco',
+          name: 'Pineco',
+          category: 'Pokémon',
+          hp: 60,
+          types: ['Grass'],
+          stage: 'Basic',
+          setCode: 'SVI 045/198',
+          localName: 'マツボックリ'
+        })
+        addPokemonCard(db, {
+          source: 't-gallery',
+          name: 'Gallery Mew',
+          category: 'Pokémon',
+          hp: 70,
+          types: ['Psychic'],
+          stage: 'Basic',
+          setCode: 'SIT TG05/TG30'
+        })
+        db.exec(`INSERT INTO cards_fts(cards_fts) VALUES('rebuild')`)
+        addEntry(db, { printingId: pineco.printingId, imageId: pineco.cardId, quantity: 1 }, now)
+      })
+
+      const found = (q: string): string[] => browseNames({ q })
+      const searched = (q: string): string[] => searchCards(db, q).map((r) => r.name)
+
+      it('finds a card by name or Japanese name', () => {
+        expect(found('Pineco')).toEqual(['Pineco'])
+        expect(found('マツボックリ')).toEqual(['Pineco'])
+        expect(searched('Pineco')).toEqual(['Pineco'])
+        expect(searched('ボックリ')).toEqual(['Pineco'])
+        expect(names(listEntries(db, { ...ALL, q: 'マツボ' }))).toEqual(['Pineco'])
+      })
+
+      it('finds a card by printing number, with or without leading zeros', () => {
+        for (const q of ['045', '45']) {
+          expect(found(q)).toEqual(['Pikachu', 'Pineco'])
+          expect(searched(q)).toEqual(['Pikachu', 'Pineco'])
+          expect(names(listEntries(db, { ...ALL, q }))).toEqual(['Pikachu', 'Pineco'])
+        }
+        expect(found('45/193')).toEqual(['Pikachu'])
+        expect(found('045/198')).toEqual(['Pineco'])
+        expect(searched('45/193')).toEqual(['Pikachu'])
+        expect(found('45/999')).toEqual([])
+      })
+
+      it('does not match a localId with letters, or a number inside a longer one', () => {
+        expect(found('5')).toEqual([])
+        expect(found('05')).toEqual([])
+        expect(found('30')).toEqual(['ピカチュウ'])
+      })
+
+      it('never finds Pokémon from a Yu-Gi-Oh scope', () => {
+        setGame(db, 'ygo')
+        for (const q of ['Pineco', 'マツボックリ', '045', '45/193']) {
+          expect(found(q)).toEqual([])
+          expect(searched(q)).toEqual([])
+        }
+      })
     })
 
     it('ignores the Yu-Gi-Oh fields', () => {

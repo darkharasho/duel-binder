@@ -286,6 +286,15 @@ CREATE TABLE pokemon_cards (card_id INTEGER PRIMARY KEY REFERENCES cards(id), ca
 CREATE INDEX ix_pokemon_cards_catalog_seq ON pokemon_cards(catalog_seq);
 `
 
+/**
+ * Pokémon catalog: an image URL and the card's name in its own language. Desktop-only: a fresh
+ * server runs desktop steps before server-12 creates `pokemon_cards`, so server-13 repeats this.
+ */
+export const SCHEMA_V20 = `
+ALTER TABLE pokemon_cards ADD COLUMN image_url TEXT;
+ALTER TABLE pokemon_cards ADD COLUMN local_name TEXT;
+`
+
 /** A printing's rarity as shown: "Starlight Rare (Extended Art)" for a labelled variant. */
 export const RARITY_LABEL = "p.set_rarity || COALESCE(' (' || p.variant || ')', '')"
 
@@ -309,6 +318,7 @@ export const MIGRATIONS: Migration[] = [
   { version: 16, sql: SCHEMA_V16, server: false },
   { version: 17, sql: SCHEMA_V17 },
   { version: 18, sql: SCHEMA_V18, server: false },
-  { version: 19, sql: SCHEMA_V19, server: false }
+  { version: 19, sql: SCHEMA_V19, server: false },
+  { version: 20, sql: SCHEMA_V20, server: false }
 ]
 

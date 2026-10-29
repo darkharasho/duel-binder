@@ -16,7 +16,7 @@ const RETRY_DELAYS_MS = [1000, 2000]
 const HASH_VERSION = '3'
 
 export interface FingerprintOptions {
-  /** The work database; its `card_images` decides which ids the file holds. */
+  /** The work database; its Yu-Gi-Oh `card_images` decide which ids the file holds. */
   work: Database.Database
   /** SQLite file caching one hash per image id, so each night fetches only new images. */
   cachePath: string
@@ -62,7 +62,8 @@ async function hashImage(
 }
 
 /**
- * Builds the scan fingerprint file for every `card_images` id in `work`. Hashes already in the
+ * Builds the scan fingerprint file for every Yu-Gi-Oh `card_images` id in `work` (the scanner is
+ * Yu-Gi-Oh only, and Pokémon art isn't on YGOPRODeck). Hashes already in the
  * cache are reused; the rest are downloaded and hashed, and an image that fails is skipped
  * (and counted) so it is tried again next run.
  */
@@ -79,7 +80,8 @@ export async function buildFingerprints(opts: FingerprintOptions): Promise<Finge
         opts.work
           .prepare(
             `SELECT i.image_id, COALESCE(c.frame_type, '') AS frame_type
-             FROM card_images i LEFT JOIN cards c ON c.id = i.card_id`
+             FROM card_images i LEFT JOIN cards c ON c.id = i.card_id
+             WHERE i.game = 'ygo'`
           )
           .all() as { image_id: number; frame_type: string }[]
       ).map((r) => [r.image_id, r.frame_type])

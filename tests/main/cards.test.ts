@@ -1,6 +1,7 @@
 import type Database from 'better-sqlite3'
 import { buildFtsQuery, getCardDetail, searchCards } from '../../src/main/repo/cards'
 import { seededDb } from './helpers'
+import { seedPokemon } from '../fixtures/pokemon'
 
 let db: Database.Database
 beforeAll(async () => {
@@ -28,4 +29,13 @@ test('getCardDetail', () => {
   expect(d.images).toHaveLength(2)
   expect(d.card.name).toBe('Dark Magician')
   expect(getCardDetail(db, 1)).toBeNull()
+})
+
+test('Pokémon cards are not found by name or number from a Yu-Gi-Oh! search', async () => {
+  const other = await seededDb()
+  seedPokemon(other)
+  expect(searchCards(other, 'Pikachu')).toEqual([])
+  expect(searchCards(other, '045')).toEqual([])
+  expect(searchCards(other, '45/193')).toEqual([])
+  other.close()
 })

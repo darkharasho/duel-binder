@@ -6,6 +6,7 @@ import { LANGUAGES, type Language } from '../../shared/languages'
 import { parsePrice } from '../../shared/pricing'
 import type { ScanPrinting } from '../../shared/scan/types'
 import { enTwinPrice } from './enTwin'
+import { isMarketOnly } from './priceRule'
 import { LOCAL, type Scope } from './scope'
 
 interface PrintingRow {
@@ -22,7 +23,7 @@ interface PrintingRow {
 
 const select = (scope: Scope): string => `SELECT p.id AS printingId, p.card_id AS cardId, c.name AS name, c.frame_type AS frameType,
   p.set_name AS setName, p.set_code AS setCode, p.set_rarity AS rarity, p.language AS language,
-  CASE WHEN p.language = 'en' THEN COALESCE(p.market_price, ip.price, p.set_price) ELSE COALESCE(ip.price, ${enTwinPrice(scope.game)}) END AS rawPrice
+  CASE WHEN ${isMarketOnly} THEN p.market_price WHEN p.language = 'en' THEN COALESCE(p.market_price, ip.price, p.set_price) ELSE COALESCE(ip.price, ${enTwinPrice(scope.game)}) END AS rawPrice
   FROM card_printings p JOIN cards c ON c.id = p.card_id AND +c.game = ${scope.game}
   LEFT JOIN intl_prices ip ON ip.printing_id = p.id
   WHERE +p.game = ${scope.game} AND p.contributed = 0`

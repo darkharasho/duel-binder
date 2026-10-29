@@ -60,7 +60,7 @@ describe('migration V19 (game columns, Pokémon card fields)', () => {
 
     migrate(db)
 
-    expect(db.pragma('user_version', { simple: true })).toBe(19)
+    expect(db.pragma('user_version', { simple: true })).toBe(20)
     for (const t of GAME_TABLES) {
       expect(columns(db, t), t).toContain('game')
       expect(all(db, `SELECT DISTINCT game FROM ${t}`), t).toEqual([{ game: 'ygo' }])
@@ -136,8 +136,7 @@ describe('migration V19 (game columns, Pokémon card fields)', () => {
   })
 
   it('adds the Pokémon card fields and per-game cloud cursors', () => {
-    const db = v18()
-    migrate(db)
+    const db = databaseAt(19)
     expect(columns(db, 'pokemon_cards')).toEqual([
       'card_id',
       'category',

@@ -1,6 +1,6 @@
 import type Database from 'better-sqlite3'
 import { getMeta } from '../../src/main/db/meta'
-import { LEGACY_CATALOG_TABLES } from '../../src/shared/catalogTables'
+import { CATALOG_TABLES } from '../../src/shared/catalogTables'
 import { diffTable } from './diff'
 
 const DEFAULT_BATCH = 2000
@@ -39,8 +39,8 @@ function chunk<T>(items: T[], size: number): T[][] {
 
 /**
  * Sends what changed in `work` since `base` to the portal's admin endpoints: deletions in
- * reverse `LEGACY_CATALOG_TABLES` order (children before parents), then upserts table by table in
- * `LEGACY_CATALOG_TABLES` order, then `/admin/catalog/finish` with the work database's version and sync time. Each request is
+ * reverse `CATALOG_TABLES` order (children before parents), then upserts table by table in
+ * `CATALOG_TABLES` order, then `/admin/catalog/finish` with the work database's version and sync time. Each request is
  * retried on network errors, 429 and 5xx; the first failure that can't be retried rejects.
  */
 export async function uploadCatalog(
@@ -74,7 +74,7 @@ export async function uploadCatalog(
     }
   }
 
-  const diffs = LEGACY_CATALOG_TABLES.map((t) => ({ t, ...diffTable(opts.work, opts.base, t) }))
+  const diffs = CATALOG_TABLES.map((t) => ({ t, ...diffTable(opts.work, opts.base, t) }))
   let upserted = 0
   let deleted = 0
   // Deletes go first so a freed unique value (e.g. a logo's image_key) is gone before its new row lands.

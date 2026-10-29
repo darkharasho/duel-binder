@@ -20,12 +20,31 @@ export const RARITY_COLORS: Record<string, string> = {
   'Ghost/Gold Rare': '#ddd3a8'
 }
 
-/** A game's rarity colours. Pokémon has none of its own yet, so its versions all take the grey. */
+// Pokémon's printing versions: the foils get a colour, Normal and the rest stay grey. Yu-Gi-Oh! has
+// no foil colour of its own, so Holofoil takes the gold of its Gold Rare.
+const HOLO = '#d4a93c'
+const POKEMON_COLORS: Record<string, string> = {
+  Holofoil: HOLO,
+  '1st Edition Holofoil': HOLO,
+  'Reverse Holofoil': '#8fb4cf'
+}
+
+/** A game's rarity colours (exact labels). */
 export const rarityColors = (game: GameId): Record<string, string> =>
-  game === 'ygo' ? RARITY_COLORS : {}
+  game === 'ygo' ? RARITY_COLORS : POKEMON_COLORS
+
+/** A Pokémon version with its subtype in front ("Shadowless Holofoil") takes its base version's colour. */
+function pokemonColor(version: string): string | undefined {
+  if (POKEMON_COLORS[version]) return POKEMON_COLORS[version]
+  const base = Object.keys(POKEMON_COLORS)
+    .filter((v) => version.endsWith(` ${v}`))
+    .sort((a, b) => b.length - a.length)[0]
+  return base && POKEMON_COLORS[base]
+}
 
 export function rarityColor(rarity: string, game: GameId = 'ygo'): string {
-  return rarityColors(game)[rarity] ?? '#9ca3af'
+  const own = game === 'ygo' ? RARITY_COLORS[rarity] : pokemonColor(rarity)
+  return own ?? '#9ca3af'
 }
 
 /** Dark or white text, whichever reads better on the rarity's colour. */

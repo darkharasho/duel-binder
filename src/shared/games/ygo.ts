@@ -7,6 +7,7 @@ export const YGO: GameDef = {
   color: '#c9a24b',
   features: { scan: true, rip: true },
   crossLanguagePriceFallback: true,
+  priceRule: 'ygo',
   access: 'everyone',
   vocab: {
     cardId: 'Passcode',
@@ -21,5 +22,7 @@ export const YGO: GameDef = {
     { key: 'races', label: 'Race', kind: 'multi' },
     { key: 'archetypes', label: 'Archetype', kind: 'multi' },
     { key: 'level', label: 'Level', kind: 'range' }
-  ]
+  ],
+  // Yu-Gi-Oh!'s facts are its stats line, which the card panel builds itself.
+  details: []
 }

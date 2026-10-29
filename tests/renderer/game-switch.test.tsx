@@ -252,6 +252,49 @@ describe('per-game filters and words', () => {
     expect(screen.getByText('Version').nextElementSibling).toHaveTextContent('Reverse Holofoil')
   })
 
+  it("card details list a Pokémon card's own facts, skipping empty ones, then its text", async () => {
+    const card: CardRow = {
+      id: 2 ** 40 + 2,
+      name: 'Pineco',
+      type: 'Pokémon',
+      frameType: '',
+      race: '',
+      attribute: null,
+      level: null,
+      linkval: null,
+      atk: null,
+      def: null,
+      archetype: null,
+      desc: 'It likes to hang from trees.',
+      tcgplayerPrice: null,
+      pokemon: {
+        category: 'Pokémon',
+        hp: 60,
+        types: ['Grass', 'Fighting'],
+        stage: 'Basic',
+        rarity: 'Common',
+        illustrator: null,
+        localName: 'マツボックリ'
+      }
+    }
+    renderWithProviders(
+      <GameProvider>
+        <CardDetails card={card} printing={{ setCode: 'SVI 045/198', setRarity: 'Normal' }} />
+      </GameProvider>,
+      { api: pkmApi() }
+    )
+    const fact = async (label: string): Promise<HTMLElement | null> =>
+      (await screen.findByText(label)).nextElementSibling as HTMLElement | null
+    expect(await fact('HP')).toHaveTextContent('60')
+    expect(await fact('Type')).toHaveTextContent('Grass, Fighting')
+    expect(await fact('Stage')).toHaveTextContent('Basic')
+    expect(await fact('Rarity')).toHaveTextContent('Common')
+    expect(await fact('Japanese name')).toHaveTextContent('マツボックリ')
+    expect(await fact('Version')).toHaveTextContent('Normal')
+    expect(screen.queryByText('Illustrator')).not.toBeInTheDocument()
+    expect(screen.getByText('It likes to hang from trees.')).toBeInTheDocument()
+  })
+
   it('keeps the saved set types per game, with Yu-Gi-Oh! on the old key', async () => {
     localStorage.setItem('sets.types', '["deck"]')
     localStorage.setItem('sets.types:pkm', '["promo"]')

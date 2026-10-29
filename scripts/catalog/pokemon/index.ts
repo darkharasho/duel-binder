@@ -1,0 +1,47 @@
+import type Database from 'better-sqlite3'
+import { createPokemonSources } from './sources'
+import type { PokemonSources } from './types'
+import { refreshPokemon, type PokemonReport } from './write'
+
+export type { PokemonReport } from './write'
+
+export interface PokemonStepOpts {
+  /** The job-local source cache (catalog-work/pokemon-src.sqlite). */
+  cachePath: string
+  fetch?: typeof fetch
+  version: string
+  log: (l: string) => void
+  /** Replaces the live sources (tests). */
+  sources?: PokemonSources
+}
+
+/**
+ * The nightly job's Pokémon step. Any failure (a source down, a bad response, a write error) is
+ * returned as `error`; refreshPokemon writes nothing until everything is fetched, and then in one
+ * transaction, so the work database keeps the previous night's Pokémon rows.
+ */
+export async function runPokemonStep(
+  work: Database.Database,
+  opts: PokemonStepOpts
+): Promise<{ reports: PokemonReport[]; error: string | null }> {
+  let close: (() => void) | undefined
+  try {
+    let sources = opts.sources
+    if (!sources) {
+      const live = createPokemonSources({
+        cachePath: opts.cachePath,
+        fetch: opts.fetch,
+        version: opts.version,
+        log: opts.log
+      })
+      close = () => live.close()
+      sources = live
+    }
+    const reports = await refreshPokemon(work, sources, { log: opts.log })
+    return { reports, error: null }
+  } catch (e) {
+    return { reports: [], error: e instanceof Error ? e.message : String(e) }
+  } finally {
+    close?.()
+  }
+}

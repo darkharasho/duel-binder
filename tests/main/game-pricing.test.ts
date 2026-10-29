@@ -4,6 +4,8 @@ import { seededDb } from './helpers'
 import { seedPokemon } from '../fixtures/pokemon'
 import { pokemonId } from '../../src/shared/games'
 import { addEntry, listEntries } from '../../src/main/repo/collection'
+import { getCardDetail } from '../../src/main/repo/cards'
+import { printingsByCode } from '../../src/main/repo/scan'
 import { getChecklist } from '../../src/main/repo/sets'
 import { getStats } from '../../src/main/repo/stats'
 import { countCandidates, priceCandidates } from '../../src/main/prices/candidates'
@@ -108,6 +110,64 @@ describe('Pokémon pricing', () => {
       .run().lastInsertRowid as number
     db.prepare('INSERT INTO price_requests (printing_id, requested_at) VALUES (?, ?)').run(ygo, NOW.toISOString())
     expect(priceCandidates(db, NOW, { printingIds: [Number(ygo), ids.ja] }).map((c) => c.id)).toEqual([Number(ygo)])
+  })
+})
+
+describe('Pokémon market-only price rule', () => {
+  let db: Database.Database
+  let en: number
+  let ja: number
+  let jaNull: number
+
+  beforeEach(async () => {
+    db = await seededDb()
+    seedPokemon(db)
+    en = pkmPrinting(db, { language: 'en', setName: 'Rule Set', code: 'RUL-EN001', rarity: 'Normal', market: 1 })
+    ja = pkmPrinting(db, { language: 'ja', setName: 'Rule Set JP', code: 'RUL-JP001', rarity: 'Normal', market: 2 })
+    jaNull = pkmPrinting(db, { language: 'ja', setName: 'Rule Set JP', code: 'RUL-JP002', rarity: 'Normal' })
+    db.prepare('UPDATE card_printings SET set_price = 5 WHERE id = ?').run(en)
+    db.prepare('UPDATE card_printings SET set_price = 5 WHERE id = ?').run(jaNull)
+    db.prepare("INSERT INTO intl_prices (printing_id, price, listing_count, checked_at) VALUES (?, 9.99, 3, ?)").run(ja, NOW.toISOString())
+    db.prepare("INSERT INTO intl_prices (printing_id, price, listing_count, checked_at) VALUES (?, 9.99, 3, ?)").run(jaNull, NOW.toISOString())
+    setGame(db, 'pkm')
+    for (const id of [en, ja, jaNull]) addEntry(db, { printingId: id, imageId: PIKACHU, quantity: 1 }, NOW)
+  })
+
+  const entry = (id: number): ReturnType<typeof listEntries>[number] =>
+    listEntries(db, ALL).find((e) => e.printing.id === id)!
+
+  it('entries use the printing market price in every language, never approximate', () => {
+    expect(entry(en)).toMatchObject({ unitPrice: 1, priceApproximate: false })
+    expect(entry(ja)).toMatchObject({ unitPrice: 2, priceApproximate: false, priceSource: 'tcgplayer' })
+  })
+
+  it('a Japanese printing with no market price gets no price, not eBay or set_price', () => {
+    expect(entry(jaNull)).toMatchObject({
+      unitPrice: null,
+      priceApproximate: false,
+      priceSource: null,
+      noPriceReason: null
+    })
+  })
+
+  it('the sets total uses the market price', () => {
+    expect(getChecklist(db, 'Rule Set', 'en')!.cards[0].rarities[0].price).toBe(1)
+    // Both Japanese printings share one rarity row: the dearest is the market 2, not eBay 9.99 or set_price 5.
+    expect(getChecklist(db, 'Rule Set JP', 'ja')!.cards[0].rarities[0].price).toBe(2)
+  })
+
+  it('scan rawPrice uses the market price', () => {
+    const raw = (code: string): number | null => printingsByCode(db, code)[0].price
+    expect(raw('RUL-EN001')).toBe(1)
+    expect(raw('RUL-JP001')).toBe(2)
+    expect(raw('RUL-JP002')).toBeNull()
+  })
+
+  it('card detail setPrice uses the market price and ignores set_price', () => {
+    const prices = Object.fromEntries(getCardDetail(db, PIKACHU)!.printings.map((p) => [p.id, p.setPrice]))
+    expect(prices[en]).toBe(1)
+    expect(prices[ja]).toBe(2)
+    expect(prices[jaNull]).toBeNull()
   })
 })
 

@@ -69,6 +69,65 @@ describe('image route', () => {
       deps
     )
 
+  describe('Pokémon art and set logos', () => {
+    const PKM = 2 ** 40
+    const addPokemon = (n: number, url: string | null): number => {
+      const id = PKM + n
+      db.prepare(
+        "INSERT INTO cards (id, name, type, frame_type, race, \"desc\", updated_at, game) VALUES (?, 'Pika', 'Pokemon', 'pokemon', '', '', 'x', 'pkm')"
+      ).run(id)
+      db.prepare("INSERT INTO card_images (image_id, card_id, sort_order, game) VALUES (?, ?, 0, 'pkm')").run(id, id)
+      db.prepare("INSERT INTO pokemon_cards (card_id, category, source_id, image_url) VALUES (?, 'Pokemon', ?, ?)").run(id, `s${n}`, url)
+      return id
+    }
+    const addSet = (key: string, url: string | null, game = 'pkm'): void => {
+      db.prepare(
+        'INSERT INTO sets (game, language, set_name, set_code, image_url, image_key) VALUES (?, ?, ?, ?, ?, ?)'
+      ).run(game, 'en', `set ${key}`, 'x', url, key)
+    }
+
+    it('fetches TCGdex full and small art', async () => {
+      const id = addPokemon(1, 'https://assets.tcgdex.net/en/sv/sv01/001')
+      expect((await get(`full/${id}`)).status).toBe(200)
+      expect(upstream.mock.calls[0][0]).toBe('https://assets.tcgdex.net/en/sv/sv01/001/high.webp')
+      expect((await getFrom('1.2.3.4', `small/${id}`)).status).toBe(200) // signed-out fill
+      expect(upstream.mock.calls[1][0]).toBe('https://assets.tcgdex.net/en/sv/sv01/001/low.webp')
+      expect(bucket.store.has(`card/full/${id}`)).toBe(true)
+    })
+
+    it('fetches TCGplayer art at the requested size', async () => {
+      const id = addPokemon(2, 'https://tcgplayer-cdn.tcgplayer.com/product/487828_200w.jpg')
+      await get(`full/${id}`)
+      await get(`small/${id}`)
+      expect(upstream.mock.calls[0][0]).toBe('https://tcgplayer-cdn.tcgplayer.com/product/487828_in_1000x1000.jpg')
+      expect(upstream.mock.calls[1][0]).toBe('https://tcgplayer-cdn.tcgplayer.com/product/487828_200w.jpg')
+    })
+
+    it('404s a foreign host, a lookalike host, a null url and cropped without fetching', async () => {
+      const evil = addPokemon(3, 'https://evil.example/x')
+      const like = addPokemon(4, 'https://assets.tcgdex.net.evil.com/en/x')
+      const none = addPokemon(5, null)
+      const ok = addPokemon(6, 'https://assets.tcgdex.net/en/sv/sv01/001')
+      for (const p of [`full/${evil}`, `full/${like}`, `small/${none}`, `cropped/${ok}`, `full/${PKM + 99}`]) {
+        expect((await get(p)).status).toBe(404)
+      }
+      expect(upstream).not.toHaveBeenCalled()
+    })
+
+    it('serves a TCGdex set logo', async () => {
+      addSet('td-en-sv01', 'https://assets.tcgdex.net/en/sv/sv01/logo')
+      expect((await get('set/td-en-sv01')).status).toBe(200)
+      expect(upstream.mock.calls[0][0]).toBe('https://assets.tcgdex.net/en/sv/sv01/logo.webp')
+    })
+
+    it('404s an unknown td- key, a foreign logo host and a non-pkm row without fetching', async () => {
+      addSet('td-en-bad', 'https://evil.example/logo')
+      addSet('td-en-ygo', 'https://assets.tcgdex.net/en/x/logo', 'ygo')
+      for (const k of ['td-en-nope', 'td-en-bad', 'td-en-ygo']) expect((await get(`set/${k}`)).status).toBe(404)
+      expect(upstream).not.toHaveBeenCalled()
+    })
+  })
+
   it('serves a card image from upstream once, then from R2', async () => {
     const first = await get(`small/${imageId}`)
     expect(first.status).toBe(200)

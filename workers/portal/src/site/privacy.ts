@@ -77,7 +77,7 @@ export function renderPrivacy(view: PrivacyView): string {
         [
           'Contact',
           p(
-            `Questions or requests, including about your data: email <a href="mailto:project96@gmail.com">project96@gmail.com</a>, or <a href="${REPO_URL}/issues">open an issue on GitHub</a>.`
+            `Questions or requests, including about your data: email <a href="mailto:support@duelbinder.com">support@duelbinder.com</a>, or <a href="${REPO_URL}/issues">open an issue on GitHub</a>.`
           )
         ]
       ]

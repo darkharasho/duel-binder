@@ -170,7 +170,7 @@ describe('renderPrivacy', () => {
       'You can turn them off in Settings',
       'The portal runs on Cloudflare',
       'Last updated',
-      '<a href="mailto:project96@gmail.com">project96@gmail.com</a>'
+      '<a href="mailto:support@duelbinder.com">support@duelbinder.com</a>'
     ]) {
       expect(html).toContain(text)
     }
@@ -192,7 +192,7 @@ describe('renderTerms', () => {
       'Acceptable use',
       'https://github.com/darkharasho/duel-binder/issues',
       '<a href="/terms">Terms</a>',
-      'mailto:project96@gmail.com'
+      'mailto:support@duelbinder.com'
     ])
       expect(html).toContain(text)
     expect(html).not.toMatch(/<script/i)

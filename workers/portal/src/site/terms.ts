@@ -70,7 +70,7 @@ export function renderTerms(view: LegalView): string {
         ],
         [
           'Contact',
-          p(`Questions: email <a href="mailto:project96@gmail.com">project96@gmail.com</a>, or <a href="${REPO_URL}/issues">open an issue on GitHub</a>.`)
+          p(`Questions: email <a href="mailto:support@duelbinder.com">support@duelbinder.com</a>, or <a href="${REPO_URL}/issues">open an issue on GitHub</a>.`)
         ]
       ]
     },

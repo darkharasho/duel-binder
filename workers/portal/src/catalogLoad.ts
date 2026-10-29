@@ -72,11 +72,14 @@ function validateRow(table: CatalogTable, row: unknown): Record<string, string |
   for (const k of required) {
     if (out[k] === undefined || out[k] === null) throw new BadRequest(`Missing key column ${k}`)
   }
-  // A card's id says its game; a row must agree with it.
-  const id = out[table.name === 'cards' ? 'id' : 'card_id']
+  // Card and image ids say their game; a row must agree with them.
   const game = table.name === 'pokemon_cards' ? 'pkm' : out.game
-  if (typeof id === 'number' && game !== undefined && gameOfId(id) !== game)
-    throw new BadRequest(`The id ${id} is not a ${String(game)} id`)
+  const ids = table.name === 'cards' ? ['id'] : ['card_id', 'image_id']
+  for (const col of ids) {
+    const id = out[col]
+    if (typeof id === 'number' && game !== undefined && gameOfId(id) !== game)
+      throw new BadRequest(`The ${col} ${id} is not a ${String(game)} id`)
+  }
   return out
 }
 

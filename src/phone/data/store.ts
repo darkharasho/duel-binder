@@ -276,13 +276,14 @@ export function createPhoneStore(deps: {
   function resetOldFormat(): void {
     if (formatCurrent()) return
     db.transaction(() => {
+      // The side tables go first: pokemon_cards references cards.
+      for (const t of RESET_TABLES) db.exec(`DELETE FROM ${t}`)
       db.exec(`
         DELETE FROM card_printings WHERE id NOT IN (SELECT printing_id FROM collection_entries);
         DELETE FROM card_images WHERE image_id NOT IN (SELECT image_id FROM collection_entries);
         DELETE FROM cards WHERE id NOT IN (SELECT card_id FROM card_printings)
           AND id NOT IN (SELECT card_id FROM card_images);
       `)
-      for (const t of RESET_TABLES) db.exec(`DELETE FROM ${t}`)
       finishApply(db, { applied: 1, cardsChanged: true, imagesChanged: true })
       setMeta(db, 'catalog_cursor', '0')
       deleteMeta(db, 'catalog_cursor:pkm')

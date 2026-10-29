@@ -12,6 +12,7 @@ import { seedPokemon, SHARED_SET_NAME } from '../fixtures/pokemon'
 const BASE = 'https://portal.test'
 const NOW = new Date('2026-10-24T12:00:00.000Z')
 const TOKEN = 'Bearer alice-desktop-token'
+const DARK_MAGICIAN = 46986414
 const sha256Hex = (s: string): string => createHash('sha256').update(s).digest('hex')
 
 describe('GET /api/catalog/changes', () => {
@@ -352,6 +353,39 @@ describe('per-game catalog feed', () => {
     await loadPokemon()
   })
 
+  it('the loader refuses ids outside their game, image ids included', async () => {
+    const pikachu = (
+      db.prepare("SELECT id FROM cards WHERE game = 'pkm' LIMIT 1").get() as {
+        id: number
+      }
+    ).id
+    const rows = async (table: string, row: Record<string, unknown>): Promise<number> =>
+      (await call('/admin/catalog/rows', 'Bearer admin-secret', { table, rows: [row] })).status
+    const image = { card_id: pikachu, sort_order: 1, missing_from_api: 0, game: 'pkm' }
+    expect(await rows('card_images', { ...image, image_id: 12345 })).toBe(400)
+    expect(
+      await rows('card_images', {
+        ...image,
+        image_id: DARK_MAGICIAN,
+        card_id: DARK_MAGICIAN,
+        game: 'pkm'
+      })
+    ).toBe(400)
+    expect(
+      await rows('cards', {
+        id: 12345,
+        name: 'X',
+        type: 'T',
+        frame_type: 'f',
+        desc: '',
+        updated_at: 'x',
+        game: 'pkm'
+      })
+    ).toBe(400)
+    expect(await rows('card_images', { ...image, image_id: pikachu + 1 })).toBe(200)
+    expect(db.prepare('SELECT 1 FROM card_images WHERE image_id = 12345').get()).toBeUndefined()
+  })
+
   it('the loader stores Pokémon rows with their game, and rows without one as Yu-Gi-Oh!', () => {
     expect(
       db.prepare('SELECT game, count(*) AS n FROM cards GROUP BY game ORDER BY game').all()
@@ -379,6 +413,50 @@ describe('per-game catalog feed', () => {
       (c) => c.table === 'sets' && 'row' in c && c.row.set_name === SHARED_SET_NAME
     )
     expect(sets).toHaveLength(1)
+  })
+
+  it('legacy pages skip Pokémon rows that sit between Yu-Gi-Oh! ones', async () => {
+    const beforePkm =
+      (
+        db.prepare("SELECT MIN(catalog_seq) AS s FROM cards WHERE game = 'pkm'").get() as {
+          s: number
+        }
+      ).s - 1
+    // A Yu-Gi-Oh! row loaded after the Pokémon ones (no game: the nightly job's shape).
+    await admin('/admin/catalog/rows', {
+      table: 'sets',
+      rows: [{ language: 'en', set_name: 'Late Set', set_code: 'LATE' }]
+    })
+    const late = (
+      db.prepare("SELECT catalog_seq AS s FROM sets WHERE set_name = 'Late Set'").get() as {
+        s: number
+      }
+    ).s
+    expect(late).toBeGreaterThan(beforePkm + 10)
+
+    const page = await feed(`?since=${beforePkm}&limit=1`)
+    expect(page.changes).toEqual([
+      { seq: late, table: 'sets', row: expect.objectContaining({ set_name: 'Late Set' }) }
+    ])
+    expect(page.changes[0]).not.toHaveProperty('row.game')
+    expect(page).toMatchObject({ cursor: late, more: false })
+
+    for (const limit of [1, 2, 3]) {
+      const cursors: number[] = []
+      const all: CatalogChange[] = []
+      let since = 0
+      for (;;) {
+        const p = await feed(`?since=${since}&limit=${limit}`)
+        all.push(...p.changes)
+        cursors.push(p.cursor)
+        since = p.cursor
+        if (!p.more) break
+      }
+      expect(cursors, `limit ${limit}`).toEqual([...new Set(cursors)].sort((a, b) => a - b))
+      expect(cursors.at(-1)).toBe(late)
+      expect(all.some((c) => 'row' in c && c.row.game !== undefined)).toBe(false)
+      expect(all.filter((c) => c.seq > beforePkm).map((c) => c.seq)).toEqual([late])
+    }
   })
 
   it('game=pkm from 0 returns exactly the Pokémon rows', async () => {

@@ -111,5 +111,7 @@ export const LANGUAGE_MIN_CONFIDENCE = 28
 export const LANGUAGE_MIN_MARGIN = 5
 /** Characters of its own script a non-Latin read needs, so garbage in it doesn't count. */
 export const LANGUAGE_MIN_SCRIPT_CHARS = 5
+/** Latin letters a read of a Pokémon card's text needs before it counts as English. */
+export const LANGUAGE_MIN_LATIN_CHARS = 8
 /** Frames a card's text is read on to tell its language before it's taken in its first one. */
 export const LANGUAGE_MAX_READS = 3

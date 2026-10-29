@@ -23,6 +23,7 @@ const CAT: Record<PkmLang, string> = { en: '3', ja: '85' }
 
 interface Tweaks {
   set?: (lang: PkmLang, s: TdSet) => TdSet
+  card?: (lang: PkmLang, c: TdCard) => TdCard
   groups?: (lang: PkmLang, g: TcGroup[]) => TcGroup[]
   products?: (lang: PkmLang, groupId: number, p: TcProduct[]) => TcProduct[]
   prices?: (lang: PkmLang, groupId: number, p: TcPrice[]) => TcPrice[]
@@ -42,7 +43,9 @@ function fixtureSources(t: Tweaks = {}): PokemonSources & { calls: string[] } {
     },
     async cards(lang, ids) {
       calls.push(`cards ${lang}`)
-      return ids.map((id) => read<TdCard>(`${lang}/card-${id}.json`))
+      return ids
+        .map((id) => read<TdCard>(`${lang}/card-${id}.json`))
+        .map((c) => (t.card ? t.card(lang, c) : c))
     },
     async groups(lang) {
       calls.push(`groups ${lang}`)
@@ -552,5 +555,57 @@ describe('runPokemonStep', () => {
     } finally {
       db.close()
     }
+  })
+})
+
+describe('Japanese card English names', () => {
+  const nameOf = async (variants: { id: number; subtype?: string }[]): Promise<string> => {
+    const db = openDatabase(':memory:')
+    try {
+      await refreshPokemon(
+        db,
+        fixtureSources({
+          card: (lang, c) =>
+            lang === 'ja' && c.id === 'M4-001'
+              ? {
+                  ...c,
+                  variants_detailed: variants.map((v) => ({
+                    type: 'normal',
+                    subtype: v.subtype,
+                    thirdParty: { tcgplayer: v.id }
+                  }))
+                }
+              : c,
+          products: (lang, groupId, p) =>
+            lang === 'ja' && groupId === 24653
+              ? [
+                  ...p,
+                  { productId: 683000, groupId, name: 'Zed Weedle - 001/083', number: '001/083' },
+                  { productId: 683999, groupId, name: 'Late Weedle - 001/083', number: '001/083' }
+                ]
+              : p
+        }),
+        { langs: ['ja'] }
+      )
+      return (db.prepare('SELECT name FROM cards WHERE id = ?').get(cid('ja/M4-001')) as {
+        name: string
+      }).name
+    } finally {
+      db.close()
+    }
+  }
+
+  it('prefers a product reached without a variant subtype, whatever the order', async () => {
+    const plain = { id: 683652 }
+    const shadow = { id: 683000, subtype: 'shadowless' }
+    expect(await nameOf([shadow, plain])).toBe('Weedle')
+    expect(await nameOf([plain, shadow])).toBe('Weedle')
+  })
+
+  it('takes the lowest product id among equals, whatever the order', async () => {
+    const a = { id: 683999 }
+    const b = { id: 683652 }
+    expect(await nameOf([a, b])).toBe('Weedle')
+    expect(await nameOf([b, a])).toBe('Weedle')
   })
 })

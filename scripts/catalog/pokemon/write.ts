@@ -2,7 +2,7 @@ import type Database from 'better-sqlite3'
 import { movedEnough } from '../../../src/main/tcgplayer/prices'
 import { pokemonId } from '../../../src/shared/games/ids'
 import { matchGroup, matchProducts, type MatchedProduct } from './match'
-import { cardVersions, type PkmVersion } from './versions'
+import { cardVersions, versionSubtype, type PkmVersion } from './versions'
 import type { PkmLang, PokemonSources, TcGroup, TcPrice, TcProduct, TdCard, TdSet } from './types'
 
 /**
@@ -92,6 +92,19 @@ export function cardDesc(card: TdCard): string {
     lines.push(present(a.effect) ? `${head}: ${a.effect}` : head)
   }
   return lines.filter(present).join('\n')
+}
+
+/**
+ * The product a Japanese card's English name comes from: among the matched products those reached
+ * without a variant subtype are preferred, then the lowest product id, so TCGCSV's order never
+ * decides the name.
+ */
+function namingProduct(products: MatchedProduct[]): TcProduct | undefined {
+  const plain = products.filter((m) => versionSubtype(m.variantSubtype) === null)
+  const pool = plain.length > 0 ? plain : products
+  let best: TcProduct | undefined
+  for (const { product } of pool) if (!best || product.productId < best.productId) best = product
+  return best
 }
 
 /** Fetches and matches one language. Throws on any source failure, before anything is written. */
@@ -189,7 +202,7 @@ async function planLanguage(
         versions += v.versions.length
         priced += v.versions.filter((x) => x.price !== null).length
         cardCount++
-        const first = products[0]?.product
+        const first = namingProduct(products)
         const english = lang === 'ja' && first ? stripNumber(first.name) : ''
         const name = english || card.name
         return {

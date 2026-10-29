@@ -99,6 +99,8 @@ function loadImage(path: string): RgbaImage {
   return decode(bytes, { useTArray: true, formatAsRGBA: true, maxMemoryUsageInMB: 1024 })
 }
 
+const hasPixels = (b: OcrBand): boolean => b.width > 0 && b.height > 0
+
 const pct = (n: number, of: number): string => `${n}/${of} (${((100 * n) / (of || 1)).toFixed(1)}%)`
 
 function summary(rows: Row[]): Record<string, string | number> {
@@ -159,11 +161,14 @@ describe.skipIf(!READY)('the Pokémon scanner on real photos', () => {
       }
       const start = performance.now()
       const signals = analyze(cv, img, index, null, true, false, profile)
-      // As the scan engine reads them: the code band as a collector number.
+      // As the scan engine reads them: empty bands dropped, the code band as a collector number.
+      const codeBands = signals.codeBands.filter(hasPixels)
+      const nameBands = signals.nameBands.filter(hasPixels)
+      const textBands = signals.textBands.filter(hasPixels)
       const read = (bands: OcrBand[], kind: 'number' | 'name'): Promise<string[]> =>
         bands.length ? ocr.read(bands, kind).catch(() => []) : Promise.resolve([])
       const [codes, names] = signals.found
-        ? await Promise.all([read(signals.codeBands, 'number'), read(signals.nameBands, 'name')])
+        ? await Promise.all([read(codeBands, 'number'), read(nameBands, 'name')])
         : [[], []]
       let language = '-'
       const outcome = await resolveSignals(
@@ -173,7 +178,7 @@ describe.skipIf(!READY)('the Pokémon scanner on real photos', () => {
           art: signals.art,
           codeTexts: codes.map((c) => c.trim()).filter(Boolean),
           nameTexts: names.map((c) => c.trim()).filter(Boolean),
-          textBands: signals.textBands,
+          textBands,
           cues: null,
           version: signals.version,
           slab: signals.slab,
@@ -185,16 +190,22 @@ describe.skipIf(!READY)('the Pokémon scanner on real photos', () => {
           setPrintings: null,
           defaultRarity: null,
           lookups,
-          // As the scan loop's pokemonLanguageOf: one read per model, each judged on its own.
+          // As the scan loop's pokemonLanguageOf: one read per model, each judged on its own,
+          // and a failed read counts as not told.
           readLanguage: async () => {
-            if (!signals.textBands.length) return null
-            const [jpn, eng] = await Promise.all([
-              readTexts(ocr, signals.textBands, 'jpn'),
-              readTexts(ocr, signals.textBands, 'eng')
-            ])
-            const lang = pokemonLanguageOfReads({ jpn: jpn.join('\n'), eng: eng.join('\n') })
-            language = lang ?? 'null'
-            return lang
+            if (!textBands.length) return null
+            try {
+              const [jpn, eng] = await Promise.all([
+                readTexts(ocr, textBands, 'jpn'),
+                readTexts(ocr, textBands, 'eng')
+              ])
+              const lang = pokemonLanguageOfReads({ jpn: jpn.join('\n'), eng: eng.join('\n') })
+              language = lang ?? 'null'
+              return lang
+            } catch {
+              language = 'failed'
+              return null
+            }
           }
         }
       )
@@ -214,9 +225,14 @@ describe.skipIf(!READY)('the Pokémon scanner on real photos', () => {
         else if (cardId === null) problems.push('a card not known')
         else if (item.cardId !== cardId) problems.push('another card')
         else if (lang !== t.language) problems.push('another language')
+        // A version is scored only on a card with several in the photo's language: options span
+        // both languages, and a lone version's label may differ from the truth's.
+        const versions = new Set(
+          item.options.filter((o) => o.language === t.language).map((o) => o.rarity)
+        )
         if (
           sure &&
-          item.options.length > 1 &&
+          versions.size > 1 &&
           t.version !== null &&
           t.unclear !== 'version' &&
           item.rarity !== t.version
@@ -297,7 +313,10 @@ describe.skipIf(!READY)('the Pokémon scanner on real photos', () => {
   })
 
   it(`names the right card on at least ${MIN_RIGHT_SHARE * 100}% of the owner's photos`, () => {
-    const { right, need } = rightShare(rows.filter((r) => r.source === 'owner'))
+    const owner = rows.filter((r) => r.source === 'owner')
+    // Without the owner's photos the bar would pass on nothing.
+    expect(owner.length).toBeGreaterThan(0)
+    const { right, need } = rightShare(owner)
     expect(right).toBeGreaterThanOrEqual(need)
   })
 })

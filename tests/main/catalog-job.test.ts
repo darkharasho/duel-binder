@@ -806,6 +806,70 @@ describe('Pokémon step in the nightly job', () => {
     for (const p of many) expect(lines.some((l) => l.includes(p))).toBe(true)
   })
 
+  /** The job over Yu-Gi-Oh and one Pokémon card, recording every URL it sends to the portal. */
+  async function gatedJob(
+    gate: JobOptions['checkAccuracy'],
+    over: Partial<JobOptions> = {}
+  ): Promise<{ urls: string[]; problems: string[] }> {
+    const work = await workDb()
+    addPokemon(work)
+    work.close()
+    const urls: string[] = []
+    const { fetch } = recordingFetch(ok)
+    const { problems } = await runJob({
+      dir,
+      url: URL_BASE,
+      token: TOKEN,
+      fetch: ((input: string | URL | Request, init?: RequestInit) => {
+        urls.push(String(input))
+        return fetch(input, init)
+      }) as typeof fetch,
+      imageFetch: noImages,
+      checkAccuracy: gate,
+      refresh: async () => {},
+      log: () => {},
+      ...over
+    })
+    return { urls: urls.filter((u) => u.includes('/admin/scan/fingerprints')), problems }
+  }
+
+  it('failing pkm gate holds back only the pkm file', async () => {
+    const games: string[] = []
+    const { urls, problems } = await gatedJob(async (_work, _bytes, game) => {
+      games.push(game)
+      return game === 'pkm'
+        ? { shots: 3, right: 2, wrong: ['1.jpg (Pikachu) as Pikachu (900002)'], missed: [] }
+        : passing()
+    })
+    expect(games).toEqual(['ygo', 'pkm'])
+    expect(urls).toEqual([`${URL_BASE}/admin/scan/fingerprints`])
+    expect(problems).toEqual([
+      'Pokémon fingerprints held back: took 1 shot(s) for the wrong card: 1.jpg (Pikachu) as Pikachu (900002)'
+    ])
+  })
+
+  it('a passing pkm gate uploads the pkm file after the Yu-Gi-Oh one', async () => {
+    const { urls, problems } = await gatedJob(passing)
+    expect(urls).toEqual([
+      `${URL_BASE}/admin/scan/fingerprints`,
+      `${URL_BASE}/admin/scan/fingerprints?game=pkm`
+    ])
+    expect(problems).toEqual([])
+  })
+
+  it('skipPokemon builds no pkm fingerprints', async () => {
+    const games: string[] = []
+    const { urls } = await gatedJob(
+      async (_work, _bytes, game) => {
+        games.push(game)
+        return passing()
+      },
+      { skipPokemon: true }
+    )
+    expect(urls).toEqual([`${URL_BASE}/admin/scan/fingerprints`])
+    expect(games).toEqual(['ygo'])
+  })
+
   it('skipPokemon leaves the step out', async () => {
     ;(await workDb()).close()
     const pokemon = vi.fn(async () => ({ reports: [], error: null }))

@@ -1,0 +1,1922 @@
+{
+  "shots": [
+    {
+      "file": "114971639124880-0.jpg",
+      "imageId": 114971639124880,
+      "cardId": 1121482240437272,
+      "sourceId": "en/sv03.5-025",
+      "name": "Pikachu",
+      "language": "en",
+      "setCode": "MEW 025/165",
+      "versions": [
+        "Normal",
+        "Pokemon Together Normal",
+        "Reverse Holofoil",
+        "Snowflake Normal"
+      ],
+      "version": null,
+      "kind": "pokemon",
+      "quad": [
+        [
+          584.2,
+          324.3
+        ],
+        [
+          828.9,
+          284.5
+        ],
+        [
+          876.7,
+          660
+        ],
+        [
+          623.8,
+          684
+        ]
+      ],
+      "effect": "blur σ0.84"
+    },
+    {
+      "file": "114971639124880-1.jpg",
+      "imageId": 114971639124880,
+      "cardId": 1121482240437272,
+      "sourceId": "en/sv03.5-025",
+      "name": "Pikachu",
+      "language": "en",
+      "setCode": "MEW 025/165",
+      "versions": [
+        "Normal",
+        "Pokemon Together Normal",
+        "Reverse Holofoil",
+        "Snowflake Normal"
+      ],
+      "version": null,
+      "kind": "pokemon",
+      "quad": [
+        [
+          565,
+          240.8
+        ],
+        [
+          805.1,
+          243.6
+        ],
+        [
+          791.4,
+          593.7
+        ],
+        [
+          561.4,
+          578.8
+        ]
+      ],
+      "effect": "brightness ×0.78"
+    },
+    {
+      "file": "114971639124880-2.jpg",
+      "imageId": 114971639124880,
+      "cardId": 1121482240437272,
+      "sourceId": "en/sv03.5-025",
+      "name": "Pikachu",
+      "language": "en",
+      "setCode": "MEW 025/165",
+      "versions": [
+        "Normal",
+        "Pokemon Together Normal",
+        "Reverse Holofoil",
+        "Snowflake Normal"
+      ],
+      "version": null,
+      "kind": "pokemon",
+      "quad": [
+        [
+          375.3,
+          211.9
+        ],
+        [
+          685.6,
+          211.2
+        ],
+        [
+          682.5,
+          668.9
+        ],
+        [
+          370.3,
+          663
+        ]
+      ],
+      "effect": "glare r58 α0.64"
+    },
+    {
+      "file": "3186715818475470-0.jpg",
+      "imageId": 3186715818475470,
+      "cardId": 3593731052795870,
+      "sourceId": "en/sv03.5-001",
+      "name": "Bulbasaur",
+      "language": "en",
+      "setCode": "MEW 001/165",
+      "versions": [
+        "Normal",
+        "Reverse Holofoil",
+        "Set Logo Normal"
+      ],
+      "version": null,
+      "kind": "pokemon",
+      "quad": [
+        [
+          278.4,
+          99.2
+        ],
+        [
+          561.2,
+          122.7
+        ],
+        [
+          561.2,
+          540.2
+        ],
+        [
+          263.2,
+          539.8
+        ]
+      ],
+      "effect": "blur σ0.64"
+    },
+    {
+      "file": "3186715818475470-1.jpg",
+      "imageId": 3186715818475470,
+      "cardId": 3593731052795870,
+      "sourceId": "en/sv03.5-001",
+      "name": "Bulbasaur",
+      "language": "en",
+      "setCode": "MEW 001/165",
+      "versions": [
+        "Normal",
+        "Reverse Holofoil",
+        "Set Logo Normal"
+      ],
+      "version": null,
+      "kind": "pokemon",
+      "quad": [
+        [
+          59.3,
+          135.4
+        ],
+        [
+          301.5,
+          155.4
+        ],
+        [
+          276,
+          505.4
+        ],
+        [
+          34.8,
+          491.6
+        ]
+      ],
+      "effect": "brightness ×1.07"
+    },
+    {
+      "file": "3186715818475470-2.jpg",
+      "imageId": 3186715818475470,
+      "cardId": 3593731052795870,
+      "sourceId": "en/sv03.5-001",
+      "name": "Bulbasaur",
+      "language": "en",
+      "setCode": "MEW 001/165",
+      "versions": [
+        "Normal",
+        "Reverse Holofoil",
+        "Set Logo Normal"
+      ],
+      "version": null,
+      "kind": "pokemon",
+      "quad": [
+        [
+          527.1,
+          38.8
+        ],
+        [
+          871.8,
+          10.3
+        ],
+        [
+          908.6,
+          523.7
+        ],
+        [
+          556.9,
+          542.8
+        ]
+      ],
+      "effect": "glare r116 α0.77"
+    },
+    {
+      "file": "3204516003259013-0.jpg",
+      "imageId": 3204516003259013,
+      "cardId": 3554287269426189,
+      "sourceId": "en/sv03.5-006",
+      "name": "Charizard ex",
+      "language": "en",
+      "setCode": "MEW 006/165",
+      "versions": [
+        "Holofoil"
+      ],
+      "version": "Holofoil",
+      "kind": "pokemon",
+      "quad": [
+        [
+          378.4,
+          143
+        ],
+        [
+          621.2,
+          180.5
+        ],
+        [
+          566.7,
+          519
+        ],
+        [
+          334.4,
+          498.8
+        ]
+      ],
+      "effect": "blur σ1.29"
+    },
+    {
+      "file": "3204516003259013-1.jpg",
+      "imageId": 3204516003259013,
+      "cardId": 3554287269426189,
+      "sourceId": "en/sv03.5-006",
+      "name": "Charizard ex",
+      "language": "en",
+      "setCode": "MEW 006/165",
+      "versions": [
+        "Holofoil"
+      ],
+      "version": "Holofoil",
+      "kind": "pokemon",
+      "quad": [
+        [
+          134.8,
+          362.8
+        ],
+        [
+          348.3,
+          384
+        ],
+        [
+          309.8,
+          699.9
+        ],
+        [
+          98.8,
+          669.7
+        ]
+      ],
+      "effect": "brightness ×1.17"
+    },
+    {
+      "file": "3204516003259013-2.jpg",
+      "imageId": 3204516003259013,
+      "cardId": 3554287269426189,
+      "sourceId": "en/sv03.5-006",
+      "name": "Charizard ex",
+      "language": "en",
+      "setCode": "MEW 006/165",
+      "versions": [
+        "Holofoil"
+      ],
+      "version": "Holofoil",
+      "kind": "pokemon",
+      "quad": [
+        [
+          66,
+          83.2
+        ],
+        [
+          360.9,
+          69.1
+        ],
+        [
+          395.7,
+          503.6
+        ],
+        [
+          85.8,
+          524.1
+        ]
+      ],
+      "effect": "glare r69 α0.62"
+    },
+    {
+      "file": "101205424084034-0.jpg",
+      "imageId": 101205424084034,
+      "cardId": 3205555266464691,
+      "sourceId": "en/sv03.5-199",
+      "name": "Charizard ex",
+      "language": "en",
+      "setCode": "MEW 199/165",
+      "versions": [
+        "Holofoil"
+      ],
+      "version": "Holofoil",
+      "kind": "full-art",
+      "quad": [
+        [
+          792.2,
+          127.8
+        ],
+        [
+          1080.3,
+          99.4
+        ],
+        [
+          1136.4,
+          513.7
+        ],
+        [
+          851.8,
+          563.7
+        ]
+      ],
+      "effect": "blur σ0.65"
+    },
+    {
+      "file": "101205424084034-1.jpg",
+      "imageId": 101205424084034,
+      "cardId": 3205555266464691,
+      "sourceId": "en/sv03.5-199",
+      "name": "Charizard ex",
+      "language": "en",
+      "setCode": "MEW 199/165",
+      "versions": [
+        "Holofoil"
+      ],
+      "version": "Holofoil",
+      "kind": "full-art",
+      "quad": [
+        [
+          251.3,
+          55.5
+        ],
+        [
+          599.6,
+          63
+        ],
+        [
+          630.2,
+          575.2
+        ],
+        [
+          259.9,
+          592.1
+        ]
+      ],
+      "effect": "brightness ×1.13"
+    },
+    {
+      "file": "101205424084034-2.jpg",
+      "imageId": 101205424084034,
+      "cardId": 3205555266464691,
+      "sourceId": "en/sv03.5-199",
+      "name": "Charizard ex",
+      "language": "en",
+      "setCode": "MEW 199/165",
+      "versions": [
+        "Holofoil"
+      ],
+      "version": "Holofoil",
+      "kind": "full-art",
+      "quad": [
+        [
+          814.1,
+          93.2
+        ],
+        [
+          1196.4,
+          98.4
+        ],
+        [
+          1179.3,
+          630.3
+        ],
+        [
+          819.5,
+          632.3
+        ]
+      ],
+      "effect": "glare r71 α0.62"
+    },
+    {
+      "file": "3948443432832600-0.jpg",
+      "imageId": 3948443432832600,
+      "cardId": 2213526611000318,
+      "sourceId": "en/sv03-045",
+      "name": "Lapras",
+      "language": "en",
+      "setCode": "OBF 045/197",
+      "versions": [
+        "Normal",
+        "Reverse Holofoil"
+      ],
+      "version": null,
+      "kind": "pokemon",
+      "quad": [
+        [
+          143.2,
+          98.4
+        ],
+        [
+          485.2,
+          118.4
+        ],
+        [
+          502,
+          623.3
+        ],
+        [
+          137.5,
+          630.5
+        ]
+      ],
+      "effect": "blur σ0.48"
+    },
+    {
+      "file": "3948443432832600-1.jpg",
+      "imageId": 3948443432832600,
+      "cardId": 2213526611000318,
+      "sourceId": "en/sv03-045",
+      "name": "Lapras",
+      "language": "en",
+      "setCode": "OBF 045/197",
+      "versions": [
+        "Normal",
+        "Reverse Holofoil"
+      ],
+      "version": null,
+      "kind": "pokemon",
+      "quad": [
+        [
+          808.9,
+          87.4
+        ],
+        [
+          1065.6,
+          110.3
+        ],
+        [
+          1024.3,
+          462.6
+        ],
+        [
+          787.1,
+          441.2
+        ]
+      ],
+      "effect": "brightness ×0.73"
+    },
+    {
+      "file": "3948443432832600-2.jpg",
+      "imageId": 3948443432832600,
+      "cardId": 2213526611000318,
+      "sourceId": "en/sv03-045",
+      "name": "Lapras",
+      "language": "en",
+      "setCode": "OBF 045/197",
+      "versions": [
+        "Normal",
+        "Reverse Holofoil"
+      ],
+      "version": null,
+      "kind": "pokemon",
+      "quad": [
+        [
+          19.2,
+          258.8
+        ],
+        [
+          256.5,
+          219.7
+        ],
+        [
+          305.2,
+          573.5
+        ],
+        [
+          69.4,
+          599.9
+        ]
+      ],
+      "effect": "glare r99 α0.79"
+    },
+    {
+      "file": "1581911074339026-0.jpg",
+      "imageId": 1581911074339026,
+      "cardId": 938062285348894,
+      "sourceId": "en/sv01-198",
+      "name": "Youngster",
+      "language": "en",
+      "setCode": "SVI 198/198",
+      "versions": [
+        "Normal",
+        "Reverse Holofoil"
+      ],
+      "version": null,
+      "kind": "trainer",
+      "quad": [
+        [
+          834.5,
+          129.2
+        ],
+        [
+          1087.9,
+          103.2
+        ],
+        [
+          1107.3,
+          499.9
+        ],
+        [
+          834.7,
+          505.1
+        ]
+      ],
+      "effect": "blur σ0.59"
+    },
+    {
+      "file": "1581911074339026-1.jpg",
+      "imageId": 1581911074339026,
+      "cardId": 938062285348894,
+      "sourceId": "en/sv01-198",
+      "name": "Youngster",
+      "language": "en",
+      "setCode": "SVI 198/198",
+      "versions": [
+        "Normal",
+        "Reverse Holofoil"
+      ],
+      "version": null,
+      "kind": "trainer",
+      "quad": [
+        [
+          511.9,
+          129.6
+        ],
+        [
+          729.1,
+          133.3
+        ],
+        [
+          734.7,
+          454.5
+        ],
+        [
+          504.6,
+          454.5
+        ]
+      ],
+      "effect": "brightness ×0.61"
+    },
+    {
+      "file": "1581911074339026-2.jpg",
+      "imageId": 1581911074339026,
+      "cardId": 938062285348894,
+      "sourceId": "en/sv01-198",
+      "name": "Youngster",
+      "language": "en",
+      "setCode": "SVI 198/198",
+      "versions": [
+        "Normal",
+        "Reverse Holofoil"
+      ],
+      "version": null,
+      "kind": "trainer",
+      "quad": [
+        [
+          318.1,
+          214.4
+        ],
+        [
+          602.9,
+          183.8
+        ],
+        [
+          642.4,
+          605.9
+        ],
+        [
+          355.5,
+          628.3
+        ]
+      ],
+      "effect": "glare r74 α0.54"
+    },
+    {
+      "file": "2296970243928590-0.jpg",
+      "imageId": 2296970243928590,
+      "cardId": 83028013070512,
+      "sourceId": "en/sv02-192",
+      "name": "Reversal Energy",
+      "language": "en",
+      "setCode": "PAL 192/193",
+      "versions": [
+        "Normal",
+        "Reverse Holofoil"
+      ],
+      "version": null,
+      "kind": "energy",
+      "quad": [
+        [
+          795.2,
+          292.4
+        ],
+        [
+          1057.5,
+          299.2
+        ],
+        [
+          1047.6,
+          669.2
+        ],
+        [
+          795.3,
+          674.6
+        ]
+      ],
+      "effect": "blur σ0.40"
+    },
+    {
+      "file": "2296970243928590-1.jpg",
+      "imageId": 2296970243928590,
+      "cardId": 83028013070512,
+      "sourceId": "en/sv02-192",
+      "name": "Reversal Energy",
+      "language": "en",
+      "setCode": "PAL 192/193",
+      "versions": [
+        "Normal",
+        "Reverse Holofoil"
+      ],
+      "version": null,
+      "kind": "energy",
+      "quad": [
+        [
+          63.5,
+          42.1
+        ],
+        [
+          389.3,
+          54.2
+        ],
+        [
+          359.2,
+          537.4
+        ],
+        [
+          37.8,
+          509.7
+        ]
+      ],
+      "effect": "brightness ×0.97"
+    },
+    {
+      "file": "2296970243928590-2.jpg",
+      "imageId": 2296970243928590,
+      "cardId": 83028013070512,
+      "sourceId": "en/sv02-192",
+      "name": "Reversal Energy",
+      "language": "en",
+      "setCode": "PAL 192/193",
+      "versions": [
+        "Normal",
+        "Reverse Holofoil"
+      ],
+      "version": null,
+      "kind": "energy",
+      "quad": [
+        [
+          705.7,
+          122
+        ],
+        [
+          1046.9,
+          154.9
+        ],
+        [
+          1047,
+          660.5
+        ],
+        [
+          679.9,
+          653.6
+        ]
+      ],
+      "effect": "glare r138 α0.66"
+    },
+    {
+      "file": "4206903995895382-0.jpg",
+      "imageId": 4206903995895382,
+      "cardId": 2589139987844400,
+      "sourceId": "en/base1-4",
+      "name": "Charizard",
+      "language": "en",
+      "setCode": "BS 4/102",
+      "versions": [
+        "1999 2000 Copyright Holofoil",
+        "Holofoil",
+        "Shadowless 1st Edition Holofoil",
+        "Shadowless Holofoil"
+      ],
+      "version": null,
+      "kind": "pokemon",
+      "quad": [
+        [
+          125.1,
+          214.7
+        ],
+        [
+          437.7,
+          238.3
+        ],
+        [
+          391.6,
+          684.1
+        ],
+        [
+          99.7,
+          647.4
+        ]
+      ],
+      "effect": "blur σ0.30"
+    },
+    {
+      "file": "4206903995895382-1.jpg",
+      "imageId": 4206903995895382,
+      "cardId": 2589139987844400,
+      "sourceId": "en/base1-4",
+      "name": "Charizard",
+      "language": "en",
+      "setCode": "BS 4/102",
+      "versions": [
+        "1999 2000 Copyright Holofoil",
+        "Holofoil",
+        "Shadowless 1st Edition Holofoil",
+        "Shadowless Holofoil"
+      ],
+      "version": null,
+      "kind": "pokemon",
+      "quad": [
+        [
+          460.5,
+          120.7
+        ],
+        [
+          798.4,
+          96.7
+        ],
+        [
+          833.2,
+          579.6
+        ],
+        [
+          503.9,
+          611.4
+        ]
+      ],
+      "effect": "brightness ×0.72"
+    },
+    {
+      "file": "4206903995895382-2.jpg",
+      "imageId": 4206903995895382,
+      "cardId": 2589139987844400,
+      "sourceId": "en/base1-4",
+      "name": "Charizard",
+      "language": "en",
+      "setCode": "BS 4/102",
+      "versions": [
+        "1999 2000 Copyright Holofoil",
+        "Holofoil",
+        "Shadowless 1st Edition Holofoil",
+        "Shadowless Holofoil"
+      ],
+      "version": null,
+      "kind": "pokemon",
+      "quad": [
+        [
+          757.2,
+          37.4
+        ],
+        [
+          1090.2,
+          55.1
+        ],
+        [
+          1063.8,
+          556.6
+        ],
+        [
+          704.7,
+          527.6
+        ]
+      ],
+      "effect": "glare r138 α0.68"
+    },
+    {
+      "file": "1072818538787379-0.jpg",
+      "imageId": 1072818538787379,
+      "cardId": 3714592356161743,
+      "sourceId": "ja/SV2a-025",
+      "name": "ピカチュウ",
+      "language": "ja",
+      "setCode": "SV2A 025/165",
+      "versions": [
+        "Normal",
+        "Reverse Holofoil"
+      ],
+      "version": null,
+      "kind": "pokemon",
+      "quad": [
+        [
+          914.8,
+          90.8
+        ],
+        [
+          1202.8,
+          54.6
+        ],
+        [
+          1235.8,
+          505.9
+        ],
+        [
+          928,
+          518.6
+        ]
+      ],
+      "effect": "blur σ0.14"
+    },
+    {
+      "file": "1072818538787379-1.jpg",
+      "imageId": 1072818538787379,
+      "cardId": 3714592356161743,
+      "sourceId": "ja/SV2a-025",
+      "name": "ピカチュウ",
+      "language": "ja",
+      "setCode": "SV2A 025/165",
+      "versions": [
+        "Normal",
+        "Reverse Holofoil"
+      ],
+      "version": null,
+      "kind": "pokemon",
+      "quad": [
+        [
+          903.7,
+          230
+        ],
+        [
+          1202.8,
+          255.7
+        ],
+        [
+          1156.3,
+          692.9
+        ],
+        [
+          864.3,
+          657.4
+        ]
+      ],
+      "effect": "brightness ×0.77"
+    },
+    {
+      "file": "1072818538787379-2.jpg",
+      "imageId": 1072818538787379,
+      "cardId": 3714592356161743,
+      "sourceId": "ja/SV2a-025",
+      "name": "ピカチュウ",
+      "language": "ja",
+      "setCode": "SV2A 025/165",
+      "versions": [
+        "Normal",
+        "Reverse Holofoil"
+      ],
+      "version": null,
+      "kind": "pokemon",
+      "quad": [
+        [
+          606.6,
+          261.6
+        ],
+        [
+          859,
+          256.5
+        ],
+        [
+          855.4,
+          624.1
+        ],
+        [
+          616.8,
+          612.9
+        ]
+      ],
+      "effect": "glare r137 α0.47"
+    },
+    {
+      "file": "405062950978348-0.jpg",
+      "imageId": 405062950978348,
+      "cardId": 1208331426579055,
+      "sourceId": "ja/SV2a-001",
+      "name": "フシギダネ",
+      "language": "ja",
+      "setCode": "SV2A 001/165",
+      "versions": [
+        "Normal",
+        "Reverse Holofoil"
+      ],
+      "version": null,
+      "kind": "pokemon",
+      "quad": [
+        [
+          796.6,
+          34.3
+        ],
+        [
+          1040.9,
+          58.5
+        ],
+        [
+          1003.9,
+          410.8
+        ],
+        [
+          764.1,
+          387.3
+        ]
+      ],
+      "effect": "blur σ0.13"
+    },
+    {
+      "file": "405062950978348-1.jpg",
+      "imageId": 405062950978348,
+      "cardId": 1208331426579055,
+      "sourceId": "ja/SV2a-001",
+      "name": "フシギダネ",
+      "language": "ja",
+      "setCode": "SV2A 001/165",
+      "versions": [
+        "Normal",
+        "Reverse Holofoil"
+      ],
+      "version": null,
+      "kind": "pokemon",
+      "quad": [
+        [
+          530.9,
+          155.2
+        ],
+        [
+          788.1,
+          125.9
+        ],
+        [
+          826.3,
+          516.1
+        ],
+        [
+          553.6,
+          535.6
+        ]
+      ],
+      "effect": "brightness ×1.08"
+    },
+    {
+      "file": "405062950978348-2.jpg",
+      "imageId": 405062950978348,
+      "cardId": 1208331426579055,
+      "sourceId": "ja/SV2a-001",
+      "name": "フシギダネ",
+      "language": "ja",
+      "setCode": "SV2A 001/165",
+      "versions": [
+        "Normal",
+        "Reverse Holofoil"
+      ],
+      "version": null,
+      "kind": "pokemon",
+      "quad": [
+        [
+          874.5,
+          163.9
+        ],
+        [
+          1119.2,
+          150.8
+        ],
+        [
+          1164.4,
+          509.3
+        ],
+        [
+          902.1,
+          536.1
+        ]
+      ],
+      "effect": "glare r115 α0.71"
+    },
+    {
+      "file": "937089088266899-0.jpg",
+      "imageId": 937089088266899,
+      "cardId": 2188552453176060,
+      "sourceId": "ja/SV2a-006",
+      "name": "リザードンex",
+      "language": "ja",
+      "setCode": "SV2A 006/165",
+      "versions": [
+        "Holofoil"
+      ],
+      "version": "Holofoil",
+      "kind": "pokemon",
+      "quad": [
+        [
+          321.1,
+          236.7
+        ],
+        [
+          612.7,
+          199.8
+        ],
+        [
+          656.1,
+          646.4
+        ],
+        [
+          349.2,
+          667.3
+        ]
+      ],
+      "effect": "blur σ0.65"
+    },
+    {
+      "file": "937089088266899-1.jpg",
+      "imageId": 937089088266899,
+      "cardId": 2188552453176060,
+      "sourceId": "ja/SV2a-006",
+      "name": "リザードンex",
+      "language": "ja",
+      "setCode": "SV2A 006/165",
+      "versions": [
+        "Holofoil"
+      ],
+      "version": "Holofoil",
+      "kind": "pokemon",
+      "quad": [
+        [
+          83.7,
+          163.3
+        ],
+        [
+          293.4,
+          135.2
+        ],
+        [
+          329.6,
+          438.7
+        ],
+        [
+          125,
+          463
+        ]
+      ],
+      "effect": "brightness ×0.82"
+    },
+    {
+      "file": "937089088266899-2.jpg",
+      "imageId": 937089088266899,
+      "cardId": 2188552453176060,
+      "sourceId": "ja/SV2a-006",
+      "name": "リザードンex",
+      "language": "ja",
+      "setCode": "SV2A 006/165",
+      "versions": [
+        "Holofoil"
+      ],
+      "version": "Holofoil",
+      "kind": "pokemon",
+      "quad": [
+        [
+          127,
+          76.2
+        ],
+        [
+          452.5,
+          36.4
+        ],
+        [
+          496.1,
+          511.9
+        ],
+        [
+          187.1,
+          527.9
+        ]
+      ],
+      "effect": "glare r65 α0.75"
+    },
+    {
+      "file": "816435301599160-0.jpg",
+      "imageId": 816435301599160,
+      "cardId": 2677284215593685,
+      "sourceId": "ja/SV2a-201",
+      "name": "リザードンex",
+      "language": "ja",
+      "setCode": "SV2A 201/165",
+      "versions": [
+        "Holofoil"
+      ],
+      "version": "Holofoil",
+      "kind": "full-art",
+      "quad": [
+        [
+          609.2,
+          264.2
+        ],
+        [
+          832.4,
+          279.5
+        ],
+        [
+          817.2,
+          613
+        ],
+        [
+          575.2,
+          595
+        ]
+      ],
+      "effect": "blur σ0.56"
+    },
+    {
+      "file": "816435301599160-1.jpg",
+      "imageId": 816435301599160,
+      "cardId": 2677284215593685,
+      "sourceId": "ja/SV2a-201",
+      "name": "リザードンex",
+      "language": "ja",
+      "setCode": "SV2A 201/165",
+      "versions": [
+        "Holofoil"
+      ],
+      "version": "Holofoil",
+      "kind": "full-art",
+      "quad": [
+        [
+          278.8,
+          137.3
+        ],
+        [
+          612.3,
+          166.8
+        ],
+        [
+          602.4,
+          657.8
+        ],
+        [
+          254.4,
+          652.9
+        ]
+      ],
+      "effect": "brightness ×0.88"
+    },
+    {
+      "file": "816435301599160-2.jpg",
+      "imageId": 816435301599160,
+      "cardId": 2677284215593685,
+      "sourceId": "ja/SV2a-201",
+      "name": "リザードンex",
+      "language": "ja",
+      "setCode": "SV2A 201/165",
+      "versions": [
+        "Holofoil"
+      ],
+      "version": "Holofoil",
+      "kind": "full-art",
+      "quad": [
+        [
+          283.5,
+          14.7
+        ],
+        [
+          591.7,
+          43.2
+        ],
+        [
+          551.7,
+          494.1
+        ],
+        [
+          241.1,
+          466
+        ]
+      ],
+      "effect": "glare r135 α0.63"
+    },
+    {
+      "file": "1847452216994916-0.jpg",
+      "imageId": 1847452216994916,
+      "cardId": 3084918268166023,
+      "sourceId": "ja/SV1S-077",
+      "name": "ボタン",
+      "language": "ja",
+      "setCode": "SV1S 077/78",
+      "versions": [
+        "Normal"
+      ],
+      "version": "Normal",
+      "kind": "trainer",
+      "quad": [
+        [
+          617.8,
+          23.8
+        ],
+        [
+          931.2,
+          35.5
+        ],
+        [
+          938.3,
+          494.8
+        ],
+        [
+          613.5,
+          501.1
+        ]
+      ],
+      "effect": "blur σ0.27"
+    },
+    {
+      "file": "1847452216994916-1.jpg",
+      "imageId": 1847452216994916,
+      "cardId": 3084918268166023,
+      "sourceId": "ja/SV1S-077",
+      "name": "ボタン",
+      "language": "ja",
+      "setCode": "SV1S 077/78",
+      "versions": [
+        "Normal"
+      ],
+      "version": "Normal",
+      "kind": "trainer",
+      "quad": [
+        [
+          590.7,
+          25.7
+        ],
+        [
+          918.4,
+          21.4
+        ],
+        [
+          913,
+          518.6
+        ],
+        [
+          572.7,
+          505.7
+        ]
+      ],
+      "effect": "brightness ×0.79"
+    },
+    {
+      "file": "1847452216994916-2.jpg",
+      "imageId": 1847452216994916,
+      "cardId": 3084918268166023,
+      "sourceId": "ja/SV1S-077",
+      "name": "ボタン",
+      "language": "ja",
+      "setCode": "SV1S 077/78",
+      "versions": [
+        "Normal"
+      ],
+      "version": "Normal",
+      "kind": "trainer",
+      "quad": [
+        [
+          21.5,
+          72.2
+        ],
+        [
+          303.5,
+          59.1
+        ],
+        [
+          349.2,
+          472.6
+        ],
+        [
+          49.8,
+          500.6
+        ]
+      ],
+      "effect": "glare r101 α0.65"
+    },
+    {
+      "file": "4090868436968136-0.jpg",
+      "imageId": 4090868436968136,
+      "cardId": 1722136327782624,
+      "sourceId": "ja/SV1S-001",
+      "name": "サボネア",
+      "language": "ja",
+      "setCode": "SV1S 001/78",
+      "versions": [
+        "Normal"
+      ],
+      "version": "Normal",
+      "kind": "pokemon",
+      "quad": [
+        [
+          785.7,
+          90
+        ],
+        [
+          1065.9,
+          94.5
+        ],
+        [
+          1047.9,
+          511.8
+        ],
+        [
+          770.9,
+          492.4
+        ]
+      ],
+      "effect": "blur σ0.43"
+    },
+    {
+      "file": "4090868436968136-1.jpg",
+      "imageId": 4090868436968136,
+      "cardId": 1722136327782624,
+      "sourceId": "ja/SV1S-001",
+      "name": "サボネア",
+      "language": "ja",
+      "setCode": "SV1S 001/78",
+      "versions": [
+        "Normal"
+      ],
+      "version": "Normal",
+      "kind": "pokemon",
+      "quad": [
+        [
+          95.6,
+          185
+        ],
+        [
+          399.9,
+          150.8
+        ],
+        [
+          438.4,
+          612
+        ],
+        [
+          128.4,
+          628.8
+        ]
+      ],
+      "effect": "brightness ×1.09"
+    },
+    {
+      "file": "4090868436968136-2.jpg",
+      "imageId": 4090868436968136,
+      "cardId": 1722136327782624,
+      "sourceId": "ja/SV1S-001",
+      "name": "サボネア",
+      "language": "ja",
+      "setCode": "SV1S 001/78",
+      "versions": [
+        "Normal"
+      ],
+      "version": "Normal",
+      "kind": "pokemon",
+      "quad": [
+        [
+          489,
+          147.7
+        ],
+        [
+          850.1,
+          126.8
+        ],
+        [
+          871.7,
+          636.8
+        ],
+        [
+          527.8,
+          658.8
+        ]
+      ],
+      "effect": "glare r96 α0.73"
+    },
+    {
+      "file": "644572343758826-0.jpg",
+      "imageId": 644572343758826,
+      "cardId": 849279284299886,
+      "sourceId": "ja/SV1V-001",
+      "name": "クヌギダマ",
+      "language": "ja",
+      "setCode": "SV1V 001/78",
+      "versions": [
+        "Normal"
+      ],
+      "version": "Normal",
+      "kind": "pokemon",
+      "quad": [
+        [
+          604.5,
+          128.4
+        ],
+        [
+          871.3,
+          150.5
+        ],
+        [
+          851.4,
+          542.7
+        ],
+        [
+          575,
+          528
+        ]
+      ],
+      "effect": "blur σ0.03"
+    },
+    {
+      "file": "644572343758826-1.jpg",
+      "imageId": 644572343758826,
+      "cardId": 849279284299886,
+      "sourceId": "ja/SV1V-001",
+      "name": "クヌギダマ",
+      "language": "ja",
+      "setCode": "SV1V 001/78",
+      "versions": [
+        "Normal"
+      ],
+      "version": "Normal",
+      "kind": "pokemon",
+      "quad": [
+        [
+          801.4,
+          207.6
+        ],
+        [
+          1106.2,
+          217.2
+        ],
+        [
+          1094,
+          649.9
+        ],
+        [
+          798.2,
+          653.4
+        ]
+      ],
+      "effect": "brightness ×0.88"
+    },
+    {
+      "file": "644572343758826-2.jpg",
+      "imageId": 644572343758826,
+      "cardId": 849279284299886,
+      "sourceId": "ja/SV1V-001",
+      "name": "クヌギダマ",
+      "language": "ja",
+      "setCode": "SV1V 001/78",
+      "versions": [
+        "Normal"
+      ],
+      "version": "Normal",
+      "kind": "pokemon",
+      "quad": [
+        [
+          75.1,
+          66.4
+        ],
+        [
+          439.7,
+          100.3
+        ],
+        [
+          381.9,
+          601.4
+        ],
+        [
+          41.1,
+          580.1
+        ]
+      ],
+      "effect": "glare r124 α0.63"
+    },
+    {
+      "file": "365779397337585-0.jpg",
+      "imageId": 365779397337585,
+      "cardId": 318430634083352,
+      "sourceId": "ja/S12a-001",
+      "name": "パラス",
+      "language": "ja",
+      "setCode": "S12A 001/172",
+      "versions": [
+        "Normal",
+        "Reverse Holofoil"
+      ],
+      "version": null,
+      "kind": "pokemon",
+      "quad": [
+        [
+          468.1,
+          174.3
+        ],
+        [
+          761.8,
+          196.7
+        ],
+        [
+          727.8,
+          626.3
+        ],
+        [
+          433.8,
+          602
+        ]
+      ],
+      "effect": "blur σ1.00"
+    },
+    {
+      "file": "365779397337585-1.jpg",
+      "imageId": 365779397337585,
+      "cardId": 318430634083352,
+      "sourceId": "ja/S12a-001",
+      "name": "パラス",
+      "language": "ja",
+      "setCode": "S12A 001/172",
+      "versions": [
+        "Normal",
+        "Reverse Holofoil"
+      ],
+      "version": null,
+      "kind": "pokemon",
+      "quad": [
+        [
+          904.3,
+          52.9
+        ],
+        [
+          1259.2,
+          77.3
+        ],
+        [
+          1234.4,
+          590.3
+        ],
+        [
+          879.5,
+          581.1
+        ]
+      ],
+      "effect": "brightness ×0.95"
+    },
+    {
+      "file": "365779397337585-2.jpg",
+      "imageId": 365779397337585,
+      "cardId": 318430634083352,
+      "sourceId": "ja/S12a-001",
+      "name": "パラス",
+      "language": "ja",
+      "setCode": "S12A 001/172",
+      "versions": [
+        "Normal",
+        "Reverse Holofoil"
+      ],
+      "version": null,
+      "kind": "pokemon",
+      "quad": [
+        [
+          534.3,
+          178.7
+        ],
+        [
+          882,
+          206.3
+        ],
+        [
+          833.8,
+          682.6
+        ],
+        [
+          509.1,
+          678.7
+        ]
+      ],
+      "effect": "glare r58 α0.70"
+    }
+  ],
+  "distractors": [
+    {
+      "imageId": 523605810418592,
+      "cardId": 2459603765420542,
+      "sourceId": "en/sv03.5-002",
+      "name": "Ivysaur",
+      "language": "en",
+      "setCode": "MEW 002/165",
+      "versions": [
+        "Normal",
+        "Reverse Holofoil"
+      ]
+    },
+    {
+      "imageId": 3198510425972683,
+      "cardId": 1061628591541900,
+      "sourceId": "en/sv03.5-004",
+      "name": "Charmander",
+      "language": "en",
+      "setCode": "MEW 004/165",
+      "versions": [
+        "Eb Games Reverse Holofoil",
+        "Gamestop Normal",
+        "Holofoil",
+        "Normal",
+        "Reverse Holofoil"
+      ]
+    },
+    {
+      "imageId": 3115235207953482,
+      "cardId": 384120329583064,
+      "sourceId": "en/sv03.5-005",
+      "name": "Charmeleon",
+      "language": "en",
+      "setCode": "MEW 005/165",
+      "versions": [
+        "Holofoil",
+        "Normal",
+        "Reverse Holofoil"
+      ]
+    },
+    {
+      "imageId": 352777657948052,
+      "cardId": 3231251973486082,
+      "sourceId": "en/sv03.5-026",
+      "name": "Raichu",
+      "language": "en",
+      "setCode": "MEW 026/165",
+      "versions": [
+        "Holofoil",
+        "Reverse Holofoil"
+      ]
+    },
+    {
+      "imageId": 1665675474770595,
+      "cardId": 1286762054508209,
+      "sourceId": "en/sv03.5-166",
+      "name": "Bulbasaur",
+      "language": "en",
+      "setCode": "MEW 166/165",
+      "versions": [
+        "Holofoil"
+      ]
+    },
+    {
+      "imageId": 4340031461319510,
+      "cardId": 935083662359134,
+      "sourceId": "en/sv03.5-173",
+      "name": "Pikachu",
+      "language": "en",
+      "setCode": "MEW 173/165",
+      "versions": [
+        "Holofoil"
+      ]
+    },
+    {
+      "imageId": 2947312763824616,
+      "cardId": 1825369601506943,
+      "sourceId": "en/sv03-125",
+      "name": "Charizard ex",
+      "language": "en",
+      "setCode": "OBF 125/197",
+      "versions": [
+        "Holofoil",
+        "Player Rewards Program Holofoil"
+      ]
+    },
+    {
+      "imageId": 3397407406726488,
+      "cardId": 4449870909561280,
+      "sourceId": "en/sv03-215",
+      "name": "Charizard ex",
+      "language": "en",
+      "setCode": "OBF 215/197",
+      "versions": [
+        "Holofoil"
+      ]
+    },
+    {
+      "imageId": 1316158363988530,
+      "cardId": 4056657857184810,
+      "sourceId": "en/sv03-046",
+      "name": "Carvanha",
+      "language": "en",
+      "setCode": "OBF 046/197",
+      "versions": [
+        "Normal",
+        "Reverse Holofoil"
+      ]
+    },
+    {
+      "imageId": 1570010372681289,
+      "cardId": 1495452887860710,
+      "sourceId": "en/sv01-001",
+      "name": "Pineco",
+      "language": "en",
+      "setCode": "SVI 001/198",
+      "versions": [
+        "Normal",
+        "Reverse Holofoil"
+      ]
+    },
+    {
+      "imageId": 3887047722454517,
+      "cardId": 3725043292310725,
+      "sourceId": "en/sv01-196",
+      "name": "Ultra Ball",
+      "language": "en",
+      "setCode": "SVI 196/198",
+      "versions": [
+        "Normal",
+        "Reverse Holofoil"
+      ]
+    },
+    {
+      "imageId": 2358878764661928,
+      "cardId": 619850612355335,
+      "sourceId": "en/swsh1-180",
+      "name": "Rare Candy",
+      "language": "en",
+      "setCode": "SSH 180/202",
+      "versions": [
+        "Normal",
+        "Reverse Holofoil"
+      ]
+    },
+    {
+      "imageId": 3353033959756154,
+      "cardId": 2802320435711444,
+      "sourceId": "en/base1-58",
+      "name": "Pikachu",
+      "language": "en",
+      "setCode": "BS 58/102",
+      "versions": [
+        "1999 2000 Copyright Normal",
+        "Normal",
+        "Poketour 99 Normal",
+        "Shadowless 1st Edition",
+        "Shadowless Normal",
+        "Shadowless Red Cheek 1st Edition",
+        "Shadowless Red Cheek Normal"
+      ]
+    },
+    {
+      "imageId": 969959606685637,
+      "cardId": 1201972798997143,
+      "sourceId": "en/base1-2",
+      "name": "Blastoise",
+      "language": "en",
+      "setCode": "BS 2/102",
+      "versions": [
+        "1999 2000 Copyright Holofoil",
+        "Holofoil",
+        "Shadowless 1st Edition Holofoil",
+        "Shadowless Holofoil"
+      ]
+    },
+    {
+      "imageId": 2942690597837404,
+      "cardId": 57063344187984,
+      "sourceId": "ja/SV2a-002",
+      "name": "フシギソウ",
+      "language": "ja",
+      "setCode": "SV2A 002/165",
+      "versions": [
+        "Normal",
+        "Reverse Holofoil"
+      ]
+    },
+    {
+      "imageId": 4046814749420054,
+      "cardId": 1295621064661732,
+      "sourceId": "ja/SV2a-004",
+      "name": "ヒトカゲ",
+      "language": "ja",
+      "setCode": "SV2A 004/165",
+      "versions": [
+        "Normal",
+        "Reverse Holofoil"
+      ]
+    },
+    {
+      "imageId": 4193528931827861,
+      "cardId": 3003294460969737,
+      "sourceId": "ja/SV2a-026",
+      "name": "ライチュウ",
+      "language": "ja",
+      "setCode": "SV2A 026/165",
+      "versions": [
+        "Holofoil",
+        "Reverse Holofoil"
+      ]
+    },
+    {
+      "imageId": 2183169060631956,
+      "cardId": 3830739192050596,
+      "sourceId": "ja/SV2a-166",
+      "name": "フシギダネ",
+      "language": "ja",
+      "setCode": "SV2A 166/165",
+      "versions": [
+        "Holofoil"
+      ]
+    },
+    {
+      "imageId": 3747938715483052,
+      "cardId": 4478766105470076,
+      "sourceId": "ja/SV2a-173",
+      "name": "ピカチュウ",
+      "language": "ja",
+      "setCode": "SV2A 173/165",
+      "versions": [
+        "Holofoil"
+      ]
+    },
+    {
+      "imageId": 3304798539820101,
+      "cardId": 2113195223004620,
+      "sourceId": "ja/SV2a-185",
+      "name": "リザードンex",
+      "language": "ja",
+      "setCode": "SV2A 185/165",
+      "versions": [
+        "Holofoil"
+      ]
+    },
+    {
+      "imageId": 1008522124656324,
+      "cardId": 271681992436239,
+      "sourceId": "ja/SV1S-002",
+      "name": "ノクタス",
+      "language": "ja",
+      "setCode": "SV1S 002/78",
+      "versions": [
+        "Normal"
+      ]
+    },
+    {
+      "imageId": 854594270671578,
+      "cardId": 2547722753577447,
+      "sourceId": "ja/SV1S-076",
+      "name": "博士の研究（オーリム博士）",
+      "language": "ja",
+      "setCode": "SV1S 076/78",
+      "versions": [
+        "Holofoil"
+      ]
+    },
+    {
+      "imageId": 3773610638557558,
+      "cardId": 1881535470504083,
+      "sourceId": "ja/SV1V-002",
+      "name": "ヘラクロス",
+      "language": "ja",
+      "setCode": "SV1V 002/78",
+      "versions": [
+        "Normal"
+      ]
+    },
+    {
+      "imageId": 1111485682563851,
+      "cardId": 2593528591263368,
+      "sourceId": "ja/S12a-002",
+      "name": "パラセクト",
+      "language": "ja",
+      "setCode": "S12A 002/172",
+      "versions": [
+        "Normal",
+        "Reverse Holofoil"
+      ]
+    }
+  ]
+}

@@ -97,7 +97,7 @@ const web = {
       portal.serverDb,
       { printingId: pid(portal.serverDb, code), imageId, quantity },
       at,
-      userScope(user)
+      userScope(user, 'ygo')
     ),
   update: (uid: string, patch: { quantity?: number; notes?: string }, at: Date) => {
     const { id } = portal.serverDb
@@ -105,7 +105,7 @@ const web = {
       .get(uid) as {
       id: number
     }
-    return updateEntry(portal.serverDb, id, patch, at, userScope(user))
+    return updateEntry(portal.serverDb, id, patch, at, userScope(user, 'ygo'))
   }
 }
 

@@ -55,7 +55,7 @@ describe('server eBay prices', () => {
   let p2: { id: number; imageId: number; code: string }
 
   const own = (userId: number, p: { id: number; imageId: number }): number =>
-    addEntry(db, { printingId: p.id, imageId: p.imageId, quantity: 1 }, NOW, userScope(userId)).id
+    addEntry(db, { printingId: p.id, imageId: p.imageId, quantity: 1 }, NOW, userScope(userId, 'ygo')).id
   const price = (id: number): { price: number | null; checked_at: string } | undefined =>
     db.prepare('SELECT price, checked_at FROM intl_prices WHERE printing_id = ?').get(id) as
       | { price: number | null; checked_at: string }
@@ -124,7 +124,7 @@ describe('server eBay prices', () => {
 
   it('printings owned by nobody, or only by tombstones, are skipped', async () => {
     const id = own(alice, p1)
-    removeEntry(db, id, NOW, userScope(alice))
+    removeEntry(db, id, NOW, userScope(alice, 'ygo'))
     const storage = fakeStorage()
     const { client, lookup } = fakeClient()
     await runPriceAlarm(db, client, storage, () => NOW)

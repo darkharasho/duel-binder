@@ -60,6 +60,7 @@ describe("CORS for the iOS app's origin", () => {
       expect(res.headers.get('access-control-allow-origin'), path).toBe(IOS)
       expect(res.headers.get('access-control-allow-headers')).toMatch(/authorization/)
       expect(res.headers.get('access-control-allow-headers')).toMatch(/if-none-match/)
+      expect(res.headers.get('access-control-allow-headers')).toMatch(/x-duel-game/)
       expect(res.headers.get('access-control-allow-credentials')).toBeNull()
     }
   })

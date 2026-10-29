@@ -131,7 +131,7 @@ describe('price requests', () => {
 
   it('skips owned printings: the alarm prices them anyway', async () => {
     const p = printing()
-    addEntry(db, { printingId: p.id, imageId, quantity: 1 }, NOW, userScope(bob))
+    addEntry(db, { printingId: p.id, imageId, quantity: 1 }, NOW, userScope(bob, 'ygo'))
     expect(await ask([p.pkey])).toEqual({ queued: 0, capped: false })
     expect(requested()).toEqual([])
     expect(soon).not.toHaveBeenCalled()
@@ -233,7 +233,7 @@ describe('price requests', () => {
   it('the alarm prices a requested printing after the owned ones', async () => {
     const wanted = printing()
     const mine = printing()
-    addEntry(db, { printingId: mine.id, imageId, quantity: 1 }, NOW, userScope(alice))
+    addEntry(db, { printingId: mine.id, imageId, quantity: 1 }, NOW, userScope(alice, 'ygo'))
     await ask([wanted.pkey])
     const lookup = vi.fn(async () => ({ price: 4, listingCount: 3, checkedAt: NOW.toISOString() }))
     const client = { lookup } as unknown as PriceClient

@@ -120,7 +120,8 @@ describe('Discord sign-in and sessions', () => {
       id: user.id,
       username: 'kaiba',
       displayName: 'Seto',
-      avatarUrl: 'https://cdn.discordapp.com/avatars/111/abc.png'
+      avatarUrl: 'https://cdn.discordapp.com/avatars/111/abc.png',
+      games: ['ygo']
     })
   })
 
@@ -131,7 +132,7 @@ describe('Discord sign-in and sessions', () => {
     const token = await signIn()
     expect(db.prepare('SELECT COUNT(*) AS n FROM users').get()).toEqual({ n: 1 })
     const me = await (await get('/api/me', `session=${token}`)).json()
-    expect(me).toEqual({ id: before.id, username: 'kaiba2', displayName: 'Seto K', avatarUrl: null })
+    expect(me).toEqual({ id: before.id, username: 'kaiba2', displayName: 'Seto K', avatarUrl: null, games: ['ygo'] })
   })
 
   it('renaming into a username held by a stale row moves the stale row aside', async () => {

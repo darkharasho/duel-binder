@@ -78,7 +78,7 @@ describe('phone sign-in', () => {
     expect(res.status).toBe(200)
     expect(res.headers.get('cache-control')).toBe('no-store')
     const body = (await res.json()) as { token: string; user: unknown }
-    expect(body.user).toEqual({ id: alice, username: 'alice', displayName: null, avatarUrl: null })
+    expect(body.user).toEqual({ id: alice, username: 'alice', displayName: null, avatarUrl: null, games: ['ygo'] })
     expect(body.token).toMatch(/^[A-Za-z0-9_-]{43}$/)
     expect(body.token).not.toBe(WEB_TOKEN)
 

@@ -1,4 +1,5 @@
 import type { Me } from '../../../src/shared/cloud'
+import { allowedGames, type GameId } from '../../../src/shared/games'
 import type { AppDeps } from './app'
 import { appleRefreshToken, verifyAppleIdentityToken } from './apple'
 
@@ -137,6 +138,11 @@ function isAdminUser(deps: AppDeps, userId: number): boolean {
   const row = deps.db.prepare('SELECT discord_id FROM users WHERE id = ?').get(userId) as
     { discord_id: string } | undefined
   return row?.discord_id === admin
+}
+
+/** The games this user may use; the server's gate for every game-scoped route. */
+export function gamesFor(deps: AppDeps, userId: number): GameId[] {
+  return allowedGames(isAdminUser(deps, userId))
 }
 
 /** Whether the request is signed in as the ADMIN_DISCORD_ID account. */
@@ -628,7 +634,8 @@ function loadMe(deps: AppDeps, userId: number): Me {
     id: row.id,
     username: row.username,
     displayName: row.display_name,
-    avatarUrl: avatarUrl(row.discord_id, row.avatar)
+    avatarUrl: avatarUrl(row.discord_id, row.avatar),
+    games: gamesFor(deps, row.id)
   }
 }
 

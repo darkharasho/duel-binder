@@ -128,7 +128,7 @@ describe('friends', () => {
       id: number
       card_id: number
     }[]
-    const scope = userScope(bob)
+    const scope = userScope(bob, 'ygo')
     const imageOf = (cardId: number): number =>
       (
         db

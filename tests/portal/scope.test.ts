@@ -31,20 +31,20 @@ describe('owner scope', () => {
   const input = (quantity: number) => ({ printingId: printing.id, imageId, quantity })
 
   it('each user sees only their own entries', () => {
-    addEntry(db, input(1), now, userScope(u1))
-    addEntry(db, input(3), now, userScope(u2))
-    const a = listEntries(db, ALL, userScope(u1))
-    const b = listEntries(db, ALL, userScope(u2))
+    addEntry(db, input(1), now, userScope(u1, 'ygo'))
+    addEntry(db, input(3), now, userScope(u2, 'ygo'))
+    const a = listEntries(db, ALL, userScope(u1, 'ygo'))
+    const b = listEntries(db, ALL, userScope(u2, 'ygo'))
     expect(a.map((e) => e.quantity)).toEqual([1])
     expect(b.map((e) => e.quantity)).toEqual([3])
   })
 
   it('adding the same printing twice sums within one user only', () => {
-    addEntry(db, input(1), now, userScope(u1))
-    addEntry(db, input(2), now, userScope(u1))
-    addEntry(db, input(5), now, userScope(u2))
-    expect(listEntries(db, ALL, userScope(u1)).map((e) => e.quantity)).toEqual([3])
-    expect(listEntries(db, ALL, userScope(u2)).map((e) => e.quantity)).toEqual([5])
+    addEntry(db, input(1), now, userScope(u1, 'ygo'))
+    addEntry(db, input(2), now, userScope(u1, 'ygo'))
+    addEntry(db, input(5), now, userScope(u2, 'ygo'))
+    expect(listEntries(db, ALL, userScope(u1, 'ygo')).map((e) => e.quantity)).toEqual([3])
+    expect(listEntries(db, ALL, userScope(u2, 'ygo')).map((e) => e.quantity)).toEqual([5])
   })
 
   it('inserts take distinct, increasing server_seq values', () => {
@@ -54,8 +54,8 @@ describe('owner scope', () => {
          WHERE p.id <> ? ORDER BY p.id, i.image_id LIMIT 1`
       )
       .get(printing.id) as { id: number; image_id: number }
-    const a = addEntry(db, input(1), now, userScope(u1))
-    const b = addEntry(db, { printingId: other.id, imageId: other.image_id, quantity: 1 }, now, userScope(u1))
+    const a = addEntry(db, input(1), now, userScope(u1, 'ygo'))
+    const b = addEntry(db, { printingId: other.id, imageId: other.image_id, quantity: 1 }, now, userScope(u1, 'ygo'))
     const seq = (id: number): number =>
       (db.prepare('SELECT server_seq FROM collection_entries WHERE id = ?').get(id) as { server_seq: number }).server_seq
     expect(seq(a.id)).toBeGreaterThan(0)
@@ -63,7 +63,7 @@ describe('owner scope', () => {
   })
 
   it('every server write takes a new server_seq', () => {
-    const s = userScope(u1)
+    const s = userScope(u1, 'ygo')
     const seq = (id: number): number =>
       (db.prepare('SELECT server_seq FROM collection_entries WHERE id = ?').get(id) as { server_seq: number }).server_seq
     const maxSeq = (): number =>
@@ -80,7 +80,7 @@ describe('owner scope', () => {
         `SELECT p.id FROM card_printings p WHERE p.card_id = ? AND p.id <> ? ORDER BY p.id LIMIT 1`
       )
       .get(printing.card_id, printing.id) as { id: number }
-    addEntry(db, input(1), now, userScope(u2)) // another user's row, so u1's seqs aren't the only ones
+    addEntry(db, input(1), now, userScope(u2, 'ygo')) // another user's row, so u1's seqs aren't the only ones
     let a = 0
     let b = 0
     bumps(() => [(a = addEntry(db, input(1), now, s).id)]) // add new
@@ -101,7 +101,7 @@ describe('owner scope', () => {
   })
 
   it('remove tombstones on the server', () => {
-    const s = userScope(u1)
+    const s = userScope(u1, 'ygo')
     const e = addEntry(db, input(1), now, s)
     removeEntry(db, e.id, undefined, s)
     expect(listEntries(db, ALL, s)).toEqual([])
@@ -113,20 +113,20 @@ describe('owner scope', () => {
   })
 
   it('set checklist ownership is per user', () => {
-    addEntry(db, input(2), now, userScope(u2))
+    addEntry(db, input(2), now, userScope(u2, 'ygo'))
     const owned = (s: ReturnType<typeof userScope>): number =>
       getChecklist(db, printing.set_name, printing.language, s)!.cards.reduce((n, c) => n + c.owned, 0)
-    expect(owned(userScope(u1))).toBe(0)
-    expect(owned(userScope(u2))).toBe(2)
+    expect(owned(userScope(u1, 'ygo'))).toBe(0)
+    expect(owned(userScope(u2, 'ygo'))).toBe(2)
   })
 
   it('stats and snapshots are per user', () => {
-    addEntry(db, input(2), now, userScope(u1))
-    recordSnapshot(db, now, userScope(u1))
+    addEntry(db, input(2), now, userScope(u1, 'ygo'))
+    recordSnapshot(db, now, userScope(u1, 'ygo'))
     const rows = db.prepare('SELECT user_id, total_cards FROM value_snapshots').all()
     expect(rows).toEqual([{ user_id: u1, total_cards: 2 }])
-    expect(getStats(db, userScope(u2)).totalCards).toBe(0)
-    expect(getStats(db, userScope(u1)).totalCards).toBe(2)
+    expect(getStats(db, userScope(u2, 'ygo')).totalCards).toBe(0)
+    expect(getStats(db, userScope(u1, 'ygo')).totalCards).toBe(2)
   })
 
   it('userScope(id, pkm) reads and writes only Pokémon rows', () => {
@@ -138,7 +138,7 @@ describe('owner scope', () => {
     expect(db.prepare('SELECT game FROM collection_entries WHERE id = ?').get(e.id)).toEqual({ game: 'pkm' })
     expect(listEntries(db, ALL, poke).map((x) => [x.card.id, x.quantity])).toEqual([[pkm.cardIds[0], 5]])
     expect(listEntries(db, ALL, ygo).map((x) => x.quantity)).toEqual([2])
-    expect(listEntries(db, ALL, userScope(u1)).map((x) => x.quantity)).toEqual([2])
+    expect(listEntries(db, ALL, userScope(u1, 'ygo')).map((x) => x.quantity)).toEqual([2])
     expect(getStats(db, poke).totalCards).toBe(5)
     expect(getStats(db, ygo).totalCards).toBe(2)
     expect(getChecklist(db, SHARED_SET_NAME, 'en', poke)!.cards.map((c) => c.cardId)).toEqual([pkm.cardIds[0]])
@@ -163,7 +163,7 @@ describe('owner scope', () => {
   })
 
   it('userScope rejects a non-integer id', () => {
-    expect(() => userScope(1.5)).toThrow()
-    expect(() => userScope(NaN)).toThrow()
+    expect(() => userScope(1.5, 'ygo')).toThrow()
+    expect(() => userScope(NaN, 'ygo')).toThrow()
   })
 })

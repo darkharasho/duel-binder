@@ -189,6 +189,29 @@ describe('createScanEngine', () => {
     expect(ygo.posted[0].msg).toMatchObject({ type: 'init', game: 'ygo' })
   })
 
+  it('a Pokémon engine reads its code bands as collector numbers', async () => {
+    const api = createMockApi().scan
+    vi.mocked(api.ocr).mockImplementation(async (bands, kind) =>
+      bands.map(() => (kind === 'number' ? '045/193' : 'PIKACHU'))
+    )
+    const { worker } = fakeWorker({
+      found: true,
+      quad: null,
+      art: [],
+      codeBands: [band(10)],
+      nameBands: [band(7)],
+      textBands: [],
+      cues: null,
+      look: null
+    })
+    const engine = createScanEngine({ api, makeWorker: () => worker, game: 'pkm' })
+    const read = await engine.analyze(frame(), { candidates: null, wantText: true })
+    expect(read.codeTexts).toEqual(['045/193'])
+    expect(read.nameTexts).toEqual(['PIKACHU'])
+    expect(api.ocr).toHaveBeenCalledWith([band(10)], 'number')
+    expect(api.ocr).toHaveBeenCalledWith([band(7)], 'name')
+  })
+
   it('dispose rejects a pending frame, and later calls reject', async () => {
     const silent = { postMessage: vi.fn(), terminate: vi.fn() } as unknown as Worker
     const engine = createScanEngine({ api: createMockApi().scan, makeWorker: () => silent })

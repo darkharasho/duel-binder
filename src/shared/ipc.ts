@@ -26,6 +26,7 @@ import type { ScanWindowMessage } from './scanWindow'
 import type { FingerprintStatus, OcrBand, ScanPrinting } from './scan/types'
 import type { CollectorNumber } from './scan/collectorNumber'
 import type { CardLanguage } from './scan/language'
+import type { OcrKind, TextModel } from './scan/ocr'
 import type { PackWrappers, RipCard, RipHistory, RipSessionDetail, RipSet } from './rip/types'
 import type { GameId } from './games'
 
@@ -70,9 +71,14 @@ export interface Api {
     cardsForImages(imageIds: number[]): Promise<{ imageId: number; cardId: number }[]>
     fingerprints(game: GameId): Promise<ArrayBuffer | null>
     refreshFingerprints(game: GameId, opts?: { force?: boolean }): Promise<FingerprintStatus>
-    ocr(bands: OcrBand[], kind: 'code' | 'name'): Promise<string[]>
+    ocr(bands: OcrBand[], kind: OcrKind): Promise<string[]>
     /** The language the card text on the bands reads as; null when it can't be told. */
     language(bands: OcrBand[]): Promise<CardLanguage | null>
+    /**
+     * The card text on each band as model reads it, unjudged: a Pokémon card's language is told
+     * from one read per model (pokemonLanguageOfReads), never from the reads run together.
+     */
+    readText(bands: OcrBand[], model: TextModel): Promise<string[]>
   }
   scanWindow: {
     /** Opens the scan window, or brings it to the front. */
@@ -206,6 +212,7 @@ export const INVOKE_CHANNELS = [
   'scan:refreshFingerprints',
   'scan:ocr',
   'scan:language',
+  'scan:readText',
   'scanWindow:open',
   'scanWindow:isOpen',
   'scanWindow:toggleFullScreen',

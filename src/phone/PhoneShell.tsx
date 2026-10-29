@@ -24,7 +24,7 @@ import {
   SheetHeader,
   SheetTitle
 } from '@/components/ui/sheet'
-import type { ScanEngine } from '@/features/scan/engine'
+import type { EngineFactory } from '@/features/scan/engine'
 import { GameSegments } from '@/components/GameSwitch'
 import { api, mutationInvalidationKeys } from '@/lib/api'
 import { useFriendsOverview } from '@/lib/friends'
@@ -86,7 +86,7 @@ function useReadyChecks(): void {
 export function PhoneShell({
   engineFactory
 }: {
-  engineFactory?: () => ScanEngine
+  engineFactory?: EngineFactory
 }): React.JSX.Element {
   return (
     <GameProvider fallback={<div className="fixed inset-0 bg-background" />}>
@@ -95,7 +95,7 @@ export function PhoneShell({
   )
 }
 
-function Shell({ engineFactory }: { engineFactory?: () => ScanEngine }): React.JSX.Element {
+function Shell({ engineFactory }: { engineFactory?: EngineFactory }): React.JSX.Element {
   const pages = usePages('dashboard')
   const { page, onNavigate } = pages
   const [moreOpen, setMoreOpen] = useState(false)

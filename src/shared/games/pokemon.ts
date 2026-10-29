@@ -5,7 +5,7 @@ export const PKM: GameDef = {
   id: 'pkm',
   name: 'Pokémon',
   color: '#e0483d',
-  features: { scan: false, rip: false },
+  features: { scan: true, rip: false },
   crossLanguagePriceFallback: false,
   priceRule: 'marketOnly',
   access: 'owner',

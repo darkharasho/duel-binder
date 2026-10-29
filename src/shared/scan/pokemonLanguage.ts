@@ -55,3 +55,24 @@ export function pokemonLanguage(text: string): 'en' | 'ja' | 'other' | null {
   if (words) return words === 'en' ? 'en' : 'other'
   return englishWords(text) >= LANGUAGE_MIN_WORDS ? 'en' : null
 }
+
+/**
+ * A Pokémon card's language from its text read once per model. Each read is judged on its own:
+ * run together, the Japanese model's kana-like garbage on an English card would make it Japanese.
+ *
+ * - `other` when either read says other (Chinese, Korean, a European language).
+ * - `ja` when the Japanese model's read says ja and the English one's doesn't say en.
+ * - `en` when the English model's read says en and the Japanese one's doesn't say ja.
+ * - null otherwise: the reads disagree, or neither tells.
+ */
+export function pokemonLanguageOfReads(reads: {
+  eng: string
+  jpn: string
+}): 'en' | 'ja' | 'other' | null {
+  const eng = pokemonLanguage(reads.eng)
+  const jpn = pokemonLanguage(reads.jpn)
+  if (eng === 'other' || jpn === 'other') return 'other'
+  if (jpn === 'ja' && eng !== 'en') return 'ja'
+  if (eng === 'en' && jpn !== 'ja') return 'en'
+  return null
+}

@@ -2,11 +2,13 @@ import { useEffect, useRef, useState } from 'react'
 import { FlashlightIcon, FlashlightOffIcon } from 'lucide-react'
 import type { LookModel } from '@shared/scan/look'
 import { LOOK_MODEL } from '@shared/scan/lookModel'
-import { defaultEngine, type ScanEngine } from '@/features/scan/engine'
+import { scanProfile } from '@shared/scan/profiles'
+import { defaultEngine, type EngineFactory } from '@/features/scan/engine'
 import { useScanHub } from '@/features/scan/ScanHub'
 import { ScanViewport } from '@/features/scan/ScanViewport'
 import { useCamera, type CameraError } from '@/features/scan/useCamera'
 import { useHubScan } from '@/features/scan/useHubScan'
+import { useGame } from '@/lib/game'
 import { cn } from '@/lib/utils'
 
 const CAMERA_MESSAGES: Record<CameraError, string> = {
@@ -76,7 +78,8 @@ function CameraBackdrop({ stream }: { stream: MediaStream | null }): React.JSX.E
  *
  * Unlike the desktop's scanners, it reads rarity with the look model after the name and frame
  * rules (useScanLoop's lookModel): it was fitted and tested on photos the size of a phone
- * camera's, and gains nothing on a desktop webcam. `lookModel` is for tests.
+ * camera's, and gains nothing on a desktop webcam. It reads Yu-Gi-Oh! rarities only, so a game
+ * without them (Pokémon) scans without it. `lookModel` is for tests.
  */
 export function PhoneCamera({
   engineFactory = defaultEngine,
@@ -84,19 +87,20 @@ export function PhoneCamera({
   className,
   children
 }: {
-  engineFactory?: () => ScanEngine
+  engineFactory?: EngineFactory
   lookModel?: LookModel | null
   className?: string
   children?: React.ReactNode
 }): React.JSX.Element {
   const { settings } = useScanHub()
+  const { game } = useGame()
   const videoRef = useRef<HTMLVideoElement>(null)
   const camera = useCamera(settings.deviceId, 'environment')
   const { loop } = useHubScan({
     videoRef,
     stream: camera.stream,
     engineFactory,
-    lookModel,
+    lookModel: scanProfile(game).rarityLook ? lookModel : null,
     onStalled: camera.retry
   })
   const torch = useTorch(camera.stream)

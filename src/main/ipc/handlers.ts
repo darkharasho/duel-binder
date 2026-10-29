@@ -8,6 +8,7 @@ import { createDataHandlers } from './dataHandlers'
 import type { ScanWindowManager } from '../scanWindow'
 import type { FingerprintStore } from '../scan/fingerprints'
 import { checkOcrBands, type Ocr } from '../scan/ocr'
+import { isOcrKind, isTextModel, readTexts } from '@shared/scan/ocr'
 import type { GameId } from '@shared/games'
 import { cardLanguage } from '@shared/scan/cardLanguage'
 import type { AccountService } from '../cloud/account'
@@ -86,14 +87,19 @@ export function createHandlers({
     'friends:facets': async (userId: number) => account.portal('friends:facets', [userId]),
     'scan:fingerprints': (game: GameId) => fingerprints[game].read(),
     'scan:refreshFingerprints': (game: GameId, opts?: { force?: boolean }) => fingerprints[game].refresh(opts),
-    'scan:ocr': async (bands: unknown, kind: 'code' | 'name') => {
-      if (kind !== 'code' && kind !== 'name') throw new Error(`Unknown OCR kind: ${String(kind)}`)
+    'scan:ocr': async (bands: unknown, kind: unknown) => {
+      if (!isOcrKind(kind)) throw new Error(`Unknown OCR kind: ${String(kind)}`)
       checkOcrBands(bands)
       return ocr.read(bands, kind)
     },
     'scan:language': async (bands: unknown) => {
       checkOcrBands(bands)
       return cardLanguage(ocr, bands)
+    },
+    'scan:readText': async (bands: unknown, model: unknown) => {
+      if (!isTextModel(model)) throw new Error(`Unknown OCR model: ${String(model)}`)
+      checkOcrBands(bands)
+      return readTexts(ocr, bands, model)
     },
     'prices:request': (printingIds: unknown) => account.requestPrices(printingIds),
     'usage:report': (events: unknown) => account.reportUsage(events),

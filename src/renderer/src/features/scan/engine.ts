@@ -2,6 +2,7 @@ import type { GameId } from '@shared/games/types'
 import type { Api } from '@shared/ipc'
 import type { RarityCues } from '@shared/scan/rarity'
 import type { VersionCues } from './vision/pokemonVersion'
+import type { OcrKind } from '@shared/scan/ocr'
 import type { OcrBand, RgbaImage } from '@shared/scan/types'
 import type { Quad } from './vision/detect'
 
@@ -238,9 +239,11 @@ export function createScanEngine(deps: {
       const nameBands = signals.nameBands.filter(hasPixels)
       // Text is a helper to the art: a failed or timed-out read counts as nothing read, so OCR
       // trouble never stops art matching.
-      const read = (bands: OcrBand[], kind: 'code' | 'name'): Promise<string[]> =>
+      const read = (bands: OcrBand[], kind: OcrKind): Promise<string[]> =>
         bands.length ? deps.api.ocr(bands, kind).catch(() => []) : Promise.resolve([])
-      const [codes, names] = await Promise.all([read(codeBands, 'code'), read(nameBands, 'name')])
+      // A Pokémon card's code band holds its collector number, slash and all.
+      const codeKind = deps.game === 'pkm' ? 'number' : 'code'
+      const [codes, names] = await Promise.all([read(codeBands, codeKind), read(nameBands, 'name')])
       return {
         found,
         quad,
@@ -264,6 +267,9 @@ export function createScanEngine(deps: {
   }
 }
 
+/** Makes a scan engine for a game's cards; the scan loop makes a new one when the game changes. */
+export type EngineFactory = (game: GameId) => ScanEngine
+
 /** The real engine: the vision worker, with the main process's scan lookups. */
-export const defaultEngine = (): ScanEngine =>
-  createScanEngine({ api: window.api.scan, makeWorker: makeVisionWorker })
+export const defaultEngine: EngineFactory = (game) =>
+  createScanEngine({ api: window.api.scan, makeWorker: makeVisionWorker, game })

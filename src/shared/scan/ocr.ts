@@ -1,13 +1,24 @@
 import type { OcrBand } from './types'
 
 const CODE_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-'
+/** A Pokémon collector number's ("PAL EN 045/193"): a set code's, and the slash before the set's total. */
+const NUMBER_CHARS = CODE_CHARS + '/'
+
+/**
+ * What a band holds: a Yu-Gi-Oh set code, a Pokémon collector number or a card name, each read
+ * as one line.
+ */
+export type OcrKind = 'code' | 'number' | 'name'
+
+export const isOcrKind = (k: unknown): k is OcrKind =>
+  k === 'code' || k === 'number' || k === 'name'
 
 /** The tesseract models the app ships: English, and the scripts a card's language is told by. */
 export type OcrModel = 'eng' | 'jpn' | 'kor' | 'chi_sim'
 
 export interface Ocr {
   /** The text on each band, one line per band, in order. */
-  read(bands: OcrBand[], kind: 'code' | 'name'): Promise<string[]>
+  read(bands: OcrBand[], kind: OcrKind): Promise<string[]>
   /** The block of text on one band, read with model, and tesseract's confidence in it (0-100). */
   readText(band: OcrBand, model: OcrModel): Promise<{ text: string; confidence: number }>
   dispose(): Promise<void>
@@ -73,7 +84,14 @@ export function checkOcrBands(bands: unknown): asserts bands is OcrBand[] {
   }
 }
 
-type Kind = 'code' | 'name' | 'text'
+type Kind = OcrKind | 'text'
+
+const WHITELISTS: Record<Kind, string> = {
+  code: CODE_CHARS,
+  number: NUMBER_CHARS,
+  name: '',
+  text: ''
+}
 
 interface Slot {
   worker: Promise<OcrWorker>
@@ -118,7 +136,7 @@ export function createOcrQueue(opts: {
     if (slot.kind !== kind) {
       await w.setParameters({
         tessedit_pageseg_mode: kind === 'text' ? PSM_BLOCK : PSM_LINE,
-        tessedit_char_whitelist: kind === 'code' ? CODE_CHARS : ''
+        tessedit_char_whitelist: WHITELISTS[kind]
       })
       slot.kind = kind
     }
@@ -173,4 +191,16 @@ export function createOcrQueue(opts: {
       await Promise.all(all.map((slot) => slot.worker.then((w) => w.terminate()).catch(() => {})))
     }
   }
+}
+
+/** The models a card's text is read with as it is (scan.readText): English, and Japanese for its kana. */
+export type TextModel = 'eng' | 'jpn'
+
+export const isTextModel = (m: unknown): m is TextModel => m === 'eng' || m === 'jpn'
+
+/** Each band's block of text read with model, in order; '' for an empty band. */
+export async function readTexts(ocr: Ocr, bands: OcrBand[], model: TextModel): Promise<string[]> {
+  const out: string[] = []
+  for (const band of bands) out.push((await ocr.readText(band, model)).text)
+  return out
 }

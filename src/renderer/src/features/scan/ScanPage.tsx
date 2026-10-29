@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { SCAN_ZOOMS, type ScanFit, type ScanWindowState } from '@shared/scanWindow'
+import { scanProfile } from '@shared/scan/profiles'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
 import {
@@ -9,13 +10,14 @@ import {
   SelectTrigger,
   SelectValue
 } from '@/components/ui/select'
-import { defaultEngine, type ScanEngine } from './engine'
+import { defaultEngine, type EngineFactory } from './engine'
 import { InPageScanner, type InPageCamera } from './InPageScanner'
 import { useScanHub } from './ScanHub'
 import { NO_FINGERPRINTS, SET_UNREADABLE, statusText } from './scanText'
 import { SessionList } from './SessionList'
 import { SearchPicker } from './SearchPicker'
 import { useScanPickers } from './pickerOptions'
+import { useGame } from '@/lib/game'
 
 const UNNAMED_CAMERA = 'unnamed-camera-'
 
@@ -34,7 +36,7 @@ const CAMERA_MESSAGES: Record<NonNullable<ScanWindowState['cameraError']>, strin
 export function ScanPage({
   engineFactory = defaultEngine
 }: {
-  engineFactory?: () => ScanEngine
+  engineFactory?: EngineFactory
 }): React.JSX.Element {
   const hub = useScanHub()
   const { settings, setSettings, state, open, openKnown } = hub
@@ -54,6 +56,9 @@ export function ScanPage({
   }, [handingOff])
 
   const pickers = useScanPickers()
+  // A game priced by version rather than Yu-Gi-Oh!'s rarities has no rarity for new scans.
+  const { game } = useGame()
+  const rarities = scanProfile(game).rarityLook
 
   const pickCamera = (id: string): void => {
     // A camera listed before permission has no id: open the default one.
@@ -76,7 +81,7 @@ export function ScanPage({
 
   if (!openKnown) return <div className="p-8" />
 
-  const newScansAs = (
+  const newScansAs = rarities && (
     <>
       <span className="text-sm text-muted-foreground">New scans as</span>
       <SearchPicker

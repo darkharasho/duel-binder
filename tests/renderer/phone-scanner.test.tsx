@@ -5,11 +5,14 @@ import { ScanHubProvider, useScanHub } from '@/features/scan/ScanHub'
 import type { ScanRow } from '@/features/scan/session'
 import { PhoneContext } from '../../src/phone/context'
 import { ScannerScreen } from '../../src/phone/ScannerScreen'
+import { PhoneCamera } from '../../src/phone/PhoneCamera'
+import { GameProvider } from '@/lib/game'
+import { LOOK_MODEL } from '@shared/scan/lookModel'
 import { createSyncTriggers } from '../../src/phone/syncTriggers'
 import type { PhoneStore } from '../../src/phone/data/store'
-import { renderWithProviders } from './mockApi'
+import { createMockApi, renderWithProviders } from './mockApi'
 import { SETO, fakeStore, installPhoneApi, setOnline } from './phoneFakes'
-import { fakeEngine, printing, stubCamera, stubVideo } from './scanFakes'
+import { codeFrame, fakeBridge, fakeEngine, printing, stubCamera, stubVideo } from './scanFakes'
 
 const SESSION_KEY = 'scan.session.v1'
 
@@ -511,5 +514,89 @@ describe('phone scanner', () => {
       await user.click(within(languages).getByRole('button', { name: 'Close' }))
       expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     })
+  })
+})
+
+describe('phone scanner on Pokémon', () => {
+  const pkmGames = {
+    available: vi.fn(async () => ['ygo', 'pkm'] as never),
+    active: vi.fn(async () => 'pkm' as const)
+  }
+
+  it('phone scanner runs without the look model for pkm', async () => {
+    vi.useFakeTimers()
+    vi.stubGlobal('jest', { advanceTimersByTime: (ms: number) => vi.advanceTimersByTime(ms) })
+    const engine = fakeEngine(() => codeFrame('045/193'))
+    const factory = vi.fn(() => engine)
+    const api = createMockApi({ scanWindow: fakeBridge().scanWindow, games: pkmGames })
+    renderWithProviders(
+      <GameProvider>
+        <ScanHubProvider>
+          <PhoneCamera engineFactory={factory} lookModel={LOOK_MODEL} />
+        </ScanHubProvider>
+      </GameProvider>,
+      { api }
+    )
+    await settle()
+    await settle(1500)
+    expect(factory).toHaveBeenLastCalledWith('pkm')
+    expect(api.scan.fingerprints).toHaveBeenLastCalledWith('pkm')
+    expect(engine.analyze).toHaveBeenCalled()
+    expect(engine.analyze.mock.calls.every(([, o]) => o.wantLook === false)).toBe(true)
+  })
+
+  it("the last scan of a Pokémon card whose version isn't sure shows no lone price", async () => {
+    vi.useFakeTimers()
+    vi.stubGlobal('jest', { advanceTimersByTime: (ms: number) => vi.advanceTimersByTime(ms) })
+    const options = [
+      printing({ printingId: 501, cardId: 5, name: 'Pikachu', rarity: 'Normal', price: 1 }),
+      printing({
+        printingId: 502,
+        cardId: 5,
+        name: 'Pikachu',
+        rarity: 'Reverse Holofoil',
+        price: 3.5
+      })
+    ]
+    localStorage.setItem(
+      SESSION_KEY,
+      JSON.stringify([
+        row({
+          key: '501:500',
+          cardId: 5,
+          name: 'Pikachu',
+          imageId: 500,
+          printingId: 501,
+          setCode: 'PAL 045/193',
+          rarity: 'Normal',
+          options,
+          flag: 'pick-printing',
+          via: 'art',
+          game: 'pkm'
+        })
+      ])
+    )
+    const store = fakeStore()
+    renderWithProviders(
+      <PhoneContext.Provider value={{ store, user: SETO, signedOut: () => {} }}>
+        <GameProvider>
+          <ScanHubProvider>
+            <ScannerScreen
+              engineFactory={() => fakeEngine()}
+              onClose={() => {}}
+              onOpenSettings={() => {}}
+            />
+          </ScanHubProvider>
+        </GameProvider>
+      </PhoneContext.Provider>,
+      { api: createMockApi({ scanWindow: fakeBridge().scanWindow, games: pkmGames }) }
+    )
+    await settle()
+    const last = screen.getByRole('region', { name: 'Last scan' })
+    expect(within(last).getByText('Check version')).toBeInTheDocument()
+    expect(within(last).queryByLabelText('Price of Pikachu')).not.toBeInTheDocument()
+    expect(within(last).queryByText('Normal')).not.toBeInTheDocument()
+    expect(within(last).getByLabelText('Price range of Pikachu')).toHaveTextContent('$1.00 – $3.50')
+    expect(screen.queryByRole('button', { name: /New scans as/ })).not.toBeInTheDocument()
   })
 })

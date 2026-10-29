@@ -10,14 +10,21 @@ import {
 import { CardArt } from '@/components/CardArt'
 import { useScanLanguage } from '@/features/scan/pickerOptions'
 import { useScanHub } from '@/features/scan/ScanHub'
-import { choicesFor, FLAG_TEXT } from '@/features/scan/ScanRowItem'
+import { choicesFor, flagText, pickerLabel } from '@/features/scan/ScanRowItem'
 import type { ScanRow } from '@/features/scan/session'
 import { ClearSessionDialog, useSessionCommit } from '@/features/scan/SessionList'
 import { plural } from '@/features/scan/scanText'
 import { formatUsd } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { PickerSheet } from './PickerSheet'
-import { GLASS, listValue, priceOf } from '@/features/scan/scanLook'
+import {
+  GLASS,
+  listValue,
+  priceOf,
+  priceRange,
+  printingOf,
+  versionToPick
+} from '@/features/scan/scanLook'
 
 /** A drag shorter than this is a tap. */
 const TAP_PX = 8
@@ -33,7 +40,10 @@ function ReviewRow({ row, disabled }: { row: ScanRow; disabled: boolean }): Reac
   const language = useScanLanguage()
   const choices = useMemo(() => choicesFor(row, language), [row, language])
   const price = priceOf(row)
-  const picked = choices.find((c) => c.key === String(row.printingId))
+  const range = versionToPick(row) ? priceRange(row) : null
+  const current = printingOf(row)
+  const picked = choices.find((c) => c.key === String(current))
+  const flag = flagText(row)
   return (
     <li className={cn('flex gap-3 rounded-[20px] p-2.5', GLASS, row.flag && 'border-amber-400/45')}>
       <CardArt imageId={row.imageId} size="small" alt="" className="w-12 shrink-0 self-start" />
@@ -41,17 +51,22 @@ function ReviewRow({ row, disabled }: { row: ScanRow; disabled: boolean }): Reac
         <p className="truncate text-[15px] font-semibold leading-5">{row.name}</p>
         <p className="truncate text-muted-foreground">
           {row.setCode && <span className="font-mono text-xs">{row.setCode}</span>}
-          {row.setCode && price != null && ' · '}
+          {row.setCode && (price != null || range) && ' · '}
           {price != null && (
             <span aria-label={`Price of ${row.name}`} className="text-emerald-400 tabular-nums">
               {formatUsd(price)}
             </span>
           )}
+          {range && (
+            <span aria-label={`Price range of ${row.name}`} className="tabular-nums">
+              {formatUsd(range.low)} – {formatUsd(range.high)}
+            </span>
+          )}
         </p>
         <PickerSheet
-          label={`Rarity for ${row.name}`}
-          title="Printing"
-          value={row.printingId === null ? null : String(row.printingId)}
+          label={pickerLabel(row)}
+          title={row.game === 'pkm' ? 'Version' : 'Printing'}
+          value={current === null ? null : String(current)}
           options={choices}
           onPick={(v) => session.setPrinting(row.key, Number(v))}
           searchPlaceholder="Search code, rarity or set…"
@@ -60,14 +75,16 @@ function ReviewRow({ row, disabled }: { row: ScanRow; disabled: boolean }): Reac
         >
           <StarIcon aria-hidden className="size-3.5 shrink-0 text-white/60" />
           <span className={cn('truncate', !picked && 'text-muted-foreground')}>
-            {picked ? (picked.title ?? picked.label) : 'Choose a printing'}
+            {picked
+              ? (picked.title ?? picked.label)
+              : `Choose a ${row.game === 'pkm' ? 'version' : 'printing'}`}
           </span>
           <ChevronDownIcon aria-hidden className="size-3.5 shrink-0 opacity-60" />
         </PickerSheet>
-        {row.flag && (
+        {flag && (
           <p className="mt-1 flex items-center gap-1 text-xs text-amber-300">
             <TriangleAlertIcon aria-hidden className="size-3.5 shrink-0" />
-            {FLAG_TEXT[row.flag]}
+            {flag}
           </p>
         )}
         {row.error && <p className="mt-1 text-xs text-destructive">{row.error}</p>}

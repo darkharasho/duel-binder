@@ -630,3 +630,42 @@ describe('Scan window', () => {
     })
   })
 })
+
+describe('Scan window and the game', () => {
+  it('scans the active game, and re-inits when the game changes', async () => {
+    stubCamera()
+    let active: 'ygo' | 'pkm' = 'pkm'
+    const changed: (() => void)[] = []
+    const factory = vi.fn(() => fakeEngine())
+    const api = createMockApi({
+      scanWindow: bridge.scanWindow,
+      games: {
+        available: vi.fn(async () => ['ygo', 'pkm'] as never),
+        active: vi.fn(async () => active)
+      },
+      app: {
+        onDataChanged: vi.fn((cb: () => void) => {
+          changed.push(cb)
+          return () => {}
+        })
+      }
+    })
+    renderWithProviders(<ScanWindowApp engineFactory={factory} />, { api })
+    act(() => bridge.emit({ kind: 'settings', settings: SETTINGS }))
+    await run()
+    await run(500)
+    expect(factory).toHaveBeenCalledTimes(1)
+    expect(factory).toHaveBeenLastCalledWith('pkm')
+    expect(api.scan.fingerprints).toHaveBeenLastCalledWith('pkm')
+
+    // Switched in the main window: main tells every window the data changed.
+    active = 'ygo'
+    await act(async () => {
+      for (const cb of changed) cb()
+    })
+    await run(500)
+    expect(factory).toHaveBeenCalledTimes(2)
+    expect(factory).toHaveBeenLastCalledWith('ygo')
+    expect(api.scan.fingerprints).toHaveBeenLastCalledWith('ygo')
+  })
+})

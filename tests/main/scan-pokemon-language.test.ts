@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { pokemonLanguage } from '../../src/shared/scan/pokemonLanguage'
+import { pokemonLanguage, pokemonLanguageOfReads } from '../../src/shared/scan/pokemonLanguage'
 
 describe('pokemonLanguage', () => {
   it.each([
@@ -46,5 +46,33 @@ describe('pokemonLanguage', () => {
 
   it('does not count a dash read as a long-vowel mark for kana', () => {
     expect(pokemonLanguage('ーーーーーー HP 60')).toBeNull()
+  })
+})
+
+describe('pokemonLanguageOfReads', () => {
+  const EN = 'Pikachu HP 60 Basic Pokémon Gnaw 10 Weakness Resistance Retreat Cost'
+  const JA = 'ピカチュウ HP 60 ワザ'
+  const ZH = '皮卡丘 HP 60 招式'
+  const FR =
+    'Si cette carte est dans votre main, vous pouvez la mettre sur le terrain de votre adversaire.'
+  // What one model makes of text in a script it doesn't know: says nothing.
+  const GARBAGE = 'l1 ,. ii'
+
+  it.each([
+    // ja only when the jpn read says ja and the eng read doesn't say en.
+    [{ jpn: JA, eng: GARBAGE }, 'ja'],
+    [{ jpn: JA, eng: EN }, null],
+    // en only when the eng read says en and the jpn read doesn't say ja: the jpn model's
+    // kana-looking garbage on an English card never makes it Japanese.
+    [{ jpn: GARBAGE, eng: EN }, 'en'],
+    // other when either read says other.
+    [{ jpn: ZH, eng: GARBAGE }, 'other'],
+    [{ jpn: GARBAGE, eng: FR }, 'other'],
+    [{ jpn: JA, eng: FR }, 'other'],
+    [{ jpn: ZH, eng: EN }, 'other'],
+    [{ jpn: GARBAGE, eng: GARBAGE }, null],
+    [{ jpn: '', eng: '' }, null]
+  ] as const)('%j → %s', (reads, expected) => {
+    expect(pokemonLanguageOfReads(reads)).toBe(expected)
   })
 })

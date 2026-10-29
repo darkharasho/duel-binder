@@ -149,6 +149,16 @@ describe('createHandlers', () => {
     await expect(handlers['scan:ocr']([], 'name')).resolves.toEqual([])
   })
 
+  it('scan:readText takes eng or jpn and checks its bands', async () => {
+    const { handlers } = await makeHandlers()
+    const bad = [{ width: 10, height: 10, data: new Uint8Array(5) }]
+    await expect(handlers['scan:readText'](bad, 'eng')).rejects.toThrow('one byte per pixel')
+    await expect(handlers['scan:readText']([], 'kor')).rejects.toThrow('Unknown OCR model')
+    const ok = { width: 1, height: 1, data: new Uint8Array(1) }
+    await expect(handlers['scan:readText']([ok], 'jpn')).resolves.toEqual([''])
+    await expect(handlers['scan:ocr']([], 'number')).resolves.toEqual([])
+  })
+
   it('scan:cardsForImages rejects anything but integer ids', async () => {
     const { handlers } = await makeHandlers()
     await expect(handlers['scan:cardsForImages']('1')).rejects.toThrow('list of integers')

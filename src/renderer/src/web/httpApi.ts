@@ -210,7 +210,8 @@ export function createHttpApi(opts: HttpApiOptions = {}): Api {
       fingerprints: scanUnavailable,
       refreshFingerprints: scanUnavailable,
       ocr: scanUnavailable,
-      language: scanUnavailable
+      language: scanUnavailable,
+      readText: scanUnavailable
     },
     scanWindow: {
       open: unavailable,

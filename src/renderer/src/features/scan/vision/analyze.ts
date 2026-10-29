@@ -109,9 +109,11 @@ function analyzeFrame(
   // Read at CARD_W, the size the cues and the look model were tuned at; Yu-Gi-Oh's foils only.
   const { cues, features: look } =
     upright && profile.rarityLook ? rarityLook(upright, wantLook) : { cues: null, features: null }
-  const version = upright ? pokemonVersionCues(upright, profile) : null
-  // Pokémon only (a graded slab changes how it's priced); Yu-Gi-Oh's signals carry no slab key.
-  const slab = profile.foil ? isSlab(cv, img, quad) : undefined
+  // Pokémon only: its versions are priced apart, and a graded slab changes how it's priced.
+  // Yu-Gi-Oh's signals carry no slab key.
+  const pokemon = profile.game === 'pkm'
+  const version = pokemon && upright ? pokemonVersionCues(upright, profile) : null
+  const slab = pokemon ? isSlab(cv, img, quad) : undefined
   if (!wantBands)
     return {
       found: true,

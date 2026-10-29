@@ -7,12 +7,13 @@ import {
   TriangleAlertIcon,
   XIcon
 } from 'lucide-react'
+import { GAMES } from '@shared/games'
 import { languageInfo, type Language } from '@shared/languages'
 import { CardArt } from '@/components/CardArt'
 import { formatUsd } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import type { ScanDraft } from './resolve'
-import { GLASS, priceOf } from './scanLook'
+import { GLASS, priceOf, priceRange, printingOf, versionToPick } from './scanLook'
 import { SearchPicker, type PickerOption } from './SearchPicker'
 import type { ScanRow } from './session'
 
@@ -23,6 +24,16 @@ export const FLAG_TEXT: Record<NonNullable<ScanDraft['flag']>, string> = {
   'other-set': 'From another set'
 }
 
+/** The row's flag as the list words it: Yu-Gi-Oh!'s FLAG_TEXT, a Pokémon version still to pick. */
+// eslint-disable-next-line react-refresh/only-export-components -- shared with the phone's last-scan card
+export const flagText = (row: Pick<ScanDraft, 'game' | 'flag'>): string | null =>
+  versionToPick(row) ? 'Check version' : row.flag && FLAG_TEXT[row.flag]
+
+/** "Rarity for Dark Magician", "Version for Pikachu": the row's printing picker. */
+// eslint-disable-next-line react-refresh/only-export-components -- shared with the phone's review
+export const pickerLabel = (row: Pick<ScanDraft, 'game' | 'name'>): string =>
+  `${GAMES[row.game ?? 'ygo'].vocab.rarity} for ${row.name}`
+
 /**
  * What the row's dropdown offers, always only the row's card: the rarities its set code came in
  * when the code was read off the card, else every printing it was matched to, so a printing
@@ -32,6 +43,8 @@ export const FLAG_TEXT: Record<NonNullable<ScanDraft['flag']>, string> = {
  * With a scan language (see useScanLanguage), only printings in it are listed, plus the row's own
  * printing whatever its language. When none are in it, as for a Japanese code read under English,
  * every one is listed. A code read is already one language, being one set code.
+ *
+ * A Pokémon card's versions share its number, so each shows its version and price instead.
  */
 // eslint-disable-next-line react-refresh/only-export-components -- shared with the phone's last-scan card
 export function choicesFor(row: ScanRow, language: Language | null): PickerOption[] {
@@ -47,6 +60,17 @@ export function choicesFor(row: ScanRow, language: Language | null): PickerOptio
   const languages = new Set(shown.map((o) => o.language)).size > 1
   return shown.map((o) => {
     const tag = languageInfo(o.language).tag
+    if (row.game === 'pkm') {
+      const label = [o.rarity, o.price == null ? null : formatUsd(o.price), languages ? tag : null]
+        .filter(Boolean)
+        .join(' · ')
+      return {
+        key: String(o.printingId),
+        label,
+        search: `${o.rarity} ${o.setCode} ${o.setName} ${tag}`.toLowerCase(),
+        title: label
+      }
+    }
     const label = `${o.setCode} · ${o.rarity}${languages ? ` · ${tag}` : ''}`
     return {
       key: String(o.printingId),
@@ -86,6 +110,9 @@ export const ScanRowItem = memo(function ScanRowItem({
 }): React.JSX.Element {
   const choices = useMemo(() => choicesFor(row, language), [row, language])
   const price = priceOf(row)
+  const range = versionToPick(row) ? priceRange(row) : null
+  const current = printingOf(row)
+  const flag = flagText(row)
   const { key } = row
   const { setPrinting } = actions
   const pick = useMemo(() => (v: string) => setPrinting(key, Number(v)), [key, setPrinting])
@@ -103,16 +130,21 @@ export const ScanRowItem = memo(function ScanRowItem({
         <p className="truncate text-[15px] font-semibold leading-5">{row.name}</p>
         <p className="truncate text-muted-foreground">
           {row.setCode && <span className="font-mono text-xs">{row.setCode}</span>}
-          {row.setCode && price != null && ' · '}
+          {row.setCode && (price != null || range) && ' · '}
           {price != null && (
             <span aria-label={`Price of ${row.name}`} className="text-emerald-400 tabular-nums">
               {formatUsd(price)}
             </span>
           )}
+          {range && (
+            <span aria-label={`Price range of ${row.name}`} className="tabular-nums">
+              {formatUsd(range.low)} – {formatUsd(range.high)}
+            </span>
+          )}
         </p>
         <SearchPicker
-          label={`Rarity for ${row.name}`}
-          value={row.printingId === null ? null : String(row.printingId)}
+          label={pickerLabel(row)}
+          value={current === null ? null : String(current)}
           options={choices}
           onPick={pick}
           searchPlaceholder="Search code, rarity or set…"
@@ -122,16 +154,16 @@ export const ScanRowItem = memo(function ScanRowItem({
             <>
               <StarIcon aria-hidden className="size-3.5 shrink-0 text-white/60" />
               <span className={cn('truncate', !picked && 'text-muted-foreground')}>
-                {picked ? picked.label : 'Choose a printing'}
+                {picked ? picked.label : `Choose a ${row.game === 'pkm' ? 'version' : 'printing'}`}
               </span>
               <ChevronDownIcon aria-hidden className="size-3.5 shrink-0 opacity-60" />
             </>
           )}
         />
-        {row.flag && (
+        {flag && (
           <p className="mt-1 flex items-center gap-1 text-xs text-amber-300">
             <TriangleAlertIcon aria-hidden className="size-3.5 shrink-0" />
-            {FLAG_TEXT[row.flag]}
+            {flag}
           </p>
         )}
         {row.error && <p className="mt-1 text-xs text-destructive">{row.error}</p>}

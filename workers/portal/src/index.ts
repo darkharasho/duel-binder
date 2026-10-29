@@ -7,7 +7,7 @@ import {
 import { createTcgplayerLookup } from '../../../src/main/tcgplayer/catalog'
 import { createYugipediaClient } from '../../../src/main/yugipedia/client'
 import { handle, type Env } from './app'
-import { createImageQuota } from './images'
+import { createAnonImageQuota, createImageQuota, createMissCache } from './images'
 import { doSql } from './doSql'
 import { migrateServer } from './migrate'
 import { alarmQueue, priceClientFor, runPriceAlarm, type PriceQueue } from './prices'
@@ -31,6 +31,8 @@ export class Store extends DurableObject<WorkerEnv> {
   private readonly printingArt: PrintingArtResolver
   private readonly prices: PriceQueue
   private readonly imageQuota = createImageQuota(Date.now)
+  private readonly anonImageQuota = createAnonImageQuota(Date.now)
+  private readonly anonMisses = createMissCache(Date.now)
 
   constructor(ctx: DurableObjectState, env: WorkerEnv) {
     super(ctx, env)
@@ -59,6 +61,8 @@ export class Store extends DurableObject<WorkerEnv> {
       assets: this.env.ASSETS,
       images: this.env.IMAGES,
       imageQuota: this.imageQuota,
+      anonImageQuota: this.anonImageQuota,
+      anonMisses: this.anonMisses,
       printingArt: this.printingArt,
       prices: this.prices,
       env: this.env,

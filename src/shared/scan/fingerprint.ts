@@ -1,3 +1,5 @@
+import type { ScanProfile } from './profiles'
+import type { Box } from './regions'
 import type { RgbaImage } from './types'
 
 export const HASH_WORDS = 8
@@ -93,12 +95,36 @@ export function hamming(a: Uint32Array, aOff: number, b: Uint32Array, bOff: numb
 export const PENDULUM_ART_VISIBLE = 0.58
 
 /**
- * The part of a card's cropped art to fingerprint: the visible top for Pendulum cards, else all of it.
- * About one Pendulum crop in six is already cut to the visible window (712x528, wider than tall, where
- * the whole picture is 712x908); those are kept whole, since their top part alone matches nothing.
+ * The part of a card's reference image to fingerprint. Yu-Gi-Oh references are YGOPRODeck's
+ * cropped art: the visible top for Pendulum cards, else all of it. About one Pendulum crop in six
+ * is already cut to the visible window (712x528, wider than tall, where the whole picture is
+ * 712x908); those are kept whole, since their top part alone matches nothing. Other games'
+ * references are the whole card, cut to the profile's first art box as a scanned card is.
  */
-export function fingerprintSource(img: RgbaImage, frameType: string): RgbaImage {
+export function fingerprintSource(
+  img: RgbaImage,
+  frameType: string,
+  profile?: ScanProfile
+): RgbaImage {
+  if (profile && profile.game !== 'ygo') return cropTo(img, profile.artBoxes[0])
   if (!frameType.includes('pendulum') || img.width > img.height) return img
   const height = Math.max(1, Math.round(img.height * PENDULUM_ART_VISIBLE))
   return { width: img.width, height, data: img.data.subarray(0, img.width * height * 4) }
+}
+
+/**
+ * regions' crop, kept here so this file has no runtime imports: make-fixtures loads it by
+ * Node's type stripping, which can't resolve extensionless ones.
+ */
+function cropTo(img: RgbaImage, box: Box): RgbaImage {
+  const x0 = Math.max(0, Math.round(box[0] * img.width))
+  const y0 = Math.max(0, Math.round(box[1] * img.height))
+  const width = Math.max(0, Math.min(img.width, Math.round(box[2] * img.width)) - x0)
+  const height = Math.max(0, Math.min(img.height, Math.round(box[3] * img.height)) - y0)
+  const data = new Uint8ClampedArray(width * height * 4)
+  for (let y = 0; y < height; y++) {
+    const from = ((y0 + y) * img.width + x0) * 4
+    data.set(img.data.subarray(from, from + width * 4), y * width * 4)
+  }
+  return { width, height, data }
 }

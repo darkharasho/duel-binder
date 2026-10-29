@@ -165,6 +165,30 @@ describe('createScanEngine', () => {
     expect(posted[0].transfer).toEqual([fp])
   })
 
+  it('engine posts game in worker init', async () => {
+    const none: FrameSignals = {
+      found: false,
+      quad: null,
+      art: [],
+      codeBands: [],
+      nameBands: [],
+      textBands: [],
+      cues: null,
+      look: null
+    }
+    const pkm = fakeWorker(none)
+    await createScanEngine({
+      api: createMockApi().scan,
+      makeWorker: () => pkm.worker,
+      game: 'pkm'
+    }).init(null)
+    expect(pkm.posted[0].msg).toMatchObject({ type: 'init', game: 'pkm' })
+    // Left out, it's Yu-Gi-Oh, as before there were games.
+    const ygo = fakeWorker(none)
+    await createScanEngine({ api: createMockApi().scan, makeWorker: () => ygo.worker }).init(null)
+    expect(ygo.posted[0].msg).toMatchObject({ type: 'init', game: 'ygo' })
+  })
+
   it('dispose rejects a pending frame, and later calls reject', async () => {
     const silent = { postMessage: vi.fn(), terminate: vi.fn() } as unknown as Worker
     const engine = createScanEngine({ api: createMockApi().scan, makeWorker: () => silent })

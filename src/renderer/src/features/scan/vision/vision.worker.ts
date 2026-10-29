@@ -1,6 +1,7 @@
 // The Scan page's vision work, off the UI thread: finding the card in a camera frame, matching
 // its art against the fingerprints and cutting out its text bands for OCR in main.
 import { decodeFingerprints, type FingerprintIndex } from '@shared/scan/fingerprintFile'
+import { SCAN_PROFILES, scanProfile, type ScanProfile } from '@shared/scan/profiles'
 import type { RgbaImage } from '@shared/scan/types'
 import type { WorkerReply, WorkerRequest } from '../engine'
 import { analyze } from './analyze'
@@ -13,6 +14,8 @@ interface WorkerScope {
 const scope = self as unknown as WorkerScope
 
 let index: FingerprintIndex | null = null
+// The game whose cards are scanned, set by init.
+let profile: ScanProfile = SCAN_PROFILES.ygo
 // Messages are handled one at a time, in order, even while OpenCV is still loading.
 let queue = Promise.resolve()
 
@@ -41,6 +44,7 @@ async function handle(msg: WorkerRequest): Promise<void> {
     try {
       await loadCv()
       index = msg.fingerprints ? decodeFingerprints(msg.fingerprints) : null
+      profile = scanProfile(msg.game)
       scope.postMessage({ type: 'ready' })
     } catch (e) {
       scope.postMessage({ type: 'error', id: null, message: messageOf(e) })
@@ -54,7 +58,8 @@ async function handle(msg: WorkerRequest): Promise<void> {
       index,
       msg.candidates,
       msg.wantBands,
-      msg.wantLook
+      msg.wantLook,
+      profile
     )
     const bands = [...signals.codeBands, ...signals.nameBands, ...signals.textBands]
     scope.postMessage(

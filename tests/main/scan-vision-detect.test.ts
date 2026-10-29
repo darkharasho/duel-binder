@@ -3,7 +3,7 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { decode } from 'jpeg-js'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
-import { artHash, fingerprintSource } from '../../src/shared/scan/fingerprint'
+import { artHash, fingerprintSource, hamming } from '../../src/shared/scan/fingerprint'
 import {
   decodeFingerprints,
   encodeFingerprints,
@@ -14,9 +14,13 @@ import {
   ART_MAX_DISTANCE_IN_SET,
   ART_MIN_MARGIN
 } from '../../src/shared/scan/thresholds'
+import { scanProfile } from '../../src/shared/scan/profiles'
 import type { RgbaImage } from '../../src/shared/scan/types'
+import { analyze } from '../../src/renderer/src/features/scan/vision/analyze'
 import { loadCv, type CV } from '../../src/renderer/src/features/scan/vision/cv'
 import {
+  CARD_H,
+  CARD_W,
   findCard,
   matchArt,
   rotate180,
@@ -25,7 +29,7 @@ import {
   type Point,
   type Quad
 } from '../../src/renderer/src/features/scan/vision/detect'
-import { ART_BOXES } from '../../src/renderer/src/features/scan/vision/regions'
+import { ART_BOXES, crop } from '../../src/renderer/src/features/scan/vision/regions'
 import {
   findCandidates,
   preferOuter,
@@ -40,6 +44,7 @@ vi.mock('@techstark/opencv-js', async () => {
 })
 
 const DIR = 'tests/fixtures/scan'
+const PKM_DIR = 'tests/fixtures/scan-pkm/full'
 
 interface Shot {
   file: string
@@ -486,4 +491,73 @@ describe('warpCard', () => {
     expect([card.width, card.height]).toEqual([842, 1228])
     expect(card.data.length).toBe(842 * 1228 * 4)
   })
+})
+
+describe('the Pokémon profile', () => {
+  const pkm = scanProfile('pkm')
+  // TCGdex's en/sv03-045 (Lapras, Obsidian Flames), a full-card reference image.
+  const PKM_IMAGE = 3948443432832600
+  const reference = (): RgbaImage => load(join(PKM_DIR, `${PKM_IMAGE}.jpg`))
+
+  /** img stretched to width x height, as warpCard leaves a card. */
+  const resized = (img: RgbaImage, width: number, height: number): RgbaImage => {
+    const src = toMat(cv, img)
+    const out = new cv.Mat()
+    try {
+      cv.resize(src, out, new cv.Size(width, height), 0, 0, cv.INTER_LINEAR)
+      return { width, height, data: new Uint8ClampedArray(out.data) }
+    } finally {
+      src.delete()
+      out.delete()
+    }
+  }
+
+  /** The card at height px tall in the middle of an empty 1280x720 frame, and its corners. */
+  const framed = (card: RgbaImage, height: number): { img: RgbaImage; quad: Quad } => {
+    const width = Math.round((height * card.width) / card.height)
+    const small = resized(card, width, height)
+    const img = emptyFrame(3)
+    const [x0, y0] = [Math.round((1280 - width) / 2), Math.round((720 - height) / 2)]
+    for (let y = 0; y < height; y++)
+      img.data.set(
+        small.data.subarray(y * width * 4, (y + 1) * width * 4),
+        ((y0 + y) * 1280 + x0) * 4
+      )
+    const quad: Quad = [
+      [x0, y0],
+      [x0 + width, y0],
+      [x0 + width, y0 + height],
+      [x0, y0 + height]
+    ]
+    return { img, quad }
+  }
+
+  it('pkm art box crops the reference and the warped card alike', () => {
+    const img = reference()
+    const stored = artHash(fingerprintSource(img, 'pokemon', pkm))
+    const seen = artHash(crop(resized(img, CARD_W, CARD_H), pkm.artBoxes[0]))
+    expect(hamming(stored, 0, seen, 0)).toBeLessThanOrEqual(20)
+  })
+
+  it('a Yu-Gi-Oh reference is left as it was', () => {
+    const img = load(join(DIR, 'cropped', readdirSync(join(DIR, 'cropped'))[0]))
+    expect(fingerprintSource(img, 'effect')).toBe(img)
+  })
+
+  it('matches a Pokémon card in a frame by its art, without the Yu-Gi-Oh rarity look', () => {
+    const pkmIndex = decodeFingerprints(
+      encodeFingerprints([
+        { imageId: PKM_IMAGE, hash: artHash(fingerprintSource(reference(), 'pokemon', pkm)) }
+      ])
+    )
+    const { img } = framed(reference(), 600)
+    const signals = analyze(cv, img, pkmIndex, null, true, true, pkm)
+    expect(signals.found).toBe(true)
+    expect(signals.art[0]).toEqual({ imageId: PKM_IMAGE, distance: expect.any(Number) })
+    expect(signals.art[0].distance).toBeLessThanOrEqual(ART_MAX_DISTANCE)
+    expect(signals.cues).toBeNull()
+    expect(signals.look).toBeNull()
+    expect(signals.nameBands.length).toBeGreaterThan(0)
+    expect(signals.codeBands.length).toBeGreaterThan(0)
+  }, 30_000)
 })

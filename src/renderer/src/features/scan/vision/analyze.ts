@@ -3,6 +3,7 @@
 import type { FingerprintIndex } from '@shared/scan/fingerprintFile'
 import { ART_MATCH_DEPTH } from '@shared/scan/thresholds'
 import type { Mat } from '@techstark/opencv-js'
+import { SCAN_PROFILES, type ScanProfile } from '@shared/scan/profiles'
 import type { OcrBand, RgbaImage } from '@shared/scan/types'
 import type { ArtMatch, FrameSignals } from '../engine'
 import { toBand, toBlock } from './bands'
@@ -10,7 +11,6 @@ import { findCandidates, preferOuter, recognizeArt } from './candidates'
 import type { CV } from './cv'
 import { CARD_W, dist, rotate180, toMat, using, warpCard, type Quad } from './detect'
 import { rarityLook } from './rarityCues'
-import { CODE_BANDS, NAME_BAND, TEXT_BOX } from './regions'
 
 /** How far past CARD_W a card is straightened for reading its text. */
 const MAX_BAND_SCALE = 2
@@ -40,8 +40,9 @@ function bandWidth(quad: Quad): number {
 
 /**
  * The frame's signals, matched against index (null: no art matching), with the look model's
- * features when wantLook. It's copied into OpenCV once, for finding the card and every warp of
- * it, and freed whatever happens.
+ * features when wantLook, read off the regions of profile's game (whose rarity cues and look are
+ * left null when it has none). It's copied into OpenCV once, for finding the card and every warp
+ * of it, and freed whatever happens.
  */
 export function analyze(
   cv: CV,
@@ -49,10 +50,13 @@ export function analyze(
   index: FingerprintIndex | null,
   candidates: number[] | null,
   wantBands: boolean,
-  wantLook = false
+  wantLook = false,
+  profile: ScanProfile = SCAN_PROFILES.ygo
 ): FrameSignals {
   const frame = toMat(cv, img)
-  return using([frame], () => analyzeFrame(cv, frame, index, candidates, wantBands, wantLook))
+  return using([frame], () =>
+    analyzeFrame(cv, frame, index, candidates, wantBands, wantLook, profile)
+  )
 }
 
 function analyzeFrame(
@@ -61,7 +65,8 @@ function analyzeFrame(
   index: FingerprintIndex | null,
   candidates: number[] | null,
   wantBands: boolean,
-  wantLook: boolean
+  wantLook: boolean,
+  profile: ScanProfile
 ): FrameSignals {
   let quad: Quad
   let art: ArtMatch[] = []
@@ -75,7 +80,8 @@ function analyzeFrame(
       img,
       index,
       candidates ? new Set(candidates) : undefined,
-      ART_MATCH_DEPTH
+      ART_MATCH_DEPTH,
+      profile
     )
     if (!found) return NOTHING
     quad = found.quad
@@ -97,10 +103,9 @@ function analyzeFrame(
     quad = likeliest
     card = () => warpCard(cv, img, likeliest, bandWidth(likeliest))
   }
-  // Read at CARD_W, the size the cues and the look model were tuned at.
-  const { cues, features: look } = upright
-    ? rarityLook(upright, wantLook)
-    : { cues: null, features: null }
+  // Read at CARD_W, the size the cues and the look model were tuned at; Yu-Gi-Oh's foils only.
+  const { cues, features: look } =
+    upright && profile.rarityLook ? rarityLook(upright, wantLook) : { cues: null, features: null }
   if (!wantBands)
     return { found: true, quad, art, codeBands: [], nameBands: [], textBands: [], cues, look }
   const straight = card()
@@ -110,10 +115,12 @@ function analyzeFrame(
     found: true,
     quad,
     art,
-    codeBands: ways.flatMap((c) => CODE_BANDS.map((box) => toBand(c, box))).filter(hasPixels),
-    nameBands: ways.map((c) => toBand(c, NAME_BAND)).filter(hasPixels),
+    codeBands: ways
+      .flatMap((c) => profile.codeBands.map((box) => toBand(c, box)))
+      .filter(hasPixels),
+    nameBands: ways.map((c) => toBand(c, profile.nameBand)).filter(hasPixels),
     // Only a card whose art matched: read off a guessed outline, it reads as a language too often.
-    textBands: upright ? [toBlock(straight, TEXT_BOX)].filter(hasPixels) : [],
+    textBands: upright ? [toBlock(straight, profile.textBox)].filter(hasPixels) : [],
     cues,
     look
   }

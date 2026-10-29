@@ -1,3 +1,4 @@
+import type { GameId } from '@shared/games/types'
 import type { Api } from '@shared/ipc'
 import type { RarityCues } from '@shared/scan/rarity'
 import type { OcrBand, RgbaImage } from '@shared/scan/types'
@@ -34,7 +35,7 @@ export interface FrameSignals {
 
 /** Messages to the vision worker. Frames are answered in the order they're sent. */
 export type WorkerRequest =
-  | { type: 'init'; fingerprints: ArrayBuffer | null }
+  | { type: 'init'; fingerprints: ArrayBuffer | null; game: GameId }
   | {
       type: 'frame'
       id: number
@@ -104,11 +105,13 @@ const hasPixels = (b: OcrBand): boolean => b.width > 0 && b.height > 0
 
 /**
  * Runs the vision worker over camera frames and reads the text bands it cuts out through
- * `api.ocr`, only when wantText. The worker starts on first use.
+ * `api.ocr`, only when wantText. The worker starts on first use, reading cards of game
+ * (Yu-Gi-Oh when left out).
  */
 export function createScanEngine(deps: {
   api: Api['scan']
   makeWorker: () => Worker
+  game?: GameId
   timeouts?: { initMs?: number; frameMs?: number }
 }): ScanEngine {
   let worker: Worker | null = null
@@ -183,7 +186,7 @@ export function createScanEngine(deps: {
       return new Promise<void>((resolve, reject) => {
         try {
           // Handed over rather than copied: it's a few MB, and the caller reads a fresh one each time.
-          send({ type: 'init', fingerprints: fp }, fp ? [fp] : [])
+          send({ type: 'init', fingerprints: fp, game: deps.game ?? 'ygo' }, fp ? [fp] : [])
           inits.push(watched({ resolve, reject }, initMs))
         } catch (e) {
           reject(e instanceof Error ? e : new Error(String(e)))

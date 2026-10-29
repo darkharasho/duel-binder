@@ -13,8 +13,8 @@ const { loadCv } = (await import(
   appModule('renderer/src/features/scan/vision/cv.ts')
 )) as typeof import('../../src/renderer/src/features/scan/vision/cv')
 const { ART_BOXES, CODE_BANDS, crop } = (await import(
-  appModule('renderer/src/features/scan/vision/regions.ts')
-)) as typeof import('../../src/renderer/src/features/scan/vision/regions')
+  appModule('shared/scan/regions.ts')
+)) as typeof import('../../src/shared/scan/regions')
 const { artHash, fingerprintSource, hamming } = (await import(
   appModule('shared/scan/fingerprint.ts')
 )) as typeof import('../../src/shared/scan/fingerprint')

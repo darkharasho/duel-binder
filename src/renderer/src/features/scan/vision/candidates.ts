@@ -11,6 +11,7 @@ import {
   NEST_MIN_END_INSET,
   NEST_MIN_GROWTH
 } from '@shared/scan/thresholds'
+import { SCAN_PROFILES, type ScanProfile } from '@shared/scan/profiles'
 import type { RgbaImage } from '@shared/scan/types'
 import type { CV } from './cv'
 import {
@@ -599,14 +600,15 @@ function aroundInnerFrame(quad: Quad): Quad[] {
  * even then none is close enough, the closest says nothing of where the card is or which way up
  * (its artwork may be missing from the fingerprints, as a new alternate art is): quad and card are
  * then the outline finder's likeliest (preferOuter), as it was filmed, and upsideDown is null. Null
- * when the frame holds no card-shaped outline.
+ * when the frame holds no card-shaped outline. The art is looked for in profile's art boxes.
  */
 export function recognizeArt(
   cv: CV,
   img: FrameSource,
   index: FingerprintIndex,
   candidates?: ReadonlySet<number>,
-  k?: number
+  k?: number,
+  profile: ScanProfile = SCAN_PROFILES.ygo
 ): {
   quad: Quad
   card: RgbaImage
@@ -618,7 +620,15 @@ export function recognizeArt(
     const closest = (quads: Quad[]): { quad: Quad; distance: number } | null => {
       let best: { quad: Quad; distance: number } | null = null
       for (const quad of quads) {
-        const { matches } = rankArt(cv, warpCard(cv, frame, quad, PICK_WIDTH), index, candidates)
+        const { matches } = rankArt(
+          cv,
+          warpCard(cv, frame, quad, PICK_WIDTH),
+          index,
+          candidates,
+          undefined,
+          0,
+          profile
+        )
         const distance = matches[0]?.distance ?? Infinity
         if (!best || distance < best.distance) best = { quad, distance }
       }
@@ -633,7 +643,7 @@ export function recognizeArt(
       if (around && around.distance < best.distance) best = around
     }
     const card = warpCard(cv, frame, best.quad, CARD_W)
-    const { matches, upsideDown } = rankArt(cv, card, index, candidates, k, ART_BOX_JITTER)
+    const { matches, upsideDown } = rankArt(cv, card, index, candidates, k, ART_BOX_JITTER, profile)
     if ((matches[0]?.distance ?? Infinity) > ART_MAX_DISTANCE) {
       const outline = preferOuter(quads) ?? best.quad
       return {

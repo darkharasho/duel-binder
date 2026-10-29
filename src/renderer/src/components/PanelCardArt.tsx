@@ -1,16 +1,17 @@
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { CardArt } from '@/components/CardArt'
-import { usePanelNavKeys, type PanelNav } from '@/components/panelNav'
+import { usePanelNavKeys, useSwipeNav, type PanelNav } from '@/components/panelNav'
 import { TiltCard } from '@/components/TiltCard'
 import { Button } from '@/components/ui/button'
 import { SheetPortal } from '@/components/ui/sheet'
+import { isPhone } from '@/lib/platform'
 import { cn } from '@/lib/utils'
 
 interface PanelCardArtProps {
   imageId: number
   printingId?: number | null
   alt: string
-  /** Previous/next card arrows (and arrow keys); none when omitted. */
+  /** Previous/next card arrows (and arrow keys; swipes on the phone); none when omitted. */
   nav?: PanelNav
 }
 
@@ -49,10 +50,13 @@ export function PanelCardArt({
   nav
 }: PanelCardArtProps): React.JSX.Element {
   usePanelNavKeys(nav)
+  useSwipeNav(nav)
+  // The phone steps by swiping across the card (CardSheet), so it shows no arrows.
+  const arrows = isPhone() ? undefined : nav
   return (
     <>
       <div className="flex items-center justify-center gap-3 min-[900px]:hidden">
-        {nav && <NavArrow dir="prev" step={nav.prev} />}
+        {arrows && <NavArrow dir="prev" step={arrows.prev} />}
         <TiltCard className="w-48">
           <CardArt
             imageId={imageId}
@@ -62,12 +66,12 @@ export function PanelCardArt({
             className="w-full"
           />
         </TiltCard>
-        {nav && <NavArrow dir="next" step={nav.next} />}
+        {arrows && <NavArrow dir="next" step={arrows.next} />}
       </div>
       {/* Portalled out of the sliding panel so it isn't moved by the panel's transform. */}
       <SheetPortal>
         <div className="pointer-events-none fixed inset-y-0 left-0 right-[420px] z-50 hidden items-center justify-center gap-6 p-12 duration-500 animate-in fade-in-0 zoom-in-90 min-[900px]:flex">
-          {nav && <NavArrow dir="prev" step={nav.prev} large />}
+          {arrows && <NavArrow dir="prev" step={arrows.prev} large />}
           <TiltCard
             maxTilt={10}
             glareClassName="rounded-[14px]"
@@ -81,7 +85,7 @@ export function PanelCardArt({
               className="w-full rounded-[14px] shadow-[0_30px_80px_rgb(0_0_0/0.65)]"
             />
           </TiltCard>
-          {nav && <NavArrow dir="next" step={nav.next} large />}
+          {arrows && <NavArrow dir="next" step={arrows.next} large />}
         </div>
       </SheetPortal>
     </>

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { createContext, useContext, useEffect, useRef } from 'react'
 
 /** Steps a side panel to the previous/next card of the page's list; a missing step is an end. */
 export interface PanelNav {
@@ -62,4 +62,19 @@ export function usePanelNavKeys(nav: PanelNav | undefined): void {
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [])
+}
+
+/**
+ * Lets a card panel hand its nav to the CardSheet around it, which steps it on a swipe (phone).
+ * The value records the latest nav; null outside a CardSheet.
+ */
+export const SwipeNavContext = createContext<((nav: PanelNav | undefined) => void) | null>(null)
+
+/** Hands `nav` to the surrounding CardSheet's swipe, if any, for as long as this is mounted. */
+export function useSwipeNav(nav: PanelNav | undefined): void {
+  const register = useContext(SwipeNavContext)
+  useEffect(() => {
+    register?.(nav)
+  })
+  useEffect(() => () => register?.(undefined), [register])
 }

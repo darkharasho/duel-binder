@@ -115,3 +115,14 @@ export const LANGUAGE_MIN_SCRIPT_CHARS = 5
 export const LANGUAGE_MIN_LATIN_CHARS = 8
 /** Frames a card's text is read on to tell its language before it's taken in its first one. */
 export const LANGUAGE_MAX_READS = 3
+
+// A Pokémon card's version from its foil, untuned until real photos (Task 13). Texture is the
+// median fine texture of a region of the straightened card, in luma levels (vision/foil.ts).
+/** A frame texture at least this reads as foil on the frame (reverse holo)... */
+export const VERSION_FRAME_FOIL_MIN = 2
+/** ...and at most this as a plain frame. */
+export const VERSION_FRAME_PLAIN_MAX = 0.6
+/** An art-window texture at least this reads as foil on the art (holo)... */
+export const VERSION_ART_FOIL_MIN = 12
+/** ...and at most this as flat art, which a reverse holo is only named over. */
+export const VERSION_ART_PLAIN_MAX = 3

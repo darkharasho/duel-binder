@@ -386,3 +386,27 @@ describe('ygo path unchanged', () => {
     expect('game' in art || 'slab' in art).toBe(false)
   })
 })
+
+describe('Pokémon version cues (rule 7)', () => {
+  const art = [{ imageId: 401, distance: 10 }]
+  const sure = (frame: number, art: number): RawSignals['version'] => ({
+    frame,
+    art,
+    firstEdition: 'unknown'
+  })
+
+  it('a decisive cue that names one of the versions picks it, with no flag', async () => {
+    const out = await recognized(raw({ art, version: sure(99, 0) }), pkm('en'))
+    expect(out).toMatchObject({ flag: null, printingId: 41, rarity: 'Reverse Holofoil' })
+  })
+
+  it('a decisive cue for a version the card lacks keeps pick-printing', async () => {
+    const out = await recognized(raw({ art, version: sure(0, 99) }), pkm('en'))
+    expect(out).toMatchObject({ flag: 'pick-printing', printingId: 42 })
+  })
+
+  it('an undecided cue keeps pick-printing on the cheapest', async () => {
+    const out = await recognized(raw({ art, version: sure(0.1, 0.1) }), pkm('en'))
+    expect(out).toMatchObject({ flag: 'pick-printing', printingId: 42 })
+  })
+})

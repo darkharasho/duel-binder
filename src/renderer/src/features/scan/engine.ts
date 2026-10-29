@@ -1,6 +1,7 @@
 import type { GameId } from '@shared/games/types'
 import type { Api } from '@shared/ipc'
 import type { RarityCues } from '@shared/scan/rarity'
+import type { VersionCues } from './vision/pokemonVersion'
 import type { OcrBand, RgbaImage } from '@shared/scan/types'
 import type { Quad } from './vision/detect'
 
@@ -26,6 +27,8 @@ export interface FrameSignals {
   textBands: OcrBand[]
   /** What the card shows of its foil; null when it couldn't be turned upright to look. */
   cues: RarityCues | null
+  /** A Pokémon card's foil cues for its version; null for other games or a card not turned upright. */
+  version?: VersionCues | null
   /**
    * The card's look for the rarity look model (rarityFeatures, LOOK_FEATURES order): only when
    * asked for (wantLook) and the card was turned upright, else null.
@@ -65,6 +68,7 @@ export interface RawSignals {
   /** The text bands, unread: reading them is slow, so it's left until a card's language is needed. */
   textBands: OcrBand[]
   cues: RarityCues | null
+  version?: VersionCues | null
   look: number[] | null
 }
 
@@ -213,9 +217,19 @@ export function createScanEngine(deps: {
           reject(e instanceof Error ? e : new Error(String(e)))
         }
       })
-      const { found, quad, art, cues, look } = signals
+      const { found, quad, art, cues, version, look } = signals
       if (!wantText || !found)
-        return { found, quad, art, codeTexts: [], nameTexts: [], textBands: [], cues, look }
+        return {
+          found,
+          quad,
+          art,
+          codeTexts: [],
+          nameTexts: [],
+          textBands: [],
+          cues,
+          version,
+          look
+        }
       const codeBands = signals.codeBands.filter(hasPixels)
       const nameBands = signals.nameBands.filter(hasPixels)
       // Text is a helper to the art: a failed or timed-out read counts as nothing read, so OCR
@@ -231,6 +245,7 @@ export function createScanEngine(deps: {
         nameTexts: names.map((t) => t.trim()).filter(Boolean),
         textBands: signals.textBands.filter(hasPixels),
         cues,
+        version,
         look
       }
     },

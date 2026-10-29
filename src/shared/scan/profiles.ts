@@ -16,6 +16,11 @@ export interface ScanProfile {
   textBox: Box
   /** Whether the Yu-Gi-Oh rarity cues and look model run on the card. */
   rarityLook: boolean
+  /**
+   * Where a version's foil shows, when the game prices versions by it: strips of frame (a reverse
+   * holo's foil covers them, a holo's doesn't) and the art window (a holo's foil covers it).
+   */
+  foil: { frame: readonly Box[]; art: Box } | null
 }
 
 /**
@@ -37,7 +42,8 @@ export const SCAN_PROFILES: Record<GameId, ScanProfile> = {
     codeBands: CODE_BANDS,
     nameBand: NAME_BAND,
     textBox: TEXT_BOX,
-    rarityLook: true
+    rarityLook: true,
+    foil: null
   },
   pkm: {
     game: 'pkm',
@@ -58,7 +64,15 @@ export const SCAN_PROFILES: Record<GameId, ScanProfile> = {
     nameBand: [0.04, 0.02, 0.64, 0.09],
     // Attacks and abilities, between the art (or the Pokédex strip under it) and the weakness bar.
     textBox: [0.07, 0.57, 0.93, 0.8],
-    rarityLook: false
+    rarityLook: false,
+    foil: {
+      // The card's side borders, between its edge and the art window (which starts at 0.08–0.1).
+      frame: [
+        [0.04, 0.2, 0.075, 0.88],
+        [0.925, 0.2, 0.96, 0.88]
+      ],
+      art: PKM_ART
+    }
   }
 }
 

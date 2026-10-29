@@ -10,6 +10,7 @@ import { toBand, toBlock } from './bands'
 import { findCandidates, preferOuter, recognizeArt } from './candidates'
 import type { CV } from './cv'
 import { CARD_W, dist, rotate180, toMat, using, warpCard, type Quad } from './detect'
+import { pokemonVersionCues } from './pokemonVersion'
 import { rarityLook } from './rarityCues'
 
 /** How far past CARD_W a card is straightened for reading its text. */
@@ -23,6 +24,7 @@ const NOTHING: FrameSignals = {
   nameBands: [],
   textBands: [],
   cues: null,
+  version: null,
   look: null
 }
 
@@ -106,8 +108,19 @@ function analyzeFrame(
   // Read at CARD_W, the size the cues and the look model were tuned at; Yu-Gi-Oh's foils only.
   const { cues, features: look } =
     upright && profile.rarityLook ? rarityLook(upright, wantLook) : { cues: null, features: null }
+  const version = upright ? pokemonVersionCues(upright, profile) : null
   if (!wantBands)
-    return { found: true, quad, art, codeBands: [], nameBands: [], textBands: [], cues, look }
+    return {
+      found: true,
+      quad,
+      art,
+      codeBands: [],
+      nameBands: [],
+      textBands: [],
+      cues,
+      version,
+      look
+    }
   const straight = card()
   // Not knowing which way up the card is, its text is read both ways.
   const ways = upright ? [straight] : [straight, rotate180(straight)]
@@ -122,6 +135,7 @@ function analyzeFrame(
     // Only a card whose art matched: read off a guessed outline, it reads as a language too often.
     textBands: upright ? [toBlock(straight, profile.textBox)].filter(hasPixels) : [],
     cues,
+    version,
     look
   }
 }

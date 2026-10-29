@@ -8,6 +8,7 @@ import {
 } from '@shared/scan/thresholds'
 import type { ScanDraft, ScanPrinting } from '@shared/scan/types'
 import type { RawSignals } from './engine'
+import { pokemonVersion } from './vision/pokemonVersion'
 import type { ResolveContext, ScanOutcome } from './resolve'
 
 type Read = 'en' | 'ja' | 'other' | null
@@ -92,15 +93,25 @@ async function draft(
   const imageId =
     top && printing.imageIds.includes(top.imageId) ? top.imageId : printing.imageIds[0]
   if (imageId === undefined) return null
+  // The foil, when it names one of the versions for sure, is the version; else a range.
+  const label =
+    options.length > 1
+      ? pokemonVersion(
+          raw.version ?? null,
+          options.map((o) => o.rarity)
+        )
+      : null
+  const named = label === null ? null : options.find((o) => o.rarity === label)
+  const chosen = named ?? printing
   return {
     cardId,
     name: printing.name,
     imageId,
-    printingId: printing.printingId,
-    setCode: printing.setCode,
-    rarity: printing.rarity,
+    printingId: chosen.printingId,
+    setCode: chosen.setCode,
+    rarity: chosen.rarity,
     options,
-    flag: options.length === 1 ? null : 'pick-printing',
+    flag: options.length === 1 || named ? null : 'pick-printing',
     via,
     game: 'pkm'
   }

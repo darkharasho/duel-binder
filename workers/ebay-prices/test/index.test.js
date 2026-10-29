@@ -225,6 +225,25 @@ describe('GET /v1/price', () => {
     expect(await res.json()).toMatchObject({ price: 3, listingCount: 2, rarityFallback: false })
   })
 
+  it('falls back without counting pricier Secret variants when few Secret Rares exist', async () => {
+    const mk = (title, value) => ({ title, price: { value, currency: 'USD' } })
+    const listings = {
+      itemSummaries: [
+        mk('LOB-DE001 Secret Rare', '3'),
+        mk('LOB-DE001 Quarter Century Secret Rare', '30'),
+        mk('LOB-DE001 Quarter Century Secret Rare NM', '30'),
+        mk('LOB-DE001 Quarter Century Secret Rare EX', '30')
+      ]
+    }
+    const f = makeFetch([json(listings), json(listings)])
+    vi.stubGlobal('fetch', f)
+    const res = await worker.fetch(req(URL_OK.replace('Ultra%20Rare', 'Secret%20Rare')), env)
+    const body = await res.json()
+    expect(f.calls.filter((u) => u.includes('item_summary'))).toHaveLength(2)
+    expect(body.price).not.toBe(30)
+    expect(body.listingCount).toBeLessThan(2)
+  })
+
   it('returns 502 when OAuth fails and leaks no secrets', async () => {
     vi.stubGlobal(
       'fetch',

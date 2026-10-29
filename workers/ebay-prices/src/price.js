@@ -56,6 +56,9 @@ const RARITY_PHRASES = [
   'super rare',
   'gold rare',
   'platinum rare',
+  'ultra parallel rare',
+  'normal parallel rare',
+  'rare parallel rare',
   'parallel rare'
 ]
 
@@ -66,12 +69,25 @@ export function namesOtherRarity(title, rarity) {
   return RARITY_PHRASES.some((phrase) => t.includes(phrase) && !r.includes(phrase))
 }
 
+// True when every word of `part` appears in `phrase`, in order ("ultra rare" in "ultra parallel rare").
+function containsWords(phrase, part) {
+  const words = phrase.split(' ')
+  let i = 0
+  for (const w of part.split(' ')) {
+    i = words.indexOf(w, i) + 1
+    if (i === 0) return false
+  }
+  return true
+}
+
 /** True when the title names a longer rarity that contains the requested one ("Quarter Century Secret Rare" for a Secret Rare). */
 export function namesLongerRarity(title, rarity) {
   const t = String(title).toLowerCase()
   const r = String(rarity).toLowerCase()
   if (r === '') return false
-  return RARITY_PHRASES.some((phrase) => t.includes(phrase) && phrase.includes(r) && phrase !== r)
+  return RARITY_PHRASES.some(
+    (phrase) => t.includes(phrase) && phrase !== r && containsWords(phrase, r)
+  )
 }
 
 function median(sorted) {

@@ -105,11 +105,7 @@ describe('isSingleCard', () => {
     ]) {
       expect(isSingleCard(t), t).toBe(false)
     }
-    for (const t of [
-      'Number 39: Utopia LC01-EN039 1st Edition',
-      'Dragon Master Knight DRLG-EN001 x1',
-      'LOB-EN001 1x Blue-Eyes'
-    ]) {
+    for (const t of ['Number 39: Utopia LC01-EN039 1st Edition', 'Dragon Master Knight DRLG-EN001 x1', 'LOB-EN001 1x Blue-Eyes']) {
       expect(isSingleCard(t), t).toBe(true)
     }
   })
@@ -126,6 +122,7 @@ describe('namesOtherRarity', () => {
     expect(namesOtherRarity('SDK-001 ULTRA RARE', 'Ultra Rare')).toBe(false)
     expect(namesOtherRarity('SDK-001 Prismatic Secret Rare', 'Prismatic Secret Rare')).toBe(false)
     expect(namesOtherRarity('SDK-001 Blue-Eyes NM', 'Common')).toBe(false)
+    expect(namesOtherRarity('SDK-001 Ultra Parallel Rare', 'Ultra Parallel Rare')).toBe(false)
   })
 })
 
@@ -135,6 +132,7 @@ describe('namesLongerRarity', () => {
     expect(namesLongerRarity(qc, 'Secret Rare')).toBe(true)
     expect(namesLongerRarity('RC04-JP067 Extra Secret Rare', 'Secret Rare')).toBe(true)
     expect(namesLongerRarity('SDK-001 Ultra Rare', 'Rare')).toBe(true)
+    expect(namesLongerRarity('SDK-001 Ultra Parallel Rare', 'Ultra Rare')).toBe(true)
   })
   it('allows the same rarity or an unrelated one', () => {
     expect(namesLongerRarity(qc, '')).toBe(false)

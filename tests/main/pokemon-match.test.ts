@@ -176,6 +176,12 @@ describe('labels', () => {
     expect(canonicalLabel('1st Edition Holofoil')).toBe('1st Edition Holofoil')
     expect(canonicalLabel('Something New')).toBe('Something New')
   })
+  it('labels several stamps the same whatever order TCGdex lists them in', () => {
+    const a = variantLabel({ type: 'holo', stamp: ['staff', 'set-logo'] })
+    expect(variantLabel({ type: 'holo', stamp: ['set-logo', 'staff', 'staff'] })).toBe(a)
+    expect(a).toBe('Set Logo Staff Holofoil')
+  })
+
   it('reads the 1st-edition stamp however TCGdex spells it ("1st edition", "1st Edition")', () => {
     expect(variantLabel({ type: 'normal', stamp: ['1st edition'] })).toBe('1st Edition')
     expect(variantLabel({ type: 'normal', stamp: ['1st Edition'] })).toBe('1st Edition')

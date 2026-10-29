@@ -50,7 +50,8 @@ export function canonicalLabel(subTypeName: string): string {
 function variantBase(v: TdVariant): { label: string; known: boolean } {
   const type = v.type.trim().toLowerCase()
   // TCGdex spells one stamp several ways ("1st-edition", "1st edition", "1st Edition").
-  const stamps = (v.stamp ?? []).map((s) => s.trim().toLowerCase().replace(/[\s_]+/g, '-')).filter(Boolean)
+  // Sorted and deduped: the label is frozen at first write, and TCGdex's stamp order isn't stable.
+  const stamps = [...new Set((v.stamp ?? []).map((s) => s.trim().toLowerCase().replace(/[\s_]+/g, '-')).filter(Boolean))].sort()
   if (stamps.length === 0 && TYPES[type]) return { label: TYPES[type], known: true }
   if (stamps.length === 1 && stamps[0] === '1st-edition' && FIRST_EDITION[type]) {
     return { label: FIRST_EDITION[type], known: true }

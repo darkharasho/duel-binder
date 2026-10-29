@@ -7,6 +7,7 @@ import {
   KONAMI_LOGO_PREFIX,
   type ImageSize
 } from '../../../src/shared/imageSources'
+import { PKM_ID_MIN } from '../../../src/shared/games/ids'
 import { findSetImageUrl } from '../../../src/main/repo/sets'
 import { TCGPLAYER_IMAGE_PREFIX } from '../../../src/main/tcgplayer/catalog'
 import type { AppDeps } from './app'
@@ -229,6 +230,18 @@ interface Target {
   anonymous?: boolean
 }
 
+const TCGDEX_PREFIX = 'https://assets.tcgdex.net/'
+const TCGPLAYER_CDN_PREFIX = 'https://tcgplayer-cdn.tcgplayer.com/'
+
+/** The upstream URL of a Pokémon card image at `size`; null for a foreign host. */
+function pokemonArtUrl(base: string, size: 'small' | 'full'): string | null {
+  if (base.startsWith(TCGDEX_PREFIX)) return `${base}/${size === 'small' ? 'low' : 'high'}.webp`
+  if (base.startsWith(TCGPLAYER_CDN_PREFIX)) {
+    return base.replace(/_200w\.jpg$/, size === 'small' ? '_200w.jpg' : '_in_1000x1000.jpg')
+  }
+  return null
+}
+
 const fixed =
   (url: string, headers?: Record<string, string>): Target['source'] =>
   async () => ({ url, headers })
@@ -241,6 +254,17 @@ function resolve(deps: AppDeps, path: string): Target | null {
     if (!/^\d+$/.test(id)) return null
     const n = Number(id)
     if (!Number.isSafeInteger(n) || n <= 0) return null
+    if (n >= PKM_ID_MIN) {
+      if (kind === 'cropped') return null
+      const row = deps.db
+        .prepare(
+          'SELECT pc.image_url FROM card_images ci JOIN pokemon_cards pc ON pc.card_id = ci.card_id WHERE ci.image_id = ?'
+        )
+        .get(n) as { image_url: string | null } | undefined
+      const url = row?.image_url ? pokemonArtUrl(row.image_url, kind) : null
+      if (url === null) return null
+      return { key: `card/${kind}/${n}`, source: fixed(url), cache: CARD_CACHE, anonymous: true }
+    }
     if (!deps.db.prepare('SELECT 1 FROM card_images WHERE image_id = ?').get(n)) return null
     return {
       key: `card/${kind satisfies ImageSize}/${n}`,
@@ -253,6 +277,13 @@ function resolve(deps: AppDeps, path: string): Target | null {
     if (id.length > MAX_SET_KEY || !SET_KEY_RE.test(id)) return null
     const prefix = id.slice(0, 3)
     if (prefix === 'km-') return null
+    if (prefix === 'td-') {
+      const row = deps.db
+        .prepare("SELECT image_url FROM sets WHERE image_key = ? AND +game = 'pkm'")
+        .get(id) as { image_url: string | null } | undefined
+      if (!row?.image_url || !row.image_url.startsWith(TCGDEX_PREFIX)) return null
+      return { key: `set/${id}`, source: fixed(`${row.image_url}.webp`), cache: SET_CACHE }
+    }
     if (prefix === 'yp-' || prefix === 'yc-') {
       const source = findSetImageUrl(deps.db, id)
       const allowed = prefix === 'yp-' ? YUGIPEDIA_IMAGE_PREFIX : PACK_ART_PREFIX

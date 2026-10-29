@@ -99,29 +99,20 @@ export function findShrinks(work: Database.Database, base: Database.Database | n
   return out
 }
 
-/** Max report problems listed as job problems; every one is logged. */
-const MAX_POKEMON_PROBLEMS = 20
-
-function logPokemon(
-  reports: PokemonReport[],
-  log: (line: string) => void,
-  problem: (p: string) => void
-): void {
-  const problems: string[] = []
+/**
+ * Logs the Pokémon reports. Their problems (unmatched products, variants outside the version
+ * table, upstream gaps) are data notes that recur every night, so they are logged, not raised as
+ * job problems; only a skipped refresh fails the job.
+ */
+function logPokemon(reports: PokemonReport[], log: (line: string) => void): void {
   for (const r of reports) {
     log(
-      `Pokémon ${r.lang}: ${r.sets} sets, ${r.cards} cards, ${r.versions} versions (${r.priced} priced, ${r.versions - r.priced} unpriced), ${r.images} images, ${r.unmatchedCards} cards unmatched`
+      `Pokémon ${r.lang}: ${r.sets} sets, ${r.cards} cards, ${r.versions} versions (${r.priced} priced, ${r.versions - r.priced} unpriced), ${r.images} images, ${r.unmatchedCards} cards unmatched, ${r.problems.length} notes`
     )
     if (r.unmatchedSets.length > 0)
       log(`Pokémon ${r.lang}: unmatched sets: ${r.unmatchedSets.join(', ')}`)
-    for (const p of r.problems) {
-      log(`Pokémon ${r.lang}: ${p}`)
-      problems.push(p)
-    }
+    for (const p of r.problems) log(`Pokémon ${r.lang}: ${p}`)
   }
-  for (const p of problems.slice(0, MAX_POKEMON_PROBLEMS)) problem(p)
-  if (problems.length > MAX_POKEMON_PROBLEMS)
-    problem(`... and ${problems.length - MAX_POKEMON_PROBLEMS} more Pokémon problems`)
 }
 
 export async function runJob(opts: JobOptions): Promise<JobResult> {
@@ -200,7 +191,7 @@ export async function runJob(opts: JobOptions): Promise<JobResult> {
           }))
       const out = await step(work)
       if (out.error !== null) problem(`Pokémon refresh skipped: ${out.error}`)
-      logPokemon(out.reports, log, problem)
+      logPokemon(out.reports, log)
     }
     base = !opts.full && existsSync(basePath) ? openDatabase(basePath) : null
     log(base ? 'Diffing against the last uploaded snapshot' : 'No base snapshot: every row is new')

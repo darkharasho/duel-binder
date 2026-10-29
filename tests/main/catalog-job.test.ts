@@ -782,14 +782,14 @@ describe('Pokémon step in the nightly job', () => {
     expect(out.counts?.['card_printings:pkm']).toEqual({ upserts: 1, deletes: 0 })
     expect(out.problems).toEqual([])
     expect(lines).toContain(
-      'Pokémon en: 1 sets, 1 cards, 2 versions (1 priced, 1 unpriced), 1 images, 3 cards unmatched'
+      'Pokémon en: 1 sets, 1 cards, 2 versions (1 priced, 1 unpriced), 1 images, 3 cards unmatched, 0 notes'
     )
     expect(lines).toContain('Pokémon en: unmatched sets: sv01 Scarlet & Violet')
     expect(lines.some((l) => l.startsWith('Pokémon ja: 1 sets'))).toBe(true)
     expect(lines.some((l) => l.startsWith('Pokémon ja: unmatched sets'))).toBe(false)
   })
 
-  it('logs every report problem but lists only the first 20 as job problems', async () => {
+  it('logs every report problem as a note, not a job problem', async () => {
     ;(await workDb()).close()
     const lines: string[] = []
     const many = Array.from({ length: 25 }, (_, i) => `p${i}`)
@@ -802,7 +802,7 @@ describe('Pokémon step in the nightly job', () => {
       pokemon: async () => ({ reports: [report({ problems: many })], error: null }),
       log: (l) => lines.push(l)
     })
-    expect(out.problems).toEqual([...many.slice(0, 20), '... and 5 more Pokémon problems'])
+    expect(out.problems).toEqual([])
     for (const p of many) expect(lines.some((l) => l.includes(p))).toBe(true)
   })
 

@@ -35,7 +35,7 @@ export interface ResolveContext {
   cardLanguage?: (cardId: number) => Promise<CardLanguage | null>
   lookups: Pick<
     Api['scan'],
-    'printingsByCode' | 'printingsForCards' | 'matchName' | 'cardsForImages'
+    'printingsByCode' | 'printingsByNumber' | 'printingsForCards' | 'matchName' | 'cardsForImages'
   >
 }
 

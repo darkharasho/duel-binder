@@ -5,6 +5,7 @@ import { bestNameMatch, normalizeName, type NameEntry } from '../../shared/scan/
 import { LANGUAGES, type Language } from '../../shared/languages'
 import { parsePrice } from '../../shared/pricing'
 import type { ScanPrinting } from '../../shared/scan/types'
+import type { CollectorNumber } from '../../shared/scan/collectorNumber'
 import { enTwinPrice } from './enTwin'
 import { isMarketOnly } from './priceRule'
 import { LOCAL, type Scope } from './scope'
@@ -21,7 +22,9 @@ interface PrintingRow {
   rawPrice: number | null
 }
 
-const select = (scope: Scope): string => `SELECT p.id AS printingId, p.card_id AS cardId, c.name AS name, c.frame_type AS frameType,
+const select = (
+  scope: Scope
+): string => `SELECT p.id AS printingId, p.card_id AS cardId, c.name AS name, c.frame_type AS frameType,
   p.set_name AS setName, p.set_code AS setCode, p.set_rarity AS rarity, p.language AS language,
   CASE WHEN ${isMarketOnly} THEN p.market_price WHEN p.language = 'en' THEN COALESCE(p.market_price, ip.price, p.set_price) ELSE COALESCE(ip.price, ${enTwinPrice(scope.game)}) END AS rawPrice
   FROM card_printings p JOIN cards c ON c.id = p.card_id AND +c.game = ${scope.game}
@@ -71,6 +74,36 @@ export function printingsByCode(db: SqlDb, code: string, scope: Scope = LOCAL): 
   return withImages(db, rows, scope)
 }
 
+// A Pokémon set_code is "{abbrev} {localId}/{official}" or "{abbrev} {localId}" (scripts/catalog/pokemon/write.ts).
+const CODE_REST = `substr(p.set_code, instr(p.set_code, ' ') + 1)`
+const CODE_NUMBER = `CASE WHEN instr(${CODE_REST}, '/') > 0 THEN substr(${CODE_REST}, 1, instr(${CODE_REST}, '/') - 1) ELSE ${CODE_REST} END`
+const CODE_TOTAL = `CASE WHEN instr(${CODE_REST}, '/') > 0 THEN substr(${CODE_REST}, instr(${CODE_REST}, '/') + 1) END`
+
+/**
+ * The Pokémon printings with this printed number (leading zeros ignored), and this set total when
+ * read. A printing whose code has no total still matches a read total. The abbreviation narrows
+ * the match only when some printing carries it (a card may print "PAL" where TCGdex says "SV2"):
+ * a prefix scan on the set_code index, with the number alone as the fallback. Without an
+ * abbreviation this reads every printing of the game; the catalog has no index on the number.
+ */
+export function printingsByNumber(
+  db: SqlDb,
+  n: CollectorNumber,
+  scope: Scope = LOCAL
+): ScanPrinting[] {
+  const sql = (abbrev: boolean): string =>
+    `${select(scope)}
+     ${abbrev ? 'AND p.set_code LIKE ?' : ''}
+     AND ltrim(${CODE_NUMBER}, '0') = ltrim(?, '0') COLLATE NOCASE
+     ${n.total === null ? '' : `AND (${CODE_TOTAL} IS NULL OR ltrim(${CODE_TOTAL}, '0') = ltrim(?, '0') COLLATE NOCASE)`}`
+  const rest = n.total === null ? [n.number] : [n.number, n.total]
+  const abbrev = n.setAbbrev && /^[A-Za-z0-9]+$/.test(n.setAbbrev) ? n.setAbbrev : null
+  let rows: PrintingRow[] = []
+  if (abbrev) rows = db.prepare(sql(true)).all(`${abbrev} %`, ...rest) as PrintingRow[]
+  if (!rows.length) rows = db.prepare(sql(false)).all(...rest) as PrintingRow[]
+  return withImages(db, rows, scope)
+}
+
 export function printingsForSet(
   db: SqlDb,
   setName: string,
@@ -83,7 +116,11 @@ export function printingsForSet(
   return withImages(db, rows, scope)
 }
 
-export function printingsForCards(db: SqlDb, cardIds: number[], scope: Scope = LOCAL): ScanPrinting[] {
+export function printingsForCards(
+  db: SqlDb,
+  cardIds: number[],
+  scope: Scope = LOCAL
+): ScanPrinting[] {
   const ids = [...new Set(cardIds)]
   const rows: PrintingRow[] = []
   for (let i = 0; i < ids.length; i += 500) {
@@ -120,7 +157,10 @@ export function cardsForImages(
 }
 
 // The game's name list, normalized for matching, is rebuilt only when the catalog version or game changes.
-const nameCache = new WeakMap<object, { version: string | null; game: string; names: NameEntry[] }>()
+const nameCache = new WeakMap<
+  object,
+  { version: string | null; game: string; names: NameEntry[] }
+>()
 
 function cardNames(db: SqlDb, scope: Scope): NameEntry[] {
   const version = getMeta(db, 'db_version')

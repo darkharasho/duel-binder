@@ -202,6 +202,7 @@ export function createHttpApi(opts: HttpApiOptions = {}): Api {
     },
     scan: {
       printingsByCode: scanUnavailable,
+      printingsByNumber: scanUnavailable,
       printingsForSet: scanUnavailable,
       printingsForCards: scanUnavailable,
       matchName: scanUnavailable,

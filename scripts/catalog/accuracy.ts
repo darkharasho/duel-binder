@@ -12,8 +12,10 @@ import {
   cardsForImages,
   matchName,
   printingsByCode,
+  printingsByNumber,
   printingsForCards
 } from '../../src/main/repo/scan'
+import type { CollectorNumber } from '../../src/shared/scan/collectorNumber'
 import { decodeFingerprints } from '../../src/shared/scan/fingerprintFile'
 import { ART_MATCH_DEPTH } from '../../src/shared/scan/thresholds'
 import { resolveSignals } from '../../src/renderer/src/features/scan/resolve'
@@ -56,6 +58,7 @@ export async function checkAccuracy(
   const index = decodeFingerprints(fingerprints)
   const lookups = {
     printingsByCode: async (code: string) => printingsByCode(work, code),
+    printingsByNumber: async (n: CollectorNumber) => printingsByNumber(work, n),
     printingsForCards: async (ids: number[]) => printingsForCards(work, ids),
     matchName: async (text: string) => matchName(work, text),
     cardsForImages: async (ids: number[]) => cardsForImages(work, ids)

@@ -3,12 +3,15 @@ import {
   cardsForImages,
   matchName,
   printingsByCode,
+  printingsByNumber,
   printingsForCards,
   printingsForSet
 } from '../../src/main/repo/scan'
 import type Database from 'better-sqlite3'
 import { seededDb } from './helpers'
 import { getMeta, setMeta } from '../../src/main/db/meta'
+import { localScope } from '../../src/main/repo/scope'
+import { seedPokemon } from '../fixtures/pokemon'
 
 const LOB = 'Legend of Blue Eyes White Dragon'
 
@@ -181,5 +184,55 @@ describe('scan repo', () => {
       setCols(db, 'LOB-EN005', R, null, null)
       expect(priceOf(db, 'LOB-EN005', R)).toBeNull()
     })
+  })
+})
+
+describe('printingsByNumber', () => {
+  const PKM = localScope("'pkm'")
+
+  async function numberDb(): Promise<Database.Database> {
+    const db = await seededDb()
+    const { cardIds } = seedPokemon(db)
+    db.exec("DELETE FROM card_printings WHERE game = 'pkm'")
+    const add = db.prepare(
+      "INSERT INTO card_printings (game, card_id, language, set_name, set_code, set_rarity) VALUES ('pkm', ?, ?, ?, ?, ?)"
+    )
+    add.run(cardIds[0], 'en', 'Scarlet', 'SV3 045/193', 'Holofoil')
+    add.run(cardIds[1], 'ja', 'Japan', 'SV1S 045/078', 'Normal')
+    add.run(cardIds[1], 'ja', 'Japan', 'SVP 12', 'Normal')
+    add.run(cardIds[0], 'en', 'Gallery', 'SIT TG05/TG30', 'Normal')
+    return db
+  }
+  const codes = (db: Database.Database, n: Parameters<typeof printingsByNumber>[1]): string[] =>
+    printingsByNumber(db, n, PKM)
+      .map((p) => p.setCode)
+      .sort()
+
+  it('matches number and total, ignoring leading zeros', async () => {
+    const db = await numberDb()
+    expect(codes(db, { setAbbrev: null, number: '45', total: '193' })).toEqual(['SV3 045/193'])
+    expect(codes(db, { setAbbrev: null, number: '045', total: null })).toEqual([
+      'SV1S 045/078',
+      'SV3 045/193'
+    ])
+  })
+
+  it('narrows by set abbreviation only when it matches a stored one', async () => {
+    const db = await numberDb()
+    expect(codes(db, { setAbbrev: 'sv1s', number: '045', total: null })).toEqual(['SV1S 045/078'])
+    expect(codes(db, { setAbbrev: 'PAL', number: '045', total: '193' })).toEqual(['SV3 045/193'])
+  })
+
+  it('matches a code with no total and one whose number carries letters', async () => {
+    const db = await numberDb()
+    expect(codes(db, { setAbbrev: null, number: '012', total: null })).toEqual(['SVP 12'])
+    expect(codes(db, { setAbbrev: null, number: 'TG05', total: 'TG30' })).toEqual(['SIT TG05/TG30'])
+    expect(codes(db, { setAbbrev: null, number: '5', total: null })).toEqual([])
+  })
+
+  it('keeps to Pokémon, and the rows have the ScanPrinting shape', async () => {
+    const db = await numberDb()
+    const [row] = printingsByNumber(db, { setAbbrev: null, number: '45', total: '193' }, PKM)
+    expect(row).toMatchObject({ language: 'en', rarity: 'Holofoil', imageIds: expect.any(Array) })
   })
 })

@@ -24,6 +24,7 @@ import type {
 } from './types'
 import type { ScanWindowMessage } from './scanWindow'
 import type { FingerprintStatus, OcrBand, ScanPrinting } from './scan/types'
+import type { CollectorNumber } from './scan/collectorNumber'
 import type { CardLanguage } from './scan/language'
 import type { PackWrappers, RipCard, RipHistory, RipSessionDetail, RipSet } from './rip/types'
 import type { GameId } from './games'
@@ -60,6 +61,8 @@ export interface Api {
   }
   scan: {
     printingsByCode(code: string): Promise<ScanPrinting[]>
+    /** Pokémon printings with this printed collector number (leading zeros ignored). */
+    printingsByNumber(n: CollectorNumber): Promise<ScanPrinting[]>
     printingsForSet(setName: string, language: Language): Promise<ScanPrinting[]>
     printingsForCards(cardIds: number[]): Promise<ScanPrinting[]>
     matchName(text: string): Promise<{ cardId: number; name: string; score: number } | null>
@@ -194,6 +197,7 @@ export const INVOKE_CHANNELS = [
   'friends:collection',
   'friends:facets',
   'scan:printingsByCode',
+  'scan:printingsByNumber',
   'scan:printingsForSet',
   'scan:printingsForCards',
   'scan:matchName',

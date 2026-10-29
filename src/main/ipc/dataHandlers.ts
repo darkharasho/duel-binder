@@ -16,6 +16,7 @@ import {
   cardsForImages,
   matchName,
   printingsByCode,
+  printingsByNumber,
   printingsForCards,
   printingsForSet
 } from '../repo/scan'
@@ -24,6 +25,7 @@ import { activeOwner, listSyncIssues } from '../cloud/localSync'
 import { openPack, ripHistory, ripSession, ripSets, startRip } from '../repo/rip'
 import { activeGame, setActiveGame } from '../cloud/activeGame'
 import type { GameId } from '@shared/games'
+import type { CollectorNumber } from '@shared/scan/collectorNumber'
 
 /** The channels whose handlers only need the database, so the phone runs them too. */
 export const DATA_CHANNELS = [
@@ -38,6 +40,7 @@ export const DATA_CHANNELS = [
   'collection:remove',
   'collection:facets',
   'scan:printingsByCode',
+  'scan:printingsByNumber',
   'scan:printingsForSet',
   'scan:printingsForCards',
   'scan:matchName',
@@ -129,6 +132,15 @@ export function createDataHandlers({
     'collection:remove': async (id: number) => edited(snapshotAfter(removeEntry(db, id))),
     'collection:facets': async () => getFacets(db),
     'scan:printingsByCode': async (code: string) => printingsByCode(db, code),
+    'scan:printingsByNumber': async (n: CollectorNumber) => {
+      const text = (x: unknown): boolean => typeof x === 'string' && x.length > 0 && x.length <= 16
+      if (!n || !text(n.number) || !(n.total === null || text(n.total))) return []
+      return printingsByNumber(db, {
+        setAbbrev: text(n.setAbbrev) ? n.setAbbrev : null,
+        number: n.number,
+        total: n.total
+      })
+    },
     'scan:printingsForSet': async (setName: string, language: Language) =>
       printingsForSet(db, setName, checkLanguage(language)),
     'scan:printingsForCards': async (cardIds: number[]) => printingsForCards(db, cardIds),

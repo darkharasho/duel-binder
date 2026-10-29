@@ -67,6 +67,7 @@ const inSet = (setName: string): ScanPrinting[] => PRINTINGS.filter((p) => p.set
 const lookups: ResolveContext['lookups'] = {
   printingsByCode: async (code) =>
     PRINTINGS.filter((p) => p.setCode.toUpperCase() === code.toUpperCase()),
+  printingsByNumber: async () => [],
   printingsForCards: async (ids) => PRINTINGS.filter((p) => ids.includes(p.cardId)),
   matchName: async (text) =>
     text === 'Dark Magician' ? { cardId: 1, name: 'Dark Magician', score: 1 } : null,

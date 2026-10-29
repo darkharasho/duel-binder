@@ -102,4 +102,21 @@ describe('migrateServer', () => {
     expect(late.length).toBeGreaterThan(0)
     for (const m of late) expect(m.server, `desktop-${m.version}`).not.toBeUndefined()
   })
+
+  it('server-11 backfills price_seq', () => {
+    const db = freshDb()
+    runSteps(db, [...MIGRATIONS, ...SERVER_STEPS].filter((s) => !('name' in s && s.name === 'server-11')))
+    db.exec(`INSERT INTO cards (id, name, type, frame_type, race, "desc", updated_at) VALUES (1, 'C', 'M', 'n', 'W', '', '')`)
+    for (let i = 1; i <= 3; i++) {
+      db.exec(`INSERT INTO card_printings (id, card_id, set_name, set_code, set_rarity, language) VALUES (${i}, 1, 'S', 'X-JP00${i}', 'Common', 'ja')`)
+      db.exec(`INSERT INTO intl_prices (printing_id, price, listing_count, checked_at) VALUES (${i}, ${i}, 2, 't')`)
+    }
+    migrateServer(db)
+    const seqs = (db.prepare('SELECT price_seq AS s FROM intl_prices ORDER BY printing_id').all() as { s: number }[]).map((r) => r.s)
+    expect(new Set(seqs).size).toBe(3)
+    expect(seqs.every((s) => s > 0)).toBe(true)
+    const clock = (db.prepare('SELECT seq FROM catalog_clock').get() as { seq: number }).seq
+    expect(clock).toBeGreaterThanOrEqual(Math.max(...seqs))
+    db.close()
+  })
 })

@@ -268,6 +268,20 @@ CREATE INDEX ix_price_request_log_day ON price_request_log(day);
       count INTEGER NOT NULL,
       PRIMARY KEY (day, platform, event)
     ) WITHOUT ROWID;`
+  },
+  {
+    // Weekly eBay set sweep: the prefix queue, and a change clock on intl_prices so a client pulls only
+    // rows whose price or listing count moved (a checked_at-only refresh stamps nothing).
+    name: 'server-11',
+    sql: `CREATE TABLE price_sweeps (key TEXT NOT NULL, language TEXT NOT NULL, owned INTEGER NOT NULL DEFAULT 0,
+  released TEXT, swept_at TEXT, calls INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (key, language)) WITHOUT ROWID;
+CREATE INDEX ix_price_sweeps_due ON price_sweeps(owned DESC, swept_at, released DESC);
+ALTER TABLE intl_prices ADD COLUMN price_seq INTEGER NOT NULL DEFAULT 0;
+UPDATE intl_prices SET price_seq = c.base + x.rn FROM (SELECT rowid AS r, row_number() OVER (ORDER BY rowid) AS rn FROM intl_prices) AS x, (SELECT seq AS base FROM catalog_clock) AS c WHERE intl_prices.rowid = x.r;
+UPDATE catalog_clock SET seq = seq + (SELECT count(*) FROM intl_prices);
+CREATE INDEX ix_intl_prices_seq ON intl_prices(price_seq);
+CREATE TRIGGER trg_intl_prices_seq_ins AFTER INSERT ON intl_prices BEGIN UPDATE catalog_clock SET seq = seq + 1; UPDATE intl_prices SET price_seq = (SELECT seq FROM catalog_clock) WHERE rowid = NEW.rowid; END;
+CREATE TRIGGER trg_intl_prices_seq_upd AFTER UPDATE ON intl_prices WHEN NEW.price IS NOT OLD.price OR NEW.listing_count IS NOT OLD.listing_count BEGIN UPDATE catalog_clock SET seq = seq + 1; UPDATE intl_prices SET price_seq = (SELECT seq FROM catalog_clock) WHERE rowid = NEW.rowid; END;`
   }
 ]
 

@@ -11,6 +11,8 @@ import {
   runPriceAlarm,
   type AlarmStorage
 } from '../../workers/portal/src/prices'
+import type { SweepClient } from '../../workers/portal/src/sweep'
+import { SWEEP_BATCH } from '../../workers/portal/src/sweep'
 import { PriceUnavailableError, type PriceClient, type PriceQuery } from '../../src/main/prices/client'
 import { addEntry, removeEntry } from '../../src/main/repo/collection'
 import { getMeta } from '../../src/main/db/meta'
@@ -85,7 +87,7 @@ describe('server eBay prices', () => {
     const storage = fakeStorage()
     const { client, lookup } = fakeClient()
 
-    await runPriceAlarm(db, client, storage, () => NOW, { limit: 1 })
+    await runPriceAlarm(db, client, storage, () => NOW, null, { limit: 1 })
     expect(lookup).toHaveBeenCalledTimes(1)
     expect(lookup.mock.calls[0][0]).toMatchObject({ code: p2.code })
     expect(price(p2.id)?.price).toBe(7.5)
@@ -93,12 +95,30 @@ describe('server eBay prices', () => {
 
     // The second run is that alarm firing a minute later.
     const later = new Date(T + PRICE_MORE_MS)
-    await runPriceAlarm(db, client, storage, () => later, { limit: 1 })
+    await runPriceAlarm(db, client, storage, () => later, null, { limit: 1 })
     expect(lookup).toHaveBeenCalledTimes(2)
     expect(lookup.mock.calls[1][0]).toMatchObject({ code: p1.code })
     expect(price(p1.id)?.price).toBe(7.5)
     expect(storage.alarm).toBe(later.getTime() + PRICE_IDLE_MS)
     expect(getMeta(db, 'price_service_status')).toBe('ok')
+  })
+
+  it('alarm re-arms in 60 s while the sweep has work', async () => {
+    for (let i = 0; i < SWEEP_BATCH + 1; i++)
+      db.prepare(`INSERT INTO price_sweeps (key, language) VALUES (?, 'ja')`).run(`K${i}-JP`)
+    db.prepare(`INSERT INTO meta (key, value) VALUES ('price_sweeps_listed_at', '2026-10-24')`).run()
+    const sweep: SweepClient = {
+      set: vi.fn(async () => ({ codes: {}, calls: 1, checkedAt: NOW.toISOString() })),
+      quota: vi.fn(async () => ({ remaining: 5000 }))
+    }
+    const storage = fakeStorage()
+    await runPriceAlarm(db, fakeClient().client, storage, () => NOW, sweep)
+    expect(sweep.set).toHaveBeenCalledTimes(SWEEP_BATCH)
+    expect(storage.alarm).toBe(T + PRICE_MORE_MS)
+    // The next run clears the last prefix: nothing more, back to idle.
+    const later = new Date(T + PRICE_MORE_MS)
+    await runPriceAlarm(db, fakeClient().client, storage, () => later, sweep)
+    expect(storage.alarm).toBe(later.getTime() + PRICE_IDLE_MS)
   })
 
   it('printings owned by nobody, or only by tombstones, are skipped', async () => {
@@ -133,7 +153,7 @@ describe('server eBay prices', () => {
     const { client } = fakeClient(async () => {
       throw new PriceUnavailableError('down')
     })
-    await expect(runPriceAlarm(db, client, storage, () => NOW, { limit: 1 })).resolves.toBeUndefined()
+    await expect(runPriceAlarm(db, client, storage, () => NOW, null, { limit: 1 })).resolves.toBeUndefined()
     expect(storage.alarm).toBe(T + PRICE_FAILED_MS)
     expect(getMeta(db, 'price_service_status')).toBe('unavailable')
   })

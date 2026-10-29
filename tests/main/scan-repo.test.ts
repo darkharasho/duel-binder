@@ -200,6 +200,7 @@ describe('printingsByNumber', () => {
     add.run(cardIds[0], 'en', 'Scarlet', 'SV3 045/193', 'Holofoil')
     add.run(cardIds[1], 'ja', 'Japan', 'SV1S 045/078', 'Normal')
     add.run(cardIds[1], 'ja', 'Japan', 'SVP 12', 'Normal')
+    add.run(cardIds[1], 'en', 'Promos', 'SVP 045', 'Normal')
     add.run(cardIds[0], 'en', 'Gallery', 'SIT TG05/TG30', 'Normal')
     return db
   }
@@ -213,8 +214,41 @@ describe('printingsByNumber', () => {
     expect(codes(db, { setAbbrev: null, number: '45', total: '193' })).toEqual(['SV3 045/193'])
     expect(codes(db, { setAbbrev: null, number: '045', total: null })).toEqual([
       'SV1S 045/078',
-      'SV3 045/193'
+      'SV3 045/193',
+      'SVP 045'
     ])
+  })
+
+  it('matches a code with no total only when no total was read', async () => {
+    const db = await numberDb()
+    expect(codes(db, { setAbbrev: null, number: '045', total: '193' })).toEqual(['SV3 045/193'])
+    expect(codes(db, { setAbbrev: 'SVP', number: '045', total: '193' })).toEqual(['SV3 045/193'])
+  })
+
+  it('never returns a Yu-Gi-Oh printing for a Pokémon scope', async () => {
+    const db = await numberDb()
+    const ygo = db
+      .prepare("SELECT card_id AS id FROM card_printings WHERE game = 'ygo' LIMIT 1")
+      .get() as { id: number }
+    db.prepare(
+      "INSERT INTO card_printings (game, card_id, language, set_name, set_code, set_rarity) VALUES ('ygo', ?, 'en', 'X', 'YGO 045/193', 'Common')"
+    ).run(ygo.id)
+    expect(codes(db, { setAbbrev: null, number: '45', total: '193' })).toEqual(['SV3 045/193'])
+  })
+
+  it('rebuilds its number index when the catalog version changes', async () => {
+    const db = await numberDb()
+    const n = { setAbbrev: null, number: '99', total: null }
+    expect(codes(db, n)).toEqual([])
+    const card = db
+      .prepare("SELECT card_id AS id FROM card_printings WHERE game = 'pkm' LIMIT 1")
+      .get() as { id: number }
+    db.prepare(
+      "INSERT INTO card_printings (game, card_id, language, set_name, set_code, set_rarity) VALUES ('pkm', ?, 'en', 'New', 'NEW 099/100', 'Normal')"
+    ).run(card.id)
+    expect(codes(db, n)).toEqual([])
+    setMeta(db, 'db_version', 'next')
+    expect(codes(db, n)).toEqual(['NEW 099/100'])
   })
 
   it('narrows by set abbreviation only when it matches a stored one', async () => {

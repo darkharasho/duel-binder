@@ -74,33 +74,82 @@ export function printingsByCode(db: SqlDb, code: string, scope: Scope = LOCAL): 
   return withImages(db, rows, scope)
 }
 
-// A Pokémon set_code is "{abbrev} {localId}/{official}" or "{abbrev} {localId}" (scripts/catalog/pokemon/write.ts).
-const CODE_REST = `substr(p.set_code, instr(p.set_code, ' ') + 1)`
-const CODE_NUMBER = `CASE WHEN instr(${CODE_REST}, '/') > 0 THEN substr(${CODE_REST}, 1, instr(${CODE_REST}, '/') - 1) ELSE ${CODE_REST} END`
-const CODE_TOTAL = `CASE WHEN instr(${CODE_REST}, '/') > 0 THEN substr(${CODE_REST}, instr(${CODE_REST}, '/') + 1) END`
+interface NumberEntry {
+  id: number
+  total: string | null
+  abbrev: string
+}
+
+// The game's printings by printed number, rebuilt only when the catalog version or game changes.
+const numberCache = new WeakMap<
+  object,
+  { version: string | null; game: string; byNumber: Map<string, NumberEntry[]> }
+>()
+
+const stripZeros = (s: string): string => s.toUpperCase().replace(/^0+/, '')
+
+/** A Pokémon set_code is "{abbrev} {localId}/{official}" or "{abbrev} {localId}" (scripts/catalog/pokemon/write.ts). */
+function numberIndex(db: SqlDb, scope: Scope): Map<string, NumberEntry[]> {
+  const version = getMeta(db, 'db_version')
+  const { game } = db.prepare(`SELECT ${scope.game} AS game`).get() as { game: string }
+  const hit = numberCache.get(db)
+  if (hit && hit.version === version && hit.game === game) return hit.byNumber
+  const rows = db
+    .prepare(
+      `SELECT p.id, p.set_code AS code FROM card_printings p WHERE +p.game = ${scope.game} AND p.contributed = 0`
+    )
+    .all() as { id: number; code: string }[]
+  const byNumber = new Map<string, NumberEntry[]>()
+  for (const { id, code } of rows) {
+    const space = code.indexOf(' ')
+    if (space < 0) continue
+    const rest = code.slice(space + 1)
+    const slash = rest.indexOf('/')
+    const key = stripZeros(slash < 0 ? rest : rest.slice(0, slash))
+    const entry = {
+      id,
+      total: slash < 0 ? null : stripZeros(rest.slice(slash + 1)),
+      abbrev: code.slice(0, space).toUpperCase()
+    }
+    const list = byNumber.get(key)
+    if (list) list.push(entry)
+    else byNumber.set(key, [entry])
+  }
+  numberCache.set(db, { version, game, byNumber })
+  return byNumber
+}
 
 /**
- * The Pokémon printings with this printed number (leading zeros ignored), and this set total when
- * read. A printing whose code has no total still matches a read total. The abbreviation narrows
- * the match only when some printing carries it (a card may print "PAL" where TCGdex says "SV2"):
- * a prefix scan on the set_code index, with the number alone as the fallback. Without an
- * abbreviation this reads every printing of the game; the catalog has no index on the number.
+ * The Pokémon printings with this printed number (leading zeros ignored). A read total must equal
+ * the code's total, so a code with no total (a promo) matches only when no total was read. The
+ * abbreviation narrows the match only when some printing carries it (a card may print "PAL" where
+ * TCGdex says "SV2"); otherwise the number alone decides.
  */
 export function printingsByNumber(
   db: SqlDb,
   n: CollectorNumber,
   scope: Scope = LOCAL
 ): ScanPrinting[] {
-  const sql = (abbrev: boolean): string =>
-    `${select(scope)}
-     ${abbrev ? 'AND p.set_code LIKE ?' : ''}
-     AND ltrim(${CODE_NUMBER}, '0') = ltrim(?, '0') COLLATE NOCASE
-     ${n.total === null ? '' : `AND (${CODE_TOTAL} IS NULL OR ltrim(${CODE_TOTAL}, '0') = ltrim(?, '0') COLLATE NOCASE)`}`
-  const rest = n.total === null ? [n.number] : [n.number, n.total]
-  const abbrev = n.setAbbrev && /^[A-Za-z0-9]+$/.test(n.setAbbrev) ? n.setAbbrev : null
-  let rows: PrintingRow[] = []
-  if (abbrev) rows = db.prepare(sql(true)).all(`${abbrev} %`, ...rest) as PrintingRow[]
-  if (!rows.length) rows = db.prepare(sql(false)).all(...rest) as PrintingRow[]
+  let found = numberIndex(db, scope).get(stripZeros(n.number)) ?? []
+  if (n.total !== null) {
+    const total = stripZeros(n.total)
+    found = found.filter((e) => e.total === total)
+  }
+  if (n.setAbbrev) {
+    const abbrev = n.setAbbrev.toUpperCase()
+    const same = found.filter((e) => e.abbrev === abbrev)
+    if (same.length) found = same
+  }
+  const ids = found.map((e) => e.id)
+  const rows: PrintingRow[] = []
+  for (let i = 0; i < ids.length; i += 500) {
+    const chunk = ids.slice(i, i + 500)
+    rows.push(
+      ...(db
+        .prepare(`${select(scope)} AND p.id IN (${chunk.map(() => '?').join(',')})`)
+        .all(...chunk) as PrintingRow[])
+    )
+  }
   return withImages(db, rows, scope)
 }
 

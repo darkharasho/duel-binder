@@ -92,9 +92,13 @@ export function hamming(a: Uint32Array, aOff: number, b: Uint32Array, bOff: numb
  */
 export const PENDULUM_ART_VISIBLE = 0.58
 
-/** The part of a card's cropped art to fingerprint: the visible top for Pendulum cards, else all of it. */
+/**
+ * The part of a card's cropped art to fingerprint: the visible top for Pendulum cards, else all of it.
+ * About one Pendulum crop in six is already cut to the visible window (712x528, wider than tall, where
+ * the whole picture is 712x908); those are kept whole, since their top part alone matches nothing.
+ */
 export function fingerprintSource(img: RgbaImage, frameType: string): RgbaImage {
-  if (!frameType.includes('pendulum')) return img
+  if (!frameType.includes('pendulum') || img.width > img.height) return img
   const height = Math.max(1, Math.round(img.height * PENDULUM_ART_VISIBLE))
   return { width: img.width, height, data: img.data.subarray(0, img.width * height * 4) }
 }

@@ -9,6 +9,7 @@ import { buildFingerprints, uploadFingerprints } from '../../scripts/catalog/fin
 import { openDatabase } from '../../src/main/db/database'
 import { artHash, fingerprintSource } from '../../src/shared/scan/fingerprint'
 import { decodeFingerprints } from '../../src/shared/scan/fingerprintFile'
+import type { RgbaImage } from '../../src/shared/scan/types'
 
 let dir: string
 let work: Database.Database
@@ -224,5 +225,29 @@ describe('runJob', () => {
       type: 'application/octet-stream'
     })
     expect(lines).toContain('Fingerprints: 2 (2 new, 1 failed)')
+  })
+})
+
+describe('fingerprintSource', () => {
+  const art = (width: number, height: number): RgbaImage => ({
+    width,
+    height,
+    data: new Uint8ClampedArray(width * height * 4)
+  })
+
+  it('keeps the visible top of a whole Pendulum picture', () => {
+    // YGOPRODeck's usual Pendulum crop: the whole picture, part of it behind the Pendulum box.
+    expect(fingerprintSource(art(712, 908), 'effect_pendulum').height).toBe(527)
+  })
+
+  it('keeps all of a Pendulum crop that is already just the visible window', () => {
+    // About one Pendulum crop in six (Twilight Specter Rayrage among them) is cut to the window.
+    const wide = art(712, 528)
+    expect(fingerprintSource(wide, 'effect_pendulum')).toBe(wide)
+  })
+
+  it('keeps any other frame whole', () => {
+    const square = art(624, 624)
+    expect(fingerprintSource(square, 'link')).toBe(square)
   })
 })

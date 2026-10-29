@@ -9,8 +9,11 @@ const DEFAULT_CONCURRENCY = 6
 const COMMIT_EVERY = 200
 /** Waits before each retry; an image is tried once plus once per entry. */
 const RETRY_DELAYS_MS = [1000, 2000]
-/** Bump when the way an image is hashed changes; v2 hashes only the visible top of Pendulum art. */
-const HASH_VERSION = '2'
+/**
+ * Bump when the way an image is hashed changes; v2 hashes only the visible top of Pendulum art, v3
+ * keeps Pendulum crops already cut to the visible window whole.
+ */
+const HASH_VERSION = '3'
 
 export interface FingerprintOptions {
   /** The work database; its `card_images` decides which ids the file holds. */

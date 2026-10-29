@@ -133,7 +133,8 @@ async function lookup(env, params) {
 }
 
 async function lookupSet(env, key, lang) {
-  const query = buildQuery({ code: key, lang })
+  // Unquoted so eBay matches every number in the set; a bare "LOB-" has no region letters, so add the language word.
+  const query = key.endsWith('-') ? `${key} ${EBAY_WORDS[lang]}` : key
   const items = []
   let calls = 0
   for (let page = 0; page < SET_MAX_PAGES; page++) {

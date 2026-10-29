@@ -363,6 +363,14 @@ describe('GET /v1/set', () => {
     expect(env.PRICES.put).not.toHaveBeenCalled()
   })
 
+  it('sends the key unquoted and without rarity', async () => {
+    const f = makeFetch([json(page(1))])
+    vi.stubGlobal('fetch', f)
+    await settle(worker.fetch(req(SET_URL), env))
+    const q = new URL(f.calls.find((c) => c.includes('item_summary'))).searchParams.get('q')
+    expect(q).toBe('CORI-JP')
+  })
+
   it('stops at three pages', async () => {
     const f = makeFetch([json(page(200)), json(page(200)), json(page(200)), json(page(200))])
     vi.stubGlobal('fetch', f)

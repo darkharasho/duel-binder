@@ -4,7 +4,6 @@ import { isSingleCard, askingPrice } from './price.js'
 // Title tokens -> the catalog's set_rarity names.
 export const RARITY_ALIASES = Object.freeze({
   N: 'Common',
-  Normal: 'Common',
   Common: 'Common',
   R: 'Rare',
   SR: 'Super Rare',
@@ -44,11 +43,17 @@ export const RARITY_ALIASES = Object.freeze({
 })
 
 const escape = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-// Whole words only, so R never matches inside "Rescue".
-const ALIAS_PATTERNS = Object.entries(RARITY_ALIASES).map(([token, rarity]) => ({
-  rarity,
-  re: new RegExp(`(?<![A-Za-z0-9])${escape(token)}(?![A-Za-z0-9])`, 'gi')
-}))
+// Whole words only, so R never matches inside "Rescue". Short tokens (N, R, SR...) must be
+// upper case and not touch a hyphen or apostrophe, so "Rock 'n' Roll" and "Link-R" stay unread.
+const isShort = (token) => token === token.toUpperCase()
+const ALIAS_PATTERNS = Object.entries(RARITY_ALIASES).map(([token, rarity]) => {
+  const short = isShort(token)
+  const edge = short ? "A-Za-z0-9'\u2019-" : 'A-Za-z0-9'
+  return {
+    rarity,
+    re: new RegExp(`(?<![${edge}])${escape(token)}(?![${edge}])`, short ? 'g' : 'gi')
+  }
+})
 
 /** CORI-JP025 -> CORI-JP. */
 export function sweepKey(code) {

@@ -38,6 +38,21 @@ describe('parseListing', () => {
     expect(parseListing('CORI-JP010 Rescue Rabbit', 'CORI-JP').rarity).toBeNull()
   })
 
+  it("leaves Rock 'n' Roll, Link-R and Normal Monster without a rarity", () => {
+    expect(parseListing("CORI-JP010 Rock 'n' Roll", 'CORI-JP').rarity).toBeNull()
+    expect(parseListing('CORI-JP010 Link-R', 'CORI-JP').rarity).toBeNull()
+    expect(parseListing('CORI-JP010 Normal Monster', 'CORI-JP').rarity).toBeNull()
+  })
+
+  it('prefers the longest spelled-out name', () => {
+    expect(parseListing('CORI-JP001 Prismatic Secret Rare', 'CORI-JP').rarity).toBe(
+      'Prismatic Secret Rare'
+    )
+    expect(parseListing('CORI-JP001 Ultra Parallel Rare', 'CORI-JP').rarity).toBe(
+      'Ultra Parallel Rare'
+    )
+  })
+
   it('gives a null code when the key is absent', () => {
     expect(parseListing('Blue-Eyes White Dragon', 'CORI-JP')).toEqual({ code: null, rarity: null })
   })

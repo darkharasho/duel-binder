@@ -94,7 +94,10 @@ export const CATALOG_TABLES: CatalogTable[] = [
   {
     name: 'pokemon_cards',
     key: ['card_id'],
-    columns: ['card_id', 'category', 'hp', 'types', 'stage', 'rarity', 'illustrator', 'source_id'],
+    columns: [
+      'card_id', 'category', 'hp', 'types', 'stage', 'rarity', 'illustrator', 'source_id',
+      'image_url', 'local_name'
+    ],
     unique: ['source_id'],
     games: ['pkm']
   }

@@ -1,4 +1,4 @@
-import { MIGRATIONS, SCHEMA_V19_SERVER, type Migration } from '../../../src/main/db/schema'
+import { MIGRATIONS, SCHEMA_V19_SERVER, SCHEMA_V20, type Migration } from '../../../src/main/db/schema'
 import type { SqlDb } from '../../../src/main/db/sql'
 
 export interface ServerStep {
@@ -217,6 +217,39 @@ function multiGameStep(): ServerStep {
   }
 }
 
+/** Frozen, as of server-13: server-12's `pokemon_cards` entry plus `image_url` and `local_name`. */
+const SERVER_13_POKEMON_CARDS: FrozenTable = {
+  name: 'pokemon_cards',
+  key: ['card_id'],
+  columns: [
+    'card_id',
+    'category',
+    'hp',
+    'types',
+    'stage',
+    'rarity',
+    'illustrator',
+    'source_id',
+    'image_url',
+    'local_name'
+  ]
+}
+
+/**
+ * The two new `pokemon_cards` columns (the server's V20), and the seq triggers recreated over them:
+ * without that, a change to only one of the two would never bump `catalog_seq`.
+ */
+function pokemonColumnsStep(): ServerStep {
+  return {
+    name: 'server-13',
+    sql: [
+      SCHEMA_V20.trim(),
+      ...['ins', 'upd', 'del'].map((op) => `DROP TRIGGER IF EXISTS trg_pokemon_cards_seq_${op};`),
+      ...seqTriggers(SERVER_13_POKEMON_CARDS, "'pkm'")
+    ].join('\n')
+  }
+}
+
 /**
  * Server-only steps, run after every desktop step. Append only; never edit a shipped step.
  *
@@ -346,7 +379,8 @@ CREATE INDEX ix_intl_prices_seq ON intl_prices(price_seq);
 CREATE TRIGGER trg_intl_prices_seq_ins AFTER INSERT ON intl_prices BEGIN UPDATE catalog_clock SET seq = seq + 1; UPDATE intl_prices SET price_seq = (SELECT seq FROM catalog_clock) WHERE rowid = NEW.rowid; END;
 CREATE TRIGGER trg_intl_prices_seq_upd AFTER UPDATE ON intl_prices WHEN NEW.price IS NOT OLD.price BEGIN UPDATE catalog_clock SET seq = seq + 1; UPDATE intl_prices SET price_seq = (SELECT seq FROM catalog_clock) WHERE rowid = NEW.rowid; END;`
   },
-  multiGameStep()
+  multiGameStep(),
+  pokemonColumnsStep()
 ]
 
 /**

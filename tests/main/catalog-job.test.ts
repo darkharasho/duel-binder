@@ -14,8 +14,13 @@ import { CATALOG_TABLES, LEGACY_CATALOG_TABLES, type CatalogTable } from '../../
 import { diffTable } from '../../scripts/catalog/diff'
 import { uploadCatalog } from '../../scripts/catalog/upload'
 import type { AccuracyReport } from '../../scripts/catalog/accuracy'
-import { findShrinks, runJob } from '../../scripts/catalog/build'
+import { findShrinks, runJob as runRealJob, type JobOptions } from '../../scripts/catalog/build'
+import type { PokemonReport } from '../../scripts/catalog/pokemon'
 import fixture from '../fixtures/cardinfo.sample.json'
+
+/** The job with a Pokémon step that does nothing, so no test reaches the live sources. */
+const runJob = (o: JobOptions): ReturnType<typeof runRealJob> =>
+  runRealJob({ pokemon: async () => ({ reports: [], error: null }), ...o })
 
 const NOW = new Date('2026-10-23T12:00:00.000Z')
 const HOUR = 60 * 60 * 1000
@@ -717,5 +722,103 @@ describe('game-aware catalog job', () => {
     expect(findShrinks(work, base)).toEqual([])
     base.close()
     work.close()
+  })
+})
+
+describe('Pokémon step in the nightly job', () => {
+  const report = (over: Partial<PokemonReport> = {}): PokemonReport => ({
+    lang: 'en',
+    sets: 1,
+    cards: 1,
+    versions: 2,
+    priced: 1,
+    images: 1,
+    unmatchedSets: ['sv01 Scarlet & Violet'],
+    unmatchedCards: 3,
+    problems: [],
+    ...over
+  })
+
+  it('a failed Pokémon step is a problem, Yu-Gi-Oh still uploads, and pkm rows stay', async () => {
+    const work = await workDb()
+    addPokemon(work)
+    snapshot(work).close()
+    work.close()
+    const { fetch, calls } = recordingFetch(ok)
+    const out = await runJob({
+      dir,
+      url: URL_BASE,
+      token: TOKEN,
+      fetch,
+      imageFetch: noImages,
+      checkAccuracy: passing,
+      refresh: async () => {},
+      pokemon: async () => ({ reports: [], error: 'boom' }),
+      log: () => {}
+    })
+    expect(out.problems).toContain('Pokémon refresh skipped: boom')
+    expect(calls.map((c) => c.path)).toContain('/admin/catalog/finish')
+    expect(calls.flatMap((c) => (c.body.keys ?? []) as unknown[])).toEqual([])
+    const after = openDatabase(join(dir, 'work.sqlite'))
+    expect(count(after, "cards WHERE game = 'pkm'")).toBe(1)
+    after.close()
+  })
+
+  it('a successful step is part of the diff and is logged per language', async () => {
+    ;(await workDb()).close()
+    const lines: string[] = []
+    const out = await runJob({
+      dir,
+      dryRun: true,
+      imageFetch: noImages,
+      checkAccuracy: passing,
+      refresh: async () => {},
+      pokemon: async (work) => {
+        addPokemon(work)
+        return { reports: [report(), report({ lang: 'ja', unmatchedSets: [] })], error: null }
+      },
+      log: (l) => lines.push(l)
+    })
+    expect(out.counts?.['card_printings:pkm']).toEqual({ upserts: 1, deletes: 0 })
+    expect(out.problems).toEqual([])
+    expect(lines).toContain(
+      'Pokémon en: 1 sets, 1 cards, 2 versions (1 priced, 1 unpriced), 1 images, 3 cards unmatched'
+    )
+    expect(lines).toContain('Pokémon en: unmatched sets: sv01 Scarlet & Violet')
+    expect(lines.some((l) => l.startsWith('Pokémon ja: 1 sets'))).toBe(true)
+    expect(lines.some((l) => l.startsWith('Pokémon ja: unmatched sets'))).toBe(false)
+  })
+
+  it('logs every report problem but lists only the first 20 as job problems', async () => {
+    ;(await workDb()).close()
+    const lines: string[] = []
+    const many = Array.from({ length: 25 }, (_, i) => `p${i}`)
+    const out = await runJob({
+      dir,
+      dryRun: true,
+      imageFetch: noImages,
+      checkAccuracy: passing,
+      refresh: async () => {},
+      pokemon: async () => ({ reports: [report({ problems: many })], error: null }),
+      log: (l) => lines.push(l)
+    })
+    expect(out.problems).toEqual([...many.slice(0, 20), '... and 5 more Pokémon problems'])
+    for (const p of many) expect(lines.some((l) => l.includes(p))).toBe(true)
+  })
+
+  it('skipPokemon leaves the step out', async () => {
+    ;(await workDb()).close()
+    const pokemon = vi.fn(async () => ({ reports: [], error: null }))
+    await runJob({
+      dir,
+      dryRun: true,
+      skipPokemon: true,
+      imageFetch: noImages,
+      checkAccuracy: passing,
+      refresh: async () => {},
+      pokemon,
+      log: () => {}
+    })
+    expect(pokemon).not.toHaveBeenCalled()
   })
 })

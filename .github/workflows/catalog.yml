@@ -58,6 +58,8 @@ jobs:
             catalog-work/work.sqlite
             catalog-work/work.sqlite-wal
             catalog-work/fingerprints.sqlite
+            catalog-work/pokemon-src.sqlite
+            catalog-work/pokemon-src.sqlite-wal
           key: catalog-work-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: catalog-work-
       - name: Restore base snapshot
@@ -84,6 +86,8 @@ jobs:
             catalog-work/work.sqlite
             catalog-work/work.sqlite-wal
             catalog-work/fingerprints.sqlite
+            catalog-work/pokemon-src.sqlite
+            catalog-work/pokemon-src.sqlite-wal
           key: catalog-work-${{ github.run_id }}-${{ github.run_attempt }}
       - name: Save base snapshot
         if: success()

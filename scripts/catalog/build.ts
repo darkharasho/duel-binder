@@ -3,13 +3,13 @@
  * desktop app does, uploads what changed since catalog-work/base.sqlite (the last snapshot the
  * portal accepted), then makes work the new base.
  *
- *   npm run catalog:job [-- --full | --dry-run | --allow-shrink | --refresh-sets]
+ *   npm run catalog:job [-- --full | --dry-run | --allow-shrink | --refresh-sets | --no-pokemon]
  *
  * Env: PORTAL_URL, PORTAL_ADMIN_TOKEN (not needed for --dry-run). --full ignores the base and
  * uploads every row; --dry-run refreshes and prints per-table counts without uploading or
  * touching the base. A refresh that would delete more than a sliver of any table (see
  * `findShrinks`) is refused unless --allow-shrink is passed, since every client applies the
- * deletes. --refresh-sets re-reads the non-English set lists now instead of on their weekly timer.
+ * deletes. --no-pokemon skips the Pokémon step. --refresh-sets re-reads the non-English set lists now instead of on their weekly timer.
  * Problems that don't stop the upload (a failed card sync, a failed fingerprint build)
  * end the run with a non-zero exit so the workflow shows red. So does a fingerprint file that fails
  * the accuracy gate (see accuracy.ts), which is held back while clients keep the last one.
@@ -27,6 +27,7 @@ import { createYugipediaClient, type YugipediaClient } from '../../src/main/yugi
 import { CATALOG_TABLES } from '../../src/shared/catalogTables'
 import { accuracyProblem, checkAccuracy, type AccuracyReport } from './accuracy'
 import { deletesByGame, diffTable, hasGameColumn } from './diff'
+import { runPokemonStep, type PokemonReport } from './pokemon'
 import { buildFingerprints, uploadFingerprints } from './fingerprints'
 import { uploadCatalog } from './upload'
 
@@ -44,6 +45,13 @@ export interface JobOptions {
   yugipedia?: Pick<YugipediaClient, 'listPageImages' | 'fetchImageUrls'>
   /** Refreshes the work database; defaults to `refreshCatalog` against the live APIs. */
   refresh?: (work: Database.Database, onProblem: (p: string) => void) => Promise<unknown>
+  /**
+   * Refreshes the Pokémon catalog in the work database; defaults to `runPokemonStep` over the live
+   * sources, cached in pokemon-src.sqlite. A non-null `error` skips Pokémon for the night.
+   */
+  pokemon?: (work: Database.Database) => Promise<{ reports: PokemonReport[]; error: string | null }>
+  /** Leaves the Pokémon step out (--no-pokemon). */
+  skipPokemon?: boolean
   /** Uploads deletes beyond the shrink limit. */
   allowShrink?: boolean
   /** Re-reads the non-English set lists now instead of waiting for their weekly timer. */
@@ -89,6 +97,31 @@ export function findShrinks(work: Database.Database, base: Database.Database | n
     }
   }
   return out
+}
+
+/** Max report problems listed as job problems; every one is logged. */
+const MAX_POKEMON_PROBLEMS = 20
+
+function logPokemon(
+  reports: PokemonReport[],
+  log: (line: string) => void,
+  problem: (p: string) => void
+): void {
+  const problems: string[] = []
+  for (const r of reports) {
+    log(
+      `Pokémon ${r.lang}: ${r.sets} sets, ${r.cards} cards, ${r.versions} versions (${r.priced} priced, ${r.versions - r.priced} unpriced), ${r.images} images, ${r.unmatchedCards} cards unmatched`
+    )
+    if (r.unmatchedSets.length > 0)
+      log(`Pokémon ${r.lang}: unmatched sets: ${r.unmatchedSets.join(', ')}`)
+    for (const p of r.problems) {
+      log(`Pokémon ${r.lang}: ${p}`)
+      problems.push(p)
+    }
+  }
+  for (const p of problems.slice(0, MAX_POKEMON_PROBLEMS)) problem(p)
+  if (problems.length > MAX_POKEMON_PROBLEMS)
+    problem(`... and ${problems.length - MAX_POKEMON_PROBLEMS} more Pokémon problems`)
 }
 
 export async function runJob(opts: JobOptions): Promise<JobResult> {
@@ -156,6 +189,19 @@ export async function runJob(opts: JobOptions): Promise<JobResult> {
   try {
     if (opts.refreshSets) deleteMeta(work, 'intl_sets_synced_at')
     await refresh(work, problem)
+    if (!opts.skipPokemon) {
+      const step =
+        opts.pokemon ??
+        ((w: Database.Database) =>
+          runPokemonStep(w, {
+            cachePath: join(opts.dir, 'pokemon-src.sqlite'),
+            version,
+            log
+          }))
+      const out = await step(work)
+      if (out.error !== null) problem(`Pokémon refresh skipped: ${out.error}`)
+      logPokemon(out.reports, log, problem)
+    }
     base = !opts.full && existsSync(basePath) ? openDatabase(basePath) : null
     log(base ? 'Diffing against the last uploaded snapshot' : 'No base snapshot: every row is new')
     // --full has no base and sends no deletes, so there is nothing to check.
@@ -214,7 +260,7 @@ export async function runJob(opts: JobOptions): Promise<JobResult> {
 
 async function main(): Promise<void> {
   const args = process.argv.slice(2)
-  const flags = ['--full', '--dry-run', '--allow-shrink', '--refresh-sets']
+  const flags = ['--full', '--dry-run', '--allow-shrink', '--refresh-sets', '--no-pokemon']
   const unknown = args.filter((a) => !flags.includes(a))
   if (unknown.length > 0) throw new Error(`Unknown argument(s): ${unknown.join(' ')}`)
   const { problems } = await runJob({
@@ -224,7 +270,8 @@ async function main(): Promise<void> {
     full: args.includes('--full'),
     dryRun: args.includes('--dry-run'),
     allowShrink: args.includes('--allow-shrink'),
-    refreshSets: args.includes('--refresh-sets')
+    refreshSets: args.includes('--refresh-sets'),
+    skipPokemon: args.includes('--no-pokemon')
   })
   for (const p of problems) console.log(`::error::${p}`)
   if (problems.length > 0) process.exitCode = 1

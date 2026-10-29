@@ -208,6 +208,7 @@ describe('runJob', () => {
     }) as typeof fetch
     const lines: string[] = []
     await runJob({
+      pokemon: async () => ({ reports: [], error: null }),
       dir,
       url: 'https://portal.example',
       token: 'tok',

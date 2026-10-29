@@ -337,6 +337,31 @@ describe('Scan window', () => {
     })
   })
 
+  it('refetches set printings when data changes', async () => {
+    stubCamera()
+    const printingsForSet = vi.fn(async () => [printing()])
+    let onDataChanged: () => void = () => {}
+    await renderWindow(
+      fakeEngine(),
+      {
+        scan: { printingsForSet },
+        app: {
+          onDataChanged: vi.fn((cb: () => void) => {
+            onDataChanged = cb
+            return () => {}
+          })
+        }
+      },
+      { set: { setName: 'Legend of Blue Eyes White Dragon', language: 'en' } }
+    )
+    await run(500)
+    expect(printingsForSet).toHaveBeenCalledTimes(1)
+
+    act(() => onDataChanged())
+    await run(500)
+    expect(printingsForSet).toHaveBeenCalledTimes(2)
+  })
+
   it("a set whose cards can't be read scans as any set and says so", async () => {
     stubCamera()
     const engine = fakeEngine()

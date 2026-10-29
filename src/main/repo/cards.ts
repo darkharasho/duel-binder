@@ -1,9 +1,10 @@
 import type { SqlDb } from '../db/sql'
 import { RARITY_LABEL } from '../db/schema'
-import type { CardDetail, CardImage, CardRow, CardSearchResult, Printing } from '../../shared/types'
+import type { CardDetail, CardImage, CardRow, CardSearchResult, PokemonFacts, Printing } from '../../shared/types'
 import { isLanguage } from '../../shared/languages'
 import { SET_PRICE } from './priceRule'
-import { LOCAL, type Scope } from './scope'
+import { LOCAL, scopeGame, type Scope } from './scope'
+import { pokemonNumberMatch } from './pkmFilters'
 
 export interface CardDbRow {
   id: number
@@ -19,6 +20,40 @@ export interface CardDbRow {
   archetype: string | null
   desc: string
   tcgplayer_price: number | null
+  /** Set when the query LEFT JOINs pokemon_cards as `pc` (see POKEMON_COLS); null on Yu-Gi-Oh! rows. */
+  pk_category?: string | null
+  pk_hp?: number | null
+  pk_types?: string | null
+  pk_stage?: string | null
+  pk_rarity?: string | null
+  pk_illustrator?: string | null
+  pk_local_name?: string | null
+}
+
+/** The pokemon_cards columns rowToCard reads, from a `LEFT JOIN pokemon_cards pc ON pc.card_id = c.id`. */
+export const POKEMON_COLS = `pc.category AS pk_category, pc.hp AS pk_hp, pc.types AS pk_types, pc.stage AS pk_stage,
+  pc.rarity AS pk_rarity, pc.illustrator AS pk_illustrator, pc.local_name AS pk_local_name`
+
+function parseTypes(json: string | null | undefined): string[] {
+  try {
+    const v: unknown = JSON.parse(json ?? '[]')
+    return Array.isArray(v) ? v.filter((t): t is string => typeof t === 'string') : []
+  } catch {
+    return []
+  }
+}
+
+function pokemonFacts(row: CardDbRow): PokemonFacts | undefined {
+  if (row.pk_category === null || row.pk_category === undefined) return undefined
+  return {
+    category: row.pk_category,
+    hp: row.pk_hp ?? null,
+    types: parseTypes(row.pk_types),
+    stage: row.pk_stage ?? null,
+    rarity: row.pk_rarity ?? null,
+    illustrator: row.pk_illustrator ?? null,
+    localName: row.pk_local_name ?? null
+  }
 }
 
 export interface PrintingDbRow {
@@ -36,6 +71,7 @@ export interface PrintingDbRow {
 }
 
 export function rowToCard(row: CardDbRow): CardRow {
+  const pokemon = pokemonFacts(row)
   return {
     id: row.id,
     name: row.name,
@@ -49,7 +85,8 @@ export function rowToCard(row: CardDbRow): CardRow {
     def: row.def,
     archetype: row.archetype,
     desc: row.desc,
-    tcgplayerPrice: row.tcgplayer_price
+    tcgplayerPrice: row.tcgplayer_price,
+    ...(pokemon ? { pokemon } : {})
   }
 }
 
@@ -88,6 +125,22 @@ export function searchCards(db: SqlDb, q: string, limit = 20, scope: Scope = LOC
   }
   const defaultImage = `COALESCE((SELECT image_id FROM card_images WHERE card_id = c.id AND +game = ${scope.game} AND sort_order = 0), c.id)`
 
+  const pkmNumber =
+    scopeGame(db, scope) === 'pkm' ? pokemonNumberMatch(text, 'p.set_code') : null
+  if (pkmNumber) {
+    // A card number (45, 045, 45/193): only printings' numbers match, never names.
+    const rows = db
+      .prepare(
+        `SELECT c.id, c.name, c.type, ${defaultImage} AS default_image_id, p.set_code AS matched
+         FROM card_printings p JOIN cards c ON c.id = p.card_id AND +c.game = ${scope.game}
+         WHERE +p.game = ${scope.game} AND p.contributed = 0 AND ${pkmNumber.sql}
+         ORDER BY c.name, p.set_code, p.id LIMIT ?`
+      )
+      .all(...pkmNumber.params, limit) as DbHit[]
+    rows.forEach((r) => push(toResult(r)))
+    return results
+  }
+
   if (text.includes('-') && !/\s/.test(text)) {
     const rows = db
       .prepare(
@@ -111,6 +164,16 @@ export function searchCards(db: SqlDb, q: string, limit = 20, scope: Scope = LOC
       .all(fts, limit) as DbHit[]
     rows.forEach((r) => push(toResult(r)))
   }
+  if (scopeGame(db, scope) === 'pkm') {
+    const rows = db
+      .prepare(
+        `SELECT c.id, c.name, c.type, ${defaultImage} AS default_image_id, NULL AS matched
+         FROM pokemon_cards pc JOIN cards c ON c.id = pc.card_id AND +c.game = ${scope.game}
+         WHERE pc.local_name LIKE ? ESCAPE '\\' ORDER BY c.name LIMIT ?`
+      )
+      .all(`%${escapeLike(text)}%`, limit) as DbHit[]
+    rows.forEach((r) => push(toResult(r)))
+  }
   return results
 }
 
@@ -131,7 +194,12 @@ const toResult = (r: DbHit): CardSearchResult => ({
 })
 
 export function getCardDetail(db: SqlDb, cardId: number, scope: Scope = LOCAL): CardDetail | null {
-  const row = db.prepare(`SELECT * FROM cards WHERE id = ? AND +game = ${scope.game}`).get(cardId) as
+  const row = db
+    .prepare(
+      `SELECT c.*, ${POKEMON_COLS} FROM cards c LEFT JOIN pokemon_cards pc ON pc.card_id = c.id
+       WHERE c.id = ? AND +c.game = ${scope.game}`
+    )
+    .get(cardId) as
     | CardDbRow
     | undefined
   if (!row) return null

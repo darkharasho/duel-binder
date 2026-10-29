@@ -2,7 +2,7 @@ import type { SqlDb } from '../db/sql'
 import type { BrowseCard, BrowseFacets, BrowseFilters, BrowsePage } from '../../shared/types'
 import { buildFtsQuery } from './cards'
 import { LOCAL, scopeGame, type Scope } from './scope'
-import { pokemonFacets, pokemonWhere } from './pkmFilters'
+import { pokemonFacets, pokemonSearch, pokemonWhere } from './pkmFilters'
 
 const MAX_LIMIT = 200
 
@@ -73,20 +73,25 @@ function whereClause(db: SqlDb, f: BrowseFilters, scope: Scope): { sql: string; 
       params.push(...values)
     }
   }
+  const pkm = scopeGame(db, scope) === 'pkm'
   const text = f.q?.trim()
   if (text) {
-    const fts = buildFtsQuery(text)
-    const parts = [
-      `c.id IN (SELECT card_id FROM card_printings WHERE +game = ${scope.game} AND contributed = 0 AND set_code LIKE ? ESCAPE '\\')`
-    ]
-    params.push(`${escapeLike(text)}%`)
-    if (fts) {
-      parts.push('c.id IN (SELECT rowid FROM cards_fts WHERE cards_fts MATCH ?)')
-      params.push(fts)
+    const own = pkm ? pokemonSearch(text, { game: scope.game }) : null
+    const parts: string[] = own ? [...own.parts] : []
+    if (own) params.push(...own.params)
+    if (!own?.numeric) {
+      const fts = buildFtsQuery(text)
+      parts.push(
+        `c.id IN (SELECT card_id FROM card_printings WHERE +game = ${scope.game} AND contributed = 0 AND set_code LIKE ? ESCAPE '\\')`
+      )
+      params.push(`${escapeLike(text)}%`)
+      if (fts) {
+        parts.push('c.id IN (SELECT rowid FROM cards_fts WHERE cards_fts MATCH ?)')
+        params.push(fts)
+      }
     }
     where.push(`(${parts.join(' OR ')})`)
   }
-  const pkm = scopeGame(db, scope) === 'pkm'
   if (pkm) {
     const p = pokemonWhere(f)
     where.push(...p.where)

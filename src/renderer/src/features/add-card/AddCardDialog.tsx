@@ -13,6 +13,7 @@ import { CardArt } from '@/components/CardArt'
 import { LanguageSelect } from '@/components/LanguageSelect'
 import { LanguageTag } from '@/components/LanguageTag'
 import { matchesLanguage, useLanguageFilter } from '@/lib/languageFilter'
+import { useGame } from '@/lib/game'
 import { isPhone } from '@/lib/platform'
 import { useSyncStatus } from '@/components/useSyncStatus'
 import { Button } from '@/components/ui/button'
@@ -80,6 +81,7 @@ export function AddCardDialog({
 }: AddCardDialogProps): React.JSX.Element {
   const qc = useQueryClient()
   const sync = useSyncStatus()
+  const { def } = useGame()
   const [step, setStep] = useState<Step>('search')
   const [text, setText] = useState('')
   const [card, setCard] = useState<CardSearchResult | null>(null)
@@ -298,7 +300,7 @@ export function AddCardDialog({
             <Command shouldFilter={false} className={commandClass}>
               <CommandInput
                 autoFocus
-                placeholder="Search cards by name or set code…"
+                placeholder={`Search cards by name or ${def.vocab.printingCode.toLowerCase()}…`}
                 value={text}
                 onValueChange={setText}
               />

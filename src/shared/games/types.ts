@@ -30,4 +30,6 @@ export interface GameDef {
   access: 'everyone' | 'owner'
   vocab: GameVocab
   filters: FilterDef[]
+  /** The card facts the details panel lists, in order, as keys of the card's game-specific facts. */
+  details: { key: string; label: string }[]
 }

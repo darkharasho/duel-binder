@@ -3,7 +3,7 @@ import type { CollectionFilters } from '@shared/types'
 import { RANGE_FIELDS, rangeFilters } from '@/lib/rangeFilters'
 
 type GameKey =
-  'cardTypes' | 'attributes' | 'archetypes' | 'pkmCategories' | 'pkmTypes' | 'pkmStages'
+  'cardTypes' | 'attributes' | 'archetypes' | 'pkmCategories' | 'pkmTypes' | 'pkmStages' | 'pkmRarities'
 export type ListKey = GameKey | 'setNames' | 'rarities'
 
 const GAME_KEYS: readonly string[] = [
@@ -12,7 +12,8 @@ const GAME_KEYS: readonly string[] = [
   'archetypes',
   'pkmCategories',
   'pkmTypes',
-  'pkmStages'
+  'pkmStages',
+  'pkmRarities'
 ] satisfies GameKey[]
 
 /** The collection's own names for some of the games' filters. */

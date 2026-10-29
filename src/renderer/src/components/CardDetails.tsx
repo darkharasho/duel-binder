@@ -1,10 +1,16 @@
 import type { CardRow, Printing } from '@shared/types'
 import { useGame } from '@/lib/game'
 
+/** A fact's text: lists joined, numbers as digits, empty and missing as ''. */
+function factText(v: unknown): string {
+  if (Array.isArray(v)) return v.join(', ')
+  return v === null || v === undefined ? '' : String(v)
+}
+
 /**
  * A card's facts and rules text, shown under its art in the side panels. Yu-Gi-Oh! shows its
- * stats line; Pokémon, whose stats aren't in the card row, shows the printing being viewed in the
- * game's words (its number and version).
+ * stats line; Pokémon lists the card's own facts (HP, stage, types, …) and then the printing being
+ * viewed in the game's words (its number and version).
  */
 export function CardDetails({
   card,
@@ -24,13 +30,20 @@ export function CardDetails({
           card.linkval !== null && `Link ${card.linkval}`
         ].filter(Boolean)
       : []
-  const facts =
+  const own = def.details
+    .map(({ key, label }) => ({
+      label,
+      value: factText((card.pokemon as object | undefined)?.[key as never])
+    }))
+    .filter((f) => f.value)
+  const printed =
     def.id !== 'ygo' && printing
       ? [
           { label: def.vocab.printingCode, value: printing.setCode },
           { label: def.vocab.rarity, value: printing.setRarity }
         ].filter((f) => f.value)
       : []
+  const facts = [...own, ...printed]
   return (
     <div className="space-y-2">
       {stats.length > 0 && (

@@ -19,6 +19,16 @@ export const PKM: GameDef = {
     { key: 'pkmCategories', label: 'Category', kind: 'multi' },
     { key: 'pkmTypes', label: 'Type', kind: 'multi' },
     { key: 'pkmStages', label: 'Stage', kind: 'multi' },
+    { key: 'pkmRarities', label: 'Rarity', kind: 'multi' },
     { key: 'hp', label: 'HP', kind: 'range' }
+  ],
+  details: [
+    { key: 'category', label: 'Category' },
+    { key: 'hp', label: 'HP' },
+    { key: 'types', label: 'Type' },
+    { key: 'stage', label: 'Stage' },
+    { key: 'rarity', label: 'Rarity' },
+    { key: 'illustrator', label: 'Illustrator' },
+    { key: 'localName', label: 'Japanese name' }
   ]
 }

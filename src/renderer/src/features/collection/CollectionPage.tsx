@@ -55,6 +55,7 @@ function hasActiveFilters(f: CollectionFilters): boolean {
     f.pkmCategories?.length ||
     f.pkmTypes?.length ||
     f.pkmStages?.length ||
+    f.pkmRarities?.length ||
     f.hpMin !== undefined ||
     f.hpMax !== undefined
   )

@@ -6,10 +6,10 @@ import { priceFor } from '../../shared/pricing'
 import type { AddEntryInput, CollectionFilters, EntryView, Facets, UpdateEntryInput } from '../../shared/types'
 import { getMeta } from '../db/meta'
 import { LOCAL, scopeGame, type Scope } from './scope'
-import { pokemonFacets, pokemonWhere } from './pkmFilters'
+import { pokemonFacets, pokemonSearch, pokemonWhere } from './pkmFilters'
 import { enTwinPrice } from './enTwin'
 import { marketOnlyGame, SET_PRICE } from './priceRule'
-import { buildFtsQuery, rowToCard, rowToPrinting, type CardDbRow, type PrintingDbRow } from './cards'
+import { buildFtsQuery, POKEMON_COLS, rowToCard, rowToPrinting, type CardDbRow, type PrintingDbRow } from './cards'
 
 export class CollectionError extends Error {
   constructor(message: string) {
@@ -34,7 +34,7 @@ const select = (scope: Scope): string => `
          e.image_id IS (SELECT ci.image_id FROM card_images ci WHERE ci.card_id = c.id AND +ci.game = ${scope.game}
                         ORDER BY ci.sort_order, ci.image_id LIMIT 1) AS e_original_art,
          c.id AS id, c.name, c.type, c.frame_type, c.race, c.attribute, c.level, c.linkval, c.atk, c.def,
-         c.archetype, c.desc, c.tcgplayer_price,
+         c.archetype, c.desc, c.tcgplayer_price, ${POKEMON_COLS},
          p.id AS p_id, p.card_id, p.set_name, p.set_code, ${RARITY_LABEL} AS set_rarity, p.set_rarity_code, ${SET_PRICE} AS set_price,
          p.market_price, ${enTwinPrice(scope.game)} AS en_twin_price, p.game AS p_game,
          p.missing_from_api, p.language,
@@ -43,6 +43,7 @@ const select = (scope: Scope): string => `
   FROM collection_entries e
   JOIN card_printings p ON p.id = e.printing_id AND +p.game = ${scope.game}
   JOIN cards c ON c.id = p.card_id AND +c.game = ${scope.game}
+  LEFT JOIN pokemon_cards pc ON pc.card_id = c.id
   LEFT JOIN intl_prices ip ON ip.printing_id = p.id`
 
 function toView(r: EntryDbRow, priceStatus: string | null): EntryView {
@@ -214,19 +215,25 @@ export function listEntries(db: SqlDb, f: CollectionFilters, scope: Scope = LOCA
       params.push(...values)
     }
   }
+  const pkm = scopeGame(db, scope) === 'pkm'
   const text = f.q?.trim()
   if (text) {
-    const fts = buildFtsQuery(text)
-    const parts = [`p.set_code LIKE ? ESCAPE '\\'`]
-    params.push(`${escapeLike(text)}%`)
-    if (fts) {
-      parts.push('c.id IN (SELECT rowid FROM cards_fts WHERE cards_fts MATCH ?)')
-      params.push(fts)
+    const own = pkm ? pokemonSearch(text, { game: scope.game, printingCol: 'p.set_code' }) : null
+    const parts: string[] = own ? [...own.parts] : []
+    if (own) params.push(...own.params)
+    if (!own?.numeric) {
+      const fts = buildFtsQuery(text)
+      parts.push(`p.set_code LIKE ? ESCAPE '\\'`)
+      params.push(`${escapeLike(text)}%`)
+      if (fts) {
+        parts.push('c.id IN (SELECT rowid FROM cards_fts WHERE cards_fts MATCH ?)')
+        params.push(fts)
+      }
     }
     where.push(`(${parts.join(' OR ')})`)
   }
   // Each game has its own card filters; the other game's are ignored.
-  if (scopeGame(db, scope) === 'pkm') {
+  if (pkm) {
     const pkm = pokemonWhere(f)
     where.push(...pkm.where)
     params.push(...pkm.params)

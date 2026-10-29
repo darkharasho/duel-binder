@@ -169,7 +169,8 @@ describe('renderPrivacy', () => {
       'Anonymous usage counts',
       'You can turn them off in Settings',
       'The portal runs on Cloudflare',
-      'Last updated'
+      'Last updated',
+      '<a href="mailto:project96@gmail.com">project96@gmail.com</a>'
     ]) {
       expect(html).toContain(text)
     }
@@ -190,7 +191,8 @@ describe('renderTerms', () => {
       'provided “as is”',
       'Acceptable use',
       'https://github.com/darkharasho/duel-binder/issues',
-      '<a href="/terms">Terms</a>'
+      '<a href="/terms">Terms</a>',
+      'mailto:project96@gmail.com'
     ])
       expect(html).toContain(text)
     expect(html).not.toMatch(/<script/i)

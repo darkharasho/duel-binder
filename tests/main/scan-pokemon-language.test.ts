@@ -17,6 +17,8 @@ describe('pokemonLanguage', () => {
       "Flip a coin. If heads, your opponent's Active Pokémon is now Paralyzed. Discard an Energy from this Pokémon.",
       'en'
     ],
+    // Read off a real photo of an English card (Grubbin): few of latinLanguageOf's words.
+    ['x) dtnng shot LA\nFlip 3 coin. If ads, your opponents Acove Pokémen is\nnow Panlyzed', 'en'],
     ['HP', null],
     ['', null]
   ] as const)('%s reads as %s', (text, language) => {

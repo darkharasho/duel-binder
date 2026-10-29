@@ -21,9 +21,12 @@ const DASHES = new Set(['一', 'ー'])
  * dropped).
  */
 const ENGLISH = new Set(
-  "weakness retreat basic stage evolves energy damage attack opponent's your this ability".split(
-    ' '
-  )
+  (
+    "weakness retreat basic stage evolves energy damage attack opponent's your this ability " +
+    // The words of attacks' text, as a blurred read keeps them ("opponent's" as "opponents").
+    'opponents flip coin coins heads tails during prevent discard attached attacks effects ' +
+    'next turn more less does done takes benched active'
+  ).split(' ')
 )
 
 /**

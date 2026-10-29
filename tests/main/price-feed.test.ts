@@ -94,7 +94,7 @@ describe('pullPriceChanges', () => {
     )
     const { client: c, ask } = client([{ prices: [change(k2, 7, 2)], cursor: 7, more: false }])
     await expect(pullPriceChanges(db, c)).resolves.toBe(1)
-    expect(ask).toHaveBeenCalledWith(4)
+    expect(ask).toHaveBeenCalledWith(4, 'ygo')
     expect(getMeta(db, 'price_feed_cursor')).toBe('7')
   })
 })

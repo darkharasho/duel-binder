@@ -15,6 +15,7 @@ import type {
   PushResult,
   WireEntry
 } from '../../shared/cloud'
+import type { GameId } from '../../shared/games'
 import type { PortalChannel } from '../../shared/portal'
 
 /** The portal answered 401: the desktop token is unknown, expired or revoked. */
@@ -36,10 +37,11 @@ export class CloudOfflineError extends Error {
 export interface CloudClient {
   me(): Promise<Me>
   push(entries: WireEntry[]): Promise<PushResult[]>
-  pull(cursor: number): Promise<PullResponse>
+  /** One page of the account's entries of `game` (default Yu-Gi-Oh!) written after `cursor`. */
+  pull(cursor: number, game?: GameId): Promise<PullResponse>
   prices(pkeys: string[]): Promise<PricesResponse>
-  /** One page of server price changes after `since` (the price change feed). */
-  priceChanges(since: number): Promise<PriceChangesResponse>
+  /** One page of server price changes of `game` (default Yu-Gi-Oh!) after `since` (the price change feed). */
+  priceChanges(since: number, game?: GameId): Promise<PriceChangesResponse>
   /** Asks the server to price these printings (at most MAX_PRICE_REQUEST); see requestPrices. */
   requestPrices(pkeys: string[]): Promise<PriceRequestResponse>
   /**
@@ -141,10 +143,11 @@ export function createCloudClient(opts: {
     me: () => call<Me>('/api/me', 'GET'),
     push: async (entries) =>
       (await call<PushResponse>('/api/sync/push', 'POST', { entries })).results,
-    pull: (cursor) => call<PullResponse>(`/api/sync/pull?cursor=${cursor}`, 'GET'),
+    pull: (cursor, game = 'ygo') =>
+      call<PullResponse>(`/api/sync/pull?cursor=${cursor}&game=${game}`, 'GET'),
     prices: (pkeys) => call<PricesResponse>('/api/sync/prices', 'POST', { pkeys }),
-    priceChanges: (since) =>
-      call<PriceChangesResponse>(`/api/sync/price-changes?since=${since}`, 'GET'),
+    priceChanges: (since, game = 'ygo') =>
+      call<PriceChangesResponse>(`/api/sync/price-changes?since=${since}&game=${game}`, 'GET'),
     requestPrices: (pkeys) =>
       call<PriceRequestResponse>('/api/sync/price-requests', 'POST', { pkeys }),
     catalogChanges: (since, limit, tables) =>

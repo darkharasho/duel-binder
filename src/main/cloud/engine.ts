@@ -3,15 +3,16 @@ import { setMeta } from '../db/meta'
 import { recordSnapshot } from '../repo/stats'
 import { MAX_CONTRIBUTE, type ContributeResult } from '../../shared/catalogFeed'
 import { MAX_PULL, MAX_PUSH, editTime, type WireEntry } from '../../shared/cloud'
+import { isGameId, type GameId } from '../../shared/games'
 import { CloudAuthError, CloudOfflineError, type CloudClient } from './client'
 import {
-  accountState,
   activeOwner,
   applyPending,
   applyPrices,
   applyRemote,
   contributionGroups,
   dirtyEntries,
+  gameCursor,
   pullPriceChanges,
   dropEntry,
   markPushed,
@@ -21,6 +22,7 @@ import {
   recordSyncIssue,
   rekey,
   saveAccountState,
+  saveGameCursor,
   stalePricePkeys,
   syncIssueCount,
   tombstoneClean
@@ -42,6 +44,20 @@ export interface SyncOutcome {
 }
 
 const sameAs = (e: WireEntry): string => JSON.stringify(e)
+
+/**
+ * The games the account may sync, from `me()`. An old server leaves `games` out, which means
+ * Yu-Gi-Oh! only; so does a failing `me()` (other than signed-out), so the rest of the run goes on.
+ */
+async function syncedGames(client: CloudClient): Promise<GameId[]> {
+  try {
+    const games = (await client.me()).games?.filter(isGameId) ?? []
+    return games.includes('ygo') ? games : ['ygo', ...games]
+  } catch (e) {
+    if (e instanceof CloudAuthError) throw e
+    return ['ygo']
+  }
+}
 
 /**
  * One sync of `owner`'s collection: push its unpushed rows, pull what the server has written since the
@@ -175,25 +191,29 @@ export async function syncOnce(
     pruneSyncIssues(db, owner, keep)
   })()
 
-  // 2. Pull. Each page and its cursor commit together.
+  // 2. Pull, once per game the account may use, each from its own cursor (a game newly allowed
+  // starts from 0). Each page and its cursor commit together.
+  const games = await syncedGames(client)
   let pulled = 0
-  let cursor = accountState(db, owner).cursor
-  for (;;) {
-    const page = await client.pull(cursor)
-    db.transaction(() => {
-      for (const e of page.entries) {
-        if (applyRemote(db, owner, e) === 'applied') changed = true
-      }
-      saveAccountState(db, owner, { cursor: page.cursor })
-    })()
-    pulled += page.entries.length
-    cursor = page.cursor
-    if (!page.more || page.entries.length === 0) break
+  for (const game of games) {
+    let cursor = gameCursor(db, owner, game, 'entries')
+    for (;;) {
+      const page = await client.pull(cursor, game)
+      db.transaction(() => {
+        for (const e of page.entries) {
+          if (applyRemote(db, owner, e) === 'applied') changed = true
+        }
+        saveGameCursor(db, owner, game, 'entries', page.cursor)
+      })()
+      pulled += page.entries.length
+      cursor = page.cursor
+      if (!page.more || page.entries.length === 0) break
+    }
   }
 
-  // 3. Every price change the server has made, then prices for printings whose local price is
-  // missing or stale (a printing the server hasn't priced yet).
-  if ((await pullPriceChanges(db, client)) > 0) changed = true
+  // 3. Every price change the server has made in each game, then prices for printings whose local
+  // price is missing or stale (a printing the server hasn't priced yet).
+  for (const game of games) if ((await pullPriceChanges(db, client, owner, game)) > 0) changed = true
   // Asked even with no keys, to keep price_service_status current.
   const { prices, status } = await client.prices(stalePricePkeys(db, now(), MAX_PULL))
   db.transaction(() => {

@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { pokemonLanguage, pokemonLanguageOfReads } from '../../src/shared/scan/pokemonLanguage'
+import {
+  pokemonLanguage,
+  pokemonLanguageOfBands,
+  pokemonLanguageOfReads
+} from '../../src/shared/scan/pokemonLanguage'
 
 describe('pokemonLanguage', () => {
   it.each([
@@ -118,5 +122,25 @@ describe('pokemonLanguageOfReads', () => {
     const fr =
       'Si cette carte est dans votre main, vous pouvez la mettre sur le terrain de votre adversaire. ぅ て'
     expect(pokemonLanguageOfReads({ jpn: fr, eng: BRONZONG_ENG })).toBe('other')
+  })
+})
+
+describe('pokemonLanguageOfBands', () => {
+  const EN = 'Pikachu HP 60 Basic Pokémon Gnaw 10 Weakness Resistance Retreat Cost'
+  const JA = 'ピカチュウ HP 60 ワザ 相手のバトルポケモンに10ダメージ'
+  const ZH = '皮卡丘 HP 60 招式'
+  const GARBAGE = 'l1 ,. ii'
+
+  it.each([
+    // The same text read off two bands (as it is, and as ink on white): one telling is enough.
+    [{ eng: [GARBAGE, EN], jpn: [GARBAGE, GARBAGE] }, 'en'],
+    [{ eng: [GARBAGE, GARBAGE], jpn: [JA, GARBAGE] }, 'ja'],
+    // Bands that disagree tell nothing; any band's other is other.
+    [{ eng: [EN, GARBAGE], jpn: [GARBAGE, JA] }, null],
+    [{ eng: [EN, GARBAGE], jpn: [GARBAGE, ZH] }, 'other'],
+    [{ eng: [GARBAGE, GARBAGE], jpn: [GARBAGE, GARBAGE] }, null],
+    [{ eng: [], jpn: [] }, null]
+  ] as const)('%j → %s', (reads, expected) => {
+    expect(pokemonLanguageOfBands({ eng: [...reads.eng], jpn: [...reads.jpn] })).toBe(expected)
   })
 })

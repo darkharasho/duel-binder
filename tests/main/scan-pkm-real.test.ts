@@ -24,7 +24,7 @@ import { MIN_RIGHT_SHARE } from '../../scripts/catalog/accuracy'
 import { pokemonId } from '../../src/shared/games/ids'
 import { decodeFingerprints, type FingerprintIndex } from '../../src/shared/scan/fingerprintFile'
 import { readTexts } from '../../src/shared/scan/ocr'
-import { pokemonLanguageOfReads } from '../../src/shared/scan/pokemonLanguage'
+import { pokemonLanguageOfBands } from '../../src/shared/scan/pokemonLanguage'
 import { scanProfile } from '../../src/shared/scan/profiles'
 import type { OcrBand, RgbaImage } from '../../src/shared/scan/types'
 import { createOcr } from '../../src/main/scan/ocr'
@@ -190,8 +190,8 @@ describe.skipIf(!READY)('the Pokémon scanner on real photos', () => {
           setPrintings: null,
           defaultRarity: null,
           lookups,
-          // As the scan loop's pokemonLanguageOf: one read per model, each judged on its own,
-          // and a failed read counts as not told.
+          // As the scan loop's pokemonLanguageOf: one read per model and band, each judged on
+          // its own, and a failed read counts as not told.
           readLanguage: async () => {
             if (!textBands.length) return null
             try {
@@ -199,7 +199,7 @@ describe.skipIf(!READY)('the Pokémon scanner on real photos', () => {
                 readTexts(ocr, textBands, 'jpn'),
                 readTexts(ocr, textBands, 'eng')
               ])
-              const lang = pokemonLanguageOfReads({ jpn: jpn.join('\n'), eng: eng.join('\n') })
+              const lang = pokemonLanguageOfBands({ jpn, eng })
               language = lang ?? 'null'
               return lang
             } catch {

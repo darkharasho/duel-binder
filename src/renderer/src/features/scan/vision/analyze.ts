@@ -6,7 +6,7 @@ import type { Mat } from '@techstark/opencv-js'
 import { SCAN_PROFILES, type ScanProfile } from '@shared/scan/profiles'
 import type { OcrBand, RgbaImage } from '@shared/scan/types'
 import type { ArtMatch, FrameSignals } from '../engine'
-import { toBand, toBlock } from './bands'
+import { toBand, toBlock, toInkBlock } from './bands'
 import { findCandidates, preferOuter, recognizeArt } from './candidates'
 import type { CV } from './cv'
 import { CARD_W, dist, rotate180, toMat, using, warpCard, type Quad } from './detect'
@@ -139,7 +139,14 @@ function analyzeFrame(
       .filter(hasPixels),
     nameBands: ways.map((c) => toBand(c, profile.nameBand)).filter(hasPixels),
     // Only a card whose art matched: read off a guessed outline, it reads as a language too often.
-    textBands: upright ? [toBlock(straight, profile.textBox)].filter(hasPixels) : [],
+    // A Pokémon card's is cut out twice, as it is and as ink on white (each read on its own): a
+    // webcam's small text on a mottled box often reads only one way.
+    textBands: upright
+      ? [
+          toBlock(straight, profile.textBox),
+          ...(pokemon ? [toInkBlock(straight, profile.textBox)] : [])
+        ].filter(hasPixels)
+      : [],
     cues,
     version,
     ...(slab === undefined ? {} : { slab }),

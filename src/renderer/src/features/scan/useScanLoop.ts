@@ -3,7 +3,7 @@ import type { GameId } from '@shared/games/types'
 import type { LookModel } from '@shared/scan/look'
 import { cuesOver, type RarityCues } from '@shared/scan/rarity'
 import type { CardLanguage } from '@shared/scan/language'
-import { pokemonLanguageOfReads } from '@shared/scan/pokemonLanguage'
+import { pokemonLanguageOfBands } from '@shared/scan/pokemonLanguage'
 import type { TextModel } from '@shared/scan/ocr'
 import { scanProfile } from '@shared/scan/profiles'
 import { ABSENT_MS, LANGUAGE_MAX_READS, RARITY_MAX_READINGS } from '@shared/scan/thresholds'
@@ -327,8 +327,8 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
     }
 
     /**
-     * A Pokémon card's language: its text read once with the Japanese model and once with the
-     * English one, each judged on its own (pokemonLanguageOfReads). Kept, like languageOf, while
+     * A Pokémon card's language: each of its text bands read once with the Japanese model and
+     * once with the English one, each read judged on its own (pokemonLanguageOfBands). Kept, like languageOf, while
      * the same artwork stays in view, and tried on LANGUAGE_MAX_READS frames when it can't be
      * told; a failed read counts as not told.
      */
@@ -341,11 +341,11 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
       const known = l.pokemonLanguage
       if (known.read || known.reads >= LANGUAGE_MAX_READS || !bands.length) return known.read
       known.reads++
-      const read = (model: TextModel): Promise<string> =>
-        within(api.scan.readText(bands, model), LANGUAGE_TIMEOUT_MS).then((t) => t.join('\n'))
+      const read = (model: TextModel): Promise<string[]> =>
+        within(api.scan.readText(bands, model), LANGUAGE_TIMEOUT_MS)
       try {
         const [jpn, eng] = await Promise.all([read('jpn'), read('eng')])
-        known.read = pokemonLanguageOfReads({ jpn, eng })
+        known.read = pokemonLanguageOfBands({ jpn, eng })
       } catch {
         known.read = null
       }

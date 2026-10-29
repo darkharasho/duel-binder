@@ -122,3 +122,19 @@ export function pokemonLanguageOfReads(reads: {
   if (eng === 'en' && jpn !== 'ja') return 'en'
   return null
 }
+
+/**
+ * A Pokémon card's language from its text bands (the same text cut out in different ways), each
+ * read once per model and judged on its own (pokemonLanguageOfReads): other when any band says
+ * so, else the one language some band tells and none contradicts; null when none tells.
+ */
+export function pokemonLanguageOfBands(reads: {
+  eng: string[]
+  jpn: string[]
+}): 'en' | 'ja' | 'other' | null {
+  const told = reads.eng.map((eng, i) => pokemonLanguageOfReads({ eng, jpn: reads.jpn[i] ?? '' }))
+  if (told.includes('other')) return 'other'
+  const ja = told.includes('ja')
+  const en = told.includes('en')
+  return ja === en ? null : ja ? 'ja' : 'en'
+}

@@ -25,8 +25,10 @@ export interface PriceCandidate {
 // Owned by anyone: deliberately global across desktop owners and server users; tombstones don't count.
 const OWNED =
   'EXISTS (SELECT 1 FROM collection_entries e WHERE e.printing_id = p.id AND e.deleted_at IS NULL)'
-const REQUESTED =
-  'EXISTS (SELECT 1 FROM price_requests r WHERE r.printing_id = p.id AND r.requested_at >= ?)'
+// Owned or recently requested printings. The filter starts from these rather than testing every catalog
+// printing (~340k), which on a desktop meant a sync froze the app for as long as a minute.
+const WANTED = `p.id IN (SELECT printing_id FROM collection_entries WHERE deleted_at IS NULL
+       UNION SELECT printing_id FROM price_requests WHERE requested_at >= ?)`
 
 /** WHERE clause and params shared by the candidate list and its count. */
 function candidateFilter(
@@ -43,7 +45,7 @@ function candidateFilter(
   }
   // English printings with a TCGplayer market price don't need eBay's.
   where.push("(p.language <> 'en' OR p.market_price IS NULL)")
-  where.push(`(${OWNED} OR ${REQUESTED})`)
+  where.push(WANTED)
   params.push(new Date(now.getTime() - REQUEST_WINDOW_MS).toISOString())
   return { where: where.join(' AND '), params }
 }

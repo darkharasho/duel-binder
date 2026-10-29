@@ -194,7 +194,7 @@ const ENTRY_REFS: Record<string, [count: number, kind: string]> = {
   'src/main/repo/scope.ts': [5, SCOPED],
   'src/main/repo/sets.ts': [5, SCOPED],
   'workers/portal/src/scope.ts': [3, SCOPED],
-  'src/main/prices/candidates.ts': [1, LIVE],
+  'src/main/prices/candidates.ts': [2, LIVE],
   'src/main/dev/fakeData.ts': [2, LIVE],
   'src/main/index.ts': [1, LIVE],
   'src/main/sync/sync.ts': [1, FK],
@@ -219,7 +219,7 @@ const ENTRY_REFS: Record<string, [count: number, kind: string]> = {
     'live rows for the census; all rows incl. tombstones for the dangling check and pruning (FK)'
   ],
   'src/main/cloud/localSync.ts': [15, SYNC],
-  'src/main/db/schema.ts': [9, DDL],
+  'src/main/db/schema.ts': [10, DDL],
   'workers/portal/src/migrate.ts': [10, DDL]
 }
 

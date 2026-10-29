@@ -303,7 +303,8 @@ describe('useScanSession', () => {
 
 const textBand: OcrBand = { width: 4, height: 2, data: new Uint8Array(8) }
 const EN_TEXT = 'Pikachu HP 60 Basic Pokémon Gnaw 10 Weakness Resistance Retreat Cost'
-const JA_TEXT = 'ピカチュウ HP 60 ワザ'
+// Japanese needs Japanese card words, not just kana (pokemonLanguage).
+const JA_TEXT = 'ピカチュウ HP 60 ワザ 相手のバトルポケモンに10ダメージ'
 
 const pkmPrinting = (o: Partial<ScanPrinting>): ScanPrinting => ({
   printingId: 501,

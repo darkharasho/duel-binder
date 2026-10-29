@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest'
 vi.mock('electron', () => ({ nativeImage: {} }))
 
 import type { Bitmap } from '../../src/main/images/cutout'
-import { findWrappers } from '../../src/main/images/packWrappers'
+import { findWrappers } from '../../src/shared/rip/wrappers'
 
 /**
  * A 100×100 transparent canvas with opaque rectangles on it, like the square pack photos.

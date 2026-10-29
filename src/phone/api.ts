@@ -12,6 +12,7 @@ import type {
   UpdateStatus
 } from '../shared/types'
 import type { PhoneStore } from './data/store'
+import { phonePackWrappers } from './packWrappers'
 // Declares __APP_VERSION__.
 import type {} from './globals'
 
@@ -53,8 +54,6 @@ export function createPhoneEvents(): PhoneEvents {
 const NOT_HERE = 'Not in the phone app'
 const notHere = (): Promise<never> => Promise.reject(new Error(NOT_HERE))
 const noUnsubscribe = (): (() => void) => () => {}
-const unavailable = (): Promise<never> => Promise.reject(new Error('Not available on the phone'))
-
 // The phone has no updater; report the quiet state the UI expects, as the web does.
 const UPDATE_IDLE: UpdateStatus = { state: 'idle', mode: 'auto', version: null, error: null }
 
@@ -223,12 +222,8 @@ export function createPhoneApi(deps: {
       onOpenChange: noUnsubscribe
     },
     rip: {
-      sets: unavailable,
-      start: unavailable,
-      openPack: unavailable,
-      session: unavailable,
-      history: unavailable,
-      packWrappers: unavailable
+      ...dataPart('rip'),
+      packWrappers: phonePackWrappers
     },
     stats: dataPart('stats'),
     prices: {

@@ -56,6 +56,17 @@ function AttributeChip({ attribute }: { attribute: string }): React.JSX.Element 
   )
 }
 
+/** The phone's short version of CardInfo, under the card: its rarity, name and code, centred. */
+export function CardCaption({ card }: { card: RipCard }): React.JSX.Element {
+  return (
+    <div className="flex w-full flex-col items-center gap-1.5 text-center">
+      <RarityBadge rarity={card.rarity} />
+      <span className="line-clamp-1 text-lg leading-tight font-bold text-white">{card.name}</span>
+      <span className="text-xs leading-none text-white/55">{card.setCode}</span>
+    </div>
+  )
+}
+
 /**
  * What the front card is: its rarity, name and code at once, then (once its details load) its
  * type line, ATK/DEF and text. Fills the height it's given; the text scrolls inside.

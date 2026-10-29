@@ -21,6 +21,7 @@ import {
 } from '../repo/scan'
 import { getStats, recordSnapshot } from '../repo/stats'
 import { activeOwner, listSyncIssues } from '../cloud/localSync'
+import { openPack, ripHistory, ripSession, ripSets, startRip } from '../repo/rip'
 
 /** The channels whose handlers only need the database, so the phone runs them too. */
 export const DATA_CHANNELS = [
@@ -43,13 +44,24 @@ export const DATA_CHANNELS = [
   'sets:list',
   'sets:checklist',
   'sets:adjust',
-  'account:unsynced'
+  'account:unsynced',
+  'rip:sets',
+  'rip:start',
+  'rip:openPack',
+  'rip:session',
+  'rip:history'
 ] as const
 
 export type DataChannel = (typeof DATA_CHANNELS)[number]
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 type Handler = (...args: any[]) => Promise<unknown>
+
+function wholeNumber(n: unknown, what: string): number {
+  if (typeof n !== 'number' || !Number.isInteger(n))
+    throw new Error(`${what} must be a whole number`)
+  return n
+}
 
 /** How long, and how many, named adds are remembered to answer a repeat. */
 const REPEAT_ADD_MS = 30 * 60_000
@@ -123,6 +135,20 @@ export function createDataHandlers({
       edited(
         snapshotAfter(adjustPrinting(db, setName, checkLanguage(language), printingId, delta))
       ),
-    'account:unsynced': async () => listSyncIssues(db, activeOwner(db))
+    'account:unsynced': async () => listSyncIssues(db, activeOwner(db)),
+    // Rip is never synced, so none of these tell the account service about an edit.
+    'rip:sets': async () => ripSets(db),
+    'rip:start': async (setName: unknown, packCount: unknown) => {
+      if (typeof setName !== 'string') throw new Error('Set name must be a string')
+      return startRip(db, setName, wholeNumber(packCount, 'Pack count'), new Date())
+    },
+    'rip:openPack': async (sessionId: unknown) =>
+      openPack(db, wholeNumber(sessionId, 'Session id')),
+    'rip:session': async (id: unknown) => ripSession(db, wholeNumber(id, 'Session id')),
+    'rip:history': async (opts?: { sessionOffset?: number }) =>
+      ripHistory(db, {
+        sessionOffset:
+          opts?.sessionOffset === undefined ? undefined : wholeNumber(opts.sessionOffset, 'Offset')
+      })
   }
 }

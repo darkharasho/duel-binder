@@ -1,10 +1,11 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import {
   EllipsisIcon,
   HouseIcon,
   LayoutGridIcon,
   LibraryIcon,
+  PackageOpenIcon,
   ScanLineIcon,
   SearchIcon,
   SettingsIcon,
@@ -32,6 +33,9 @@ import { ScannerScreen } from './ScannerScreen'
 import { Settings } from './Settings'
 import { StatusLine } from './StatusLine'
 
+// Loaded on demand, as on the desktop, so Rip stays out of the first load.
+const RipPage = lazy(() => import('@/features/rip/RipPage').then((m) => ({ default: m.RipPage })))
+
 const TABS: { page: Page; label: string; icon: LucideIcon }[] = [
   { page: 'dashboard', label: 'Home', icon: HouseIcon },
   { page: 'collection', label: 'Collection', icon: LibraryIcon },
@@ -40,6 +44,7 @@ const TABS: { page: Page; label: string; icon: LucideIcon }[] = [
 ]
 const MORE: { page: Page; label: string; icon: LucideIcon }[] = [
   { page: 'browse', label: 'Browse', icon: SearchIcon },
+  { page: 'rip', label: 'Rip', icon: PackageOpenIcon },
   { page: 'friends', label: 'Friends', icon: UsersIcon },
   { page: 'settings', label: 'Settings', icon: SettingsIcon }
 ]
@@ -134,7 +139,11 @@ export function PhoneShell({
                   onOpenSettings={() => go('settings')}
                 />
               }
-              rip={null}
+              rip={
+                <Suspense fallback={null}>
+                  <RipPage />
+                </Suspense>
+              }
               settings={<Settings />}
             />
           </MainScrollContext.Provider>

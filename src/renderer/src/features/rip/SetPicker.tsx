@@ -109,7 +109,7 @@ export function SetPicker({ onRip, initialSetName = null }: Props): React.JSX.El
       {shown.length === 0 ? (
         <p className="text-sm text-muted-foreground">No sets match &ldquo;{q}&rdquo;.</p>
       ) : (
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(170px,1fr))] gap-x-5 gap-y-7">
+        <div className="grid grid-cols-[repeat(auto-fill,minmax(170px,1fr))] gap-x-5 gap-y-7 max-md:grid-cols-2 max-md:gap-x-3">
           {shown.map((s) => (
             <button
               key={s.setName}
@@ -147,7 +147,7 @@ export function SetPicker({ onRip, initialSetName = null }: Props): React.JSX.El
       )}
       {selected && (
         <div className="sticky bottom-4 z-10 flex flex-wrap items-center gap-x-6 gap-y-3 rounded-md border border-white/[0.08] bg-card/95 p-4 shadow-[0_8px_30px_rgb(0_0_0/0.6)] backdrop-blur">
-          <div className="min-w-0 flex-1">
+          <div className="min-w-0 flex-1 max-md:basis-full">
             <p className="truncate text-base font-semibold">{selected.setName}</p>
             <p title={selected.layoutLabel} className="text-[13px] text-muted-foreground">
               {selected.packLine}
@@ -202,7 +202,12 @@ export function SetPicker({ onRip, initialSetName = null }: Props): React.JSX.El
               <Plus />
             </Button>
           </div>
-          <Button type="button" disabled={starting} onClick={() => void rip()}>
+          <Button
+            type="button"
+            disabled={starting}
+            onClick={() => void rip()}
+            className="max-md:flex-1"
+          >
             {count === 1 ? 'Rip 1 pack' : `Rip ${count} packs`}
           </Button>
           {error && (

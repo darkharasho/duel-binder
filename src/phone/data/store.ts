@@ -133,7 +133,10 @@ const READ_CHANNELS: ReadonlySet<DataChannel> = new Set<DataChannel>([
   'stats:get',
   'sets:list',
   'sets:checklist',
-  'account:unsynced'
+  'account:unsynced',
+  'rip:sets',
+  'rip:session',
+  'rip:history'
 ])
 
 /**

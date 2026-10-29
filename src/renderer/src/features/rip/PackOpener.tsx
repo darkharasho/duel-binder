@@ -10,9 +10,9 @@ import { cn } from '@/lib/utils'
 import { baseOf, compareRarity } from '../../../../shared/rip/rarity'
 import { tierFor } from '../../../../shared/rip/layouts'
 import type { PackWrappers, RevealTier, RipCard, RipSet } from '../../../../shared/rip/types'
-import { CardInfo, RarityBadge } from './CardInfo'
+import { CardCaption, CardInfo, RarityBadge } from './CardInfo'
 import { HoloCard } from './HoloCard'
-import { STAGE, prefersReducedMotion } from './stage'
+import { PHONE, STAGE, prefersReducedMotion } from './stage'
 import { initialOpener, openerReducer } from './opener'
 import { loadArt } from './loadArt'
 
@@ -45,26 +45,33 @@ const EASE = 'cubic-bezier(.25,.8,.25,1)'
 const PANEL_GAP = 44
 /** The info panel's narrowest; the card moves left of centre rather than squeeze it more. */
 const PANEL_MIN = 280
+/** Under the card on the phone: the gap, the badge and the name and code lines. */
+const CAPTION_H = PHONE ? 84 : 0
 /**
  * The front card's height, from the middle of the stage (a size container), the least of:
  * - its height less room above for the edges (7px a card, four deep) and a hit's scale-up, and
- *   below for the scale-up;
+ *   below for the scale-up (and the phone's caption);
  * - 600px, so a big window doesn't blow the art up past its size;
- * - what leaves room across the width for the 44px gap, the panel and 32px margins each side.
+ * - what leaves room across the width for the 44px gap, the panel and 32px margins each side (on
+ *   the phone, just margins wide enough for the edges and the scale-up).
  */
 // Wrapped in calc() so it's also usable where a bare min() isn't (and jsdom keeps it).
-const CARD_H = `calc(min(100cqh - 58px, 600px, (100cqw - ${PANEL_GAP + 64 + PANEL_MIN}px) * 614 / 421))`
+const CARD_H = PHONE
+  ? `calc(min(100cqh - ${58 + CAPTION_H}px, 600px, (100cqw - 72px) * 614 / 421))`
+  : `calc(min(100cqh - 58px, 600px, (100cqw - ${PANEL_GAP + 64 + PANEL_MIN}px) * 614 / 421))`
 /** Centred in the space left over, but never closer than 32px to the top bar. */
-const CARD_TOP = `calc(max(32px, (100cqh - ${CARD_H}) / 2))`
+const CARD_TOP = `calc(max(32px, (100cqh - ${CARD_H} - ${CAPTION_H}px) / 2))`
 /** Card width from its height (421×614). */
 const CARD_W = `calc(${CARD_H} * 421 / 614)`
 /** The panel takes the room right of the centred card, from 280px to 400px. */
 const PANEL_W = `clamp(${PANEL_MIN}px, 50cqw - ${CARD_W} / 2 - ${PANEL_GAP + 32}px, 400px)`
 /**
  * The card centred, with the panel to its right; where that would push the panel past the 32px
- * margin, the card moves left just enough.
+ * margin, the card moves left just enough. Just centred on the phone.
  */
-const CARD_LEFT = `calc(min(50% - ${CARD_W} / 2, 100% - 32px - ${PANEL_W} - ${PANEL_GAP}px - ${CARD_W}))`
+const CARD_LEFT = PHONE
+  ? `calc(50% - ${CARD_W} / 2)`
+  : `calc(min(50% - ${CARD_W} / 2, 100% - 32px - ${PANEL_W} - ${PANEL_GAP}px - ${CARD_W}))`
 
 /** The big hits' ring of sparkles, flying outward from round the card. */
 const SPARKS = Array.from({ length: 10 }, (_, i) => {
@@ -339,7 +346,7 @@ function SealedPack({
     >
       {phase === 'sealed' && (
         <span className="absolute inset-x-0 -top-7 text-center text-sm font-medium whitespace-nowrap text-white/70 animate-[rip-bob_1600ms_ease-in-out_infinite] motion-reduce:animate-none">
-          Click to tear open
+          {PHONE ? 'Tap to tear open' : 'Click to tear open'}
         </span>
       )}
       <TiltCard maxTilt={8} glareClassName="hidden">
@@ -385,6 +392,7 @@ function handTransform(depth: number, scale: number): string {
 
 /**
  * Beside the front card: what it is (rarity, name, code, type, stats, text), as tall as the card.
+ * Under it on the phone, just the rarity, name and code.
  * Clicks and scrolls in it stay here: they never move the hand on.
  */
 function InfoPanel({ card, outgoing }: { card: RipCard; outgoing?: boolean }): React.JSX.Element {
@@ -393,12 +401,16 @@ function InfoPanel({ card, outgoing }: { card: RipCard; outgoing?: boolean }): R
       data-testid={outgoing ? 'rip-info-out' : 'rip-info'}
       aria-hidden={outgoing || undefined}
       onClick={(e) => e.stopPropagation()}
-      style={{
-        left: `calc(${CARD_LEFT} + ${CARD_W} + ${PANEL_GAP}px)`,
-        top: CARD_TOP,
-        height: CARD_H,
-        width: PANEL_W
-      }}
+      style={
+        PHONE
+          ? { left: 16, right: 16, top: `calc(${CARD_TOP} + ${CARD_H} + 18px)` }
+          : {
+              left: `calc(${CARD_LEFT} + ${CARD_W} + ${PANEL_GAP}px)`,
+              top: CARD_TOP,
+              height: CARD_H,
+              width: PANEL_W
+            }
+      }
       className={cn(
         'absolute flex flex-col justify-center motion-reduce:animate-none',
         outgoing
@@ -406,7 +418,7 @@ function InfoPanel({ card, outgoing }: { card: RipCard; outgoing?: boolean }): R
           : 'cursor-auto animate-[rip-caption_500ms_ease-out_both]'
       )}
     >
-      <CardInfo card={card} />
+      {PHONE ? <CardCaption card={card} /> : <CardInfo card={card} />}
     </div>
   )
 }
@@ -444,8 +456,11 @@ function RowCard({
     )
   }, [flyFromRef, flyKey])
   return (
-    <li data-testid="rip-row-card" className="min-w-0 shrink basis-[66px] last:shrink-0">
-      <div ref={ref} className="w-[60px] origin-top-left">
+    <li
+      data-testid="rip-row-card"
+      className="min-w-0 shrink basis-[66px] last:shrink-0 max-md:basis-[48px]"
+    >
+      <div ref={ref} className="w-[60px] origin-top-left max-md:w-[44px]">
         {/* Just a record of what's been seen: no tilt or hover. */}
         <div className="pointer-events-none rounded-[4px] shadow-[0_6px_14px_rgb(0_0_0/0.5)]">
           <HoloCard card={card} size="full" holo={false} />
@@ -790,12 +805,12 @@ export function PackOpener({
           <span className="font-semibold">
             Pack {packIndex + 1} of {packCount}
           </span>
-          <span className="text-white/55"> · {setName}</span>
+          <span className="text-white/55 max-md:hidden"> · {setName}</span>
         </span>
         <span className="flex min-w-0 items-center gap-4">
           {best && (
             <span data-testid="rip-best" className="flex min-w-0 items-center gap-2 text-white/55">
-              Best so far
+              <span className="shrink-0 max-md:sr-only">Best so far</span>
               <RarityBadge rarity={best.rarity} />
               <span className="truncate text-white">{best.name}</span>
             </span>
@@ -976,12 +991,12 @@ export function PackOpener({
       <div
         data-testid="rip-bottom"
         onClick={(e) => e.stopPropagation()}
-        className="relative z-40 flex h-[112px] shrink-0 items-end gap-6 px-5 pb-3"
+        className="relative z-40 flex h-[112px] shrink-0 items-end gap-6 px-5 pb-3 max-md:h-auto max-md:flex-col max-md:items-stretch max-md:gap-3 max-md:px-4"
       >
         <ol
           aria-label="Seen cards"
           data-testid="rip-row"
-          className="flex min-w-0 flex-1 items-end pt-2"
+          className="flex min-w-0 flex-1 items-end pt-2 max-md:min-h-[72px]"
         >
           {row.map((c) => (
             <RowCard
@@ -992,15 +1007,21 @@ export function PackOpener({
             />
           ))}
         </ol>
-        <div className="flex shrink-0 flex-col items-end gap-2">
-          <span className="text-xs text-white/55">
-            {phase === 'end'
-              ? `That's the pack. Click for ${lastPack ? 'your summary' : 'the next one'}`
-              : phase === 'hand'
-                ? 'Click, Space or swipe to send the front card down'
-                : 'Click or press Space to tear the pack open'}
+        <div className="flex shrink-0 flex-col items-end gap-2 max-md:items-stretch">
+          <span className="text-xs text-white/55 max-md:text-center">
+            {PHONE
+              ? phase === 'end'
+                ? `That's the pack. Tap for ${lastPack ? 'your summary' : 'the next one'}`
+                : phase === 'hand'
+                  ? 'Tap or swipe to send the front card down'
+                  : 'Tap to tear the pack open'
+              : phase === 'end'
+                ? `That's the pack. Click for ${lastPack ? 'your summary' : 'the next one'}`
+                : phase === 'hand'
+                  ? 'Click, Space or swipe to send the front card down'
+                  : 'Click or press Space to tear the pack open'}
           </span>
-          <div className="flex gap-2">
+          <div className="flex gap-2 max-md:*:flex-1">
             <Button
               variant="outline"
               disabled={

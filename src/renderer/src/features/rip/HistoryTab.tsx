@@ -21,7 +21,7 @@ const formatSessionDate = (iso: string): string => {
 
 function Stat({ label, value }: { label: string; value: number }): React.JSX.Element {
   return (
-    <div className="rounded-lg border bg-muted/30 px-4 py-3">
+    <div className="rounded-lg border bg-muted/30 px-4 py-3 max-sm:px-3 max-sm:py-2.5">
       <div className="text-2xl font-semibold tabular-nums">{value.toLocaleString()}</div>
       <div className="text-xs text-muted-foreground">{label}</div>
     </div>
@@ -113,7 +113,7 @@ export function HistoryTab(): React.JSX.Element {
 
   return (
     <div className="flex flex-col gap-6">
-      <div className="grid grid-cols-3 gap-3 max-sm:grid-cols-1">
+      <div className="grid grid-cols-3 gap-3 max-sm:gap-2">
         <Stat label="Packs opened" value={first.packsOpened} />
         <Stat label="Cards pulled" value={first.cardsPulled} />
         <Stat label="Sets ripped" value={first.setsRipped} />
@@ -122,9 +122,9 @@ export function HistoryTab(): React.JSX.Element {
       {first.bestPulls.length > 0 && (
         <section>
           <h2 className="mb-2 text-sm font-semibold">Best pulls ever</h2>
-          <div className="flex flex-wrap gap-3">
+          <div className="flex flex-wrap gap-3 max-sm:grid max-sm:grid-cols-3">
             {first.bestPulls.map((c, i) => (
-              <div key={`${c.pkey}-${i}`} className="w-28">
+              <div key={`${c.pkey}-${i}`} className="w-28 max-sm:w-auto max-sm:min-w-0">
                 <HoloCard card={c} size="small" />
                 <p className="mt-1 truncate text-xs">{c.name}</p>
                 <p className="truncate text-xs text-muted-foreground">{c.rarity}</p>

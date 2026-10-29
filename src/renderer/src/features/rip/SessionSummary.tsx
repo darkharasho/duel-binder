@@ -1,13 +1,16 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { rarityColor } from '@/lib/rarityColors'
 import { cn } from '@/lib/utils'
 import { baseOf, compareRarity } from '../../../../shared/rip/rarity'
 import { tierFor } from '../../../../shared/rip/layouts'
 import type { RevealTier, RipCard, RipSessionDetail } from '../../../../shared/rip/types'
-import { CardInfo, RarityBadge } from './CardInfo'
+import { CardCaption, CardInfo, RarityBadge } from './CardInfo'
 import { HoloCard } from './HoloCard'
-import { prefersReducedMotion } from './stage'
+import { PHONE, prefersReducedMotion } from './stage'
+
+/** How far a drag must go to step to the next card (the phone). */
+const SWIPE_PX = 50
 
 const shortRarity = (rarity: string): string => baseOf(rarity).replace(/ Rare$/, '')
 
@@ -57,7 +60,10 @@ export function rankedHits(packs: RipCard[][]): Pull[] {
  * height less room for its tilt; 380px (about 260 wide); and what leaves room beside it for the
  * gap, the info and margins.
  */
-const HERO_H = 'calc(min(100cqh - 56px, 380px, (100cqw - 56px - 300px - 64px) * 614 / 421))'
+const HERO_H = PHONE
+  ? // Beside a narrower block of text, so the whole summary still fits on the screen.
+    'calc(min(100cqh - 24px, 380px, (100cqw - 32px - 16px - 170px) * 614 / 421))'
+  : 'calc(min(100cqh - 56px, 380px, (100cqw - 56px - 300px - 64px) * 614 / 421))'
 const HERO_W = `calc(${HERO_H} * 421 / 614)`
 /** The card's landing (rip-hero-land); the kicker stamps and the sparkles fly as it ends. */
 const LAND_MS = 900
@@ -94,7 +100,10 @@ function Hero({
     <div
       data-testid="rip-summary-hero"
       data-tier={tier}
-      className="flex size-full items-center justify-center gap-14 px-8"
+      className={cn(
+        'flex size-full items-center justify-center',
+        PHONE ? 'gap-4 px-4' : 'gap-14 px-8'
+      )}
     >
       <div className="relative shrink-0" style={{ height: HERO_H, width: HERO_W }}>
         {rays && (
@@ -176,7 +185,12 @@ function Hero({
           ))}
       </div>
 
-      <div className="flex max-w-[400px] min-w-[240px] flex-1 flex-col items-start gap-3">
+      <div
+        className={cn(
+          'flex max-w-[400px] flex-1 flex-col items-start',
+          PHONE ? 'min-w-[170px] gap-2' : 'min-w-[240px] gap-3'
+        )}
+      >
         <span
           style={{ color, animationDelay: `${LAND_MS - 100}ms` }}
           className={cn(
@@ -190,7 +204,10 @@ function Hero({
         <RarityBadge rarity={card.rarity} className={cn(tier === 'huge' && 'px-3 py-1 text-sm')} />
         <h3
           data-testid="rip-summary-hero-name"
-          className="line-clamp-3 text-[34px] leading-[1.1] font-bold tracking-tight text-white"
+          className={cn(
+            'line-clamp-3 leading-[1.1] font-bold tracking-tight text-white',
+            PHONE ? 'text-xl' : 'text-[34px]'
+          )}
         >
           {card.name}
         </h3>
@@ -226,12 +243,16 @@ function Hero({
 }
 
 /** The focused card's height, from the overlay (a size container), like the opener's front card. */
-const FOCUS_H = 'calc(min(100cqh - 64px, 600px, (100cqw - 64px - 44px - 300px) * 614 / 421))'
+const FOCUS_H = PHONE
+  ? // The caption goes under it on the phone.
+    'calc(min(100cqh - 160px, 600px, (100cqw - 48px) * 614 / 421))'
+  : 'calc(min(100cqh - 64px, 600px, (100cqw - 64px - 44px - 300px) * 614 / 421))'
 const FOCUS_W = `calc(${FOCUS_H} * 421 / 614)`
 
 /**
  * One card, large, with what it is beside it, over the summary. A click outside it, Escape or the
- * close button puts it away; the arrow keys step through the session's cards.
+ * close button puts it away; the arrow keys step through the session's cards. On the phone the
+ * caption goes under the card, and a swipe steps.
  */
 function Focus({
   card,
@@ -255,17 +276,40 @@ function Focus({
   }, [onClose, onStep])
   const color = rarityColor(baseOf(card.rarity))
   const tier = tierFor(card.rarity, card.setCode)
+  const swipe = useRef<number | null>(null)
+  const swiped = useRef(false)
   return (
     <div
       role="dialog"
       aria-modal="true"
       aria-label={card.name}
       data-testid="rip-summary-focus"
+      onPointerDown={(e) => {
+        swipe.current = e.clientX
+        swiped.current = false
+      }}
+      onPointerUp={(e) => {
+        const from = swipe.current
+        swipe.current = null
+        if (!PHONE || from === null || Math.abs(e.clientX - from) < SWIPE_PX) return
+        swiped.current = true
+        onStep(e.clientX < from ? 1 : -1)
+      }}
+      onClickCapture={(e) => {
+        // A swipe isn't a tap as well.
+        if (swiped.current) e.stopPropagation()
+        swiped.current = false
+      }}
       onClick={onClose}
       className="absolute inset-0 z-50 rounded-xl bg-black/75 backdrop-blur-sm duration-200 animate-in fade-in-0 motion-reduce:animate-none"
     >
       <div style={{ containerType: 'size' }} className="absolute inset-0">
-        <div className="flex size-full items-center justify-center gap-11 px-8">
+        <div
+          className={cn(
+            'flex size-full items-center justify-center',
+            PHONE ? 'flex-col gap-5 px-4' : 'gap-11 px-8'
+          )}
+        >
           <div
             key={`${card.pkey}-${card.slot}`}
             onClick={(e) => e.stopPropagation()}
@@ -285,13 +329,19 @@ function Focus({
               }
             />
           </div>
-          <div
-            onClick={(e) => e.stopPropagation()}
-            style={{ height: FOCUS_H }}
-            className="flex w-[300px] shrink-0 flex-col justify-center"
-          >
-            <CardInfo card={card} />
-          </div>
+          {PHONE ? (
+            <div onClick={(e) => e.stopPropagation()} className="w-full">
+              <CardCaption card={card} />
+            </div>
+          ) : (
+            <div
+              onClick={(e) => e.stopPropagation()}
+              style={{ height: FOCUS_H }}
+              className="flex w-[300px] shrink-0 flex-col justify-center"
+            >
+              <CardInfo card={card} />
+            </div>
+          )}
         </div>
       </div>
       <Button
@@ -462,7 +512,7 @@ export function SessionSummary({
         {focused && <Focus card={focused} onClose={() => setFocused(null)} onStep={step} />}
       </div>
 
-      <div className="flex shrink-0 flex-wrap justify-end gap-2">
+      <div className="flex shrink-0 flex-wrap justify-end gap-2 max-md:*:flex-1">
         <Button variant="ghost" aria-expanded={showAll} onClick={() => setShowAll((v) => !v)}>
           {showAll ? 'Hide cards' : 'See all cards'}
         </Button>

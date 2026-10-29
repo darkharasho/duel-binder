@@ -180,6 +180,19 @@ test('one failure among two lookups still updates the other', async () => {
   expect(getMeta(db, 'price_service_status')).toBe('ok')
 })
 
+test('a lookup that finds nothing keeps an existing price and stamps checked_at', async () => {
+  const a = owned('LB-05', 'ja')
+  db.prepare('INSERT INTO intl_prices (printing_id, price, listing_count, checked_at) VALUES (?, 4, 5, ?)').run(a, ago(8))
+  const { client } = fakeClient(async () => ({ price: null, listingCount: 0, checkedAt: ago(0) }))
+  await expect(refreshIntlPrices(db, client, { now: NOW })).resolves.toEqual({ updated: 1, failed: 0, remaining: 0 })
+  expect(row(a)).toMatchObject({ price: 4, listing_count: 5, checked_at: ago(0) })
+  expect(needsPrice(db, a, NOW)).toBe(false)
+  // A real price still replaces it.
+  db.prepare('UPDATE intl_prices SET checked_at = ? WHERE printing_id = ?').run(ago(8), a)
+  await refreshIntlPrices(db, fakeClient().client, { now: NOW })
+  expect(row(a)).toMatchObject({ price: 9, listing_count: 2 })
+})
+
 test('every lookup failing sets the status to unavailable', async () => {
   owned('LB-05', 'ja')
   const { client } = fakeClient(async () => {

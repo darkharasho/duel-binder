@@ -16,6 +16,7 @@ import { SWEEP_BATCH } from '../../workers/portal/src/sweep'
 import { PriceUnavailableError, type PriceClient, type PriceQuery } from '../../src/main/prices/client'
 import { addEntry, removeEntry } from '../../src/main/repo/collection'
 import { getMeta } from '../../src/main/db/meta'
+import { refreshIntlPrices } from '../../src/main/prices/refresh'
 import { userScope } from '../../workers/portal/src/scope'
 import { addUser, memoryBucket, noPrintingArt, seededServerDb } from './helpers'
 
@@ -144,6 +145,18 @@ describe('server eBay prices', () => {
     expect(lookup.mock.calls[0][0]).toMatchObject({ code: p2.code })
     expect(price(p1.id)).toEqual({ price: 1, checked_at: ago(3) })
     expect(price(p2.id)?.price).toBe(7.5)
+  })
+
+  it('a per-card "nothing found" keeps the price and does not bump price_seq', async () => {
+    own(alice, p1)
+    db.prepare('INSERT INTO intl_prices (printing_id, price, listing_count, checked_at) VALUES (?, 4, 5, ?)').run(p1.id, ago(8))
+    type Row = { price: number | null; listing_count: number; checked_at: string; price_seq: number }
+    const seq = (): Row =>
+      db.prepare('SELECT price, listing_count, checked_at, price_seq FROM intl_prices WHERE printing_id = ?').get(p1.id) as Row
+    const before = seq().price_seq
+    const { client } = fakeClient(async () => ({ price: null, listingCount: 0, checkedAt: NOW.toISOString() }))
+    await refreshIntlPrices(db, client, { now: NOW })
+    expect(seq()).toEqual({ price: 4, listing_count: 5, checked_at: NOW.toISOString(), price_seq: before })
   })
 
   it('a failing price Worker re-arms in an hour and never throws', async () => {

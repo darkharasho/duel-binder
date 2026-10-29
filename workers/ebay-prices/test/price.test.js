@@ -134,6 +134,23 @@ describe('namesLongerRarity', () => {
     expect(namesLongerRarity('SDK-001 Ultra Rare', 'Rare')).toBe(true)
     expect(namesLongerRarity('SDK-001 Ultra Parallel Rare', 'Ultra Rare')).toBe(true)
   })
+  it.each([
+    ['Gold Secret Rare', 'Secret Rare'],
+    ['Ultra Secret Rare', 'Secret Rare'],
+    ['20th Secret Rare', 'Secret Rare'],
+    ['Secret Parallel Rare', 'Secret Rare'],
+    ['Super Parallel Rare', 'Super Rare'],
+    ['Extra Secret Parallel Rare', 'Secret Parallel Rare'],
+    ['Millennium Super Rare', 'Super Rare'],
+    ['Millennium Ultra Rare', 'Ultra Rare'],
+    ['Premium Gold Rare', 'Gold Rare'],
+    ['Holographic Rare', 'Rare'],
+    ['Duel Terminal Ultra Parallel Rare', 'Ultra Parallel Rare']
+  ])('flags %s for a %s', (longer, rarity) => {
+    expect(namesLongerRarity(`RC04-JP067 Dragon ${longer}`, rarity)).toBe(true)
+    expect(namesLongerRarity(`RC04-JP067 Dragon ${longer}`, longer)).toBe(false)
+    expect(namesOtherRarity(`RC04-JP067 Dragon ${longer}`, longer)).toBe(false)
+  })
   it('allows the same rarity or an unrelated one', () => {
     expect(namesLongerRarity(qc, '')).toBe(false)
     expect(namesLongerRarity(qc, 'Quarter Century Secret Rare')).toBe(false)

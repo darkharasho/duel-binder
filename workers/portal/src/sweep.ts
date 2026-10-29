@@ -116,7 +116,7 @@ export function refreshSweepQueue(db: SqlDb, now: Date): number {
       const ownedKeys = new Set<string>()
       const keys = new Map<string, string | null>()
       for (const r of codes.all(language) as { set_name: string; set_code: string; owned: number }[]) {
-        const key = sweepKey(r.set_code)
+        const key = sweepKey(r.set_code).toUpperCase()
         if (!key) continue
         if (r.owned) ownedKeys.add(key)
         const d = released.get(r.set_name) ?? null
@@ -137,7 +137,8 @@ export function refreshSweepQueue(db: SqlDb, now: Date): number {
  * A prefix's printings. The unary plus keeps the planner off idx_printings_lang_set (which, with no
  * ANALYZE stats, reads the whole language) and on the NOCASE set-code index that LIKE can use.
  */
-export const ASSIGN_PRINTINGS_SQL = `SELECT p.id AS id, p.set_code AS code, p.set_rarity AS rarity, ip.checked_at AS checkedAt
+export const ASSIGN_PRINTINGS_SQL = `SELECT p.id AS id, p.set_code AS code, p.set_rarity AS rarity, ip.checked_at AS checkedAt,
+    ip.price AS price
   FROM card_printings p LEFT JOIN intl_prices ip ON ip.printing_id = p.id
   WHERE +p.language = ? AND p.set_code LIKE ?`
 
@@ -145,7 +146,8 @@ export const ASSIGN_PRINTINGS_SQL = `SELECT p.id AS id, p.set_code AS code, p.se
  * Writes a prefix's sweep result onto its printings. A one-printing code takes its rarity price when
  * that has 2+ listings (`all` runs high when other variants leak in), else `all`; a code with several
  * printings takes only the price named for its rarity. Thin or missing prices are not written, and a
- * row checked since the previous sweep (a per-card price) is left alone. Never deletes.
+ * priced row checked since the previous sweep (a per-card price) is left alone; a per-card "nothing
+ * found" row is filled. Never deletes.
  */
 export function assignSweep(
   db: SqlDb,
@@ -163,7 +165,13 @@ export function assignSweep(
   const rows = (
     db
       .prepare(ASSIGN_PRINTINGS_SQL)
-      .all(language, `${key}%`) as { id: number; code: string; rarity: string; checkedAt: string | null }[]
+      .all(language, `${key}%`) as {
+        id: number
+        code: string
+        rarity: string
+        checkedAt: string | null
+        price: number | null
+      }[]
   ).filter((r) => sweepKey(r.code).toUpperCase() === key.toUpperCase())
 
   const perCode = new Map<string, number>()
@@ -187,7 +195,7 @@ export function assignSweep(
         if (perCode.get(r.code.toUpperCase()) === 1) entry = usable(byRarity) ? byRarity : code.all
         else entry = byRarity
       }
-      if (!usable(entry) || (r.checkedAt !== null && r.checkedAt > fresherThan)) {
+      if (!usable(entry) || (r.price !== null && r.checkedAt !== null && r.checkedAt > fresherThan)) {
         skipped++
         continue
       }
@@ -249,8 +257,10 @@ export async function runSweep(
   let limited = false
   for (const { key, language } of batch) {
     if (used >= SWEEP_DAILY_CALLS) break
+    let searched = false
     try {
       const result = await client.set(key, language)
+      searched = true
       // Spent as soon as the search returned, even if writing it fails.
       const spent = result.calls ?? 1
       used += spent
@@ -264,6 +274,8 @@ export async function runSweep(
         break
       }
       console.error('Set sweep failed', key, language, e instanceof Error ? e.message : '')
+      // A failed search may still have spent a Browse call; count one (already counted if it returned).
+      if (!searched) used += 1
       // Back off: due again in about a day, so a permanent failure can't hold the head of the queue.
       db.prepare(
         'UPDATE price_sweeps SET swept_at = ? WHERE key = ? AND language = ?'

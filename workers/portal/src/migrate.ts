@@ -281,7 +281,7 @@ UPDATE intl_prices SET price_seq = c.base + x.rn FROM (SELECT rowid AS r, row_nu
 UPDATE catalog_clock SET seq = seq + (SELECT count(*) FROM intl_prices);
 CREATE INDEX ix_intl_prices_seq ON intl_prices(price_seq);
 CREATE TRIGGER trg_intl_prices_seq_ins AFTER INSERT ON intl_prices BEGIN UPDATE catalog_clock SET seq = seq + 1; UPDATE intl_prices SET price_seq = (SELECT seq FROM catalog_clock) WHERE rowid = NEW.rowid; END;
-CREATE TRIGGER trg_intl_prices_seq_upd AFTER UPDATE ON intl_prices WHEN NEW.price IS NOT OLD.price OR NEW.listing_count IS NOT OLD.listing_count BEGIN UPDATE catalog_clock SET seq = seq + 1; UPDATE intl_prices SET price_seq = (SELECT seq FROM catalog_clock) WHERE rowid = NEW.rowid; END;`
+CREATE TRIGGER trg_intl_prices_seq_upd AFTER UPDATE ON intl_prices WHEN NEW.price IS NOT OLD.price BEGIN UPDATE catalog_clock SET seq = seq + 1; UPDATE intl_prices SET price_seq = (SELECT seq FROM catalog_clock) WHERE rowid = NEW.rowid; END;`
   }
 ]
 

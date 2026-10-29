@@ -62,6 +62,60 @@ describe('parseListing', () => {
     expect(parseListing('RC04-JP021 Short Print', 'RC04-JP').rarity).toBe('Short Print')
   })
 
+  it.each([
+    'Secret Parallel Rare',
+    'Super Parallel Rare',
+    'Extra Secret Parallel Rare',
+    '20th Secret Rare',
+    '10000 Secret Rare',
+    'Gold Secret Rare',
+    'Ultra Secret Rare',
+    'Millennium Super Rare',
+    'Millennium Ultra Rare',
+    'Millennium Gold Rare',
+    'Millennium Secret Rare',
+    'Premium Gold Rare',
+    'Holographic Rare',
+    'Holographic Parallel Rare',
+    'Kaiba Corporation Ultra Rare',
+    'Kaiba Corporation Common',
+    'Duel Terminal Normal Parallel Rare',
+    'Duel Terminal Normal Rare Parallel Rare',
+    'Duel Terminal Rare Parallel Rare',
+    'Duel Terminal Secret Parallel Rare',
+    'Duel Terminal Super Parallel Rare',
+    'Duel Terminal Ultra Parallel Rare'
+  ])('reads %s as itself, not an inner alias', (rarity) => {
+    expect(parseListing(`Yugioh CORI-JP001 Dragon ${rarity} Japanese NM`, 'CORI-JP').rarity).toBe(
+      rarity
+    )
+  })
+
+  it('reads catalog art-variant rarities whole', () => {
+    expect(parseListing('CORI-JP001 Secret Rare (Alternate art)', 'CORI-JP').rarity).toBe(
+      'Secret Rare (Alternate art)'
+    )
+  })
+
+  it('never reads a condition M as Millennium Rare', () => {
+    expect(parseListing('CORI-JP001 Dragon Mint (M) Japanese', 'CORI-JP').rarity).toBeNull()
+    expect(parseListing('CORI-JP001 Dragon M/NM Japanese', 'CORI-JP').rarity).toBeNull()
+    expect(parseListing('CORI-JP001 Dragon UR M/NM', 'CORI-JP').rarity).toBe('Ultra Rare')
+    expect(parseListing('CORI-JP001 Dragon Millennium Rare', 'CORI-JP').rarity).toBe(
+      'Millennium Rare'
+    )
+  })
+
+  it('reads 25th only next to Secret', () => {
+    expect(parseListing('RC04-JP001 25th Anniversary Dragon', 'RC04-JP').rarity).toBeNull()
+    expect(parseListing('RC04-JP001 Dragon 25th Secret', 'RC04-JP').rarity).toBe(
+      'Quarter Century Secret Rare'
+    )
+    expect(parseListing('RC04-JP001 Dragon 25th Secret Rare', 'RC04-JP').rarity).toBe(
+      'Quarter Century Secret Rare'
+    )
+  })
+
   it('gives a null code when the key is absent', () => {
     expect(parseListing('Blue-Eyes White Dragon', 'CORI-JP')).toEqual({ code: null, rarity: null })
   })

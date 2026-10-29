@@ -103,6 +103,12 @@ describe('set sweep', () => {
       expect(refreshSweepQueue(db, new Date(NOW.getTime() + DAY))).toBe(2)
       expect(sweepRow('CORI-JP').swept_at).toBe(ago(1))
     })
+    it('upper-cases keys so a lower-case code joins its prefix', () => {
+      printing('lc', 'cori-jp003', 'Common', 'ja', 'Cori')
+      refreshSweepQueue(db, NOW)
+      const keys = (db.prepare(`SELECT key FROM price_sweeps WHERE language = 'ja' ORDER BY key`).all() as { key: string }[]).map((r) => r.key)
+      expect(keys).toEqual(['CORI-JP', 'LODT-JP'])
+    })
   })
 
   describe('assignSweep', () => {
@@ -184,6 +190,22 @@ describe('set sweep', () => {
       expect(out).toEqual({ priced: 1, skipped: 2 })
     })
 
+    it('fills a per-card "nothing found" row checked after the last sweep', () => {
+      seedQueue('CORI-JP', { swept: ago(7) })
+      db.prepare(`INSERT INTO intl_prices (printing_id, price, listing_count, checked_at) VALUES (?, NULL, 0, ?)`).run(ids.c2, ago(2))
+      const out = assignSweep(db, 'CORI-JP', 'ja', result({ 'CORI-JP002': { all: entry(1.5), byRarity: {} } }), NOW)
+      expect(row('c2')).toMatchObject({ price: 1.5, listing_count: 3, checked_at: NOW.toISOString() })
+      // Only the CORI-JP001 printings (no result) are skipped.
+      expect(out).toEqual({ priced: 1, skipped: 2 })
+    })
+
+    it('a never-swept prefix fills a recent per-card "nothing found" row', () => {
+      seedQueue('CORI-JP')
+      db.prepare(`INSERT INTO intl_prices (printing_id, price, listing_count, checked_at) VALUES (?, NULL, 0, ?)`).run(ids.c2, ago(1))
+      assignSweep(db, 'CORI-JP', 'ja', result({ 'CORI-JP002': { all: entry(1.5), byRarity: {} } }), NOW)
+      expect(row('c2')).toMatchObject({ price: 1.5, checked_at: NOW.toISOString() })
+    })
+
     it('never erases', () => {
       seedQueue('CORI-JP')
       db.prepare(`INSERT INTO intl_prices (printing_id, price, listing_count, checked_at) VALUES (?, 4, 5, ?)`).run(ids.ur, ago(30))
@@ -202,6 +224,15 @@ describe('set sweep', () => {
       expect(row('c2')).toMatchObject({ price_seq: first.price_seq, checked_at: NOW.toISOString() })
       assignSweep(db, 'CORI-JP', 'ja', result(codes(6), new Date(NOW.getTime() + 1000).toISOString()), NOW)
       expect(row('c2')!.price_seq).toBeGreaterThan(first.price_seq)
+    })
+
+    it('a listing_count-only change does not bump price_seq', () => {
+      db.prepare(`INSERT INTO intl_prices (printing_id, price, listing_count, checked_at) VALUES (?, 4, 5, ?)`).run(ids.c2, ago(2))
+      const seq = row('c2')!.price_seq
+      db.prepare('UPDATE intl_prices SET listing_count = 9 WHERE printing_id = ?').run(ids.c2)
+      expect(row('c2')).toMatchObject({ listing_count: 9, price_seq: seq })
+      db.prepare('UPDATE intl_prices SET price = 5 WHERE printing_id = ?').run(ids.c2)
+      expect(row('c2')!.price_seq).toBeGreaterThan(seq)
     })
 
     it('a sweep never makes its own rows look like fresher per-card prices', () => {
@@ -302,6 +333,16 @@ describe('set sweep', () => {
       expect(set).toHaveBeenCalledTimes(2)
       expect(out.more).toBe(false)
       expect(Number(getMeta(db, 'sweep_calls_day')!.split(':')[1])).toBe(SWEEP_DAILY_CALLS + 1)
+    })
+
+    it('a failed set search still counts one call against the day', async () => {
+      refreshSweepQueue(db, NOW)
+      const { client } = fakeClient(4000, async (k) => {
+        if (k === 'LODT-JP') throw new Error('400')
+        return result({}, NOW.toISOString(), 2)
+      })
+      await runSweep(db, client, NOW)
+      expect(getMeta(db, 'sweep_calls_day')).toBe('2026-10-28:3')
     })
 
     it('a failing prefix backs off and does not block the next one on the following run', async () => {

@@ -1,5 +1,6 @@
 import { latinLanguageOf } from './language'
 import {
+  LANGUAGE_MIN_JA_WORDS,
   LANGUAGE_MIN_LATIN_CHARS,
   LANGUAGE_MIN_SCRIPT_CHARS,
   LANGUAGE_MIN_WORDS
@@ -25,6 +26,33 @@ const ENGLISH = new Set(
   )
 )
 
+/**
+ * Words of Japanese Pokémon card text, written in kana as Chinese never is, three kana or more so
+ * the Japanese model's kana-like noise doesn't make them by chance. Kept as japaneseWords
+ * compares them: without dakuten, which a blurred read drops (ダメージ as タメーシ).
+ */
+const JAPANESE =
+  'ポケモン ダメージ エネルギー トラッシュ コイン オモテ バトル ベンチ にげる グッズ サポート スタジアム ターン カード こんらん ねむり やけど'
+    .split(' ')
+    .map((w) => plainKana(w))
+
+/** Kana without dakuten and handakuten, and a kanji one read for the long-vowel mark as that mark. */
+function plainKana(text: string): string {
+  return text
+    .normalize('NFD')
+    .replace(/[\u3099\u309a]/gu, '')
+    .normalize('NFC')
+    .replace(/一/gu, 'ー')
+}
+
+/** The Japanese Pokémon card words in a read, counted as often as they come; spaces left out. */
+function japaneseWords(text: string): number {
+  const plain = plainKana(text.replace(/\s+/gu, ''))
+  let n = 0
+  for (const w of JAPANESE) n += plain.split(w).length - 1
+  return n
+}
+
 /** The English Pokémon card words in a read, counted as often as they come. */
 const englishWords = (text: string): number =>
   (text.toLowerCase().match(/[a-z']+/g) ?? []).filter((w) => ENGLISH.has(w)).length
@@ -33,7 +61,8 @@ const englishWords = (text: string): number =>
  * The language a read of a Pokémon card's text is in, of those the catalog has.
  *
  * - `ja`: LANGUAGE_MIN_SCRIPT_CHARS of kana (not counting katakana that look like kanji), at
- *   least a quarter of the CJK text, which is most of the letters. Chinese has no kana.
+ *   least a quarter of the CJK text, which is most of the letters, with LANGUAGE_MIN_JA_WORDS
+ *   Japanese card words in it (kana alone may be noise; null then). Chinese has no kana.
  * - `other`: any other CJK or Hangul text that much, and a Latin language whose common words
  *   say it isn't English.
  * - `en`: LANGUAGE_MIN_LATIN_CHARS of mostly Latin letters, with English words in them
@@ -48,7 +77,7 @@ export function pokemonLanguage(text: string): 'en' | 'ja' | 'other' | null {
   const hangul = count((c) => HANGUL.test(c))
   const latin = count((c) => LATIN.test(c))
   if (kana >= LANGUAGE_MIN_SCRIPT_CHARS && !hangul && kana * 4 >= cjk && cjk * 2 > letters.length)
-    return 'ja'
+    return japaneseWords(text) >= LANGUAGE_MIN_JA_WORDS ? 'ja' : null
   if (cjk + hangul >= LANGUAGE_MIN_SCRIPT_CHARS) return 'other'
   if (latin < LANGUAGE_MIN_LATIN_CHARS || latin * 2 <= letters.length) return null
   const words = latinLanguageOf(text)

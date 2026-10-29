@@ -3,7 +3,11 @@ import { pokemonLanguage, pokemonLanguageOfReads } from '../../src/shared/scan/p
 
 describe('pokemonLanguage', () => {
   it.each([
-    ['ピカチュウ HP 60 ワザ', 'ja'],
+    // Kana alone may be what the Japanese model makes of noise: Japanese card words are needed.
+    ['ピカチュウ HP 60 ワザ', null],
+    ['ピカチュウ HP 60 ワザ 相手のバトルポケモンに10ダメージ', 'ja'],
+    // As a blurred read gives them: without dakuten, spaced out, a dash read as 一.
+    ['ヒ カ チ ュ ウ HP 60 相手 の ハ ト ル ホ ケ モ ン に 10 タ メ 一 シ', 'ja'],
     ['皮卡丘 HP 60 招式', 'other'],
     ['피카츄 HP 60 기술 전기', 'other'],
     // No English word in it to go on, so not told (fix round 1: English needs positive evidence).
@@ -51,7 +55,7 @@ describe('pokemonLanguage', () => {
 
 describe('pokemonLanguageOfReads', () => {
   const EN = 'Pikachu HP 60 Basic Pokémon Gnaw 10 Weakness Resistance Retreat Cost'
-  const JA = 'ピカチュウ HP 60 ワザ'
+  const JA = 'ピカチュウ HP 60 ワザ 相手のバトルポケモンに10ダメージ'
   const ZH = '皮卡丘 HP 60 招式'
   const FR =
     'Si cette carte est dans votre main, vous pouvez la mettre sur le terrain de votre adversaire.'
@@ -94,6 +98,18 @@ describe('pokemonLanguageOfReads', () => {
 
   it('takes the Japanese model reading English text, with stray kana, for no other script', () => {
     expect(pokemonLanguageOfReads({ jpn: BRONZONG_JPN, eng: BRONZONG_ENG })).toBe('en')
+  })
+
+  it('does not take kana the Japanese model makes of a noisy text box for Japanese', () => {
+    // An English card with one attack (Mankey, Low Kick) on a mottled box: both models read noise.
+    const mankey = {
+      eng: '- Rs\n3 Rk -\n5 o ws\nXt . 3 - ot\na ¥ sN xu 8 ST\na ~',
+      jpn: '$ 0 。 庄 凍\n* 3 : で っ 補\nビラ * 生 胃 』\n】 owa テ 20\n所 < 。 . る を 、\n了 区 可 ュ 4 。\n用 ( a: 学 。 例 メ\n誠二'
+    }
+    // A Chinese card (Probopass), its small text blurred past reading.
+    const probopass = { eng: '- Rg J\nB 5\n0 NN\nhaa J 1', jpn: '島 か\nリャ て 16\nし 。 人 間 |' }
+    expect(pokemonLanguageOfReads(mankey)).toBeNull()
+    expect(pokemonLanguageOfReads(probopass)).toBeNull()
   })
 
   it('still takes a mostly Latin Japanese-model read in a European language for other', () => {

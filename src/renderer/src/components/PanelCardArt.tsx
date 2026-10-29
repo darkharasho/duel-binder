@@ -58,14 +58,21 @@ export function PanelCardArt({
 }: PanelCardArtProps): React.JSX.Element {
   usePanelNavKeys(nav)
   useSwipeNav(nav)
-  // The phone steps by swiping across the card (CardSheet), so its arrows are only for
-  // screen readers; the large layout leaves them to the small one there.
+  // The phone steps by swiping across the card (CardSheet), so its arrows are one pair for
+  // screen readers only, outside both layouts so they exist at every width; the layouts
+  // show arrows on desktop alone.
   const phone = isPhone()
   const arrows = phone ? undefined : nav
   return (
     <>
+      {phone && nav && (
+        <>
+          <NavArrow dir="prev" step={nav.prev} srOnly />
+          <NavArrow dir="next" step={nav.next} srOnly />
+        </>
+      )}
       <div className="flex items-center justify-center gap-3 min-[900px]:hidden">
-        {nav && <NavArrow dir="prev" step={nav.prev} srOnly={phone} />}
+        {arrows && <NavArrow dir="prev" step={arrows.prev} />}
         <TiltCard className="w-48">
           <CardArt
             imageId={imageId}
@@ -75,7 +82,7 @@ export function PanelCardArt({
             className="w-full"
           />
         </TiltCard>
-        {nav && <NavArrow dir="next" step={nav.next} srOnly={phone} />}
+        {arrows && <NavArrow dir="next" step={arrows.next} />}
       </div>
       {/* Portalled out of the sliding panel so it isn't moved by the panel's transform. */}
       <SheetPortal>

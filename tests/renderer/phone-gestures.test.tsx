@@ -108,8 +108,12 @@ describe('phone card swipes', () => {
   it('keeps the arrows on the phone for screen readers only', () => {
     const nav = { prev: vi.fn(), next: vi.fn() }
     renderSheet('phone', nav)
+    // Exactly one pair, outside both layouts, so it's there at every width and announced once.
+    expect(screen.getAllByRole('button', { name: 'Next card' })).toHaveLength(1)
+    expect(screen.getAllByRole('button', { name: 'Previous card' })).toHaveLength(1)
     const next = screen.getByRole('button', { name: 'Next card' })
     const prev = screen.getByRole('button', { name: 'Previous card' })
+    expect(next.closest('.min-\\[900px\\]\\:hidden, .min-\\[900px\\]\\:flex')).toBeNull()
     expect(next).toHaveClass('sr-only')
     expect(prev).toHaveClass('sr-only')
     fireEvent.click(next)

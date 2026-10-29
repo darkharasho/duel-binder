@@ -3,7 +3,14 @@ import { KONAMI_LOGO_PREFIX, PACK_ART_PREFIX, YUGIPEDIA_IMAGE_PREFIX } from '../
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { handle, type AppDeps } from '../../workers/portal/src/app'
 import { TCGPLAYER_IMAGE_PREFIX } from '../../src/main/tcgplayer/catalog'
-import { ANON_IMAGE_LIMIT, clientAddressKey, createAnonImageQuota, createImageQuota } from '../../workers/portal/src/images'
+import {
+  ANON_IMAGE_GLOBAL_LIMIT,
+  ANON_IMAGE_LIMIT,
+  clientAddressKey,
+  createAnonImageQuota,
+  createImageQuota,
+  createMissCache
+} from '../../workers/portal/src/images'
 import { addUser, memoryBucket, noPrices, seededServerDb } from './helpers'
 
 const BASE = 'https://app.test'
@@ -171,24 +178,123 @@ describe('image route', () => {
       expect((await getFrom(IP, `small/${ids[2]}`)).status).toBe(200)
     })
 
-    it('the Worker default allows ANON_IMAGE_LIMIT fetches per address per hour', () => {
+    it('unwraps IPv4-mapped IPv6 and groups other IPv6 by /56', () => {
+      const key = (ip: string) => clientAddressKey(new Request(BASE, { headers: { 'cf-connecting-ip': ip } }))
+      expect(key('203.0.113.7')).toBe('203.0.113.7')
+      expect(key('::ffff:203.0.113.7')).toBe('203.0.113.7')
+      expect(key('0:0:0:0:0:FFFF:203.0.113.7')).toBe('203.0.113.7')
+      expect(key('2001:db8:0:1::1')).toBe('2001:db8:0:0::/56')
+      expect(key('2001:db8:0:1ff::1')).toBe('2001:db8:0:100::/56')
+      expect(key('2001:DB8:0000:12AB:aaaa:bbbb:cccc:dddd')).toBe('2001:db8:0:1200::/56')
+      expect(key('2001:db8::5')).toBe('2001:db8:0:0::/56')
+      expect(key('::1')).toBe('0:0:0:0::/56')
+      expect(clientAddressKey(new Request(BASE))).toBeNull()
+    })
+
+    it('a shared hourly ceiling caps all signed-out fetches but not signed-in ones', async () => {
+      let t = 1_000_000
+      deps.anonImageQuota = createAnonImageQuota(() => t, { perAddress: 2, global: 3 })
+      deps.imageQuota = createImageQuota(() => t, { limit: 5, windowMs: 3_600_000 })
+      const ids = (db.prepare('SELECT image_id FROM card_images LIMIT 4').all() as { image_id: number }[]).map((r) => r.image_id)
+      expect((await getFrom('198.51.100.1', `small/${ids[0]}`)).status).toBe(200)
+      expect((await getFrom('198.51.100.2', `small/${ids[1]}`)).status).toBe(200)
+      t += 600_000
+      expect((await getFrom('198.51.100.3', `small/${ids[2]}`)).status).toBe(200)
+      const limited = await getFrom('198.51.100.4', `small/${ids[3]}`)
+      expect(limited.status).toBe(429)
+      expect(await limited.text()).toBe('Too many requests')
+      expect(limited.headers.get('retry-after')).toBe('3000') // the ceiling's window opened 10 min earlier
+      expect(upstream).toHaveBeenCalledTimes(3)
+      expect((await getFrom('198.51.100.4', `small/${ids[3]}`, true)).status).toBe(200) // signed in
+      t += 3_000_000
+      expect((await getFrom('198.51.100.4', `full/${ids[3]}`)).status).toBe(200)
+    })
+
+    it('the Worker defaults: per address and shared ceiling, and a full ceiling opens no address windows', () => {
       let t = 0
       const quota = createAnonImageQuota(() => t)
       for (let i = 0; i < ANON_IMAGE_LIMIT; i++) expect(quota.take(IP)).toBe(true)
       expect(quota.take(IP)).toBe(false)
-      expect(quota.take('198.51.100.9')).toBe(true)
+      expect(quota.retryAfterMs(IP)).toBe(3_600_000)
+      let n = ANON_IMAGE_LIMIT
+      for (let a = 0; n < ANON_IMAGE_GLOBAL_LIMIT; a++) {
+        for (let i = 0; i < ANON_IMAGE_LIMIT && n < ANON_IMAGE_GLOBAL_LIMIT; i++, n++) expect(quota.take(`10.0.0.${a}`)).toBe(true)
+      }
+      t = 1000
+      expect(quota.take('192.0.2.1')).toBe(false)
+      expect(quota.retryAfterMs('192.0.2.1')).toBe(3_599_000)
+      expect(quota.exhausted('192.0.2.1')).toBe(true)
       t = 3_600_000
-      expect(quota.take(IP)).toBe(true)
+      expect(quota.take('192.0.2.1')).toBe(true)
     })
 
-    it('groups IPv6 addresses by /64', () => {
-      const key = (ip: string) => clientAddressKey(new Request(BASE, { headers: { 'cf-connecting-ip': ip } }))
-      expect(key('203.0.113.7')).toBe('203.0.113.7')
-      expect(key('2001:db8:0:1::1')).toBe('2001:db8:0:1::/64')
-      expect(key('2001:DB8:0000:0001:aaaa:bbbb:cccc:dddd')).toBe('2001:db8:0:1::/64')
-      expect(key('2001:db8::5')).toBe('2001:db8:0:0::/64')
-      expect(key('::1')).toBe('0:0:0:0::/64')
-      expect(clientAddressKey(new Request(BASE))).toBeNull()
+    it('remembers an upstream failure and answers signed-out callers 404 without refetching', async () => {
+      let t = 0
+      deps.anonMisses = createMissCache(() => t, { ttlMs: 3_600_000, maxKeys: 100 })
+      upstream.mockResolvedValueOnce(new Response('nope', { status: 404, headers: { 'content-type': 'image/jpeg' } }))
+      expect((await getFrom(IP, `cropped/${imageId}`)).status).toBe(404)
+      expect((await getFrom('198.51.100.9', `cropped/${imageId}`)).status).toBe(404)
+      expect(upstream).toHaveBeenCalledTimes(1)
+      // Other sizes of the same card are their own keys.
+      expect((await getFrom(IP, `small/${imageId}`)).status).toBe(200)
+      expect(upstream).toHaveBeenCalledTimes(2)
+      // Signed-in callers still try upstream.
+      expect((await getFrom(IP, `cropped/${imageId}`, true)).status).toBe(200)
+      expect(upstream).toHaveBeenCalledTimes(3)
+    })
+
+    it('forgets a remembered failure after the TTL', async () => {
+      let t = 0
+      deps.anonMisses = createMissCache(() => t, { ttlMs: 3_600_000, maxKeys: 100 })
+      upstream.mockRejectedValueOnce(new Error('timeout'))
+      expect((await getFrom(IP, `full/${imageId}`)).status).toBe(404)
+      t = 3_599_999
+      expect((await getFrom(IP, `full/${imageId}`)).status).toBe(404)
+      expect(upstream).toHaveBeenCalledTimes(1)
+      t = 3_600_000
+      expect((await getFrom(IP, `full/${imageId}`)).status).toBe(200)
+      expect(upstream).toHaveBeenCalledTimes(2)
+    })
+
+    it('the miss cache is bounded and drops its oldest entry first', () => {
+      const misses = createMissCache(() => 0, { ttlMs: 1000, maxKeys: 2 })
+      misses.add('a')
+      misses.add('b')
+      misses.add('a') // refreshed: now the newest
+      misses.add('c')
+      expect(misses.has('b')).toBe(false)
+      expect(misses.has('a')).toBe(true)
+      expect(misses.has('c')).toBe(true)
+    })
+
+    it('a capped quota evicts the oldest address; the signed-in quota never evicts', () => {
+      const capped = createImageQuota<string>(() => 0, { limit: 1, windowMs: 1000, maxKeys: 2 })
+      expect(capped.take('a')).toBe(true)
+      expect(capped.take('b')).toBe(true)
+      expect(capped.take('c')).toBe(true) // evicts a
+      expect(capped.exhausted('b')).toBe(true)
+      expect(capped.exhausted('a')).toBe(false)
+      const signedIn = createImageQuota(() => 0, { limit: 1, windowMs: 1000 })
+      for (let id = 0; id <= 20_001; id++) signedIn.take(id)
+      expect(signedIn.take(0)).toBe(false)
+    })
+
+    it('sweeps expired windows at most once a minute', () => {
+      let t = 0
+      const quota = createImageQuota<string>(() => t, { limit: 1, windowMs: 1000, maxKeys: 1000 })
+      const scans = vi.spyOn(Map.prototype, Symbol.iterator)
+      try {
+        for (let i = 0; i < 50; i++, t += 500) quota.take(`k${i}`) // 25 s of new keys
+        expect(scans).toHaveBeenCalledTimes(1)
+        t = 60_000
+        quota.take('late')
+        expect(scans).toHaveBeenCalledTimes(2)
+      } finally {
+        scans.mockRestore()
+      }
+      // That sweep dropped the expired windows, so their keys start fresh.
+      expect(quota.exhausted('k0')).toBe(false)
+      expect(quota.exhausted('late')).toBe(true)
     })
   })
 

@@ -4,7 +4,8 @@ import App from '@/App'
 import { CardDetails } from '@/components/CardDetails'
 import { BrowsePage } from '@/features/browse/BrowsePage'
 import { FilterBar } from '@/features/collection/FilterBar'
-import { GameProvider } from '@/lib/game'
+import { GAME_FREE, GameProvider, useGame } from '@/lib/game'
+import { SetsPage } from '@/features/sets/SetsPage'
 import { createHttpApi, GAME_KEY } from '@/web/httpApi'
 import { App as PhoneApp } from '../../src/phone/App'
 import type { DataChannel } from '../../src/main/ipc/dataHandlers'
@@ -98,6 +99,21 @@ describe('desktop game switch', () => {
     expect(await screen.findByRole('button', { name: /switch game/i })).toHaveTextContent('Pokémon')
     expect(navNames()).not.toContain('Scan')
     expect(navNames()).not.toContain('Rip')
+  })
+
+  it('shows Yu-Gi-Oh! and asks main for it when the game cannot be read', async () => {
+    const api = desktopApi(['ygo', 'pkm'], 'pkm', {
+      games: { active: vi.fn(async () => Promise.reject(new Error('IPC failed'))) }
+    })
+    await renderDesktop(api)
+    expect(navNames()).toContain('Scan')
+    expect(screen.queryByRole('button', { name: /switch game/i })).not.toBeInTheDocument()
+    await waitFor(() => expect(api.games.setActive).toHaveBeenCalledWith('ygo'))
+    expect(api.games.setActive).toHaveBeenCalledTimes(1)
+  })
+
+  it('pins the query roots a game switch keeps', () => {
+    expect([...GAME_FREE]).toEqual(['account', 'sync', 'me', 'update', 'app', 'images', 'phone'])
   })
 
   it("reads the game before the first page's queries", async () => {
@@ -236,6 +252,20 @@ describe('per-game filters and words', () => {
     expect(screen.getByText('Version').nextElementSibling).toHaveTextContent('Reverse Holofoil')
   })
 
+  it('keeps the saved set types per game, with Yu-Gi-Oh! on the old key', async () => {
+    localStorage.setItem('sets.types', '["deck"]')
+    localStorage.setItem('sets.types:pkm', '["promo"]')
+    renderWithProviders(
+      // As the app does: no page renders before the game is known.
+      <GameProvider fallback={null}>
+        <SetsPage onAddCard={() => {}} onAddMissing={() => {}} />
+      </GameProvider>,
+      { api: pkmApi() }
+    )
+    expect(await screen.findByText('Promos')).toBeInTheDocument()
+    expect(screen.queryByText('Decks')).not.toBeInTheDocument()
+  })
+
   it('card details on Yu-Gi-Oh! stay as they are', () => {
     const card: CardRow = {
       id: 46986414,
@@ -261,7 +291,77 @@ describe('per-game filters and words', () => {
   })
 })
 
+/** A Storage stand-in over a Map. */
+function memoryStorage(): Pick<Storage, 'getItem' | 'setItem'> {
+  const m = new Map<string, string>()
+  return { getItem: (k) => m.get(k) ?? null, setItem: (k, v) => void m.set(k, v) }
+}
+
+/** A portal for createHttpApi: `/api/me` answers with `me` (or `status`), RPCs record their game header. */
+function webPortal(
+  me: object,
+  status = 200
+): { fetch: typeof globalThis.fetch; headers: string[] } {
+  const headers: string[] = []
+  const fetch = vi.fn(async (url: RequestInfo | URL, init?: RequestInit) => {
+    if (String(url) === '/api/me') return json(me, status)
+    headers.push((init?.headers as Record<string, string>)['x-duel-game'])
+    return json({ result: [] })
+  }) as unknown as typeof globalThis.fetch
+  return { fetch, headers }
+}
+
+const OWNER = {
+  id: 1,
+  username: 'seto',
+  displayName: 'Seto',
+  avatarUrl: null,
+  games: ['ygo', 'pkm']
+}
+const listArgs = { sort: 'added', dir: 'desc' } as const
+
+function GameProbe(): React.JSX.Element {
+  return <p data-testid="game">{useGame().def.name}</p>
+}
+
 describe('web game header', () => {
+  it('sends Yu-Gi-Oh! and shows it when a remembered game cannot be checked', async () => {
+    const storage = memoryStorage()
+    storage.setItem(GAME_KEY, 'pkm')
+    const { fetch, headers } = webPortal({ error: 'boom' }, 500)
+    const api = createHttpApi({ fetch, storage, onSignedOut: () => {} })
+    await api.collection.list(listArgs)
+    expect(headers).toEqual(['ygo'])
+    renderWithProviders(
+      <GameProvider>
+        <GameProbe />
+      </GameProvider>,
+      { api: Object.assign(createMockApi(), { games: api.games }) }
+    )
+    expect(await screen.findByTestId('game')).toHaveTextContent('Yu-Gi-Oh!')
+    await expect(api.games.active()).resolves.toBe('ygo')
+    await api.collection.list(listArgs)
+    expect(headers).toEqual(['ygo', 'ygo'])
+    // Still remembered for the next load, when the check may work.
+    expect(storage.getItem(GAME_KEY)).toBe('pkm')
+  })
+
+  it("keeps the tab's own game when another tab changes storage", async () => {
+    const storage = memoryStorage()
+    const { fetch, headers } = webPortal(OWNER)
+    const api = createHttpApi({ fetch, storage, onSignedOut: () => {} })
+    await api.collection.list(listArgs)
+    // Another tab switches to Pokémon.
+    storage.setItem(GAME_KEY, 'pkm')
+    await api.collection.list(listArgs)
+    await expect(api.games.active()).resolves.toBe('ygo')
+    // This tab switches; another tab switching back doesn't move it.
+    await api.games.setActive('pkm')
+    storage.setItem(GAME_KEY, 'ygo')
+    await api.collection.list(listArgs)
+    expect(headers).toEqual(['ygo', 'ygo', 'pkm'])
+  })
+
   it('checks a remembered non-Yu-Gi-Oh! game before the first RPC sends it', async () => {
     const storage = new Map<string, string>()
     const store = {
@@ -285,7 +385,7 @@ describe('web game header', () => {
 
   it('sends a remembered Yu-Gi-Oh! without asking first', async () => {
     const fetch = vi.fn(async () => json({ result: [] })) as unknown as typeof globalThis.fetch
-    const api = createHttpApi({ fetch, storage: new Map() as never, onSignedOut: () => {} })
+    const api = createHttpApi({ fetch, storage: memoryStorage(), onSignedOut: () => {} })
     await api.collection.list({ sort: 'added', dir: 'desc' })
     expect(fetch).toHaveBeenCalledTimes(1)
   })

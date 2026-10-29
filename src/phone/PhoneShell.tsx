@@ -50,6 +50,8 @@ const MORE: { page: Page; label: string; icon: LucideIcon }[] = [
   { page: 'friends', label: 'Friends', icon: UsersIcon },
   { page: 'settings', label: 'Settings', icon: SettingsIcon }
 ]
+/** The tab bar's grid by column count: the tabs plus More (5 with Scan, 4 without). */
+const GRID_COLS: Record<number, string> = { 4: 'grid-cols-4', 5: 'grid-cols-5' }
 const IN_MORE = new Set<Page>(MORE.map((m) => m.page))
 
 /** Once the app is ready: a sync, a daily card data check, the fingerprints, and persistent storage. */
@@ -190,12 +192,7 @@ function Shell({ engineFactory }: { engineFactory?: () => ScanEngine }): React.J
           scan && 'hidden'
         )}
       >
-        <div
-          className={cn(
-            'mx-auto grid h-16 max-w-lg items-end',
-            tabs.length === 4 ? 'grid-cols-5' : 'grid-cols-4'
-          )}
-        >
+        <div className={cn('mx-auto grid h-16 max-w-lg items-end', GRID_COLS[tabs.length + 1])}>
           {tabs.map(({ page: p, label, icon: Icon }) =>
             p === 'scan' ? (
               <button

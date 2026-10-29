@@ -1,6 +1,7 @@
 import { useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { LayoutGrid, List, Search, SlidersHorizontal, X } from 'lucide-react'
+import type { GameId } from '@shared/games'
 import type { Language } from '@shared/languages'
 import type { CardSearchResult, CountMode, SetSummary } from '@shared/types'
 import { SET_TYPES, type SetType } from '@shared/setTypes'
@@ -31,7 +32,8 @@ type View = 'grid' | 'list'
 const VIEW_KEY = 'sets.view'
 const MODE_KEY = 'sets.countMode'
 const FILTER_KEY = 'sets.filter'
-const TYPES_KEY = 'sets.types'
+/** Set types are each game's own, so each game keeps its own; Yu-Gi-Oh! keeps the original key. */
+const typesKey = (game: GameId): string => (game === 'ygo' ? 'sets.types' : `sets.types:${game}`)
 
 function readView(): View {
   try {
@@ -66,9 +68,9 @@ function persist(key: string, value: string): void {
   }
 }
 
-function readTypes(): SetType[] {
+function readTypes(game: GameId): SetType[] {
   try {
-    const raw: unknown = JSON.parse(localStorage.getItem(TYPES_KEY) ?? '[]')
+    const raw: unknown = JSON.parse(localStorage.getItem(typesKey(game)) ?? '[]')
     if (!Array.isArray(raw)) return []
     return SET_TYPES.map((t) => t.value).filter((v) => raw.includes(v))
   } catch {
@@ -104,7 +106,9 @@ export function SetsPage({ onAddCard, onAddMissing }: SetsPageProps): React.JSX.
   const view: View = phone ? 'list' : storedView
   const [mode, setMode] = useState<CountMode>(readMode)
   const [filter, setFilterState] = useState<SetFilter>(readFilter)
-  const [types, setTypes] = useState<SetType[]>(readTypes)
+  // The page remounts on a game switch (PageSwitch), so the types are read for the game shown.
+  const { game } = useGame()
+  const [types, setTypes] = useState<SetType[]>(() => readTypes(game))
   const [panelOpen, setPanelOpen] = useState(false)
   const [q, setQ] = useState('')
   const [sort, setSort] = useState<SetSort>('date')
@@ -126,7 +130,6 @@ export function SetsPage({ onAddCard, onAddMissing }: SetsPageProps): React.JSX.
   }, [openSet, main])
 
   const [language, setLanguage] = useLanguageFilter()
-  const { game } = useGame()
 
   const sets = useQuery({ queryKey: queryKeys.setsList, queryFn: () => api.sets.list() })
   const all = useMemo(() => sets.data ?? [], [sets.data])
@@ -148,7 +151,7 @@ export function SetsPage({ onAddCard, onAddMissing }: SetsPageProps): React.JSX.
   const activeCount = activeFilterCount(types, filter)
   const changeTypes = (t: SetType[]): void => {
     setTypes(t)
-    persist(TYPES_KEY, JSON.stringify(t))
+    persist(typesKey(game), JSON.stringify(t))
   }
   const clearFilters = (): void => {
     changeTypes([])

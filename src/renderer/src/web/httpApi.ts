@@ -44,25 +44,27 @@ export function createHttpApi(opts: HttpApiOptions = {}): Api {
   const storage = (): Pick<Storage, 'getItem' | 'setItem'> => opts.storage ?? localStorage
   const dataListeners = new Set<() => void>()
 
-  /** The last game stored, for when storage can't be read. */
-  let remembered: GameId = 'ygo'
-  /** The game remembered in this browser; anything else counts as Yu-Gi-Oh!. */
-  const storedGame = (): GameId => {
-    let value: string | null
+  /**
+   * The game this tab shows, kept in memory so another tab's switch never changes what this one
+   * sends. Storage only gives the starting value and remembers the last game for the next load.
+   */
+  const startGame = ((): GameId => {
     try {
-      value = storage().getItem(GAME_KEY)
+      const value = storage().getItem(GAME_KEY)
+      return isGameId(value) ? value : 'ygo'
     } catch {
-      // Storage blocked: the choice lasts until the page reloads.
-      return remembered
+      // Storage blocked: start on Yu-Gi-Oh!.
+      return 'ygo'
     }
-    return isGameId(value) ? value : 'ygo'
-  }
+  })()
+  let current: GameId = 'ygo'
+  /** Whether the starting game is settled; Yu-Gi-Oh! is every account's, so it needs no check. */
+  let settled = startGame === 'ygo'
   const storeGame = (game: GameId): void => {
-    remembered = game
     try {
       storage().setItem(GAME_KEY, game)
     } catch {
-      // Storage blocked or full: see storedGame.
+      // Storage blocked or full: the choice lasts until the page reloads.
     }
   }
 
@@ -89,18 +91,34 @@ export function createHttpApi(opts: HttpApiOptions = {}): Api {
     })
     return gamesAsked
   }
-  const activeGame = async (): Promise<GameId> => {
-    const available = await availableGames()
-    const game = storedGame()
-    if (available.includes(game)) return game
-    storeGame('ygo')
-    return 'ygo'
+  /**
+   * The game shown. A remembered game other than Yu-Gi-Oh! (an owner's, left in a shared browser)
+   * is checked against this account once. Until then the tab shows and sends Yu-Gi-Oh!, and if the
+   * check can't be made (offline, a server error) it stays on Yu-Gi-Oh!, so the requests never
+   * carry a game the page isn't showing. Storage keeps the remembered game for the next load.
+   */
+  let settling: Promise<GameId> | null = null
+  const activeGame = (): Promise<GameId> => {
+    if (settled) return Promise.resolve(current)
+    settling ??= (async () => {
+      try {
+        if ((await availableGames()).includes(startGame)) current = startGame
+        else storeGame('ygo')
+      } catch {
+        // Unchecked: Yu-Gi-Oh!, as the page shows.
+      }
+      settled = true
+      return current
+    })()
+    return settling
   }
   const setActiveGame = async (game: GameId): Promise<void> => {
     const available = await availableGames()
     if (!isGameId(game) || !available.includes(game))
       throw new Error(`${String(game)} isn't available on this account`)
-    const before = storedGame()
+    await activeGame()
+    const before = current
+    current = game
     storeGame(game)
     if (game !== before) for (const cb of [...dataListeners]) cb()
   }
@@ -129,10 +147,8 @@ export function createHttpApi(opts: HttpApiOptions = {}): Api {
   const call =
     (channel: PortalChannel) =>
     async (...args: unknown[]): Promise<never> => {
-      // Yu-Gi-Oh! is every account's. Any other remembered game (an owner's, left in a shared
-      // browser) is checked against this account first, so it can't send a game it may not see.
-      const stored = storedGame()
-      const game = stored === 'ygo' ? stored : await activeGame().catch(() => stored)
+      // The tab's own game, once a remembered one is checked (see activeGame).
+      const game = await activeGame()
       let res: Response
       try {
         res = await doFetch(`/api/rpc/${encodeURIComponent(channel).replace('%3A', ':')}`, {

@@ -35,7 +35,7 @@ export function FriendEntryPanel({
           alt={card.name}
           nav={nav}
         />
-        <CardDetails card={card} />
+        <CardDetails card={card} printing={entry.printing} />
 
         {copies.length > 0 && (
           <section aria-label="Their copies" className="space-y-1.5">

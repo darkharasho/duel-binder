@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react'
+import { Fragment, useCallback, useState } from 'react'
 import type { CardSearchResult } from '@shared/types'
 import type { NavigateFn, Page } from '@/components/AppShell'
 import { useDataChanged } from '@/components/useDataChanged'
@@ -9,6 +9,7 @@ import { DashboardPage } from '@/features/dashboard/DashboardPage'
 import { FriendsPage } from '@/features/friends/FriendsPage'
 import { SetsPage } from '@/features/sets/SetsPage'
 import { useFriendsAvailable } from '@/lib/friends'
+import { useGame } from '@/lib/game'
 
 export interface AddInitial {
   card: CardSearchResult
@@ -56,7 +57,8 @@ export function usePages(initial: Page = 'dashboard'): Pages {
 
 /**
  * The page for `pages.page`. Scan, Rip and Settings differ between the shells, so each passes its
- * own; the rest are the same pages with the same props.
+ * own; the rest are the same pages with the same props. A game switch starts the page afresh, so
+ * no filter, open card or set carries over from the other game.
  */
 export function PageSwitch({
   pages,
@@ -70,8 +72,9 @@ export function PageSwitch({
   settings: React.ReactNode
 }): React.JSX.Element {
   const { page, entryId, friendsKey, onNavigate, openAdd } = pages
+  const { game } = useGame()
   return (
-    <>
+    <Fragment key={game}>
       {page === 'dashboard' && (
         <DashboardPage onNavigate={onNavigate} onAddCard={() => openAdd()} />
       )}
@@ -97,7 +100,7 @@ export function PageSwitch({
         <FriendsPage key={friendsKey} onBackToMine={() => onNavigate('collection')} />
       )}
       {page === 'settings' && settings}
-    </>
+    </Fragment>
   )
 }
 

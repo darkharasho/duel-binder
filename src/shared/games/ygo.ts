@@ -4,6 +4,7 @@ import type { GameDef } from './types'
 export const YGO: GameDef = {
   id: 'ygo',
   name: 'Yu-Gi-Oh!',
+  color: '#c9a24b',
   features: { scan: true, rip: true },
   crossLanguagePriceFallback: true,
   access: 'everyone',

@@ -87,6 +87,11 @@ export function createMockApi(overrides: DeepPartial<Api> = {}): Api {
       }))
     },
     prices: { request: vi.fn(async () => undefined) },
+    games: {
+      available: vi.fn(async () => ['ygo']),
+      active: vi.fn(async () => 'ygo'),
+      setActive: vi.fn(async () => undefined)
+    },
     usage: { report: vi.fn(async () => undefined) },
     sets: {
       list: vi.fn(async () => []),

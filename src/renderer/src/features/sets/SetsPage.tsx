@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { api, queryKeys } from '@/lib/api'
+import { useGame } from '@/lib/game'
 import { matchesLanguage, useLanguageFilter } from '@/lib/languageFilter'
 import { isPhone } from '@/lib/platform'
 import { SetChecklist } from './SetChecklist'
@@ -125,6 +126,7 @@ export function SetsPage({ onAddCard, onAddMissing }: SetsPageProps): React.JSX.
   }, [openSet, main])
 
   const [language, setLanguage] = useLanguageFilter()
+  const { game } = useGame()
 
   const sets = useQuery({ queryKey: queryKeys.setsList, queryFn: () => api.sets.list() })
   const all = useMemo(() => sets.data ?? [], [sets.data])
@@ -135,13 +137,13 @@ export function SetsPage({ onAddCard, onAddMissing }: SetsPageProps): React.JSX.
   const available = useMemo(() => [...new Set(all.map((s) => s.language))], [all])
   const header = setsHeader(inLanguage, mode)
   const visible = useMemo(
-    () => sortSets(filterSets(all, { filter, q, mode, language, types }), sort, mode),
-    [all, filter, q, mode, sort, language, types]
+    () => sortSets(filterSets(all, { filter, q, mode, language, types, game }), sort, mode),
+    [all, filter, q, mode, sort, language, types, game]
   )
 
   const counts = useMemo(
-    () => typeCounts(all, { filter, mode, language }),
-    [all, filter, mode, language]
+    () => typeCounts(all, { filter, mode, language, game }),
+    [all, filter, mode, language, game]
   )
   const activeCount = activeFilterCount(types, filter)
   const changeTypes = (t: SetType[]): void => {

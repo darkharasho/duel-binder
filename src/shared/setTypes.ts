@@ -1,3 +1,5 @@
+import type { GameId } from './games'
+
 export type SetType = 'booster' | 'deck' | 'tin' | 'collection' | 'promo'
 
 export const SET_TYPES: readonly { value: SetType; label: string }[] = [
@@ -25,8 +27,13 @@ const RULES: [SetType, RegExp][] = [
   ]
 ]
 
-/** Classify a set into one of the five set types from its name (the code is accepted for overrides/future rules). */
-export function setType(s: { setName: string; setCode: string }): SetType {
+/**
+ * Classify a set into one of the five set types from its name (the code is accepted for
+ * overrides/future rules). The name rules are Yu-Gi-Oh!'s; another game's sets are all boosters
+ * until it has rules of its own.
+ */
+export function setType(s: { setName: string; setCode: string }, game: GameId = 'ygo'): SetType {
+  if (game !== 'ygo') return 'booster'
   const override = OVERRIDES[s.setName]
   if (override) return override
   const name = s.setName.toLowerCase()

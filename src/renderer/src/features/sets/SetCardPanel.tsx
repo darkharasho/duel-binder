@@ -91,7 +91,16 @@ export function SetCardPanel({
         </div>
 
         {phone && copiesSection}
-        <CardDetails card={info} />
+        <CardDetails
+          card={info}
+          printing={
+            focus && {
+              setCode:
+                focus.codes.find((c) => c.printingId === focus.defaultPrintingId)?.setCode ?? '',
+              setRarity: focus.rarity
+            }
+          }
+        />
         {!phone && copiesSection}
 
         {focus && (

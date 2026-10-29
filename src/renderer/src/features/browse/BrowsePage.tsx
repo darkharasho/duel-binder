@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowDownAZ, ArrowUpAZ, Search, SlidersHorizontal } from 'lucide-react'
+import type { FilterDef, GameDef, GameId } from '@shared/games'
 import type { BrowseCard, BrowseFilters, BrowseSort, CardSearchResult } from '@shared/types'
 import { cardArtUrl, useArtWash } from '@/components/artWashContext'
 import { CardArt } from '@/components/CardArt'
@@ -8,6 +9,7 @@ import { CardSheet } from '@/components/CardSheet'
 import { TiltCard } from '@/components/TiltCard'
 import { FacetMenu } from '@/components/FacetMenu'
 import { PageHeader } from '@/components/PageHeader'
+import { RangeFilter } from '@/components/RangeFilter'
 import { listNav } from '@/components/panelNav'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -29,23 +31,47 @@ import { UnderlineTabs } from '@/components/UnderlineTabs'
 import { EntryDetailPanel } from '@/features/collection/EntryDetailPanel'
 import { api, queryKeys } from '@/lib/api'
 import { formatUsd } from '@/lib/format'
+import { useGame } from '@/lib/game'
+import { RANGE_FIELDS, rangeFilters } from '@/lib/rangeFilters'
 import { isPhone } from '@/lib/platform'
 import { useSetNames } from '@/lib/setLabels'
 import { BrowseCardPanel } from './BrowseCardPanel'
 
 const PAGE = 120
 
-type ListKey = 'cardTypes' | 'attributes' | 'races' | 'archetypes' | 'setNames' | 'rarities'
+type GameKey =
+  'cardTypes' | 'attributes' | 'races' | 'archetypes' | 'pkmCategories' | 'pkmTypes' | 'pkmStages'
+type ListKey = GameKey | 'setNames' | 'rarities'
 type Filters = Omit<BrowseFilters, 'offset' | 'limit'>
 
-const FACETS: { key: ListKey; label: string }[] = [
-  { key: 'cardTypes', label: 'Card type' },
-  { key: 'attributes', label: 'Attribute' },
-  { key: 'races', label: 'Monster/Spell type' },
-  { key: 'archetypes', label: 'Archetype' },
-  { key: 'setNames', label: 'Set' },
-  { key: 'rarities', label: 'Rarity' }
-]
+const GAME_KEYS: readonly string[] = [
+  'cardTypes',
+  'attributes',
+  'races',
+  'archetypes',
+  'pkmCategories',
+  'pkmTypes',
+  'pkmStages'
+] satisfies GameKey[]
+
+/** Browse's own names for some of the games' filters. */
+const LABELS: Partial<Record<GameKey, string>> = {
+  cardTypes: 'Card type',
+  races: 'Monster/Spell type'
+}
+
+/** The game's list filters, then Set and the game's word for rarity. */
+function facetsFor(def: GameDef): { key: ListKey; label: string }[] {
+  return [
+    ...def.filters
+      .filter(
+        (f): f is FilterDef & { key: GameKey } => f.kind === 'multi' && GAME_KEYS.includes(f.key)
+      )
+      .map((f) => ({ key: f.key, label: LABELS[f.key] ?? f.label })),
+    { key: 'setNames', label: 'Set' },
+    { key: 'rarities', label: def.vocab.rarity }
+  ]
+}
 
 const SORTS: { value: BrowseSort; label: string; dir: 'asc' | 'desc' }[] = [
   { value: 'name', label: 'Name', dir: 'asc' },
@@ -53,8 +79,15 @@ const SORTS: { value: BrowseSort; label: string; dir: 'asc' | 'desc' }[] = [
   { value: 'price', label: 'Price', dir: 'desc' },
   { value: 'atk', label: 'ATK', dir: 'desc' },
   { value: 'def', label: 'DEF', dir: 'desc' },
-  { value: 'level', label: 'Level / Link', dir: 'desc' }
+  { value: 'level', label: 'Level / Link', dir: 'desc' },
+  { value: 'hp', label: 'HP', dir: 'desc' }
 ]
+
+/** The game's sorts: ATK, DEF and Level are Yu-Gi-Oh!'s, HP is Pokémon's. */
+const sortsFor = (game: GameId): typeof SORTS =>
+  SORTS.filter((s) =>
+    game === 'pkm' ? !['atk', 'def', 'level'].includes(s.value) : s.value !== 'hp'
+  )
 
 const OWNED = [
   { value: 'all', label: 'All cards' },
@@ -69,12 +102,6 @@ function statsLine(c: BrowseCard): string {
   const rank = c.linkval !== null ? `LINK-${c.linkval}` : c.level !== null ? `★${c.level}` : ''
   const def = c.linkval !== null ? '' : ` / ${c.def ?? '?'}`
   return `${rank} · ${c.atk}${def}`
-}
-
-function parseLevel(v: string): number | undefined {
-  if (v.trim() === '') return undefined
-  const n = Number(v)
-  return Number.isFinite(n) ? n : undefined
 }
 
 interface Props {
@@ -92,6 +119,10 @@ export function BrowsePage({ onAddCard }: Props): React.JSX.Element {
   const [filtersOpen, setFiltersOpen] = useState(false)
   const qc = useQueryClient()
   const change = (patch: Partial<Filters>): void => setFilters((f) => ({ ...f, ...patch }))
+  const { game, def } = useGame()
+  const facetList = facetsFor(def)
+  const ranges = rangeFilters(def.filters)
+  const sorts = sortsFor(game)
 
   // Debounce search text into the query.
   useEffect(() => {
@@ -139,9 +170,11 @@ export function BrowsePage({ onAddCard }: Props): React.JSX.Element {
 
   const filtered =
     Boolean(filters.q) ||
-    FACETS.some(({ key }) => filters[key]?.length) ||
-    filters.levelMin !== undefined ||
-    filters.levelMax !== undefined ||
+    facetList.some(({ key }) => filters[key]?.length) ||
+    ranges.some(
+      ({ key }) =>
+        filters[RANGE_FIELDS[key].min] !== undefined || filters[RANGE_FIELDS[key].max] !== undefined
+    ) ||
     filters.owned !== 'all'
   const clear = (): void => {
     setFilters({ ...DEFAULTS, sort: filters.sort, dir: filters.dir })
@@ -197,7 +230,7 @@ export function BrowsePage({ onAddCard }: Props): React.JSX.Element {
   )
   const facetFilters = (
     <>
-      {FACETS.map(({ key, label }) => (
+      {facetList.map(({ key, label }) => (
         <FacetMenu
           key={key}
           label={label}
@@ -207,26 +240,9 @@ export function BrowsePage({ onAddCard }: Props): React.JSX.Element {
           labelOf={key === 'setNames' ? setNames.labelOf : undefined}
         />
       ))}
-      <div className="flex items-center gap-1 text-[13px] text-foreground/80">
-        <span className="px-1">Level</span>
-        <Input
-          type="number"
-          aria-label="Level min"
-          placeholder="min"
-          value={filters.levelMin ?? ''}
-          onChange={(e) => change({ levelMin: parseLevel(e.target.value) })}
-          className="h-8 w-14 px-2 font-mono text-xs"
-        />
-        <span aria-hidden>–</span>
-        <Input
-          type="number"
-          aria-label="Level max"
-          placeholder="max"
-          value={filters.levelMax ?? ''}
-          onChange={(e) => change({ levelMax: parseLevel(e.target.value) })}
-          className="h-8 w-14 px-2 font-mono text-xs"
-        />
-      </div>
+      {ranges.map((f) => (
+        <RangeFilter key={f.key} filter={f} values={filters} onChange={change} />
+      ))}
       {filtered && (
         <Button variant="ghost" size="sm" onClick={clear} className="text-muted-foreground">
           Clear filters
@@ -255,7 +271,7 @@ export function BrowsePage({ onAddCard }: Props): React.JSX.Element {
             <Select
               value={filters.sort}
               onValueChange={(v) => {
-                const s = SORTS.find((x) => x.value === v)
+                const s = sorts.find((x) => x.value === v)
                 if (s) change({ sort: s.value, dir: s.dir })
               }}
             >
@@ -263,7 +279,7 @@ export function BrowsePage({ onAddCard }: Props): React.JSX.Element {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {SORTS.map((s) => (
+                {sorts.map((s) => (
                   <SelectItem key={s.value} value={s.value}>
                     {s.label}
                   </SelectItem>

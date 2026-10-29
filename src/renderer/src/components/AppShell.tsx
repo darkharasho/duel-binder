@@ -2,12 +2,14 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import logo from '@/assets/logo.svg'
 import { useFriendsAvailable, useFriendsOverview } from '@/lib/friends'
+import { pageInGame, useGame } from '@/lib/game'
 import { isMac, isWeb } from '@/lib/platform'
 import { cn } from '@/lib/utils'
 import { track, trackOpen } from '@/lib/usage'
 import { fetchMe } from '@/web/account'
 import { ArtWash } from './ArtWash'
 import { ArtWashContext } from './artWashContext'
+import { SidebarGameSwitch } from './GameSwitch'
 import { MainScrollContext, type MainScroll } from './mainScroll'
 import { SyncBanner } from './SyncBanner'
 import { TitleBar } from './TitleBar'
@@ -41,6 +43,7 @@ export function AppShell({
   children
 }: AppShellProps): React.JSX.Element {
   const friendsAvailable = useFriendsAvailable()
+  const { def, available } = useGame()
   const requests = useFriendsOverview().data?.incoming.length ?? 0
   const mainRef = useRef<HTMLElement>(null)
   const scroll = useMemo<MainScroll>(
@@ -61,6 +64,10 @@ export function AppShell({
   }, [page, scroll])
   useEffect(() => trackOpen(), [])
   useEffect(() => track(`page:${page}`), [page])
+  // A switch to a game without this page (Scan or Rip) leaves it.
+  useEffect(() => {
+    if (!pageInGame(page, def)) onNavigate('dashboard')
+  }, [page, def, onNavigate])
   return (
     <div className="group/shell relative isolate flex h-screen flex-col overflow-hidden bg-background text-foreground tabular-nums">
       <ArtWash src={wash} />
@@ -76,16 +83,22 @@ export function AppShell({
       )}
       <div className="flex min-h-0 flex-1">
         <aside className="flex w-[200px] shrink-0 flex-col gap-6 border-r border-white/[0.06] px-4 pb-5 pt-1">
-          <div className="flex items-center gap-2.5">
-            <img src={logo} alt="" className="h-9 w-9" />
-            <span className="whitespace-nowrap text-[15px] font-semibold tracking-[-0.01em]">
-              Duel Binder
-            </span>
-          </div>
+          {available.length > 1 ? (
+            <SidebarGameSwitch />
+          ) : (
+            <div className="flex items-center gap-2.5">
+              <img src={logo} alt="" className="h-9 w-9" />
+              <span className="whitespace-nowrap text-[15px] font-semibold tracking-[-0.01em]">
+                Duel Binder
+              </span>
+            </div>
+          )}
           <nav aria-label="Main" className="flex flex-col">
             {NAV.filter(
               ({ page: p }) =>
-                (p !== 'friends' || friendsAvailable) && ((p !== 'scan' && p !== 'rip') || !isWeb())
+                (p !== 'friends' || friendsAvailable) &&
+                ((p !== 'scan' && p !== 'rip') || !isWeb()) &&
+                pageInGame(p, def)
             ).map(({ page: p, label }) => (
               <button
                 key={p}

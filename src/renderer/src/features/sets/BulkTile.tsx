@@ -11,6 +11,7 @@ import {
   SelectValue
 } from '@/components/ui/select'
 import { formatUsd } from '@/lib/format'
+import { useGame } from '@/lib/game'
 import { rarityColor, rarityTextColor } from '@/lib/rarityColors'
 import { cn } from '@/lib/utils'
 
@@ -44,6 +45,7 @@ export const BulkTile = memo(function BulkTile({
   hidden,
   onAdjust
 }: BulkTileProps): React.JSX.Element {
+  const { game } = useGame()
   // A sync can drop the chosen printing; fall back to the default rather than adjusting a dead id.
   const printingId = rarity.codes.some((c) => c.printingId === chosenId)
     ? chosenId
@@ -89,8 +91,8 @@ export const BulkTile = memo(function BulkTile({
           </button>
           <span
             style={{
-              backgroundColor: rarityColor(rarity.rarity),
-              color: rarityTextColor(rarity.rarity)
+              backgroundColor: rarityColor(rarity.rarity, game),
+              color: rarityTextColor(rarity.rarity, game)
             }}
             className="pointer-events-none absolute top-1 left-1 rounded-full px-2 py-0.5 text-[10px] leading-none font-semibold shadow-sm"
           >

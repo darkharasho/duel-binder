@@ -129,11 +129,15 @@ export function createHttpApi(opts: HttpApiOptions = {}): Api {
   const call =
     (channel: PortalChannel) =>
     async (...args: unknown[]): Promise<never> => {
+      // Yu-Gi-Oh! is every account's. Any other remembered game (an owner's, left in a shared
+      // browser) is checked against this account first, so it can't send a game it may not see.
+      const stored = storedGame()
+      const game = stored === 'ygo' ? stored : await activeGame().catch(() => stored)
       let res: Response
       try {
         res = await doFetch(`/api/rpc/${encodeURIComponent(channel).replace('%3A', ':')}`, {
           method: 'POST',
-          headers: { 'content-type': 'application/json', [GAME_HEADER]: storedGame() },
+          headers: { 'content-type': 'application/json', [GAME_HEADER]: game },
           body: JSON.stringify({ args }),
           credentials: 'same-origin'
         })

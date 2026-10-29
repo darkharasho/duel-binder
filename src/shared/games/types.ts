@@ -21,6 +21,8 @@ export interface FilterDef {
 export interface GameDef {
   id: GameId
   name: string
+  /** The game's dot in the game switch. */
+  color: string
   features: { scan: boolean; rip: boolean }
   crossLanguagePriceFallback: boolean
   access: 'everyone' | 'owner'

@@ -254,7 +254,7 @@ export function EntryDetailPanel({
             nav={nav}
           />
         )}
-        <CardDetails card={card} />
+        <CardDetails card={card} printing={entry?.printing} />
 
         {(copies.data?.length ?? 0) > 0 && (
           <section aria-label="Your copies" className="space-y-1.5">

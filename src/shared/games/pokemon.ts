@@ -4,6 +4,7 @@ import type { GameDef } from './types'
 export const PKM: GameDef = {
   id: 'pkm',
   name: 'Pokémon',
+  color: '#e0483d',
   features: { scan: false, rip: false },
   crossLanguagePriceFallback: false,
   access: 'owner',

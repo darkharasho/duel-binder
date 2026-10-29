@@ -174,7 +174,7 @@ export function BrowseCardPanel({
         />
         <PanelPrice entry={ownedEntry} price={price} label={priceLabel} />
 
-        <CardDetails card={info} />
+        <CardDetails card={info} printing={shown} />
 
         <section aria-label="Printings" className="space-y-2">
           <h3 className="text-sm font-medium">

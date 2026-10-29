@@ -1,10 +1,13 @@
 import { useLayoutEffect, useRef } from 'react'
+import { useGame } from '@/lib/game'
 import { isPhone } from '@/lib/platform'
 import { cn } from '@/lib/utils'
+import { GameChip } from './GameSwitch'
 
 /**
  * A page's title bar, pinned to the top of the scrolling main area. Sits first in a `p-8` page
- * (`max-md:p-4` under 768 px). On the phone it scrolls away under the shell's sticky status line.
+ * (`max-md:p-4` under 768 px). On the phone it scrolls away under the shell's sticky status line,
+ * and carries the game chip at its right when the account has more than one game.
  */
 export function PageHeader({
   className,
@@ -14,6 +17,8 @@ export function PageHeader({
   children: React.ReactNode
 }): React.JSX.Element {
   const ref = useRef<HTMLDivElement>(null)
+  const { available } = useGame()
+  const chip = isPhone() && available.length > 1
   // Tells the main scroll area how tall the header is, so its scrollbar gutter can match the glass.
   useLayoutEffect(() => {
     const el = ref.current
@@ -38,7 +43,14 @@ export function PageHeader({
         className
       )}
     >
-      {children}
+      {chip ? (
+        <div className="flex items-start gap-3">
+          <div className="min-w-0 flex-1 space-y-3">{children}</div>
+          <GameChip className="mt-1" />
+        </div>
+      ) : (
+        children
+      )}
     </div>
   )
 }

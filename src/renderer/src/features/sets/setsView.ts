@@ -1,4 +1,5 @@
 import type { LanguageFilter } from '@shared/languages'
+import type { GameId } from '@shared/games'
 import { setType, type SetType } from '@shared/setTypes'
 import { matchesLanguage } from '@/lib/languageFilter'
 import type {
@@ -80,13 +81,14 @@ export function filterSets(
     mode: CountMode
     language: LanguageFilter
     types: SetType[]
+    game?: GameId
   }
 ): SetSummary[] {
   const q = o.q.trim().toLowerCase()
   return sets.filter((s) => {
     if (!matchesLanguage(o.language, s.language)) return false
     if (!passesProgress(s, o.filter, o.mode)) return false
-    if (o.types.length > 0 && !o.types.includes(setType(s))) return false
+    if (o.types.length > 0 && !o.types.includes(setType(s, o.game))) return false
     return !q || s.setName.toLowerCase().includes(q) || s.setCode.toLowerCase().includes(q)
   })
 }
@@ -94,13 +96,13 @@ export function filterSets(
 /** Sets per type after language and progress, ignoring search and the type filter. */
 export function typeCounts(
   sets: SetSummary[],
-  o: { filter: SetFilter; mode: CountMode; language: LanguageFilter }
+  o: { filter: SetFilter; mode: CountMode; language: LanguageFilter; game?: GameId }
 ): Record<SetType, number> {
   const counts: Record<SetType, number> = { booster: 0, deck: 0, tin: 0, collection: 0, promo: 0 }
   for (const s of sets) {
     if (!matchesLanguage(o.language, s.language)) continue
     if (!passesProgress(s, o.filter, o.mode)) continue
-    counts[setType(s)]++
+    counts[setType(s, o.game)]++
   }
   return counts
 }

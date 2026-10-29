@@ -1,10 +1,14 @@
 import { useEffect, useState } from 'react'
 import { ArrowDownAZ, ArrowUpAZ, Search } from 'lucide-react'
+import type { FilterDef, GameDef } from '@shared/games'
 import type { CollectionFilters, Facets, SortKey } from '@shared/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { FacetMenu } from '@/components/FacetMenu'
 import { LanguageSelect } from '@/components/LanguageSelect'
+import { RangeFilter } from '@/components/RangeFilter'
+import { rangeFilters } from '@/lib/rangeFilters'
+import { useGame } from '@/lib/game'
 import { useLanguageFilter } from '@/lib/languageFilter'
 import { useSetNames } from '@/lib/setLabels'
 import {
@@ -15,15 +19,34 @@ import {
   SelectValue
 } from '@/components/ui/select'
 
-type ListKey = 'cardTypes' | 'attributes' | 'archetypes' | 'setNames' | 'rarities'
+type GameKey =
+  'cardTypes' | 'attributes' | 'archetypes' | 'pkmCategories' | 'pkmTypes' | 'pkmStages'
+type ListKey = GameKey | 'setNames' | 'rarities'
 
-const FACETS: { key: ListKey; label: string }[] = [
-  { key: 'cardTypes', label: 'Card type' },
-  { key: 'attributes', label: 'Attribute' },
-  { key: 'archetypes', label: 'Archetype' },
-  { key: 'setNames', label: 'Set' },
-  { key: 'rarities', label: 'Rarity' }
-]
+const GAME_KEYS: readonly string[] = [
+  'cardTypes',
+  'attributes',
+  'archetypes',
+  'pkmCategories',
+  'pkmTypes',
+  'pkmStages'
+] satisfies GameKey[]
+
+/** The collection's own names for some of the games' filters. */
+const LABELS: Partial<Record<GameKey, string>> = { cardTypes: 'Card type' }
+
+/** The game's list filters the collection has (no Race), then Set and the game's word for rarity. */
+function facetsFor(def: GameDef): { key: ListKey; label: string }[] {
+  return [
+    ...def.filters
+      .filter(
+        (f): f is FilterDef & { key: GameKey } => f.kind === 'multi' && GAME_KEYS.includes(f.key)
+      )
+      .map((f) => ({ key: f.key, label: LABELS[f.key] ?? f.label })),
+    { key: 'setNames', label: 'Set' },
+    { key: 'rarities', label: def.vocab.rarity }
+  ]
+}
 
 const SORTS: { value: SortKey; label: string }[] = [
   { value: 'name', label: 'Name' },
@@ -40,16 +63,11 @@ interface Props {
   onClear: () => void
 }
 
-function parseLevel(v: string): number | undefined {
-  if (v.trim() === '') return undefined
-  const n = Number(v)
-  return Number.isFinite(n) ? n : undefined
-}
-
 export function FilterBar({ filters, facets, onChange, onClear }: Props): React.JSX.Element {
   const [text, setText] = useState(filters.q ?? '')
   const [language, setLanguage] = useLanguageFilter()
   const setNames = useSetNames(language)
+  const { def } = useGame()
 
   // Debounce search text into the page's filter state.
   useEffect(() => {
@@ -71,7 +89,7 @@ export function FilterBar({ filters, facets, onChange, onClear }: Props): React.
           className="h-8 w-52 pl-8 max-md:w-full"
         />
       </div>
-      {FACETS.map(({ key, label }) => (
+      {facetsFor(def).map(({ key, label }) => (
         <FacetMenu
           key={key}
           label={label}
@@ -86,26 +104,9 @@ export function FilterBar({ filters, facets, onChange, onClear }: Props): React.
         />
       ))}
       <LanguageSelect value={language} onChange={setLanguage} available={facets?.languages ?? []} />
-      <div className="flex items-center gap-1 text-[13px] text-foreground/80">
-        <span className="px-1">Level</span>
-        <Input
-          type="number"
-          aria-label="Level min"
-          placeholder="min"
-          value={filters.levelMin ?? ''}
-          onChange={(e) => onChange({ levelMin: parseLevel(e.target.value) })}
-          className="h-8 w-14 px-2 font-mono text-xs"
-        />
-        <span aria-hidden>–</span>
-        <Input
-          type="number"
-          aria-label="Level max"
-          placeholder="max"
-          value={filters.levelMax ?? ''}
-          onChange={(e) => onChange({ levelMax: parseLevel(e.target.value) })}
-          className="h-8 w-14 px-2 font-mono text-xs"
-        />
-      </div>
+      {rangeFilters(def.filters).map((f) => (
+        <RangeFilter key={f.key} filter={f} values={filters} onChange={onChange} />
+      ))}
       <div className="ml-auto flex items-center gap-1">
         <Select value={filters.sort} onValueChange={(v) => onChange({ sort: v as SortKey })}>
           <SelectTrigger size="sm" aria-label="Sort by" className="w-36">

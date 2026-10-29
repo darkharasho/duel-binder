@@ -4,6 +4,7 @@ import type { CollectionStats, EntryView } from '@shared/types'
 import type { NavigateFn } from '@/components/AppShell'
 import { cardArtUrl, useArtWash } from '@/components/artWashContext'
 import { CardArt } from '@/components/CardArt'
+import { GameChip } from '@/components/GameSwitch'
 import { TiltCard } from '@/components/TiltCard'
 import { scanFor } from '@/components/scanFor'
 import { Button } from '@/components/ui/button'
@@ -12,7 +13,9 @@ import { UnderlineTabs } from '@/components/UnderlineTabs'
 import { EntryValue, StaleBadge, displayTotal } from '@/features/collection/EntryValue'
 import { api, queryKeys } from '@/lib/api'
 import { formatRelative, formatUsd } from '@/lib/format'
-import { RARITY_COLORS } from '@/lib/rarityColors'
+import { isPhone } from '@/lib/platform'
+import { useGame } from '@/lib/game'
+import { rarityColors } from '@/lib/rarityColors'
 import { cn } from '@/lib/utils'
 import { ValueChart } from './ValueChart'
 
@@ -196,6 +199,7 @@ function Content({
   stats: CollectionStats
   onNavigate: NavigateFn
 }): React.JSX.Element {
+  const { def } = useGame()
   const n = stats.approximateCount
   const unpriced = stats.unpricedCount ?? 0
   const stale = isStale(stats.pricesUpdatedAt)
@@ -316,12 +320,12 @@ function Content({
 
       <div className="grid gap-10 lg:grid-cols-2 xl:grid-cols-3 max-md:grid-cols-1">
         <Breakdown
-          title="By rarity"
+          title={`By ${def.vocab.rarity.toLowerCase()}`}
           segments={stats.byRarity.map((r, i) => ({
             label: r.rarity,
             amount: r.value,
             text: rarityText(r),
-            color: colorFor(RARITY_COLORS, r.rarity, i)
+            color: colorFor(rarityColors(def.id), r.rarity, i)
           }))}
         />
         <Breakdown
@@ -343,12 +347,20 @@ export function DashboardPage({ onNavigate, onAddCard }: Props): React.JSX.Eleme
   const stats = useQuery({ queryKey: queryKeys.stats, queryFn: () => api.stats.get() })
   const data = stats.data
   const top = data?.topEntries[0]
+  const { available } = useGame()
+  const phoneChip = isPhone() && available.length > 1
   useArtWash(top ? cardArtUrl(top.imageId) : null)
 
   return (
     <TooltipProvider>
       <div className="max-w-[1800px] space-y-10 px-8 pb-10 pt-3 max-md:space-y-8 max-md:px-4">
         <h1 className="sr-only">Dashboard</h1>
+        {/* Home has no page header, so the phone's game chip sits at its top right. */}
+        {phoneChip && (
+          <div className="-mb-6 flex justify-end">
+            <GameChip />
+          </div>
+        )}
         {data && data.totalCards === 0 ? (
           <div className="flex flex-col items-start gap-3 py-16">
             <p className="text-2xl font-semibold">Your collection is empty</p>

@@ -49,7 +49,12 @@ function hasActiveFilters(f: CollectionFilters): boolean {
     f.setNames?.length ||
     f.rarities?.length ||
     f.levelMin !== undefined ||
-    f.levelMax !== undefined
+    f.levelMax !== undefined ||
+    f.pkmCategories?.length ||
+    f.pkmTypes?.length ||
+    f.pkmStages?.length ||
+    f.hpMin !== undefined ||
+    f.hpMax !== undefined
   )
 }
 

@@ -5,6 +5,7 @@ import { Toaster } from '@/components/ui/sonner'
 import { SettingsPage } from '@/features/settings/SettingsPage'
 import { isWeb } from '@/lib/platform'
 import { useAccountState } from '@/lib/account'
+import { GameProvider } from '@/lib/game'
 import { SignInScreen } from '@/features/account/SignInScreen'
 import { TitleBar } from '@/components/TitleBar'
 import { ScanHubProvider } from '@/features/scan/ScanHub'
@@ -23,19 +24,22 @@ function DesktopOnlyEffects(): null {
   return null
 }
 
+/** The window while the app finds out who is signed in and which game they last used. */
+function LoadingShell(): React.JSX.Element {
+  return (
+    <div className="flex h-screen flex-col bg-background">
+      <TitleBar />
+    </div>
+  )
+}
+
 function Gate(): React.JSX.Element {
   const web = isWeb()
   const { status: account, failed } = useAccountState()
   if (!web) {
     // Until the first status arrives show neither the gate nor the app, so neither flashes.
     if (!account && failed) return <SignInScreen />
-    if (!account) {
-      return (
-        <div className="flex h-screen flex-col bg-background">
-          <TitleBar />
-        </div>
-      )
-    }
+    if (!account) return <LoadingShell />
     if (
       account.signInRequired &&
       (account.state === 'signed-out' || account.state === 'signing-in')
@@ -43,7 +47,13 @@ function Gate(): React.JSX.Element {
       return <SignInScreen status={account} />
     }
   }
-  return <SignedInApp />
+  // The desktop reads the game before any page does; the web checks a remembered game in each
+  // request instead (httpApi), so its shell shows at once.
+  return (
+    <GameProvider fallback={web ? undefined : <LoadingShell />}>
+      <SignedInApp />
+    </GameProvider>
+  )
 }
 
 /** On desktop the hub sits above the sign-in gate, so it outlives every page and sign-in state. */

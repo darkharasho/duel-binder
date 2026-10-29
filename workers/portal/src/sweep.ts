@@ -84,7 +84,7 @@ export function sweepClientFor(env: PriceEnv): SweepClient | null {
   }
 }
 
-const utcDay = (d: Date): string => d.toISOString().slice(0, 10)
+export const utcDay = (d: Date): string => d.toISOString().slice(0, 10)
 
 /**
  * Lists every Asian (sweepKey, language) prefix in the catalog, at most once a UTC day. `owned` marks
@@ -204,7 +204,8 @@ export function assignSweep(
   return { priced, skipped }
 }
 
-function readCalls(db: SqlDb, today: string): number {
+/** Today's eBay sweep calls from meta; 0 when the stored count is for another UTC day. */
+export function readCalls(db: SqlDb, today: string): number {
   const v = getMeta(db, 'sweep_calls_day')
   if (!v) return 0
   const [day, n] = v.split(':')

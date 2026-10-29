@@ -6,6 +6,7 @@ import { priceFor } from '../../shared/pricing'
 import type { AddEntryInput, CollectionFilters, EntryView, Facets, UpdateEntryInput } from '../../shared/types'
 import { getMeta } from '../db/meta'
 import { LOCAL, type Scope } from './scope'
+import { EN_TWIN_PRICE } from './enTwin'
 import { buildFtsQuery, rowToCard, rowToPrinting, type CardDbRow, type PrintingDbRow } from './cards'
 
 export class CollectionError extends Error {
@@ -33,7 +34,7 @@ const SELECT = `
          c.id AS id, c.name, c.type, c.frame_type, c.race, c.attribute, c.level, c.linkval, c.atk, c.def,
          c.archetype, c.desc, c.tcgplayer_price,
          p.id AS p_id, p.card_id, p.set_name, p.set_code, ${RARITY_LABEL} AS set_rarity, p.set_rarity_code, p.set_price,
-         p.market_price,
+         p.market_price, ${EN_TWIN_PRICE} AS en_twin_price,
          p.missing_from_api, p.language,
          ip.printing_id AS ip_id, ip.price AS ip_price, ip.checked_at AS ip_checked_at,
          ip.listing_count AS ip_listing_count
@@ -49,15 +50,19 @@ function toView(r: EntryDbRow, priceStatus: string | null): EntryView {
   const hasRow = r.ip_id !== null && r.ip_id !== undefined
   const ebayPrice = hasRow ? (r.ip_price as number | null) : null
   // English uses the printing's TCGplayer market price, then its eBay asking price, then YGOPRODeck.
-  // intl_prices holds eBay prices for every language; non-English never falls back to an English price.
+  // intl_prices holds eBay prices for every language; European printings with no eBay price fall back to the English twin as an estimate.
   const market = english ? ((r.market_price as number | null) ?? null) : null
-  const ebay = market === null && (english ? ebayPrice !== null : true)
+  const twin = !english && ebayPrice === null ? ((r.en_twin_price as number | null) ?? null) : null
+  const ebay = market === null && twin === null && (english ? ebayPrice !== null : true)
   let unitPrice: number | null
   let approximate: boolean
   let noPriceReason: EntryView['noPriceReason'] = null
   if (market !== null) {
     unitPrice = market
     approximate = false
+  } else if (twin !== null) {
+    unitPrice = twin
+    approximate = true
   } else if (ebay) {
     unitPrice = ebayPrice
     approximate = false
@@ -78,7 +83,7 @@ function toView(r: EntryDbRow, priceStatus: string | null): EntryView {
     originalArt: r.e_original_art === 1,
     unitPrice,
     priceApproximate: approximate,
-    priceSource: market !== null ? 'tcgplayer' : ebay ? 'ebay' : 'ygoprodeck',
+    priceSource: market !== null || twin !== null ? 'tcgplayer' : ebay ? 'ebay' : 'ygoprodeck',
     priceCheckedAt: ebay ? ((r.ip_checked_at as string | null) ?? null) : null,
     priceListingCount: ebay ? ((r.ip_listing_count as number | null) ?? null) : null,
     noPriceReason,

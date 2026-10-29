@@ -26,7 +26,7 @@ import {
 import { adjustPrinting, getChecklist, listSets } from '../../../src/main/repo/sets'
 import { getStats, recordSnapshot } from '../../../src/main/repo/stats'
 import type { AppDeps } from './app'
-import { currentUser } from './auth'
+import { currentUser, gamesFor } from './auth'
 import {
   FriendError,
   acceptFriend,
@@ -39,6 +39,8 @@ import {
   unblockUser
 } from './friends'
 import { userScope } from './scope'
+import { GAME_HEADER } from '../../../src/shared/cloud'
+import type { GameId } from '../../../src/shared/games'
 
 type Params<T> = T extends (...args: infer A) => unknown ? A : never
 
@@ -50,7 +52,7 @@ type ChannelMethod<C extends InvokeChannel> = C extends `${infer N}:${infer M}`
     : never
   : never
 
-type RpcDeps = AppDeps & { userId: number }
+type RpcDeps = AppDeps & { userId: number; game: GameId }
 
 type Handler<C extends InvokeChannel> = (
   deps: RpcDeps,
@@ -67,11 +69,11 @@ function friendId(db: AppDeps['db'], me: number, id: unknown): number {
 
 // Arguments come off the wire untyped: every handler checks its own before use.
 const HANDLERS: { [C in PortalChannel]: Handler<C> } = {
-  'cards:search': ({ db }, _s, q) => searchCards(db, checkString(q, 'q')),
-  'cards:get': ({ db }, _s, cardId) => getCardDetail(db, checkId(cardId, 'cardId')),
+  'cards:search': ({ db }, scope, q) => searchCards(db, checkString(q, 'q'), undefined, scope),
+  'cards:get': ({ db }, scope, cardId) => getCardDetail(db, checkId(cardId, 'cardId'), scope),
   'cards:browse': ({ db }, scope, f) =>
     browseCards(db, checkObject(f, 'Filters') as unknown as BrowseFilters, scope),
-  'cards:browseFacets': ({ db }) => browseFacets(db),
+  'cards:browseFacets': ({ db }, scope) => browseFacets(db, scope),
   'sets:list': ({ db }, scope) => listSets(db, scope),
   'sets:checklist': ({ db }, scope, setName, language) =>
     getChecklist(db, checkString(setName, 'setName'), checkLanguage(language), scope),
@@ -109,7 +111,7 @@ const HANDLERS: { [C in PortalChannel]: Handler<C> } = {
     removeEntry(db, checkId(id, 'id'), now(), scope)
     recordSnapshot(db, now(), scope)
   },
-  'friends:overview': ({ db, userId }) => friendsOverview(db, userId),
+  'friends:overview': ({ db, userId, game }) => friendsOverview(db, userId, game),
   'friends:request': ({ db, userId, now }, _s, username) =>
     requestFriend(db, userId, checkString(username, 'username'), now()),
   'friends:accept': ({ db, userId, now }, _s, id) =>
@@ -119,12 +121,14 @@ const HANDLERS: { [C in PortalChannel]: Handler<C> } = {
   'friends:block': ({ db, userId, now }, _s, id) =>
     blockUser(db, userId, checkId(id, 'userId'), now()),
   'friends:unblock': ({ db, userId }, _s, id) => unblockUser(db, userId, checkId(id, 'userId')),
-  'friends:collection': ({ db, userId }, _s, id, f) => {
+  // A friend's binder shows the caller's game; a friend who can't use it simply has no rows there.
+  'friends:collection': ({ db, userId, game }, _s, id, f) => {
     const friend = friendId(db, userId, id)
     const filters = checkObject(f, 'Filters') as unknown as CollectionFilters
-    return listEntries(db, filters, userScope(friend)).map((e) => ({ ...e, notes: '' }))
+    return listEntries(db, filters, userScope(friend, game)).map((e) => ({ ...e, notes: '' }))
   },
-  'friends:facets': ({ db, userId }, _s, id) => getFacets(db, userScope(friendId(db, userId, id))),
+  'friends:facets': ({ db, userId, game }, _s, id) =>
+    getFacets(db, userScope(friendId(db, userId, id), game)),
   'stats:get': ({ db }, scope) => getStats(db, scope)
 }
 
@@ -149,6 +153,10 @@ export async function rpcRoute(req: Request, deps: AppDeps, channel: string): Pr
   const user = await currentUser(req, deps)
   if (!user) return json({ error: 'signed-out' }, 401)
   if (!Object.hasOwn(HANDLERS, channel)) return json({ error: 'unknown-channel' }, 404)
+  // The game comes from the caller and is checked against what they may use; unknown names fail too.
+  const asked = req.headers.get(GAME_HEADER) || 'ygo'
+  const game = gamesFor(deps, user.id).find((g) => g === asked)
+  if (!game) return json({ error: 'game-not-allowed' }, 403)
 
   let body: unknown
   try {
@@ -165,7 +173,8 @@ export async function rpcRoute(req: Request, deps: AppDeps, channel: string): Pr
       s: Scope,
       ...a: unknown[]
     ) => unknown
-    const result = handler({ ...deps, userId: user.id }, userScope(user.id), ...args) ?? null
+    const result =
+      handler({ ...deps, userId: user.id, game }, userScope(user.id, game), ...args) ?? null
     if (QUEUES_PRICES.has(channel)) await deps.prices.soon()
     return json({ result })
   } catch (e) {

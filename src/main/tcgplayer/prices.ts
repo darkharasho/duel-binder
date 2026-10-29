@@ -43,13 +43,13 @@ export function pickMarketPrice(rows: PriceRow[]): number | null {
   return priced.length > 0 ? (priced[0].marketPrice as number) : null
 }
 
-/** Sets holding an owned English printing (any owner, tombstones excluded). */
+/** Sets holding an owned English Yu-Gi-Oh! printing (any owner, tombstones excluded). */
 function ownedGroups(db: Database.Database): Set<number> {
   const resolve = createTcgProductResolver(db)
   const ids = db
     .prepare(
       `SELECT DISTINCT p.id FROM card_printings p
-       WHERE p.language = 'en' AND EXISTS
+       WHERE p.language = 'en' AND p.game = 'ygo' AND EXISTS
          (SELECT 1 FROM collection_entries e WHERE e.printing_id = p.id AND e.deleted_at IS NULL)`
     )
     .all() as { id: number }[]
@@ -155,8 +155,8 @@ export async function refreshTcgPrices(
 }
 
 /**
- * Sets each English printing's market_price from its TCGplayer product's price, or null when it has
- * none. A printing matched only loosely (see createTcgProductResolver) is priced only when no other
+ * Sets each English Yu-Gi-Oh! printing's market_price from its TCGplayer product's price, or null when
+ * it has none (TCGCSV matching is Yu-Gi-Oh! only; other games' printings are never touched). A printing matched only loosely (see createTcgProductResolver) is priced only when no other
  * printing matches that product, since TCGplayer may list just one of several rarities. Moves under
  * MIN_MOVE_USD and MIN_MOVE_SHARE are ignored. With `groups`, only printings in those sets are
  * looked at. Returns how many printings changed.
@@ -172,7 +172,7 @@ export function applyTcgPrices(db: Database.Database, groups?: number[]): number
     : ''
   const printings = db
     .prepare(
-      `SELECT id, market_price FROM card_printings WHERE language = 'en' AND set_code <> '' ${inGroups}`
+      `SELECT id, market_price FROM card_printings WHERE language = 'en' AND game = 'ygo' AND set_code <> '' ${inGroups}`
     )
     .all(...(groups ?? [])) as { id: number; market_price: number | null }[]
   const matches = printings.map((p) => ({ ...p, match: resolve(p.id) }))

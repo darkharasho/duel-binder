@@ -21,8 +21,9 @@ import {
   type WireEntry,
   type WirePrice
 } from '../../../src/shared/cloud'
+import type { GameId } from '../../../src/shared/games'
 import type { AppDeps } from './app'
-import { currentUser } from './auth'
+import { currentUser, gamesFor } from './auth'
 import { requestPrices } from './priceRequests'
 import { NEXT_SEQ, userScope } from './scope'
 
@@ -85,6 +86,12 @@ const ENTRY_SELECT = `SELECT e.id, e.user_id, e.printing_id, e.uid, p.pkey, e.im
   e.created_at, e.updated_at, e.deleted_at, e.server_seq
   FROM collection_entries e JOIN card_printings p ON p.id = e.printing_id`
 
+/** The printing a pushed pkey names. */
+interface Printing {
+  id: number
+  game: GameId
+}
+
 /** A row whose printing is in the catalog. */
 type WireRow = EntryRow & { pkey: string }
 
@@ -110,18 +117,20 @@ const sameEntry = (x: WireEntry, y: WireEntry): boolean =>
 
 /**
  * Applies pushed entries for `userId` with latest-edit-wins per uid and one live row per printing+art,
- * then records the user's value snapshot, all in one transaction. `wroteLive` is set when a live entry
- * was actually written (an identical re-push writes nothing).
+ * then records the user's value snapshots, all in one transaction. Each entry takes the game of the
+ * printing its pkey names; a game outside `games` (the user's) answers `unknown-printing`, so the
+ * client keeps the entry and retries it later. `wroteLive` is set when a live entry was actually
+ * written (an identical re-push writes nothing).
  */
 export function applyPush(
   db: SqlDb,
   userId: number,
   entries: WireEntry[],
-  now: Date
+  now: Date,
+  games: readonly GameId[] = ['ygo']
 ): { results: PushResult[]; wroteLive: boolean } {
-  const scope = userScope(userId)
   const findPrinting = db.prepare(
-    `SELECT p.id FROM card_printings p JOIN card_images i ON i.card_id = p.card_id AND i.image_id = ?
+    `SELECT p.id, p.game FROM card_printings p JOIN card_images i ON i.card_id = p.card_id AND i.image_id = ?
      WHERE p.pkey = ?`
   )
   // LEFT JOIN: a uid must be found even if its printing has left the catalog, or the insert below
@@ -135,19 +144,20 @@ export function applyPush(
   )
   const bumpSeq = db.prepare(`UPDATE collection_entries SET server_seq = ${NEXT_SEQ} WHERE id = ?`)
   const update = db.prepare(
-    `UPDATE collection_entries SET printing_id = ?, image_id = ?, quantity = ?, notes = ?, created_at = ?,
+    `UPDATE collection_entries SET game = ?, printing_id = ?, image_id = ?, quantity = ?, notes = ?, created_at = ?,
        updated_at = ?, deleted_at = ?, server_seq = ${NEXT_SEQ}
      WHERE id = ? AND user_id = ?`
   )
   const insert = db.prepare(
-    `INSERT INTO collection_entries (user_id, uid, printing_id, image_id, quantity, notes, created_at, updated_at,
+    `INSERT INTO collection_entries (user_id, uid, game, printing_id, image_id, quantity, notes, created_at, updated_at,
        deleted_at, server_seq)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ${NEXT_SEQ})`
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ${NEXT_SEQ})`
   )
 
-  const store = (existing: EntryRow | undefined, printingId: number, e: WireEntry): void => {
+  const store = (existing: EntryRow | undefined, printing: Printing, e: WireEntry): void => {
     const fields = [
-      printingId,
+      printing.game,
+      printing.id,
       e.imageId,
       e.quantity,
       e.notes,
@@ -160,9 +170,13 @@ export function applyPush(
   }
 
   let wroteLive = false
+  /** Yu-Gi-Oh! always gets its snapshot, as before games; another game only when pushed to. */
+  const touched = new Set<GameId>(['ygo'])
   const applyOne = (e: WireEntry): PushResult => {
-    const printing = findPrinting.get(e.imageId, e.pkey) as { id: number } | undefined
-    if (!printing) return { uid: e.uid, status: 'unknown-printing' }
+    const printing = findPrinting.get(e.imageId, e.pkey) as Printing | undefined
+    // Never 'rejected' for a game the user can't use yet: that would make the client drop the uid.
+    if (!printing || !games.includes(printing.game)) return { uid: e.uid, status: 'unknown-printing' }
+    touched.add(printing.game)
 
     const existing = byUid.get(e.uid) as EntryRow | undefined
     if (existing && existing.user_id !== userId) return { uid: e.uid, status: 'rejected' }
@@ -185,7 +199,7 @@ export function applyPush(
           const at = editTime(e)
           tombstone.run(at, at, other.id)
         } else {
-          store(existing, printing.id, { ...e, deletedAt: editTime(e) })
+          store(existing, printing, { ...e, deletedAt: editTime(e) })
           // Re-sequence the winner so, here too, the loser's tombstone comes first in a pull.
           bumpSeq.run(other.id)
           return { uid: e.uid, status: 'merged', winner }
@@ -193,71 +207,115 @@ export function applyPush(
       }
     }
     // An owned row whose printing is gone can't be sent back as `current`, so the incoming entry replaces it.
-    store(existing, printing.id, e)
+    store(existing, printing, e)
     if (e.deletedAt === null) wroteLive = true
     return { uid: e.uid, status: 'applied' }
   }
 
   const results = db.transaction(() => {
     const out = entries.map(applyOne)
-    recordSnapshot(db, now, scope)
+    for (const game of touched) recordSnapshot(db, now, userScope(userId, game))
     return out
   })()
   return { results, wroteLive }
 }
 
-/** The caller's rows written after `cursor`, tombstones included, in seq order. */
+/**
+ * A page's cursor. Mid-feed it is the last row returned; on the last page it is the feed's highest seq
+ * of any game, so a feed read for one game moves past the other games' seqs and never re-reads them.
+ */
+function pageCursor(
+  db: SqlDb,
+  last: number | undefined,
+  more: boolean,
+  from: number,
+  maxSql: string,
+  ...args: unknown[]
+): number {
+  if (more) return last!
+  const { top } = db.prepare(maxSql).get(...args) as { top: number | null }
+  return Math.max(from, last ?? 0, Number(top ?? 0))
+}
+
+/** The caller's rows of `game` written after `cursor`, tombstones included, in seq order. */
 export function pullSince(
   db: SqlDb,
   userId: number,
   cursor: number,
-  limit = MAX_PULL
+  limit = MAX_PULL,
+  game: GameId = 'ygo'
 ): PullResponse {
   const rows = db
     .prepare(
-      `${ENTRY_SELECT} WHERE e.user_id = ? AND e.server_seq > ? ORDER BY e.server_seq LIMIT ?`
+      `${ENTRY_SELECT} WHERE e.user_id = ? AND e.game = ? AND e.server_seq > ? ORDER BY e.server_seq LIMIT ?`
     )
-    .all(userId, cursor, limit + 1) as WireRow[]
+    .all(userId, game, cursor, limit + 1) as WireRow[]
   const page = rows.slice(0, limit)
   const entries: PulledEntry[] = page.map((r) => ({ ...toWire(r), seq: r.server_seq }))
+  const more = rows.length > limit
   return {
     entries,
-    cursor: page.length > 0 ? page[page.length - 1].server_seq : cursor,
-    more: rows.length > limit
+    cursor: pageCursor(
+      db,
+      page.at(-1)?.server_seq,
+      more,
+      cursor,
+      'SELECT MAX(server_seq) AS top FROM collection_entries WHERE user_id = ?',
+      userId
+    ),
+    more
   }
 }
 
-/** Server prices for the given printing keys (catalog data, shared by every user). Unknown keys are absent. */
-export function pricesFor(db: SqlDb, pkeys: string[]): PricesResponse {
-  // One JSON parameter keeps under the Durable Object's bound-parameter limit.
+/**
+ * Server prices for the given printing keys (catalog data, shared by every user), for printings of
+ * `games` only. Unknown keys, and keys of other games, are absent.
+ */
+export function pricesFor(
+  db: SqlDb,
+  pkeys: string[],
+  games: readonly GameId[] = ['ygo']
+): PricesResponse {
+  // One JSON parameter per list keeps under the Durable Object's bound-parameter limit.
   const prices = db
     .prepare(
       `SELECT p.pkey, ip.price, ip.listing_count AS listingCount, ip.checked_at AS checkedAt
        FROM intl_prices ip JOIN card_printings p ON p.id = ip.printing_id
-       WHERE p.pkey IN (SELECT value FROM json_each(?))`
+       WHERE p.pkey IN (SELECT value FROM json_each(?)) AND p.game IN (SELECT value FROM json_each(?))`
     )
-    .all(JSON.stringify(pkeys)) as WirePrice[]
+    .all(JSON.stringify(pkeys), JSON.stringify(games)) as WirePrice[]
   return { prices, status: getMeta(db, 'price_service_status') }
 }
 
-/** Server price changes after `since`, oldest first; unpriced printings the server never saw are absent. */
+/**
+ * Server price changes of `game` after `since`, oldest first; unpriced printings the server never
+ * saw are absent.
+ */
 export function priceChanges(
   db: SqlDb,
   since: number,
-  limit = MAX_PRICE_CHANGES
+  limit = MAX_PRICE_CHANGES,
+  game: GameId = 'ygo'
 ): PriceChangesResponse {
   const rows = db
     .prepare(
       `SELECT p.pkey, ip.price, ip.listing_count AS listingCount, ip.checked_at AS checkedAt, ip.price_seq AS seq
        FROM intl_prices ip JOIN card_printings p ON p.id = ip.printing_id
-       WHERE ip.price_seq > ? ORDER BY ip.price_seq LIMIT ?`
+       WHERE ip.price_seq > ? AND +p.game = ? ORDER BY ip.price_seq LIMIT ?`
     )
-    .all(since, limit + 1) as PriceChange[]
+    .all(since, game, limit + 1) as PriceChange[]
   const prices = rows.slice(0, limit)
+  const more = rows.length > limit
   return {
     prices,
-    cursor: prices.length > 0 ? prices[prices.length - 1].seq : since,
-    more: rows.length > limit
+    cursor: pageCursor(
+      db,
+      prices.at(-1)?.seq,
+      more,
+      since,
+      'SELECT MAX(price_seq) AS top FROM intl_prices'
+    ),
+    more
   }
 }
 
@@ -297,13 +355,19 @@ export async function syncRoute(req: Request, deps: AppDeps, path: string): Prom
   const user = await currentUser(req, deps)
   if (!user || user.kind !== 'desktop') return json({ error: 'signed-out' }, 401)
 
+  // The game named by `game` (default Yu-Gi-Oh!), checked against the user's games as RPC does.
+  const asked = new URL(req.url).searchParams.get('game') || 'ygo'
+  const games = gamesFor(deps, user.id)
+  const game = games.find((g) => g === asked)
+  if (!game) return json({ error: 'game-not-allowed' }, 403)
+
   try {
     if (path === 'pull') {
       const raw = new URL(req.url).searchParams.get('cursor') ?? ''
       const cursor = /^\d{1,16}$/.test(raw) ? Number(raw) : NaN
       if (!Number.isSafeInteger(cursor))
         throw new CollectionError('cursor must be a whole number of at least 0')
-      return json(pullSince(deps.db, user.id, cursor))
+      return json(pullSince(deps.db, user.id, cursor, MAX_PULL, game))
     }
 
     if (path === 'price-changes') {
@@ -311,7 +375,7 @@ export async function syncRoute(req: Request, deps: AppDeps, path: string): Prom
       const since = /^\d{1,16}$/.test(raw) ? Number(raw) : NaN
       if (!Number.isSafeInteger(since))
         throw new CollectionError('since must be a whole number of at least 0')
-      return json(priceChanges(deps.db, since))
+      return json(priceChanges(deps.db, since, MAX_PRICE_CHANGES, game))
     }
 
     const body = await readJson(req)
@@ -320,7 +384,7 @@ export async function syncRoute(req: Request, deps: AppDeps, path: string): Prom
       if (Array.isArray(raw) && raw.length > MAX_PUSH) return json({ error: 'too-many' }, 413)
       const now = deps.now()
       const entries = checkPush(body, now)
-      const { results, wroteLive } = applyPush(deps.db, user.id, entries, now)
+      const { results, wroteLive } = applyPush(deps.db, user.id, entries, now, games)
       if (wroteLive) await deps.prices.soon()
       return json({ results })
     }
@@ -336,7 +400,7 @@ export async function syncRoute(req: Request, deps: AppDeps, path: string): Prom
       return json(result)
     }
     if (pkeys.length > MAX_PULL) return json({ error: 'too-many' }, 413)
-    return json(pricesFor(deps.db, pkeys))
+    return json(pricesFor(deps.db, pkeys, games))
   } catch (e) {
     if (e instanceof CollectionError) return json({ error: e.message }, 400)
     throw e

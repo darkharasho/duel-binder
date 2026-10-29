@@ -3,7 +3,7 @@ import Database from 'better-sqlite3'
 import { handle, type AppDeps } from '../../workers/portal/src/app'
 import { searchCards } from '../../src/main/repo/cards'
 import { openDatabase } from '../../src/main/db/database'
-import { CATALOG_TABLES } from '../../src/shared/catalogTables'
+import { CATALOG_TABLES, LEGACY_CATALOG_TABLES } from '../../src/shared/catalogTables'
 import { addUser, memoryBucket, noPrintingArt, noPrices } from './helpers'
 import { seededDb } from '../main/helpers'
 
@@ -48,7 +48,7 @@ describe('admin catalog loader', () => {
     )
 
   const sourceRows = (table: string): Row[] => {
-    const columns = CATALOG_TABLES.find((t) => t.name === table)!.columns
+    const columns = LEGACY_CATALOG_TABLES.find((t) => t.name === table)!.columns
     return source.prepare(`SELECT ${columns.map((c) => `"${c}"`).join(', ')} FROM ${table}`).all() as Row[]
   }
   async function loadCatalog(): Promise<void> {

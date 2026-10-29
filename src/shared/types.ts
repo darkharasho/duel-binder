@@ -64,7 +64,8 @@ export interface EntryView {
   originalArt: boolean
   unitPrice: number | null
   priceApproximate: boolean
-  priceSource: 'tcgplayer' | 'ygoprodeck' | 'ebay'
+  /** null: no price from any source the entry's game has (Pokémon has only TCGplayer for now). */
+  priceSource: 'tcgplayer' | 'ygoprodeck' | 'ebay' | null
   priceCheckedAt: string | null
   /** eBay listings behind the asking price (non-English copies only). */
   priceListingCount: number | null
@@ -103,11 +104,18 @@ export interface CollectionFilters {
   setNames?: string[]
   rarities?: string[]
   language?: Language
+  /** Pokémon only (ignored on Yu-Gi-Oh!, as the Yu-Gi-Oh! fields are ignored on Pokémon). */
+  pkmCategories?: string[]
+  pkmTypes?: string[]
+  pkmStages?: string[]
+  hpMin?: number
+  hpMax?: number
   sort: SortKey
   dir: 'asc' | 'desc'
 }
 
-export type BrowseSort = 'name' | 'released' | 'price' | 'atk' | 'def' | 'level'
+/** 'atk', 'def' and 'level' are Yu-Gi-Oh! only and 'hp' is Pokémon only; on the other game each sorts by name. */
+export type BrowseSort = 'name' | 'released' | 'price' | 'atk' | 'def' | 'level' | 'hp'
 
 /** Filters for the Browse page: every card in the database, not just owned ones. */
 export interface BrowseFilters {
@@ -121,6 +129,12 @@ export interface BrowseFilters {
   levelMin?: number
   levelMax?: number
   owned?: 'all' | 'owned' | 'missing'
+  /** Pokémon only (ignored on Yu-Gi-Oh!, as the Yu-Gi-Oh! fields are ignored on Pokémon). */
+  pkmCategories?: string[]
+  pkmTypes?: string[]
+  pkmStages?: string[]
+  hpMin?: number
+  hpMax?: number
   sort: BrowseSort
   dir: 'asc' | 'desc'
   offset?: number
@@ -161,6 +175,10 @@ export interface BrowseFacets {
   archetypes: string[]
   setNames: string[]
   rarities: string[]
+  /** Pokémon only: filled on Pokémon, absent otherwise (the Yu-Gi-Oh! facets are empty arrays there). */
+  pkmCategories?: string[]
+  pkmTypes?: string[]
+  pkmStages?: string[]
 }
 
 export interface Facets {
@@ -170,6 +188,10 @@ export interface Facets {
   setNames: string[]
   rarities: string[]
   languages: Language[]
+  /** Pokémon only: filled on Pokémon, absent otherwise (the Yu-Gi-Oh! facets are empty arrays there). */
+  pkmCategories?: string[]
+  pkmTypes?: string[]
+  pkmStages?: string[]
 }
 
 export interface CollectionStats {
@@ -184,6 +206,7 @@ export interface CollectionStats {
   unpricedCount?: number
   /** `unpriced`: copies of the rarity with no price (optional, as unpricedCount). */
   byRarity: { rarity: string; count: number; value: number; unpriced?: number }[]
+  /** Yu-Gi-Oh!'s frame types; on Pokémon the category (Pokémon/Trainer/Energy) in the same field. */
   byFrameType: { frameType: string; count: number }[]
   topEntries: EntryView[]
   /** The dearest single copies: entries by unit price. */

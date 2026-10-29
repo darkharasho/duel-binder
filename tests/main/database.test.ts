@@ -38,7 +38,7 @@ describe('database', () => {
     art.run(ids[0], null, '2026-10-01')
     art.run(ids[1], 'https://x/y.png', '2026-10-01')
     migrate(db)
-    expect(db.pragma('user_version', { simple: true })).toBe(18)
+    expect(db.pragma('user_version', { simple: true })).toBe(19)
     expect(getMeta(db, 'intl_sets_synced_at')).toBeNull()
     expect(getMeta(db, 'tcgplayer_synced_at')).toBe('2026-10-01T00:00:00.000Z')
     expect(db.prepare('SELECT printing_id, url FROM printing_art').all()).toEqual([
@@ -69,7 +69,7 @@ describe('database', () => {
     insert.run(9, 8, 3, '', '2026-10-03', '2026-10-04')
     db.prepare("INSERT INTO value_snapshots (date, total_value, total_cards) VALUES ('2026-10-04', 12.5, 5)").run()
     migrate(db)
-    expect(db.pragma('user_version', { simple: true })).toBe(18)
+    expect(db.pragma('user_version', { simple: true })).toBe(19)
     const rows = db
       .prepare(
         'SELECT id, uid, owner_id, dirty, deleted_at, quantity, notes, created_at, updated_at FROM collection_entries ORDER BY id'
@@ -84,7 +84,7 @@ describe('database', () => {
       { id: 9, uid: undefined, owner_id: 0, dirty: 1, deleted_at: null, quantity: 3, notes: '', created_at: '2026-10-03', updated_at: '2026-10-04' }
     ])
     expect(db.prepare('SELECT * FROM value_snapshots').all()).toEqual([
-      { owner_id: 0, date: '2026-10-04', total_value: 12.5, total_cards: 5 }
+      { owner_id: 0, game: 'ygo', date: '2026-10-04', total_value: 12.5, total_cards: 5 }
     ])
     expect(db.pragma('foreign_key_check')).toEqual([])
     db.close()
@@ -122,11 +122,11 @@ describe('database', () => {
     db.close()
   })
 
-  test('migrate sets user_version 18 and is idempotent', () => {
+  test('migrate sets user_version 19 and is idempotent', () => {
     const db = openDatabase(':memory:')
-    expect(db.pragma('user_version', { simple: true })).toBe(18)
+    expect(db.pragma('user_version', { simple: true })).toBe(19)
     expect(() => migrate(db)).not.toThrow()
-    expect(db.pragma('user_version', { simple: true })).toBe(18)
+    expect(db.pragma('user_version', { simple: true })).toBe(19)
     db.close()
   })
 
@@ -151,7 +151,7 @@ describe('database', () => {
     ).run()
     db.prepare(`INSERT INTO sets (set_name, set_code) VALUES ('Legend of Blue Eyes White Dragon', 'LOB')`).run()
     migrate(db)
-    expect(db.pragma('user_version', { simple: true })).toBe(18)
+    expect(db.pragma('user_version', { simple: true })).toBe(19)
     expect(db.prepare('SELECT id, language FROM card_printings').all()).toEqual([{ id: 7, language: 'en' }])
     expect(db.prepare('SELECT id, printing_id FROM collection_entries').all()).toEqual([
       { id: 3, printing_id: 7 }
@@ -192,7 +192,7 @@ describe('database', () => {
     db.pragma('user_version = 1')
     db.prepare("INSERT INTO meta (key, value) VALUES ('k', 'v')").run()
     migrate(db)
-    expect(db.pragma('user_version', { simple: true })).toBe(18)
+    expect(db.pragma('user_version', { simple: true })).toBe(19)
     expect(db.prepare('SELECT value FROM meta WHERE key = ?').get('k')).toEqual({ value: 'v' })
     expect(db.prepare('SELECT count(*) AS n FROM sets').get()).toEqual({ n: 0 })
     db.close()

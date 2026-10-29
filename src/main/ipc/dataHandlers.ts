@@ -22,6 +22,8 @@ import {
 import { getStats, recordSnapshot } from '../repo/stats'
 import { activeOwner, listSyncIssues } from '../cloud/localSync'
 import { openPack, ripHistory, ripSession, ripSets, startRip } from '../repo/rip'
+import { activeGame, setActiveGame } from '../cloud/activeGame'
+import type { GameId } from '@shared/games'
 
 /** The channels whose handlers only need the database, so the phone runs them too. */
 export const DATA_CHANNELS = [
@@ -49,7 +51,10 @@ export const DATA_CHANNELS = [
   'rip:start',
   'rip:openPack',
   'rip:session',
-  'rip:history'
+  'rip:history',
+  'games:available',
+  'games:active',
+  'games:setActive'
 ] as const
 
 export type DataChannel = (typeof DATA_CHANNELS)[number]
@@ -69,10 +74,16 @@ const MAX_REMEMBERED_ADDS = 500
 
 export function createDataHandlers({
   db,
-  onEdit
+  onEdit,
+  availableGames,
+  onGameChanged
 }: {
   db: SqlDb
   onEdit(): void
+  /** The games the signed-in account may use; signed out, `['ygo']`. */
+  availableGames(): GameId[]
+  /** The game shown changed: every page should reload. */
+  onGameChanged(): void
 }): Record<DataChannel, Handler> {
   // Keep today's value snapshot meaning "end of day" as the collection changes.
   const snapshotAfter = <T>(result: T): T => {
@@ -149,6 +160,14 @@ export function createDataHandlers({
       ripHistory(db, {
         sessionOffset:
           opts?.sessionOffset === undefined ? undefined : wholeNumber(opts.sessionOffset, 'Offset')
-      })
+      }),
+    'games:available': async () => availableGames(),
+    'games:active': async () => activeGame(db, availableGames()),
+    'games:setActive': async (game: unknown) => {
+      const available = availableGames()
+      const before = activeGame(db, available)
+      setActiveGame(db, available, game)
+      if (game !== before) onGameChanged()
+    }
   }
 }

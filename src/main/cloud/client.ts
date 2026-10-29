@@ -15,6 +15,8 @@ import type {
   PushResult,
   WireEntry
 } from '../../shared/cloud'
+import { GAME_HEADER } from '../../shared/cloud'
+import type { GameId } from '../../shared/games'
 import type { PortalChannel } from '../../shared/portal'
 
 /** The portal answered 401: the desktop token is unknown, expired or revoked. */
@@ -36,28 +38,31 @@ export class CloudOfflineError extends Error {
 export interface CloudClient {
   me(): Promise<Me>
   push(entries: WireEntry[]): Promise<PushResult[]>
-  pull(cursor: number): Promise<PullResponse>
+  /** One page of the account's entries of `game` (default Yu-Gi-Oh!) written after `cursor`. */
+  pull(cursor: number, game?: GameId): Promise<PullResponse>
   prices(pkeys: string[]): Promise<PricesResponse>
-  /** One page of server price changes after `since` (the price change feed). */
-  priceChanges(since: number): Promise<PriceChangesResponse>
+  /** One page of server price changes of `game` (default Yu-Gi-Oh!) after `since` (the price change feed). */
+  priceChanges(since: number, game?: GameId): Promise<PriceChangesResponse>
   /** Asks the server to price these printings (at most MAX_PRICE_REQUEST); see requestPrices. */
   requestPrices(pkeys: string[]): Promise<PriceRequestResponse>
   /**
    * One page of the catalog change feed after `since`; `limit` defaults to the server's page size,
-   * `tables` (default all) limits the feed to those tables.
+   * `tables` (default all) limits the feed to those tables. With a `game`, the feed of that game;
+   * without one, the legacy (Yu-Gi-Oh! only, pre-games) feed.
    */
   catalogChanges(
     since: number,
     limit?: number,
-    tables?: readonly CatalogTableName[]
+    tables?: readonly CatalogTableName[],
+    game?: GameId
   ): Promise<CatalogChangesResponse>
   /** Offers printings the catalog lacks; one result per printing. */
   contribute(printings: ContributedPrinting[]): Promise<ContributeResult[]>
   revoke(): Promise<void>
   /** Adds anonymous event totals to the portal's daily counters. */
   usage(report: UsageReport): Promise<void>
-  /** Calls a portal RPC channel; resolves to its result. */
-  rpc<T>(channel: PortalChannel, args: unknown[]): Promise<T>
+  /** Calls a portal RPC channel for `game` (default: none sent, which the server takes as Yu-Gi-Oh!). */
+  rpc<T>(channel: PortalChannel, args: unknown[], game?: GameId): Promise<T>
 }
 
 const DEFAULT_TIMEOUT_MS = 30_000
@@ -83,9 +88,13 @@ export function createCloudClient(opts: {
     method: string,
     body?: unknown,
     parse = true,
-    callTimeoutMs = timeoutMs
+    callTimeoutMs = timeoutMs,
+    extraHeaders: Record<string, string> = {}
   ): Promise<T> {
-    const headers: Record<string, string> = { authorization: `Bearer ${opts.token}` }
+    const headers: Record<string, string> = {
+      ...extraHeaders,
+      authorization: `Bearer ${opts.token}`
+    }
     if (body !== undefined) headers['content-type'] = 'application/json'
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), callTimeoutMs)
@@ -141,17 +150,18 @@ export function createCloudClient(opts: {
     me: () => call<Me>('/api/me', 'GET'),
     push: async (entries) =>
       (await call<PushResponse>('/api/sync/push', 'POST', { entries })).results,
-    pull: (cursor) => call<PullResponse>(`/api/sync/pull?cursor=${cursor}`, 'GET'),
+    pull: (cursor, game = 'ygo') =>
+      call<PullResponse>(`/api/sync/pull?cursor=${cursor}&game=${game}`, 'GET'),
     prices: (pkeys) => call<PricesResponse>('/api/sync/prices', 'POST', { pkeys }),
-    priceChanges: (since) =>
-      call<PriceChangesResponse>(`/api/sync/price-changes?since=${since}`, 'GET'),
+    priceChanges: (since, game = 'ygo') =>
+      call<PriceChangesResponse>(`/api/sync/price-changes?since=${since}&game=${game}`, 'GET'),
     requestPrices: (pkeys) =>
       call<PriceRequestResponse>('/api/sync/price-requests', 'POST', { pkeys }),
-    catalogChanges: (since, limit, tables) =>
+    catalogChanges: (since, limit, tables, game) =>
       call<CatalogChangesResponse>(
         `/api/catalog/changes?since=${since}${limit === undefined ? '' : `&limit=${limit}`}${
           tables ? `&tables=${tables.join(',')}` : ''
-        }`,
+        }${game ? `&game=${game}` : ''}`,
         'GET',
         undefined,
         true,
@@ -165,7 +175,16 @@ export function createCloudClient(opts: {
       ).results,
     revoke: () => call<void>('/auth/desktop/revoke', 'POST', undefined, false),
     usage: (report) => call<void>('/api/usage', 'POST', report, false),
-    rpc: async <T>(channel: PortalChannel, args: unknown[]) =>
-      (await call<{ result: T }>(`/api/rpc/${channel}`, 'POST', { args })).result
+    rpc: async <T>(channel: PortalChannel, args: unknown[], game?: GameId) =>
+      (
+        await call<{ result: T }>(
+          `/api/rpc/${channel}`,
+          'POST',
+          { args },
+          true,
+          timeoutMs,
+          game ? { [GAME_HEADER]: game } : {}
+        )
+      ).result
   }
 }

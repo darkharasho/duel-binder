@@ -25,8 +25,10 @@ import {
   SheetTitle
 } from '@/components/ui/sheet'
 import type { ScanEngine } from '@/features/scan/engine'
+import { GameSegments } from '@/components/GameSwitch'
 import { api, mutationInvalidationKeys } from '@/lib/api'
 import { useFriendsOverview } from '@/lib/friends'
+import { GameProvider, pageInGame, useGame } from '@/lib/game'
 import { cn } from '@/lib/utils'
 import { usePhone } from './context'
 import { ScannerScreen } from './ScannerScreen'
@@ -48,6 +50,8 @@ const MORE: { page: Page; label: string; icon: LucideIcon }[] = [
   { page: 'friends', label: 'Friends', icon: UsersIcon },
   { page: 'settings', label: 'Settings', icon: SettingsIcon }
 ]
+/** The tab bar's grid by column count: the tabs plus More (5 with Scan, 4 without). */
+const GRID_COLS: Record<number, string> = { 4: 'grid-cols-4', 5: 'grid-cols-5' }
 const IN_MORE = new Set<Page>(MORE.map((m) => m.page))
 
 /** Once the app is ready: a sync, a daily card data check, the fingerprints, and persistent storage. */
@@ -76,18 +80,34 @@ function useReadyChecks(): void {
 /**
  * The phone app once signed in and set up: the desktop's pages (the same page switch as the
  * desktop shell) above a bottom tab bar, with the status line at the top of each page. It opens
- * on Home. `engineFactory` is for tests.
+ * on Home, once the game shown is known. `engineFactory` is for tests.
  */
 export function PhoneShell({
   engineFactory
 }: {
   engineFactory?: () => ScanEngine
 }): React.JSX.Element {
+  return (
+    <GameProvider fallback={<div className="fixed inset-0 bg-background" />}>
+      <Shell engineFactory={engineFactory} />
+    </GameProvider>
+  )
+}
+
+function Shell({ engineFactory }: { engineFactory?: () => ScanEngine }): React.JSX.Element {
   const pages = usePages('dashboard')
   const { page, onNavigate } = pages
   const [moreOpen, setMoreOpen] = useState(false)
   const requests = useFriendsOverview().data?.incoming.length ?? 0
+  const { def, available } = useGame()
+  // Scan and Rip only for a game that has them; on Pokémon the raised Scan tab goes.
+  const tabs = TABS.filter((t) => pageInGame(t.page, def))
+  const more = MORE.filter((m) => pageInGame(m.page, def))
   useReadyChecks()
+  // A switch to a game without this page (Scan or Rip) goes Home.
+  useEffect(() => {
+    if (!pageInGame(page, def)) onNavigate('dashboard')
+  }, [page, def, onNavigate])
 
   const mainRef = useRef<HTMLElement>(null)
   const scroll = useMemo<MainScroll>(
@@ -172,8 +192,8 @@ export function PhoneShell({
           scan && 'hidden'
         )}
       >
-        <div className="mx-auto grid h-16 max-w-lg grid-cols-5 items-end">
-          {TABS.map(({ page: p, label, icon: Icon }) =>
+        <div className={cn('mx-auto grid h-16 max-w-lg items-end', GRID_COLS[tabs.length + 1])}>
+          {tabs.map(({ page: p, label, icon: Icon }) =>
             p === 'scan' ? (
               <button
                 key={p}
@@ -225,8 +245,13 @@ export function PhoneShell({
             <SheetTitle>More</SheetTitle>
             <SheetDescription className="sr-only">More pages</SheetDescription>
           </SheetHeader>
+          {available.length > 1 && (
+            <div className="px-4 pb-2">
+              <GameSegments />
+            </div>
+          )}
           <div className="divide-y divide-white/[0.06] px-4">
-            {MORE.map(({ page: p, label, icon: Icon }) => (
+            {more.map(({ page: p, label, icon: Icon }) => (
               <button
                 key={p}
                 type="button"

@@ -11,10 +11,10 @@ interface SetRow {
 }
 
 export function hasSetData(db: Database.Database): boolean {
-  return db.prepare("SELECT 1 FROM sets WHERE language = 'en' LIMIT 1").get() !== undefined
+  return db.prepare("SELECT 1 FROM sets WHERE game = 'ygo' AND language = 'en' LIMIT 1").get() !== undefined
 }
 
-/** Replaces the English set rows with the API list. Never rejects; failures keep the old rows. */
+/** Replaces the English Yu-Gi-Oh set rows with the API list. Never rejects; failures keep the old rows. */
 export async function refreshSets(db: Database.Database, client: YgoClient): Promise<boolean> {
   try {
     const payload = await client.fetchCardSets()
@@ -37,7 +37,7 @@ export async function refreshSets(db: Database.Database, client: YgoClient): Pro
        VALUES ('en', @set_name, @set_code, @tcg_date, @image_url)`
     )
     db.transaction(() => {
-      db.exec("DELETE FROM sets WHERE language = 'en'")
+      db.exec("DELETE FROM sets WHERE game = 'ygo' AND language = 'en'")
       for (const row of rows.values()) insert.run(row)
     })()
     return true

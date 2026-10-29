@@ -190,9 +190,10 @@ const SYNC = 'sync, reads and writes tombstones explicitly'
  */
 const ENTRY_REFS: Record<string, [count: number, kind: string]> = {
   'src/main/repo/browse.ts': [2, SCOPED],
-  'src/main/repo/collection.ts': [6, SCOPED],
+  'src/main/repo/collection.ts': [7, SCOPED],
   'src/main/repo/scope.ts': [5, SCOPED],
   'src/main/repo/sets.ts': [5, SCOPED],
+  'src/main/repo/stats.ts': [1, SCOPED],
   'workers/portal/src/scope.ts': [3, SCOPED],
   'src/main/prices/candidates.ts': [2, LIVE],
   'src/main/dev/fakeData.ts': [2, LIVE],
@@ -206,7 +207,7 @@ const ENTRY_REFS: Record<string, [count: number, kind: string]> = {
     1,
     'live rows for the card count; all rows incl. tombstones for the last-change time'
   ],
-  'workers/portal/src/sync.ts': [5, SYNC],
+  'workers/portal/src/sync.ts': [6, SYNC],
   'workers/portal/src/priceRequests.ts': [1, LIVE],
   'workers/portal/src/sweep.ts': [1, LIVE],
   'workers/portal/src/stats.ts': [
@@ -220,7 +221,7 @@ const ENTRY_REFS: Record<string, [count: number, kind: string]> = {
     'live rows for the census; all rows incl. tombstones for the dangling check and pruning (FK)'
   ],
   'src/main/cloud/localSync.ts': [15, SYNC],
-  'src/main/db/schema.ts': [10, DDL],
+  'src/main/db/schema.ts': [12, DDL],
   'workers/portal/src/migrate.ts': [10, DDL]
 }
 

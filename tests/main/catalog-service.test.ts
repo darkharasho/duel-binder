@@ -5,10 +5,11 @@ import type Database from 'better-sqlite3'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createCatalogService, type CatalogService } from '../../src/main/catalog/service'
 import { CloudOfflineError, createCloudClient, type CloudClient } from '../../src/main/cloud/client'
-import { getMeta, setMeta } from '../../src/main/db/meta'
+import { deleteMeta, getMeta, setMeta } from '../../src/main/db/meta'
 import type { SyncStatus } from '../../src/shared/types'
 import { seededDb } from './helpers'
 import { inProcessPortal, PORTAL } from './cloudHelpers'
+import { seedPokemon } from '../fixtures/pokemon'
 
 type Portal = Awaited<ReturnType<typeof inProcessPortal>>
 let portal: Portal
@@ -394,5 +395,125 @@ describe('catalog service', () => {
       CloudOfflineError
     )
     expect(service.status().state).toBe('idle')
+  })
+
+  describe('per game', () => {
+    let owned: Portal
+    let ownerClient: CloudClient
+    const pkmCount = (table: string): number =>
+      (
+        db
+          .prepare(
+            table === 'pokemon_cards'
+              ? 'SELECT count(*) AS n FROM pokemon_cards'
+              : `SELECT count(*) AS n FROM ${table} WHERE game = 'pkm'`
+          )
+          .get() as { n: number }
+      ).n
+    const serverClock = (): number =>
+      (owned.serverDb.prepare('SELECT seq FROM catalog_clock').get() as { seq: number }).seq
+
+    beforeEach(async () => {
+      owned = await inProcessPortal({ ADMIN_DISCORD_ID: 'discord-1-owner' })
+      seedPokemon(owned.serverDb)
+      const token = await owned.desktopToken(owned.addUser('owner'))
+      ownerClient = createCloudClient({ baseUrl: PORTAL, token, fetch: owned.fetch })
+    })
+    afterEach(() => owned.serverDb.close())
+
+    it('a first Pokémon pass starts from 0, wherever the Yu-Gi-Oh! cursor is', async () => {
+      const service = makeService()
+      // A Yu-Gi-Oh!-only first run, then the cursor at the server's newest change.
+      await service.update(
+        { ...ownerClient, me: async () => ({ ...(await ownerClient.me()), games: ['ygo'] }) },
+        { force: true }
+      )
+      expect(pkmCount('cards')).toBe(0)
+      setMeta(db, 'catalog_cursor', String(serverClock()))
+
+      const asked: { since: number; game: string | undefined }[] = []
+      const watching: CloudClient = {
+        ...ownerClient,
+        catalogChanges: (since, limit, tables, game) => {
+          asked.push({ since, game })
+          return ownerClient.catalogChanges(since, limit, tables, game)
+        }
+      }
+      expect(await service.update(watching, { force: true })).toMatchObject({ changed: true })
+
+      expect(asked).toEqual([
+        { since: serverClock(), game: 'ygo' },
+        { since: 0, game: 'pkm' }
+      ])
+      expect(pkmCount('cards')).toBe(2)
+      expect(pkmCount('card_images')).toBe(2)
+      expect(pkmCount('card_printings')).toBe(4)
+      expect(pkmCount('sets')).toBe(2)
+      expect(pkmCount('pokemon_cards')).toBe(2)
+      expect(Number(getMeta(db, 'catalog_cursor:pkm'))).toBeGreaterThan(0)
+      expect(getMeta(db, 'catalog_cursor')).toBe(String(serverClock()))
+
+      // The next pass starts from the Pokémon cursor.
+      asked.length = 0
+      await service.update(watching, { force: true })
+      expect(asked[1]).toEqual({ since: Number(getMeta(db, 'catalog_cursor:pkm')), game: 'pkm' })
+    })
+
+    it('a user without Pokémon never asks for it', async () => {
+      const games: (string | undefined)[] = []
+      const watching: CloudClient = {
+        ...client,
+        catalogChanges: (since, limit, tables, game) => {
+          games.push(game)
+          return client.catalogChanges(since, limit, tables, game)
+        }
+      }
+      seedPokemon(portal.serverDb)
+      await makeService().update(watching, { force: true })
+      expect(new Set(games)).toEqual(new Set(['ygo']))
+      expect(pkmCount('cards')).toBe(0)
+      expect(getMeta(db, 'catalog_cursor:pkm')).toBeNull()
+    })
+
+    it('a Pokémon pass cut off part way keeps its staged rows through a Yu-Gi-Oh! pass', async () => {
+      const service = makeService()
+      await service.update(ownerClient, { force: true })
+      // A fresh Pokémon pass, a page at a time, offline after its first page.
+      db.prepare('DELETE FROM pokemon_cards').run()
+      deleteMeta(db, 'catalog_cursor:pkm')
+      let pkmPages = 0
+      const flaky: CloudClient = {
+        ...ownerClient,
+        catalogChanges: async (since, limit, tables, game) => {
+          if (game === 'pkm' && ++pkmPages === 2) throw new CloudOfflineError()
+          return ownerClient.catalogChanges(since, game === 'pkm' ? 1 : limit, tables, game)
+        }
+      }
+      await expect(service.update(flaky, { force: true })).rejects.toBeInstanceOf(CloudOfflineError)
+      const staged = getMeta(db, 'catalog_staging_cursor:pkm')
+      expect(staged).not.toBeNull()
+      expect(db.prepare('SELECT count(*) AS n FROM catalog_staging').get()).toEqual({ n: 1 })
+
+      // The next run's Yu-Gi-Oh! pass applies a change and leaves the Pokémon staging alone.
+      owned.serverDb
+        .prepare("UPDATE cards SET name = 'Dark Magician (Renamed)' WHERE id = ?")
+        .run(DM)
+      const asked: { since: number; game: string | undefined }[] = []
+      await service.update(
+        {
+          ...ownerClient,
+          catalogChanges: (since, limit, tables, game) => {
+            asked.push({ since, game })
+            return ownerClient.catalogChanges(since, limit, tables, game)
+          }
+        },
+        { force: true }
+      )
+      expect(cardName(db, DM)).toBe('Dark Magician (Renamed)')
+      expect(asked.find((a) => a.game === 'pkm')?.since).toBe(Number(staged))
+      expect(pkmCount('pokemon_cards')).toBe(2)
+      expect(getMeta(db, 'catalog_staging_cursor:pkm')).toBeNull()
+      expect(db.prepare('SELECT count(*) AS n FROM catalog_staging').get()).toEqual({ n: 0 })
+    })
   })
 })

@@ -1,3 +1,5 @@
+import { isGameId, type GameId } from './games'
+
 /** Limits shared by the desktop sync client and the server's sync endpoints. */
 
 /** Most entries one push may send. */
@@ -8,6 +10,8 @@ export const MAX_PULL = 1000
 export const MAX_NOTES = 2000
 /** How far in the future a client timestamp may be before the server clamps it to server time. */
 export const FUTURE_SKEW_MS = 600_000
+/** The request header naming the game an RPC call is for; missing or empty means Yu-Gi-Oh!. */
+export const GAME_HEADER = 'x-duel-game'
 
 /** The signed-in user, as returned by the portal's `GET /api/me` and `POST /auth/desktop/token`. */
 export interface Me {
@@ -17,6 +21,17 @@ export interface Me {
   avatarUrl: string | null
   /** Set only by `GET /api/me`, and only for the ADMIN_DISCORD_ID account. */
   admin?: true
+  /** The games this account may use. Old servers leave it out, which means `['ygo']`. */
+  games?: GameId[]
+}
+
+/**
+ * The games an account may use, from its `me`: Yu-Gi-Oh! always, then the others it lists. Signed
+ * out (null) or an old server's `me` (no `games`) means Yu-Gi-Oh! only.
+ */
+export function gamesOf(me: Me | null): GameId[] {
+  const games = me?.games?.filter(isGameId) ?? []
+  return games.includes('ygo') ? games : ['ygo', ...games]
 }
 
 /** One collection entry as the sync protocol carries it. Times are ISO 8601 in `toISOString()` form. */

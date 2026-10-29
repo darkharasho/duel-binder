@@ -87,8 +87,8 @@ export function sweepClientFor(env: PriceEnv): SweepClient | null {
 export const utcDay = (d: Date): string => d.toISOString().slice(0, 10)
 
 /**
- * Lists every Asian (sweepKey, language) prefix in the catalog, at most once a UTC day. `owned` marks
- * prefixes with a live collection entry; `released` is the latest set date. Never touches swept_at.
+ * Lists every Asian (sweepKey, language) prefix of Yu-Gi-Oh! printings (the eBay sweep is Yu-Gi-Oh!
+ * only), at most once a UTC day. `owned` marks prefixes with a live collection entry; `released` is the latest set date. Never touches swept_at.
  * One query per language per table (DO SQLite rejects long compound queries). Returns rows upserted.
  */
 export function refreshSweepQueue(db: SqlDb, now: Date): number {
@@ -97,10 +97,10 @@ export function refreshSweepQueue(db: SqlDb, now: Date): number {
   const codes = db.prepare(
     `SELECT set_name, set_code,
        MAX(EXISTS (SELECT 1 FROM collection_entries e WHERE e.printing_id = p.id AND e.deleted_at IS NULL)) AS owned
-     FROM card_printings p WHERE language = ? GROUP BY set_name, set_code`
+     FROM card_printings p WHERE language = ? AND game = 'ygo' GROUP BY set_name, set_code`
   )
   const dates = db.prepare(
-    'SELECT set_name, MAX(tcg_date) AS d FROM sets WHERE language = ? GROUP BY set_name'
+    "SELECT set_name, MAX(tcg_date) AS d FROM sets WHERE language = ? AND game = 'ygo' GROUP BY set_name"
   )
   const upsert = db.prepare(
     `INSERT INTO price_sweeps (key, language, owned, released) VALUES (?, ?, ?, ?)
@@ -134,13 +134,14 @@ export function refreshSweepQueue(db: SqlDb, now: Date): number {
 }
 
 /**
- * A prefix's printings. The unary plus keeps the planner off idx_printings_lang_set (which, with no
- * ANALYZE stats, reads the whole language) and on the NOCASE set-code index that LIKE can use.
+ * A prefix's Yu-Gi-Oh! printings. The unary pluses keep the planner off idx_printings_lang_set and the
+ * game indexes (which, with no ANALYZE stats, read the whole language or game) and on the NOCASE
+ * set-code index that LIKE can use.
  */
 export const ASSIGN_PRINTINGS_SQL = `SELECT p.id AS id, p.set_code AS code, p.set_rarity AS rarity, ip.checked_at AS checkedAt,
     ip.price AS price
   FROM card_printings p LEFT JOIN intl_prices ip ON ip.printing_id = p.id
-  WHERE +p.language = ? AND p.set_code LIKE ?`
+  WHERE +p.language = ? AND +p.game = 'ygo' AND p.set_code LIKE ?`
 
 /**
  * Writes a prefix's sweep result onto its printings. A one-printing code takes its rarity price when

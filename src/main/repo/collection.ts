@@ -5,8 +5,9 @@ import { LANGUAGES } from '../../shared/languages'
 import { priceFor } from '../../shared/pricing'
 import type { AddEntryInput, CollectionFilters, EntryView, Facets, UpdateEntryInput } from '../../shared/types'
 import { getMeta } from '../db/meta'
-import { LOCAL, type Scope } from './scope'
-import { EN_TWIN_PRICE } from './enTwin'
+import { LOCAL, scopeGame, type Scope } from './scope'
+import { pokemonFacets, pokemonWhere } from './pkmFilters'
+import { enTwinPrice } from './enTwin'
 import { buildFtsQuery, rowToCard, rowToPrinting, type CardDbRow, type PrintingDbRow } from './cards'
 
 export class CollectionError extends Error {
@@ -26,21 +27,21 @@ interface EntryDbRow {
   [col: string]: unknown
 }
 
-const SELECT = `
+const select = (scope: Scope): string => `
   SELECT e.id AS e_id, e.quantity AS e_quantity, e.notes AS e_notes, e.created_at AS e_created_at,
          e.updated_at AS e_updated_at, e.image_id AS e_image_id,
-         e.image_id IS (SELECT ci.image_id FROM card_images ci WHERE ci.card_id = c.id
+         e.image_id IS (SELECT ci.image_id FROM card_images ci WHERE ci.card_id = c.id AND +ci.game = ${scope.game}
                         ORDER BY ci.sort_order, ci.image_id LIMIT 1) AS e_original_art,
          c.id AS id, c.name, c.type, c.frame_type, c.race, c.attribute, c.level, c.linkval, c.atk, c.def,
          c.archetype, c.desc, c.tcgplayer_price,
          p.id AS p_id, p.card_id, p.set_name, p.set_code, ${RARITY_LABEL} AS set_rarity, p.set_rarity_code, p.set_price,
-         p.market_price, ${EN_TWIN_PRICE} AS en_twin_price,
+         p.market_price, ${enTwinPrice(scope.game)} AS en_twin_price, p.game AS p_game,
          p.missing_from_api, p.language,
          ip.printing_id AS ip_id, ip.price AS ip_price, ip.checked_at AS ip_checked_at,
          ip.listing_count AS ip_listing_count
   FROM collection_entries e
-  JOIN card_printings p ON p.id = e.printing_id
-  JOIN cards c ON c.id = p.card_id
+  JOIN card_printings p ON p.id = e.printing_id AND +p.game = ${scope.game}
+  JOIN cards c ON c.id = p.card_id AND +c.game = ${scope.game}
   LEFT JOIN intl_prices ip ON ip.printing_id = p.id`
 
 function toView(r: EntryDbRow, priceStatus: string | null): EntryView {
@@ -51,9 +52,12 @@ function toView(r: EntryDbRow, priceStatus: string | null): EntryView {
   const ebayPrice = hasRow ? (r.ip_price as number | null) : null
   // English uses the printing's TCGplayer market price, then its eBay asking price, then YGOPRODeck.
   // intl_prices holds eBay prices for every language; European printings with no eBay price fall back to the English twin as an estimate.
+  // eBay and YGOPRODeck prices are Yu-Gi-Oh! only for now: another game's unpriced copy has no price
+  // and no source, never a YGOPRODeck label or an eBay "checking" that never comes.
+  const ygo = r.p_game === 'ygo'
   const market = english ? ((r.market_price as number | null) ?? null) : null
   const twin = !english && ebayPrice === null ? ((r.en_twin_price as number | null) ?? null) : null
-  const ebay = market === null && twin === null && (english ? ebayPrice !== null : true)
+  const ebay = market === null && twin === null && (english || !ygo ? ebayPrice !== null : true)
   let unitPrice: number | null
   let approximate: boolean
   let noPriceReason: EntryView['noPriceReason'] = null
@@ -68,8 +72,11 @@ function toView(r: EntryDbRow, priceStatus: string | null): EntryView {
     approximate = false
     if (unitPrice === null)
       noPriceReason = hasRow ? 'no-listings' : priceStatus === 'ok' ? 'pending' : 'unavailable'
-  } else {
+  } else if (ygo) {
     ;({ unitPrice, approximate } = priceFor(r.set_price as number | null, card.tcgplayerPrice))
+  } else {
+    unitPrice = null
+    approximate = false
   }
   return {
     id: r.e_id,
@@ -83,7 +90,7 @@ function toView(r: EntryDbRow, priceStatus: string | null): EntryView {
     originalArt: r.e_original_art === 1,
     unitPrice,
     priceApproximate: approximate,
-    priceSource: market !== null || twin !== null ? 'tcgplayer' : ebay ? 'ebay' : 'ygoprodeck',
+    priceSource: market !== null || twin !== null ? 'tcgplayer' : ebay ? 'ebay' : ygo ? 'ygoprodeck' : null,
     priceCheckedAt: ebay ? ((r.ip_checked_at as string | null) ?? null) : null,
     priceListingCount: ebay ? ((r.ip_listing_count as number | null) ?? null) : null,
     noPriceReason,
@@ -92,7 +99,7 @@ function toView(r: EntryDbRow, priceStatus: string | null): EntryView {
 }
 
 export function getEntry(db: SqlDb, id: number, scope: Scope = LOCAL): EntryView | null {
-  const row = db.prepare(`${SELECT} WHERE e.id = ? AND ${scope.where('e')}`).get(id) as EntryDbRow | undefined
+  const row = db.prepare(`${select(scope)} WHERE e.id = ? AND ${scope.where('e')}`).get(id) as EntryDbRow | undefined
   return row ? toView(row, getMeta(db, 'price_service_status')) : null
 }
 
@@ -106,12 +113,12 @@ function assertQuantity(q: number): void {
   if (!Number.isInteger(q) || q < 1) throw new CollectionError('Quantity must be a whole number of at least 1')
 }
 
-function assertLink(db: SqlDb, printingId: number, imageId: number): void {
-  const p = db.prepare('SELECT card_id FROM card_printings WHERE id = ?').get(printingId) as
+function assertLink(db: SqlDb, printingId: number, imageId: number, scope: Scope): void {
+  const p = db.prepare(`SELECT card_id FROM card_printings WHERE id = ? AND +game = ${scope.game}`).get(printingId) as
     | { card_id: number }
     | undefined
   if (!p) throw new CollectionError(`Printing ${printingId} not found`)
-  const img = db.prepare('SELECT card_id FROM card_images WHERE image_id = ?').get(imageId) as
+  const img = db.prepare(`SELECT card_id FROM card_images WHERE image_id = ? AND +game = ${scope.game}`).get(imageId) as
     | { card_id: number }
     | undefined
   if (!img || img.card_id !== p.card_id) throw new CollectionError('Image does not belong to the printing’s card')
@@ -128,7 +135,7 @@ const findExisting = (db: SqlDb, printingId: number, imageId: number, scope: Sco
 
 export function addEntry(db: SqlDb, input: AddEntryInput, now = new Date(), scope: Scope = LOCAL): EntryView {
   assertQuantity(input.quantity)
-  assertLink(db, input.printingId, input.imageId)
+  assertLink(db, input.printingId, input.imageId, scope)
   const ts = now.toISOString()
   return db.transaction(() => {
     const existing = findExisting(db, input.printingId, input.imageId, scope)
@@ -166,7 +173,7 @@ export function updateEntry(
     const printingId = patch.printingId ?? cur.printing.id
     const imageId = patch.imageId ?? cur.imageId
     assertQuantity(quantity)
-    assertLink(db, printingId, imageId)
+    assertLink(db, printingId, imageId, scope)
 
     const target = findExisting(db, printingId, imageId, scope)
     if (target !== undefined && target !== id) {
@@ -216,25 +223,32 @@ export function listEntries(db: SqlDb, f: CollectionFilters, scope: Scope = LOCA
     }
     where.push(`(${parts.join(' OR ')})`)
   }
-  inList('c.type', f.cardTypes)
-  inList('c.attribute', f.attributes)
-  inList('c.archetype', f.archetypes)
+  // Each game has its own card filters; the other game's are ignored.
+  if (scopeGame(db, scope) === 'pkm') {
+    const pkm = pokemonWhere(f)
+    where.push(...pkm.where)
+    params.push(...pkm.params)
+  } else {
+    inList('c.type', f.cardTypes)
+    inList('c.attribute', f.attributes)
+    inList('c.archetype', f.archetypes)
+    if (f.levelMin !== undefined) {
+      where.push('COALESCE(c.level, c.linkval) >= ?')
+      params.push(f.levelMin)
+    }
+    if (f.levelMax !== undefined) {
+      where.push('COALESCE(c.level, c.linkval) <= ?')
+      params.push(f.levelMax)
+    }
+  }
   inList('p.set_name', f.setNames)
   inList('p.set_rarity', f.rarities)
   if (f.language) {
     where.push('p.language = ?')
     params.push(f.language)
   }
-  if (f.levelMin !== undefined) {
-    where.push('COALESCE(c.level, c.linkval) >= ?')
-    params.push(f.levelMin)
-  }
-  if (f.levelMax !== undefined) {
-    where.push('COALESCE(c.level, c.linkval) <= ?')
-    params.push(f.levelMax)
-  }
   const status = getMeta(db, 'price_service_status')
-  const sql = `${SELECT} WHERE ${where.join(' AND ')}`
+  const sql = `${select(scope)} WHERE ${where.join(' AND ')}`
   const entries = (db.prepare(sql).all(...params) as EntryDbRow[]).map((r) => toView(r, status))
 
   const dir = f.dir === 'desc' ? -1 : 1
@@ -264,7 +278,7 @@ export function listEntries(db: SqlDb, f: CollectionFilters, scope: Scope = LOCA
 export function entriesForCard(db: SqlDb, cardId: number, scope: Scope = LOCAL): EntryView[] {
   const status = getMeta(db, 'price_service_status')
   return (
-    db.prepare(`${SELECT} WHERE c.id = ? AND ${scope.where('e')} ORDER BY p.set_code, e.id`).all(cardId) as EntryDbRow[]
+    db.prepare(`${select(scope)} WHERE c.id = ? AND ${scope.where('e')} ORDER BY p.set_code, e.id`).all(cardId) as EntryDbRow[]
   ).map((r) => toView(r, status))
 }
 
@@ -274,18 +288,27 @@ export function getFacets(db: SqlDb, scope: Scope = LOCAL): Facets {
       db
         .prepare(
           `SELECT DISTINCT ${col} AS v FROM collection_entries e
-           JOIN card_printings p ON p.id = e.printing_id JOIN cards c ON c.id = p.card_id
+           JOIN card_printings p ON p.id = e.printing_id AND +p.game = ${scope.game}
+           JOIN cards c ON c.id = p.card_id AND +c.game = ${scope.game}
            WHERE ${scope.where('e')} AND ${col} IS NOT NULL AND ${col} <> '' ORDER BY ${col}`
         )
         .all() as { v: string }[]
     ).map((r) => r.v)
   const owned = new Set(distinct('p.language'))
+  const pkm = scopeGame(db, scope) === 'pkm'
   return {
-    cardTypes: distinct('c.type'),
-    attributes: distinct('c.attribute'),
-    archetypes: distinct('c.archetype'),
+    cardTypes: pkm ? [] : distinct('c.type'),
+    attributes: pkm ? [] : distinct('c.attribute'),
+    archetypes: pkm ? [] : distinct('c.archetype'),
     setNames: distinct('p.set_name'),
     rarities: distinct('p.set_rarity'),
-    languages: LANGUAGES.map((l) => l.code).filter((code) => owned.has(code))
+    languages: LANGUAGES.map((l) => l.code).filter((code) => owned.has(code)),
+    ...(pkm
+      ? pokemonFacets(
+          db,
+          scope,
+          `SELECT p.card_id FROM collection_entries e JOIN card_printings p ON p.id = e.printing_id AND +p.game = ${scope.game} WHERE ${scope.where('e')}`
+        )
+      : {})
   }
 }

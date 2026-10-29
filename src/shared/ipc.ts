@@ -26,6 +26,7 @@ import type { ScanWindowMessage } from './scanWindow'
 import type { FingerprintStatus, OcrBand, ScanPrinting } from './scan/types'
 import type { CardLanguage } from './scan/language'
 import type { PackWrappers, RipCard, RipHistory, RipSessionDetail, RipSet } from './rip/types'
+import type { GameId } from './games'
 
 /** The API exposed to the renderer as `window.api`. */
 export interface Api {
@@ -144,6 +145,15 @@ export interface Api {
     /** Fired after background syncs change card or set data. */
     onDataChanged(cb: () => void): () => void
   }
+  /** The game this device shows, remembered per device. */
+  games: {
+    /** The games the signed-in account may use (cached for offline use); signed out, `['ygo']`. */
+    available(): Promise<GameId[]>
+    /** The game shown: the remembered one when available, otherwise 'ygo'. */
+    active(): Promise<GameId>
+    /** Shows `g` from now on and reloads every page (`app.onDataChanged`); rejects a game not available. */
+    setActive(g: GameId): Promise<void>
+  }
   account: {
     status(): Promise<AccountStatus>
     /** Resolves when sign-in finishes or fails. */
@@ -221,6 +231,9 @@ export const INVOKE_CHANNELS = [
   'app:checkForUpdates',
   'app:applyUpdate',
   'app:updateStatus',
+  'games:available',
+  'games:active',
+  'games:setActive',
   'account:status',
   'account:signIn',
   'account:signOut',

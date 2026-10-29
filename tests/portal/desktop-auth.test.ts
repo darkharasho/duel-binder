@@ -251,7 +251,8 @@ describe('desktop sign-in and bearer tokens', () => {
       id: user.id,
       username: 'kaiba',
       displayName: 'Seto',
-      avatarUrl: 'https://cdn.discordapp.com/avatars/111/abc.png'
+      avatarUrl: 'https://cdn.discordapp.com/avatars/111/abc.png',
+      games: ['ygo']
     })
     expect(sessionRow(body.token)).toEqual({
       kind: 'desktop',

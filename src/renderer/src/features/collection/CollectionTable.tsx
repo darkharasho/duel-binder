@@ -12,6 +12,7 @@ import {
   TableRow
 } from '@/components/ui/table'
 import { LanguageTag } from '@/components/LanguageTag'
+import { useGame } from '@/lib/game'
 import { EntryValue, StaleBadge, displayTotal } from './EntryValue'
 
 interface Props {
@@ -21,6 +22,11 @@ interface Props {
   dir: CollectionFilters['dir']
   onSort: (key: SortKey) => void
   onSelect: (entry: EntryView) => void
+}
+
+/** A column heading in the game's words ("Set code" and "Rarity" on Yu-Gi-Oh!). */
+function GameWord({ word }: { word: 'printingCode' | 'rarity' }): string {
+  return useGame().def.vocab[word]
 }
 
 const features = tableFeatures({})
@@ -60,7 +66,7 @@ const columns = helper.columns([
   }),
   helper.accessor((e) => e.printing.setCode, {
     id: 'setCode',
-    header: 'Set code',
+    header: () => <GameWord word="printingCode" />,
     cell: ({ row }) => (
       <span className="inline-flex items-center gap-1.5">
         {row.original.printing.setCode}
@@ -69,7 +75,10 @@ const columns = helper.columns([
     )
   }),
   helper.accessor((e) => e.printing.setName, { id: 'setName', header: 'Set' }),
-  helper.accessor((e) => e.printing.setRarity, { id: 'rarity', header: 'Rarity' }),
+  helper.accessor((e) => e.printing.setRarity, {
+    id: 'rarity',
+    header: () => <GameWord word="rarity" />
+  }),
   helper.accessor('quantity', {
     id: 'quantity',
     header: 'Qty',

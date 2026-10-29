@@ -13,6 +13,7 @@ import { openWasmDb } from '../../src/phone/data/wasmSql'
 import { PHONE_FORMAT } from '../../src/phone/data/phoneSchema'
 import { createPhoneStore, type PhoneStore } from '../../src/phone/data/store'
 import { inProcessPortal, PORTAL, SERVER_NOW } from './cloudHelpers'
+import { seedPokemon } from '../fixtures/pokemon'
 
 type Portal = Awaited<ReturnType<typeof inProcessPortal>>
 
@@ -667,6 +668,55 @@ describe('phone store', () => {
     expect((await store.catalog()).filled).toBe(true)
   })
 
+  it('the owner gets a Pokémon pass, and an older format resets it too', async () => {
+    portal.serverDb.close()
+    portal = await inProcessPortal({ ADMIN_DISCORD_ID: 'discord-1-alice' })
+    userId = portal.addUser('alice')
+    token = await portal.desktopToken(userId)
+    me = { ...me, id: userId }
+    seedPokemon(portal.serverDb)
+    const pkm = (table: string): number =>
+      table === 'pokemon_cards'
+        ? count(table)
+        : Number(
+            (
+              db.prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE game = 'pkm'`).get() as {
+                n: number
+              }
+            ).n
+          )
+    const pkmSinces = (): number[] =>
+      catalogRequests()
+        .filter((u) => new URL(u).searchParams.get('game') === 'pkm')
+        .map(since)
+
+    await ready()
+    expect(pkm('cards')).toBe(2)
+    expect(pkm('card_printings')).toBe(4)
+    expect(pkm('pokemon_cards')).toBe(2)
+    expect(pkmSinces()[0]).toBe(0)
+    const pkmCursor = Number(getMeta(db, 'catalog_cursor:pkm'))
+    expect(pkmCursor).toBeGreaterThan(0)
+
+    // A Pokémon card nobody owns: the reset drops its details before the card.
+    db.prepare("UPDATE phone_state SET value = '0' WHERE key = 'format'").run()
+    net = (async (input, init) => {
+      if (String(input).includes('/api/catalog/changes')) throw new TypeError('Failed to fetch')
+      return real(input, init)
+    }) as typeof fetch
+    await expect(store.fillCatalog(() => {})).rejects.toBeInstanceOf(CloudOfflineError)
+    expect(pkm('cards')).toBe(0)
+    expect(pkm('pokemon_cards')).toBe(0)
+    expect(getMeta(db, 'catalog_cursor:pkm')).toBeNull()
+
+    net = real
+    requests = []
+    await store.fillCatalog(() => {})
+    expect(pkmSinces()[0]).toBe(0)
+    expect(pkm('pokemon_cards')).toBe(2)
+    expect(Number(getMeta(db, 'catalog_cursor:pkm'))).toBe(pkmCursor)
+  })
+
   it('runs one call at a time', async () => {
     await store.signIn(token, me)
     const order: string[] = []
@@ -794,3 +844,39 @@ function phoneUids(...ids: number[]): string[] {
       (db.prepare('SELECT uid FROM collection_entries WHERE id = ?').get(id) as { uid: string }).uid
   )
 }
+
+describe('phone store: active game', () => {
+  const activeGameMeta = (): string | null => getMeta(db, 'active_game')
+
+  it('a sync whose me() no longer lists the shown game switches back to Yu-Gi-Oh!', async () => {
+    // Signed in while the account had Pokémon; the server now says it hasn't.
+    await store.signIn(token, { ...me, games: ['ygo', 'pkm'] })
+    await store.invoke('games:setActive', ['pkm'])
+    expect(activeGameMeta()).toBe('pkm')
+    const r = await store.sync()
+    expect(r.changed).toBe(true)
+    expect(activeGameMeta()).toBe('ygo')
+    await expect(store.invoke('games:available', [])).resolves.toEqual(['ygo'])
+    const account = await store.account()
+    expect(account.state === 'signed-in' && account.user.games).toEqual(['ygo'])
+  })
+
+  it('portal calls name the shown game', async () => {
+    await store.signIn(token, { ...me, games: ['ygo', 'pkm'] })
+    await store.portal('friends:overview', [])
+    await store.invoke('games:setActive', ['pkm'])
+    // The server still holds Pokémon back from this account.
+    await expect(store.portal('friends:overview', [])).rejects.toThrow('game-not-allowed')
+    const rpc = requests.filter((r) => r.url.includes('/api/rpc/'))
+    expect(rpc.map((r) => r.headers.get('x-duel-game'))).toEqual(['ygo', 'pkm'])
+  })
+
+  it('a server sign-out shows Yu-Gi-Oh! again', async () => {
+    await store.signIn(token, { ...me, games: ['ygo', 'pkm'] })
+    await store.invoke('games:setActive', ['pkm'])
+    portal.serverDb.prepare('DELETE FROM sessions').run()
+    await store.sync()
+    expect((await store.account()).state).toBe('signed-out')
+    expect(activeGameMeta()).toBe('ygo')
+  })
+})

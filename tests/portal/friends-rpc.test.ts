@@ -101,7 +101,7 @@ describe('friends RPC', () => {
       await rpc('cards:browse', [{ sort: 'name', dir: 'asc' }], { cookie: ca })
     ).json()) as { result: { cards: { defaultPrintingId: number; imageId: number }[] } }
     const [c1, c2] = browse.result.cards.filter((c) => c.defaultPrintingId != null)
-    const scope = userScope(bob)
+    const scope = userScope(bob, 'ygo')
     const kept = addEntry(
       db,
       { printingId: c1.defaultPrintingId, imageId: c1.imageId, quantity: 1 },

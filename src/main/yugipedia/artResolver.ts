@@ -50,7 +50,7 @@ export function createPrintingArtResolver(opts: {
      FROM card_printings p JOIN cards c ON c.id = p.card_id WHERE p.id = ?`
   )
   const siblingCodes = db.prepare(
-    "SELECT set_code FROM card_printings WHERE language = ? AND set_name = ? AND set_code <> ''"
+    "SELECT set_code FROM card_printings WHERE +game = 'ygo' AND language = ? AND set_name = ? AND set_code <> ''"
   )
   /** An uncoded printing's set prefix: the most common one among its set's coded printings. */
   const setPrefix = (p: PrintingInfo): string => {

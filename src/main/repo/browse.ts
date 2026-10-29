@@ -1,7 +1,8 @@
 import type { SqlDb } from '../db/sql'
 import type { BrowseCard, BrowseFacets, BrowseFilters, BrowsePage } from '../../shared/types'
 import { buildFtsQuery } from './cards'
-import { LOCAL, type Scope } from './scope'
+import { LOCAL, scopeGame, type Scope } from './scope'
+import { pokemonFacets, pokemonWhere } from './pkmFilters'
 
 const MAX_LIMIT = 200
 
@@ -11,12 +12,14 @@ const escapeLike = (s: string): string => s.replace(/[\\%_]/g, (c) => `\\${c}`)
 const base = (scope: Scope): string => `
   WITH owned AS (
     SELECT p.card_id, SUM(e.quantity) AS n FROM collection_entries e
-    JOIN card_printings p ON p.id = e.printing_id WHERE ${scope.where('e')} GROUP BY p.card_id
+    JOIN card_printings p ON p.id = e.printing_id AND +p.game = ${scope.game} WHERE ${scope.where('e')}
+    GROUP BY p.card_id
   ),
   released AS (
     SELECT p.card_id, MIN(s.tcg_date) AS d FROM card_printings p
-    JOIN sets s ON s.language = 'en' AND s.set_name = p.set_name
-    WHERE p.language = 'en' AND p.contributed = 0 AND s.tcg_date IS NOT NULL GROUP BY p.card_id
+    JOIN sets s ON s.game = p.game AND s.language = 'en' AND s.set_name = p.set_name
+    WHERE +p.game = ${scope.game} AND p.language = 'en' AND p.contributed = 0 AND s.tcg_date IS NOT NULL
+    GROUP BY p.card_id
   )
   SELECT c.id, c.name, c.type, c.frame_type, c.attribute, c.race, c.level, c.linkval, c.atk, c.def,
     c.tcgplayer_price AS price, r.d AS released_at, COALESCE(o.n, 0) AS owned
@@ -48,11 +51,21 @@ const SORT_SQL: Record<BrowseFilters['sort'], string> = {
   price: 'c.tcgplayer_price',
   atk: 'c.atk',
   def: 'c.def',
-  level: 'COALESCE(c.level, c.linkval)'
+  level: 'COALESCE(c.level, c.linkval)',
+  hp: '(SELECT hp FROM pokemon_cards WHERE card_id = c.id)'
 }
 
-function whereClause(f: BrowseFilters): { sql: string; params: unknown[] } {
-  const where: string[] = []
+const YGO_ONLY_SORTS = ['atk', 'def', 'level']
+
+/** A sort that doesn't exist on the game (or isn't known at all) sorts by name. */
+function sortSql(sort: string, game: string): string {
+  if (!Object.hasOwn(SORT_SQL, sort)) return SORT_SQL.name
+  if (game === 'pkm' ? YGO_ONLY_SORTS.includes(sort) : sort === 'hp') return SORT_SQL.name
+  return SORT_SQL[sort as BrowseFilters['sort']]
+}
+
+function whereClause(db: SqlDb, f: BrowseFilters, scope: Scope): { sql: string; params: unknown[] } {
+  const where: string[] = [`+c.game = ${scope.game}`]
   const params: unknown[] = []
   const inList = (col: string, values?: string[]): void => {
     if (values?.length) {
@@ -63,7 +76,9 @@ function whereClause(f: BrowseFilters): { sql: string; params: unknown[] } {
   const text = f.q?.trim()
   if (text) {
     const fts = buildFtsQuery(text)
-    const parts = [`c.id IN (SELECT card_id FROM card_printings WHERE contributed = 0 AND set_code LIKE ? ESCAPE '\\')`]
+    const parts = [
+      `c.id IN (SELECT card_id FROM card_printings WHERE +game = ${scope.game} AND contributed = 0 AND set_code LIKE ? ESCAPE '\\')`
+    ]
     params.push(`${escapeLike(text)}%`)
     if (fts) {
       parts.push('c.id IN (SELECT rowid FROM cards_fts WHERE cards_fts MATCH ?)')
@@ -71,14 +86,21 @@ function whereClause(f: BrowseFilters): { sql: string; params: unknown[] } {
     }
     where.push(`(${parts.join(' OR ')})`)
   }
-  inList('c.type', f.cardTypes)
-  inList('c.attribute', f.attributes)
-  inList('c.race', f.races)
-  inList('c.archetype', f.archetypes)
+  const pkm = scopeGame(db, scope) === 'pkm'
+  if (pkm) {
+    const p = pokemonWhere(f)
+    where.push(...p.where)
+    params.push(...p.params)
+  } else {
+    inList('c.type', f.cardTypes)
+    inList('c.attribute', f.attributes)
+    inList('c.race', f.races)
+    inList('c.archetype', f.archetypes)
+  }
   const printingFilter = (col: string, values?: string[]): void => {
     if (!values?.length) return
     where.push(
-      `c.id IN (SELECT card_id FROM card_printings WHERE contributed = 0 AND language = 'en' AND ${col} IN (${values
+      `c.id IN (SELECT card_id FROM card_printings WHERE +game = ${scope.game} AND contributed = 0 AND language = 'en' AND ${col} IN (${values
         .map(() => '?')
         .join(',')}))`
     )
@@ -86,23 +108,23 @@ function whereClause(f: BrowseFilters): { sql: string; params: unknown[] } {
   }
   printingFilter('set_name', f.setNames)
   printingFilter('set_rarity', f.rarities)
-  if (f.levelMin !== undefined) {
+  if (!pkm && f.levelMin !== undefined) {
     where.push('COALESCE(c.level, c.linkval) >= ?')
     params.push(f.levelMin)
   }
-  if (f.levelMax !== undefined) {
+  if (!pkm && f.levelMax !== undefined) {
     where.push('COALESCE(c.level, c.linkval) <= ?')
     params.push(f.levelMax)
   }
   if (f.owned === 'owned') where.push('o.n > 0')
   if (f.owned === 'missing') where.push('o.n IS NULL')
-  return { sql: where.length ? ` WHERE ${where.join(' AND ')}` : '', params }
+  return { sql: ` WHERE ${where.join(' AND ')}`, params }
 }
 
 /** One page of every card in the database, filtered and sorted. Cards missing the sort value go last. */
 export function browseCards(db: SqlDb, f: BrowseFilters, scope: Scope = LOCAL): BrowsePage {
-  const { sql, params } = whereClause(f)
-  const sortCol = Object.hasOwn(SORT_SQL, f.sort) ? SORT_SQL[f.sort] : SORT_SQL.name
+  const { sql, params } = whereClause(db, f, scope)
+  const sortCol = sortSql(f.sort, scopeGame(db, scope))
   const dir = f.dir === 'desc' ? 'DESC' : 'ASC'
   const limit = Math.min(Math.max(1, Math.floor(f.limit ?? 120)), MAX_LIMIT)
   const offset = Math.max(0, Math.floor(f.offset ?? 0))
@@ -110,11 +132,11 @@ export function browseCards(db: SqlDb, f: BrowseFilters, scope: Scope = LOCAL): 
   const rows = db
     .prepare(
       `SELECT page.*,
-         COALESCE((SELECT image_id FROM card_images WHERE card_id = page.id ORDER BY sort_order, image_id
-           LIMIT 1), page.id) AS image_id,
+         COALESCE((SELECT image_id FROM card_images WHERE card_id = page.id AND +game = ${scope.game}
+           ORDER BY sort_order, image_id LIMIT 1), page.id) AS image_id,
          (SELECT p.id FROM card_printings p
-           LEFT JOIN sets s ON s.language = 'en' AND s.set_name = p.set_name
-           WHERE p.card_id = page.id AND p.language = 'en' AND p.contributed = 0
+           LEFT JOIN sets s ON s.game = p.game AND s.language = 'en' AND s.set_name = p.set_name
+           WHERE p.card_id = page.id AND +p.game = ${scope.game} AND p.language = 'en' AND p.contributed = 0
            ORDER BY s.tcg_date IS NULL, s.tcg_date, p.id LIMIT 1) AS default_printing_id
        FROM (${base(scope)}${sql} ORDER BY ${sortCol} IS NULL, ${sortCol} ${dir}, c.name COLLATE NOCASE, c.id
          LIMIT ? OFFSET ?) page`
@@ -124,7 +146,8 @@ export function browseCards(db: SqlDb, f: BrowseFilters, scope: Scope = LOCAL): 
     .prepare(
       `SELECT count(*) AS n FROM cards c
        LEFT JOIN (SELECT p.card_id, SUM(e.quantity) AS n FROM collection_entries e
-         JOIN card_printings p ON p.id = e.printing_id WHERE ${scope.where('e')} GROUP BY p.card_id) o ON o.card_id = c.id${sql}`
+         JOIN card_printings p ON p.id = e.printing_id AND +p.game = ${scope.game} WHERE ${scope.where('e')}
+         GROUP BY p.card_id) o ON o.card_id = c.id${sql}`
     )
     .get(...params) as { n: number }
   return {
@@ -149,25 +172,30 @@ export function browseCards(db: SqlDb, f: BrowseFilters, scope: Scope = LOCAL): 
   }
 }
 
-/** Filter options across the whole card database (English sets and rarities). */
-export function browseFacets(db: SqlDb): BrowseFacets {
+/** Filter options across the game's whole card database (English sets and rarities). */
+export function browseFacets(db: SqlDb, scope: Scope = LOCAL): BrowseFacets {
   const distinct = (sql: string): string[] =>
     (db.prepare(sql).all() as { v: string }[]).map((r) => r.v)
   const col = (c: string): string[] =>
     distinct(
-      `SELECT DISTINCT ${c} AS v FROM cards WHERE ${c} IS NOT NULL AND ${c} <> '' ORDER BY ${c}`
+      `SELECT DISTINCT ${c} AS v FROM cards WHERE +game = ${scope.game} AND ${c} IS NOT NULL AND ${c} <> ''
+       ORDER BY ${c}`
     )
+  const pkm = scopeGame(db, scope) === 'pkm'
   return {
-    cardTypes: col('type'),
-    attributes: col('attribute'),
-    races: col('race'),
-    archetypes: col('archetype'),
+    cardTypes: pkm ? [] : col('type'),
+    attributes: pkm ? [] : col('attribute'),
+    races: pkm ? [] : col('race'),
+    archetypes: pkm ? [] : col('archetype'),
     setNames: distinct(
-      `SELECT DISTINCT set_name AS v FROM card_printings WHERE contributed = 0 AND language = 'en' ORDER BY set_name`
+      `SELECT DISTINCT set_name AS v FROM card_printings WHERE +game = ${scope.game} AND contributed = 0 AND language = 'en'
+       ORDER BY set_name`
     ),
     rarities: distinct(
-      `SELECT DISTINCT set_rarity AS v FROM card_printings WHERE contributed = 0 AND language = 'en' AND set_rarity <> ''
+      `SELECT DISTINCT set_rarity AS v FROM card_printings
+       WHERE +game = ${scope.game} AND contributed = 0 AND language = 'en' AND set_rarity <> ''
        ORDER BY set_rarity`
-    )
+    ),
+    ...(pkm ? pokemonFacets(db, scope, null) : {})
   }
 }

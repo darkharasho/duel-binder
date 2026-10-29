@@ -20,7 +20,7 @@ const opensTo = (req: Request): boolean =>
 const ALLOW = {
   'access-control-allow-origin': IOS_APP_ORIGIN,
   'access-control-allow-methods': 'GET, HEAD, POST, PUT, DELETE',
-  'access-control-allow-headers': 'authorization, content-type, if-none-match',
+  'access-control-allow-headers': 'authorization, content-type, if-none-match, x-duel-game',
   'access-control-max-age': '86400',
   vary: 'origin'
 }

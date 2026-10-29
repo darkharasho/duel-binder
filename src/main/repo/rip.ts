@@ -1,5 +1,6 @@
 import type { SqlDb } from '../db/sql'
 import { listSets } from './sets'
+import { localScope } from './scope'
 import { setPrefix } from '../../shared/sets'
 import { canonicalRarity, compareRarity } from '../../shared/rip/rarity'
 import { RIP_SET_LAYOUTS, describeLayout, layoutFor, tierFor } from '../../shared/rip/layouts'
@@ -18,6 +19,9 @@ import type {
 type LayoutMap = Record<string, string>
 
 const MAX_PACKS = 100
+
+/** Rip is Yu-Gi-Oh only, whatever game is active. */
+const YGO = localScope("'ygo'")
 
 /** Products that share a core set's code but aren't core boosters, so have no researched layout. */
 const NOT_CORE =
@@ -49,10 +53,10 @@ export function ripPool(db: SqlDb, setName: string): PoolCard[] {
   const rows = db
     .prepare(
       `SELECT p.pkey, p.card_id, c.name, p.set_code, p.set_rarity, p.variant, c.frame_type,
-              (SELECT ci.image_id FROM card_images ci WHERE ci.card_id = p.card_id
+              (SELECT ci.image_id FROM card_images ci WHERE ci.card_id = p.card_id AND ci.game = 'ygo'
                ORDER BY ci.sort_order, ci.image_id LIMIT 1) AS image_id
-       FROM card_printings p JOIN cards c ON c.id = p.card_id
-       WHERE p.language = 'en' AND p.contributed = 0 AND p.set_name = ?
+       FROM card_printings p JOIN cards c ON c.id = p.card_id AND c.game = 'ygo'
+       WHERE p.game = 'ygo' AND p.language = 'en' AND p.contributed = 0 AND p.set_name = ?
        ORDER BY p.set_code, p.id`
     )
     .all(setName) as PoolRow[]
@@ -71,7 +75,7 @@ export function ripPool(db: SqlDb, setName: string): PoolCard[] {
 /** English sets with a researched layout whose pool fills every slot, newest first. */
 export function ripSets(db: SqlDb, layouts: LayoutMap = RIP_SET_LAYOUTS): RipSet[] {
   const out: RipSet[] = []
-  for (const s of listSets(db)) {
+  for (const s of listSets(db, YGO)) {
     if (s.language !== 'en') continue
     const layout = layoutFor(s.setCode, layouts)
     if (!layout || sharesCode(s.setName, layout) || !canFill(layout, ripPool(db, s.setName)))
@@ -112,8 +116,9 @@ export function startRip(
   const row = db
     .prepare(
       `SELECT s.set_code AS s_code, MIN(p.set_code) AS min_code
-       FROM card_printings p LEFT JOIN sets s ON s.language = p.language AND s.set_name = p.set_name
-       WHERE p.language = 'en' AND p.contributed = 0 AND p.set_name = ?`
+       FROM card_printings p
+       LEFT JOIN sets s ON s.game = p.game AND s.language = p.language AND s.set_name = p.set_name
+       WHERE p.game = 'ygo' AND p.language = 'en' AND p.contributed = 0 AND p.set_name = ?`
     )
     .get(setName) as { s_code: string | null; min_code: string | null } | undefined
   const setCode = row?.s_code ?? (row?.min_code ? setPrefix(row.min_code) : null)

@@ -2,9 +2,11 @@ import type Database from 'better-sqlite3'
 import type { SqlDb } from '../db/sql'
 import { deleteMeta, getMeta, setMeta } from '../db/meta'
 import { CloudAuthError, CloudOfflineError, type CloudClient } from '../cloud/client'
+import { syncedGames } from '../cloud/engine'
 import type { SyncStatus } from '../../shared/types'
-import { finishApply } from './apply'
-import { applyStaged, runSwitch, type SwitchFailure } from './switch'
+import type { GameId } from '../../shared/games'
+import { catalogCursorKey, catalogStagingKey, finishApply } from './apply'
+import { applyStaged, clearStaged, runSwitch, stageChanges, type SwitchFailure } from './switch'
 
 export interface CatalogUpdate {
   changed: boolean
@@ -40,7 +42,9 @@ interface Unannounced {
 
 /**
  * The card catalog, kept in step with the server's: the one-time switch to the server's catalog
- * until it's done, then the change feed from `catalog_cursor`, staged page by page and applied whole.
+ * until it's done, then each of the account's games' change feeds from its own cursor
+ * (`catalog_cursor` for Yu-Gi-Oh!, `catalog_cursor:pkm` for Pokémon), staged page by page and
+ * applied whole.
  */
 export function createCatalogService(deps: CatalogServiceDeps): CatalogService {
   const db: SqlDb = deps.db
@@ -136,50 +140,47 @@ export function createCatalogService(deps: CatalogServiceDeps): CatalogService {
   }
 
   /**
-   * Downloads the change feed from `catalog_cursor` (or, resuming, from `catalog_staging_cursor`)
-   * into `catalog_staging`, each page committing with its staging cursor; then, once the feed has
-   * no more, applies everything staged in seq order in one transaction that also advances
-   * `catalog_cursor` and clears staging. Applying page by page could fail a foreign key forever: a
-   * card changed after its new printings is listed at its later seq, on a later page.
+   * Downloads `game`'s change feed from its cursor (or, resuming, from its staging cursor) into
+   * `catalog_staging`, each page committing with its staging cursor; then, once the feed has no
+   * more, applies everything staged for the game in seq order in one transaction that also advances
+   * its cursor and clears its staging. Applying page by page could fail a foreign key forever: a
+   * card changed after its new printings is listed at its later seq, on a later page. A game never
+   * pulled before starts from 0.
    */
-  async function pullDeltas(client: CloudClient): Promise<void> {
-    let cursor = Number(
-      getMeta(db, 'catalog_staging_cursor') ?? getMeta(db, 'catalog_cursor') ?? 0
-    )
-    const stage = db.prepare(
-      'INSERT OR REPLACE INTO catalog_staging (seq, tbl, row) VALUES (?, ?, ?)'
-    )
+  async function pullDeltas(client: CloudClient, game: GameId): Promise<void> {
+    const cursorKey = catalogCursorKey(game)
+    const stagingKey = catalogStagingKey(game)
+    let cursor = Number(getMeta(db, stagingKey) ?? getMeta(db, cursorKey) ?? 0)
     for (;;) {
       set('downloading')
-      const page = await client.catalogChanges(cursor)
+      const page = await client.catalogChanges(cursor, undefined, undefined, game)
       if (page.more && page.cursor <= cursor) throw new Error('The catalog feed stopped advancing')
       if (page.more) {
         db.transaction(() => {
-          for (const c of page.changes) stage.run(c.seq, c.table, JSON.stringify(c))
-          setMeta(db, 'catalog_staging_cursor', String(page.cursor))
+          stageChanges(db, page.changes, game)
+          setMeta(db, stagingKey, String(page.cursor))
         })()
         cursor = page.cursor
         continue
       }
-      const anyStaged = db.prepare('SELECT 1 FROM catalog_staging LIMIT 1').get() !== undefined
+      const anyStaged = getMeta(db, stagingKey) !== null
       if (page.changes.length > 0 || anyStaged) set('saving')
       db.transaction(() => {
-        for (const c of page.changes) stage.run(c.seq, c.table, JSON.stringify(c))
-        const r = applyStaged(db)
+        stageChanges(db, page.changes, game)
+        const r = applyStaged(db, game)
         if (r.applied > 0)
           noteUnannounced({
             cardsChanged: r.cardsChanged,
             imagesChanged: r.imagesChanged,
             needsFinish: true
           })
-        setMeta(db, 'catalog_cursor', String(page.cursor))
+        setMeta(db, cursorKey, String(page.cursor))
         if (page.dbVersion !== null) setMeta(db, 'db_version', page.dbVersion)
-        db.exec('DELETE FROM catalog_staging')
-        deleteMeta(db, 'catalog_staging_cursor')
+        clearStaged(db, game)
+        deleteMeta(db, stagingKey)
       })()
       break
     }
-    setMeta(db, 'last_sync_at', now().toISOString())
   }
 
   async function doUpdate(client: CloudClient, force: boolean): Promise<CatalogUpdate> {
@@ -205,7 +206,11 @@ export function createCatalogService(deps: CatalogServiceDeps): CatalogService {
         noteUnannounced({ cardsChanged: true, imagesChanged: true, needsFinish: true })
       }
       try {
-        await pullDeltas(client)
+        // Yu-Gi-Oh! first, which every account has; then the account's other games.
+        await pullDeltas(client, 'ygo')
+        for (const game of await syncedGames(client))
+          if (game !== 'ygo') await pullDeltas(client, game)
+        setMeta(db, 'last_sync_at', now().toISOString())
       } finally {
         finishPending()
       }

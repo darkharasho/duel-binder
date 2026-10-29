@@ -100,7 +100,7 @@ describe('read-only RPC', () => {
       db,
       { printingId: card.defaultPrintingId, imageId: card.imageId, quantity: 3 },
       NOW,
-      userScope(alice)
+      userScope(alice, 'ygo')
     )
 
     const a = (await (await rpc('collection:list', [{}], { cookie: 'session=ta' })).json()) as {

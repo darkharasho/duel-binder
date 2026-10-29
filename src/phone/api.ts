@@ -65,6 +65,9 @@ const EDITS: readonly DataChannel[] = [
   'sets:adjust'
 ]
 
+/** The channels after which every page reloads: switching the game shown. */
+const RELOADS: readonly DataChannel[] = ['games:setActive']
+
 type Fn = (...args: unknown[]) => Promise<unknown>
 type NamespaceOf<C> = C extends `${infer N}:${string}` ? N : never
 type MethodOf<C, N extends string> = C extends `${N}:${infer M}` ? M : never
@@ -96,7 +99,13 @@ export function createPhoneApi(deps: {
           triggers.afterAdd()
           return value
         }
-      : (...args) => store.invoke(channel, args)
+      : RELOADS.includes(channel)
+        ? async (...args) => {
+            const value = await store.invoke(channel, args)
+            events.emit('dataChanged')
+            return value
+          }
+        : (...args) => store.invoke(channel, args)
   }
   const dataPart = <N extends DataNamespace>(ns: N): DataPart<N> =>
     data.get(ns) as unknown as DataPart<N>
@@ -232,6 +241,7 @@ export function createPhoneApi(deps: {
       }
     },
     sets: dataPart('sets'),
+    games: dataPart('games'),
     sync: {
       status: syncStatus,
       run: runCatalogUpdate,

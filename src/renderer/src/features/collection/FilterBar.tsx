@@ -5,10 +5,13 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { FacetMenu } from '@/components/FacetMenu'
 import { LanguageSelect } from '@/components/LanguageSelect'
+import { RangeFilter } from '@/components/RangeFilter'
+import { RANGE_FIELDS, rangeFilters } from '@/lib/rangeFilters'
+import { useGame } from '@/lib/game'
 import { useLanguageFilter } from '@/lib/languageFilter'
 import { useSetNames } from '@/lib/setLabels'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
-import { activeFilterCount, FACETS } from './filterFacets'
+import { activeFilterCount, facetsFor } from './filterFacets'
 import {
   Select,
   SelectContent,
@@ -30,12 +33,6 @@ interface Props {
   facets: Facets | undefined
   onChange: (patch: Partial<CollectionFilters>) => void
   onClear: () => void
-}
-
-function parseLevel(v: string): number | undefined {
-  if (v.trim() === '') return undefined
-  const n = Number(v)
-  return Number.isFinite(n) ? n : undefined
 }
 
 /** The collection's search box; its text reaches the filters after a short pause. */
@@ -75,9 +72,10 @@ function FacetMenus({
 }: Pick<Props, 'filters' | 'facets' | 'onChange'>): React.JSX.Element {
   const [language] = useLanguageFilter()
   const setNames = useSetNames(language)
+  const { def } = useGame()
   return (
     <>
-      {FACETS.map(({ key, label }) => (
+      {facetsFor(def).map(({ key, label }) => (
         <FacetMenu
           key={key}
           label={label}
@@ -95,26 +93,14 @@ function FacetMenus({
   )
 }
 
-function LevelRange({ filters, onChange }: Pick<Props, 'filters' | 'onChange'>): React.JSX.Element {
+/** The game's range filters (Level for Yu-Gi-Oh!, HP for Pokémon). */
+function Ranges({ filters, onChange }: Pick<Props, 'filters' | 'onChange'>): React.JSX.Element {
+  const { def } = useGame()
   return (
     <>
-      <Input
-        type="number"
-        aria-label="Level min"
-        placeholder="min"
-        value={filters.levelMin ?? ''}
-        onChange={(e) => onChange({ levelMin: parseLevel(e.target.value) })}
-        className="h-8 w-14 px-2 font-mono text-xs"
-      />
-      <span aria-hidden>–</span>
-      <Input
-        type="number"
-        aria-label="Level max"
-        placeholder="max"
-        value={filters.levelMax ?? ''}
-        onChange={(e) => onChange({ levelMax: parseLevel(e.target.value) })}
-        className="h-8 w-14 px-2 font-mono text-xs"
-      />
+      {rangeFilters(def.filters).map((f) => (
+        <RangeFilter key={f.key} filter={f} values={filters} onChange={onChange} />
+      ))}
     </>
   )
 }
@@ -132,7 +118,7 @@ function DirButton({ filters, onChange }: Pick<Props, 'filters' | 'onChange'>): 
   )
 }
 
-/** The desktop's one row of search, facets, language, level and sort. */
+/** The desktop's one row of search, facets, language, ranges and sort. */
 export function FilterBar({ filters, facets, onChange, onClear }: Props): React.JSX.Element {
   const [language, setLanguage] = useLanguageFilter()
 
@@ -141,10 +127,7 @@ export function FilterBar({ filters, facets, onChange, onClear }: Props): React.
       <CollectionSearch filters={filters} onChange={onChange} />
       <FacetMenus filters={filters} facets={facets} onChange={onChange} />
       <LanguageSelect value={language} onChange={setLanguage} available={facets?.languages ?? []} />
-      <div className="flex items-center gap-1 text-[13px] text-foreground/80">
-        <span className="px-1">Level</span>
-        <LevelRange filters={filters} onChange={onChange} />
-      </div>
+      <Ranges filters={filters} onChange={onChange} />
       <div className="ml-auto flex items-center gap-1">
         <Select value={filters.sort} onValueChange={(v) => onChange({ sort: v as SortKey })}>
           <SelectTrigger size="sm" aria-label="Sort by" className="w-36">
@@ -185,11 +168,12 @@ function Section({
 }
 
 /**
- * The phone's filter sheet body: facets, language, level and sort, without the search box
+ * The phone's filter sheet body: facets, language, ranges and sort, without the search box
  * (which stays on the page, so opening the sheet never raises the keyboard).
  */
 export function FilterSheetBody({ filters, facets, onChange, onClear }: Props): React.JSX.Element {
   const [language, setLanguage] = useLanguageFilter()
+  const { def } = useGame()
   return (
     <div className="flex flex-col gap-5 px-4 pb-4">
       <Section title="Filter">
@@ -197,11 +181,11 @@ export function FilterSheetBody({ filters, facets, onChange, onClear }: Props): 
           <FacetMenus filters={filters} facets={facets} onChange={onChange} />
         </div>
       </Section>
-      <Section title="Level">
-        <div className="flex items-center gap-1 text-[13px] text-foreground/80">
-          <LevelRange filters={filters} onChange={onChange} />
-        </div>
-      </Section>
+      {rangeFilters(def.filters).map((f) => (
+        <Section key={f.key} title={f.label}>
+          <RangeFilter filter={f} values={filters} onChange={onChange} showLabel={false} />
+        </Section>
+      ))}
       <Section title="Language">
         <LanguageSelect
           value={language}
@@ -246,11 +230,11 @@ export function FilterChips({
 }: Pick<Props, 'filters' | 'onChange' | 'onClear'>): React.JSX.Element | null {
   const [language] = useLanguageFilter()
   const setNames = useSetNames(language)
-  if (activeFilterCount(filters) === 0) return null
-  const { levelMin, levelMax } = filters
+  const { def } = useGame()
+  if (activeFilterCount(filters, def) === 0) return null
   return (
     <div className="flex flex-wrap items-center gap-2">
-      {FACETS.flatMap(({ key }) =>
+      {facetsFor(def).flatMap(({ key }) =>
         (filters[key] ?? []).map((v) => {
           const label = key === 'setNames' ? setNames.labelOf(v) : v
           return (
@@ -265,12 +249,17 @@ export function FilterChips({
           )
         })
       )}
-      {(levelMin !== undefined || levelMax !== undefined) && (
-        <Chip
-          label={`Level ${levelMin ?? ''}–${levelMax ?? ''}`}
-          onRemove={() => onChange({ levelMin: undefined, levelMax: undefined })}
-        />
-      )}
+      {rangeFilters(def.filters).map((f) => {
+        const { min, max } = RANGE_FIELDS[f.key]
+        if (filters[min] === undefined && filters[max] === undefined) return null
+        return (
+          <Chip
+            key={f.key}
+            label={`${f.label} ${filters[min] ?? ''}–${filters[max] ?? ''}`}
+            onRemove={() => onChange({ [min]: undefined, [max]: undefined })}
+          />
+        )
+      })}
       <Button variant="ghost" size="sm" onClick={onClear}>
         Clear
       </Button>

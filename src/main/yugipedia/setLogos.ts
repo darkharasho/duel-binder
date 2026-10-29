@@ -27,7 +27,7 @@ export async function refreshSetLogos(
   const sets = db
     .prepare(
       `SELECT set_name, set_code FROM sets
-       WHERE language = 'en' AND set_code GLOB '[A-Za-z0-9]*' AND set_code NOT GLOB '*[^A-Za-z0-9]*'`
+       WHERE game = 'ygo' AND language = 'en' AND set_code GLOB '[A-Za-z0-9]*' AND set_code NOT GLOB '*[^A-Za-z0-9]*'`
     )
     .all() as { set_name: string; set_code: string }[]
   let urls: Map<string, string>

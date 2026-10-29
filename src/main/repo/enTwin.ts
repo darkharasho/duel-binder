@@ -1,3 +1,4 @@
+import { GAMES } from '../../shared/games'
 import type { Language } from '../../shared/languages'
 
 /** European languages whose printings share a TCG product line with the English one. */
@@ -27,10 +28,17 @@ const TWIN_CODE = `CASE
     THEN substr(p.set_code, 1, ${DASH}) || 'E' || substr(p.set_code, ${DASH} + 2)
 END`
 
+/** SQL list of the games whose printings may take the English twin's price (crossLanguagePriceFallback). */
+const FALLBACK_GAMES = Object.values(GAMES)
+  .filter((g) => g.crossLanguagePriceFallback)
+  .map((g) => `'${g.id}'`)
+  .join(',')
+
 /**
- * The English twin's TCGplayer market price (same card, rarity and set number), or NULL. A scalar
+ * The English twin's TCGplayer market price (same game, card, rarity and set number), or NULL. A scalar
  * subquery over alias `p`; it hits ux_printings_en (card_id, set_code, set_rarity), a point lookup.
+ * `game` is the scope's game SQL: a game without crossLanguagePriceFallback (Pokémon) never gets one.
  */
-export const EN_TWIN_PRICE = `(SELECT en.market_price FROM card_printings en
-  WHERE p.language IN ('de','fr','it','es','pt') AND en.language = 'en' AND en.card_id = p.card_id
-    AND en.set_rarity = p.set_rarity AND en.set_code = ${TWIN_CODE})`
+export const enTwinPrice = (game: string): string => `(SELECT en.market_price FROM card_printings en
+  WHERE ${game} IN (${FALLBACK_GAMES}) AND p.language IN ('de','fr','it','es','pt') AND en.language = 'en'
+    AND en.game = p.game AND en.card_id = p.card_id AND en.set_rarity = p.set_rarity AND en.set_code = ${TWIN_CODE})`

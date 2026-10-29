@@ -24,7 +24,7 @@ import { deleteMeta } from '../../src/main/db/meta'
 import { refreshCatalog } from '../../src/main/sync/catalog'
 import { createYgoClient } from '../../src/main/ygo/client'
 import { createYugipediaClient, type YugipediaClient } from '../../src/main/yugipedia/client'
-import { CATALOG_TABLES } from '../../src/shared/catalogTables'
+import { LEGACY_CATALOG_TABLES } from '../../src/shared/catalogTables'
 import { accuracyProblem, checkAccuracy, type AccuracyReport } from './accuracy'
 import { diffTable } from './diff'
 import { buildFingerprints, uploadFingerprints } from './fingerprints'
@@ -69,7 +69,7 @@ export const SHRINK_SHARE = 0.02
 export function findShrinks(work: Database.Database, base: Database.Database | null): string[] {
   if (!base) return []
   const out: string[] = []
-  for (const t of CATALOG_TABLES) {
+  for (const t of LEGACY_CATALOG_TABLES) {
     const { n } = base.prepare(`SELECT count(*) AS n FROM ${t.name}`).get() as { n: number }
     const { deletes } = diffTable(work, base, t)
     if (deletes.length > Math.max(SHRINK_MIN_ROWS, n * SHRINK_SHARE)) {
@@ -157,7 +157,7 @@ export async function runJob(opts: JobOptions): Promise<JobResult> {
 
     if (opts.dryRun) {
       const counts: NonNullable<JobResult['counts']> = {}
-      for (const t of CATALOG_TABLES) {
+      for (const t of LEGACY_CATALOG_TABLES) {
         const d = diffTable(work, base, t)
         counts[t.name] = { upserts: d.upserts.length, deletes: d.deletes.length }
         log(`${t.name}: ${d.upserts.length} upserts, ${d.deletes.length} deletes`)

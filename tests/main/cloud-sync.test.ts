@@ -97,7 +97,7 @@ const web = {
       portal.serverDb,
       { printingId: pid(portal.serverDb, code), imageId, quantity },
       at,
-      userScope(user)
+      userScope(user, 'ygo')
     ),
   update: (uid: string, patch: { quantity?: number; notes?: string }, at: Date) => {
     const { id } = portal.serverDb
@@ -105,7 +105,7 @@ const web = {
       .get(uid) as {
       id: number
     }
-    return updateEntry(portal.serverDb, id, patch, at, userScope(user))
+    return updateEntry(portal.serverDb, id, patch, at, userScope(user, 'ygo'))
   }
 }
 
@@ -672,6 +672,15 @@ describe('createCloudClient', () => {
     expect(calls[0].method).toBe('POST')
     expect(calls[0].headers.get('authorization')).toBe('Bearer tok')
     expect(await calls[0].text()).toBe('{"args":[]}')
+  })
+
+  it('rpc names its game in x-duel-game, and sends none without one', async () => {
+    const { calls, f } = recorder(() => Response.json({ result: null }))
+    const c = createCloudClient({ baseUrl: PORTAL, token: 'tok', fetch: f })
+    await c.rpc('friends:overview', [], 'pkm')
+    await c.rpc('friends:overview', [])
+    expect(calls.map((r) => r.headers.get('x-duel-game'))).toEqual(['pkm', null])
+    expect(calls[0].headers.get('authorization')).toBe('Bearer tok')
   })
 
   it('rpc rejects with the portal error message on a 400', async () => {

@@ -20,6 +20,7 @@ import { TooltipProvider } from '@/components/ui/tooltip'
 import { api, queryKeys } from '@/lib/api'
 import { formatRelative } from '@/lib/format'
 import { friendsErrorMessage } from '@/lib/friends'
+import { useGame } from '@/lib/game'
 import { useLanguageFilter } from '@/lib/languageFilter'
 import { isPhone } from '@/lib/platform'
 import { CollectionGrid } from './CollectionGrid'
@@ -50,7 +51,12 @@ function hasActiveFilters(f: CollectionFilters): boolean {
     f.setNames?.length ||
     f.rarities?.length ||
     f.levelMin !== undefined ||
-    f.levelMax !== undefined
+    f.levelMax !== undefined ||
+    f.pkmCategories?.length ||
+    f.pkmTypes?.length ||
+    f.pkmStages?.length ||
+    f.hpMin !== undefined ||
+    f.hpMax !== undefined
   )
 }
 
@@ -202,7 +208,8 @@ export function CollectionPage({
   // The collection tints the page with its first card in the current order.
   useArtWash(list[0] ? cardArtUrl(list[0].imageId) : null)
   const filtered = hasActiveFilters(filters)
-  const activeCount = activeFilterCount(filters)
+  const { def } = useGame()
+  const activeCount = activeFilterCount(filters, def)
   // Entries exist, but the language filter alone hides them all.
   const hiddenByLanguage =
     !filtered &&

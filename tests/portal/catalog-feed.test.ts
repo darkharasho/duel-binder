@@ -1,14 +1,18 @@
 import { createHash } from 'node:crypto'
 import { beforeEach, describe, expect, it } from 'vitest'
-import type Database from 'better-sqlite3'
+import Database from 'better-sqlite3'
 import { handle, type AppDeps } from '../../workers/portal/src/app'
 import { CATALOG_TABLES } from '../../src/shared/catalogTables'
 import type { CatalogChange, CatalogChangesResponse } from '../../src/shared/catalogFeed'
 import { addUser, seededServerDb, memoryBucket, noPrintingArt } from './helpers'
+import { migrateServer } from '../../workers/portal/src/migrate'
+import { PKM_ID_MIN } from '../../src/shared/games'
+import { seedPokemon, SHARED_SET_NAME } from '../fixtures/pokemon'
 
 const BASE = 'https://portal.test'
 const NOW = new Date('2026-10-24T12:00:00.000Z')
 const TOKEN = 'Bearer alice-desktop-token'
+const DARK_MAGICIAN = 46986414
 const sha256Hex = (s: string): string => createHash('sha256').update(s).digest('hex')
 
 describe('GET /api/catalog/changes', () => {
@@ -271,5 +275,293 @@ describe('GET /api/catalog/changes', () => {
       deps
     )
     expect(res.status).toBe(404)
+  })
+})
+
+describe('per-game catalog feed', () => {
+  let db: Database.Database
+  let deps: AppDeps
+  const OWNER = 'Bearer owner-desktop-token'
+  const BOB = 'Bearer bob-desktop-token'
+
+  const call = (path: string, auth: string, body?: unknown): Promise<Response> =>
+    handle(
+      new Request(`${BASE}${path}`, {
+        method: body === undefined ? 'GET' : 'POST',
+        headers: { authorization: auth, 'content-type': 'application/json' },
+        body: body === undefined ? undefined : JSON.stringify(body)
+      }),
+      deps
+    )
+  const feed = async (qs: string, auth = OWNER): Promise<CatalogChangesResponse> => {
+    const res = await call(`/api/catalog/changes${qs}`, auth)
+    expect(res.status, qs).toBe(200)
+    return (await res.json()) as CatalogChangesResponse
+  }
+  const drain = async (game: string | null, since = 0, limit = 3): Promise<CatalogChange[]> => {
+    const all: CatalogChange[] = []
+    for (;;) {
+      const page = await feed(`?since=${since}&limit=${limit}${game ? `&game=${game}` : ''}`)
+      all.push(...page.changes)
+      since = page.cursor
+      if (!page.more) return all
+    }
+  }
+  const admin = async (path: string, body: unknown): Promise<void> => {
+    const res = await call(path, 'Bearer admin-secret', body)
+    expect(res.status, await res.clone().text()).toBe(200)
+  }
+
+  /** The seedPokemon rows, read from a scratch server and loaded here through the loader. */
+  async function loadPokemon(): Promise<void> {
+    const scratch = new Database(':memory:')
+    migrateServer(scratch)
+    seedPokemon(scratch)
+    for (const name of ['cards', 'card_images', 'card_printings', 'sets', 'pokemon_cards']) {
+      const t = CATALOG_TABLES.find((x) => x.name === name)!
+      const rows = scratch
+        .prepare(`SELECT ${t.columns.map((c) => `"${c}"`).join(', ')} FROM ${name}`)
+        .all()
+      await admin('/admin/catalog/rows', { table: name, rows })
+    }
+    scratch.close()
+  }
+
+  beforeEach(async () => {
+    db = await seededServerDb()
+    const owner = addUser(db, 'owner-discord', 'owner')
+    const bob = addUser(db, 'bob-discord', 'bob')
+    for (const [id, token] of [
+      [owner, 'owner-desktop-token'],
+      [bob, 'bob-desktop-token']
+    ] as const)
+      db.prepare(
+        "INSERT INTO sessions (token_hash, user_id, kind, created_at, expires_at) VALUES (?, ?, 'desktop', ?, ?)"
+      ).run(sha256Hex(token), id, NOW.toISOString(), '2099-01-01T00:00:00.000Z')
+    db.prepare("INSERT INTO sets (language, set_name, set_code) VALUES ('en', ?, 'LOB')").run(
+      SHARED_SET_NAME
+    )
+    deps = {
+      db,
+      images: memoryBucket(),
+      printingArt: noPrintingArt,
+      prices: { soon: async () => {} },
+      env: { ADMIN_TOKEN: 'admin-secret', ADMIN_DISCORD_ID: 'owner-discord' },
+      now: () => NOW,
+      fetch: (async () => new Response('', { status: 404 })) as typeof fetch
+    } as unknown as AppDeps
+    await loadPokemon()
+  })
+
+  it('the loader refuses ids outside their game, image ids included', async () => {
+    const pikachu = (
+      db.prepare("SELECT id FROM cards WHERE game = 'pkm' LIMIT 1").get() as {
+        id: number
+      }
+    ).id
+    const rows = async (table: string, row: Record<string, unknown>): Promise<number> =>
+      (await call('/admin/catalog/rows', 'Bearer admin-secret', { table, rows: [row] })).status
+    const image = { card_id: pikachu, sort_order: 1, missing_from_api: 0, game: 'pkm' }
+    expect(await rows('card_images', { ...image, image_id: 12345 })).toBe(400)
+    expect(
+      await rows('card_images', {
+        ...image,
+        image_id: DARK_MAGICIAN,
+        card_id: DARK_MAGICIAN,
+        game: 'pkm'
+      })
+    ).toBe(400)
+    expect(
+      await rows('cards', {
+        id: 12345,
+        name: 'X',
+        type: 'T',
+        frame_type: 'f',
+        desc: '',
+        updated_at: 'x',
+        game: 'pkm'
+      })
+    ).toBe(400)
+    expect(await rows('card_images', { ...image, image_id: pikachu + 1 })).toBe(200)
+    expect(db.prepare('SELECT 1 FROM card_images WHERE image_id = 12345').get()).toBeUndefined()
+  })
+
+  it('the loader stores Pokémon rows with their game, and rows without one as Yu-Gi-Oh!', () => {
+    expect(
+      db.prepare('SELECT game, count(*) AS n FROM cards GROUP BY game ORDER BY game').all()
+    ).toEqual([
+      { game: 'pkm', n: 2 },
+      { game: 'ygo', n: expect.any(Number) }
+    ])
+    expect(db.prepare('SELECT count(*) AS n FROM pokemon_cards').get()).toEqual({ n: 2 })
+    expect(
+      db.prepare('SELECT game FROM sets WHERE set_name = ? ORDER BY game').all(SHARED_SET_NAME)
+    ).toEqual([{ game: 'pkm' }, { game: 'ygo' }])
+  })
+
+  it('the legacy feed from 0 holds no Pokémon row, no game column and no pokemon_cards', async () => {
+    const all = await drain(null)
+    expect(all.length).toBeGreaterThan(0)
+    expect(all.some((c) => c.table === ('pokemon_cards' as never))).toBe(false)
+    for (const c of all) {
+      if (!('row' in c)) continue
+      expect(c.row).not.toHaveProperty('game')
+      const ids = c.table === 'cards' ? ['id'] : ['card_id', 'image_id']
+      for (const col of ids) expect(Number(c.row[col] ?? 0)).toBeLessThan(PKM_ID_MIN)
+    }
+    const sets = all.filter(
+      (c) => c.table === 'sets' && 'row' in c && c.row.set_name === SHARED_SET_NAME
+    )
+    expect(sets).toHaveLength(1)
+  })
+
+  it('legacy pages skip Pokémon rows that sit between Yu-Gi-Oh! ones', async () => {
+    const beforePkm =
+      (
+        db.prepare("SELECT MIN(catalog_seq) AS s FROM cards WHERE game = 'pkm'").get() as {
+          s: number
+        }
+      ).s - 1
+    // A Yu-Gi-Oh! row loaded after the Pokémon ones (no game: the nightly job's shape).
+    await admin('/admin/catalog/rows', {
+      table: 'sets',
+      rows: [{ language: 'en', set_name: 'Late Set', set_code: 'LATE' }]
+    })
+    const late = (
+      db.prepare("SELECT catalog_seq AS s FROM sets WHERE set_name = 'Late Set'").get() as {
+        s: number
+      }
+    ).s
+    expect(late).toBeGreaterThan(beforePkm + 10)
+
+    const page = await feed(`?since=${beforePkm}&limit=1`)
+    expect(page.changes).toEqual([
+      { seq: late, table: 'sets', row: expect.objectContaining({ set_name: 'Late Set' }) }
+    ])
+    expect(page.changes[0]).not.toHaveProperty('row.game')
+    expect(page).toMatchObject({ cursor: late, more: false })
+
+    for (const limit of [1, 2, 3]) {
+      const cursors: number[] = []
+      const all: CatalogChange[] = []
+      let since = 0
+      for (;;) {
+        const p = await feed(`?since=${since}&limit=${limit}`)
+        all.push(...p.changes)
+        cursors.push(p.cursor)
+        since = p.cursor
+        if (!p.more) break
+      }
+      expect(cursors, `limit ${limit}`).toEqual([...new Set(cursors)].sort((a, b) => a - b))
+      expect(cursors.at(-1)).toBe(late)
+      expect(all.some((c) => 'row' in c && c.row.game !== undefined)).toBe(false)
+      expect(all.filter((c) => c.seq > beforePkm).map((c) => c.seq)).toEqual([late])
+    }
+  })
+
+  it('game=pkm from 0 returns exactly the Pokémon rows', async () => {
+    const all = await drain('pkm')
+    const got = all.map((c) => {
+      if (!('row' in c)) throw new Error('no tombstones from 0')
+      const t = CATALOG_TABLES.find((x) => x.name === c.table)!
+      expect(t.games).toContain('pkm')
+      if (t.columns.includes('game')) expect(c.row.game).toBe('pkm')
+      return `${c.table}:${JSON.stringify(t.key.map((k) => c.row[k]))}`
+    })
+    const expected: string[] = []
+    for (const t of CATALOG_TABLES.filter((x) => x.games.includes('pkm'))) {
+      const where = t.columns.includes('game') ? " WHERE game = 'pkm'" : ''
+      for (const r of db
+        .prepare(`SELECT ${t.key.map((k) => `"${k}"`).join(', ')} FROM ${t.name}${where}`)
+        .all() as Record<string, unknown>[])
+        expected.push(`${t.name}:${JSON.stringify(t.key.map((k) => r[k]))}`)
+    }
+    expect(got.sort()).toEqual(expected.sort())
+    expect(expected.filter((k) => k.startsWith('pokemon_cards:'))).toHaveLength(2)
+  })
+
+  it('game=ygo serves only Yu-Gi-Oh! rows, with their game', async () => {
+    const legacy = await drain(null)
+    const ygo = await drain('ygo')
+    expect(ygo.map((c) => c.seq)).toEqual(legacy.map((c) => c.seq))
+    for (const c of ygo) if ('row' in c && c.table === 'cards') expect(c.row.game).toBe('ygo')
+  })
+
+  it('deleting a Pokémon set shows up only in the pkm feed', async () => {
+    const since = (db.prepare('SELECT seq FROM catalog_clock').get() as { seq: number }).seq
+    await admin('/admin/catalog/delete', { table: 'sets', keys: [['pkm', 'en', SHARED_SET_NAME]] })
+    expect(db.prepare('SELECT game FROM sets WHERE set_name = ?').all(SHARED_SET_NAME)).toEqual([
+      { game: 'ygo' }
+    ])
+    expect((await feed(`?since=${since}`)).changes).toEqual([])
+    expect((await feed(`?since=${since}&game=ygo`)).changes).toEqual([])
+    const pkm = await feed(`?since=${since}&game=pkm`)
+    expect(pkm.changes).toEqual([
+      { seq: since + 1, table: 'sets', deleted: ['pkm', 'en', SHARED_SET_NAME] }
+    ])
+  })
+
+  it('a legacy two-part sets delete from the loader removes only the Yu-Gi-Oh! set', async () => {
+    const since = (db.prepare('SELECT seq FROM catalog_clock').get() as { seq: number }).seq
+    await admin('/admin/catalog/delete', { table: 'sets', keys: [['en', SHARED_SET_NAME]] })
+    expect(db.prepare('SELECT game FROM sets WHERE set_name = ?').all(SHARED_SET_NAME)).toEqual([
+      { game: 'pkm' }
+    ])
+    expect((await feed(`?since=${since}`)).changes).toEqual([
+      { seq: since + 1, table: 'sets', deleted: ['en', SHARED_SET_NAME] }
+    ])
+    expect((await feed(`?since=${since}&game=ygo`)).changes).toEqual([
+      { seq: since + 1, table: 'sets', deleted: ['ygo', 'en', SHARED_SET_NAME] }
+    ])
+    expect((await feed(`?since=${since}&game=pkm`)).changes).toEqual([])
+  })
+
+  it('pokemon_cards tombstones stay off the legacy feed', async () => {
+    const since = (db.prepare('SELECT seq FROM catalog_clock').get() as { seq: number }).seq
+    const id = (
+      db.prepare('SELECT card_id FROM pokemon_cards LIMIT 1').get() as { card_id: number }
+    ).card_id
+    db.prepare('DELETE FROM pokemon_cards WHERE card_id = ?').run(id)
+    expect((await feed(`?since=${since}`)).changes).toEqual([])
+    expect((await feed(`?since=${since}&game=pkm`)).changes).toEqual([
+      { seq: since + 1, table: 'pokemon_cards', deleted: [id] }
+    ])
+  })
+
+  it('tables with a game may name pokemon_cards; tables of another game are left out', async () => {
+    const tables = 'cards,pack_art,pokemon_cards'
+    const pkm = await feed(`?since=0&game=pkm&tables=${tables}`)
+    expect(new Set(pkm.changes.map((c) => c.table))).toEqual(new Set(['cards', 'pokemon_cards']))
+    const ygo = await feed(`?since=0&game=ygo&tables=${tables}`)
+    expect(ygo.changes.some((c) => c.table === ('pokemon_cards' as never))).toBe(false)
+    expect((await call(`/api/catalog/changes?since=0&tables=pokemon_cards`, OWNER)).status).toBe(
+      400
+    )
+  })
+
+  it('a user without Pokémon asking for game=pkm gets 403', async () => {
+    const res = await call('/api/catalog/changes?since=0&game=pkm', BOB)
+    expect(res.status).toBe(403)
+    expect(await res.json()).toEqual({ error: 'game-not-allowed' })
+    expect((await call('/api/catalog/changes?since=0&game=nope', OWNER)).status).toBe(403)
+    expect((await call('/api/catalog/changes?since=0&game=ygo', BOB)).status).toBe(200)
+  })
+
+  it('builds no compound SELECT on a per-game feed', async () => {
+    const real = db
+    deps.db = new Proxy(real, {
+      get(target, prop) {
+        if (prop === 'prepare')
+          return (sql: string) => {
+            if (/\b(UNION|INTERSECT|EXCEPT)\b/i.test(sql))
+              throw new Error('too many terms in compound SELECT')
+            return target.prepare(sql)
+          }
+        const v = Reflect.get(target, prop) as unknown
+        return typeof v === 'function' ? (v as (...a: unknown[]) => unknown).bind(target) : v
+      }
+    })
+    expect((await drain('pkm', 0, 2)).length).toBeGreaterThan(2)
+    expect((await feed('?since=1&game=pkm')).changes.length).toBeGreaterThan(0)
   })
 })

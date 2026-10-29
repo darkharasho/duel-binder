@@ -43,7 +43,12 @@ beforeEach(async () => {
 afterEach(() => db.close())
 
 const handlers = (): Record<DataChannel, (...a: unknown[]) => Promise<unknown>> =>
-  createDataHandlers({ db, onEdit: () => {} })
+  createDataHandlers({
+    db,
+    onEdit: () => {},
+    availableGames: () => ['ygo'],
+    onGameChanged: () => {}
+  })
 
 /** Clicks the Japanese Dark Magician in Most valuable and expects its panel, filter untouched. */
 async function clickAndExpectPanel(): Promise<void> {

@@ -288,7 +288,7 @@ describe('account service', () => {
       portal.serverDb,
       { printingId: pid(portal.serverDb, 'LOB-EN119'), imageId: POT, quantity: 3 },
       T1,
-      userScope(bob)
+      userScope(bob, 'ygo')
     )
     emitDataChanged.mockClear()
     await signInAs(service, me(bob, 'bob'))
@@ -408,7 +408,7 @@ describe('account service', () => {
       portal.serverDb,
       { printingId: pid(portal.serverDb, 'LOB-EN119'), imageId: POT, quantity: 2 },
       T1,
-      userScope(alice)
+      userScope(alice, 'ygo')
     )
     db.prepare(
       "UPDATE card_printings SET set_code = 'ZZ-LOB-EN119' WHERE set_code = 'LOB-EN119'"
@@ -440,7 +440,7 @@ describe('account service', () => {
       portal.serverDb,
       { printingId: pid(portal.serverDb, 'SRV-EN001'), imageId: DM, quantity: 2 },
       T1,
-      userScope(alice)
+      userScope(alice, 'ygo')
     )
     const service = makeService()
     await signInAs(service, me(alice, 'alice'))
@@ -531,7 +531,7 @@ describe('account service', () => {
       portal.serverDb,
       { printingId: pid(portal.serverDb, 'LOB-EN005'), imageId: DM, quantity: 3 },
       T3,
-      userScope(alice)
+      userScope(alice, 'ygo')
     )
     await service.syncNow()
     expect(emitDataChanged).toHaveBeenCalledTimes(1)
@@ -686,7 +686,7 @@ describe('account service', () => {
       portal.serverDb,
       { printingId: pid(portal.serverDb, 'LOB-EN005'), imageId: DM, quantity: 3 },
       T1,
-      userScope(alice)
+      userScope(alice, 'ygo')
     )
     const realFetch = fetchSpy.getMockImplementation()!
     fetchSpy.mockImplementation(async (input, init) =>

@@ -1,4 +1,4 @@
-import { MIGRATIONS, type Migration } from '../../../src/main/db/schema'
+import { MIGRATIONS, SCHEMA_V19_SERVER, type Migration } from '../../../src/main/db/schema'
 import type { SqlDb } from '../../../src/main/db/sql'
 
 export interface ServerStep {
@@ -91,6 +91,35 @@ const SERVER_6_TABLES: FrozenTable[] = [
 const q = (c: string): string => `"${c}"`
 
 /**
+ * The insert, update and delete triggers that stamp a table's rows with a seq and tombstone deleted
+ * (or re-keyed) rows. `game` is the SQL for a tombstone's game; without it the tombstone takes the
+ * column default (the server-6 triggers, from before tombstones had a game). Shipped steps build
+ * their SQL with this, so its output for a given table and game must never change.
+ */
+function seqTriggers(t: FrozenTable, game?: string): string[] {
+  const stamp = `UPDATE catalog_clock SET seq = seq + 1; UPDATE ${t.name} SET catalog_seq = (SELECT seq FROM catalog_clock) WHERE rowid = NEW.rowid;`
+  const watched = [...t.columns, ...(t.extra ?? [])]
+  // card_printings.key is the generated pkey, which isn't in its column list.
+  const changed = (t.name === 'card_printings' ? [...watched, 'pkey'] : watched)
+    .map((c) => `NEW.${q(c)} IS NOT OLD.${q(c)}`)
+    .join(' OR ')
+  const key = t.key.map((c) => `OLD.${q(c)}`).join(', ')
+  const rekeyed = t.key.map((c) => `NEW.${q(c)} IS NOT OLD.${q(c)}`).join(' OR ')
+  const cols = game === undefined ? 'seq, tbl, key' : 'seq, tbl, key, game'
+  const gameValue = game === undefined ? '' : `, ${game}`
+  // A key changed in place: tombstone the old key first, so a client drops the row it holds
+  // under that key before taking the row under its new one.
+  const oldKeyTombstone =
+    `UPDATE catalog_clock SET seq = seq + 1 WHERE ${rekeyed}; ` +
+    `INSERT INTO catalog_tombstones (${cols}) SELECT (SELECT seq FROM catalog_clock), '${t.name}', json_array(${key})${gameValue} WHERE ${rekeyed};`
+  return [
+    `CREATE TRIGGER trg_${t.name}_seq_ins AFTER INSERT ON ${t.name} BEGIN ${stamp} END;`,
+    `CREATE TRIGGER trg_${t.name}_seq_upd AFTER UPDATE ON ${t.name} WHEN ${changed} BEGIN ${oldKeyTombstone} ${stamp} END;`,
+    `CREATE TRIGGER trg_${t.name}_seq_del AFTER DELETE ON ${t.name} BEGIN UPDATE catalog_clock SET seq = seq + 1; INSERT INTO catalog_tombstones (${cols}) VALUES ((SELECT seq FROM catalog_clock), '${t.name}', json_array(${key})${gameValue}); END;`
+  ]
+}
+
+/**
  * Change-feed steps: a global clock, a `catalog_seq` per row (stamped by triggers on real changes),
  * and tombstones for deletes and for the old key of a row whose key changed in place.
  *
@@ -128,30 +157,64 @@ function catalogFeedSteps(tables: FrozenTable[]): ServerStep[] {
       ].join('\n')
     })
   }
-  const stamp = (t: FrozenTable): string =>
-    `UPDATE catalog_clock SET seq = seq + 1; UPDATE ${t.name} SET catalog_seq = (SELECT seq FROM catalog_clock) WHERE rowid = NEW.rowid;`
-  const triggers: string[] = []
-  for (const t of tables) {
-    const watched = [...t.columns, ...(t.extra ?? [])]
-    // card_printings.key is the generated pkey, which isn't in its column list.
-    const changed = (t.name === 'card_printings' ? [...watched, 'pkey'] : watched)
-      .map((c) => `NEW.${q(c)} IS NOT OLD.${q(c)}`)
-      .join(' OR ')
-    const key = t.key.map((c) => `OLD.${q(c)}`).join(', ')
-    const rekeyed = t.key.map((c) => `NEW.${q(c)} IS NOT OLD.${q(c)}`).join(' OR ')
-    // A key changed in place: tombstone the old key first, so a client drops the row it holds
-    // under that key before taking the row under its new one.
-    const oldKeyTombstone =
-      `UPDATE catalog_clock SET seq = seq + 1 WHERE ${rekeyed}; ` +
-      `INSERT INTO catalog_tombstones (seq, tbl, key) SELECT (SELECT seq FROM catalog_clock), '${t.name}', json_array(${key}) WHERE ${rekeyed};`
-    triggers.push(
-      `CREATE TRIGGER trg_${t.name}_seq_ins AFTER INSERT ON ${t.name} BEGIN ${stamp(t)} END;`,
-      `CREATE TRIGGER trg_${t.name}_seq_upd AFTER UPDATE ON ${t.name} WHEN ${changed} BEGIN ${oldKeyTombstone} ${stamp(t)} END;`,
-      `CREATE TRIGGER trg_${t.name}_seq_del AFTER DELETE ON ${t.name} BEGIN UPDATE catalog_clock SET seq = seq + 1; INSERT INTO catalog_tombstones (seq, tbl, key) VALUES ((SELECT seq FROM catalog_clock), '${t.name}', json_array(${key})); END;`
-    )
-  }
+  const triggers = tables.flatMap((t) => seqTriggers(t))
   steps.push({ name: 'server-6-triggers', sql: triggers.join('\n') })
   return steps
+}
+
+/**
+ * Frozen copy, as of server-12, of the catalog tables that belong to more than one game or to
+ * Pokémon only. Like SERVER_6_TABLES, never read the live list here.
+ */
+const SERVER_12_TABLES: (FrozenTable & { game: string })[] = [
+  ...['cards', 'card_images', 'card_printings'].map((name) => {
+    const t = SERVER_6_TABLES.find((x) => x.name === name)!
+    return { ...t, columns: [...t.columns, 'game'], game: 'OLD."game"' }
+  }),
+  {
+    name: 'sets',
+    key: ['game', 'language', 'set_name'],
+    columns: [
+      'game',
+      'language',
+      'set_name',
+      'set_code',
+      'tcg_date',
+      'image_url',
+      'image_key',
+      'list_rows',
+      'unmatched_rows'
+    ],
+    game: 'OLD."game"'
+  },
+  {
+    name: 'pokemon_cards',
+    key: ['card_id'],
+    columns: ['card_id', 'category', 'hp', 'types', 'stage', 'rarity', 'illustrator', 'source_id'],
+    game: "'pkm'"
+  }
+]
+
+/**
+ * Multi-game: the server's V19 (SCHEMA_V19_SERVER), tombstones that carry a game, a
+ * `(game, catalog_seq)` index per game-bearing table for per-game feeds, and the seq triggers
+ * recreated so tombstones record the game (`sets` tombstones its three-part key). Nothing is
+ * re-stamped: the rebuilt `sets` keeps its seqs, and no trigger exists while it is rebuilt.
+ */
+function multiGameStep(): ServerStep {
+  const shared = SERVER_12_TABLES.filter((t) => t.columns.includes('game'))
+  return {
+    name: 'server-12',
+    sql: [
+      "ALTER TABLE catalog_tombstones ADD COLUMN game TEXT NOT NULL DEFAULT 'ygo';",
+      SCHEMA_V19_SERVER.trim(),
+      ...shared.map((t) => `CREATE INDEX ix_${t.name}_game_seq ON ${t.name}(game, catalog_seq);`),
+      ...SERVER_12_TABLES.flatMap((t) =>
+        ['ins', 'upd', 'del'].map((op) => `DROP TRIGGER IF EXISTS trg_${t.name}_seq_${op};`)
+      ),
+      ...SERVER_12_TABLES.flatMap((t) => seqTriggers(t, t.game))
+    ].join('\n')
+  }
 }
 
 /**
@@ -282,7 +345,8 @@ UPDATE catalog_clock SET seq = seq + (SELECT count(*) FROM intl_prices);
 CREATE INDEX ix_intl_prices_seq ON intl_prices(price_seq);
 CREATE TRIGGER trg_intl_prices_seq_ins AFTER INSERT ON intl_prices BEGIN UPDATE catalog_clock SET seq = seq + 1; UPDATE intl_prices SET price_seq = (SELECT seq FROM catalog_clock) WHERE rowid = NEW.rowid; END;
 CREATE TRIGGER trg_intl_prices_seq_upd AFTER UPDATE ON intl_prices WHEN NEW.price IS NOT OLD.price BEGIN UPDATE catalog_clock SET seq = seq + 1; UPDATE intl_prices SET price_seq = (SELECT seq FROM catalog_clock) WHERE rowid = NEW.rowid; END;`
-  }
+  },
+  multiGameStep()
 ]
 
 /**

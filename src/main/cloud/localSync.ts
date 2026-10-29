@@ -4,6 +4,7 @@ import type { CloudClient } from './client'
 import { priceCandidates } from '../prices/candidates'
 import type { ContributedPrinting } from '../../shared/catalogFeed'
 import type { UnsyncedEntry } from '../../shared/types'
+import type { GameId } from '../../shared/games'
 import { isLanguage } from '../../shared/languages'
 import {
   MAX_NOTES,
@@ -66,6 +67,43 @@ export function saveAccountState(
     `INSERT INTO cloud_accounts (owner_id, name, cursor, synced_at) VALUES (?, '', COALESCE(?, 0), ?)
      ON CONFLICT(owner_id) DO UPDATE SET cursor = COALESCE(?, cursor), synced_at = COALESCE(?, synced_at)`
   ).run(owner, s.cursor ?? null, s.syncedAt ?? null, s.cursor ?? null, s.syncedAt ?? null)
+}
+
+/** A per-game sync feed: the account's entries, or the server's price changes. */
+export type SyncStream = 'entries' | 'prices'
+
+/**
+ * Where `owner` is in one game's feed. Yu-Gi-Oh! keeps its pre-games places (the account's cursor,
+ * and this device's `price_feed_cursor`); every other game has a `cloud_game_cursors` row, 0 until
+ * its first pull.
+ */
+export function gameCursor(db: SqlDb, owner: number, game: GameId, stream: SyncStream): number {
+  if (game === 'ygo')
+    return stream === 'entries'
+      ? accountState(db, owner).cursor
+      : Number(getMeta(db, 'price_feed_cursor') ?? 0)
+  const r = db
+    .prepare('SELECT cursor FROM cloud_game_cursors WHERE owner_id = ? AND game = ? AND stream = ?')
+    .get(owner, game, stream) as { cursor: number } | undefined
+  return r ? Number(r.cursor) : 0
+}
+
+export function saveGameCursor(
+  db: SqlDb,
+  owner: number,
+  game: GameId,
+  stream: SyncStream,
+  cursor: number
+): void {
+  if (game === 'ygo') {
+    if (stream === 'entries') saveAccountState(db, owner, { cursor })
+    else setMeta(db, 'price_feed_cursor', String(cursor))
+    return
+  }
+  db.prepare(
+    `INSERT INTO cloud_game_cursors (owner_id, game, stream, cursor) VALUES (?, ?, ?, ?)
+     ON CONFLICT(owner_id, game, stream) DO UPDATE SET cursor = excluded.cursor`
+  ).run(owner, game, stream, cursor)
 }
 
 /** Whether this computer has never-signed-in entries (owner 0), tombstones included. */
@@ -238,15 +276,18 @@ export function applyRemote(db: SqlDb, owner: number, e: WireEntry): ApplyResult
         dirty
       ]
       if (local)
+        // A delete may keep a printing this catalog has lost, so then the row keeps its game too.
         db.prepare(
           `UPDATE collection_entries SET owner_id = ?, printing_id = ?, image_id = ?, quantity = ?, notes = ?,
-             created_at = ?, updated_at = ?, deleted_at = ?, dirty = ? WHERE uid = ?`
-        ).run(...fields, e.uid)
+             created_at = ?, updated_at = ?, deleted_at = ?, dirty = ?,
+             game = COALESCE((SELECT game FROM card_printings WHERE id = ?), game) WHERE uid = ?`
+        ).run(...fields, printingId, e.uid)
       else
         db.prepare(
           `INSERT INTO collection_entries (owner_id, printing_id, image_id, quantity, notes, created_at, updated_at,
-             deleted_at, dirty, uid) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
-        ).run(...fields, e.uid)
+             deleted_at, dirty, uid, game) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?,
+             (SELECT game FROM card_printings WHERE id = ?))`
+        ).run(...fields, e.uid, printingId)
       db.prepare('DELETE FROM sync_pending WHERE owner_id = ? AND uid = ?').run(owner, e.uid)
     }
 
@@ -358,20 +399,22 @@ export function applyPrices(db: SqlDb, prices: WirePrice[]): number {
 }
 
 /**
- * Applies the server's price change feed from the saved cursor, page by page; each page and its
- * cursor commit together. Returns rows written.
+ * Applies the server's price change feed of `game` from the saved cursor (see gameCursor), page by
+ * page; each page and its cursor commit together. Returns rows written.
  */
 export async function pullPriceChanges(
   db: SqlDb,
-  client: Pick<CloudClient, 'priceChanges'>
+  client: Pick<CloudClient, 'priceChanges'>,
+  owner = 0,
+  game: GameId = 'ygo'
 ): Promise<number> {
-  let cursor = Number(getMeta(db, 'price_feed_cursor') ?? 0)
+  let cursor = gameCursor(db, owner, game, 'prices')
   let applied = 0
   for (;;) {
-    const page = await client.priceChanges(cursor)
+    const page = await client.priceChanges(cursor, game)
     db.transaction(() => {
       applied += applyPrices(db, page.prices)
-      setMeta(db, 'price_feed_cursor', String(page.cursor))
+      saveGameCursor(db, owner, game, 'prices', page.cursor)
     })()
     cursor = page.cursor
     if (!page.more || page.prices.length === 0) break

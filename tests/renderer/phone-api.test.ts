@@ -1,6 +1,11 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DATA_CHANNELS } from '../../src/main/ipc/dataHandlers'
-import type { PhoneStore } from '../../src/phone/data/store'
+import { createPhoneStore, type PhoneStore } from '../../src/phone/data/store'
+import { applyPhoneSchema } from '../../src/phone/data/phoneSchema'
+import type { PhoneDb } from '../../src/phone/data/wasmSql'
+import type { Me } from '../../src/shared/cloud'
+import { seedPokemon } from '../fixtures/pokemon'
+import { seededDb } from '../main/helpers'
 import { createPhoneApi, createPhoneEvents, type PhoneEvents } from '../../src/phone/api'
 import type { Api } from '../../src/shared/ipc'
 import type { Ocr } from '../../src/shared/scan/ocr'
@@ -329,5 +334,129 @@ describe('phone api', () => {
     expect(store.invoke).toHaveBeenCalledWith('account:unsynced', [])
     await api.account.deleteAccount()
     expect(store.deleteAccount).toHaveBeenCalled()
+  })
+
+  describe('active game', () => {
+    const OWNER: Me = { ...ME, games: ['ygo', 'pkm'] }
+    const NOW = '2026-10-29T12:00:00.000Z'
+
+    /** A phone database with one Yu-Gi-Oh! and one Pokémon entry of OWNER, already synced. */
+    async function phoneDb(): Promise<Awaited<ReturnType<typeof seededDb>>> {
+      const db = await seededDb()
+      applyPhoneSchema(db)
+      seedPokemon(db)
+      for (const game of ['ygo', 'pkm']) {
+        const p = db
+          .prepare(
+            `SELECT p.id, (SELECT image_id FROM card_images WHERE card_id = p.card_id LIMIT 1) AS imageId
+             FROM card_printings p WHERE p.game = ? ORDER BY p.id LIMIT 1`
+          )
+          .get(game) as { id: number; imageId: number }
+        db.prepare(
+          `INSERT INTO collection_entries (uid, owner_id, game, printing_id, image_id, quantity, created_at, updated_at, dirty)
+           VALUES (?, ?, ?, ?, ?, 1, ?, ?, 0)`
+        ).run(crypto.randomUUID(), OWNER.id, game, p.id, p.imageId, NOW, NOW)
+      }
+      return db
+    }
+
+    /** `db` as the phone store takes it (better-sqlite3's `inTransaction` is a property). */
+    const asPhoneDb = (db: Awaited<ReturnType<typeof seededDb>>): PhoneDb => ({
+      prepare: (sql) => db.prepare(sql),
+      exec: (sql) => void db.exec(sql),
+      transaction: (fn) => db.transaction(fn),
+      inTransaction: () => db.inTransaction
+    })
+
+    /** The phone Api over a real store on `db`, offline: what a page load builds. */
+    function load(db: Awaited<ReturnType<typeof seededDb>>): { api: Api; events: PhoneEvents } {
+      const store = createPhoneStore({
+        db: asPhoneDb(db),
+        portal: 'https://portal.test',
+        fetch: (async () => {
+          throw new TypeError('Failed to fetch')
+        }) as typeof fetch
+      })
+      const events = createPhoneEvents()
+      const triggers = { afterAdd: vi.fn(), afterPriceRequest: vi.fn() }
+      return { api: createPhoneApi({ store, ocr: fakeOcr(), triggers, events }), events }
+    }
+
+    const listedGames = async (
+      api: Api,
+      db: Awaited<ReturnType<typeof seededDb>>
+    ): Promise<string[]> =>
+      (await api.collection.list({ sort: 'name', dir: 'asc' } as never)).map(
+        (e) =>
+          (
+            db.prepare('SELECT game FROM collection_entries WHERE id = ?').get(e.id) as {
+              game: string
+            }
+          ).game
+      )
+
+    it('opening signed out with Pokémon stored shows Yu-Gi-Oh! before any read', async () => {
+      const db = await phoneDb()
+      db.prepare("INSERT INTO meta (key, value) VALUES ('active_game', 'pkm')").run()
+      load(db)
+      expect(
+        (db.prepare("SELECT value FROM meta WHERE key = 'active_game'").get() as { value: string })
+          .value
+      ).toBe('ygo')
+    })
+
+    it("setActive('pkm') rejects for an account without Pokémon", async () => {
+      const db = await phoneDb()
+      const { api, events } = load(db)
+      await api.account.status()
+      const reload = vi.fn()
+      events.on('dataChanged', reload)
+      await expect(api.games.available()).resolves.toEqual(['ygo'])
+      await expect(api.games.setActive('pkm')).rejects.toThrow("isn't available")
+      expect(reload).not.toHaveBeenCalled()
+      await expect(api.games.active()).resolves.toBe('ygo')
+    })
+
+    it('the owner switches to Pokémon, every page reloads, and the choice survives a reload', async () => {
+      const db = await phoneDb()
+      const first = load(db)
+      const store = createPhoneStore({
+        db: asPhoneDb(db),
+        portal: 'https://portal.test',
+        fetch: vi.fn()
+      })
+      await store.signIn('token', OWNER)
+      await expect(first.api.games.available()).resolves.toEqual(['ygo', 'pkm'])
+      expect(await listedGames(first.api, db)).toEqual(['ygo'])
+      const reload = vi.fn()
+      first.events.on('dataChanged', reload)
+      await first.api.games.setActive('pkm')
+      expect(reload).toHaveBeenCalledTimes(1)
+      expect(await listedGames(first.api, db)).toEqual(['pkm'])
+
+      const second = load(db)
+      await expect(second.api.games.active()).resolves.toBe('pkm')
+      expect(await listedGames(second.api, db)).toEqual(['pkm'])
+    })
+
+    it('signing out, then in as an account without Pokémon, shows Yu-Gi-Oh! only', async () => {
+      const db = await phoneDb()
+      const { api } = load(db)
+      const store = createPhoneStore({
+        db: asPhoneDb(db),
+        portal: 'https://portal.test',
+        fetch: (async () => new Response(null, { status: 204 })) as typeof fetch
+      })
+      await store.signIn('token', OWNER)
+      await api.games.setActive('pkm')
+      await api.account.signOut()
+      expect(
+        (db.prepare("SELECT value FROM meta WHERE key = 'active_game'").get() as { value: string })
+          .value
+      ).toBe('ygo')
+      await store.signIn('token-2', { ...ME, id: OWNER.id })
+      await expect(api.games.active()).resolves.toBe('ygo')
+      expect(await listedGames(api, db)).toEqual(['ygo'])
+    })
   })
 })

@@ -9,7 +9,7 @@ export interface TdCard {
   set: { id: string; name: string }
 }
 export interface TdSet {
-  id: string; name: string; releaseDate?: string; logo?: string
+  id: string; name: string; releaseDate?: string; logo?: string; serie?: { id: string }
   abbreviation?: { official?: string }; cardCount?: { official?: number }
   cards: { id: string; localId: string; name: string }[]
 }

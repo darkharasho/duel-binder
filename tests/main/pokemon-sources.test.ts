@@ -194,6 +194,19 @@ describe('pokemon sources', () => {
     s.close()
   })
 
+  it('leaves out the digital-only TCG Pocket sets', async () => {
+    const pocket = { id: 'A1', name: 'Genetic Apex', serie: { id: 'tcgp' }, cards: [] }
+    const paper = { id: 'sv01', name: 'Scarlet & Violet', serie: { id: 'sv' }, cards: [] }
+    const f = (async (input: RequestInfo | URL) => {
+      const url = String(input)
+      if (url.endsWith('/en/sets')) return json([{ id: 'A1' }, { id: 'sv01' }])
+      return json(url.endsWith('/A1') ? pocket : paper)
+    }) as typeof fetch
+    const s = make({ fetch: f, calls: [], fail: new Map() })
+    expect((await s.sets('en')).map((x) => x.id)).toEqual(['sv01'])
+    s.close()
+  })
+
   it('maps languages to TCGCSV categories', async () => {
     const fake = fakeFetch(); const s = make(fake)
     const ja = await s.groups('ja')

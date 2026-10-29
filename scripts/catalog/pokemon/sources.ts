@@ -14,6 +14,9 @@ export interface PokemonSourcesOpts {
   retryDelayMs?: number
 }
 
+/** TCGdex series with no physical cards (Pokémon TCG Pocket); a binder only holds paper. */
+const DIGITAL_SERIES = new Set(['tcgp'])
+
 export function createPokemonSources(opts: PokemonSourcesOpts): PokemonSources & { close(): void } {
   const cache = openCardCache(opts.cachePath)
   const now = opts.now ?? (() => new Date())
@@ -47,7 +50,8 @@ export function createPokemonSources(opts: PokemonSourcesOpts): PokemonSources &
   return {
     async sets(lang) {
       const list = await tcgdexSetList(lang, o)
-      return allOrNothing(list, (s, oo) => tcgdexSet(lang, s.id, oo))
+      const sets = await allOrNothing(list, (s, oo) => tcgdexSet(lang, s.id, oo))
+      return sets.filter((s) => !DIGITAL_SERIES.has(s.serie?.id ?? ''))
     },
     async cards(lang, ids) {
       const t = now().getTime()

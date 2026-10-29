@@ -12,13 +12,24 @@ interface Props {
   mode: CountMode
   view: 'grid' | 'list'
   onOpen: (setName: string, language: Language) => void
+  /** The list's accessible name. */
+  label?: string
+  id?: string
 }
 
-export function SetsList({ sets, mode, view, onOpen }: Props): React.JSX.Element {
+export function SetsList({
+  sets,
+  mode,
+  view,
+  onOpen,
+  label = 'Sets',
+  id
+}: Props): React.JSX.Element {
   if (view === 'grid') {
     return (
       <ul
-        aria-label="Sets"
+        id={id}
+        aria-label={label}
         data-view="grid"
         className="grid grid-cols-[repeat(auto-fill,minmax(170px,1fr))] gap-x-5 gap-y-7"
       >
@@ -76,7 +87,8 @@ export function SetsList({ sets, mode, view, onOpen }: Props): React.JSX.Element
   }
   return (
     <ul
-      aria-label="Sets"
+      id={id}
+      aria-label={label}
       data-view="list"
       className="divide-y divide-white/[0.06] border-b border-white/[0.06]"
     >

@@ -129,6 +129,33 @@ export function sortSets(sets: SetSummary[], sort: SetSort, mode: CountMode): Se
   })
 }
 
+/** Sets releasing more than this many days from today sit under the "upcoming" banner. */
+export const UPCOMING_DAYS = 30
+
+/** The last release date ('YYYY-MM-DD', local) that still shows in the main list. */
+export function upcomingCutoff(now: Date = new Date()): string {
+  const d = new Date(now.getFullYear(), now.getMonth(), now.getDate() + UPCOMING_DAYS)
+  const pad = (n: number): string => String(n).padStart(2, '0')
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+}
+
+/** A not-yet-started set releasing after the cutoff. Undated and started sets never are. */
+export function isUpcoming(s: SetSummary, cutoff: string): boolean {
+  if (s.tcgDate === null || s.ownedCards > 0 || s.ownedRarities > 0) return false
+  return s.tcgDate.slice(0, 10) > cutoff
+}
+
+/** Splits sets into the main list and the upcoming ones, keeping each side's order. */
+export function splitUpcoming(
+  sets: SetSummary[],
+  cutoff: string
+): { current: SetSummary[]; upcoming: SetSummary[] } {
+  const current: SetSummary[] = []
+  const upcoming: SetSummary[] = []
+  for (const s of sets) (isUpcoming(s, cutoff) ? upcoming : current).push(s)
+  return { current, upcoming }
+}
+
 export function checklistTiles(cl: SetChecklist, mode: CountMode): Tile[] {
   if (mode === 'cards') {
     return cl.cards.map((card) => ({

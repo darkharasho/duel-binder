@@ -24,3 +24,15 @@ export function formatMonthYear(date: string): string {
   const t = Date.parse(date)
   return Number.isNaN(t) ? date : monthYear.format(t)
 }
+
+const monthDay = new Intl.DateTimeFormat('en-US', {
+  month: 'short',
+  day: 'numeric',
+  timeZone: 'UTC'
+})
+
+/** '2026-11-28' → 'Nov 28'; anything unparseable is returned as-is. */
+export function formatMonthDay(date: string): string {
+  const t = Date.parse(date)
+  return Number.isNaN(t) ? date : monthDay.format(t)
+}

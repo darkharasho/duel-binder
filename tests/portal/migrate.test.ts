@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3'
 import { MIGRATIONS } from '../../src/main/db/schema'
 import { migrateServer, runSteps, SERVER_STEPS } from '../../workers/portal/src/migrate'
+import { SHARED_SET_NAME, seedPokemon } from '../fixtures/pokemon'
 
 function freshDb(): Database.Database {
   const db = new Database(':memory:')
@@ -117,6 +118,116 @@ describe('migrateServer', () => {
     expect(seqs.every((s) => s > 0)).toBe(true)
     const clock = (db.prepare('SELECT seq FROM catalog_clock').get() as { seq: number }).seq
     expect(clock).toBeGreaterThanOrEqual(Math.max(...seqs))
+    db.close()
+  })
+})
+
+/** A server as deployed before server-12, holding a few Yu-Gi-Oh! rows of every kind. */
+function serverBefore12(): Database.Database {
+  const db = freshDb()
+  runSteps(db, [
+    ...MIGRATIONS.filter((m) => m.version <= 18),
+    ...SERVER_STEPS.filter((s) => s.name !== 'server-12')
+  ])
+  db.exec(`
+    INSERT INTO users (id, discord_id, username, created_at, updated_at) VALUES (1, 'd1', 'one', 'x', 'x');
+    INSERT INTO cards (id, name, type, frame_type, race, "desc", updated_at) VALUES
+      (46986414, 'Dark Magician', 'Normal Monster', 'normal', 'Spellcaster', 'desc', 'x');
+    INSERT INTO card_images (image_id, card_id, sort_order) VALUES (46986414, 46986414, 0);
+    INSERT INTO card_printings (id, card_id, set_name, set_code, set_rarity, language) VALUES
+      (7, 46986414, '${SHARED_SET_NAME}', 'LOB-EN005', 'Ultra Rare', 'en'),
+      (8, 46986414, 'Vol.1', '', 'Ultra Rare', 'ja');
+    INSERT INTO sets (language, set_name, set_code, list_rows) VALUES
+      ('en', '${SHARED_SET_NAME}', 'LOB', NULL), ('ja', 'Vol.1', '', 40);
+    INSERT INTO collection_entries (id, user_id, uid, printing_id, image_id, quantity, created_at, updated_at, server_seq)
+      VALUES (4, 1, 'a', 7, 46986414, 1, 'x', 'x', 4);
+    INSERT INTO value_snapshots (user_id, date, total_value, total_cards) VALUES (1, '2026-10-22', 5, 1), (1, '2026-10-23', 6, 1);
+  `)
+  return db
+}
+
+const rows = (db: Database.Database, sql: string): unknown[] => db.prepare(sql).all()
+const clockOf = (db: Database.Database): number =>
+  (db.prepare('SELECT seq FROM catalog_clock').get() as { seq: number }).seq
+const pkOf = (db: Database.Database, table: string): string[] =>
+  (db.prepare(`PRAGMA table_info(${table})`).all() as { name: string; pk: number }[])
+    .filter((c) => c.pk > 0)
+    .sort((a, b) => a.pk - b.pk)
+    .map((c) => c.name)
+
+describe('server-12 (game columns)', () => {
+  it('marks every existing row Yu-Gi-Oh! without stamping or tombstoning anything', () => {
+    const db = serverBefore12()
+    const pkeys = rows(db, 'SELECT pkey FROM card_printings ORDER BY id')
+    const sets = rows(db, 'SELECT language, set_name, catalog_seq FROM sets ORDER BY rowid')
+    const snapshots = rows(db, 'SELECT user_id, date, total_value FROM value_snapshots ORDER BY date')
+    const clock = clockOf(db)
+
+    migrateServer(db)
+
+    for (const t of ['cards', 'card_images', 'card_printings', 'sets', 'collection_entries', 'value_snapshots']) {
+      expect(rows(db, `SELECT DISTINCT game FROM ${t}`), t).toEqual([{ game: 'ygo' }])
+    }
+    expect(rows(db, 'SELECT pkey FROM card_printings ORDER BY id')).toEqual(pkeys)
+    expect(rows(db, 'SELECT language, set_name, catalog_seq FROM sets ORDER BY rowid')).toEqual(sets)
+    expect(rows(db, 'SELECT user_id, date, total_value FROM value_snapshots ORDER BY date')).toEqual(snapshots)
+    expect(pkOf(db, 'sets')).toEqual(['game', 'language', 'set_name'])
+    expect(pkOf(db, 'value_snapshots')).toEqual(['user_id', 'game', 'date'])
+    expect(clockOf(db)).toBe(clock)
+    expect(rows(db, 'SELECT * FROM catalog_tombstones')).toEqual([])
+    expect(db.prepare('PRAGMA foreign_key_check').all()).toEqual([])
+    const indexes = (rows(db, "SELECT name FROM sqlite_master WHERE type = 'index'") as { name: string }[]).map(
+      (r) => r.name
+    )
+    for (const t of ['cards', 'card_images', 'card_printings', 'sets']) expect(indexes).toContain(`ix_${t}_game_seq`)
+    expect(indexes).toEqual(expect.arrayContaining(['ix_sets_catalog_seq', 'ix_pokemon_cards_catalog_seq']))
+    expect(rows(db, "SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'cloud_game_cursors'")).toEqual([])
+    db.close()
+  })
+
+  it('takes Pokémon rows next to a same-named Yu-Gi-Oh! set, each stamped with a new seq', () => {
+    const db = serverBefore12()
+    migrateServer(db)
+    const clock = clockOf(db)
+    const { cardIds } = seedPokemon(db)
+    expect(db.prepare('PRAGMA foreign_key_check').all()).toEqual([])
+    expect(
+      db.prepare("SELECT game FROM sets WHERE language = 'en' AND set_name = ? ORDER BY game").all(SHARED_SET_NAME)
+    ).toEqual([{ game: 'pkm' }, { game: 'ygo' }])
+    // 2 cards, 2 images, 2 pokemon_cards rows, 2 sets and 4 printings
+    expect(clockOf(db)).toBe(clock + 12)
+    const seq = db.prepare('SELECT catalog_seq AS s FROM pokemon_cards WHERE card_id = ?').get(cardIds[0]) as { s: number }
+    expect(seq.s).toBeGreaterThan(clock)
+    db.close()
+  })
+
+  it('tombstones record the game, and a set by its three-part key', () => {
+    const db = serverBefore12()
+    migrateServer(db)
+    const { cardIds } = seedPokemon(db)
+    db.prepare("DELETE FROM sets WHERE game = 'pkm' AND language = 'en' AND set_name = ?").run(SHARED_SET_NAME)
+    db.prepare('DELETE FROM pokemon_cards WHERE card_id = ?').run(cardIds[0])
+    db.prepare("DELETE FROM sets WHERE game = 'ygo' AND language = 'ja'").run()
+    expect(rows(db, 'SELECT tbl, game, key FROM catalog_tombstones ORDER BY seq')).toEqual([
+      { tbl: 'sets', game: 'pkm', key: JSON.stringify(['pkm', 'en', SHARED_SET_NAME]) },
+      { tbl: 'pokemon_cards', game: 'pkm', key: JSON.stringify([cardIds[0]]) },
+      { tbl: 'sets', game: 'ygo', key: JSON.stringify(['ygo', 'ja', 'Vol.1']) }
+    ])
+    expect(rows(db, "SELECT set_name FROM sets WHERE language = 'en'")).toEqual([{ set_name: SHARED_SET_NAME }])
+    db.close()
+  })
+
+  it('a changed key tombstones the old key with its game', () => {
+    const db = serverBefore12()
+    migrateServer(db)
+    const { printingIds } = seedPokemon(db)
+    const { pkey } = db.prepare('SELECT pkey FROM card_printings WHERE id = ?').get(printingIds[0]) as { pkey: string }
+    db.prepare("UPDATE card_printings SET set_code = 'PAL 046/193' WHERE id = ?").run(printingIds[0])
+    db.prepare("UPDATE sets SET set_name = 'Renamed' WHERE game = 'pkm' AND language = 'ja'").run()
+    expect(rows(db, 'SELECT tbl, game, key FROM catalog_tombstones ORDER BY seq')).toEqual([
+      { tbl: 'card_printings', game: 'pkm', key: JSON.stringify([pkey]) },
+      { tbl: 'sets', game: 'pkm', key: JSON.stringify(['pkm', 'ja', 'クレイバースト']) }
+    ])
     db.close()
   })
 })

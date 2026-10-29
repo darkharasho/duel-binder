@@ -4,7 +4,7 @@ import type Database from 'better-sqlite3'
 import type { SqlDb } from '../db/sql'
 import { deleteMeta, getMeta, setMeta } from '../db/meta'
 import { CloudAuthError, CloudOfflineError, type CloudClient } from '../cloud/client'
-import { CATALOG_TABLES } from '../../shared/catalogTables'
+import { LEGACY_CATALOG_TABLES } from '../../shared/catalogTables'
 import type { CatalogChange } from '../../shared/catalogFeed'
 import { applyChanges, finishApply, type ApplyResult } from './apply'
 
@@ -247,7 +247,7 @@ function pruneUnlisted(db: SqlDb): void {
      WHERE remote_id IS NULL AND NOT EXISTS (SELECT 1 FROM collection_entries e WHERE e.printing_id = card_printings.id)`
   )
   for (const name of PRUNED_TABLES) {
-    const table = CATALOG_TABLES.find((t) => t.name === name)
+    const table = LEGACY_CATALOG_TABLES.find((t) => t.name === name)
     if (!table) continue
     const keyOf = (row: Record<string, unknown>): string =>
       JSON.stringify(table.key.map((k) => row[k] ?? null))

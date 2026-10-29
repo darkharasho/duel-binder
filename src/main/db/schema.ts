@@ -224,6 +224,68 @@ export const SCHEMA_V18 = `
 CREATE INDEX ix_entries_printing_live ON collection_entries(printing_id) WHERE deleted_at IS NULL;
 `
 
+/**
+ * Multi-game: every catalog row, entry and snapshot belongs to a game ('ygo' or 'pkm'; anything
+ * older is Yu-Gi-Oh!). The referenced tables only gain a column; `sets` and `value_snapshots`,
+ * which no foreign key references, are rebuilt with the game in their key. `pokemon_cards` holds
+ * the Pokémon-only card fields, and `cloud_game_cursors` the pull cursors of games after the first
+ * (Yu-Gi-Oh! keeps `cloud_accounts.cursor` and its price cursor). The server has its own shape for
+ * entries and snapshots, so this step is desktop-only; server-12 runs SCHEMA_V19_SERVER.
+ */
+export const SCHEMA_V19 = `
+ALTER TABLE cards ADD COLUMN game TEXT NOT NULL DEFAULT 'ygo';
+ALTER TABLE card_images ADD COLUMN game TEXT NOT NULL DEFAULT 'ygo';
+ALTER TABLE card_printings ADD COLUMN game TEXT NOT NULL DEFAULT 'ygo';
+ALTER TABLE collection_entries ADD COLUMN game TEXT NOT NULL DEFAULT 'ygo';
+CREATE TABLE sets_new (game TEXT NOT NULL DEFAULT 'ygo', language TEXT NOT NULL DEFAULT 'en', set_name TEXT NOT NULL,
+  set_code TEXT NOT NULL, tcg_date TEXT, image_url TEXT, image_key TEXT, list_rows INTEGER, unmatched_rows INTEGER,
+  PRIMARY KEY (game, language, set_name));
+INSERT INTO sets_new (language, set_name, set_code, tcg_date, image_url, image_key, list_rows, unmatched_rows)
+  SELECT language, set_name, set_code, tcg_date, image_url, image_key, list_rows, unmatched_rows FROM sets;
+DROP TABLE sets;
+ALTER TABLE sets_new RENAME TO sets;
+CREATE TABLE value_snapshots_new (owner_id INTEGER NOT NULL DEFAULT 0, game TEXT NOT NULL DEFAULT 'ygo', date TEXT NOT NULL,
+  total_value REAL NOT NULL, total_cards INTEGER NOT NULL, PRIMARY KEY (owner_id, game, date));
+INSERT INTO value_snapshots_new (owner_id, date, total_value, total_cards)
+  SELECT owner_id, date, total_value, total_cards FROM value_snapshots;
+DROP TABLE value_snapshots;
+ALTER TABLE value_snapshots_new RENAME TO value_snapshots;
+CREATE TABLE pokemon_cards (card_id INTEGER PRIMARY KEY REFERENCES cards(id), category TEXT NOT NULL, hp INTEGER,
+  types TEXT NOT NULL DEFAULT '[]', stage TEXT, rarity TEXT, illustrator TEXT, source_id TEXT NOT NULL UNIQUE);
+CREATE TABLE cloud_game_cursors (owner_id INTEGER NOT NULL, game TEXT NOT NULL, stream TEXT NOT NULL,
+  cursor INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (owner_id, game, stream));
+`
+
+/**
+ * The server's V19, run as part of server-12 (after server-6 added `catalog_seq`, which the `sets`
+ * rebuild keeps, so no row looks changed). Snapshots key on `user_id`; no cloud cursors. Frozen:
+ * server-12 has shipped once deployed.
+ */
+export const SCHEMA_V19_SERVER = `
+ALTER TABLE cards ADD COLUMN game TEXT NOT NULL DEFAULT 'ygo';
+ALTER TABLE card_images ADD COLUMN game TEXT NOT NULL DEFAULT 'ygo';
+ALTER TABLE card_printings ADD COLUMN game TEXT NOT NULL DEFAULT 'ygo';
+ALTER TABLE collection_entries ADD COLUMN game TEXT NOT NULL DEFAULT 'ygo';
+CREATE TABLE sets_new (game TEXT NOT NULL DEFAULT 'ygo', language TEXT NOT NULL DEFAULT 'en', set_name TEXT NOT NULL,
+  set_code TEXT NOT NULL, tcg_date TEXT, image_url TEXT, image_key TEXT, list_rows INTEGER, unmatched_rows INTEGER,
+  catalog_seq INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (game, language, set_name));
+INSERT INTO sets_new (language, set_name, set_code, tcg_date, image_url, image_key, list_rows, unmatched_rows, catalog_seq)
+  SELECT language, set_name, set_code, tcg_date, image_url, image_key, list_rows, unmatched_rows, catalog_seq FROM sets;
+DROP TABLE sets;
+ALTER TABLE sets_new RENAME TO sets;
+CREATE INDEX ix_sets_catalog_seq ON sets(catalog_seq);
+CREATE TABLE value_snapshots_new (user_id INTEGER NOT NULL REFERENCES users(id), game TEXT NOT NULL DEFAULT 'ygo',
+  date TEXT NOT NULL, total_value REAL NOT NULL, total_cards INTEGER NOT NULL, PRIMARY KEY (user_id, game, date));
+INSERT INTO value_snapshots_new (user_id, date, total_value, total_cards)
+  SELECT user_id, date, total_value, total_cards FROM value_snapshots;
+DROP TABLE value_snapshots;
+ALTER TABLE value_snapshots_new RENAME TO value_snapshots;
+CREATE TABLE pokemon_cards (card_id INTEGER PRIMARY KEY REFERENCES cards(id), category TEXT NOT NULL, hp INTEGER,
+  types TEXT NOT NULL DEFAULT '[]', stage TEXT, rarity TEXT, illustrator TEXT, source_id TEXT NOT NULL UNIQUE,
+  catalog_seq INTEGER NOT NULL DEFAULT 0);
+CREATE INDEX ix_pokemon_cards_catalog_seq ON pokemon_cards(catalog_seq);
+`
+
 /** A printing's rarity as shown: "Starlight Rare (Extended Art)" for a labelled variant. */
 export const RARITY_LABEL = "p.set_rarity || COALESCE(' (' || p.variant || ')', '')"
 
@@ -246,6 +308,7 @@ export const MIGRATIONS: Migration[] = [
   { version: 15, sql: SCHEMA_V15, server: SCHEMA_V15_SERVER },
   { version: 16, sql: SCHEMA_V16, server: false },
   { version: 17, sql: SCHEMA_V17 },
-  { version: 18, sql: SCHEMA_V18, server: false }
+  { version: 18, sql: SCHEMA_V18, server: false },
+  { version: 19, sql: SCHEMA_V19, server: false }
 ]
 

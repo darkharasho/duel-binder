@@ -62,8 +62,8 @@ export const LOCAL: Scope = {
   },
   touch: 'dirty = 1',
   snapshotTable: {
-    insertCols: 'owner_id, ',
-    insertVals: `${ACTIVE_OWNER}, `,
+    insertCols: 'owner_id, game, ',
+    insertVals: `${ACTIVE_OWNER}, 'ygo', `,
     where: `owner_id = ${ACTIVE_OWNER}`
   }
 }

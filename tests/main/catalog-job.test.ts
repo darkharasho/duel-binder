@@ -10,7 +10,7 @@ import { runSync } from '../../src/main/sync/sync'
 import type { YgoClient } from '../../src/main/ygo/client'
 import type { ApiCard } from '../../src/main/ygo/mapCard'
 import type { YugipediaClient } from '../../src/main/yugipedia/client'
-import { CATALOG_TABLES, type CatalogTable } from '../../src/shared/catalogTables'
+import { LEGACY_CATALOG_TABLES, type CatalogTable } from '../../src/shared/catalogTables'
 import { diffTable } from '../../scripts/catalog/diff'
 import { uploadCatalog } from '../../scripts/catalog/upload'
 import type { AccuracyReport } from '../../scripts/catalog/accuracy'
@@ -22,7 +22,7 @@ const HOUR = 60 * 60 * 1000
 const URL_BASE = 'https://portal.example'
 const TOKEN = 'secret-token'
 
-const table = (name: string): CatalogTable => CATALOG_TABLES.find((t) => t.name === name)!
+const table = (name: string): CatalogTable => LEGACY_CATALOG_TABLES.find((t) => t.name === name)!
 
 const SETS = [
   { set_name: 'Legend of Blue Eyes White Dragon', set_code: 'LOB', tcg_date: '2002-03-08' },
@@ -272,7 +272,7 @@ describe('refreshCatalog', () => {
 describe('diffTable', () => {
   it('diff with no base uploads everything', async () => {
     const work = await workDb()
-    for (const t of CATALOG_TABLES) {
+    for (const t of LEGACY_CATALOG_TABLES) {
       const d = diffTable(work, null, t)
       expect(d.upserts, t.name).toHaveLength(count(work, t.name))
       expect(d.deletes, t.name).toEqual([])
@@ -303,7 +303,7 @@ describe('diffTable', () => {
       upserts: [],
       deletes: [['en', 'Starter Deck: Yugi']]
     })
-    for (const t of CATALOG_TABLES.filter((x) => !['card_printings', 'sets'].includes(x.name))) {
+    for (const t of LEGACY_CATALOG_TABLES.filter((x) => !['card_printings', 'sets'].includes(x.name))) {
       expect(diffTable(work, base, t), t.name).toEqual({ upserts: [], deletes: [] })
     }
     // The work connection is left as it was found.
@@ -447,7 +447,7 @@ describe('uploadCatalog', () => {
 
     const work = openDatabase(join(dir, 'work.sqlite'))
     const base = openDatabase(join(dir, 'base.sqlite'))
-    for (const t of CATALOG_TABLES) {
+    for (const t of LEGACY_CATALOG_TABLES) {
       expect(diffTable(work, base, t), t.name).toEqual({ upserts: [], deletes: [] })
     }
     base.close()

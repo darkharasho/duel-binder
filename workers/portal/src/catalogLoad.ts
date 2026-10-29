@@ -1,4 +1,4 @@
-import { CATALOG_TABLES, type CatalogTable } from '../../../src/shared/catalogTables'
+import { LEGACY_CATALOG_TABLES, type CatalogTable } from '../../../src/shared/catalogTables'
 import { setMeta, type MetaKey } from '../../../src/main/db/meta'
 import type { AppDeps } from './app'
 import { upsertCatalogRow } from '../../../src/main/catalog/upsert'
@@ -40,7 +40,7 @@ const isScalar = (v: unknown): v is string | number | null =>
   v === null || typeof v === 'string' || typeof v === 'number'
 
 function tableOf(body: Record<string, unknown>): CatalogTable {
-  const table = CATALOG_TABLES.find((t) => t.name === body.table)
+  const table = LEGACY_CATALOG_TABLES.find((t) => t.name === body.table)
   if (!table) throw new BadRequest('Unknown table')
   return table
 }
@@ -134,7 +134,7 @@ export async function adminRoute(req: Request, deps: AppDeps): Promise<Response>
 
   if (req.method === 'GET' && path === '/admin/catalog/status') {
     const counts: Record<string, number> = {}
-    for (const t of CATALOG_TABLES) {
+    for (const t of LEGACY_CATALOG_TABLES) {
       counts[t.name] = (
         deps.db.prepare(`SELECT COUNT(*) AS n FROM ${t.name}`).get() as { n: number }
       ).n

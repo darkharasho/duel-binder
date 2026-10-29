@@ -75,7 +75,7 @@ describe('catalog change feed (server-6)', () => {
       tbl: string
       key: string
     }
-    expect(t.key).toBe('["en","Gone Set"]')
+    expect(t.key).toBe('["ygo","en","Gone Set"]')
     expect(t.seq).toBe(clock(db))
 
     const p = db.prepare('SELECT id, pkey FROM card_printings LIMIT 1').get() as { id: number; pkey: string }

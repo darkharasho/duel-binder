@@ -1,7 +1,7 @@
 import type { SqlDb } from '../../../src/main/db/sql'
 import { getMeta } from '../../../src/main/db/meta'
 import { CollectionError } from '../../../src/main/repo/collection'
-import { CATALOG_TABLES } from '../../../src/shared/catalogTables'
+import { LEGACY_CATALOG_TABLES } from '../../../src/shared/catalogTables'
 import {
   MAX_CHANGES,
   MAX_CONTRIBUTE,
@@ -18,7 +18,7 @@ const json = (body: unknown, status = 200): Response =>
 
 /** Columns selected for the feed; printings also expose the server id, generated pkey and provenance. */
 const FEED_COLUMNS = new Map(
-  CATALOG_TABLES.map((t) => [
+  LEGACY_CATALOG_TABLES.map((t) => [
     t.name,
     (t.name === 'card_printings' ? ['id', 'pkey', ...t.columns, 'contributed'] : t.columns)
       .map((c) => `"${c}"`)
@@ -36,7 +36,7 @@ export function catalogChanges(
   limit: number,
   tables?: readonly CatalogTableName[]
 ): CatalogChangesResponse {
-  const wanted = CATALOG_TABLES.filter(
+  const wanted = LEGACY_CATALOG_TABLES.filter(
     (t) => !tables || tables.includes(t.name as CatalogTableName)
   )
   const marks = wanted.map(() => '?').join(', ')
@@ -90,12 +90,16 @@ export function catalogChanges(
       tbl: string
       key: string
     }[]
-    for (const d of dead)
+    for (const d of dead) {
+      const key = JSON.parse(d.key) as (string | number | null)[]
       changes.push({
         seq: d.seq,
         table: d.tbl as CatalogTableName,
-        deleted: JSON.parse(d.key) as (string | number | null)[]
+        // Since server-12 a sets tombstone keys on [game, language, set_name]; this feed keeps the
+        // legacy [language, set_name].
+        deleted: d.tbl === 'sets' && key.length === 3 ? key.slice(1) : key
       })
+    }
   }
   changes.sort((a, b) => a.seq - b.seq)
   return {
@@ -116,7 +120,7 @@ function wholeNumber(raw: string | null, what: string, min: number): number {
 
 function tablesParam(raw: string | null): CatalogTableName[] | undefined {
   if (raw === null) return undefined
-  const known = new Set<string>(CATALOG_TABLES.map((t) => t.name))
+  const known = new Set<string>(LEGACY_CATALOG_TABLES.map((t) => t.name))
   const names = raw.split(',')
   for (const n of names) {
     if (!known.has(n)) throw new CollectionError(`tables has an unknown or empty name: "${n}"`)

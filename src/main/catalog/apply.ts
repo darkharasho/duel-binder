@@ -1,5 +1,5 @@
 import type { SqlDb } from '../db/sql'
-import { CATALOG_TABLES } from '../../shared/catalogTables'
+import { LEGACY_CATALOG_TABLES } from '../../shared/catalogTables'
 import type { CatalogChange } from '../../shared/catalogFeed'
 import { prepared, upsertCatalogRow, type Scalar } from './upsert'
 
@@ -41,7 +41,7 @@ export function applyChanges(db: SqlDb, changes: CatalogChange[]): ApplyResult {
     prepared(db, sql).get(...params) !== undefined
 
   for (const change of changes) {
-    const table = CATALOG_TABLES.find((t) => t.name === change.table)
+    const table = LEGACY_CATALOG_TABLES.find((t) => t.name === change.table)
     if (!table) continue
 
     if ('row' in change) {

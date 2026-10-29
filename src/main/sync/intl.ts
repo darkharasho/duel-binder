@@ -212,7 +212,7 @@ async function run(
   const upsertSet = db.prepare(`
     INSERT INTO sets (language, set_name, set_code, tcg_date, image_url, image_key, list_rows, unmatched_rows)
     VALUES (@language, @setName, '', @tcgDate, @imageUrl, @imageKey, @listRows, @unmatchedRows)
-    ON CONFLICT(language, set_name) DO UPDATE SET set_code = '',
+    ON CONFLICT(game, language, set_name) DO UPDATE SET set_code = '',
       tcg_date = CASE WHEN @keepDate THEN sets.tcg_date ELSE excluded.tcg_date END,
       image_url = CASE WHEN @keepImage THEN sets.image_url ELSE excluded.image_url END,
       image_key = CASE WHEN @keepImage THEN sets.image_key ELSE excluded.image_key END, list_rows = excluded.list_rows, unmatched_rows = excluded.unmatched_rows`)

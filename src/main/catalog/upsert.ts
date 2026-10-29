@@ -69,7 +69,11 @@ function rowSql(db: SqlDb, table: CatalogTable, cols: string[], clearMissing: bo
     const updates = cols
       .filter((c) => !table.key.includes(c))
       .map((c) => `"${c}" = excluded."${c}"`)
-    const conflict = table.key.map((k) => `"${k}"`).join(', ')
+    // Since V19 the sets key includes the game; a legacy row (no game) is a Yu-Gi-Oh! one, which
+    // the column default makes it, so it conflicts on the game too.
+    const conflictKey =
+      table.name === 'sets' && !table.key.includes('game') ? ['game', ...table.key] : table.key
+    const conflict = conflictKey.map((k) => `"${k}"`).join(', ')
     plan = {
       insert:
         `INSERT INTO ${table.name} (${quoted.join(', ')}) VALUES (${placeholders}) ` +

@@ -11,6 +11,12 @@ export const ART_MAX_DISTANCE_IN_SET = 80
  */
 export const ART_MIN_MARGIN = 10
 /**
+ * How far behind the closest a Pokémon artwork may be and still be in its art group, which the
+ * language or number then decides: reprints' and twins' reference scans of one artwork differ by
+ * 20 bits and more, where Yu-Gi-Oh's ART_MIN_MARGIN is 10.
+ */
+export const PKM_ART_MIN_MARGIN = 24
+/**
  * A card-shaped thing in view whose closest artwork is further off than this, and that reads as
  * no card by code or name, is taken for something else (a book, the deck on the desk): nothing in
  * view, rather than a card it couldn't recognize.

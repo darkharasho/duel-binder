@@ -4,7 +4,7 @@ import {
   ART_FAR_DISTANCE,
   ART_MATCH_DEPTH,
   ART_MAX_DISTANCE,
-  ART_MIN_MARGIN
+  PKM_ART_MIN_MARGIN
 } from '@shared/scan/thresholds'
 import type { ScanDraft, ScanPrinting } from '@shared/scan/types'
 import type { RawSignals } from './engine'
@@ -14,7 +14,7 @@ import type { ResolveContext, ScanOutcome } from './resolve'
 type Read = 'en' | 'ja' | 'other' | null
 
 /**
- * The cards whose art is close enough and within ART_MIN_MARGIN of the best, closest first. A
+ * The cards whose art is close enough and within PKM_ART_MIN_MARGIN of the best, closest first. A
  * Pokémon card's English and Japanese twins share art, as do reprints, so they all come in and
  * the language or number decides between them rather than the margin. Null when the group
  * can't be trusted to be whole: an artwork in it is missing from the catalog, or every match
@@ -24,7 +24,7 @@ async function artGroup(raw: RawSignals, ctx: ResolveContext): Promise<number[] 
   const [top] = raw.art
   if (!top || top.distance > ART_MAX_DISTANCE) return []
   const near = raw.art.filter(
-    (a) => a.distance <= ART_MAX_DISTANCE && a.distance <= top.distance + ART_MIN_MARGIN
+    (a) => a.distance <= ART_MAX_DISTANCE && a.distance <= top.distance + PKM_ART_MIN_MARGIN
   )
   if (near.length === raw.art.length && raw.art.length >= ART_MATCH_DEPTH) return null
   const cardOf = new Map(

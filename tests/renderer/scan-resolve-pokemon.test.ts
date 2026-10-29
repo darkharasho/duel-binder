@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { resolveSignals, type ResolveContext, type ScanDraft } from '@/features/scan/resolve'
 import type { RawSignals } from '@/features/scan/engine'
 import type { ScanPrinting } from '@shared/scan/types'
-import { ART_FAR_DISTANCE, ART_MAX_DISTANCE } from '@shared/scan/thresholds'
+import { ART_FAR_DISTANCE, ART_MAX_DISTANCE, PKM_ART_MIN_MARGIN } from '@shared/scan/thresholds'
 import { printing } from './scanFakes'
 
 type Read = 'en' | 'ja' | 'other' | null
@@ -187,10 +187,17 @@ describe('resolvePokemonSignals', () => {
       { imageId: 301, distance: 32 }
     ]
     expect(await resolveSignals(raw({ art: reprints }), pkm('en'))).toEqual({ kind: 'unsure' })
-    // Far enough ahead, the closer card is taken.
+    // Reprints' reference scans of one artwork differ by 20 bits and more: a real base set
+    // Charmander matched its Legendary Collection reprint at 36 and itself at 58.
+    const scans = [
+      { imageId: 101, distance: 36 },
+      { imageId: 301, distance: 58 }
+    ]
+    expect(await resolveSignals(raw({ art: scans }), pkm('en'))).toEqual({ kind: 'unsure' })
+    // Far enough ahead, past PKM_ART_MIN_MARGIN, the closer card is taken.
     const ahead = [
       { imageId: 101, distance: 30 },
-      { imageId: 301, distance: 50 }
+      { imageId: 301, distance: 30 + PKM_ART_MIN_MARGIN + 2 }
     ]
     expect(await recognized(raw({ art: ahead }), pkm('en'))).toMatchObject({ cardId: 1 })
   })

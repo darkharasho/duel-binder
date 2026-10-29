@@ -208,6 +208,7 @@ const ENTRY_REFS: Record<string, [count: number, kind: string]> = {
   ],
   'workers/portal/src/sync.ts': [5, SYNC],
   'workers/portal/src/priceRequests.ts': [1, LIVE],
+  'workers/portal/src/sweep.ts': [1, LIVE],
   'workers/portal/src/stats.ts': [
     3,
     'admin stats: live rows for the counts; all rows incl. tombstones for the storage row count'

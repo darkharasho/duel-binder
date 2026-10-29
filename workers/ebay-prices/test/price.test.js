@@ -3,6 +3,7 @@ import {
   titleMatches,
   isSingleCard,
   namesOtherRarity,
+  namesLongerRarity,
   askingPrice
 } from '../src/price.js'
 
@@ -121,5 +122,39 @@ describe('namesOtherRarity', () => {
     expect(namesOtherRarity('SDK-001 ULTRA RARE', 'Ultra Rare')).toBe(false)
     expect(namesOtherRarity('SDK-001 Prismatic Secret Rare', 'Prismatic Secret Rare')).toBe(false)
     expect(namesOtherRarity('SDK-001 Blue-Eyes NM', 'Common')).toBe(false)
+    expect(namesOtherRarity('SDK-001 Ultra Parallel Rare', 'Ultra Parallel Rare')).toBe(false)
+  })
+})
+
+describe('namesLongerRarity', () => {
+  const qc = 'Pot of Prosperity RC04-JP067 Quarter Century Secret Rare'
+  it('flags a longer rarity that contains the requested one', () => {
+    expect(namesLongerRarity(qc, 'Secret Rare')).toBe(true)
+    expect(namesLongerRarity('RC04-JP067 Extra Secret Rare', 'Secret Rare')).toBe(true)
+    expect(namesLongerRarity('SDK-001 Ultra Rare', 'Rare')).toBe(true)
+    expect(namesLongerRarity('SDK-001 Ultra Parallel Rare', 'Ultra Rare')).toBe(true)
+  })
+  it.each([
+    ['Gold Secret Rare', 'Secret Rare'],
+    ['Ultra Secret Rare', 'Secret Rare'],
+    ['20th Secret Rare', 'Secret Rare'],
+    ['Secret Parallel Rare', 'Secret Rare'],
+    ['Super Parallel Rare', 'Super Rare'],
+    ['Extra Secret Parallel Rare', 'Secret Parallel Rare'],
+    ['Millennium Super Rare', 'Super Rare'],
+    ['Millennium Ultra Rare', 'Ultra Rare'],
+    ['Premium Gold Rare', 'Gold Rare'],
+    ['Holographic Rare', 'Rare'],
+    ['Duel Terminal Ultra Parallel Rare', 'Ultra Parallel Rare']
+  ])('flags %s for a %s', (longer, rarity) => {
+    expect(namesLongerRarity(`RC04-JP067 Dragon ${longer}`, rarity)).toBe(true)
+    expect(namesLongerRarity(`RC04-JP067 Dragon ${longer}`, longer)).toBe(false)
+    expect(namesOtherRarity(`RC04-JP067 Dragon ${longer}`, longer)).toBe(false)
+  })
+  it('allows the same rarity or an unrelated one', () => {
+    expect(namesLongerRarity(qc, '')).toBe(false)
+    expect(namesLongerRarity(qc, 'Quarter Century Secret Rare')).toBe(false)
+    expect(namesLongerRarity('Pot of Prosperity RC04-JP067 Secret Rare', 'Secret Rare')).toBe(false)
+    expect(namesLongerRarity('SDK-001 Ultra Rare', 'Secret Rare')).toBe(false)
   })
 })

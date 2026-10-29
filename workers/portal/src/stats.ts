@@ -1,4 +1,5 @@
 import type { AppDeps } from './app'
+import { readCalls, utcDay } from './sweep'
 
 const DAY_MS = 24 * 60 * 60 * 1000
 
@@ -14,7 +15,8 @@ const COUNTED_TABLES = [
   'friendships',
   'printing_contributions',
   'catalog_tombstones',
-  'usage_daily'
+  'usage_daily',
+  'price_sweeps'
 ]
 
 /** Users, activity, collections, friends and storage, for GET /admin/stats. */
@@ -89,6 +91,11 @@ export function collectStats(deps: AppDeps): Record<string, unknown> {
         'SELECT COALESCE(SUM(count), 0) AS n FROM price_request_log WHERE day >= ?',
         since(7).slice(0, 10)
       )
+    },
+    sweep: {
+      callsToday: readCalls(db, utcDay(now)),
+      sweptLast7d: count('SELECT COUNT(*) AS n FROM price_sweeps WHERE swept_at >= ?', since(7)),
+      prefixes: rows.price_sweeps
     },
     // Anonymous app usage over the last 30 days; see src/shared/usage.ts.
     usage: {

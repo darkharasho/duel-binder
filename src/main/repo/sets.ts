@@ -6,6 +6,7 @@ import type { Language } from '../../shared/languages'
 import { setImageKey } from '../../shared/setImages'
 import { addEntry, CollectionError } from './collection'
 import { LOCAL, type Scope } from './scope'
+import { EN_TWIN_PRICE } from './enTwin'
 
 interface SummaryDbRow {
   language: Language
@@ -166,10 +167,11 @@ function latest(entries: EntryDbRow[]): number | null {
 
 /**
  * A checklist printing's own price. English: TCGplayer market, then YGOPRODeck's set price. Other
- * languages: only their eBay price (intl_prices), never the English card's TCGplayer price, which is a
- * different product (an OCG Prismatic Secret is not a $0.16 TCG common); unpriced stays null.
+ * European languages: their eBay price (intl_prices), else the English twin's market price as an estimate.
+ * Asian languages: only their eBay price, never the English card's TCGplayer price, which is a different
+ * product (an OCG Prismatic Secret is not a $0.16 TCG common); unpriced stays null.
  */
-const PRINTING_PRICE = `CASE WHEN p.language = 'en' THEN COALESCE(p.market_price, p.set_price) ELSE ip.price END`
+const PRINTING_PRICE = `CASE WHEN p.language = 'en' THEN COALESCE(p.market_price, p.set_price) ELSE COALESCE(ip.price, ${EN_TWIN_PRICE}) END`
 
 /** The dearest printing price among the rows; null when none has one. */
 function maxPrice(rows: PrintingDbRow[]): number | null {

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import type { Language } from '@shared/languages'
 import { isToScanWindow, type ScanWindowSettings, type ScanWindowState } from '@shared/scanWindow'
 import { api } from '@/lib/api'
@@ -44,6 +44,7 @@ function Scanner({
     hitPrice.current = settings.hitPrice
   })
 
+  const queryClient = useQueryClient()
   const picked = settings.set
   const setPrintings = useQuery({
     queryKey: ['scan', 'setPrintings', picked?.setName, picked?.language as Language | undefined],
@@ -52,6 +53,15 @@ function Scanner({
     staleTime: Infinity,
     refetchOnWindowFocus: false
   })
+  // Staleness is infinite, so printings are only re-read when a background sync changes data
+  // (a price that arrives after the card was first scanned must show).
+  useEffect(
+    () =>
+      api.app.onDataChanged(() => {
+        void queryClient.invalidateQueries({ queryKey: ['scan'] })
+      }),
+    [queryClient]
+  )
   // A set whose printings can't be read scans as any set rather than not at all.
   const setUnreadable = picked !== null && setPrintings.isError
   const scanSet = setUnreadable ? null : picked

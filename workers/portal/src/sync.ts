@@ -5,12 +5,15 @@ import { CollectionError } from '../../../src/main/repo/collection'
 import { recordSnapshot } from '../../../src/main/repo/stats'
 import {
   FUTURE_SKEW_MS,
+  MAX_PRICE_CHANGES,
   MAX_PRICE_REQUEST,
   MAX_PULL,
   MAX_PUSH,
   editTime,
   keepsKey,
   replaces,
+  type PriceChange,
+  type PriceChangesResponse,
   type PricesResponse,
   type PullResponse,
   type PulledEntry,
@@ -237,6 +240,27 @@ export function pricesFor(db: SqlDb, pkeys: string[]): PricesResponse {
   return { prices, status: getMeta(db, 'price_service_status') }
 }
 
+/** Server price changes after `since`, oldest first; unpriced printings the server never saw are absent. */
+export function priceChanges(
+  db: SqlDb,
+  since: number,
+  limit = MAX_PRICE_CHANGES
+): PriceChangesResponse {
+  const rows = db
+    .prepare(
+      `SELECT p.pkey, ip.price, ip.listing_count AS listingCount, ip.checked_at AS checkedAt, ip.price_seq AS seq
+       FROM intl_prices ip JOIN card_printings p ON p.id = ip.printing_id
+       WHERE ip.price_seq > ? ORDER BY ip.price_seq LIMIT ?`
+    )
+    .all(since, limit + 1) as PriceChange[]
+  const prices = rows.slice(0, limit)
+  return {
+    prices,
+    cursor: prices.length > 0 ? prices[prices.length - 1].seq : since,
+    more: rows.length > limit
+  }
+}
+
 const json = (body: unknown, status = 200): Response =>
   new Response(JSON.stringify(body), {
     status,
@@ -262,11 +286,12 @@ function checkPkeys(body: unknown): string[] {
 const POST_PATHS: ReadonlySet<string> = new Set(['push', 'prices', 'price-requests'])
 
 /**
- * POST /api/sync/push, GET /api/sync/pull, POST /api/sync/prices and POST /api/sync/price-requests;
+ * POST /api/sync/push, GET /api/sync/pull, GET /api/sync/price-changes, POST /api/sync/prices and POST /api/sync/price-requests;
  * desktop tokens only (the phone app has one too).
  */
 export async function syncRoute(req: Request, deps: AppDeps, path: string): Promise<Response> {
-  const method = path === 'pull' ? 'GET' : POST_PATHS.has(path) ? 'POST' : null
+  const method =
+    path === 'pull' || path === 'price-changes' ? 'GET' : POST_PATHS.has(path) ? 'POST' : null
   if (!method) return json({ error: 'Not found' }, 404)
   if (req.method !== method) return json({ error: 'method-not-allowed' }, 405)
   const user = await currentUser(req, deps)
@@ -279,6 +304,14 @@ export async function syncRoute(req: Request, deps: AppDeps, path: string): Prom
       if (!Number.isSafeInteger(cursor))
         throw new CollectionError('cursor must be a whole number of at least 0')
       return json(pullSince(deps.db, user.id, cursor))
+    }
+
+    if (path === 'price-changes') {
+      const raw = new URL(req.url).searchParams.get('since') ?? ''
+      const since = /^\d{1,16}$/.test(raw) ? Number(raw) : NaN
+      if (!Number.isSafeInteger(since))
+        throw new CollectionError('since must be a whole number of at least 0')
+      return json(priceChanges(deps.db, since))
     }
 
     const body = await readJson(req)

@@ -1,6 +1,7 @@
 import type { SqlDb } from '../../../src/main/db/sql'
 import { createPriceClient, type PriceClient } from '../../../src/main/prices/client'
 import { refreshIntlPrices } from '../../../src/main/prices/refresh'
+import { refreshSweepQueue, runSweep, type SweepClient } from './sweep'
 
 /** Lookups per alarm run. */
 export const PRICE_BATCH = 25
@@ -88,6 +89,7 @@ export async function runPriceAlarm(
   client: PriceClient | null,
   storage: AlarmStorage,
   now: () => Date,
+  sweep: SweepClient | null = null,
   opts: { limit?: number } = {}
 ): Promise<void> {
   let delay = PRICE_IDLE_MS
@@ -99,6 +101,15 @@ export async function runPriceAlarm(
   } catch (e) {
     console.error('Price alarm failed', e)
     delay = PRICE_FAILED_MS
+  }
+  try {
+    // The weekly set sweep; its failures never touch the per-card pacing above.
+    const at = now()
+    refreshSweepQueue(db, at)
+    const r = await runSweep(db, sweep, at)
+    if (r.more && r.swept > 0) delay = Math.min(delay, PRICE_MORE_MS)
+  } catch (e) {
+    console.error('Set sweep failed', e)
   }
   try {
     // Web writes can run while lookups are in flight; keep an earlier alarm they queued.

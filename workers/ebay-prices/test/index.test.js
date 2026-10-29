@@ -202,6 +202,48 @@ describe('GET /v1/price', () => {
     expect(body).toMatchObject({ price: 11, listingCount: 2, rarityFallback: true })
   })
 
+  it('prices a Secret Rare from Secret Rare listings, not pricier Secret variants', async () => {
+    const mk = (title, value) => ({ title, price: { value, currency: 'USD' } })
+    vi.stubGlobal(
+      'fetch',
+      makeFetch([
+        json({
+          itemSummaries: [
+            mk('LOB-DE001 Secret Rare', '3'),
+            mk('LOB-DE001 Secret Rare NM', '3'),
+            mk('LOB-DE001 Quarter Century Secret Rare', '30'),
+            mk('LOB-DE001 Quarter Century Secret Rare NM', '30'),
+            mk('LOB-DE001 Extra Secret Rare', '30')
+          ]
+        })
+      ])
+    )
+    const res = await worker.fetch(
+      req(URL_OK.replace('Ultra%20Rare', 'Secret%20Rare'), undefined),
+      env
+    )
+    expect(await res.json()).toMatchObject({ price: 3, listingCount: 2, rarityFallback: false })
+  })
+
+  it('falls back without counting pricier Secret variants when few Secret Rares exist', async () => {
+    const mk = (title, value) => ({ title, price: { value, currency: 'USD' } })
+    const listings = {
+      itemSummaries: [
+        mk('LOB-DE001 Secret Rare', '3'),
+        mk('LOB-DE001 Quarter Century Secret Rare', '30'),
+        mk('LOB-DE001 Quarter Century Secret Rare NM', '30'),
+        mk('LOB-DE001 Quarter Century Secret Rare EX', '30')
+      ]
+    }
+    const f = makeFetch([json(listings), json(listings)])
+    vi.stubGlobal('fetch', f)
+    const res = await worker.fetch(req(URL_OK.replace('Ultra%20Rare', 'Secret%20Rare')), env)
+    const body = await res.json()
+    expect(f.calls.filter((u) => u.includes('item_summary'))).toHaveLength(2)
+    expect(body.price).not.toBe(30)
+    expect(body.listingCount).toBeLessThan(2)
+  })
+
   it('returns 502 when OAuth fails and leaks no secrets', async () => {
     vi.stubGlobal(
       'fetch',
@@ -334,5 +376,101 @@ describe('GET /v1/price', () => {
     f.mockClear()
     expect((await worker.fetch(req(u), env)).status).toBe(200)
     expect(f).not.toHaveBeenCalled()
+  })
+})
+
+describe('GET /v1/set', () => {
+  const SET_URL = 'https://w.test/v1/set?key=CORI-JP&lang=ja'
+  beforeEach(() => vi.useFakeTimers({ toFake: ['setTimeout'] }))
+  const page = (n) => ({
+    itemSummaries: Array.from({ length: n }, (_, i) => ({
+      title: `CORI-JP${String((i % 5) + 1).padStart(3, '0')} UR`,
+      price: { value: String(10 + i), currency: 'USD' }
+    }))
+  })
+
+  it('pages until a short page', async () => {
+    const f = makeFetch([json(page(200)), json(page(37))])
+    vi.stubGlobal('fetch', f)
+    const res = await settle(worker.fetch(req(SET_URL), env))
+    expect(res.status).toBe(200)
+    const body = await res.json()
+    expect(body.calls).toBe(2)
+    expect(body.codes['CORI-JP001']).toBeDefined()
+    expect(body.checkedAt).toMatch(/^\d{4}-\d{2}-\d{2}T/)
+    const searches = f.calls.filter((c) => c.includes('item_summary'))
+    expect(searches).toHaveLength(2)
+    expect(searches[0]).toContain('limit=200')
+    expect(searches[1]).toContain('offset=200')
+    expect(env.PRICES.put).not.toHaveBeenCalled()
+  })
+
+  it('sends the key unquoted and without rarity', async () => {
+    const f = makeFetch([json(page(1))])
+    vi.stubGlobal('fetch', f)
+    await settle(worker.fetch(req(SET_URL), env))
+    const q = new URL(f.calls.find((c) => c.includes('item_summary'))).searchParams.get('q')
+    expect(q).toBe('CORI-JP')
+  })
+
+  it('stops at five pages', async () => {
+    const f = makeFetch(Array.from({ length: 6 }, () => json(page(200))))
+    vi.stubGlobal('fetch', f)
+    const body = await (await settle(worker.fetch(req(SET_URL), env))).json()
+    expect(body.calls).toBe(5)
+  })
+
+  it('rejects English', async () => {
+    vi.stubGlobal('fetch', makeFetch([]))
+    const res = await worker.fetch(req('https://w.test/v1/set?key=LOB-EN&lang=en'), env)
+    expect(res.status).toBe(400)
+  })
+
+  it('rejects a missing X-Client header', async () => {
+    vi.stubGlobal('fetch', makeFetch([]))
+    expect((await worker.fetch(req(SET_URL, {}), env)).status).toBe(400)
+  })
+
+  it('passes through 429', async () => {
+    vi.stubGlobal('fetch', makeFetch([json({}, 429), json({}, 429), json({}, 429)]))
+    const res = await settle(worker.fetch(req(SET_URL), env))
+    expect(res.status).toBe(429)
+    expect(await res.json()).toEqual({ error: 'rate limited' })
+  })
+})
+
+describe('GET /v1/quota', () => {
+  const QUOTA = 'https://w.test/v1/quota'
+  const analytics = {
+    rateLimits: [
+      {
+        apiContext: 'buy',
+        apiName: 'browse',
+        resources: [
+          {
+            name: 'buy.browse',
+            rates: [{ remaining: 4321, reset: '2026-10-29T00:00:00.000Z' }]
+          }
+        ]
+      }
+    ]
+  }
+
+  it('reads browse remaining', async () => {
+    const f = makeFetch([json(analytics)])
+    vi.stubGlobal('fetch', f)
+    const res = await worker.fetch(req(QUOTA), env)
+    expect(await res.json()).toEqual({ remaining: 4321, resetAt: '2026-10-29T00:00:00.000Z' })
+    expect(f.calls[1]).toBe(
+      'https://api.ebay.com/developer/analytics/v1_beta/rate_limit/?api_context=buy&api_name=browse'
+    )
+  })
+
+  it('is null on failure', async () => {
+    vi.useFakeTimers({ toFake: ['setTimeout'] })
+    vi.stubGlobal('fetch', makeFetch([json({}, 500)]))
+    const res = await settle(worker.fetch(req(QUOTA), env))
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ remaining: null, resetAt: null })
   })
 })

@@ -244,10 +244,10 @@ describe('price requests', () => {
         storage.alarm = t
       }
     }
-    await runPriceAlarm(db, client, storage, () => NOW, { limit: 1 })
+    await runPriceAlarm(db, client, storage, () => NOW, null, { limit: 1 })
     expect(lookup.mock.calls[0]).toEqual([expect.objectContaining({ code: mine.code })])
     expect(storage.alarm).toBe(T + PRICE_MORE_MS)
-    await runPriceAlarm(db, client, storage, () => NOW, { limit: 1 })
+    await runPriceAlarm(db, client, storage, () => NOW, null, { limit: 1 })
     expect(lookup.mock.calls[1]).toEqual([expect.objectContaining({ code: wanted.code })])
     expect(
       db.prepare('SELECT price FROM intl_prices WHERE printing_id = ?').get(wanted.id)

@@ -29,6 +29,12 @@ export type MetaKey =
   | 'catalog_switch_failed'
   /** Catalog work committed but not yet reported, as JSON `{ cardsChanged, imagesChanged, needsFinish }`. */
   | 'catalog_unannounced'
+  /** UTC day (YYYY-MM-DD) the portal last listed its eBay sweep prefixes. */
+  | 'price_sweeps_listed_at'
+  /** The portal's eBay sweep calls for one UTC day, as `YYYY-MM-DD:N`. */
+  | 'sweep_calls_day'
+  /** Seq of the last server price change applied from the price change feed. */
+  | 'price_feed_cursor'
 
 export function getMeta(db: SqlDb, key: MetaKey): string | null {
   const row = db.prepare('SELECT value FROM meta WHERE key = ?').get(key) as

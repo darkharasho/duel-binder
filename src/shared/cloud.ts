@@ -68,6 +68,22 @@ export interface PricesResponse {
   status: string | null
 }
 
+/** A server price change, numbered by the server's catalog clock. */
+export interface PriceChange extends WirePrice {
+  seq: number
+}
+
+/** One page of the price change feed (GET /api/sync/price-changes). */
+export interface PriceChangesResponse {
+  prices: PriceChange[]
+  /** The last row's seq, or the caller's `since` when the page is empty. */
+  cursor: number
+  more: boolean
+}
+
+/** Most price changes one feed page carries. */
+export const MAX_PRICE_CHANGES = 2000
+
 /** Most printing keys one price request (POST /api/sync/price-requests) may send. */
 export const MAX_PRICE_REQUEST = 200
 

@@ -152,6 +152,26 @@ describe('GET /admin/stats', () => {
     expect(html).toContain("fetch('/admin/stats'")
   })
 
+  it('stats include sweep counts', async () => {
+    const ins = db.prepare(
+      'INSERT INTO price_sweeps (key, language, owned, released, swept_at, calls) VALUES (?, ?, ?, ?, ?, ?)'
+    )
+    ins.run('RA01', 'ja', 1, '2026-01-01', '2026-10-27T00:00:00.000Z', 1)
+    ins.run('RA02', 'ja', 0, '2026-02-01', '2026-10-01T00:00:00.000Z', 1)
+    ins.run('RA03', 'ko', 0, '2026-03-01', null, 0)
+    db.prepare('INSERT OR REPLACE INTO meta (key, value) VALUES (?, ?)').run(
+      'sweep_calls_day',
+      '2026-10-28:42'
+    )
+    expect(((await (await stats()).json()) as Stats).sweep).toEqual({
+      callsToday: 42,
+      sweptLast7d: 1,
+      prefixes: 3
+    })
+    db.prepare('UPDATE meta SET value = ? WHERE key = ?').run('2026-10-27:42', 'sweep_calls_day')
+    expect(((await (await stats()).json()) as Stats).sweep.callsToday).toBe(0)
+  })
+
   it('flags only the owner as admin in /api/me, and nobody when unset', async () => {
     const owner = addUser(db, '999', 'owner')
     const other = addUser(db, '111', 'alice')

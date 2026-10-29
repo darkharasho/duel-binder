@@ -109,7 +109,9 @@ function render(s) {
     ]),
     panel('Scanner and prices', [
       ['Scan contributions', n(s.scan.contributions)], ['… in 7 days', n(s.scan.contributions7d)],
-      ['eBay price requests today', n(s.priceRequests.today)], ['… in 7 days', n(s.priceRequests.last7d)]
+      ['eBay price requests today', n(s.priceRequests.today)], ['… in 7 days', n(s.priceRequests.last7d)],
+      ['eBay sweep calls today', n(s.sweep.callsToday)], ['Sets swept in 7 days', n(s.sweep.sweptLast7d)],
+      ['Sets in sweep queue', n(s.sweep.prefixes)]
     ]),
     panel('Storage', Object.entries(s.storage.rows).map(([k, v]) => [k, n(v) + ' rows']), usage)
   )

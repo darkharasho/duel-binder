@@ -44,17 +44,45 @@ export function isSingleCard(title) {
 }
 
 const RARITY_PHRASES = [
+  // Longer catalog rarities first; each contains a shorter phrase below (see set.js RARITY_ALIASES).
+  'duel terminal normal rare parallel rare',
+  'duel terminal normal parallel rare',
+  'duel terminal secret parallel rare',
+  'duel terminal super parallel rare',
+  'duel terminal ultra parallel rare',
+  'duel terminal rare parallel rare',
+  'kaiba corporation ultra rare',
+  'kaiba corporation common',
+  'extra secret parallel rare',
+  'holographic parallel rare',
+  'secret parallel rare',
+  'super parallel rare',
+  'millennium secret rare',
+  'millennium super rare',
+  'millennium ultra rare',
+  'millennium gold rare',
+  'millennium rare',
+  'premium gold rare',
+  '10000 secret rare',
+  '20th secret rare',
+  'gold secret rare',
+  'ultra secret rare',
+  'holographic rare',
   'quarter century secret rare',
   'prismatic secret rare',
   'starlight rare',
   'ghost rare',
   'ultimate rare',
   "collector's rare",
+  'extra secret rare',
   'secret rare',
   'ultra rare',
   'super rare',
   'gold rare',
   'platinum rare',
+  'ultra parallel rare',
+  'normal parallel rare',
+  'rare parallel rare',
   'parallel rare'
 ]
 
@@ -63,6 +91,27 @@ export function namesOtherRarity(title, rarity) {
   const t = String(title).toLowerCase()
   const r = String(rarity).toLowerCase()
   return RARITY_PHRASES.some((phrase) => t.includes(phrase) && !r.includes(phrase))
+}
+
+// True when every word of `part` appears in `phrase`, in order ("ultra rare" in "ultra parallel rare").
+function containsWords(phrase, part) {
+  const words = phrase.split(' ')
+  let i = 0
+  for (const w of part.split(' ')) {
+    i = words.indexOf(w, i) + 1
+    if (i === 0) return false
+  }
+  return true
+}
+
+/** True when the title names a longer rarity that contains the requested one ("Quarter Century Secret Rare" for a Secret Rare). */
+export function namesLongerRarity(title, rarity) {
+  const t = String(title).toLowerCase()
+  const r = String(rarity).toLowerCase()
+  if (r === '') return false
+  return RARITY_PHRASES.some(
+    (phrase) => t.includes(phrase) && phrase !== r && containsWords(phrase, r)
+  )
 }
 
 function median(sorted) {

@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type Database from 'better-sqlite3'
 import { handle, type AppDeps } from '../../workers/portal/src/app'
 import { setMeta } from '../../src/main/db/meta'
-import { pullSince } from '../../workers/portal/src/sync'
+import { priceChanges, pullSince } from '../../workers/portal/src/sync'
 import type {
   PricesResponse,
   PullResponse,
@@ -565,5 +565,36 @@ describe('sync routes', () => {
         { pkey: b.pkey, price: null, listingCount: 0, checkedAt: T0 }
       ].sort((x, y) => x.pkey.localeCompare(y.pkey))
     )
+  })
+  it('price-changes pages by seq', async () => {
+    const three = db.prepare('SELECT id, pkey FROM card_printings ORDER BY id LIMIT 3').all() as {
+      id: number
+      pkey: string
+    }[]
+    expect(three).toHaveLength(3)
+    three.forEach((p, i) =>
+      db
+        .prepare(
+          'INSERT INTO intl_prices (printing_id, price, listing_count, checked_at) VALUES (?, ?, ?, ?)'
+        )
+        .run(p.id, 1 + i, i, T1)
+    )
+    const first = priceChanges(db, 0, 2)
+    expect(first.prices.map((p) => p.pkey)).toEqual([three[0].pkey, three[1].pkey])
+    expect(first.more).toBe(true)
+    expect(first.prices[0]).toMatchObject({ price: 1, listingCount: 0, checkedAt: T1 })
+    const second = priceChanges(db, first.cursor, 2)
+    expect(second.prices.map((p) => p.pkey)).toEqual([three[2].pkey])
+    expect(second.more).toBe(false)
+    expect(second.cursor).toBe(second.prices[0].seq)
+    // Over HTTP, and an empty page keeps the caller's cursor.
+    const res = await send(`/api/sync/price-changes?since=${second.cursor}`)
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ prices: [], cursor: second.cursor, more: false })
+    expect((await send('/api/sync/price-changes?since=x')).status).toBe(400)
+  })
+
+  it('price-changes needs a session', async () => {
+    expect((await send('/api/sync/price-changes?since=0', {}, null)).status).toBe(401)
   })
 })

@@ -512,5 +512,6 @@ test('fresher server prices replace older local ones only', () => {
       { pkey: a.pkey, price: null, listingCount: 0, checkedAt: later.toISOString() }
     ])
   ).toBe(1)
-  expect(price(a.id)).toEqual({ price: null, listing_count: 0, checked_at: later.toISOString() })
+  // A server miss stamps the check but never erases the local price.
+  expect(price(a.id)).toEqual({ price: 5, listing_count: 3, checked_at: later.toISOString() })
 })

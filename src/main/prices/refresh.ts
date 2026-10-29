@@ -40,10 +40,15 @@ export async function refreshIntlPrices(
       return { updated, failed, remaining }
     }
     const now = opts.now ?? new Date()
+    // A lookup that finds nothing never erases a price: it keeps the price and its listing count and
+    // only stamps checked_at, so the row stops being a candidate. A new row with no price still records
+    // the check.
     const upsert = db.prepare(
       `INSERT INTO intl_prices (printing_id, price, listing_count, checked_at) VALUES (?, ?, ?, ?)
-       ON CONFLICT(printing_id) DO UPDATE SET price = excluded.price,
-         listing_count = excluded.listing_count, checked_at = excluded.checked_at`
+       ON CONFLICT(printing_id) DO UPDATE SET price = COALESCE(excluded.price, intl_prices.price),
+         listing_count = CASE WHEN excluded.price IS NULL AND intl_prices.price IS NOT NULL
+           THEN intl_prices.listing_count ELSE excluded.listing_count END,
+         checked_at = excluded.checked_at`
     )
     const batch = priceCandidates(db, now, { printingIds: opts.printingIds, limit: opts.limit })
     if (opts.limit !== undefined) remaining = Math.max(0, countCandidates(db, now, opts.printingIds) - batch.length)

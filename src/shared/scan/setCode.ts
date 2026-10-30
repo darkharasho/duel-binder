@@ -11,8 +11,13 @@ const DIGIT_FIX: Record<string, string> = { O: '0', I: '1', L: '1', S: '5', B: '
 
 const toDigits = (s: string): string => s.replace(/[OILSBZ]/g, (c) => DIGIT_FIX[c])
 
+/** A token's number in a set of other cards: `TKN`, `TK1`, `TKN2`, `BT1`, as in `SR06-ENTKN`. */
+const TOKEN_NUMBER = /^(TKN|TK|BT)([0-9OILSBZ]?)$/
+
 /** The number part of a code, OCR-corrected; a single leading letter survives (e.g. `A01`). */
 function fixNumber(num: string): string | null {
+  const token = TOKEN_NUMBER.exec(num)
+  if (token && (token[1] === 'TKN' || token[2])) return token[1] + toDigits(token[2])
   const tail = toDigits(num.slice(1))
   if (/^[A-Z]/.test(num) && /^\d{2,3}$/.test(tail)) return num[0] + tail
   const all = toDigits(num)

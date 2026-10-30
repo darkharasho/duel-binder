@@ -550,15 +550,16 @@ describe('the Pokémon profile', () => {
     // the hash says nothing.
     const inner = resized(crop(card, [0.037, 0.04, 0.963, 0.985]), CARD_W, CARD_H)
     expect(distance(inner, pkm.artBoxes[0])).toBeGreaterThan(ART_MAX_DISTANCE)
-    const found = (img: RgbaImage): number =>
-      Math.min(...windowArtBoxes(img, pkm).map((b) => distance(img, b)))
+    const found = (img: RgbaImage, wide = false): number =>
+      Math.min(...windowArtBoxes(img, pkm, wide).map((b) => distance(img, b)))
     expect(found(inner)).toBeLessThanOrEqual(30)
     // A card straightened by its own outline still matches where it is.
     expect(found(card)).toBeLessThanOrEqual(20)
     // Found by the line under its header, the name lost under a deck's edge: the window sits
-    // further off than the near search reaches.
+    // further off than the near search reaches, so the final match looks further.
     const headless = resized(crop(card, [0, 0.07, 1, 1]), CARD_W, CARD_H)
-    expect(found(headless)).toBeLessThanOrEqual(30)
+    expect(found(headless)).toBe(Infinity)
+    expect(found(headless, true)).toBeLessThanOrEqual(30)
   })
 
   it('finds a Pokémon card whose outline is lost, around its art window', () => {
@@ -571,7 +572,7 @@ describe('the Pokémon profile', () => {
     // Everything of the card but its art window is the desk again, as a held card's frame is
     // lost under fingers, a sleeve or a holder's rim while its art window's border stays crisp.
     const desk = emptyFrame(3)
-    const [[x0, y0], [x1, , ], [, y1]] = quad
+    const [[x0, y0], [x1, ,], [, y1]] = quad
     const [wx0, wy0, wx1, wy1] = pkm.windows[0]
     for (let y = y0; y < y1; y++)
       for (let x = x0; x < x1; x++) {

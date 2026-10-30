@@ -10,10 +10,11 @@ export interface Pixels {
 
 /**
  * How far from where the profile puts it a window's border is looked for, as a share of the card:
- * near, and again wider for a card found by a frame well inside or outside it (a held card's
- * header lost under a deck's edge), where the near search finds nothing or the wrong line.
+ * near, and with wide also further, for a card found by a frame well inside or outside it (a
+ * held card's header lost under a deck's edge), where the near search finds nothing.
  */
-const WINDOW_SEARCH = [0.03, 0.08]
+const WINDOW_SEARCH = 0.03
+const WINDOW_SEARCH_WIDE = 0.08
 /** How many times the median edge strength around it a border must be, to count as found. */
 const WINDOW_MIN_PEAK = 1.6
 
@@ -69,10 +70,10 @@ function edgeNear(
  * a few percent in; the printed window's border is crisp. Only windows found on all four sides
  * give a box.
  */
-export function windowArtBoxes(img: Pixels, profile: ScanProfile): Box[] {
+export function windowArtBoxes(img: Pixels, profile: ScanProfile, wide = false): Box[] {
   const out: Box[] = []
   const [art] = profile.artBoxes
-  for (const reach of WINDOW_SEARCH) {
+  for (const reach of wide ? [WINDOW_SEARCH, WINDOW_SEARCH_WIDE] : [WINDOW_SEARCH]) {
     for (const w of profile.windows) {
       const inX: [number, number] = [w[0] + 0.1 * (w[2] - w[0]), w[2] - 0.1 * (w[2] - w[0])]
       const top = edgeNear(img, w[1], inX, false, reach)

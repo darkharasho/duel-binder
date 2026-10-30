@@ -351,7 +351,9 @@ export function rankArt(
       if (profile.windowArt)
         for (const box of windowArtBoxes(
           { width: mat.cols, height: mat.rows, data: mat.data },
-          profile
+          profile,
+          // Further only on the final match (jittered): picking between candidates, it misleads.
+          jitter > 0
         ))
           look(mat, box)
     }

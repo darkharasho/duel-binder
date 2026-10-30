@@ -104,6 +104,18 @@ const VARIANT_SUFFIX: Record<string, string> = { overframe: 'EA' }
 const suffixKey = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]/g, '')
 const variantSuffix = (variant: string): string =>
   suffixKey(VARIANT_SUFFIX[variant.toLowerCase()] ?? variant)
+/**
+ * The file-name suffixes a variant needs, one per comma-separated part: "Manga-Style, Monochrome"
+ * is filed as "-MangaStyle-Monochrome".
+ */
+const variantSuffixes = (variant: string): string[] =>
+  variant
+    .split(',')
+    .map((v) => v.trim())
+    .filter(Boolean)
+    .map(variantSuffix)
+const hasSuffixes = (keys: string[], wants: string[]): boolean =>
+  wants.every((w) => keys.includes(w))
 
 /** "Ultra Rare (Overframe)" to its rarity and variant; the variant column wins when set. */
 function splitVariant(p: PrintingKey): { rarity: string; variant: string | null } {
@@ -136,7 +148,7 @@ export function fileShowsVariant(
   const rest = (m[4] ?? '').split('-').filter(Boolean)
   if (rest.length > 0 && EDITIONS.includes(rest[0].toUpperCase())) rest.shift()
   const keys = rest.map(suffixKey)
-  if (keys.includes(variantSuffix(variant))) return true
+  if (hasSuffixes(keys, variantSuffixes(variant))) return true
   const wanted = rarityAbbr(rarity, p.rarityCode)
   return (
     onlyVariantOfRarity &&
@@ -156,7 +168,7 @@ export function choosePrintingFile(files: string[], p: PrintingKey): string | nu
   const regions = regionsFor(p.setCode, p.language)
   const { rarity, variant } = splitVariant(p)
   const wanted = rarityAbbr(rarity, p.rarityCode)
-  const want = variant ? variantSuffix(variant) : null
+  const wants = variant ? variantSuffixes(variant) : null
   const candidates = files.flatMap((file) => {
     const m = FILE_RE.exec(file.replace(/^File:/, ''))
     if (!m || m[1].toUpperCase() !== prefix) return []
@@ -174,8 +186,9 @@ export function choosePrintingFile(files: string[], p: PrintingKey): string | nu
         edition,
         extra: rest.length,
         // 0 when the file shows the printing's variant (or the printing has none), else 1.
-        variantMiss: want && !keys.includes(want) ? 1 : 0,
-        // Manga-Style comes in colour and monochrome; colour first.
+        variantMiss: wants && !hasSuffixes(keys, wants) ? 1 : 0,
+        // Manga-Style comes in colour and monochrome; colour first for a printing that doesn't
+        // say which (as stored before they were told apart).
         mono: keys.includes('monochrome') ? 1 : 0
       }
     ]

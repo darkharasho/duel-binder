@@ -129,6 +129,22 @@ describe('choosePrintingFile variants', () => {
       'Zoa-YAC1-JP-ScR-MangaStyle-Color.png'
     )
   })
+
+  it('picks the Color or Monochrome file for a Manga-Style printing of that tone', () => {
+    const p = { setCode: 'YAC1', language: 'ja' as const }
+    expect(
+      choosePrintingFile(ZOA, { ...p, rarity: 'Ultra Rare', variant: 'Manga-Style, Color' })
+    ).toBe('Zoa-YAC1-JP-UR-MangaStyle-Color.png')
+    expect(choosePrintingFile(ZOA, { ...p, rarity: 'Ultra Rare (Manga-Style, Monochrome)' })).toBe(
+      'Zoa-YAC1-JP-UR-MangaStyle-Monochrome.png'
+    )
+    expect(choosePrintingFile(ZOA, { ...p, rarity: 'Secret Rare (Manga-Style, Monochrome)' })).toBe(
+      'Zoa-YAC1-JP-ScR-MangaStyle-Monochrome.png'
+    )
+    expect(
+      choosePrintingFile(ZOA, { ...p, rarity: 'Secret Rare', variant: 'Manga-Style, Color' })
+    ).toBe('Zoa-YAC1-JP-ScR-MangaStyle-Color.png')
+  })
 })
 
 describe('fileShowsVariant', () => {
@@ -154,6 +170,16 @@ describe('fileShowsVariant', () => {
         rarity: 'Ultra Rare'
       })
     ).toBe(true)
+  })
+
+  it("tells a Manga-Style printing's tone by its file", () => {
+    const p = { setCode: 'YAC1', language: 'ja' as const }
+    const color = { ...p, rarity: 'Ultra Rare', variant: 'Manga-Style, Color' }
+    const mono = { ...p, rarity: 'Ultra Rare (Manga-Style, Monochrome)' }
+    expect(fileShowsVariant('Zoa-YAC1-JP-UR-MangaStyle-Color.png', color)).toBe(true)
+    expect(fileShowsVariant('Zoa-YAC1-JP-UR-MangaStyle-Monochrome.png', color)).toBe(false)
+    expect(fileShowsVariant('Zoa-YAC1-JP-UR-MangaStyle-Monochrome.png', mono)).toBe(true)
+    expect(fileShowsVariant('Zoa-YAC1-JP-UR-MangaStyle-Color.png', mono)).toBe(false)
   })
 
   it('is false for the plain file an overframe printing fell back to', () => {

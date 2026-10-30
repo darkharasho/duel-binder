@@ -4,7 +4,10 @@ import { FoilLayer } from '@/components/FoilLayer'
 import { PanelCardArt } from '@/components/PanelCardArt'
 import { TiltCard } from '@/components/TiltCard'
 import { CardSheet } from '@/components/CardSheet'
+import { BrowseCardPanel } from '@/features/browse/BrowseCardPanel'
+import { SetCardPanel } from '@/features/sets/SetCardPanel'
 import { findArtWindow, type ArtBitmap } from '@shared/artWindow'
+import type { BrowseCard, CardDetail, ChecklistCard, Printing } from '@shared/types'
 import {
   ART_WINDOWS,
   cardFoil,
@@ -473,5 +476,131 @@ describe('PanelCardArt', () => {
     )
     expect(screen.getAllByTestId('foil-layer')[0]).toHaveAttribute('data-foil', 'fullart')
     expect(asked).not.toHaveBeenCalled()
+  })
+})
+
+describe('panels pass a Scarlet & Violet printing to its stained glass', () => {
+  const id = PKM_ID_MIN + 5
+  const printing = (printingId: number, setRarity: string): Printing => ({
+    id: printingId,
+    cardId: id,
+    setName: 'Scarlet & Violet',
+    setCode: 'SVI 005/198',
+    setRarity,
+    setRarityCode: '',
+    setPrice: 1,
+    missingFromApi: false,
+    language: 'en'
+  })
+  // The shape getCardDetail returns for Cacnea.
+  const detail: CardDetail = {
+    card: {
+      id,
+      name: 'Cacnea',
+      type: 'Pokemon',
+      frameType: '',
+      race: '',
+      attribute: null,
+      level: null,
+      linkval: null,
+      atk: null,
+      def: null,
+      archetype: null,
+      desc: '',
+      tcgplayerPrice: null,
+      pokemon: {
+        category: 'Pokemon',
+        hp: 60,
+        types: ['Grass'],
+        stage: 'Basic',
+        rarity: 'Common',
+        illustrator: null,
+        localName: null
+      }
+    },
+    printings: [printing(1, 'Normal'), printing(2, 'Reverse Holofoil')],
+    images: []
+  }
+  const api = (): ReturnType<typeof createMockApi> =>
+    createMockApi({
+      cards: { get: async () => detail },
+      collection: { forCard: async () => [] }
+    })
+  const glassOf = (grassUrl: string | undefined): void => {
+    const layer = screen.getAllByTestId('foil-layer')[0]
+    expect(layer).toHaveAttribute('data-foil', 'reverse')
+    expect(layer).toHaveAttribute('data-textured')
+    expect(layer.style.getPropertyValue('--foil-texture')).toContain(grassUrl)
+  }
+  const grass = reverseTextureFor('SVI 005/198', detail.card.pokemon)?.url
+
+  it('in Browse', async () => {
+    const card = {
+      id,
+      name: 'Cacnea',
+      type: 'Pokemon',
+      frameType: '',
+      attribute: null,
+      race: '',
+      level: null,
+      linkval: null,
+      atk: null,
+      def: null,
+      imageId: id,
+      price: 1,
+      releasedAt: null,
+      owned: 0,
+      defaultPrintingId: 2
+    } as BrowseCard
+    renderWithProviders(
+      <CardSheet onClose={() => {}}>
+        <BrowseCardPanel card={card} onMoreOptions={() => {}} />
+      </CardSheet>,
+      { api: api() }
+    )
+    await waitFor(() => expect(screen.getAllByTestId('foil-layer').length).toBeGreaterThan(0))
+    glassOf(grass)
+  })
+
+  it('in Sets', async () => {
+    const card: ChecklistCard = {
+      cardId: id,
+      name: 'Cacnea',
+      type: 'Pokemon',
+      number: 5,
+      numberLabel: '005',
+      imageId: id,
+      owned: 0,
+      entryId: null,
+      price: 1,
+      atk: null,
+      def: null,
+      level: null,
+      rarities: [
+        {
+          rarity: 'Reverse Holofoil',
+          owned: 0,
+          codes: [{ printingId: 2, setCode: 'SVI 005/198', owned: 0 }],
+          defaultPrintingId: 2,
+          entryId: null,
+          price: 1
+        }
+      ]
+    }
+    renderWithProviders(
+      <CardSheet onClose={() => {}}>
+        <SetCardPanel
+          setName="Scarlet & Violet"
+          card={card}
+          rarity="Reverse Holofoil"
+          busy={false}
+          onAdjust={() => {}}
+          onMoreOptions={() => {}}
+        />
+      </CardSheet>,
+      { api: api() }
+    )
+    await waitFor(() => expect(screen.getAllByTestId('foil-layer').length).toBeGreaterThan(0))
+    glassOf(grass)
   })
 })

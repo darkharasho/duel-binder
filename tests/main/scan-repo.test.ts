@@ -270,3 +270,63 @@ describe('printingsByNumber', () => {
     expect(row).toMatchObject({ language: 'en', rarity: 'Holofoil', imageIds: expect.any(Array) })
   })
 })
+
+describe('a Pokémon art twin with no artwork', () => {
+  const PKM = localScope("'pkm'")
+
+  it('marks a card with an unseen reprint: same name, illustrator and language, no image', async () => {
+    const db = await seededDb()
+    const { cardIds } = seedPokemon(db)
+    const [pikachu, japanese] = cardIds
+    db.prepare(
+      "UPDATE pokemon_cards SET image_url = 'https://assets/x' WHERE card_id IN (?, ?)"
+    ).run(pikachu, japanese)
+    const add = (
+      id: number,
+      name: string,
+      illustrator: string,
+      sourceId: string,
+      url: string | null
+    ): void => {
+      db.prepare(
+        `INSERT INTO cards (id, game, name, type, frame_type, race, "desc", updated_at)
+         VALUES (?, 'pkm', ?, 'Pokémon', 'pokemon', 'Basic', '', '2026-10-29')`
+      ).run(id, name)
+      db.prepare(
+        `INSERT INTO pokemon_cards (card_id, category, hp, types, stage, rarity, illustrator, source_id, image_url)
+         VALUES (?, 'Pokémon', 60, '[]', 'Basic', 'Common', ?, ?, ?)`
+      ).run(id, illustrator, sourceId, url)
+      db.prepare(
+        `INSERT INTO card_printings (game, card_id, language, set_name, set_code, set_rarity)
+         VALUES ('pkm', ?, ?, 'Reprints', 'R 1', 'Holofoil')`
+      ).run(id, sourceId.slice(0, 2))
+    }
+    const twinned = (): boolean[] =>
+      printingsForCards(db, [pikachu], PKM).map((p) => p.unseenTwin === true)
+    expect(twinned()).toEqual([false, false])
+    // Another illustrator's, another language's, or one with its artwork: not a twin.
+    add(9001, 'Pikachu', 'Someone Else', 'en/x-1', null)
+    add(9002, 'Pikachu', 'Naoyo Kimura', 'ja/X-1', null)
+    add(9003, 'Pikachu', 'Naoyo Kimura', 'en/x-3', 'https://assets/y')
+    expect(twinned()).toEqual([false, false])
+    // A reprint with no artwork, as the Classic Collection's cards have none.
+    add(9004, 'Pikachu', 'Naoyo Kimura', 'en/cel25cc-1', null)
+    expect(twinned()).toEqual([true, true])
+    db.prepare('DELETE FROM pokemon_cards WHERE card_id = 9004').run()
+    expect(twinned()).toEqual([false, false])
+    // A trainer kit's, whose only artwork is a product photo; and a blank written another way.
+    add(
+      9005,
+      'Pikachu',
+      'Naoyo Kimura',
+      'en/tk-1',
+      'https://tcgplayer-cdn.tcgplayer.com/product/1_200w.jpg'
+    )
+    expect(twinned()).toEqual([true, true])
+    db.prepare('DELETE FROM pokemon_cards WHERE card_id = 9005').run()
+    db.prepare("UPDATE cards SET name = '_____''s Pikachu' WHERE id = ?").run(pikachu)
+    add(9006, "___'s Pikachu", 'Naoyo Kimura', 'en/cel25cc-2', null)
+    expect(twinned()).toEqual([true, true])
+    expect(printingsByCode(db, 'LOB-EN005').every((r) => !('unseenTwin' in r))).toBe(true)
+  })
+})

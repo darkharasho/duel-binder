@@ -29,16 +29,43 @@ const select = (
   CASE WHEN ${isMarketOnly} THEN p.market_price WHEN p.language = 'en' THEN COALESCE(p.market_price, ip.price, p.set_price) ELSE COALESCE(ip.price, ${enTwinPrice(scope.game)}) END AS rawPrice
   FROM card_printings p JOIN cards c ON c.id = p.card_id AND +c.game = ${scope.game}
   LEFT JOIN intl_prices ip ON ip.printing_id = p.id
+  LEFT JOIN pokemon_cards pc ON pc.card_id = p.card_id
   WHERE +p.game = ${scope.game} AND p.contributed = 0`
 
 const languageRank = (l: Language): number => LANGUAGES.findIndex((x) => x.code === l)
 
-/** Attaches each card's artwork ids and sorts by set code, then language, then rarity tier. */
-function withImages(db: SqlDb, rows: PrintingRow[], scope: Scope): ScanPrinting[] {
+/**
+ * Attaches each card's artwork ids and sorts by set code, then language, then rarity tier; with
+ * twins, marks a Pokémon printing's unseenTwin (a scan of every card with no artwork per card,
+ * so only for the few cards an art match brings).
+ */
+function withImages(db: SqlDb, rows: PrintingRow[], scope: Scope, twins = false): ScanPrinting[] {
   const ids = [...new Set(rows.map((r) => r.cardId))]
   const images = new Map<number, number[]>()
+  // Cards and languages with an art twin the scanner can't see (ScanPrinting.unseenTwin).
+  const twinned = new Set<string>()
   for (let i = 0; i < ids.length; i += 500) {
     const chunk = ids.slice(i, i + 500)
+    const unseen = !twins
+      ? []
+      : (db
+          .prepare(
+            // CROSS JOIN keeps this order: the few cards asked for first, then the cards with no
+            // artwork, rather than every printing. A tcgplayer product photo is a poor reference,
+            // often missing (a 403) or matched far behind the card it reprints, so it counts as none.
+            // A Japanese card may be named in English or Japanese, and a blank as any run of _.
+            `SELECT DISTINCT pc.card_id AS cardId, tp.language AS language
+         FROM pokemon_cards pc CROSS JOIN cards c CROSS JOIN pokemon_cards t CROSS JOIN cards tc
+         CROSS JOIN card_printings tp
+         WHERE pc.card_id IN (${chunk.map(() => '?').join(',')}) AND c.id = pc.card_id
+           AND (t.image_url IS NULL OR t.image_url LIKE 'https://tcgplayer-cdn.%')
+           AND t.card_id <> pc.card_id AND t.illustrator IS pc.illustrator AND tc.id = t.card_id
+           AND (lower(replace(tc.name, '_', '')) = lower(replace(c.name, '_', ''))
+             OR COALESCE(t.local_name, tc.name) = COALESCE(pc.local_name, c.name))
+           AND tp.card_id = t.card_id`
+          )
+          .all(...chunk) as { cardId: number; language: string }[])
+    for (const t of unseen) twinned.add(`${t.cardId}|${t.language}`)
     const found = db
       .prepare(
         `SELECT card_id AS cardId, image_id AS imageId FROM card_images
@@ -56,7 +83,8 @@ function withImages(db: SqlDb, rows: PrintingRow[], scope: Scope): ScanPrinting[
     .map(({ rawPrice, ...r }) => ({
       ...r,
       price: parsePrice(rawPrice),
-      imageIds: images.get(r.cardId) ?? []
+      imageIds: images.get(r.cardId) ?? [],
+      ...(twinned.has(`${r.cardId}|${r.language}`) ? { unseenTwin: true as const } : {})
     }))
     .sort(
       (a, b) =>
@@ -180,7 +208,7 @@ export function printingsForCards(
         .all(...chunk) as PrintingRow[])
     )
   }
-  return withImages(db, rows, scope)
+  return withImages(db, rows, scope, true)
 }
 
 /** The card of each known artwork, by image id; unknown ids are left out. */

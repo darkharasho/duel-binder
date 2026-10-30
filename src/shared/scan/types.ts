@@ -20,6 +20,13 @@ export interface ScanPrinting {
   price: number | null
   /** The card's artworks, in sort order. */
   imageIds: number[]
+  /**
+   * A Pokémon card with a likely reprint of its art the scanner can't see: a card of the same
+   * name and illustrator, in the same language, with no artwork in the catalog (the Classic
+   * Collections) or only a tcgplayer product photo (trainer kits). Its art alone can't tell the
+   * two apart. Set by printingsForCards only; left out otherwise.
+   */
+  unseenTwin?: true
 }
 
 export type FingerprintStatus = {

@@ -39,6 +39,28 @@ async function artGroup(raw: RawSignals, ctx: ResolveContext): Promise<number[] 
   return cards
 }
 
+/**
+ * Whether a card of the same name and language as card matched too, past the art group's margin
+ * but within ART_MAX_DISTANCE: likely a reprint whose reference is a poor product photo, which
+ * the art can't tell from card. Other cards' art that close is rare.
+ */
+async function reprintBehind(
+  raw: RawSignals,
+  card: ScanPrinting,
+  ctx: ResolveContext
+): Promise<boolean> {
+  const [top] = raw.art
+  const behind = raw.art.filter(
+    (a) => a.distance > top.distance + PKM_ART_MIN_MARGIN && a.distance <= ART_MAX_DISTANCE
+  )
+  if (!behind.length) return false
+  const cards = (await ctx.lookups.cardsForImages(behind.map((a) => a.imageId))).map(
+    (c) => c.cardId
+  )
+  const others = await ctx.lookups.printingsForCards(cards.filter((id) => id !== card.cardId))
+  return others.some((p) => p.language === card.language && sameName(p.name, card.name))
+}
+
 /** The printings of the first collector number, over every code band read, that names any. */
 async function byNumber(raw: RawSignals, ctx: ResolveContext): Promise<ScanPrinting[]> {
   const tried = new Set<string>()
@@ -128,7 +150,8 @@ async function draft(
  * - With a collector number read: the art's cards that carry it, or with no art close, the
  *   number's cards a name read agrees with; one of them in the read language is named,
  *   `via: 'code'`.
- * - Without: the art's cards; one of them in the read language is named.
+ * - Without: the art's cards; one of them in the read language is named, unless it has a
+ *   reprint of the art with no artwork to match (ScanPrinting.unseenTwin).
  * - Nothing at all, and the closest artwork past ART_FAR_DISTANCE: `none`, far.
  *
  * The language is read only once there's a card to name, and at most once; a read that fails
@@ -154,6 +177,13 @@ export async function resolvePokemonSignals(
     return item ? { kind: 'recognized', item } : unsure
   }
 
+  /** The cards among printings in the language read; none when it's unread or another. */
+  const inLanguage = async (printings: ScanPrinting[]): Promise<number[]> => {
+    const lang = await language()
+    if (lang === null || lang === 'other') return []
+    return unique(printings.filter((p) => p.language === lang).map((p) => p.cardId))
+  }
+
   if (numbered.length) {
     const name = group.length ? null : await nameRead(raw, ctx)
     const cards = numbered.filter((p) =>
@@ -162,9 +192,7 @@ export async function resolvePokemonSignals(
         : !!name && (name.cardId === p.cardId || sameName(name.name, p.name))
     )
     if (!cards.length) return unsure
-    const lang = await language()
-    if (lang === null || lang === 'other') return unsure
-    const ids = unique(cards.filter((p) => p.language === lang).map((p) => p.cardId))
+    const ids = await inLanguage(cards)
     return ids.length === 1 ? named(ids[0], 'code') : unsure
   }
 
@@ -172,9 +200,11 @@ export async function resolvePokemonSignals(
     const [top] = raw.art
     return top && top.distance > ART_FAR_DISTANCE ? { kind: 'none', far: true } : unsure
   }
-  const lang = await language()
-  if (lang === null || lang === 'other') return unsure
   const printings = await ctx.lookups.printingsForCards(group)
-  const ids = unique(printings.filter((p) => p.language === lang).map((p) => p.cardId))
-  return ids.length === 1 ? named(ids[0], 'art') : unsure
+  const ids = await inLanguage(printings)
+  if (ids.length !== 1) return unsure
+  const card = printings.filter((p) => p.cardId === ids[0])
+  // A reprint of the art with no artwork of its own can't be told from the card by art alone.
+  if (card.some((p) => p.unseenTwin)) return unsure
+  return (await reprintBehind(raw, card[0], ctx)) ? unsure : named(ids[0], 'art')
 }

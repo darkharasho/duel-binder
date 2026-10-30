@@ -172,6 +172,27 @@ describe('resolvePokemonSignals', () => {
     expect(await resolveSignals(raw({ art: twins }), pkm(null))).toEqual({ kind: 'unsure' })
   })
 
+  it('art alone never names a card whose reprint of the art has no artwork to match', async () => {
+    const ctx = (twinned: boolean): ResolveContext => ({
+      ...pkm('en'),
+      lookups: {
+        ...lookups,
+        printingsForCards: async (ids) =>
+          PKM.filter((p) => ids.includes(p.cardId)).map((p) =>
+            twinned && p.cardId === 1 ? { ...p, unseenTwin: true as const } : p
+          )
+      }
+    })
+    // A Classic Collection reprint matches its original's art, and has none of its own.
+    expect(await resolveSignals(raw({ art: twins }), ctx(true))).toEqual({ kind: 'unsure' })
+    expect(await recognized(raw({ art: twins }), ctx(false))).toMatchObject({ cardId: 1 })
+    // A number read is the card's own: the reprint's differs.
+    expect(await recognized(raw({ art: twins, codeTexts: ['045/193'] }), ctx(true))).toMatchObject({
+      cardId: 1,
+      via: 'code'
+    })
+  })
+
   it('zh text with ja art match is unsure', async () => {
     const art = [{ imageId: 201, distance: 20 }]
     expect(await resolveSignals(raw({ art }), pkm('other'))).toEqual({ kind: 'unsure' })
@@ -194,12 +215,25 @@ describe('resolvePokemonSignals', () => {
       { imageId: 301, distance: 58 }
     ]
     expect(await resolveSignals(raw({ art: scans }), pkm('en'))).toEqual({ kind: 'unsure' })
-    // Far enough ahead, past PKM_ART_MIN_MARGIN, the closer card is taken.
+    // Far enough ahead, past PKM_ART_MIN_MARGIN, the closer card is taken over another card's art.
     const ahead = [
+      { imageId: 101, distance: 30 },
+      { imageId: 501, distance: 30 + PKM_ART_MIN_MARGIN + 2 }
+    ]
+    expect(await recognized(raw({ art: ahead }), pkm('en'))).toMatchObject({ cardId: 1 })
+    // But not over a card of the same name still close enough to match: a reprint whose
+    // reference is a poor product photo (a McDonald's Porygon matched itself at 60 and its
+    // original at 28, a trainer kit's Pikachu Libre 74 against 34).
+    const reprint = [
       { imageId: 101, distance: 30 },
       { imageId: 301, distance: 30 + PKM_ART_MIN_MARGIN + 2 }
     ]
-    expect(await recognized(raw({ art: ahead }), pkm('en'))).toMatchObject({ cardId: 1 })
+    expect(await resolveSignals(raw({ art: reprint }), pkm('en'))).toEqual({ kind: 'unsure' })
+    const past = [
+      { imageId: 101, distance: 30 },
+      { imageId: 301, distance: ART_MAX_DISTANCE + 1 }
+    ]
+    expect(await recognized(raw({ art: past }), pkm('en'))).toMatchObject({ cardId: 1 })
   })
 
   it('number decides between reprints', async () => {

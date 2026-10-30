@@ -189,6 +189,28 @@ describe('createScanEngine', () => {
     expect(ygo.posted[0].msg).toMatchObject({ type: 'init', game: 'ygo' })
   })
 
+  it('hands on art found by the holder search, with text read or not', async () => {
+    const api = createMockApi().scan
+    vi.mocked(api.ocr).mockResolvedValue([])
+    const { worker } = fakeWorker({
+      found: true,
+      quad: null,
+      art: [{ imageId: 1, distance: 3 }],
+      codeBands: [],
+      nameBands: [],
+      textBands: [],
+      cues: null,
+      artVia: 'holder',
+      look: null
+    })
+    const engine = createScanEngine({ api, makeWorker: () => worker })
+    await engine.init(null)
+    for (const wantText of [false, true]) {
+      const raw = await engine.analyze(frame(), { candidates: null, wantText })
+      expect(raw.artVia).toBe('holder')
+    }
+  })
+
   it('a Pokémon engine reads its code bands as collector numbers', async () => {
     const api = createMockApi().scan
     vi.mocked(api.ocr).mockImplementation(async (bands, kind) =>

@@ -1,6 +1,8 @@
 import type Database from 'better-sqlite3'
 import { movedEnough } from '../../../src/main/tcgplayer/prices'
 import { pokemonId } from '../../../src/shared/games/ids'
+import { hasNativeScript } from '../../../src/shared/setNames'
+import { englishNamer } from './englishNames'
 import { matchGroup, matchProducts, type MatchedProduct } from './match'
 import { cardVersions, versionSubtype, type PkmVersion } from './versions'
 import type { PkmLang, PokemonSources, TcGroup, TcPrice, TcProduct, TdCard, TdSet } from './types'
@@ -23,6 +25,10 @@ export interface PokemonReport {
   images: number
   unmatchedSets: string[]
   unmatchedCards: number
+  /** Japanese cards named in English by englishNamer (no product named them). */
+  englishNamed: number
+  /** Japanese cards still named in Japanese: no English name was found. */
+  japaneseNames: number
   problems: string[]
 }
 
@@ -228,6 +234,8 @@ async function planLanguage(
       images: 0,
       unmatchedSets,
       unmatchedCards,
+      englishNamed: 0,
+      japaneseNames: 0,
       problems
     }
   }
@@ -436,6 +444,32 @@ function writePlans(db: Database.Database, plans: LangPlan[], nowIso: string): v
   })()
 }
 
+/**
+ * Names the Japanese cards no product named in English (see englishNamer), keeping the Japanese
+ * name as `localName`. A card's id, printings and prices don't depend on its name.
+ */
+function nameInEnglish(ja: LangPlan, en: LangPlan | undefined): void {
+  const cards = ja.sets.flatMap((s) => s.cards)
+  const namer = englishNamer(
+    en ? en.sets.flatMap((s) => s.cards.map((c) => c.card)) : [],
+    cards.map((c) => c.card),
+    cards
+      .filter((c) => c.localName !== null)
+      .map((c) => ({ japanese: c.card.name, english: c.name }))
+  )
+  for (const cp of cards) {
+    if (cp.localName !== null) continue
+    const named = namer.nameOf(cp.card)
+    if (named) {
+      cp.name = named.name
+      cp.localName = cp.card.name
+      ja.report.englishNamed++
+    } else if (hasNativeScript(cp.name)) {
+      ja.report.japaneseNames++
+    }
+  }
+}
+
 /** `name`, or the first of "name (alt)" not taken by another set of the language. */
 function freeName(name: string, alts: string[], taken: (n: string) => boolean): string {
   if (!taken(name)) return name
@@ -459,6 +493,12 @@ export async function refreshPokemon(
   const langs = opts.langs ?? ['en', 'ja']
   const plans: LangPlan[] = []
   for (const lang of langs) plans.push(await planLanguage(lang, sources, log))
+  const ja = plans.find((p) => p.lang === 'ja')
+  if (ja)
+    nameInEnglish(
+      ja,
+      plans.find((p) => p.lang === 'en')
+    )
   writePlans(work, plans, (opts.now ?? (() => new Date()))().toISOString())
   return plans.map((p) => p.report)
 }

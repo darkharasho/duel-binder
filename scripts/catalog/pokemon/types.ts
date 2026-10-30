@@ -6,6 +6,8 @@ export interface TdCard {
   abilities?: { type?: string; name: string; effect?: string }[]
   attacks?: { cost?: string[]; name: string; damage?: string | number; effect?: string }[]
   variants_detailed?: TdVariant[]; thirdParty?: { tcgplayer?: number }
+  /** National Pokédex numbers of a Pokémon card (one per Pokémon on it). */
+  dexId?: number[]
   set: { id: string; name: string }
 }
 export interface TdSet {

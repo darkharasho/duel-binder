@@ -165,6 +165,77 @@ describe('createScanEngine', () => {
     expect(posted[0].transfer).toEqual([fp])
   })
 
+  it('engine posts game in worker init', async () => {
+    const none: FrameSignals = {
+      found: false,
+      quad: null,
+      art: [],
+      codeBands: [],
+      nameBands: [],
+      textBands: [],
+      cues: null,
+      look: null
+    }
+    const pkm = fakeWorker(none)
+    await createScanEngine({
+      api: createMockApi().scan,
+      makeWorker: () => pkm.worker,
+      game: 'pkm'
+    }).init(null)
+    expect(pkm.posted[0].msg).toMatchObject({ type: 'init', game: 'pkm' })
+    // Left out, it's Yu-Gi-Oh, as before there were games.
+    const ygo = fakeWorker(none)
+    await createScanEngine({ api: createMockApi().scan, makeWorker: () => ygo.worker }).init(null)
+    expect(ygo.posted[0].msg).toMatchObject({ type: 'init', game: 'ygo' })
+  })
+
+  it('hands on art found by the holder search, with text read or not', async () => {
+    const api = createMockApi().scan
+    vi.mocked(api.ocr).mockResolvedValue([])
+    const { worker } = fakeWorker({
+      found: true,
+      quad: null,
+      art: [{ imageId: 1, distance: 3 }],
+      codeBands: [],
+      nameBands: [],
+      textBands: [],
+      cues: null,
+      artVia: 'holder',
+      look: null
+    })
+    const engine = createScanEngine({ api, makeWorker: () => worker })
+    await engine.init(null)
+    for (const wantText of [false, true]) {
+      const raw = await engine.analyze(frame(), { candidates: null, wantText })
+      expect(raw.artVia).toBe('holder')
+    }
+  })
+
+  it('a Pokémon engine reads its code bands as collector numbers', async () => {
+    const api = createMockApi().scan
+    vi.mocked(api.ocr).mockImplementation(async (bands, kind) =>
+      bands.map(() => (kind === 'number' ? '045/193' : 'PIKACHU'))
+    )
+    const { worker } = fakeWorker({
+      found: true,
+      quad: null,
+      art: [],
+      codeBands: [band(10)],
+      nameBands: [band(7)],
+      textBands: [],
+      cues: null,
+      look: null
+    })
+    const engine = createScanEngine({ api, makeWorker: () => worker, game: 'pkm' })
+    const read = await engine.analyze(frame(), { candidates: null, wantText: true })
+    expect(read.codeTexts).toEqual(['045/193'])
+    expect(read.nameTexts).toEqual(['PIKACHU'])
+    expect(api.ocr).toHaveBeenCalledWith([band(10)], 'number')
+    expect(api.ocr).toHaveBeenCalledWith([band(7)], 'name')
+    // Kept for reading the printed name with the Japanese model if the text can't tell.
+    expect(read.nameBands).toEqual([band(7)])
+  })
+
   it('dispose rejects a pending frame, and later calls reject', async () => {
     const silent = { postMessage: vi.fn(), terminate: vi.fn() } as unknown as Worker
     const engine = createScanEngine({ api: createMockApi().scan, makeWorker: () => silent })

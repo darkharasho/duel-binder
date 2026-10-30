@@ -3,7 +3,7 @@ import { isNativeApp } from '../renderer/src/lib/portal'
 import type { Api } from '../shared/ipc'
 import type { PortalChannel } from '../shared/portal'
 import { cardLanguage } from '../shared/scan/cardLanguage'
-import { checkOcrBands, type Ocr } from '../shared/scan/ocr'
+import { checkOcrBands, isOcrKind, isTextModel, readTexts, type Ocr } from '../shared/scan/ocr'
 import type {
   AccountStatus,
   CollectionFilters,
@@ -210,17 +210,22 @@ export function createPhoneApi(deps: {
     },
     scan: {
       ...dataPart('scan'),
-      fingerprints: () => store.fingerprints(),
+      fingerprints: (game) => store.fingerprints(game),
       fingerprintRefs: () => store.fingerprintRefs(),
-      refreshFingerprints: () => store.refreshFingerprints(),
+      refreshFingerprints: (game, opts) => store.refreshFingerprints({ game, ...opts }),
       ocr: async (bands, kind) => {
-        if (kind !== 'code' && kind !== 'name') throw new Error(`Unknown OCR kind: ${String(kind)}`)
+        if (!isOcrKind(kind)) throw new Error(`Unknown OCR kind: ${String(kind)}`)
         checkOcrBands(bands)
         return ocr.read(bands, kind)
       },
       language: async (bands) => {
         checkOcrBands(bands)
         return cardLanguage(ocr, bands)
+      },
+      readText: async (bands, model) => {
+        if (!isTextModel(model)) throw new Error(`Unknown OCR model: ${String(model)}`)
+        checkOcrBands(bands)
+        return readTexts(ocr, bands, model)
       }
     },
     scanWindow: {

@@ -36,6 +36,8 @@ import { resolveUserData } from './userData'
 import { captureShots } from './dev/capture'
 import { createAccountService } from './cloud/account'
 import { createCloudClient } from './cloud/client'
+import type { GameId } from '@shared/games'
+import type { FingerprintStore } from './scan/fingerprints'
 import { createFingerprintStore } from './scan/fingerprints'
 import { createOcr } from './scan/ocr'
 import { portalUrl } from './cloud/config'
@@ -285,7 +287,17 @@ async function bootstrap(): Promise<void> {
   }
 
   const emitDataChanged = (): void => broadcast(DATA_CHANGED, undefined)
-  const fingerprints = createFingerprintStore({ dir: join(userData, 'scan'), portal })
+  // One store per game; they are tiny until something downloads into them.
+  const fingerprints: Record<GameId, FingerprintStore> = {
+    ygo: createFingerprintStore({ dir: join(userData, 'scan'), portal, game: 'ygo' }),
+    pkm: createFingerprintStore({ dir: join(userData, 'scan'), portal, game: 'pkm' })
+  }
+  /** Re-downloads the files of the games this account can see (a game it can't has no file for it). */
+  const refreshFingerprints = (): void => {
+    for (const game of account.games()) {
+      void fingerprints[game].refresh({ force: true }).catch(() => {})
+    }
+  }
   // The dev fake-data profile keeps the self-built catalog and can be used signed out.
   const catalog = fakeData
     ? directCatalog(db)
@@ -314,7 +326,7 @@ async function bootstrap(): Promise<void> {
     catalog,
     onCatalogChanged: ({ imagesChanged }) => {
       recordSnapshot(db)
-      if (imagesChanged) void fingerprints.refresh({ force: true }).catch(() => {})
+      if (imagesChanged) refreshFingerprints()
     },
     signInRequired: !fakeData
   })
@@ -397,7 +409,7 @@ async function bootstrap(): Promise<void> {
       onSyncProgress: emitSync,
       onSynced: () => {
         recordSnapshot(db)
-        void fingerprints.refresh({ force: true }).catch(() => {})
+        refreshFingerprints()
       },
       onChanged: emitDataChanged
     })

@@ -1,10 +1,22 @@
 import { decodeFingerprints } from '../../../src/shared/scan/fingerprintFile'
+import { isGameId, type GameId } from '../../../src/shared/games'
 import { parseFingerprintRefs } from '../../../src/shared/scan/fingerprintRefs'
 import type { AppDeps } from './app'
 
-const FINGERPRINTS_KEY = 'scan/fingerprints.bin'
-/** The file the last upload replaced, kept so a bad night can be rolled back. */
-const PREVIOUS_KEY = 'scan/fingerprints.prev.bin'
+/**
+ * Each game has its own file. Yu-Gi-Oh!'s keeps the original keys, so a client that never sends
+ * `?game` keeps getting it.
+ */
+interface Keys {
+  /** The file served. */
+  current: string
+  /** The file the last upload replaced, kept so a bad night can be rolled back. */
+  previous: string
+}
+const KEYS: Record<GameId, Keys> = {
+  ygo: { current: 'scan/fingerprints.bin', previous: 'scan/fingerprints.prev.bin' },
+  pkm: { current: 'scan/pkm/fingerprints.bin', previous: 'scan/pkm/fingerprints.prev.bin' }
+}
 const MAX_FINGERPRINT_BYTES = 8 * 1024 * 1024
 /** Which printings the fingerprint file's printing scans show (see fingerprintRefs.ts). */
 const REFS_KEY = 'scan/fingerprint-refs.json'
@@ -19,6 +31,14 @@ export const MIN_KEPT_SHARE = 0.9
 const json = (body: unknown, status = 200): Response =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
 
+/** The keys for the request's `?game` (none means Yu-Gi-Oh!); null for a game that isn't known. */
+function keysOf(req: Request): Keys | null {
+  const game = new URL(req.url).searchParams.get('game') ?? 'ygo'
+  return isGameId(game) ? KEYS[game] : null
+}
+
+const BAD_GAME = (): Response => json({ error: 'Unknown game' }, 400)
+
 const PUT_OPTS = { httpMetadata: { contentType: 'application/octet-stream' } }
 
 async function stored(deps: AppDeps, key: string): Promise<ArrayBuffer | null> {
@@ -32,6 +52,8 @@ async function stored(deps: AppDeps, key: string): Promise<ArrayBuffer | null> {
  * replaces is kept as the previous copy.
  */
 export async function putFingerprints(req: Request, deps: AppDeps): Promise<Response> {
+  const keys = keysOf(req)
+  if (!keys) return BAD_GAME()
   const declared = Number(req.headers.get('content-length') ?? 0)
   if (declared > MAX_FINGERPRINT_BYTES) return json({ error: 'File is too large' }, 400)
   const bytes = await req.arrayBuffer()
@@ -43,7 +65,7 @@ export async function putFingerprints(req: Request, deps: AppDeps): Promise<Resp
     return json({ error: 'Not a fingerprint file' }, 400)
   }
   if (count === 0) return json({ error: 'The file holds no fingerprints' }, 400)
-  const current = await stored(deps, FINGERPRINTS_KEY)
+  const current = await stored(deps, keys.current)
   if (current) {
     let had = 0
     try {
@@ -58,19 +80,21 @@ export async function putFingerprints(req: Request, deps: AppDeps): Promise<Resp
         409
       )
     }
-    await deps.images.put(PREVIOUS_KEY, current, PUT_OPTS)
+    await deps.images.put(keys.previous, current, PUT_OPTS)
   }
-  await deps.images.put(FINGERPRINTS_KEY, bytes, PUT_OPTS)
+  await deps.images.put(keys.current, bytes, PUT_OPTS)
   return json({ ok: true, count })
 }
 
 /** Admin rollback: serves the previous upload again (and keeps the current one as previous). */
-export async function rollbackFingerprints(deps: AppDeps): Promise<Response> {
-  const previous = await stored(deps, PREVIOUS_KEY)
+export async function rollbackFingerprints(req: Request, deps: AppDeps): Promise<Response> {
+  const keys = keysOf(req)
+  if (!keys) return BAD_GAME()
+  const previous = await stored(deps, keys.previous)
   if (!previous) return json({ error: 'No previous fingerprint file' }, 404)
-  const current = await stored(deps, FINGERPRINTS_KEY)
-  if (current) await deps.images.put(PREVIOUS_KEY, current, PUT_OPTS)
-  await deps.images.put(FINGERPRINTS_KEY, previous, PUT_OPTS)
+  const current = await stored(deps, keys.current)
+  if (current) await deps.images.put(keys.previous, current, PUT_OPTS)
+  await deps.images.put(keys.current, previous, PUT_OPTS)
   return json({ ok: true, count: decodeFingerprints(previous).count })
 }
 
@@ -114,9 +138,12 @@ async function serve(
   return new Response(object.body, { status: 200, headers })
 }
 
-/** Public download of the fingerprint file. */
-export const getFingerprints = (req: Request, deps: AppDeps): Promise<Response> =>
-  serve(req, deps, FINGERPRINTS_KEY, 'application/octet-stream', 'No fingerprints yet')
+/** Public download of the request's game's fingerprint file. */
+export async function getFingerprints(req: Request, deps: AppDeps): Promise<Response> {
+  const keys = keysOf(req)
+  if (!keys) return BAD_GAME()
+  return serve(req, deps, keys.current, 'application/octet-stream', 'No fingerprints yet')
+}
 
 /** Public download of the fingerprint refs file. */
 export const getFingerprintRefs = (req: Request, deps: AppDeps): Promise<Response> =>

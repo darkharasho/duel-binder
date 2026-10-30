@@ -3,14 +3,16 @@
 import type { FingerprintIndex } from '@shared/scan/fingerprintFile'
 import { ART_MATCH_DEPTH } from '@shared/scan/thresholds'
 import type { Mat } from '@techstark/opencv-js'
+import { SCAN_PROFILES, type ScanProfile } from '@shared/scan/profiles'
 import type { OcrBand, RgbaImage } from '@shared/scan/types'
 import type { ArtMatch, FrameSignals } from '../engine'
-import { toBand, toBlock } from './bands'
+import { toBand, toBlock, toInkBlock } from './bands'
 import { findCandidates, preferOuter, recognizeArt } from './candidates'
 import type { CV } from './cv'
 import { CARD_W, dist, rotate180, toMat, using, warpCard, type Quad } from './detect'
+import { isSlab } from './holder'
+import { pokemonVersionCues } from './pokemonVersion'
 import { rarityLook } from './rarityCues'
-import { CODE_BANDS, NAME_BAND, TEXT_BOX } from './regions'
 
 /** How far past CARD_W a card is straightened for reading its text. */
 const MAX_BAND_SCALE = 2
@@ -23,6 +25,7 @@ const NOTHING: FrameSignals = {
   nameBands: [],
   textBands: [],
   cues: null,
+  version: null,
   look: null
 }
 
@@ -40,8 +43,10 @@ function bandWidth(quad: Quad): number {
 
 /**
  * The frame's signals, matched against index (null: no art matching), with the look model's
- * features when wantLook. It's copied into OpenCV once, for finding the card and every warp of
- * it, and freed whatever happens.
+ * features when wantLook, read off the regions of profile's game (whose rarity cues and look are
+ * left null when it has none). It's copied into OpenCV once, for finding the card and every warp
+ * of it, and freed whatever happens. holderPass false skips the holder search of a profile that
+ * has one, for a frame the caller has already given its share of them (holderBudget.ts).
  */
 export function analyze(
   cv: CV,
@@ -49,10 +54,14 @@ export function analyze(
   index: FingerprintIndex | null,
   candidates: number[] | null,
   wantBands: boolean,
-  wantLook = false
+  wantLook = false,
+  profile: ScanProfile = SCAN_PROFILES.ygo,
+  holderPass = true
 ): FrameSignals {
   const frame = toMat(cv, img)
-  return using([frame], () => analyzeFrame(cv, frame, index, candidates, wantBands, wantLook))
+  return using([frame], () =>
+    analyzeFrame(cv, frame, index, candidates, wantBands, wantLook, profile, holderPass)
+  )
 }
 
 function analyzeFrame(
@@ -61,7 +70,9 @@ function analyzeFrame(
   index: FingerprintIndex | null,
   candidates: number[] | null,
   wantBands: boolean,
-  wantLook: boolean
+  wantLook: boolean,
+  profile: ScanProfile,
+  holderPass: boolean
 ): FrameSignals {
   let quad: Quad
   let art: ArtMatch[] = []
@@ -69,17 +80,22 @@ function analyzeFrame(
   let card: () => RgbaImage
   // The card turned upright at CARD_W, when art matching found which way up it is.
   let upright: RgbaImage | null = null
+  // Set only when the art matched on the holder search's second look.
+  let via: { artVia?: 'holder' } = {}
   if (index) {
     const found = recognizeArt(
       cv,
       img,
       index,
       candidates ? new Set(candidates) : undefined,
-      ART_MATCH_DEPTH
+      ART_MATCH_DEPTH,
+      profile,
+      holderPass
     )
     if (!found) return NOTHING
     quad = found.quad
     art = found.matches
+    if (found.via) via = { artVia: found.via }
     upright = found.upsideDown === null ? null : found.card
     // Art is matched at CARD_W, the size it was tuned for; text is read at the card's own size.
     card = () => {
@@ -92,17 +108,33 @@ function analyzeFrame(
     // No fingerprints: the candidate finder's likeliest outline (it holds up on real photos far
     // better than findCard alone), or the card around it when that is one of its inner frames.
     // Not turned upright, so its foil isn't looked at and its text is read both ways.
-    const likeliest = preferOuter(findCandidates(cv, img))
+    const likeliest = preferOuter(findCandidates(cv, img, profile))
     if (!likeliest) return NOTHING
     quad = likeliest
     card = () => warpCard(cv, img, likeliest, bandWidth(likeliest))
   }
-  // Read at CARD_W, the size the cues and the look model were tuned at.
-  const { cues, features: look } = upright
-    ? rarityLook(upright, wantLook)
-    : { cues: null, features: null }
+  // Read at CARD_W, the size the cues and the look model were tuned at; Yu-Gi-Oh's foils only.
+  const { cues, features: look } =
+    upright && profile.rarityLook ? rarityLook(upright, wantLook) : { cues: null, features: null }
+  // Pokémon only: its versions are priced apart, and a graded slab changes how it's priced.
+  // Yu-Gi-Oh's signals carry no slab key.
+  const pokemon = profile.game === 'pkm'
+  const version = pokemon && upright ? pokemonVersionCues(upright, profile) : null
+  const slab = pokemon ? isSlab(cv, img, quad) : undefined
   if (!wantBands)
-    return { found: true, quad, art, codeBands: [], nameBands: [], textBands: [], cues, look }
+    return {
+      found: true,
+      quad,
+      art,
+      codeBands: [],
+      nameBands: [],
+      textBands: [],
+      cues,
+      version,
+      ...(slab === undefined ? {} : { slab }),
+      ...via,
+      look
+    }
   const straight = card()
   // Not knowing which way up the card is, its text is read both ways.
   const ways = upright ? [straight] : [straight, rotate180(straight)]
@@ -110,11 +142,23 @@ function analyzeFrame(
     found: true,
     quad,
     art,
-    codeBands: ways.flatMap((c) => CODE_BANDS.map((box) => toBand(c, box))).filter(hasPixels),
-    nameBands: ways.map((c) => toBand(c, NAME_BAND)).filter(hasPixels),
+    codeBands: ways
+      .flatMap((c) => profile.codeBands.map((box) => toBand(c, box)))
+      .filter(hasPixels),
+    nameBands: ways.map((c) => toBand(c, profile.nameBand)).filter(hasPixels),
     // Only a card whose art matched: read off a guessed outline, it reads as a language too often.
-    textBands: upright ? [toBlock(straight, TEXT_BOX)].filter(hasPixels) : [],
+    // A Pokémon card's is cut out twice, as it is and as ink on white (each read on its own): a
+    // webcam's small text on a mottled box often reads only one way.
+    textBands: upright
+      ? [
+          toBlock(straight, profile.textBox),
+          ...(pokemon ? [toInkBlock(straight, profile.textBox)] : [])
+        ].filter(hasPixels)
+      : [],
     cues,
+    version,
+    ...(slab === undefined ? {} : { slab }),
+    ...via,
     look
   }
 }

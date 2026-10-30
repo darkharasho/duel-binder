@@ -22,6 +22,18 @@ export interface ScanPrinting {
   price: number | null
   /** The card's artworks, in sort order. */
   imageIds: number[]
+  /**
+   * A Pokémon card's name as printed, when the catalog's name is another (a Japanese card is
+   * named in English); left out otherwise, and on every Yu-Gi-Oh printing.
+   */
+  localName?: string
+  /**
+   * A Pokémon card with a likely reprint of its art the scanner can't see: a card of the same
+   * name and illustrator, in the same language, with no artwork in the catalog (the Classic
+   * Collections) or only a tcgplayer product photo (trainer kits). Its art alone can't tell the
+   * two apart. Set by printingsForCards only; left out otherwise.
+   */
+  unseenTwin?: true
 }
 
 export type FingerprintStatus = {
@@ -51,6 +63,10 @@ export interface ScanDraft {
   options: ScanPrinting[]
   flag: 'check-rarity' | 'pick-printing' | 'other-set' | null
   via: 'code' | 'art' | 'name'
+  /** A Pokémon card; left out for Yu-Gi-Oh, so its drafts are as they always were. */
+  game?: 'pkm'
+  /** Shown in a graded slab; priced as the raw card. */
+  slab?: true
   /**
    * The printings a reference scan of their art told the photo for (an overframe family, say),
    * which the rarity's look then picks among; absent when no scan did.

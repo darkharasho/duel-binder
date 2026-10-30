@@ -159,6 +159,24 @@ export function toBlock(img: RgbaImage, box: Box): OcrBand {
 }
 
 /**
+ * The block of text in box on a straightened card as ink on white, for reading whole: cropped,
+ * grayscale, scaled up `scale` times and contrast-stretched, then each pixel black where it is
+ * INK_CONTRAST darker than the mean around it. A webcam's small, soft text on a mottled or foil
+ * box reads far better so than as it is. Pure, so the vision worker can use it.
+ */
+export function toInkBlock(img: RgbaImage, box: Box, scale = 2): OcrBand {
+  const { width, height, data: px } = grayScaled(crop(img, box), scale)
+  stretch(px)
+  const diff = localContrast(px, width, height, INK_BLOCK_RADIUS * scale)
+  const data = new Uint8Array(width * height)
+  for (let i = 0; i < data.length; i++) data[i] = diff[i] < -INK_CONTRAST ? 0 : 255
+  return { width, height, data }
+}
+
+/** The mean toInkBlock takes each pixel against is over a square this many pixels out, at scale 1. */
+const INK_BLOCK_RADIUS = 10
+
+/**
  * The blobs of the longest line of text: character-sized blobs whose centres line up, without a
  * gap wider than two characters, plus the small marks (dashes, dots) between them. A band with
  * more than MAX_CHAR_BLOBS character-sized blobs is texture, not text, and finds nothing (the

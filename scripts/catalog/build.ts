@@ -12,7 +12,9 @@
  * deletes. --no-pokemon skips the Pokémon step. --refresh-sets re-reads the non-English set lists now instead of on their weekly timer.
  * Problems that don't stop the upload (a failed card sync, a failed fingerprint build)
  * end the run with a non-zero exit so the workflow shows red. So does a fingerprint file that fails
- * the accuracy gate (see accuracy.ts), which is held back while clients keep the last one.
+ * the accuracy gate (see accuracy.ts), which is held back while clients keep the last one. Each
+ * game has its own fingerprint file and gate: Pokémon's is built after Yu-Gi-Oh's (not with
+ * --no-pokemon, nor before the catalog has Pokémon cards) and held back on its own.
  */
 import { existsSync, mkdirSync, renameSync, rmSync } from 'node:fs'
 import { join, resolve } from 'node:path'
@@ -25,7 +27,14 @@ import { refreshCatalog } from '../../src/main/sync/catalog'
 import { createYgoClient } from '../../src/main/ygo/client'
 import { createYugipediaClient, type YugipediaClient } from '../../src/main/yugipedia/client'
 import { CATALOG_TABLES } from '../../src/shared/catalogTables'
-import { accuracyProblem, checkAccuracy, type AccuracyReport } from './accuracy'
+import type { GameId } from '../../src/shared/games/types'
+import {
+  accuracyProblem,
+  checkAccuracy,
+  FIXTURES_DIR,
+  PKM_FIXTURES_DIR,
+  type AccuracyReport
+} from './accuracy'
 import { deletesByGame, diffTable, hasGameColumn } from './diff'
 import { runPokemonStep, type PokemonReport } from './pokemon'
 import { refreshPokemonSetArt, shouldRefreshSetArt, warmSetArt } from './pokemon/setArt'
@@ -62,8 +71,15 @@ export interface JobOptions {
   allowShrink?: boolean
   /** Re-reads the non-English set lists now instead of waiting for their weekly timer. */
   refreshSets?: boolean
-  /** Checks a new fingerprint file before it is uploaded; defaults to `checkAccuracy`. */
-  checkAccuracy?: (work: Database.Database, bytes: Uint8Array) => Promise<AccuracyReport>
+  /**
+   * Checks a game's new fingerprint file before it is uploaded; defaults to `checkAccuracy` on
+   * the game's fixtures.
+   */
+  checkAccuracy?: (
+    work: Database.Database,
+    bytes: Uint8Array,
+    game: GameId
+  ) => Promise<AccuracyReport>
   log?: (line: string) => void
 }
 
@@ -163,45 +179,77 @@ export async function runJob(opts: JobOptions): Promise<JobResult> {
   const tmpPath = `${basePath}.tmp`
   const work = openDatabase(join(opts.dir, 'work.sqlite'))
   let base: Database.Database | null = null
+  const gate =
+    opts.checkAccuracy ??
+    ((w: Database.Database, bytes: Uint8Array, game: GameId) =>
+      checkAccuracy(w, bytes, game === 'pkm' ? PKM_FIXTURES_DIR : FIXTURES_DIR, game))
   // The catalog is the job's main product, so a fingerprint failure never stops its upload; it
-  // is reported as a problem instead.
-  const fingerprint = async (upload: boolean): Promise<void> => {
+  // is reported as a problem instead. Each game's file is gated and uploaded on its own.
+  const fingerprint = async (upload: boolean, game: GameId): Promise<void> => {
+    const pkm = game === 'pkm'
+    const what = pkm ? 'Pokémon fingerprints' : 'Fingerprints'
     let refs: Uint8Array
     try {
       const out = await buildFingerprints({
         work,
-        cachePath: join(opts.dir, 'fingerprints.sqlite'),
+        game,
+        cachePath: join(opts.dir, pkm ? 'fingerprints-pkm.sqlite' : 'fingerprints.sqlite'),
         fetch: opts.imageFetch ?? opts.fetch,
         log,
-        references: {
-          yugipedia: opts.yugipedia ?? createYugipediaClient({ version }),
-          fetch: opts.imageFetch ?? opts.fetch,
-          userAgent: `DuelBinder/${version} (https://github.com/darkharasho/duel-binder)`
-        }
+        // Printing scans are Yu-Gi-Oh's only.
+        ...(pkm
+          ? {}
+          : {
+              references: {
+                yugipedia: opts.yugipedia ?? createYugipediaClient({ version }),
+                fetch: opts.imageFetch ?? opts.fetch,
+                userAgent: `DuelBinder/${version} (https://github.com/darkharasho/duel-binder)`
+              }
+            })
       })
       const scans = out.references
-      log(`Fingerprints: ${out.count} (${out.fetched} new, ${out.failed} failed)`)
-      log(`Printing scans: ${scans.count} (${scans.fetched} new, ${scans.failed} failed)`)
+      log(`${what}: ${out.count} (${out.fetched} new, ${out.failed} failed)`)
+      if (!pkm) log(`Printing scans: ${scans.count} (${scans.fetched} new, ${scans.failed} failed)`)
       refs = out.refs
-      const report = await (opts.checkAccuracy ?? checkAccuracy)(work, out.bytes)
-      log(`Accuracy: ${report.right} of ${report.shots} shots right, ${report.wrong.length} wrong`)
+      const report = await gate(work, out.bytes, game)
+      log(
+        `${pkm ? 'Pokémon accuracy' : 'Accuracy'}: ${report.right} of ${report.shots} shots right, ${report.wrong.length} wrong`
+      )
       const failed = accuracyProblem(report)
       if (failed) {
-        problem(`Fingerprints held back: ${failed}`)
+        problem(`${what} held back: ${failed}`)
         return
       }
       if (!upload) return
-      await uploadFingerprints({ url: url!, token: token!, bytes: out.bytes, fetch: opts.fetch })
+      await uploadFingerprints({
+        url: url!,
+        token: token!,
+        bytes: out.bytes,
+        game,
+        fetch: opts.fetch
+      })
     } catch (e) {
-      problem(`Fingerprints failed: ${e instanceof Error ? e.message : e}`)
+      problem(`${what} failed: ${e instanceof Error ? e.message : e}`)
       return
     }
+    // Refs go with Yu-Gi-Oh's printing scans; Pokémon has none.
+    if (pkm) return
     // After the file they go with: a client holding the other file just finds no refs in it.
     try {
       await uploadFingerprintRefs({ url: url!, token: token!, bytes: refs, fetch: opts.fetch })
     } catch (e) {
       problem(`Fingerprint refs failed: ${e instanceof Error ? e.message : e}`)
     }
+  }
+  /** Yu-Gi-Oh's file, then Pokémon's once the catalog has Pokémon cards (and it isn't skipped). */
+  const fingerprints = async (upload: boolean): Promise<void> => {
+    await fingerprint(upload, 'ygo')
+    if (opts.skipPokemon) return
+    if (!work.prepare("SELECT 1 FROM card_images WHERE game = 'pkm' LIMIT 1").get()) {
+      log('Pokémon fingerprints: no Pokémon cards yet')
+      return
+    }
+    await fingerprint(upload, 'pkm')
   }
   try {
     if (opts.refreshSets) deleteMeta(work, 'intl_sets_synced_at')
@@ -250,7 +298,7 @@ export async function runJob(opts: JobOptions): Promise<JobResult> {
           log(`${name}: ${upserts} upserts, ${lost[game] ?? 0} deletes`)
         }
       }
-      await fingerprint(false)
+      await fingerprints(false)
       return { counts, uploaded: null, problems }
     }
 
@@ -285,7 +333,7 @@ export async function runJob(opts: JobOptions): Promise<JobResult> {
     rmSync(`${basePath}-wal`, { force: true })
     rmSync(`${basePath}-shm`, { force: true })
     renameSync(tmpPath, basePath)
-    await fingerprint(true)
+    await fingerprints(true)
     return { counts: null, uploaded, problems }
   } finally {
     base?.close()

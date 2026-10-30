@@ -58,6 +58,7 @@ jobs:
             catalog-work/work.sqlite
             catalog-work/work.sqlite-wal
             catalog-work/fingerprints.sqlite
+            catalog-work/fingerprints-pkm.sqlite
             catalog-work/pokemon-src.sqlite
             catalog-work/pokemon-src.sqlite-wal
           key: catalog-work-${{ github.run_id }}-${{ github.run_attempt }}
@@ -86,6 +87,7 @@ jobs:
             catalog-work/work.sqlite
             catalog-work/work.sqlite-wal
             catalog-work/fingerprints.sqlite
+            catalog-work/fingerprints-pkm.sqlite
             catalog-work/pokemon-src.sqlite
             catalog-work/pokemon-src.sqlite-wal
           key: catalog-work-${{ github.run_id }}-${{ github.run_attempt }}

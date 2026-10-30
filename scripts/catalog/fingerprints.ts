@@ -1,6 +1,8 @@
 import Database from 'better-sqlite3'
 import { decode } from 'jpeg-js'
+import type { GameId } from '../../src/shared/games'
 import { imageUrl } from '../../src/shared/imageSources'
+import { scanProfile, type ScanProfile } from '../../src/shared/scan/profiles'
 import { HASH_WORDS, artHash, fingerprintSource } from '../../src/shared/scan/fingerprint'
 import { encodeFingerprints } from '../../src/shared/scan/fingerprintFile'
 import { encodeFingerprintRefs } from '../../src/shared/scan/fingerprintRefs'
@@ -15,12 +17,19 @@ const RETRY_DELAYS_MS = [1000, 2000]
  * keeps Pendulum crops already cut to the visible window whole.
  */
 const HASH_VERSION = '3'
+/** Pokémon's own cache file has its own version: bump when the full-card crop changes. */
+const PKM_HASH_VERSION = '1'
 
 export interface FingerprintOptions {
-  /** The work database; its Yu-Gi-Oh `card_images` decide which ids the file holds. */
+  /** The work database; the game's `card_images` decide which ids the file holds. */
   work: Database.Database
-  /** SQLite file caching one hash per image id, so each night fetches only new images. */
+  /**
+   * SQLite file caching one hash per image id, so each night fetches only new images. Pokémon
+   * needs a file of its own (`fingerprints-pkm.sqlite`): its version and ids are its own.
+   */
   cachePath: string
+  /** Which game's file to build; Yu-Gi-Oh without it. */
+  game?: GameId
   fetch?: typeof fetch
   concurrency?: number
   log?: (s: string) => void
@@ -45,17 +54,18 @@ const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout
 /** Downloads and hashes one cropped art image; 429 and 5xx are retried, anything else rejects. */
 async function hashImage(
   fetchFn: typeof fetch,
-  id: number,
-  frameType: string
+  url: string,
+  frameType: string,
+  profile?: ScanProfile
 ): Promise<Uint32Array> {
   for (let attempt = 0; ; attempt++) {
-    const res = await fetchFn(imageUrl('cropped', id))
+    const res = await fetchFn(url)
     if (res.ok) {
       const img = decode(new Uint8Array(await res.arrayBuffer()), {
         useTArray: true,
         formatAsRGBA: true
       })
-      return artHash(fingerprintSource(img, frameType))
+      return artHash(fingerprintSource(img, frameType, profile))
     }
     await res.body?.cancel()
     const retry = res.status === 429 || res.status >= 500
@@ -65,14 +75,27 @@ async function hashImage(
 }
 
 /**
- * Builds the scan fingerprint file for every Yu-Gi-Oh `card_images` id in `work` (the scanner is
- * Yu-Gi-Oh only, and Pokémon art isn't on YGOPRODeck). Hashes already in the
+ * TCGdex serves a card's image at `${base}/low.jpg` (jpeg-js can't read its webp default); a
+ * TCGplayer image is already a full `_200w.jpg` URL.
+ */
+function pokemonImageUrl(base: string): string {
+  return base.includes('tcgplayer-cdn') ? base : `${base}/low.jpg`
+}
+
+/**
+ * Builds the scan fingerprint file for every `card_images` id of the game in `work`: Yu-Gi-Oh
+ * from YGOPRODeck's cropped art, Pokémon from the full-card renders (cut to the art box by
+ * fingerprintSource) with no printing scans. Hashes already in the
  * cache are reused; the rest are downloaded and hashed, and an image that fails is skipped
  * (and counted) so it is tried again next run.
  */
 export async function buildFingerprints(opts: FingerprintOptions): Promise<FingerprintResult> {
   const fetchFn = opts.fetch ?? fetch
   const log = opts.log ?? ((): void => {})
+  const game = opts.game ?? 'ygo'
+  const pkm = game === 'pkm'
+  const profile = pkm ? scanProfile('pkm') : undefined
+  const hashVersion = pkm ? PKM_HASH_VERSION : HASH_VERSION
   const cache = new Database(opts.cachePath)
   try {
     cache.exec('CREATE TABLE IF NOT EXISTS fp (image_id INTEGER PRIMARY KEY, hash BLOB NOT NULL)')
@@ -84,16 +107,18 @@ export async function buildFingerprints(opts: FingerprintOptions): Promise<Finge
           .prepare(
             `SELECT i.image_id, COALESCE(c.frame_type, '') AS frame_type
              FROM card_images i LEFT JOIN cards c ON c.id = i.card_id
-             WHERE i.game = 'ygo'`
+             WHERE i.game = ?`
           )
-          .all() as { image_id: number; frame_type: string }[]
+          .all(game) as { image_id: number; frame_type: string }[]
       ).map((r) => [r.image_id, r.frame_type])
     )
     cache.exec('CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)')
     const version = cache.prepare("SELECT value FROM meta WHERE key = 'hash_version'").pluck().get()
-    if (version !== HASH_VERSION) {
-      // Older hashes are only still right for images known not to be Pendulum art.
-      const keep = (id: number): boolean => frames.has(id) && !frames.get(id)!.includes('pendulum')
+    if (version !== hashVersion) {
+      // Older hashes are only still right for images known not to be Pendulum art (all are
+      // stale for Pokémon, whose first version is the only one).
+      const keep = (id: number): boolean =>
+        !pkm && frames.has(id) && !frames.get(id)!.includes('pendulum')
       const stale = (cache.prepare('SELECT image_id FROM fp').pluck().all() as number[]).filter(
         (id) => !keep(id)
       )
@@ -104,11 +129,21 @@ export async function buildFingerprints(opts: FingerprintOptions): Promise<Finge
         cache.exec('DROP TABLE IF EXISTS ref_file')
         cache
           .prepare("INSERT OR REPLACE INTO meta (key, value) VALUES ('hash_version', ?)")
-          .run(HASH_VERSION)
+          .run(hashVersion)
       })()
     }
     const cached = new Set(cache.prepare('SELECT image_id FROM fp').pluck().all() as number[])
     const ids = [...frames.keys()]
+    const urls = new Map<number, string>()
+    if (pkm) {
+      for (const r of opts.work
+        .prepare(
+          `SELECT i.image_id, p.image_url FROM card_images i
+           JOIN pokemon_cards p ON p.card_id = i.card_id WHERE i.game = 'pkm' AND p.image_url IS NOT NULL`
+        )
+        .all() as { image_id: number; image_url: string }[])
+        urls.set(r.image_id, pokemonImageUrl(r.image_url))
+    }
     const todo = ids.filter((id) => !cached.has(id))
     const insert = cache.prepare('INSERT OR REPLACE INTO fp (image_id, hash) VALUES (?, ?)')
     // Commit every few inserts rather than per row, but often enough that a run cut off by the
@@ -123,7 +158,9 @@ export async function buildFingerprints(opts: FingerprintOptions): Promise<Finge
       while (next < todo.length) {
         const id = todo[next++]
         try {
-          const hash = await hashImage(fetchFn, id, frames.get(id)!)
+          const url = pkm ? urls.get(id) : imageUrl('cropped', id)
+          if (!url) throw new Error('no image URL')
+          const hash = await hashImage(fetchFn, url, frames.get(id)!, profile)
           insert.run(id, Buffer.from(hash.buffer, hash.byteOffset, hash.byteLength))
           fetched++
           if (++pending >= COMMIT_EVERY) {
@@ -155,7 +192,7 @@ export async function buildFingerprints(opts: FingerprintOptions): Promise<Finge
     // Printing scans are extras: trouble with them is logged and leaves the card art file as is.
     const references = { count: 0, fetched: 0, failed: 0 }
     const refs: { imageId: number; hash: Uint32Array; printings: string[] }[] = []
-    if (opts.references) {
+    if (opts.references && !pkm) {
       try {
         const out = await buildReferences({ ...opts.references, work: opts.work, cache, log })
         const own = out.entries.filter((e) => idSet.has(e.imageId))
@@ -183,12 +220,14 @@ export interface UploadFingerprintsOptions {
   url: string
   token: string
   bytes: Uint8Array
+  game: GameId
   fetch?: typeof fetch
 }
 
 async function put(opts: UploadFingerprintsOptions, path: string, type: string): Promise<number> {
   const fetchFn = opts.fetch ?? fetch
-  const res = await fetchFn(`${opts.url.replace(/\/+$/, '')}${path}`, {
+  const query = opts.game === 'ygo' ? '' : `?game=${opts.game}`
+  const res = await fetchFn(`${opts.url.replace(/\/+$/, '')}${path}${query}`, {
     method: 'PUT',
     headers: { authorization: `Bearer ${opts.token}`, 'content-type': type },
     body: opts.bytes as BodyInit
@@ -205,5 +244,7 @@ export const uploadFingerprints = (opts: UploadFingerprintsOptions): Promise<num
   put(opts, '/admin/scan/fingerprints', 'application/octet-stream')
 
 /** PUTs the fingerprint refs file to the portal and returns the count of refs it stored. */
-export const uploadFingerprintRefs = (opts: UploadFingerprintsOptions): Promise<number> =>
-  put(opts, '/admin/scan/fingerprint-refs', 'application/json')
+export const uploadFingerprintRefs = (
+  opts: Omit<UploadFingerprintsOptions, 'game'>
+): Promise<number> =>
+  put({ ...opts, game: 'ygo' }, '/admin/scan/fingerprint-refs', 'application/json')

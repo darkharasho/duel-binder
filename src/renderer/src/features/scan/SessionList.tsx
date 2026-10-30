@@ -13,7 +13,7 @@ import { formatUsd } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { useScanLanguage } from './pickerOptions'
 import { useScanHub } from './ScanHub'
-import { GLASS, listValue } from './scanLook'
+import { GLASS, listValue, printingOf } from './scanLook'
 import { plural } from './scanText'
 import { ScanRowItem } from './ScanRowItem'
 
@@ -22,7 +22,7 @@ import { ScanRowItem } from './ScanRowItem'
 export function useSessionCommit(): { addable: number; commit: () => Promise<void> } {
   const { session } = useScanHub()
   const addable = session.rows
-    .filter((r) => r.printingId !== null)
+    .filter((r) => printingOf(r) !== null)
     .reduce((n, r) => n + r.quantity, 0)
 
   const commit = async (): Promise<void> => {

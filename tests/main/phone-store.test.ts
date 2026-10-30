@@ -585,26 +585,26 @@ describe('phone store', () => {
     const fpRequests = (): typeof requests =>
       requests.filter((r) => r.url.endsWith('/scan/fingerprints'))
 
-    expect(await store.fingerprints()).toBeNull()
-    expect(await store.refreshFingerprints()).toEqual({ state: 'missing', count: 0 })
+    expect(await store.fingerprints('ygo')).toBeNull()
+    expect(await store.refreshFingerprints({ game: 'ygo' })).toEqual({ state: 'missing', count: 0 })
 
     await put(file(2))
-    expect(await store.refreshFingerprints({ force: true })).toEqual({
+    expect(await store.refreshFingerprints({ game: 'ygo', force: true })).toEqual({
       state: 'ready',
       count: 2,
       updated: true
     })
-    expect(new Uint8Array((await store.fingerprints())!)).toEqual(file(2))
+    expect(new Uint8Array((await store.fingerprints('ygo'))!)).toEqual(file(2))
     expect(fpRequests().at(-1)!.headers.get('if-none-match')).toBeNull()
 
     // Within a day: no request.
     const n = fpRequests().length
-    expect(await store.refreshFingerprints()).toEqual({ state: 'ready', count: 2 })
+    expect(await store.refreshFingerprints({ game: 'ygo' })).toEqual({ state: 'ready', count: 2 })
     expect(fpRequests()).toHaveLength(n)
 
     // A day later: revalidated, unchanged (304).
     clock = new Date(SERVER_NOW.getTime() + 25 * 3_600_000)
-    expect(await store.refreshFingerprints()).toEqual({ state: 'ready', count: 2 })
+    expect(await store.refreshFingerprints({ game: 'ygo' })).toEqual({ state: 'ready', count: 2 })
     const etag = portal.images.store.get('scan/fingerprints.bin')!.etag
     expect(fpRequests().at(-1)!.headers.get('if-none-match')).toBe(etag)
     expect(
@@ -615,22 +615,55 @@ describe('phone store', () => {
       ).checked_at
     ).toBe(clock.toISOString())
     // Checked just now: within a day again.
-    expect(await store.refreshFingerprints()).toEqual({ state: 'ready', count: 2 })
+    expect(await store.refreshFingerprints({ game: 'ygo' })).toEqual({ state: 'ready', count: 2 })
     expect(fpRequests()).toHaveLength(n + 1)
 
     // A new file on the server, forced.
     await put(file(3))
-    expect(await store.refreshFingerprints({ force: true })).toEqual({
+    expect(await store.refreshFingerprints({ game: 'ygo', force: true })).toEqual({
       state: 'ready',
       count: 3,
       updated: true
     })
-    expect(new Uint8Array((await store.fingerprints())!)).toEqual(file(3))
+    expect(new Uint8Array((await store.fingerprints('ygo'))!)).toEqual(file(3))
 
     // Offline keeps the file.
     net = offline
-    expect(await store.refreshFingerprints({ force: true })).toEqual({ state: 'ready', count: 3 })
-    expect(new Uint8Array((await store.fingerprints())!)).toEqual(file(3))
+    expect(await store.refreshFingerprints({ game: 'ygo', force: true })).toEqual({
+      state: 'ready',
+      count: 3
+    })
+    expect(new Uint8Array((await store.fingerprints('ygo'))!)).toEqual(file(3))
+  })
+
+  it("refresh pulls each game's fingerprints", async () => {
+    portal.serverDb.close()
+    portal = await inProcessPortal({ ADMIN_DISCORD_ID: 'discord-1-alice' })
+    userId = portal.addUser('alice')
+    token = await portal.desktopToken(userId)
+    me = { ...me, id: userId }
+    const file = (n: number, fill: number): Uint8Array =>
+      encodeFingerprints(
+        Array.from({ length: n }, (_, i) => ({
+          imageId: i + 1,
+          hash: new Uint32Array(HASH_WORDS).fill(fill)
+        }))
+      )
+    for (const [key, bytes] of [
+      ['scan/fingerprints.bin', file(2, 1)],
+      ['scan/pkm/fingerprints.bin', file(3, 2)]
+    ] as const) {
+      await portal.images.put(key, bytes.slice().buffer, {
+        httpMetadata: { contentType: 'application/octet-stream' }
+      })
+    }
+    await ready()
+    for (const game of ['ygo', 'pkm'] as const) {
+      await store.refreshFingerprints({ game, force: true })
+    }
+    expect(new Uint8Array((await store.fingerprints('ygo'))!)).toEqual(file(2, 1))
+    expect(new Uint8Array((await store.fingerprints('pkm'))!)).toEqual(file(3, 2))
+    expect(requests.some((r) => r.url.endsWith('/scan/fingerprints?game=pkm'))).toBe(true)
   })
 
   it("fingerprint refs come down beside the fingerprints, as this phone's printing ids", async () => {
@@ -644,7 +677,7 @@ describe('phone store', () => {
       encodeFingerprints([{ imageId: 1, hash }]).slice().buffer,
       { httpMetadata: { contentType: 'application/octet-stream' } }
     )
-    expect(await store.refreshFingerprints({ force: true })).toMatchObject({ updated: true })
+    expect(await store.refreshFingerprints({ game: 'ygo', force: true })).toMatchObject({ updated: true })
     // No refs on the server yet: none, and the fingerprints are as they were.
     expect(await store.fingerprintRefs()).toEqual([])
 
@@ -654,7 +687,7 @@ describe('phone store', () => {
     await portal.images.put('scan/fingerprint-refs.json', refs.slice().buffer, {
       httpMetadata: { contentType: 'application/json' }
     })
-    expect(await store.refreshFingerprints({ force: true })).toEqual({
+    expect(await store.refreshFingerprints({ game: 'ygo', force: true })).toEqual({
       state: 'ready',
       count: 1,
       updated: true
@@ -663,7 +696,7 @@ describe('phone store', () => {
       { h: hashHex(hash), imageId: 1, printingIds: [printing.id] }
     ])
     // Unchanged: revalidated, nothing new.
-    expect(await store.refreshFingerprints({ force: true })).toEqual({ state: 'ready', count: 1 })
+    expect(await store.refreshFingerprints({ game: 'ygo', force: true })).toEqual({ state: 'ready', count: 1 })
     const refsAsked = requests.filter((r) => r.url.endsWith('/scan/fingerprint-refs'))
     expect(refsAsked.at(-1)!.headers.get('if-none-match')).toBe(
       portal.images.store.get('scan/fingerprint-refs.json')!.etag
@@ -678,7 +711,7 @@ describe('phone store', () => {
       encodeFingerprints([{ imageId: 1, hash }]).slice().buffer,
       { httpMetadata: { contentType: 'application/octet-stream' } }
     )
-    await store.refreshFingerprints({ force: true })
+    await store.refreshFingerprints({ game: 'ygo', force: true })
     // As an older app left it: the fingerprints checked just now, nothing for the refs.
     db.prepare("DELETE FROM phone_files WHERE name = 'fingerprint-refs'").run()
     const asked = (): number =>
@@ -686,10 +719,10 @@ describe('phone store', () => {
     const fpAsked = (): number =>
       requests.filter((r) => r.url.endsWith('/scan/fingerprints')).length
     const [refs0, fp0] = [asked(), fpAsked()]
-    expect(await store.refreshFingerprints()).toEqual({ state: 'ready', count: 1 })
+    expect(await store.refreshFingerprints({ game: 'ygo' })).toEqual({ state: 'ready', count: 1 })
     expect([asked(), fpAsked()]).toEqual([refs0 + 1, fp0])
     // The portal had none: not asked again until the daily check.
-    await store.refreshFingerprints()
+    await store.refreshFingerprints({ game: 'ygo' })
     expect(asked()).toBe(refs0 + 1)
     expect(await store.fingerprintRefs()).toEqual([])
   })
@@ -856,7 +889,7 @@ describe('phone store', () => {
         store.catalog(),
         store.syncState(),
         store.syncProblems(),
-        store.fingerprints(),
+        store.fingerprints('ygo'),
         store.invoke('scan:printingsByCode', [code]),
         store.invoke('collection:list', [{}]),
         store.invoke('stats:get', [])

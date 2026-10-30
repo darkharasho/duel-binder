@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button'
 import { CloudAuthError } from '../main/cloud/client'
 import { FIRST_RUN_CELLULAR, FIRST_RUN_SIZE, FIRST_RUN_STOPPED, FIRST_RUN_TITLE } from './copy'
 import type { PhoneStore } from './data/store'
+import { refreshAllFingerprints } from './refreshFingerprints'
 import { PhoneScreen } from './PhoneScreen'
 import { useMounted, useOnce } from './useOnce'
 
@@ -45,7 +46,7 @@ export function FirstRun({
         if (live.current) setProgress(p)
       })
       // Artwork matching needs them; scanning by set code and name works without.
-      await store.refreshFingerprints()
+      await refreshAllFingerprints(store)
       if (live.current) onDone()
     } catch (e) {
       if (!live.current) return

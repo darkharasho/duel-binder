@@ -8,6 +8,7 @@ import App from '@/App'
 import { Toaster } from '@/components/ui/sonner'
 import { ScanHubProvider } from '@/features/scan/ScanHub'
 import { ScanPage } from '@/features/scan/ScanPage'
+import { GameProvider } from '@/lib/game'
 import type { ScanRow } from '@/features/scan/session'
 import { createMockApi, renderWithProviders, type DeepPartial } from './mockApi'
 import type { Api } from '@shared/ipc'
@@ -1421,5 +1422,195 @@ describe('Scan page', () => {
     // Fifty pulls' updates; the closed set picker renders none of its 7,500 entries.
     expect(elapsed).toBeLessThan(2000)
     expect(screen.queryAllByRole('option')).toHaveLength(0)
+  })
+})
+
+describe('Pokémon on the Scan page', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    vi.stubGlobal('jest', { advanceTimersByTime: (ms: number) => vi.advanceTimersByTime(ms) })
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  const pkmOption = (o: Partial<ScanRow['options'][number]>): ScanRow['options'][number] =>
+    printing({
+      printingId: 501,
+      cardId: 5,
+      name: 'Pikachu',
+      frameType: 'pokemon',
+      setName: 'Paldea Evolved',
+      setCode: 'PAL 045/193',
+      rarity: 'Normal',
+      price: 1,
+      imageIds: [500],
+      ...o
+    })
+
+  async function renderPkm(engine: FakeEngine = fakeEngine()): Promise<{
+    factory: ReturnType<typeof vi.fn>
+    api: Api
+  }> {
+    const factory = vi.fn(() => engine)
+    const { api } = renderWithProviders(
+      <GameProvider>
+        <ScanHubProvider>
+          <ScanPage engineFactory={factory} />
+          <Toaster />
+        </ScanHubProvider>
+      </GameProvider>,
+      {
+        api: createMockApi({
+          scanWindow: bridge.scanWindow,
+          games: {
+            available: vi.fn(async () => ['ygo', 'pkm'] as const as never),
+            active: vi.fn(async () => 'pkm' as const)
+          }
+        })
+      }
+    )
+    await run()
+    await run(500)
+    return { factory, api }
+  }
+
+  it('pkm scan page shows the version picker', async () => {
+    localStorage.setItem(
+      SESSION_KEY,
+      JSON.stringify([
+        row({
+          key: '501:500',
+          cardId: 5,
+          name: 'Pikachu',
+          imageId: 500,
+          printingId: 501,
+          setCode: 'PAL 045/193',
+          rarity: 'Normal',
+          options: [
+            pkmOption({}),
+            pkmOption({ printingId: 502, rarity: 'Reverse Holofoil', price: 3.5 })
+          ],
+          flag: 'pick-printing',
+          via: 'art',
+          game: 'pkm'
+        })
+      ])
+    )
+    await renderPkm()
+    expect(screen.getByText('Check version')).toBeInTheDocument()
+    expect(screen.queryByText('Check printing')).not.toBeInTheDocument()
+    // The cheapest version is only a placeholder: no lone price, the range instead.
+    expect(screen.queryByLabelText('Price of Pikachu')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Price range of Pikachu')).toHaveTextContent('$1.00 – $3.50')
+    const picker = screen.getByRole('combobox', { name: 'Version for Pikachu' })
+    expect(picker).toHaveTextContent('Choose a version')
+    expect(screen.getByRole('button', { name: 'Add 0 cards to collection' })).toBeDisabled()
+    const u = user()
+    await u.click(picker)
+    expect(screen.getAllByRole('option').map((o) => o.textContent)).toEqual([
+      'Normal · $1.00',
+      'Reverse Holofoil · $3.50'
+    ])
+    await u.click(screen.getByRole('option', { name: 'Reverse Holofoil · $3.50' }))
+    expect(screen.getByLabelText('Price of Pikachu')).toHaveTextContent('$3.50')
+    expect(screen.queryByText('Check version')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Add 1 card to collection' })).toBeEnabled()
+  })
+
+  it('scans Pokémon with its own engine and fingerprints, with no rarity default', async () => {
+    const engine = fakeEngine()
+    const { factory, api } = await renderPkm(engine)
+    expect(factory).toHaveBeenLastCalledWith('pkm')
+    expect(api.scan.fingerprints).toHaveBeenLastCalledWith('pkm')
+    expect(engine.init).toHaveBeenCalled()
+    expect(screen.queryByText('New scans as')).not.toBeInTheDocument()
+  })
+})
+
+describe('The hub with two games', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    vi.stubGlobal('jest', { advanceTimersByTime: (ms: number) => vi.advanceTimersByTime(ms) })
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  /** The hub alone, on a mock api whose active game `switchTo` changes (and announces). */
+  async function renderHub(
+    start: 'ygo' | 'pkm'
+  ): Promise<{ switchTo(g: 'ygo' | 'pkm'): Promise<void>; seen: () => ScanWindowSettings | null }> {
+    let active: 'ygo' | 'pkm' = start
+    const changed: (() => void)[] = []
+    const api = createMockApi({
+      scanWindow: bridge.scanWindow,
+      games: {
+        available: vi.fn(async () => ['ygo', 'pkm'] as never),
+        active: vi.fn(async () => active)
+      },
+      app: {
+        onDataChanged: vi.fn((cb: () => void) => {
+          changed.push(cb)
+          return () => {}
+        })
+      }
+    })
+    renderWithProviders(
+      <ScanHubProvider>
+        <p>hub</p>
+      </ScanHubProvider>,
+      { api }
+    )
+    await run()
+    return {
+      async switchTo(g) {
+        active = g
+        await act(async () => {
+          for (const cb of changed) cb()
+          await vi.advanceTimersByTimeAsync(0)
+        })
+      },
+      seen: () => {
+        const m = bridge.sent.findLast((x) => x.kind === 'settings')
+        return m?.kind === 'settings' ? m.settings : null
+      }
+    }
+  }
+
+  const pkmDraft = (): ScanDraft => draft({ game: 'pkm', cardId: 5, imageId: 500, printingId: 501 })
+
+  it('hub leaves other-game drafts unacked', async () => {
+    const hub = await renderHub('ygo')
+    act(() => bridge.emit({ kind: 'ready' }))
+    act(() => bridge.emit({ kind: 'draft', id: 'k1', draft: pkmDraft() }))
+    expect(bridge.sent.filter((m) => m.kind === 'ack')).toEqual([])
+    expect(localStorage.getItem(SESSION_KEY)).toBeNull()
+
+    await hub.switchTo('pkm')
+    // The window sends an unacked pull again.
+    act(() => bridge.emit({ kind: 'draft', id: 'k1', draft: pkmDraft() }))
+    expect(bridge.sent.filter((m) => m.kind === 'ack')).toEqual([{ kind: 'ack', id: 'k1' }])
+    expect(JSON.parse(localStorage.getItem(SESSION_KEY)!)).toHaveLength(1)
+
+    // And a Yu-Gi-Oh! draft now waits for Yu-Gi-Oh!.
+    act(() => bridge.emit({ kind: 'draft', id: 'k2', draft: draft() }))
+    expect(bridge.sent.filter((m) => m.kind === 'ack')).toHaveLength(1)
+  })
+
+  it('remembers the picked set per game', async () => {
+    const mrd = { setName: 'Metal Raiders', language: 'en' }
+    localStorage.setItem('scan.set', JSON.stringify(mrd))
+    const hub = await renderHub('ygo')
+    act(() => bridge.emit({ kind: 'ready' }))
+    expect(hub.seen()?.set).toEqual(mrd)
+
+    // Pokémon doesn't inherit the Yu-Gi-Oh! set.
+    await hub.switchTo('pkm')
+    expect(hub.seen()?.set).toBeNull()
+    expect(JSON.parse(localStorage.getItem('scan.set')!)).toEqual(mrd)
+
+    await hub.switchTo('ygo')
+    expect(hub.seen()?.set).toEqual(mrd)
   })
 })

@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react'
-import { defaultEngine, type ScanEngine } from './engine'
+import { defaultEngine, type EngineFactory } from './engine'
 import { useScanHub } from './ScanHub'
 import { ScanViewport } from './ScanViewport'
 import { NO_FINGERPRINTS, SET_UNREADABLE } from './scanText'
@@ -32,7 +32,7 @@ export function InPageScanner({
   onCamera,
   controls
 }: {
-  engineFactory?: () => ScanEngine
+  engineFactory?: EngineFactory
   onCamera: (camera: InPageCamera | null) => void
   controls: React.ReactNode
 }): React.JSX.Element {

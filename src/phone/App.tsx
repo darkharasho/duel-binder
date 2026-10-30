@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Toaster } from '@/components/ui/sonner'
-import type { ScanEngine } from '@/features/scan/engine'
+import type { EngineFactory } from '@/features/scan/engine'
 import { ScanHubProvider } from '@/features/scan/ScanHub'
 import type { Me } from '../shared/cloud'
 import { OPEN_ELSEWHERE, UNSUPPORTED } from './copy'
@@ -43,7 +43,7 @@ export function App({
 }: {
   store: PhoneStore
   onFatal: (cb: (message: string) => void) => () => void
-  engineFactory?: () => ScanEngine
+  engineFactory?: EngineFactory
 }): React.JSX.Element {
   const [view, setView] = useState<View>({ kind: 'loading' })
   const [client] = useState(

@@ -16,6 +16,11 @@ function Range({ range }: { range: NonNullable<Pull['range']> }): React.JSX.Elem
   )
 }
 
+/** Marks a slab's price as the raw card's. */
+function Raw(): React.JSX.Element {
+  return <span className="text-[clamp(0.75rem,1.4vw,1.3rem)] text-emerald-200/80">Raw</span>
+}
+
 /** The phone's last-scan card, sized to the window: art, name, set, price and rarity. */
 function Bar({ pull }: { pull: Pull }): React.JSX.Element {
   const sub = [pull.setCode, pull.setName === null ? null : englishSetName(pull.setName)]
@@ -39,8 +44,9 @@ function Bar({ pull }: { pull: Pull }): React.JSX.Element {
         </p>
         {sub && <p className="truncate text-white/60">{sub}</p>}
         {pull.price !== null && (
-          <p className="text-[clamp(1.1rem,2.6vw,2.4rem)] leading-tight font-bold text-emerald-400 tabular-nums">
+          <p className="flex items-baseline gap-[0.6vw] text-[clamp(1.1rem,2.6vw,2.4rem)] leading-tight font-bold text-emerald-400 tabular-nums">
             {formatUsd(pull.price)}
+            {pull.raw && <Raw />}
           </p>
         )}
         {pull.range !== null && <Range range={pull.range} />}
@@ -75,8 +81,9 @@ function Hit({ pull }: { pull: Pull }): React.JSX.Element {
         {pull.name}
       </p>
       {pull.price !== null && (
-        <p className="text-[clamp(1.4rem,3.5vw,3.5rem)] font-bold text-emerald-400 tabular-nums">
+        <p className="flex items-baseline gap-[0.6vw] text-[clamp(1.4rem,3.5vw,3.5rem)] font-bold text-emerald-400 tabular-nums">
           {formatUsd(pull.price)}
+          {pull.raw && <Raw />}
         </p>
       )}
       {pull.range !== null && <Range range={pull.range} />}

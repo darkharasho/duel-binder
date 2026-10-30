@@ -8,6 +8,8 @@ import { createDataHandlers } from './dataHandlers'
 import type { ScanWindowManager } from '../scanWindow'
 import type { FingerprintStore } from '../scan/fingerprints'
 import { checkOcrBands, type Ocr } from '../scan/ocr'
+import { isOcrKind, isTextModel, readTexts } from '@shared/scan/ocr'
+import type { GameId } from '@shared/games'
 import { scanRefs } from '../repo/scanRefs'
 import { cardLanguage } from '@shared/scan/cardLanguage'
 import type { AccountService } from '../cloud/account'
@@ -41,7 +43,7 @@ export interface HandlerDeps {
   account: AccountService
   /** Tells every window that the data shown changed. */
   emitDataChanged(): void
-  fingerprints: FingerprintStore
+  fingerprints: Record<GameId, FingerprintStore>
   ocr: Ocr
 }
 
@@ -84,20 +86,25 @@ export function createHandlers({
         printingScan: false
       })),
     'friends:facets': async (userId: number) => account.portal('friends:facets', [userId]),
-    'scan:fingerprints': () => fingerprints.read(),
+    'scan:fingerprints': (game: GameId) => fingerprints[game].read(),
     'scan:fingerprintRefs': async () => {
-      const file = await fingerprints.readRefs()
+      const file = await fingerprints.ygo.readRefs()
       return file ? scanRefs(db, file) : []
     },
-    'scan:refreshFingerprints': () => fingerprints.refresh(),
-    'scan:ocr': async (bands: unknown, kind: 'code' | 'name') => {
-      if (kind !== 'code' && kind !== 'name') throw new Error(`Unknown OCR kind: ${String(kind)}`)
+    'scan:refreshFingerprints': (game: GameId, opts?: { force?: boolean }) => fingerprints[game].refresh(opts),
+    'scan:ocr': async (bands: unknown, kind: unknown) => {
+      if (!isOcrKind(kind)) throw new Error(`Unknown OCR kind: ${String(kind)}`)
       checkOcrBands(bands)
       return ocr.read(bands, kind)
     },
     'scan:language': async (bands: unknown) => {
       checkOcrBands(bands)
       return cardLanguage(ocr, bands)
+    },
+    'scan:readText': async (bands: unknown, model: unknown) => {
+      if (!isTextModel(model)) throw new Error(`Unknown OCR model: ${String(model)}`)
+      checkOcrBands(bands)
+      return readTexts(ocr, bands, model)
     },
     'prices:request': (printingIds: unknown) => account.requestPrices(printingIds),
     'usage:report': (events: unknown) => account.reportUsage(events),

@@ -34,7 +34,8 @@ describe('games', () => {
   })
   test('features', () => {
     expect(gameDef('ygo').features).toEqual({ scan: true, rip: true })
-    expect(gameDef('pkm').features).toEqual({ scan: false, rip: false })
+    expect(gameDef('pkm').features).toEqual({ scan: true, rip: false })
+    expect(gameDef('pkm').access).toBe('owner')
     expect(gameDef('pkm').crossLanguagePriceFallback).toBe(false)
   })
   test('vocab and guards', () => {

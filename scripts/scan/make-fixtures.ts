@@ -1,6 +1,9 @@
 // Generates the scan test fixtures in tests/fixtures/scan: three synthetic webcam shots per target
 // card, 128x128 cropped-art thumbnails (targets plus distractors) and manifest.json.
 // Run from the repo root: node --experimental-strip-types scripts/scan/make-fixtures.ts
+// With --game pkm it makes tests/fixtures/scan-pkm instead: shots of TCGdex's card renders, the
+// low.jpg reference images the nightly Pokémon fingerprints are built from (full/) and
+// manifest.json.
 // Downloads are cached in node_modules/.cache/scan-fixtures, so a re-run only regenerates.
 import { mkdirSync, existsSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -13,14 +16,24 @@ const { loadCv } = (await import(
   appModule('renderer/src/features/scan/vision/cv.ts')
 )) as typeof import('../../src/renderer/src/features/scan/vision/cv')
 const { ART_BOXES, CODE_BANDS, crop } = (await import(
-  appModule('renderer/src/features/scan/vision/regions.ts')
-)) as typeof import('../../src/renderer/src/features/scan/vision/regions')
+  appModule('shared/scan/regions.ts')
+)) as typeof import('../../src/shared/scan/regions')
 const { artHash, fingerprintSource, hamming } = (await import(
   appModule('shared/scan/fingerprint.ts')
 )) as typeof import('../../src/shared/scan/fingerprint')
 const { imageUrl } = (await import(
   appModule('shared/imageSources.ts')
 )) as typeof import('../../src/shared/imageSources')
+const { pokemonId } = (await import(
+  appModule('shared/games/ids.ts')
+)) as typeof import('../../src/shared/games/ids')
+const { variantLabel } = (await import(
+  new URL('../catalog/pokemon/versions.ts', import.meta.url).href
+)) as typeof import('../catalog/pokemon/versions')
+
+const gameArg = process.argv.indexOf('--game')
+const GAME = gameArg === -1 ? 'ygo' : process.argv[gameArg + 1]
+if (GAME !== 'ygo' && GAME !== 'pkm') throw new Error(`Unknown game ${GAME}`)
 
 type Frame = 'normal' | 'pendulum' | 'link'
 
@@ -91,7 +104,8 @@ async function get(url: string): Promise<Response> {
       return res
     }
     await res.body?.cancel()
-    if (res.status === 429 && ++throttled >= 5) throw new Error('YGOPRODeck keeps rate limiting')
+    if (res.status === 429 && ++throttled >= 5)
+      throw new Error(`${new URL(url).host} keeps rate limiting`)
     if ((res.status !== 429 && res.status < 500) || attempt >= 3)
       throw new Error(`HTTP ${res.status} ${url}`)
     await sleep(2000 * (attempt + 1))
@@ -151,10 +165,10 @@ function decodeMat(buf: Buffer): Mat {
   return mat
 }
 
-function writeJpeg(path: string, mat: Mat): void {
+function writeJpeg(path: string, mat: Mat, quality = JPEG_QUALITY): void {
   const data = new Uint8Array(mat.data)
   for (let i = 3; i < data.length; i += 4) data[i] = 255
-  const out = jpeg.encode({ width: mat.cols, height: mat.rows, data }, JPEG_QUALITY)
+  const out = jpeg.encode({ width: mat.cols, height: mat.rows, data }, quality)
   writeFileSync(path, out.data)
 }
 
@@ -399,122 +413,339 @@ function thumbnail(buf: Buffer, path: string): void {
   out.delete()
 }
 
-// ---- Resolve targets ----
+/** The Yu-Gi-Oh fixtures in tests/fixtures/scan. */
+async function makeYugioh(): Promise<void> {
+  // ---- Resolve targets ----
 
-const swapped: { requested: number; used: number; reason: string }[] = []
-const targets: { imageId: number; card: CardInfo; frame: Frame }[] = []
-const allTargetCards = await api(`id=${TARGETS.map((t) => t.imageId).join(',')}`)
-const cardFor = (imageId: number, cards: CardInfo[]): CardInfo | undefined =>
-  cards.find((c) => c.card_images.some((i) => i.id === imageId))
+  const swapped: { requested: number; used: number; reason: string }[] = []
+  const targets: { imageId: number; card: CardInfo; frame: Frame }[] = []
+  const allTargetCards = await api(`id=${TARGETS.map((t) => t.imageId).join(',')}`)
+  const cardFor = (imageId: number, cards: CardInfo[]): CardInfo | undefined =>
+    cards.find((c) => c.card_images.some((i) => i.id === imageId))
 
-for (const t of TARGETS) {
-  let card = cardFor(t.imageId, allTargetCards)
-  let imageId = t.imageId
-  if (!card || !(await cached(`full/${imageId}.jpg`, imageUrl('full', imageId)))) {
-    const frame = card ? frameOf(card.frameType) : 'normal'
-    for (const spare of SPARES[frame]) {
-      const [c] = await api(`id=${spare}`)
-      if (c && !targets.some((x) => x.imageId === spare)) {
-        swapped.push({ requested: t.imageId, used: spare, reason: 'not found on YGOPRODeck' })
-        card = c
-        imageId = spare
-        break
+  for (const t of TARGETS) {
+    let card = cardFor(t.imageId, allTargetCards)
+    let imageId = t.imageId
+    if (!card || !(await cached(`full/${imageId}.jpg`, imageUrl('full', imageId)))) {
+      const frame = card ? frameOf(card.frameType) : 'normal'
+      for (const spare of SPARES[frame]) {
+        const [c] = await api(`id=${spare}`)
+        if (c && !targets.some((x) => x.imageId === spare)) {
+          swapped.push({ requested: t.imageId, used: spare, reason: 'not found on YGOPRODeck' })
+          card = c
+          imageId = spare
+          break
+        }
       }
+      if (!card) throw new Error(`No replacement for ${t.name}`)
     }
-    if (!card) throw new Error(`No replacement for ${t.name}`)
+    targets.push({ imageId, card, frame: frameOf(card.frameType) })
   }
-  targets.push({ imageId, card, frame: frameOf(card.frameType) })
-}
 
-// ---- Distractors: other artworks from the same archetypes ----
+  // ---- Distractors: other artworks from the same archetypes ----
 
-const targetIds = new Set(targets.map((t) => t.imageId))
-const pools: { imageId: number; card: CardInfo }[][] = []
-for (const archetype of DISTRACTOR_ARCHETYPES) {
-  const cards = await api(`archetype=${encodeURIComponent(archetype)}`)
-  pools.push(
-    cards
-      .flatMap((card) => card.card_images.map((i) => ({ imageId: i.id, card })))
-      .filter((d) => !targetIds.has(d.imageId))
-      .sort((a, b) => a.imageId - b.imageId)
+  const targetIds = new Set(targets.map((t) => t.imageId))
+  const pools: { imageId: number; card: CardInfo }[][] = []
+  for (const archetype of DISTRACTOR_ARCHETYPES) {
+    const cards = await api(`archetype=${encodeURIComponent(archetype)}`)
+    pools.push(
+      cards
+        .flatMap((card) => card.card_images.map((i) => ({ imageId: i.id, card })))
+        .filter((d) => !targetIds.has(d.imageId))
+        .sort((a, b) => a.imageId - b.imageId)
+    )
+  }
+  const distractors: { imageId: number; card: CardInfo }[] = []
+  for (let i = 0; distractors.length < DISTRACTORS && pools.some((p) => i < p.length); i++) {
+    for (const pool of pools) {
+      const d = pool[i]
+      if (
+        d &&
+        distractors.length < DISTRACTORS &&
+        !distractors.some((x) => x.imageId === d.imageId)
+      )
+        distractors.push(d)
+    }
+  }
+
+  // ---- Write fixtures ----
+
+  rmSync(OUT, { recursive: true, force: true })
+  mkdirSync(join(OUT, 'cropped'), { recursive: true })
+
+  const thumbs: number[] = []
+  for (const { imageId, card } of [...targets, ...distractors]) {
+    const buf = await cached(`cropped/${imageId}.jpg`, imageUrl('cropped', imageId))
+    if (!buf) {
+      console.warn(`no cropped art for ${card.name} (${imageId}), skipped`)
+      continue
+    }
+    thumbnail(buf, join(OUT, 'cropped', `${imageId}.jpg`))
+    thumbs.push(imageId)
+  }
+  const missingTarget = targets.find((t) => !thumbs.includes(t.imageId))
+  if (missingTarget) throw new Error(`No cropped art for target ${missingTarget.imageId}`)
+
+  const shots: object[] = []
+  for (const { imageId, card, frame } of targets) {
+    const full = await cached(`full/${imageId}.jpg`, imageUrl('full', imageId))
+    if (!full) throw new Error(`No full image for ${imageId}`)
+    const cropped = await cached(`cropped/${imageId}.jpg`, imageUrl('cropped', imageId))
+    const setCode = englishCode(card)
+    const { card: face, artPasted } = cardFace(full, cropped!, setCode, frame)
+    if (artPasted) console.log(`${card.name} (${imageId}): render art differs, pasted cropped art`)
+    for (let shot = 0; shot < SHOTS; shot++) {
+      const rand = rng(imageId * 10 + shot)
+      const img = background(rand)
+      const quad = randomQuad(rand)
+      composite(img, face, quad)
+      const effect = degrade(img, shot, quad, rand)
+      const file = `${imageId}-${shot}.jpg`
+      writeJpeg(join(OUT, file), img)
+      img.delete()
+      shots.push({
+        file,
+        imageId,
+        cardId: card.id,
+        name: card.name,
+        setCode,
+        frame,
+        quad,
+        effect,
+        ...(artPasted && { artPasted })
+      })
+    }
+    face.delete()
+  }
+
+  writeFileSync(
+    join(OUT, 'manifest.json'),
+    JSON.stringify(
+      {
+        shots,
+        distractors: distractors
+          .filter((d) => thumbs.includes(d.imageId))
+          .map((d) => ({
+            imageId: d.imageId,
+            cardId: d.card.id,
+            name: d.card.name,
+            frame: frameOf(d.card.frameType)
+          })),
+        swapped
+      },
+      null,
+      2
+    ) + '\n'
   )
+  console.log(`${shots.length} shots, ${thumbs.length} thumbnails, ${swapped.length} swapped`)
 }
-const distractors: { imageId: number; card: CardInfo }[] = []
-for (let i = 0; distractors.length < DISTRACTORS && pools.some((p) => i < p.length); i++) {
-  for (const pool of pools) {
-    const d = pool[i]
-    if (d && distractors.length < DISTRACTORS && !distractors.some((x) => x.imageId === d.imageId))
-      distractors.push(d)
+
+// ---- Pokémon ----
+
+type PkmLang = 'en' | 'ja'
+type PkmKind = 'pokemon' | 'trainer' | 'energy' | 'full-art'
+
+interface PkmTarget {
+  lang: PkmLang
+  /** TCGdex card id. */
+  id: string
+  kind: PkmKind
+}
+
+/**
+ * Eight English and eight Japanese cards: four en/ja twin pairs (Pikachu, Bulbasaur and Charizard
+ * ex from 151, and its Special Illustration Rare, the full arts), cards with a Reverse Holofoil
+ * version (Pikachu, Bulbasaur, Lapras, Youngster, Reversal Energy, Paras), Trainers, an Energy,
+ * base set Charizard (four versions, three of them stamped) and Scarlet & Violet and Sword &
+ * Shield era Japanese cards.
+ */
+const PKM_TARGETS: PkmTarget[] = [
+  { lang: 'en', id: 'sv03.5-025', kind: 'pokemon' },
+  { lang: 'en', id: 'sv03.5-001', kind: 'pokemon' },
+  { lang: 'en', id: 'sv03.5-006', kind: 'pokemon' },
+  { lang: 'en', id: 'sv03.5-199', kind: 'full-art' },
+  { lang: 'en', id: 'sv03-045', kind: 'pokemon' },
+  { lang: 'en', id: 'sv01-198', kind: 'trainer' },
+  { lang: 'en', id: 'sv02-192', kind: 'energy' },
+  { lang: 'en', id: 'base1-4', kind: 'pokemon' },
+  { lang: 'ja', id: 'SV2a-025', kind: 'pokemon' },
+  { lang: 'ja', id: 'SV2a-001', kind: 'pokemon' },
+  { lang: 'ja', id: 'SV2a-006', kind: 'pokemon' },
+  { lang: 'ja', id: 'SV2a-201', kind: 'full-art' },
+  { lang: 'ja', id: 'SV1S-077', kind: 'trainer' },
+  { lang: 'ja', id: 'SV1S-001', kind: 'pokemon' },
+  { lang: 'ja', id: 'SV1V-001', kind: 'pokemon' },
+  { lang: 'ja', id: 'S12a-001', kind: 'pokemon' }
+]
+/**
+ * Other artworks of the same Pokémon and sets: their evolutions, other Pikachu and Charizard
+ * cards, base set neighbours and the Japanese twins of English distractors.
+ */
+const PKM_DISTRACTORS: { lang: PkmLang; id: string }[] = [
+  { lang: 'en', id: 'sv03.5-002' },
+  { lang: 'en', id: 'sv03.5-004' },
+  { lang: 'en', id: 'sv03.5-005' },
+  { lang: 'en', id: 'sv03.5-026' },
+  { lang: 'en', id: 'sv03.5-166' },
+  { lang: 'en', id: 'sv03.5-173' },
+  { lang: 'en', id: 'sv03-125' },
+  { lang: 'en', id: 'sv03-215' },
+  { lang: 'en', id: 'sv03-046' },
+  { lang: 'en', id: 'sv01-001' },
+  { lang: 'en', id: 'sv01-196' },
+  { lang: 'en', id: 'swsh1-180' },
+  { lang: 'en', id: 'base1-58' },
+  { lang: 'en', id: 'base1-2' },
+  { lang: 'ja', id: 'SV2a-002' },
+  { lang: 'ja', id: 'SV2a-004' },
+  { lang: 'ja', id: 'SV2a-026' },
+  { lang: 'ja', id: 'SV2a-166' },
+  { lang: 'ja', id: 'SV2a-173' },
+  { lang: 'ja', id: 'SV2a-185' },
+  { lang: 'ja', id: 'SV1S-002' },
+  { lang: 'ja', id: 'SV1S-076' },
+  { lang: 'ja', id: 'SV1V-002' },
+  { lang: 'ja', id: 'S12a-002' }
+]
+const PKM_OUT = 'tests/fixtures/scan-pkm'
+/** A little under Yu-Gi-Oh's, so the shots and references keep under 6 MB. */
+const PKM_JPEG_QUALITY = 72
+/** The share of a card's width its corners are rounded by (about 3 mm of 63). */
+const CORNER = 0.048
+
+interface TdCardInfo {
+  id: string
+  localId: string
+  name: string
+  category?: string
+  image?: string
+  variants_detailed?: { type: string; subtype?: string; stamp?: string[] }[]
+  set: { id: string }
+}
+
+interface TdSetInfo {
+  id: string
+  abbreviation?: { official?: string }
+  cardCount?: { official?: number }
+}
+
+const tcgdex = async <T>(lang: PkmLang, path: string): Promise<T> => {
+  const buf = await cached(
+    `pkm/api/${lang}_${path.replace(/[^a-z0-9.]+/gi, '_')}.json`,
+    `https://api.tcgdex.net/v2/${lang}/${path}`
+  )
+  if (!buf) throw new Error(`TCGdex has no ${lang}/${path}`)
+  return JSON.parse(buf.toString()) as T
+}
+
+/** An art's catalog keys, as the nightly Pokémon step writes them, and what the gate needs. */
+interface PkmArt {
+  imageId: number
+  cardId: number
+  sourceId: string
+  name: string
+  language: PkmLang
+  setCode: string
+  versions: string[]
+  /** TCGdex's image base URL. */
+  image: string
+}
+
+async function pokemonArt(lang: PkmLang, id: string): Promise<PkmArt> {
+  const card = await tcgdex<TdCardInfo>(lang, `cards/${encodeURIComponent(id)}`)
+  if (!card.image) throw new Error(`No image for ${lang}/${id}`)
+  const set = await tcgdex<TdSetInfo>(lang, `sets/${encodeURIComponent(card.set.id)}`)
+  // As scripts/catalog/pokemon/write.ts numbers a printing and labels its versions (TCGplayer's
+  // prices may add more there; the gate only scores a version the catalog has more than one of).
+  const abbrev = set.abbreviation?.official?.trim() || set.id.toUpperCase()
+  const official = set.cardCount?.official
+  const sourceId = `${lang}/${card.id}`
+  const versions = [...new Set((card.variants_detailed ?? []).map(variantLabel))].sort()
+  return {
+    imageId: pokemonId(`${sourceId}#img`),
+    cardId: pokemonId(sourceId),
+    sourceId,
+    name: card.name,
+    language: lang,
+    setCode: official ? `${abbrev} ${card.localId}/${official}` : `${abbrev} ${card.localId}`,
+    versions: versions.length ? versions : ['Normal'],
+    image: card.image
   }
 }
 
-// ---- Write fixtures ----
-
-rmSync(OUT, { recursive: true, force: true })
-mkdirSync(join(OUT, 'cropped'), { recursive: true })
-
-const thumbs: number[] = []
-for (const { imageId, card } of [...targets, ...distractors]) {
-  const buf = await cached(`cropped/${imageId}.jpg`, imageUrl('cropped', imageId))
-  if (!buf) {
-    console.warn(`no cropped art for ${card.name} (${imageId}), skipped`)
-    continue
+/** A TCGdex render stretched to the straightened size, its corners rounded off as a card's are. */
+function pokemonFace(high: Buffer): Mat {
+  const src = decodeMat(high)
+  const card = new cv.Mat()
+  cv.resize(src, card, new cv.Size(CARD_W, CARD_H), 0, 0, cv.INTER_CUBIC)
+  src.delete()
+  const r = Math.round(CORNER * CARD_W)
+  const d = card.data
+  for (let y = 0; y < r; y++) {
+    for (let x = 0; x < r; x++) {
+      if ((r - x - 0.5) ** 2 + (r - y - 0.5) ** 2 <= r * r) continue
+      for (const [cx, cy] of [
+        [x, y],
+        [CARD_W - 1 - x, y],
+        [x, CARD_H - 1 - y],
+        [CARD_W - 1 - x, CARD_H - 1 - y]
+      ])
+        d[(cy * CARD_W + cx) * 4 + 3] = 0
+    }
   }
-  thumbnail(buf, join(OUT, 'cropped', `${imageId}.jpg`))
-  thumbs.push(imageId)
-}
-const missingTarget = targets.find((t) => !thumbs.includes(t.imageId))
-if (missingTarget) throw new Error(`No cropped art for target ${missingTarget.imageId}`)
-
-const shots: object[] = []
-for (const { imageId, card, frame } of targets) {
-  const full = await cached(`full/${imageId}.jpg`, imageUrl('full', imageId))
-  if (!full) throw new Error(`No full image for ${imageId}`)
-  const cropped = await cached(`cropped/${imageId}.jpg`, imageUrl('cropped', imageId))
-  const setCode = englishCode(card)
-  const { card: face, artPasted } = cardFace(full, cropped!, setCode, frame)
-  if (artPasted) console.log(`${card.name} (${imageId}): render art differs, pasted cropped art`)
-  for (let shot = 0; shot < SHOTS; shot++) {
-    const rand = rng(imageId * 10 + shot)
-    const img = background(rand)
-    const quad = randomQuad(rand)
-    composite(img, face, quad)
-    const effect = degrade(img, shot, quad, rand)
-    const file = `${imageId}-${shot}.jpg`
-    writeJpeg(join(OUT, file), img)
-    img.delete()
-    shots.push({
-      file,
-      imageId,
-      cardId: card.id,
-      name: card.name,
-      setCode,
-      frame,
-      quad,
-      effect,
-      ...(artPasted && { artPasted })
-    })
-  }
-  face.delete()
+  return card
 }
 
-writeFileSync(
-  join(OUT, 'manifest.json'),
-  JSON.stringify(
-    {
-      shots,
-      distractors: distractors
-        .filter((d) => thumbs.includes(d.imageId))
-        .map((d) => ({
-          imageId: d.imageId,
-          cardId: d.card.id,
-          name: d.card.name,
-          frame: frameOf(d.card.frameType)
-        })),
-      swapped
-    },
-    null,
-    2
-  ) + '\n'
-)
-console.log(`${shots.length} shots, ${thumbs.length} thumbnails, ${swapped.length} swapped`)
+/** The Pokémon fixtures in tests/fixtures/scan-pkm. */
+async function makePokemon(): Promise<void> {
+  const targets: (PkmArt & { kind: PkmKind })[] = []
+  for (const t of PKM_TARGETS) targets.push({ ...(await pokemonArt(t.lang, t.id)), kind: t.kind })
+  const distractors: PkmArt[] = []
+  for (const d of PKM_DISTRACTORS) distractors.push(await pokemonArt(d.lang, d.id))
+
+  rmSync(PKM_OUT, { recursive: true, force: true })
+  mkdirSync(join(PKM_OUT, 'full'), { recursive: true })
+  // The references are TCGdex's own bytes, as the nightly job downloads them.
+  for (const a of [...targets, ...distractors]) {
+    const low = await cached(`pkm/low/${a.sourceId}.jpg`, `${a.image}/low.jpg`)
+    if (!low) throw new Error(`No low.jpg for ${a.sourceId}`)
+    writeFileSync(join(PKM_OUT, 'full', `${a.imageId}.jpg`), low)
+  }
+
+  const shots: object[] = []
+  for (const { image, kind, ...art } of targets) {
+    const high = await cached(`pkm/high/${art.sourceId}.jpg`, `${image}/high.jpg`)
+    if (!high) throw new Error(`No high.jpg for ${art.sourceId}`)
+    const face = pokemonFace(high)
+    for (let shot = 0; shot < SHOTS; shot++) {
+      // Image ids are past 2^32, so the seed takes their low bits.
+      const rand = rng((art.imageId % 2 ** 31) * 10 + shot)
+      const img = background(rand)
+      const quad = randomQuad(rand)
+      composite(img, face, quad)
+      const effect = degrade(img, shot, quad, rand)
+      const file = `${art.imageId}-${shot}.jpg`
+      writeJpeg(join(PKM_OUT, file), img, PKM_JPEG_QUALITY)
+      img.delete()
+      shots.push({
+        file,
+        ...art,
+        // The version the shot is when the catalog can only have one; else not told.
+        version: art.versions.length === 1 ? art.versions[0] : null,
+        kind,
+        quad,
+        effect
+      })
+    }
+    face.delete()
+  }
+
+  writeFileSync(
+    join(PKM_OUT, 'manifest.json'),
+    JSON.stringify({ shots, distractors: distractors.map(({ image, ...d }) => d) }, null, 2) + '\n'
+  )
+  console.log(`${shots.length} shots, ${targets.length + distractors.length} reference images`)
+}
+
+if (GAME === 'pkm') await makePokemon()
+else await makeYugioh()

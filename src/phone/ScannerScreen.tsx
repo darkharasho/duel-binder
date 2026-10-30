@@ -12,30 +12,43 @@ import {
   XIcon
 } from 'lucide-react'
 import { CardArt } from '@/components/CardArt'
-import type { ScanEngine } from '@/features/scan/engine'
+import type { EngineFactory } from '@/features/scan/engine'
 import { useScanLanguage, useScanPickers, type PickerProps } from '@/features/scan/pickerOptions'
-import { choicesFor, FLAG_TEXT } from '@/features/scan/ScanRowItem'
+import { choicesFor, flagText } from '@/features/scan/ScanRowItem'
 import { useScanHub } from '@/features/scan/ScanHub'
 import type { PickerOption } from '@/features/scan/SearchPicker'
 import type { ScanRow } from '@/features/scan/session'
+import { scanProfile } from '@shared/scan/profiles'
 import { api, queryKeys } from '@/lib/api'
+import { useGame } from '@/lib/game'
 import { formatUsd } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { FoundBurst } from '@/features/scan/FoundBurst'
 import { PhoneCamera } from './PhoneCamera'
 import { PickerSheet } from './PickerSheet'
 import { ReviewSheet } from './ReviewSheet'
-import { GLASS, listValue, priceOf } from '@/features/scan/scanLook'
+import {
+  GLASS,
+  listValue,
+  priceOf,
+  priceRange,
+  printingOf,
+  versionToPick
+} from '@/features/scan/scanLook'
 
-/** Copies of the row's printing already in the collection, any condition; null while loading. */
+/**
+ * Copies of the row's printing already in the collection, any condition; of any of the card's
+ * versions while a Pokémon card's version is still to pick. Null while loading.
+ */
 function useOwned(row: ScanRow): number | null {
   const entries = useQuery({
     queryKey: queryKeys.forCard(row.cardId),
     queryFn: () => api.collection.forCard(row.cardId)
   })
   if (!entries.data) return null
+  const anyVersion = versionToPick(row)
   return entries.data
-    .filter((e) => e.printing.id === row.printingId)
+    .filter((e) => anyVersion || e.printing.id === row.printingId)
     .reduce((n, e) => n + e.quantity, 0)
 }
 
@@ -52,9 +65,13 @@ function LastScan({ row, burst }: { row: ScanRow; burst: number }): React.JSX.El
   const owned = useOwned(row)
   const language = useScanLanguage()
   const choices = useMemo(() => choicesFor(row, language), [row, language])
-  const at = choices.findIndex((c) => c.key === String(row.printingId))
-  const printing = row.options.find((o) => o.printingId === row.printingId)
+  // A Pokémon version still to pick has no printing to show yet, only its card's price range.
+  const current = printingOf(row)
+  const at = choices.findIndex((c) => c.key === String(current))
+  const printing = row.options.find((o) => o.printingId === current)
   const price = priceOf(row)
+  const range = versionToPick(row) ? priceRange(row) : null
+  const flag = flagText(row)
   const sub = [row.setCode, printing?.setName && englishSetName(printing.setName)]
     .filter(Boolean)
     .join(' · ')
@@ -88,7 +105,12 @@ function LastScan({ row, burst }: { row: ScanRow; burst: number }): React.JSX.El
             {formatUsd(price)}
           </p>
         )}
-        {row.rarity && (
+        {range && (
+          <p aria-label={`Price range of ${row.name}`} className="tabular-nums text-white/75">
+            {formatUsd(range.low)} – {formatUsd(range.high)}
+          </p>
+        )}
+        {row.rarity && !versionToPick(row) && (
           <p className="mt-0.5 flex items-center gap-1 text-white/75">
             <StarIcon aria-hidden className="size-3.5 shrink-0" />
             <span className="truncate">{row.rarity}</span>
@@ -100,13 +122,13 @@ function LastScan({ row, burst }: { row: ScanRow; burst: number }): React.JSX.El
             {owned === null ? `×${row.quantity} this scan` : ownedText(owned, row.quantity)}
           </span>
         </p>
-        {row.flag && <p className="text-amber-300">{FLAG_TEXT[row.flag]}</p>}
+        {flag && <p className="text-amber-300">{flag}</p>}
       </div>
       <div className="flex shrink-0 items-center">
         {choices.length > 1 && (
           <button
             type="button"
-            aria-label={`Next printing of ${row.name}`}
+            aria-label={`Next ${row.game === 'pkm' ? 'version' : 'printing'} of ${row.name}`}
             disabled={session.committing}
             onClick={cycle}
             className="flex h-12 w-11 flex-col items-center justify-center gap-0.5 rounded-xl text-[11px] text-white/75 active:bg-white/[0.08] disabled:opacity-50"
@@ -182,12 +204,14 @@ export function ScannerScreen({
   onClose,
   onOpenSettings
 }: {
-  engineFactory?: () => ScanEngine
+  engineFactory?: EngineFactory
   onClose: () => void
   onOpenSettings: () => void
 }): React.JSX.Element {
   const { session } = useScanHub()
   const pickers = useScanPickers()
+  // A game priced by version rather than Yu-Gi-Oh!'s rarities has no rarity for new scans.
+  const rarities = scanProfile(useGame().game).rarityLook
   const [reviewing, setReviewing] = useState(false)
 
   const last = session.rows.reduce<ScanRow | null>(
@@ -263,15 +287,17 @@ export function ScannerScreen({
           shown={(p) => (pickers.set.value === 'any' || !p ? 'Any set' : p.label)}
           searchPlaceholder="Search sets…"
         />
-        <Chip
-          label="New scans as"
-          name="Rarity"
-          title="New scans as"
-          icon={StarIcon}
-          picker={pickers.rarity}
-          shown={(p) => (!p || p.key === 'auto' ? 'Auto rarity' : p.label)}
-          searchPlaceholder="Search rarities…"
-        />
+        {rarities && (
+          <Chip
+            label="New scans as"
+            name="Rarity"
+            title="New scans as"
+            icon={StarIcon}
+            picker={pickers.rarity}
+            shown={(p) => (!p || p.key === 'auto' ? 'Auto rarity' : p.label)}
+            searchPlaceholder="Search rarities…"
+          />
+        )}
       </div>
       <div className="flex shrink-0 pb-[max(0.75rem,env(safe-area-inset-bottom))] items-center justify-between px-4 pt-3">
         <div>

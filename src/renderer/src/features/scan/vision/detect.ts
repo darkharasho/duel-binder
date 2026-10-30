@@ -1,9 +1,11 @@
 import type { Mat } from '@techstark/opencv-js'
 import { artHash } from '@shared/scan/fingerprint'
 import type { ArtMatch, FingerprintIndex } from '@shared/scan/fingerprintFile'
+import { SCAN_PROFILES, type ScanProfile } from '@shared/scan/profiles'
 import type { RgbaImage } from '@shared/scan/types'
+import { windowArtBoxes } from './artWindow'
 import type { CV } from './cv'
-import { ART_BOXES, type Box } from './regions'
+import type { Box } from './regions'
 
 export type Point = readonly [number, number]
 /** Card corners, clockwise from top-left. */
@@ -25,7 +27,7 @@ export const SEARCH_WIDTH = 640
 const CANNY_LOW = 30
 const CANNY_HIGH = 90
 export const CARD_W = 842
-const CARD_H = 1228
+export const CARD_H = 1228
 const TOP_MATCHES = 5
 
 /**
@@ -331,7 +333,8 @@ export function mergeMatch(a: ArtMatch, b: ArtMatch): ArtMatch {
  * A straightened card's k closest artworks, and whether the best of them matched it upside down.
  * With jitter, the art box and way up that came closest to any artwork is tried again a little off
  * (jittered), keeping each image's best distances (mergeMatch): four more hashes and lookups
- * rather than sixteen for every box both ways up.
+ * rather than sixteen for every box both ways up. The art boxes are profile's, and with its
+ * windowArt, also where its art windows are found on the card.
  */
 export function rankArt(
   cv: CV,
@@ -339,7 +342,8 @@ export function rankArt(
   index: FingerprintIndex,
   candidates?: ReadonlySet<number>,
   k = TOP_MATCHES,
-  jitter = 0
+  jitter = 0,
+  profile: ScanProfile = SCAN_PROFILES.ygo
 ): { matches: ArtMatch[]; upsideDown: boolean } {
   const upright = toMat(cv, card)
   const flipped = new cv.Mat()
@@ -362,7 +366,17 @@ export function rankArt(
       if (found[0] && (!closest || found[0].distance < closest.distance))
         closest = { mat, box, distance: found[0].distance }
     }
-    for (const mat of [upright, flipped]) for (const box of Object.values(ART_BOXES)) look(mat, box)
+    for (const mat of [upright, flipped]) {
+      for (const box of profile.artBoxes) look(mat, box)
+      if (profile.windowArt)
+        for (const box of windowArtBoxes(
+          { width: mat.cols, height: mat.rows, data: mat.data },
+          profile,
+          // Further only on the final match (jittered): picking between candidates, it misleads.
+          jitter > 0
+        ))
+          look(mat, box)
+    }
     const around = closest as { mat: Mat; box: Box } | null
     if (jitter && around) for (const box of jittered(around.box, jitter)) look(around.mat, box)
     const ranked = [...best.values()]

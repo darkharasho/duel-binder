@@ -202,6 +202,7 @@ export function createHttpApi(opts: HttpApiOptions = {}): Api {
     },
     scan: {
       printingsByCode: scanUnavailable,
+      printingsByNumber: scanUnavailable,
       printingsForSet: scanUnavailable,
       printingsForCards: scanUnavailable,
       matchName: scanUnavailable,
@@ -210,7 +211,8 @@ export function createHttpApi(opts: HttpApiOptions = {}): Api {
       fingerprintRefs: scanUnavailable,
       refreshFingerprints: scanUnavailable,
       ocr: scanUnavailable,
-      language: scanUnavailable
+      language: scanUnavailable,
+      readText: scanUnavailable
     },
     scanWindow: {
       open: unavailable,

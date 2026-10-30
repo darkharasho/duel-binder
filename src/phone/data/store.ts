@@ -81,10 +81,10 @@ export interface PhoneStore {
   requestPrices(printingIds: number[]): Promise<number>
   /** Sends anonymous usage totals when signed in; drops them otherwise. Never rejects. */
   reportUsage(report: UsageReport): Promise<void>
-  fingerprints(): Promise<ArrayBuffer | null>
-  /** The fingerprint file's reference scans with this phone's printing ids; empty without them. */
+  fingerprints(game: GameId): Promise<ArrayBuffer | null>
+  /** Yu-Gi-Oh's file's reference scans with this phone's printing ids; empty without them. */
   fingerprintRefs(): Promise<ScanRef[]>
-  refreshFingerprints(opts?: { force?: boolean }): Promise<FingerprintStatus>
+  refreshFingerprints(opts: { game: GameId; force?: boolean }): Promise<FingerprintStatus>
 }
 
 /**
@@ -112,8 +112,10 @@ const DAY_MS = 24 * 60 * 60 * 1000
 const REVOKE_TIMEOUT_MS = 10_000
 /** A portal call the user is waiting on (friends) gives up after this long. */
 const PORTAL_TIMEOUT_MS = 15_000
-const FINGERPRINTS = 'fingerprints'
-/** Which printings the fingerprint file's printing scans show (fingerprintRefs.ts), as JSON bytes. */
+/** The `phone_files` row of a game's fingerprint file; Yu-Gi-Oh!'s keeps its original name. */
+const fingerprintsName = (game: GameId): string =>
+  game === 'ygo' ? 'fingerprints' : `fingerprints:${game}`
+/** Which printings Yu-Gi-Oh's printing scans show (fingerprintRefs.ts), as JSON bytes. */
 const FINGERPRINT_REFS = 'fingerprint-refs'
 
 /** The catalog tables that are cleared when the phone's data format changes. */
@@ -134,6 +136,7 @@ const READ_CHANNELS: ReadonlySet<DataChannel> = new Set<DataChannel>([
   'collection:forCard',
   'collection:facets',
   'scan:printingsByCode',
+  'scan:printingsByNumber',
   'scan:printingsForSet',
   'scan:printingsForCards',
   'scan:matchName',
@@ -427,9 +430,10 @@ export function createPhoneStore(deps: {
     return added > 0
   }
 
-  function fingerprintStatus(failed = false): FingerprintStatus {
-    const row = db.prepare('SELECT bytes FROM phone_files WHERE name = ?').get(FINGERPRINTS) as
-      { bytes: Uint8Array } | undefined
+  function fingerprintStatus(game: GameId, failed = false): FingerprintStatus {
+    const row = db
+      .prepare('SELECT bytes FROM phone_files WHERE name = ?')
+      .get(fingerprintsName(game)) as { bytes: Uint8Array } | undefined
     if (row) {
       try {
         return { state: 'ready', count: decodeFingerprints(row.bytes).count }
@@ -441,12 +445,15 @@ export function createPhoneStore(deps: {
   }
 
   /** Resolves true when it stored a new file. */
-  async function downloadFingerprints(): Promise<boolean> {
-    const known = db.prepare('SELECT etag FROM phone_files WHERE name = ?').get(FINGERPRINTS) as
-      { etag: string | null } | undefined
+  async function downloadFingerprints(game: GameId): Promise<boolean> {
+    const known = db
+      .prepare('SELECT etag FROM phone_files WHERE name = ?')
+      .get(fingerprintsName(game)) as { etag: string | null } | undefined
     const headers: Record<string, string> =
-      known?.etag && fingerprintStatus().state === 'ready' ? { 'If-None-Match': known.etag } : {}
-    const res = await doFetch(`${base}/scan/fingerprints`, {
+      known?.etag && fingerprintStatus(game).state === 'ready'
+        ? { 'If-None-Match': known.etag }
+        : {}
+    const res = await doFetch(`${base}/scan/fingerprints${game === 'ygo' ? '' : `?game=${game}`}`, {
       headers,
       signal: AbortSignal.timeout(30_000)
     })
@@ -454,7 +461,7 @@ export function createPhoneStore(deps: {
     if (res.status === 304 && known) {
       db.prepare('UPDATE phone_files SET checked_at = ? WHERE name = ?').run(
         now().toISOString(),
-        FINGERPRINTS
+        fingerprintsName(game)
       )
       return false
     }
@@ -465,7 +472,7 @@ export function createPhoneStore(deps: {
       `INSERT INTO phone_files (name, etag, checked_at, bytes) VALUES (?, ?, ?, ?)
        ON CONFLICT(name) DO UPDATE SET etag = excluded.etag, checked_at = excluded.checked_at,
          bytes = excluded.bytes`
-    ).run(FINGERPRINTS, res.headers.get('ETag'), now().toISOString(), bytes)
+    ).run(fingerprintsName(game), res.headers.get('ETag'), now().toISOString(), bytes)
     return true
   }
 
@@ -683,11 +690,12 @@ export function createPhoneStore(deps: {
       })
     },
 
-    fingerprints: () =>
+    fingerprints: (game) =>
       read(() => {
-        const row = db.prepare('SELECT bytes FROM phone_files WHERE name = ?').get(FINGERPRINTS) as
-          { bytes: Uint8Array } | undefined
-        if (!row || fingerprintStatus().state !== 'ready') return null
+        const row = db
+          .prepare('SELECT bytes FROM phone_files WHERE name = ?')
+          .get(fingerprintsName(game)) as { bytes: Uint8Array } | undefined
+        if (!row || fingerprintStatus(game).state !== 'ready') return null
         return row.bytes.slice().buffer as ArrayBuffer
       }),
 
@@ -704,12 +712,14 @@ export function createPhoneStore(deps: {
         }
       }),
 
-    refreshFingerprints: ({ force = false } = {}) =>
+    refreshFingerprints: ({ game, force = false }) =>
       serial(async () => {
         const checked = db
           .prepare('SELECT checked_at FROM phone_files WHERE name = ?')
-          .get(FINGERPRINTS) as { checked_at: string } | undefined
-        const ready = fingerprintStatus().state === 'ready'
+          .get(fingerprintsName(game)) as { checked_at: string } | undefined
+        const ready = fingerprintStatus(game).state === 'ready'
+        // Printing scans, and so refs, are Yu-Gi-Oh's only.
+        const hasRefs = game === 'ygo'
         if (
           !force &&
           ready &&
@@ -718,23 +728,23 @@ export function createPhoneStore(deps: {
         ) {
           // A phone from before the refs (no row for them) gets them now, not at the next check.
           const asked = db.prepare('SELECT 1 FROM phone_files WHERE name = ?').get(FINGERPRINT_REFS)
-          if (asked) return fingerprintStatus()
+          if (!hasRefs || asked) return fingerprintStatus(game)
           return (await downloadFingerprintRefs().catch(() => false))
-            ? { ...fingerprintStatus(), updated: true as const }
-            : fingerprintStatus()
+            ? { ...fingerprintStatus(game), updated: true as const }
+            : fingerprintStatus(game)
         }
         try {
-          const wrote = await downloadFingerprints()
+          const wrote = await downloadFingerprints(game)
           // Extras: trouble with them leaves the fingerprints' state as it is.
           const wroteRefs =
-            fingerprintStatus().state === 'ready'
+            hasRefs && fingerprintStatus(game).state === 'ready'
               ? await downloadFingerprintRefs().catch(() => false)
               : false
           return wrote || wroteRefs
-            ? { ...fingerprintStatus(), updated: true as const }
-            : fingerprintStatus()
+            ? { ...fingerprintStatus(game), updated: true as const }
+            : fingerprintStatus(game)
         } catch {
-          return fingerprintStatus(true)
+          return fingerprintStatus(game, true)
         }
       })
   }

@@ -5,6 +5,7 @@ import { bestNameMatch, normalizeName, type NameEntry } from '../../shared/scan/
 import { LANGUAGES, type Language } from '../../shared/languages'
 import { parsePrice } from '../../shared/pricing'
 import type { ScanPrinting } from '../../shared/scan/types'
+import type { CollectorNumber } from '../../shared/scan/collectorNumber'
 import { enTwinPrice } from './enTwin'
 import { isMarketOnly } from './priceRule'
 import { LOCAL, type Scope } from './scope'
@@ -21,25 +22,82 @@ interface PrintingRow {
   variant: string | null
   language: Language
   rawPrice: number | null
+  localName: string | null
 }
 
 const select = (
   scope: Scope
 ): string => `SELECT p.id AS printingId, p.card_id AS cardId, c.name AS name, c.frame_type AS frameType,
   p.set_name AS setName, p.set_code AS setCode, p.set_rarity AS rarity, p.variant AS variant, p.language AS language,
-  CASE WHEN ${isMarketOnly} THEN p.market_price WHEN p.language = 'en' THEN COALESCE(p.market_price, ip.price, p.set_price) ELSE COALESCE(ip.price, ${enTwinPrice(scope.game)}) END AS rawPrice
+  CASE WHEN ${isMarketOnly} THEN p.market_price WHEN p.language = 'en' THEN COALESCE(p.market_price, ip.price, p.set_price) ELSE COALESCE(ip.price, ${enTwinPrice(scope.game)}) END AS rawPrice,
+  pc.local_name AS localName
   FROM card_printings p JOIN cards c ON c.id = p.card_id AND +c.game = ${scope.game}
   LEFT JOIN intl_prices ip ON ip.printing_id = p.id
+  LEFT JOIN pokemon_cards pc ON pc.card_id = p.card_id
   WHERE +p.game = ${scope.game} AND p.contributed = 0 AND ${shownPrinting(scope)}`
 
 const languageRank = (l: Language): number => LANGUAGES.findIndex((x) => x.code === l)
 
-/** Attaches each card's artwork ids and sorts by set code, then language, then rarity tier. */
-function withImages(db: SqlDb, rows: PrintingRow[], scope: Scope): ScanPrinting[] {
+/** A card name as unseenTwins compares it: its letters and digits, or as it is with none. */
+const nameKey = (name: string): string => normalizeName(name) || name
+
+/**
+ * `${cardId}|${language}` for each of cardIds with an art twin the scanner can't see
+ * (ScanPrinting.unseenTwin): a card of the same name and illustrator with no artwork, or only a
+ * tcgplayer product photo, a poor reference (often a 403, or matched far behind the card it
+ * reprints), and a printing in that language. A Japanese card may be named in English or
+ * Japanese, and names are compared by their letters ("Tapu Lele-GX", "Umbreon ☆").
+ */
+function unseenTwins(db: SqlDb, cardIds: number[], scope: Scope): string[] {
+  // CROSS JOIN keeps this order: the few cards asked for first, then the cards with no artwork.
+  const rows = db
+    .prepare(
+      `SELECT pc.card_id AS cardId, c.name AS name, pc.local_name AS localName,
+         t.card_id AS twinId, tc.name AS twinName, t.local_name AS twinLocal
+       FROM pokemon_cards pc CROSS JOIN cards c CROSS JOIN pokemon_cards t CROSS JOIN cards tc
+       WHERE pc.card_id IN (${cardIds.map(() => '?').join(',')}) AND c.id = pc.card_id
+         AND (t.image_url IS NULL OR t.image_url LIKE 'https://tcgplayer-cdn.%')
+         AND t.card_id <> pc.card_id AND t.illustrator IS pc.illustrator AND tc.id = t.card_id`
+    )
+    .all(...cardIds) as {
+    cardId: number
+    name: string
+    localName: string | null
+    twinId: number
+    twinName: string
+    twinLocal: string | null
+  }[]
+  const twins = rows.filter(
+    (r) =>
+      nameKey(r.name) === nameKey(r.twinName) ||
+      (r.localName ?? r.name) === (r.twinLocal ?? r.twinName)
+  )
+  if (!twins.length) return []
+  const ids = [...new Set(twins.map((t) => t.twinId))]
+  const languages = db
+    .prepare(
+      `SELECT DISTINCT p.card_id AS cardId, p.language AS language FROM card_printings p
+       WHERE p.card_id IN (${ids.map(() => '?').join(',')}) AND ${shownPrinting(scope)}`
+    )
+    .all(...ids) as { cardId: number; language: string }[]
+  return twins.flatMap((t) =>
+    languages.filter((l) => l.cardId === t.twinId).map((l) => `${t.cardId}|${l.language}`)
+  )
+}
+
+/**
+ * Attaches each card's artwork ids and sorts by set code, then language, then rarity tier; with
+ * twins, marks a Pokémon printing's unseenTwin (a scan of every card with no artwork per card,
+ * so only for the few cards an art match brings).
+ */
+function withImages(db: SqlDb, rows: PrintingRow[], scope: Scope, twins = false): ScanPrinting[] {
   const ids = [...new Set(rows.map((r) => r.cardId))]
   const images = new Map<number, number[]>()
+  // Cards and languages with an art twin the scanner can't see (ScanPrinting.unseenTwin).
+  const twinned = new Set<string>()
   for (let i = 0; i < ids.length; i += 500) {
     const chunk = ids.slice(i, i + 500)
+    if (twins) for (const t of unseenTwins(db, chunk, scope)) twinned.add(t)
     const found = db
       .prepare(
         `SELECT card_id AS cardId, image_id AS imageId FROM card_images
@@ -54,10 +112,13 @@ function withImages(db: SqlDb, rows: PrintingRow[], scope: Scope): ScanPrinting[
     }
   }
   return rows
-    .map(({ rawPrice, ...r }) => ({
+    .map(({ rawPrice, localName, ...r }) => ({
       ...r,
       price: parsePrice(rawPrice),
-      imageIds: images.get(r.cardId) ?? []
+      imageIds: images.get(r.cardId) ?? [],
+      // Only where the catalog has one, so a Yu-Gi-Oh printing is as it always was.
+      ...(localName ? { localName } : {}),
+      ...(twinned.has(`${r.cardId}|${r.language}`) ? { unseenTwin: true as const } : {})
     }))
     .sort(
       (a, b) =>
@@ -72,6 +133,85 @@ export function printingsByCode(db: SqlDb, code: string, scope: Scope = LOCAL): 
   const rows = db
     .prepare(`${select(scope)} AND p.set_code = ? COLLATE NOCASE`)
     .all(code) as PrintingRow[]
+  return withImages(db, rows, scope)
+}
+
+interface NumberEntry {
+  id: number
+  total: string | null
+  abbrev: string
+}
+
+// The game's printings by printed number, rebuilt only when the catalog version or game changes.
+const numberCache = new WeakMap<
+  object,
+  { version: string | null; game: string; byNumber: Map<string, NumberEntry[]> }
+>()
+
+const stripZeros = (s: string): string => s.toUpperCase().replace(/^0+/, '')
+
+/** A Pokémon set_code is "{abbrev} {localId}/{official}" or "{abbrev} {localId}" (scripts/catalog/pokemon/write.ts). */
+function numberIndex(db: SqlDb, scope: Scope): Map<string, NumberEntry[]> {
+  const version = getMeta(db, 'db_version')
+  const { game } = db.prepare(`SELECT ${scope.game} AS game`).get() as { game: string }
+  const hit = numberCache.get(db)
+  if (hit && hit.version === version && hit.game === game) return hit.byNumber
+  const rows = db
+    .prepare(
+      `SELECT p.id, p.set_code AS code FROM card_printings p WHERE +p.game = ${scope.game} AND p.contributed = 0`
+    )
+    .all() as { id: number; code: string }[]
+  const byNumber = new Map<string, NumberEntry[]>()
+  for (const { id, code } of rows) {
+    const space = code.indexOf(' ')
+    if (space < 0) continue
+    const rest = code.slice(space + 1)
+    const slash = rest.indexOf('/')
+    const key = stripZeros(slash < 0 ? rest : rest.slice(0, slash))
+    const entry = {
+      id,
+      total: slash < 0 ? null : stripZeros(rest.slice(slash + 1)),
+      abbrev: code.slice(0, space).toUpperCase()
+    }
+    const list = byNumber.get(key)
+    if (list) list.push(entry)
+    else byNumber.set(key, [entry])
+  }
+  numberCache.set(db, { version, game, byNumber })
+  return byNumber
+}
+
+/**
+ * The Pokémon printings with this printed number (leading zeros ignored). A read total must equal
+ * the code's total, so a code with no total (a promo) matches only when no total was read. The
+ * abbreviation narrows the match only when some printing carries it (a card may print "PAL" where
+ * TCGdex says "SV2"); otherwise the number alone decides.
+ */
+export function printingsByNumber(
+  db: SqlDb,
+  n: CollectorNumber,
+  scope: Scope = LOCAL
+): ScanPrinting[] {
+  let found = numberIndex(db, scope).get(stripZeros(n.number)) ?? []
+  if (n.total !== null) {
+    const total = stripZeros(n.total)
+    found = found.filter((e) => e.total === total)
+  }
+  if (n.setAbbrev) {
+    const abbrev = n.setAbbrev.toUpperCase()
+    const same = found.filter((e) => e.abbrev === abbrev)
+    if (same.length) found = same
+  }
+  const ids = found.map((e) => e.id)
+  const rows: PrintingRow[] = []
+  for (let i = 0; i < ids.length; i += 500) {
+    const chunk = ids.slice(i, i + 500)
+    rows.push(
+      ...(db
+        .prepare(`${select(scope)} AND p.id IN (${chunk.map(() => '?').join(',')})`)
+        .all(...chunk) as PrintingRow[])
+    )
+  }
   return withImages(db, rows, scope)
 }
 
@@ -102,7 +242,7 @@ export function printingsForCards(
         .all(...chunk) as PrintingRow[])
     )
   }
-  return withImages(db, rows, scope)
+  return withImages(db, rows, scope, true)
 }
 
 /** The card of each known artwork, by image id; unknown ids are left out. */

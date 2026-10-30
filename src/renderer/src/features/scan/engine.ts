@@ -1,5 +1,8 @@
+import type { GameId } from '@shared/games/types'
 import type { Api } from '@shared/ipc'
 import type { RarityCues } from '@shared/scan/rarity'
+import type { VersionCues } from './vision/pokemonVersion'
+import type { OcrKind } from '@shared/scan/ocr'
 import type { ArtMatch } from '@shared/scan/fingerprintFile'
 import type { ScanRef } from '@shared/scan/fingerprintRefs'
 import type { OcrBand, RgbaImage } from '@shared/scan/types'
@@ -24,6 +27,15 @@ export interface FrameSignals {
   textBands: OcrBand[]
   /** What the card shows of its foil; null when it couldn't be turned upright to look. */
   cues: RarityCues | null
+  /** A Pokémon card's foil cues for its version; null for other games or a card not turned upright. */
+  version?: VersionCues | null
+  /** Pokémon only: the card is in a graded slab (its label block shows above it). */
+  slab?: boolean
+  /**
+   * 'holder' when the art matched only on the second look of a profile's holderSearch, which
+   * must then clear the art margin against every other name (resolvePokemon).
+   */
+  artVia?: 'holder'
   /**
    * The card's look for the rarity look model (rarityFeatures, LOOK_FEATURES order): only when
    * asked for (wantLook) and the card was turned upright, else null.
@@ -33,7 +45,7 @@ export interface FrameSignals {
 
 /** Messages to the vision worker. Frames are answered in the order they're sent. */
 export type WorkerRequest =
-  | { type: 'init'; fingerprints: ArrayBuffer | null; refs?: ScanRef[] }
+  | { type: 'init'; fingerprints: ArrayBuffer | null; game: GameId; refs?: ScanRef[] }
   | {
       type: 'frame'
       id: number
@@ -62,7 +74,13 @@ export interface RawSignals {
   nameTexts: string[]
   /** The text bands, unread: reading them is slow, so it's left until a card's language is needed. */
   textBands: OcrBand[]
+  /** A Pokémon card's name bands, for reading its printed name with another model if need be. */
+  nameBands?: OcrBand[]
   cues: RarityCues | null
+  version?: VersionCues | null
+  slab?: boolean
+  /** As FrameSignals.artVia. */
+  artVia?: 'holder'
   look: number[] | null
 }
 
@@ -106,11 +124,13 @@ const hasPixels = (b: OcrBand): boolean => b.width > 0 && b.height > 0
 
 /**
  * Runs the vision worker over camera frames and reads the text bands it cuts out through
- * `api.ocr`, only when wantText. The worker starts on first use.
+ * `api.ocr`, only when wantText. The worker starts on first use, reading cards of game
+ * (Yu-Gi-Oh when left out).
  */
 export function createScanEngine(deps: {
   api: Api['scan']
   makeWorker: () => Worker
+  game?: GameId
   timeouts?: { initMs?: number; frameMs?: number }
 }): ScanEngine {
   let worker: Worker | null = null
@@ -185,7 +205,7 @@ export function createScanEngine(deps: {
       return new Promise<void>((resolve, reject) => {
         try {
           // Handed over rather than copied: it's a few MB, and the caller reads a fresh one each time.
-          send({ type: 'init', fingerprints: fp, refs }, fp ? [fp] : [])
+          send({ type: 'init', fingerprints: fp, game: deps.game ?? 'ygo', refs }, fp ? [fp] : [])
           inits.push(watched({ resolve, reject }, initMs))
         } catch (e) {
           reject(e instanceof Error ? e : new Error(String(e)))
@@ -212,16 +232,32 @@ export function createScanEngine(deps: {
           reject(e instanceof Error ? e : new Error(String(e)))
         }
       })
-      const { found, quad, art, cues, look } = signals
+      const { found, quad, art, cues, version, slab, look } = signals
+      // Only when set, so a Yu-Gi-Oh frame's signals are as they were.
+      const via = signals.artVia ? { artVia: signals.artVia } : {}
       if (!wantText || !found)
-        return { found, quad, art, codeTexts: [], nameTexts: [], textBands: [], cues, look }
+        return {
+          found,
+          quad,
+          art,
+          codeTexts: [],
+          nameTexts: [],
+          textBands: [],
+          cues,
+          version,
+          slab,
+          ...via,
+          look
+        }
       const codeBands = signals.codeBands.filter(hasPixels)
       const nameBands = signals.nameBands.filter(hasPixels)
       // Text is a helper to the art: a failed or timed-out read counts as nothing read, so OCR
       // trouble never stops art matching.
-      const read = (bands: OcrBand[], kind: 'code' | 'name'): Promise<string[]> =>
+      const read = (bands: OcrBand[], kind: OcrKind): Promise<string[]> =>
         bands.length ? deps.api.ocr(bands, kind).catch(() => []) : Promise.resolve([])
-      const [codes, names] = await Promise.all([read(codeBands, 'code'), read(nameBands, 'name')])
+      // A Pokémon card's code band holds its collector number, slash and all.
+      const codeKind = deps.game === 'pkm' ? 'number' : 'code'
+      const [codes, names] = await Promise.all([read(codeBands, codeKind), read(nameBands, 'name')])
       return {
         found,
         quad,
@@ -229,7 +265,11 @@ export function createScanEngine(deps: {
         codeTexts: codes.map((t) => t.trim()).filter(Boolean),
         nameTexts: names.map((t) => t.trim()).filter(Boolean),
         textBands: signals.textBands.filter(hasPixels),
+        ...(deps.game === 'pkm' ? { nameBands } : {}),
         cues,
+        version,
+        slab,
+        ...via,
         look
       }
     },
@@ -243,6 +283,9 @@ export function createScanEngine(deps: {
   }
 }
 
+/** Makes a scan engine for a game's cards; the scan loop makes a new one when the game changes. */
+export type EngineFactory = (game: GameId) => ScanEngine
+
 /** The real engine: the vision worker, with the main process's scan lookups. */
-export const defaultEngine = (): ScanEngine =>
-  createScanEngine({ api: window.api.scan, makeWorker: makeVisionWorker })
+export const defaultEngine: EngineFactory = (game) =>
+  createScanEngine({ api: window.api.scan, makeWorker: makeVisionWorker, game })

@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync 
 import { readFile } from 'fs/promises'
 import { join } from 'path'
 import { decodeFingerprints } from '@shared/scan/fingerprintFile'
+import type { GameId } from '@shared/games'
 import { parseFingerprintRefs, type FingerprintRefsFile } from '@shared/scan/fingerprintRefs'
 import type { FingerprintStatus } from '@shared/scan/types'
 
@@ -30,24 +31,31 @@ export interface FingerprintStore {
 }
 
 /**
- * The card-art fingerprint file, downloaded from the portal and kept in `dir` (`<userData>/scan`),
- * with the refs file that says which printings its printing scans show. The refs are extras: a
- * portal without them, or trouble getting them, leaves the fingerprints as they would be alone.
+ * One game's card-art fingerprint file, downloaded from the portal and kept in `dir`
+ * (`<userData>/scan`). Yu-Gi-Oh!'s files keep their original names. Yu-Gi-Oh!'s comes with the refs
+ * file that says which printings its printing scans show. The refs are extras: a portal without
+ * them, or trouble getting them, leaves the fingerprints as they would be alone.
  */
 export function createFingerprintStore(opts: {
   dir: string
   portal: string
+  game: GameId
   fetch?: typeof fetch
   now?: () => Date
   timeoutMs?: number
 }): FingerprintStore {
-  const { dir, portal } = opts
+  const { dir, portal, game } = opts
   const doFetch = opts.fetch ?? fetch
   const now = opts.now ?? ((): Date => new Date())
   const timeoutMs = opts.timeoutMs ?? DOWNLOAD_TIMEOUT_MS
-  const binPath = join(dir, 'fingerprints.bin')
-  const metaPath = join(dir, 'fingerprints.json')
+  const stem = game === 'ygo' ? 'fingerprints' : `fingerprints-${game}`
+  const url =
+    game === 'ygo' ? `${portal}/scan/fingerprints` : `${portal}/scan/fingerprints?game=${game}`
+  const binPath = join(dir, `${stem}.bin`)
+  const metaPath = join(dir, `${stem}.json`)
   const refsPath = join(dir, 'fingerprint-refs.json')
+  // Printing scans, and so refs, are Yu-Gi-Oh's only.
+  const hasRefs = game === 'ygo'
 
   const loadMeta = (): Meta | null => {
     try {
@@ -84,7 +92,7 @@ export function createFingerprintStore(opts: {
   async function download(): Promise<boolean> {
     const wrote = await downloadFingerprints()
     // Only beside a fingerprint file, and never failing the refresh.
-    const wroteRefs = meta ? await downloadRefs().catch(() => false) : false
+    const wroteRefs = meta && hasRefs ? await downloadRefs().catch(() => false) : false
     return wrote || wroteRefs
   }
 
@@ -116,7 +124,7 @@ export function createFingerprintStore(opts: {
   async function downloadFingerprints(): Promise<boolean> {
     const headers: Record<string, string> = meta?.etag ? { 'If-None-Match': meta.etag } : {}
     // The timeout covers the body too: arrayBuffer() rejects once the signal aborts.
-    const res = await doFetch(`${portal}/scan/fingerprints`, {
+    const res = await doFetch(url, {
       headers,
       signal: AbortSignal.timeout(timeoutMs)
     })
@@ -159,6 +167,7 @@ export function createFingerprintStore(opts: {
       }
     },
     async readRefs() {
+      if (!hasRefs) return null
       try {
         return parseFingerprintRefs(await readFile(refsPath, 'utf8'))
       } catch {
@@ -169,7 +178,7 @@ export function createFingerprintStore(opts: {
       if (inFlight) return inFlight
       const fresh = !force && meta && now().getTime() - Date.parse(meta.checkedAt) < DAY_MS
       // An install from before the refs gets them now, not at its next daily check.
-      if (fresh && meta!.refsEtag !== undefined) return Promise.resolve(status())
+      if (fresh && (!hasRefs || meta!.refsEtag !== undefined)) return Promise.resolve(status())
       downloading = true
       failed = false
       inFlight = (fresh ? downloadRefs().catch(() => false) : download())

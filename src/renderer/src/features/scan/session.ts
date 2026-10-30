@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { api, mutationInvalidationKeys } from '@/lib/api'
 import { track } from '@/lib/usage'
 import type { ScanDraft } from './resolve'
+import { printingOf } from './scanLook'
 
 export interface ScanRow extends ScanDraft {
   key: string
@@ -204,9 +205,10 @@ export function useScanSession(): {
     let added = 0
     let failed = 0
     let cards = 0
-    const unaddable = new Set(ref.current.filter((r) => r.printingId === null).map((r) => r.key))
+    // A row with no printing, or a Pokémon version still to pick, waits for one.
+    const unaddable = new Set(ref.current.filter((r) => printingOf(r) === null).map((r) => r.key))
     try {
-      for (const row of ref.current.filter((r) => r.printingId !== null)) {
+      for (const row of ref.current.filter((r) => printingOf(r) !== null)) {
         try {
           await api.collection.add({
             printingId: row.printingId!,

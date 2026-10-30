@@ -4,12 +4,12 @@ import App from '@/App'
 import { CardDetails } from '@/components/CardDetails'
 import { BrowsePage } from '@/features/browse/BrowsePage'
 import { FilterBar } from '@/features/collection/FilterBar'
-import { GAME_FREE, GameProvider, useGame } from '@/lib/game'
+import { GAME_FREE, GameProvider, pageInGame, useGame } from '@/lib/game'
 import { SetsPage } from '@/features/sets/SetsPage'
 import { createHttpApi, GAME_KEY } from '@/web/httpApi'
 import { App as PhoneApp } from '../../src/phone/App'
 import type { DataChannel } from '../../src/main/ipc/dataHandlers'
-import type { GameId } from '@shared/games'
+import { GAMES, type GameId } from '@shared/games'
 import type { Api } from '@shared/ipc'
 import type { AccountStatus, CardRow } from '@shared/types'
 import { createMockApi, renderWithProviders, type DeepPartial } from './mockApi'
@@ -94,11 +94,15 @@ describe('desktop game switch', () => {
     expect(api.games.setActive).toHaveBeenCalledWith('pkm')
   })
 
-  it('on Pokémon, leaves Scan and Rip out of the nav', async () => {
+  it('scan tab shows for pkm when owner', async () => {
+    // Only the owner's account lists Pokémon (server-enforced); there, Scan shows and Rip doesn't.
     await renderDesktop(desktopApi(['ygo', 'pkm'], 'pkm'))
     expect(await screen.findByRole('button', { name: /switch game/i })).toHaveTextContent('Pokémon')
-    expect(navNames()).not.toContain('Scan')
+    expect(navNames()).toContain('Scan')
     expect(navNames()).not.toContain('Rip')
+    expect(pageInGame('scan', GAMES.pkm)).toBe(true)
+    expect(pageInGame('rip', GAMES.pkm)).toBe(false)
+    expect(GAMES.pkm.access).toBe('owner')
   })
 
   it('shows Yu-Gi-Oh! and asks main for it when the game cannot be read', async () => {
@@ -144,7 +148,7 @@ describe('desktop game switch', () => {
     })
     await renderDesktop(api)
     await waitFor(() => expect(api.stats.get).toHaveBeenCalled())
-    expect(navNames()).not.toContain('Scan')
+    expect(navNames()).not.toContain('Rip')
     const reads = vi.mocked(api.stats.get).mock.calls.length
     // Signing in as someone without Pokémon resets the game in main.
     active = 'ygo'
@@ -152,7 +156,7 @@ describe('desktop game switch', () => {
     await act(async () => {
       for (const cb of onAccount) cb(signedIn)
     })
-    await waitFor(() => expect(navNames()).toContain('Scan'))
+    await waitFor(() => expect(navNames()).toContain('Rip'))
     expect(screen.queryByRole('button', { name: /switch game/i })).not.toBeInTheDocument()
     await waitFor(() => expect(vi.mocked(api.stats.get).mock.calls.length).toBeGreaterThan(reads))
   })
@@ -502,13 +506,12 @@ describe('phone game switch', () => {
     )
     await userEvent.click(within(group).getByRole('radio', { name: /Pokémon/ }))
     expect(store.invoke).toHaveBeenCalledWith('games:setActive', ['pkm'])
-    // On Pokémon the raised Scan tab goes, and Rip leaves More (the open sheet hides the tabs).
+    // On Pokémon (the owner's) the raised Scan tab stays, and Rip leaves More (the open sheet
+    // hides the tabs).
     await waitFor(() =>
-      expect(
-        within(nav).queryByRole('button', { name: 'Scan', hidden: true })
-      ).not.toBeInTheDocument()
+      expect(within(sheet).queryByRole('button', { name: 'Rip' })).not.toBeInTheDocument()
     )
-    expect(within(nav).getAllByRole('button', { hidden: true })).toHaveLength(4)
-    expect(within(sheet).queryByRole('button', { name: 'Rip' })).not.toBeInTheDocument()
+    expect(within(nav).getByRole('button', { name: 'Scan', hidden: true })).toBeInTheDocument()
+    expect(within(nav).getAllByRole('button', { hidden: true })).toHaveLength(5)
   })
 })

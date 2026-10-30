@@ -48,6 +48,7 @@ const pull = (key: number, hit = false): Pull => ({
   rarity: null,
   price: null,
   range: null,
+  raw: false,
   hit
 })
 
@@ -62,6 +63,7 @@ describe('pullOf', () => {
       rarity: 'Ultra Rare',
       price: 12.5,
       range: null,
+      raw: false,
       hit: false
     })
   })
@@ -89,6 +91,29 @@ describe('pullOf', () => {
       range: { low: 2, high: 50 },
       hit: false
     })
+  })
+
+  it('pkm pick-printing pull shows range and is never a hit', () => {
+    const d = draft({
+      game: 'pkm',
+      flag: 'pick-printing',
+      printingId: 2,
+      options: [printing({ printingId: 2, price: 2 }), printing({ printingId: 3, price: 45 })]
+    })
+    // The placeholder printing's price isn't the card's: only the range shows.
+    expect(pullOf(d, 20, 1)).toMatchObject({
+      price: null,
+      range: { low: 2, high: 45 },
+      raw: false,
+      hit: false
+    })
+    expect(pullOf(draft({ ...d, printingId: 3 }), 20, 1).hit).toBe(false)
+  })
+
+  it('slab pull shows Raw and can be a hit', () => {
+    const d = draft({ game: 'pkm', slab: true }, { price: 120 })
+    expect(pullOf(d, 20, 1)).toMatchObject({ price: 120, raw: true, hit: true })
+    expect(pullOf(draft({ game: 'pkm' }, { price: 120 }), 20, 1).raw).toBe(false)
   })
 
   it('shows no range for a pick-printing draft whose priced printings agree', () => {

@@ -60,6 +60,24 @@ describe('createOcrQueue', () => {
     })
   })
 
+  it("reads a Pokémon collector number with the slash, leaving the set code's characters as they were", async () => {
+    const f = fake()
+    const ocr = createOcrQueue({ start: f.start })
+    await ocr.read([band(1)], 'number')
+    await ocr.read([band(1)], 'code')
+    const params = vi.mocked(f.worker.setParameters).mock.calls.map((c) => c[0])
+    expect(params).toMatchObject([
+      {
+        tessedit_pageseg_mode: '7',
+        tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-/'
+      },
+      {
+        tessedit_pageseg_mode: '7',
+        tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-'
+      }
+    ])
+  })
+
   it('a read past timeoutMs rejects and the next read starts a fresh worker', async () => {
     const f = fake(() => new Promise(() => {}))
     const ocr = createOcrQueue({ start: f.start, timeoutMs: 20 })

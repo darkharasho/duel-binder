@@ -3,7 +3,7 @@ import { readdirSync, readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { decode } from 'jpeg-js'
 import { beforeAll, describe, expect, it, vi } from 'vitest'
-import { artHash, fingerprintSource } from '../../src/shared/scan/fingerprint'
+import { artHash, fingerprintSource, hamming } from '../../src/shared/scan/fingerprint'
 import {
   decodeFingerprints,
   encodeFingerprints,
@@ -14,9 +14,14 @@ import {
   ART_MAX_DISTANCE_IN_SET,
   ART_MIN_MARGIN
 } from '../../src/shared/scan/thresholds'
+import { scanProfile } from '../../src/shared/scan/profiles'
 import type { RgbaImage } from '../../src/shared/scan/types'
+import { analyze } from '../../src/renderer/src/features/scan/vision/analyze'
+import { windowArtBoxes } from '../../src/renderer/src/features/scan/vision/artWindow'
 import { loadCv, type CV } from '../../src/renderer/src/features/scan/vision/cv'
 import {
+  CARD_H,
+  CARD_W,
   findCard,
   matchArt,
   rotate180,
@@ -25,7 +30,7 @@ import {
   type Point,
   type Quad
 } from '../../src/renderer/src/features/scan/vision/detect'
-import { ART_BOXES } from '../../src/renderer/src/features/scan/vision/regions'
+import { ART_BOXES, crop, type Box } from '../../src/renderer/src/features/scan/vision/regions'
 import {
   findCandidates,
   preferOuter,
@@ -40,6 +45,7 @@ vi.mock('@techstark/opencv-js', async () => {
 })
 
 const DIR = 'tests/fixtures/scan'
+const PKM_DIR = 'tests/fixtures/scan-pkm/full'
 
 interface Shot {
   file: string
@@ -486,4 +492,158 @@ describe('warpCard', () => {
     expect([card.width, card.height]).toEqual([842, 1228])
     expect(card.data.length).toBe(842 * 1228 * 4)
   })
+})
+
+describe('the Pokémon profile', () => {
+  const pkm = scanProfile('pkm')
+  // TCGdex's en/sv03-045 (Lapras, Obsidian Flames), a full-card reference image.
+  const PKM_IMAGE = 3948443432832600
+  const reference = (): RgbaImage => load(join(PKM_DIR, `${PKM_IMAGE}.jpg`))
+
+  /** img stretched to width x height, as warpCard leaves a card. */
+  const resized = (img: RgbaImage, width: number, height: number): RgbaImage => {
+    const src = toMat(cv, img)
+    const out = new cv.Mat()
+    try {
+      cv.resize(src, out, new cv.Size(width, height), 0, 0, cv.INTER_LINEAR)
+      return { width, height, data: new Uint8ClampedArray(out.data) }
+    } finally {
+      src.delete()
+      out.delete()
+    }
+  }
+
+  /** The card at height px tall in the middle of an empty 1280x720 frame, and its corners. */
+  const framed = (card: RgbaImage, height: number): { img: RgbaImage; quad: Quad } => {
+    const width = Math.round((height * card.width) / card.height)
+    const small = resized(card, width, height)
+    const img = emptyFrame(3)
+    const [x0, y0] = [Math.round((1280 - width) / 2), Math.round((720 - height) / 2)]
+    for (let y = 0; y < height; y++)
+      img.data.set(
+        small.data.subarray(y * width * 4, (y + 1) * width * 4),
+        ((y0 + y) * 1280 + x0) * 4
+      )
+    const quad: Quad = [
+      [x0, y0],
+      [x0 + width, y0],
+      [x0 + width, y0 + height],
+      [x0, y0 + height]
+    ]
+    return { img, quad }
+  }
+
+  it('pkm art box crops the reference and the warped card alike', () => {
+    const img = reference()
+    const stored = artHash(fingerprintSource(img, 'pokemon', pkm))
+    const seen = artHash(crop(resized(img, CARD_W, CARD_H), pkm.artBoxes[0]))
+    expect(hamming(stored, 0, seen, 0)).toBeLessThanOrEqual(20)
+  })
+
+  it('places the pkm art box on the art window of a card straightened by its inner frame', () => {
+    const stored = artHash(fingerprintSource(reference(), 'pokemon', pkm))
+    const distance = (card: RgbaImage, box: Box): number =>
+      hamming(stored, 0, artHash(crop(card, box)), 0)
+    const card = resized(reference(), CARD_W, CARD_H)
+    // A card held over a deck is often found by the inner edge of its border, a few percent in,
+    // with the deck's card edge below: straightened from there, the art box is that far off and
+    // the hash says nothing.
+    const inner = resized(crop(card, [0.037, 0.04, 0.963, 0.985]), CARD_W, CARD_H)
+    expect(distance(inner, pkm.artBoxes[0])).toBeGreaterThan(ART_MAX_DISTANCE)
+    const found = (img: RgbaImage, wide = false): number =>
+      Math.min(...windowArtBoxes(img, pkm, wide).map((b) => distance(img, b)))
+    expect(found(inner)).toBeLessThanOrEqual(30)
+    // A card straightened by its own outline still matches where it is.
+    expect(found(card)).toBeLessThanOrEqual(20)
+    // Found by the line under its header, the name lost under a deck's edge: the window sits
+    // further off than the near search reaches, so the final match looks further.
+    const headless = resized(crop(card, [0, 0.07, 1, 1]), CARD_W, CARD_H)
+    expect(found(headless)).toBe(Infinity)
+    expect(found(headless, true)).toBeLessThanOrEqual(30)
+  })
+
+  it('finds a Pokémon card whose outline is lost, around its art window', () => {
+    const pkmIndex = decodeFingerprints(
+      encodeFingerprints([
+        { imageId: PKM_IMAGE, hash: artHash(fingerprintSource(reference(), 'pokemon', pkm)) }
+      ])
+    )
+    const { img, quad } = framed(reference(), 600)
+    // Everything of the card but its art window is the desk again, as a held card's frame is
+    // lost under fingers, a sleeve or a holder's rim while its art window's border stays crisp.
+    const desk = emptyFrame(3)
+    const [[x0, y0], [x1, ,], [, y1]] = quad
+    const [wx0, wy0, wx1, wy1] = pkm.windows[0]
+    for (let y = y0; y < y1; y++)
+      for (let x = x0; x < x1; x++) {
+        const u = (x - x0) / (x1 - x0)
+        const v = (y - y0) / (y1 - y0)
+        if (u >= wx0 && u <= wx1 && v >= wy0 && v <= wy1) continue
+        const i = (y * 1280 + x) * 4
+        img.data.set(desk.data.subarray(i, i + 4), i)
+      }
+    const found = recognizeArt(cv, img, pkmIndex, undefined, undefined, pkm)
+    expect(found?.matches[0]?.imageId).toBe(PKM_IMAGE)
+    expect(found!.matches[0].distance).toBeLessThanOrEqual(ART_MAX_DISTANCE)
+    // The card's own corners, not the window's.
+    for (let i = 0; i < 4; i++) {
+      const [x, y] = found!.quad[i]
+      expect(Math.min(...quad.map(([qx, qy]) => Math.hypot(qx - x, qy - y)))).toBeLessThan(25)
+    }
+  }, 60_000)
+
+  it('finds a card too small in the frame for the first search by looking again nearer', () => {
+    const pkmIndex = decodeFingerprints(
+      encodeFingerprints([
+        { imageId: PKM_IMAGE, hash: artHash(fingerprintSource(reference(), 'pokemon', pkm)) }
+      ])
+    )
+    // 200 px tall in 1280x720, as a card held far off or in a holder is: at SEARCH_WIDTH it is
+    // under MIN_AREA, so the first search finds no outline at all.
+    const { img, quad } = framed(reference(), 200)
+    const without = recognizeArt(cv, img, pkmIndex, undefined, undefined, {
+      ...pkm,
+      holderSearch: false
+    })
+    expect(without === null || without.matches[0].distance > ART_MAX_DISTANCE).toBe(true)
+    const found = recognizeArt(cv, img, pkmIndex, undefined, undefined, pkm)
+    expect(found?.matches[0]?.imageId).toBe(PKM_IMAGE)
+    expect(found!.matches[0].distance).toBeLessThanOrEqual(ART_MAX_DISTANCE)
+    expect(found!.via).toBe('holder')
+    for (let i = 0; i < 4; i++) {
+      const [x, y] = found!.quad[i]
+      expect(Math.min(...quad.map(([qx, qy]) => Math.hypot(qx - x, qy - y)))).toBeLessThan(15)
+    }
+    // analyze hands it on, for the resolver's margin check.
+    expect(analyze(cv, img, pkmIndex, null, false, false, pkm).artVia).toBe('holder')
+  }, 60_000)
+
+  it('looks again only for Pokémon: Yu-Gi-Oh keeps its one search', () => {
+    expect(pkm.holderSearch).toBe(true)
+    expect(scanProfile('ygo').holderSearch).toBe(false)
+  })
+
+  it('a Yu-Gi-Oh reference is left as it was', () => {
+    const img = load(join(DIR, 'cropped', readdirSync(join(DIR, 'cropped'))[0]))
+    expect(fingerprintSource(img, 'effect')).toBe(img)
+  })
+
+  it('matches a Pokémon card in a frame by its art, without the Yu-Gi-Oh rarity look', () => {
+    const pkmIndex = decodeFingerprints(
+      encodeFingerprints([
+        { imageId: PKM_IMAGE, hash: artHash(fingerprintSource(reference(), 'pokemon', pkm)) }
+      ])
+    )
+    const { img } = framed(reference(), 600)
+    const signals = analyze(cv, img, pkmIndex, null, true, true, pkm)
+    expect(signals.found).toBe(true)
+    expect(signals.art[0]).toEqual({ imageId: PKM_IMAGE, distance: expect.any(Number) })
+    expect(signals.art[0].distance).toBeLessThanOrEqual(ART_MAX_DISTANCE)
+    expect(signals.cues).toBeNull()
+    expect(signals.look).toBeNull()
+    // Found by the first search: no second look, so no margin check beyond the usual.
+    expect(signals.artVia).toBeUndefined()
+    expect(signals.nameBands.length).toBeGreaterThan(0)
+    expect(signals.codeBands.length).toBeGreaterThan(0)
+  }, 30_000)
 })

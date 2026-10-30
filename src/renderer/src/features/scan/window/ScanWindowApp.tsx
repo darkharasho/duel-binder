@@ -3,8 +3,9 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import type { Language } from '@shared/languages'
 import { isToScanWindow, type ScanWindowSettings, type ScanWindowState } from '@shared/scanWindow'
 import { api } from '@/lib/api'
+import { GameProvider, useGame } from '@/lib/game'
 import { cn } from '@/lib/utils'
-import { defaultEngine, type ScanEngine } from '../engine'
+import { defaultEngine, type EngineFactory } from '../engine'
 import type { ScanDraft } from '../resolve'
 import { useCamera } from '../useCamera'
 import { useScanLoop } from '../useScanLoop'
@@ -32,10 +33,11 @@ function Scanner({
   outbox
 }: {
   settings: ScanWindowSettings
-  engineFactory: () => ScanEngine
+  engineFactory: EngineFactory
   outbox: Outbox
 }): React.JSX.Element {
   const videoRef = useRef<HTMLVideoElement>(null)
+  const { game } = useGame()
   const camera = useCamera(settings.deviceId)
   const { overlay, push, clear } = useOverlay()
   const pulls = useRef(0)
@@ -76,6 +78,7 @@ function Scanner({
   const loop = useScanLoop({
     videoRef,
     engineFactory,
+    game,
     running: camera.stream !== null && !settings.paused,
     setName: scanSet?.setName ?? null,
     setKey: scanSet ? `${scanSet.language}|${scanSet.setName}` : ANY,
@@ -154,12 +157,14 @@ function CameraNotAvailable(): React.JSX.Element {
 
 /**
  * The scan window's whole page: the camera, the recognition loop and the pull
- * overlays, with no app UI. It does nothing until the main window sends its settings.
+ * overlays, with no app UI. It does nothing until the main window sends its settings, and scans
+ * the game the main window shows: read as the main window reads it, again whenever main says the
+ * data changed (as it does after a switch), and nothing is scanned before it's known.
  */
 export function ScanWindowApp({
   engineFactory = defaultEngine
 }: {
-  engineFactory?: () => ScanEngine
+  engineFactory?: EngineFactory
 }): React.JSX.Element {
   const [settings, setSettings] = useState<ScanWindowSettings | null>(null)
   const [outbox] = useState(createOutbox)
@@ -184,6 +189,11 @@ export function ScanWindowApp({
     }
   }, [outbox])
 
-  if (settings === null) return <div className="absolute inset-0 bg-black" />
-  return <Scanner settings={settings} engineFactory={engineFactory} outbox={outbox} />
+  const black = <div className="absolute inset-0 bg-black" />
+  if (settings === null) return black
+  return (
+    <GameProvider fallback={black}>
+      <Scanner settings={settings} engineFactory={engineFactory} outbox={outbox} />
+    </GameProvider>
+  )
 }

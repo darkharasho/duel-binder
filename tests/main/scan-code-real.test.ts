@@ -26,6 +26,7 @@ import {
   cardsForImages,
   matchName,
   printingsByCode,
+  printingsByNumber,
   printingsForCards
 } from '../../src/main/repo/scan'
 import { resolveSignals, type ResolveContext } from '../../src/renderer/src/features/scan/resolve'
@@ -163,6 +164,7 @@ describe.skipIf(!DB || !FP || (!REAL && !SCANS))('set codes read on real photos 
       defaultRarity: null,
       lookups: {
         printingsByCode: async (code) => printingsByCode(db, code),
+        printingsByNumber: async (n) => printingsByNumber(db, n),
         printingsForCards: async (ids) => printingsForCards(db, ids),
         matchName: async (text) => matchName(db, text),
         cardsForImages: async (ids) => cardsForImages(db, ids)

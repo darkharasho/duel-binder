@@ -1,3 +1,4 @@
+import type { GameId } from '@shared/games/types'
 import type { Api } from '@shared/ipc'
 import { LANGUAGES } from '@shared/languages'
 import { artVariantName } from '@shared/scan/fingerprintRefs'
@@ -16,6 +17,8 @@ import {
 } from '@shared/scan/thresholds'
 import type { ScanDraft, ScanPrinting } from '@shared/scan/types'
 import type { ArtMatch, RawSignals } from './engine'
+import { resolvePokemonSignals } from './resolvePokemon'
+import type { PokemonTextLanguage } from '@shared/scan/pokemonLanguage'
 
 export type { ScanDraft } from '@shared/scan/types'
 
@@ -27,6 +30,8 @@ export type ScanOutcome =
   { kind: 'none'; far?: true } | { kind: 'unsure' } | { kind: 'recognized'; item: ScanDraft }
 
 export interface ResolveContext {
+  /** The game whose cards are scanned; Yu-Gi-Oh when left out. */
+  game?: GameId
   setName: string | null
   /** The picked set's printings in its language; null when no set is picked. */
   setPrintings: ScanPrinting[] | null
@@ -36,9 +41,19 @@ export interface ResolveContext {
    * code read; null when it can't be told. Without it, such a card is taken in its first language.
    */
   cardLanguage?: (cardId: number) => Promise<CardLanguage | null>
+  /**
+   * For Pokémon: the language the card's text reads as (pokemonLanguageOfBands), asked only when
+   * a card is about to be named; null when it can't be told. Without it, never told.
+   */
+  readLanguage?: () => Promise<PokemonTextLanguage>
+  /**
+   * For Pokémon: the name band read with the Japanese model, asked only when the language can't
+   * be told from the text. Without it, nothing read.
+   */
+  readLocalName?: () => Promise<string[]>
   lookups: Pick<
     Api['scan'],
-    'printingsByCode' | 'printingsForCards' | 'matchName' | 'cardsForImages'
+    'printingsByCode' | 'printingsByNumber' | 'printingsForCards' | 'matchName' | 'cardsForImages'
   >
 }
 
@@ -296,9 +311,10 @@ async function byName(raw: RawSignals, ctx: ResolveContext): Promise<ScanDraft |
  * when a card is in view but none of those is trusted. A code read that names a different card
  * than confident art is a misread one way or the other, so it's unsure too. When art was matched
  * and its closest artwork is past ART_FAR_DISTANCE, what's in view isn't taken for a card at all
- * unless its code or name reads: `none`.
+ * unless its code or name reads: `none`. Pokémon cards are resolvePokemonSignals'.
  */
 export async function resolveSignals(raw: RawSignals, ctx: ResolveContext): Promise<ScanOutcome> {
+  if (ctx.game === 'pkm') return resolvePokemonSignals(raw, ctx)
   if (!raw.found) return { kind: 'none' }
   const artCard = await confidentArt(raw, ctx)
   const code = await byCode(raw, ctx)

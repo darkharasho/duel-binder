@@ -24,13 +24,14 @@ import {
   SheetHeader,
   SheetTitle
 } from '@/components/ui/sheet'
-import type { ScanEngine } from '@/features/scan/engine'
+import type { EngineFactory } from '@/features/scan/engine'
 import { GameSegments } from '@/components/GameSwitch'
 import { api, mutationInvalidationKeys } from '@/lib/api'
 import { useFriendsOverview } from '@/lib/friends'
 import { GameProvider, pageInGame, useGame } from '@/lib/game'
 import { cn } from '@/lib/utils'
 import { usePhone } from './context'
+import { refreshAllFingerprints } from './refreshFingerprints'
 import { ScannerScreen } from './ScannerScreen'
 import { Settings } from './Settings'
 import { StatusLine } from './StatusLine'
@@ -73,7 +74,7 @@ function useReadyChecks(): void {
         void qc.invalidateQueries({ queryKey: ['card'] })
       })
       .catch(() => undefined)
-    void store.refreshFingerprints().catch(() => undefined)
+    void refreshAllFingerprints(store).catch(() => undefined)
   }, [store, qc])
 }
 
@@ -85,7 +86,7 @@ function useReadyChecks(): void {
 export function PhoneShell({
   engineFactory
 }: {
-  engineFactory?: () => ScanEngine
+  engineFactory?: EngineFactory
 }): React.JSX.Element {
   return (
     <GameProvider fallback={<div className="fixed inset-0 bg-background" />}>
@@ -94,7 +95,7 @@ export function PhoneShell({
   )
 }
 
-function Shell({ engineFactory }: { engineFactory?: () => ScanEngine }): React.JSX.Element {
+function Shell({ engineFactory }: { engineFactory?: EngineFactory }): React.JSX.Element {
   const pages = usePages('dashboard')
   const { page, onNavigate } = pages
   const [moreOpen, setMoreOpen] = useState(false)

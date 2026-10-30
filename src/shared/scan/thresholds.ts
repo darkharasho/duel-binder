@@ -11,6 +11,22 @@ export const ART_MAX_DISTANCE_IN_SET = 80
  */
 export const ART_MIN_MARGIN = 10
 /**
+ * How far behind the closest a Pokémon artwork may be and still be in its art group, which the
+ * language or number then decides: reprints' and twins' reference scans of one artwork differ by
+ * 20 bits and more, where Yu-Gi-Oh's ART_MIN_MARGIN is 10.
+ */
+export const PKM_ART_MIN_MARGIN = 24
+/**
+ * A Japanese card's printed name is evidence of its language (readsJapaneseName) with this many
+ * kana and kanji or more, and may be read one letter off with JA_NAME_FUZZY_LENGTH.
+ */
+export const JA_NAME_MIN_LENGTH = 3
+export const JA_NAME_FUZZY_LENGTH = 5
+/** The same for an English card's name (readsEnglishName), in letters and digits. */
+export const EN_NAME_MIN_LENGTH = 4
+export const EN_NAME_FUZZY_LENGTH = 7
+export const EN_NAME_FUZZIER_LENGTH = 12
+/**
  * How much closer than its card art a reference scan of an art variant (an overframe, say) must
  * match a photo for the photo to be taken for that variant's printings (see artFamily in
  * resolve.ts). On the owner's photos, overframe and manga-art printings beat their card art by
@@ -128,5 +144,48 @@ export const LANGUAGE_MIN_CONFIDENCE = 28
 export const LANGUAGE_MIN_MARGIN = 5
 /** Characters of its own script a non-Latin read needs, so garbage in it doesn't count. */
 export const LANGUAGE_MIN_SCRIPT_CHARS = 5
+/** Latin letters a read of a Pokémon card's text needs before it counts as English. */
+export const LANGUAGE_MIN_LATIN_CHARS = 8
+/**
+ * Japanese Pokémon card words (ポケモン, ダメージ, ...) a read needs before it counts as Japanese:
+ * the Japanese model makes kana of noise, but not these words.
+ */
+export const LANGUAGE_MIN_JA_WORDS = 2
 /** Frames a card's text is read on to tell its language before it's taken in its first one. */
 export const LANGUAGE_MAX_READS = 3
+
+// A Pokémon card's version from its foil. Texture is the median fine texture of a region of the
+// straightened card, in luma levels (vision/foil.ts). On real photos the frame's doesn't tell a
+// reverse holo from a normal card, so only Holofoil is ever named (pokemonVersion).
+/** A frame texture at least this reads as foil on the frame (reverse holo), naming nothing... */
+export const VERSION_FRAME_FOIL_MIN = 2
+/** ...and at most this as a plain frame. */
+export const VERSION_FRAME_PLAIN_MAX = 0.6
+/** An art-window texture at least this reads as foil on the art (holo). */
+export const VERSION_ART_FOIL_MIN = 6
+/** The foiled region must be this many times as textured as the other (frame against art). */
+export const VERSION_OTHER_RATIO = 2
+/** ...and this many times as textured as the card's text box, which noise and detail hit too. */
+export const VERSION_REFERENCE_RATIO = 1.5
+
+// A graded slab's label block, untuned until real photos (Task 13). Boxes are in card widths and
+// heights from the card's top-left corner (u across, v down), so they hold at any distance.
+/** The label block sits above the card: v from here... */
+export const SLAB_LABEL_V = [-0.26, -0.06] as const
+/** ...and u from here (a label is about as wide as the card). */
+export const SLAB_LABEL_U = [0.08, 0.92] as const
+/** A label sample at least this bright (luma 0-255) counts as the label's paper... */
+export const SLAB_LABEL_MIN_BRIGHT = 170
+/** ...and this share of the label box must be paper. */
+export const SLAB_LABEL_MIN_PAPER_SHARE = 0.6
+/**
+ * Text is where a row of the label box flips between paper and a sample this much darker, at
+ * least this many times over the whole box (a plain strip, or a margin, flips none).
+ */
+export const SLAB_INK_DARKER_BY = 80
+export const SLAB_TEXT_MIN_FLIPS = 12
+/**
+ * The label's paper must be this much brighter (luma) than the holder beside it and the strip
+ * above it, which is plastic over the desk: a bright desk or a card sleeve's glare isn't a label.
+ */
+export const SLAB_MIN_CONTRAST = 40

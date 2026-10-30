@@ -189,12 +189,33 @@ describe('phone api', () => {
     await expect(api.scan.language('nope' as never)).rejects.toThrow()
   })
 
+  it('scan.readText reads each band with the one model asked for, as it is', async () => {
+    const { api, ocr } = setup()
+    await expect(api.scan.readText([band(4, 2), band(3, 2)], 'jpn')).resolves.toEqual([
+      'Lorsque cette carte est invoquée, de la',
+      'Lorsque cette carte est invoquée, de la'
+    ])
+    expect(ocr.readText).toHaveBeenCalledTimes(2)
+    expect(ocr.readText).toHaveBeenCalledWith(expect.objectContaining({ width: 3 }), 'jpn')
+    await expect(api.scan.readText([band(4, 2)], 'chi_sim' as never)).rejects.toThrow(
+      'Unknown OCR model'
+    )
+    await expect(api.scan.readText('nope' as never, 'eng')).rejects.toThrow()
+    expect(ocr.readText).toHaveBeenCalledTimes(2)
+  })
+
+  it('scan.ocr reads Pokémon collector numbers', async () => {
+    const { api, ocr } = setup()
+    await api.scan.ocr([band(2, 2)], 'number')
+    expect(ocr.read).toHaveBeenCalledWith([band(2, 2)], 'number')
+  })
+
   it('scan fingerprints go to the store', async () => {
     const { api, store } = setup()
-    await api.scan.fingerprints()
-    await expect(api.scan.refreshFingerprints()).resolves.toEqual({ state: 'ready', count: 3 })
+    await api.scan.fingerprints('ygo')
+    await expect(api.scan.refreshFingerprints('ygo')).resolves.toEqual({ state: 'ready', count: 3 })
     expect(store.fingerprints).toHaveBeenCalled()
-    expect(store.refreshFingerprints).toHaveBeenCalled()
+    expect(store.refreshFingerprints).toHaveBeenCalledWith({ game: 'ygo' })
   })
 
   it('scanWindow.isOpen is false', async () => {

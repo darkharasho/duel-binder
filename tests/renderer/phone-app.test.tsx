@@ -504,7 +504,7 @@ describe('phone app', () => {
     expect(await screen.findByText(/Version dev/)).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Refresh card data' }))
     await waitFor(() => expect(store.updateCatalog).toHaveBeenCalledWith({ force: true }))
-    await waitFor(() => expect(store.refreshFingerprints).toHaveBeenCalledWith({ force: true }))
+    await waitFor(() => expect(store.refreshFingerprints).toHaveBeenCalledWith({ game: 'ygo', force: true }))
     expect(await screen.findByText('Card data is up to date.')).toBeInTheDocument()
   })
 })

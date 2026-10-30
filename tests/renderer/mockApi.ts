@@ -62,6 +62,7 @@ export function createMockApi(overrides: DeepPartial<Api> = {}): Api {
     },
     scan: {
       printingsByCode: vi.fn(async () => []),
+      printingsByNumber: vi.fn(async () => []),
       printingsForSet: vi.fn(async () => []),
       printingsForCards: vi.fn(async () => []),
       matchName: vi.fn(async () => null),
@@ -70,7 +71,8 @@ export function createMockApi(overrides: DeepPartial<Api> = {}): Api {
       fingerprintRefs: vi.fn(async () => []),
       refreshFingerprints: vi.fn(async () => ({ state: 'missing' as const, count: 0 })),
       ocr: vi.fn(async () => []),
-      language: vi.fn(async () => null)
+      language: vi.fn(async () => null),
+      readText: vi.fn(async () => [])
     },
     stats: {
       get: vi.fn(async () => ({

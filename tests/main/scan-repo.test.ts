@@ -3,6 +3,7 @@ import {
   cardsForImages,
   matchName,
   printingsByCode,
+  printingsByNumber,
   printingsForCards,
   printingsForSet
 } from '../../src/main/repo/scan'
@@ -10,6 +11,8 @@ import { scanRefs } from '../../src/main/repo/scanRefs'
 import type Database from 'better-sqlite3'
 import { seededDb } from './helpers'
 import { getMeta, setMeta } from '../../src/main/db/meta'
+import { localScope } from '../../src/main/repo/scope'
+import { seedPokemon } from '../fixtures/pokemon'
 
 const LOB = 'Legend of Blue Eyes White Dragon'
 
@@ -210,5 +213,178 @@ describe('scan repo', () => {
       setCols(db, 'LOB-EN005', R, null, null)
       expect(priceOf(db, 'LOB-EN005', R)).toBeNull()
     })
+  })
+})
+
+describe('printingsByNumber', () => {
+  const PKM = localScope("'pkm'")
+
+  async function numberDb(): Promise<Database.Database> {
+    const db = await seededDb()
+    const { cardIds } = seedPokemon(db)
+    db.exec("DELETE FROM card_printings WHERE game = 'pkm'")
+    const add = db.prepare(
+      "INSERT INTO card_printings (game, card_id, language, set_name, set_code, set_rarity) VALUES ('pkm', ?, ?, ?, ?, ?)"
+    )
+    add.run(cardIds[0], 'en', 'Scarlet', 'SV3 045/193', 'Holofoil')
+    add.run(cardIds[1], 'ja', 'Japan', 'SV1S 045/078', 'Normal')
+    add.run(cardIds[1], 'ja', 'Japan', 'SVP 12', 'Normal')
+    add.run(cardIds[1], 'en', 'Promos', 'SVP 045', 'Normal')
+    add.run(cardIds[0], 'en', 'Gallery', 'SIT TG05/TG30', 'Normal')
+    return db
+  }
+  const codes = (db: Database.Database, n: Parameters<typeof printingsByNumber>[1]): string[] =>
+    printingsByNumber(db, n, PKM)
+      .map((p) => p.setCode)
+      .sort()
+
+  it('matches number and total, ignoring leading zeros', async () => {
+    const db = await numberDb()
+    expect(codes(db, { setAbbrev: null, number: '45', total: '193' })).toEqual(['SV3 045/193'])
+    expect(codes(db, { setAbbrev: null, number: '045', total: null })).toEqual([
+      'SV1S 045/078',
+      'SV3 045/193',
+      'SVP 045'
+    ])
+  })
+
+  it('matches a code with no total only when no total was read', async () => {
+    const db = await numberDb()
+    expect(codes(db, { setAbbrev: null, number: '045', total: '193' })).toEqual(['SV3 045/193'])
+    expect(codes(db, { setAbbrev: 'SVP', number: '045', total: '193' })).toEqual(['SV3 045/193'])
+  })
+
+  it('never returns a Yu-Gi-Oh printing for a Pokémon scope', async () => {
+    const db = await numberDb()
+    const ygo = db
+      .prepare("SELECT card_id AS id FROM card_printings WHERE game = 'ygo' LIMIT 1")
+      .get() as { id: number }
+    db.prepare(
+      "INSERT INTO card_printings (game, card_id, language, set_name, set_code, set_rarity) VALUES ('ygo', ?, 'en', 'X', 'YGO 045/193', 'Common')"
+    ).run(ygo.id)
+    expect(codes(db, { setAbbrev: null, number: '45', total: '193' })).toEqual(['SV3 045/193'])
+  })
+
+  it('rebuilds its number index when the catalog version changes', async () => {
+    const db = await numberDb()
+    const n = { setAbbrev: null, number: '99', total: null }
+    expect(codes(db, n)).toEqual([])
+    const card = db
+      .prepare("SELECT card_id AS id FROM card_printings WHERE game = 'pkm' LIMIT 1")
+      .get() as { id: number }
+    db.prepare(
+      "INSERT INTO card_printings (game, card_id, language, set_name, set_code, set_rarity) VALUES ('pkm', ?, 'en', 'New', 'NEW 099/100', 'Normal')"
+    ).run(card.id)
+    expect(codes(db, n)).toEqual([])
+    setMeta(db, 'db_version', 'next')
+    expect(codes(db, n)).toEqual(['NEW 099/100'])
+  })
+
+  it('narrows by set abbreviation only when it matches a stored one', async () => {
+    const db = await numberDb()
+    expect(codes(db, { setAbbrev: 'sv1s', number: '045', total: null })).toEqual(['SV1S 045/078'])
+    expect(codes(db, { setAbbrev: 'PAL', number: '045', total: '193' })).toEqual(['SV3 045/193'])
+  })
+
+  it('matches a code with no total and one whose number carries letters', async () => {
+    const db = await numberDb()
+    expect(codes(db, { setAbbrev: null, number: '012', total: null })).toEqual(['SVP 12'])
+    expect(codes(db, { setAbbrev: null, number: 'TG05', total: 'TG30' })).toEqual(['SIT TG05/TG30'])
+    expect(codes(db, { setAbbrev: null, number: '5', total: null })).toEqual([])
+  })
+
+  it('keeps to Pokémon, and the rows have the ScanPrinting shape', async () => {
+    const db = await numberDb()
+    const [row] = printingsByNumber(db, { setAbbrev: null, number: '45', total: '193' }, PKM)
+    expect(row).toMatchObject({ language: 'en', rarity: 'Holofoil', imageIds: expect.any(Array) })
+  })
+})
+
+describe("a Pokémon card's local name", () => {
+  const PKM = localScope("'pkm'")
+
+  it("carries the catalog's local-language name on a Pokémon printing, none on Yu-Gi-Oh's", async () => {
+    const db = await seededDb()
+    const { cardIds } = seedPokemon(db)
+    // A Japanese card named in English, as TCGCSV names it, with its printed name beside it.
+    db.prepare("UPDATE cards SET name = 'Pikachu' WHERE id = ?").run(cardIds[1])
+    db.prepare("UPDATE pokemon_cards SET local_name = 'ピカチュウ' WHERE card_id = ?").run(
+      cardIds[1]
+    )
+    const rows = printingsForCards(db, cardIds, PKM)
+    expect(rows.filter((r) => r.cardId === cardIds[1]).map((r) => r.localName)).toEqual([
+      'ピカチュウ',
+      'ピカチュウ'
+    ])
+    // No local name: the key is left out, as on every Yu-Gi-Oh printing.
+    expect(rows.filter((r) => r.cardId === cardIds[0]).every((r) => !('localName' in r))).toBe(true)
+    const ygo = printingsByCode(db, 'LOB-EN005')
+    expect(ygo.length).toBeGreaterThan(0)
+    expect(ygo.every((r) => !('localName' in r))).toBe(true)
+  })
+})
+
+describe('a Pokémon art twin with no artwork', () => {
+  const PKM = localScope("'pkm'")
+
+  it('marks a card with an unseen reprint: same name, illustrator and language, no image', async () => {
+    const db = await seededDb()
+    const { cardIds } = seedPokemon(db)
+    const [pikachu, japanese] = cardIds
+    db.prepare(
+      "UPDATE pokemon_cards SET image_url = 'https://assets/x' WHERE card_id IN (?, ?)"
+    ).run(pikachu, japanese)
+    const add = (
+      id: number,
+      name: string,
+      illustrator: string,
+      sourceId: string,
+      url: string | null
+    ): void => {
+      db.prepare(
+        `INSERT INTO cards (id, game, name, type, frame_type, race, "desc", updated_at)
+         VALUES (?, 'pkm', ?, 'Pokémon', 'pokemon', 'Basic', '', '2026-10-29')`
+      ).run(id, name)
+      db.prepare(
+        `INSERT INTO pokemon_cards (card_id, category, hp, types, stage, rarity, illustrator, source_id, image_url)
+         VALUES (?, 'Pokémon', 60, '[]', 'Basic', 'Common', ?, ?, ?)`
+      ).run(id, illustrator, sourceId, url)
+      db.prepare(
+        `INSERT INTO card_printings (game, card_id, language, set_name, set_code, set_rarity)
+         VALUES ('pkm', ?, ?, 'Reprints', 'R 1', 'Holofoil')`
+      ).run(id, sourceId.slice(0, 2))
+    }
+    const twinned = (): boolean[] =>
+      printingsForCards(db, [pikachu], PKM).map((p) => p.unseenTwin === true)
+    expect(twinned()).toEqual([false, false])
+    // Another illustrator's, another language's, or one with its artwork: not a twin.
+    add(9001, 'Pikachu', 'Someone Else', 'en/x-1', null)
+    add(9002, 'Pikachu', 'Naoyo Kimura', 'ja/X-1', null)
+    add(9003, 'Pikachu', 'Naoyo Kimura', 'en/x-3', 'https://assets/y')
+    expect(twinned()).toEqual([false, false])
+    // A reprint with no artwork, as the Classic Collection's cards have none.
+    add(9004, 'Pikachu', 'Naoyo Kimura', 'en/cel25cc-1', null)
+    expect(twinned()).toEqual([true, true])
+    db.prepare('DELETE FROM pokemon_cards WHERE card_id = 9004').run()
+    expect(twinned()).toEqual([false, false])
+    // A trainer kit's, whose only artwork is a product photo; and a blank written another way.
+    add(
+      9005,
+      'Pikachu',
+      'Naoyo Kimura',
+      'en/tk-1',
+      'https://tcgplayer-cdn.tcgplayer.com/product/1_200w.jpg'
+    )
+    expect(twinned()).toEqual([true, true])
+    db.prepare('DELETE FROM pokemon_cards WHERE card_id = 9005').run()
+    db.prepare("UPDATE cards SET name = '_____''s Pikachu' WHERE id = ?").run(pikachu)
+    add(9006, "___'s Pikachu", 'Naoyo Kimura', 'en/cel25cc-2', null)
+    expect(twinned()).toEqual([true, true])
+    // Names written another way: Tapu Lele-GX and Tapu Lele GX, a star as ☆ or ★.
+    db.prepare('DELETE FROM pokemon_cards WHERE card_id = 9006').run()
+    db.prepare("UPDATE cards SET name = 'Umbreon ★' WHERE id = ?").run(pikachu)
+    add(9007, 'Umbreon ☆', 'Naoyo Kimura', 'en/cel25cc-3', null)
+    expect(twinned()).toEqual([true, true])
+    expect(printingsByCode(db, 'LOB-EN005').every((r) => !('unseenTwin' in r))).toBe(true)
   })
 })

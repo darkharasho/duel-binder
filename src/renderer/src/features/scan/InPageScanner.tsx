@@ -2,7 +2,8 @@ import { useEffect, useRef } from 'react'
 import { defaultEngine, type EngineFactory } from './engine'
 import { useScanHub } from './ScanHub'
 import { ScanViewport } from './ScanViewport'
-import { NO_FINGERPRINTS, SET_UNREADABLE } from './scanText'
+import { ArtDataNotice } from './ArtDataNotice'
+import { SET_UNREADABLE } from './scanText'
 import { useCamera, type CameraError } from './useCamera'
 import { useHubScan } from './useHubScan'
 
@@ -65,9 +66,7 @@ export function InPageScanner({
         className="aspect-[3/4] h-[calc(100vh-15rem)] min-h-72 rounded-lg border-2 border-white/10"
       />
       {setUnreadable && <p className="text-xs text-muted-foreground">{SET_UNREADABLE}</p>}
-      {loop.artReady === false && (
-        <p className="text-xs text-muted-foreground">{NO_FINGERPRINTS}</p>
-      )}
+      {loop.artReady === false && <ArtDataNotice status={loop.artData} />}
       {controls}
     </section>
   )

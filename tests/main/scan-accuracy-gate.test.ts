@@ -119,6 +119,14 @@ describe('checkAccuracy', () => {
 })
 
 describe('accuracyProblem', () => {
+  it('holds Pokémon to its own floor, and to no wrong cards', () => {
+    const report = { shots: 48, right: 33, wrong: [], missed: [] }
+    expect(accuracyProblem(report)).toMatch(/needs 41/)
+    expect(accuracyProblem(report, 'pkm')).toBeNull()
+    expect(accuracyProblem({ ...report, right: 28 }, 'pkm')).toMatch(/needs 29/)
+    expect(accuracyProblem({ ...report, wrong: ['a'] }, 'pkm')).toMatch(/wrong card/)
+  })
+
   it('passes a report at the floor with nothing wrong', () => {
     expect(accuracyProblem({ shots: 20, right: 17, wrong: [], missed: ['a', 'b', 'c'] })).toBeNull()
     expect(accuracyProblem({ shots: 20, right: 16, wrong: [], missed: [] })).toMatch(/needs 17/)

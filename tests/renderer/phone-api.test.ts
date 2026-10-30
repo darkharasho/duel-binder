@@ -50,6 +50,7 @@ function fakeStore(over: Partial<PhoneStore> = {}): PhoneStore {
     reportUsage: vi.fn(async () => {}),
     fingerprints: vi.fn(async () => null),
     fingerprintRefs: vi.fn(async () => []),
+    fingerprintStatus: vi.fn(async () => ({ state: 'ready' as const, count: 3 })),
     refreshFingerprints: vi.fn(async () => ({ state: 'ready' as const, count: 3 })),
     ...over
   }

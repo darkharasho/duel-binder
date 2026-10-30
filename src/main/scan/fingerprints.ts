@@ -4,6 +4,7 @@ import { join } from 'path'
 import { decodeFingerprints } from '@shared/scan/fingerprintFile'
 import type { GameId } from '@shared/games'
 import { parseFingerprintRefs, type FingerprintRefsFile } from '@shared/scan/fingerprintRefs'
+import { readBody } from '@shared/scan/readBody'
 import type { FingerprintStatus } from '@shared/scan/types'
 
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -75,11 +76,12 @@ export function createFingerprintStore(opts: {
   let meta = loadMeta()
   let downloading = false
   let failed = false
+  let progress: number | undefined
   let inFlight: Promise<FingerprintStatus> | null = null
 
   const status = (): FingerprintStatus => {
     if (meta) return { state: 'ready', count: meta.count }
-    if (downloading) return { state: 'downloading', count: 0 }
+    if (downloading) return { state: 'downloading', count: 0, progress }
     return { state: failed ? 'error' : 'missing', count: 0 }
   }
 
@@ -134,7 +136,9 @@ export function createFingerprintStore(opts: {
       return false
     }
     if (!res.ok) throw new Error(`Fingerprint download failed (${res.status})`)
-    const bytes = new Uint8Array(await res.arrayBuffer())
+    const bytes = await readBody(res, (share) => {
+      progress = share
+    })
     const count = decodeFingerprints(bytes).count
     mkdirSync(dir, { recursive: true })
     writeFileSync(`${binPath}.tmp`, bytes)
@@ -181,6 +185,7 @@ export function createFingerprintStore(opts: {
       if (fresh && (!hasRefs || meta!.refsEtag !== undefined)) return Promise.resolve(status())
       downloading = true
       failed = false
+      progress = undefined
       inFlight = (fresh ? downloadRefs().catch(() => false) : download())
         .catch(() => {
           failed = true

@@ -1,6 +1,10 @@
 import { collectorNumberCandidates } from '@shared/scan/collectorNumber'
 import { normalizeName } from '@shared/scan/names'
-import { readsEnglishName, readsJapaneseName } from '@shared/scan/pokemonLanguage'
+import {
+  readsEnglishName,
+  readsJapaneseName,
+  type PokemonTextLanguage
+} from '@shared/scan/pokemonLanguage'
 import {
   ART_FAR_DISTANCE,
   ART_MATCH_DEPTH,
@@ -12,7 +16,7 @@ import type { RawSignals } from './engine'
 import { pokemonVersion } from './vision/pokemonVersion'
 import type { ResolveContext, ScanOutcome } from './resolve'
 
-type Read = 'en' | 'ja' | 'other' | null
+type Read = PokemonTextLanguage
 
 /**
  * The cards whose art is close enough and within PKM_ART_MIN_MARGIN of the best, closest first. A
@@ -193,18 +197,21 @@ export async function resolvePokemonSignals(
    * The cards among printings in the language read. With no language read, the name band
    * decides, never against the art: the English cards whose name the English read shows
    * (readsEnglishName), or the Japanese ones whose printed name the Japanese read shows
-   * (readsJapaneseName); neither when both do. Only with the art agreeing: without it, the name
-   * read already stands for the card.
+   * (readsJapaneseName); neither when both do. Text read as kanji alone (which the Japanese
+   * model makes of a blurred English text box and of Chinese text alike) leaves the English name
+   * only: a Chinese card prints its name in Chinese. Only with the art agreeing: without it, the
+   * name read already stands for the card.
    */
   const inLanguage = async (printings: ScanPrinting[]): Promise<number[]> => {
     const lang = await language()
     if (lang === 'other') return []
-    if (lang !== null)
+    if (lang === 'en' || lang === 'ja')
       return unique(printings.filter((p) => p.language === lang).map((p) => p.cardId))
     if (!group.length) return []
     const en = printings.filter(
       (p) => p.language === 'en' && raw.nameTexts.some((r) => readsEnglishName(r, p.name))
     )
+    if (lang === 'kanji') return unique(en.map((p) => p.cardId))
     const ja = printings.filter((p) => p.language === 'ja')
     const reads = ja.length ? await localNames() : []
     const jaNamed = ja.filter((p) => reads.some((r) => readsJapaneseName(r, p.localName ?? p.name)))

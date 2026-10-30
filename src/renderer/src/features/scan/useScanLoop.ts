@@ -3,7 +3,7 @@ import type { GameId } from '@shared/games/types'
 import type { LookModel } from '@shared/scan/look'
 import { cuesOver, type RarityCues } from '@shared/scan/rarity'
 import type { CardLanguage } from '@shared/scan/language'
-import { pokemonLanguageOfBands } from '@shared/scan/pokemonLanguage'
+import { pokemonLanguageOfBands, type PokemonTextLanguage } from '@shared/scan/pokemonLanguage'
 import type { TextModel } from '@shared/scan/ocr'
 import { scanProfile } from '@shared/scan/profiles'
 import { ABSENT_MS, LANGUAGE_MAX_READS, RARITY_MAX_READINGS } from '@shared/scan/thresholds'
@@ -155,7 +155,7 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
     pokemonLanguage: {
       imageId: null as number | null,
       reads: 0,
-      read: null as 'en' | 'ja' | 'other' | null
+      read: null as PokemonTextLanguage
     },
     // A Pokémon card's name band as the Japanese model reads it, every read so far, by artwork.
     pokemonNames: { imageId: null as number | null, reads: [] as string[][] },
@@ -338,7 +338,7 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
     const pokemonLanguageOf = async (
       imageId: number | null,
       bands: OcrBand[]
-    ): Promise<'en' | 'ja' | 'other' | null> => {
+    ): Promise<PokemonTextLanguage> => {
       if (l.pokemonLanguage.imageId !== imageId)
         l.pokemonLanguage = { imageId, reads: 0, read: null }
       const known = l.pokemonLanguage

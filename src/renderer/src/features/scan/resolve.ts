@@ -15,6 +15,7 @@ import {
 import type { ScanDraft, ScanPrinting } from '@shared/scan/types'
 import type { ArtMatch, RawSignals } from './engine'
 import { resolvePokemonSignals } from './resolvePokemon'
+import type { PokemonTextLanguage } from '@shared/scan/pokemonLanguage'
 
 export type { ScanDraft } from '@shared/scan/types'
 
@@ -38,10 +39,10 @@ export interface ResolveContext {
    */
   cardLanguage?: (cardId: number) => Promise<CardLanguage | null>
   /**
-   * For Pokémon: the language the card's text reads as (pokemonLanguage), asked only when a card
-   * is about to be named; null when it can't be told. Without it, never told.
+   * For Pokémon: the language the card's text reads as (pokemonLanguageOfBands), asked only when
+   * a card is about to be named; null when it can't be told. Without it, never told.
    */
-  readLanguage?: () => Promise<'en' | 'ja' | 'other' | null>
+  readLanguage?: () => Promise<PokemonTextLanguage>
   /**
    * For Pokémon: the name band read with the Japanese model, asked only when the language can't
    * be told from the text. Without it, nothing read.

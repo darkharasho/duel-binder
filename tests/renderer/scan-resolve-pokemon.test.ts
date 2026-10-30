@@ -5,7 +5,7 @@ import type { ScanPrinting } from '@shared/scan/types'
 import { ART_FAR_DISTANCE, ART_MAX_DISTANCE, PKM_ART_MIN_MARGIN } from '@shared/scan/thresholds'
 import { printing } from './scanFakes'
 
-type Read = 'en' | 'ja' | 'other' | null
+type Read = 'en' | 'ja' | 'other' | 'kanji' | null
 
 // Pikachu in English (A) and its Japanese twin (B) share art; C is an English reprint of A's art
 // in another set; D has two versions; R is Raichu, in English and Japanese.
@@ -219,6 +219,16 @@ describe('resolvePokemonSignals', () => {
     expect(await resolveSignals(raw({ art: twins, nameTexts: ['Pika'] }), pkm(null))).toEqual({
       kind: 'unsure'
     })
+  })
+
+  it('text read as kanji alone leaves the English name to decide, never the Japanese', async () => {
+    // The Japanese model's kanji of a blurred English text box (owner shots of Drilbur, Thievul).
+    expect(
+      await recognized(raw({ art: twins, nameTexts: ['Pikachu'] }), pkm('kanji'))
+    ).toMatchObject({ cardId: 1 })
+    const ja: ResolveContext = { ...pkm('kanji'), readLocalName: async () => ['ピカチュウ'] }
+    expect(await resolveSignals(raw({ art: twins }), ja)).toEqual({ kind: 'unsure' })
+    expect(await resolveSignals(raw({ art: twins }), pkm('kanji'))).toEqual({ kind: 'unsure' })
   })
 
   it('a Japanese card named in English is matched by its printed name', async () => {

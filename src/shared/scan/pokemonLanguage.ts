@@ -151,6 +151,12 @@ export function pokemonLanguage(text: string): 'en' | 'ja' | 'other' | null {
   return englishWords(text) >= LANGUAGE_MIN_WORDS ? 'en' : null
 }
 
+/** Whether most of a read's letters are Latin ones. */
+function mostlyLatin(text: string): boolean {
+  const letters = [...text].filter((c) => /\p{L}/u.test(c) && !DASHES.has(c))
+  return letters.filter((c) => LATIN.test(c)).length * 2 > letters.length
+}
+
 /**
  * A Japanese-model read as pokemonLanguage judges it, but one mostly in Latin letters is judged
  * on those alone: the model reads an English card's text as English with stray kana and kanji
@@ -158,29 +164,34 @@ export function pokemonLanguage(text: string): 'en' | 'ja' | 'other' | null {
  * its words.
  */
 function jpnLanguage(text: string): 'en' | 'ja' | 'other' | null {
-  const letters = [...text].filter((c) => /\p{L}/u.test(c) && !DASHES.has(c))
-  const latin = letters.filter((c) => LATIN.test(c)).length
-  if (latin * 2 <= letters.length) return pokemonLanguage(text)
+  if (!mostlyLatin(text)) return pokemonLanguage(text)
   return pokemonLanguage([...text].filter((c) => !/\p{L}/u.test(c) || LATIN.test(c)).join(''))
 }
+
+/**
+ * What a Pokémon card's text says of its language: one of the catalog's, `other` (Chinese, Korean,
+ * a European language), `kanji` (other, but only by the kanji the Japanese model reads, which it
+ * makes of a blurred English text box as readily as of Chinese text), or null when it can't tell.
+ */
+export type PokemonTextLanguage = 'en' | 'ja' | 'other' | 'kanji' | null
 
 /**
  * A Pokémon card's language from its text read once per model. Each read is judged on its own:
  * run together, the Japanese model's kana-like garbage on an English card would make it Japanese.
  *
- * - `other` when either read says other (Chinese, Korean, a European language); a Japanese-model
- *   read mostly in Latin letters is judged on those alone (jpnLanguage).
+ * - `other` when the English read says other (a European language), or the Japanese one does by
+ *   Hangul or, read mostly in Latin letters, by its words (jpnLanguage).
+ * - `kanji` when only the Japanese read says other, by kanji and kana that aren't Japanese
+ *   text.
  * - `ja` when the Japanese model's read says ja and the English one's doesn't say en.
  * - `en` when the English model's read says en and the Japanese one's doesn't say ja.
  * - null otherwise: the reads disagree, or neither tells.
  */
-export function pokemonLanguageOfReads(reads: {
-  eng: string
-  jpn: string
-}): 'en' | 'ja' | 'other' | null {
+export function pokemonLanguageOfReads(reads: { eng: string; jpn: string }): PokemonTextLanguage {
   const eng = pokemonLanguage(reads.eng)
   const jpn = jpnLanguage(reads.jpn)
-  if (eng === 'other' || jpn === 'other') return 'other'
+  if (eng === 'other') return 'other'
+  if (jpn === 'other') return HANGUL.test(reads.jpn) || mostlyLatin(reads.jpn) ? 'other' : 'kanji'
   if (jpn === 'ja' && eng !== 'en') return 'ja'
   if (eng === 'en' && jpn !== 'ja') return 'en'
   return null
@@ -189,14 +200,16 @@ export function pokemonLanguageOfReads(reads: {
 /**
  * A Pokémon card's language from its text bands (the same text cut out in different ways), each
  * read once per model and judged on its own (pokemonLanguageOfReads): other when any band says
- * so, else the one language some band tells and none contradicts; null when none tells.
+ * so, else kanji when any band says that, else the one language some band tells and none
+ * contradicts; null when none tells.
  */
 export function pokemonLanguageOfBands(reads: {
   eng: string[]
   jpn: string[]
-}): 'en' | 'ja' | 'other' | null {
+}): PokemonTextLanguage {
   const told = reads.eng.map((eng, i) => pokemonLanguageOfReads({ eng, jpn: reads.jpn[i] ?? '' }))
   if (told.includes('other')) return 'other'
+  if (told.includes('kanji')) return 'kanji'
   const ja = told.includes('ja')
   const en = told.includes('en')
   return ja === en ? null : ja ? 'ja' : 'en'

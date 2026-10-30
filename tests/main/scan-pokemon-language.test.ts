@@ -75,6 +75,7 @@ describe('pokemonLanguageOfReads', () => {
   const EN = 'Pikachu HP 60 Basic Pokémon Gnaw 10 Weakness Resistance Retreat Cost'
   const JA = 'ピカチュウ HP 60 ワザ 相手のバトルポケモンに10ダメージ'
   const ZH = '皮卡丘 HP 60 招式'
+  const KO = '피카츄 HP 60 기술 전기'
   const FR =
     'Si cette carte est dans votre main, vous pouvez la mettre sur le terrain de votre adversaire.'
   // What one model makes of text in a script it doesn't know: says nothing.
@@ -87,11 +88,14 @@ describe('pokemonLanguageOfReads', () => {
     // en only when the eng read says en and the jpn read doesn't say ja: the jpn model's
     // kana-looking garbage on an English card never makes it Japanese.
     [{ jpn: GARBAGE, eng: EN }, 'en'],
-    // other when either read says other.
-    [{ jpn: ZH, eng: GARBAGE }, 'other'],
+    // other when the eng read says other, or the jpn read does by Hangul or European words;
+    // kanji when the jpn read says other by kanji alone, which it reads noise as too.
+    [{ jpn: ZH, eng: GARBAGE }, 'kanji'],
     [{ jpn: GARBAGE, eng: FR }, 'other'],
     [{ jpn: JA, eng: FR }, 'other'],
-    [{ jpn: ZH, eng: EN }, 'other'],
+    [{ jpn: ZH, eng: EN }, 'kanji'],
+    [{ jpn: KO, eng: GARBAGE }, 'other'],
+    [{ jpn: FR, eng: GARBAGE }, 'other'],
     [{ jpn: GARBAGE, eng: GARBAGE }, null],
     [{ jpn: '', eng: '' }, null]
   ] as const)('%j → %s', (reads, expected) => {
@@ -158,9 +162,19 @@ describe('pokemonLanguageOfBands', () => {
     // The same text read off two bands (as it is, and as ink on white): one telling is enough.
     [{ eng: [GARBAGE, EN], jpn: [GARBAGE, GARBAGE] }, 'en'],
     [{ eng: [GARBAGE, GARBAGE], jpn: [JA, GARBAGE] }, 'ja'],
-    // Bands that disagree tell nothing; any band's other is other.
+    // Bands that disagree tell nothing; any band's other is other, then any band's kanji kanji.
     [{ eng: [EN, GARBAGE], jpn: [GARBAGE, JA] }, null],
-    [{ eng: [EN, GARBAGE], jpn: [GARBAGE, ZH] }, 'other'],
+    [{ eng: [EN, GARBAGE], jpn: [GARBAGE, ZH] }, 'kanji'],
+    [
+      {
+        eng: [
+          EN,
+          'Si cette carte est dans votre main, vous pouvez la mettre sur le terrain de votre adversaire.'
+        ],
+        jpn: [GARBAGE, ZH]
+      },
+      'other'
+    ],
     [{ eng: [GARBAGE, GARBAGE], jpn: [GARBAGE, GARBAGE] }, null],
     [{ eng: [], jpn: [] }, null]
   ] as const)('%j → %s', (reads, expected) => {

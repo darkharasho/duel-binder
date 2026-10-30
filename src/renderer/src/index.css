@@ -709,6 +709,62 @@
     transparent 64%
   );
 }
+/* A picture in place of the pattern: its alpha is a third mask, so only the light shows it. */
+.foil[data-finish='reverse'][data-textured] {
+  --foil-pattern: linear-gradient(#fff, #fff);
+  --foil-pattern-size: auto;
+  --foil-shine: 0.95;
+  --foil-cross: 0.5;
+  --foil-grain: 0.3;
+  --foil-band-rate: 0.8;
+  --foil-bands: linear-gradient(
+    115deg,
+    transparent 28%,
+    rgb(0 0 0 / 0.65) 40%,
+    #000 50%,
+    rgb(0 0 0 / 0.65) 60%,
+    transparent 72%
+  );
+}
+.foil[data-textured] .foil-shine,
+.foil[data-textured] .foil-grain,
+.foil[data-textured] .foil-cross {
+  mask-image: var(--foil-band-mask), var(--foil-mask), var(--foil-texture);
+  -webkit-mask-image: var(--foil-band-mask), var(--foil-mask), var(--foil-texture);
+  mask-composite: intersect, intersect;
+  -webkit-mask-composite: source-in, source-in;
+  mask-size:
+    var(--foil-band-size),
+    100% 100%,
+    var(--foil-texture-size);
+  -webkit-mask-size:
+    var(--foil-band-size),
+    100% 100%,
+    var(--foil-texture-size);
+  mask-position:
+    var(--foil-band-at),
+    0 0,
+    var(--foil-texture-at);
+  -webkit-mask-position:
+    var(--foil-band-at),
+    0 0,
+    var(--foil-texture-at);
+  mask-repeat: no-repeat;
+  -webkit-mask-repeat: no-repeat;
+}
+.foil[data-textured] .foil-shine,
+.foil[data-textured] .foil-grain {
+  --foil-band-mask: var(--foil-bands);
+  --foil-band-size: 300% 300%;
+  --foil-band-at:
+    calc(50% + (50% - var(--foil-x)) * var(--foil-band-rate) / 2)
+    calc(50% + (50% - var(--foil-y)) * var(--foil-band-rate) / 2);
+}
+.foil[data-textured] .foil-cross {
+  --foil-band-mask: var(--foil-cross-band);
+  --foil-band-size: 240% 240%;
+  --foil-band-at: calc(var(--foil-x) * 0.8 + 15%) calc(100% - var(--foil-y));
+}
 /* EX and e-Reader reverse: from the real cards: a plain bright mirror, no pattern. */
 .foil[data-finish='reverse-flat'] {
   --foil-wash: 0.5;

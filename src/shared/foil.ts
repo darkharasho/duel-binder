@@ -250,10 +250,86 @@ export function foilKindFor(
   return 'none'
 }
 
+/** A picture the light of a reverse foil shows up, and where the art sits in that picture. */
+export interface FoilTexture {
+  url: string
+  art: ArtWindow
+}
+
+/**
+ * Optional pictures for Scarlet & Violet reverse foils, by `${type}/${stage}`: the catalog's type
+ * ("Grass", "Darkness", "Colorless") and `basic` or `stage`. Their alpha is the pattern. Empty: a
+ * card with no entry keeps the plain reverse foil.
+ */
+export const REVERSE_TEXTURES: Record<string, FoilTexture> = {}
+
+const SV_SETS = new Set([
+  'SVI',
+  'PAL',
+  'OBF',
+  'MEW',
+  'PAR',
+  'PAF',
+  'TEF',
+  'TWM',
+  'SFA',
+  'SCR',
+  'SSP',
+  'PRE',
+  'JTG',
+  'DRI',
+  'BLK',
+  'WHT',
+  'SVE',
+  'SVP'
+])
+
+/**
+ * A reverse foil's picture: Scarlet & Violet Pokémon only, chosen by the card's first type and
+ * whether it's a Basic or evolved. Null for anything else (Trainers, Energy, other eras).
+ */
+export function reverseTextureFor(
+  setCode: string,
+  pokemon: FoilCard['pokemon'],
+  table: Record<string, FoilTexture> = REVERSE_TEXTURES
+): FoilTexture | null {
+  if (!SV_SETS.has(setCode.trim().split(/\s/)[0])) return null
+  const type = pokemon?.types?.[0]
+  const stage =
+    pokemon?.stage === 'Basic' ? 'basic' : /^Stage\d/.test(pokemon?.stage ?? '') ? 'stage' : null
+  if (pokemon?.category.toLowerCase() !== 'pokemon' || !type || !stage) return null
+  return table[`${type}/${stage}`] ?? null
+}
+
+/**
+ * The CSS size and position that lay a texture over the card with its art on `window`. Percent
+ * positions divide by the room left over, so a size of exactly 100% is nudged off it.
+ */
+export function texturePlacement(
+  art: ArtWindow,
+  window: ArtWindow | null
+): {
+  size: string
+  position: string
+} {
+  if (!window) return { size: '100% 100%', position: '0% 0%' }
+  const axis = (from: number, to: number, artFrom: number, artTo: number): [number, number] => {
+    const scale = (to - from) / (artTo - artFrom)
+    const size = Math.abs(scale - 1) < 0.002 ? 100.2 : scale * 100
+    const offset = from - artFrom * scale
+    return [round(size), round((offset / (100 - size)) * 100)]
+  }
+  const [w, x] = axis(window.left, 100 - window.right, art.left, 100 - art.right)
+  const [h, y] = axis(window.top, window.bottom, art.top, art.bottom)
+  return { size: `${w}% ${h}%`, position: `${x}% ${y}%` }
+}
+
 /** What PanelCardArt needs to draw a card's foil. */
 export interface CardFoil {
   kind: FoilKind
   finish: FoilFinish
+  /** A picture for the light to show up, in place of the finish's own pattern. */
+  texture: FoilTexture | null
   /** The art's box from data, before the image is looked at; null when data doesn't say. */
   window: ArtWindow | null
   /** The card's image should be searched for its box. */
@@ -265,6 +341,7 @@ export interface CardFoil {
 export const NO_FOIL: CardFoil = {
   kind: 'none',
   finish: 'none',
+  texture: null,
   window: null,
   detect: false,
   roundedLeft: false
@@ -273,7 +350,12 @@ export const NO_FOIL: CardFoil = {
 interface FoilCard {
   id: number
   frameType?: string
-  pokemon?: { rarity: string | null; category: string } | null
+  pokemon?: {
+    rarity: string | null
+    category: string
+    types?: string[]
+    stage?: string | null
+  } | null
 }
 
 /**
@@ -292,12 +374,13 @@ export function cardFoil(
   if (game === 'ygo') {
     const box = artBox(card.frameType ?? '')
     const window = { top: box.top, bottom: 100 - box.bottom, left: box.left, right: box.right }
-    return { kind, finish, window, detect: false, roundedLeft: false }
+    return { kind, finish, texture: null, window, detect: false, roundedLeft: false }
   }
   const layout = pokemonLayoutFor(printing.setCode, card.pokemon?.category)
   return {
     kind,
     finish,
+    texture: kind === 'reverse' ? reverseTextureFor(printing.setCode, card.pokemon) : null,
     window: layout && ART_WINDOWS[layout],
     detect: true,
     roundedLeft: layout === 'ereader' || layout === 'ereader-trainer'

@@ -12,7 +12,9 @@ import {
   foilFinishFor,
   foilKindFor,
   foilMask,
-  pokemonLayoutFor
+  pokemonLayoutFor,
+  reverseTextureFor,
+  texturePlacement
 } from '@shared/foil'
 import { PKM_ID_MIN } from '@shared/games'
 import { createMockApi, renderWithProviders } from './mockApi'
@@ -160,6 +162,64 @@ describe('chooseArtWindow', () => {
   })
 })
 
+describe('reverseTextureFor', () => {
+  const art = { top: 9.4, bottom: 49.9, left: 7.4, right: 7.5 }
+  const table = {
+    'Grass/basic': { url: 'grass-basic', art },
+    'Darkness/stage': { url: 'dark-stage', art }
+  }
+  const pokemon = (
+    types: string[],
+    stage: string | null,
+    category = 'Pokemon'
+  ): { rarity: string; category: string; types: string[]; stage: string | null } => ({
+    rarity: 'Common',
+    category,
+    types,
+    stage
+  })
+
+  it('picks by Scarlet & Violet, type and Basic or evolved', () => {
+    expect(reverseTextureFor('SVI 5/198', pokemon(['Grass'], 'Basic'), table)?.url).toBe(
+      'grass-basic'
+    )
+    expect(reverseTextureFor('PAR 80/182', pokemon(['Darkness'], 'Stage1'), table)?.url).toBe(
+      'dark-stage'
+    )
+    expect(reverseTextureFor('TEF 80/162', pokemon(['Darkness'], 'Stage2'), table)?.url).toBe(
+      'dark-stage'
+    )
+  })
+
+  it('has nothing for other eras, Trainers, or a pair not in the table', () => {
+    expect(reverseTextureFor('BLW 40/114', pokemon(['Grass'], 'Basic'), table)).toBeNull()
+    expect(reverseTextureFor('SVI 170/198', pokemon([], null, 'Trainer'), table)).toBeNull()
+    expect(reverseTextureFor('SVI 257/198', pokemon(['Grass'], null, 'Energy'), table)).toBeNull()
+    expect(reverseTextureFor('SVI 5/198', pokemon(['Fire'], 'Basic'), table)).toBeNull()
+  })
+
+  it('ships empty, so every reverse keeps the plain foil', () => {
+    expect(reverseTextureFor('SVI 5/198', pokemon(['Grass'], 'Basic'))).toBeNull()
+    expect(
+      cardFoil({ setRarity: 'Reverse Holofoil', setCode: 'SVI 5/198' }, pokemonCard('Common'))
+        .texture
+    ).toBeNull()
+  })
+})
+
+describe('texturePlacement', () => {
+  const art = { top: 10, bottom: 50, left: 10, right: 10 }
+
+  it('lays a texture flat when its art is already on the window', () => {
+    expect(texturePlacement(art, null)).toEqual({ size: '100% 100%', position: '0% 0%' })
+  })
+
+  it('scales a texture so its art lands on the window', () => {
+    const { size } = texturePlacement(art, { top: 10, bottom: 70, left: 10, right: 10 })
+    expect(size).toBe('100.2% 150%')
+  })
+})
+
 describe('foilMask', () => {
   const box = { top: 10, bottom: 50, left: 8, right: 8 }
   const path = (mask: string | undefined): string =>
@@ -264,6 +324,21 @@ describe('FoilLayer', () => {
     expect(layer.style.clipPath).toBe('')
     expect(layer.style.opacity).toBe('')
     expect(layer.children.length).toBeGreaterThan(1)
+  })
+
+  it('carries a texture and marks itself textured', () => {
+    render(
+      <FoilLayer
+        kind="reverse"
+        finish="reverse"
+        texture={{ url: 'pattern.png', art: ART_WINDOWS.modern }}
+        window={ART_WINDOWS.modern}
+        aspect={aspect}
+      />
+    )
+    const layer = screen.getByTestId('foil-layer')
+    expect(layer).toHaveAttribute('data-textured')
+    expect(layer.style.getPropertyValue('--foil-texture')).toContain('pattern.png')
   })
 
   it('takes the frame aspect it is given', () => {

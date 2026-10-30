@@ -1,12 +1,21 @@
 import { useEffect, useRef } from 'react'
 import { cn } from '@/lib/utils'
 import { cssAspect, type CardAspect } from '@shared/games'
-import { foilMask, type ArtWindow, type FoilFinish, type FoilKind } from '@shared/foil'
+import {
+  foilMask,
+  texturePlacement,
+  type ArtWindow,
+  type FoilFinish,
+  type FoilKind,
+  type FoilTexture
+} from '@shared/foil'
 
 interface FoilLayerProps {
   kind: FoilKind
   /** How it moves and what its texture is; one `[data-finish]` block in index.css. */
   finish: FoilFinish
+  /** A picture the light shows up, laid so its art sits on `window`. */
+  texture?: FoilTexture | null
   /** The art's box; null draws a faint whole-card sheen in place of a holo or reverse mask. */
   window: ArtWindow | null
   aspect: CardAspect
@@ -89,6 +98,7 @@ function useDeviceLight(ref: React.RefObject<HTMLDivElement | null>, enabled: bo
 export function FoilLayer({
   kind,
   finish,
+  texture,
   window: artWindow,
   aspect,
   className,
@@ -98,6 +108,7 @@ export function FoilLayer({
   useDeviceLight(ref, device && kind !== 'none')
   if (kind === 'none') return null
   const mask = foilMask(kind, artWindow, aspect.width / aspect.height)
+  const placed = texture && texturePlacement(texture.art, artWindow)
   const masked = kind === 'holo' || kind === 'reverse'
   return (
     <div
@@ -106,10 +117,19 @@ export function FoilLayer({
       data-testid="foil-layer"
       data-foil={kind}
       data-finish={finish}
+      data-textured={texture ? '' : undefined}
       data-faint={masked && !artWindow ? '' : undefined}
       className={cn('foil', className)}
       // The layers take the mask themselves: masking here would cut them off from the card.
-      style={{ aspectRatio: cssAspect(aspect), '--foil-mask': mask } as React.CSSProperties}
+      style={
+        {
+          aspectRatio: cssAspect(aspect),
+          '--foil-mask': mask,
+          '--foil-texture': texture ? `url("${texture.url}")` : undefined,
+          '--foil-texture-size': placed?.size,
+          '--foil-texture-at': placed?.position
+        } as React.CSSProperties
+      }
     >
       <div className="foil-wash" />
       <div className="foil-milk" />

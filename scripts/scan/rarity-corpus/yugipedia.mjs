@@ -12,6 +12,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { choosePrintingFile, rarityAbbr } from '../../../src/main/yugipedia/printingArt.ts'
+import { yugipediaTitle } from '../../../src/main/yugipedia/cardGallery.ts'
 import {
   CORPUS,
   RARITIES,
@@ -234,7 +235,7 @@ const filesOf = new Map() // group key -> Map(rarity -> entry)
 
 /** One scan per rarity Yugipedia lists for this card in this set (English regions). */
 function chooseFiles(g) {
-  const files = galleries.get(`Card Gallery:${g.name}`) ?? []
+  const files = galleries.get(`Card Gallery:${yugipediaTitle(g.name)}`) ?? []
   const byRarity = new Map()
   for (const f of files) {
     const m = parseFile(f)
@@ -279,7 +280,7 @@ function chooseFiles(g) {
 
 /** Galleries and file existence for a batch of groups (cached API calls). */
 async function check(list) {
-  const need = [...new Set(list.map((g) => `Card Gallery:${g.name}`))].filter(
+  const need = [...new Set(list.map((g) => `Card Gallery:${yugipediaTitle(g.name)}`))].filter(
     (t) => !galleries.has(t)
   )
   if (need.length) {

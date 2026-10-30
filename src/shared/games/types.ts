@@ -12,6 +12,14 @@ export interface GameVocab {
   regionLabel(lang: Language): string
 }
 
+export interface CardAspect {
+  width: number
+  height: number
+}
+
+/** The aspect as a CSS ratio (`aspect-ratio`) or ratio expression (inside `calc()`), e.g. `421 / 614`. */
+export const cssAspect = (a: CardAspect): string => `${a.width} / ${a.height}`
+
 export interface FilterDef {
   key: string
   label: string
@@ -24,6 +32,11 @@ export interface GameDef {
   /** The game's dot in the game switch. */
   color: string
   features: { scan: boolean; rip: boolean }
+  /**
+   * The card art's width and height, in the proportion the game's card images are served at: every
+   * art frame takes this aspect, so the picture fills it without being cut off.
+   */
+  cardAspect: CardAspect
   crossLanguagePriceFallback: boolean
   /** 'ygo': market, eBay, twin and set-price fallbacks. 'marketOnly': the printing's own market price, any language. */
   priceRule: 'ygo' | 'marketOnly'

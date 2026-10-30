@@ -6,6 +6,8 @@ export const YGO: GameDef = {
   name: 'Yu-Gi-Oh!',
   color: '#c9a24b',
   features: { scan: true, rip: true },
+  // YGOPRODeck's card images are 421×614.
+  cardAspect: { width: 421, height: 614 },
   crossLanguagePriceFallback: true,
   priceRule: 'ygo',
   access: 'everyone',

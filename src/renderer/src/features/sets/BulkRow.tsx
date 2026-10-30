@@ -4,6 +4,7 @@ import type { ChecklistCard, ChecklistRarity } from '@shared/types'
 import { Button } from '@/components/ui/button'
 import { Select, SelectTrigger } from '@/components/ui/select'
 import { formatUsd } from '@/lib/format'
+import { pickableRow } from '@/components/pickableRow'
 import { cn } from '@/lib/utils'
 import { CodeOptions, CodeValue } from './CodePicker'
 
@@ -16,6 +17,9 @@ interface BulkRowProps {
   onAdjust: (printingId: number, delta: 1 | -1) => void
   /** Shows the rarity's price before the stepper (the side panel has room; bulk tiles don't). */
   showPrice?: boolean
+  /** Side panel only: whether this rarity is the one the panel shows, and how to pick it. */
+  picked?: boolean
+  onPick?: () => void
 }
 
 /** One rarity of a card in bulk mode: a code picker and a −/count/+ stepper. */
@@ -25,7 +29,9 @@ export function BulkRow({
   setName,
   busy,
   onAdjust,
-  showPrice
+  showPrice,
+  picked,
+  onPick
 }: BulkRowProps): React.JSX.Element {
   const [chosenId, setPrintingId] = useState(rarity.defaultPrintingId)
   // A sync can drop the chosen printing; fall back to the default rather than adjusting a dead id.
@@ -36,7 +42,13 @@ export function BulkRow({
   const label = `${card.name} ${rarity.rarity}`
 
   return (
-    <div role="group" aria-label={label} className="flex items-center gap-1.5">
+    <div
+      role="group"
+      aria-label={label}
+      {...(onPick
+        ? pickableRow(!!picked, onPick, 'flex items-center gap-1.5')
+        : { className: 'flex items-center gap-1.5' })}
+    >
       <div className="min-w-0 flex-1 text-xs">
         {rarity.codes.length === 1 ? (
           <span className="block truncate text-muted-foreground">

@@ -108,6 +108,7 @@ export function createMockApi(overrides: DeepPartial<Api> = {}): Api {
     },
     images: {
       cacheSize: vi.fn(async () => 0),
+      artBytes: vi.fn(async () => null),
       clearCache: vi.fn(async () => undefined),
       onDownloads: vi.fn(() => () => {})
     },

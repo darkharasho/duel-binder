@@ -17,6 +17,8 @@ export const queryKeys = {
   ripHistory: ['rip', 'history'] as const,
   ripSession: (id: number) => ['rip', 'session', id] as const,
   ripPackWrappers: (key: string) => ['rip', 'packWrappers', key] as const,
+  artWindow: (imageId: number, printingId: number | null, roundedLeft: boolean) =>
+    ['images', 'artWindow', imageId, printingId, roundedLeft] as const,
   setsList: ['sets', 'list'] as const,
   setChecklist: (name: string, language: Language) =>
     ['sets', 'checklist', language, name] as const,

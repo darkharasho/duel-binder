@@ -346,3 +346,689 @@
     transition: none;
   }
 }
+
+/* foil:start
+ * Foil (FoilLayer): a shine over a printing's flat scan that behaves like light on a card.
+ * - It changes the print: colour goes through blend modes that lift mid-tones and leave black ink
+ *   black. Only the soft bloom near the light crosses black, and only there.
+ * - It needs an angle: everything scales with --foil-lit, lowest head-on and highest at the edges.
+ * - The light is overhead: towards the top the card goes pale, towards the bottom deep.
+ * - Texture stays on the card: patterns never move, colour moves through them, and glints are
+ *   fixed specks that a slow blotch uncovers. Only `lattice` travels.
+ * - It is off at rest, and comes up when the card is held.
+ *
+ * Layers must blend with the card, so .foil must not form a stacking context: no clip-path,
+ * contain, opacity or filter on it. Each layer takes the shape of the foil (--foil-mask) itself,
+ * as a mask: a clip-path with a hole in it stops a blended layer painting at all.
+ * Each [data-finish] block sets levels, colour, motion rates and a texture; rates are how far a
+ * thing moves per pointer move, negative against the pointer. Every texture is generated here.
+ * The light is TiltCard's pointer, the phone's tilt, or a slow drift.
+ */
+@property --foil-x {
+  syntax: '<percentage>';
+  inherits: true;
+  initial-value: 50%;
+}
+@property --foil-y {
+  syntax: '<percentage>';
+  inherits: true;
+  initial-value: 50%;
+}
+@property --foil-reach {
+  syntax: '<number>';
+  inherits: true;
+  initial-value: 0;
+}
+@property --foil-fall {
+  syntax: '<number>';
+  inherits: true;
+  initial-value: 0.5;
+}
+.foil {
+  position: absolute;
+  inset: 0 0 auto 0;
+  overflow: hidden;
+  pointer-events: none;
+  --foil-x: var(--glare-x, 50%);
+  --foil-y: var(--glare-y, 50%);
+  --foil-reach: var(--glare-reach, 0);
+  --foil-fall: var(--glare-fall, 0.5);
+  /* Off at rest; held, it needs an angle to catch the light. */
+  --foil-on: 0;
+  --foil-gain: 1;
+  --foil-head-on: 0.4;
+  --foil-lit: calc(var(--foil-head-on) + (1 - var(--foil-head-on)) * var(--foil-reach));
+  /* Levels. */
+  --foil-wash: 0.3;
+  --foil-shine: 0.5;
+  --foil-cross: 0.22;
+  --foil-grain: 0.4;
+  --foil-milk: 0.3;
+  --foil-deep: 0.4;
+  --foil-bloom: 0.16;
+  /* Motion. */
+  --foil-wash-rate: 0.6;
+  --foil-band-rate: 1;
+  --foil-hue-x: -2.2;
+  --foil-hue-y: 1.5;
+  /* Pale at the bright end: color-dodge takes these to pastel and white. */
+  --foil-spectrum: repeating-linear-gradient(
+    115deg,
+    hsl(0 85% 64%) 0.0%,
+    hsl(45 85% 62%) 2.86%,
+    hsl(110 70% 60%) 5.71%,
+    hsl(178 80% 58%) 8.57%,
+    hsl(218 85% 66%) 11.43%,
+    hsl(280 80% 68%) 14.29%,
+    hsl(330 85% 66%) 17.14%,
+    hsl(360 85% 64%) 20.0%
+  );
+  --foil-deep-tint: hsl(262 70% 24%);
+  --foil-bands: linear-gradient(
+    115deg,
+    transparent 26%,
+    rgb(0 0 0 / 0.5) 33%,
+    rgb(0 0 0 / 0.1) 40%,
+    #000 49%,
+    rgb(0 0 0 / 0.5) 54%,
+    rgb(0 0 0 / 0.75) 58%,
+    rgb(0 0 0 / 0.1) 66%,
+    rgb(0 0 0 / 0.4) 71%,
+    transparent 78%
+  );
+  --foil-mask: linear-gradient(#000, #000);
+  --foil-rest: 0.8;
+  --foil-texture-k: 1;
+  --foil-rest-pattern: linear-gradient(#fff, #fff);
+  --foil-rest-tint: linear-gradient(120deg, #fff, #d8e6ff 35%, #ffe0ef 65%, #fff);
+  --foil-pattern: linear-gradient(#fff, #fff);
+  --foil-pattern-size: auto;
+  --foil-pattern-at: 0 0;
+  --foil-pattern-repeat: repeat;
+  --foil-specks: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='256' height='256'%3E%3Cfilter id='n' x='0' y='0' width='100%25' height='100%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2' seed='7' stitchTiles='stitch'/%3E%3CfeColorMatrix values='9 0 0 0 -5.6 9 0 0 0 -5.6 9 0 0 0 -5.6 0 0 0 0 1'/%3E%3C/filter%3E%3Crect width='256' height='256' filter='url(%23n)'/%3E%3C/svg%3E");
+  --foil-specks-size: 256px 256px;
+  --foil-blotch: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='256' height='256'%3E%3Cfilter id='n' x='0' y='0' width='100%25' height='100%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.012' numOctaves='2' seed='5' stitchTiles='stitch'/%3E%3CfeColorMatrix values='3 0 0 0 -1 3 0 0 0 -1 3 0 0 0 -1 0 0 0 0 1'/%3E%3C/filter%3E%3Crect width='256' height='256' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+[data-tilting] .foil,
+.foil[data-live],
+.foil[data-idle] {
+  --foil-on: 1;
+}
+.foil-wash,
+.foil-milk,
+.foil-deep,
+.foil-shine,
+.foil-cross,
+.foil-grain {
+  position: absolute;
+  inset: 0;
+}
+.foil-wash,
+.foil-milk,
+.foil-deep {
+  mask-image: var(--foil-mask);
+  -webkit-mask-image: var(--foil-mask);
+  mask-size: 100% 100%;
+  -webkit-mask-size: 100% 100%;
+}
+.foil-wash,
+.foil-milk,
+.foil-deep,
+.foil-shine,
+.foil-cross,
+.foil-grain,
+.foil-bloom {
+  transition: opacity 900ms ease-out;
+}
+[data-tilting] .foil > * {
+  transition-duration: 200ms;
+}
+.foil-wash {
+  mix-blend-mode: soft-light;
+  opacity: calc(var(--foil-on) * var(--foil-gain) * var(--foil-wash) * var(--foil-lit));
+  background-image: var(--foil-spectrum);
+  background-size: 500% 500%;
+  background-repeat: no-repeat;
+  background-position:
+    calc(50% + (var(--foil-x) - 50%) * var(--foil-wash-rate))
+    calc(50% + (var(--foil-y) - 50%) * var(--foil-wash-rate));
+}
+/* Towards the top the card goes milky, soft-light keeping black ink black. */
+.foil-milk {
+  mix-blend-mode: soft-light;
+  opacity: calc(var(--foil-on) * var(--foil-gain) * var(--foil-milk) * (1 - var(--foil-fall)));
+  background: #fff;
+}
+/* Towards the bottom it goes deep and contrasty. */
+.foil-deep {
+  mix-blend-mode: overlay;
+  opacity: calc(var(--foil-on) * var(--foil-gain) * var(--foil-deep) * var(--foil-fall));
+  background: var(--foil-deep-tint);
+}
+.foil-shine,
+.foil-grain {
+  mask-image: var(--foil-bands), var(--foil-mask);
+  -webkit-mask-image: var(--foil-bands), var(--foil-mask);
+  mask-composite: intersect;
+  -webkit-mask-composite: source-in;
+  mask-size:
+    300% 300%,
+    100% 100%;
+  -webkit-mask-size:
+    300% 300%,
+    100% 100%;
+  /* A rate of 1 keeps the middle of the bands under the light. */
+  mask-position:
+    calc(50% + (50% - var(--foil-x)) * var(--foil-band-rate) / 2)
+      calc(50% + (50% - var(--foil-y)) * var(--foil-band-rate) / 2),
+    0 0;
+  -webkit-mask-position:
+    calc(50% + (50% - var(--foil-x)) * var(--foil-band-rate) / 2)
+      calc(50% + (50% - var(--foil-y)) * var(--foil-band-rate) / 2),
+    0 0;
+}
+.foil-shine {
+  mix-blend-mode: color-dodge;
+  opacity: calc(var(--foil-on) * var(--foil-gain) * var(--foil-shine) * var(--foil-lit));
+  /* The texture holds still; the colour behind it moves. */
+  background-image: var(--foil-pattern), var(--foil-spectrum);
+  background-size: var(--foil-pattern-size), 500% 500%;
+  /* The spectrum never tiles: a diagonal gradient doesn't meet itself at a tile's edge, and that
+     seam would show as a hard line. It is 5 cards wide and stays inside itself instead, which
+     is why a rate is divided by 4 and must stay within 4. */
+  background-repeat: var(--foil-pattern-repeat), no-repeat;
+  background-position:
+    var(--foil-pattern-at),
+    calc(50% + (var(--foil-x) - 50%) * var(--foil-hue-x) / 4)
+      calc(50% + (var(--foil-y) - 50%) * var(--foil-hue-y) / 4);
+  background-blend-mode: multiply;
+}
+.foil-cross {
+  mix-blend-mode: overlay;
+  opacity: calc(var(--foil-on) * var(--foil-gain) * var(--foil-cross) * var(--foil-lit));
+  background-image: linear-gradient(
+    35deg,
+    hsl(190 80% 62%),
+    hsl(290 75% 68%),
+    hsl(20 80% 64%),
+    hsl(90 70% 60%),
+    hsl(190 80% 62%)
+  );
+  background-size: 300% 300%;
+  background-repeat: no-repeat;
+  background-position:
+    calc(50% + (var(--foil-y) - 50%) * 0.7) calc(50% + (50% - var(--foil-x)) * 0.6);
+  --foil-cross-band: linear-gradient(
+    35deg,
+    transparent 30%,
+    rgb(0 0 0 / 0.7) 45%,
+    #000 52%,
+    rgb(0 0 0 / 0.6) 60%,
+    transparent 74%
+  );
+  mask-image: var(--foil-cross-band), var(--foil-mask);
+  -webkit-mask-image: var(--foil-cross-band), var(--foil-mask);
+  mask-composite: intersect;
+  -webkit-mask-composite: source-in;
+  mask-size:
+    240% 240%,
+    100% 100%;
+  -webkit-mask-size:
+    240% 240%,
+    100% 100%;
+  mask-position:
+    calc(var(--foil-x) * 0.8 + 15%) calc(100% - var(--foil-y)),
+    0 0;
+  -webkit-mask-position:
+    calc(var(--foil-x) * 0.8 + 15%) calc(100% - var(--foil-y)),
+    0 0;
+}
+/* Glints: specks fixed to the card, uncovered by a slow blotch moving behind them. */
+.foil-grain {
+  mix-blend-mode: color-dodge;
+  opacity: calc(var(--foil-on) * var(--foil-gain) * var(--foil-grain) * var(--foil-lit));
+  background-image: var(--foil-specks), var(--foil-blotch);
+  background-size: var(--foil-specks-size), 400px 400px;
+  background-position:
+    0 0,
+    calc(var(--foil-x) * -3) calc(var(--foil-y) * 2.4);
+  background-blend-mode: multiply;
+}
+/* The glare: a soft bloom by the light, the one thing that lifts black, and only there. */
+.foil-bloom {
+  position: absolute;
+  inset: 0;
+  mix-blend-mode: screen;
+  opacity: calc(var(--foil-on) * var(--foil-gain) * var(--foil-bloom) * var(--foil-reach));
+  background: radial-gradient(
+    circle at var(--foil-x) var(--foil-y),
+    rgb(255 255 255 / 0.9),
+    rgb(255 255 255 / 0.25) 28%,
+    transparent 55%
+  );
+}
+
+/* Reverse is told from its Normal printing at a glance, so it keeps a still version at rest: the
+   pattern (or the sheen) in a pale tint. The moving light goes on top when the card is held. */
+.foil-rest {
+  display: none;
+  position: absolute;
+  inset: 0;
+  mix-blend-mode: var(--foil-rest-blend, overlay);
+  /* Up a little while held, so a pattern holds its own under the light. */
+  opacity: calc(var(--foil-gain) * var(--foil-rest) * var(--foil-texture-k) * (1 + 0.2 * var(--foil-on)));
+  background-image: var(--foil-rest-pattern), var(--foil-texture-tint, var(--foil-rest-tint));
+  background-size: var(--foil-pattern-size), 100% 100%;
+  background-blend-mode: multiply;
+  mask-image: var(--foil-mask);
+  -webkit-mask-image: var(--foil-mask);
+  mask-size: 100% 100%;
+  -webkit-mask-size: 100% 100%;
+}
+.foil[data-finish='reverse'] .foil-rest,
+.foil[data-finish='reverse-flat'] .foil-rest {
+  display: block;
+}
+.foil[data-textured] .foil-rest {
+  --foil-rest-pattern: linear-gradient(#fff, #fff);
+  mask-image: var(--foil-mask), var(--foil-texture);
+  -webkit-mask-image: var(--foil-mask), var(--foil-texture);
+  mask-composite: intersect;
+  -webkit-mask-composite: source-in;
+  mask-size:
+    100% 100%,
+    var(--foil-texture-size);
+  -webkit-mask-size:
+    100% 100%,
+    var(--foil-texture-size);
+  mask-position:
+    0 0,
+    var(--foil-texture-at);
+  -webkit-mask-position:
+    0 0,
+    var(--foil-texture-at);
+  mask-repeat: no-repeat;
+  -webkit-mask-repeat: no-repeat;
+}
+
+/* Modern holo: a wash on the light's side, thin upright streaks on the far side, moving apart. */
+.foil[data-finish='lines'] {
+  --foil-band-rate: -1;
+  --foil-wash-rate: 1;
+  --foil-wash: 0.42;
+  --foil-shine: 0.6;
+  --foil-grain: 0.15;
+  --foil-hue-x: -1.4;
+  --foil-hue-y: 0.5;
+  --foil-bands: linear-gradient(
+    90deg,
+    transparent 30%,
+    rgb(0 0 0 / 0.7) 38%,
+    rgb(0 0 0 / 0.25) 43%,
+    #000 50%,
+    rgb(0 0 0 / 0.35) 56%,
+    rgb(0 0 0 / 0.8) 61%,
+    transparent 70%
+  );
+  --foil-pattern: repeating-linear-gradient(
+    90deg,
+    #fff 0 1px,
+    #333 1px 3px,
+    #bbb 3px 4px,
+    #222 4px 7px,
+    #fff 7px 8px,
+    #333 8px 13px
+  );
+}
+/* WotC holo: from the real cards (no reference in the study): star flecks of mixed size held in a
+   slow, wide sheen, all of it swirling colour and no lines. */
+.foil[data-finish='stars'] {
+  --foil-head-on: 0.55;
+  --foil-band-rate: 0.5;
+  --foil-hue-x: -0.9;
+  --foil-hue-y: 0.9;
+  --foil-shine: 0.42;
+  --foil-grain: 0.7;
+  --foil-cross: 0.3;
+  --foil-specks: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='256' height='256'%3E%3Cfilter id='n' x='0' y='0' width='100%25' height='100%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.35' numOctaves='3' seed='31' stitchTiles='stitch'/%3E%3CfeColorMatrix values='14 0 0 0 -9.6 14 0 0 0 -9.6 14 0 0 0 -9.6 0 0 0 0 1'/%3E%3C/filter%3E%3Crect width='256' height='256' filter='url(%23n)'/%3E%3C/svg%3E");
+  --foil-bands: radial-gradient(
+    ellipse 22% 26% at 50% 50%,
+    #000,
+    rgb(0 0 0 / 0.6) 45%,
+    rgb(0 0 0 / 0.14) 100%
+  );
+}
+/* EX holo: from the real cards: one broad diagonal sheen over fine even grain. */
+.foil[data-finish='sheen'] {
+  --foil-band-rate: 0.8;
+  --foil-shine: 0.5;
+  --foil-grain: 0.3;
+  --foil-hue-x: -1.2;
+  --foil-hue-y: 1.2;
+  --foil-bands: linear-gradient(
+    125deg,
+    transparent 30%,
+    rgb(0 0 0 / 0.6) 42%,
+    #000 50%,
+    rgb(0 0 0 / 0.6) 58%,
+    transparent 70%
+  );
+}
+/* e-Reader holo: from the real cards: dense even glitter with little colour, no bands. */
+.foil[data-finish='glitter'] {
+  --foil-shine: 0.3;
+  --foil-grain: 0.55;
+  --foil-cross: 0.12;
+  --foil-hue-x: -1.6;
+  --foil-specks: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='256' height='256'%3E%3Cfilter id='n' x='0' y='0' width='100%25' height='100%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.1' numOctaves='1' seed='11' stitchTiles='stitch'/%3E%3CfeColorMatrix values='9 0 0 0 -5.3 9 0 0 0 -5.3 9 0 0 0 -5.3 0 0 0 0 1'/%3E%3C/filter%3E%3Crect width='256' height='256' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+/* Amazing: coarse weave, the most saturated foil, colour shifting by patch. */
+.foil[data-finish='amazing'] {
+  --foil-shine: 0.72;
+  --foil-grain: 0.25;
+  --foil-deep: 0.6;
+  --foil-hue-x: -3;
+  --foil-hue-y: 2.4;
+  --foil-spectrum: repeating-linear-gradient(
+    115deg,
+    hsl(0 100% 56%) 0.0%,
+    hsl(50 100% 54%) 4.0%,
+    hsl(130 90% 46%) 8.0%,
+    hsl(205 100% 54%) 12.0%,
+    hsl(300 90% 56%) 16.0%,
+    hsl(360 100% 56%) 20.0%
+  );
+  --foil-pattern:
+    repeating-linear-gradient(0deg, #fff 0 4px, #777 4px 6px),
+    repeating-linear-gradient(90deg, #fff 0 4px, #777 4px 6px);
+  --foil-pattern-size: auto, auto;
+  --foil-pattern-at: 0 0, 0 0;
+  --foil-pattern-repeat: repeat, repeat;
+}
+/* Modern reverse: a big embossed pattern, a column of light, brightest near head-on. */
+.foil[data-finish='reverse'] {
+  --foil-head-on: 0.8;
+  --foil-wash: 0.5;
+  --foil-shine: 0.5;
+  --foil-grain: 0.12;
+  --foil-cross: 0.3;
+  --foil-band-rate: 0.4;
+  --foil-hue-x: -0.7;
+  --foil-hue-y: 0.4;
+  --foil-pattern: conic-gradient(from 45deg, #fff 25%, #aaa 25% 50%, #fff 50% 75%, #aaa 75%);
+  --foil-rest-pattern: conic-gradient(from 45deg, #b4b4b4 25%, #8a8a8a 25% 50%, #b4b4b4 50% 75%, #8a8a8a 75%);
+  --foil-pattern-size: 44px 44px;
+  --foil-bands: linear-gradient(
+    90deg,
+    transparent 36%,
+    rgb(0 0 0 / 0.75) 44%,
+    #000 50%,
+    rgb(0 0 0 / 0.75) 56%,
+    transparent 64%
+  );
+}
+/* A picture in place of the pattern: its alpha is a third mask, so only the light shows it. */
+.foil[data-finish='reverse'][data-textured] {
+  --foil-pattern: linear-gradient(#fff, #fff);
+  --foil-pattern-size: auto;
+  --foil-shine: 0.42;
+  --foil-wash: 0.22;
+  --foil-milk: 0.1;
+  --foil-deep: 0.2;
+  --foil-cross: 0.3;
+  --foil-grain: 0.3;
+  --foil-band-rate: 0.8;
+  --foil-bands: linear-gradient(
+    115deg,
+    transparent 28%,
+    rgb(0 0 0 / 0.65) 40%,
+    #000 50%,
+    rgb(0 0 0 / 0.65) 60%,
+    transparent 72%
+  );
+}
+.foil[data-textured] .foil-shine,
+.foil[data-textured] .foil-grain,
+.foil[data-textured] .foil-cross {
+  mask-image: var(--foil-band-mask), var(--foil-mask), var(--foil-texture);
+  -webkit-mask-image: var(--foil-band-mask), var(--foil-mask), var(--foil-texture);
+  mask-composite: intersect, intersect;
+  -webkit-mask-composite: source-in, source-in;
+  mask-size:
+    var(--foil-band-size),
+    100% 100%,
+    var(--foil-texture-size);
+  -webkit-mask-size:
+    var(--foil-band-size),
+    100% 100%,
+    var(--foil-texture-size);
+  mask-position:
+    var(--foil-band-at),
+    0 0,
+    var(--foil-texture-at);
+  -webkit-mask-position:
+    var(--foil-band-at),
+    0 0,
+    var(--foil-texture-at);
+  mask-repeat: no-repeat;
+  -webkit-mask-repeat: no-repeat;
+}
+.foil[data-textured] .foil-shine,
+.foil[data-textured] .foil-grain {
+  --foil-band-mask: var(--foil-bands);
+  --foil-band-size: 300% 300%;
+  --foil-band-at:
+    calc(50% + (50% - var(--foil-x)) * var(--foil-band-rate) / 2)
+    calc(50% + (50% - var(--foil-y)) * var(--foil-band-rate) / 2);
+}
+.foil[data-textured] .foil-cross {
+  --foil-band-mask: var(--foil-cross-band);
+  --foil-band-size: 240% 240%;
+  --foil-band-at: calc(var(--foil-x) * 0.8 + 15%) calc(100% - var(--foil-y));
+}
+/* EX and e-Reader reverse: from the real cards: a plain bright mirror, no pattern. */
+.foil[data-finish='reverse-flat'] {
+  --foil-wash: 0.5;
+  --foil-shine: 0.5;
+  --foil-grain: 0.08;
+  --foil-cross: 0.28;
+  --foil-hue-x: -1;
+  --foil-hue-y: 0.8;
+  --foil-bands: linear-gradient(
+    115deg,
+    transparent 24%,
+    rgb(0 0 0 / 0.5) 40%,
+    #000 50%,
+    rgb(0 0 0 / 0.5) 60%,
+    transparent 76%
+  );
+}
+/* V and ex: diagonal patches of fine sparkle, no lines. Its direction is a guess. */
+.foil[data-finish='sparkle'] {
+  --foil-shine: 0.44;
+  --foil-grain: 0.65;
+  --foil-hue-x: -1.8;
+  --foil-hue-y: -1.2;
+  --foil-bands: linear-gradient(
+    60deg,
+    transparent 26%,
+    rgb(0 0 0 / 0.7) 34%,
+    rgb(0 0 0 / 0.1) 42%,
+    #000 50%,
+    rgb(0 0 0 / 0.15) 57%,
+    rgb(0 0 0 / 0.8) 64%,
+    transparent 74%
+  );
+}
+/* Full art: fingerprint lines fixed to the card, light passing through them as through grooves. */
+.foil[data-finish='contour'] {
+  --foil-shine: 0.5;
+  --foil-grain: 0.14;
+  --foil-pattern: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='512' height='512'%3E%3Cfilter id='n' x='0' y='0' width='100%25' height='100%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.016' numOctaves='2' seed='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 0 0 0 0 1'/%3E%3CfeComponentTransfer%3E%3CfeFuncR type='discrete' tableValues='.72 1 .72 1 .72 1 .72 1 .72 1 .72 1 .72 1 .72 1 .72 1 .72 1 .72 1'/%3E%3CfeFuncG type='discrete' tableValues='.72 1 .72 1 .72 1 .72 1 .72 1 .72 1 .72 1 .72 1 .72 1 .72 1 .72 1'/%3E%3CfeFuncB type='discrete' tableValues='.72 1 .72 1 .72 1 .72 1 .72 1 .72 1 .72 1 .72 1 .72 1 .72 1 .72 1'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='512' height='512' filter='url(%23n)'/%3E%3C/svg%3E");
+  --foil-pattern-size: 512px 512px;
+}
+/* VMAX: raised diagonal ridges carry it; the colour is pastel and slow. */
+.foil[data-finish='ridges'] {
+  --foil-hue-x: -0.6;
+  --foil-hue-y: 0.5;
+  --foil-band-rate: 0.6;
+  --foil-shine: 0.5;
+  --foil-grain: 0.3;
+  --foil-pattern: repeating-linear-gradient(
+    68deg,
+    #fff 0 3px,
+    #8a8a8a 5px,
+    #2a2a2a 7px,
+    #8a8a8a 9px,
+    #fff 11px
+  );
+}
+/* VSTAR: fine lines with white-flashing glitter, pale overall. */
+.foil[data-finish='vstar'] {
+  --foil-milk: 0.4;
+  --foil-shine: 0.42;
+  --foil-grain: 0.45;
+  --foil-pattern: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='512' height='512'%3E%3Cfilter id='n' x='0' y='0' width='100%25' height='100%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.016' numOctaves='2' seed='3' stitchTiles='stitch'/%3E%3CfeColorMatrix values='1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 0 0 0 0 1'/%3E%3CfeComponentTransfer%3E%3CfeFuncR type='discrete' tableValues='.72 1 .72 1 .72 1 .72 1 .72 1 .72 1 .72 1 .72 1 .72 1 .72 1 .72 1'/%3E%3CfeFuncG type='discrete' tableValues='.72 1 .72 1 .72 1 .72 1 .72 1 .72 1 .72 1 .72 1 .72 1 .72 1 .72 1'/%3E%3CfeFuncB type='discrete' tableValues='.72 1 .72 1 .72 1 .72 1 .72 1 .72 1 .72 1 .72 1 .72 1 .72 1 .72 1'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='512' height='512' filter='url(%23n)'/%3E%3C/svg%3E");
+  --foil-pattern-size: 512px 512px;
+}
+/* Radiant: huge crossing bands, peach-white, the one pattern that travels, against the pointer. */
+.foil[data-finish='lattice'] {
+  --foil-head-on: 0.25;
+  --foil-shine: 0.3;
+  --foil-cross: 0;
+  --foil-grain: 0.35;
+  --foil-band-rate: 0;
+  --foil-spectrum: repeating-linear-gradient(
+    115deg,
+    hsl(24 80% 80%) 0.0%,
+    hsl(38 70% 86%) 10.0%,
+    hsl(24 80% 80%) 20.0%
+  );
+  --foil-pattern:
+    repeating-linear-gradient(45deg, #fff 0 44px, #000 90px 150px, #fff 196px),
+    repeating-linear-gradient(-45deg, #fff 0 44px, #000 90px 150px, #fff 196px);
+  --foil-pattern-size: 300% 300%, 300% 300%;
+  --foil-pattern-at:
+    calc(50% + (50% - var(--foil-x)) * 0.6) calc(50% + (50% - var(--foil-y)) * 0.4),
+    calc(50% + (50% - var(--foil-x)) * 0.6) calc(50% + (50% - var(--foil-y)) * 0.4);
+  --foil-pattern-repeat: no-repeat, no-repeat;
+  --foil-bands: linear-gradient(#000, #000);
+}
+.foil[data-finish='lattice'] .foil-shine {
+  background-blend-mode: screen, multiply;
+}
+/* Shiny: very fine feather lines on a pale silver ground, lilac and cyan. */
+.foil[data-finish='feather'] {
+  --foil-milk: 0.4;
+  --foil-deep: 0.28;
+  --foil-shine: 0.46;
+  --foil-grain: 0.2;
+  --foil-pattern: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='512' height='512'%3E%3Cfilter id='n' x='0' y='0' width='100%25' height='100%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.012 .05' numOctaves='2' seed='9' stitchTiles='stitch'/%3E%3CfeColorMatrix values='1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 0 0 0 0 1'/%3E%3CfeComponentTransfer%3E%3CfeFuncR type='discrete' tableValues='.72 1 .72 1 .72 1 .72 1 .72 1 .72 1 .72 1 .72 1 .72 1 .72 1 .72 1'/%3E%3CfeFuncG type='discrete' tableValues='.72 1 .72 1 .72 1 .72 1 .72 1 .72 1 .72 1 .72 1 .72 1 .72 1 .72 1'/%3E%3CfeFuncB type='discrete' tableValues='.72 1 .72 1 .72 1 .72 1 .72 1 .72 1 .72 1 .72 1 .72 1 .72 1 .72 1'/%3E%3C/feComponentTransfer%3E%3C/filter%3E%3Crect width='512' height='512' filter='url(%23n)'/%3E%3C/svg%3E");
+  --foil-pattern-size: 512px 512px;
+  --foil-spectrum: repeating-linear-gradient(
+    115deg,
+    hsl(265 60% 76%) 0.0%,
+    hsl(190 70% 72%) 6.67%,
+    hsl(300 55% 78%) 13.33%,
+    hsl(265 60% 76%) 20.0%
+  );
+}
+/* Gallery: no texture, two big soft fields that swap hue as the card rocks top to bottom. */
+.foil[data-finish='fields'] {
+  --foil-shine: 0.34;
+  --foil-grain: 0.14;
+  --foil-cross: 0;
+  --foil-band-rate: 0;
+  --foil-hue-x: -0.2;
+  --foil-hue-y: 2.6;
+  --foil-spectrum: repeating-linear-gradient(
+    180deg,
+    hsl(330 80% 66%) 0.0%,
+    hsl(235 75% 66%) 12.5%,
+    hsl(330 80% 66%) 25.0%
+  );
+  --foil-bands: linear-gradient(#000, #000);
+}
+/* Full art trainer: tight stacked lines, silver, colour only in flashes. */
+.foil[data-finish='scanlines'] {
+  --foil-shine: 0.5;
+  --foil-grain: 0.12;
+  --foil-wash: 0.14;
+  --foil-pattern: repeating-linear-gradient(0deg, #fff 0 1px, #2e2e2e 1px 3px);
+  --foil-spectrum: repeating-linear-gradient(
+    115deg,
+    hsl(220 8% 70%) 0.0%,
+    hsl(340 60% 74%) 3.33%,
+    hsl(220 8% 74%) 6.67%,
+    hsl(130 45% 70%) 10.0%,
+    hsl(220 8% 72%) 13.33%,
+    hsl(28 70% 72%) 16.67%,
+    hsl(220 8% 70%) 20.0%
+  );
+}
+/* Secret: fine glitter and a soft tint; the print's own rainbow stays put. */
+.foil[data-finish='rainbow'] {
+  --foil-shine: 0.22;
+  --foil-grain: 0.45;
+  --foil-wash: 0.24;
+  --foil-hue-x: -0.6;
+  --foil-hue-y: 0.6;
+  --foil-specks: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='256' height='256'%3E%3Cfilter id='n' x='0' y='0' width='100%25' height='100%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.1' numOctaves='1' seed='11' stitchTiles='stitch'/%3E%3CfeColorMatrix values='9 0 0 0 -5.3 9 0 0 0 -5.3 9 0 0 0 -5.3 0 0 0 0 1'/%3E%3C/filter%3E%3Crect width='256' height='256' filter='url(%23n)'/%3E%3C/svg%3E");
+}
+/* Gold: one hue and the heaviest glitter, dim amber head-on, bright at any angle. */
+.foil[data-finish='gold'] {
+  --foil-head-on: 0.15;
+  --foil-shine: 0.55;
+  --foil-grain: 0.55;
+  --foil-cross: 0;
+  --foil-wash: 0.4;
+  --foil-deep-tint: hsl(32 90% 20%);
+  --foil-specks: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='256' height='256'%3E%3Cfilter id='n' x='0' y='0' width='100%25' height='100%25'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='1.1' numOctaves='1' seed='11' stitchTiles='stitch'/%3E%3CfeColorMatrix values='9 0 0 0 -5.3 9 0 0 0 -5.3 9 0 0 0 -5.3 0 0 0 0 1'/%3E%3C/filter%3E%3Crect width='256' height='256' filter='url(%23n)'/%3E%3C/svg%3E");
+  --foil-spectrum: repeating-linear-gradient(
+    115deg,
+    hsl(46 90% 58%) 0.0%,
+    hsl(34 85% 46%) 5.0%,
+    hsl(52 95% 68%) 10.0%,
+    hsl(28 80% 44%) 15.0%,
+    hsl(46 90% 58%) 20.0%
+  );
+}
+/* No art box known: a trace of shine, since a mask would be a guess. */
+.foil[data-faint] {
+  --foil-gain: 0.25;
+}
+
+/* Phones without tilt access: the light drifts slowly across the card. */
+@keyframes foil-idle {
+  0%,
+  100% {
+    --foil-x: 12%;
+    --foil-y: 14%;
+    --foil-reach: 0.76;
+    --foil-fall: 0.14;
+  }
+  50% {
+    --foil-x: 88%;
+    --foil-y: 86%;
+    --foil-reach: 0.76;
+    --foil-fall: 0.86;
+  }
+}
+.foil[data-idle]:not([data-live]) {
+  animation: foil-idle 11s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .foil {
+    --foil-on: 1;
+    --foil-gain: 0.5;
+    --foil-x: 32%;
+    --foil-y: 24%;
+    --foil-reach: 0.5;
+    --foil-fall: 0.4;
+    animation: none !important;
+  }
+  .foil > * {
+    transition: none;
+  }
+}
+/* foil:end */

@@ -5,6 +5,7 @@ import type { ChecklistCard } from '@shared/types'
 import { CardDetails } from '@/components/CardDetails'
 import { PanelPrice } from '@/components/PanelPrice'
 import { PanelCardArt } from '@/components/PanelCardArt'
+import { cardFoil } from '@shared/foil'
 import type { PanelNav } from '@/components/panelNav'
 import { Button } from '@/components/ui/button'
 import { SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
@@ -98,6 +99,14 @@ export function SetCardPanel({
           printingId={focus?.defaultPrintingId}
           alt={card.name}
           nav={nav}
+          foil={cardFoil(
+            focus && {
+              setRarity: focus.rarity,
+              setCode:
+                focus.codes.find((c) => c.printingId === focus.defaultPrintingId)?.setCode ?? ''
+            },
+            info
+          )}
         />
         <div className="space-y-1">
           <p className="font-mono text-[13px] text-muted-foreground">

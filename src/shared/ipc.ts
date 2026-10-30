@@ -31,6 +31,12 @@ import type { PackWrappers, RipCard, RipHistory, RipSessionDetail, RipSet } from
 import type { GameId } from './games'
 
 /** The API exposed to the renderer as `window.api`. */
+/** The image to look for the art in: the printing's own scan if it has one, else the card's art. */
+export interface ArtImageRequest {
+  imageId: number
+  printingId: number | null
+}
+
 export interface Api {
   cards: {
     search(q: string): Promise<CardSearchResult[]>
@@ -126,6 +132,8 @@ export interface Api {
   images: {
     cacheSize(): Promise<number>
     clearCache(): Promise<void>
+    /** The bytes of the image a card's panel shows (to find its art box); null if there's none. */
+    artBytes(request: ArtImageRequest): Promise<Uint8Array | null>
     /** Art downloads under way, as they change; never fires on the web or the phone. */
     onDownloads(cb: (d: ImageDownloads) => void): () => void
   }
@@ -230,6 +238,7 @@ export const INVOKE_CHANNELS = [
   'sync:run',
   'images:cacheSize',
   'images:clearCache',
+  'images:artBytes',
   'window:minimize',
   'window:toggleMaximize',
   'window:close',

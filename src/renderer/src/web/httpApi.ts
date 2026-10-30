@@ -1,3 +1,4 @@
+import { pageArtBytes } from '@/lib/pageArtWindow'
 import { GAME_HEADER, gamesOf, type Me } from '../../../shared/cloud'
 import { isGameId, type GameId } from '../../../shared/games'
 import type { Api } from '../../../shared/ipc'
@@ -258,7 +259,12 @@ export function createHttpApi(opts: HttpApiOptions = {}): Api {
       run: async () => SYNC_IDLE,
       onProgress: noUnsubscribe
     },
-    images: { cacheSize: unavailable, clearCache: unavailable, onDownloads: noUnsubscribe },
+    images: {
+      cacheSize: unavailable,
+      clearCache: unavailable,
+      artBytes: pageArtBytes,
+      onDownloads: noUnsubscribe
+    },
     window: {
       platform: 'web',
       minimize: async () => {},

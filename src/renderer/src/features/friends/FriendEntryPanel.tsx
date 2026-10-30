@@ -2,6 +2,7 @@ import type { EntryView } from '@shared/types'
 import { CardDetails } from '@/components/CardDetails'
 import { LanguageTag } from '@/components/LanguageTag'
 import { PanelCardArt } from '@/components/PanelCardArt'
+import { cardFoil } from '@shared/foil'
 import type { PanelNav } from '@/components/panelNav'
 import { scanFor } from '@/components/scanFor'
 import { SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
@@ -34,6 +35,7 @@ export function FriendEntryPanel({
           printingId={scanFor(entry)}
           alt={card.name}
           nav={nav}
+          foil={cardFoil(entry.printing, card)}
         />
         <CardDetails card={card} printing={entry.printing} />
 

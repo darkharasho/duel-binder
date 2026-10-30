@@ -8,6 +8,7 @@ import { createDataHandlers } from './dataHandlers'
 import type { ScanWindowManager } from '../scanWindow'
 import type { FingerprintStore } from '../scan/fingerprints'
 import { checkOcrBands, type Ocr } from '../scan/ocr'
+import { scanRefs } from '../repo/scan'
 import { cardLanguage } from '@shared/scan/cardLanguage'
 import type { AccountService } from '../cloud/account'
 import type { CatalogService } from '../catalog/service'
@@ -84,6 +85,10 @@ export function createHandlers({
       })),
     'friends:facets': async (userId: number) => account.portal('friends:facets', [userId]),
     'scan:fingerprints': () => fingerprints.read(),
+    'scan:fingerprintRefs': async () => {
+      const file = await fingerprints.readRefs()
+      return file ? scanRefs(db, file) : []
+    },
     'scan:refreshFingerprints': () => fingerprints.refresh(),
     'scan:ocr': async (bands: unknown, kind: 'code' | 'name') => {
       if (kind !== 'code' && kind !== 'name') throw new Error(`Unknown OCR kind: ${String(kind)}`)

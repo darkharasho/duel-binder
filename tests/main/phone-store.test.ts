@@ -8,6 +8,7 @@ import { activeOwner, recordSyncIssue } from '../../src/main/cloud/localSync'
 import { PHONE_TABLES } from '../../src/shared/catalogFeed'
 import type { Me } from '../../src/shared/cloud'
 import { encodeFingerprints } from '../../src/shared/scan/fingerprintFile'
+import { encodeFingerprintRefs, hashHex } from '../../src/shared/scan/fingerprintRefs'
 import { HASH_WORDS } from '../../src/shared/scan/fingerprint'
 import { openWasmDb } from '../../src/phone/data/wasmSql'
 import { PHONE_FORMAT } from '../../src/phone/data/phoneSchema'
@@ -630,6 +631,43 @@ describe('phone store', () => {
     net = offline
     expect(await store.refreshFingerprints({ force: true })).toEqual({ state: 'ready', count: 3 })
     expect(new Uint8Array((await store.fingerprints())!)).toEqual(file(3))
+  })
+
+  it("fingerprint refs come down beside the fingerprints, as this phone's printing ids", async () => {
+    await ready()
+    const printing = db
+      .prepare("SELECT id, pkey FROM card_printings WHERE set_code = 'LOB-EN005' LIMIT 1")
+      .get() as { id: number; pkey: string }
+    const hash = new Uint32Array(HASH_WORDS).fill(7)
+    await portal.images.put(
+      'scan/fingerprints.bin',
+      encodeFingerprints([{ imageId: 1, hash }]).slice().buffer,
+      { httpMetadata: { contentType: 'application/octet-stream' } }
+    )
+    expect(await store.refreshFingerprints({ force: true })).toMatchObject({ updated: true })
+    // No refs on the server yet: none, and the fingerprints are as they were.
+    expect(await store.fingerprintRefs()).toEqual([])
+
+    const refs = encodeFingerprintRefs([
+      { imageId: 1, hash, printings: [printing.pkey, 'ja|1|Nowhere|NOPE-JP001|Ultra Rare'] }
+    ])
+    await portal.images.put('scan/fingerprint-refs.json', refs.slice().buffer, {
+      httpMetadata: { contentType: 'application/json' }
+    })
+    expect(await store.refreshFingerprints({ force: true })).toEqual({
+      state: 'ready',
+      count: 1,
+      updated: true
+    })
+    expect(await store.fingerprintRefs()).toEqual([
+      { h: hashHex(hash), imageId: 1, printingIds: [printing.id] }
+    ])
+    // Unchanged: revalidated, nothing new.
+    expect(await store.refreshFingerprints({ force: true })).toEqual({ state: 'ready', count: 1 })
+    const refsAsked = requests.filter((r) => r.url.endsWith('/scan/fingerprint-refs'))
+    expect(refsAsked.at(-1)!.headers.get('if-none-match')).toBe(
+      portal.images.store.get('scan/fingerprint-refs.json')!.etag
+    )
   })
 
   it('an older format resets the catalog but keeps collection entries', async () => {

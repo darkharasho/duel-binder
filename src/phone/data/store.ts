@@ -28,6 +28,8 @@ import type { GameId } from '../../shared/games'
 import { FRIENDS_SIGNED_OUT, OFFLINE_MESSAGE } from '../../shared/friends'
 import type { PortalChannel } from '../../shared/portal'
 import { decodeFingerprints } from '../../shared/scan/fingerprintFile'
+import { parseFingerprintRefs, type ScanRef } from '../../shared/scan/fingerprintRefs'
+import { scanRefs } from '../../main/repo/scan'
 import type { FingerprintStatus } from '../../shared/scan/types'
 import type { CollectionStats, UnsyncedEntry } from '../../shared/types'
 import { PHONE_FORMAT } from './phoneSchema'
@@ -80,6 +82,8 @@ export interface PhoneStore {
   /** Sends anonymous usage totals when signed in; drops them otherwise. Never rejects. */
   reportUsage(report: UsageReport): Promise<void>
   fingerprints(): Promise<ArrayBuffer | null>
+  /** The fingerprint file's reference scans with this phone's printing ids; empty without them. */
+  fingerprintRefs(): Promise<ScanRef[]>
   refreshFingerprints(opts?: { force?: boolean }): Promise<FingerprintStatus>
 }
 
@@ -109,6 +113,8 @@ const REVOKE_TIMEOUT_MS = 10_000
 /** A portal call the user is waiting on (friends) gives up after this long. */
 const PORTAL_TIMEOUT_MS = 15_000
 const FINGERPRINTS = 'fingerprints'
+/** Which printings the fingerprint file's printing scans show (fingerprintRefs.ts), as JSON bytes. */
+const FINGERPRINT_REFS = 'fingerprint-refs'
 
 /** The catalog tables that are cleared when the phone's data format changes. */
 const RESET_TABLES = PHONE_TABLES.filter(
@@ -463,6 +469,32 @@ export function createPhoneStore(deps: {
     return true
   }
 
+  /**
+   * Resolves true when it stored a new refs file. Only beside a fingerprint file; a portal
+   * without one (404) or a bad one leaves the stored one as it is.
+   */
+  async function downloadFingerprintRefs(): Promise<boolean> {
+    const known = db
+      .prepare('SELECT etag FROM phone_files WHERE name = ?')
+      .get(FINGERPRINT_REFS) as { etag: string | null } | undefined
+    const res = await doFetch(`${base}/scan/fingerprint-refs`, {
+      headers: known?.etag ? { 'If-None-Match': known.etag } : {},
+      signal: AbortSignal.timeout(30_000)
+    })
+    if (!res.ok) {
+      await res.body?.cancel()
+      return false
+    }
+    const bytes = new Uint8Array(await res.arrayBuffer())
+    parseFingerprintRefs(new TextDecoder().decode(bytes))
+    db.prepare(
+      `INSERT INTO phone_files (name, etag, checked_at, bytes) VALUES (?, ?, ?, ?)
+       ON CONFLICT(name) DO UPDATE SET etag = excluded.etag, checked_at = excluded.checked_at,
+         bytes = excluded.bytes`
+    ).run(FINGERPRINT_REFS, res.headers.get('ETag'), now().toISOString(), bytes)
+    return true
+  }
+
   return {
     account: () =>
       read(() => {
@@ -653,6 +685,19 @@ export function createPhoneStore(deps: {
         return row.bytes.slice().buffer as ArrayBuffer
       }),
 
+    fingerprintRefs: () =>
+      read(() => {
+        const row = db
+          .prepare('SELECT bytes FROM phone_files WHERE name = ?')
+          .get(FINGERPRINT_REFS) as { bytes: Uint8Array } | undefined
+        if (!row) return []
+        try {
+          return scanRefs(db, parseFingerprintRefs(new TextDecoder().decode(row.bytes)))
+        } catch {
+          return []
+        }
+      }),
+
     refreshFingerprints: ({ force = false } = {}) =>
       serial(async () => {
         const checked = db
@@ -662,7 +707,13 @@ export function createPhoneStore(deps: {
         if (!force && ready && checked && now().getTime() - Date.parse(checked.checked_at) < DAY_MS)
           return fingerprintStatus()
         try {
-          return (await downloadFingerprints())
+          const wrote = await downloadFingerprints()
+          // Extras: trouble with them leaves the fingerprints' state as it is.
+          const wroteRefs =
+            fingerprintStatus().state === 'ready'
+              ? await downloadFingerprintRefs().catch(() => false)
+              : false
+          return wrote || wroteRefs
             ? { ...fingerprintStatus(), updated: true as const }
             : fingerprintStatus()
         } catch {

@@ -4,7 +4,8 @@ import {
   matchName,
   printingsByCode,
   printingsForCards,
-  printingsForSet
+  printingsForSet,
+  scanRefs
 } from '../../src/main/repo/scan'
 import type Database from 'better-sqlite3'
 import { seededDb } from './helpers'
@@ -28,6 +29,34 @@ async function scanDb(): Promise<{ db: Database.Database; cardId: number }> {
 }
 
 describe('scan repo', () => {
+  it("scanRefs names printings by this catalog's ids, leaving out the ones it lacks", async () => {
+    const { db, cardId } = await scanDb()
+    const id = (rarity: string): number =>
+      (
+        db
+          .prepare("SELECT id FROM card_printings WHERE set_code = 'LOB-EN005' AND set_rarity = ?")
+          .get(rarity) as { id: number }
+      ).id
+    const h = 'ab'.repeat(32)
+    expect(
+      scanRefs(db, {
+        v: 1,
+        refs: [
+          {
+            h,
+            imageId: 7,
+            printings: [
+              `en|${cardId}|LOB-EN005|Ultra Rare (Extended Art)`,
+              `en|${cardId}|LOB-EN005|Ultra Rare`,
+              'ja|1|Nowhere|NOPE-JP001|Ultra Rare'
+            ]
+          },
+          { h, imageId: 8, printings: ['ja|1|Nowhere|NOPE-JP001|Ultra Rare'] }
+        ]
+      })
+    ).toEqual([{ h, imageId: 7, printingIds: [id('Ultra Rare (Extended Art)'), id('Ultra Rare')] }])
+  })
+
   it('printingsByCode is case-insensitive, carries ordered image ids', async () => {
     const { db, cardId } = await scanDb()
     const rows = printingsByCode(db, 'lob-en005')

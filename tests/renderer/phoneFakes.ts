@@ -114,6 +114,7 @@ export function fakeStore(
     requestPrices: vi.fn(async () => 0),
     reportUsage: vi.fn(async () => {}),
     fingerprints: vi.fn(async () => null),
+    fingerprintRefs: vi.fn(async () => []),
     refreshFingerprints: vi.fn(async () => ({ state: 'ready' as const, count: 3 })),
     ...over
   }

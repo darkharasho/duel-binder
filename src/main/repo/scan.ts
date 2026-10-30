@@ -4,6 +4,7 @@ import { rarityRank } from '../../shared/scan/rarity'
 import { bestNameMatch, normalizeName, type NameEntry } from '../../shared/scan/names'
 import { LANGUAGES, type Language } from '../../shared/languages'
 import { parsePrice } from '../../shared/pricing'
+import type { FingerprintRefsFile, ScanRef } from '../../shared/scan/fingerprintRefs'
 import type { ScanPrinting } from '../../shared/scan/types'
 import { enTwinPrice } from './enTwin'
 import { isMarketOnly } from './priceRule'
@@ -22,7 +23,9 @@ interface PrintingRow {
   rawPrice: number | null
 }
 
-const select = (scope: Scope): string => `SELECT p.id AS printingId, p.card_id AS cardId, c.name AS name, c.frame_type AS frameType,
+const select = (
+  scope: Scope
+): string => `SELECT p.id AS printingId, p.card_id AS cardId, c.name AS name, c.frame_type AS frameType,
   p.set_name AS setName, p.set_code AS setCode, p.set_rarity AS rarity, p.variant AS variant, p.language AS language,
   CASE WHEN ${isMarketOnly} THEN p.market_price WHEN p.language = 'en' THEN COALESCE(p.market_price, ip.price, p.set_price) ELSE COALESCE(ip.price, ${enTwinPrice(scope.game)}) END AS rawPrice
   FROM card_printings p JOIN cards c ON c.id = p.card_id AND +c.game = ${scope.game}
@@ -84,7 +87,11 @@ export function printingsForSet(
   return withImages(db, rows, scope)
 }
 
-export function printingsForCards(db: SqlDb, cardIds: number[], scope: Scope = LOCAL): ScanPrinting[] {
+export function printingsForCards(
+  db: SqlDb,
+  cardIds: number[],
+  scope: Scope = LOCAL
+): ScanPrinting[] {
   const ids = [...new Set(cardIds)]
   const rows: PrintingRow[] = []
   for (let i = 0; i < ids.length; i += 500) {
@@ -96,6 +103,29 @@ export function printingsForCards(db: SqlDb, cardIds: number[], scope: Scope = L
     )
   }
   return withImages(db, rows, scope)
+}
+
+/**
+ * The refs file's refs with their printings as this catalog's printing ids, found by natural key
+ * (card_printings.pkey). Printings the catalog doesn't have are left out, and so is a ref left
+ * with none.
+ */
+export function scanRefs(db: SqlDb, file: FingerprintRefsFile): ScanRef[] {
+  const keys = [...new Set(file.refs.flatMap((r) => r.printings))]
+  const idOf = new Map<string, number>()
+  for (let i = 0; i < keys.length; i += 500) {
+    const chunk = keys.slice(i, i + 500)
+    const rows = db
+      .prepare(
+        `SELECT id, pkey FROM card_printings WHERE pkey IN (${chunk.map(() => '?').join(',')})`
+      )
+      .all(...chunk) as { id: number; pkey: string }[]
+    for (const r of rows) idOf.set(r.pkey, r.id)
+  }
+  return file.refs.flatMap((r) => {
+    const printingIds = r.printings.flatMap((k) => idOf.get(k) ?? [])
+    return printingIds.length ? [{ h: r.h, imageId: r.imageId, printingIds }] : []
+  })
 }
 
 /** The card of each known artwork, by image id; unknown ids are left out. */
@@ -121,7 +151,10 @@ export function cardsForImages(
 }
 
 // The game's name list, normalized for matching, is rebuilt only when the catalog version or game changes.
-const nameCache = new WeakMap<object, { version: string | null; game: string; names: NameEntry[] }>()
+const nameCache = new WeakMap<
+  object,
+  { version: string | null; game: string; names: NameEntry[] }
+>()
 
 function cardNames(db: SqlDb, scope: Scope): NameEntry[] {
   const version = getMeta(db, 'db_version')

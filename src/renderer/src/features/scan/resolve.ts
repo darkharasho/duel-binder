@@ -11,7 +11,8 @@ import {
   ART_MAX_DISTANCE,
   ART_MAX_DISTANCE_IN_SET,
   ART_MIN_MARGIN,
-  ART_REF_MIN_MARGIN
+  ART_REF_MIN_MARGIN,
+  ART_TONE_MIN_LEAD
 } from '@shared/scan/thresholds'
 import type { ScanDraft, ScanPrinting } from '@shared/scan/types'
 import type { ArtMatch, RawSignals } from './engine'
@@ -51,14 +52,19 @@ const imageFor = (art: ArtMatch[], imageIds: number[]): number | undefined =>
  * than its card art did, every printing among them in the same art variant as that scan's. The
  * whole variant, not just the scan's printings: an overframe Prismatic Secret, Grand Master and
  * Ultra Rare look alike, and some have no scan. Null when no scan does.
+ *
+ * An art printed in tones (a Manga-Style card's Color and Monochrome) is taken in the tone whose
+ * scans matched at least ART_TONE_MIN_LEAD closer than every other tone's; otherwise, or when a
+ * tone among them has no scan to compare, in all of its tones, for the user to pick.
  */
 function artFamily(art: ArtMatch[], among: ScanPrinting[]): ScanPrinting[] | null {
   const variantOf = (p: ScanPrinting): string | null => artVariantName(p.rarity, p.variant)
   const variants = new Set<string>()
+  /** Each variant's closest scan, whether close enough to pick it out or not. */
+  const closest = new Map<string, number>()
   for (const m of art) {
     if (m.base === undefined || !m.refs) continue
     for (const r of m.refs) {
-      if (r.distance > ART_MAX_DISTANCE || m.base - r.distance < ART_REF_MIN_MARGIN) continue
       const shown = new Set(
         among
           .filter((p) => r.printingIds.includes(p.printingId))
@@ -66,11 +72,37 @@ function artFamily(art: ArtMatch[], among: ScanPrinting[]): ScanPrinting[] | nul
           .filter((v) => v !== null)
       )
       // A scan more than one art took (a gallery short of scans) says nothing of which.
-      if (shown.size === 1) variants.add([...shown][0])
+      if (shown.size !== 1) continue
+      const [variant] = shown
+      closest.set(variant, Math.min(closest.get(variant) ?? Infinity, r.distance))
+      if (r.distance > ART_MAX_DISTANCE || m.base - r.distance < ART_REF_MIN_MARGIN) continue
+      variants.add(variant)
     }
   }
   if (variants.size === 0) return null
-  return among.filter((p) => variants.has(variantOf(p) ?? ''))
+  const all = [...new Set(among.map(variantOf).filter((v) => v !== null))]
+  const picked = new Set<string>()
+  for (const variant of variants) {
+    const art = toneOf(variant)?.art
+    const tones = all.filter((v) => art !== undefined && toneOf(v)?.art === art)
+    if (tones.length < 2) {
+      picked.add(variant)
+      continue
+    }
+    const distance = (v: string): number => closest.get(v) ?? Infinity
+    const [best, ...rest] = tones.sort((a, b) => distance(a) - distance(b))
+    const leads = rest.every(
+      (v) => closest.has(v) && distance(v) - distance(best) >= ART_TONE_MIN_LEAD
+    )
+    for (const v of leads ? [best] : tones) picked.add(v)
+  }
+  return among.filter((p) => picked.has(variantOf(p) ?? ''))
+}
+
+/** "manga-style, monochrome" to its art and tone; null for a variant not in a tone. */
+function toneOf(variant: string): { art: string; tone: string } | null {
+  const m = /^(.+?),\s*(color|monochrome)$/.exec(variant)
+  return m ? { art: m[1], tone: m[2] } : null
 }
 
 /**

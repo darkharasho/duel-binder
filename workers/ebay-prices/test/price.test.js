@@ -4,7 +4,10 @@ import {
   isSingleCard,
   namesOtherRarity,
   namesLongerRarity,
-  askingPrice
+  askingPrice,
+  rarityTone,
+  titleTone,
+  matchesTone
 } from '../src/price.js'
 
 describe('buildQuery', () => {
@@ -48,6 +51,52 @@ describe('buildQuery', () => {
     expect(buildQuery({ code: 'LOB-DE001', name: 'x', set: 's', rarity: '', lang: 'de' })).toBe(
       '"LOB-DE001"'
     )
+  })
+})
+
+describe('Manga-Style tones', () => {
+  it('queries a toned rarity by its base rarity', () => {
+    expect(
+      buildQuery({
+        code: '',
+        name: 'Zoa',
+        set: 'Original Artwork Collection',
+        rarity: 'Secret Rare (Manga-Style, Monochrome)',
+        lang: 'ja'
+      })
+    ).toBe('"Zoa" Original Artwork Collection Japanese Secret Rare')
+  })
+
+  it('reads the tone a rarity asks for', () => {
+    expect(rarityTone('Ultra Rare (Manga-Style, Color)')).toBe('color')
+    expect(rarityTone('Secret Rare (Manga-Style, Monochrome)')).toBe('monochrome')
+    expect(rarityTone('Ultra Rare (Overframe)')).toBeNull()
+    expect(rarityTone('Ultra Rare')).toBeNull()
+  })
+
+  it.each([
+    ['Zoa YAC1 Monochrome Ultra Rare', 'monochrome'],
+    ['Zoa Black & White Edition', 'monochrome'],
+    ['Zoa Black and White UR', 'monochrome'],
+    ['Zoa B&W Secret Rare', 'monochrome'],
+    ['Zoa Monochrome Ver. SER', 'monochrome'],
+    ['ゾーア 白黒 YAC1', 'monochrome'],
+    ['ゾーア モノクロ', 'monochrome'],
+    ['Zoa Full Color Edition', 'color'],
+    ['Zoa Colour Ver. UR', 'color'],
+    ['ゾーア カラー YAC1', 'color'],
+    ['Zoa Ultra Rare Manga Style', null],
+    ['Zoa Color & Monochrome set of 2', null],
+    ['Colorful Dragon Ultra Rare', null]
+  ])('tells the tone of %s', (title, tone) => {
+    expect(titleTone(title)).toBe(tone)
+  })
+
+  it('keeps only listings of the asked tone, any listing for an untoned rarity', () => {
+    expect(matchesTone('Zoa Black & White', 'Ultra Rare (Manga-Style, Monochrome)')).toBe(true)
+    expect(matchesTone('Zoa Full Color', 'Ultra Rare (Manga-Style, Monochrome)')).toBe(false)
+    expect(matchesTone('Zoa Manga Style', 'Ultra Rare (Manga-Style, Color)')).toBe(false)
+    expect(matchesTone('Zoa Manga Style', 'Ultra Rare')).toBe(true)
   })
 })
 
@@ -105,7 +154,11 @@ describe('isSingleCard', () => {
     ]) {
       expect(isSingleCard(t), t).toBe(false)
     }
-    for (const t of ['Number 39: Utopia LC01-EN039 1st Edition', 'Dragon Master Knight DRLG-EN001 x1', 'LOB-EN001 1x Blue-Eyes']) {
+    for (const t of [
+      'Number 39: Utopia LC01-EN039 1st Edition',
+      'Dragon Master Knight DRLG-EN001 x1',
+      'LOB-EN001 1x Blue-Eyes'
+    ]) {
       expect(isSingleCard(t), t).toBe(true)
     }
   })

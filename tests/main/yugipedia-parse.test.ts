@@ -69,6 +69,23 @@ describe('parseSetList', () => {
     ])
   })
 
+  it("names a Manga-Style row's tone the same way whatever its spelling", () => {
+    const r = parseSetList(
+      [
+        '{{Set list|region=JP|rarities=Ultra Rare|',
+        '; Zoa //description::Manga Style - Monochrome',
+        '; Zoa //description::(Manga-Style - Colour)',
+        '; Zoa //description::(manga-style, black & white)',
+        '}}'
+      ].join('\n')
+    )!
+    expect(r.rows.map((x) => x.variant)).toEqual([
+      'Manga-Style, Monochrome',
+      'Manga-Style, Color',
+      'Manga-Style, Monochrome'
+    ])
+  })
+
   it('flags rows whose print note (4th field) is New artwork, with the list print= as fallback', () => {
     const r = parseSetList(
       [

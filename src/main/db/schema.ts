@@ -295,6 +295,16 @@ ALTER TABLE pokemon_cards ADD COLUMN image_url TEXT;
 ALTER TABLE pokemon_cards ADD COLUMN local_name TEXT;
 `
 
+/**
+ * Manga-Style printings now come as Color and Monochrome. An app from before took the colour scan
+ * for any Manga-Style printing, so a Monochrome one it looked up shows the colour photo: look
+ * those up again.
+ */
+export const SCHEMA_V21 = `
+DELETE FROM printing_art WHERE printing_id IN
+  (SELECT id FROM card_printings WHERE set_rarity LIKE '%Monochrome)' OR variant LIKE '%Monochrome');
+`
+
 /** A printing's rarity as shown: "Starlight Rare (Extended Art)" for a labelled variant. */
 export const RARITY_LABEL = "p.set_rarity || COALESCE(' (' || p.variant || ')', '')"
 
@@ -319,6 +329,6 @@ export const MIGRATIONS: Migration[] = [
   { version: 17, sql: SCHEMA_V17 },
   { version: 18, sql: SCHEMA_V18, server: false },
   { version: 19, sql: SCHEMA_V19, server: false },
-  { version: 20, sql: SCHEMA_V20, server: false }
+  { version: 20, sql: SCHEMA_V20, server: false },
+  { version: 21, sql: SCHEMA_V21 }
 ]
-

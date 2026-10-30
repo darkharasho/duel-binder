@@ -19,6 +19,15 @@ export const ART_MIN_MARGIN = 10
  */
 export const ART_REF_MIN_MARGIN = 32
 /**
+ * How much closer one tone's scans (a Manga-Style card's Color or Monochrome) must match a photo
+ * than the other tone's for the photo to be taken for that tone (see artFamily in resolve.ts);
+ * nearer than that, both are left to pick from. The art hash is luminance only, but a colour
+ * painting and its monochrome inks differ in it: on the owner's 11 YAC1 photos the right tone
+ * was closer every time, by 4 to 42 bits (4, 8 and 8 the least). Colour itself is no help there:
+ * foil glare and the camera's blue cast make monochrome foils read as saturated as colour ones.
+ */
+export const ART_TONE_MIN_LEAD = 8
+/**
  * A card-shaped thing in view whose closest artwork is further off than this, and that reads as
  * no card by code or name, is taken for something else (a book, the deck on the desk): nothing in
  * view, rather than a card it couldn't recognize.

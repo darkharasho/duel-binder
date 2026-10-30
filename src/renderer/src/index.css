@@ -616,7 +616,7 @@
   inset: 0;
   mix-blend-mode: var(--foil-rest-blend, overlay);
   /* Up a little while held, so a pattern holds its own under the light. */
-  opacity: calc(var(--foil-gain) * var(--foil-rest) * var(--foil-texture-k) * (1 + 0.3 * var(--foil-on)));
+  opacity: calc(var(--foil-gain) * var(--foil-rest) * var(--foil-texture-k) * (1 + 0.2 * var(--foil-on)));
   background-image: var(--foil-rest-pattern), var(--foil-texture-tint, var(--foil-rest-tint));
   background-size: var(--foil-pattern-size), 100% 100%;
   background-blend-mode: multiply;
@@ -771,8 +771,11 @@
 .foil[data-finish='reverse'][data-textured] {
   --foil-pattern: linear-gradient(#fff, #fff);
   --foil-pattern-size: auto;
-  --foil-shine: calc(0.7 * var(--foil-texture-k));
-  --foil-cross: 0.5;
+  --foil-shine: 0.42;
+  --foil-wash: 0.22;
+  --foil-milk: 0.1;
+  --foil-deep: 0.2;
+  --foil-cross: 0.3;
   --foil-grain: 0.3;
   --foil-band-rate: 0.8;
   --foil-bands: linear-gradient(

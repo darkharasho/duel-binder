@@ -264,13 +264,6 @@ export interface FoilTexture {
   restBlend?: 'overlay' | 'multiply' | 'screen'
 }
 
-/**
- * Optional pictures for Scarlet & Violet reverse foils, by `${type}/${stage}`: the catalog's type
- * ("Grass", "Darkness", "Colorless") and `basic` or `stage`. A card with no entry keeps the plain
- * reverse foil. Empty until there are pictures we may ship.
- */
-export const REVERSE_TEXTURES: Record<string, FoilTexture> = {}
-
 const firstWord = (setCode: string): string => setCode.trim().split(/\s/)[0]
 
 const SV_SETS = new Set([
@@ -342,24 +335,17 @@ function typedTexture(era: PatternEra, pokemon: FoilCard['pokemon']): FoilTextur
 }
 
 /**
- * A reverse foil's picture. Sword & Shield, Sun & Moon: by the card's first type. Scarlet & Violet: from
- * `table`, by first type and whether it's a Basic or evolved. Null otherwise, which is the plain
- * reverse foil.
+ * A reverse foil's picture, by the card's first type: Scarlet & Violet's stained glass, Sword &
+ * Shield's chevrons, Sun & Moon's petals. Null elsewhere, which is the plain reverse foil.
  */
 export function reverseTextureFor(
   setCode: string,
-  pokemon: FoilCard['pokemon'],
-  table: Record<string, FoilTexture> = REVERSE_TEXTURES
+  pokemon: FoilCard['pokemon']
 ): FoilTexture | null {
   const set = firstWord(setCode)
+  if (SV_SETS.has(set)) return typedTexture('sv', pokemon)
   if (SWSH_SETS.has(set)) return typedTexture('swsh', pokemon)
-  if (SM_SETS.has(set)) return typedTexture('sm', pokemon)
-  if (!SV_SETS.has(set)) return null
-  const type = pokemon?.types?.[0]
-  const stage =
-    pokemon?.stage === 'Basic' ? 'basic' : /^Stage\d/.test(pokemon?.stage ?? '') ? 'stage' : null
-  if (pokemon?.category.toLowerCase() !== 'pokemon' || !type || !stage) return null
-  return table[`${type}/${stage}`] ?? null
+  return SM_SETS.has(set) ? typedTexture('sm', pokemon) : null
 }
 
 /**

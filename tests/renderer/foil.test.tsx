@@ -165,11 +165,6 @@ describe('chooseArtWindow', () => {
 })
 
 describe('reverseTextureFor', () => {
-  const art = { top: 9.4, bottom: 49.9, left: 7.4, right: 7.5 }
-  const table = {
-    'Grass/basic': { url: 'grass-basic', art },
-    'Darkness/stage': { url: 'dark-stage', art }
-  }
   const pokemon = (
     types: string[],
     stage: string | null,
@@ -181,23 +176,24 @@ describe('reverseTextureFor', () => {
     stage
   })
 
-  it('picks by Scarlet & Violet, type and Basic or evolved', () => {
-    expect(reverseTextureFor('SVI 5/198', pokemon(['Grass'], 'Basic'), table)?.url).toBe(
-      'grass-basic'
-    )
-    expect(reverseTextureFor('PAR 80/182', pokemon(['Darkness'], 'Stage1'), table)?.url).toBe(
-      'dark-stage'
-    )
-    expect(reverseTextureFor('TEF 80/162', pokemon(['Darkness'], 'Stage2'), table)?.url).toBe(
-      'dark-stage'
-    )
+  it('gives Scarlet & Violet reverses stained glass by type, one pattern for every stage', () => {
+    const grass = reverseTextureFor('SVI 5/198', pokemon(['Grass'], 'Basic'))
+    expect(grass?.url).toContain('data:image/svg+xml')
+    expect(reverseTextureFor('PRE 7/131', pokemon(['Grass'], 'Stage1'))?.url).toBe(grass?.url)
+    expect(reverseTextureFor('SVI 98/198', pokemon(['Psychic'], 'Basic'))?.url).not.toBe(grass?.url)
+    expect(reverseTextureFor('SVI 170/198', pokemon([], null, 'Trainer'))).not.toBeNull()
   })
 
-  it('has nothing for other eras, Trainers, or a pair not in the table', () => {
-    expect(reverseTextureFor('BLW 40/114', pokemon(['Grass'], 'Basic'), table)).toBeNull()
-    expect(reverseTextureFor('SVI 170/198', pokemon([], null, 'Trainer'), table)).toBeNull()
-    expect(reverseTextureFor('SVI 257/198', pokemon(['Grass'], null, 'Energy'), table)).toBeNull()
-    expect(reverseTextureFor('SVI 5/198', pokemon(['Fire'], 'Basic'), table)).toBeNull()
+  it('draws the same glass every time', () => {
+    const url = (): string | undefined =>
+      reverseTextureFor('SVI 5/198', pokemon(['Fire'], 'Basic'))?.url
+    expect(url()).toBe(url())
+    expect(decodeURIComponent(url()!)).toContain("mask='url(#lead)'")
+  })
+
+  it('has nothing for other eras, or a card with no type', () => {
+    expect(reverseTextureFor('BLW 40/114', pokemon(['Grass'], 'Basic'))).toBeNull()
+    expect(reverseTextureFor('SVI 5/198', pokemon([], 'Basic'))).toBeNull()
   })
 
   it('gives Sword & Shield reverses their type, with a plain version for Trainers and Energy', () => {
@@ -241,14 +237,6 @@ describe('reverseTextureFor', () => {
     expect(reverseTextureFor('SSH 1/202', pokemon(['Unknown'], 'Basic'))).toBeNull()
     expect(reverseTextureFor('SSH 1/202', pokemon([], 'Basic'))).toBeNull()
     expect(reverseTextureFor('ASR:TG TG01/TG30', pokemon(['Fire'], 'Basic'))).toBeNull()
-  })
-
-  it('ships empty, so every reverse keeps the plain foil', () => {
-    expect(reverseTextureFor('SVI 5/198', pokemon(['Grass'], 'Basic'))).toBeNull()
-    expect(
-      cardFoil({ setRarity: 'Reverse Holofoil', setCode: 'SVI 5/198' }, pokemonCard('Common'))
-        .texture
-    ).toBeNull()
   })
 })
 

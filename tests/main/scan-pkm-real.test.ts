@@ -89,6 +89,8 @@ interface Row {
   scorable: boolean
   /** The stamp's kind (stampKind), or '' for none. */
   stamp: string
+  /** 'holder' when the art matched only on the holder search's second look. */
+  via: string
 }
 
 /** A stamp grouped loosely by kind, for the breakdown. */
@@ -214,6 +216,7 @@ describe.skipIf(!READY)('the Pokémon scanner on real photos', () => {
           cues: null,
           version: signals.version,
           slab: signals.slab,
+          ...(signals.artVia ? { artVia: signals.artVia } : {}),
           look: null
         },
         {
@@ -314,7 +317,8 @@ describe.skipIf(!READY)('the Pokémon scanner on real photos', () => {
         inTop: cardId !== null && artCards.some((c) => c.cardId === cardId),
         ms,
         scorable,
-        stamp: t.stamp ? stampKind(t.stamp) : ''
+        stamp: t.stamp ? stampKind(t.stamp) : '',
+        via: signals.artVia ?? ''
       })
     }
     console.table(rows)

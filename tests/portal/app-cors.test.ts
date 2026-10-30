@@ -53,6 +53,7 @@ describe("CORS for the iOS app's origin", () => {
       '/auth/desktop/token',
       '/auth/desktop/revoke',
       '/scan/fingerprints',
+      '/scan/fingerprint-refs',
       '/img/small/1.jpg'
     ]) {
       const res = await preflight(path)

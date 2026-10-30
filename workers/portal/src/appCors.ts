@@ -8,7 +8,7 @@ export const IOS_APP_ORIGIN = 'capacitor://localhost'
 const BEARER_ROUTES = [
   /^\/api\//,
   /^\/img\//,
-  /^\/scan\/fingerprints$/,
+  /^\/scan\/fingerprint(s|-refs)$/,
   /^\/auth\/desktop\/(token|revoke)$/,
   /^\/auth\/apple\/token$/
 ]

@@ -3,7 +3,7 @@ import { gameOfId, isGameId } from '../../../src/shared/games'
 import { setMeta, type MetaKey } from '../../../src/main/db/meta'
 import type { AppDeps } from './app'
 import { upsertCatalogRow } from '../../../src/main/catalog/upsert'
-import { putFingerprints, rollbackFingerprints } from './scanFiles'
+import { putFingerprintRefs, putFingerprints, rollbackFingerprints } from './scanFiles'
 import { isAdmin } from './auth'
 import { collectStats } from './stats'
 
@@ -175,6 +175,8 @@ export async function adminRoute(req: Request, deps: AppDeps): Promise<Response>
   }
 
   if (req.method === 'PUT' && path === '/admin/scan/fingerprints') return putFingerprints(req, deps)
+  if (req.method === 'PUT' && path === '/admin/scan/fingerprint-refs')
+    return putFingerprintRefs(req, deps)
   if (req.method === 'POST' && path === '/admin/scan/fingerprints/rollback') {
     return rollbackFingerprints(deps)
   }

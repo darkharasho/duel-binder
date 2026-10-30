@@ -185,7 +185,7 @@ export const PKM_GUESS_NAME_LIKENESS = 0.5
  * it. Art hardly tells reprints apart: of 35 guesses, 15 were right with no lead asked, 12 of 30
  * at 2, 9 of 16 at 4.
  */
-export const PKM_GUESS_REPRINT_LEAD = 2
+export const PKM_GUESS_REPRINT_LEAD = 4
 /**
  * Consecutive frames a best guess must hold before it counts: past every frame that may still
  * read the language, so a certain answer gets its chance first.

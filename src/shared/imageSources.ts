@@ -25,3 +25,8 @@ export const KONAMI_LOGO_PREFIX = 'https://img.konami.com/'
 export const BULBAGARDEN_IMAGE_PREFIX = 'https://archives.bulbagarden.net/media/upload/'
 /** Pokémon set logos from the Pokémon TCG API, for sets TCGdex has none for. */
 export const POKEMONTCG_IMAGE_PREFIX = 'https://images.pokemontcg.io/'
+/** Where the same API keeps the logos of its newest sets. */
+export const SCRYDEX_IMAGE_PREFIX = 'https://images.scrydex.com/pokemon/'
+
+export const isFallbackLogoUrl = (url: string): boolean =>
+  url.startsWith(POKEMONTCG_IMAGE_PREFIX) || url.startsWith(SCRYDEX_IMAGE_PREFIX)

@@ -4,7 +4,7 @@ import {
   BULBAGARDEN_IMAGE_PREFIX,
   imageUrl,
   KONAMI_LOGO_PREFIX,
-  POKEMONTCG_IMAGE_PREFIX,
+  isFallbackLogoUrl,
   PACK_ART_PREFIX,
   setImageUrl,
   YUGIPEDIA_IMAGE_PREFIX
@@ -48,7 +48,10 @@ export function directImageSources(opts: {
       if (source === 'yp-') return resolved(key, YUGIPEDIA_IMAGE_PREFIX)
       if (source === 'yc-') return resolved(key, PACK_ART_PREFIX)
       if (source === 'bp-') return resolved(key, BULBAGARDEN_IMAGE_PREFIX, findPokemonSetArtUrl)
-      if (source === 'pt-') return resolved(key, POKEMONTCG_IMAGE_PREFIX, findPokemonSetArtUrl)
+      if (source === 'pt-') {
+        const url = findPokemonSetArtUrl(opts.db, key)
+        return url !== null && isFallbackLogoUrl(url) ? { url, headers } : null
+      }
       return { url: setImageUrl(key) }
     },
     konami: (key) => resolved(key, KONAMI_LOGO_PREFIX),

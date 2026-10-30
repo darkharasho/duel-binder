@@ -352,6 +352,32 @@ describe('buildReferences', () => {
     expect(requested).toHaveLength(2)
   })
 
+  it("downloads the newest set's scans first when there are more than maxDownloads", async () => {
+    work
+      .prepare(
+        `INSERT INTO sets (language, set_name, set_code, tcg_date) VALUES
+           ('en', 'Gold Glory', 'BLGG', '2021-01-01'), ('en', 'Storm of Ragnarok', 'STOR', '2011-01-01'),
+           ('ja', 'Original Artwork Collection', '', '2026-09-26')`
+      )
+      .run()
+    work
+      .prepare(
+        `INSERT INTO card_printings (card_id, set_name, set_code, set_rarity, set_rarity_code, language, variant)
+         VALUES (1, 'Original Artwork Collection', 'YAC1-JP006', 'Ultra Rare', '', 'ja', 'Overframe')`
+      )
+      .run()
+    const requested: string[] = []
+    await buildReferences({
+      work,
+      cache,
+      yugipedia: fakeYugipedia([...FILES, 'ShiEn-YAC1-JP-UR-EA.png']),
+      fetch: scans({}, requested),
+      userAgent: 'test',
+      maxDownloads: 1
+    })
+    expect(requested).toEqual(['ShiEn-YAC1-JP-UR-EA.png'])
+  })
+
   it('counts a file not shaped like a card as failed and keeps nothing for it', async () => {
     const fetch = scans({ 'ShiEn-BLGG-EN-StR-1E.png': png(image(200, 200, 'x')) })
     const out = await buildReferences({

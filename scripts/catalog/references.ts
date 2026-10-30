@@ -168,7 +168,10 @@ export async function buildReferences(opts: ReferenceOptions): Promise<Reference
         `SELECT p.id, p.card_id, c.name, c.frame_type, p.set_name, p.set_code, p.language, p.set_rarity,
            p.set_rarity_code, p.variant
          FROM card_printings p JOIN cards c ON c.id = p.card_id
-         WHERE p.language IN (${languages})`
+         LEFT JOIN sets s ON s.game = p.game AND s.language = p.language AND s.set_name = p.set_name
+         WHERE p.language IN (${languages})
+         -- Newest sets first, so their scans aren't left behind maxDownloads.
+         ORDER BY s.tcg_date IS NULL, s.tcg_date DESC, p.id`
       )
       .all() as PrintingRow[]
   )

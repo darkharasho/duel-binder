@@ -452,7 +452,10 @@ describe('phone scanner', () => {
         within(picker)
           .getAllByRole('option')
           .map((o) => o.textContent)
-      ).toEqual(['LOB-EN005Ultra RareEN', 'LOB-JP005RareJP'])
+      ).toEqual([
+        'LOB-EN005Legend of Blue Eyes White Dragon - Ultra RareEN',
+        'LOB-JP005Legend of Blue Eyes White Dragon - RareJP'
+      ])
     })
 
     it('a new scan pops the found bubble and buzzes; saved rows and count changes do not', async () => {

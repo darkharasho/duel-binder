@@ -11,6 +11,7 @@ type TileProps = React.ComponentProps<typeof BulkTile>
 const props = (over: Partial<TileProps> = {}): TileProps => ({
   card: alpha,
   rarity: secret,
+  setName: 'Metal Raiders',
   printingId: PRINTING.alphaSecret as number,
   onPickCode: vi.fn(),
   busy: false,
@@ -61,7 +62,9 @@ describe('BulkTile', () => {
     )
     expect(p.onAdjust).toHaveBeenCalledWith(PRINTING.alphaUltraE001, -1)
     await userEvent.click(combo)
-    await userEvent.click(await screen.findByRole('option', { name: 'MRD-EN001' }))
+    await userEvent.click(
+      await screen.findByRole('option', { name: /^MRD-EN001 Metal Raiders - Ultra Rare/ })
+    )
     expect(p.onPickCode).toHaveBeenCalledWith(PRINTING.alphaUltraEN001)
   })
 

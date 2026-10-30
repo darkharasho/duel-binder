@@ -3,21 +3,18 @@ import { Minus, Plus } from 'lucide-react'
 import type { ChecklistCard, ChecklistRarity } from '@shared/types'
 import { CardArt } from '@/components/CardArt'
 import { Button } from '@/components/ui/button'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue
-} from '@/components/ui/select'
+import { Select, SelectTrigger } from '@/components/ui/select'
 import { formatUsd } from '@/lib/format'
 import { useGame } from '@/lib/game'
 import { rarityColor, rarityTextColor } from '@/lib/rarityColors'
 import { cn } from '@/lib/utils'
+import { CodeOptions, CodeValue } from './CodePicker'
 
 interface BulkTileProps {
   card: ChecklistCard
   rarity: ChecklistRarity
+  /** The set's name, which the code picker's options show after each code. */
+  setName?: string
   /** The chosen code's printing; the parent owns the choice. */
   printingId: number
   onPickCode: (printingId: number) => void
@@ -37,6 +34,7 @@ const keepFocus = (e: React.MouseEvent): void => e.preventDefault()
 export const BulkTile = memo(function BulkTile({
   card,
   rarity,
+  setName,
   printingId: chosenId,
   onPickCode,
   onPickerClose,
@@ -52,7 +50,6 @@ export const BulkTile = memo(function BulkTile({
     : rarity.defaultPrintingId
   const selected = rarity.codes.find((c) => c.printingId === printingId)
   const label = `${card.name} ${rarity.rarity}`
-  const showOwned = rarity.codes.filter((c) => c.owned > 0).length > 1
   const owned = rarity.owned > 0
 
   return (
@@ -115,9 +112,11 @@ export const BulkTile = memo(function BulkTile({
               aria-label={`Set code for ${label}`}
               className="h-7 w-full px-2 text-xs"
             >
-              <SelectValue />
+              <CodeValue rarity={rarity} printingId={printingId} setName={setName} />
             </SelectTrigger>
-            <SelectContent
+            <CodeOptions
+              rarity={rarity}
+              setName={setName}
               onCloseAutoFocus={
                 onPickerClose
                   ? (e) => {
@@ -126,14 +125,7 @@ export const BulkTile = memo(function BulkTile({
                     }
                   : undefined
               }
-            >
-              {rarity.codes.map((c) => (
-                <SelectItem key={c.printingId} value={String(c.printingId)}>
-                  {c.setCode}
-                  {showOwned && c.owned > 0 && ` ×${c.owned}`}
-                </SelectItem>
-              ))}
-            </SelectContent>
+            />
           </Select>
         )}
         <div className="flex items-center justify-between gap-1.5">

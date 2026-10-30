@@ -472,7 +472,12 @@ export function SetChecklist({
         )}
 
         {bulk ? (
-          <BulkMode cards={bulkCards} pending={pending} adjust={adjust} />
+          <BulkMode
+            cards={bulkCards}
+            setName={data.set.setName}
+            pending={pending}
+            adjust={adjust}
+          />
         ) : (
           <ul className="grid grid-cols-[repeat(auto-fill,minmax(7.5rem,1fr))] gap-3 max-md:grid-cols-3 max-md:gap-1.5">
             {tiles.map((t) => {

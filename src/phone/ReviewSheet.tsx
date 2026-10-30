@@ -11,6 +11,7 @@ import { CardArt } from '@/components/CardArt'
 import { useScanLanguage } from '@/features/scan/pickerOptions'
 import { useScanHub } from '@/features/scan/ScanHub'
 import { choicesFor, FLAG_TEXT, photoFor, setLabelFor } from '@/features/scan/ScanRowItem'
+import { OptionLabel } from '@/features/scan/SearchPicker'
 import type { ScanRow } from '@/features/scan/session'
 import { ClearSessionDialog, useSessionCommit } from '@/features/scan/SessionList'
 import { plural } from '@/features/scan/scanText'
@@ -66,9 +67,11 @@ function ReviewRow({ row, disabled }: { row: ScanRow; disabled: boolean }): Reac
           className="mt-1.5 h-8 max-w-full gap-1.5 rounded-full border border-white/[0.12] bg-white/[0.08] px-2.5 text-xs active:bg-white/[0.14]"
         >
           <StarIcon aria-hidden className="size-3.5 shrink-0 text-white/60" />
-          <span className={cn('truncate', !picked && 'text-muted-foreground')}>
-            {picked ? (picked.title ?? picked.label) : 'Choose a printing'}
-          </span>
+          {picked ? (
+            <OptionLabel option={picked} compact />
+          ) : (
+            <span className="truncate text-muted-foreground">Choose a printing</span>
+          )}
           <ChevronDownIcon aria-hidden className="size-3.5 shrink-0 opacity-60" />
         </PickerSheet>
         {row.flag && (

@@ -8,13 +8,13 @@ import {
   XIcon
 } from 'lucide-react'
 import { languageInfo, type Language } from '@shared/languages'
-import type { ScanPrinting } from '@shared/scan/types'
+import { printingChip, printingSearch, printingText, printingTitle } from '@shared/printingLabel'
 import { CardArt } from '@/components/CardArt'
 import { formatUsd } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import type { ScanDraft } from './resolve'
 import { GLASS, priceOf } from './scanLook'
-import { SearchPicker, type PickerOption } from './SearchPicker'
+import { OptionLabel, SearchPicker, type PickerOption } from './SearchPicker'
 import type { ScanRow } from './session'
 
 // eslint-disable-next-line react-refresh/only-export-components -- shared with the phone's last-scan card
@@ -24,19 +24,12 @@ export const FLAG_TEXT: Record<NonNullable<ScanDraft['flag']>, string> = {
   'other-set': 'From another set'
 }
 
-/** "Prismatic Secret Rare (Overframe)": the rarity, and the art variant when it doesn't already say it. */
-function rarityLabel(o: ScanPrinting): string {
-  const variant = o.variant?.trim()
-  return variant && !o.rarity.toLowerCase().includes(variant.toLowerCase())
-    ? `${o.rarity} (${variant})`
-    : o.rarity
-}
-
 /**
  * What the row's dropdown offers, always only the row's card: the rarities its set code came in
  * when the code was read off the card, else every printing it was matched to, so a printing
- * picked for an art or name match can still be changed to another code. Each shows its code and
- * rarity, its art variant, and its language when they differ; the search also matches the set's name.
+ * picked for an art or name match can still be changed to another code. Each shows as every
+ * printing picker does (see @shared/printingLabel): its code as a badge (none when it has no
+ * code), then "Set name - Rarity" with its art variant, and its language when they differ.
  *
  * With a scan language (see useScanLanguage), only printings in it are listed, plus the row's own
  * printing whatever its language. When none are in it, as for a Japanese code read under English,
@@ -56,15 +49,13 @@ export function choicesFor(row: ScanRow, language: Language | null): PickerOptio
   const languages = new Set(shown.map((o) => o.language)).size > 1
   return shown.map((o) => {
     const tag = languageInfo(o.language).tag
-    const rarity = rarityLabel(o)
-    // An uncoded printing (YAC1's Manga-Style ones) goes by its set's name instead.
-    const label = `${o.setCode || o.setName} · ${rarity}${languages ? ` · ${tag}` : ''}`
+    const p = { setCode: o.setCode, setName: o.setName, rarity: o.rarity, variant: o.variant }
     return {
       key: String(o.printingId),
-      label,
-      search: `${o.setCode} ${rarity} ${o.setName} ${tag}`.toLowerCase(),
-      badge: o.setCode || undefined,
-      title: o.setCode ? rarity : `${o.setName} · ${rarity}`,
+      label: printingText(p, languages ? tag : undefined),
+      search: printingSearch(p, tag),
+      badge: printingChip(p) ?? undefined,
+      title: printingTitle(p),
       note: languages ? tag : undefined
     }
   })
@@ -154,13 +145,16 @@ export const ScanRowItem = memo(function ScanRowItem({
           onPick={pick}
           searchPlaceholder="Search code, rarity or set…"
           disabled={disabled}
+          badges
           className="mt-1.5 h-8 max-w-full justify-start gap-1.5 rounded-full border-white/[0.12] bg-white/[0.08] px-2.5 text-xs shadow-none dark:bg-white/[0.08] dark:hover:bg-white/[0.14]"
           renderTrigger={(picked) => (
             <>
               <StarIcon aria-hidden className="size-3.5 shrink-0 text-white/60" />
-              <span className={cn('truncate', !picked && 'text-muted-foreground')}>
-                {picked ? picked.label : 'Choose a printing'}
-              </span>
+              {picked ? (
+                <OptionLabel option={picked} compact />
+              ) : (
+                <span className="truncate text-muted-foreground">Choose a printing</span>
+              )}
               <ChevronDownIcon aria-hidden className="size-3.5 shrink-0 opacity-60" />
             </>
           )}

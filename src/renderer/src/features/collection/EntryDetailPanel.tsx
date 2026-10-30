@@ -4,7 +4,6 @@ import { toast } from 'sonner'
 import type { Language } from '@shared/languages'
 import { printingChip, printingTitle } from '@shared/printingLabel'
 import type { EntryView, UpdateEntryInput } from '@shared/types'
-import { CardArt } from '@/components/CardArt'
 import { CardDetails } from '@/components/CardDetails'
 import { PanelCardArt } from '@/components/PanelCardArt'
 import type { PanelNav } from '@/components/panelNav'
@@ -36,13 +35,11 @@ interface Props {
 /** Edit form for one entry; remounted (via `key`) when the selected entry changes. */
 function EntryEditor({
   entry,
-  images,
   printings,
   onSelectEntry,
   onClose
 }: {
   entry: EntryView
-  images: { imageId: number }[]
   printings: {
     id: number
     setCode: string
@@ -138,41 +135,6 @@ function EntryEditor({
       <Button onClick={save} disabled={!dirty || !qtyValid || busy}>
         Save changes
       </Button>
-
-      {images.length > 1 && (
-        <div className="space-y-1.5">
-          <div className="text-sm font-medium">Artwork</div>
-          <div role="radiogroup" aria-label="Artwork" className="flex flex-wrap gap-2">
-            {images.map((im, i) => (
-              <button
-                key={im.imageId}
-                type="button"
-                role="radio"
-                aria-checked={im.imageId === entry.imageId}
-                aria-label={`Artwork ${i + 1}`}
-                disabled={busy}
-                onClick={() =>
-                  im.imageId !== entry.imageId && update.mutate({ imageId: im.imageId })
-                }
-                className={cn(
-                  'rounded-lg p-1 outline-none transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-ring',
-                  im.imageId === entry.imageId
-                    ? 'bg-primary/20 ring-2 ring-primary'
-                    : 'hover:bg-accent'
-                )}
-              >
-                <CardArt
-                  imageId={im.imageId}
-                  printingId={i === 0 ? entry.printing.id : undefined}
-                  size="small"
-                  alt=""
-                  className="w-14"
-                />
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
 
       {choosable.length > 1 && (
         <div className="space-y-1.5">
@@ -299,7 +261,6 @@ export function EntryDetailPanel({
           <EntryEditor
             key={`${entry.id}:${entry.updatedAt}`}
             entry={entry}
-            images={detail.data?.images ?? []}
             printings={detail.data?.printings ?? []}
             onSelectEntry={onSelectEntry}
             onClose={onClose}

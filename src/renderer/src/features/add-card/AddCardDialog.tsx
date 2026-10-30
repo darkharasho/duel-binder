@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ChevronLeft, XIcon } from 'lucide-react'
 import { toast } from 'sonner'
@@ -44,7 +44,7 @@ import {
 import { Input } from '@/components/ui/input'
 import { TooltipProvider } from '@/components/ui/tooltip'
 
-type Step = 'search' | 'printing' | 'art' | 'quantity'
+type Step = 'search' | 'printing' | 'quantity'
 
 interface AddCardDialogProps {
   open: boolean
@@ -94,7 +94,6 @@ export function AddCardDialog({
   const [text, setText] = useState('')
   const [card, setCard] = useState<CardSearchResult | null>(null)
   const [printing, setPrinting] = useState<Printing | null>(null)
-  const [imageId, setImageId] = useState<number | null>(null)
   const [quantity, setQuantity] = useState('1')
   const [preferredId, setPreferredId] = useState<number | null>(null)
   const [seeded, setSeeded] = useState<AddCardDialogProps['initial']>(null)
@@ -103,7 +102,6 @@ export function AddCardDialog({
   // shared setting (or the language of the printing the dialog was opened on).
   const [sharedLanguage] = useLanguageFilter()
   const [pickedLanguage, setPickedLanguage] = useState<LanguageFilter | null>(null)
-  const artRefs = useRef<(HTMLButtonElement | null)[]>([])
 
   const q = useDebounced(text.trim(), 200)
   // Results belong to `q`; never show or select them while the typed text is ahead of it.
@@ -118,9 +116,21 @@ export function AddCardDialog({
     queryFn: () => api.cards.get(card!.id),
     enabled: open && card !== null
   })
+  const owned = useQuery({
+    queryKey: queryKeys.forCard(card?.id ?? 0),
+    queryFn: () => api.collection.forCard(card!.id),
+    enabled: open && card !== null
+  })
 
   const printings = (detail.data?.printings ?? []).filter((p) => !p.missingFromApi)
   const images = [...(detail.data?.images ?? [])].sort((a, b) => a.sortOrder - b.sortOrder)
+  // Users don't pick artwork: the printing's own scan shows it. The stored art is the fallback
+  // when the printing has no scan: a copy already owned keeps its art (so the add tops it up
+  // instead of starting a second entry), otherwise the card's original art.
+  const imageId = (p: Printing | null): number =>
+    owned.data?.find((e) => p !== null && e.printing.id === p.id)?.imageId ??
+    images[0]?.imageId ??
+    card!.defaultImageId
   const labelOf = (p: Printing): PrintingLabelInput => ({
     setCode: p.setCode,
     setName: p.setName,
@@ -145,7 +155,6 @@ export function AddCardDialog({
     setText('')
     setCard(null)
     setPrinting(null)
-    setImageId(null)
     setQuantity('1')
     setPreferredId(null)
     setPickedLanguage(null)
@@ -154,7 +163,7 @@ export function AddCardDialog({
 
   const add = useMutation({
     mutationFn: () =>
-      api.collection.add({ printingId: printing!.id, imageId: imageId!, quantity: qty }),
+      api.collection.add({ printingId: printing!.id, imageId: imageId(printing), quantity: qty }),
     onSuccess: () => {
       for (const queryKey of mutationInvalidationKeys) void qc.invalidateQueries({ queryKey })
       toast.success(`Added ${qty} × ${card!.name} (${printing!.setCode})`)
@@ -165,8 +174,7 @@ export function AddCardDialog({
   })
 
   const goBack = (): void => {
-    if (step === 'quantity') setStep(images.length > 1 ? 'art' : 'printing')
-    else if (step === 'art') setStep('printing')
+    if (step === 'quantity') setStep('printing')
     else if (step === 'printing') {
       setStep('search')
       setPrinting(null)
@@ -175,7 +183,6 @@ export function AddCardDialog({
 
   const pickCard = (c: CardSearchResult): void => {
     setCard(c)
-    setImageId(c.defaultImageId)
     setPreferredId(null)
     setPickedLanguage(null)
     setHighlight(undefined)
@@ -184,13 +191,7 @@ export function AddCardDialog({
 
   const pickPrinting = (p: Printing): void => {
     setPrinting(p)
-    if (images.length > 1) {
-      setImageId(images[0].imageId)
-      setStep('art')
-    } else {
-      setImageId(images[0]?.imageId ?? card!.defaultImageId)
-      setStep('quantity')
-    }
+    setStep('quantity')
   }
 
   const onKeyDown = (e: React.KeyboardEvent): void => {
@@ -202,29 +203,12 @@ export function AddCardDialog({
     goBack()
   }
 
-  useEffect(() => {
-    if (step !== 'art') return
-    const i = images.findIndex((im) => im.imageId === imageId)
-    artRefs.current[Math.max(i, 0)]?.focus()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [step])
-
-  const moveArt = (e: React.KeyboardEvent, i: number): void => {
-    const delta = e.key === 'ArrowRight' ? 1 : e.key === 'ArrowLeft' ? -1 : 0
-    if (delta === 0) return
-    e.preventDefault()
-    const next = (i + delta + images.length) % images.length
-    setImageId(images[next].imageId)
-    artRefs.current[next]?.focus()
-  }
-
   // Seed from `initial` once per open (adjusting state during render, not in an effect).
   if (!open && seeded !== null) {
     setSeeded(null)
   } else if (open && initial && seeded !== initial) {
     setSeeded(initial)
     setCard(initial.card)
-    setImageId(initial.card.defaultImageId)
     setPrinting(null)
     setText('')
     setHighlight(undefined)
@@ -269,7 +253,7 @@ export function AddCardDialog({
             Add card
           </DialogTitle>
           <DialogDescription className={phone ? 'sr-only' : undefined}>
-            Search for a card, then choose its printing, art and quantity.
+            Search for a card, then choose its printing and quantity.
           </DialogDescription>
           {phone && (
             <DialogClose asChild>
@@ -283,10 +267,8 @@ export function AddCardDialog({
         {card && step !== 'search' && (
           <div className={cn('flex items-center gap-3 border-b px-4 py-3', !phone && 'pr-10')}>
             <CardArt
-              imageId={imageId ?? card.defaultImageId}
-              printingId={
-                images.length === 0 || imageId === images[0].imageId ? printing?.id : undefined
-              }
+              imageId={imageId(printing)}
+              printingId={printing?.id}
               size="small"
               alt=""
               className="w-9"
@@ -397,62 +379,6 @@ export function AddCardDialog({
               </CommandGroup>
             </CommandList>
           </Command>
-        )}
-
-        {step === 'art' && (
-          <div className={cn('p-4', phone && 'min-h-0 flex-1 overflow-y-auto')}>
-            <p className="mb-3 text-sm text-muted-foreground">
-              {phone ? 'Choose the artwork.' : 'Choose the artwork. Press Enter to continue.'}
-            </p>
-            <div role="radiogroup" aria-label="Artwork" className="flex flex-wrap gap-3">
-              {images.map((im, i) => (
-                <button
-                  key={im.imageId}
-                  ref={(el) => {
-                    artRefs.current[i] = el
-                  }}
-                  type="button"
-                  role="radio"
-                  aria-checked={im.imageId === imageId}
-                  aria-label={`Artwork ${i + 1}`}
-                  tabIndex={im.imageId === imageId ? 0 : -1}
-                  onClick={() => {
-                    setImageId(im.imageId)
-                    setStep('quantity')
-                  }}
-                  onKeyUp={(e) => {
-                    // Space only selects the radio; it must not fire the button's click.
-                    if (e.key === ' ') e.preventDefault()
-                  }}
-                  onKeyDown={(e) => {
-                    moveArt(e, i)
-                    if (e.key === ' ') {
-                      e.preventDefault()
-                      setImageId(im.imageId)
-                    }
-                    if (e.key === 'Enter') {
-                      e.preventDefault()
-                      setImageId(im.imageId)
-                      setStep('quantity')
-                    }
-                  }}
-                  className={cn(
-                    'rounded-lg p-1 outline-none transition-transform duration-150 focus-visible:ring-2 focus-visible:ring-ring',
-                    im.imageId === imageId ? 'ring-2 ring-primary' : 'opacity-80 hover:opacity-100'
-                  )}
-                >
-                  {/* The original artwork stands for "as printed", so it shows this printing's photo. */}
-                  <CardArt
-                    imageId={im.imageId}
-                    printingId={i === 0 ? printing?.id : undefined}
-                    size="small"
-                    alt=""
-                    className="w-24"
-                  />
-                </button>
-              ))}
-            </div>
-          </div>
         )}
 
         {step === 'quantity' && (

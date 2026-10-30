@@ -56,7 +56,7 @@ const dm: EntryView = {
   card,
   printing,
   imageId: 101,
-  originalArt: true,
+  printingScan: true,
   unitPrice: 10,
   priceApproximate: false,
   priceSource: 'ygoprodeck',

@@ -85,8 +85,8 @@ function setup(overrides: Parameters<typeof createMockApi>[0] = {}): {
         q.toLowerCase().startsWith('pot') ? [pot] : q.toLowerCase().startsWith('dark') ? [dm] : [],
       get
     },
-    collection: { add },
-    ...overrides
+    ...overrides,
+    collection: { add, ...overrides.collection }
   })
   const utils = renderWithProviders(<AddCardDialog open onOpenChange={() => {}} />, { api })
   return { add, get, ...utils }
@@ -173,15 +173,27 @@ describe('AddCardDialog', () => {
     expect(toast.success).toHaveBeenCalledWith('Added 3 × Pot of Greed (LOB-EN119)')
   })
 
-  it('multi-art card shows art step with original preselected', async () => {
+  it('multi-art card skips straight to quantity with the original art', async () => {
     const { add } = setup()
     await userEvent.type(await screen.findByPlaceholderText(/Search cards/), 'dark')
     await userEvent.click(await screen.findByText('Dark Magician'))
     await userEvent.click(await screen.findByText('LOB-EN005'))
-    const arts = await screen.findAllByRole('radio')
-    expect(arts).toHaveLength(2)
-    expect(arts[0]).toHaveAttribute('aria-checked', 'true')
-    await userEvent.click(arts[1])
+    expect(screen.queryByRole('radiogroup')).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await waitFor(() =>
+      expect(add).toHaveBeenCalledWith({ printingId: 3, imageId: 46986413, quantity: 1 })
+    )
+  })
+
+  it('adding a printing already owned keeps that entry’s art, so the copies join it', async () => {
+    const { add } = setup({
+      collection: {
+        forCard: async () => [{ id: 7, printing: { id: 3 }, imageId: 46986415 }] as never
+      }
+    })
+    await userEvent.type(await screen.findByPlaceholderText(/Search cards/), 'dark')
+    await userEvent.click(await screen.findByText('Dark Magician'))
+    await userEvent.click(await screen.findByText('LOB-EN005'))
     await userEvent.click(screen.getByRole('button', { name: 'Save' }))
     await waitFor(() =>
       expect(add).toHaveBeenCalledWith({ printingId: 3, imageId: 46986415, quantity: 1 })
@@ -204,19 +216,6 @@ describe('AddCardDialog', () => {
     await screen.findByText('LOB-EN119')
     expect(screen.getByText('≈')).toBeInTheDocument()
     expect(screen.getByText('$1.00')).toBeInTheDocument()
-  })
-
-  it('Space on an art radio selects it without advancing', async () => {
-    setup()
-    await userEvent.type(await screen.findByPlaceholderText(/Search cards/), 'dark')
-    await userEvent.click(await screen.findByText('Dark Magician'))
-    await userEvent.click(await screen.findByText('LOB-EN005'))
-    const arts = await screen.findAllByRole('radio')
-    await waitFor(() => expect(arts[0]).toHaveFocus())
-    await userEvent.keyboard('{ArrowRight}')
-    await userEvent.keyboard(' ')
-    expect(screen.getAllByRole('radio')[1]).toHaveAttribute('aria-checked', 'true')
-    expect(screen.queryByLabelText('Quantity')).not.toBeInTheDocument()
   })
 
   it('quantity 0 disables Save', async () => {
@@ -304,7 +303,7 @@ describe('AddCardDialog', () => {
     const item = await screen.findByRole('option', { name: /LOB-EN005/ })
     await waitFor(() => expect(item).toHaveAttribute('aria-selected', 'true'))
     await userEvent.keyboard('{Enter}')
-    expect(await screen.findAllByRole('radio')).toHaveLength(2)
+    expect(await screen.findByLabelText('Quantity')).toBeInTheDocument()
   })
 
   it('a stale highlight from an initial open does not block Enter on the next card', async () => {

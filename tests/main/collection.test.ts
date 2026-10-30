@@ -308,9 +308,9 @@ test('language filter and facets', () => {
   expect(getFacets(db).languages).toEqual(['en', 'ja'])
 })
 
-test('originalArt is true only for the card’s first artwork', () => {
+test('every entry shows its printing’s scan, keeping its stored art as the fallback', () => {
   const a = addEntry(db, { printingId: pid('LOB-EN005'), imageId: 46986414, quantity: 1 })
   const b = addEntry(db, { printingId: pid('LOB-EN005'), imageId: 46986415, quantity: 1 })
-  expect(getEntry(db, a.id)?.originalArt).toBe(true)
-  expect(getEntry(db, b.id)?.originalArt).toBe(false)
+  expect(getEntry(db, a.id)).toMatchObject({ printingScan: true, imageId: 46986414 })
+  expect(getEntry(db, b.id)).toMatchObject({ printingScan: true, imageId: 46986415 })
 })

@@ -115,13 +115,13 @@ export function startRip(
   // Validate only this set: building every set's summary (ownership counts, covers) costs ~1 s.
   const row = db
     .prepare(
-      `SELECT s.set_code AS s_code, MIN(p.set_code) AS min_code
+      `SELECT s.set_code AS s_code, MIN(NULLIF(p.set_code, '')) AS min_code
        FROM card_printings p
        LEFT JOIN sets s ON s.game = p.game AND s.language = p.language AND s.set_name = p.set_name
        WHERE p.game = 'ygo' AND p.language = 'en' AND p.contributed = 0 AND p.set_name = ?`
     )
     .get(setName) as { s_code: string | null; min_code: string | null } | undefined
-  const setCode = row?.s_code ?? (row?.min_code ? setPrefix(row.min_code) : null)
+  const setCode = row?.s_code || (row?.min_code ? setPrefix(row.min_code) : null)
   const layout = setCode ? layoutFor(setCode, layouts) : null
   if (
     !setCode ||

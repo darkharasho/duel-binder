@@ -34,6 +34,7 @@ describe('wantsReference', () => {
 
   it("takes every printing of an Original Artwork Duel Set, whose art is the manga's", () => {
     expect(wantsReference('Ultra Rare', null, 'Original Artwork Duel Set: Joey')).toBe(true)
+    expect(wantsReference('Secret Rare', null, 'Original Artwork Collection')).toBe(true)
     expect(wantsReference('Ultra Rare', null, 'Starter Deck: Joey')).toBe(false)
   })
 })
@@ -221,6 +222,27 @@ describe('buildReferences', () => {
     })
     expect(requested).toContain('ShiEn-LOCR-JP-UR-EA.png')
     expect(requested).not.toContain('ShiEn-LOCR-KR-UR-UE-EA.png')
+    expect(result.entries).toContainEqual({ imageId: 11, hash: SCAN_HASH })
+  })
+
+  it("files an uncoded printing under its set's prefix, from the set's coded printings", async () => {
+    const add = work.prepare(
+      `INSERT INTO card_printings (card_id, set_name, set_code, set_rarity, set_rarity_code, language, variant)
+       VALUES (1, 'Original Artwork Collection', ?, 'Ultra Rare', '', 'ja', ?)`
+    )
+    add.run('YAC1-JP006', null)
+    add.run('', 'Manga-Style')
+    const files = [...FILES, 'ShiEn-YAC1-JP-UR-MangaStyle-Color.png']
+    const requested: string[] = []
+    const fetch = scans({ 'ShiEn-YAC1-JP-UR-MangaStyle-Color.png': png(SCAN) }, requested)
+    const result = await buildReferences({
+      work,
+      cache,
+      yugipedia: fakeYugipedia(files),
+      fetch,
+      userAgent: 'test'
+    })
+    expect(requested).toContain('ShiEn-YAC1-JP-UR-MangaStyle-Color.png')
     expect(result.entries).toContainEqual({ imageId: 11, hash: SCAN_HASH })
   })
 

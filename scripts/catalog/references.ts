@@ -40,15 +40,15 @@ const REFERENCE_LANGUAGES = ['en', 'ja'] as const
 const FOIL = /^(starlight|ghost|collector's) rare/i
 /** Variants that only change the foil colour of the name, not the art. */
 const COLOUR = /^(red|blue|green|purple|silver|bronze|gold|yellow|orange|white|pink)$/i
-/** Sets whose every card carries the manga's art, not the card art YGOPRODeck has. */
-const ORIGINAL_ART_SET = /^Original Artwork Duel Set\b/i
+/** Sets whose every card carries the manga's art, not the card art YGOPRODeck has (YAS1–3, YAC1). */
+const ORIGINAL_ART_SET = /^Original Artwork (Duel Set|Collection)\b/i
 
 /**
  * Whether a printing looks unlike its card's art from YGOPRODeck: an alternate or overframe art
  * (named in its variant or in brackets after its rarity), a printing its set list marks "New
  * artwork" (variant NEW_ART_VARIANT, e.g. LOCR-JP029–038, an art YGOPRODeck doesn't have yet), a
- * printing in a set of manga art (the Original Artwork Duel Sets), or a foil that changes the
- * picture.
+ * printing in a set of manga art (the Original Artwork Duel Sets and Collection), or a foil that
+ * changes the picture.
  */
 export function wantsReference(rarity: string, variant: string | null, setName = ''): boolean {
   if (FOIL.test(rarity.trim()) || ORIGINAL_ART_SET.test(setName.trim())) return true
@@ -149,17 +149,33 @@ export async function buildReferences(opts: ReferenceOptions): Promise<Reference
     CREATE TABLE IF NOT EXISTS ref_file (file TEXT PRIMARY KEY, hash BLOB, checked_at TEXT NOT NULL);
   `)
 
+  const languages = REFERENCE_LANGUAGES.map((l) => `'${l}'`).join(', ')
+  // An uncoded printing (YAC1's Manga-Style ones, say) is filed on Yugipedia under its set's
+  // prefix, which its set's coded printings carry.
+  const setCodes = new Map(
+    (
+      work
+        .prepare(
+          `SELECT language, set_name, MIN(set_code) AS code FROM card_printings
+           WHERE language IN (${languages}) AND set_code <> '' GROUP BY language, set_name`
+        )
+        .all() as { language: string; set_name: string; code: string }[]
+    ).map((r) => [`${r.language}|${r.set_name}`, r.code])
+  )
   const printings = (
     work
       .prepare(
         `SELECT p.id, p.card_id, c.name, c.frame_type, p.set_name, p.set_code, p.language, p.set_rarity,
            p.set_rarity_code, p.variant
          FROM card_printings p JOIN cards c ON c.id = p.card_id
-         WHERE p.language IN (${REFERENCE_LANGUAGES.map((l) => `'${l}'`).join(', ')})
-           AND p.set_code <> ''`
+         WHERE p.language IN (${languages})`
       )
       .all() as PrintingRow[]
-  ).filter((p) => wantsReference(p.set_rarity, p.variant, p.set_name))
+  )
+    .map((p) =>
+      p.set_code ? p : { ...p, set_code: setCodes.get(`${p.language}|${p.set_name}`) ?? '' }
+    )
+    .filter((p) => p.set_code && wantsReference(p.set_rarity, p.variant, p.set_name))
 
   // Which scan each printing has, from its card's gallery page.
   const known = new Map(

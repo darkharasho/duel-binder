@@ -9,6 +9,7 @@ import {
 } from 'lucide-react'
 import { languageInfo, type Language } from '@shared/languages'
 import { printingChip, printingSearch, printingText, printingTitle } from '@shared/printingLabel'
+import { englishSetName } from '@shared/setNames'
 import { CardArt } from '@/components/CardArt'
 import { formatUsd } from '@/lib/format'
 import { cn } from '@/lib/utils'
@@ -77,7 +78,8 @@ export function photoFor(row: ScanRow): number | null {
 // eslint-disable-next-line react-refresh/only-export-components -- shared with the phone's review
 export function setLabelFor(row: ScanRow): string | null {
   if (row.setCode) return row.setCode
-  return row.options.find((o) => o.printingId === row.printingId)?.setName || null
+  const name = row.options.find((o) => o.printingId === row.printingId)?.setName
+  return name ? englishSetName(name) : null
 }
 
 export interface ScanRowActions {

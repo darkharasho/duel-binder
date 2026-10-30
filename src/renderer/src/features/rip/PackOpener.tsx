@@ -7,6 +7,7 @@ import { track } from '@/lib/usage'
 import { cardImageSrc, setImageSrc } from '@/lib/images'
 import { rarityColor } from '@/lib/rarityColors'
 import { cn } from '@/lib/utils'
+import { englishSetName } from '../../../../shared/setNames'
 import { baseOf, compareRarity } from '../../../../shared/rip/rarity'
 import { tierFor } from '../../../../shared/rip/layouts'
 import type { PackWrappers, RevealTier, RipCard, RipSet } from '../../../../shared/rip/types'
@@ -269,7 +270,7 @@ function PackFace({
             />
           ) : (
             <span className="text-center text-[clamp(1rem,7cqh,1.6rem)] leading-tight font-black tracking-tight text-white uppercase drop-shadow-[0_2px_8px_rgb(0_0_0/0.85)]">
-              {setName}
+              {englishSetName(setName)}
             </span>
           )}
         </div>
@@ -805,7 +806,7 @@ export function PackOpener({
           <span className="font-semibold">
             Pack {packIndex + 1} of {packCount}
           </span>
-          <span className="text-white/55 max-md:hidden"> · {setName}</span>
+          <span className="text-white/55 max-md:hidden"> · {englishSetName(setName)}</span>
         </span>
         <span className="flex min-w-0 items-center gap-4">
           {best && (

@@ -1,6 +1,7 @@
 import type { LanguageFilter } from '@shared/languages'
 import type { GameId } from '@shared/games'
 import { setType, type SetType } from '@shared/setTypes'
+import { englishSetName } from '@shared/setNames'
 import { matchesLanguage } from '@/lib/languageFilter'
 import type {
   ChecklistCard,
@@ -89,7 +90,12 @@ export function filterSets(
     if (!matchesLanguage(o.language, s.language)) return false
     if (!passesProgress(s, o.filter, o.mode)) return false
     if (o.types.length > 0 && !o.types.includes(setType(s, o.game))) return false
-    return !q || s.setName.toLowerCase().includes(q) || s.setCode.toLowerCase().includes(q)
+    return (
+      !q ||
+      s.setName.toLowerCase().includes(q) ||
+      englishSetName(s.setName, s.setCode).toLowerCase().includes(q) ||
+      s.setCode.toLowerCase().includes(q)
+    )
   })
 }
 
@@ -113,7 +119,8 @@ export function activeFilterCount(types: SetType[], filter: SetFilter): number {
 }
 
 export function sortSets(sets: SetSummary[], sort: SetSort, mode: CountMode): SetSummary[] {
-  const byName = (a: SetSummary, b: SetSummary): number => a.setName.localeCompare(b.setName)
+  const byName = (a: SetSummary, b: SetSummary): number =>
+    englishSetName(a.setName, a.setCode).localeCompare(englishSetName(b.setName, b.setCode))
   const out = [...sets]
   if (sort === 'name') return out.sort(byName)
   if (sort === 'date') {

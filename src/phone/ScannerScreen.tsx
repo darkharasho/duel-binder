@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { englishSetName } from '@shared/setNames'
 import { useQuery } from '@tanstack/react-query'
 import {
   ArrowRightIcon,
@@ -54,7 +55,9 @@ function LastScan({ row, burst }: { row: ScanRow; burst: number }): React.JSX.El
   const at = choices.findIndex((c) => c.key === String(row.printingId))
   const printing = row.options.find((o) => o.printingId === row.printingId)
   const price = priceOf(row)
-  const sub = [row.setCode, printing?.setName].filter(Boolean).join(' · ')
+  const sub = [row.setCode, printing?.setName && englishSetName(printing.setName)]
+    .filter(Boolean)
+    .join(' · ')
 
   const cycle = (): void => {
     const next = choices[(at + 1) % choices.length]

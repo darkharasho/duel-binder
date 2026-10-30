@@ -7,6 +7,7 @@ import {
 } from '@tanstack/react-query'
 import { Minus, Plus } from 'lucide-react'
 import { toast } from 'sonner'
+import { englishSetName } from '@shared/setNames'
 import type { BrowseCard, BrowsePage, ChecklistCard, EntryView, Printing } from '@shared/types'
 import { CardDetails } from '@/components/CardDetails'
 import { PanelCardArt } from '@/components/PanelCardArt'
@@ -187,7 +188,7 @@ export function BrowseCardPanel({
               <div key={p.id} role="group" aria-label={label} className="flex items-center gap-1.5">
                 <div className="min-w-0 flex-1 text-xs">
                   <div className="flex items-center gap-1.5">
-                    <span className="truncate">{p.setName}</span>
+                    <span className="truncate">{englishSetName(p.setName, p.setCode)}</span>
                     <LanguageTag language={p.language} />
                   </div>
                   <div className="truncate text-muted-foreground">

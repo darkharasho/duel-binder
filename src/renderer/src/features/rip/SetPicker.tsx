@@ -7,6 +7,7 @@ import { api, queryKeys } from '@/lib/api'
 import { formatMonthYear } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import type { RipSet } from '../../../../shared/rip/types'
+import { englishSetName, setNameTooltip } from '../../../../shared/setNames'
 import { SetArt } from '../sets/SetArt'
 
 const MAX_PACKS = 100
@@ -46,7 +47,10 @@ export function SetPicker({ onRip, initialSetName = null }: Props): React.JSX.El
     if (!all) return []
     if (!needle) return all
     return all.filter(
-      (s) => s.setName.toLowerCase().includes(needle) || s.setCode.toLowerCase().includes(needle)
+      (s) =>
+        s.setName.toLowerCase().includes(needle) ||
+        englishSetName(s.setName, s.setCode).toLowerCase().includes(needle) ||
+        s.setCode.toLowerCase().includes(needle)
     )
   }, [all, q])
   const selected = all?.find((s) => s.setName === selectedName) ?? null
@@ -133,8 +137,11 @@ export function SetPicker({ onRip, initialSetName = null }: Props): React.JSX.El
                 )}
               />
               <div className="min-w-0 space-y-0.5">
-                <span title={s.setName} className="line-clamp-2 text-sm/5 font-semibold">
-                  {s.setName}
+                <span
+                  title={setNameTooltip(s.setName, s.setCode)}
+                  className="line-clamp-2 text-sm/5 font-semibold"
+                >
+                  {englishSetName(s.setName, s.setCode)}
                 </span>
                 <p className="text-xs text-muted-foreground">
                   {s.setCode}
@@ -148,7 +155,9 @@ export function SetPicker({ onRip, initialSetName = null }: Props): React.JSX.El
       {selected && (
         <div className="sticky bottom-4 z-10 flex flex-wrap items-center gap-x-6 gap-y-3 rounded-md border border-white/[0.08] bg-card/95 p-4 shadow-[0_8px_30px_rgb(0_0_0/0.6)] backdrop-blur">
           <div className="min-w-0 flex-1 max-md:basis-full">
-            <p className="truncate text-base font-semibold">{selected.setName}</p>
+            <p className="truncate text-base font-semibold">
+              {englishSetName(selected.setName, selected.setCode)}
+            </p>
             <p title={selected.layoutLabel} className="text-[13px] text-muted-foreground">
               {selected.packLine}
             </p>

@@ -1,4 +1,5 @@
 import type { Language } from '@shared/languages'
+import { englishSetName, setNameTooltip } from '@shared/setNames'
 import type { CountMode, SetSummary } from '@shared/types'
 import { LanguageTag } from '@/components/LanguageTag'
 import { formatMonthYear } from '@/lib/format'
@@ -57,8 +58,11 @@ export function SetsList({
                 />
                 <div className="min-w-0 space-y-1.5">
                   <div className="flex min-h-10 items-start gap-1.5 text-sm/5 font-semibold">
-                    <span title={s.setName} className="line-clamp-2 min-w-0 break-words">
-                      {s.setName}
+                    <span
+                      title={setNameTooltip(s.setName, s.setCode)}
+                      className="line-clamp-2 min-w-0 break-words"
+                    >
+                      {englishSetName(s.setName, s.setCode)}
                     </span>
                     <LanguageTag language={s.language} className="mt-px shrink-0" />
                   </div>
@@ -119,7 +123,9 @@ export function SetsList({
               />
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-1.5 text-sm font-semibold">
-                  <span className="truncate">{s.setName}</span>
+                  <span title={setNameTooltip(s.setName, s.setCode)} className="truncate">
+                    {englishSetName(s.setName, s.setCode)}
+                  </span>
                   <LanguageTag language={s.language} />
                 </div>
                 <div className="mt-0.5 font-mono text-xs text-muted-foreground">

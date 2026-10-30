@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
+import { englishSetName } from '@shared/setNames'
 import type { ChecklistCard } from '@shared/types'
 import { CardDetails } from '@/components/CardDetails'
 import { PanelPrice } from '@/components/PanelPrice'
@@ -93,7 +94,7 @@ export function SetCardPanel({
         />
         <div className="space-y-1">
           <p className="font-mono text-[13px] text-muted-foreground">
-            {setName} · {card.numberLabel}
+            {englishSetName(setName)} · {card.numberLabel}
           </p>
           <PanelPrice entry={ownedEntry} price={price} label={priceLabel} />
         </div>

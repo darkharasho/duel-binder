@@ -1,12 +1,11 @@
 import type { Api } from '@shared/ipc'
 import type { RarityCues } from '@shared/scan/rarity'
+import type { ArtMatch } from '@shared/scan/fingerprintFile'
+import type { ScanRef } from '@shared/scan/fingerprintRefs'
 import type { OcrBand, RgbaImage } from '@shared/scan/types'
 import type { Quad } from './vision/detect'
 
-export interface ArtMatch {
-  imageId: number
-  distance: number
-}
+export type { ArtMatch } from '@shared/scan/fingerprintFile'
 
 /** What the vision worker sees in one frame. */
 export interface FrameSignals {
@@ -34,7 +33,7 @@ export interface FrameSignals {
 
 /** Messages to the vision worker. Frames are answered in the order they're sent. */
 export type WorkerRequest =
-  | { type: 'init'; fingerprints: ArrayBuffer | null }
+  | { type: 'init'; fingerprints: ArrayBuffer | null; refs?: ScanRef[] }
   | {
       type: 'frame'
       id: number
@@ -68,8 +67,11 @@ export interface RawSignals {
 }
 
 export interface ScanEngine {
-  /** Loads OpenCV and the fingerprints (null: no art matching) in the worker, which takes fp's buffer. */
-  init(fp: ArrayBuffer | null): Promise<void>
+  /**
+   * Loads OpenCV and the fingerprints (null: no art matching) in the worker, which takes fp's
+   * buffer, with the printings of their reference scans when known (see fingerprintRefs.ts).
+   */
+  init(fp: ArrayBuffer | null, refs?: ScanRef[]): Promise<void>
   /**
    * The frame is handed to the worker, so it can't be used afterwards. A camera frame is best
    * an ImageBitmap: the worker reads its pixels, so the UI thread never copies them. `wantLook`
@@ -179,11 +181,11 @@ export function createScanEngine(deps: {
     start().postMessage(msg, transfer)
 
   return {
-    init(fp) {
+    init(fp, refs) {
       return new Promise<void>((resolve, reject) => {
         try {
           // Handed over rather than copied: it's a few MB, and the caller reads a fresh one each time.
-          send({ type: 'init', fingerprints: fp }, fp ? [fp] : [])
+          send({ type: 'init', fingerprints: fp, refs }, fp ? [fp] : [])
           inits.push(watched({ resolve, reject }, initMs))
         } catch (e) {
           reject(e instanceof Error ? e : new Error(String(e)))

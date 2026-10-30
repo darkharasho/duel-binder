@@ -1,5 +1,5 @@
 import type { Mat } from '@techstark/opencv-js'
-import type { FingerprintIndex } from '@shared/scan/fingerprintFile'
+import type { ArtMatch, FingerprintIndex } from '@shared/scan/fingerprintFile'
 import {
   ART_BOX_JITTER,
   ART_MAX_DISTANCE,
@@ -611,7 +611,7 @@ export function recognizeArt(
   quad: Quad
   card: RgbaImage
   upsideDown: boolean | null
-  matches: { imageId: number; distance: number }[]
+  matches: ArtMatch[]
 } | null {
   // Copied into OpenCV once for all the candidates' warps.
   return withMat(cv, img, (frame) => {

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import type { GameId } from '@shared/games/types'
 import { api, mutationInvalidationKeys } from '@/lib/api'
@@ -266,7 +266,7 @@ export function useScanSession(game: GameId = 'ygo'): {
     return { added, failed, cards }
   }, [game, qc, update])
 
-  const rows = useMemo(() => allRows.filter((r) => inGame(r, game)), [allRows, game])
+  const rows = allRows.filter((r) => inGame(r, game))
   const total = rows.reduce((n, r) => n + r.quantity, 0)
   return {
     rows,

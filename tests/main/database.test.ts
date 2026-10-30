@@ -17,7 +17,7 @@ describe('database', () => {
     db.close()
   })
 
-  test('V22 retries scan misses of cards named with a title-illegal character, and only those', () => {
+  test('V22 retries every stored scan miss and keeps found scans', () => {
     const db = new Database(':memory:')
     db.pragma('foreign_keys = ON')
     for (const m of MIGRATIONS.slice(0, 21)) db.exec(m.sql)
@@ -33,7 +33,8 @@ describe('database', () => {
        (10, 1, 'en', 'Metal Raiders', 'MRD-EN001', 'Common'),
        (11, 1, 'en', 'Legend of Blue Eyes White Dragon', 'LOB-EN001', 'Common'),
        (20, 2, 'en', 'Alliance Insight', 'ALIN-EN001', 'Ultra Rare'),
-       (30, 3, 'en', 'Legend of Blue Eyes White Dragon', 'LOB-EN005', 'Ultra Rare')`
+       (30, 3, 'en', 'Legend of Blue Eyes White Dragon', 'LOB-EN005', 'Ultra Rare'),
+       (31, 3, 'en', 'Starter Deck: Yugi', 'SDY-006', 'Ultra Rare')`
     ).run()
     const art = db.prepare(
       "INSERT INTO printing_art (printing_id, url, checked_at) VALUES (?, ?, '2026-10-29')"
@@ -42,12 +43,13 @@ describe('database', () => {
     art.run(11, 'https://ms.yugipedia.com/n.png')
     art.run(20, null)
     art.run(30, null)
+    art.run(31, 'https://ms.yugipedia.com/dm.png')
     migrate(db)
     expect(db.pragma('user_version', { simple: true })).toBe(22)
     const left = db.prepare('SELECT printing_id, url FROM printing_art ORDER BY printing_id').all()
     expect(left).toEqual([
       { printing_id: 11, url: 'https://ms.yugipedia.com/n.png' },
-      { printing_id: 30, url: null }
+      { printing_id: 31, url: 'https://ms.yugipedia.com/dm.png' }
     ])
     db.close()
   })

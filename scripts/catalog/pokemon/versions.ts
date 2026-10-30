@@ -66,6 +66,50 @@ export function variantLabel(v: TdVariant): string {
 
 export interface PkmVersion { label: string; productId: number | null; subTypeName: string | null; price: number | null }
 
+/**
+ * Finish evidence (owner report 2026-10-30: "ground set lists in full truth").
+ *
+ * TCGdex serves two kinds of `variants_detailed`. A curated list (each variant has its own id) is
+ * what TCGdex's editors recorded for that card. When a card has no curated list, TCGdex builds one
+ * from its legacy `variants` booleans and marks every entry `variantId: "generated"`; those
+ * booleans default to normal = true, reverse = false, holo = false when the set or card file says
+ * nothing (tcgdex/cards-database server/compiler/utils/cardUtil.ts, variantsToVariantsDetailed and
+ * cardToCardSingle). So a generated list is often TCGdex's default, not data: every card of the
+ * 30th Celebration set is generated "normal", while TCGplayer sells each one only as Holofoil.
+ *
+ * The rules, in order:
+ * 1. A curated TCGdex variant is a real printing.
+ * 2. A TCGplayer subtype of a matched product is a real printing: TCGplayer lists one SKU per finish
+ *    it sells, priced or not (TCGCSV's prices rows are those SKUs).
+ * 3. A generated TCGdex variant is used only when the card has no TCGplayer row from a product
+ *    matched to its plain printing; when it has one, TCGplayer's subtypes are the card's finishes
+ *    and the generated guesses are dropped.
+ * 4. A generated (or fallback) non-foil variant of an always-foil rarity is read as that rarity's
+ *    foil. The list is measured, not assumed: of the cards with TCGplayer rows (2026-10-30, EN+JA),
+ *    these rarities show a non-foil row on 0 cards, except Double (3/916), Secret (5/692), Holo Rare
+ *    V (1/237), Hyper (1/184) and Ultra Rare (1/2097). Holo Rare (38/739), LEGEND (4/18), Rare PRIME
+ *    (7/26) and Rare Holo LV.X (4/58) do show them, so they are left out. Nothing else is ever
+ *    added: Common, Rare, Promo and the like keep what TCGdex says, and reverse holos are never
+ *    inferred.
+ * Cards that reach rule 3 or 4 have no confirmed finish; the report counts them as unverified.
+ */
+export const GENERATED_VARIANT_ID = 'generated'
+
+/** TCGdex rarity names (lower case) that only exist as foil; see rule 4 above. */
+const ALWAYS_FOIL = new Set([
+  'rare holo', 'holo rare v', 'holo rare vmax', 'holo rare vstar', 'ultra rare', 'double rare', 'triple rare', 'illustration rare',
+  'special illustration rare', 'secret rare', 'hyper rare', 'mega hyper rare', 'shiny rare',
+  'shiny rare v', 'shiny rare vmax', 'shiny ultra rare', 'ace spec rare', 'radiant rare',
+  'amazing rare', 'character rare', 'character super rare', 'black white rare'
+])
+
+/** Whether a TCGdex rarity is only ever printed as foil. */
+export const alwaysFoil = (rarity: string | null | undefined): boolean =>
+  ALWAYS_FOIL.has((rarity ?? '').trim().toLowerCase())
+
+/** Whether TCGdex made this variant up from its legacy booleans rather than recording it. */
+export const isGenerated = (v: TdVariant): boolean => v.variantId === GENERATED_VARIANT_ID
+
 interface Source { productId: number; subTypeName: string; price: number | null }
 interface Entry { sources: Map<string, Source>; candidates: Set<number>; ambiguous: boolean }
 
@@ -80,14 +124,15 @@ const usablePrice = (p: number | null): number | null =>
  * reported. A version only TCGdex knows has no price; it keeps the product its variant points at, or
  * the only matched product with its subtype. A product reached under more than one variant subtype
  * (after versionSubtype, so none and "unlimited" are one) gives no product or price to any version
- * it touches, and is reported once. With no versions at all the card gets a single Normal.
- * Sorted by label.
+ * it touches, and is reported once. Generated TCGdex variants follow the finish rules above
+ * (`unverified` says the card's finishes rest on them). With no versions at all the card gets a
+ * single Normal (Holofoil for an always-foil rarity), also unverified. Sorted by label.
  */
 export function cardVersions(
   card: TdCard,
   matched: { product: TcProduct; variantSubtype: string | null }[],
   prices: Map<number, TcPrice[]>
-): { versions: PkmVersion[]; problems: string[] } {
+): { versions: PkmVersion[]; problems: string[]; unverified: boolean } {
   const problems: string[] = []
   const entries = new Map<string, Entry>()
   const entry = (label: string): Entry => {
@@ -137,7 +182,21 @@ export function cardVersions(
     }
   }
 
-  for (const v of card.variants_detailed ?? []) {
+  // Rule 3: TCGplayer rows of a product matched to the plain printing settle the card's finishes.
+  const plainRows = matched.some(
+    ({ product, variantSubtype }) =>
+      versionSubtype(variantSubtype) === null && (prices.get(product.productId)?.length ?? 0) > 0
+  )
+  const foil = alwaysFoil(card.rarity)
+  let unverified = false
+  for (const raw of card.variants_detailed ?? []) {
+    let v = raw
+    if (isGenerated(raw)) {
+      if (plainRows) continue
+      unverified = true
+      // Rule 4: an always-foil rarity's generated "normal" is its foil.
+      if (foil && raw.type.trim().toLowerCase() === 'normal') v = { ...raw, type: 'holo' }
+    }
     const base = variantBase(v)
     const label = variantLabel(v)
     if (!base.known) problems.push(`${card.id}: TCGdex variant ${JSON.stringify(v.type)}${v.stamp?.length ? ` ${JSON.stringify(v.stamp)}` : ''} is not in the version table; labelled "${label}"`)
@@ -168,9 +227,10 @@ export function cardVersions(
   }
 
   if (versions.length === 0) {
+    unverified = true
     const ids = new Set(matched.map((m) => m.product.productId))
-    versions.push({ label: 'Normal', productId: ids.size === 1 ? [...ids][0] : null, subTypeName: null, price: null })
+    versions.push({ label: foil ? 'Holofoil' : 'Normal', productId: ids.size === 1 ? [...ids][0] : null, subTypeName: null, price: null })
   }
   versions.sort((a, b) => (a.label < b.label ? -1 : a.label > b.label ? 1 : 0))
-  return { versions, problems }
+  return { versions, problems, unverified }
 }

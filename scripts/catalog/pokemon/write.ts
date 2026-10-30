@@ -29,6 +29,8 @@ export interface PokemonReport {
   englishNamed: number
   /** Japanese cards still named in Japanese: no English name was found. */
   japaneseNames: number
+  /** Cards whose finishes no source confirms (only TCGdex's generated defaults or the fallback). */
+  unverified: number
   problems: string[]
 }
 
@@ -195,6 +197,7 @@ async function planLanguage(
   }
 
   let versions = 0
+  let unverified = 0
   let priced = 0
   let cardCount = 0
   const planned: SetPlan[] = matched.map(({ set, groupId, cards: cs }) => {
@@ -206,6 +209,7 @@ async function planLanguage(
         const v = cardVersions(card, products, prices)
         problems.push(...v.problems.map((p) => `${lang}/${p}`))
         versions += v.versions.length
+        if (v.unverified) unverified++
         priced += v.versions.filter((x) => x.price !== null).length
         cardCount++
         const first = namingProduct(products)
@@ -236,6 +240,7 @@ async function planLanguage(
       unmatchedCards,
       englishNamed: 0,
       japaneseNames: 0,
+      unverified,
       problems
     }
   }

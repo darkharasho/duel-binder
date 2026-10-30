@@ -175,6 +175,24 @@ describe('matching Bulbagarden pack files to sets', () => {
     ])
   })
 
+  it('takes logos the API keeps on Scrydex, and hand-picked ones the name match misses', () => {
+    const scrydex = 'https://images.scrydex.com/pokemon/me3-logo/logo'
+    const logos = matchLogos(
+      [{ id: 'me3', name: 'Perfect Order', images: { logo: scrydex } }],
+      [
+        set('Perfect Order', 'POR', 'td-en-me03'),
+        set('XY trainer Kit (Latias)', 'XYTK', 'td-en-tk-xy-latia'),
+        set('Radiant Collection', 'RC', 'td-en-rc')
+      ]
+    )
+    expect([...logos]).toEqual([
+      ['Perfect Order', scrydex],
+      ['XY trainer Kit (Latias)', 'https://images.scrydex.com/pokemon/tk6a-logo/logo'],
+      ['Radiant Collection', 'https://images.pokemontcg.io/bw11/logo.png']
+    ])
+    expect(pokemontcgKey(scrydex)).toMatch(/^pt-[0-9a-f]{20}$/)
+  })
+
   it('keys images by their source', () => {
     expect(bulbagardenKey(`${UP}a/ab/X.png`)).toMatch(/^bp-[0-9a-f]{20}$/)
     expect(bulbagardenKey('https://example.com/X.png')).toBeNull()

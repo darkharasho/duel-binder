@@ -6,7 +6,7 @@ import {
   YUGIPEDIA_IMAGE_PREFIX,
   KONAMI_LOGO_PREFIX,
   BULBAGARDEN_IMAGE_PREFIX,
-  POKEMONTCG_IMAGE_PREFIX,
+  isFallbackLogoUrl,
   type ImageSize
 } from '../../../src/shared/imageSources'
 import { PKM_ID_MIN } from '../../../src/shared/games/ids'
@@ -114,7 +114,10 @@ export function createAnonImageQuota(
     windowMs,
     maxKeys: opts.maxKeys ?? ANON_IMAGE_MAX_KEYS
   })
-  const global = createImageQuota<string>(now, { limit: opts.global ?? ANON_IMAGE_GLOBAL_LIMIT, windowMs })
+  const global = createImageQuota<string>(now, {
+    limit: opts.global ?? ANON_IMAGE_GLOBAL_LIMIT,
+    windowMs
+  })
   const exhausted = (key: string): boolean => perAddress.exhausted(key) || global.exhausted(GLOBAL)
   return {
     take(key) {
@@ -145,7 +148,10 @@ export const ANON_MISS_MAX_KEYS = 10_000
 /** Bounded in-memory miss list; past `maxKeys` the oldest entry is dropped. */
 export function createMissCache(
   now: () => number,
-  opts: { ttlMs: number; maxKeys: number } = { ttlMs: ANON_MISS_TTL_MS, maxKeys: ANON_MISS_MAX_KEYS }
+  opts: { ttlMs: number; maxKeys: number } = {
+    ttlMs: ANON_MISS_TTL_MS,
+    maxKeys: ANON_MISS_MAX_KEYS
+  }
 ): MissCache {
   const until = new Map<string, number>()
   return {
@@ -263,7 +269,9 @@ function resolve(deps: AppDeps, path: string): Target | null {
         )
         .get(n) as { image_url: string | null } | undefined
       // TCGdex and TCGplayer have no crop, so a Pokémon `cropped` (a set tile's backdrop) is the small art.
-      const url = row?.image_url ? pokemonArtUrl(row.image_url, kind === 'full' ? 'full' : 'small') : null
+      const url = row?.image_url
+        ? pokemonArtUrl(row.image_url, kind === 'full' ? 'full' : 'small')
+        : null
       if (url === null) return null
       return { key: `card/${kind}/${n}`, source: fixed(url), cache: CARD_CACHE, anonymous: true }
     }
@@ -289,8 +297,10 @@ function resolve(deps: AppDeps, path: string): Target | null {
     if (prefix === 'bp-' || prefix === 'pt-') {
       // Pokémon pack art (Bulbagarden Archives) and fallback logos (Pokémon TCG API).
       const source = findPokemonSetArtUrl(deps.db, id)
-      const allowed = prefix === 'bp-' ? BULBAGARDEN_IMAGE_PREFIX : POKEMONTCG_IMAGE_PREFIX
-      if (source === null || !source.startsWith(allowed)) return null
+      if (source === null) return null
+      const allowed =
+        prefix === 'bp-' ? source.startsWith(BULBAGARDEN_IMAGE_PREFIX) : isFallbackLogoUrl(source)
+      if (!allowed) return null
       return {
         key: `set/${id}`,
         source: fixed(source, { 'User-Agent': USER_AGENT }),
@@ -392,7 +402,10 @@ async function serve(req: Request, deps: AppDeps, path: string): Promise<Respons
   const overQuota = (): Response | null => {
     if (!meter || meter.take()) return null
     const seconds = Math.max(1, Math.ceil(meter.retryAfterMs() / 1000))
-    return new Response('Too many requests', { status: 429, headers: { 'retry-after': String(seconds) } })
+    return new Response('Too many requests', {
+      status: 429,
+      headers: { 'retry-after': String(seconds) }
+    })
   }
 
   const early = target.meterFirst ? overQuota() : null

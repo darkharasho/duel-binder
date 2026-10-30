@@ -74,18 +74,20 @@ export function PanelCardArt({
   // show arrows on desktop alone.
   const phone = isPhone()
   const arrows = phone ? undefined : nav
-  // The large card's width is capped by the window's height at the card's own aspect.
   const found = useQuery({
     queryKey: queryKeys.artWindow(imageId, printingId ?? null, foil.roundedLeft),
     queryFn: () => detectArtWindow({ imageId, printingId: printingId ?? null }, foil.roundedLeft),
     enabled: foil.detect,
+    // An image's box never changes: found once a session.
     staleTime: Infinity,
+    gcTime: Infinity,
     retry: false
   })
   const artWindow = chooseArtWindow(found.data, foil.window)
   // Held back until the box is known, so a mask never jumps into place.
   const foilKind = foil.detect && found.isPending ? 'none' : foil.kind
   const shiny = foilKind !== 'none'
+  // The large card's width is capped by the window's height at the card's own aspect.
   const aspectVar = { '--card-aspect': `calc(${cssAspect(aspect)})` } as React.CSSProperties
   return (
     <>

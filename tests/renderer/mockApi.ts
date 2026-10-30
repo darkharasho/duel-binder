@@ -69,6 +69,7 @@ export function createMockApi(overrides: DeepPartial<Api> = {}): Api {
       cardsForImages: vi.fn(async () => []),
       fingerprints: vi.fn(async () => null),
       fingerprintRefs: vi.fn(async () => []),
+      fingerprintStatus: vi.fn(async () => ({ state: 'missing' as const, count: 0 })),
       refreshFingerprints: vi.fn(async () => ({ state: 'missing' as const, count: 0 })),
       ocr: vi.fn(async () => []),
       language: vi.fn(async () => null),

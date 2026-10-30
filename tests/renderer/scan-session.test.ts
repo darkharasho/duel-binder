@@ -40,13 +40,20 @@ const draft = (extra: Partial<ScanDraft> = {}): ScanDraft => ({
 type Session = ReturnType<typeof useScanSession>
 
 function setup(
-  add = vi.fn(async () => ({}) as never)
-): { add: typeof add } & RenderHookResult<Session, unknown> {
+  add = vi.fn(async () => ({}) as never),
+  game?: GameId
+): { add: typeof add } & RenderHookResult<Session, { game?: GameId }> {
   window.api = createMockApi({ collection: { add } })
   const client = new QueryClient()
   const wrapper = ({ children }: { children: ReactNode }): ReactElement =>
     createElement(QueryClientProvider, { client }, children)
-  return { add, ...renderHook(() => useScanSession(), { wrapper }) }
+  return {
+    add,
+    ...renderHook((props: { game?: GameId }) => useScanSession(props.game), {
+      wrapper,
+      initialProps: { game } as { game?: GameId }
+    })
+  }
 }
 
 describe('useScanSession', () => {
@@ -166,7 +173,7 @@ describe('useScanSession', () => {
   })
 
   it('a Pokémon row whose version is still to be picked is not added', async () => {
-    const { result, add } = setup()
+    const { result, add } = setup(undefined, 'pkm')
     act(() => result.current.add(draft({ game: 'pkm', flag: 'pick-printing', via: 'art' })))
     let out = { added: 0, failed: 0 }
     await act(async () => {
@@ -474,5 +481,64 @@ describe('useScanLoop', () => {
     expect(readText).toHaveBeenCalled()
     expect(onDraft).not.toHaveBeenCalled()
     expect(result.current).toMatchObject({ status: { kind: 'unsure' } })
+  })
+})
+
+describe('useScanSession per game', () => {
+  beforeEach(() => localStorage.clear())
+  const pkm = (extra: Partial<ScanDraft> = {}): ScanDraft => draft({ game: 'pkm', ...extra })
+
+  it("shows and counts only the active game's rows, and keeps the other's", () => {
+    const { result, rerender } = setup()
+    act(() => result.current.add(draft()))
+    act(() => result.current.add(draft()))
+    rerender({ game: 'pkm' })
+    expect(result.current.rows).toEqual([])
+    expect(result.current.total).toBe(0)
+    act(() => result.current.add(pkm()))
+    expect(result.current.rows.map((r) => r.game)).toEqual(['pkm'])
+    expect(result.current.total).toBe(1)
+    rerender({ game: 'ygo' })
+    expect(result.current.total).toBe(2)
+    expect(result.current.rows[0].game).toBeUndefined()
+  })
+
+  it('keeps a Pokémon row apart from a Yu-Gi-Oh row with the same ids', () => {
+    const { result, rerender } = setup(undefined, 'pkm')
+    act(() => result.current.add(pkm()))
+    rerender({ game: 'ygo' })
+    act(() => result.current.add(draft()))
+    expect(result.current.total).toBe(1)
+    rerender({ game: 'pkm' })
+    expect(result.current.total).toBe(1)
+  })
+
+  it("Add sends only the active game's rows", async () => {
+    const { add, result, rerender } = setup()
+    act(() => result.current.add(draft()))
+    rerender({ game: 'pkm' })
+    act(() => result.current.add(pkm({ printingId: 500, imageId: 50, options: [opt(500, '')] })))
+    await act(async () => void (await result.current.commit()))
+    expect(add).toHaveBeenCalledTimes(1)
+    expect(add).toHaveBeenCalledWith(expect.objectContaining({ printingId: 500 }))
+    rerender({ game: 'ygo' })
+    expect(result.current.total).toBe(1)
+  })
+
+  it("Clear takes only the active game's rows", () => {
+    const { result, rerender } = setup()
+    act(() => result.current.add(draft()))
+    rerender({ game: 'pkm' })
+    act(() => result.current.add(pkm()))
+    act(() => result.current.clear())
+    expect(result.current.total).toBe(0)
+    rerender({ game: 'ygo' })
+    expect(result.current.total).toBe(1)
+  })
+
+  it('reads a saved list with no game as Yu-Gi-Oh', () => {
+    localStorage.setItem(KEY, JSON.stringify([{ ...draft(), key: 'x', quantity: 1, addedAt: 1 }]))
+    expect(setup().result.current.total).toBe(1)
+    expect(setup(undefined, 'pkm').result.current.total).toBe(0)
   })
 })

@@ -1,5 +1,5 @@
 import type { Language } from './languages'
-import type { ScanDraft } from './scan/types'
+import type { FingerprintStatus, ScanDraft } from './scan/types'
 
 /** What the scan loop is doing; the scan window reports it, the Scan page words it. */
 export type ScanStatus =
@@ -32,6 +32,8 @@ export interface ScanWindowState {
   cameraError: 'denied' | 'none' | 'lost' | 'busy' | null
   loop: ScanStatus
   artReady: boolean | null
+  /** Where the artwork data stands, while there is none to match against. */
+  artData?: FingerprintStatus | null
   setUnreadable: boolean
 }
 

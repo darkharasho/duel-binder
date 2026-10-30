@@ -77,6 +77,8 @@ export interface Api {
      * app's printing ids (see fingerprintRefs.ts); empty when there are none.
      */
     fingerprintRefs(): Promise<ScanRef[]>
+    /** Where the game's fingerprint file stands, a download's progress included. */
+    fingerprintStatus(game: GameId): Promise<FingerprintStatus>
     refreshFingerprints(game: GameId, opts?: { force?: boolean }): Promise<FingerprintStatus>
     ocr(bands: OcrBand[], kind: OcrKind): Promise<string[]>
     /** The language the card text on the bands reads as; null when it can't be told. */
@@ -219,6 +221,7 @@ export const INVOKE_CHANNELS = [
   'scan:cardsForImages',
   'scan:fingerprints',
   'scan:fingerprintRefs',
+  'scan:fingerprintStatus',
   'scan:refreshFingerprints',
   'scan:ocr',
   'scan:language',

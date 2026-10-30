@@ -13,7 +13,8 @@ import {
 import { defaultEngine, type EngineFactory } from './engine'
 import { InPageScanner, type InPageCamera } from './InPageScanner'
 import { useScanHub } from './ScanHub'
-import { NO_FINGERPRINTS, SET_UNREADABLE, statusText } from './scanText'
+import { ArtDataNotice } from './ArtDataNotice'
+import { SET_UNREADABLE, statusText } from './scanText'
 import { SessionList } from './SessionList'
 import { SearchPicker } from './SearchPicker'
 import { useScanPickers } from './pickerOptions'
@@ -241,9 +242,7 @@ export function ScanPage({
             {open && state?.setUnreadable && (
               <p className="text-xs text-muted-foreground">{SET_UNREADABLE}</p>
             )}
-            {open && state?.artReady === false && (
-              <p className="text-xs text-muted-foreground">{NO_FINGERPRINTS}</p>
-            )}
+            {open && state?.artReady === false && <ArtDataNotice status={state.artData} />}
           </div>
 
           <SessionList className="mt-6 h-[calc(100vh-17rem)]" />

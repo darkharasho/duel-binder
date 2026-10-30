@@ -115,6 +115,7 @@ function Scanner({
     cameraError: camera.error,
     loop: loop.status,
     artReady: loop.artReady,
+    artData: loop.artData,
     setUnreadable
   }
   const serialized = JSON.stringify(state)

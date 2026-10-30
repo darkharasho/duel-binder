@@ -1,3 +1,4 @@
+import type { FingerprintStatus } from '@shared/scan/types'
 import type { ScanStatus } from '@shared/scanWindow'
 
 export const plural = (n: number, one: string, many: string): string =>
@@ -19,5 +20,18 @@ export function statusText(s: ScanStatus): string {
 export const SET_UNREADABLE =
   "Couldn't load this set's cards, so cards are matched against every set."
 
-export const NO_FINGERPRINTS =
-  'Artwork matching is unavailable until the artwork data downloads. Set codes and names still work.'
+export function artDataText(status: FingerprintStatus | null | undefined): string {
+  const still = 'Set codes and names still work.'
+  switch (status?.state) {
+    case 'downloading':
+      return status.progress === undefined
+        ? `Downloading artwork data. ${still}`
+        : `Downloading artwork data: ${Math.round(status.progress * 100)}%. ${still}`
+    case 'error':
+      return `Couldn't download the artwork data. Trying again shortly. ${still}`
+    case 'missing':
+      return `Artwork data for this game isn't available yet. It will load here once it is. ${still}`
+    default:
+      return `Artwork matching is unavailable until the artwork data downloads. ${still}`
+  }
+}

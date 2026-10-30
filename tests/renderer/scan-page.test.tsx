@@ -695,15 +695,29 @@ describe('Scan page', () => {
     expect(screen.queryByText(/The camera stopped/)).not.toBeInTheDocument()
   })
 
+  it('picks up a fingerprint file published while the scanner is open', async () => {
+    const fp = new ArrayBuffer(8)
+    const fingerprints = vi.fn(async () => null as ArrayBuffer | null)
+    const refreshFingerprints = vi.fn(async () => {
+      if (refreshFingerprints.mock.calls.length === 1) return { state: 'missing', count: 0 }
+      fingerprints.mockResolvedValue(fp)
+      return { state: 'ready', count: 1, updated: true }
+    })
+    const engine = fakeEngine()
+    await renderScan({ scan: { fingerprints, refreshFingerprints } as never }, engine)
+    await run()
+    expect(screen.getByText(/isn't available yet/)).toBeInTheDocument()
+    await run(60_000)
+    await run(100)
+    expect(engine.init).toHaveBeenCalledWith(fp, [])
+    expect(screen.queryByText(/isn't available yet/)).not.toBeInTheDocument()
+  })
+
   it('shows the no-fingerprints notice', async () => {
     const engine = fakeEngine()
     const { unmount } = await renderScan({}, engine)
     await run()
-    expect(
-      screen.getByText(
-        'Artwork matching is unavailable until the artwork data downloads. Set codes and names still work.'
-      )
-    ).toBeInTheDocument()
+    expect(screen.getByText(/Artwork data for this game isn't available yet/)).toBeInTheDocument()
     expect(engine.init).toHaveBeenCalledWith(null, [])
     unmount()
 
@@ -712,7 +726,7 @@ describe('Scan page', () => {
     await renderScan({ scan: { fingerprints: vi.fn(async () => fp) } }, ready)
     await run()
     expect(ready.init).toHaveBeenCalledWith(fp, [])
-    expect(screen.queryByText(/Artwork matching is unavailable/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/Artwork data/)).not.toBeInTheDocument()
   })
 
   it('scans with the file on disk while the fingerprint refresh hangs', async () => {

@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { cn } from '@/lib/utils'
-import { cssAspect, type CardAspect } from '@shared/games'
+import { cssAspect, gameOfId, type CardAspect } from '@shared/games'
 import { useCardAspect } from '@/lib/game'
 import { cardImageSrc, printingImageSrc } from '@/lib/images'
 import { useArtLoad } from './artLoad'
@@ -12,6 +12,8 @@ interface CardArtProps {
   className?: string
   /** Shows this printing's own scan (fetched from Yugipedia) over the default art once it loads. */
   printingId?: number | null
+  /** Someone is waiting on this image (a clicked card): the desktop downloads it ahead of its queue. */
+  priority?: boolean
 }
 
 function CardBack({
@@ -94,12 +96,18 @@ function PrintingScan({
   )
 }
 
-export function CardArt({
+/** Keyed by card, so a failed load or a shown scan never carries over to the next card. */
+export function CardArt(props: CardArtProps): React.JSX.Element {
+  return <CardArtImage key={props.imageId} {...props} />
+}
+
+function CardArtImage({
   imageId,
   size,
   alt,
   className,
-  printingId
+  printingId,
+  priority
 }: CardArtProps): React.JSX.Element {
   const [failed, setFailed] = useState(false)
   const [scanShown, setScanShown] = useState<number | null>(null)
@@ -108,9 +116,11 @@ export function CardArt({
   const aspectStyle = { aspectRatio: cssAspect(aspect) }
   // A shimmer in the frame's shape while the art downloads, then a fade into it.
   const art = useArtLoad()
-  const src = cardImageSrc(size, imageId)
+  const src = cardImageSrc(size, imageId, { now: priority })
   // No scan where there are no printing scans (the phone).
-  const scanSrc = printingId == null ? null : printingImageSrc(printingId)
+  // Nor for Pokémon: scans are Yugipedia's, Yu-Gi-Oh! only.
+  const scanSrc =
+    printingId == null || gameOfId(imageId) === 'pkm' ? null : printingImageSrc(printingId)
   if (printingId == null || scanSrc === null) {
     if (failed) return <CardBack className={className} label={alt} aspect={aspect} />
     return (

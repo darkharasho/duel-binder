@@ -109,12 +109,21 @@ describe('image route', () => {
       expect(upstream.mock.calls[1][0]).toBe('https://tcgplayer-cdn.tcgplayer.com/product/487828_200w.jpg')
     })
 
-    it('404s a foreign host, a lookalike host, a null url and cropped without fetching', async () => {
+    it('serves cropped Pokémon art as the small art, under its own key', async () => {
+      const id = addPokemon(7, 'https://assets.tcgdex.net/en/sv/sv01/001')
+      expect((await get(`cropped/${id}`)).status).toBe(200)
+      expect(upstream.mock.calls[0][0]).toBe('https://assets.tcgdex.net/en/sv/sv01/001/low.webp')
+      expect(bucket.store.has(`card/cropped/${id}`)).toBe(true)
+      const tp = addPokemon(8, 'https://tcgplayer-cdn.tcgplayer.com/product/487828_200w.jpg')
+      await get(`cropped/${tp}`)
+      expect(upstream.mock.calls[1][0]).toBe('https://tcgplayer-cdn.tcgplayer.com/product/487828_200w.jpg')
+    })
+
+    it('404s a foreign host, a lookalike host and a null url without fetching', async () => {
       const evil = addPokemon(3, 'https://evil.example/x')
       const like = addPokemon(4, 'https://assets.tcgdex.net.evil.com/en/x')
       const none = addPokemon(5, null)
-      const ok = addPokemon(6, 'https://assets.tcgdex.net/en/sv/sv01/001')
-      for (const p of [`full/${evil}`, `full/${like}`, `small/${none}`, `cropped/${ok}`, `full/${PKM + 99}`]) {
+      for (const p of [`full/${evil}`, `full/${like}`, `small/${none}`, `cropped/${none}`, `full/${PKM + 99}`]) {
         expect((await get(p)).status).toBe(404)
       }
       expect(upstream).not.toHaveBeenCalled()

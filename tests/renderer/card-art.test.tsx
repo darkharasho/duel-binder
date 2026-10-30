@@ -61,6 +61,40 @@ describe('CardArt', () => {
   })
 })
 
+describe('CardArt gaps', () => {
+  it('requests no printing scan for a Pokémon card', () => {
+    render(<CardArt imageId={PKM_ID_MIN + 7} printingId={9} size="small" alt="Pikachu" />)
+    expect(screen.queryByTestId('printing-scan')).not.toBeInTheDocument()
+  })
+
+  it('asks for priority only when told to', () => {
+    const { rerender } = render(<CardArt imageId={5} size="full" alt="K" />)
+    expect(screen.getByAltText('K')).toHaveAttribute('src', 'ygo-img://full/5')
+    rerender(<CardArt imageId={5} size="full" alt="K" priority />)
+    expect(screen.getByAltText('K')).toHaveAttribute('src', 'ygo-img://full/5?now')
+  })
+
+  it("the panel's large card downloads ahead of the queue", () => {
+    renderWithProviders(
+      <CardSheet onClose={() => {}}>
+        <PanelCardArt imageId={5} alt="Card" />
+      </CardSheet>
+    )
+    for (const img of screen.getAllByRole('img')) {
+      expect(img).toHaveAttribute('src', 'ygo-img://full/5?now')
+    }
+  })
+
+  it('a failed card does not leave the next card as a card back', () => {
+    const { rerender } = render(<CardArt imageId={5} size="full" alt="A" />)
+    fireEvent.error(screen.getByAltText('A'))
+    expect(screen.getByTestId('card-art-placeholder')).toBeInTheDocument()
+    rerender(<CardArt imageId={6} size="full" alt="B" />)
+    expect(screen.queryByTestId('card-art-placeholder')).not.toBeInTheDocument()
+    expect(screen.getByAltText('B')).toHaveAttribute('src', 'ygo-img://full/6')
+  })
+})
+
 describe('CardArt aspect', () => {
   const PKM_CARD = PKM_ID_MIN + 7
 

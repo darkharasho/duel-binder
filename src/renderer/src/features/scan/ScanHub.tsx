@@ -164,8 +164,8 @@ const HubContext = createContext<ScanHub | null>(null)
  * while the Scan page isn't showing, and the window is told the settings however it came up.
  */
 export function ScanHubProvider({ children }: { children: React.ReactNode }): React.JSX.Element {
-  const session = useScanSession()
   const game = useActiveGame()
+  const session = useScanSession(game)
   const gameRef = useRef<GameId>('ygo')
   const [settings, setSettingsState] = useState<ScanWindowSettings>(initialSettings)
   const settingsRef = useRef(settings)

@@ -1,5 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
+import type { GameId } from '@shared/games/types'
 import { api, mutationInvalidationKeys } from '@/lib/api'
 import { track } from '@/lib/usage'
 import type { ScanDraft } from './resolve'
@@ -14,8 +15,12 @@ export interface ScanRow extends ScanDraft {
 
 const STORAGE_KEY = 'scan.session.v1'
 
-export const rowKey = (d: Pick<ScanDraft, 'printingId' | 'cardId' | 'imageId'>): string =>
-  `${d.printingId ?? 'c' + d.cardId}:${d.imageId}`
+/** The two games' ids overlap, so a Pokémon row's key says which it is. */
+export const rowKey = (d: Pick<ScanDraft, 'printingId' | 'cardId' | 'imageId' | 'game'>): string =>
+  `${d.game === 'pkm' ? 'pkm:' : ''}${d.printingId ?? 'c' + d.cardId}:${d.imageId}`
+
+/** Rows saved before a second game had no game: they're Yu-Gi-Oh's. */
+const inGame = (r: ScanRow, game: GameId): boolean => (r.game ?? 'ygo') === game
 
 const isRow = (v: unknown): v is ScanRow => {
   if (typeof v !== 'object' || v === null) return false
@@ -66,7 +71,11 @@ export function clearSavedScans(): void {
 const messageOf = (err: unknown): string =>
   err instanceof Error ? err.message : 'Could not add card'
 
-export function useScanSession(): {
+/**
+ * The unsaved scans of `game`. Both games share one saved list, so a game's scans wait there while
+ * the other game shows; everything here (the rows, the total, Add, Clear) is the one game's.
+ */
+export function useScanSession(game: GameId = 'ygo'): {
   rows: ScanRow[]
   total: number
   committing: boolean
@@ -84,9 +93,9 @@ export function useScanSession(): {
   commit(): Promise<{ added: number; failed: number; cards: number }>
 } {
   const qc = useQueryClient()
-  const [rows, setRows] = useState<ScanRow[]>(load)
+  const [allRows, setRows] = useState<ScanRow[]>(load)
   // Always the latest list, so back-to-back updates and the async commit never read stale state.
-  const ref = useRef(rows)
+  const ref = useRef(allRows)
   const committingRef = useRef(false)
   const [committing, setCommitting] = useState(false)
 
@@ -164,12 +173,17 @@ export function useScanSession(): {
     [update]
   )
 
-  const clear = useCallback((): void => update(() => []), [update])
+  const clear = useCallback(
+    (): void => update((list) => list.filter((r) => !inGame(r, game))),
+    [game, update]
+  )
 
   const refreshPrices = useCallback(async (): Promise<void> => {
     const cardIds = [
       ...new Set(
-        ref.current.filter((r) => r.options.some((o) => o.price == null)).map((r) => r.cardId)
+        ref.current
+          .filter((r) => inGame(r, game) && r.options.some((o) => o.price == null))
+          .map((r) => r.cardId)
       )
     ]
     if (cardIds.length === 0) return
@@ -179,6 +193,7 @@ export function useScanSession(): {
     update((list) => {
       let changed = false
       const next = list.map((r) => {
+        if (!inGame(r, game)) return r
         let filled = false
         const options = r.options.map((o) => {
           const price = o.price == null ? fresh.get(o.printingId) : null
@@ -192,7 +207,7 @@ export function useScanSession(): {
       })
       return changed ? next : list
     })
-  }, [update])
+  }, [game, update])
 
   const commit = useCallback(async (): Promise<{
     added: number
@@ -206,9 +221,10 @@ export function useScanSession(): {
     let failed = 0
     let cards = 0
     // A row with no printing, or a Pokémon version still to pick, waits for one.
-    const unaddable = new Set(ref.current.filter((r) => printingOf(r) === null).map((r) => r.key))
+    const batch = ref.current.filter((r) => inGame(r, game))
+    const unaddable = new Set(batch.filter((r) => printingOf(r) === null).map((r) => r.key))
     try {
-      for (const row of ref.current.filter((r) => printingOf(r) !== null)) {
+      for (const row of batch.filter((r) => printingOf(r) !== null)) {
         try {
           await api.collection.add({
             printingId: row.printingId!,
@@ -248,8 +264,9 @@ export function useScanSession(): {
       for (const queryKey of mutationInvalidationKeys) void qc.invalidateQueries({ queryKey })
     }
     return { added, failed, cards }
-  }, [qc, update])
+  }, [game, qc, update])
 
+  const rows = useMemo(() => allRows.filter((r) => inGame(r, game)), [allRows, game])
   const total = rows.reduce((n, r) => n + r.quantity, 0)
   return {
     rows,

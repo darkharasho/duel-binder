@@ -334,10 +334,11 @@ describe('phone scanner', () => {
       )
       const store = fakeStore()
       installPhoneApi(store)
+      window.api = { ...window.api, games: { active: vi.fn(async () => 'pkm' as const) } as never }
       renderScanner(store)
       const card = await screen.findByRole('region', { name: 'Last scan' })
       expect(
-        within(card).getByRole('button', { name: 'Next version of Dark Magician' })
+        await within(card).findByRole('button', { name: 'Next version of Dark Magician' })
       ).toHaveTextContent('1/3')
       expect(
         within(card).queryByRole('button', { name: 'Next printing of Dark Magician' })

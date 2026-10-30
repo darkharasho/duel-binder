@@ -6,6 +6,9 @@ export const PKM: GameDef = {
   name: 'Pokémon',
   color: '#e0483d',
   features: { scan: false, rip: false },
+  // TCGdex's card images, most of the catalog's art, are 600×825 (low: 245×337). Its TCGplayer
+  // fallbacks are a little narrower (about 716×1000), so they lose a sliver top and bottom.
+  cardAspect: { width: 600, height: 825 },
   crossLanguagePriceFallback: false,
   priceRule: 'marketOnly',
   access: 'owner',

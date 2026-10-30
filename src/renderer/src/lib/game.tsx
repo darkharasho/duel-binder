@@ -1,7 +1,7 @@
 /* eslint-disable react-refresh/only-export-components -- the provider and its hook belong together */
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
-import { GAMES, type GameDef, type GameId } from '@shared/games'
+import { GAMES, gameOfId, type CardAspect, type GameDef, type GameId } from '@shared/games'
 import { api } from '@/lib/api'
 
 export interface GameState {
@@ -39,6 +39,15 @@ const GameContext = createContext<GameState>({
 })
 
 export const useGame = (): GameState => useContext(GameContext)
+
+/**
+ * The aspect of a card's art frame: the card's own game's, read from its id (a Pokémon id is in its
+ * own range, so a friend's or a scanned card of either game is framed right), else the game shown.
+ */
+export function useCardAspect(imageId?: number): CardAspect {
+  const { game } = useGame()
+  return GAMES[imageId !== undefined && imageId > 0 ? gameOfId(imageId) : game].cardAspect
+}
 
 /** Whether a page is in this game: Scan and Rip are only for a game that has them. */
 export function pageInGame(page: string, def: GameDef): boolean {

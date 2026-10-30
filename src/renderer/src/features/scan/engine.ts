@@ -33,6 +33,11 @@ export interface FrameSignals {
   /** Pokémon only: the card is in a graded slab (its label block shows above it). */
   slab?: boolean
   /**
+   * 'holder' when the art matched only on the second look of a profile's holderSearch, which
+   * must then clear the art margin against every other name (resolvePokemon).
+   */
+  artVia?: 'holder'
+  /**
    * The card's look for the rarity look model (rarityFeatures, LOOK_FEATURES order): only when
    * asked for (wantLook) and the card was turned upright, else null.
    */
@@ -75,6 +80,8 @@ export interface RawSignals {
   cues: RarityCues | null
   version?: VersionCues | null
   slab?: boolean
+  /** As FrameSignals.artVia. */
+  artVia?: 'holder'
   look: number[] | null
 }
 
@@ -224,6 +231,8 @@ export function createScanEngine(deps: {
         }
       })
       const { found, quad, art, cues, version, slab, look } = signals
+      // Only when set, so a Yu-Gi-Oh frame's signals are as they were.
+      const via = signals.artVia ? { artVia: signals.artVia } : {}
       if (!wantText || !found)
         return {
           found,
@@ -235,6 +244,7 @@ export function createScanEngine(deps: {
           cues,
           version,
           slab,
+          ...via,
           look
         }
       const codeBands = signals.codeBands.filter(hasPixels)
@@ -257,6 +267,7 @@ export function createScanEngine(deps: {
         cues,
         version,
         slab,
+        ...via,
         look
       }
     },

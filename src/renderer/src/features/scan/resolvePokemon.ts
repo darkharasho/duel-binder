@@ -66,6 +66,41 @@ async function reprintBehind(
   return others.some((p) => p.language === card.language && sameName(p.name, card.name))
 }
 
+/**
+ * Whether the closest artwork is more than PKM_ART_MIN_MARGIN ahead of the closest one of a card
+ * of another name, over every match ranked: asked of art found only by the holder search, which
+ * looks at many more quads and so has more chances of a chance match. A match whose card isn't
+ * known, ranked before any other name, can't be told and fails. With no other name ranked at
+ * all, any is further than the last, which artGroup has already seen past the margin.
+ */
+async function clearOfOtherNames(raw: RawSignals, ctx: ResolveContext): Promise<boolean> {
+  const [top] = raw.art
+  const cardOf = new Map(
+    (await ctx.lookups.cardsForImages(raw.art.map((a) => a.imageId))).map((c) => [
+      c.imageId,
+      c.cardId
+    ])
+  )
+  const nameOf = new Map(
+    (await ctx.lookups.printingsForCards(unique([...cardOf.values()]))).map((p) => [
+      p.cardId,
+      p.name
+    ])
+  )
+  const name = (imageId: number): string | undefined => {
+    const cardId = cardOf.get(imageId)
+    return cardId === undefined ? undefined : nameOf.get(cardId)
+  }
+  const topName = name(top.imageId)
+  if (topName === undefined) return false
+  for (const a of raw.art) {
+    const other = name(a.imageId)
+    if (other === undefined) return false
+    if (!sameName(other, topName)) return a.distance > top.distance + PKM_ART_MIN_MARGIN
+  }
+  return true
+}
+
 /** The printings of the first collector number, over every code band read, that names any. */
 async function byNumber(raw: RawSignals, ctx: ResolveContext): Promise<ScanPrinting[]> {
   const tried = new Set<string>()
@@ -158,6 +193,8 @@ async function draft(
  * - Without: the art's cards; one of them in the read language is named.
  * - Either way, never a card with a reprint of its art that has no artwork to match
  *   (ScanPrinting.unseenTwin).
+ * - Art found only by the holder search (artVia), never unless it is past the margin from every
+ *   card of another name (clearOfOtherNames).
  * - Nothing at all, and the closest artwork past ART_FAR_DISTANCE: `none`, far.
  *
  * The language is read only once there's a card to name, and at most once; a read that fails
@@ -184,6 +221,7 @@ export async function resolvePokemonSignals(
 
   const group = await artGroup(raw, ctx)
   if (group === null) return unsure
+  if (raw.artVia === 'holder' && group.length && !(await clearOfOtherNames(raw, ctx))) return unsure
   const numbered = await byNumber(raw, ctx)
   // A card with a reprint of its art that has no artwork of its own is never named: the art
   // can't tell them apart, nor can the number, as a Classic Collection reprint prints its

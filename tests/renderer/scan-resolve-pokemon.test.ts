@@ -420,6 +420,58 @@ describe('resolvePokemonSignals', () => {
   })
 })
 
+describe('art found only by the holder search', () => {
+  // More quads looked at mean more chances of a chance match, so such a match must also clear
+  // PKM_ART_MIN_MARGIN against the next card of another name, over every match ranked.
+  const holder = (r: Partial<RawSignals>): RawSignals => raw({ ...r, artVia: 'holder' })
+
+  it('names nothing when a card of another name is within the margin, even past the art limit', async () => {
+    // Raichu past ART_MAX_DISTANCE is outside the art group, so the first search names Pikachu.
+    const art = [
+      { imageId: 101, distance: 70 },
+      { imageId: 501, distance: ART_MAX_DISTANCE + 10 }
+    ]
+    expect(await recognized(raw({ art }), pkm('en'))).toMatchObject({ cardId: 1 })
+    expect(await resolveSignals(holder({ art }), pkm('en'))).toEqual({ kind: 'unsure' })
+    // Exactly the margin behind isn't past it.
+    const edge = [
+      { imageId: 101, distance: 30 },
+      { imageId: 501, distance: 30 + PKM_ART_MIN_MARGIN }
+    ]
+    expect(await resolveSignals(holder({ art: edge }), pkm('en'))).toEqual({ kind: 'unsure' })
+  })
+
+  it('names the card when the next of another name is past the margin', async () => {
+    const art = [
+      { imageId: 101, distance: 60 },
+      { imageId: 501, distance: 60 + PKM_ART_MIN_MARGIN + 1 }
+    ]
+    expect(await recognized(holder({ art }), pkm('en'))).toMatchObject({ cardId: 1, via: 'art' })
+  })
+
+  it("doesn't count a reprint of the same name, which the number still tells apart", async () => {
+    const art = [
+      { imageId: 101, distance: 30 },
+      { imageId: 301, distance: 40 },
+      { imageId: 501, distance: 30 + PKM_ART_MIN_MARGIN + 1 }
+    ]
+    expect(await recognized(holder({ art, codeTexts: ['045/193'] }), pkm('en'))).toMatchObject({
+      cardId: 1,
+      via: 'code'
+    })
+  })
+
+  it('names nothing when a match ranked before another name is missing from the catalog', async () => {
+    const art = [
+      { imageId: 101, distance: 30 },
+      { imageId: 999, distance: 90 },
+      { imageId: 501, distance: 100 }
+    ]
+    expect(await recognized(raw({ art }), pkm('en'))).toMatchObject({ cardId: 1 })
+    expect(await resolveSignals(holder({ art }), pkm('en'))).toEqual({ kind: 'unsure' })
+  })
+})
+
 describe('ygo path unchanged', () => {
   // Two cases from scan-resolve.test.ts, with the game said and left out.
   const DM = {

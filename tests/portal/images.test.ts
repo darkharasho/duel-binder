@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import type Database from 'better-sqlite3'
 import { tokenId } from '../../src/shared/games/ids'
 import {
@@ -63,6 +64,71 @@ describe('token card art', () => {
     expect((await get(`full/${image}`)).status).toBe(200)
     expect(upstream.mock.calls[0][0]).toBe(`${YP}a/ab/Token.png`)
     expect(tokenArt).toHaveBeenCalledWith(image)
+  })
+
+  describe('art over the size limit', () => {
+    const TOO_BIG = 16 * 1024 * 1024
+    const header = (): Response =>
+      new Response(JPEG, { headers: { 'content-type': 'image/jpeg', 'content-length': String(TOO_BIG) } })
+    const signedIn = (path: string) =>
+      handle(new Request(`${BASE}/img/${path}`, { headers: { cookie: 'session=tok' } }), deps)
+
+    beforeEach(() => {
+      db.prepare('INSERT INTO sessions (token_hash, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)').run(
+        createHash('sha256').update('tok').digest('hex'),
+        addUser(db, '1', 'alice'),
+        '2026-10-25T11:00:00.000Z',
+        '2026-10-25T23:00:00.000Z'
+      )
+      deps.anonMisses = createMissCache(() => 0, { ttlMs: 3_600_000, maxKeys: 100 })
+      deps.imageQuota = createImageQuota(() => 0, { limit: 1, windowMs: 3_600_000 })
+    })
+
+    test('is remembered, so a signed-in view spends no quota, Yugipedia call or fetch', async () => {
+      upstream.mockImplementation(async () => header())
+      expect((await signedIn(`full/${image}`)).status).toBe(404)
+      expect((await signedIn(`full/${image}`)).status).toBe(404) // not 429: the quota of 1 is spent
+      expect((await signedIn(`small/${image}`)).status).toBe(404) // one image for all sizes
+      expect(tokenArt).toHaveBeenCalledTimes(1)
+      expect(upstream).toHaveBeenCalledTimes(1)
+    })
+
+    test('is remembered from a signed-out view for signed-in ones, and the other way', async () => {
+      upstream.mockImplementation(async () => header())
+      expect((await get(`full/${image}`)).status).toBe(404)
+      expect((await signedIn(`full/${image}`)).status).toBe(404)
+      expect(upstream).toHaveBeenCalledTimes(1)
+
+      const other = tokenId(779)
+      db.prepare('INSERT INTO card_images (image_id, card_id, sort_order) VALUES (?, ?, 1)').run(other, tokenId(1))
+      deps.imageQuota = createImageQuota(() => 0, { limit: 10, windowMs: 3_600_000 })
+      expect((await signedIn(`full/${other}`)).status).toBe(404)
+      expect((await get(`full/${other}`)).status).toBe(404)
+      expect(upstream).toHaveBeenCalledTimes(2)
+    })
+
+    test('is told by the body when no content-length says so', async () => {
+      upstream.mockImplementation(
+        async () => new Response(new Uint8Array(10 * 1024 * 1024 + 1), { headers: { 'content-type': 'image/jpeg' } })
+      )
+      expect((await signedIn(`full/${image}`)).status).toBe(404)
+      expect((await signedIn(`full/${image}`)).status).toBe(404)
+      expect(upstream).toHaveBeenCalledTimes(1)
+    })
+
+    test('any other failure stays open to signed-in callers', async () => {
+      deps.imageQuota = createImageQuota(() => 0, { limit: 10, windowMs: 3_600_000 })
+      upstream.mockRejectedValueOnce(new Error('timeout'))
+      expect((await signedIn(`full/${image}`)).status).toBe(404)
+      expect((await signedIn(`full/${image}`)).status).toBe(200)
+      expect(upstream).toHaveBeenCalledTimes(2)
+    })
+
+    test('works without a miss cache', async () => {
+      deps.anonMisses = undefined
+      upstream.mockImplementation(async () => header())
+      expect((await get(`full/${image}`)).status).toBe(404)
+    })
   })
 
   test('is stored once, so no size asks Yugipedia again', async () => {
@@ -611,6 +677,17 @@ describe('image route', () => {
     upstream.mockResolvedValueOnce(new Response(new Uint8Array(10 * 1024 * 1024 + 1), { headers: { 'content-type': 'image/jpeg' } }))
     expect((await get(`full/${imageId}`)).status).toBe(404)
     expect([...bucket.store.keys()]).toEqual([`set/${'a'.repeat(200)}`])
+  })
+
+  it('remembers an oversized set image for signed-in callers too', async () => {
+    deps.anonMisses = createMissCache(() => 0, { ttlMs: 3_600_000, maxKeys: 100 })
+    upstream.mockImplementation(
+      async () =>
+        new Response(JPEG, { headers: { 'content-type': 'image/jpeg', 'content-length': String(11 * 1024 * 1024) } })
+    )
+    expect((await get('set/abc')).status).toBe(404)
+    expect((await get('set/abc')).status).toBe(404)
+    expect(upstream).toHaveBeenCalledTimes(1)
   })
 
   describe('printing photos', () => {

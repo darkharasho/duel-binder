@@ -52,7 +52,7 @@ export interface AppDeps {
   imageQuota?: ImageQuota
   /** Caps signed-out upstream card-image fetches per client address; absent means unlimited. */
   anonImageQuota?: ImageQuota<string>
-  /** Card images whose upstream fetch recently failed; signed-out misses on them answer 404 without fetching. */
+  /** Card images whose upstream fetch recently failed, so signed-out misses on them answer 404 without fetching; images too big to keep answer 404 for everyone. */
   anonMisses?: MissCache
   printingArt: PrintingArtResolver
   /** The Yugipedia URL of a token image (see TOKEN_ID_MIN); null when it has none. */

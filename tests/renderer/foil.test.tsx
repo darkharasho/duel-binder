@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { render, screen, waitFor } from '@testing-library/react'
 import { FoilLayer } from '@/components/FoilLayer'
 import { PanelCardArt } from '@/components/PanelCardArt'
@@ -346,6 +347,39 @@ describe('FoilLayer', () => {
       <FoilLayer kind="holo" finish="lines" window={null} aspect={{ width: 421, height: 614 }} />
     )
     expect(screen.getByTestId('foil-layer').style.aspectRatio).toBe('421 / 614')
+  })
+})
+
+describe('foil styles', () => {
+  const css = readFileSync('src/renderer/src/index.css', 'utf8')
+
+  it('wraps every spectrum seamlessly: its last stop is its first', () => {
+    const spectra = [...css.matchAll(/--foil-spectrum: ([\s\S]*?);/g)].map((m) => m[1])
+    expect(spectra.length).toBeGreaterThan(5)
+    const hue = (stop: string): string => stop.replace('hsl(360', 'hsl(0').replace(/\)[^)]*$/, ')')
+    for (const spectrum of spectra) {
+      expect(spectrum.startsWith('repeating-linear-gradient')).toBe(true)
+      const stops = spectrum.match(/hsl\([^)]*\)/g)!
+      expect(hue(stops[stops.length - 1])).toBe(hue(stops[0]))
+    }
+  })
+
+  it('never tiles a spectrum, whose tile edges would show as a hard line', () => {
+    const rules = css.split('}').filter((rule) => rule.includes('var(--foil-spectrum)'))
+    expect(rules.length).toBeGreaterThan(1)
+    for (const rule of rules) expect(rule).toMatch(/background-repeat:[^;]*no-repeat;/)
+  })
+
+  it('keeps every hue rate inside the spectrum', () => {
+    const rates = [...css.matchAll(/--foil-hue-[xy]: (-?[\d.]+);/g)].map((m) => Number(m[1]))
+    for (const rate of rates) expect(Math.abs(rate)).toBeLessThanOrEqual(4)
+  })
+
+  it('keeps a still version of reverse foils at rest, and of nothing else', () => {
+    const shown = [...css.matchAll(/\.foil\[data-finish='([\w-]+)'\] \.foil-rest/g)].map(
+      (m) => m[1]
+    )
+    expect(shown.sort()).toEqual(['reverse', 'reverse-flat'])
   })
 })
 

@@ -131,6 +131,7 @@ export function FoilLayer({
         } as React.CSSProperties
       }
     >
+      <div className="foil-rest" />
       <div className="foil-wash" />
       <div className="foil-milk" />
       <div className="foil-deep" />

@@ -4,6 +4,8 @@
 // that scripts/scan/prep-real.ts downloads:
 //   SCAN_REAL_DIR=<dir> npx vitest run --maxWorkers=2 --silent=false tests/main/scan-real.test.ts
 // (--silent=false shows the per-shot and summary tables when the tests pass.)
+// SCAN_REAL_CROP=1 scans each shot at the app's framing (the live scan's centre crop), for
+// information only: the bars below were set on whole shots.
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { decode } from 'jpeg-js'
@@ -14,6 +16,7 @@ import { ART_MAX_DISTANCE, ART_MIN_MARGIN } from '../../src/shared/scan/threshol
 import type { RgbaImage } from '../../src/shared/scan/types'
 import { loadCv } from '../../src/renderer/src/features/scan/vision/cv'
 import { recognizeArt } from '../../src/renderer/src/features/scan/vision/candidates'
+import { appFrame } from './scan-app-frame'
 
 // Same reason as in scan-vision-detect.test.ts: hand vitest the plain OpenCV module.
 vi.mock('@techstark/opencv-js', async () => {
@@ -87,7 +90,8 @@ describe.skipIf(!DIR)('recognizeArt on real webcam photos', () => {
     )
     const truth = JSON.parse(readFileSync(join(dir, 'truth.json'), 'utf8')) as Truth[]
     for (const t of truth) {
-      const img = load(join(dir, t.file))
+      const shot = load(join(dir, t.file))
+      const img = process.env.SCAN_REAL_CROP === '1' ? appFrame(shot) : shot
       const start = performance.now()
       const found = recognizeArt(cv, img, index)
       const ms = performance.now() - start

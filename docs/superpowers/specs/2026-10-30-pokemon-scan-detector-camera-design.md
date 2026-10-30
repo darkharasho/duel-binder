@@ -459,6 +459,19 @@ reprint groups (105) and the 80 cards with no artwork.
 8. **App size:** about 12 MB more in the installer for everyone, while only the owner uses it. Fine, or
    should the runtime also be a download until Pokémon opens up?
 
+### Defaults taken, 2026-10-30
+
+The owner asked for default judgements on the questions above.
+
+- **3, spending:** rented GPU, hard cap $40. Booking it waits on the owner's account.
+- **4, encoder:** ImageNet-pretrained, Apache-2.0 weights.
+- **5, the bar:** 85% applies to the sealed 4K set at app framing. The 1080p set stays as a regression check.
+- **6, rule G:** yes, at the low tiers only.
+- **7, hints:** in the scan window, never on the stream overlay.
+- **8, app size:** bundled, about 12 MB more in the installer.
+
+Questions 1 and 2 still need the owner: the camera check and the 200-photo shoot.
+
 ## Sources
 
 - [Insta360 Link 2 Pro specs](https://www.insta360.com/specs/link2pro) (USB 2.0);

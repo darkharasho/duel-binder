@@ -15,6 +15,7 @@ export type CatalogTableName =
   | 'tcgplayer_groups'
   | 'tcgplayer_products'
   | 'pokemon_cards'
+  | 'pokemon_set_art'
 
 /** The catalog tables the phone downloads; the TCGplayer tables stay off it. */
 export const PHONE_TABLES: readonly CatalogTableName[] = [
@@ -25,7 +26,8 @@ export const PHONE_TABLES: readonly CatalogTableName[] = [
   'pack_art',
   'set_logos',
   'konami_logos',
-  'pokemon_cards'
+  'pokemon_cards',
+  'pokemon_set_art'
 ]
 
 export type CatalogChange =

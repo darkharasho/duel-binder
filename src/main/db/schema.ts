@@ -316,6 +316,19 @@ export const SCHEMA_V22 = `
 DELETE FROM printing_art WHERE url IS NULL;
 `
 
+/**
+ * Pokémon set art the nightly job matches: booster pack images from the Bulbagarden Archives
+ * (kind 'pack', one row per design, sort_order 0 the main one) and set logos from the Pokémon TCG
+ * API for sets TCGdex has none for (kind 'logo'). Keyed by set name like `sets`, whose Pokémon
+ * names never change once written. The server adds its change-feed columns in server-14.
+ */
+export const SCHEMA_V23 = `
+CREATE TABLE pokemon_set_art (language TEXT NOT NULL, set_name TEXT NOT NULL, kind TEXT NOT NULL,
+  sort_order INTEGER NOT NULL, image_url TEXT NOT NULL, image_key TEXT NOT NULL,
+  PRIMARY KEY (language, set_name, kind, sort_order));
+CREATE INDEX ix_pokemon_set_art_key ON pokemon_set_art(image_key);
+`
+
 /** A printing's rarity as shown: "Starlight Rare (Extended Art)" for a labelled variant. */
 export const RARITY_LABEL = "p.set_rarity || COALESCE(' (' || p.variant || ')', '')"
 
@@ -342,5 +355,6 @@ export const MIGRATIONS: Migration[] = [
   { version: 19, sql: SCHEMA_V19, server: false },
   { version: 20, sql: SCHEMA_V20, server: false },
   { version: 21, sql: SCHEMA_V21 },
-  { version: 22, sql: SCHEMA_V22 }
+  { version: 22, sql: SCHEMA_V22 },
+  { version: 23, sql: SCHEMA_V23 }
 ]

@@ -250,6 +250,31 @@ function pokemonColumnsStep(): ServerStep {
   }
 }
 
+/** Frozen, as of server-14: the Pokémon set art table desktop step 23 creates. */
+const SERVER_14_POKEMON_SET_ART: FrozenTable = {
+  name: 'pokemon_set_art',
+  key: ['language', 'set_name', 'kind', 'sort_order'],
+  columns: ['language', 'set_name', 'kind', 'sort_order', 'image_url', 'image_key']
+}
+
+/**
+ * `pokemon_set_art` (desktop step 23) joins the change feed: its `catalog_seq`, the index the feed
+ * reads, and the seq triggers, whose tombstones are Pokémon ones. Desktop step 23 always runs
+ * first (on a fresh server with every desktop step, on an upgraded one before the server steps it
+ * lacks) and the table starts empty, so there is nothing to backfill.
+ */
+function pokemonSetArtStep(): ServerStep {
+  const t = SERVER_14_POKEMON_SET_ART
+  return {
+    name: 'server-14',
+    sql: [
+      `ALTER TABLE ${t.name} ADD COLUMN catalog_seq INTEGER NOT NULL DEFAULT 0;`,
+      `CREATE INDEX ix_${t.name}_catalog_seq ON ${t.name}(catalog_seq);`,
+      ...seqTriggers(t, "'pkm'")
+    ].join('\n')
+  }
+}
+
 /**
  * Server-only steps, run after every desktop step. Append only; never edit a shipped step.
  *
@@ -380,7 +405,8 @@ CREATE TRIGGER trg_intl_prices_seq_ins AFTER INSERT ON intl_prices BEGIN UPDATE 
 CREATE TRIGGER trg_intl_prices_seq_upd AFTER UPDATE ON intl_prices WHEN NEW.price IS NOT OLD.price BEGIN UPDATE catalog_clock SET seq = seq + 1; UPDATE intl_prices SET price_seq = (SELECT seq FROM catalog_clock) WHERE rowid = NEW.rowid; END;`
   },
   multiGameStep(),
-  pokemonColumnsStep()
+  pokemonColumnsStep(),
+  pokemonSetArtStep()
 ]
 
 /**

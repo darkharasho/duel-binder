@@ -100,6 +100,12 @@ export const CATALOG_TABLES: CatalogTable[] = [
     ],
     unique: ['source_id'],
     games: ['pkm']
+  },
+  {
+    name: 'pokemon_set_art',
+    key: ['language', 'set_name', 'kind', 'sort_order'],
+    columns: ['language', 'set_name', 'kind', 'sort_order', 'image_url', 'image_key'],
+    games: ['pkm']
   }
 ]
 

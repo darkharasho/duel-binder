@@ -28,6 +28,7 @@ import { CATALOG_TABLES } from '../../src/shared/catalogTables'
 import { accuracyProblem, checkAccuracy, type AccuracyReport } from './accuracy'
 import { deletesByGame, diffTable, hasGameColumn } from './diff'
 import { runPokemonStep, type PokemonReport } from './pokemon'
+import { refreshPokemonSetArt, shouldRefreshSetArt, warmSetArt } from './pokemon/setArt'
 import { buildFingerprints, uploadFingerprintRefs, uploadFingerprints } from './fingerprints'
 import { uploadCatalog } from './upload'
 
@@ -50,6 +51,11 @@ export interface JobOptions {
    * sources, cached in pokemon-src.sqlite. A non-null `error` skips Pokémon for the night.
    */
   pokemon?: (work: Database.Database) => Promise<{ reports: PokemonReport[]; error: string | null }>
+  /**
+   * Asks the portal to mirror new Pokémon set art into R2 (see warmSetArt); defaults to
+   * `warmSetArt` against the portal, one image a second.
+   */
+  warmSetArt?: typeof warmSetArt
   /** Leaves the Pokémon step out (--no-pokemon). */
   skipPokemon?: boolean
   /** Uploads deletes beyond the shrink limit. */
@@ -113,6 +119,18 @@ function logPokemon(reports: PokemonReport[], log: (line: string) => void): void
       log(`Pokémon ${r.lang}: unmatched sets: ${r.unmatchedSets.join(', ')}`)
     for (const p of r.problems) log(`Pokémon ${r.lang}: ${p}`)
   }
+}
+
+/** Image keys of Pokémon set art in `work` that `base` lacks (every one when there is no base). */
+export function newSetArtKeys(work: Database.Database, base: Database.Database | null): string[] {
+  const keys = (db: Database.Database): string[] =>
+    (
+      db.prepare('SELECT DISTINCT image_key FROM pokemon_set_art ORDER BY image_key').all() as {
+        image_key: string
+      }[]
+    ).map((r) => r.image_key)
+  const old = new Set(base ? keys(base) : [])
+  return keys(work).filter((k) => !old.has(k))
 }
 
 export async function runJob(opts: JobOptions): Promise<JobResult> {
@@ -191,12 +209,18 @@ export async function runJob(opts: JobOptions): Promise<JobResult> {
     if (!opts.skipPokemon) {
       const step =
         opts.pokemon ??
-        ((w: Database.Database) =>
-          runPokemonStep(w, {
+        (async (w: Database.Database) => {
+          const out = await runPokemonStep(w, {
             cachePath: join(opts.dir, 'pokemon-src.sqlite'),
             version,
             log
-          }))
+          })
+          // Weekly; a source that fails keeps last week's rows and is asked again tomorrow.
+          if (out.error === null && shouldRefreshSetArt(w, new Date())) {
+            await refreshPokemonSetArt(w, { version, log })
+          }
+          return out
+        })
       const out = await step(work)
       if (out.error !== null) problem(`Pokémon refresh skipped: ${out.error}`)
       logPokemon(out.reports, log)
@@ -238,6 +262,19 @@ export async function runJob(opts: JobOptions): Promise<JobResult> {
       fetch: opts.fetch
     })
     log(`Uploaded ${uploaded.upserted} rows, deleted ${uploaded.deleted}`)
+    // New Pokémon pack art is fetched into the portal's R2 now, slowly, not by clients' first views.
+    const art = newSetArtKeys(work, base)
+    if (art.length > 0) {
+      const warmed = await (opts.warmSetArt ?? warmSetArt)({
+        url: url!,
+        token: token!,
+        keys: art,
+        fetch: opts.fetch
+      })
+      log(
+        `Pokémon set art: ${warmed.stored} stored, ${warmed.cached} already stored, ${warmed.failed} failed`
+      )
+    }
 
     // Only now, with the portal holding this state, does work become the new base.
     base?.close()

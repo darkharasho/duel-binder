@@ -20,6 +20,9 @@ interface SummaryDbRow {
   image_key: string | null
   pack_key: string | null
   logo_key: string | null
+  /** Pokémon only: the set's own TCGdex logo (`image_key`), when TCGdex has one. */
+  pkm_logo_key: string | null
+  is_pkm: 0 | 1
   list_rows: number | null
   unmatched_rows: number | null
   total_cards: number
@@ -30,14 +33,19 @@ interface SummaryDbRow {
 
 // One row per distinct (language, set_name); callers limit it to the scope's game with `p.game = <game>`.
 // A (card, rarity) pair is keyed as "<card_id>|<rarity>"; card_id is an integer, so the first "|"
-// always ends it. Pack art and logos are Yu-Gi-Oh only, keyed by set name alone.
+// always ends it. Yu-Gi-Oh! pack art and logos are English only, keyed by set name alone; Pokémon
+// pack art (its main design) and fallback logos come from pokemon_set_art, per language.
 // Ownership is an uncorrelated IN list (built once, then a keyed lookup per printing). A LEFT JOIN
 // to the owned printings made SQLite scan them for every printing (~1 s on a full catalog).
 const summary = (scope: Scope): string => {
   const owned = `p.id IN (SELECT printing_id FROM collection_entries e WHERE ${scope.where('e')})`
   return `
   SELECT p.language, p.set_name, s.set_code AS s_code, MIN(NULLIF(p.set_code, '')) AS min_code, s.tcg_date, s.image_url,
-         s.image_key, pa.image_key AS pack_key, COALESCE(sl.image_key, kl.image_key) AS logo_key, s.list_rows, s.unmatched_rows,
+         s.image_key, COALESCE(pa.image_key, pp.image_key) AS pack_key,
+         COALESCE(sl.image_key, kl.image_key, pl.image_key) AS logo_key,
+         CASE WHEN p.game = 'pkm' AND s.image_url IS NOT NULL THEN s.image_key END AS pkm_logo_key,
+         p.game = 'pkm' AS is_pkm,
+         s.list_rows, s.unmatched_rows,
          COUNT(DISTINCT p.card_id) AS total_cards,
          COUNT(DISTINCT CASE WHEN ${owned} THEN p.card_id END) AS owned_cards,
          COUNT(DISTINCT p.card_id || '|' || p.set_rarity) AS total_rarities,
@@ -47,7 +55,11 @@ const summary = (scope: Scope): string => {
   LEFT JOIN sets s ON s.game = p.game AND s.language = p.language AND s.set_name = p.set_name
   LEFT JOIN pack_art pa ON p.game = 'ygo' AND p.language = 'en' AND pa.set_name = p.set_name
   LEFT JOIN set_logos sl ON p.game = 'ygo' AND p.language = 'en' AND sl.set_name = p.set_name
-  LEFT JOIN konami_logos kl ON p.game = 'ygo' AND p.language = 'en' AND kl.set_name = p.set_name`
+  LEFT JOIN konami_logos kl ON p.game = 'ygo' AND p.language = 'en' AND kl.set_name = p.set_name
+  LEFT JOIN pokemon_set_art pp ON p.game = 'pkm' AND pp.language = p.language AND pp.set_name = p.set_name
+    AND pp.kind = 'pack' AND pp.sort_order = 0
+  LEFT JOIN pokemon_set_art pl ON p.game = 'pkm' AND pl.language = p.language AND pl.set_name = p.set_name
+    AND pl.kind = 'logo' AND pl.sort_order = 0`
 }
 
 /**
@@ -94,6 +106,9 @@ function coverImages(
 }
 
 function toSummary(r: SummaryDbRow, covers: Map<string, number>): SetSummary {
+  // A Pokémon booster shows the set's logo printed on it, so its pack art goes in front and the
+  // logo (TCGdex's, else the Pokémon TCG API's) only stands in where there's no pack.
+  const logo = r.is_pkm ? (r.pack_key !== null ? null : (r.pkm_logo_key ?? r.logo_key)) : r.logo_key
   return {
     language: r.language,
     setName: r.set_name,
@@ -101,7 +116,7 @@ function toSummary(r: SummaryDbRow, covers: Map<string, number>): SetSummary {
     tcgDate: r.tcg_date,
     imageKey: r.image_key ?? setImageKey(r.image_url),
     packImageKey: r.pack_key,
-    logoImageKey: r.logo_key,
+    logoImageKey: logo,
     coverImageId: covers.get(`${r.language}|${r.set_name}`) ?? null,
     totalCards: r.total_cards,
     ownedCards: r.owned_cards,
@@ -123,6 +138,14 @@ export function findSetImageUrl(db: SqlDb, key: string): string | null {
        UNION ALL SELECT image_url FROM konami_logos WHERE image_key = ? LIMIT 1`
     )
     .get(key, key, key, key) as { image_url: string | null } | undefined
+  return row?.image_url ?? null
+}
+
+/** Source URL of a Pokémon set art key (a Bulbagarden pack image or a Pokémon TCG API logo). */
+export function findPokemonSetArtUrl(db: SqlDb, key: string): string | null {
+  const row = db
+    .prepare('SELECT image_url FROM pokemon_set_art WHERE image_key = ? LIMIT 1')
+    .get(key) as { image_url: string } | undefined
   return row?.image_url ?? null
 }
 

@@ -312,7 +312,7 @@ export function jittered(box: Box, jitter: number): Box[] {
 }
 
 /** Two matches of one artwork as one: the best of each distance (base, each reference scan). */
-function mergeMatch(a: ArtMatch, b: ArtMatch): ArtMatch {
+export function mergeMatch(a: ArtMatch, b: ArtMatch): ArtMatch {
   const out: ArtMatch = { imageId: a.imageId, distance: Math.min(a.distance, b.distance) }
   const base = Math.min(a.base ?? Infinity, b.base ?? Infinity)
   if (Number.isFinite(base)) out.base = base
@@ -330,8 +330,8 @@ function mergeMatch(a: ArtMatch, b: ArtMatch): ArtMatch {
 /**
  * A straightened card's k closest artworks, and whether the best of them matched it upside down.
  * With jitter, the art box and way up that came closest to any artwork is tried again a little off
- * (jittered), keeping each image's best distances (mergeMatch): four more hashes and lookups rather than
- * sixteen for every box both ways up.
+ * (jittered), keeping each image's best distances (mergeMatch): four more hashes and lookups
+ * rather than sixteen for every box both ways up.
  */
 export function rankArt(
   cv: CV,

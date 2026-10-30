@@ -5,8 +5,10 @@ import {
   encodeFingerprintRefs,
   hashHex,
   isArtVariant,
-  parseFingerprintRefs
+  parseFingerprintRefs,
+  type RefMatch
 } from '../../src/shared/scan/fingerprintRefs'
+import { mergeMatch } from '../../src/renderer/src/features/scan/vision/detect'
 
 /** A hash with the first `bits` bits of `from` flipped. */
 function flip(from: Uint32Array, bits: number, start = 0): Uint32Array {
@@ -111,6 +113,20 @@ describe('FingerprintIndex with refs', () => {
     })
     // An image without reference scans is given as before.
     expect(next).toEqual({ imageId: 9, distance: hamming(photo, 0, other, 0) })
+  })
+
+  it('keeps the best of each distance when an artwork is matched more than once', () => {
+    const ref = (h: string, distance: number): RefMatch => ({ h, printingIds: [41], distance })
+    expect(
+      mergeMatch(
+        { imageId: 5, distance: 20, base: 40, refs: [ref('a', 20), ref('b', 30)] },
+        { imageId: 5, distance: 18, base: 44, refs: [ref('b', 18)] }
+      )
+    ).toEqual({ imageId: 5, distance: 18, base: 40, refs: [ref('b', 18), ref('a', 20)] })
+    expect(mergeMatch({ imageId: 9, distance: 30 }, { imageId: 9, distance: 25 })).toEqual({
+      imageId: 9,
+      distance: 25
+    })
   })
 
   it('ignores refs whose hash or image the file does not hold', () => {

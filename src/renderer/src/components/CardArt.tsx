@@ -1,5 +1,7 @@
 import { useState } from 'react'
 import { cn } from '@/lib/utils'
+import { cssAspect, type CardAspect } from '@shared/games'
+import { useCardAspect } from '@/lib/game'
 import { cardImageSrc, printingImageSrc } from '@/lib/images'
 
 interface CardArtProps {
@@ -11,18 +13,48 @@ interface CardArtProps {
   printingId?: number | null
 }
 
-function CardBack({ className, label }: { className?: string; label: string }): React.JSX.Element {
+function CardBack({
+  className,
+  label,
+  aspect
+}: {
+  className?: string
+  label: string
+  aspect: CardAspect
+}): React.JSX.Element {
+  const { width: w, height: h } = aspect
+  // Drawn on Yu-Gi-Oh!'s 421×614 card, scaled to the game's: a 24-unit border, an oval in the middle.
   return (
     <svg
       role="img"
       aria-label={label}
       data-testid="card-art-placeholder"
-      viewBox="0 0 421 614"
-      className={cn('aspect-[421/614] rounded-[6px] shadow-sm', className)}
+      viewBox={`0 0 ${w} ${h}`}
+      style={{ aspectRatio: cssAspect(aspect) }}
+      className={cn('rounded-[6px] shadow-sm', className)}
     >
-      <rect width="421" height="614" fill="currentColor" className="text-zinc-300 dark:text-zinc-700" />
-      <rect x="24" y="24" width="373" height="566" rx="8" fill="none" stroke="currentColor" strokeWidth="6" className="text-zinc-400 dark:text-zinc-500" />
-      <ellipse cx="210.5" cy="307" rx="92" ry="132" fill="none" stroke="currentColor" strokeWidth="6" className="text-zinc-400 dark:text-zinc-500" />
+      <rect width={w} height={h} fill="currentColor" className="text-zinc-300 dark:text-zinc-700" />
+      <rect
+        x="24"
+        y="24"
+        width={w - 48}
+        height={h - 48}
+        rx="8"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="6"
+        className="text-zinc-400 dark:text-zinc-500"
+      />
+      <ellipse
+        cx={w / 2}
+        cy={h / 2}
+        rx={(92 * w) / 421}
+        ry={(132 * h) / 614}
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="6"
+        className="text-zinc-400 dark:text-zinc-500"
+      />
     </svg>
   )
 }
@@ -61,13 +93,22 @@ function PrintingScan({
   )
 }
 
-export function CardArt({ imageId, size, alt, className, printingId }: CardArtProps): React.JSX.Element {
+export function CardArt({
+  imageId,
+  size,
+  alt,
+  className,
+  printingId
+}: CardArtProps): React.JSX.Element {
   const [failed, setFailed] = useState(false)
   const [scanShown, setScanShown] = useState<number | null>(null)
+  const aspect = useCardAspect(imageId)
+  // Inline, not a class: the ratio is the card's game's, known only at runtime.
+  const aspectStyle = { aspectRatio: cssAspect(aspect) }
   // No scan where there are no printing scans (the phone).
   const scanSrc = printingId == null ? null : printingImageSrc(printingId)
   if (printingId == null || scanSrc === null) {
-    if (failed) return <CardBack className={className} label={alt} />
+    if (failed) return <CardBack className={className} label={alt} aspect={aspect} />
     return (
       <img
         src={cardImageSrc(size, imageId)}
@@ -75,20 +116,19 @@ export function CardArt({ imageId, size, alt, className, printingId }: CardArtPr
         loading="lazy"
         draggable={false}
         onError={() => setFailed(true)}
-        className={cn('aspect-[421/614] rounded-[6px] bg-muted object-cover shadow-sm', className)}
+        style={aspectStyle}
+        className={cn('rounded-[6px] bg-muted object-cover shadow-sm', className)}
       />
     )
   }
   const scanVisible = scanShown === printingId
   return (
     <span
-      className={cn(
-        'relative block aspect-[421/614] overflow-hidden rounded-[6px] bg-muted shadow-sm',
-        className
-      )}
+      style={aspectStyle}
+      className={cn('relative block overflow-hidden rounded-[6px] bg-muted shadow-sm', className)}
     >
       {failed ? (
-        <CardBack className="absolute inset-0 size-full" label={alt} />
+        <CardBack className="absolute inset-0 size-full" label={alt} aspect={aspect} />
       ) : (
         <img
           src={cardImageSrc(size, imageId)}

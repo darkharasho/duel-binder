@@ -51,4 +51,9 @@ export interface ScanDraft {
   options: ScanPrinting[]
   flag: 'check-rarity' | 'pick-printing' | 'other-set' | null
   via: 'code' | 'art' | 'name'
+  /**
+   * The printings a reference scan of their art told the photo for (an overframe family, say),
+   * which the rarity's look then picks among; absent when no scan did.
+   */
+  artPrintings?: number[]
 }

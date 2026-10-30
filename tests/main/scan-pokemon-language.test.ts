@@ -128,6 +128,17 @@ describe('pokemonLanguageOfReads', () => {
     expect(pokemonLanguageOfReads(probopass)).toBeNull()
   })
 
+  it("does not take the English model's garbage of Japanese text for English by its short words", () => {
+    // Read off a real eBay photo of a Japanese Zoroark GX (ink on white): "of" three times, by chance.
+    const zoroark = {
+      eng: 'ELY O ow oo. . ai A of il ithe -~ , oom of aw\n3 > : i : ix. Pai Lh B oy of\nEW rN SF Popyd vo',
+      jpn: 'の SU りく e 4 放 寺 へ 二 【 誠 癌 本 計 の 作 間\nミン 人 U、 いい きだ と'
+    }
+    expect(pokemonLanguageOfReads(zoroark)).toBeNull()
+    // English card words alongside still make it English.
+    expect(pokemonLanguage('the damage of this attack to your opponent')).toBe('en')
+  })
+
   it('still takes a mostly Latin Japanese-model read in a European language for other', () => {
     const fr =
       'Si cette carte est dans votre main, vous pouvez la mettre sur le terrain de votre adversaire. ぅ て'
@@ -152,5 +163,21 @@ describe('pokemonLanguageOfBands', () => {
     [{ eng: [], jpn: [] }, null]
   ] as const)('%j → %s', (reads, expected) => {
     expect(pokemonLanguageOfBands({ eng: [...reads.eng], jpn: [...reads.jpn] })).toBe(expected)
+  })
+})
+
+describe("pokemonLanguage on a model's garbage", () => {
+  it('does not take short capitals a blurred English text box reads as for French', () => {
+    // Read off an owner photo of an English card (shot_0048), and part of an eBay one.
+    expect(
+      pokemonLanguage(
+        'ELLE EAS SAE\n1 Ce ow a, cea! . -, x - 1 . .e Pam 3 ~\n: . ; . Se\nSY vr ‘ - Pl TN EN \\ eee Cee ey, oJ ‘e f SE\n- .. wo LE. ve . , . ~'
+      )
+    ).not.toBe('other')
+    expect(pokemonLanguage('EE TE SE ER LE ET EN DE LA CE SI UN OU EST LES DES')).not.toBe('other')
+    // A European card's own text, in lower case, still is.
+    expect(pokemonLanguage('Mélangez votre main dans votre deck. Ensuite, piochez 4 cartes.')).toBe(
+      'other'
+    )
   })
 })

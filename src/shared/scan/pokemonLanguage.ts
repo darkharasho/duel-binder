@@ -105,6 +105,13 @@ const englishWords = (text: string): number =>
   ).filter(englishWord).length
 
 /**
+ * Words latinLanguageOf isn't shown: short ones and ones in capitals, which a model's garbage of
+ * a blurred text box is full of ("EE TE SE ER LE" reads as French), where a card's own text is
+ * in lower case with long words enough to tell.
+ */
+const SHORT_OR_CAPS = /(?<!\p{L})(?:\p{L}{1,2}|\p{Lu}{3,})(?!\p{L})/gu
+
+/**
  * The language a read of a Pokémon card's text is in, of those the catalog has.
  *
  * - `ja`: LANGUAGE_MIN_SCRIPT_CHARS of kana (not counting katakana that look like kanji), at
@@ -113,7 +120,8 @@ const englishWords = (text: string): number =>
  * - `other`: any other CJK or Hangul text that much, and a Latin language whose common words
  *   say it isn't English.
  * - `en`: LANGUAGE_MIN_LATIN_CHARS of mostly Latin letters, with English words in them
- *   (LANGUAGE_MIN_WORDS of them); European cards share the names and the numbers.
+ *   (LANGUAGE_MIN_WORDS of them, one an English Pokémon card's); European cards share the names
+ *   and the numbers.
  * - null: too little to tell.
  */
 export function pokemonLanguage(text: string): 'en' | 'ja' | 'other' | null {
@@ -128,7 +136,12 @@ export function pokemonLanguage(text: string): 'en' | 'ja' | 'other' | null {
   if (cjk + hangul >= LANGUAGE_MIN_SCRIPT_CHARS) return 'other'
   if (latin < LANGUAGE_MIN_LATIN_CHARS || latin * 2 <= letters.length) return null
   const words = latinLanguageOf(text)
-  if (words) return words === 'en' ? 'en' : 'other'
+  // Its short common words ("of", "to") come up by chance in garbage the English model makes of
+  // Japanese text, so English needs a Pokémon card's word too.
+  if (words === 'en') return englishWords(text) ? 'en' : null
+  // A European language is told by its longer words alone.
+  const european = latinLanguageOf(text.replace(SHORT_OR_CAPS, ' '))
+  if (european && european !== 'en') return 'other'
   return englishWords(text) >= LANGUAGE_MIN_WORDS ? 'en' : null
 }
 

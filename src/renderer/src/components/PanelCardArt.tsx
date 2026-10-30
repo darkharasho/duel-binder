@@ -109,6 +109,7 @@ export function PanelCardArt({
           />
           <FoilLayer
             kind={foilKind}
+            finish={foil.finish}
             window={artWindow}
             aspect={aspect}
             className="rounded-[6px]"
@@ -139,6 +140,7 @@ export function PanelCardArt({
             />
             <FoilLayer
               kind={foilKind}
+              finish={foil.finish}
               window={artWindow}
               aspect={aspect}
               className="rounded-[14px]"

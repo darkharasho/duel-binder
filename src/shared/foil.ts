@@ -38,8 +38,50 @@ export const ART_WINDOWS = {
 
 export type ArtLayout = keyof typeof ART_WINDOWS
 
+/**
+ * How a foil moves and what its texture is, on top of where it sits (`FoilKind`). Each is one
+ * `[data-finish]` block in index.css.
+ */
+export type FoilFinish =
+  | 'none'
+  | 'lines' // modern holo: upright streaks against a broad wash
+  | 'stars' // WotC holo: fixed star flecks in a slow sheen
+  | 'sheen' // EX holo: a broad diagonal sheen over fine grain
+  | 'glitter' // e-Reader holo: dense even glitter
+  | 'amazing' // coarse weave with saturated patches
+  | 'reverse' // modern reverse: large embossed pattern, brightest head-on
+  | 'reverse-flat' // EX and e-Reader reverse: plain mirror sheen
+  | 'sparkle' // V and ex: diagonal patches of fine sparkle
+  | 'contour' // full art: fingerprint lines
+  | 'ridges' // VMAX: raised stripes, slow colour
+  | 'vstar' // contour lines with flashing glitter
+  | 'lattice' // radiant: huge crossing bands that travel
+  | 'feather' // shiny: pale feathery lines
+  | 'fields' // gallery: two big colour fields that swap
+  | 'scanlines' // full art trainer: silver stacked lines
+  | 'rainbow' // secret: glitter over a tint, the print's rainbow left alone
+  | 'gold' // one hue, heavy glitter, dim head-on
+
 // Set-code prefixes ("SK 1/144"), the only era a printing carries.
 const EREADER_SETS = new Set(['EX', 'AQ', 'SK'])
+const EX_SETS = new Set([
+  'RS',
+  'SS',
+  'DR',
+  'MA',
+  'HL',
+  'RG',
+  'TR',
+  'DX',
+  'EM',
+  'UF',
+  'DS',
+  'LM',
+  'HP',
+  'CG',
+  'DF',
+  'PK'
+])
 const WOTC_SETS = new Set([
   'BS',
   'JU',
@@ -67,9 +109,68 @@ export function pokemonLayoutFor(
   const kind = category?.trim().toLowerCase()
   if (kind !== 'pokemon' && kind !== 'trainer') return null
   const suffix = kind === 'trainer' ? '-trainer' : ''
+  const era = eraOf(setCode)
+  return `${era === 'ex' ? 'modern' : era}${suffix}` as ArtLayout
+}
+
+type Era = 'wotc' | 'ereader' | 'ex' | 'modern'
+
+function eraOf(setCode: string): Era {
   const set = setCode.trim().split(/\s/)[0]
-  const era = EREADER_SETS.has(set) ? 'ereader' : WOTC_SETS.has(set) ? 'wotc' : 'modern'
-  return `${era}${suffix}` as ArtLayout
+  if (EREADER_SETS.has(set)) return 'ereader'
+  if (WOTC_SETS.has(set)) return 'wotc'
+  return EX_SETS.has(set) ? 'ex' : 'modern'
+}
+
+const PKM_FINISHES: Record<string, FoilFinish> = {
+  'ultra rare': 'contour',
+  'illustration rare': 'contour',
+  'special illustration rare': 'contour',
+  'art rare': 'contour',
+  'special art rare': 'contour',
+  'black white rare': 'contour',
+  'double rare': 'sparkle',
+  'triple rare': 'sparkle',
+  'holo rare v': 'sparkle',
+  'ace spec rare': 'sparkle',
+  'holo rare vmax': 'ridges',
+  'holo rare vstar': 'vstar',
+  'radiant rare': 'lattice',
+  'shiny rare': 'feather',
+  'shiny rare v': 'feather',
+  'shiny rare vmax': 'feather',
+  'shiny ultra rare': 'feather',
+  'character rare': 'fields',
+  'character super rare': 'fields',
+  'full art trainer': 'scanlines',
+  'secret rare': 'rainbow',
+  'amazing rare': 'amazing'
+}
+
+/** A foil's look: the card's rarity where it has its own, else its era's holo or reverse. */
+export function foilFinishFor(
+  kind: FoilKind,
+  game: GameId,
+  setCode: string,
+  cardRarity?: string | null
+): FoilFinish {
+  if (kind === 'none') return 'none'
+  if (kind === 'gold') return 'gold'
+  if (game === 'ygo') return kind === 'holo' ? 'lines' : 'contour'
+  const own = PKM_FINISHES[(cardRarity ?? '').trim().toLowerCase()]
+  if (own) return own
+  const era = eraOf(setCode)
+  if (kind === 'reverse') return era === 'modern' || era === 'wotc' ? 'reverse' : 'reverse-flat'
+  if (kind === 'holo') {
+    return era === 'wotc'
+      ? 'stars'
+      : era === 'ereader'
+        ? 'glitter'
+        : era === 'ex'
+          ? 'sheen'
+          : 'lines'
+  }
+  return 'contour'
 }
 
 // Pokémon card rarities (TCGdex's spelling, compared lower-cased) that are foil on every printing.
@@ -152,6 +253,7 @@ export function foilKindFor(
 /** What PanelCardArt needs to draw a card's foil. */
 export interface CardFoil {
   kind: FoilKind
+  finish: FoilFinish
   /** The art's box from data, before the image is looked at; null when data doesn't say. */
   window: ArtWindow | null
   /** The card's image should be searched for its box. */
@@ -160,7 +262,13 @@ export interface CardFoil {
   roundedLeft: boolean
 }
 
-export const NO_FOIL: CardFoil = { kind: 'none', window: null, detect: false, roundedLeft: false }
+export const NO_FOIL: CardFoil = {
+  kind: 'none',
+  finish: 'none',
+  window: null,
+  detect: false,
+  roundedLeft: false
+}
 
 interface FoilCard {
   id: number
@@ -179,15 +287,17 @@ export function cardFoil(
   if (!printing || !card) return NO_FOIL
   const game = gameOfId(card.id)
   const kind = foilKindFor(printing, game, card.pokemon?.rarity)
-  if (kind !== 'holo' && kind !== 'reverse') return { ...NO_FOIL, kind }
+  const finish = foilFinishFor(kind, game, printing.setCode, card.pokemon?.rarity)
+  if (kind !== 'holo' && kind !== 'reverse') return { ...NO_FOIL, kind, finish }
   if (game === 'ygo') {
     const box = artBox(card.frameType ?? '')
     const window = { top: box.top, bottom: 100 - box.bottom, left: box.left, right: box.right }
-    return { kind, window, detect: false, roundedLeft: false }
+    return { kind, finish, window, detect: false, roundedLeft: false }
   }
   const layout = pokemonLayoutFor(printing.setCode, card.pokemon?.category)
   return {
     kind,
+    finish,
     window: layout && ART_WINDOWS[layout],
     detect: true,
     roundedLeft: layout === 'ereader' || layout === 'ereader-trainer'
@@ -218,8 +328,8 @@ export function chooseArtWindow(
 
 const round = (n: number): number => Math.round(n * 100) / 100
 
-/** The box's outline, clockwise, in `x% y%` points; the left corners as short arcs when rounded. */
-function outline(w: ArtWindow, cardRatio: number): string[] {
+/** The box's outline, clockwise, as x, y points; the left corners as short arcs when rounded. */
+export function artOutline(w: ArtWindow, cardRatio: number): [number, number][] {
   const left = w.left
   const right = 100 - w.right
   const r = w.leftRadius ?? 0
@@ -240,23 +350,27 @@ function outline(w: ArtWindow, cardRatio: number): string[] {
     arc(left + r, w.bottom - ry, Math.PI / 2)
     arc(left + r, w.top + ry, Math.PI)
   }
-  return points.map(([x, y]) => `${round(x)}% ${round(y)}%`)
+  return points.map(([x, y]) => [round(x), round(y)])
 }
 
 /**
- * The clip-path that puts a foil where it belongs on a card of `aspect` (width over height):
- * inside the art for holo, around it for reverse (the strip under the art stays in), and nowhere
- * for the whole-card kinds or when there's no window.
+ * The mask that puts a foil where it belongs on a card of `aspect` (width over height): inside
+ * the art for holo, around it for reverse (the strip under the art stays in), and nowhere for the
+ * whole-card kinds or when there's no window. An SVG stretched over the card, so its units are
+ * percent of the card.
  */
-export function foilClip(
+export function foilMask(
   kind: FoilKind,
   window: ArtWindow | null,
   aspect: number
 ): string | undefined {
   if (!window || (kind !== 'holo' && kind !== 'reverse')) return undefined
-  const box = outline(window, aspect)
-  if (kind === 'holo') return `polygon(${box.join(', ')})`
-  // The card, then the box as a hole; even-odd leaves the seam between them out.
-  const card = ['0% 0%', '100% 0%', '100% 100%', '0% 100%', '0% 0%']
-  return `polygon(evenodd, ${[...card, ...box, box[0], '0% 0%'].join(', ')})`
+  const box = `M${artOutline(window, aspect)
+    .map(([x, y]) => `${x} ${y}`)
+    .join('L')}Z`
+  const path = kind === 'holo' ? box : `M0 0H100V100H0Z${box}`
+  const svg =
+    `<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100' preserveAspectRatio='none'>` +
+    `<path fill-rule='evenodd' d='${path}'/></svg>`
+  return `url("data:image/svg+xml,${encodeURIComponent(svg)}")`
 }

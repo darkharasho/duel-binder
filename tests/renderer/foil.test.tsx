@@ -8,8 +8,10 @@ import {
   ART_WINDOWS,
   cardFoil,
   chooseArtWindow,
-  foilClip,
+  artOutline,
+  foilFinishFor,
   foilKindFor,
+  foilMask,
   pokemonLayoutFor
 } from '@shared/foil'
 import { PKM_ID_MIN } from '@shared/games'
@@ -59,6 +61,34 @@ describe('foilKindFor', () => {
   })
 })
 
+describe('foilFinishFor', () => {
+  it('gives each era its own holo', () => {
+    expect(foilFinishFor('holo', 'pkm', 'BS 4/102', 'Rare')).toBe('stars')
+    expect(foilFinishFor('holo', 'pkm', 'SK 1/144', 'Rare')).toBe('glitter')
+    expect(foilFinishFor('holo', 'pkm', 'RG 3/112', 'Rare')).toBe('sheen')
+    expect(foilFinishFor('holo', 'pkm', 'SVI 1/198', 'Rare')).toBe('lines')
+  })
+
+  it('gives modern reverses a pattern and older ones a plain sheen', () => {
+    expect(foilFinishFor('reverse', 'pkm', 'SVI 1/198', 'Common')).toBe('reverse')
+    expect(foilFinishFor('reverse', 'pkm', 'EX 1/165', 'Common')).toBe('reverse-flat')
+    expect(foilFinishFor('reverse', 'pkm', 'RG 3/112', 'Common')).toBe('reverse-flat')
+  })
+
+  it('takes the look of a rarity that has its own', () => {
+    expect(foilFinishFor('fullart', 'pkm', 'SVI 1/198', 'Radiant Rare')).toBe('lattice')
+    expect(foilFinishFor('fullart', 'pkm', 'SVI 1/198', 'Holo Rare VMAX')).toBe('ridges')
+    expect(foilFinishFor('fullart', 'pkm', 'SVI 1/198', 'Character Rare')).toBe('fields')
+    expect(foilFinishFor('fullart', 'pkm', 'SVI 1/198', 'Full Art Trainer')).toBe('scanlines')
+    expect(foilFinishFor('holo', 'pkm', 'SVI 1/198', 'Amazing Rare')).toBe('amazing')
+    expect(foilFinishFor('gold', 'pkm', 'SVI 1/198', 'Hyper rare')).toBe('gold')
+  })
+
+  it('has no finish without a foil', () => {
+    expect(foilFinishFor('none', 'pkm', 'SVI 1/198', 'Common')).toBe('none')
+  })
+})
+
 describe('pokemonLayoutFor', () => {
   it('knows the e-Reader and WotC sets, and Trainers, from the set code and category', () => {
     expect(pokemonLayoutFor('SK 1/144', 'Pokemon')).toBe('ereader')
@@ -66,6 +96,7 @@ describe('pokemonLayoutFor', () => {
     expect(pokemonLayoutFor('BS 1/102', 'Pokemon')).toBe('wotc')
     expect(pokemonLayoutFor('N1 9/111', 'Trainer')).toBe('wotc-trainer')
     expect(pokemonLayoutFor('SVI 1/198', 'Pokemon')).toBe('modern')
+    expect(pokemonLayoutFor('RG 3/112', 'Pokemon')).toBe('modern')
     expect(pokemonLayoutFor('SVI 170/198', 'Trainer')).toBe('modern-trainer')
   })
 
@@ -129,32 +160,33 @@ describe('chooseArtWindow', () => {
   })
 })
 
-describe('foilClip', () => {
+describe('foilMask', () => {
   const box = { top: 10, bottom: 50, left: 8, right: 8 }
+  const path = (mask: string | undefined): string =>
+    decodeURIComponent(mask!).match(/ d='([^']+)'/)![1]
 
   it('keeps a holo inside the art, stopping at its bottom edge', () => {
-    expect(foilClip('holo', box, 0.7)).toBe('polygon(92% 10%, 92% 50%, 8% 50%, 8% 10%)')
+    expect(path(foilMask('holo', box, 0.7))).toBe('M92 10L92 50L8 50L8 10Z')
   })
 
   it('cuts only the art out of a reverse, so the strip under it stays foil', () => {
-    const clip = foilClip('reverse', box, 0.7)!
-    expect(clip).toMatch(/^polygon\(evenodd, 0% 0%, 100% 0%, 100% 100%, 0% 100%/)
-    expect(clip).toContain('8% 50%')
-    expect(clip).not.toContain('55%')
+    expect(path(foilMask('reverse', box, 0.7))).toBe('M0 0H100V100H0ZM92 10L92 50L8 50L8 10Z')
   })
 
+  it('leaves whole-card foils, and a missing window, unmasked', () => {
+    expect(foilMask('fullart', box, 0.7)).toBeUndefined()
+    expect(foilMask('gold', box, 0.7)).toBeUndefined()
+    expect(foilMask('holo', null, 0.7)).toBeUndefined()
+  })
+})
+
+describe('artOutline', () => {
   it('rounds only the left corners of an e-Reader box', () => {
-    const clip = foilClip('holo', ART_WINDOWS.ereader, 0.7)!
-    expect(clip.split(',').length).toBeGreaterThan(10)
-    expect(clip).toContain('95.8% 10.8%')
-    expect(clip).toContain('95.8% 48.5%')
-    expect(clip).not.toContain('9.7% 10.8%')
-  })
-
-  it('leaves whole-card foils, and a missing window, unclipped', () => {
-    expect(foilClip('fullart', box, 0.7)).toBeUndefined()
-    expect(foilClip('gold', box, 0.7)).toBeUndefined()
-    expect(foilClip('holo', null, 0.7)).toBeUndefined()
+    const points = artOutline(ART_WINDOWS.ereader, 0.7)
+    expect(points.length).toBeGreaterThan(10)
+    expect(points).toContainEqual([95.8, 10.8])
+    expect(points).toContainEqual([95.8, 48.5])
+    expect(points).not.toContainEqual([9.7, 10.8])
   })
 })
 
@@ -200,34 +232,34 @@ describe('FoilLayer', () => {
 
   it('draws nothing at all without a foil', () => {
     const { container } = render(
-      <FoilLayer kind="none" window={ART_WINDOWS.modern} aspect={aspect} />
+      <FoilLayer kind="none" finish="lines" window={ART_WINDOWS.modern} aspect={aspect} />
     )
     expect(container).toBeEmptyDOMElement()
   })
 
   it('clips a holo to the window it is given', () => {
-    render(<FoilLayer kind="holo" window={ART_WINDOWS.modern} aspect={aspect} />)
+    render(<FoilLayer kind="holo" finish="lines" window={ART_WINDOWS.modern} aspect={aspect} />)
     const layer = screen.getByTestId('foil-layer')
     expect(layer).toHaveAttribute('data-foil', 'holo')
     expect(layer).toHaveAttribute('aria-hidden', 'true')
-    expect(layer.style.getPropertyValue('--foil-clip')).toContain('92.8% 9.2%')
+    expect(layer.style.getPropertyValue('--foil-mask')).toContain('data:image/svg')
     expect(layer).not.toHaveAttribute('data-faint')
   })
 
   it('leaves a whole-card foil unclipped', () => {
-    render(<FoilLayer kind="fullart" window={null} aspect={aspect} />)
+    render(<FoilLayer kind="fullart" finish="lines" window={null} aspect={aspect} />)
     const layer = screen.getByTestId('foil-layer')
-    expect(layer.style.getPropertyValue('--foil-clip')).toBe('')
+    expect(layer.style.getPropertyValue('--foil-mask')).toBe('')
     expect(layer).not.toHaveAttribute('data-faint')
   })
 
   it('is a faint sheen when a masked foil has no window', () => {
-    render(<FoilLayer kind="reverse" window={null} aspect={aspect} />)
+    render(<FoilLayer kind="reverse" finish="lines" window={null} aspect={aspect} />)
     expect(screen.getByTestId('foil-layer')).toHaveAttribute('data-faint')
   })
 
   it('forms no stacking context, so its layers blend with the card', () => {
-    render(<FoilLayer kind="holo" window={ART_WINDOWS.modern} aspect={aspect} />)
+    render(<FoilLayer kind="holo" finish="lines" window={ART_WINDOWS.modern} aspect={aspect} />)
     const layer = screen.getByTestId('foil-layer')
     expect(layer.style.clipPath).toBe('')
     expect(layer.style.opacity).toBe('')
@@ -235,7 +267,9 @@ describe('FoilLayer', () => {
   })
 
   it('takes the frame aspect it is given', () => {
-    render(<FoilLayer kind="holo" window={null} aspect={{ width: 421, height: 614 }} />)
+    render(
+      <FoilLayer kind="holo" finish="lines" window={null} aspect={{ width: 421, height: 614 }} />
+    )
     expect(screen.getByTestId('foil-layer').style.aspectRatio).toBe('421 / 614')
   })
 })

@@ -1,10 +1,12 @@
 import { useEffect, useRef } from 'react'
 import { cn } from '@/lib/utils'
 import { cssAspect, type CardAspect } from '@shared/games'
-import { foilClip, type ArtWindow, type FoilKind } from '@shared/foil'
+import { foilMask, type ArtWindow, type FoilFinish, type FoilKind } from '@shared/foil'
 
 interface FoilLayerProps {
   kind: FoilKind
+  /** How it moves and what its texture is; one `[data-finish]` block in index.css. */
+  finish: FoilFinish
   /** The art's box; null draws a faint whole-card sheen in place of a holo or reverse mask. */
   window: ArtWindow | null
   aspect: CardAspect
@@ -50,6 +52,11 @@ function useDeviceLight(ref: React.RefObject<HTMLDivElement | null>, enabled: bo
       frame = requestAnimationFrame(() => {
         el.style.setProperty('--glare-x', `${x.toFixed(1)}%`)
         el.style.setProperty('--glare-y', `${y.toFixed(1)}%`)
+        el.style.setProperty(
+          '--glare-reach',
+          Math.max(Math.abs(x - 50), Math.abs(y - 50)) / 50 + ''
+        )
+        el.style.setProperty('--glare-fall', (y / 100).toFixed(3))
         el.dataset.live = ''
       })
     }
@@ -81,6 +88,7 @@ function useDeviceLight(ref: React.RefObject<HTMLDivElement | null>, enabled: bo
  */
 export function FoilLayer({
   kind,
+  finish,
   window: artWindow,
   aspect,
   className,
@@ -89,7 +97,7 @@ export function FoilLayer({
   const ref = useRef<HTMLDivElement>(null)
   useDeviceLight(ref, device && kind !== 'none')
   if (kind === 'none') return null
-  const clip = foilClip(kind, artWindow, aspect.width / aspect.height)
+  const mask = foilMask(kind, artWindow, aspect.width / aspect.height)
   const masked = kind === 'holo' || kind === 'reverse'
   return (
     <div
@@ -97,15 +105,19 @@ export function FoilLayer({
       aria-hidden
       data-testid="foil-layer"
       data-foil={kind}
+      data-finish={finish}
       data-faint={masked && !artWindow ? '' : undefined}
       className={cn('foil', className)}
-      // The layers take the clip themselves: clipping here would cut them off from the card.
-      style={{ aspectRatio: cssAspect(aspect), '--foil-clip': clip } as React.CSSProperties}
+      // The layers take the mask themselves: masking here would cut them off from the card.
+      style={{ aspectRatio: cssAspect(aspect), '--foil-mask': mask } as React.CSSProperties}
     >
       <div className="foil-wash" />
+      <div className="foil-milk" />
+      <div className="foil-deep" />
       <div className="foil-shine" />
       <div className="foil-cross" />
       <div className="foil-grain" />
+      <div className="foil-bloom" />
     </div>
   )
 }

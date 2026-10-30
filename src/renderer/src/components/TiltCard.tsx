@@ -42,6 +42,9 @@ export function TiltCard({
       el.style.setProperty('--tilt-y', `${((x - 0.5) * maxTilt * 2).toFixed(2)}deg`)
       el.style.setProperty('--glare-x', `${(x * 100).toFixed(1)}%`)
       el.style.setProperty('--glare-y', `${(y * 100).toFixed(1)}%`)
+      // For foils: how far from head-on the card is, and how far down the light has gone.
+      el.style.setProperty('--glare-reach', Math.max(Math.abs(x - 0.5), Math.abs(y - 0.5)) * 2 + '')
+      el.style.setProperty('--glare-fall', Math.min(1, Math.max(0, y)).toFixed(3))
       el.dataset.tilting = ''
     })
   }

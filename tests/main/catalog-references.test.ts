@@ -31,6 +31,12 @@ describe('wantsReference', () => {
   ])('%s / %s: %s', (rarity, variant, wanted) => {
     expect(wantsReference(rarity, variant)).toBe(wanted)
   })
+
+  it("takes every printing of an Original Artwork Duel Set, whose art is the manga's", () => {
+    expect(wantsReference('Ultra Rare', null, 'Original Artwork Duel Set: Joey')).toBe(true)
+    expect(wantsReference('Secret Rare', null, 'Original Artwork Collection')).toBe(true)
+    expect(wantsReference('Ultra Rare', null, 'Starter Deck: Joey')).toBe(false)
+  })
 })
 
 /** A card-shaped image (or any size) whose brightness ramps along x, or y, or a checker. */
@@ -219,6 +225,27 @@ describe('buildReferences', () => {
     expect(result.entries).toContainEqual({ imageId: 11, hash: SCAN_HASH })
   })
 
+  it("files an uncoded printing under its set's prefix, from the set's coded printings", async () => {
+    const add = work.prepare(
+      `INSERT INTO card_printings (card_id, set_name, set_code, set_rarity, set_rarity_code, language, variant)
+       VALUES (1, 'Original Artwork Collection', ?, 'Ultra Rare', '', 'ja', ?)`
+    )
+    add.run('YAC1-JP006', null)
+    add.run('', 'Manga-Style')
+    const files = [...FILES, 'ShiEn-YAC1-JP-UR-MangaStyle-Color.png']
+    const requested: string[] = []
+    const fetch = scans({ 'ShiEn-YAC1-JP-UR-MangaStyle-Color.png': png(SCAN) }, requested)
+    const result = await buildReferences({
+      work,
+      cache,
+      yugipedia: fakeYugipedia(files),
+      fetch,
+      userAgent: 'test'
+    })
+    expect(requested).toContain('ShiEn-YAC1-JP-UR-MangaStyle-Color.png')
+    expect(result.entries).toContainEqual({ imageId: 11, hash: SCAN_HASH })
+  })
+
   it('fetches the plain scan of a New artwork printing, and not of a plain reprint', async () => {
     const add = work.prepare(
       `INSERT INTO card_printings (card_id, set_name, set_code, set_rarity, set_rarity_code, language, variant)
@@ -251,26 +278,43 @@ describe('buildReferences', () => {
     expect(result.entries).toContainEqual({ imageId: 11, hash: SCAN_HASH })
   })
 
-  it('looks again, a month on, for a printing with no scan or a scan that failed', async () => {
+  it('looks a printing up again after three days when its gallery had no scan for it', async () => {
+    // The gallery has the Starlight scan but none for the Overframe printing.
     const yugipedia = fakeYugipedia(['ShiEn-BLGG-EN-StR-1E.png'])
+    const fetch = scans({ 'ShiEn-BLGG-EN-StR-1E.png': png(SCAN) })
+    let now = new Date('2026-01-01T00:00:00Z')
+    const run = (): ReturnType<typeof buildReferences> =>
+      buildReferences({ work, cache, yugipedia, fetch, userAgent: 'test', now: () => now })
+    await run()
+    expect(yugipedia.listPageImages).toHaveBeenCalledTimes(1)
+
+    now = new Date('2026-01-03T00:00:00Z')
+    await run()
+    expect(yugipedia.listPageImages).toHaveBeenCalledTimes(1)
+
+    now = new Date('2026-01-05T00:00:00Z')
+    await run()
+    expect(yugipedia.listPageImages).toHaveBeenCalledTimes(2)
+  })
+
+  it('downloads a scan that failed again a month on', async () => {
+    const yugipedia = fakeYugipedia()
     const requested: string[] = []
     const fetch = scans({}, requested)
     let now = new Date('2026-01-01T00:00:00Z')
     const run = (): ReturnType<typeof buildReferences> =>
       buildReferences({ work, cache, yugipedia, fetch, userAgent: 'test', now: () => now })
     await run()
-    expect(yugipedia.listPageImages).toHaveBeenCalledTimes(1)
-    expect(requested).toEqual(['ShiEn-BLGG-EN-StR-1E.png'])
+    const first = requested.length
+    expect(first).toBeGreaterThan(0)
 
     now = new Date('2026-01-20T00:00:00Z')
     await run()
-    expect(yugipedia.listPageImages).toHaveBeenCalledTimes(1)
-    expect(requested).toHaveLength(1)
+    expect(requested).toHaveLength(first)
 
     now = new Date('2026-02-05T00:00:00Z')
     await run()
-    expect(yugipedia.listPageImages).toHaveBeenCalledTimes(2)
-    expect(requested).toHaveLength(2)
+    expect(requested).toHaveLength(2 * first)
   })
 
   it('tries a scan again next run when Yugipedia was down', async () => {

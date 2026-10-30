@@ -13,7 +13,8 @@ interface SummaryDbRow {
   language: Language
   set_name: string
   s_code: string | null
-  min_code: string
+  // The lowest code, skipping uncoded printings; null when none has one.
+  min_code: string | null
   tcg_date: string | null
   image_url: string | null
   image_key: string | null
@@ -35,7 +36,7 @@ interface SummaryDbRow {
 const summary = (scope: Scope): string => {
   const owned = `p.id IN (SELECT printing_id FROM collection_entries e WHERE ${scope.where('e')})`
   return `
-  SELECT p.language, p.set_name, s.set_code AS s_code, MIN(p.set_code) AS min_code, s.tcg_date, s.image_url,
+  SELECT p.language, p.set_name, s.set_code AS s_code, MIN(NULLIF(p.set_code, '')) AS min_code, s.tcg_date, s.image_url,
          s.image_key, pa.image_key AS pack_key, COALESCE(sl.image_key, kl.image_key) AS logo_key, s.list_rows, s.unmatched_rows,
          COUNT(DISTINCT p.card_id) AS total_cards,
          COUNT(DISTINCT CASE WHEN ${owned} THEN p.card_id END) AS owned_cards,
@@ -96,7 +97,7 @@ function toSummary(r: SummaryDbRow, covers: Map<string, number>): SetSummary {
   return {
     language: r.language,
     setName: r.set_name,
-    setCode: r.s_code ? r.s_code : setPrefix(r.min_code),
+    setCode: r.s_code ? r.s_code : r.min_code ? setPrefix(r.min_code) : '',
     tcgDate: r.tcg_date,
     imageKey: r.image_key ?? setImageKey(r.image_url),
     packImageKey: r.pack_key,

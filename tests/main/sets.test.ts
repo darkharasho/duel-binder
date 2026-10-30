@@ -308,6 +308,16 @@ describe('language-aware sets', () => {
     expect(mrd[1]).toMatchObject({ totalCards: 2, totalRarities: 3, tcgDate: null })
   })
 
+  it("takes a set's code from its coded printings when some have none", async () => {
+    const { db } = await withJapanese()
+    db.prepare(
+      `INSERT INTO card_printings (card_id, language, set_name, set_code, set_rarity, set_rarity_code,
+         set_price, missing_from_api) VALUES (2001, 'ja', ?, 'MRD-JP011', 'Rare', '', NULL, 0)`
+    ).run(MRD)
+    const ja = listSets(db).find((x) => x.setName === MRD && x.language === 'ja')
+    expect(ja?.setCode).toBe('MRD')
+  })
+
   it('owning the Japanese copy fills only the Japanese set', async () => {
     const { db, jaUltra } = await withJapanese()
     addEntry(db, { printingId: jaUltra, imageId: 1001, quantity: 1 })

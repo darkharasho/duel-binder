@@ -8,6 +8,7 @@ import type { ScanPrinting } from '../../shared/scan/types'
 import { enTwinPrice } from './enTwin'
 import { isMarketOnly } from './priceRule'
 import { LOCAL, type Scope } from './scope'
+import { shownPrinting } from './shownPrinting'
 
 interface PrintingRow {
   printingId: number
@@ -29,7 +30,7 @@ const select = (
   CASE WHEN ${isMarketOnly} THEN p.market_price WHEN p.language = 'en' THEN COALESCE(p.market_price, ip.price, p.set_price) ELSE COALESCE(ip.price, ${enTwinPrice(scope.game)}) END AS rawPrice
   FROM card_printings p JOIN cards c ON c.id = p.card_id AND +c.game = ${scope.game}
   LEFT JOIN intl_prices ip ON ip.printing_id = p.id
-  WHERE +p.game = ${scope.game} AND p.contributed = 0`
+  WHERE +p.game = ${scope.game} AND p.contributed = 0 AND ${shownPrinting(scope)}`
 
 const languageRank = (l: Language): number => LANGUAGES.findIndex((x) => x.code === l)
 

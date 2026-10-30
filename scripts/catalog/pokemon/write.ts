@@ -4,7 +4,7 @@ import { pokemonId } from '../../../src/shared/games/ids'
 import { hasNativeScript } from '../../../src/shared/setNames'
 import { englishNamer } from './englishNames'
 import { matchGroup, matchProducts, type MatchedProduct } from './match'
-import { cardVersions, versionSubtype, type PkmVersion } from './versions'
+import { cardVersions, groupFinish, versionSubtype, type PkmVersion } from './versions'
 import type { PkmLang, PokemonSources, TcGroup, TcPrice, TcProduct, TdCard, TdSet } from './types'
 
 /**
@@ -29,6 +29,8 @@ export interface PokemonReport {
   englishNamed: number
   /** Japanese cards still named in Japanese: no English name was found. */
   japaneseNames: number
+  /** Cards whose finishes no source confirms (only TCGdex's generated defaults or the fallback). */
+  unverified: number
   problems: string[]
 }
 
@@ -186,6 +188,8 @@ async function planLanguage(
   const priceGroups = new Set<number>()
   for (const s of matched)
     for (const c of s.cards) for (const m of c.products) priceGroups.add(m.product.groupId)
+  // A set's own group too: groupFinish reads it even when no card matched a product.
+  for (const s of matched) if (s.groupId !== null) priceGroups.add(s.groupId)
   const priceLists = await Promise.all([...priceGroups].map((g) => sources.prices(lang, g)))
   const prices = new Map<number, TcPrice[]>()
   for (const row of priceLists.flat()) {
@@ -195,17 +199,21 @@ async function planLanguage(
   }
 
   let versions = 0
+  let unverified = 0
   let priced = 0
   let cardCount = 0
   const planned: SetPlan[] = matched.map(({ set, groupId, cards: cs }) => {
     const group = groupId === null ? undefined : groupById.get(groupId)
+    const setFinish =
+      groupId === null ? null : groupFinish(inGroup.get(groupId) ?? [], prices, cs.length)
     return {
       set,
       groupName: lang === 'ja' && group ? stripCode(group.name) || null : null,
       cards: cs.map(({ card, products }) => {
-        const v = cardVersions(card, products, prices)
+        const v = cardVersions(card, products, prices, setFinish)
         problems.push(...v.problems.map((p) => `${lang}/${p}`))
         versions += v.versions.length
+        if (v.unverified) unverified++
         priced += v.versions.filter((x) => x.price !== null).length
         cardCount++
         const first = namingProduct(products)
@@ -236,6 +244,7 @@ async function planLanguage(
       unmatchedCards,
       englishNamed: 0,
       japaneseNames: 0,
+      unverified,
       problems
     }
   }

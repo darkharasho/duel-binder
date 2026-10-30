@@ -2,8 +2,8 @@ import { describe, it, expect } from 'vitest'
 import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { matchGroup, matchProducts } from '../../scripts/catalog/pokemon/match'
-import { cardVersions, canonicalLabel, variantLabel } from '../../scripts/catalog/pokemon/versions'
-import type { TcGroup, TcPrice, TcProduct, TdCard, TdSet } from '../../scripts/catalog/pokemon/types'
+import { alwaysFoil, cardVersions, canonicalLabel, groupFinish, variantLabel } from '../../scripts/catalog/pokemon/versions'
+import type { TcGroup, TcPrice, TcProduct, TdCard, TdSet, TdVariant } from '../../scripts/catalog/pokemon/types'
 import { movedEnough } from '../../src/main/tcgplayer/prices'
 
 const FIX = join(__dirname, '..', 'fixtures', 'pokemon')
@@ -315,6 +315,94 @@ describe('cardVersions', () => {
       const unmatched = cardVersions(c, [], new Map()).versions.map((v) => v.label)
       for (const label of unmatched) expect(matched).toContain(label)
     }
+  })
+})
+
+describe('true finishes', () => {
+  const gen = (type: string, stamp?: string[]): TdVariant => ({ type, variantId: 'generated', ...(stamp ? { stamp } : {}) })
+  const labels = (r: ReturnType<typeof cardVersions>): string[] => r.versions.map((v) => v.label)
+
+  it('drops TCGdex\'s generated Normal when TCGplayer sells the card only as Holofoil (30th-131)', () => {
+    const c = brief({ id: '30th-131', rarity: 'Illustration rare', variants_detailed: [gen('normal')] })
+    const p = prod(696683, 24722, '131/128')
+    const prices = new Map([[696683, [{ productId: 696683, subTypeName: 'Holofoil', marketPrice: 4.87 }]]])
+    const r = cardVersions(c, [{ product: p, variantSubtype: null }], prices)
+    expect(r.versions).toEqual([{ label: 'Holofoil', productId: 696683, subTypeName: 'Holofoil', price: 4.87 }])
+    expect(r.unverified).toBe(false)
+  })
+  it('drops generated guesses for a common too: TCGplayer\'s subtypes are the finishes', () => {
+    const c = brief({ rarity: 'Common', variants_detailed: [gen('normal'), gen('reverse')] })
+    const prices = new Map([[1, [{ productId: 1, subTypeName: 'Holofoil', marketPrice: 0.26 }]]])
+    expect(labels(cardVersions(c, [{ product: prod(1, 9, '001/010'), variantSubtype: null }], prices))).toEqual(['Holofoil'])
+  })
+  it('keeps curated TCGdex variants alongside TCGplayer subtypes', () => {
+    const c = brief({ rarity: 'Common', variants_detailed: [{ type: 'normal', variantId: 'endfynwn4n10gzq' }, { type: 'reverse', variantId: 'cm4kqul3x1bwlz1f' }] })
+    const prices = new Map([[1, [{ productId: 1, subTypeName: 'Normal', marketPrice: 0.1 }]]])
+    expect(labels(cardVersions(c, [{ product: prod(1, 9, null), variantSubtype: null }], prices))).toEqual(['Normal', 'Reverse Holofoil'])
+  })
+  it('keeps generated variants, flagged unverified, when no TCGplayer row says otherwise', () => {
+    const c = brief({ rarity: 'Common', variants_detailed: [gen('normal'), gen('reverse')] })
+    const r = cardVersions(c, [{ product: prod(1, 9, null), variantSubtype: null }], new Map())
+    expect(labels(r)).toEqual(['Normal', 'Reverse Holofoil'])
+    expect(r.versions[0].productId).toBe(1)
+    expect(r.unverified).toBe(true)
+  })
+  it('keeps generated variants when only a subtyped product has rows', () => {
+    const c = brief({ rarity: 'Common', variants_detailed: [gen('normal')] })
+    const prices = new Map([[2, [{ productId: 2, subTypeName: 'Normal', marketPrice: 1 }]]])
+    expect(labels(cardVersions(c, [{ product: prod(2, 9, null), variantSubtype: 'shadowless' }], prices))).toEqual(['Normal', 'Shadowless Normal'])
+  })
+  it('reads a generated normal of an always-foil rarity as Holofoil, keeping its stamp', () => {
+    for (const rarity of ['Illustration rare', 'Special illustration rare', 'Ultra Rare', 'Double rare', 'Holo Rare V', 'ACE SPEC Rare', 'Character Super Rare']) {
+      const r = cardVersions(brief({ rarity, variants_detailed: [gen('normal'), gen('normal', ['1st-edition'])] }), [], new Map())
+      expect(labels(r)).toEqual(['1st Edition Holofoil', 'Holofoil'])
+      expect(r.unverified).toBe(true)
+    }
+  })
+  it('never adds a finish TCGdex did not list for a rarity printed either way', () => {
+    for (const rarity of ['Common', 'Rare', 'Promo', 'Holo Rare', 'LEGEND', undefined]) {
+      expect(labels(cardVersions(brief({ rarity, variants_detailed: [gen('normal')] }), [], new Map()))).toEqual(['Normal'])
+    }
+  })
+  it('leaves a curated normal of an always-foil rarity alone', () => {
+    const c = brief({ rarity: 'Ultra Rare', variants_detailed: [{ type: 'normal', variantId: 'endfynwn4n10gzq' }] })
+    expect(labels(cardVersions(c, [], new Map()))).toEqual(['Normal'])
+  })
+  it('falls back to Holofoil for an always-foil card with no versions at all', () => {
+    const r = cardVersions(brief({ rarity: 'Secret Rare' }), [], new Map())
+    expect(labels(r)).toEqual(['Holofoil'])
+    expect(r.unverified).toBe(true)
+  })
+  it('takes the finish of a one-finish group that covers the set (30th-c-001)', () => {
+    const c = brief({ id: '30th-c-001', rarity: undefined, variants_detailed: [gen('normal')] })
+    const r = cardVersions(c, [], new Map(), 'Holofoil')
+    expect(r.versions).toEqual([{ label: 'Holofoil', productId: null, subTypeName: null, price: null }])
+    expect(r.unverified).toBe(false)
+  })
+  it('reads a group as one finish only when all its rows agree and they cover the set', () => {
+    const products = [prod(1, 9, '4/102'), prod(2, 9, '5/109')]
+    const row = (productId: number, subTypeName: string): TcPrice => ({ productId, subTypeName, marketPrice: 1 })
+    const holo = new Map([[1, [row(1, 'Holofoil')]], [2, [row(2, 'Holofoil')]]])
+    expect(groupFinish(products, holo, 2)).toBe('Holofoil')
+    expect(groupFinish(products, holo, 3)).toBeNull()
+    const mixed = new Map([[1, [row(1, 'Holofoil')]], [2, [row(2, 'Normal')]]])
+    expect(groupFinish(products, mixed, 2)).toBeNull()
+    expect(groupFinish(products, new Map(), 0)).toBeNull()
+  })
+  it('breaks an abbreviation tie by the words of the set name (30th-c → 24837)', () => {
+    const tied: TcGroup[] = [
+      { groupId: 24722, name: 'ME: 30th Celebration', abbreviation: '30C' },
+      { groupId: 24837, name: 'ME: 30th Celebration Classic Collection', abbreviation: '30C' }
+    ]
+    const s = (id: string, name: string): TdSet => ({ id, name, abbreviation: { official: '30C' }, cards: [] })
+    expect(matchGroup(s('30th-c', '30th Classic Collection'), [], tied, new Map())).toBe(24837)
+    expect(matchGroup(s('30th', '30th Celebration'), [], tied, new Map())).toBe(24722)
+  })
+  it('knows which rarities are always foil', () => {
+    expect(alwaysFoil('Special illustration rare')).toBe(true)
+    expect(alwaysFoil(' hyper RARE ')).toBe(true)
+    expect(alwaysFoil('Rare')).toBe(false)
+    expect(alwaysFoil(null)).toBe(false)
   })
 })
 

@@ -8,6 +8,7 @@ import { addEntry, CollectionError } from './collection'
 import { LOCAL, type Scope } from './scope'
 import { enTwinPrice } from './enTwin'
 import { isMarketOnly } from './priceRule'
+import { shownPrinting } from './shownPrinting'
 
 interface SummaryDbRow {
   language: Language
@@ -151,7 +152,7 @@ export function findPokemonSetArtUrl(db: SqlDb, key: string): string | null {
 
 export function listSets(db: SqlDb, scope: Scope = LOCAL): SetSummary[] {
   const covers = coverImages(db, scope)
-  return (db.prepare(`${summary(scope)} WHERE +p.game = ${scope.game} AND p.contributed = 0 GROUP BY p.language, p.set_name ORDER BY p.set_name, p.language <> 'en', p.language`).all() as SummaryDbRow[]).map((r) => toSummary(r, covers))
+  return (db.prepare(`${summary(scope)} WHERE +p.game = ${scope.game} AND p.contributed = 0 AND ${shownPrinting(scope)} GROUP BY p.language, p.set_name ORDER BY p.set_name, p.language <> 'en', p.language`).all() as SummaryDbRow[]).map((r) => toSummary(r, covers))
 }
 
 interface PrintingDbRow {
@@ -229,7 +230,7 @@ function checklistCards(
                ORDER BY i.sort_order, i.image_id LIMIT 1) AS image_id
        FROM card_printings p JOIN cards c ON c.id = p.card_id AND +c.game = ${scope.game}
        LEFT JOIN intl_prices ip ON ip.printing_id = p.id
-       WHERE +p.game = ${scope.game} AND p.contributed = 0 AND p.language = ? AND p.set_name = ?${cardFilter}`
+       WHERE +p.game = ${scope.game} AND p.contributed = 0 AND ${shownPrinting(scope)} AND p.language = ? AND p.set_name = ?${cardFilter}`
     )
     .all(...params) as PrintingDbRow[]
   const entries = db
@@ -322,7 +323,7 @@ export function getChecklist(
   scope: Scope = LOCAL
 ): SetChecklist | null {
   const row = db
-    .prepare(`${summary(scope)} WHERE +p.game = ${scope.game} AND p.contributed = 0 AND p.language = ? AND p.set_name = ? GROUP BY p.language, p.set_name`)
+    .prepare(`${summary(scope)} WHERE +p.game = ${scope.game} AND p.contributed = 0 AND ${shownPrinting(scope)} AND p.language = ? AND p.set_name = ? GROUP BY p.language, p.set_name`)
     .get(language, setName) as SummaryDbRow | undefined
   if (!row) return null
   return { set: toSummary(row, coverImages(db, scope, { language, setName })), cards: checklistCards(db, setName, language, undefined, scope) }

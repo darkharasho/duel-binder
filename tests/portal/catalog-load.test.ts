@@ -4,6 +4,7 @@ import { handle, type AppDeps } from '../../workers/portal/src/app'
 import { searchCards } from '../../src/main/repo/cards'
 import { openDatabase } from '../../src/main/db/database'
 import { CATALOG_TABLES, LEGACY_CATALOG_TABLES } from '../../src/shared/catalogTables'
+import { pokemonId } from '../../src/shared/games/ids'
 import { addUser, memoryBucket, noPrintingArt, noPrices } from './helpers'
 import { seededDb } from '../main/helpers'
 
@@ -140,6 +141,25 @@ describe('admin catalog loader', () => {
     expect(db.prepare('SELECT missing_from_api FROM card_printings WHERE pkey = ?').get(pkey)).toEqual({
       missing_from_api: 0
     })
+  })
+
+  it('a Pokémon source row keeps its flag: the job flags versions it no longer produces', async () => {
+    await loadCatalog()
+    const id = pokemonId('en/x-001')
+    const card = { ...sourceRows('cards')[0], id, game: 'pkm' }
+    expect((await call('/admin/catalog/rows', { table: 'cards', rows: [card] })).status).toBe(200)
+    const row = { ...sourceRows('card_printings')[0], card_id: id, game: 'pkm' }
+    const upload = async (missing: number): Promise<unknown> => {
+      const res = await call('/admin/catalog/rows', {
+        table: 'card_printings',
+        rows: [{ ...row, missing_from_api: missing }]
+      })
+      expect(res.status).toBe(200)
+      return db.prepare('SELECT missing_from_api FROM card_printings WHERE card_id = ?').get(id)
+    }
+    expect(await upload(0)).toEqual({ missing_from_api: 0 })
+    expect(await upload(1)).toEqual({ missing_from_api: 1 })
+    expect(await upload(0)).toEqual({ missing_from_api: 0 })
   })
 
   it('delete never removes a contributed printing', async () => {

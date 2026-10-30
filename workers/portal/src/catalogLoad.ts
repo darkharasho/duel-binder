@@ -101,10 +101,15 @@ function upsertRows(deps: AppDeps, table: CatalogTable, rows: unknown[]): void {
   const { db } = deps
   const valid = rows.map((r) => validateRow(table, r))
   // A source upsert makes a contributed printing an ordinary catalog row again, and un-flags a
-  // printing the source lists again.
+  // printing the source lists again. The Pokémon job is the exception: its versions are sticky, so
+  // a version its sources no longer show (or never did) is uploaded flagged, and the flag stands.
   const extra = table.name === 'card_printings' ? { contributed: 0 } : undefined
   db.transaction(() => {
-    for (const row of valid) upsertCatalogRow(db, table, row, extra, { clearMissing: true })
+    for (const row of valid) {
+      const flagged =
+        table.name === 'card_printings' && row.game === 'pkm' && row.missing_from_api === 1
+      upsertCatalogRow(db, table, row, extra, { clearMissing: !flagged })
+    }
   })()
 }
 

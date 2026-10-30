@@ -50,6 +50,11 @@ function reads(db: Database.Database, setCode: string): Record<string, unknown> 
 
 describe('game-scoped repo queries', () => {
   let baseline: Database.Database
+  /** The Yu-Gi-Oh-only database with the printing flagged, for comparing a read. */
+  const baselineFlagged = (id: number): Database.Database => {
+    baseline.prepare('UPDATE card_printings SET missing_from_api = 1 WHERE id = ?').run(id)
+    return baseline
+  }
   let db: Database.Database
   let pkm: { cardIds: number[]; printingIds: number[] }
   let ygo: { id: number; imageId: number; setCode: string }
@@ -127,6 +132,42 @@ describe('game-scoped repo queries', () => {
       { imageId: pkm.cardIds[0], cardId: pkm.cardIds[0] }
     ])
     expect(matchName(db, 'Pikachu')?.cardId).toBe(pkm.cardIds[0])
+  })
+
+  it('hides a Pokémon finish the catalog flags missing unless an entry is on it', () => {
+    setGame(db, 'pkm')
+    // printingIds[1] is the English card's Reverse Holo; nobody owns it.
+    db.prepare('UPDATE card_printings SET missing_from_api = 1 WHERE id IN (?, ?)').run(pkm.printingIds[0], pkm.printingIds[1])
+    const rarities = (): string[] =>
+      getChecklist(db, SHARED_SET_NAME, 'en')!.cards.flatMap((c) => c.rarities.map((r) => r.rarity))
+    // printingIds[0] (Normal) is owned, so it stays; the unowned Reverse Holo is gone everywhere.
+    expect(rarities()).toEqual(['Normal'])
+    expect(getCardDetail(db, pkm.cardIds[0])?.printings.map((p) => p.id)).toEqual([pkm.printingIds[0]])
+    expect(printingsByCode(db, PKM_CODE).map((p) => p.printingId)).toEqual([pkm.printingIds[0]])
+    expect(listSets(db)[0].totalRarities).toBe(1)
+    expect(listEntries(db, ALL).map((e) => [e.printing.id, e.printing.missingFromApi])).toEqual([[pkm.printingIds[0], true]])
+
+    addEntry(db, { printingId: pkm.printingIds[1], imageId: pkm.cardIds[0], quantity: 1 }, now)
+    expect(rarities()).toEqual(['Normal', 'Reverse Holo'])
+    expect(getCardDetail(db, pkm.cardIds[0])?.printings).toHaveLength(2)
+  })
+
+  it('keeps listing a flagged Yu-Gi-Oh! printing nobody owns', () => {
+    const other = db
+      .prepare(
+        `SELECT id, card_id, set_code FROM card_printings
+         WHERE game = 'ygo' AND language = 'en' AND set_name = ? AND id <> ? ORDER BY id LIMIT 1`
+      )
+      .get(SHARED_SET_NAME, ygo.id) as { id: number; card_id: number; set_code: string }
+    db.prepare('UPDATE card_printings SET missing_from_api = 1 WHERE id = ?').run(other.id)
+    const codes = getChecklist(db, SHARED_SET_NAME, 'en')!.cards.flatMap((c) =>
+      c.rarities.flatMap((r) => r.codes.map((x) => x.printingId))
+    )
+    expect(codes).toContain(other.id)
+    const shown = getCardDetail(db, other.card_id)?.printings.find((p) => p.id === other.id)
+    expect(shown?.missingFromApi).toBe(true)
+    expect(printingsByCode(db, other.set_code).map((p) => p.printingId)).toContain(other.id)
+    expect(browseCards(db, BROWSE)).toEqual(browseCards(baselineFlagged(other.id), BROWSE))
   })
 
   it('stats count only the active game', () => {

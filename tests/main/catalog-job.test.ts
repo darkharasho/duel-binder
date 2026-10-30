@@ -810,6 +810,7 @@ describe('Pokémon step in the nightly job', () => {
     unmatchedCards: 3,
     englishNamed: 0,
     japaneseNames: 0,
+    unverified: 0,
     problems: [],
     ...over
   })
@@ -857,7 +858,7 @@ describe('Pokémon step in the nightly job', () => {
     expect(out.counts?.['card_printings:pkm']).toEqual({ upserts: 1, deletes: 0 })
     expect(out.problems).toEqual([])
     expect(lines).toContain(
-      'Pokémon en: 1 sets, 1 cards, 2 versions (1 priced, 1 unpriced), 1 images, 3 cards unmatched, 0 named in English by species or name, 0 still in Japanese, 0 notes'
+      'Pokémon en: 1 sets, 1 cards, 2 versions (1 priced, 1 unpriced), 1 images, 3 cards unmatched, 0 with unverified finishes, 0 named in English by species or name, 0 still in Japanese, 0 notes'
     )
     expect(lines).toContain('Pokémon en: unmatched sets: sv01 Scarlet & Violet')
     expect(lines.some((l) => l.startsWith('Pokémon ja: 1 sets'))).toBe(true)

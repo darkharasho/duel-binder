@@ -7,6 +7,8 @@ import {
   activeFilterCount,
   filterSets,
   filterTiles,
+  filterTilesByRarity,
+  rarityCounts,
   patchSetSummary,
   progressFor,
   replaceChecklistCard,
@@ -466,5 +468,44 @@ describe('upcoming sets', () => {
     expect(current.map((s) => s.setName)).toEqual(['B', 'D', 'E'])
     expect(upcoming.map((s) => s.setName)).toEqual(['A', 'C'])
     expect(splitUpcoming([], '2026-11-28')).toEqual({ current: [], upcoming: [] })
+  })
+})
+
+describe('rarityCounts', () => {
+  it('counts cards per rarity, lowest rarity first, unknown ones last by name', () => {
+    const named = (cards: ChecklistCard[]): SetChecklist => ({ set: started, cards })
+    const card = (cardId: number, rarities: string[]): ChecklistCard => ({
+      ...alpha,
+      cardId,
+      rarities: rarities.map((rarity) => ({ ...alpha.rarities[0], rarity }))
+    })
+    const cl = named([
+      card(1, ['Secret Rare', 'Common']),
+      card(2, ['Common']),
+      card(3, ['Reverse Holofoil', 'Holofoil'])
+    ])
+    expect(rarityCounts(cl)).toEqual([
+      { rarity: 'Common', count: 2 },
+      { rarity: 'Secret Rare', count: 1 },
+      { rarity: 'Holofoil', count: 1 },
+      { rarity: 'Reverse Holofoil', count: 1 }
+    ])
+  })
+})
+
+describe('filterTilesByRarity', () => {
+  const rarity = alpha.rarities[0].rarity
+  it('keeps every tile with no rarity chosen', () => {
+    const tiles = checklistTiles(checklist, 'rarities')
+    expect(filterTilesByRarity(tiles, null)).toEqual(tiles)
+  })
+  it('keeps the tiles of that rarity in every-rarity mode', () => {
+    const out = filterTilesByRarity(checklistTiles(checklist, 'rarities'), rarity)
+    expect(out.every((t) => t.rarity === rarity)).toBe(true)
+    expect(out).toHaveLength(1)
+  })
+  it('keeps a card with that rarity in each-card-once mode', () => {
+    expect(filterTilesByRarity(checklistTiles(checklist, 'cards'), rarity)).toHaveLength(1)
+    expect(filterTilesByRarity(checklistTiles(checklist, 'cards'), 'Nope')).toHaveLength(0)
   })
 })

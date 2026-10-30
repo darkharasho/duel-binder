@@ -2,6 +2,7 @@ import type { LanguageFilter } from '@shared/languages'
 import type { GameId } from '@shared/games'
 import { setType, type SetType } from '@shared/setTypes'
 import { englishSetName } from '@shared/setNames'
+import { rarityRank } from '@shared/scan/rarity'
 import { matchesLanguage } from '@/lib/languageFilter'
 import type {
   ChecklistCard,
@@ -242,6 +243,28 @@ export function filterTiles(tiles: Tile[], f: TileFilter): Tile[] {
   if (f === 'owned') return tiles.filter((t) => t.owned > 0)
   if (f === 'missing') return tiles.filter((t) => t.owned === 0)
   return tiles
+}
+
+/**
+ * The rarities present in a set with how many cards have each, lowest rarity first. A card
+ * counts once per rarity it has, so a card in two rarities is in two counts. Rarities the tier
+ * list doesn't know (Pokémon versions) follow it by name.
+ */
+export function rarityCounts(cl: SetChecklist): { rarity: string; count: number }[] {
+  const counts = new Map<string, number>()
+  for (const card of cl.cards)
+    for (const r of card.rarities) counts.set(r.rarity, (counts.get(r.rarity) ?? 0) + 1)
+  return [...counts]
+    .map(([rarity, count]) => ({ rarity, count }))
+    .sort((a, b) => rarityRank(a.rarity) - rarityRank(b.rarity) || a.rarity.localeCompare(b.rarity))
+}
+
+/** Tiles of one rarity (a card's tile in 'cards' mode stays if the card has it); null keeps all. */
+export function filterTilesByRarity(tiles: Tile[], rarity: string | null): Tile[] {
+  if (rarity === null) return tiles
+  return tiles.filter((t) =>
+    t.rarity !== null ? t.rarity === rarity : t.card.rarities.some((r) => r.rarity === rarity)
+  )
 }
 
 /** The checklist with one card replaced by id and the set's owned counts recomputed from the cards. */

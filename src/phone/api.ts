@@ -204,7 +204,7 @@ export function createPhoneApi(deps: {
       collection: async (userId: number, f: CollectionFilters) =>
         (await store.portal<EntryView[]>('friends:collection', [userId, f])).map((e) => ({
           ...e,
-          originalArt: false
+          printingScan: false
         })),
       facets: portal('friends:facets')
     },

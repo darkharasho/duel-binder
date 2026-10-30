@@ -19,7 +19,7 @@ interface SetCardPanelProps {
   rarity: string | null
   busy: boolean
   onAdjust: (printingId: number, delta: 1 | -1) => void
-  /** Opens the full Add Card dialog (artwork, quantity, notes). */
+  /** Opens the full Add Card dialog (printing, quantity). */
   onMoreOptions: (printingId: number) => void
   nav?: PanelNav
 }

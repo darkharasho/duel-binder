@@ -81,7 +81,7 @@ export function createHandlers({
     'friends:collection': async (userId: number, f: CollectionFilters) =>
       (await account.portal<EntryView[]>('friends:collection', [userId, f])).map((e) => ({
         ...e,
-        originalArt: false
+        printingScan: false
       })),
     'friends:facets': async (userId: number) => account.portal('friends:facets', [userId]),
     'scan:fingerprints': () => fingerprints.read(),

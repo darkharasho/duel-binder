@@ -46,7 +46,7 @@ const entry = (p: Printing): EntryView =>
     card,
     printing: p,
     imageId: 1,
-    originalArt: true,
+    printingScan: true,
     unitPrice: 10,
     priceApproximate: false,
     priceSource: 'ygoprodeck',

@@ -24,7 +24,7 @@ import { cn } from '@/lib/utils'
 
 interface BrowseCardPanelProps {
   card: BrowseCard
-  /** Opens the full Add Card dialog (artwork, quantity, notes). */
+  /** Opens the full Add Card dialog (printing, quantity). */
   onMoreOptions: (printingId: number) => void
   nav?: PanelNav
 }

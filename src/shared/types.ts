@@ -72,9 +72,17 @@ export interface EntryView {
   updatedAt: string
   card: CardRow
   printing: Printing
+  /**
+   * The artwork shown when the printing has no scan of its own. Users no longer pick it: it is the
+   * card's original art, the art the scanner matched, or one picked in an older version; kept
+   * (and synced) as before.
+   */
   imageId: number
-  /** The entry uses the card's original artwork, so the printing's own photo can stand in for it. */
-  originalArt: boolean
+  /**
+   * The printing's own scan shows over imageId. False only for a friend's entry seen from the
+   * desktop or phone app, whose printing ids are the server's, not this catalog's.
+   */
+  printingScan: boolean
   unitPrice: number | null
   priceApproximate: boolean
   /** null: no price from any source the entry's game has (Pokémon has only TCGplayer for now). */
@@ -101,6 +109,7 @@ export interface UpdateEntryInput {
   quantity?: number
   notes?: string
   printingId?: number
+  /** No longer sent by the app (art comes from the printing); still accepted from older clients. */
   imageId?: number
 }
 

@@ -81,7 +81,7 @@ const copy: EntryView = {
   card: detail.card,
   printing: printing(10),
   imageId: 1,
-  originalArt: true,
+  printingScan: true,
   unitPrice: 10,
   priceApproximate: false,
   priceSource: 'ygoprodeck',

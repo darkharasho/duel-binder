@@ -129,7 +129,7 @@ const entry = (id: number, name: string, language: 'en' | 'ja' = 'en'): EntryVie
     missingFromApi: false
   },
   imageId: 100 + id,
-  originalArt: true,
+  printingScan: true,
   unitPrice: 10,
   priceApproximate: false,
   priceSource: 'ygoprodeck',

@@ -152,15 +152,15 @@ describe('phone api', () => {
     expect(triggers.afterAdd).not.toHaveBeenCalled()
   })
 
-  it('friends.collection clears originalArt', async () => {
+  it('friends.collection clears printingScan', async () => {
     const entries = [
-      { id: 1, originalArt: true },
-      { id: 2, originalArt: false }
+      { id: 1, printingScan: true },
+      { id: 2, printingScan: false }
     ] as EntryView[]
     const portal = vi.fn(async () => entries)
     const { api } = setup(fakeStore({ portal: portal as unknown as PhoneStore['portal'] }))
     const got = await api.friends.collection(5, {} as never)
-    expect(got.map((e) => e.originalArt)).toEqual([false, false])
+    expect(got.map((e) => e.printingScan)).toEqual([false, false])
     expect(portal).toHaveBeenCalledWith('friends:collection', [5, {}])
   })
 

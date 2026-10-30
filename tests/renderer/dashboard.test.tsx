@@ -37,7 +37,7 @@ const entry = (id: number, name: string, extra: Partial<EntryView> = {}): EntryV
     missingFromApi: false
   },
   imageId: 100 + id,
-  originalArt: true,
+  printingScan: true,
   unitPrice: 10,
   priceApproximate: false,
   priceSource: 'ygoprodeck',

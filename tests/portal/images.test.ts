@@ -155,6 +155,8 @@ describe('image route', () => {
       expect(bucket.store.has('set/bp-pack')).toBe(true)
       expect((await get('set/bp-pack')).status).toBe(200)
       expect(upstream).toHaveBeenCalledTimes(2)
+      addArt('pt-new', 'https://images.scrydex.com/pokemon/me55-logo/logo', 'logo')
+      expect((await get('set/pt-new')).status).toBe(200)
     })
 
     it('404s Pokémon set art keys that are unknown, off-prefix or cross-source, and signed-out fills', async () => {

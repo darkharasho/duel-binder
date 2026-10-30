@@ -1,7 +1,12 @@
 import { createHash } from 'node:crypto'
 import type Database from 'better-sqlite3'
 import { getMeta, setMeta } from '../../../src/main/db/meta'
-import { BULBAGARDEN_IMAGE_PREFIX, POKEMONTCG_IMAGE_PREFIX } from '../../../src/shared/imageSources'
+import {
+  BULBAGARDEN_IMAGE_PREFIX,
+  isFallbackLogoUrl,
+  POKEMONTCG_IMAGE_PREFIX,
+  SCRYDEX_IMAGE_PREFIX
+} from '../../../src/shared/imageSources'
 import { REPO_URL } from './http'
 import type { PkmLang } from './types'
 import { setImageKey } from './write'
@@ -13,7 +18,8 @@ import { setImageKey } from './write'
  *   categories with the API and matched to our sets by Bulbapedia's set code or the set's name. Every
  *   design a set has is kept (sort_order 0, the largest image, is the main one the app shows).
  * - Set logos from the Pokémon TCG API, for English sets TCGdex has no logo for (TCGdex's own logo
- *   stays in `sets.image_url`). Neither source has Japanese logos.
+ *   stays in `sets.image_url`), plus a few picked by hand (HAND_PICKED_LOGOS). Neither source has
+ *   Japanese logos.
  *
  * Only URLs are stored here. The portal mirrors each image into R2 the first time it's asked for,
  * and the job asks for new ones itself, one a second (see warmSetArt), so clients never reach
@@ -82,7 +88,7 @@ export function bulbagardenKey(url: string): string | null {
 
 /** 'pt-' + first 20 hex chars of sha1(url); null for anything outside the Pokémon TCG API's images. */
 export function pokemontcgKey(url: string): string | null {
-  return url.startsWith(POKEMONTCG_IMAGE_PREFIX) ? `pt-${sha(url)}` : null
+  return isFallbackLogoUrl(url) ? `pt-${sha(url)}` : null
 }
 
 // ---- Reading the archive ----------------------------------------------------------------------
@@ -376,17 +382,60 @@ interface PtcgSet {
   images?: { logo?: string }
 }
 
-/** English sets without a TCGdex logo, matched to a Pokémon TCG API set by name: set name → logo URL. */
+const scrydexLogo = (id: string): string => `${SCRYDEX_IMAGE_PREFIX}${id}-logo/logo`
+const TRAINER_KIT_LOGOS = {
+  DP: scrydexLogo('tk3a'),
+  HS: scrydexLogo('tk4a'),
+  BW: scrydexLogo('tk5a'),
+  XY: scrydexLogo('tk6a'),
+  SM: scrydexLogo('tk10a')
+}
+
+/**
+ * Logos checked by eye, for sets whose name doesn't meet the API's. Scrydex serves a placeholder for
+ * ids it doesn't know, so these were each looked at. Trainer kits share their era's banner; a
+ * subset without its own logo has its parent set's.
+ */
+const HAND_PICKED_LOGOS: Record<string, string> = {
+  '30th Celebration': scrydexLogo('me55'),
+  '30th Classic Collection': scrydexLogo('me55c'),
+  'SVP Black Star Promos': `${POKEMONTCG_IMAGE_PREFIX}svp/logo.png`,
+  'MEP Black Star Promos': scrydexLogo('mep'),
+  'Scarlet & Violet Energy': `${POKEMONTCG_IMAGE_PREFIX}sve/logo.png`,
+  'Mega Evolution Energy': scrydexLogo('mee'),
+  "McDonald's Collection 2023": scrydexLogo('mcd23'),
+  "McDonald's Collection 2024": scrydexLogo('mcd24'),
+  'Unseen Forces Unown Collection': `${POKEMONTCG_IMAGE_PREFIX}ex10/logo.png`,
+  'Radiant Collection': `${POKEMONTCG_IMAGE_PREFIX}bw11/logo.png`,
+  'DP trainer Kit (Lucario)': TRAINER_KIT_LOGOS.DP,
+  'DP trainer Kit (Manaphy)': TRAINER_KIT_LOGOS.DP,
+  'HS trainer Kit (Gyarados)': TRAINER_KIT_LOGOS.HS,
+  'HS trainer Kit (Raichu)': TRAINER_KIT_LOGOS.HS,
+  'BW trainer Kit (Excadrill)': TRAINER_KIT_LOGOS.BW,
+  'BW trainer Kit (Zoroark)': TRAINER_KIT_LOGOS.BW,
+  'XY trainer Kit (Bisharp)': TRAINER_KIT_LOGOS.XY,
+  'XY trainer Kit (Latias)': TRAINER_KIT_LOGOS.XY,
+  'XY trainer Kit (Latios)': TRAINER_KIT_LOGOS.XY,
+  'XY trainer Kit (Noivern)': TRAINER_KIT_LOGOS.XY,
+  'XY trainer Kit (Pikachu Libre)': TRAINER_KIT_LOGOS.XY,
+  'XY trainer Kit (Suicune)': TRAINER_KIT_LOGOS.XY,
+  'XY trainer Kit (Sylveon)': TRAINER_KIT_LOGOS.XY,
+  'XY trainer Kit (Wigglytuff)': TRAINER_KIT_LOGOS.XY,
+  'SM trainer Kit (Alolan Raichu)': TRAINER_KIT_LOGOS.SM,
+  'SM trainer Kit (Lycanroc)': TRAINER_KIT_LOGOS.SM
+}
+
+/** English sets without a TCGdex logo, matched to a Pokémon TCG API set by name or picked by hand: set name → logo URL. */
 export function matchLogos(ptcg: PtcgSet[], sets: SetRow[]): Map<string, string> {
   const byName = new Map<string, string>()
   for (const p of ptcg) {
     const logo = p.images?.logo
-    if (logo && logo.startsWith(POKEMONTCG_IMAGE_PREFIX)) byName.set(nameKey(p.name), logo)
+    if (logo && isFallbackLogoUrl(logo)) byName.set(nameKey(p.name), logo)
   }
   const out = new Map<string, string>()
   for (const s of sets) {
     if (s.image_url) continue
-    const logo = byName.get(nameKey(s.set_name))
+    const logo = HAND_PICKED_LOGOS[s.set_name] ?? byName.get(nameKey(s.set_name))
     if (logo) out.set(s.set_name, logo)
   }
   return out

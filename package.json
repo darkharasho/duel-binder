@@ -1,6 +1,6 @@
 {
   "name": "duel-binder",
-  "version": "0.23.3",
+  "version": "0.24.0",
   "description": "Duel Binder: a local Yu-Gi-Oh! card collection binder",
   "main": "./out/main/index.js",
   "author": "darkharasho",

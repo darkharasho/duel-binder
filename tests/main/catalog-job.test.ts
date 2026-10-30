@@ -10,7 +10,11 @@ import { runSync } from '../../src/main/sync/sync'
 import type { YgoClient } from '../../src/main/ygo/client'
 import type { ApiCard } from '../../src/main/ygo/mapCard'
 import type { YugipediaClient } from '../../src/main/yugipedia/client'
-import { CATALOG_TABLES, LEGACY_CATALOG_TABLES, type CatalogTable } from '../../src/shared/catalogTables'
+import {
+  CATALOG_TABLES,
+  LEGACY_CATALOG_TABLES,
+  type CatalogTable
+} from '../../src/shared/catalogTables'
 import { diffTable } from '../../scripts/catalog/diff'
 import { uploadCatalog } from '../../scripts/catalog/upload'
 import type { AccuracyReport } from '../../scripts/catalog/accuracy'
@@ -308,7 +312,9 @@ describe('diffTable', () => {
       upserts: [],
       deletes: [['en', 'Starter Deck: Yugi']]
     })
-    for (const t of LEGACY_CATALOG_TABLES.filter((x) => !['card_printings', 'sets'].includes(x.name))) {
+    for (const t of LEGACY_CATALOG_TABLES.filter(
+      (x) => !['card_printings', 'sets'].includes(x.name)
+    )) {
       expect(diffTable(work, base, t), t.name).toEqual({ upserts: [], deletes: [] })
     }
     // The work connection is left as it was found.
@@ -444,9 +450,10 @@ describe('uploadCatalog', () => {
       refresh: async () => {},
       log: () => {}
     })
-    expect(calls.map((c) => c.path).slice(-2)).toEqual([
+    expect(calls.map((c) => c.path).slice(-3)).toEqual([
       '/admin/catalog/finish',
-      '/admin/scan/fingerprints'
+      '/admin/scan/fingerprints',
+      '/admin/scan/fingerprint-refs'
     ])
     expect(existsSync(join(dir, 'base.sqlite'))).toBe(true)
 
@@ -479,6 +486,26 @@ describe('uploadCatalog', () => {
     expect(problems[0]).toMatch(/^Fingerprints failed: .*404/)
   })
 
+  it('a failing refs upload is a problem of its own, after the fingerprints went up', async () => {
+    ;(await workDb()).close()
+    const { fetch, calls } = recordingFetch((call) =>
+      call.path === '/admin/scan/fingerprint-refs' ? new Response('', { status: 500 }) : ok()
+    )
+    const { problems } = await runJob({
+      dir,
+      url: URL_BASE,
+      token: TOKEN,
+      fetch,
+      imageFetch: noImages,
+      checkAccuracy: passing,
+      refresh: async () => {},
+      log: () => {}
+    })
+    expect(calls.map((c) => c.path)).toContain('/admin/scan/fingerprints')
+    expect(problems).toHaveLength(1)
+    expect(problems[0]).toMatch(/^Fingerprint refs failed: .*500/)
+  })
+
   it('a fingerprint file that fails the accuracy gate is held back, and the catalog still uploads', async () => {
     ;(await workDb()).close()
     const { fetch, calls } = recordingFetch(ok)
@@ -499,6 +526,7 @@ describe('uploadCatalog', () => {
     })
     expect(calls.map((c) => c.path)).toContain('/admin/catalog/finish')
     expect(calls.map((c) => c.path)).not.toContain('/admin/scan/fingerprints')
+    expect(calls.map((c) => c.path)).not.toContain('/admin/scan/fingerprint-refs')
     expect(existsSync(join(dir, 'base.sqlite'))).toBe(true)
     expect(problems).toEqual([
       'Fingerprints held back: took 1 shot(s) for the wrong card: 1.jpg (Dark Magician) as Dark Magician Girl (38033121)'
@@ -644,7 +672,9 @@ describe('game-aware catalog job', () => {
     const { fetch, calls } = recordingFetch(ok)
     await uploadCatalog({ url: URL_BASE, token: TOKEN, work, base: null, fetch })
     const rows = (t: string): Record<string, unknown>[] =>
-      calls.filter((c) => c.body.table === t).flatMap((c) => c.body.rows as Record<string, unknown>[])
+      calls
+        .filter((c) => c.body.table === t)
+        .flatMap((c) => c.body.rows as Record<string, unknown>[])
     for (const t of ['cards', 'card_images', 'card_printings', 'sets']) {
       expect(rows(t), t).toHaveLength(1)
       expect(rows(t)[0]).toMatchObject({ game: 'pkm' })
@@ -679,11 +709,13 @@ describe('game-aware catalog job', () => {
 
   async function shrinkBase(): Promise<Database.Database> {
     const work = openDatabase(join(dir, 'work.sqlite'))
-    work.prepare(
-      `INSERT INTO cards (id, name, type, frame_type, race, "desc", updated_at, game)
+    work
+      .prepare(
+        `INSERT INTO cards (id, name, type, frame_type, race, "desc", updated_at, game)
        VALUES (1, 'A', 'Spell Card', 'spell', 'Normal', '', 'x', 'ygo'),
               (2, 'B', 'Pokémon', 'pokemon', '', '', 'x', 'pkm')`
-    ).run()
+      )
+      .run()
     const ins = work.prepare(
       `INSERT INTO card_printings (card_id, set_name, set_code, set_rarity, language, game)
        VALUES (?, 'S', ?, 'Common', 'en', ?)`
@@ -698,7 +730,11 @@ describe('game-aware catalog job', () => {
 
   it('refuses 60 pkm deletes of 100 that a whole-table count would allow', async () => {
     const work = await shrinkBase()
-    work.prepare("DELETE FROM card_printings WHERE game = 'pkm' AND set_code IN (SELECT set_code FROM card_printings WHERE game = 'pkm' ORDER BY set_code LIMIT 60)").run()
+    work
+      .prepare(
+        "DELETE FROM card_printings WHERE game = 'pkm' AND set_code IN (SELECT set_code FROM card_printings WHERE game = 'pkm' ORDER BY set_code LIMIT 60)"
+      )
+      .run()
     const base = openDatabase(join(dir, 'base.sqlite'))
     expect(findShrinks(work, base)).toEqual(['card_printings (pkm) would lose 60 of 100 rows'])
     base.close()
@@ -707,7 +743,11 @@ describe('game-aware catalog job', () => {
 
   it('allows 40 ygo deletes of 3000', async () => {
     const work = await shrinkBase()
-    work.prepare("DELETE FROM card_printings WHERE game = 'ygo' AND set_code IN (SELECT set_code FROM card_printings WHERE game = 'ygo' ORDER BY set_code LIMIT 40)").run()
+    work
+      .prepare(
+        "DELETE FROM card_printings WHERE game = 'ygo' AND set_code IN (SELECT set_code FROM card_printings WHERE game = 'ygo' ORDER BY set_code LIMIT 40)"
+      )
+      .run()
     const base = openDatabase(join(dir, 'base.sqlite'))
     expect(findShrinks(work, base)).toEqual([])
     base.close()

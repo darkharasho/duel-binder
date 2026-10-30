@@ -28,7 +28,7 @@ import { CATALOG_TABLES } from '../../src/shared/catalogTables'
 import { accuracyProblem, checkAccuracy, type AccuracyReport } from './accuracy'
 import { deletesByGame, diffTable, hasGameColumn } from './diff'
 import { runPokemonStep, type PokemonReport } from './pokemon'
-import { buildFingerprints, uploadFingerprints } from './fingerprints'
+import { buildFingerprints, uploadFingerprintRefs, uploadFingerprints } from './fingerprints'
 import { uploadCatalog } from './upload'
 
 export interface JobOptions {
@@ -148,6 +148,7 @@ export async function runJob(opts: JobOptions): Promise<JobResult> {
   // The catalog is the job's main product, so a fingerprint failure never stops its upload; it
   // is reported as a problem instead.
   const fingerprint = async (upload: boolean): Promise<void> => {
+    let refs: Uint8Array
     try {
       const out = await buildFingerprints({
         work,
@@ -160,9 +161,10 @@ export async function runJob(opts: JobOptions): Promise<JobResult> {
           userAgent: `DuelBinder/${version} (https://github.com/darkharasho/duel-binder)`
         }
       })
-      const refs = out.references
+      const scans = out.references
       log(`Fingerprints: ${out.count} (${out.fetched} new, ${out.failed} failed)`)
-      log(`Printing scans: ${refs.count} (${refs.fetched} new, ${refs.failed} failed)`)
+      log(`Printing scans: ${scans.count} (${scans.fetched} new, ${scans.failed} failed)`)
+      refs = out.refs
       const report = await (opts.checkAccuracy ?? checkAccuracy)(work, out.bytes)
       log(`Accuracy: ${report.right} of ${report.shots} shots right, ${report.wrong.length} wrong`)
       const failed = accuracyProblem(report)
@@ -170,11 +172,17 @@ export async function runJob(opts: JobOptions): Promise<JobResult> {
         problem(`Fingerprints held back: ${failed}`)
         return
       }
-      if (upload) {
-        await uploadFingerprints({ url: url!, token: token!, bytes: out.bytes, fetch: opts.fetch })
-      }
+      if (!upload) return
+      await uploadFingerprints({ url: url!, token: token!, bytes: out.bytes, fetch: opts.fetch })
     } catch (e) {
       problem(`Fingerprints failed: ${e instanceof Error ? e.message : e}`)
+      return
+    }
+    // After the file they go with: a client holding the other file just finds no refs in it.
+    try {
+      await uploadFingerprintRefs({ url: url!, token: token!, bytes: refs, fetch: opts.fetch })
+    } catch (e) {
+      problem(`Fingerprint refs failed: ${e instanceof Error ? e.message : e}`)
     }
   }
   try {

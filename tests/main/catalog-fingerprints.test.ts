@@ -242,12 +242,11 @@ describe('runJob', () => {
       log: (l) => lines.push(l)
     })
     const paths = calls.map((c) => c.path)
-    expect(paths.at(-2)).toBe('/admin/catalog/finish')
-    expect(calls.at(-1)).toEqual({
-      method: 'PUT',
-      path: '/admin/scan/fingerprints',
-      type: 'application/octet-stream'
-    })
+    expect(paths.at(-3)).toBe('/admin/catalog/finish')
+    expect(calls.slice(-2)).toEqual([
+      { method: 'PUT', path: '/admin/scan/fingerprints', type: 'application/octet-stream' },
+      { method: 'PUT', path: '/admin/scan/fingerprint-refs', type: 'application/json' }
+    ])
     expect(lines).toContain('Fingerprints: 2 (2 new, 1 failed)')
   })
 })

@@ -9,6 +9,24 @@ describe('CardArt', () => {
     expect(screen.queryByTestId('printing-scan')).not.toBeInTheDocument()
   })
 
+  it('shimmers in the frame while the art downloads, then fades it in', () => {
+    render(<CardArt imageId={5} size="small" alt="Kuriboh" />)
+    const img = screen.getByAltText('Kuriboh')
+    expect(img).toHaveClass('art-loading')
+    fireEvent.load(img)
+    expect(img).not.toHaveClass('art-loading')
+    expect(img).toHaveClass('art-reveal')
+  })
+
+  it('with a printing, the frame shimmers until the default art loads', () => {
+    const { container } = render(<CardArt imageId={5} printingId={9} size="small" alt="Kuriboh" />)
+    const frame = container.firstElementChild!
+    expect(frame).toHaveClass('art-loading')
+    fireEvent.load(screen.getByAltText('Kuriboh'))
+    expect(frame).not.toHaveClass('art-loading')
+    expect(screen.getByAltText('Kuriboh')).toHaveClass('art-reveal')
+  })
+
   it('fades the printing scan in over the default art once it loads', () => {
     render(<CardArt imageId={5} printingId={9} size="small" alt="Kuriboh" />)
     const scan = screen.getByTestId('printing-scan')

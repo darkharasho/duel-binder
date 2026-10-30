@@ -254,6 +254,17 @@ export interface SyncStatus {
   blockedRetry: 'next-run' | 'next-launch' | null
 }
 
+/**
+ * The desktop's image downloads since its queue was last empty (all zeros when none are under
+ * way). Images download as pages ask for them, so a first visit to a page queues its art.
+ */
+export interface ImageDownloads {
+  /** Card art and printing scans. */
+  cards: { done: number; total: number }
+  /** Set logos, pack art and set images. */
+  sets: { done: number; total: number }
+}
+
 /** The desktop's Duel Binder account, as the renderer sees it. Never carries the token. */
 export interface AccountStatus {
   state: 'signed-out' | 'signing-in' | 'idle' | 'syncing' | 'offline' | 'error'

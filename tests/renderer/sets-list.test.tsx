@@ -295,6 +295,21 @@ describe('SetArt', () => {
     expect(getByTestId('set-art-pack')).toHaveAttribute('src', 'ygo-img://set/yc-abc')
   })
 
+  it('shimmers until its backdrop loads, keeping the art hidden until each image arrives', () => {
+    const { container, getByTestId } = renderWithProviders(
+      <SetArt imageKey="LOB" logoImageKey="yp-logo" coverImageId={7} setCode="LOB" />
+    )
+    const tile = container.firstElementChild!
+    expect(tile).toHaveClass('art-loading')
+    expect(getByTestId('set-art-backdrop')).toHaveClass('opacity-0')
+    expect(getByTestId('set-art-logo')).toHaveClass('opacity-0')
+    fireEvent.load(getByTestId('set-art-backdrop'))
+    expect(tile).not.toHaveClass('art-loading')
+    expect(getByTestId('set-art-backdrop')).toHaveClass('art-reveal')
+    fireEvent.load(getByTestId('set-art-logo'))
+    expect(getByTestId('set-art-logo')).not.toHaveClass('opacity-0')
+  })
+
   it('uses the ygo-img set URL', () => {
     renderWithProviders(<SetArt imageKey="LOB" setCode="LOB" />)
     expect(screen.getByTestId('set-art-set')).toHaveAttribute('src', 'ygo-img://set/LOB')

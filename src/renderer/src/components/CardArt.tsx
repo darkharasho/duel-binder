@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { cn } from '@/lib/utils'
 import { cardImageSrc, printingImageSrc } from '@/lib/images'
+import { useArtLoad } from './artLoad'
 
 interface CardArtProps {
   imageId: number
@@ -64,18 +65,26 @@ function PrintingScan({
 export function CardArt({ imageId, size, alt, className, printingId }: CardArtProps): React.JSX.Element {
   const [failed, setFailed] = useState(false)
   const [scanShown, setScanShown] = useState<number | null>(null)
+  // A shimmer in the frame's shape while the art downloads, then a fade into it.
+  const art = useArtLoad()
+  const src = cardImageSrc(size, imageId)
   // No scan where there are no printing scans (the phone).
   const scanSrc = printingId == null ? null : printingImageSrc(printingId)
   if (printingId == null || scanSrc === null) {
     if (failed) return <CardBack className={className} label={alt} />
     return (
       <img
-        src={cardImageSrc(size, imageId)}
+        src={src}
         alt={alt}
         loading="lazy"
         draggable={false}
         onError={() => setFailed(true)}
-        className={cn('aspect-[421/614] rounded-[6px] bg-muted object-cover shadow-sm', className)}
+        {...art.bind(src)}
+        className={cn(
+          'aspect-[421/614] rounded-[6px] bg-muted object-cover shadow-sm',
+          art.className(src),
+          className
+        )}
       />
     )
   }
@@ -84,6 +93,7 @@ export function CardArt({ imageId, size, alt, className, printingId }: CardArtPr
     <span
       className={cn(
         'relative block aspect-[421/614] overflow-hidden rounded-[6px] bg-muted shadow-sm',
+        !failed && !art.loaded(src) && !scanVisible && 'art-loading',
         className
       )}
     >
@@ -91,14 +101,16 @@ export function CardArt({ imageId, size, alt, className, printingId }: CardArtPr
         <CardBack className="absolute inset-0 size-full" label={alt} />
       ) : (
         <img
-          src={cardImageSrc(size, imageId)}
+          src={src}
           alt={alt}
           loading="lazy"
           draggable={false}
           onError={() => setFailed(true)}
+          {...art.bind(src)}
           // Hidden under a loaded scan so its corners don't show through transparent ones.
           className={cn(
             'absolute inset-0 size-full object-cover transition-opacity duration-300',
+            art.loaded(src) && !scanVisible && art.className(src),
             scanVisible && 'opacity-0'
           )}
         />

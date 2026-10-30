@@ -11,6 +11,7 @@ import { ArtWash } from './ArtWash'
 import { ArtWashContext } from './artWashContext'
 import { SidebarGameSwitch } from './GameSwitch'
 import { MainScrollContext, type MainScroll } from './mainScroll'
+import { ArtDownloads } from './ArtDownloads'
 import { SyncBanner } from './SyncBanner'
 import { TitleBar } from './TitleBar'
 
@@ -154,13 +155,14 @@ export function AppShell({
             </kbd>
           </button>
         </aside>
-        <div className="flex min-w-0 flex-1 flex-col">
+        <div className="relative flex min-w-0 flex-1 flex-col">
           <SyncBanner />
           <main ref={mainRef} data-main-scroll className="min-h-0 flex-1 overflow-auto">
             <ArtWashContext.Provider value={setWash}>
               <MainScrollContext.Provider value={scroll}>{children}</MainScrollContext.Provider>
             </ArtWashContext.Provider>
           </main>
+          <ArtDownloads />
         </div>
       </div>
     </div>

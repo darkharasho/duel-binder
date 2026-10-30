@@ -16,6 +16,7 @@ import type {
   Facets,
   FriendRequestResult,
   FriendsOverview,
+  ImageDownloads,
   SetChecklist,
   SetSummary,
   SyncStatus,
@@ -125,6 +126,8 @@ export interface Api {
   images: {
     cacheSize(): Promise<number>
     clearCache(): Promise<void>
+    /** Art downloads under way, as they change; never fires on the web or the phone. */
+    onDownloads(cb: (d: ImageDownloads) => void): () => void
   }
   window: {
     /** `process.platform`, for drawing the title bar the way the OS does. */
@@ -254,6 +257,7 @@ export type InvokeChannel = (typeof INVOKE_CHANNELS)[number]
 /** Event channels pushed from main to renderer. */
 export const SYNC_PROGRESS = 'sync:progress'
 export const UPDATE_STATUS = 'update:status'
+export const IMAGE_DOWNLOADS = 'images:downloads' // payload: ImageDownloads
 export const DATA_CHANGED = 'data:changed' // payload: void
 export const WINDOW_MAXIMIZED = 'window:maximized' // payload: boolean
 export const ACCOUNT_CHANGED = 'account:changed' // payload: AccountStatus

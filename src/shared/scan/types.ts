@@ -39,6 +39,8 @@ export interface ScanPrinting {
 export type FingerprintStatus = {
   state: 'ready' | 'missing' | 'downloading' | 'error'
   count: number
+  /** How much of a download has arrived, 0 to 1, when its size is known. */
+  progress?: number
   /** Set by a refresh that wrote a new file to disk. */
   updated?: true
 }

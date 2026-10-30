@@ -5,6 +5,7 @@ import { LOOK_MODEL } from '@shared/scan/lookModel'
 import { scanProfile } from '@shared/scan/profiles'
 import { defaultEngine, type EngineFactory } from '@/features/scan/engine'
 import { useScanHub } from '@/features/scan/ScanHub'
+import { ArtDataNotice } from '@/features/scan/ArtDataNotice'
 import { ScanViewport } from '@/features/scan/ScanViewport'
 import { useCamera, type CameraError } from '@/features/scan/useCamera'
 import { useHubScan } from '@/features/scan/useHubScan'
@@ -119,6 +120,11 @@ export function PhoneCamera({
           className="aspect-[3/4] w-[min(100cqw,75cqh)] rounded-3xl shadow-[0_10px_40px_rgba(0,0,0,0.4)]"
         >
           {children}
+          {loop.artReady === false && (
+            <div className="absolute inset-x-2 bottom-2 rounded-2xl bg-black/55 p-2 backdrop-blur-md">
+              <ArtDataNotice status={loop.artData} />
+            </div>
+          )}
           {torch.available && (
             <button
               type="button"

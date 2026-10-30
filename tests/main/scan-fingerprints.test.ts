@@ -50,6 +50,25 @@ describe('fingerprint store', () => {
       })
   )
 
+  it('reports how far along a download is', async () => {
+    const bytes = body(3)
+    const shares: (number | undefined)[] = []
+    let store: ReturnType<typeof make>
+    const stream = new ReadableStream<Uint8Array>({
+      pull(c) {
+        shares.push(store.status().progress)
+        const sent = shares.length - 1
+        if (sent >= bytes.length) return c.close()
+        c.enqueue(bytes.subarray(sent, sent + 1))
+      }
+    })
+    const headers = { ETag: '"v1"', 'Content-Length': String(bytes.length) }
+    store = make(vi.fn(async () => new Response(stream, { status: 200, headers })))
+    expect(await store.refresh()).toMatchObject({ state: 'ready', updated: true })
+    expect(shares.some((s) => s !== undefined && s > 0 && s < 1)).toBe(true)
+    expect(store.status().progress).toBeUndefined()
+  })
+
   it('is missing before anything is downloaded', async () => {
     const store = make(vi.fn())
     expect(store.status()).toEqual({ state: 'missing', count: 0 })

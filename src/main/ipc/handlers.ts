@@ -91,7 +91,9 @@ export function createHandlers({
       const file = await fingerprints.ygo.readRefs()
       return file ? scanRefs(db, file) : []
     },
-    'scan:refreshFingerprints': (game: GameId, opts?: { force?: boolean }) => fingerprints[game].refresh(opts),
+    'scan:fingerprintStatus': async (game: GameId) => fingerprints[game].status(),
+    'scan:refreshFingerprints': (game: GameId, opts?: { force?: boolean }) =>
+      fingerprints[game].refresh(opts),
     'scan:ocr': async (bands: unknown, kind: unknown) => {
       if (!isOcrKind(kind)) throw new Error(`Unknown OCR kind: ${String(kind)}`)
       checkOcrBands(bands)

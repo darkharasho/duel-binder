@@ -7,7 +7,7 @@ import { pokemonLanguageOfBands, type PokemonTextLanguage } from '@shared/scan/p
 import type { TextModel } from '@shared/scan/ocr'
 import { scanProfile } from '@shared/scan/profiles'
 import { ABSENT_MS, LANGUAGE_MAX_READS, RARITY_MAX_READINGS } from '@shared/scan/thresholds'
-import type { OcrBand, ScanPrinting } from '@shared/scan/types'
+import type { FingerprintStatus, OcrBand, ScanPrinting } from '@shared/scan/types'
 import type { ScanStatus } from '@shared/scanWindow'
 import { api } from '@/lib/api'
 import { centreCrop } from './crop'
@@ -34,6 +34,10 @@ const FIRST_BACKOFF_MS = 500
  * as unknown.
  */
 const FINGERPRINTS_TIMEOUT_MS = 20_000
+/** How often a running fingerprint download is asked how far along it is. */
+const ART_PROGRESS_MS = 400
+/** How often a game with no fingerprint file looks for one while scanning. */
+const ART_RECHECK_MS = 60_000
 const LOOKUP_TIMEOUT_MS = 30_000
 const LANGUAGE_TIMEOUT_MS = 20_000
 /**
@@ -89,6 +93,8 @@ export interface ScanLoop {
   outline: { quad: Quad; width: number; height: number } | null
   /** null until the engine has been given the fingerprint file (or found there is none). */
   artReady: boolean | null
+  /** Where the fingerprint file stands, once checked. */
+  artData: FingerprintStatus | null
 }
 
 const sameStatus = (a: ScanStatus, b: ScanStatus): boolean =>
@@ -118,6 +124,7 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
   const [status, setStatusState] = useState<ScanStatus>({ kind: 'idle' })
   const [outline, setOutline] = useState<ScanLoop['outline']>(null)
   const [artReady, setArtReady] = useState<boolean | null>(null)
+  const [artData, setArtData] = useState<FingerprintStatus | null>(null)
 
   // The picked set's artworks, worked out once per set rather than per frame.
   const candidates = useMemo(
@@ -200,6 +207,8 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
       await engine.init(fp, refs)
     }
     reinit.current = init
+    let progressTimer: ReturnType<typeof setInterval> | undefined
+    let recheckTimer: ReturnType<typeof setTimeout> | undefined
     void (async () => {
       // Scanning starts at once with whatever file is on disk: set codes and names need no
       // network, and a slow download mustn't hold them up.
@@ -210,12 +219,32 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
       }
       if (!live) return
       readyRef.current = true
-      // A newer file, once downloaded, goes to the engine between frames.
-      const refreshed = await api.scan.refreshFingerprints(game).catch(() => null)
-      if (live && refreshed?.updated) loop.current.needsInit = true
+      // A newer file, once downloaded, goes to the engine between frames. With none yet, keep
+      // looking: the first one can be published while the scanner is open.
+      const refresh = async (): Promise<void> => {
+        progressTimer = setInterval(() => {
+          api.scan.fingerprintStatus(game).then(
+            (s) => {
+              if (live) setArtData(s)
+            },
+            () => {
+              // Unreadable: the notice stays as it was.
+            }
+          )
+        }, ART_PROGRESS_MS)
+        const refreshed = await api.scan.refreshFingerprints(game).catch(() => null)
+        clearInterval(progressTimer)
+        if (!live) return
+        setArtData(refreshed)
+        if (refreshed?.updated) loop.current.needsInit = true
+        if (refreshed?.state !== 'ready') recheckTimer = setTimeout(refresh, ART_RECHECK_MS)
+      }
+      await refresh()
     })()
     return () => {
       live = false
+      clearInterval(progressTimer)
+      clearTimeout(recheckTimer)
       readyRef.current = false
       reinit.current = null
       engineRef.current = null
@@ -493,5 +522,5 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
     }
   }, [opts.running])
 
-  return { status, retry, outline, artReady }
+  return { status, retry, outline, artReady, artData }
 }

@@ -30,6 +30,7 @@ import type { PortalChannel } from '../../shared/portal'
 import { decodeFingerprints } from '../../shared/scan/fingerprintFile'
 import { parseFingerprintRefs, type ScanRef } from '../../shared/scan/fingerprintRefs'
 import { scanRefs } from '../../main/repo/scanRefs'
+import { readBody } from '../../shared/scan/readBody'
 import type { FingerprintStatus } from '../../shared/scan/types'
 import type { CollectionStats, UnsyncedEntry } from '../../shared/types'
 import { PHONE_FORMAT } from './phoneSchema'
@@ -84,6 +85,7 @@ export interface PhoneStore {
   fingerprints(game: GameId): Promise<ArrayBuffer | null>
   /** Yu-Gi-Oh's file's reference scans with this phone's printing ids; empty without them. */
   fingerprintRefs(): Promise<ScanRef[]>
+  fingerprintStatus(game: GameId): Promise<FingerprintStatus>
   refreshFingerprints(opts: { game: GameId; force?: boolean }): Promise<FingerprintStatus>
 }
 
@@ -430,6 +432,9 @@ export function createPhoneStore(deps: {
     return added > 0
   }
 
+  /** The fingerprint downloads under way, and their share arrived once it is known. */
+  const downloads = new Map<GameId, number | undefined>()
+
   function fingerprintStatus(game: GameId, failed = false): FingerprintStatus {
     const row = db
       .prepare('SELECT bytes FROM phone_files WHERE name = ?')
@@ -466,7 +471,13 @@ export function createPhoneStore(deps: {
       return false
     }
     if (!res.ok) throw new Error(`Fingerprint download failed (${res.status})`)
-    const bytes = new Uint8Array(await res.arrayBuffer())
+    downloads.set(game, undefined)
+    let bytes: Uint8Array
+    try {
+      bytes = await readBody(res, (share) => downloads.set(game, share))
+    } finally {
+      downloads.delete(game)
+    }
     decodeFingerprints(bytes)
     db.prepare(
       `INSERT INTO phone_files (name, etag, checked_at, bytes) VALUES (?, ?, ?, ?)
@@ -711,6 +722,13 @@ export function createPhoneStore(deps: {
           return []
         }
       }),
+
+    fingerprintStatus: (game) =>
+      read(() =>
+        downloads.has(game)
+          ? { state: 'downloading', count: 0, progress: downloads.get(game) }
+          : fingerprintStatus(game)
+      ),
 
     refreshFingerprints: ({ game, force = false }) =>
       serial(async () => {

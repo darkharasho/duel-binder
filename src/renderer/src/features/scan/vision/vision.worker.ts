@@ -6,6 +6,7 @@ import type { RgbaImage } from '@shared/scan/types'
 import type { WorkerReply, WorkerRequest } from '../engine'
 import { analyze } from './analyze'
 import { loadCv } from './cv'
+import { holderBudget } from './holderBudget'
 
 interface WorkerScope {
   onmessage: ((e: MessageEvent<WorkerRequest>) => void) | null
@@ -18,6 +19,8 @@ let index: FingerprintIndex | null = null
 let profile: ScanProfile = SCAN_PROFILES.ygo
 // Messages are handled one at a time, in order, even while OpenCV is still loading.
 let queue = Promise.resolve()
+// Frames in a row that matched nothing, for pacing the holder search.
+const budget = holderBudget()
 
 const messageOf = (e: unknown): string => (e instanceof Error ? e.message : String(e))
 
@@ -59,8 +62,10 @@ async function handle(msg: WorkerRequest): Promise<void> {
       msg.candidates,
       msg.wantBands,
       msg.wantLook,
-      profile
+      profile,
+      budget.allow()
     )
+    budget.record(signals.art[0]?.distance ?? null)
     const bands = [...signals.codeBands, ...signals.nameBands, ...signals.textBands]
     scope.postMessage(
       { type: 'result', id: msg.id, signals },

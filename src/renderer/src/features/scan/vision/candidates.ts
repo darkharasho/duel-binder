@@ -703,7 +703,8 @@ const REGION_LINES = 40
  * then the outline finder's likeliest (preferOuter), as it was filmed, and upsideDown is null. Null
  * when the frame holds no card-shaped outline. The art is looked for in profile's art boxes.
  * With profile's holderSearch, a frame none of whose quads matched is looked at again
- * (lookAgain), and via is 'holder' when that is what matched.
+ * (lookAgain) unless holderPass is false (the live scanner skips it on some frames), and via is
+ * 'holder' when that is what matched.
  */
 export function recognizeArt(
   cv: CV,
@@ -711,7 +712,8 @@ export function recognizeArt(
   index: FingerprintIndex,
   candidates?: ReadonlySet<number>,
   k?: number,
-  profile: ScanProfile = SCAN_PROFILES.ygo
+  profile: ScanProfile = SCAN_PROFILES.ygo,
+  holderPass = true
 ): {
   quad: Quad
   card: RgbaImage
@@ -765,7 +767,7 @@ export function recognizeArt(
     }
     // Nothing matched: look again (lookAgain), and take what it finds only when it matches.
     let via: 'holder' | undefined
-    if (profile.holderSearch && (!final || topDistance(final) > ART_MAX_DISTANCE)) {
+    if (profile.holderSearch && holderPass && (!final || topDistance(final) > ART_MAX_DISTANCE)) {
       const tried = [best?.quad, runnerUp].filter((q): q is Quad => !!q)
       const again = lookAgain(cv, frame, { quads, windows }, tried, closest, ranked, profile)
       if (again && topDistance(again) <= ART_MAX_DISTANCE) {

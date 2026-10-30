@@ -286,6 +286,41 @@ describe('fingerprint store', () => {
       writeFileSync(join(dir, 'fingerprint-refs.json'), '{')
       expect(await store.readRefs()).toBeNull()
     })
+
+    it('is asked for within the day by an install from before the refs, then daily', async () => {
+      // A file checked an hour ago by an app that knew nothing of refs.
+      writeFileSync(join(dir, 'fingerprints.bin'), body(2))
+      writeFileSync(
+        join(dir, 'fingerprints.json'),
+        JSON.stringify({
+          etag: '"v1"',
+          count: 2,
+          checkedAt: new Date(clock - 3600_000).toISOString()
+        })
+      )
+      const fp = vi.fn<typeof globalThis.fetch>(async () => ok(body(2)))
+      const refsFetch = vi.fn<typeof globalThis.fetch>(
+        async () => new Response('{}', { status: 404 })
+      )
+      const store = make(fp, undefined, refsFetch)
+      expect(await store.refresh()).toEqual({ state: 'ready', count: 2 })
+      expect(fp).not.toHaveBeenCalled()
+      expect(refsFetch).toHaveBeenCalledTimes(1)
+      // The portal has none yet: asked again at the daily check, not on every refresh.
+      await store.refresh()
+      expect(refsFetch).toHaveBeenCalledTimes(1)
+
+      // Another old install, once the portal has them.
+      refsFetch.mockResolvedValue(okRefs())
+      writeFileSync(
+        join(dir, 'fingerprints.json'),
+        JSON.stringify({ etag: '"v1"', count: 2, checkedAt: new Date(clock).toISOString() })
+      )
+      const again = make(fp, undefined, refsFetch)
+      expect(await again.refresh()).toEqual({ state: 'ready', count: 2, updated: true })
+      expect(fp).not.toHaveBeenCalled()
+      expect(await again.readRefs()).not.toBeNull()
+    })
   })
 
   it('downloads again on the next refresh when the file on disk goes bad', async () => {

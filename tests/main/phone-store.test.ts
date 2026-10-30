@@ -670,6 +670,30 @@ describe('phone store', () => {
     )
   })
 
+  it('a phone from before the refs asks for them within the day, then daily', async () => {
+    await ready()
+    const hash = new Uint32Array(HASH_WORDS).fill(7)
+    await portal.images.put(
+      'scan/fingerprints.bin',
+      encodeFingerprints([{ imageId: 1, hash }]).slice().buffer,
+      { httpMetadata: { contentType: 'application/octet-stream' } }
+    )
+    await store.refreshFingerprints({ force: true })
+    // As an older app left it: the fingerprints checked just now, nothing for the refs.
+    db.prepare("DELETE FROM phone_files WHERE name = 'fingerprint-refs'").run()
+    const asked = (): number =>
+      requests.filter((r) => r.url.endsWith('/scan/fingerprint-refs')).length
+    const fpAsked = (): number =>
+      requests.filter((r) => r.url.endsWith('/scan/fingerprints')).length
+    const [refs0, fp0] = [asked(), fpAsked()]
+    expect(await store.refreshFingerprints()).toEqual({ state: 'ready', count: 1 })
+    expect([asked(), fpAsked()]).toEqual([refs0 + 1, fp0])
+    // The portal had none: not asked again until the daily check.
+    await store.refreshFingerprints()
+    expect(asked()).toBe(refs0 + 1)
+    expect(await store.fingerprintRefs()).toEqual([])
+  })
+
   it('an older format resets the catalog but keeps collection entries', async () => {
     await ready()
     const pick = dmPick()

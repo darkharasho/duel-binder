@@ -481,17 +481,23 @@ export function createPhoneStore(deps: {
       headers: known?.etag ? { 'If-None-Match': known.etag } : {},
       signal: AbortSignal.timeout(30_000)
     })
+    const store = (etag: string | null, bytes: Uint8Array): void => {
+      db.prepare(
+        `INSERT INTO phone_files (name, etag, checked_at, bytes) VALUES (?, ?, ?, ?)
+         ON CONFLICT(name) DO UPDATE SET etag = excluded.etag, checked_at = excluded.checked_at,
+           bytes = excluded.bytes`
+      ).run(FINGERPRINT_REFS, etag, now().toISOString(), bytes)
+    }
     if (!res.ok) {
       await res.body?.cancel()
+      // None on the portal yet: an empty row says it was asked, so the daily check asks again
+      // rather than every refresh (see refreshFingerprints).
+      if (res.status === 404 && !known) store(null, new Uint8Array())
       return false
     }
     const bytes = new Uint8Array(await res.arrayBuffer())
     parseFingerprintRefs(new TextDecoder().decode(bytes))
-    db.prepare(
-      `INSERT INTO phone_files (name, etag, checked_at, bytes) VALUES (?, ?, ?, ?)
-       ON CONFLICT(name) DO UPDATE SET etag = excluded.etag, checked_at = excluded.checked_at,
-         bytes = excluded.bytes`
-    ).run(FINGERPRINT_REFS, res.headers.get('ETag'), now().toISOString(), bytes)
+    store(res.headers.get('ETag'), bytes)
     return true
   }
 
@@ -704,8 +710,19 @@ export function createPhoneStore(deps: {
           .prepare('SELECT checked_at FROM phone_files WHERE name = ?')
           .get(FINGERPRINTS) as { checked_at: string } | undefined
         const ready = fingerprintStatus().state === 'ready'
-        if (!force && ready && checked && now().getTime() - Date.parse(checked.checked_at) < DAY_MS)
-          return fingerprintStatus()
+        if (
+          !force &&
+          ready &&
+          checked &&
+          now().getTime() - Date.parse(checked.checked_at) < DAY_MS
+        ) {
+          // A phone from before the refs (no row for them) gets them now, not at the next check.
+          const asked = db.prepare('SELECT 1 FROM phone_files WHERE name = ?').get(FINGERPRINT_REFS)
+          if (asked) return fingerprintStatus()
+          return (await downloadFingerprintRefs().catch(() => false))
+            ? { ...fingerprintStatus(), updated: true as const }
+            : fingerprintStatus()
+        }
         try {
           const wrote = await downloadFingerprints()
           // Extras: trouble with them leaves the fingerprints' state as it is.

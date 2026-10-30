@@ -13,7 +13,10 @@ interface Meta {
   etag: string | null
   count: number
   checkedAt: string
-  /** The refs file's ETag; absent until one is downloaded. */
+  /**
+   * The refs file's ETag: null once asked for and the portal had none (or gave none), absent
+   * until asked for (an install from before the refs), which asks within the day.
+   */
   refsEtag?: string | null
 }
 
@@ -54,7 +57,7 @@ export function createFingerprintStore(opts: {
         etag: meta.etag ?? null,
         count,
         checkedAt: meta.checkedAt,
-        refsEtag: meta.refsEtag ?? null
+        refsEtag: meta.refsEtag
       }
     } catch {
       return null
@@ -96,6 +99,9 @@ export function createFingerprintStore(opts: {
     })
     if (!res.ok) {
       await res.body?.cancel()
+      // None on the portal yet: asked, so the daily check asks again rather than every refresh.
+      if (res.status === 404 && meta && meta.refsEtag === undefined)
+        saveMeta({ ...meta, refsEtag: null })
       return false
     }
     const text = await res.text()
@@ -161,12 +167,12 @@ export function createFingerprintStore(opts: {
     },
     refresh({ force = false } = {}) {
       if (inFlight) return inFlight
-      if (!force && meta && now().getTime() - Date.parse(meta.checkedAt) < DAY_MS) {
-        return Promise.resolve(status())
-      }
+      const fresh = !force && meta && now().getTime() - Date.parse(meta.checkedAt) < DAY_MS
+      // An install from before the refs gets them now, not at its next daily check.
+      if (fresh && meta!.refsEtag !== undefined) return Promise.resolve(status())
       downloading = true
       failed = false
-      inFlight = download()
+      inFlight = (fresh ? downloadRefs().catch(() => false) : download())
         .catch(() => {
           failed = true
           return false

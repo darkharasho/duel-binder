@@ -9,7 +9,7 @@ import {
   isFallbackLogoUrl,
   type ImageSize
 } from '../../../src/shared/imageSources'
-import { PKM_ID_MIN } from '../../../src/shared/games/ids'
+import { isTokenId, PKM_ID_MIN } from '../../../src/shared/games/ids'
 import { findPokemonSetArtUrl, findSetImageUrl } from '../../../src/main/repo/sets'
 import { TCGPLAYER_IMAGE_PREFIX } from '../../../src/main/tcgplayer/catalog'
 import type { AppDeps } from './app'
@@ -136,7 +136,11 @@ export function createAnonImageQuota(
   }
 }
 
-/** R2 keys whose upstream fetch recently failed, so signed-out requests don't refetch them every time. */
+/**
+ * R2 keys whose upstream fetch recently failed, so signed-out requests don't refetch them every
+ * time; and, under oversizedKey, those upstream had only as an image too big to keep, which no
+ * request of anyone's refetches.
+ */
 export interface MissCache {
   has(key: string): boolean
   add(key: string): void
@@ -169,6 +173,9 @@ export function createMissCache(
     }
   }
 }
+
+/** The miss cache's entry for an R2 key whose upstream image is over MAX_IMAGE_BYTES. */
+const oversizedKey = (key: string): string => `oversized:${key}`
 
 /**
  * The quota key for a signed-out request: the address Cloudflare reports, IPv4-mapped IPv6
@@ -276,6 +283,23 @@ function resolve(deps: AppDeps, path: string): Target | null {
       return { key: `card/${kind}/${n}`, source: fixed(url), cache: CARD_CACHE, anonymous: true }
     }
     if (!deps.db.prepare('SELECT 1 FROM card_images WHERE image_id = ?').get(n)) return null
+    if (isTokenId(n)) {
+      // The id names its Yugipedia file. There is one size of it, the original (Yugipedia makes no
+      // crops, nor thumbnails for others), so every size is one stored image and one fetch.
+      return {
+        key: `card/full/${n}`,
+        cache: CARD_CACHE,
+        anonymous: true,
+        meterFirst: true,
+        source: async () => {
+          const art = deps.tokenArt?.(n).catch(() => null)
+          const url = art ? await withTimeout(art, IMAGE_TIMEOUT_MS) : null
+          return url?.startsWith(YUGIPEDIA_IMAGE_PREFIX)
+            ? { url, headers: { 'User-Agent': USER_AGENT } }
+            : null
+        }
+      }
+    }
     return {
       key: `card/${kind satisfies ImageSize}/${n}`,
       source: fixed(imageUrl(kind, n)),
@@ -385,6 +409,9 @@ async function serve(req: Request, deps: AppDeps, path: string): Promise<Respons
   const stored = await deps.images.get(target.key).catch(() => null) // a failing bucket is a miss
   if (stored) return reply(stored.body, stored.httpMetadata?.contentType ?? 'image/jpeg')
 
+  // An image too big to keep stays so however many ask: no quota, Yugipedia call or fetch for it.
+  if (deps.anonMisses?.has(oversizedKey(target.key))) return notFound()
+
   // Signed-in users may make the portal fetch from upstream; signed-out requests (the iOS app's
   // plain <img> tags) only for known card images, metered per client address. Stored artwork stays public.
   const user = await currentUser(req, deps)
@@ -417,7 +444,8 @@ async function serve(req: Request, deps: AppDeps, path: string): Promise<Respons
   if (late) return late
 
   const got = await fetchAndStore(deps, target, source)
-  if (!got) {
+  if (got === 'oversized') deps.anonMisses?.add(oversizedKey(target.key))
+  if (!got || got === 'oversized') {
     // A failed fetch of signed-out-servable art is remembered, so signed-out callers stop refetching it.
     if (target.anonymous) deps.anonMisses?.add(target.key)
     return notFound()
@@ -425,12 +453,15 @@ async function serve(req: Request, deps: AppDeps, path: string): Promise<Respons
   return reply(got.bytes, got.contentType)
 }
 
-/** Fetches a target's artwork from upstream and stores it in R2; null when upstream has no usable image. */
+/**
+ * Fetches a target's artwork from upstream and stores it in R2; null when upstream has no usable
+ * image, 'oversized' when what it has is over MAX_IMAGE_BYTES.
+ */
 async function fetchAndStore(
   deps: AppDeps,
   target: Target,
   source: { url: string; headers?: Record<string, string> }
-): Promise<{ bytes: ArrayBuffer; contentType: string } | null> {
+): Promise<{ bytes: ArrayBuffer; contentType: string } | 'oversized' | null> {
   let bytes: ArrayBuffer
   let contentType: string
   try {
@@ -441,12 +472,13 @@ async function fetchAndStore(
     })
     contentType = mediaType(res.headers.get('content-type') ?? '')
     if (!res.ok || !IMAGE_TYPES.has(contentType)) return null
-    if (Number(res.headers.get('content-length') ?? 0) > MAX_IMAGE_BYTES) return null
+    if (Number(res.headers.get('content-length') ?? 0) > MAX_IMAGE_BYTES) return 'oversized'
     bytes = await res.arrayBuffer()
   } catch {
     return null
   }
-  if (bytes.byteLength === 0 || bytes.byteLength > MAX_IMAGE_BYTES) return null
+  if (bytes.byteLength > MAX_IMAGE_BYTES) return 'oversized'
+  if (bytes.byteLength === 0) return null
   await deps.images.put(target.key, bytes, { httpMetadata: { contentType } }).catch(() => undefined) // still serve what was fetched
   return { bytes, contentType }
 }
@@ -473,5 +505,6 @@ export async function warmImage(deps: AppDeps, path: string): Promise<WarmResult
   }
   const source = await target.source()
   if (!source) return 'missing'
-  return (await fetchAndStore(deps, target, source)) ? 'stored' : 'failed'
+  const got = await fetchAndStore(deps, target, source)
+  return got && got !== 'oversized' ? 'stored' : 'failed'
 }

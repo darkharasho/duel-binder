@@ -141,7 +141,15 @@ describe('set codes', () => {
     ['BROL-EN062', 'BROL-EN062'],
     ['LOBDE005', 'LOB-DE005'],
     ['DUPOENA01', 'DUPO-ENA01'],
-    ['ATK2500DEF2000', null]
+    ['ATK2500DEF2000', null],
+    ['SR06-ENTKN', 'SR06-ENTKN'],
+    ['SR06ENTKN', 'SR06-ENTKN'],
+    ['ANPR-ENTK1', 'ANPR-ENTK1'],
+    ['20TH-JPBT1', '20TH-JPBT1'],
+    ['2019-KRTKN2', '2019-KRTKN2'],
+    ['TKN5-EN055', 'TKN5-EN055'],
+    ['LDK2-ENT03', 'LDK2-ENT03'],
+    ['SOVR-ENTKI', 'SOVR-ENTK1']
   ])('parseSetCode(%s) = %s', (text, want) => expect(parseSetCode(text)).toBe(want))
 
   it('lists candidates with prefix zeros read as O as an alternate', () => {

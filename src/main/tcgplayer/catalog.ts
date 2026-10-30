@@ -1,4 +1,5 @@
 import type Database from 'better-sqlite3'
+import { TOKEN_ID_MIN } from '../../shared/games/ids'
 import type { SqlDb } from '../db/sql'
 import { getMeta, setMeta } from '../db/meta'
 import { createLimiter } from '../images/limiter'
@@ -305,7 +306,8 @@ export function saveTcgVariants(db: Database.Database): { saved: number; added: 
     const plain = db
       .prepare(
         `SELECT id, set_code, set_rarity, variant FROM card_printings
-       WHERE game = 'ygo' AND language = 'en' AND tcg_product_id IS NULL AND set_code <> ''`
+       WHERE game = 'ygo' AND language = 'en' AND tcg_product_id IS NULL AND set_code <> ''
+         AND card_id < ${TOKEN_ID_MIN}` // the token sync names these from their scans
       )
       .all() as { id: number; set_code: string; set_rarity: string; variant: string | null }[]
     for (const p of plain) {

@@ -9,6 +9,7 @@ import { buildReferences, scanHash, wantsReference } from '../../scripts/catalog
 import { openDatabase } from '../../src/main/db/database'
 import { NEW_ART_VARIANT } from '../../src/main/yugipedia/parse'
 import { ART_BOXES, crop } from '../../src/renderer/src/features/scan/vision/regions'
+import { tokenId } from '../../src/shared/games/ids'
 import { artHash } from '../../src/shared/scan/fingerprint'
 import { decodeFingerprints } from '../../src/shared/scan/fingerprintFile'
 import { hashHex, parseFingerprintRefs } from '../../src/shared/scan/fingerprintRefs'
@@ -147,6 +148,91 @@ function scans(bodies: Record<string, Uint8Array>, requested: string[] = []): ty
     return body ? new Response(body as BodyInit) : new Response('', { status: 404 })
   }) as typeof fetch
 }
+
+describe('token cards', () => {
+  const TOKEN = tokenId(1200)
+  const IMAGE = tokenId(7000)
+  const FILE = 'Token-TKN5-EN-SR-1E-Nash.png'
+
+  beforeEach(() => {
+    work.prepare(
+      `INSERT INTO cards (id, name, type, frame_type, race, "desc", updated_at)
+       VALUES (?, 'Token (Nash)', 'Token', 'token', 'Token', '', 'now')`
+    ).run(TOKEN)
+    work.prepare('INSERT INTO card_images (image_id, card_id, sort_order) VALUES (?, ?, 0)').run(IMAGE, TOKEN)
+    work.prepare(
+      `INSERT INTO card_printings (card_id, set_name, set_code, set_rarity, language)
+       VALUES (?, 'Beyond the Brave', 'TKN5-EN055', 'Super Rare', 'en')`
+    ).run(TOKEN)
+  })
+
+  const art = {
+    imageUrlsByPageId: vi.fn(async (ids: number[]) =>
+      new Map(ids.map((id) => [id, `https://ms.yugipedia.com/a/${FILE}`]))
+    )
+  }
+
+  it('hashes a token from its Yugipedia scan, cut as a photo is, in a format 1 file', async () => {
+    const requested: string[] = []
+    const out = await buildFingerprints({
+      work,
+      cachePath: join(dir, 'tokens.sqlite'),
+      fetch: scans({ [FILE]: png(SCAN) }, requested),
+      tokenArt: art
+    })
+    expect(requested).toContain(FILE)
+    expect(new Uint8Array(out.bytes)[4]).toBe(1)
+    expect(decodeFingerprints(out.bytes).nearest(SCAN_HASH, 1)).toMatchObject([
+      { imageId: IMAGE, distance: 0 }
+    ])
+  })
+
+  it('leaves a token as like a card as its art out, fresh or from the cache', async () => {
+    // Image 11's cached art is what this token's scan shows.
+    const cachePath = join(dir, 'fingerprints.sqlite')
+    const run = (fetch: typeof globalThis.fetch): ReturnType<typeof buildFingerprints> =>
+      buildFingerprints({ work, cachePath, fetch, tokenArt: art })
+    const requested: string[] = []
+    const fresh = await run(scans({ [FILE]: png(SCAN) }, requested))
+    expect(requested).toContain(FILE)
+    expect(fresh.fetched).toBe(1)
+    const again = await run(scans({}))
+    expect(again.fetched).toBe(0)
+    expect(again.bytes).toEqual(fresh.bytes)
+    expect(decodeFingerprints(again.bytes).nearest(SCAN_HASH, 2)).toMatchObject([
+      { imageId: 11, distance: 0 },
+      { imageId: 10 }
+    ])
+  })
+
+  it('never asks YGOPRODeck for a token, and counts a lookup that fails', async () => {
+    const requested: string[] = []
+    const out = await buildFingerprints({
+      work,
+      cachePath: join(dir, 'tokens.sqlite'),
+      fetch: scans({}, requested),
+      tokenArt: {
+        imageUrlsByPageId: async () => {
+          throw new Error('down')
+        }
+      }
+    })
+    expect(requested).not.toContain(`${IMAGE}.jpg`)
+    expect(out.failed).toBeGreaterThan(0)
+  })
+
+  it('wants the scan of every token printing, foil or not', async () => {
+    cache.exec('CREATE TABLE IF NOT EXISTS fp (image_id INTEGER PRIMARY KEY, hash BLOB NOT NULL)')
+    const out = await buildReferences({
+      work,
+      cache,
+      yugipedia: fakeYugipedia([FILE]),
+      fetch: scans({ [FILE]: png(SCAN) }),
+      userAgent: 'test'
+    })
+    expect(out.entries).toContainEqual({ imageId: IMAGE, hash: SCAN_HASH, printings: [] })
+  })
+})
 
 describe('buildReferences', () => {
   it("hashes each wanted printing's scan once, under its card's closest artwork", async () => {

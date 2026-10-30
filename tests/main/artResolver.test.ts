@@ -12,6 +12,9 @@ function fakeClient(files: Record<string, string[]>): YugipediaClient & {
   fetchImageUrls: ReturnType<typeof vi.fn>
 } {
   return {
+    listCategoryPages: async () => [],
+    filePageIds: async () => new Map(),
+    imageUrlsByPageId: async () => new Map(),
     listSetListTitles: async () => [],
     fetchPages: async () => new Map(),
     listPageImages: vi.fn(async (titles: string[]) => {

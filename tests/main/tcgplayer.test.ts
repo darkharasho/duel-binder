@@ -179,6 +179,9 @@ describe('TCGplayer catalog', () => {
     const db = await seededDb()
     const listPageImages = vi.fn(async () => new Map<string, string[]>())
     const client: YugipediaClient = {
+      listCategoryPages: async () => [],
+      filePageIds: async () => new Map(),
+      imageUrlsByPageId: async () => new Map(),
       listSetListTitles: async () => [],
       fetchPages: async () => new Map(),
       listPageImages,

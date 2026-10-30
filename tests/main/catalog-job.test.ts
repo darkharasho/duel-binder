@@ -66,6 +66,12 @@ function fakeYugipedia(): { client: YugipediaClient; calls: string[] } {
   return {
     calls,
     client: {
+      listCategoryPages: async () => {
+        calls.push('listCategoryPages')
+        return [{ pageId: 1, title: 'Unprinted Token' }]
+      },
+      filePageIds: async () => new Map(),
+      imageUrlsByPageId: async () => new Map(),
       listSetListTitles: async () => {
         calls.push('listSetListTitles')
         return [LB]
@@ -213,6 +219,7 @@ describe('refreshCatalog', () => {
       db.prepare("SELECT set_name FROM sets WHERE language = 'en' ORDER BY set_name").pluck().all()
     ).toEqual(SETS.map((s) => s.set_name))
     expect(count(db, "card_printings WHERE language = 'ja'")).toBe(1)
+    expect(wiki.calls).toContain('listCategoryPages')
     expect(count(db, 'tcgplayer_groups')).toBe(1)
     for (const key of [
       'last_sync_at',

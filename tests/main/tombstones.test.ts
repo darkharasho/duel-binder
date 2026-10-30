@@ -3,6 +3,7 @@ import { join, relative } from 'node:path'
 import type Database from 'better-sqlite3'
 import { vi } from 'vitest'
 import { deleteMeta, setMeta } from '../../src/main/db/meta'
+import { gameOfId, tokenId } from '../../src/shared/games/ids'
 import { browseCards } from '../../src/main/repo/browse'
 import {
   addEntry,
@@ -65,6 +66,28 @@ test('removing an entry keeps a dirty tombstone', () => {
     updated_at: later.toISOString(),
     dirty: 1
   })
+})
+
+test('an entry on a token card with no passcode keeps its ids through removal', () => {
+  const card = tokenId(4242)
+  const image = tokenId(99)
+  db.prepare(
+    `INSERT INTO cards (id, name, type, frame_type, race, "desc", updated_at)
+     VALUES (?, 'Token (Nash)', 'Token', 'token', 'Token', '', '2026-10-25')`
+  ).run(card)
+  db.prepare('INSERT INTO card_images (image_id, card_id, sort_order) VALUES (?, ?, 0)').run(image, card)
+  const printing = db
+    .prepare(
+      `INSERT INTO card_printings (card_id, set_name, set_code, set_rarity, language)
+       VALUES (?, 'Beyond the Brave', 'TKN5-EN055', 'Super Rare', 'en') RETURNING id`
+    )
+    .pluck()
+    .get(card) as number
+  const { id } = addEntry(db, { printingId: printing, imageId: image, quantity: 1 }, now)
+  db.prepare('UPDATE collection_entries SET dirty = 0').run()
+  removeEntry(db, id, later)
+  expect(raw(id)).toMatchObject({ deleted_at: later.toISOString(), dirty: 1 })
+  expect(gameOfId(card)).toBe('ygo')
 })
 
 test('removing a never-signed-in (owner 0) entry deletes the row', () => {
@@ -201,6 +224,7 @@ const ENTRY_REFS: Record<string, [count: number, kind: string]> = {
   'src/main/index.ts': [1, LIVE],
   'src/main/sync/sync.ts': [1, FK],
   'src/main/sync/intl.ts': [1, FK],
+  'src/main/sync/tokens.ts': [1, FK],
   'src/main/tcgplayer/catalog.ts': [1, FK],
   'src/main/tcgplayer/prices.ts': [1, LIVE],
   'workers/portal/src/catalogLoad.ts': [1, FK],

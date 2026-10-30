@@ -159,6 +159,18 @@ export function fileShowsVariant(
 }
 
 /**
+ * What a scan's file name says after its edition, with its words spaced ("Ojama Yellow" for
+ * "Token-TKN4-EN-SR-UE-OjamaYellow.png"); null when nothing, or just a number, is left. It is
+ * read back by choosePrintingFile as a variant, which ignores spacing.
+ */
+export function fileArtName(file: string): string | null {
+  const rest = (FILE_RE.exec(file)?.[4] ?? '').split('-').filter(Boolean)
+  if (rest.length > 0 && EDITIONS.includes(rest[0].toUpperCase())) rest.shift()
+  const name = rest.join(', ').replace(/([a-z])([A-Z0-9])/g, '$1 $2')
+  return name === '' || /^\d+$/.test(name) ? null : name
+}
+
+/**
  * Picks the Yugipedia scan for a printing from the files on its card's gallery page: same set
  * prefix and region (preferred regions first), the printing's rarity when one exists, then the
  * plainest file (no alternate-art or special-edition suffix). Null when nothing matches.

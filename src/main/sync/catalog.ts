@@ -6,6 +6,7 @@ import type { YugipediaClient } from '../yugipedia/client'
 import { runSync, shouldSync } from './sync'
 import { hasSetData, refreshSets } from './sets'
 import { refreshIntlSets, shouldRefreshIntl } from './intl'
+import { refreshTokens, shouldRefreshTokens } from './tokens'
 import { refreshSetLogos, shouldRefreshSetLogos } from '../yugipedia/setLogos'
 import { refreshPackArt, shouldRefreshPackArt } from '../konami/packArt'
 import { refreshKonamiLogos, shouldRefreshKonamiLogos } from '../konami/logos'
@@ -34,7 +35,7 @@ export interface RefreshCatalogDeps {
 
 /**
  * Brings the shared card catalog up to date: card sync, English sets, TCGplayer catalog and prices, pack
- * art, set logos, Konami logos and non-English sets, each only when its interval has passed.
+ * art, set logos, Konami logos, token cards and non-English sets, each only when its interval has passed.
  * `changed` is true when the cards or the non-English sets were refreshed.
  */
 export async function refreshCatalog(
@@ -59,6 +60,14 @@ export async function refreshCatalog(
     }
   } else if (!hasSetData(db)) {
     changed = await refreshSets(db, client)
+  }
+  if (hasSetData(db) && shouldRefreshTokens(db, now())) {
+    // Before the TCGplayer and non-English steps, which match printings and names against it.
+    const tokens = await refreshTokens(db, yugipedia, now())
+    if (tokens.changed) {
+      changed = true
+      rematch = true
+    }
   }
   if (shouldRefreshTcgCatalog(db, now())) {
     // A few minutes at most; English cards then show their TCGplayer photos.

@@ -8,9 +8,12 @@ import { runJob } from '../../scripts/catalog/build'
 import { buildFingerprints, uploadFingerprints } from '../../scripts/catalog/fingerprints'
 import { openDatabase } from '../../src/main/db/database'
 import { scanProfile } from '../../src/shared/scan/profiles'
+import { NEW_ART_VARIANT } from '../../src/main/yugipedia/parse'
 import { artHash, fingerprintSource } from '../../src/shared/scan/fingerprint'
-import { decodeFingerprints } from '../../src/shared/scan/fingerprintFile'
+import { decodeFingerprints, encodeFingerprints } from '../../src/shared/scan/fingerprintFile'
+import { hashHex, parseFingerprintRefs } from '../../src/shared/scan/fingerprintRefs'
 import { pokemonId } from '../../src/shared/games'
+import { tokenId } from '../../src/shared/games/ids'
 import type { RgbaImage } from '../../src/shared/scan/types'
 
 let dir: string
@@ -206,6 +209,160 @@ describe('buildFingerprints resilience', () => {
     const out = await buildFingerprints({ work, cachePath, fetch: imageFetch(requested) })
     expect(out).toMatchObject({ count: 2, fetched: 1 })
     expect(requested).toContain('1')
+  })
+})
+
+describe('buildFingerprints with tokens close to other cards', () => {
+  const cachePath = (): string => join(dir, 'fingerprints.sqlite')
+  /** A hash `bits` flipped away from all zeroes: two of these differ by the difference in bits. */
+  const hash = (bits: number): Uint32Array => {
+    const words = new Uint32Array(8)
+    for (let i = 0; i < bits; i++) words[i >> 5] |= 1 << (i & 31)
+    return words
+  }
+  /** The top `bits` bits set: `bits` from hash(0), and `bits + n` from hash(n) if they don't overlap. */
+  const flipped = (bits: number): Uint32Array => hash(256).map((w, i) => w ^ hash(256 - bits)[i])
+  const blob = (h: Uint32Array): Buffer => Buffer.from(h.buffer, h.byteOffset, h.byteLength)
+  const yugipedia = {
+    listPageImages: async () => new Map<string, string[]>(),
+    fetchImageUrls: async () => new Map<string, string>()
+  }
+  const references = { yugipedia, userAgent: 'test' }
+  const noImages = (async () => new Response('', { status: 404 })) as typeof fetch
+
+  /** Puts hashes in the cache for images of the catalog, as an earlier night left them. */
+  function cached(hashes: Record<number, Uint32Array>): void {
+    const cache = new Database(cachePath())
+    for (const [id, h] of Object.entries(hashes))
+      cache.prepare('INSERT OR REPLACE INTO fp (image_id, hash) VALUES (?, ?)').run(id, blob(h))
+    cache.close()
+  }
+
+  /** Puts a scan of an art variant printing of the card in the cache. */
+  function scan(card: number, file: string, h: Uint32Array): void {
+    const { lastInsertRowid: id } = work
+      .prepare(
+        `INSERT INTO card_printings (card_id, set_name, set_code, set_rarity, set_rarity_code, language, variant)
+         VALUES (?, ?, ?, 'Ultra Rare', 'UR', 'en', ?)`
+      )
+      .run(card, file, `${file}-EN001`, NEW_ART_VARIANT)
+    const cache = new Database(cachePath())
+    cache
+      .prepare('INSERT INTO ref_printing (printing_id, file, checked_at) VALUES (?, ?, ?)')
+      .run(id, file, '2026-10-30')
+    cache
+      .prepare('INSERT INTO ref_file (file, hash, checked_at) VALUES (?, ?, ?)')
+      .run(file, blob(h), '2026-10-30')
+    cache.close()
+  }
+
+  function token(page: number, images = [page + 1000]): number[] {
+    work
+      .prepare(
+        `INSERT INTO cards (id, name, type, frame_type, race, "desc", updated_at)
+         VALUES (?, ?, 'Token', 'token', 'Token', '', '2026-10-30')`
+      )
+      .run(tokenId(page), `Token ${page}`)
+    for (const [i, image] of images.entries()) {
+      work
+        .prepare('INSERT INTO card_images (image_id, card_id, sort_order) VALUES (?, ?, ?)')
+        .run(tokenId(image), tokenId(page), i)
+    }
+    return images.map(tokenId)
+  }
+
+  const ids = (bytes: Uint8Array): number[] => {
+    const index = decodeFingerprints(bytes)
+    return [...new Set(index.nearest(hash(0), 50).map((m) => m.imageId))].sort((a, b) => a - b)
+  }
+
+  beforeEach(async () => {
+    // Makes the cache's tables; none of the catalog's images are fetched.
+    await buildFingerprints({ work, cachePath: cachePath(), fetch: noImages, references })
+    cached({ 1: hash(0) })
+    work.prepare('DELETE FROM card_images WHERE image_id != 1').run()
+  })
+
+  it('leaves out a token within 80 of a normal card, and keeps one 81 away', async () => {
+    const [close] = token(1)
+    const [clear] = token(2)
+    cached({ [close]: hash(80), [clear]: flipped(81) })
+    const lines: string[] = []
+    const out = await buildFingerprints({
+      work,
+      cachePath: cachePath(),
+      fetch: noImages,
+      log: (s) => lines.push(s)
+    })
+    expect(ids(out.bytes)).toEqual([1, clear])
+    expect(out.count).toBe(2)
+    expect(lines).toContain(
+      'Tokens left out of the fingerprints, too close to other art (1): Token 1'
+    )
+  })
+
+  it('leaves the other records byte for byte as they were, in format 1', async () => {
+    const [close] = token(1)
+    const [clear] = token(2)
+    cached({ [close]: hash(46), [clear]: flipped(200) })
+    const out = await buildFingerprints({ work, cachePath: cachePath(), fetch: noImages })
+    expect(out.bytes).toEqual(
+      encodeFingerprints([
+        { imageId: 1, hash: hash(0) },
+        { imageId: clear, hash: flipped(200) }
+      ])
+    )
+    expect(out.bytes[4]).toBe(1)
+  })
+
+  it('leaves out both of two tokens close to each other, and neither is close to a card', async () => {
+    const [a] = token(1)
+    const [b] = token(2)
+    const [c] = token(3)
+    cached({ [a]: flipped(200), [b]: flipped(160), [c]: hash(120) })
+    const out = await buildFingerprints({ work, cachePath: cachePath(), fetch: noImages })
+    expect(ids(out.bytes)).toEqual([1, c])
+  })
+
+  it('does not hold two images of one token against each other', async () => {
+    const [a, b] = token(1, [1001, 1002])
+    cached({ [a]: flipped(200), [b]: flipped(190) })
+    const out = await buildFingerprints({ work, cachePath: cachePath(), fetch: noImages })
+    expect(ids(out.bytes)).toEqual([1, a, b])
+  })
+
+  it('counts a printing scan of a normal card among the records a token is held against', async () => {
+    const [image] = token(1)
+    cached({ [image]: flipped(200) })
+    scan(1, 'Normal-Scan.png', flipped(170))
+    const opts = { work, cachePath: cachePath(), fetch: noImages }
+    const out = await buildFingerprints({ ...opts, references })
+    expect(ids(out.bytes)).toEqual([1])
+    expect(out.references.count).toBe(1)
+  })
+
+  it('takes every record and ref of a token whose own printing scan is close to a card', async () => {
+    const [image] = token(1)
+    cached({ [image]: flipped(200) })
+    scan(tokenId(1), 'Token-Close.png', hash(30))
+    scan(tokenId(1), 'Token-Far.png', flipped(190))
+    const opts = { work, cachePath: cachePath(), fetch: noImages }
+    const out = await buildFingerprints({ ...opts, references })
+    expect(ids(out.bytes)).toEqual([1])
+    expect(out).toMatchObject({ count: 1, references: { count: 0 } })
+    expect(parseFingerprintRefs(new TextDecoder().decode(out.refs)).refs).toEqual([])
+  })
+
+  it('keeps the printing scans and refs of a token that is clear of every card', async () => {
+    const [image] = token(1)
+    cached({ [image]: flipped(200) })
+    scan(tokenId(1), 'Token-Far.png', flipped(190))
+    const opts = { work, cachePath: cachePath(), fetch: noImages }
+    const out = await buildFingerprints({ ...opts, references })
+    expect(out).toMatchObject({ count: 3, references: { count: 1 } })
+    expect(parseFingerprintRefs(new TextDecoder().decode(out.refs)).refs).toMatchObject([
+      { h: hashHex(flipped(190)), imageId: image }
+    ])
   })
 })
 

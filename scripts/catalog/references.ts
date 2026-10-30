@@ -98,7 +98,7 @@ interface PrintingRow {
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
 
 /** Decodes a PNG or JPEG by its first bytes; anything else is null. */
-function decodeImage(bytes: Uint8Array): RgbaImage | null {
+export function decodeImage(bytes: Uint8Array): RgbaImage | null {
   if (bytes[0] === 0x89 && bytes[1] === 0x50) {
     const png = PNG.sync.read(Buffer.from(bytes))
     return { width: png.width, height: png.height, data: png.data }
@@ -121,7 +121,7 @@ export function scanHash(img: RgbaImage, frameType: string): Uint32Array | null 
 /** A scan that isn't there, or isn't one of a card. */
 class Missing extends Error {}
 
-async function download(
+export async function download(
   fetchFn: typeof fetch,
   url: string,
   userAgent: string
@@ -185,7 +185,12 @@ export async function buildReferences(opts: ReferenceOptions): Promise<Reference
     .map((p) =>
       p.set_code ? p : { ...p, set_code: setCodes.get(`${p.language}|${p.set_name}`) ?? '' }
     )
-    .filter((p) => p.set_code && wantsReference(p.set_rarity, p.variant, p.set_name))
+    // Every token: its card art is often the video game's, unlike any printing.
+    .filter(
+      (p) =>
+        p.set_code &&
+        (p.frame_type === 'token' || wantsReference(p.set_rarity, p.variant, p.set_name))
+    )
   // Each code's rarities printed in the usual art: an unsuffixed scan of one of those is of that
   // printing, not of an art variant of the same rarity (see fileShowsVariant).
   const plainRarities = new Set(

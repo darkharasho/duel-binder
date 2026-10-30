@@ -27,6 +27,15 @@ export interface YugipediaClient {
    * titles absent). Chunks of 50.
    */
   listPageImages(titles: string[]): Promise<Map<string, string[]>>
+  /** Every article in a category, with its page id (follows cmcontinue). */
+  listCategoryPages(category: string): Promise<{ pageId: number; title: string }[]>
+  /** File name (no "File:") -> its page id, for files that exist. Chunks of 50. */
+  filePageIds(files: string[]): Promise<Map<string, number>>
+  /**
+   * File page id -> the file's URL (as fetchImageUrls allows them). The original only: Yugipedia's
+   * API refuses to make thumbnails for anyone but its own pages. Chunks of 50.
+   */
+  imageUrlsByPageId(pageIds: number[]): Promise<Map<number, string>>
 }
 
 interface FromTo {
@@ -36,6 +45,7 @@ interface FromTo {
 
 interface ApiPage {
   title: string
+  pageid?: number
   missing?: boolean
   /** A title MediaWiki can't hold ("<", "[", ...). */
   invalid?: boolean
@@ -46,9 +56,10 @@ interface ApiPage {
 
 interface ApiBody {
   error?: { code?: string }
-  continue?: { apcontinue?: string; imcontinue?: string; continue?: string }
+  continue?: { apcontinue?: string; cmcontinue?: string; imcontinue?: string; continue?: string }
   query?: {
     allpages?: { title: string }[]
+    categorymembers?: { pageid: number; title: string }[]
     pages?: ApiPage[]
     normalized?: FromTo[]
     redirects?: FromTo[]
@@ -74,11 +85,12 @@ export function createYugipediaClient(opts: {
   let lastStart: number | null = null
 
   async function paceThenFetch(url: string): Promise<Response> {
-    if (lastStart !== null) {
-      const wait = lastStart + MIN_GAP_MS - now()
-      if (wait > 0) await sleep(wait)
-    }
-    lastStart = now()
+    // The slot is taken before sleeping, so callers at the same moment queue up instead of waking
+    // together.
+    const t = now()
+    const start = lastStart === null ? t : Math.max(t, lastStart + MIN_GAP_MS)
+    lastStart = start
+    if (start > t) await sleep(start - t)
     return fetchFn(url, {
       headers: { 'User-Agent': userAgent },
       signal: AbortSignal.timeout(TIMEOUT_MS)
@@ -223,6 +235,61 @@ export function createYugipediaClient(opts: {
         for (const f of part) {
           const url = byTitle.get(resolve(`File:${f}`))?.imageinfo?.[0]?.url
           if (typeof url === 'string' && url.startsWith(IMAGE_URL_PREFIX)) out.set(f, url)
+        }
+      }
+      return out
+    },
+
+    async listCategoryPages(category) {
+      const pages: { pageId: number; title: string }[] = []
+      let cont: string | undefined
+      do {
+        const params: Record<string, string> = {
+          action: 'query',
+          list: 'categorymembers',
+          cmtitle: category,
+          cmnamespace: '0',
+          cmlimit: 'max'
+        }
+        if (cont) params.cmcontinue = cont
+        const body = await request(params)
+        for (const p of body.query?.categorymembers ?? [])
+          pages.push({ pageId: p.pageid, title: p.title })
+        cont = body.continue?.cmcontinue
+      } while (cont)
+      return pages
+    },
+
+    async filePageIds(files) {
+      const out = new Map<string, number>()
+      for (const part of chunk(files, CHUNK_SIZE)) {
+        const body = await request({
+          action: 'query',
+          titles: part.map((f) => `File:${f}`).join('|')
+        })
+        const byTitle = new Map((body.query?.pages ?? []).map((p) => [p.title, p]))
+        const resolve = resolver(body)
+        for (const f of part) {
+          const id = byTitle.get(resolve(`File:${f}`))?.pageid
+          if (typeof id === 'number' && id > 0) out.set(f, id)
+        }
+      }
+      return out
+    },
+
+    async imageUrlsByPageId(pageIds) {
+      const out = new Map<number, string>()
+      for (const part of chunk(pageIds, CHUNK_SIZE)) {
+        const body = await request({
+          action: 'query',
+          prop: 'imageinfo',
+          iiprop: 'url',
+          pageids: part.join('|')
+        })
+        for (const p of body.query?.pages ?? []) {
+          const url = p.imageinfo?.[0]?.url
+          if (typeof p.pageid === 'number' && url?.startsWith(IMAGE_URL_PREFIX))
+            out.set(p.pageid, url)
         }
       }
       return out

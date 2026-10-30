@@ -231,3 +231,100 @@ export function releaseDateFor(box: Infobox, language: Language): string | null 
   for (const f of DATE_FIELDS[language]) if (box.dates[f]) return box.dates[f]
   return null
 }
+
+/** What a card page says of a token. English printings only: other languages come from set lists. */
+export interface TokenPage {
+  /** The first scan the page shows, as a file name; null when it names none. */
+  image: string | null
+  attribute: string | null
+  /** The first of `types`, e.g. "Thunder" for "Thunder / Normal"; null when that is just Normal. */
+  race: string | null
+  level: number | null
+  atk: number | null
+  def: number | null
+  archetype: string | null
+  text: string
+  printings: { code: string; setName: string; rarity: string }[]
+  /** Whether the page lists a printing in any language: an anime-only token lists none. */
+  printed: boolean
+}
+
+/** Set fields of English printings; old sets give North America and Europe their own. */
+const ENGLISH_SETS = ['en_sets', 'na_sets', 'eu_sets', 'au_sets', 'oc_sets']
+const IMAGE_FILE = /\.(png|jpe?g|gif|webp)$/i
+
+/** The fields of a page's {{CardTable2}}, a value running over the lines after its `| name =`. */
+function cardTable(wikitext: string): Map<string, string> | null {
+  const start = wikitext.indexOf('{{CardTable2')
+  if (start === -1) return null
+  const fields = new Map<string, string>()
+  let key: string | null = null
+  for (const line of wikitext.slice(start).split(/\r?\n/).slice(1)) {
+    if (line.startsWith('}}')) break
+    const m = /^\|\s*(\w+)\s*=\s*(.*?)\s*$/.exec(line)
+    if (m) {
+      key = m[1]
+      fields.set(key, m[2])
+    } else if (key) {
+      fields.set(key, `${fields.get(key)}\n${line}`.trim())
+    }
+  }
+  return fields
+}
+
+/** Card text without its wiki markup. */
+function plainText(wiki: string): string {
+  return wiki
+    .replace(/\[\[(?:[^\]|]*\|)?([^\]]*)\]\]/g, '$1')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/'{2,}/g, '')
+    .trim()
+}
+
+const toInt = (raw: string | undefined): number | null =>
+  raw !== undefined && /^\d+$/.test(raw) ? Number(raw) : null
+
+export function parseTokenPage(wikitext: string): TokenPage | null {
+  const f = cardTable(wikitext)
+  if (!f) return null
+  const printings: TokenPage['printings'] = []
+  for (const field of ENGLISH_SETS) {
+    for (const line of (f.get(field) ?? '').split('\n')) {
+      const [code = '', setName = '', rarities = ''] = line.split(';').map((s) => s.trim())
+      for (const rarity of splitRarities(rarities))
+        if (code && setName) printings.push({ code, setName, rarity })
+    }
+  }
+  const printed = [...f].some(([k, v]) => k.endsWith('_sets') && v !== '')
+  // Plain, or "1; <file>; <its artwork>" per line for several arts.
+  const image = (f.get('image') ?? '')
+    .split(/[\n;]/)
+    .map((s) => s.trim())
+    .find((s) => IMAGE_FILE.test(s))
+  const race = f.get('types')?.split('/')[0].trim() || null
+  return {
+    image: image ?? null,
+    attribute: f.get('attribute') || null,
+    race: race === 'Normal' ? null : race,
+    level: toInt(f.get('level')),
+    atk: toInt(f.get('atk')),
+    def: toInt(f.get('def')),
+    archetype: f.get('archseries')?.split('\n')[0].trim() || null,
+    text: plainText(f.get('text') ?? ''),
+    printings,
+    printed
+  }
+}
+
+/**
+ * Each code's scan file on a card gallery page of `<gallery>` lines ("<file> | [[<code>]] ...").
+ * A code's first file stands for it.
+ */
+export function parseGalleryCodes(wikitext: string): Map<string, string> {
+  const out = new Map<string, string>()
+  for (const line of wikitext.split(/\r?\n/)) {
+    const m = /^([^|]+?)\s*\|\s*\[\[([A-Z0-9]+-[A-Z0-9]+)\]\]/.exec(line)
+    if (m && IMAGE_FILE.test(m[1]) && !out.has(m[2])) out.set(m[2], m[1])
+  }
+  return out
+}

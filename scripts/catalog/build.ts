@@ -52,7 +52,7 @@ export interface JobOptions {
   /** Fetches card art and printing scans for fingerprints; defaults to `fetch`. */
   imageFetch?: typeof fetch
   /** Finds printing scans for fingerprints; defaults to the live Yugipedia API. */
-  yugipedia?: Pick<YugipediaClient, 'listPageImages' | 'fetchImageUrls'>
+  yugipedia?: Pick<YugipediaClient, 'listPageImages' | 'fetchImageUrls' | 'imageUrlsByPageId'>
   /** Refreshes the work database; defaults to `refreshCatalog` against the live APIs. */
   refresh?: (work: Database.Database, onProblem: (p: string) => void) => Promise<unknown>
   /**
@@ -189,6 +189,7 @@ export async function runJob(opts: JobOptions): Promise<JobResult> {
     const pkm = game === 'pkm'
     const what = pkm ? 'Pokémon fingerprints' : 'Fingerprints'
     let refs: Uint8Array
+    const yugipedia = opts.yugipedia ?? createYugipediaClient({ version })
     try {
       const out = await buildFingerprints({
         work,
@@ -200,8 +201,9 @@ export async function runJob(opts: JobOptions): Promise<JobResult> {
         ...(pkm
           ? {}
           : {
+              tokenArt: yugipedia,
               references: {
-                yugipedia: opts.yugipedia ?? createYugipediaClient({ version }),
+                yugipedia,
                 fetch: opts.imageFetch ?? opts.fetch,
                 userAgent: `DuelBinder/${version} (https://github.com/darkharasho/duel-binder)`
               }

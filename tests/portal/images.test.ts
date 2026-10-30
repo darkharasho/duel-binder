@@ -1,4 +1,6 @@
+import { createHash } from 'node:crypto'
 import type Database from 'better-sqlite3'
+import { tokenId } from '../../src/shared/games/ids'
 import {
   BULBAGARDEN_IMAGE_PREFIX,
   KONAMI_LOGO_PREFIX,
@@ -22,6 +24,132 @@ import { addUser, memoryBucket, noPrices, seededServerDb } from './helpers'
 const BASE = 'https://app.test'
 const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3])
 const imageResponse = (): Response => new Response(JPEG, { status: 200, headers: { 'content-type': 'image/jpeg' } })
+
+describe('token card art', () => {
+  const YP = 'https://ms.yugipedia.com/'
+  const image = tokenId(777)
+  let db: Database.Database
+  let upstream: ReturnType<typeof vi.fn>
+  let deps: AppDeps
+  const tokenArt = vi.fn(async (_id: number): Promise<string | null> => `${YP}a/ab/Token.png`)
+
+  beforeEach(async () => {
+    db = await seededServerDb()
+    tokenArt.mockClear()
+    upstream = vi.fn(async () => imageResponse())
+    const card = tokenId(1)
+    db.prepare(
+      `INSERT INTO cards (id, name, type, frame_type, race, "desc", updated_at)
+       VALUES (?, 'Token (Nash)', 'Token', 'token', 'Token', '', '2026-10-25')`
+    ).run(card)
+    db.prepare('INSERT INTO card_images (image_id, card_id, sort_order) VALUES (?, ?, 0)').run(image, card)
+    deps = {
+      db,
+      assets: { fetch: async () => new Response('nope', { status: 404 }) },
+      images: memoryBucket(),
+      printingArt: { url: vi.fn(async () => null) },
+      tokenArt,
+      prices: noPrices,
+      env: { PUBLIC_URL: BASE, SITE_URL: 'https://site.test', DISCORD_CLIENT_ID: 'c', DISCORD_CLIENT_SECRET: 's', ADMIN_TOKEN: 'a', PRICE_WORKER_URL: 'https://prices.test' },
+      now: () => new Date('2026-10-25T12:00:00.000Z'),
+      fetch: upstream as unknown as typeof fetch
+    }
+  })
+  afterEach(() => db.close())
+
+  const get = (path: string) =>
+    handle(new Request(`${BASE}/img/${path}`, { headers: { 'cf-connecting-ip': '198.51.100.7' } }), deps)
+
+  test('comes from Yugipedia, signed out too, and never from YGOPRODeck', async () => {
+    expect((await get(`full/${image}`)).status).toBe(200)
+    expect(upstream.mock.calls[0][0]).toBe(`${YP}a/ab/Token.png`)
+    expect(tokenArt).toHaveBeenCalledWith(image)
+  })
+
+  describe('art over the size limit', () => {
+    const TOO_BIG = 16 * 1024 * 1024
+    const header = (): Response =>
+      new Response(JPEG, { headers: { 'content-type': 'image/jpeg', 'content-length': String(TOO_BIG) } })
+    const signedIn = (path: string) =>
+      handle(new Request(`${BASE}/img/${path}`, { headers: { cookie: 'session=tok' } }), deps)
+
+    beforeEach(() => {
+      db.prepare('INSERT INTO sessions (token_hash, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)').run(
+        createHash('sha256').update('tok').digest('hex'),
+        addUser(db, '1', 'alice'),
+        '2026-10-25T11:00:00.000Z',
+        '2026-10-25T23:00:00.000Z'
+      )
+      deps.anonMisses = createMissCache(() => 0, { ttlMs: 3_600_000, maxKeys: 100 })
+      deps.imageQuota = createImageQuota(() => 0, { limit: 1, windowMs: 3_600_000 })
+    })
+
+    test('is remembered, so a signed-in view spends no quota, Yugipedia call or fetch', async () => {
+      upstream.mockImplementation(async () => header())
+      expect((await signedIn(`full/${image}`)).status).toBe(404)
+      expect((await signedIn(`full/${image}`)).status).toBe(404) // not 429: the quota of 1 is spent
+      expect((await signedIn(`small/${image}`)).status).toBe(404) // one image for all sizes
+      expect(tokenArt).toHaveBeenCalledTimes(1)
+      expect(upstream).toHaveBeenCalledTimes(1)
+    })
+
+    test('is remembered from a signed-out view for signed-in ones, and the other way', async () => {
+      upstream.mockImplementation(async () => header())
+      expect((await get(`full/${image}`)).status).toBe(404)
+      expect((await signedIn(`full/${image}`)).status).toBe(404)
+      expect(upstream).toHaveBeenCalledTimes(1)
+
+      const other = tokenId(779)
+      db.prepare('INSERT INTO card_images (image_id, card_id, sort_order) VALUES (?, ?, 1)').run(other, tokenId(1))
+      deps.imageQuota = createImageQuota(() => 0, { limit: 10, windowMs: 3_600_000 })
+      expect((await signedIn(`full/${other}`)).status).toBe(404)
+      expect((await get(`full/${other}`)).status).toBe(404)
+      expect(upstream).toHaveBeenCalledTimes(2)
+    })
+
+    test('is told by the body when no content-length says so', async () => {
+      upstream.mockImplementation(
+        async () => new Response(new Uint8Array(10 * 1024 * 1024 + 1), { headers: { 'content-type': 'image/jpeg' } })
+      )
+      expect((await signedIn(`full/${image}`)).status).toBe(404)
+      expect((await signedIn(`full/${image}`)).status).toBe(404)
+      expect(upstream).toHaveBeenCalledTimes(1)
+    })
+
+    test('any other failure stays open to signed-in callers', async () => {
+      deps.imageQuota = createImageQuota(() => 0, { limit: 10, windowMs: 3_600_000 })
+      upstream.mockRejectedValueOnce(new Error('timeout'))
+      expect((await signedIn(`full/${image}`)).status).toBe(404)
+      expect((await signedIn(`full/${image}`)).status).toBe(200)
+      expect(upstream).toHaveBeenCalledTimes(2)
+    })
+
+    test('works without a miss cache', async () => {
+      deps.anonMisses = undefined
+      upstream.mockImplementation(async () => header())
+      expect((await get(`full/${image}`)).status).toBe(404)
+    })
+  })
+
+  test('is stored once, so no size asks Yugipedia again', async () => {
+    await get(`small/${image}`)
+    tokenArt.mockClear()
+    upstream.mockClear()
+    expect((await get(`full/${image}`)).status).toBe(200)
+    expect((await get(`cropped/${image}`)).status).toBe(200)
+    expect(tokenArt).not.toHaveBeenCalled()
+    expect(upstream).not.toHaveBeenCalled()
+  })
+
+  test('404s for an id the catalog lacks, a foreign host, and a failed lookup', async () => {
+    expect((await get(`full/${tokenId(778)}`)).status).toBe(404)
+    tokenArt.mockResolvedValueOnce('https://evil.test/x.png')
+    expect((await get(`full/${image}`)).status).toBe(404)
+    tokenArt.mockRejectedValueOnce(new Error('down'))
+    expect((await get(`small/${image}`)).status).toBe(404)
+    expect(upstream).not.toHaveBeenCalled()
+  })
+})
 
 describe('image route', () => {
   let db: Database.Database
@@ -549,6 +677,17 @@ describe('image route', () => {
     upstream.mockResolvedValueOnce(new Response(new Uint8Array(10 * 1024 * 1024 + 1), { headers: { 'content-type': 'image/jpeg' } }))
     expect((await get(`full/${imageId}`)).status).toBe(404)
     expect([...bucket.store.keys()]).toEqual([`set/${'a'.repeat(200)}`])
+  })
+
+  it('remembers an oversized set image for signed-in callers too', async () => {
+    deps.anonMisses = createMissCache(() => 0, { ttlMs: 3_600_000, maxKeys: 100 })
+    upstream.mockImplementation(
+      async () =>
+        new Response(JPEG, { headers: { 'content-type': 'image/jpeg', 'content-length': String(11 * 1024 * 1024) } })
+    )
+    expect((await get('set/abc')).status).toBe(404)
+    expect((await get('set/abc')).status).toBe(404)
+    expect(upstream).toHaveBeenCalledTimes(1)
   })
 
   describe('printing photos', () => {

@@ -1,5 +1,6 @@
 import type Database from 'better-sqlite3'
 import type { SyncStatus } from '@shared/types'
+import { TOKEN_ID_MIN } from '@shared/games/ids'
 import { getMeta, setMeta } from '../db/meta'
 import type { YgoClient } from '../ygo/client'
 import { refreshSets } from './sets'
@@ -145,16 +146,18 @@ function saveCards(
       }
     }
     // Only English printings come from YGOPRODeck; other languages belong to the Yugipedia sync,
-    // and art variants to the TCGplayer catalog.
+    // art variants to the TCGplayer catalog, and printings of token cards and the images of token
+    // ids to the token sync (sync/tokens.ts), which reads token cards YGOPRODeck has no codes for.
     prune(
       db,
       'card_printings',
       'id',
       'printing_id',
       seenPrintings,
-      "game = 'ygo' AND language = 'en' AND tcg_product_id IS NULL"
+      `game = 'ygo' AND language = 'en' AND tcg_product_id IS NULL
+       AND card_id NOT IN (SELECT id FROM cards WHERE frame_type = 'token')`
     )
-    prune(db, 'card_images', 'image_id', 'image_id', seenImages, "game = 'ygo'")
+    prune(db, 'card_images', 'image_id', 'image_id', seenImages, `game = 'ygo' AND image_id < ${TOKEN_ID_MIN}`)
     db.exec(`INSERT INTO cards_fts(cards_fts) VALUES('rebuild')`)
     setMeta(db, 'last_sync_at', nowIso)
     setMeta(db, 'db_version', dbVersion)

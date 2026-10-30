@@ -297,6 +297,18 @@ describe('buildReferences', () => {
     expect(yugipedia.listPageImages).toHaveBeenCalledTimes(2)
   })
 
+  it("takes a gallery titled with '(card)' when the plain one is missing", async () => {
+    const yugipedia = fakeYugipedia()
+    yugipedia.listPageImages.mockImplementation(
+      async (titles: string[]) =>
+        new Map(titles.filter((t) => t.endsWith(' (card)')).map((t) => [t, FILES]))
+    )
+    const fetch = scans({ 'ShiEn-BLGG-EN-StR-1E.png': png(SCAN) })
+    const result = await buildReferences({ work, cache, yugipedia, fetch, userAgent: 'test' })
+    expect(result.entries).toEqual([{ imageId: 11, hash: SCAN_HASH }])
+    expect(yugipedia.listPageImages).toHaveBeenCalledTimes(2)
+  })
+
   it('downloads a scan that failed again a month on', async () => {
     const yugipedia = fakeYugipedia()
     const requested: string[] = []

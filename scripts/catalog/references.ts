@@ -7,6 +7,7 @@ import { ART_FAR_DISTANCE } from '../../src/shared/scan/thresholds'
 import type { RgbaImage } from '../../src/shared/scan/types'
 import { isLanguage } from '../../src/shared/languages'
 import type { YugipediaClient } from '../../src/main/yugipedia/client'
+import { listCardGalleries } from '../../src/main/yugipedia/cardGallery'
 import { choosePrintingFile } from '../../src/main/yugipedia/printingArt'
 
 /** Scans downloaded per run; the rest wait for the next night. */
@@ -197,13 +198,13 @@ export async function buildReferences(opts: ReferenceOptions): Promise<Reference
   const saveFile = cache.prepare(
     'INSERT OR REPLACE INTO ref_printing (printing_id, file, checked_at) VALUES (?, ?, ?)'
   )
-  const titles = [...new Set(lookUp.map((p) => `Card Gallery:${p.name}`))]
+  const names = [...new Set(lookUp.map((p) => p.name))]
   // A batch at a time, each saved as it comes, so trouble partway keeps what came before.
-  for (let i = 0; i < titles.length; i += GALLERY_BATCH) {
-    const batch = new Set(titles.slice(i, i + GALLERY_BATCH))
+  for (let i = 0; i < names.length; i += GALLERY_BATCH) {
+    const batch = new Set(names.slice(i, i + GALLERY_BATCH))
     let galleries: Map<string, string[]>
     try {
-      galleries = await yugipedia.listPageImages([...batch])
+      galleries = await listCardGalleries(yugipedia, [...batch])
     } catch (e) {
       log(`Printing scan lookup failed: ${e instanceof Error ? e.message : e}`)
       break
@@ -211,9 +212,9 @@ export async function buildReferences(opts: ReferenceOptions): Promise<Reference
     const at = now().toISOString()
     cache.transaction(() => {
       for (const p of lookUp) {
-        const files = galleries.get(`Card Gallery:${p.name}`)
-        // A gallery missing from the answer is left to look up again next run.
-        if (!batch.has(`Card Gallery:${p.name}`) || !files || !isLanguage(p.language)) continue
+        const files = galleries.get(p.name)
+        // A gallery missing from the answer (under either title) is left to look up again next run.
+        if (!batch.has(p.name) || !files || !isLanguage(p.language)) continue
         const file = choosePrintingFile(files, {
           setCode: p.set_code,
           language: p.language,

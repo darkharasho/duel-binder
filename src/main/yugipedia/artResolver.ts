@@ -1,6 +1,7 @@
 import type { SqlDb } from '../db/sql'
 import { isLanguage } from '../../shared/languages'
 import type { YugipediaClient } from './client'
+import { listCardGalleries } from './cardGallery'
 import { choosePrintingFile } from './printingArt'
 
 const BATCH = 50
@@ -80,12 +81,13 @@ export function createPrintingArtResolver(opts: {
     for (const id of ids) if (!printings.some((p) => p.id === id)) finish(id, null)
     if (printings.length === 0) return
     try {
-      const galleries = await client.listPageImages([
-        ...new Set(printings.map((p) => `Card Gallery:${p.name}`))
-      ])
+      const galleries = await listCardGalleries(
+        client,
+        printings.map((p) => p.name)
+      )
       const chosen = new Map<number, string | null>()
       for (const p of printings) {
-        const files = galleries.get(`Card Gallery:${p.name}`) ?? []
+        const files = galleries.get(p.name) ?? []
         chosen.set(
           p.id,
           isLanguage(p.language)

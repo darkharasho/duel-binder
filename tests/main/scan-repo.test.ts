@@ -351,6 +351,11 @@ describe('a Pokémon art twin with no artwork', () => {
     db.prepare("UPDATE cards SET name = '_____''s Pikachu' WHERE id = ?").run(pikachu)
     add(9006, "___'s Pikachu", 'Naoyo Kimura', 'en/cel25cc-2', null)
     expect(twinned()).toEqual([true, true])
+    // Names written another way: Tapu Lele-GX and Tapu Lele GX, a star as ☆ or ★.
+    db.prepare('DELETE FROM pokemon_cards WHERE card_id = 9006').run()
+    db.prepare("UPDATE cards SET name = 'Umbreon ★' WHERE id = ?").run(pikachu)
+    add(9007, 'Umbreon ☆', 'Naoyo Kimura', 'en/cel25cc-3', null)
+    expect(twinned()).toEqual([true, true])
     expect(printingsByCode(db, 'LOB-EN005').every((r) => !('unseenTwin' in r))).toBe(true)
   })
 })

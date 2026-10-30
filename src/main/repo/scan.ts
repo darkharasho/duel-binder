@@ -36,6 +36,53 @@ const select = (
 
 const languageRank = (l: Language): number => LANGUAGES.findIndex((x) => x.code === l)
 
+/** A card name as unseenTwins compares it: its letters and digits, or as it is with none. */
+const nameKey = (name: string): string => normalizeName(name) || name
+
+/**
+ * `${cardId}|${language}` for each of cardIds with an art twin the scanner can't see
+ * (ScanPrinting.unseenTwin): a card of the same name and illustrator with no artwork, or only a
+ * tcgplayer product photo, a poor reference (often a 403, or matched far behind the card it
+ * reprints), and a printing in that language. A Japanese card may be named in English or
+ * Japanese, and names are compared by their letters ("Tapu Lele-GX", "Umbreon ☆").
+ */
+function unseenTwins(db: SqlDb, cardIds: number[]): string[] {
+  // CROSS JOIN keeps this order: the few cards asked for first, then the cards with no artwork.
+  const rows = db
+    .prepare(
+      `SELECT pc.card_id AS cardId, c.name AS name, pc.local_name AS localName,
+         t.card_id AS twinId, tc.name AS twinName, t.local_name AS twinLocal
+       FROM pokemon_cards pc CROSS JOIN cards c CROSS JOIN pokemon_cards t CROSS JOIN cards tc
+       WHERE pc.card_id IN (${cardIds.map(() => '?').join(',')}) AND c.id = pc.card_id
+         AND (t.image_url IS NULL OR t.image_url LIKE 'https://tcgplayer-cdn.%')
+         AND t.card_id <> pc.card_id AND t.illustrator IS pc.illustrator AND tc.id = t.card_id`
+    )
+    .all(...cardIds) as {
+    cardId: number
+    name: string
+    localName: string | null
+    twinId: number
+    twinName: string
+    twinLocal: string | null
+  }[]
+  const twins = rows.filter(
+    (r) =>
+      nameKey(r.name) === nameKey(r.twinName) ||
+      (r.localName ?? r.name) === (r.twinLocal ?? r.twinName)
+  )
+  if (!twins.length) return []
+  const ids = [...new Set(twins.map((t) => t.twinId))]
+  const languages = db
+    .prepare(
+      `SELECT DISTINCT card_id AS cardId, language FROM card_printings
+       WHERE card_id IN (${ids.map(() => '?').join(',')})`
+    )
+    .all(...ids) as { cardId: number; language: string }[]
+  return twins.flatMap((t) =>
+    languages.filter((l) => l.cardId === t.twinId).map((l) => `${t.cardId}|${l.language}`)
+  )
+}
+
 /**
  * Attaches each card's artwork ids and sorts by set code, then language, then rarity tier; with
  * twins, marks a Pokémon printing's unseenTwin (a scan of every card with no artwork per card,
@@ -48,26 +95,7 @@ function withImages(db: SqlDb, rows: PrintingRow[], scope: Scope, twins = false)
   const twinned = new Set<string>()
   for (let i = 0; i < ids.length; i += 500) {
     const chunk = ids.slice(i, i + 500)
-    const unseen = !twins
-      ? []
-      : (db
-          .prepare(
-            // CROSS JOIN keeps this order: the few cards asked for first, then the cards with no
-            // artwork, rather than every printing. A tcgplayer product photo is a poor reference,
-            // often missing (a 403) or matched far behind the card it reprints, so it counts as none.
-            // A Japanese card may be named in English or Japanese, and a blank as any run of _.
-            `SELECT DISTINCT pc.card_id AS cardId, tp.language AS language
-         FROM pokemon_cards pc CROSS JOIN cards c CROSS JOIN pokemon_cards t CROSS JOIN cards tc
-         CROSS JOIN card_printings tp
-         WHERE pc.card_id IN (${chunk.map(() => '?').join(',')}) AND c.id = pc.card_id
-           AND (t.image_url IS NULL OR t.image_url LIKE 'https://tcgplayer-cdn.%')
-           AND t.card_id <> pc.card_id AND t.illustrator IS pc.illustrator AND tc.id = t.card_id
-           AND (lower(replace(tc.name, '_', '')) = lower(replace(c.name, '_', ''))
-             OR COALESCE(t.local_name, tc.name) = COALESCE(pc.local_name, c.name))
-           AND tp.card_id = t.card_id`
-          )
-          .all(...chunk) as { cardId: number; language: string }[])
-    for (const t of unseen) twinned.add(`${t.cardId}|${t.language}`)
+    if (twins) for (const t of unseenTwins(db, chunk)) twinned.add(t)
     const found = db
       .prepare(
         `SELECT card_id AS cardId, image_id AS imageId FROM card_images

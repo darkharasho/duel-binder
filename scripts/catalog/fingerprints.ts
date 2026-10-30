@@ -3,6 +3,7 @@ import { decode } from 'jpeg-js'
 import { imageUrl } from '../../src/shared/imageSources'
 import { HASH_WORDS, artHash, fingerprintSource } from '../../src/shared/scan/fingerprint'
 import { encodeFingerprints } from '../../src/shared/scan/fingerprintFile'
+import { encodeFingerprintRefs } from '../../src/shared/scan/fingerprintRefs'
 import { buildReferences, type ReferenceOptions } from './references'
 
 const DEFAULT_CONCURRENCY = 6
@@ -29,6 +30,8 @@ export interface FingerprintOptions {
 
 export interface FingerprintResult {
   bytes: Uint8Array
+  /** The refs file that goes with it: which printings its printing scans show (fingerprintRefs.ts). */
+  refs: Uint8Array
   fetched: number
   failed: number
   /** Every hash in the file, printing scans included. */
@@ -151,11 +154,13 @@ export async function buildFingerprints(opts: FingerprintOptions): Promise<Finge
     }
     // Printing scans are extras: trouble with them is logged and leaves the card art file as is.
     const references = { count: 0, fetched: 0, failed: 0 }
+    const refs: { imageId: number; hash: Uint32Array; printings: string[] }[] = []
     if (opts.references) {
       try {
         const out = await buildReferences({ ...opts.references, work: opts.work, cache, log })
         const own = out.entries.filter((e) => idSet.has(e.imageId))
-        entries.push(...own)
+        entries.push(...own.map(({ imageId, hash }) => ({ imageId, hash })))
+        refs.push(...own.filter((e) => e.printings.length > 0))
         Object.assign(references, { count: own.length, fetched: out.fetched, failed: out.failed })
       } catch (e) {
         log(`Printing scans failed: ${e instanceof Error ? e.message : e}`)
@@ -163,6 +168,7 @@ export async function buildFingerprints(opts: FingerprintOptions): Promise<Finge
     }
     return {
       bytes: encodeFingerprints(entries),
+      refs: encodeFingerprintRefs(refs),
       fetched,
       failed,
       count: entries.length,
@@ -180,16 +186,11 @@ export interface UploadFingerprintsOptions {
   fetch?: typeof fetch
 }
 
-/** PUTs the fingerprint file to the portal and returns the count it stored. */
-export async function uploadFingerprints(opts: UploadFingerprintsOptions): Promise<number> {
+async function put(opts: UploadFingerprintsOptions, path: string, type: string): Promise<number> {
   const fetchFn = opts.fetch ?? fetch
-  const path = '/admin/scan/fingerprints'
   const res = await fetchFn(`${opts.url.replace(/\/+$/, '')}${path}`, {
     method: 'PUT',
-    headers: {
-      authorization: `Bearer ${opts.token}`,
-      'content-type': 'application/octet-stream'
-    },
+    headers: { authorization: `Bearer ${opts.token}`, 'content-type': type },
     body: opts.bytes as BodyInit
   })
   if (!res.ok) {
@@ -198,3 +199,11 @@ export async function uploadFingerprints(opts: UploadFingerprintsOptions): Promi
   }
   return ((await res.json()) as { count: number }).count
 }
+
+/** PUTs the fingerprint file to the portal and returns the count it stored. */
+export const uploadFingerprints = (opts: UploadFingerprintsOptions): Promise<number> =>
+  put(opts, '/admin/scan/fingerprints', 'application/octet-stream')
+
+/** PUTs the fingerprint refs file to the portal and returns the count of refs it stored. */
+export const uploadFingerprintRefs = (opts: UploadFingerprintsOptions): Promise<number> =>
+  put(opts, '/admin/scan/fingerprint-refs', 'application/json')

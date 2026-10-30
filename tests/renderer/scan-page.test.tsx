@@ -703,14 +703,14 @@ describe('Scan page', () => {
         'Artwork matching is unavailable until the artwork data downloads. Set codes and names still work.'
       )
     ).toBeInTheDocument()
-    expect(engine.init).toHaveBeenCalledWith(null)
+    expect(engine.init).toHaveBeenCalledWith(null, [])
     unmount()
 
     const fp = new ArrayBuffer(8)
     const ready = fakeEngine()
     await renderScan({ scan: { fingerprints: vi.fn(async () => fp) } }, ready)
     await run()
-    expect(ready.init).toHaveBeenCalledWith(fp)
+    expect(ready.init).toHaveBeenCalledWith(fp, [])
     expect(screen.queryByText(/Artwork matching is unavailable/)).not.toBeInTheDocument()
   })
 
@@ -728,7 +728,7 @@ describe('Scan page', () => {
       engine
     )
     await run(1000)
-    expect(engine.init).toHaveBeenCalledWith(fp)
+    expect(engine.init).toHaveBeenCalledWith(fp, [])
     expect(engine.analyze).toHaveBeenCalled()
     expect(
       within(screen.getByRole('list', { name: 'This session' })).getByText('Dark Magician')
@@ -756,10 +756,10 @@ describe('Scan page', () => {
       engine
     )
     await run(500)
-    expect(engine.init.mock.calls).toEqual([[old]])
+    expect(engine.init.mock.calls).toEqual([[old, []]])
     finish()
     await run(500)
-    expect(engine.init.mock.calls).toEqual([[old], [fresh]])
+    expect(engine.init.mock.calls).toEqual([[old, []], [fresh, []]])
   })
 
   it('keeps the engine as it is when a refresh finds nothing new', async () => {

@@ -3,12 +3,14 @@ import { decode as decodeJpeg } from 'jpeg-js'
 import { PNG } from 'pngjs'
 import { ART_BOXES, crop } from '../../src/renderer/src/features/scan/vision/regions'
 import { HASH_WORDS, artHash, hamming } from '../../src/shared/scan/fingerprint'
+import { isArtVariant, namedVariant } from '../../src/shared/scan/fingerprintRefs'
+import { rarityFamily } from '../../src/shared/scan/rarity'
 import { ART_FAR_DISTANCE } from '../../src/shared/scan/thresholds'
 import type { RgbaImage } from '../../src/shared/scan/types'
 import { isLanguage } from '../../src/shared/languages'
 import type { YugipediaClient } from '../../src/main/yugipedia/client'
 import { listCardGalleries } from '../../src/main/yugipedia/cardGallery'
-import { choosePrintingFile } from '../../src/main/yugipedia/printingArt'
+import { choosePrintingFile, fileShowsVariant } from '../../src/main/yugipedia/printingArt'
 
 /** Scans downloaded per run; the rest wait for the next night. */
 const DEFAULT_MAX_DOWNLOADS = 600
@@ -39,8 +41,6 @@ const SAME_ART_MAX_DISTANCE = ART_FAR_DISTANCE
 const REFERENCE_LANGUAGES = ['en', 'ja'] as const
 /** Foils whose shine changes how the art looks, so the plain art matches them poorly. */
 const FOIL = /^(starlight|ghost|collector's) rare/i
-/** Variants that only change the foil colour of the name, not the art. */
-const COLOUR = /^(red|blue|green|purple|silver|bronze|gold|yellow|orange|white|pink)$/i
 /** Sets whose every card carries the manga's art, not the card art YGOPRODeck has (YAS1–3, YAC1). */
 const ORIGINAL_ART_SET = /^Original Artwork (Duel Set|Collection)\b/i
 
@@ -53,8 +53,7 @@ const ORIGINAL_ART_SET = /^Original Artwork (Duel Set|Collection)\b/i
  */
 export function wantsReference(rarity: string, variant: string | null, setName = ''): boolean {
   if (FOIL.test(rarity.trim()) || ORIGINAL_ART_SET.test(setName.trim())) return true
-  const named = variant?.trim() || /\(([^()]+)\)\s*$/.exec(rarity)?.[1]?.trim()
-  return !!named && !COLOUR.test(named)
+  return namedVariant(rarity, variant) !== null
 }
 
 export interface ReferenceOptions {
@@ -71,13 +70,20 @@ export interface ReferenceOptions {
 }
 
 export interface ReferenceResult {
-  entries: { imageId: number; hash: Uint32Array }[]
+  /**
+   * Each scan's hash under its artwork's image id, with the printings it shows that are art
+   * variants (isArtVariant), by card_printings.pkey: none for a scan of a foil or edition of the
+   * usual art, nor for an art variant printing whose scan is a plain one it fell back to
+   * (fileShowsVariant).
+   */
+  entries: { imageId: number; hash: Uint32Array; printings: string[] }[]
   fetched: number
   failed: number
 }
 
 interface PrintingRow {
   id: number
+  pkey: string
   card_id: number
   name: string
   frame_type: string
@@ -166,7 +172,7 @@ export async function buildReferences(opts: ReferenceOptions): Promise<Reference
   const printings = (
     work
       .prepare(
-        `SELECT p.id, p.card_id, c.name, c.frame_type, p.set_name, p.set_code, p.language, p.set_rarity,
+        `SELECT p.id, p.pkey, p.card_id, c.name, c.frame_type, p.set_name, p.set_code, p.language, p.set_rarity,
            p.set_rarity_code, p.variant
          FROM card_printings p JOIN cards c ON c.id = p.card_id
          LEFT JOIN sets s ON s.game = p.game AND s.language = p.language AND s.set_name = p.set_name
@@ -180,6 +186,29 @@ export async function buildReferences(opts: ReferenceOptions): Promise<Reference
       p.set_code ? p : { ...p, set_code: setCodes.get(`${p.language}|${p.set_name}`) ?? '' }
     )
     .filter((p) => p.set_code && wantsReference(p.set_rarity, p.variant, p.set_name))
+  // Each code's rarities printed in the usual art: an unsuffixed scan of one of those is of that
+  // printing, not of an art variant of the same rarity (see fileShowsVariant).
+  const plainRarities = new Set(
+    (
+      work
+        .prepare(
+          `SELECT language, set_name, set_code, set_rarity, variant FROM card_printings
+           WHERE language IN (${languages})`
+        )
+        .all() as {
+        language: string
+        set_name: string
+        set_code: string
+        set_rarity: string
+        variant: string | null
+      }[]
+    )
+      .filter((r) => namedVariant(r.set_rarity, r.variant) === null)
+      .map(
+        (r) =>
+          `${r.language}|${r.set_code || setCodes.get(`${r.language}|${r.set_name}`)}|${r.set_rarity}`
+      )
+  )
 
   // Which scan each printing has, from its card's gallery page.
   const known = new Map(
@@ -228,11 +257,15 @@ export async function buildReferences(opts: ReferenceOptions): Promise<Reference
     })()
   }
 
-  // Each scan once: its file, and the card it shows.
+  // Each scan once: its file, the card it shows (from the first printing that chose it), and
+  // every printing that chose it.
   const scans = new Map<string, PrintingRow>()
+  const printingsOf = new Map<string, PrintingRow[]>()
   for (const p of printings) {
     const file = known.get(p.id)?.file
-    if (file && !scans.has(file)) scans.set(file, p)
+    if (!file) continue
+    if (!scans.has(file)) scans.set(file, p)
+    printingsOf.set(file, [...(printingsOf.get(file) ?? []), p])
   }
   const hashed = new Map(
     (
@@ -306,7 +339,27 @@ export async function buildReferences(opts: ReferenceOptions): Promise<Reference
       if (d < bestDistance) [best, bestDistance] = [id, d]
     }
     if (bestDistance > SAME_ART_MAX_DISTANCE) best = images[0]
-    entries.push({ imageId: best, hash })
+    const keys = printingsOf
+      .get(file)!
+      .filter(
+        (q) =>
+          q.card_id === p.card_id &&
+          isArtVariant(q.set_rarity, q.variant) &&
+          isLanguage(q.language) &&
+          fileShowsVariant(
+            file,
+            {
+              setCode: q.set_code,
+              language: q.language,
+              rarity: q.set_rarity,
+              rarityCode: q.set_rarity_code,
+              variant: q.variant
+            },
+            !plainRarities.has(`${q.language}|${q.set_code}|${rarityFamily(q.set_rarity)}`)
+          )
+      )
+      .map((q) => q.pkey)
+    entries.push({ imageId: best, hash, printings: [...new Set(keys)] })
   }
   return { entries, fetched, failed }
 }

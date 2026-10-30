@@ -3,6 +3,7 @@ import Database from 'better-sqlite3'
 import { handle, type AppDeps } from '../../workers/portal/src/app'
 import { migrateServer } from '../../workers/portal/src/migrate'
 import { encodeFingerprints } from '../../src/shared/scan/fingerprintFile'
+import { encodeFingerprintRefs } from '../../src/shared/scan/fingerprintRefs'
 import { HASH_WORDS } from '../../src/shared/scan/fingerprint'
 import { memoryBucket, noPrintingArt, noPrices } from './helpers'
 
@@ -168,5 +169,71 @@ describe('scan fingerprint file', () => {
     const res = await get()
     expect(res.status).toBe(404)
     expect(await res.json()).toEqual({ error: 'No fingerprints yet' })
+  })
+
+  describe('the refs file', () => {
+    const KEY = 'ja|1|Original Artwork Collection|YAC1-JP006|Prismatic Secret Rare'
+    const refs = (n = 1): Uint8Array =>
+      encodeFingerprintRefs(
+        Array.from({ length: n }, (_, i) => ({
+          imageId: i + 1,
+          hash: new Uint32Array(HASH_WORDS).fill(i),
+          printings: [KEY]
+        }))
+      )
+    const putRefs = (bytes: Uint8Array, token: string | null = TOKEN): Promise<Response> =>
+      handle(
+        new Request(`${BASE}/admin/scan/fingerprint-refs`, {
+          method: 'PUT',
+          headers: {
+            'content-type': 'application/json',
+            ...(token ? { authorization: `Bearer ${token}` } : {})
+          },
+          body: bytes as unknown as BodyInit
+        }),
+        deps
+      )
+    const getRefs = (headers: Record<string, string> = {}): Promise<Response> =>
+      handle(new Request(`${BASE}/scan/fingerprint-refs`, { headers }), deps)
+
+    it('rejects a PUT without the admin token', async () => {
+      expect((await putRefs(refs(), null)).status).toBe(401)
+      expect(bucket.store.size).toBe(0)
+    })
+
+    it('rejects a PUT that is not a refs file, or over 4 MB', async () => {
+      const bad = new TextEncoder().encode(JSON.stringify({ v: 1, refs: [{ h: 'x' }] }))
+      expect((await putRefs(bad)).status).toBe(400)
+      expect((await putRefs(new Uint8Array(4 * 1024 * 1024 + 1))).status).toBe(400)
+      expect(bucket.store.size).toBe(0)
+    })
+
+    it('stores a valid file, empty ones too, and serves it with an ETag', async () => {
+      const res = await putRefs(refs(2))
+      expect(res.status).toBe(200)
+      expect(await res.json()).toEqual({ ok: true, count: 2 })
+      const got = await getRefs()
+      expect(got.status).toBe(200)
+      expect(got.headers.get('content-type')).toBe('application/json')
+      expect(got.headers.get('cache-control')).toBe('no-cache')
+      expect(new Uint8Array(await got.arrayBuffer())).toEqual(refs(2))
+      const etag = got.headers.get('etag')!
+      expect((await getRefs({ 'if-none-match': etag })).status).toBe(304)
+
+      expect(await (await putRefs(refs(0))).json()).toEqual({ ok: true, count: 0 })
+      expect((await getRefs({ 'if-none-match': etag })).status).toBe(200)
+    })
+
+    it('leaves the fingerprint file alone', async () => {
+      await put(body)
+      await putRefs(refs())
+      expect(new Uint8Array(await (await get()).arrayBuffer())).toEqual(body)
+    })
+
+    it('answers 404 before any upload', async () => {
+      const res = await getRefs()
+      expect(res.status).toBe(404)
+      expect(await res.json()).toEqual({ error: 'No fingerprint refs yet' })
+    })
   })
 })

@@ -22,7 +22,9 @@ interface PrintingRow {
   rawPrice: number | null
 }
 
-const select = (scope: Scope): string => `SELECT p.id AS printingId, p.card_id AS cardId, c.name AS name, c.frame_type AS frameType,
+const select = (
+  scope: Scope
+): string => `SELECT p.id AS printingId, p.card_id AS cardId, c.name AS name, c.frame_type AS frameType,
   p.set_name AS setName, p.set_code AS setCode, p.set_rarity AS rarity, p.variant AS variant, p.language AS language,
   CASE WHEN ${isMarketOnly} THEN p.market_price WHEN p.language = 'en' THEN COALESCE(p.market_price, ip.price, p.set_price) ELSE COALESCE(ip.price, ${enTwinPrice(scope.game)}) END AS rawPrice
   FROM card_printings p JOIN cards c ON c.id = p.card_id AND +c.game = ${scope.game}
@@ -84,7 +86,11 @@ export function printingsForSet(
   return withImages(db, rows, scope)
 }
 
-export function printingsForCards(db: SqlDb, cardIds: number[], scope: Scope = LOCAL): ScanPrinting[] {
+export function printingsForCards(
+  db: SqlDb,
+  cardIds: number[],
+  scope: Scope = LOCAL
+): ScanPrinting[] {
   const ids = [...new Set(cardIds)]
   const rows: PrintingRow[] = []
   for (let i = 0; i < ids.length; i += 500) {
@@ -121,7 +127,10 @@ export function cardsForImages(
 }
 
 // The game's name list, normalized for matching, is rebuilt only when the catalog version or game changes.
-const nameCache = new WeakMap<object, { version: string | null; game: string; names: NameEntry[] }>()
+const nameCache = new WeakMap<
+  object,
+  { version: string | null; game: string; names: NameEntry[] }
+>()
 
 function cardNames(db: SqlDb, scope: Scope): NameEntry[] {
   const version = getMeta(db, 'db_version')

@@ -1,7 +1,8 @@
-import { mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'fs'
+import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync } from 'fs'
 import { readFile } from 'fs/promises'
 import { join } from 'path'
 import { decodeFingerprints } from '@shared/scan/fingerprintFile'
+import { parseFingerprintRefs, type FingerprintRefsFile } from '@shared/scan/fingerprintRefs'
 import type { FingerprintStatus } from '@shared/scan/types'
 
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -12,16 +13,27 @@ interface Meta {
   etag: string | null
   count: number
   checkedAt: string
+  /**
+   * The refs file's ETag: null once asked for and the portal had none (or gave none), absent
+   * until asked for (an install from before the refs), which asks within the day.
+   */
+  refsEtag?: string | null
 }
 
 export interface FingerprintStore {
   read(): Promise<ArrayBuffer | null>
+  /** The fingerprint refs file on disk (see fingerprintRefs.ts), or null when there is none. */
+  readRefs(): Promise<FingerprintRefsFile | null>
   status(): FingerprintStatus
   /** The status after checking the portal; `updated` when it wrote a new file to disk. */
   refresh(opts?: { force?: boolean }): Promise<FingerprintStatus>
 }
 
-/** The card-art fingerprint file, downloaded from the portal and kept in `dir` (`<userData>/scan`). */
+/**
+ * The card-art fingerprint file, downloaded from the portal and kept in `dir` (`<userData>/scan`),
+ * with the refs file that says which printings its printing scans show. The refs are extras: a
+ * portal without them, or trouble getting them, leaves the fingerprints as they would be alone.
+ */
 export function createFingerprintStore(opts: {
   dir: string
   portal: string
@@ -35,12 +47,18 @@ export function createFingerprintStore(opts: {
   const timeoutMs = opts.timeoutMs ?? DOWNLOAD_TIMEOUT_MS
   const binPath = join(dir, 'fingerprints.bin')
   const metaPath = join(dir, 'fingerprints.json')
+  const refsPath = join(dir, 'fingerprint-refs.json')
 
   const loadMeta = (): Meta | null => {
     try {
       const meta = JSON.parse(readFileSync(metaPath, 'utf8')) as Meta
       const count = decodeFingerprints(readFileSync(binPath)).count
-      return { etag: meta.etag ?? null, count, checkedAt: meta.checkedAt }
+      return {
+        etag: meta.etag ?? null,
+        count,
+        checkedAt: meta.checkedAt,
+        refsEtag: meta.refsEtag
+      }
     } catch {
       return null
     }
@@ -64,6 +82,38 @@ export function createFingerprintStore(opts: {
 
   /** Resolves true when it wrote a new file. */
   async function download(): Promise<boolean> {
+    const wrote = await downloadFingerprints()
+    // Only beside a fingerprint file, and never failing the refresh.
+    const wroteRefs = meta ? await downloadRefs().catch(() => false) : false
+    return wrote || wroteRefs
+  }
+
+  /** Resolves true when it wrote a new refs file. */
+  async function downloadRefs(): Promise<boolean> {
+    const etag = meta?.refsEtag
+    const headers: Record<string, string> =
+      etag && existsSync(refsPath) ? { 'If-None-Match': etag } : {}
+    const res = await doFetch(`${portal}/scan/fingerprint-refs`, {
+      headers,
+      signal: AbortSignal.timeout(timeoutMs)
+    })
+    if (!res.ok) {
+      await res.body?.cancel()
+      // None on the portal yet: asked, so the daily check asks again rather than every refresh.
+      if (res.status === 404 && meta && meta.refsEtag === undefined)
+        saveMeta({ ...meta, refsEtag: null })
+      return false
+    }
+    const text = await res.text()
+    parseFingerprintRefs(text)
+    writeFileSync(`${refsPath}.tmp`, text)
+    renameSync(`${refsPath}.tmp`, refsPath)
+    if (meta) saveMeta({ ...meta, refsEtag: res.headers.get('ETag') })
+    return true
+  }
+
+  /** Resolves true when it wrote a new fingerprint file. */
+  async function downloadFingerprints(): Promise<boolean> {
     const headers: Record<string, string> = meta?.etag ? { 'If-None-Match': meta.etag } : {}
     // The timeout covers the body too: arrayBuffer() rejects once the signal aborts.
     const res = await doFetch(`${portal}/scan/fingerprints`, {
@@ -81,7 +131,7 @@ export function createFingerprintStore(opts: {
     mkdirSync(dir, { recursive: true })
     writeFileSync(`${binPath}.tmp`, bytes)
     renameSync(`${binPath}.tmp`, binPath)
-    saveMeta({ etag: res.headers.get('ETag'), count, checkedAt: now().toISOString() })
+    saveMeta({ ...meta, etag: res.headers.get('ETag'), count, checkedAt: now().toISOString() })
     return true
   }
 
@@ -108,14 +158,21 @@ export function createFingerprintStore(opts: {
         return null
       }
     },
+    async readRefs() {
+      try {
+        return parseFingerprintRefs(await readFile(refsPath, 'utf8'))
+      } catch {
+        return null
+      }
+    },
     refresh({ force = false } = {}) {
       if (inFlight) return inFlight
-      if (!force && meta && now().getTime() - Date.parse(meta.checkedAt) < DAY_MS) {
-        return Promise.resolve(status())
-      }
+      const fresh = !force && meta && now().getTime() - Date.parse(meta.checkedAt) < DAY_MS
+      // An install from before the refs gets them now, not at its next daily check.
+      if (fresh && meta!.refsEtag !== undefined) return Promise.resolve(status())
       downloading = true
       failed = false
-      inFlight = download()
+      inFlight = (fresh ? downloadRefs().catch(() => false) : download())
         .catch(() => {
           failed = true
           return false

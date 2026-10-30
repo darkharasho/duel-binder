@@ -14,7 +14,8 @@ import {
   ART_MATCH_DEPTH,
   ART_MAX_DISTANCE,
   ART_MAX_DISTANCE_IN_SET,
-  ART_MIN_MARGIN
+  ART_MIN_MARGIN,
+  ART_REF_MIN_MARGIN
 } from '@shared/scan/thresholds'
 
 const LOB = 'Legend of Blue Eyes White Dragon'
@@ -559,5 +560,133 @@ describe('withRarityByLook with the look model (the phone scanner)', () => {
       const item = await secretOrUltimate()
       expect(withRarityByLook(item, LIGHT, 'Ultimate Rare', look(frame(3)))).toBe(item)
     })
+  })
+})
+
+describe('printings told by a reference scan of their art', () => {
+  // YAC1-JP006 in five printings: plain Ultra and Secret, and an overframe family of three.
+  const YAC1 = 'Original Artwork Collection'
+  const card = {
+    cardId: 3,
+    name: 'Relinquished the Wicked Eye of Illusion',
+    frameType: 'fusion',
+    price: null,
+    setName: YAC1,
+    setCode: 'YAC1-JP006',
+    language: 'ja'
+  } as const
+  const OWN: ScanPrinting[] = [
+    { ...card, imageIds: [301], printingId: 31, rarity: 'Ultra Rare' },
+    { ...card, imageIds: [301], printingId: 32, rarity: 'Secret Rare' },
+    {
+      ...card,
+      imageIds: [301],
+      printingId: 33,
+      rarity: 'Prismatic Secret Rare',
+      variant: 'Overframe'
+    },
+    { ...card, imageIds: [301], printingId: 34, rarity: 'Grand Master Rare', variant: 'Overframe' },
+    { ...card, imageIds: [301], printingId: 35, rarity: 'Ultra Rare (Overframe)' }
+  ]
+  const ctx: ResolveContext = {
+    ...noSet,
+    lookups: {
+      ...lookups,
+      printingsByCode: async (code) => (code === 'YAC1-JP006' ? OWN : []),
+      printingsForCards: async (ids) => (ids.includes(3) ? OWN : []),
+      cardsForImages: async (ids) =>
+        ids.filter((i) => i === 301).map((imageId) => ({ imageId, cardId: 3 }))
+    }
+  }
+  /** The photo's art match: its card art `base` off, the PScR's overframe scan `ref` off. */
+  const art = (base: number, ref: number, printingIds = [33]): ArtMatch[] => [
+    {
+      imageId: 301,
+      distance: Math.min(base, ref),
+      base,
+      refs: [{ h: 'a'.repeat(64), printingIds, distance: ref }]
+    }
+  ]
+  const OVERFRAME = [33, 34, 35]
+  const coded = (a: ArtMatch[]): RawSignals => raw({ codeTexts: ['YAC1-JP006'], art: a })
+
+  it("takes a code's printing from its art family when an overframe scan beats the card art", async () => {
+    const item = await recognized(coded(art(70, 30)), ctx)
+    expect(item).toMatchObject({
+      printingId: 35,
+      rarity: 'Ultra Rare (Overframe)',
+      flag: 'check-rarity',
+      artPrintings: OVERFRAME
+    })
+    expect(item.options).toEqual(OWN)
+  })
+
+  it("picks a one-rarity family's printing, still to be checked against the code's others", async () => {
+    const three = OWN.filter((p) => p.printingId !== 34 && p.printingId !== 35)
+    const item = await recognized(coded(art(70, 30)), {
+      ...ctx,
+      lookups: { ...ctx.lookups, printingsByCode: async () => three }
+    })
+    expect(item).toMatchObject({ printingId: 33, flag: 'check-rarity', artPrintings: [33] })
+  })
+
+  it('ignores a scan that more than one art variant took', async () => {
+    const alt: ScanPrinting = {
+      ...OWN[0],
+      printingId: 36,
+      rarity: 'Ultra Rare',
+      variant: 'Alternate art'
+    }
+    const item = await recognized(coded(art(70, 30, [33, 36])), {
+      ...ctx,
+      lookups: { ...ctx.lookups, printingsByCode: async () => [...OWN, alt] }
+    })
+    expect(item).toMatchObject({ printingId: 31, flag: 'check-rarity' })
+    expect(item.artPrintings).toBeUndefined()
+  })
+
+  it('keeps to the lowest rarity when the scan is not clearly closer than the card art', async () => {
+    const item = await recognized(coded(art(30 + ART_REF_MIN_MARGIN - 1, 30)), ctx)
+    expect(item).toMatchObject({ printingId: 31, flag: 'check-rarity' })
+    expect(item.artPrintings).toBeUndefined()
+  })
+
+  it("ignores a scan of printings the code doesn't have, or that aren't another art", async () => {
+    for (const ids of [[99], [32]]) {
+      const item = await recognized(coded(art(70, 30, ids)), ctx)
+      expect(item).toMatchObject({ printingId: 31, flag: 'check-rarity' })
+      expect(item.artPrintings).toBeUndefined()
+    }
+  })
+
+  it('leaves a match without its card art distance alone', async () => {
+    const [match] = art(70, 30)
+    const item = await recognized(coded([{ ...match, base: undefined }]), ctx)
+    expect(item.printingId).toBe(31)
+  })
+
+  it('keeps the rarity the user said the stack is', async () => {
+    const item = await recognized(coded(art(70, 30)), { ...ctx, defaultRarity: 'Secret Rare' })
+    expect(item).toMatchObject({ printingId: 32, flag: null })
+  })
+
+  it('takes the family by art within a picked set and with no code read', async () => {
+    const inYac1 = await recognized(raw({ art: art(70, 30) }), {
+      ...ctx,
+      setName: YAC1,
+      setPrintings: OWN
+    })
+    expect(inYac1).toMatchObject({ printingId: 35, artPrintings: OVERFRAME })
+    const anywhere = await recognized(raw({ art: art(70, 30) }), ctx)
+    expect(anywhere).toMatchObject({ printingId: 35, artPrintings: OVERFRAME })
+  })
+
+  it("lets the look pick only among the art family's rarities", async () => {
+    // LOB-EN005 as if a scan had told its Secret Rare (12) from its Ultra Rare (11): a dark gold
+    // name, which says Ultra Rare, doesn't move it.
+    const item = { ...(await recognized(raw({ codeTexts: ['LOB-EN005'] }))), printingId: 12 }
+    const dark = { nameInk: 'dark', nameTint: 'gold' } as const
+    expect(withRarityByLook(item, dark, null).printingId).toBe(11)
+    expect(withRarityByLook({ ...item, artPrintings: [12] }, dark, null).printingId).toBe(12)
   })
 })

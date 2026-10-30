@@ -1,6 +1,6 @@
 import type { Mat } from '@techstark/opencv-js'
 import { artHash } from '@shared/scan/fingerprint'
-import type { FingerprintIndex } from '@shared/scan/fingerprintFile'
+import type { ArtMatch, FingerprintIndex } from '@shared/scan/fingerprintFile'
 import type { RgbaImage } from '@shared/scan/types'
 import type { CV } from './cv'
 import { ART_BOXES, type Box } from './regions'
@@ -311,11 +311,27 @@ export function jittered(box: Box, jitter: number): Box[] {
   ])
 }
 
+/** Two matches of one artwork as one: the best of each distance (base, each reference scan). */
+export function mergeMatch(a: ArtMatch, b: ArtMatch): ArtMatch {
+  const out: ArtMatch = { imageId: a.imageId, distance: Math.min(a.distance, b.distance) }
+  const base = Math.min(a.base ?? Infinity, b.base ?? Infinity)
+  if (Number.isFinite(base)) out.base = base
+  if (a.refs || b.refs) {
+    const refs = new Map<string, NonNullable<ArtMatch['refs']>[number]>()
+    for (const r of [...(a.refs ?? []), ...(b.refs ?? [])]) {
+      const had = refs.get(r.h)
+      if (!had || r.distance < had.distance) refs.set(r.h, r)
+    }
+    out.refs = [...refs.values()].sort((x, y) => x.distance - y.distance)
+  }
+  return out
+}
+
 /**
  * A straightened card's k closest artworks, and whether the best of them matched it upside down.
  * With jitter, the art box and way up that came closest to any artwork is tried again a little off
- * (jittered), keeping each image's best distance: four more hashes and lookups rather than
- * sixteen for every box both ways up.
+ * (jittered), keeping each image's best distances (mergeMatch): four more hashes and lookups
+ * rather than sixteen for every box both ways up.
  */
 export function rankArt(
   cv: CV,
@@ -324,20 +340,24 @@ export function rankArt(
   candidates?: ReadonlySet<number>,
   k = TOP_MATCHES,
   jitter = 0
-): { matches: { imageId: number; distance: number }[]; upsideDown: boolean } {
+): { matches: ArtMatch[]; upsideDown: boolean } {
   const upright = toMat(cv, card)
   const flipped = new cv.Mat()
   return using([upright, flipped], () => {
     // Flipping both axes turns the card 180 degrees.
     cv.flip(upright, flipped, -1)
-    const best = new Map<number, { distance: number; upsideDown: boolean }>()
+    const best = new Map<number, { match: ArtMatch; upsideDown: boolean }>()
     let closest: { mat: Mat; box: Box; distance: number } | null = null
     const look = (mat: Mat, box: Box): void => {
       const found = index.nearest(hashBox(cv, mat, box), k, candidates)
-      for (const { imageId, distance } of found) {
-        const prev = best.get(imageId)
-        if (prev === undefined || distance < prev.distance)
-          best.set(imageId, { distance, upsideDown: mat === flipped })
+      for (const match of found) {
+        const prev = best.get(match.imageId)
+        if (prev === undefined) best.set(match.imageId, { match, upsideDown: mat === flipped })
+        else
+          best.set(match.imageId, {
+            match: mergeMatch(prev.match, match),
+            upsideDown: match.distance < prev.match.distance ? mat === flipped : prev.upsideDown
+          })
       }
       if (found[0] && (!closest || found[0].distance < closest.distance))
         closest = { mat, box, distance: found[0].distance }
@@ -345,12 +365,11 @@ export function rankArt(
     for (const mat of [upright, flipped]) for (const box of Object.values(ART_BOXES)) look(mat, box)
     const around = closest as { mat: Mat; box: Box } | null
     if (jitter && around) for (const box of jittered(around.box, jitter)) look(around.mat, box)
-    const ranked = [...best]
-      .map(([imageId, m]) => ({ imageId, ...m }))
-      .sort((a, b) => a.distance - b.distance || a.imageId - b.imageId)
+    const ranked = [...best.values()]
+      .sort((a, b) => a.match.distance - b.match.distance || a.match.imageId - b.match.imageId)
       .slice(0, k)
     return {
-      matches: ranked.map(({ imageId, distance }) => ({ imageId, distance })),
+      matches: ranked.map((r) => r.match),
       upsideDown: ranked[0]?.upsideDown ?? false
     }
   })
@@ -366,6 +385,6 @@ export function matchArt(
   card: RgbaImage,
   index: FingerprintIndex,
   candidates?: ReadonlySet<number>
-): { imageId: number; distance: number }[] {
+): ArtMatch[] {
   return rankArt(cv, card, index, candidates).matches
 }

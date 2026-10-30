@@ -23,6 +23,7 @@ import type {
   UpdateStatus
 } from './types'
 import type { ScanWindowMessage } from './scanWindow'
+import type { ScanRef } from './scan/fingerprintRefs'
 import type { FingerprintStatus, OcrBand, ScanPrinting } from './scan/types'
 import type { CardLanguage } from './scan/language'
 import type { PackWrappers, RipCard, RipHistory, RipSessionDetail, RipSet } from './rip/types'
@@ -66,6 +67,11 @@ export interface Api {
     /** The card of each artwork id that is in the catalog. */
     cardsForImages(imageIds: number[]): Promise<{ imageId: number; cardId: number }[]>
     fingerprints(): Promise<ArrayBuffer | null>
+    /**
+     * The fingerprint file's reference scans of art variants, with their printings as this app's
+     * printing ids (see fingerprintRefs.ts); empty when there are none.
+     */
+    fingerprintRefs(): Promise<ScanRef[]>
     refreshFingerprints(): Promise<FingerprintStatus>
     ocr(bands: OcrBand[], kind: 'code' | 'name'): Promise<string[]>
     /** The language the card text on the bands reads as; null when it can't be told. */
@@ -199,6 +205,7 @@ export const INVOKE_CHANNELS = [
   'scan:matchName',
   'scan:cardsForImages',
   'scan:fingerprints',
+  'scan:fingerprintRefs',
   'scan:refreshFingerprints',
   'scan:ocr',
   'scan:language',

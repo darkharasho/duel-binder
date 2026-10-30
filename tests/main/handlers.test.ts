@@ -75,6 +75,7 @@ async function makeHandlers(opts: { signedIn?: boolean } = {}) {
     emitDataChanged: vi.fn(),
     fingerprints: {
       read: async () => null,
+      readRefs: async () => null,
       status: () => ({ state: 'missing', count: 0 }),
       refresh: async () => ({ state: 'missing', count: 0 })
     },

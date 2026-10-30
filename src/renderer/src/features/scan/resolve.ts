@@ -1,5 +1,6 @@
 import type { Api } from '@shared/ipc'
 import { LANGUAGES } from '@shared/languages'
+import { artVariantName } from '@shared/scan/fingerprintRefs'
 import type { CardLanguage } from '@shared/scan/language'
 import { lookCandidate, pickRarityByLook, type LookModel } from '@shared/scan/look'
 import { pickRarity, pickRarityByCues, type RarityCues } from '@shared/scan/rarity'
@@ -9,7 +10,8 @@ import {
   ART_MATCH_DEPTH,
   ART_MAX_DISTANCE,
   ART_MAX_DISTANCE_IN_SET,
-  ART_MIN_MARGIN
+  ART_MIN_MARGIN,
+  ART_REF_MIN_MARGIN
 } from '@shared/scan/thresholds'
 import type { ScanDraft, ScanPrinting } from '@shared/scan/types'
 import type { ArtMatch, RawSignals } from './engine'
@@ -43,17 +45,68 @@ export interface ResolveContext {
 const imageFor = (art: ArtMatch[], imageIds: number[]): number | undefined =>
   art[0] && imageIds.includes(art[0].imageId) ? art[0].imageId : imageIds[0]
 
-/** The printing among same-code printings whose rarity pickRarity chooses. */
+/**
+ * The printings among `among` that a reference scan picks out (see fingerprintRefs.ts): when a
+ * Yugipedia scan of an art variant's printing matched the photo at least ART_REF_MIN_MARGIN closer
+ * than its card art did, every printing among them in the same art variant as that scan's. The
+ * whole variant, not just the scan's printings: an overframe Prismatic Secret, Grand Master and
+ * Ultra Rare look alike, and some have no scan. Null when no scan does.
+ */
+function artFamily(art: ArtMatch[], among: ScanPrinting[]): ScanPrinting[] | null {
+  const variantOf = (p: ScanPrinting): string | null => artVariantName(p.rarity, p.variant)
+  const variants = new Set<string>()
+  for (const m of art) {
+    if (m.base === undefined || !m.refs) continue
+    for (const r of m.refs) {
+      if (r.distance > ART_MAX_DISTANCE || m.base - r.distance < ART_REF_MIN_MARGIN) continue
+      const shown = new Set(
+        among
+          .filter((p) => r.printingIds.includes(p.printingId))
+          .map(variantOf)
+          .filter((v) => v !== null)
+      )
+      // A scan more than one art took (a gallery short of scans) says nothing of which.
+      if (shown.size === 1) variants.add([...shown][0])
+    }
+  }
+  if (variants.size === 0) return null
+  return among.filter((p) => variants.has(variantOf(p) ?? ''))
+}
+
+/**
+ * The printing among same-code printings whose rarity pickRarity chooses, among the art family
+ * a reference scan picked out (artFamily) when there is one, unless the rarity the user said the
+ * stack is is among the printings but not the family: what the user said goes. `family` is the
+ * family it chose among, or null. The family only preselects: whether the rarity is certain is
+ * still told over all the printings (or by the user's rarity), since a scan's art doesn't tell
+ * its foil.
+ */
 function choose(
   printings: ScanPrinting[],
-  defaultRarity: string | null
-): { printing: ScanPrinting; certain: boolean } {
-  const { rarity, certain } = pickRarity(
-    printings.map((p) => p.rarity),
-    defaultRarity
-  )
-  return { printing: printings.find((p) => p.rarity === rarity) ?? printings[0], certain }
+  defaultRarity: string | null,
+  family: ScanPrinting[] | null = null
+): { printing: ScanPrinting; certain: boolean; family: ScanPrinting[] | null } {
+  const pick = (among: ScanPrinting[]): { rarity: string; certain: boolean } =>
+    pickRarity(
+      among.map((p) => p.rarity),
+      defaultRarity
+    )
+  const all = pick(printings)
+  const ofFamily = family && pick(family)
+  const useFamily = ofFamily && !(defaultRarity !== null && all.certain && !ofFamily.certain)
+  const among = useFamily ? family! : printings
+  const { rarity } = useFamily ? ofFamily : all
+  const certain = all.certain || (!!useFamily && defaultRarity !== null && ofFamily.certain)
+  return {
+    printing: among.find((p) => p.rarity === rarity) ?? among[0],
+    certain,
+    family: useFamily ? family : null
+  }
 }
+
+/** The draft's artPrintings, when a reference scan's family chose its printing. */
+const artPrintings = (family: ScanPrinting[] | null): Pick<ScanDraft, 'artPrintings'> =>
+  family ? { artPrintings: family.map((p) => p.printingId) } : {}
 
 /** The first code candidate, over every code band read, that names a printing. */
 async function byCode(raw: RawSignals, ctx: ResolveContext): Promise<ScanDraft | null> {
@@ -64,7 +117,11 @@ async function byCode(raw: RawSignals, ctx: ResolveContext): Promise<ScanDraft |
       tried.add(code)
       const found = await ctx.lookups.printingsByCode(code)
       if (!found.length) continue
-      const { printing, certain } = choose(found, ctx.defaultRarity)
+      const { printing, certain, family } = choose(
+        found,
+        ctx.defaultRarity,
+        artFamily(raw.art, found)
+      )
       const imageId = imageFor(raw.art, printing.imageIds)
       if (imageId === undefined) continue
       const otherSet =
@@ -79,7 +136,8 @@ async function byCode(raw: RawSignals, ctx: ResolveContext): Promise<ScanDraft |
         rarity: printing.rarity,
         options: found,
         flag: otherSet ? 'other-set' : certain ? null : 'check-rarity',
-        via: 'code'
+        via: 'code',
+        ...artPrintings(family)
       }
     }
   }
@@ -88,7 +146,8 @@ async function byCode(raw: RawSignals, ctx: ResolveContext): Promise<ScanDraft |
 
 /**
  * A card found by art or name within the picked set: its first code in the set, with the
- * rarity pickRarity chooses among that code's printings, and all its set printings to pick from.
+ * rarity pickRarity chooses among that code's printings (or among its set printings of the art
+ * family a reference scan picked out), and all its set printings to pick from.
  */
 function inSet(
   cardId: number,
@@ -98,9 +157,10 @@ function inSet(
 ): ScanDraft | null {
   const own = (ctx.setPrintings ?? []).filter((p) => p.cardId === cardId)
   if (!own.length) return null
-  const { printing, certain } = choose(
+  const { printing, certain, family } = choose(
     own.filter((p) => p.setCode === own[0].setCode),
-    ctx.defaultRarity
+    ctx.defaultRarity,
+    artFamily(art, own)
   )
   const imageId = imageFor(art, printing.imageIds)
   if (imageId === undefined) return null
@@ -113,15 +173,17 @@ function inSet(
     rarity: printing.rarity,
     options: own,
     flag: certain ? null : 'check-rarity',
-    via
+    via,
+    ...artPrintings(family)
   }
 }
 
 /**
  * A card with no code read and no set to place it in: an assumed printing among all of its
  * printings, in the language its text reads as when it has printings in it, else in the first
- * language it has (English when it has one), of the rarity pickRarity chooses there, flagged for
- * the user to check unless the card was printed only once.
+ * language it has (English when it has one), of the rarity pickRarity chooses there (among the
+ * art family a reference scan picked out there, if any), flagged for the user to check unless
+ * the card was printed only once.
  */
 async function anyPrinting(
   cardId: number,
@@ -140,7 +202,7 @@ async function anyPrinting(
   )?.code
   const ofLanguage = options.filter((o) => o.language === language)
   if (!ofLanguage.length) return null
-  const { printing } = choose(ofLanguage, ctx.defaultRarity)
+  const { printing, family } = choose(ofLanguage, ctx.defaultRarity, artFamily(art, ofLanguage))
   const imageId = imageFor(art, printing.imageIds)
   if (imageId === undefined) return null
   return {
@@ -152,7 +214,8 @@ async function anyPrinting(
     rarity: printing.rarity,
     options,
     flag: options.length === 1 ? null : 'pick-printing',
-    via
+    via,
+    ...artPrintings(family)
   }
 }
 
@@ -231,6 +294,18 @@ export interface LookInput {
 }
 
 /**
+ * The printings the look picks the rarity among: the draft's code's, in its language, and of its
+ * art family when a reference scan picked one out.
+ */
+const lookOptions = (item: ScanDraft, current: ScanPrinting): ScanPrinting[] =>
+  item.options.filter(
+    (p) =>
+      p.setCode === current.setCode &&
+      p.language === current.language &&
+      (!item.artPrintings || item.artPrintings.includes(p.printingId))
+  )
+
+/**
  * The draft with the rarity its look picks, under Auto (no default rarity), when the look
  * settles which of its code's rarities it is: no longer flagged Check rarity, and on the
  * printing of that rarity showing the draft's artwork when there is one. Unchanged when the
@@ -248,9 +323,7 @@ export function withRarityByLook(
 ): ScanDraft {
   const current = item.options.find((p) => p.printingId === item.printingId)
   if (!current || defaultRarity !== null || !cues || (!cues.nameInk && !cues.surface)) return item
-  const sameCode = item.options.filter(
-    (p) => p.setCode === current.setCode && p.language === current.language
-  )
+  const sameCode = lookOptions(item, current)
   const available = sameCode.map((p) => p.rarity)
   if (pickRarity(available, null).certain) return item
   const { rarity, certain } = look
@@ -279,9 +352,7 @@ export function describeLook(
 ): Record<string, unknown> | null {
   const current = item.options.find((p) => p.printingId === item.printingId)
   if (!current || !cues) return null
-  const available = item.options
-    .filter((p) => p.setCode === current.setCode && p.language === current.language)
-    .map((p) => p.rarity)
+  const available = lookOptions(item, current).map((p) => p.rarity)
   if (pickRarity(available, null).certain) return null
   const rules = pickRarityByCues(available, cues, current.frameType)
   const candidate = lookCandidate(look.model, available, cues, look.frames, current.frameType)

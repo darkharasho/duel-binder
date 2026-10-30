@@ -11,6 +11,14 @@ export const ART_MAX_DISTANCE_IN_SET = 80
  */
 export const ART_MIN_MARGIN = 10
 /**
+ * How much closer than its card art a reference scan of an art variant (an overframe, say) must
+ * match a photo for the photo to be taken for that variant's printings (see artFamily in
+ * resolve.ts). On the owner's photos, overframe and manga-art printings beat their card art by
+ * 46-96; plain printings were beaten by another art's scan by at most 28 (alternate QCAC arts at
+ * 12-16).
+ */
+export const ART_REF_MIN_MARGIN = 32
+/**
  * A card-shaped thing in view whose closest artwork is further off than this, and that reads as
  * no card by code or name, is taken for something else (a book, the deck on the desk): nothing in
  * view, rather than a card it couldn't recognize.

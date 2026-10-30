@@ -1,10 +1,14 @@
 import { decodeFingerprints } from '../../../src/shared/scan/fingerprintFile'
+import { parseFingerprintRefs } from '../../../src/shared/scan/fingerprintRefs'
 import type { AppDeps } from './app'
 
 const FINGERPRINTS_KEY = 'scan/fingerprints.bin'
 /** The file the last upload replaced, kept so a bad night can be rolled back. */
 const PREVIOUS_KEY = 'scan/fingerprints.prev.bin'
 const MAX_FINGERPRINT_BYTES = 8 * 1024 * 1024
+/** Which printings the fingerprint file's printing scans show (see fingerprintRefs.ts). */
+const REFS_KEY = 'scan/fingerprint-refs.json'
+const MAX_REFS_BYTES = 4 * 1024 * 1024
 /**
  * An upload holding fewer than this share of the current file's records is refused unless the
  * request says `?force=1`: a night with failed image downloads must not shrink every client's
@@ -70,16 +74,50 @@ export async function rollbackFingerprints(deps: AppDeps): Promise<Response> {
   return json({ ok: true, count: decodeFingerprints(previous).count })
 }
 
-/** Public download of the fingerprint file; clients revalidate by ETag. */
-export async function getFingerprints(req: Request, deps: AppDeps): Promise<Response> {
-  const object = await deps.images.get(FINGERPRINTS_KEY)
-  if (!object) return json({ error: 'No fingerprints yet' }, 404)
+/**
+ * Admin upload of the fingerprint refs file: stored once it parses and fits the size limit. It
+ * goes with the fingerprint file uploaded just before it, and keys its refs by hash, so a client
+ * holding another fingerprint file just finds fewer of them; no shrink check or rollback.
+ */
+export async function putFingerprintRefs(req: Request, deps: AppDeps): Promise<Response> {
+  const declared = Number(req.headers.get('content-length') ?? 0)
+  if (declared > MAX_REFS_BYTES) return json({ error: 'File is too large' }, 400)
+  const bytes = await req.arrayBuffer()
+  if (bytes.byteLength > MAX_REFS_BYTES) return json({ error: 'File is too large' }, 400)
+  let count: number
+  try {
+    count = parseFingerprintRefs(new TextDecoder().decode(bytes)).refs.length
+  } catch {
+    return json({ error: 'Not a fingerprint refs file' }, 400)
+  }
+  await deps.images.put(REFS_KEY, bytes, { httpMetadata: { contentType: 'application/json' } })
+  return json({ ok: true, count })
+}
+
+/** A stored scan file for download; clients revalidate by ETag. */
+async function serve(
+  req: Request,
+  deps: AppDeps,
+  key: string,
+  type: string,
+  missing: string
+): Promise<Response> {
+  const object = await deps.images.get(key)
+  if (!object) return json({ error: missing }, 404)
   const headers = new Headers({ 'cache-control': 'no-cache' })
   if (object.httpEtag) headers.set('etag', object.httpEtag)
   if (object.httpEtag && req.headers.get('if-none-match') === object.httpEtag) {
     await object.body.cancel()
     return new Response(null, { status: 304, headers })
   }
-  headers.set('content-type', 'application/octet-stream')
+  headers.set('content-type', type)
   return new Response(object.body, { status: 200, headers })
 }
+
+/** Public download of the fingerprint file. */
+export const getFingerprints = (req: Request, deps: AppDeps): Promise<Response> =>
+  serve(req, deps, FINGERPRINTS_KEY, 'application/octet-stream', 'No fingerprints yet')
+
+/** Public download of the fingerprint refs file. */
+export const getFingerprintRefs = (req: Request, deps: AppDeps): Promise<Response> =>
+  serve(req, deps, REFS_KEY, 'application/json', 'No fingerprint refs yet')

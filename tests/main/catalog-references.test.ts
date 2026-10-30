@@ -11,6 +11,7 @@ import { NEW_ART_VARIANT } from '../../src/main/yugipedia/parse'
 import { ART_BOXES, crop } from '../../src/renderer/src/features/scan/vision/regions'
 import { artHash } from '../../src/shared/scan/fingerprint'
 import { decodeFingerprints } from '../../src/shared/scan/fingerprintFile'
+import { hashHex, parseFingerprintRefs } from '../../src/shared/scan/fingerprintRefs'
 import type { RgbaImage } from '../../src/shared/scan/types'
 
 describe('wantsReference', () => {
@@ -27,7 +28,8 @@ describe('wantsReference', () => {
     ['Super Rare', null, false],
     ['Secret Rare', '', false],
     ['Rare (Green)', null, false],
-    ['Ultra Rare', 'Blue', false]
+    ['Ultra Rare', 'Blue', false],
+    ['Ultra Rare (25th Anniversary Edition)', null, true]
   ])('%s / %s: %s', (rarity, variant, wanted) => {
     expect(wantsReference(rarity, variant)).toBe(wanted)
   })
@@ -123,7 +125,7 @@ afterEach(() => {
   rmSync(dir, { recursive: true, force: true })
 })
 
-const FILES = ['ShiEn-BLGG-EN-StR-1E.png', 'ShiEn-BLGG-EN-ScR-1E.png', 'ShiEn-STOR-EN-UR-1E.png']
+const FILES = ['ShiEn-BLGG-EN-StR-1E.png', 'ShiEn-BLGG-EN-ScR-1E.png', 'ShiEn-STOR-EN-UR-1E-EA.png']
 
 function fakeYugipedia(files: string[] = FILES): {
   listPageImages: Mock<(titles: string[]) => Promise<Map<string, string[]>>>
@@ -154,10 +156,10 @@ describe('buildReferences', () => {
     const run = (): ReturnType<typeof buildReferences> =>
       buildReferences({ work, cache, yugipedia, fetch, userAgent: 'test' })
     const first = await run()
-    expect(first.entries).toEqual([{ imageId: 11, hash: SCAN_HASH }])
+    expect(first.entries).toEqual([{ imageId: 11, hash: SCAN_HASH, printings: [] }])
     expect(first).toMatchObject({ fetched: 1, failed: 1 })
     // The Secret Rare isn't wanted; the overframe's scan is missing.
-    expect(requested.sort()).toEqual(['ShiEn-BLGG-EN-StR-1E.png', 'ShiEn-STOR-EN-UR-1E.png'])
+    expect(requested.sort()).toEqual(['ShiEn-BLGG-EN-StR-1E.png', 'ShiEn-STOR-EN-UR-1E-EA.png'])
 
     requested.length = 0
     const second = await run()
@@ -192,15 +194,82 @@ describe('buildReferences', () => {
       // BLMM's Blue-Eyes: an art YGOPRODeck doesn't have, 122 from the art it was filed under.
       setArt(10, flipped(140))
       setArt(11, flipped(122))
-      expect((await run()).entries).toEqual([{ imageId: 10, hash: SCAN_HASH }])
+      expect((await run()).entries).toEqual([{ imageId: 10, hash: SCAN_HASH, printings: [] }])
     })
 
     it('still goes under the closest artwork when that one is close enough', async () => {
       // A foil or overframe of the second art, a little further off than a plain scan.
       setArt(10, flipped(130))
       setArt(11, flipped(96))
-      expect((await run()).entries).toEqual([{ imageId: 11, hash: SCAN_HASH }])
+      expect((await run()).entries).toEqual([{ imageId: 11, hash: SCAN_HASH, printings: [] }])
     })
+  })
+
+  it('names every art variant printing that took the scan, by its natural key', async () => {
+    // No Secret Rare overframe scan: that printing takes the Ultra Rare one, whose art it shares.
+    work
+      .prepare(
+        `INSERT INTO card_printings (card_id, set_name, set_code, set_rarity, set_rarity_code, language, variant)
+         VALUES (1, 'Storm of Ragnarok', 'STOR-EN041', 'Secret Rare', '', 'en', 'Overframe')`
+      )
+      .run()
+    const result = await buildReferences({
+      work,
+      cache,
+      yugipedia: fakeYugipedia(['ShiEn-STOR-EN-UR-1E-EA.png']),
+      fetch: scans({ 'ShiEn-STOR-EN-UR-1E-EA.png': png(SCAN) }),
+      userAgent: 'test'
+    })
+    expect(result.entries).toEqual([
+      {
+        imageId: 11,
+        hash: SCAN_HASH,
+        printings: ['en|1|STOR-EN041|Ultra Rare', 'en|1|STOR-EN041|Secret Rare']
+      }
+    ])
+  })
+
+  it('names no overframe printing on the plain scan it fell back to', async () => {
+    // STOR's overframe Ultra Rare has no scan of its own; the plain Super Rare one isn't of it.
+    const plain = 'ShiEn-STOR-EN-SR-1E.png'
+    const result = await buildReferences({
+      work,
+      cache,
+      yugipedia: fakeYugipedia([plain]),
+      fetch: scans({ [plain]: png(SCAN) }),
+      userAgent: 'test'
+    })
+    expect(result.entries).toEqual([{ imageId: 11, hash: SCAN_HASH, printings: [] }])
+  })
+
+  it("names an overframe printing on its rarity's plain-named scan only when that rarity has no plain printing", async () => {
+    // As in LOCR: the Prismatic Secret Rare is only printed overframe, and its file is PScR.png.
+    const add = work.prepare(
+      `INSERT INTO card_printings (card_id, set_name, set_code, set_rarity, set_rarity_code, language, variant)
+       VALUES (1, 'Limit Over Collection: The Rivals', 'LOCR-JP016', ?, '', 'ja', ?)`
+    )
+    add.run('Prismatic Secret Rare', 'Overframe')
+    add.run('Ultra Rare (Overframe)', null)
+    add.run('Ultra Rare', null)
+    const files = ['ShiEn-LOCR-JP-PScR.png', 'ShiEn-LOCR-JP-UR.png']
+    const result = await buildReferences({
+      work,
+      cache,
+      yugipedia: fakeYugipedia(files),
+      fetch: scans({
+        'ShiEn-LOCR-JP-PScR.png': png(SCAN),
+        'ShiEn-LOCR-JP-UR.png': png(image(118, 172, 'y'))
+      }),
+      userAgent: 'test'
+    })
+    const named = result.entries.flatMap((e) => e.printings)
+    expect(named).toContain(
+      'ja|1|Limit Over Collection: The Rivals|LOCR-JP016|Prismatic Secret Rare'
+    )
+    // UR.png is the plain Ultra Rare's, not the overframe one's.
+    expect(named).not.toContain(
+      'ja|1|Limit Over Collection: The Rivals|LOCR-JP016|Ultra Rare (Overframe)'
+    )
   })
 
   it('takes Japanese printings too, and no other language', async () => {
@@ -222,7 +291,11 @@ describe('buildReferences', () => {
     })
     expect(requested).toContain('ShiEn-LOCR-JP-UR-EA.png')
     expect(requested).not.toContain('ShiEn-LOCR-KR-UR-UE-EA.png')
-    expect(result.entries).toContainEqual({ imageId: 11, hash: SCAN_HASH })
+    expect(result.entries).toContainEqual({
+      imageId: 11,
+      hash: SCAN_HASH,
+      printings: ['ja|1|Limit Over Collection: The Rivals|LOCR-JP016|Ultra Rare (Overframe)']
+    })
   })
 
   it("files an uncoded printing under its set's prefix, from the set's coded printings", async () => {
@@ -243,7 +316,11 @@ describe('buildReferences', () => {
       userAgent: 'test'
     })
     expect(requested).toContain('ShiEn-YAC1-JP-UR-MangaStyle-Color.png')
-    expect(result.entries).toContainEqual({ imageId: 11, hash: SCAN_HASH })
+    expect(result.entries).toContainEqual({
+      imageId: 11,
+      hash: SCAN_HASH,
+      printings: ['ja|1|Original Artwork Collection||Ultra Rare']
+    })
   })
 
   it('fetches the plain scan of a New artwork printing, and not of a plain reprint', async () => {
@@ -275,7 +352,11 @@ describe('buildReferences', () => {
     )
     expect(requested).not.toContain('ShiEn-LOCR-JP-SR.png')
     expect(requested).not.toContain('ShiEn-LOCR-KR-UR.png')
-    expect(result.entries).toContainEqual({ imageId: 11, hash: SCAN_HASH })
+    expect(result.entries).toContainEqual({
+      imageId: 11,
+      hash: SCAN_HASH,
+      printings: ['ja|1|Limit Over Collection: The Rivals|LOCR-JP032|Ultra Rare']
+    })
   })
 
   it('looks a printing up again after three days when its gallery had no scan for it', async () => {
@@ -305,7 +386,7 @@ describe('buildReferences', () => {
     )
     const fetch = scans({ 'ShiEn-BLGG-EN-StR-1E.png': png(SCAN) })
     const result = await buildReferences({ work, cache, yugipedia, fetch, userAgent: 'test' })
-    expect(result.entries).toEqual([{ imageId: 11, hash: SCAN_HASH }])
+    expect(result.entries).toEqual([{ imageId: 11, hash: SCAN_HASH, printings: [] }])
     expect(yugipedia.listPageImages).toHaveBeenCalledTimes(2)
   })
 
@@ -440,6 +521,32 @@ describe('buildFingerprints with printing scans', () => {
     })
     expect(again).toMatchObject({ count: 3, references: { count: 1, fetched: 0, failed: 0 } })
     expect(lines).toContain('Printing scan lookup failed: down')
+    cache = new Database(cachePath)
+  })
+
+  it("writes a refs file naming the art variant scans' printings, and not the foils'", async () => {
+    cache.close()
+    const cachePath = join(dir, 'fingerprints.sqlite')
+    const overframe = image(118, 172, 'y')
+    const fetch = scans({
+      'ShiEn-BLGG-EN-StR-1E.png': png(SCAN),
+      'ShiEn-STOR-EN-UR-1E-EA.png': png(overframe)
+    })
+    const out = await buildFingerprints({
+      work,
+      cachePath,
+      fetch: cardArt,
+      references: { yugipedia: fakeYugipedia(), fetch, userAgent: 'test' }
+    })
+    expect(out.references.count).toBe(2)
+    const file = parseFingerprintRefs(new TextDecoder().decode(out.refs))
+    expect(file.refs).toEqual([
+      {
+        h: hashHex(scanHash(overframe, 'effect')!),
+        imageId: expect.any(Number),
+        printings: ['en|1|STOR-EN041|Ultra Rare']
+      }
+    ])
     cache = new Database(cachePath)
   })
 })

@@ -4,6 +4,7 @@ import { tmpdir } from 'os'
 import { join } from 'path'
 import { createFingerprintStore } from '../../src/main/scan/fingerprints'
 import { encodeFingerprints } from '../../src/shared/scan/fingerprintFile'
+import { encodeFingerprintRefs } from '../../src/shared/scan/fingerprintRefs'
 
 const body = (n: number): Uint8Array =>
   encodeFingerprints(
@@ -24,11 +25,21 @@ describe('fingerprint store', () => {
   })
   afterEach(() => rmSync(dir, { recursive: true, force: true }))
 
+  /** The server has no refs file unless a test gives `refsFetch` to answer for it. */
+  const noRefs: typeof globalThis.fetch = async () => new Response('{}', { status: 404 })
   const make = (
     fetch: typeof globalThis.fetch,
-    timeoutMs?: number
+    timeoutMs?: number,
+    refsFetch: typeof globalThis.fetch = noRefs
   ): ReturnType<typeof createFingerprintStore> =>
-    createFingerprintStore({ dir, portal: 'https://p.test', fetch, now, timeoutMs })
+    createFingerprintStore({
+      dir,
+      portal: 'https://p.test',
+      fetch: (url, init) =>
+        String(url).endsWith('/scan/fingerprint-refs') ? refsFetch(url, init) : fetch(url, init),
+      now,
+      timeoutMs
+    })
 
   /** A fetch that never answers, but gives up when its signal aborts, as fetch does. */
   const stalled = vi.fn<typeof globalThis.fetch>(
@@ -202,6 +213,114 @@ describe('fingerprint store', () => {
     const store = make(vi.fn(async () => ok(body(1))))
     await store.refresh()
     expect(readdirSync(dir).sort()).toEqual(['fingerprints.bin', 'fingerprints.json'])
+  })
+
+  describe('the refs file', () => {
+    const KEY = 'ja|1|Original Artwork Collection|YAC1-JP006|Prismatic Secret Rare'
+    const refs = encodeFingerprintRefs([
+      { imageId: 1, hash: new Uint32Array(8).fill(1), printings: [KEY] }
+    ])
+    const okRefs = (etag = '"r1"'): Response =>
+      new Response(refs as BodyInit, { status: 200, headers: { ETag: etag } })
+
+    it('is downloaded beside the fingerprints and read back', async () => {
+      const refsFetch = vi.fn<typeof globalThis.fetch>(async () => okRefs())
+      const store = make(
+        vi.fn(async () => ok(body(2))),
+        undefined,
+        refsFetch
+      )
+      expect(await store.readRefs()).toBeNull()
+      expect(await store.refresh()).toEqual({ state: 'ready', count: 2, updated: true })
+      expect((await store.readRefs())?.refs).toEqual([
+        { h: '01000000'.repeat(8), imageId: 1, printings: [KEY] }
+      ])
+      // A new store reads it back from disk.
+      expect(await make(vi.fn()).readRefs()).toEqual(await store.readRefs())
+    })
+
+    it('is revalidated by its own ETag, and a new one alone counts as an update', async () => {
+      const fp = vi.fn<typeof globalThis.fetch>(async () => ok(body(2)))
+      const refsFetch = vi.fn<typeof globalThis.fetch>(async () => okRefs())
+      const store = make(fp, undefined, refsFetch)
+      await store.refresh()
+      fp.mockResolvedValue(new Response(null, { status: 304 }))
+      refsFetch.mockResolvedValueOnce(new Response(null, { status: 304 }))
+      expect(await store.refresh({ force: true })).toEqual({ state: 'ready', count: 2 })
+      expect(refsFetch.mock.calls[1][1]).toMatchObject({ headers: { 'If-None-Match': '"r1"' } })
+      refsFetch.mockResolvedValueOnce(okRefs('"r2"'))
+      expect(await store.refresh({ force: true })).toEqual({
+        state: 'ready',
+        count: 2,
+        updated: true
+      })
+    })
+
+    it("leaves the fingerprints' state alone when it fails, and keeps the one on disk", async () => {
+      const refsFetch = vi.fn<typeof globalThis.fetch>(async () => okRefs())
+      const fp = vi.fn<typeof globalThis.fetch>(async () => ok(body(2)))
+      const store = make(fp, undefined, refsFetch)
+      await store.refresh()
+      fp.mockResolvedValue(new Response(null, { status: 304 }))
+      refsFetch.mockResolvedValueOnce(new Response('junk', { status: 200 }))
+      expect(await store.refresh({ force: true })).toEqual({ state: 'ready', count: 2 })
+      refsFetch.mockRejectedValueOnce(new Error('offline'))
+      expect(await store.refresh({ force: true })).toEqual({ state: 'ready', count: 2 })
+      expect(await store.readRefs()).not.toBeNull()
+    })
+
+    it('is not asked for without a fingerprint file', async () => {
+      const refsFetch = vi.fn<typeof globalThis.fetch>(async () => okRefs())
+      const store = make(async () => new Response('{}', { status: 404 }), undefined, refsFetch)
+      await store.refresh()
+      expect(refsFetch).not.toHaveBeenCalled()
+    })
+
+    it('reads as none when the file on disk goes bad', async () => {
+      const store = make(
+        vi.fn(async () => ok(body(2))),
+        undefined,
+        async () => okRefs()
+      )
+      await store.refresh()
+      writeFileSync(join(dir, 'fingerprint-refs.json'), '{')
+      expect(await store.readRefs()).toBeNull()
+    })
+
+    it('is asked for within the day by an install from before the refs, then daily', async () => {
+      // A file checked an hour ago by an app that knew nothing of refs.
+      writeFileSync(join(dir, 'fingerprints.bin'), body(2))
+      writeFileSync(
+        join(dir, 'fingerprints.json'),
+        JSON.stringify({
+          etag: '"v1"',
+          count: 2,
+          checkedAt: new Date(clock - 3600_000).toISOString()
+        })
+      )
+      const fp = vi.fn<typeof globalThis.fetch>(async () => ok(body(2)))
+      const refsFetch = vi.fn<typeof globalThis.fetch>(
+        async () => new Response('{}', { status: 404 })
+      )
+      const store = make(fp, undefined, refsFetch)
+      expect(await store.refresh()).toEqual({ state: 'ready', count: 2 })
+      expect(fp).not.toHaveBeenCalled()
+      expect(refsFetch).toHaveBeenCalledTimes(1)
+      // The portal has none yet: asked again at the daily check, not on every refresh.
+      await store.refresh()
+      expect(refsFetch).toHaveBeenCalledTimes(1)
+
+      // Another old install, once the portal has them.
+      refsFetch.mockResolvedValue(okRefs())
+      writeFileSync(
+        join(dir, 'fingerprints.json'),
+        JSON.stringify({ etag: '"v1"', count: 2, checkedAt: new Date(clock).toISOString() })
+      )
+      const again = make(fp, undefined, refsFetch)
+      expect(await again.refresh()).toEqual({ state: 'ready', count: 2, updated: true })
+      expect(fp).not.toHaveBeenCalled()
+      expect(await again.readRefs()).not.toBeNull()
+    })
   })
 
   it('downloads again on the next refresh when the file on disk goes bad', async () => {

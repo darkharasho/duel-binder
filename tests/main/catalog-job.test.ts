@@ -466,6 +466,39 @@ describe('uploadCatalog', () => {
     work.close()
   })
 
+  it('asks the portal to mirror only new Pokémon set art, after the upload', async () => {
+    ;(await workDb()).close()
+    const { fetch } = recordingFetch(ok)
+    const warmed: string[][] = []
+    const warm: JobOptions['warmSetArt'] = async (o) => {
+      warmed.push(o.keys)
+      return { stored: o.keys.length, cached: 0, failed: 0 }
+    }
+    const addArt = (key: string) => async (work: Database.Database) => {
+      work
+        .prepare(
+          "INSERT INTO pokemon_set_art (language, set_name, kind, sort_order, image_url, image_key) VALUES ('en', 'Base Set', 'pack', ?, ?, ?)"
+        )
+        .run(Number(key.slice(-1)), `https://archives.bulbagarden.net/media/upload/${key}.jpg`, key)
+      return { reports: [], error: null }
+    }
+    const job = {
+      dir,
+      url: URL_BASE,
+      token: TOKEN,
+      fetch,
+      imageFetch: noImages,
+      checkAccuracy: passing,
+      refresh: async () => {},
+      warmSetArt: warm,
+      log: () => {}
+    }
+    await runJob({ ...job, pokemon: addArt('bp-0') })
+    await runJob({ ...job, pokemon: async () => ({ reports: [], error: null }) })
+    await runJob({ ...job, pokemon: addArt('bp-1') })
+    expect(warmed).toEqual([['bp-0'], ['bp-1']])
+  })
+
   it('a failing fingerprint upload is logged and the catalog base still advances', async () => {
     ;(await workDb()).close()
     const { fetch } = recordingFetch((call) =>

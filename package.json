@@ -28,6 +28,7 @@
     "build:linux": "npm run build && electron-builder --linux",
     "catalog:job": "vite build --config scripts/catalog/vite.config.ts && cross-env ELECTRON_RUN_AS_NODE=1 electron out/catalog/build.mjs",
     "catalog:parity": "vite build --config scripts/catalog/vite.config.ts && cross-env ELECTRON_RUN_AS_NODE=1 electron out/catalog/parity.mjs",
+    "catalog:set-art": "vite build --config scripts/catalog/vite.config.ts && cross-env ELECTRON_RUN_AS_NODE=1 electron out/catalog/set-art.mjs",
     "test": "cross-env ELECTRON_RUN_AS_NODE=1 electron ./node_modules/vitest/vitest.mjs run --maxWorkers=2"
   },
   "dependencies": {

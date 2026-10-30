@@ -10,6 +10,8 @@ export type MetaKey =
   | 'pack_art_synced_at'
   | 'set_logos_synced_at'
   | 'konami_logos_synced_at'
+  /** When the nightly job last matched Pokémon pack art and fallback logos (pokemon_set_art). */
+  | 'pkm_set_art_synced_at'
   /** The cloud account whose collection is shown, as an integer string; absent means 0 (local). */
   | 'cloud_active_owner'
   /** The signed-in user's `Me` as JSON; absent when signed out. */

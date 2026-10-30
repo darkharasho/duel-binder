@@ -1,15 +1,17 @@
 import type Database from 'better-sqlite3'
 import type { SqlDb } from '../db/sql'
 import {
+  BULBAGARDEN_IMAGE_PREFIX,
   imageUrl,
   KONAMI_LOGO_PREFIX,
+  POKEMONTCG_IMAGE_PREFIX,
   PACK_ART_PREFIX,
   setImageUrl,
   YUGIPEDIA_IMAGE_PREFIX
 } from '../../shared/imageSources'
 import type { ImageSources } from '../images/cache'
 import { printingImageKey } from '../images/cache'
-import { findSetImageUrl } from '../repo/sets'
+import { findPokemonSetArtUrl, findSetImageUrl } from '../repo/sets'
 import type { CatalogService } from '../catalog/service'
 import { createYgoClient } from '../ygo/client'
 import { refreshCatalog, type RefreshCatalogDeps } from '../sync/catalog'
@@ -33,9 +35,10 @@ export function directImageSources(opts: {
   const headers = { 'User-Agent': `DuelBinder/${opts.version} (${REPO_URL})` }
   const resolved = (
     key: string,
-    prefix: string
+    prefix: string,
+    find: (db: SqlDb, key: string) => string | null = findSetImageUrl
   ): { url: string; headers: typeof headers } | null => {
-    const url = findSetImageUrl(opts.db, key)
+    const url = find(opts.db, key)
     return url !== null && url.startsWith(prefix) ? { url, headers } : null
   }
   return {
@@ -44,6 +47,8 @@ export function directImageSources(opts: {
       const source = key.slice(0, 3)
       if (source === 'yp-') return resolved(key, YUGIPEDIA_IMAGE_PREFIX)
       if (source === 'yc-') return resolved(key, PACK_ART_PREFIX)
+      if (source === 'bp-') return resolved(key, BULBAGARDEN_IMAGE_PREFIX, findPokemonSetArtUrl)
+      if (source === 'pt-') return resolved(key, POKEMONTCG_IMAGE_PREFIX, findPokemonSetArtUrl)
       return { url: setImageUrl(key) }
     },
     konami: (key) => resolved(key, KONAMI_LOGO_PREFIX),

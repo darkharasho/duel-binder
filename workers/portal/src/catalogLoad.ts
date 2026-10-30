@@ -6,6 +6,7 @@ import { upsertCatalogRow } from '../../../src/main/catalog/upsert'
 import { putFingerprintRefs, putFingerprints, rollbackFingerprints } from './scanFiles'
 import { isAdmin } from './auth'
 import { collectStats } from './stats'
+import { warmImage } from './images'
 
 const MAX_ITEMS = 5000
 const META_KEYS: MetaKey[] = ['db_version', 'last_sync_at']
@@ -179,6 +180,13 @@ export async function adminRoute(req: Request, deps: AppDeps): Promise<Response>
     return putFingerprintRefs(req, deps)
   if (req.method === 'POST' && path === '/admin/scan/fingerprints/rollback') {
     return rollbackFingerprints(deps)
+  }
+
+  if (req.method === 'POST' && path === '/admin/img/warm') {
+    const body: unknown = await req.json().catch(() => null)
+    if (!isObject(body) || typeof body.path !== 'string')
+      return json({ error: 'Body must be { path }' }, 400)
+    return json({ result: await warmImage(deps, body.path) })
   }
 
   const handlers: Record<string, (body: Record<string, unknown>) => void> = {

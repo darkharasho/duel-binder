@@ -63,6 +63,18 @@ function AboutSection(): React.JSX.Element {
         </a>{' '}
         (CC BY-SA 4.0).
       </p>
+      <p className="text-sm text-muted-foreground">
+        Pokémon booster pack images from the{' '}
+        <a
+          href="https://archives.bulbagarden.net/"
+          target="_blank"
+          rel="noreferrer"
+          className="underline underline-offset-2 hover:text-foreground"
+        >
+          Bulbagarden Archives
+        </a>
+        ; set logos from TCGdex and the Pokémon TCG API. Pokémon images © The Pokémon Company.
+      </p>
     </Section>
   )
 }

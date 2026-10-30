@@ -235,7 +235,7 @@ describe('resolvePokemonSignals', () => {
     expect(await recognized(raw({ art: twins }), ctx)).toMatchObject({ cardId: 2 })
   })
 
-  it('art alone never names a card whose reprint of the art has no artwork to match', async () => {
+  it('never names a card whose reprint of the art has no artwork to match', async () => {
     const ctx = (twinned: boolean): ResolveContext => ({
       ...pkm('en'),
       lookups: {
@@ -249,10 +249,10 @@ describe('resolvePokemonSignals', () => {
     // A Classic Collection reprint matches its original's art, and has none of its own.
     expect(await resolveSignals(raw({ art: twins }), ctx(true))).toEqual({ kind: 'unsure' })
     expect(await recognized(raw({ art: twins }), ctx(false))).toMatchObject({ cardId: 1 })
-    // A number read is the card's own: the reprint's differs.
-    expect(await recognized(raw({ art: twins, codeTexts: ['045/193'] }), ctx(true))).toMatchObject({
-      cardId: 1,
-      via: 'code'
+    // Nor with its number read: a Classic Collection reprint prints its original's number (an
+    // eBay Celebrations Tapu Lele GX read 60/145, the original's).
+    expect(await resolveSignals(raw({ art: twins, codeTexts: ['045/193'] }), ctx(true))).toEqual({
+      kind: 'unsure'
     })
   })
 

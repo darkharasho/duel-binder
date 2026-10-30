@@ -151,8 +151,9 @@ async function draft(
  * - With a collector number read: the art's cards that carry it, or with no art close, the
  *   number's cards a name read agrees with; one of them in the read language is named,
  *   `via: 'code'`.
- * - Without: the art's cards; one of them in the read language is named, unless it has a
- *   reprint of the art with no artwork to match (ScanPrinting.unseenTwin).
+ * - Without: the art's cards; one of them in the read language is named.
+ * - Either way, never a card with a reprint of its art that has no artwork to match
+ *   (ScanPrinting.unseenTwin).
  * - Nothing at all, and the closest artwork past ART_FAR_DISTANCE: `none`, far.
  *
  * The language is read only once there's a card to name, and at most once; a read that fails
@@ -180,9 +181,12 @@ export async function resolvePokemonSignals(
   const group = await artGroup(raw, ctx)
   if (group === null) return unsure
   const numbered = await byNumber(raw, ctx)
+  // A card with a reprint of its art that has no artwork of its own is never named: the art
+  // can't tell them apart, nor can the number, as a Classic Collection reprint prints its
+  // original's.
   const named = async (cardId: number, via: 'code' | 'art'): Promise<ScanOutcome> => {
     const item = await draft(cardId, raw, ctx, via)
-    return item ? { kind: 'recognized', item } : unsure
+    return item && !item.options.some((p) => p.unseenTwin) ? { kind: 'recognized', item } : unsure
   }
 
   /**
@@ -227,8 +231,6 @@ export async function resolvePokemonSignals(
   const printings = await ctx.lookups.printingsForCards(group)
   const ids = await inLanguage(printings)
   if (ids.length !== 1) return unsure
-  const card = printings.filter((p) => p.cardId === ids[0])
-  // A reprint of the art with no artwork of its own can't be told from the card by art alone.
-  if (card.some((p) => p.unseenTwin)) return unsure
-  return (await reprintBehind(raw, card[0], ctx)) ? unsure : named(ids[0], 'art')
+  const card = printings.find((p) => p.cardId === ids[0])!
+  return (await reprintBehind(raw, card, ctx)) ? unsure : named(ids[0], 'art')
 }

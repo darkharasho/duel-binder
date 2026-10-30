@@ -81,9 +81,32 @@ describe('English names for Japanese cards', () => {
     expect(nameOf(card('Magcargo（デルタ種）', [219]))).toBe('Magcargo δ')
   })
 
-  it('names an owner other cards name, and leaves out one they do not', () => {
-    expect(nameOf(card('ナンジャモのピカチュウ', [25]))).toBe("Iono's Pikachu")
-    expect(nameOf(card('モーティのピカチュウ', [25]))).toBe('Pikachu')
+  it('names an owner from the table, from other cards, or as TCGdex writes it in English', () => {
+    expect(nameOf(card('タケシのピカチュウ', [25]))).toBe("Brock's Pikachu")
+    expect(nameOf(card('モーティのピカチュウ', [25]))).toBe("Morty's Pikachu")
+    expect(nameOf(card('マチスのピカチュウ', [25]))).toBe("Lt. Surge's Pikachu")
+    expect(nameOf(card('Bugsyのピカチュウ', [25]))).toBe("Bugsy's Pikachu")
+    expect(nameOf(card("Surge's Pikachu中t", [25]))).toBe("Lt. Surge's Pikachu")
+    // Not in the table: learned from a product-named card ("ナンジャモの…" → "Iono's …").
+    const learned = englishNamer(en, ja, [
+      { japanese: 'ゼイユのオタチ', english: "Carmine's Sentret" }
+    ])
+    expect(learned.nameOf(card('ゼイユのピカチュウ', [25]))?.name).toBe("Carmine's Pikachu")
+  })
+
+  it('keeps the Japanese name when an owner cannot be named, rather than drop it', () => {
+    expect(nameOf(card('ゼイユのピカチュウ', [25]))).toBeNull()
+  })
+
+  it("names a form whose Japanese name holds a 'の', and Unown only by its letter", () => {
+    expect(nameOf(card('ピカチュウの星', [25]))).toBe('Pikachu ☆')
+    const unown = englishNamer([card('Unown', [201]), card('Ogerpon', [1017])], [], [])
+    expect(unown.nameOf(card('オーガポン みどりのめんex', [1017]))?.name).toBe(
+      'Teal Mask Ogerpon ex'
+    )
+    expect(unown.nameOf(card('未定のm', [201]))?.name).toBe('Unown M')
+    expect(unown.nameOf(card('hなしh', [201]))?.name).toBe('Unown H')
+    expect(unown.nameOf(card('未知', [201]))).toBeNull()
   })
 
   it('names basic Energy by type', () => {

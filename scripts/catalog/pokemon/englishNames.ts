@@ -43,6 +43,7 @@ function baseEnglish(name: string): string {
 const JA_SUFFIXES: readonly [string, string][] = [
   ['プリズムスター', ' Prism Star'],
   ['(デルタ種)', ' δ'],
+  ['の星', ' ☆'],
   ['V-UNION', ' V-UNION'],
   ['VUNION', ' V-UNION'],
   ['VSTAR', ' VSTAR'],
@@ -80,6 +81,91 @@ const JA_PREFIXES: readonly [string, string][] = [
   ['メガ', 'Mega '],
   ['M', 'M ']
 ]
+
+/**
+ * Owners of Owner's Pokémon ("タケシの" → "Brock's"), as Bulbapedia's list names them in
+ * English. Each has its official Japanese name and, where TCGdex writes the English name in
+ * katakana instead (its older Japanese sets are machine translated), that spelling too.
+ */
+const OWNERS: Readonly<Record<string, string>> = {
+  タケシ: 'Brock',
+  ブロック: 'Brock',
+  カスミ: 'Misty',
+  ミスティ: 'Misty',
+  マチス: 'Lt. Surge',
+  エリカ: 'Erika',
+  キョウ: 'Koga',
+  コガ: 'Koga',
+  ナツメ: 'Sabrina',
+  サブリナ: 'Sabrina',
+  カツラ: 'Blaine',
+  ブレイン: 'Blaine',
+  サカキ: 'Giovanni',
+  ジョバンニ: 'Giovanni',
+  R団: 'Rocket',
+  ロケット: 'Rocket',
+  ロケット団: 'Team Rocket',
+  アクア団: 'Team Aqua',
+  マグマ団: 'Team Magma',
+  ハヤト: 'Falkner',
+  フォークナー: 'Falkner',
+  ツクシ: 'Bugsy',
+  バグジー: 'Bugsy',
+  アカネ: 'Whitney',
+  ホイットニー: 'Whitney',
+  マツバ: 'Morty',
+  モーティ: 'Morty',
+  ミカン: 'Jasmine',
+  ジャスミン: 'Jasmine',
+  シジマ: 'Chuck',
+  チャック: 'Chuck',
+  ヤナギ: 'Pryce',
+  プライス: 'Pryce',
+  イブキ: 'Clair',
+  クレア: 'Clair',
+  アンズ: 'Janine',
+  ジャニーン: 'Janine',
+  イツキ: 'Will',
+  ウィル: 'Will',
+  シバ: 'Bruno',
+  ブルーノ: 'Bruno',
+  カリン: 'Karen',
+  カレン: 'Karen',
+  ワタル: 'Lance',
+  ランス: 'Lance',
+  ホロン: 'Holon',
+  レッド: 'Red',
+  サトシ: 'Ash',
+  リーリエ: 'Lillie',
+  ホップ: 'Hop',
+  ナンジャモ: 'Iono',
+  ダイゴ: 'Steven',
+  マリィ: 'Marnie',
+  ヒビキ: 'Ethan',
+  シロナ: 'Cynthia',
+  ペパー: 'Arven',
+  アオキ: 'Larry'
+}
+
+/** An owner TCGdex already writes in English ("Bugsy", "N"). */
+const LATIN_OWNER = /^[A-Z][A-Za-z.]*(?: [A-Z][A-Za-z.]*)?$/
+
+/** Pokémon whose Japanese form name holds a "の" that is no owner, by their English card name. */
+const JA_FORMS: Readonly<Record<string, string>> = {
+  'オーガポン みどりのめん': 'Teal Mask Ogerpon',
+  'オーガポン いどのめん': 'Wellspring Mask Ogerpon',
+  'オーガポン かまどのめん': 'Hearthflame Mask Ogerpon',
+  'オーガポン いしずえのめん': 'Cornerstone Mask Ogerpon',
+  'ネクロズマ あかつきのつばさ': 'Dawn Wings Necrozma',
+  'ネクロズマ たそがれのたてがみ': 'Dusk Mane Necrozma',
+  'ポワルン たいようのすがた': 'Castform Sunny Form',
+  'ポワルン あまみずのすがた': 'Castform Rainy Form',
+  'ポワルン ゆきぐものすがた': 'Castform Snowy Form',
+  // TCGdex's machine-translated names for Holon Research Tower's forms.
+  日当たりの良いキャストフォーム: 'Castform Sunny Form',
+  雨のキャストフォーム: 'Castform Rain Form',
+  スノークラウドキャストフォーム: 'Castform Snow-cloud Form'
+}
 
 const LATIN_END = /[A-Za-z]$/
 const LATIN_START = /^[A-Za-z]/
@@ -223,6 +309,15 @@ export function englishNamer(
         }
       }
     }
+    const form = JA_FORMS[rest]
+    if (form) return form + suffix
+    if (dex.length === 1 && dex[0] === 201) {
+      // Each Unown card is one letter, which TCGdex's older sets bury in a machine translation
+      // ("未定のm", "hなしh"). With no single letter to tell it apart, it keeps its Japanese name.
+      const letters = new Set((rest.match(/[A-Za-z!?]/g) ?? []).map((l) => l.toUpperCase()))
+      if (letters.size === 1) return `${names[0]} ${[...letters][0]}${suffix}`
+      return rest === 'アンノーン' ? names[0] + suffix : null
+    }
     let prefix = ''
     if (dex.length === 1) {
       for (let found = true; found && !startsOwn(rest);) {
@@ -237,11 +332,23 @@ export function englishNamer(
             break
           }
         }
+        // An owner TCGdex already writes in English ("Surge's Raichu中t").
+        const en = found ? null : /^([A-Z][A-Za-z.]*(?: [A-Z][A-Za-z.]*)?)'s\s*/.exec(rest)
+        if (en) {
+          prefix += `${en[1] === 'Surge' ? 'Lt. Surge' : en[1]}'s `
+          rest = rest.slice(en[0].length)
+          found = true
+        }
         const o = found ? null : /^(.+?)の./.exec(rest)
         if (o) {
-          // An owner ("ナンジャモの"): in English when other cards name it, else left out.
-          const who = owners.get(o[1])
-          if (who) prefix += `${who}'s `
+          // An owner ("ナンジャモの"), in English from the table, from other cards that name it, or
+          // as written when it already is ("Bugsyの"). An owner left out would make the card read
+          // as another card ("モーティの…" is Morty's Hypno, not Hypno), so an unknown one keeps
+          // the card's Japanese name.
+          const who =
+            OWNERS[o[1]] ?? owners.get(o[1]) ?? (LATIN_OWNER.test(o[1]) ? o[1] : undefined)
+          if (!who) return null
+          prefix += `${who}'s `
           rest = rest.slice(o[1].length + 1)
           found = true
         }

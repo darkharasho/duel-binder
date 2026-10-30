@@ -676,8 +676,6 @@ type Ranked = { quad: Quad; card: RgbaImage } & ReturnType<typeof rankArt>
 const topDistance = (r: { matches: readonly { distance: number }[] }): number =>
   r.matches[0]?.distance ?? Infinity
 
-/** lookAgain: outlines matched again at full size, before any region is searched. */
-const RERANK = 3
 /**
  * Regions round candidates are grown by this share of their size, and round an art window's
  * card by this (its size is guessed); at most this many art windows give one.
@@ -723,8 +721,6 @@ export function recognizeArt(
 } | null {
   // Copied into OpenCV once for all the candidates' warps.
   return withMat(cv, img, (frame) => {
-    // Every quad matched at PICK_WIDTH, for a second look (lookAgain).
-    const scored: { quad: Quad; distance: number }[] = []
     const closest = (quads: Quad[]): { quad: Quad; distance: number } | null => {
       let best: { quad: Quad; distance: number } | null = null
       for (const quad of quads) {
@@ -738,7 +734,6 @@ export function recognizeArt(
           profile
         )
         const distance = matches[0]?.distance ?? Infinity
-        if (profile.holderSearch) scored.push({ quad, distance })
         if (!best || distance < best.distance) best = { quad, distance }
       }
       return best
@@ -772,16 +767,7 @@ export function recognizeArt(
     let via: 'holder' | undefined
     if (profile.holderSearch && (!final || topDistance(final) > ART_MAX_DISTANCE)) {
       const tried = [best?.quad, runnerUp].filter((q): q is Quad => !!q)
-      const again = lookAgain(
-        cv,
-        frame,
-        { quads, windows },
-        scored,
-        tried,
-        closest,
-        ranked,
-        profile
-      )
+      const again = lookAgain(cv, frame, { quads, windows }, tried, closest, ranked, profile)
       if (again && topDistance(again) <= ART_MAX_DISTANCE) {
         final = again
         via = 'holder'
@@ -811,17 +797,15 @@ export function recognizeArt(
 /**
  * The second look, for a frame whose art matched nothing (a profile's holderSearch): a card in a
  * holder is small in the frame and its outline loses to the holder's rim; a bare card held over
- * a deck may have no outline found at all. First the closest RERANK outlines matched so far are
- * matched again at full size (at PICK_WIDTH a small card is often misjudged). Then the line and
- * quad search runs again, cut from the full-size frame, inside up to MAX_REGIONS regions: round
- * the first few candidates (a holder's rim, a slab, or the card), round the card each of the
- * first art-window quads would be, and the middle of the frame, where the scan window and the
- * phone have the card held. Each region's closest quad at PICK_WIDTH is matched at full size.
+ * a deck may have no outline found at all. The line and quad search runs again, cut from the
+ * full-size frame, inside up to MAX_REGIONS regions: round the first few candidates (a holder's
+ * rim, a slab, or the card), round the card each of the first art-window quads would be, and the
+ * middle of the frame, where the scan window and the phone have the card held. Each region's closest quad at PICK_WIDTH is matched at full size.
  * The art match is the only judge, and the resolver asks more of a match found this way
  * (resolvePokemon's clearOfOtherNames). Its closest at full size, or null when nothing new was
  * matched.
  *
- * Bounded: at most RERANK + MAX_REGIONS full-size matches, MAX_REGIONS searches of
+ * Bounded: at most MAX_REGIONS full-size matches, MAX_REGIONS searches of
  * REGION_LINES lines each, and their quads (at most SPLIT_CANDIDATES + PLAIN_CANDIDATES + 1 a
  * region) at PICK_WIDTH.
  */
@@ -829,7 +813,6 @@ function lookAgain(
   cv: CV,
   frame: Mat,
   first: { quads: readonly Quad[]; windows: readonly Quad[] },
-  scored: readonly { quad: Quad; distance: number }[],
   tried: Quad[],
   pick: (quads: Quad[]) => { quad: Quad; distance: number } | null,
   ranked: (quad: Quad) => Ranked,
@@ -842,8 +825,6 @@ function lookAgain(
     const r = ranked(quad)
     if (!best || topDistance(r) < topDistance(best)) best = r
   }
-  for (const { quad } of [...scored].sort((a, b) => a.distance - b.distance).slice(0, RERANK))
-    consider(quad)
   const [w, h] = [frame.cols, frame.rows]
   const regions = pickRegions(
     [

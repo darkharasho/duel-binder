@@ -6,7 +6,9 @@ import { scanProfile, type ScanProfile } from '../../src/shared/scan/profiles'
 import { HASH_WORDS, artHash, fingerprintSource } from '../../src/shared/scan/fingerprint'
 import { encodeFingerprints } from '../../src/shared/scan/fingerprintFile'
 import { encodeFingerprintRefs } from '../../src/shared/scan/fingerprintRefs'
-import { buildReferences, type ReferenceOptions } from './references'
+import { isTokenId, TOKEN_ID_MIN } from '../../src/shared/games/ids'
+import type { YugipediaClient } from '../../src/main/yugipedia/client'
+import { buildReferences, decodeImage, download, scanHash, type ReferenceOptions } from './references'
 
 const DEFAULT_CONCURRENCY = 6
 const COMMIT_EVERY = 200
@@ -35,6 +37,8 @@ export interface FingerprintOptions {
   log?: (s: string) => void
   /** Adds Yugipedia printing scans as extra references (see buildReferences); none without it. */
   references?: Omit<ReferenceOptions, 'work' | 'cache' | 'log'>
+  /** Finds the scans of token ids, which YGOPRODeck has no art for; they are left out without it. */
+  tokenArt?: Pick<YugipediaClient, 'imageUrlsByPageId'>
 }
 
 export interface FingerprintResult {
@@ -144,7 +148,9 @@ export async function buildFingerprints(opts: FingerprintOptions): Promise<Finge
         .all() as { image_id: number; image_url: string }[])
         urls.set(r.image_id, pokemonImageUrl(r.image_url))
     }
-    const todo = ids.filter((id) => !cached.has(id))
+    const missing = ids.filter((id) => !cached.has(id))
+    const todo = missing.filter((id) => !isTokenId(id))
+    const tokens = missing.filter(isTokenId)
     const insert = cache.prepare('INSERT OR REPLACE INTO fp (image_id, hash) VALUES (?, ?)')
     // Commit every few inserts rather than per row, but often enough that a run cut off by the
     // timeout keeps its progress.
@@ -175,6 +181,32 @@ export async function buildFingerprints(opts: FingerprintOptions): Promise<Finge
     }
     const workers = Math.max(1, opts.concurrency ?? DEFAULT_CONCURRENCY)
     await Promise.all(Array.from({ length: Math.min(workers, todo.length) }, worker))
+
+    // Token art is a Yugipedia scan of the whole card, cut as a photo is; one at a time, like the
+    // printing scans from the same host.
+    if (tokens.length > 0 && opts.tokenArt) {
+      const userAgent = opts.references?.userAgent ?? 'DuelBinder'
+      try {
+        const art = await opts.tokenArt.imageUrlsByPageId(tokens.map((id) => id - TOKEN_ID_MIN))
+        for (const id of tokens) {
+          try {
+            const url = art.get(id - TOKEN_ID_MIN)
+            if (!url) throw new Error('no image URL')
+            const img = decodeImage(await download(fetchFn, url, userAgent))
+            const hash = img && scanHash(img, frames.get(id)!)
+            if (!hash) throw new Error('not a card scan')
+            insert.run(id, Buffer.from(hash.buffer, hash.byteOffset, hash.byteLength))
+            fetched++
+          } catch (e) {
+            failed++
+            log(`Fingerprint for image ${id} failed: ${e instanceof Error ? e.message : e}`)
+          }
+        }
+      } catch (e) {
+        failed += tokens.length
+        log(`Token art lookup failed: ${e instanceof Error ? e.message : e}`)
+      }
+    }
 
     cache.exec('COMMIT')
 

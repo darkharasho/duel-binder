@@ -3,6 +3,20 @@ import type { GameId } from './types'
 /** Pokémon card ids live at or above this; Yu-Gi-Oh! passcodes are far below it. */
 export const PKM_ID_MIN = 2 ** 40
 
+/**
+ * Yu-Gi-Oh! cards printed with no passcode that YGOPRODeck doesn't list (character tokens and the
+ * like) have ids in [TOKEN_ID_MIN, TOKEN_ID_MAX): a Yugipedia page id above TOKEN_ID_MIN, the
+ * card's page for a card id, its scan's file page for an image id. A page keeps its id through
+ * renames, and the two kinds share one numbering, so an id is stable and names its file. Above
+ * every YGOPRODeck id (passcodes, and its own 9-digit ids at about 500 million) and below 2^31,
+ * so these are plain Yu-Gi-Oh! ids to everything else, and a fingerprint file stays format v1.
+ */
+export const TOKEN_ID_MIN = 2_000_000_000
+export const TOKEN_ID_MAX = 2 ** 31
+
+export const tokenId = (pageId: number): number => TOKEN_ID_MIN + pageId
+export const isTokenId = (id: number): boolean => id >= TOKEN_ID_MIN && id < TOKEN_ID_MAX
+
 const K = new Uint32Array([
   0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5, 0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
   0xd807aa98, 0x12835b01, 0x243185be, 0x550c7dc3, 0x72be5d74, 0x80deb1fe, 0x9bdc06a7, 0xc19bf174,

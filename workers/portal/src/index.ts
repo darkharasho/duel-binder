@@ -6,6 +6,7 @@ import {
 } from '../../../src/main/yugipedia/artResolver'
 import { createTcgplayerLookup } from '../../../src/main/tcgplayer/catalog'
 import { createYugipediaClient } from '../../../src/main/yugipedia/client'
+import { TOKEN_ID_MIN } from '../../../src/shared/games/ids'
 import { handle, type Env } from './app'
 import { createAnonImageQuota, createImageQuota, createMissCache } from './images'
 import { doSql } from './doSql'
@@ -28,6 +29,7 @@ export interface WorkerEnv extends Env {
 /** The single Durable Object holding the catalog and every user's collection. */
 export class Store extends DurableObject<WorkerEnv> {
   private readonly db: SqlDb
+  private readonly yugipedia = createYugipediaClient({ version: 'portal' })
   private readonly printingArt: PrintingArtResolver
   private readonly prices: PriceQueue
   private readonly imageQuota = createImageQuota(Date.now)
@@ -39,7 +41,7 @@ export class Store extends DurableObject<WorkerEnv> {
     this.db = doSql(ctx.storage)
     this.printingArt = createPrintingArtResolver({
       db: this.db,
-      client: createYugipediaClient({ version: 'portal' }),
+      client: this.yugipedia,
       quickUrl: createTcgplayerLookup(this.db)
     })
     this.prices = alarmQueue(ctx.storage, Date.now)
@@ -64,6 +66,10 @@ export class Store extends DurableObject<WorkerEnv> {
       anonImageQuota: this.anonImageQuota,
       anonMisses: this.anonMisses,
       printingArt: this.printingArt,
+      tokenArt: async (imageId) => {
+        const pageId = imageId - TOKEN_ID_MIN
+        return (await this.yugipedia.imageUrlsByPageId([pageId])).get(pageId) ?? null
+      },
       prices: this.prices,
       env: this.env,
       storageBytes: () => this.ctx.storage.sql.databaseSize,

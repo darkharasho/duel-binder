@@ -9,7 +9,7 @@ import {
   isFallbackLogoUrl,
   type ImageSize
 } from '../../../src/shared/imageSources'
-import { PKM_ID_MIN } from '../../../src/shared/games/ids'
+import { isTokenId, PKM_ID_MIN } from '../../../src/shared/games/ids'
 import { findPokemonSetArtUrl, findSetImageUrl } from '../../../src/main/repo/sets'
 import { TCGPLAYER_IMAGE_PREFIX } from '../../../src/main/tcgplayer/catalog'
 import type { AppDeps } from './app'
@@ -276,6 +276,23 @@ function resolve(deps: AppDeps, path: string): Target | null {
       return { key: `card/${kind}/${n}`, source: fixed(url), cache: CARD_CACHE, anonymous: true }
     }
     if (!deps.db.prepare('SELECT 1 FROM card_images WHERE image_id = ?').get(n)) return null
+    if (isTokenId(n)) {
+      // The id names its Yugipedia file. There is one size of it, the original (Yugipedia makes no
+      // crops, nor thumbnails for others), so every size is one stored image and one fetch.
+      return {
+        key: `card/full/${n}`,
+        cache: CARD_CACHE,
+        anonymous: true,
+        meterFirst: true,
+        source: async () => {
+          const art = deps.tokenArt?.(n).catch(() => null)
+          const url = art ? await withTimeout(art, IMAGE_TIMEOUT_MS) : null
+          return url?.startsWith(YUGIPEDIA_IMAGE_PREFIX)
+            ? { url, headers: { 'User-Agent': USER_AGENT } }
+            : null
+        }
+      }
+    }
     return {
       key: `card/${kind satisfies ImageSize}/${n}`,
       source: fixed(imageUrl(kind, n)),

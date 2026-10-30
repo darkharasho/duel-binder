@@ -244,3 +244,54 @@ describe('yugipedia client', () => {
     expect([...out]).toEqual([['Card Gallery:Here', ['H.png']]])
   })
 })
+
+describe('token lookups', () => {
+  it('lists a category through its continuations', async () => {
+    const { client, calls } = setup((_, n) =>
+      n === 0
+        ? res({
+            query: { categorymembers: [{ pageid: 7, title: 'A' }] },
+            continue: { cmcontinue: 'next' }
+          })
+        : res({ query: { categorymembers: [{ pageid: 8, title: 'B' }] } })
+    )
+    expect(await client.listCategoryPages('Category:Monster Tokens')).toEqual([
+      { pageId: 7, title: 'A' },
+      { pageId: 8, title: 'B' }
+    ])
+    expect(calls[1].url.searchParams.get('cmcontinue')).toBe('next')
+    expect(calls[0].url.searchParams.get('cmnamespace')).toBe('0')
+  })
+
+  it('gives a file its page id, through normalized titles, and skips missing files', async () => {
+    const { client } = setup(() =>
+      res({
+        query: {
+          normalized: [{ from: 'File:a_b.png', to: 'File:A b.png' }],
+          pages: [
+            { title: 'File:A b.png', pageid: 12 },
+            { title: 'File:Gone.png', missing: true }
+          ]
+        }
+      })
+    )
+    expect(await client.filePageIds(['a_b.png', 'Gone.png'])).toEqual(new Map([['a_b.png', 12]]))
+  })
+
+  it('finds a file by page id, only on Yugipedia, asking for no thumbnail', async () => {
+    const yp = 'https://ms.yugipedia.com/'
+    const { client, calls } = setup(() =>
+      res({
+        query: {
+          pages: [
+            { title: 'File:A', pageid: 1, imageinfo: [{ url: `${yp}a.png` }] },
+            { title: 'File:C', pageid: 3, imageinfo: [{ url: 'https://evil.test/c.png' }] }
+          ]
+        }
+      })
+    )
+    expect(await client.imageUrlsByPageId([1, 3])).toEqual(new Map([[1, `${yp}a.png`]]))
+    expect(calls[0].url.searchParams.get('pageids')).toBe('1|3')
+    expect(calls[0].url.searchParams.has('iiurlwidth')).toBe(false)
+  })
+})

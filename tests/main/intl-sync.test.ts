@@ -38,6 +38,9 @@ function fake(pages: Record<string, string>): Fake {
     client: undefined as unknown as YugipediaClient
   }
   f.client = {
+    listCategoryPages: async () => [],
+    filePageIds: async () => new Map(),
+    imageUrlsByPageId: async () => new Map(),
     listSetListTitles: async () => {
       if (f.failListing) throw new YugipediaError('boom')
       return f.lists

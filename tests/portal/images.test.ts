@@ -1,4 +1,5 @@
 import type Database from 'better-sqlite3'
+import { tokenId } from '../../src/shared/games/ids'
 import {
   BULBAGARDEN_IMAGE_PREFIX,
   KONAMI_LOGO_PREFIX,
@@ -22,6 +23,67 @@ import { addUser, memoryBucket, noPrices, seededServerDb } from './helpers'
 const BASE = 'https://app.test'
 const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3])
 const imageResponse = (): Response => new Response(JPEG, { status: 200, headers: { 'content-type': 'image/jpeg' } })
+
+describe('token card art', () => {
+  const YP = 'https://ms.yugipedia.com/'
+  const image = tokenId(777)
+  let db: Database.Database
+  let upstream: ReturnType<typeof vi.fn>
+  let deps: AppDeps
+  const tokenArt = vi.fn(async (_id: number): Promise<string | null> => `${YP}a/ab/Token.png`)
+
+  beforeEach(async () => {
+    db = await seededServerDb()
+    tokenArt.mockClear()
+    upstream = vi.fn(async () => imageResponse())
+    const card = tokenId(1)
+    db.prepare(
+      `INSERT INTO cards (id, name, type, frame_type, race, "desc", updated_at)
+       VALUES (?, 'Token (Nash)', 'Token', 'token', 'Token', '', '2026-10-25')`
+    ).run(card)
+    db.prepare('INSERT INTO card_images (image_id, card_id, sort_order) VALUES (?, ?, 0)').run(image, card)
+    deps = {
+      db,
+      assets: { fetch: async () => new Response('nope', { status: 404 }) },
+      images: memoryBucket(),
+      printingArt: { url: vi.fn(async () => null) },
+      tokenArt,
+      prices: noPrices,
+      env: { PUBLIC_URL: BASE, SITE_URL: 'https://site.test', DISCORD_CLIENT_ID: 'c', DISCORD_CLIENT_SECRET: 's', ADMIN_TOKEN: 'a', PRICE_WORKER_URL: 'https://prices.test' },
+      now: () => new Date('2026-10-25T12:00:00.000Z'),
+      fetch: upstream as unknown as typeof fetch
+    }
+  })
+  afterEach(() => db.close())
+
+  const get = (path: string) =>
+    handle(new Request(`${BASE}/img/${path}`, { headers: { 'cf-connecting-ip': '198.51.100.7' } }), deps)
+
+  test('comes from Yugipedia, signed out too, and never from YGOPRODeck', async () => {
+    expect((await get(`full/${image}`)).status).toBe(200)
+    expect(upstream.mock.calls[0][0]).toBe(`${YP}a/ab/Token.png`)
+    expect(tokenArt).toHaveBeenCalledWith(image)
+  })
+
+  test('is stored once, so no size asks Yugipedia again', async () => {
+    await get(`small/${image}`)
+    tokenArt.mockClear()
+    upstream.mockClear()
+    expect((await get(`full/${image}`)).status).toBe(200)
+    expect((await get(`cropped/${image}`)).status).toBe(200)
+    expect(tokenArt).not.toHaveBeenCalled()
+    expect(upstream).not.toHaveBeenCalled()
+  })
+
+  test('404s for an id the catalog lacks, a foreign host, and a failed lookup', async () => {
+    expect((await get(`full/${tokenId(778)}`)).status).toBe(404)
+    tokenArt.mockResolvedValueOnce('https://evil.test/x.png')
+    expect((await get(`full/${image}`)).status).toBe(404)
+    tokenArt.mockRejectedValueOnce(new Error('down'))
+    expect((await get(`small/${image}`)).status).toBe(404)
+    expect(upstream).not.toHaveBeenCalled()
+  })
+})
 
 describe('image route', () => {
   let db: Database.Database

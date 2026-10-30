@@ -55,6 +55,8 @@ export interface AppDeps {
   /** Card images whose upstream fetch recently failed; signed-out misses on them answer 404 without fetching. */
   anonMisses?: MissCache
   printingArt: PrintingArtResolver
+  /** The Yugipedia URL of a token image (see TOKEN_ID_MIN); null when it has none. */
+  tokenArt?: (imageId: number) => Promise<string | null>
   /** Queues an eBay price run after a write. */
   prices: PriceQueue
   env: Env

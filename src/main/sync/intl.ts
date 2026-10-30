@@ -86,7 +86,7 @@ async function fetchChunked(
 }
 
 /** Rows not seen this run: delete when no entry references them, else flag as missing. */
-function deleteOrFlag(db: Database.Database, ids: number[]): void {
+export function deleteOrFlag(db: Database.Database, ids: number[]): void {
   const del = db.prepare(
     `DELETE FROM card_printings WHERE id = ? AND NOT EXISTS
        (SELECT 1 FROM collection_entries WHERE printing_id = card_printings.id)`

@@ -1,4 +1,4 @@
-import { ABSENT_MS, STABLE_FRAMES } from '@shared/scan/thresholds'
+import { ABSENT_MS, GUESS_STABLE_FRAMES, STABLE_FRAMES } from '@shared/scan/thresholds'
 import type { ScanDraft, ScanOutcome } from './resolve'
 
 export interface ShowingTracker {
@@ -17,11 +17,16 @@ export interface ShowingTracker {
  * card is in view. A card whose art matches poorly (a holo, a full-art print, a case's glare)
  * flickers between recognized and far-art `none` frames, so one far-art `none` right after a
  * recognized frame counts as unsure; a second in a row is a real `none`.
+ *
+ * A best guess has to hold for guessFrames, so the frames that may yet read its language or number
+ * come first, and, as it can't be taken back, never counts while a card shown is still in view: a
+ * guess of another card there is more likely the same card's twin than a new one.
  */
 export function createShowingTracker(
-  opts: { stableFrames?: number; absentMs?: number } = {}
+  opts: { stableFrames?: number; guessFrames?: number; absentMs?: number } = {}
 ): ShowingTracker {
   const stableFrames = opts.stableFrames ?? STABLE_FRAMES
+  const guessFrames = opts.guessFrames ?? GUESS_STABLE_FRAMES
   const absentMs = opts.absentMs ?? ABSENT_MS
   let streakOf: number | null = null
   let streak = 0
@@ -55,14 +60,15 @@ export function createShowingTracker(
       }
       absentSince = null
       justSeen = true
-      const { cardId } = outcome.item
+      const { cardId, guess } = outcome.item
       if (cardId === shown) {
         clearStreak()
         return null
       }
+      if (guess && shown !== null) return null
       streak = cardId === streakOf ? streak + 1 : 1
       streakOf = cardId
-      if (streak < stableFrames) return null
+      if (streak < (guess ? guessFrames : stableFrames)) return null
       shown = cardId
       clearStreak()
       return outcome.item

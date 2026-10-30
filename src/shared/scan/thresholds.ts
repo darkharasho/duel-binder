@@ -153,6 +153,44 @@ export const LANGUAGE_MIN_LATIN_CHARS = 8
 export const LANGUAGE_MIN_JA_WORDS = 2
 /** Frames a card's text is read on to tell its language before it's taken in its first one. */
 export const LANGUAGE_MAX_READS = 3
+/**
+ * Where a Pokémon card that can't be named for certain may be named as a best guess (ScanDraft.guess),
+ * by what stood in the way of certainty:
+ * - language: its text told no language, but its name band nearly reads a card's name
+ *   (PKM_GUESS_NAME_LIKENESS).
+ * - language-default: its text told no language and nothing else did either; English.
+ * - reprint: several cards of one name in the language; the closest art.
+ * - misread: a number naming nothing in the art group; taken as a misread and ignored.
+ * - twin: a reprint with no artwork to match (ScanPrinting.unseenTwin).
+ * - behind: a reprint past the art group's margin (reprintBehind).
+ * - holder: art found by the holder search, with another name close (clearOfOtherNames).
+ */
+export type PkmGuessRule =
+  'language' | 'language-default' | 'reprint' | 'misread' | 'twin' | 'behind' | 'holder'
+/**
+ * The rules on, the most right answers with wrong at most PKM_MAX_WRONG_SHARE on the owner's photos
+ * and overall (tests/main/scan-pkm-guess-curve.test.ts replays the others). Language-default costs
+ * 12 Chinese photos; twin is right less often than wrong.
+ */
+export const PKM_GUESS_RULES: readonly PkmGuessRule[] = ['language', 'reprint', 'misread', 'holder']
+/**
+ * How nearly a name band must read a card's name (englishNameLikeness, japaneseNameLikeness) for
+ * the language rule. On the 200 photos whose art matched and whose text told no language, 0.5
+ * reached 40 English and 16 Japanese photos and 1 in the wrong language; no Chinese one reached
+ * even 0.4.
+ */
+export const PKM_GUESS_NAME_LIKENESS = 0.5
+/**
+ * How much closer the closest reprint's art must be than the next's for the reprint rule to name
+ * it. Art hardly tells reprints apart: of 35 guesses, 15 were right with no lead asked, 12 of 30
+ * at 2, 9 of 16 at 4.
+ */
+export const PKM_GUESS_REPRINT_LEAD = 2
+/**
+ * Consecutive frames a best guess must hold before it counts: past every frame that may still
+ * read the language, so a certain answer gets its chance first.
+ */
+export const GUESS_STABLE_FRAMES = LANGUAGE_MAX_READS + 1
 
 // A Pokémon card's version from its foil. Texture is the median fine texture of a region of the
 // straightened card, in luma levels (vision/foil.ts). On real photos the frame's doesn't tell a

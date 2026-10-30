@@ -5,7 +5,7 @@ import type { FingerprintStatus, ScanDraft } from './scan/types'
 export type ScanStatus =
   | { kind: 'idle' }
   | { kind: 'unsure' }
-  | { kind: 'added'; name: string; setCode: string | null }
+  | { kind: 'added'; name: string; setCode: string | null; guess?: true }
   | { kind: 'stopped' }
 
 /** What the main window tells the scan window to scan with. */

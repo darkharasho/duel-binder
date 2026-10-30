@@ -42,6 +42,7 @@ function Bar({ pull }: { pull: Pull }): React.JSX.Element {
         <p className="truncate text-[clamp(1rem,2.4vw,2.25rem)] leading-tight font-semibold">
           {pull.name}
         </p>
+        {pull.guess && <p className="text-amber-300">Best guess</p>}
         {sub && <p className="truncate text-white/60">{sub}</p>}
         {pull.price !== null && (
           <p className="flex items-baseline gap-[0.6vw] text-[clamp(1.1rem,2.6vw,2.4rem)] leading-tight font-bold text-emerald-400 tabular-nums">

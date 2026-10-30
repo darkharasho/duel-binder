@@ -2,7 +2,12 @@ import { describe, expect, it, vi } from 'vitest'
 import { resolveSignals, type ResolveContext, type ScanDraft } from '@/features/scan/resolve'
 import type { RawSignals } from '@/features/scan/engine'
 import type { ScanPrinting } from '@shared/scan/types'
-import { ART_FAR_DISTANCE, ART_MAX_DISTANCE, PKM_ART_MIN_MARGIN } from '@shared/scan/thresholds'
+import {
+  ART_FAR_DISTANCE,
+  ART_MAX_DISTANCE,
+  PKM_ART_MIN_MARGIN,
+  PKM_GUESS_REPRINT_LEAD
+} from '@shared/scan/thresholds'
 import { printing } from './scanFakes'
 
 type Read = 'en' | 'ja' | 'other' | 'kanji' | null
@@ -136,8 +141,17 @@ const pkm = (read: Read): ResolveContext & { readLanguage: ReturnType<typeof vi.
   setName: null,
   setPrintings: null,
   defaultRarity: null,
+  // What's certain; the rules are on in the best-guess tests below.
+  guessRules: [],
   readLanguage: vi.fn(async () => read),
   lookups
+})
+
+/** The app's context: PKM_GUESS_RULES on. */
+const guessing = (read: Read, names: string[] = []): ResolveContext => ({
+  ...pkm(read),
+  guessRules: undefined,
+  readLocalName: async () => names
 })
 
 async function recognized(r: RawSignals, ctx: ResolveContext): Promise<ScanDraft> {
@@ -469,6 +483,95 @@ describe('art found only by the holder search', () => {
     ]
     expect(await recognized(raw({ art }), pkm('en'))).toMatchObject({ cardId: 1 })
     expect(await resolveSignals(holder({ art }), pkm('en'))).toEqual({ kind: 'unsure' })
+  })
+})
+
+describe('best guesses', () => {
+  const unsure = { kind: 'unsure' }
+
+  it('a certain card carries no guess', async () => {
+    const item = await recognized(raw({ art: twins }), guessing('en'))
+    expect(item).toMatchObject({ cardId: 1 })
+    expect('guess' in item).toBe(false)
+  })
+
+  it('language: a name band that nearly reads a name picks its card and language', async () => {
+    const en = raw({ art: twins, nameTexts: ['Pikch'] })
+    expect(await recognized(en, guessing(null))).toMatchObject({ cardId: 1, guess: true })
+    const ja = await recognized(raw({ art: twins }), guessing('kanji', ['ピカチ']))
+    expect(ja).toMatchObject({ cardId: 2, guess: true })
+  })
+
+  it('language: never with nothing like a name read, as a Chinese card reads', async () => {
+    const zh = raw({ art: twins, nameTexts: ['ZERIT', 'al NL'] })
+    expect(await resolveSignals(zh, guessing(null, ['空 宋 中 管']))).toEqual(unsure)
+    expect(await resolveSignals(zh, guessing('kanji', ['空 宋 中 管']))).toEqual(unsure)
+  })
+
+  it('language: never against text read as another language', async () => {
+    const r = raw({ art: twins, nameTexts: ['Pikachu'] })
+    expect(await resolveSignals(r, guessing('other', ['ピカチュウ']))).toEqual(unsure)
+  })
+
+  it('reprint: the closest art, given enough of a lead', async () => {
+    const art = (lead: number): RawSignals =>
+      raw({
+        art: [
+          { imageId: 301, distance: 30 },
+          { imageId: 101, distance: 30 + lead }
+        ]
+      })
+    expect(await recognized(art(PKM_GUESS_REPRINT_LEAD), guessing('en'))).toMatchObject({
+      cardId: 3,
+      guess: true
+    })
+    expect(await resolveSignals(art(PKM_GUESS_REPRINT_LEAD - 1), guessing('en'))).toEqual(unsure)
+  })
+
+  it('reprint: never among cards of different names', async () => {
+    const art = [
+      { imageId: 101, distance: 30 },
+      { imageId: 501, distance: 50 }
+    ]
+    expect(await resolveSignals(raw({ art }), guessing('en'))).toEqual(unsure)
+  })
+
+  it('misread: a number naming nothing in the art group is ignored', async () => {
+    const art = [{ imageId: 101, distance: 20 }]
+    const item = await recognized(raw({ art, codeTexts: ['026/165'] }), guessing('en'))
+    expect(item).toMatchObject({ cardId: 1, via: 'art', guess: true })
+  })
+
+  it('holder: art with another name close is a guess', async () => {
+    const art = [
+      { imageId: 101, distance: 70 },
+      { imageId: 501, distance: ART_MAX_DISTANCE + 10 }
+    ]
+    const item = await recognized(raw({ art, artVia: 'holder' }), guessing('en'))
+    expect(item).toMatchObject({ cardId: 1, guess: true })
+  })
+
+  it('left off: a reprint behind the margin or with no artwork stays unsure', async () => {
+    const behind = [
+      { imageId: 101, distance: 30 },
+      { imageId: 301, distance: 30 + PKM_ART_MIN_MARGIN + 2 }
+    ]
+    expect(await resolveSignals(raw({ art: behind }), guessing('en'))).toEqual(unsure)
+    const seenTwin: ResolveContext = {
+      ...guessing('en'),
+      lookups: {
+        ...lookups,
+        printingsForCards: async (ids) =>
+          (await lookups.printingsForCards(ids)).map((p) => ({ ...p, unseenTwin: true as const }))
+      }
+    }
+    expect(await resolveSignals(raw({ art: twins }), seenTwin)).toEqual(unsure)
+  })
+
+  it('a rule left out of guessRules guesses nothing', async () => {
+    const art = [{ imageId: 101, distance: 20 }]
+    const ctx = { ...guessing('en'), guessRules: ['language' as const] }
+    expect(await resolveSignals(raw({ art, codeTexts: ['026/165'] }), ctx)).toEqual(unsure)
   })
 })
 

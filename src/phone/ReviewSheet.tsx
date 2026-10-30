@@ -10,7 +10,13 @@ import {
 import { CardArt } from '@/components/CardArt'
 import { useScanLanguage } from '@/features/scan/pickerOptions'
 import { useScanHub } from '@/features/scan/ScanHub'
-import { choicesFor, flagText, photoFor, pickerLabel, setLabelFor } from '@/features/scan/ScanRowItem'
+import {
+  choicesFor,
+  flagText,
+  photoFor,
+  pickerLabel,
+  setLabelFor
+} from '@/features/scan/ScanRowItem'
 import { OptionLabel } from '@/features/scan/SearchPicker'
 import type { ScanRow } from '@/features/scan/session'
 import { ClearSessionDialog, useSessionCommit } from '@/features/scan/SessionList'
@@ -47,7 +53,13 @@ function ReviewRow({ row, disabled }: { row: ScanRow; disabled: boolean }): Reac
   const flag = flagText(row)
   const where = setLabelFor(row)
   return (
-    <li className={cn('flex gap-3 rounded-[20px] p-2.5', GLASS, row.flag && 'border-amber-400/45')}>
+    <li
+      className={cn(
+        'flex gap-3 rounded-[20px] p-2.5',
+        GLASS,
+        (row.flag || row.guess) && 'border-amber-400/45'
+      )}
+    >
       <CardArt
         imageId={row.imageId}
         printingId={photoFor(row)}

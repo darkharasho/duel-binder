@@ -13,7 +13,8 @@ import {
   ART_MAX_DISTANCE_IN_SET,
   ART_MIN_MARGIN,
   ART_REF_MIN_MARGIN,
-  ART_TONE_MIN_LEAD
+  ART_TONE_MIN_LEAD,
+  type PkmGuessRule
 } from '@shared/scan/thresholds'
 import type { ScanDraft, ScanPrinting } from '@shared/scan/types'
 import type { ArtMatch, RawSignals } from './engine'
@@ -32,6 +33,8 @@ export type ScanOutcome =
 export interface ResolveContext {
   /** The game whose cards are scanned; Yu-Gi-Oh when left out. */
   game?: GameId
+  /** Which best guesses a Pokémon card may be named by; PKM_GUESS_RULES when left out. */
+  guessRules?: readonly PkmGuessRule[]
   setName: string | null
   /** The picked set's printings in its language; null when no set is picked. */
   setPrintings: ScanPrinting[] | null

@@ -85,11 +85,12 @@ export function createYugipediaClient(opts: {
   let lastStart: number | null = null
 
   async function paceThenFetch(url: string): Promise<Response> {
-    if (lastStart !== null) {
-      const wait = lastStart + MIN_GAP_MS - now()
-      if (wait > 0) await sleep(wait)
-    }
-    lastStart = now()
+    // The slot is taken before sleeping, so callers at the same moment queue up instead of waking
+    // together.
+    const t = now()
+    const start = lastStart === null ? t : Math.max(t, lastStart + MIN_GAP_MS)
+    lastStart = start
+    if (start > t) await sleep(start - t)
     return fetchFn(url, {
       headers: { 'User-Agent': userAgent },
       signal: AbortSignal.timeout(TIMEOUT_MS)

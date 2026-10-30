@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { createYugipediaClient, YugipediaError } from '../../src/main/yugipedia/client'
 
 interface Call {
@@ -165,6 +165,35 @@ describe('yugipedia client', () => {
     const { client, calls } = setup(() => res({ error: { code: 'badvalue' } }))
     await expect(client.listSetListTitles()).rejects.toThrow('API error: badvalue')
     expect(calls).toHaveLength(1)
+  })
+
+  it('keeps concurrent callers 500 ms apart, those arriving late included', async () => {
+    vi.useFakeTimers()
+    try {
+      const starts: number[] = []
+      const t0 = Date.now()
+      const client = createYugipediaClient({
+        version: '1',
+        fetchFn: (async () => {
+          starts.push(Date.now() - t0)
+          return res({ query: { pages: [] } })
+        }) as unknown as typeof fetch
+      })
+      const calls = [1, 2, 3].map((n) => client.imageUrlsByPageId([n]))
+      await vi.advanceTimersByTimeAsync(100)
+      calls.push(client.imageUrlsByPageId([4]))
+      await vi.runAllTimersAsync()
+      await Promise.all(calls)
+      expect(starts).toEqual([0, 500, 1000, 1500])
+
+      // Slots already past hold nobody up.
+      await vi.advanceTimersByTimeAsync(10_000)
+      const idle = Date.now() - t0
+      await client.imageUrlsByPageId([5])
+      expect(starts[4]).toBe(idle)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('paces requests at >=500 ms', async () => {

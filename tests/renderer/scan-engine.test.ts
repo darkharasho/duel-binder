@@ -210,6 +210,8 @@ describe('createScanEngine', () => {
     expect(read.nameTexts).toEqual(['PIKACHU'])
     expect(api.ocr).toHaveBeenCalledWith([band(10)], 'number')
     expect(api.ocr).toHaveBeenCalledWith([band(7)], 'name')
+    // Kept for reading the printed name with the Japanese model if the text can't tell.
+    expect(read.nameBands).toEqual([band(7)])
   })
 
   it('dispose rejects a pending frame, and later calls reject', async () => {

@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest'
 import {
   pokemonLanguage,
   pokemonLanguageOfBands,
-  pokemonLanguageOfReads
+  pokemonLanguageOfReads,
+  readsEnglishName,
+  readsJapaneseName
 } from '../../src/shared/scan/pokemonLanguage'
 
 describe('pokemonLanguage', () => {
@@ -163,6 +165,44 @@ describe('pokemonLanguageOfBands', () => {
     [{ eng: [], jpn: [] }, null]
   ] as const)('%j → %s', (reads, expected) => {
     expect(pokemonLanguageOfBands({ eng: [...reads.eng], jpn: [...reads.jpn] })).toBe(expected)
+  })
+})
+
+describe('readsJapaneseName', () => {
+  it('finds the printed name in a Japanese-model read of the name band, noise and all', () => {
+    expect(readsJapaneseName('クチート', 'クチート')).toBe(true)
+    expect(readsJapaneseName('~ クチート HP', 'クチート')).toBe(true)
+    // A blurred read drops dakuten and spaces the letters out.
+    expect(readsJapaneseName('トン メル', 'ドンメル')).toBe(true)
+    // A suffix in Latin letters is left to the art.
+    expect(readsJapaneseName('リザードン', 'リザードンex')).toBe(true)
+    // One letter wrong in a long name still counts.
+    expect(readsJapaneseName('フシギバナ', 'フシギダネ')).toBe(false)
+    expect(readsJapaneseName('ライチユウ', 'ライチュウ')).toBe(true)
+  })
+
+  it('never in a read without the name, nor of a name too short or with too little kana', () => {
+    expect(readsJapaneseName('ピカチュウ', 'ライチュウ')).toBe(false)
+    expect(readsJapaneseName('', 'ピカチュウ')).toBe(false)
+    // Two letters: a chance read of noise.
+    expect(readsJapaneseName('ミュウ', 'ミュ')).toBe(false)
+    // Han alone a Chinese card prints alike.
+    expect(readsJapaneseName('博士の研究', '博士の研究')).toBe(true)
+    expect(readsJapaneseName('博士研究', '博士研究')).toBe(false)
+    // A Chinese card's name, in Han, never reads as the Japanese katakana.
+    expect(readsJapaneseName('皮卡丘', 'ピカチュウ')).toBe(false)
+  })
+})
+
+describe('readsEnglishName', () => {
+  it('finds the name in a read of the name band, one letter off in a long one', () => {
+    expect(readsEnglishName('~ Charizard ex', 'Charizard ex')).toBe(true)
+    expect(readsEnglishName('Charlzard', 'Charizard')).toBe(true)
+    expect(readsEnglishName('Charmeleon', 'Charizard')).toBe(false)
+    // Short names one letter off are other names (Mew, Mewtwo; Abra, Arbok).
+    expect(readsEnglishName('Abra', 'Abra')).toBe(true)
+    expect(readsEnglishName('Arba', 'Abra')).toBe(false)
+    expect(readsEnglishName('Mew', 'Mew')).toBe(false)
   })
 })
 

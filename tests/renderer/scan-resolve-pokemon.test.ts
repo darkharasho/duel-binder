@@ -172,6 +172,69 @@ describe('resolvePokemonSignals', () => {
     expect(await resolveSignals(raw({ art: twins }), pkm(null))).toEqual({ kind: 'unsure' })
   })
 
+  it('unread text: the Japanese twin is named when its name band reads as the printed name', async () => {
+    const withName = (read: Read, names: string[]): ResolveContext => ({
+      ...pkm(read),
+      readLocalName: vi.fn(async () => names)
+    })
+    expect(await recognized(raw({ art: twins }), withName(null, ['ピカチユウ HP']))).toMatchObject({
+      cardId: 2,
+      via: 'art'
+    })
+    // By the number too.
+    expect(
+      await recognized(raw({ art: twins, codeTexts: ['025/165'] }), withName(null, ['ピカチュウ']))
+    ).toMatchObject({ cardId: 2, via: 'code' })
+    // Another name, or none: unsure. The English twin is never named by it.
+    expect(await resolveSignals(raw({ art: twins }), withName(null, ['ライチュウ']))).toEqual({
+      kind: 'unsure'
+    })
+    expect(await resolveSignals(raw({ art: twins }), withName(null, []))).toEqual({
+      kind: 'unsure'
+    })
+    // A Chinese read of the text still says no, whatever the name band shows.
+    expect(await resolveSignals(raw({ art: twins }), withName('other', ['ピカチュウ']))).toEqual({
+      kind: 'unsure'
+    })
+    // Text read as English: the name isn't asked for.
+    const en = withName('en', ['ピカチュウ'])
+    expect(await recognized(raw({ art: twins }), en)).toMatchObject({ cardId: 1 })
+    expect(en.readLocalName).not.toHaveBeenCalled()
+  })
+
+  it('unread text: the English twin is named when the name band reads its name', async () => {
+    expect(
+      await recognized(raw({ art: twins, nameTexts: ['~ Pikachu .'] }), pkm(null))
+    ).toMatchObject({ cardId: 1, via: 'art' })
+    // Not when the text reads as another language (a European card shares many names).
+    expect(await resolveSignals(raw({ art: twins, nameTexts: ['Pikachu'] }), pkm('other'))).toEqual(
+      { kind: 'unsure' }
+    )
+    // Not when both names read: the twins can't both be in view.
+    const both: ResolveContext = { ...pkm(null), readLocalName: async () => ['ピカチュウ'] }
+    expect(await resolveSignals(raw({ art: twins, nameTexts: ['Pikachu'] }), both)).toEqual({
+      kind: 'unsure'
+    })
+    // A name too short to tell from noise says nothing.
+    expect(await resolveSignals(raw({ art: twins, nameTexts: ['Pika'] }), pkm(null))).toEqual({
+      kind: 'unsure'
+    })
+  })
+
+  it('a Japanese card named in English is matched by its printed name', async () => {
+    const local: ScanPrinting = { ...PKM[1], name: 'Pikachu', localName: 'ピカチュウ' }
+    const ctx: ResolveContext = {
+      ...pkm(null),
+      readLocalName: async () => ['ピカチュウ'],
+      lookups: {
+        ...lookups,
+        printingsForCards: async (ids) =>
+          PKM.map((p) => (p.cardId === 2 ? local : p)).filter((p) => ids.includes(p.cardId))
+      }
+    }
+    expect(await recognized(raw({ art: twins }), ctx)).toMatchObject({ cardId: 2 })
+  })
+
   it('art alone never names a card whose reprint of the art has no artwork to match', async () => {
     const ctx = (twinned: boolean): ResolveContext => ({
       ...pkm('en'),

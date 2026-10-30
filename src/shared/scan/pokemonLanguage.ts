@@ -1,5 +1,10 @@
 import { latinLanguageOf } from './language'
+import { normalizeName } from './names'
 import {
+  EN_NAME_FUZZY_LENGTH,
+  EN_NAME_MIN_LENGTH,
+  JA_NAME_FUZZY_LENGTH,
+  JA_NAME_MIN_LENGTH,
   LANGUAGE_MIN_JA_WORDS,
   LANGUAGE_MIN_LATIN_CHARS,
   LANGUAGE_MIN_SCRIPT_CHARS,
@@ -194,4 +199,59 @@ export function pokemonLanguageOfBands(reads: {
   const ja = told.includes('ja')
   const en = told.includes('en')
   return ja === en ? null : ja ? 'ja' : 'en'
+}
+
+/** Small kana a blurred read takes for their full-size forms (ュ as ユ). */
+const SMALL_KANA: Record<string, string> = Object.fromEntries(
+  [...'ァィゥェォッャュョヮ'].map((c) => [c, String.fromCodePoint(c.codePointAt(0)! + 1)])
+)
+
+/** A name's letters as readsJapaneseName compares them: kana and kanji, without dakuten, small kana as full-size. */
+function japaneseNameKey(text: string): string {
+  return plainKana(text)
+    .replace(/[ァ-ヺ]/gu, (c) => SMALL_KANA[c] ?? c)
+    .replace(/[^ぁ-ゖァ-ヺー一-鿿]/gu, '')
+}
+
+/** The fewest letters key differs in from any stretch of text (an approximate substring match). */
+function nearestStretch(text: string, key: string): number {
+  // Row per key letter: the cost of matching key so far, ending at each text position.
+  let prev = new Array<number>(text.length + 1).fill(0)
+  for (let i = 1; i <= key.length; i++) {
+    const cur = [i]
+    for (let j = 1; j <= text.length; j++)
+      cur.push(
+        Math.min(prev[j - 1] + (key[i - 1] === text[j - 1] ? 0 : 1), prev[j] + 1, cur[j - 1] + 1)
+      )
+    prev = cur
+  }
+  return Math.min(...prev)
+}
+
+/**
+ * Whether a Japanese-model read of a card's name band shows name, a Japanese card's printed
+ * name: its kana and kanji (a suffix in Latin letters like ex is left to the art) somewhere in
+ * the read, one letter off in a name of JA_NAME_FUZZY_LENGTH letters or more. A name needs
+ * JA_NAME_MIN_LENGTH letters and some kana: Chinese prints no kana, so a Chinese twin's name,
+ * all Han, never reads as a Japanese one.
+ */
+export function readsJapaneseName(read: string, name: string): boolean {
+  const key = japaneseNameKey(name)
+  if (key.length < JA_NAME_MIN_LENGTH || !KANA.test(key)) return false
+  const text = japaneseNameKey(read)
+  if (!text) return false
+  return nearestStretch(text, key) <= (key.length >= JA_NAME_FUZZY_LENGTH ? 1 : 0)
+}
+
+/**
+ * Whether an English-model read of a card's name band shows name, an English card's name: its
+ * letters and digits somewhere in the read, one letter off in a name of EN_NAME_FUZZY_LENGTH or
+ * more. A name needs EN_NAME_MIN_LENGTH of them, so a short one isn't made by chance.
+ */
+export function readsEnglishName(read: string, name: string): boolean {
+  const key = normalizeName(name)
+  if (key.length < EN_NAME_MIN_LENGTH) return false
+  const text = normalizeName(read)
+  if (!text) return false
+  return nearestStretch(text, key) <= (key.length >= EN_NAME_FUZZY_LENGTH ? 1 : 0)
 }

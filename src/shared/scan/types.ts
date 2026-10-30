@@ -21,6 +21,11 @@ export interface ScanPrinting {
   /** The card's artworks, in sort order. */
   imageIds: number[]
   /**
+   * A Pokémon card's name as printed, when the catalog's name is another (a Japanese card is
+   * named in English); left out otherwise, and on every Yu-Gi-Oh printing.
+   */
+  localName?: string
+  /**
    * A Pokémon card with a likely reprint of its art the scanner can't see: a card of the same
    * name and illustrator, in the same language, with no artwork in the catalog (the Classic
    * Collections) or only a tcgplayer product photo (trainer kits). Its art alone can't tell the

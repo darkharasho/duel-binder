@@ -157,6 +157,8 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
       reads: 0,
       read: null as 'en' | 'ja' | 'other' | null
     },
+    // A Pokémon card's name band as the Japanese model reads it, every read so far, by artwork.
+    pokemonNames: { imageId: null as number | null, reads: [] as string[][] },
     status: { kind: 'idle' } as ScanStatus
   })
 
@@ -223,6 +225,7 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
     l.looks = { cardId: null, cues: [], frames: [] }
     l.language = { cardId: null, reads: 0, read: null }
     l.pokemonLanguage = { imageId: null, reads: 0, read: null }
+    l.pokemonNames = { imageId: null, reads: [] }
     // Stopped stays stopped until Retry.
     if (l.stopped) return
     l.status = { kind: 'idle' }
@@ -352,6 +355,21 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
       return known.read
     }
 
+    /**
+     * A Pokémon card's name band read with the Japanese model, for its printed name when its text
+     * can't be told: on LANGUAGE_MAX_READS frames at most while the same artwork stays in view,
+     * every read so far given, since any one may show the name. A failed read is nothing read.
+     */
+    const pokemonNamesOf = async (imageId: number | null, bands: OcrBand[]): Promise<string[]> => {
+      if (l.pokemonNames.imageId !== imageId) l.pokemonNames = { imageId, reads: [] }
+      const known = l.pokemonNames
+      if (known.reads.length < LANGUAGE_MAX_READS && bands.length)
+        known.reads.push(
+          await within(api.scan.readText(bands, 'jpn'), LANGUAGE_TIMEOUT_MS).catch(() => [])
+        )
+      return known.reads.flat()
+    }
+
     /** Calls onStalled when the shown camera's picture hasn't moved for STALL_MS. */
     const watch = (video: HTMLVideoElement | null): void => {
       const now = Date.now()
@@ -412,7 +430,10 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
         if (!live || engineRef.current !== engine) return
         l.lastFound = raw.found
         // A card that left the view takes its language with it.
-        if (!raw.found) l.pokemonLanguage = { imageId: null, reads: 0, read: null }
+        if (!raw.found) {
+          l.pokemonLanguage = { imageId: null, reads: 0, read: null }
+          l.pokemonNames = { imageId: null, reads: [] }
+        }
         let outcome: ScanOutcome
         try {
           outcome = await within(
@@ -423,6 +444,7 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
               defaultRarity: o.defaultRarity,
               cardLanguage: (cardId) => languageOf(cardId, raw.textBands),
               readLanguage: () => pokemonLanguageOf(raw.art[0]?.imageId ?? null, raw.textBands),
+              readLocalName: () => pokemonNamesOf(raw.art[0]?.imageId ?? null, raw.nameBands ?? []),
               lookups: api.scan
             }),
             LOOKUP_TIMEOUT_MS

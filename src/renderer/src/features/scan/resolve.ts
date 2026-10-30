@@ -42,6 +42,11 @@ export interface ResolveContext {
    * is about to be named; null when it can't be told. Without it, never told.
    */
   readLanguage?: () => Promise<'en' | 'ja' | 'other' | null>
+  /**
+   * For Pokémon: the name band read with the Japanese model, asked only when the language can't
+   * be told from the text. Without it, nothing read.
+   */
+  readLocalName?: () => Promise<string[]>
   lookups: Pick<
     Api['scan'],
     'printingsByCode' | 'printingsByNumber' | 'printingsForCards' | 'matchName' | 'cardsForImages'

@@ -1,5 +1,6 @@
 import { collectorNumberCandidates } from '@shared/scan/collectorNumber'
 import { normalizeName } from '@shared/scan/names'
+import { readsEnglishName, readsJapaneseName } from '@shared/scan/pokemonLanguage'
 import {
   ART_FAR_DISTANCE,
   ART_MATCH_DEPTH,
@@ -155,7 +156,9 @@ async function draft(
  * - Nothing at all, and the closest artwork past ART_FAR_DISTANCE: `none`, far.
  *
  * The language is read only once there's a card to name, and at most once; a read that fails
- * counts as unread.
+ * counts as unread. Unread, a card is still named when its name band reads as its English or
+ * printed Japanese name (Chinese prints neither Latin names nor kana); the name decides only
+ * among the cards the art and number already allow.
  */
 export async function resolvePokemonSignals(
   raw: RawSignals,
@@ -168,6 +171,11 @@ export async function resolvePokemonSignals(
     (read ??= Promise.resolve()
       .then(() => ctx.readLanguage?.() ?? null)
       .catch(() => null))
+  let names: Promise<string[]> | null = null
+  const localNames = (): Promise<string[]> =>
+    (names ??= Promise.resolve()
+      .then(() => ctx.readLocalName?.() ?? [])
+      .catch(() => []))
 
   const group = await artGroup(raw, ctx)
   if (group === null) return unsure
@@ -177,11 +185,27 @@ export async function resolvePokemonSignals(
     return item ? { kind: 'recognized', item } : unsure
   }
 
-  /** The cards among printings in the language read; none when it's unread or another. */
+  /**
+   * The cards among printings in the language read. With no language read, the name band
+   * decides, never against the art: the English cards whose name the English read shows
+   * (readsEnglishName), or the Japanese ones whose printed name the Japanese read shows
+   * (readsJapaneseName); neither when both do. Only with the art agreeing: without it, the name
+   * read already stands for the card.
+   */
   const inLanguage = async (printings: ScanPrinting[]): Promise<number[]> => {
     const lang = await language()
-    if (lang === null || lang === 'other') return []
-    return unique(printings.filter((p) => p.language === lang).map((p) => p.cardId))
+    if (lang === 'other') return []
+    if (lang !== null)
+      return unique(printings.filter((p) => p.language === lang).map((p) => p.cardId))
+    if (!group.length) return []
+    const en = printings.filter(
+      (p) => p.language === 'en' && raw.nameTexts.some((r) => readsEnglishName(r, p.name))
+    )
+    const ja = printings.filter((p) => p.language === 'ja')
+    const reads = ja.length ? await localNames() : []
+    const jaNamed = ja.filter((p) => reads.some((r) => readsJapaneseName(r, p.localName ?? p.name)))
+    if (en.length && jaNamed.length) return []
+    return unique([...en, ...jaNamed].map((p) => p.cardId))
   }
 
   if (numbered.length) {

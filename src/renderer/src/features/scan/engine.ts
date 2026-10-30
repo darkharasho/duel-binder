@@ -70,6 +70,8 @@ export interface RawSignals {
   nameTexts: string[]
   /** The text bands, unread: reading them is slow, so it's left until a card's language is needed. */
   textBands: OcrBand[]
+  /** A Pokémon card's name bands, for reading its printed name with another model if need be. */
+  nameBands?: OcrBand[]
   cues: RarityCues | null
   version?: VersionCues | null
   slab?: boolean
@@ -251,6 +253,7 @@ export function createScanEngine(deps: {
         codeTexts: codes.map((t) => t.trim()).filter(Boolean),
         nameTexts: names.map((t) => t.trim()).filter(Boolean),
         textBands: signals.textBands.filter(hasPixels),
+        ...(deps.game === 'pkm' ? { nameBands } : {}),
         cues,
         version,
         slab,

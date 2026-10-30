@@ -20,13 +20,15 @@ interface PrintingRow {
   rarity: string
   language: Language
   rawPrice: number | null
+  localName: string | null
 }
 
 const select = (
   scope: Scope
 ): string => `SELECT p.id AS printingId, p.card_id AS cardId, c.name AS name, c.frame_type AS frameType,
   p.set_name AS setName, p.set_code AS setCode, p.set_rarity AS rarity, p.language AS language,
-  CASE WHEN ${isMarketOnly} THEN p.market_price WHEN p.language = 'en' THEN COALESCE(p.market_price, ip.price, p.set_price) ELSE COALESCE(ip.price, ${enTwinPrice(scope.game)}) END AS rawPrice
+  CASE WHEN ${isMarketOnly} THEN p.market_price WHEN p.language = 'en' THEN COALESCE(p.market_price, ip.price, p.set_price) ELSE COALESCE(ip.price, ${enTwinPrice(scope.game)}) END AS rawPrice,
+  pc.local_name AS localName
   FROM card_printings p JOIN cards c ON c.id = p.card_id AND +c.game = ${scope.game}
   LEFT JOIN intl_prices ip ON ip.printing_id = p.id
   LEFT JOIN pokemon_cards pc ON pc.card_id = p.card_id
@@ -80,10 +82,12 @@ function withImages(db: SqlDb, rows: PrintingRow[], scope: Scope, twins = false)
     }
   }
   return rows
-    .map(({ rawPrice, ...r }) => ({
+    .map(({ rawPrice, localName, ...r }) => ({
       ...r,
       price: parsePrice(rawPrice),
       imageIds: images.get(r.cardId) ?? [],
+      // Only where the catalog has one, so a Yu-Gi-Oh printing is as it always was.
+      ...(localName ? { localName } : {}),
       ...(twinned.has(`${r.cardId}|${r.language}`) ? { unseenTwin: true as const } : {})
     }))
     .sort(

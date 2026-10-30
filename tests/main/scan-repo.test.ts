@@ -271,6 +271,30 @@ describe('printingsByNumber', () => {
   })
 })
 
+describe("a Pokémon card's local name", () => {
+  const PKM = localScope("'pkm'")
+
+  it("carries the catalog's local-language name on a Pokémon printing, none on Yu-Gi-Oh's", async () => {
+    const db = await seededDb()
+    const { cardIds } = seedPokemon(db)
+    // A Japanese card named in English, as TCGCSV names it, with its printed name beside it.
+    db.prepare("UPDATE cards SET name = 'Pikachu' WHERE id = ?").run(cardIds[1])
+    db.prepare("UPDATE pokemon_cards SET local_name = 'ピカチュウ' WHERE card_id = ?").run(
+      cardIds[1]
+    )
+    const rows = printingsForCards(db, cardIds, PKM)
+    expect(rows.filter((r) => r.cardId === cardIds[1]).map((r) => r.localName)).toEqual([
+      'ピカチュウ',
+      'ピカチュウ'
+    ])
+    // No local name: the key is left out, as on every Yu-Gi-Oh printing.
+    expect(rows.filter((r) => r.cardId === cardIds[0]).every((r) => !('localName' in r))).toBe(true)
+    const ygo = printingsByCode(db, 'LOB-EN005')
+    expect(ygo.length).toBeGreaterThan(0)
+    expect(ygo.every((r) => !('localName' in r))).toBe(true)
+  })
+})
+
 describe('a Pokémon art twin with no artwork', () => {
   const PKM = localScope("'pkm'")
 

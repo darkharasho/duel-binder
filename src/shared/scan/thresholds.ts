@@ -17,6 +17,15 @@ export const ART_MIN_MARGIN = 10
  */
 export const PKM_ART_MIN_MARGIN = 24
 /**
+ * A Japanese card's printed name is evidence of its language (readsJapaneseName) with this many
+ * kana and kanji or more, and may be read one letter off with JA_NAME_FUZZY_LENGTH.
+ */
+export const JA_NAME_MIN_LENGTH = 3
+export const JA_NAME_FUZZY_LENGTH = 5
+/** The same for an English card's name (readsEnglishName), in letters and digits. */
+export const EN_NAME_MIN_LENGTH = 4
+export const EN_NAME_FUZZY_LENGTH = 7
+/**
  * A card-shaped thing in view whose closest artwork is further off than this, and that reads as
  * no card by code or name, is taken for something else (a book, the deck on the desk): nothing in
  * view, rather than a card it couldn't recognize.

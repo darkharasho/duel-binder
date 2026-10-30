@@ -5,6 +5,8 @@ import { getMeta, setMeta } from '../db/meta'
 import type { YugipediaClient } from '../yugipedia/client'
 import {
   listTitleParts,
+  MANGA_STYLE,
+  MANGA_TONES,
   NEW_ART_VARIANT,
   normalizeRarity,
   parseInfobox,
@@ -109,7 +111,9 @@ interface IntlPrinting {
  * plain one); otherwise it keeps the bare rarity with the variant in `variant` (an overframe-only
  * Prismatic Secret Rare), so a printing stored before variants were read keeps its row. A plain row
  * the list marks "New artwork" keeps its bare rarity too, with NEW_ART_VARIANT in `variant`, so its
- * printing scan is fingerprinted (YGOPRODeck only has the old art).
+ * printing scan is fingerprinted (YGOPRODeck only has the old art). A Manga-Style row stands for
+ * its Color and Monochrome printings: "Ultra Rare" with the variant "Manga-Style, Color" and
+ * "Ultra Rare (Manga-Style, Monochrome)".
  */
 function listPrintings(matched: { cardId: number; row: SetListRow }[]): IntlPrinting[] {
   const out: IntlPrinting[] = []
@@ -127,9 +131,20 @@ function listPrintings(matched: { cardId: number; row: SetListRow }[]): IntlPrin
     for (const r of row.rarities)
       add({ cardId, setCode: row.code, setRarity: normalizeRarity(r), variant })
   }
-  for (const { cardId, row } of matched) {
-    const variant = row.variant
-    if (!variant) continue
+  // A Manga-Style row is two printings of each rarity, Color and Monochrome; Color goes first,
+  // so it keeps the bare rarity a Manga-Style printing was stored under before they were told
+  // apart (and the entries on it, whose art the app showed in colour).
+  const tone = (v: string): number => (v.endsWith(`, ${MANGA_TONES[1]}`) ? 1 : 0)
+  const variants = matched
+    .flatMap(({ cardId, row }) =>
+      row.variant === MANGA_STYLE
+        ? MANGA_TONES.map((t) => ({ cardId, row, variant: `${MANGA_STYLE}, ${t}` }))
+        : row.variant
+          ? [{ cardId, row, variant: row.variant }]
+          : []
+    )
+    .sort((a, b) => tone(a.variant) - tone(b.variant))
+  for (const { cardId, row, variant } of variants) {
     for (const r of row.rarities) {
       const rarity = normalizeRarity(r)
       const bare = `${cardId}\u0000${row.code}\u0000${rarity}`

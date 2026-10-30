@@ -77,8 +77,20 @@ function variantFromComment(comment: string): string | undefined {
   const note = m?.[1].trim()
   if (!note) return undefined
   if (/^extended art$/i.test(note)) return 'Overframe'
+  const manga = MANGA_NOTE.exec(note)
+  if (manga) return manga[1] ? `${MANGA_STYLE}, ${mangaTone(manga[1])}` : MANGA_STYLE
   return note[0].toUpperCase() + note.slice(1)
 }
+
+/**
+ * Manga-Style cards (YAC1) come in colour and monochrome. Set lists say only "Manga-Style";
+ * card galleries say "Manga Style - Color" or "Manga Style - Monochrome".
+ */
+export const MANGA_STYLE = 'Manga-Style'
+export const MANGA_TONES = ['Color', 'Monochrome'] as const
+const MANGA_NOTE = /^manga[- ]style(?:\s*[-,]\s*(colou?r|monochrome|black (?:and|&) white))?$/i
+const mangaTone = (raw: string): (typeof MANGA_TONES)[number] =>
+  /^colou?r$/i.test(raw) ? 'Color' : 'Monochrome'
 
 /** The variant stored for a plain printing whose set list marks it "New artwork". */
 export const NEW_ART_VARIANT = 'New artwork'

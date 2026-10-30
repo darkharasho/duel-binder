@@ -12,7 +12,13 @@ export const ICON_PATHS = ['/favicon.ico', '/favicon.svg', '/apple-touch-icon.pn
  * The /scan/ paths the app answers itself (see phonePage.ts and getFingerprints): the page with its
  * CSP, the service worker and manifest with their headers, and the fingerprint file.
  */
-const SCAN_ROUTES = ['/scan/', '/scan/sw.js', '/scan/manifest.webmanifest', '/scan/fingerprints']
+const SCAN_ROUTES = [
+  '/scan/',
+  '/scan/sw.js',
+  '/scan/manifest.webmanifest',
+  '/scan/fingerprints',
+  '/scan/fingerprint-refs'
+]
 
 /**
  * The site host serves the page, www.<site host> redirects to it, everything else is the app. The

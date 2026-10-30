@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { englishSetName } from '@shared/setNames'
 import type { ChecklistCard } from '@shared/types'
@@ -48,8 +49,12 @@ export function SetCardPanel({
   const typeLine = info
     ? [info.type, info.attribute, info.race].filter(Boolean).join(' · ')
     : card.type
-  const focus = card.rarities.find((r) => r.rarity === rarity) ?? card.rarities[0]
-  const rarities = focus ? [focus, ...card.rarities.filter((r) => r !== focus)] : card.rarities
+  const opened = card.rarities.find((r) => r.rarity === rarity) ?? card.rarities[0]
+  const rarities = opened ? [opened, ...card.rarities.filter((r) => r !== opened)] : card.rarities
+  // The rarity the user clicked (for this card only); until then the one whose tile was opened.
+  const [pick, setPick] = useState<{ cardId: number; rarity: string } | null>(null)
+  const focus =
+    (pick?.cardId === card.cardId && card.rarities.find((r) => r.rarity === pick.rarity)) || opened
   // Rarities of one card can differ by orders of magnitude, so price the one being viewed.
   const price = focus?.price ?? card.price
   const priceLabel = focus?.price != null ? focus.rarity : 'cheapest printing'
@@ -72,6 +77,8 @@ export function SetCardPanel({
           busy={busy}
           onAdjust={onAdjust}
           showPrice
+          picked={r === focus}
+          onPick={() => setPick({ cardId: card.cardId, rarity: r.rarity })}
         />
       ))}
     </section>

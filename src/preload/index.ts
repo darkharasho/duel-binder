@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from 'electron'
 import {
   ACCOUNT_CHANGED,
   DATA_CHANGED,
+  IMAGE_DOWNLOADS,
   INVOKE_CHANNELS,
   SCAN_WINDOW_MESSAGE,
   SCAN_WINDOW_OPEN,
@@ -12,7 +13,7 @@ import {
   type Api
 } from '../shared/ipc'
 import type { ScanWindowMessage } from '../shared/scanWindow'
-import type { AccountStatus, SyncStatus, UpdateStatus } from '../shared/types'
+import type { AccountStatus, ImageDownloads, SyncStatus, UpdateStatus } from '../shared/types'
 
 const invoke =
   (channel: string) =>
@@ -33,6 +34,7 @@ for (const channel of INVOKE_CHANNELS) {
   ;(api[ns] ??= {})[method] = invoke(channel)
 }
 api.sync.onProgress = (cb: (s: SyncStatus) => void) => subscribe(SYNC_PROGRESS, cb)
+api.images.onDownloads = (cb: (d: ImageDownloads) => void) => subscribe(IMAGE_DOWNLOADS, cb)
 api.app.onUpdateStatus = (cb: (s: UpdateStatus) => void) => subscribe(UPDATE_STATUS, cb)
 api.app.onDataChanged = (cb: () => void) => subscribe<void>(DATA_CHANGED, () => cb())
 api.account.onChange = (cb: (s: AccountStatus) => void) => subscribe(ACCOUNT_CHANGED, cb)

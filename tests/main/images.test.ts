@@ -4,8 +4,9 @@ import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createLimiter, type Limiter } from '../../src/main/images/limiter'
 import type { ImageSources } from '../../src/main/images/cache'
+import type { ImageDownloads } from '../../src/shared/types'
 import { portalImageSources } from '../../src/main/images/portalSources'
-import { createImageCache, imageUrl, parseImageUrl, parsePrintingImageUrl, parseSetImageUrl, setImageKey, setImageUrl, yugipediaImageKey } from '../../src/main/images/cache'
+import { createImageCache, idleDownloads, throttleDownloads, imageUrl, parseImageUrl, parsePrintingImageUrl, parseSetImageUrl, setImageKey, setImageUrl, yugipediaImageKey } from '../../src/main/images/cache'
 
 let dir: string
 beforeEach(async () => {
@@ -242,6 +243,54 @@ describe('image cache priority', () => {
     expect(started[0]).toBe('1')
     expect(started.slice(1, 3).sort()).toEqual(['4', '5'])
     expect(fetchFn).toHaveBeenCalledTimes(5)
+  })
+})
+
+describe('image cache download counts', () => {
+  it('counts downloads by kind while any are under way, never cached files, then reports none', async () => {
+    let release!: () => void
+    const gate = new Promise<void>((r) => (release = r))
+    const fetchFn = vi.fn(async () => {
+      await gate
+      return okResponse()
+    })
+    const seen: ImageDownloads[] = []
+    const cache = createImageCache({
+      sources: direct(),
+      dir,
+      fetchFn: fetchFn as unknown as typeof fetch,
+      limit: noLimit,
+      onDownloads: (d) => seen.push(d)
+    })
+    const gets = [cache.get('small', 1), cache.get('small', 1), cache.get('cropped', 2), cache.getSet('LOB')]
+    await vi.waitFor(() => expect(seen.at(-1)).toEqual({ cards: { done: 0, total: 2 }, sets: { done: 0, total: 1 } }))
+    release()
+    await Promise.all(gets)
+    expect(seen.at(-1)).toEqual(idleDownloads())
+    // Each finished download counts until the last one, which empties the queue.
+    const settling = seen.slice(seen.findIndex((d) => d.cards.total === 2 && d.sets.total === 1))
+    expect(settling.map((d) => d.cards.done + d.sets.done)).toEqual([0, 1, 2, 0])
+    const before = seen.length
+    await cache.get('small', 1) // on disk now
+    expect(seen.length).toBe(before)
+  })
+
+  it('throttles to the latest counts, but passes "none under way" at once', () => {
+    vi.useFakeTimers()
+    const out: ImageDownloads[] = []
+    const emit = throttleDownloads((d) => out.push(d), 250)
+    const n = (done: number, total: number): ImageDownloads => ({ cards: { done, total }, sets: { done: 0, total: 0 } })
+    emit(n(0, 3))
+    emit(n(1, 3))
+    emit(n(2, 3))
+    expect(out).toEqual([n(0, 3)])
+    vi.advanceTimersByTime(250)
+    expect(out).toEqual([n(0, 3), n(2, 3)])
+    emit(n(3, 4))
+    emit(idleDownloads())
+    expect(out.at(-1)).toEqual(idleDownloads())
+    vi.advanceTimersByTime(1000)
+    expect(out.at(-1)).toEqual(idleDownloads())
   })
 })
 

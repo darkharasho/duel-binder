@@ -248,7 +248,7 @@ export function createPhoneApi(deps: {
       run: runCatalogUpdate,
       onProgress: (cb) => events.on('syncStatus', cb)
     },
-    images: { cacheSize: async () => 0, clearCache: async () => {} },
+    images: { cacheSize: async () => 0, clearCache: async () => {}, onDownloads: () => () => {} },
     usage: {
       report: (events) => store.reportUsage({ platform: isNativeApp() ? 'ios' : 'phone', events })
     },

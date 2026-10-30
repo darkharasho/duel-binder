@@ -258,7 +258,7 @@ export function createHttpApi(opts: HttpApiOptions = {}): Api {
       run: async () => SYNC_IDLE,
       onProgress: noUnsubscribe
     },
-    images: { cacheSize: unavailable, clearCache: unavailable },
+    images: { cacheSize: unavailable, clearCache: unavailable, onDownloads: noUnsubscribe },
     window: {
       platform: 'web',
       minimize: async () => {},

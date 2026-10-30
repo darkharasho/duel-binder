@@ -131,15 +131,16 @@ describe('createHttpApi', () => {
 
   it('every on* subscription returns an unsubscribe function', () => {
     const { api } = setup(reply(200, {}))
-    let count = 0
-    for (const ns of Object.values(api) as Record<string, unknown>[]) {
+    const names: string[] = []
+    for (const [nsName, ns] of Object.entries(api) as [string, Record<string, unknown>][]) {
       for (const [name, fn] of Object.entries(ns)) {
         if (!/^on[A-Z]/.test(name)) continue
-        count++
+        names.push(`${nsName}.${name}`)
         expect(typeof (fn as (cb: () => void) => unknown)(() => {}), name).toBe('function')
       }
     }
-    expect(count).toBe(7)
+    expect(names).toHaveLength(8)
+    expect(names).toContain('images.onDownloads')
   })
 
   it('account calls reject on the web without fetching', async () => {

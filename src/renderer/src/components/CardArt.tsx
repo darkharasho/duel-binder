@@ -3,6 +3,7 @@ import { cn } from '@/lib/utils'
 import { cssAspect, type CardAspect } from '@shared/games'
 import { useCardAspect } from '@/lib/game'
 import { cardImageSrc, printingImageSrc } from '@/lib/images'
+import { useArtLoad } from './artLoad'
 
 interface CardArtProps {
   imageId: number
@@ -105,19 +106,27 @@ export function CardArt({
   const aspect = useCardAspect(imageId)
   // Inline, not a class: the ratio is the card's game's, known only at runtime.
   const aspectStyle = { aspectRatio: cssAspect(aspect) }
+  // A shimmer in the frame's shape while the art downloads, then a fade into it.
+  const art = useArtLoad()
+  const src = cardImageSrc(size, imageId)
   // No scan where there are no printing scans (the phone).
   const scanSrc = printingId == null ? null : printingImageSrc(printingId)
   if (printingId == null || scanSrc === null) {
     if (failed) return <CardBack className={className} label={alt} aspect={aspect} />
     return (
       <img
-        src={cardImageSrc(size, imageId)}
+        src={src}
         alt={alt}
         loading="lazy"
         draggable={false}
         onError={() => setFailed(true)}
+        {...art.bind(src)}
         style={aspectStyle}
-        className={cn('rounded-[6px] bg-muted object-cover shadow-sm', className)}
+        className={cn(
+          'rounded-[6px] bg-muted object-cover shadow-sm',
+          art.className(src),
+          className
+        )}
       />
     )
   }
@@ -125,20 +134,26 @@ export function CardArt({
   return (
     <span
       style={aspectStyle}
-      className={cn('relative block overflow-hidden rounded-[6px] bg-muted shadow-sm', className)}
+      className={cn(
+        'relative block overflow-hidden rounded-[6px] bg-muted shadow-sm',
+        !failed && !art.loaded(src) && !scanVisible && 'art-loading',
+        className
+      )}
     >
       {failed ? (
         <CardBack className="absolute inset-0 size-full" label={alt} aspect={aspect} />
       ) : (
         <img
-          src={cardImageSrc(size, imageId)}
+          src={src}
           alt={alt}
           loading="lazy"
           draggable={false}
           onError={() => setFailed(true)}
+          {...art.bind(src)}
           // Hidden under a loaded scan so its corners don't show through transparent ones.
           className={cn(
             'absolute inset-0 size-full object-cover transition-opacity duration-300',
+            art.loaded(src) && !scanVisible && art.className(src),
             scanVisible && 'opacity-0'
           )}
         />

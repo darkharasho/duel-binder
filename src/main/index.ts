@@ -7,6 +7,7 @@ import type { AccountStatus, SyncStatus, UpdateStatus } from '@shared/types'
 import {
   ACCOUNT_CHANGED,
   DATA_CHANGED,
+  IMAGE_DOWNLOADS,
   SCAN_WINDOW_SEND,
   SYNC_PROGRESS,
   UPDATE_STATUS,
@@ -22,7 +23,7 @@ import {
   directPrintingArt,
   startDirectCatalog
 } from './dev/directSources'
-import { createImageCache } from './images/cache'
+import { createImageCache, throttleDownloads } from './images/cache'
 import { portalImageSources } from './images/portalSources'
 import { prepareLogo } from './images/prepareLogo'
 import { handleImageProtocol, registerImageScheme } from './images/protocol'
@@ -231,7 +232,8 @@ async function bootstrap(): Promise<void> {
           token: () => tokens.get(),
           remoteId: (id) => (remoteIdOf.get(id) as number | null | undefined) ?? null
         }),
-    prepareLogo
+    prepareLogo,
+    onDownloads: throttleDownloads((d) => broadcast(IMAGE_DOWNLOADS, d), 250)
   })
   handleImageProtocol(images)
 

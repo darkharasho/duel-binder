@@ -621,13 +621,28 @@ describe('printings told by a reference scan of their art', () => {
     expect(item.options).toEqual(OWN)
   })
 
-  it('is certain when the family holds one rarity', async () => {
+  it("picks a one-rarity family's printing, still to be checked against the code's others", async () => {
     const three = OWN.filter((p) => p.printingId !== 34 && p.printingId !== 35)
     const item = await recognized(coded(art(70, 30)), {
       ...ctx,
       lookups: { ...ctx.lookups, printingsByCode: async () => three }
     })
-    expect(item).toMatchObject({ printingId: 33, flag: null, artPrintings: [33] })
+    expect(item).toMatchObject({ printingId: 33, flag: 'check-rarity', artPrintings: [33] })
+  })
+
+  it('ignores a scan that more than one art variant took', async () => {
+    const alt: ScanPrinting = {
+      ...OWN[0],
+      printingId: 36,
+      rarity: 'Ultra Rare',
+      variant: 'Alternate art'
+    }
+    const item = await recognized(coded(art(70, 30, [33, 36])), {
+      ...ctx,
+      lookups: { ...ctx.lookups, printingsByCode: async () => [...OWN, alt] }
+    })
+    expect(item).toMatchObject({ printingId: 31, flag: 'check-rarity' })
+    expect(item.artPrintings).toBeUndefined()
   })
 
   it('keeps to the lowest rarity when the scan is not clearly closer than the card art', async () => {

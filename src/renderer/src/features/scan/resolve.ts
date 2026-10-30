@@ -53,21 +53,22 @@ const imageFor = (art: ArtMatch[], imageIds: number[]): number | undefined =>
  * Ultra Rare look alike, and some have no scan. Null when no scan does.
  */
 function artFamily(art: ArtMatch[], among: ScanPrinting[]): ScanPrinting[] | null {
-  const shown = new Set<number>()
+  const variantOf = (p: ScanPrinting): string | null => artVariantName(p.rarity, p.variant)
+  const variants = new Set<string>()
   for (const m of art) {
     if (m.base === undefined || !m.refs) continue
     for (const r of m.refs) {
       if (r.distance > ART_MAX_DISTANCE || m.base - r.distance < ART_REF_MIN_MARGIN) continue
-      for (const id of r.printingIds) shown.add(id)
+      const shown = new Set(
+        among
+          .filter((p) => r.printingIds.includes(p.printingId))
+          .map(variantOf)
+          .filter((v) => v !== null)
+      )
+      // A scan more than one art took (a gallery short of scans) says nothing of which.
+      if (shown.size === 1) variants.add([...shown][0])
     }
   }
-  const variantOf = (p: ScanPrinting): string | null => artVariantName(p.rarity, p.variant)
-  const variants = new Set(
-    among
-      .filter((p) => shown.has(p.printingId))
-      .map(variantOf)
-      .filter((v) => v !== null)
-  )
   if (variants.size === 0) return null
   return among.filter((p) => variants.has(variantOf(p) ?? ''))
 }
@@ -76,7 +77,9 @@ function artFamily(art: ArtMatch[], among: ScanPrinting[]): ScanPrinting[] | nul
  * The printing among same-code printings whose rarity pickRarity chooses, among the art family
  * a reference scan picked out (artFamily) when there is one, unless the rarity the user said the
  * stack is is among the printings but not the family: what the user said goes. `family` is the
- * family it chose among, or null.
+ * family it chose among, or null. The family only preselects: whether the rarity is certain is
+ * still told over all the printings (or by the user's rarity), since a scan's art doesn't tell
+ * its foil.
  */
 function choose(
   printings: ScanPrinting[],
@@ -92,7 +95,8 @@ function choose(
   const ofFamily = family && pick(family)
   const useFamily = ofFamily && !(defaultRarity !== null && all.certain && !ofFamily.certain)
   const among = useFamily ? family! : printings
-  const { rarity, certain } = useFamily ? ofFamily : all
+  const { rarity } = useFamily ? ofFamily : all
+  const certain = all.certain || (!!useFamily && defaultRarity !== null && ofFamily.certain)
   return {
     printing: among.find((p) => p.rarity === rarity) ?? among[0],
     certain,

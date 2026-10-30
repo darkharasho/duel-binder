@@ -493,6 +493,48 @@ describe('rarityCounts', () => {
   })
 })
 
+describe('Pokémon rarity chips', () => {
+  const finishes = (names: string[]): ChecklistCard['rarities'] =>
+    names.map((rarity) => ({ ...alpha.rarities[0], rarity }))
+  const card = (cardId: number, cardRarity: string | null): ChecklistCard => ({
+    ...alpha,
+    cardId,
+    cardRarity,
+    rarities: finishes(['Normal', 'Reverse Holofoil'])
+  })
+  const cl: SetChecklist = {
+    set: started,
+    cards: [
+      card(1, 'Common'),
+      card(2, 'Illustration rare'),
+      card(3, 'Illustration Rare'),
+      card(4, null),
+      card(5, 'ACE SPEC Rare'),
+      card(6, 'Rare')
+    ]
+  }
+
+  it('counts each card once under its own rarity, in order, with Unknown last', () => {
+    expect(rarityCounts(cl)).toEqual([
+      { rarity: 'Common', count: 1 },
+      { rarity: 'Rare', count: 1 },
+      { rarity: 'Illustration rare', count: 2 },
+      { rarity: 'ACE SPEC Rare', count: 1 },
+      { rarity: 'Unknown', count: 1 }
+    ])
+  })
+
+  it('keeps every finish tile of the matching cards', () => {
+    const out = filterTilesByRarity(checklistTiles(cl, 'rarities'), 'Illustration Rare')
+    expect(out.map((t) => t.key)).toEqual([
+      '2|Normal',
+      '2|Reverse Holofoil',
+      '3|Normal',
+      '3|Reverse Holofoil'
+    ])
+  })
+})
+
 describe('filterTilesByRarity', () => {
   const rarity = alpha.rarities[0].rarity
   it('keeps every tile with no rarity chosen', () => {

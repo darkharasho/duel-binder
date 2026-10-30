@@ -91,6 +91,16 @@ describe('game-scoped repo queries', () => {
     expect(reads(db, ygo.setCode)).toEqual(none)
   })
 
+  it('a Pokémon checklist card carries its own rarity, not its finishes', () => {
+    setGame(db, 'pkm')
+    const card = getChecklist(db, SHARED_SET_NAME, 'en')?.cards[0]
+    expect(card?.cardRarity).toBe('Common')
+    expect(card?.rarities.map((r) => r.rarity)).toEqual(['Normal', 'Reverse Holo'])
+    setGame(db, 'ygo')
+    const ygoCards = getChecklist(db, SHARED_SET_NAME, 'en')?.cards ?? []
+    expect(ygoCards.some((c) => 'cardRarity' in c)).toBe(false)
+  })
+
   it('with active_game = pkm, every read is Pokémon only', () => {
     setGame(db, 'pkm')
     const list = listEntries(db, ALL)

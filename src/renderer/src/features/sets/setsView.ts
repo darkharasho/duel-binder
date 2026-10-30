@@ -2,6 +2,7 @@ import type { LanguageFilter } from '@shared/languages'
 import type { GameId } from '@shared/games'
 import { setType, type SetType } from '@shared/setTypes'
 import { englishSetName } from '@shared/setNames'
+import { rarityRank } from '@shared/scan/rarity'
 import { matchesLanguage } from '@/lib/languageFilter'
 import type {
   ChecklistCard,
@@ -242,6 +243,73 @@ export function filterTiles(tiles: Tile[], f: TileFilter): Tile[] {
   if (f === 'owned') return tiles.filter((t) => t.owned > 0)
   if (f === 'missing') return tiles.filter((t) => t.owned === 0)
   return tiles
+}
+
+/** Pokémon rarities low to high; others follow by name. Compared case-insensitively. */
+const POKEMON_RARITY_ORDER = [
+  'common',
+  'uncommon',
+  'rare',
+  'rare holo',
+  'double rare',
+  'art rare',
+  'ultra rare',
+  'illustration rare',
+  'special illustration rare',
+  'hyper rare',
+  'mega hyper rare'
+]
+
+const UNKNOWN_RARITY = 'Unknown'
+
+/** The rarity a Pokémon card is grouped under; undefined for Yu-Gi-Oh! cards. */
+const cardRarityOf = (card: ChecklistCard): string | undefined =>
+  card.cardRarity === undefined ? undefined : card.cardRarity?.trim() || UNKNOWN_RARITY
+
+function pokemonRank(rarity: string): number {
+  if (rarity === UNKNOWN_RARITY) return Number.MAX_SAFE_INTEGER
+  const i = POKEMON_RARITY_ORDER.indexOf(rarity.toLowerCase())
+  return i === -1 ? POKEMON_RARITY_ORDER.length : i
+}
+
+/**
+ * The rarities present in a set with how many cards have each, lowest rarity first. Yu-Gi-Oh!
+ * cards count once per rarity they have, so a card in two rarities is in two counts. Pokémon
+ * cards carry one rarity of their own (their finishes aren't rarities), so the counts add up to
+ * the set; cards with none are "Unknown", last.
+ */
+export function rarityCounts(cl: SetChecklist): { rarity: string; count: number }[] {
+  // Keyed by lower case since TCGdex's casing varies ("Illustration rare"); the first spelling shows.
+  const counts = new Map<string, { rarity: string; count: number }>()
+  const bump = (r: string): void => {
+    const e = counts.get(r.toLowerCase()) ?? { rarity: r, count: 0 }
+    e.count++
+    counts.set(r.toLowerCase(), e)
+  }
+  for (const card of cl.cards) {
+    const own = cardRarityOf(card)
+    if (own !== undefined) bump(own)
+    else for (const r of card.rarities) bump(r.rarity)
+  }
+  const rank = cl.cards.some((c) => c.cardRarity !== undefined) ? pokemonRank : rarityRank
+  return [...counts.values()].sort(
+    (a, b) => rank(a.rarity) - rank(b.rarity) || a.rarity.localeCompare(b.rarity)
+  )
+}
+
+/**
+ * Tiles of one rarity; null keeps all. A Pokémon card keeps every finish tile when its rarity
+ * matches. A Yu-Gi-Oh! card's tile in 'cards' mode stays if the card has the rarity.
+ */
+export function filterTilesByRarity(tiles: Tile[], rarity: string | null): Tile[] {
+  if (rarity === null) return tiles
+  return tiles.filter((t) => {
+    const own = cardRarityOf(t.card)
+    if (own !== undefined) return own.toLowerCase() === rarity.toLowerCase()
+    return t.rarity !== null
+      ? t.rarity === rarity
+      : t.card.rarities.some((r) => r.rarity === rarity)
+  })
 }
 
 /** The checklist with one card replaced by id and the set's owned counts recomputed from the cards. */

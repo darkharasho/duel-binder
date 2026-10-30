@@ -368,6 +368,7 @@ export interface ChecklistCard {
   atk: number | null
   def: number | null
   level: number | null // level, rank or link rating
+  cardRarity?: string | null // Pokémon only: the card's own rarity (null when unknown), apart from its finishes
 }
 
 export interface SetChecklist {

@@ -49,6 +49,12 @@ export interface ScanProfile {
    * reference region on the same card, to tell foil from sensor noise and detailed print.
    */
   foil: { frame: readonly Box[]; art: Box; reference: Box } | null
+  /**
+   * Whether a frame whose art matched nothing is searched again (candidates.ts): the closest few
+   * outlines matched at full size, and the line and quad search run again inside each holder or
+   * card-sized region found, cut from the full-size frame (holderSearch.ts).
+   */
+  holderSearch: boolean
 }
 
 /**
@@ -92,7 +98,8 @@ export const SCAN_PROFILES: Record<GameId, ScanProfile> = {
     nameBand: NAME_BAND,
     textBox: TEXT_BOX,
     rarityLook: true,
-    foil: null
+    foil: null,
+    holderSearch: false
   },
   pkm: {
     game: 'pkm',
@@ -131,7 +138,9 @@ export const SCAN_PROFILES: Record<GameId, ScanProfile> = {
       art: PKM_ART,
       // The attacks' text, like textBox.
       reference: [0.07, 0.57, 0.93, 0.8]
-    }
+    },
+    // Cards are often filmed in toploaders, cases and slabs, small in the frame.
+    holderSearch: true
   }
 }
 

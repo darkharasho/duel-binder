@@ -35,6 +35,14 @@ import {
   type Point,
   type Quad
 } from './detect'
+import {
+  MAX_REGIONS,
+  centreRegion,
+  fromRegion,
+  pickRegions,
+  regionAround,
+  type Rect
+} from './holderSearch'
 import type { Box } from './regions'
 
 // Tuned on real webcam photos: cards held in hand, sleeved, foil or in toploaders, fingers over the
@@ -194,7 +202,7 @@ function splitSegments(cv: CV, small: Mat, edges: Mat): Segment[] {
 }
 
 /** Straight edge lines, longest first, from segments merged when collinear. */
-function mergeLines(segs: Segment[]): Line[] {
+function mergeLines(segs: Segment[], max = MAX_LINES): Line[] {
   const lines: Line[] = []
   for (const s of segs) {
     const theta = direction(s)
@@ -214,7 +222,7 @@ function mergeLines(segs: Segment[]): Line[] {
     const ny = Math.cos(theta)
     lines.push({ theta, rho: mx * nx + my * ny, length, nx, ny })
   }
-  return lines.sort((a, b) => b.length - a.length).slice(0, MAX_LINES)
+  return lines.sort((a, b) => b.length - a.length).slice(0, max)
 }
 
 function intersect(a: Line, b: Line): Point | null {
@@ -497,12 +505,13 @@ export function findCandidates(
 /**
  * findCandidates' outlines, and with profile's windowShape, up to WINDOW_CANDIDATES quads of an
  * art window's shape (best covered first), which may be the window of a card whose own outline
- * is lost.
+ * is lost. Quads are built from the maxLines longest lines.
  */
 function searchCandidates(
   cv: CV,
   img: FrameSource,
-  profile: ScanProfile
+  profile: ScanProfile,
+  maxLines = MAX_LINES
 ): { quads: Quad[]; windows: Quad[] } {
   const scale = Math.min(1, SEARCH_WIDTH / frameWidth(img))
   const small = searchImage(cv, img, scale)
@@ -511,10 +520,10 @@ function searchCandidates(
     return using([edges], () => {
       const thick = thicken(cv, edges)
       return using([thick], () => {
-        const splitLines = mergeLines(splitSegments(cv, small, edges))
+        const splitLines = mergeLines(splitSegments(cv, small, edges), maxLines)
         const split = lineQuads(splitLines, thick, SPLIT_CANDIDATES, profile.windows)
         const plain = lineQuads(
-          mergeLines(segments(cv, edges)),
+          mergeLines(segments(cv, edges), maxLines),
           thick,
           PLAIN_CANDIDATES + split.length,
           profile.windows
@@ -536,6 +545,36 @@ function searchCandidates(
         }
       })
     })
+  })
+}
+
+/**
+ * searchCandidates run on region r of the frame, cut from it at full size and scaled so its
+ * longer side is SEARCH_WIDTH, its quads given in the frame's pixels.
+ */
+function searchRegion(
+  cv: CV,
+  frame: Mat,
+  r: Rect,
+  profile: ScanProfile
+): { quads: Quad[]; windows: Quad[] } {
+  const w = r.x1 - r.x0
+  const h = r.y1 - r.y0
+  const scale = SEARCH_WIDTH / Math.max(w, h)
+  const roi = frame.roi(new cv.Rect(r.x0, r.y0, w, h))
+  const scaled = new cv.Mat()
+  return using([roi, scaled], () => {
+    cv.resize(
+      roi,
+      scaled,
+      new cv.Size(Math.max(1, Math.round(w * scale)), Math.max(1, Math.round(h * scale))),
+      0,
+      0,
+      scale < 1 ? cv.INTER_AREA : cv.INTER_LINEAR
+    )
+    const found = searchCandidates(cv, scaled, profile, REGION_LINES)
+    const back = (q: Quad): Quad => fromRegion(q, r, scale)
+    return { quads: found.quads.map(back), windows: found.windows.map(back) }
   })
 }
 
@@ -631,6 +670,30 @@ function aroundInnerFrame(quad: Quad, frames: readonly Box[]): Quad[] {
   })
 }
 
+/** A quad straightened at CARD_W and its closest artworks (rankArt). */
+type Ranked = { quad: Quad; card: RgbaImage } & ReturnType<typeof rankArt>
+
+const topDistance = (r: { matches: readonly { distance: number }[] }): number =>
+  r.matches[0]?.distance ?? Infinity
+
+/** lookAgain: outlines matched again at full size, before any region is searched. */
+const RERANK = 3
+/**
+ * Regions round candidates are grown by this share of their size, and round an art window's
+ * card by this (its size is guessed); at most this many art windows give one.
+ */
+const REGION_MARGIN = 0.06
+const WINDOW_MARGIN = 0.1
+const WINDOW_REGIONS = 2
+/** A region narrower than this, in frame pixels, isn't searched again. */
+const MIN_REGION_SIDE = 40
+/**
+ * Longest lines kept in a region's search: up close, a card's own printed frames give many more
+ * than a frame does, and quads are built from pairs of pairs of them. 40 finds as many cards as
+ * 80 on the real photos, in a third of the time.
+ */
+const REGION_LINES = 40
+
 /**
  * The card in a frame and its closest artworks: each candidate outline is matched on a small
  * straightened copy, and the one closest to any artwork is straightened at full size and matched
@@ -641,6 +704,8 @@ function aroundInnerFrame(quad: Quad, frames: readonly Box[]): Quad[] {
  * (its artwork may be missing from the fingerprints, as a new alternate art is): quad and card are
  * then the outline finder's likeliest (preferOuter), as it was filmed, and upsideDown is null. Null
  * when the frame holds no card-shaped outline. The art is looked for in profile's art boxes.
+ * With profile's holderSearch, a frame none of whose quads matched is looked at again
+ * (lookAgain), and via is 'holder' when that is what matched.
  */
 export function recognizeArt(
   cv: CV,
@@ -654,9 +719,12 @@ export function recognizeArt(
   card: RgbaImage
   upsideDown: boolean | null
   matches: { imageId: number; distance: number }[]
+  via?: 'holder'
 } | null {
   // Copied into OpenCV once for all the candidates' warps.
   return withMat(cv, img, (frame) => {
+    // Every quad matched at PICK_WIDTH, for a second look (lookAgain).
+    const scored: { quad: Quad; distance: number }[] = []
     const closest = (quads: Quad[]): { quad: Quad; distance: number } | null => {
       let best: { quad: Quad; distance: number } | null = null
       for (const quad of quads) {
@@ -670,6 +738,7 @@ export function recognizeArt(
           profile
         )
         const distance = matches[0]?.distance ?? Infinity
+        if (profile.holderSearch) scored.push({ quad, distance })
         if (!best || distance < best.distance) best = { quad, distance }
       }
       return best
@@ -690,19 +759,37 @@ export function recognizeArt(
         best = around
       }
     }
-    if (!best) return null
-    const ranked = (quad: Quad): { quad: Quad; card: RgbaImage } & ReturnType<typeof rankArt> => {
+    const ranked = (quad: Quad): Ranked => {
       const card = warpCard(cv, frame, quad, CARD_W)
       return { quad, card, ...rankArt(cv, card, index, candidates, k, ART_BOX_JITTER, profile) }
     }
-    let final = ranked(best.quad)
-    if (runnerUp) {
+    let final = best && ranked(best.quad)
+    if (final && runnerUp) {
       const other = ranked(runnerUp)
-      if ((other.matches[0]?.distance ?? Infinity) < (final.matches[0]?.distance ?? Infinity))
-        final = other
+      if (topDistance(other) < topDistance(final)) final = other
     }
+    // Nothing matched: look again (lookAgain), and take what it finds only when it matches.
+    let via: 'holder' | undefined
+    if (profile.holderSearch && (!final || topDistance(final) > ART_MAX_DISTANCE)) {
+      const tried = [best?.quad, runnerUp].filter((q): q is Quad => !!q)
+      const again = lookAgain(
+        cv,
+        frame,
+        { quads, windows },
+        scored,
+        tried,
+        closest,
+        ranked,
+        profile
+      )
+      if (again && topDistance(again) <= ART_MAX_DISTANCE) {
+        final = again
+        via = 'holder'
+      }
+    }
+    if (!final) return null
     const { card, matches, upsideDown } = final
-    if ((matches[0]?.distance ?? Infinity) > ART_MAX_DISTANCE) {
+    if (topDistance(final) > ART_MAX_DISTANCE) {
       const outline = preferOuter(quads) ?? final.quad
       return {
         quad: outline,
@@ -711,6 +798,71 @@ export function recognizeArt(
         matches
       }
     }
-    return { quad: final.quad, card: upsideDown ? rotate180(card) : card, upsideDown, matches }
+    return {
+      quad: final.quad,
+      card: upsideDown ? rotate180(card) : card,
+      upsideDown,
+      matches,
+      ...(via ? { via } : {})
+    }
   })
+}
+
+/**
+ * The second look, for a frame whose art matched nothing (a profile's holderSearch): a card in a
+ * holder is small in the frame and its outline loses to the holder's rim; a bare card held over
+ * a deck may have no outline found at all. First the closest RERANK outlines matched so far are
+ * matched again at full size (at PICK_WIDTH a small card is often misjudged). Then the line and
+ * quad search runs again, cut from the full-size frame, inside up to MAX_REGIONS regions: round
+ * the first few candidates (a holder's rim, a slab, or the card), round the card each of the
+ * first art-window quads would be, and the middle of the frame, where the scan window and the
+ * phone have the card held. Each region's closest quad at PICK_WIDTH is matched at full size.
+ * The art match is the only judge, and the resolver asks more of a match found this way
+ * (resolvePokemon's clearOfOtherNames). Its closest at full size, or null when nothing new was
+ * matched.
+ *
+ * Bounded: at most RERANK + MAX_REGIONS full-size matches, MAX_REGIONS searches of
+ * REGION_LINES lines each, and their quads (at most SPLIT_CANDIDATES + PLAIN_CANDIDATES + 1 a
+ * region) at PICK_WIDTH.
+ */
+function lookAgain(
+  cv: CV,
+  frame: Mat,
+  first: { quads: readonly Quad[]; windows: readonly Quad[] },
+  scored: readonly { quad: Quad; distance: number }[],
+  tried: Quad[],
+  pick: (quads: Quad[]) => { quad: Quad; distance: number } | null,
+  ranked: (quad: Quad) => Ranked,
+  profile: ScanProfile
+): Ranked | null {
+  let best: Ranked | null = null
+  const consider = (quad: Quad): void => {
+    if (tried.some((t) => sameQuad(t, quad))) return
+    tried.push(quad)
+    const r = ranked(quad)
+    if (!best || topDistance(r) < topDistance(best)) best = r
+  }
+  for (const { quad } of [...scored].sort((a, b) => a.distance - b.distance).slice(0, RERANK))
+    consider(quad)
+  const [w, h] = [frame.cols, frame.rows]
+  const regions = pickRegions(
+    [
+      ...first.quads.slice(0, MAX_REGIONS).map((q) => regionAround(q, REGION_MARGIN, w, h)),
+      // The card round an art window, as the newest layout's window would be (a guess at its
+      // size is enough: the region is searched, not matched).
+      ...first.windows
+        .slice(0, WINDOW_REGIONS)
+        .map((q) =>
+          regionAround(aroundInnerFrame(q, profile.windows.slice(0, 1))[0], WINDOW_MARGIN, w, h)
+        ),
+      centreRegion(w, h)
+    ],
+    MAX_REGIONS,
+    MIN_REGION_SIDE
+  )
+  for (const r of regions) {
+    const found = pick(searchRegion(cv, frame, r, profile).quads)
+    if (found) consider(found.quad)
+  }
+  return best
 }

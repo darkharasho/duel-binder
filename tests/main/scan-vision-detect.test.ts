@@ -592,6 +592,37 @@ describe('the Pokémon profile', () => {
     }
   }, 60_000)
 
+  it('finds a card too small in the frame for the first search by looking again nearer', () => {
+    const pkmIndex = decodeFingerprints(
+      encodeFingerprints([
+        { imageId: PKM_IMAGE, hash: artHash(fingerprintSource(reference(), 'pokemon', pkm)) }
+      ])
+    )
+    // 200 px tall in 1280x720, as a card held far off or in a holder is: at SEARCH_WIDTH it is
+    // under MIN_AREA, so the first search finds no outline at all.
+    const { img, quad } = framed(reference(), 200)
+    const without = recognizeArt(cv, img, pkmIndex, undefined, undefined, {
+      ...pkm,
+      holderSearch: false
+    })
+    expect(without === null || without.matches[0].distance > ART_MAX_DISTANCE).toBe(true)
+    const found = recognizeArt(cv, img, pkmIndex, undefined, undefined, pkm)
+    expect(found?.matches[0]?.imageId).toBe(PKM_IMAGE)
+    expect(found!.matches[0].distance).toBeLessThanOrEqual(ART_MAX_DISTANCE)
+    expect(found!.via).toBe('holder')
+    for (let i = 0; i < 4; i++) {
+      const [x, y] = found!.quad[i]
+      expect(Math.min(...quad.map(([qx, qy]) => Math.hypot(qx - x, qy - y)))).toBeLessThan(15)
+    }
+    // analyze hands it on, for the resolver's margin check.
+    expect(analyze(cv, img, pkmIndex, null, false, false, pkm).artVia).toBe('holder')
+  }, 60_000)
+
+  it('looks again only for Pokémon: Yu-Gi-Oh keeps its one search', () => {
+    expect(pkm.holderSearch).toBe(true)
+    expect(scanProfile('ygo').holderSearch).toBe(false)
+  })
+
   it('a Yu-Gi-Oh reference is left as it was', () => {
     const img = load(join(DIR, 'cropped', readdirSync(join(DIR, 'cropped'))[0]))
     expect(fingerprintSource(img, 'effect')).toBe(img)
@@ -610,6 +641,8 @@ describe('the Pokémon profile', () => {
     expect(signals.art[0].distance).toBeLessThanOrEqual(ART_MAX_DISTANCE)
     expect(signals.cues).toBeNull()
     expect(signals.look).toBeNull()
+    // Found by the first search: no second look, so no margin check beyond the usual.
+    expect(signals.artVia).toBeUndefined()
     expect(signals.nameBands.length).toBeGreaterThan(0)
     expect(signals.codeBands.length).toBeGreaterThan(0)
   }, 30_000)

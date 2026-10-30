@@ -77,6 +77,8 @@ function analyzeFrame(
   let card: () => RgbaImage
   // The card turned upright at CARD_W, when art matching found which way up it is.
   let upright: RgbaImage | null = null
+  // Set only when the art matched on the holder search's second look.
+  let via: { artVia?: 'holder' } = {}
   if (index) {
     const found = recognizeArt(
       cv,
@@ -89,6 +91,7 @@ function analyzeFrame(
     if (!found) return NOTHING
     quad = found.quad
     art = found.matches
+    if (found.via) via = { artVia: found.via }
     upright = found.upsideDown === null ? null : found.card
     // Art is matched at CARD_W, the size it was tuned for; text is read at the card's own size.
     card = () => {
@@ -125,6 +128,7 @@ function analyzeFrame(
       cues,
       version,
       ...(slab === undefined ? {} : { slab }),
+      ...via,
       look
     }
   const straight = card()
@@ -150,6 +154,7 @@ function analyzeFrame(
     cues,
     version,
     ...(slab === undefined ? {} : { slab }),
+    ...via,
     look
   }
 }

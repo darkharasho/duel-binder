@@ -1,6 +1,7 @@
 import { latinLanguageOf } from './language'
 import { normalizeName } from './names'
 import {
+  EN_NAME_FUZZIER_LENGTH,
   EN_NAME_FUZZY_LENGTH,
   EN_NAME_MIN_LENGTH,
   JA_NAME_FUZZY_LENGTH,
@@ -246,12 +247,14 @@ export function readsJapaneseName(read: string, name: string): boolean {
 /**
  * Whether an English-model read of a card's name band shows name, an English card's name: its
  * letters and digits somewhere in the read, one letter off in a name of EN_NAME_FUZZY_LENGTH or
- * more. A name needs EN_NAME_MIN_LENGTH of them, so a short one isn't made by chance.
+ * more and two in one of EN_NAME_FUZZIER_LENGTH. A name needs EN_NAME_MIN_LENGTH of them, so
+ * a short one isn't made by chance.
  */
 export function readsEnglishName(read: string, name: string): boolean {
   const key = normalizeName(name)
   if (key.length < EN_NAME_MIN_LENGTH) return false
   const text = normalizeName(read)
   if (!text) return false
-  return nearestStretch(text, key) <= (key.length >= EN_NAME_FUZZY_LENGTH ? 1 : 0)
+  const off = key.length >= EN_NAME_FUZZIER_LENGTH ? 2 : key.length >= EN_NAME_FUZZY_LENGTH ? 1 : 0
+  return nearestStretch(text, key) <= off
 }

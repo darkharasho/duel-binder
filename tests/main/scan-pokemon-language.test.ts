@@ -203,6 +203,10 @@ describe('readsEnglishName', () => {
     expect(readsEnglishName('Abra', 'Abra')).toBe(true)
     expect(readsEnglishName('Arba', 'Abra')).toBe(false)
     expect(readsEnglishName('Mew', 'Mew')).toBe(false)
+    // Two letters off in a name of twelve or more (owner shots: Marnie's Morgrem, Steven's Metang).
+    expect(readsEnglishName('Mamies MOrgrem', "Marnie's Morgrem")).toBe(true)
+    expect(readsEnglishName('Stevens etane', "Steven's Metang")).toBe(true)
+    expect(readsEnglishName('Charmeleon', 'Charizard')).toBe(false)
   })
 })
 

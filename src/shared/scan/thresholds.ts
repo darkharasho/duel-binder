@@ -25,6 +25,7 @@ export const JA_NAME_FUZZY_LENGTH = 5
 /** The same for an English card's name (readsEnglishName), in letters and digits. */
 export const EN_NAME_MIN_LENGTH = 4
 export const EN_NAME_FUZZY_LENGTH = 7
+export const EN_NAME_FUZZIER_LENGTH = 12
 /**
  * A card-shaped thing in view whose closest artwork is further off than this, and that reads as
  * no card by code or name, is taken for something else (a book, the deck on the desk): nothing in

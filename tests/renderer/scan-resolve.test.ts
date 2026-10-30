@@ -15,7 +15,8 @@ import {
   ART_MAX_DISTANCE,
   ART_MAX_DISTANCE_IN_SET,
   ART_MIN_MARGIN,
-  ART_REF_MIN_MARGIN
+  ART_REF_MIN_MARGIN,
+  ART_TONE_MIN_LEAD
 } from '@shared/scan/thresholds'
 
 const LOB = 'Legend of Blue Eyes White Dragon'
@@ -688,5 +689,83 @@ describe('printings told by a reference scan of their art', () => {
     const dark = { nameInk: 'dark', nameTint: 'gold' } as const
     expect(withRarityByLook(item, dark, null).printingId).toBe(11)
     expect(withRarityByLook({ ...item, artPrintings: [12] }, dark, null).printingId).toBe(12)
+  })
+})
+
+describe('Manga-Style printings told Color from Monochrome by their scans', () => {
+  // Zoa's YAC1 Manga-Style printings: Ultra and Secret Rare, each in colour and monochrome.
+  const card = {
+    cardId: 4,
+    name: 'Zoa',
+    frameType: 'normal',
+    price: null,
+    setName: 'Original Artwork Collection',
+    setCode: '',
+    language: 'ja'
+  } as const
+  const MANGA: ScanPrinting[] = [
+    {
+      ...card,
+      imageIds: [401],
+      printingId: 41,
+      rarity: 'Ultra Rare',
+      variant: 'Manga-Style, Color'
+    },
+    {
+      ...card,
+      imageIds: [401],
+      printingId: 42,
+      rarity: 'Secret Rare',
+      variant: 'Manga-Style, Color'
+    },
+    { ...card, imageIds: [401], printingId: 43, rarity: 'Ultra Rare (Manga-Style, Monochrome)' },
+    { ...card, imageIds: [401], printingId: 44, rarity: 'Secret Rare (Manga-Style, Monochrome)' }
+  ]
+  const ctx: ResolveContext = {
+    ...noSet,
+    lookups: {
+      ...lookups,
+      printingsForCards: async (ids) => (ids.includes(4) ? MANGA : []),
+      cardsForImages: async (ids) =>
+        ids.filter((i) => i === 401).map((imageId) => ({ imageId, cardId: 4 }))
+    }
+  }
+  /** The photo's match: its card art 90 off, each printing's own scan as far off as given. */
+  const art = (byPrinting: Record<number, number>): ArtMatch[] => [
+    {
+      imageId: 401,
+      distance: Math.min(...Object.values(byPrinting)),
+      base: 90,
+      refs: Object.entries(byPrinting)
+        .map(([id, distance], i) => ({
+          h: String(i).repeat(64),
+          printingIds: [Number(id)],
+          distance
+        }))
+        .sort((a, b) => a.distance - b.distance)
+    }
+  ]
+
+  it('takes the tone whose scans are clearly closer', async () => {
+    const mono = await recognized(raw({ art: art({ 41: 44, 42: 46, 43: 30, 44: 32 }) }), ctx)
+    expect(mono).toMatchObject({ printingId: 43, artPrintings: [43, 44] })
+    const color = await recognized(
+      raw({ art: art({ 41: 30, 42: 32, 43: 30 + ART_TONE_MIN_LEAD, 44: 50 }) }),
+      ctx
+    )
+    expect(color).toMatchObject({ printingId: 41, artPrintings: [41, 42] })
+  })
+
+  it('leaves both tones to pick from when neither is clearly closer', async () => {
+    const item = await recognized(
+      raw({ art: art({ 41: 34, 42: 36, 43: 30 + ART_TONE_MIN_LEAD - 2, 44: 30 }) }),
+      ctx
+    )
+    expect(item).toMatchObject({ printingId: 41, artPrintings: [41, 42, 43, 44] })
+  })
+
+  it('leaves both tones when only one of them has a scan', async () => {
+    const item = await recognized(raw({ art: art({ 43: 30, 44: 32 }) }), ctx)
+    expect(item).toMatchObject({ printingId: 41, artPrintings: [41, 42, 43, 44] })
   })
 })

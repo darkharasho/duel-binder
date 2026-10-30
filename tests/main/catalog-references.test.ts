@@ -125,7 +125,7 @@ afterEach(() => {
   rmSync(dir, { recursive: true, force: true })
 })
 
-const FILES = ['ShiEn-BLGG-EN-StR-1E.png', 'ShiEn-BLGG-EN-ScR-1E.png', 'ShiEn-STOR-EN-UR-1E.png']
+const FILES = ['ShiEn-BLGG-EN-StR-1E.png', 'ShiEn-BLGG-EN-ScR-1E.png', 'ShiEn-STOR-EN-UR-1E-EA.png']
 
 function fakeYugipedia(files: string[] = FILES): {
   listPageImages: Mock<(titles: string[]) => Promise<Map<string, string[]>>>
@@ -159,7 +159,7 @@ describe('buildReferences', () => {
     expect(first.entries).toEqual([{ imageId: 11, hash: SCAN_HASH, printings: [] }])
     expect(first).toMatchObject({ fetched: 1, failed: 1 })
     // The Secret Rare isn't wanted; the overframe's scan is missing.
-    expect(requested.sort()).toEqual(['ShiEn-BLGG-EN-StR-1E.png', 'ShiEn-STOR-EN-UR-1E.png'])
+    expect(requested.sort()).toEqual(['ShiEn-BLGG-EN-StR-1E.png', 'ShiEn-STOR-EN-UR-1E-EA.png'])
 
     requested.length = 0
     const second = await run()
@@ -216,8 +216,8 @@ describe('buildReferences', () => {
     const result = await buildReferences({
       work,
       cache,
-      yugipedia: fakeYugipedia(['ShiEn-STOR-EN-UR-1E.png']),
-      fetch: scans({ 'ShiEn-STOR-EN-UR-1E.png': png(SCAN) }),
+      yugipedia: fakeYugipedia(['ShiEn-STOR-EN-UR-1E-EA.png']),
+      fetch: scans({ 'ShiEn-STOR-EN-UR-1E-EA.png': png(SCAN) }),
       userAgent: 'test'
     })
     expect(result.entries).toEqual([
@@ -227,6 +227,19 @@ describe('buildReferences', () => {
         printings: ['en|1|STOR-EN041|Ultra Rare', 'en|1|STOR-EN041|Secret Rare']
       }
     ])
+  })
+
+  it('names no overframe printing on the plain scan it fell back to', async () => {
+    // STOR's overframe Ultra Rare has no scan of its own; the plain Super Rare one isn't of it.
+    const plain = 'ShiEn-STOR-EN-SR-1E.png'
+    const result = await buildReferences({
+      work,
+      cache,
+      yugipedia: fakeYugipedia([plain]),
+      fetch: scans({ [plain]: png(SCAN) }),
+      userAgent: 'test'
+    })
+    expect(result.entries).toEqual([{ imageId: 11, hash: SCAN_HASH, printings: [] }])
   })
 
   it('takes Japanese printings too, and no other language', async () => {
@@ -487,7 +500,7 @@ describe('buildFingerprints with printing scans', () => {
     const overframe = image(118, 172, 'y')
     const fetch = scans({
       'ShiEn-BLGG-EN-StR-1E.png': png(SCAN),
-      'ShiEn-STOR-EN-UR-1E.png': png(overframe)
+      'ShiEn-STOR-EN-UR-1E-EA.png': png(overframe)
     })
     const out = await buildFingerprints({
       work,

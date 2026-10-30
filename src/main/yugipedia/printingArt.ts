@@ -85,7 +85,8 @@ function regionsFor(setCode: string, language: Language): string[] {
 
 const EDITIONS = ['1E', 'UE', 'LE', 'DT']
 // <Card>-<SETPREFIX>-<REGION>-<RARITY>[-<EDITION>][-<variant>].<ext>
-const FILE_RE = /^[^-]+-([A-Za-z0-9]+)-([A-Z]{2})-([A-Za-z0-9]+)(?:-([^.]+))?\.(?:png|jpe?g|gif|webp)$/i
+const FILE_RE =
+  /^[^-]+-([A-Za-z0-9]+)-([A-Z]{2})-([A-Za-z0-9]+)(?:-([^.]+))?\.(?:png|jpe?g|gif|webp)$/i
 
 export interface PrintingKey {
   /** The printing's code, or just the set prefix ("YAC1") for an uncoded printing. */
@@ -112,6 +113,23 @@ function splitVariant(p: PrintingKey): { rarity: string; variant: string | null 
   return { rarity: p.rarity, variant: null }
 }
 
+/** Variants whose scans carry no suffix: a New artwork printing's file is named like a plain one. */
+const UNSUFFIXED_VARIANT = /^new art(work)?$/i
+
+/**
+ * Whether a scan (as choosePrintingFile names it) shows the printing's art variant: its file is
+ * named with the variant, or the printing has none, or its variant's scans carry no suffix.
+ * False for the plain file an overframe or Manga-Style printing with no scan of its own fell back
+ * to.
+ */
+export function fileShowsVariant(file: string, p: PrintingKey): boolean {
+  const { variant } = splitVariant(p)
+  if (!variant || UNSUFFIXED_VARIANT.test(variant.trim())) return true
+  const m = FILE_RE.exec(file.replace(/^File:/, ''))
+  const keys = (m?.[4] ?? '').split('-').filter(Boolean).map(suffixKey)
+  return keys.includes(variantSuffix(variant))
+}
+
 /**
  * Picks the Yugipedia scan for a printing from the files on its card's gallery page: same set
  * prefix and region (preferred regions first), the printing's rarity when one exists, then the
@@ -129,7 +147,8 @@ export function choosePrintingFile(files: string[], p: PrintingKey): string | nu
     const region = regions.indexOf(m[2].toUpperCase())
     if (region < 0) return []
     const rest = (m[4] ?? '').split('-').filter(Boolean)
-    const edition = rest.length > 0 && EDITIONS.includes(rest[0].toUpperCase()) ? rest.shift() : undefined
+    const edition =
+      rest.length > 0 && EDITIONS.includes(rest[0].toUpperCase()) ? rest.shift() : undefined
     const keys = rest.map(suffixKey)
     return [
       {
@@ -146,7 +165,9 @@ export function choosePrintingFile(files: string[], p: PrintingKey): string | nu
     ]
   })
   if (candidates.length === 0) return null
-  const sameRarity = wanted ? candidates.filter((c) => c.rarity.toLowerCase() === wanted.toLowerCase()) : []
+  const sameRarity = wanted
+    ? candidates.filter((c) => c.rarity.toLowerCase() === wanted.toLowerCase())
+    : []
   const pool = sameRarity.length > 0 ? sameRarity : candidates
   const editionRank = (e: string | undefined): number =>
     e === undefined ? 0 : EDITIONS.indexOf(e.toUpperCase()) + 1

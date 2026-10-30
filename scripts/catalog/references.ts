@@ -9,7 +9,7 @@ import type { RgbaImage } from '../../src/shared/scan/types'
 import { isLanguage } from '../../src/shared/languages'
 import type { YugipediaClient } from '../../src/main/yugipedia/client'
 import { listCardGalleries } from '../../src/main/yugipedia/cardGallery'
-import { choosePrintingFile } from '../../src/main/yugipedia/printingArt'
+import { choosePrintingFile, fileShowsVariant } from '../../src/main/yugipedia/printingArt'
 
 /** Scans downloaded per run; the rest wait for the next night. */
 const DEFAULT_MAX_DOWNLOADS = 600
@@ -71,7 +71,9 @@ export interface ReferenceOptions {
 export interface ReferenceResult {
   /**
    * Each scan's hash under its artwork's image id, with the printings it shows that are art
-   * variants (isArtVariant), by card_printings.pkey: none for a scan of a foil or edition of the usual art.
+   * variants (isArtVariant), by card_printings.pkey: none for a scan of a foil or edition of the
+   * usual art, nor for an art variant printing whose scan is a plain one it fell back to
+   * (fileShowsVariant).
    */
   entries: { imageId: number; hash: Uint32Array; printings: string[] }[]
   fetched: number
@@ -315,7 +317,19 @@ export async function buildReferences(opts: ReferenceOptions): Promise<Reference
     if (bestDistance > SAME_ART_MAX_DISTANCE) best = images[0]
     const keys = printingsOf
       .get(file)!
-      .filter((q) => q.card_id === p.card_id && isArtVariant(q.set_rarity, q.variant))
+      .filter(
+        (q) =>
+          q.card_id === p.card_id &&
+          isArtVariant(q.set_rarity, q.variant) &&
+          isLanguage(q.language) &&
+          fileShowsVariant(file, {
+            setCode: q.set_code,
+            language: q.language,
+            rarity: q.set_rarity,
+            rarityCode: q.set_rarity_code,
+            variant: q.variant
+          })
+      )
       .map((q) => q.pkey)
     entries.push({ imageId: best, hash, printings: [...new Set(keys)] })
   }

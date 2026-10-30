@@ -11,6 +11,7 @@ import { englishSetName } from '@shared/setNames'
 import type { BrowseCard, BrowsePage, ChecklistCard, EntryView, Printing } from '@shared/types'
 import { CardDetails } from '@/components/CardDetails'
 import { PanelCardArt } from '@/components/PanelCardArt'
+import { cardFoil } from '@shared/foil'
 import type { PanelNav } from '@/components/panelNav'
 import { PanelPrice } from '@/components/PanelPrice'
 import { LanguageTag } from '@/components/LanguageTag'
@@ -177,6 +178,7 @@ export function BrowseCardPanel({
           printingId={shown?.id ?? card.defaultPrintingId}
           alt={card.name}
           nav={nav}
+          foil={cardFoil(shown, info)}
         />
         <PanelPrice entry={ownedEntry} price={price} label={priceLabel} />
 

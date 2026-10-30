@@ -9,6 +9,8 @@ interface TiltCardProps {
   maxTilt?: number
   /** Rounds the glare to match the card's corners. */
   glareClassName?: string
+  /** False tilts the card with no glare over it, for a card with no shine to catch. */
+  glare?: boolean
   /** On the part that tilts, e.g. a glow that should lean with the card. */
   innerStyle?: React.CSSProperties
   innerClassName?: string
@@ -20,6 +22,7 @@ export function TiltCard({
   className,
   maxTilt = 14,
   glareClassName,
+  glare = true,
   innerStyle,
   innerClassName
 }: TiltCardProps): React.JSX.Element {
@@ -71,17 +74,19 @@ export function TiltCard({
         )}
       >
         {children}
-        <div
-          aria-hidden
-          className={cn(
-            'pointer-events-none absolute inset-0 rounded-[4px] opacity-0 mix-blend-overlay transition-opacity duration-300 group-data-[tilting]/tilt:opacity-100 motion-reduce:hidden',
-            glareClassName
-          )}
-          style={{
-            background:
-              'radial-gradient(circle at var(--glare-x, 50%) var(--glare-y, 50%), rgb(255 255 255 / 0.55), transparent 60%)'
-          }}
-        />
+        {glare && (
+          <div
+            aria-hidden
+            className={cn(
+              'pointer-events-none absolute inset-0 rounded-[4px] opacity-0 mix-blend-overlay transition-opacity duration-300 group-data-[tilting]/tilt:opacity-100 motion-reduce:hidden',
+              glareClassName
+            )}
+            style={{
+              background:
+                'radial-gradient(circle at var(--glare-x, 50%) var(--glare-y, 50%), rgb(255 255 255 / 0.55), transparent 60%)'
+            }}
+          />
+        )}
       </div>
     </div>
   )

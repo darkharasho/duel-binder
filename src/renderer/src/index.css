@@ -346,3 +346,146 @@
     transition: none;
   }
 }
+
+/* foil:start
+ * Foil (FoilLayer): a shine over a printing's flat scan. A real foil reads as plain print head-on
+ * and only blooms where the light's angle catches it, so nearly all of this is a narrow soft band
+ * through the light: nothing outside it, a muted colour shift and fine etch inside it. The light is
+ * TiltCard's pointer, the phone's tilt, or a slow drift. FoilLayer clips the whole layer to the art
+ * (holo) or around it (reverse). Every texture is generated here: gradients and nothing else.
+ */
+@property --foil-x {
+  syntax: '<percentage>';
+  inherits: true;
+  initial-value: 30%;
+}
+@property --foil-y {
+  syntax: '<percentage>';
+  inherits: true;
+  initial-value: 22%;
+}
+.foil {
+  position: absolute;
+  inset: 0 0 auto 0;
+  overflow: hidden;
+  pointer-events: none;
+  contain: paint;
+  --foil-x: var(--glare-x, 30%);
+  --foil-y: var(--glare-y, 22%);
+  /* Scales everything: low at rest, up when the light is on the card. */
+  --foil-on: 0.35;
+  --foil-strength: 0.4;
+  --foil-bands: linear-gradient(
+    115deg,
+    hsl(350 42% 34%),
+    hsl(38 44% 32%),
+    hsl(95 32% 30%),
+    hsl(172 38% 30%),
+    hsl(214 44% 36%),
+    hsl(272 36% 36%),
+    hsl(328 40% 34%),
+    hsl(350 42% 34%)
+  );
+  /* A soft diagonal band through the light, 300% wide so it can travel; 75% - half the light
+     keeps its middle under the light. */
+  --foil-band: linear-gradient(
+    115deg,
+    transparent 44%,
+    rgb(0 0 0 / 0.28) 47.5%,
+    #000 50%,
+    rgb(0 0 0 / 0.28) 52.5%,
+    transparent 56%
+  );
+}
+[data-tilting] .foil,
+.foil[data-live],
+.foil[data-idle] {
+  --foil-on: 1;
+}
+.foil-shine,
+.foil-glare {
+  position: absolute;
+  inset: 0;
+  opacity: calc(var(--foil-on) * var(--foil-strength));
+  transition: opacity 400ms ease-out;
+  mask-image: var(--foil-band);
+  -webkit-mask-image: var(--foil-band);
+  mask-size: 300% 300%;
+  -webkit-mask-size: 300% 300%;
+  mask-position: calc(75% - var(--foil-x) / 2) calc(75% - var(--foil-y) / 2);
+  -webkit-mask-position: calc(75% - var(--foil-x) / 2) calc(75% - var(--foil-y) / 2);
+}
+.foil-shine {
+  mix-blend-mode: color-dodge;
+  background-image: var(--foil-bands);
+  background-size: 400% 400%;
+  background-position: var(--foil-x) var(--foil-y);
+}
+.foil-glare {
+  mix-blend-mode: soft-light;
+  background: linear-gradient(115deg, transparent 30%, rgb(255 255 255 / 0.5) 50%, transparent 70%);
+  background-size: 300% 300%;
+  background-position: calc(75% - var(--foil-x) / 2) calc(75% - var(--foil-y) / 2);
+}
+/* Reverse holo: the print's own colours lifted, with hardly any rainbow. */
+.foil[data-foil='reverse'] {
+  --foil-strength: 0.32;
+}
+/* No art box known: a trace of shine, since a mask would be a guess. */
+.foil[data-faint] {
+  --foil-strength: 0.12;
+}
+/* Whole-card foils: a fine crossing etch that only the band shows. */
+.foil[data-foil='fullart'],
+.foil[data-foil='gold'] {
+  --foil-strength: 0.38;
+}
+.foil[data-foil='fullart'] .foil-shine,
+.foil[data-foil='gold'] .foil-shine {
+  background-image:
+    repeating-linear-gradient(45deg, #fff 0 1px, #bdbdbd 1px 3px),
+    repeating-linear-gradient(-45deg, #fff 0 1px, #bdbdbd 1px 3px),
+    var(--foil-bands);
+  background-size: auto, auto, 400% 400%;
+  background-position: 0 0, 0 0, var(--foil-x) var(--foil-y);
+  background-blend-mode: multiply;
+}
+/* Gold: the same etch in warm metal. */
+.foil[data-foil='gold'] {
+  --foil-bands: linear-gradient(
+    115deg,
+    hsl(42 58% 36%),
+    hsl(34 52% 24%),
+    hsl(48 66% 44%),
+    hsl(30 46% 22%),
+    hsl(44 60% 38%),
+    hsl(42 58% 36%)
+  );
+}
+/* Phones without tilt access: the light drifts slowly across the card. */
+@keyframes foil-idle {
+  0%,
+  100% {
+    --foil-x: 8%;
+    --foil-y: 12%;
+  }
+  50% {
+    --foil-x: 92%;
+    --foil-y: 88%;
+  }
+}
+.foil[data-idle]:not([data-live]) {
+  animation: foil-idle 11s ease-in-out infinite;
+}
+@media (prefers-reduced-motion: reduce) {
+  .foil {
+    --foil-x: 32%;
+    --foil-y: 24%;
+    animation: none !important;
+  }
+  .foil-shine,
+  .foil-glare {
+    transition: none;
+  }
+}
+/* foil:end */

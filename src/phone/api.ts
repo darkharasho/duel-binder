@@ -13,6 +13,7 @@ import type {
 } from '../shared/types'
 import type { PhoneStore } from './data/store'
 import { phonePackWrappers } from './packWrappers'
+import { pageArtBytes } from '../renderer/src/lib/pageArtWindow'
 // Declares __APP_VERSION__.
 import type {} from './globals'
 
@@ -248,7 +249,12 @@ export function createPhoneApi(deps: {
       run: runCatalogUpdate,
       onProgress: (cb) => events.on('syncStatus', cb)
     },
-    images: { cacheSize: async () => 0, clearCache: async () => {}, onDownloads: () => () => {} },
+    images: {
+      cacheSize: async () => 0,
+      clearCache: async () => {},
+      artBytes: pageArtBytes,
+      onDownloads: () => () => {}
+    },
     usage: {
       report: (events) => store.reportUsage({ platform: isNativeApp() ? 'ios' : 'phone', events })
     },

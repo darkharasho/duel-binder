@@ -1,10 +1,15 @@
+import { useQuery } from '@tanstack/react-query'
 import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { CardArt } from '@/components/CardArt'
+import { FoilLayer } from '@/components/FoilLayer'
 import { usePanelNavKeys, useSwipeNav, type PanelNav } from '@/components/panelNav'
 import { TiltCard } from '@/components/TiltCard'
+import { chooseArtWindow, NO_FOIL, type CardFoil } from '@shared/foil'
 import { cssAspect } from '@shared/games'
 import { Button } from '@/components/ui/button'
 import { SheetPortal } from '@/components/ui/sheet'
+import { queryKeys } from '@/lib/api'
+import { detectArtWindow } from '@/lib/pageArtWindow'
 import { useCardAspect } from '@/lib/game'
 import { isPhone } from '@/lib/platform'
 import { cn } from '@/lib/utils'
@@ -15,6 +20,8 @@ interface PanelCardArtProps {
   alt: string
   /** Previous/next card arrows (and arrow keys; swipes on the phone); none when omitted. */
   nav?: PanelNav
+  /** The shown printing's foil (`cardFoil`); no foil, shine or glare when omitted. */
+  foil?: CardFoil
 }
 
 function NavArrow({
@@ -56,7 +63,8 @@ export function PanelCardArt({
   imageId,
   printingId,
   alt,
-  nav
+  nav,
+  foil = NO_FOIL
 }: PanelCardArtProps): React.JSX.Element {
   usePanelNavKeys(nav)
   useSwipeNav(nav)
@@ -67,6 +75,17 @@ export function PanelCardArt({
   const phone = isPhone()
   const arrows = phone ? undefined : nav
   // The large card's width is capped by the window's height at the card's own aspect.
+  const found = useQuery({
+    queryKey: queryKeys.artWindow(imageId, printingId ?? null, foil.roundedLeft),
+    queryFn: () => detectArtWindow({ imageId, printingId: printingId ?? null }, foil.roundedLeft),
+    enabled: foil.detect,
+    staleTime: Infinity,
+    retry: false
+  })
+  const artWindow = chooseArtWindow(found.data, foil.window)
+  // Held back until the box is known, so a mask never jumps into place.
+  const foilKind = foil.detect && found.isPending ? 'none' : foil.kind
+  const shiny = foilKind !== 'none'
   const aspectVar = { '--card-aspect': `calc(${cssAspect(aspect)})` } as React.CSSProperties
   return (
     <>
@@ -78,13 +97,20 @@ export function PanelCardArt({
       )}
       <div className="flex items-center justify-center gap-3 min-[900px]:hidden">
         {arrows && <NavArrow dir="prev" step={arrows.prev} />}
-        <TiltCard className="w-48">
+        <TiltCard className="w-48" glare={shiny}>
           <CardArt
             imageId={imageId}
             printingId={printingId}
             size="full"
             alt={alt}
             className="w-full"
+          />
+          <FoilLayer
+            kind={foilKind}
+            window={artWindow}
+            aspect={aspect}
+            className="rounded-[6px]"
+            device={phone}
           />
         </TiltCard>
         {arrows && <NavArrow dir="next" step={arrows.next} />}
@@ -98,6 +124,7 @@ export function PanelCardArt({
           {arrows && <NavArrow dir="prev" step={arrows.prev} large />}
           <TiltCard
             maxTilt={10}
+            glare={shiny}
             glareClassName="rounded-[14px]"
             className="pointer-events-auto w-[min(26rem,calc((100vh-6rem)*var(--card-aspect)))] min-w-0 [perspective:1400px]"
           >
@@ -107,6 +134,12 @@ export function PanelCardArt({
               size="full"
               alt=""
               className="w-full rounded-[14px] shadow-[0_30px_80px_rgb(0_0_0/0.65)]"
+            />
+            <FoilLayer
+              kind={foilKind}
+              window={artWindow}
+              aspect={aspect}
+              className="rounded-[14px]"
             />
           </TiltCard>
           {arrows && <NavArrow dir="next" step={arrows.next} large />}

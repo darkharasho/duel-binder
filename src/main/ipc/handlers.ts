@@ -1,7 +1,8 @@
 import type Database from 'better-sqlite3'
 import { ipcMain } from 'electron'
+import { readFile } from 'node:fs/promises'
 import type { CollectionFilters, EntryView, UpdateStatus } from '@shared/types'
-import type { INVOKE_CHANNELS } from '@shared/ipc'
+import type { ArtImageRequest, INVOKE_CHANNELS } from '@shared/ipc'
 import { INVOKE_CHANNELS as CHANNELS } from '@shared/ipc'
 import type { ImageCache } from '../images/cache'
 import { createDataHandlers } from './dataHandlers'
@@ -111,6 +112,17 @@ export function createHandlers({
     'sync:run': async () => account.refreshCatalog(),
     'images:cacheSize': () => images.sizeBytes(),
     'images:clearCache': () => images.clear(),
+    'images:artBytes': async (request: unknown) => {
+      const { imageId, printingId } = (request ?? {}) as Partial<ArtImageRequest>
+      if (!Number.isSafeInteger(imageId)) throw new Error('Image id must be an integer')
+      if (printingId != null && !Number.isSafeInteger(printingId)) {
+        throw new Error('Printing id must be an integer')
+      }
+      // The image the panel is showing: the printing's scan if there is one.
+      const scan = printingId == null ? null : await images.getPrinting(printingId)
+      const file = scan ?? (await images.get('full', imageId as number, { priority: true }))
+      return file ? readFile(file) : null
+    },
     'window:minimize': async () => window.minimize(),
     'window:toggleMaximize': async () => window.toggleMaximize(),
     'window:close': async () => window.close(),

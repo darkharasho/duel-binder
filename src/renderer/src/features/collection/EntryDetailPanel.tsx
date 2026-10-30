@@ -6,6 +6,7 @@ import { printingChip, printingTitle } from '@shared/printingLabel'
 import type { EntryView, UpdateEntryInput } from '@shared/types'
 import { CardDetails } from '@/components/CardDetails'
 import { PanelCardArt } from '@/components/PanelCardArt'
+import { cardFoil } from '@shared/foil'
 import type { PanelNav } from '@/components/panelNav'
 import { scanFor } from '@/components/scanFor'
 import { LanguageTag } from '@/components/LanguageTag'
@@ -226,6 +227,7 @@ export function EntryDetailPanel({
             printingId={scanFor(artEntry)}
             alt={artEntry.card.name}
             nav={nav}
+            foil={cardFoil(artEntry.printing, artEntry.card)}
           />
         )}
         <CardDetails card={card} printing={entry?.printing} />

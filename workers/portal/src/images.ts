@@ -257,13 +257,13 @@ function resolve(deps: AppDeps, path: string): Target | null {
     const n = Number(id)
     if (!Number.isSafeInteger(n) || n <= 0) return null
     if (n >= PKM_ID_MIN) {
-      if (kind === 'cropped') return null
       const row = deps.db
         .prepare(
           'SELECT pc.image_url FROM card_images ci JOIN pokemon_cards pc ON pc.card_id = ci.card_id WHERE ci.image_id = ?'
         )
         .get(n) as { image_url: string | null } | undefined
-      const url = row?.image_url ? pokemonArtUrl(row.image_url, kind) : null
+      // TCGdex and TCGplayer have no crop, so a Pokémon `cropped` (a set tile's backdrop) is the small art.
+      const url = row?.image_url ? pokemonArtUrl(row.image_url, kind === 'full' ? 'full' : 'small') : null
       if (url === null) return null
       return { key: `card/${kind}/${n}`, source: fixed(url), cache: CARD_CACHE, anonymous: true }
     }

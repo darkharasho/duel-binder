@@ -83,6 +83,7 @@ export function PanelCardArt({
             imageId={imageId}
             printingId={printingId}
             size="full"
+            priority
             alt={alt}
             className="w-full"
           />
@@ -105,6 +106,7 @@ export function PanelCardArt({
               imageId={imageId}
               printingId={printingId}
               size="full"
+            priority
               alt=""
               className="w-full rounded-[14px] shadow-[0_30px_80px_rgb(0_0_0/0.65)]"
             />

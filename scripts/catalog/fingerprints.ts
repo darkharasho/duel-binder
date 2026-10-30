@@ -3,12 +3,19 @@ import { decode } from 'jpeg-js'
 import type { GameId } from '../../src/shared/games'
 import { imageUrl } from '../../src/shared/imageSources'
 import { scanProfile, type ScanProfile } from '../../src/shared/scan/profiles'
-import { HASH_WORDS, artHash, fingerprintSource } from '../../src/shared/scan/fingerprint'
+import { HASH_WORDS, artHash, fingerprintSource, hamming } from '../../src/shared/scan/fingerprint'
 import { encodeFingerprints } from '../../src/shared/scan/fingerprintFile'
 import { encodeFingerprintRefs } from '../../src/shared/scan/fingerprintRefs'
 import { isTokenId, TOKEN_ID_MIN } from '../../src/shared/games/ids'
 import type { YugipediaClient } from '../../src/main/yugipedia/client'
-import { buildReferences, decodeImage, download, scanHash, type ReferenceOptions } from './references'
+import {
+  buildReferences,
+  decodeImage,
+  download,
+  scanHash,
+  type ReferenceOptions,
+  type ReferenceResult
+} from './references'
 
 const DEFAULT_CONCURRENCY = 6
 const COMMIT_EVERY = 200
@@ -21,6 +28,12 @@ const RETRY_DELAYS_MS = [1000, 2000]
 const HASH_VERSION = '3'
 /** Pokémon's own cache file has its own version: bump when the full-card crop changes. */
 const PKM_HASH_VERSION = '1'
+/**
+ * A token with a hash this close to another card's gets no records. Its art is often that card's,
+ * and a whole-card scan sits nearer a photo than the art crop does, so it would win the match in
+ * apps already shipped. Such a token is still scanned by its printed code.
+ */
+const TOKEN_MIN_DISTANCE = 80
 
 export interface FingerprintOptions {
   /** The work database; the game's `card_images` decide which ids the file holds. */
@@ -87,11 +100,34 @@ function pokemonImageUrl(base: string): string {
 }
 
 /**
+ * The token cards with a record within TOKEN_MIN_DISTANCE of a record of any other card, tokens
+ * included, so two tokens close to each other are both in it.
+ */
+function tooCloseTokens(
+  records: { imageId: number; hash: Uint32Array }[],
+  cardOf: ReadonlyMap<number, number>
+): Set<number> {
+  const out = new Set<number>()
+  for (const token of records) {
+    if (!isTokenId(token.imageId)) continue
+    const card = cardOf.get(token.imageId)!
+    if (out.has(card)) continue
+    const close = records.some(
+      (r) =>
+        cardOf.get(r.imageId) !== card && hamming(token.hash, 0, r.hash, 0) <= TOKEN_MIN_DISTANCE
+    )
+    if (close) out.add(card)
+  }
+  return out
+}
+
+/**
  * Builds the scan fingerprint file for every `card_images` id of the game in `work`: Yu-Gi-Oh
  * from YGOPRODeck's cropped art, Pokémon from the full-card renders (cut to the art box by
  * fingerprintSource) with no printing scans. Hashes already in the
  * cache are reused; the rest are downloaded and hashed, and an image that fails is skipped
- * (and counted) so it is tried again next run.
+ * (and counted) so it is tried again next run. Tokens too like another card are left out of the
+ * finished set of records (see TOKEN_MIN_DISTANCE), however their hashes were come by.
  */
 export async function buildFingerprints(opts: FingerprintOptions): Promise<FingerprintResult> {
   const fetchFn = opts.fetch ?? fetch
@@ -105,17 +141,15 @@ export async function buildFingerprints(opts: FingerprintOptions): Promise<Finge
     cache.exec('CREATE TABLE IF NOT EXISTS fp (image_id INTEGER PRIMARY KEY, hash BLOB NOT NULL)')
     // A truncated or foreign blob would corrupt the file; drop it so it is fetched again.
     cache.prepare('DELETE FROM fp WHERE length(hash) != ?').run(HASH_WORDS * 4)
-    const frames = new Map(
-      (
-        opts.work
-          .prepare(
-            `SELECT i.image_id, COALESCE(c.frame_type, '') AS frame_type
-             FROM card_images i LEFT JOIN cards c ON c.id = i.card_id
-             WHERE i.game = ?`
-          )
-          .all(game) as { image_id: number; frame_type: string }[]
-      ).map((r) => [r.image_id, r.frame_type])
-    )
+    const images = opts.work
+      .prepare(
+        `SELECT i.image_id, i.card_id, COALESCE(c.frame_type, '') AS frame_type
+         FROM card_images i LEFT JOIN cards c ON c.id = i.card_id
+         WHERE i.game = ?`
+      )
+      .all(game) as { image_id: number; card_id: number; frame_type: string }[]
+    const frames = new Map(images.map((r) => [r.image_id, r.frame_type]))
+    const cardOf = new Map(images.map((r) => [r.image_id, r.card_id]))
     cache.exec('CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)')
     const version = cache.prepare("SELECT value FROM meta WHERE key = 'hash_version'").pluck().get()
     if (version !== hashVersion) {
@@ -223,24 +257,33 @@ export async function buildFingerprints(opts: FingerprintOptions): Promise<Finge
     }
     // Printing scans are extras: trouble with them is logged and leaves the card art file as is.
     const references = { count: 0, fetched: 0, failed: 0 }
-    const refs: { imageId: number; hash: Uint32Array; printings: string[] }[] = []
+    const scans: ReferenceResult['entries'] = []
     if (opts.references && !pkm) {
       try {
         const out = await buildReferences({ ...opts.references, work: opts.work, cache, log })
-        const own = out.entries.filter((e) => idSet.has(e.imageId))
-        entries.push(...own.map(({ imageId, hash }) => ({ imageId, hash })))
-        refs.push(...own.filter((e) => e.printings.length > 0))
-        Object.assign(references, { count: own.length, fetched: out.fetched, failed: out.failed })
+        scans.push(...out.entries.filter((e) => idSet.has(e.imageId)))
+        Object.assign(references, { fetched: out.fetched, failed: out.failed })
       } catch (e) {
         log(`Printing scans failed: ${e instanceof Error ? e.message : e}`)
       }
     }
+    const records = [...entries, ...scans.map(({ imageId, hash }) => ({ imageId, hash }))]
+    const leftOut = tooCloseTokens(records, cardOf)
+    if (leftOut.size > 0) {
+      const name = opts.work.prepare('SELECT name FROM cards WHERE id = ?').pluck()
+      const names = [...leftOut].map((id) => name.get(id)).join(', ')
+      log(`Tokens left out of the fingerprints, too close to other art (${leftOut.size}): ${names}`)
+    }
+    const kept = (e: { imageId: number }): boolean => !leftOut.has(cardOf.get(e.imageId)!)
+    const keptScans = scans.filter(kept)
+    references.count = keptScans.length
+    const finalRecords = records.filter(kept)
     return {
-      bytes: encodeFingerprints(entries),
-      refs: encodeFingerprintRefs(refs),
+      bytes: encodeFingerprints(finalRecords),
+      refs: encodeFingerprintRefs(keptScans.filter((e) => e.printings.length > 0)),
       fetched,
       failed,
-      count: entries.length,
+      count: finalRecords.length,
       references
     }
   } finally {

@@ -187,6 +187,24 @@ describe('token cards', () => {
     ])
   })
 
+  it('leaves a token as like a card as its art out, fresh or from the cache', async () => {
+    // Image 11's cached art is what this token's scan shows.
+    const cachePath = join(dir, 'fingerprints.sqlite')
+    const run = (fetch: typeof globalThis.fetch): ReturnType<typeof buildFingerprints> =>
+      buildFingerprints({ work, cachePath, fetch, tokenArt: art })
+    const requested: string[] = []
+    const fresh = await run(scans({ [FILE]: png(SCAN) }, requested))
+    expect(requested).toContain(FILE)
+    expect(fresh.fetched).toBe(1)
+    const again = await run(scans({}))
+    expect(again.fetched).toBe(0)
+    expect(again.bytes).toEqual(fresh.bytes)
+    expect(decodeFingerprints(again.bytes).nearest(SCAN_HASH, 2)).toMatchObject([
+      { imageId: 11, distance: 0 },
+      { imageId: 10 }
+    ])
+  })
+
   it('never asks YGOPRODeck for a token, and counts a lookup that fails', async () => {
     const requested: string[] = []
     const out = await buildFingerprints({

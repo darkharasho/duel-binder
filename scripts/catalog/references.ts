@@ -4,6 +4,7 @@ import { PNG } from 'pngjs'
 import { ART_BOXES, crop } from '../../src/renderer/src/features/scan/vision/regions'
 import { HASH_WORDS, artHash, hamming } from '../../src/shared/scan/fingerprint'
 import { isArtVariant, namedVariant } from '../../src/shared/scan/fingerprintRefs'
+import { rarityFamily } from '../../src/shared/scan/rarity'
 import { ART_FAR_DISTANCE } from '../../src/shared/scan/thresholds'
 import type { RgbaImage } from '../../src/shared/scan/types'
 import { isLanguage } from '../../src/shared/languages'
@@ -185,6 +186,29 @@ export async function buildReferences(opts: ReferenceOptions): Promise<Reference
       p.set_code ? p : { ...p, set_code: setCodes.get(`${p.language}|${p.set_name}`) ?? '' }
     )
     .filter((p) => p.set_code && wantsReference(p.set_rarity, p.variant, p.set_name))
+  // Each code's rarities printed in the usual art: an unsuffixed scan of one of those is of that
+  // printing, not of an art variant of the same rarity (see fileShowsVariant).
+  const plainRarities = new Set(
+    (
+      work
+        .prepare(
+          `SELECT language, set_name, set_code, set_rarity, variant FROM card_printings
+           WHERE language IN (${languages})`
+        )
+        .all() as {
+        language: string
+        set_name: string
+        set_code: string
+        set_rarity: string
+        variant: string | null
+      }[]
+    )
+      .filter((r) => namedVariant(r.set_rarity, r.variant) === null)
+      .map(
+        (r) =>
+          `${r.language}|${r.set_code || setCodes.get(`${r.language}|${r.set_name}`)}|${r.set_rarity}`
+      )
+  )
 
   // Which scan each printing has, from its card's gallery page.
   const known = new Map(
@@ -322,13 +346,17 @@ export async function buildReferences(opts: ReferenceOptions): Promise<Reference
           q.card_id === p.card_id &&
           isArtVariant(q.set_rarity, q.variant) &&
           isLanguage(q.language) &&
-          fileShowsVariant(file, {
-            setCode: q.set_code,
-            language: q.language,
-            rarity: q.set_rarity,
-            rarityCode: q.set_rarity_code,
-            variant: q.variant
-          })
+          fileShowsVariant(
+            file,
+            {
+              setCode: q.set_code,
+              language: q.language,
+              rarity: q.set_rarity,
+              rarityCode: q.set_rarity_code,
+              variant: q.variant
+            },
+            !plainRarities.has(`${q.language}|${q.set_code}|${rarityFamily(q.set_rarity)}`)
+          )
       )
       .map((q) => q.pkey)
     entries.push({ imageId: best, hash, printings: [...new Set(keys)] })

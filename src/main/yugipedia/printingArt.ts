@@ -118,16 +118,32 @@ const UNSUFFIXED_VARIANT = /^new art(work)?$/i
 
 /**
  * Whether a scan (as choosePrintingFile names it) shows the printing's art variant: its file is
- * named with the variant, or the printing has none, or its variant's scans carry no suffix.
+ * named with the variant, or the printing has none, or its variant's scans carry no suffix, or
+ * (with `onlyVariantOfRarity`: its code has no plain printing of its rarity) the file is its own
+ * rarity's with no variant named, as Yugipedia names LOCR's all-overframe Prismatic Secret Rares.
  * False for the plain file an overframe or Manga-Style printing with no scan of its own fell back
  * to.
  */
-export function fileShowsVariant(file: string, p: PrintingKey): boolean {
-  const { variant } = splitVariant(p)
+export function fileShowsVariant(
+  file: string,
+  p: PrintingKey,
+  onlyVariantOfRarity = false
+): boolean {
+  const { rarity, variant } = splitVariant(p)
   if (!variant || UNSUFFIXED_VARIANT.test(variant.trim())) return true
   const m = FILE_RE.exec(file.replace(/^File:/, ''))
-  const keys = (m?.[4] ?? '').split('-').filter(Boolean).map(suffixKey)
-  return keys.includes(variantSuffix(variant))
+  if (!m) return false
+  const rest = (m[4] ?? '').split('-').filter(Boolean)
+  if (rest.length > 0 && EDITIONS.includes(rest[0].toUpperCase())) rest.shift()
+  const keys = rest.map(suffixKey)
+  if (keys.includes(variantSuffix(variant))) return true
+  const wanted = rarityAbbr(rarity, p.rarityCode)
+  return (
+    onlyVariantOfRarity &&
+    keys.length === 0 &&
+    !!wanted &&
+    m[3].toLowerCase() === wanted.toLowerCase()
+  )
 }
 
 /**

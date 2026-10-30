@@ -242,6 +242,36 @@ describe('buildReferences', () => {
     expect(result.entries).toEqual([{ imageId: 11, hash: SCAN_HASH, printings: [] }])
   })
 
+  it("names an overframe printing on its rarity's plain-named scan only when that rarity has no plain printing", async () => {
+    // As in LOCR: the Prismatic Secret Rare is only printed overframe, and its file is PScR.png.
+    const add = work.prepare(
+      `INSERT INTO card_printings (card_id, set_name, set_code, set_rarity, set_rarity_code, language, variant)
+       VALUES (1, 'Limit Over Collection: The Rivals', 'LOCR-JP016', ?, '', 'ja', ?)`
+    )
+    add.run('Prismatic Secret Rare', 'Overframe')
+    add.run('Ultra Rare (Overframe)', null)
+    add.run('Ultra Rare', null)
+    const files = ['ShiEn-LOCR-JP-PScR.png', 'ShiEn-LOCR-JP-UR.png']
+    const result = await buildReferences({
+      work,
+      cache,
+      yugipedia: fakeYugipedia(files),
+      fetch: scans({
+        'ShiEn-LOCR-JP-PScR.png': png(SCAN),
+        'ShiEn-LOCR-JP-UR.png': png(image(118, 172, 'y'))
+      }),
+      userAgent: 'test'
+    })
+    const named = result.entries.flatMap((e) => e.printings)
+    expect(named).toContain(
+      'ja|1|Limit Over Collection: The Rivals|LOCR-JP016|Prismatic Secret Rare'
+    )
+    // UR.png is the plain Ultra Rare's, not the overframe one's.
+    expect(named).not.toContain(
+      'ja|1|Limit Over Collection: The Rivals|LOCR-JP016|Ultra Rare (Overframe)'
+    )
+  })
+
   it('takes Japanese printings too, and no other language', async () => {
     const add = work.prepare(
       `INSERT INTO card_printings (card_id, set_name, set_code, set_rarity, set_rarity_code, language, variant)

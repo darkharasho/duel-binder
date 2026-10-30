@@ -157,13 +157,13 @@ describe('fileShowsVariant', () => {
   })
 
   it('is false for the plain file an overframe printing fell back to', () => {
-    expect(
-      fileShowsVariant('GagagaGirlCellPhoneSubtraction-LOCH-JP-GMR.png', {
-        ...p,
-        rarity: 'Grand Master Rare',
-        variant: 'Overframe'
-      })
-    ).toBe(false)
+    const overframe = { ...p, rarity: 'Grand Master Rare', variant: 'Overframe' }
+    // Another rarity's file.
+    expect(fileShowsVariant('GagagaGirlCellPhoneSubtraction-LOCH-JP-UR.png', overframe)).toBe(false)
+    // Its own rarity's, when that rarity was printed plain too.
+    expect(fileShowsVariant('GagagaGirlCellPhoneSubtraction-LOCH-JP-GMR.png', overframe)).toBe(
+      false
+    )
     expect(
       fileShowsVariant('Zoa-YAC1-JP-UR.png', {
         setCode: 'YAC1',
@@ -172,6 +172,20 @@ describe('fileShowsVariant', () => {
         variant: 'Manga-Style'
       })
     ).toBe(false)
+  })
+
+  it("is true for its own rarity's plain-named file when that rarity was only printed so", () => {
+    // LOCR's and YAC1's Prismatic Secret and Grand Master Rares are all overframe: PScR.png is.
+    const overframe = { ...p, rarity: 'Grand Master Rare', variant: 'Overframe' }
+    expect(
+      fileShowsVariant('GagagaGirlCellPhoneSubtraction-LOCH-JP-GMR.png', overframe, true)
+    ).toBe(true)
+    expect(fileShowsVariant('GagagaGirlCellPhoneSubtraction-LOCH-JP-UR.png', overframe, true)).toBe(
+      false
+    )
+    expect(
+      fileShowsVariant('GagagaGirlCellPhoneSubtraction-LOCH-JP-GMR-UE.png', overframe, true)
+    ).toBe(true)
   })
 
   it('is true for a New artwork printing, whose scans carry no suffix', () => {

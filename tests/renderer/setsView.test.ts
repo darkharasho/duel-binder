@@ -129,6 +129,12 @@ describe('filterSets', () => {
       filterSets(all, { filter: 'all', q: 'RAID', mode: 'cards', language: 'all', types: [] })
     ).toEqual([started])
   })
+  it('matches a Japanese-named set by its English name or its own', () => {
+    const gx = mk({ language: 'ja', setName: 'GXバトルブースト', setCode: 'SM4P' })
+    const o = { filter: 'all' as const, mode: 'cards' as const, language: 'all' as const }
+    expect(filterSets([started, gx], { ...o, q: 'battle boost', types: [] })).toEqual([gx])
+    expect(filterSets([started, gx], { ...o, q: 'バトル', types: [] })).toEqual([gx])
+  })
   it('filters by type, with none ticked keeping every type', () => {
     const booster = mk({ setName: 'Phantom Nightmare', setCode: 'PHNI' })
     const deck = mk({ setName: 'Structure Deck: Albaz Strike', setCode: 'SDAZ' })
@@ -172,6 +178,11 @@ describe('sortSets', () => {
     const b = mk({ setName: 'B', totalCards: 100, ownedCards: 50 })
     const out = sortSets([a, untouched, b, complete], 'complete', 'cards')
     expect(out.map((s) => s.setName)).toEqual(['Legend of Blue Eyes', 'B', 'A', 'Spell Ruler'])
+  })
+  it('name sorts a Japanese-named set by its English name', () => {
+    const gx = mk({ setName: 'GXバトルブースト', setCode: 'SM4P' })
+    const out = sortSets([untouched, gx, complete], 'name', 'cards')
+    expect(out.map((s) => s.setCode)).toEqual(['SM4P', 'LOB', 'SRL'])
   })
   it('name sorts alphabetically and does not mutate input', () => {
     const input = [untouched, complete]

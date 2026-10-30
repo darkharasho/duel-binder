@@ -5,6 +5,7 @@ import { api, queryKeys } from '@/lib/api'
 import { rarityColor } from '@/lib/rarityColors'
 import { baseOf } from '../../../../shared/rip/rarity'
 import type { RipSessionSummary } from '../../../../shared/rip/types'
+import { englishSetName } from '../../../../shared/setNames'
 import { HoloCard } from './HoloCard'
 import { SessionSummary } from './SessionSummary'
 
@@ -63,7 +64,7 @@ function SessionRow({
       className="flex w-full items-center justify-between gap-3 rounded-lg border px-4 py-2.5 text-left text-sm transition-colors hover:bg-muted/50"
     >
       <span className="min-w-0">
-        <span className="block truncate font-medium">{s.setName}</span>
+        <span className="block truncate font-medium">{englishSetName(s.setName, s.setCode)}</span>
         <span className="text-xs text-muted-foreground">
           {s.packsOpened} {s.packsOpened === 1 ? 'pack' : 'packs'} ·{' '}
           {formatSessionDate(s.startedAt)}

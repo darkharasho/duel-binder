@@ -12,6 +12,7 @@ import {
   printingTitle,
   type PrintingLabelInput
 } from '@shared/printingLabel'
+import { englishSetName } from '@shared/setNames'
 import { LANGUAGES, type LanguageFilter } from '@shared/languages'
 import { ValueText } from '@/features/collection/EntryValue'
 import { cn } from '@/lib/utils'
@@ -126,7 +127,7 @@ export function AddCardDialog({
     rarity: p.setRarity
   })
   const printingValue = (p: Printing): string =>
-    `${p.id} ${p.setName} ${p.setCode} ${p.setRarity} ${p.language}`
+    `${p.id} ${englishSetName(p.setName, p.setCode)} ${p.setName} ${p.setCode} ${p.setRarity} ${p.language}`
   const preferred = printings.find((p) => p.id === preferredId)
   const languageFilter = pickedLanguage ?? preferred?.language ?? sharedLanguage
   const availableLanguages = LANGUAGES.map((l) => l.code).filter((code) =>

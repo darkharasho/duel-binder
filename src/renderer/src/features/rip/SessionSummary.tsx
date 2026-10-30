@@ -5,6 +5,7 @@ import { cn } from '@/lib/utils'
 import { baseOf, compareRarity } from '../../../../shared/rip/rarity'
 import { tierFor } from '../../../../shared/rip/layouts'
 import type { RevealTier, RipCard, RipSessionDetail } from '../../../../shared/rip/types'
+import { englishSetName } from '../../../../shared/setNames'
 import { CardCaption, CardInfo, RarityBadge } from './CardInfo'
 import { HoloCard } from './HoloCard'
 import { PHONE, prefersReducedMotion } from './stage'
@@ -405,7 +406,8 @@ export function SessionSummary({
             </span>
             <span className="text-white/55">
               {' '}
-              · {session.setName} · {all.length} {all.length === 1 ? 'card' : 'cards'}
+              · {englishSetName(session.setName, session.setCode)} · {all.length}{' '}
+              {all.length === 1 ? 'card' : 'cards'}
             </span>
           </h2>
         </div>

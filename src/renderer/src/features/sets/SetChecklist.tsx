@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowDownAZ, ArrowLeft, ArrowUpAZ, Ellipsis, Search } from 'lucide-react'
 import { toast } from 'sonner'
 import type { Language } from '@shared/languages'
+import { englishSetName, nativeSetName } from '@shared/setNames'
 import type {
   CardSearchResult,
   ChecklistCard,
@@ -339,8 +340,13 @@ export function SetChecklist({
           <div className="flex flex-wrap items-center gap-2">
             <BackButton onBack={onBack} />
             <h1 className="flex min-w-0 items-center gap-2 text-xl font-semibold">
-              <span className="truncate">{data.set.setName}</span>
+              <span className="truncate">{englishSetName(data.set.setName, data.set.setCode)}</span>
               <LanguageTag language={data.set.language} />
+              {nativeSetName(data.set.setName, data.set.setCode) && (
+                <span className="truncate text-sm font-normal text-muted-foreground">
+                  {data.set.setName}
+                </span>
+              )}
             </h1>
           </div>
           <div className="flex flex-wrap items-end gap-3 border-b border-white/[0.08]">

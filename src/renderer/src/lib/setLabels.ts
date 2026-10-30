@@ -1,14 +1,21 @@
 import { useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import type { Language, LanguageFilter } from '@shared/languages'
+import { englishSetName, hasNativeScript } from '@shared/setNames'
 import { setPrefix } from '@shared/sets'
 import { api, queryKeys } from '@/lib/api'
 import { matchesLanguage } from '@/lib/languageFilter'
 
-/** "MAMO - Magnificent Monsters", or the bare name when the set's code isn't known. */
+/**
+ * "MAMO - Magnificent Monsters", or the bare name when the set's code isn't known. The set shows
+ * its English name (see englishSetName); one in another script with no English name known shows
+ * its code alone.
+ */
 export function setLabel(setName: string, setCode: string | null | undefined): string {
   const code = setCode ? setPrefix(setCode) : ''
-  return code ? `${code} - ${setName}` : setName
+  const name = englishSetName(setName)
+  if (code && hasNativeScript(name)) return code
+  return code ? `${code} - ${name}` : name
 }
 
 /**

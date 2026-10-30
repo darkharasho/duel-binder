@@ -1,4 +1,5 @@
 import { printingChip, printingTitle } from '@shared/printingLabel'
+import { englishSetName } from '@shared/setNames'
 import type { ChecklistRarity } from '@shared/types'
 import { PrintingLabel } from '@/components/PrintingLabel'
 import { SelectContent, SelectItem, SelectValue } from '@/components/ui/select'
@@ -26,7 +27,8 @@ export function CodeValue({
   const note = picked ? ownedNote(rarity, picked.owned) : null
   return (
     <SelectValue>
-      {picked && `${picked.setCode || setName || rarity.rarity}${note ? ` ${note}` : ''}`}
+      {picked &&
+        `${picked.setCode || (setName && englishSetName(setName)) || rarity.rarity}${note ? ` ${note}` : ''}`}
     </SelectValue>
   )
 }

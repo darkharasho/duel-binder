@@ -1,5 +1,6 @@
 import { createColumnHelper, tableFeatures, useTable } from '@tanstack/react-table'
 import { ArrowDown, ArrowUp } from 'lucide-react'
+import { englishSetName } from '@shared/setNames'
 import type { CollectionFilters, EntryView, SortKey } from '@shared/types'
 import { CardArt } from '@/components/CardArt'
 import { scanFor } from '@/components/scanFor'
@@ -74,7 +75,10 @@ const columns = helper.columns([
       </span>
     )
   }),
-  helper.accessor((e) => e.printing.setName, { id: 'setName', header: 'Set' }),
+  helper.accessor((e) => englishSetName(e.printing.setName, e.printing.setCode), {
+    id: 'setName',
+    header: 'Set'
+  }),
   helper.accessor((e) => e.printing.setRarity, {
     id: 'rarity',
     header: () => <GameWord word="rarity" />

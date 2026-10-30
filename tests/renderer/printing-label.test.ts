@@ -46,4 +46,16 @@ describe('printing labels', () => {
     expect(printingSearch(coded, 'JP')).toBe('yac1-jp001 original art collection super rare jp')
     expect(printingSearch(uncoded)).toBe('original art collection ultra rare (manga-style, color)')
   })
+
+  it('names a Japanese-named set in English, and searches both names', () => {
+    const p = { setCode: 'SM4P 121/114', setName: 'GXバトルブースト', rarity: 'Holo' }
+    expect(printingTitle(p)).toBe('GX Battle Boost - Holo')
+    expect(printingSearch(p)).toBe('sm4p 121/114 gx battle boost gxバトルブースト holo')
+  })
+
+  it('leaves out a set name with no English name when the code is shown', () => {
+    const p = { setCode: 'ZZ1 001/010', setName: '未知のセット', rarity: 'Common' }
+    expect(printingTitle(p)).toBe('Common')
+    expect(printingTitle({ ...p, setCode: '' })).toBe('未知のセット - Common')
+  })
 })

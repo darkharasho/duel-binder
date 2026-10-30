@@ -7,13 +7,14 @@
 //   SCAN_PKM_DIR=~/scan-capture   pkm-truth.json, the photos it names, and pkm-work/ (catalog.sqlite
 //                                 and fingerprints-pkm.bin, from scripts/scan/pokemon-corpus/prep.ts)
 //   SCAN_PKM_TRUTH=<file>         another truth file (default SCAN_PKM_DIR/pkm-truth.json)
+//   SCAN_PKM_OUT=<file>           also write the per-photo rows there as JSON
 //   SCAN_PKM_DIR=~/scan-capture npm test -- --silent=false tests/main/scan-pkm-real.test.ts
 // (--silent=false shows the per-photo and summary tables when the tests pass.)
 // Wrong is another card, another language, a version named as sure that isn't the photo's, a
 // graded tag on a card that isn't in a slab, or any card named for a Chinese or other-language
 // photo. None may be wrong, and the right card must be named on MIN_RIGHT_SHARE of the photos
 // that can be (English or Japanese, the card known), over all photos and the owner's alone.
-import { existsSync, readFileSync } from 'node:fs'
+import { existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import Database from 'better-sqlite3'
@@ -56,6 +57,9 @@ interface Truth {
   language: 'en' | 'ja' | 'zh' | 'other'
   holder: 'bare' | 'toploader' | 'case' | 'slab'
   unclear?: 'card' | 'version'
+  /** A printed stamp the photo shows ('1st Edition', 'STAFF', '25th logo', ...). Its version is
+   *  the catalog's label for it, or null (unclear 'version') when the catalog has none. */
+  stamp?: string
 }
 
 interface Row {
@@ -72,6 +76,9 @@ interface Row {
   /** Why it is wrong, when it is. */
   why: string
   number: string
+  /** The name band's reads, and with the Japanese model when the language wasn't told. */
+  name: string
+  localName: string
   read: string
   /** The closest artwork's card and distance. */
   art: string
@@ -80,6 +87,25 @@ interface Row {
   ms: number
   /** Can count toward the right share: English or Japanese, the card known. */
   scorable: boolean
+  /** The stamp's kind (stampKind), or '' for none. */
+  stamp: string
+}
+
+/** A stamp grouped loosely by kind, for the breakdown. */
+function stampKind(stamp: string): string {
+  const s = stamp.toLowerCase()
+  if (s.includes('mcdonald')) return "McDonald's"
+  if (s.includes('1st edition')) return '1st Edition'
+  if (s.includes('staff')) return 'Staff'
+  if (s.includes('prerelease') || s.includes('pre release')) return 'Prerelease'
+  if (s.includes('30th')) return '30th'
+  if (s.includes('25th') || s.includes('celebration')) return '25th/Celebrations'
+  if (s.includes('cosmos')) return 'Cosmos'
+  if (s.includes('set-logo') || s.includes('set logo')) return 'Set logo'
+  if (/league|championship|play! pok|winner|gym challenge|qualifier/.test(s))
+    return 'League/Championships'
+  if (s.includes('pokemon center') || s.includes('pokémon center')) return 'Pokemon Center'
+  return 'other'
 }
 
 const home = (p: string): string => p.replace(/^~/, homedir())
@@ -122,6 +148,10 @@ describe.skipIf(!READY)('the Pokémon scanner on real photos', () => {
   let db: Database.Database
   const ocr = createOcr()
   const rows: Row[] = []
+  /** The text box's reads per photo, for SCAN_PKM_OUT. */
+  const texts: Record<string, { eng: string[]; jpn: string[] }> = {}
+  /** The version cues per photo, for SCAN_PKM_OUT. */
+  const cues: Record<string, unknown> = {}
   /** Truth rows left out: unclear which card, or the photo isn't there. */
   const skipped: string[] = []
 
@@ -161,6 +191,7 @@ describe.skipIf(!READY)('the Pokémon scanner on real photos', () => {
       }
       const start = performance.now()
       const signals = analyze(cv, img, index, null, true, false, profile)
+      cues[t.file] = signals.version
       // As the scan engine reads them: empty bands dropped, the code band as a collector number.
       const codeBands = signals.codeBands.filter(hasPixels)
       const nameBands = signals.nameBands.filter(hasPixels)
@@ -171,6 +202,7 @@ describe.skipIf(!READY)('the Pokémon scanner on real photos', () => {
         ? await Promise.all([read(codeBands, 'number'), read(nameBands, 'name')])
         : [[], []]
       let language = '-'
+      let localName = ''
       const outcome = await resolveSignals(
         {
           found: signals.found,
@@ -199,6 +231,7 @@ describe.skipIf(!READY)('the Pokémon scanner on real photos', () => {
                 readTexts(ocr, textBands, 'jpn'),
                 readTexts(ocr, textBands, 'eng')
               ])
+              texts[t.file] = { eng, jpn }
               const lang = pokemonLanguageOfBands({ jpn, eng })
               language = lang ?? 'null'
               return lang
@@ -206,6 +239,16 @@ describe.skipIf(!READY)('the Pokémon scanner on real photos', () => {
               language = 'failed'
               return null
             }
+          },
+          // As the scan loop's pokemonNamesOf, on one frame: the name band with the Japanese model.
+          readLocalName: async () => {
+            if (!nameBands.length) return []
+            const reads = await readTexts(ocr, nameBands, 'jpn').catch(() => [])
+            localName = reads
+              .map((r) => r.trim())
+              .filter(Boolean)
+              .join(' | ')
+            return reads
           }
         }
       )
@@ -261,14 +304,25 @@ describe.skipIf(!READY)('the Pokémon scanner on real photos', () => {
         got,
         why,
         number: codes.filter(Boolean).join(' | '),
+        name: names
+          .map((c) => c.trim())
+          .filter(Boolean)
+          .join(' | '),
+        localName,
         read: language,
         art: top ? `${topCard ? nameOf(topCard.cardId).slice(0, 24) : '?'} @${top.distance}` : '-',
         inTop: cardId !== null && artCards.some((c) => c.cardId === cardId),
         ms,
-        scorable
+        scorable,
+        stamp: t.stamp ? stampKind(t.stamp) : ''
       })
     }
     console.table(rows)
+    if (process.env.SCAN_PKM_OUT)
+      writeFileSync(
+        home(process.env.SCAN_PKM_OUT),
+        JSON.stringify({ rows, texts, cues, skipped }, null, 1)
+      )
     if (skipped.length) console.log(`Left out:\n  ${skipped.join('\n  ')}`)
     const owner = rows.filter((r) => r.source === 'owner')
     const groups: Record<string, Row[]> = {
@@ -276,10 +330,24 @@ describe.skipIf(!READY)('the Pokémon scanner on real photos', () => {
       owner,
       ebay: rows.filter((r) => r.source === 'ebay')
     }
-    for (const holder of ['bare', 'toploader', 'case', 'slab'])
+    for (const holder of ['bare', 'toploader', 'case', 'slab']) {
       groups[holder] = rows.filter((r) => r.holder === holder)
+      for (const source of ['owner', 'ebay'])
+        groups[`${source} ${holder}`] = rows.filter(
+          (r) => r.holder === holder && r.source === source
+        )
+    }
     groups.ja = rows.filter((r) => r.lang === 'ja')
+    groups.stamped = rows.filter((r) => r.stamp)
     console.table(Object.fromEntries(Object.entries(groups).map(([k, rs]) => [k, summary(rs)])))
+    // Stamped photos by kind: their version is the stamp's label, or unscored when the catalog
+    // has none.
+    const kinds = [...new Set(rows.map((r) => r.stamp).filter(Boolean))].sort()
+    console.table(
+      Object.fromEntries(
+        kinds.map((k) => [`stamp ${k}`, summary(rows.filter((r) => r.stamp === k))])
+      )
+    )
     const median = [...rows.map((r) => r.ms)].sort((a, b) => a - b)[rows.length >> 1] ?? 0
     console.log(`median ${median} ms per photo`)
   }, 7_200_000)

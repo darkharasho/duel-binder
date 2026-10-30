@@ -193,7 +193,9 @@ async function run(
   console.info(`Yugipedia: ${jobs.length} non-English set lists to sync`)
 
   const cardIds = new Map<string, number>()
-  const cardRows = db.prepare("SELECT id, name FROM cards WHERE game = 'ygo' ORDER BY id").all() as {
+  const cardRows = db
+    .prepare("SELECT id, name FROM cards WHERE game = 'ygo' ORDER BY id")
+    .all() as {
     id: number
     name: string
   }[]
@@ -226,10 +228,16 @@ async function run(
   // Sets not stored yet go first, so an interrupted first sync fills in rather than starting over;
   // within that, sets with no English release (e.g. Limit Over Collection) first, then Asian-market
   // lists before European ones.
-  const storedSet = db.prepare("SELECT 1 FROM sets WHERE game = 'ygo' AND language = ? AND set_name = ?")
+  const storedSet = db.prepare(
+    "SELECT 1 FROM sets WHERE game = 'ygo' AND language = ? AND set_name = ?"
+  )
   const englishSets = new Set(
     (
-      db.prepare("SELECT DISTINCT set_name FROM card_printings WHERE game = 'ygo' AND language = 'en'").all() as {
+      db
+        .prepare(
+          "SELECT DISTINCT set_name FROM card_printings WHERE game = 'ygo' AND language = 'en'"
+        )
+        .all() as {
         set_name: string
       }[]
     ).map((r) => r.set_name.toLowerCase())
@@ -283,7 +291,9 @@ async function run(
       let unmatched = 0
       const matched: { cardId: number; row: SetListRow }[] = []
       for (const row of s.parsed.rows) {
-        const cardId = cardIds.get(normalizeName(row.name))
+        const key = normalizeName(row.name)
+        // Yugipedia titles some card pages "Name (card)"; only that suffix is dropped.
+        const cardId = cardIds.get(key) ?? cardIds.get(key.replace(/ \(card\)$/, ''))
         if (cardId === undefined) {
           unmatched++
           if (unmatchedExamples.length < MAX_LOGGED_UNMATCHED) unmatchedExamples.push(row.name)
@@ -360,7 +370,9 @@ async function run(
         db,
         orphanPrintings.map((r) => r.id)
       )
-      const delSet = db.prepare("DELETE FROM sets WHERE game = 'ygo' AND language = ? AND set_name = ?")
+      const delSet = db.prepare(
+        "DELETE FROM sets WHERE game = 'ygo' AND language = ? AND set_name = ?"
+      )
       for (const r of gone) delSet.run(r.language, r.set_name)
       setMeta(db, 'intl_sets_synced_at', now.toISOString())
     })()

@@ -51,13 +51,27 @@ describe('createPrintingArtResolver', () => {
     expect(client.listPageImages).toHaveBeenCalledTimes(1)
   })
 
+  it("falls back to the '(card)' gallery once, only for galleries the first answer lacks", async () => {
+    const db = await seededDb()
+    const client = fakeClient({
+      'Card Gallery:Dark Magician (card)': ['DarkMagician-LOB-EN-UR-1E.png']
+    })
+    const art = createPrintingArtResolver({ db, client, batchWaitMs: 0 })
+    expect(await art.url(printing(db, 'LOB-EN005'))).toBe(
+      'https://ms.yugipedia.com/a/DarkMagician-LOB-EN-UR-1E.png'
+    )
+    expect(client.listPageImages).toHaveBeenCalledTimes(2)
+    expect(client.listPageImages).toHaveBeenLastCalledWith(['Card Gallery:Dark Magician (card)'])
+  })
+
   it('remembers a printing with no scan, and retries failures', async () => {
     const db = await seededDb()
     const client = fakeClient({})
     const art = createPrintingArtResolver({ db, client, batchWaitMs: 0 })
     expect(await art.url(printing(db, 'LOB-EN119'))).toBeNull()
     expect(await art.url(printing(db, 'LOB-EN119'))).toBeNull()
-    expect(client.listPageImages).toHaveBeenCalledTimes(1)
+    // Once for the gallery, once more for its "(card)" title; the second answer comes from the database.
+    expect(client.listPageImages).toHaveBeenCalledTimes(2)
 
     const failing = fakeClient(GALLERY)
     failing.listPageImages.mockRejectedValueOnce(new Error('offline'))
@@ -69,7 +83,9 @@ describe('createPrintingArtResolver', () => {
 
   it("finds an uncoded printing's scan from its set's prefix, preferring its variant", async () => {
     const db = await seededDb()
-    const card = (db.prepare("SELECT id FROM cards WHERE name = 'Dark Magician'").get() as { id: number }).id
+    const card = (
+      db.prepare("SELECT id FROM cards WHERE name = 'Dark Magician'").get() as { id: number }
+    ).id
     const insert = db.prepare(
       `INSERT INTO card_printings (card_id, language, set_name, set_code, set_rarity, set_rarity_code,
          missing_from_api, variant)

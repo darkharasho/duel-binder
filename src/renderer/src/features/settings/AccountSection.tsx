@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { englishSetName } from '@shared/setNames'
 import { useQuery } from '@tanstack/react-query'
 import { LanguageTag } from '@/components/LanguageTag'
 import { Button } from '@/components/ui/button'
@@ -79,7 +80,11 @@ function UnsyncedNotice({ count }: { count: number }): React.JSX.Element {
                     <span className="tabular-nums">×{e.quantity}</span>
                   </div>
                   <div className="flex items-center gap-1.5 text-muted-foreground">
-                    <span>{[e.setCode, e.setName, e.rarity].filter(Boolean).join(' · ')}</span>
+                    <span>
+                      {[e.setCode, e.setName && englishSetName(e.setName), e.rarity]
+                        .filter(Boolean)
+                        .join(' · ')}
+                    </span>
                     <LanguageTag language={e.language} />
                   </div>
                   <div className="text-muted-foreground">{reasonText(e.reason)}</div>

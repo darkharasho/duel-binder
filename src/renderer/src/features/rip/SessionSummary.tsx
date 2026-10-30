@@ -5,9 +5,10 @@ import { cn } from '@/lib/utils'
 import { baseOf, compareRarity } from '../../../../shared/rip/rarity'
 import { tierFor } from '../../../../shared/rip/layouts'
 import type { RevealTier, RipCard, RipSessionDetail } from '../../../../shared/rip/types'
+import { englishSetName } from '../../../../shared/setNames'
 import { CardCaption, CardInfo, RarityBadge } from './CardInfo'
 import { HoloCard } from './HoloCard'
-import { PHONE, prefersReducedMotion } from './stage'
+import { H_PER_W, PHONE, W_PER_H, prefersReducedMotion } from './stage'
 
 /** How far a drag must go to step to the next card (the phone). */
 const SWIPE_PX = 50
@@ -62,9 +63,9 @@ export function rankedHits(packs: RipCard[][]): Pull[] {
  */
 const HERO_H = PHONE
   ? // Beside a narrower block of text, so the whole summary still fits on the screen.
-    'calc(min(100cqh - 24px, 380px, (100cqw - 32px - 16px - 170px) * 614 / 421))'
-  : 'calc(min(100cqh - 56px, 380px, (100cqw - 56px - 300px - 64px) * 614 / 421))'
-const HERO_W = `calc(${HERO_H} * 421 / 614)`
+    `calc(min(100cqh - 24px, 380px, (100cqw - 32px - 16px - 170px) * ${H_PER_W}))`
+  : `calc(min(100cqh - 56px, 380px, (100cqw - 56px - 300px - 64px) * ${H_PER_W}))`
+const HERO_W = `calc(${HERO_H} * ${W_PER_H})`
 /** The card's landing (rip-hero-land); the kicker stamps and the sparkles fly as it ends. */
 const LAND_MS = 900
 
@@ -245,9 +246,9 @@ function Hero({
 /** The focused card's height, from the overlay (a size container), like the opener's front card. */
 const FOCUS_H = PHONE
   ? // The caption goes under it on the phone.
-    'calc(min(100cqh - 160px, 600px, (100cqw - 48px) * 614 / 421))'
-  : 'calc(min(100cqh - 64px, 600px, (100cqw - 64px - 44px - 300px) * 614 / 421))'
-const FOCUS_W = `calc(${FOCUS_H} * 421 / 614)`
+    `calc(min(100cqh - 160px, 600px, (100cqw - 48px) * ${H_PER_W}))`
+  : `calc(min(100cqh - 64px, 600px, (100cqw - 64px - 44px - 300px) * ${H_PER_W}))`
+const FOCUS_W = `calc(${FOCUS_H} * ${W_PER_H})`
 
 /**
  * One card, large, with what it is beside it, over the summary. A click outside it, Escape or the
@@ -405,7 +406,8 @@ export function SessionSummary({
             </span>
             <span className="text-white/55">
               {' '}
-              · {session.setName} · {all.length} {all.length === 1 ? 'card' : 'cards'}
+              · {englishSetName(session.setName, session.setCode)} · {all.length}{' '}
+              {all.length === 1 ? 'card' : 'cards'}
             </span>
           </h2>
         </div>

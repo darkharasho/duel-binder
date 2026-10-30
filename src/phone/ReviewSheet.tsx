@@ -10,7 +10,8 @@ import {
 import { CardArt } from '@/components/CardArt'
 import { useScanLanguage } from '@/features/scan/pickerOptions'
 import { useScanHub } from '@/features/scan/ScanHub'
-import { choicesFor, flagText, pickerLabel } from '@/features/scan/ScanRowItem'
+import { choicesFor, flagText, photoFor, pickerLabel, setLabelFor } from '@/features/scan/ScanRowItem'
+import { OptionLabel } from '@/features/scan/SearchPicker'
 import type { ScanRow } from '@/features/scan/session'
 import { ClearSessionDialog, useSessionCommit } from '@/features/scan/SessionList'
 import { plural } from '@/features/scan/scanText'
@@ -44,14 +45,21 @@ function ReviewRow({ row, disabled }: { row: ScanRow; disabled: boolean }): Reac
   const current = printingOf(row)
   const picked = choices.find((c) => c.key === String(current))
   const flag = flagText(row)
+  const where = setLabelFor(row)
   return (
     <li className={cn('flex gap-3 rounded-[20px] p-2.5', GLASS, row.flag && 'border-amber-400/45')}>
-      <CardArt imageId={row.imageId} size="small" alt="" className="w-12 shrink-0 self-start" />
+      <CardArt
+        imageId={row.imageId}
+        printingId={photoFor(row)}
+        size="small"
+        alt=""
+        className="w-12 shrink-0 self-start"
+      />
       <div className="min-w-0 flex-1 text-[13px] leading-[18px]">
         <p className="truncate text-[15px] font-semibold leading-5">{row.name}</p>
         <p className="truncate text-muted-foreground">
-          {row.setCode && <span className="font-mono text-xs">{row.setCode}</span>}
-          {row.setCode && (price != null || range) && ' · '}
+          {where && <span className={cn(row.setCode && 'font-mono text-xs')}>{where}</span>}
+          {where && (price != null || range) && ' · '}
           {price != null && (
             <span aria-label={`Price of ${row.name}`} className="text-emerald-400 tabular-nums">
               {formatUsd(price)}
@@ -74,11 +82,13 @@ function ReviewRow({ row, disabled }: { row: ScanRow; disabled: boolean }): Reac
           className="mt-1.5 h-8 max-w-full gap-1.5 rounded-full border border-white/[0.12] bg-white/[0.08] px-2.5 text-xs active:bg-white/[0.14]"
         >
           <StarIcon aria-hidden className="size-3.5 shrink-0 text-white/60" />
-          <span className={cn('truncate', !picked && 'text-muted-foreground')}>
-            {picked
-              ? (picked.title ?? picked.label)
-              : `Choose a ${row.game === 'pkm' ? 'version' : 'printing'}`}
-          </span>
+          {picked ? (
+            <OptionLabel option={picked} compact />
+          ) : (
+            <span className="truncate text-muted-foreground">
+              {`Choose a ${row.game === 'pkm' ? 'version' : 'printing'}`}
+            </span>
+          )}
           <ChevronDownIcon aria-hidden className="size-3.5 shrink-0 opacity-60" />
         </PickerSheet>
         {flag && (

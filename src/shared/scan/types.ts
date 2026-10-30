@@ -15,6 +15,8 @@ export interface ScanPrinting {
   setName: string
   setCode: string
   rarity: string
+  /** card_printings.variant, e.g. "Overframe" or "Manga-Style"; absent or null when plain. */
+  variant?: string | null
   language: Language
   /** USD, this printing's own price; null when unknown. */
   price: number | null
@@ -65,4 +67,9 @@ export interface ScanDraft {
   game?: 'pkm'
   /** Shown in a graded slab; priced as the raw card. */
   slab?: true
+  /**
+   * The printings a reference scan of their art told the photo for (an overframe family, say),
+   * which the rarity's look then picks among; absent when no scan did.
+   */
+  artPrintings?: number[]
 }

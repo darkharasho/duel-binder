@@ -1,5 +1,11 @@
 import type Database from 'better-sqlite3'
-import { KONAMI_LOGO_PREFIX, PACK_ART_PREFIX, YUGIPEDIA_IMAGE_PREFIX } from '../../src/shared/imageSources'
+import {
+  BULBAGARDEN_IMAGE_PREFIX,
+  KONAMI_LOGO_PREFIX,
+  PACK_ART_PREFIX,
+  POKEMONTCG_IMAGE_PREFIX,
+  YUGIPEDIA_IMAGE_PREFIX
+} from '../../src/shared/imageSources'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { handle, type AppDeps } from '../../workers/portal/src/app'
 import { TCGPLAYER_IMAGE_PREFIX } from '../../src/main/tcgplayer/catalog'
@@ -103,12 +109,21 @@ describe('image route', () => {
       expect(upstream.mock.calls[1][0]).toBe('https://tcgplayer-cdn.tcgplayer.com/product/487828_200w.jpg')
     })
 
-    it('404s a foreign host, a lookalike host, a null url and cropped without fetching', async () => {
+    it('serves cropped Pokémon art as the small art, under its own key', async () => {
+      const id = addPokemon(7, 'https://assets.tcgdex.net/en/sv/sv01/001')
+      expect((await get(`cropped/${id}`)).status).toBe(200)
+      expect(upstream.mock.calls[0][0]).toBe('https://assets.tcgdex.net/en/sv/sv01/001/low.webp')
+      expect(bucket.store.has(`card/cropped/${id}`)).toBe(true)
+      const tp = addPokemon(8, 'https://tcgplayer-cdn.tcgplayer.com/product/487828_200w.jpg')
+      await get(`cropped/${tp}`)
+      expect(upstream.mock.calls[1][0]).toBe('https://tcgplayer-cdn.tcgplayer.com/product/487828_200w.jpg')
+    })
+
+    it('404s a foreign host, a lookalike host and a null url without fetching', async () => {
       const evil = addPokemon(3, 'https://evil.example/x')
       const like = addPokemon(4, 'https://assets.tcgdex.net.evil.com/en/x')
       const none = addPokemon(5, null)
-      const ok = addPokemon(6, 'https://assets.tcgdex.net/en/sv/sv01/001')
-      for (const p of [`full/${evil}`, `full/${like}`, `small/${none}`, `cropped/${ok}`, `full/${PKM + 99}`]) {
+      for (const p of [`full/${evil}`, `full/${like}`, `small/${none}`, `cropped/${none}`, `full/${PKM + 99}`]) {
         expect((await get(p)).status).toBe(404)
       }
       expect(upstream).not.toHaveBeenCalled()
@@ -118,6 +133,60 @@ describe('image route', () => {
       addSet('td-en-sv01', 'https://assets.tcgdex.net/en/sv/sv01/logo')
       expect((await get('set/td-en-sv01')).status).toBe(200)
       expect(upstream.mock.calls[0][0]).toBe('https://assets.tcgdex.net/en/sv/sv01/logo.webp')
+    })
+
+    const addArt = (key: string, url: string, kind = 'pack'): void => {
+      db.prepare(
+        'INSERT INTO pokemon_set_art (language, set_name, kind, sort_order, image_url, image_key) VALUES (?, ?, ?, 0, ?, ?)'
+      ).run('en', `art ${key}`, kind, url, key)
+    }
+
+    it('serves Bulbagarden pack art and Pokémon TCG API logos with a User-Agent, then from R2', async () => {
+      const pack = `${BULBAGARDEN_IMAGE_PREFIX}a/ab/SV1_Booster_Koraidon.png`
+      addArt('bp-pack', pack)
+      addArt('pt-logo', `${POKEMONTCG_IMAGE_PREFIX}sm35/logo.png`, 'logo')
+      expect((await get('set/bp-pack')).status).toBe(200)
+      expect(upstream.mock.calls[0][0]).toBe(pack)
+      expect((upstream.mock.calls[0][1] as RequestInit).headers).toEqual({
+        'User-Agent': 'DuelBinder/portal (https://github.com/darkharasho/duel-binder)'
+      })
+      expect((await get('set/pt-logo')).status).toBe(200)
+      expect(upstream.mock.calls[1][0]).toBe(`${POKEMONTCG_IMAGE_PREFIX}sm35/logo.png`)
+      expect(bucket.store.has('set/bp-pack')).toBe(true)
+      expect((await get('set/bp-pack')).status).toBe(200)
+      expect(upstream).toHaveBeenCalledTimes(2)
+    })
+
+    it('404s Pokémon set art keys that are unknown, off-prefix or cross-source, and signed-out fills', async () => {
+      addArt('bp-evil', 'https://evil.example/x.png')
+      addArt('pt-swap', `${BULBAGARDEN_IMAGE_PREFIX}a/ab/X.png`, 'logo')
+      addArt('bp-ok', `${BULBAGARDEN_IMAGE_PREFIX}a/ab/Y.png`)
+      for (const k of ['bp-nope', 'bp-evil', 'pt-swap']) {
+        expect((await get(`set/${k}`)).status).toBe(404)
+      }
+      expect((await getFrom('1.2.3.4', 'set/bp-ok')).status).toBe(404)
+      expect(upstream).not.toHaveBeenCalled()
+    })
+
+    it('warms set art into R2 for the admin token only', async () => {
+      addArt('bp-warm', `${BULBAGARDEN_IMAGE_PREFIX}a/ab/W.png`)
+      const warm = (body: unknown, token = 'a'): Promise<Response> =>
+        handle(
+          new Request(`${BASE}/admin/img/warm`, {
+            method: 'POST',
+            headers: { authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+            body: JSON.stringify(body)
+          }),
+          deps
+        )
+      expect((await warm({ path: 'set/bp-warm' }, 'wrong')).status).toBe(401)
+      expect(await (await warm({ path: 'set/bp-warm' })).json()).toEqual({ result: 'stored' })
+      expect(bucket.store.has('set/bp-warm')).toBe(true)
+      expect(await (await warm({ path: 'set/bp-warm' })).json()).toEqual({ result: 'cached' })
+      expect(await (await warm({ path: 'set/bp-nope' })).json()).toEqual({ result: 'missing' })
+      expect(await (await warm({ path: `small/${imageId}` })).json()).toEqual({ result: 'missing' })
+      expect((await warm({})).status).toBe(400)
+      expect(upstream).toHaveBeenCalledTimes(1)
     })
 
     it('404s an unknown td- key, a foreign logo host and a non-pkm row without fetching', async () => {

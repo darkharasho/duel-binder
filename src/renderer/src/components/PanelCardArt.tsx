@@ -2,8 +2,10 @@ import { ChevronLeft, ChevronRight } from 'lucide-react'
 import { CardArt } from '@/components/CardArt'
 import { usePanelNavKeys, useSwipeNav, type PanelNav } from '@/components/panelNav'
 import { TiltCard } from '@/components/TiltCard'
+import { cssAspect } from '@shared/games'
 import { Button } from '@/components/ui/button'
 import { SheetPortal } from '@/components/ui/sheet'
+import { useCardAspect } from '@/lib/game'
 import { isPhone } from '@/lib/platform'
 import { cn } from '@/lib/utils'
 
@@ -58,11 +60,14 @@ export function PanelCardArt({
 }: PanelCardArtProps): React.JSX.Element {
   usePanelNavKeys(nav)
   useSwipeNav(nav)
+  const aspect = useCardAspect(imageId)
   // The phone steps by swiping across the card (CardSheet), so its arrows are one pair for
   // screen readers only, outside both layouts so they exist at every width; the layouts
   // show arrows on desktop alone.
   const phone = isPhone()
   const arrows = phone ? undefined : nav
+  // The large card's width is capped by the window's height at the card's own aspect.
+  const aspectVar = { '--card-aspect': `calc(${cssAspect(aspect)})` } as React.CSSProperties
   return (
     <>
       {phone && nav && (
@@ -78,6 +83,7 @@ export function PanelCardArt({
             imageId={imageId}
             printingId={printingId}
             size="full"
+            priority
             alt={alt}
             className="w-full"
           />
@@ -86,17 +92,21 @@ export function PanelCardArt({
       </div>
       {/* Portalled out of the sliding panel so it isn't moved by the panel's transform. */}
       <SheetPortal>
-        <div className="pointer-events-none fixed inset-y-0 left-0 right-[420px] z-50 hidden items-center justify-center gap-6 p-12 duration-500 animate-in fade-in-0 zoom-in-90 min-[900px]:flex">
+        <div
+          style={aspectVar}
+          className="pointer-events-none fixed inset-y-0 left-0 right-[420px] z-50 hidden items-center justify-center gap-6 p-12 duration-500 animate-in fade-in-0 zoom-in-90 min-[900px]:flex"
+        >
           {arrows && <NavArrow dir="prev" step={arrows.prev} large />}
           <TiltCard
             maxTilt={10}
             glareClassName="rounded-[14px]"
-            className="pointer-events-auto w-[min(26rem,calc((100vh-6rem)*421/614))] min-w-0 [perspective:1400px]"
+            className="pointer-events-auto w-[min(26rem,calc((100vh-6rem)*var(--card-aspect)))] min-w-0 [perspective:1400px]"
           >
             <CardArt
               imageId={imageId}
               printingId={printingId}
               size="full"
+            priority
               alt=""
               className="w-full rounded-[14px] shadow-[0_30px_80px_rgb(0_0_0/0.65)]"
             />

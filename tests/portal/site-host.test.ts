@@ -52,7 +52,8 @@ describe('routeHost', () => {
       '/scan/',
       '/scan/sw.js',
       '/scan/manifest.webmanifest',
-      '/scan/fingerprints'
+      '/scan/fingerprints',
+      '/scan/fingerprint-refs'
     ]) {
       expect(routeHost(new URL(`https://app.duelbinder.com${p}?x=1`), SITE)).toEqual({
         kind: 'app'

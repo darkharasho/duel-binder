@@ -208,6 +208,7 @@ export function createHttpApi(opts: HttpApiOptions = {}): Api {
       matchName: scanUnavailable,
       cardsForImages: scanUnavailable,
       fingerprints: scanUnavailable,
+      fingerprintRefs: scanUnavailable,
       refreshFingerprints: scanUnavailable,
       ocr: scanUnavailable,
       language: scanUnavailable,
@@ -259,7 +260,7 @@ export function createHttpApi(opts: HttpApiOptions = {}): Api {
       run: async () => SYNC_IDLE,
       onProgress: noUnsubscribe
     },
-    images: { cacheSize: unavailable, clearCache: unavailable },
+    images: { cacheSize: unavailable, clearCache: unavailable, onDownloads: noUnsubscribe },
     window: {
       platform: 'web',
       minimize: async () => {},

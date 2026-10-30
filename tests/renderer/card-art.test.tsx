@@ -1,12 +1,34 @@
 import { fireEvent, render, screen } from '@testing-library/react'
+import { PKM_ID_MIN, type GameId } from '@shared/games'
 import { CardArt } from '@/components/CardArt'
-import { createMockApi } from './mockApi'
+import { CardSheet } from '@/components/CardSheet'
+import { PanelCardArt } from '@/components/PanelCardArt'
+import { GameProvider } from '@/lib/game'
+import { createMockApi, renderWithProviders } from './mockApi'
 
 describe('CardArt', () => {
   it('without a printing it is the plain default art', () => {
     render(<CardArt imageId={5} size="small" alt="Kuriboh" />)
     expect(screen.getByAltText('Kuriboh')).toHaveAttribute('src', 'ygo-img://small/5')
     expect(screen.queryByTestId('printing-scan')).not.toBeInTheDocument()
+  })
+
+  it('shimmers in the frame while the art downloads, then fades it in', () => {
+    render(<CardArt imageId={5} size="small" alt="Kuriboh" />)
+    const img = screen.getByAltText('Kuriboh')
+    expect(img).toHaveClass('art-loading')
+    fireEvent.load(img)
+    expect(img).not.toHaveClass('art-loading')
+    expect(img).toHaveClass('art-reveal')
+  })
+
+  it('with a printing, the frame shimmers until the default art loads', () => {
+    const { container } = render(<CardArt imageId={5} printingId={9} size="small" alt="Kuriboh" />)
+    const frame = container.firstElementChild!
+    expect(frame).toHaveClass('art-loading')
+    fireEvent.load(screen.getByAltText('Kuriboh'))
+    expect(frame).not.toHaveClass('art-loading')
+    expect(screen.getByAltText('Kuriboh')).toHaveClass('art-reveal')
   })
 
   it('fades the printing scan in over the default art once it loads', () => {
@@ -35,6 +57,105 @@ describe('CardArt', () => {
       expect(screen.queryByTestId('printing-scan')).not.toBeInTheDocument()
     } finally {
       window.api = saved
+    }
+  })
+})
+
+describe('CardArt gaps', () => {
+  it('requests no printing scan for a Pokémon card', () => {
+    render(<CardArt imageId={PKM_ID_MIN + 7} printingId={9} size="small" alt="Pikachu" />)
+    expect(screen.queryByTestId('printing-scan')).not.toBeInTheDocument()
+  })
+
+  it('asks for priority only when told to', () => {
+    const { rerender } = render(<CardArt imageId={5} size="full" alt="K" />)
+    expect(screen.getByAltText('K')).toHaveAttribute('src', 'ygo-img://full/5')
+    rerender(<CardArt imageId={5} size="full" alt="K" priority />)
+    expect(screen.getByAltText('K')).toHaveAttribute('src', 'ygo-img://full/5?now')
+  })
+
+  it("the panel's large card downloads ahead of the queue", () => {
+    renderWithProviders(
+      <CardSheet onClose={() => {}}>
+        <PanelCardArt imageId={5} alt="Card" />
+      </CardSheet>
+    )
+    for (const img of screen.getAllByRole('img')) {
+      expect(img).toHaveAttribute('src', 'ygo-img://full/5?now')
+    }
+  })
+
+  it('a failed card does not leave the next card as a card back', () => {
+    const { rerender } = render(<CardArt imageId={5} size="full" alt="A" />)
+    fireEvent.error(screen.getByAltText('A'))
+    expect(screen.getByTestId('card-art-placeholder')).toBeInTheDocument()
+    rerender(<CardArt imageId={6} size="full" alt="B" />)
+    expect(screen.queryByTestId('card-art-placeholder')).not.toBeInTheDocument()
+    expect(screen.getByAltText('B')).toHaveAttribute('src', 'ygo-img://full/6')
+  })
+})
+
+describe('CardArt aspect', () => {
+  const PKM_CARD = PKM_ID_MIN + 7
+
+  /** Renders under a game provider showing `game`, once the provider has read it. */
+  async function renderInGame(game: GameId, ui: React.ReactElement): Promise<void> {
+    renderWithProviders(<GameProvider fallback={null}>{ui}</GameProvider>, {
+      api: createMockApi({
+        games: { available: async () => ['ygo', 'pkm'], active: async () => game }
+      })
+    })
+    await screen.findAllByRole('img')
+  }
+
+  it("keeps Yu-Gi-Oh!'s 421×614 frame", () => {
+    render(<CardArt imageId={5} size="small" alt="Kuriboh" />)
+    expect(screen.getByAltText('Kuriboh').style.aspectRatio).toBe('421 / 614')
+  })
+
+  it("frames a Pokémon card at TCGdex's 600×825 from its id, whatever the game shown", () => {
+    render(<CardArt imageId={PKM_CARD} size="small" alt="Pikachu" />)
+    expect(screen.getByAltText('Pikachu').style.aspectRatio).toBe('600 / 825')
+  })
+
+  it('frames a Yu-Gi-Oh! card at 421×614 while Pokémon shows (a friend’s binder)', async () => {
+    await renderInGame('pkm', <CardArt imageId={5} printingId={9} size="small" alt="Kuriboh" />)
+    expect(screen.getByAltText('Kuriboh').parentElement!.style.aspectRatio).toBe('421 / 614')
+  })
+
+  it('without a card id it takes the game shown', async () => {
+    await renderInGame('pkm', <CardArt imageId={0} size="small" alt="Unknown" />)
+    expect(screen.getByAltText('Unknown').style.aspectRatio).toBe('600 / 825')
+  })
+
+  it("draws the placeholder card back at the card's game's aspect", () => {
+    const { unmount } = render(<CardArt imageId={5} size="small" alt="Kuriboh" />)
+    fireEvent.error(screen.getByAltText('Kuriboh'))
+    const ygo = screen.getByTestId('card-art-placeholder')
+    expect(ygo).toHaveAttribute('viewBox', '0 0 421 614')
+    expect(ygo.style.aspectRatio).toBe('421 / 614')
+    unmount()
+
+    render(<CardArt imageId={PKM_CARD} size="small" alt="Pikachu" />)
+    fireEvent.error(screen.getByAltText('Pikachu'))
+    const pkm = screen.getByTestId('card-art-placeholder')
+    expect(pkm).toHaveAttribute('viewBox', '0 0 600 825')
+    expect(pkm.style.aspectRatio).toBe('600 / 825')
+  })
+
+  it("caps the panel's large card by the window height at the card's aspect", () => {
+    for (const [imageId, ratio] of [
+      [5, 'calc(421 / 614)'],
+      [PKM_CARD, 'calc(600 / 825)']
+    ] as const) {
+      const { unmount } = renderWithProviders(
+        <CardSheet onClose={() => {}}>
+          <PanelCardArt imageId={imageId} alt="Card" />
+        </CardSheet>
+      )
+      const large = document.querySelector<HTMLElement>('[class*="var(--card-aspect)"]')!
+      expect(large.parentElement!.style.getPropertyValue('--card-aspect')).toBe(ratio)
+      unmount()
     }
   })
 })

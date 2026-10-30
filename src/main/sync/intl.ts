@@ -5,6 +5,8 @@ import { getMeta, setMeta } from '../db/meta'
 import type { YugipediaClient } from '../yugipedia/client'
 import {
   listTitleParts,
+  MANGA_STYLE,
+  MANGA_TONES,
   NEW_ART_VARIANT,
   normalizeRarity,
   parseInfobox,
@@ -109,7 +111,9 @@ interface IntlPrinting {
  * plain one); otherwise it keeps the bare rarity with the variant in `variant` (an overframe-only
  * Prismatic Secret Rare), so a printing stored before variants were read keeps its row. A plain row
  * the list marks "New artwork" keeps its bare rarity too, with NEW_ART_VARIANT in `variant`, so its
- * printing scan is fingerprinted (YGOPRODeck only has the old art).
+ * printing scan is fingerprinted (YGOPRODeck only has the old art). A Manga-Style row stands for
+ * its Color and Monochrome printings: "Ultra Rare" with the variant "Manga-Style, Color" and
+ * "Ultra Rare (Manga-Style, Monochrome)".
  */
 function listPrintings(matched: { cardId: number; row: SetListRow }[]): IntlPrinting[] {
   const out: IntlPrinting[] = []
@@ -127,9 +131,20 @@ function listPrintings(matched: { cardId: number; row: SetListRow }[]): IntlPrin
     for (const r of row.rarities)
       add({ cardId, setCode: row.code, setRarity: normalizeRarity(r), variant })
   }
-  for (const { cardId, row } of matched) {
-    const variant = row.variant
-    if (!variant) continue
+  // A Manga-Style row is two printings of each rarity, Color and Monochrome; Color goes first,
+  // so it keeps the bare rarity a Manga-Style printing was stored under before they were told
+  // apart (and the entries on it, whose art the app showed in colour).
+  const tone = (v: string): number => (v.endsWith(`, ${MANGA_TONES[1]}`) ? 1 : 0)
+  const variants = matched
+    .flatMap(({ cardId, row }) =>
+      row.variant === MANGA_STYLE
+        ? MANGA_TONES.map((t) => ({ cardId, row, variant: `${MANGA_STYLE}, ${t}` }))
+        : row.variant
+          ? [{ cardId, row, variant: row.variant }]
+          : []
+    )
+    .sort((a, b) => tone(a.variant) - tone(b.variant))
+  for (const { cardId, row, variant } of variants) {
     for (const r of row.rarities) {
       const rarity = normalizeRarity(r)
       const bare = `${cardId}\u0000${row.code}\u0000${rarity}`
@@ -193,7 +208,9 @@ async function run(
   console.info(`Yugipedia: ${jobs.length} non-English set lists to sync`)
 
   const cardIds = new Map<string, number>()
-  const cardRows = db.prepare("SELECT id, name FROM cards WHERE game = 'ygo' ORDER BY id").all() as {
+  const cardRows = db
+    .prepare("SELECT id, name FROM cards WHERE game = 'ygo' ORDER BY id")
+    .all() as {
     id: number
     name: string
   }[]
@@ -226,10 +243,16 @@ async function run(
   // Sets not stored yet go first, so an interrupted first sync fills in rather than starting over;
   // within that, sets with no English release (e.g. Limit Over Collection) first, then Asian-market
   // lists before European ones.
-  const storedSet = db.prepare("SELECT 1 FROM sets WHERE game = 'ygo' AND language = ? AND set_name = ?")
+  const storedSet = db.prepare(
+    "SELECT 1 FROM sets WHERE game = 'ygo' AND language = ? AND set_name = ?"
+  )
   const englishSets = new Set(
     (
-      db.prepare("SELECT DISTINCT set_name FROM card_printings WHERE game = 'ygo' AND language = 'en'").all() as {
+      db
+        .prepare(
+          "SELECT DISTINCT set_name FROM card_printings WHERE game = 'ygo' AND language = 'en'"
+        )
+        .all() as {
         set_name: string
       }[]
     ).map((r) => r.set_name.toLowerCase())
@@ -283,7 +306,9 @@ async function run(
       let unmatched = 0
       const matched: { cardId: number; row: SetListRow }[] = []
       for (const row of s.parsed.rows) {
-        const cardId = cardIds.get(normalizeName(row.name))
+        const key = normalizeName(row.name)
+        // Yugipedia titles some card pages "Name (card)"; only that suffix is dropped.
+        const cardId = cardIds.get(key) ?? cardIds.get(key.replace(/ \(card\)$/, ''))
         if (cardId === undefined) {
           unmatched++
           if (unmatchedExamples.length < MAX_LOGGED_UNMATCHED) unmatchedExamples.push(row.name)
@@ -360,7 +385,9 @@ async function run(
         db,
         orphanPrintings.map((r) => r.id)
       )
-      const delSet = db.prepare("DELETE FROM sets WHERE game = 'ygo' AND language = ? AND set_name = ?")
+      const delSet = db.prepare(
+        "DELETE FROM sets WHERE game = 'ygo' AND language = ? AND set_name = ?"
+      )
       for (const r of gone) delSet.run(r.language, r.set_name)
       setMeta(db, 'intl_sets_synced_at', now.toISOString())
     })()

@@ -142,7 +142,7 @@ export function browseCards(db: SqlDb, f: BrowseFilters, scope: Scope = LOCAL): 
          (SELECT p.id FROM card_printings p
            LEFT JOIN sets s ON s.game = p.game AND s.language = 'en' AND s.set_name = p.set_name
            WHERE p.card_id = page.id AND +p.game = ${scope.game} AND p.language = 'en' AND p.contributed = 0
-           ORDER BY s.tcg_date IS NULL, s.tcg_date, p.id LIMIT 1) AS default_printing_id
+           ORDER BY p.game = 'pkm' AND p.missing_from_api = 1, s.tcg_date IS NULL, s.tcg_date, p.id LIMIT 1) AS default_printing_id
        FROM (${base(scope)}${sql} ORDER BY ${sortCol} IS NULL, ${sortCol} ${dir}, c.name COLLATE NOCASE, c.id
          LIMIT ? OFFSET ?) page`
     )

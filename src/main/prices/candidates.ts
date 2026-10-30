@@ -52,6 +52,14 @@ function candidateFilter(
   return { where: where.join(' AND '), params }
 }
 
+/**
+ * The rarity a printing is priced as: its own, with a Manga-Style tone kept in its variant added
+ * ("Ultra Rare (Manga-Style, Color)"), as the Monochrome one carries it in its rarity, so the price
+ * Worker keeps to listings of that tone. Other variants are left out, as before.
+ */
+const PRICED_RARITY = `p.set_rarity || CASE WHEN p.variant LIKE '%, Color' OR p.variant LIKE '%, Monochrome'
+  THEN ' (' || p.variant || ')' ELSE '' END`
+
 // intl_prices holds eBay prices for every language.
 const CANDIDATE_FROM = `FROM card_printings p
        JOIN cards c ON c.id = p.card_id
@@ -77,7 +85,7 @@ export function priceCandidates(
   }
   return db
     .prepare(
-      `SELECT p.id, p.pkey, p.set_code AS code, c.name, p.set_name AS "set", p.set_rarity AS rarity, p.language AS lang
+      `SELECT p.id, p.pkey, p.set_code AS code, c.name, p.set_name AS "set", ${PRICED_RARITY} AS rarity, p.language AS lang
        ${CANDIDATE_FROM}
        WHERE ${f.where}
        ORDER BY ${OWNED} DESC, ip.printing_id IS NULL DESC, ip.checked_at, p.id

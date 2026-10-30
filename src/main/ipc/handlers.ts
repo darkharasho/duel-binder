@@ -10,6 +10,7 @@ import type { FingerprintStore } from '../scan/fingerprints'
 import { checkOcrBands, type Ocr } from '../scan/ocr'
 import { isOcrKind, isTextModel, readTexts } from '@shared/scan/ocr'
 import type { GameId } from '@shared/games'
+import { scanRefs } from '../repo/scanRefs'
 import { cardLanguage } from '@shared/scan/cardLanguage'
 import type { AccountService } from '../cloud/account'
 import type { CatalogService } from '../catalog/service'
@@ -82,10 +83,14 @@ export function createHandlers({
     'friends:collection': async (userId: number, f: CollectionFilters) =>
       (await account.portal<EntryView[]>('friends:collection', [userId, f])).map((e) => ({
         ...e,
-        originalArt: false
+        printingScan: false
       })),
     'friends:facets': async (userId: number) => account.portal('friends:facets', [userId]),
     'scan:fingerprints': (game: GameId) => fingerprints[game].read(),
+    'scan:fingerprintRefs': async () => {
+      const file = await fingerprints.ygo.readRefs()
+      return file ? scanRefs(db, file) : []
+    },
     'scan:refreshFingerprints': (game: GameId, opts?: { force?: boolean }) => fingerprints[game].refresh(opts),
     'scan:ocr': async (bands: unknown, kind: unknown) => {
       if (!isOcrKind(kind)) throw new Error(`Unknown OCR kind: ${String(kind)}`)

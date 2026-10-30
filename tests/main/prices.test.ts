@@ -260,6 +260,25 @@ test('a printing requested in the last 7 days is a candidate; an older request i
   expect(countCandidates(db, NOW)).toBe(1)
 })
 
+test('a Manga-Style printing is priced as its tone, other variants as their rarity', () => {
+  const ids = ['Manga-Style, Color', 'Overframe', 'New artwork'].map((variant, i) => {
+    const id = unowned(`X-JP0${i}`, 'ja')
+    db.prepare('UPDATE card_printings SET variant = ? WHERE id = ?').run(variant, id)
+    request(id, ago(0))
+    return id
+  })
+  const mono = unowned('', 'ja')
+  db.prepare("UPDATE card_printings SET set_rarity = 'Ultra Rare (Manga-Style, Monochrome)' WHERE id = ?").run(mono)
+  request(mono, ago(0))
+  const rarity = new Map(priceCandidates(db, NOW).map((c) => [c.id, c.rarity]))
+  expect([...ids, mono].map((id) => rarity.get(id))).toEqual([
+    'Ultra Rare (Manga-Style, Color)',
+    'Ultra Rare',
+    'Ultra Rare',
+    'Ultra Rare (Manga-Style, Monochrome)'
+  ])
+})
+
 test('a requested printing priced since the request is not a candidate again', () => {
   const id = unowned('LB-JP01', 'ja')
   request(id, ago(1))

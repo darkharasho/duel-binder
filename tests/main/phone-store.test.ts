@@ -8,6 +8,7 @@ import { activeOwner, recordSyncIssue } from '../../src/main/cloud/localSync'
 import { PHONE_TABLES } from '../../src/shared/catalogFeed'
 import type { Me } from '../../src/shared/cloud'
 import { encodeFingerprints } from '../../src/shared/scan/fingerprintFile'
+import { encodeFingerprintRefs, hashHex } from '../../src/shared/scan/fingerprintRefs'
 import { HASH_WORDS } from '../../src/shared/scan/fingerprint'
 import { openWasmDb } from '../../src/phone/data/wasmSql'
 import { PHONE_FORMAT } from '../../src/phone/data/phoneSchema'
@@ -663,6 +664,67 @@ describe('phone store', () => {
     expect(new Uint8Array((await store.fingerprints('ygo'))!)).toEqual(file(2, 1))
     expect(new Uint8Array((await store.fingerprints('pkm'))!)).toEqual(file(3, 2))
     expect(requests.some((r) => r.url.endsWith('/scan/fingerprints?game=pkm'))).toBe(true)
+  })
+
+  it("fingerprint refs come down beside the fingerprints, as this phone's printing ids", async () => {
+    await ready()
+    const printing = db
+      .prepare("SELECT id, pkey FROM card_printings WHERE set_code = 'LOB-EN005' LIMIT 1")
+      .get() as { id: number; pkey: string }
+    const hash = new Uint32Array(HASH_WORDS).fill(7)
+    await portal.images.put(
+      'scan/fingerprints.bin',
+      encodeFingerprints([{ imageId: 1, hash }]).slice().buffer,
+      { httpMetadata: { contentType: 'application/octet-stream' } }
+    )
+    expect(await store.refreshFingerprints({ game: 'ygo', force: true })).toMatchObject({ updated: true })
+    // No refs on the server yet: none, and the fingerprints are as they were.
+    expect(await store.fingerprintRefs()).toEqual([])
+
+    const refs = encodeFingerprintRefs([
+      { imageId: 1, hash, printings: [printing.pkey, 'ja|1|Nowhere|NOPE-JP001|Ultra Rare'] }
+    ])
+    await portal.images.put('scan/fingerprint-refs.json', refs.slice().buffer, {
+      httpMetadata: { contentType: 'application/json' }
+    })
+    expect(await store.refreshFingerprints({ game: 'ygo', force: true })).toEqual({
+      state: 'ready',
+      count: 1,
+      updated: true
+    })
+    expect(await store.fingerprintRefs()).toEqual([
+      { h: hashHex(hash), imageId: 1, printingIds: [printing.id] }
+    ])
+    // Unchanged: revalidated, nothing new.
+    expect(await store.refreshFingerprints({ game: 'ygo', force: true })).toEqual({ state: 'ready', count: 1 })
+    const refsAsked = requests.filter((r) => r.url.endsWith('/scan/fingerprint-refs'))
+    expect(refsAsked.at(-1)!.headers.get('if-none-match')).toBe(
+      portal.images.store.get('scan/fingerprint-refs.json')!.etag
+    )
+  })
+
+  it('a phone from before the refs asks for them within the day, then daily', async () => {
+    await ready()
+    const hash = new Uint32Array(HASH_WORDS).fill(7)
+    await portal.images.put(
+      'scan/fingerprints.bin',
+      encodeFingerprints([{ imageId: 1, hash }]).slice().buffer,
+      { httpMetadata: { contentType: 'application/octet-stream' } }
+    )
+    await store.refreshFingerprints({ game: 'ygo', force: true })
+    // As an older app left it: the fingerprints checked just now, nothing for the refs.
+    db.prepare("DELETE FROM phone_files WHERE name = 'fingerprint-refs'").run()
+    const asked = (): number =>
+      requests.filter((r) => r.url.endsWith('/scan/fingerprint-refs')).length
+    const fpAsked = (): number =>
+      requests.filter((r) => r.url.endsWith('/scan/fingerprints')).length
+    const [refs0, fp0] = [asked(), fpAsked()]
+    expect(await store.refreshFingerprints({ game: 'ygo' })).toEqual({ state: 'ready', count: 1 })
+    expect([asked(), fpAsked()]).toEqual([refs0 + 1, fp0])
+    // The portal had none: not asked again until the daily check.
+    await store.refreshFingerprints({ game: 'ygo' })
+    expect(asked()).toBe(refs0 + 1)
+    expect(await store.fingerprintRefs()).toEqual([])
   })
 
   it('an older format resets the catalog but keeps collection entries', async () => {

@@ -5,10 +5,12 @@ import {
   setImageUrl,
   YUGIPEDIA_IMAGE_PREFIX,
   KONAMI_LOGO_PREFIX,
+  BULBAGARDEN_IMAGE_PREFIX,
+  POKEMONTCG_IMAGE_PREFIX,
   type ImageSize
 } from '../../../src/shared/imageSources'
 import { PKM_ID_MIN } from '../../../src/shared/games/ids'
-import { findSetImageUrl } from '../../../src/main/repo/sets'
+import { findPokemonSetArtUrl, findSetImageUrl } from '../../../src/main/repo/sets'
 import { TCGPLAYER_IMAGE_PREFIX } from '../../../src/main/tcgplayer/catalog'
 import type { AppDeps } from './app'
 import { currentUser } from './auth'
@@ -255,13 +257,13 @@ function resolve(deps: AppDeps, path: string): Target | null {
     const n = Number(id)
     if (!Number.isSafeInteger(n) || n <= 0) return null
     if (n >= PKM_ID_MIN) {
-      if (kind === 'cropped') return null
       const row = deps.db
         .prepare(
           'SELECT pc.image_url FROM card_images ci JOIN pokemon_cards pc ON pc.card_id = ci.card_id WHERE ci.image_id = ?'
         )
         .get(n) as { image_url: string | null } | undefined
-      const url = row?.image_url ? pokemonArtUrl(row.image_url, kind) : null
+      // TCGdex and TCGplayer have no crop, so a Pokémon `cropped` (a set tile's backdrop) is the small art.
+      const url = row?.image_url ? pokemonArtUrl(row.image_url, kind === 'full' ? 'full' : 'small') : null
       if (url === null) return null
       return { key: `card/${kind}/${n}`, source: fixed(url), cache: CARD_CACHE, anonymous: true }
     }
@@ -283,6 +285,17 @@ function resolve(deps: AppDeps, path: string): Target | null {
         .get(id) as { image_url: string | null } | undefined
       if (!row?.image_url || !row.image_url.startsWith(TCGDEX_PREFIX)) return null
       return { key: `set/${id}`, source: fixed(`${row.image_url}.webp`), cache: SET_CACHE }
+    }
+    if (prefix === 'bp-' || prefix === 'pt-') {
+      // Pokémon pack art (Bulbagarden Archives) and fallback logos (Pokémon TCG API).
+      const source = findPokemonSetArtUrl(deps.db, id)
+      const allowed = prefix === 'bp-' ? BULBAGARDEN_IMAGE_PREFIX : POKEMONTCG_IMAGE_PREFIX
+      if (source === null || !source.startsWith(allowed)) return null
+      return {
+        key: `set/${id}`,
+        source: fixed(source, { 'User-Agent': USER_AGENT }),
+        cache: SET_CACHE
+      }
     }
     if (prefix === 'yp-' || prefix === 'yc-') {
       const source = findSetImageUrl(deps.db, id)
@@ -390,12 +403,21 @@ async function serve(req: Request, deps: AppDeps, path: string): Promise<Respons
   const late = target.meterFirst ? null : overQuota()
   if (late) return late
 
-  // A failed fetch of signed-out-servable art is remembered, so signed-out callers stop refetching it.
-  const miss = (): Response => {
+  const got = await fetchAndStore(deps, target, source)
+  if (!got) {
+    // A failed fetch of signed-out-servable art is remembered, so signed-out callers stop refetching it.
     if (target.anonymous) deps.anonMisses?.add(target.key)
     return notFound()
   }
+  return reply(got.bytes, got.contentType)
+}
 
+/** Fetches a target's artwork from upstream and stores it in R2; null when upstream has no usable image. */
+async function fetchAndStore(
+  deps: AppDeps,
+  target: Target,
+  source: { url: string; headers?: Record<string, string> }
+): Promise<{ bytes: ArrayBuffer; contentType: string } | null> {
   let bytes: ArrayBuffer
   let contentType: string
   try {
@@ -405,13 +427,38 @@ async function serve(req: Request, deps: AppDeps, path: string): Promise<Respons
       ...(source.headers && { headers: source.headers })
     })
     contentType = mediaType(res.headers.get('content-type') ?? '')
-    if (!res.ok || !IMAGE_TYPES.has(contentType)) return miss()
-    if (Number(res.headers.get('content-length') ?? 0) > MAX_IMAGE_BYTES) return miss()
+    if (!res.ok || !IMAGE_TYPES.has(contentType)) return null
+    if (Number(res.headers.get('content-length') ?? 0) > MAX_IMAGE_BYTES) return null
     bytes = await res.arrayBuffer()
   } catch {
-    return miss()
+    return null
   }
-  if (bytes.byteLength === 0 || bytes.byteLength > MAX_IMAGE_BYTES) return miss()
+  if (bytes.byteLength === 0 || bytes.byteLength > MAX_IMAGE_BYTES) return null
   await deps.images.put(target.key, bytes, { httpMetadata: { contentType } }).catch(() => undefined) // still serve what was fetched
-  return reply(bytes, contentType)
+  return { bytes, contentType }
+}
+
+export type WarmResult = 'stored' | 'cached' | 'missing' | 'failed'
+
+/**
+ * Admin only (the nightly job): makes sure one set image is in R2, fetching it from upstream if
+ * it isn't. The job calls this one image at a time, paced, so a source like the Bulbagarden
+ * Archives sees each new image fetched once, slowly, instead of in bursts from clients' first views.
+ */
+export async function warmImage(deps: AppDeps, path: string): Promise<WarmResult> {
+  if (!path.startsWith('set/')) return 'missing'
+  const target = resolve(deps, path)
+  if (!target) return 'missing'
+  const stored = await deps.images.get(target.key).catch(() => null)
+  if (stored) {
+    try {
+      await stored.body.cancel() // only its presence matters
+    } catch {
+      // already read or closed
+    }
+    return 'cached'
+  }
+  const source = await target.source()
+  if (!source) return 'missing'
+  return (await fetchAndStore(deps, target, source)) ? 'stored' : 'failed'
 }

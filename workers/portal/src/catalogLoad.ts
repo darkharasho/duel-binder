@@ -3,9 +3,10 @@ import { gameOfId, isGameId } from '../../../src/shared/games'
 import { setMeta, type MetaKey } from '../../../src/main/db/meta'
 import type { AppDeps } from './app'
 import { upsertCatalogRow } from '../../../src/main/catalog/upsert'
-import { putFingerprints, rollbackFingerprints } from './scanFiles'
+import { putFingerprintRefs, putFingerprints, rollbackFingerprints } from './scanFiles'
 import { isAdmin } from './auth'
 import { collectStats } from './stats'
+import { warmImage } from './images'
 
 const MAX_ITEMS = 5000
 const META_KEYS: MetaKey[] = ['db_version', 'last_sync_at']
@@ -100,10 +101,15 @@ function upsertRows(deps: AppDeps, table: CatalogTable, rows: unknown[]): void {
   const { db } = deps
   const valid = rows.map((r) => validateRow(table, r))
   // A source upsert makes a contributed printing an ordinary catalog row again, and un-flags a
-  // printing the source lists again.
+  // printing the source lists again. The Pokémon job is the exception: its versions are sticky, so
+  // a version its sources no longer show (or never did) is uploaded flagged, and the flag stands.
   const extra = table.name === 'card_printings' ? { contributed: 0 } : undefined
   db.transaction(() => {
-    for (const row of valid) upsertCatalogRow(db, table, row, extra, { clearMissing: true })
+    for (const row of valid) {
+      const flagged =
+        table.name === 'card_printings' && row.game === 'pkm' && row.missing_from_api === 1
+      upsertCatalogRow(db, table, row, extra, { clearMissing: !flagged })
+    }
   })()
 }
 
@@ -175,8 +181,17 @@ export async function adminRoute(req: Request, deps: AppDeps): Promise<Response>
   }
 
   if (req.method === 'PUT' && path === '/admin/scan/fingerprints') return putFingerprints(req, deps)
+  if (req.method === 'PUT' && path === '/admin/scan/fingerprint-refs')
+    return putFingerprintRefs(req, deps)
   if (req.method === 'POST' && path === '/admin/scan/fingerprints/rollback') {
     return rollbackFingerprints(req, deps)
+  }
+
+  if (req.method === 'POST' && path === '/admin/img/warm') {
+    const body: unknown = await req.json().catch(() => null)
+    if (!isObject(body) || typeof body.path !== 'string')
+      return json({ error: 'Body must be { path }' }, 400)
+    return json({ result: await warmImage(deps, body.path) })
   }
 
   const handlers: Record<string, (body: Record<string, unknown>) => void> = {

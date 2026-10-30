@@ -388,7 +388,7 @@ describe('useScanLoop', () => {
     await run(500)
     expect(engines.map((e) => e.game)).toEqual(['ygo'])
     expect(fingerprints).toHaveBeenLastCalledWith('ygo')
-    expect(engines[0].engine.init).toHaveBeenCalledWith(files.ygo)
+    expect(engines[0].engine.init).toHaveBeenCalledWith(files.ygo, [])
     expect(engines[0].engine.analyze).toHaveBeenCalled()
 
     rerender({ game: 'pkm' })
@@ -397,7 +397,9 @@ describe('useScanLoop', () => {
     expect(engines[0].engine.dispose).toHaveBeenCalled()
     expect(fingerprints).toHaveBeenLastCalledWith('pkm')
     expect(window.api.scan.refreshFingerprints).toHaveBeenLastCalledWith('pkm')
-    expect(engines[1].engine.init).toHaveBeenCalledWith(files.pkm)
+    // Refs are Yu-Gi-Oh's only: asked for once, for its file.
+    expect(engines[1].engine.init).toHaveBeenCalledWith(files.pkm, [])
+    expect(window.api.scan.fingerprintRefs).toHaveBeenCalledTimes(1)
     expect(engines[1].engine.analyze).toHaveBeenCalled()
     const ygoFrames = engines[0].engine.analyze.mock.calls.length
     await run(1000)

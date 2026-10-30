@@ -1,6 +1,6 @@
 {
   "name": "duel-binder",
-  "version": "0.23.1",
+  "version": "0.27.0",
   "description": "Duel Binder: a local Yu-Gi-Oh! card collection binder",
   "main": "./out/main/index.js",
   "author": "darkharasho",
@@ -28,6 +28,7 @@
     "build:linux": "npm run build && electron-builder --linux",
     "catalog:job": "vite build --config scripts/catalog/vite.config.ts && cross-env ELECTRON_RUN_AS_NODE=1 electron out/catalog/build.mjs",
     "catalog:parity": "vite build --config scripts/catalog/vite.config.ts && cross-env ELECTRON_RUN_AS_NODE=1 electron out/catalog/parity.mjs",
+    "catalog:set-art": "vite build --config scripts/catalog/vite.config.ts && cross-env ELECTRON_RUN_AS_NODE=1 electron out/catalog/set-art.mjs",
     "test": "cross-env ELECTRON_RUN_AS_NODE=1 electron ./node_modules/vitest/vitest.mjs run --maxWorkers=2"
   },
   "dependencies": {

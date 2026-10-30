@@ -21,7 +21,7 @@ import { home } from './home'
 import type { PrintingArtResolver } from '../../../src/main/yugipedia/artResolver'
 import { imageRoute, type ImageBucket, type ImageQuota, type MissCache } from './images'
 import type { PriceQueue } from './prices'
-import { getFingerprints } from './scanFiles'
+import { getFingerprintRefs, getFingerprints } from './scanFiles'
 import { phoneRoute } from './phonePage'
 import { deleteAccountRoute } from './account'
 import type { AppleSignInEnv } from './apple'
@@ -112,6 +112,8 @@ async function route(req: Request, deps: AppDeps): Promise<Response> {
     return imageRoute(req, deps, url.pathname.slice('/img/'.length))
   if (req.method === 'GET' && url.pathname === '/scan/fingerprints')
     return getFingerprints(req, deps)
+  if (req.method === 'GET' && url.pathname === '/scan/fingerprint-refs')
+    return getFingerprintRefs(req, deps)
   if (req.method === 'GET' && url.pathname === '/admin')
     return (await isAdmin(req, deps)) ? adminPage() : json({ error: 'Not found' }, 404)
   if (url.pathname.startsWith('/admin/')) return adminRoute(req, deps)

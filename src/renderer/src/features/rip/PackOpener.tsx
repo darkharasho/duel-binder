@@ -7,12 +7,13 @@ import { track } from '@/lib/usage'
 import { cardImageSrc, setImageSrc } from '@/lib/images'
 import { rarityColor } from '@/lib/rarityColors'
 import { cn } from '@/lib/utils'
+import { englishSetName } from '../../../../shared/setNames'
 import { baseOf, compareRarity } from '../../../../shared/rip/rarity'
 import { tierFor } from '../../../../shared/rip/layouts'
 import type { PackWrappers, RevealTier, RipCard, RipSet } from '../../../../shared/rip/types'
 import { CardCaption, CardInfo, RarityBadge } from './CardInfo'
 import { HoloCard } from './HoloCard'
-import { PHONE, STAGE, prefersReducedMotion } from './stage'
+import { H_PER_W, PHONE, STAGE, W_PER_H, prefersReducedMotion } from './stage'
 import { initialOpener, openerReducer } from './opener'
 import { loadArt } from './loadArt'
 
@@ -57,12 +58,12 @@ const CAPTION_H = PHONE ? 84 : 0
  */
 // Wrapped in calc() so it's also usable where a bare min() isn't (and jsdom keeps it).
 const CARD_H = PHONE
-  ? `calc(min(100cqh - ${58 + CAPTION_H}px, 600px, (100cqw - 72px) * 614 / 421))`
-  : `calc(min(100cqh - 58px, 600px, (100cqw - ${PANEL_GAP + 64 + PANEL_MIN}px) * 614 / 421))`
+  ? `calc(min(100cqh - ${58 + CAPTION_H}px, 600px, (100cqw - 72px) * ${H_PER_W}))`
+  : `calc(min(100cqh - 58px, 600px, (100cqw - ${PANEL_GAP + 64 + PANEL_MIN}px) * ${H_PER_W}))`
 /** Centred in the space left over, but never closer than 32px to the top bar. */
 const CARD_TOP = `calc(max(32px, (100cqh - ${CARD_H} - ${CAPTION_H}px) / 2))`
-/** Card width from its height (421×614). */
-const CARD_W = `calc(${CARD_H} * 421 / 614)`
+/** Card width from its height. */
+const CARD_W = `calc(${CARD_H} * ${W_PER_H})`
 /** The panel takes the room right of the centred card, from 280px to 400px. */
 const PANEL_W = `clamp(${PANEL_MIN}px, 50cqw - ${CARD_W} / 2 - ${PANEL_GAP + 32}px, 400px)`
 /**
@@ -269,7 +270,7 @@ function PackFace({
             />
           ) : (
             <span className="text-center text-[clamp(1rem,7cqh,1.6rem)] leading-tight font-black tracking-tight text-white uppercase drop-shadow-[0_2px_8px_rgb(0_0_0/0.85)]">
-              {setName}
+              {englishSetName(setName)}
             </span>
           )}
         </div>
@@ -805,7 +806,7 @@ export function PackOpener({
           <span className="font-semibold">
             Pack {packIndex + 1} of {packCount}
           </span>
-          <span className="text-white/55 max-md:hidden"> · {setName}</span>
+          <span className="text-white/55 max-md:hidden"> · {englishSetName(setName)}</span>
         </span>
         <span className="flex min-w-0 items-center gap-4">
           {best && (

@@ -164,7 +164,11 @@ describe('refreshIntlSets', () => {
       )
       .all()
     expect(rows).toEqual([
-      { set_rarity: 'Grand Master Rare', variant: 'Overframe', label: 'Grand Master Rare (Overframe)' },
+      {
+        set_rarity: 'Grand Master Rare',
+        variant: 'Overframe',
+        label: 'Grand Master Rare (Overframe)'
+      },
       {
         set_rarity: 'Prismatic Secret Rare',
         variant: 'Overframe',
@@ -234,7 +238,8 @@ describe('refreshIntlSets', () => {
     const own = db.prepare(
       "INSERT INTO collection_entries (uid, printing_id, image_id, quantity, created_at, updated_at) VALUES (lower(hex(randomblob(16))), ?, ?, 1, 'x', 'x')"
     )
-    for (const r of ['Ultra Rare', 'Prismatic Secret Rare', 'Grand Master Rare']) own.run(old[r], imageId)
+    for (const r of ['Ultra Rare', 'Prismatic Secret Rare', 'Grand Master Rare'])
+      own.run(old[r], imageId)
     const f = fake({
       [LB]: listPage([
         'LB-05; Dark Magician; Ultra Rare, Secret Rare; New',
@@ -246,7 +251,12 @@ describe('refreshIntlSets', () => {
       .prepare(
         "SELECT id, set_rarity, variant, missing_from_api FROM card_printings WHERE language = 'ja'"
       )
-      .all() as { id: number; set_rarity: string; variant: string | null; missing_from_api: number }[]
+      .all() as {
+      id: number
+      set_rarity: string
+      variant: string | null
+      missing_from_api: number
+    }[]
     expect(rows).toHaveLength(5)
     for (const [r, id] of Object.entries(old)) {
       expect(rows.find((x) => x.id === id)).toMatchObject({ set_rarity: r, missing_from_api: 0 })
@@ -260,6 +270,91 @@ describe('refreshIntlSets', () => {
     expect(
       (db.prepare('SELECT count(*) AS n FROM collection_entries').get() as { n: number }).n
     ).toBe(3)
+  })
+
+  const OAC = 'Set Card Lists:Original Artwork Collection (OCG-JP)'
+  const mangaList = (): string =>
+    listPage(
+      ['; Dark Magician //description::(Manga-Style)'],
+      'region=JP|rarities=Ultra Rare, Secret Rare|print=New as Manga-Style'
+    )
+  const labelled = (): {
+    id: number
+    set_rarity: string
+    variant: string | null
+    label: string
+  }[] =>
+    db
+      .prepare(
+        `SELECT p.id, p.set_rarity, p.variant, ${RARITY_LABEL} AS label FROM card_printings p
+         WHERE p.language = 'ja' ORDER BY label`
+      )
+      .all() as { id: number; set_rarity: string; variant: string | null; label: string }[]
+
+  it('a Manga-Style row makes a Color and a Monochrome printing of each rarity', async () => {
+    await refreshIntlSets(db, fake({ [OAC]: mangaList() }).client, NOW)
+    expect(
+      labelled().map(({ set_rarity, variant, label }) => [set_rarity, variant, label])
+    ).toEqual([
+      ['Secret Rare', 'Manga-Style, Color', 'Secret Rare (Manga-Style, Color)'],
+      ['Secret Rare (Manga-Style, Monochrome)', null, 'Secret Rare (Manga-Style, Monochrome)'],
+      ['Ultra Rare', 'Manga-Style, Color', 'Ultra Rare (Manga-Style, Color)'],
+      ['Ultra Rare (Manga-Style, Monochrome)', null, 'Ultra Rare (Manga-Style, Monochrome)']
+    ])
+  })
+
+  it('a row Yugipedia already names Color or Monochrome is stored the same way', async () => {
+    const f = fake({
+      [OAC]: listPage(
+        [
+          '; Dark Magician //description::(Manga Style - Monochrome)',
+          '; Dark Magician //description::(Manga-Style - Color)'
+        ],
+        'region=JP|rarities=Ultra Rare'
+      )
+    })
+    await refreshIntlSets(db, f.client, NOW)
+    expect(labelled().map((r) => r.label)).toEqual([
+      'Ultra Rare (Manga-Style, Color)',
+      'Ultra Rare (Manga-Style, Monochrome)'
+    ])
+  })
+
+  it('a Manga-Style printing stored before the split keeps its id and entries as the Color one', async () => {
+    const card = db.prepare("SELECT id FROM cards WHERE name = 'Dark Magician'").get() as {
+      id: number
+    }
+    const insert = db.prepare(
+      `INSERT INTO card_printings (card_id, language, set_name, set_code, set_rarity, set_rarity_code,
+         set_price, missing_from_api, variant)
+       VALUES (?, 'ja', 'Original Artwork Collection', '', ?, '', NULL, 0, 'Manga-Style') RETURNING id`
+    )
+    const old = Object.fromEntries(
+      ['Ultra Rare', 'Secret Rare'].map((r) => [r, (insert.get(card.id, r) as { id: number }).id])
+    )
+    const imageId = (
+      db.prepare('SELECT image_id FROM card_images WHERE card_id = ?').get(card.id) as {
+        image_id: number
+      }
+    ).image_id
+    db.prepare(
+      "INSERT INTO collection_entries (uid, printing_id, image_id, quantity, created_at, updated_at) VALUES ('u1', ?, ?, 1, 'x', 'x')"
+    ).run(old['Ultra Rare'], imageId)
+    await refreshIntlSets(db, fake({ [OAC]: mangaList() }).client, NOW)
+    const rows = labelled()
+    expect(rows).toHaveLength(4)
+    expect(rows.find((r) => r.id === old['Ultra Rare'])!.label).toBe(
+      'Ultra Rare (Manga-Style, Color)'
+    )
+    expect(rows.find((r) => r.id === old['Secret Rare'])!.label).toBe(
+      'Secret Rare (Manga-Style, Color)'
+    )
+    expect(db.prepare("SELECT printing_id FROM collection_entries WHERE uid = 'u1'").get()).toEqual(
+      { printing_id: old['Ultra Rare'] }
+    )
+    expect(
+      db.prepare('SELECT count(*) AS n FROM card_printings WHERE missing_from_api = 1').get()
+    ).toEqual({ n: 0 })
   })
 
   it("codeless sets don't collide", async () => {
@@ -286,6 +381,19 @@ describe('refreshIntlSets', () => {
         .sort()
     ).toEqual(["Harpie's Feather Duster", 'Pot of Greed'])
     expect(normalizeName('  Ａ‐B – C  “x” ‘y’ ')).toBe('a-b - c "x" \'y\'')
+  })
+
+  it('matches a page title disambiguated with (card), and only that suffix', async () => {
+    const f = fake({
+      [LB]: listPage([
+        'A-1; Dark Magician (card); UR',
+        'A-2; Pot of Greed (Normal); C',
+        'A-3; DARK MAGICIAN (CARD); C'
+      ])
+    })
+    const res = await refreshIntlSets(db, f.client, NOW)
+    expect(res.unmatchedRows).toBe(1)
+    expect(intlRows(db).map((r) => r.set_code)).toEqual(['A-1', 'A-3'])
   })
 
   it('skips English and unknown suffixes', async () => {
@@ -470,7 +578,9 @@ describe('refreshIntlSets', () => {
   it('keeps the stored image when the image lookup fails but the infobox parses', async () => {
     const f = fake({
       [LB]: listPage(['LB-05; Dark Magician; UR']),
-      'Legend of Blue Eyes White Dragon': infobox('| image = LB-JP.png\n| jp_release_date = March 8, 2002')
+      'Legend of Blue Eyes White Dragon': infobox(
+        '| image = LB-JP.png\n| jp_release_date = March 8, 2002'
+      )
     })
     await refreshIntlSets(db, f.client, NOW)
     const before = db.prepare("SELECT image_url, image_key FROM sets WHERE language = 'ja'").get()
@@ -483,7 +593,9 @@ describe('refreshIntlSets', () => {
       throw new YugipediaError('images down')
     }
     await refreshIntlSets(db, f.client, NOW)
-    expect(db.prepare("SELECT image_url, image_key FROM sets WHERE language = 'ja'").get()).toEqual(before)
+    expect(db.prepare("SELECT image_url, image_key FROM sets WHERE language = 'ja'").get()).toEqual(
+      before
+    )
     expect(db.prepare("SELECT tcg_date FROM sets WHERE language = 'ja'").get()).toEqual({
       tcg_date: '2003-04-01'
     })

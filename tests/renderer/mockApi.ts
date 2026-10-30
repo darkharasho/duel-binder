@@ -68,6 +68,7 @@ export function createMockApi(overrides: DeepPartial<Api> = {}): Api {
       matchName: vi.fn(async () => null),
       cardsForImages: vi.fn(async () => []),
       fingerprints: vi.fn(async () => null),
+      fingerprintRefs: vi.fn(async () => []),
       refreshFingerprints: vi.fn(async () => ({ state: 'missing' as const, count: 0 })),
       ocr: vi.fn(async () => []),
       language: vi.fn(async () => null),
@@ -107,7 +108,11 @@ export function createMockApi(overrides: DeepPartial<Api> = {}): Api {
       run: vi.fn(async () => ({ ...emptyStatus })),
       onProgress: vi.fn(() => () => {})
     },
-    images: { cacheSize: vi.fn(async () => 0), clearCache: vi.fn(async () => undefined) },
+    images: {
+      cacheSize: vi.fn(async () => 0),
+      clearCache: vi.fn(async () => undefined),
+      onDownloads: vi.fn(() => () => {})
+    },
     scanWindow: {
       open: vi.fn(async () => undefined),
       isOpen: vi.fn(async () => false),

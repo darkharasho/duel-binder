@@ -13,6 +13,7 @@ import {
   YUGIPEDIA_IMAGE_PREFIX,
   type ImageSize
 } from '../../shared/imageSources'
+import type { ImageDownloads } from '../../shared/types'
 
 export { imageUrl, setImageUrl, type ImageSize }
 
@@ -92,6 +93,39 @@ const PRINTING_EXT: Record<string, string> = {
 }
 const PRINTING_EXTS = ['png', 'jpg', 'webp', 'gif']
 
+/** No downloads under way. */
+export const idleDownloads = (): ImageDownloads => ({
+  cards: { done: 0, total: 0 },
+  sets: { done: 0, total: 0 }
+})
+
+/**
+ * Passes on download counts at most every `ms` (the latest ones, trailing), so a page queueing
+ * hundreds of images doesn't flood the renderer. "None under way" goes out at once.
+ */
+export function throttleDownloads(
+  emit: (d: ImageDownloads) => void,
+  ms: number
+): (d: ImageDownloads) => void {
+  let last = -Infinity
+  let latest: ImageDownloads | null = null
+  let timer: ReturnType<typeof setTimeout> | null = null
+  const flush = (): void => {
+    timer = null
+    last = Date.now()
+    if (latest) emit(latest)
+    latest = null
+  }
+  return (d) => {
+    latest = d
+    const idle = d.cards.total === 0 && d.sets.total === 0
+    if (idle || Date.now() - last >= ms) {
+      if (timer) clearTimeout(timer)
+      flush()
+    } else timer ??= setTimeout(flush, ms - (Date.now() - last))
+  }
+}
+
 export const defaultLimiter = (): Limiter => createLimiter({ concurrency: 4, minIntervalMs: 100 })
 
 export function createImageCache(opts: {
@@ -101,6 +135,8 @@ export function createImageCache(opts: {
   limit?: Limiter
   /** Rewrites a downloaded Konami logo in place (cutting out its white); a throw drops the download. */
   prepareLogo?: (file: string) => Promise<void>
+  /** Hears every change to the downloads under way (cached files never count). */
+  onDownloads?: (d: ImageDownloads) => void
 }): ImageCache {
   const fetchFn = opts.fetchFn ?? fetch
   const limit = opts.limit ?? defaultLimiter()
@@ -110,6 +146,12 @@ export function createImageCache(opts: {
    * spends image quota). Kept in memory only, so a restart asks again.
    */
   const missingPrintings = new Set<string>()
+  /**
+   * Downloads since the queue was last empty, by kind: a first visit to a page queues dozens,
+   * and their count is what the app shows. Reset once the last one settles.
+   */
+  let downloads: ImageDownloads = idleDownloads()
+  const report = (): void => opts.onDownloads?.(downloads)
 
   const exists = (p: string): Promise<boolean> =>
     fs.stat(p).then(
@@ -165,10 +207,20 @@ export function createImageCache(opts: {
   ): Promise<string | null> {
     let pending = inFlight.get(key)
     if (!pending) {
+      const kind = key.startsWith('set/') ? 'sets' : 'cards'
+      downloads = { ...downloads, [kind]: { ...downloads[kind], total: downloads[kind].total + 1 } }
+      report()
       pending = limit(() => download(source, finalPath, prepare, notFound), {
         priority,
         key
-      }).finally(() => inFlight.delete(key))
+      }).finally(() => {
+        inFlight.delete(key)
+        downloads =
+          inFlight.size === 0
+            ? idleDownloads()
+            : { ...downloads, [kind]: { ...downloads[kind], done: downloads[kind].done + 1 } }
+        report()
+      })
       inFlight.set(key, pending)
     } else if (priority) limit.promote(key)
     return pending

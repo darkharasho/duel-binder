@@ -17,6 +17,66 @@ describe('database', () => {
     db.close()
   })
 
+  test('V22 retries every stored scan miss and keeps found scans', () => {
+    const db = new Database(':memory:')
+    db.pragma('foreign_keys = ON')
+    for (const m of MIGRATIONS.slice(0, 21)) db.exec(m.sql)
+    db.pragma('user_version = 21')
+    db.prepare(
+      `INSERT INTO cards (id, name, type, frame_type, race, "desc", updated_at) VALUES
+       (1, 'Nekogal #1', 'Normal Monster', 'normal', 'Beast', 'd', '2026-10-23'),
+       (2, 'Maliss <P> Dormouse', 'Effect Monster', 'effect', 'Cyberse', 'd', '2026-10-23'),
+       (3, 'Dark Magician', 'Normal Monster', 'normal', 'Spellcaster', 'd', '2026-10-23')`
+    ).run()
+    db.prepare(
+      `INSERT INTO card_printings (id, card_id, language, set_name, set_code, set_rarity) VALUES
+       (10, 1, 'en', 'Metal Raiders', 'MRD-EN001', 'Common'),
+       (11, 1, 'en', 'Legend of Blue Eyes White Dragon', 'LOB-EN001', 'Common'),
+       (20, 2, 'en', 'Alliance Insight', 'ALIN-EN001', 'Ultra Rare'),
+       (30, 3, 'en', 'Legend of Blue Eyes White Dragon', 'LOB-EN005', 'Ultra Rare'),
+       (31, 3, 'en', 'Starter Deck: Yugi', 'SDY-006', 'Ultra Rare')`
+    ).run()
+    const art = db.prepare(
+      "INSERT INTO printing_art (printing_id, url, checked_at) VALUES (?, ?, '2026-10-29')"
+    )
+    art.run(10, null)
+    art.run(11, 'https://ms.yugipedia.com/n.png')
+    art.run(20, null)
+    art.run(30, null)
+    art.run(31, 'https://ms.yugipedia.com/dm.png')
+    migrate(db)
+    expect(db.pragma('user_version', { simple: true })).toBe(23)
+    const left = db.prepare('SELECT printing_id, url FROM printing_art ORDER BY printing_id').all()
+    expect(left).toEqual([
+      { printing_id: 11, url: 'https://ms.yugipedia.com/n.png' },
+      { printing_id: 31, url: 'https://ms.yugipedia.com/dm.png' }
+    ])
+    db.close()
+  })
+
+  test('V21 looks up Monochrome Manga-Style printing photos again, and only those', () => {
+    const db = new Database(':memory:')
+    db.pragma('foreign_keys = ON')
+    for (const m of MIGRATIONS.slice(0, 20)) db.exec(m.sql)
+    db.pragma('user_version = 20')
+    db.prepare(
+      `INSERT INTO cards (id, name, type, frame_type, race, "desc", updated_at)
+       VALUES (1, 'Zoa', 'Normal Monster', 'normal', 'Fiend', 'desc', '2026-10-23')`
+    ).run()
+    db.prepare(
+      `INSERT INTO card_printings (id, card_id, language, set_name, set_code, set_rarity, variant) VALUES
+       (7, 1, 'ja', 'Original Artwork Collection', '', 'Ultra Rare', 'Manga-Style, Color'),
+       (8, 1, 'ja', 'Original Artwork Collection', '', 'Ultra Rare (Manga-Style, Monochrome)', NULL),
+       (9, 1, 'ja', 'Original Artwork Collection', '', 'Secret Rare', 'Manga-Style, Monochrome')`
+    ).run()
+    const art = db.prepare("INSERT INTO printing_art (printing_id, url, checked_at) VALUES (?, 'https://x/c.png', 'x')")
+    for (const id of [7, 8, 9]) art.run(id)
+    migrate(db)
+    expect(db.pragma('user_version', { simple: true })).toBe(23)
+    expect(db.prepare('SELECT printing_id FROM printing_art').all()).toEqual([{ printing_id: 7 }])
+    db.close()
+  })
+
   test('V11 forces a non-English re-sync and retries printing art misses', () => {
     const db = new Database(':memory:')
     db.pragma('foreign_keys = ON')
@@ -38,7 +98,7 @@ describe('database', () => {
     art.run(ids[0], null, '2026-10-01')
     art.run(ids[1], 'https://x/y.png', '2026-10-01')
     migrate(db)
-    expect(db.pragma('user_version', { simple: true })).toBe(20)
+    expect(db.pragma('user_version', { simple: true })).toBe(23)
     expect(getMeta(db, 'intl_sets_synced_at')).toBeNull()
     expect(getMeta(db, 'tcgplayer_synced_at')).toBe('2026-10-01T00:00:00.000Z')
     expect(db.prepare('SELECT printing_id, url FROM printing_art').all()).toEqual([
@@ -69,7 +129,7 @@ describe('database', () => {
     insert.run(9, 8, 3, '', '2026-10-03', '2026-10-04')
     db.prepare("INSERT INTO value_snapshots (date, total_value, total_cards) VALUES ('2026-10-04', 12.5, 5)").run()
     migrate(db)
-    expect(db.pragma('user_version', { simple: true })).toBe(20)
+    expect(db.pragma('user_version', { simple: true })).toBe(23)
     const rows = db
       .prepare(
         'SELECT id, uid, owner_id, dirty, deleted_at, quantity, notes, created_at, updated_at FROM collection_entries ORDER BY id'
@@ -122,11 +182,11 @@ describe('database', () => {
     db.close()
   })
 
-  test('migrate sets user_version 20 and is idempotent', () => {
+  test('migrate sets user_version 23 and is idempotent', () => {
     const db = openDatabase(':memory:')
-    expect(db.pragma('user_version', { simple: true })).toBe(20)
+    expect(db.pragma('user_version', { simple: true })).toBe(23)
     expect(() => migrate(db)).not.toThrow()
-    expect(db.pragma('user_version', { simple: true })).toBe(20)
+    expect(db.pragma('user_version', { simple: true })).toBe(23)
     db.close()
   })
 
@@ -151,7 +211,7 @@ describe('database', () => {
     ).run()
     db.prepare(`INSERT INTO sets (set_name, set_code) VALUES ('Legend of Blue Eyes White Dragon', 'LOB')`).run()
     migrate(db)
-    expect(db.pragma('user_version', { simple: true })).toBe(20)
+    expect(db.pragma('user_version', { simple: true })).toBe(23)
     expect(db.prepare('SELECT id, language FROM card_printings').all()).toEqual([{ id: 7, language: 'en' }])
     expect(db.prepare('SELECT id, printing_id FROM collection_entries').all()).toEqual([
       { id: 3, printing_id: 7 }
@@ -192,7 +252,7 @@ describe('database', () => {
     db.pragma('user_version = 1')
     db.prepare("INSERT INTO meta (key, value) VALUES ('k', 'v')").run()
     migrate(db)
-    expect(db.pragma('user_version', { simple: true })).toBe(20)
+    expect(db.pragma('user_version', { simple: true })).toBe(23)
     expect(db.prepare('SELECT value FROM meta WHERE key = ?').get('k')).toEqual({ value: 'v' })
     expect(db.prepare('SELECT count(*) AS n FROM sets').get()).toEqual({ n: 0 })
     db.close()

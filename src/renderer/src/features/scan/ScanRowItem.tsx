@@ -9,12 +9,14 @@ import {
 } from 'lucide-react'
 import { GAMES } from '@shared/games'
 import { languageInfo, type Language } from '@shared/languages'
+import { printingChip, printingSearch, printingText, printingTitle } from '@shared/printingLabel'
+import { englishSetName } from '@shared/setNames'
 import { CardArt } from '@/components/CardArt'
 import { formatUsd } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import type { ScanDraft } from './resolve'
 import { GLASS, priceOf, priceRange, printingOf, versionToPick } from './scanLook'
-import { SearchPicker, type PickerOption } from './SearchPicker'
+import { OptionLabel, SearchPicker, type PickerOption } from './SearchPicker'
 import type { ScanRow } from './session'
 
 // eslint-disable-next-line react-refresh/only-export-components -- shared with the phone's last-scan card
@@ -37,8 +39,9 @@ export const pickerLabel = (row: Pick<ScanDraft, 'game' | 'name'>): string =>
 /**
  * What the row's dropdown offers, always only the row's card: the rarities its set code came in
  * when the code was read off the card, else every printing it was matched to, so a printing
- * picked for an art or name match can still be changed to another code. Each shows its code and
- * rarity, and its language when they differ; the search also matches the set's name.
+ * picked for an art or name match can still be changed to another code. Each shows as every
+ * printing picker does (see @shared/printingLabel): its code as a badge (none when it has no
+ * code), then "Set name - Rarity" with its art variant, and its language when they differ.
  *
  * With a scan language (see useScanLanguage), only printings in it are listed, plus the row's own
  * printing whatever its language. When none are in it, as for a Japanese code read under English,
@@ -67,20 +70,39 @@ export function choicesFor(row: ScanRow, language: Language | null): PickerOptio
       return {
         key: String(o.printingId),
         label,
-        search: `${o.rarity} ${o.setCode} ${o.setName} ${tag}`.toLowerCase(),
-        title: label
+        search: `${o.rarity} ${o.setCode} ${o.setName} ${tag}`.toLowerCase()
       }
     }
-    const label = `${o.setCode} · ${o.rarity}${languages ? ` · ${tag}` : ''}`
+    const p = { setCode: o.setCode, setName: o.setName, rarity: o.rarity, variant: o.variant }
     return {
       key: String(o.printingId),
-      label,
-      search: `${o.setCode} ${o.rarity} ${o.setName} ${tag}`.toLowerCase(),
-      badge: o.setCode,
-      title: o.rarity,
+      label: printingText(p, languages ? tag : undefined),
+      search: printingSearch(p, tag),
+      badge: printingChip(p) ?? undefined,
+      title: printingTitle(p),
       note: languages ? tag : undefined
     }
   })
+}
+
+/**
+ * The printing whose own photo shows for a row, as for a collection entry (scanFor): only when
+ * the row keeps its card's first artwork, so an alternate artwork the art match picked stays.
+ * The photo is how a printing whose art YGOPRODeck doesn't have (Manga-Style, an overframe)
+ * shows as itself.
+ */
+// eslint-disable-next-line react-refresh/only-export-components -- shared with the phone's review
+export function photoFor(row: ScanRow): number | null {
+  const own = row.options.find((o) => o.printingId === row.printingId)
+  return own && own.imageIds[0] === row.imageId ? own.printingId : null
+}
+
+/** The printing's set as the row's subtitle names it: its code, or its set's name when it has none. */
+// eslint-disable-next-line react-refresh/only-export-components -- shared with the phone's review
+export function setLabelFor(row: ScanRow): string | null {
+  if (row.setCode) return row.setCode
+  const name = row.options.find((o) => o.printingId === row.printingId)?.setName
+  return name ? englishSetName(name) : null
 }
 
 export interface ScanRowActions {
@@ -113,6 +135,7 @@ export const ScanRowItem = memo(function ScanRowItem({
   const range = versionToPick(row) ? priceRange(row) : null
   const current = printingOf(row)
   const flag = flagText(row)
+  const where = setLabelFor(row)
   const { key } = row
   const { setPrinting } = actions
   const pick = useMemo(() => (v: string) => setPrinting(key, Number(v)), [key, setPrinting])
@@ -125,12 +148,18 @@ export const ScanRowItem = memo(function ScanRowItem({
         highlighted && 'bg-emerald-400/10'
       )}
     >
-      <CardArt imageId={row.imageId} size="small" alt="" className="w-12 shrink-0 self-start" />
+      <CardArt
+        imageId={row.imageId}
+        printingId={photoFor(row)}
+        size="small"
+        alt=""
+        className="w-12 shrink-0 self-start"
+      />
       <div className="min-w-0 flex-1 text-[13px] leading-[18px]">
         <p className="truncate text-[15px] font-semibold leading-5">{row.name}</p>
         <p className="truncate text-muted-foreground">
-          {row.setCode && <span className="font-mono text-xs">{row.setCode}</span>}
-          {row.setCode && (price != null || range) && ' · '}
+          {where && <span className={cn(row.setCode && 'font-mono text-xs')}>{where}</span>}
+          {where && (price != null || range) && ' · '}
           {price != null && (
             <span aria-label={`Price of ${row.name}`} className="text-emerald-400 tabular-nums">
               {formatUsd(price)}
@@ -149,13 +178,18 @@ export const ScanRowItem = memo(function ScanRowItem({
           onPick={pick}
           searchPlaceholder="Search code, rarity or set…"
           disabled={disabled}
+          badges
           className="mt-1.5 h-8 max-w-full justify-start gap-1.5 rounded-full border-white/[0.12] bg-white/[0.08] px-2.5 text-xs shadow-none dark:bg-white/[0.08] dark:hover:bg-white/[0.14]"
           renderTrigger={(picked) => (
             <>
               <StarIcon aria-hidden className="size-3.5 shrink-0 text-white/60" />
-              <span className={cn('truncate', !picked && 'text-muted-foreground')}>
-                {picked ? picked.label : `Choose a ${row.game === 'pkm' ? 'version' : 'printing'}`}
-              </span>
+              {picked ? (
+                <OptionLabel option={picked} compact />
+              ) : (
+                <span className="truncate text-muted-foreground">
+                  {`Choose a ${row.game === 'pkm' ? 'version' : 'printing'}`}
+                </span>
+              )}
               <ChevronDownIcon aria-hidden className="size-3.5 shrink-0 opacity-60" />
             </>
           )}

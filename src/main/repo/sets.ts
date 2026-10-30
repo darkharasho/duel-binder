@@ -5,20 +5,25 @@ import type { ChecklistCard, ChecklistRarity, SetChecklist, SetSummary } from '.
 import type { Language } from '../../shared/languages'
 import { setImageKey } from '../../shared/setImages'
 import { addEntry, CollectionError } from './collection'
-import { LOCAL, type Scope } from './scope'
+import { LOCAL, scopeGame, type Scope } from './scope'
 import { enTwinPrice } from './enTwin'
 import { isMarketOnly } from './priceRule'
+import { shownPrinting } from './shownPrinting'
 
 interface SummaryDbRow {
   language: Language
   set_name: string
   s_code: string | null
-  min_code: string
+  // The lowest code, skipping uncoded printings; null when none has one.
+  min_code: string | null
   tcg_date: string | null
   image_url: string | null
   image_key: string | null
   pack_key: string | null
   logo_key: string | null
+  /** Pokémon only: the set's own TCGdex logo (`image_key`), when TCGdex has one. */
+  pkm_logo_key: string | null
+  is_pkm: 0 | 1
   list_rows: number | null
   unmatched_rows: number | null
   total_cards: number
@@ -29,14 +34,19 @@ interface SummaryDbRow {
 
 // One row per distinct (language, set_name); callers limit it to the scope's game with `p.game = <game>`.
 // A (card, rarity) pair is keyed as "<card_id>|<rarity>"; card_id is an integer, so the first "|"
-// always ends it. Pack art and logos are Yu-Gi-Oh only, keyed by set name alone.
+// always ends it. Yu-Gi-Oh! pack art and logos are English only, keyed by set name alone; Pokémon
+// pack art (its main design) and fallback logos come from pokemon_set_art, per language.
 // Ownership is an uncorrelated IN list (built once, then a keyed lookup per printing). A LEFT JOIN
 // to the owned printings made SQLite scan them for every printing (~1 s on a full catalog).
 const summary = (scope: Scope): string => {
   const owned = `p.id IN (SELECT printing_id FROM collection_entries e WHERE ${scope.where('e')})`
   return `
-  SELECT p.language, p.set_name, s.set_code AS s_code, MIN(p.set_code) AS min_code, s.tcg_date, s.image_url,
-         s.image_key, pa.image_key AS pack_key, COALESCE(sl.image_key, kl.image_key) AS logo_key, s.list_rows, s.unmatched_rows,
+  SELECT p.language, p.set_name, s.set_code AS s_code, MIN(NULLIF(p.set_code, '')) AS min_code, s.tcg_date, s.image_url,
+         s.image_key, COALESCE(pa.image_key, pp.image_key) AS pack_key,
+         COALESCE(sl.image_key, kl.image_key, pl.image_key) AS logo_key,
+         CASE WHEN p.game = 'pkm' AND s.image_url IS NOT NULL THEN s.image_key END AS pkm_logo_key,
+         p.game = 'pkm' AS is_pkm,
+         s.list_rows, s.unmatched_rows,
          COUNT(DISTINCT p.card_id) AS total_cards,
          COUNT(DISTINCT CASE WHEN ${owned} THEN p.card_id END) AS owned_cards,
          COUNT(DISTINCT p.card_id || '|' || p.set_rarity) AS total_rarities,
@@ -46,7 +56,11 @@ const summary = (scope: Scope): string => {
   LEFT JOIN sets s ON s.game = p.game AND s.language = p.language AND s.set_name = p.set_name
   LEFT JOIN pack_art pa ON p.game = 'ygo' AND p.language = 'en' AND pa.set_name = p.set_name
   LEFT JOIN set_logos sl ON p.game = 'ygo' AND p.language = 'en' AND sl.set_name = p.set_name
-  LEFT JOIN konami_logos kl ON p.game = 'ygo' AND p.language = 'en' AND kl.set_name = p.set_name`
+  LEFT JOIN konami_logos kl ON p.game = 'ygo' AND p.language = 'en' AND kl.set_name = p.set_name
+  LEFT JOIN pokemon_set_art pp ON p.game = 'pkm' AND pp.language = p.language AND pp.set_name = p.set_name
+    AND pp.kind = 'pack' AND pp.sort_order = 0
+  LEFT JOIN pokemon_set_art pl ON p.game = 'pkm' AND pl.language = p.language AND pl.set_name = p.set_name
+    AND pl.kind = 'logo' AND pl.sort_order = 0`
 }
 
 /**
@@ -93,14 +107,17 @@ function coverImages(
 }
 
 function toSummary(r: SummaryDbRow, covers: Map<string, number>): SetSummary {
+  // A Pokémon booster shows the set's logo printed on it, so its pack art goes in front and the
+  // logo (TCGdex's, else the Pokémon TCG API's) only stands in where there's no pack.
+  const logo = r.is_pkm ? (r.pack_key !== null ? null : (r.pkm_logo_key ?? r.logo_key)) : r.logo_key
   return {
     language: r.language,
     setName: r.set_name,
-    setCode: r.s_code ? r.s_code : setPrefix(r.min_code),
+    setCode: r.s_code ? r.s_code : r.min_code ? setPrefix(r.min_code) : '',
     tcgDate: r.tcg_date,
     imageKey: r.image_key ?? setImageKey(r.image_url),
     packImageKey: r.pack_key,
-    logoImageKey: r.logo_key,
+    logoImageKey: logo,
     coverImageId: covers.get(`${r.language}|${r.set_name}`) ?? null,
     totalCards: r.total_cards,
     ownedCards: r.owned_cards,
@@ -125,9 +142,17 @@ export function findSetImageUrl(db: SqlDb, key: string): string | null {
   return row?.image_url ?? null
 }
 
+/** Source URL of a Pokémon set art key (a Bulbagarden pack image or a Pokémon TCG API logo). */
+export function findPokemonSetArtUrl(db: SqlDb, key: string): string | null {
+  const row = db
+    .prepare('SELECT image_url FROM pokemon_set_art WHERE image_key = ? LIMIT 1')
+    .get(key) as { image_url: string } | undefined
+  return row?.image_url ?? null
+}
+
 export function listSets(db: SqlDb, scope: Scope = LOCAL): SetSummary[] {
   const covers = coverImages(db, scope)
-  return (db.prepare(`${summary(scope)} WHERE +p.game = ${scope.game} AND p.contributed = 0 GROUP BY p.language, p.set_name ORDER BY p.set_name, p.language <> 'en', p.language`).all() as SummaryDbRow[]).map((r) => toSummary(r, covers))
+  return (db.prepare(`${summary(scope)} WHERE +p.game = ${scope.game} AND p.contributed = 0 AND ${shownPrinting(scope)} GROUP BY p.language, p.set_name ORDER BY p.set_name, p.language <> 'en', p.language`).all() as SummaryDbRow[]).map((r) => toSummary(r, covers))
 }
 
 interface PrintingDbRow {
@@ -143,6 +168,7 @@ interface PrintingDbRow {
   atk: number | null
   def: number | null
   level: number | null
+  card_rarity: string | null
 }
 
 interface EntryDbRow {
@@ -195,6 +221,7 @@ function checklistCards(
 ): ChecklistCard[] {
   const cardFilter = cardId === undefined ? '' : ' AND p.card_id = ?'
   const params = cardId === undefined ? [language, setName] : [language, setName, cardId]
+  const pkm = scopeGame(db, scope) === 'pkm'
   const printings = db
     .prepare(
       `SELECT p.id, p.card_id, p.set_code, ${RARITY_LABEL} AS set_rarity, c.name, c.type,
@@ -202,10 +229,12 @@ function checklistCards(
               CASE WHEN p.language = 'en' THEN c.tcgplayer_price END AS card_price,
               c.atk, c.def, COALESCE(c.level, c.linkval) AS level,
               (SELECT i.image_id FROM card_images i WHERE i.card_id = c.id AND +i.game = ${scope.game}
-               ORDER BY i.sort_order, i.image_id LIMIT 1) AS image_id
+               ORDER BY i.sort_order, i.image_id LIMIT 1) AS image_id,
+              pc.rarity AS card_rarity
        FROM card_printings p JOIN cards c ON c.id = p.card_id AND +c.game = ${scope.game}
        LEFT JOIN intl_prices ip ON ip.printing_id = p.id
-       WHERE +p.game = ${scope.game} AND p.contributed = 0 AND p.language = ? AND p.set_name = ?${cardFilter}`
+       LEFT JOIN pokemon_cards pc ON pc.card_id = p.card_id AND ${scope.game} = 'pkm'
+       WHERE +p.game = ${scope.game} AND p.contributed = 0 AND ${shownPrinting(scope)} AND p.language = ? AND p.set_name = ?${cardFilter}`
     )
     .all(...params) as PrintingDbRow[]
   const entries = db
@@ -277,7 +306,9 @@ function checklistCards(
       price: maxPrice(rows) ?? rows[0].card_price,
       atk: rows[0].atk,
       def: rows[0].def,
-      level: rows[0].level
+      level: rows[0].level,
+      // Pokémon only: the card's own rarity, apart from its finishes in `rarities`.
+      ...(pkm ? { cardRarity: rows[0].card_rarity } : {})
     })
   }
   return cards.sort((a, b) => {
@@ -298,7 +329,7 @@ export function getChecklist(
   scope: Scope = LOCAL
 ): SetChecklist | null {
   const row = db
-    .prepare(`${summary(scope)} WHERE +p.game = ${scope.game} AND p.contributed = 0 AND p.language = ? AND p.set_name = ? GROUP BY p.language, p.set_name`)
+    .prepare(`${summary(scope)} WHERE +p.game = ${scope.game} AND p.contributed = 0 AND ${shownPrinting(scope)} AND p.language = ? AND p.set_name = ? GROUP BY p.language, p.set_name`)
     .get(language, setName) as SummaryDbRow | undefined
   if (!row) return null
   return { set: toSummary(row, coverImages(db, scope, { language, setName })), cards: checklistCards(db, setName, language, undefined, scope) }

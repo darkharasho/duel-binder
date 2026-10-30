@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { StarIcon } from 'lucide-react'
+import { englishSetName } from '@shared/setNames'
 import { CardArt } from '@/components/CardArt'
 import { formatUsd } from '@/lib/format'
 import { FoundBurst } from '../FoundBurst'
@@ -22,7 +23,9 @@ function Raw(): React.JSX.Element {
 
 /** The phone's last-scan card, sized to the window: art, name, set, price and rarity. */
 function Bar({ pull }: { pull: Pull }): React.JSX.Element {
-  const sub = [pull.setCode, pull.setName].filter((s) => s !== null).join(' · ')
+  const sub = [pull.setCode, pull.setName === null ? null : englishSetName(pull.setName)]
+    .filter((s) => s !== null)
+    .join(' · ')
   return (
     <div
       role="status"

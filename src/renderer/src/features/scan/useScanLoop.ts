@@ -186,8 +186,18 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
         FINGERPRINTS_TIMEOUT_MS
       )
       if (!live) return
+      // Extras: without them (an older portal, a phone build without them, Pokémon, which has no
+      // printing scans) art matches as before.
+      const refs =
+        fp && game === 'ygo'
+          ? await within(
+              Promise.resolve().then(() => api.scan.fingerprintRefs()),
+              FINGERPRINTS_TIMEOUT_MS
+            ).catch(() => [])
+          : []
+      if (!live) return
       setArtReady(fp !== null)
-      await engine.init(fp)
+      await engine.init(fp, refs)
     }
     reinit.current = init
     void (async () => {

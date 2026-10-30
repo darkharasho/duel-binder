@@ -48,6 +48,7 @@ async function handle(msg: WorkerRequest): Promise<void> {
       await loadCv()
       index = msg.fingerprints ? decodeFingerprints(msg.fingerprints) : null
       profile = scanProfile(msg.game)
+      if (index && msg.refs?.length) index.withRefs(msg.refs)
       scope.postMessage({ type: 'ready' })
     } catch (e) {
       scope.postMessage({ type: 'error', id: null, message: messageOf(e) })

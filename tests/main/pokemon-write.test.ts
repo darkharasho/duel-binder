@@ -587,9 +587,11 @@ describe('Japanese card English names', () => {
         }),
         { langs: ['ja'] }
       )
-      return (db.prepare('SELECT name FROM cards WHERE id = ?').get(cid('ja/M4-001')) as {
-        name: string
-      }).name
+      return (
+        db.prepare('SELECT name FROM cards WHERE id = ?').get(cid('ja/M4-001')) as {
+          name: string
+        }
+      ).name
     } finally {
       db.close()
     }
@@ -607,5 +609,40 @@ describe('Japanese card English names', () => {
     const b = { id: 683652 }
     expect(await nameOf([a, b])).toBe('Weedle')
     expect(await nameOf([b, a])).toBe('Weedle')
+  })
+
+  it('names a card no product names by its species, keeping the Japanese name and the keys', async () => {
+    const db = openDatabase(':memory:')
+    try {
+      const [report] = (
+        await refreshPokemon(
+          db,
+          fixtureSources({
+            // No Japanese group matches, so no product names a Japanese card.
+            groups: (lang, g) => (lang === 'ja' ? [] : g),
+            card: (lang, c) =>
+              lang === 'ja' && c.id === 'SV1S-008'
+                ? { ...c, name: 'クヌギダマex', dexId: [204] }
+                : c
+          })
+        )
+      ).filter((r) => r.lang === 'ja')
+      const id = cid('ja/SV1S-008')
+      expect(db.prepare('SELECT name FROM cards WHERE id = ?').get(id)).toEqual({
+        name: 'Pineco ex'
+      })
+      expect(db.prepare('SELECT local_name FROM pokemon_cards WHERE card_id = ?').get(id)).toEqual({
+        local_name: 'クヌギダマex'
+      })
+      // A species with no English card in the run keeps its Japanese name.
+      expect(db.prepare('SELECT name FROM cards WHERE id = ?').get(cid('ja/SV1S-001'))).toEqual({
+        name: 'サボネア'
+      })
+      expect(report.englishNamed).toBe(1)
+      expect(report.japaneseNames).toBe(report.cards - 1)
+      expect(printings(db, 'ja/SV1S-008').every((p) => p.pkey.includes(String(id)))).toBe(true)
+    } finally {
+      db.close()
+    }
   })
 })

@@ -248,7 +248,7 @@ describe('Scan window', () => {
     const engine = fakeEngine()
     const { unmount } = await renderWindow(engine)
     await run()
-    expect(engine.init).toHaveBeenCalledWith(null)
+    expect(engine.init).toHaveBeenCalledWith(null, [])
     expect(lastState().artReady).toBe(false)
     unmount()
 
@@ -256,8 +256,31 @@ describe('Scan window', () => {
     const ready = fakeEngine()
     await renderWindow(ready, { scan: { fingerprints: vi.fn(async () => fp) } })
     await run()
-    expect(ready.init).toHaveBeenCalledWith(fp)
+    expect(ready.init).toHaveBeenCalledWith(fp, [])
     expect(lastState().artReady).toBe(true)
+  })
+
+  it("gives the engine the file's reference scans, and none when they can't be had", async () => {
+    stubCamera()
+    const fp = new ArrayBuffer(8)
+    const refs = [{ h: 'ab'.repeat(32), imageId: 7, printingIds: [33] }]
+    const engine = fakeEngine()
+    const { unmount } = await renderWindow(engine, {
+      scan: { fingerprints: vi.fn(async () => fp), fingerprintRefs: vi.fn(async () => refs) }
+    })
+    await run()
+    expect(engine.init).toHaveBeenCalledWith(fp, refs)
+    unmount()
+
+    const failing = fakeEngine()
+    await renderWindow(failing, {
+      scan: {
+        fingerprints: vi.fn(async () => fp),
+        fingerprintRefs: vi.fn(async () => Promise.reject(new Error('no')))
+      }
+    })
+    await run()
+    expect(failing.init).toHaveBeenCalledWith(fp, [])
   })
 
   it('scans with the file on disk while the fingerprint refresh hangs', async () => {
@@ -272,7 +295,7 @@ describe('Scan window', () => {
       }
     })
     await run(1000)
-    expect(engine.init).toHaveBeenCalledWith(fp)
+    expect(engine.init).toHaveBeenCalledWith(fp, [])
     expect(engine.analyze).toHaveBeenCalled()
     expect(drafts()).toHaveLength(1)
   })
@@ -297,10 +320,13 @@ describe('Scan window', () => {
       scan: { fingerprints: vi.fn(async () => file), refreshFingerprints }
     })
     await run(500)
-    expect(engine.init.mock.calls).toEqual([[old]])
+    expect(engine.init.mock.calls).toEqual([[old, []]])
     finish()
     await run(500)
-    expect(engine.init.mock.calls).toEqual([[old], [fresh]])
+    expect(engine.init.mock.calls).toEqual([
+      [old, []],
+      [fresh, []]
+    ])
   })
 
   it('keeps the engine as it is when a refresh finds nothing new', async () => {

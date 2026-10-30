@@ -225,6 +225,36 @@ describe('GET /v1/price', () => {
     expect(await res.json()).toMatchObject({ price: 3, listingCount: 2, rarityFallback: false })
   })
 
+  it('prices a Manga-Style tone from listings naming that tone, the query without the brackets', async () => {
+    const mk = (title, value) => ({ title, price: { value, currency: 'USD' } })
+    const listings = () =>
+      json({
+        itemSummaries: [
+          mk('Yugioh Zoa YAC1 Manga Style Ultra Rare Monochrome Japanese', '20'),
+          mk('Zoa Black & White Edition Ultra Rare Original Artwork Collection', '22'),
+          mk('Zoa モノクロ Ultra Rare YAC1', '21'),
+          mk('Zoa Full Color Ultra Rare YAC1 Japanese', '60'),
+          mk('Zoa Color Ver. Ultra Rare YAC1', '62'),
+          mk('Zoa Ultra Rare Manga YAC1', '40')
+        ]
+      })
+    const url = (rarity) =>
+      `https://w.test/v1/price?code=&name=Zoa&set=Original%20Artwork%20Collection&rarity=${encodeURIComponent(rarity)}&lang=ja`
+    const f = makeFetch([listings()])
+    vi.stubGlobal('fetch', f)
+    const mono = await (
+      await worker.fetch(req(url('Ultra Rare (Manga-Style, Monochrome)')), env)
+    ).json()
+    expect(mono).toMatchObject({ price: 21, listingCount: 3, rarityFallback: false })
+    const query = new URL(f.calls.find((u) => u.includes('item_summary'))).searchParams.get('q')
+    expect(query).toBe('"Zoa" Original Artwork Collection Japanese Ultra Rare')
+    vi.stubGlobal('fetch', makeFetch([listings()]))
+    const color = await (
+      await worker.fetch(req(url('Ultra Rare (Manga-Style, Color)')), env)
+    ).json()
+    expect(color).toMatchObject({ price: 61, listingCount: 2 })
+  })
+
   it('falls back without counting pricier Secret variants when few Secret Rares exist', async () => {
     const mk = (title, value) => ({ title, price: { value, currency: 'USD' } })
     const listings = {

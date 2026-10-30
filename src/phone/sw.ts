@@ -31,7 +31,7 @@ const PAGE = '/scan/'
 const PAGE_WAIT_MS = 3000
 const CORES = '/scan/ocr/core/'
 /** Under /scan/ but not app files: always the network. */
-const NETWORK_ONLY = ['/scan/fingerprints', '/scan/index.html']
+const NETWORK_ONLY = ['/scan/fingerprints', '/scan/fingerprint-refs', '/scan/index.html']
 
 /**
  * The OCR core this phone's tesseract.js will load. It decides with wasm-feature-detect's

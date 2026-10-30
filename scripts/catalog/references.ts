@@ -3,18 +3,27 @@ import { decode as decodeJpeg } from 'jpeg-js'
 import { PNG } from 'pngjs'
 import { ART_BOXES, crop } from '../../src/renderer/src/features/scan/vision/regions'
 import { HASH_WORDS, artHash, hamming } from '../../src/shared/scan/fingerprint'
+import { isArtVariant, namedVariant } from '../../src/shared/scan/fingerprintRefs'
+import { rarityFamily } from '../../src/shared/scan/rarity'
 import { ART_FAR_DISTANCE } from '../../src/shared/scan/thresholds'
 import type { RgbaImage } from '../../src/shared/scan/types'
 import { isLanguage } from '../../src/shared/languages'
 import type { YugipediaClient } from '../../src/main/yugipedia/client'
-import { choosePrintingFile } from '../../src/main/yugipedia/printingArt'
+import { listCardGalleries } from '../../src/main/yugipedia/cardGallery'
+import { choosePrintingFile, fileShowsVariant } from '../../src/main/yugipedia/printingArt'
 
 /** Scans downloaded per run; the rest wait for the next night. */
 const DEFAULT_MAX_DOWNLOADS = 600
 /** Card gallery pages asked for at once (the API's own limit). */
 const GALLERY_BATCH = 50
-/** A printing with no scan, or a scan that failed, is tried again after this long. */
-const RETRY_MS = 30 * 24 * 60 * 60 * 1000
+const DAY_MS = 24 * 60 * 60 * 1000
+/**
+ * A printing whose gallery had no scan for it is looked up again after this long: a new set's
+ * scans go up on Yugipedia in the weeks after it comes out.
+ */
+const NO_SCAN_RETRY_MS = 3 * DAY_MS
+/** A scan that failed to download is tried again after this long. */
+const RETRY_MS = 30 * DAY_MS
 const RETRY_DELAYS_MS = [1000, 2000]
 /** Width over height of a card; a file far from it is art or a photo, not a scan of the card. */
 const CARD_RATIO = 59 / 86
@@ -32,19 +41,19 @@ const SAME_ART_MAX_DISTANCE = ART_FAR_DISTANCE
 const REFERENCE_LANGUAGES = ['en', 'ja'] as const
 /** Foils whose shine changes how the art looks, so the plain art matches them poorly. */
 const FOIL = /^(starlight|ghost|collector's) rare/i
-/** Variants that only change the foil colour of the name, not the art. */
-const COLOUR = /^(red|blue|green|purple|silver|bronze|gold|yellow|orange|white|pink)$/i
+/** Sets whose every card carries the manga's art, not the card art YGOPRODeck has (YAS1–3, YAC1). */
+const ORIGINAL_ART_SET = /^Original Artwork (Duel Set|Collection)\b/i
 
 /**
  * Whether a printing looks unlike its card's art from YGOPRODeck: an alternate or overframe art
  * (named in its variant or in brackets after its rarity), a printing its set list marks "New
- * artwork" (variant NEW_ART_VARIANT, e.g. LOCR-JP029–038, an art YGOPRODeck doesn't have yet), or a
- * foil that changes the picture.
+ * artwork" (variant NEW_ART_VARIANT, e.g. LOCR-JP029–038, an art YGOPRODeck doesn't have yet), a
+ * printing in a set of manga art (the Original Artwork Duel Sets and Collection), or a foil that
+ * changes the picture.
  */
-export function wantsReference(rarity: string, variant: string | null): boolean {
-  if (FOIL.test(rarity.trim())) return true
-  const named = variant?.trim() || /\(([^()]+)\)\s*$/.exec(rarity)?.[1]?.trim()
-  return !!named && !COLOUR.test(named)
+export function wantsReference(rarity: string, variant: string | null, setName = ''): boolean {
+  if (FOIL.test(rarity.trim()) || ORIGINAL_ART_SET.test(setName.trim())) return true
+  return namedVariant(rarity, variant) !== null
 }
 
 export interface ReferenceOptions {
@@ -61,16 +70,24 @@ export interface ReferenceOptions {
 }
 
 export interface ReferenceResult {
-  entries: { imageId: number; hash: Uint32Array }[]
+  /**
+   * Each scan's hash under its artwork's image id, with the printings it shows that are art
+   * variants (isArtVariant), by card_printings.pkey: none for a scan of a foil or edition of the
+   * usual art, nor for an art variant printing whose scan is a plain one it fell back to
+   * (fileShowsVariant).
+   */
+  entries: { imageId: number; hash: Uint32Array; printings: string[] }[]
   fetched: number
   failed: number
 }
 
 interface PrintingRow {
   id: number
+  pkey: string
   card_id: number
   name: string
   frame_type: string
+  set_name: string
   set_code: string
   language: string
   set_rarity: string
@@ -124,8 +141,8 @@ async function download(
  * Yugipedia's scans of the printings wantsReference picks, as extra art references: each scan's
  * art-box hash under the image id of its card's closest artwork (its first when none is close),
  * so the scanner takes a photo of that printing for its card. Which scan each printing has is
- * looked up once (again after RETRY_MS when it had none), and each scan is downloaded once, up to
- * maxDownloads per run.
+ * looked up once (again after NO_SCAN_RETRY_MS when it had none), and each scan is downloaded
+ * once (again after RETRY_MS when it failed), up to maxDownloads per run.
  */
 export async function buildReferences(opts: ReferenceOptions): Promise<ReferenceResult> {
   const { work, cache, yugipedia } = opts
@@ -133,22 +150,65 @@ export async function buildReferences(opts: ReferenceOptions): Promise<Reference
   const now = opts.now ?? ((): Date => new Date())
   const log = opts.log ?? ((): void => {})
   const retryBefore = new Date(now().getTime() - RETRY_MS).toISOString()
+  const lookUpBefore = new Date(now().getTime() - NO_SCAN_RETRY_MS).toISOString()
   cache.exec(`
     CREATE TABLE IF NOT EXISTS ref_printing (printing_id INTEGER PRIMARY KEY, file TEXT, checked_at TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS ref_file (file TEXT PRIMARY KEY, hash BLOB, checked_at TEXT NOT NULL);
   `)
 
+  const languages = REFERENCE_LANGUAGES.map((l) => `'${l}'`).join(', ')
+  // An uncoded printing (YAC1's Manga-Style ones, say) is filed on Yugipedia under its set's
+  // prefix, which its set's coded printings carry.
+  const setCodes = new Map(
+    (
+      work
+        .prepare(
+          `SELECT language, set_name, MIN(set_code) AS code FROM card_printings
+           WHERE language IN (${languages}) AND set_code <> '' GROUP BY language, set_name`
+        )
+        .all() as { language: string; set_name: string; code: string }[]
+    ).map((r) => [`${r.language}|${r.set_name}`, r.code])
+  )
   const printings = (
     work
       .prepare(
-        `SELECT p.id, p.card_id, c.name, c.frame_type, p.set_code, p.language, p.set_rarity,
+        `SELECT p.id, p.pkey, p.card_id, c.name, c.frame_type, p.set_name, p.set_code, p.language, p.set_rarity,
            p.set_rarity_code, p.variant
          FROM card_printings p JOIN cards c ON c.id = p.card_id
-         WHERE p.language IN (${REFERENCE_LANGUAGES.map((l) => `'${l}'`).join(', ')})
-           AND p.set_code <> ''`
+         LEFT JOIN sets s ON s.game = p.game AND s.language = p.language AND s.set_name = p.set_name
+         WHERE p.language IN (${languages})
+         -- Newest sets first, so their scans aren't left behind maxDownloads.
+         ORDER BY s.tcg_date IS NULL, s.tcg_date DESC, p.id`
       )
       .all() as PrintingRow[]
-  ).filter((p) => wantsReference(p.set_rarity, p.variant))
+  )
+    .map((p) =>
+      p.set_code ? p : { ...p, set_code: setCodes.get(`${p.language}|${p.set_name}`) ?? '' }
+    )
+    .filter((p) => p.set_code && wantsReference(p.set_rarity, p.variant, p.set_name))
+  // Each code's rarities printed in the usual art: an unsuffixed scan of one of those is of that
+  // printing, not of an art variant of the same rarity (see fileShowsVariant).
+  const plainRarities = new Set(
+    (
+      work
+        .prepare(
+          `SELECT language, set_name, set_code, set_rarity, variant FROM card_printings
+           WHERE language IN (${languages})`
+        )
+        .all() as {
+        language: string
+        set_name: string
+        set_code: string
+        set_rarity: string
+        variant: string | null
+      }[]
+    )
+      .filter((r) => namedVariant(r.set_rarity, r.variant) === null)
+      .map(
+        (r) =>
+          `${r.language}|${r.set_code || setCodes.get(`${r.language}|${r.set_name}`)}|${r.set_rarity}`
+      )
+  )
 
   // Which scan each printing has, from its card's gallery page.
   const known = new Map(
@@ -162,18 +222,18 @@ export async function buildReferences(opts: ReferenceOptions): Promise<Reference
   )
   const lookUp = printings.filter((p) => {
     const row = known.get(p.id)
-    return !row || (row.file === null && row.checked_at < retryBefore)
+    return !row || (row.file === null && row.checked_at < lookUpBefore)
   })
   const saveFile = cache.prepare(
     'INSERT OR REPLACE INTO ref_printing (printing_id, file, checked_at) VALUES (?, ?, ?)'
   )
-  const titles = [...new Set(lookUp.map((p) => `Card Gallery:${p.name}`))]
+  const names = [...new Set(lookUp.map((p) => p.name))]
   // A batch at a time, each saved as it comes, so trouble partway keeps what came before.
-  for (let i = 0; i < titles.length; i += GALLERY_BATCH) {
-    const batch = new Set(titles.slice(i, i + GALLERY_BATCH))
+  for (let i = 0; i < names.length; i += GALLERY_BATCH) {
+    const batch = new Set(names.slice(i, i + GALLERY_BATCH))
     let galleries: Map<string, string[]>
     try {
-      galleries = await yugipedia.listPageImages([...batch])
+      galleries = await listCardGalleries(yugipedia, [...batch])
     } catch (e) {
       log(`Printing scan lookup failed: ${e instanceof Error ? e.message : e}`)
       break
@@ -181,9 +241,9 @@ export async function buildReferences(opts: ReferenceOptions): Promise<Reference
     const at = now().toISOString()
     cache.transaction(() => {
       for (const p of lookUp) {
-        const files = galleries.get(`Card Gallery:${p.name}`)
-        // A gallery missing from the answer is left to look up again next run.
-        if (!batch.has(`Card Gallery:${p.name}`) || !files || !isLanguage(p.language)) continue
+        const files = galleries.get(p.name)
+        // A gallery missing from the answer (under either title) is left to look up again next run.
+        if (!batch.has(p.name) || !files || !isLanguage(p.language)) continue
         const file = choosePrintingFile(files, {
           setCode: p.set_code,
           language: p.language,
@@ -197,11 +257,15 @@ export async function buildReferences(opts: ReferenceOptions): Promise<Reference
     })()
   }
 
-  // Each scan once: its file, and the card it shows.
+  // Each scan once: its file, the card it shows (from the first printing that chose it), and
+  // every printing that chose it.
   const scans = new Map<string, PrintingRow>()
+  const printingsOf = new Map<string, PrintingRow[]>()
   for (const p of printings) {
     const file = known.get(p.id)?.file
-    if (file && !scans.has(file)) scans.set(file, p)
+    if (!file) continue
+    if (!scans.has(file)) scans.set(file, p)
+    printingsOf.set(file, [...(printingsOf.get(file) ?? []), p])
   }
   const hashed = new Map(
     (
@@ -275,7 +339,27 @@ export async function buildReferences(opts: ReferenceOptions): Promise<Reference
       if (d < bestDistance) [best, bestDistance] = [id, d]
     }
     if (bestDistance > SAME_ART_MAX_DISTANCE) best = images[0]
-    entries.push({ imageId: best, hash })
+    const keys = printingsOf
+      .get(file)!
+      .filter(
+        (q) =>
+          q.card_id === p.card_id &&
+          isArtVariant(q.set_rarity, q.variant) &&
+          isLanguage(q.language) &&
+          fileShowsVariant(
+            file,
+            {
+              setCode: q.set_code,
+              language: q.language,
+              rarity: q.set_rarity,
+              rarityCode: q.set_rarity_code,
+              variant: q.variant
+            },
+            !plainRarities.has(`${q.language}|${q.set_code}|${rarityFamily(q.set_rarity)}`)
+          )
+      )
+      .map((q) => q.pkey)
+    entries.push({ imageId: best, hash, printings: [...new Set(keys)] })
   }
   return { entries, fetched, failed }
 }

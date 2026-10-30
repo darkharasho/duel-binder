@@ -1,4 +1,5 @@
 import { HASH_WORDS, hamming } from './fingerprint'
+import { hashHex, type RefMatch, type ScanRef } from './fingerprintRefs'
 
 // Format v1, little-endian: "DBFP", u8 version, u16 bits, u32 count,
 // then per record u32 imageId + 32 hash bytes, sorted by imageId. An id may repeat: a printing
@@ -31,10 +32,26 @@ export function encodeFingerprints(entries: { imageId: number; hash: Uint32Array
   return out
 }
 
+/**
+ * An artwork's match. An artwork with reference scans of known printings (withRefs) also has its
+ * best distance over its other records (`base`, its card art) and each of those scans' distances,
+ * closest first, so the printing it looks most like can be told.
+ */
+export interface ArtMatch {
+  imageId: number
+  distance: number
+  base?: number
+  refs?: RefMatch[]
+}
+
 export class FingerprintIndex {
   readonly count: number
   private readonly ids: Float64Array
   private readonly hashes: Uint32Array
+  /** The ref of each record that is a reference scan of known printings, by record. */
+  private refOf = new Map<number, ScanRef>()
+  /** The records of each artwork with such a reference scan. */
+  private recordsOf = new Map<number, number[]>()
 
   constructor(ids: Float64Array, hashes: Uint32Array) {
     this.count = ids.length
@@ -43,16 +60,46 @@ export class FingerprintIndex {
   }
 
   /**
-   * The k closest images by Hamming distance, closest first, optionally limited to candidates. An
-   * image id the file holds more than once is given once, at its closest.
+   * Tags the records that are reference scans of known printings (see fingerprintRefs.ts): those
+   * whose image id and hash a ref names. Replaces any tagged before; resolves how many it tagged.
    */
-  nearest(
-    hash: Uint32Array,
-    k: number,
-    candidates?: ReadonlySet<number>
-  ): { imageId: number; distance: number }[] {
+  withRefs(refs: readonly ScanRef[]): number {
+    this.refOf = new Map()
+    this.recordsOf = new Map()
+    const byKey = new Map<string, ScanRef>()
+    for (const r of refs) {
+      const key = `${r.imageId}:${r.h}`
+      const had = byKey.get(key)
+      byKey.set(
+        key,
+        had ? { ...had, printingIds: [...new Set([...had.printingIds, ...r.printingIds])] } : r
+      )
+    }
+    const imageIds = new Set(refs.map((r) => r.imageId))
+    for (let i = 0; i < this.count; i++) {
+      const imageId = this.ids[i]
+      if (!imageIds.has(imageId)) continue
+      const records = this.recordsOf.get(imageId) ?? []
+      records.push(i)
+      this.recordsOf.set(imageId, records)
+      const ref = byKey.get(
+        `${imageId}:${hashHex(this.hashes.subarray(i * HASH_WORDS, (i + 1) * HASH_WORDS))}`
+      )
+      if (ref) this.refOf.set(i, ref)
+    }
+    for (const [imageId, records] of this.recordsOf)
+      if (!records.some((i) => this.refOf.has(i))) this.recordsOf.delete(imageId)
+    return this.refOf.size
+  }
+
+  /**
+   * The k closest images by Hamming distance, closest first, optionally limited to candidates. An
+   * image id the file holds more than once is given once, at its closest, with its base and
+   * reference scan distances when it has tagged reference scans (see ArtMatch).
+   */
+  nearest(hash: Uint32Array, k: number, candidates?: ReadonlySet<number>): ArtMatch[] {
     // One pass keeping the best k in order: this runs a few dozen times per camera frame.
-    const found: { imageId: number; distance: number }[] = []
+    const found: ArtMatch[] = []
     if (k <= 0) return found
     const { hashes } = this
     for (let i = 0; i < this.count; i++) {
@@ -81,7 +128,22 @@ export class FingerprintIndex {
       found.splice(at, 0, { imageId, distance })
       if (found.length > k) found.pop()
     }
-    return found
+    // Only the few artworks found, and only those with reference scans, are looked at again.
+    if (this.recordsOf.size === 0) return found
+    return found.map((f) => {
+      const records = this.recordsOf.get(f.imageId)
+      if (!records) return f
+      let base = Infinity
+      const refs: RefMatch[] = []
+      for (const i of records) {
+        const distance = hamming(hash, 0, hashes, i * HASH_WORDS)
+        const ref = this.refOf.get(i)
+        if (ref) refs.push({ h: ref.h, printingIds: ref.printingIds, distance })
+        else base = Math.min(base, distance)
+      }
+      refs.sort((a, b) => a.distance - b.distance)
+      return Number.isFinite(base) ? { ...f, base, refs } : { ...f, refs }
+    })
   }
 }
 

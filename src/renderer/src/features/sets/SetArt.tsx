@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { cn } from '@/lib/utils'
 import { cardImageSrc, setImageSrc } from '@/lib/images'
+import { useArtLoad } from '@/components/artLoad'
 
 interface SetArtProps {
   imageKey: string | null
@@ -31,6 +32,8 @@ export function SetArt({
     set: false,
     cover: false
   })
+  // The tile shimmers until its backdrop (or, without one, its front) arrives, then fades in.
+  const art = useArtLoad()
   const fronts: [Front, string | null][] = [
     ['logo', logoImageKey ? setImageSrc(logoImageKey) : null],
     ['pack', packImageKey ? setImageSrc(packImageKey) : null],
@@ -57,9 +60,14 @@ export function SetArt({
   }
   const fail = (source: Front | 'cover') => (): void => setFailed((f) => ({ ...f, [source]: true }))
 
+  const lead = backdrop ?? front![1]
   return (
     <div
-      className={cn('@container relative isolate overflow-hidden rounded-md bg-muted', className)}
+      className={cn(
+        '@container relative isolate overflow-hidden rounded-md bg-muted',
+        !art.loaded(lead) && 'art-loading',
+        className
+      )}
     >
       {backdrop && (
         <img
@@ -71,7 +79,11 @@ export function SetArt({
           loading="lazy"
           draggable={false}
           onError={cover ? fail('cover') : undefined}
-          className="absolute inset-0 size-full scale-125 object-cover blur-[6px] brightness-[0.8] saturate-[1.2]"
+          {...art.bind(backdrop)}
+          className={cn(
+            'absolute inset-0 size-full scale-125 object-cover blur-[6px] brightness-[0.8] saturate-[1.2]',
+            art.loaded(backdrop) ? art.className(backdrop) : 'opacity-0'
+          )}
         />
       )}
       <div className="absolute inset-0 flex items-center justify-center p-[8%]">
@@ -84,8 +96,10 @@ export function SetArt({
             loading="lazy"
             draggable={false}
             onError={fail(front[0])}
+            {...art.bind(front[1])}
             className={cn(
               'max-h-full max-w-full object-contain drop-shadow-[0_4px_10px_rgb(0_0_0/0.55)]',
+              art.loaded(front[1]) ? art.className(front[1]) : 'opacity-0',
               front[0] === 'logo' && 'max-w-[92%]',
               front[0] === 'set' && 'rounded-[2px]'
             )}

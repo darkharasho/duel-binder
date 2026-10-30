@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
+import { englishSetName } from '@shared/setNames'
 import { LanguageTag } from '@/components/LanguageTag'
 import {
   Dialog,
@@ -48,7 +49,11 @@ export function SyncProblems({
                   <span className="tabular-nums">×{e.quantity}</span>
                 </div>
                 <div className="flex items-center gap-1.5 text-muted-foreground">
-                  <span>{[e.setCode, e.setName, e.rarity].filter(Boolean).join(' · ')}</span>
+                  <span>
+                    {[e.setCode, e.setName && englishSetName(e.setName), e.rarity]
+                      .filter(Boolean)
+                      .join(' · ')}
+                  </span>
                   <LanguageTag language={e.language} />
                 </div>
                 <div className="text-muted-foreground">{reasonText(e.reason)}</div>

@@ -28,6 +28,8 @@ import type { GameId } from '../../shared/games'
 import { FRIENDS_SIGNED_OUT, OFFLINE_MESSAGE } from '../../shared/friends'
 import type { PortalChannel } from '../../shared/portal'
 import { decodeFingerprints } from '../../shared/scan/fingerprintFile'
+import { parseFingerprintRefs, type ScanRef } from '../../shared/scan/fingerprintRefs'
+import { scanRefs } from '../../main/repo/scanRefs'
 import type { FingerprintStatus } from '../../shared/scan/types'
 import type { CollectionStats, UnsyncedEntry } from '../../shared/types'
 import { PHONE_FORMAT } from './phoneSchema'
@@ -80,6 +82,8 @@ export interface PhoneStore {
   /** Sends anonymous usage totals when signed in; drops them otherwise. Never rejects. */
   reportUsage(report: UsageReport): Promise<void>
   fingerprints(game: GameId): Promise<ArrayBuffer | null>
+  /** Yu-Gi-Oh's file's reference scans with this phone's printing ids; empty without them. */
+  fingerprintRefs(): Promise<ScanRef[]>
   refreshFingerprints(opts: { game: GameId; force?: boolean }): Promise<FingerprintStatus>
 }
 
@@ -111,6 +115,8 @@ const PORTAL_TIMEOUT_MS = 15_000
 /** The `phone_files` row of a game's fingerprint file; Yu-Gi-Oh!'s keeps its original name. */
 const fingerprintsName = (game: GameId): string =>
   game === 'ygo' ? 'fingerprints' : `fingerprints:${game}`
+/** Which printings Yu-Gi-Oh's printing scans show (fingerprintRefs.ts), as JSON bytes. */
+const FINGERPRINT_REFS = 'fingerprint-refs'
 
 /** The catalog tables that are cleared when the phone's data format changes. */
 const RESET_TABLES = PHONE_TABLES.filter(
@@ -470,6 +476,38 @@ export function createPhoneStore(deps: {
     return true
   }
 
+  /**
+   * Resolves true when it stored a new refs file. Only beside a fingerprint file; a portal
+   * without one (404) or a bad one leaves the stored one as it is.
+   */
+  async function downloadFingerprintRefs(): Promise<boolean> {
+    const known = db
+      .prepare('SELECT etag FROM phone_files WHERE name = ?')
+      .get(FINGERPRINT_REFS) as { etag: string | null } | undefined
+    const res = await doFetch(`${base}/scan/fingerprint-refs`, {
+      headers: known?.etag ? { 'If-None-Match': known.etag } : {},
+      signal: AbortSignal.timeout(30_000)
+    })
+    const store = (etag: string | null, bytes: Uint8Array): void => {
+      db.prepare(
+        `INSERT INTO phone_files (name, etag, checked_at, bytes) VALUES (?, ?, ?, ?)
+         ON CONFLICT(name) DO UPDATE SET etag = excluded.etag, checked_at = excluded.checked_at,
+           bytes = excluded.bytes`
+      ).run(FINGERPRINT_REFS, etag, now().toISOString(), bytes)
+    }
+    if (!res.ok) {
+      await res.body?.cancel()
+      // None on the portal yet: an empty row says it was asked, so the daily check asks again
+      // rather than every refresh (see refreshFingerprints).
+      if (res.status === 404 && !known) store(null, new Uint8Array())
+      return false
+    }
+    const bytes = new Uint8Array(await res.arrayBuffer())
+    parseFingerprintRefs(new TextDecoder().decode(bytes))
+    store(res.headers.get('ETag'), bytes)
+    return true
+  }
+
   return {
     account: () =>
       read(() => {
@@ -661,16 +699,48 @@ export function createPhoneStore(deps: {
         return row.bytes.slice().buffer as ArrayBuffer
       }),
 
+    fingerprintRefs: () =>
+      read(() => {
+        const row = db
+          .prepare('SELECT bytes FROM phone_files WHERE name = ?')
+          .get(FINGERPRINT_REFS) as { bytes: Uint8Array } | undefined
+        if (!row) return []
+        try {
+          return scanRefs(db, parseFingerprintRefs(new TextDecoder().decode(row.bytes)))
+        } catch {
+          return []
+        }
+      }),
+
     refreshFingerprints: ({ game, force = false }) =>
       serial(async () => {
         const checked = db
           .prepare('SELECT checked_at FROM phone_files WHERE name = ?')
           .get(fingerprintsName(game)) as { checked_at: string } | undefined
         const ready = fingerprintStatus(game).state === 'ready'
-        if (!force && ready && checked && now().getTime() - Date.parse(checked.checked_at) < DAY_MS)
-          return fingerprintStatus(game)
+        // Printing scans, and so refs, are Yu-Gi-Oh's only.
+        const hasRefs = game === 'ygo'
+        if (
+          !force &&
+          ready &&
+          checked &&
+          now().getTime() - Date.parse(checked.checked_at) < DAY_MS
+        ) {
+          // A phone from before the refs (no row for them) gets them now, not at the next check.
+          const asked = db.prepare('SELECT 1 FROM phone_files WHERE name = ?').get(FINGERPRINT_REFS)
+          if (!hasRefs || asked) return fingerprintStatus(game)
+          return (await downloadFingerprintRefs().catch(() => false))
+            ? { ...fingerprintStatus(game), updated: true as const }
+            : fingerprintStatus(game)
+        }
         try {
-          return (await downloadFingerprints(game))
+          const wrote = await downloadFingerprints(game)
+          // Extras: trouble with them leaves the fingerprints' state as it is.
+          const wroteRefs =
+            hasRefs && fingerprintStatus(game).state === 'ready'
+              ? await downloadFingerprintRefs().catch(() => false)
+              : false
+          return wrote || wroteRefs
             ? { ...fingerprintStatus(game), updated: true as const }
             : fingerprintStatus(game)
         } catch {

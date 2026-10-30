@@ -295,6 +295,40 @@ ALTER TABLE pokemon_cards ADD COLUMN image_url TEXT;
 ALTER TABLE pokemon_cards ADD COLUMN local_name TEXT;
 `
 
+/**
+ * Manga-Style printings now come as Color and Monochrome. An app from before took the colour scan
+ * for any Manga-Style printing, so a Monochrome one it looked up shows the colour photo: look
+ * those up again.
+ */
+export const SCHEMA_V21 = `
+DELETE FROM printing_art WHERE printing_id IN
+  (SELECT id FROM card_printings WHERE set_rarity LIKE '%Monochrome)' OR variant LIKE '%Monochrome');
+`
+
+/**
+ * Printing scans of a card whose name holds a character MediaWiki can't title a page with
+ * (# < > [ ] { } |: "Nekogal #1", "Maliss <P> Dormouse") were looked up under the wrong gallery
+ * title and stored as "no scan". And a gallery titled "Name (card)" was never asked for, since a
+ * missing plain gallery came back as an empty one. Those misses can't be told apart by name, so
+ * every stored miss is looked up again (lazily, as printings are shown); found scans are kept.
+ */
+export const SCHEMA_V22 = `
+DELETE FROM printing_art WHERE url IS NULL;
+`
+
+/**
+ * Pokémon set art the nightly job matches: booster pack images from the Bulbagarden Archives
+ * (kind 'pack', one row per design, sort_order 0 the main one) and set logos from the Pokémon TCG
+ * API for sets TCGdex has none for (kind 'logo'). Keyed by set name like `sets`, whose Pokémon
+ * names never change once written. The server adds its change-feed columns in server-14.
+ */
+export const SCHEMA_V23 = `
+CREATE TABLE pokemon_set_art (language TEXT NOT NULL, set_name TEXT NOT NULL, kind TEXT NOT NULL,
+  sort_order INTEGER NOT NULL, image_url TEXT NOT NULL, image_key TEXT NOT NULL,
+  PRIMARY KEY (language, set_name, kind, sort_order));
+CREATE INDEX ix_pokemon_set_art_key ON pokemon_set_art(image_key);
+`
+
 /** A printing's rarity as shown: "Starlight Rare (Extended Art)" for a labelled variant. */
 export const RARITY_LABEL = "p.set_rarity || COALESCE(' (' || p.variant || ')', '')"
 
@@ -319,6 +353,8 @@ export const MIGRATIONS: Migration[] = [
   { version: 17, sql: SCHEMA_V17 },
   { version: 18, sql: SCHEMA_V18, server: false },
   { version: 19, sql: SCHEMA_V19, server: false },
-  { version: 20, sql: SCHEMA_V20, server: false }
+  { version: 20, sql: SCHEMA_V20, server: false },
+  { version: 21, sql: SCHEMA_V21 },
+  { version: 22, sql: SCHEMA_V22 },
+  { version: 23, sql: SCHEMA_V23 }
 ]
-

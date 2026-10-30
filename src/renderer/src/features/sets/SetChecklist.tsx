@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowDownAZ, ArrowLeft, ArrowUpAZ, Ellipsis, Search } from 'lucide-react'
 import { toast } from 'sonner'
 import type { Language } from '@shared/languages'
+import { englishSetName, nativeSetName } from '@shared/setNames'
 import type {
   CardSearchResult,
   ChecklistCard,
@@ -54,9 +55,11 @@ import {
   CHECKLIST_SORTS,
   checklistTiles,
   filterTiles,
+  filterTilesByRarity,
   matchesCardSearch,
   patchSetSummary,
   progressFor,
+  rarityCounts,
   replaceChecklistCard,
   sortCards,
   sortTiles,
@@ -96,6 +99,30 @@ function BackButton({ onBack }: { onBack: () => void }): React.JSX.Element {
   )
 }
 
+function RarityChip({
+  active,
+  onClick,
+  children
+}: {
+  active: boolean
+  onClick: () => void
+  children: React.ReactNode
+}): React.JSX.Element {
+  return (
+    <button
+      type="button"
+      aria-pressed={active}
+      onClick={onClick}
+      className={cn(
+        'whitespace-nowrap rounded-full border border-white/[0.08] px-2.5 py-1 text-[12px] font-semibold tabular-nums outline-none focus-visible:ring-2 focus-visible:ring-ring',
+        active ? 'bg-primary text-primary-foreground' : 'bg-muted hover:bg-accent'
+      )}
+    >
+      {children}
+    </button>
+  )
+}
+
 /** Esc and the mouse's back button leave the set, unless a dialog or panel is open. */
 function useBackShortcuts(onBack: () => void): void {
   const latest = useRef(onBack)
@@ -132,6 +159,7 @@ export function SetChecklist({
 }: SetChecklistProps): React.JSX.Element {
   const [filter, setFilter] = useState<TileFilter>('all')
   const [q, setQ] = useState('')
+  const [rarity, setRarity] = useState<string | null>(null)
   const [sort, setSort] = useState<{ by: ChecklistSort; dir: SortDir }>({
     by: 'number',
     dir: 'asc'
@@ -172,14 +200,14 @@ export function SetChecklist({
     () =>
       data
         ? sortTiles(
-            filterTiles(checklistTiles(data, mode), filter).filter((t) =>
-              matchesCardSearch(t.card, q)
+            filterTilesByRarity(filterTiles(checklistTiles(data, mode), filter), rarity).filter(
+              (t) => matchesCardSearch(t.card, q)
             ),
             sort.by,
             sort.dir
           )
         : [],
-    [data, mode, filter, q, sort]
+    [data, mode, filter, rarity, q, sort]
   )
 
   // Recompute the frozen ids on entering bulk mode and when the filter or count mode changes.
@@ -303,6 +331,7 @@ export function SetChecklist({
   }
 
   const progress = progressFor(data.set, mode)
+  const rarities = rarityCounts(data)
   // On the phone the count mode and bulk add move into a "⋯" menu to fit the width.
   const phone = isPhone()
   const toggleBulk = (): void => {
@@ -339,8 +368,13 @@ export function SetChecklist({
           <div className="flex flex-wrap items-center gap-2">
             <BackButton onBack={onBack} />
             <h1 className="flex min-w-0 items-center gap-2 text-xl font-semibold">
-              <span className="truncate">{data.set.setName}</span>
+              <span className="truncate">{englishSetName(data.set.setName, data.set.setCode)}</span>
               <LanguageTag language={data.set.language} />
+              {nativeSetName(data.set.setName, data.set.setCode) && (
+                <span className="truncate text-sm font-normal text-muted-foreground">
+                  {data.set.setName}
+                </span>
+              )}
             </h1>
           </div>
           <div className="flex flex-wrap items-end gap-3 border-b border-white/[0.08]">
@@ -465,6 +499,23 @@ export function SetChecklist({
           </div>
         </header>
 
+        {!bulk && rarities.length > 1 && (
+          <div role="group" aria-label="Filter by rarity" className="flex flex-wrap gap-1.5">
+            <RarityChip active={rarity === null} onClick={() => setRarity(null)}>
+              All {checklistTiles(data, mode).length}
+            </RarityChip>
+            {rarities.map((r) => (
+              <RarityChip
+                key={r.rarity}
+                active={rarity === r.rarity}
+                onClick={() => setRarity(rarity === r.rarity ? null : r.rarity)}
+              >
+                {r.rarity} {r.count}
+              </RarityChip>
+            ))}
+          </div>
+        )}
+
         {!bulk && q.trim() !== '' && tiles.length === 0 && (
           <p className="py-12 text-center text-sm text-muted-foreground">
             No cards in this set match &ldquo;{q.trim()}&rdquo;
@@ -472,7 +523,12 @@ export function SetChecklist({
         )}
 
         {bulk ? (
-          <BulkMode cards={bulkCards} pending={pending} adjust={adjust} />
+          <BulkMode
+            cards={bulkCards}
+            setName={data.set.setName}
+            pending={pending}
+            adjust={adjust}
+          />
         ) : (
           <ul className="grid grid-cols-[repeat(auto-fill,minmax(7.5rem,1fr))] gap-3 max-md:grid-cols-3 max-md:gap-1.5">
             {tiles.map((t) => {

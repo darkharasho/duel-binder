@@ -204,13 +204,14 @@ export function createPhoneApi(deps: {
       collection: async (userId: number, f: CollectionFilters) =>
         (await store.portal<EntryView[]>('friends:collection', [userId, f])).map((e) => ({
           ...e,
-          originalArt: false
+          printingScan: false
         })),
       facets: portal('friends:facets')
     },
     scan: {
       ...dataPart('scan'),
       fingerprints: (game) => store.fingerprints(game),
+      fingerprintRefs: () => store.fingerprintRefs(),
       refreshFingerprints: (game, opts) => store.refreshFingerprints({ game, ...opts }),
       ocr: async (bands, kind) => {
         if (!isOcrKind(kind)) throw new Error(`Unknown OCR kind: ${String(kind)}`)
@@ -252,7 +253,7 @@ export function createPhoneApi(deps: {
       run: runCatalogUpdate,
       onProgress: (cb) => events.on('syncStatus', cb)
     },
-    images: { cacheSize: async () => 0, clearCache: async () => {} },
+    images: { cacheSize: async () => 0, clearCache: async () => {}, onDownloads: () => () => {} },
     usage: {
       report: (events) => store.reportUsage({ platform: isNativeApp() ? 'ios' : 'phone', events })
     },

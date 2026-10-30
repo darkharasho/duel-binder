@@ -1,11 +1,17 @@
 export type PkmLang = 'en' | 'ja'
-export interface TdVariant { type: string; subtype?: string; stamp?: string[]; thirdParty?: { tcgplayer?: number } }
+/**
+ * One TCGdex printing of a card. `variantId` is "generated" when TCGdex had no curated variant list
+ * for the card and filled this one in from its legacy `variants` booleans (see GENERATED in versions.ts).
+ */
+export interface TdVariant { type: string; subtype?: string; stamp?: string[]; thirdParty?: { tcgplayer?: number }; variantId?: string }
 export interface TdCard {
   id: string; localId: string; name: string; category?: string; rarity?: string | null; hp?: number
   types?: string[]; stage?: string; illustrator?: string; image?: string
   abilities?: { type?: string; name: string; effect?: string }[]
   attacks?: { cost?: string[]; name: string; damage?: string | number; effect?: string }[]
   variants_detailed?: TdVariant[]; thirdParty?: { tcgplayer?: number }
+  /** National Pokédex numbers of a Pokémon card (one per Pokémon on it). */
+  dexId?: number[]
   set: { id: string; name: string }
 }
 export interface TdSet {

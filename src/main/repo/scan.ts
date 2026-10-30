@@ -9,6 +9,7 @@ import type { CollectorNumber } from '../../shared/scan/collectorNumber'
 import { enTwinPrice } from './enTwin'
 import { isMarketOnly } from './priceRule'
 import { LOCAL, type Scope } from './scope'
+import { shownPrinting } from './shownPrinting'
 
 interface PrintingRow {
   printingId: number
@@ -18,6 +19,7 @@ interface PrintingRow {
   setName: string
   setCode: string
   rarity: string
+  variant: string | null
   language: Language
   rawPrice: number | null
   localName: string | null
@@ -26,13 +28,13 @@ interface PrintingRow {
 const select = (
   scope: Scope
 ): string => `SELECT p.id AS printingId, p.card_id AS cardId, c.name AS name, c.frame_type AS frameType,
-  p.set_name AS setName, p.set_code AS setCode, p.set_rarity AS rarity, p.language AS language,
+  p.set_name AS setName, p.set_code AS setCode, p.set_rarity AS rarity, p.variant AS variant, p.language AS language,
   CASE WHEN ${isMarketOnly} THEN p.market_price WHEN p.language = 'en' THEN COALESCE(p.market_price, ip.price, p.set_price) ELSE COALESCE(ip.price, ${enTwinPrice(scope.game)}) END AS rawPrice,
   pc.local_name AS localName
   FROM card_printings p JOIN cards c ON c.id = p.card_id AND +c.game = ${scope.game}
   LEFT JOIN intl_prices ip ON ip.printing_id = p.id
   LEFT JOIN pokemon_cards pc ON pc.card_id = p.card_id
-  WHERE +p.game = ${scope.game} AND p.contributed = 0`
+  WHERE +p.game = ${scope.game} AND p.contributed = 0 AND ${shownPrinting(scope)}`
 
 const languageRank = (l: Language): number => LANGUAGES.findIndex((x) => x.code === l)
 
@@ -46,7 +48,7 @@ const nameKey = (name: string): string => normalizeName(name) || name
  * reprints), and a printing in that language. A Japanese card may be named in English or
  * Japanese, and names are compared by their letters ("Tapu Lele-GX", "Umbreon ☆").
  */
-function unseenTwins(db: SqlDb, cardIds: number[]): string[] {
+function unseenTwins(db: SqlDb, cardIds: number[], scope: Scope): string[] {
   // CROSS JOIN keeps this order: the few cards asked for first, then the cards with no artwork.
   const rows = db
     .prepare(
@@ -74,8 +76,8 @@ function unseenTwins(db: SqlDb, cardIds: number[]): string[] {
   const ids = [...new Set(twins.map((t) => t.twinId))]
   const languages = db
     .prepare(
-      `SELECT DISTINCT card_id AS cardId, language FROM card_printings
-       WHERE card_id IN (${ids.map(() => '?').join(',')})`
+      `SELECT DISTINCT p.card_id AS cardId, p.language AS language FROM card_printings p
+       WHERE p.card_id IN (${ids.map(() => '?').join(',')}) AND ${shownPrinting(scope)}`
     )
     .all(...ids) as { cardId: number; language: string }[]
   return twins.flatMap((t) =>
@@ -95,7 +97,7 @@ function withImages(db: SqlDb, rows: PrintingRow[], scope: Scope, twins = false)
   const twinned = new Set<string>()
   for (let i = 0; i < ids.length; i += 500) {
     const chunk = ids.slice(i, i + 500)
-    if (twins) for (const t of unseenTwins(db, chunk)) twinned.add(t)
+    if (twins) for (const t of unseenTwins(db, chunk, scope)) twinned.add(t)
     const found = db
       .prepare(
         `SELECT card_id AS cardId, image_id AS imageId FROM card_images

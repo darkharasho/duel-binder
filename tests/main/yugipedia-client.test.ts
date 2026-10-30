@@ -223,4 +223,24 @@ describe('yugipedia client', () => {
     expect(calls[1].url.searchParams.get('imcontinue')).toBe('123|B.png')
     expect([...out]).toEqual([['Card Gallery:Old', ['A.png', 'B.png']]])
   })
+
+  it('listPageImages leaves out missing and invalid titles, as the live API lists them', async () => {
+    const { client } = setup(() =>
+      res({
+        query: {
+          pages: [
+            { title: 'Card Gallery:Gone', missing: true },
+            { title: 'Card Gallery:A <B>', invalid: true },
+            { title: 'Card Gallery:Here', images: [{ title: 'File:H.png' }] }
+          ]
+        }
+      })
+    )
+    const out = await client.listPageImages([
+      'Card Gallery:Gone',
+      'Card Gallery:A <B>',
+      'Card Gallery:Here'
+    ])
+    expect([...out]).toEqual([['Card Gallery:Here', ['H.png']]])
+  })
 })

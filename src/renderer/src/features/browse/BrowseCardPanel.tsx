@@ -7,6 +7,7 @@ import {
 } from '@tanstack/react-query'
 import { Minus, Plus } from 'lucide-react'
 import { toast } from 'sonner'
+import { englishSetName } from '@shared/setNames'
 import type { BrowseCard, BrowsePage, ChecklistCard, EntryView, Printing } from '@shared/types'
 import { CardDetails } from '@/components/CardDetails'
 import { PanelCardArt } from '@/components/PanelCardArt'
@@ -18,11 +19,12 @@ import { SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet
 import { api, mutationInvalidationKeys, queryKeys } from '@/lib/api'
 import { createSerialQueue } from '@/lib/serialQueue'
 import { formatUsd } from '@/lib/format'
+import { pickableRow } from '@/components/pickableRow'
 import { cn } from '@/lib/utils'
 
 interface BrowseCardPanelProps {
   card: BrowseCard
-  /** Opens the full Add Card dialog (artwork, quantity, notes). */
+  /** Opens the full Add Card dialog (printing, quantity). */
   onMoreOptions: (printingId: number) => void
   nav?: PanelNav
 }
@@ -76,6 +78,8 @@ export function BrowseCardPanel({
   const queue = useRef(createSerialQueue())
   const [pending, setPending] = useState(0)
   const flight = useRef<InFlight | null>(null)
+  // The printing the user clicked; until then the card's default one.
+  const [pickedId, setPickedId] = useState<number | null>(null)
   // Counts shown since the last click, with the forCard data they were shown over.
   const [local, setLocal] = useState<{
     base: EntryView[] | undefined
@@ -107,9 +111,11 @@ export function BrowseCardPanel({
   const total =
     (copies.data ?? []).reduce((n, c) => n + c.quantity, 0) +
     printings.reduce((n, p) => n + ownedOf(p.id) - serverOwned(p.id), 0)
-  const moreFor = card.defaultPrintingId ?? printings[0]?.id
   // Price the printing the art shows; rarities of one card can differ by orders of magnitude.
-  const shown = printings.find((p) => p.id === card.defaultPrintingId)
+  const shown =
+    printings.find((p) => p.id === (pickedId ?? card.defaultPrintingId)) ??
+    printings.find((p) => p.id === card.defaultPrintingId)
+  const moreFor = shown?.id ?? card.defaultPrintingId ?? printings[0]?.id
   const price = shown?.setPrice ?? card.price
   const priceLabel = shown?.setPrice != null ? shown.setRarity : 'cheapest printing'
   // An owned printing shows the price the collection shows (eBay-first), not YGOPRODeck's.
@@ -168,7 +174,7 @@ export function BrowseCardPanel({
       <div className="space-y-5 px-4 pb-6">
         <PanelCardArt
           imageId={card.imageId}
-          printingId={card.defaultPrintingId}
+          printingId={shown?.id ?? card.defaultPrintingId}
           alt={card.name}
           nav={nav}
         />
@@ -184,10 +190,19 @@ export function BrowseCardPanel({
             const owned = ownedOf(p.id)
             const label = `${card.name} ${p.setCode} ${p.setRarity}`
             return (
-              <div key={p.id} role="group" aria-label={label} className="flex items-center gap-1.5">
+              <div
+                key={p.id}
+                role="group"
+                aria-label={label}
+                {...pickableRow(
+                  p.id === shown?.id,
+                  () => setPickedId(p.id),
+                  'flex items-center gap-1.5'
+                )}
+              >
                 <div className="min-w-0 flex-1 text-xs">
                   <div className="flex items-center gap-1.5">
-                    <span className="truncate">{p.setName}</span>
+                    <span className="truncate">{englishSetName(p.setName, p.setCode)}</span>
                     <LanguageTag language={p.language} />
                   </div>
                   <div className="truncate text-muted-foreground">

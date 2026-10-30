@@ -43,7 +43,7 @@ const entry = (id: number, name: string, extra: Partial<EntryView> = {}): EntryV
   card: card(100 + id, name),
   printing: printing(id, 100 + id),
   imageId: 100 + id,
-  originalArt: true,
+  printingScan: true,
   unitPrice: 10,
   priceApproximate: false,
   priceSource: 'ygoprodeck',
@@ -274,6 +274,14 @@ describe('CollectionPage', () => {
     ).toBeInTheDocument()
   })
 
+  it('offers no artwork picker, even for a card with several artworks', async () => {
+    setup([dm, bew])
+    await userEvent.click(await screen.findByText('Dark Magician'))
+    await screen.findByRole('combobox', { name: 'Printing' })
+    expect(screen.queryByRole('radiogroup', { name: 'Artwork' })).not.toBeInTheDocument()
+    expect(screen.queryByText('Artwork')).not.toBeInTheDocument()
+  })
+
   it('editing quantity calls update', async () => {
     const update = vi.fn(async () => ({ ...dm, quantity: 5 }))
     setup([dm, bew], { collection: { update } })
@@ -286,12 +294,17 @@ describe('CollectionPage', () => {
   })
 
   it('merge result reselects returned entry and toasts', async () => {
-    const other = entry(9, 'Dark Magician', { card: dm.card, imageId: 9001, quantity: 4 })
+    const other = entry(9, 'Dark Magician', {
+      card: dm.card,
+      printing: printing(5, dm.card.id, { setRarity: 'Common', setCode: 'SDY-006' }),
+      quantity: 4
+    })
     const update = vi.fn(async () => other)
     setup([dm, other], { collection: { update } })
     await userEvent.click((await screen.findAllByText('Dark Magician'))[0])
-    await userEvent.click(await screen.findByRole('radio', { name: 'Artwork 2' }))
-    await waitFor(() => expect(update).toHaveBeenCalledWith(1, { imageId: 9001 }))
+    await userEvent.click(await screen.findByRole('combobox', { name: 'Printing' }))
+    await userEvent.click(await screen.findByRole('option', { name: /SDY-006/ }))
+    await waitFor(() => expect(update).toHaveBeenCalledWith(1, { printingId: 5 }))
     await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Merged with an existing entry'))
     const copies = await screen.findByRole('region', { name: 'Your copies' })
     await waitFor(() =>

@@ -16,6 +16,7 @@ import type {
   Facets,
   FriendRequestResult,
   FriendsOverview,
+  ImageDownloads,
   SetChecklist,
   SetSummary,
   SyncStatus,
@@ -23,6 +24,7 @@ import type {
   UpdateStatus
 } from './types'
 import type { ScanWindowMessage } from './scanWindow'
+import type { ScanRef } from './scan/fingerprintRefs'
 import type { FingerprintStatus, OcrBand, ScanPrinting } from './scan/types'
 import type { CollectorNumber } from './scan/collectorNumber'
 import type { CardLanguage } from './scan/language'
@@ -70,6 +72,11 @@ export interface Api {
     /** The card of each artwork id that is in the catalog. */
     cardsForImages(imageIds: number[]): Promise<{ imageId: number; cardId: number }[]>
     fingerprints(game: GameId): Promise<ArrayBuffer | null>
+    /**
+     * Yu-Gi-Oh's fingerprint file's reference scans of art variants, with their printings as this
+     * app's printing ids (see fingerprintRefs.ts); empty when there are none.
+     */
+    fingerprintRefs(): Promise<ScanRef[]>
     refreshFingerprints(game: GameId, opts?: { force?: boolean }): Promise<FingerprintStatus>
     ocr(bands: OcrBand[], kind: OcrKind): Promise<string[]>
     /** The language the card text on the bands reads as; null when it can't be told. */
@@ -128,6 +135,8 @@ export interface Api {
   images: {
     cacheSize(): Promise<number>
     clearCache(): Promise<void>
+    /** Art downloads under way, as they change; never fires on the web or the phone. */
+    onDownloads(cb: (d: ImageDownloads) => void): () => void
   }
   window: {
     /** `process.platform`, for drawing the title bar the way the OS does. */
@@ -209,6 +218,7 @@ export const INVOKE_CHANNELS = [
   'scan:matchName',
   'scan:cardsForImages',
   'scan:fingerprints',
+  'scan:fingerprintRefs',
   'scan:refreshFingerprints',
   'scan:ocr',
   'scan:language',
@@ -258,6 +268,7 @@ export type InvokeChannel = (typeof INVOKE_CHANNELS)[number]
 /** Event channels pushed from main to renderer. */
 export const SYNC_PROGRESS = 'sync:progress'
 export const UPDATE_STATUS = 'update:status'
+export const IMAGE_DOWNLOADS = 'images:downloads' // payload: ImageDownloads
 export const DATA_CHANGED = 'data:changed' // payload: void
 export const WINDOW_MAXIMIZED = 'window:maximized' // payload: boolean
 export const ACCOUNT_CHANGED = 'account:changed' // payload: AccountStatus

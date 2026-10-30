@@ -85,6 +85,7 @@ async function makeHandlers(opts: { signedIn?: boolean } = {}) {
 
 const noFingerprints = {
   read: async () => null,
+  readRefs: async () => null,
   status: () => ({ state: 'missing' as const, count: 0 }),
   refresh: async () => ({ state: 'missing' as const, count: 0 })
 }
@@ -368,18 +369,18 @@ describe('friends handlers', () => {
     expect(account.portal).toHaveBeenCalledWith('friends:overview', [])
   })
 
-  it('collection forwards and marks every entry as not original art', async () => {
+  it('collection forwards and marks every entry as having no printing scan', async () => {
     const { handlers, account } = await makeHandlers({ signedIn: true })
     const f = { sort: 'name', dir: 'asc' } as const
     account.portal.mockResolvedValue([
-      { id: 1, originalArt: true },
-      { id: 2, originalArt: true }
+      { id: 1, printingScan: true },
+      { id: 2, printingScan: true }
     ])
     const out = await handlers['friends:collection'](7, f)
     expect(account.portal).toHaveBeenCalledWith('friends:collection', [7, f])
     expect(out).toEqual([
-      { id: 1, originalArt: false },
-      { id: 2, originalArt: false }
+      { id: 1, printingScan: false },
+      { id: 2, printingScan: false }
     ])
   })
 

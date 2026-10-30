@@ -9,6 +9,7 @@ import {
   CommandItem,
   CommandList
 } from '@/components/ui/command'
+import { PrintingLabel } from '@/components/PrintingLabel'
 import { cn } from '@/lib/utils'
 
 export interface PickerOption {
@@ -16,10 +17,40 @@ export interface PickerOption {
   label: string
   /** Lower-case text the search matches (every word must appear); the label when left out. */
   search?: string
-  /** The phone's picker sheet: a short code shown as a badge, the label without it, and a note. */
+  /**
+   * A short code shown as a badge (a printing's code, a set's prefix), the label without it as
+   * the title, and a note such as a language tag; the label is the plain-text form of them all.
+   */
   badge?: string
   title?: string
   note?: string
+}
+
+/**
+ * An option as the pickers show it: its badge, then its title truncated to fit, then its note;
+ * just its label when it has no title. `compact` sizes the badge for a small trigger.
+ */
+export function OptionLabel({
+  option,
+  compact = false
+}: {
+  option: PickerOption
+  compact?: boolean
+}): React.JSX.Element {
+  if (option.title === undefined) {
+    return <span className="min-w-0 truncate">{option.label}</span>
+  }
+  return (
+    <PrintingLabel
+      chip={option.badge}
+      title={option.title ?? option.label}
+      chipClassName={compact ? 'px-1.5 py-0 text-[11px]' : undefined}
+      className={compact ? 'gap-1.5' : undefined}
+      tag={
+        option.note && <span className="shrink-0 text-xs text-muted-foreground">{option.note}</span>
+      }
+    />
+  )
 }
 
 /** Options shown at once; the search narrows the rest down. */
@@ -52,6 +83,7 @@ export const SearchPicker = memo(function SearchPicker({
   searchPlaceholder = 'Search…',
   className,
   disabled = false,
+  badges = false,
   renderTrigger
 }: {
   /** The trigger's accessible name. */
@@ -64,6 +96,8 @@ export const SearchPicker = memo(function SearchPicker({
   searchPlaceholder?: string
   className?: string
   disabled?: boolean
+  /** Lists each option as its badge, title and note, as the printing pickers do; else its label. */
+  badges?: boolean
   /** The trigger's contents in place of the picked label and chevron (the phone's chips). */
   renderTrigger?: (picked: PickerOption | undefined) => React.ReactNode
 }): React.JSX.Element {
@@ -98,11 +132,17 @@ export const SearchPicker = memo(function SearchPicker({
         <Popover.Content
           align="start"
           sideOffset={4}
-          className="z-50 w-[max(var(--radix-popover-trigger-width),18rem)] rounded-md border bg-popover p-0 text-popover-foreground shadow-md"
+          className={cn(
+            'z-50 max-w-[calc(100vw-1rem)] rounded-md border bg-popover p-0 text-popover-foreground shadow-md',
+            badges
+              ? 'w-[max(var(--radix-popover-trigger-width),22rem)]'
+              : 'w-[max(var(--radix-popover-trigger-width),18rem)]'
+          )}
         >
           <PickerList
             options={options}
             searchPlaceholder={searchPlaceholder}
+            badges={badges}
             onPick={(key) => {
               onPick(key)
               setOpen(false)
@@ -117,10 +157,12 @@ export const SearchPicker = memo(function SearchPicker({
 function PickerList({
   options,
   searchPlaceholder,
+  badges,
   onPick
 }: {
   options: readonly PickerOption[]
   searchPlaceholder: string
+  badges: boolean
   onPick: (key: string) => void
 }): React.JSX.Element {
   const [query, setQuery] = useState('')
@@ -139,7 +181,7 @@ function PickerList({
         <CommandGroup>
           {shown.map((o) => (
             <CommandItem key={o.key} value={o.key} onSelect={() => onPick(o.key)}>
-              {o.label}
+              {badges ? <OptionLabel option={o} /> : o.label}
             </CommandItem>
           ))}
         </CommandGroup>

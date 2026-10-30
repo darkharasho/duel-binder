@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3'
 import { MIGRATIONS } from '../../src/main/db/schema'
 import { migrateServer, runSteps, SERVER_STEPS } from '../../workers/portal/src/migrate'
+import { catalogChanges } from '../../workers/portal/src/catalogFeed'
 import { SHARED_SET_NAME, seedPokemon } from '../fixtures/pokemon'
 
 function freshDb(): Database.Database {
@@ -127,7 +128,7 @@ function serverBefore12(): Database.Database {
   const db = freshDb()
   runSteps(db, [
     ...MIGRATIONS.filter((m) => m.version <= 18),
-    ...SERVER_STEPS.filter((s) => s.name !== 'server-12' && s.name !== 'server-13')
+    ...SERVER_STEPS.filter((s) => !['server-12', 'server-13', 'server-14'].includes(s.name))
   ])
   db.exec(`
     INSERT INTO users (id, discord_id, username, created_at, updated_at) VALUES (1, 'd1', 'one', 'x', 'x');
@@ -275,6 +276,60 @@ describe('server-13 (pokemon_cards image_url and local_name)', () => {
     db.prepare('DELETE FROM pokemon_cards WHERE card_id = ?').run(cardIds[0])
     expect(rows(db, 'SELECT tbl, game, key FROM catalog_tombstones')).toEqual([
       { tbl: 'pokemon_cards', game: 'pkm', key: JSON.stringify([cardIds[0]]) }
+    ])
+    db.close()
+  })
+})
+
+describe('server-14 (pokemon_set_art in the change feed)', () => {
+  const art = (db: Database.Database, order: number, key: string): void => {
+    db.prepare(
+      "INSERT INTO pokemon_set_art (language, set_name, kind, sort_order, image_url, image_key) VALUES ('en', 'Paldea Evolved', 'pack', ?, ?, ?)"
+    ).run(order, `https://archives.bulbagarden.net/media/upload/${key}.png`, key)
+  }
+
+  it('a fresh server and one upgraded from server-13 both feed new rows to Pokémon only', () => {
+    const fresh = freshDb()
+    migrateServer(fresh)
+    const old = freshDb()
+    runSteps(old, [
+      ...MIGRATIONS.filter((m) => m.version <= 22),
+      ...SERVER_STEPS.filter((s) => s.name !== 'server-14')
+    ])
+    migrateServer(old)
+    for (const db of [fresh, old]) {
+      art(db, 0, 'bp-a')
+      art(db, 1, 'bp-b')
+      const pkm = catalogChanges(db, 0, 100, undefined, 'pkm').changes.filter(
+        (c) => c.table === 'pokemon_set_art'
+      )
+      expect(pkm.map((c) => 'row' in c && c.row.image_key)).toEqual(['bp-a', 'bp-b'])
+      const ygo = catalogChanges(db, 0, 100, undefined, 'ygo').changes
+      expect(ygo.some((c) => c.table === 'pokemon_set_art')).toBe(false)
+      const legacy = catalogChanges(db, 0, 100).changes
+      expect(legacy.some((c) => c.table === 'pokemon_set_art')).toBe(false)
+    }
+    fresh.close()
+    old.close()
+  })
+
+  it('a change bumps catalog_seq and a delete tombstones the full key for game pkm', () => {
+    const db = freshDb()
+    migrateServer(db)
+    art(db, 0, 'bp-a')
+    const seq = (): number =>
+      (db.prepare('SELECT catalog_seq AS s FROM pokemon_set_art').get() as { s: number }).s
+    const before = seq()
+    db.prepare("UPDATE pokemon_set_art SET image_key = 'bp-c'").run()
+    expect(seq()).toBeGreaterThan(before)
+    const since = seq()
+    db.prepare('DELETE FROM pokemon_set_art').run()
+    const key = ['en', 'Paldea Evolved', 'pack', 0]
+    expect(rows(db, 'SELECT tbl, game, key FROM catalog_tombstones')).toEqual([
+      { tbl: 'pokemon_set_art', game: 'pkm', key: JSON.stringify(key) }
+    ])
+    expect(catalogChanges(db, since, 100, ['pokemon_set_art'], 'pkm').changes).toEqual([
+      expect.objectContaining({ table: 'pokemon_set_art', deleted: key })
     ])
     db.close()
   })

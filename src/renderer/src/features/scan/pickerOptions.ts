@@ -2,6 +2,7 @@ import { useCallback, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { isLanguage, LANGUAGES, languageInfo, type Language } from '@shared/languages'
 import { RARITY_TIERS } from '@shared/scan/rarity'
+import { englishSetName, setNameTooltip } from '@shared/setNames'
 import { setPrefix } from '@shared/sets'
 import { api, queryKeys } from '@/lib/api'
 import { matchesLanguage, useLanguageFilter } from '@/lib/languageFilter'
@@ -76,7 +77,7 @@ export function useScanPickers(): {
       .filter((s) => matchesLanguage(language, s.language))
       .sort(
         (a, b) =>
-          byName(a.setName, b.setName) ||
+          byName(englishSetName(a.setName), englishSetName(b.setName)) ||
           (order.get(a.language) ?? 0) - (order.get(b.language) ?? 0)
       )
     const options: PickerOption[] = [{ key: ANY, label: 'Any set' }]
@@ -88,9 +89,9 @@ export function useScanPickers(): {
       options.push({
         key,
         label,
-        search: label.toLowerCase(),
+        search: `${label} ${s.setName}`.toLowerCase(),
         badge: s.setCode ? setPrefix(s.setCode) : undefined,
-        title: s.setName,
+        title: setNameTooltip(s.setName, s.setCode),
         note: withTag ? languageInfo(s.language).tag : undefined
       })
     }

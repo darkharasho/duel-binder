@@ -52,7 +52,7 @@ const entry = (p: Printing, extra: Partial<EntryView> = {}): EntryView =>
     card: detail([]).card,
     printing: p,
     imageId: 1,
-    originalArt: true,
+    printingScan: true,
     unitPrice: 10,
     priceApproximate: false,
     priceSource: 'ygoprodeck',

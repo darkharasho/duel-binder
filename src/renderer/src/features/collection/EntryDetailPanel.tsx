@@ -2,13 +2,14 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import type { Language } from '@shared/languages'
+import { printingChip, printingTitle } from '@shared/printingLabel'
 import type { EntryView, UpdateEntryInput } from '@shared/types'
-import { CardArt } from '@/components/CardArt'
 import { CardDetails } from '@/components/CardDetails'
 import { PanelCardArt } from '@/components/PanelCardArt'
 import type { PanelNav } from '@/components/panelNav'
 import { scanFor } from '@/components/scanFor'
 import { LanguageTag } from '@/components/LanguageTag'
+import { PrintingLabel } from '@/components/PrintingLabel'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -34,13 +35,11 @@ interface Props {
 /** Edit form for one entry; remounted (via `key`) when the selected entry changes. */
 function EntryEditor({
   entry,
-  images,
   printings,
   onSelectEntry,
   onClose
 }: {
   entry: EntryView
-  images: { imageId: number }[]
   printings: {
     id: number
     setCode: string
@@ -100,8 +99,8 @@ function EntryEditor({
   // (contributed or not) or the picker shows nothing.
   const withOwn = printings.some((p) => p.id === entry.printing.id)
     ? printings
-    : [...printings, entry.printing].sort(
-        (a, b) => (a.setCode < b.setCode ? -1 : a.setCode > b.setCode ? 1 : a.id - b.id)
+    : [...printings, entry.printing].sort((a, b) =>
+        a.setCode < b.setCode ? -1 : a.setCode > b.setCode ? 1 : a.id - b.id
       )
   const choosable = withOwn.filter((p) => !p.missingFromApi || p.id === entry.printing.id)
 
@@ -137,41 +136,6 @@ function EntryEditor({
         Save changes
       </Button>
 
-      {images.length > 1 && (
-        <div className="space-y-1.5">
-          <div className="text-sm font-medium">Artwork</div>
-          <div role="radiogroup" aria-label="Artwork" className="flex flex-wrap gap-2">
-            {images.map((im, i) => (
-              <button
-                key={im.imageId}
-                type="button"
-                role="radio"
-                aria-checked={im.imageId === entry.imageId}
-                aria-label={`Artwork ${i + 1}`}
-                disabled={busy}
-                onClick={() =>
-                  im.imageId !== entry.imageId && update.mutate({ imageId: im.imageId })
-                }
-                className={cn(
-                  'rounded-lg p-1 outline-none transition-colors duration-150 focus-visible:ring-2 focus-visible:ring-ring',
-                  im.imageId === entry.imageId
-                    ? 'bg-primary/20 ring-2 ring-primary'
-                    : 'hover:bg-accent'
-                )}
-              >
-                <CardArt
-                  imageId={im.imageId}
-                  printingId={i === 0 ? entry.printing.id : undefined}
-                  size="small"
-                  alt=""
-                  className="w-14"
-                />
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
       {choosable.length > 1 && (
         <div className="space-y-1.5">
           <div className="text-sm font-medium">Printing</div>
@@ -180,15 +144,25 @@ function EntryEditor({
             disabled={busy}
             onValueChange={(v) => update.mutate({ printingId: Number(v) })}
           >
-            <SelectTrigger aria-label="Printing" className="w-full">
+            <SelectTrigger
+              aria-label="Printing"
+              className="w-full *:data-[slot=select-value]:min-w-0"
+            >
               <SelectValue />
             </SelectTrigger>
-            <SelectContent>
-              {choosable.map((p) => (
-                <SelectItem key={p.id} value={String(p.id)}>
-                  {p.setCode} · {p.setRarity} — {p.setName} <LanguageTag language={p.language} />
-                </SelectItem>
-              ))}
+            <SelectContent className="max-w-[min(36rem,calc(100vw-2rem))]">
+              {choosable.map((p) => {
+                const label = { setCode: p.setCode, setName: p.setName, rarity: p.setRarity }
+                return (
+                  <SelectItem key={p.id} value={String(p.id)} className="*:[span]:last:min-w-0">
+                    <PrintingLabel
+                      chip={printingChip(label)}
+                      title={printingTitle(label)}
+                      tag={<LanguageTag language={p.language} />}
+                    />
+                  </SelectItem>
+                )
+              })}
             </SelectContent>
           </Select>
         </div>
@@ -287,7 +261,6 @@ export function EntryDetailPanel({
           <EntryEditor
             key={`${entry.id}:${entry.updatedAt}`}
             entry={entry}
-            images={detail.data?.images ?? []}
             printings={detail.data?.printings ?? []}
             onSelectEntry={onSelectEntry}
             onClose={onClose}

@@ -72,9 +72,17 @@ export interface EntryView {
   updatedAt: string
   card: CardRow
   printing: Printing
+  /**
+   * The artwork shown when the printing has no scan of its own. Users no longer pick it: it is the
+   * card's original art, the art the scanner matched, or one picked in an older version; kept
+   * (and synced) as before.
+   */
   imageId: number
-  /** The entry uses the card's original artwork, so the printing's own photo can stand in for it. */
-  originalArt: boolean
+  /**
+   * The printing's own scan shows over imageId. False only for a friend's entry seen from the
+   * desktop or phone app, whose printing ids are the server's, not this catalog's.
+   */
+  printingScan: boolean
   unitPrice: number | null
   priceApproximate: boolean
   /** null: no price from any source the entry's game has (Pokémon has only TCGplayer for now). */
@@ -101,6 +109,7 @@ export interface UpdateEntryInput {
   quantity?: number
   notes?: string
   printingId?: number
+  /** No longer sent by the app (art comes from the printing); still accepted from older clients. */
   imageId?: number
 }
 
@@ -254,6 +263,17 @@ export interface SyncStatus {
   blockedRetry: 'next-run' | 'next-launch' | null
 }
 
+/**
+ * The desktop's image downloads since its queue was last empty (all zeros when none are under
+ * way). Images download as pages ask for them, so a first visit to a page queues its art.
+ */
+export interface ImageDownloads {
+  /** Card art and printing scans. */
+  cards: { done: number; total: number }
+  /** Set logos, pack art and set images. */
+  sets: { done: number; total: number }
+}
+
 /** The desktop's Duel Binder account, as the renderer sees it. Never carries the token. */
 export interface AccountStatus {
   state: 'signed-out' | 'signing-in' | 'idle' | 'syncing' | 'offline' | 'error'
@@ -348,6 +368,7 @@ export interface ChecklistCard {
   atk: number | null
   def: number | null
   level: number | null // level, rank or link rating
+  cardRarity?: string | null // Pokémon only: the card's own rarity (null when unknown), apart from its finishes
 }
 
 export interface SetChecklist {

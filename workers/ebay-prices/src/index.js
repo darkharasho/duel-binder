@@ -5,6 +5,7 @@ import {
   isSingleCard,
   namesOtherRarity,
   namesLongerRarity,
+  matchesTone,
   askingPrice
 } from './price.js'
 import { setPrices } from './set.js'
@@ -104,6 +105,7 @@ function matchingPrices(items, ref, { otherRarities = true } = {}) {
       (i) =>
         titleMatches(i.title, ref) &&
         isSingleCard(i.title) &&
+        matchesTone(i.title, ref.rarity) &&
         (otherRarities
           ? !namesLongerRarity(i.title, ref.rarity)
           : !namesOtherRarity(i.title, ref.rarity)) &&

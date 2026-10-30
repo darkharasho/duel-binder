@@ -81,7 +81,7 @@ const copy: EntryView = {
   card: detail.card,
   printing: printing(10),
   imageId: 1,
-  originalArt: true,
+  printingScan: true,
   unitPrice: 10,
   priceApproximate: false,
   priceSource: 'ygoprodeck',
@@ -226,6 +226,28 @@ describe('BrowseCardPanel steppers', () => {
     // Give any background refetch a chance to run.
     await new Promise((r) => setTimeout(r, 20))
     expect(browse).toHaveBeenCalledTimes(fetched)
+  })
+})
+
+describe('BrowseCardPanel picked printing', () => {
+  const JA_ROW = 'Dark Magician DP-JP001 Ultra Rare'
+
+  it('marks the shown printing, follows clicks, and survives +', async () => {
+    const server = lobServer()
+    const { panel, plus } = await openLobStepper(server)
+    const lob = within(panel).getByRole('group', { name: LOB_ROW })
+    const ja = within(panel).getByRole('group', { name: JA_ROW })
+    expect(lob).toHaveAttribute('aria-current', 'true')
+    expect(ja).not.toHaveAttribute('aria-current')
+    expect(lob).toHaveAttribute('tabindex', '0')
+    await userEvent.click(ja)
+    expect(ja).toHaveAttribute('aria-current', 'true')
+    expect(lob).not.toHaveAttribute('aria-current')
+    await userEvent.click(plus)
+    expect(lob).toHaveAttribute('aria-current', 'true')
+    ja.focus()
+    await userEvent.keyboard(' ')
+    expect(ja).toHaveAttribute('aria-current', 'true')
   })
 })
 

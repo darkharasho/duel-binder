@@ -15,7 +15,8 @@ import {
   foilMask,
   pokemonLayoutFor,
   reverseTextureFor,
-  texturePlacement
+  texturePlacement,
+  textureVars
 } from '@shared/foil'
 import { PKM_ID_MIN } from '@shared/games'
 import { createMockApi, renderWithProviders } from './mockApi'
@@ -199,6 +200,49 @@ describe('reverseTextureFor', () => {
     expect(reverseTextureFor('SVI 5/198', pokemon(['Fire'], 'Basic'), table)).toBeNull()
   })
 
+  it('gives Sword & Shield reverses their type, with a plain version for Trainers and Energy', () => {
+    const water = reverseTextureFor('SSH 45/202', pokemon(['Water'], 'Basic'))
+    const fire = reverseTextureFor('CPA 4/73', pokemon(['Fire'], 'Stage1'))
+    expect(water?.url).toContain('data:image/svg+xml')
+    expect(fire?.url).not.toBe(water?.url)
+    expect(water?.tint).not.toBe(fire?.tint)
+    const plain = reverseTextureFor('SSH 170/202', pokemon([], null, 'Trainer'))
+    expect(plain).not.toBeNull()
+    expect(plain?.url).not.toBe(water?.url)
+    expect(reverseTextureFor('EVS 190/203', pokemon([], null, 'Energy'))?.url).toBe(plain?.url)
+    expect(reverseTextureFor('SSH 45/202', pokemon(['Water'], 'Basic'))).toBe(water)
+  })
+
+  it('gives Sun & Moon reverses their own pattern for the same types', () => {
+    const sm = reverseTextureFor('UNB 135/214', pokemon(['Fairy'], 'Stage1'))
+    expect(sm?.url).toContain('data:image/svg+xml')
+    expect(sm?.url).not.toBe(reverseTextureFor('SSH 1/202', pokemon(['Fairy'], 'Basic'))?.url)
+    expect(reverseTextureFor('CES 105/168', pokemon(['Dragon'], 'Basic'))).not.toBeNull()
+    expect(reverseTextureFor('SUM 130/149', pokemon([], null, 'Trainer'))).not.toBeNull()
+    expect(reverseTextureFor('SMP SM01', pokemon(['Fire'], 'Basic'))).toBeNull()
+  })
+
+  it('draws every type, and falls back for a type it has no symbol for', () => {
+    for (const type of [
+      'Grass',
+      'Fire',
+      'Water',
+      'Lightning',
+      'Psychic',
+      'Fighting',
+      'Darkness',
+      'Metal',
+      'Dragon',
+      'Fairy',
+      'Colorless'
+    ]) {
+      expect(reverseTextureFor('SSH 1/202', pokemon([type], 'Basic')), type).not.toBeNull()
+    }
+    expect(reverseTextureFor('SSH 1/202', pokemon(['Unknown'], 'Basic'))).toBeNull()
+    expect(reverseTextureFor('SSH 1/202', pokemon([], 'Basic'))).toBeNull()
+    expect(reverseTextureFor('ASR:TG TG01/TG30', pokemon(['Fire'], 'Basic'))).toBeNull()
+  })
+
   it('ships empty, so every reverse keeps the plain foil', () => {
     expect(reverseTextureFor('SVI 5/198', pokemon(['Grass'], 'Basic'))).toBeNull()
     expect(
@@ -213,6 +257,20 @@ describe('texturePlacement', () => {
 
   it('lays a texture flat when its art is already on the window', () => {
     expect(texturePlacement(art, null)).toEqual({ size: '100% 100%', position: '0% 0%' })
+  })
+
+  it('lays a texture with no art of its own flat on the card', () => {
+    expect(texturePlacement(undefined, art)).toEqual({ size: '100% 100%', position: '0% 0%' })
+  })
+
+  it('carries strength, tint and blend to the styles', () => {
+    expect(
+      textureVars({ url: 'p', strength: 1.5, tint: '#123456', restBlend: 'multiply' }, null)
+    ).toMatchObject({
+      '--foil-texture-k': '1.5',
+      '--foil-texture-tint': 'linear-gradient(#123456, #123456)',
+      '--foil-rest-blend': 'multiply'
+    })
   })
 
   it('scales a texture so its art lands on the window', () => {

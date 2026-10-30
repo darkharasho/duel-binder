@@ -1,6 +1,7 @@
 import { artBox } from './rip/rarity'
 import { gameOfId, type GameId } from './games'
 import { MIN_CONFIDENCE, type DetectedArtWindow } from './artWindow'
+import { eraPattern, type PatternEra } from './reversePatterns'
 
 /**
  * How a printing's foil looks, for the shine drawn over its (flat) scan:
@@ -250,18 +251,27 @@ export function foilKindFor(
   return 'none'
 }
 
-/** A picture the light of a reverse foil shows up, and where the art sits in that picture. */
+/** A picture the light of a reverse foil shows up. Its alpha is the pattern. */
 export interface FoilTexture {
   url: string
-  art: ArtWindow
+  /** Where the art sits in the picture, to lay it on the card's; none lays it flat on the card. */
+  art?: ArtWindow
+  /** Scales the picture's foil, for one drawn lighter than its neighbours. Default 1. */
+  strength?: number
+  /** Its colour at rest; default the pale reverse tint. */
+  tint?: string
+  /** How it sits on the print at rest: overlay leaves near-white and near-black alone. */
+  restBlend?: 'overlay' | 'multiply' | 'screen'
 }
 
 /**
  * Optional pictures for Scarlet & Violet reverse foils, by `${type}/${stage}`: the catalog's type
- * ("Grass", "Darkness", "Colorless") and `basic` or `stage`. Their alpha is the pattern. Empty: a
- * card with no entry keeps the plain reverse foil.
+ * ("Grass", "Darkness", "Colorless") and `basic` or `stage`. A card with no entry keeps the plain
+ * reverse foil. Empty until there are pictures we may ship.
  */
 export const REVERSE_TEXTURES: Record<string, FoilTexture> = {}
+
+const firstWord = (setCode: string): string => setCode.trim().split(/\s/)[0]
 
 const SV_SETS = new Set([
   'SVI',
@@ -284,16 +294,67 @@ const SV_SETS = new Set([
   'SVP'
 ])
 
+// The Sword & Shield sets with reverse printings. Their galleries ("ASR:TG") are separate codes.
+const SWSH_SETS = new Set([
+  'SSH',
+  'RCL',
+  'DAA',
+  'CPA',
+  'VIV',
+  'SHF',
+  'BST',
+  'CRE',
+  'EVS',
+  'FST',
+  'BRS',
+  'ASR',
+  'PGO',
+  'LOR',
+  'SIT',
+  'CRZ'
+])
+
+// The Sun & Moon sets with reverse printings.
+const SM_SETS = new Set([
+  'SUM',
+  'GRI',
+  'BUS',
+  'SLG',
+  'CIN',
+  'UPR',
+  'FLI',
+  'CES',
+  'DRM',
+  'LOT',
+  'TEU',
+  'UNB',
+  'UNM',
+  'HIF',
+  'CEC'
+])
+
+/** These eras' reverses carry the card's type: our own drawing, plain for Trainers and Energy. */
+function typedTexture(era: PatternEra, pokemon: FoilCard['pokemon']): FoilTexture | null {
+  const category = pokemon?.category.toLowerCase()
+  if (category === 'trainer' || category === 'energy') return eraPattern(era, 'plain')
+  const type = pokemon?.types?.[0]
+  return category === 'pokemon' && type ? eraPattern(era, type) : null
+}
+
 /**
- * A reverse foil's picture: Scarlet & Violet Pokémon only, chosen by the card's first type and
- * whether it's a Basic or evolved. Null for anything else (Trainers, Energy, other eras).
+ * A reverse foil's picture. Sword & Shield, Sun & Moon: by the card's first type. Scarlet & Violet: from
+ * `table`, by first type and whether it's a Basic or evolved. Null otherwise, which is the plain
+ * reverse foil.
  */
 export function reverseTextureFor(
   setCode: string,
   pokemon: FoilCard['pokemon'],
   table: Record<string, FoilTexture> = REVERSE_TEXTURES
 ): FoilTexture | null {
-  if (!SV_SETS.has(setCode.trim().split(/\s/)[0])) return null
+  const set = firstWord(setCode)
+  if (SWSH_SETS.has(set)) return typedTexture('swsh', pokemon)
+  if (SM_SETS.has(set)) return typedTexture('sm', pokemon)
+  if (!SV_SETS.has(set)) return null
   const type = pokemon?.types?.[0]
   const stage =
     pokemon?.stage === 'Basic' ? 'basic' : /^Stage\d/.test(pokemon?.stage ?? '') ? 'stage' : null
@@ -306,13 +367,10 @@ export function reverseTextureFor(
  * positions divide by the room left over, so a size of exactly 100% is nudged off it.
  */
 export function texturePlacement(
-  art: ArtWindow,
+  art: ArtWindow | undefined,
   window: ArtWindow | null
-): {
-  size: string
-  position: string
-} {
-  if (!window) return { size: '100% 100%', position: '0% 0%' }
+): { size: string; position: string } {
+  if (!art || !window) return { size: '100% 100%', position: '0% 0%' }
   const axis = (from: number, to: number, artFrom: number, artTo: number): [number, number] => {
     const scale = (to - from) / (artTo - artFrom)
     const size = Math.abs(scale - 1) < 0.002 ? 100.2 : scale * 100
@@ -322,6 +380,24 @@ export function texturePlacement(
   const [w, x] = axis(window.left, 100 - window.right, art.left, 100 - art.right)
   const [h, y] = axis(window.top, window.bottom, art.top, art.bottom)
   return { size: `${w}% ${h}%`, position: `${x}% ${y}%` }
+}
+
+/** The CSS variables that carry a texture to the `foil` styles. */
+export function textureVars(
+  texture: FoilTexture,
+  window: ArtWindow | null
+): Record<string, string> {
+  const placed = texturePlacement(texture.art, window)
+  const vars: Record<string, string> = {
+    '--foil-texture': `url("${texture.url}")`,
+    '--foil-texture-size': placed.size,
+    '--foil-texture-at': placed.position,
+    '--foil-texture-k': String(texture.strength ?? 1)
+  }
+  if (texture.tint)
+    vars['--foil-texture-tint'] = `linear-gradient(${texture.tint}, ${texture.tint})`
+  if (texture.restBlend) vars['--foil-rest-blend'] = texture.restBlend
+  return vars
 }
 
 /** What PanelCardArt needs to draw a card's foil. */

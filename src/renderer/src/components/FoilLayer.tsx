@@ -3,7 +3,7 @@ import { cn } from '@/lib/utils'
 import { cssAspect, type CardAspect } from '@shared/games'
 import {
   foilMask,
-  texturePlacement,
+  textureVars,
   type ArtWindow,
   type FoilFinish,
   type FoilKind,
@@ -14,7 +14,7 @@ interface FoilLayerProps {
   kind: FoilKind
   /** How it moves and what its texture is; one `[data-finish]` block in index.css. */
   finish: FoilFinish
-  /** A picture the light shows up, laid so its art sits on `window`. */
+  /** A picture the light shows up, laid on `window` when it says where its own art is. */
   texture?: FoilTexture | null
   /** The art's box; null draws a faint whole-card sheen in place of a holo or reverse mask. */
   window: ArtWindow | null
@@ -108,7 +108,6 @@ export function FoilLayer({
   useDeviceLight(ref, device && kind !== 'none')
   if (kind === 'none') return null
   const mask = foilMask(kind, artWindow, aspect.width / aspect.height)
-  const placed = texture && texturePlacement(texture.art, artWindow)
   const masked = kind === 'holo' || kind === 'reverse'
   return (
     <div
@@ -125,9 +124,7 @@ export function FoilLayer({
         {
           aspectRatio: cssAspect(aspect),
           '--foil-mask': mask,
-          '--foil-texture': texture ? `url("${texture.url}")` : undefined,
-          '--foil-texture-size': placed?.size,
-          '--foil-texture-at': placed?.position
+          ...(texture ? textureVars(texture, artWindow) : {})
         } as React.CSSProperties
       }
     >

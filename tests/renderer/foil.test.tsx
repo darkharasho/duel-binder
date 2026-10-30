@@ -210,20 +210,28 @@ describe('FoilLayer', () => {
     const layer = screen.getByTestId('foil-layer')
     expect(layer).toHaveAttribute('data-foil', 'holo')
     expect(layer).toHaveAttribute('aria-hidden', 'true')
-    expect(layer.style.clipPath).toContain('92.8% 9.2%')
+    expect(layer.style.getPropertyValue('--foil-clip')).toContain('92.8% 9.2%')
     expect(layer).not.toHaveAttribute('data-faint')
   })
 
   it('leaves a whole-card foil unclipped', () => {
     render(<FoilLayer kind="fullart" window={null} aspect={aspect} />)
     const layer = screen.getByTestId('foil-layer')
-    expect(layer.style.clipPath).toBe('')
+    expect(layer.style.getPropertyValue('--foil-clip')).toBe('')
     expect(layer).not.toHaveAttribute('data-faint')
   })
 
   it('is a faint sheen when a masked foil has no window', () => {
     render(<FoilLayer kind="reverse" window={null} aspect={aspect} />)
     expect(screen.getByTestId('foil-layer')).toHaveAttribute('data-faint')
+  })
+
+  it('forms no stacking context, so its layers blend with the card', () => {
+    render(<FoilLayer kind="holo" window={ART_WINDOWS.modern} aspect={aspect} />)
+    const layer = screen.getByTestId('foil-layer')
+    expect(layer.style.clipPath).toBe('')
+    expect(layer.style.opacity).toBe('')
+    expect(layer.children.length).toBeGreaterThan(1)
   })
 
   it('takes the frame aspect it is given', () => {

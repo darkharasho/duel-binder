@@ -99,10 +99,13 @@ export function FoilLayer({
       data-foil={kind}
       data-faint={masked && !artWindow ? '' : undefined}
       className={cn('foil', className)}
-      style={{ aspectRatio: cssAspect(aspect), clipPath: clip }}
+      // The layers take the clip themselves: clipping here would cut them off from the card.
+      style={{ aspectRatio: cssAspect(aspect), '--foil-clip': clip } as React.CSSProperties}
     >
+      <div className="foil-wash" />
       <div className="foil-shine" />
-      <div className="foil-glare" />
+      <div className="foil-cross" />
+      <div className="foil-grain" />
     </div>
   )
 }

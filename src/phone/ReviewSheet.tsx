@@ -10,7 +10,7 @@ import {
 import { CardArt } from '@/components/CardArt'
 import { useScanLanguage } from '@/features/scan/pickerOptions'
 import { useScanHub } from '@/features/scan/ScanHub'
-import { choicesFor, FLAG_TEXT } from '@/features/scan/ScanRowItem'
+import { choicesFor, FLAG_TEXT, photoFor, setLabelFor } from '@/features/scan/ScanRowItem'
 import type { ScanRow } from '@/features/scan/session'
 import { ClearSessionDialog, useSessionCommit } from '@/features/scan/SessionList'
 import { plural } from '@/features/scan/scanText'
@@ -34,14 +34,21 @@ function ReviewRow({ row, disabled }: { row: ScanRow; disabled: boolean }): Reac
   const choices = useMemo(() => choicesFor(row, language), [row, language])
   const price = priceOf(row)
   const picked = choices.find((c) => c.key === String(row.printingId))
+  const where = setLabelFor(row)
   return (
     <li className={cn('flex gap-3 rounded-[20px] p-2.5', GLASS, row.flag && 'border-amber-400/45')}>
-      <CardArt imageId={row.imageId} size="small" alt="" className="w-12 shrink-0 self-start" />
+      <CardArt
+        imageId={row.imageId}
+        printingId={photoFor(row)}
+        size="small"
+        alt=""
+        className="w-12 shrink-0 self-start"
+      />
       <div className="min-w-0 flex-1 text-[13px] leading-[18px]">
         <p className="truncate text-[15px] font-semibold leading-5">{row.name}</p>
         <p className="truncate text-muted-foreground">
-          {row.setCode && <span className="font-mono text-xs">{row.setCode}</span>}
-          {row.setCode && price != null && ' · '}
+          {where && <span className={cn(row.setCode && 'font-mono text-xs')}>{where}</span>}
+          {where && price != null && ' · '}
           {price != null && (
             <span aria-label={`Price of ${row.name}`} className="text-emerald-400 tabular-nums">
               {formatUsd(price)}

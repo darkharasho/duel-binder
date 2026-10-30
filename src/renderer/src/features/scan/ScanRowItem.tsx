@@ -57,16 +57,36 @@ export function choicesFor(row: ScanRow, language: Language | null): PickerOptio
   return shown.map((o) => {
     const tag = languageInfo(o.language).tag
     const rarity = rarityLabel(o)
-    const label = `${o.setCode} · ${rarity}${languages ? ` · ${tag}` : ''}`
+    // An uncoded printing (YAC1's Manga-Style ones) goes by its set's name instead.
+    const label = `${o.setCode || o.setName} · ${rarity}${languages ? ` · ${tag}` : ''}`
     return {
       key: String(o.printingId),
       label,
       search: `${o.setCode} ${rarity} ${o.setName} ${tag}`.toLowerCase(),
-      badge: o.setCode,
-      title: rarity,
+      badge: o.setCode || undefined,
+      title: o.setCode ? rarity : `${o.setName} · ${rarity}`,
       note: languages ? tag : undefined
     }
   })
+}
+
+/**
+ * The printing whose own photo shows for a row, as for a collection entry (scanFor): only when
+ * the row keeps its card's first artwork, so an alternate artwork the art match picked stays.
+ * The photo is how a printing whose art YGOPRODeck doesn't have (Manga-Style, an overframe)
+ * shows as itself.
+ */
+// eslint-disable-next-line react-refresh/only-export-components -- shared with the phone's review
+export function photoFor(row: ScanRow): number | null {
+  const own = row.options.find((o) => o.printingId === row.printingId)
+  return own && own.imageIds[0] === row.imageId ? own.printingId : null
+}
+
+/** The printing's set as the row's subtitle names it: its code, or its set's name when it has none. */
+// eslint-disable-next-line react-refresh/only-export-components -- shared with the phone's review
+export function setLabelFor(row: ScanRow): string | null {
+  if (row.setCode) return row.setCode
+  return row.options.find((o) => o.printingId === row.printingId)?.setName || null
 }
 
 export interface ScanRowActions {
@@ -96,6 +116,7 @@ export const ScanRowItem = memo(function ScanRowItem({
 }): React.JSX.Element {
   const choices = useMemo(() => choicesFor(row, language), [row, language])
   const price = priceOf(row)
+  const where = setLabelFor(row)
   const { key } = row
   const { setPrinting } = actions
   const pick = useMemo(() => (v: string) => setPrinting(key, Number(v)), [key, setPrinting])
@@ -108,12 +129,18 @@ export const ScanRowItem = memo(function ScanRowItem({
         highlighted && 'bg-emerald-400/10'
       )}
     >
-      <CardArt imageId={row.imageId} size="small" alt="" className="w-12 shrink-0 self-start" />
+      <CardArt
+        imageId={row.imageId}
+        printingId={photoFor(row)}
+        size="small"
+        alt=""
+        className="w-12 shrink-0 self-start"
+      />
       <div className="min-w-0 flex-1 text-[13px] leading-[18px]">
         <p className="truncate text-[15px] font-semibold leading-5">{row.name}</p>
         <p className="truncate text-muted-foreground">
-          {row.setCode && <span className="font-mono text-xs">{row.setCode}</span>}
-          {row.setCode && price != null && ' · '}
+          {where && <span className={cn(row.setCode && 'font-mono text-xs')}>{where}</span>}
+          {where && price != null && ' · '}
           {price != null && (
             <span aria-label={`Price of ${row.name}`} className="text-emerald-400 tabular-nums">
               {formatUsd(price)}

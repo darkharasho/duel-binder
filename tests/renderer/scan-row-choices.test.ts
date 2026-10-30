@@ -46,4 +46,32 @@ describe('choicesFor', () => {
       'YAC1-JP006 · Ultra Rare (Manga-Style)'
     ])
   })
+
+  it("names an uncoded printing by its set, as YAC1's Manga-Style ones", () => {
+    const options = [
+      printing(1, 'Ultra Rare', null),
+      { ...printing(2, 'Ultra Rare', 'Manga-Style'), setCode: '' }
+    ]
+    const row: ScanRow = {
+      key: 'k',
+      quantity: 1,
+      addedAt: 0,
+      cardId: 1,
+      name: options[0].name,
+      imageId: 10,
+      printingId: 2,
+      setCode: '',
+      rarity: 'Ultra Rare',
+      options,
+      flag: 'pick-printing',
+      via: 'art'
+    }
+    const [coded, uncoded] = choicesFor(row, 'ja')
+    expect(coded).toMatchObject({ label: 'YAC1-JP006 · Ultra Rare', badge: 'YAC1-JP006' })
+    expect(uncoded).toMatchObject({
+      label: 'Original Artwork Collection · Ultra Rare (Manga-Style)',
+      badge: undefined,
+      title: 'Original Artwork Collection · Ultra Rare (Manga-Style)'
+    })
+  })
 })

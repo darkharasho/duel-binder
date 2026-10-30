@@ -159,7 +159,9 @@ describe('SetChecklist bulk mode', () => {
     await userEvent.click(
       screen.getByRole('combobox', { name: 'Set code for Alpha Dragon Ultra Rare' })
     )
-    await userEvent.click(await screen.findByRole('option', { name: 'MRD-EN001' }))
+    await userEvent.click(
+      await screen.findByRole('option', { name: /^MRD-EN001 Metal Raiders - / })
+    )
     const box = screen.getByRole('searchbox', { name: 'Type a card number or name' })
     await userEvent.type(box, 'beta')
     await userEvent.clear(box)
@@ -271,7 +273,7 @@ describe('SetChecklist bulk mode', () => {
     await userEvent.click(
       screen.getByRole('combobox', { name: 'Set code for Alpha Dragon Ultra Rare' })
     )
-    await userEvent.click(await screen.findByRole('option', { name: 'MRD-001' }))
+    await userEvent.click(await screen.findByRole('option', { name: /^MRD-001 Metal Raiders - / }))
     await userEvent.click(screen.getByRole('button', { name: 'Add one Alpha Dragon Ultra Rare' }))
     expect(adjust).toHaveBeenCalledWith('Metal Raiders', 'en', PRINTING.alphaUltra001, 1)
   })
@@ -359,7 +361,7 @@ describe('SetChecklist bulk mode', () => {
     await userEvent.click(
       screen.getByRole('combobox', { name: 'Set code for Alpha Dragon Ultra Rare' })
     )
-    await userEvent.click(await screen.findByRole('option', { name: 'MRD-001' }))
+    await userEvent.click(await screen.findByRole('option', { name: /^MRD-001 Metal Raiders - / }))
     expect(remove).toBeDisabled()
   })
 
@@ -369,7 +371,7 @@ describe('SetChecklist bulk mode', () => {
     await userEvent.click(
       screen.getByRole('combobox', { name: 'Set code for Alpha Dragon Ultra Rare' })
     )
-    await userEvent.click(await screen.findByRole('option', { name: 'MRD-001' }))
+    await userEvent.click(await screen.findByRole('option', { name: /^MRD-001 Metal Raiders - / }))
     await waitFor(() =>
       expect(screen.getByRole('searchbox', { name: 'Type a card number or name' })).toHaveFocus()
     )

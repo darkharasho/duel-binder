@@ -759,7 +759,10 @@ describe('Scan page', () => {
     expect(engine.init.mock.calls).toEqual([[old, []]])
     finish()
     await run(500)
-    expect(engine.init.mock.calls).toEqual([[old, []], [fresh, []]])
+    expect(engine.init.mock.calls).toEqual([
+      [old, []],
+      [fresh, []]
+    ])
   })
 
   it('keeps the engine as it is when a refresh finds nothing new', async () => {
@@ -1065,12 +1068,14 @@ describe('Scan page', () => {
     const u = user()
     await u.click(screen.getByRole('combobox', { name: 'Rarity for Dark Magician' }))
     expect(screen.getAllByRole('option').map((o) => o.textContent)).toEqual([
-      'LOB-EN005 · Common',
-      'LOB-EN005 · Rare'
+      'LOB-EN005 Legend of Blue Eyes White Dragon - Common',
+      'LOB-EN005 Legend of Blue Eyes White Dragon - Rare'
     ])
     // The search box has a name of its own, not just a placeholder.
     await u.type(screen.getByRole('combobox', { name: 'Search code, rarity or set…' }), 'rare')
-    await u.click(screen.getByRole('option', { name: 'LOB-EN005 · Rare' }))
+    await u.click(
+      screen.getByRole('option', { name: 'LOB-EN005 Legend of Blue Eyes White Dragon - Rare' })
+    )
     const saved = JSON.parse(localStorage.getItem(SESSION_KEY)!) as ScanRow[]
     expect(saved[0]).toMatchObject({ printingId: 102, rarity: 'Rare', flag: null })
     expect(screen.queryByText('Check rarity')).not.toBeInTheDocument()
@@ -1102,12 +1107,14 @@ describe('Scan page', () => {
     const u = user()
     await u.click(screen.getByRole('combobox', { name: 'Rarity for Dark Magician' }))
     expect(screen.getAllByRole('option').map((o) => o.textContent)).toEqual([
-      'LOB-EN005 · Ultra Rare · EN',
-      'SDY-006 · Common · DE'
+      'LOB-EN005 Legend of Blue Eyes White Dragon - Ultra Rare EN',
+      'SDY-006 Legend of Blue Eyes White Dragon - Common DE'
     ])
     await u.type(screen.getByPlaceholderText('Search code, rarity or set…'), 'sdy')
     expect(screen.getAllByRole('option')).toHaveLength(1)
-    await u.click(screen.getByRole('option', { name: 'SDY-006 · Common · DE' }))
+    await u.click(
+      screen.getByRole('option', { name: 'SDY-006 Legend of Blue Eyes White Dragon - Common DE' })
+    )
     await u.click(screen.getByRole('combobox', { name: 'Rarity for Dark Magician' }))
     expect(screen.getAllByRole('option')).toHaveLength(2)
   })
@@ -1143,9 +1150,9 @@ describe('Scan page', () => {
     // English is picked (the default): English printings, and the German one the row is on.
     await u.click(picker())
     expect(listed()).toEqual([
-      'LOB-EN005 · Ultra Rare · EN',
-      'SDY-006 · Common · DE',
-      'SDY-EN006 · Common · EN'
+      'LOB-EN005 Legend of Blue Eyes White Dragon - Ultra Rare EN',
+      'SDY-006 Legend of Blue Eyes White Dragon - Common DE',
+      'SDY-EN006 Legend of Blue Eyes White Dragon - Common EN'
     ])
     await u.keyboard('{Escape}')
 
@@ -1153,7 +1160,10 @@ describe('Scan page', () => {
     await u.click(screen.getByRole('combobox', { name: 'Language' }))
     await u.click(screen.getByRole('option', { name: /Japanese/ }))
     await u.click(picker())
-    expect(listed()).toEqual(['SDY-006 · Common · DE', 'LOB-JP005 · Rare · JP'])
+    expect(listed()).toEqual([
+      'SDY-006 Legend of Blue Eyes White Dragon - Common DE',
+      'LOB-JP005 Legend of Blue Eyes White Dragon - Rare JP'
+    ])
   })
 
   it("under All languages the dropdown follows the picked set's language", async () => {
@@ -1186,8 +1196,8 @@ describe('Scan page', () => {
     const u = user()
     await u.click(screen.getByRole('combobox', { name: 'Rarity for Dark Magician' }))
     expect(screen.getAllByRole('option').map((o) => o.textContent)).toEqual([
-      'LOB-JP005 · Rare',
-      'SDJ-JP001 · Common'
+      'LOB-JP005 Legend of Blue Eyes White Dragon - Rare',
+      'SDJ-JP001 Legend of Blue Eyes White Dragon - Common'
     ])
     await u.keyboard('{Escape}')
 
@@ -1213,8 +1223,8 @@ describe('Scan page', () => {
     const u = user()
     await u.click(screen.getByRole('combobox', { name: 'Rarity for Dark Magician' }))
     expect(screen.getAllByRole('option').map((o) => o.textContent)).toEqual([
-      'LOCR-JP036 · Common',
-      'LOCR-JP036 · Secret Rare'
+      'LOCR-JP036 Legend of Blue Eyes White Dragon - Common',
+      'LOCR-JP036 Legend of Blue Eyes White Dragon - Secret Rare'
     ])
   })
 

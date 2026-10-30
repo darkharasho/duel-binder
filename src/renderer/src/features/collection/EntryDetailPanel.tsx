@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import type { Language } from '@shared/languages'
+import { printingChip, printingTitle } from '@shared/printingLabel'
 import type { EntryView, UpdateEntryInput } from '@shared/types'
 import { CardArt } from '@/components/CardArt'
 import { CardDetails } from '@/components/CardDetails'
@@ -9,6 +10,7 @@ import { PanelCardArt } from '@/components/PanelCardArt'
 import type { PanelNav } from '@/components/panelNav'
 import { scanFor } from '@/components/scanFor'
 import { LanguageTag } from '@/components/LanguageTag'
+import { PrintingLabel } from '@/components/PrintingLabel'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -100,8 +102,8 @@ function EntryEditor({
   // (contributed or not) or the picker shows nothing.
   const withOwn = printings.some((p) => p.id === entry.printing.id)
     ? printings
-    : [...printings, entry.printing].sort(
-        (a, b) => (a.setCode < b.setCode ? -1 : a.setCode > b.setCode ? 1 : a.id - b.id)
+    : [...printings, entry.printing].sort((a, b) =>
+        a.setCode < b.setCode ? -1 : a.setCode > b.setCode ? 1 : a.id - b.id
       )
   const choosable = withOwn.filter((p) => !p.missingFromApi || p.id === entry.printing.id)
 
@@ -180,15 +182,25 @@ function EntryEditor({
             disabled={busy}
             onValueChange={(v) => update.mutate({ printingId: Number(v) })}
           >
-            <SelectTrigger aria-label="Printing" className="w-full">
+            <SelectTrigger
+              aria-label="Printing"
+              className="w-full *:data-[slot=select-value]:min-w-0"
+            >
               <SelectValue />
             </SelectTrigger>
-            <SelectContent>
-              {choosable.map((p) => (
-                <SelectItem key={p.id} value={String(p.id)}>
-                  {p.setCode} · {p.setRarity} — {p.setName} <LanguageTag language={p.language} />
-                </SelectItem>
-              ))}
+            <SelectContent className="max-w-[min(36rem,calc(100vw-2rem))]">
+              {choosable.map((p) => {
+                const label = { setCode: p.setCode, setName: p.setName, rarity: p.setRarity }
+                return (
+                  <SelectItem key={p.id} value={String(p.id)} className="*:[span]:last:min-w-0">
+                    <PrintingLabel
+                      chip={printingChip(label)}
+                      title={printingTitle(label)}
+                      tag={<LanguageTag language={p.language} />}
+                    />
+                  </SelectItem>
+                )
+              })}
             </SelectContent>
           </Select>
         </div>

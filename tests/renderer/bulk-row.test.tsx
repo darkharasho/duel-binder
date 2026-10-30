@@ -20,7 +20,7 @@ describe('BulkRow', () => {
       <BulkRow card={card} rarity={rarity([1, 2], 1)} busy={false} onAdjust={onAdjust} />
     )
     await userEvent.click(screen.getByRole('combobox'))
-    await userEvent.click(await screen.findByRole('option', { name: 'MRD-2' }))
+    await userEvent.click(await screen.findByRole('option', { name: 'MRD-2 Ultra Rare' }))
     await userEvent.click(screen.getByRole('button', { name: 'Add one Alpha Ultra Rare' }))
     expect(onAdjust).toHaveBeenLastCalledWith(2, 1)
 
@@ -37,5 +37,21 @@ describe('BulkRow', () => {
     expect(screen.queryByText('$4.25')).not.toBeInTheDocument()
     rerender(<BulkRow card={card} rarity={priced} busy={false} onAdjust={() => {}} showPrice />)
     expect(screen.getByText('$4.25')).toBeInTheDocument()
+  })
+
+  it('labels each code with the set name and rarity, the closed picker with the code', async () => {
+    const r = rarity([1, 2], 1)
+    r.codes[1] = { printingId: 2, setCode: '', owned: 0 }
+    render(
+      <BulkRow card={card} rarity={r} setName="Metal Raiders" busy={false} onAdjust={() => {}} />
+    )
+    const combo = screen.getByRole('combobox')
+    expect(combo).toHaveTextContent(/^MRD-1$/)
+    await userEvent.click(combo)
+    expect(
+      await screen.findByRole('option', { name: 'MRD-1 Metal Raiders - Ultra Rare' })
+    ).toBeInTheDocument()
+    // An uncoded printing has no chip; its set's name still leads.
+    expect(screen.getByRole('option', { name: 'Metal Raiders - Ultra Rare' })).toBeInTheDocument()
   })
 })

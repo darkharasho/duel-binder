@@ -6,12 +6,19 @@ import type { CardSearchResult, Printing } from '@shared/types'
 import { api, mutationInvalidationKeys, queryKeys } from '@/lib/api'
 import { track } from '@/lib/usage'
 import { priceFor } from '@shared/pricing'
+import {
+  printingChip,
+  printingText,
+  printingTitle,
+  type PrintingLabelInput
+} from '@shared/printingLabel'
 import { LANGUAGES, type LanguageFilter } from '@shared/languages'
 import { ValueText } from '@/features/collection/EntryValue'
 import { cn } from '@/lib/utils'
 import { CardArt } from '@/components/CardArt'
 import { LanguageSelect } from '@/components/LanguageSelect'
 import { LanguageTag } from '@/components/LanguageTag'
+import { PrintingLabel } from '@/components/PrintingLabel'
 import { matchesLanguage, useLanguageFilter } from '@/lib/languageFilter'
 import { useGame } from '@/lib/game'
 import { isPhone } from '@/lib/platform'
@@ -113,6 +120,11 @@ export function AddCardDialog({
 
   const printings = (detail.data?.printings ?? []).filter((p) => !p.missingFromApi)
   const images = [...(detail.data?.images ?? [])].sort((a, b) => a.sortOrder - b.sortOrder)
+  const labelOf = (p: Printing): PrintingLabelInput => ({
+    setCode: p.setCode,
+    setName: p.setName,
+    rarity: p.setRarity
+  })
   const printingValue = (p: Printing): string =>
     `${p.id} ${p.setName} ${p.setCode} ${p.setRarity} ${p.language}`
   const preferred = printings.find((p) => p.id === preferredId)
@@ -281,9 +293,7 @@ export function AddCardDialog({
             <div className="min-w-0">
               <p className="truncate text-sm font-medium">{card.name}</p>
               <p className="truncate text-xs text-muted-foreground">
-                {printing
-                  ? `${printing.setName} · ${printing.setCode} · ${printing.setRarity}`
-                  : card.type}
+                {printing ? printingText(labelOf(printing)) : card.type}
               </p>
             </div>
           </div>
@@ -369,10 +379,11 @@ export function AddCardDialog({
                     onSelect={() => pickPrinting(p)}
                     className="gap-3 py-2"
                   >
-                    <span className="min-w-0 flex-1 truncate">{p.setName}</span>
-                    <LanguageTag language={p.language} />
-                    <span className="text-xs tabular-nums text-muted-foreground">{p.setCode}</span>
-                    <span className="text-xs text-muted-foreground">{p.setRarity}</span>
+                    <PrintingLabel
+                      chip={printingChip(labelOf(p))}
+                      title={printingTitle(labelOf(p))}
+                      tag={<LanguageTag language={p.language} />}
+                    />
                     <span className="w-16 text-right text-xs">
                       <PrintingPrice
                         setPrice={p.setPrice}

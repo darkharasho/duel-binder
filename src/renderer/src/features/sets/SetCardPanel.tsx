@@ -63,7 +63,15 @@ export function SetCardPanel({
         {card.owned > 0 ? `You have ${card.owned}` : 'You have none yet'}
       </h3>
       {rarities.map((r) => (
-        <BulkRow key={r.rarity} card={card} rarity={r} busy={busy} onAdjust={onAdjust} showPrice />
+        <BulkRow
+          key={r.rarity}
+          card={card}
+          rarity={r}
+          setName={setName}
+          busy={busy}
+          onAdjust={onAdjust}
+          showPrice
+        />
       ))}
     </section>
   )

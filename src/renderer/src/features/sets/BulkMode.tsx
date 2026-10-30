@@ -12,6 +12,8 @@ type Adjust = (cardId: number, printingId: number, delta: 1 | -1) => Promise<boo
 interface BulkModeProps {
   /** Frozen and sorted, not filtered by the page search: bulk mode has its own. */
   cards: ChecklistCard[]
+  /** The set's name, which each tile's code picker shows after the code. */
+  setName?: string
   pending: Record<number, number>
   /** Resolves true when the server saved the click, false when it failed. */
   adjust: Adjust
@@ -19,6 +21,7 @@ interface BulkModeProps {
 
 interface BulkSlotProps {
   tile: BulkTileData
+  setName?: string
   printingId: number | undefined
   busy: boolean
   highlighted: boolean
@@ -32,6 +35,7 @@ interface BulkSlotProps {
 /** Gives one tile handlers that stay the same across renders, so its memo can hold. */
 function BulkSlot({
   tile,
+  setName,
   printingId,
   busy,
   highlighted,
@@ -59,6 +63,7 @@ function BulkSlot({
     <BulkTile
       card={card}
       rarity={rarity}
+      setName={setName}
       printingId={printingId ?? rarity.defaultPrintingId}
       onPickCode={pick}
       onPickerClose={onPickerClose}
@@ -76,7 +81,7 @@ function printingFor(tile: BulkTileData, chosen: number | undefined): number {
   return codes.some((c) => c.printingId === chosen) ? chosen! : defaultPrintingId
 }
 
-export function BulkMode({ cards, pending, adjust }: BulkModeProps): React.JSX.Element {
+export function BulkMode({ cards, setName, pending, adjust }: BulkModeProps): React.JSX.Element {
   const [query, setQuery] = useState('')
   // The code chosen per tile (key -> printing); unset means the rarity's default. Kept here, not
   // in the tile, so a choice survives the tile leaving the grid while the search narrows.
@@ -241,6 +246,7 @@ export function BulkMode({ cards, pending, adjust }: BulkModeProps): React.JSX.E
             <BulkSlot
               key={tile.key}
               tile={tile}
+              setName={setName}
               printingId={chosen[tile.key]}
               busy={(pending[tile.card.cardId] ?? 0) > 0}
               highlighted={tile.key === highlight}

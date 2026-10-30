@@ -164,7 +164,9 @@ function Sheet({
                     {o.badge}
                   </span>
                 )}
-                <span className="min-w-0 flex-1 text-base leading-5">{o.title ?? o.label}</span>
+                <span className="min-w-0 flex-1 truncate text-base leading-5">
+                  {o.title ?? o.label}
+                </span>
                 {o.note && (
                   <span className="shrink-0 text-xs font-medium text-muted-foreground">
                     {o.note}

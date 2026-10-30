@@ -3,7 +3,7 @@ import { decode as decodeJpeg } from 'jpeg-js'
 import { PNG } from 'pngjs'
 import { ART_BOXES, crop } from '../../src/renderer/src/features/scan/vision/regions'
 import { HASH_WORDS, artHash, hamming } from '../../src/shared/scan/fingerprint'
-import { isArtVariant } from '../../src/shared/scan/fingerprintRefs'
+import { isArtVariant, namedVariant } from '../../src/shared/scan/fingerprintRefs'
 import { ART_FAR_DISTANCE } from '../../src/shared/scan/thresholds'
 import type { RgbaImage } from '../../src/shared/scan/types'
 import { isLanguage } from '../../src/shared/languages'
@@ -52,7 +52,7 @@ const ORIGINAL_ART_SET = /^Original Artwork (Duel Set|Collection)\b/i
  */
 export function wantsReference(rarity: string, variant: string | null, setName = ''): boolean {
   if (FOIL.test(rarity.trim()) || ORIGINAL_ART_SET.test(setName.trim())) return true
-  return isArtVariant(rarity, variant)
+  return namedVariant(rarity, variant) !== null
 }
 
 export interface ReferenceOptions {
@@ -71,7 +71,7 @@ export interface ReferenceOptions {
 export interface ReferenceResult {
   /**
    * Each scan's hash under its artwork's image id, with the printings it shows that are art
-   * variants (isArtVariant), by card_printings.pkey: none for a scan of a foil of the usual art.
+   * variants (isArtVariant), by card_printings.pkey: none for a scan of a foil or edition of the usual art.
    */
   entries: { imageId: number; hash: Uint32Array; printings: string[] }[]
   fetched: number

@@ -28,7 +28,8 @@ describe('wantsReference', () => {
     ['Super Rare', null, false],
     ['Secret Rare', '', false],
     ['Rare (Green)', null, false],
-    ['Ultra Rare', 'Blue', false]
+    ['Ultra Rare', 'Blue', false],
+    ['Ultra Rare (25th Anniversary Edition)', null, true]
   ])('%s / %s: %s', (rarity, variant, wanted) => {
     expect(wantsReference(rarity, variant)).toBe(wanted)
   })

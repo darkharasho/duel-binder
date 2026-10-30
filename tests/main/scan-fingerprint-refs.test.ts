@@ -42,6 +42,10 @@ describe('isArtVariant', () => {
     ['Starlight Rare', null, false],
     ['Rare (Green)', null, false],
     ['Ultra Rare', 'Blue', false],
+    ['Ultra Rare (25th Anniversary Edition)', null, false],
+    ["Ultra Rare (Pharaoh's Rare)", null, false],
+    ['Rare (World Championship Qualifier)', null, false],
+    ['Quarter Century Secret Rare', '4th artwork', true],
     ['Secret Rare', '', false]
   ])('%s / %s: %s', (rarity, variant, art) => {
     expect(isArtVariant(rarity, variant)).toBe(art)

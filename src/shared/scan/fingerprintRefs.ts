@@ -48,13 +48,31 @@ export interface RefMatch {
 const COLOUR = /^(red|blue|green|purple|silver|bronze|gold|yellow|orange|white|pink)$/i
 
 /**
- * The art variant a printing is printed in, in lower case ("overframe"): an alternate or
- * overframe art, named in its variant or in brackets after its rarity ("Ultra Rare (Overframe)"),
- * and not just a foil colour. Null for the card's usual art.
+ * Variants that name an edition, foil or stamp of the usual art rather than another art ("Ultra
+ * Rare (25th Anniversary Edition)", "Ultra Rare (Pharaoh's Rare)"): their scans can match a
+ * photo better than YGOPRODeck's crop of the same art (taken for these on the owner's LC01
+ * photos), so they never pick a printing out.
+ */
+const NOT_ART =
+  /edition$|pharaoh's rare|^stamp$|promo|qualifier|date reprint|^replica$|^(chinese|english)$/i
+
+/**
+ * The variant a printing names, in its variant or in brackets after its rarity ("Ultra Rare
+ * (Overframe)"), when it is more than a foil colour; null for none.
+ */
+export function namedVariant(rarity: string, variant: string | null | undefined): string | null {
+  const named = variant?.trim() || /\(([^()]+)\)\s*$/.exec(rarity)?.[1]?.trim()
+  return named && !COLOUR.test(named) ? named : null
+}
+
+/**
+ * The art variant a printing is printed in, in lower case ("overframe"): an alternate, overframe
+ * or manga art (namedVariant), and not an edition or foil of the usual art (NOT_ART). Null for
+ * the card's usual art.
  */
 export function artVariantName(rarity: string, variant: string | null | undefined): string | null {
-  const named = variant?.trim() || /\(([^()]+)\)\s*$/.exec(rarity)?.[1]?.trim()
-  return named && !COLOUR.test(named) ? named.toLowerCase() : null
+  const named = namedVariant(rarity, variant)
+  return named && !NOT_ART.test(named) ? named.toLowerCase() : null
 }
 
 /** Whether a printing's art differs from its card's usual art (see artVariantName). */

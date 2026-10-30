@@ -91,6 +91,11 @@ export interface PkmVersion { label: string; productId: number | null; subTypeNa
  *    (7/26) and Rare Holo LV.X (4/58) do show them, so they are left out. Nothing else is ever
  *    added: Common, Rare, Promo and the like keep what TCGdex says, and reverse holos are never
  *    inferred.
+ * 5. A card TCGplayer has no row for, in a group where every row is one finish and the rows cover
+ *    at least the set's card count, takes that finish in place of its generated variants: the
+ *    whole set is sold that way. Reprint sets need this: 30th Classic Collection keeps each
+ *    reprint's original number on TCGplayer ("4/102"), so its products can't be told apart by
+ *    number. The version has no product and no price, since no row is known to be this card's.
  * Cards that reach rule 3 or 4 have no confirmed finish; the report counts them as unverified.
  */
 export const GENERATED_VARIANT_ID = 'generated'
@@ -106,6 +111,25 @@ const ALWAYS_FOIL = new Set([
 /** Whether a TCGdex rarity is only ever printed as foil. */
 export const alwaysFoil = (rarity: string | null | undefined): boolean =>
   ALWAYS_FOIL.has((rarity ?? '').trim().toLowerCase())
+
+/**
+ * The one finish a TCGplayer group is sold in (rule 5), or null: its rows must all be one subtype
+ * and cover at least `cardCount` products.
+ */
+export function groupFinish(
+  products: TcProduct[],
+  prices: Map<number, TcPrice[]>,
+  cardCount: number
+): string | null {
+  const names = new Set<string>()
+  let covered = 0
+  for (const p of products) {
+    const rows = prices.get(p.productId) ?? []
+    if (rows.length > 0) covered++
+    for (const r of rows) names.add(canonicalLabel(r.subTypeName))
+  }
+  return names.size === 1 && covered >= cardCount ? [...names][0] : null
+}
 
 /** Whether TCGdex made this variant up from its legacy booleans rather than recording it. */
 export const isGenerated = (v: TdVariant): boolean => v.variantId === GENERATED_VARIANT_ID
@@ -131,7 +155,8 @@ const usablePrice = (p: number | null): number | null =>
 export function cardVersions(
   card: TdCard,
   matched: { product: TcProduct; variantSubtype: string | null }[],
-  prices: Map<number, TcPrice[]>
+  prices: Map<number, TcPrice[]>,
+  setFinish: string | null = null
 ): { versions: PkmVersion[]; problems: string[]; unverified: boolean } {
   const problems: string[] = []
   const entries = new Map<string, Entry>()
@@ -193,6 +218,10 @@ export function cardVersions(
     let v = raw
     if (isGenerated(raw)) {
       if (plainRows) continue
+      if (setFinish) {
+        entry(setFinish) // Rule 5.
+        continue
+      }
       unverified = true
       // Rule 4: an always-foil rarity's generated "normal" is its foil.
       if (foil && raw.type.trim().toLowerCase() === 'normal') v = { ...raw, type: 'holo' }

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { matchGroup, matchProducts } from '../../scripts/catalog/pokemon/match'
-import { alwaysFoil, cardVersions, canonicalLabel, variantLabel } from '../../scripts/catalog/pokemon/versions'
+import { alwaysFoil, cardVersions, canonicalLabel, groupFinish, variantLabel } from '../../scripts/catalog/pokemon/versions'
 import type { TcGroup, TcPrice, TcProduct, TdCard, TdSet, TdVariant } from '../../scripts/catalog/pokemon/types'
 import { movedEnough } from '../../src/main/tcgplayer/prices'
 
@@ -372,6 +372,31 @@ describe('true finishes', () => {
     const r = cardVersions(brief({ rarity: 'Secret Rare' }), [], new Map())
     expect(labels(r)).toEqual(['Holofoil'])
     expect(r.unverified).toBe(true)
+  })
+  it('takes the finish of a one-finish group that covers the set (30th-c-001)', () => {
+    const c = brief({ id: '30th-c-001', rarity: undefined, variants_detailed: [gen('normal')] })
+    const r = cardVersions(c, [], new Map(), 'Holofoil')
+    expect(r.versions).toEqual([{ label: 'Holofoil', productId: null, subTypeName: null, price: null }])
+    expect(r.unverified).toBe(false)
+  })
+  it('reads a group as one finish only when all its rows agree and they cover the set', () => {
+    const products = [prod(1, 9, '4/102'), prod(2, 9, '5/109')]
+    const row = (productId: number, subTypeName: string): TcPrice => ({ productId, subTypeName, marketPrice: 1 })
+    const holo = new Map([[1, [row(1, 'Holofoil')]], [2, [row(2, 'Holofoil')]]])
+    expect(groupFinish(products, holo, 2)).toBe('Holofoil')
+    expect(groupFinish(products, holo, 3)).toBeNull()
+    const mixed = new Map([[1, [row(1, 'Holofoil')]], [2, [row(2, 'Normal')]]])
+    expect(groupFinish(products, mixed, 2)).toBeNull()
+    expect(groupFinish(products, new Map(), 0)).toBeNull()
+  })
+  it('breaks an abbreviation tie by the words of the set name (30th-c → 24837)', () => {
+    const tied: TcGroup[] = [
+      { groupId: 24722, name: 'ME: 30th Celebration', abbreviation: '30C' },
+      { groupId: 24837, name: 'ME: 30th Celebration Classic Collection', abbreviation: '30C' }
+    ]
+    const s = (id: string, name: string): TdSet => ({ id, name, abbreviation: { official: '30C' }, cards: [] })
+    expect(matchGroup(s('30th-c', '30th Classic Collection'), [], tied, new Map())).toBe(24837)
+    expect(matchGroup(s('30th', '30th Celebration'), [], tied, new Map())).toBe(24722)
   })
   it('knows which rarities are always foil', () => {
     expect(alwaysFoil('Special illustration rare')).toBe(true)

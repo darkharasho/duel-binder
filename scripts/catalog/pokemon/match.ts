@@ -37,7 +37,8 @@ function unique<T>(hits: T[]): T | null {
 /**
  * The TCGCSV group of a TCGdex set: the group holding most of the set's product ids, if at least
  * half; else the unique group whose abbreviation is the set's (case insensitive; the TCGdex set id
- * stands in when the set has no official abbreviation); else the unique group with the same
+ * stands in when the set has no official abbreviation), or, when several share it, the only one of
+ * those whose name holds every word of the set's name; else the unique group with the same
  * normalized name; else null. Ids found in no group still count toward the "half".
  */
 export function matchGroup(
@@ -62,7 +63,13 @@ export function matchGroup(
 
   const abbrev = (set.abbreviation?.official ?? set.id).trim().toLowerCase()
   if (abbrev) {
-    const hit = unique(groups.filter((g) => g.abbreviation?.trim().toLowerCase() === abbrev))
+    const hits = groups.filter((g) => g.abbreviation?.trim().toLowerCase() === abbrev)
+    const words = normalizeName(set.name).split(' ').filter(Boolean)
+    const named = hits.filter((g) => {
+      const own = new Set(normalizeName(g.name).split(' '))
+      return words.length > 0 && words.every((w) => own.has(w))
+    })
+    const hit = unique(hits) ?? unique(named)
     if (hit) return hit.groupId
   }
 

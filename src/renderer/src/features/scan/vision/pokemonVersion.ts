@@ -3,7 +3,6 @@
 import type { ScanProfile } from '@shared/scan/profiles'
 import {
   VERSION_ART_FOIL_MIN,
-  VERSION_FRAME_FOIL_MIN,
   VERSION_FRAME_PLAIN_MAX,
   VERSION_OTHER_RATIO,
   VERSION_REFERENCE_RATIO
@@ -41,27 +40,19 @@ export function pokemonVersionCues(card: RgbaImage, profile: ScanProfile): Versi
 const UNSTAMPED = ['Normal', 'Holofoil', 'Reverse Holofoil']
 
 /**
- * The label among options (the versions' labels) the cues name, or null. Foil on the frame well
- * over the art is Reverse Holofoil; foil on the art well over a plain frame is Holofoil; either
- * must also stand well over the card's text box, so noise or detail across the card names
- * nothing. A card with a stamped version among the options is never named, as the stamp isn't
- * read to tell it from its unstamped twin.
+ * The label among options (the versions' labels) the cues name, or null. Foil on the art well
+ * over a plain frame is Holofoil, and must also stand well over the card's text box, so noise or
+ * detail across the card names nothing. Foil on the frame never names Reverse Holofoil: on real
+ * photos a Normal card's frame reads as foil as often as a reverse holo's (a Normal Pawniard was
+ * named Reverse Holofoil), so the price is left a range. A card with a stamped version among the
+ * options is never named, as the stamp isn't read to tell it from its unstamped twin.
  */
 export function pokemonVersion(cues: VersionCues | null, options: string[]): string | null {
   if (!cues || !options.every((o) => UNSTAMPED.includes(o))) return null
-  let label: string | null = null
-  if (
-    cues.frame >= VERSION_FRAME_FOIL_MIN &&
-    cues.frame >= cues.art * VERSION_OTHER_RATIO &&
-    cues.frame >= cues.reference * VERSION_REFERENCE_RATIO
-  )
-    label = 'Reverse Holofoil'
-  else if (
+  const holo =
     cues.art >= VERSION_ART_FOIL_MIN &&
     cues.frame <= VERSION_FRAME_PLAIN_MAX &&
     cues.art >= cues.frame * VERSION_OTHER_RATIO &&
     cues.art >= cues.reference * VERSION_REFERENCE_RATIO
-  )
-    label = 'Holofoil'
-  return label !== null && options.includes(label) ? label : null
+  return holo && options.includes('Holofoil') ? 'Holofoil' : null
 }

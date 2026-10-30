@@ -500,21 +500,6 @@ describe('Pokémon version cues (rule 7)', () => {
     firstEdition: 'unknown'
   })
 
-  it('a decisive cue that names one of the versions picks it, with no flag', async () => {
-    const out = await recognized(raw({ art, version: sure(99, 0) }), pkm('en'))
-    expect(out).toMatchObject({ flag: null, printingId: 41, rarity: 'Reverse Holofoil' })
-  })
-
-  it('a decisive cue for a version the card lacks keeps pick-printing', async () => {
-    const out = await recognized(raw({ art, version: sure(0, 99) }), pkm('en'))
-    expect(out).toMatchObject({ flag: 'pick-printing', printingId: 42 })
-  })
-
-  it('an undecided cue keeps pick-printing on the cheapest', async () => {
-    const out = await recognized(raw({ art, version: sure(0.1, 0.1) }), pkm('en'))
-    expect(out).toMatchObject({ flag: 'pick-printing', printingId: 42 })
-  })
-
   /** Card 4 with its versions replaced by labels (priced 2, 3, ...). */
   const withVersions = (labels: string[]): ResolveContext => {
     const ctx = pkm('en')
@@ -530,6 +515,29 @@ describe('Pokémon version cues (rule 7)', () => {
       }
     }
   }
+
+  it('a decisive cue that names one of the versions picks it, with no flag', async () => {
+    const out = await recognized(
+      raw({ art, version: sure(0, 99) }),
+      withVersions(['Normal', 'Holofoil'])
+    )
+    expect(out).toMatchObject({ flag: null, printingId: 901, rarity: 'Holofoil' })
+  })
+
+  it('frame foil never names Reverse Holofoil: a webcam frame reads alike either way', async () => {
+    const out = await recognized(raw({ art, version: sure(99, 0) }), pkm('en'))
+    expect(out).toMatchObject({ flag: 'pick-printing', printingId: 42 })
+  })
+
+  it('a decisive cue for a version the card lacks keeps pick-printing', async () => {
+    const out = await recognized(raw({ art, version: sure(0, 99) }), pkm('en'))
+    expect(out).toMatchObject({ flag: 'pick-printing', printingId: 42 })
+  })
+
+  it('an undecided cue keeps pick-printing on the cheapest', async () => {
+    const out = await recognized(raw({ art, version: sure(0.1, 0.1) }), pkm('en'))
+    expect(out).toMatchObject({ flag: 'pick-printing', printingId: 42 })
+  })
 
   it('a 1st Edition twin or a repeated label keeps pick-printing', async () => {
     for (const labels of [

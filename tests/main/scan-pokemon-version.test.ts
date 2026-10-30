@@ -25,10 +25,10 @@ const ART_HIGH = VERSION_ART_FOIL_MIN * 2
 const ART_LOW = 0
 
 describe('pokemonVersion', () => {
-  it('frame foil picks Reverse Holofoil', () => {
-    expect(pokemonVersion(cues(FRAME_HIGH, ART_LOW), ['Normal', 'Reverse Holofoil'])).toBe(
-      'Reverse Holofoil'
-    )
+  it('frame foil never names Reverse Holofoil', () => {
+    // On real photos a Normal card's frame reads as foil as often as a reverse holo's does (an
+    // eBay Pawniard, Normal, was named Reverse Holofoil), so its price is left a range.
+    expect(pokemonVersion(cues(FRAME_HIGH, ART_LOW), ['Normal', 'Reverse Holofoil'])).toBeNull()
   })
 
   it('art foil picks Holofoil', () => {
@@ -93,11 +93,11 @@ describe('pokemonVersionCues', () => {
   const profile = scanProfile('pkm')
   const { frame, art } = profile.foil!
 
-  it('sparkle on the frame only reads as frame foil, and picks Reverse Holofoil', () => {
+  it('sparkle on the frame only reads as frame foil, and names no version', () => {
     const c = pokemonVersionCues(card(frame), profile)!
     expect(c.frame).toBeGreaterThan(c.art)
     expect(c.frame).toBeGreaterThanOrEqual(VERSION_FRAME_FOIL_MIN)
-    expect(pokemonVersion(c, ['Normal', 'Reverse Holofoil'])).toBe('Reverse Holofoil')
+    expect(pokemonVersion(c, ['Normal', 'Reverse Holofoil'])).toBeNull()
   })
 
   it('sparkle on the art only reads as art foil, and picks Holofoil', () => {

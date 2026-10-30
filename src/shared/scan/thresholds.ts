@@ -136,9 +136,10 @@ export const LANGUAGE_MIN_JA_WORDS = 2
 /** Frames a card's text is read on to tell its language before it's taken in its first one. */
 export const LANGUAGE_MAX_READS = 3
 
-// A Pokémon card's version from its foil, untuned until real photos (Task 13). Texture is the
-// median fine texture of a region of the straightened card, in luma levels (vision/foil.ts).
-/** A frame texture at least this reads as foil on the frame (reverse holo)... */
+// A Pokémon card's version from its foil. Texture is the median fine texture of a region of the
+// straightened card, in luma levels (vision/foil.ts). On real photos the frame's doesn't tell a
+// reverse holo from a normal card, so only Holofoil is ever named (pokemonVersion).
+/** A frame texture at least this reads as foil on the frame (reverse holo), naming nothing... */
 export const VERSION_FRAME_FOIL_MIN = 2
 /** ...and at most this as a plain frame. */
 export const VERSION_FRAME_PLAIN_MAX = 0.6

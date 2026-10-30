@@ -1,9 +1,19 @@
 // Where each game's card keeps what the scanner reads: its art, collector number or set code,
 // name and rules text, as shares of the straightened card (warpCard's 842x1228).
 import type { GameId } from '../games/types'
-import { ART_BOXES, CODE_BANDS, NAME_BAND, TEXT_BOX, type Box } from './regions'
+import { ART_BOXES, CODE_BANDS, INNER_FRAME, NAME_BAND, TEXT_BOX, type Box } from './regions'
 
 export type { Box }
+
+/**
+ * A quad the candidate finder builds: short side over long side, how far off it may be, and the
+ * least share of the frame it covers.
+ */
+export interface QuadShape {
+  aspect: number
+  tolerance: number
+  minArea: number
+}
 
 export interface ScanProfile {
   game: GameId
@@ -19,6 +29,13 @@ export interface ScanProfile {
    * (artWindow.ts): a few percent off, the art hash says nothing.
    */
   windowArt: boolean
+  /**
+   * Printed frames inside the card that a candidate outline may be instead of the card: when no
+   * candidate's art matches, the card around each is tried as if it were one of these.
+   */
+  innerFrames: readonly Box[]
+  /** The art window's shape on a real card, when quads of it are looked for too (innerFrames). */
+  windowShape: QuadShape | null
   /** Where the set code or collector number may be read. */
   codeBands: readonly Box[]
   nameBand: Box
@@ -46,12 +63,31 @@ export interface ScanProfile {
  */
 const PKM_ART = [0.1, 0.14, 0.9, 0.47] as const satisfies Box
 
+/** The art window's printed border, by layout, measured on TCGdex renders. */
+const PKM_WINDOWS: readonly Box[] = [
+  // Scarlet & Violet, Mega Evolution, Sword & Shield and EX Pokémon (sv03 045, me05 050).
+  [0.077, 0.097, 0.925, 0.473],
+  // Scarlet & Violet and Sword & Shield Trainers (sv01 196, me05 079, swsh1 180).
+  [0.078, 0.139, 0.927, 0.524],
+  // Sun & Moon Pokémon and Trainers (sm1 1, sm1 120).
+  [0.057, 0.081, 0.94, 0.476],
+  [0.055, 0.125, 0.94, 0.522],
+  // Black & White and Diamond & Pearl Pokémon (bw1 1, dp1 1).
+  [0.08, 0.097, 0.92, 0.5],
+  // Base set and Neo (base1 4, neo1 1).
+  [0.108, 0.117, 0.89, 0.515],
+  // XY Trainers (xy1 120).
+  [0.097, 0.156, 0.9, 0.524]
+]
+
 export const SCAN_PROFILES: Record<GameId, ScanProfile> = {
   ygo: {
     game: 'ygo',
     artBoxes: Object.values(ART_BOXES),
     windows: Object.values(ART_BOXES),
     windowArt: false,
+    innerFrames: [INNER_FRAME],
+    windowShape: null,
     codeBands: CODE_BANDS,
     nameBand: NAME_BAND,
     textBox: TEXT_BOX,
@@ -61,23 +97,14 @@ export const SCAN_PROFILES: Record<GameId, ScanProfile> = {
   pkm: {
     game: 'pkm',
     artBoxes: [PKM_ART],
-    // The art window's printed border, by layout, measured on TCGdex renders.
-    windows: [
-      // Scarlet & Violet, Mega Evolution, Sword & Shield and EX Pokémon (sv03 045, me05 050).
-      [0.077, 0.097, 0.925, 0.473],
-      // Scarlet & Violet and Sword & Shield Trainers (sv01 196, me05 079, swsh1 180).
-      [0.078, 0.139, 0.927, 0.524],
-      // Sun & Moon Pokémon and Trainers (sm1 1, sm1 120).
-      [0.057, 0.081, 0.94, 0.476],
-      [0.055, 0.125, 0.94, 0.522],
-      // Black & White and Diamond & Pearl Pokémon (bw1 1, dp1 1).
-      [0.08, 0.097, 0.92, 0.5],
-      // Base set and Neo (base1 4, neo1 1).
-      [0.108, 0.117, 0.89, 0.515],
-      // XY Trainers (xy1 120).
-      [0.097, 0.156, 0.9, 0.524]
-    ],
+    windows: PKM_WINDOWS,
     windowArt: true,
+    // A held card's outline is often lost under fingers, a sleeve or a holder's rim, while its
+    // art window's crisp border is found: about a card's shape itself.
+    innerFrames: PKM_WINDOWS,
+    // The windows' short over long side on a 63 x 88 mm card: 0.62 (Scarlet & Violet) to 0.71
+    // (base set), about a third of the card's area.
+    windowShape: { aspect: 0.66, tolerance: 0.065, minArea: 0.012 },
     codeBands: [
       // The collector number ("045/197", after the regulation mark and set badge), bottom left on
       // Sword & Shield and later cards, Japanese ones included: 0.94–0.968, between the

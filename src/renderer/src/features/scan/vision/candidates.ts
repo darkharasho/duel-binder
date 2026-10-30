@@ -11,10 +11,11 @@ import {
   NEST_MIN_END_INSET,
   NEST_MIN_GROWTH
 } from '@shared/scan/thresholds'
-import { SCAN_PROFILES, type ScanProfile } from '@shared/scan/profiles'
+import { SCAN_PROFILES, type QuadShape, type ScanProfile } from '@shared/scan/profiles'
 import type { RgbaImage } from '@shared/scan/types'
 import type { CV } from './cv'
 import {
+  CARD_H,
   CARD_W,
   MIN_AREA,
   SEARCH_WIDTH,
@@ -34,7 +35,7 @@ import {
   type Point,
   type Quad
 } from './detect'
-import { INNER_FRAME, type Box } from './regions'
+import type { Box } from './regions'
 
 // Tuned on real webcam photos: cards held in hand, sleeved, foil or in toploaders, fingers over the
 // edges, a deck under the card and a wood-grain desk behind. A held card's outline seldom closes,
@@ -61,6 +62,11 @@ const MIN_SEPARATION = 0.08
 /** Short side over long side of a card, and how far off a candidate may be. */
 const CARD_ASPECT = 0.69
 const ASPECT_TOLERANCE = 0.06
+const CARD_SHAPE: QuadShape = {
+  aspect: CARD_ASPECT,
+  tolerance: ASPECT_TOLERANCE,
+  minArea: MIN_AREA
+}
 /** Corners may lie this far outside the frame, as a share of its size. */
 const FRAME_MARGIN = 0.02
 /** Share of each side that must lie on edges. */
@@ -74,6 +80,8 @@ const SAME_QUAD = 0.015
 /** Candidates kept from the direction-split lines and, besides those, from all edges' lines. */
 const SPLIT_CANDIDATES = 8
 const PLAIN_CANDIDATES = 3
+/** Art-window-shaped quads kept, for a profile with a windowShape. */
+const WINDOW_CANDIDATES = 6
 /**
  * preferOuter: an outer candidate may be at most this many times the first one's area (a card
  * is about 1.5x its art-plus-text box), and the first one's corners may lie this far outside it,
@@ -389,7 +397,13 @@ const sameQuad = (a: Quad, b: Quad): boolean =>
  * angles, with a card's aspect ratio and edges along every side, scored by how much of their
  * outline and of their art window's border lies on the thickened edges.
  */
-function lineQuads(lines: Line[], thick: Mat, max: number, windows: readonly Box[]): Quad[] {
+function lineQuads(
+  lines: Line[],
+  thick: Mat,
+  max: number,
+  windows: readonly Box[],
+  shape: QuadShape = CARD_SHAPE
+): Quad[] {
   const w = thick.cols
   const h = thick.rows
   const td = thick.data
@@ -436,8 +450,8 @@ function lineQuads(lines: Line[], thick: Mat, max: number, windows: readonly Box
       const sideA = (dist(q[0], q[1]) + dist(q[2], q[3])) / 2
       const sideB = (dist(q[1], q[2]) + dist(q[3], q[0])) / 2
       const aspect = Math.min(sideA, sideB) / Math.max(sideA, sideB)
-      if (Math.abs(aspect - CARD_ASPECT) > ASPECT_TOLERANCE) continue
-      if (sideA * sideB < MIN_AREA * w * h) continue
+      if (Math.abs(aspect - shape.aspect) > shape.tolerance) continue
+      if (sideA * sideB < shape.minArea * w * h) continue
       const sides = sideCover(q)
       if (Math.min(...sides) < MIN_SIDE_COVER) continue
       // The art window's border, either way up and for each of the game's frames.
@@ -477,6 +491,19 @@ export function findCandidates(
   img: FrameSource,
   profile: ScanProfile = SCAN_PROFILES.ygo
 ): Quad[] {
+  return searchCandidates(cv, img, profile).quads
+}
+
+/**
+ * findCandidates' outlines, and with profile's windowShape, up to WINDOW_CANDIDATES quads of an
+ * art window's shape (best covered first), which may be the window of a card whose own outline
+ * is lost.
+ */
+function searchCandidates(
+  cv: CV,
+  img: FrameSource,
+  profile: ScanProfile
+): { quads: Quad[]; windows: Quad[] } {
   const scale = Math.min(1, SEARCH_WIDTH / frameWidth(img))
   const small = searchImage(cv, img, scale)
   return using([small], () => {
@@ -484,12 +511,8 @@ export function findCandidates(
     return using([edges], () => {
       const thick = thicken(cv, edges)
       return using([thick], () => {
-        const split = lineQuads(
-          mergeLines(splitSegments(cv, small, edges)),
-          thick,
-          SPLIT_CANDIDATES,
-          profile.windows
-        )
+        const splitLines = mergeLines(splitSegments(cv, small, edges))
+        const split = lineQuads(splitLines, thick, SPLIT_CANDIDATES, profile.windows)
         const plain = lineQuads(
           mergeLines(segments(cv, edges)),
           thick,
@@ -499,13 +522,18 @@ export function findCandidates(
           .filter((q) => !split.some((k) => sameQuad(q, k)))
           .slice(0, PLAIN_CANDIDATES)
         const outline = outlineQuad(cv, thick, scale)
-        const quads = [...split, ...plain].map(
-          (q) => q.map(([x, y]) => [x / scale, y / scale]) as unknown as Quad
-        )
-        return cardsBeforeHolders(
-          outline ? [outline, ...quads.filter((q) => !sameQuad(q, outline))] : quads,
-          sampler(small, scale)
-        )
+        const up = (q: Quad): Quad => q.map(([x, y]) => [x / scale, y / scale]) as unknown as Quad
+        const quads = [...split, ...plain].map(up)
+        const windows = profile.windowShape
+          ? lineQuads(splitLines, thick, WINDOW_CANDIDATES, [], profile.windowShape).map(up)
+          : []
+        return {
+          quads: cardsBeforeHolders(
+            outline ? [outline, ...quads.filter((q) => !sameQuad(q, outline))] : quads,
+            sampler(small, scale)
+          ),
+          windows
+        }
       })
     })
   })
@@ -580,21 +608,26 @@ export function preferOuter(quads: readonly Quad[]): Quad | null {
 }
 
 /**
- * The card's outline were quad its inner frame (INNER_FRAME), either way up: a black
- * (Xyz) card's edge barely shows against a dark desk, palm or sleeve, so its outline may not be
- * among the candidates while its inner frame is.
+ * The card's outline were quad one of its inner frames (profile.innerFrames), either way up: a
+ * black (Xyz) card's edge barely shows against a dark desk, palm or sleeve, so its outline may not
+ * be among the candidates while its inner frame is; a held Pokémon card's art window likewise.
  */
-function aroundInnerFrame(quad: Quad): Quad[] {
-  const at = homography(quad)
-  const [x0, y0, x1, y1] = INNER_FRAME
-  const ways: Box[] = [INNER_FRAME, [1 - x1, 1 - y1, 1 - x0, 1 - y0]]
-  return ways.map(([a, b, c, d]) => {
-    // The card's corners in the inner frame's unit square.
-    const u0 = -a / (c - a)
-    const u1 = (1 - a) / (c - a)
-    const v0 = -b / (d - b)
-    const v1 = (1 - b) / (d - b)
-    return [at(u0, v0), at(u1, v0), at(u1, v1), at(u0, v1)] as const
+function aroundInnerFrame(quad: Quad, frames: readonly Box[]): Quad[] {
+  const portrait = homography(quad)
+  // Candidates start on a short side, as a card's top is; a landscape frame's top is a long one.
+  const landscape = homography([quad[1], quad[2], quad[3], quad[0]])
+  return frames.flatMap((frame) => {
+    const [x0, y0, x1, y1] = frame
+    const at = (x1 - x0) * CARD_W > (y1 - y0) * CARD_H ? landscape : portrait
+    const ways: Box[] = [frame, [1 - x1, 1 - y1, 1 - x0, 1 - y0]]
+    return ways.map(([a, b, c, d]) => {
+      // The card's corners in the inner frame's unit square.
+      const u0 = -a / (c - a)
+      const u1 = (1 - a) / (c - a)
+      const v0 = -b / (d - b)
+      const v1 = (1 - b) / (d - b)
+      return [at(u0, v0), at(u1, v0), at(u1, v1), at(u0, v1)] as const
+    })
   })
 }
 
@@ -641,18 +674,36 @@ export function recognizeArt(
       }
       return best
     }
-    const quads = findCandidates(cv, frame, profile)
+    const { quads, windows } = searchCandidates(cv, frame, profile)
     let best = closest(quads)
-    if (!best) return null
-    // No candidate matched: one may be a black card's inner frame rather than the card.
-    if (best.distance > ART_MAX_DISTANCE) {
-      const around = closest(quads.flatMap(aroundInnerFrame))
-      if (around && around.distance < best.distance) best = around
+    // The candidate that lost to the card around an inner frame, matched again at full size too
+    // when the profile looks for art windows: at PICK_WIDTH a window's card is often misjudged.
+    let runnerUp: Quad | null = null
+    // No candidate matched: one may be a black card's inner frame rather than the card, or a
+    // held card's art window.
+    if (!best || best.distance > ART_MAX_DISTANCE) {
+      const around = closest(
+        [...quads, ...windows].flatMap((q) => aroundInnerFrame(q, profile.innerFrames))
+      )
+      if (around && (!best || around.distance < best.distance)) {
+        if (best && profile.windowShape) runnerUp = best.quad
+        best = around
+      }
     }
-    const card = warpCard(cv, frame, best.quad, CARD_W)
-    const { matches, upsideDown } = rankArt(cv, card, index, candidates, k, ART_BOX_JITTER, profile)
+    if (!best) return null
+    const ranked = (quad: Quad): { quad: Quad; card: RgbaImage } & ReturnType<typeof rankArt> => {
+      const card = warpCard(cv, frame, quad, CARD_W)
+      return { quad, card, ...rankArt(cv, card, index, candidates, k, ART_BOX_JITTER, profile) }
+    }
+    let final = ranked(best.quad)
+    if (runnerUp) {
+      const other = ranked(runnerUp)
+      if ((other.matches[0]?.distance ?? Infinity) < (final.matches[0]?.distance ?? Infinity))
+        final = other
+    }
+    const { card, matches, upsideDown } = final
     if ((matches[0]?.distance ?? Infinity) > ART_MAX_DISTANCE) {
-      const outline = preferOuter(quads) ?? best.quad
+      const outline = preferOuter(quads) ?? final.quad
       return {
         quad: outline,
         card: warpCard(cv, frame, outline, CARD_W),
@@ -660,6 +711,6 @@ export function recognizeArt(
         matches
       }
     }
-    return { quad: best.quad, card: upsideDown ? rotate180(card) : card, upsideDown, matches }
+    return { quad: final.quad, card: upsideDown ? rotate180(card) : card, upsideDown, matches }
   })
 }

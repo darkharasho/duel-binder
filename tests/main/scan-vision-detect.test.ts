@@ -555,7 +555,41 @@ describe('the Pokémon profile', () => {
     expect(found(inner)).toBeLessThanOrEqual(30)
     // A card straightened by its own outline still matches where it is.
     expect(found(card)).toBeLessThanOrEqual(20)
+    // Found by the line under its header, the name lost under a deck's edge: the window sits
+    // further off than the near search reaches.
+    const headless = resized(crop(card, [0, 0.07, 1, 1]), CARD_W, CARD_H)
+    expect(found(headless)).toBeLessThanOrEqual(30)
   })
+
+  it('finds a Pokémon card whose outline is lost, around its art window', () => {
+    const pkmIndex = decodeFingerprints(
+      encodeFingerprints([
+        { imageId: PKM_IMAGE, hash: artHash(fingerprintSource(reference(), 'pokemon', pkm)) }
+      ])
+    )
+    const { img, quad } = framed(reference(), 600)
+    // Everything of the card but its art window is the desk again, as a held card's frame is
+    // lost under fingers, a sleeve or a holder's rim while its art window's border stays crisp.
+    const desk = emptyFrame(3)
+    const [[x0, y0], [x1, , ], [, y1]] = quad
+    const [wx0, wy0, wx1, wy1] = pkm.windows[0]
+    for (let y = y0; y < y1; y++)
+      for (let x = x0; x < x1; x++) {
+        const u = (x - x0) / (x1 - x0)
+        const v = (y - y0) / (y1 - y0)
+        if (u >= wx0 && u <= wx1 && v >= wy0 && v <= wy1) continue
+        const i = (y * 1280 + x) * 4
+        img.data.set(desk.data.subarray(i, i + 4), i)
+      }
+    const found = recognizeArt(cv, img, pkmIndex, undefined, undefined, pkm)
+    expect(found?.matches[0]?.imageId).toBe(PKM_IMAGE)
+    expect(found!.matches[0].distance).toBeLessThanOrEqual(ART_MAX_DISTANCE)
+    // The card's own corners, not the window's.
+    for (let i = 0; i < 4; i++) {
+      const [x, y] = found!.quad[i]
+      expect(Math.min(...quad.map(([qx, qy]) => Math.hypot(qx - x, qy - y)))).toBeLessThan(25)
+    }
+  }, 60_000)
 
   it('a Yu-Gi-Oh reference is left as it was', () => {
     const img = load(join(DIR, 'cropped', readdirSync(join(DIR, 'cropped'))[0]))

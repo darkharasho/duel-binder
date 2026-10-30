@@ -8,6 +8,7 @@ import {
   XIcon
 } from 'lucide-react'
 import { languageInfo, type Language } from '@shared/languages'
+import type { ScanPrinting } from '@shared/scan/types'
 import { CardArt } from '@/components/CardArt'
 import { formatUsd } from '@/lib/format'
 import { cn } from '@/lib/utils'
@@ -23,11 +24,19 @@ export const FLAG_TEXT: Record<NonNullable<ScanDraft['flag']>, string> = {
   'other-set': 'From another set'
 }
 
+/** "Prismatic Secret Rare (Overframe)": the rarity, and the art variant when it doesn't already say it. */
+function rarityLabel(o: ScanPrinting): string {
+  const variant = o.variant?.trim()
+  return variant && !o.rarity.toLowerCase().includes(variant.toLowerCase())
+    ? `${o.rarity} (${variant})`
+    : o.rarity
+}
+
 /**
  * What the row's dropdown offers, always only the row's card: the rarities its set code came in
  * when the code was read off the card, else every printing it was matched to, so a printing
  * picked for an art or name match can still be changed to another code. Each shows its code and
- * rarity, and its language when they differ; the search also matches the set's name.
+ * rarity, its art variant, and its language when they differ; the search also matches the set's name.
  *
  * With a scan language (see useScanLanguage), only printings in it are listed, plus the row's own
  * printing whatever its language. When none are in it, as for a Japanese code read under English,
@@ -47,13 +56,14 @@ export function choicesFor(row: ScanRow, language: Language | null): PickerOptio
   const languages = new Set(shown.map((o) => o.language)).size > 1
   return shown.map((o) => {
     const tag = languageInfo(o.language).tag
-    const label = `${o.setCode} · ${o.rarity}${languages ? ` · ${tag}` : ''}`
+    const rarity = rarityLabel(o)
+    const label = `${o.setCode} · ${rarity}${languages ? ` · ${tag}` : ''}`
     return {
       key: String(o.printingId),
       label,
-      search: `${o.setCode} ${o.rarity} ${o.setName} ${tag}`.toLowerCase(),
+      search: `${o.setCode} ${rarity} ${o.setName} ${tag}`.toLowerCase(),
       badge: o.setCode,
-      title: o.rarity,
+      title: rarity,
       note: languages ? tag : undefined
     }
   })

@@ -15,6 +15,8 @@ export interface ScanPrinting {
   setName: string
   setCode: string
   rarity: string
+  /** card_printings.variant, e.g. "Overframe" or "Manga-Style"; absent or null when plain. */
+  variant?: string | null
   language: Language
   /** USD, this printing's own price; null when unknown. */
   price: number | null

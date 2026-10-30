@@ -62,11 +62,17 @@ const LOOSE = /([A-Z0-9OILSBZ|]{1,6})\s*\/\s*([A-Z0-9OILSBZ|]{1,6})/
 
 const toDigits = (s: string): string => s.replace(/[OILSBZ|]/g, (c) => DIGIT_FIX[c])
 
-/** The readings of one side: as read, all digits, and a kept letter prefix with digits after it. */
-function sides(tok: string): string[] {
+/**
+ * The readings of one side: as read, all digits, and a kept letter prefix with digits after it.
+ * Then, as a blurred read runs the regulation mark and set badge into the number ("HWMB129")
+ * and noise onto the total ("1420"), the number's last digits and the total's first three.
+ */
+function sides(tok: string, side: 'number' | 'total'): string[] {
   const out = [tok, toDigits(tok)]
   const prefixed = /^([A-Z]{2,})(.+)$/.exec(tok)
   if (prefixed) out.push(prefixed[1] + toDigits(prefixed[2]))
+  const run = side === 'number' ? /[A-Z](\d{1,3})$/.exec(tok) : /^(\d{3})\d+$/.exec(tok)
+  if (run) out.push(run[1])
   return out.filter((s) => new RegExp(`^${TOKEN}$`).test(s))
 }
 
@@ -84,8 +90,8 @@ export function collectorNumberCandidates(text: string): CollectorNumber[] {
       first?.setAbbrev ??
       abbrevIn(up.slice(0, m.index)) ??
       abbrevIn(up.slice(m.index + m[0].length))
-    for (const number of sides(m[1]))
-      for (const total of sides(m[2])) out.push({ setAbbrev, number, total })
+    for (const number of sides(m[1], 'number'))
+      for (const total of sides(m[2], 'total')) out.push({ setAbbrev, number, total })
   }
   const seen = new Set<string>()
   return out.filter((c) => {

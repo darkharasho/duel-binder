@@ -68,6 +68,17 @@ describe('collectorNumberCandidates', () => {
       total: 'TG30'
     })
   })
+  it('takes the digits of a number run into the regulation mark and set badge before it', () => {
+    // Read off eBay photos of Drakloak (129/167) and Fan Rotom (118/142).
+    expect(collectorNumberCandidates('HWMB129/167')).toContainEqual({
+      setAbbrev: null,
+      number: '129',
+      total: '167'
+    })
+    expect(collectorNumberCandidates('HETD118/1420-')).toContainEqual(
+      expect.objectContaining({ number: '118', total: '142' })
+    )
+  })
   it('is empty for text without a number', () => {
     expect(collectorNumberCandidates('HP 70')).toEqual([])
   })

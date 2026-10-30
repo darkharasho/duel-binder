@@ -1,6 +1,8 @@
 import { collectorNumberCandidates } from '@shared/scan/collectorNumber'
 import { normalizeName } from '@shared/scan/names'
 import {
+  englishNameLikeness,
+  japaneseNameLikeness,
   readsEnglishName,
   readsJapaneseName,
   type PokemonTextLanguage
@@ -9,7 +11,11 @@ import {
   ART_FAR_DISTANCE,
   ART_MATCH_DEPTH,
   ART_MAX_DISTANCE,
-  PKM_ART_MIN_MARGIN
+  PKM_ART_MIN_MARGIN,
+  PKM_GUESS_NAME_LIKENESS,
+  PKM_GUESS_REPRINT_LEAD,
+  PKM_GUESS_RULES,
+  type PkmGuessRule
 } from '@shared/scan/thresholds'
 import type { ScanDraft, ScanPrinting } from '@shared/scan/types'
 import type { RawSignals } from './engine'
@@ -101,6 +107,25 @@ async function clearOfOtherNames(raw: RawSignals, ctx: ResolveContext): Promise<
   return true
 }
 
+/** How much closer the closest of cards' artworks is than the closest of the next card's. */
+async function artLead(raw: RawSignals, cards: number[], ctx: ResolveContext): Promise<number> {
+  const cardOf = new Map(
+    (await ctx.lookups.cardsForImages(raw.art.map((a) => a.imageId))).map((c) => [
+      c.imageId,
+      c.cardId
+    ])
+  )
+  const seen = new Set<number>()
+  const closest: number[] = []
+  for (const a of raw.art) {
+    const cardId = cardOf.get(a.imageId)
+    if (cardId === undefined || !cards.includes(cardId) || seen.has(cardId)) continue
+    seen.add(cardId)
+    closest.push(a.distance)
+  }
+  return closest.length < 2 ? Infinity : closest[1] - closest[0]
+}
+
 /** The printings of the first collector number, over every code band read, that names any. */
 async function byNumber(raw: RawSignals, ctx: ResolveContext): Promise<ScanPrinting[]> {
   const tried = new Set<string>()
@@ -182,10 +207,12 @@ async function draft(
 }
 
 /**
- * What a frame shows of a Pokémon card, named only when art, number and language agree on one
- * card. A Chinese, European (or any other uncatalogued) card shares its art and often its number
+ * What a frame shows of a Pokémon card, named for certain only when art, number and language
+ * agree on one card; else, where a PKM_GUESS_RULES rule allows, named as a best guess (`guess` on
+ * the draft). A Chinese, European (or any other uncatalogued) card shares its art and often its number
  * with a Japanese or English twin, so a card is named only in a language read as English or
- * Japanese; anything else, unread included, is `unsure`.
+ * Japanese; anything else, unread included, is `unsure` unless the name band nearly reads a
+ * name of the art's cards (likelyInLanguage).
  *
  * - With a collector number read: the art's cards that carry it, or with no art close, the
  *   number's cards a name read agrees with; one of them in the read language is named,
@@ -221,14 +248,28 @@ export async function resolvePokemonSignals(
 
   const group = await artGroup(raw, ctx)
   if (group === null) return unsure
-  if (raw.artVia === 'holder' && group.length && !(await clearOfOtherNames(raw, ctx))) return unsure
+  const rules = ctx.guessRules ?? PKM_GUESS_RULES
+  // Set once a rule has let something past that certainty wouldn't have.
+  let guess = false
+  const may = (rule: PkmGuessRule): boolean => {
+    if (rules.includes(rule)) guess = true
+    return rules.includes(rule)
+  }
+  if (
+    raw.artVia === 'holder' &&
+    group.length &&
+    !(await clearOfOtherNames(raw, ctx)) &&
+    !may('holder')
+  )
+    return unsure
   const numbered = await byNumber(raw, ctx)
-  // A card with a reprint of its art that has no artwork of its own is never named: the art
-  // can't tell them apart, nor can the number, as a Classic Collection reprint prints its
+  // A card with a reprint of its art that has no artwork of its own is named only as a guess: the
+  // art can't tell them apart, nor can the number, as a Classic Collection reprint prints its
   // original's.
   const named = async (cardId: number, via: 'code' | 'art'): Promise<ScanOutcome> => {
     const item = await draft(cardId, raw, ctx, via)
-    return item && !item.options.some((p) => p.unseenTwin) ? { kind: 'recognized', item } : unsure
+    if (!item || (item.options.some((p) => p.unseenTwin) && !may('twin'))) return unsure
+    return { kind: 'recognized', item: guess ? { ...item, guess: true } : item }
   }
 
   /**
@@ -257,6 +298,50 @@ export async function resolvePokemonSignals(
     return unique([...en, ...jaNamed].map((p) => p.cardId))
   }
 
+  /**
+   * With no language told, the cards whose name the name band nearly reads, in the language of the
+   * nearest: Chinese text comes nowhere near either language's name, so the guess stays off a
+   * Chinese card, which a guess at the language alone wouldn't.
+   */
+  const likelyInLanguage = async (printings: ScanPrinting[]): Promise<number[]> => {
+    if (!rules.includes('language')) return []
+    const lang = await language()
+    if (lang !== null && lang !== 'kanji') return []
+    const reads = await localNames()
+    const likeness = (p: ScanPrinting): number =>
+      p.language === 'en'
+        ? englishNameLikeness(raw.nameTexts, p.name)
+        : p.language === 'ja'
+          ? japaneseNameLikeness(reads, p.localName ?? p.name)
+          : 0
+    const likely = printings.filter((p) => likeness(p) >= PKM_GUESS_NAME_LIKENESS)
+    if (!likely.length) return []
+    const nearest = likely.reduce((a, b) => (likeness(b) > likeness(a) ? b : a))
+    return unique(likely.filter((p) => p.language === nearest.language).map((p) => p.cardId))
+  }
+
+  /**
+   * The one card of printings to name: the language's, and when that leaves none or several, a
+   * rule's best guess. Only among the art's cards, closest first; null when there's none.
+   */
+  const pick = async (printings: ScanPrinting[]): Promise<number | null> => {
+    let ids = await inLanguage(printings)
+    if (!group.length) return ids.length === 1 ? ids[0] : null
+    if (!ids.length) {
+      ids = await likelyInLanguage(printings)
+      if (ids.length) may('language')
+      else if ((await language()) === null && may('language-default'))
+        ids = unique(printings.filter((p) => p.language === 'en').map((p) => p.cardId))
+      if (!ids.length) return null
+    }
+    if (ids.length < 2) return ids[0] ?? null
+    const closest = group.find((id) => ids.includes(id))!
+    const name = printings.find((p) => p.cardId === closest)!.name
+    const reprints = printings.every((p) => !ids.includes(p.cardId) || sameName(p.name, name))
+    if (!reprints || (await artLead(raw, ids, ctx)) < PKM_GUESS_REPRINT_LEAD) return null
+    return may('reprint') ? closest : null
+  }
+
   if (numbered.length) {
     const name = group.length ? null : await nameRead(raw, ctx)
     const cards = numbered.filter((p) =>
@@ -264,9 +349,11 @@ export async function resolvePokemonSignals(
         ? group.includes(p.cardId)
         : !!name && (name.cardId === p.cardId || sameName(name.name, p.name))
     )
-    if (!cards.length) return unsure
-    const ids = await inLanguage(cards)
-    return ids.length === 1 ? named(ids[0], 'code') : unsure
+    if (cards.length) {
+      const id = await pick(cards)
+      return id === null ? unsure : named(id, 'code')
+    }
+    if (!group.length || !may('misread')) return unsure
   }
 
   if (!group.length) {
@@ -274,8 +361,8 @@ export async function resolvePokemonSignals(
     return top && top.distance > ART_FAR_DISTANCE ? { kind: 'none', far: true } : unsure
   }
   const printings = await ctx.lookups.printingsForCards(group)
-  const ids = await inLanguage(printings)
-  if (ids.length !== 1) return unsure
-  const card = printings.find((p) => p.cardId === ids[0])!
-  return (await reprintBehind(raw, card, ctx)) ? unsure : named(ids[0], 'art')
+  const id = await pick(printings)
+  if (id === null) return unsure
+  const card = printings.find((p) => p.cardId === id)!
+  return (await reprintBehind(raw, card, ctx)) && !may('behind') ? unsure : named(id, 'art')
 }

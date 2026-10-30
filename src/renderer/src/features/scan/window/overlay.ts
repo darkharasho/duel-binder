@@ -18,19 +18,30 @@ export interface Pull {
   /** A graded slab, priced as the raw card. */
   raw: boolean
   hit: boolean
+  /** The scanner's best guess, so viewers can see it may be corrected. */
+  guess?: true
 }
 
 /**
  * A pull shows the drafted printing's price. A draft whose printing or rarity isn't certain also
  * shows its options' price range; a Pick printing draft shows no set or rarity and is never a hit.
  * A Pokémon card whose version is unsure shows only the range: its drafted printing is a
- * placeholder, so its price is no one version's.
+ * placeholder, so its price is no one version's. A best guess is marked as one and is never a hit:
+ * the hit moment is for a card known to be in hand.
  */
 export function pullOf(d: ScanDraft, hitPrice: number, key: number): Pull {
   const picked = d.options.find((o) => o.printingId === d.printingId)
   const price = versionToPick(d) ? null : (picked?.price ?? null)
   const range = d.flag === 'pick-printing' || d.flag === 'check-rarity' ? priceRange(d) : null
-  const base = { key, name: d.name, imageId: d.imageId, price, range, raw: d.slab === true }
+  const base = {
+    key,
+    name: d.name,
+    imageId: d.imageId,
+    price,
+    range,
+    raw: d.slab === true,
+    ...(d.guess ? { guess: true as const } : {})
+  }
   if (d.flag === 'pick-printing')
     return { ...base, setCode: null, setName: null, rarity: null, hit: false }
   return {
@@ -38,7 +49,7 @@ export function pullOf(d: ScanDraft, hitPrice: number, key: number): Pull {
     setCode: d.setCode,
     setName: picked?.setName ?? null,
     rarity: d.rarity,
-    hit: price !== null && price >= hitPrice
+    hit: !d.guess && price !== null && price >= hitPrice
   }
 }
 

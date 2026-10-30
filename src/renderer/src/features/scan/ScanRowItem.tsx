@@ -26,10 +26,19 @@ export const FLAG_TEXT: Record<NonNullable<ScanDraft['flag']>, string> = {
   'other-set': 'From another set'
 }
 
-/** The row's flag as the list words it: Yu-Gi-Oh!'s FLAG_TEXT, a Pokémon version still to pick. */
+/**
+ * The row's flag as the list words it: Yu-Gi-Oh!'s FLAG_TEXT, a Pokémon version still to pick, or
+ * a best guess to check.
+ */
 // eslint-disable-next-line react-refresh/only-export-components -- shared with the phone's last-scan card
-export const flagText = (row: Pick<ScanDraft, 'game' | 'flag'>): string | null =>
-  versionToPick(row) ? 'Check version' : row.flag && FLAG_TEXT[row.flag]
+export const flagText = (row: Pick<ScanDraft, 'game' | 'flag' | 'guess'>): string | null =>
+  row.guess
+    ? versionToPick(row)
+      ? 'Best guess, check card and version'
+      : 'Best guess, check card'
+    : versionToPick(row)
+      ? 'Check version'
+      : row.flag && FLAG_TEXT[row.flag]
 
 /** "Rarity for Dark Magician", "Version for Pikachu": the row's printing picker. */
 // eslint-disable-next-line react-refresh/only-export-components -- shared with the phone's review
@@ -144,7 +153,7 @@ export const ScanRowItem = memo(function ScanRowItem({
       className={cn(
         'flex gap-3 rounded-[20px] p-2.5 transition-colors duration-700',
         GLASS,
-        row.flag && 'border-amber-400/45',
+        (row.flag || row.guess) && 'border-amber-400/45',
         highlighted && 'bg-emerald-400/10'
       )}
     >

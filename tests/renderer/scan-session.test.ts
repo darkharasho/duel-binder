@@ -117,6 +117,16 @@ describe('useScanSession', () => {
     expect(row).toMatchObject({ key: '102:10', quantity: 2, rarity: 'Rare', flag: null })
   })
 
+  it('a best guess stays marked when merged, and is one no longer once a printing is picked', () => {
+    const { result } = setup()
+    act(() => result.current.add(draft({ flag: null })))
+    act(() => result.current.add(draft({ flag: null, guess: true })))
+    expect(result.current.rows).toHaveLength(1)
+    expect(result.current.rows[0]).toMatchObject({ quantity: 2, guess: true })
+    act(() => result.current.setPrinting('101:10', 102))
+    expect('guess' in result.current.rows[0]).toBe(false)
+  })
+
   it('setPrinting updates fields, clears flags, ignores unknown printings', () => {
     const { result } = setup()
     act(() => result.current.add(draft({ flag: 'other-set' })))

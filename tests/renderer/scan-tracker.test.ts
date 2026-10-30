@@ -35,6 +35,39 @@ function run(
 }
 
 describe('createShowingTracker', () => {
+  describe('a best guess', () => {
+    const guess = (cardId: number): ScanOutcome => as({ ...draft(cardId), guess: true })
+    const tracker = (): ReturnType<typeof createShowingTracker> =>
+      createShowingTracker({ stableFrames: 2, guessFrames: 4, absentMs: 600 })
+
+    it('counts only after holding for its frames', () => {
+      const t = tracker()
+      expect(run(t, [guess(1), guess(1), guess(1)])).toEqual([])
+      expect(run(t, [guess(1)], 300)).toEqual([1])
+    })
+
+    it('gives way to a certain answer, which counts at once and as certain', () => {
+      const t = tracker()
+      expect(run(t, [guess(1), guess(1), seen(2), seen(2)])).toEqual([2])
+      const u = tracker()
+      u.push(0, guess(1))
+      expect(u.push(100, seen(1))?.guess).toBeUndefined()
+    })
+
+    it('never counts while a card already counted is in view, as its twin', () => {
+      const t = tracker()
+      expect(run(t, [seen(1), seen(1), guess(2), guess(2), guess(2), guess(2), guess(2)])).toEqual([
+        1
+      ])
+    })
+
+    it('counts for the next card once the view has cleared', () => {
+      const t = tracker()
+      run(t, [seen(1), seen(1), NONE, NONE, NONE, NONE, NONE, NONE, NONE, NONE])
+      expect(run(t, [guess(2), guess(2), guess(2), guess(2)], 2000)).toEqual([2])
+    })
+  })
+
   it('counts once across flicker', () => {
     const t = createShowingTracker({ stableFrames: 2, absentMs: 600 })
     expect(run(t, [seen(1), UNSURE, seen(1), seen(1), UNSURE, seen(1), seen(1)])).toEqual([1])

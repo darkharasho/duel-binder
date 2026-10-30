@@ -11,7 +11,7 @@ export function statusText(s: ScanStatus): string {
     case 'unsure':
       return "Couldn't recognize this card"
     case 'added':
-      return `${s.setCode ? `${s.name} ${s.setCode}` : s.name} · added, lower it to scan the next card`
+      return `${s.setCode ? `${s.name} ${s.setCode}` : s.name} · ${s.guess ? 'added as a best guess' : 'added'}, lower it to scan the next card`
     case 'stopped':
       return 'Scanning stopped after repeated errors.'
   }

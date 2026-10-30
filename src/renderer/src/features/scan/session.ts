@@ -125,7 +125,13 @@ export function useScanSession(game: GameId = 'ygo'): {
         const key = rowKey(d)
         const existing = list.find((r) => r.key === key)
         const row: ScanRow = existing
-          ? { ...existing, quantity: existing.quantity + 1, addedAt: Date.now(), error: undefined }
+          ? {
+              ...existing,
+              ...(d.guess ? { guess: true as const } : {}),
+              quantity: existing.quantity + 1,
+              addedAt: Date.now(),
+              error: undefined
+            }
           : { ...d, key, quantity: 1, addedAt: Date.now() }
         return [row, ...list.filter((r) => r.key !== key)]
       }),
@@ -146,6 +152,8 @@ export function useScanSession(game: GameId = 'ygo'): {
           flag: null,
           error: undefined
         }
+        // Choosing is looking at it, so a guess is one no longer.
+        delete next.guess
         next.key = rowKey(next)
         if (next.key === key) return list.map((r) => (r.key === key ? next : r))
         const twin = list.find((r) => r.key === next.key)

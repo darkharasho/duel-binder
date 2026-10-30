@@ -271,3 +271,24 @@ export function readsEnglishName(read: string, name: string): boolean {
   const off = key.length >= EN_NAME_FUZZIER_LENGTH ? 2 : key.length >= EN_NAME_FUZZY_LENGTH ? 1 : 0
   return nearestStretch(text, key) <= off
 }
+
+/**
+ * How nearly reads show a card's name, 0 to 1: the share of its letters and digits (English) or
+ * kana and kanji (Japanese) that match the closest stretch of the best read. Looser evidence than
+ * readsEnglishName and readsJapaneseName, for a best guess; 0 for a name too short to say or, in
+ * Japanese, with no kana (all Han could be its Chinese twin).
+ */
+export function englishNameLikeness(reads: string[], name: string): number {
+  const key = normalizeName(name)
+  return key.length < EN_NAME_MIN_LENGTH ? 0 : likeness(reads.map(normalizeName), key)
+}
+
+export function japaneseNameLikeness(reads: string[], name: string): number {
+  const key = japaneseNameKey(name)
+  return key.length < JA_NAME_MIN_LENGTH || !KANA.test(key)
+    ? 0
+    : likeness(reads.map(japaneseNameKey), key)
+}
+
+const likeness = (texts: string[], key: string): number =>
+  Math.max(0, ...texts.filter(Boolean).map((t) => 1 - nearestStretch(t, key) / key.length))

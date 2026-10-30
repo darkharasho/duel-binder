@@ -99,7 +99,8 @@ export interface ScanLoop {
 
 const sameStatus = (a: ScanStatus, b: ScanStatus): boolean =>
   a.kind === b.kind &&
-  (a.kind !== 'added' || (b.kind === 'added' && a.name === b.name && a.setCode === b.setCode))
+  (a.kind !== 'added' ||
+    (b.kind === 'added' && a.name === b.name && a.setCode === b.setCode && a.guess === b.guess))
 
 /**
  * The part of the video's current frame the preview shows (its centre crop), at full camera
@@ -318,7 +319,12 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
       l.absentSince = null
       if (draft) {
         l.shown = draft.cardId
-        setStatus({ kind: 'added', name: draft.name, setCode: draft.setCode })
+        setStatus({
+          kind: 'added',
+          name: draft.name,
+          setCode: draft.setCode,
+          ...(draft.guess ? { guess: true as const } : {})
+        })
       } else if (outcome.kind === 'unsure' && l.shown === null) {
         setStatus({ kind: 'unsure' })
       }

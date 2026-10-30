@@ -51,6 +51,13 @@ export const MIN_RIGHT_SHARE = 0.85
  */
 export const PKM_MIN_RIGHT_SHARE = 0.6
 
+/**
+ * The private real-photo test's budget: wrong answers as a share of the cards named, the owner's
+ * photos and all of them. The Pokémon scanner may name a best guess, marked as one; the nightly
+ * gate on the fixtures takes no wrong card at all.
+ */
+export const PKM_MAX_WRONG_SHARE = 0.05
+
 export interface AccuracyReport {
   shots: number
   right: number

@@ -110,6 +110,11 @@ describe('pullOf', () => {
     expect(pullOf(draft({ ...d, printingId: 3 }), 20, 1).hit).toBe(false)
   })
 
+  it('a best guess is marked and is never a hit; a certain pull has no mark', () => {
+    expect(pullOf(draft({ guess: true }), 1, 1)).toMatchObject({ guess: true, hit: false })
+    expect('guess' in pullOf(draft(), 1, 1)).toBe(false)
+  })
+
   it('slab pull shows Raw and can be a hit', () => {
     const d = draft({ game: 'pkm', slab: true }, { price: 120 })
     expect(pullOf(d, 20, 1)).toMatchObject({ price: 120, raw: true, hit: true })

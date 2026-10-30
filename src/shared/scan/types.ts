@@ -70,6 +70,11 @@ export interface ScanDraft {
   /** Shown in a graded slab; priced as the raw card. */
   slab?: true
   /**
+   * The scanner's best guess at a Pokémon card, not a certain match: shown as such until the user
+   * has looked at it. Left out when certain, as it always is for Yu-Gi-Oh.
+   */
+  guess?: true
+  /**
    * The printings a reference scan of their art told the photo for (an overframe family, say),
    * which the rarity's look then picks among; absent when no scan did.
    */

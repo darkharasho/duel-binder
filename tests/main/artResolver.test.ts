@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { createPrintingArtResolver } from '../../src/main/yugipedia/artResolver'
+import { listCardGalleries, yugipediaTitle } from '../../src/main/yugipedia/cardGallery'
 import type { YugipediaClient } from '../../src/main/yugipedia/client'
 import { seededDb } from './helpers'
 
@@ -108,9 +109,60 @@ describe('createPrintingArtResolver', () => {
     )
   })
 
+  it("asks for a '#' card's gallery under Yugipedia's title and answers by card name", async () => {
+    const db = await seededDb()
+    const card = (
+      db.prepare("SELECT id FROM cards WHERE name = 'Dark Magician'").get() as { id: number }
+    ).id
+    db.prepare('UPDATE cards SET name = ? WHERE id = ?').run(
+      'Winged Dragon, Guardian of the Fortress #1',
+      card
+    )
+    const client = fakeClient({
+      'Card Gallery:Winged Dragon, Guardian of the Fortress 1': ['WDGotF1-LOB-EN-UR-1E.png']
+    })
+    const art = createPrintingArtResolver({ db, client, batchWaitMs: 0 })
+    expect(await art.url(printing(db, 'LOB-EN005'))).toBe(
+      'https://ms.yugipedia.com/a/WDGotF1-LOB-EN-UR-1E.png'
+    )
+    expect(client.listPageImages).toHaveBeenCalledWith([
+      'Card Gallery:Winged Dragon, Guardian of the Fortress 1'
+    ])
+  })
+
   it('answers null for unknown printings', async () => {
     const db = await seededDb()
     const art = createPrintingArtResolver({ db, client: fakeClient(GALLERY), batchWaitMs: 0 })
     expect(await art.url(999999)).toBeNull()
+  })
+})
+
+describe('yugipediaTitle', () => {
+  it("drops the characters MediaWiki can't title a page with, as Yugipedia does", () => {
+    expect(yugipediaTitle('Winged Dragon, Guardian of the Fortress #1')).toBe(
+      'Winged Dragon, Guardian of the Fortress 1'
+    )
+    expect(yugipediaTitle('GMX Applied Experiment #55')).toBe('GMX Applied Experiment 55')
+    expect(yugipediaTitle('Maliss <P> Dormouse')).toBe('Maliss P Dormouse')
+    expect(yugipediaTitle('A [B] {C} | D')).toBe('A B C D')
+    expect(yugipediaTitle('Dark Magician')).toBe('Dark Magician')
+  })
+})
+
+describe('listCardGalleries', () => {
+  it("maps Yugipedia's titles back to the card names asked for, '(card)' fallback included", async () => {
+    const client = fakeClient({
+      'Card Gallery:Nekogal 1': ['Nekogal1-MRD-EN-C-UE.png'],
+      'Card Gallery:Maliss P Dormouse (card)': ['MalissPDormouse-ALIN-EN-UR-1E.png']
+    })
+    const out = await listCardGalleries(client, ['Nekogal #1', 'Maliss <P> Dormouse', 'Nekogal #1'])
+    expect([...out]).toEqual([
+      ['Nekogal #1', ['Nekogal1-MRD-EN-C-UE.png']],
+      ['Maliss <P> Dormouse', ['MalissPDormouse-ALIN-EN-UR-1E.png']]
+    ])
+    expect(client.listPageImages.mock.calls).toEqual([
+      [['Card Gallery:Nekogal 1', 'Card Gallery:Maliss P Dormouse']],
+      [['Card Gallery:Maliss P Dormouse (card)']]
+    ])
   })
 })

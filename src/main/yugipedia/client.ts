@@ -22,7 +22,10 @@ export interface YugipediaClient {
   fetchPages(titles: string[]): Promise<Map<string, string>>
   /** File name (no "File:") -> URL, only for URLs starting with https://ms.yugipedia.com/. Chunks of 50. */
   fetchImageUrls(files: string[]): Promise<Map<string, string>>
-  /** File names (no "File:") used on each requested page (redirects followed). Chunks of 50. */
+  /**
+   * File names (no "File:") used on each requested page (redirects followed; missing and invalid
+   * titles absent). Chunks of 50.
+   */
   listPageImages(titles: string[]): Promise<Map<string, string[]>>
 }
 
@@ -34,6 +37,8 @@ interface FromTo {
 interface ApiPage {
   title: string
   missing?: boolean
+  /** A title MediaWiki can't hold ("<", "[", ...). */
+  invalid?: boolean
   revisions?: { slots?: { main?: { content?: string } } }[]
   imageinfo?: { url?: string }[]
   images?: { title: string }[]
@@ -186,6 +191,8 @@ export function createYugipediaClient(opts: {
           })
           if (Object.keys(cont).length === 0) resolve = resolver(body)
           for (const p of body.query?.pages ?? []) {
+            // A missing page is listed with no images; leave it out so callers can try another title.
+            if (p.missing || p.invalid) continue
             const files = byTitle.get(p.title) ?? []
             for (const i of p.images ?? []) files.push(i.title.replace(/^File:/, ''))
             byTitle.set(p.title, files)

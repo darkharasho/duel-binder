@@ -305,6 +305,16 @@ DELETE FROM printing_art WHERE printing_id IN
   (SELECT id FROM card_printings WHERE set_rarity LIKE '%Monochrome)' OR variant LIKE '%Monochrome');
 `
 
+/**
+ * Printing scans of a card whose name holds a character MediaWiki can't title a page with
+ * (# < > [ ] { } |: "Nekogal #1", "Maliss <P> Dormouse") were looked up under the wrong gallery
+ * title and stored as "no scan". Gallery titles now drop those characters: look these up again.
+ */
+export const SCHEMA_V22 = `
+DELETE FROM printing_art WHERE url IS NULL AND printing_id IN
+  (SELECT p.id FROM card_printings p JOIN cards c ON c.id = p.card_id WHERE c.name GLOB '*[]#<>[{}|]*');
+`
+
 /** A printing's rarity as shown: "Starlight Rare (Extended Art)" for a labelled variant. */
 export const RARITY_LABEL = "p.set_rarity || COALESCE(' (' || p.variant || ')', '')"
 
@@ -330,5 +340,6 @@ export const MIGRATIONS: Migration[] = [
   { version: 18, sql: SCHEMA_V18, server: false },
   { version: 19, sql: SCHEMA_V19, server: false },
   { version: 20, sql: SCHEMA_V20, server: false },
-  { version: 21, sql: SCHEMA_V21 }
+  { version: 21, sql: SCHEMA_V21 },
+  { version: 22, sql: SCHEMA_V22 }
 ]

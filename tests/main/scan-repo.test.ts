@@ -4,9 +4,9 @@ import {
   matchName,
   printingsByCode,
   printingsForCards,
-  printingsForSet,
-  scanRefs
+  printingsForSet
 } from '../../src/main/repo/scan'
+import { scanRefs } from '../../src/main/repo/scanRefs'
 import type Database from 'better-sqlite3'
 import { seededDb } from './helpers'
 import { getMeta, setMeta } from '../../src/main/db/meta'

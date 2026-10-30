@@ -17,7 +17,41 @@ export const EBAY_WORDS = Object.freeze({
 
 const CODE_WITHOUT_LANGUAGE = /^[A-Z0-9]+-\d+$/
 
-export function buildQuery({ code, name, set, rarity, lang }) {
+// A Manga-Style card's tone, as the app names it after the rarity: "Ultra Rare (Manga-Style, Color)".
+const TONED_RARITY = /^(.*?)\s*\([^()]*,\s*(color|monochrome)\)\s*$/i
+// How sellers name the tones: "Monochrome", "Black & White Edition", "B&W", 白黒, モノクロ; "Full
+// Color", "Color Ver.", "Colour", カラー. A bare "colorful" is not a tone.
+const MONO_WORDS = /\bmonochrome\b|\bblack\s*(?:&|and|\/)\s*white\b|\bb\s*[&/]\s*w\b|白黒|モノクロ/i
+const COLOR_WORDS = /\bcolou?r\b|\bcolou?r(?:ed)?\s+ver|カラー/i
+
+/** The tone a rarity asks for ("color" or "monochrome"), or null for none. */
+export function rarityTone(rarity) {
+  const m = TONED_RARITY.exec(String(rarity))
+  return m ? m[2].toLowerCase() : null
+}
+
+/** A toned rarity without its tone: "Ultra Rare" for "Ultra Rare (Manga-Style, Color)". */
+function untoned(rarity) {
+  const m = TONED_RARITY.exec(String(rarity))
+  return m ? m[1] : rarity
+}
+
+/** The tone a listing names, or null when it names neither or both. */
+export function titleTone(title) {
+  const mono = MONO_WORDS.test(String(title))
+  const color = COLOR_WORDS.test(String(title))
+  return mono === color ? null : mono ? 'monochrome' : 'color'
+}
+
+/** True when the rarity asks for no tone, or the listing names the one it asks for. */
+export function matchesTone(title, rarity) {
+  const tone = rarityTone(rarity)
+  return tone === null || titleTone(title) === tone
+}
+
+export function buildQuery({ code, name, set, rarity: asked, lang }) {
+  // Sellers spell the tone too many ways to put it in the query; listings are sorted by it after.
+  const rarity = untoned(asked)
   const word = EBAY_WORDS[lang] ?? ''
   const parts = []
   if (code) {
@@ -107,7 +141,7 @@ function containsWords(phrase, part) {
 /** True when the title names a longer rarity that contains the requested one ("Quarter Century Secret Rare" for a Secret Rare). */
 export function namesLongerRarity(title, rarity) {
   const t = String(title).toLowerCase()
-  const r = String(rarity).toLowerCase()
+  const r = String(untoned(rarity)).toLowerCase()
   if (r === '') return false
   return RARITY_PHRASES.some(
     (phrase) => t.includes(phrase) && phrase !== r && containsWords(phrase, r)

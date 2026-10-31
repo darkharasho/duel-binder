@@ -19,31 +19,37 @@ export function FriendHeader({
   friend,
   tab,
   onTab,
-  onBack
+  onBack,
+  trailing
 }: {
   friend: Friend
   tab: BinderTab
   onTab: (tab: BinderTab) => void
   onBack: () => void
+  /** Sits on the tabs' row, at its right. */
+  trailing?: React.ReactNode
 }): React.JSX.Element {
   return (
     <>
-      <Button variant="ghost" size="sm" className="-ml-2" onClick={onBack}>
-        <ArrowLeft />
-        All friends
-      </Button>
       <div className="flex items-center gap-3">
-        <FriendAvatar user={friend} className="size-11 text-lg" />
+        <Button variant="ghost" size="sm" className="-ml-2 shrink-0" onClick={onBack}>
+          <ArrowLeft />
+          <span className="max-md:sr-only">All friends</span>
+        </Button>
+        <FriendAvatar user={friend} className="size-9 text-base" />
         <div className="min-w-0">
-          <h1 className="truncate text-xl font-semibold">
+          <h1 className="truncate text-lg font-semibold leading-tight">
             {friend.displayName ?? friend.username}
           </h1>
-          <p className="truncate text-xs text-muted-foreground">
+          <p className="truncate text-xs leading-tight text-muted-foreground">
             @{friend.username} · Updated {formatRelative(friend.updatedAt)}
           </p>
         </div>
       </div>
-      <UnderlineTabs label="Binder" value={tab} options={BINDER_TABS} onChange={onTab} />
+      <div className="flex items-end justify-between gap-4">
+        <UnderlineTabs label="Binder" value={tab} options={BINDER_TABS} onChange={onTab} />
+        {trailing && <div className="flex items-center gap-3 pb-1">{trailing}</div>}
+      </div>
     </>
   )
 }

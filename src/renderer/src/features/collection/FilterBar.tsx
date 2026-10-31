@@ -123,12 +123,19 @@ export function FilterBar({ filters, facets, onChange, onClear }: Props): React.
   const [language, setLanguage] = useLanguageFilter()
 
   return (
-    <div className="flex flex-wrap items-center gap-1.5">
-      <CollectionSearch filters={filters} onChange={onChange} />
-      <FacetMenus filters={filters} facets={facets} onChange={onChange} />
-      <LanguageSelect value={language} onChange={setLanguage} available={facets?.languages ?? []} />
-      <Ranges filters={filters} onChange={onChange} />
-      <div className="ml-auto flex items-center gap-1">
+    <div className="flex items-start gap-3">
+      <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
+        <CollectionSearch filters={filters} onChange={onChange} />
+        <FacetMenus filters={filters} facets={facets} onChange={onChange} />
+        <LanguageSelect
+          value={language}
+          onChange={setLanguage}
+          available={facets?.languages ?? []}
+        />
+        <Ranges filters={filters} onChange={onChange} />
+      </div>
+      {/* Sort stays on the top row when the filters wrap, rather than alone on a row of its own. */}
+      <div className="flex shrink-0 items-center gap-1">
         <Select value={filters.sort} onValueChange={(v) => onChange({ sort: v as SortKey })}>
           <SelectTrigger size="sm" aria-label="Sort by" className="w-36">
             <SelectValue />
@@ -142,10 +149,10 @@ export function FilterBar({ filters, facets, onChange, onClear }: Props): React.
           </SelectContent>
         </Select>
         <DirButton filters={filters} onChange={onChange} />
+        <Button variant="ghost" size="sm" onClick={onClear} className="text-muted-foreground">
+          Clear filters
+        </Button>
       </div>
-      <Button variant="ghost" size="sm" onClick={onClear} className="text-muted-foreground">
-        Clear filters
-      </Button>
     </div>
   )
 }

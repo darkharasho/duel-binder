@@ -69,7 +69,8 @@ interface Props {
   /** Shows this friend's collection read-only instead of your own. */
   friend?: Friend
   /** Whose binder this is, shown above a friend's collection. */
-  friendHeader?: React.ReactNode
+  /** Takes the entry count and view toggle when they fit on its tabs' row (not on the phone). */
+  friendHeader?: (trailing?: React.ReactNode) => React.ReactNode
 }
 
 export function CollectionPage({
@@ -216,36 +217,50 @@ export function CollectionPage({
     languageFilter !== 'all' &&
     (friend ? friend.cardCount > 0 : (stats.data?.uniqueCards ?? 0) > 0)
   const languageLabel = LANGUAGES.find((l) => l.code === languageFilter)?.label ?? ''
+  const entryCount = (
+    <p className="text-sm text-muted-foreground tabular-nums">
+      {list.length} {list.length === 1 ? 'entry' : 'entries'}
+      {!friend && <> · Prices updated {formatRelative(stats.data?.pricesUpdatedAt ?? null)}</>}
+    </p>
+  )
+  const viewToggle = (
+    <ToggleGroup type="single" variant="outline" value={view} onValueChange={changeView}>
+      <ToggleGroupItem value="grid" aria-label="Grid view">
+        <LayoutGrid />
+      </ToggleGroupItem>
+      <ToggleGroupItem value="table" aria-label="Table view">
+        <Table2 />
+      </ToggleGroupItem>
+    </ToggleGroup>
+  )
+  const inFriendHeader = !!friendHeader && !phone
 
   return (
     <TooltipProvider>
       <div className="space-y-4 p-8 max-md:p-4">
         <PageHeader>
-          {friend && friendHeader}
-          <header className="flex flex-wrap items-end justify-between gap-2 max-md:flex-col max-md:items-start">
-            <div>
-              {!friend && <h1 className="text-xl font-semibold">Collection</h1>}
-              <p className="text-sm text-muted-foreground tabular-nums">
-                {list.length} {list.length === 1 ? 'entry' : 'entries'}
-                {!friend && (
-                  <> · Prices updated {formatRelative(stats.data?.pricesUpdatedAt ?? null)}</>
-                )}
-              </p>
-            </div>
-            {!phone && (
-              <div className="flex items-center gap-2">
-                {game === 'pkm' && !friend && !isWeb() && <DexImportButton />}
-                <ToggleGroup type="single" variant="outline" value={view} onValueChange={changeView}>
-                  <ToggleGroupItem value="grid" aria-label="Grid view">
-                    <LayoutGrid />
-                  </ToggleGroupItem>
-                  <ToggleGroupItem value="table" aria-label="Table view">
-                    <Table2 />
-                  </ToggleGroupItem>
-                </ToggleGroup>
+          {friendHeader?.(
+            inFriendHeader && (
+              <>
+                {entryCount}
+                {viewToggle}
+              </>
+            )
+          )}
+          {!inFriendHeader && (
+            <header className="flex flex-wrap items-end justify-between gap-2 max-md:flex-col max-md:items-start">
+              <div>
+                {!friend && <h1 className="text-xl font-semibold">Collection</h1>}
+                {entryCount}
               </div>
-            )}
-          </header>
+              {!phone && (
+                <div className="flex items-center gap-2">
+                  {game === 'pkm' && !friend && !isWeb() && <DexImportButton />}
+                  {viewToggle}
+                </div>
+              )}
+            </header>
+          )}
 
           {phone ? (
             <>

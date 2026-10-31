@@ -21,13 +21,15 @@ export function FriendBinder({
     setOpenEntry(undefined)
     setTabState(next)
   }
-  const header = <FriendHeader friend={friend} tab={tab} onTab={setTab} onBack={onBack} />
+  const header = (trailing?: React.ReactNode): React.JSX.Element => (
+    <FriendHeader friend={friend} tab={tab} onTab={setTab} onBack={onBack} trailing={trailing} />
+  )
   switch (tab) {
     case 'dashboard':
       return (
         <FriendDashboard
           friend={friend}
-          header={header}
+          header={header()}
           onOpenEntry={(id) => {
             setOpenEntry(id)
             setTabState('collection')
@@ -45,8 +47,8 @@ export function FriendBinder({
         />
       )
     case 'sets':
-      return <FriendSets friend={friend} header={header} />
+      return <FriendSets friend={friend} header={header()} />
     case 'wishlist':
-      return <FriendWishlist friend={friend} header={header} />
+      return <FriendWishlist friend={friend} header={header()} />
   }
 }

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { matchGroup, matchProducts } from '../../scripts/catalog/pokemon/match'
-import { alwaysFoil, cardVersions, canonicalLabel, groupFinish, variantLabel } from '../../scripts/catalog/pokemon/versions'
+import { alwaysFoil, cardVersions, canonicalLabel, groupFinish, productTreatment, variantLabel } from '../../scripts/catalog/pokemon/versions'
 import type { TcGroup, TcPrice, TcProduct, TdCard, TdSet, TdVariant } from '../../scripts/catalog/pokemon/types'
 import { movedEnough } from '../../src/main/tcgplayer/prices'
 
@@ -403,6 +403,72 @@ describe('true finishes', () => {
     expect(alwaysFoil(' hyper RARE ')).toBe(true)
     expect(alwaysFoil('Rare')).toBe(false)
     expect(alwaysFoil(null)).toBe(false)
+  })
+})
+
+describe('foil patterns', () => {
+  const named = (productId: number, name: string): TcProduct => ({ productId, groupId: 1, name, number: '023/086' })
+  const row = (productId: number, subTypeName: string, marketPrice: number): TcPrice => ({ productId, subTypeName, marketPrice })
+  const variant = (type: string, id: number, variantId: string): TdCard['variants_detailed'] extends (infer V)[] | undefined ? V : never => ({ type, variantId, thirdParty: { tcgplayer: id } })
+  const plain = named(1, 'Carracosta')
+  const ball = named(2, 'Carracosta (Poke Ball Pattern)')
+  const master = named(3, 'Carracosta (Master Ball Pattern)')
+  const matched = [plain, ball, master].map((product) => ({ product, variantSubtype: null }))
+
+  it('keeps a pattern sold as Holofoil out of the plain Holofoil, each with its own price', () => {
+    const c = brief({ variants_detailed: [variant('holo', 1, 'a'), variant('reverse', 1, 'b'), variant('reverse', 2, 'c'), variant('reverse', 3, 'd')] })
+    const prices = new Map<number, TcPrice[]>([
+      [1, [row(1, 'Holofoil', 0.19), row(1, 'Reverse Holofoil', 0.27)]],
+      [2, [row(2, 'Holofoil', 0.44)]],
+      [3, [row(3, 'Holofoil', 13.2)]]
+    ])
+    expect(cardVersions(c, matched, prices).versions.map((v) => [v.label, v.productId, v.price])).toEqual([
+      ['Holofoil', 1, 0.19],
+      ['Master Ball Pattern', 3, 13.2],
+      ['Poke Ball Pattern', 2, 0.44],
+      ['Reverse Holofoil', 1, 0.27]
+    ])
+  })
+
+  it('gives a Common with only patterns no Holofoil', () => {
+    const c = brief({ rarity: 'Common', variants_detailed: [variant('normal', 1, 'a'), variant('reverse', 2, 'c')] })
+    const prices = new Map<number, TcPrice[]>([
+      [1, [row(1, 'Normal', 0.1)]],
+      [2, [row(2, 'Holofoil', 0.5)]]
+    ])
+    expect(cardVersions(c, matched.slice(0, 2), prices).versions.map((v) => v.label)).toEqual(['Normal', 'Poke Ball Pattern'])
+  })
+
+  it('keeps a curated reverse holo TCGplayer has no row for', () => {
+    const c = brief({ variants_detailed: [variant('normal', 1, 'a'), variant('reverse', 1, 'b')] })
+    const prices = new Map<number, TcPrice[]>([[1, [row(1, 'Normal', 2)]]])
+    expect(cardVersions(c, matched.slice(0, 1), prices).versions.map((v) => v.label)).toEqual(['Normal', 'Reverse Holofoil'])
+  })
+
+  it('leaves out a curated Normal of a card sold only as Holofoil', () => {
+    const c = brief({ variants_detailed: [variant('normal', 1, 'a'), variant('holo', 1, 'b')] })
+    const prices = new Map<number, TcPrice[]>([[1, [row(1, 'Holofoil', 2)]]])
+    expect(cardVersions(c, matched.slice(0, 1), prices).versions.map((v) => v.label)).toEqual(['Holofoil'])
+  })
+
+  it('keeps a curated finish when TCGplayer has no rows to say otherwise', () => {
+    const c = brief({ variants_detailed: [variant('normal', 1, 'a'), variant('reverse', 1, 'b')] })
+    expect(cardVersions(c, matched.slice(0, 1), new Map()).versions.map((v) => v.label)).toEqual(['Normal', 'Reverse Holofoil'])
+  })
+
+  it('names the patterns in one spelling and leaves stamps and plain finish notes alone', () => {
+    expect(productTreatment('Erika\'s Oddish (Poke Ball)')).toBe('Poke Ball Pattern')
+    expect(productTreatment('Sneasel (Dusk Ball)')).toBe('Dusk Ball Pattern')
+    expect(productTreatment('Pawmi (Cosmos Foil)')).toBe('Cosmos Holo')
+    expect(productTreatment('Capsule (Cosmo Holo)')).toBe('Cosmos Holo')
+    expect(productTreatment('Capsule (Cosmos Holofoil)')).toBe('Cosmos Holo')
+    expect(productTreatment('Blastoise - 13/95 (Cracked Ice Holo)')).toBe('Cracked Ice Holo')
+    expect(productTreatment('Blastoise (Cracked Ice)')).toBe('Cracked Ice Holo')
+    expect(productTreatment('Air Balloon (Great Ball League)')).toBeNull()
+    expect(productTreatment('Mail - 92a/108 (Holo)')).toBeNull()
+    expect(productTreatment('Sycamore - 107a/122 (Non-Holo)')).toBeNull()
+    expect(productTreatment('Raichu - SM65 (#25 Pikachu Stamped)')).toBeNull()
+    expect(productTreatment('Carracosta')).toBeNull()
   })
 })
 

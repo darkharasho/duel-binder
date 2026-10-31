@@ -303,6 +303,29 @@ describe('one card panel, owned or not', () => {
   })
 })
 
+describe('CardPanel versions of one art', () => {
+  const normal = printing(1, { setRarity: 'Normal' })
+  const reverse = printing(2, { setRarity: 'Reverse Holofoil' })
+
+  it('names the selected Pokémon version in the chip, and moves with the row', async () => {
+    setup([], { printingId: 1 }, [normal, reverse], 'pkm')
+    const chip = await screen.findByTestId('selected-version')
+    await waitFor(() => expect(chip).toHaveTextContent('Normal'))
+    await userEvent.click(await screen.findByText('Reverse Holofoil'))
+    await waitFor(() =>
+      expect(screen.getByTestId('selected-version')).toHaveTextContent('Reverse Holofoil')
+    )
+    cleanup()
+  })
+
+  it('leaves Yu-Gi-Oh! as it was', async () => {
+    setup([], { printingId: 1 }, [a, b], 'ygo')
+    await screen.findByText(/Market price · Ultra Rare/)
+    expect(screen.queryByTestId('selected-version')).toBeNull()
+    cleanup()
+  })
+})
+
 describe('cardTypeRows', () => {
   const base = { originalImageId: 100, ownedAtOpen: new Set<number>() }
 

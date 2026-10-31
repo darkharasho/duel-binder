@@ -15,6 +15,7 @@ import { FriendWants } from '@/features/friends/FriendWants'
 import { api, queryKeys } from '@/lib/api'
 import { useGame } from '@/lib/game'
 import { isPhone } from '@/lib/platform'
+import { rarityColor, rarityTextColor } from '@/lib/rarityColors'
 import { cardTypeRows, type CardTypeRow } from './cardTypes'
 import { CardTypeList } from './CardTypeList'
 
@@ -163,6 +164,8 @@ export function CardPanel({
     !preferSet ||
     (shown.setName === preferSet.setName && shown.language === preferSet.language)
 
+  const pokemonVersion = def.id === 'pkm' ? shown?.setRarity : undefined
+
   const moreFor = shown?.id ?? seed?.defaultPrintingId ?? rows[0]?.printing.id
   const list = (
     <CardTypeList
@@ -194,10 +197,23 @@ export function CardPanel({
           />
         )}
         <div className="space-y-1">
+          {/* Pokémon versions share their art, so nothing else shows which one is selected. */}
+          {pokemonVersion && (
+            <p
+              data-testid="selected-version"
+              className="mb-2 w-fit rounded-full px-3 py-1 text-sm font-semibold"
+              style={{
+                backgroundColor: rarityColor(pokemonVersion, 'pkm'),
+                color: rarityTextColor(pokemonVersion, 'pkm')
+              }}
+            >
+              {pokemonVersion}
+            </p>
+          )}
           {caption && inPreferredSet && (
             <p className="font-mono text-[13px] text-muted-foreground">{caption}</p>
           )}
-          <PanelPrice entry={entry} price={price} label={priceLabel} />
+          <PanelPrice entry={entry} price={price} label={priceLabel} plain={!!pokemonVersion} />
         </div>
 
         {phone && list}

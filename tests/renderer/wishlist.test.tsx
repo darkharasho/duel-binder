@@ -10,7 +10,7 @@ import { WishlistToggle } from '@/features/settings/WishlistToggle'
 import { WishlistPage } from '@/features/wishlist/WishlistPage'
 import { invalidateAfterEdit, mutationInvalidationKeys, queryKeys } from '@/lib/api'
 import { GameProvider } from '@/lib/game'
-import { stillWanted, wishlistCost } from '@/lib/wishlist'
+import { matchesWishSearch, stillWanted, wishlistCost } from '@/lib/wishlist'
 import { createMockApi, renderWithProviders } from './mockApi'
 
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() }, Toaster: () => null }))
@@ -183,6 +183,17 @@ describe('X wants this', () => {
     expect(await screen.findByRole('button', { name: /Want .*LOB-001/ })).toBeInTheDocument()
     await waitFor(() => expect(wanting).toHaveBeenCalled())
     expect(screen.queryByRole('region', { name: 'Friends who want this card' })).toBeNull()
+  })
+})
+
+describe('matchesWishSearch', () => {
+  const item = { card, printing: printing(1) } as WishlistItem
+
+  it('matches the name or the set code, ignoring case', () => {
+    expect(matchesWishSearch(item, 'dark')).toBe(true)
+    expect(matchesWishSearch(item, ' lob-001 ')).toBe(true)
+    expect(matchesWishSearch(item, '')).toBe(true)
+    expect(matchesWishSearch(item, 'kuriboh')).toBe(false)
   })
 })
 

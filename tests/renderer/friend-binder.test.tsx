@@ -131,6 +131,18 @@ describe("a friend's binder", () => {
     expect(rows[1]).toHaveTextContent('Barely')
   })
 
+  it('searches their sets by name or code', async () => {
+    open()
+    await userEvent.click(screen.getByRole('radio', { name: 'Sets' }))
+    const search = await screen.findByRole('searchbox', { name: 'Search sets' })
+    await userEvent.type(search, 'barely')
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: /Metal Raiders/ })).not.toBeInTheDocument()
+    )
+    await userEvent.type(search, 'zzz')
+    expect(await screen.findByText('No sets match')).toBeInTheDocument()
+  })
+
   it("shows a set read-only with the friend's copies", async () => {
     const { api } = open()
     await userEvent.click(screen.getByRole('radio', { name: 'Sets' }))

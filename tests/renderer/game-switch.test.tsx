@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import App from '@/App'
 import { CardDetails } from '@/components/CardDetails'
 import { BrowsePage } from '@/features/browse/BrowsePage'
-import { FilterBar } from '@/features/collection/FilterBar'
+import { CollectionPage } from '@/features/collection/CollectionPage'
 import { GAME_FREE, GameProvider, pageInGame, useGame } from '@/lib/game'
 import { SetsPage } from '@/features/sets/SetsPage'
 import { createHttpApi, GAME_KEY } from '@/web/httpApi'
@@ -161,67 +161,67 @@ describe('desktop game switch', () => {
 })
 
 describe('per-game filters and words', () => {
-  const pkmApi = (): Api =>
+  const pkmApi = (list = vi.fn(async () => [])): Api =>
     desktopApi(['ygo', 'pkm'], 'pkm', {
-      collection: { facets: async () => pkmFacets },
+      collection: { facets: async () => pkmFacets, list },
       cards: {
         browseFacets: async () => ({ ...pkmFacets, races: [] })
       }
     })
 
-  it('the collection filter bar shows Category, Type, Stage and HP on Pokémon', async () => {
+  it('the collection filters show Category, Type, Stage and HP on Pokémon', async () => {
     renderWithProviders(
       <GameProvider>
-        <FilterBar
-          filters={{ sort: 'added', dir: 'desc' }}
-          facets={pkmFacets}
-          onChange={() => {}}
-          onClear={() => {}}
-        />
+        <CollectionPage />
       </GameProvider>,
       { api: pkmApi() }
     )
+    await userEvent.click(await screen.findByRole('button', { name: /^Filters/ }))
     expect(await screen.findByRole('button', { name: /Category/ })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /^Type/ })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Stage/ })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Version/ })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'HP' }))
     expect(screen.getByLabelText('HP min')).toBeInTheDocument()
     expect(screen.getByLabelText('HP max')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Attribute/ })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Card type/ })).not.toBeInTheDocument()
-    expect(screen.queryByLabelText('Level min')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Level' })).not.toBeInTheDocument()
   })
 
   it('a Pokémon HP bound goes to hpMin', async () => {
-    const onChange = vi.fn()
+    const list = vi.fn(async () => [])
     renderWithProviders(
       <GameProvider>
-        <FilterBar
-          filters={{ sort: 'added', dir: 'desc' }}
-          facets={pkmFacets}
-          onChange={onChange}
-          onClear={() => {}}
-        />
+        <CollectionPage />
       </GameProvider>,
-      { api: pkmApi() }
+      { api: pkmApi(list) }
     )
-    await userEvent.type(await screen.findByLabelText('HP min'), '9')
-    expect(onChange).toHaveBeenCalledWith({ hpMin: 9 })
+    await userEvent.click(await screen.findByRole('button', { name: /^Filters/ }))
+    await userEvent.click(await screen.findByRole('button', { name: 'HP' }))
+    await userEvent.type(screen.getByLabelText('HP min'), '9')
+    await waitFor(() =>
+      expect(list).toHaveBeenLastCalledWith(expect.objectContaining({ hpMin: 9 }))
+    )
   })
 
-  it('Browse builds its filters from the game too', async () => {
+  it('Browse builds its filters and sorts from the game too', async () => {
     renderWithProviders(
       <GameProvider>
         <BrowsePage onAddCard={() => {}} />
       </GameProvider>,
       { api: pkmApi() }
     )
+    await userEvent.click(await screen.findByRole('combobox', { name: 'Sort by' }))
+    expect(await screen.findByRole('option', { name: 'HP: high to low' })).toBeInTheDocument()
+    expect(screen.queryByRole('option', { name: /^ATK/ })).not.toBeInTheDocument()
+    await userEvent.keyboard('{Escape}')
+    await userEvent.click(screen.getByRole('button', { name: /^Filters/ }))
     expect(await screen.findByRole('button', { name: /Category/ })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Stage/ })).toBeInTheDocument()
-    expect(screen.getByLabelText('HP min')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'HP' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Attribute/ })).not.toBeInTheDocument()
-    expect(screen.queryByLabelText('Level min')).not.toBeInTheDocument()
-    expect(screen.queryByRole('option', { name: 'ATK' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Level' })).not.toBeInTheDocument()
   })
 
   it('card details label the printing code "Number" and the rarity "Version" on Pokémon', async () => {

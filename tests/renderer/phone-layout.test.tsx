@@ -116,42 +116,39 @@ describe('phone layout', () => {
     expect(screen.queryByRole('table')).not.toBeInTheDocument()
   })
 
-  it('collection keeps search on the page and the facets in a Filters sheet', async () => {
+  it('collection keeps search and sort on the page and the facets in a Filters sheet', async () => {
     renderWithProviders(<CollectionPage />, { api: phoneApi() })
     await screen.findByLabelText('Collection grid')
     // Search sits on the page itself, so opening the filters never raises the keyboard.
     expect(screen.getByRole('searchbox', { name: 'Search collection' })).toBeInTheDocument()
+    expect(screen.getByRole('combobox', { name: 'Sort by' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Card type' })).not.toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: 'Filters' }))
+    await userEvent.click(screen.getByRole('button', { name: /^Filters/ }))
     const sheet = await screen.findByRole('dialog', { name: 'Filters' })
     expect(sheet).toHaveAttribute('data-layout', 'bottom-sheet')
     expect(within(sheet).queryByRole('searchbox')).not.toBeInTheDocument()
-    expect(within(sheet).queryByRole('textbox')).not.toBeInTheDocument()
-    for (const facet of ['Card type', 'Attribute', 'Archetype', 'Set', 'Rarity']) {
+    for (const facet of ['Language', 'Card type', 'Attribute', 'Archetype', 'Set', 'Rarity']) {
       expect(within(sheet).getByRole('button', { name: facet })).toBeInTheDocument()
     }
-    expect(within(sheet).getByRole('combobox', { name: 'Language' })).toBeInTheDocument()
-    expect(within(sheet).getByLabelText('Level min')).toBeInTheDocument()
-    expect(within(sheet).getByRole('radio', { name: 'Date added' })).toBeChecked()
-    expect(within(sheet).getByRole('button', { name: 'Sort descending' })).toBeInTheDocument()
-    expect(within(sheet).getByRole('button', { name: 'Clear filters' })).toBeInTheDocument()
+    expect(within(sheet).getByRole('button', { name: 'Clear all' })).toBeInTheDocument()
     // Nothing in the sheet takes focus on opening.
     expect(sheet.contains(document.activeElement)).toBe(false)
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Level' }))
+    expect(within(sheet).getByLabelText('Level min')).toBeInTheDocument()
   })
 
   it('collection shows a count and removable chips for active phone filters', async () => {
     renderWithProviders(<CollectionPage />, { api: phoneApi() })
     await screen.findByLabelText('Collection grid')
-    await userEvent.click(screen.getByRole('button', { name: 'Filters' }))
+    await userEvent.click(screen.getByRole('button', { name: /^Filters/ }))
     const sheet = await screen.findByRole('dialog', { name: 'Filters' })
-    await userEvent.click(within(sheet).getByRole('button', { name: 'Card type' }))
-    await userEvent.click(await screen.findByRole('menuitemcheckbox', { name: 'Normal Monster' }))
-    await userEvent.keyboard('{Escape}')
+    await userEvent.click(await within(sheet).findByRole('button', { name: 'Normal Monster' }))
     await userEvent.keyboard('{Escape}')
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-    expect(screen.getByRole('button', { name: 'Filters, 1 active' })).toBeInTheDocument()
+    // The language counts too: English by default.
+    expect(screen.getByRole('button', { name: 'Filters, 2 active' })).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Remove Normal Monster filter' }))
-    expect(screen.getByRole('button', { name: 'Filters' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Filters, 1 active' })).toBeInTheDocument()
     expect(
       screen.queryByRole('button', { name: 'Remove Normal Monster filter' })
     ).not.toBeInTheDocument()
@@ -191,10 +188,10 @@ describe('phone layout', () => {
     expect(await screen.findByRole('button', { name: /Metal Raiders/ })).toBeInTheDocument()
     expect(screen.getByRole('list', { name: 'Sets' })).toHaveAttribute('data-view', 'list')
     expect(screen.queryByRole('radio', { name: 'Grid view' })).not.toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: 'Filters & sort' }))
-    const sheet = await screen.findByRole('dialog', { name: 'Filters & sort' })
+    await userEvent.click(screen.getByRole('button', { name: /^Filters/ }))
+    const sheet = await screen.findByRole('dialog', { name: 'Filters' })
     expect(sheet).toHaveAttribute('data-layout', 'bottom-sheet')
-    expect(within(sheet).getByRole('radio', { name: 'Started' })).toBeInTheDocument()
+    expect(within(sheet).getByRole('button', { name: 'Started' })).toBeInTheDocument()
   })
 
   it('set card panel opens full-screen on the phone', async () => {
@@ -283,7 +280,7 @@ describe('phone layout', () => {
     const sheet = await screen.findByRole('dialog', { name: 'Filters' })
     expect(sheet).toHaveAttribute('data-layout', 'bottom-sheet')
     expect(within(sheet).getByRole('button', { name: /Card type/ })).toBeInTheDocument()
-    expect(within(sheet).getByLabelText('Level min')).toBeInTheDocument()
+    expect(within(sheet).getByRole('button', { name: 'Level' })).toBeInTheDocument()
     // Nothing in the sheet takes focus on opening.
     expect(sheet.contains(document.activeElement)).toBe(false)
     await userEvent.keyboard('{Escape}')

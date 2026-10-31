@@ -246,6 +246,7 @@ interface PrintingDbRow {
   def: number | null
   level: number | null
   card_rarity: string | null
+  hp: number | null
 }
 
 interface EntryDbRow {
@@ -307,7 +308,7 @@ function checklistCards(
               c.atk, c.def, COALESCE(c.level, c.linkval) AS level,
               (SELECT i.image_id FROM card_images i WHERE i.card_id = c.id AND +i.game = ${scope.game}
                ORDER BY i.sort_order, i.image_id LIMIT 1) AS image_id,
-              pc.rarity AS card_rarity
+              pc.rarity AS card_rarity, pc.hp
        FROM card_printings p JOIN cards c ON c.id = p.card_id AND +c.game = ${scope.game}
        LEFT JOIN intl_prices ip ON ip.printing_id = p.id
        LEFT JOIN pokemon_cards pc ON pc.card_id = p.card_id AND ${scope.game} = 'pkm'
@@ -385,7 +386,7 @@ function checklistCards(
       def: rows[0].def,
       level: rows[0].level,
       // Pokémon only: the card's own rarity, apart from its finishes in `rarities`.
-      ...(pkm ? { cardRarity: rows[0].card_rarity } : {})
+      ...(pkm ? { cardRarity: rows[0].card_rarity, hp: rows[0].hp } : {})
     })
   }
   return cards.sort((a, b) => {

@@ -1,35 +1,40 @@
 import { useCallback, useMemo, useState } from 'react'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
-import { LayoutGrid, SlidersHorizontal, Table2 } from 'lucide-react'
+import { LayoutGrid, Table2 } from 'lucide-react'
 import { LANGUAGES } from '@shared/languages'
 import type { CollectionFilters, EntryView, Friend, SortKey } from '@shared/types'
 import { cardArtUrl, useArtWash } from '@/components/artWashContext'
 import { CardSheet } from '@/components/CardSheet'
+import { FilterBar } from '@/components/FilterBar'
+import { CardFilterSections, FilterPanel, LanguageSection } from '@/components/FilterPanel'
 import { PageHeader } from '@/components/PageHeader'
 import { listNav } from '@/components/panelNav'
+import { SearchInput } from '@/components/SearchInput'
+import { SortControl } from '@/components/SortControl'
 import { Button } from '@/components/ui/button'
-import {
-  Sheet,
-  SheetContent,
-  SheetDescription,
-  SheetHeader,
-  SheetTitle
-} from '@/components/ui/sheet'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { api, queryKeys } from '@/lib/api'
+import {
+  cardFilterChips,
+  clearedFilters,
+  facetsFor,
+  languageChip,
+  sortOptions
+} from '@/lib/filters'
 import { formatRelative } from '@/lib/format'
 import { friendsErrorMessage } from '@/lib/friends'
 import { useGame } from '@/lib/game'
 import { useLanguageFilter } from '@/lib/languageFilter'
 import { isPhone } from '@/lib/platform'
+import { rangeFilters } from '@/lib/rangeFilters'
+import { useSetNames } from '@/lib/setLabels'
+import { useFilterPanel } from '@/lib/useFilterPanel'
 import { CollectionGrid } from './CollectionGrid'
 import { CollectionTable } from './CollectionTable'
 import { CardPanel } from '../card/CardPanel'
 import { FriendEntryPanel } from '../friends/FriendEntryPanel'
-import { CollectionSearch, FilterBar, FilterChips, FilterSheetBody } from './FilterBar'
 import { DEFAULT_FILTERS } from './defaultFilters'
-import { activeFilterCount } from './filterFacets'
 
 type View = 'grid' | 'table'
 const VIEW_KEY = 'collection.view'
@@ -42,24 +47,16 @@ function readView(): View {
   }
 }
 
-function hasActiveFilters(f: CollectionFilters): boolean {
-  return Boolean(
-    f.q ||
-    f.cardTypes?.length ||
-    f.attributes?.length ||
-    f.archetypes?.length ||
-    f.setNames?.length ||
-    f.rarities?.length ||
-    f.levelMin !== undefined ||
-    f.levelMax !== undefined ||
-    f.pkmCategories?.length ||
-    f.pkmTypes?.length ||
-    f.pkmStages?.length ||
-    f.pkmRarities?.length ||
-    f.hpMin !== undefined ||
-    f.hpMax !== undefined
-  )
-}
+const SORTS = sortOptions<SortKey>([
+  { value: 'name', label: 'Name', kind: 'text', dir: 'asc' },
+  { value: 'value', label: 'Total price', kind: 'number', dir: 'desc' },
+  { value: 'unitPrice', label: 'Price', kind: 'number', dir: 'desc' },
+  { value: 'quantity', label: 'Quantity', kind: 'number', dir: 'desc' },
+  { value: 'added', label: 'Date added', kind: 'date', dir: 'desc' }
+])
+
+const cardCount = (n: number): string =>
+  `${n.toLocaleString('en-US')} ${n === 1 ? 'card' : 'cards'}`
 
 interface Props {
   /** Opens this entry's detail panel on mount (dashboard "top entries" navigation). */
@@ -89,9 +86,8 @@ export function CollectionPage({
   // The table needs desktop width, so the phone always shows the grid.
   const phone = isPhone()
   const view: View = phone ? 'grid' : storedView
-  const [filtersOpen, setFiltersOpen] = useState(false)
+  const panel = useFilterPanel()
   const [selectedId, setSelectedId] = useState<number | null>(initialEntryId ?? null)
-  const [resetCount, setResetCount] = useState(0)
   const [pickedCardId, setCardId] = useState<number | null>(null)
 
   const friendId = friend?.id
@@ -140,21 +136,13 @@ export function CollectionPage({
     (patch: Partial<CollectionFilters>) => setFilters((f) => ({ ...f, ...patch })),
     []
   )
-  // Bumping resetCount remounts FilterBar so its local search text resets too.
-  const clear = useCallback(() => {
-    setFilters(DEFAULT_FILTERS)
-    setResetCount((n) => n + 1)
-  }, [])
-  // The phone's filter sheet and chips clear the facets, leaving the search and sort be.
-  const clearFacets = useCallback(
-    () =>
-      setFilters((f) => ({
-        ...DEFAULT_FILTERS,
-        q: f.q,
-        sort: f.sort,
-        dir: f.dir
-      })),
-    []
+  const clearFilters = useCallback(() => {
+    setFilters((f) => clearedFilters(f, DEFAULT_FILTERS))
+    setLanguageFilter('all')
+  }, [setLanguageFilter])
+  const changeSearch = useCallback(
+    (q: string) => onChange({ q: q === '' ? undefined : q }),
+    [onChange]
   )
 
   const changeView = (v: string): void => {
@@ -207,9 +195,13 @@ export function CollectionPage({
   )
   // The collection tints the page with its first card in the current order.
   useArtWash(list[0] ? cardArtUrl(list[0].imageId) : null)
-  const filtered = hasActiveFilters(filters)
   const { def } = useGame()
-  const activeCount = activeFilterCount(filters, def)
+  const setNames = useSetNames(languageFilter)
+  const facetList = facetsFor(def)
+  const ranges = rangeFilters(def.filters)
+  const cardChips = cardFilterChips(filters, facetList, ranges, setNames.labelOf, onChange)
+  const chips = [...languageChip(languageFilter, setLanguageFilter), ...cardChips]
+  const filtered = Boolean(filters.q) || cardChips.length > 0
   // Entries exist, but the language filter alone hides them all.
   const hiddenByLanguage =
     !filtered &&
@@ -236,164 +228,160 @@ export function CollectionPage({
 
   return (
     <TooltipProvider>
-      <div className="space-y-4 p-8 max-md:p-4">
-        <PageHeader>
-          {friendHeader?.(
-            inFriendHeader && (
-              <>
-                {entryCount}
-                {viewToggle}
-              </>
-            )
-          )}
-          {!inFriendHeader && (
-            <header className="flex flex-wrap items-end justify-between gap-2 max-md:flex-col max-md:items-start">
-              <div>
-                {!friend && <h1 className="text-xl font-semibold">Collection</h1>}
-                {entryCount}
-              </div>
-              {!phone && viewToggle}
-            </header>
-          )}
+      <div className="flex items-start">
+        <div className="min-w-0 flex-1 space-y-4 p-8 max-md:p-4">
+          <PageHeader>
+            {friendHeader?.(
+              inFriendHeader && (
+                <>
+                  {entryCount}
+                  {viewToggle}
+                </>
+              )
+            )}
+            {!inFriendHeader && (
+              <header className="flex flex-wrap items-end justify-between gap-2 max-md:flex-col max-md:items-start">
+                <div>
+                  {!friend && <h1 className="text-xl font-semibold">Collection</h1>}
+                  {entryCount}
+                </div>
+              </header>
+            )}
 
-          {phone ? (
-            <>
-              <div className="flex items-center gap-2">
-                <CollectionSearch
-                  key={resetCount}
-                  filters={filters}
-                  onChange={onChange}
-                  className="relative min-w-0 flex-1"
-                />
-                <Button
-                  variant="outline"
-                  size="sm"
-                  aria-label={activeCount > 0 ? `Filters, ${activeCount} active` : 'Filters'}
-                  onClick={() => setFiltersOpen(true)}
-                >
-                  <SlidersHorizontal />
-                  Filters
-                  {activeCount > 0 && (
-                    <span className="ml-1 rounded-full bg-primary px-1.5 text-xs tabular-nums text-primary-foreground">
-                      {activeCount}
-                    </span>
-                  )}
-                </Button>
-              </div>
-              <FilterChips filters={filters} onChange={onChange} onClear={clearFacets} />
-            </>
-          ) : (
             <FilterBar
-              key={resetCount}
-              filters={filters}
-              facets={facets.data}
-              onChange={onChange}
-              onClear={clear}
+              search={
+                <SearchInput
+                  label="Search collection"
+                  placeholder="Search collection by name or set code"
+                  value={filters.q ?? ''}
+                  onChange={changeSearch}
+                />
+              }
+              filtersOpen={panel.open}
+              onToggleFilters={() => panel.setOpen(!panel.open)}
+              sort={
+                <SortControl
+                  options={SORTS}
+                  value={filters.sort}
+                  dir={filters.dir}
+                  onChange={(sort, dir) => onChange({ sort, dir })}
+                />
+              }
+              toggle={!phone && !inFriendHeader && viewToggle}
+              chips={chips}
+              onClearAll={clearFilters}
+              resultCount={cardCount(list.length)}
             />
-          )}
-        </PageHeader>
+          </PageHeader>
 
-        {phone && (
-          <Sheet open={filtersOpen} onOpenChange={setFiltersOpen}>
-            <SheetContent
-              side="bottom"
-              data-layout="bottom-sheet"
-              className="max-h-[85dvh] gap-0 overflow-y-auto rounded-t-3xl border-white/[0.08] pb-[max(1rem,env(safe-area-inset-bottom))]"
-              // Nothing takes focus on opening, so no field raises the keyboard over the sheet.
-              onOpenAutoFocus={(e) => e.preventDefault()}
-            >
-              <SheetHeader>
-                <SheetTitle>Filters</SheetTitle>
-                <SheetDescription className="sr-only">
-                  Filter and sort the collection
-                </SheetDescription>
-              </SheetHeader>
-              <FilterSheetBody
-                filters={filters}
-                facets={facets.data}
-                onChange={onChange}
-                onClear={clearFacets}
-              />
-            </SheetContent>
-          </Sheet>
-        )}
-
-        {friend && entries.isError && !friendLoadFailed && (
-          <p role="alert" className="mb-3 text-sm text-muted-foreground">
-            Couldn&apos;t refresh {friendName}&apos;s collection:{' '}
-            {friendsErrorMessage(entries.error)}
-          </p>
-        )}
-        {friendLoadFailed && entries.isError ? (
-          <div className="flex flex-col items-center gap-3 py-24 text-center">
-            <p role="alert" className="text-sm text-muted-foreground">
+          {friend && entries.isError && !friendLoadFailed && (
+            <p role="alert" className="mb-3 text-sm text-muted-foreground">
+              Couldn&apos;t refresh {friendName}&apos;s collection:{' '}
               {friendsErrorMessage(entries.error)}
             </p>
-            <Button variant="outline" onClick={() => void entries.refetch()}>
-              Retry
-            </Button>
-          </div>
-        ) : entries.isSuccess && list.length === 0 ? (
-          <div className="flex flex-col items-center gap-3 py-24 text-center">
-            {hiddenByLanguage ? (
-              <>
-                <p className="text-lg font-medium">No {languageLabel} cards</p>
-                <Button variant="outline" onClick={() => setLanguageFilter('all')}>
-                  Show all languages
-                </Button>
-              </>
-            ) : filtered ? (
-              <>
-                <p className="text-lg font-medium">No cards match these filters</p>
-                <Button variant="outline" onClick={clear}>
-                  Clear filters
-                </Button>
-              </>
-            ) : friend ? (
-              <p className="text-lg font-medium">{friendName} hasn&apos;t added any cards yet</p>
-            ) : (
-              <>
-                <p className="text-lg font-medium">No cards yet</p>
-                <Button onClick={onAddCard}>Add card</Button>
-              </>
-            )}
-          </div>
-        ) : view === 'grid' ? (
-          <CollectionGrid entries={list} selectedId={selectedId} onSelect={select} />
-        ) : (
-          <CollectionTable
-            entries={list}
-            selectedId={selectedId}
-            sort={filters.sort}
-            dir={filters.dir}
-            onSort={onSort}
-            onSelect={select}
-          />
-        )}
-
-        {friend && selectedEntry && (
-          <CardSheet onClose={close}>
-            <FriendEntryPanel
-              entry={selectedEntry}
-              copies={(allFriendEntries.data ?? list).filter(
-                (e) => e.card.id === selectedEntry.card.id
+          )}
+          {friendLoadFailed && entries.isError ? (
+            <div className="flex flex-col items-center gap-3 py-24 text-center">
+              <p role="alert" className="text-sm text-muted-foreground">
+                {friendsErrorMessage(entries.error)}
+              </p>
+              <Button variant="outline" onClick={() => void entries.refetch()}>
+                Retry
+              </Button>
+            </div>
+          ) : entries.isSuccess && list.length === 0 ? (
+            <div className="flex flex-col items-center gap-3 py-24 text-center">
+              {hiddenByLanguage ? (
+                <>
+                  <p className="text-lg font-medium">No {languageLabel} cards</p>
+                  <Button variant="outline" onClick={() => setLanguageFilter('all')}>
+                    Show all languages
+                  </Button>
+                </>
+              ) : filtered ? (
+                <>
+                  <p className="text-lg font-medium">No cards match these filters</p>
+                  {chips.length > 0 ? (
+                    <Button variant="outline" onClick={clearFilters}>
+                      Clear all
+                    </Button>
+                  ) : (
+                    <Button variant="outline" onClick={() => changeSearch('')}>
+                      Clear search
+                    </Button>
+                  )}
+                </>
+              ) : friend ? (
+                <p className="text-lg font-medium">{friendName} hasn&apos;t added any cards yet</p>
+              ) : (
+                <>
+                  <p className="text-lg font-medium">No cards yet</p>
+                  <Button onClick={onAddCard}>Add card</Button>
+                </>
               )}
-              onSelectEntry={setSelectedId}
-              nav={nav}
+            </div>
+          ) : view === 'grid' ? (
+            <CollectionGrid entries={list} selectedId={selectedId} onSelect={select} />
+          ) : (
+            <CollectionTable
+              entries={list}
+              selectedId={selectedId}
+              sort={filters.sort}
+              dir={filters.dir}
+              onSort={onSort}
+              onSelect={select}
             />
-          </CardSheet>
-        )}
-        {!friend && selectedId !== null && cardId !== null && (
-          <CardSheet onClose={close}>
-            <CardPanel
-              cardId={cardId}
-              entryId={selectedId}
-              onSelectEntry={setSelectedId}
-              onClose={close}
-              nav={nav}
-            />
-          </CardSheet>
-        )}
+          )}
+
+          {friend && selectedEntry && (
+            <CardSheet onClose={close}>
+              <FriendEntryPanel
+                entry={selectedEntry}
+                copies={(allFriendEntries.data ?? list).filter(
+                  (e) => e.card.id === selectedEntry.card.id
+                )}
+                onSelectEntry={setSelectedId}
+                nav={nav}
+              />
+            </CardSheet>
+          )}
+          {!friend && selectedId !== null && cardId !== null && (
+            <CardSheet onClose={close}>
+              <CardPanel
+                cardId={cardId}
+                entryId={selectedId}
+                onSelectEntry={setSelectedId}
+                onClose={close}
+                nav={nav}
+              />
+            </CardSheet>
+          )}
+        </div>
+        <FilterPanel
+          wide={panel.wide}
+          open={panel.open}
+          onOpenChange={panel.setOpen}
+          description="Filter the collection"
+          onClearAll={chips.length > 0 ? clearFilters : undefined}
+        >
+          <LanguageSection
+            value={languageFilter}
+            onChange={setLanguageFilter}
+            available={facets.data?.languages ?? []}
+          />
+          <CardFilterSections
+            facetList={facetList}
+            ranges={ranges}
+            filters={filters}
+            options={(key) => {
+              if (key === 'races') return []
+              const options = facets.data?.[key] ?? []
+              return key === 'setNames' ? options.filter(setNames.inLanguage) : options
+            }}
+            setLabelOf={setNames.labelOf}
+            onChange={onChange}
+          />
+        </FilterPanel>
       </div>
     </TooltipProvider>
   )

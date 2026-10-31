@@ -5,6 +5,7 @@ import { SetsFilterPanel, type SetsFilterPanelProps } from '@/features/sets/Sets
 
 const setup = (o: Partial<SetsFilterPanelProps> = {}) => {
   const p: SetsFilterPanelProps = {
+    wide: false,
     open: true,
     onOpenChange: vi.fn(),
     types: [],
@@ -12,14 +13,12 @@ const setup = (o: Partial<SetsFilterPanelProps> = {}) => {
     counts: { booster: 300, deck: 140, tin: 20, collection: 30, promo: 50 },
     filter: 'all',
     onFilterChange: vi.fn(),
-    sort: 'date',
-    onSortChange: vi.fn(),
     mode: 'cards',
     onModeChange: vi.fn(),
     language: 'all',
     onLanguageChange: vi.fn(),
     availableLanguages: ['en'],
-    onReset: vi.fn(),
+    onClearAll: vi.fn(),
     ...o
   }
   render(<SetsFilterPanel {...p} />)
@@ -27,56 +26,46 @@ const setup = (o: Partial<SetsFilterPanelProps> = {}) => {
 }
 
 describe('SetsFilterPanel', () => {
-  it('shows the title and section headings', () => {
+  it('shows the title and section headings, Language first', () => {
     setup()
-    expect(screen.getByText('Filters & sort')).toBeInTheDocument()
-    for (const h of ['Type', 'Progress', 'Sort by', 'Count', 'Language'])
-      expect(screen.getByText(h)).toBeInTheDocument()
+    expect(screen.getByRole('dialog', { name: 'Filters' })).toBeInTheDocument()
+    const headings = screen.getAllByRole('button', { expanded: true }).map((b) => b.textContent)
+    expect(headings).toEqual(['Language', 'Type', 'Progress', 'Count'])
   })
 
   it('shows type counts and toggles types in SET_TYPES order', async () => {
     const p = setup()
     expect(screen.getByText('140')).toBeInTheDocument()
-    await userEvent.click(screen.getByRole('checkbox', { name: /Decks/ }))
+    await userEvent.click(screen.getByRole('button', { name: /Decks/ }))
     expect(p.onTypesChange).toHaveBeenCalledWith(['deck'])
   })
 
   it('adds in canonical order and removes', async () => {
     const p = setup({ types: ['promo'] })
-    await userEvent.click(screen.getByRole('checkbox', { name: /Decks/ }))
+    await userEvent.click(screen.getByRole('button', { name: /Decks/ }))
     expect(p.onTypesChange).toHaveBeenCalledWith(['deck', 'promo'])
   })
 
   it('unchecks a selected type', async () => {
     const p = setup({ types: ['deck'] })
-    await userEvent.click(screen.getByRole('checkbox', { name: /Decks/ }))
+    await userEvent.click(screen.getByRole('button', { name: /Decks/ }))
     expect(p.onTypesChange).toHaveBeenCalledWith([])
   })
 
-  it('changes progress, sort and count', async () => {
+  it('changes progress and count', async () => {
     const p = setup()
-    await userEvent.click(screen.getByRole('radio', { name: 'Started' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Started' }))
     expect(p.onFilterChange).toHaveBeenCalledWith('started')
-    await userEvent.click(screen.getByRole('radio', { name: 'Complete' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Complete' }))
     expect(p.onFilterChange).toHaveBeenCalledWith('complete')
-    await userEvent.click(screen.getByRole('radio', { name: 'Most complete' }))
-    expect(p.onSortChange).toHaveBeenCalledWith('complete')
-    await userEvent.click(screen.getByRole('radio', { name: 'Name' }))
-    expect(p.onSortChange).toHaveBeenCalledWith('name')
-    await userEvent.click(screen.getByRole('radio', { name: 'Every rarity' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Every rarity' }))
     expect(p.onModeChange).toHaveBeenCalledWith('rarities')
   })
 
-  it('ignores re-clicking the active item', async () => {
-    const p = setup({ filter: 'all' })
-    await userEvent.click(screen.getByRole('radio', { name: 'All' }))
-    expect(p.onFilterChange).not.toHaveBeenCalled()
-  })
-
-  it('resets and closes on Escape', async () => {
+  it('clears and closes on Escape', async () => {
     const p = setup()
-    await userEvent.click(screen.getByRole('button', { name: 'Reset all' }))
-    expect(p.onReset).toHaveBeenCalled()
+    await userEvent.click(screen.getByRole('button', { name: 'Clear all' }))
+    expect(p.onClearAll).toHaveBeenCalled()
     await userEvent.keyboard('{Escape}')
     expect(p.onOpenChange).toHaveBeenCalledWith(false)
   })

@@ -1,8 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { RefObject } from 'react'
-import { Search } from 'lucide-react'
 import type { ChecklistCard } from '@shared/types'
-import { Input } from '@/components/ui/input'
+import { SearchInput } from '@/components/SearchInput'
 import { BulkTile } from './BulkTile'
 import { JustAdded, type AddedItem } from './JustAdded'
 import { bulkTiles, filterBulkCards, type BulkTileData } from './setsView'
@@ -216,23 +215,16 @@ export function BulkMode({ cards, setName, pending, adjust }: BulkModeProps): Re
   return (
     <div className="flex flex-col gap-4 md:flex-row md:items-start">
       <div className="space-y-3 md:sticky md:top-4 md:w-72 md:shrink-0">
-        <div className="relative">
-          <Search
-            className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
-            aria-hidden
-          />
-          <Input
-            type="search"
-            ref={inputRef}
-            autoFocus
-            value={query}
-            onChange={(e) => changeQuery(e.target.value)}
-            onKeyDown={onKeyDown}
-            placeholder="Type a card number or name"
-            aria-label="Type a card number or name"
-            className="pl-8"
-          />
-        </div>
+        <SearchInput
+          label="Type a card number or name"
+          placeholder="Search this set by number, name or code"
+          inputRef={inputRef}
+          autoFocus
+          value={query}
+          onChange={changeQuery}
+          debounceMs={0}
+          onKeyDown={onKeyDown}
+        />
         <JustAdded items={added} onUndo={undo} />
       </div>
       <div className="min-w-0 flex-1 space-y-4">

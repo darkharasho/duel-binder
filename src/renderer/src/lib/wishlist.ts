@@ -33,6 +33,16 @@ export function wishlistCost(items: WishlistItem[]): { cost: number; unpriced: n
   return { cost, unpriced }
 }
 
+/** Whether a wanted card matches a search: its name or its printing's set code. */
+export function matchesWishSearch(w: WishlistItem, q: string): boolean {
+  const needle = q.trim().toLowerCase()
+  return (
+    !needle ||
+    w.card.name.toLowerCase().includes(needle) ||
+    w.printing.setCode.toLowerCase().includes(needle)
+  )
+}
+
 export function useWishlist(): UseQueryResult<WishlistItem[]> {
   return useQuery({ queryKey: queryKeys.wishlist, queryFn: () => api.wishlist.list() })
 }

@@ -286,11 +286,9 @@ describe('BrowsePage', () => {
       }
     })
     await screen.findByRole('button', { name: /Dark Magician/ })
-    await userEvent.click(screen.getByRole('button', { name: 'Set' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Filters' }))
     expect(
-      await screen.findByRole('menuitemcheckbox', {
-        name: 'LOB - Legend of Blue Eyes White Dragon'
-      })
+      await screen.findByRole('button', { name: 'LOB - Legend of Blue Eyes White Dragon' })
     ).toBeInTheDocument()
   })
 
@@ -307,6 +305,45 @@ describe('BrowsePage', () => {
         expect.objectContaining({ owned: 'missing', offset: 0 })
       )
     )
+  })
+
+  it('Clear all clears the filters; the search, sort and Show tab stay', async () => {
+    const { browse } = setup([card(1, 'Dark Magician')], 1, {
+      cards: {
+        browseFacets: async () => ({
+          cardTypes: ['Normal Monster'],
+          attributes: [],
+          races: [],
+          archetypes: [],
+          setNames: [],
+          rarities: []
+        })
+      }
+    })
+    await screen.findByRole('button', { name: /Dark Magician/ })
+    await userEvent.type(screen.getByLabelText('Search cards'), 'dark')
+    await userEvent.click(screen.getByRole('combobox', { name: 'Sort by' }))
+    await userEvent.click(await screen.findByRole('option', { name: 'Price: low to high' }))
+    await userEvent.click(screen.getByRole('radio', { name: 'Not owned' }))
+    // Browse lists English only, so the app-wide language is no filter here.
+    await userEvent.click(screen.getByRole('button', { name: 'Filters' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Normal Monster' }))
+    await userEvent.keyboard('{Escape}')
+    expect(await screen.findByRole('button', { name: 'Filters, 1 active' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Remove Normal Monster filter' })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Clear all' }))
+    await waitFor(() =>
+      expect(browse).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          q: 'dark',
+          sort: 'price',
+          dir: 'asc',
+          owned: 'missing'
+        })
+      )
+    )
+    expect(browse.mock.lastCall?.[0].cardTypes).toBeUndefined()
+    expect(screen.getByLabelText('Search cards')).toHaveValue('dark')
   })
 
   it('clicking a card not owned opens a panel with a stepper per printing, English first', async () => {

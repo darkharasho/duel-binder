@@ -1,9 +1,11 @@
 import { useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Minus, Plus, Search } from 'lucide-react'
+import { Minus, Plus } from 'lucide-react'
+import { SearchInput } from '@/components/SearchInput'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { api, queryKeys } from '@/lib/api'
+import { matchesSetSearch } from '@/lib/filters'
 import { formatMonthYear } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import type { RipSet } from '../../../../shared/rip/types'
@@ -42,17 +44,7 @@ export function SetPicker({ onRip, initialSetName = null }: Props): React.JSX.El
   const [error, setError] = useState<string | null>(null)
 
   const all = sets.data
-  const shown = useMemo(() => {
-    const needle = q.trim().toLowerCase()
-    if (!all) return []
-    if (!needle) return all
-    return all.filter(
-      (s) =>
-        s.setName.toLowerCase().includes(needle) ||
-        englishSetName(s.setName, s.setCode).toLowerCase().includes(needle) ||
-        s.setCode.toLowerCase().includes(needle)
-    )
-  }, [all, q])
+  const shown = useMemo(() => (all ?? []).filter((s) => matchesSetSearch(s, q)), [all, q])
   const selected = all?.find((s) => s.setName === selectedName) ?? null
   const count = clampPackCount(Number(text))
 
@@ -95,20 +87,13 @@ export function SetPicker({ onRip, initialSetName = null }: Props): React.JSX.El
 
   return (
     <div className="space-y-5">
-      <div className="relative w-72 max-md:w-full">
-        <Search
-          aria-hidden
-          className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
-        />
-        <Input
-          type="search"
-          value={q}
-          onChange={(e) => setQ(e.target.value)}
-          placeholder="Search sets by name or code"
-          aria-label="Search sets"
-          className="pl-8"
-        />
-      </div>
+      <SearchInput
+        label="Search sets"
+        placeholder="Search sets by name or code"
+        value={q}
+        onChange={setQ}
+        className="w-72 max-md:w-full"
+      />
 
       {shown.length === 0 ? (
         <p className="text-sm text-muted-foreground">No sets match &ldquo;{q}&rdquo;.</p>

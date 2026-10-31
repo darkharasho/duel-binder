@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import type { SetSummary } from '@shared/types'
 import { SetsPage } from '@/features/sets/SetsPage'
 import { SetArt } from '@/features/sets/SetArt'
+import { searchPause } from './filterTestHelpers'
 import { createMockApi, renderWithProviders } from './mockApi'
 import { metalRaidersChecklist } from './setFixtures'
 
@@ -61,7 +62,7 @@ function renderPage(
 beforeEach(() => localStorage.clear())
 
 const openPanel = async (): Promise<void> => {
-  await userEvent.click(screen.getByRole('button', { name: /^Filters & sort/ }))
+  await userEvent.click(screen.getByRole('button', { name: /^Filters/ }))
 }
 const closePanel = async (): Promise<void> => {
   await userEvent.keyboard('{Escape}')
@@ -91,8 +92,7 @@ describe('SetsPage languages', () => {
     expect(screen.getAllByRole('button', { name: /Legend of Blue Eyes/ })).toHaveLength(1)
 
     await openPanel()
-    await userEvent.click(screen.getByRole('combobox', { name: 'Language' }))
-    await userEvent.click(await screen.findByRole('option', { name: 'Japanese' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Japanese' }))
     await closePanel()
     const jp = await screen.findByRole('button', { name: /Legend of Blue Eyes/ })
     expect(within(jp).getByText('JP')).toBeInTheDocument()
@@ -114,13 +114,14 @@ describe('SetsPage', () => {
     renderPage()
     await screen.findByRole('button', { name: /Metal Raiders/ })
     await openPanel()
-    await userEvent.click(screen.getByRole('checkbox', { name: /Decks/ }))
+    await userEvent.click(screen.getByRole('button', { name: /Decks/ }))
     await closePanel()
     expect(screen.getByRole('button', { name: /Albaz Strike/ })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Metal Raiders/ })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Remove Decks filter' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Filters & sort, 1 active' })).toHaveTextContent(
-      /^Filters & sort1$/
+    // English, the default language, and Decks.
+    expect(screen.getByRole('button', { name: 'Filters, 2 active' })).toHaveTextContent(
+      /^Filters2$/
     )
     await userEvent.click(screen.getByRole('button', { name: 'Remove Decks filter' }))
     expect(screen.getByRole('button', { name: /Metal Raiders/ })).toBeInTheDocument()
@@ -131,7 +132,7 @@ describe('SetsPage', () => {
     const first = renderPage()
     await screen.findByRole('button', { name: /Metal Raiders/ })
     await openPanel()
-    await userEvent.click(screen.getByRole('checkbox', { name: /Decks/ }))
+    await userEvent.click(screen.getByRole('button', { name: /Decks/ }))
     await closePanel()
     first.unmount()
     renderPage()
@@ -150,30 +151,33 @@ describe('SetsPage', () => {
     expect(screen.queryByRole('button', { name: /Metal Raiders/ })).not.toBeInTheDocument()
   })
 
-  it('Clear resets types and progress but not count mode', async () => {
+  it('Clear all resets types, progress and language but not sort or count mode', async () => {
     renderPage()
     await screen.findByRole('button', { name: /Metal Raiders/ })
     await openPanel()
-    await userEvent.click(screen.getByRole('radio', { name: 'Every rarity' }))
-    await userEvent.click(screen.getByRole('radio', { name: 'Started' }))
-    await userEvent.click(screen.getByRole('checkbox', { name: /Decks/ }))
+    await userEvent.click(screen.getByRole('button', { name: 'Every rarity' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Started' }))
+    await userEvent.click(screen.getByRole('button', { name: /Decks/ }))
     await closePanel()
-    await userEvent.click(screen.getByRole('button', { name: 'Clear' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Clear all' }))
     expect(screen.queryAllByRole('button', { name: /^Remove .* filter$/ })).toHaveLength(0)
     await openPanel()
-    expect(screen.getByRole('radio', { name: 'All' })).toBeChecked()
-    expect(screen.getByRole('checkbox', { name: /Decks/ })).not.toBeChecked()
-    expect(screen.getByRole('radio', { name: 'Every rarity' })).toBeChecked()
+    expect(screen.getByRole('button', { name: 'Started' })).toHaveAttribute('aria-pressed', 'false')
+    expect(screen.getByRole('button', { name: /Decks/ })).toHaveAttribute('aria-pressed', 'false')
+    expect(screen.getByRole('button', { name: 'Every rarity' })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    )
   })
 
   it('no matching types shows No sets match', async () => {
     renderPage()
     await screen.findByRole('button', { name: /Metal Raiders/ })
     await openPanel()
-    await userEvent.click(screen.getByRole('checkbox', { name: /Tins/ }))
+    await userEvent.click(screen.getByRole('button', { name: /Tins/ }))
     await closePanel()
     expect(screen.getByText('No sets match')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /^Filters & sort/ })).toBeEnabled()
+    expect(screen.getByRole('button', { name: /^Filters/ })).toBeEnabled()
   })
 
   it('shows the header summary and lists unstarted sets by default', async () => {
@@ -188,7 +192,7 @@ describe('SetsPage', () => {
     renderPage()
     await screen.findByRole('button', { name: /Legend of Blue Eyes/ })
     await openPanel()
-    await userEvent.click(screen.getByRole('radio', { name: 'Started' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Started' }))
     await closePanel()
     expect(screen.queryByRole('button', { name: /Legend of Blue Eyes/ })).not.toBeInTheDocument()
     expect(localStorage.getItem('sets.filter')).toBe('started')
@@ -206,7 +210,7 @@ describe('SetsPage', () => {
     const mr = await screen.findByRole('button', { name: /Metal Raiders/ })
     expect(within(mr).getByText('1 / 3')).toBeInTheDocument()
     await openPanel()
-    await userEvent.click(screen.getByRole('radio', { name: 'Every rarity' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Every rarity' }))
     await closePanel()
     expect(
       within(screen.getByRole('button', { name: /Metal Raiders/ })).getByText('1 / 4')
@@ -218,6 +222,7 @@ describe('SetsPage', () => {
     renderPage()
     await screen.findByRole('button', { name: /Metal Raiders/ })
     await userEvent.type(screen.getByPlaceholderText('Search sets by name or code'), 'mrd')
+    await searchPause()
     expect(screen.getByRole('button', { name: /Metal Raiders/ })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Albaz Strike/ })).not.toBeInTheDocument()
   })
@@ -246,6 +251,7 @@ describe('SetsPage', () => {
     renderPage()
     await screen.findByRole('button', { name: /Metal Raiders/ })
     await userEvent.type(screen.getByPlaceholderText('Search sets by name or code'), 'zzz')
+    await searchPause()
     expect(screen.getByText('No sets match')).toBeInTheDocument()
   })
 

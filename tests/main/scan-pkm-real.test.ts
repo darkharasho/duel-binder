@@ -9,6 +9,8 @@
 //   SCAN_PKM_TRUTH=<file>         another truth file (default SCAN_PKM_DIR/pkm-truth.json)
 //   SCAN_PKM_OUT=<file>           also write the per-photo rows there as JSON, with every signal the
 //                                 resolver takes (raws), so resolver changes can be replayed offline
+//   SCAN_PKM_CROP=1               scan each photo at the app's framing: the live scan's centre crop
+//                                 (810x1080 of a 1080p frame), not the whole photo
 //   SCAN_PKM_DIR=~/scan-capture npm test -- --silent=false tests/main/scan-pkm-real.test.ts
 // (--silent=false shows the per-photo and summary tables when the tests pass.)
 // Wrong is another card, another language, a version named as sure that isn't the photo's, a
@@ -45,6 +47,7 @@ import { localScope } from '../../src/main/repo/scope'
 import { resolveSignals, type ResolveContext } from '../../src/renderer/src/features/scan/resolve'
 import { analyze } from '../../src/renderer/src/features/scan/vision/analyze'
 import { loadCv, type CV } from '../../src/renderer/src/features/scan/vision/cv'
+import { appFrame } from './scan-app-frame'
 import { problemsOf, type Truth } from './scan-pkm-score'
 
 // Same reason as in scan-vision-detect.test.ts: hand vitest the plain OpenCV module.
@@ -106,6 +109,7 @@ const DIR = process.env.SCAN_PKM_DIR ? home(process.env.SCAN_PKM_DIR) : undefine
 const TRUTH = DIR ? home(process.env.SCAN_PKM_TRUTH ?? join(DIR, 'pkm-truth.json')) : undefined
 const WORK = DIR ? join(DIR, 'pkm-work') : undefined
 const READY = !!DIR && existsSync(TRUTH!)
+const CROP = process.env.SCAN_PKM_CROP === '1'
 if (DIR && !READY)
   console.warn(`Pokémon real-photo gate skipped: no truth file at ${TRUTH} (see the test's header)`)
 
@@ -180,6 +184,7 @@ describe.skipIf(!READY)('the Pokémon scanner on real photos', () => {
       let img: RgbaImage
       try {
         img = loadImage(path)
+        if (CROP) img = appFrame(img)
       } catch (e) {
         skipped.push(`${t.file}: ${e instanceof Error ? e.message : e}`)
         continue

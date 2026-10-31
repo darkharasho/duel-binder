@@ -2,6 +2,7 @@ import {
   ABSENT_MS,
   GUESS_STABLE_FRAMES,
   GUESS_SWAP_FRAMES,
+  PHOTO_SETTLE_MS,
   STABLE_FRAMES
 } from '@shared/scan/thresholds'
 import type { ScanDraft, ScanOutcome } from './resolve'
@@ -9,6 +10,11 @@ import type { ScanDraft, ScanOutcome } from './resolve'
 export interface ShowingTracker {
   /** The draft to count, once per showing of a card, else null. */
   push(now: number, outcome: ScanOutcome): ScanDraft | null
+  /**
+   * Nothing counts until the view clears, or settleMs pass (a hand swapping cards may never clear
+   * it): a card just counted some other way, which live frames may take for its twin.
+   */
+  settle(now: number): void
   reset(): void
 }
 
@@ -29,16 +35,24 @@ export interface ShowingTracker {
  * hand swapping cards may never empty the view. Any frame of the card shown starts it over.
  */
 export function createShowingTracker(
-  opts: { stableFrames?: number; guessFrames?: number; swapFrames?: number; absentMs?: number } = {}
+  opts: {
+    stableFrames?: number
+    guessFrames?: number
+    swapFrames?: number
+    absentMs?: number
+    settleMs?: number
+  } = {}
 ): ShowingTracker {
   const stableFrames = opts.stableFrames ?? STABLE_FRAMES
   const guessFrames = opts.guessFrames ?? GUESS_STABLE_FRAMES
   const swapFrames = opts.swapFrames ?? GUESS_SWAP_FRAMES
   const absentMs = opts.absentMs ?? ABSENT_MS
+  const settleMs = opts.settleMs ?? PHOTO_SETTLE_MS
   let streakOf: number | null = null
   let streak = 0
   let shown: number | null = null
   let absentSince: number | null = null
+  let settledUntil = 0
   // A card was recognized, and no `none` frame has come since.
   let justSeen = false
 
@@ -62,11 +76,15 @@ export function createShowingTracker(
         justSeen = false
         clearStreak()
         absentSince ??= now
-        if (now - absentSince >= absentMs) shown = null
+        if (now - absentSince >= absentMs) {
+          shown = null
+          settledUntil = 0
+        }
         return null
       }
       absentSince = null
       justSeen = true
+      if (now < settledUntil) return null
       const { cardId, guess } = outcome.item
       if (cardId === shown) {
         clearStreak()
@@ -81,8 +99,15 @@ export function createShowingTracker(
       return outcome.item
     },
 
+    settle(now) {
+      clearStreak()
+      shown = null
+      settledUntil = now + settleMs
+    },
+
     reset() {
       clearStreak()
+      settledUntil = 0
       justSeen = false
       shown = null
       absentSince = null

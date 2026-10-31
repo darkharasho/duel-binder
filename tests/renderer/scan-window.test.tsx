@@ -24,6 +24,7 @@ const SETTINGS: ScanWindowSettings = {
   deviceId: null,
   paused: false,
   set: null,
+  scanLanguage: 'en',
   defaultRarity: null,
   hitPrice: 20,
   fit: 'fill',
@@ -89,6 +90,9 @@ const lastState = (): ScanWindowState => {
   return states[states.length - 1]
 }
 
+/** The state as the window has it now, before an effect has sent it. */
+const lastStateSoon = (): ScanWindowState['loop'] => lastState().loop
+
 const settings = (s: Partial<ScanWindowSettings>): void =>
   act(() => bridge.emit({ kind: 'settings', settings: { ...SETTINGS, ...s } }))
 
@@ -122,6 +126,54 @@ describe('Scan window', () => {
     await run(1000)
     expect(drafts()).toHaveLength(1)
     expect(lastState().loop).toEqual({ kind: 'added', name: 'Dark Magician', setCode: 'LOB-EN005' })
+  })
+
+  it('a photo counts what one look names, and live frames leave that card be', async () => {
+    stubCamera()
+    const engine = fakeEngine(() => codeFrame('LOB-EN005'))
+    const live = engine.analyze.getMockImplementation() as (...a: unknown[]) => Promise<RawSignals>
+    // Live frames can't name it; a photo can, with its text whatever the frame before asked.
+    engine.analyze.mockImplementation(async (img: ImageData, opts: { photo?: boolean }) =>
+      opts.photo ? live(img, opts) : NOTHING
+    )
+    await renderWindow(engine, { scan: { printingsByCode: vi.fn(async () => [printing()]) } })
+    await run(500)
+    act(() => bridge.emit({ kind: 'takePhoto' }))
+    expect(lastStateSoon()).toEqual({ kind: 'reading' })
+    await run(500)
+    expect(engine.analyze.mock.calls.some(([, o]) => o.photo && o.wantText)).toBe(true)
+    expect(drafts()).toHaveLength(1)
+    expect(lastState().loop).toMatchObject({ kind: 'added', name: 'Dark Magician' })
+  })
+
+  it('a photo that names nothing says so, on every frame it tried', async () => {
+    stubCamera()
+    const engine = fakeEngine(() => NOTHING)
+    await renderWindow(engine)
+    await run(500)
+    engine.analyze.mockClear()
+    act(() => bridge.emit({ kind: 'takePhoto' }))
+    await run(1000)
+    expect(engine.analyze.mock.calls.filter(([, o]) => o.photo)).toHaveLength(3)
+    expect(drafts()).toHaveLength(0)
+    expect(lastState().loop).toEqual({ kind: 'photo-failed' })
+  })
+
+  it('searches only the chosen language\'s art on Pokémon', async () => {
+    stubCamera()
+    const engine = fakeEngine()
+    const imagesForLanguage = vi.fn(async () => [1, 2])
+    await renderWindow(
+      engine,
+      {
+        games: { active: vi.fn(async () => 'pkm' as const) },
+        scan: { imagesForLanguage }
+      },
+      { scanLanguage: 'ja' }
+    )
+    await run(500)
+    expect(imagesForLanguage).toHaveBeenCalledWith('ja')
+    expect(engine.scope).toHaveBeenCalledWith([1, 2])
   })
 
   it('resends a pull until the main window acknowledges it', async () => {

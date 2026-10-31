@@ -5,6 +5,7 @@ import { RARITY_TIERS } from '@shared/scan/rarity'
 import {
   SCAN_ZOOMS,
   isFromScanWindow,
+  isPokemonLanguage,
   type ScanFit,
   type ScanWindowSettings,
   type ScanWindowState
@@ -18,6 +19,7 @@ import { rememberedCamera } from './useCamera'
 /** Yu-Gi-Oh!'s keeps the key it always had, so an existing pick survives. */
 const setKeyOf = (game: GameId): string => (game === 'ygo' ? 'scan.set' : `scan.set.${game}`)
 const RARITY_KEY = 'scan.defaultRarity'
+const LANGUAGE_KEY = 'scan.pokemonLanguage'
 const HIT_PRICE_KEY = 'scan.hitPrice'
 const FIT_KEY = 'scan.fit'
 const ZOOM_KEY = 'scan.zoom'
@@ -46,6 +48,7 @@ export interface ScanHub {
   openWindow(): Promise<void>
   retryCamera(): void
   retryScan(): void
+  takePhoto(): void
 }
 
 function read<T>(key: string, parse: (raw: string) => T | null): T | null {
@@ -87,6 +90,7 @@ const initialSettings = (): ScanWindowSettings => ({
   deviceId: rememberedCamera(),
   paused: false,
   set: read(setKeyOf('ygo'), parseSet),
+  scanLanguage: read(LANGUAGE_KEY, (l) => (isPokemonLanguage(l) ? l : null)) ?? 'en',
   defaultRarity: read(RARITY_KEY, (r) => (RARITY_TIERS.includes(r) ? r : null)),
   hitPrice: read(HIT_PRICE_KEY, parseHitPrice) ?? DEFAULT_HIT_PRICE,
   fit: read(FIT_KEY, (f): ScanFit | null => (f === 'whole' || f === 'fill' ? f : null)) ?? 'fill',
@@ -213,6 +217,7 @@ export function ScanHubProvider({ children }: { children: React.ReactNode }): Re
       if ('set' in patch)
         write(setKeyOf(gameRef.current), next.set ? JSON.stringify(next.set) : null)
       if ('defaultRarity' in patch) write(RARITY_KEY, next.defaultRarity)
+      if ('scanLanguage' in patch) write(LANGUAGE_KEY, next.scanLanguage)
       if ('hitPrice' in patch) write(HIT_PRICE_KEY, String(next.hitPrice))
       if ('fit' in patch) write(FIT_KEY, next.fit)
       if ('zoom' in patch) write(ZOOM_KEY, String(next.zoom))
@@ -299,7 +304,8 @@ export function ScanHubProvider({ children }: { children: React.ReactNode }): Re
       count,
       openWindow: () => window.api.scanWindow.open(),
       retryCamera: () => window.api.scanWindow.send({ kind: 'retryCamera' }),
-      retryScan: () => window.api.scanWindow.send({ kind: 'retryScan' })
+      retryScan: () => window.api.scanWindow.send({ kind: 'retryScan' }),
+      takePhoto: () => window.api.scanWindow.send({ kind: 'takePhoto' })
     }),
     [session, fresh, open, openKnown, state, settings, setSettings, count]
   )

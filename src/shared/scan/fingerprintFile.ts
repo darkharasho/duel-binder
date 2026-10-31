@@ -93,6 +93,23 @@ export class FingerprintIndex {
   }
 
   /**
+   * The same index holding only imageIds' records, for searching one language's art: nearest walks
+   * every record it holds, while a candidates set still costs a lookup for each one left out.
+   * Reference scans aren't carried over; only Yu-Gi-Oh has them, and it's never narrowed.
+   */
+  only(imageIds: ReadonlySet<number>): FingerprintIndex {
+    const kept: number[] = []
+    for (let i = 0; i < this.count; i++) if (imageIds.has(this.ids[i])) kept.push(i)
+    const ids = new Float64Array(kept.length)
+    const hashes = new Uint32Array(kept.length * HASH_WORDS)
+    kept.forEach((record, i) => {
+      ids[i] = this.ids[record]
+      hashes.set(this.hashes.subarray(record * HASH_WORDS, (record + 1) * HASH_WORDS), i * HASH_WORDS)
+    })
+    return new FingerprintIndex(ids, hashes)
+  }
+
+  /**
    * The k closest images by Hamming distance, closest first, optionally limited to candidates. An
    * image id the file holds more than once is given once, at its closest, with its base and
    * reference scan distances when it has tagged reference scans (see ArtMatch).

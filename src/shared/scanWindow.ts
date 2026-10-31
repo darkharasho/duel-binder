@@ -5,14 +5,30 @@ import type { FingerprintStatus, ScanDraft } from './scan/types'
 export type ScanStatus =
   | { kind: 'idle' }
   | { kind: 'unsure' }
+  | { kind: 'reading' }
+  | { kind: 'photo-failed' }
   | { kind: 'added'; name: string; setCode: string | null; guess?: true }
   | { kind: 'stopped' }
+
+/** The languages a Pokémon card is catalogued in. */
+export const POKEMON_LANGUAGES = ['en', 'ja'] as const
+export type PokemonLanguage = (typeof POKEMON_LANGUAGES)[number]
+
+export const isPokemonLanguage = (v: unknown): v is PokemonLanguage =>
+  (POKEMON_LANGUAGES as readonly unknown[]).includes(v)
+
+/** The language a live Pokémon scan takes cards to be in: the picked set's, or the one chosen. */
+export function liveLanguage(s: Pick<ScanWindowSettings, 'set' | 'scanLanguage'>): PokemonLanguage {
+  return isPokemonLanguage(s.set?.language) ? s.set.language : s.scanLanguage
+}
 
 /** What the main window tells the scan window to scan with. */
 export interface ScanWindowSettings {
   deviceId: string | null
   paused: boolean
   set: { setName: string; language: Language } | null
+  /** The language live Pokémon cards are scanned in, with no set of a language picked. */
+  scanLanguage: PokemonLanguage
   defaultRarity: string | null
   hitPrice: number
   /** How the camera fills the window: cropped to fill it, or the whole picture, letterboxed. */
@@ -41,6 +57,7 @@ export type ToScanWindow =
   | { kind: 'settings'; settings: ScanWindowSettings }
   | { kind: 'retryCamera' }
   | { kind: 'retryScan' }
+  | { kind: 'takePhoto' }
   /** The draft with this id is on the list; the scan window stops resending it. */
   | { kind: 'ack'; id: string }
 
@@ -52,7 +69,7 @@ export type FromScanWindow =
 
 export type ScanWindowMessage = ToScanWindow | FromScanWindow
 
-const TO: readonly string[] = ['settings', 'retryCamera', 'retryScan', 'ack']
+const TO: readonly string[] = ['settings', 'retryCamera', 'retryScan', 'takePhoto', 'ack']
 const FROM: readonly string[] = ['ready', 'state', 'draft']
 
 const kindOf = (v: unknown): unknown =>

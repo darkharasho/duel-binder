@@ -1,5 +1,6 @@
 import { latinLanguageOf } from './language'
 import { normalizeName } from './names'
+import type { TextModel } from './ocr'
 import {
   EN_NAME_FUZZIER_LENGTH,
   EN_NAME_FUZZY_LENGTH,
@@ -11,6 +12,7 @@ import {
   LANGUAGE_MIN_SCRIPT_CHARS,
   LANGUAGE_MIN_WORDS
 } from './thresholds'
+import type { OcrBand } from './types'
 
 // Kana without the long-vowel mark and middle dot, which a model reads rules and dashes as.
 const KANA = /[ぁ-ゖァ-ヺ]/u
@@ -213,6 +215,24 @@ export function pokemonLanguageOfBands(reads: {
   const ja = told.includes('ja')
   const en = told.includes('en')
   return ja === en ? null : ja ? 'ja' : 'en'
+}
+
+/**
+ * A Pokémon card's language, reading no more than it must: the first band with each model, and the
+ * rest only when that tells nothing (pokemonLanguageOfBands over them all). The bands are cheapest
+ * first: the rest are larger, and reading them takes most of a frame's time.
+ */
+export async function tellPokemonLanguage(
+  bands: OcrBand[],
+  read: (bands: OcrBand[], model: TextModel) => Promise<string[]>
+): Promise<PokemonTextLanguage> {
+  const both = (b: OcrBand[]): Promise<[string[], string[]]> =>
+    Promise.all([read(b, 'jpn'), read(b, 'eng')])
+  const [jpn, eng] = await both(bands.slice(0, 1))
+  const told = pokemonLanguageOfBands({ jpn, eng })
+  if (told !== null || bands.length < 2) return told
+  const [moreJpn, moreEng] = await both(bands.slice(1))
+  return pokemonLanguageOfBands({ jpn: [...jpn, ...moreJpn], eng: [...eng, ...moreEng] })
 }
 
 /** Small kana a blurred read takes for their full-size forms (ュ as ユ). */

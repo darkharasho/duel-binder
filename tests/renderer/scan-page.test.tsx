@@ -224,6 +224,7 @@ describe('Scan page', () => {
       deviceId: null,
       paused: false,
       set: null,
+      scanLanguage: 'en',
       defaultRarity: 'Secret Rare',
       hitPrice: 20,
       fit: 'fill',
@@ -360,7 +361,7 @@ describe('Scan page', () => {
     await u0.click(screen.getByRole('button', { name: 'Resume' }))
     expect(screen.getByRole('status')).toHaveTextContent('Hold a card up')
     report({ loop: { kind: 'unsure' } })
-    expect(screen.getByText("Couldn't recognize this card")).toBeInTheDocument()
+    expect(screen.getByText("Couldn't recognize this card. Try a photo.")).toBeInTheDocument()
     report({ loop: { kind: 'added', name: 'Dark Magician', setCode: 'LOB-EN005' } })
     expect(
       screen.getByText('Dark Magician LOB-EN005 · added, lower it to scan the next card')

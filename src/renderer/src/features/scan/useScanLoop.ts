@@ -3,12 +3,19 @@ import type { GameId } from '@shared/games/types'
 import type { LookModel } from '@shared/scan/look'
 import { cuesOver, type RarityCues } from '@shared/scan/rarity'
 import type { CardLanguage } from '@shared/scan/language'
-import { pokemonLanguageOfBands, type PokemonTextLanguage } from '@shared/scan/pokemonLanguage'
-import type { TextModel } from '@shared/scan/ocr'
+import { tellPokemonLanguage, type PokemonTextLanguage } from '@shared/scan/pokemonLanguage'
 import { scanProfile } from '@shared/scan/profiles'
-import { ABSENT_MS, LANGUAGE_MAX_READS, RARITY_MAX_READINGS } from '@shared/scan/thresholds'
+import {
+  ABSENT_MS,
+  LANGUAGE_MAX_READS,
+  LANGUAGE_RETRY_FRAMES,
+  PHOTO_FRAMES,
+  PHOTO_GAP_MS,
+  PKM_PHOTO_REPRINT_LEAD,
+  RARITY_MAX_READINGS
+} from '@shared/scan/thresholds'
 import type { FingerprintStatus, OcrBand, ScanPrinting } from '@shared/scan/types'
-import type { ScanStatus } from '@shared/scanWindow'
+import type { PokemonLanguage, ScanStatus } from '@shared/scanWindow'
 import { api } from '@/lib/api'
 import { centreCrop } from './crop'
 import type { EngineFactory, FrameSignals, ScanEngine } from './engine'
@@ -19,6 +26,7 @@ import {
   type ScanDraft,
   type ScanOutcome
 } from './resolve'
+import { sameSpot } from './sameSpot'
 import { createShowingTracker } from './tracker'
 import type { Quad } from './vision/detect'
 
@@ -45,6 +53,8 @@ const LANGUAGE_TIMEOUT_MS = 20_000
  * system muted in the background, or one that died without ending) and handed to onStalled.
  */
 const STALL_MS = 5000
+/** How long a failed photo's message stays once nothing's in view. */
+const PHOTO_FAILED_MS = 4000
 
 /** p, or a rejection once ms pass. */
 function within<T>(p: Promise<T>, ms: number): Promise<T> {
@@ -74,6 +84,11 @@ export interface ScanLoopOptions {
   setPrintings: ScanPrinting[] | null | undefined
   defaultRarity: string | null
   /**
+   * Pokémon only: the language live frames take every card to be in, so its art alone is searched
+   * and no frame waits on reading its language. A photo still reads it, this being its fallback.
+   */
+  language?: PokemonLanguage | null
+  /**
    * The rarity look model, to read a rarity by after the name and frame rules can't, or null for
    * the rules alone. The phone scanner passes it; the desktop webcam, where it gains nothing,
    * doesn't. With it, the worker measures each frame's look features too. Yu-Gi-Oh's only: it's
@@ -89,6 +104,8 @@ export interface ScanLoop {
   status: ScanStatus
   /** After scanning stopped on errors: starts over with a fresh init. */
   retry: () => void
+  /** Looks hard at what's in view for a few seconds, and counts the card it names. */
+  takePhoto: () => void
   /** The card's outline in the scanned crop's pixels, and the crop's size, for drawing over the preview. */
   outline: { quad: Quad; width: number; height: number } | null
   /** null until the engine has been given the fingerprint file (or found there is none). */
@@ -113,6 +130,25 @@ const KEEP_FRAMES = import.meta.env.DEV && import.meta.env.MODE !== 'test'
 /** Every DEBUG_EVERY-th frame is kept in a dev build: encoding a 4K frame isn't free. */
 const DEBUG_EVERY = 3
 
+/** What's known of a Pokémon card's language before any read of it. */
+const NO_POKEMON_LANGUAGE = {
+  quad: null as Quad | null,
+  reads: 0,
+  // Frames since the last read, once they're down to LANGUAGE_RETRY_FRAMES apart.
+  since: 0,
+  read: null as PokemonTextLanguage
+}
+
+const NO_POKEMON_NAMES = { quad: null as Quad | null, reads: [] as string[][] }
+
+/** One frame's ms in the worker and in resolving it, with what it came to, for timing a scan. */
+type FrameTime = [
+  analyzeMs: number,
+  resolveMs: number,
+  outcome: ScanOutcome['kind'],
+  counted: boolean
+]
+
 /** The frame as a JPEG, drawn before the engine takes it; null on the frames skipped. */
 function debugShot(
   frame: ImageBitmap,
@@ -132,7 +168,8 @@ async function keepDebugShot(
   game: GameId,
   raw: FrameSignals,
   outcome: ScanOutcome,
-  counted: boolean
+  counted: boolean,
+  times: FrameTime[]
 ): Promise<void> {
   const jpeg = await (await shot).arrayBuffer()
   const note = JSON.stringify({
@@ -145,7 +182,8 @@ async function keepDebugShot(
     far: outcome.kind === 'none' ? (outcome.far ?? false) : undefined,
     card: outcome.kind === 'recognized' ? outcome.item.cardId : undefined,
     guess: outcome.kind === 'recognized' ? (outcome.item.guess ?? false) : undefined,
-    counted
+    counted,
+    times
   })
   await api.scan.debugFrame(jpeg, note).catch(() => undefined)
 }
@@ -189,8 +227,11 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
     needsInit: false,
     failures: 0,
     debugFrames: 0,
+    debugTimes: [] as FrameTime[],
     retryAt: 0,
     stopped: false,
+    photoWanted: false,
+    photoFailedUntil: 0,
     lastFound: false,
     shown: null as number | null,
     absentSince: null as number | null,
@@ -203,16 +244,25 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
     lookLogged: '',
     // What the card in view's text has read as, and how many times it has been read.
     language: { cardId: null as number | null, reads: 0, read: null as CardLanguage | null },
-    // The same for a Pokémon card, by the artwork it matched best (its card isn't known yet).
-    pokemonLanguage: {
-      imageId: null as number | null,
-      reads: 0,
-      read: null as PokemonTextLanguage
-    },
-    // A Pokémon card's name band as the Japanese model reads it, every read so far, by artwork.
-    pokemonNames: { imageId: null as number | null, reads: [] as string[][] },
+    // The same for a Pokémon card, by where it is in the frame: its card isn't known yet, and the
+    // artwork it matches best changes frame to frame on a card that's hard to see.
+    pokemonLanguage: { ...NO_POKEMON_LANGUAGE },
+    // A Pokémon card's name band as the Japanese model reads it, every read so far, likewise.
+    pokemonNames: { ...NO_POKEMON_NAMES, reads: [] as string[][] },
     status: { kind: 'idle' } as ScanStatus
   })
+
+  /** Live frames search only the language's art; on trouble, all of it, which is just slower. */
+  const narrow = async (engine: ScanEngine): Promise<void> => {
+    const { language } = latest.current
+    const ids = language
+      ? await within(
+          Promise.resolve().then(() => api.scan.imagesForLanguage(language)),
+          LOOKUP_TIMEOUT_MS
+        ).catch(() => null)
+      : null
+    if (engineRef.current === engine) engine.scope(ids?.length ? ids : null)
+  }
 
   const setStatus = (next: ScanStatus): void => {
     if (sameStatus(loop.current.status, next)) return
@@ -250,6 +300,7 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
       if (!live) return
       setArtReady(fp !== null)
       await engine.init(fp, refs)
+      await narrow(engine)
     }
     reinit.current = init
     let progressTimer: ReturnType<typeof setInterval> | undefined
@@ -299,7 +350,14 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
     }
   }, [game])
 
-  // A new set or game is a new start: nothing counted yet, nothing in view.
+  // Another language's art to search; the engine's init does it for the first.
+  const { language } = opts
+  useEffect(() => {
+    const engine = engineRef.current
+    if (engine && readyRef.current) void narrow(engine)
+  }, [language])
+
+  // A new set, game or language is a new start: nothing counted yet, nothing in view.
   useEffect(() => {
     const l = loop.current
     tracker.current.reset()
@@ -308,13 +366,21 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
     l.absentSince = null
     l.looks = { cardId: null, cues: [], frames: [] }
     l.language = { cardId: null, reads: 0, read: null }
-    l.pokemonLanguage = { imageId: null, reads: 0, read: null }
-    l.pokemonNames = { imageId: null, reads: [] }
+    l.pokemonLanguage = { ...NO_POKEMON_LANGUAGE }
+    l.pokemonNames = { ...NO_POKEMON_NAMES, reads: [] }
     // Stopped stays stopped until Retry.
     if (l.stopped) return
     l.status = { kind: 'idle' }
     setStatusState(l.status)
-  }, [opts.setKey, game])
+  }, [opts.setKey, game, language])
+
+  const takePhoto = useCallback(() => {
+    if (!latest.current.running || loop.current.stopped) return
+    loop.current.photoWanted = true
+    setStatus({ kind: 'reading' })
+    // setStatus only touches refs and state.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const retry = useCallback(() => {
     const l = loop.current
@@ -356,7 +422,8 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
         l.absentSince ??= now
         if (now - l.absentSince >= ABSENT_MS) {
           l.shown = null
-          setStatus({ kind: 'idle' })
+          // Time to read that a photo failed, with the card already lowered.
+          if (now >= l.photoFailedUntil) setStatus({ kind: 'idle' })
         }
         return
       }
@@ -369,7 +436,11 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
           setCode: draft.setCode,
           ...(draft.guess ? { guess: true as const } : {})
         })
-      } else if (outcome.kind === 'unsure' && l.shown === null) {
+      } else if (
+        outcome.kind === 'unsure' &&
+        l.shown === null &&
+        performance.now() >= l.photoFailedUntil
+      ) {
         setStatus({ kind: 'unsure' })
       }
     }
@@ -419,25 +490,28 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
     }
 
     /**
-     * A Pokémon card's language: each of its text bands read once with the Japanese model and
-     * once with the English one, each read judged on its own (pokemonLanguageOfBands). Kept, like languageOf, while
-     * the same artwork stays in view, and tried on LANGUAGE_MAX_READS frames when it can't be
-     * told; a failed read counts as not told.
+     * A Pokémon card's language (tellPokemonLanguage). Kept, like languageOf, while the card stays
+     * where it is, and tried on LANGUAGE_MAX_READS frames when it can't be told, then on every
+     * LANGUAGE_RETRY_FRAMES'th: a card held still may yet turn to where it can be read. A failed
+     * read counts as not told.
      */
     const pokemonLanguageOf = async (
-      imageId: number | null,
+      quad: Quad | null,
       bands: OcrBand[]
     ): Promise<PokemonTextLanguage> => {
-      if (l.pokemonLanguage.imageId !== imageId)
-        l.pokemonLanguage = { imageId, reads: 0, read: null }
+      if (!sameSpot(l.pokemonLanguage.quad, quad))
+        l.pokemonLanguage = { ...NO_POKEMON_LANGUAGE }
       const known = l.pokemonLanguage
-      if (known.read || known.reads >= LANGUAGE_MAX_READS || !bands.length) return known.read
+      known.quad = quad
+      if (known.read || !bands.length) return known.read
+      const spare = known.reads >= LANGUAGE_MAX_READS
+      if (spare && ++known.since < LANGUAGE_RETRY_FRAMES) return null
+      known.since = 0
       known.reads++
-      const read = (model: TextModel): Promise<string[]> =>
-        within(api.scan.readText(bands, model), LANGUAGE_TIMEOUT_MS)
       try {
-        const [jpn, eng] = await Promise.all([read('jpn'), read('eng')])
-        known.read = pokemonLanguageOfBands({ jpn, eng })
+        known.read = await tellPokemonLanguage(bands, (b, model) =>
+          within(api.scan.readText(b, model), LANGUAGE_TIMEOUT_MS)
+        )
       } catch {
         known.read = null
       }
@@ -446,17 +520,89 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
 
     /**
      * A Pokémon card's name band read with the Japanese model, for its printed name when its text
-     * can't be told: on LANGUAGE_MAX_READS frames at most while the same artwork stays in view,
+     * can't be told: on LANGUAGE_MAX_READS frames at most while the card stays where it is,
      * every read so far given, since any one may show the name. A failed read is nothing read.
      */
-    const pokemonNamesOf = async (imageId: number | null, bands: OcrBand[]): Promise<string[]> => {
-      if (l.pokemonNames.imageId !== imageId) l.pokemonNames = { imageId, reads: [] }
+    const pokemonNamesOf = async (quad: Quad | null, bands: OcrBand[]): Promise<string[]> => {
+      if (!sameSpot(l.pokemonNames.quad, quad)) l.pokemonNames = { ...NO_POKEMON_NAMES, reads: [] }
       const known = l.pokemonNames
+      known.quad = quad
       if (known.reads.length < LANGUAGE_MAX_READS && bands.length)
         known.reads.push(
           await within(api.scan.readText(bands, 'jpn'), LANGUAGE_TIMEOUT_MS).catch(() => [])
         )
       return known.reads.flat()
+    }
+
+    /**
+     * A photo of what's in view: up to PHOTO_FRAMES frames, each given every language's art, the
+     * whole holder search and a fresh read of its text, until one names a card for certain, else
+     * the first guess. The same outcome the live frames work towards, so a card can be counted
+     * from one look; the live scan then leaves it be (ShowingTracker.settle).
+     */
+    const photo = async (
+      engine: ScanEngine,
+      video: HTMLVideoElement,
+      o: typeof latest.current
+    ): Promise<void> => {
+      const stale = (): boolean =>
+        !live || latest.current.setKey !== o.setKey || engineRef.current !== engine
+      const profile = scanProfile(o.game)
+      setOutline(null)
+      let best: ScanOutcome | null = null
+      for (let i = 0; i < PHOTO_FRAMES && !stale(); i++) {
+        if (i) await new Promise((done) => setTimeout(done, PHOTO_GAP_MS))
+        const grabbed = await grab(video).catch(() => null)
+        if (!grabbed) continue
+        const raw = await engine
+          .analyze(grabbed.frame, {
+            candidates: o.candidates,
+            wantText: true,
+            wantLook: !!o.lookModel && profile.rarityLook,
+            photo: true
+          })
+          .catch(() => null)
+        if (!raw || stale()) continue
+        const outcome = await within(
+          resolveSignals(raw, {
+            game: o.game,
+            reprintLead: PKM_PHOTO_REPRINT_LEAD,
+            setName: o.setName,
+            setPrintings: o.setPrintings ?? null,
+            defaultRarity: o.defaultRarity,
+            cardLanguage: (cardId) => languageOf(cardId, raw.textBands),
+            readLanguage: () =>
+              tellPokemonLanguage(raw.textBands, (b, model) =>
+                within(api.scan.readText(b, model), LANGUAGE_TIMEOUT_MS)
+              )
+                .catch(() => null)
+                .then((read) => read ?? o.language ?? null),
+            readLocalName: async () => {
+              const reads = api.scan.readText(raw.nameBands ?? [], 'jpn')
+              return within(reads, LANGUAGE_TIMEOUT_MS).catch(() => [] as string[])
+            },
+            lookups: api.scan
+          }),
+          LOOKUP_TIMEOUT_MS
+        ).catch(() => null)
+        if (outcome?.kind !== 'recognized' || stale()) continue
+        const looked = profile.rarityLook ? withLook(outcome, raw.cues, raw.look) : outcome
+        if (looked.kind !== 'recognized') continue
+        if (!looked.item.guess) {
+          best = looked
+          break
+        }
+        best ??= looked
+      }
+      if (stale()) return
+      tracker.current.settle(performance.now())
+      if (best?.kind === 'recognized') {
+        show(best, best.item)
+        latest.current.onDraft(best.item)
+      } else {
+        l.photoFailedUntil = performance.now() + PHOTO_FAILED_MS
+        setStatus({ kind: 'photo-failed' })
+      }
     }
 
     /** Calls onStalled when the shown camera's picture hasn't moved for STALL_MS. */
@@ -494,6 +640,11 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
             return
           }
         }
+        if (l.photoWanted) {
+          l.photoWanted = false
+          await photo(engine, video, o)
+          return
+        }
         const grabbed = await grab(video).catch(() => null)
         if (!grabbed) return
         if (!live) {
@@ -504,6 +655,7 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
         const setPrintings = o.setPrintings
         const candidates = o.candidates
         const shot = KEEP_FRAMES ? debugShot(frame, width, height, l) : null
+        const started = performance.now()
         let raw
         try {
           raw = await engine.analyze(frame, {
@@ -519,10 +671,11 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
         // Another game's engine took over mid-frame: this frame is the old game's.
         if (!live || engineRef.current !== engine) return
         l.lastFound = raw.found
+        const analyzed = performance.now()
         // A card that left the view takes its language with it.
         if (!raw.found) {
-          l.pokemonLanguage = { imageId: null, reads: 0, read: null }
-          l.pokemonNames = { imageId: null, reads: [] }
+          l.pokemonLanguage = { ...NO_POKEMON_LANGUAGE }
+          l.pokemonNames = { ...NO_POKEMON_NAMES, reads: [] }
         }
         let outcome: ScanOutcome
         try {
@@ -533,8 +686,10 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
               setPrintings,
               defaultRarity: o.defaultRarity,
               cardLanguage: (cardId) => languageOf(cardId, raw.textBands),
-              readLanguage: () => pokemonLanguageOf(raw.art[0]?.imageId ?? null, raw.textBands),
-              readLocalName: () => pokemonNamesOf(raw.art[0]?.imageId ?? null, raw.nameBands ?? []),
+              readLanguage: o.language
+                ? async () => o.language ?? null
+                : () => pokemonLanguageOf(raw.quad, raw.textBands),
+              readLocalName: () => pokemonNamesOf(raw.quad, raw.nameBands ?? []),
               lookups: api.scan
             }),
             LOOKUP_TIMEOUT_MS
@@ -556,7 +711,18 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
         // Only Yu-Gi-Oh's rarities are read by the look of the card.
         const looked = profile.rarityLook ? withLook(outcome, raw.cues, raw.look) : outcome
         const draft = tracker.current.push(performance.now(), looked)
-        if (shot) void keepDebugShot(shot, o.game, raw, outcome, draft !== null)
+        if (KEEP_FRAMES) {
+          l.debugTimes.push([
+            Math.round(analyzed - started),
+            Math.round(performance.now() - analyzed),
+            outcome.kind,
+            draft !== null
+          ])
+        }
+        if (shot) {
+          void keepDebugShot(shot, o.game, raw, outcome, draft !== null, l.debugTimes)
+          l.debugTimes = []
+        }
         show(outcome, draft)
         if (draft) latest.current.onDraft(draft)
       } finally {
@@ -574,5 +740,5 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
     }
   }, [opts.running])
 
-  return { status, retry, outline, artReady, artData }
+  return { status, retry, takePhoto, outline, artReady, artData }
 }

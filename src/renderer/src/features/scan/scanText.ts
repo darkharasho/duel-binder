@@ -9,7 +9,11 @@ export function statusText(s: ScanStatus): string {
     case 'idle':
       return 'Hold a card up'
     case 'unsure':
-      return "Couldn't recognize this card"
+      return "Couldn't recognize this card. Try a photo."
+    case 'reading':
+      return 'Reading the photo…'
+    case 'photo-failed':
+      return "Couldn't read that photo. Hold the card still and try again."
     case 'added':
       return `${s.setCode ? `${s.name} ${s.setCode}` : s.name} · ${s.guess ? 'added as a best guess' : 'added'}, lower it to scan the next card`
     case 'stopped':

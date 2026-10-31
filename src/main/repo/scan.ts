@@ -245,6 +245,22 @@ export function printingsForCards(
   return withImages(db, rows, scope, true)
 }
 
+/** Every artwork of a card printed in the language, for narrowing the art search to it. */
+export function imagesForLanguage(
+  db: SqlDb,
+  language: Language,
+  scope: Scope = LOCAL
+): number[] {
+  const rows = db
+    .prepare(
+      `SELECT DISTINCT i.image_id AS imageId FROM card_images i
+       JOIN card_printings p ON p.card_id = i.card_id
+       WHERE +i.game = ${scope.game} AND p.language = ?`
+    )
+    .all(language) as { imageId: number }[]
+  return rows.map((r) => r.imageId)
+}
+
 /** The card of each known artwork, by image id; unknown ids are left out. */
 export function cardsForImages(
   db: SqlDb,

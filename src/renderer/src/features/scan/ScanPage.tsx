@@ -17,6 +17,7 @@ import { ArtDataNotice } from './ArtDataNotice'
 import { SET_UNREADABLE, statusText } from './scanText'
 import { SessionList } from './SessionList'
 import { SearchPicker } from './SearchPicker'
+import { PhotoButton } from './PhotoButton'
 import { useScanPickers } from './pickerOptions'
 import { useGame } from '@/lib/game'
 
@@ -236,6 +237,9 @@ export function ScanPage({
                   <Button variant="outline" size="xs" onClick={hub.retryScan}>
                     Retry
                   </Button>
+                )}
+                {!settings.paused && state?.openDeviceId && state.loop.kind !== 'stopped' && (
+                  <PhotoButton status={state.loop} onClick={hub.takePhoto} />
                 )}
               </div>
             )}

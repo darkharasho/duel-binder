@@ -345,7 +345,8 @@ export async function resolvePokemonSignals(
     const closest = group.find((id) => ids.includes(id))!
     const name = printings.find((p) => p.cardId === closest)!.name
     const reprints = printings.every((p) => !ids.includes(p.cardId) || sameName(p.name, name))
-    if (!reprints || (await artLead(raw, ids, ctx)) < PKM_GUESS_REPRINT_LEAD) return null
+    const lead = ctx.reprintLead ?? PKM_GUESS_REPRINT_LEAD
+    if (!reprints || (await artLead(raw, ids, ctx)) < lead) return null
     return may('reprint') ? closest : null
   }
 

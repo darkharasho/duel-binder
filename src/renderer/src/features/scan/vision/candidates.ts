@@ -696,6 +696,14 @@ const MIN_REGION_SIDE = 40
  * 80 on the real photos, in a third of the time.
  */
 const REGION_LINES = 40
+/**
+ * How much of the holder search a live frame gets (recognizeArt's thorough): the likeliest
+ * outlines and art windows, and one region. All of it runs to 2-3.5s on every frame whose art
+ * didn't match; a photo, where the wait is expected, gets the lot.
+ */
+const LIVE_OUTLINES = 4
+const LIVE_WINDOWS = 2
+const LIVE_REGIONS = 1
 
 /**
  * The card in a frame and its closest artworks: each candidate outline is matched on a small
@@ -711,7 +719,8 @@ const REGION_LINES = 40
  * (lookAgain) unless holderPass is false (the live scanner skips it on some frames), and via is
  * 'holder' when that is what matched. So does the inner frame search of a profile with a holder
  * search, which costs as much. held is an earlier frame's outline: when art matches there, the
- * frame isn't searched at all.
+ * frame isn't searched at all. thorough false is a live frame's short holder search: see
+ * LIVE_OUTLINES.
  */
 export function recognizeArt(
   cv: CV,
@@ -721,7 +730,8 @@ export function recognizeArt(
   k?: number,
   profile: ScanProfile = SCAN_PROFILES.ygo,
   holderPass = true,
-  held: Quad | null = null
+  held: Quad | null = null,
+  thorough = true
 ): {
   quad: Quad
   card: RgbaImage
@@ -771,8 +781,12 @@ export function recognizeArt(
     // No candidate matched: one may be a black card's inner frame rather than the card, or a
     // held card's art window.
     if ((!best || best.distance > ART_MAX_DISTANCE) && (holderPass || !profile.holderSearch)) {
+      const short = profile.holderSearch && !thorough
       const around = closest(
-        [...quads, ...windows].flatMap((q) => aroundInnerFrame(q, profile.innerFrames)),
+        [
+          ...(short ? quads.slice(0, LIVE_OUTLINES) : quads),
+          ...(short ? windows.slice(0, LIVE_WINDOWS) : windows)
+        ].flatMap((q) => aroundInnerFrame(q, profile.innerFrames)),
         profile.holderSearch ? INNER_SURE_DISTANCE : -1
       )
       if (around && (!best || around.distance < best.distance)) {
@@ -789,7 +803,17 @@ export function recognizeArt(
     let via: 'holder' | undefined
     if (profile.holderSearch && holderPass && (!final || topDistance(final) > ART_MAX_DISTANCE)) {
       const tried = [best?.quad, runnerUp].filter((q): q is Quad => !!q)
-      const again = lookAgain(cv, frame, { quads, windows }, tried, closest, ranked, profile)
+      const regions = thorough ? MAX_REGIONS : LIVE_REGIONS
+      const again = lookAgain(
+        cv,
+        frame,
+        { quads, windows },
+        tried,
+        closest,
+        ranked,
+        profile,
+        regions
+      )
       if (again && topDistance(again) <= ART_MAX_DISTANCE) {
         final = again
         via = 'holder'
@@ -820,14 +844,14 @@ export function recognizeArt(
  * The second look, for a frame whose art matched nothing (a profile's holderSearch): a card in a
  * holder is small in the frame and its outline loses to the holder's rim; a bare card held over
  * a deck may have no outline found at all. The line and quad search runs again, cut from the
- * full-size frame, inside up to MAX_REGIONS regions: round the first few candidates (a holder's
+ * full-size frame, inside up to maxRegions regions: round the first few candidates (a holder's
  * rim, a slab, or the card), round the card each of the first art-window quads would be, and the
  * middle of the frame, where the scan window and the phone have the card held. Each region's closest quad at PICK_WIDTH is matched at full size.
  * The art match is the only judge, and the resolver asks more of a match found this way
  * (resolvePokemon's clearOfOtherNames). Its closest at full size, or null when nothing new was
  * matched.
  *
- * Bounded: at most MAX_REGIONS full-size matches, MAX_REGIONS searches of
+ * Bounded: at most maxRegions full-size matches, maxRegions searches of
  * REGION_LINES lines each, and their quads (at most SPLIT_CANDIDATES + PLAIN_CANDIDATES + 1 a
  * region) at PICK_WIDTH.
  */
@@ -838,7 +862,8 @@ function lookAgain(
   tried: Quad[],
   pick: (quads: Quad[]) => { quad: Quad; distance: number } | null,
   ranked: (quad: Quad) => Ranked,
-  profile: ScanProfile
+  profile: ScanProfile,
+  maxRegions: number
 ): Ranked | null {
   let best: Ranked | null = null
   const consider = (quad: Quad): void => {
@@ -860,7 +885,7 @@ function lookAgain(
         ),
       centreRegion(w, h)
     ],
-    MAX_REGIONS,
+    maxRegions,
     MIN_REGION_SIDE
   )
   for (const r of regions) {

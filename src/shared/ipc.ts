@@ -104,6 +104,8 @@ export interface Api {
     matchName(text: string): Promise<{ cardId: number; name: string; score: number } | null>
     /** The card of each artwork id that is in the catalog. */
     cardsForImages(imageIds: number[]): Promise<{ imageId: number; cardId: number }[]>
+    /** Every artwork of a card printed in the language, in the shown game. */
+    imagesForLanguage(language: Language): Promise<number[]>
     fingerprints(game: GameId): Promise<ArrayBuffer | null>
     /**
      * Yu-Gi-Oh's fingerprint file's reference scans of art variants, with their printings as this
@@ -267,6 +269,7 @@ export const INVOKE_CHANNELS = [
   'scan:printingsForCards',
   'scan:matchName',
   'scan:cardsForImages',
+  'scan:imagesForLanguage',
   'scan:fingerprints',
   'scan:fingerprintRefs',
   'scan:fingerprintStatus',

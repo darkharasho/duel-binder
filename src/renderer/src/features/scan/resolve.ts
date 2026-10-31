@@ -35,6 +35,8 @@ export interface ResolveContext {
   game?: GameId
   /** Which best guesses a Pokémon card may be named by; PKM_GUESS_RULES when left out. */
   guessRules?: readonly PkmGuessRule[]
+  /** The art lead the reprint guess needs; PKM_GUESS_REPRINT_LEAD when left out. */
+  reprintLead?: number
   setName: string | null
   /** The picked set's printings in its language; null when no set is picked. */
   setPrintings: ScanPrinting[] | null

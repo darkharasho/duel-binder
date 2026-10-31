@@ -7,6 +7,10 @@ test('setNumber', () => {
   expect(setNumber('YAP1-EN001')).toEqual({ number: 1, label: '001' })
   expect(setNumber('DUSA-EN001A')).toEqual({ number: 1, label: '001' })
   expect(setNumber('SDY-E')).toEqual({ number: null, label: '' })
+  expect(setNumber('PAR 150/182')).toEqual({ number: 150, label: '150' })
+  expect(setNumber('M5 065/81')).toEqual({ number: 65, label: '065' })
+  expect(setNumber('SMA SV12/94')).toEqual({ number: 12, label: '12' })
+  expect(setNumber('MEP 102')).toEqual({ number: 102, label: '102' })
   expect(setNumber('PROMO')).toEqual({ number: null, label: '' })
 })
 

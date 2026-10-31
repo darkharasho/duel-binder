@@ -9,6 +9,7 @@ import type {
   WishlistItem
 } from '@shared/types'
 import { MAX_DEX_ROWS, type DexRow } from '@shared/dex/parse'
+import { checkPlaceholderRequest } from '@shared/placeholders'
 import type { INVOKE_CHANNELS } from '@shared/ipc'
 import { INVOKE_CHANNELS as CHANNELS } from '@shared/ipc'
 import type { ImageCache } from '../images/cache'
@@ -19,6 +20,7 @@ import { checkOcrBands, type Ocr } from '../scan/ocr'
 import { isOcrKind, isTextModel, readTexts } from '@shared/scan/ocr'
 import type { GameId } from '@shared/games'
 import { applyDexImport, previewDexImport } from '../repo/dexImport'
+import { savePlaceholders } from '../placeholders'
 import { scanRefs } from '../repo/scanRefs'
 import { recordSnapshot } from '../repo/stats'
 import { cardLanguage } from '@shared/scan/cardLanguage'
@@ -103,6 +105,7 @@ export function createHandlers({
       availableGames: () => account.games(),
       onGameChanged: emitDataChanged
     }),
+    'placeholders:save': (request: unknown) => savePlaceholders(checkPlaceholderRequest(request)),
     'dex:preview': async (rows: unknown) => previewDexImport(db, dexRows(rows)),
     'dex:apply': async (rows: unknown) => {
       if (!account.games().includes('pkm'))

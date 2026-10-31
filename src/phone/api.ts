@@ -201,6 +201,9 @@ export function createPhoneApi(deps: {
       apply: () => Promise.reject(new Error('Dex import is only in the desktop app')),
       copy: () => Promise.reject(new Error('Dex import is only in the desktop app'))
     },
+    placeholders: {
+      save: () => Promise.reject(new Error('Placeholders are only in the desktop app'))
+    },
     friends: {
       overview: portal('friends:overview'),
       request: portal('friends:request'),

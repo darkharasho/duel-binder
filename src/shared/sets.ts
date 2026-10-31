@@ -10,9 +10,14 @@ function afterDash(code: string): string | null {
   return i === -1 ? null : code.slice(i + 1)
 }
 
-/** The numeric part of a set code (letter prefix/suffix allowed), e.g. LOB-EN005 -> 5 / '005'. */
+/**
+ * The numeric part of a set code (letter prefix/suffix allowed), e.g. LOB-EN005 -> 5 / '005', or
+ * of a Pokémon number, e.g. PAR 150/182 -> 150 / '150'.
+ */
 export function setNumber(code: string): { number: number | null; label: string } {
-  const m = /^[A-Za-z]*(\d+)[A-Za-z]*$/.exec(afterDash(code) ?? '')
+  const m =
+    /^[A-Za-z]*(\d+)[A-Za-z]*$/.exec(afterDash(code) ?? '') ??
+    /^\S+ [A-Za-z]*(\d+)[A-Za-z]*(?:\/\S+)?$/.exec(code)
   return m ? { number: parseInt(m[1], 10), label: m[1] } : { number: null, label: '' }
 }
 

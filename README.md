@@ -1,8 +1,10 @@
 # Duel Binder
 
-A local, offline-first Electron desktop app for cataloging a personal Yu-Gi-Oh! card collection. Users add cards with quantity, set, and rarity, then search and filter them. Card details and images are fetched automatically from the YGOPRODeck API and cached locally. A modern, easy-to-use UI shows collection stats such as total cards and estimated value.
+A local, offline-first Electron desktop app for cataloging a personal Yu-Gi-Oh! and Pokémon card collection. Users add cards with quantity, set, and rarity, then search and filter them. Card details and images are fetched automatically from the YGOPRODeck API and cached locally. A modern, easy-to-use UI shows collection stats such as total cards and estimated value.
 
 Card data and images come from [YGOPRODeck](https://ygoprodeck.com). This project is not affiliated with or endorsed by Konami; Yu-Gi-Oh! is a trademark of Konami.
+
+Pokémon card data comes from [TCGdex](https://tcgdex.dev). This project is not affiliated with or endorsed by The Pokémon Company, Nintendo, Creatures or GAME FREAK, who own Pokémon.
 
 ## Install notes
 

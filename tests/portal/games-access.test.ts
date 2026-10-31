@@ -4,9 +4,13 @@ import { handle, type AppDeps } from '../../workers/portal/src/app'
 import { addEntry } from '../../src/main/repo/collection'
 import { userScope } from '../../workers/portal/src/scope'
 import { GAME_HEADER } from '../../src/shared/cloud'
+import { GAMES } from '../../src/shared/games'
 import { addUser, seededServerDb, memoryBucket, noPrintingArt, noPrices } from './helpers'
 import { SHARED_SET_NAME, seedPokemon } from '../fixtures/pokemon'
 import type { Facets, FriendsOverview } from '../../src/shared/types'
+import { withOwnerOnlyPokemon } from '../fixtures/ownerOnlyGame'
+
+withOwnerOnlyPokemon()
 
 const BASE = 'https://portal.test'
 const NOW = new Date('2026-10-24T12:00:00.000Z')
@@ -117,6 +121,12 @@ describe('per-user game access', () => {
   it('/api/me lists Pokémon only for the ADMIN_DISCORD_ID account', async () => {
     expect((await meFor(co)).games).toEqual(['ygo', 'pkm'])
     expect((await meFor(cb)).games).toEqual(['ygo'])
+  })
+
+  it('/api/me lists Pokémon for every account once the game is open to everyone', async () => {
+    GAMES.pkm.access = 'everyone'
+    expect((await meFor(cb)).games).toEqual(['ygo', 'pkm'])
+    expect((await rpc('collection:list', [F], cb, 'pkm')).status).toBe(200)
   })
 
   it('/api/me lists only Yu-Gi-Oh! when no owner is configured', async () => {

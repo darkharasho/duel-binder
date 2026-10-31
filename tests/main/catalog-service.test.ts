@@ -10,6 +10,9 @@ import type { SyncStatus } from '../../src/shared/types'
 import { seededDb } from './helpers'
 import { inProcessPortal, PORTAL } from './cloudHelpers'
 import { seedPokemon } from '../fixtures/pokemon'
+import { withOwnerOnlyPokemon } from '../fixtures/ownerOnlyGame'
+
+withOwnerOnlyPokemon()
 
 type Portal = Awaited<ReturnType<typeof inProcessPortal>>
 let portal: Portal

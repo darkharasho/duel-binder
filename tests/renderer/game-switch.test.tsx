@@ -94,15 +94,13 @@ describe('desktop game switch', () => {
     expect(api.games.setActive).toHaveBeenCalledWith('pkm')
   })
 
-  it('scan tab shows for pkm when owner', async () => {
-    // Only the owner's account lists Pokémon (server-enforced); there, Scan shows and Rip doesn't.
+  it('Pokémon shows Scan and not Rip', async () => {
     await renderDesktop(desktopApi(['ygo', 'pkm'], 'pkm'))
     expect(await screen.findByRole('button', { name: /switch game/i })).toHaveTextContent('Pokémon')
     expect(navNames()).toContain('Scan')
     expect(navNames()).not.toContain('Rip')
     expect(pageInGame('scan', GAMES.pkm)).toBe(true)
     expect(pageInGame('rip', GAMES.pkm)).toBe(false)
-    expect(GAMES.pkm.access).toBe('owner')
   })
 
   it('shows Yu-Gi-Oh! and asks main for it when the game cannot be read', async () => {

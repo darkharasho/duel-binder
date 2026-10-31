@@ -12,6 +12,9 @@ import {
 } from '../../src/shared/catalogFeed'
 import { addUser, seededServerDb, memoryBucket, noPrintingArt } from './helpers'
 import { seedPokemon } from '../fixtures/pokemon'
+import { withOwnerOnlyPokemon } from '../fixtures/ownerOnlyGame'
+
+withOwnerOnlyPokemon()
 
 const BASE = 'https://portal.test'
 const NOW = new Date('2026-10-24T12:00:00.000Z')

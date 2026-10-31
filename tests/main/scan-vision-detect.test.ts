@@ -618,6 +618,34 @@ describe('the Pokémon profile', () => {
     expect(analyze(cv, img, pkmIndex, null, false, false, pkm).artVia).toBe('holder')
   }, 60_000)
 
+  it('stays on the outline art matched on, and searches when it no longer matches', () => {
+    const pkmIndex = decodeFingerprints(
+      encodeFingerprints([
+        { imageId: PKM_IMAGE, hash: artHash(fingerprintSource(reference(), 'pokemon', pkm)) }
+      ])
+    )
+    const { img } = framed(reference(), 200)
+    const searched = recognizeArt(cv, img, pkmIndex, undefined, undefined, pkm)!
+    const kept = recognizeArt(cv, img, pkmIndex, undefined, undefined, pkm, true, searched.quad)!
+    expect(kept.quad).toEqual(searched.quad)
+    expect(kept.matches[0].imageId).toBe(PKM_IMAGE)
+    // The search's own mark is missing: this frame wasn't searched.
+    expect(kept.via).toBeUndefined()
+    const moved = recognizeArt(cv, img, pkmIndex, undefined, undefined, pkm, true, [
+      [0, 0],
+      [60, 0],
+      [60, 84],
+      [0, 84]
+    ])!
+    expect(moved.matches[0].imageId).toBe(PKM_IMAGE)
+    expect(moved.via).toBe('holder')
+  }, 60_000)
+
+  it('keeps outlines only for Pokémon', () => {
+    expect(pkm.keepOutline).toBe(true)
+    expect(scanProfile('ygo').keepOutline).toBe(false)
+  })
+
   it('looks again only for Pokémon: Yu-Gi-Oh keeps its one search', () => {
     expect(pkm.holderSearch).toBe(true)
     expect(scanProfile('ygo').holderSearch).toBe(false)

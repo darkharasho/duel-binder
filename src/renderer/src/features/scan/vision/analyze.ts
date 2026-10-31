@@ -46,7 +46,8 @@ function bandWidth(quad: Quad): number {
  * features when wantLook, read off the regions of profile's game (whose rarity cues and look are
  * left null when it has none). It's copied into OpenCV once, for finding the card and every warp
  * of it, and freed whatever happens. holderPass false skips the holder search of a profile that
- * has one, for a frame the caller has already given its share of them (holderBudget.ts).
+ * has one, for a frame the caller has already given its share of them (holderBudget.ts). held is
+ * an earlier frame's outline, tried before the frame is searched (recognizeArt).
  */
 export function analyze(
   cv: CV,
@@ -56,11 +57,12 @@ export function analyze(
   wantBands: boolean,
   wantLook = false,
   profile: ScanProfile = SCAN_PROFILES.ygo,
-  holderPass = true
+  holderPass = true,
+  held: Quad | null = null
 ): FrameSignals {
   const frame = toMat(cv, img)
   return using([frame], () =>
-    analyzeFrame(cv, frame, index, candidates, wantBands, wantLook, profile, holderPass)
+    analyzeFrame(cv, frame, index, candidates, wantBands, wantLook, profile, holderPass, held)
   )
 }
 
@@ -72,7 +74,8 @@ function analyzeFrame(
   wantBands: boolean,
   wantLook: boolean,
   profile: ScanProfile,
-  holderPass: boolean
+  holderPass: boolean,
+  held: Quad | null
 ): FrameSignals {
   let quad: Quad
   let art: ArtMatch[] = []
@@ -90,7 +93,8 @@ function analyzeFrame(
       candidates ? new Set(candidates) : undefined,
       ART_MATCH_DEPTH,
       profile,
-      holderPass
+      holderPass,
+      held
     )
     if (!found) return NOTHING
     quad = found.quad

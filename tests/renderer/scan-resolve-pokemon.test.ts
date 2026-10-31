@@ -704,6 +704,22 @@ describe('Pokémon version cues (rule 7)', () => {
     expect(out).toMatchObject({ flag: 'pick-printing', printingId: 42 })
   })
 
+  it('an unnamed version falls on Normal, though a reverse holo is cheaper', async () => {
+    const out = await recognized(
+      raw({ art, version: sure(0.1, 0.1) }),
+      withVersions(['Reverse Holofoil', 'Normal', 'Holofoil'])
+    )
+    expect(out).toMatchObject({ flag: 'pick-printing', printingId: 901, rarity: 'Normal' })
+  })
+
+  it('an unnamed version falls on Holofoil where there is no Normal', async () => {
+    const out = await recognized(
+      raw({ art, version: sure(0.1, 0.1) }),
+      withVersions(['Reverse Holofoil', 'Holofoil'])
+    )
+    expect(out).toMatchObject({ flag: 'pick-printing', printingId: 901, rarity: 'Holofoil' })
+  })
+
   it('a 1st Edition twin or a repeated label keeps pick-printing', async () => {
     for (const labels of [
       ['Reverse Holofoil', '1st Edition Reverse Holofoil'],

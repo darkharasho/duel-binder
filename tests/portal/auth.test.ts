@@ -3,6 +3,9 @@ import Database from 'better-sqlite3'
 import { memoryBucket, noPrintingArt, noPrices } from './helpers'
 import { handle, type AppDeps } from '../../workers/portal/src/app'
 import { migrateServer } from '../../workers/portal/src/migrate'
+import { withOwnerOnlyPokemon } from '../fixtures/ownerOnlyGame'
+
+withOwnerOnlyPokemon()
 
 const BASE = 'https://portal.test'
 let clock = new Date('2026-10-24T12:00:00.000Z')

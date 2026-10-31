@@ -8,6 +8,9 @@ import { addUser, seededServerDb, memoryBucket, noPrintingArt } from './helpers'
 import { migrateServer } from '../../workers/portal/src/migrate'
 import { PKM_ID_MIN } from '../../src/shared/games'
 import { seedPokemon, SHARED_SET_NAME } from '../fixtures/pokemon'
+import { withOwnerOnlyPokemon } from '../fixtures/ownerOnlyGame'
+
+withOwnerOnlyPokemon()
 
 const BASE = 'https://portal.test'
 const NOW = new Date('2026-10-24T12:00:00.000Z')

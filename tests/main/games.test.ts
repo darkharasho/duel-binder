@@ -28,14 +28,14 @@ describe('games', () => {
     expect(pokemonId('sv02-045')).not.toBe(pokemonId('sv02-046'))
   })
   test('Yu-Gi-Oh ids are ygo', () => expect(gameOfId(89631139)).toBe('ygo'))
-  test('Pokémon is owner-only', () => {
-    expect(allowedGames(false)).toEqual(['ygo'])
+  test('every game is open to everyone', () => {
+    expect(allowedGames(false)).toEqual(['ygo', 'pkm'])
     expect(allowedGames(true)).toEqual(['ygo', 'pkm'])
   })
   test('features', () => {
     expect(gameDef('ygo').features).toEqual({ scan: true, rip: true })
     expect(gameDef('pkm').features).toEqual({ scan: true, rip: false })
-    expect(gameDef('pkm').access).toBe('owner')
+    expect(gameDef('pkm').access).toBe('everyone')
     expect(gameDef('pkm').crossLanguagePriceFallback).toBe(false)
   })
   test('vocab and guards', () => {

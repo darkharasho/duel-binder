@@ -11,7 +11,7 @@ export const PKM: GameDef = {
   cardAspect: { width: 600, height: 825 },
   crossLanguagePriceFallback: false,
   priceRule: 'marketOnly',
-  access: 'owner',
+  access: 'everyone',
   vocab: {
     cardId: 'Card',
     printingCode: 'Number',

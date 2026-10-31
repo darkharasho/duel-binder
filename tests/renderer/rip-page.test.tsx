@@ -4,6 +4,7 @@ import { vi } from 'vitest'
 import { RipPage } from '@/features/rip/RipPage'
 import { clampPackCount } from '@/features/rip/SetPicker'
 import type { RipCard, RipSet } from '../../src/shared/rip/types'
+import { searchPause } from './filterTestHelpers'
 import { createMockApi, renderWithProviders } from './mockApi'
 
 // jsdom never loads images: the art is "in" at once.
@@ -78,6 +79,7 @@ describe('RipPage', () => {
     })
     await screen.findByRole('button', { name: /Metal Raiders/ })
     await userEvent.type(screen.getByRole('searchbox'), 'lob')
+    await searchPause()
     expect(screen.queryByRole('button', { name: /Metal Raiders/ })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: /Legend of Blue Eyes/ })).toBeInTheDocument()
   })

@@ -4,6 +4,7 @@ import { toast } from 'sonner'
 import type { CardDetail, CardRow, EntryView, Printing, SetSummary } from '@shared/types'
 import { CollectionPage } from '@/features/collection/CollectionPage'
 import { createMockApi, renderWithProviders } from './mockApi'
+import { stubWideWindow } from './filterTestHelpers'
 
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() }, Toaster: () => null }))
 
@@ -98,6 +99,9 @@ function setup(
   return { list, ...renderWithProviders(<CollectionPage {...props} />, { api }) }
 }
 
+const openFilters = (): Promise<void> =>
+  userEvent.click(screen.getByRole('button', { name: /^Filters/ }))
+
 describe('CollectionPage', () => {
   beforeEach(() => {
     localStorage.clear()
@@ -115,24 +119,25 @@ describe('CollectionPage', () => {
     expect(localStorage.getItem('collection.view')).toBe('table')
   })
 
-  it('keeps the desktop filter row on the page, with no Filters sheet', async () => {
+  it('keeps search, Filters and sort in one row, and every facet in the panel', async () => {
     setup()
     await screen.findByText('Dark Magician')
     expect(screen.getByRole('searchbox', { name: 'Search collection' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Card type' })).toBeInTheDocument()
     expect(screen.getByRole('combobox', { name: 'Sort by' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Card type' })).not.toBeInTheDocument()
+    await openFilters()
+    expect(screen.getByRole('button', { name: 'Language' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Card type' })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Level' }))
     expect(screen.getByLabelText('Level min')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Clear filters' })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /^Filters/ })).not.toBeInTheDocument()
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
   it('sends the shared language filter (English by default) and All languages clears it', async () => {
     const { list } = setup()
     await screen.findByText('Dark Magician')
     expect(list).toHaveBeenLastCalledWith(expect.objectContaining({ language: 'en' }))
-    await userEvent.click(screen.getByRole('combobox', { name: 'Language' }))
-    await userEvent.click(await screen.findByRole('option', { name: 'All languages' }))
+    await openFilters()
+    await userEvent.click(screen.getByRole('button', { name: 'All' }))
     await waitFor(() =>
       expect(list).toHaveBeenLastCalledWith(expect.objectContaining({ language: undefined }))
     )
@@ -162,17 +167,16 @@ describe('CollectionPage', () => {
     })
     await screen.findByText('Dark Magician')
     const u = userEvent.setup()
-    await u.click(screen.getByRole('button', { name: 'Set' }))
-    const items = async (): Promise<(string | null)[]> =>
-      (await screen.findAllByRole('menuitemcheckbox')).map((o) => o.textContent)
+    await openFilters()
+    const items = (): (string | null)[] =>
+      within(screen.getByRole('button', { name: 'Set' }).closest('section')!)
+        .getAllByRole('button', { pressed: false })
+        .map((o) => o.textContent)
     // A set the sets list doesn't know yet still shows, by its bare name.
-    expect(await items()).toEqual(['LOB - Legend of Blue Eyes', 'Unlisted Set'])
-    await u.keyboard('{Escape}')
+    expect(items()).toEqual(['LOB - Legend of Blue Eyes', 'Unlisted Set'])
 
-    await u.click(screen.getByRole('combobox', { name: 'Language' }))
-    await u.click(await screen.findByRole('option', { name: 'Japanese' }))
-    await u.click(screen.getByRole('button', { name: 'Set' }))
-    expect(await items()).toEqual([
+    await u.click(screen.getByRole('button', { name: 'Japanese' }))
+    expect(items()).toEqual([
       'LOB - Legend of Blue Eyes',
       'PP01 - Premium Pack 1',
       'Unlisted Set'
@@ -214,8 +218,8 @@ describe('CollectionPage', () => {
   it('changing rarity facet calls list with rarities', async () => {
     const { list } = setup()
     await screen.findByText('Dark Magician')
-    await userEvent.click(screen.getByRole('button', { name: 'Rarity' }))
-    await userEvent.click(await screen.findByRole('menuitemcheckbox', { name: 'Ultra Rare' }))
+    await openFilters()
+    await userEvent.click(await screen.findByRole('button', { name: 'Ultra Rare' }))
     await waitFor(() =>
       expect(list).toHaveBeenLastCalledWith(expect.objectContaining({ rarities: ['Ultra Rare'] }))
     )
@@ -243,15 +247,63 @@ describe('CollectionPage', () => {
     )
   })
 
-  it('sort select and direction toggle drive the same state', async () => {
+  it('the one sort control carries the direction', async () => {
     const { list } = setup()
     await screen.findByText('Dark Magician')
     await userEvent.click(screen.getByRole('combobox', { name: 'Sort by' }))
-    await userEvent.click(await screen.findByRole('option', { name: 'Total value' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Sort descending' }))
+    await userEvent.click(await screen.findByRole('option', { name: 'Total price: low to high' }))
     await waitFor(() =>
       expect(list).toHaveBeenLastCalledWith(expect.objectContaining({ sort: 'value', dir: 'asc' }))
     )
+    expect(screen.queryByRole('button', { name: /^Sort (a|de)scending/ })).not.toBeInTheDocument()
+  })
+
+  it('Clear all clears the filters and returns to English; search and sort stay', async () => {
+    const { list } = setup()
+    await screen.findByText('Dark Magician')
+    await userEvent.type(screen.getByLabelText('Search collection'), 'dark')
+    await userEvent.click(screen.getByRole('combobox', { name: 'Sort by' }))
+    await userEvent.click(await screen.findByRole('option', { name: 'Name: A to Z' }))
+    await openFilters()
+    await userEvent.click(await screen.findByRole('button', { name: 'Ultra Rare' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Japanese' }))
+    await userEvent.keyboard('{Escape}')
+    expect(await screen.findByRole('button', { name: 'Filters, 2 active' })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Clear all' }))
+    await waitFor(() =>
+      expect(list).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          q: 'dark',
+          sort: 'name',
+          dir: 'asc',
+          language: 'en'
+        })
+      )
+    )
+    expect(list.mock.lastCall?.[0].rarities).toBeUndefined()
+    expect(localStorage.getItem('language.filter')).toBe('en')
+    expect(screen.getByLabelText('Search collection')).toHaveValue('dark')
+    expect(screen.getByRole('button', { name: 'Filters' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Clear all' })).not.toBeInTheDocument()
+  })
+
+  it('the default English is no filter; All languages is, and its chip returns to English', async () => {
+    setup()
+    await screen.findByText('Dark Magician')
+    expect(screen.getByRole('button', { name: 'Filters' })).toBeInTheDocument()
+    expect(screen.queryByText('2 cards')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Remove / })).not.toBeInTheDocument()
+
+    await openFilters()
+    await userEvent.click(screen.getByRole('button', { name: 'All' }))
+    await userEvent.keyboard('{Escape}')
+    expect(await screen.findByRole('button', { name: 'Filters, 1 active' })).toBeInTheDocument()
+    expect(screen.getByText('2 cards')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Remove All languages filter' }))
+    expect(screen.getByRole('button', { name: 'Filters' })).toBeInTheDocument()
+    expect(screen.queryByText('2 cards')).not.toBeInTheDocument()
+    expect(localStorage.getItem('language.filter')).toBe('en')
   })
 
   it('approximate value shows ≈', async () => {
@@ -373,11 +425,15 @@ describe('CollectionPage', () => {
   })
 
   it('keeps the panel open when a filter excludes the initial entry', async () => {
+    // The side panel stays usable behind the card.
+    stubWideWindow()
+    localStorage.setItem('filters.panelOpen', 'open')
     const { list } = setup([dm, bew], {}, { initialEntryId: 2 })
     expect(
       await within(await screen.findByRole('dialog')).findByText('Blue-Eyes White Dragon')
     ).toBeInTheDocument()
     list.mockImplementation(async () => [dm])
+    fireEvent.click(screen.getByRole('button', { name: 'Level', hidden: true }))
     fireEvent.change(screen.getByLabelText('Level min'), { target: { value: '3' } })
     await waitFor(() =>
       expect(list).toHaveBeenLastCalledWith(expect.objectContaining({ levelMin: 3 }))
@@ -445,11 +501,19 @@ describe('CollectionPage', () => {
     await userEvent.type(screen.getByLabelText('Search collection'), 'zzz')
     expect(await screen.findByText('No cards match these filters')).toBeInTheDocument()
     expect(list).toHaveBeenLastCalledWith(expect.objectContaining({ q: 'zzz' }))
-    await userEvent.click(
-      within(screen.getByText('No cards match these filters').parentElement!).getByRole('button', {
-        name: 'Clear filters'
-      })
+    const state = (): HTMLElement => screen.getByText('No cards match these filters').parentElement!
+    // The default English is no filter, so with only a search there's only that to clear.
+    expect(within(state()).queryByRole('button', { name: 'Clear all' })).not.toBeInTheDocument()
+
+    // With a language picked, Clear all returns to English and leaves the search.
+    await userEvent.click(screen.getByRole('button', { name: 'Filters' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'All' }))
+    await userEvent.keyboard('{Escape}')
+    await userEvent.click(await within(state()).findByRole('button', { name: 'Clear all' }))
+    await waitFor(() =>
+      expect(list).toHaveBeenLastCalledWith(expect.objectContaining({ q: 'zzz', language: 'en' }))
     )
+    await userEvent.click(await within(state()).findByRole('button', { name: 'Clear search' }))
     expect(await screen.findByText('No cards yet')).toBeInTheDocument()
   })
 })

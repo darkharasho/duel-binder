@@ -2,6 +2,7 @@ import { act, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { SetSummary } from '@shared/types'
 import { SetsPage } from '@/features/sets/SetsPage'
+import { searchPause } from './filterTestHelpers'
 import { createMockApi, renderWithProviders } from './mockApi'
 
 const set = (o: Partial<SetSummary>): SetSummary => ({
@@ -107,8 +108,9 @@ describe('SetsPage upcoming sets', () => {
   it('a search matching only upcoming sets shows them open, without saving that', async () => {
     renderPage([OLD, LATER, FAR])
     await screen.findByRole('button', { name: /Metal Raiders/ })
-    const search = screen.getByRole('textbox', { name: 'Search sets' })
+    const search = screen.getByRole('searchbox', { name: 'Search sets' })
     await userEvent.type(search, 'far')
+    await searchPause()
     // Nothing in the main list matches, so the banner is the answer rather than "No sets match".
     expect(screen.queryByText('No sets match')).not.toBeInTheDocument()
     expect(banner()).toHaveTextContent('1 upcoming set')
@@ -124,14 +126,17 @@ describe('SetsPage upcoming sets', () => {
 
     // Clearing the search goes back to the saved (collapsed) state.
     await userEvent.clear(search)
+    await searchPause()
     expect(banner()).toHaveAttribute('aria-expanded', 'false')
     expect(banner()).toHaveTextContent('2 upcoming sets')
 
     // A search the main list answers leaves the banner as saved, and only counts matches.
     await userEvent.type(search, 'metal')
+    await searchPause()
     expect(screen.queryByRole('button', { name: /upcoming set/ })).not.toBeInTheDocument()
     await userEvent.clear(search)
     await userEvent.type(search, 'r')
+    await searchPause()
     expect(banner()).toHaveTextContent('2 upcoming sets')
     expect(banner()).toHaveAttribute('aria-expanded', 'false')
   })
@@ -143,9 +148,8 @@ describe('SetsPage upcoming sets', () => {
     await screen.findByRole('button', { name: /Metal Raiders/ })
     expect(screen.queryByRole('button', { name: /upcoming set/ })).not.toBeInTheDocument()
 
-    await userEvent.click(screen.getByRole('button', { name: /^Filters & sort/ }))
-    await userEvent.click(screen.getByRole('combobox', { name: 'Language' }))
-    await userEvent.click(await screen.findByRole('option', { name: 'Japanese' }))
+    await userEvent.click(screen.getByRole('button', { name: /^Filters/ }))
+    await userEvent.click(screen.getByRole('button', { name: 'Japanese' }))
     await userEvent.keyboard('{Escape}')
     expect(await screen.findByRole('button', { name: /upcoming set/ })).toHaveTextContent(
       '1 upcoming set'

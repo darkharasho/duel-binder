@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { ArrowDownAZ, ArrowLeft, ArrowUpAZ, Ellipsis, Search } from 'lucide-react'
+import { ArrowLeft, Ellipsis } from 'lucide-react'
 import { toast } from 'sonner'
 import type { Language } from '@shared/languages'
 import { englishSetName, nativeSetName } from '@shared/setNames'
@@ -16,11 +16,16 @@ import { CardArt } from '@/components/CardArt'
 import { checklistUnpriced, useRequestPrices } from '@/lib/priceRequests'
 import { useChunkedList } from '@/lib/useChunkedList'
 import { CardSheet } from '@/components/CardSheet'
+import { FilterBar } from '@/components/FilterBar'
+import { FilterOptionChip } from '@/components/FilterChip'
+import { ChipOptions, FilterPanel, FilterSection } from '@/components/FilterPanel'
 import { TiltCard } from '@/components/TiltCard'
 import { coverArtUrl, setArtUrl, useArtWash } from '@/components/artWashContext'
 import { LanguageTag } from '@/components/LanguageTag'
 import { PageHeader } from '@/components/PageHeader'
 import { listNav } from '@/components/panelNav'
+import { SearchInput } from '@/components/SearchInput'
+import { SortControl } from '@/components/SortControl'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -32,22 +37,16 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu'
-import { Input } from '@/components/ui/input'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue
-} from '@/components/ui/select'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { UnderlineTabs } from '@/components/UnderlineTabs'
 import { CardPanel, type CardPanelSeed } from '@/features/card/CardPanel'
 import { api, invalidateAfterEdit, queryKeys } from '@/lib/api'
+import type { ActiveChip } from '@/lib/filters'
 import { useGame } from '@/lib/game'
 import { isPhone, isWeb } from '@/lib/platform'
 import { createSerialQueue } from '@/lib/serialQueue'
+import { useFilterPanel } from '@/lib/useFilterPanel'
 import { cn } from '@/lib/utils'
 import { PlaceholdersButton } from './PlaceholdersDialog'
 import { BulkMode } from './BulkMode'
@@ -56,7 +55,7 @@ import { SetArt } from './SetArt'
 import { SetProgress } from './SetProgress'
 import {
   adjustChecklistCard,
-  CHECKLIST_SORTS,
+  checklistSorts,
   checklistTiles,
   filterTiles,
   filterTilesByRarity,
@@ -107,30 +106,6 @@ function BackButton({ onBack }: { onBack: () => void }): React.JSX.Element {
   )
 }
 
-function RarityChip({
-  active,
-  onClick,
-  children
-}: {
-  active: boolean
-  onClick: () => void
-  children: React.ReactNode
-}): React.JSX.Element {
-  return (
-    <button
-      type="button"
-      aria-pressed={active}
-      onClick={onClick}
-      className={cn(
-        'whitespace-nowrap rounded-full border border-white/[0.08] px-2.5 py-1 text-[12px] font-semibold tabular-nums outline-none focus-visible:ring-2 focus-visible:ring-ring',
-        active ? 'bg-primary text-primary-foreground' : 'bg-muted hover:bg-accent'
-      )}
-    >
-      {children}
-    </button>
-  )
-}
-
 /** Esc and the mouse's back button leave the set, unless a dialog or panel is open. */
 function useBackShortcuts(onBack: () => void): void {
   const latest = useRef(onBack)
@@ -178,6 +153,7 @@ export function SetChecklist({
   friendHeader
 }: SetChecklistProps): React.JSX.Element {
   const { game } = useGame()
+  const panel = useFilterPanel()
   const [filter, setFilter] = useState<TileFilter>('all')
   const [q, setQ] = useState('')
   const [rarity, setRarity] = useState<string | null>(null)
@@ -360,6 +336,13 @@ export function SetChecklist({
   const Title = friend ? 'h2' : 'h1'
   const progress = progressFor(data.set, mode)
   const rarities = rarityCounts(data)
+  const sorts = checklistSorts(game)
+  // Bulk mode ignores the rarity, so nothing filters there.
+  const canFilter = !bulk && rarities.length > 1
+  const chips: ActiveChip[] =
+    canFilter && rarity !== null
+      ? [{ key: 'rarity', label: rarity, onRemove: () => setRarity(null) }]
+      : []
   // On the phone the count mode and bulk add move into a "⋯" menu to fit the width.
   const phone = isPhone()
   const toggleBulk = (): void => {
@@ -396,256 +379,259 @@ export function SetChecklist({
 
   return (
     <TooltipProvider>
-      <div className="space-y-4 p-8 max-md:p-4">
-        <PageHeader>
-          {friend && friendHeader}
-          <div className="flex flex-wrap items-center gap-2">
-            <BackButton onBack={onBack} />
-            <Title className="flex min-w-0 items-center gap-2 text-xl font-semibold">
-              <span className="truncate">{englishSetName(data.set.setName, data.set.setCode)}</span>
-              <LanguageTag language={data.set.language} />
-              {nativeSetName(data.set.setName, data.set.setCode) && (
-                <span className="truncate text-sm font-normal text-muted-foreground">
-                  {data.set.setName}
+      <div className="flex items-start">
+        <div className="min-w-0 flex-1 space-y-4 p-8 max-md:p-4">
+          <PageHeader>
+            {friend && friendHeader}
+            <div className="flex flex-wrap items-center gap-2">
+              <BackButton onBack={onBack} />
+              <Title className="flex min-w-0 items-center gap-2 text-xl font-semibold">
+                <span className="truncate">
+                  {englishSetName(data.set.setName, data.set.setCode)}
                 </span>
-              )}
-            </Title>
-          </div>
-          <div className="flex flex-wrap items-end gap-3 border-b border-white/[0.08]">
-            <UnderlineTabs label="Show" value={filter} options={FILTERS} onChange={setFilter} />
-            <div className="ml-auto flex flex-wrap items-center gap-3 pb-2 max-md:ml-0 max-md:w-full max-md:gap-2">
-              {!bulk && (
-                <div className="relative w-52 max-md:w-full">
-                  <Search
-                    className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
-                    aria-hidden
-                  />
-                  <Input
-                    type="search"
-                    value={q}
-                    onChange={(e) => setQ(e.target.value)}
-                    placeholder="Search this set"
-                    aria-label="Search this set"
-                    className="h-8 pl-8"
-                  />
-                </div>
-              )}
-              <div className="flex items-center gap-1.5">
-                <Select
-                  value={sort.by}
-                  onValueChange={(v) => {
-                    const o = CHECKLIST_SORTS.find((x) => x.value === v)
-                    if (o) setSort({ by: o.value, dir: o.dir })
-                  }}
-                >
-                  <SelectTrigger size="sm" aria-label="Sort by" className="w-36">
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {CHECKLIST_SORTS.map((o) => (
-                      <SelectItem key={o.value} value={o.value}>
-                        {o.label}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <Button
-                  variant="outline"
-                  size="icon-sm"
-                  aria-label={sort.dir === 'asc' ? 'Sort ascending' : 'Sort descending'}
-                  onClick={() => setSort((s) => ({ ...s, dir: s.dir === 'asc' ? 'desc' : 'asc' }))}
-                >
-                  {sort.dir === 'asc' ? <ArrowUpAZ /> : <ArrowDownAZ />}
-                </Button>
-              </div>
-              {!phone && (
-                <ToggleGroup
-                  type="single"
-                  variant="outline"
-                  size="sm"
-                  value={mode}
-                  onValueChange={(m) => {
-                    if (m === 'cards' || m === 'rarities') onModeChange(m)
-                  }}
-                >
-                  <ToggleGroupItem value="cards">Each card once</ToggleGroupItem>
-                  <ToggleGroupItem value="rarities">Every rarity</ToggleGroupItem>
-                </ToggleGroup>
-              )}
-              {bulk && (
-                <span className="text-sm text-muted-foreground">Changes save as you click.</span>
-              )}
-              {(!phone || bulk) && !friend && (
-                <Button variant={bulk ? 'default' : 'outline'} size="sm" onClick={toggleBulk}>
-                  {bulk ? 'Done' : 'Bulk add'}
-                </Button>
-              )}
-              {!phone && !friend && !isWeb() && game === 'pkm' && (
-                <PlaceholdersButton set={data.set} cards={data.cards} />
-              )}
-              {phone && (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="icon-sm" aria-label="More tools">
-                      <Ellipsis />
-                    </Button>
-                  </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end">
-                    <DropdownMenuLabel>Count</DropdownMenuLabel>
-                    <DropdownMenuRadioGroup
-                      value={mode}
-                      onValueChange={(m) => {
-                        if (m === 'cards' || m === 'rarities') onModeChange(m)
-                      }}
-                    >
-                      <DropdownMenuRadioItem value="cards">Each card once</DropdownMenuRadioItem>
-                      <DropdownMenuRadioItem value="rarities">Every rarity</DropdownMenuRadioItem>
-                    </DropdownMenuRadioGroup>
-                    {!friend && (
-                      <>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem onSelect={toggleBulk}>
-                          {bulk ? 'Done' : 'Bulk add'}
-                        </DropdownMenuItem>
-                      </>
-                    )}
-                  </DropdownMenuContent>
-                </DropdownMenu>
-              )}
+                <LanguageTag language={data.set.language} />
+                {nativeSetName(data.set.setName, data.set.setCode) && (
+                  <span className="truncate text-sm font-normal text-muted-foreground">
+                    {data.set.setName}
+                  </span>
+                )}
+              </Title>
             </div>
-          </div>
-        </PageHeader>
-
-        <header className="flex flex-wrap items-center gap-5">
-          <SetArt
-            imageKey={data.set.imageKey}
-            packImageKey={data.set.packImageKey}
-            logoImageKey={data.set.logoImageKey}
-            coverImageId={data.set.coverImageId}
-            setCode={data.set.setCode}
-            className="size-24 rounded-[3px] shadow-[0_8px_20px_rgb(0_0_0/0.5)]"
-          />
-          <div className="min-w-0 flex-1">
-            <p className="font-mono text-[13px] text-foreground/75">
-              {data.set.setCode}
-              {data.set.tcgDate && ` · ${data.set.tcgDate}`} · {progress.owned} of {progress.total}
-            </p>
-            {data.set.listRows !== null && data.set.unmatchedRows ? (
-              <p className="text-sm text-muted-foreground">
-                {data.set.listRows - data.set.unmatchedRows} of {data.set.listRows} cards listed;{' '}
-                {data.set.unmatchedRows} couldn&apos;t be identified
-              </p>
-            ) : null}
-            <SetProgress progress={progress} className="mt-2 max-w-md" />
-          </div>
-        </header>
-
-        {!bulk && rarities.length > 1 && (
-          <div role="group" aria-label="Filter by rarity" className="flex flex-wrap gap-1.5">
-            <RarityChip active={rarity === null} onClick={() => setRarity(null)}>
-              All {checklistTiles(data, mode).length}
-            </RarityChip>
-            {rarities.map((r) => (
-              <RarityChip
-                key={r.rarity}
-                active={rarity === r.rarity}
-                onClick={() => setRarity(rarity === r.rarity ? null : r.rarity)}
-              >
-                {r.rarity} {r.count}
-              </RarityChip>
-            ))}
-          </div>
-        )}
-
-        {!bulk && q.trim() !== '' && tiles.length === 0 && (
-          <p className="py-12 text-center text-sm text-muted-foreground">
-            No cards in this set match &ldquo;{q.trim()}&rdquo;
-          </p>
-        )}
-
-        {bulk ? (
-          <BulkMode
-            cards={bulkCards}
-            setName={data.set.setName}
-            pending={pending}
-            adjust={adjust}
-          />
-        ) : (
-          <ul className="grid grid-cols-[repeat(auto-fill,minmax(7.5rem,1fr))] gap-3 max-md:grid-cols-3 max-md:gap-1.5">
-            {shownTiles.map((t) => {
-              const owned = t.owned > 0
-              return (
-                <li key={t.key} className="lazy-item [--lazy-h:240px]">
-                  <button
-                    type="button"
-                    data-owned={owned}
-                    data-nav-key={t.key}
-                    aria-label={t.rarity ? `${t.card.name}, ${t.rarity}` : t.card.name}
-                    disabled={friend !== undefined && !owned}
-                    onClick={() => open(t)}
-                    className={cn(
-                      'relative flex w-full flex-col gap-1 rounded-lg p-1.5 text-left outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring',
-                      !owned && 'grayscale opacity-40'
-                    )}
+            <div className="flex flex-wrap items-end gap-3 border-b border-white/[0.08]">
+              <UnderlineTabs label="Show" value={filter} options={FILTERS} onChange={setFilter} />
+              <div className="ml-auto flex flex-wrap items-center gap-3 pb-2 max-md:gap-2">
+                {bulk && (
+                  <span className="text-sm text-muted-foreground">Changes save as you click.</span>
+                )}
+                {(!phone || bulk) && !friend && (
+                  <Button variant={bulk ? 'default' : 'outline'} size="sm" onClick={toggleBulk}>
+                    {bulk ? 'Done' : 'Bulk add'}
+                  </Button>
+                )}
+                {!phone && !friend && !isWeb() && game === 'pkm' && (
+                  <PlaceholdersButton set={data.set} cards={data.cards} />
+                )}
+                {phone && (
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button variant="outline" size="icon-sm" aria-label="More tools">
+                        <Ellipsis />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuLabel>Count</DropdownMenuLabel>
+                      <DropdownMenuRadioGroup
+                        value={mode}
+                        onValueChange={(m) => {
+                          if (m === 'cards' || m === 'rarities') onModeChange(m)
+                        }}
+                      >
+                        <DropdownMenuRadioItem value="cards">Each card once</DropdownMenuRadioItem>
+                        <DropdownMenuRadioItem value="rarities">Every rarity</DropdownMenuRadioItem>
+                      </DropdownMenuRadioGroup>
+                      {!friend && (
+                        <>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem onSelect={toggleBulk}>
+                            {bulk ? 'Done' : 'Bulk add'}
+                          </DropdownMenuItem>
+                        </>
+                      )}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                )}
+              </div>
+            </div>
+            <FilterBar
+              // Bulk mode has its own search box, and shows every rarity.
+              search={
+                !bulk && (
+                  <SearchInput
+                    label="Search this set"
+                    placeholder="Search this set by name, number or code"
+                    value={q}
+                    onChange={setQ}
+                  />
+                )
+              }
+              filtersOpen={panel.open}
+              onToggleFilters={canFilter ? () => panel.setOpen(!panel.open) : undefined}
+              sort={
+                <SortControl
+                  options={sorts}
+                  value={sort.by}
+                  dir={sort.dir}
+                  onChange={(by, dir) => setSort({ by, dir })}
+                />
+              }
+              toggle={
+                !phone && (
+                  <ToggleGroup
+                    type="single"
+                    variant="outline"
+                    value={mode}
+                    onValueChange={(m) => {
+                      if (m === 'cards' || m === 'rarities') onModeChange(m)
+                    }}
                   >
-                    <TiltCard>
-                      <CardArt
-                        imageId={t.card.imageId}
-                        printingId={
-                          (t.card.rarities.find((r) => r.rarity === t.rarity) ?? t.card.rarities[0])
-                            ?.defaultPrintingId
-                        }
-                        size="small"
-                        alt=""
-                        className="w-full"
-                      />
-                    </TiltCard>
-                    {owned && (
-                      <span className="absolute right-2.5 top-2.5 rounded-full bg-primary px-1.5 text-xs font-semibold tabular-nums text-primary-foreground">
-                        ×{t.owned}
-                      </span>
-                    )}
-                    <span className="text-xs tabular-nums text-muted-foreground">
-                      {t.card.numberLabel}
-                    </span>
-                    <span className="truncate text-xs font-medium">{t.card.name}</span>
-                    {t.rarity && (
-                      <span className="truncate text-xs text-muted-foreground">{t.rarity}</span>
-                    )}
-                  </button>
-                </li>
-              )
-            })}
-          </ul>
-        )}
-
-        {friend && friendCard && (
-          <FriendCardSheet friend={friend} {...friendCard} onClose={() => setFriendCard(null)} />
-        )}
-
-        {openCardId !== undefined && (
-          <CardSheet onClose={close}>
-            <CardPanel
-              cardId={openCardId}
-              entryId={selected?.entryId}
-              seed={unownedCard && seedOf(unownedCard, unowned?.rarity ?? null)}
-              caption={
-                unownedCard && `${englishSetName(data.set.setName)} · ${unownedCard.numberLabel}`
+                    {/* Short words when the side panel leaves the bar narrow. */}
+                    <ToggleGroupItem value="cards" aria-label="Each card once">
+                      <span className="@max-2xl:hidden">Each card once</span>
+                      <span className="@2xl:hidden">Cards</span>
+                    </ToggleGroupItem>
+                    <ToggleGroupItem value="rarities" aria-label="Every rarity">
+                      <span className="@max-2xl:hidden">Every rarity</span>
+                      <span className="@2xl:hidden">Rarities</span>
+                    </ToggleGroupItem>
+                  </ToggleGroup>
+                )
               }
-              preferSet={{ setName: data.set.setName, language: data.set.language }}
-              onSelectEntry={
-                selected
-                  ? (entryId) => setSelected({ cardId: selected.cardId, entryId })
-                  : undefined
-              }
-              onClose={close}
-              onMoreOptions={(card, printingId) => {
-                close()
-                onAddMissing?.(card, printingId)
-              }}
-              nav={nav}
+              chips={chips}
+              onClearAll={() => setRarity(null)}
+              resultCount={`${tiles.length.toLocaleString('en-US')} ${tiles.length === 1 ? 'card' : 'cards'}`}
             />
-          </CardSheet>
+          </PageHeader>
+
+          <header className="flex flex-wrap items-center gap-5">
+            <SetArt
+              imageKey={data.set.imageKey}
+              packImageKey={data.set.packImageKey}
+              logoImageKey={data.set.logoImageKey}
+              coverImageId={data.set.coverImageId}
+              setCode={data.set.setCode}
+              className="size-24 rounded-[3px] shadow-[0_8px_20px_rgb(0_0_0/0.5)]"
+            />
+            <div className="min-w-0 flex-1">
+              <p className="font-mono text-[13px] text-foreground/75">
+                {data.set.setCode}
+                {data.set.tcgDate && ` · ${data.set.tcgDate}`} · {progress.owned} of{' '}
+                {progress.total}
+              </p>
+              {data.set.listRows !== null && data.set.unmatchedRows ? (
+                <p className="text-sm text-muted-foreground">
+                  {data.set.listRows - data.set.unmatchedRows} of {data.set.listRows} cards listed;{' '}
+                  {data.set.unmatchedRows} couldn&apos;t be identified
+                </p>
+              ) : null}
+              <SetProgress progress={progress} className="mt-2 max-w-md" />
+            </div>
+          </header>
+
+          {!bulk && q.trim() !== '' && tiles.length === 0 && (
+            <p className="py-12 text-center text-sm text-muted-foreground">
+              No cards in this set match &ldquo;{q.trim()}&rdquo;
+            </p>
+          )}
+
+          {bulk ? (
+            <BulkMode
+              cards={bulkCards}
+              setName={data.set.setName}
+              pending={pending}
+              adjust={adjust}
+            />
+          ) : (
+            <ul className="grid grid-cols-[repeat(auto-fill,minmax(7.5rem,1fr))] gap-3 max-md:grid-cols-3 max-md:gap-1.5">
+              {shownTiles.map((t) => {
+                const owned = t.owned > 0
+                return (
+                  <li key={t.key} className="lazy-item [--lazy-h:240px]">
+                    <button
+                      type="button"
+                      data-owned={owned}
+                      data-nav-key={t.key}
+                      aria-label={t.rarity ? `${t.card.name}, ${t.rarity}` : t.card.name}
+                      disabled={friend !== undefined && !owned}
+                      onClick={() => open(t)}
+                      className={cn(
+                        'relative flex w-full flex-col gap-1 rounded-lg p-1.5 text-left outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring',
+                        !owned && 'grayscale opacity-40'
+                      )}
+                    >
+                      <TiltCard>
+                        <CardArt
+                          imageId={t.card.imageId}
+                          printingId={
+                            (
+                              t.card.rarities.find((r) => r.rarity === t.rarity) ??
+                              t.card.rarities[0]
+                            )?.defaultPrintingId
+                          }
+                          size="small"
+                          alt=""
+                          className="w-full"
+                        />
+                      </TiltCard>
+                      {owned && (
+                        <span className="absolute right-2.5 top-2.5 rounded-full bg-primary px-1.5 text-xs font-semibold tabular-nums text-primary-foreground">
+                          ×{t.owned}
+                        </span>
+                      )}
+                      <span className="text-xs tabular-nums text-muted-foreground">
+                        {t.card.numberLabel}
+                      </span>
+                      <span className="truncate text-xs font-medium">{t.card.name}</span>
+                      {t.rarity && (
+                        <span className="truncate text-xs text-muted-foreground">{t.rarity}</span>
+                      )}
+                    </button>
+                  </li>
+                )
+              })}
+            </ul>
+          )}
+
+          {friend && friendCard && (
+            <FriendCardSheet friend={friend} {...friendCard} onClose={() => setFriendCard(null)} />
+          )}
+
+          {openCardId !== undefined && (
+            <CardSheet onClose={close}>
+              <CardPanel
+                cardId={openCardId}
+                entryId={selected?.entryId}
+                seed={unownedCard && seedOf(unownedCard, unowned?.rarity ?? null)}
+                caption={
+                  unownedCard && `${englishSetName(data.set.setName)} · ${unownedCard.numberLabel}`
+                }
+                preferSet={{ setName: data.set.setName, language: data.set.language }}
+                onSelectEntry={
+                  selected
+                    ? (entryId) => setSelected({ cardId: selected.cardId, entryId })
+                    : undefined
+                }
+                onClose={close}
+                onMoreOptions={(card, printingId) => {
+                  close()
+                  onAddMissing?.(card, printingId)
+                }}
+                nav={nav}
+              />
+            </CardSheet>
+          )}
+        </div>
+        {canFilter && (
+          <FilterPanel
+            wide={panel.wide}
+            open={panel.open}
+            onOpenChange={panel.setOpen}
+            description="Filter this set's cards"
+            onClearAll={rarity !== null ? () => setRarity(null) : undefined}
+          >
+            <FilterSection title="Rarity" defaultOpen picked={rarity === null ? 0 : 1}>
+              <ChipOptions>
+                {rarities.map((r) => (
+                  <FilterOptionChip
+                    key={r.rarity}
+                    label={r.rarity}
+                    count={r.count}
+                    selected={rarity === r.rarity}
+                    onClick={() => setRarity(rarity === r.rarity ? null : r.rarity)}
+                  />
+                ))}
+              </ChipOptions>
+            </FilterSection>
+          </FilterPanel>
         )}
       </div>
     </TooltipProvider>

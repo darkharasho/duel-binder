@@ -1,14 +1,21 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import type { WishlistItem } from '@shared/types'
 import { CardSheet } from '@/components/CardSheet'
 import { PageHeader } from '@/components/PageHeader'
+import { SearchInput } from '@/components/SearchInput'
 import { CardPanel } from '@/features/card/CardPanel'
 import { api, queryKeys } from '@/lib/api'
 import { formatUsd } from '@/lib/format'
 import { unpricedIntl, useRequestPrices } from '@/lib/priceRequests'
-import { useWishEdit, useWishOwners, useWishlist, wishlistCost } from '@/lib/wishlist'
+import {
+  matchesWishSearch,
+  useWishEdit,
+  useWishOwners,
+  useWishlist,
+  wishlistCost
+} from '@/lib/wishlist'
 import { WishlistRows } from './WishlistRows'
 
 /** The card panel over a wishlist: the wanted type is the row it opens on. */
@@ -69,6 +76,11 @@ export function WishlistPage(): React.JSX.Element {
   const items = wishlist.data ?? []
   const owners = useWishOwners(items.map((w) => w.pkey))
   const [open, setOpen] = useState<WishlistItem | null>(null)
+  const [q, setQ] = useState('')
+  const shown = useMemo(
+    () => (wishlist.data ?? []).filter((w) => matchesWishSearch(w, q)),
+    [wishlist.data, q]
+  )
   useRequestPrices(
     unpricedIntl(
       items.map((w) => ({
@@ -96,14 +108,24 @@ export function WishlistPage(): React.JSX.Element {
         <p className="text-sm text-muted-foreground tabular-nums">
           {items.length > 0 ? summary(items) : 'Cards you want'}
         </p>
+        {items.length > 0 && (
+          <SearchInput
+            label="Search wishlist"
+            placeholder="Search wishlist by name or set code"
+            value={q}
+            onChange={setQ}
+          />
+        )}
       </PageHeader>
       {wishlist.isSuccess && items.length === 0 ? (
         <p className="text-sm text-muted-foreground">
           Nothing here yet. Open a card and press the heart next to the type you want.
         </p>
+      ) : items.length > 0 && shown.length === 0 ? (
+        <p className="text-sm text-muted-foreground">No cards match</p>
       ) : (
         <WishlistRows
-          items={items}
+          items={shown}
           owners={owners}
           onOpen={setOpen}
           onQuantity={(w, quantity) => setQuantity.mutate({ printingId: w.printing.id, quantity })}

@@ -3,6 +3,7 @@ import type { GameId } from '@shared/games'
 import { setType, type SetType } from '@shared/setTypes'
 import { englishSetName } from '@shared/setNames'
 import { rarityRank } from '@shared/scan/rarity'
+import { matchesSetSearch, sortOptions, type SortOption } from '@/lib/filters'
 import { matchesLanguage } from '@/lib/languageFilter'
 import type {
   ChecklistCard,
@@ -15,18 +16,26 @@ import type {
 export type SetFilter = 'started' | 'all' | 'complete'
 export type SetSort = 'complete' | 'name' | 'date'
 export type TileFilter = 'all' | 'owned' | 'missing'
-export type ChecklistSort = 'number' | 'name' | 'price' | 'atk' | 'def' | 'level'
+export type ChecklistSort = 'number' | 'name' | 'price' | 'atk' | 'def' | 'level' | 'hp'
 export type SortDir = 'asc' | 'desc'
 
-/** Sort choices for a set's cards, each with the direction it starts in. */
-export const CHECKLIST_SORTS: readonly { value: ChecklistSort; label: string; dir: SortDir }[] = [
-  { value: 'number', label: 'Set number', dir: 'asc' },
-  { value: 'name', label: 'Name', dir: 'asc' },
-  { value: 'price', label: 'Price', dir: 'desc' },
-  { value: 'atk', label: 'ATK', dir: 'desc' },
-  { value: 'def', label: 'DEF', dir: 'desc' },
-  { value: 'level', label: 'Level / Link', dir: 'desc' }
-]
+const CHECKLIST_SORTS = [
+  { value: 'number', label: 'Set number', kind: 'number', dir: 'asc' },
+  { value: 'name', label: 'Name', kind: 'text', dir: 'asc' },
+  { value: 'price', label: 'Price', kind: 'number', dir: 'desc' },
+  { value: 'atk', label: 'ATK', kind: 'number', dir: 'desc' },
+  { value: 'def', label: 'DEF', kind: 'number', dir: 'desc' },
+  { value: 'level', label: 'Level / Link', kind: 'number', dir: 'desc' },
+  { value: 'hp', label: 'HP', kind: 'number', dir: 'desc' }
+] as const
+
+/** Sort choices for a set's cards: ATK, DEF and Level are Yu-Gi-Oh!'s, HP is Pokémon's. */
+export const checklistSorts = (game: GameId): SortOption<ChecklistSort>[] =>
+  sortOptions<ChecklistSort>(
+    CHECKLIST_SORTS.filter((s) =>
+      game === 'pkm' ? !['atk', 'def', 'level'].includes(s.value) : s.value !== 'hp'
+    )
+  )
 
 export interface Progress {
   owned: number
@@ -86,17 +95,11 @@ export function filterSets(
     game?: GameId
   }
 ): SetSummary[] {
-  const q = o.q.trim().toLowerCase()
   return sets.filter((s) => {
     if (!matchesLanguage(o.language, s.language)) return false
     if (!passesProgress(s, o.filter, o.mode)) return false
     if (o.types.length > 0 && !o.types.includes(setType(s, o.game))) return false
-    return (
-      !q ||
-      s.setName.toLowerCase().includes(q) ||
-      englishSetName(s.setName, s.setCode).toLowerCase().includes(q) ||
-      s.setCode.toLowerCase().includes(q)
-    )
+    return matchesSetSearch(s, o.q)
   })
 }
 
@@ -112,11 +115,6 @@ export function typeCounts(
     counts[setType(s, o.game)]++
   }
   return counts
-}
-
-/** One per ticked type, plus one when filter isn't 'all'. */
-export function activeFilterCount(types: SetType[], filter: SetFilter): number {
-  return types.length + (filter === 'all' ? 0 : 1)
 }
 
 export function sortSets(sets: SetSummary[], sort: SetSort, mode: CountMode): SetSummary[] {
@@ -198,6 +196,8 @@ function sortValue(t: Tile, sort: ChecklistSort): number | string | null {
       const r = t.rarity === null ? undefined : c.rarities.find((x) => x.rarity === t.rarity)
       return r?.price ?? c.price
     }
+    case 'hp':
+      return c.hp ?? null
     default:
       return c[sort]
   }

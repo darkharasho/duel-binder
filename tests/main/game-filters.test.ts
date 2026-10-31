@@ -7,6 +7,7 @@ import { searchCards } from '../../src/main/repo/cards'
 import { addEntry, getFacets, listEntries } from '../../src/main/repo/collection'
 import { browseCards, browseFacets } from '../../src/main/repo/browse'
 import { getStats } from '../../src/main/repo/stats'
+import { getChecklist } from '../../src/main/repo/sets'
 
 const now = new Date('2026-10-29T12:00:00.000Z')
 const ALL = { sort: 'name', dir: 'asc' } as const
@@ -91,6 +92,12 @@ describe('per-game filters and facets', () => {
   })
 
   const names = (rows: { card: { name: string } }[]): string[] => rows.map((r) => r.card.name)
+  it("a Pokémon set's checklist carries each card's HP", () => {
+    const cards = getChecklist(db, 'Test Set', 'en')!.cards
+    expect(cards.find((c) => c.name === 'Charizard')?.hp).toBe(170)
+    expect(cards.find((c) => c.name === 'Potion')?.hp).toBeNull()
+  })
+
   const browseNames = (f: object): string[] =>
     browseCards(db, { ...BROWSE, ...f }).cards.map((c) => c.name)
 

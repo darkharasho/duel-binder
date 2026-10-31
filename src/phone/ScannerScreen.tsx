@@ -276,7 +276,7 @@ export function ScannerScreen({
           icon={LanguagesIcon}
           picker={pickers.language}
           shown={(p) => (!p || p.key === 'all' ? 'All' : p.label)}
-          searchPlaceholder="Search languages…"
+          searchPlaceholder="Search languages"
         />
         <Chip
           label="Set"
@@ -285,7 +285,7 @@ export function ScannerScreen({
           icon={LayersIcon}
           picker={pickers.set}
           shown={(p) => (pickers.set.value === 'any' || !p ? 'Any set' : p.label)}
-          searchPlaceholder="Search sets…"
+          searchPlaceholder="Search sets"
         />
         {rarities && (
           <Chip
@@ -295,7 +295,7 @@ export function ScannerScreen({
             icon={StarIcon}
             picker={pickers.rarity}
             shown={(p) => (!p || p.key === 'auto' ? 'Auto rarity' : p.label)}
-            searchPlaceholder="Search rarities…"
+            searchPlaceholder="Search rarities"
           />
         )}
       </div>

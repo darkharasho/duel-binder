@@ -4,7 +4,7 @@ import {
   bulkTiles,
   checklistTiles,
   filterBulkCards,
-  activeFilterCount,
+  checklistSorts,
   filterSets,
   filterTiles,
   filterTilesByRarity,
@@ -16,6 +16,7 @@ import {
   sortCards,
   sortSets,
   sortTiles,
+  type Tile,
   typeCounts,
   upcomingCutoff,
   isUpcoming,
@@ -163,10 +164,24 @@ describe('typeCounts', () => {
   })
 })
 
-describe('activeFilterCount', () => {
-  it('counts ticked types plus a non-default progress filter', () => {
-    expect(activeFilterCount([], 'all')).toBe(0)
-    expect(activeFilterCount(['deck', 'tin'], 'started')).toBe(3)
+describe('checklistSorts', () => {
+  const labels = (game: 'ygo' | 'pkm'): string[] => checklistSorts(game).map((s) => s.label)
+
+  it('offers ATK, DEF and Level on Yu-Gi-Oh!, and no HP', () => {
+    expect(labels('ygo')).toEqual(
+      expect.arrayContaining(['ATK: high to low', 'DEF: high to low', 'Level / Link: high to low'])
+    )
+    expect(labels('ygo').some((l) => l.startsWith('HP'))).toBe(false)
+  })
+
+  it('offers HP on Pokémon, and no ATK, DEF or Level', () => {
+    expect(labels('pkm')).toContain('HP: high to low')
+    expect(labels('pkm').some((l) => /^(ATK|DEF|Level)/.test(l))).toBe(false)
+  })
+
+  it('starts each sort in its usual direction', () => {
+    expect(checklistSorts('pkm')[0]).toMatchObject({ value: 'number', dir: 'asc' })
+    expect(checklistSorts('pkm').find((s) => s.value === 'price')?.dir).toBe('desc')
   })
 })
 
@@ -311,6 +326,13 @@ describe('replaceChecklistCard', () => {
 })
 
 describe('sortTiles', () => {
+  it('sorts by HP, with cards that have none last', () => {
+    const tile = (cardId: number, hp?: number): Tile =>
+      ({ key: String(cardId), card: { cardId, hp } as ChecklistCard, rarity: null }) as Tile
+    const ids = (t: Tile[]): number[] => t.map((x) => x.card.cardId)
+    expect(ids(sortTiles([tile(1, 60), tile(2), tile(3, 120)], 'hp', 'desc'))).toEqual([3, 1, 2])
+  })
+
   const names = (tiles: { card: ChecklistCard }[]): string[] => tiles.map((t) => t.card.name)
   const cardTiles = checklistTiles(metalRaidersChecklist, 'cards')
 

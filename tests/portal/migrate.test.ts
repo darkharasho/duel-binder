@@ -2,6 +2,8 @@ import Database from 'better-sqlite3'
 import { MIGRATIONS } from '../../src/main/db/schema'
 import { migrateServer, runSteps, SERVER_STEPS } from '../../workers/portal/src/migrate'
 import { catalogChanges } from '../../workers/portal/src/catalogFeed'
+import { userScope } from '../../workers/portal/src/scope'
+import { getChecklist } from '../../src/main/repo/sets'
 import { SHARED_SET_NAME, seedPokemon } from '../fixtures/pokemon'
 
 function freshDb(): Database.Database {
@@ -199,6 +201,19 @@ describe('server-12 (game columns)', () => {
     expect(clockOf(db)).toBe(clock + 12)
     const seq = db.prepare('SELECT catalog_seq AS s FROM pokemon_cards WHERE card_id = ?').get(cardIds[0]) as { s: number }
     expect(seq.s).toBeGreaterThan(clock)
+    db.close()
+  })
+
+  it("serves a Pokémon checklist with each card's hp from the migrated schema", () => {
+    const db = freshDb()
+    migrateServer(db)
+    seedPokemon(db)
+    const cols = (db.prepare('PRAGMA table_info(pokemon_cards)').all() as { name: string }[]).map((c) => c.name)
+    expect(cols).toContain('hp')
+    const list = getChecklist(db, SHARED_SET_NAME, 'en', userScope(1, 'pkm'))
+    expect(list?.cards.length).toBeGreaterThan(0)
+    const stored = db.prepare('SELECT hp FROM pokemon_cards WHERE card_id = ?')
+    for (const c of list!.cards) expect(c.hp).toBe((stored.get(c.cardId) as { hp: number | null }).hp)
     db.close()
   })
 

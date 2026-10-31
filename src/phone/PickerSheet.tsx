@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { CheckIcon, SearchIcon, XIcon } from 'lucide-react'
+import { CheckIcon, XIcon } from 'lucide-react'
+import { SearchInput } from '@/components/SearchInput'
 import { matchOptions, type PickerOption } from '@/features/scan/SearchPicker'
 import { cn } from '@/lib/utils'
 
@@ -15,7 +16,7 @@ export function PickerSheet({
   value,
   options,
   onPick,
-  searchPlaceholder = 'Search…',
+  searchPlaceholder = 'Search',
   className,
   disabled = false,
   children
@@ -118,17 +119,14 @@ function Sheet({
             <XIcon aria-hidden className="size-5" />
           </button>
         </header>
-        <label className="mx-3 flex h-12 shrink-0 items-center gap-2.5 rounded-2xl bg-white/[0.07] px-3.5 text-muted-foreground focus-within:ring-2 focus-within:ring-white/20">
-          <SearchIcon aria-hidden className="size-5 shrink-0" />
-          <input
-            type="search"
-            aria-label={searchPlaceholder}
-            placeholder={searchPlaceholder}
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-            className="min-w-0 flex-1 bg-transparent text-base text-foreground outline-none placeholder:text-muted-foreground"
-          />
-        </label>
+        <SearchInput
+          label={searchPlaceholder}
+          value={query}
+          onChange={setQuery}
+          debounceMs={0}
+          className="mx-3 shrink-0"
+          inputClassName="h-11 rounded-2xl border-0 bg-white/[0.07] text-base dark:bg-white/[0.07]"
+        />
         <ul
           role="listbox"
           aria-label={title}

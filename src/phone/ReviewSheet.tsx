@@ -89,7 +89,7 @@ function ReviewRow({ row, disabled }: { row: ScanRow; disabled: boolean }): Reac
           value={current === null ? null : String(current)}
           options={choices}
           onPick={(v) => session.setPrinting(row.key, Number(v))}
-          searchPlaceholder="Search code, rarity or set…"
+          searchPlaceholder="Search code, rarity or set"
           disabled={disabled}
           className="mt-1.5 h-8 max-w-full gap-1.5 rounded-full border border-white/[0.12] bg-white/[0.08] px-2.5 text-xs active:bg-white/[0.14]"
         >

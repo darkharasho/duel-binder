@@ -3,8 +3,10 @@ import { useQuery } from '@tanstack/react-query'
 import type { Language } from '@shared/languages'
 import type { CountMode, Friend, SetSummary } from '@shared/types'
 import { PageHeader } from '@/components/PageHeader'
+import { SearchInput } from '@/components/SearchInput'
 import { Button } from '@/components/ui/button'
 import { api, queryKeys } from '@/lib/api'
+import { matchesSetSearch } from '@/lib/filters'
 import { friendsErrorMessage } from '@/lib/friends'
 import { matchesLanguage, useLanguageFilter } from '@/lib/languageFilter'
 import { isPhone } from '@/lib/platform'
@@ -25,6 +27,7 @@ export function FriendSets({
   const [mode, setMode] = useState<CountMode>('cards')
   const [open, setOpen] = useState<{ setName: string; language: Language } | null>(null)
   const [language] = useLanguageFilter()
+  const [q, setQ] = useState('')
   const sets = useQuery({
     queryKey: queryKeys.friendSets(friend.id),
     queryFn: () => api.friends.sets(friend.id),
@@ -37,6 +40,8 @@ export function FriendSets({
         .sort((a, b) => share(b) - share(a) || b.ownedCards - a.ownedCards),
     [sets.data, language]
   )
+
+  const shown = useMemo(() => started.filter((s) => matchesSetSearch(s, q)), [started, q])
 
   if (open) {
     return (
@@ -52,7 +57,17 @@ export function FriendSets({
   }
   return (
     <div className="space-y-4 p-8 max-md:p-4">
-      <PageHeader>{header}</PageHeader>
+      <PageHeader>
+        {header}
+        {started.length > 0 && (
+          <SearchInput
+            label="Search sets"
+            placeholder="Search sets by name or code"
+            value={q}
+            onChange={setQ}
+          />
+        )}
+      </PageHeader>
       {sets.isError && !sets.data && (
         <div className="space-y-2">
           <p role="alert" className="text-sm text-muted-foreground">
@@ -68,8 +83,11 @@ export function FriendSets({
           {name} hasn&apos;t started any sets in this game.
         </p>
       )}
+      {started.length > 0 && shown.length === 0 && (
+        <p className="text-sm text-muted-foreground">No sets match</p>
+      )}
       <SetsList
-        sets={started}
+        sets={shown}
         mode={mode}
         view={isPhone() ? 'list' : 'grid'}
         onOpen={(setName, language) => setOpen({ setName, language })}

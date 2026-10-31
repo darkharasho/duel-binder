@@ -1,8 +1,9 @@
 import { openCardCache, cardIsUsable } from './cache'
 import { createLimiter, REPO_URL, MAX_CONCURRENCY, type GetJsonOpts } from './http'
-import { tcgcsvGroups, tcgcsvPrices, tcgcsvProducts } from './tcgcsv'
+import { tcgcsvCardRows, tcgcsvGroups, tcgcsvPrices, tcgcsvProducts } from './tcgcsv'
 import { tcgdexCard, tcgdexSet, tcgdexSetList } from './tcgdex'
 import type { PokemonSources, TdCard } from './types'
+import { upcomingGroups, upcomingSet } from './upcoming'
 
 export interface PokemonSourcesOpts {
   cachePath: string
@@ -47,15 +48,31 @@ export function createPokemonSources(opts: PokemonSourcesOpts): PokemonSources &
       )
     )
   }
+  /** Cards of sets built from TCGplayer (see upcoming.ts); TCGdex would 404 them. */
+  const upcoming = new Map<string, TdCard>()
   return {
     async sets(lang) {
       const list = await tcgdexSetList(lang, o)
       const sets = await allOrNothing(list, (s, oo) => tcgdexSet(lang, s.id, oo))
-      return sets.filter((s) => !DIGITAL_SERIES.has(s.serie?.id ?? ''))
+      const paper = sets.filter((s) => !DIGITAL_SERIES.has(s.serie?.id ?? ''))
+      if (lang !== 'en') return paper
+      const groups = upcomingGroups(await tcgcsvGroups(lang, o), sets)
+      const built = await allOrNothing(groups, async (g, oo) =>
+        upcomingSet(g, await tcgcsvCardRows(lang, g.groupId, oo))
+      )
+      for (const b of built) {
+        if (!b) continue
+        opts.log?.(`Pokémon en: ${b.set.name} built from TCGplayer, ${b.cards.length} cards`)
+        paper.push(b.set)
+        for (const c of b.cards) upcoming.set(c.id, c)
+      }
+      return paper
     },
     async cards(lang, ids) {
       const t = now().getTime()
       return allOrNothing(ids, async (id, oo): Promise<TdCard> => {
+        const built = lang === 'en' ? upcoming.get(id) : undefined
+        if (built) return built
         const hit = cache.get(lang, id)
         if (hit && cardIsUsable(hit.card, hit.fetchedAt, t)) return hit.card
         const card = await tcgdexCard(lang, id, oo)

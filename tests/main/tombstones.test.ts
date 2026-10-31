@@ -229,6 +229,7 @@ const ENTRY_REFS: Record<string, [count: number, kind: string]> = {
   'src/main/tcgplayer/catalog.ts': [1, FK],
   'src/main/tcgplayer/prices.ts': [1, LIVE],
   'workers/portal/src/catalogLoad.ts': [1, FK],
+  'workers/portal/src/friendCards.ts': [1, LIVE],
   'workers/portal/src/friends.ts': [
     1,
     'live rows for the card count; all rows incl. tombstones for the last-change time'

@@ -120,6 +120,7 @@ export function createHandlers({
         printingScan: false
       })),
     'friends:facets': async (userId: number) => account.portal('friends:facets', [userId]),
+    'friends:forCard': async (cardId: number) => account.portal('friends:forCard', [cardId]),
     'scan:fingerprints': (game: GameId) => fingerprints[game].read(),
     'scan:fingerprintRefs': async () => {
       const file = await fingerprints.ygo.readRefs()

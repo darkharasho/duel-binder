@@ -364,7 +364,7 @@ describe('BrowsePage', () => {
     })
     await userEvent.click(await screen.findByRole('button', { name: /Dark Magician/ }))
     const panel = await screen.findByRole('dialog')
-    expect(await within(panel).findByText('Your copies')).toBeInTheDocument()
+    expect(await within(panel).findByLabelText('Quantity')).toBeInTheDocument()
   })
 
   it('arrows step through the results, opening each as a click would', async () => {
@@ -373,18 +373,18 @@ describe('BrowsePage', () => {
     })
     await userEvent.click(await screen.findByRole('button', { name: /Dark Magician/ }))
     const panel = await screen.findByRole('dialog')
-    expect(await within(panel).findByText('Your copies')).toBeInTheDocument()
+    expect(await within(panel).findByLabelText('Quantity')).toBeInTheDocument()
     expect(screen.getAllByRole('button', { name: 'Previous card' })[0]).toBeDisabled()
 
     await userEvent.click(screen.getAllByRole('button', { name: 'Next card' })[0])
     expect(await within(panel).findByText('You have none yet')).toBeInTheDocument()
     expect(within(panel).getByRole('heading', { name: 'Pot of Greed' })).toBeInTheDocument()
     expect(screen.getAllByRole('button', { name: 'Next card' })[0]).toBeDisabled()
-    // Switching panel kinds keeps the same sheet open.
+    // Owned and not owned are one panel in one sheet.
     expect(screen.getByRole('dialog')).toBe(panel)
 
     await userEvent.click(screen.getAllByRole('button', { name: 'Previous card' })[0])
-    expect(await within(panel).findByText('Your copies')).toBeInTheDocument()
+    expect(await within(panel).findByLabelText('Quantity')).toBeInTheDocument()
   })
 
   it('Load more fetches the next page', async () => {

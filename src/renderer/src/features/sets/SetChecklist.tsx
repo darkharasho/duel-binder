@@ -42,13 +42,12 @@ import {
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { UnderlineTabs } from '@/components/UnderlineTabs'
-import { EntryDetailPanel } from '@/features/collection/EntryDetailPanel'
+import { CardPanel, type CardPanelSeed } from '@/features/card/CardPanel'
 import { api, invalidateAfterEdit, queryKeys } from '@/lib/api'
 import { isPhone } from '@/lib/platform'
 import { createSerialQueue } from '@/lib/serialQueue'
 import { cn } from '@/lib/utils'
 import { BulkMode } from './BulkMode'
-import { SetCardPanel } from './SetCardPanel'
 import { SetArt } from './SetArt'
 import { SetProgress } from './SetProgress'
 import {
@@ -149,6 +148,16 @@ function useBackShortcuts(onBack: () => void): void {
     }
   }, [])
 }
+
+/** What the card panel shows of a checklist card until its details load; `rarity` is the opened tile's. */
+const seedOf = (card: ChecklistCard, rarity: string | null): CardPanelSeed => ({
+  name: card.name,
+  type: card.type,
+  imageId: card.imageId,
+  price: (card.rarities.find((r) => r.rarity === rarity) ?? card.rarities[0])?.price ?? card.price,
+  defaultPrintingId:
+    (card.rarities.find((r) => r.rarity === rarity) ?? card.rarities[0])?.defaultPrintingId ?? null
+})
 
 export function SetChecklist({
   setName,
@@ -354,6 +363,7 @@ export function SetChecklist({
     setUnowned(null)
   }
   const unownedCard = unowned ? data.cards.find((c) => c.cardId === unowned.cardId) : undefined
+  const openCardId = selected?.cardId ?? unownedCard?.cardId
   const nav = listNav(
     tiles,
     tiles.findIndex((t) => t.key === openKey),
@@ -577,39 +587,28 @@ export function SetChecklist({
           </ul>
         )}
 
-        {(selected || (unowned && unownedCard)) && (
+        {openCardId !== undefined && (
           <CardSheet onClose={close}>
-            {selected ? (
-              <EntryDetailPanel
-                cardId={selected.cardId}
-                entryId={selected.entryId}
-                onSelectEntry={(entryId) => setSelected({ cardId: selected.cardId, entryId })}
-                onClose={close}
-                nav={nav}
-              />
-            ) : unowned && unownedCard ? (
-              <SetCardPanel
-                setName={data.set.setName}
-                nav={nav}
-                card={unownedCard}
-                rarity={unowned.rarity}
-                busy={(pending[unownedCard.cardId] ?? 0) > 0}
-                onAdjust={(printingId, delta) => adjust(unownedCard.cardId, printingId, delta)}
-                onMoreOptions={(printingId) => {
-                  setUnowned(null)
-                  onAddMissing(
-                    {
-                      id: unownedCard.cardId,
-                      name: unownedCard.name,
-                      type: unownedCard.type,
-                      defaultImageId: unownedCard.imageId,
-                      matchedSetCode: null
-                    },
-                    printingId
-                  )
-                }}
-              />
-            ) : null}
+            <CardPanel
+              cardId={openCardId}
+              entryId={selected?.entryId}
+              seed={unownedCard && seedOf(unownedCard, unowned?.rarity ?? null)}
+              caption={
+                unownedCard && `${englishSetName(data.set.setName)} · ${unownedCard.numberLabel}`
+              }
+              preferSet={{ setName: data.set.setName, language: data.set.language }}
+              onSelectEntry={
+                selected
+                  ? (entryId) => setSelected({ cardId: selected.cardId, entryId })
+                  : undefined
+              }
+              onClose={close}
+              onMoreOptions={(card, printingId) => {
+                close()
+                onAddMissing(card, printingId)
+              }}
+              nav={nav}
+            />
           </CardSheet>
         )}
       </div>

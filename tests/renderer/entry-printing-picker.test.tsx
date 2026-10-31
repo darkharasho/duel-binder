@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { screen, within } from '@testing-library/react'
 import type { CardDetail, EntryView, Printing } from '@shared/types'
 import { CardSheet } from '@/components/CardSheet'
-import { EntryDetailPanel } from '@/features/collection/EntryDetailPanel'
+import { CardPanel } from '@/features/card/CardPanel'
 import { createMockApi, renderWithProviders } from './mockApi'
 
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() }, Toaster: () => null }))
@@ -62,7 +62,7 @@ describe('entry editor printing picker', () => {
     const contributed = printing(9, { setCode: 'DESK-EN001', setName: 'Desktop Only Set' })
     renderWithProviders(
       <CardSheet onClose={() => {}}>
-        <EntryDetailPanel cardId={1} entryId={5} onSelectEntry={() => {}} onClose={() => {}} />
+        <CardPanel cardId={1} entryId={5} onSelectEntry={() => {}} onClose={() => {}} />
       </CardSheet>,
       {
         api: createMockApi({

@@ -23,6 +23,7 @@ export const STORE_METHODS = [
   'syncProblems',
   'invoke',
   'portal',
+  'portalRead',
   'requestPrices',
   'reportUsage',
   'fingerprints',

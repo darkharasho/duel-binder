@@ -383,6 +383,20 @@ export interface FriendUser {
   avatarUrl: string | null
 }
 
+/** A friend's copies of one printing of a card. */
+export interface FriendCardPrinting {
+  setCode: string
+  rarity: string
+  language: Language
+  quantity: number
+}
+
+/** A friend who has a card: their copies across its printings. */
+export interface FriendCardCopies extends FriendUser {
+  quantity: number
+  printings: FriendCardPrinting[]
+}
+
 export interface Friend extends FriendUser {
   /** Copies across live entries (sum of quantity). */
   cardCount: number

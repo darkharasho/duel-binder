@@ -13,7 +13,7 @@ import {
   DialogHeader,
   DialogTitle
 } from '@/components/ui/dialog'
-import { api, mutationInvalidationKeys } from '@/lib/api'
+import { api, invalidateAfterEdit } from '@/lib/api'
 import { DEX_MISS_TEXT, notImportedText } from './dexImportText'
 
 const plural = (n: number, one: string, many = `${one}s`): string =>
@@ -128,7 +128,7 @@ export function DexImportButton(): React.JSX.Element {
   const run = useMutation({
     mutationFn: () => api.dex.apply(rows),
     onSuccess: ({ copies }) => {
-      for (const queryKey of mutationInvalidationKeys) void qc.invalidateQueries({ queryKey })
+      void invalidateAfterEdit(qc)
       toast.success(`Added ${plural(copies, 'card')} from Dex`)
       setOpen(false)
       reset()

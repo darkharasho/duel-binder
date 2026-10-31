@@ -1,4 +1,5 @@
 import type { QueryClient } from '@tanstack/react-query'
+import type { GameId } from '@shared/games'
 import type { Api } from '@shared/ipc'
 import type { Language } from '@shared/languages'
 import type { BrowseFilters, CollectionFilters } from '@shared/types'
@@ -31,7 +32,8 @@ export const queryKeys = {
   browseFacets: ['browse', 'facets'] as const,
   friends: ['friends'] as const,
   friendEntries: (id: number, f: CollectionFilters) => ['friends', id, 'entries', f] as const,
-  friendFacets: (id: number) => ['friends', id, 'facets'] as const
+  friendFacets: (id: number) => ['friends', id, 'facets'] as const,
+  friendsWithCard: (game: GameId, cardId: number) => ['friends', 'card', game, cardId] as const
 }
 
 /** Query-key prefixes to invalidate after any collection mutation. */

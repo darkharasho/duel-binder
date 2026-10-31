@@ -63,6 +63,12 @@ export function useFriendsAvailable(): boolean {
   return useFriendsAccess().available
 }
 
+/** Whether friends can be asked for: the status behind `available` has arrived. */
+export function useFriendsReady(): boolean {
+  const { available, confirmed } = useFriendsAccess()
+  return available && confirmed
+}
+
 /** The overview query (key queryKeys.friends), enabled once available is confirmed, refetched every 60 s. */
 export function useFriendsOverview(): UseQueryResult<FriendsOverview> {
   const { available, confirmed } = useFriendsAccess()

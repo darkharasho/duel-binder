@@ -38,6 +38,7 @@ import {
   requestFriend,
   unblockUser
 } from './friends'
+import { friendsWithCard } from './friendCards'
 import { userScope } from './scope'
 import { GAME_HEADER } from '../../../src/shared/cloud'
 import type { GameId } from '../../../src/shared/games'
@@ -129,6 +130,8 @@ const HANDLERS: { [C in PortalChannel]: Handler<C> } = {
   },
   'friends:facets': ({ db, userId, game }, _s, id) =>
     getFacets(db, userScope(friendId(db, userId, id), game)),
+  'friends:forCard': ({ db, userId, game }, _s, cardId) =>
+    friendsWithCard(db, userId, game, checkId(cardId, 'cardId')),
   'stats:get': ({ db }, scope) => getStats(db, scope)
 }
 

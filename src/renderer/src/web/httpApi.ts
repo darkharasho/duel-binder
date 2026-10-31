@@ -199,7 +199,8 @@ export function createHttpApi(opts: HttpApiOptions = {}): Api {
       block: call('friends:block'),
       unblock: call('friends:unblock'),
       collection: call('friends:collection'),
-      facets: call('friends:facets')
+      facets: call('friends:facets'),
+      forCard: call('friends:forCard')
     },
     scan: {
       debugFrame: async () => undefined,

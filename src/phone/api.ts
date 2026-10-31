@@ -211,7 +211,9 @@ export function createPhoneApi(deps: {
           ...e,
           printingScan: false
         })),
-      facets: portal('friends:facets')
+      facets: portal('friends:facets'),
+      // Off the serial queue: a card opening must not hold up the edits behind it.
+      forCard: (cardId: number) => store.portalRead('friends:forCard', [cardId])
     },
     scan: {
       debugFrame: async () => undefined,

@@ -239,7 +239,7 @@ async function planLanguage(
         return {
           card,
           name,
-          localName: lang === 'ja' && name !== card.name ? card.name : null,
+          localName: card.localName ?? (lang === 'ja' && name !== card.name ? card.name : null),
           imageUrl: card.image || first?.imageUrl || null,
           versions: v.versions
         }

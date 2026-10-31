@@ -1,8 +1,8 @@
 import { getJson, type GetJsonOpts } from './http'
-import type { PkmLang, TcCardRow, TcGroup, TcPrice, TcProduct } from './types'
+import type { TdLang, TcCardRow, TcGroup, TcPrice, TcProduct } from './types'
 
-const CATEGORY: Record<PkmLang, number> = { en: 3, ja: 85 }
-const base = (lang: PkmLang): string => `https://tcgcsv.com/tcgplayer/${CATEGORY[lang]}`
+const CATEGORY: Record<TdLang, number> = { en: 3, ja: 85 }
+const base = (lang: TdLang): string => `https://tcgcsv.com/tcgplayer/${CATEGORY[lang]}`
 
 interface Envelope<T> { success?: boolean; errors?: unknown[]; results: T[] }
 
@@ -14,12 +14,12 @@ async function results<T>(url: string, o: GetJsonOpts): Promise<T[]> {
   return body.results
 }
 
-export async function tcgcsvGroups(lang: PkmLang, o: GetJsonOpts): Promise<TcGroup[]> {
+export async function tcgcsvGroups(lang: TdLang, o: GetJsonOpts): Promise<TcGroup[]> {
   const rows = await results<{ groupId: number; name: string; abbreviation?: string | null; publishedOn?: string }>(`${base(lang)}/groups`, o)
   return rows.map((g) => ({ groupId: g.groupId, name: g.name, abbreviation: g.abbreviation ?? null, publishedOn: g.publishedOn }))
 }
 
-export async function tcgcsvProducts(lang: PkmLang, groupId: number, o: GetJsonOpts): Promise<TcProduct[]> {
+export async function tcgcsvProducts(lang: TdLang, groupId: number, o: GetJsonOpts): Promise<TcProduct[]> {
   const rows = await results<{
     productId: number; groupId: number; name: string; imageUrl?: string; imageCount?: number
     extendedData?: { name: string; value: string }[]
@@ -31,7 +31,7 @@ export async function tcgcsvProducts(lang: PkmLang, groupId: number, o: GetJsonO
   }))
 }
 
-export async function tcgcsvCardRows(lang: PkmLang, groupId: number, o: GetJsonOpts): Promise<TcCardRow[]> {
+export async function tcgcsvCardRows(lang: TdLang, groupId: number, o: GetJsonOpts): Promise<TcCardRow[]> {
   const rows = await results<{ productId: number; name: string; extendedData?: { name: string; value: string }[] }>(
     `${base(lang)}/${groupId}/products`, o
   )
@@ -41,7 +41,7 @@ export async function tcgcsvCardRows(lang: PkmLang, groupId: number, o: GetJsonO
   }))
 }
 
-export async function tcgcsvPrices(lang: PkmLang, groupId: number, o: GetJsonOpts): Promise<TcPrice[]> {
+export async function tcgcsvPrices(lang: TdLang, groupId: number, o: GetJsonOpts): Promise<TcPrice[]> {
   const rows = await results<{ productId: number; subTypeName: string; marketPrice?: number | null }>(
     `${base(lang)}/${groupId}/prices`, o
   )

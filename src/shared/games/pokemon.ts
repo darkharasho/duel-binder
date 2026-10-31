@@ -32,6 +32,6 @@ export const PKM: GameDef = {
     { key: 'stage', label: 'Stage' },
     { key: 'rarity', label: 'Rarity' },
     { key: 'illustrator', label: 'Illustrator' },
-    { key: 'localName', label: 'Japanese name' }
+    { key: 'localName', label: 'Local name' }
   ]
 }

@@ -1,4 +1,4 @@
-import { isSameNumber, OWN_NUMBERS, sameCardName } from './match'
+import { isSameNumber, OWN_NUMBERS, plainName, sameCardName } from './match'
 import type { PkmLang, TcProduct, TdCard, TdSet } from './types'
 
 /**
@@ -141,4 +141,47 @@ export function findArt(
     outcome = 'unsettled'
   }
   return { imageUrl: null, outcome }
+}
+
+/**
+ * The TCGCSV groups of the sets whose products have no numbers, where only a name can place a card:
+ * Japanese groups from the neo era and before.
+ */
+export const NAME_GROUPS: Readonly<Record<string, number>> = {
+  neo1: 23727, // Gold, Silver, to a New World...
+  neo2: 23728, // Crossing the Ruins...
+  neo3: 23720, // Awakening Legends
+  neo4: 23729, // Darkness, and to Light...
+  PMCG2: 23722, // Pokemon Jungle
+  PMCG5: 23725, // Leaders' Stadium
+  PMCG6: 23726 // Challenge from the Darkness
+}
+
+/**
+ * Art by name, for a NAME_GROUPS set: `cards` is every card of the set, each with its names. A card
+ * takes a product only when the name leaves that one product, and no other card of the set lands on
+ * it: two Pikachu, or a Dark and a Light Dragonite on one species, stay without art. The same name
+ * beats the same base name, so a plain Gyarados isn't lost to a Shining one beside it. Returns the
+ * image by card id.
+ */
+export function findArtByName(
+  groupId: number,
+  cards: { id: string; names: string[] }[],
+  inGroup: Map<number, TcProduct[]>
+): Map<string, string> {
+  const products = (inGroup.get(groupId) ?? []).filter((p) => p.imageUrl)
+  const claims = new Map<number, { id: string; product: TcProduct }[]>()
+  for (const { id, names } of cards) {
+    const english = names.filter((n) => !JAPANESE.test(n))
+    const same = products.filter((p) => english.some((n) => plainName(n) === plainName(p.name)))
+    const hits = same.length > 0 ? same : products.filter((p) => english.some((n) => sameCardName(n, p.name)))
+    const product = pickArt(hits)
+    if (!product) continue
+    claims.set(product.productId, [...(claims.get(product.productId) ?? []), { id, product }])
+  }
+  const out = new Map<string, string>()
+  for (const claim of claims.values()) {
+    if (claim.length === 1) out.set(claim[0].id, claim[0].product.imageUrl!)
+  }
+  return out
 }

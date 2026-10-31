@@ -2,7 +2,7 @@ import type Database from 'better-sqlite3'
 import { movedEnough } from '../../../src/main/tcgplayer/prices'
 import { pokemonId } from '../../../src/shared/games/ids'
 import { hasNativeScript } from '../../../src/shared/setNames'
-import { findArt } from './art'
+import { findArt, findArtByName, NAME_GROUPS } from './art'
 import { englishNamer, type EnglishNamer } from './englishNames'
 import { matchGroup, matchProducts, namesCard, speciesCheck, type MatchedProduct, type NameCheck } from './match'
 import { cardVersions, groupFinish, versionSubtype, type PkmVersion } from './versions'
@@ -521,12 +521,29 @@ function nameInEnglish(ja: LangPlan, en: LangPlan | undefined): EnglishNamer {
 /** Art for the cards still without any, once they have their English names. */
 function fillArt(plan: LangPlan, namer: EnglishNamer | null): void {
   const { lang, report } = plan
+  const namesOf = (cp: CardPlan): string[] => {
+    const species = namer?.speciesOf(cp.card)
+    return species ? [cp.name, species] : [cp.name]
+  }
   for (const sp of plan.sets) {
+    const nameGroup = lang === 'ja' ? NAME_GROUPS[sp.set.id] : undefined
+    const byName =
+      nameGroup === undefined
+        ? null
+        : findArtByName(
+            nameGroup,
+            sp.cards.map((cp) => ({ id: cp.card.id, names: namesOf(cp) })),
+            plan.inGroup
+          )
     for (const cp of sp.cards) {
       if (cp.imageUrl) continue
-      const species = namer?.speciesOf(cp.card)
-      const names = species ? [cp.name, species] : [cp.name]
-      const art = findArt(lang, sp.set, sp.groupId, cp.card, names, plan.inGroup)
+      const named = byName?.get(cp.card.id)
+      if (named) {
+        cp.imageUrl = named
+        report.artFilled++
+        continue
+      }
+      const art = findArt(lang, sp.set, sp.groupId, cp.card, namesOf(cp), plan.inGroup)
       if (art.imageUrl) {
         cp.imageUrl = art.imageUrl
         report.artFilled++

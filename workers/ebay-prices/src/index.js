@@ -22,6 +22,14 @@ const QUOTA_URL =
 const SET_PAGE = 200
 const SET_MAX_PAGES = 5
 const SET_LANGS = new Set(['ja', 'ko', 'zh-hans', 'zh-hant', 'ae'])
+// eBay's "Pokémon Individual Cards" category, and its Graded condition.
+const POKEMON_CATEGORY = '183454'
+const GRADED_CONDITION = '2750'
+// Pokémon sweep: at most 3 Browse calls a set; the portal's budget counts on this.
+const POKEMON_MAX_PAGES = 3
+const POKEMON_LANGS = new Set(['zh-hans', 'zh-hant'])
+const POKEMON_CODE = /^[A-Za-z0-9.]{3,12}$/
+const POKEMON_MAX_CODES = 2
 // 'ygo-collection-tracker' is what app versions before the Duel Binder rename send.
 const CLIENTS = new Set(['duel-binder', 'ygo-collection-tracker'])
 
@@ -80,10 +88,11 @@ async function getToken(env) {
   return cachedToken.value
 }
 
-async function search(env, query, { offset = 0, limit = 50 } = {}) {
+async function search(env, query, { offset = 0, limit = 50, category = '31395', filter } = {}) {
   const token = await getToken(env)
-  const params = new URLSearchParams({ q: query, category_ids: '31395', limit: String(limit) })
+  const params = new URLSearchParams({ q: query, category_ids: category, limit: String(limit) })
   if (offset) params.set('offset', String(offset))
+  if (filter) params.set('filter', filter)
   const res = await fetchWithRetry(`${BROWSE_URL}?${params}`, {
     headers: { Authorization: `Bearer ${token}`, 'X-EBAY-C-MARKETPLACE-ID': 'EBAY_US' }
   })
@@ -152,6 +161,34 @@ async function lookupSet(env, key, lang) {
   return { ...setPrices(items, key), calls, checkedAt: new Date().toISOString() }
 }
 
+// One Chinese Pokémon set's raw listings. No matching here: only the portal knows the set's numbers,
+// names and versions, so it picks the listings (workers/portal/src/pokemonSweep.ts).
+async function lookupPokemonListings(env, codes, lang) {
+  // eBay's (a,b) is OR; sellers write the set code with and without its trailing C.
+  const codeQuery = codes.length > 1 ? `(${codes.join(',')})` : codes[0]
+  // Traditional sets print Japanese-style codes, so the code alone would mostly find Japanese cards.
+  const query = lang === 'zh-hant' ? `${codeQuery} Chinese` : codeQuery
+  const items = []
+  let calls = 0
+  for (let page = 0; page < POKEMON_MAX_PAGES; page++) {
+    const got = await search(env, query, {
+      offset: page * SET_PAGE,
+      limit: SET_PAGE,
+      category: POKEMON_CATEGORY,
+      filter: 'buyingOptions:{FIXED_PRICE}'
+    })
+    calls++
+    for (const i of got) {
+      const price = Number.parseFloat(i.price?.value)
+      if (i.price?.currency !== 'USD' || !Number.isFinite(price)) continue
+      if (i.conditionId === GRADED_CONDITION) continue
+      items.push({ title: String(i.title ?? ''), price, seller: String(i.seller?.username ?? '') })
+    }
+    if (got.length < SET_PAGE) break
+  }
+  return { items, calls, checkedAt: new Date().toISOString() }
+}
+
 // Remaining Browse calls for the day; null fields on any failure.
 async function lookupQuota(env) {
   try {
@@ -191,6 +228,32 @@ export default {
         if (e?.status === 429) return respond({ error: 'rate limited' }, 429)
         console.error(
           'ebay set failed',
+          String(e?.message ?? '')
+            .split(' ')
+            .slice(0, 2)
+            .join(' ')
+        )
+        return respond({ error: 'upstream' }, 502)
+      }
+    }
+    if (url.pathname === '/v1/pokemon-listings') {
+      const codes = (url.searchParams.get('codes') ?? '').split(',').filter(Boolean)
+      const lang = url.searchParams.get('lang') ?? ''
+      if (
+        !clientOk ||
+        !POKEMON_LANGS.has(lang) ||
+        codes.length === 0 ||
+        codes.length > POKEMON_MAX_CODES ||
+        !codes.every((c) => POKEMON_CODE.test(c))
+      ) {
+        return respond({ error: 'bad request' }, 400)
+      }
+      try {
+        return respond(await lookupPokemonListings(env, codes, lang))
+      } catch (e) {
+        if (e?.status === 429) return respond({ error: 'rate limited' }, 429)
+        console.error(
+          'ebay pokemon listings failed',
           String(e?.message ?? '')
             .split(' ')
             .slice(0, 2)

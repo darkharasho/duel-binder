@@ -12,8 +12,13 @@ export const SWEEP_BATCH = 10
 /** The Asian languages the sweep covers; the same values the price Worker's /v1/set accepts. */
 export const SWEEP_LANGUAGES = ['ja', 'ko', 'zh-hans', 'zh-hant', 'ae'] as const
 
-const DAY_MS = 24 * 3600 * 1000
-const WEEK_MS = 7 * DAY_MS
+/** Most Browse calls one Yu-Gi-Oh! prefix can cost (the price Worker's SET_MAX_PAGES). */
+export const SET_MAX_CALLS = 5
+/** Pokémon rows in price_sweeps have keys with this prefix; see pokemonSweep.ts. */
+export const POKEMON_KEY_PREFIX = 'pkm:'
+
+export const DAY_MS = 24 * 3600 * 1000
+export const WEEK_MS = 7 * DAY_MS
 const TIMEOUT_MS = 60_000
 
 export interface SetEntry {
@@ -28,8 +33,23 @@ export interface SetResult {
   checkedAt?: string
 }
 
+/** One listing of the price Worker's /v1/pokemon-listings: USD, fixed price, not graded. */
+export interface PokemonListing {
+  title: string
+  price: number
+  seller: string
+}
+
+/** The price Worker's /v1/pokemon-listings body. */
+export interface PokemonListings {
+  items: PokemonListing[]
+  calls?: number
+  checkedAt?: string
+}
+
 export interface SweepClient {
   set(key: string, lang: string): Promise<SetResult>
+  pokemonListings(codes: string[], lang: string): Promise<PokemonListings>
   quota(): Promise<{ remaining: number | null }>
 }
 
@@ -69,6 +89,14 @@ export function sweepClientFor(env: PriceEnv): SweepClient | null {
       if (!body || typeof body.codes !== 'object' || body.codes === null)
         throw new Error('Set sweep returned an unexpected response')
       return body as SetResult
+    },
+    async pokemonListings(codes, lang) {
+      const res = await get(`/v1/pokemon-listings?${new URLSearchParams({ codes: codes.join(','), lang })}`)
+      if (res.status === 429) throw new SweepRateLimited()
+      if (res.status !== 200) throw new Error(`Pokémon sweep returned ${res.status}`)
+      const body = (await res.json()) as Partial<PokemonListings> | null
+      if (!body || !Array.isArray(body.items)) throw new Error('Pokémon sweep returned an unexpected response')
+      return body as PokemonListings
     },
     async quota() {
       try {
@@ -240,7 +268,7 @@ export async function runSweep(
   const due = (limit: number): { key: string; language: string }[] =>
     db
       .prepare(
-        `SELECT key, language FROM price_sweeps WHERE swept_at IS NULL OR swept_at < ?
+        `SELECT key, language FROM price_sweeps WHERE key NOT LIKE '${POKEMON_KEY_PREFIX}%' AND (swept_at IS NULL OR swept_at < ?)
          ORDER BY owned DESC, swept_at, released DESC LIMIT ?`
       )
       .all(dueBefore, limit) as { key: string; language: string }[]

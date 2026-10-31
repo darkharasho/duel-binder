@@ -13,6 +13,7 @@ import { doSql } from './doSql'
 import { migrateServer } from './migrate'
 import { alarmQueue, priceClientFor, runPriceAlarm, type PriceQueue } from './prices'
 import { sweepClientFor } from './sweep'
+import { pokemonDailyCalls } from './pokemonSweep'
 import { handleSite } from './site/handler'
 import { routeHost } from './site/host'
 import { createReleaseSource, type Downloads } from './site/releases'
@@ -54,7 +55,9 @@ export class Store extends DurableObject<WorkerEnv> {
 
   /** Keeps eBay prices fresh for every printing any user owns; re-arms itself. */
   async alarm(): Promise<void> {
-    await runPriceAlarm(this.db, priceClientFor(this.env), this.ctx.storage, () => new Date(), sweepClientFor(this.env))
+    await runPriceAlarm(this.db, priceClientFor(this.env), this.ctx.storage, () => new Date(), sweepClientFor(this.env), {
+      pokemonDailyCalls: pokemonDailyCalls(this.env.POKEMON_SWEEP_DAILY_CALLS)
+    })
   }
 
   fetch(req: Request): Promise<Response> {

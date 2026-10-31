@@ -7,6 +7,7 @@ import { searchCards } from '../../../src/main/repo/cards'
 import { countCandidates, priceCandidates } from '../../../src/main/prices/candidates'
 import { requestPrices } from '../src/priceRequests'
 import { assignSweep, refreshSweepQueue } from '../src/sweep'
+import { assignPokemonSweep, refreshPokemonQueue } from '../src/pokemonSweep'
 
 /** Run `fn` against a fresh, migrated Store's SQLite through the doSql adapter. */
 function inStore<R>(name: string, fn: (db: SqlDb) => R): Promise<R> {
@@ -166,5 +167,33 @@ describe('Store Durable Object SQLite', () => {
     expect(out.prices.map((p) => p.price)).toEqual([1, 7])
     expect(out.prices.every((p) => p.price_seq > 0)).toBe(true)
     expect(out.sweep).toEqual([{ key: 'CORI-JP', language: 'ja', swept_at: '2026-10-28T12:00:00.000Z', calls: 2 }])
+  })
+
+  it('the Pokémon sweep queue and assignment run on DO SQLite', async () => {
+    const out = await inStore('pokemon-sweep', (db) => {
+      const card = 2 ** 40 + 1
+      db.prepare(
+        `INSERT INTO cards (id, game, name, type, frame_type, race, "desc", updated_at) VALUES (?, 'pkm', 'Blipbug', 'Pokémon', 'pokemon', '', '', '')`
+      ).run(card)
+      db.prepare(
+        `INSERT INTO card_printings (game, card_id, set_name, set_code, set_rarity, language) VALUES ('pkm', ?, 'Set', 'CS3aC 017', 'Normal', 'zh-hans')`
+      ).run(card)
+      const now = new Date('2026-10-28T12:00:00.000Z')
+      const listed = refreshPokemonQueue(db, now)
+      const res = assignPokemonSweep(
+        db,
+        'CS3aC',
+        'zh-hans',
+        {
+          items: [2, 3, 4].map((price, i) => ({ title: 'Chinese Blipbug 017/122 CS3a', price, seller: `s${i}` })),
+          calls: 1,
+          checkedAt: now.toISOString()
+        },
+        now
+      )
+      const prices = db.prepare('SELECT price FROM intl_prices').all()
+      return { listed, res, prices }
+    })
+    expect(out).toEqual({ listed: 1, res: { priced: 1 }, prices: [{ price: 3 }] })
   })
 })

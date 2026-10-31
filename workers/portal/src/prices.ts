@@ -2,6 +2,7 @@ import type { SqlDb } from '../../../src/main/db/sql'
 import { createPriceClient, type PriceClient } from '../../../src/main/prices/client'
 import { refreshIntlPrices } from '../../../src/main/prices/refresh'
 import { refreshSweepQueue, runSweep, type SweepClient } from './sweep'
+import { runPokemonSweep } from './pokemonSweep'
 
 /** Lookups per alarm run. */
 export const PRICE_BATCH = 25
@@ -18,6 +19,8 @@ export const PRICE_IDLE_MS = 21_600_000
 export interface PriceEnv {
   PRICE_WORKER_URL: string
   PRICES?: { fetch(input: RequestInfo | URL, init?: RequestInit): Promise<Response> }
+  /** Browse calls a day for the Chinese Pokémon sweep. Unset or "0" is off; see pokemonSweep.ts. */
+  POKEMON_SWEEP_DAILY_CALLS?: string
 }
 
 /**
@@ -90,7 +93,7 @@ export async function runPriceAlarm(
   storage: AlarmStorage,
   now: () => Date,
   sweep: SweepClient | null = null,
-  opts: { limit?: number } = {}
+  opts: { limit?: number; pokemonDailyCalls?: number } = {}
 ): Promise<void> {
   let delay = PRICE_IDLE_MS
   try {
@@ -108,6 +111,8 @@ export async function runPriceAlarm(
     refreshSweepQueue(db, at)
     const r = await runSweep(db, sweep, at)
     if (r.more && r.swept > 0) delay = Math.min(delay, PRICE_MORE_MS)
+    // What Yu-Gi-Oh! leaves. Never touches the delay: it takes whichever alarms come anyway.
+    else await runPokemonSweep(db, sweep, at, opts.pokemonDailyCalls ?? 0)
   } catch (e) {
     console.error('Set sweep failed', e)
   }

@@ -504,3 +504,84 @@ describe('GET /v1/quota', () => {
     expect(await res.json()).toEqual({ remaining: null, resetAt: null })
   })
 })
+
+describe('GET /v1/pokemon-listings', () => {
+  const URL_ = 'https://w.test/v1/pokemon-listings?codes=CS3aC,CS3a&lang=zh-hans'
+  beforeEach(() => vi.useFakeTimers({ toFake: ['setTimeout'] }))
+  const listing = (title, extra = {}) => ({
+    title,
+    price: { value: '2.50', currency: 'USD' },
+    seller: { username: 'dealer' },
+    conditionId: '4000',
+    ...extra
+  })
+  const page = (n) => ({ itemSummaries: Array.from({ length: n }, (_, i) => listing(`Card ${i}`)) })
+
+  it('searches the Pokémon category for either code, fixed price only', async () => {
+    const f = makeFetch([json({ itemSummaries: [listing('Chinese Blipbug 017/122 CS3a')] })])
+    vi.stubGlobal('fetch', f)
+    const res = await settle(worker.fetch(req(URL_), env))
+    expect(res.status).toBe(200)
+    expect(await res.json()).toMatchObject({
+      items: [{ title: 'Chinese Blipbug 017/122 CS3a', price: 2.5, seller: 'dealer' }],
+      calls: 1
+    })
+    const url = new URL(f.mock.calls.at(-1)[0])
+    expect(url.searchParams.get('q')).toBe('(CS3aC,CS3a)')
+    expect(url.searchParams.get('category_ids')).toBe('183454')
+    expect(url.searchParams.get('filter')).toBe('buyingOptions:{FIXED_PRICE}')
+  })
+
+  it('adds the language word for Traditional, whose codes are Japanese-style', async () => {
+    const f = makeFetch([json({ itemSummaries: [] })])
+    vi.stubGlobal('fetch', f)
+    await settle(worker.fetch(req('https://w.test/v1/pokemon-listings?codes=SV8aF&lang=zh-hant'), env))
+    expect(new URL(f.mock.calls.at(-1)[0]).searchParams.get('q')).toBe('SV8aF Chinese')
+  })
+
+  it('leaves out graded and non-USD listings', async () => {
+    vi.stubGlobal(
+      'fetch',
+      makeFetch([
+        json({
+          itemSummaries: [
+            listing('keep'),
+            listing('graded', { conditionId: '2750' }),
+            listing('yen', { price: { value: '300', currency: 'JPY' } }),
+            listing('none', { price: undefined })
+          ]
+        })
+      ])
+    )
+    const body = await (await settle(worker.fetch(req(URL_), env))).json()
+    expect(body.items.map((i) => i.title)).toEqual(['keep'])
+  })
+
+  it('stops at three pages', async () => {
+    const f = makeFetch([json(page(200)), json(page(200)), json(page(200)), json(page(200))])
+    vi.stubGlobal('fetch', f)
+    const body = await (await settle(worker.fetch(req(URL_), env))).json()
+    expect(body.calls).toBe(3)
+    expect(body.items).toHaveLength(600)
+  })
+
+  it.each([
+    ['https://w.test/v1/pokemon-listings?codes=CS3aC&lang=ja'],
+    ['https://w.test/v1/pokemon-listings?lang=zh-hans'],
+    ['https://w.test/v1/pokemon-listings?codes=A,B,C&lang=zh-hans'],
+    ['https://w.test/v1/pokemon-listings?codes=CS3aC)%20OR%20(x&lang=zh-hans']
+  ])('refuses %s', async (url) => {
+    vi.stubGlobal('fetch', makeFetch([]))
+    expect((await worker.fetch(req(url), env)).status).toBe(400)
+  })
+
+  it('refuses a missing X-Client header', async () => {
+    vi.stubGlobal('fetch', makeFetch([]))
+    expect((await worker.fetch(req(URL_, {}), env)).status).toBe(400)
+  })
+
+  it('passes through 429', async () => {
+    vi.stubGlobal('fetch', makeFetch([json({}, 429), json({}, 429), json({}, 429)]))
+    expect((await settle(worker.fetch(req(URL_), env))).status).toBe(429)
+  })
+})

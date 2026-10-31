@@ -37,6 +37,8 @@ export type MetaKey =
   | 'catalog_unannounced'
   /** UTC day (YYYY-MM-DD) the portal last listed its eBay sweep prefixes. */
   | 'price_sweeps_listed_at'
+  | 'price_sweeps_pkm_listed_at'
+  | 'sweep_pokemon_day'
   /** The portal's eBay sweep calls for one UTC day, as `YYYY-MM-DD:N`. */
   | 'sweep_calls_day'
   /** When the token cards were last read from Yugipedia (ISO). */

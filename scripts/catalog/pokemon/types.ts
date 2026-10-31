@@ -16,7 +16,7 @@ export interface TdCard {
 }
 export interface TdSet {
   id: string; name: string; releaseDate?: string; logo?: string; serie?: { id: string }
-  abbreviation?: { official?: string }; cardCount?: { official?: number }
+  abbreviation?: { official?: string }; cardCount?: { official?: number; total?: number }
   cards: { id: string; localId: string; name: string }[]
 }
 export interface TcGroup { groupId: number; name: string; abbreviation: string | null }

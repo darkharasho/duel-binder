@@ -181,6 +181,12 @@ export async function buildFingerprints(opts: FingerprintOptions): Promise<Finge
         )
         .all() as { image_id: number; image_url: string }[])
         urls.set(r.image_id, pokemonImageUrl(r.image_url))
+      // Art taken off a card (it was another card's) takes its hash with it.
+      const drop = cache.prepare('DELETE FROM fp WHERE image_id = ?')
+      for (const id of [...cached].filter((x) => !urls.has(x))) {
+        drop.run(id)
+        cached.delete(id)
+      }
     }
     const missing = ids.filter((id) => !cached.has(id))
     const todo = missing.filter((id) => !isTokenId(id))

@@ -123,6 +123,9 @@ export function findShrinks(work: Database.Database, base: Database.Database | n
   return out
 }
 
+const noArt = (r: PokemonReport): number =>
+  Object.values(r.artMissing).reduce((a, b) => a + b, 0)
+
 /**
  * Logs the Pokémon reports. Their problems (unmatched products, variants outside the version
  * table, upstream gaps) are data notes that recur every night, so they are logged, not raised as
@@ -131,10 +134,11 @@ export function findShrinks(work: Database.Database, base: Database.Database | n
 function logPokemon(reports: PokemonReport[], log: (line: string) => void): void {
   for (const r of reports) {
     log(
-      `Pokémon ${r.lang}: ${r.sets} sets, ${r.cards} cards, ${r.versions} versions (${r.priced} priced, ${r.versions - r.priced} unpriced), ${r.images} images, ${r.unmatchedCards} cards unmatched, ${r.unverified} with unverified finishes, ${r.englishNamed} named in English by species or name, ${r.japaneseNames} still in Japanese, ${r.problems.length} notes`
+      `Pokémon ${r.lang}: ${r.sets} sets, ${r.cards} cards, ${r.versions} versions (${r.priced} priced, ${r.versions - r.priced} unpriced), ${r.images} images (${r.artFilled} from a checked product, ${r.artRemoved} wrong ones removed, ${noArt(r)} cards without), ${r.unmatchedCards} cards unmatched, ${r.unverified} with unverified finishes, ${r.englishNamed} named in English by species or name, ${r.japaneseNames} still in Japanese, ${r.problems.length} notes`
     )
     if (r.unmatchedSets.length > 0)
       log(`Pokémon ${r.lang}: unmatched sets: ${r.unmatchedSets.join(', ')}`)
+    if (noArt(r) > 0) log(`Pokémon ${r.lang}: no art: ${JSON.stringify(r.artMissing)}`)
     for (const p of r.problems) log(`Pokémon ${r.lang}: ${p}`)
   }
 }

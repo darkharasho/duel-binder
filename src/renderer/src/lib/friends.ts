@@ -51,6 +51,8 @@ function useFriendsAccess(): { available: boolean; confirmed: boolean } {
     } else if (lastUser.current !== userId) {
       lastUser.current = userId
       qc.removeQueries({ queryKey: queryKeys.friends })
+      // Nor their wants: a page left open would show them until it refetched.
+      void qc.resetQueries({ queryKey: queryKeys.wishlist })
     }
   }, [web, status.isSuccess, userId, qc])
   if (web) return { available: true, confirmed: true }

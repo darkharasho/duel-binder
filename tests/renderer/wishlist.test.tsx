@@ -270,7 +270,10 @@ describe("a friend's binder", () => {
     incoming: [],
     blocked: []
   }
-  const openBinder = async (wishlist: () => Promise<WishlistItem[]>): Promise<void> => {
+  const openBinder = async (
+    wishlist: () => Promise<WishlistItem[]>,
+    get: () => Promise<CardDetail> = async () => detail([printing(1)])
+  ): Promise<void> => {
     renderWithProviders(
       <GameProvider>
         <FriendsPage onBackToMine={() => {}} />
@@ -278,6 +281,7 @@ describe("a friend's binder", () => {
       {
         api: createMockApi({
           friends: { overview: async () => overview, wishlist },
+          cards: { get },
           ...signedIn
         })
       }
@@ -293,6 +297,21 @@ describe("a friend's binder", () => {
     expect(within(list).getByText('Dark Magician')).toBeInTheDocument()
     expect(within(list).queryByRole('button', { name: /Remove/ })).toBeNull()
     expect(within(list).queryByRole('button', { name: /Want more/ })).toBeNull()
+  })
+
+  it("opens the card on the printing they want, whatever this catalog's id for it", async () => {
+    const theirs = item(2, {
+      printingScan: false,
+      printing: { ...printing(2), id: 7002 }
+    })
+    await openBinder(
+      async () => [theirs],
+      async () => detail([printing(1), printing(2), printing(3)])
+    )
+    const list = await screen.findByRole('list', { name: 'Wanted cards' })
+    await userEvent.click(within(list).getByRole('button', { name: /Dark Magician/ }))
+    await waitFor(() => expect(document.querySelector('[aria-current="true"]')).not.toBeNull())
+    expect(document.querySelector('[aria-current="true"]')).toHaveTextContent('LOB-002')
   })
 
   it('a hidden list reads as an empty one, and a failure too', async () => {

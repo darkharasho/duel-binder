@@ -1,10 +1,11 @@
 import { useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import type { WishlistItem } from '@shared/types'
 import { CardSheet } from '@/components/CardSheet'
 import { PageHeader } from '@/components/PageHeader'
 import { CardPanel } from '@/features/card/CardPanel'
-import { api } from '@/lib/api'
+import { api, queryKeys } from '@/lib/api'
 import { formatUsd } from '@/lib/format'
 import { unpricedIntl, useRequestPrices } from '@/lib/priceRequests'
 import { useWishEdit, useWishOwners, useWishlist, wishlistCost } from '@/lib/wishlist'
@@ -18,8 +19,23 @@ export function WishCardSheet({
   item: WishlistItem
   onClose: () => void
 }): React.JSX.Element {
-  // A friend's item has the server's printing id, which means nothing in this catalog.
-  const printingId = item.printingScan ? item.printing.id : null
+  // A friend's item has the server's printing id, which means nothing in this catalog; find its row
+  // by what the printing is. On the web the catalog is the server's, and printingScan is true.
+  const { printing } = item
+  const detail = useQuery({
+    queryKey: queryKeys.card(item.card.id),
+    queryFn: () => api.cards.get(item.card.id),
+    enabled: !item.printingScan
+  })
+  const printingId = item.printingScan
+    ? printing.id
+    : (detail.data?.printings.find(
+        (p) =>
+          p.setName === printing.setName &&
+          p.setCode === printing.setCode &&
+          p.setRarity === printing.setRarity &&
+          p.language === printing.language
+      )?.id ?? null)
   return (
     <CardSheet onClose={onClose}>
       <CardPanel

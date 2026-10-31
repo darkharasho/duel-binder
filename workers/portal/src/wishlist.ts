@@ -170,7 +170,7 @@ export function friendsWanting(
          JOIN card_printings p ON p.pkey = w.pkey
         WHERE w.user_id IN (${FRIEND_IDS})
           AND u.wishlist_hidden = 0 AND w.game = ? AND w.deleted_at IS NULL
-          AND +p.card_id = ?
+          AND +p.card_id = ? AND +p.game = w.game
           AND COALESCE(w.quantity, 1) > (SELECT COALESCE(SUM(e.quantity), 0) FROM collection_entries e
                                           WHERE e.user_id = w.user_id AND e.printing_id = p.id
                                             AND e.game = w.game AND e.deleted_at IS NULL)

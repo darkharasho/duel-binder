@@ -51,11 +51,15 @@ export function flushUsage(): void {
   timer = null
   const events = pending
   pending = {}
-  if (Object.keys(events).length === 0) return
-  try {
-    void window.api?.usage?.report(events).catch(() => {})
-  } catch {
-    // No bridge (a test torn down, say): drop the batch.
+  // On its own: a portal from before this event refuses a whole report with it in.
+  const { 'page:wishlist': wishlist, ...rest } = events
+  for (const batch of [rest, wishlist ? { 'page:wishlist': wishlist } : {}]) {
+    if (Object.keys(batch).length === 0) continue
+    try {
+      void window.api?.usage?.report(batch).catch(() => {})
+    } catch {
+      // No bridge (a test torn down, say): drop the batch.
+    }
   }
 }
 

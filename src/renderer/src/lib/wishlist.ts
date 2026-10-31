@@ -7,7 +7,7 @@ import {
 } from '@tanstack/react-query'
 import { MAX_PULL } from '@shared/cloud'
 import type { CardWish, FriendWantsCard, WishlistItem, WishOwners } from '@shared/types'
-import { api, queryKeys } from './api'
+import { api, invalidateAfterEdit, queryKeys } from './api'
 import { useFriendsReady } from './friends'
 import { useGame } from './game'
 
@@ -57,7 +57,7 @@ export function useWishEdit<T>(
   return useMutation<void, Error, T, () => void>({
     mutationFn: write,
     ...opts,
-    onSettled: () => qc.invalidateQueries({ queryKey: queryKeys.wishlist })
+    onSettled: () => invalidateAfterEdit(qc, (k) => k[0] !== queryKeys.wishlist[0])
   })
 }
 

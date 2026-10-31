@@ -255,6 +255,44 @@ describe('wishlist sync', () => {
     expect(rows(a)).toEqual([expect.objectContaining({ dirty: 0 })])
   })
 
+  it('wants stay with their account when another signs in on this computer', async () => {
+    setWish(a, p.id, 2, T1) // queued, not yet up, when the account changes
+    const other = portal.addUser('other')
+    ensureAccount(a, other, 'other')
+    setActiveOwner(a, other)
+    expect(listWishlist(a)).toEqual([])
+    await syncOnce(
+      a,
+      other,
+      createCloudClient({
+        baseUrl: PORTAL,
+        token: await portal.desktopToken(other),
+        fetch: portal.fetch
+      }),
+      NOW
+    )
+    expect(listWishlist(a)).toEqual([])
+    expect(server()).toEqual([])
+    expect(rows(a)).toEqual([expect.objectContaining({ owner_id: user, dirty: 1 })])
+
+    setActiveOwner(a, user)
+    await sync(a)
+    expect(listWishlist(a)).toMatchObject([{ pkey: p.pkey, quantity: 2 }])
+    expect(server()).toHaveLength(1)
+  })
+
+  it('a removal and a re-add before the next sync reach the server as a want', async () => {
+    setWish(a, p.id, null, T1)
+    await sync(a)
+    removeWish(a, p.id, T2)
+    setWish(a, p.id, 3, T3)
+    await sync(a)
+    expect(server()).toEqual([{ pkey: p.pkey, game: 'ygo', quantity: 3, deleted_at: null }])
+    const b = await device()
+    await sync(b)
+    expect(listWishlist(b)).toMatchObject([{ pkey: p.pkey, quantity: 3 }])
+  })
+
   it('the latest edit wins between two devices, either way round', async () => {
     const b = await device()
     setWish(a, p.id, 2, T1)

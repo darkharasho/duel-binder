@@ -361,6 +361,19 @@ ${rollupTriggers('konami_logos')}
 ${rollupTriggers('pokemon_set_art')}
 `
 
+/**
+ * Wishlist: the cards an owner wants, one row per printing. Keyed by `pkey`, with no foreign key: a
+ * want can outlive its printing's row (a catalog refresh, the phone's catalog reset) and show again
+ * when the printing does, so it needs no sync_pending. `quantity` is the copies wanted, NULL for no
+ * target. The server has its own shape, so this step is desktop-only (see server-15).
+ */
+export const SCHEMA_V25 = `
+CREATE TABLE wishlist_entries (owner_id INTEGER NOT NULL DEFAULT 0, pkey TEXT NOT NULL, game TEXT NOT NULL DEFAULT 'ygo',
+  quantity INTEGER CHECK (quantity >= 1), created_at TEXT NOT NULL, updated_at TEXT NOT NULL, deleted_at TEXT,
+  dirty INTEGER NOT NULL DEFAULT 1, PRIMARY KEY (owner_id, pkey));
+CREATE INDEX ix_wishlist_dirty ON wishlist_entries(owner_id) WHERE dirty = 1;
+`
+
 /** A printing's rarity as shown: "Starlight Rare (Extended Art)" for a labelled variant. */
 export const RARITY_LABEL = "p.set_rarity || COALESCE(' (' || p.variant || ')', '')"
 
@@ -389,5 +402,6 @@ export const MIGRATIONS: Migration[] = [
   { version: 21, sql: SCHEMA_V21 },
   { version: 22, sql: SCHEMA_V22 },
   { version: 23, sql: SCHEMA_V23 },
-  { version: 24, sql: SCHEMA_V24, server: false }
+  { version: 24, sql: SCHEMA_V24, server: false },
+  { version: 25, sql: SCHEMA_V25, server: false }
 ]

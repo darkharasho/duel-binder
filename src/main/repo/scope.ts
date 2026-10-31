@@ -37,6 +37,17 @@ export interface Scope {
    */
   touch: string
   /**
+   * wishlist_entries scoping: the owner column and its value, the row's change-marker column and
+   * value for an insert, and the SQL assignment recording a change (dirty, or a new seq).
+   */
+  wishlist: {
+    ownerCol: string
+    owner: string
+    markerCol: string
+    marker: string
+    touch: string
+  }
+  /**
    * value_snapshots scoping. `insertCols`/`insertVals` are comma-terminated fragments placed before
    * `date` / `?` in an INSERT (and `insertCols + 'date'` is the upsert conflict target); `where` limits a read
    * to this owner's rows of the game.
@@ -96,6 +107,13 @@ export function localScope(game: string): Scope {
       ).run(ts, ts, id)
     },
     touch: 'dirty = 1',
+    wishlist: {
+      ownerCol: 'owner_id',
+      owner: ACTIVE_OWNER,
+      markerCol: 'dirty',
+      marker: '1',
+      touch: 'dirty = 1'
+    },
     snapshotTable: {
       insertCols: 'owner_id, game, ',
       insertVals: `${ACTIVE_OWNER}, ${game}, `,

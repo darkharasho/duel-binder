@@ -2,23 +2,29 @@ import type { SqlDb } from '../db/sql'
 import { setMeta } from '../db/meta'
 import { recordSnapshot } from '../repo/stats'
 import { MAX_CONTRIBUTE, type ContributeResult } from '../../shared/catalogFeed'
+import { settleWishlist } from '../repo/wishlist'
+import { localScope } from '../repo/scope'
 import { MAX_PULL, MAX_PUSH, editTime, gamesOf, type WireEntry } from '../../shared/cloud'
 import type { GameId } from '../../shared/games'
-import { CloudAuthError, CloudOfflineError, type CloudClient } from './client'
+import { CloudAuthError, CloudNotFoundError, CloudOfflineError, type CloudClient } from './client'
 import {
   activeOwner,
   applyPending,
   applyPrices,
   applyRemote,
+  applyRemoteWish,
   contributionGroups,
   dirtyEntries,
+  dirtyWishes,
   gameCursor,
   pullPriceChanges,
   dropEntry,
   markPushed,
+  markWishPushed,
   pendingCount,
   pruneSyncIssues,
   purgeCleanTombstones,
+  purgeCleanWishes,
   recordSyncIssue,
   rekey,
   saveAccountState,
@@ -56,6 +62,61 @@ export async function syncedGames(client: CloudClient): Promise<GameId[]> {
     if (e instanceof CloudAuthError) throw e
     return ['ygo']
   }
+}
+
+/**
+ * Syncs `owner`'s wishlist on its own routes: pull (each game from its own cursor), drop the rows
+ * whose target the collection has reached, push. Best effort: rows stay dirty for the next run, so
+ * a portal without wishlists (404) or a failure here never fails the collection's sync. Only a
+ * signed-out answer goes on, as it ends the session. Resolves whether the list changed.
+ */
+async function syncWishlist(
+  db: SqlDb,
+  owner: number,
+  client: CloudClient,
+  games: GameId[],
+  now: () => Date
+): Promise<boolean> {
+  let changed = false
+  try {
+    for (const game of games) {
+      let cursor = gameCursor(db, owner, game, 'wishlist')
+      for (;;) {
+        const page = await client.wishlistPull(cursor, game)
+        db.transaction(() => {
+          for (const w of page.entries) if (applyRemoteWish(db, owner, w)) changed = true
+          saveGameCursor(db, owner, game, 'wishlist', page.cursor)
+        })()
+        cursor = page.cursor
+        if (!page.more || page.entries.length === 0) break
+      }
+    }
+    if (activeOwner(db) === owner)
+      for (const game of games)
+        if (settleWishlist(db, localScope(`'${game}'`), now()) > 0) changed = true
+
+    const sent = new Set<string>()
+    for (;;) {
+      const batch = dirtyWishes(db, owner, MAX_PUSH, sent)
+      if (batch.length === 0) break
+      for (const w of batch) sent.add(w.pkey)
+      const results = await client.wishlistPush(batch)
+      const byKey = new Map(batch.map((w) => [w.pkey, w]))
+      db.transaction(() => {
+        for (const r of results) {
+          const w = byKey.get(r.pkey)
+          if (!w || r.status === 'skipped') continue
+          markWishPushed(db, owner, w)
+          if (r.status === 'stale' && applyRemoteWish(db, owner, r.current)) changed = true
+        }
+      })()
+    }
+  } catch (e) {
+    if (e instanceof CloudAuthError) throw e
+    if (!(e instanceof CloudNotFoundError) && !(e instanceof CloudOfflineError))
+      console.warn('Wishlist sync failed; it stays queued', e)
+  }
+  return changed
 }
 
 /**
@@ -221,9 +282,13 @@ export async function syncOnce(
     if (status !== null) setMeta(db, 'price_service_status', status)
   })()
 
-  // 4. Tidy up and record the run.
+  // 4. The wishlist, which has its own routes.
+  if (await syncWishlist(db, owner, client, games, now)) changed = true
+
+  // 5. Tidy up and record the run.
   db.transaction(() => {
     purgeCleanTombstones(db, owner)
+    purgeCleanWishes(db, owner)
     saveAccountState(db, owner, { syncedAt: now().toISOString() })
     // recordSnapshot writes the active owner's (LOCAL) snapshot.
     if (changed && activeOwner(db) === owner) recordSnapshot(db, now())

@@ -64,7 +64,18 @@ export function createMockApi(overrides: DeepPartial<Api> = {}): Api {
       unblock: vi.fn(async () => undefined),
       collection: vi.fn(async () => []),
       forCard: vi.fn(async () => []),
-      facets: vi.fn(async () => ({ cardTypes: [], attributes: [], archetypes: [], setNames: [], rarities: [], languages: [] }))
+      facets: vi.fn(async () => ({ cardTypes: [], attributes: [], archetypes: [], setNames: [], rarities: [], languages: [] })),
+      wishlist: vi.fn(async () => []),
+      wanting: vi.fn(async () => []),
+      owning: vi.fn(async () => []),
+      wishlistVisible: vi.fn(async () => true),
+      setWishlistVisible: vi.fn(async () => undefined)
+    },
+    wishlist: {
+      list: vi.fn(async () => []),
+      forCard: vi.fn(async () => []),
+      set: vi.fn(async () => undefined),
+      remove: vi.fn(async () => undefined)
     },
     scan: {
       printingsByCode: vi.fn(async () => []),

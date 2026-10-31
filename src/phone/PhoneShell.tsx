@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState }
 import { useQueryClient } from '@tanstack/react-query'
 import {
   EllipsisIcon,
+  HeartIcon,
   HouseIcon,
   LayoutGridIcon,
   LibraryIcon,
@@ -46,6 +47,7 @@ const TABS: { page: Page; label: string; icon: LucideIcon }[] = [
   { page: 'sets', label: 'Sets', icon: LayoutGridIcon }
 ]
 const MORE: { page: Page; label: string; icon: LucideIcon }[] = [
+  { page: 'wishlist', label: 'Wishlist', icon: HeartIcon },
   { page: 'browse', label: 'Browse', icon: SearchIcon },
   { page: 'rip', label: 'Rip', icon: PackageOpenIcon },
   { page: 'friends', label: 'Friends', icon: UsersIcon },

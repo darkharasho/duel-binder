@@ -25,13 +25,14 @@ import type { GameId } from '../../../src/shared/games'
 import type { AppDeps } from './app'
 import { currentUser, gamesFor } from './auth'
 import { requestPrices } from './priceRequests'
+import { applyWishPush, checkWishPush, wishPullSince } from './wishlist'
 import { NEXT_SEQ, userScope } from './scope'
 
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
-const MAX_PKEY = 300
+export const MAX_PKEY = 300
 
 /** A client time as toISOString(), clamped to `now` when beyond the allowed clock skew. */
-function checkTime(v: unknown, what: string, now: Date): string {
+export function checkTime(v: unknown, what: string, now: Date): string {
   const ms = typeof v === 'string' ? Date.parse(v) : NaN
   if (Number.isNaN(ms)) throw new CollectionError(`${what} must be a date`)
   return new Date(ms > now.getTime() + FUTURE_SKEW_MS ? now.getTime() : ms).toISOString()
@@ -224,7 +225,7 @@ export function applyPush(
  * A page's cursor. Mid-feed it is the last row returned; on the last page it is the feed's highest seq
  * of any game, so a feed read for one game moves past the other games' seqs and never re-reads them.
  */
-function pageCursor(
+export function pageCursor(
   db: SqlDb,
   last: number | undefined,
   more: boolean,
@@ -341,15 +342,21 @@ function checkPkeys(body: unknown): string[] {
   return pkeys as string[]
 }
 
-const POST_PATHS: ReadonlySet<string> = new Set(['push', 'prices', 'price-requests'])
+const POST_PATHS: ReadonlySet<string> = new Set([
+  'push',
+  'prices',
+  'price-requests',
+  'wishlist-push'
+])
+const GET_PATHS: ReadonlySet<string> = new Set(['pull', 'price-changes', 'wishlist-pull'])
 
 /**
- * POST /api/sync/push, GET /api/sync/pull, GET /api/sync/price-changes, POST /api/sync/prices and POST /api/sync/price-requests;
+ * POST /api/sync/push, GET /api/sync/pull, GET /api/sync/price-changes, POST /api/sync/prices,
+ * POST /api/sync/price-requests, POST /api/sync/wishlist-push and GET /api/sync/wishlist-pull;
  * desktop tokens only (the phone app has one too).
  */
 export async function syncRoute(req: Request, deps: AppDeps, path: string): Promise<Response> {
-  const method =
-    path === 'pull' || path === 'price-changes' ? 'GET' : POST_PATHS.has(path) ? 'POST' : null
+  const method = GET_PATHS.has(path) ? 'GET' : POST_PATHS.has(path) ? 'POST' : null
   if (!method) return json({ error: 'Not found' }, 404)
   if (req.method !== method) return json({ error: 'method-not-allowed' }, 405)
   const user = await currentUser(req, deps)
@@ -362,12 +369,16 @@ export async function syncRoute(req: Request, deps: AppDeps, path: string): Prom
   if (!game) return json({ error: 'game-not-allowed' }, 403)
 
   try {
-    if (path === 'pull') {
+    if (path === 'pull' || path === 'wishlist-pull') {
       const raw = new URL(req.url).searchParams.get('cursor') ?? ''
       const cursor = /^\d{1,16}$/.test(raw) ? Number(raw) : NaN
       if (!Number.isSafeInteger(cursor))
         throw new CollectionError('cursor must be a whole number of at least 0')
-      return json(pullSince(deps.db, user.id, cursor, MAX_PULL, game))
+      return json(
+        path === 'pull'
+          ? pullSince(deps.db, user.id, cursor, MAX_PULL, game)
+          : wishPullSince(deps.db, user.id, cursor, MAX_PULL, game)
+      )
     }
 
     if (path === 'price-changes') {
@@ -387,6 +398,13 @@ export async function syncRoute(req: Request, deps: AppDeps, path: string): Prom
       const { results, wroteLive } = applyPush(deps.db, user.id, entries, now, games)
       if (wroteLive) await deps.prices.soon()
       return json({ results })
+    }
+
+    if (path === 'wishlist-push') {
+      const raw = (body as { entries?: unknown } | null)?.entries
+      if (Array.isArray(raw) && raw.length > MAX_PUSH) return json({ error: 'too-many' }, 413)
+      const entries = checkWishPush(body, deps.now())
+      return json({ results: applyWishPush(deps.db, user.id, entries, games) })
     }
 
     const pkeys = checkPkeys(body)

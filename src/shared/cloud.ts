@@ -83,6 +83,33 @@ export interface PricesResponse {
   status: string | null
 }
 
+/** One wishlist row as the sync protocol carries it; a user has one per printing, tombstones included. */
+export interface WireWish {
+  pkey: string
+  game: GameId
+  /** Copies wanted; null for no target. */
+  quantity: number | null
+  createdAt: string
+  updatedAt: string
+  deletedAt: string | null
+}
+
+export type WishPushResult =
+  | { pkey: string; status: 'applied' }
+  /** The server kept its newer row for this printing. */
+  | { pkey: string; status: 'stale'; current: WireWish }
+  /** The account can't use the row's game yet; the client keeps it and retries later. */
+  | { pkey: string; status: 'skipped' }
+
+export interface WishPullResponse {
+  entries: WireWish[]
+  cursor: number
+  more: boolean
+}
+
+/** The highest copies-wanted count a wishlist row may hold. */
+export const MAX_WANTED = 999
+
 /** A server price change, numbered by the server's catalog clock. */
 export interface PriceChange extends WirePrice {
   seq: number
@@ -117,7 +144,10 @@ export function editTime(e: Pick<WireEntry, 'updatedAt' | 'deletedAt'>): string 
 }
 
 /** Same uid: a replaces b when its edit time is later, or equal with a a tombstone and b live. */
-export function replaces(a: WireEntry, b: WireEntry): boolean {
+export function replaces(
+  a: Pick<WireEntry, 'updatedAt' | 'deletedAt'>,
+  b: Pick<WireEntry, 'updatedAt' | 'deletedAt'>
+): boolean {
   const ta = Date.parse(editTime(a))
   const tb = Date.parse(editTime(b))
   return ta > tb || (ta === tb && a.deletedAt !== null && b.deletedAt === null)

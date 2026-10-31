@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button'
 import { SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { EntryEditor } from '@/features/collection/EntryEditor'
 import { FriendCopies } from '@/features/friends/FriendCopies'
+import { FriendWants } from '@/features/friends/FriendWants'
 import { api, queryKeys } from '@/lib/api'
 import { useGame } from '@/lib/game'
 import { isPhone } from '@/lib/platform'
@@ -235,6 +236,7 @@ export function CardPanel({
         )}
 
         <FriendCopies cardId={cardId} />
+        <FriendWants cardId={cardId} owned={(copies.data?.length ?? 0) > 0} />
       </div>
     </>
   )

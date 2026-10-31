@@ -8,6 +8,7 @@ import { CollectionPage } from '@/features/collection/CollectionPage'
 import { DashboardPage } from '@/features/dashboard/DashboardPage'
 import { FriendsPage } from '@/features/friends/FriendsPage'
 import { SetsPage } from '@/features/sets/SetsPage'
+import { WishlistPage } from '@/features/wishlist/WishlistPage'
 import { useFriendsAvailable } from '@/lib/friends'
 import { useGame } from '@/lib/game'
 
@@ -85,6 +86,7 @@ export function PageSwitch({
           onAddCard={() => openAdd()}
         />
       )}
+      {page === 'wishlist' && <WishlistPage />}
       {page === 'browse' && (
         <BrowsePage onAddCard={(card, printingId) => openAdd({ card, printingId })} />
       )}

@@ -13,7 +13,10 @@ import type {
   PullResponse,
   PushResponse,
   PushResult,
-  WireEntry
+  WireEntry,
+  WireWish,
+  WishPullResponse,
+  WishPushResult
 } from '../../shared/cloud'
 import { GAME_HEADER } from '../../shared/cloud'
 import type { GameId } from '../../shared/games'
@@ -35,11 +38,23 @@ export class CloudOfflineError extends Error {
   }
 }
 
+/** The portal answered 404: it has no such call, as an older portal hasn't for anything newer. */
+export class CloudNotFoundError extends Error {
+  constructor(message = 'Not found') {
+    super(message)
+    this.name = 'CloudNotFoundError'
+  }
+}
+
 export interface CloudClient {
   me(): Promise<Me>
   push(entries: WireEntry[]): Promise<PushResult[]>
   /** One page of the account's entries of `game` (default Yu-Gi-Oh!) written after `cursor`. */
   pull(cursor: number, game?: GameId): Promise<PullResponse>
+  /** Pushes wishlist rows; a portal without wishlists rejects with CloudNotFoundError. */
+  wishlistPush(entries: WireWish[]): Promise<WishPushResult[]>
+  /** One page of the account's wishlist rows of `game` after `cursor`; as `wishlistPush` on an old portal. */
+  wishlistPull(cursor: number, game: GameId): Promise<WishPullResponse>
   prices(pkeys: string[]): Promise<PricesResponse>
   /** One page of server price changes of `game` (default Yu-Gi-Oh!) after `since` (the price change feed). */
   priceChanges(since: number, game?: GameId): Promise<PriceChangesResponse>
@@ -131,7 +146,8 @@ export function createCloudClient(opts: {
         } catch {
           error = undefined
         }
-        throw new Error(typeof error === 'string' ? error : `Request failed (${res.status})`)
+        const message = typeof error === 'string' ? error : `Request failed (${res.status})`
+        throw res.status === 404 ? new CloudNotFoundError(message) : new Error(message)
       }
       if (!parse) return undefined as T
       try {
@@ -152,6 +168,12 @@ export function createCloudClient(opts: {
       (await call<PushResponse>('/api/sync/push', 'POST', { entries })).results,
     pull: (cursor, game = 'ygo') =>
       call<PullResponse>(`/api/sync/pull?cursor=${cursor}&game=${game}`, 'GET'),
+    wishlistPush: async (entries) =>
+      (
+        await call<{ results: WishPushResult[] }>('/api/sync/wishlist-push', 'POST', { entries })
+      ).results,
+    wishlistPull: (cursor, game) =>
+      call<WishPullResponse>(`/api/sync/wishlist-pull?cursor=${cursor}&game=${game}`, 'GET'),
     prices: (pkeys) => call<PricesResponse>('/api/sync/prices', 'POST', { pkeys }),
     priceChanges: (since, game = 'ygo') =>
       call<PriceChangesResponse>(`/api/sync/price-changes?since=${since}&game=${game}`, 'GET'),

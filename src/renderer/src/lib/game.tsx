@@ -49,6 +49,12 @@ export function useCardAspect(imageId?: number): CardAspect {
   return GAMES[imageId !== undefined && imageId > 0 ? gameOfId(imageId) : game].cardAspect
 }
 
+/** The game a card is of: read from its id like the aspect, else the game shown. */
+export function useCardGame(imageId?: number): GameId {
+  const { game } = useGame()
+  return imageId !== undefined && imageId > 0 ? gameOfId(imageId) : game
+}
+
 /** Whether a page is in this game: Scan and Rip are only for a game that has them. */
 export function pageInGame(page: string, def: GameDef): boolean {
   return (page !== 'scan' || def.features.scan) && (page !== 'rip' || def.features.rip)

@@ -147,6 +147,51 @@ describe('friends RPC', () => {
     expect((await call('friends:facets', [bob], ca)).status).toBe(200)
   })
 
+  it("serves a friend's dashboard with notes blanked and no value history", async () => {
+    await befriend()
+    await bobOwns()
+    const { status, body } = await call('friends:stats', [bob], ca)
+    expect(status).toBe(200)
+    const s = body.result
+    expect(s.totalCards).toBe(1)
+    expect(s.sharedCards).toBe(0)
+    expect(s.valueHistory).toEqual([])
+    for (const list of [s.topEntries, s.topSingles, s.recentEntries]) {
+      expect(list).toHaveLength(1)
+      expect(list[0].notes).toBe('')
+    }
+    expect(JSON.stringify(s)).not.toContain('secret')
+  })
+
+  it('counts cards you both have, in any printing, once each', async () => {
+    await befriend()
+    await bobOwns()
+    const owned = (await call('friends:collection', [bob, F], ca)).body.result[0]
+    const scope = userScope(alice, 'ygo')
+    const mine = addEntry(
+      db,
+      { printingId: owned.printing.id, imageId: owned.imageId, quantity: 3 },
+      NOW,
+      scope
+    )
+    expect((await call('friends:stats', [bob], ca)).body.result.sharedCards).toBe(1)
+    removeEntry(db, mine.id, NOW, scope)
+    expect((await call('friends:stats', [bob], ca)).body.result.sharedCards).toBe(0)
+  })
+
+  it("serves a friend's set progress and checklist", async () => {
+    await befriend()
+    await bobOwns()
+    const sets = (await call('friends:sets', [bob], ca)).body.result
+    const started = sets.filter((s: { ownedCards: number }) => s.ownedCards > 0)
+    expect(started).toHaveLength(1)
+    const { setName, language } = started[0]
+    const list = (await call('friends:checklist', [bob, setName, language], ca)).body.result
+    expect(list.set.ownedCards).toBe(1)
+    expect(list.cards.reduce((n: number, c: { owned: number }) => n + c.owned, 0)).toBe(1)
+    expect(JSON.stringify(list)).not.toContain('secret')
+  })
+
   it('answers which friends have a card, and nothing of strangers', async () => {
     await bobOwns()
     await befriend()
@@ -165,7 +210,10 @@ describe('friends RPC', () => {
     const cc = await sessionFor(carol, 'tc')
     for (const [ch, args] of [
       ['friends:collection', [bob, F]],
-      ['friends:facets', [bob]]
+      ['friends:facets', [bob]],
+      ['friends:stats', [bob]],
+      ['friends:sets', [bob]],
+      ['friends:checklist', [bob, 'Any set', 'en']]
     ] as const) {
       const r = await call(ch, [...args], cc)
       expect(r.status).toBe(400)

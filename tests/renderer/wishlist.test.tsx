@@ -276,7 +276,7 @@ describe("a friend's binder", () => {
   ): Promise<void> => {
     renderWithProviders(
       <GameProvider>
-        <FriendsPage onBackToMine={() => {}} />
+        <FriendsPage />
       </GameProvider>,
       {
         api: createMockApi({
@@ -292,7 +292,7 @@ describe("a friend's binder", () => {
 
   it('has their wishlist, read-only', async () => {
     await openBinder(async () => [item(1)])
-    expect(await screen.findByRole('heading', { name: "Bob's wishlist" })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Bob' })).toBeInTheDocument()
     const list = await screen.findByRole('list', { name: 'Wanted cards' })
     expect(within(list).getByText('Dark Magician')).toBeInTheDocument()
     expect(within(list).queryByRole('button', { name: /Remove/ })).toBeNull()

@@ -1,6 +1,6 @@
 import { useCallback, useMemo, useState } from 'react'
 import { keepPreviousData, useQuery } from '@tanstack/react-query'
-import { ArrowLeft, LayoutGrid, SlidersHorizontal, Table2 } from 'lucide-react'
+import { LayoutGrid, SlidersHorizontal, Table2 } from 'lucide-react'
 import { LANGUAGES } from '@shared/languages'
 import type { CollectionFilters, EntryView, Friend, SortKey } from '@shared/types'
 import { cardArtUrl, useArtWash } from '@/components/artWashContext'
@@ -28,12 +28,12 @@ import { CollectionTable } from './CollectionTable'
 import { CardPanel } from '../card/CardPanel'
 import { FriendEntryPanel } from '../friends/FriendEntryPanel'
 import { CollectionSearch, FilterBar, FilterChips, FilterSheetBody } from './FilterBar'
+import { DEFAULT_FILTERS } from './defaultFilters'
 import { DexImportButton } from './DexImportDialog'
 import { activeFilterCount } from './filterFacets'
 
 type View = 'grid' | 'table'
 const VIEW_KEY = 'collection.view'
-const DEFAULT_FILTERS: CollectionFilters = { sort: 'added', dir: 'desc' }
 
 function readView(): View {
   try {
@@ -68,20 +68,15 @@ interface Props {
   onAddCard?: () => void
   /** Shows this friend's collection read-only instead of your own. */
   friend?: Friend
-  onBackToMine?: () => void
-  /** Returns to the friend list; the phone passes it, as its binder replaces the list. */
-  onBackToFriends?: () => void
-  /** The binder's tabs, shown under a friend's header. */
-  friendTabs?: React.ReactNode
+  /** Whose binder this is, shown above a friend's collection. */
+  friendHeader?: React.ReactNode
 }
 
 export function CollectionPage({
   initialEntryId,
   onAddCard,
   friend,
-  onBackToMine,
-  onBackToFriends,
-  friendTabs
+  friendHeader
 }: Props): React.JSX.Element {
   const [pageFilters, setFilters] = useState<CollectionFilters>(DEFAULT_FILTERS)
   const [languageFilter, setLanguageFilter] = useLanguageFilter()
@@ -226,11 +221,10 @@ export function CollectionPage({
     <TooltipProvider>
       <div className="space-y-4 p-8 max-md:p-4">
         <PageHeader>
+          {friend && friendHeader}
           <header className="flex flex-wrap items-end justify-between gap-2 max-md:flex-col max-md:items-start">
             <div>
-              <h1 className="text-xl font-semibold">
-                {friend ? `${friendName}'s collection` : 'Collection'}
-              </h1>
+              {!friend && <h1 className="text-xl font-semibold">Collection</h1>}
               <p className="text-sm text-muted-foreground tabular-nums">
                 {list.length} {list.length === 1 ? 'entry' : 'entries'}
                 {!friend && (
@@ -252,24 +246,6 @@ export function CollectionPage({
               </div>
             )}
           </header>
-
-          {friend && (
-            <div className="flex items-center gap-3 max-md:flex-wrap max-md:gap-2">
-              {onBackToFriends && (
-                <Button variant="ghost" size="sm" onClick={onBackToFriends}>
-                  <ArrowLeft />
-                  All friends
-                </Button>
-              )}
-              <p className="text-sm text-muted-foreground">
-                Viewing {friendName}&apos;s collection
-              </p>
-              <Button variant="outline" size="sm" onClick={onBackToMine}>
-                Back to mine
-              </Button>
-            </div>
-          )}
-          {friend && friendTabs}
 
           {phone ? (
             <>

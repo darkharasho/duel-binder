@@ -81,7 +81,7 @@ afterEach(() => {
 describe('friend collection', () => {
   it('reads from the friend endpoints only', async () => {
     const api = make()
-    renderWithProviders(<CollectionPage friend={friend} onBackToMine={() => {}} />, { api })
+    renderWithProviders(<CollectionPage friend={friend} />, { api })
     expect(await screen.findByText('Kuriboh')).toBeInTheDocument()
     expect(api.friends.collection).toHaveBeenCalledWith(7, expect.anything())
     expect(api.friends.facets).toHaveBeenCalledWith(7)
@@ -91,18 +91,18 @@ describe('friend collection', () => {
     expect(screen.getByText(/1 entry$/)).toBeInTheDocument()
   })
 
-  it('shows the heading and a banner with Back to mine', async () => {
-    const onBack = vi.fn()
-    renderWithProviders(<CollectionPage friend={friend} onBackToMine={onBack} />, { api: make() })
-    expect(await screen.findByRole('heading', { name: "Bob's collection" })).toBeInTheDocument()
-    expect(screen.getByText("Viewing Bob's collection")).toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: 'Back to mine' }))
-    expect(onBack).toHaveBeenCalled()
+  it('shows the header it is given and no Back to mine', async () => {
+    renderWithProviders(<CollectionPage friend={friend} friendHeader={<h1>Bob</h1>} />, {
+      api: make()
+    })
+    expect(await screen.findByRole('heading', { name: 'Bob' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Collection' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Back to mine' })).not.toBeInTheDocument()
   })
 
   it('has no Add card button, even when empty', async () => {
     renderWithProviders(
-      <CollectionPage friend={{ ...friend, cardCount: 0 }} onBackToMine={() => {}} />,
+      <CollectionPage friend={{ ...friend, cardCount: 0 }} />,
       { api: make([]) }
     )
     expect(await screen.findByText("Bob hasn't added any cards yet")).toBeInTheDocument()
@@ -121,7 +121,7 @@ describe('friend collection', () => {
       friends: { collection },
       collection: { list: vi.fn(async () => [mine]), forCard: vi.fn(async () => []) }
     })
-    renderWithProviders(<CollectionPage friend={friend} onBackToMine={() => {}} />, { api })
+    renderWithProviders(<CollectionPage friend={friend} />, { api })
     expect(await screen.findByRole('alert')).toHaveTextContent("You're offline.")
     expect(screen.queryByText("Bob hasn't added any cards yet")).not.toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Retry' }))
@@ -131,7 +131,7 @@ describe('friend collection', () => {
 
   it('opens a read-only detail panel', async () => {
     const api = make([kuriboh, entry(3, 'Kuriboh', { card: kuriboh.card })])
-    renderWithProviders(<CollectionPage friend={friend} onBackToMine={() => {}} />, { api })
+    renderWithProviders(<CollectionPage friend={friend} />, { api })
     await userEvent.click((await screen.findAllByText('Kuriboh'))[0])
     expect(await screen.findByText('Their copies')).toBeInTheDocument()
     expect(screen.getAllByText('Kuriboh').length).toBeGreaterThan(0)
@@ -155,7 +155,7 @@ describe('friend collection', () => {
         )
       }
     })
-    renderWithProviders(<CollectionPage friend={friend} onBackToMine={() => {}} />, { api })
+    renderWithProviders(<CollectionPage friend={friend} />, { api })
     await screen.findAllByText('Kuriboh')
     await userEvent.type(screen.getByLabelText('Search collection'), 'LOB-EN001')
     await waitFor(() => expect(screen.getAllByText('Kuriboh')).toHaveLength(1))
@@ -178,7 +178,7 @@ describe('friend collection', () => {
       .mockRejectedValue(new Error("You're offline."))
     const api = createMockApi({ window: { platform: 'web' }, friends: { collection } })
     const { client } = renderWithProviders(
-      <CollectionPage friend={friend} onBackToMine={() => {}} />,
+      <CollectionPage friend={friend} />,
       { api }
     )
     expect(await screen.findByText('Kuriboh')).toBeInTheDocument()
@@ -189,7 +189,7 @@ describe('friend collection', () => {
 
   it('passes search filters to the friend endpoint', async () => {
     const api = make()
-    renderWithProviders(<CollectionPage friend={friend} onBackToMine={() => {}} />, { api })
+    renderWithProviders(<CollectionPage friend={friend} />, { api })
     await screen.findByText('Kuriboh')
     await userEvent.type(screen.getByLabelText('Search collection'), 'kur')
     await waitFor(() =>
@@ -203,7 +203,7 @@ describe('friend collection', () => {
   it("does not leak the friend's entries into your own collection", async () => {
     const api = make()
     const { client, unmount } = renderWithProviders(
-      <CollectionPage friend={friend} onBackToMine={() => {}} />,
+      <CollectionPage friend={friend} />,
       { api }
     )
     expect(await screen.findByText('Kuriboh')).toBeInTheDocument()
@@ -217,12 +217,13 @@ describe('friend collection', () => {
     expect(screen.queryByText('Kuriboh')).not.toBeInTheDocument()
   })
 
-  it("opens a friend's collection from FriendsPage", async () => {
-    const onBack = vi.fn()
-    renderWithProviders(<FriendsPage onBackToMine={onBack} />, { api: make() })
-    await userEvent.click(await screen.findByText('Bob'))
-    expect(await screen.findByRole('heading', { name: "Bob's collection" })).toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: 'Back to mine' }))
-    expect(onBack).toHaveBeenCalled()
+  it("opens a friend's binder from FriendsPage and goes back", async () => {
+    renderWithProviders(<FriendsPage />, { api: make() })
+    await userEvent.click(await screen.findByRole('button', { name: /Bob/ }))
+    expect(await screen.findByRole('heading', { name: 'Bob' })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('radio', { name: 'Collection' }))
+    expect(await screen.findByText('Kuriboh')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'All friends' }))
+    expect(await screen.findByRole('button', { name: /Bob/ })).toBeInTheDocument()
   })
 })

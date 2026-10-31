@@ -45,7 +45,7 @@ import {
   requestFriend,
   unblockUser
 } from './friends'
-import { friendsWithCard } from './friendCards'
+import { friendStats, friendsWithCard } from './friendCards'
 import {
   friendWishlist,
   friendsOwning,
@@ -147,6 +147,17 @@ const HANDLERS: { [C in PortalChannel]: Handler<C> } = {
   },
   'friends:facets': ({ db, userId, game }, _s, id) =>
     getFacets(db, userScope(friendId(db, userId, id), game)),
+  'friends:stats': ({ db, userId, game }, _s, id) =>
+    friendStats(db, userId, friendId(db, userId, id), game),
+  'friends:sets': ({ db, userId, game }, _s, id) =>
+    listSets(db, userScope(friendId(db, userId, id), game)),
+  'friends:checklist': ({ db, userId, game }, _s, id, setName, language) =>
+    getChecklist(
+      db,
+      checkString(setName, 'setName'),
+      checkLanguage(language),
+      userScope(friendId(db, userId, id), game)
+    ),
   'friends:forCard': ({ db, userId, game }, _s, cardId) =>
     friendsWithCard(db, userId, game, checkId(cardId, 'cardId')),
   'friends:wishlist': ({ db, userId, game }, _s, id) =>

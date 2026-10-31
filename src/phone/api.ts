@@ -8,6 +8,7 @@ import type {
   AccountStatus,
   CollectionFilters,
   EntryView,
+  FriendStats,
   SyncStatus,
   UpdateStatus,
   WishlistItem
@@ -215,6 +216,18 @@ export function createPhoneApi(deps: {
           printingScan: false
         })),
       facets: portal('friends:facets'),
+      stats: async (userId: number) => {
+        const s = await store.portal<FriendStats>('friends:stats', [userId])
+        const noScan = (e: EntryView): EntryView => ({ ...e, printingScan: false })
+        return {
+          ...s,
+          topEntries: s.topEntries.map(noScan),
+          topSingles: s.topSingles.map(noScan),
+          recentEntries: s.recentEntries.map(noScan)
+        }
+      },
+      sets: portal('friends:sets'),
+      checklist: portal('friends:checklist'),
       // Off the serial queue: a card opening must not hold up the edits behind it.
       forCard: (cardId: number) => store.portalRead('friends:forCard', [cardId]),
       wishlist: async (userId: number) =>

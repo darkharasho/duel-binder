@@ -1,6 +1,13 @@
 import type Database from 'better-sqlite3'
 import { clipboard, ipcMain } from 'electron'
-import type { CollectionFilters, EntryView, UpdateStatus, WishlistItem } from '@shared/types'
+import type { Language } from '@shared/languages'
+import type {
+  CollectionFilters,
+  EntryView,
+  FriendStats,
+  UpdateStatus,
+  WishlistItem
+} from '@shared/types'
 import { MAX_DEX_ROWS, type DexRow } from '@shared/dex/parse'
 import type { INVOKE_CHANNELS } from '@shared/ipc'
 import { INVOKE_CHANNELS as CHANNELS } from '@shared/ipc'
@@ -52,6 +59,9 @@ export interface HandlerDeps {
 }
 
 /** A renderer's parsed export, checked before it reaches the database. */
+/** Printing ids differ between the server and this computer, so a friend's entries get no printing scans. */
+const friendEntry = (e: EntryView): EntryView => ({ ...e, printingScan: false })
+
 function dexRows(rows: unknown): DexRow[] {
   const text = ['locale', 'series', 'set', 'id', 'number', 'name', 'variant'] as const
   const ok =
@@ -113,13 +123,21 @@ export function createHandlers({
     'friends:remove': async (userId: number) => account.portal('friends:remove', [userId]),
     'friends:block': async (userId: number) => account.portal('friends:block', [userId]),
     'friends:unblock': async (userId: number) => account.portal('friends:unblock', [userId]),
-    // Printing ids differ between the server and this computer, so a friend's entries get no printing scans.
     'friends:collection': async (userId: number, f: CollectionFilters) =>
-      (await account.portal<EntryView[]>('friends:collection', [userId, f])).map((e) => ({
-        ...e,
-        printingScan: false
-      })),
+      (await account.portal<EntryView[]>('friends:collection', [userId, f])).map(friendEntry),
     'friends:facets': async (userId: number) => account.portal('friends:facets', [userId]),
+    'friends:stats': async (userId: number) => {
+      const s = await account.portal<FriendStats>('friends:stats', [userId])
+      return {
+        ...s,
+        topEntries: s.topEntries.map(friendEntry),
+        topSingles: s.topSingles.map(friendEntry),
+        recentEntries: s.recentEntries.map(friendEntry)
+      }
+    },
+    'friends:sets': async (userId: number) => account.portal('friends:sets', [userId]),
+    'friends:checklist': async (userId: number, setName: string, language: Language) =>
+      account.portal('friends:checklist', [userId, setName, language]),
     'friends:forCard': async (cardId: number) => account.portal('friends:forCard', [cardId]),
     'friends:wishlist': async (userId: number) =>
       (await account.portal<WishlistItem[]>('friends:wishlist', [userId])).map((w) => ({

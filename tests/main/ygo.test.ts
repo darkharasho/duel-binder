@@ -84,3 +84,18 @@ test('fetchCardSets rejects a non-array body', async () => {
   const client = createYgoClient(respond(JSON.stringify({ error: 'x' })))
   await expect(client.fetchCardSets()).rejects.toBeInstanceOf(YgoApiError)
 })
+
+test('a rarity YGOPRODeck copied wrongly becomes the printings that exist', () => {
+  const card = {
+    ...cards[0],
+    card_sets: [
+      { set_name: 'Rarity Collection 5', set_code: 'RA05-EN136', set_rarity: 'force-SMW' },
+      { set_name: 'Crossover Breakers', set_code: 'CRBR-EN015', set_rarity: 'Ultra Rare' }
+    ]
+  }
+  expect(mapApiCard(card, NOW).printings.map((p) => [p.setCode, p.setRarity, p.setRarityCode])).toEqual([
+    ['RA05-EN136', 'Ultra Rare', '(UR)'],
+    ['RA05-EN136', 'Starlight Rare', '(StR)'],
+    ['CRBR-EN015', 'Ultra Rare', '']
+  ])
+})

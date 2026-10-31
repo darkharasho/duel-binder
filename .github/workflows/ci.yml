@@ -27,3 +27,7 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm test
+      - run: npm ci
+        working-directory: workers/portal
+      - run: npm test
+        working-directory: workers/portal

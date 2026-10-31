@@ -92,7 +92,7 @@ describe('friend collection', () => {
   })
 
   it('shows the header it is given and no Back to mine', async () => {
-    renderWithProviders(<CollectionPage friend={friend} friendHeader={<h1>Bob</h1>} />, {
+    renderWithProviders(<CollectionPage friend={friend} friendHeader={() => <h1>Bob</h1>} />, {
       api: make()
     })
     expect(await screen.findByRole('heading', { name: 'Bob' })).toBeInTheDocument()

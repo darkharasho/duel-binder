@@ -41,7 +41,7 @@ DISCORD_CLIENT_ID = "1563797080420655266"
 PRICE_WORKER_URL = "https://ygo-ebay-prices.project96.workers.dev"
 # The Chinese Pokémon eBay sweep's Browse calls a day; "0" is off (see src/pokemonSweep.ts). Keep it off until
 # its listing matching has been checked against live eBay results; "100" is the planned value.
-POKEMON_SWEEP_DAILY_CALLS = "0"
+POKEMON_SWEEP_DAILY_CALLS = "100"
 # The only account the /admin dashboard opens for (.harasho). Not a secret: it only names who.
 ADMIN_DISCORD_ID = "201537071804973056"
 

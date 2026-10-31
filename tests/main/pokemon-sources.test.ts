@@ -200,10 +200,54 @@ describe('pokemon sources', () => {
     const f = (async (input: RequestInfo | URL) => {
       const url = String(input)
       if (url.endsWith('/en/sets')) return json([{ id: 'A1' }, { id: 'sv01' }])
+      if (url.endsWith('/groups')) return json({ results: [] })
       return json(url.endsWith('/A1') ? pocket : paper)
     }) as typeof fetch
     const s = make({ fetch: f, calls: [], fail: new Map() })
     expect((await s.sets('en')).map((x) => x.id)).toEqual(['sv01'])
+    s.close()
+  })
+
+  it('adds a set TCGplayer lists and TCGdex does not, and serves its cards without TCGdex', async () => {
+    const urls: string[] = []
+    const f = (async (input: RequestInfo | URL) => {
+      const url = String(input)
+      urls.push(url)
+      if (url.endsWith('/en/sets')) return json([])
+      if (url.endsWith('/groups')) {
+        return json({ results: [{ groupId: 24831, name: 'ME06: Delta Reign', abbreviation: 'DLR' }] })
+      }
+      if (url.endsWith('/24831/products')) {
+        return json({
+          results: [{
+            productId: 726512, name: 'Mega Golisopod ex - 011/103',
+            extendedData: [{ name: 'Number', value: '011/103' }, { name: 'Card Type', value: 'Grass' }]
+          }]
+        })
+      }
+      return json({}, 404)
+    }) as typeof fetch
+    const s = make({ fetch: f, calls: [], fail: new Map() })
+    expect((await s.sets('en')).map((x) => x.id)).toEqual(['me06'])
+    const [card] = await s.cards('en', ['me06-011'])
+    expect(card.name).toBe('Mega Golisopod ex')
+    expect(urls.some((u) => u.includes('tcgdex.net') && u.includes('me06'))).toBe(false)
+    s.close()
+  })
+
+  it('leaves the art of a product with no picture yet', async () => {
+    const f = (async () =>
+      json({
+        results: [
+          { productId: 1, groupId: 2, name: 'A', imageUrl: 'https://x/1_200w.jpg', imageCount: 0 },
+          { productId: 2, groupId: 2, name: 'B', imageUrl: 'https://x/2_200w.jpg', imageCount: 1 }
+        ]
+      })) as typeof fetch
+    const s = make({ fetch: f, calls: [], fail: new Map() })
+    expect((await s.products('en', 2)).map((p) => p.imageUrl)).toEqual([
+      undefined,
+      'https://x/2_200w.jpg'
+    ])
     s.close()
   })
 

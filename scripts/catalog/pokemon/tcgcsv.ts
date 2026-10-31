@@ -1,5 +1,5 @@
 import { getJson, type GetJsonOpts } from './http'
-import type { PkmLang, TcGroup, TcPrice, TcProduct } from './types'
+import type { PkmLang, TcCardRow, TcGroup, TcPrice, TcProduct } from './types'
 
 const CATEGORY: Record<PkmLang, number> = { en: 3, ja: 85 }
 const base = (lang: PkmLang): string => `https://tcgcsv.com/tcgplayer/${CATEGORY[lang]}`
@@ -15,18 +15,29 @@ async function results<T>(url: string, o: GetJsonOpts): Promise<T[]> {
 }
 
 export async function tcgcsvGroups(lang: PkmLang, o: GetJsonOpts): Promise<TcGroup[]> {
-  const rows = await results<{ groupId: number; name: string; abbreviation?: string | null }>(`${base(lang)}/groups`, o)
-  return rows.map((g) => ({ groupId: g.groupId, name: g.name, abbreviation: g.abbreviation ?? null }))
+  const rows = await results<{ groupId: number; name: string; abbreviation?: string | null; publishedOn?: string }>(`${base(lang)}/groups`, o)
+  return rows.map((g) => ({ groupId: g.groupId, name: g.name, abbreviation: g.abbreviation ?? null, publishedOn: g.publishedOn }))
 }
 
 export async function tcgcsvProducts(lang: PkmLang, groupId: number, o: GetJsonOpts): Promise<TcProduct[]> {
   const rows = await results<{
-    productId: number; groupId: number; name: string; imageUrl?: string
+    productId: number; groupId: number; name: string; imageUrl?: string; imageCount?: number
     extendedData?: { name: string; value: string }[]
   }>(`${base(lang)}/${groupId}/products`, o)
   return rows.map((p) => ({
-    productId: p.productId, groupId: p.groupId, name: p.name, imageUrl: p.imageUrl,
+    // A presale single has a URL before it has a picture; imageCount 0 says it would 403.
+    productId: p.productId, groupId: p.groupId, name: p.name, imageUrl: p.imageCount === 0 ? undefined : p.imageUrl,
     number: p.extendedData?.find((e) => e.name === 'Number')?.value ?? null
+  }))
+}
+
+export async function tcgcsvCardRows(lang: PkmLang, groupId: number, o: GetJsonOpts): Promise<TcCardRow[]> {
+  const rows = await results<{ productId: number; name: string; extendedData?: { name: string; value: string }[] }>(
+    `${base(lang)}/${groupId}/products`, o
+  )
+  return rows.map((p) => ({
+    productId: p.productId, name: p.name,
+    details: Object.fromEntries((p.extendedData ?? []).map((e) => [e.name, e.value]))
   }))
 }
 

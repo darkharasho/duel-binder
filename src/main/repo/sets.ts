@@ -9,6 +9,7 @@ import { LOCAL, scopeGame, type Scope } from './scope'
 import { enTwinPrice } from './enTwin'
 import { isMarketOnly } from './priceRule'
 import { shownPrinting } from './shownPrinting'
+import { catalogRollup } from './rollup'
 
 interface SummaryDbRow {
   language: Language
@@ -32,6 +33,21 @@ interface SummaryDbRow {
   owned_rarities: number
 }
 
+const SET_ART = `s.set_code AS s_code, s.tcg_date, s.image_url, s.image_key, COALESCE(pa.image_key, pp.image_key) AS pack_key,
+         COALESCE(sl.image_key, kl.image_key, pl.image_key) AS logo_key,
+         CASE WHEN p.game = 'pkm' AND s.image_url IS NOT NULL THEN s.image_key END AS pkm_logo_key,
+         p.game = 'pkm' AS is_pkm,
+         s.list_rows, s.unmatched_rows`
+
+const SET_JOINS = `LEFT JOIN sets s ON s.game = p.game AND s.language = p.language AND s.set_name = p.set_name
+  LEFT JOIN pack_art pa ON p.game = 'ygo' AND p.language = 'en' AND pa.set_name = p.set_name
+  LEFT JOIN set_logos sl ON p.game = 'ygo' AND p.language = 'en' AND sl.set_name = p.set_name
+  LEFT JOIN konami_logos kl ON p.game = 'ygo' AND p.language = 'en' AND kl.set_name = p.set_name
+  LEFT JOIN pokemon_set_art pp ON p.game = 'pkm' AND pp.language = p.language AND pp.set_name = p.set_name
+    AND pp.kind = 'pack' AND pp.sort_order = 0
+  LEFT JOIN pokemon_set_art pl ON p.game = 'pkm' AND pl.language = p.language AND pl.set_name = p.set_name
+    AND pl.kind = 'logo' AND pl.sort_order = 0`
+
 // One row per distinct (language, set_name); callers limit it to the scope's game with `p.game = <game>`.
 // A (card, rarity) pair is keyed as "<card_id>|<rarity>"; card_id is an integer, so the first "|"
 // always ends it. Yu-Gi-Oh! pack art and logos are English only, keyed by set name alone; Pokémon
@@ -41,26 +57,14 @@ interface SummaryDbRow {
 const summary = (scope: Scope): string => {
   const owned = `p.id IN (SELECT printing_id FROM collection_entries e WHERE ${scope.where('e')})`
   return `
-  SELECT p.language, p.set_name, s.set_code AS s_code, MIN(NULLIF(p.set_code, '')) AS min_code, s.tcg_date, s.image_url,
-         s.image_key, COALESCE(pa.image_key, pp.image_key) AS pack_key,
-         COALESCE(sl.image_key, kl.image_key, pl.image_key) AS logo_key,
-         CASE WHEN p.game = 'pkm' AND s.image_url IS NOT NULL THEN s.image_key END AS pkm_logo_key,
-         p.game = 'pkm' AS is_pkm,
-         s.list_rows, s.unmatched_rows,
+  SELECT p.language, p.set_name, MIN(NULLIF(p.set_code, '')) AS min_code, ${SET_ART},
          COUNT(DISTINCT p.card_id) AS total_cards,
          COUNT(DISTINCT CASE WHEN ${owned} THEN p.card_id END) AS owned_cards,
          COUNT(DISTINCT p.card_id || '|' || p.set_rarity) AS total_rarities,
          COUNT(DISTINCT CASE WHEN ${owned} THEN p.card_id || '|' || p.set_rarity END)
            AS owned_rarities
   FROM card_printings p
-  LEFT JOIN sets s ON s.game = p.game AND s.language = p.language AND s.set_name = p.set_name
-  LEFT JOIN pack_art pa ON p.game = 'ygo' AND p.language = 'en' AND pa.set_name = p.set_name
-  LEFT JOIN set_logos sl ON p.game = 'ygo' AND p.language = 'en' AND sl.set_name = p.set_name
-  LEFT JOIN konami_logos kl ON p.game = 'ygo' AND p.language = 'en' AND kl.set_name = p.set_name
-  LEFT JOIN pokemon_set_art pp ON p.game = 'pkm' AND pp.language = p.language AND pp.set_name = p.set_name
-    AND pp.kind = 'pack' AND pp.sort_order = 0
-  LEFT JOIN pokemon_set_art pl ON p.game = 'pkm' AND pl.language = p.language AND pl.set_name = p.set_name
-    AND pl.kind = 'logo' AND pl.sort_order = 0`
+  ${SET_JOINS}`
 }
 
 /**
@@ -153,6 +157,79 @@ export function findPokemonSetArtUrl(db: SqlDb, key: string): string | null {
 export function listSets(db: SqlDb, scope: Scope = LOCAL): SetSummary[] {
   const covers = coverImages(db, scope)
   return (db.prepare(`${summary(scope)} WHERE +p.game = ${scope.game} AND p.contributed = 0 AND ${shownPrinting(scope)} GROUP BY p.language, p.set_name ORDER BY p.set_name, p.language <> 'en', p.language`).all() as SummaryDbRow[]).map((r) => toSummary(r, covers))
+}
+
+/** Bump when `catalogSets` or `toSummary` change what they produce: stored rollups aren't rebuilt otherwise. */
+const SETS_ROLLUP = 1
+
+/**
+ * listSets as the catalog alone has it: nobody owns anything and a flagged Pokémon printing isn't
+ * listed. Each set's counts are taken before the art joins, which would otherwise run per printing.
+ */
+function catalogSets(db: SqlDb, scope: Scope): SetSummary[] {
+  const rows = db
+    .prepare(
+      `WITH p AS (
+         SELECT p.game, p.language, p.set_name, MIN(NULLIF(p.set_code, '')) AS min_code,
+           COUNT(DISTINCT p.card_id) AS total_cards,
+           COUNT(DISTINCT p.card_id || '|' || p.set_rarity) AS total_rarities
+         FROM card_printings p
+         WHERE +p.game = ${scope.game} AND p.contributed = 0 AND (p.game <> 'pkm' OR p.missing_from_api = 0)
+         GROUP BY p.language, p.set_name)
+       SELECT p.language, p.set_name, p.min_code, ${SET_ART}, p.total_cards, 0 AS owned_cards,
+         p.total_rarities, 0 AS owned_rarities
+       FROM p ${SET_JOINS}
+       ORDER BY p.set_name, p.language <> 'en', p.language`
+    )
+    .all() as SummaryDbRow[]
+  const covers = coverImages(db, scope)
+  return rows.map((r) => toSummary(r, covers))
+}
+
+/** A set's summary with the scope's ownership; null when it lists no printing. */
+function setSummary(db: SqlDb, setName: string, language: Language, scope: Scope): SetSummary | null {
+  const row = db
+    .prepare(`${summary(scope)} WHERE +p.game = ${scope.game} AND p.contributed = 0 AND ${shownPrinting(scope)} AND p.language = ? AND p.set_name = ? GROUP BY p.language, p.set_name`)
+    .get(language, setName) as SummaryDbRow | undefined
+  return row ? toSummary(row, coverImages(db, scope, { language, setName })) : null
+}
+
+/**
+ * What listSets returns, without its full scan of the catalog: the catalog's part comes from a
+ * rollup and the scope's ownership, always read live, goes on top. A set holding an owned flagged
+ * Pokémon printing (see shownPrinting) lists rows the rollup left out, so it's read on its own.
+ */
+export function listSetsFast(db: SqlDb, scope: Scope = LOCAL): SetSummary[] {
+  const key = `sets:${SETS_ROLLUP}:${scopeGame(db, scope)}`
+  const catalog = catalogRollup(db, key, () => catalogSets(db, scope))
+  const owned = db
+    .prepare(
+      `SELECT p.language, p.set_name, COUNT(DISTINCT p.card_id) AS cards,
+         COUNT(DISTINCT p.card_id || '|' || p.set_rarity) AS rarities,
+         MAX(p.game = 'pkm' AND p.missing_from_api = 1) AS flagged
+       FROM collection_entries e JOIN card_printings p ON p.id = e.printing_id AND +p.game = ${scope.game}
+       WHERE ${scope.where('e')} AND p.contributed = 0
+       GROUP BY p.language, p.set_name`
+    )
+    .all() as { language: Language; set_name: string; cards: number; rarities: number; flagged: 0 | 1 }[]
+  const byKey = new Map(owned.map((o) => [`${o.language}|${o.set_name}`, o]))
+  const sets = catalog.map((s) => {
+    const o = byKey.get(`${s.language}|${s.setName}`)
+    if (!o) return s
+    return o.flagged
+      ? (setSummary(db, s.setName, s.language, scope) ?? s)
+      : { ...s, ownedCards: o.cards, ownedRarities: o.rarities }
+  })
+  // A set only flagged printings are left of isn't in the rollup at all.
+  const listed = new Set(catalog.map((s) => `${s.language}|${s.setName}`))
+  const extra = owned.filter((o) => o.flagged && !listed.has(`${o.language}|${o.set_name}`))
+  if (extra.length === 0) return sets
+  for (const o of extra) {
+    const s = setSummary(db, o.set_name, o.language, scope)
+    if (s) sets.push(s)
+  }
+  const rank = (s: SetSummary): string => `${s.language === 'en' ? 0 : 1}${s.language}`
+  return sets.sort((a, b) => cmp(a.setName, b.setName) || cmp(rank(a), rank(b)))
 }
 
 interface PrintingDbRow {
@@ -328,11 +405,8 @@ export function getChecklist(
   language: Language,
   scope: Scope = LOCAL
 ): SetChecklist | null {
-  const row = db
-    .prepare(`${summary(scope)} WHERE +p.game = ${scope.game} AND p.contributed = 0 AND ${shownPrinting(scope)} AND p.language = ? AND p.set_name = ? GROUP BY p.language, p.set_name`)
-    .get(language, setName) as SummaryDbRow | undefined
-  if (!row) return null
-  return { set: toSummary(row, coverImages(db, scope, { language, setName })), cards: checklistCards(db, setName, language, undefined, scope) }
+  const set = setSummary(db, setName, language, scope)
+  return set ? { set, cards: checklistCards(db, setName, language, undefined, scope) } : null
 }
 
 /**

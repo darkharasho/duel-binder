@@ -18,7 +18,12 @@ const ScanWindowApp = lazy(() =>
   import('./features/scan/window/ScanWindowApp').then((m) => ({ default: m.ScanWindowApp }))
 )
 
-const queryClient = new QueryClient({ defaultOptions: { queries: { staleTime: 30_000, refetchOnWindowFocus: false } } })
+// Data a page left stays for an hour, so going back shows it at once and refetches behind it.
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: { staleTime: 30_000, gcTime: 60 * 60_000, refetchOnWindowFocus: false }
+  }
+})
 
 // The app has one dark theme; `dark` keeps shadcn's dark: variants in step with it.
 document.documentElement.classList.add('dark')

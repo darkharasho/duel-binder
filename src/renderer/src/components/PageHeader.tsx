@@ -24,7 +24,10 @@ export function PageHeader({
     const el = ref.current
     const main = el?.closest<HTMLElement>('main[data-main-scroll]')
     if (!el || !main) return
-    const update = (): void => main.style.setProperty('--page-header-h', `${el.offsetHeight}px`)
+    const update = (): void => {
+      // Sets keeps its list's header mounted, hidden, under an open set: that one measures nothing.
+      if (el.offsetHeight > 0) main.style.setProperty('--page-header-h', `${el.offsetHeight}px`)
+    }
     update()
     const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(update)
     observer?.observe(el)

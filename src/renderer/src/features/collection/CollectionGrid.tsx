@@ -4,6 +4,7 @@ import { CardArt } from '@/components/CardArt'
 import { TiltCard } from '@/components/TiltCard'
 import { scanFor } from '@/components/scanFor'
 import { LanguageTag } from '@/components/LanguageTag'
+import { useChunkedList } from '@/lib/useChunkedList'
 import { EntryValue, StaleBadge, displayTotal } from './EntryValue'
 
 interface Props {
@@ -13,13 +14,14 @@ interface Props {
 }
 
 export function CollectionGrid({ entries, selectedId, onSelect }: Props): React.JSX.Element {
+  const shown = useChunkedList(entries)
   return (
     <ul
       className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-x-4 gap-y-6 max-md:grid-cols-3 max-md:gap-x-2 max-md:gap-y-4"
       aria-label="Collection grid"
     >
-      {entries.map((e) => (
-        <li key={e.id}>
+      {shown.map((e) => (
+        <li key={e.id} className="lazy-item [--lazy-h:310px]">
           <button
             type="button"
             data-nav-key={e.id}

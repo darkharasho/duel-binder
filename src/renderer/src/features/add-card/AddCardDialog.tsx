@@ -3,7 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { ChevronLeft, XIcon } from 'lucide-react'
 import { toast } from 'sonner'
 import type { CardSearchResult, Printing } from '@shared/types'
-import { api, mutationInvalidationKeys, queryKeys } from '@/lib/api'
+import { api, invalidateAfterEdit, queryKeys } from '@/lib/api'
 import { track } from '@/lib/usage'
 import { priceFor } from '@shared/pricing'
 import {
@@ -165,7 +165,7 @@ export function AddCardDialog({
     mutationFn: () =>
       api.collection.add({ printingId: printing!.id, imageId: imageId(printing), quantity: qty }),
     onSuccess: () => {
-      for (const queryKey of mutationInvalidationKeys) void qc.invalidateQueries({ queryKey })
+      void invalidateAfterEdit(qc)
       toast.success(`Added ${qty} × ${card!.name} (${printing!.setCode})`)
       track('card:add')
       reset()

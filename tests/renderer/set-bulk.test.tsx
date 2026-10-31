@@ -263,7 +263,7 @@ describe('SetChecklist bulk mode', () => {
     // The set list is patched, not refetched; other lists refresh once the card's clicks are done.
     expect(invalidate).not.toHaveBeenCalledWith({ queryKey: [...queryKeys.setsList] })
     expect(invalidate).not.toHaveBeenCalledWith({ queryKey: ['sets'] })
-    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['stats'] })
+    expect(invalidate).toHaveBeenCalledWith({ queryKey: ['stats'], refetchType: 'all' })
     expect(invalidate.mock.calls.filter(([f]) => f?.queryKey?.[0] === 'stats')).toHaveLength(1)
   })
 

@@ -1,7 +1,7 @@
 import type { Language } from '@shared/languages'
 import type { SqlDb } from '../db/sql'
 import { getCardDetail, searchCards } from '../repo/cards'
-import { browseCards, browseFacets } from '../repo/browse'
+import { browseCards, browseFacetsFast } from '../repo/browse'
 import { checkLanguage, checkNotesLength } from '../repo/args'
 import {
   addEntry,
@@ -11,7 +11,7 @@ import {
   removeEntry,
   updateEntry
 } from '../repo/collection'
-import { adjustPrinting, getChecklist, listSets } from '../repo/sets'
+import { adjustPrinting, getChecklist, listSetsFast } from '../repo/sets'
 import {
   cardsForImages,
   matchName,
@@ -112,7 +112,7 @@ export function createDataHandlers({
     'cards:search': async (q: string) => searchCards(db, q),
     'cards:get': async (cardId: number) => getCardDetail(db, cardId),
     'cards:browse': async (f) => browseCards(db, f),
-    'cards:browseFacets': async () => browseFacets(db),
+    'cards:browseFacets': async () => browseFacetsFast(db),
     'collection:list': async (f) => listEntries(db, f),
     'collection:forCard': async (cardId: number) => entriesForCard(db, cardId),
     'collection:add': async (input) => {
@@ -151,7 +151,7 @@ export function createDataHandlers({
       return cardsForImages(db, imageIds)
     },
     'stats:get': async () => getStats(db),
-    'sets:list': async () => listSets(db),
+    'sets:list': async () => listSetsFast(db),
     'sets:checklist': async (setName: string, language: Language) =>
       getChecklist(db, setName, checkLanguage(language)),
     'sets:adjust': async (setName: string, language: Language, printingId: number, delta: 1 | -1) =>

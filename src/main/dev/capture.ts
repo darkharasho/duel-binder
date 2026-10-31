@@ -1,6 +1,7 @@
 import { mkdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { BrowserWindow } from 'electron'
+import type { GameId } from '../../shared/games'
 
 /** Dev-only screenshot capture for the marketing site (YGO_CAPTURE_DIR); never runs when packaged. */
 export interface Shot {
@@ -8,11 +9,16 @@ export interface Shot {
   clicks: string[]
 }
 
-export const SHOTS: Shot[] = [
-  { file: 'collection.png', clicks: ['Collection', 'Date added', 'Value'] },
-  { file: 'dashboard.png', clicks: ['Dashboard'] },
-  { file: 'sets.png', clicks: ['Sets', 'Metal Raiders'] }
-]
+export const SHOTS: Record<GameId, Shot[]> = {
+  ygo: [
+    { file: 'collection.png', clicks: ['Collection', 'Date added', 'Total value'] },
+    { file: 'dashboard.png', clicks: ['Dashboard'] }
+  ],
+  pkm: [
+    { file: 'collection-pokemon.png', clicks: ['Collection', 'Date added', 'Total value'] },
+    { file: 'sets.png', clicks: ['Sets', 'Base Set'] }
+  ]
+}
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
 
@@ -42,11 +48,26 @@ async function waitForImages(win: Pick<BrowserWindow, 'webContents'>): Promise<v
   await sleep(500)
 }
 
+/** The page at 2x; an off-screen window ignores the app's scale factor. */
+async function png(win: Pick<BrowserWindow, 'webContents'>): Promise<Buffer> {
+  const cdp = win.webContents.debugger
+  if (!cdp.isAttached()) cdp.attach()
+  await cdp.sendCommand('Emulation.setDeviceMetricsOverride', {
+    width: 1280,
+    height: 800,
+    deviceScaleFactor: 2,
+    mobile: false
+  })
+  await sleep(500)
+  const { data } = await cdp.sendCommand('Page.captureScreenshot', { format: 'png' })
+  return Buffer.from(data, 'base64')
+}
+
 /** Runs each shot's clicks, waits for images to load, and saves the window as a PNG in `dir`. */
 export async function captureShots(
   win: Pick<BrowserWindow, 'webContents'>,
   dir: string,
-  shots: Shot[] = SHOTS
+  shots: Shot[] = SHOTS.ygo
 ): Promise<string[]> {
   mkdirSync(dir, { recursive: true })
   const written: string[] = []
@@ -57,9 +78,8 @@ export async function captureShots(
       await sleep(400)
     }
     await waitForImages(win)
-    const image = await win.webContents.capturePage()
     const path = join(dir, shot.file)
-    writeFileSync(path, image.toPNG())
+    writeFileSync(path, await png(win))
     written.push(path)
   }
   return written

@@ -17,7 +17,10 @@ function fakeWin(found: (script: string) => boolean = () => true) {
         scripts.push(script)
         return script.includes('.click()') ? found(script) : true
       },
-      capturePage: async () => ({ toPNG: () => Buffer.from('png') })
+      debugger: {
+        isAttached: () => true,
+        sendCommand: async () => ({ data: Buffer.from('png').toString('base64') })
+      }
     }
   }
   return { win: win as never, scripts }
@@ -47,7 +50,8 @@ describe('captureShots', () => {
     )
   })
 
-  it('defines the three site shots', () => {
-    expect(SHOTS.map((s) => s.file)).toEqual(['collection.png', 'dashboard.png', 'sets.png'])
+  it('defines the site shots of each game', () => {
+    expect(SHOTS.ygo.map((s) => s.file)).toEqual(['collection.png', 'dashboard.png'])
+    expect(SHOTS.pkm.map((s) => s.file)).toEqual(['collection-pokemon.png', 'sets.png'])
   })
 })

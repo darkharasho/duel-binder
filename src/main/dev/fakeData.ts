@@ -9,6 +9,14 @@ const SET_PLAN: [setName: string, share: number][] = [
   ["Pharaoh's Servant", 0.35],
   ['Spell Ruler', 0.15]
 ]
+const PKM_SET_PLAN: [setName: string, share: number][] = [
+  ['Base Set', 0.7],
+  ['Jungle', 0.5],
+  ['Fossil', 0.5],
+  ['151', 0.5],
+  ['Evolving Skies', 0.3],
+  ['Prismatic Evolutions', 0.3]
+]
 const EXTRA_PRINTINGS = 60
 const HISTORY_DAYS = 90
 const SEED = 0x59474f
@@ -65,7 +73,7 @@ export function seedFakeCollection(db: Database.Database, now = new Date()): num
   }
 
   const allPrintings = (
-    db.prepare(`SELECT id FROM card_printings WHERE missing_from_api = 0 AND language = 'en' ORDER BY id`).all() as {
+    db.prepare(`SELECT id FROM card_printings WHERE missing_from_api = 0 AND language = 'en' AND card_id IN (SELECT id FROM cards WHERE game = 'ygo') ORDER BY id`).all() as {
       id: number
     }[]
   ).map((r) => r.id)
@@ -107,6 +115,44 @@ export function seedFakeCollection(db: Database.Database, now = new Date()): num
       )
     }
     recordSnapshot(db, now)
+  })()
+  return inserted
+}
+
+/**
+ * Adds sample Pokémon entries to a profile whose catalog has Pokémon (the site's screenshots).
+ * No-op once it holds any. Returns the number of entries inserted.
+ */
+export function seedFakePokemon(db: Database.Database, now = new Date()): number {
+  const has = `SELECT 1 FROM collection_entries e JOIN card_printings p ON p.id = e.printing_id
+     JOIN cards c ON c.id = p.card_id WHERE c.game = 'pkm' AND e.deleted_at IS NULL LIMIT 1`
+  if (db.prepare(has).get()) return 0
+
+  const rand = rng(SEED)
+  const printings = db.prepare(
+    `SELECT p.id, p.card_id, i.image_id FROM card_printings p
+     JOIN cards c ON c.id = p.card_id JOIN card_images i ON i.card_id = p.card_id
+     WHERE c.game = 'pkm' AND p.set_name = ? AND p.language = 'en' AND p.missing_from_api = 0
+     ORDER BY p.id`
+  )
+  const insert = db.prepare(
+    `INSERT OR IGNORE INTO collection_entries (uid, game, printing_id, image_id, quantity, notes, created_at, updated_at)
+     VALUES (?, 'pkm', ?, ?, ?, '', ?, ?)`
+  )
+  let inserted = 0
+  db.transaction(() => {
+    const ts = now.toISOString()
+    for (const [setName, share] of PKM_SET_PLAN) {
+      const byCard = new Map<number, { id: number; image_id: number }[]>()
+      for (const p of printings.all(setName) as { id: number; card_id: number; image_id: number }[])
+        byCard.set(p.card_id, [...(byCard.get(p.card_id) ?? []), p])
+      const owned = shuffle([...byCard.values()], rand).slice(0, Math.ceil(byCard.size * share))
+      for (const versions of owned) {
+        const p = versions[Math.floor(rand() * versions.length)]
+        const quantity = 1 + Math.floor(rand() * 3)
+        inserted += insert.run(crypto.randomUUID(), p.id, p.image_id, quantity, ts, ts).changes
+      }
+    }
   })()
   return inserted
 }

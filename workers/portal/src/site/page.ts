@@ -63,9 +63,15 @@ function features(): string {
     ),
     feature(
       '',
+      'Yu-Gi-Oh! and Pokémon',
+      'Both games in one app. Switch between them from the sidebar, each with its own collection and prices.',
+      { src: '/shots/collection-pokemon.webp', alt: 'The Collection page showing Pokémon cards sorted by value, with filters for category, type, stage, rarity, set and version.' },
+    ),
+    feature(
+      '',
       'Finish your sets',
       'Every set and printing from the full catalog, with a checklist of what you still need.',
-      { src: '/shots/sets.webp', alt: 'The Sets page showing Metal Raiders with 101 of 144 cards owned; the cards still missing are greyed out.' },
+      { src: '/shots/sets.webp', alt: 'The Sets page showing the Pokémon Base Set with 72 of 102 cards owned; the cards still missing are greyed out.' },
     ),
     feature(
       '',

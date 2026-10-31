@@ -138,7 +138,7 @@ describe('renderPage', () => {
     expect(html).toContain('<meta property="og:url" content="https://duelbinder.com/">')
     expect(html).toContain('<meta name="twitter:card" content="summary_large_image">')
     const imgs = html.match(/<img [^>]*>/g)!.filter((img) => img.includes('/shots/'))
-    expect(imgs).toHaveLength(3)
+    expect(imgs).toHaveLength(4)
     for (const img of imgs) {
       expect(img).toContain('width="2560" height="1600"')
       expect(img).toMatch(/alt="[^"]+"/)

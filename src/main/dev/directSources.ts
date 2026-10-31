@@ -9,6 +9,7 @@ import {
   setImageUrl,
   YUGIPEDIA_IMAGE_PREFIX
 } from '../../shared/imageSources'
+import { PKM_ID_MIN } from '../../shared/games'
 import type { ImageSources } from '../images/cache'
 import { printingImageKey } from '../images/cache'
 import { findPokemonSetArtUrl, findSetImageUrl } from '../repo/sets'
@@ -42,9 +43,24 @@ export function directImageSources(opts: {
     return url !== null && url.startsWith(prefix) ? { url, headers } : null
   }
   return {
-    card: (size, id) => ({ url: imageUrl(size, id) }),
+    card(size, id) {
+      if (id < PKM_ID_MIN) return { url: imageUrl(size, id) }
+      const row = opts.db
+        .prepare(
+          'SELECT pc.image_url FROM card_images ci JOIN pokemon_cards pc ON pc.card_id = ci.card_id WHERE ci.image_id = ?'
+        )
+        .get(id) as { image_url: string | null } | undefined
+      if (!row?.image_url) return null
+      const low = size !== 'full'
+      return row.image_url.startsWith('https://assets.tcgdex.net/')
+        ? { url: `${row.image_url}/${low ? 'low' : 'high'}.webp` }
+        : { url: low ? row.image_url : row.image_url.replace(/_200w\.jpg$/, '_in_1000x1000.jpg') }
+    },
     set(key) {
       const source = key.slice(0, 3)
+      const tcgdexLogo = findSetImageUrl(opts.db, key)
+      if (tcgdexLogo?.startsWith('https://assets.tcgdex.net/'))
+        return { url: `${tcgdexLogo}.webp` }
       if (source === 'yp-') return resolved(key, YUGIPEDIA_IMAGE_PREFIX)
       if (source === 'yc-') return resolved(key, PACK_ART_PREFIX)
       if (source === 'bp-') return resolved(key, BULBAGARDEN_IMAGE_PREFIX, findPokemonSetArtUrl)

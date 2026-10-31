@@ -31,12 +31,13 @@ import { createUpdater, updateMode, RELEASES_URL } from './updater'
 import { restrictPermissions } from './permissions'
 import { createScanWindowManager, type Rect, type ScanWindowManager } from './scanWindow'
 import { createHandlers, registerIpc, type AppDeps } from './ipc/handlers'
-import { seedFakeCollection } from './dev/fakeData'
+import { seedFakeCollection, seedFakePokemon } from './dev/fakeData'
 import { resolveUserData } from './userData'
-import { captureShots } from './dev/capture'
+import { captureShots, SHOTS } from './dev/capture'
 import { createAccountService } from './cloud/account'
 import { createCloudClient } from './cloud/client'
-import type { GameId } from '@shared/games'
+import { GAME_IDS, type GameId } from '@shared/games'
+import { setMeta } from './db/meta'
 import type { FingerprintStore } from './scan/fingerprints'
 import { createFingerprintStore } from './scan/fingerprints'
 import { createOcr } from './scan/ocr'
@@ -66,6 +67,8 @@ app.setPath(
  *  `npm run site:shots`: screenshots of that profile for the marketing site, then quit. */
 const captureDir = !app.isPackaged ? process.env['YGO_CAPTURE_DIR'] : undefined
 const fakeData = !app.isPackaged && (process.env['YGO_FAKE_DATA'] === '1' || !!captureDir)
+/** The game to capture, in a profile scripts/site/shots.sh filled with both games' catalogs. */
+const captureGame: GameId = process.env['YGO_CAPTURE_GAME'] === 'pkm' ? 'pkm' : 'ygo'
 if (captureDir) app.commandLine.appendSwitch('force-device-scale-factor', '2')
 // Capture uses its own profile so it never collides with a running dev session's instance lock.
 if (fakeData)
@@ -164,7 +167,9 @@ function createWindow(): void {
       preload: join(__dirname, '../preload/index.js'),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: true
+      sandbox: true,
+      // Captures stay off screen.
+      offscreen: !!captureDir
     }
   })
 
@@ -178,9 +183,9 @@ function createWindow(): void {
   }
   win.on('maximize', sendMaximized)
   win.on('unmaximize', sendMaximized)
-  windowShown = new Promise((r) => win.once('show', () => r()))
+  windowShown = new Promise((r) => win.once(captureDir ? 'ready-to-show' : 'show', () => r()))
   win.on('ready-to-show', () => {
-    win.show()
+    if (!captureDir) win.show()
   })
 
   guardNavigation(win)
@@ -249,6 +254,7 @@ async function bootstrap(): Promise<void> {
   }
   if (fakeData) {
     seedFakeCollection(db)
+    seedFakePokemon(db)
     // Already seeded by an earlier run, or just now: nothing to wait for.
     if (db.prepare('SELECT 1 FROM collection_entries WHERE deleted_at IS NULL LIMIT 1').get())
       markSeeded()
@@ -376,13 +382,14 @@ async function bootstrap(): Promise<void> {
       app: appDeps,
       window: windowDeps,
       scanWindow,
-      account,
+      account: fakeData ? { ...account, games: () => [...GAME_IDS] } : account,
       emitDataChanged,
       fingerprints,
       ocr
     })
   )
 
+  if (captureDir) setMeta(db, 'active_game', captureGame)
   createWindow()
   updater.start()
   account.start()
@@ -393,7 +400,7 @@ async function bootstrap(): Promise<void> {
       .then(async () => {
         if (!win) throw new Error('No window to capture')
         await new Promise((r) => setTimeout(r, 2000))
-        console.log((await captureShots(win, resolve(captureDir))).join('\n'))
+        console.log((await captureShots(win, resolve(captureDir), SHOTS[captureGame])).join('\n'))
         app.quit()
       })
       .catch((e) => {
@@ -403,7 +410,8 @@ async function bootstrap(): Promise<void> {
   }
 
   recordSnapshot(db)
-  if (fakeData) {
+  // A capture's profile comes with its catalog.
+  if (fakeData && !captureDir) {
     void startDirectCatalog(db, {
       version: app.getVersion(),
       onSyncProgress: emitSync,

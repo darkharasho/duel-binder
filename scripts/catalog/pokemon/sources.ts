@@ -1,5 +1,5 @@
 import { openCardCache, cardIsUsable } from './cache'
-import { chineseCards, chineseSet } from './chinese'
+import { chineseCards, chineseFiles, chineseIndex, chineseListSets, chineseSet, type ZhCard } from './chinese'
 import { createLimiter, REPO_URL, MAX_CONCURRENCY, type GetJsonOpts } from './http'
 import { tcgcsvCardRows, tcgcsvGroups, tcgcsvPrices, tcgcsvProducts } from './tcgcsv'
 import { tcgdexCard, tcgdexSet, tcgdexSetList } from './tcgdex'
@@ -55,9 +55,18 @@ export function createPokemonSources(opts: PokemonSourcesOpts): PokemonSources &
   return {
     async sets(lang) {
       if (lang === 'zh-hans') {
-        const { set, cards } = chineseSet(await chineseCards(o))
-        for (const c of cards) chinese.set(c.id, c)
-        return [set]
+        const index = await chineseIndex(o)
+        const ids = [...chineseFiles(index).keys()]
+        const lists = await allOrNothing(ids, (id, oo) => chineseCards(id, oo))
+        const rows = new Map<string, ZhCard[]>(ids.map((id, i) => [id, lists[i]]))
+        const list = chineseListSets(index, rows)
+        opts.log?.(
+          `Pokémon zh-hans: ${list.sets.length + 1} sets; ${list.named} cards named from other rows, ` +
+            `${list.unnamed} left unnamed, ${list.oddNumbers} odd numbers, ${list.repeats} repeats left out`
+        )
+        const built = [chineseSet(rows.get('30thC')!), ...list.sets]
+        for (const b of built) for (const c of b.cards) chinese.set(c.id, c)
+        return built.map((b) => b.set)
       }
       const list = await tcgdexSetList(lang, o)
       const sets = await allOrNothing(list, (s, oo) => tcgdexSet(lang, s.id, oo))

@@ -17,7 +17,16 @@ const SUBTYPES: Record<string, string> = {
 }
 
 /** TCGdex variant type → canonical label (no stamp). */
-const TYPES: Record<string, string> = { normal: 'Normal', holo: 'Holofoil', reverse: 'Reverse Holofoil' }
+const TYPES: Record<string, string> = {
+  normal: 'Normal',
+  holo: 'Holofoil',
+  reverse: 'Reverse Holofoil',
+  // The Chinese list's finishes (chinese.ts): patterns and a stamp, spelled as the version labels.
+  'poke ball pattern': 'Poke Ball Pattern',
+  'master ball pattern': 'Master Ball Pattern',
+  'starlight holo': 'Starlight Holo',
+  'set logo holofoil': 'Set Logo Holofoil'
+}
 
 /** The finish a card sold as the key can't also be printed in unless it's sold so too (rule 6). */
 const EXCLUDES: Record<string, string> = { Normal: 'Holofoil', Holofoil: 'Normal' }

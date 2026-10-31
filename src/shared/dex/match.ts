@@ -121,7 +121,8 @@ const FINISHES: Record<string, string> = {
   'Love Ball Holo': 'Love Ball Pattern',
   'Quick Ball Holo': 'Quick Ball Pattern',
   'Dusk Ball Holo': 'Dusk Ball Pattern',
-  'Cosmos Holo': 'Cosmos Holo'
+  'Cosmos Holo': 'Cosmos Holo',
+  'Starlight Holo': 'Starlight Holo'
 }
 
 /**
@@ -162,6 +163,12 @@ function sameCard(dex: string, ours: string): boolean {
   )
 }
 
+/** Dex orders a Chinese form's words its own way ("Sunny Form Castform"); the card is the same. */
+const sameWords = (dex: string, ours: string): boolean => {
+  const words = (s: string): string => s.split(/\s+/).map(squash).sort().join(' ')
+  return words(dex) === words(ours)
+}
+
 /** A set flagged with a country in Dex ("McDonald's Collection 2018 (🇫🇷)") isn't our set of that name. */
 const REGIONAL = /[\u{1F1E6}-\u{1F1FF}]/u
 
@@ -174,7 +181,12 @@ interface LanguageIndex {
   byId: Map<string, CatalogSet>
   /** Null for a name two sets share. */
   byName: Map<string, CatalogSet | null>
+  /** Simplified Chinese sets by the code Dex's `scn_` ids use. */
+  byDexCode: Map<string, CatalogSet>
 }
+
+/** A Chinese set id to Dex's code: "CSV9.5C" and "scn_csv95" meet at "csv95", "CSIC" and "scn_csI" at "csi". */
+const dexCode = (id: string): string => id.toLowerCase().replace(/\./g, '').replace(/c$/, '')
 
 function indexCatalog(catalog: DexCatalogPrinting[]): Map<string, LanguageIndex> {
   const languages = new Map<string, LanguageIndex>()
@@ -184,12 +196,13 @@ function indexCatalog(catalog: DexCatalogPrinting[]): Map<string, LanguageIndex>
     if (slash < 0 || dash < slash) continue
     const id = p.sourceId.slice(slash + 1, dash)
     let lang = languages.get(p.language)
-    if (!lang) languages.set(p.language, (lang = { byId: new Map(), byName: new Map() }))
+    if (!lang) languages.set(p.language, (lang = { byId: new Map(), byName: new Map(), byDexCode: new Map() }))
     let set = lang.byId.get(id)
     if (!set) {
       lang.byId.set(id, (set = { id, cards: new Map() }))
       const key = setKey(p.setName)
       lang.byName.set(key, lang.byName.has(key) ? null : set)
+      lang.byDexCode.set(dexCode(id), set)
     }
     const number = numberKey(p.sourceId.slice(dash + 1))
     const rows = set.cards.get(number)
@@ -209,6 +222,10 @@ function findSet(row: DexRow, language: string, index: LanguageIndex): CatalogSe
   const named = index.byName.get(setKey(row.set, row.series)) ?? null
   // Each language's ids are its own; one with no table has only the name to go on.
   const pinned = language === 'en' ? DEX_SETS[dexId] : language === 'ja' ? DEX_JA_SETS[dexId] : undefined
+  if (language === 'zh-hans' && dexId.startsWith('scn_')) {
+    const set = index.byDexCode.get(dexId.slice(4).toLowerCase().replace(/\./g, ''))
+    if (set) return named && named !== set ? null : set
+  }
   if (pinned) {
     const set = index.byId.get(pinned) ?? null
     return named && named !== set ? null : set
@@ -230,7 +247,9 @@ function findPrinting(
   const number = pinned ? pinned[printed] : printed
   const versions = number === undefined ? undefined : set.cards.get(number)
   if (!versions) return 'number'
-  if (!versions.every((p) => sameCard(row.name, p.cardName))) return 'name'
+  const same = (p: DexCatalogPrinting): boolean =>
+    sameCard(row.name, p.cardName) || (language === 'zh-hans' && sameWords(row.name, p.cardName))
+  if (!versions.every(same)) return 'name'
   if (row.variant === 'Expansion Stamp') {
     const stamped = versions.filter((p) => STAMPED.has(p.version))
     return stamped.length === 1 ? stamped[0] : 'finish'

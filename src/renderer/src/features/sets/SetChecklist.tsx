@@ -45,9 +45,11 @@ import { TooltipProvider } from '@/components/ui/tooltip'
 import { UnderlineTabs } from '@/components/UnderlineTabs'
 import { CardPanel, type CardPanelSeed } from '@/features/card/CardPanel'
 import { api, invalidateAfterEdit, queryKeys } from '@/lib/api'
-import { isPhone } from '@/lib/platform'
+import { useGame } from '@/lib/game'
+import { isPhone, isWeb } from '@/lib/platform'
 import { createSerialQueue } from '@/lib/serialQueue'
 import { cn } from '@/lib/utils'
+import { PlaceholdersButton } from './PlaceholdersDialog'
 import { BulkMode } from './BulkMode'
 import { FriendCardSheet } from '../friends/FriendCardSheet'
 import { SetArt } from './SetArt'
@@ -175,6 +177,7 @@ export function SetChecklist({
   friend,
   friendHeader
 }: SetChecklistProps): React.JSX.Element {
+  const { game } = useGame()
   const [filter, setFilter] = useState<TileFilter>('all')
   const [q, setQ] = useState('')
   const [rarity, setRarity] = useState<string | null>(null)
@@ -476,6 +479,9 @@ export function SetChecklist({
                 <Button variant={bulk ? 'default' : 'outline'} size="sm" onClick={toggleBulk}>
                   {bulk ? 'Done' : 'Bulk add'}
                 </Button>
+              )}
+              {!phone && !friend && !isWeb() && game === 'pkm' && (
+                <PlaceholdersButton set={data.set} cards={data.cards} />
               )}
               {phone && (
                 <DropdownMenu>

@@ -1,3 +1,4 @@
+import type { PlaceholderRequest } from './placeholders'
 import type { UsageCounts } from './usage'
 import type { Language } from './languages'
 import type {
@@ -63,6 +64,10 @@ export interface Api {
     apply(rows: DexRow[]): Promise<{ copies: number }>
     /** The window's own clipboard API is denied by the app's permission rules. */
     copy(text: string): Promise<void>
+  }
+  /** Desktop only: a PDF of a set's binder placeholders. Null when the save dialog is cancelled. */
+  placeholders: {
+    save(request: PlaceholderRequest): Promise<string | null>
   }
   friends: {
     overview(): Promise<FriendsOverview>
@@ -250,6 +255,7 @@ export const INVOKE_CHANNELS = [
   'dex:preview',
   'dex:apply',
   'dex:copy',
+  'placeholders:save',
   'friends:overview',
   'friends:request',
   'friends:accept',

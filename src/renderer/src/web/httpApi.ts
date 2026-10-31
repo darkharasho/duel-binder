@@ -190,6 +190,7 @@ export function createHttpApi(opts: HttpApiOptions = {}): Api {
       facets: call('collection:facets')
     },
     dex: { preview: unavailable, apply: unavailable, copy: unavailable },
+    placeholders: { save: unavailable },
     friends: {
       overview: call('friends:overview'),
       request: call('friends:request'),

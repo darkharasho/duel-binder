@@ -187,6 +187,11 @@ function listFinishes(setId: string, row: ZhCard): string[] {
   return mirrored ? [base, mirror] : [base]
 }
 
+/** Marks the list has wrong, by set and number, as a Dex export shows them. */
+const RARITY_FIXES: Record<string, Record<string, string>> = {
+  CSV5C: { '035': 'U', '037': 'U', '038': 'R', '054': 'U', '074': 'R', '083': 'R', '092': 'R', '098': 'R', '103': 'R' }
+}
+
 /** The letter codes the list uses for energy and the like, kept as they are printed. */
 const LETTER_INDEX = new Set([...LETTER_CARDS, 'FAI'])
 
@@ -240,6 +245,7 @@ export function chineseListSets(index: ZhSetEntry[], rows: Map<string, ZhCard[]>
     const cards: TdCard[] = []
     list.forEach((row, i) => {
       const number = row.cardIndex.replace(/[^A-Za-z0-9]/g, '')
+      const rarity = RARITY_FIXES[id]?.[number] ?? row.rarity
       if (!/^\d+$/.test(number) && !LETTER_INDEX.has(number)) out.oddNumbers++
       const localId = number || `X${i + 1}`
       if (seen.has(localId)) return void out.repeats++
@@ -260,8 +266,8 @@ export function chineseListSets(index: ZhSetEntry[], rows: Map<string, ZhCard[]>
         name,
         localName: row.cardName,
         category: categoryOf(row.cardType),
-        rarity: LIST_RARITIES[row.rarity] ?? null,
-        variants_detailed: listFinishes(id, row).map(
+        rarity: LIST_RARITIES[rarity] ?? null,
+        variants_detailed: listFinishes(id, { ...row, rarity }).map(
           (type): TdVariant => ({ type, variantId: GENERATED_VARIANT_ID })
         ),
         set: ref

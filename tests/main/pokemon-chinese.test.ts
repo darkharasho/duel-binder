@@ -99,6 +99,17 @@ const labels = (id: string, row: ZhCard): string[] => {
   return cardVersions(card, [], new Map()).versions.map((v) => v.label)
 }
 
+describe('chineseListSets rarity fixes', () => {
+  it('takes a mark the list has wrong from the table, finish and all', () => {
+    const index: ZhSetEntry[] = [{ id: 'CSV5C', code: 'CSV5C', series: 'SV', count: 2 }]
+    const rows = new Map([['CSV5C', [zh('074', '红腿鹬', 'Flamigo', 'C'), zh('075', '宝贝龙', 'Bagon', 'C')]]])
+    const [fixed, plain] = chineseListSets(index, rows).sets[0].cards
+    expect(fixed.rarity).toBe('Rare')
+    expect(fixed.variants_detailed?.map((v) => v.type)).toEqual(['holo', 'Poke Ball Pattern'])
+    expect(plain.rarity).toBe('Common')
+  })
+})
+
 describe('chineseFiles', () => {
   it('skips the promo rows and folds the 151 waves into their one file', () => {
     const files = chineseFiles([

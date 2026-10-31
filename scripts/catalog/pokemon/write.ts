@@ -4,7 +4,8 @@ import { pokemonId } from '../../../src/shared/games/ids'
 import { hasNativeScript } from '../../../src/shared/setNames'
 import { findArt, findArtByName, NAME_GROUPS } from './art'
 import { englishNamer, type EnglishNamer } from './englishNames'
-import { matchGroup, matchProducts, namesCard, speciesCheck, type MatchedProduct, type NameCheck } from './match'
+import { matchGroup, matchProducts, namesCard, plainName, speciesCheck, type MatchedProduct, type NameCheck } from './match'
+import { tcgplayerOnlyCards } from './upcoming'
 import { cardVersions, groupFinish, versionSubtype, type PkmVersion } from './versions'
 import type { PkmLang, PokemonSources, TcGroup, TcPrice, TcProduct, TdCard, TdSet } from './types'
 
@@ -88,12 +89,16 @@ const stripNumber = (name: string): string => name.replace(/\s+-\s+\S*\d\S*$/, '
 /** The abbreviation a set's numbers start with: TCGdex's official one, else its id in upper case. */
 const setAbbrev = (s: TdSet): string => s.abbreviation?.official?.trim() || s.id.toUpperCase()
 
-/** The printed number: "{abbrev} {localId}/{official}", or "{abbrev} {localId}" with no count. */
-function printedNumber(abbrev: string, s: TdSet, localId: string): string {
+/**
+ * The printed number: "{abbrev} {localId}/{official}", or "{abbrev} {localId}" with no count, or the
+ * card's own where TCGplayer's rows say it ("30C R/RGB").
+ */
+function printedNumber(abbrev: string, s: TdSet, card: TdCard): string {
+  if (card.printed) return `${abbrev} ${card.printed}`
   const official = s.cardCount?.official
   return typeof official === 'number' && official > 0
-    ? `${abbrev} ${localId}/${official}`
-    : `${abbrev} ${localId}`
+    ? `${abbrev} ${card.localId}/${official}`
+    : `${abbrev} ${card.localId}`
 }
 
 const present = (x: unknown): x is string | number =>
@@ -128,6 +133,25 @@ function namingProduct(products: MatchedProduct[]): TcProduct | undefined {
   return best
 }
 
+/**
+ * Some of TCGplayer's Japanese rows don't say what a card is: the English card of that name does,
+ * when every English card of the name agrees. Else the category stays empty.
+ */
+function fillCategories(cards: TdCard[], enCards: TdCard[]): void {
+  const unknown = cards.filter((c) => c.fromTcgplayer && !c.category)
+  if (unknown.length === 0) return
+  const byName = new Map<string, Set<string>>()
+  for (const c of enCards) {
+    if (!c.category) continue
+    const name = plainName(c.name)
+    byName.set(name, (byName.get(name) ?? new Set()).add(c.category))
+  }
+  for (const c of unknown) {
+    const found = byName.get(plainName(c.name))
+    if (found?.size === 1) c.category = [...found][0]
+  }
+}
+
 /** Fetches and matches one language. Throws on any source failure, before anything is written. */
 async function planLanguage(
   lang: PkmLang,
@@ -149,6 +173,7 @@ async function planLanguage(
   }
   const cards = await sources.cards(lang, [...setOf.keys()])
   const cardById = new Map(cards.map((c) => [c.id, c]))
+  fillCategories(cards, enCards)
   const nameOk = lang === 'en' ? namesCard : speciesCheck(enCards, cards)
   log(`Pokémon ${lang}: ${sets.length} sets, ${cards.length} cards from TCGdex`)
 
@@ -185,6 +210,12 @@ async function planLanguage(
     }
     const groupId = matchGroup(s, setCards, groups, productGroup)
     if (groupId === null) unmatchedSets.push(`${s.id} ${s.name}`)
+    else {
+      const only = tcgplayerOnlyCards(s, setCards, inGroup.get(groupId) ?? [])
+      setCards.push(...only.cards)
+      problems.push(...only.notes.map((n) => `${lang}/${n}`))
+      if (only.cards.length > 0) log(`Pokémon ${lang}: ${s.id} has ${only.cards.length} cards from TCGplayer only`)
+    }
     const out = setCards.map((card) => {
       const m = matchProducts(
         card,
@@ -234,7 +265,7 @@ async function planLanguage(
         priced += v.versions.filter((x) => x.price !== null).length
         cardCount++
         const first = namingProduct(products)
-        const english = lang === 'ja' && first ? stripNumber(first.name) : ''
+        const english = lang === 'ja' && first && !card.fromTcgplayer ? stripNumber(first.name) : ''
         const name = english || card.name
         return {
           card,
@@ -436,7 +467,7 @@ function writePlans(db: Database.Database, plans: LangPlan[], nowIso: string): v
           const existing = printingsOf.all(id) as ExistingPrinting[]
           // Frozen: a written card keeps its printings' set name and code.
           const printSetName = existing[0]?.set_name ?? setName
-          const printSetCode = existing[0]?.set_code ?? printedNumber(setCode, set, card.localId)
+          const printSetCode = existing[0]?.set_code ?? printedNumber(setCode, set, card)
           const byLabel = new Map(existing.map((p) => [p.set_rarity, p]))
           const produced = new Set<string>()
           for (const v of cp.versions) {

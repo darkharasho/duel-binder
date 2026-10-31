@@ -84,7 +84,7 @@ export function matchGroup(
 }
 
 /** The collector number of a TCGCSV Number ("001/083" → "001"). */
-const numberPart = (n: string): string => n.split('/')[0].trim()
+export const numberPart = (n: string): string => n.split('/')[0].trim()
 
 /** Digits with an optional letter suffix, such as "050a". */
 const NUMBER_RE = /^(\d+)([a-z]*)$/i

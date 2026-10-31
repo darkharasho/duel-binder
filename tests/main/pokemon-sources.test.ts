@@ -235,6 +235,33 @@ describe('pokemon sources', () => {
     s.close()
   })
 
+  it('builds a Japanese Mega era set TCGdex lacks, and serves its cards without TCGdex', async () => {
+    const urls: string[] = []
+    const f = (async (input: RequestInfo | URL) => {
+      const url = String(input)
+      urls.push(url)
+      if (url.endsWith('/ja/sets')) return json([])
+      if (url.endsWith('/85/groups')) {
+        return json({ results: [{ groupId: 24721, name: 'M6a: MEGA Expansion 30th Celebration', abbreviation: 'm6a' }] })
+      }
+      if (url.endsWith('/24721/products')) {
+        return json({
+          results: [{
+            productId: 717600, name: 'Mew - R/RGB',
+            extendedData: [{ name: 'Number', value: 'R/RGB' }, { name: 'Rarity', value: 'RGB Rare' }]
+          }]
+        })
+      }
+      return json({}, 404)
+    }) as typeof fetch
+    const s = make({ fetch: f, calls: [], fail: new Map() })
+    expect((await s.sets('ja')).map((x) => x.name)).toEqual(['MEGA Expansion 30th Celebration'])
+    const [card] = await s.cards('ja', ['M6a-R'])
+    expect(card.name).toBe('Mew')
+    expect(urls.some((u) => u.includes('tcgdex.net') && u.includes('M6a'))).toBe(false)
+    s.close()
+  })
+
   it('leaves the art of a product with no picture yet', async () => {
     const f = (async () =>
       json({

@@ -11,6 +11,12 @@ const appUrl = 'https://app.duelbinder.com'
 const page = (over: Partial<Parameters<typeof renderPage>[0]> = {}): string =>
   renderPage({ downloads, os: null, appUrl, ...over })
 
+describe('brand mark', () => {
+  it('shows the favicon in the nav, not a drawing of its own', () => {
+    expect(page()).toContain('<a class="brand" href="/"><img src="/favicon.svg"')
+  })
+})
+
 describe('detectOs', () => {
   it.each([
     [

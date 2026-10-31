@@ -199,6 +199,17 @@ describe('nameOk', () => {
   })
 })
 
+describe('accessories', () => {
+  it.each([
+    'Pikachu Gengar 151C 172/151 AR S-Chinese Exclusive Extended Art Case',
+    'Chinese Arcanine 151C-059/151 & Figure Collect 151 Figure Set',
+    'S-Chinese 151C-059/151 refrigerator magnet',
+    'S-Chinese 151C-059/151 Arcanine framed'
+  ])('rejects %s', (title) => {
+    expect(parseListing(title, ['151C'], 'zh-hans')).toBeNull()
+  })
+})
+
 describe('pokemonSetPrices', () => {
   const p = (id: number, version: string, code = 'CS3aC 017', name = 'Blipbug'): SetPrinting => ({
     id,
@@ -218,6 +229,16 @@ describe('pokemonSetPrices', () => {
     expect(MIN_SELLERS).toBe(3)
     expect(prices(listings(PLAIN, [2, 3]), [p(1, 'Normal')])).toEqual({})
     expect(prices(listings(PLAIN, [2, 3, 4]), [p(1, 'Normal')])).toEqual({ 1: { price: 3, listingCount: 3 } })
+  })
+
+  it('leaves out a thinly listed card whose sellers disagree', () => {
+    expect(prices(listings(PLAIN, [19, 74.47, 85.66]), [p(1, 'Normal')])).toEqual({})
+    expect(prices(listings(PLAIN, [4.5, 6.99, 12.49]), [p(1, 'Normal')])).toEqual({
+      1: { price: 6.99, listingCount: 3 }
+    })
+    expect(prices(listings(PLAIN, [10, 20, 30, 40, 50]), [p(1, 'Normal')])).toEqual({
+      1: { price: 30, listingCount: 5 }
+    })
   })
 
   it('counts one seller once, at their cheapest', () => {

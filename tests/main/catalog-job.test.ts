@@ -990,4 +990,35 @@ describe('Pokémon step in the nightly job', () => {
     })
     expect(pokemon).not.toHaveBeenCalled()
   })
+
+  it('--stage runs that stage alone', async () => {
+    ;(await workDb()).close()
+    const refresh = vi.fn(async () => {})
+    const pokemon = vi.fn(async () => ({ reports: [], error: null }))
+    const gate = vi.fn<NonNullable<JobOptions['checkAccuracy']>>(passing)
+    const common = {
+      dir,
+      url: URL_BASE,
+      token: TOKEN,
+      imageFetch: noImages,
+      checkAccuracy: gate,
+      refresh,
+      pokemon,
+      log: (): void => {}
+    }
+    const upload = vi.fn(async () => Response.json({ ok: true }))
+
+    await runJob({ ...common, fetch: upload as never, stage: 'ygo' })
+    expect([refresh.mock.calls.length, pokemon.mock.calls.length, upload.mock.calls.length]).toEqual([1, 0, 0])
+    await runJob({ ...common, fetch: upload as never, stage: 'pokemon' })
+    expect([refresh.mock.calls.length, pokemon.mock.calls.length, upload.mock.calls.length]).toEqual([1, 1, 0])
+    expect(gate).not.toHaveBeenCalled()
+    await runJob({ ...common, fetch: upload as never, stage: 'fingerprints-ygo' })
+    expect(gate.mock.calls.map((c) => c[2])).toEqual(['ygo'])
+    expect(refresh).toHaveBeenCalledTimes(1)
+  })
+
+  it('--stage does not go with --dry-run', async () => {
+    await expect(runJob({ dir, dryRun: true, stage: 'ygo' })).rejects.toThrow('--dry-run')
+  })
 })

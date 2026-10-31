@@ -53,7 +53,8 @@ jobs:
           node-version: 22
           cache: npm
       # postinstall rebuilds better-sqlite3 for Electron, which the job runs under.
-      - run: npm ci
+      - name: Install
+        run: npm ci
       - name: Restore work database
         uses: actions/cache/restore@v4
         with:
@@ -73,13 +74,26 @@ jobs:
           path: catalog-work/base.sqlite
           key: catalog-base-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: catalog-base-
-      - name: Refresh and upload
+      # One step per stage so the admin page can show each one's time. A problem only fails the run
+      # at "Check for problems", so it doesn't stop the stages after it.
+      - name: Refresh Yu-Gi-Oh
         run: >-
-          npm run catalog:job --
-          ${{ inputs.full && '--full' || '' }}
-          ${{ inputs.allow_shrink && '--allow-shrink' || '' }}
+          npm run catalog:job -- --stage ygo
           ${{ inputs.refresh_sets && '--refresh-sets' || '' }}
           ${{ inputs.refresh_cards && '--refresh-cards' || '' }}
+      - name: Refresh Pokémon
+        run: npm run catalog:job -- --stage pokemon
+      - name: Upload catalog
+        run: >-
+          npm run catalog:job -- --stage upload
+          ${{ inputs.full && '--full' || '' }}
+          ${{ inputs.allow_shrink && '--allow-shrink' || '' }}
+      - name: Yu-Gi-Oh fingerprints
+        run: npm run catalog:job -- --stage fingerprints-ygo
+      - name: Pokémon fingerprints
+        run: npm run catalog:job -- --stage fingerprints-pkm
+      - name: Check for problems
+        run: test -z "$CATALOG_PROBLEMS"
       - name: Parity check
         continue-on-error: false
         run: npm run catalog:parity

@@ -662,6 +662,25 @@ describe('uploadCatalog', () => {
     expect(stamp).toBeNull()
   })
 
+  it('--refresh-cards reads the card list before its daily timer', async () => {
+    const seeded = await workDb()
+    setMeta(seeded, 'last_sync_at', new Date().toISOString())
+    seeded.close()
+    let stamp: string | null = 'unset'
+    await runJob({
+      dir,
+      dryRun: true,
+      refreshCards: true,
+      imageFetch: noImages,
+      checkAccuracy: passing,
+      refresh: async (work) => {
+        stamp = getMeta(work, 'last_sync_at')
+      },
+      log: () => {}
+    })
+    expect(stamp).toBeNull()
+  })
+
   it('a dry run counts changes without uploading or writing base', async () => {
     ;(await workDb()).close()
     const { fetch, calls } = recordingFetch(ok)

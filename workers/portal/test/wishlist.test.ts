@@ -288,8 +288,7 @@ describe('wishlist on Durable Object SQLite', () => {
     expect(ygo.data.cursor).toBe(2)
     expect(pk.data.cursor).toBe(2)
 
-    // The owner's friend, seen through each game. Pokémon is owner-only for now, so the pal's game
-    // header is refused; the list reads through the owner.
+    // The owner's friend, seen through each game.
     await s.db((db) => {
       db.prepare('UPDATE users SET discord_id = ? WHERE id = 1').run('swap')
       db.prepare('UPDATE users SET discord_id = ? WHERE id = 2').run(OWNER_DISCORD)
@@ -308,12 +307,6 @@ describe('wishlist on Durable Object SQLite', () => {
     })
     expect((await s.rpc<unknown[]>('pal', 'friends:wishlist', [3], 'pkm')).result).toEqual([])
     expect((await s.rpc<unknown[]>('pal', 'friends:wanting', [YGO_CARD], 'pkm')).result).toEqual([])
-
-    // A game the account can't use yet stays out of the table.
-    const skipped = await s.call<{ results: WishPushResult[] }>('stranger', '/api/sync/wishlist-push', {
-      entries: [wish(pkm.pkey, { game: 'pkm' })]
-    })
-    expect(skipped.data.results).toEqual([{ pkey: pkm.pkey, status: 'skipped' }])
   })
 
   it('takes a 500-row push, a 1,000-printing list, and the friends reads at that size', async () => {

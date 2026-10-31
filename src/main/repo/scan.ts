@@ -7,7 +7,7 @@ import { parsePrice } from '../../shared/pricing'
 import type { ScanPrinting } from '../../shared/scan/types'
 import type { CollectorNumber } from '../../shared/scan/collectorNumber'
 import { enTwinPrice } from './enTwin'
-import { isMarketOnly } from './priceRule'
+import { isMarketOnly, MARKET_ONLY_PRICE } from './priceRule'
 import { LOCAL, type Scope } from './scope'
 import { shownPrinting } from './shownPrinting'
 
@@ -29,7 +29,7 @@ const select = (
   scope: Scope
 ): string => `SELECT p.id AS printingId, p.card_id AS cardId, c.name AS name, c.frame_type AS frameType,
   p.set_name AS setName, p.set_code AS setCode, p.set_rarity AS rarity, p.variant AS variant, p.language AS language,
-  CASE WHEN ${isMarketOnly} THEN p.market_price WHEN p.language = 'en' THEN COALESCE(p.market_price, ip.price, p.set_price) ELSE COALESCE(ip.price, ${enTwinPrice(scope.game)}) END AS rawPrice,
+  CASE WHEN ${isMarketOnly} THEN ${MARKET_ONLY_PRICE} WHEN p.language = 'en' THEN COALESCE(p.market_price, ip.price, p.set_price) ELSE COALESCE(ip.price, ${enTwinPrice(scope.game)}) END AS rawPrice,
   pc.local_name AS localName
   FROM card_printings p JOIN cards c ON c.id = p.card_id AND +c.game = ${scope.game}
   LEFT JOIN intl_prices ip ON ip.printing_id = p.id

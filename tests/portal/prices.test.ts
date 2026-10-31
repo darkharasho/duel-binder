@@ -110,6 +110,7 @@ describe('server eBay prices', () => {
     db.prepare(`INSERT INTO meta (key, value) VALUES ('price_sweeps_listed_at', '2026-10-24')`).run()
     const sweep: SweepClient = {
       set: vi.fn(async () => ({ codes: {}, calls: 1, checkedAt: NOW.toISOString() })),
+      pokemonListings: vi.fn(async () => ({ items: [] })),
       quota: vi.fn(async () => ({ remaining: 5000 }))
     }
     const storage = fakeStorage()

@@ -56,6 +56,8 @@ All sync routes need `Authorization: Bearer <desktop token>`. Without one they a
 
 The `Store` Durable Object's alarm keeps eBay prices fresh for every printing any user owns. Each run looks up to 25 printings through the `PRICES` binding and then sets the next run. If more are waiting and the service answered, the next run is in 60 seconds. If every lookup failed, it is in 1 hour. Otherwise it is in 6 hours. A web edit that can add a printing, or a sync push that writes a live entry, brings the alarm forward to 5 seconds. The alarm also starts on the Durable Object's first start, or whenever no alarm is set. Signed-in desktops get these prices from `/api/sync/prices` and never call the eBay Worker themselves.
 
+The same alarm also runs the weekly set sweep (`src/sweep.ts`), and after it the Chinese Pokémon sweep (`src/pokemonSweep.ts`), which is off until `POKEMON_SWEEP_DAILY_CALLS` in `wrangler.toml` is above `"0"`. To turn it on: deploy the `ygo-ebay-prices` Worker first (it has the `/v1/pokemon-listings` route), check a few sets' listings by hand, set the value to `"100"` and deploy this Worker. To turn it off again, set `"0"` and deploy; prices already written stay. Rows in `price_sweeps` have `pkm:` keys, so the sweep needs no migration.
+
 ### Developing against a local portal
 
 Development builds of the desktop app use the portal set in `DUEL_BINDER_PORTAL_URL` (for example `DUEL_BINDER_PORTAL_URL=http://localhost:8787 npm run dev` at the repo root). Packaged builds always use `https://app.duelbinder.com`.

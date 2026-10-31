@@ -171,6 +171,57 @@ describe('Pokémon market-only price rule', () => {
   })
 })
 
+describe('Chinese Pokémon takes its swept eBay price', () => {
+  let db: Database.Database
+  let priced: number
+  let unpriced: number
+  let marketed: number
+
+  beforeEach(async () => {
+    db = await seededDb()
+    seedPokemon(db)
+    priced = pkmPrinting(db, { language: 'zh-hans', setName: 'Rule ZH', code: 'CS3aC 017', rarity: 'Normal' })
+    unpriced = pkmPrinting(db, { language: 'zh-hans', setName: 'Rule ZH', code: 'CS3aC 018', rarity: 'Normal' })
+    marketed = pkmPrinting(db, { language: 'zh-hant', setName: 'Rule TW', code: 'SV8F 019', rarity: 'Normal', market: 2 })
+    // The English twin must never stand in for the unpriced card.
+    pkmPrinting(db, { language: 'en', setName: 'Rule EN', code: 'CS3aC 018', rarity: 'Normal', market: 50 })
+    const add = db.prepare('INSERT INTO intl_prices (printing_id, price, listing_count, checked_at) VALUES (?, ?, 3, ?)')
+    add.run(priced, 4.5, NOW.toISOString())
+    add.run(marketed, 9.99, NOW.toISOString())
+    setGame(db, 'pkm')
+    for (const id of [priced, unpriced, marketed]) addEntry(db, { printingId: id, imageId: PIKACHU, quantity: 1 }, NOW)
+  })
+
+  const entry = (id: number): ReturnType<typeof listEntries>[number] =>
+    listEntries(db, ALL).find((e) => e.printing.id === id)!
+
+  it('an entry shows it as an eBay price', () => {
+    expect(entry(priced)).toMatchObject({
+      unitPrice: 4.5,
+      priceApproximate: false,
+      priceSource: 'ebay',
+      priceListingCount: 3,
+      noPriceReason: null
+    })
+  })
+
+  it('no swept price is no price, not a "checking" and not another language', () => {
+    expect(entry(unpriced)).toMatchObject({ unitPrice: null, priceSource: null, noPriceReason: null })
+  })
+
+  it('a market price beats it', () => {
+    expect(entry(marketed)).toMatchObject({ unitPrice: 2, priceSource: 'tcgplayer' })
+  })
+
+  it('reaches the set list, the scan and the card detail', () => {
+    expect(getChecklist(db, 'Rule ZH', 'zh-hans')!.cards.flatMap((c) => c.rarities.map((r) => r.price))).toContain(4.5)
+    expect(printingsByCode(db, 'CS3aC 017')[0].price).toBe(4.5)
+    const prices = Object.fromEntries(getCardDetail(db, PIKACHU)!.printings.map((p) => [p.id, p.setPrice]))
+    expect(prices[priced]).toBe(4.5)
+    expect(prices[unpriced]).toBeNull()
+  })
+})
+
 describe('TCGplayer prices are Yu-Gi-Oh! only', () => {
   const json = (results: unknown[]): Response =>
     new Response(JSON.stringify({ success: true, results }), { status: 200 })

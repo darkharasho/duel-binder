@@ -7,7 +7,7 @@ import { setImageKey } from '../../shared/setImages'
 import { addEntry, CollectionError } from './collection'
 import { LOCAL, scopeGame, type Scope } from './scope'
 import { enTwinPrice } from './enTwin'
-import { isMarketOnly } from './priceRule'
+import { isMarketOnly, MARKET_ONLY_PRICE } from './priceRule'
 import { shownPrinting } from './shownPrinting'
 import { catalogRollup } from './rollup'
 
@@ -278,7 +278,7 @@ function latest(entries: EntryDbRow[]): number | null {
  * product (an OCG Prismatic Secret is not a $0.16 TCG common); unpriced stays null.
  */
 const printingPrice = (scope: Scope): string =>
-  `CASE WHEN ${isMarketOnly} THEN p.market_price WHEN p.language = 'en' THEN COALESCE(p.market_price, p.set_price) ELSE COALESCE(ip.price, ${enTwinPrice(scope.game)}) END`
+  `CASE WHEN ${isMarketOnly} THEN ${MARKET_ONLY_PRICE} WHEN p.language = 'en' THEN COALESCE(p.market_price, p.set_price) ELSE COALESCE(ip.price, ${enTwinPrice(scope.game)}) END`
 
 /** The dearest printing price among the rows; null when none has one. */
 function maxPrice(rows: PrintingDbRow[]): number | null {

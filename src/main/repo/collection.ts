@@ -16,7 +16,7 @@ import { getMeta } from '../db/meta'
 import { LOCAL, scopeGame, type Scope } from './scope'
 import { pokemonFacets, pokemonSearch, pokemonWhere } from './pkmFilters'
 import { enTwinPrice } from './enTwin'
-import { marketOnlyGame, SET_PRICE } from './priceRule'
+import { marketOnlyGame, SET_PRICE, sweptLanguage } from './priceRule'
 import { buildFtsQuery, POKEMON_COLS, rowToCard, rowToPrinting, type CardDbRow, type PrintingDbRow } from './cards'
 
 export class CollectionError extends Error {
@@ -84,7 +84,9 @@ export function entryPrice(
   const marketOnly = marketOnlyGame(r.p_game)
   const market = english || marketOnly ? ((r.market_price as number | null) ?? null) : null
   const twin = !english && !marketOnly && ebayPrice === null ? ((r.en_twin_price as number | null) ?? null) : null
-  const ebay = !marketOnly && market === null && twin === null && (english || !ygo ? ebayPrice !== null : true)
+  // A market-only game takes eBay only where the set sweep prices it (Chinese Pokémon), and only when there is a price.
+  const swept = marketOnly && market === null && ebayPrice !== null && sweptLanguage(printing.language)
+  const ebay = swept || (!marketOnly && market === null && twin === null && (english || !ygo ? ebayPrice !== null : true))
   let unitPrice: number | null
   let approximate: boolean
   let noPriceReason: EntryView['noPriceReason'] = null

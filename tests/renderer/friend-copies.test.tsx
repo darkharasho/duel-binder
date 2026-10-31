@@ -36,6 +36,20 @@ const section = (): HTMLElement | null =>
   screen.queryByRole('region', { name: 'Friends with this card' })
 
 describe('FriendCopies', () => {
+  it('names a code once when two finishes share it', async () => {
+    const finish = { setCode: 'base1-4', language: 'en' as const, quantity: 1 }
+    setup(async () => [
+      {
+        ...bob,
+        printings: [
+          { ...finish, rarity: 'Holofoil' },
+          { ...finish, rarity: 'Reverse Holofoil' }
+        ]
+      }
+    ])
+    expect(await screen.findByText('base1-4')).toBeInTheDocument()
+  })
+
   it('names each friend with their count and printings, once per card', async () => {
     const forCard = setup(async () => [bob])
     expect(await screen.findByText('Bob')).toBeInTheDocument()

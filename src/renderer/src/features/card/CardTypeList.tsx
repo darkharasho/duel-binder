@@ -24,18 +24,21 @@ interface CardTypeListProps {
   onSelect: (row: CardTypeRow) => void
 }
 
-/** The list's clicks not yet answered, in queue order, over the server's last count per printing. */
+/** The list's clicks not yet answered, in queue order, over the server's last count per stepper. */
 interface InFlight {
-  confirmed: Map<number, number>
-  ops: { printingId: number; delta: 1 | -1 }[]
+  confirmed: Map<string, number>
+  ops: { key: string; delta: 1 | -1 }[]
 }
 
-function countsOf(f: InFlight): Map<number, number> {
+function countsOf(f: InFlight): Map<string, number> {
   const counts = new Map(f.confirmed)
-  for (const op of f.ops)
-    counts.set(op.printingId, Math.max(0, (counts.get(op.printingId) ?? 0) + op.delta))
+  for (const op of f.ops) counts.set(op.key, Math.max(0, (counts.get(op.key) ?? 0) + op.delta))
   return counts
 }
+
+/** What a row's −/+ counts: the printing's original-art copies, or the row's own entry. */
+const countKey = (row: CardTypeRow): string =>
+  row.viaPrinting ? `p${row.printing.id}` : `e${row.entry?.id}`
 
 /** Moves a card's owned count in every cached Browse page, without refetching them. */
 function patchBrowseOwned(qc: QueryClient, cardId: number, by: number): void {
@@ -56,14 +59,18 @@ function patchBrowseOwned(qc: QueryClient, cardId: number, by: number): void {
   )
 }
 
-/** A printing's owned count in the checklist card `sets.adjust` answers with. */
-const ownedIn = (card: ChecklistCard, printingId: number): number | undefined =>
-  card.rarities.flatMap((r) => r.codes).find((c) => c.printingId === printingId)?.owned
+/**
+ * A printing's owned count in the checklist card `sets.adjust` answers with. There is no card for
+ * a printing the checklist leaves out: a contributed one, or a retired one once its last copy goes.
+ */
+const ownedIn = (card: ChecklistCard | undefined, printingId: number): number | undefined =>
+  card?.rarities.flatMap((r) => r.codes).find((c) => c.printingId === printingId)?.owned
 
 /**
- * Every type of a card, owned or not: the row picked is what the panel shows, and a −/count/+ on a
- * row goes through `sets.adjust`, the path the Sets page uses. Give it a key per card so counts in
- * flight never carry over.
+ * Every type of a card, owned or not: the row picked is what the panel shows. A −/count/+ on a row
+ * goes through `sets.adjust`, the path the Sets page uses, or edits the row's own entry when that
+ * can't reach it (see CardTypeRow). Taking the last copy of an entry asks first, as the entry
+ * editor's Remove does. Give it a key per card so counts in flight never carry over.
  */
 export function CardTypeList({
   cardId,
@@ -80,50 +87,71 @@ export function CardTypeList({
   // Counts shown since the last click, with the forCard data they were shown over.
   const [local, setLocal] = useState<{
     base: EntryView[] | undefined
-    counts: Map<number, number>
+    counts: Map<string, number>
   } | null>(null)
-  const printingIds = [...new Set(rows.map((r) => r.printing.id))]
-  const serverOwned = (printingId: number): number =>
-    (copies ?? []).filter((c) => c.printing.id === printingId).reduce((n, c) => n + c.quantity, 0)
+  // The row whose last copy is waiting on Confirm.
+  const [confirming, setConfirming] = useState<string | null>(null)
+  const serverOwned = (row: CardTypeRow): number => row.entry?.quantity ?? 0
   // Our counts hold until forCard catches up (it is refetched once the clicks are done).
   const overlay = local && (pending > 0 || local.base === copies) ? local.counts : null
-  const ownedOf = (printingId: number): number =>
-    overlay?.get(printingId) ?? serverOwned(printingId)
+  const ownedOf = (row: CardTypeRow): number => overlay?.get(countKey(row)) ?? serverOwned(row)
   const total =
     (copies ?? []).reduce((n, c) => n + c.quantity, 0) +
-    printingIds.reduce((n, id) => n + ownedOf(id) - serverOwned(id), 0)
+    rows.reduce((n, row) => n + ownedOf(row) - serverOwned(row), 0)
+
+  /** One +/- through `sets.adjust`; answers the printing's new count. */
+  const adjustPrinting = async (p: Printing, delta: 1 | -1, before: number): Promise<number> => {
+    const answer: ChecklistCard | undefined = await api.sets.adjust(
+      p.setName,
+      p.language,
+      p.id,
+      delta
+    )
+    // The set page behind the panel shows the new count at once, as its own steppers do.
+    if (answer)
+      qc.setQueryData<SetChecklist | null>(queryKeys.setChecklist(p.setName, p.language), (old) =>
+        old ? replaceChecklistCard(old, answer) : old
+      )
+    return ownedIn(answer, p.id) ?? Math.max(0, before + delta)
+  }
+
+  /** Sets a row's own entry to `quantity`, removing it at 0; answers the entry's new count. */
+  const adjustEntry = async (row: CardTypeRow, quantity: number): Promise<number> => {
+    if (row.entry === undefined) throw new Error('This row has no copies')
+    if (quantity > 0) await api.collection.update(row.entry.id, { quantity })
+    else await api.collection.remove(row.entry.id)
+    return Math.max(0, quantity)
+  }
 
   /**
-   * Queues one +/- of a printing. The count moves at once; each answer from the server becomes
+   * Queues one +/- of a row. The count moves at once; each answer from the server becomes
    * the confirmed count with later clicks re-applied. Browse pages get the card's new owned count
    * patched in, and other lists refresh in the background once the clicks are done.
    */
-  const adjust = (p: Printing, delta: 1 | -1): void => {
+  const adjust = (row: CardTypeRow, delta: 1 | -1): void => {
     if (!flight.current)
-      flight.current = { confirmed: new Map(printingIds.map((id) => [id, ownedOf(id)])), ops: [] }
+      flight.current = { confirmed: new Map(rows.map((r) => [countKey(r), ownedOf(r)])), ops: [] }
     const f = flight.current
+    const key = countKey(row)
+    if (!f.confirmed.has(key)) f.confirmed.set(key, ownedOf(row))
     const show = (): void =>
       setLocal({ base: qc.getQueryData(queryKeys.forCard(cardId)), counts: countsOf(f) })
-    f.ops.push({ printingId: p.id, delta })
+    f.ops.push({ key, delta })
     show()
     setPending((n) => n + 1)
     queue
       .current(async () => {
-        let answer: ChecklistCard
+        const before = f.confirmed.get(key) ?? 0
+        let after: number
         try {
-          answer = await api.sets.adjust(p.setName, p.language, p.id, delta)
+          after = row.viaPrinting
+            ? await adjustPrinting(row.printing, delta, before)
+            : await adjustEntry(row, before + delta)
         } finally {
           f.ops.shift()
         }
-        const before = f.confirmed.get(p.id) ?? 0
-        const after = ownedIn(answer, p.id) ?? Math.max(0, before + delta)
-        f.confirmed.set(p.id, after)
+        f.confirmed.set(key, after)
         if (after !== before) patchBrowseOwned(qc, cardId, after - before)
-        // The set page behind the panel shows the new count at once, as its own steppers do.
-        qc.setQueryData<SetChecklist | null>(
-          queryKeys.setChecklist(p.setName, p.language),
-          (old) => (old ? replaceChecklistCard(old, answer) : old)
-        )
       })
       .catch((e: unknown) => {
         toast.error(e instanceof Error ? e.message : 'Could not update the collection')
@@ -152,65 +180,88 @@ export function CardTypeList({
         const name = `${cardName} ${p.setCode} ${p.setRarity}`
         // Rows of one printing need telling apart.
         const label = row.key.startsWith('e') ? `${name} entry ${row.entry?.id}` : name
-        const owned = ownedOf(p.id)
+        const owned = ownedOf(row)
         const price = row.entry ? row.entry.unitPrice : p.setPrice
         return (
-          <div
-            key={row.key}
-            role="group"
-            aria-label={label}
-            {...pickableRow(
-              row.key === selectedKey,
-              () => onSelect(row),
-              'flex items-center gap-1.5'
-            )}
-          >
-            <div className="min-w-0 flex-1 text-xs">
-              <div className="flex items-center gap-1.5">
-                <span className="truncate">{englishSetName(p.setName, p.setCode)}</span>
-                <LanguageTag language={p.language} />
+          <div key={row.key} className="space-y-1">
+            <div
+              role="group"
+              aria-label={label}
+              {...pickableRow(
+                row.key === selectedKey,
+                () => onSelect(row),
+                'flex items-center gap-1.5'
+              )}
+            >
+              <div className="min-w-0 flex-1 text-xs">
+                <div className="flex items-center gap-1.5">
+                  <span className="truncate">{englishSetName(p.setName, p.setCode)}</span>
+                  <LanguageTag language={p.language} />
+                </div>
+                <div className="truncate text-muted-foreground">
+                  {p.setCode} · {p.setRarity}
+                </div>
               </div>
-              <div className="truncate text-muted-foreground">
-                {p.setCode} · {p.setRarity}
-              </div>
+              {price !== null && (
+                <span className="text-xs text-muted-foreground tabular-nums">
+                  {formatUsd(price)}
+                </span>
+              )}
+              <Button
+                variant="outline"
+                size="icon-sm"
+                aria-label={`Remove one ${label}`}
+                disabled={owned === 0}
+                onClick={() => {
+                  if (owned === 1 && row.entry) setConfirming(row.key)
+                  else adjust(row, -1)
+                }}
+              >
+                <Minus />
+              </Button>
+              <span
+                aria-busy={pending > 0}
+                className={cn(
+                  'w-6 text-center text-sm tabular-nums',
+                  owned === 0 ? 'text-muted-foreground' : 'font-semibold',
+                  pending > 0 && 'text-muted-foreground'
+                )}
+              >
+                {owned}
+              </span>
+              <Button
+                variant="outline"
+                size="icon-sm"
+                aria-label={`Add one ${label}`}
+                // A removed entry has nothing left to add to; its row goes on the next refresh.
+                disabled={owned === 0 && !row.viaPrinting}
+                onClick={() => {
+                  setConfirming(null)
+                  adjust(row, 1)
+                }}
+              >
+                <Plus />
+              </Button>
             </div>
-            {price !== null && (
-              <span className="text-xs text-muted-foreground tabular-nums">{formatUsd(price)}</span>
-            )}
-            {row.stepper ? (
-              <>
-                <Button
-                  variant="outline"
-                  size="icon-sm"
-                  aria-label={`Remove one ${label}`}
-                  disabled={owned === 0}
-                  onClick={() => adjust(p, -1)}
-                >
-                  <Minus />
-                </Button>
-                <span
-                  aria-busy={pending > 0}
-                  className={cn(
-                    'w-6 text-center text-sm tabular-nums',
-                    owned === 0 ? 'text-muted-foreground' : 'font-semibold',
-                    pending > 0 && 'text-muted-foreground'
-                  )}
-                >
-                  {owned}
+            {confirming === row.key && row.entry && (
+              <div className="flex flex-wrap items-center gap-2 pl-2">
+                <span className="text-sm">
+                  {row.entry.notes ? 'Remove this entry and its notes?' : 'Remove this entry?'}
                 </span>
                 <Button
-                  variant="outline"
-                  size="icon-sm"
-                  aria-label={`Add one ${label}`}
-                  onClick={() => adjust(p, 1)}
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => {
+                    setConfirming(null)
+                    adjust(row, -1)
+                  }}
                 >
-                  <Plus />
+                  Confirm
                 </Button>
-              </>
-            ) : (
-              <span className="px-1 text-sm font-semibold tabular-nums">
-                ×{row.entry?.quantity}
-              </span>
+                <Button variant="ghost" size="sm" onClick={() => setConfirming(null)}>
+                  Cancel
+                </Button>
+              </div>
             )}
           </div>
         )

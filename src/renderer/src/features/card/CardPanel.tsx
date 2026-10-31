@@ -89,7 +89,8 @@ export function CardPanel({
     copies: copies.data ?? [],
     originalImageId: detail.data?.images[0]?.imageId,
     ownedAtOpen: ownedAtOpen?.cardId === cardId ? ownedAtOpen.ids : new Set(),
-    preferSet
+    preferSet,
+    openedPrintingId: printingId ?? seed?.defaultPrintingId
   })
 
   const [pick, setPick] = useState<Pick | null>(null)
@@ -97,9 +98,14 @@ export function CardPanel({
     pick?.cardId === cardId && pick.openedOn === entryId
       ? pick
       : { entryId: entryId ?? null, printingId: printingId ?? seed?.defaultPrintingId ?? null }
+  // When the selected entry goes (its last copy removed on its row), stay on its printing.
+  const [lastShown, setLastShown] = useState<{ cardId: number; printingId: number } | null>(null)
   const selected =
     rows.find((r) => r.entry !== undefined && r.entry.id === want.entryId) ??
-    rows.find((r) => r.printing.id === want.printingId)
+    rows.find((r) => r.printing.id === want.printingId) ??
+    rows.find((r) => lastShown?.cardId === cardId && r.printing.id === lastShown.printingId)
+  if (selected && (lastShown?.cardId !== cardId || lastShown.printingId !== selected.printing.id))
+    setLastShown({ cardId, printingId: selected.printing.id })
 
   const selectRow = (row: CardTypeRow): void => {
     setPick({
@@ -150,6 +156,12 @@ export function CardPanel({
         ? 'cheapest printing'
         : shown?.setRarity
 
+  // The caption names the set the panel opened from, which a row of another set isn't in.
+  const inPreferredSet =
+    !shown ||
+    !preferSet ||
+    (shown.setName === preferSet.setName && shown.language === preferSet.language)
+
   const moreFor = shown?.id ?? seed?.defaultPrintingId ?? rows[0]?.printing.id
   const list = (
     <CardTypeList
@@ -181,7 +193,9 @@ export function CardPanel({
           />
         )}
         <div className="space-y-1">
-          {caption && <p className="font-mono text-[13px] text-muted-foreground">{caption}</p>}
+          {caption && inPreferredSet && (
+            <p className="font-mono text-[13px] text-muted-foreground">{caption}</p>
+          )}
           <PanelPrice entry={entry} price={price} label={priceLabel} />
         </div>
 
@@ -191,7 +205,7 @@ export function CardPanel({
 
         {entry && (
           <EntryEditor
-            key={`${entry.id}:${entry.updatedAt}`}
+            key={entry.id}
             entry={entry}
             printings={detail.data?.printings ?? []}
             onSelectEntry={selectEntry}

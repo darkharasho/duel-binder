@@ -8,11 +8,11 @@ export interface CardTypeRow {
   printing: Printing
   entry?: EntryView
   /**
-   * The −/+ can only reach this row's copies. They change the printing's original-art entry
-   * (see adjustPrinting), so a row of other art, or one of several on a printing, has no stepper;
-   * its quantity is edited on the selected entry.
+   * Whether the row's −/+ goes through `sets.adjust`, which adds to the printing's original-art
+   * entry (see adjustPrinting). A row of other art, or one of several on a printing, wouldn't be
+   * the entry that changes, so its −/+ edits its own entry instead.
    */
-  stepper: boolean
+  viaPrinting: boolean
 }
 
 export interface CardTypeOptions {
@@ -24,6 +24,8 @@ export interface CardTypeOptions {
   ownedAtOpen: ReadonlySet<number>
   /** The set the panel was opened from, listed next. */
   preferSet?: { setName: string; language: Language }
+  /** The printing of the tile opened in that set, first of the set's. */
+  openedPrintingId?: number | null
 }
 
 /**
@@ -37,7 +39,8 @@ export function cardTypeRows({
   copies,
   originalImageId,
   ownedAtOpen,
-  preferSet
+  preferSet,
+  openedPrintingId
 }: CardTypeOptions): CardTypeRow[] {
   const entries = new Map<number, EntryView[]>()
   for (const c of copies) entries.set(c.printing.id, [...(entries.get(c.printing.id) ?? []), c])
@@ -54,15 +57,22 @@ export function cardTypeRows({
   }
   return [...listed, ...own]
     .map((p, i) => ({ p, i }))
-    .sort((a, b) => rank(a.p) - rank(b.p) || a.i - b.i)
+    .sort(
+      (a, b) =>
+        rank(a.p) - rank(b.p) ||
+        (preferSet
+          ? Number(b.p.id === openedPrintingId) - Number(a.p.id === openedPrintingId)
+          : 0) ||
+        a.i - b.i
+    )
     .flatMap(({ p }): CardTypeRow[] => {
       const onIt = entries.get(p.id) ?? []
-      if (onIt.length === 0) return [{ key: `p${p.id}`, printing: p, stepper: true }]
+      if (onIt.length === 0) return [{ key: `p${p.id}`, printing: p, viaPrinting: true }]
       return onIt.map((entry, i) => ({
         key: i === 0 ? `p${p.id}` : `e${entry.id}`,
         printing: p,
         entry,
-        stepper: onIt.length === 1 && entry.imageId === originalImageId
+        viaPrinting: onIt.length === 1 && entry.imageId === originalImageId
       }))
     })
 }

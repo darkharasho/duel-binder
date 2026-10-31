@@ -17,8 +17,10 @@ export function FriendCopies({ cardId }: { cardId: number }): React.JSX.Element 
       <h3 className="text-sm font-medium">Friends with this card</h3>
       <ul className="space-y-1.5">
         {friends.map((f) => {
-          const codes = f.printings.slice(0, MAX_CODES).map((p) => p.setCode || p.rarity)
-          const more = f.printings.length - codes.length
+          // Finishes of one Pokémon card share a code.
+          const all = [...new Set(f.printings.map((p) => p.setCode || p.rarity))]
+          const codes = all.slice(0, MAX_CODES)
+          const more = all.length - codes.length
           return (
             <li key={f.id} className="flex items-center gap-2 text-sm">
               <FriendAvatar user={f} className="size-6 text-xs" />

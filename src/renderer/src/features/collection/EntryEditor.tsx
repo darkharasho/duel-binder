@@ -18,7 +18,10 @@ import {
 import { api, mutationInvalidationKeys } from '@/lib/api'
 import { EntryValue, StaleBadge, displayTotal } from './EntryValue'
 
-/** Edit form for one entry; remounted (via `key`) when the selected entry changes. */
+/**
+ * Edit form for one entry; remounted (via `key`) when the selected entry changes. An edit from
+ * elsewhere (the row's −/+) moves a field the user hasn't touched and leaves their draft alone.
+ */
 export function EntryEditor({
   entry,
   printings,
@@ -41,6 +44,12 @@ export function EntryEditor({
   const [quantity, setQuantity] = useState(String(entry.quantity))
   const [notes, setNotes] = useState(entry.notes)
   const [confirming, setConfirming] = useState(false)
+  const [seen, setSeen] = useState(entry)
+  if (entry !== seen) {
+    setSeen(entry)
+    if (quantity === String(seen.quantity)) setQuantity(String(entry.quantity))
+    if (notes === seen.notes) setNotes(entry.notes)
+  }
 
   const invalidate = (): Promise<unknown[]> =>
     Promise.all(mutationInvalidationKeys.map((k) => qc.invalidateQueries({ queryKey: [...k] })))
@@ -99,7 +108,7 @@ export function EntryEditor({
       <StaleBadge entry={entry} />
 
       <div className="space-y-1.5">
-        <label htmlFor="entry-qty" className="text-sm font-medium">
+        <label htmlFor="entry-qty" className="block text-sm font-medium">
           Quantity
         </label>
         <Input

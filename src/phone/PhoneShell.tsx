@@ -137,7 +137,7 @@ function Shell({ engineFactory }: { engineFactory?: EngineFactory }): React.JSX.
       data-phone-shell
       className="fixed inset-0 isolate flex flex-col overflow-hidden bg-background text-foreground tabular-nums"
     >
-      <ArtWash src={scan ? null : wash} />
+      <ArtWash src={scan ? null : wash} glow={!scan} />
       <main
         ref={mainRef}
         data-main-scroll

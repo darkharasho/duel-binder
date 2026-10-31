@@ -105,7 +105,7 @@ const namePart = (name: string): string =>
   name.replace(/\s+-\s*\S*\d.*$/, '').replace(/\s+-\s.*$/, '').replace(/\s*[([].*$/, '')
 
 /** A card name for comparing: no number tail or notes, no accents, case or punctuation. */
-function plainName(name: string): string {
+export function plainName(name: string): string {
   return namePart(name)
     .normalize('NFKD')
     .replace(/\p{M}/gu, '')

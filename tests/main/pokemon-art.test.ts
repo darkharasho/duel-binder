@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { ART_GROUPS, findArt } from '../../scripts/catalog/pokemon/art'
+import { ART_GROUPS, findArt, findArtByName } from '../../scripts/catalog/pokemon/art'
 import { englishNamer } from '../../scripts/catalog/pokemon/englishNames'
 import {
   isSameNumber,
@@ -164,6 +164,40 @@ describe('findArt', () => {
   it('skips a product with no image', () => {
     const p = { ...product(10, 'Abra', '018/128'), imageUrl: undefined }
     expect(find('ja', set('E1', 128), card('018'), ['Abra'], [p]).imageUrl).toBeNull()
+  })
+})
+
+describe('findArtByName', () => {
+  const entry = (id: string, ...names: string[]) => ({ id, names })
+  const run = (cards: { id: string; names: string[] }[], products: TcProduct[]) =>
+    Object.fromEntries(findArtByName(1, cards, new Map([[1, products]])))
+
+  it('takes the one product of a name', () => {
+    expect(run([entry('a', 'Caterpie')], [product(10, 'Caterpie', null)])).toEqual({ a: art(10) })
+  })
+  it('leaves out two cards on one product, and a card on two', () => {
+    expect(
+      run([entry('a', 'Pikachu'), entry('b', 'Pikachu')], [product(10, 'Pikachu', null)])
+    ).toEqual({})
+    expect(
+      run([entry('a', 'Pikachu')], [product(10, 'Pikachu', null), product(11, 'Pikachu', null)])
+    ).toEqual({})
+  })
+  it('lets the same name beat the same base name', () => {
+    const hits = [product(10, 'Gyarados', null), product(11, 'Shining Gyarados', null)]
+    expect(run([entry('a', 'Gyarados'), entry('b', 'Shining Gyarados')], hits)).toEqual({
+      a: art(10),
+      b: art(11)
+    })
+  })
+  it('never lands a Dark and a Light card on one species', () => {
+    const hits = [product(10, 'Dark Dragonite', null), product(11, 'Light Dragonite', null)]
+    expect(run([entry('a', 'Dragonite')], hits)).toEqual({})
+  })
+  it('skips a Japanese name and a product with no image', () => {
+    expect(run([entry('a', 'ベリー')], [product(10, 'Berry', null)])).toEqual({})
+    const bare = { ...product(10, 'Caterpie', null), imageUrl: undefined }
+    expect(run([entry('a', 'Caterpie')], [bare])).toEqual({})
   })
 })
 

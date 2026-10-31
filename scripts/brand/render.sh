@@ -18,9 +18,16 @@ mkdir -p "$SITE" build src/renderer/src/assets
 tmp=$(mktemp -d)
 trap 'rm -rf "$tmp"' EXIT
 
+# iOS and home-screen icons are square and opaque: the system rounds them itself.
+sed 's/ rx="56"//' "$B/square.svg" > "$tmp/full.svg"
+
 rsvg-convert -w 1024 -h 1024 "$B/square.svg" -o build/icon.png
 rsvg-convert -w 512 -h 512 "$B/square.svg" -o resources/icon.png
-rsvg-convert -w 180 -h 180 "$B/square.svg" -o "$SITE/apple-touch-icon.png"
+rsvg-convert -w 180 -h 180 "$tmp/full.svg" -o "$SITE/apple-touch-icon.png"
+rsvg-convert -w 192 -h 192 "$tmp/full.svg" -o src/phone/public/icon-192.png
+rsvg-convert -w 512 -h 512 "$tmp/full.svg" -o src/phone/public/icon-512.png
+rsvg-convert -w 1024 -h 1024 "$tmp/full.svg" -o "$tmp/ios.png"
+magick "$tmp/ios.png" -alpha off ios/App/App/Assets.xcassets/AppIcon.appiconset/AppIcon-512@2x.png
 rsvg-convert -w 1024 -h 1024 "$B/circle.svg" -o "$B/discord-icon.png"
 for s in 16 32 48; do rsvg-convert -w "$s" -h "$s" "$B/small.svg" -o "$tmp/$s.png"; done
 magick "$tmp/16.png" "$tmp/32.png" "$tmp/48.png" "$SITE/favicon.ico"

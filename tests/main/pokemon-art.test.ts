@@ -1,7 +1,13 @@
 import { describe, it, expect } from 'vitest'
 import { ART_GROUPS, findArt } from '../../scripts/catalog/pokemon/art'
 import { englishNamer } from '../../scripts/catalog/pokemon/englishNames'
-import { isSameNumber, matchProducts, sameCardName } from '../../scripts/catalog/pokemon/match'
+import {
+  isSameNumber,
+  matchProducts,
+  namesCard,
+  sameCardName,
+  speciesCheck
+} from '../../scripts/catalog/pokemon/match'
 import type { PkmLang, TcProduct, TdCard, TdSet } from '../../scripts/catalog/pokemon/types'
 
 const set = (id: string, official?: number): TdSet => ({
@@ -166,17 +172,134 @@ describe('matchProducts by number', () => {
   const delcatty = product(716156, 'Delcatty', '5/109')
 
   it('rejects a product of the same number and another name, when asked to check', () => {
-    const m = matchProducts(misty, 1, [delcatty], new Map(), true)
+    const m = matchProducts(misty, 1, [delcatty], new Map(), namesCard)
     expect(m.products).toEqual([])
     expect(m.problems).toHaveLength(1)
   })
   it('keeps a matching name', () => {
-    const m = matchProducts(card('005', { name: 'Delcatty' }), 1, [delcatty], new Map(), true)
+    const m = matchProducts(card('005', { name: 'Delcatty' }), 1, [delcatty], new Map(), namesCard)
     expect(m.products.map((p) => p.product.productId)).toEqual([716156])
   })
   it('leaves Japanese cards as they were', () => {
     const m = matchProducts(card('005', { name: 'エネコロロ' }), 1, [delcatty], new Map())
     expect(m.products).toHaveLength(1)
+  })
+})
+
+describe('namesCard', () => {
+  const pokemon = (name: string): TdCard => card('1', { name, category: 'Pokemon' })
+  const trainer = (name: string): TdCard => card('1', { name, category: 'Trainer' })
+  const energy = (name: string): TdCard => card('1', { name, category: 'Energy' })
+
+  it.each([
+    [pokemon('Dark Raichu'), 'Raichu'],
+    [pokemon('Pikachu ex'), 'Pikachu'],
+    [pokemon('Metagross δ'), 'Metagross (Delta Species)'],
+    [pokemon('Palkia'), 'Palkia LV.X'],
+    [pokemon('Gengar'), 'Gengar (Prime)'],
+    [pokemon('Tornadus-EX'), 'Tornadus EX - BW96 (Prerelease)'],
+    [pokemon('Flying Pikachu'), 'Pikachu (Flying)'],
+    [pokemon('Unown A'), 'Unown [A]'],
+    [pokemon('Finizen'), 'Finizen 60/197'],
+    [energy('Water Energy'), 'Basic Water Energy (Blue Border)'],
+    [energy('δ Rainbow Energy'), 'Delta Rainbow Energy'],
+    [pokemon('Drowzee'), 'Drowsee'],
+    [pokemon('Dark Exeggutor'), 'Dark Exeggcutor'],
+    [pokemon('ナッシー[Exeggutor]'), 'Exeggutor'],
+    [trainer('Impostor Professor Oak'), 'Imposter Professor Oak'],
+    [trainer('Miracle Sphere β'), 'Miracle Sphere Beta'],
+    [trainer('Fairy Charm Lightning'), 'Fairy Charm L'],
+    [energy('Hiding Darkness Energy'), 'Hiding D Energy'],
+    [energy('Unit Energy GrassFireWater'), 'Unit Energy GRW (Secret Rare)'],
+    [energy('Blend Energy Grass Fire Psychic Darkness'), 'Blend Energy GFPD']
+  ])('takes the product, case %#', (c, name) => expect(namesCard(c, name)).toBe(true))
+
+  it.each([
+    [trainer('Switch'), 'Potion (Bulbasaur)'],
+    [trainer('Switch'), 'Granbull (#29)'],
+    [pokemon('Charmander'), 'Bulbasaur'],
+    [pokemon('Toedscruel ex'), 'Rayquaza - 22/107 (2004-2005 Gym Challenge)'],
+    [pokemon('Genesect EX'), 'Charizard'],
+    [pokemon('Darkrai & Cresselia LEGEND'), 'Dark Tyranitar'],
+    [pokemon('Mew'), 'Mewtwo']
+  ])('refuses the product, case %#', (c, name) => expect(namesCard(c, name)).toBe(false))
+})
+
+describe('speciesCheck', () => {
+  const en = (name: string, dex: number): TdCard =>
+    card('1', { name, category: 'Pokemon', dexId: [dex] })
+  const ja = (name: string, dex: number): TdCard =>
+    card('1', { name, category: 'Pokemon', dexId: [dex] })
+  const enCards = [en('Bulbasaur', 1), en('Bellsprout', 69), en('Garbodor', 569), en('Bunnelby', 659)]
+  const jaCards = [ja('フシギダネ', 1), ja('マダツボミ', 69), ja('ダストダス', 569), ja('ホルビー', 659)]
+  const ok = speciesCheck(enCards, jaCards)
+
+  it('refuses a product of another species', () => {
+    expect(ok(ja('エリカのフシギダネ', 1), "Erika's Bellsprout (Lv.13)")).toBe(false)
+  })
+  it('takes the same species under an owner, prefix or suffix', () => {
+    expect(ok(ja('エリカのフシギダネ', 1), "Erika's Bulbasaur (Lv.13)")).toBe(true)
+    expect(ok(ja('フシギダネV', 1), 'Dark Bulbasaur V - 001/100')).toBe(true)
+  })
+  it('trusts the Japanese name over a wrong dexId', () => {
+    expect(ok(ja('ダストダス', 659), 'Garbodor - 132/SV-P')).toBe(true)
+  })
+  it('says nothing when the product species has no Japanese name to go by', () => {
+    const check = speciesCheck([...enCards, en('Arctovish', 883)], jaCards)
+    expect(check(ja('ウオチルドンV', 881), 'Arctovish V - 017/070')).toBe(true)
+  })
+  it('says nothing about a name no English card uses, or a card with no dexId', () => {
+    expect(ok(ja('フシギダネ', 1), 'Some New Thing')).toBe(true)
+    expect(ok(card('1', { name: 'きずぐすり', category: 'Trainer' }), 'Bulbasaur')).toBe(true)
+  })
+})
+
+describe('matchProducts against a wrong TCGdex id', () => {
+  const potion = product(524026, 'Potion (Bulbasaur)', null)
+  const own = product(524034, 'Switch (Squirtle)', null)
+  const byId = new Map([potion, own].map((p) => [p.productId, p]))
+  const switchCard = card('34', {
+    name: 'Switch',
+    category: 'Trainer',
+    variants_detailed: [
+      { type: 'normal', stamp: ['squirtle'], thirdParty: { tcgplayer: 524034 } },
+      { type: 'normal', stamp: ['bulbasaur'], thirdParty: { tcgplayer: 524026 } }
+    ]
+  })
+
+  it('drops the id naming another card and keeps the card\'s own', () => {
+    const m = matchProducts(switchCard, 1, [], byId, namesCard)
+    expect(m.products.map((p) => p.product.productId)).toEqual([524034])
+    expect(m.problems).toEqual(['x-34: TCGplayer product 524026 is "Potion (Bulbasaur)"; rejected'])
+  })
+})
+
+describe('matchProducts in a set numbered on its own', () => {
+  const inSet = (localId: string, name: string, over: Partial<TdCard> = {}): TdCard =>
+    card(localId, { name, category: 'Pokemon', set: { id: '30th-c', name: '30th Classic Collection' }, ...over })
+  const charizard = product(714372, 'Charizard', '4/102')
+  const genesect = product(716158, 'Genesect EX (Team Plasma)', '11/101')
+  const gengar = product(716198, 'Gengar (Prime)', '94/102')
+  const misty = product(716159, 'Misty', '18/132')
+  const top = product(716199, 'Darkrai & Cresselia Legend (Top)', '99/102')
+  const bottom = product(716200, 'Darkrai & Cresselia Legend (Bottom)', '100/102')
+  const list = [charizard, genesect, gengar, misty, top, bottom]
+  const ids = (c: TdCard): number[] =>
+    matchProducts(c, 1, list, new Map(), namesCard).products.map((p) => p.product.productId)
+
+  it('goes by name, not the number that lands on another card', () => {
+    expect(ids(inSet('004', 'Genesect EX'))).toEqual([716158])
+    expect(ids(inSet('018', 'Gengar'))).toEqual([716198])
+  })
+  it('leaves a card out when two products take its name', () => {
+    expect(ids(inSet('019', 'Darkrai & Cresselia LEGEND'))).toEqual([])
+  })
+  it('takes a TCGdex id whose Number is the reprinted card\'s, when the name agrees', () => {
+    const c = (name: string): TdCard =>
+      inSet('001', name, { variants_detailed: [{ type: 'holo', thirdParty: { tcgplayer: 714372 } }] })
+    const byId = new Map([[714372, charizard]])
+    expect(matchProducts(c('Charizard'), 1, [], byId, namesCard).products).toHaveLength(1)
+    expect(matchProducts(c('Blastoise'), 1, [], byId, namesCard).products).toEqual([])
   })
 })
 

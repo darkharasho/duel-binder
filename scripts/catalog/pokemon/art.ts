@@ -1,4 +1,4 @@
-import { isSameNumber, sameCardName } from './match'
+import { isSameNumber, OWN_NUMBERS, sameCardName } from './match'
 import type { PkmLang, TcProduct, TdCard, TdSet } from './types'
 
 /**
@@ -62,12 +62,6 @@ export const ART_GROUPS: Record<PkmLang, Readonly<Record<string, readonly number
     web1: [24141] // Pokemon Web
   }
 }
-
-/**
- * Sets whose cards TCGdex numbers on its own (CC001, 001) while the card itself prints the reprinted
- * card's number (2/102). There the variant's TCGplayer id stands in for the number.
- */
-const OWN_NUMBERS: ReadonlySet<string> = new Set(['cel25cc', '30th-c'])
 
 /** Product notes that only name a finish: the art is the same under either. */
 const FINISH_NOTE = /^(?:non-holo|holo|holofoil|reverse holo|reverse holofoil|mirror holo|mirror holofoil|cosmos holo)$/i

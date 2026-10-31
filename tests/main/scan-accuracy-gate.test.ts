@@ -125,6 +125,14 @@ describe('accuracyProblem', () => {
     expect(accuracyProblem(report, 'pkm')).toBeNull()
     expect(accuracyProblem({ ...report, right: 28 }, 'pkm')).toMatch(/needs 29/)
     expect(accuracyProblem({ ...report, wrong: ['a'] }, 'pkm')).toMatch(/wrong card/)
+    // A reprint within the budget passes; another card, or too many reprints, doesn't.
+    expect(accuracyProblem({ ...report, wrong: ['a'], reprints: ['a'] }, 'pkm')).toBeNull()
+    expect(accuracyProblem({ ...report, wrong: ['a', 'b'], reprints: ['a'] }, 'pkm')).toMatch(
+      /wrong card/
+    )
+    const many = ['a', 'b', 'c']
+    expect(accuracyProblem({ ...report, wrong: many, reprints: many }, 'pkm')).toMatch(/wrong card/)
+    expect(accuracyProblem({ ...report, wrong: ['a'], reprints: ['a'] })).toMatch(/wrong card/)
   })
 
   it('passes a report at the floor with nothing wrong', () => {

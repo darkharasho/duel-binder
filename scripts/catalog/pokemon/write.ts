@@ -4,7 +4,7 @@ import { pokemonId } from '../../../src/shared/games/ids'
 import { hasNativeScript } from '../../../src/shared/setNames'
 import { findArt } from './art'
 import { englishNamer, type EnglishNamer } from './englishNames'
-import { matchGroup, matchProducts, sameCardName, type MatchedProduct } from './match'
+import { matchGroup, matchProducts, namesCard, speciesCheck, type MatchedProduct, type NameCheck } from './match'
 import { cardVersions, groupFinish, versionSubtype, type PkmVersion } from './versions'
 import type { PkmLang, PokemonSources, TcGroup, TcPrice, TcProduct, TdCard, TdSet } from './types'
 
@@ -70,6 +70,8 @@ interface LangPlan {
   sets: SetPlan[]
   productById: Map<number, TcProduct>
   inGroup: Map<number, TcProduct[]>
+  /** Whether a product can be a card of this language. */
+  nameOk: NameCheck
   report: PokemonReport
 }
 
@@ -130,7 +132,8 @@ function namingProduct(products: MatchedProduct[]): TcProduct | undefined {
 async function planLanguage(
   lang: PkmLang,
   sources: PokemonSources,
-  log: (l: string) => void
+  log: (l: string) => void,
+  enCards: TdCard[]
 ): Promise<LangPlan> {
   const problems: string[] = []
   const sets = await sources.sets(lang)
@@ -146,6 +149,7 @@ async function planLanguage(
   }
   const cards = await sources.cards(lang, [...setOf.keys()])
   const cardById = new Map(cards.map((c) => [c.id, c]))
+  const nameOk = lang === 'en' ? namesCard : speciesCheck(enCards, cards)
   log(`Pokémon ${lang}: ${sets.length} sets, ${cards.length} cards from TCGdex`)
 
   const groups: TcGroup[] = await sources.groups(lang)
@@ -187,7 +191,7 @@ async function planLanguage(
         groupId,
         groupId === null ? [] : (inGroup.get(groupId) ?? []),
         productById,
-        lang === 'en'
+        nameOk
       )
       problems.push(...m.problems.map((p) => `${lang}/${p}`))
       if (m.products.length === 0) unmatchedCards++
@@ -248,6 +252,7 @@ async function planLanguage(
     sets: planned,
     productById,
     inGroup,
+    nameOk,
     report: {
       lang,
       sets: sets.length,
@@ -418,9 +423,9 @@ function writePlans(db: Database.Database, plans: LangPlan[], nowIso: string): v
             localName: cp.localName
           })
           let image = (detailsRow.get(id) as { image_url: string | null }).image_url
-          // Art is kept, except art an unchecked number match gave an English card: another card's.
-          const product = lang === 'en' && image ? productOfImage(image, plan.productById) : null
-          if (product && image !== cp.imageUrl && !sameCardName(card.name, product.name)) {
+          // Art is kept, except art an unchecked match gave the card: another card's.
+          const product = image ? productOfImage(image, plan.productById) : null
+          if (product && image !== cp.imageUrl && !plan.nameOk(card, product.name)) {
             image = cp.imageUrl
             setImage.run(image, id)
             report.artRemoved++
@@ -466,11 +471,12 @@ function writePlans(db: Database.Database, plans: LangPlan[], nowIso: string): v
               updatePrinting.run(0, product, price, p.id)
             }
           }
-          // Sticky: a version no longer produced is kept, flagged missing.
+          // Sticky: a version no longer produced is kept, flagged missing, without another card's price.
           for (const p of existing) {
-            if (!produced.has(p.set_rarity) && p.missing_from_api === 0) {
-              updatePrinting.run(1, p.tcg_product_id, p.market_price, p.id)
-            }
+            if (produced.has(p.set_rarity)) continue
+            const old = p.tcg_product_id === null ? undefined : plan.productById.get(p.tcg_product_id)
+            if (old && !plan.nameOk(card, old.name)) updatePrinting.run(1, null, null, p.id)
+            else if (p.missing_from_api === 0) updatePrinting.run(1, p.tcg_product_id, p.market_price, p.id)
           }
         }
       }
@@ -553,7 +559,11 @@ export async function refreshPokemon(
   const log = opts.log ?? ((): void => {})
   const langs = opts.langs ?? ['en', 'ja']
   const plans: LangPlan[] = []
-  for (const lang of langs) plans.push(await planLanguage(lang, sources, log))
+  for (const lang of langs) {
+    const en = plans.find((p) => p.lang === 'en')
+    const enCards = en ? en.sets.flatMap((s) => s.cards.map((c) => c.card)) : []
+    plans.push(await planLanguage(lang, sources, log, enCards))
+  }
   const ja = plans.find((p) => p.lang === 'ja')
   const namer = ja
     ? nameInEnglish(

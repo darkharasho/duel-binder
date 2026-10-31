@@ -24,6 +24,6 @@ describe('brand assets', () => {
     expect(icoSizes('workers/portal/site/favicon.ico')).toEqual([16, 32, 48]))
   it('svg sources are self-contained', () => {
     for (const f of ['square', 'circle', 'small'])
-      expect(readFileSync(`resources/brand/${f}.svg`, 'utf8')).toMatch(/<linearGradient id="au"/)
+      expect(readFileSync(`resources/brand/${f}.svg`, 'utf8')).toMatch(/<radialGradient id="bg"/)
   })
 })

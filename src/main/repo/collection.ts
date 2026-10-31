@@ -3,7 +3,15 @@ import { RARITY_LABEL } from '../db/schema'
 import { MAX_NOTES } from '../../shared/cloud'
 import { LANGUAGES } from '../../shared/languages'
 import { priceFor } from '../../shared/pricing'
-import type { AddEntryInput, CollectionFilters, EntryView, Facets, UpdateEntryInput } from '../../shared/types'
+import type {
+  AddEntryInput,
+  CardRow,
+  CollectionFilters,
+  EntryView,
+  Facets,
+  Printing,
+  UpdateEntryInput
+} from '../../shared/types'
 import { getMeta } from '../db/meta'
 import { LOCAL, scopeGame, type Scope } from './scope'
 import { pokemonFacets, pokemonSearch, pokemonWhere } from './pkmFilters'
@@ -28,25 +36,43 @@ interface EntryDbRow {
   [col: string]: unknown
 }
 
-const select = (scope: Scope): string => `
-  SELECT e.id AS e_id, e.quantity AS e_quantity, e.notes AS e_notes, e.created_at AS e_created_at,
-         e.updated_at AS e_updated_at, e.image_id AS e_image_id,
+/** The card, printing and price columns `entryPrice` and rowToCard read; `c`, `p`, `ip` and `pc` joined as below. */
+export const cardPriceColumns = (scope: Scope): string => `
          c.id AS id, c.name, c.type, c.frame_type, c.race, c.attribute, c.level, c.linkval, c.atk, c.def,
          c.archetype, c.desc, c.tcgplayer_price, ${POKEMON_COLS},
          p.id AS p_id, p.card_id, p.set_name, p.set_code, ${RARITY_LABEL} AS set_rarity, p.set_rarity_code, ${SET_PRICE} AS set_price,
          p.market_price, ${enTwinPrice(scope.game)} AS en_twin_price, p.game AS p_game,
          p.missing_from_api, p.language,
          ip.printing_id AS ip_id, ip.price AS ip_price, ip.checked_at AS ip_checked_at,
-         ip.listing_count AS ip_listing_count
+         ip.listing_count AS ip_listing_count`
+
+const select = (scope: Scope): string => `
+  SELECT e.id AS e_id, e.quantity AS e_quantity, e.notes AS e_notes, e.created_at AS e_created_at,
+         e.updated_at AS e_updated_at, e.image_id AS e_image_id,
+         ${cardPriceColumns(scope)}
   FROM collection_entries e
   JOIN card_printings p ON p.id = e.printing_id AND +p.game = ${scope.game}
   JOIN cards c ON c.id = p.card_id AND +c.game = ${scope.game}
   LEFT JOIN pokemon_cards pc ON pc.card_id = c.id
   LEFT JOIN intl_prices ip ON ip.printing_id = p.id`
 
-function toView(r: EntryDbRow, priceStatus: string | null): EntryView {
-  const card = rowToCard(r as unknown as CardDbRow)
-  const printing = rowToPrinting({ ...(r as unknown as PrintingDbRow), id: r.p_id as number })
+type EntryPrice = Pick<
+  EntryView,
+  | 'unitPrice'
+  | 'priceApproximate'
+  | 'priceSource'
+  | 'priceCheckedAt'
+  | 'priceListingCount'
+  | 'noPriceReason'
+>
+
+/** A printing's price from a row of `cardPriceColumns`, by the rules of the row's game. */
+export function entryPrice(
+  r: Record<string, unknown>,
+  card: CardRow,
+  printing: Printing,
+  priceStatus: string | null
+): EntryPrice {
   const english = printing.language === 'en'
   const hasRow = r.ip_id !== null && r.ip_id !== undefined
   const ebayPrice = hasRow ? (r.ip_price as number | null) : null
@@ -80,6 +106,20 @@ function toView(r: EntryDbRow, priceStatus: string | null): EntryView {
     approximate = false
   }
   return {
+    unitPrice,
+    priceApproximate: approximate,
+    priceSource: market !== null || twin !== null ? 'tcgplayer' : ebay ? 'ebay' : ygo ? 'ygoprodeck' : null,
+    priceCheckedAt: ebay ? ((r.ip_checked_at as string | null) ?? null) : null,
+    priceListingCount: ebay ? ((r.ip_listing_count as number | null) ?? null) : null,
+    noPriceReason
+  }
+}
+
+function toView(r: EntryDbRow, priceStatus: string | null): EntryView {
+  const card = rowToCard(r as unknown as CardDbRow)
+  const printing = rowToPrinting({ ...(r as unknown as PrintingDbRow), id: r.p_id as number })
+  const price = entryPrice(r, card, printing, priceStatus)
+  return {
     id: r.e_id,
     quantity: r.e_quantity,
     notes: r.e_notes,
@@ -89,13 +129,8 @@ function toView(r: EntryDbRow, priceStatus: string | null): EntryView {
     printing,
     imageId: r.e_image_id,
     printingScan: true,
-    unitPrice,
-    priceApproximate: approximate,
-    priceSource: market !== null || twin !== null ? 'tcgplayer' : ebay ? 'ebay' : ygo ? 'ygoprodeck' : null,
-    priceCheckedAt: ebay ? ((r.ip_checked_at as string | null) ?? null) : null,
-    priceListingCount: ebay ? ((r.ip_listing_count as number | null) ?? null) : null,
-    noPriceReason,
-    totalValue: (unitPrice ?? 0) * r.e_quantity
+    ...price,
+    totalValue: (price.unitPrice ?? 0) * r.e_quantity
   }
 }
 

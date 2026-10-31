@@ -8,9 +8,11 @@ import { LanguageTag } from '@/components/LanguageTag'
 import { pickableRow } from '@/components/pickableRow'
 import { Button } from '@/components/ui/button'
 import { replaceChecklistCard } from '@/features/sets/setsView'
+import { WishToggle } from '@/features/wishlist/WishToggle'
 import { api, invalidateAfterEdit, queryKeys } from '@/lib/api'
 import { formatUsd } from '@/lib/format'
 import { createSerialQueue } from '@/lib/serialQueue'
+import { useCardWishes } from '@/lib/wishlist'
 import { cn } from '@/lib/utils'
 import type { CardTypeRow } from './cardTypes'
 
@@ -81,6 +83,7 @@ export function CardTypeList({
   onSelect
 }: CardTypeListProps): React.JSX.Element {
   const qc = useQueryClient()
+  const wishes = useCardWishes(cardId)
   const queue = useRef(createSerialQueue())
   const [pending, setPending] = useState(0)
   const flight = useRef<InFlight | null>(null)
@@ -204,6 +207,17 @@ export function CardTypeList({
                 <span className="text-xs text-muted-foreground tabular-nums">
                   {formatUsd(price)}
                 </span>
+              )}
+              {/* One heart per printing: its other rows are only other art. */}
+              {row.key.startsWith('p') ? (
+                <WishToggle
+                  cardId={cardId}
+                  printingId={p.id}
+                  wanted={wishes.data?.some((w) => w.printingId === p.id) ?? false}
+                  label={name}
+                />
+              ) : (
+                <span aria-hidden className="size-8 shrink-0" />
               )}
               <Button
                 variant="outline"

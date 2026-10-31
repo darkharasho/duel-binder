@@ -598,6 +598,7 @@ export function createPhoneStore(deps: {
         db.transaction(() => {
           for (const table of [
             'collection_entries',
+            'wishlist_entries',
             'value_snapshots',
             'sync_pending',
             'sync_issues',

@@ -12,7 +12,8 @@ import {
   keepsKey,
   replaces,
   type WireEntry,
-  type WirePrice
+  type WirePrice,
+  type WireWish
 } from '../../shared/cloud'
 
 /**
@@ -69,16 +70,16 @@ export function saveAccountState(
   ).run(owner, s.cursor ?? null, s.syncedAt ?? null, s.cursor ?? null, s.syncedAt ?? null)
 }
 
-/** A per-game sync feed: the account's entries, or the server's price changes. */
-export type SyncStream = 'entries' | 'prices'
+/** A per-game sync feed: the account's entries or wishlist, or the server's price changes. */
+export type SyncStream = 'entries' | 'prices' | 'wishlist'
 
 /**
  * Where `owner` is in one game's feed. Yu-Gi-Oh! keeps its pre-games places (the account's cursor,
- * and this device's `price_feed_cursor`); every other game has a `cloud_game_cursors` row, 0 until
- * its first pull.
+ * and this device's `price_feed_cursor`); every other game, and every game's wishlist, has a
+ * `cloud_game_cursors` row, 0 until its first pull.
  */
 export function gameCursor(db: SqlDb, owner: number, game: GameId, stream: SyncStream): number {
-  if (game === 'ygo')
+  if (game === 'ygo' && stream !== 'wishlist')
     return stream === 'entries'
       ? accountState(db, owner).cursor
       : Number(getMeta(db, 'price_feed_cursor') ?? 0)
@@ -95,7 +96,7 @@ export function saveGameCursor(
   stream: SyncStream,
   cursor: number
 ): void {
-  if (game === 'ygo') {
+  if (game === 'ygo' && stream !== 'wishlist') {
     if (stream === 'entries') saveAccountState(db, owner, { cursor })
     else setMeta(db, 'price_feed_cursor', String(cursor))
     return
@@ -106,10 +107,11 @@ export function saveGameCursor(
   ).run(owner, game, stream, cursor)
 }
 
-/** Whether this computer has never-signed-in entries (owner 0), tombstones included. */
+/** Whether this computer has never-signed-in entries or wishes (owner 0), tombstones included. */
 export function hasLocalData(db: SqlDb): boolean {
   return (
-    db.prepare('SELECT 1 FROM collection_entries WHERE owner_id = 0 LIMIT 1').get() !== undefined
+    db.prepare('SELECT 1 FROM collection_entries WHERE owner_id = 0 LIMIT 1').get() !== undefined ||
+    db.prepare('SELECT 1 FROM wishlist_entries WHERE owner_id = 0 LIMIT 1').get() !== undefined
   )
 }
 
@@ -125,6 +127,8 @@ export function adoptLocalData(db: SqlDb, owner: number): number {
     // A day the owner already has a snapshot for keeps the owner's.
     db.prepare('UPDATE OR IGNORE value_snapshots SET owner_id = ? WHERE owner_id = 0').run(owner)
     db.prepare('DELETE FROM value_snapshots WHERE owner_id = 0').run()
+    db.prepare('UPDATE OR IGNORE wishlist_entries SET owner_id = ?, dirty = 1 WHERE owner_id = 0').run(owner)
+    db.prepare('DELETE FROM wishlist_entries WHERE owner_id = 0').run()
     return moved.changes
   })()
 }
@@ -375,6 +379,94 @@ export function purgeCleanTombstones(db: SqlDb, owner: number): number {
       'DELETE FROM collection_entries WHERE owner_id = ? AND deleted_at IS NOT NULL AND dirty = 0'
     )
     .run(owner).changes
+}
+
+interface WishRow {
+  pkey: string
+  game: GameId
+  quantity: number | null
+  created_at: string
+  updated_at: string
+  deleted_at: string | null
+  dirty: number
+}
+
+const wishToWire = (r: WishRow): WireWish => ({
+  pkey: r.pkey,
+  game: r.game,
+  quantity: r.quantity,
+  createdAt: r.created_at,
+  updatedAt: r.updated_at,
+  deletedAt: r.deleted_at
+})
+
+const wishRow = (db: SqlDb, owner: number, pkey: string): WishRow | undefined =>
+  db
+    .prepare(
+      `SELECT pkey, game, quantity, created_at, updated_at, deleted_at, dirty FROM wishlist_entries
+       WHERE owner_id = ? AND pkey = ?`
+    )
+    .get(owner, pkey) as WishRow | undefined
+
+/** Up to `limit` of the owner's unpushed wishlist rows, tombstones included, leaving out `skip`. */
+export function dirtyWishes(
+  db: SqlDb,
+  owner: number,
+  limit: number,
+  skip: ReadonlySet<string>
+): WireWish[] {
+  const rows = db
+    .prepare(
+      `SELECT pkey, game, quantity, created_at, updated_at, deleted_at, dirty FROM wishlist_entries
+       WHERE owner_id = ? AND dirty = 1 AND pkey NOT IN (SELECT value FROM json_each(?))
+       ORDER BY updated_at, pkey LIMIT ?`
+    )
+    .all(owner, JSON.stringify([...skip]), limit) as WishRow[]
+  return rows.map(wishToWire)
+}
+
+/** Marks a pushed wishlist row clean, unless it was edited again since `w` was read. */
+export function markWishPushed(db: SqlDb, owner: number, w: WireWish): void {
+  db.prepare(
+    `UPDATE wishlist_entries SET dirty = 0
+     WHERE owner_id = ? AND pkey = ? AND updated_at = ? AND deleted_at IS ?`
+  ).run(owner, w.pkey, w.updatedAt, w.deletedAt)
+}
+
+/** Applies one server wishlist row, clean; a newer unpushed local edit is kept. Returns whether it wrote. */
+export function applyRemoteWish(db: SqlDb, owner: number, w: WireWish): boolean {
+  const local = wishRow(db, owner, w.pkey)
+  if (!local && w.deletedAt !== null) return false
+  if (local) {
+    const same = JSON.stringify(wishToWire(local)) === JSON.stringify(wishToWire(toWishRow(w)))
+    if (local.dirty === 0 && same) return false
+    if (local.dirty === 1 && !replaces(w, wishToWire(local))) return false
+  }
+  db.prepare(
+    `INSERT INTO wishlist_entries (owner_id, pkey, game, quantity, created_at, updated_at, deleted_at, dirty)
+     VALUES (?, ?, ?, ?, ?, ?, ?, 0)
+     ON CONFLICT(owner_id, pkey) DO UPDATE SET game = excluded.game, quantity = excluded.quantity,
+       created_at = excluded.created_at, updated_at = excluded.updated_at, deleted_at = excluded.deleted_at,
+       dirty = 0`
+  ).run(owner, w.pkey, w.game, w.quantity, w.createdAt, w.updatedAt, w.deletedAt)
+  return true
+}
+
+const toWishRow = (w: WireWish): WishRow => ({
+  pkey: w.pkey,
+  game: w.game,
+  quantity: w.quantity,
+  created_at: w.createdAt,
+  updated_at: w.updatedAt,
+  deleted_at: w.deletedAt,
+  dirty: 0
+})
+
+/** Deletes the owner's wishlist tombstones the server already has. */
+export function purgeCleanWishes(db: SqlDb, owner: number): void {
+  db.prepare(
+    'DELETE FROM wishlist_entries WHERE owner_id = ? AND deleted_at IS NOT NULL AND dirty = 0'
+  ).run(owner)
 }
 
 /** Printing keys whose price is missing or stale, most needed first. */

@@ -71,6 +71,8 @@ interface Props {
   onBackToMine?: () => void
   /** Returns to the friend list; the phone passes it, as its binder replaces the list. */
   onBackToFriends?: () => void
+  /** The binder's tabs, shown under a friend's header. */
+  friendTabs?: React.ReactNode
 }
 
 export function CollectionPage({
@@ -78,7 +80,8 @@ export function CollectionPage({
   onAddCard,
   friend,
   onBackToMine,
-  onBackToFriends
+  onBackToFriends,
+  friendTabs
 }: Props): React.JSX.Element {
   const [pageFilters, setFilters] = useState<CollectionFilters>(DEFAULT_FILTERS)
   const [languageFilter, setLanguageFilter] = useLanguageFilter()
@@ -266,6 +269,7 @@ export function CollectionPage({
               </Button>
             </div>
           )}
+          {friend && friendTabs}
 
           {phone ? (
             <>

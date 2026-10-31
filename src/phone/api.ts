@@ -9,7 +9,8 @@ import type {
   CollectionFilters,
   EntryView,
   SyncStatus,
-  UpdateStatus
+  UpdateStatus,
+  WishlistItem
 } from '../shared/types'
 import type { PhoneStore } from './data/store'
 import { phonePackWrappers } from './packWrappers'
@@ -62,7 +63,9 @@ const EDITS: readonly DataChannel[] = [
   'collection:add',
   'collection:update',
   'collection:remove',
-  'sets:adjust'
+  'sets:adjust',
+  'wishlist:set',
+  'wishlist:remove'
 ]
 
 /** The channels after which every page reloads: switching the game shown. */
@@ -213,8 +216,18 @@ export function createPhoneApi(deps: {
         })),
       facets: portal('friends:facets'),
       // Off the serial queue: a card opening must not hold up the edits behind it.
-      forCard: (cardId: number) => store.portalRead('friends:forCard', [cardId])
+      forCard: (cardId: number) => store.portalRead('friends:forCard', [cardId]),
+      wishlist: async (userId: number) =>
+        (await store.portal<WishlistItem[]>('friends:wishlist', [userId])).map((w) => ({
+          ...w,
+          printingScan: false
+        })),
+      wanting: (cardId: number) => store.portalRead('friends:wanting', [cardId]),
+      owning: (pkeys: string[]) => store.portalRead('friends:owning', [pkeys]),
+      wishlistVisible: portal('friends:wishlistVisible'),
+      setWishlistVisible: portal('friends:setWishlistVisible')
     },
+    wishlist: dataPart('wishlist'),
     scan: {
       debugFrame: async () => undefined,
       ...dataPart('scan'),

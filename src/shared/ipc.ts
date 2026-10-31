@@ -9,6 +9,7 @@ import type {
   BrowsePage,
   CardDetail,
   CardSearchResult,
+  CardWish,
   ChecklistCard,
   CollectionFilters,
   CollectionStats,
@@ -17,12 +18,15 @@ import type {
   FriendRequestResult,
   FriendCardCopies,
   FriendsOverview,
+  FriendWantsCard,
   ImageDownloads,
   SetChecklist,
   SetSummary,
   SyncStatus,
   UpdateEntryInput,
-  UpdateStatus
+  UpdateStatus,
+  WishlistItem,
+  WishOwners
 } from './types'
 import type { ScanWindowMessage } from './scanWindow'
 import type { ScanRef } from './scan/fingerprintRefs'
@@ -73,6 +77,23 @@ export interface Api {
     facets(userId: number): Promise<Facets>
     /** Friends with copies of this card in the current game; a portal without it answers 404. */
     forCard(cardId: number): Promise<FriendCardCopies[]>
+    /** An accepted friend's wishlist, without what they already have; empty if they hide it. */
+    wishlist(userId: number): Promise<WishlistItem[]>
+    /** Friends who want this card and don't hide their wishlist. */
+    wanting(cardId: number): Promise<FriendWantsCard[]>
+    /** Which friends own these printings (sync keys), in one call; only those some friend owns. */
+    owning(pkeys: string[]): Promise<WishOwners[]>
+    /** Whether friends can see this account's wishlist. */
+    wishlistVisible(): Promise<boolean>
+    setWishlistVisible(visible: boolean): Promise<void>
+  }
+  /** The cards this account wants, in the game shown. Local first, like the collection. */
+  wishlist: {
+    list(): Promise<WishlistItem[]>
+    forCard(cardId: number): Promise<CardWish[]>
+    /** Wants a printing; `quantity` null for no target. A target is kept above the copies owned. */
+    set(printingId: number, quantity: number | null): Promise<void>
+    remove(printingId: number): Promise<void>
   }
   scan: {
     printingsByCode(code: string): Promise<ScanPrinting[]>
@@ -231,6 +252,15 @@ export const INVOKE_CHANNELS = [
   'friends:collection',
   'friends:facets',
   'friends:forCard',
+  'friends:wishlist',
+  'friends:wanting',
+  'friends:owning',
+  'friends:wishlistVisible',
+  'friends:setWishlistVisible',
+  'wishlist:list',
+  'wishlist:forCard',
+  'wishlist:set',
+  'wishlist:remove',
   'scan:printingsByCode',
   'scan:printingsByNumber',
   'scan:printingsForSet',

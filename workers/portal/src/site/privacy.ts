@@ -19,7 +19,7 @@ export function renderPrivacy(view: PrivacyView): string {
           'What is stored',
           p(
             'When you sign in with Discord, the portal stores your Discord id, username, display name and avatar. It asks Discord only for the <code>identify</code> scope: not your email, your servers or your messages. When you sign in with Apple, in the iPhone app, it stores Apple’s id for your account and, if you share it, your name; not your email.',
-            'Either way it also stores your collection, notes and value history; your friends and blocks; your sign-in sessions; and when your account last used the portal, to the hour.'
+            'Either way it also stores your collection, wishlist, notes and value history; your friends and blocks; your sign-in sessions; and when your account last used the portal, to the hour.'
           )
         ],
         [
@@ -59,7 +59,7 @@ export function renderPrivacy(view: PrivacyView): string {
         [
           'Deleting your account',
           p(
-            'Go to Settings → Delete account, on the web or in the phone app. This removes your synced collection, friends and sign-ins on every device. Desktop apps keep their own copy on that computer and are signed out.'
+            'Go to Settings → Delete account, on the web or in the phone app. This removes your synced collection, wishlist, friends and sign-ins on every device. Desktop apps keep their own copy on that computer and are signed out.'
           )
         ],
         [

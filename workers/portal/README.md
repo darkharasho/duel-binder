@@ -46,6 +46,8 @@ The desktop app signs in through the browser. It stores a long-lived desktop tok
 | `POST /auth/desktop/revoke` | Takes a desktop Bearer token and deletes that one session (204). Answers 401 if the token is not a live desktop token. |
 | `POST /api/sync/push` `{ entries }` | Sends up to 500 changed entries (tombstones included). Each gets one of `applied`, `stale` (with the server's `current` row), `merged` (with the `winner` on the same printing and art), `unknown-printing` or `rejected`. More than 500 gets 413 and bad payloads get 400. Timestamps more than 10 minutes in the future are clamped to server time. |
 | `GET /api/sync/pull?cursor=N` | The caller's rows changed after `cursor`, tombstones included, in `server_seq` order. Returns `{ entries, cursor, more }`, at most 1,000 entries per page. |
+| `POST /api/sync/wishlist-push` `{ entries }` | Sends up to 500 wishlist rows (one per printing, tombstones included). Each gets `applied`, `stale` (with the server's `current` row) or `skipped` (a game the account can't use yet). More than 500 gets 413 and bad payloads get 400. |
+| `GET /api/sync/wishlist-pull?cursor=N&game=G` | The caller's wishlist rows of `game` changed after `cursor`, tombstones included. Returns `{ entries, cursor, more }`, at most 1,000 per page. |
 | `POST /api/sync/prices` `{ pkeys }` | Server eBay prices for up to 1,000 printing keys (more gets 413). A key longer than 300 characters gets 400. Unknown keys are left out. Returns `{ prices, status }`. |
 
 All sync routes need `Authorization: Bearer <desktop token>`. Without one they answer `401 { error: 'signed-out' }`.

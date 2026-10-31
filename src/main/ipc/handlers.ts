@@ -1,6 +1,6 @@
 import type Database from 'better-sqlite3'
 import { clipboard, ipcMain } from 'electron'
-import type { CollectionFilters, EntryView, UpdateStatus } from '@shared/types'
+import type { CollectionFilters, EntryView, UpdateStatus, WishlistItem } from '@shared/types'
 import { MAX_DEX_ROWS, type DexRow } from '@shared/dex/parse'
 import type { INVOKE_CHANNELS } from '@shared/ipc'
 import { INVOKE_CHANNELS as CHANNELS } from '@shared/ipc'
@@ -121,6 +121,16 @@ export function createHandlers({
       })),
     'friends:facets': async (userId: number) => account.portal('friends:facets', [userId]),
     'friends:forCard': async (cardId: number) => account.portal('friends:forCard', [cardId]),
+    'friends:wishlist': async (userId: number) =>
+      (await account.portal<WishlistItem[]>('friends:wishlist', [userId])).map((w) => ({
+        ...w,
+        printingScan: false
+      })),
+    'friends:wanting': async (cardId: number) => account.portal('friends:wanting', [cardId]),
+    'friends:owning': async (pkeys: string[]) => account.portal('friends:owning', [pkeys]),
+    'friends:wishlistVisible': async () => account.portal('friends:wishlistVisible', []),
+    'friends:setWishlistVisible': async (visible: boolean) =>
+      account.portal('friends:setWishlistVisible', [visible]),
     'scan:fingerprints': (game: GameId) => fingerprints[game].read(),
     'scan:fingerprintRefs': async () => {
       const file = await fingerprints.ygo.readRefs()

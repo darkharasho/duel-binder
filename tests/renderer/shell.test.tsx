@@ -84,6 +84,7 @@ describe('AppShell sets nav', () => {
     expect(names).toEqual([
       'Dashboard',
       'Collection',
+      'Wishlist',
       'Sets',
       'Browse',
       'Scan',

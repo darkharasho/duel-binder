@@ -221,7 +221,7 @@ const ENTRY_REFS: Record<string, [count: number, kind: string]> = {
   'src/main/repo/stats.ts': [1, SCOPED],
   'workers/portal/src/scope.ts': [3, SCOPED],
   'src/main/prices/candidates.ts': [2, LIVE],
-  'src/main/dev/fakeData.ts': [2, LIVE],
+  'src/main/dev/fakeData.ts': [4, LIVE],
   'src/main/index.ts': [1, LIVE],
   'src/main/sync/sync.ts': [1, FK],
   'src/main/sync/intl.ts': [1, FK],

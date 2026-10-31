@@ -16,7 +16,7 @@ import { PanelPrice } from '@/components/PanelPrice'
 import { LanguageTag } from '@/components/LanguageTag'
 import { Button } from '@/components/ui/button'
 import { SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
-import { api, mutationInvalidationKeys, queryKeys } from '@/lib/api'
+import { api, invalidateAfterEdit, queryKeys } from '@/lib/api'
 import { createSerialQueue } from '@/lib/serialQueue'
 import { formatUsd } from '@/lib/format'
 import { pickableRow } from '@/components/pickableRow'
@@ -159,9 +159,7 @@ export function BrowseCardPanel({
         flight.current = null
         // Mark Browse stale without refetching every loaded page; its counts are patched above.
         void qc.invalidateQueries({ queryKey: ['browse'], refetchType: 'none' })
-        for (const k of mutationInvalidationKeys) {
-          if (k[0] !== 'browse') void qc.invalidateQueries({ queryKey: [...k] })
-        }
+        void invalidateAfterEdit(qc, (k) => k[0] === 'browse')
       })
   }
 

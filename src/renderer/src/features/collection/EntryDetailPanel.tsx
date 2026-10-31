@@ -20,7 +20,7 @@ import {
   SelectValue
 } from '@/components/ui/select'
 import { SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
-import { api, mutationInvalidationKeys, queryKeys } from '@/lib/api'
+import { api, invalidateAfterEdit, queryKeys } from '@/lib/api'
 import { cn } from '@/lib/utils'
 import { EbayPriceLine, EntryValue, StaleBadge, displayTotal } from './EntryValue'
 
@@ -56,8 +56,7 @@ function EntryEditor({
   const [notes, setNotes] = useState(entry.notes)
   const [confirming, setConfirming] = useState(false)
 
-  const invalidate = (): Promise<unknown[]> =>
-    Promise.all(mutationInvalidationKeys.map((k) => qc.invalidateQueries({ queryKey: [...k] })))
+  const invalidate = (): Promise<unknown> => invalidateAfterEdit(qc)
 
   const update = useMutation({
     mutationFn: (patch: UpdateEntryInput) => api.collection.update(entry.id, patch),

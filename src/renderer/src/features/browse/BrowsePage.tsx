@@ -360,7 +360,7 @@ export function BrowsePage({ onAddCard }: Props): React.JSX.Element {
           className="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-x-4 gap-y-6 max-md:grid-cols-3 max-md:gap-x-2 max-md:gap-y-4"
         >
           {cards.map((c) => (
-            <li key={c.id}>
+            <li key={c.id} className="lazy-item [--lazy-h:290px]">
               <button
                 type="button"
                 data-nav-key={c.id}

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import type { GameId } from '@shared/games/types'
-import { api, mutationInvalidationKeys } from '@/lib/api'
+import { api, invalidateAfterEdit } from '@/lib/api'
 import { track } from '@/lib/usage'
 import type { ScanDraft } from './resolve'
 import { printingOf } from './scanLook'
@@ -268,9 +268,7 @@ export function useScanSession(game: GameId = 'ygo'): {
     }
     // A clean Add leaves an empty list: rows with no printing go too. Rows scanned meanwhile stay.
     if (added > 0 && failed === 0) update((list) => list.filter((r) => !unaddable.has(r.key)))
-    if (added > 0) {
-      for (const queryKey of mutationInvalidationKeys) void qc.invalidateQueries({ queryKey })
-    }
+    if (added > 0) void invalidateAfterEdit(qc)
     return { added, failed, cards }
   }, [game, qc, update])
 

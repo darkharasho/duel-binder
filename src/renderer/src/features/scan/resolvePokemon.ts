@@ -165,7 +165,8 @@ const unique = (ids: number[]): number[] => [...new Set(ids)]
 
 /**
  * The card's draft, its versions to pick from: sure when it has one, else flagged pick-printing
- * on the cheapest, which is only a placeholder (the overlay shows the range across them).
+ * on its Normal version, else its Holofoil, else the cheapest, which is only a placeholder (the overlay shows the range
+ * across them). A reverse holo is often the cheapest, and the foil can't tell one yet.
  */
 async function draft(
   cardId: number,
@@ -175,7 +176,13 @@ async function draft(
 ): Promise<ScanDraft | null> {
   const options = await ctx.lookups.printingsForCards([cardId])
   if (!options.length) return null
-  const printing = options.reduce((a, b) => ((b.price ?? Infinity) < (a.price ?? Infinity) ? b : a))
+  const cheapest = (list: ScanPrinting[]): ScanPrinting =>
+    list.reduce((a, b) => ((b.price ?? Infinity) < (a.price ?? Infinity) ? b : a))
+  const printing = cheapest(options)
+  const plain =
+    ['Normal', 'Holofoil']
+      .map((label) => options.filter((o) => o.rarity === label))
+      .find((list) => list.length) ?? []
   const [top] = raw.art
   const imageId =
     top && printing.imageIds.includes(top.imageId) ? top.imageId : printing.imageIds[0]
@@ -189,7 +196,7 @@ async function draft(
         )
       : null
   const named = label === null ? null : options.filter((o) => o.rarity === label)
-  const chosen = named?.length === 1 ? named[0] : printing
+  const chosen = named?.length === 1 ? named[0] : plain.length ? cheapest(plain) : printing
   return {
     cardId,
     name: printing.name,

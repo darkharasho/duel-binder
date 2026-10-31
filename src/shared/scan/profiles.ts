@@ -55,6 +55,11 @@ export interface ScanProfile {
    * card-sized region found, cut from the full-size frame (holderSearch.ts).
    */
   holderSearch: boolean
+  /**
+   * Whether a frame tries the outline the last frame's art matched on before searching: a card
+   * stays where it is between frames, and the search is most of a frame's cost.
+   */
+  keepOutline: boolean
 }
 
 /**
@@ -99,7 +104,8 @@ export const SCAN_PROFILES: Record<GameId, ScanProfile> = {
     textBox: TEXT_BOX,
     rarityLook: true,
     foil: null,
-    holderSearch: false
+    holderSearch: false,
+    keepOutline: false
   },
   pkm: {
     game: 'pkm',
@@ -140,7 +146,8 @@ export const SCAN_PROFILES: Record<GameId, ScanProfile> = {
       reference: [0.07, 0.57, 0.93, 0.8]
     },
     // Cards are often filmed in toploaders, cases and slabs, small in the frame.
-    holderSearch: true
+    holderSearch: true,
+    keepOutline: true
   }
 }
 

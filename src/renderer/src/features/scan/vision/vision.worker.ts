@@ -2,10 +2,12 @@
 // its art against the fingerprints and cutting out its text bands for OCR in main.
 import { decodeFingerprints, type FingerprintIndex } from '@shared/scan/fingerprintFile'
 import { SCAN_PROFILES, scanProfile, type ScanProfile } from '@shared/scan/profiles'
+import { ART_MAX_DISTANCE } from '@shared/scan/thresholds'
 import type { RgbaImage } from '@shared/scan/types'
 import type { WorkerReply, WorkerRequest } from '../engine'
 import { analyze } from './analyze'
 import { loadCv } from './cv'
+import type { Quad } from './detect'
 import { holderBudget } from './holderBudget'
 
 interface WorkerScope {
@@ -21,6 +23,9 @@ let profile: ScanProfile = SCAN_PROFILES.ygo
 let queue = Promise.resolve()
 // Frames in a row that matched nothing, for pacing the holder search.
 const budget = holderBudget()
+// Where the last frame's art matched, tried first on the next. Art the holder search found isn't
+// kept: the resolver is warier of it, and only that search can say so.
+let held: Quad | null = null
 
 const messageOf = (e: unknown): string => (e instanceof Error ? e.message : String(e))
 
@@ -48,6 +53,7 @@ async function handle(msg: WorkerRequest): Promise<void> {
       await loadCv()
       index = msg.fingerprints ? decodeFingerprints(msg.fingerprints) : null
       profile = scanProfile(msg.game)
+      held = null
       if (index && msg.refs?.length) index.withRefs(msg.refs)
       scope.postMessage({ type: 'ready' })
     } catch (e) {
@@ -64,9 +70,19 @@ async function handle(msg: WorkerRequest): Promise<void> {
       msg.wantBands,
       msg.wantLook,
       profile,
-      budget.allow()
+      budget.allow(),
+      held
     )
-    budget.record(signals.art[0]?.distance ?? null)
+    const distance = signals.art[0]?.distance ?? null
+    budget.record(distance)
+    held =
+      profile.keepOutline &&
+      signals.quad &&
+      !signals.artVia &&
+      distance !== null &&
+      distance <= ART_MAX_DISTANCE
+        ? signals.quad
+        : null
     const bands = [...signals.codeBands, ...signals.nameBands, ...signals.textBands]
     scope.postMessage(
       { type: 'result', id: msg.id, signals },

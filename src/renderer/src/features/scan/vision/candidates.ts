@@ -102,6 +102,11 @@ const BORDER_SAMPLES = 9
 const BORDER_OUTSIDE = 0.02
 /** Width candidates are straightened to for choosing between them. */
 const PICK_WIDTH = 210
+/**
+ * Art this close on a guess at the card round an art window ends that search: it tries every
+ * window both ways up on every quad, some thousands of lookups, seconds on a live frame.
+ */
+const INNER_SURE_DISTANCE = 40
 
 interface Line {
   theta: number
@@ -704,7 +709,9 @@ const REGION_LINES = 40
  * when the frame holds no card-shaped outline. The art is looked for in profile's art boxes.
  * With profile's holderSearch, a frame none of whose quads matched is looked at again
  * (lookAgain) unless holderPass is false (the live scanner skips it on some frames), and via is
- * 'holder' when that is what matched.
+ * 'holder' when that is what matched. So does the inner frame search of a profile with a holder
+ * search, which costs as much. held is an earlier frame's outline: when art matches there, the
+ * frame isn't searched at all.
  */
 export function recognizeArt(
   cv: CV,
@@ -713,7 +720,8 @@ export function recognizeArt(
   candidates?: ReadonlySet<number>,
   k?: number,
   profile: ScanProfile = SCAN_PROFILES.ygo,
-  holderPass = true
+  holderPass = true,
+  held: Quad | null = null
 ): {
   quad: Quad
   card: RgbaImage
@@ -723,7 +731,21 @@ export function recognizeArt(
 } | null {
   // Copied into OpenCV once for all the candidates' warps.
   return withMat(cv, img, (frame) => {
-    const closest = (quads: Quad[]): { quad: Quad; distance: number } | null => {
+    const ranked = (quad: Quad): Ranked => {
+      const card = warpCard(cv, frame, quad, CARD_W)
+      return { quad, card, ...rankArt(cv, card, index, candidates, k, ART_BOX_JITTER, profile) }
+    }
+    if (held) {
+      const still = ranked(held)
+      if (topDistance(still) <= ART_MAX_DISTANCE)
+        return {
+          quad: held,
+          card: still.upsideDown ? rotate180(still.card) : still.card,
+          upsideDown: still.upsideDown,
+          matches: still.matches
+        }
+    }
+    const closest = (quads: Quad[], sure = -1): { quad: Quad; distance: number } | null => {
       let best: { quad: Quad; distance: number } | null = null
       for (const quad of quads) {
         const { matches } = rankArt(
@@ -737,6 +759,7 @@ export function recognizeArt(
         )
         const distance = matches[0]?.distance ?? Infinity
         if (!best || distance < best.distance) best = { quad, distance }
+        if (distance <= sure) break
       }
       return best
     }
@@ -747,18 +770,15 @@ export function recognizeArt(
     let runnerUp: Quad | null = null
     // No candidate matched: one may be a black card's inner frame rather than the card, or a
     // held card's art window.
-    if (!best || best.distance > ART_MAX_DISTANCE) {
+    if ((!best || best.distance > ART_MAX_DISTANCE) && (holderPass || !profile.holderSearch)) {
       const around = closest(
-        [...quads, ...windows].flatMap((q) => aroundInnerFrame(q, profile.innerFrames))
+        [...quads, ...windows].flatMap((q) => aroundInnerFrame(q, profile.innerFrames)),
+        profile.holderSearch ? INNER_SURE_DISTANCE : -1
       )
       if (around && (!best || around.distance < best.distance)) {
         if (best && profile.windowShape) runnerUp = best.quad
         best = around
       }
-    }
-    const ranked = (quad: Quad): Ranked => {
-      const card = warpCard(cv, frame, quad, CARD_W)
-      return { quad, card, ...rankArt(cv, card, index, candidates, k, ART_BOX_JITTER, profile) }
     }
     let final = best && ranked(best.quad)
     if (final && runnerUp) {

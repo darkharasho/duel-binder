@@ -4,9 +4,9 @@ import type { Os } from './os'
 export interface PageView { downloads: Downloads; os: Os | null; appUrl: string }
 
 export const REPO_URL = 'https://github.com/darkharasho/duel-binder'
-const TITLE = 'Duel Binder — a binder for your Yu-Gi-Oh! collection'
+const TITLE = 'Duel Binder — a binder for your Yu-Gi-Oh! and Pokémon cards'
 const DESCRIPTION =
-  'Duel Binder is a desktop app for cataloging your Yu-Gi-Oh! collection by set, rarity and condition, with prices that update on their own.'
+  'Duel Binder is a desktop app for cataloging your Yu-Gi-Oh! and Pokémon cards by set, rarity and condition, with prices that update on their own.'
 const LEAD =
   "Log what you own by set, rarity and condition. Prices update on their own. It runs on your computer and works offline. Sign in with Discord to see your friends' binders on the web."
 
@@ -38,7 +38,7 @@ function hero(v: PageView): string {
   const href = os ? (asset ? asset.url : RELEASES_FALLBACK) : '#download'
   const meta = `${downloads.version ? `v${downloads.version} · ` : ''}Windows, macOS, Linux · free`
   return `<header class="hero">
-<h1>A binder for your <span class="nowrap">Yu-Gi-Oh!</span> collection.</h1>
+<h1>A binder for your <span class="nowrap">Yu-Gi-Oh!</span> and Pokémon cards.</h1>
 <p class="lead">${LEAD}</p>
 <div class="actions"><a class="btn pri" href="${esc(href)}">${label}</a><a class="btn out" href="${esc(appUrl)}">Open the web app</a></div>
 <div class="meta mono">${esc(meta)}</div>
@@ -90,7 +90,7 @@ ${downloadRow('Linux', d.linux)}
 }
 
 export function footer(): string {
-  return `<footer><span>Duel Binder is not affiliated with Konami. Card data and images from YGOPRODeck.</span><span class="links"><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="${REPO_URL}">GitHub</a></span></footer>`
+  return `<footer><span>Duel Binder is not affiliated with Konami or The Pokémon Company. Card data and images from YGOPRODeck and TCGdex.</span><span class="links"><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="${REPO_URL}">GitHub</a></span></footer>`
 }
 
 export function renderPage(view: PageView): string {

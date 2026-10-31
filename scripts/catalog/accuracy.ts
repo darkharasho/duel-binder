@@ -108,7 +108,7 @@ export async function checkAccuracy(
     matchName: async (text: string) => matchName(work, text, scope),
     cardsForImages: async (ids: number[]) => cardsForImages(work, ids, scope)
   }
-  const nameOf = work.prepare<[number], { name: string }>('SELECT name FROM cards WHERE id = ?')
+  const nameOf = work.prepare('SELECT name FROM cards WHERE id = ?')
   const report: AccuracyReport = { shots: shots.length, right: 0, wrong: [], missed: [] }
   for (const shot of shots) {
     const img = decode(readFileSync(join(dir, shot.file)), { useTArray: true, formatAsRGBA: true })
@@ -120,7 +120,10 @@ export async function checkAccuracy(
       else if (problem === null) report.right++
       else {
         report.wrong.push(`${label} as ${problem}`)
-        if (outcome.kind === 'recognized' && outcome.item.name === nameOf.get(shot.cardId)?.name)
+        if (
+          outcome.kind === 'recognized' &&
+          outcome.item.name === (nameOf.get(shot.cardId) as { name: string } | undefined)?.name
+        )
           (report.reprints ??= []).push(`${label} as ${problem}`)
       }
       continue

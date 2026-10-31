@@ -1,4 +1,5 @@
 import type { Language } from '@shared/languages'
+import { canonRarity, isJunkRarity, isNewArtNote } from '../ygo/rarity'
 
 export interface SetListRow {
   code: string
@@ -57,15 +58,16 @@ const RARITIES: Record<string, string> = {
 }
 
 export function normalizeRarity(raw: string): string {
-  return Object.hasOwn(RARITIES, raw) ? RARITIES[raw] : raw
+  return canonRarity(Object.hasOwn(RARITIES, raw) ? RARITIES[raw] : raw)
 }
 
 function splitRarities(raw: string | undefined): string[] {
   if (!raw) return []
   return raw
     .split(',')
-    .map((s) => normalizeRarity(s.trim()))
-    .filter((s) => s !== '')
+    .map((s) => s.trim())
+    .filter((s) => s !== '' && !isJunkRarity(s))
+    .map(normalizeRarity)
 }
 
 /**
@@ -77,6 +79,7 @@ function variantFromComment(comment: string): string | undefined {
   const note = m?.[1].trim()
   if (!note) return undefined
   if (/^extended art$/i.test(note)) return 'Overframe'
+  if (/^alternate art$/i.test(note)) return 'Alternate Art'
   const manga = MANGA_NOTE.exec(note)
   if (manga) return manga[1] ? `${MANGA_STYLE}, ${mangaTone(manga[1])}` : MANGA_STYLE
   return note[0].toUpperCase() + note.slice(1)
@@ -147,11 +150,29 @@ export function parseSetList(wikitext: string): ParsedSetList | null {
         const code = noCode ? '' : (fields.shift() ?? '')
         const name = fields[0] ?? ''
         if (name !== '') {
-          const own = splitRarities(fields[1])
-          const rarities = own.length ? own : fallback.length ? fallback : ['Common']
+          // A slot holding only a note or quantity ("New", "2") is no rarity: the list's default
+          // stands in, and with none the row stays out. A truly empty slot is a Common.
+          const slot = fields[1] ?? ''
+          const own = splitRarities(slot)
+          const onlyJunk = own.length === 0 && slot.split(',').some((s) => s.trim() !== '')
+          const rarities = own.length
+            ? own
+            : fallback.length
+              ? fallback
+              : onlyJunk
+                ? []
+                : ['Common']
+          if (rarities.length === 0) {
+            if (closes) {
+              i++
+              break
+            }
+            continue
+          }
           const row: SetListRow = { code, name, rarities }
           if (variant) row.variant = variant
-          if (NEW_ART.test(fields[2] || listPrint)) row.newArt = true
+          if (NEW_ART.test(fields[2] || listPrint) || slot.split(',').some(isNewArtNote))
+            row.newArt = true
           rows.push(row)
         }
       }

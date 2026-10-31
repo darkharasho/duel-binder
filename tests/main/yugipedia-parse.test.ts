@@ -133,7 +133,7 @@ describe('parseSetList', () => {
 
   it('keeps other description:: notes as the variant, without parentheses', () => {
     const r = parseSetList('{{Set list|\nX-001; Some Card; UR // description::(alternate art)\n}}')!
-    expect(r.rows[0].variant).toBe('Alternate art')
+    expect(r.rows[0].variant).toBe('Alternate Art')
   })
 
   it('parses the LB Japanese list', () => {

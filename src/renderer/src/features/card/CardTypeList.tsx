@@ -12,6 +12,8 @@ import { WishToggle } from '@/features/wishlist/WishToggle'
 import { api, invalidateAfterEdit, queryKeys } from '@/lib/api'
 import { formatUsd } from '@/lib/format'
 import { createSerialQueue } from '@/lib/serialQueue'
+import { useGame } from '@/lib/game'
+import { rarityColor } from '@/lib/rarityColors'
 import { useCardWishes } from '@/lib/wishlist'
 import { cn } from '@/lib/utils'
 import type { CardTypeRow } from './cardTypes'
@@ -82,6 +84,7 @@ export function CardTypeList({
   selectedKey,
   onSelect
 }: CardTypeListProps): React.JSX.Element {
+  const { def } = useGame()
   const qc = useQueryClient()
   const wishes = useCardWishes(cardId)
   const queue = useRef(createSerialQueue())
@@ -195,13 +198,32 @@ export function CardTypeList({
               )}
             >
               <div className="min-w-0 flex-1 text-xs">
-                <div className="flex items-center gap-1.5">
-                  <span className="truncate">{englishSetName(p.setName, p.setCode)}</span>
-                  <LanguageTag language={p.language} />
-                </div>
-                <div className="truncate text-muted-foreground">
-                  {p.setCode} · {p.setRarity}
-                </div>
+                {def.id === 'pkm' ? (
+                  <>
+                    <div className="flex items-center gap-1.5">
+                      <span
+                        aria-hidden
+                        className="size-2 shrink-0 rounded-full"
+                        style={{ backgroundColor: rarityColor(p.setRarity, 'pkm') }}
+                      />
+                      <span className="truncate text-[13px] font-semibold">{p.setRarity}</span>
+                      <LanguageTag language={p.language} />
+                    </div>
+                    <div className="truncate text-muted-foreground">
+                      {englishSetName(p.setName, p.setCode)} · {p.setCode}
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <div className="flex items-center gap-1.5">
+                      <span className="truncate">{englishSetName(p.setName, p.setCode)}</span>
+                      <LanguageTag language={p.language} />
+                    </div>
+                    <div className="truncate text-muted-foreground">
+                      {p.setCode} · {p.setRarity}
+                    </div>
+                  </>
+                )}
               </div>
               {price !== null && (
                 <span className="text-xs text-muted-foreground tabular-nums">

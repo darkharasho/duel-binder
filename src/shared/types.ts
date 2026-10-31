@@ -244,6 +244,12 @@ export interface CollectionStats {
   pricesUpdatedAt: string | null
 }
 
+/** A friend's dashboard. `valueHistory` is always empty: their history stays theirs. */
+export interface FriendStats extends CollectionStats {
+  /** Distinct cards both of you have, in any printing. */
+  sharedCards: number
+}
+
 export interface ValuePoint {
   /** Local date, YYYY-MM-DD. */
   date: string

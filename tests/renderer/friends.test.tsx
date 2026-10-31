@@ -135,7 +135,7 @@ describe('friends page', () => {
   it('sends a request', async () => {
     const user = userEvent.setup()
     const api = make({ friends: [], incoming: [], blocked: [] })
-    renderWithProviders(<FriendsPage onBackToMine={() => {}} />, { api })
+    renderWithProviders(<FriendsPage />, { api })
     const send = screen.getByRole('button', { name: 'Send request' })
     expect(send).toBeDisabled()
     await user.type(screen.getByRole('textbox', { name: 'Username' }), 'bob')
@@ -152,7 +152,7 @@ describe('friends page', () => {
         friends: { request: vi.fn(async () => ({ status: 'accepted' as const, friend: bob })) }
       }
     )
-    renderWithProviders(<FriendsPage onBackToMine={() => {}} />, { api })
+    renderWithProviders(<FriendsPage />, { api })
     await user.type(screen.getByRole('textbox', { name: 'Username' }), 'bob')
     await user.click(screen.getByRole('button', { name: 'Send request' }))
     expect(await screen.findByText("You're now friends with Bob")).toBeInTheDocument()
@@ -170,7 +170,7 @@ describe('friends page', () => {
         }
       }
     )
-    renderWithProviders(<FriendsPage onBackToMine={() => {}} />, { api })
+    renderWithProviders(<FriendsPage />, { api })
     await user.type(screen.getByRole('textbox', { name: 'Username' }), 'bob')
     await user.click(screen.getByRole('button', { name: 'Send request' }))
     expect(await screen.findByText('No Duel Binder user called "bob"')).toBeInTheDocument()
@@ -183,7 +183,7 @@ describe('friends page', () => {
       incoming: [alice(3), { ...alice(4), displayName: 'Carl', username: 'carl' }],
       blocked: []
     })
-    renderWithProviders(<FriendsPage onBackToMine={() => {}} />, { api })
+    renderWithProviders(<FriendsPage />, { api })
     await screen.findByText('Alice')
     expect(api.friends.overview).toHaveBeenCalledTimes(1)
     await user.click(screen.getAllByRole('button', { name: 'Accept' })[0])
@@ -211,7 +211,7 @@ describe('friends page', () => {
         }
       }
     )
-    renderWithProviders(<FriendsPage onBackToMine={() => {}} />, { api })
+    renderWithProviders(<FriendsPage />, { api })
     await user.click(await screen.findByRole('button', { name: 'Accept' }))
     expect(await screen.findByRole('alert')).toHaveTextContent(OFFLINE_MESSAGE)
     await user.click(screen.getByRole('button', { name: 'Accept' }))
@@ -221,7 +221,7 @@ describe('friends page', () => {
   it('lists friends and unfriends after confirming', async () => {
     const user = userEvent.setup()
     const api = make({ friends: [bob], incoming: [], blocked: [] })
-    renderWithProviders(<FriendsPage onBackToMine={() => {}} />, { api })
+    renderWithProviders(<FriendsPage />, { api })
     expect(await screen.findByText('Bob')).toBeInTheDocument()
     expect(screen.getByText('@bob')).toBeInTheDocument()
     expect(screen.getByText('42 cards · Updated 2 days ago')).toBeInTheDocument()
@@ -237,7 +237,7 @@ describe('friends page', () => {
   it('blocks a friend after confirming', async () => {
     const user = userEvent.setup()
     const api = make({ friends: [bob], incoming: [], blocked: [] })
-    renderWithProviders(<FriendsPage onBackToMine={() => {}} />, { api })
+    renderWithProviders(<FriendsPage />, { api })
     await user.click(await screen.findByRole('button', { name: 'Block' }))
     expect(screen.getByText('Block Bob?')).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Cancel' }))
@@ -252,7 +252,7 @@ describe('friends page', () => {
   it('blocks someone from their request', async () => {
     const user = userEvent.setup()
     const api = make({ friends: [], incoming: [alice(3)], blocked: [] })
-    renderWithProviders(<FriendsPage onBackToMine={() => {}} />, { api })
+    renderWithProviders(<FriendsPage />, { api })
     await user.click(await screen.findByRole('button', { name: 'Block' }))
     expect(screen.getByText('Block Alice?')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Accept' })).not.toBeInTheDocument()
@@ -265,7 +265,7 @@ describe('friends page', () => {
     const user = userEvent.setup()
     const carl = { id: 5, username: 'carl', displayName: 'Carl', avatarUrl: null }
     const api = make({ friends: [], incoming: [], blocked: [carl] })
-    renderWithProviders(<FriendsPage onBackToMine={() => {}} />, { api })
+    renderWithProviders(<FriendsPage />, { api })
     const blocked = await screen.findByRole('region', { name: 'Blocked' })
     expect(blocked).toHaveTextContent('Carl')
     await user.click(screen.getByRole('button', { name: 'Unblock' }))
@@ -273,14 +273,14 @@ describe('friends page', () => {
   })
 
   it('says "1 card" for a single card', async () => {
-    renderWithProviders(<FriendsPage onBackToMine={() => {}} />, {
+    renderWithProviders(<FriendsPage />, {
       api: make({ friends: [{ ...bob, cardCount: 1 }], incoming: [], blocked: [] })
     })
     expect(await screen.findByText('1 card · Updated 2 days ago')).toBeInTheDocument()
   })
 
   it('shows the empty state', async () => {
-    renderWithProviders(<FriendsPage onBackToMine={() => {}} />, {
+    renderWithProviders(<FriendsPage />, {
       api: make({ friends: [], incoming: [], blocked: [] })
     })
     expect(
@@ -297,7 +297,7 @@ describe('friends page', () => {
       )
       .mockResolvedValue({ friends: [], incoming: [], blocked: [] })
     const api = make({ friends: [], incoming: [], blocked: [] }, { friends: { overview } })
-    renderWithProviders(<FriendsPage onBackToMine={() => {}} />, { api })
+    renderWithProviders(<FriendsPage />, { api })
     expect(await screen.findByText(OFFLINE_MESSAGE)).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Retry' }))
     expect(
@@ -313,7 +313,7 @@ describe('friends page', () => {
         account: { status: vi.fn(async () => signedOut) }
       }
     )
-    renderWithProviders(<FriendsPage onBackToMine={() => {}} />, { api })
+    renderWithProviders(<FriendsPage />, { api })
     expect(await screen.findByText(FRIENDS_SIGNED_OUT)).toBeInTheDocument()
     expect(api.friends.overview).not.toHaveBeenCalled()
   })
@@ -335,7 +335,7 @@ describe('friends cache across accounts', () => {
         }
       }
     )
-    const { client } = renderWithProviders(<FriendsPage onBackToMine={() => {}} />, { api })
+    const { client } = renderWithProviders(<FriendsPage />, { api })
     expect(await screen.findByText('Bob')).toBeInTheDocument()
     expect(client.getQueryData(['friends'])).toBeDefined()
 
@@ -352,7 +352,7 @@ describe('friends cache across accounts', () => {
       { friends: [bob], incoming: [], blocked: [] },
       { window: { platform: 'linux' }, account: { status: vi.fn(async () => signedIn) } }
     )
-    renderWithProviders(<FriendsPage onBackToMine={() => {}} />, { api })
+    renderWithProviders(<FriendsPage />, { api })
     expect(await screen.findByText('Bob')).toBeInTheDocument()
     await new Promise((r) => setTimeout(r, 50))
     expect(api.friends.overview).toHaveBeenCalledTimes(1)
@@ -373,7 +373,7 @@ describe('friends cache across accounts', () => {
         }
       }
     )
-    const { client } = renderWithProviders(<FriendsPage onBackToMine={() => {}} />, { api })
+    const { client } = renderWithProviders(<FriendsPage />, { api })
     expect(await screen.findByText('Bob')).toBeInTheDocument()
     act(() => emit(signedOut))
     await waitFor(() => expect(client.getQueryData(['friends'])).toBeUndefined())

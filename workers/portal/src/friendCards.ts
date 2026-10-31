@@ -1,9 +1,11 @@
 import { RARITY_LABEL } from '../../../src/main/db/schema'
 import type { SqlDb } from '../../../src/main/db/sql'
+import { getStats } from '../../../src/main/repo/stats'
 import type { GameId } from '../../../src/shared/games'
-import type { FriendCardCopies } from '../../../src/shared/types'
+import type { EntryView, FriendCardCopies, FriendStats } from '../../../src/shared/types'
 import type { Language } from '../../../src/shared/languages'
 import { toUser, type UserRow } from './friends'
+import { userScope } from './scope'
 
 /**
  * `me`'s friends who have a card of `game`, with their copies per printing; most copies first.
@@ -54,4 +56,34 @@ export function friendsWithCard(
   return [...friends.values()].sort(
     (a, b) => b.quantity - a.quantity || shownName(a).localeCompare(shownName(b))
   )
+}
+
+const noNotes = (entries: EntryView[]): EntryView[] => entries.map((e) => ({ ...e, notes: '' }))
+
+/**
+ * A friend's dashboard in `game`: their stats with notes blanked and no value history, plus how many
+ * of their cards `me` has too. Cards count whatever the printing. The caller checks the friendship.
+ */
+export function friendStats(db: SqlDb, me: number, friend: number, game: GameId): FriendStats {
+  const stats = getStats(db, userScope(friend, game))
+  const { n } = db
+    .prepare(
+      `SELECT COUNT(DISTINCT p.card_id) AS n
+         FROM collection_entries e
+         JOIN card_printings p ON p.id = e.printing_id
+        WHERE e.user_id = ? AND e.game = ? AND e.deleted_at IS NULL
+          AND +p.card_id IN (SELECT p2.card_id
+                               FROM collection_entries e2
+                               JOIN card_printings p2 ON p2.id = e2.printing_id
+                              WHERE e2.user_id = ? AND e2.game = ? AND e2.deleted_at IS NULL)`
+    )
+    .get(friend, game, me, game) as { n: number }
+  return {
+    ...stats,
+    topEntries: noNotes(stats.topEntries),
+    topSingles: noNotes(stats.topSingles),
+    recentEntries: noNotes(stats.recentEntries),
+    valueHistory: [],
+    sharedCards: n
+  }
 }

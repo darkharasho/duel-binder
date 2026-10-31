@@ -6,6 +6,7 @@ import type { Language } from '@shared/languages'
 import { englishSetName, nativeSetName } from '@shared/setNames'
 import type {
   CardSearchResult,
+  Friend,
   ChecklistCard,
   CountMode,
   SetChecklist as SetChecklistData,
@@ -48,6 +49,7 @@ import { isPhone } from '@/lib/platform'
 import { createSerialQueue } from '@/lib/serialQueue'
 import { cn } from '@/lib/utils'
 import { BulkMode } from './BulkMode'
+import { FriendCardSheet } from '../friends/FriendCardSheet'
 import { SetArt } from './SetArt'
 import { SetProgress } from './SetProgress'
 import {
@@ -75,7 +77,11 @@ interface SetChecklistProps {
   mode: CountMode
   onModeChange: (m: CountMode) => void
   onBack: () => void
-  onAddMissing: (card: CardSearchResult, printingId: number) => void
+  onAddMissing?: (card: CardSearchResult, printingId: number) => void
+  /** Shows this friend's progress read-only instead of your own. */
+  friend?: Friend
+  /** Whose binder this is, shown above a friend's set. */
+  friendHeader?: React.ReactNode
 }
 
 /** A card's clicks not yet answered, in queue order, and the server's last answer for it. */
@@ -165,7 +171,9 @@ export function SetChecklist({
   mode,
   onModeChange,
   onBack,
-  onAddMissing
+  onAddMissing,
+  friend,
+  friendHeader
 }: SetChecklistProps): React.JSX.Element {
   const [filter, setFilter] = useState<TileFilter>('all')
   const [q, setQ] = useState('')
@@ -179,6 +187,7 @@ export function SetChecklist({
   const [unowned, setUnowned] = useState<{ cardId: number; rarity: string | null } | null>(null)
   // The opened tile, for stepping to its neighbours (a card has one tile per rarity).
   const [openKey, setOpenKey] = useState<string | null>(null)
+  const [friendCard, setFriendCard] = useState<{ cardId: number; entryId: number } | null>(null)
   const [bulk, setBulk] = useState(false)
   // Card ids shown in bulk mode, frozen so saves never re-filter a card away mid-click.
   const [frozen, setFrozen] = useState<{
@@ -193,12 +202,17 @@ export function SetChecklist({
   useBackShortcuts(onBack)
 
   const checklist = useQuery({
-    queryKey: queryKeys.setChecklist(setName, language),
-    queryFn: () => api.sets.checklist(setName, language)
+    queryKey: friend
+      ? queryKeys.friendChecklist(friend.id, setName, language)
+      : queryKeys.setChecklist(setName, language),
+    queryFn: () =>
+      friend
+        ? api.friends.checklist(friend.id, setName, language)
+        : api.sets.checklist(setName, language)
   })
   const data = checklist.data
   // An OCG set's unpriced printings: the portal prices them and they show after the next sync.
-  useRequestPrices(useMemo(() => checklistUnpriced(data), [data]))
+  useRequestPrices(useMemo(() => (friend ? [] : checklistUnpriced(data)), [friend, data]))
   useArtWash(
     data?.set.coverImageId
       ? coverArtUrl(data.set.coverImageId)
@@ -339,6 +353,8 @@ export function SetChecklist({
     )
   }
 
+  // A friend's header already holds the page's h1.
+  const Title = friend ? 'h2' : 'h1'
   const progress = progressFor(data.set, mode)
   const rarities = rarityCounts(data)
   // On the phone the count mode and bulk add move into a "⋯" menu to fit the width.
@@ -350,6 +366,10 @@ export function SetChecklist({
 
   const open = (t: Tile): void => {
     setOpenKey(t.key)
+    if (friend) {
+      if (t.entryId !== null) setFriendCard({ cardId: t.card.cardId, entryId: t.entryId })
+      return
+    }
     if (t.owned > 0 && t.entryId !== null) {
       setUnowned(null)
       setSelected({ cardId: t.card.cardId, entryId: t.entryId })
@@ -375,9 +395,10 @@ export function SetChecklist({
     <TooltipProvider>
       <div className="space-y-4 p-8 max-md:p-4">
         <PageHeader>
+          {friend && friendHeader}
           <div className="flex flex-wrap items-center gap-2">
             <BackButton onBack={onBack} />
-            <h1 className="flex min-w-0 items-center gap-2 text-xl font-semibold">
+            <Title className="flex min-w-0 items-center gap-2 text-xl font-semibold">
               <span className="truncate">{englishSetName(data.set.setName, data.set.setCode)}</span>
               <LanguageTag language={data.set.language} />
               {nativeSetName(data.set.setName, data.set.setCode) && (
@@ -385,7 +406,7 @@ export function SetChecklist({
                   {data.set.setName}
                 </span>
               )}
-            </h1>
+            </Title>
           </div>
           <div className="flex flex-wrap items-end gap-3 border-b border-white/[0.08]">
             <UnderlineTabs label="Show" value={filter} options={FILTERS} onChange={setFilter} />
@@ -451,7 +472,7 @@ export function SetChecklist({
               {bulk && (
                 <span className="text-sm text-muted-foreground">Changes save as you click.</span>
               )}
-              {(!phone || bulk) && (
+              {(!phone || bulk) && !friend && (
                 <Button variant={bulk ? 'default' : 'outline'} size="sm" onClick={toggleBulk}>
                   {bulk ? 'Done' : 'Bulk add'}
                 </Button>
@@ -474,10 +495,14 @@ export function SetChecklist({
                       <DropdownMenuRadioItem value="cards">Each card once</DropdownMenuRadioItem>
                       <DropdownMenuRadioItem value="rarities">Every rarity</DropdownMenuRadioItem>
                     </DropdownMenuRadioGroup>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem onSelect={toggleBulk}>
-                      {bulk ? 'Done' : 'Bulk add'}
-                    </DropdownMenuItem>
+                    {!friend && (
+                      <>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem onSelect={toggleBulk}>
+                          {bulk ? 'Done' : 'Bulk add'}
+                        </DropdownMenuItem>
+                      </>
+                    )}
                   </DropdownMenuContent>
                 </DropdownMenu>
               )}
@@ -550,6 +575,7 @@ export function SetChecklist({
                     data-owned={owned}
                     data-nav-key={t.key}
                     aria-label={t.rarity ? `${t.card.name}, ${t.rarity}` : t.card.name}
+                    disabled={friend !== undefined && !owned}
                     onClick={() => open(t)}
                     className={cn(
                       'relative flex w-full flex-col gap-1 rounded-lg p-1.5 text-left outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring',
@@ -587,6 +613,10 @@ export function SetChecklist({
           </ul>
         )}
 
+        {friend && friendCard && (
+          <FriendCardSheet friend={friend} {...friendCard} onClose={() => setFriendCard(null)} />
+        )}
+
         {openCardId !== undefined && (
           <CardSheet onClose={close}>
             <CardPanel
@@ -605,7 +635,7 @@ export function SetChecklist({
               onClose={close}
               onMoreOptions={(card, printingId) => {
                 close()
-                onAddMissing(card, printingId)
+                onAddMissing?.(card, printingId)
               }}
               nav={nav}
             />

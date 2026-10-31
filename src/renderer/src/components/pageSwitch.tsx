@@ -98,9 +98,7 @@ export function PageSwitch({
       )}
       {page === 'scan' && scan}
       {page === 'rip' && rip}
-      {page === 'friends' && (
-        <FriendsPage key={friendsKey} onBackToMine={() => onNavigate('collection')} />
-      )}
+      {page === 'friends' && <FriendsPage key={friendsKey} />}
       {page === 'settings' && settings}
     </Fragment>
   )

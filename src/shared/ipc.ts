@@ -17,6 +17,7 @@ import type {
   Facets,
   FriendRequestResult,
   FriendCardCopies,
+  FriendStats,
   FriendsOverview,
   FriendWantsCard,
   ImageDownloads,
@@ -75,6 +76,11 @@ export interface Api {
     /** An accepted friend's live entries, notes always ''. */
     collection(userId: number, f: CollectionFilters): Promise<EntryView[]>
     facets(userId: number): Promise<Facets>
+    /** An accepted friend's dashboard in the current game; a portal without it answers 404. */
+    stats(userId: number): Promise<FriendStats>
+    /** Every set in the current game, with an accepted friend's progress. */
+    sets(userId: number): Promise<SetSummary[]>
+    checklist(userId: number, setName: string, language: Language): Promise<SetChecklist | null>
     /** Friends with copies of this card in the current game; a portal without it answers 404. */
     forCard(cardId: number): Promise<FriendCardCopies[]>
     /** An accepted friend's wishlist, without what they already have; empty if they hide it. */
@@ -253,6 +259,9 @@ export const INVOKE_CHANNELS = [
   'friends:unblock',
   'friends:collection',
   'friends:facets',
+  'friends:stats',
+  'friends:sets',
+  'friends:checklist',
   'friends:forCard',
   'friends:wishlist',
   'friends:wanting',

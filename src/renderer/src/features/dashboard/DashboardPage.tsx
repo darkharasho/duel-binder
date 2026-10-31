@@ -111,10 +111,10 @@ function Breakdown({ title, segments }: { title: string; segments: Segment[] }):
 /** The newest additions, each opening in the collection. */
 function RecentlyAdded({
   entries,
-  onNavigate
+  onOpen
 }: {
   entries: EntryView[]
-  onNavigate: NavigateFn
+  onOpen: (entryId: number) => void
 }): React.JSX.Element {
   return (
     <section className="lg:col-span-2 xl:col-span-1">
@@ -130,7 +130,7 @@ function RecentlyAdded({
             <li key={e.id} className="min-w-0 max-md:w-56 max-md:shrink-0 max-md:snap-start">
               <button
                 type="button"
-                onClick={() => onNavigate('collection', { entryId: e.id })}
+                onClick={() => onOpen(e.id)}
                 className="flex w-full items-center gap-3 rounded-md px-1.5 py-1 text-left text-[13px] hover:bg-white/5 focus-visible:outline-2 focus-visible:outline-ring"
               >
                 <CardArt
@@ -192,17 +192,36 @@ function readMostBy(): MostBy {
   }
 }
 
-function Content({
-  stats,
-  onNavigate
-}: {
-  stats: CollectionStats
-  onNavigate: NavigateFn
-}): React.JSX.Element {
-  const { def } = useGame()
+/** What the total leaves out or estimates. */
+export function PriceNotes({ stats }: { stats: CollectionStats }): React.JSX.Element {
   const n = stats.approximateCount
   const unpriced = stats.unpricedCount ?? 0
-  const stale = isStale(stats.pricesUpdatedAt)
+  return (
+    <>
+      {n > 0 && (
+        <p className="mt-1 text-xs text-muted-foreground tabular-nums">
+          ≈ includes {n} approximate {n === 1 ? 'price' : 'prices'}
+        </p>
+      )}
+      {unpriced > 0 && (
+        <p className="mt-1 text-xs text-muted-foreground tabular-nums">
+          Leaves out {unpriced} {unpriced === 1 ? 'card' : 'cards'} with no price yet
+        </p>
+      )}
+    </>
+  )
+}
+
+/** The dearest cards by total or by single copy. Shows nothing with no cards. */
+export function MostValuable({
+  stats,
+  onOpen,
+  onSeeAll
+}: {
+  stats: CollectionStats
+  onOpen: (entryId: number) => void
+  onSeeAll: () => void
+}): React.JSX.Element | null {
   // Most valuable by an entry's total (price × copies) or by one copy's price.
   const [mostBy, setMostByState] = useState<MostBy>(readMostBy)
   const setMostBy = (v: MostBy): void => {
@@ -214,6 +233,111 @@ function Content({
     }
   }
   const top = mostBy === 'single' ? stats.topSingles : stats.topEntries
+  if (stats.topEntries.length === 0) return null
+  return (
+    <section>
+      <div className="mb-3 flex items-baseline justify-between">
+        <div className="flex items-baseline gap-4">
+          <h2 className="text-sm font-semibold">Most valuable</h2>
+          <UnderlineTabs
+            label="Most valuable by"
+            value={mostBy}
+            options={MOST_BY_OPTIONS}
+            onChange={setMostBy}
+            className="gap-3 [&>*]:pb-0.5 [&>*]:text-[13px]"
+          />
+        </div>
+        <button
+          type="button"
+          onClick={onSeeAll}
+          className="text-[13px] text-muted-foreground hover:text-foreground"
+        >
+          See all
+        </button>
+      </div>
+      {/* One row of as many as fit, stretched to the full width; the rest sit in zero-height rows, clipped.
+          On a phone, all ten in a row that swipes sideways, edge to edge. */}
+      <ul className="-mx-1 grid auto-rows-[0] grid-cols-[repeat(auto-fit,minmax(7rem,1fr))] grid-rows-[auto] gap-x-2 overflow-hidden max-md:-mx-4 max-md:flex max-md:snap-x max-md:snap-mandatory max-md:scroll-px-3 max-md:overflow-x-auto max-md:overscroll-x-contain max-md:px-3 max-md:[scrollbar-width:none]">
+        {top.slice(0, 10).map((e) => (
+          <li key={e.id} className="min-w-0 max-md:w-28 max-md:shrink-0 max-md:snap-start">
+            <button
+              type="button"
+              onClick={() => onOpen(e.id)}
+              className="group flex w-full flex-col gap-2 rounded-md p-1 text-left focus-visible:outline-2 focus-visible:outline-ring"
+            >
+              <TiltCard>
+                <CardArt
+                  imageId={e.imageId}
+                  printingId={scanFor(e)}
+                  size="small"
+                  alt=""
+                  className="w-full rounded-[4px] shadow-[0_8px_20px_rgb(0_0_0/0.5)]"
+                />
+              </TiltCard>
+              <span className="min-w-0 text-xs leading-snug">
+                <span className="line-clamp-2">{e.card.name}</span>
+                <span className="block truncate font-mono text-[11px] text-muted-foreground">
+                  {e.printing.setCode}
+                  {e.quantity > 1 && ` ×${e.quantity}`}
+                </span>
+                <span className="block font-mono text-[11px]">
+                  <EntryValue
+                    entry={e}
+                    amount={mostBy === 'single' ? e.unitPrice : displayTotal(e)}
+                  />
+                </span>
+                <StaleBadge entry={e} />
+              </span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </section>
+  )
+}
+
+/** By rarity, by card type and the newest additions. */
+export function Breakdowns({
+  stats,
+  onOpen
+}: {
+  stats: CollectionStats
+  onOpen: (entryId: number) => void
+}): React.JSX.Element {
+  const { def } = useGame()
+  return (
+    <div className="grid gap-10 lg:grid-cols-2 xl:grid-cols-3 max-md:grid-cols-1">
+      <Breakdown
+        title={`By ${def.vocab.rarity.toLowerCase()}`}
+        segments={stats.byRarity.map((r, i) => ({
+          label: r.rarity,
+          amount: r.value,
+          text: rarityText(r),
+          color: colorFor(rarityColors(def.id), r.rarity, i)
+        }))}
+      />
+      <Breakdown
+        title="By card type"
+        segments={stats.byFrameType.map((r, i) => ({
+          label: titleCase(r.frameType),
+          amount: r.count,
+          text: String(r.count),
+          color: colorFor(FRAME_COLORS, r.frameType, i)
+        }))}
+      />
+      <RecentlyAdded entries={stats.recentEntries} onOpen={onOpen} />
+    </div>
+  )
+}
+
+function Content({
+  stats,
+  onNavigate
+}: {
+  stats: CollectionStats
+  onNavigate: NavigateFn
+}): React.JSX.Element {
+  const stale = isStale(stats.pricesUpdatedAt)
   return (
     <>
       <div className="grid gap-x-12 gap-y-8 lg:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
@@ -222,16 +346,7 @@ function Content({
           <p className="mt-1 text-5xl font-semibold tracking-tight tabular-nums max-md:text-4xl">
             {formatUsd(stats.totalValue)}
           </p>
-          {n > 0 && (
-            <p className="mt-1 text-xs text-muted-foreground tabular-nums">
-              ≈ includes {n} approximate {n === 1 ? 'price' : 'prices'}
-            </p>
-          )}
-          {unpriced > 0 && (
-            <p className="mt-1 text-xs text-muted-foreground tabular-nums">
-              Leaves out {unpriced} {unpriced === 1 ? 'card' : 'cards'} with no price yet
-            </p>
-          )}
+          <PriceNotes stats={stats} />
           <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-[13px] text-foreground/75 max-md:grid max-md:grid-cols-2 max-md:gap-2">
             <div className={statTile}>
               <span className="font-semibold text-foreground">{stats.totalCards}</span>
@@ -257,88 +372,13 @@ function Content({
         <ValueChart history={stats.valueHistory} />
       </div>
 
-      {stats.topEntries.length > 0 && (
-        <section>
-          <div className="mb-3 flex items-baseline justify-between">
-            <div className="flex items-baseline gap-4">
-              <h2 className="text-sm font-semibold">Most valuable</h2>
-              <UnderlineTabs
-                label="Most valuable by"
-                value={mostBy}
-                options={MOST_BY_OPTIONS}
-                onChange={setMostBy}
-                className="gap-3 [&>*]:pb-0.5 [&>*]:text-[13px]"
-              />
-            </div>
-            <button
-              type="button"
-              onClick={() => onNavigate('collection')}
-              className="text-[13px] text-muted-foreground hover:text-foreground"
-            >
-              See all
-            </button>
-          </div>
-          {/* One row of as many as fit, stretched to the full width; the rest sit in zero-height rows, clipped.
-              On a phone, all ten in a row that swipes sideways, edge to edge. */}
-          <ul className="-mx-1 grid auto-rows-[0] grid-cols-[repeat(auto-fit,minmax(7rem,1fr))] grid-rows-[auto] gap-x-2 overflow-hidden max-md:-mx-4 max-md:flex max-md:snap-x max-md:snap-mandatory max-md:scroll-px-3 max-md:overflow-x-auto max-md:overscroll-x-contain max-md:px-3 max-md:[scrollbar-width:none]">
-            {top.slice(0, 10).map((e) => (
-              <li key={e.id} className="min-w-0 max-md:w-28 max-md:shrink-0 max-md:snap-start">
-                <button
-                  type="button"
-                  onClick={() => onNavigate('collection', { entryId: e.id })}
-                  className="group flex w-full flex-col gap-2 rounded-md p-1 text-left focus-visible:outline-2 focus-visible:outline-ring"
-                >
-                  <TiltCard>
-                    <CardArt
-                      imageId={e.imageId}
-                      printingId={scanFor(e)}
-                      size="small"
-                      alt=""
-                      className="w-full rounded-[4px] shadow-[0_8px_20px_rgb(0_0_0/0.5)]"
-                    />
-                  </TiltCard>
-                  <span className="min-w-0 text-xs leading-snug">
-                    <span className="line-clamp-2">{e.card.name}</span>
-                    <span className="block truncate font-mono text-[11px] text-muted-foreground">
-                      {e.printing.setCode}
-                      {e.quantity > 1 && ` ×${e.quantity}`}
-                    </span>
-                    <span className="block font-mono text-[11px]">
-                      <EntryValue
-                        entry={e}
-                        amount={mostBy === 'single' ? e.unitPrice : displayTotal(e)}
-                      />
-                    </span>
-                    <StaleBadge entry={e} />
-                  </span>
-                </button>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
+      <MostValuable
+        stats={stats}
+        onOpen={(entryId) => onNavigate('collection', { entryId })}
+        onSeeAll={() => onNavigate('collection')}
+      />
 
-      <div className="grid gap-10 lg:grid-cols-2 xl:grid-cols-3 max-md:grid-cols-1">
-        <Breakdown
-          title={`By ${def.vocab.rarity.toLowerCase()}`}
-          segments={stats.byRarity.map((r, i) => ({
-            label: r.rarity,
-            amount: r.value,
-            text: rarityText(r),
-            color: colorFor(rarityColors(def.id), r.rarity, i)
-          }))}
-        />
-        <Breakdown
-          title="By card type"
-          segments={stats.byFrameType.map((r, i) => ({
-            label: titleCase(r.frameType),
-            amount: r.count,
-            text: String(r.count),
-            color: colorFor(FRAME_COLORS, r.frameType, i)
-          }))}
-        />
-        <RecentlyAdded entries={stats.recentEntries} onNavigate={onNavigate} />
-      </div>
+      <Breakdowns stats={stats} onOpen={(entryId) => onNavigate('collection', { entryId })} />
     </>
   )
 }

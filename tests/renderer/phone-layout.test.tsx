@@ -305,12 +305,13 @@ describe('phone layout', () => {
     const api = phoneApi()
     api.friends.overview = vi.fn(async () => ({ friends: [bob], incoming: [], blocked: [] }))
     api.friends.collection = vi.fn(async () => [dm])
-    renderWithProviders(<FriendsPage onBackToMine={() => {}} />, { api })
+    renderWithProviders(<FriendsPage />, { api })
     // The friend list comes before the add-friend form.
     const pick = await screen.findByRole('button', { name: /Bob/ })
     const add = screen.getByRole('textbox', { name: 'Username' })
     expect(pick.compareDocumentPosition(add) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     await userEvent.click(pick)
+    await userEvent.click(await screen.findByRole('radio', { name: 'Collection' }))
     expect(await screen.findByLabelText('Collection grid')).toBeInTheDocument()
     await userEvent.click(await screen.findByRole('button', { name: /Dark Magician/ }))
     const sheet = await screen.findByRole('dialog')
@@ -328,7 +329,7 @@ describe('phone layout', () => {
     api.friends.overview = vi.fn(async () => {
       throw new Error(OFFLINE_MESSAGE)
     })
-    renderWithProviders(<FriendsPage onBackToMine={() => {}} />, { api })
+    renderWithProviders(<FriendsPage />, { api })
     expect(await screen.findByRole('alert')).toHaveTextContent(OFFLINE_MESSAGE)
     expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument()
   })

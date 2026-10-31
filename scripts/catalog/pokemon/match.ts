@@ -1,3 +1,4 @@
+import { hasNativeScript } from '../../../src/shared/setNames'
 import { baseEnglish } from './englishNames'
 import type { TcGroup, TcProduct, TdCard, TdSet } from './types'
 import { versionSubtype } from './versions'
@@ -127,6 +128,96 @@ export function sameCardName(cardName: string, productName: string): boolean {
   return c !== '' && c === plainName(baseEnglish(namePart(productName)))
 }
 
+/** Edit distance of at most one: TCGplayer's own typos ("Drowsee", "Imposter Professor Oak"). */
+function oneEditApart(a: string, b: string): boolean {
+  if (Math.abs(a.length - b.length) > 1) return false
+  let i = 0
+  while (i < a.length && i < b.length && a[i] === b[i]) i++
+  return (
+    a.slice(i + 1) === b.slice(i + 1) ||
+    a.slice(i) === b.slice(i + 1) ||
+    a.slice(i + 1) === b.slice(i)
+  )
+}
+
+/** The shortest name a typo allowance applies to; shorter names differ by a letter on purpose. */
+const MIN_TYPO_LENGTH = 6
+
+const firstWord = (name: string): string => plainName(namePart(name).split(/\s+/)[0] ?? '')
+
+/** A name's words, its notes and number included. */
+const allWords = (name: string): string[] =>
+  name
+    .normalize('NFKD')
+    .replace(/\p{M}/gu, '')
+    .replace(/['’]/g, '')
+    .replace(/δ/g, 'delta')
+    .toLowerCase()
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter(Boolean)
+
+/** Whether a product can be the card, by name: TCGdex's product ids and numbers can be wrong. */
+export type NameCheck = (card: TdCard, productName: string) => boolean
+
+/**
+ * Whether a product could be an English card, more loosely than sameCardName: a false mismatch costs
+ * a good price, so this only refuses a product that plainly names something else. Every word of the
+ * card's name may sit anywhere in the product's ("Pikachu (Flying)", "Unown [A]", "Basic Water Energy",
+ * "Finizen 60/197"). TCGplayer shortens Trainers and Energy ("Hiding D Energy", "Unit Energy GRW",
+ * "Fairy Charm L"), so those need only their first word. A name TCGdex left in Japanese can't be
+ * compared.
+ */
+export const namesCard: NameCheck = (card, productName) => {
+  if (hasNativeScript(card.name) || sameCardName(card.name, productName)) return true
+  const a = plainName(card.name)
+  const b = plainName(productName)
+  if (Math.min(a.length, b.length) >= MIN_TYPO_LENGTH && oneEditApart(a, b)) return true
+  const words = new Set(allWords(productName))
+  if (allWords(card.name).every((w) => words.has(w))) return true
+  return card.category !== 'Pokemon' && firstWord(card.name) === firstWord(productName)
+}
+
+/**
+ * The check for Japanese cards, whose names can't be compared with a product's: the product's
+ * species must be the card's. A product name no English card uses says nothing, and neither does a
+ * card with no `dexId` (Trainers, Energy). TCGdex's Japanese `dexId` is wrong now and then (ダストダス
+ * has Bunnelby's), so a product of another species is refused only when the card's Japanese name
+ * doesn't hold that species' Japanese name either, and that species has one to go by (every
+ * ウオチルドン has Arctozolt's `dexId`, so Arctovish has none).
+ */
+export function speciesCheck(enCards: TdCard[], jaCards: TdCard[]): NameCheck {
+  const dexOf = new Map<string, Set<number>>()
+  for (const c of enCards) {
+    if (c.category !== 'Pokemon' || c.dexId?.length !== 1) continue
+    const base = plainName(baseEnglish(namePart(c.name)))
+    if (!base) continue
+    const set = dexOf.get(base)
+    if (set) set.add(c.dexId[0])
+    else dexOf.set(base, new Set(c.dexId))
+  }
+  const jaNames = new Map<number, Set<string>>()
+  for (const c of jaCards) {
+    if (c.category !== 'Pokemon' || c.dexId?.length !== 1) continue
+    const set = jaNames.get(c.dexId[0])
+    if (set) set.add(c.name.normalize('NFKC'))
+    else jaNames.set(c.dexId[0], new Set([c.name.normalize('NFKC')]))
+  }
+  return (card, productName) => {
+    if (card.category !== 'Pokemon' || !card.dexId?.length) return true
+    const dex = dexOf.get(plainName(baseEnglish(namePart(productName))))
+    if (!dex || card.dexId.some((d) => dex.has(d))) return true
+    const own = card.name.normalize('NFKC')
+    const names = [...dex].flatMap((d) => [...(jaNames.get(d) ?? [])])
+    return names.length === 0 || names.some((n) => own.includes(n))
+  }
+}
+
+/**
+ * Sets whose cards TCGdex numbers on its own (CC001, 001) while the card itself prints the reprinted
+ * card's number (2/102). Their numbers say nothing, so names decide.
+ */
+export const OWN_NUMBERS: ReadonlySet<string> = new Set(['cel25cc', '30th-c'])
+
 /** A printed number as a letter prefix and a value: "BW04" and "BW004" are one number. */
 const PREFIXED_RE = /^([a-z]+)0*(\d+)([a-z]*)$/i
 
@@ -157,30 +248,35 @@ export interface MatchedProduct { product: TcProduct; variantSubtype: string | n
 /**
  * The TCGplayer products of a card. Its TCGdex ids are used first: the variants' ids (each with the
  * variant's version subtype, see versionSubtype), and the card-level id only when no variant carries one. A card with no ids is
- * matched by number within its set's group (`products`), only when exactly one product has that
- * number and, with `checkName` (English cards: a Japanese card's name can't be compared), that
- * product is named as the card; a group can number on its own, the 30th Classic Collection with the
- * reprinted cards' numbers. A product whose Number disagrees with the card's localId, or that is in no product list, is
- * dropped and reported.
+ * matched within its set's group (`products`) when exactly one product has its number; in OWN_NUMBERS
+ * sets, whose group prints the reprinted cards' numbers, when exactly one product has its name.
+ * Every product must also pass `nameOk`, TCGdex's own ids too: they can point at another card. A
+ * product whose Number disagrees with the card's localId, that fails `nameOk`, or that is in no
+ * product list, is dropped and reported.
  */
 export function matchProducts(
   card: TdCard,
   groupId: number | null,
   products: TcProduct[],
   productById: Map<number, TcProduct>,
-  checkName = false
+  nameOk: NameCheck = () => true
 ): { products: MatchedProduct[]; problems: string[] } {
   const problems: string[] = []
   const fromVariants = variantIds(card)
   const ids = fromVariants.length > 0 ? fromVariants : cardLevelId(card)
+  const ownNumbers = OWN_NUMBERS.has(card.set.id)
 
   if (ids.length === 0) {
     if (groupId === null) return { products: [], problems }
     const hits = products.filter(
-      (p) => p.groupId === groupId && p.number !== null && sameNumber(card.localId, p.number)
+      (p) =>
+        p.groupId === groupId &&
+        (ownNumbers
+          ? sameCardName(card.name, p.name)
+          : p.number !== null && sameNumber(card.localId, p.number))
     )
     if (hits.length !== 1) return { products: [], problems }
-    if (checkName && !sameCardName(card.name, hits[0].name)) {
+    if (!nameOk(card, hits[0].name)) {
       problems.push(`${card.id}: product ${hits[0].productId} is "${hits[0].name}"; rejected`)
       return { products: [], problems }
     }
@@ -198,10 +294,14 @@ export function matchProducts(
       problems.push(`${card.id}: TCGplayer product ${id} is in no TCGCSV product list`)
       continue
     }
-    if (product.number !== null && !sameNumber(card.localId, product.number)) {
+    if (!ownNumbers && product.number !== null && !sameNumber(card.localId, product.number)) {
       problems.push(
         `${card.id}: TCGplayer product ${id} has Number ${product.number}, not ${card.localId}; rejected`
       )
+      continue
+    }
+    if (!nameOk(card, product.name) || (ownNumbers && !sameCardName(card.name, product.name))) {
+      problems.push(`${card.id}: TCGplayer product ${id} is "${product.name}"; rejected`)
       continue
     }
     out.push({ product, variantSubtype: subtype })

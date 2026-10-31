@@ -223,6 +223,7 @@ export async function runJob(opts: JobOptions): Promise<JobResult> {
       log(
         `${pkm ? 'Pokémon accuracy' : 'Accuracy'}: ${report.right} of ${report.shots} shots right, ${report.wrong.length} wrong`
       )
+      for (const shot of report.wrong) log(`  Wrong: ${shot}`)
       const failed = accuracyProblem(report, game)
       if (failed) {
         problem(`${what} held back: ${failed}`)

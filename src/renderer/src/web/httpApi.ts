@@ -201,6 +201,7 @@ export function createHttpApi(opts: HttpApiOptions = {}): Api {
       facets: call('friends:facets')
     },
     scan: {
+      debugFrame: async () => undefined,
       printingsByCode: scanUnavailable,
       printingsByNumber: scanUnavailable,
       printingsForSet: scanUnavailable,

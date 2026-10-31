@@ -107,6 +107,9 @@ const sameStatus = (a: ScanStatus, b: ScanStatus): boolean =>
  * resolution, as a bitmap for the engine to hand to its worker: the pixels are never copied on
  * the UI thread.
  */
+/** Dev builds of the app, not their tests, keep frames for replaying a live failure. */
+const KEEP_FRAMES = import.meta.env.DEV && import.meta.env.MODE !== 'test'
+
 /** Every DEBUG_EVERY-th frame is kept in a dev build: encoding a 4K frame isn't free. */
 const DEBUG_EVERY = 3
 
@@ -500,7 +503,7 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
         const { frame, width, height } = grabbed
         const setPrintings = o.setPrintings
         const candidates = o.candidates
-        const shot = import.meta.env.DEV ? debugShot(frame, width, height, l) : null
+        const shot = KEEP_FRAMES ? debugShot(frame, width, height, l) : null
         let raw
         try {
           raw = await engine.analyze(frame, {

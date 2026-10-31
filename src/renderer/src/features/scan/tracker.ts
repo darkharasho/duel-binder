@@ -1,4 +1,9 @@
-import { ABSENT_MS, GUESS_STABLE_FRAMES, GUESS_SWAP_FRAMES, STABLE_FRAMES } from '@shared/scan/thresholds'
+import {
+  ABSENT_MS,
+  GUESS_STABLE_FRAMES,
+  GUESS_SWAP_FRAMES,
+  STABLE_FRAMES
+} from '@shared/scan/thresholds'
 import type { ScanDraft, ScanOutcome } from './resolve'
 
 export interface ShowingTracker {

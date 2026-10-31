@@ -646,3 +646,120 @@ describe('Japanese card English names', () => {
     }
   })
 })
+
+describe('art', () => {
+  let db: Database.Database
+  beforeEach(() => {
+    db = openDatabase(':memory:')
+  })
+  afterEach(() => db.close())
+
+  const noImage = (_l: PkmLang, c: TdCard): TdCard =>
+    c.id === 'sv01-001'
+      ? { ...c, image: undefined, thirdParty: undefined, variants_detailed: undefined }
+      : c
+  const url = (id: number): string => `https://tcgplayer-cdn.tcgplayer.com/product/${id}_200w.jpg`
+  const stored = (id: string): string | null =>
+    (
+      db.prepare('SELECT image_url FROM pokemon_cards WHERE source_id = ?').get(id) as {
+        image_url: string | null
+      }
+    ).image_url
+
+  const misty = (l: PkmLang, c: TdCard): TdCard =>
+    c.id === 'sv01-001' ? { ...noImage(l, c), name: 'Misty' } : c
+  const opts = { langs: ['en'] as PkmLang[], now: clock('2026-10-29T03:00:00.000Z') }
+  const put = (id: number): void => {
+    db.prepare('UPDATE pokemon_cards SET image_url = ? WHERE source_id = ?').run(
+      url(id),
+      'en/sv01-001'
+    )
+  }
+
+  it("leaves a card without art rather than take another card's", async () => {
+    const reports = await refreshPokemon(db, fixtureSources({ card: misty }), opts)
+    expect(stored('en/sv01-001')).toBeNull()
+    expect(reports[0].artFilled).toBe(0)
+    expect(reports[0].artMissing).toEqual({ 'no name': 1 })
+    expect(reports[0].problems.some((p) => p.includes('sv01-001'))).toBe(true)
+  })
+
+  it('fills a card two products of its number left unmatched', async () => {
+    const reports = await refreshPokemon(
+      db,
+      fixtureSources({
+        card: noImage,
+        products: (_l, g, p) =>
+          g === 22873
+            ? [...p, { productId: 999, groupId: g, name: 'Pineco (Stamped)', number: '001/198' }]
+            : p
+      }),
+      opts
+    )
+    expect(stored('en/sv01-001')).toBe(url(487828))
+    expect(reports[0].artFilled).toBe(1)
+    expect(reports[0].artMissing).toEqual({})
+  })
+
+  it('takes a stored image off a card when its product names another card', async () => {
+    await refreshPokemon(db, fixtureSources({ card: misty }), opts)
+    put(487831)
+    const reports = await refreshPokemon(db, fixtureSources({ card: misty }), opts)
+    expect(stored('en/sv01-001')).toBeNull()
+    expect(reports[0].artRemoved).toBe(1)
+  })
+
+  it("clears a printing's product and price when TCGdex's own id names another card", async () => {
+    const before = (await refreshPokemon(db, fixtureSources(), opts), printings(db, 'en/sv01-001'))
+    expect(before.some((p) => p.market_price !== null)).toBe(true)
+    const wrongName = (_l: PkmLang, c: TdCard): TdCard =>
+      c.id === 'sv01-001' ? { ...c, name: 'Misty' } : c
+    await refreshPokemon(db, fixtureSources({ card: wrongName }), opts)
+    const after = printings(db, 'en/sv01-001')
+    expect(after.filter((p) => !p.missing_from_api).every((p) => p.market_price === null)).toBe(true)
+    expect(after.filter((p) => !p.missing_from_api).every((p) => p.tcg_product_id === null)).toBe(true)
+  })
+
+  it("clears another card's price from a version no longer produced", async () => {
+    await refreshPokemon(db, fixtureSources(), opts)
+    const id = printings(db, 'en/sv01-001')[0].id
+    db.prepare('UPDATE card_printings SET set_rarity = ?, tcg_product_id = 487831, market_price = 9 WHERE id = ?').run('Old Label', id)
+    await refreshPokemon(db, fixtureSources({ card: misty }), opts)
+    const row = printings(db, 'en/sv01-001').find((p) => p.id === id)!
+    expect([row.missing_from_api, row.tcg_product_id, row.market_price]).toEqual([1, null, null])
+  })
+
+  it("takes another species' stored image off a Japanese card", async () => {
+    const jaOpts = { now: clock('2026-10-29T03:00:00.000Z') }
+    const other = (l: PkmLang, c: TdCard): TdCard =>
+      l === 'en'
+        ? { ...c, category: 'Pokemon', dexId: c.id === 'sv01-002' ? [900] : [901] }
+        : c.id === 'M4-001'
+          ? { ...c, category: 'Pokemon', dexId: [901], name: 'ビードル', image: undefined, thirdParty: undefined, variants_detailed: undefined }
+          : c.id === 'SV1S-001'
+            ? { ...c, category: 'Pokemon', dexId: [900] }
+            : c
+    const sources = fixtureSources({ card: other })
+    await refreshPokemon(db, sources, jaOpts)
+    const enName = (db.prepare("SELECT c.name FROM cards c JOIN pokemon_cards p ON p.card_id = c.id WHERE p.source_id = 'en/sv01-002'").get() as { name: string }).name
+    const wrong = 683100
+    const withWrong = fixtureSources({
+      card: other,
+      products: (l, g, p) => (l === 'ja' && g === 24653 ? [...p, { productId: wrong, groupId: g, name: enName, number: null }] : p)
+    })
+    db.prepare("UPDATE pokemon_cards SET image_url = ? WHERE source_id = 'ja/M4-001'").run(url(wrong))
+    const reports = await refreshPokemon(db, withWrong, jaOpts)
+    expect(stored('ja/M4-001')).not.toBe(url(wrong))
+    expect(reports.find((r) => r.lang === 'ja')!.artRemoved).toBe(1)
+  })
+
+  it('keeps a stored image of the card, and one of a product no longer listed', async () => {
+    await refreshPokemon(db, fixtureSources({ card: noImage }), opts)
+    put(487828)
+    await refreshPokemon(db, fixtureSources({ card: noImage }), opts)
+    expect(stored('en/sv01-001')).toBe(url(487828))
+    put(1)
+    await refreshPokemon(db, fixtureSources({ card: noImage }), opts)
+    expect(stored('en/sv01-001')).toBe(url(1))
+  })
+})

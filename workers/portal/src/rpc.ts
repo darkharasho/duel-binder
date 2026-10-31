@@ -25,6 +25,13 @@ import {
 } from '../../../src/main/repo/collection'
 import { adjustPrinting, getChecklist, listSets } from '../../../src/main/repo/sets'
 import { getStats, recordSnapshot } from '../../../src/main/repo/stats'
+import {
+  listWishlist,
+  removeWish,
+  setWish,
+  settleWishlist,
+  wishesForCard
+} from '../../../src/main/repo/wishlist'
 import type { AppDeps } from './app'
 import { currentUser, gamesFor } from './auth'
 import {
@@ -38,6 +45,14 @@ import {
   requestFriend,
   unblockUser
 } from './friends'
+import { friendsWithCard } from './friendCards'
+import {
+  friendWishlist,
+  friendsOwning,
+  friendsWanting,
+  setWishlistVisible,
+  wishlistVisible
+} from './wishlist'
 import { userScope } from './scope'
 import { GAME_HEADER } from '../../../src/shared/cloud'
 import type { GameId } from '../../../src/shared/games'
@@ -87,6 +102,7 @@ const HANDLERS: { [C in PortalChannel]: Handler<C> } = {
       now(),
       scope
     )
+    settleWishlist(db, scope, now())
     recordSnapshot(db, now(), scope)
     return result
   },
@@ -98,12 +114,14 @@ const HANDLERS: { [C in PortalChannel]: Handler<C> } = {
   'collection:add': ({ db, now }, scope, input) => {
     checkNotesLength(input)
     const entry = addEntry(db, checkAddInput(input), now(), scope)
+    settleWishlist(db, scope, now())
     recordSnapshot(db, now(), scope)
     return entry
   },
   'collection:update': ({ db, now }, scope, id, patch) => {
     checkNotesLength(patch)
     const entry = updateEntry(db, checkId(id, 'id'), checkUpdatePatch(patch), now(), scope)
+    settleWishlist(db, scope, now())
     recordSnapshot(db, now(), scope)
     return entry
   },
@@ -129,6 +147,23 @@ const HANDLERS: { [C in PortalChannel]: Handler<C> } = {
   },
   'friends:facets': ({ db, userId, game }, _s, id) =>
     getFacets(db, userScope(friendId(db, userId, id), game)),
+  'friends:forCard': ({ db, userId, game }, _s, cardId) =>
+    friendsWithCard(db, userId, game, checkId(cardId, 'cardId')),
+  'friends:wishlist': ({ db, userId, game }, _s, id) =>
+    friendWishlist(db, friendId(db, userId, id), game),
+  'friends:wanting': ({ db, userId, game }, _s, cardId) =>
+    friendsWanting(db, userId, game, checkId(cardId, 'cardId')),
+  'friends:owning': ({ db, userId, game }, _s, pkeys) => friendsOwning(db, userId, game, pkeys),
+  'friends:wishlistVisible': ({ db, userId }) => wishlistVisible(db, userId),
+  'friends:setWishlistVisible': ({ db, userId }, _s, visible) =>
+    setWishlistVisible(db, userId, visible),
+  'wishlist:list': ({ db }, scope) => listWishlist(db, scope),
+  'wishlist:forCard': ({ db }, scope, cardId) =>
+    wishesForCard(db, checkId(cardId, 'cardId'), scope),
+  'wishlist:set': ({ db, now }, scope, printingId, quantity) =>
+    setWish(db, checkId(printingId, 'printingId'), quantity, now(), scope),
+  'wishlist:remove': ({ db, now }, scope, printingId) =>
+    removeWish(db, checkId(printingId, 'printingId'), now(), scope),
   'stats:get': ({ db }, scope) => getStats(db, scope)
 }
 

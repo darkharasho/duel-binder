@@ -383,6 +383,20 @@ export interface FriendUser {
   avatarUrl: string | null
 }
 
+/** A friend's copies of one printing of a card. */
+export interface FriendCardPrinting {
+  setCode: string
+  rarity: string
+  language: Language
+  quantity: number
+}
+
+/** A friend who has a card: their copies across its printings. */
+export interface FriendCardCopies extends FriendUser {
+  quantity: number
+  printings: FriendCardPrinting[]
+}
+
 export interface Friend extends FriendUser {
   /** Copies across live entries (sum of quantity). */
   cardCount: number
@@ -402,3 +416,39 @@ export interface FriendsOverview {
 }
 
 export type FriendRequestResult = { status: 'sent' } | { status: 'accepted'; friend: FriendUser }
+
+/** A printing on someone's wishlist. */
+export interface WishlistItem {
+  /** The printing's sync key; the same on every device, unlike `printing.id`. */
+  pkey: string
+  card: CardRow
+  printing: Printing
+  /** The card's original art, shown when the printing has no scan. */
+  imageId: number
+  /** As on EntryView: false for a friend's item seen from the desktop or phone app. */
+  printingScan: boolean
+  /** Copies wanted; null for no target, which never removes the row by itself. */
+  quantity: number | null
+  /** Copies of this printing in the list owner's collection. */
+  owned: number
+  unitPrice: number | null
+  priceApproximate: boolean
+  addedAt: string
+}
+
+/** A printing of one card on the wishlist. */
+export interface CardWish {
+  printingId: number
+  quantity: number | null
+}
+
+/** The friends who own a wanted printing, by its sync key. */
+export interface WishOwners {
+  pkey: string
+  friends: (FriendUser & { quantity: number })[]
+}
+
+/** A friend who wants a card, and which of its printings. */
+export interface FriendWantsCard extends FriendUser {
+  printings: { setCode: string; rarity: string; language: Language }[]
+}

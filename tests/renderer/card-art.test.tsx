@@ -143,6 +143,16 @@ describe('CardArt aspect', () => {
     expect(pkm.style.aspectRatio).toBe('600 / 825')
   })
 
+  it("picks the placeholder by the card's game", () => {
+    const { unmount } = render(<CardArt imageId={5} size="small" alt="Kuriboh" />)
+    fireEvent.error(screen.getByAltText('Kuriboh'))
+    expect(screen.getByTestId('card-art-placeholder')).toHaveAttribute('data-game', 'ygo')
+    unmount()
+    render(<CardArt imageId={PKM_CARD} size="small" alt="Pikachu" />)
+    fireEvent.error(screen.getByAltText('Pikachu'))
+    expect(screen.getByTestId('card-art-placeholder')).toHaveAttribute('data-game', 'pkm')
+  })
+
   it("caps the panel's large card by the window height at the card's aspect", () => {
     for (const [imageId, ratio] of [
       [5, 'calc(421 / 614)'],

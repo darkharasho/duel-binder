@@ -1,8 +1,10 @@
+import { memo } from 'react'
 import type { Language } from '@shared/languages'
 import { englishSetName, setNameTooltip } from '@shared/setNames'
 import type { CountMode, SetSummary } from '@shared/types'
 import { LanguageTag } from '@/components/LanguageTag'
 import { formatMonthYear } from '@/lib/format'
+import { useChunkedList } from '@/lib/useChunkedList'
 import { cn } from '@/lib/utils'
 import { SetArt } from './SetArt'
 import { SetProgress } from './SetProgress'
@@ -18,7 +20,8 @@ interface Props {
   id?: string
 }
 
-export function SetsList({
+/** Memoized: the page re-renders on every keystroke and open set, and a list can be a thousand rows. */
+export const SetsList = memo(function SetsList({
   sets,
   mode,
   view,
@@ -26,6 +29,7 @@ export function SetsList({
   label = 'Sets',
   id
 }: Props): React.JSX.Element {
+  const shown = useChunkedList(sets)
   if (view === 'grid') {
     return (
       <ul
@@ -34,11 +38,11 @@ export function SetsList({
         data-view="grid"
         className="grid grid-cols-[repeat(auto-fill,minmax(170px,1fr))] gap-x-5 gap-y-7"
       >
-        {sets.map((s) => {
+        {shown.map((s) => {
           const p = progressFor(s, mode)
           const started = p.owned > 0
           return (
-            <li key={`${s.language}|${s.setName}`}>
+            <li key={`${s.language}|${s.setName}`} className="lazy-item [--lazy-h:290px]">
               <button
                 type="button"
                 data-started={started}
@@ -96,11 +100,11 @@ export function SetsList({
       data-view="list"
       className="divide-y divide-white/[0.06] border-b border-white/[0.06]"
     >
-      {sets.map((s) => {
+      {shown.map((s) => {
         const p = progressFor(s, mode)
         const started = p.owned > 0
         return (
-          <li key={`${s.language}|${s.setName}`}>
+          <li key={`${s.language}|${s.setName}`} className="lazy-item [--lazy-h:69px]">
             <button
               type="button"
               data-started={started}
@@ -154,4 +158,4 @@ export function SetsList({
       })}
     </ul>
   )
-}
+})

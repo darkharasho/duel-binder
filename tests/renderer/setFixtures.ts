@@ -1,4 +1,4 @@
-import type { SetChecklist } from '@shared/types'
+import type { CardDetail, Printing, SetChecklist } from '@shared/types'
 
 // Task 4's Metal Raiders data shape. Printing ids are distinct per code.
 export const PRINTING = {
@@ -108,4 +108,34 @@ export const metalRaidersChecklist: SetChecklist = {
       ]
     }
   ]
+}
+
+/** A checklist card's rarities as the printings `cards.get` lists. */
+export const printingsOf = (cardId: number): Printing[] =>
+  metalRaidersChecklist.cards
+    .filter((c) => c.cardId === cardId)
+    .flatMap((c) =>
+      c.rarities.flatMap((r) =>
+        r.codes.map((code) => ({
+          id: code.printingId,
+          cardId,
+          setName: 'Metal Raiders',
+          setCode: code.setCode,
+          setRarity: r.rarity,
+          setRarityCode: '',
+          setPrice: r.price,
+          missingFromApi: false,
+          language: 'en' as const
+        }))
+      )
+    )
+
+/** `cards.get` for a card of the fixture. */
+export const detailOf = (cardId: number): CardDetail => {
+  const c = metalRaidersChecklist.cards.find((x) => x.cardId === cardId)
+  return {
+    card: { id: cardId, name: c?.name, type: c?.type } as CardDetail['card'],
+    printings: printingsOf(cardId),
+    images: [{ imageId: c?.imageId ?? cardId, cardId, sortOrder: 0 }]
+  }
 }

@@ -129,6 +129,7 @@ describe('Scan nav', () => {
     expect(navNames()).toEqual([
       'Dashboard',
       'Collection',
+      'Wishlist',
       'Sets',
       'Browse',
       'Scan',

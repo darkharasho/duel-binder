@@ -16,12 +16,21 @@ import { SyncBanner } from './SyncBanner'
 import { TitleBar } from './TitleBar'
 
 export type Page =
-  'dashboard' | 'collection' | 'browse' | 'scan' | 'rip' | 'friends' | 'sets' | 'settings'
+  | 'dashboard'
+  | 'collection'
+  | 'wishlist'
+  | 'browse'
+  | 'scan'
+  | 'rip'
+  | 'friends'
+  | 'sets'
+  | 'settings'
 export type NavigateFn = (page: Page, opts?: { entryId?: number }) => void
 
 const NAV = [
   { page: 'dashboard', label: 'Dashboard' },
   { page: 'collection', label: 'Collection' },
+  { page: 'wishlist', label: 'Wishlist' },
   { page: 'sets', label: 'Sets' },
   { page: 'browse', label: 'Browse' },
   { page: 'scan', label: 'Scan' },

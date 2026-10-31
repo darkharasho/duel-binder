@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import { cn } from '@/lib/utils'
-import { cssAspect, gameOfId, type CardAspect } from '@shared/games'
-import { useCardAspect } from '@/lib/game'
+import { cssAspect, gameOfId } from '@shared/games'
+import { useCardAspect, useCardGame } from '@/lib/game'
 import { cardImageSrc, printingImageSrc } from '@/lib/images'
 import { useArtLoad } from './artLoad'
+import { CardPlaceholder } from './CardPlaceholder'
 
 interface CardArtProps {
   imageId: number
@@ -14,52 +15,6 @@ interface CardArtProps {
   printingId?: number | null
   /** Someone is waiting on this image (a clicked card): the desktop downloads it ahead of its queue. */
   priority?: boolean
-}
-
-function CardBack({
-  className,
-  label,
-  aspect
-}: {
-  className?: string
-  label: string
-  aspect: CardAspect
-}): React.JSX.Element {
-  const { width: w, height: h } = aspect
-  // Drawn on Yu-Gi-Oh!'s 421×614 card, scaled to the game's: a 24-unit border, an oval in the middle.
-  return (
-    <svg
-      role="img"
-      aria-label={label}
-      data-testid="card-art-placeholder"
-      viewBox={`0 0 ${w} ${h}`}
-      style={{ aspectRatio: cssAspect(aspect) }}
-      className={cn('rounded-[6px] shadow-sm', className)}
-    >
-      <rect width={w} height={h} fill="currentColor" className="text-zinc-300 dark:text-zinc-700" />
-      <rect
-        x="24"
-        y="24"
-        width={w - 48}
-        height={h - 48}
-        rx="8"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="6"
-        className="text-zinc-400 dark:text-zinc-500"
-      />
-      <ellipse
-        cx={w / 2}
-        cy={h / 2}
-        rx={(92 * w) / 421}
-        ry={(132 * h) / 614}
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="6"
-        className="text-zinc-400 dark:text-zinc-500"
-      />
-    </svg>
-  )
 }
 
 /** The printing's scan, faded in over the default art; removed if the printing has none. */
@@ -112,6 +67,7 @@ function CardArtImage({
   const [failed, setFailed] = useState(false)
   const [scanShown, setScanShown] = useState<number | null>(null)
   const aspect = useCardAspect(imageId)
+  const game = useCardGame(imageId)
   // Inline, not a class: the ratio is the card's game's, known only at runtime.
   const aspectStyle = { aspectRatio: cssAspect(aspect) }
   // A shimmer in the frame's shape while the art downloads, then a fade into it.
@@ -122,7 +78,8 @@ function CardArtImage({
   const scanSrc =
     printingId == null || gameOfId(imageId) === 'pkm' ? null : printingImageSrc(printingId)
   if (printingId == null || scanSrc === null) {
-    if (failed) return <CardBack className={className} label={alt} aspect={aspect} />
+    if (failed)
+      return <CardPlaceholder game={game} className={className} label={alt} aspect={aspect} />
     return (
       <img
         src={src}
@@ -151,7 +108,12 @@ function CardArtImage({
       )}
     >
       {failed ? (
-        <CardBack className="absolute inset-0 size-full" label={alt} aspect={aspect} />
+        <CardPlaceholder
+          game={game}
+          className="absolute inset-0 size-full"
+          label={alt}
+          aspect={aspect}
+        />
       ) : (
         <img
           src={src}

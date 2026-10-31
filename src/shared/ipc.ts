@@ -9,24 +9,31 @@ import type {
   BrowsePage,
   CardDetail,
   CardSearchResult,
+  CardWish,
   ChecklistCard,
   CollectionFilters,
   CollectionStats,
   EntryView,
   Facets,
   FriendRequestResult,
+  FriendCardCopies,
   FriendsOverview,
+  FriendWantsCard,
   ImageDownloads,
   SetChecklist,
   SetSummary,
   SyncStatus,
   UpdateEntryInput,
-  UpdateStatus
+  UpdateStatus,
+  WishlistItem,
+  WishOwners
 } from './types'
 import type { ScanWindowMessage } from './scanWindow'
 import type { ScanRef } from './scan/fingerprintRefs'
 import type { FingerprintStatus, OcrBand, ScanPrinting } from './scan/types'
 import type { CollectorNumber } from './scan/collectorNumber'
+import type { DexPreview } from './dex/match'
+import type { DexRow } from './dex/parse'
 import type { CardLanguage } from './scan/language'
 import type { OcrKind, TextModel } from './scan/ocr'
 import type { PackWrappers, RipCard, RipHistory, RipSessionDetail, RipSet } from './rip/types'
@@ -49,6 +56,13 @@ export interface Api {
     remove(id: number): Promise<void>
     facets(): Promise<Facets>
   }
+  /** Desktop only: imports a Dex CSV export into the Pokémon collection. */
+  dex: {
+    preview(rows: DexRow[]): Promise<DexPreview>
+    apply(rows: DexRow[]): Promise<{ copies: number }>
+    /** The window's own clipboard API is denied by the app's permission rules. */
+    copy(text: string): Promise<void>
+  }
   friends: {
     overview(): Promise<FriendsOverview>
     request(username: string): Promise<FriendRequestResult>
@@ -61,6 +75,25 @@ export interface Api {
     /** An accepted friend's live entries, notes always ''. */
     collection(userId: number, f: CollectionFilters): Promise<EntryView[]>
     facets(userId: number): Promise<Facets>
+    /** Friends with copies of this card in the current game; a portal without it answers 404. */
+    forCard(cardId: number): Promise<FriendCardCopies[]>
+    /** An accepted friend's wishlist, without what they already have; empty if they hide it. */
+    wishlist(userId: number): Promise<WishlistItem[]>
+    /** Friends who want this card and don't hide their wishlist. */
+    wanting(cardId: number): Promise<FriendWantsCard[]>
+    /** Which friends own these printings (sync keys), in one call; only those some friend owns. */
+    owning(pkeys: string[]): Promise<WishOwners[]>
+    /** Whether friends can see this account's wishlist. */
+    wishlistVisible(): Promise<boolean>
+    setWishlistVisible(visible: boolean): Promise<void>
+  }
+  /** The cards this account wants, in the game shown. Local first, like the collection. */
+  wishlist: {
+    list(): Promise<WishlistItem[]>
+    forCard(cardId: number): Promise<CardWish[]>
+    /** Wants a printing; `quantity` null for no target. A target is kept above the copies owned. */
+    set(printingId: number, quantity: number | null): Promise<void>
+    remove(printingId: number): Promise<void>
   }
   scan: {
     printingsByCode(code: string): Promise<ScanPrinting[]>
@@ -208,6 +241,9 @@ export const INVOKE_CHANNELS = [
   'collection:update',
   'collection:remove',
   'collection:facets',
+  'dex:preview',
+  'dex:apply',
+  'dex:copy',
   'friends:overview',
   'friends:request',
   'friends:accept',
@@ -217,6 +253,16 @@ export const INVOKE_CHANNELS = [
   'friends:unblock',
   'friends:collection',
   'friends:facets',
+  'friends:forCard',
+  'friends:wishlist',
+  'friends:wanting',
+  'friends:owning',
+  'friends:wishlistVisible',
+  'friends:setWishlistVisible',
+  'wishlist:list',
+  'wishlist:forCard',
+  'wishlist:set',
+  'wishlist:remove',
   'scan:printingsByCode',
   'scan:printingsByNumber',
   'scan:printingsForSet',

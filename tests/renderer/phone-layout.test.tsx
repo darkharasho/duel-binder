@@ -17,7 +17,7 @@ import { FriendsPage } from '@/features/friends/FriendsPage'
 import { SetChecklist } from '@/features/sets/SetChecklist'
 import { SetsPage } from '@/features/sets/SetsPage'
 import { createMockApi, renderWithProviders } from './mockApi'
-import { metalRaidersChecklist } from './setFixtures'
+import { metalRaidersChecklist, printingsOf } from './setFixtures'
 
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() }, Toaster: () => null }))
 
@@ -201,6 +201,7 @@ describe('phone layout', () => {
     const api = phoneApi()
     api.sets.checklist = vi.fn(async () => metalRaidersChecklist)
     api.collection.forCard = vi.fn(async () => [])
+    api.cards.get = vi.fn(async () => ({ ...detail, printings: printingsOf(2001) }))
     renderWithProviders(
       <SetChecklist
         setName="Metal Raiders"
@@ -216,7 +217,9 @@ describe('phone layout', () => {
     const sheet = await screen.findByRole('dialog', { name: 'Beta Knight' })
     expect(sheet).toHaveAttribute('data-layout', 'full-screen')
     // The steppers come before the card text, so they're reachable without a long scroll.
-    const plus = within(sheet).getByRole('button', { name: 'Add one Beta Knight Common' })
+    const plus = await within(sheet).findByRole('button', {
+      name: 'Add one Beta Knight MRD-002 Common'
+    })
     const text = await within(sheet).findByText('A wizard.')
     expect(plus.compareDocumentPosition(text) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
     await userEvent.click(within(sheet).getByRole('button', { name: 'Back' }))

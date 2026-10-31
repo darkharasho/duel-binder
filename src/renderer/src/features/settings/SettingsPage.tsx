@@ -8,6 +8,7 @@ import { formatRelative } from '@/lib/format'
 import { isWeb } from '@/lib/platform'
 import { AccountSection } from './AccountSection'
 import { UsageToggle } from './UsageToggle'
+import { WishlistToggle } from './WishlistToggle'
 import type { UpdateStatus } from '@shared/types'
 
 function Section({ title, children }: { title: string; children: React.ReactNode }): React.JSX.Element {
@@ -186,6 +187,7 @@ function DesktopSettings(): React.JSX.Element {
       </Section>
 
       <Section title="Privacy">
+        <WishlistToggle />
         <UsageToggle />
         <a
           href="https://duelbinder.com/privacy"
@@ -210,6 +212,7 @@ function WebSettings(): React.JSX.Element {
         <AccountSection />
       </Section>
       <Section title="Privacy">
+        <WishlistToggle />
         <UsageToggle />
         <a
           href="https://duelbinder.com/privacy"

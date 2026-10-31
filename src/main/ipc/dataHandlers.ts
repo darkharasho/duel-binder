@@ -1,7 +1,8 @@
 import type { Language } from '@shared/languages'
 import type { SqlDb } from '../db/sql'
+import { LOCAL } from '../repo/scope'
 import { getCardDetail, searchCards } from '../repo/cards'
-import { browseCards, browseFacets } from '../repo/browse'
+import { browseCards, browseFacetsFast } from '../repo/browse'
 import { checkLanguage, checkNotesLength } from '../repo/args'
 import {
   addEntry,
@@ -11,7 +12,7 @@ import {
   removeEntry,
   updateEntry
 } from '../repo/collection'
-import { adjustPrinting, getChecklist, listSets } from '../repo/sets'
+import { adjustPrinting, getChecklist, listSetsFast } from '../repo/sets'
 import {
   cardsForImages,
   imagesForLanguage,
@@ -22,6 +23,7 @@ import {
   printingsForSet
 } from '../repo/scan'
 import { getStats, recordSnapshot } from '../repo/stats'
+import { listWishlist, removeWish, setWish, settleWishlist, wishesForCard } from '../repo/wishlist'
 import { activeOwner, listSyncIssues } from '../cloud/localSync'
 import { openPack, ripHistory, ripSession, ripSets, startRip } from '../repo/rip'
 import { activeGame, setActiveGame } from '../cloud/activeGame'
@@ -40,6 +42,10 @@ export const DATA_CHANNELS = [
   'collection:update',
   'collection:remove',
   'collection:facets',
+  'wishlist:list',
+  'wishlist:forCard',
+  'wishlist:set',
+  'wishlist:remove',
   'scan:printingsByCode',
   'scan:printingsByNumber',
   'scan:printingsForSet',
@@ -100,6 +106,11 @@ export function createDataHandlers({
     onEdit()
     return result
   }
+  // A write that can add copies: a wish whose target is now met goes, in the same sync.
+  const collected = <T>(result: T): T => {
+    settleWishlist(db, LOCAL, new Date())
+    return edited(snapshotAfter(result))
+  }
   // Named adds already done, with what they returned, oldest first.
   const doneAdds = new Map<string, { at: number; result: unknown }>()
   const rememberAdd = (id: string, result: unknown): void => {
@@ -114,25 +125,30 @@ export function createDataHandlers({
     'cards:search': async (q: string) => searchCards(db, q),
     'cards:get': async (cardId: number) => getCardDetail(db, cardId),
     'cards:browse': async (f) => browseCards(db, f),
-    'cards:browseFacets': async () => browseFacets(db),
+    'cards:browseFacets': async () => browseFacetsFast(db),
     'collection:list': async (f) => listEntries(db, f),
     'collection:forCard': async (cardId: number) => entriesForCard(db, cardId),
     'collection:add': async (input) => {
       checkNotesLength(input)
       const id: unknown = input?.requestId
-      if (typeof id !== 'string') return edited(snapshotAfter(addEntry(db, input)))
+      if (typeof id !== 'string') return collected(addEntry(db, input))
       const done = doneAdds.get(id)
       if (done && Date.now() - done.at < REPEAT_ADD_MS) return done.result
-      const result = edited(snapshotAfter(addEntry(db, input)))
+      const result = collected(addEntry(db, input))
       rememberAdd(id, result)
       return result
     },
     'collection:update': async (id: number, patch) => {
       checkNotesLength(patch)
-      return edited(snapshotAfter(updateEntry(db, id, patch)))
+      return collected(updateEntry(db, id, patch))
     },
     'collection:remove': async (id: number) => edited(snapshotAfter(removeEntry(db, id))),
     'collection:facets': async () => getFacets(db),
+    'wishlist:list': async () => listWishlist(db),
+    'wishlist:forCard': async (cardId: number) => wishesForCard(db, cardId),
+    'wishlist:set': async (printingId: number, quantity: number | null) =>
+      edited(setWish(db, printingId, quantity)),
+    'wishlist:remove': async (printingId: number) => edited(removeWish(db, printingId)),
     'scan:printingsByCode': async (code: string) => printingsByCode(db, code),
     'scan:printingsByNumber': async (n: CollectorNumber) => {
       const text = (x: unknown): boolean => typeof x === 'string' && x.length > 0 && x.length <= 16
@@ -155,13 +171,11 @@ export function createDataHandlers({
       return cardsForImages(db, imageIds)
     },
     'stats:get': async () => getStats(db),
-    'sets:list': async () => listSets(db),
+    'sets:list': async () => listSetsFast(db),
     'sets:checklist': async (setName: string, language: Language) =>
       getChecklist(db, setName, checkLanguage(language)),
     'sets:adjust': async (setName: string, language: Language, printingId: number, delta: 1 | -1) =>
-      edited(
-        snapshotAfter(adjustPrinting(db, setName, checkLanguage(language), printingId, delta))
-      ),
+      collected(adjustPrinting(db, setName, checkLanguage(language), printingId, delta)),
     'account:unsynced': async () => listSyncIssues(db, activeOwner(db)),
     // Rip is never synced, so none of these tell the account service about an edit.
     'rip:sets': async () => ripSets(db),

@@ -22,12 +22,13 @@ import { formatRelative } from '@/lib/format'
 import { friendsErrorMessage } from '@/lib/friends'
 import { useGame } from '@/lib/game'
 import { useLanguageFilter } from '@/lib/languageFilter'
-import { isPhone } from '@/lib/platform'
+import { isPhone, isWeb } from '@/lib/platform'
 import { CollectionGrid } from './CollectionGrid'
 import { CollectionTable } from './CollectionTable'
-import { EntryDetailPanel } from './EntryDetailPanel'
+import { CardPanel } from '../card/CardPanel'
 import { FriendEntryPanel } from '../friends/FriendEntryPanel'
 import { CollectionSearch, FilterBar, FilterChips, FilterSheetBody } from './FilterBar'
+import { DexImportButton } from './DexImportDialog'
 import { activeFilterCount } from './filterFacets'
 
 type View = 'grid' | 'table'
@@ -70,6 +71,8 @@ interface Props {
   onBackToMine?: () => void
   /** Returns to the friend list; the phone passes it, as its binder replaces the list. */
   onBackToFriends?: () => void
+  /** The binder's tabs, shown under a friend's header. */
+  friendTabs?: React.ReactNode
 }
 
 export function CollectionPage({
@@ -77,7 +80,8 @@ export function CollectionPage({
   onAddCard,
   friend,
   onBackToMine,
-  onBackToFriends
+  onBackToFriends,
+  friendTabs
 }: Props): React.JSX.Element {
   const [pageFilters, setFilters] = useState<CollectionFilters>(DEFAULT_FILTERS)
   const [languageFilter, setLanguageFilter] = useLanguageFilter()
@@ -209,7 +213,7 @@ export function CollectionPage({
   // The collection tints the page with its first card in the current order.
   useArtWash(list[0] ? cardArtUrl(list[0].imageId) : null)
   const filtered = hasActiveFilters(filters)
-  const { def } = useGame()
+  const { game, def } = useGame()
   const activeCount = activeFilterCount(filters, def)
   // Entries exist, but the language filter alone hides them all.
   const hiddenByLanguage =
@@ -235,14 +239,17 @@ export function CollectionPage({
               </p>
             </div>
             {!phone && (
-              <ToggleGroup type="single" variant="outline" value={view} onValueChange={changeView}>
-                <ToggleGroupItem value="grid" aria-label="Grid view">
-                  <LayoutGrid />
-                </ToggleGroupItem>
-                <ToggleGroupItem value="table" aria-label="Table view">
-                  <Table2 />
-                </ToggleGroupItem>
-              </ToggleGroup>
+              <div className="flex items-center gap-2">
+                {game === 'pkm' && !friend && !isWeb() && <DexImportButton />}
+                <ToggleGroup type="single" variant="outline" value={view} onValueChange={changeView}>
+                  <ToggleGroupItem value="grid" aria-label="Grid view">
+                    <LayoutGrid />
+                  </ToggleGroupItem>
+                  <ToggleGroupItem value="table" aria-label="Table view">
+                    <Table2 />
+                  </ToggleGroupItem>
+                </ToggleGroup>
+              </div>
             )}
           </header>
 
@@ -262,6 +269,7 @@ export function CollectionPage({
               </Button>
             </div>
           )}
+          {friend && friendTabs}
 
           {phone ? (
             <>
@@ -392,7 +400,7 @@ export function CollectionPage({
         )}
         {!friend && selectedId !== null && cardId !== null && (
           <CardSheet onClose={close}>
-            <EntryDetailPanel
+            <CardPanel
               cardId={cardId}
               entryId={selectedId}
               onSelectEntry={setSelectedId}

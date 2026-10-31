@@ -189,6 +189,7 @@ export function createHttpApi(opts: HttpApiOptions = {}): Api {
       remove: call('collection:remove'),
       facets: call('collection:facets')
     },
+    dex: { preview: unavailable, apply: unavailable, copy: unavailable },
     friends: {
       overview: call('friends:overview'),
       request: call('friends:request'),
@@ -198,7 +199,19 @@ export function createHttpApi(opts: HttpApiOptions = {}): Api {
       block: call('friends:block'),
       unblock: call('friends:unblock'),
       collection: call('friends:collection'),
-      facets: call('friends:facets')
+      facets: call('friends:facets'),
+      forCard: call('friends:forCard'),
+      wishlist: call('friends:wishlist'),
+      wanting: call('friends:wanting'),
+      owning: call('friends:owning'),
+      wishlistVisible: call('friends:wishlistVisible'),
+      setWishlistVisible: call('friends:setWishlistVisible')
+    },
+    wishlist: {
+      list: call('wishlist:list'),
+      forCard: call('wishlist:forCard'),
+      set: call('wishlist:set'),
+      remove: call('wishlist:remove')
     },
     scan: {
       debugFrame: async () => undefined,

@@ -74,6 +74,8 @@ export interface PhoneStore {
   syncProblems(): Promise<UnsyncedEntry[]>
   invoke(channel: DataChannel, args: unknown[]): Promise<unknown>
   portal<T>(channel: PortalChannel, args: unknown[]): Promise<T>
+  /** A portal call that doesn't wait for the serial queue, nor hold it up. */
+  portalRead<T>(channel: PortalChannel, args: unknown[]): Promise<T>
   /**
    * Asks the portal to price the unpriced non-English printings among these (see requestPrices in
    * main/cloud/priceRequests); resolves how many it queued. Signed out, offline or failed: 0 (it
@@ -284,6 +286,19 @@ export function createPhoneStore(deps: {
       if (e instanceof CloudAuthError) serverSignedOut()
       throw e
     }
+  }
+
+  function portalCall<T>(channel: PortalChannel, args: unknown[]): Promise<T> {
+    return online(async () => {
+      const t = token()
+      if (t === null) throw new Error(FRIENDS_SIGNED_OUT)
+      try {
+        return await client(t, PORTAL_TIMEOUT_MS).rpc<T>(channel, args, activeGame(db, games()))
+      } catch (e) {
+        if (e instanceof CloudOfflineError) throw new CloudOfflineError(OFFLINE_MESSAGE)
+        throw e
+      }
+    })
   }
 
   function syncStateNow(): PhoneSyncState {
@@ -584,6 +599,7 @@ export function createPhoneStore(deps: {
         db.transaction(() => {
           for (const table of [
             'collection_entries',
+            'wishlist_entries',
             'value_snapshots',
             'sync_pending',
             'sync_issues',
@@ -665,18 +681,10 @@ export function createPhoneStore(deps: {
     },
 
     portal: <T>(channel: PortalChannel, args: unknown[]) =>
-      serial(() =>
-        online(async () => {
-          const t = token()
-          if (t === null) throw new Error(FRIENDS_SIGNED_OUT)
-          try {
-            return await client(t, PORTAL_TIMEOUT_MS).rpc<T>(channel, args, activeGame(db, games()))
-          } catch (e) {
-            if (e instanceof CloudOfflineError) throw new CloudOfflineError(OFFLINE_MESSAGE)
-            throw e
-          }
-        })
-      ),
+      serial(() => portalCall<T>(channel, args)),
+
+    portalRead: <T>(channel: PortalChannel, args: unknown[]) =>
+      read(() => portalCall<T>(channel, args)),
 
     reportUsage: async (report) => {
       const t = token()

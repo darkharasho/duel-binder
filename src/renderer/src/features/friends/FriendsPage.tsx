@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { PageHeader } from '@/components/PageHeader'
+import { UnderlineTabs } from '@/components/UnderlineTabs'
 import { Button } from '@/components/ui/button'
 import { api, queryKeys } from '@/lib/api'
 import { formatRelative } from '@/lib/format'
@@ -9,32 +10,17 @@ import { isPhone } from '@/lib/platform'
 import { FRIENDS_SIGNED_OUT } from '@shared/friends'
 import type { Friend, FriendUser } from '@shared/types'
 import { CollectionPage } from '../collection/CollectionPage'
+import { FriendWishlist } from '../wishlist/FriendWishlist'
 import { AddFriendForm } from './AddFriendForm'
-
-function Avatar({ user }: { user: FriendUser }): React.JSX.Element {
-  const [failed, setFailed] = useState(false)
-  if (user.avatarUrl && !failed) {
-    return (
-      <img
-        src={user.avatarUrl}
-        alt=""
-        className="size-8 shrink-0 rounded-full"
-        onError={() => setFailed(true)}
-      />
-    )
-  }
-  const name = user.displayName ?? user.username
-  return (
-    <span
-      aria-hidden
-      className="flex size-8 shrink-0 items-center justify-center rounded-full bg-white/10 text-sm font-semibold uppercase"
-    >
-      {name.charAt(0)}
-    </span>
-  )
-}
+import { FriendAvatar } from './FriendAvatar'
 
 type Confirming = { id: number; action: 'unfriend' | 'block' }
+type BinderTab = 'collection' | 'wishlist'
+
+const BINDER_TABS = [
+  { value: 'collection', label: 'Collection' },
+  { value: 'wishlist', label: 'Wishlist' }
+] as const
 
 const friendStats = (f: Friend): string =>
   `${f.cardCount} ${f.cardCount === 1 ? 'card' : 'cards'} · Updated ${formatRelative(f.updatedAt)}`
@@ -44,6 +30,7 @@ export function FriendsPage({ onBackToMine }: { onBackToMine: () => void }): Rea
   const available = useFriendsAvailable()
   const overview = useFriendsOverview()
   const [viewing, setViewing] = useState<Friend | null>(null)
+  const [tab, setTab] = useState<BinderTab>('collection')
   const [confirming, setConfirming] = useState<Confirming | null>(null)
   const refresh = (): Promise<void> => qc.invalidateQueries({ queryKey: queryKeys.friends })
   const act = useMutation({
@@ -102,14 +89,27 @@ export function FriendsPage({ onBackToMine }: { onBackToMine: () => void }): Rea
 
   // On the phone the friend list and requests come first, and a friend's binder has a way back.
   const phone = isPhone()
-  if (viewing)
-    return (
+  if (viewing) {
+    const onBackToFriends = phone ? () => setViewing(null) : undefined
+    const tabs = (
+      <UnderlineTabs label="Binder" value={tab} options={BINDER_TABS} onChange={setTab} />
+    )
+    return tab === 'wishlist' ? (
+      <FriendWishlist
+        friend={viewing}
+        tabs={tabs}
+        onBackToMine={onBackToMine}
+        onBackToFriends={onBackToFriends}
+      />
+    ) : (
       <CollectionPage
         friend={viewing}
+        friendTabs={tabs}
         onBackToMine={onBackToMine}
-        onBackToFriends={phone ? () => setViewing(null) : undefined}
+        onBackToFriends={onBackToFriends}
       />
     )
+  }
 
   const data = overview.data
   return (
@@ -137,7 +137,7 @@ export function FriendsPage({ onBackToMine }: { onBackToMine: () => void }): Rea
           <ul className="space-y-2">
             {data.incoming.map((r) => (
               <li key={r.id} className="flex items-center gap-3 max-md:flex-wrap">
-                <Avatar user={r} />
+                <FriendAvatar user={r} />
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm font-medium">{r.displayName ?? r.username}</div>
                   <div className="truncate text-xs text-muted-foreground">@{r.username}</div>
@@ -181,10 +181,13 @@ export function FriendsPage({ onBackToMine }: { onBackToMine: () => void }): Rea
               <li key={f.id} className="flex items-center gap-3 max-md:flex-wrap">
                 <button
                   type="button"
-                  onClick={() => setViewing(f)}
+                  onClick={() => {
+                    setTab('collection')
+                    setViewing(f)
+                  }}
                   className="flex min-w-0 flex-1 items-center gap-3 rounded-sm text-left focus-visible:outline-2 focus-visible:outline-ring"
                 >
-                  <Avatar user={f} />
+                  <FriendAvatar user={f} />
                   <span className="min-w-0">
                     <span className="block truncate text-sm font-medium">
                       {f.displayName ?? f.username}
@@ -231,7 +234,7 @@ export function FriendsPage({ onBackToMine }: { onBackToMine: () => void }): Rea
           <ul className="space-y-2">
             {data.blocked.map((b) => (
               <li key={b.id} className="flex items-center gap-3">
-                <Avatar user={b} />
+                <FriendAvatar user={b} />
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm font-medium">{b.displayName ?? b.username}</div>
                   <div className="truncate text-xs text-muted-foreground">@{b.username}</div>

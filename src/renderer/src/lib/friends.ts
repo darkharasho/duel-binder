@@ -51,6 +51,8 @@ function useFriendsAccess(): { available: boolean; confirmed: boolean } {
     } else if (lastUser.current !== userId) {
       lastUser.current = userId
       qc.removeQueries({ queryKey: queryKeys.friends })
+      // Nor their wants: a page left open would show them until it refetched.
+      void qc.resetQueries({ queryKey: queryKeys.wishlist })
     }
   }, [web, status.isSuccess, userId, qc])
   if (web) return { available: true, confirmed: true }
@@ -61,6 +63,12 @@ function useFriendsAccess(): { available: boolean; confirmed: boolean } {
 /** Whether to offer friends: see useFriendsAccess. */
 export function useFriendsAvailable(): boolean {
   return useFriendsAccess().available
+}
+
+/** Whether friends can be asked for: the status behind `available` has arrived. */
+export function useFriendsReady(): boolean {
+  const { available, confirmed } = useFriendsAccess()
+  return available && confirmed
 }
 
 /** The overview query (key queryKeys.friends), enabled once available is confirmed, refetched every 60 s. */

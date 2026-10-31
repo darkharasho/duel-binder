@@ -47,6 +47,15 @@ describe('usage counts', () => {
     expect(report()).toHaveBeenCalledWith({ 'rip:pack': 1 })
   })
 
+  it('sends page:wishlist on its own, so an older portal keeps the rest of the report', () => {
+    track('open')
+    track('page:wishlist')
+    flushUsage()
+    expect(report()).toHaveBeenCalledTimes(2)
+    expect(report()).toHaveBeenCalledWith({ open: 1 })
+    expect(report()).toHaveBeenCalledWith({ 'page:wishlist': 1 })
+  })
+
   it('counts and sends nothing once turned off, and drops what was waiting', () => {
     track('open')
     setUsageEnabled(false)

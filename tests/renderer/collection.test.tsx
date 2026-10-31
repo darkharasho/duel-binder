@@ -306,9 +306,9 @@ describe('CollectionPage', () => {
     await userEvent.click(await screen.findByRole('option', { name: /SDY-006/ }))
     await waitFor(() => expect(update).toHaveBeenCalledWith(1, { printingId: 5 }))
     await waitFor(() => expect(toast.success).toHaveBeenCalledWith('Merged with an existing entry'))
-    const copies = await screen.findByRole('region', { name: 'Your copies' })
+    const list = await screen.findByRole('region', { name: 'Printings' })
     await waitFor(() =>
-      expect(within(copies).getByRole('button', { name: /×4/ })).toHaveAttribute(
+      expect(within(list).getByRole('group', { name: /SDY-006/ })).toHaveAttribute(
         'aria-current',
         'true'
       )

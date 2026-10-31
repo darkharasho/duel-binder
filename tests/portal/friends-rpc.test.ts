@@ -147,6 +147,19 @@ describe('friends RPC', () => {
     expect((await call('friends:facets', [bob], ca)).status).toBe(200)
   })
 
+  it('answers which friends have a card, and nothing of strangers', async () => {
+    await bobOwns()
+    await befriend()
+    const owned = (await call('friends:collection', [bob, F], ca)).body.result[0]
+    const r = await call('friends:forCard', [owned.card.id], ca)
+    expect(r.status).toBe(200)
+    expect(r.body.result).toHaveLength(1)
+    expect(r.body.result[0].username).toBe('bob')
+    await call('friends:remove', [bob], ca)
+    expect((await call('friends:forCard', [owned.card.id], ca)).body.result).toEqual([])
+    expect((await call('friends:forCard', ['x'], ca)).status).toBe(400)
+  })
+
   it('refuses strangers', async () => {
     const carol = addUser(db, '3', 'carol')
     const cc = await sessionFor(carol, 'tc')

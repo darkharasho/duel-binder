@@ -406,7 +406,19 @@ CREATE TRIGGER trg_intl_prices_seq_upd AFTER UPDATE ON intl_prices WHEN NEW.pric
   },
   multiGameStep(),
   pokemonColumnsStep(),
-  pokemonSetArtStep()
+  pokemonSetArtStep(),
+  {
+    // Wishlists, numbered by their own clock (`seq`), and whether a user hides theirs from friends.
+    name: 'server-15',
+    sql: `
+CREATE TABLE wishlist_entries (user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, pkey TEXT NOT NULL,
+  game TEXT NOT NULL DEFAULT 'ygo', quantity INTEGER CHECK (quantity >= 1), created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL, deleted_at TEXT, seq INTEGER NOT NULL, PRIMARY KEY (user_id, pkey));
+CREATE UNIQUE INDEX ux_wishlist_seq ON wishlist_entries(seq);
+CREATE INDEX ix_wishlist_user_seq ON wishlist_entries(user_id, seq);
+ALTER TABLE users ADD COLUMN wishlist_hidden INTEGER NOT NULL DEFAULT 0;
+`
+  }
 ]
 
 /**

@@ -2,8 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { screen, within } from '@testing-library/react'
 import type { BrowseCard, CardDetail, EntryView, Printing } from '@shared/types'
 import { CardSheet } from '@/components/CardSheet'
-import { BrowseCardPanel } from '@/features/browse/BrowseCardPanel'
-import { SetCardPanel } from '@/features/sets/SetCardPanel'
+import { CardPanel } from '@/features/card/CardPanel'
 import { createMockApi, renderWithProviders } from './mockApi'
 import { metalRaidersChecklist, PRINTING } from './setFixtures'
 
@@ -99,7 +98,12 @@ const browseCard: BrowseCard = {
 function renderBrowse(printings: Printing[], entries: EntryView[]): void {
   renderWithProviders(
     <CardSheet onClose={() => {}}>
-      <BrowseCardPanel card={browseCard} onMoreOptions={() => {}} />
+      <CardPanel
+        cardId={browseCard.id}
+        seed={browseCard}
+        onClose={() => {}}
+        onMoreOptions={() => {}}
+      />
     </CardSheet>,
     {
       api: createMockApi({
@@ -115,7 +119,7 @@ const marketLine = async (): Promise<HTMLElement> => {
   return within(dialog).getByText(/^Market price/).parentElement as HTMLElement
 }
 
-describe('BrowseCardPanel price for the viewed printing', () => {
+describe('Card panel price, from Browse for the viewed printing', () => {
   it('owned with an eBay price shows it with the eBay marker, listings and checked date', async () => {
     const p = printing(10)
     renderBrowse([p], [entry(p, ebay)])
@@ -156,7 +160,7 @@ describe('BrowseCardPanel price for the viewed printing', () => {
   })
 })
 
-describe('SetCardPanel price for the viewed rarity', () => {
+describe('Card panel price, from a set for the viewed rarity', () => {
   const alpha = metalRaidersChecklist.cards[0]
   const viewed = printing(PRINTING.alphaUltraE001, {
     cardId: 1001,
@@ -167,16 +171,33 @@ describe('SetCardPanel price for the viewed rarity', () => {
   const renderSet = (entries: EntryView[], rarity = 'Ultra Rare'): void => {
     renderWithProviders(
       <CardSheet onClose={() => {}}>
-        <SetCardPanel
-          setName="Metal Raiders"
-          card={alpha}
-          rarity={rarity}
-          busy={false}
-          onAdjust={() => {}}
-          onMoreOptions={() => {}}
+        <CardPanel
+          cardId={alpha.cardId}
+          seed={{
+            ...alpha,
+            defaultPrintingId: alpha.rarities.find((r) => r.rarity === rarity)!.defaultPrintingId
+          }}
+          onClose={() => {}}
         />
       </CardSheet>,
-      { api: createMockApi({ collection: { forCard: async () => entries } }) }
+      {
+        api: createMockApi({
+          cards: {
+            get: async () =>
+              detail([
+                viewed,
+                printing(PRINTING.alphaSecret, {
+                  cardId: 1001,
+                  setName: 'Metal Raiders',
+                  setCode: 'MRD-001',
+                  setRarity: 'Secret Rare',
+                  setPrice: 40
+                })
+              ])
+          },
+          collection: { forCard: async () => entries }
+        })
+      }
     )
   }
 
@@ -204,6 +225,7 @@ describe('SetCardPanel price for the viewed rarity', () => {
 
   it('not owned keeps the rarity price', async () => {
     renderSet([], 'Secret Rare')
+    await screen.findByText('Market price · Secret Rare')
     expect(screen.getByText(/^Market price/).parentElement).toHaveTextContent(
       'Market price · Secret Rare $40.00'
     )

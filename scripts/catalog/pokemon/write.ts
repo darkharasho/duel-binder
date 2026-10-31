@@ -2,8 +2,9 @@ import type Database from 'better-sqlite3'
 import { movedEnough } from '../../../src/main/tcgplayer/prices'
 import { pokemonId } from '../../../src/shared/games/ids'
 import { hasNativeScript } from '../../../src/shared/setNames'
-import { englishNamer } from './englishNames'
-import { matchGroup, matchProducts, type MatchedProduct } from './match'
+import { findArt } from './art'
+import { englishNamer, type EnglishNamer } from './englishNames'
+import { matchGroup, matchProducts, namesCard, speciesCheck, type MatchedProduct, type NameCheck } from './match'
 import { cardVersions, groupFinish, versionSubtype, type PkmVersion } from './versions'
 import type { PkmLang, PokemonSources, TcGroup, TcPrice, TcProduct, TdCard, TdSet } from './types'
 
@@ -29,6 +30,12 @@ export interface PokemonReport {
   englishNamed: number
   /** Japanese cards still named in Japanese: no English name was found. */
   japaneseNames: number
+  /** Cards given art by findArt: no TCGdex image and no matched product's. */
+  artFilled: number
+  /** Stored images taken off a card because their product names another card. */
+  artRemoved: number
+  /** Cards left with no art, by why (see ArtOutcome). */
+  artMissing: Record<string, number>
   /** Cards whose finishes no source confirms (only TCGdex's generated defaults or the fallback). */
   unverified: number
   problems: string[]
@@ -53,12 +60,18 @@ interface SetPlan {
   set: TdSet
   /** The English name of a matched Japanese set (its TCGplayer Japan group), else null. */
   groupName: string | null
+  /** Its matched TCGCSV group. */
+  groupId: number | null
   cards: CardPlan[]
 }
 
 interface LangPlan {
   lang: PkmLang
   sets: SetPlan[]
+  productById: Map<number, TcProduct>
+  inGroup: Map<number, TcProduct[]>
+  /** Whether a product can be a card of this language. */
+  nameOk: NameCheck
   report: PokemonReport
 }
 
@@ -119,7 +132,8 @@ function namingProduct(products: MatchedProduct[]): TcProduct | undefined {
 async function planLanguage(
   lang: PkmLang,
   sources: PokemonSources,
-  log: (l: string) => void
+  log: (l: string) => void,
+  enCards: TdCard[]
 ): Promise<LangPlan> {
   const problems: string[] = []
   const sets = await sources.sets(lang)
@@ -135,6 +149,7 @@ async function planLanguage(
   }
   const cards = await sources.cards(lang, [...setOf.keys()])
   const cardById = new Map(cards.map((c) => [c.id, c]))
+  const nameOk = lang === 'en' ? namesCard : speciesCheck(enCards, cards)
   log(`Pokémon ${lang}: ${sets.length} sets, ${cards.length} cards from TCGdex`)
 
   const groups: TcGroup[] = await sources.groups(lang)
@@ -175,7 +190,8 @@ async function planLanguage(
         card,
         groupId,
         groupId === null ? [] : (inGroup.get(groupId) ?? []),
-        productById
+        productById,
+        nameOk
       )
       problems.push(...m.problems.map((p) => `${lang}/${p}`))
       if (m.products.length === 0) unmatchedCards++
@@ -209,6 +225,7 @@ async function planLanguage(
     return {
       set,
       groupName: lang === 'ja' && group ? stripCode(group.name) || null : null,
+      groupId,
       cards: cs.map(({ card, products }) => {
         const v = cardVersions(card, products, prices, setFinish)
         problems.push(...v.problems.map((p) => `${lang}/${p}`))
@@ -233,6 +250,9 @@ async function planLanguage(
   return {
     lang,
     sets: planned,
+    productById,
+    inGroup,
+    nameOk,
     report: {
       lang,
       sets: sets.length,
@@ -244,6 +264,9 @@ async function planLanguage(
       unmatchedCards,
       englishNamed: 0,
       japaneseNames: 0,
+      artFilled: 0,
+      artRemoved: 0,
+      artMissing: {},
       unverified,
       problems
     }
@@ -258,6 +281,12 @@ interface ExistingPrinting {
   tcg_product_id: number | null
   market_price: number | null
   missing_from_api: number
+}
+
+/** The product a stored TCGplayer image belongs to, if it's still listed. */
+function productOfImage(url: string, byId: Map<number, TcProduct>): TcProduct | null {
+  const m = /^https:\/\/tcgplayer-cdn\.tcgplayer\.com\/product\/(\d+)_/.exec(url)
+  return m ? (byId.get(Number(m[1])) ?? null) : null
 }
 
 /** Writes the planned languages in one transaction. */
@@ -297,6 +326,7 @@ function writePlans(db: Database.Database, plans: LangPlan[], nowIso: string): v
        OR pokemon_cards.source_id IS NOT excluded.source_id OR pokemon_cards.local_name IS NOT excluded.local_name
        OR (pokemon_cards.image_url IS NULL AND excluded.image_url IS NOT NULL)`
   )
+  const setImage = db.prepare('UPDATE pokemon_cards SET image_url = ? WHERE card_id = ?')
   const upsertImage = db.prepare(
     `INSERT INTO card_images (image_id, card_id, sort_order, missing_from_api, game) VALUES (?, ?, 0, 0, 'pkm')
      ON CONFLICT(image_id) DO UPDATE SET missing_from_api = 0
@@ -392,7 +422,14 @@ function writePlans(db: Database.Database, plans: LangPlan[], nowIso: string): v
             imageUrl: cp.imageUrl,
             localName: cp.localName
           })
-          const image = (detailsRow.get(id) as { image_url: string | null }).image_url
+          let image = (detailsRow.get(id) as { image_url: string | null }).image_url
+          // Art is kept, except art an unchecked match gave the card: another card's.
+          const product = image ? productOfImage(image, plan.productById) : null
+          if (product && image !== cp.imageUrl && !plan.nameOk(card, product.name)) {
+            image = cp.imageUrl
+            setImage.run(image, id)
+            report.artRemoved++
+          }
           if (image) report.images++
           upsertImage.run(pokemonId(`${sourceId}#img`), id)
 
@@ -434,11 +471,12 @@ function writePlans(db: Database.Database, plans: LangPlan[], nowIso: string): v
               updatePrinting.run(0, product, price, p.id)
             }
           }
-          // Sticky: a version no longer produced is kept, flagged missing.
+          // Sticky: a version no longer produced is kept, flagged missing, without another card's price.
           for (const p of existing) {
-            if (!produced.has(p.set_rarity) && p.missing_from_api === 0) {
-              updatePrinting.run(1, p.tcg_product_id, p.market_price, p.id)
-            }
+            if (produced.has(p.set_rarity)) continue
+            const old = p.tcg_product_id === null ? undefined : plan.productById.get(p.tcg_product_id)
+            if (old && !plan.nameOk(card, old.name)) updatePrinting.run(1, null, null, p.id)
+            else if (p.missing_from_api === 0) updatePrinting.run(1, p.tcg_product_id, p.market_price, p.id)
           }
         }
       }
@@ -457,7 +495,7 @@ function writePlans(db: Database.Database, plans: LangPlan[], nowIso: string): v
  * Names the Japanese cards no product named in English (see englishNamer), keeping the Japanese
  * name as `localName`. A card's id, printings and prices don't depend on its name.
  */
-function nameInEnglish(ja: LangPlan, en: LangPlan | undefined): void {
+function nameInEnglish(ja: LangPlan, en: LangPlan | undefined): EnglishNamer {
   const cards = ja.sets.flatMap((s) => s.cards)
   const namer = englishNamer(
     en ? en.sets.flatMap((s) => s.cards.map((c) => c.card)) : [],
@@ -475,6 +513,26 @@ function nameInEnglish(ja: LangPlan, en: LangPlan | undefined): void {
       ja.report.englishNamed++
     } else if (hasNativeScript(cp.name)) {
       ja.report.japaneseNames++
+    }
+  }
+  return namer
+}
+
+/** Art for the cards still without any, once they have their English names. */
+function fillArt(plan: LangPlan, namer: EnglishNamer | null): void {
+  const { lang, report } = plan
+  for (const sp of plan.sets) {
+    for (const cp of sp.cards) {
+      if (cp.imageUrl) continue
+      const species = namer?.speciesOf(cp.card)
+      const names = species ? [cp.name, species] : [cp.name]
+      const art = findArt(lang, sp.set, sp.groupId, cp.card, names, plan.inGroup)
+      if (art.imageUrl) {
+        cp.imageUrl = art.imageUrl
+        report.artFilled++
+      } else {
+        report.artMissing[art.outcome] = (report.artMissing[art.outcome] ?? 0) + 1
+      }
     }
   }
 }
@@ -501,13 +559,19 @@ export async function refreshPokemon(
   const log = opts.log ?? ((): void => {})
   const langs = opts.langs ?? ['en', 'ja']
   const plans: LangPlan[] = []
-  for (const lang of langs) plans.push(await planLanguage(lang, sources, log))
+  for (const lang of langs) {
+    const en = plans.find((p) => p.lang === 'en')
+    const enCards = en ? en.sets.flatMap((s) => s.cards.map((c) => c.card)) : []
+    plans.push(await planLanguage(lang, sources, log, enCards))
+  }
   const ja = plans.find((p) => p.lang === 'ja')
-  if (ja)
-    nameInEnglish(
-      ja,
-      plans.find((p) => p.lang === 'en')
-    )
+  const namer = ja
+    ? nameInEnglish(
+        ja,
+        plans.find((p) => p.lang === 'en')
+      )
+    : null
+  for (const plan of plans) fillArt(plan, plan === ja ? namer : null)
   writePlans(work, plans, (opts.now ?? (() => new Date()))().toISOString())
   return plans.map((p) => p.report)
 }

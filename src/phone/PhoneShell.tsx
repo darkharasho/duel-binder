@@ -2,6 +2,7 @@ import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState }
 import { useQueryClient } from '@tanstack/react-query'
 import {
   EllipsisIcon,
+  HeartIcon,
   HouseIcon,
   LayoutGridIcon,
   LibraryIcon,
@@ -46,6 +47,7 @@ const TABS: { page: Page; label: string; icon: LucideIcon }[] = [
   { page: 'sets', label: 'Sets', icon: LayoutGridIcon }
 ]
 const MORE: { page: Page; label: string; icon: LucideIcon }[] = [
+  { page: 'wishlist', label: 'Wishlist', icon: HeartIcon },
   { page: 'browse', label: 'Browse', icon: SearchIcon },
   { page: 'rip', label: 'Rip', icon: PackageOpenIcon },
   { page: 'friends', label: 'Friends', icon: UsersIcon },
@@ -137,7 +139,7 @@ function Shell({ engineFactory }: { engineFactory?: EngineFactory }): React.JSX.
       data-phone-shell
       className="fixed inset-0 isolate flex flex-col overflow-hidden bg-background text-foreground tabular-nums"
     >
-      <ArtWash src={scan ? null : wash} />
+      <ArtWash src={scan ? null : wash} glow={!scan} />
       <main
         ref={mainRef}
         data-main-scroll

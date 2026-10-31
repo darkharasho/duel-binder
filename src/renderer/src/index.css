@@ -107,6 +107,16 @@
  * Art still downloading (CardArt, SetArt): the frame's own shape in the muted tone, with a soft
  * light sweeping across it. `art-reveal` fades the art in over it once it's loaded.
  */
+/*
+ * Long card and set lists: the browser skips style, layout and paint of what is off screen, which is
+ * most of the cost of opening a page. The clip margin keeps shadows and hover tilts from being cut
+ * at the item's edge. --lazy-h is the item's rough height until it has been laid out once.
+ */
+.lazy-item {
+  content-visibility: auto;
+  contain-intrinsic-size: auto var(--lazy-h, 300px);
+  overflow-clip-margin: 48px;
+}
 .art-loading {
   background-color: var(--muted);
   background-image: linear-gradient(

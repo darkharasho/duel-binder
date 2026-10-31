@@ -329,6 +329,51 @@ CREATE TABLE pokemon_set_art (language TEXT NOT NULL, set_name TEXT NOT NULL, ki
 CREATE INDEX ix_pokemon_set_art_key ON pokemon_set_art(image_key);
 `
 
+/** One AFTER INSERT, DELETE and UPDATE trigger on `table`; `cols` are what a rollup reads (see V24). */
+const rollupTriggers = (table: string, cols?: string[]): string => {
+  const guard = cols ? ` WHEN ${cols.map((c) => `OLD.${c} IS NOT NEW.${c}`).join(' OR ')}` : ''
+  return ['INSERT', 'DELETE', 'UPDATE']
+    .map(
+      (op) => `CREATE TRIGGER rollup_${table}_${op.toLowerCase()} AFTER ${op} ON ${table}${
+        op === 'UPDATE' ? guard : ''
+      } BEGIN DELETE FROM catalog_rollups; END;`
+    )
+    .join('\n')
+}
+
+/**
+ * Per-game results that only the catalog decides and that take hundreds of ms over a full catalog
+ * (src/main/repo/rollup.ts); better-sqlite3 runs on the main process, so those were UI freezes.
+ * A write to anything a rollup reads drops every rollup in the same transaction, whoever writes.
+ * Price columns are left out of the triggers: they change daily and no rollup reads them.
+ * Desktop and phone only. A later step that rebuilds one of these tables must recreate its triggers.
+ */
+export const SCHEMA_V24 = `
+CREATE TABLE catalog_rollups (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+${rollupTriggers('card_printings', ['language', 'set_name', 'set_code', 'set_rarity', 'card_id', 'game', 'contributed', 'missing_from_api'])}
+${rollupTriggers('card_images', ['image_id', 'card_id', 'sort_order', 'game'])}
+${rollupTriggers('cards', ['type', 'attribute', 'race', 'archetype', 'game'])}
+${rollupTriggers('pokemon_cards', ['card_id', 'category', 'types', 'stage', 'rarity'])}
+${rollupTriggers('sets')}
+${rollupTriggers('pack_art')}
+${rollupTriggers('set_logos')}
+${rollupTriggers('konami_logos')}
+${rollupTriggers('pokemon_set_art')}
+`
+
+/**
+ * Wishlist: the cards an owner wants, one row per printing. Keyed by `pkey`, with no foreign key: a
+ * want can outlive its printing's row (a catalog refresh, the phone's catalog reset) and show again
+ * when the printing does, so it needs no sync_pending. `quantity` is the copies wanted, NULL for no
+ * target. The server has its own shape, so this step is desktop-only (see server-15).
+ */
+export const SCHEMA_V25 = `
+CREATE TABLE wishlist_entries (owner_id INTEGER NOT NULL DEFAULT 0, pkey TEXT NOT NULL, game TEXT NOT NULL DEFAULT 'ygo',
+  quantity INTEGER CHECK (quantity >= 1), created_at TEXT NOT NULL, updated_at TEXT NOT NULL, deleted_at TEXT,
+  dirty INTEGER NOT NULL DEFAULT 1, PRIMARY KEY (owner_id, pkey));
+CREATE INDEX ix_wishlist_dirty ON wishlist_entries(owner_id) WHERE dirty = 1;
+`
+
 /** A printing's rarity as shown: "Starlight Rare (Extended Art)" for a labelled variant. */
 export const RARITY_LABEL = "p.set_rarity || COALESCE(' (' || p.variant || ')', '')"
 
@@ -356,5 +401,7 @@ export const MIGRATIONS: Migration[] = [
   { version: 20, sql: SCHEMA_V20, server: false },
   { version: 21, sql: SCHEMA_V21 },
   { version: 22, sql: SCHEMA_V22 },
-  { version: 23, sql: SCHEMA_V23 }
+  { version: 23, sql: SCHEMA_V23 },
+  { version: 24, sql: SCHEMA_V24, server: false },
+  { version: 25, sql: SCHEMA_V25, server: false }
 ]

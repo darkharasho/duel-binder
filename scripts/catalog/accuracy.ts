@@ -54,7 +54,8 @@ export const PKM_MIN_RIGHT_SHARE = 0.6
 /**
  * The private real-photo test's budget: wrong answers as a share of the cards named, the owner's
  * photos and all of them. The Pokémon scanner may name a best guess, marked as one; the nightly
- * gate on the fixtures takes no wrong card at all.
+ * gate on the fixtures takes no other card at all, and the same share of the shots as reprints:
+ * a promo with the same art can't be told from its original without reading the number.
  */
 export const PKM_MAX_WRONG_SHARE = 0.05
 
@@ -66,6 +67,8 @@ export interface AccuracyReport {
    * named as sure), as "file (name) as card".
    */
   wrong: string[]
+  /** The wrong shots of those named as a card of the same name: a reprint, not another card. */
+  reprints?: string[]
   /** Shots taken for no card, as "file (name)". */
   missed: string[]
 }
@@ -105,6 +108,7 @@ export async function checkAccuracy(
     matchName: async (text: string) => matchName(work, text, scope),
     cardsForImages: async (ids: number[]) => cardsForImages(work, ids, scope)
   }
+  const nameOf = work.prepare('SELECT name FROM cards WHERE id = ?')
   const report: AccuracyReport = { shots: shots.length, right: 0, wrong: [], missed: [] }
   for (const shot of shots) {
     const img = decode(readFileSync(join(dir, shot.file)), { useTArray: true, formatAsRGBA: true })
@@ -114,7 +118,14 @@ export async function checkAccuracy(
       const problem = pokemonProblem(outcome, shot)
       if (problem === undefined) report.missed.push(label)
       else if (problem === null) report.right++
-      else report.wrong.push(`${label} as ${problem}`)
+      else {
+        report.wrong.push(`${label} as ${problem}`)
+        if (
+          outcome.kind === 'recognized' &&
+          outcome.item.name === (nameOf.get(shot.cardId) as { name: string } | undefined)?.name
+        )
+          (report.reprints ??= []).push(`${label} as ${problem}`)
+      }
       continue
     }
     const found = recognizeArt(cv, img, index, undefined, ART_MATCH_DEPTH)
@@ -195,7 +206,9 @@ function pokemonProblem(outcome: ScanOutcome, shot: Shot): string | null | undef
 
 /** Why the report fails the gate, or null when it passes. */
 export function accuracyProblem(r: AccuracyReport, game: GameId = 'ygo'): string | null {
-  if (r.wrong.length > 0)
+  const allowed = game === 'pkm' ? (r.reprints?.length ?? 0) : 0
+  const others = r.wrong.length - allowed
+  if (others > 0 || allowed > r.shots * PKM_MAX_WRONG_SHARE)
     return `took ${r.wrong.length} shot(s) for the wrong card: ${r.wrong.join('; ')}`
   const share = game === 'pkm' ? PKM_MIN_RIGHT_SHARE : MIN_RIGHT_SHARE
   if (r.right < r.shots * share) {

@@ -10,6 +10,7 @@ export const USAGE_EVENTS = [
   'open',
   'page:dashboard',
   'page:collection',
+  'page:wishlist',
   'page:sets',
   'page:browse',
   'page:scan',

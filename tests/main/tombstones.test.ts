@@ -214,8 +214,9 @@ const SYNC = 'sync, reads and writes tombstones explicitly'
 const ENTRY_REFS: Record<string, [count: number, kind: string]> = {
   'src/main/repo/browse.ts': [2, SCOPED],
   'src/main/repo/collection.ts': [7, SCOPED],
+  'src/main/repo/dexImport.ts': [2, SCOPED],
   'src/main/repo/scope.ts': [5, SCOPED],
-  'src/main/repo/sets.ts': [5, SCOPED],
+  'src/main/repo/sets.ts': [6, SCOPED],
   'src/main/repo/shownPrinting.ts': [1, SCOPED],
   'src/main/repo/stats.ts': [1, SCOPED],
   'workers/portal/src/scope.ts': [3, SCOPED],
@@ -228,6 +229,9 @@ const ENTRY_REFS: Record<string, [count: number, kind: string]> = {
   'src/main/tcgplayer/catalog.ts': [1, FK],
   'src/main/tcgplayer/prices.ts': [1, LIVE],
   'workers/portal/src/catalogLoad.ts': [1, FK],
+  'workers/portal/src/friendCards.ts': [1, LIVE],
+  'workers/portal/src/wishlist.ts': [2, LIVE],
+  'src/main/repo/wishlist.ts': [2, LIVE],
   'workers/portal/src/friends.ts': [
     1,
     'live rows for the card count; all rows incl. tombstones for the last-change time'

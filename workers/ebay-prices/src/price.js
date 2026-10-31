@@ -153,11 +153,17 @@ function median(sorted) {
   return sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2
 }
 
-export function askingPrice(prices) {
+/** The prices within a factor of three of their median, low to high. */
+export function keptPrices(prices) {
   const sorted = prices.filter((p) => Number.isFinite(p)).sort((a, b) => a - b)
-  if (sorted.length === 0) return { price: null, listingCount: 0 }
+  if (sorted.length === 0) return []
   const m = median(sorted)
-  const kept = sorted.filter((p) => p >= m / 3 && p <= m * 3)
+  return sorted.filter((p) => p >= m / 3 && p <= m * 3)
+}
+
+export function askingPrice(prices) {
+  const kept = keptPrices(prices)
+  if (kept.length === 0) return { price: null, listingCount: 0 }
   if (kept.length < 2) return { price: null, listingCount: kept.length }
   return { price: Math.round(median(kept) * 100) / 100, listingCount: kept.length }
 }

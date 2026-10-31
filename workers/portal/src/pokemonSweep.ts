@@ -1,6 +1,6 @@
 import type { SqlDb } from '../../../src/main/db/sql'
 import { getMeta, setMeta } from '../../../src/main/db/meta'
-import { askingPrice, isSingleCard } from '../../ebay-prices/src/price.js'
+import { askingPrice, isSingleCard, keptPrices } from '../../ebay-prices/src/price.js'
 import {
   DAY_MS,
   POKEMON_KEY_PREFIX,
@@ -41,6 +41,9 @@ export const POKEMON_SWEEP_BATCH = 6
 export const POKEMON_SWEEP_DAYS = 6
 /** Sellers a price needs. Each counts once, so a dealer's many copies are one opinion. */
 export const MIN_SELLERS = 3
+/** Below this many sellers, a top price over MAX_SPREAD times the bottom one is a guess, not a price. */
+const SPREAD_SELLERS = 5
+const MAX_SPREAD = 3
 
 const LISTED_META = 'price_sweeps_pkm_listed_at'
 const DAY_META = 'sweep_pokemon_day'
@@ -103,7 +106,7 @@ const SLAB =
   /\b(?:psa|bgs|cgc|sgc|ccic|pcg|wcg|ags|hga|gma|ars)\s*\d|\b(?:ccic|pcg|wcg|ags|hga|gma)\b|\b(?:ace|tag)\s+\d|\bgem\s*(?:mt|mint)\b|\bpristine\b|\bgraded?\b|\bgrade\s*\d/i
 const SEVERAL =
   /\b\d+\s*pcs?\b|\b\d+\s*cards\b|[&＆+]\s*\d|[&＆+]\s*(?:rev(?:erse)?|holo)\b|\b(?:complete|master|full)\s+set\b|\b(?:pick|choose|select)\b|\byour\s+choice\b/i
-const NOT_A_CARD = /\b(?:booster|sealed|box|tin|etb|sticker|coins?|sleeves?|playmat|binder|non[- ]?tcg)\b/i
+const NOT_A_CARD = /\b(?:booster|sealed|box|tin|etb|sticker|coins?|sleeves?|playmat|binder|non[- ]?tcg|cases?|display|acrylic|frame[ds]?|magnets?|figures?|keychain|plush|poster)\b/i
 const FAKE = /\b(?:reprint|replica|fake|unofficial|handmade|fan\s*art)\b/i
 const BAD_CONDITION = /\b(?:damaged|dmg|creased?|heavily\s+played)\b/i
 const OTHER_PRINTING =
@@ -261,8 +264,12 @@ export function pokemonSetPrices(
         for (const [seller, price] of finishes.get(f) ?? [])
           bySeller.set(seller, Math.min(bySeller.get(seller) ?? Infinity, price))
       }
-      const { price, listingCount } = askingPrice([...bySeller.values()])
-      if (price !== null && listingCount >= MIN_SELLERS) out.set(v.id, { price, listingCount })
+      const asked = [...bySeller.values()]
+      const { price, listingCount } = askingPrice(asked)
+      if (price === null || listingCount < MIN_SELLERS) continue
+      const kept = keptPrices(asked)
+      if (listingCount < SPREAD_SELLERS && kept[kept.length - 1] / kept[0] > MAX_SPREAD) continue
+      out.set(v.id, { price, listingCount })
     }
   }
   return out

@@ -2,6 +2,8 @@
  * GET /admin: the owner's dashboard, served only to the ADMIN_DISCORD_ID session (see app.ts). It
  * holds no data itself and reads GET /admin/stats with that session's cookie.
  * It loads only when asked: each stats read counts every table, and free-plan row reads are capped daily.
+ * Catalog and Release runs come from GitHub's public API, straight from the browser: the repository
+ * is public, so that takes no secret and no portal reads. GitHub allows 60 requests an hour per IP.
  */
 
 /** Free-plan SQLite storage for the whole account (Durable Objects pricing, Workers Free). */
@@ -34,10 +36,21 @@ td.v{text-align:right;font-weight:500}
 .bar div{height:100%;background:var(--accent)}
 .note{color:var(--muted);font-size:12px;margin:4px 0 0}
 .wide{margin-top:12px}
+#runs{margin-bottom:12px}
+#runs .wide{margin-top:0}
 .chart{display:flex;align-items:flex-end;gap:3px;height:80px;margin-bottom:16px}
 .chart div{flex:1;min-height:2px;background:var(--accent);border-radius:2px 2px 0 0;opacity:.85}
 th{padding:6px 0;text-align:right;font-size:12px;font-weight:500;color:var(--muted)}
 th:first-child{text-align:left}
+.run{padding:10px 0;border-top:1px solid var(--line)}
+.run:first-of-type{border-top:0;padding-top:0}
+.run .line{display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
+.run a{color:var(--fg);font-weight:500;text-decoration:none}
+.run a:hover{text-decoration:underline}
+.run .state{font-size:12px;font-weight:600;color:var(--muted)}
+.run .state.good{color:#6fcf8e}
+.run .state.bad{color:#ef7d73}
+.run .state.live{color:var(--accent)}
 [hidden]{display:none!important}
 `
 
@@ -173,8 +186,101 @@ async function load() {
   }
 }
 
-$('refresh').addEventListener('click', load)
+const RUNS = 'https://api.github.com/repos/darkharasho/duel-binder/actions'
+const WATCHED = [['Catalog', 'catalog.yml'], ['Release', 'release.yml']]
+const POLL_MS = 120000
+const STATES = { success: ['Passed', 'good'], failure: ['Failed', 'bad'], cancelled: ['Cancelled', 'bad'], timed_out: ['Timed out', 'bad'] }
+const TRIGGERS = { schedule: 'nightly', workflow_dispatch: 'manual', push: 'tag' }
+let pollTimer = null
+
+async function gh(path) {
+  // no-cache revalidates by ETag, and GitHub doesn't count an unchanged answer.
+  const res = await fetch(RUNS + path, { cache: 'no-cache' })
+  if (res.status === 403 || res.status === 429) throw new Error('GitHub limit reached for now. It resets within the hour.')
+  if (!res.ok) throw new Error('GitHub answered ' + res.status)
+  return res.json()
+}
+
+const started = (r) => new Date(r.run_started_at).getTime()
+const took = (r) => new Date(r.updated_at).getTime() - started(r)
+const minutes = (ms) => {
+  const m = Math.max(1, Math.round(ms / 60000))
+  return m < 60 ? m + ' min' : Math.floor(m / 60) + ' h ' + (m % 60) + ' min'
+}
+const isLive = (r) => r.status !== 'completed'
+
+/** The usual length of this workflow's passed runs, or null with none to go on. */
+function typical(runs) {
+  const done = runs.filter((r) => r.conclusion === 'success').map(took).sort((a, b) => a - b)
+  return done.length ? done[Math.floor(done.length / 2)] : null
+}
+
+function stateOf(r) {
+  if (r.status === 'queued' || r.status === 'pending' || r.status === 'waiting') return ['Queued', 'live']
+  if (isLive(r)) return ['Running', 'live']
+  return STATES[r.conclusion] ?? [r.conclusion ?? 'Finished', '']
+}
+
+function runRow(name, r, usual, jobs) {
+  const row = el('div', null, 'run')
+  const line = el('div', null, 'line')
+  const link = el('a', name)
+  link.href = r.html_url
+  link.target = '_blank'
+  link.rel = 'noopener'
+  const [label, cls] = stateOf(r)
+  const when = new Date(started(r)).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' })
+  line.append(link, el('span', label, 'state ' + cls),
+    el('span', (TRIGGERS[r.event] ?? r.event) + ' · ' + when + (isLive(r) ? '' : ' · ' + minutes(took(r))), 'at'))
+  row.append(line)
+  if (r.status !== 'in_progress') return row
+
+  const elapsed = Date.now() - started(r)
+  const steps = (jobs ?? []).flatMap((j) => j.steps ?? [])
+  const finished = steps.filter((s) => s.status === 'completed').length
+  const current = steps.find((s) => s.status === 'in_progress')
+  // Time, not steps: most of a run is one step. Held under 100 so an overrun doesn't read as done.
+  const part = usual ? Math.min(0.97, elapsed / usual) : steps.length ? finished / steps.length : 0
+  const bar = el('div', null, 'bar')
+  const fill = el('div')
+  fill.style.width = (part * 100).toFixed(1) + '%'
+  bar.append(fill)
+  const left = usual && elapsed < usual ? ', about ' + minutes(usual - elapsed) + ' left' : ''
+  const step = current ? current.name + ' (step ' + (finished + 1) + ' of ' + steps.length + ') · ' : ''
+  row.append(bar, el('p', step + minutes(elapsed) + ' so far' + left, 'note'))
+  return row
+}
+
+async function loadRuns() {
+  clearTimeout(pollTimer)
+  const box = el('section', null, 'panel wide')
+  box.append(el('h2', 'Catalog and releases'))
+  let live = false
+  try {
+    const lists = await Promise.all(WATCHED.map(([, file]) => gh('/workflows/' + file + '/runs?per_page=6')))
+    for (const [i, [name]] of WATCHED.entries()) {
+      const runs = lists[i].workflow_runs
+      const usual = typical(runs)
+      const shown = runs.filter(isLive)
+      const last = runs.find((r) => !isLive(r))
+      if (last) shown.push(last)
+      for (const r of shown) {
+        const jobs = r.status === 'in_progress' ? (await gh('/runs/' + r.id + '/jobs')).jobs : null
+        live ||= isLive(r)
+        box.append(runRow(name, r, usual, jobs))
+      }
+    }
+    box.append(el('p', live ? 'Updates every 2 minutes while something runs.' : 'Nothing running.', 'note'))
+  } catch (e) {
+    box.append(el('p', String(e.message || e), 'note'))
+  }
+  $('runs').replaceChildren(box)
+  if (live) pollTimer = setTimeout(loadRuns, POLL_MS)
+}
+
+$('refresh').addEventListener('click', () => { load(); loadRuns() })
 load()
+loadRuns()
 `
 
 function csp(nonce: string): string {
@@ -182,7 +288,7 @@ function csp(nonce: string): string {
     "default-src 'none'",
     `script-src 'nonce-${nonce}'`,
     `style-src 'nonce-${nonce}'`,
-    "connect-src 'self'",
+    "connect-src 'self' https://api.github.com",
     "img-src 'self'",
     "base-uri 'none'",
     "form-action 'none'",
@@ -206,6 +312,7 @@ export function adminPage(): Response {
 <main>
 <header><h1>Duel Binder</h1><span class="at" id="at"></span><span class="grow"></span>
 <a href="/">Back to the app</a><button id="refresh" type="button">Refresh</button></header>
+<div id="runs"></div>
 <div class="tiles" id="tiles"></div>
 <div class="grid" id="panels"></div>
 <div id="usage"></div>

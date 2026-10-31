@@ -21,6 +21,10 @@ on:
         description: Re-read the non-English set lists now instead of on their weekly timer
         type: boolean
         default: false
+      refresh_cards:
+        description: Read the YGOPRODeck card list now instead of on its daily timer
+        type: boolean
+        default: false
 
 concurrency:
   group: catalog
@@ -75,6 +79,7 @@ jobs:
           ${{ inputs.full && '--full' || '' }}
           ${{ inputs.allow_shrink && '--allow-shrink' || '' }}
           ${{ inputs.refresh_sets && '--refresh-sets' || '' }}
+          ${{ inputs.refresh_cards && '--refresh-cards' || '' }}
       - name: Parity check
         continue-on-error: false
         run: npm run catalog:parity

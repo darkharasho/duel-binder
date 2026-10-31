@@ -3,13 +3,13 @@
  * desktop app does, uploads what changed since catalog-work/base.sqlite (the last snapshot the
  * portal accepted), then makes work the new base.
  *
- *   npm run catalog:job [-- --full | --dry-run | --allow-shrink | --refresh-sets | --no-pokemon]
+ *   npm run catalog:job [-- --full | --dry-run | --allow-shrink | --refresh-sets | --refresh-cards | --no-pokemon]
  *
  * Env: PORTAL_URL, PORTAL_ADMIN_TOKEN (not needed for --dry-run). --full ignores the base and
  * uploads every row; --dry-run refreshes and prints per-table counts without uploading or
  * touching the base. A refresh that would delete more than a sliver of any table (see
  * `findShrinks`) is refused unless --allow-shrink is passed, since every client applies the
- * deletes. --no-pokemon skips the Pokémon step. --refresh-sets re-reads the non-English set lists now instead of on their weekly timer.
+ * deletes. --no-pokemon skips the Pokémon step. --refresh-sets re-reads the non-English set lists now instead of on their weekly timer. --refresh-cards reads the YGOPRODeck card list now instead of on its daily timer.
  * Problems that don't stop the upload (a failed card sync, a failed fingerprint build)
  * end the run with a non-zero exit so the workflow shows red. So does a fingerprint file that fails
  * the accuracy gate (see accuracy.ts), which is held back while clients keep the last one. Each
@@ -71,6 +71,8 @@ export interface JobOptions {
   allowShrink?: boolean
   /** Re-reads the non-English set lists now instead of waiting for their weekly timer. */
   refreshSets?: boolean
+  /** Reads the YGOPRODeck card list now instead of on its daily timer. */
+  refreshCards?: boolean
   /**
    * Checks a game's new fingerprint file before it is uploaded; defaults to `checkAccuracy` on
    * the game's fixtures.
@@ -255,6 +257,7 @@ export async function runJob(opts: JobOptions): Promise<JobResult> {
   }
   try {
     if (opts.refreshSets) deleteMeta(work, 'intl_sets_synced_at')
+    if (opts.refreshCards) deleteMeta(work, 'last_sync_at')
     await refresh(work, problem)
     if (!opts.skipPokemon) {
       const step =
@@ -346,7 +349,7 @@ export async function runJob(opts: JobOptions): Promise<JobResult> {
 
 async function main(): Promise<void> {
   const args = process.argv.slice(2)
-  const flags = ['--full', '--dry-run', '--allow-shrink', '--refresh-sets', '--no-pokemon']
+  const flags = ['--full', '--dry-run', '--allow-shrink', '--refresh-sets', '--refresh-cards', '--no-pokemon']
   const unknown = args.filter((a) => !flags.includes(a))
   if (unknown.length > 0) throw new Error(`Unknown argument(s): ${unknown.join(' ')}`)
   const { problems } = await runJob({
@@ -357,6 +360,7 @@ async function main(): Promise<void> {
     dryRun: args.includes('--dry-run'),
     allowShrink: args.includes('--allow-shrink'),
     refreshSets: args.includes('--refresh-sets'),
+    refreshCards: args.includes('--refresh-cards'),
     skipPokemon: args.includes('--no-pokemon')
   })
   for (const p of problems) console.log(`::error::${p}`)

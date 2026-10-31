@@ -37,7 +37,7 @@ export async function runPokemonStep(
       close = () => live.close()
       sources = live
     }
-    const reports = await refreshPokemon(work, sources, { log: opts.log, langs: ['en', 'ja', 'zh-hans'] })
+    const reports = await refreshPokemon(work, sources, { log: opts.log, langs: ['en', 'ja', 'zh-hans', 'zh-hant'] })
     return { reports, error: null }
   } catch (e) {
     return { reports: [], error: e instanceof Error ? e.message : String(e) }

@@ -473,6 +473,40 @@ describe('buildFingerprints for Pokémon', () => {
     expect(await build()).toMatchObject({ count: 0, fetched: 0 })
   })
 
+  it('leaves Traditional Chinese Pokémon cards out of the pkm file', async () => {
+    for (const sourceId of ['en/sv03-045', 'zh-hant/SV4K-001']) {
+      const cardId = pokemonId(sourceId)
+      work
+        .prepare(
+          `INSERT INTO cards (id, name, type, frame_type, race, "desc", updated_at, game)
+           VALUES (?, 'P', 'Pokemon', 'pokemon', '', '', '2026-01-01', 'pkm')`
+        )
+        .run(cardId)
+      work
+        .prepare(
+          "INSERT INTO card_images (image_id, card_id, sort_order, game) VALUES (?, ?, 0, 'pkm')"
+        )
+        .run(pokemonId(`${sourceId}#img`), cardId)
+      work
+        .prepare(
+          `INSERT INTO pokemon_cards (card_id, category, source_id, image_url) VALUES (?, 'Pokemon', ?, ?)`
+        )
+        .run(cardId, sourceId, `https://assets.tcgdex.net/${sourceId}`)
+    }
+    const urls: string[] = []
+    const out = await buildFingerprints({
+      work,
+      cachePath: join(dir, 'fingerprints-pkm.sqlite'),
+      fetch: (async (input: string | URL | Request) => {
+        urls.push(String(input))
+        return new Response(jpeg(false) as BodyInit)
+      }) as typeof fetch,
+      game: 'pkm'
+    })
+    expect(out).toMatchObject({ count: 1, fetched: 1, failed: 0 })
+    expect(urls).toEqual(['https://assets.tcgdex.net/en/sv03-045/low.jpg'])
+  })
+
   it('pkm build hashes full-card art and writes v2', async () => {
     const sources = ['en/sv03-045', 'ja/SV1S-001']
     const bases = [

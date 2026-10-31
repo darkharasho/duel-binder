@@ -4,6 +4,7 @@ import { pokemonId } from '../../../src/shared/games/ids'
 import { hasNativeScript } from '../../../src/shared/setNames'
 import { findArt, findArtByName, NAME_GROUPS } from './art'
 import { englishNamer, type EnglishNamer } from './englishNames'
+import { traditionalNamer, type JapaneseTwin, type SimplifiedName } from './traditional'
 import { matchGroup, matchProducts, namesCard, plainName, speciesCheck, type MatchedProduct, type NameCheck } from './match'
 import { tcgplayerOnlyCards } from './upcoming'
 import { cardVersions, groupFinish, versionSubtype, type PkmVersion } from './versions'
@@ -27,9 +28,9 @@ export interface PokemonReport {
   images: number
   unmatchedSets: string[]
   unmatchedCards: number
-  /** Japanese cards named in English by englishNamer (no product named them). */
+  /** Japanese cards named by englishNamer (no product named them), Traditional Chinese by theirs. */
   englishNamed: number
-  /** Japanese cards still named in Japanese: no English name was found. */
+  /** Cards with no English name: named in Japanese, or by set and number if Traditional Chinese. */
   japaneseNames: number
   /** Cards given art by findArt: no TCGdex image and no matched product's. */
   artFilled: number
@@ -549,6 +550,41 @@ function nameInEnglish(ja: LangPlan, en: LangPlan | undefined): EnglishNamer {
   return namer
 }
 
+/**
+ * Names the Traditional Chinese cards in English, after the Japanese cards have their names, keeping
+ * the Chinese name as `localName`. A card nothing names takes its set and number.
+ */
+function nameTraditional(zh: LangPlan, others: LangPlan[]): void {
+  const plan = (lang: PkmLang): LangPlan | undefined => others.find((p) => p.lang === lang)
+  const twins = new Map<string, JapaneseTwin>()
+  for (const s of plan('ja')?.sets ?? [])
+    for (const c of s.cards) twins.set(c.card.id, { card: c.card, name: c.name })
+  const simplified: SimplifiedName[] = []
+  for (const s of plan('zh-hans')?.sets ?? []) {
+    for (const c of s.cards) {
+      // A card the list couldn't name is called by its set and number.
+      if (c.card.localName && c.name !== `${s.set.id} ${c.card.localId}`)
+        simplified.push({ chinese: c.card.localName, english: c.name, category: c.card.category })
+    }
+  }
+  const namer = traditionalNamer(
+    zh.sets.flatMap((s) => s.cards.map((c) => c.card)),
+    twins,
+    plan('en')?.sets.flatMap((s) => s.cards.map((c) => c.card)) ?? [],
+    simplified
+  )
+  for (const sp of zh.sets) {
+    for (const cp of sp.cards) {
+      if (!hasNativeScript(cp.card.name)) continue
+      const named = namer.nameOf(cp.card)
+      cp.localName = cp.card.name
+      cp.name = named?.name ?? `${sp.set.id} ${cp.card.localId}`
+      if (named) zh.report.englishNamed++
+      else zh.report.japaneseNames++
+    }
+  }
+}
+
 /** Art for the cards still without any, once they have their English names. */
 function fillArt(plan: LangPlan, namer: EnglishNamer | null): void {
   const { lang, report } = plan
@@ -619,6 +655,8 @@ export async function refreshPokemon(
         plans.find((p) => p.lang === 'en')
       )
     : null
+  const zh = plans.find((p) => p.lang === 'zh-hant')
+  if (zh) nameTraditional(zh, plans)
   for (const plan of plans) fillArt(plan, plan === ja ? namer : null)
   writePlans(work, plans, (opts.now ?? (() => new Date()))().toISOString())
   return plans.map((p) => p.report)

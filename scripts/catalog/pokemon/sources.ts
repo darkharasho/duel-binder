@@ -1,9 +1,10 @@
-import { openCardCache, cardIsUsable } from './cache'
+import { openCardCache, cardIsUsable, traditionalCardIsUsable } from './cache'
 import { chineseCards, chineseFiles, chineseIndex, chineseListSets, chineseSet, type ZhCard } from './chinese'
 import { createLimiter, REPO_URL, MAX_CONCURRENCY, type GetJsonOpts } from './http'
 import { tcgcsvCardRows, tcgcsvGroups, tcgcsvPrices, tcgcsvProducts } from './tcgcsv'
 import { tcgdexCard, tcgdexSet, tcgdexSetList } from './tcgdex'
-import type { PokemonSources, TdCard } from './types'
+import { traditionalCard, traditionalSets } from './traditional'
+import type { PkmLang, PokemonSources, TdCard } from './types'
 import { upcomingGroups, upcomingSet } from './upcoming'
 
 export interface PokemonSourcesOpts {
@@ -18,6 +19,10 @@ export interface PokemonSourcesOpts {
 
 /** TCGdex series with no physical cards (Pokémon TCG Pocket); a binder only holds paper. */
 const DIGITAL_SERIES = new Set(['tcgp'])
+
+/** TCGplayer doesn't sell Chinese cards, so they have no groups and the rest never runs. */
+const noGroups = (lang: PkmLang): lang is 'zh-hans' | 'zh-hant' =>
+  lang === 'zh-hans' || lang === 'zh-hant'
 
 export function createPokemonSources(opts: PokemonSourcesOpts): PokemonSources & { close(): void } {
   const cache = openCardCache(opts.cachePath)
@@ -68,6 +73,10 @@ export function createPokemonSources(opts: PokemonSourcesOpts): PokemonSources &
         for (const b of built) for (const c of b.cards) chinese.set(c.id, c)
         return built.map((b) => b.set)
       }
+      if (lang === 'zh-hant') {
+        const list = await tcgdexSetList('zh-tw', o)
+        return traditionalSets(await allOrNothing(list, (s, oo) => tcgdexSet('zh-tw', s.id, oo)))
+      }
       const list = await tcgdexSetList(lang, o)
       const sets = await allOrNothing(list, (s, oo) => tcgdexSet(lang, s.id, oo))
       const paper = sets.filter((s) => !DIGITAL_SERIES.has(s.serie?.id ?? ''))
@@ -86,6 +95,15 @@ export function createPokemonSources(opts: PokemonSourcesOpts): PokemonSources &
     async cards(lang, ids) {
       if (lang === 'zh-hans') return ids.flatMap((id) => chinese.get(id) ?? [])
       const t = now().getTime()
+      if (lang === 'zh-hant') {
+        return allOrNothing(ids, async (id, oo): Promise<TdCard> => {
+          const hit = cache.get(lang, id)
+          if (hit && traditionalCardIsUsable(hit.fetchedAt, t)) return traditionalCard(hit.card)
+          const card = await tcgdexCard('zh-tw', id, oo)
+          cache.put(lang, id, card, t)
+          return traditionalCard(card)
+        })
+      }
       return allOrNothing(ids, async (id, oo): Promise<TdCard> => {
         const built = upcoming.get(`${lang}/${id}`)
         if (built) return built
@@ -96,10 +114,9 @@ export function createPokemonSources(opts: PokemonSourcesOpts): PokemonSources &
         return card
       })
     },
-    // TCGplayer doesn't sell Chinese cards, so they have no groups and the rest never runs.
-    groups: async (lang) => (lang === 'zh-hans' ? [] : tcgcsvGroups(lang, o)),
-    products: async (lang, groupId) => (lang === 'zh-hans' ? [] : tcgcsvProducts(lang, groupId, o)),
-    prices: async (lang, groupId) => (lang === 'zh-hans' ? [] : tcgcsvPrices(lang, groupId, o)),
+    groups: async (lang) => (noGroups(lang) ? [] : tcgcsvGroups(lang, o)),
+    products: async (lang, groupId) => (noGroups(lang) ? [] : tcgcsvProducts(lang, groupId, o)),
+    prices: async (lang, groupId) => (noGroups(lang) ? [] : tcgcsvPrices(lang, groupId, o)),
     close: () => cache.close()
   }
 }

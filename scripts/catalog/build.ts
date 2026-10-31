@@ -139,7 +139,7 @@ const noArt = (r: PokemonReport): number =>
 function logPokemon(reports: PokemonReport[], log: (line: string) => void): void {
   for (const r of reports) {
     log(
-      `Pokémon ${r.lang}: ${r.sets} sets, ${r.cards} cards, ${r.versions} versions (${r.priced} priced, ${r.versions - r.priced} unpriced), ${r.images} images (${r.artFilled} from a checked product, ${r.artRemoved} wrong ones removed, ${noArt(r)} cards without), ${r.unmatchedCards} cards unmatched, ${r.unverified} with unverified finishes, ${r.englishNamed} named in English by species or name, ${r.japaneseNames} still in Japanese, ${r.problems.length} notes`
+      `Pokémon ${r.lang}: ${r.sets} sets, ${r.cards} cards, ${r.versions} versions (${r.priced} priced, ${r.versions - r.priced} unpriced), ${r.images} images (${r.artFilled} from a checked product, ${r.artRemoved} wrong ones removed, ${noArt(r)} cards without), ${r.unmatchedCards} cards unmatched, ${r.unverified} with unverified finishes, ${r.englishNamed} named in English by species or name, ${r.japaneseNames} with no English name, ${r.problems.length} notes`
     )
     if (r.unmatchedSets.length > 0)
       log(`Pokémon ${r.lang}: unmatched sets: ${r.unmatchedSets.join(', ')}`)

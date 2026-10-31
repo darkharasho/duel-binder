@@ -1,6 +1,8 @@
 /** The languages TCGdex and TCGCSV both serve. */
 export type TdLang = 'en' | 'ja'
-export type PkmLang = TdLang | 'zh-hans'
+export type PkmLang = TdLang | 'zh-hans' | 'zh-hant'
+/** The catalog's languages whose cards come from TCGdex's card pages, so sit in the card cache. */
+export type CachedLang = TdLang | 'zh-hant'
 /**
  * One TCGdex printing of a card. `variantId` is "generated" when TCGdex had no curated variant list
  * for the card and filled this one in from its legacy `variants` booleans (see GENERATED in versions.ts).
@@ -14,6 +16,8 @@ export interface TdCard {
   variants_detailed?: TdVariant[]; thirdParty?: { tcgplayer?: number }
   /** National Pokédex numbers of a Pokémon card (one per Pokémon on it). */
   dexId?: number[]
+  /** TCGdex's mechanic for the card, in its own spelling ("EX" on a Scarlet & Violet ex). */
+  suffix?: string
   /** The number as printed, when it isn't "{localId}/{official}" ("R/RGB"). */
   printed?: string
   /** Built from TCGplayer's rows (upcoming.ts), so its name is already English and plain. */

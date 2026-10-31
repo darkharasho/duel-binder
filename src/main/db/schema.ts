@@ -374,6 +374,15 @@ CREATE TABLE wishlist_entries (owner_id INTEGER NOT NULL DEFAULT 0, pkey TEXT NO
 CREATE INDEX ix_wishlist_dirty ON wishlist_entries(owner_id) WHERE dirty = 1;
 `
 
+/**
+ * A card's printings. The unique indexes that lead with card_id are partial, so a lookup that
+ * names no language read the whole table: the catalog job did that once per Pokémon card, which
+ * was most of its run time. Desktop-only: the server has its own indexes.
+ */
+export const SCHEMA_V26 = `
+CREATE INDEX ix_printings_card ON card_printings(card_id);
+`
+
 /** A printing's rarity as shown: "Starlight Rare (Extended Art)" for a labelled variant. */
 export const RARITY_LABEL = "p.set_rarity || COALESCE(' (' || p.variant || ')', '')"
 
@@ -403,5 +412,6 @@ export const MIGRATIONS: Migration[] = [
   { version: 22, sql: SCHEMA_V22 },
   { version: 23, sql: SCHEMA_V23 },
   { version: 24, sql: SCHEMA_V24, server: false },
-  { version: 25, sql: SCHEMA_V25, server: false }
+  { version: 25, sql: SCHEMA_V25, server: false },
+  { version: 26, sql: SCHEMA_V26, server: false }
 ]

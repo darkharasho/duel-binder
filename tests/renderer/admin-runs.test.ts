@@ -32,7 +32,8 @@ let steps: unknown[] = STEPS
 
 async function open(
   catalog: unknown[],
-  fail?: number
+  fail?: number,
+  release: unknown[] = []
 ): Promise<{ text: string; fetched: string[] }> {
   const html = await adminPage().text()
   const doc = new DOMParser().parseFromString(html, 'text/html')
@@ -47,7 +48,7 @@ async function open(
     if (url.includes('/jobs')) {
       return Response.json({ jobs: [{ steps }] })
     }
-    return Response.json({ workflow_runs: url.includes('catalog.yml') ? catalog : [] })
+    return Response.json({ workflow_runs: url.includes('catalog.yml') ? catalog : release })
   })
   new Function(script)()
   await vi.waitFor(() => expect(document.getElementById('runs')!.textContent).toMatch(/\S/))
@@ -74,8 +75,46 @@ describe('admin catalog runs', () => {
     expect(text).toContain('manual')
     expect(text).toContain('Refresh and upload (step 2 of 4)')
     expect(text).toContain('5 min so far, about 15 min left')
-    expect(document.querySelector<HTMLElement>('.run .bar div')!.style.width).toBe('25%')
     expect(text).toContain('Updates every 2 minutes')
+  })
+
+  it('shows a Release run as progress by time, without its steps', async () => {
+    await open([], undefined, [
+      run(2, { status: 'in_progress', conclusion: null, run_started_at: ago(5) }),
+      run(1)
+    ])
+    expect(document.querySelector<HTMLElement>('.run .bar div')!.style.width).toBe('25%')
+    expect(document.querySelector('.steps')).toBeNull()
+  })
+
+  it('sizes the timeline by each step\'s time and leaves out skipped steps', async () => {
+    steps = [
+      step('Upload catalog', 'success', 0, 240),
+      { name: 'Parity check', status: 'completed', conclusion: 'skipped' }
+    ]
+    await open([run(1)])
+    const parts = [...document.querySelectorAll<HTMLElement>('.timeline div')]
+    expect(parts.map((p) => [p.title, p.style.flexGrow])).toEqual([['Upload catalog', '240']])
+  })
+
+  it('names the running job in the header and on the overview', async () => {
+    await open([run(2, { status: 'in_progress', conclusion: null, run_started_at: ago(5) }), run(1)])
+    expect(document.getElementById('pulse')!.textContent).toBe('Catalog running · 5 min')
+    expect(document.getElementById('latest')!.textContent).toContain('Catalog')
+    expect(document.querySelectorAll('#runs .history tr')).toHaveLength(3)
+  })
+
+  it('opens the tab in the address and follows the links', async () => {
+    location.hash = '#runs'
+    await open([])
+    expect(document.getElementById('runs')!.hidden).toBe(false)
+    expect(document.getElementById('overview')!.hidden).toBe(true)
+    expect(document.querySelector('nav a[aria-current]')!.textContent).toBe('Runs')
+    location.hash = '#storage'
+    window.dispatchEvent(new HashChangeEvent('hashchange'))
+    expect(document.getElementById('storage')!.hidden).toBe(false)
+    expect(document.getElementById('runs')!.hidden).toBe(true)
+    location.hash = ''
   })
 
   it('shows the last run and does not poll when idle', async () => {

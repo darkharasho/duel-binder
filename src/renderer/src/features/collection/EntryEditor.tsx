@@ -15,7 +15,7 @@ import {
   SelectTrigger,
   SelectValue
 } from '@/components/ui/select'
-import { api, mutationInvalidationKeys } from '@/lib/api'
+import { api, invalidateAfterEdit } from '@/lib/api'
 import { EntryValue, StaleBadge, displayTotal } from './EntryValue'
 
 /**
@@ -51,8 +51,7 @@ export function EntryEditor({
     if (notes === seen.notes) setNotes(entry.notes)
   }
 
-  const invalidate = (): Promise<unknown[]> =>
-    Promise.all(mutationInvalidationKeys.map((k) => qc.invalidateQueries({ queryKey: [...k] })))
+  const invalidate = (): Promise<unknown> => invalidateAfterEdit(qc)
 
   const update = useMutation({
     mutationFn: (patch: UpdateEntryInput) => api.collection.update(entry.id, patch),

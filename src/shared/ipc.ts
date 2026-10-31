@@ -28,6 +28,8 @@ import type { ScanWindowMessage } from './scanWindow'
 import type { ScanRef } from './scan/fingerprintRefs'
 import type { FingerprintStatus, OcrBand, ScanPrinting } from './scan/types'
 import type { CollectorNumber } from './scan/collectorNumber'
+import type { DexPreview } from './dex/match'
+import type { DexRow } from './dex/parse'
 import type { CardLanguage } from './scan/language'
 import type { OcrKind, TextModel } from './scan/ocr'
 import type { PackWrappers, RipCard, RipHistory, RipSessionDetail, RipSet } from './rip/types'
@@ -49,6 +51,13 @@ export interface Api {
     update(id: number, patch: UpdateEntryInput): Promise<EntryView>
     remove(id: number): Promise<void>
     facets(): Promise<Facets>
+  }
+  /** Desktop only: imports a Dex CSV export into the Pokémon collection. */
+  dex: {
+    preview(rows: DexRow[]): Promise<DexPreview>
+    apply(rows: DexRow[]): Promise<{ copies: number }>
+    /** The window's own clipboard API is denied by the app's permission rules. */
+    copy(text: string): Promise<void>
   }
   friends: {
     overview(): Promise<FriendsOverview>
@@ -209,6 +218,9 @@ export const INVOKE_CHANNELS = [
   'collection:update',
   'collection:remove',
   'collection:facets',
+  'dex:preview',
+  'dex:apply',
+  'dex:copy',
   'friends:overview',
   'friends:request',
   'friends:accept',

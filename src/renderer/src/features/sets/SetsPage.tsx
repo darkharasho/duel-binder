@@ -1,4 +1,4 @@
-import { useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { LayoutGrid, List, Search, SlidersHorizontal, X } from 'lucide-react'
 import type { GameId } from '@shared/games'
@@ -131,10 +131,17 @@ export function SetsPage({ onAddCard, onAddMissing }: SetsPageProps): React.JSX.
   const main = useMainScroll()
   // Where the list was scrolled when a set was opened, restored on the way back.
   const listScroll = useRef<number | null>(null)
-  const setOpenSet = (next: { setName: string; language: Language } | null): void => {
-    if (next && main) listScroll.current = main.get()
-    setOpenSetState(next)
-  }
+  const setOpenSet = useCallback(
+    (next: { setName: string; language: Language } | null): void => {
+      if (next && main) listScroll.current = main.get()
+      setOpenSetState(next)
+    },
+    [main]
+  )
+  const openFromList = useCallback(
+    (setName: string, language: Language): void => setOpenSet({ setName, language }),
+    [setOpenSet]
+  )
   useLayoutEffect(() => {
     if (!main) return
     if (openSet) main.set(0)
@@ -218,172 +225,167 @@ export function SetsPage({ onAddCard, onAddMissing }: SetsPageProps): React.JSX.
           : null
   )
 
-  if (openSet !== null) {
-    return (
-      <SetChecklist
-        key={`${openSet.language}|${openSet.setName}`}
-        setName={openSet.setName}
-        language={openSet.language}
-        mode={mode}
-        onModeChange={changeMode}
-        onBack={() => setOpenSet(null)}
-        onAddMissing={onAddMissing}
-      />
-    )
-  }
-
   const noneStarted =
     filter === 'started' && types.length === 0 && q.trim() === '' && header.started === 0
 
+  // The list stays mounted under an open set, so the way back is instant and keeps its scroll.
   return (
-    <div className="space-y-4 p-8 max-md:p-4">
-      <PageHeader>
-        <div>
-          <h1 className="text-2xl font-semibold tracking-tight">Sets</h1>
-          {sets.isSuccess && (
-            <p className="mt-0.5 text-[13px] text-foreground/75 tabular-nums">
-              You&apos;ve started {header.started} of {header.total} sets · {header.complete}{' '}
-              complete
-            </p>
-          )}
-        </div>
-        <div className="flex flex-wrap items-center gap-2 border-b border-white/[0.08] pb-2">
-          <div className="relative w-56 max-md:w-auto max-md:min-w-0 max-md:flex-1">
-            <Search
-              className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
-              aria-hidden
-            />
-            <Input
-              value={q}
-              onChange={(e) => {
-                setQ(e.target.value)
-                setSearchCollapsed(false)
-              }}
-              placeholder="Search sets by name or code"
-              aria-label="Search sets"
-              className="h-8 pl-8"
-            />
-          </div>
-          <div className="ml-auto flex flex-wrap items-center gap-2">
-            <Button
-              variant="outline"
-              size="sm"
-              aria-label={
-                activeCount > 0 ? `Filters & sort, ${activeCount} active` : 'Filters & sort'
-              }
-              onClick={() => setPanelOpen(true)}
-            >
-              <SlidersHorizontal />
-              Filters &amp; sort
-              {activeCount > 0 && (
-                <span className="ml-1 rounded-full bg-primary px-1.5 text-xs tabular-nums text-primary-foreground">
-                  {activeCount}
-                </span>
-              )}
-            </Button>
-            {!phone && (
-              <ToggleGroup
-                type="single"
-                variant="outline"
-                size="sm"
-                value={view}
-                onValueChange={changeView}
-              >
-                <ToggleGroupItem value="list" aria-label="List view">
-                  <List />
-                </ToggleGroupItem>
-                <ToggleGroupItem value="grid" aria-label="Grid view">
-                  <LayoutGrid />
-                </ToggleGroupItem>
-              </ToggleGroup>
-            )}
-          </div>
-        </div>
-        {activeCount > 0 && (
-          <div className="flex flex-wrap items-center gap-2">
-            {types.map((t) => {
-              const label = SET_TYPES.find((x) => x.value === t)?.label ?? t
-              return (
-                <Chip
-                  key={t}
-                  label={label}
-                  onRemove={() => changeTypes(types.filter((x) => x !== t))}
-                />
-              )
-            })}
-            {filter !== 'all' && (
-              <Chip
-                label={filter === 'started' ? 'Started' : 'Complete'}
-                onRemove={() => setFilter('all')}
-              />
-            )}
-            <Button variant="ghost" size="sm" onClick={clearFilters}>
-              Clear
-            </Button>
-          </div>
-        )}
-      </PageHeader>
-
-      <SetsFilterPanel
-        open={panelOpen}
-        onOpenChange={setPanelOpen}
-        types={types}
-        onTypesChange={changeTypes}
-        counts={counts}
-        filter={filter}
-        onFilterChange={setFilter}
-        sort={sort}
-        onSortChange={setSort}
-        mode={mode}
-        onModeChange={changeMode}
-        language={language}
-        onLanguageChange={setLanguage}
-        availableLanguages={available}
-        onReset={() => {
-          changeTypes([])
-          setFilter('all')
-          setSort('date')
-          changeMode('cards')
-        }}
-      />
-
-      <UpcomingSets
-        sets={upcoming}
-        cutoff={cutoff}
-        open={upcomingShown}
-        onOpenChange={setUpcomingOpen}
-        mode={mode}
-        view={view}
-        onOpen={(setName, language) => setOpenSet({ setName, language })}
-      />
-
-      {sets.isSuccess && visible.length === 0 ? (
-        // Only upcoming sets match: the banner above is the whole answer.
-        upcoming.length > 0 ? null : (
-          <div className="flex flex-col items-center gap-3 py-24 text-center">
-            {noneStarted ? (
-              <>
-                <p className="text-lg font-medium">You haven&apos;t started any sets yet</p>
-                <div className="flex gap-2">
-                  <Button variant="outline" onClick={() => setFilter('all')}>
-                    Show all sets
-                  </Button>
-                  <Button onClick={onAddCard}>Add card</Button>
-                </div>
-              </>
-            ) : (
-              <p className="text-lg font-medium">No sets match</p>
-            )}
-          </div>
-        )
-      ) : (
-        <SetsList
-          sets={visible}
+    <>
+      {openSet !== null && (
+        <SetChecklist
+          key={`${openSet.language}|${openSet.setName}`}
+          setName={openSet.setName}
+          language={openSet.language}
           mode={mode}
-          view={view}
-          onOpen={(setName, language) => setOpenSet({ setName, language })}
+          onModeChange={changeMode}
+          onBack={() => setOpenSet(null)}
+          onAddMissing={onAddMissing}
         />
       )}
-    </div>
+      <div hidden={openSet !== null} className="space-y-4 p-8 max-md:p-4">
+        <PageHeader>
+          <div>
+            <h1 className="text-2xl font-semibold tracking-tight">Sets</h1>
+            {sets.isSuccess && (
+              <p className="mt-0.5 text-[13px] text-foreground/75 tabular-nums">
+                You&apos;ve started {header.started} of {header.total} sets · {header.complete}{' '}
+                complete
+              </p>
+            )}
+          </div>
+          <div className="flex flex-wrap items-center gap-2 border-b border-white/[0.08] pb-2">
+            <div className="relative w-56 max-md:w-auto max-md:min-w-0 max-md:flex-1">
+              <Search
+                className="pointer-events-none absolute left-2.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+                aria-hidden
+              />
+              <Input
+                value={q}
+                onChange={(e) => {
+                  setQ(e.target.value)
+                  setSearchCollapsed(false)
+                }}
+                placeholder="Search sets by name or code"
+                aria-label="Search sets"
+                className="h-8 pl-8"
+              />
+            </div>
+            <div className="ml-auto flex flex-wrap items-center gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                aria-label={
+                  activeCount > 0 ? `Filters & sort, ${activeCount} active` : 'Filters & sort'
+                }
+                onClick={() => setPanelOpen(true)}
+              >
+                <SlidersHorizontal />
+                Filters &amp; sort
+                {activeCount > 0 && (
+                  <span className="ml-1 rounded-full bg-primary px-1.5 text-xs tabular-nums text-primary-foreground">
+                    {activeCount}
+                  </span>
+                )}
+              </Button>
+              {!phone && (
+                <ToggleGroup
+                  type="single"
+                  variant="outline"
+                  size="sm"
+                  value={view}
+                  onValueChange={changeView}
+                >
+                  <ToggleGroupItem value="list" aria-label="List view">
+                    <List />
+                  </ToggleGroupItem>
+                  <ToggleGroupItem value="grid" aria-label="Grid view">
+                    <LayoutGrid />
+                  </ToggleGroupItem>
+                </ToggleGroup>
+              )}
+            </div>
+          </div>
+          {activeCount > 0 && (
+            <div className="flex flex-wrap items-center gap-2">
+              {types.map((t) => {
+                const label = SET_TYPES.find((x) => x.value === t)?.label ?? t
+                return (
+                  <Chip
+                    key={t}
+                    label={label}
+                    onRemove={() => changeTypes(types.filter((x) => x !== t))}
+                  />
+                )
+              })}
+              {filter !== 'all' && (
+                <Chip
+                  label={filter === 'started' ? 'Started' : 'Complete'}
+                  onRemove={() => setFilter('all')}
+                />
+              )}
+              <Button variant="ghost" size="sm" onClick={clearFilters}>
+                Clear
+              </Button>
+            </div>
+          )}
+        </PageHeader>
+
+        <SetsFilterPanel
+          open={panelOpen}
+          onOpenChange={setPanelOpen}
+          types={types}
+          onTypesChange={changeTypes}
+          counts={counts}
+          filter={filter}
+          onFilterChange={setFilter}
+          sort={sort}
+          onSortChange={setSort}
+          mode={mode}
+          onModeChange={changeMode}
+          language={language}
+          onLanguageChange={setLanguage}
+          availableLanguages={available}
+          onReset={() => {
+            changeTypes([])
+            setFilter('all')
+            setSort('date')
+            changeMode('cards')
+          }}
+        />
+
+        <UpcomingSets
+          sets={upcoming}
+          cutoff={cutoff}
+          open={upcomingShown}
+          onOpenChange={setUpcomingOpen}
+          mode={mode}
+          view={view}
+          onOpen={openFromList}
+        />
+
+        {sets.isSuccess && visible.length === 0 ? (
+          // Only upcoming sets match: the banner above is the whole answer.
+          upcoming.length > 0 ? null : (
+            <div className="flex flex-col items-center gap-3 py-24 text-center">
+              {noneStarted ? (
+                <>
+                  <p className="text-lg font-medium">You haven&apos;t started any sets yet</p>
+                  <div className="flex gap-2">
+                    <Button variant="outline" onClick={() => setFilter('all')}>
+                      Show all sets
+                    </Button>
+                    <Button onClick={onAddCard}>Add card</Button>
+                  </div>
+                </>
+              ) : (
+                <p className="text-lg font-medium">No sets match</p>
+              )}
+            </div>
+          )
+        ) : (
+          <SetsList sets={visible} mode={mode} view={view} onOpen={openFromList} />
+        )}
+      </div>
+    </>
   )
 }

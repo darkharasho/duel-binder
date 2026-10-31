@@ -13,6 +13,7 @@ import type {
 } from '@shared/types'
 import { CardArt } from '@/components/CardArt'
 import { checklistUnpriced, useRequestPrices } from '@/lib/priceRequests'
+import { useChunkedList } from '@/lib/useChunkedList'
 import { CardSheet } from '@/components/CardSheet'
 import { TiltCard } from '@/components/TiltCard'
 import { coverArtUrl, setArtUrl, useArtWash } from '@/components/artWashContext'
@@ -42,7 +43,7 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { UnderlineTabs } from '@/components/UnderlineTabs'
 import { CardPanel, type CardPanelSeed } from '@/features/card/CardPanel'
-import { api, mutationInvalidationKeys, queryKeys } from '@/lib/api'
+import { api, invalidateAfterEdit, queryKeys } from '@/lib/api'
 import { isPhone } from '@/lib/platform'
 import { createSerialQueue } from '@/lib/serialQueue'
 import { cn } from '@/lib/utils'
@@ -218,6 +219,7 @@ export function SetChecklist({
         : [],
     [data, mode, filter, rarity, q, sort]
   )
+  const shownTiles = useChunkedList(tiles)
 
   // Recompute the frozen ids on entering bulk mode and when the filter or count mode changes.
   if (bulk && data && (!frozen || frozen.filter !== filter || frozen.mode !== mode)) {
@@ -311,12 +313,10 @@ export function SetChecklist({
       })
       .finally(() => {
         bumpPending(cardId, -1)
-        // Once this card's clicks are done, refresh what else counts copies. Only queries on
-        // screen refetch; ['sets'] is skipped since the checklist and set list are patched above.
+        // Once this card's clicks are done, refresh what else counts copies. ['sets'] is skipped
+        // since the checklist and set list are patched above.
         if (inFlight.current.has(cardId)) return
-        for (const k of mutationInvalidationKeys) {
-          if (!(k.length === 1 && k[0] === 'sets')) void qc.invalidateQueries({ queryKey: [...k] })
-        }
+        void invalidateAfterEdit(qc, (k) => k[0] === 'sets')
       })
       .then(() => saved)
   }
@@ -541,10 +541,10 @@ export function SetChecklist({
           />
         ) : (
           <ul className="grid grid-cols-[repeat(auto-fill,minmax(7.5rem,1fr))] gap-3 max-md:grid-cols-3 max-md:gap-1.5">
-            {tiles.map((t) => {
+            {shownTiles.map((t) => {
               const owned = t.owned > 0
               return (
-                <li key={t.key}>
+                <li key={t.key} className="lazy-item [--lazy-h:240px]">
                   <button
                     type="button"
                     data-owned={owned}

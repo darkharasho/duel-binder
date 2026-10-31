@@ -22,12 +22,13 @@ import { formatRelative } from '@/lib/format'
 import { friendsErrorMessage } from '@/lib/friends'
 import { useGame } from '@/lib/game'
 import { useLanguageFilter } from '@/lib/languageFilter'
-import { isPhone } from '@/lib/platform'
+import { isPhone, isWeb } from '@/lib/platform'
 import { CollectionGrid } from './CollectionGrid'
 import { CollectionTable } from './CollectionTable'
 import { CardPanel } from '../card/CardPanel'
 import { FriendEntryPanel } from '../friends/FriendEntryPanel'
 import { CollectionSearch, FilterBar, FilterChips, FilterSheetBody } from './FilterBar'
+import { DexImportButton } from './DexImportDialog'
 import { activeFilterCount } from './filterFacets'
 
 type View = 'grid' | 'table'
@@ -209,7 +210,7 @@ export function CollectionPage({
   // The collection tints the page with its first card in the current order.
   useArtWash(list[0] ? cardArtUrl(list[0].imageId) : null)
   const filtered = hasActiveFilters(filters)
-  const { def } = useGame()
+  const { game, def } = useGame()
   const activeCount = activeFilterCount(filters, def)
   // Entries exist, but the language filter alone hides them all.
   const hiddenByLanguage =
@@ -235,14 +236,17 @@ export function CollectionPage({
               </p>
             </div>
             {!phone && (
-              <ToggleGroup type="single" variant="outline" value={view} onValueChange={changeView}>
-                <ToggleGroupItem value="grid" aria-label="Grid view">
-                  <LayoutGrid />
-                </ToggleGroupItem>
-                <ToggleGroupItem value="table" aria-label="Table view">
-                  <Table2 />
-                </ToggleGroupItem>
-              </ToggleGroup>
+              <div className="flex items-center gap-2">
+                {game === 'pkm' && !friend && !isWeb() && <DexImportButton />}
+                <ToggleGroup type="single" variant="outline" value={view} onValueChange={changeView}>
+                  <ToggleGroupItem value="grid" aria-label="Grid view">
+                    <LayoutGrid />
+                  </ToggleGroupItem>
+                  <ToggleGroupItem value="table" aria-label="Table view">
+                    <Table2 />
+                  </ToggleGroupItem>
+                </ToggleGroup>
+              </div>
             )}
           </header>
 

@@ -3,29 +3,30 @@ import type { BrowseCard, BrowseFacets, BrowseFilters, BrowsePage } from '../../
 import { buildFtsQuery } from './cards'
 import { LOCAL, scopeGame, type Scope } from './scope'
 import { pokemonFacets, pokemonSearch, pokemonWhere } from './pkmFilters'
+import { catalogRollup } from './rollup'
 
 const MAX_LIMIT = 200
 
 const escapeLike = (s: string): string => s.replace(/[\\%_]/g, (c) => `\\${c}`)
 
-// Per card: owned copies, earliest English release, and an English printing to preselect.
-const base = (scope: Scope): string => `
+// Per card: owned copies, and (only when sorting by it: the join reads every English printing)
+// earliest English release. The page's own dates and printing to preselect are looked up after.
+const base = (scope: Scope, byRelease: boolean): string => `
   WITH owned AS (
     SELECT p.card_id, SUM(e.quantity) AS n FROM collection_entries e
     JOIN card_printings p ON p.id = e.printing_id AND +p.game = ${scope.game} WHERE ${scope.where('e')}
     GROUP BY p.card_id
-  ),
+  )${byRelease ? `,
   released AS (
     SELECT p.card_id, MIN(s.tcg_date) AS d FROM card_printings p
     JOIN sets s ON s.game = p.game AND s.language = 'en' AND s.set_name = p.set_name
     WHERE +p.game = ${scope.game} AND p.language = 'en' AND p.contributed = 0 AND s.tcg_date IS NOT NULL
     GROUP BY p.card_id
-  )
+  )` : ''}
   SELECT c.id, c.name, c.type, c.frame_type, c.attribute, c.race, c.level, c.linkval, c.atk, c.def,
-    c.tcgplayer_price AS price, r.d AS released_at, COALESCE(o.n, 0) AS owned
+    c.tcgplayer_price AS price, COALESCE(o.n, 0) AS owned
   FROM cards c
-  LEFT JOIN owned o ON o.card_id = c.id
-  LEFT JOIN released r ON r.card_id = c.id`
+  LEFT JOIN owned o ON o.card_id = c.id${byRelease ? '\n  LEFT JOIN released r ON r.card_id = c.id' : ''}`
 
 interface BrowseRow {
   id: number
@@ -139,11 +140,15 @@ export function browseCards(db: SqlDb, f: BrowseFilters, scope: Scope = LOCAL): 
       `SELECT page.*,
          COALESCE((SELECT image_id FROM card_images WHERE card_id = page.id AND +game = ${scope.game}
            ORDER BY sort_order, image_id LIMIT 1), page.id) AS image_id,
+         (SELECT MIN(s.tcg_date) FROM card_printings p
+           JOIN sets s ON s.game = p.game AND s.language = 'en' AND s.set_name = p.set_name
+           WHERE p.card_id = page.id AND +p.game = ${scope.game} AND p.language = 'en' AND p.contributed = 0
+             AND s.tcg_date IS NOT NULL) AS released_at,
          (SELECT p.id FROM card_printings p
            LEFT JOIN sets s ON s.game = p.game AND s.language = 'en' AND s.set_name = p.set_name
            WHERE p.card_id = page.id AND +p.game = ${scope.game} AND p.language = 'en' AND p.contributed = 0
            ORDER BY p.game = 'pkm' AND p.missing_from_api = 1, s.tcg_date IS NULL, s.tcg_date, p.id LIMIT 1) AS default_printing_id
-       FROM (${base(scope)}${sql} ORDER BY ${sortCol} IS NULL, ${sortCol} ${dir}, c.name COLLATE NOCASE, c.id
+       FROM (${base(scope, sortCol === SORT_SQL.released)}${sql} ORDER BY ${sortCol} IS NULL, ${sortCol} ${dir}, c.name COLLATE NOCASE, c.id
          LIMIT ? OFFSET ?) page`
     )
     .all(...params, limit, offset) as BrowseRow[]
@@ -175,6 +180,16 @@ export function browseCards(db: SqlDb, f: BrowseFilters, scope: Scope = LOCAL): 
       defaultPrintingId: r.default_printing_id
     }))
   }
+}
+
+/** Bump when browseFacets changes what it produces: stored rollups aren't rebuilt otherwise. */
+const FACETS_ROLLUP = 1
+
+/** browseFacets from its rollup: its answer depends on the catalog alone. */
+export function browseFacetsFast(db: SqlDb, scope: Scope = LOCAL): BrowseFacets {
+  return catalogRollup(db, `browseFacets:${FACETS_ROLLUP}:${scopeGame(db, scope)}`, () =>
+    browseFacets(db, scope)
+  )
 }
 
 /** Filter options across the game's whole card database (English sets and rarities). */

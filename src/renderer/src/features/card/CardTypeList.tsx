@@ -8,7 +8,7 @@ import { LanguageTag } from '@/components/LanguageTag'
 import { pickableRow } from '@/components/pickableRow'
 import { Button } from '@/components/ui/button'
 import { replaceChecklistCard } from '@/features/sets/setsView'
-import { api, mutationInvalidationKeys, queryKeys } from '@/lib/api'
+import { api, invalidateAfterEdit, queryKeys } from '@/lib/api'
 import { formatUsd } from '@/lib/format'
 import { createSerialQueue } from '@/lib/serialQueue'
 import { cn } from '@/lib/utils'
@@ -164,9 +164,7 @@ export function CardTypeList({
         flight.current = null
         // Mark Browse stale without refetching every loaded page; its counts are patched above.
         void qc.invalidateQueries({ queryKey: ['browse'], refetchType: 'none' })
-        for (const k of mutationInvalidationKeys) {
-          if (k[0] !== 'browse') void qc.invalidateQueries({ queryKey: [...k] })
-        }
+        void invalidateAfterEdit(qc, (k) => k[0] === 'browse')
       })
   }
 

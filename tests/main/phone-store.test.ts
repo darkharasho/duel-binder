@@ -15,6 +15,9 @@ import { PHONE_FORMAT } from '../../src/phone/data/phoneSchema'
 import { createPhoneStore, type PhoneStore } from '../../src/phone/data/store'
 import { inProcessPortal, PORTAL, SERVER_NOW } from './cloudHelpers'
 import { seedPokemon } from '../fixtures/pokemon'
+import { withOwnerOnlyPokemon } from '../fixtures/ownerOnlyGame'
+
+withOwnerOnlyPokemon()
 
 type Portal = Awaited<ReturnType<typeof inProcessPortal>>
 

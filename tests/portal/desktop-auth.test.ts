@@ -4,6 +4,9 @@ import Database from 'better-sqlite3'
 import { memoryBucket, noPrintingArt, noPrices } from './helpers'
 import { handle, type AppDeps } from '../../workers/portal/src/app'
 import { migrateServer } from '../../workers/portal/src/migrate'
+import { withOwnerOnlyPokemon } from '../fixtures/ownerOnlyGame'
+
+withOwnerOnlyPokemon()
 
 const BASE = 'https://portal.test'
 const DAY = 24 * 60 * 60 * 1000

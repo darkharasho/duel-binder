@@ -27,7 +27,8 @@ export async function tcgcsvProducts(lang: TdLang, groupId: number, o: GetJsonOp
   return rows.map((p) => ({
     // A presale single has a URL before it has a picture; imageCount 0 says it would 403.
     productId: p.productId, groupId: p.groupId, name: p.name, imageUrl: p.imageCount === 0 ? undefined : p.imageUrl,
-    number: p.extendedData?.find((e) => e.name === 'Number')?.value ?? null
+    number: p.extendedData?.find((e) => e.name === 'Number')?.value ?? null,
+    details: Object.fromEntries((p.extendedData ?? []).map((e) => [e.name, e.value]))
   }))
 }
 

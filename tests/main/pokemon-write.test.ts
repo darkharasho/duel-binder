@@ -765,3 +765,62 @@ describe('art', () => {
     expect(stored('en/sv01-001')).toBe(url(1))
   })
 })
+
+describe('cards TCGdex lacks', () => {
+  let db: Database.Database
+  beforeEach(() => {
+    db = openDatabase(':memory:')
+  })
+  afterEach(() => db.close())
+
+  const stamp = { name: '30th Celebration', id: '30th' }
+  const group = { groupId: 24722, name: 'ME: 30th Celebration', abbreviation: '30C' }
+  const product = (productId: number, name: string, number: string): TcProduct => ({
+    productId,
+    groupId: 24722,
+    name,
+    number,
+    imageUrl: `https://tcgplayer-cdn.tcgplayer.com/product/${productId}_200w.jpg`,
+    details: { Number: number, Rarity: 'RGB Rare', 'Card Type': 'Psychic', HP: '60' }
+  })
+  const first: TdCard = {
+    id: '30th-001', localId: '001', name: 'Exeggcute', category: 'Pokemon',
+    image: 'https://td/30th/001', set: stamp, thirdParty: { tcgplayer: 1 }
+  }
+  const later: TdCard = {
+    id: '30th-R', localId: 'R', name: 'Mew', category: 'Pokemon', rarity: 'Rare',
+    image: 'https://td/30th/R', set: stamp, thirdParty: { tcgplayer: 717607 }
+  }
+  const sources = (cards: TdCard[], lang: PkmLang = 'en'): PokemonSources => ({
+    sets: async (l) =>
+      l !== lang
+        ? []
+        : [{
+            id: '30th', name: '30th Celebration', serie: { id: 'me' },
+            abbreviation: { official: '30C' }, cardCount: { official: 128 },
+            cards: cards.map((c) => ({ id: c.id, localId: c.localId, name: c.name }))
+          }],
+    cards: async (l, ids) => (l === lang ? cards.filter((c) => ids.includes(c.id)) : []),
+    groups: async (l) => (l === lang ? [group] : []),
+    products: async () => [product(1, 'Exeggcute - 001/128', '001/128'), product(717607, 'Mew - R/RGB', 'R/RGB')],
+    prices: async () => [
+      { productId: 1, subTypeName: 'Holofoil', marketPrice: 1 },
+      { productId: 717607, subTypeName: 'Holofoil', marketPrice: 4678.5 }
+    ]
+  })
+  const opts = { langs: ['en' as const], now: clock('2026-10-31T03:00:00.000Z') }
+
+  it('adds the card to the set, priced, and TCGdex later takes over the same rows', async () => {
+    await refreshPokemon(db, sources([first]), opts)
+    const before = printings(db, 'en/30th-R')
+    expect(before).toMatchObject([
+      { set_name: '30th Celebration', set_code: '30C R/RGB', set_rarity: 'Holofoil', tcg_product_id: 717607, market_price: 4678.5 }
+    ])
+    expect(db.prepare('SELECT name FROM cards WHERE id = ?').get(cid('en/30th-R'))).toEqual({ name: 'Mew' })
+    expect(printings(db, 'en/30th-001')[0].set_code).toBe('30C 001/128')
+
+    await refreshPokemon(db, sources([first, later]), opts)
+    expect(printings(db, 'en/30th-R')).toEqual(before)
+    expect(db.prepare('SELECT COUNT(*) AS n FROM cards').get()).toEqual({ n: 2 })
+  })
+})

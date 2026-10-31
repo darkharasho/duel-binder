@@ -14,6 +14,10 @@ export interface TdCard {
   variants_detailed?: TdVariant[]; thirdParty?: { tcgplayer?: number }
   /** National Pokédex numbers of a Pokémon card (one per Pokémon on it). */
   dexId?: number[]
+  /** The number as printed, when it isn't "{localId}/{official}" ("R/RGB"). */
+  printed?: string
+  /** Built from TCGplayer's rows (upcoming.ts), so its name is already English and plain. */
+  fromTcgplayer?: boolean
   set: { id: string; name: string }
 }
 export interface TdSet {
@@ -22,7 +26,10 @@ export interface TdSet {
   cards: { id: string; localId: string; name: string }[]
 }
 export interface TcGroup { groupId: number; name: string; abbreviation: string | null; publishedOn?: string }
-export interface TcProduct { productId: number; groupId: number; name: string; imageUrl?: string; number: string | null }
+export interface TcProduct {
+  productId: number; groupId: number; name: string; imageUrl?: string; number: string | null
+  details?: Record<string, string>
+}
 /** A product with TCGplayer's card details (Number, Rarity, HP, ...) by field name. */
 export interface TcCardRow { productId: number; name: string; details: Record<string, string> }
 export interface TcPrice { productId: number; subTypeName: string; marketPrice: number | null }

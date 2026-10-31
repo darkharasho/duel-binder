@@ -125,7 +125,7 @@ const ALWAYS_FOIL = new Set([
   'rare holo', 'holo rare v', 'holo rare vmax', 'holo rare vstar', 'ultra rare', 'double rare', 'triple rare', 'illustration rare',
   'special illustration rare', 'secret rare', 'hyper rare', 'mega hyper rare', 'shiny rare',
   'shiny rare v', 'shiny rare vmax', 'shiny ultra rare', 'ace spec rare', 'radiant rare',
-  'amazing rare', 'character rare', 'character super rare', 'black white rare'
+  'amazing rare', 'character rare', 'character super rare', 'black white rare', 'rgb rare'
 ])
 
 /** Whether a TCGdex rarity is only ever printed as foil. */

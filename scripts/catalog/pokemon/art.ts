@@ -68,7 +68,7 @@ export const ART_GROUPS: Record<PkmLang, Readonly<Record<string, readonly number
 const FINISH_NOTE = /^(?:non-holo|holo|holofoil|reverse holo|reverse holofoil|mirror holo|mirror holofoil|cosmos holo)$/i
 
 /** The notes in a product's name, "(...)" and "[...]"; a few upstream names leave one unclosed. */
-const notes = (name: string): string[] =>
+export const notes = (name: string): string[] =>
   [...name.matchAll(/[([]([^()[\]]*)/g)].map((m) => m[1].trim())
 
 const isStaff = (p: TcProduct): boolean => notes(p.name).some((n) => /^staff$/i.test(n))

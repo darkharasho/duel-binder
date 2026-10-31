@@ -49,7 +49,7 @@ export function createPokemonSources(opts: PokemonSourcesOpts): PokemonSources &
       )
     )
   }
-  /** Cards of sets built from TCGplayer (see upcoming.ts); TCGdex would 404 them. */
+  /** Cards of sets built from TCGplayer (see upcoming.ts), by language and id; TCGdex would 404 them. */
   const upcoming = new Map<string, TdCard>()
   const chinese = new Map<string, TdCard>()
   return {
@@ -71,16 +71,15 @@ export function createPokemonSources(opts: PokemonSourcesOpts): PokemonSources &
       const list = await tcgdexSetList(lang, o)
       const sets = await allOrNothing(list, (s, oo) => tcgdexSet(lang, s.id, oo))
       const paper = sets.filter((s) => !DIGITAL_SERIES.has(s.serie?.id ?? ''))
-      if (lang !== 'en') return paper
-      const groups = upcomingGroups(await tcgcsvGroups(lang, o), sets)
+      const groups = upcomingGroups(await tcgcsvGroups(lang, o), sets, lang)
       const built = await allOrNothing(groups, async (g, oo) =>
-        upcomingSet(g, await tcgcsvCardRows(lang, g.groupId, oo))
+        upcomingSet(g, await tcgcsvCardRows(lang, g.groupId, oo), lang)
       )
       for (const b of built) {
         if (!b) continue
-        opts.log?.(`Pokémon en: ${b.set.name} built from TCGplayer, ${b.cards.length} cards`)
+        opts.log?.(`Pokémon ${lang}: ${b.set.name} built from TCGplayer, ${b.cards.length} cards`)
         paper.push(b.set)
-        for (const c of b.cards) upcoming.set(c.id, c)
+        for (const c of b.cards) upcoming.set(`${lang}/${c.id}`, c)
       }
       return paper
     },
@@ -88,7 +87,7 @@ export function createPokemonSources(opts: PokemonSourcesOpts): PokemonSources &
       if (lang === 'zh-hans') return ids.flatMap((id) => chinese.get(id) ?? [])
       const t = now().getTime()
       return allOrNothing(ids, async (id, oo): Promise<TdCard> => {
-        const built = lang === 'en' ? upcoming.get(id) : undefined
+        const built = upcoming.get(`${lang}/${id}`)
         if (built) return built
         const hit = cache.get(lang, id)
         if (hit && cardIsUsable(hit.card, hit.fetchedAt, t)) return hit.card

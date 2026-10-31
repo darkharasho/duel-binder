@@ -19,6 +19,9 @@ const SUBTYPES: Record<string, string> = {
 /** TCGdex variant type → canonical label (no stamp). */
 const TYPES: Record<string, string> = { normal: 'Normal', holo: 'Holofoil', reverse: 'Reverse Holofoil' }
 
+/** The finish a card sold as the key can't also be printed in unless it's sold so too (rule 6). */
+const EXCLUDES: Record<string, string> = { Normal: 'Holofoil', Holofoil: 'Normal' }
+
 /** TCGdex variant type with the 1st-edition stamp → canonical label. */
 const FIRST_EDITION: Record<string, string> = { normal: '1st Edition', holo: '1st Edition Holofoil' }
 
@@ -96,6 +99,14 @@ export interface PkmVersion { label: string; productId: number | null; subTypeNa
  *    whole set is sold that way. Reprint sets need this: 30th Classic Collection keeps each
  *    reprint's original number on TCGplayer ("4/102"), so its products can't be told apart by
  *    number. The version has no product and no price, since no row is known to be this card's.
+ * 6. A curated Normal on a card whose plain product is sold as Holofoil and not Normal isn't a
+ *    printing, nor is a curated Holofoil on one sold as Normal and not Holofoil: SM Black Star Promos
+ *    has 157 curated Normals of cards sold only as Holofoil. A reverse holo is never dropped this
+ *    way: TCGplayer has no row for many real ones of old sets (Skyridge, Legendary Collection).
+ * 7. A foil pattern is its own version (productTreatment). TCGplayer sells each as a separate product
+ *    whose row says Holofoil even on a Common with no plain holo ("Snivy (Poke Ball Pattern)"), and
+ *    TCGdex files it as `reverse`; under either plain label it would make up a finish, and the
+ *    label's several rows would leave it unpriced.
  * Cards that reach rule 3 or 4 have no confirmed finish; the report counts them as unverified.
  */
 export const GENERATED_VARIANT_ID = 'generated'
@@ -129,6 +140,21 @@ export function groupFinish(
     for (const r of rows) names.add(canonicalLabel(r.subTypeName))
   }
   return names.size === 1 && covered >= cardCount ? [...names][0] : null
+}
+
+/** The foils TCGplayer names in a product's trailing brackets, by the words that give them away. */
+const TREATMENT = /\b(?:ball|pattern|cosmos?|cracked ice|water web|wave foil|mirror|sheen|galaxy|tinsel|crosshatch)\b/i
+
+/**
+ * The foil pattern a TCGplayer product is sold as, in one spelling per pattern, or null for a plain
+ * product, a stamp, or a bracket that only says which finish ("(Holo)", "(Non-Holo)").
+ */
+export function productTreatment(name: string): string | null {
+  const raw = /\(([^()]*)\)\s*$/.exec(name)?.[1].trim()
+  if (!raw || !TREATMENT.test(raw) || /stamp|league/i.test(raw)) return null
+  if (/^cosmos?\s+(holo|holofoil|foil)$/i.test(raw)) return 'Cosmos Holo'
+  if (/^cracked ice$/i.test(raw)) return 'Cracked Ice Holo'
+  return /\bball$/i.test(raw) ? `${raw} Pattern` : raw
 }
 
 /** Whether TCGdex made this variant up from its legacy booleans rather than recording it. */
@@ -189,7 +215,7 @@ export function cardVersions(
       if (!(name in SUBTYPES)) {
         problems.push(`${card.id}: TCGplayer subtype "${name}" of product ${product.productId} is not in the version table`)
       }
-      const label = prefix(sub) + canonicalLabel(name)
+      const label = (sub === null ? productTreatment(product.name) : null) ?? prefix(sub) + canonicalLabel(name)
       const key = `${product.productId}\u0000${name}`
       if (ambiguous.has(product.productId)) {
         entry(label).ambiguous = true
@@ -208,9 +234,18 @@ export function cardVersions(
   }
 
   // Rule 3: TCGplayer rows of a product matched to the plain printing settle the card's finishes.
-  const plainRows = matched.some(
+  const plainProducts = matched.filter(
     ({ product, variantSubtype }) =>
-      versionSubtype(variantSubtype) === null && (prices.get(product.productId)?.length ?? 0) > 0
+      versionSubtype(variantSubtype) === null &&
+      productTreatment(product.name) === null &&
+      (prices.get(product.productId)?.length ?? 0) > 0
+  )
+  const plainRows = plainProducts.length > 0
+  // Rule 6: the finishes the plain products are sold in.
+  const sold = new Set(
+    plainProducts.flatMap(({ product }) =>
+      (prices.get(product.productId) ?? []).map((r) => canonicalLabel(r.subTypeName))
+    )
   )
   const foil = alwaysFoil(card.rarity)
   let unverified = false
@@ -227,7 +262,11 @@ export function cardVersions(
       if (foil && raw.type.trim().toLowerCase() === 'normal') v = { ...raw, type: 'holo' }
     }
     const base = variantBase(v)
-    const label = variantLabel(v)
+    const pattern = matched.find((m) => m.product.productId === v.thirdParty?.tcgplayer)
+    const treatment = pattern && !versionSubtype(v.subtype) && !v.stamp?.length ? productTreatment(pattern.product.name) : null
+    const label = treatment ?? variantLabel(v)
+    const rival = EXCLUDES[label]
+    if (!treatment && rival && sold.has(rival) && !sold.has(label)) continue
     if (!base.known) problems.push(`${card.id}: TCGdex variant ${JSON.stringify(v.type)}${v.stamp?.length ? ` ${JSON.stringify(v.stamp)}` : ''} is not in the version table; labelled "${label}"`)
     const e = entry(label)
     const sub = versionSubtype(v.subtype)

@@ -2,6 +2,7 @@ import type Database from 'better-sqlite3'
 import { TOKEN_ID_MIN } from '../../shared/games/ids'
 import type { SqlDb } from '../db/sql'
 import { getMeta, setMeta } from '../db/meta'
+import { canonRarity } from '../ygo/rarity'
 import { createLimiter } from '../images/limiter'
 
 /**
@@ -207,7 +208,7 @@ export function variantLabel(name: string, rarity: string): string {
     notes.push(note)
   }
   // TCGplayer's "Extended Art" is the card art running over the frame: an overframe.
-  return notes.map((n) => (/^extended art$/i.test(n) ? 'Overframe' : n)).join(', ')
+  return notes.map((n) => (/^extended art$/i.test(n) ? 'Overframe' : canonRarity(n))).join(', ')
 }
 
 /**
@@ -288,7 +289,7 @@ export function saveTcgVariants(db: Database.Database): { saved: number; added: 
       for (const v of variants) {
         const label = variantLabel(v.name, v.rarity)
         if (!label || /misprint/i.test(label)) continue
-        const rarity = `${base.set_rarity} (${label})`
+        const rarity = canonRarity(`${base.set_rarity} (${label})`)
         if (used.has(rarity)) continue
         used.add(rarity)
         const row = upsert.get(
@@ -317,7 +318,9 @@ export function saveTcgVariants(db: Database.Database): { saved: number; added: 
       if (variant !== p.variant) labelled.run(variant, p.id)
     }
     const stale = (
-      db.prepare("SELECT id FROM card_printings WHERE game = 'ygo' AND tcg_product_id IS NOT NULL").all() as {
+      db
+        .prepare("SELECT id FROM card_printings WHERE game = 'ygo' AND tcg_product_id IS NOT NULL")
+        .all() as {
         id: number
       }[]
     ).filter((r) => !seen.has(r.id))
@@ -424,7 +427,8 @@ function saveMissingPrintings(db: Database.Database, seen: Set<number>): number 
       const own = variantLabel(plain.name, plain.rarity)
       // The plain product sorts first, so a misprint here means every product is one.
       if (/misprint/i.test(own)) continue
-      const save = (setRarity: string, productId: number, variant: string | null): void => {
+      const save = (rawRarity: string, productId: number, variant: string | null): void => {
+        const setRarity = canonRarity(rawRarity)
         if (!existing.get(cardId, code, setRarity)) added++
         const row = upsert.get(
           cardId,

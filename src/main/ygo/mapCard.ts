@@ -1,4 +1,5 @@
 import { parsePrice } from '@shared/pricing'
+import { cleanRarity } from './rarity'
 import type { CardImage, CardRow, Printing } from '@shared/types'
 
 export interface ApiCard {
@@ -54,6 +55,8 @@ export function mapApiCard(
   printings: Omit<Printing, 'id' | 'missingFromApi' | 'language'>[]
   images: CardImage[]
 } {
+  const sets = (c.card_sets ?? []).flatMap(fixRarity)
+  const rated = new Set(sets.filter((s) => cleanRarity(s.set_rarity)).map((s) => s.set_code))
   return {
     card: {
       id: c.id,
@@ -70,14 +73,23 @@ export function mapApiCard(
       desc: c.desc ?? '',
       tcgplayerPrice: parsePrice(c.card_prices?.[0]?.tcgplayer_price)
     },
-    printings: (c.card_sets ?? []).flatMap(fixRarity).map((s) => ({
-      cardId: c.id,
-      setName: s.set_name,
-      setCode: s.set_code,
-      setRarity: s.set_rarity,
-      setRarityCode: s.set_rarity_code ?? '',
-      setPrice: parsePrice(s.set_price)
-    })),
+    // YGOPRODeck copies the wiki's print-note and quantity columns into some rarities ("New", "2").
+    // Beside a real rarity of its code such a row stays out, and the sync retires or flags its
+    // stored row. Alone it stays as it reads: a wrong label beats losing a real printing.
+    printings: sets.flatMap((s) => {
+      const setRarity = cleanRarity(s.set_rarity)
+      if (setRarity === null && rated.has(s.set_code)) return []
+      return [
+        {
+          cardId: c.id,
+          setName: s.set_name,
+          setCode: s.set_code,
+          setRarity: setRarity ?? s.set_rarity,
+          setRarityCode: s.set_rarity_code ?? '',
+          setPrice: parsePrice(s.set_price)
+        }
+      ]
+    }),
     images: (c.card_images ?? []).filter((img) => Number.isInteger(img?.id)).map((img, i) => ({
       imageId: img.id,
       cardId: c.id,

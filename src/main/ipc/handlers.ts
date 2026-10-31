@@ -15,6 +15,7 @@ import { cardLanguage } from '@shared/scan/cardLanguage'
 import type { AccountService } from '../cloud/account'
 import type { CatalogService } from '../catalog/service'
 import { readPackWrappers } from '../images/packWrappers'
+import { saveDebugFrame } from '../scan/debugFrames'
 
 export interface WindowDeps {
   minimize(): void
@@ -102,6 +103,10 @@ export function createHandlers({
     'scan:language': async (bands: unknown) => {
       checkOcrBands(bands)
       return cardLanguage(ocr, bands)
+    },
+    'scan:debugFrame': async (jpeg: unknown, note: unknown) => {
+      if (!(jpeg instanceof ArrayBuffer) || typeof note !== 'string') throw new Error('Bad debug frame')
+      await saveDebugFrame(jpeg, note)
     },
     'scan:readText': async (bands: unknown, model: unknown) => {
       if (!isTextModel(model)) throw new Error(`Unknown OCR model: ${String(model)}`)

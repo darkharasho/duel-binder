@@ -209,6 +209,7 @@ export function createPhoneApi(deps: {
       facets: portal('friends:facets')
     },
     scan: {
+      debugFrame: async () => undefined,
       ...dataPart('scan'),
       fingerprints: (game) => store.fingerprints(game),
       fingerprintRefs: () => store.fingerprintRefs(),

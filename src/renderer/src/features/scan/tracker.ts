@@ -1,4 +1,4 @@
-import { ABSENT_MS, GUESS_STABLE_FRAMES, STABLE_FRAMES } from '@shared/scan/thresholds'
+import { ABSENT_MS, GUESS_STABLE_FRAMES, GUESS_SWAP_FRAMES, STABLE_FRAMES } from '@shared/scan/thresholds'
 import type { ScanDraft, ScanOutcome } from './resolve'
 
 export interface ShowingTracker {
@@ -19,14 +19,16 @@ export interface ShowingTracker {
  * recognized frame counts as unsure; a second in a row is a real `none`.
  *
  * A best guess has to hold for guessFrames, so the frames that may yet read its language or number
- * come first, and, as it can't be taken back, never counts while a card shown is still in view: a
- * guess of another card there is more likely the same card's twin than a new one.
+ * come first. As it can't be taken back, it holds for swapFrames while a card shown hasn't cleared:
+ * a brief guess of another card there is more likely the same card's twin than a new one, but a
+ * hand swapping cards may never empty the view. Any frame of the card shown starts it over.
  */
 export function createShowingTracker(
-  opts: { stableFrames?: number; guessFrames?: number; absentMs?: number } = {}
+  opts: { stableFrames?: number; guessFrames?: number; swapFrames?: number; absentMs?: number } = {}
 ): ShowingTracker {
   const stableFrames = opts.stableFrames ?? STABLE_FRAMES
   const guessFrames = opts.guessFrames ?? GUESS_STABLE_FRAMES
+  const swapFrames = opts.swapFrames ?? GUESS_SWAP_FRAMES
   const absentMs = opts.absentMs ?? ABSENT_MS
   let streakOf: number | null = null
   let streak = 0
@@ -65,10 +67,10 @@ export function createShowingTracker(
         clearStreak()
         return null
       }
-      if (guess && shown !== null) return null
       streak = cardId === streakOf ? streak + 1 : 1
       streakOf = cardId
-      if (streak < (guess ? guessFrames : stableFrames)) return null
+      const needed = !guess ? stableFrames : shown === null ? guessFrames : swapFrames
+      if (streak < needed) return null
       shown = cardId
       clearStreak()
       return outcome.item

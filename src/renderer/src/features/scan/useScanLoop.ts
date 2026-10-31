@@ -11,7 +11,7 @@ import type { FingerprintStatus, OcrBand, ScanPrinting } from '@shared/scan/type
 import type { ScanStatus } from '@shared/scanWindow'
 import { api } from '@/lib/api'
 import { centreCrop } from './crop'
-import type { EngineFactory, ScanEngine } from './engine'
+import type { EngineFactory, FrameSignals, ScanEngine } from './engine'
 import {
   describeLook,
   resolveSignals,
@@ -107,6 +107,46 @@ const sameStatus = (a: ScanStatus, b: ScanStatus): boolean =>
  * resolution, as a bitmap for the engine to hand to its worker: the pixels are never copied on
  * the UI thread.
  */
+/** Every DEBUG_EVERY-th frame is kept in a dev build: encoding a 4K frame isn't free. */
+const DEBUG_EVERY = 3
+
+/** The frame as a JPEG, drawn before the engine takes it; null on the frames skipped. */
+function debugShot(
+  frame: ImageBitmap,
+  width: number,
+  height: number,
+  l: { debugFrames: number }
+): Promise<Blob> | null {
+  if (l.debugFrames++ % DEBUG_EVERY !== 0) return null
+  const canvas = new OffscreenCanvas(width, height)
+  canvas.getContext('2d')?.drawImage(frame, 0, 0)
+  return canvas.convertToBlob({ type: 'image/jpeg', quality: 0.92 })
+}
+
+/** Hands the JPEG to main with what the scanner made of it. */
+async function keepDebugShot(
+  shot: Promise<Blob>,
+  game: GameId,
+  raw: FrameSignals,
+  outcome: ScanOutcome,
+  counted: boolean
+): Promise<void> {
+  const jpeg = await (await shot).arrayBuffer()
+  const note = JSON.stringify({
+    game,
+    found: raw.found,
+    quad: raw.quad,
+    via: raw.artVia ?? null,
+    top: raw.art.slice(0, 3).map((a) => [a.imageId, a.distance]),
+    outcome: outcome.kind,
+    far: outcome.kind === 'none' ? (outcome.far ?? false) : undefined,
+    card: outcome.kind === 'recognized' ? outcome.item.cardId : undefined,
+    guess: outcome.kind === 'recognized' ? (outcome.item.guess ?? false) : undefined,
+    counted
+  })
+  await api.scan.debugFrame(jpeg, note).catch(() => undefined)
+}
+
 async function grab(
   video: HTMLVideoElement
 ): Promise<{ frame: ImageBitmap; width: number; height: number } | null> {
@@ -145,6 +185,7 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
     busy: false,
     needsInit: false,
     failures: 0,
+    debugFrames: 0,
     retryAt: 0,
     stopped: false,
     lastFound: false,
@@ -459,6 +500,7 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
         const { frame, width, height } = grabbed
         const setPrintings = o.setPrintings
         const candidates = o.candidates
+        const shot = import.meta.env.DEV ? debugShot(frame, width, height, l) : null
         let raw
         try {
           raw = await engine.analyze(frame, {
@@ -511,6 +553,7 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
         // Only Yu-Gi-Oh's rarities are read by the look of the card.
         const looked = profile.rarityLook ? withLook(outcome, raw.cues, raw.look) : outcome
         const draft = tracker.current.push(performance.now(), looked)
+        if (shot) void keepDebugShot(shot, o.game, raw, outcome, draft !== null)
         show(outcome, draft)
         if (draft) latest.current.onDraft(draft)
       } finally {

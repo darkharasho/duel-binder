@@ -83,6 +83,8 @@ export interface Api {
     ocr(bands: OcrBand[], kind: OcrKind): Promise<string[]>
     /** The language the card text on the bands reads as; null when it can't be told. */
     language(bands: OcrBand[]): Promise<CardLanguage | null>
+    /** Dev builds: keeps a camera frame and what became of it, for replaying a live failure. */
+    debugFrame(jpeg: ArrayBuffer, note: string): Promise<void>
     /**
      * The card text on each band as model reads it, unjudged: a Pokémon card's language is told
      * from one read per model (pokemonLanguageOfReads), never from the reads run together.
@@ -225,6 +227,7 @@ export const INVOKE_CHANNELS = [
   'scan:refreshFingerprints',
   'scan:ocr',
   'scan:language',
+  'scan:debugFrame',
   'scan:readText',
   'scanWindow:open',
   'scanWindow:isOpen',

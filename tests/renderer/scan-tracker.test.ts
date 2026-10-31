@@ -38,7 +38,7 @@ describe('createShowingTracker', () => {
   describe('a best guess', () => {
     const guess = (cardId: number): ScanOutcome => as({ ...draft(cardId), guess: true })
     const tracker = (): ReturnType<typeof createShowingTracker> =>
-      createShowingTracker({ stableFrames: 2, guessFrames: 4, absentMs: 600 })
+      createShowingTracker({ stableFrames: 2, guessFrames: 4, swapFrames: 8, absentMs: 600 })
 
     it('counts only after holding for its frames', () => {
       const t = tracker()
@@ -54,11 +54,16 @@ describe('createShowingTracker', () => {
       expect(u.push(100, seen(1))?.guess).toBeUndefined()
     })
 
-    it('never counts while a card already counted is in view, as its twin', () => {
+    it('takes twice as long while a card counted has not cleared, as it may be its twin', () => {
       const t = tracker()
-      expect(run(t, [seen(1), seen(1), guess(2), guess(2), guess(2), guess(2), guess(2)])).toEqual([
-        1
-      ])
+      expect(run(t, [seen(1), seen(1), ...Array(7).fill(guess(2))])).toEqual([1])
+      expect(run(t, [guess(2)], 1000)).toEqual([2])
+    })
+
+    it('starts over on any frame of the card still shown', () => {
+      const t = tracker()
+      const flicker = [...Array(7).fill(guess(2)), seen(1), ...Array(7).fill(guess(2))]
+      expect(run(t, [seen(1), seen(1), ...flicker])).toEqual([1])
     })
 
     it('counts for the next card once the view has cleared', () => {

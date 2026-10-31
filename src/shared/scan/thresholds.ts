@@ -192,6 +192,12 @@ export const PKM_GUESS_REPRINT_LEAD = 4
  */
 export const GUESS_STABLE_FRAMES = LANGUAGE_MAX_READS + 1
 
+/**
+ * Consecutive frames a best guess of another card must hold while a counted card hasn't cleared. A
+ * hand swapping toploaders rarely leaves the view empty, and those cards are mostly guesses.
+ */
+export const GUESS_SWAP_FRAMES = GUESS_STABLE_FRAMES * 2
+
 // A Pokémon card's version from its foil. Texture is the median fine texture of a region of the
 // straightened card, in luma levels (vision/foil.ts). On real photos the frame's doesn't tell a
 // reverse holo from a normal card, so only Holofoil is ever named (pokemonVersion).

@@ -15,6 +15,7 @@ import type {
   EntryView,
   Facets,
   FriendRequestResult,
+  FriendCardCopies,
   FriendsOverview,
   ImageDownloads,
   SetChecklist,
@@ -61,6 +62,8 @@ export interface Api {
     /** An accepted friend's live entries, notes always ''. */
     collection(userId: number, f: CollectionFilters): Promise<EntryView[]>
     facets(userId: number): Promise<Facets>
+    /** Friends with copies of this card in the current game; a portal without it answers 404. */
+    forCard(cardId: number): Promise<FriendCardCopies[]>
   }
   scan: {
     printingsByCode(code: string): Promise<ScanPrinting[]>
@@ -215,6 +218,7 @@ export const INVOKE_CHANNELS = [
   'friends:unblock',
   'friends:collection',
   'friends:facets',
+  'friends:forCard',
   'scan:printingsByCode',
   'scan:printingsByNumber',
   'scan:printingsForSet',

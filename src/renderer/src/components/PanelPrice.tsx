@@ -2,10 +2,14 @@ import type { EntryView } from '@shared/types'
 import { EbayPriceLine, EntryValue } from '@/features/collection/EntryValue'
 import { formatUsd } from '@/lib/format'
 
+const LABEL = 'block text-xs text-muted-foreground'
+const FIGURE = 'block text-3xl leading-tight font-semibold tabular-nums'
+
 /**
- * The price line of a card side panel. When the user owns the viewed printing (`entry`), it shows
- * the collection's own price for it (eBay marker, listings and date, or "No price" with its
- * reason); otherwise the YGOPRODeck `price`, labelled by `label`. Null when there is nothing to show.
+ * The headline price of a card side panel. When the selected row is a collection entry (`entry`),
+ * it shows the collection's own price for it (eBay marker, listings and date, or "No price" with
+ * its reason); otherwise the YGOPRODeck `price`, labelled by `label`, or "No price" for a row with
+ * none. Null when no row is selected and there is nothing to show.
  */
 export function PanelPrice({
   entry,
@@ -14,14 +18,14 @@ export function PanelPrice({
 }: {
   entry: EntryView | undefined
   price: number | null
-  label: string
+  label: string | undefined
 }): React.JSX.Element | null {
   if (entry) {
     return (
       <div className="space-y-0.5">
-        <p className="text-sm">
-          <span className="text-muted-foreground">Market price · {entry.printing.setRarity}</span>{' '}
-          <span className="font-medium">
+        <p>
+          <span className={LABEL}>Market price · {entry.printing.setRarity}</span>{' '}
+          <span className={FIGURE}>
             <EntryValue entry={entry} amount={entry.unitPrice} />
           </span>
         </p>
@@ -29,11 +33,15 @@ export function PanelPrice({
       </div>
     )
   }
-  if (price === null) return null
+  if (label === undefined) return null
   return (
-    <p className="text-sm">
-      <span className="text-muted-foreground">Market price · {label}</span>{' '}
-      <span className="font-medium tabular-nums">{formatUsd(price)}</span>
+    <p>
+      <span className={LABEL}>Market price · {label}</span>{' '}
+      {price === null ? (
+        <span className="block text-lg leading-tight text-muted-foreground">No price</span>
+      ) : (
+        <span className={FIGURE}>{formatUsd(price)}</span>
+      )}
     </p>
   )
 }

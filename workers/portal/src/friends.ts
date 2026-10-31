@@ -17,7 +17,7 @@ export class FriendError extends CollectionError {}
 export const DAILY_REQUEST_LIMIT = 20
 const DAY_MS = 24 * 60 * 60 * 1000
 
-interface UserRow {
+export interface UserRow {
   id: number
   discord_id: string
   username: string
@@ -25,7 +25,7 @@ interface UserRow {
   avatar: string | null
 }
 
-const toUser = (r: UserRow): FriendUser => ({
+export const toUser = (r: UserRow): FriendUser => ({
   id: r.id,
   username: r.username,
   // Discord sends '' for an unset global name; show the username then.

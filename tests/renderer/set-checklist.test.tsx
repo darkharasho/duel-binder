@@ -1,6 +1,6 @@
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import type { CountMode } from '@shared/types'
+import type { CardDetail, CountMode, EntryView } from '@shared/types'
 import { SetChecklist } from '@/features/sets/SetChecklist'
 import { createMockApi, renderWithProviders } from './mockApi'
 import { metalRaidersChecklist, PRINTING } from './setFixtures'
@@ -126,7 +126,43 @@ describe('SetChecklist', () => {
     const onAddMissing = vi.fn()
     const api = createMockApi({
       sets: { checklist: async () => metalRaidersChecklist, adjust },
-      collection: { forCard: vi.fn(async () => []) }
+      // The server's copies once the add went through.
+      collection: {
+        forCard: vi.fn(async () =>
+          adjust.mock.calls.length > 0
+            ? ([
+                {
+                  id: 9,
+                  quantity: 1,
+                  imageId: 3001,
+                  unitPrice: 3,
+                  printing: { id: PRINTING.gammaEN010 },
+                  card: { name: 'Gamma Trap' }
+                }
+              ] as EntryView[])
+            : []
+        )
+      },
+      cards: {
+        get: async () =>
+          ({
+            card: { id: 3001, name: 'Gamma Trap', type: 'Trap Card' },
+            printings: [
+              {
+                id: PRINTING.gammaEN010,
+                cardId: 3001,
+                setName: 'Metal Raiders',
+                setCode: 'MRD-EN010',
+                setRarity: 'Common',
+                setRarityCode: '',
+                setPrice: 3,
+                missingFromApi: false,
+                language: 'en'
+              }
+            ],
+            images: [{ imageId: 3001, cardId: 3001, sortOrder: 0 }]
+          }) as CardDetail
+      }
     })
     renderWithProviders(
       <SetChecklist
@@ -141,15 +177,14 @@ describe('SetChecklist', () => {
     )
     await userEvent.click(await screen.findByRole('button', { name: /Gamma Trap/ }))
     const panel = await screen.findByRole('dialog')
-    expect(within(panel).getByText('You have none yet')).toBeInTheDocument()
+    expect(await within(panel).findByText('You have none yet')).toBeInTheDocument()
     expect(onAddMissing).not.toHaveBeenCalled()
     // The viewed rarity's price, named, and again on its stepper row.
     expect(within(panel).getByText(/^Market price · /)).toBeInTheDocument()
-    expect(within(panel).getAllByText('$3.00')).toHaveLength(2)
+    expect(await within(panel).findAllByText('$3.00')).toHaveLength(2)
 
-    const rarity = metalRaidersChecklist.cards[2].rarities[0].rarity
     await userEvent.click(
-      within(panel).getByRole('button', { name: `Add one Gamma Trap ${rarity}` })
+      within(panel).getByRole('button', { name: 'Add one Gamma Trap MRD-EN010 Common' })
     )
     expect(adjust).toHaveBeenCalledWith('Metal Raiders', 'en', PRINTING.gammaEN010, 1)
     expect(await within(panel).findByText('You have 1')).toBeInTheDocument()
@@ -179,9 +214,7 @@ describe('SetChecklist', () => {
 
     await userEvent.click(screen.getAllByRole('button', { name: 'Previous card' })[0])
     await userEvent.click(screen.getAllByRole('button', { name: 'Previous card' })[0])
-    // Alpha Dragon is owned, so it opens in the entry editor.
     await waitFor(() => expect(forCard).toHaveBeenCalledWith(1001))
-    expect(within(panel).queryByText('You have none yet')).not.toBeInTheDocument()
     expect(screen.getByRole('dialog')).toBe(panel)
   })
 

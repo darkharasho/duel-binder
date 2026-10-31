@@ -21,6 +21,7 @@ export const PORTAL_CHANNELS = [
   'friends:unblock',
   'friends:collection',
   'friends:facets',
+  'friends:forCard',
   'stats:get',
   'sets:list',
   'sets:checklist',

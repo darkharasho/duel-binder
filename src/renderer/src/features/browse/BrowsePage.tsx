@@ -28,14 +28,13 @@ import {
   SheetTitle
 } from '@/components/ui/sheet'
 import { UnderlineTabs } from '@/components/UnderlineTabs'
-import { EntryDetailPanel } from '@/features/collection/EntryDetailPanel'
+import { CardPanel } from '@/features/card/CardPanel'
 import { api, queryKeys } from '@/lib/api'
 import { formatUsd } from '@/lib/format'
 import { useGame } from '@/lib/game'
 import { RANGE_FIELDS, rangeFilters } from '@/lib/rangeFilters'
 import { isPhone } from '@/lib/platform'
 import { useSetNames } from '@/lib/setLabels'
-import { BrowseCardPanel } from './BrowseCardPanel'
 
 const PAGE = 120
 
@@ -409,36 +408,24 @@ export function BrowsePage({ onAddCard }: Props): React.JSX.Element {
         )}
       </div>
 
-      {(selected || unowned) && (
+      {openId !== undefined && (
         <CardSheet onClose={close}>
-          {selected ? (
-            <EntryDetailPanel
-              cardId={selected.cardId}
-              entryId={selected.entryId}
-              onSelectEntry={(entryId) => setSelected({ cardId: selected.cardId, entryId })}
-              onClose={close}
-              nav={nav}
-            />
-          ) : unowned ? (
-            <BrowseCardPanel
-              key={unowned.id}
-              card={unowned}
-              nav={nav}
-              onMoreOptions={(printingId) => {
-                setUnowned(null)
-                onAddCard(
-                  {
-                    id: unowned.id,
-                    name: unowned.name,
-                    type: unowned.type,
-                    defaultImageId: unowned.imageId,
-                    matchedSetCode: null
-                  },
-                  printingId
-                )
-              }}
-            />
-          ) : null}
+          <CardPanel
+            cardId={openId}
+            entryId={selected?.entryId}
+            seed={unowned ?? undefined}
+            onSelectEntry={
+              selected
+                ? (entryId) => setSelected({ cardId: selected.cardId, entryId })
+                : undefined
+            }
+            onClose={close}
+            onMoreOptions={(card, printingId) => {
+              close()
+              onAddCard(card, printingId)
+            }}
+            nav={nav}
+          />
         </CardSheet>
       )}
     </div>

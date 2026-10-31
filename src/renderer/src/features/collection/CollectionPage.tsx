@@ -25,7 +25,7 @@ import { useLanguageFilter } from '@/lib/languageFilter'
 import { isPhone } from '@/lib/platform'
 import { CollectionGrid } from './CollectionGrid'
 import { CollectionTable } from './CollectionTable'
-import { EntryDetailPanel } from './EntryDetailPanel'
+import { CardPanel } from '../card/CardPanel'
 import { FriendEntryPanel } from '../friends/FriendEntryPanel'
 import { CollectionSearch, FilterBar, FilterChips, FilterSheetBody } from './FilterBar'
 import { activeFilterCount } from './filterFacets'
@@ -392,7 +392,7 @@ export function CollectionPage({
         )}
         {!friend && selectedId !== null && cardId !== null && (
           <CardSheet onClose={close}>
-            <EntryDetailPanel
+            <CardPanel
               cardId={cardId}
               entryId={selectedId}
               onSelectEntry={setSelectedId}

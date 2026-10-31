@@ -10,29 +10,7 @@ import { FRIENDS_SIGNED_OUT } from '@shared/friends'
 import type { Friend, FriendUser } from '@shared/types'
 import { CollectionPage } from '../collection/CollectionPage'
 import { AddFriendForm } from './AddFriendForm'
-
-function Avatar({ user }: { user: FriendUser }): React.JSX.Element {
-  const [failed, setFailed] = useState(false)
-  if (user.avatarUrl && !failed) {
-    return (
-      <img
-        src={user.avatarUrl}
-        alt=""
-        className="size-8 shrink-0 rounded-full"
-        onError={() => setFailed(true)}
-      />
-    )
-  }
-  const name = user.displayName ?? user.username
-  return (
-    <span
-      aria-hidden
-      className="flex size-8 shrink-0 items-center justify-center rounded-full bg-white/10 text-sm font-semibold uppercase"
-    >
-      {name.charAt(0)}
-    </span>
-  )
-}
+import { FriendAvatar } from './FriendAvatar'
 
 type Confirming = { id: number; action: 'unfriend' | 'block' }
 
@@ -137,7 +115,7 @@ export function FriendsPage({ onBackToMine }: { onBackToMine: () => void }): Rea
           <ul className="space-y-2">
             {data.incoming.map((r) => (
               <li key={r.id} className="flex items-center gap-3 max-md:flex-wrap">
-                <Avatar user={r} />
+                <FriendAvatar user={r} />
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm font-medium">{r.displayName ?? r.username}</div>
                   <div className="truncate text-xs text-muted-foreground">@{r.username}</div>
@@ -184,7 +162,7 @@ export function FriendsPage({ onBackToMine }: { onBackToMine: () => void }): Rea
                   onClick={() => setViewing(f)}
                   className="flex min-w-0 flex-1 items-center gap-3 rounded-sm text-left focus-visible:outline-2 focus-visible:outline-ring"
                 >
-                  <Avatar user={f} />
+                  <FriendAvatar user={f} />
                   <span className="min-w-0">
                     <span className="block truncate text-sm font-medium">
                       {f.displayName ?? f.username}
@@ -231,7 +209,7 @@ export function FriendsPage({ onBackToMine }: { onBackToMine: () => void }): Rea
           <ul className="space-y-2">
             {data.blocked.map((b) => (
               <li key={b.id} className="flex items-center gap-3">
-                <Avatar user={b} />
+                <FriendAvatar user={b} />
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-sm font-medium">{b.displayName ?? b.username}</div>
                   <div className="truncate text-xs text-muted-foreground">@{b.username}</div>

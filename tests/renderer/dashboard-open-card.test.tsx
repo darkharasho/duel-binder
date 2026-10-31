@@ -60,7 +60,7 @@ async function clickAndExpectPanel(): Promise<void> {
   const dialog = await screen.findByRole('dialog')
   expect(await within(dialog).findByRole('heading', { name: 'Dark Magician' })).toBeVisible()
   await waitFor(() =>
-    expect(within(dialog).getByRole('button', { current: true })).toHaveTextContent('LB-05')
+    expect(within(dialog).getByRole('group', { current: true })).toHaveTextContent('LB-05')
   )
   expect(localStorage.getItem('language.filter')).toBe('en')
 }

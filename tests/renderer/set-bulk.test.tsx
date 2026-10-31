@@ -9,7 +9,7 @@ import { SetChecklist } from '@/features/sets/SetChecklist'
 import { SetsPage } from '@/features/sets/SetsPage'
 import { queryKeys } from '@/lib/api'
 import { createMockApi, renderWithProviders } from './mockApi'
-import { metalRaidersChecklist, PRINTING } from './setFixtures'
+import { detailOf, metalRaidersChecklist, PRINTING } from './setFixtures'
 
 vi.mock('sonner', () => ({ toast: { success: vi.fn(), error: vi.fn() }, Toaster: () => null }))
 
@@ -65,7 +65,10 @@ function setup(
 } {
   const adj = createAdjust()
   const checklist = vi.fn(async () => metalRaidersChecklist)
-  const api = createMockApi({ sets: { checklist, adjust: adj.adjust } })
+  const api = createMockApi({
+    sets: { checklist, adjust: adj.adjust },
+    cards: { get: async (id: number) => detailOf(id) }
+  })
   const { client } = renderWithProviders(
     <SetChecklist
       setName="Metal Raiders"
@@ -294,17 +297,21 @@ describe('SetChecklist bulk mode', () => {
   })
 
   it('the side panel stepper counts a click before the server answers', async () => {
-    const { releaseNext } = setup()
+    const { releaseNext, checklist } = setup()
     await userEvent.click(await screen.findByRole('button', { name: /Gamma Trap/ }))
     const panel = await screen.findByRole('dialog')
-    await userEvent.click(within(panel).getByRole('button', { name: 'Add one Gamma Trap Rare' }))
+    const code = detailOf(3001).printings[0].setCode
+    await userEvent.click(
+      await within(panel).findByRole('button', { name: `Add one Gamma Trap ${code} Rare` })
+    )
     expect(within(panel).getByText('You have 1')).toBeInTheDocument()
     expect(
-      within(within(panel).getByRole('group', { name: 'Gamma Trap Rare' })).getByText('1')
+      within(within(panel).getByRole('group', { name: `Gamma Trap ${code} Rare` })).getByText('1')
     ).toBeInTheDocument()
+    expect(checklist).toHaveBeenCalledTimes(1)
     releaseNext()
-    await waitFor(() => expect(screen.getByText(/2 of 3/)).toBeInTheDocument())
-    expect(within(panel).getByText('You have 1')).toBeInTheDocument()
+    // The set page behind the panel refreshes once the click is answered.
+    await waitFor(() => expect(checklist).toHaveBeenCalledTimes(2))
   })
 
   it('a failed adjust toasts and keeps the count', async () => {

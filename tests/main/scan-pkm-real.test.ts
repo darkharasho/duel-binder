@@ -9,6 +9,7 @@
 //   SCAN_PKM_TRUTH=<file>         another truth file (default SCAN_PKM_DIR/pkm-truth.json)
 //   SCAN_PKM_OUT=<file>           also write the per-photo rows there as JSON, with every signal the
 //                                 resolver takes (raws), so resolver changes can be replayed offline
+//   SCAN_PKM_LIVE=1               as a live frame: short holder search, language preset from the truth
 //   SCAN_PKM_CROP=1               scan each photo at the app's framing: the live scan's centre crop
 //                                 (810x1080 of a 1080p frame), not the whole photo
 //   SCAN_PKM_DIR=~/scan-capture npm test -- --silent=false tests/main/scan-pkm-real.test.ts
@@ -27,10 +28,11 @@ import { PNG } from 'pngjs'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import { MIN_RIGHT_SHARE, PKM_MAX_WRONG_SHARE } from '../../scripts/catalog/accuracy'
 import { pokemonId } from '../../src/shared/games/ids'
+import { PKM_PHOTO_REPRINT_LEAD } from '../../src/shared/scan/thresholds'
 import { decodeFingerprints, type FingerprintIndex } from '../../src/shared/scan/fingerprintFile'
 import { readTexts } from '../../src/shared/scan/ocr'
 import {
-  pokemonLanguageOfBands,
+  tellPokemonLanguage,
   type PokemonTextLanguage
 } from '../../src/shared/scan/pokemonLanguage'
 import { scanProfile } from '../../src/shared/scan/profiles'
@@ -38,6 +40,7 @@ import type { OcrBand, RgbaImage } from '../../src/shared/scan/types'
 import { createOcr } from '../../src/main/scan/ocr'
 import {
   cardsForImages,
+  imagesForLanguage,
   matchName,
   printingsByCode,
   printingsByNumber,
@@ -110,6 +113,9 @@ const TRUTH = DIR ? home(process.env.SCAN_PKM_TRUTH ?? join(DIR, 'pkm-truth.json
 const WORK = DIR ? join(DIR, 'pkm-work') : undefined
 const READY = !!DIR && existsSync(TRUTH!)
 const CROP = process.env.SCAN_PKM_CROP === '1'
+// A live frame: the short holder search, and the language told rather than read.
+const LIVE = process.env.SCAN_PKM_LIVE === '1'
+const preset = (t: Truth): 'en' | 'ja' => (t.language === 'ja' ? 'ja' : 'en')
 if (DIR && !READY)
   console.warn(`Pokémon real-photo gate skipped: no truth file at ${TRUTH} (see the test's header)`)
 
@@ -170,6 +176,14 @@ describe.skipIf(!READY)('the Pokémon scanner on real photos', () => {
       (db.prepare('SELECT name FROM cards WHERE id = ?').pluck().get(cardId) as string) ?? '?'
     const truth = JSON.parse(readFileSync(TRUTH!, 'utf8')) as Truth[]
     const profile = scanProfile('pkm')
+    const narrowed = new Map<string, FingerprintIndex>()
+    const liveIndex = (language: 'en' | 'ja'): FingerprintIndex => {
+      const had = narrowed.get(language)
+      if (had) return had
+      const only = index.only(new Set(imagesForLanguage(db, language, scope)))
+      narrowed.set(language, only)
+      return only
+    }
 
     for (const t of truth) {
       const path = join(DIR!, t.file)
@@ -190,7 +204,18 @@ describe.skipIf(!READY)('the Pokémon scanner on real photos', () => {
         continue
       }
       const start = performance.now()
-      const signals = analyze(cv, img, index, null, true, false, profile)
+      const signals = analyze(
+        cv,
+        img,
+        LIVE ? liveIndex(preset(t)) : index,
+        null,
+        true,
+        false,
+        profile,
+        true,
+        null,
+        !LIVE
+      )
       cues[t.file] = signals.version
       // As the scan engine reads them: empty bands dropped, the code band as a collector number.
       const codeBands = signals.codeBands.filter(hasPixels)
@@ -203,17 +228,18 @@ describe.skipIf(!READY)('the Pokémon scanner on real photos', () => {
         : [[], []]
       let language = '-'
       let localName = ''
-      // As the scan loop's pokemonLanguageOf: one read per model and band, each judged on its
-      // own, and a failed read counts as not told.
+      // As the scan loop's pokemonLanguageOf; a failed read counts as not told.
       const readLanguage = async (): Promise<PokemonTextLanguage> => {
+        if (LIVE) return preset(t)
         if (!textBands.length) return null
         try {
-          const [jpn, eng] = await Promise.all([
-            readTexts(ocr, textBands, 'jpn'),
-            readTexts(ocr, textBands, 'eng')
-          ])
-          texts[t.file] = { eng, jpn }
-          const lang = pokemonLanguageOfBands({ jpn, eng })
+          const heard = { eng: [] as string[], jpn: [] as string[] }
+          const lang = await tellPokemonLanguage(textBands, async (bands, model) => {
+            const read = await readTexts(ocr, bands, model)
+            heard[model].push(...read)
+            return read
+          })
+          texts[t.file] = heard
           language = lang ?? 'null'
           return lang
         } catch {
@@ -251,6 +277,7 @@ describe.skipIf(!READY)('the Pokémon scanner on real photos', () => {
         { ...signalsRead, textBands, cues: null, look: null },
         {
           game: 'pkm',
+          ...(LIVE ? {} : { reprintLead: PKM_PHOTO_REPRINT_LEAD }),
           setName: null,
           setPrintings: null,
           defaultRarity: null,

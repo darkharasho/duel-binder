@@ -55,7 +55,11 @@ export type WorkerRequest =
       wantBands: boolean
       /** Measure the card's look for the rarity look model too (about 3.7 ms more a frame). */
       wantLook: boolean
+      /** A photo: every language's art, the whole holder search, and bands whatever wantBands says. */
+      photo?: true
     }
+  /** Narrows live frames' art search to these artworks, or null for all of it, until told again. */
+  | { type: 'scope'; imageIds: number[] | null }
 
 /** Messages from it: `ready` answers `init`, and an error with no id is init's. */
 export type WorkerReply =
@@ -97,8 +101,10 @@ export interface ScanEngine {
    */
   analyze(
     frame: ImageBitmap | ImageData,
-    opts: { candidates: number[] | null; wantText: boolean; wantLook?: boolean }
+    opts: { candidates: number[] | null; wantText: boolean; wantLook?: boolean; photo?: boolean }
   ): Promise<RawSignals>
+  /** Live frames match only these artworks from now on; null for every one. */
+  scope(imageIds: number[] | null): void
   /** Stops the worker and rejects pending calls; init and analyze reject afterwards. */
   dispose(): void
 }
@@ -115,6 +121,8 @@ interface Waiter<T> {
  */
 const INIT_TIMEOUT_MS = 45_000
 const FRAME_TIMEOUT_MS = 10_000
+/** A photo gets the whole holder search, which a slow phone may spend this long on. */
+const PHOTO_TIMEOUT_MS = 30_000
 
 /** The vision worker, bundled by Vite. */
 export const makeVisionWorker = (): Worker =>
@@ -213,7 +221,11 @@ export function createScanEngine(deps: {
       })
     },
 
-    async analyze(frame, { candidates, wantText, wantLook = false }) {
+    scope(imageIds) {
+      send({ type: 'scope', imageIds })
+    },
+
+    async analyze(frame, { candidates, wantText, wantLook = false, photo = false }) {
       const id = nextId++
       const signals = await new Promise<FrameSignals>((resolve, reject) => {
         const bitmap = !('data' in frame)
@@ -221,10 +233,19 @@ export function createScanEngine(deps: {
           ? frame
           : { width: frame.width, height: frame.height, data: frame.data }
         try {
-          send({ type: 'frame', id, image, candidates, wantBands: wantText, wantLook }, [
-            bitmap ? frame : (frame.data.buffer as ArrayBuffer)
-          ])
-          frames.set(id, watched({ resolve, reject }, frameMs))
+          send(
+            {
+              type: 'frame',
+              id,
+              image,
+              candidates,
+              wantBands: wantText,
+              wantLook,
+              ...(photo ? { photo: true as const } : {})
+            },
+            [bitmap ? frame : (frame.data.buffer as ArrayBuffer)]
+          )
+          frames.set(id, watched({ resolve, reject }, photo ? Math.max(frameMs, PHOTO_TIMEOUT_MS) : frameMs))
         } catch (e) {
           frames.delete(id)
           // Never handed over, so it's still ours to free.

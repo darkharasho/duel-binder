@@ -2,6 +2,7 @@ import type { RefObject } from 'react'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { CardOutline } from './CardOutline'
+import { PhotoButton } from './PhotoButton'
 import { statusText } from './scanText'
 import type { CameraError } from './useCamera'
 import type { ScanLoop } from './useScanLoop'
@@ -59,10 +60,12 @@ export function ScanViewport({
           )}
           <div className="absolute inset-x-0 bottom-0 flex items-center gap-3 bg-black/70 px-4 py-2 text-sm text-white">
             <p role="status">{statusText(loop.status)}</p>
-            {loop.status.kind === 'stopped' && (
+            {loop.status.kind === 'stopped' ? (
               <Button variant="outline" size="xs" className="ml-auto" onClick={loop.retry}>
                 Retry
               </Button>
+            ) : (
+              <PhotoButton status={loop.status} onClick={loop.takePhoto} className="ml-auto" />
             )}
           </div>
         </>

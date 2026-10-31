@@ -6,7 +6,8 @@ import {
   ART_FAR_DISTANCE,
   ART_MAX_DISTANCE,
   PKM_ART_MIN_MARGIN,
-  PKM_GUESS_REPRINT_LEAD
+  PKM_GUESS_REPRINT_LEAD,
+  PKM_PHOTO_REPRINT_LEAD
 } from '@shared/scan/thresholds'
 import { printing } from './scanFakes'
 
@@ -525,7 +526,18 @@ describe('best guesses', () => {
       cardId: 3,
       guess: true
     })
-    expect(await resolveSignals(art(PKM_GUESS_REPRINT_LEAD - 1), guessing('en'))).toEqual(unsure)
+  })
+
+  it('reprint: a photo asks for a lead the live frames do not', async () => {
+    const tied = raw({
+      art: [
+        { imageId: 301, distance: 30 },
+        { imageId: 101, distance: 30 }
+      ]
+    })
+    expect(await recognized(tied, guessing('en'))).toMatchObject({ cardId: 3, guess: true })
+    const photo = { ...guessing('en'), reprintLead: PKM_PHOTO_REPRINT_LEAD }
+    expect((await resolveSignals(tied, photo)).kind).toBe('unsure')
   })
 
   it('reprint: never among cards of different names', async () => {

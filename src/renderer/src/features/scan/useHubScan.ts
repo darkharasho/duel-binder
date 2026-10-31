@@ -2,6 +2,7 @@ import { useEffect, type RefObject } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import type { Language } from '@shared/languages'
 import type { LookModel } from '@shared/scan/look'
+import { liveLanguage } from '@shared/scanWindow'
 import { api } from '@/lib/api'
 import { useGame } from '@/lib/game'
 import type { EngineFactory } from './engine'
@@ -53,6 +54,7 @@ export function useHubScan({
     setKey: scanSet ? `${scanSet.language}|${scanSet.setName}` : ANY,
     setPrintings: scanSet === null ? null : setPrintings.data,
     defaultRarity: settings.defaultRarity,
+    language: game === 'pkm' ? liveLanguage(settings) : null,
     lookModel,
     onDraft: count,
     onStalled

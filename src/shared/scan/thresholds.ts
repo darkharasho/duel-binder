@@ -153,6 +153,8 @@ export const LANGUAGE_MIN_LATIN_CHARS = 8
 export const LANGUAGE_MIN_JA_WORDS = 2
 /** Frames a card's text is read on to tell its language before it's taken in its first one. */
 export const LANGUAGE_MAX_READS = 3
+/** Past LANGUAGE_MAX_READS, frames between further reads of a Pokémon card held in view. */
+export const LANGUAGE_RETRY_FRAMES = 8
 /**
  * Where a Pokémon card that can't be named for certain may be named as a best guess (ScanDraft.guess),
  * by what stood in the way of certainty:
@@ -183,9 +185,15 @@ export const PKM_GUESS_NAME_LIKENESS = 0.5
 /**
  * How much closer the closest reprint's art must be than the next's for the reprint rule to name
  * it. Art hardly tells reprints apart: of 35 guesses, 15 were right with no lead asked, 12 of 30
- * at 2, 9 of 16 at 4.
+ * at 2, 9 of 16 at 4. None is asked: a sleeved card's art often ties its reprints exactly, its
+ * number can't be read, and a flagged guess beats it never counting.
  */
-export const PKM_GUESS_REPRINT_LEAD = 4
+export const PKM_GUESS_REPRINT_LEAD = 0
+/**
+ * The same lead for a photo. It's taken to be sure, with time to read the number instead, and with
+ * no lead it named the right Pokémon's wrong printing three times as often (21 wrong to 7 of 719).
+ */
+export const PKM_PHOTO_REPRINT_LEAD = 1
 /**
  * Consecutive frames a best guess must hold before it counts: past every frame that may still
  * read the language, so a certain answer gets its chance first.
@@ -233,3 +241,9 @@ export const SLAB_TEXT_MIN_FLIPS = 12
  * above it, which is plastic over the desk: a bright desk or a card sleeve's glare isn't a label.
  */
 export const SLAB_MIN_CONTRAST = 40
+
+/** Frames a photo looks at, this far apart, stopping at the first that names a card for certain. */
+export const PHOTO_FRAMES = 3
+export const PHOTO_GAP_MS = 150
+/** After a photo, the live scan counts nothing until the view clears, or this long at most. */
+export const PHOTO_SETTLE_MS = 4000

@@ -1,11 +1,14 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
+import type { TextModel } from '../../src/shared/scan/ocr'
 import {
   pokemonLanguage,
   pokemonLanguageOfBands,
   pokemonLanguageOfReads,
   readsEnglishName,
-  readsJapaneseName
+  readsJapaneseName,
+  tellPokemonLanguage
 } from '../../src/shared/scan/pokemonLanguage'
+import type { OcrBand } from '../../src/shared/scan/types'
 
 describe('pokemonLanguage', () => {
   it.each([
@@ -179,6 +182,32 @@ describe('pokemonLanguageOfBands', () => {
     [{ eng: [], jpn: [] }, null]
   ] as const)('%j → %s', (reads, expected) => {
     expect(pokemonLanguageOfBands({ eng: [...reads.eng], jpn: [...reads.jpn] })).toBe(expected)
+  })
+})
+
+describe('tellPokemonLanguage', () => {
+  const EN = 'Pikachu HP 60 Basic Pokémon Gnaw 10 Weakness Resistance Retreat Cost'
+  const GARBAGE = 'l1 ,. ii'
+  const band = (width: number): OcrBand => ({ width, height: 1, data: new Uint8Array(width) })
+  const reading = (eng: Record<number, string>) =>
+    vi.fn(async (bands: OcrBand[], model: TextModel) =>
+      bands.map((b) => (model === 'eng' ? (eng[b.width] ?? GARBAGE) : GARBAGE))
+    )
+
+  it('leaves the larger band unread once the first tells', async () => {
+    const read = reading({ 1: EN })
+    expect(await tellPokemonLanguage([band(1), band(2)], read)).toBe('en')
+    expect(read.mock.calls.flatMap(([bands]) => bands.map((b) => b.width))).toEqual([1, 1])
+  })
+
+  it('reads the rest when the first tells nothing', async () => {
+    const read = reading({ 2: EN })
+    expect(await tellPokemonLanguage([band(1), band(2)], read)).toBe('en')
+    expect(read).toHaveBeenCalledTimes(4)
+  })
+
+  it('tells nothing when no band does', async () => {
+    expect(await tellPokemonLanguage([band(1)], reading({}))).toBeNull()
   })
 })
 

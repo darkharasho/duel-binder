@@ -61,6 +61,7 @@ export function fakeEngine(frame: (n: number) => RawSignals | Error = () => NOTH
       if (out instanceof Error) throw out
       return opts.wantText ? out : { ...out, codeTexts: [], nameTexts: [] }
     }),
+    scope: vi.fn(),
     dispose: vi.fn()
   } as unknown as FakeEngine
 }

@@ -173,4 +173,20 @@ describe('createShowingTracker', () => {
     expect(run(t, [seen(1), seen(1), ...fars, seen(1), seen(1)])).toEqual([1, 1])
     expect(run(t, [seen(1), FAR, FAR, FAR, seen(1), seen(1)], 5000)).toEqual([])
   })
+
+  it('after settle counts nothing until the view clears', () => {
+    const t = createShowingTracker({ stableFrames: 1, absentMs: 100, settleMs: 5000 })
+    t.settle(0)
+    expect(t.push(10, seen(1))).toBeNull()
+    t.push(20, NONE)
+    t.push(130, NONE)
+    expect(t.push(140, seen(1))?.cardId).toBe(1)
+  })
+
+  it('after settle counts again once settleMs pass, for a view that never clears', () => {
+    const t = createShowingTracker({ stableFrames: 1, absentMs: 100, settleMs: 500 })
+    t.settle(0)
+    expect(t.push(499, seen(2))).toBeNull()
+    expect(t.push(500, seen(2))?.cardId).toBe(2)
+  })
 })

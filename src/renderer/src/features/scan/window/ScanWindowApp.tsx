@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import type { Language } from '@shared/languages'
+import { liveLanguage } from '@shared/scanWindow'
 import { isToScanWindow, type ScanWindowSettings, type ScanWindowState } from '@shared/scanWindow'
 import { api } from '@/lib/api'
 import { GameProvider, useGame } from '@/lib/game'
@@ -84,6 +85,7 @@ function Scanner({
     setKey: scanSet ? `${scanSet.language}|${scanSet.setName}` : ANY,
     setPrintings: scanSet === null ? null : setPrintings.data,
     defaultRarity: settings.defaultRarity,
+    language: game === 'pkm' ? liveLanguage(settings) : null,
     onDraft,
     onStalled: camera.retry
   })
@@ -93,15 +95,16 @@ function Scanner({
   }, [settings.paused, clear])
 
   const { retry: retryCamera } = camera
-  const { retry: retryScan } = loop
+  const { retry: retryScan, takePhoto } = loop
   useEffect(
     () =>
       window.api.scanWindow.onMessage((m) => {
         if (!isToScanWindow(m)) return
         if (m.kind === 'retryCamera') retryCamera()
         else if (m.kind === 'retryScan') retryScan()
+        else if (m.kind === 'takePhoto') takePhoto()
       }),
-    [retryCamera, retryScan]
+    [retryCamera, retryScan, takePhoto]
   )
 
   useEffect(() => {

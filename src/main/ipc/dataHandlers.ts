@@ -14,6 +14,7 @@ import {
 import { adjustPrinting, getChecklist, listSets } from '../repo/sets'
 import {
   cardsForImages,
+  imagesForLanguage,
   matchName,
   printingsByCode,
   printingsByNumber,
@@ -45,6 +46,7 @@ export const DATA_CHANNELS = [
   'scan:printingsForCards',
   'scan:matchName',
   'scan:cardsForImages',
+  'scan:imagesForLanguage',
   'stats:get',
   'sets:list',
   'sets:checklist',
@@ -145,6 +147,8 @@ export function createDataHandlers({
       printingsForSet(db, setName, checkLanguage(language)),
     'scan:printingsForCards': async (cardIds: number[]) => printingsForCards(db, cardIds),
     'scan:matchName': async (text: string) => matchName(db, text),
+    'scan:imagesForLanguage': async (language: Language) =>
+      imagesForLanguage(db, checkLanguage(language)),
     'scan:cardsForImages': async (imageIds: unknown) => {
       if (!Array.isArray(imageIds) || !imageIds.every((i) => Number.isInteger(i)))
         throw new Error('Image ids must be a list of integers')

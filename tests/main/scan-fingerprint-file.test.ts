@@ -45,4 +45,13 @@ describe('DBFP versions', () => {
     bytes[4] = 3
     expect(() => decodeFingerprints(bytes)).toThrow('Not a fingerprint file')
   })
+
+  it('only: the same matches among the kept artworks, with no record of the rest', () => {
+    const entries = [11, 22, 33].map((imageId) => ({ imageId, hash: hashOf(imageId) }))
+    const index = decodeFingerprints(encodeFingerprints(entries))
+    const kept = index.only(new Set([11, 33]))
+    expect(kept.count).toBe(2)
+    expect(kept.nearest(hashOf(22), 3).map((m) => m.imageId).sort()).toEqual([11, 33])
+    expect(kept.nearest(hashOf(33), 1)).toEqual(index.nearest(hashOf(33), 1))
+  })
 })

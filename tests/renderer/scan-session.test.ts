@@ -12,6 +12,7 @@ import { createMockApi } from './mockApi'
 import { fakeEngine, quad, stubVideo, type FakeEngine } from './scanFakes'
 
 const KEY = 'scan.session.v1'
+const ids = (r: Session): string[] => r.rows.map((x) => x.key)
 const opt = (printingId: number, rarity: string): ScanPrinting => ({
   printingId,
   cardId: 1,
@@ -79,16 +80,31 @@ describe('useScanSession', () => {
     expect(printingsForCards).toHaveBeenCalledTimes(1)
   })
 
-  it('merges repeat scans', () => {
+  it('two scans of the same card are two rows', () => {
     const { result } = setup()
     act(() => result.current.add(draft()))
     act(() => result.current.add(draft({ cardId: 2, printingId: 201, imageId: 20 })))
     act(() => result.current.add(draft()))
-    expect(result.current.rows.map((r) => [r.key, r.quantity])).toEqual([
-      ['101:10', 2],
-      ['201:20', 1]
+    expect(result.current.rows.map((r) => [r.printingId, r.quantity])).toEqual([
+      [101, 1],
+      [201, 1],
+      [101, 1]
     ])
+    expect(new Set(ids(result.current)).size).toBe(3)
     expect(result.current.total).toBe(3)
+  })
+
+  it('add returns the key of the new row', () => {
+    const { result } = setup()
+    let first = ''
+    let second = ''
+    act(() => {
+      first = result.current.add(draft())
+      second = result.current.add(draft())
+    })
+    expect(first).not.toBe(second)
+    expect(result.current.rows[0].key).toBe(second)
+    expect(result.current.rows[1].key).toBe(first)
   })
 
   it('persists across remount', () => {
@@ -106,33 +122,52 @@ describe('useScanSession', () => {
     expect(setup().result.current.rows).toEqual([])
   })
 
-  it('rarity change merges rows', () => {
+  it("changing one row's rarity leaves the other alone", () => {
+    const { result } = setup()
+    act(() => result.current.add(draft()))
+    act(() => result.current.add(draft()))
+    const [newer, older] = result.current.rows.map((r) => r.key)
+    act(() => result.current.setPrinting(newer, 102))
+    expect(result.current.rows).toHaveLength(2)
+    expect(result.current.rows[0]).toMatchObject({
+      key: newer,
+      printingId: 102,
+      rarity: 'Rare',
+      flag: null
+    })
+    expect(result.current.rows[1]).toMatchObject({ key: older, printingId: 101, rarity: 'Common' })
+  })
+
+  it('two rows can hold the same printing after an edit', () => {
     const { result } = setup()
     act(() => result.current.add(draft()))
     act(() => result.current.add(draft({ printingId: 102, rarity: 'Rare', flag: null })))
-    expect(result.current.rows).toHaveLength(2)
-    act(() => result.current.setPrinting('101:10', 102))
-    expect(result.current.rows).toHaveLength(1)
-    const row = result.current.rows[0]
-    expect(row).toMatchObject({ key: '102:10', quantity: 2, rarity: 'Rare', flag: null })
+    const [rare, common] = result.current.rows.map((r) => r.key)
+    act(() => result.current.setPrinting(common, 102))
+    expect(result.current.rows.map((r) => [r.key, r.printingId, r.quantity])).toEqual([
+      [rare, 102, 1],
+      [common, 102, 1]
+    ])
   })
 
-  it('a best guess stays marked when merged, and is one no longer once a printing is picked', () => {
+  it('a best guess stays a guess until its printing is picked, and stays its own row', () => {
     const { result } = setup()
     act(() => result.current.add(draft({ flag: null })))
     act(() => result.current.add(draft({ flag: null, guess: true })))
-    expect(result.current.rows).toHaveLength(1)
-    expect(result.current.rows[0]).toMatchObject({ quantity: 2, guess: true })
-    act(() => result.current.setPrinting('101:10', 102))
+    expect(result.current.rows).toHaveLength(2)
+    expect(result.current.rows[0].guess).toBe(true)
+    expect('guess' in result.current.rows[1]).toBe(false)
+    act(() => result.current.setPrinting(result.current.rows[0].key, 102))
     expect('guess' in result.current.rows[0]).toBe(false)
   })
 
   it('setPrinting updates fields, clears flags, ignores unknown printings', () => {
     const { result } = setup()
     act(() => result.current.add(draft({ flag: 'other-set' })))
-    act(() => result.current.setPrinting('101:10', 999))
+    const key = result.current.rows[0].key
+    act(() => result.current.setPrinting(key, 999))
     expect(result.current.rows[0].flag).toBe('other-set')
-    act(() => result.current.setPrinting('101:10', 102))
+    act(() => result.current.setPrinting(key, 102))
     expect(result.current.rows[0]).toMatchObject({
       printingId: 102,
       setCode: 'SET-EN00102',
@@ -144,9 +179,10 @@ describe('useScanSession', () => {
   it('setQuantity below 1 removes the row', () => {
     const { result } = setup()
     act(() => result.current.add(draft()))
-    act(() => result.current.setQuantity('101:10', 4))
+    const key = result.current.rows[0].key
+    act(() => result.current.setQuantity(key, 4))
     expect(result.current.rows[0].quantity).toBe(4)
-    act(() => result.current.setQuantity('101:10', 0))
+    act(() => result.current.setQuantity(key, 0))
     expect(result.current.rows).toEqual([])
   })
 
@@ -164,10 +200,10 @@ describe('useScanSession', () => {
       printingId: 101,
       imageId: 10,
       quantity: 1,
-      requestId: expect.stringMatching(/^101:10@\d+x1$/)
+      requestId: expect.stringMatching(/^101:10#.+@101x1$/)
     })
     expect(result.current.rows).toHaveLength(1)
-    expect(result.current.rows[0]).toMatchObject({ key: '201:20', error: 'boom' })
+    expect(result.current.rows[0]).toMatchObject({ printingId: 201, error: 'boom' })
   })
 
   it('rows needing a printing are not added', async () => {
@@ -179,7 +215,7 @@ describe('useScanSession', () => {
     })
     expect(add).not.toHaveBeenCalled()
     expect(out).toEqual({ added: 0, failed: 0, cards: 0 })
-    expect(result.current.rows[0].key).toBe('c1:10')
+    expect(result.current.rows[0].key).toMatch(/^c1:10#/)
   })
 
   it('a Pokémon row whose version is still to be picked is not added', async () => {
@@ -220,7 +256,7 @@ describe('useScanSession', () => {
     expect(result.current.committing).toBe(false)
   })
 
-  it('keeps scans merged in during a commit', async () => {
+  it('keeps scans made during a commit', async () => {
     let release!: () => void
     const add = vi.fn(() => new Promise<never>((res) => (release = () => res({} as never))))
     const { result } = setup(add)
@@ -238,6 +274,38 @@ describe('useScanSession', () => {
     expect(result.current.rows[0].quantity).toBe(1)
   })
 
+  it('takes off only what was added when the quantity is raised during a commit', async () => {
+    let release!: () => void
+    const add = vi.fn(() => new Promise<never>((res) => (release = () => res({} as never))))
+    const { result } = setup(add)
+    act(() => result.current.add(draft()))
+    const key = result.current.rows[0].key
+    let done!: Promise<unknown>
+    await act(async () => {
+      done = result.current.commit()
+    })
+    act(() => result.current.setQuantity(key, 3))
+    await act(async () => {
+      release()
+      await done
+    })
+    expect(result.current.rows.map((r) => r.quantity)).toEqual([2])
+  })
+
+  it('rows of the same printing are added separately, each under its own id', async () => {
+    const { result, add } = setup()
+    act(() => result.current.add(draft()))
+    act(() => result.current.add(draft()))
+    await act(async () => void (await result.current.commit()))
+    expect(add).toHaveBeenCalledTimes(2)
+    const sent = add.mock.calls.map(
+      (c) => (c as unknown[])[0] as { printingId: number; requestId: string }
+    )
+    expect(sent.map((i) => i.printingId)).toEqual([101, 101])
+    expect(sent[0].requestId).not.toBe(sent[1].requestId)
+    expect(result.current.rows).toEqual([])
+  })
+
   it('names each add after the row as it stands, so a retry of the same row is the same add', async () => {
     const add = vi.fn().mockRejectedValueOnce(new Error('lost reply')).mockResolvedValue({})
     const { result } = setup(add)
@@ -248,9 +316,22 @@ describe('useScanSession', () => {
     expect(ids[0]).toBe(ids[1])
 
     act(() => result.current.add(draft()))
-    act(() => result.current.setQuantity('101:10', 3))
     await act(async () => void (await result.current.commit()))
-    expect((add.mock.calls[2][0] as { requestId: string }).requestId).not.toBe(ids[0])
+    expect(result.current.rows).toEqual([])
+    // A new row of the same printing, and an edit of a failed row, each get another id.
+    const failing = vi.fn().mockRejectedValue(new Error('down'))
+    const again = setup(failing)
+    act(() => again.result.current.add(draft()))
+    act(() => again.result.current.add(draft()))
+    await act(async () => void (await again.result.current.commit()))
+    const same = failing.mock.calls.map(([i]) => (i as { requestId: string }).requestId)
+    expect(same[0]).not.toBe(same[1])
+    act(() => again.result.current.setPrinting(again.result.current.rows[0].key, 102))
+    failing.mockClear()
+    await act(async () => void (await again.result.current.commit()))
+    const after = failing.mock.calls.map(([i]) => (i as { requestId: string }).requestId)
+    expect(after).not.toContain(same[0])
+    expect(after).toContain(same[1])
   })
 
   it("takes up the list another tab saved, so its next change doesn't write over it", () => {
@@ -260,39 +341,46 @@ describe('useScanSession', () => {
       ...JSON.parse(localStorage.getItem(KEY)!),
       {
         ...draft({ cardId: 2, printingId: 201, imageId: 20 }),
-        key: '201:20',
+        key: '201:20#a',
         quantity: 4,
         addedAt: 1
       }
     ]
     localStorage.setItem(KEY, JSON.stringify(other))
     act(() => window.dispatchEvent(new StorageEvent('storage', { key: KEY })))
-    expect(result.current.rows.map((r) => [r.key, r.quantity])).toEqual([
-      ['101:10', 1],
-      ['201:20', 4]
-    ])
+    expect(result.current.rows.map((r) => r.quantity)).toEqual([1, 4])
     act(() => result.current.add(draft()))
     const saved = JSON.parse(localStorage.getItem(KEY)!) as { key: string; quantity: number }[]
-    expect(saved.map((r) => [r.key, r.quantity])).toEqual([
-      ['101:10', 2],
-      ['201:20', 4]
-    ])
+    expect(saved.map((r) => r.quantity)).toEqual([1, 1, 4])
   })
 
   it('ignores non-finite quantities and floors the rest', () => {
     const { result } = setup()
     act(() => result.current.add(draft()))
-    act(() => result.current.setQuantity('101:10', NaN))
+    const key = result.current.rows[0].key
+    act(() => result.current.setQuantity(key, NaN))
     expect(result.current.rows[0].quantity).toBe(1)
-    act(() => result.current.setQuantity('101:10', 2.9))
+    act(() => result.current.setQuantity(key, 2.9))
     expect(result.current.rows[0].quantity).toBe(2)
   })
 
-  it('recomputes keys and drops malformed rows on load', () => {
+  it('recomputes keys of older lists and drops malformed rows on load', () => {
     const good = { ...draft(), key: 'stale', quantity: 1, addedAt: 1 }
     localStorage.setItem(KEY, JSON.stringify([good, { ...good, options: [1] }]))
     const { result } = setup()
     expect(result.current.rows.map((r) => r.key)).toEqual(['101:10'])
+  })
+
+  it('loads an old saved list with its quantities, one row each, and keeps unique keys', () => {
+    const old = { ...draft(), key: '101:10', quantity: 3, addedAt: 1 }
+    const own = { ...draft(), key: '101:10#abc', quantity: 1, addedAt: 2 }
+    localStorage.setItem(KEY, JSON.stringify([old, own]))
+    const { result } = setup()
+    expect(result.current.rows.map((r) => [r.key, r.quantity])).toEqual([
+      ['101:10', 3],
+      ['101:10#abc', 1]
+    ])
+    expect(result.current.total).toBe(4)
   })
 
   it('clear empties storage', () => {

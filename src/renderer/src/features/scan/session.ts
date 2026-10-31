@@ -19,6 +19,13 @@ const STORAGE_KEY = 'scan.session.v1'
 export const rowKey = (d: Pick<ScanDraft, 'printingId' | 'cardId' | 'imageId' | 'game'>): string =>
   `${d.game === 'pkm' ? 'pkm:' : ''}${d.printingId ?? 'c' + d.cardId}:${d.imageId}`
 
+/** A fresh id, made without crypto.randomUUID where it is missing (insecure pages). */
+function uniqueId(): string {
+  return typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function'
+    ? crypto.randomUUID()
+    : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`
+}
+
 /** Rows saved before a second game had no game: they're Yu-Gi-Oh's. */
 const inGame = (r: ScanRow, game: GameId): boolean => (r.game ?? 'ygo') === game
 
@@ -39,7 +46,12 @@ const isRow = (v: unknown): v is ScanRow => {
 function load(): ScanRow[] {
   try {
     const parsed: unknown = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '[]')
-    return Array.isArray(parsed) ? parsed.filter(isRow).map((r) => ({ ...r, key: rowKey(r) })) : []
+    return Array.isArray(parsed)
+      ? parsed
+          .filter(isRow)
+          // A key with '#' is already one row's own; older lists had one row per printing.
+          .map((r) => (r.key.includes('#') ? r : { ...r, key: rowKey(r) }))
+      : []
   } catch {
     return []
   }
@@ -79,7 +91,8 @@ export function useScanSession(game: GameId = 'ygo'): {
   rows: ScanRow[]
   total: number
   committing: boolean
-  add(d: ScanDraft): void
+  /** Adds a row of its own (never merged into another) and returns its key. */
+  add(d: ScanDraft): string
   setPrinting(key: string, printingId: number): void
   setQuantity(key: string, q: number): void
   remove(key: string): void
@@ -120,21 +133,12 @@ export function useScanSession(game: GameId = 'ygo'): {
   }, [])
 
   const add = useCallback(
-    (d: ScanDraft): void =>
-      update((list) => {
-        const key = rowKey(d)
-        const existing = list.find((r) => r.key === key)
-        const row: ScanRow = existing
-          ? {
-              ...existing,
-              ...(d.guess ? { guess: true as const } : {}),
-              quantity: existing.quantity + 1,
-              addedAt: Date.now(),
-              error: undefined
-            }
-          : { ...d, key, quantity: 1, addedAt: Date.now() }
-        return [row, ...list.filter((r) => r.key !== key)]
-      }),
+    (d: ScanDraft): string => {
+      // Every scan is its own row, so a wrong rarity on one can be changed without the others.
+      const key = `${rowKey(d)}#${uniqueId()}`
+      update((list) => [{ ...d, key, quantity: 1, addedAt: Date.now() }, ...list])
+      return key
+    },
     [update]
   )
 
@@ -154,12 +158,7 @@ export function useScanSession(game: GameId = 'ygo'): {
         }
         // Choosing is looking at it, so a guess is one no longer.
         delete next.guess
-        next.key = rowKey(next)
-        if (next.key === key) return list.map((r) => (r.key === key ? next : r))
-        const twin = list.find((r) => r.key === next.key)
-        if (!twin) return list.map((r) => (r.key === key ? next : r))
-        const merged = { ...twin, quantity: twin.quantity + row.quantity }
-        return list.filter((r) => r.key !== key).map((r) => (r.key === twin.key ? merged : r))
+        return list.map((r) => (r.key === key ? next : r))
       }),
     [update]
   )
@@ -239,14 +238,15 @@ export function useScanSession(game: GameId = 'ygo'): {
             imageId: row.imageId,
             quantity: row.quantity,
             // This row as it stands: if the add landed but its reply didn't (the page reloaded
-            // mid-Add), adding it again is answered without adding the copies twice. A scan or
-            // edit since changes the row, and so the id.
-            requestId: `${row.key}@${row.addedAt}x${row.quantity}`
+            // mid-Add), adding it again is answered without adding the copies twice. An edit
+            // since (printing or quantity) changes the id. Same-printing rows add separately and
+            // the collection combines them.
+            requestId: `${row.key}@${row.printingId}x${row.quantity}`
           })
           added++
           cards += row.quantity
           track('scan:add')
-          // Scans merged in meanwhile stay: take off only what was added.
+          // The quantity may have been raised meanwhile: take off only what was added.
           update((list) =>
             list.flatMap((r) =>
               r.key !== row.key
@@ -266,7 +266,7 @@ export function useScanSession(game: GameId = 'ygo'): {
       committingRef.current = false
       setCommitting(false)
     }
-    // A clean Add leaves an empty list: rows with no printing go too. Scans merged in meanwhile stay.
+    // A clean Add leaves an empty list: rows with no printing go too. Rows scanned meanwhile stay.
     if (added > 0 && failed === 0) update((list) => list.filter((r) => !unaddable.has(r.key)))
     if (added > 0) {
       for (const queryKey of mutationInvalidationKeys) void qc.invalidateQueries({ queryKey })

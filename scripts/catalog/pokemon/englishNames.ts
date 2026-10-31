@@ -19,6 +19,8 @@ export type NamedBy = 'pair' | 'species' | 'energy'
 export interface EnglishNamer {
   /** The English name of a Japanese card, or null when none can be found. */
   nameOf(card: TdCard): { name: string; by: NamedBy } | null
+  /** The English species of a card of one Pokémon, by its `dexId`, or null. */
+  speciesOf(card: TdCard): string | null
 }
 
 /** NFKC folds full-width letters and brackets ("ＧＸ", "（") to their plain forms. */
@@ -30,7 +32,8 @@ const EN_SUFFIX =
 const EN_PREFIX =
   /^(?:Dark|Light|Shining|Radiant|M|Mega|Alolan|Galarian|Hisuian|Paldean|Team Rocket's|Team Aqua's|Team Magma's|Holon's|[A-Z][\w.-]*(?: [A-Z][\w.-]*)?'s) /
 
-function baseEnglish(name: string): string {
+/** An English card name without its suffixes and prefixes ("Dark Golbat ex" → "Golbat"). */
+export function baseEnglish(name: string): string {
   let n = fold(name)
   for (let prev = ''; prev !== n;) {
     prev = n
@@ -358,6 +361,7 @@ export function englishNamer(
   }
 
   return {
+    speciesOf: (card) => (card.dexId?.length === 1 ? (species.get(card.dexId[0]) ?? null) : null),
     nameOf(card) {
       const ja = fold(card.name)
       if (!hasNativeScript(ja)) return null

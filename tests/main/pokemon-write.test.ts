@@ -646,3 +646,76 @@ describe('Japanese card English names', () => {
     }
   })
 })
+
+describe('art', () => {
+  let db: Database.Database
+  beforeEach(() => {
+    db = openDatabase(':memory:')
+  })
+  afterEach(() => db.close())
+
+  const noImage = (_l: PkmLang, c: TdCard): TdCard =>
+    c.id === 'sv01-001'
+      ? { ...c, image: undefined, thirdParty: undefined, variants_detailed: undefined }
+      : c
+  const url = (id: number): string => `https://tcgplayer-cdn.tcgplayer.com/product/${id}_200w.jpg`
+  const stored = (id: string): string | null =>
+    (
+      db.prepare('SELECT image_url FROM pokemon_cards WHERE source_id = ?').get(id) as {
+        image_url: string | null
+      }
+    ).image_url
+
+  const misty = (l: PkmLang, c: TdCard): TdCard =>
+    c.id === 'sv01-001' ? { ...noImage(l, c), name: 'Misty' } : c
+  const opts = { langs: ['en'] as PkmLang[], now: clock('2026-10-29T03:00:00.000Z') }
+  const put = (id: number): void => {
+    db.prepare('UPDATE pokemon_cards SET image_url = ? WHERE source_id = ?').run(
+      url(id),
+      'en/sv01-001'
+    )
+  }
+
+  it("leaves a card without art rather than take another card's", async () => {
+    const reports = await refreshPokemon(db, fixtureSources({ card: misty }), opts)
+    expect(stored('en/sv01-001')).toBeNull()
+    expect(reports[0].artFilled).toBe(0)
+    expect(reports[0].artMissing).toEqual({ 'no name': 1 })
+    expect(reports[0].problems.some((p) => p.includes('sv01-001'))).toBe(true)
+  })
+
+  it('fills a card two products of its number left unmatched', async () => {
+    const reports = await refreshPokemon(
+      db,
+      fixtureSources({
+        card: noImage,
+        products: (_l, g, p) =>
+          g === 22873
+            ? [...p, { productId: 999, groupId: g, name: 'Pineco (Stamped)', number: '001/198' }]
+            : p
+      }),
+      opts
+    )
+    expect(stored('en/sv01-001')).toBe(url(487828))
+    expect(reports[0].artFilled).toBe(1)
+    expect(reports[0].artMissing).toEqual({})
+  })
+
+  it('takes a stored image off a card when its product names another card', async () => {
+    await refreshPokemon(db, fixtureSources({ card: misty }), opts)
+    put(487831)
+    const reports = await refreshPokemon(db, fixtureSources({ card: misty }), opts)
+    expect(stored('en/sv01-001')).toBeNull()
+    expect(reports[0].artRemoved).toBe(1)
+  })
+
+  it('keeps a stored image of the card, and one of a product no longer listed', async () => {
+    await refreshPokemon(db, fixtureSources({ card: noImage }), opts)
+    put(487828)
+    await refreshPokemon(db, fixtureSources({ card: noImage }), opts)
+    expect(stored('en/sv01-001')).toBe(url(487828))
+    put(1)
+    await refreshPokemon(db, fixtureSources({ card: noImage }), opts)
+    expect(stored('en/sv01-001')).toBe(url(1))
+  })
+})

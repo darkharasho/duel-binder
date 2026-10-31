@@ -441,6 +441,38 @@ describe('fingerprintSource', () => {
 })
 
 describe('buildFingerprints for Pokémon', () => {
+  it('drops the hash of art taken off a card', async () => {
+    const cardId = pokemonId('en/30th-c-005')
+    const imageId = pokemonId('en/30th-c-005#img')
+    work
+      .prepare(
+        `INSERT INTO cards (id, name, type, frame_type, race, "desc", updated_at, game)
+         VALUES (?, 'Misty', 'Trainer', 'pokemon', '', '', '2026-01-01', 'pkm')`
+      )
+      .run(cardId)
+    work
+      .prepare(
+        "INSERT INTO card_images (image_id, card_id, sort_order, game) VALUES (?, ?, 0, 'pkm')"
+      )
+      .run(imageId, cardId)
+    work
+      .prepare(
+        `INSERT INTO pokemon_cards (card_id, category, source_id, image_url) VALUES (?, 'Trainer', ?, ?)`
+      )
+      .run(cardId, 'en/30th-c-005', 'https://assets.tcgdex.net/en/me/30th-c/005')
+    const fetchFn = (async () => new Response(jpeg(false) as BodyInit)) as typeof fetch
+    const build = (): ReturnType<typeof buildFingerprints> =>
+      buildFingerprints({
+        work,
+        cachePath: join(dir, 'fingerprints-pkm.sqlite'),
+        fetch: fetchFn,
+        game: 'pkm'
+      })
+    expect(await build()).toMatchObject({ count: 1, fetched: 1 })
+    work.prepare('UPDATE pokemon_cards SET image_url = NULL WHERE card_id = ?').run(cardId)
+    expect(await build()).toMatchObject({ count: 0, fetched: 0 })
+  })
+
   it('pkm build hashes full-card art and writes v2', async () => {
     const sources = ['en/sv03-045', 'ja/SV1S-001']
     const bases = [

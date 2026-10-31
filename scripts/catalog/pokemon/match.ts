@@ -1,3 +1,4 @@
+import { baseEnglish } from './englishNames'
 import type { TcGroup, TcProduct, TdCard, TdSet } from './types'
 import { versionSubtype } from './versions'
 
@@ -98,20 +99,76 @@ function sameNumber(localId: string, number: string): boolean {
   return localId.trim() === numberPart(number)
 }
 
+/** A name without its number tail or notes; both spellings occur ("Muk - 004/092", "Muk -004/092"). */
+const namePart = (name: string): string =>
+  name.replace(/\s+-\s*\S*\d.*$/, '').replace(/\s+-\s.*$/, '').replace(/\s*[([].*$/, '')
+
+/** A card name for comparing: no number tail or notes, no accents, case or punctuation. */
+function plainName(name: string): string {
+  return namePart(name)
+    .normalize('NFKD')
+    .replace(/\p{M}/gu, '')
+    .replace(/☆/g, ' star')
+    .replace(/δ/g, '')
+    .toLowerCase()
+    .replace(/[^\p{L}\p{N}]+/gu, '')
+}
+
+/**
+ * Whether a product names the card: the same name, or the same base name (a Japanese card's English
+ * name is built from its species, and may lack a product's "Dark" or owner).
+ */
+export function sameCardName(cardName: string, productName: string): boolean {
+  const a = plainName(cardName)
+  const b = plainName(productName)
+  if (!a || !b) return false
+  if (a === b) return true
+  const c = plainName(baseEnglish(namePart(cardName)))
+  return c !== '' && c === plainName(baseEnglish(namePart(productName)))
+}
+
+/** A printed number as a letter prefix and a value: "BW04" and "BW004" are one number. */
+const PREFIXED_RE = /^([a-z]+)0*(\d+)([a-z]*)$/i
+
+/**
+ * Whether a card's localId and a product's Number are one number, more loosely than sameNumber: art
+ * only, with the name also compared. TCGdex url-encodes a few ids ("%3F" for the Unown "?").
+ */
+export function isSameNumber(localId: string, number: string): boolean {
+  let id = localId
+  try {
+    id = decodeURIComponent(localId)
+  } catch {
+    // Not encoded: a "%" of its own.
+  }
+  if (sameNumber(id, number)) return true
+  const a = PREFIXED_RE.exec(id.trim())
+  const b = PREFIXED_RE.exec(numberPart(number))
+  return (
+    !!a && !!b &&
+    a[1].toLowerCase() === b[1].toLowerCase() &&
+    parseInt(a[2], 10) === parseInt(b[2], 10) &&
+    a[3].toLowerCase() === b[3].toLowerCase()
+  )
+}
+
 export interface MatchedProduct { product: TcProduct; variantSubtype: string | null }
 
 /**
  * The TCGplayer products of a card. Its TCGdex ids are used first: the variants' ids (each with the
  * variant's version subtype, see versionSubtype), and the card-level id only when no variant carries one. A card with no ids is
  * matched by number within its set's group (`products`), only when exactly one product has that
- * number. A product whose Number disagrees with the card's localId, or that is in no product list, is
+ * number and, with `checkName` (English cards: a Japanese card's name can't be compared), that
+ * product is named as the card; a group can number on its own, the 30th Classic Collection with the
+ * reprinted cards' numbers. A product whose Number disagrees with the card's localId, or that is in no product list, is
  * dropped and reported.
  */
 export function matchProducts(
   card: TdCard,
   groupId: number | null,
   products: TcProduct[],
-  productById: Map<number, TcProduct>
+  productById: Map<number, TcProduct>,
+  checkName = false
 ): { products: MatchedProduct[]; problems: string[] } {
   const problems: string[] = []
   const fromVariants = variantIds(card)
@@ -122,7 +179,12 @@ export function matchProducts(
     const hits = products.filter(
       (p) => p.groupId === groupId && p.number !== null && sameNumber(card.localId, p.number)
     )
-    return { products: hits.length === 1 ? [{ product: hits[0], variantSubtype: null }] : [], problems }
+    if (hits.length !== 1) return { products: [], problems }
+    if (checkName && !sameCardName(card.name, hits[0].name)) {
+      problems.push(`${card.id}: product ${hits[0].productId} is "${hits[0].name}"; rejected`)
+      return { products: [], problems }
+    }
+    return { products: [{ product: hits[0], variantSubtype: null }], problems }
   }
 
   const out: MatchedProduct[] = []

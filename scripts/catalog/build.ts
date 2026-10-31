@@ -3,7 +3,7 @@
  * desktop app does, uploads what changed since catalog-work/base.sqlite (the last snapshot the
  * portal accepted), then makes work the new base.
  *
- *   npm run catalog:job [-- --full | --dry-run | --allow-shrink | --refresh-sets | --refresh-cards | --no-pokemon]
+ *   npm run catalog:job [-- --full | --dry-run | --allow-shrink | --refresh-sets | --refresh-cards | --no-pokemon | --stage <name>]
  *
  * Env: PORTAL_URL, PORTAL_ADMIN_TOKEN (not needed for --dry-run). --full ignores the base and
  * uploads every row; --dry-run refreshes and prints per-table counts without uploading or
@@ -15,8 +15,11 @@
  * the accuracy gate (see accuracy.ts), which is held back while clients keep the last one. Each
  * game has its own fingerprint file and gate: Pokémon's is built after Yu-Gi-Oh's (not with
  * --no-pokemon, nor before the catalog has Pokémon cards) and held back on its own.
+ *
+ * --stage runs one stage of the job, which is how the workflow calls it: each stage is a step there,
+ * and its problems fail the run at the end, after the other stages, as they do here.
  */
-import { existsSync, mkdirSync, renameSync, rmSync } from 'node:fs'
+import { appendFileSync, existsSync, mkdirSync, renameSync, rmSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { pathToFileURL } from 'node:url'
 import type Database from 'better-sqlite3'
@@ -65,6 +68,8 @@ export interface JobOptions {
    * `warmSetArt` against the portal, one image a second.
    */
   warmSetArt?: typeof warmSetArt
+  /** Runs one stage instead of them all (--stage): each is its own step in the workflow. */
+  stage?: Stage
   /** Leaves the Pokémon step out (--no-pokemon). */
   skipPokemon?: boolean
   /** Uploads deletes beyond the shrink limit. */
@@ -155,9 +160,14 @@ export function newSetArtKeys(work: Database.Database, base: Database.Database |
   return keys(work).filter((k) => !old.has(k))
 }
 
+/** In run order. They hand over through the files in `dir`, so one can start where the last stopped. */
+export const STAGES = ['ygo', 'pokemon', 'upload', 'fingerprints-ygo', 'fingerprints-pkm'] as const
+export type Stage = (typeof STAGES)[number]
+
 export async function runJob(opts: JobOptions): Promise<JobResult> {
   const log = opts.log ?? ((line: string): void => console.log(line))
   const { url, token } = opts
+  const on = (s: Stage): boolean => !opts.stage || opts.stage === s
   const problems: string[] = []
   const problem = (p: string): void => {
     problems.push(p)
@@ -166,6 +176,7 @@ export async function runJob(opts: JobOptions): Promise<JobResult> {
   if (!opts.dryRun && (!url || !token)) {
     throw new Error('PORTAL_URL and PORTAL_ADMIN_TOKEN must both be set (or pass --dry-run)')
   }
+  if (opts.dryRun && opts.stage) throw new Error('--dry-run runs every stage, so it takes no --stage')
   const refresh =
     opts.refresh ??
     ((work: Database.Database, onProblem: (p: string) => void) =>
@@ -250,9 +261,8 @@ export async function runJob(opts: JobOptions): Promise<JobResult> {
       problem(`Fingerprint refs failed: ${e instanceof Error ? e.message : e}`)
     }
   }
-  /** Yu-Gi-Oh's file, then Pokémon's once the catalog has Pokémon cards (and it isn't skipped). */
-  const fingerprints = async (upload: boolean): Promise<void> => {
-    await fingerprint(upload, 'ygo')
+  /** Pokémon's file, once the catalog has Pokémon cards (and it isn't skipped). */
+  const pokemonFingerprints = async (upload: boolean): Promise<void> => {
     if (opts.skipPokemon) return
     if (!work.prepare("SELECT 1 FROM card_images WHERE game = 'pkm' LIMIT 1").get()) {
       log('Pokémon fingerprints: no Pokémon cards yet')
@@ -261,10 +271,12 @@ export async function runJob(opts: JobOptions): Promise<JobResult> {
     await fingerprint(upload, 'pkm')
   }
   try {
-    if (opts.refreshSets) deleteMeta(work, 'intl_sets_synced_at')
-    if (opts.refreshCards) deleteMeta(work, 'last_sync_at')
-    await refresh(work, problem)
-    if (!opts.skipPokemon) {
+    if (on('ygo')) {
+      if (opts.refreshSets) deleteMeta(work, 'intl_sets_synced_at')
+      if (opts.refreshCards) deleteMeta(work, 'last_sync_at')
+      await refresh(work, problem)
+    }
+    if (on('pokemon') && !opts.skipPokemon) {
       const step =
         opts.pokemon ??
         (async (w: Database.Database) => {
@@ -282,6 +294,11 @@ export async function runJob(opts: JobOptions): Promise<JobResult> {
       const out = await step(work)
       if (out.error !== null) problem(`Pokémon refresh skipped: ${out.error}`)
       logPokemon(out.reports, log)
+    }
+    if (opts.stage && !on('upload')) {
+      if (on('fingerprints-ygo')) await fingerprint(true, 'ygo')
+      if (on('fingerprints-pkm')) await pokemonFingerprints(true)
+      return { counts: null, uploaded: null, problems }
     }
     base = !opts.full && existsSync(basePath) ? openDatabase(basePath) : null
     log(base ? 'Diffing against the last uploaded snapshot' : 'No base snapshot: every row is new')
@@ -308,7 +325,8 @@ export async function runJob(opts: JobOptions): Promise<JobResult> {
           log(`${name}: ${upserts} upserts, ${lost[game] ?? 0} deletes`)
         }
       }
-      await fingerprints(false)
+      await fingerprint(false, 'ygo')
+      await pokemonFingerprints(false)
       return { counts, uploaded: null, problems }
     }
 
@@ -343,7 +361,10 @@ export async function runJob(opts: JobOptions): Promise<JobResult> {
     rmSync(`${basePath}-wal`, { force: true })
     rmSync(`${basePath}-shm`, { force: true })
     renameSync(tmpPath, basePath)
-    await fingerprints(true)
+    if (!opts.stage) {
+      await fingerprint(true, 'ygo')
+      await pokemonFingerprints(true)
+    }
     return { counts: null, uploaded, problems }
   } finally {
     base?.close()
@@ -355,6 +376,9 @@ export async function runJob(opts: JobOptions): Promise<JobResult> {
 async function main(): Promise<void> {
   const args = process.argv.slice(2)
   const flags = ['--full', '--dry-run', '--allow-shrink', '--refresh-sets', '--refresh-cards', '--no-pokemon']
+  const at = args.indexOf('--stage')
+  const stage = at < 0 ? undefined : (args.splice(at, 2)[1] as Stage)
+  if (at >= 0 && !STAGES.includes(stage!)) throw new Error(`--stage takes one of: ${STAGES.join(' ')}`)
   const unknown = args.filter((a) => !flags.includes(a))
   if (unknown.length > 0) throw new Error(`Unknown argument(s): ${unknown.join(' ')}`)
   const { problems } = await runJob({
@@ -366,10 +390,15 @@ async function main(): Promise<void> {
     allowShrink: args.includes('--allow-shrink'),
     refreshSets: args.includes('--refresh-sets'),
     refreshCards: args.includes('--refresh-cards'),
-    skipPokemon: args.includes('--no-pokemon')
+    skipPokemon: args.includes('--no-pokemon'),
+    stage
   })
   for (const p of problems) console.log(`::error::${p}`)
-  if (problems.length > 0) process.exitCode = 1
+  if (problems.length === 0) return
+  // A problem doesn't stop the stages after it: the workflow fails on it once they have all run.
+  const env = stage && process.env['GITHUB_ENV']
+  if (env) appendFileSync(env, 'CATALOG_PROBLEMS=1\n')
+  else process.exitCode = 1
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {

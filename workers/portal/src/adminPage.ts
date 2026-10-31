@@ -51,6 +51,10 @@ th:first-child{text-align:left}
 .run .state.good{color:#6fcf8e}
 .run .state.bad{color:#ef7d73}
 .run .state.live{color:var(--accent)}
+.steps{margin:6px 0 0;padding:0;list-style:none;font-size:12px;color:var(--muted)}
+.steps li{display:flex;justify-content:space-between;gap:12px;padding:2px 0}
+.steps li.live{color:var(--fg)}
+.steps li.bad{color:#ef7d73}
 [hidden]{display:none!important}
 `
 
@@ -187,7 +191,10 @@ async function load() {
 }
 
 const RUNS = 'https://api.github.com/repos/darkharasho/duel-binder/actions'
-const WATCHED = [['Catalog', 'catalog.yml'], ['Release', 'release.yml']]
+// The third value lists the run's steps; Release is several jobs, so only its progress shows.
+const WATCHED = [['Catalog', 'catalog.yml', true], ['Release', 'release.yml', false]]
+// GitHub's own bookkeeping, which says nothing about the job.
+const PLUMBING = /^(Set up job|Complete job|Post |Run actions[/]|Check portal settings)/
 const POLL_MS = 120000
 const STATES = { success: ['Passed', 'good'], failure: ['Failed', 'bad'], cancelled: ['Cancelled', 'bad'], timed_out: ['Timed out', 'bad'] }
 const TRIGGERS = { schedule: 'nightly', workflow_dispatch: 'manual', push: 'tag' }
@@ -221,7 +228,29 @@ function stateOf(r) {
   return STATES[r.conclusion] ?? [r.conclusion ?? 'Finished', '']
 }
 
-function runRow(name, r, usual, jobs) {
+const seconds = (ms) => ms < 60000 ? Math.max(1, Math.round(ms / 1000)) + ' s' : minutes(ms)
+
+/** What a step's row says on its right, and how it's coloured. */
+function stepState(s) {
+  if (s.status === 'in_progress') return [s.started_at ? seconds(Date.now() - new Date(s.started_at).getTime()) + ' so far' : 'running', 'live']
+  if (s.status !== 'completed') return ['waiting', '']
+  if (s.conclusion === 'skipped') return ['skipped', '']
+  const time = s.started_at && s.completed_at ? seconds(new Date(s.completed_at) - new Date(s.started_at)) : 'done'
+  return s.conclusion === 'success' ? [time, ''] : [(STATES[s.conclusion]?.[0] ?? s.conclusion) + ' · ' + time, 'bad']
+}
+
+function stepList(jobs) {
+  const list = el('ul', null, 'steps')
+  for (const s of jobs.flatMap((j) => j.steps ?? []).filter((s) => !PLUMBING.test(s.name))) {
+    const [said, cls] = stepState(s)
+    const item = el('li', null, cls)
+    item.append(el('span', s.name), el('span', said))
+    list.append(item)
+  }
+  return list
+}
+
+function runRow(name, r, usual, jobs, listed) {
   const row = el('div', null, 'run')
   const line = el('div', null, 'line')
   const link = el('a', name)
@@ -233,7 +262,10 @@ function runRow(name, r, usual, jobs) {
   line.append(link, el('span', label, 'state ' + cls),
     el('span', (TRIGGERS[r.event] ?? r.event) + ' · ' + when + (isLive(r) ? '' : ' · ' + minutes(took(r))), 'at'))
   row.append(line)
-  if (r.status !== 'in_progress') return row
+  if (r.status !== 'in_progress') {
+    if (listed && jobs) row.append(stepList(jobs))
+    return row
+  }
 
   const elapsed = Date.now() - started(r)
   const steps = (jobs ?? []).flatMap((j) => j.steps ?? [])
@@ -248,6 +280,7 @@ function runRow(name, r, usual, jobs) {
   const left = usual && elapsed < usual ? ', about ' + minutes(usual - elapsed) + ' left' : ''
   const step = current ? current.name + ' (step ' + (finished + 1) + ' of ' + steps.length + ') · ' : ''
   row.append(bar, el('p', step + minutes(elapsed) + ' so far' + left, 'note'))
+  if (listed && jobs) row.append(stepList(jobs))
   return row
 }
 
@@ -258,16 +291,17 @@ async function loadRuns() {
   let live = false
   try {
     const lists = await Promise.all(WATCHED.map(([, file]) => gh('/workflows/' + file + '/runs?per_page=6')))
-    for (const [i, [name]] of WATCHED.entries()) {
+    for (const [i, [name, , listed]] of WATCHED.entries()) {
       const runs = lists[i].workflow_runs
       const usual = typical(runs)
       const shown = runs.filter(isLive)
       const last = runs.find((r) => !isLive(r))
       if (last) shown.push(last)
       for (const r of shown) {
-        const jobs = r.status === 'in_progress' ? (await gh('/runs/' + r.id + '/jobs')).jobs : null
+        const wanted = r.status === 'in_progress' || (listed && !isLive(r))
+        const jobs = wanted ? (await gh('/runs/' + r.id + '/jobs')).jobs : null
         live ||= isLive(r)
-        box.append(runRow(name, r, usual, jobs))
+        box.append(runRow(name, r, usual, jobs, listed))
       }
     }
     box.append(el('p', live ? 'Updates every 2 minutes while something runs.' : 'Nothing running.', 'note'))

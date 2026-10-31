@@ -67,8 +67,9 @@ describe('wishlist repo', () => {
   })
 
   it('migration 25 follows 24 and stays desktop-only', () => {
-    expect(MIGRATIONS.at(-1)).toMatchObject({ version: 25, server: false })
-    expect(MIGRATIONS.at(-2)?.version).toBe(24)
+    const at = MIGRATIONS.findIndex((m) => m.version === 25)
+    expect(MIGRATIONS[at]).toMatchObject({ version: 25, server: false })
+    expect(MIGRATIONS[at - 1]?.version).toBe(24)
   })
 
   it('lists a wanted printing with its card, art and price', () => {

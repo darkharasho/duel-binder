@@ -8,7 +8,7 @@ import {
   SCRYDEX_IMAGE_PREFIX
 } from '../../../src/shared/imageSources'
 import { REPO_URL } from './http'
-import type { PkmLang } from './types'
+import type { TdLang } from './types'
 import { setImageKey } from './write'
 
 /**
@@ -36,7 +36,7 @@ const TIMEOUT_MS = 30_000
 const MAX_PAGES = 40
 
 /** The category trees each language's packs are filed under ('flat': files only, no subcategories). */
-const CATEGORIES: { lang: PkmLang; title: string; flat?: true }[] = [
+const CATEGORIES: { lang: TdLang; title: string; flat?: true }[] = [
   { lang: 'en', title: 'Category:English TCG packs' },
   { lang: 'ja', title: 'Category:Japanese TCG packs' },
   // Most Japanese packs sit in the parent category, beside other languages' (filtered out below).
@@ -59,10 +59,10 @@ export interface SetRow {
 }
 
 export interface SetArtReport {
-  packs: Record<PkmLang, { matched: number; sets: number; unmatchedSets: string[] }>
+  packs: Record<TdLang, { matched: number; sets: number; unmatchedSets: string[] }>
   logos: { matched: number; missing: number; unmatchedSets: string[] }
   /** Pack files that named no set we have, per language (for the dry run). */
-  unmatchedFiles: Record<PkmLang, string[]>
+  unmatchedFiles: Record<TdLang, string[]>
   problems: string[]
 }
 
@@ -333,7 +333,7 @@ export function matchJapaneseFile(
  * every one kept is a design the set came in.
  */
 export function matchPacks(
-  lang: PkmLang,
+  lang: TdLang,
   files: ArchiveFile[],
   sets: SetRow[]
 ): { art: Map<string, ArchiveFile[]>; unmatchedFiles: string[] } {
@@ -462,7 +462,7 @@ export interface SetArtOpts {
   retryDelayMs?: number
 }
 
-const setsOf = (db: Database.Database, lang: PkmLang): SetRow[] =>
+const setsOf = (db: Database.Database, lang: TdLang): SetRow[] =>
   db
     .prepare(
       "SELECT set_name, set_code, image_key, image_url FROM sets WHERE game = 'pkm' AND language = ? ORDER BY set_name"
@@ -494,7 +494,7 @@ export async function refreshPokemonSetArt(
 
   let packs: Map<string, ArchiveFile[]>[] | null = null
   try {
-    const files: Record<PkmLang, ArchiveFile[]> = { en: [], ja: [] }
+    const files: Record<TdLang, ArchiveFile[]> = { en: [], ja: [] }
     let first = true
     for (const c of CATEGORIES) {
       if (!first) await (opts.pause ?? (() => sleep(BULBAGARDEN_GAP_MS)))()

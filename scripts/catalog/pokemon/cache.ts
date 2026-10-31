@@ -1,11 +1,11 @@
 import Database from 'better-sqlite3'
-import type { PkmLang, TdCard } from './types'
+import type { TdLang, TdCard } from './types'
 
 export const CARD_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000
 
 export interface CardCache {
-  get(lang: PkmLang, id: string): { card: TdCard; fetchedAt: number } | null
-  put(lang: PkmLang, id: string, card: TdCard, fetchedAt: number): void
+  get(lang: TdLang, id: string): { card: TdCard; fetchedAt: number } | null
+  put(lang: TdLang, id: string, card: TdCard, fetchedAt: number): void
   close(): void
 }
 

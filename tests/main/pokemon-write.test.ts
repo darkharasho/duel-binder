@@ -19,7 +19,7 @@ import type {
 
 const FIX = join(__dirname, '..', 'fixtures', 'pokemon')
 const read = <T>(p: string): T => JSON.parse(readFileSync(join(FIX, p), 'utf8')) as T
-const CAT: Record<PkmLang, string> = { en: '3', ja: '85' }
+const CAT: Record<'en' | 'ja', string> = { en: '3', ja: '85' }
 
 interface Tweaks {
   set?: (lang: PkmLang, s: TdSet) => TdSet
@@ -36,6 +36,7 @@ function fixtureSources(t: Tweaks = {}): PokemonSources & { calls: string[] } {
     calls,
     async sets(lang) {
       calls.push(`sets ${lang}`)
+      if (lang === 'zh-hans') return []
       return readdirSync(join(FIX, lang))
         .filter((f) => f.startsWith('set-'))
         .map((f) => read<TdSet>(`${lang}/${f}`))
@@ -48,6 +49,7 @@ function fixtureSources(t: Tweaks = {}): PokemonSources & { calls: string[] } {
         .map((c) => (t.card ? t.card(lang, c) : c))
     },
     async groups(lang) {
+      if (lang === 'zh-hans') return []
       calls.push(`groups ${lang}`)
       const g = read<{
         results: { groupId: number; name: string; abbreviation?: string | null }[]
@@ -551,7 +553,7 @@ describe('runPokemonStep', () => {
         sources: fixtureSources()
       })
       expect(out.error).toBeNull()
-      expect(out.reports.map((r) => r.lang)).toEqual(['en', 'ja'])
+      expect(out.reports.map((r) => r.lang)).toEqual(['en', 'ja', 'zh-hans'])
     } finally {
       db.close()
     }

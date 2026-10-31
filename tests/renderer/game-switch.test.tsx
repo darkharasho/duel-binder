@@ -291,7 +291,7 @@ describe('per-game filters and words', () => {
     expect(await fact('Type')).toHaveTextContent('Grass, Fighting')
     expect(await fact('Stage')).toHaveTextContent('Basic')
     expect(await fact('Rarity')).toHaveTextContent('Common')
-    expect(await fact('Japanese name')).toHaveTextContent('マツボックリ')
+    expect(await fact('Local name')).toHaveTextContent('マツボックリ')
     expect(await fact('Version')).toHaveTextContent('Normal')
     expect(screen.queryByText('Illustrator')).not.toBeInTheDocument()
     expect(screen.getByText('It likes to hang from trees.')).toBeInTheDocument()

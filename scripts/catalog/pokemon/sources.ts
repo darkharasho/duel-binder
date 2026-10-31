@@ -1,4 +1,5 @@
 import { openCardCache, cardIsUsable } from './cache'
+import { chineseCards, chineseSet } from './chinese'
 import { createLimiter, REPO_URL, MAX_CONCURRENCY, type GetJsonOpts } from './http'
 import { tcgcsvCardRows, tcgcsvGroups, tcgcsvPrices, tcgcsvProducts } from './tcgcsv'
 import { tcgdexCard, tcgdexSet, tcgdexSetList } from './tcgdex'
@@ -50,8 +51,14 @@ export function createPokemonSources(opts: PokemonSourcesOpts): PokemonSources &
   }
   /** Cards of sets built from TCGplayer (see upcoming.ts); TCGdex would 404 them. */
   const upcoming = new Map<string, TdCard>()
+  const chinese = new Map<string, TdCard>()
   return {
     async sets(lang) {
+      if (lang === 'zh-hans') {
+        const { set, cards } = chineseSet(await chineseCards(o))
+        for (const c of cards) chinese.set(c.id, c)
+        return [set]
+      }
       const list = await tcgdexSetList(lang, o)
       const sets = await allOrNothing(list, (s, oo) => tcgdexSet(lang, s.id, oo))
       const paper = sets.filter((s) => !DIGITAL_SERIES.has(s.serie?.id ?? ''))
@@ -69,6 +76,7 @@ export function createPokemonSources(opts: PokemonSourcesOpts): PokemonSources &
       return paper
     },
     async cards(lang, ids) {
+      if (lang === 'zh-hans') return ids.flatMap((id) => chinese.get(id) ?? [])
       const t = now().getTime()
       return allOrNothing(ids, async (id, oo): Promise<TdCard> => {
         const built = lang === 'en' ? upcoming.get(id) : undefined
@@ -80,9 +88,10 @@ export function createPokemonSources(opts: PokemonSourcesOpts): PokemonSources &
         return card
       })
     },
-    groups: (lang) => tcgcsvGroups(lang, o),
-    products: (lang, groupId) => tcgcsvProducts(lang, groupId, o),
-    prices: (lang, groupId) => tcgcsvPrices(lang, groupId, o),
+    // TCGplayer doesn't sell Chinese cards, so they have no groups and the rest never runs.
+    groups: async (lang) => (lang === 'zh-hans' ? [] : tcgcsvGroups(lang, o)),
+    products: async (lang, groupId) => (lang === 'zh-hans' ? [] : tcgcsvProducts(lang, groupId, o)),
+    prices: async (lang, groupId) => (lang === 'zh-hans' ? [] : tcgcsvPrices(lang, groupId, o)),
     close: () => cache.close()
   }
 }

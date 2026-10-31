@@ -24,7 +24,7 @@ export interface EnglishNamer {
 }
 
 /** NFKC folds full-width letters and brackets ("ＧＸ", "（") to their plain forms. */
-const fold = (s: string): string => s.normalize('NFKC').trim()
+export const fold = (s: string): string => s.normalize('NFKC').trim()
 
 /** The English name's own suffixes and prefixes, stripped to find a species' base name. */
 const EN_SUFFIX =
@@ -43,7 +43,7 @@ export function baseEnglish(name: string): string {
 }
 
 /** Japanese suffixes, longest first, and what each adds to the English name. */
-const JA_SUFFIXES: readonly [string, string][] = [
+export const JA_SUFFIXES: readonly [string, string][] = [
   ['プリズムスター', ' Prism Star'],
   ['(デルタ種)', ' δ'],
   ['の星', ' ☆'],
@@ -206,14 +206,14 @@ function mostCommon(counts: Map<string, number>): string | null {
 }
 
 /** The value more than half of `counts` agree on, else null. */
-function majority(counts: Map<string, number>): string | null {
+export function majority(counts: Map<string, number>): string | null {
   let total = 0
   for (const n of counts.values()) total += n
   const best = mostCommon(counts)
   return best !== null && counts.get(best)! * 2 > total ? best : null
 }
 
-function bump<K>(m: Map<K, Map<string, number>>, k: K, v: string): void {
+export function bump<K>(m: Map<K, Map<string, number>>, k: K, v: string): void {
   let c = m.get(k)
   if (!c) m.set(k, (c = new Map()))
   c.set(v, (c.get(v) ?? 0) + 1)
@@ -226,15 +226,8 @@ const cleanProductName = (name: string): string =>
     .replace(/\s+\([^)]*\)$/, '')
     .trim()
 
-/**
- * A namer from TCGdex's English cards (for species names) and the Japanese cards already named
- * from a product (`named`: their Japanese and English names).
- */
-export function englishNamer(
-  enCards: Iterable<TdCard>,
-  jaCards: Iterable<TdCard>,
-  named: Iterable<{ japanese: string; english: string }>
-): EnglishNamer {
+/** English species names by National Pokédex number, from TCGdex's English cards. */
+export function speciesByDex(enCards: Iterable<TdCard>): Map<number, string> {
   const enCounts = new Map<number, Map<string, number>>()
   for (const c of enCards) {
     if (c.category !== 'Pokemon' || c.dexId?.length !== 1) continue
@@ -246,6 +239,19 @@ export function englishNamer(
     const n = mostCommon(counts)
     if (n) species.set(dex, n)
   }
+  return species
+}
+
+/**
+ * A namer from TCGdex's English cards (for species names) and the Japanese cards already named
+ * from a product (`named`: their Japanese and English names).
+ */
+export function englishNamer(
+  enCards: Iterable<TdCard>,
+  jaCards: Iterable<TdCard>,
+  named: Iterable<{ japanese: string; english: string }>
+): EnglishNamer {
+  const species = speciesByDex(enCards)
 
   // A species' own Japanese names, never cut into prefix or suffix: "ダークライ" is Darkrai, not
   // "ダーク" + "ライ"; "ブースター" is Flareon, not "ブー" + "スター". They are its usual name among

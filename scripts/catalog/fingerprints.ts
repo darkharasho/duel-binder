@@ -128,6 +128,7 @@ function tooCloseTokens(
  * cache are reused; the rest are downloaded and hashed, and an image that fails is skipped
  * (and counted) so it is tried again next run. Tokens too like another card are left out of the
  * finished set of records (see TOKEN_MIN_DISTANCE), however their hashes were come by.
+ * Traditional Chinese Pokémon cards stay out: the scanner reads English and Japanese cards only.
  */
 export async function buildFingerprints(opts: FingerprintOptions): Promise<FingerprintResult> {
   const fetchFn = opts.fetch ?? fetch
@@ -145,7 +146,8 @@ export async function buildFingerprints(opts: FingerprintOptions): Promise<Finge
       .prepare(
         `SELECT i.image_id, i.card_id, COALESCE(c.frame_type, '') AS frame_type
          FROM card_images i LEFT JOIN cards c ON c.id = i.card_id
-         WHERE i.game = ?`
+         LEFT JOIN pokemon_cards p ON p.card_id = i.card_id
+         WHERE i.game = ? AND COALESCE(p.source_id, '') NOT LIKE 'zh-hant/%'`
       )
       .all(game) as { image_id: number; card_id: number; frame_type: string }[]
     const frames = new Map(images.map((r) => [r.image_id, r.frame_type]))

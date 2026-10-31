@@ -1,11 +1,11 @@
 import Database from 'better-sqlite3'
-import type { TdLang, TdCard } from './types'
+import type { CachedLang, TdCard } from './types'
 
 export const CARD_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000
 
 export interface CardCache {
-  get(lang: TdLang, id: string): { card: TdCard; fetchedAt: number } | null
-  put(lang: TdLang, id: string, card: TdCard, fetchedAt: number): void
+  get(lang: CachedLang, id: string): { card: TdCard; fetchedAt: number } | null
+  put(lang: CachedLang, id: string, card: TdCard, fetchedAt: number): void
   close(): void
 }
 
@@ -34,3 +34,10 @@ export function cardIsUsable(card: TdCard, fetchedAt: number, now: number): bool
   if (!card.image) return false
   return !!card.thirdParty?.tcgplayer || !!card.variants_detailed?.some((v) => v.thirdParty?.tcgplayer)
 }
+
+/**
+ * True when a Traditional Chinese card is still good. Fresh is enough: they have no TCGplayer row,
+ * and most have no image, so cardIsUsable would fetch every one of them again every night.
+ */
+export const traditionalCardIsUsable = (fetchedAt: number, now: number): boolean =>
+  now - fetchedAt <= CARD_MAX_AGE_MS

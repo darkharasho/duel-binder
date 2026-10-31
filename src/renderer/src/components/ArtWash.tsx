@@ -2,12 +2,12 @@ import { useGame } from '@/lib/game'
 import type { GameId } from '@shared/games'
 
 /**
- * Soft glows for a page with no art to blur (or art still loading, or near black): two radial
+ * Soft glows for a page with no art to blur (or art still loading, or near black): radial
  * gradients in the game's colours over the app's own background. Static, so it costs one paint.
  */
 const GLOW: Record<GameId, string> = {
-  ygo: 'radial-gradient(ellipse 60% 70% at 18% 0%, rgb(139 92 246 / 0.16), transparent 70%), radial-gradient(ellipse 50% 60% at 88% 8%, rgb(245 158 11 / 0.09), transparent 70%)',
-  pkm: 'radial-gradient(ellipse 60% 70% at 18% 0%, rgb(56 130 246 / 0.16), transparent 70%), radial-gradient(ellipse 50% 60% at 88% 8%, rgb(250 204 21 / 0.09), transparent 70%)'
+  ygo: 'radial-gradient(ellipse 75% 85% at 12% -10%, rgb(139 92 246 / 0.42), transparent 75%), radial-gradient(ellipse 60% 70% at 92% 0%, rgb(245 158 11 / 0.26), transparent 75%), radial-gradient(ellipse 50% 45% at 50% 70%, rgb(217 70 239 / 0.1), transparent 75%)',
+  pkm: 'radial-gradient(ellipse 75% 85% at 12% -10%, rgb(37 99 235 / 0.46), transparent 75%), radial-gradient(ellipse 60% 70% at 92% 0%, rgb(250 204 21 / 0.26), transparent 75%), radial-gradient(ellipse 50% 45% at 50% 70%, rgb(239 68 68 / 0.1), transparent 75%)'
 }
 
 const FADE = '[mask-image:linear-gradient(180deg,#000_25%,transparent)]'

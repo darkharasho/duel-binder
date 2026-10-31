@@ -189,6 +189,7 @@ export function createHttpApi(opts: HttpApiOptions = {}): Api {
       remove: call('collection:remove'),
       facets: call('collection:facets')
     },
+    dex: { preview: unavailable, apply: unavailable, copy: unavailable },
     friends: {
       overview: call('friends:overview'),
       request: call('friends:request'),

@@ -73,7 +73,27 @@ const DEX_SETS: Record<string, string> = {
   sv8: 'sv08', sv85: 'sv08.5', sv9: 'sv09', sv105b: 'sv10.5b', sv105w: 'sv10.5w',
   me1: 'me01', me2: 'me02', me5: 'me05', me55: '30th', me55cc: '30th-c',
   swsh12pt5: 'swsh12.5', swsh12pt5gg: 'swsh12.5gg', swsh35: 'swsh3.5', pgo: 'swsh10.5', sm75: 'sm7.5', smp: 'smp',
-  tk1a: 'tk-ex-latia', tk8a: 'tk-xy-latio', mcd15: '2015xy'
+  tk1a: 'tk-ex-latia', tk3a: 'tk-dp-m', tk8a: 'tk-xy-latio', tk9a: 'tk-xy-p', mcd15: '2015xy', mfbp: 'mfb',
+  mee: 'mee', uen23: 'sve', mep: 'mep', svp: 'svp', swshp: 'swshp', xyp: 'xyp', basep: 'basep'
+}
+
+/** The same for Japanese sets, whose ids Dex prefixes and whose names can differ from ours. */
+const DEX_JA_SETS: Record<string, string> = { jpn_m2a: 'M2a', jpn_mc: 'MC', jpn_svp: 'SV-P' }
+
+/**
+ * Sets whose finish Dex and the catalog name differently: every 30th Celebration card is one card
+ * to Dex's "Holo" and our "Normal", and a promo is sold in one finish whatever Dex calls it. In
+ * these, a card with a single live version takes the row.
+ */
+const ONE_FINISH_SETS = new Set(['me55', 'me55cc', 'mep', 'svp', 'swshp', 'xyp', 'basep'])
+
+/** Dex's name for a pattern in sets where it isn't the catalog's: Dex set id, variant, our version. */
+const SET_FINISHES: Record<string, Record<string, string>> = {
+  // Ascended Heroes' plain reverse is its Energy Symbol pattern.
+  me25: { 'Reverse Holo': 'Energy Symbol Pattern' },
+  // Japan's reverse in these sets is the Poké Ball pattern; the catalog has one reverse.
+  jpn_sv11b: { 'Poké Ball Holo': 'Reverse Holofoil' },
+  jpn_sv11w: { 'Poké Ball Holo': 'Reverse Holofoil' }
 }
 
 /**
@@ -97,6 +117,10 @@ const FINISHES: Record<string, string> = {
   'Reverse Holo': 'Reverse Holofoil',
   'Poké Ball Holo': 'Poke Ball Pattern',
   'Master Ball Holo': 'Master Ball Pattern',
+  'Friend Ball Holo': 'Friend Ball Pattern',
+  'Love Ball Holo': 'Love Ball Pattern',
+  'Quick Ball Holo': 'Quick Ball Pattern',
+  'Dusk Ball Holo': 'Dusk Ball Pattern',
   'Cosmos Holo': 'Cosmos Holo'
 }
 
@@ -126,12 +150,14 @@ function numberKey(number: string): string {
 
 /**
  * Whether Dex's card name is our card's. Dex adds what tells reprints apart: "Professor's Research
- * (Professor Oak)", "Palkia LV.X", "Metagross δ" (squash drops the δ).
+ * (Professor Oak)", "Palkia LV.X", "Metagross δ" (squash drops the δ), and calls a basic energy
+ * "Basic Grass Energy".
  */
 function sameCard(dex: string, ours: string): boolean {
   const want = squash(ours)
   return (
     squash(dex) === want ||
+    squash(dex.replace(/^Basic (?=.* Energy$)/, '')) === want ||
     squash(dex.replace(/\s*\([^()]*\)\s*$/, '').replace(/\s+LV\.X$/i, '')) === want
   )
 }
@@ -181,8 +207,8 @@ function findSet(row: DexRow, language: string, index: LanguageIndex): CatalogSe
   if (REGIONAL.test(row.set)) return null
   const dexId = dexSetId(row.id)
   const named = index.byName.get(setKey(row.set, row.series)) ?? null
-  // The id table is for International sets; other languages have only their name to go on.
-  const pinned = language === 'en' ? DEX_SETS[dexId] : undefined
+  // Each language's ids are its own; one with no table has only the name to go on.
+  const pinned = language === 'en' ? DEX_SETS[dexId] : language === 'ja' ? DEX_JA_SETS[dexId] : undefined
   if (pinned) {
     const set = index.byId.get(pinned) ?? null
     return named && named !== set ? null : set
@@ -209,7 +235,11 @@ function findPrinting(
     const stamped = versions.filter((p) => STAMPED.has(p.version))
     return stamped.length === 1 ? stamped[0] : 'finish'
   }
-  return versions.find((p) => p.version === FINISHES[row.variant]) ?? 'finish'
+  const dexSet = dexSetId(row.id)
+  const finish = SET_FINISHES[dexSet]?.[row.variant] ?? FINISHES[row.variant]
+  const exact = versions.find((p) => p.version === finish)
+  if (exact) return exact
+  return ONE_FINISH_SETS.has(dexSet) && versions.length === 1 ? versions[0] : 'finish'
 }
 
 export const dexMissing = (row: DexRow, reason: DexMissReason): DexMissing => ({

@@ -43,6 +43,24 @@ const CATALOG = [
     'Holofoil'
   ]),
   ...printings('en/smp-SM229', 'SM Black Star Promos', 'Pikachu', ['Holofoil']),
+  ...printings('en/sve-009', 'Scarlet & Violet Energy', 'Grass Energy', ['Normal', 'Holofoil']),
+  ...printings('en/svp-046', 'SVP Black Star Promos', 'Bulbasaur', ['Cosmos Holo']),
+  ...printings('en/mep-037', 'MEP Black Star Promos', 'Bulbasaur', ['Holofoil']),
+  ...printings('en/30th-002', '30th Celebration', 'Alolan Exeggutor', ['Normal']),
+  ...printings('en/me02.5-004', 'Ascended Heroes', "Erika's Bellsprout", [
+    'Normal',
+    'Energy Symbol Pattern',
+    'Poke Ball Pattern'
+  ]),
+  ...printings('en/sm1-010', 'Sun & Moon', 'Rowlet', ['Holofoil']),
+  ...printings(
+    'ja/M2a-001',
+    'High Class Pack: MEGA Dream ex',
+    "Ethan's Pinsir",
+    ['Normal', 'Reverse Holofoil'],
+    'ja'
+  ),
+  ...printings('ja/SV11W-011', 'White Flare', 'Tepig', ['Normal', 'Reverse Holofoil'], 'ja'),
   ...printings('en/2018sm-011', "McDonald's Collection 2018", 'Poliwag', ['Normal']),
   ...printings('en/30th-c-014', '30th Classic Collection', 'Pikachu', ['Holofoil']),
   ...printings('en/30th-c-001', '30th Classic Collection', 'Charizard', ['Holofoil']),
@@ -120,6 +138,72 @@ describe('Dex finishes', () => {
       { id: 'sv85-82', number: '82/131', name: 'Lugia ex', variant: 'Expansion Stamp' },
       'finish'
     ))
+})
+
+describe('sets Dex names its own way', () => {
+  const at = (set: string, id: string, number: string, name: string, variant: string) => ({
+    series: 'x',
+    set,
+    id,
+    number,
+    name,
+    variant
+  })
+
+  it('finds promos and basic energies by id', () => {
+    expectFound(
+      at('Scarlet & Violet Basic Energies', 'uen23-9', '9/24', 'Basic Grass Energy', 'Normal'),
+      'en/sve-009',
+      'Normal'
+    )
+    expectFound(
+      at('Scarlet & Violet Promos', 'svp-46', '46/225', 'Bulbasaur', 'Cosmos Holo'),
+      'en/svp-046',
+      'Cosmos Holo'
+    )
+  })
+
+  it('takes a one-finish set\'s only version, whatever Dex calls it', () => {
+    expectFound(
+      at('Mega Evolution Promos', 'mep-37', '37', 'Bulbasaur', '30th Anniversary'),
+      'en/mep-037',
+      'Holofoil'
+    )
+    expectFound(
+      at('30th Celebration', 'me55-2', '2/128', 'Alolan Exeggutor', 'Holo'),
+      'en/30th-002',
+      'Normal'
+    )
+  })
+
+  it('keeps an ordinary set strict: a Reverse Holo never lands on a Holofoil', () =>
+    expectMissed(at('Sun & Moon', 'sm1-10', '10/149', 'Rowlet', 'Reverse Holo'), 'finish'))
+
+  it("reads Ascended Heroes' reverse as its Energy Symbol pattern", () =>
+    expectFound(
+      at('Ascended Heroes', 'me25-4', '4/217', "Erika's Bellsprout", 'Reverse Holo'),
+      'en/me02.5-004',
+      'Energy Symbol Pattern'
+    ))
+
+  it('finds Japanese sets by their Dex id', () => {
+    expectFound(
+      {
+        ...at('MEGA Dream ex', 'jpn_m2a-1', '1/193', "Ethan's Pinsir", 'Normal'),
+        locale: 'Japanese'
+      },
+      'ja/M2a-001',
+      'Normal'
+    )
+    expectFound(
+      {
+        ...at('White Flare', 'jpn_sv11w-11', '11/86', 'Tepig', 'Poké Ball Holo'),
+        locale: 'Japanese'
+      },
+      'ja/SV11W-011',
+      'Reverse Holofoil'
+    )
+  })
 })
 
 describe('Dex sets and numbers', () => {

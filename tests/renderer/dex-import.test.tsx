@@ -1,10 +1,11 @@
 import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
 import { CollectionPage } from '@/features/collection/CollectionPage'
+import { SettingsPage } from '@/features/settings/SettingsPage'
 import { GameProvider } from '@/lib/game'
 import type { GameId } from '@shared/games'
-import { DexImportButton } from '../../src/renderer/src/features/collection/DexImportDialog'
-import { notImportedText } from '../../src/renderer/src/features/collection/dexImportText'
+import { DexImportButton } from '../../src/renderer/src/features/settings/DexImportDialog'
+import { notImportedText } from '../../src/renderer/src/features/settings/dexImportText'
 import type { DexPreview } from '../../src/shared/dex/match'
 import { createMockApi, renderWithProviders } from './mockApi'
 
@@ -85,30 +86,47 @@ describe('DexImportButton', () => {
   })
 })
 
-describe('the Collection page', () => {
-  const page = (game: GameId): ReturnType<typeof renderWithProviders> =>
+describe('where Dex import lives', () => {
+  const api = (available: GameId[]): ReturnType<typeof createMockApi> =>
+    createMockApi({
+      games: {
+        available: vi.fn(async () => available),
+        active: vi.fn(async () => available[0])
+      }
+    })
+
+  it('is in Settings whichever game is showing', async () => {
+    renderWithProviders(
+      <GameProvider>
+        <SettingsPage />
+      </GameProvider>,
+      { api: api(['ygo', 'pkm']) }
+    )
+    expect(await screen.findByRole('button', { name: 'Import from Dex' })).toBeInTheDocument()
+  })
+
+  it('is not in Settings for an account with no Pokémon', async () => {
+    const mock = api(['ygo'])
+    renderWithProviders(
+      <GameProvider>
+        <SettingsPage />
+      </GameProvider>,
+      { api: mock }
+    )
+    await waitFor(() => expect(mock.games.active).toHaveBeenCalled())
+    await screen.findByRole('heading', { name: 'Data' })
+    expect(screen.queryByRole('button', { name: 'Import from Dex' })).not.toBeInTheDocument()
+  })
+
+  it('is gone from the Collection page', async () => {
+    const mock = api(['pkm', 'ygo'])
     renderWithProviders(
       <GameProvider>
         <CollectionPage />
       </GameProvider>,
-      {
-        api: createMockApi({
-          games: {
-            available: vi.fn(async () => ['ygo', 'pkm'] as GameId[]),
-            active: vi.fn(async () => game)
-          }
-        })
-      }
+      { api: mock }
     )
-
-  it('offers Dex import for Pokémon', async () => {
-    page('pkm')
-    expect(await screen.findByRole('button', { name: 'Import from Dex' })).toBeInTheDocument()
-  })
-
-  it('does not offer it for Yu-Gi-Oh!', async () => {
-    const { api } = page('ygo')
-    await waitFor(() => expect(api.games.active).toHaveBeenCalled())
+    await waitFor(() => expect(mock.games.active).toHaveBeenCalled())
     await screen.findByRole('heading', { name: 'Collection' })
     expect(screen.queryByRole('button', { name: 'Import from Dex' })).not.toBeInTheDocument()
   })

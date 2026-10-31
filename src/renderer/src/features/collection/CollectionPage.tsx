@@ -22,14 +22,13 @@ import { formatRelative } from '@/lib/format'
 import { friendsErrorMessage } from '@/lib/friends'
 import { useGame } from '@/lib/game'
 import { useLanguageFilter } from '@/lib/languageFilter'
-import { isPhone, isWeb } from '@/lib/platform'
+import { isPhone } from '@/lib/platform'
 import { CollectionGrid } from './CollectionGrid'
 import { CollectionTable } from './CollectionTable'
 import { CardPanel } from '../card/CardPanel'
 import { FriendEntryPanel } from '../friends/FriendEntryPanel'
 import { CollectionSearch, FilterBar, FilterChips, FilterSheetBody } from './FilterBar'
 import { DEFAULT_FILTERS } from './defaultFilters'
-import { DexImportButton } from './DexImportDialog'
 import { activeFilterCount } from './filterFacets'
 
 type View = 'grid' | 'table'
@@ -209,7 +208,7 @@ export function CollectionPage({
   // The collection tints the page with its first card in the current order.
   useArtWash(list[0] ? cardArtUrl(list[0].imageId) : null)
   const filtered = hasActiveFilters(filters)
-  const { game, def } = useGame()
+  const { def } = useGame()
   const activeCount = activeFilterCount(filters, def)
   // Entries exist, but the language filter alone hides them all.
   const hiddenByLanguage =
@@ -253,12 +252,7 @@ export function CollectionPage({
                 {!friend && <h1 className="text-xl font-semibold">Collection</h1>}
                 {entryCount}
               </div>
-              {!phone && (
-                <div className="flex items-center gap-2">
-                  {game === 'pkm' && !friend && !isWeb() && <DexImportButton />}
-                  {viewToggle}
-                </div>
-              )}
+              {!phone && viewToggle}
             </header>
           )}
 

@@ -183,7 +183,10 @@ function createWindow(): void {
   }
   win.on('maximize', sendMaximized)
   win.on('unmaximize', sendMaximized)
-  windowShown = new Promise((r) => win.once(captureDir ? 'ready-to-show' : 'show', () => r()))
+  windowShown = new Promise((r) => {
+    if (captureDir) win.once('ready-to-show', () => r())
+    else win.once('show', () => r())
+  })
   win.on('ready-to-show', () => {
     if (!captureDir) win.show()
   })

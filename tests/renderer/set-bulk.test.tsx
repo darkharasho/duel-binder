@@ -172,10 +172,9 @@ describe('SetChecklist bulk mode', () => {
     expect(adjust).toHaveBeenCalledWith('Metal Raiders', 'en', PRINTING.alphaUltraEN001, 1)
   })
 
-  it('the header search is kept across bulk mode and the bulk box starts empty', async () => {
+  it('text typed just before Bulk add is kept across bulk mode; the bulk box starts empty', async () => {
     setup()
     await userEvent.type(await screen.findByRole('searchbox', { name: 'Search this set' }), 'gamma')
-    await waitFor(() => expect(screen.queryByRole('button', { name: 'Alpha Dragon' })).toBeNull())
     await enterBulk()
     expect(screen.getByRole('searchbox', { name: 'Type a card number or name' })).toHaveValue('')
     expect(screen.getAllByRole('group')).toHaveLength(4)

@@ -119,9 +119,8 @@ describe('SetsPage', () => {
     expect(screen.getByRole('button', { name: /Albaz Strike/ })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Metal Raiders/ })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Remove Decks filter' })).toBeInTheDocument()
-    // English, the default language, and Decks.
-    expect(screen.getByRole('button', { name: 'Filters, 2 active' })).toHaveTextContent(
-      /^Filters2$/
+    expect(screen.getByRole('button', { name: 'Filters, 1 active' })).toHaveTextContent(
+      /^Filters1$/
     )
     await userEvent.click(screen.getByRole('button', { name: 'Remove Decks filter' }))
     expect(screen.getByRole('button', { name: /Metal Raiders/ })).toBeInTheDocument()
@@ -151,15 +150,17 @@ describe('SetsPage', () => {
     expect(screen.queryByRole('button', { name: /Metal Raiders/ })).not.toBeInTheDocument()
   })
 
-  it('Clear all resets types, progress and language but not sort or count mode', async () => {
+  it('Clear all resets types and progress, and language to English, but not count mode', async () => {
     renderPage()
     await screen.findByRole('button', { name: /Metal Raiders/ })
     await openPanel()
     await userEvent.click(screen.getByRole('button', { name: 'Every rarity' }))
     await userEvent.click(screen.getByRole('button', { name: 'Started' }))
     await userEvent.click(screen.getByRole('button', { name: /Decks/ }))
+    localStorage.setItem('language.filter', 'all')
     await closePanel()
     await userEvent.click(screen.getByRole('button', { name: 'Clear all' }))
+    expect(localStorage.getItem('language.filter')).toBe('en')
     expect(screen.queryAllByRole('button', { name: /^Remove .* filter$/ })).toHaveLength(0)
     await openPanel()
     expect(screen.getByRole('button', { name: 'Started' })).toHaveAttribute('aria-pressed', 'false')

@@ -12,8 +12,8 @@ export function FilterChip({
   onRemove: () => void
 }): React.JSX.Element {
   return (
-    <span className={cn(CHIP, 'bg-white/[0.08] pl-2.5 pr-1')}>
-      {label}
+    <span title={label} className={cn(CHIP, 'max-w-64 bg-white/[0.08] pl-2.5 pr-1')}>
+      <span className="min-w-0 truncate">{label}</span>
       <button
         type="button"
         aria-label={`Remove ${label} filter`}
@@ -42,14 +42,15 @@ export function FilterOptionChip({
     <button
       type="button"
       aria-pressed={selected}
+      title={label}
       onClick={onClick}
       className={cn(
         CHIP,
-        'px-2.5 outline-none focus-visible:ring-2 focus-visible:ring-ring',
+        'max-w-full px-2.5 outline-none focus-visible:ring-2 focus-visible:ring-ring',
         selected ? 'bg-primary text-primary-foreground' : 'bg-white/[0.08] hover:bg-white/[0.14]'
       )}
     >
-      {label}
+      <span className="min-w-0 truncate">{label}</span>
       {count !== undefined && <span className="tabular-nums opacity-70">{count}</span>}
     </button>
   )

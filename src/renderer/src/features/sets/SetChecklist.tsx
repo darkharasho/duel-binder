@@ -474,8 +474,15 @@ export function SetChecklist({
                       if (m === 'cards' || m === 'rarities') onModeChange(m)
                     }}
                   >
-                    <ToggleGroupItem value="cards">Each card once</ToggleGroupItem>
-                    <ToggleGroupItem value="rarities">Every rarity</ToggleGroupItem>
+                    {/* Short words when the side panel leaves the bar narrow. */}
+                    <ToggleGroupItem value="cards" aria-label="Each card once">
+                      <span className="@max-2xl:hidden">Each card once</span>
+                      <span className="@2xl:hidden">Cards</span>
+                    </ToggleGroupItem>
+                    <ToggleGroupItem value="rarities" aria-label="Every rarity">
+                      <span className="@max-2xl:hidden">Every rarity</span>
+                      <span className="@2xl:hidden">Rarities</span>
+                    </ToggleGroupItem>
                   </ToggleGroup>
                 )
               }

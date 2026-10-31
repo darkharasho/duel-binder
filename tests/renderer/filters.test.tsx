@@ -46,6 +46,32 @@ describe('SearchInput', () => {
     }
   })
 
+  it('hands over text still waiting when it is removed, and only then', () => {
+    vi.useFakeTimers()
+    try {
+      const onChange = vi.fn()
+      const first = render(<SearchInput label="Search" value="" onChange={onChange} />)
+      act(() => {
+        fireInput(screen.getByRole('searchbox'), 'gamma')
+      })
+      first.unmount()
+      expect(onChange).toHaveBeenCalledTimes(1)
+      expect(onChange).toHaveBeenCalledWith('gamma')
+
+      onChange.mockClear()
+      const second = render(<SearchInput label="Search" value="" onChange={onChange} />)
+      act(() => {
+        fireInput(screen.getByRole('searchbox'), 'd')
+        vi.advanceTimersByTime(200)
+      })
+      expect(onChange).toHaveBeenCalledTimes(1)
+      second.unmount()
+      expect(onChange).toHaveBeenCalledTimes(1)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('follows a value cleared from outside', () => {
     const { rerender } = render(<SearchInput label="Search" value="dark" onChange={() => {}} />)
     expect(screen.getByRole('searchbox')).toHaveValue('dark')
@@ -147,7 +173,8 @@ describe('filter helpers', () => {
     )
     expect(chips.map((c) => c.label)).toEqual(['MRD - Metal Raiders', 'Rare', 'Common', 'Level 4–'])
     expect(chips.length + languageChip('ja', () => {}).length).toBe(5)
-    expect(chips.length + languageChip('all', () => {}).length).toBe(4)
+    expect(chips.length + languageChip('all', () => {}).length).toBe(5)
+    expect(chips.length + languageChip('en', () => {}).length).toBe(4)
 
     chips[1].onRemove()
     expect(onChange).toHaveBeenLastCalledWith({ rarities: ['Common'] })
@@ -155,12 +182,18 @@ describe('filter helpers', () => {
     expect(onChange).toHaveBeenLastCalledWith({ levelMin: undefined, levelMax: undefined })
   })
 
-  it('removing the language chip means All', () => {
+  it('the default language has no chip; any other has one that goes back to the default', () => {
+    expect(languageChip('en', () => {})).toEqual([])
     const set = vi.fn()
-    const [chip] = languageChip('ja', set)
-    expect(chip.label).toBe('Japanese')
-    chip.onRemove()
-    expect(set).toHaveBeenCalledWith('all')
+    const [ja] = languageChip('ja', set)
+    expect(ja.label).toBe('Japanese')
+    ja.onRemove()
+    expect(set).toHaveBeenLastCalledWith('en')
+    const [all] = languageChip('all', set)
+    expect(all.label).toBe('All languages')
+    set.mockClear()
+    all.onRemove()
+    expect(set).toHaveBeenCalledWith('en')
   })
 
   it('clearing keeps the search and sort and nothing else', () => {

@@ -16,7 +16,7 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { api, queryKeys } from '@/lib/api'
 import { languageChip, type ActiveChip, type SortOption } from '@/lib/filters'
 import { useGame } from '@/lib/game'
-import { matchesLanguage, useLanguageFilter } from '@/lib/languageFilter'
+import { DEFAULT_LANGUAGE, matchesLanguage, useLanguageFilter } from '@/lib/languageFilter'
 import { isPhone } from '@/lib/platform'
 import { useFilterPanel } from '@/lib/useFilterPanel'
 import { SetChecklist } from './SetChecklist'
@@ -176,7 +176,7 @@ export function SetsPage({ onAddCard, onAddMissing }: SetsPageProps): React.JSX.
   const clearFilters = (): void => {
     changeTypes([])
     setFilter('all')
-    setLanguage('all')
+    setLanguage(DEFAULT_LANGUAGE)
   }
   const changeView = (v: string): void => {
     if (v !== 'grid' && v !== 'list') return

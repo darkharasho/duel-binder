@@ -3,6 +3,9 @@ import { isLanguage, type Language, type LanguageFilter } from '@shared/language
 
 const KEY = 'language.filter'
 
+/** What the filter starts as, and what clearing the filters returns it to. */
+export const DEFAULT_LANGUAGE: LanguageFilter = 'en'
+
 // Set only when localStorage rejects a write, so the choice still holds for the session.
 let memoryFallback: LanguageFilter | null = null
 
@@ -10,9 +13,9 @@ function read(): LanguageFilter {
   if (memoryFallback !== null) return memoryFallback
   try {
     const v = localStorage.getItem(KEY)
-    return v === 'all' || isLanguage(v) ? v : 'en'
+    return v === 'all' || isLanguage(v) ? v : DEFAULT_LANGUAGE
   } catch {
-    return 'en'
+    return DEFAULT_LANGUAGE
   }
 }
 

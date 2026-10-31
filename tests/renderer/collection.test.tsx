@@ -258,7 +258,7 @@ describe('CollectionPage', () => {
     expect(screen.queryByRole('button', { name: /^Sort (a|de)scending/ })).not.toBeInTheDocument()
   })
 
-  it('Clear all clears the filters and language; search and sort stay', async () => {
+  it('Clear all clears the filters and returns to English; search and sort stay', async () => {
     const { list } = setup()
     await screen.findByText('Dark Magician')
     await userEvent.type(screen.getByLabelText('Search collection'), 'dark')
@@ -266,10 +266,9 @@ describe('CollectionPage', () => {
     await userEvent.click(await screen.findByRole('option', { name: 'Name: A to Z' }))
     await openFilters()
     await userEvent.click(await screen.findByRole('button', { name: 'Ultra Rare' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Japanese' }))
     await userEvent.keyboard('{Escape}')
-    expect(
-      await screen.findByRole('button', { name: 'Filters, 2 active' })
-    ).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Filters, 2 active' })).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Clear all' }))
     await waitFor(() =>
       expect(list).toHaveBeenLastCalledWith(
@@ -277,24 +276,34 @@ describe('CollectionPage', () => {
           q: 'dark',
           sort: 'name',
           dir: 'asc',
-          language: undefined
+          language: 'en'
         })
       )
     )
     expect(list.mock.lastCall?.[0].rarities).toBeUndefined()
+    expect(localStorage.getItem('language.filter')).toBe('en')
     expect(screen.getByLabelText('Search collection')).toHaveValue('dark')
     expect(screen.getByRole('button', { name: 'Filters' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Clear all' })).not.toBeInTheDocument()
   })
 
-  it('shows row 2 with a language chip and the result count until the language is All', async () => {
+  it('the default English is no filter; All languages is, and its chip returns to English', async () => {
     setup()
     await screen.findByText('Dark Magician')
-    expect(screen.getByRole('button', { name: 'Filters, 1 active' })).toBeInTheDocument()
-    expect(screen.getByText('2 cards')).toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: 'Remove English filter' }))
+    expect(screen.getByRole('button', { name: 'Filters' })).toBeInTheDocument()
     expect(screen.queryByText('2 cards')).not.toBeInTheDocument()
-    expect(localStorage.getItem('language.filter')).toBe('all')
+    expect(screen.queryByRole('button', { name: /^Remove / })).not.toBeInTheDocument()
+
+    await openFilters()
+    await userEvent.click(screen.getByRole('button', { name: 'All' }))
+    await userEvent.keyboard('{Escape}')
+    expect(await screen.findByRole('button', { name: 'Filters, 1 active' })).toBeInTheDocument()
+    expect(screen.getByText('2 cards')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Remove All languages filter' }))
+    expect(screen.getByRole('button', { name: 'Filters' })).toBeInTheDocument()
+    expect(screen.queryByText('2 cards')).not.toBeInTheDocument()
+    expect(localStorage.getItem('language.filter')).toBe('en')
   })
 
   it('approximate value shows ≈', async () => {
@@ -493,8 +502,17 @@ describe('CollectionPage', () => {
     expect(await screen.findByText('No cards match these filters')).toBeInTheDocument()
     expect(list).toHaveBeenLastCalledWith(expect.objectContaining({ q: 'zzz' }))
     const state = (): HTMLElement => screen.getByText('No cards match these filters').parentElement!
-    // Clear all leaves the search, so what's left to offer is clearing that.
-    await userEvent.click(within(state()).getByRole('button', { name: 'Clear all' }))
+    // The default English is no filter, so with only a search there's only that to clear.
+    expect(within(state()).queryByRole('button', { name: 'Clear all' })).not.toBeInTheDocument()
+
+    // With a language picked, Clear all returns to English and leaves the search.
+    await userEvent.click(screen.getByRole('button', { name: 'Filters' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'All' }))
+    await userEvent.keyboard('{Escape}')
+    await userEvent.click(await within(state()).findByRole('button', { name: 'Clear all' }))
+    await waitFor(() =>
+      expect(list).toHaveBeenLastCalledWith(expect.objectContaining({ q: 'zzz', language: 'en' }))
+    )
     await userEvent.click(await within(state()).findByRole('button', { name: 'Clear search' }))
     expect(await screen.findByText('No cards yet')).toBeInTheDocument()
   })

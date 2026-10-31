@@ -130,7 +130,8 @@ describe('phone layout', () => {
     for (const facet of ['Language', 'Card type', 'Attribute', 'Archetype', 'Set', 'Rarity']) {
       expect(within(sheet).getByRole('button', { name: facet })).toBeInTheDocument()
     }
-    expect(within(sheet).getByRole('button', { name: 'Clear all' })).toBeInTheDocument()
+    // Nothing to clear yet: English is the default.
+    expect(within(sheet).queryByRole('button', { name: 'Clear all' })).not.toBeInTheDocument()
     // Nothing in the sheet takes focus on opening.
     expect(sheet.contains(document.activeElement)).toBe(false)
     await userEvent.click(within(sheet).getByRole('button', { name: 'Level' }))
@@ -145,10 +146,9 @@ describe('phone layout', () => {
     await userEvent.click(await within(sheet).findByRole('button', { name: 'Normal Monster' }))
     await userEvent.keyboard('{Escape}')
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
-    // The language counts too: English by default.
-    expect(screen.getByRole('button', { name: 'Filters, 2 active' })).toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: 'Remove Normal Monster filter' }))
     expect(screen.getByRole('button', { name: 'Filters, 1 active' })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Remove Normal Monster filter' }))
+    expect(screen.getByRole('button', { name: 'Filters' })).toBeInTheDocument()
     expect(
       screen.queryByRole('button', { name: 'Remove Normal Monster filter' })
     ).not.toBeInTheDocument()

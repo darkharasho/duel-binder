@@ -25,7 +25,7 @@ import {
 import { formatRelative } from '@/lib/format'
 import { friendsErrorMessage } from '@/lib/friends'
 import { useGame } from '@/lib/game'
-import { useLanguageFilter } from '@/lib/languageFilter'
+import { DEFAULT_LANGUAGE, useLanguageFilter } from '@/lib/languageFilter'
 import { isPhone } from '@/lib/platform'
 import { rangeFilters } from '@/lib/rangeFilters'
 import { useSetNames } from '@/lib/setLabels'
@@ -138,7 +138,7 @@ export function CollectionPage({
   )
   const clearFilters = useCallback(() => {
     setFilters((f) => clearedFilters(f, DEFAULT_FILTERS))
-    setLanguageFilter('all')
+    setLanguageFilter(DEFAULT_LANGUAGE)
   }, [setLanguageFilter])
   const changeSearch = useCallback(
     (q: string) => onChange({ q: q === '' ? undefined : q }),

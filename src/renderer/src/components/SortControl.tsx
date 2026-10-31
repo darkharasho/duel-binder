@@ -8,7 +8,7 @@ import {
 } from '@/components/ui/select'
 import type { SortOption } from '@/lib/filters'
 
-/** The one sort control: each choice carries its direction. An icon alone on a phone's row. */
+/** The one sort control: each choice carries its direction. An icon alone in a narrow FilterBar. */
 export function SortControl<T extends string>({
   options,
   value,
@@ -31,9 +31,9 @@ export function SortControl<T extends string>({
     >
       <SelectTrigger
         aria-label="Sort by"
-        className="w-56 min-w-0 shrink max-lg:w-44 max-md:w-9 max-md:shrink-0 max-md:justify-center max-md:px-0 max-md:[&>svg:last-child]:hidden max-md:[&>[data-slot=select-value]]:hidden!"
+        className="w-56 shrink-0 @max-2xl:w-44 @max-lg:w-9 @max-lg:justify-center @max-lg:px-0 @max-lg:[&>svg:last-child]:hidden @max-lg:[&>[data-slot=select-value]]:hidden!"
       >
-        <ArrowUpDown aria-hidden className="md:hidden" />
+        <ArrowUpDown aria-hidden className="@lg:hidden" />
         <SelectValue />
       </SelectTrigger>
       <SelectContent>

@@ -6,7 +6,8 @@ import type { ActiveChip } from '@/lib/filters'
 /**
  * The bar every list page shares. Row 1: search, Filters, sort, then the page's own toggle. Row 2,
  * only with something active: the removable chips, Clear all and the result count. It never
- * wraps, so a sticky header stays two rows: a long run of chips scrolls sideways.
+ * wraps, so a sticky header stays two rows: a long run of chips scrolls sideways. Its controls
+ * size to the bar rather than the window, since an open side panel narrows the bar too.
  */
 export function FilterBar({
   search,
@@ -32,9 +33,9 @@ export function FilterBar({
 }): React.JSX.Element {
   const active = chips.length
   return (
-    <div className="space-y-2">
+    <div className="@container space-y-2">
       <div className="flex items-center gap-2">
-        <div className="min-w-0 flex-1">{search}</div>
+        <div className="min-w-28 flex-1">{search}</div>
         {onToggleFilters && (
           <Button
             variant={active > 0 ? 'default' : 'outline'}
@@ -56,14 +57,14 @@ export function FilterBar({
       </div>
       {active > 0 && (
         <div className="flex items-center gap-3">
-          <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto">
+          <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto [scrollbar-width:none]">
             {chips.map((c) => (
               <FilterChip key={c.key} label={c.label} onRemove={c.onRemove} />
             ))}
-            <Button variant="ghost" size="xs" className="h-7" onClick={onClearAll}>
-              Clear all
-            </Button>
           </div>
+          <Button variant="ghost" size="xs" className="h-7 shrink-0" onClick={onClearAll}>
+            Clear all
+          </Button>
           {resultCount !== undefined && (
             <span className="shrink-0 text-sm text-muted-foreground tabular-nums">
               {resultCount}

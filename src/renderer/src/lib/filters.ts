@@ -1,6 +1,7 @@
 import { LANGUAGES, type LanguageFilter } from '@shared/languages'
 import type { FilterDef, GameDef } from '@shared/games'
 import { englishSetName } from '@shared/setNames'
+import { DEFAULT_LANGUAGE } from '@/lib/languageFilter'
 import { RANGE_FIELDS, type RangeField, type RangeKey } from '@/lib/rangeFilters'
 
 type GameKey =
@@ -98,14 +99,17 @@ export function cardFilterChips(
   return [...values, ...bounds]
 }
 
-/** The language's chip, none on All. The language is app-wide, so removing it means All. */
+/** The language's chip: none on the default, which isn't a filter; removing it goes back there. */
 export function languageChip(
   language: LanguageFilter,
   setLanguage: (l: LanguageFilter) => void
 ): ActiveChip[] {
-  if (language === 'all') return []
-  const label = LANGUAGES.find((l) => l.code === language)?.label ?? language
-  return [{ key: 'language', label, onRemove: () => setLanguage('all') }]
+  if (language === DEFAULT_LANGUAGE) return []
+  const label =
+    language === 'all'
+      ? 'All languages'
+      : (LANGUAGES.find((l) => l.code === language)?.label ?? language)
+  return [{ key: 'language', label, onRemove: () => setLanguage(DEFAULT_LANGUAGE) }]
 }
 
 /** `defaults` with the search and sort of `filters`: what Clear all leaves on every page. */

@@ -192,6 +192,11 @@ export function createPhoneApi(deps: {
   return {
     cards: dataPart('cards'),
     collection: dataPart('collection'),
+    dex: {
+      preview: () => Promise.reject(new Error('Dex import is only in the desktop app')),
+      apply: () => Promise.reject(new Error('Dex import is only in the desktop app')),
+      copy: () => Promise.reject(new Error('Dex import is only in the desktop app'))
+    },
     friends: {
       overview: portal('friends:overview'),
       request: portal('friends:request'),

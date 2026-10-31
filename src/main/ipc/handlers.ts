@@ -1,6 +1,7 @@
 import type Database from 'better-sqlite3'
-import { ipcMain } from 'electron'
+import { clipboard, ipcMain } from 'electron'
 import type { CollectionFilters, EntryView, UpdateStatus } from '@shared/types'
+import { MAX_DEX_ROWS, type DexRow } from '@shared/dex/parse'
 import type { INVOKE_CHANNELS } from '@shared/ipc'
 import { INVOKE_CHANNELS as CHANNELS } from '@shared/ipc'
 import type { ImageCache } from '../images/cache'
@@ -10,7 +11,9 @@ import type { FingerprintStore } from '../scan/fingerprints'
 import { checkOcrBands, type Ocr } from '../scan/ocr'
 import { isOcrKind, isTextModel, readTexts } from '@shared/scan/ocr'
 import type { GameId } from '@shared/games'
+import { applyDexImport, previewDexImport } from '../repo/dexImport'
 import { scanRefs } from '../repo/scanRefs'
+import { recordSnapshot } from '../repo/stats'
 import { cardLanguage } from '@shared/scan/cardLanguage'
 import type { AccountService } from '../cloud/account'
 import type { CatalogService } from '../catalog/service'
@@ -48,6 +51,23 @@ export interface HandlerDeps {
   ocr: Ocr
 }
 
+/** A renderer's parsed export, checked before it reaches the database. */
+function dexRows(rows: unknown): DexRow[] {
+  const text = ['locale', 'series', 'set', 'id', 'number', 'name', 'variant'] as const
+  const ok =
+    Array.isArray(rows) &&
+    rows.length <= MAX_DEX_ROWS &&
+    rows.every(
+      (r) =>
+        typeof r === 'object' &&
+        r !== null &&
+        text.every((k) => typeof r[k] === 'string') &&
+        (r.quantity === null || (Number.isSafeInteger(r.quantity) && r.quantity >= 0))
+    )
+  if (!ok) throw new Error('Bad Dex rows')
+  return rows as DexRow[]
+}
+
 export type Handlers = Record<
   (typeof INVOKE_CHANNELS)[number],
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -73,6 +93,19 @@ export function createHandlers({
       availableGames: () => account.games(),
       onGameChanged: emitDataChanged
     }),
+    'dex:preview': async (rows: unknown) => previewDexImport(db, dexRows(rows)),
+    'dex:apply': async (rows: unknown) => {
+      if (!account.games().includes('pkm'))
+        throw new Error('Pokémon is not available on this account')
+      const result = applyDexImport(db, dexRows(rows))
+      recordSnapshot(db)
+      account.noteLocalEdit()
+      return result
+    },
+    'dex:copy': async (text: unknown) => {
+      if (typeof text !== 'string') throw new Error('Bad text')
+      clipboard.writeText(text)
+    },
     'friends:overview': async () => account.portal('friends:overview', []),
     'friends:request': async (username: string) => account.portal('friends:request', [username]),
     'friends:accept': async (userId: number) => account.portal('friends:accept', [userId]),
@@ -105,7 +138,8 @@ export function createHandlers({
       return cardLanguage(ocr, bands)
     },
     'scan:debugFrame': async (jpeg: unknown, note: unknown) => {
-      if (!(jpeg instanceof ArrayBuffer) || typeof note !== 'string') throw new Error('Bad debug frame')
+      if (!(jpeg instanceof ArrayBuffer) || typeof note !== 'string')
+        throw new Error('Bad debug frame')
       await saveDebugFrame(jpeg, note)
     },
     'scan:readText': async (bands: unknown, model: unknown) => {

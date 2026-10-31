@@ -12,7 +12,7 @@ import {
 import { api } from '@/lib/api'
 import { unpricedIntl, useRequestPrices } from '@/lib/priceRequests'
 import type { ScanDraft } from './resolve'
-import { rowKey, useScanSession } from './session'
+import { useScanSession } from './session'
 import { rememberedCamera } from './useCamera'
 
 /** Yu-Gi-Oh!'s keeps the key it always had, so an existing pick survives. */
@@ -195,8 +195,7 @@ export function ScanHubProvider({ children }: { children: React.ReactNode }): Re
 
   const count = useCallback(
     (draft: ScanDraft): void => {
-      add(draft)
-      setFresh(rowKey(draft))
+      setFresh(add(draft))
       clearTimeout(highlightTimer.current)
       highlightTimer.current = setTimeout(() => setFresh(null), HIGHLIGHT_MS)
     },

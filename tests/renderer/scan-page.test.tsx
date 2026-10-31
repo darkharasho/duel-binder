@@ -244,8 +244,15 @@ describe('Scan page', () => {
     expect(within(list).getByText('Dark Magician').closest('li')).not.toHaveClass(
       'bg-emerald-400/10'
     )
+    // A second pull is a row of its own, and only that row lights up.
     act(() => bridge.emit({ kind: 'draft', id: nextId(), draft: draft() }))
-    expect(within(list).getByLabelText('Quantity of Dark Magician')).toHaveTextContent('2')
+    const quantities = within(list).getAllByLabelText('Quantity of Dark Magician')
+    expect(quantities.map((q) => q.textContent)).toEqual(['1', '1'])
+    const [newest, older] = within(list)
+      .getAllByText('Dark Magician')
+      .map((n) => n.closest('li'))
+    expect(newest).toHaveClass('bg-emerald-400/10')
+    expect(older).not.toHaveClass('bg-emerald-400/10')
   })
 
   it('counts a resent pull once and acknowledges every copy', async () => {
@@ -543,7 +550,9 @@ describe('Scan page', () => {
     await run(1200)
     expect(screen.queryByText("Couldn't recognize this card")).not.toBeInTheDocument()
     await run(1200)
-    expect(screen.getByLabelText('Quantity of Dark Magician')).toHaveTextContent('2')
+    expect(screen.getAllByLabelText('Quantity of Dark Magician').map((q) => q.textContent)).toEqual(
+      ['1', '1']
+    )
   })
 
   it("under Auto, a card's name that looks the same over its frames picks its rarity", async () => {

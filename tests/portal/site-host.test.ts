@@ -98,7 +98,7 @@ describe('handleSite', () => {
       expect(res.headers.get('content-type')).toBe('text/html; charset=utf-8')
       expect(res.headers.get('cache-control')).toBe('private, max-age=300')
       expect(await res.text()).toContain(
-        'A binder for your <span class="nowrap">Yu-Gi-Oh!</span> collection.'
+        'A binder for your <span class="nowrap">Yu-Gi-Oh!</span> and Pokémon cards.'
       )
     }
   })

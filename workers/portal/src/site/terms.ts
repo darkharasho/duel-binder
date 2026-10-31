@@ -22,7 +22,7 @@ export function renderTerms(view: LegalView): string {
         [
           'The service',
           p(
-            'Duel Binder is a free, personal project for keeping track of a Yu-Gi-Oh! card collection. It may change, gain or lose features, or stop running, at any time and without notice.'
+            'Duel Binder is a free, personal project for keeping track of a Yu-Gi-Oh! or Pokémon card collection. It may change, gain or lose features, or stop running, at any time and without notice.'
           )
         ],
         [

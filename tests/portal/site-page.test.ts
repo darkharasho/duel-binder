@@ -62,7 +62,7 @@ describe('renderPage', () => {
   it('has the charset, headline and lead', () => {
     const html = page()
     expect(html).toContain('<meta charset="utf-8">')
-    expect(html).toContain('A binder for your <span class="nowrap">Yu-Gi-Oh!</span> collection.')
+    expect(html).toContain('A binder for your <span class="nowrap">Yu-Gi-Oh!</span> and Pokémon cards.')
     expect(html).toContain(
       "Log what you own by set, rarity and condition. Prices update on their own. It runs on your computer and works offline. Sign in with Discord to see your friends' binders on the web."
     )
@@ -108,7 +108,7 @@ describe('renderPage', () => {
     expect(html).toMatch(new RegExp(`href="${appUrl}"[^>]*>Open the web app</a>`))
     expect(html).toContain('href="https://github.com/darkharasho/duel-binder"')
     expect(html).toContain(
-      'Duel Binder is not affiliated with Konami. Card data and images from YGOPRODeck.'
+      'Duel Binder is not affiliated with Konami or The Pokémon Company. Card data and images from YGOPRODeck and TCGdex.'
     )
     expect(html).toContain('<a href="/privacy">Privacy</a>')
     expect(html).toContain('<a href="/terms">Terms</a>')
@@ -133,7 +133,7 @@ describe('renderPage', () => {
 
   it('has the head metadata and well-formed images', () => {
     const html = page()
-    expect(html).toContain('<title>Duel Binder — a binder for your Yu-Gi-Oh! collection</title>')
+    expect(html).toContain('<title>Duel Binder — a binder for your Yu-Gi-Oh! and Pokémon cards</title>')
     expect(html).toContain('<meta property="og:image" content="https://duelbinder.com/og.png">')
     expect(html).toContain('<meta property="og:url" content="https://duelbinder.com/">')
     expect(html).toContain('<meta name="twitter:card" content="summary_large_image">')

@@ -5,8 +5,10 @@ import { isSyncing, useSyncStatus } from '@/components/useSyncStatus'
 import { useUpdateStatus } from './useUpdateToasts'
 import { api, queryKeys } from '@/lib/api'
 import { formatRelative } from '@/lib/format'
+import { useGame } from '@/lib/game'
 import { isWeb } from '@/lib/platform'
 import { AccountSection } from './AccountSection'
+import { DexImportButton } from './DexImportDialog'
 import { UsageToggle } from './UsageToggle'
 import { WishlistToggle } from './WishlistToggle'
 import type { UpdateStatus } from '@shared/types'
@@ -85,6 +87,7 @@ const formatMb = (bytes: number): string => `${(bytes / (1024 * 1024)).toFixed(1
 function DesktopSettings(): React.JSX.Element {
   const qc = useQueryClient()
   const sync = useSyncStatus()
+  const { available } = useGame()
   const version = useQuery({ queryKey: ['app', 'version'], queryFn: () => api.app.version() })
   const cache = useQuery({ queryKey: ['images', 'cacheSize'], queryFn: () => api.images.cacheSize() })
   const update = useUpdateStatus()
@@ -183,6 +186,7 @@ function DesktopSettings(): React.JSX.Element {
           <Button variant="outline" size="sm" disabled={backup.isPending} onClick={() => backup.mutate()}>
             Back up collection…
           </Button>
+          {available.includes('pkm') && !isWeb() && <DexImportButton />}
         </div>
       </Section>
 

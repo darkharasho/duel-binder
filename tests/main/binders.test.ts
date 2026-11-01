@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import type Database from 'better-sqlite3'
 import { setMeta } from '../../src/main/db/meta'
 import { addEntry, CollectionError, removeEntry } from '../../src/main/repo/collection'
@@ -11,6 +11,7 @@ import {
   saveBinder,
   setBinderEdit
 } from '../../src/main/repo/binders'
+import { createDataHandlers, DATA_CHANNELS } from '../../src/main/ipc/dataHandlers'
 import { localScope } from '../../src/main/repo/scope'
 import {
   MAX_BINDER_EDITS,
@@ -577,5 +578,31 @@ describe('bindersForCard', () => {
     const db = await seededDb()
     saveBinder(db, draft(), T1)
     expect(bindersForCard(db, POT)[0].inBinder).toBe(false)
+  })
+})
+
+describe('binders channels', () => {
+  it('saves and reads through the data handlers, and a write schedules a sync', async () => {
+    const db = await seededDb()
+    const onEdit = vi.fn()
+    const h = createDataHandlers({
+      db,
+      onEdit,
+      availableGames: () => ['ygo'],
+      onGameChanged: () => {}
+    })
+    for (const c of ['list', 'get', 'preview', 'save', 'remove', 'edit', 'forCard', 'fieldValues'])
+      expect(DATA_CHANNELS).toContain(`binders:${c}`)
+    const uid = (await h['binders:save'](draft({}, name('Dark Magician')))) as string
+    expect(onEdit).toHaveBeenCalledTimes(1)
+    expect(await h['binders:list']()).toHaveLength(1)
+    expect(await h['binders:get'](uid)).toMatchObject({ uid, name: 'Mine' })
+    expect(await h['binders:get']('nope')).toBeNull()
+    expect(await h['binders:fieldValues']('rarity', 'ultra')).toContain('Ultra Rare')
+    await h['binders:edit'](uid, { level: 'card', target: String(POT) }, 'add')
+    expect(onEdit).toHaveBeenCalledTimes(2)
+    await h['binders:remove'](uid)
+    expect(onEdit).toHaveBeenCalledTimes(3)
+    expect(await h['binders:list']()).toEqual([])
   })
 })

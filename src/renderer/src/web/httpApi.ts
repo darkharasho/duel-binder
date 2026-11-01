@@ -219,6 +219,16 @@ export function createHttpApi(opts: HttpApiOptions = {}): Api {
       set: call('wishlist:set'),
       remove: call('wishlist:remove')
     },
+    binders: {
+      list: call('binders:list'),
+      get: call('binders:get'),
+      preview: call('binders:preview'),
+      save: call('binders:save'),
+      remove: call('binders:remove'),
+      edit: call('binders:edit'),
+      forCard: call('binders:forCard'),
+      fieldValues: call('binders:fieldValues')
+    },
     scan: {
       debugFrame: async () => undefined,
       printingsByCode: scanUnavailable,

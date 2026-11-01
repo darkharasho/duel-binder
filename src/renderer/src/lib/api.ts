@@ -43,7 +43,10 @@ export const queryKeys = {
   friendsOwning: (game: GameId, pkeys: string[]) => ['friends', 'owning', game, pkeys] as const,
   wishlistVisible: ['friends', 'wishlistVisible'] as const,
   wishlist: ['wishlist'] as const,
-  wishlistForCard: (id: number) => ['wishlist', 'card', id] as const
+  wishlistForCard: (id: number) => ['wishlist', 'card', id] as const,
+  binders: ['binders'] as const,
+  binder: (uid: string) => ['binders', 'binder', uid] as const,
+  bindersForCard: (id: number) => ['binders', 'card', id] as const
 }
 
 /** Query-key prefixes to invalidate after any collection mutation. */
@@ -54,7 +57,8 @@ export const mutationInvalidationKeys = [
   ['forCard'],
   ['sets'],
   ['browse'],
-  ['wishlist']
+  ['wishlist'],
+  ['binders']
 ] as const
 
 /**

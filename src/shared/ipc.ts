@@ -11,6 +11,10 @@ import type {
   BrowsePage,
   CardDetail,
   CardSearchResult,
+  BinderDetail,
+  BinderPreview,
+  BinderSummary,
+  CardBinder,
   CardWish,
   ChecklistCard,
   CollectionFilters,
@@ -41,6 +45,7 @@ import type { CardLanguage } from './scan/language'
 import type { OcrKind, TextModel } from './scan/ocr'
 import type { PackWrappers, RipCard, RipHistory, RipSessionDetail, RipSet } from './rip/types'
 import type { GameId } from './games'
+import type { BinderDraft, BinderEditAction, BinderTarget, RuleField } from './binders'
 
 /** The API exposed to the renderer as `window.api`. */
 export interface Api {
@@ -109,6 +114,19 @@ export interface Api {
     /** Wants a printing; `quantity` null for no target. A target is kept above the copies owned. */
     set(printingId: number, quantity: number | null): Promise<void>
     remove(printingId: number): Promise<void>
+  }
+  /** Named sets of cards defined by rules; progress counts what the collection holds. */
+  binders: {
+    list(): Promise<BinderSummary[]>
+    get(uid: string): Promise<BinderDetail | null>
+    preview(draft: BinderDraft): Promise<BinderPreview>
+    /** Creates or replaces; returns the uid. */
+    save(draft: BinderDraft): Promise<string>
+    remove(uid: string): Promise<void>
+    /** Adds or removes one card, art or printing by hand; null drops that edit. */
+    edit(uid: string, target: BinderTarget, action: BinderEditAction | null): Promise<void>
+    forCard(cardId: number): Promise<CardBinder[]>
+    fieldValues(field: RuleField, q: string): Promise<string[]>
   }
   scan: {
     printingsByCode(code: string): Promise<ScanPrinting[]>
@@ -295,6 +313,14 @@ export const INVOKE_CHANNELS = [
   'wishlist:forCard',
   'wishlist:set',
   'wishlist:remove',
+  'binders:list',
+  'binders:get',
+  'binders:preview',
+  'binders:save',
+  'binders:remove',
+  'binders:edit',
+  'binders:forCard',
+  'binders:fieldValues',
   'scan:printingsByCode',
   'scan:printingsByNumber',
   'scan:printingsForSet',

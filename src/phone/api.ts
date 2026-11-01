@@ -66,7 +66,10 @@ const EDITS: readonly DataChannel[] = [
   'collection:remove',
   'sets:adjust',
   'wishlist:set',
-  'wishlist:remove'
+  'wishlist:remove',
+  'binders:save',
+  'binders:remove',
+  'binders:edit'
 ]
 
 /** The channels after which every page reloads: switching the game shown. */
@@ -244,6 +247,7 @@ export function createPhoneApi(deps: {
       setWishlistVisible: portal('friends:setWishlistVisible')
     },
     wishlist: dataPart('wishlist'),
+    binders: dataPart('binders'),
     scan: {
       debugFrame: async () => undefined,
       ...dataPart('scan'),

@@ -325,6 +325,38 @@ export function filterTilesByRarity(tiles: Tile[], picked: string[]): Tile[] {
   })
 }
 
+/** The versions most cards come in, first; others follow by name. */
+const VERSION_ORDER = ['Normal', 'Holofoil', 'Reverse Holofoil']
+const versionRank = (v: string): number => {
+  const at = VERSION_ORDER.indexOf(v)
+  return at < 0 ? VERSION_ORDER.length : at
+}
+
+/** A Pokémon set's versions (finishes) with how many cards come in each; none for Yu-Gi-Oh!. */
+export function versionCounts(cl: SetChecklist): { version: string; count: number }[] {
+  const counts = new Map<string, number>()
+  for (const card of cl.cards) {
+    if (cardRarityOf(card) === undefined) continue
+    for (const r of card.rarities) counts.set(r.rarity, (counts.get(r.rarity) ?? 0) + 1)
+  }
+  return [...counts]
+    .map(([version, count]) => ({ version, count }))
+    .sort(
+      (a, b) =>
+        versionRank(a.version) - versionRank(b.version) || a.version.localeCompare(b.version)
+    )
+}
+
+/** Tiles of the picked versions: a version's own tile, or a card's that comes in one. */
+export function filterTilesByVersion(tiles: Tile[], picked: string[]): Tile[] {
+  if (picked.length === 0) return tiles
+  return tiles.filter((t) =>
+    t.rarity !== null
+      ? picked.includes(t.rarity)
+      : t.card.rarities.some((r) => picked.includes(r.rarity))
+  )
+}
+
 /** The checklist with one card replaced by id and the set's owned counts recomputed from the cards. */
 export function replaceChecklistCard(cl: SetChecklist, card: ChecklistCard): SetChecklist {
   const cards = cl.cards.map((c) => (c.cardId === card.cardId ? card : c))

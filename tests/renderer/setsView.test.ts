@@ -8,6 +8,7 @@ import {
   filterSets,
   filterTiles,
   filterTilesByRarity,
+  filterTilesByVersion,
   rarityCounts,
   patchSetSummary,
   progressFor,
@@ -17,6 +18,7 @@ import {
   sortSets,
   sortTiles,
   tilePrice,
+  versionCounts,
   type Tile,
   typeCounts,
   upcomingCutoff,
@@ -323,6 +325,44 @@ describe('replaceChecklistCard', () => {
     })
     expect(zeroed.set).toMatchObject({ ownedCards: 1, ownedRarities: 1 })
     expect(metalRaidersChecklist.set.ownedCards).toBe(1)
+  })
+})
+
+describe('versions', () => {
+  const finish = (rarity: string): ChecklistCard['rarities'][number] => ({
+    rarity,
+    owned: 0,
+    price: null,
+    codes: [],
+    defaultPrintingId: 1,
+    entryId: null
+  })
+  const card = (cardId: number, finishes: string[]): ChecklistCard =>
+    ({ cardId, cardRarity: 'Common', rarities: finishes.map(finish) }) as unknown as ChecklistCard
+  const checklist = {
+    cards: [card(1, ['Poke Ball Pattern', 'Reverse Holofoil', 'Normal']), card(2, ['Holofoil'])]
+  } as SetChecklist
+
+  it("counts a Pokémon set's versions, the usual ones first", () => {
+    expect(versionCounts(checklist)).toEqual([
+      { version: 'Normal', count: 1 },
+      { version: 'Holofoil', count: 1 },
+      { version: 'Reverse Holofoil', count: 1 },
+      { version: 'Poke Ball Pattern', count: 1 }
+    ])
+  })
+
+  it('has none for Yu-Gi-Oh!', () => {
+    const ygo = { cards: [{ rarities: [finish('Secret Rare')] }] } as unknown as SetChecklist
+    expect(versionCounts(ygo)).toEqual([])
+  })
+
+  it('keeps the cards and tiles of a picked version', () => {
+    const picked = ['Reverse Holofoil']
+    const ids = (mode: 'cards' | 'rarities'): (string | null)[] =>
+      filterTilesByVersion(checklistTiles(checklist, mode), picked).map((t) => t.rarity)
+    expect(ids('cards')).toEqual([null])
+    expect(ids('rarities')).toEqual(['Reverse Holofoil'])
   })
 })
 

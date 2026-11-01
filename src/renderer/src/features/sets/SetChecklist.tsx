@@ -61,6 +61,7 @@ import {
   checklistTiles,
   filterTiles,
   filterTilesByRarity,
+  filterTilesByVersion,
   matchesCardSearch,
   patchSetSummary,
   progressFor,
@@ -69,6 +70,7 @@ import {
   sortCards,
   sortTiles,
   tilePrice,
+  versionCounts,
   type ChecklistSort,
   type SortDir,
   type Tile,
@@ -160,6 +162,7 @@ export function SetChecklist({
   const [filter, setFilter] = useState<TileFilter>('all')
   const [q, setQ] = useState('')
   const [pickedRarities, setPickedRarities] = useState<string[]>([])
+  const [pickedVersions, setPickedVersions] = useState<string[]>([])
   const [sort, setSort] = useState<{ by: ChecklistSort; dir: SortDir }>({
     by: 'number',
     dir: 'asc'
@@ -206,15 +209,15 @@ export function SetChecklist({
     () =>
       data
         ? sortTiles(
-            filterTilesByRarity(
-              filterTiles(checklistTiles(data, mode), filter),
-              pickedRarities
+            filterTilesByVersion(
+              filterTilesByRarity(filterTiles(checklistTiles(data, mode), filter), pickedRarities),
+              pickedVersions
             ).filter((t) => matchesCardSearch(t.card, q)),
             sort.by,
             sort.dir
           )
         : [],
-    [data, mode, filter, pickedRarities, q, sort]
+    [data, mode, filter, pickedRarities, pickedVersions, q, sort]
   )
   const shownTiles = useChunkedList(tiles)
   const tileImage = useTileImage()
@@ -342,12 +345,26 @@ export function SetChecklist({
   const progress = progressFor(data.set, mode)
   const rarities = rarityCounts(data)
   const sorts = checklistSorts(game)
+  const versions = versionCounts(data)
   // Bulk mode ignores the rarity, so nothing filters there.
-  const canFilter = !bulk && rarities.length > 1
+  const canFilter = !bulk && (rarities.length > 1 || versions.length > 1)
   const toggleRarity = (r: string): void =>
     setPickedRarities((p) => (p.includes(r) ? p.filter((x) => x !== r) : [...p, r]))
+  const toggleVersion = (v: string): void =>
+    setPickedVersions((p) => (p.includes(v) ? p.filter((x) => x !== v) : [...p, v]))
+  const clearFilters = (): void => {
+    setPickedRarities([])
+    setPickedVersions([])
+  }
   const chips: ActiveChip[] = canFilter
-    ? pickedRarities.map((r) => ({ key: r, label: r, onRemove: () => toggleRarity(r) }))
+    ? [
+        ...pickedRarities.map((r) => ({ key: r, label: r, onRemove: () => toggleRarity(r) })),
+        ...pickedVersions.map((v) => ({
+          key: `version:${v}`,
+          label: v,
+          onRemove: () => toggleVersion(v)
+        }))
+      ]
     : []
   // On the phone the count mode and bulk add move into a "⋯" menu to fit the width.
   const phone = isPhone()
@@ -494,7 +511,7 @@ export function SetChecklist({
                 )
               }
               chips={chips}
-              onClearAll={() => setPickedRarities([])}
+              onClearAll={clearFilters}
               resultCount={`${tiles.length.toLocaleString('en-US')} ${tiles.length === 1 ? 'card' : 'cards'}`}
             />
           </PageHeader>
@@ -633,7 +650,7 @@ export function SetChecklist({
             open={panel.open}
             onOpenChange={panel.setOpen}
             description="Filter this set's cards"
-            onClearAll={pickedRarities.length > 0 ? () => setPickedRarities([]) : undefined}
+            onClearAll={chips.length > 0 ? clearFilters : undefined}
           >
             <FilterSection title="Rarity" defaultOpen picked={pickedRarities.length}>
               <ChipOptions>
@@ -648,6 +665,21 @@ export function SetChecklist({
                 ))}
               </ChipOptions>
             </FilterSection>
+            {versions.length > 1 && (
+              <FilterSection title="Version" defaultOpen picked={pickedVersions.length}>
+                <ChipOptions>
+                  {versions.map((v) => (
+                    <FilterOptionChip
+                      key={v.version}
+                      label={v.version}
+                      count={v.count}
+                      selected={pickedVersions.includes(v.version)}
+                      onClick={() => toggleVersion(v.version)}
+                    />
+                  ))}
+                </ChipOptions>
+              </FilterSection>
+            )}
           </FilterPanel>
         )}
       </div>

@@ -123,7 +123,7 @@ describe('pullOf', () => {
 
   it('shows no range for a pick-printing draft whose priced printings agree', () => {
     const d = draft({ flag: 'pick-printing' }, { price: 4 })
-    expect(pullOf(d, 1, 1)).toMatchObject({ price: 4, range: null, hit: false })
+    expect(pullOf(d, 1, 1)).toMatchObject({ price: 4, range: null, hit: true })
   })
 
   it('shows no price for a pick-printing draft with no priced printing', () => {

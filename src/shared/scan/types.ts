@@ -27,6 +27,8 @@ export interface ScanPrinting {
    * named in English); left out otherwise, and on every Yu-Gi-Oh printing.
    */
   localName?: string
+  /** A Pokémon card's rarity as printed; `rarity` is its version. Left out when it has none. */
+  printedRarity?: string
   /**
    * A Pokémon card with a likely reprint of its art the scanner can't see: a card of the same
    * name and illustrator, in the same language, with no artwork in the catalog (the Classic

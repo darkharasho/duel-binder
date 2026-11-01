@@ -1,13 +1,15 @@
 import { useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { toast } from 'sonner'
 import { ChevronLeftIcon } from 'lucide-react'
-import type { BinderDetail, BinderSummary } from '@shared/types'
+import type { BinderCard, BinderDetail, BinderSummary } from '@shared/types'
 import { CardArt } from '@/components/CardArt'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
 import { SetProgress } from '@/features/sets/SetProgress'
 import { api, queryKeys } from '@/lib/api'
 import { cn } from '@/lib/utils'
+import { BinderForm } from './BinderForm'
 import { BinderView } from './BinderView'
 import { GOAL_LABEL, binderProgress, languagesLabel } from './binderProgress'
 
@@ -77,7 +79,19 @@ function Open({
   onBack: () => void
   onEdit?: (detail: BinderDetail) => void
 }): React.JSX.Element {
+  const qc = useQueryClient()
   const q = useQuery({ queryKey: queryKeys.binder(uid), queryFn: () => api.binders.get(uid) })
+  // A slot's key is `${level}:${target}`; a pkey holds colons, so split on the first one only.
+  const remove = async (card: BinderCard): Promise<void> => {
+    const target = card.key.slice(card.key.indexOf(':') + 1)
+    try {
+      await api.binders.edit(uid, { level: card.level, target }, 'remove')
+      // One prefix covers the list, this page and each card's binders.
+      await qc.invalidateQueries({ queryKey: queryKeys.binders })
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : 'Could not update the binder')
+    }
+  }
   return (
     <div className="space-y-4 p-8 max-md:p-4">
       <PageHeader>
@@ -87,7 +101,11 @@ function Open({
         </Button>
       </PageHeader>
       {q.data ? (
-        <BinderView detail={q.data} onEdit={onEdit && (() => q.data && onEdit(q.data))} />
+        <BinderView
+          detail={q.data}
+          onEdit={onEdit && (() => q.data && onEdit(q.data))}
+          onRemove={(card) => void remove(card)}
+        />
       ) : q.isSuccess ? (
         <p className="text-sm text-muted-foreground">This binder no longer exists.</p>
       ) : null}
@@ -96,24 +114,31 @@ function Open({
 }
 
 /** The current game's binders, with progress; opening one shows its slots. */
-export function BindersPage({
-  onNew,
-  onEdit
-}: {
-  /** Starts a new binder; the button shows only when given (the form is a later task). */
-  onNew?: () => void
-  onEdit?: (detail: BinderDetail) => void
-}): React.JSX.Element {
+export function BindersPage(): React.JSX.Element {
   const list = useQuery({ queryKey: queryKeys.binders, queryFn: () => api.binders.list() })
   const [uid, setUid] = useState<string | null>(null)
-  if (uid) return <Open uid={uid} onBack={() => setUid(null)} onEdit={onEdit} />
+  // The form: a binder being edited, or true for a new one.
+  const [form, setForm] = useState<BinderDetail | true | null>(null)
+  if (form)
+    return (
+      <BinderForm
+        binder={form === true ? undefined : form}
+        onCancel={() => setForm(null)}
+        onDone={(saved) => {
+          setForm(null)
+          // A deleted binder goes back to the list; a saved one stays open.
+          setUid(saved ?? null)
+        }}
+      />
+    )
+  if (uid) return <Open uid={uid} onBack={() => setUid(null)} onEdit={setForm} />
   const binders = list.data ?? []
   return (
     <div className="space-y-4 p-8 max-md:p-4">
       <PageHeader>
         <div className="flex items-center justify-between gap-3">
           <h1 className="text-xl font-semibold">Binders</h1>
-          {onNew && <Button onClick={onNew}>New binder</Button>}
+          <Button onClick={() => setForm(true)}>New binder</Button>
         </div>
       </PageHeader>
       {list.isSuccess && binders.length === 0 ? (

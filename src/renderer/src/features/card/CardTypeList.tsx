@@ -7,6 +7,7 @@ import type { BrowsePage, ChecklistCard, EntryView, Printing, SetChecklist } fro
 import { LanguageTag } from '@/components/LanguageTag'
 import { pickableRow } from '@/components/pickableRow'
 import { Button } from '@/components/ui/button'
+import { AddToBinder } from '@/features/binders/AddToBinder'
 import { replaceChecklistCard } from '@/features/sets/setsView'
 import { WishToggle } from '@/features/wishlist/WishToggle'
 import { api, invalidateAfterEdit, queryKeys } from '@/lib/api'
@@ -174,6 +175,8 @@ export function CardTypeList({
       })
   }
 
+  const selected = rows.find((r) => r.key === selectedKey)
+
   return (
     <section aria-label="Printings" className="space-y-2">
       <h3 className="text-sm font-medium">
@@ -300,6 +303,17 @@ export function CardTypeList({
           </div>
         )
       })}
+      <AddToBinder
+        cardId={cardId}
+        printing={
+          selected?.printing.pkey
+            ? {
+                pkey: selected.printing.pkey,
+                label: `${selected.printing.setCode} · ${selected.printing.setRarity}`
+              }
+            : undefined
+        }
+      />
     </section>
   )
 }

@@ -72,12 +72,11 @@ describe('the binders page', () => {
     expect(screen.queryByRole('progressbar')).not.toBeInTheDocument()
   })
 
-  it('says so when there are no binders, and offers New binder when given', async () => {
-    const onNew = vi.fn()
-    renderWithProviders(<BindersPage onNew={onNew} />)
+  it('says so when there are no binders, and New binder opens the form', async () => {
+    renderWithProviders(<BindersPage />)
     expect(await screen.findByText(/No binders yet/)).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'New binder' }))
-    expect(onNew).toHaveBeenCalled()
+    expect(screen.getByRole('heading', { name: 'New binder' })).toBeInTheDocument()
   })
 
   it('opens a binder', async () => {

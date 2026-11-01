@@ -42,6 +42,8 @@ export interface Printing {
   setPrice: number | null
   missingFromApi: boolean
   language: Language
+  /** The printing's sync key, which binders refer to it by. Only where the query selects it. */
+  pkey?: string
 }
 
 /** sortOrder 0 is the original art. */

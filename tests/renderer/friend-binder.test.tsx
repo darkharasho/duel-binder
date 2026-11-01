@@ -1,6 +1,15 @@
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import type { EntryView, Friend, FriendStats, Printing, CardRow } from '@shared/types'
+import type {
+  BinderCard,
+  BinderDetail,
+  BinderSummary,
+  EntryView,
+  Friend,
+  FriendStats,
+  Printing,
+  CardRow
+} from '@shared/types'
 import { FriendBinder } from '@/features/friends/FriendBinder'
 import { createMockApi, renderWithProviders } from './mockApi'
 import { metalRaidersChecklist } from './setFixtures'
@@ -161,5 +170,79 @@ describe("a friend's binder", () => {
     const sheet = await screen.findByRole('dialog')
     expect(within(sheet).getByRole('region', { name: 'Their copies' })).toBeInTheDocument()
     await waitFor(() => expect(api.collection.forCard).not.toHaveBeenCalled())
+  })
+})
+
+describe("a friend's binders tab", () => {
+  const summary: BinderSummary = {
+    uid: 'b1',
+    name: 'Blue-Eyes',
+    goal: 'art',
+    languages: ['en'],
+    friendsVisible: true,
+    hasRules: true,
+    editable: true,
+    ownedSlots: 1,
+    missingSlots: 1,
+    tooBroad: false,
+    coverImageId: null
+  }
+  const detail: BinderDetail = {
+    ...summary,
+    rules: { version: 1, rules: [] },
+    cards: [
+      {
+        key: 'art:1',
+        level: 'art',
+        card: { id: 1, name: 'Card 1', type: 'Normal Monster', frameType: 'normal' } as CardRow,
+        imageId: 1,
+        printing: null,
+        printingScan: false,
+        owned: 1,
+        added: false,
+        price: null
+      } as BinderCard
+    ],
+    valueToFinish: 0,
+    unpricedMissing: 0
+  }
+
+  it('labels the tab bar Collection, and hides Binders when none are shared', async () => {
+    const { api } = open()
+    expect(screen.getByRole('radiogroup', { name: 'Collection' })).toBeInTheDocument()
+    await waitFor(() => expect(api.friends.binders).toHaveBeenCalledWith(7))
+    expect(screen.queryByRole('radio', { name: 'Binders' })).not.toBeInTheDocument()
+  })
+
+  it('stays hidden when the portal cannot answer', async () => {
+    const { api } = open({
+      binders: vi.fn(async () => {
+        throw new Error('404')
+      })
+    })
+    await waitFor(() => expect(api.friends.binders).toHaveBeenCalled())
+    expect(screen.queryByRole('radio', { name: 'Binders' })).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Bob' })).toBeInTheDocument()
+  })
+
+  it('lists their binders and opens one read-only', async () => {
+    const { api } = open({
+      binders: vi.fn(async () => [summary]),
+      binder: vi.fn(async () => detail)
+    })
+    await userEvent.click(await screen.findByRole('radio', { name: 'Binders' }))
+    await userEvent.click(await screen.findByRole('button', { name: /Blue-Eyes/ }))
+    expect(await screen.findByRole('heading', { name: 'Blue-Eyes' })).toBeInTheDocument()
+    expect(api.friends.binder).toHaveBeenCalledWith(7, 'b1')
+    expect(screen.getByText('Card 1')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /remove/i })).not.toBeInTheDocument()
+  })
+
+  it('says so when a binder is no longer available', async () => {
+    open({ binders: vi.fn(async () => [summary]), binder: vi.fn(async () => null) })
+    await userEvent.click(await screen.findByRole('radio', { name: 'Binders' }))
+    await userEvent.click(await screen.findByRole('button', { name: /Blue-Eyes/ }))
+    expect(await screen.findByText("This binder isn't available.")).toBeInTheDocument()
   })
 })

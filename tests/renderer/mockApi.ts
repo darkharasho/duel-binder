@@ -113,6 +113,8 @@ export function createMockApi(overrides: DeepPartial<Api> = {}): Api {
         languages: []
       })),
       wishlist: vi.fn(async () => []),
+      binders: vi.fn(async () => []),
+      binder: vi.fn(async () => null),
       wanting: vi.fn(async () => []),
       owning: vi.fn(async () => []),
       wishlistVisible: vi.fn(async () => true),
@@ -233,6 +235,16 @@ export function createMockApi(overrides: DeepPartial<Api> = {}): Api {
       })),
       onUpdateStatus: vi.fn(() => () => {}),
       onDataChanged: vi.fn(() => () => {})
+    },
+    binders: {
+      list: vi.fn(async () => []),
+      get: vi.fn(async () => null),
+      preview: vi.fn(async () => ({ printings: 0, cards: 0, owned: 0, tooBroad: false })),
+      save: vi.fn(async () => 'uid'),
+      remove: vi.fn(async () => undefined),
+      edit: vi.fn(async () => undefined),
+      forCard: vi.fn(async () => []),
+      fieldValues: vi.fn(async () => [])
     },
     account: {
       status: vi.fn(async () => ({ ...signedOut })),

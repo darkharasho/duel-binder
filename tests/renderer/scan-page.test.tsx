@@ -130,6 +130,7 @@ describe('Scan nav', () => {
       'Dashboard',
       'Collection',
       'Wishlist',
+      'Binders',
       'Sets',
       'Browse',
       'Scan',

@@ -208,6 +208,8 @@ export function createHttpApi(opts: HttpApiOptions = {}): Api {
       checklist: call('friends:checklist'),
       forCard: call('friends:forCard'),
       wishlist: call('friends:wishlist'),
+      binders: call('friends:binders'),
+      binder: call('friends:binder'),
       wanting: call('friends:wanting'),
       owning: call('friends:owning'),
       wishlistVisible: call('friends:wishlistVisible'),
@@ -218,6 +220,16 @@ export function createHttpApi(opts: HttpApiOptions = {}): Api {
       forCard: call('wishlist:forCard'),
       set: call('wishlist:set'),
       remove: call('wishlist:remove')
+    },
+    binders: {
+      list: call('binders:list'),
+      get: call('binders:get'),
+      preview: call('binders:preview'),
+      save: call('binders:save'),
+      remove: call('binders:remove'),
+      edit: call('binders:edit'),
+      forCard: call('binders:forCard'),
+      fieldValues: call('binders:fieldValues')
     },
     scan: {
       debugFrame: async () => undefined,

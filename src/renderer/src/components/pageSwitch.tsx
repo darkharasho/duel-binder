@@ -3,6 +3,7 @@ import type { CardSearchResult } from '@shared/types'
 import type { NavigateFn, Page } from '@/components/AppShell'
 import { useDataChanged } from '@/components/useDataChanged'
 import { AddCardDialog } from '@/features/add-card/AddCardDialog'
+import { BindersPage } from '@/features/binders/BindersPage'
 import { BrowsePage } from '@/features/browse/BrowsePage'
 import { CollectionPage } from '@/features/collection/CollectionPage'
 import { DashboardPage } from '@/features/dashboard/DashboardPage'
@@ -87,6 +88,7 @@ export function PageSwitch({
         />
       )}
       {page === 'wishlist' && <WishlistPage />}
+      {page === 'binders' && <BindersPage />}
       {page === 'browse' && (
         <BrowsePage onAddCard={(card, printingId) => openAdd({ card, printingId })} />
       )}

@@ -12,7 +12,12 @@ import {
   checkString,
   checkUpdatePatch
 } from '../../../src/main/repo/args'
-import { borrowedArt, getCardDetail, searchCards, traditionalArt } from '../../../src/main/repo/cards'
+import {
+  borrowedArt,
+  getCardDetail,
+  searchCards,
+  traditionalArt
+} from '../../../src/main/repo/cards'
 import { browseCards, browseFacets } from '../../../src/main/repo/browse'
 import {
   CollectionError,
@@ -23,6 +28,18 @@ import {
   removeEntry,
   updateEntry
 } from '../../../src/main/repo/collection'
+import {
+  bindersForCard,
+  getBinder,
+  listBinders,
+  previewBinder,
+  removeBinder,
+  saveBinder,
+  setBinderEdit
+} from '../../../src/main/repo/binders'
+import { ruleFieldValues } from '../../../src/main/repo/binderRules'
+import type { BinderDraft, BinderEditLevel, RuleField } from '../../../src/shared/binders'
+import { MAX_PKEY } from './sync'
 import { adjustPrinting, getChecklist, listSets } from '../../../src/main/repo/sets'
 import { getStats, recordSnapshot } from '../../../src/main/repo/stats'
 import {
@@ -53,6 +70,7 @@ import {
   setWishlistVisible,
   wishlistVisible
 } from './wishlist'
+import { friendBinder, friendBinders } from './friendBinders'
 import { userScope } from './scope'
 import { GAME_HEADER } from '../../../src/shared/cloud'
 import type { GameId } from '../../../src/shared/games'
@@ -74,6 +92,39 @@ type Handler<C extends InvokeChannel> = (
   scope: Scope,
   ...args: Params<ChannelMethod<C>>
 ) => unknown
+
+const MAX_UID = 64
+const MAX_QUERY = 100
+const EDIT_LEVELS: readonly BinderEditLevel[] = ['card', 'art', 'printing']
+const RULE_FIELD_NAMES: readonly RuleField[] = [
+  'name',
+  'artist',
+  'cardType',
+  'frameType',
+  'race',
+  'category',
+  'energyType',
+  'stage',
+  'attribute',
+  'level',
+  'archetype',
+  'set',
+  'rarity'
+]
+
+/** A string of 1 to `max` characters. */
+function checkBounded(v: unknown, what: string, max: number): string {
+  const s = checkString(v, what)
+  if (s.length < 1 || s.length > max)
+    throw new CollectionError(`${what} must be a string of 1 to ${max} characters`)
+  return s
+}
+
+function checkDraft(v: unknown): BinderDraft {
+  const draft = checkObject(v, 'Binder')
+  if (draft.uid !== undefined) checkBounded(draft.uid, 'uid', MAX_UID)
+  return draft as unknown as BinderDraft
+}
 
 /** The validated id of an accepted friend of `me`; anyone else is refused. */
 function friendId(db: AppDeps['db'], me: number, id: unknown): number {
@@ -177,6 +228,41 @@ const HANDLERS: { [C in PortalChannel]: Handler<C> } = {
     setWish(db, checkId(printingId, 'printingId'), quantity, now(), scope),
   'wishlist:remove': ({ db, now }, scope, printingId) =>
     removeWish(db, checkId(printingId, 'printingId'), now(), scope),
+  'friends:binders': ({ db, userId, game }, _s, id) =>
+    friendBinders(db, friendId(db, userId, id), game),
+  'friends:binder': ({ db, userId, game }, _s, id, uid) =>
+    friendBinder(db, friendId(db, userId, id), game, checkBounded(uid, 'uid', MAX_UID)),
+  'binders:list': ({ db }, scope) => listBinders(db, scope),
+  'binders:get': ({ db }, scope, uid) => getBinder(db, checkBounded(uid, 'uid', MAX_UID), scope),
+  'binders:preview': ({ db }, scope, draft) => previewBinder(db, checkDraft(draft), scope),
+  'binders:save': ({ db, now }, scope, draft) => saveBinder(db, checkDraft(draft), now(), scope),
+  'binders:remove': ({ db, now }, scope, uid) =>
+    removeBinder(db, checkBounded(uid, 'uid', MAX_UID), now(), scope),
+  'binders:edit': ({ db, now }, scope, uid, target, action) => {
+    const t = checkObject(target, 'target')
+    if (!EDIT_LEVELS.includes(t.level as BinderEditLevel))
+      throw new CollectionError('target.level must be card, art or printing')
+    checkBounded(t.target, 'target.target', MAX_PKEY)
+    if (action !== null && action !== 'add' && action !== 'remove')
+      throw new CollectionError('action must be add, remove or null')
+    return setBinderEdit(
+      db,
+      checkBounded(uid, 'uid', MAX_UID),
+      t as unknown as Parameters<typeof setBinderEdit>[2],
+      action,
+      now(),
+      scope
+    )
+  },
+  'binders:forCard': ({ db }, scope, cardId) =>
+    bindersForCard(db, checkId(cardId, 'cardId'), scope),
+  'binders:fieldValues': ({ db }, scope, field, q) => {
+    if (!RULE_FIELD_NAMES.includes(field as RuleField))
+      throw new CollectionError('Unknown rule field')
+    const query = checkString(q, 'q')
+    if (query.length > MAX_QUERY) throw new CollectionError('q is too long')
+    return ruleFieldValues(db, field, query, scope)
+  },
   'stats:get': ({ db }, scope) => getStats(db, scope)
 }
 

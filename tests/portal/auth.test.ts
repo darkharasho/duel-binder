@@ -286,7 +286,7 @@ describe('Discord sign-in and sessions', () => {
     expect(res.headers.get('cache-control')).toBe('no-store')
     const html = await res.text()
     expect(html).toContain('href="/auth/discord/start"')
-    expect(html).toContain('Sign in with Discord to open your binder in the browser.')
+    expect(html).toContain('Sign in with Discord to open your collection in the browser.')
     expect(html).not.toContain('on its way')
     expect(html).toContain('href="https://site.test/site.css"')
     expect(html).not.toContain("didn't go through")

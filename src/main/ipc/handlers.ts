@@ -2,6 +2,7 @@ import type Database from 'better-sqlite3'
 import { clipboard, ipcMain } from 'electron'
 import type { Language } from '@shared/languages'
 import type {
+  BinderDetail,
   CollectionFilters,
   EntryView,
   FriendStats,
@@ -150,6 +151,11 @@ export function createHandlers({
         ...w,
         printingScan: false
       })),
+    'friends:binders': async (userId: number) => account.portal('friends:binders', [userId]),
+    'friends:binder': async (userId: number, uid: string) => {
+      const b = await account.portal<BinderDetail | null>('friends:binder', [userId, uid])
+      return b && { ...b, cards: b.cards.map((c) => ({ ...c, printingScan: false })) }
+    },
     'friends:wanting': async (cardId: number) => account.portal('friends:wanting', [cardId]),
     'friends:owning': async (pkeys: string[]) => account.portal('friends:owning', [pkeys]),
     'friends:wishlistVisible': async () => account.portal('friends:wishlistVisible', []),

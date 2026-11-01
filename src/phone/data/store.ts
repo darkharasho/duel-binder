@@ -613,6 +613,8 @@ export function createPhoneStore(deps: {
           for (const table of [
             'collection_entries',
             'wishlist_entries',
+            'binders',
+            'binder_edits',
             'value_snapshots',
             'sync_pending',
             'sync_issues',

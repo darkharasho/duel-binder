@@ -6,6 +6,7 @@ import { cardLanguage } from '../shared/scan/cardLanguage'
 import { checkOcrBands, isOcrKind, isTextModel, readTexts, type Ocr } from '../shared/scan/ocr'
 import type {
   AccountStatus,
+  BinderDetail,
   CollectionFilters,
   EntryView,
   FriendStats,
@@ -66,7 +67,10 @@ const EDITS: readonly DataChannel[] = [
   'collection:remove',
   'sets:adjust',
   'wishlist:set',
-  'wishlist:remove'
+  'wishlist:remove',
+  'binders:save',
+  'binders:remove',
+  'binders:edit'
 ]
 
 /** The channels after which every page reloads: switching the game shown. */
@@ -238,12 +242,19 @@ export function createPhoneApi(deps: {
           ...w,
           printingScan: false
         })),
+      // A friend's printing ids are the server's, so their binder cards show no printing scan.
+      binders: portal('friends:binders'),
+      binder: async (userId: number, uid: string) => {
+        const b = await store.portal<BinderDetail | null>('friends:binder', [userId, uid])
+        return b && { ...b, cards: b.cards.map((c) => ({ ...c, printingScan: false })) }
+      },
       wanting: (cardId: number) => store.portalRead('friends:wanting', [cardId]),
       owning: (pkeys: string[]) => store.portalRead('friends:owning', [pkeys]),
       wishlistVisible: portal('friends:wishlistVisible'),
       setWishlistVisible: portal('friends:setWishlistVisible')
     },
     wishlist: dataPart('wishlist'),
+    binders: dataPart('binders'),
     scan: {
       debugFrame: async () => undefined,
       ...dataPart('scan'),

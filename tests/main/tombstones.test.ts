@@ -232,6 +232,7 @@ const ENTRY_REFS: Record<string, [count: number, kind: string]> = {
   'workers/portal/src/friendCards.ts': [3, LIVE],
   'workers/portal/src/wishlist.ts': [2, LIVE],
   'src/main/repo/wishlist.ts': [2, LIVE],
+  'src/main/repo/binders.ts': [1, LIVE],
   'workers/portal/src/friends.ts': [
     1,
     'live rows for the card count; all rows incl. tombstones for the last-change time'

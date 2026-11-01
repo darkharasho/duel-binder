@@ -25,7 +25,7 @@ export function renderPrivacy(view: PrivacyView): string {
         [
           'Why',
           p(
-            'It keeps these to sync and show your binder: so your collection is the same on the web, on your computers and on your phone, and so friends you add can look through it. The last-used time only feeds a count of how many accounts were active in a day, week or month.'
+            'It keeps these to sync and show your collection: so your collection is the same on the web, on your computers and on your phone, and so friends you add can look through it. The last-used time only feeds a count of how many accounts were active in a day, week or month.'
           )
         ],
         [

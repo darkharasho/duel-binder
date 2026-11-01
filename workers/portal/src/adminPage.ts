@@ -143,7 +143,7 @@ function render(s) {
     tile(n(s.active.day), 'active today'),
     tile(n(s.active.week), 'active this week'),
     tile(n(s.active.month), 'active this month'),
-    tile(n(s.collections.cards), 'cards in binders')
+    tile(n(s.collections.cards), 'cards in collections')
   )
   const db = s.storage.databaseBytes
   $('database').replaceChildren(database(db))
@@ -162,7 +162,7 @@ function render(s) {
       ['Friendships', n(s.friends.accepted)], ['Pending requests', n(s.friends.pending)],
       ['Blocks', n(s.friends.blocks)]
     ]),
-    panel('Largest binders', s.collections.largest.length
+    panel('Largest collections', s.collections.largest.length
       ? s.collections.largest.map((r) => [r.username, n(r.entries) + ' entries · ' + n(r.cards) + ' cards'])
       : [['none yet', '']])
   )

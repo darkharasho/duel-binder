@@ -9,6 +9,14 @@ export interface EntryInsert {
   ts: string
 }
 
+export interface WishlistScope {
+  ownerCol: string
+  owner: string
+  markerCol: string
+  marker: string
+  touch: string
+}
+
 /**
  * Which owner's collection a repo call reads and writes. The desktop has one collection (LOCAL);
  * the server serves one user's live rows per request (userScope).
@@ -45,13 +53,9 @@ export interface Scope {
    * wishlist_entries scoping: the owner column and its value, the row's change-marker column and
    * value for an insert, and the SQL assignment recording a change (dirty, or a new seq).
    */
-  wishlist: {
-    ownerCol: string
-    owner: string
-    markerCol: string
-    marker: string
-    touch: string
-  }
+  wishlist: WishlistScope
+  /** `binders` / `binder_edits` scoping: the same shape as `wishlist`. */
+  binderSync(table: 'binders' | 'binder_edits'): WishlistScope
   /**
    * value_snapshots scoping. `insertCols`/`insertVals` are comma-terminated fragments placed before
    * `date` / `?` in an INSERT (and `insertCols + 'date'` is the upsert conflict target); `where` limits a read
@@ -137,6 +141,13 @@ export function localScope(game: string): Scope {
       marker: '1',
       touch: 'dirty = 1'
     },
+    binderSync: () => ({
+      ownerCol: 'owner_id',
+      owner: ACTIVE_OWNER,
+      markerCol: 'dirty',
+      marker: '1',
+      touch: 'dirty = 1'
+    }),
     snapshotTable: {
       insertCols: 'owner_id, game, ',
       insertVals: `${ACTIVE_OWNER}, ${game}, `,

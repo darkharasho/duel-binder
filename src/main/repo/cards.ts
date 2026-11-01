@@ -69,6 +69,8 @@ export interface PrintingDbRow {
   market_price?: number | null
   missing_from_api: number
   language: string
+  /** Absent from queries that don't select it. */
+  pkey?: string
 }
 
 export function rowToCard(row: CardDbRow): CardRow {
@@ -101,7 +103,8 @@ export function rowToPrinting(row: PrintingDbRow): Printing {
     setRarityCode: row.set_rarity_code,
     setPrice: row.market_price ?? row.set_price,
     missingFromApi: row.missing_from_api === 1,
-    language: isLanguage(row.language) ? row.language : 'en'
+    language: isLanguage(row.language) ? row.language : 'en',
+    ...(row.pkey ? { pkey: row.pkey } : {})
   }
 }
 
@@ -111,7 +114,7 @@ export function buildFtsQuery(q: string): string | null {
   return tokens.length ? tokens.map((t) => `"${t}"*`).join(' ') : null
 }
 
-const escapeLike = (s: string): string => s.replace(/[\\%_]/g, (c) => `\\${c}`)
+export const escapeLike = (s: string): string => s.replace(/[\\%_]/g, (c) => `\\${c}`)
 
 export function searchCards(db: SqlDb, q: string, limit = 20, scope: Scope = LOCAL): CardSearchResult[] {
   const text = q.trim()
@@ -235,7 +238,7 @@ export function getCardDetail(db: SqlDb, cardId: number, scope: Scope = LOCAL): 
     db
       .prepare(
         `SELECT p.id, p.card_id, p.set_name, p.set_code, ${RARITY_LABEL} AS set_rarity, p.set_rarity_code,
-                ${setPrice(scope.ebayPrices)} AS set_price, p.market_price, p.missing_from_api, p.language
+                ${setPrice(scope.ebayPrices)} AS set_price, p.market_price, p.missing_from_api, p.language, p.pkey
          FROM card_printings p WHERE p.card_id = ? AND +p.game = ${scope.game} AND p.contributed = 0 AND ${shownPrinting(scope)}
          ORDER BY p.set_code, p.id`
       )

@@ -60,7 +60,7 @@ describe('migration V19 (game columns, Pokémon card fields)', () => {
 
     migrate(db)
 
-    expect(db.pragma('user_version', { simple: true })).toBe(29)
+    expect(db.pragma('user_version', { simple: true })).toBe(33)
     for (const t of GAME_TABLES) {
       expect(columns(db, t), t).toContain('game')
       expect(all(db, `SELECT DISTINCT game FROM ${t}`), t).toEqual([{ game: 'ygo' }])

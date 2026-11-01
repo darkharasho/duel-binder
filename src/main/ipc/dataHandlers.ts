@@ -23,6 +23,17 @@ import {
   printingsForSet
 } from '../repo/scan'
 import { getStats, recordSnapshot } from '../repo/stats'
+import type { BinderDraft, BinderEditAction, BinderTarget, RuleField } from '../../shared/binders'
+import {
+  bindersForCard,
+  getBinder,
+  listBinders,
+  previewBinder,
+  removeBinder,
+  saveBinder,
+  setBinderEdit
+} from '../repo/binders'
+import { ruleFieldValues } from '../repo/binderRules'
 import { listWishlist, removeWish, setWish, settleWishlist, wishesForCard } from '../repo/wishlist'
 import { activeOwner, listSyncIssues } from '../cloud/localSync'
 import { openPack, ripHistory, ripSession, ripSets, startRip } from '../repo/rip'
@@ -48,6 +59,14 @@ export const DATA_CHANNELS = [
   'wishlist:forCard',
   'wishlist:set',
   'wishlist:remove',
+  'binders:list',
+  'binders:get',
+  'binders:preview',
+  'binders:save',
+  'binders:remove',
+  'binders:edit',
+  'binders:forCard',
+  'binders:fieldValues',
   'scan:printingsByCode',
   'scan:printingsByNumber',
   'scan:printingsForSet',
@@ -155,6 +174,16 @@ export function createDataHandlers({
     'wishlist:set': async (printingId: number, quantity: number | null) =>
       edited(setWish(db, printingId, quantity)),
     'wishlist:remove': async (printingId: number) => edited(removeWish(db, printingId)),
+    'binders:list': async () => listBinders(db),
+    'binders:get': async (uid: string) => getBinder(db, uid),
+    'binders:preview': async (draft: BinderDraft) => previewBinder(db, draft),
+    'binders:save': async (draft: BinderDraft) => edited(saveBinder(db, draft)),
+    'binders:remove': async (uid: string) => edited(removeBinder(db, uid)),
+    'binders:edit': async (uid: string, target: BinderTarget, action: BinderEditAction | null) =>
+      edited(setBinderEdit(db, uid, target, action)),
+    'binders:forCard': async (cardId: number) => bindersForCard(db, cardId),
+    'binders:fieldValues': async (field: RuleField, q: string) =>
+      ruleFieldValues(db, field, q, LOCAL),
     'scan:printingsByCode': async (code: string) => printingsByCode(db, code),
     'scan:printingsByNumber': async (n: CollectorNumber) => {
       const text = (x: unknown): boolean => typeof x === 'string' && x.length > 0 && x.length <= 16

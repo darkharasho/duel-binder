@@ -37,7 +37,7 @@ export function WishlistToggle({ className }: { className?: string }): React.JSX
       <label htmlFor={id} className="space-y-0.5">
         <span className="block">Show my wishlist to friends</span>
         <span className="block text-muted-foreground">
-          Friends can see the cards you want, on your binder and on cards they own.
+          Friends can see the cards you want, on your collection and on cards they own.
         </span>
       </label>
     </div>

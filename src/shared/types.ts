@@ -1,3 +1,4 @@
+import type { BinderEditAction, BinderEditLevel, BinderGoal, BinderRules } from './binders'
 import type { Me } from './cloud'
 import type { Language } from './languages'
 
@@ -41,6 +42,8 @@ export interface Printing {
   setPrice: number | null
   missingFromApi: boolean
   language: Language
+  /** The printing's sync key, which binders refer to it by. Only where the query selects it. */
+  pkey?: string
 }
 
 /** sortOrder 0 is the original art. */
@@ -460,4 +463,64 @@ export interface WishOwners {
 /** A friend who wants a card, and which of its printings. */
 export interface FriendWantsCard extends FriendUser {
   printings: { setCode: string; rarity: string; language: Language }[]
+}
+
+/** A binder in a list, with its progress. */
+export interface BinderSummary {
+  uid: string
+  name: string
+  goal: BinderGoal
+  /** Empty means every language. */
+  languages: Language[]
+  friendsVisible: boolean
+  hasRules: boolean
+  /** False when this app can't read the binder's rules: it shows, but can't be saved. */
+  editable: boolean
+  ownedSlots: number
+  missingSlots: number
+  /** The rules match over MAX_BINDER_MATCHES printings, so there are no slots to show. */
+  tooBroad: boolean
+  coverImageId: number | null
+}
+
+/** One slot of a binder, owned or missing. */
+export interface BinderCard {
+  /** `${level}:${target}`. A pkey may hold colons, so split on the first colon only. */
+  key: string
+  level: BinderEditLevel
+  card: CardRow
+  /** The slot's art, or else the card's first; 0 when the card has none. */
+  imageId: number
+  printing: Printing | null
+  /** As on EntryView: false for a friend's binder seen from the desktop or phone app. */
+  printingScan: boolean
+  owned: number
+  added: boolean
+  /** The cheapest known price of a missing slot; null when owned or unpriced. */
+  price: number | null
+}
+
+export interface BinderDetail extends BinderSummary {
+  rules: BinderRules
+  cards: BinderCard[]
+  valueToFinish: number
+  unpricedMissing: number
+}
+
+/** What a draft's rules match, before any hand edits. */
+export interface BinderPreview {
+  printings: number
+  cards: number
+  /** Slots the draft's goal would count as owned. */
+  owned: number
+  tooBroad: boolean
+}
+
+/** A binder as seen from one card. */
+export interface CardBinder {
+  uid: string
+  name: string
+  inBinder: boolean
+  /** The edit on this card, or else on one of its printings. */
+  edit: BinderEditAction | null
 }

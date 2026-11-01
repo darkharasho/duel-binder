@@ -57,9 +57,13 @@ export function flushUsage(): void {
   timer = null
   const events = pending
   pending = {}
-  // On its own: a portal from before this event refuses a whole report with it in.
-  const { 'page:wishlist': wishlist, ...rest } = events
-  for (const batch of [rest, wishlist ? { 'page:wishlist': wishlist } : {}]) {
+  // Each on its own: a portal from before an event refuses a whole report with it in.
+  const { 'page:wishlist': wishlist, 'page:binders': binders, ...rest } = events
+  for (const batch of [
+    rest,
+    wishlist ? { 'page:wishlist': wishlist } : {},
+    binders ? { 'page:binders': binders } : {}
+  ]) {
     if (Object.keys(batch).length === 0) continue
     try {
       void window.api?.usage?.report(batch).catch(() => {})

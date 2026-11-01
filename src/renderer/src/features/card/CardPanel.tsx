@@ -133,9 +133,12 @@ export function CardPanel({
   const art = entry
     ? { imageId: entry.imageId, printingId: scanFor(entry) }
     : shown
-      ? { imageId: seed?.imageId ?? detail.data?.images[0]?.imageId, printingId: shown.id }
+      ? { imageId: seed?.imageId || detail.data?.images[0]?.imageId, printingId: shown.id }
       : seed
-        ? { imageId: seed.imageId, printingId: seed.defaultPrintingId }
+        ? {
+            imageId: seed.imageId || detail.data?.images[0]?.imageId,
+            printingId: seed.defaultPrintingId
+          }
         : undefined
   // Keep the last art up while a stepped-to card loads, so the floated card stays put.
   const [lastArt, setLastArt] = useState(art)

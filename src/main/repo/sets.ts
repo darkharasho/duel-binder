@@ -299,7 +299,7 @@ function latest(entries: EntryDbRow[]): number | null {
  * Asian languages: only their eBay price, never the English card's TCGplayer price, which is a different
  * product (an OCG Prismatic Secret is not a $0.16 TCG common); unpriced stays null.
  */
-const printingPrice = (scope: Scope): string =>
+export const printingPrice = (scope: Scope): string =>
   `CASE WHEN ${isMarketOnly} THEN ${MARKET_ONLY_PRICE} WHEN p.language = 'en' THEN COALESCE(p.market_price, p.set_price) ELSE COALESCE(ip.price, ${enTwinPrice(scope.game)}) END`
 
 /** The dearest printing price among the rows; null when none has one. */

@@ -96,9 +96,12 @@ function pickArt(hits: TcProduct[]): TcProduct | null {
   return pool.reduce((a, b) => (b.productId < a.productId ? b : a))
 }
 
+/** A two-card LEGEND's halves share a name, so these were matched by eye: 020 is the half with the attacks. */
+const LEGEND_HALVES: Readonly<Record<string, number>> = { '30th-c-019': 716199, '30th-c-020': 716200 }
+
 const cardProductIds = (card: TdCard): number[] => {
   const ids = (card.variants_detailed ?? []).map((v) => v.thirdParty?.tcgplayer)
-  return [...ids, card.thirdParty?.tcgplayer].filter((id): id is number => typeof id === 'number')
+  return [...ids, card.thirdParty?.tcgplayer, LEGEND_HALVES[card.id]].filter((id): id is number => typeof id === 'number')
 }
 
 export type ArtOutcome = 'filled' | 'no group' | 'no number' | 'no name' | 'japanese name' | 'unsettled'

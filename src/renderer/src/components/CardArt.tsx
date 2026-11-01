@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { cn } from '@/lib/utils'
 import { cssAspect, gameOfId } from '@shared/games'
 import { useCardAspect, useCardGame } from '@/lib/game'
+import { useBorrowedArt } from '@/lib/borrowedArt'
 import { cardImageSrc, printingImageSrc } from '@/lib/images'
 import { useArtLoad } from './artLoad'
 import { CardPlaceholder } from './CardPlaceholder'
@@ -51,9 +52,59 @@ function PrintingScan({
   )
 }
 
-/** Keyed by card, so a failed load or a shown scan never carries over to the next card. */
+const ENGLISH_ART = 'English art'
+
+/** Says the art is another printing's. Under a tile wide enough for the words, the two letters. */
+function EnglishArtLabel(): React.JSX.Element {
+  return (
+    <span
+      data-testid="english-art-label"
+      className="pointer-events-none absolute bottom-[3%] left-[4%] max-w-[92%] rounded-[3px] bg-black/70 font-medium leading-none text-white"
+    >
+      <span className="hidden whitespace-nowrap px-1 py-0.5 text-[9px] @[5rem]:block @[12rem]:px-1.5 @[12rem]:py-1 @[12rem]:text-xs">
+        {ENGLISH_ART}
+      </span>
+      <span aria-hidden className="block px-0.5 py-px text-[7px] @[5rem]:hidden">
+        EN
+      </span>
+    </span>
+  )
+}
+
+/**
+ * Keyed by card, so a failed load or a shown scan never carries over to the next card. A card that
+ * borrows art shows the other card's image by that image's own id, so the two share one download
+ * and art of its own replaces it at once.
+ */
 export function CardArt(props: CardArtProps): React.JSX.Element {
-  return <CardArtImage key={props.imageId} {...props} />
+  const { imageId, alt, className } = props
+  const borrowed = useBorrowedArt(imageId)
+  const aspect = useCardAspect(imageId)
+  if (borrowed === undefined)
+    return (
+      <span
+        role="img"
+        aria-label={alt}
+        style={{ aspectRatio: cssAspect(aspect) }}
+        className={cn('art-loading block rounded-[6px] bg-muted shadow-sm', className)}
+      />
+    )
+  if (borrowed === null) return <CardArtImage key={imageId} {...props} />
+  return (
+    <span
+      title={ENGLISH_ART}
+      className={cn('@container relative block rounded-[6px] shadow-sm', className)}
+    >
+      <CardArtImage
+        key={borrowed}
+        {...props}
+        imageId={borrowed}
+        alt={alt && `${alt} (${ENGLISH_ART})`}
+        className="block w-full rounded-[inherit] shadow-none"
+      />
+      <EnglishArtLabel />
+    </span>
+  )
 }
 
 function CardArtImage({

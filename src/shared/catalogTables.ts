@@ -96,7 +96,7 @@ export const CATALOG_TABLES: CatalogTable[] = [
     key: ['card_id'],
     columns: [
       'card_id', 'category', 'hp', 'types', 'stage', 'rarity', 'illustrator', 'source_id',
-      'image_url', 'local_name'
+      'image_url', 'local_name', 'art_twin_id'
     ],
     unique: ['source_id'],
     games: ['pkm']

@@ -49,6 +49,8 @@ export interface Api {
     /** One page of every card in the database. */
     browse(f: BrowseFilters): Promise<BrowsePage>
     browseFacets(): Promise<BrowseFacets>
+    /** `[image id, the image id it shows]` of each card showing another card's art. */
+    borrowedArt(): Promise<[number, number][]>
   }
   collection: {
     list(f: CollectionFilters): Promise<EntryView[]>
@@ -246,6 +248,7 @@ export const INVOKE_CHANNELS = [
   'cards:get',
   'cards:browse',
   'cards:browseFacets',
+  'cards:borrowedArt',
   'collection:list',
   'collection:forCard',
   'collection:add',

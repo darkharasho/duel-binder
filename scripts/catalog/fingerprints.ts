@@ -129,6 +129,7 @@ function tooCloseTokens(
  * (and counted) so it is tried again next run. Tokens too like another card are left out of the
  * finished set of records (see TOKEN_MIN_DISTANCE), however their hashes were come by.
  * Traditional Chinese Pokémon cards stay out: the scanner reads English and Japanese cards only.
+ * Art a Chinese card borrows (art_twin_id) stays out too: only a card's own image_url is hashed.
  */
 export async function buildFingerprints(opts: FingerprintOptions): Promise<FingerprintResult> {
   const fetchFn = opts.fetch ?? fetch

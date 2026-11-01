@@ -20,6 +20,8 @@ export interface TdCard {
   suffix?: string
   /** The number as printed, when it isn't "{localId}/{official}" ("R/RGB"). */
   printed?: string
+  /** The list's English card of the same rules, and the card's mark there; see artTwins.ts. */
+  englishTwin?: { setCode: string; number: string; mark: string }
   /** Built from TCGplayer's rows (upcoming.ts), so its name is already English and plain. */
   fromTcgplayer?: boolean
   set: { id: string; name: string }

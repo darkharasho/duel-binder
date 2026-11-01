@@ -6,6 +6,7 @@ export const PORTAL_CHANNELS = [
   'cards:get',
   'cards:browse',
   'cards:browseFacets',
+  'cards:borrowedArt',
   'collection:list',
   'collection:forCard',
   'collection:add',

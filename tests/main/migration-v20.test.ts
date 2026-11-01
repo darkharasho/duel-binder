@@ -21,7 +21,8 @@ describe('migration V20 (pokemon_cards image_url and local_name)', () => {
       'illustrator',
       'source_id',
       'image_url',
-      'local_name'
+      'local_name',
+      'art_twin_id'
     ])
     db.close()
   })

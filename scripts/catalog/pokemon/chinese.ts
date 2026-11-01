@@ -18,6 +18,9 @@ export interface ZhCard {
   rarity: string
   cardType: string
   nameEn?: string
+  /** The English card of the same rules, by its PTCGL code and number. */
+  setCodeEn?: string
+  cardIndexEn?: string
   /** The list's tags: stage, and the mechanics ("ex", "VSTAR", "Radiant"). */
   is?: string[]
 }
@@ -65,6 +68,13 @@ function categoryOf(cardType: string): string {
   return /Energy$/.test(cardType) ? 'Energy' : 'Trainer'
 }
 
+/** The card's link to its English twin, when the list gives one. */
+function englishTwinOf(row: ZhCard, mark: string): TdCard['englishTwin'] {
+  const setCode = row.setCodeEn?.trim()
+  const number = row.cardIndexEn?.trim()
+  return setCode && number ? { setCode, number, mark } : undefined
+}
+
 const SET = { id: '30thC', name: '30th Celebration' }
 
 /** The set and its cards. Every card of the set is holo, so the one finish is recorded as known. */
@@ -80,6 +90,7 @@ export function chineseSet(rows: ZhCard[]): { set: TdSet; cards: TdCard[] } {
       category: categoryOf(row.cardType),
       rarity: RARITIES[row.rarity] ?? null,
       variants_detailed: [{ type: 'holo' }],
+      englishTwin: englishTwinOf(row, row.rarity),
       set: SET
     }
   })
@@ -270,6 +281,7 @@ export function chineseListSets(index: ZhSetEntry[], rows: Map<string, ZhCard[]>
         variants_detailed: listFinishes(id, { ...row, rarity }).map(
           (type): TdVariant => ({ type, variantId: GENERATED_VARIANT_ID })
         ),
+        englishTwin: englishTwinOf(row, rarity),
         set: ref
       })
     })

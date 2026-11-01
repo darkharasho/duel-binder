@@ -1,4 +1,5 @@
 import type { SqlDb } from '../../main/db/sql'
+import { backfillArtTwins } from '../../main/catalog/artTwinBackfill'
 import type { UsageReport } from '../../shared/usage'
 import { deleteMeta, getMeta, setMeta } from '../../main/db/meta'
 import { applyChanges, catalogCursorKey, finishApply } from '../../main/catalog/apply'
@@ -136,6 +137,7 @@ const READ_CHANNELS: ReadonlySet<DataChannel> = new Set<DataChannel>([
   'cards:get',
   'cards:browse',
   'cards:browseFacets',
+  'cards:borrowedArt',
   'collection:list',
   'collection:forCard',
   'collection:facets',
@@ -393,7 +395,13 @@ export function createPhoneStore(deps: {
     try {
       // Yu-Gi-Oh! first, which every account has; then the account's other games.
       await pass('ygo')
-      for (const game of await syncedGames(c)) if (game !== 'ygo') await pass(game)
+      for (const game of await syncedGames(c)) {
+        if (game === 'pkm')
+          await backfillArtTwins(db, (since) =>
+            c.catalogChanges(since, undefined, ['pokemon_cards'], game)
+          )
+        if (game !== 'ygo') await pass(game)
+      }
     } finally {
       db.exec('PRAGMA foreign_keys = ON')
     }

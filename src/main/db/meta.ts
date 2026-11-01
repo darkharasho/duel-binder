@@ -35,6 +35,8 @@ export type MetaKey =
   | 'catalog_switch_failed'
   /** Catalog work committed but not yet reported, as JSON `{ cardsChanged, imagesChanged, needsFinish }`. */
   | 'catalog_unannounced'
+  /** Set once this database has its art links; see backfillArtTwins. */
+  | 'art_twins_backfilled'
   /** UTC day (YYYY-MM-DD) the portal last listed its eBay sweep prefixes. */
   | 'price_sweeps_listed_at'
   | 'price_sweeps_pkm_listed_at'

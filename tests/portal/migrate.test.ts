@@ -130,7 +130,7 @@ function serverBefore12(): Database.Database {
   const db = freshDb()
   runSteps(db, [
     ...MIGRATIONS.filter((m) => m.version <= 18),
-    ...SERVER_STEPS.filter((s) => !['server-12', 'server-13', 'server-14'].includes(s.name))
+    ...SERVER_STEPS.filter((s) => !['server-12', 'server-13', 'server-14', 'server-16'].includes(s.name))
   ])
   db.exec(`
     INSERT INTO users (id, discord_id, username, created_at, updated_at) VALUES (1, 'd1', 'one', 'x', 'x');
@@ -256,7 +256,7 @@ describe('server-13 (pokemon_cards image_url and local_name)', () => {
     const fresh = freshDb()
     migrateServer(fresh)
     const old = freshDb()
-    runSteps(old, [...MIGRATIONS, ...SERVER_STEPS.filter((s) => s.name !== 'server-13')])
+    runSteps(old, [...MIGRATIONS, ...SERVER_STEPS.filter((s) => !['server-13', 'server-16'].includes(s.name))])
     expect(cols(old)).not.toContain('image_url')
     seedPokemon(old)
     migrateServer(old)
@@ -292,6 +292,37 @@ describe('server-13 (pokemon_cards image_url and local_name)', () => {
     expect(rows(db, 'SELECT tbl, game, key FROM catalog_tombstones')).toEqual([
       { tbl: 'pokemon_cards', game: 'pkm', key: JSON.stringify([cardIds[0]]) }
     ])
+    db.close()
+  })
+})
+
+describe('server-16 (pokemon_cards art_twin_id)', () => {
+  const cols = (db: Database.Database): string[] =>
+    (db.prepare('PRAGMA table_info(pokemon_cards)').all() as { name: string }[]).map((c) => c.name)
+
+  it('a fresh server and an upgraded one both have the column, and old rows keep null', () => {
+    const fresh = freshDb()
+    migrateServer(fresh)
+    const old = freshDb()
+    runSteps(old, [...MIGRATIONS, ...SERVER_STEPS.filter((s) => s.name !== 'server-16')])
+    expect(cols(old)).not.toContain('art_twin_id')
+    seedPokemon(old)
+    migrateServer(old)
+    for (const db of [fresh, old]) expect(cols(db)).toContain('art_twin_id')
+    expect(rows(old, 'SELECT DISTINCT art_twin_id FROM pokemon_cards')).toEqual([{ art_twin_id: null }])
+    fresh.close()
+    old.close()
+  })
+
+  it('a change to art_twin_id alone raises the row catalog_seq', () => {
+    const db = freshDb()
+    migrateServer(db)
+    const { cardIds } = seedPokemon(db)
+    const seqOf = (): number =>
+      (db.prepare('SELECT catalog_seq AS s FROM pokemon_cards WHERE card_id = ?').get(cardIds[0]) as { s: number }).s
+    const before = seqOf()
+    db.prepare('UPDATE pokemon_cards SET art_twin_id = ? WHERE card_id = ?').run(cardIds[1], cardIds[0])
+    expect(seqOf()).toBeGreaterThan(before)
     db.close()
   })
 })

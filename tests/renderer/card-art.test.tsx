@@ -1,8 +1,10 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen } from '@testing-library/react'
 import { PKM_ID_MIN, type GameId } from '@shared/games'
 import { CardArt } from '@/components/CardArt'
 import { CardSheet } from '@/components/CardSheet'
 import { PanelCardArt } from '@/components/PanelCardArt'
+import { resetBorrowedArt } from '@/lib/borrowedArt'
 import { GameProvider } from '@/lib/game'
 import { createMockApi, renderWithProviders } from './mockApi'
 
@@ -167,5 +169,49 @@ describe('CardArt aspect', () => {
       expect(large.parentElement!.style.getPropertyValue('--card-aspect')).toBe(ratio)
       unmount()
     }
+  })
+})
+
+describe('CardArt with borrowed art', () => {
+  const own = PKM_ID_MIN + 1
+  const twin = PKM_ID_MIN + 2
+  const load = (pairs: [number, number][]): ReturnType<typeof vi.fn> => {
+    const borrowedArt = vi.fn(async () => pairs)
+    const mock = createMockApi()
+    window.api = { ...mock, cards: { ...mock.cards, borrowedArt } }
+    return borrowedArt
+  }
+  beforeEach(resetBorrowedArt)
+  afterEach(resetBorrowedArt)
+
+  it("shows the twin's image with the label, never asking for its own missing art", async () => {
+    load([[own, twin]])
+    render(<CardArt imageId={own} size="full" alt="Oddish" className="w-40" />)
+    expect(screen.queryByRole('img', { name: 'Oddish' })?.tagName).not.toBe('IMG')
+    const img = await screen.findByAltText('Oddish (English art)')
+    expect(img).toHaveAttribute('src', `ygo-img://full/${twin}`)
+    expect(screen.getByTestId('english-art-label')).toHaveTextContent('English art')
+    expect(img.closest('[title="English art"]')).toHaveClass('w-40')
+  })
+
+  it('a card with its own art has no label', async () => {
+    load([[twin, own]])
+    render(<CardArt imageId={own} size="full" alt="Oddish" />)
+    expect((await screen.findByAltText('Oddish')).getAttribute('src')).toBe(`ygo-img://full/${own}`)
+    expect(screen.queryByTestId('english-art-label')).not.toBeInTheDocument()
+  })
+
+  it('a twin whose image fails falls to the placeholder, keeping the label off nothing else', async () => {
+    load([[own, twin]])
+    render(<CardArt imageId={own} size="small" alt="Oddish" />)
+    fireEvent.error(await screen.findByAltText('Oddish (English art)'))
+    expect(screen.getByTestId('card-art-placeholder')).toBeInTheDocument()
+  })
+
+  it('never asks about a Yu-Gi-Oh! card', () => {
+    const asked = load([])
+    render(<CardArt imageId={5} size="small" alt="Kuriboh" />)
+    expect(screen.getByAltText('Kuriboh')).toHaveAttribute('src', 'ygo-img://small/5')
+    expect(asked).not.toHaveBeenCalled()
   })
 })

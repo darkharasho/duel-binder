@@ -35,7 +35,7 @@ function Open({
         <BinderView detail={q.data} readOnly />
       ) : (
         !q.isPending && (
-          <p className="text-sm text-muted-foreground">This binder isn't available.</p>
+          <p className="text-sm text-muted-foreground">This binder isn&apos;t available.</p>
         )
       )}
     </div>

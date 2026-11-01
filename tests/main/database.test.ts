@@ -191,7 +191,7 @@ describe('database', () => {
     db.close()
   })
 
-  test('migrate sets user_version 32 and is idempotent', () => {
+  test('migrate sets user_version 33 and is idempotent', () => {
     const db = openDatabase(':memory:')
     expect(db.pragma('user_version', { simple: true })).toBe(33)
     expect(() => migrate(db)).not.toThrow()

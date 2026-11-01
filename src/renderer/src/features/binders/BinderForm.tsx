@@ -268,7 +268,7 @@ export function BinderForm({
         </select>
         {preview && !preview.tooBroad && (
           <p className="text-sm text-muted-foreground tabular-nums">
-            {`${preview.printings} printings · ${preview.cards} cards · ${preview.owned} owned`}
+            {`${preview.printings} ${preview.printings === 1 ? 'printing' : 'printings'} · ${preview.cards} ${preview.cards === 1 ? 'card' : 'cards'} · ${preview.owned} owned`}
           </p>
         )}
       </section>

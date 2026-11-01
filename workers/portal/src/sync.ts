@@ -25,6 +25,14 @@ import type { GameId } from '../../../src/shared/games'
 import type { AppDeps } from './app'
 import { currentUser, gamesFor } from './auth'
 import { requestPrices } from './priceRequests'
+import {
+  applyBinderEditPush,
+  applyBinderPush,
+  binderEditPullSince,
+  binderPullSince,
+  checkBinderEditPush,
+  checkBinderPush
+} from './binderSync'
 import { applyWishPush, checkWishPush, wishPullSince } from './wishlist'
 import { NEXT_SEQ, userScope } from './scope'
 
@@ -346,13 +354,22 @@ const POST_PATHS: ReadonlySet<string> = new Set([
   'push',
   'prices',
   'price-requests',
-  'wishlist-push'
+  'wishlist-push',
+  'binders-push',
+  'binder-edits-push'
 ])
-const GET_PATHS: ReadonlySet<string> = new Set(['pull', 'price-changes', 'wishlist-pull'])
+const GET_PATHS: ReadonlySet<string> = new Set([
+  'pull',
+  'price-changes',
+  'wishlist-pull',
+  'binders-pull',
+  'binder-edits-pull'
+])
 
 /**
  * POST /api/sync/push, GET /api/sync/pull, GET /api/sync/price-changes, POST /api/sync/prices,
- * POST /api/sync/price-requests, POST /api/sync/wishlist-push and GET /api/sync/wishlist-pull;
+ * POST /api/sync/price-requests, POST /api/sync/wishlist-push and GET /api/sync/wishlist-pull, and the same
+ * pairs for binders (binders-push/-pull) and their edits (binder-edits-push/-pull);
  * desktop tokens only (the phone app has one too).
  */
 export async function syncRoute(req: Request, deps: AppDeps, path: string): Promise<Response> {
@@ -369,16 +386,20 @@ export async function syncRoute(req: Request, deps: AppDeps, path: string): Prom
   if (!game) return json({ error: 'game-not-allowed' }, 403)
 
   try {
-    if (path === 'pull' || path === 'wishlist-pull') {
+    if (path.endsWith('pull')) {
       const raw = new URL(req.url).searchParams.get('cursor') ?? ''
       const cursor = /^\d{1,16}$/.test(raw) ? Number(raw) : NaN
       if (!Number.isSafeInteger(cursor))
         throw new CollectionError('cursor must be a whole number of at least 0')
-      return json(
+      const pull =
         path === 'pull'
-          ? pullSince(deps.db, user.id, cursor, MAX_PULL, game)
-          : wishPullSince(deps.db, user.id, cursor, MAX_PULL, game)
-      )
+          ? pullSince
+          : path === 'wishlist-pull'
+            ? wishPullSince
+            : path === 'binders-pull'
+              ? binderPullSince
+              : binderEditPullSince
+      return json(pull(deps.db, user.id, cursor, MAX_PULL, game))
     }
 
     if (path === 'price-changes') {
@@ -405,6 +426,18 @@ export async function syncRoute(req: Request, deps: AppDeps, path: string): Prom
       if (Array.isArray(raw) && raw.length > MAX_PUSH) return json({ error: 'too-many' }, 413)
       const entries = checkWishPush(body, deps.now())
       return json({ results: applyWishPush(deps.db, user.id, entries, games) })
+    }
+
+    if (path === 'binders-push' || path === 'binder-edits-push') {
+      const raw = (body as { entries?: unknown } | null)?.entries
+      if (Array.isArray(raw) && raw.length > MAX_PUSH) return json({ error: 'too-many' }, 413)
+      const now = deps.now()
+      return json({
+        results:
+          path === 'binders-push'
+            ? applyBinderPush(deps.db, user.id, checkBinderPush(body, now), games)
+            : applyBinderEditPush(deps.db, user.id, checkBinderEditPush(body, now), games)
+      })
     }
 
     const pkeys = checkPkeys(body)

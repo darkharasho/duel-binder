@@ -1,3 +1,4 @@
+import type { BinderEditAction, BinderEditLevel } from './binders'
 import { isGameId, type GameId } from './games'
 
 /** Limits shared by the desktop sync client and the server's sync endpoints. */
@@ -103,6 +104,57 @@ export type WishPushResult =
 
 export interface WishPullResponse {
   entries: WireWish[]
+  cursor: number
+  more: boolean
+}
+
+/** One binder as the sync protocol carries it; `rules`, `goal` and `languages` are opaque JSON text to the server. */
+export interface WireBinder {
+  uid: string
+  game: GameId
+  name: string
+  rules: string
+  goal: string
+  languages: string
+  friendsVisible: boolean
+  sortOrder: number
+  createdAt: string
+  updatedAt: string
+  deletedAt: string | null
+}
+
+/** One card, art or printing added to or removed from a binder; keyed by binderEditKey. */
+export interface WireBinderEdit {
+  binderUid: string
+  level: BinderEditLevel
+  target: string
+  game: GameId
+  action: BinderEditAction
+  createdAt: string
+  updatedAt: string
+  deletedAt: string | null
+}
+
+export type BinderPushResult =
+  | { uid: string; status: 'applied' | 'skipped' }
+  | { uid: string; status: 'stale'; current: WireBinder }
+
+export type BinderEditPushResult =
+  | { key: string; status: 'applied' | 'skipped' }
+  | { key: string; status: 'stale'; current: WireBinderEdit }
+
+/** What identifies a binder edit: the binder, the level and the target. */
+export const binderEditKey = (e: Pick<WireBinderEdit, 'binderUid' | 'level' | 'target'>): string =>
+  `${e.binderUid}\u001f${e.level}\u001f${e.target}`
+
+export interface BinderPullResponse {
+  entries: WireBinder[]
+  cursor: number
+  more: boolean
+}
+
+export interface BinderEditPullResponse {
+  entries: WireBinderEdit[]
   cursor: number
   more: boolean
 }

@@ -640,11 +640,11 @@ function borrowEnglishArt(plans: LangPlan[]): void {
   const en = plans.find((p) => p.lang === 'en')
   const zh = plans.find((p) => p.lang === 'zh-hans')
   if (!en || !zh) return
-  const twins = englishTwins(en.sets, cardDesc)
+  const twins = englishTwins(en.sets)
   for (const sp of zh.sets) {
     for (const cp of sp.cards) {
       if (cp.imageUrl) continue
-      const { outcome, twin } = twins.find(cp.card, cp.name, sp.set)
+      const { outcome, twin } = twins.find(cp.card, cp.name)
       zh.report.artTwins[outcome] = (zh.report.artTwins[outcome] ?? 0) + 1
       cp.artTwinId = twin && pokemonId(`en/${twin.id}`)
     }

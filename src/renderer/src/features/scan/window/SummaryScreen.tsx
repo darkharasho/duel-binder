@@ -45,10 +45,17 @@ function Hit({ card }: { card: ScanSummaryCard }): React.JSX.Element {
       <p className="mt-[1vh] truncate text-[clamp(0.9rem,1.8vw,1.7rem)] font-semibold">
         {card.name}
       </p>
-      <p className="flex items-baseline gap-[0.5vw] text-[clamp(1.1rem,2.6vw,2.4rem)] font-bold text-emerald-400 tabular-nums">
-        {formatUsd(card.price ?? 0)}
-        {card.raw && <span className="text-[0.6em] font-normal text-emerald-200/80">Raw</span>}
-      </p>
+      {card.guess && (
+        <p className="text-[clamp(0.75rem,1.2vw,1.1rem)] text-amber-300">Best guess</p>
+      )}
+      {card.price == null ? (
+        <p className="text-[clamp(1.1rem,2.6vw,2.4rem)] text-white/60">No price</p>
+      ) : (
+        <p className="flex items-baseline gap-[0.5vw] text-[clamp(1.1rem,2.6vw,2.4rem)] font-bold text-emerald-400 tabular-nums">
+          {formatUsd(card.price)}
+          {card.raw && <span className="text-[0.6em] font-normal text-emerald-200/80">Raw</span>}
+        </p>
+      )}
     </section>
   )
 }
@@ -91,7 +98,7 @@ function Row({ card }: { card: ScanSummaryCard }): React.JSX.Element {
   )
 }
 
-/** The night so far, opaque over everything else in the window: the hit, then every card and price. */
+/** The night so far, over the camera blurred behind it: the hit, then every card and price. */
 export function SummaryScreen({ summary }: { summary: ScanSummary }): React.JSX.Element {
   const { value, cards, hits, unpriced, hit, list } = summary
   const pages = Math.max(1, Math.ceil(list.length / PAGE_ROWS))
@@ -100,7 +107,7 @@ export function SummaryScreen({ summary }: { summary: ScanSummary }): React.JSX.
     <div
       role="status"
       aria-label="Summary"
-      className="absolute inset-0 flex flex-col overflow-hidden bg-neutral-950 px-[4vw] py-[4vh] text-white animate-in fade-in"
+      className="absolute inset-0 flex flex-col overflow-hidden bg-neutral-950/65 px-[4vw] py-[4vh] text-white backdrop-blur-[2vw] animate-in fade-in"
       style={{
         backgroundImage:
           'radial-gradient(ellipse 60% 55% at 50% 0%, rgba(251,191,36,0.16), rgba(251,191,36,0) 70%)'

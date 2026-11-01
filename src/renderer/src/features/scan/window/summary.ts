@@ -16,7 +16,8 @@ const card = (row: ScanRow): ScanSummaryCard => ({
 /**
  * The list as the summary screen shows it. Value and unpriced copies are the Review list's own, so
  * the two never disagree. A best guess counts towards the value as it does there, but like a pull
- * it is never a hit: a hit is a card known to be in hand.
+ * it never counts as a hit. The night always has its hit of the night though: the dearest card known
+ * to be in hand, or with none of those priced a known card, or failing that the best guess.
  */
 export function sessionSummary(rows: ScanRow[], hitPrice: number): ScanSummary {
   const { value, unpriced } = listValue(rows)
@@ -29,7 +30,11 @@ export function sessionSummary(rows: ScanRow[], hitPrice: number): ScanSummary {
       (n, c) => n + (!c.guess && c.price != null && c.price >= hitPrice ? c.quantity : 0),
       0
     ),
-    hit: list.find((c) => !c.guess && c.price != null) ?? null,
+    hit:
+      list.find((c) => !c.guess && c.price != null) ??
+      list.find((c) => !c.guess) ??
+      list[0] ??
+      null,
     list
   }
 }

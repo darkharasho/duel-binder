@@ -49,6 +49,12 @@ const CATALOG = [
   ...printings('en/svp-046', 'SVP Black Star Promos', 'Bulbasaur', ['Cosmos Holo']),
   ...printings('en/mep-037', 'MEP Black Star Promos', 'Bulbasaur', ['Holofoil']),
   ...printings('en/30th-002', '30th Celebration', 'Alolan Exeggutor', ['Normal']),
+  ...printings('en/mee-008', 'Mega Evolution Energy', 'Metal Energy', ['Normal']),
+  ...printings('en/mee-016', 'Mega Evolution Energy', 'Basic Metal Energy', ['Holofoil']),
+  ...printings('en/mep-036', 'MEP Black Star Promos', 'Mega Feraligatr ex', [
+    'Holofoil',
+    'Lenticular'
+  ]),
   ...printings('en/me02.5-004', 'Ascended Heroes', "Erika's Bellsprout", [
     'Normal',
     'Energy Symbol Pattern',
@@ -128,6 +134,32 @@ describe('Dex finishes', () => {
     expectMissed({ id: 'sv85-6', number: '6/131', name: 'Leafeon ex', variant }, 'finish')
   )
 
+  it('a jumbo lenticular is the Lenticular version', () =>
+    expectFound(
+      {
+        id: 'mep-36',
+        set: 'Mega Evolution Promos',
+        number: '36',
+        name: 'Mega Feraligatr ex',
+        variant: 'Jumbo (Lenticular)'
+      },
+      'en/mep-036',
+      'Lenticular'
+    ))
+
+  it("a basic energy's holo is numbered after the eight", () =>
+    expectFound(
+      {
+        id: 'mee-8',
+        set: 'Mega Evolution Basic Energies',
+        number: '8/8',
+        name: 'Basic Metal Energy',
+        variant: 'Holo'
+      },
+      'en/mee-016',
+      'Holofoil'
+    ))
+
   it('an Expansion Stamp lands on the one Set Logo version', () =>
     expectFound(
       { id: 'sv85-6', number: '6/131', name: 'Leafeon ex', variant: 'Expansion Stamp' },
@@ -165,7 +197,7 @@ describe('sets Dex names its own way', () => {
     )
   })
 
-  it('takes a one-finish set\'s only version, whatever Dex calls it', () => {
+  it("takes a one-finish set's only version, whatever Dex calls it", () => {
     expectFound(
       at('Mega Evolution Promos', 'mep-37', '37', 'Bulbasaur', '30th Anniversary'),
       'en/mep-037',
@@ -386,8 +418,16 @@ describe('sets only an export holds', () => {
       }))
     )
   )
-  const catalog = [...held, ...printings('en/2018sm-11', "McDonald's Collection 2018", 'Eevee', ['Holofoil'])]
-  const poliwag = { id: 'mcd18fr-11', set: "McDonald's Collection 2018 (🇫🇷)", number: '11/40', name: 'Poliwag' }
+  const catalog = [
+    ...held,
+    ...printings('en/2018sm-11', "McDonald's Collection 2018", 'Eevee', ['Holofoil'])
+  ]
+  const poliwag = {
+    id: 'mcd18fr-11',
+    set: "McDonald's Collection 2018 (🇫🇷)",
+    number: '11/40',
+    name: 'Poliwag'
+  }
 
   it("finds France's McDonald's set by id, never the set of its name", () => {
     const { wanted, missing } = matchDexRows(
@@ -403,15 +443,32 @@ describe('sets only an export holds', () => {
   })
   it('finds the Battle Academy deck', () => {
     const { missing } = matchDexRows(
-      [row({ id: 'ba20m-6', set: 'Battle Academy 2020: Mewtwo Deck', number: '6/17', name: 'Mew' })],
+      [
+        row({ id: 'ba20m-6', set: 'Battle Academy 2020: Mewtwo Deck', number: '6/17', name: 'Mew' })
+      ],
       catalog
     )
     expect(missing).toEqual([])
   })
   it('pins Japanese 30th Celebration to its set', () => {
-    const sylveon = printings('ja/M6a-059', 'MEGA Expansion 30th Celebration', 'Sylveon ex', ['Holofoil'], 'ja')
+    const sylveon = printings(
+      'ja/M6a-059',
+      'MEGA Expansion 30th Celebration',
+      'Sylveon ex',
+      ['Holofoil'],
+      'ja'
+    )
     const { missing } = matchDexRows(
-      [row({ locale: 'Japanese', id: 'jpn_m6a-59', set: '30th Celebration', number: '59/103', name: 'Sylveon ex', variant: 'Holo' })],
+      [
+        row({
+          locale: 'Japanese',
+          id: 'jpn_m6a-59',
+          set: '30th Celebration',
+          number: '59/103',
+          name: 'Sylveon ex',
+          variant: 'Holo'
+        })
+      ],
       sylveon
     )
     expect(missing).toEqual([])
@@ -419,66 +476,186 @@ describe('sets only an export holds', () => {
 })
 
 describe('Dex rows the first full export missed', () => {
-  const found = (
-    catalog: DexCatalogPrinting[],
-    over: Partial<DexRow>
-  ): string | undefined => {
+  const found = (catalog: DexCatalogPrinting[], over: Partial<DexRow>): string | undefined => {
     const { wanted } = matchDexRows([row(over)], catalog)
     const [id] = [...wanted.keys()]
     return catalog.find((p) => p.id === id)?.version
   }
 
   it('reads the named stamps as our versions', () => {
-    const pikachu = printings('en/sv05-051', 'Temporal Forces', 'Pikachu', ['Normal', 'Pokemon Day Holofoil'])
-    expect(found(pikachu, { id: 'sv5-51', set: 'Temporal Forces', number: '51/162', name: 'Pikachu', variant: 'Pokémon Day' })).toBe('Pokemon Day Holofoil')
-    const iono = printings('en/sv09-053', 'Journey Together', "Iono's Bellibolt ex", ['Holofoil', 'Player Rewards Program Holofoil'])
-    expect(found(iono, { id: 'sv9-53', set: 'Journey Together', number: '53/159', name: "Iono's Bellibolt ex", variant: 'Play! Pokémon' })).toBe('Player Rewards Program Holofoil')
+    const pikachu = printings('en/sv05-051', 'Temporal Forces', 'Pikachu', [
+      'Normal',
+      'Pokemon Day Holofoil'
+    ])
+    expect(
+      found(pikachu, {
+        id: 'sv5-51',
+        set: 'Temporal Forces',
+        number: '51/162',
+        name: 'Pikachu',
+        variant: 'Pokémon Day'
+      })
+    ).toBe('Pokemon Day Holofoil')
+    const iono = printings('en/sv09-053', 'Journey Together', "Iono's Bellibolt ex", [
+      'Holofoil',
+      'Player Rewards Program Holofoil'
+    ])
+    expect(
+      found(iono, {
+        id: 'sv9-53',
+        set: 'Journey Together',
+        number: '53/159',
+        name: "Iono's Bellibolt ex",
+        variant: 'Play! Pokémon'
+      })
+    ).toBe('Player Rewards Program Holofoil')
   })
 
   it('keeps a Team Rocket pattern and a plain reverse apart in Ascended Heroes', () => {
-    const diglett = printings('en/me02.5-100', 'Ascended Heroes', "Team Rocket's Diglett", ['Normal', 'Reverse Holofoil', 'Energy Symbol Pattern'])
-    const at = { id: 'me25-100', set: 'Ascended Heroes', number: '100/217', name: "Team Rocket's Diglett" }
+    const diglett = printings('en/me02.5-100', 'Ascended Heroes', "Team Rocket's Diglett", [
+      'Normal',
+      'Reverse Holofoil',
+      'Energy Symbol Pattern'
+    ])
+    const at = {
+      id: 'me25-100',
+      set: 'Ascended Heroes',
+      number: '100/217',
+      name: "Team Rocket's Diglett"
+    }
     expect(found(diglett, { ...at, variant: 'Team Rocket Holo' })).toBe('Reverse Holofoil')
     expect(found(diglett, { ...at, variant: 'Reverse Holo' })).toBe('Energy Symbol Pattern')
-    const trainer = printings('en/me02.5-188', 'Ascended Heroes', 'Forest of Vitality', ['Normal', 'Reverse Holofoil'])
-    expect(found(trainer, { id: 'me25-188', set: 'Ascended Heroes', number: '188/217', name: 'Forest of Vitality', variant: 'Reverse Holo' })).toBe('Reverse Holofoil')
+    const trainer = printings('en/me02.5-188', 'Ascended Heroes', 'Forest of Vitality', [
+      'Normal',
+      'Reverse Holofoil'
+    ])
+    expect(
+      found(trainer, {
+        id: 'me25-188',
+        set: 'Ascended Heroes',
+        number: '188/217',
+        name: 'Forest of Vitality',
+        variant: 'Reverse Holo'
+      })
+    ).toBe('Reverse Holofoil')
   })
 
   it('reads 四 as E4, and no other mark', () => {
     const gallade = printings('en/pl2-20', 'Rising Rivals', 'Gallade E4', ['Normal'])
-    expect(found(gallade, { id: 'pl2-20', set: 'Rising Rivals', number: '20/111', name: 'Gallade 四' })).toBe('Normal')
-    expect(found(gallade, { id: 'pl2-20', set: 'Rising Rivals', number: '20/111', name: 'Gardevoir 四' })).toBeUndefined()
+    expect(
+      found(gallade, { id: 'pl2-20', set: 'Rising Rivals', number: '20/111', name: 'Gallade 四' })
+    ).toBe('Normal')
+    expect(
+      found(gallade, { id: 'pl2-20', set: 'Rising Rivals', number: '20/111', name: 'Gardevoir 四' })
+    ).toBeUndefined()
   })
 
   it('takes a Japanese Trainer by set and number, never a Japanese Pokémon', () => {
-    const at = { locale: 'Japanese', id: 'jpn_m2-74', set: 'Inferno X', number: '74/80', name: 'Blowtorch' }
-    const trainer = printings('ja/M2-074', 'Inferno X', 'Heat Burner', ['Normal'], 'ja').map((p) => ({ ...p, category: 'Trainer' }))
+    const at = {
+      locale: 'Japanese',
+      id: 'jpn_m2-74',
+      set: 'Inferno X',
+      number: '74/80',
+      name: 'Blowtorch'
+    }
+    const trainer = printings('ja/M2-074', 'Inferno X', 'Heat Burner', ['Normal'], 'ja').map(
+      (p) => ({ ...p, category: 'Trainer' })
+    )
     expect(found(trainer, at)).toBe('Normal')
     const pokemon = trainer.map((p) => ({ ...p, category: 'Pokemon' }))
     expect(found(pokemon, at)).toBeUndefined()
   })
 
   it("lands MEGA Dream ex's Holo on its base version, and never over a real Holofoil", () => {
-    const at = { locale: 'Japanese', id: 'jpn_m2a-10', set: 'MEGA Dream ex', number: '10/193', name: 'Zeraora', variant: 'Holo' }
-    expect(found(printings('ja/M2a-010', 'MEGA Dream ex', 'Zeraora', ['Normal', 'Reverse Holofoil'], 'ja'), at)).toBe('Normal')
-    expect(found(printings('ja/M2a-010', 'MEGA Dream ex', 'Zeraora', ['Normal', 'Holofoil'], 'ja'), at)).toBe('Holofoil')
+    const at = {
+      locale: 'Japanese',
+      id: 'jpn_m2a-10',
+      set: 'MEGA Dream ex',
+      number: '10/193',
+      name: 'Zeraora',
+      variant: 'Holo'
+    }
+    expect(
+      found(
+        printings('ja/M2a-010', 'MEGA Dream ex', 'Zeraora', ['Normal', 'Reverse Holofoil'], 'ja'),
+        at
+      )
+    ).toBe('Normal')
+    expect(
+      found(printings('ja/M2a-010', 'MEGA Dream ex', 'Zeraora', ['Normal', 'Holofoil'], 'ja'), at)
+    ).toBe('Holofoil')
   })
 
   it('takes a card with one print only where its finish can be off', () => {
     const rc = printings('en/bw11-RC3', 'Legendary Treasures', 'Serperior', ['Normal'])
-    expect(found(rc, { id: 'bw11-RC3', set: 'Legendary Treasures', number: 'RC3/113', name: 'Serperior', variant: 'Holo' })).toBe('Normal')
+    expect(
+      found(rc, {
+        id: 'bw11-RC3',
+        set: 'Legendary Treasures',
+        number: 'RC3/113',
+        name: 'Serperior',
+        variant: 'Holo'
+      })
+    ).toBe('Normal')
     const plain = printings('en/bw11-3', 'Legendary Treasures', 'Serperior', ['Normal'])
-    expect(found(plain, { id: 'bw11-3', set: 'Legendary Treasures', number: '3/113', name: 'Serperior', variant: 'Holo' })).toBeUndefined()
-    const bea = printings('zh-hans/CSIC-002', 'Trainer Collection Gift Box', 'Bea', ['Normal'], 'zh-hans')
-    const zh = { locale: 'Simplified Chinese', id: 'scn_csI-2', set: 'Trainer Collection Gift Box', number: '2/7', name: 'Bea' }
+    expect(
+      found(plain, {
+        id: 'bw11-3',
+        set: 'Legendary Treasures',
+        number: '3/113',
+        name: 'Serperior',
+        variant: 'Holo'
+      })
+    ).toBeUndefined()
+    const bea = printings(
+      'zh-hans/CSIC-002',
+      'Trainer Collection Gift Box',
+      'Bea',
+      ['Normal'],
+      'zh-hans'
+    )
+    const zh = {
+      locale: 'Simplified Chinese',
+      id: 'scn_csI-2',
+      set: 'Trainer Collection Gift Box',
+      number: '2/7',
+      name: 'Bea'
+    }
     expect(found(bea, { ...zh, variant: 'Holo' })).toBe('Normal')
     expect(found(bea, { ...zh, variant: 'Master Ball Holo' })).toBeUndefined()
   })
 
   it('finds a Classic Collection card by name, and a Chinese regional form without its region', () => {
-    const oak = printings('en/cel25cc-CC004', 'Celebrations Classic Collection', 'Imposter Professor Oak', ['Holofoil'])
-    expect(found(oak, { id: 'cel25c-73_A', set: 'Celebrations: Classic Collection', number: '73/25', name: 'Imposter Professor Oak', variant: 'Holo' })).toBe('Holofoil')
-    const clodsire = printings('zh-hans/CSV6C-089', 'Arcane Truth', 'Paldean Clodsire', ['Normal'], 'zh-hans')
-    expect(found(clodsire, { locale: 'Simplified Chinese', id: 'scn_csv6-89', set: 'Arcane Truth', number: '89/128', name: 'Clodsire' })).toBe('Normal')
+    const oak = printings(
+      'en/cel25cc-CC004',
+      'Celebrations Classic Collection',
+      'Imposter Professor Oak',
+      ['Holofoil']
+    )
+    expect(
+      found(oak, {
+        id: 'cel25c-73_A',
+        set: 'Celebrations: Classic Collection',
+        number: '73/25',
+        name: 'Imposter Professor Oak',
+        variant: 'Holo'
+      })
+    ).toBe('Holofoil')
+    const clodsire = printings(
+      'zh-hans/CSV6C-089',
+      'Arcane Truth',
+      'Paldean Clodsire',
+      ['Normal'],
+      'zh-hans'
+    )
+    expect(
+      found(clodsire, {
+        locale: 'Simplified Chinese',
+        id: 'scn_csv6-89',
+        set: 'Arcane Truth',
+        number: '89/128',
+        name: 'Clodsire'
+      })
+    ).toBe('Normal')
   })
 })

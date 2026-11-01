@@ -86,6 +86,16 @@ describe('findArt', () => {
     expect(find('ja', set('neo1', 96), c, ['Abra'], [abra]).outcome).toBe('no number')
   })
 
+  it("gives a LEGEND's two halves of one name their own art", () => {
+    const s = set('30th-c', 55)
+    const top = product(716199, 'Darkrai & Cresselia Legend (Top)', '99/102')
+    const bottom = product(716200, 'Darkrai & Cresselia Legend (Bottom)', '100/102')
+    const half = (localId: string): TdCard => card(localId, { id: `30th-c-${localId}` })
+    const names = ['Darkrai & Cresselia LEGEND']
+    expect(findArt('en', s, null, half('019'), names, new Map([[24837, [top, bottom]]])).imageUrl).toBe(art(716199))
+    expect(findArt('en', s, null, half('020'), names, new Map([[24837, [top, bottom]]])).imageUrl).toBe(art(716200))
+  })
+
   it('leaves a set with no group alone', () => {
     const r = findArt('ja', set('neo1', 96), null, card('001'), ['Oddish'], new Map())
     expect(r).toEqual({ imageUrl: null, outcome: 'no group' })

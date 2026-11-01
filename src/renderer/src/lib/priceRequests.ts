@@ -35,12 +35,9 @@ export function useRequestPrices(printingIds: readonly number[]): void {
     if (key === '') return
     const ids = key.split(',').map(Number)
     const timer = setTimeout(() => {
-      api.prices
-        .ebayHidden()
-        .then((hidden) => (hidden ? undefined : api.prices.request(ids)))
-        .catch(() => {
-          // Nothing to tell the user: the next view asks again.
-        })
+      api.prices.request(ids).catch(() => {
+        // Nothing to tell the user: the next view asks again.
+      })
     }, REQUEST_DELAY_MS)
     return () => clearTimeout(timer)
   }, [key])

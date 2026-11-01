@@ -1,5 +1,7 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { seededDb } from './helpers'
+import type { CloudClient } from '../../src/main/cloud/client'
+import { requestPrices } from '../../src/main/cloud/priceRequests'
 import { addEntry, listEntries } from '../../src/main/repo/collection'
 import { ebayPricesHidden, setEbayPricesHidden } from '../../src/main/repo/scope'
 
@@ -38,5 +40,13 @@ describe('hiding eBay prices', () => {
     expect(price()).not.toBe(99)
     setEbayPricesHidden(db, false)
     expect(price()).toBe(99)
+  })
+
+  it('stops asking the portal for eBay prices', async () => {
+    const db = await seededDb()
+    setEbayPricesHidden(db, true)
+    const client = { requestPrices: vi.fn() } as unknown as CloudClient
+    expect(await requestPrices(db, client, [1], new Date())).toBe(0)
+    expect(client.requestPrices).not.toHaveBeenCalled()
   })
 })

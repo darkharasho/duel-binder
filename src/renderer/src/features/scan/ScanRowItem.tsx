@@ -27,18 +27,15 @@ export const FLAG_TEXT: Record<NonNullable<ScanDraft['flag']>, string> = {
 }
 
 /**
- * The row's flag as the list words it: Yu-Gi-Oh!'s FLAG_TEXT, a Pokémon version still to pick, or
+ * The row's flag as the list words it: Yu-Gi-Oh!'s FLAG_TEXT, a Pokémon version to pick or check, or
  * a best guess to check.
  */
 // eslint-disable-next-line react-refresh/only-export-components -- shared with the phone's last-scan card
-export const flagText = (row: Pick<ScanDraft, 'game' | 'flag' | 'guess'>): string | null =>
-  row.guess
-    ? versionToPick(row)
-      ? 'Best guess, check card and version'
-      : 'Best guess, check card'
-    : versionToPick(row)
-      ? 'Check version'
-      : row.flag && FLAG_TEXT[row.flag]
+export const flagText = (row: Pick<ScanDraft, 'game' | 'flag' | 'guess'>): string | null => {
+  const version = versionToPick(row) || (row.game === 'pkm' && row.flag === 'check-rarity')
+  if (row.guess) return version ? 'Best guess, check card and version' : 'Best guess, check card'
+  return version ? 'Check version' : row.flag && FLAG_TEXT[row.flag]
+}
 
 /** "Rarity for Dark Magician", "Version for Pikachu": the row's printing picker. */
 // eslint-disable-next-line react-refresh/only-export-components -- shared with the phone's review

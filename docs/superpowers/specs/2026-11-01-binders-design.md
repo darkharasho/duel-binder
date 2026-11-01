@@ -73,7 +73,7 @@ These are not in the mockup, and are Claude's calls:
 | Set | yes | yes |
 | Rarity | yes | yes |
 
-**Rules are checked per printing (owner's decision).** A printing is in the binder only if that one printing satisfies every rule and is in a selected language. A card or art slot exists if at least one of its printings qualifies, and only an owned copy of a qualifying printing fills it. With Rarity = Secret Rare and One of each card, a copy owned only as a Common does not fill the slot. Set = LOB plus Rarity = Ultra needs a single printing that is both. A set rule matches that set in every language the binder selects, by `set_code` prefix or equivalent; the builder must confirm the mapping per game.
+**Rules are checked per printing (owner's decision).** A printing is in the binder only if that one printing satisfies every rule and is in a selected language. A card or art slot exists if at least one of its printings qualifies, and only an owned copy of a qualifying printing fills it. With Rarity = Secret Rare and One of each card, a copy owned only as a Common does not fill the slot. Set = LOB plus Rarity = Ultra needs a single printing that is both. A set rule matches by `set_name`, in every language the binder selects. Set codes can't link languages (LOB, LDD and LB are the same Yu-Gi-Oh! set), while `set_name` is shared across languages for 1,095 Yu-Gi-Oh! and 58 Pokémon sets. A set named differently in another language needs that name added as a second value on the same rule.
 
 Hand-added cards are not subject to this: any owned copy of the added target fills its slot. For Yu-Gi-Oh! One of each art, a rule match still needs the art check above, since a qualifying printing has no artwork id: the slot exists for each artwork of a card with a qualifying printing, and is filled by an owned copy with that image on a qualifying printing.
 
@@ -133,7 +133,7 @@ Copy the wishlist end to end; the path runs through the migration and `server-N`
 - **Binders** are one synced row: owner, game, name, rules JSON, goal, languages, visibility, sort order. Latest edit wins for the whole row.
 - **Binder hand edits** are separate synced rows: binder, a portable card reference, and add or remove. Tombstones handle deletes. Keeping them separate means two devices adding different cards both survive.
 - References must be portable. Use `pkey` for printings and `card_id` for cards, because printing ids differ per store.
-- Rows for a printing that hasn't reached the local catalog yet wait, as `sync_pending` does for collection entries.
+- A hand edit for a printing that hasn't reached the local catalog stays in its table with no foreign key and shows once the printing arrives, as a wishlist row does.
 
 Constraints:
 

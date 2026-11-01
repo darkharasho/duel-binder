@@ -96,12 +96,30 @@ function pickArt(hits: TcProduct[]): TcProduct | null {
   return pool.reduce((a, b) => (b.productId < a.productId ? b : a))
 }
 
-/** A two-card LEGEND's halves share a name, so these were matched by eye: 020 is the half with the attacks. */
-const LEGEND_HALVES: Readonly<Record<string, number>> = { '30th-c-019': 716199, '30th-c-020': 716200 }
+/**
+ * Products picked by eye. A two-card LEGEND's halves share a name (020 is the half with the attacks),
+ * and a Trainer Kit's Switch is numbered for its own half of the kit on TCGplayer.
+ */
+const PICKED_PRODUCTS: Readonly<Record<string, number>> = {
+  '30th-c-019': 716199,
+  '30th-c-020': 716200,
+  'tk-xy-n-29': 98024
+}
+
+/**
+ * Japanese sets where a number alone places a card. Checked 2026-10-31 against each set's cards with
+ * English names: 2,303 agreed and the 22 others were one card translated two ways ("Suspicious Watch"
+ * for "Strange Timepiece"). A name can't confirm these sets' Trainers, whose names are Japanese here
+ * and machine translated there. PCG7 and PCG9 have too few English names to check, so they stay out.
+ */
+const NUMBER_SETTLES: ReadonlySet<string> = new Set([
+  'E1', 'E2', 'E3', 'E4', 'E5', 'MC', 'PCG1', 'PCG2', 'PCG3', 'PCG4', 'PCG5', 'PCG6', 'PCG8', 'SM1p',
+  'SM2p', 'SM3p', 'SM4p', 'SM5p', 'SM8b', 'web1'
+])
 
 const cardProductIds = (card: TdCard): number[] => {
   const ids = (card.variants_detailed ?? []).map((v) => v.thirdParty?.tcgplayer)
-  return [...ids, card.thirdParty?.tcgplayer, LEGEND_HALVES[card.id]].filter((id): id is number => typeof id === 'number')
+  return [...ids, card.thirdParty?.tcgplayer].filter((id): id is number => typeof id === 'number')
 }
 
 export type ArtOutcome = 'filled' | 'no group' | 'no number' | 'no name' | 'japanese name' | 'unsettled'
@@ -125,12 +143,21 @@ export function findArt(
   let outcome: ArtOutcome = 'no number'
   for (const g of groups) {
     const products = (inGroup.get(g) ?? []).filter((p) => p.imageUrl)
-    const byNumber = OWN_NUMBERS.has(set.id)
+    const picked = PICKED_PRODUCTS[card.id]
+    const byNumber = picked !== undefined
+      ? products.filter((p) => p.productId === picked)
+      : OWN_NUMBERS.has(set.id)
       ? products.filter((p) => cardProductIds(card).includes(p.productId))
       : products.filter(
           (p) => p.number !== null && isSameNumber(card.localId, p.number) && ownCount(lang, set, p.number)
         )
     if (byNumber.length === 0) continue
+    if (lang === 'ja' && NUMBER_SETTLES.has(set.id)) {
+      const art = pickArt(byNumber)
+      if (art) return { imageUrl: art.imageUrl!, outcome: 'filled' }
+      outcome = 'unsettled'
+      continue
+    }
     const english = names.filter((n) => !JAPANESE.test(n))
     if (english.length === 0) {
       outcome = 'japanese name'

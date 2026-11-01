@@ -48,13 +48,19 @@ export function BinderGrid({ cards, onOpen, onRemove, readOnly }: Props): React.
                       : 'shadow-[0_8px_20px_rgb(0_0_0/0.45)]'
                   )}
                 >
-                  <CardArt
-                    imageId={c.imageId}
-                    printingId={c.printingScan && c.printing ? c.printing.id : null}
-                    size={tileImage}
-                    alt=""
-                    className={cn('w-full', missing && 'opacity-30 grayscale')}
-                  />
+                  {c.imageId ? (
+                    <CardArt
+                      imageId={c.imageId}
+                      printingId={c.printingScan && c.printing ? c.printing.id : null}
+                      size={tileImage}
+                      alt=""
+                      className={cn('w-full', missing && 'opacity-30 grayscale')}
+                    />
+                  ) : (
+                    <div
+                      className={cn('aspect-[59/86] w-full bg-white/10', missing && 'opacity-30')}
+                    />
+                  )}
                 </div>
                 {!missing && c.owned > 1 && (
                   <Badge className="absolute right-1.5 top-1.5 font-mono shadow">×{c.owned}</Badge>
@@ -89,7 +95,7 @@ export function BinderGrid({ cards, onOpen, onRemove, readOnly }: Props): React.
                 type="button"
                 aria-label={`Remove ${c.card.name} from this binder`}
                 onClick={() => onRemove(c)}
-                className="absolute right-2 top-2 z-10 rounded bg-background/80 p-1 opacity-0 transition-opacity focus-visible:opacity-100 group-hover/slot:opacity-100"
+                className="absolute right-2 top-2 z-10 rounded bg-background/80 p-1 opacity-0 transition-opacity [@media(pointer:coarse)]:opacity-100 focus-visible:opacity-100 group-hover/slot:opacity-100"
               >
                 <XIcon className="size-3.5" />
               </button>

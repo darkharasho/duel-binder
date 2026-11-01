@@ -167,3 +167,39 @@ describe('a binder', () => {
     expect(screen.getByTestId('printing-scan')).toBeInTheDocument()
   })
 })
+
+describe('binder edge cases', () => {
+  it('shows a placeholder, not an image, for a card with no art', () => {
+    const { container } = renderWithProviders(
+      <BinderView detail={detail({ cards: [slot(2, 0, { imageId: 0 })] })} />
+    )
+    expect(container.querySelector('img')).toBeNull()
+  })
+
+  it('shows the remove control only when it may remove', () => {
+    const onRemove = vi.fn()
+    const { unmount } = renderWithProviders(<BinderView detail={detail()} onRemove={onRemove} />)
+    expect(screen.getAllByRole('button', { name: /^Remove Card/ })).toHaveLength(3)
+    unmount()
+    renderWithProviders(<BinderView detail={detail()} onRemove={onRemove} readOnly />)
+    expect(screen.queryByRole('button', { name: /^Remove/ })).not.toBeInTheDocument()
+  })
+
+  it('does not call a binder with no slots complete', async () => {
+    const empty = { ownedSlots: 0, missingSlots: 0 }
+    renderWithProviders(<BinderView detail={detail({ ...empty, cards: [] })} />)
+    expect(screen.getByText('Nothing to track yet')).toBeInTheDocument()
+    expect(screen.queryByRole('progressbar')).not.toBeInTheDocument()
+    expect(screen.queryByText('Complete')).not.toBeInTheDocument()
+  })
+
+  it('says so in the list for a goal binder with no slots', async () => {
+    const api = createMockApi({
+      binders: { list: vi.fn(async () => [summary({ ownedSlots: 0, missingSlots: 0 })]) }
+    })
+    renderWithProviders(<BindersPage />, { api })
+    expect(await screen.findByText('Nothing to track yet')).toBeInTheDocument()
+    expect(screen.queryByText('Complete')).not.toBeInTheDocument()
+    expect(screen.queryByText(/0 of 0/)).not.toBeInTheDocument()
+  })
+})

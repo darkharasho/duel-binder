@@ -62,9 +62,11 @@ export function BinderView({ detail, readOnly, onEdit, onRemove }: Props): React
     [detail.cards, view]
   )
   const summary = [
-    hasGoal
-      ? `${progress.owned} of ${progress.total} · ${detail.missingSlots} missing`
-      : `${detail.cards.length} ${detail.cards.length === 1 ? 'card' : 'cards'}`,
+    hasGoal && progress.total === 0
+      ? 'Nothing to track yet'
+      : hasGoal
+        ? `${progress.owned} of ${progress.total} · ${detail.missingSlots} missing`
+        : `${detail.cards.length} ${detail.cards.length === 1 ? 'card' : 'cards'}`,
     ...(hasGoal && detail.missingSlots > 0 && !detail.tooBroad
       ? [`est. value to finish ${formatUsd(detail.valueToFinish)}`]
       : [])
@@ -106,7 +108,9 @@ export function BinderView({ detail, readOnly, onEdit, onRemove }: Props): React
       ) : (
         <>
           <div className="space-y-2">
-            {hasGoal && <SetProgress progress={progress} className="max-w-sm" />}
+            {hasGoal && progress.total > 0 && (
+              <SetProgress progress={progress} className="max-w-sm" />
+            )}
             <p className="text-sm text-muted-foreground tabular-nums">{summary}</p>
             {hasGoal && detail.unpricedMissing > 0 && (
               <p className="text-xs text-muted-foreground">

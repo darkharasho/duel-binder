@@ -39,13 +39,15 @@ function Row({ b, onOpen }: { b: BinderSummary; onOpen: () => void }): React.JSX
               ...(b.friendsVisible ? [] : ['private'])
             ].join(' · ')}
           </div>
-          {hasGoal && <SetProgress progress={progress} />}
+          {hasGoal && total > 0 && <SetProgress progress={progress} />}
           {!hasGoal ? (
             <div className="text-xs text-muted-foreground tabular-nums">
               {b.tooBroad
                 ? 'Too broad to track'
                 : `${b.ownedSlots} ${b.ownedSlots === 1 ? 'card' : 'cards'}`}
             </div>
+          ) : total === 0 && !b.tooBroad ? (
+            <div className="text-xs text-muted-foreground">Nothing to track yet</div>
           ) : b.tooBroad ? (
             <div className="text-xs text-muted-foreground">Too broad to track</div>
           ) : (

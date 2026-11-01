@@ -159,7 +159,7 @@ describe('Scan window', () => {
     expect(lastState().loop).toEqual({ kind: 'photo-failed' })
   })
 
-  it('searches only the chosen language\'s art on Pokémon', async () => {
+  it("searches only the chosen language's art on Pokémon", async () => {
     stubCamera()
     const engine = fakeEngine()
     const imagesForLanguage = vi.fn(async () => [1, 2])
@@ -562,6 +562,17 @@ describe('Scan window', () => {
     expect(getUserMedia).toHaveBeenCalledTimes(2)
     expect(screen.queryByText('Camera not available')).not.toBeInTheDocument()
     expect(lastState().cameraError).toBeNull()
+  })
+
+  it("the summary screen comes and goes on the main window's word, and scanning carries on", async () => {
+    stubCamera()
+    await renderWindow(fakeEngine())
+    const summary = { value: 12.5, cards: 1, hits: 0, unpriced: 0, top: [] }
+    act(() => bridge.emit({ kind: 'summary', summary }))
+    expect(screen.getByRole('status', { name: 'Summary' })).toHaveTextContent('$12.50')
+    expect(document.querySelector('video')).toBeInTheDocument()
+    act(() => bridge.emit({ kind: 'summary', summary: null }))
+    expect(screen.queryByRole('status', { name: 'Summary' })).not.toBeInTheDocument()
   })
 
   it('a counted pull shows the bar, then fades out', async () => {

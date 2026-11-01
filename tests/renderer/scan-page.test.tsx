@@ -318,6 +318,26 @@ describe('Scan page', () => {
     expect(lastSettings().paused).toBe(false)
   })
 
+  it('Show summary puts the list on the scan window, keeps it current, and ends with the window', async () => {
+    await renderScan()
+    await run()
+    await openWindow()
+    const u = user()
+    const summaries = (): { kind: string; summary?: unknown }[] =>
+      bridge.sent.filter((m) => m.kind === 'summary')
+    await u.click(screen.getByRole('button', { name: 'Show summary' }))
+    expect(summaries().at(-1)).toMatchObject({ summary: { cards: 0, value: 0 } })
+    // A reloaded window is told again.
+    const before = summaries().length
+    act(() => bridge.emit({ kind: 'ready' }))
+    expect(summaries()).toHaveLength(before + 1)
+    await u.click(screen.getByRole('button', { name: 'Hide summary' }))
+    expect(summaries().at(-1)).toMatchObject({ summary: null })
+    await u.click(screen.getByRole('button', { name: 'Show summary' }))
+    act(() => bridge.emitOpen(false))
+    expect(summaries().at(-1)).toMatchObject({ summary: null })
+  })
+
   it("lists the scan window's cameras; a different pick sends settings only, the current one retries", async () => {
     const devices = [
       { deviceId: 'cam1', label: 'Desk webcam' },

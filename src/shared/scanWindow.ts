@@ -53,6 +53,17 @@ export interface ScanWindowState {
   setUnreadable: boolean
 }
 
+/** The list so far, for the opaque summary screen the main window can put over the camera. */
+export interface ScanSummary {
+  /** The list's value; copies with no price are left out, never counted as $0. */
+  value: number
+  cards: number
+  hits: number
+  unpriced: number
+  /** The dearest priced rows, dearest first. */
+  top: { key: string; name: string; imageId: number; price: number; raw: boolean; guess: boolean }[]
+}
+
 export type ToScanWindow =
   | { kind: 'settings'; settings: ScanWindowSettings }
   | { kind: 'retryCamera' }
@@ -60,6 +71,8 @@ export type ToScanWindow =
   | { kind: 'takePhoto' }
   /** The draft with this id is on the list; the scan window stops resending it. */
   | { kind: 'ack'; id: string }
+  /** Shows the summary screen with these numbers, or takes it away. */
+  | { kind: 'summary'; summary: ScanSummary | null }
 
 export type FromScanWindow =
   | { kind: 'ready' }
@@ -69,7 +82,14 @@ export type FromScanWindow =
 
 export type ScanWindowMessage = ToScanWindow | FromScanWindow
 
-const TO: readonly string[] = ['settings', 'retryCamera', 'retryScan', 'takePhoto', 'ack']
+const TO: readonly string[] = [
+  'settings',
+  'retryCamera',
+  'retryScan',
+  'takePhoto',
+  'ack',
+  'summary'
+]
 const FROM: readonly string[] = ['ready', 'state', 'draft']
 
 const kindOf = (v: unknown): unknown =>

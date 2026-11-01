@@ -180,6 +180,15 @@ export function ScanPage({
             >
               {settings.paused ? 'Resume' : 'Pause'}
             </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={!open}
+              aria-pressed={hub.summaryOn}
+              onClick={hub.toggleSummary}
+            >
+              {hub.summaryOn ? 'Hide summary' : 'Show summary'}
+            </Button>
             <Select
               value={settings.fit}
               onValueChange={(fit) => setSettings({ fit: fit as ScanFit })}

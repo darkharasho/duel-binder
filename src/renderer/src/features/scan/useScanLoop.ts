@@ -379,7 +379,6 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
     loop.current.photoWanted = true
     setStatus({ kind: 'reading' })
     // setStatus only touches refs and state.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   const retry = useCallback(() => {
@@ -499,8 +498,7 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
       quad: Quad | null,
       bands: OcrBand[]
     ): Promise<PokemonTextLanguage> => {
-      if (!sameSpot(l.pokemonLanguage.quad, quad))
-        l.pokemonLanguage = { ...NO_POKEMON_LANGUAGE }
+      if (!sameSpot(l.pokemonLanguage.quad, quad)) l.pokemonLanguage = { ...NO_POKEMON_LANGUAGE }
       const known = l.pokemonLanguage
       known.quad = quad
       if (known.read || !bands.length) return known.read

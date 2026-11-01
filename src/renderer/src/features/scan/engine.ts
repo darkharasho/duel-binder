@@ -245,7 +245,10 @@ export function createScanEngine(deps: {
             },
             [bitmap ? frame : (frame.data.buffer as ArrayBuffer)]
           )
-          frames.set(id, watched({ resolve, reject }, photo ? Math.max(frameMs, PHOTO_TIMEOUT_MS) : frameMs))
+          frames.set(
+            id,
+            watched({ resolve, reject }, photo ? Math.max(frameMs, PHOTO_TIMEOUT_MS) : frameMs)
+          )
         } catch (e) {
           frames.delete(id)
           // Never handed over, so it's still ours to free.

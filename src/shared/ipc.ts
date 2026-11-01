@@ -1,4 +1,5 @@
 import type { PlaceholderRequest } from './placeholders'
+import type { ErrorDetails } from './errorReports'
 import type { UsageCounts } from './usage'
 import type { Language } from './languages'
 import type {
@@ -204,6 +205,12 @@ export interface Api {
     /** Sends anonymous event totals; never rejects, and drops them when signed out or offline. */
     report(events: UsageCounts): Promise<void>
   }
+  errors: {
+    /** Sends an anonymous, scrubbed error report; never rejects, and drops it when signed out or offline. */
+    report(details: ErrorDetails): Promise<void>
+    /** Tells the desktop's main process the usage setting, which it can't read itself; a no-op elsewhere. */
+    setEnabled(on: boolean): Promise<void>
+  }
   app: {
     version(): Promise<string>
     openDataFolder(): Promise<void>
@@ -321,6 +328,8 @@ export const INVOKE_CHANNELS = [
   'window:close',
   'window:isMaximized',
   'usage:report',
+  'errors:report',
+  'errors:setEnabled',
   'app:version',
   'app:openDataFolder',
   'app:backupDatabase',

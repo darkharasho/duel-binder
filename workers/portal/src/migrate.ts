@@ -438,7 +438,20 @@ CREATE INDEX ix_wishlist_user_seq ON wishlist_entries(user_id, seq);
 ALTER TABLE users ADD COLUMN wishlist_hidden INTEGER NOT NULL DEFAULT 0;
 `
   },
-  artTwinStep()
+  artTwinStep(),
+  {
+    // Anonymous error reports: the day, not the moment, and nothing that names a user or device.
+    name: 'server-17',
+    sql: `CREATE TABLE error_reports (
+      id INTEGER PRIMARY KEY,
+      day TEXT NOT NULL,
+      platform TEXT NOT NULL,
+      app_version TEXT NOT NULL,
+      message TEXT NOT NULL,
+      stack TEXT
+    );
+    CREATE INDEX ix_error_reports_day ON error_reports(day);`
+  }
 ]
 
 /**

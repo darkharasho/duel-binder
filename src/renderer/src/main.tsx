@@ -10,6 +10,7 @@ import { StrictMode, Suspense, lazy } from 'react'
 import { createRoot } from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import App from './App'
+import { installErrorReports } from '@/lib/errorReports'
 import { isWeb } from '@/lib/platform'
 
 // The scan window is this same bundle at #scan: the camera and overlays, none of the app.
@@ -27,6 +28,8 @@ const queryClient = new QueryClient({
 
 // The app has one dark theme; `dark` keeps shadcn's dark: variants in step with it.
 document.documentElement.classList.add('dark')
+
+installErrorReports()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

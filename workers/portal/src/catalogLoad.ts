@@ -6,6 +6,7 @@ import { upsertCatalogRow } from '../../../src/main/catalog/upsert'
 import { putFingerprintRefs, putFingerprints, rollbackFingerprints } from './scanFiles'
 import { isAdmin } from './auth'
 import { collectStats } from './stats'
+import { collectErrors } from './errors'
 import { warmImage } from './images'
 
 const MAX_ITEMS = 5000
@@ -157,6 +158,11 @@ export async function adminRoute(req: Request, deps: AppDeps): Promise<Response>
     if (!(await authorized(req, deps)) && !(await isAdmin(req, deps)))
       return json({ error: 'Unauthorized' }, 401)
     return json(collectStats(deps))
+  }
+  if (req.method === 'GET' && path === '/admin/errors') {
+    if (!(await authorized(req, deps)) && !(await isAdmin(req, deps)))
+      return json({ error: 'Unauthorized' }, 401)
+    return json(collectErrors(deps))
   }
   if (!(await authorized(req, deps))) return json({ error: 'Unauthorized' }, 401)
 

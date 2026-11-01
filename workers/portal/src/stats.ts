@@ -16,6 +16,7 @@ const COUNTED_TABLES = [
   'printing_contributions',
   'catalog_tombstones',
   'usage_daily',
+  'error_reports',
   'price_sweeps'
 ]
 

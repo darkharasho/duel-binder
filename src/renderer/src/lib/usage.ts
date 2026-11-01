@@ -24,6 +24,12 @@ export function setUsageEnabled(on: boolean): void {
   } catch {
     // No storage: the choice lasts until the app closes.
   }
+  try {
+    // Error reports follow this setting too, and the desktop's main process can't read localStorage.
+    void window.api?.errors?.setEnabled(on).catch(() => {})
+  } catch {
+    // No bridge: nothing to tell.
+  }
   if (!on) {
     pending = {}
     if (timer) clearTimeout(timer)

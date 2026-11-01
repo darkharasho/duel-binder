@@ -1,4 +1,5 @@
 import type Database from 'better-sqlite3'
+import { checkErrorReport, scrubErrorDetails } from '../../shared/errorReports'
 import { checkUsageReport } from '../../shared/usage'
 import { deleteMeta, getMeta, setMeta } from '../db/meta'
 import { gamesOf, type Me } from '../../shared/cloud'
@@ -80,6 +81,8 @@ export interface AccountService {
   requestPrices(printingIds: unknown): Promise<void>
   /** Sends anonymous usage totals when signed in and online; drops them otherwise. Never rejects. */
   reportUsage(events: unknown): Promise<void>
+  /** Sends an anonymous error report when signed in and online; drops it otherwise. Never rejects. */
+  reportError(details: unknown): Promise<void>
   start(): void
   stop(): void
 }
@@ -486,6 +489,19 @@ export function createAccountService(deps: AccountDeps): AccountService {
           .usage(report)
       } catch {
         // Counts are best effort: a lost batch only undercounts.
+      }
+    },
+
+    async reportError(details: unknown): Promise<void> {
+      const current = token
+      if (current === null || stopped || !deps.isOnline()) return
+      try {
+        const report = checkErrorReport({ ...(details as object), platform: 'desktop' })
+        await deps
+          .client(current, { signal: portalAbort.signal, timeoutMs: PORTAL_TIMEOUT_MS })
+          .errorReport(scrubErrorDetails(report))
+      } catch {
+        // Best effort, and an older portal has no such route: never a reason to bother anyone.
       }
     },
 

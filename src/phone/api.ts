@@ -296,6 +296,11 @@ export function createPhoneApi(deps: {
     usage: {
       report: (events) => store.reportUsage({ platform: isNativeApp() ? 'ios' : 'phone', events })
     },
+    errors: {
+      report: (details) =>
+        store.reportError({ ...details, platform: isNativeApp() ? 'ios' : 'phone' }),
+      setEnabled: async () => {}
+    },
     window: {
       platform: 'phone',
       minimize: async () => {},

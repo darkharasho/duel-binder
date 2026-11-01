@@ -114,6 +114,7 @@ export function fakeStore(
     portalRead: vi.fn(async () => []) as PhoneStore['portalRead'],
     requestPrices: vi.fn(async () => 0),
     reportUsage: vi.fn(async () => {}),
+    reportError: vi.fn(async () => {}),
     fingerprints: vi.fn(async () => null),
     fingerprintRefs: vi.fn(async () => []),
     fingerprintStatus: vi.fn(async () => ({ state: 'ready' as const, count: 3 })),

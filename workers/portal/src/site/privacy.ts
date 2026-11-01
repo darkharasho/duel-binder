@@ -13,7 +13,7 @@ export function renderPrivacy(view: PrivacyView): string {
       description: 'What Duel Binder stores about you, why, and how to delete it.',
       heading: 'Privacy',
       lead: 'What Duel Binder keeps about you, why, and how to delete it.',
-      updated: 'Last updated October 28, 2026',
+      updated: 'Last updated October 31, 2026',
       sections: [
         [
           'What is stored',
@@ -36,6 +36,15 @@ export function renderPrivacy(view: PrivacyView): string {
           )
         ],
         [
+          'Error reports',
+          p(
+            'The Settings choice for anonymous usage counts also covers error reports, and it is on unless you turn it off. When an app crashes or hits an error while you’re signed in, it sends the error message, its technical stack trace, the app version and the platform (desktop, web, phone).',
+            'Reports aren’t linked to you. The app needs your sign-in to send one, but the portal stores only those four things and the day: not your account, your device or your IP address. To limit how many reports can be sent, it keeps a short count per account in memory, which is never stored.',
+            'Unlike the usage counts, error text is free-form, so the app and the portal both remove home folder names, email addresses and tokens before it is stored. That cleaning is automatic and can’t be perfect: an unusual error could still contain something like a card name or other text from the app.',
+            'Reports are deleted after 30 days. To stop them, turn off anonymous usage counts and error reports in Settings, on each device; that stops both together.'
+          )
+        ],
+        [
           'Who else handles it',
           p(
             'The portal runs on Cloudflare, which stores its data and keeps request logs, which can include IP addresses, for a few days for troubleshooting. Discord and Apple handle signing in. Nothing is shared with anyone else.'
@@ -53,7 +62,7 @@ export function renderPrivacy(view: PrivacyView): string {
         [
           'How long it is kept',
           p(
-            'Your account data is kept until you delete your account. Sign-in sessions expire on their own, and signing out ends them. The anonymous daily counts are kept, since they belong to no one.'
+            'Your account data is kept until you delete your account. Sign-in sessions expire on their own, and signing out ends them. The anonymous daily counts are kept, since they belong to no one. Error reports are deleted after 30 days.'
           )
         ],
         [

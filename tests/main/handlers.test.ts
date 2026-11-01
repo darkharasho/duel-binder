@@ -37,7 +37,8 @@ const fakeAccount = (signedIn = false): FakeAccount => ({
   stop: vi.fn(),
   portal: vi.fn(),
   requestPrices: vi.fn(async () => {}),
-  reportUsage: vi.fn(async () => {})
+  reportUsage: vi.fn(async () => {}),
+  reportError: vi.fn(async () => {})
 })
 
 async function makeHandlers(opts: { signedIn?: boolean } = {}) {
@@ -72,6 +73,7 @@ async function makeHandlers(opts: { signedIn?: boolean } = {}) {
     },
     scanWindow,
     account: account as unknown as AccountService,
+    errorReports: { setEnabled: vi.fn() },
     emitDataChanged: vi.fn(),
     fingerprints: { ygo: noFingerprints, pkm: noFingerprints },
     ocr: {

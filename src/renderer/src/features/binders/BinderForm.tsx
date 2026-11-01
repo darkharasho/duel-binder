@@ -51,9 +51,15 @@ function ValueRule({
   const [q, setQ] = useState('')
   const [open, setOpen] = useState(false)
   const label = FIELD_LABEL(rule.field)
+  // Ask after typing pauses, as the preview does.
+  const [asked, setAsked] = useState('')
+  useEffect(() => {
+    const timer = setTimeout(() => setAsked(q), PREVIEW_DELAY_MS)
+    return () => clearTimeout(timer)
+  }, [q])
   const found = useQuery({
-    queryKey: [...queryKeys.binders, 'fieldValues', rule.field, q],
-    queryFn: () => api.binders.fieldValues(rule.field, q),
+    queryKey: [...queryKeys.binders, 'fieldValues', rule.field, asked],
+    queryFn: () => api.binders.fieldValues(rule.field, asked),
     enabled: open
   })
   const options = (found.data ?? []).filter((v) => !rule.values.includes(v))

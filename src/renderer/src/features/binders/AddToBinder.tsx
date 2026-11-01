@@ -66,8 +66,19 @@ export function AddToBinder({ cardId, printing }: Props): React.JSX.Element | nu
       )}
       <ul className="space-y-1.5">
         {binders.map((b) => {
-          // A hand add is undone by dropping it; anything else the rules hold is taken out.
-          const out = b.inBinder
+          // Printing level only adds (a printing comes out from the binder's page). At card level,
+          // a binder holding the card offers Remove, and a hand remove is undone by dropping it.
+          const out = at === 'card' && b.inBinder
+          const action: BinderEditAction | null =
+            at === 'printing'
+              ? 'add'
+              : out
+                ? b.edit === 'add'
+                  ? null
+                  : 'remove'
+                : b.edit === 'remove'
+                  ? null
+                  : 'add'
           return (
             <li key={b.uid} className="flex items-center gap-2 text-sm">
               <span className="min-w-0 flex-1 truncate">{b.name}</span>
@@ -77,7 +88,7 @@ export function AddToBinder({ cardId, printing }: Props): React.JSX.Element | nu
                 size="sm"
                 disabled={busy === b.uid}
                 aria-label={`${out ? 'Remove from' : 'Add to'} ${b.name}`}
-                onClick={() => void run(b, out ? (b.edit === 'add' ? null : 'remove') : 'add')}
+                onClick={() => void run(b, action)}
               >
                 {out ? 'Remove' : 'Add'}
               </Button>

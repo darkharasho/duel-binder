@@ -129,6 +129,20 @@ describe('the live preview', () => {
   })
 })
 
+describe('field value search', () => {
+  it('asks once after typing pauses', async () => {
+    const fieldValues = vi.fn<(field: string, q: string) => Promise<string[]>>(async () => [
+      'Alpha'
+    ])
+    renderForm({ binders: { fieldValues } })
+    const user = userEvent.setup()
+    await user.selectOptions(screen.getByLabelText('Add rule'), 'archetype')
+    await user.type(screen.getByLabelText('Search Archetype'), 'blue')
+    await waitFor(() => expect(fieldValues).toHaveBeenCalledTimes(2))
+    expect(fieldValues.mock.calls.map((c) => c[1])).toEqual(['', 'blue'])
+  })
+})
+
 describe('saving', () => {
   it('disables Save for a too-broad rule and says why', async () => {
     const preview = vi.fn(async () => ({ printings: 20000, cards: 9000, owned: 0, tooBroad: true }))
@@ -241,6 +255,29 @@ describe('add to binder', () => {
     expect(edit).toHaveBeenLastCalledWith('b0', { level: 'card', target: '7' }, 'remove')
     await user.click(screen.getByRole('button', { name: 'Remove from Binder 1' }))
     expect(edit).toHaveBeenLastCalledWith('b1', { level: 'card', target: '7' }, null)
+  })
+
+  it('only adds at printing level, whatever the card-level state', async () => {
+    const edit = vi.fn(async () => undefined)
+    renderWithProviders(<AddToBinder cardId={7} printing={{ pkey: 'k:1', label: 'X' }} />, {
+      api: createMockApi({
+        binders: { forCard: forCard([{ inBinder: true, edit: 'add' }]), edit }
+      })
+    })
+    const user = userEvent.setup()
+    await user.click(await screen.findByLabelText(/This printing/))
+    expect(screen.queryByRole('button', { name: /Remove from/ })).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Add to Binder 0' }))
+    expect(edit).toHaveBeenLastCalledWith('b0', { level: 'printing', target: 'k:1' }, 'add')
+  })
+
+  it('undoes a hand remove by dropping it', async () => {
+    const edit = vi.fn(async () => undefined)
+    renderWithProviders(<AddToBinder cardId={7} />, {
+      api: createMockApi({ binders: { forCard: forCard([{ edit: 'remove' }]), edit } })
+    })
+    await userEvent.click(await screen.findByRole('button', { name: 'Add to Binder 0' }))
+    expect(edit).toHaveBeenCalledWith('b0', { level: 'card', target: '7' }, null)
   })
 
   it('refreshes the binder lists after an edit', async () => {

@@ -77,7 +77,7 @@ describe('isSameNumber', () => {
 
 describe('findArt', () => {
   it('needs the set, number and name to agree', () => {
-    const s = set('E1', 128)
+    const s = set('M2a', 128)
     const c = card('018')
     const abra = product(10, 'Abra', '018/128')
     expect(find('ja', s, c, ['Abra'], [abra]).imageUrl).toBe(art(10))
@@ -96,13 +96,30 @@ describe('findArt', () => {
     expect(findArt('en', s, null, half('020'), names, new Map([[24837, [top, bottom]]])).imageUrl).toBe(art(716200))
   })
 
+  it('lets the number place a card where the set was checked, whatever its name', () => {
+    const trainer = product(576045, "Professor Elm's Training Method", '049/128')
+    expect(find('ja', set('E1', 128), card('049'), ['エルム教授のトレーニング方法'], [trainer]).imageUrl).toBe(art(576045))
+    const toy = product(669614, 'Chill Teaser Toy', '649/742')
+    expect(find('ja', set('MC', 742), card('649'), ['Carefree Cat Toy'], [toy]).imageUrl).toBe(art(669614))
+  })
+  it('takes the plain product of a number sold plain and mirror', () => {
+    const list = [product(669673, 'Waitress (Mirror Holo)', '700/742'), product(669672, 'Waitress', '700/742')]
+    expect(find('ja', set('MC', 742), card('700'), ['ウエートレス'], list).imageUrl).toBe(art(669672))
+  })
+  it('takes a product picked by eye over the number', () => {
+    const s = set('tk-xy-n', 30)
+    const list = [product(97994, 'Granbull (#29)', '29/30'), product(98024, 'Switch (Noivern)', '4/30')]
+    const c = card('29', { id: 'tk-xy-n-29' })
+    expect(findArt('en', s, null, c, ['Switch'], new Map([[1532, list]])).imageUrl).toBe(art(98024))
+  })
+
   it('leaves a set with no group alone', () => {
     const r = findArt('ja', set('neo1', 96), null, card('001'), ['Oddish'], new Map())
     expect(r).toEqual({ imageUrl: null, outcome: 'no group' })
   })
 
   it('never compares a Japanese name, but takes the species', () => {
-    const s = set('PCG4', 106)
+    const s = set('M2a', 106)
     const unown = product(10, 'Unown - 043/106', '043/106')
     expect(find('ja', s, card('043'), ['未知'], [unown])).toEqual({
       imageUrl: null,

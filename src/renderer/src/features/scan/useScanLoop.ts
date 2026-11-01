@@ -10,6 +10,8 @@ import {
   ABSENT_MS,
   LANGUAGE_MAX_READS,
   LANGUAGE_RETRY_FRAMES,
+  AUTO_PHOTO_MS,
+  AUTO_PHOTO_TRIES,
   PHOTO_FRAMES,
   PHOTO_GAP_MS,
   PKM_PHOTO_REPRINT_LEAD,
@@ -54,6 +56,10 @@ const LANGUAGE_TIMEOUT_MS = 20_000
  * system muted in the background, or one that died without ending) and handed to onStalled.
  */
 const STALL_MS = 5000
+/** Whether a card undecided since `since`, with `taken` photos already, is due another. */
+export const autoPhotoDue = (since: number, taken: number, now: number): boolean =>
+  now - since >= AUTO_PHOTO_MS && taken < AUTO_PHOTO_TRIES
+
 /** How long a failed photo's message stays once nothing's in view. */
 const PHOTO_FAILED_MS = 4000
 
@@ -234,6 +240,10 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
     retryAt: 0,
     stopped: false,
     photoWanted: false,
+    // Taken unasked, so one that finds nothing says nothing.
+    photoQuiet: false,
+    unsureSince: null as number | null,
+    autoPhotos: 0,
     photoFailedUntil: 0,
     lastFound: false,
     shown: null as number | null,
@@ -380,6 +390,7 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
   const takePhoto = useCallback(() => {
     if (!latest.current.running || loop.current.stopped) return
     loop.current.photoWanted = true
+    loop.current.photoQuiet = false
     setStatus({ kind: 'reading' })
     // setStatus only touches refs and state.
   }, [])
@@ -424,6 +435,8 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
         l.absentSince ??= now
         if (now - l.absentSince >= ABSENT_MS) {
           l.shown = null
+          l.unsureSince = null
+          l.autoPhotos = 0
           // Time to read that a photo failed, with the card already lowered.
           if (now >= l.photoFailedUntil) setStatus({ kind: 'idle' })
         }
@@ -544,7 +557,8 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
     const photo = async (
       engine: ScanEngine,
       video: HTMLVideoElement,
-      o: typeof latest.current
+      o: typeof latest.current,
+      quiet: boolean
     ): Promise<void> => {
       const stale = (): boolean =>
         !live || latest.current.setKey !== o.setKey || engineRef.current !== engine
@@ -597,7 +611,7 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
         }
         best ??= looked
       }
-      if (stale()) return
+      if (stale() || (quiet && best === null)) return
       tracker.current.settle(performance.now())
       if (best?.kind === 'recognized') {
         show(best, best.item)
@@ -645,7 +659,7 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
         }
         if (l.photoWanted) {
           l.photoWanted = false
-          await photo(engine, video, o)
+          await photo(engine, video, o, l.photoQuiet)
           return
         }
         const grabbed = await grab(video).catch(() => null)
@@ -716,6 +730,17 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
         // Only Yu-Gi-Oh's rarities are read by the look of the card.
         const looked = profile.rarityLook ? withLook(outcome, raw.cues, raw.look) : outcome
         const draft = tracker.current.push(performance.now(), looked)
+        // A card that stays undecided gets the photo the user would otherwise have to ask for.
+        if (looked.kind === 'unsure' && !draft && l.shown === null) {
+          const at = performance.now()
+          l.unsureSince ??= at
+          if (autoPhotoDue(l.unsureSince, l.autoPhotos, at)) {
+            l.autoPhotos++
+            l.unsureSince = null
+            l.photoWanted = true
+            l.photoQuiet = true
+          }
+        }
         if (KEEP_FRAMES) {
           l.debugTimes.push([
             Math.round(analyzed - started),

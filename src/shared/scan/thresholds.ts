@@ -271,5 +271,9 @@ export const SLAB_MIN_CONTRAST = 40
 /** Frames a photo looks at, this far apart, stopping at the first that names a card for certain. */
 export const PHOTO_FRAMES = 3
 export const PHOTO_GAP_MS = 150
+/** How long a card stays in view undecided before the loop takes a photo of it unasked. */
+export const AUTO_PHOTO_MS = 2500
+/** Photos taken unasked of one card in view: it may be held better for the second. */
+export const AUTO_PHOTO_TRIES = 2
 /** After a photo, the live scan counts nothing until the view clears, or this long at most. */
 export const PHOTO_SETTLE_MS = 4000

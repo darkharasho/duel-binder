@@ -156,7 +156,7 @@ export function SetChecklist({
   const panel = useFilterPanel()
   const [filter, setFilter] = useState<TileFilter>('all')
   const [q, setQ] = useState('')
-  const [rarity, setRarity] = useState<string | null>(null)
+  const [pickedRarities, setPickedRarities] = useState<string[]>([])
   const [sort, setSort] = useState<{ by: ChecklistSort; dir: SortDir }>({
     by: 'number',
     dir: 'asc'
@@ -203,14 +203,15 @@ export function SetChecklist({
     () =>
       data
         ? sortTiles(
-            filterTilesByRarity(filterTiles(checklistTiles(data, mode), filter), rarity).filter(
-              (t) => matchesCardSearch(t.card, q)
-            ),
+            filterTilesByRarity(
+              filterTiles(checklistTiles(data, mode), filter),
+              pickedRarities
+            ).filter((t) => matchesCardSearch(t.card, q)),
             sort.by,
             sort.dir
           )
         : [],
-    [data, mode, filter, rarity, q, sort]
+    [data, mode, filter, pickedRarities, q, sort]
   )
   const shownTiles = useChunkedList(tiles)
 
@@ -339,10 +340,11 @@ export function SetChecklist({
   const sorts = checklistSorts(game)
   // Bulk mode ignores the rarity, so nothing filters there.
   const canFilter = !bulk && rarities.length > 1
-  const chips: ActiveChip[] =
-    canFilter && rarity !== null
-      ? [{ key: 'rarity', label: rarity, onRemove: () => setRarity(null) }]
-      : []
+  const toggleRarity = (r: string): void =>
+    setPickedRarities((p) => (p.includes(r) ? p.filter((x) => x !== r) : [...p, r]))
+  const chips: ActiveChip[] = canFilter
+    ? pickedRarities.map((r) => ({ key: r, label: r, onRemove: () => toggleRarity(r) }))
+    : []
   // On the phone the count mode and bulk add move into a "⋯" menu to fit the width.
   const phone = isPhone()
   const toggleBulk = (): void => {
@@ -487,7 +489,7 @@ export function SetChecklist({
                 )
               }
               chips={chips}
-              onClearAll={() => setRarity(null)}
+              onClearAll={() => setPickedRarities([])}
               resultCount={`${tiles.length.toLocaleString('en-US')} ${tiles.length === 1 ? 'card' : 'cards'}`}
             />
           </PageHeader>
@@ -616,17 +618,17 @@ export function SetChecklist({
             open={panel.open}
             onOpenChange={panel.setOpen}
             description="Filter this set's cards"
-            onClearAll={rarity !== null ? () => setRarity(null) : undefined}
+            onClearAll={pickedRarities.length > 0 ? () => setPickedRarities([]) : undefined}
           >
-            <FilterSection title="Rarity" defaultOpen picked={rarity === null ? 0 : 1}>
+            <FilterSection title="Rarity" defaultOpen picked={pickedRarities.length}>
               <ChipOptions>
                 {rarities.map((r) => (
                   <FilterOptionChip
                     key={r.rarity}
                     label={r.rarity}
                     count={r.count}
-                    selected={rarity === r.rarity}
-                    onClick={() => setRarity(rarity === r.rarity ? null : r.rarity)}
+                    selected={pickedRarities.includes(r.rarity)}
+                    onClick={() => toggleRarity(r.rarity)}
                   />
                 ))}
               </ChipOptions>

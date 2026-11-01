@@ -301,14 +301,15 @@ export function rarityCounts(cl: SetChecklist): { rarity: string; count: number 
  * Tiles of one rarity; null keeps all. A Pokémon card keeps every finish tile when its rarity
  * matches. A Yu-Gi-Oh! card's tile in 'cards' mode stays if the card has the rarity.
  */
-export function filterTilesByRarity(tiles: Tile[], rarity: string | null): Tile[] {
-  if (rarity === null) return tiles
+export function filterTilesByRarity(tiles: Tile[], picked: string[]): Tile[] {
+  if (picked.length === 0) return tiles
+  const lower = picked.map((p) => p.toLowerCase())
   return tiles.filter((t) => {
     const own = cardRarityOf(t.card)
-    if (own !== undefined) return own.toLowerCase() === rarity.toLowerCase()
+    if (own !== undefined) return lower.includes(own.toLowerCase())
     return t.rarity !== null
-      ? t.rarity === rarity
-      : t.card.rarities.some((r) => r.rarity === rarity)
+      ? picked.includes(t.rarity)
+      : t.card.rarities.some((r) => picked.includes(r.rarity))
   })
 }
 

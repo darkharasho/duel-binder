@@ -21,6 +21,21 @@ const BEWD = [
 ]
 
 describe('choosePrintingFile', () => {
+  it("takes an overframe from its rarity's scan when Yugipedia names no variant (RV01)", () => {
+    const files = [
+      'File:BlueEyesToonDragon-RV01-JP-C.png',
+      'File:BlueEyesToonDragon-RV01-JP-OP.png',
+      'File:BlueEyesToonDragon-RV01-JP-ScR.png'
+    ]
+    const printing = {
+      setCode: 'RV01-JP008',
+      language: 'ja' as const,
+      rarity: 'Secret Rare',
+      variant: 'Overframe'
+    }
+    expect(choosePrintingFile(files, printing)).toBe('BlueEyesToonDragon-RV01-JP-ScR.png')
+  })
+
   it('picks the set, region and rarity, preferring the plain file', () => {
     expect(
       choosePrintingFile(BEWD, { setCode: 'LOB-EN001', language: 'en', rarity: 'Ultra Rare' })

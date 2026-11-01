@@ -405,6 +405,14 @@ ALTER TABLE pokemon_cards ADD COLUMN traditional_twin_id INTEGER;
 CREATE INDEX ix_pokemon_cards_traditional_twin ON pokemon_cards(card_id) WHERE traditional_twin_id IS NOT NULL;
 `
 
+/**
+ * Yugipedia moved its file URLs to another host, which read as "no scan" for every lookup since
+ * and stuck for 30 days: look those up again. The server needs this too.
+ */
+export const SCHEMA_V29 = `
+DELETE FROM printing_art WHERE url IS NULL;
+`
+
 /** A printing's rarity as shown: "Starlight Rare (Extended Art)" for a labelled variant. */
 export const RARITY_LABEL = "p.set_rarity || COALESCE(' (' || p.variant || ')', '')"
 
@@ -437,5 +445,6 @@ export const MIGRATIONS: Migration[] = [
   { version: 25, sql: SCHEMA_V25, server: false },
   { version: 26, sql: SCHEMA_V26, server: false },
   { version: 27, sql: SCHEMA_V27, server: false },
-  { version: 28, sql: SCHEMA_V28, server: false }
+  { version: 28, sql: SCHEMA_V28, server: false },
+  { version: 29, sql: SCHEMA_V29 }
 ]

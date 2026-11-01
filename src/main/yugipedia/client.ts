@@ -1,6 +1,16 @@
 const API_URL = 'https://yugipedia.com/api.php'
 const REPO_URL = 'https://github.com/darkharasho/duel-binder'
 const IMAGE_URL_PREFIX = 'https://ms.yugipedia.com/'
+/** The API's host for the same files now; ms stays ours, as the host every image check allows. */
+const API_IMAGE_URL_PREFIX = 'https://img.yugipedia.com/'
+
+/** The URL to keep for a file, or null for one that isn't Yugipedia's. */
+function imageUrl(url: unknown): string | null {
+  if (typeof url !== 'string') return null
+  if (url.startsWith(API_IMAGE_URL_PREFIX))
+    return IMAGE_URL_PREFIX + url.slice(API_IMAGE_URL_PREFIX.length)
+  return url.startsWith(IMAGE_URL_PREFIX) ? url : null
+}
 const SET_LIST_NAMESPACE = '3006'
 // Yugipedia can take 20-30s to answer a batch, so give it room before retrying.
 const TIMEOUT_MS = 90_000
@@ -20,7 +30,7 @@ export interface YugipediaClient {
   listSetListTitles(): Promise<string[]>
   /** Wikitext by requested title (redirects followed; missing pages absent). Chunks of 50. */
   fetchPages(titles: string[]): Promise<Map<string, string>>
-  /** File name (no "File:") -> URL, only for URLs starting with https://ms.yugipedia.com/. Chunks of 50. */
+  /** File name (no "File:") -> URL, only Yugipedia's own, on https://ms.yugipedia.com/. Chunks of 50. */
   fetchImageUrls(files: string[]): Promise<Map<string, string>>
   /**
    * File names (no "File:") used on each requested page (redirects followed; missing and invalid
@@ -233,8 +243,8 @@ export function createYugipediaClient(opts: {
         const byTitle = new Map((body.query?.pages ?? []).map((p) => [p.title, p]))
         const resolve = resolver(body)
         for (const f of part) {
-          const url = byTitle.get(resolve(`File:${f}`))?.imageinfo?.[0]?.url
-          if (typeof url === 'string' && url.startsWith(IMAGE_URL_PREFIX)) out.set(f, url)
+          const url = imageUrl(byTitle.get(resolve(`File:${f}`))?.imageinfo?.[0]?.url)
+          if (url) out.set(f, url)
         }
       }
       return out
@@ -287,9 +297,8 @@ export function createYugipediaClient(opts: {
           pageids: part.join('|')
         })
         for (const p of body.query?.pages ?? []) {
-          const url = p.imageinfo?.[0]?.url
-          if (typeof p.pageid === 'number' && url?.startsWith(IMAGE_URL_PREFIX))
-            out.set(p.pageid, url)
+          const url = imageUrl(p.imageinfo?.[0]?.url)
+          if (typeof p.pageid === 'number' && url) out.set(p.pageid, url)
         }
       }
       return out

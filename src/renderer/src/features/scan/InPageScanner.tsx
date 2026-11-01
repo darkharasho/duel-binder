@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 import { defaultEngine, type EngineFactory } from './engine'
 import { useScanHub } from './ScanHub'
+import { FoundBurst } from './FoundBurst'
 import { ScanViewport } from './ScanViewport'
 import { ArtDataNotice } from './ArtDataNotice'
 import { SET_UNREADABLE } from './scanText'
@@ -40,7 +41,7 @@ export function InPageScanner({
   const { settings } = useScanHub()
   const videoRef = useRef<HTMLVideoElement>(null)
   const camera = useCamera(settings.deviceId)
-  const { loop, setUnreadable } = useHubScan({
+  const { loop, setUnreadable, found } = useHubScan({
     videoRef,
     stream: camera.stream,
     engineFactory,
@@ -64,7 +65,16 @@ export function InPageScanner({
         onRetryCamera={camera.retry}
         loop={loop}
         className="aspect-[3/4] h-[calc(100vh-15rem)] min-h-72 rounded-lg border-2 border-white/10"
-      />
+      >
+        {found && (
+          <FoundBurst
+            key={found.key}
+            name={found.name}
+            price={found.price}
+            imageId={found.imageId}
+          />
+        )}
+      </ScanViewport>
       {setUnreadable && <p className="text-xs text-muted-foreground">{SET_UNREADABLE}</p>}
       {loop.artReady === false && <ArtDataNotice status={loop.artData} />}
       {controls}

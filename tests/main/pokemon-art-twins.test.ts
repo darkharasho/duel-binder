@@ -49,15 +49,11 @@ const zh = (number: string, mark: string, setCode = 'OBF'): TdCard => ({
 })
 
 describe('englishTwins', () => {
-  const find = (sets: EnglishPlan[], card: TdCard, name: string, set = ZH_SET): string =>
-    englishTwins(sets, () => '').find(card, name, set).outcome
+  const find = (sets: EnglishPlan[], card: TdCard, name: string): string =>
+    englishTwins(sets).find(card, name).outcome
 
-  it('links a regular print whose set, number and name agree, whatever the number padding', () => {
-    const r = englishTwins([enSet([en('001', 'Oddish', 'Common')])], () => '').find(
-      zh('1', 'C'),
-      'ODDISH',
-      ZH_SET
-    )
+  it('links a card whose set, number and name agree, whatever the number padding', () => {
+    const r = englishTwins([enSet([en('001', 'Oddish', 'Common')])]).find(zh('1', 'C'), 'ODDISH')
     expect(r.outcome).toBe('linked')
     expect(r.twin?.id).toBe('sv03-001')
   })
@@ -83,48 +79,24 @@ describe('englishTwins', () => {
     expect(find([enSet([en('001', 'Oddish', 'Common')])], zh('2', 'C'), 'Oddish')).toBe('number missing')
   })
 
-  it('leaves out AR and SAR: their twin is the plain card, CSV5C 130 and 155 among them', () => {
+  it('links whatever the print: the label says the art is English', () => {
     const sets = [enSet([en('002', 'Gloom', 'Common'), en('125', 'Charizard ex', 'Double rare')])]
-    expect(find(sets, zh('2', 'AR'), 'Gloom')).toBe('special rarity')
-    expect(find(sets, zh('125', 'SAR'), 'Charizard ex')).toBe('special rarity')
+    expect(find(sets, zh('2', 'AR'), 'Gloom')).toBe('linked')
+    expect(find(sets, zh('125', 'SAR'), 'Charizard ex')).toBe('linked')
+    expect(find(sets, zh('2', '无标记'), 'Gloom')).toBe('linked')
+    expect(find(sets, zh('125', 'U'), 'Charizard ex')).toBe('linked')
   })
 
-  it('leaves out cards with no mark', () => {
-    expect(find([enSet([en('001', 'Oddish', 'Common')])], zh('1', '无标记'), 'Oddish')).toBe('unmarked')
-  })
-
-  it("leaves out a mark the English rarity isn't the tier of", () => {
-    expect(find([enSet([en('125', 'Charizard ex', 'Double rare')])], zh('125', 'U'), 'Charizard ex')).toBe(
-      'rarity mismatch'
-    )
-  })
-
-  it('leaves out a twin from another series, as a Scarlet & Violet Nest Ball pointing at Sun & Moon', () => {
+  it('links a twin from another series, or past the printed count', () => {
     const sm = enSet([en('123', 'Nest Ball', 'Uncommon')], { serie: { id: 'sm' } })
-    expect(find([sm], zh('123', 'U'), 'Nest Ball')).toBe('other series')
+    expect(find([sm], zh('123', 'U'), 'Nest Ball')).toBe('linked')
+    expect(find([enSet([en('223', 'Charizard ex', 'Common')])], zh('223', 'C'), 'Charizard ex')).toBe('linked')
   })
 
-  it('leaves out a number past the printed count', () => {
-    expect(find([enSet([en('223', 'Charizard ex', 'Common')])], zh('223', 'C'), 'Charizard ex')).toBe(
-      'secret number'
-    )
-  })
-
-  it('leaves out rules with another regular print of different or unknown art', () => {
+  it('links one of several prints of the same rules', () => {
     const a = en('010', 'Pikachu', 'Common')
     const other = en('020', 'Pikachu', 'Common', { illustrator: 'B' })
-    const same = en('020', 'Pikachu', 'Common')
-    const unknown = en('020', 'Pikachu', 'Common', { illustrator: undefined })
-    expect(find([enSet([a, other])], zh('10', 'C'), 'Pikachu')).toBe('other art of these rules')
-    expect(find([enSet([a, unknown])], zh('10', 'C'), 'Pikachu')).toBe('other art of these rules')
-    expect(find([enSet([a, same])], zh('10', 'C'), 'Pikachu')).toBe('linked')
-  })
-
-  it('is not put off by a full art past the count, or a print of other rules', () => {
-    const a = en('010', 'Pikachu', 'Double rare')
-    const full = en('220', 'Pikachu', 'Double rare', { illustrator: 'B' })
-    const hp = en('020', 'Pikachu', 'Double rare', { illustrator: 'B', hp: 70 })
-    expect(find([enSet([a, full, hp])], zh('10', 'RR'), 'Pikachu')).toBe('linked')
+    expect(find([enSet([a, other])], zh('10', 'C'), 'Pikachu')).toBe('linked')
   })
 
   it('counts a twin with no art, and a card with no twin', () => {
@@ -223,7 +195,7 @@ describe('refreshPokemon with English art', () => {
 
   it('a link that no longer holds is cleared', async () => {
     await run([zhCard()])
-    await run([{ ...zhCard(), englishTwin: { setCode: 'OBF', number: '1', mark: 'AR' } }])
+    await run([{ ...zhCard(), englishTwin: { setCode: 'OBF', number: '99', mark: 'C' } }])
     expect(row().art_twin_id).toBeNull()
   })
 

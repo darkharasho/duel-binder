@@ -383,6 +383,17 @@ export const SCHEMA_V26 = `
 CREATE INDEX ix_printings_card ON card_printings(card_id);
 `
 
+/**
+ * The English card whose art a Pokémon card with none of its own shows, under an "English art"
+ * label. A link rather than a copy in `image_url`: stored art sticks and is what the scanner
+ * fingerprints. Older clients ignore the column and keep the placeholder. Desktop-only for the same
+ * reason as V20: server-16 repeats this.
+ */
+export const SCHEMA_V27 = `
+ALTER TABLE pokemon_cards ADD COLUMN art_twin_id INTEGER;
+CREATE INDEX ix_pokemon_cards_art_twin ON pokemon_cards(card_id) WHERE art_twin_id IS NOT NULL;
+`
+
 /** A printing's rarity as shown: "Starlight Rare (Extended Art)" for a labelled variant. */
 export const RARITY_LABEL = "p.set_rarity || COALESCE(' (' || p.variant || ')', '')"
 
@@ -413,5 +424,6 @@ export const MIGRATIONS: Migration[] = [
   { version: 23, sql: SCHEMA_V23 },
   { version: 24, sql: SCHEMA_V24, server: false },
   { version: 25, sql: SCHEMA_V25, server: false },
-  { version: 26, sql: SCHEMA_V26, server: false }
+  { version: 26, sql: SCHEMA_V26, server: false },
+  { version: 27, sql: SCHEMA_V27, server: false }
 ]

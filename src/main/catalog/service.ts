@@ -6,6 +6,7 @@ import { syncedGames } from '../cloud/engine'
 import type { SyncStatus } from '../../shared/types'
 import type { GameId } from '../../shared/games'
 import { catalogCursorKey, catalogStagingKey, finishApply } from './apply'
+import { backfillArtTwins } from './artTwinBackfill'
 import { applyStaged, clearStaged, runSwitch, stageChanges, type SwitchFailure } from './switch'
 
 export interface CatalogUpdate {
@@ -208,8 +209,13 @@ export function createCatalogService(deps: CatalogServiceDeps): CatalogService {
       try {
         // Yu-Gi-Oh! first, which every account has; then the account's other games.
         await pullDeltas(client, 'ygo')
-        for (const game of await syncedGames(client))
+        for (const game of await syncedGames(client)) {
+          if (game === 'pkm')
+            await backfillArtTwins(db, (since) =>
+              client.catalogChanges(since, undefined, ['pokemon_cards'], game)
+            )
           if (game !== 'ygo') await pullDeltas(client, game)
+        }
         setMeta(db, 'last_sync_at', now().toISOString())
       } finally {
         finishPending()

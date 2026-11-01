@@ -3,6 +3,7 @@ import { movedEnough } from '../../../src/main/tcgplayer/prices'
 import { pokemonId } from '../../../src/shared/games/ids'
 import { hasNativeScript } from '../../../src/shared/setNames'
 import { findArt, findArtByName, NAME_GROUPS } from './art'
+import { englishTwins } from './artTwins'
 import { englishNamer, type EnglishNamer } from './englishNames'
 import { traditionalNamer, type JapaneseTwin, type SimplifiedName } from './traditional'
 import { matchGroup, matchProducts, namesCard, plainName, speciesCheck, type MatchedProduct, type NameCheck } from './match'
@@ -38,6 +39,8 @@ export interface PokemonReport {
   artRemoved: number
   /** Cards left with no art, by why (see ArtOutcome). */
   artMissing: Record<string, number>
+  /** Simplified Chinese cards with no art of their own, by how the English twin went (see artTwins.ts). */
+  artTwins: Record<string, number>
   /** Cards whose finishes no source confirms (only TCGdex's generated defaults or the fallback). */
   unverified: number
   problems: string[]
@@ -55,6 +58,8 @@ interface CardPlan {
   name: string
   localName: string | null
   imageUrl: string | null
+  /** The English card whose art this one shows until it has its own. */
+  artTwinId: number | null
   versions: PkmVersion[]
 }
 
@@ -273,6 +278,7 @@ async function planLanguage(
           name,
           localName: card.localName ?? (lang === 'ja' && name !== card.name ? card.name : null),
           imageUrl: card.image || first?.imageUrl || null,
+          artTwinId: null,
           versions: v.versions
         }
       })
@@ -299,6 +305,7 @@ async function planLanguage(
       artFilled: 0,
       artRemoved: 0,
       artMissing: {},
+      artTwins: {},
       unverified,
       problems
     }
@@ -346,16 +353,17 @@ function writePlans(db: Database.Database, plans: LangPlan[], nowIso: string): v
   )
   const detailsRow = db.prepare('SELECT image_url FROM pokemon_cards WHERE card_id = ?')
   const upsertDetails = db.prepare(
-    `INSERT INTO pokemon_cards (card_id, category, hp, types, stage, rarity, illustrator, source_id, image_url, local_name)
-     VALUES (@cardId, @category, @hp, @types, @stage, @rarity, @illustrator, @sourceId, @imageUrl, @localName)
+    `INSERT INTO pokemon_cards (card_id, category, hp, types, stage, rarity, illustrator, source_id, image_url, local_name, art_twin_id)
+     VALUES (@cardId, @category, @hp, @types, @stage, @rarity, @illustrator, @sourceId, @imageUrl, @localName, @artTwinId)
      ON CONFLICT(card_id) DO UPDATE SET category = excluded.category, hp = excluded.hp, types = excluded.types,
        stage = excluded.stage, rarity = excluded.rarity, illustrator = excluded.illustrator,
        source_id = excluded.source_id, image_url = COALESCE(pokemon_cards.image_url, excluded.image_url),
-       local_name = excluded.local_name
+       local_name = excluded.local_name, art_twin_id = excluded.art_twin_id
      WHERE pokemon_cards.category IS NOT excluded.category OR pokemon_cards.hp IS NOT excluded.hp
        OR pokemon_cards.types IS NOT excluded.types OR pokemon_cards.stage IS NOT excluded.stage
        OR pokemon_cards.rarity IS NOT excluded.rarity OR pokemon_cards.illustrator IS NOT excluded.illustrator
        OR pokemon_cards.source_id IS NOT excluded.source_id OR pokemon_cards.local_name IS NOT excluded.local_name
+       OR pokemon_cards.art_twin_id IS NOT excluded.art_twin_id
        OR (pokemon_cards.image_url IS NULL AND excluded.image_url IS NOT NULL)`
   )
   const setImage = db.prepare('UPDATE pokemon_cards SET image_url = ? WHERE card_id = ?')
@@ -442,6 +450,8 @@ function writePlans(db: Database.Database, plans: LangPlan[], nowIso: string): v
             updateCard.run(cp.name, type, desc, nowIso, id)
             cardsChanged = true
           }
+          // Stored art is the card's own, so it ends any borrowing.
+          const stored = detailsRow.get(id) as { image_url: string | null } | undefined
           upsertDetails.run({
             cardId: id,
             category: type,
@@ -452,7 +462,8 @@ function writePlans(db: Database.Database, plans: LangPlan[], nowIso: string): v
             illustrator: card.illustrator ?? null,
             sourceId,
             imageUrl: cp.imageUrl,
-            localName: cp.localName
+            localName: cp.localName,
+            artTwinId: stored?.image_url ? null : cp.artTwinId
           })
           let image = (detailsRow.get(id) as { image_url: string | null }).image_url
           // Art is kept, except art an unchecked match gave the card: another card's.
@@ -621,6 +632,25 @@ function fillArt(plan: LangPlan, namer: EnglishNamer | null): void {
   }
 }
 
+/**
+ * Links the Simplified Chinese cards still without art to their English twins, once the English
+ * cards have their art. A card with art of its own is never looked at.
+ */
+function borrowEnglishArt(plans: LangPlan[]): void {
+  const en = plans.find((p) => p.lang === 'en')
+  const zh = plans.find((p) => p.lang === 'zh-hans')
+  if (!en || !zh) return
+  const twins = englishTwins(en.sets, cardDesc)
+  for (const sp of zh.sets) {
+    for (const cp of sp.cards) {
+      if (cp.imageUrl) continue
+      const { outcome, twin } = twins.find(cp.card, cp.name, sp.set)
+      zh.report.artTwins[outcome] = (zh.report.artTwins[outcome] ?? 0) + 1
+      cp.artTwinId = twin && pokemonId(`en/${twin.id}`)
+    }
+  }
+}
+
 /** `name`, or the first of "name (alt)" not taken by another set of the language. */
 function freeName(name: string, alts: string[], taken: (n: string) => boolean): string {
   if (!taken(name)) return name
@@ -658,6 +688,7 @@ export async function refreshPokemon(
   const zh = plans.find((p) => p.lang === 'zh-hant')
   if (zh) nameTraditional(zh, plans)
   for (const plan of plans) fillArt(plan, plan === ja ? namer : null)
+  borrowEnglishArt(plans)
   writePlans(work, plans, (opts.now ?? (() => new Date()))().toISOString())
   return plans.map((p) => p.report)
 }

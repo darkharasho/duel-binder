@@ -12,7 +12,7 @@ import {
   checkString,
   checkUpdatePatch
 } from '../../../src/main/repo/args'
-import { getCardDetail, searchCards } from '../../../src/main/repo/cards'
+import { borrowedArt, getCardDetail, searchCards } from '../../../src/main/repo/cards'
 import { browseCards, browseFacets } from '../../../src/main/repo/browse'
 import {
   CollectionError,
@@ -89,6 +89,7 @@ const HANDLERS: { [C in PortalChannel]: Handler<C> } = {
   'cards:browse': ({ db }, scope, f) =>
     browseCards(db, checkObject(f, 'Filters') as unknown as BrowseFilters, scope),
   'cards:browseFacets': ({ db }, scope) => browseFacets(db, scope),
+  'cards:borrowedArt': ({ db }) => borrowedArt(db),
   'sets:list': ({ db }, scope) => listSets(db, scope),
   'sets:checklist': ({ db }, scope, setName, language) =>
     getChecklist(db, checkString(setName, 'setName'), checkLanguage(language), scope),

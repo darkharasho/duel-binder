@@ -144,6 +144,8 @@ function logPokemon(reports: PokemonReport[], log: (line: string) => void): void
     if (r.unmatchedSets.length > 0)
       log(`Pokémon ${r.lang}: unmatched sets: ${r.unmatchedSets.join(', ')}`)
     if (noArt(r) > 0) log(`Pokémon ${r.lang}: no art: ${JSON.stringify(r.artMissing)}`)
+    if (Object.keys(r.artTwins).length > 0)
+      log(`Pokémon ${r.lang}: English art: ${JSON.stringify(r.artTwins)}`)
     for (const p of r.problems) log(`Pokémon ${r.lang}: ${p}`)
   }
 }

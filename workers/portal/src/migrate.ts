@@ -1,4 +1,4 @@
-import { MIGRATIONS, SCHEMA_V19_SERVER, SCHEMA_V20, type Migration } from '../../../src/main/db/schema'
+import { MIGRATIONS, SCHEMA_V19_SERVER, SCHEMA_V20, SCHEMA_V27, type Migration } from '../../../src/main/db/schema'
 import type { SqlDb } from '../../../src/main/db/sql'
 
 export interface ServerStep {
@@ -275,6 +275,25 @@ function pokemonSetArtStep(): ServerStep {
   }
 }
 
+/** Frozen, as of server-16: server-13's `pokemon_cards` entry plus `art_twin_id`. */
+const SERVER_16_POKEMON_CARDS: FrozenTable = {
+  name: 'pokemon_cards',
+  key: ['card_id'],
+  columns: [...SERVER_13_POKEMON_CARDS.columns, 'art_twin_id']
+}
+
+/** `art_twin_id` (the server's V27), and the seq triggers recreated over it, as in server-13. */
+function artTwinStep(): ServerStep {
+  return {
+    name: 'server-16',
+    sql: [
+      SCHEMA_V27.trim(),
+      ...['ins', 'upd', 'del'].map((op) => `DROP TRIGGER IF EXISTS trg_pokemon_cards_seq_${op};`),
+      ...seqTriggers(SERVER_16_POKEMON_CARDS, "'pkm'")
+    ].join('\n')
+  }
+}
+
 /**
  * Server-only steps, run after every desktop step. Append only; never edit a shipped step.
  *
@@ -418,7 +437,8 @@ CREATE UNIQUE INDEX ux_wishlist_seq ON wishlist_entries(seq);
 CREATE INDEX ix_wishlist_user_seq ON wishlist_entries(user_id, seq);
 ALTER TABLE users ADD COLUMN wishlist_hidden INTEGER NOT NULL DEFAULT 0;
 `
-  }
+  },
+  artTwinStep()
 ]
 
 /**

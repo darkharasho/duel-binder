@@ -52,7 +52,8 @@ const SORTS = sortOptions<SortKey>([
   { value: 'value', label: 'Total price', kind: 'number', dir: 'desc' },
   { value: 'unitPrice', label: 'Price', kind: 'number', dir: 'desc' },
   { value: 'quantity', label: 'Quantity', kind: 'number', dir: 'desc' },
-  { value: 'added', label: 'Date added', kind: 'date', dir: 'desc' }
+  { value: 'added', label: 'Date added', kind: 'date', dir: 'desc' },
+  { value: 'released', label: 'Release date', kind: 'date', dir: 'desc' }
 ])
 
 const cardCount = (n: number): string =>

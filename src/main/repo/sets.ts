@@ -68,13 +68,31 @@ const summary = (scope: Scope): string => {
 }
 
 /**
- * Each set's headline card: its rarest printing (lowest code, skipping 000 bonus cards). Its
- * artwork identifies the set better than a pack photo.
+ * Each set's headline card: its hit, the dearest card with art to show. With no prices (a set not
+ * out yet, most Chinese sets) it's the rarest printing instead, lowest code first, skipping 000
+ * bonus cards. Its artwork identifies the set better than a pack photo. Pokémon keeps its rarity on
+ * the card; its printings' set_rarity is the finish.
  */
 const coversSql = (scope: Scope): string => `
   WITH per_card AS (
     SELECT p.language, p.set_name, p.card_id, MIN(p.set_code) AS code,
+      MAX(CASE WHEN ${isMarketOnly} THEN ${MARKET_ONLY_PRICE}
+        ELSE COALESCE(p.market_price, p.set_price, ip.price) END) AS price,
+      MIN(CASE WHEN p.game = 'pkm' AND pc.image_url IS NULL AND pc.art_twin_id IS NULL
+        THEN 1 ELSE 0 END) AS no_art,
       MIN(CASE
+        WHEN p.game = 'pkm' THEN CASE
+          WHEN pc.rarity LIKE '%Hyper%' THEN 1
+          WHEN pc.rarity LIKE '%Special illustration%' THEN 2
+          WHEN pc.rarity LIKE '%Secret%' THEN 3
+          WHEN pc.rarity LIKE '%Ultra%' THEN 4
+          WHEN pc.rarity LIKE '%Illustration%' THEN 5
+          WHEN pc.rarity LIKE '%Character%' THEN 6
+          WHEN pc.rarity LIKE '%Shiny%' THEN 7
+          WHEN pc.rarity LIKE '%Triple%' OR pc.rarity LIKE '%Double%' OR pc.rarity LIKE '%Super%' THEN 8
+          WHEN pc.rarity LIKE '%Holo%' THEN 9
+          WHEN pc.rarity LIKE '%Rare%' THEN 10
+          ELSE 11 END
         WHEN p.set_rarity LIKE '%Starlight%' THEN 1
         WHEN p.set_rarity LIKE '%Quarter Century%' THEN 2
         WHEN p.set_rarity LIKE '%Ghost%' THEN 3
@@ -85,11 +103,14 @@ const coversSql = (scope: Scope): string => `
         WHEN p.set_rarity LIKE '%Super%' THEN 8
         WHEN p.set_rarity LIKE '%Rare%' THEN 9
         ELSE 10 END) AS rank
-    FROM card_printings p WHERE +p.game = ${scope.game} AND p.missing_from_api = 0 AND p.contributed = 0 %WHERE%
+    FROM card_printings p
+    LEFT JOIN intl_prices ip ON ip.printing_id = p.id
+    LEFT JOIN pokemon_cards pc ON pc.card_id = p.card_id AND p.game = 'pkm'
+    WHERE +p.game = ${scope.game} AND p.missing_from_api = 0 AND p.contributed = 0 %WHERE%
     GROUP BY p.language, p.set_name, p.card_id),
   ranked AS (
     SELECT *, ROW_NUMBER() OVER (PARTITION BY language, set_name
-      ORDER BY rank, code LIKE '%000', code, card_id) AS rn
+      ORDER BY no_art, price IS NULL, price DESC, rank, code LIKE '%000', code, card_id) AS rn
     FROM per_card)
   SELECT r.language, r.set_name,
     (SELECT ci.image_id FROM card_images ci WHERE ci.card_id = r.card_id AND +ci.game = ${scope.game}
@@ -160,7 +181,7 @@ export function listSets(db: SqlDb, scope: Scope = LOCAL): SetSummary[] {
 }
 
 /** Bump when `catalogSets` or `toSummary` change what they produce: stored rollups aren't rebuilt otherwise. */
-const SETS_ROLLUP = 1
+const SETS_ROLLUP = 2
 
 /**
  * listSets as the catalog alone has it: nobody owns anything and a flagged Pokémon printing isn't

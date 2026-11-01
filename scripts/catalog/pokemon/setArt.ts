@@ -5,7 +5,8 @@ import {
   BULBAGARDEN_IMAGE_PREFIX,
   isFallbackLogoUrl,
   POKEMONTCG_IMAGE_PREFIX,
-  SCRYDEX_IMAGE_PREFIX
+  SCRYDEX_IMAGE_PREFIX,
+  TCGPLAYER_PACK_PREFIX
 } from '../../../src/shared/imageSources'
 import { REPO_URL } from './http'
 import type { TdLang } from './types'
@@ -16,7 +17,8 @@ import { setImageKey } from './write'
  *
  * - Booster pack images from the Bulbagarden Archives (a MediaWiki), found through its pack
  *   categories with the API and matched to our sets by Bulbapedia's set code or the set's name. Every
- *   design a set has is kept (sort_order 0, the largest image, is the main one the app shows).
+ *   design a set has is kept (sort_order 0, the largest image, is the main one the app shows). A set
+ *   the archive doesn't have yet gets TCGplayer's photo of its pack until it does.
  * - Set logos from the Pokémon TCG API, for English sets TCGdex has no logo for (TCGdex's own logo
  *   stays in `sets.image_url`), plus a few picked by hand (HAND_PICKED_LOGOS). Neither source has
  *   Japanese logos.
@@ -42,6 +44,9 @@ const CATEGORIES: { lang: TdLang; title: string; flat?: true }[] = [
   // Most Japanese packs sit in the parent category, beside other languages' (filtered out below).
   { lang: 'ja', title: 'Category:TCG booster packs', flat: true }
 ]
+
+/** TCGplayer's own product photo of a pack, for a set the archive doesn't have (a set not out yet). */
+const TCGPLAYER_CATEGORY: Record<TdLang, number> = { en: 3, ja: 85 }
 
 export interface ArchiveFile {
   /** Without the "File:" prefix. */
@@ -89,6 +94,11 @@ export function bulbagardenKey(url: string): string | null {
 /** 'pt-' + first 20 hex chars of sha1(url); null for anything outside the Pokémon TCG API's images. */
 export function pokemontcgKey(url: string): string | null {
   return isFallbackLogoUrl(url) ? `pt-${sha(url)}` : null
+}
+
+/** 'tp-' + first 20 hex chars of sha1(url); null for anything outside TCGplayer's product images. */
+export function tcgplayerPackKey(url: string): string | null {
+  return url.startsWith(TCGPLAYER_PACK_PREFIX) ? `tp-${sha(url)}` : null
 }
 
 // ---- Reading the archive ----------------------------------------------------------------------
@@ -450,6 +460,45 @@ export function shouldRefreshSetArt(db: Database.Database, now: Date): boolean {
   return Number.isNaN(t) || now.getTime() - t >= SET_ART_INTERVAL_MS
 }
 
+export interface TcgPackProduct {
+  name: string
+  imageUrl?: string
+  imageCount?: number
+}
+
+/**
+ * The set's plain pack among a TCGplayer group's products, at full size: "<set> Booster Pack" only,
+ * so never a sleeved pack, blister, or a look-alike from another set. A product with no photo yet
+ * still has an imageUrl, which 403s, so imageCount decides.
+ */
+export function tcgplayerPack(setName: string, products: TcgPackProduct[]): string | null {
+  const want = nameKey(`${setName} Booster Pack`)
+  const pack = products.find((p) => nameKey(p.name) === want && p.imageUrl && p.imageCount)
+  return pack?.imageUrl?.replace(/_\d+w\.jpg$/, '_in_1000x1000.jpg') ?? null
+}
+
+/** Packs off TCGplayer for the sets in `missing`, found by the group named after the set. */
+async function tcgplayerPacks(
+  lang: TdLang,
+  missing: string[],
+  get: <T>(url: string) => Promise<{ results?: T[] }>
+): Promise<Map<string, ArchiveFile[]>> {
+  const out = new Map<string, ArchiveFile[]>()
+  if (missing.length === 0) return out
+  const base = `https://tcgcsv.com/tcgplayer/${TCGPLAYER_CATEGORY[lang]}`
+  const groups = (await get<{ groupId: number; name: string }>(`${base}/groups`)).results
+  if (!Array.isArray(groups)) throw new Error('no TCGplayer groups in the response')
+  const wanted = new Map(missing.map((s) => [nameKey(s), s]))
+  for (const g of groups) {
+    const set = wanted.get(nameKey(g.name.replace(/^[^:]*:\s*/, '')))
+    if (!set) continue
+    const products = (await get<TcgPackProduct>(`${base}/${g.groupId}/products`)).results ?? []
+    const url = tcgplayerPack(set, products)
+    if (url) out.set(set, [{ title: `${set} Booster Pack`, url, width: 1000, height: 1000 }])
+  }
+  return out
+}
+
 export interface SetArtOpts {
   version: string
   fetch?: typeof fetch
@@ -519,6 +568,16 @@ export async function refreshPokemonSetArt(
       report.unmatchedFiles[lang] = unmatchedFiles
       return art
     })
+    const get = <T>(url: string): Promise<{ results?: T[] }> =>
+      getJsonRetrying<{ results?: T[] }>(fetchFn, url, userAgent, opts.retryDelayMs)
+    for (const [i, lang] of (['en', 'ja'] as const).entries()) {
+      const extra = await tcgplayerPacks(lang, report.packs[lang].unmatchedSets, get)
+      for (const [set, list] of extra) packs[i].set(set, list)
+      report.packs[lang].matched += extra.size
+      report.packs[lang].unmatchedSets = report.packs[lang].unmatchedSets.filter(
+        (s) => !extra.has(s)
+      )
+    }
   } catch (e) {
     report.problems.push(`Pack art: ${e instanceof Error ? e.message : String(e)}`)
   }
@@ -563,7 +622,7 @@ export async function refreshPokemonSetArt(
       ;(['en', 'ja'] as const).forEach((lang, i) => {
         for (const [set, list] of packs![i]) {
           list.forEach((f, order) => {
-            const key = bulbagardenKey(f.url)
+            const key = bulbagardenKey(f.url) ?? tcgplayerPackKey(f.url)
             if (key) insert.run(lang, set, 'pack', order, f.url, key)
           })
         }

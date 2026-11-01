@@ -9,7 +9,7 @@
  * uploads every row; --dry-run refreshes and prints per-table counts without uploading or
  * touching the base. A refresh that would delete more than a sliver of any table (see
  * `findShrinks`) is refused unless --allow-shrink is passed, since every client applies the
- * deletes. --no-pokemon skips the Pokémon step. --refresh-sets re-reads the non-English set lists now instead of on their weekly timer. --refresh-cards reads the YGOPRODeck card list now instead of on its daily timer.
+ * deletes. --no-pokemon skips the Pokémon step. --refresh-sets re-reads the non-English set lists and Pokémon set art now instead of on their weekly timers. --refresh-cards reads the YGOPRODeck card list now instead of on its daily timer.
  * Problems that don't stop the upload (a failed card sync, a failed fingerprint build)
  * end the run with a non-zero exit so the workflow shows red. So does a fingerprint file that fails
  * the accuracy gate (see accuracy.ts), which is held back while clients keep the last one. Each
@@ -274,7 +274,10 @@ export async function runJob(opts: JobOptions): Promise<JobResult> {
   }
   try {
     if (on('ygo')) {
-      if (opts.refreshSets) deleteMeta(work, 'intl_sets_synced_at')
+      if (opts.refreshSets) {
+        deleteMeta(work, 'intl_sets_synced_at')
+        deleteMeta(work, 'pkm_set_art_synced_at')
+      }
       if (opts.refreshCards) deleteMeta(work, 'last_sync_at')
       await refresh(work, problem)
     }

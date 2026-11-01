@@ -47,7 +47,7 @@ export function renderTerms(view: LegalView): string {
           'Card data, prices and trademarks',
           p(
             'Yu-Gi-Oh! and its card names, text and art belong to Konami. Duel Binder is not affiliated with or endorsed by Konami. Card data and images come from YGOPRODeck and Yugipedia; prices come from public listings.',
-            'Pokémon and its card names, text and art belong to The Pokémon Company, Nintendo, Creatures and GAME FREAK. Duel Binder is not affiliated with or endorsed by them. Pokémon card data comes from TCGdex; booster pack images from the Bulbagarden Archives and set logos from TCGdex and the Pokémon TCG API.',
+            'Pokémon and its card names, text and art belong to The Pokémon Company, Nintendo, Creatures and GAME FREAK. Duel Binder is not affiliated with or endorsed by them. Pokémon card data comes from TCGdex; booster pack images from the Bulbagarden Archives and TCGplayer, and set logos from TCGdex and the Pokémon TCG API.',
             'Prices and collection values are estimates and may be wrong or out of date. Don’t rely on them for buying, selling or insuring cards.'
           )
         ],

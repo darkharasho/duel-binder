@@ -33,6 +33,7 @@ interface EntryDbRow {
   e_created_at: string
   e_updated_at: string
   e_image_id: number
+  e_release_date: string | null
   [col: string]: unknown
 }
 
@@ -49,12 +50,15 @@ export const cardPriceColumns = (scope: Scope): string => `
 const select = (scope: Scope): string => `
   SELECT e.id AS e_id, e.quantity AS e_quantity, e.notes AS e_notes, e.created_at AS e_created_at,
          e.updated_at AS e_updated_at, e.image_id AS e_image_id,
+         COALESCE(rs.tcg_date, res.tcg_date) AS e_release_date,
          ${cardPriceColumns(scope)}
   FROM collection_entries e
   JOIN card_printings p ON p.id = e.printing_id AND +p.game = ${scope.game}
   JOIN cards c ON c.id = p.card_id AND +c.game = ${scope.game}
   LEFT JOIN pokemon_cards pc ON pc.card_id = c.id
-  LEFT JOIN intl_prices ip ON ip.printing_id = p.id`
+  LEFT JOIN intl_prices ip ON ip.printing_id = p.id
+  LEFT JOIN sets rs ON rs.game = p.game AND rs.language = p.language AND rs.set_name = p.set_name
+  LEFT JOIN sets res ON res.game = p.game AND res.language = 'en' AND res.set_name = p.set_name`
 
 type EntryPrice = Pick<
   EntryView,
@@ -127,6 +131,7 @@ function toView(r: EntryDbRow, priceStatus: string | null): EntryView {
     notes: r.e_notes,
     createdAt: r.e_created_at,
     updatedAt: r.e_updated_at,
+    releaseDate: r.e_release_date,
     card,
     printing,
     imageId: r.e_image_id,
@@ -309,6 +314,18 @@ export function listEntries(db: SqlDb, f: CollectionFilters, scope: Scope = LOCA
       default:
         return e.card.name.toLowerCase()
     }
+  }
+  if (f.sort === 'released') {
+    // Undated sets go last whichever way it runs; one set stays in its own order.
+    return entries.sort((a, b) => {
+      const [ra, rb] = [a.releaseDate ?? '', b.releaseDate ?? '']
+      if (ra !== rb) return !ra ? 1 : !rb ? -1 : ra < rb ? -dir : dir
+      return (
+        a.printing.setCode.localeCompare(b.printing.setCode) ||
+        a.card.name.localeCompare(b.card.name) ||
+        a.id - b.id
+      )
+    })
   }
   return entries.sort((a, b) => {
     const ka = key(a)

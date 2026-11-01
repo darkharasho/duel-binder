@@ -12,6 +12,8 @@ import {
   matchPacks,
   pokemontcgKey,
   refreshPokemonSetArt,
+  tcgplayerPack,
+  type TcgPackProduct,
   shouldRefreshSetArt,
   warmSetArt,
   type ArchiveFile,
@@ -252,6 +254,25 @@ function fakeSources(
         ]
       })
     }
+    if (url.origin === 'https://tcgcsv.com') {
+      if (url.pathname.endsWith('/groups')) {
+        return json({ results: [{ groupId: 24831, name: 'ME06: Delta Reign' }] })
+      }
+      return json({
+        results: [
+          {
+            name: 'Delta Reign Sleeved Booster Pack',
+            imageUrl: 'https://tcgplayer-cdn.tcgplayer.com/product/712112_200w.jpg',
+            imageCount: 1
+          },
+          {
+            name: 'Delta Reign Booster Pack',
+            imageUrl: 'https://tcgplayer-cdn.tcgplayer.com/product/712099_200w.jpg',
+            imageCount: 1
+          }
+        ]
+      })
+    }
     if (opts.archiveDown) return new Response('down', { status: 503 })
     const cat = url.searchParams.get('gcmtitle')
     if (cat === 'Category:English TCG packs') {
@@ -316,6 +337,45 @@ describe('the job step', () => {
       'SV1 Booster Miraidon.png'
     ])
     expect(String(fetchFn.mock.calls[0][0])).toContain(BULBAGARDEN_API)
+  })
+
+  it("takes TCGplayer's pack for a set the archive doesn't have", async () => {
+    const db = await pokemonDb()
+    db.prepare(
+      "INSERT INTO sets (game, language, set_name, set_code) VALUES ('pkm', 'en', 'Delta Reign', 'DLR')"
+    ).run()
+    const report = await refreshPokemonSetArt(db, {
+      version: 'test',
+      fetch: fakeSources() as unknown as typeof fetch,
+      pause: noPause,
+      retryDelayMs: 1
+    })
+    expect(report.problems).toEqual([])
+    expect(report.packs.en.unmatchedSets).not.toContain('Delta Reign')
+    const row = db
+      .prepare("SELECT image_url, image_key FROM pokemon_set_art WHERE set_name = 'Delta Reign'")
+      .get() as { image_url: string; image_key: string }
+    expect(row.image_url).toBe(
+      'https://tcgplayer-cdn.tcgplayer.com/product/712099_in_1000x1000.jpg'
+    )
+    expect(row.image_key).toMatch(/^tp-[0-9a-f]{20}$/)
+  })
+
+  it("takes only the set's own plain pack, with a real photo", () => {
+    const url = 'https://tcgplayer-cdn.tcgplayer.com/product/1_200w.jpg'
+    const pack = (name: string, imageCount = 1): TcgPackProduct => ({
+      name,
+      imageUrl: url,
+      imageCount
+    })
+    expect(tcgplayerPack('Delta Reign', [pack('Delta Reign Booster Pack', 0)])).toBeNull()
+    expect(
+      tcgplayerPack('Delta Reign', [
+        pack('Delta Reign Booster Pack Art Bundle [Set of 4]'),
+        pack('Delta Reign Sleeved Booster Pack'),
+        pack('Pitch Black Booster Pack')
+      ])
+    ).toBeNull()
   })
 
   it('writes every design, the main one first, and stamps the week', async () => {

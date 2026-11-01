@@ -5,12 +5,15 @@ import { priceCandidates } from '../prices/candidates'
 import type { ContributedPrinting } from '../../shared/catalogFeed'
 import type { UnsyncedEntry } from '../../shared/types'
 import type { GameId } from '../../shared/games'
+import type { BinderEditAction, BinderEditLevel } from '../../shared/binders'
 import { isLanguage } from '../../shared/languages'
 import {
   MAX_NOTES,
   editTime,
   keepsKey,
   replaces,
+  type WireBinder,
+  type WireBinderEdit,
   type WireEntry,
   type WirePrice,
   type WireWish
@@ -70,16 +73,19 @@ export function saveAccountState(
   ).run(owner, s.cursor ?? null, s.syncedAt ?? null, s.cursor ?? null, s.syncedAt ?? null)
 }
 
-/** A per-game sync feed: the account's entries or wishlist, or the server's price changes. */
-export type SyncStream = 'entries' | 'prices' | 'wishlist'
+/** A per-game sync feed: the account's entries, wishlist, binders or binder edits, or the server's price changes. */
+export type SyncStream = 'entries' | 'prices' | 'wishlist' | 'binders' | 'binderEdits'
+
+const hasLegacyCursor = (game: GameId, stream: SyncStream): boolean =>
+  game === 'ygo' && (stream === 'entries' || stream === 'prices')
 
 /**
  * Where `owner` is in one game's feed. Yu-Gi-Oh! keeps its pre-games places (the account's cursor,
- * and this device's `price_feed_cursor`); every other game, and every game's wishlist, has a
+ * and this device's `price_feed_cursor`); every other game, and every game's newer feeds, have a
  * `cloud_game_cursors` row, 0 until its first pull.
  */
 export function gameCursor(db: SqlDb, owner: number, game: GameId, stream: SyncStream): number {
-  if (game === 'ygo' && stream !== 'wishlist')
+  if (hasLegacyCursor(game, stream))
     return stream === 'entries'
       ? accountState(db, owner).cursor
       : Number(getMeta(db, 'price_feed_cursor') ?? 0)
@@ -96,7 +102,7 @@ export function saveGameCursor(
   stream: SyncStream,
   cursor: number
 ): void {
-  if (game === 'ygo' && stream !== 'wishlist') {
+  if (hasLegacyCursor(game, stream)) {
     if (stream === 'entries') saveAccountState(db, owner, { cursor })
     else setMeta(db, 'price_feed_cursor', String(cursor))
     return
@@ -107,11 +113,10 @@ export function saveGameCursor(
   ).run(owner, game, stream, cursor)
 }
 
-/** Whether this computer has never-signed-in entries or wishes (owner 0), tombstones included. */
+/** Whether this computer has never-signed-in entries, wishes or binders (owner 0), tombstones included. */
 export function hasLocalData(db: SqlDb): boolean {
-  return (
-    db.prepare('SELECT 1 FROM collection_entries WHERE owner_id = 0 LIMIT 1').get() !== undefined ||
-    db.prepare('SELECT 1 FROM wishlist_entries WHERE owner_id = 0 LIMIT 1').get() !== undefined
+  return ['collection_entries', 'wishlist_entries', 'binders', 'binder_edits'].some(
+    (table) => db.prepare(`SELECT 1 FROM ${table} WHERE owner_id = 0 LIMIT 1`).get() !== undefined
   )
 }
 
@@ -127,8 +132,16 @@ export function adoptLocalData(db: SqlDb, owner: number): number {
     // A day the owner already has a snapshot for keeps the owner's.
     db.prepare('UPDATE OR IGNORE value_snapshots SET owner_id = ? WHERE owner_id = 0').run(owner)
     db.prepare('DELETE FROM value_snapshots WHERE owner_id = 0').run()
-    db.prepare('UPDATE OR IGNORE wishlist_entries SET owner_id = ?, dirty = 1 WHERE owner_id = 0').run(owner)
+    db.prepare(
+      'UPDATE OR IGNORE wishlist_entries SET owner_id = ?, dirty = 1 WHERE owner_id = 0'
+    ).run(owner)
     db.prepare('DELETE FROM wishlist_entries WHERE owner_id = 0').run()
+    db.prepare('UPDATE OR IGNORE binders SET owner_id = ?, dirty = 1 WHERE owner_id = 0').run(owner)
+    db.prepare('DELETE FROM binders WHERE owner_id = 0').run()
+    db.prepare('UPDATE OR IGNORE binder_edits SET owner_id = ?, dirty = 1 WHERE owner_id = 0').run(
+      owner
+    )
+    db.prepare('DELETE FROM binder_edits WHERE owner_id = 0').run()
     return moved.changes
   })()
 }
@@ -466,6 +479,211 @@ const toWishRow = (w: WireWish): WishRow => ({
 export function purgeCleanWishes(db: SqlDb, owner: number): void {
   db.prepare(
     'DELETE FROM wishlist_entries WHERE owner_id = ? AND deleted_at IS NOT NULL AND dirty = 0'
+  ).run(owner)
+}
+
+interface BinderRow {
+  uid: string
+  game: GameId
+  name: string
+  rules: string
+  goal: string
+  languages: string
+  friends_visible: number
+  sort_order: number
+  created_at: string
+  updated_at: string
+  deleted_at: string | null
+  dirty: number
+}
+
+const BINDER_COLS = `uid, game, name, rules, goal, languages, friends_visible, sort_order, created_at,
+  updated_at, deleted_at, dirty`
+
+const binderToWire = (r: BinderRow): WireBinder => ({
+  uid: r.uid,
+  game: r.game,
+  name: r.name,
+  rules: r.rules,
+  goal: r.goal,
+  languages: r.languages,
+  friendsVisible: r.friends_visible !== 0,
+  sortOrder: r.sort_order,
+  createdAt: r.created_at,
+  updatedAt: r.updated_at,
+  deletedAt: r.deleted_at
+})
+
+/** Whether two rows of one wire shape hold the same values, whatever order their keys came in. */
+const sameFields = <T extends object>(x: T, y: T): boolean =>
+  (Object.keys(x) as (keyof T)[]).every((k) => x[k] === y[k])
+
+/** Up to `limit` of the owner's unpushed binders, tombstones included, leaving out the uids in `skip`. */
+export function dirtyBinders(
+  db: SqlDb,
+  owner: number,
+  limit: number,
+  skip: ReadonlySet<string>
+): WireBinder[] {
+  const rows = db
+    .prepare(
+      `SELECT ${BINDER_COLS} FROM binders
+       WHERE owner_id = ? AND dirty = 1 AND uid NOT IN (SELECT value FROM json_each(?))
+       ORDER BY updated_at, uid LIMIT ?`
+    )
+    .all(owner, JSON.stringify([...skip]), limit) as BinderRow[]
+  return rows.map(binderToWire)
+}
+
+/** Marks a pushed binder clean, unless it was edited again since `b` was read. */
+export function markBinderPushed(db: SqlDb, owner: number, b: WireBinder): void {
+  db.prepare(
+    'UPDATE binders SET dirty = 0 WHERE owner_id = ? AND uid = ? AND updated_at = ? AND deleted_at IS ?'
+  ).run(owner, b.uid, b.updatedAt, b.deletedAt)
+}
+
+/**
+ * Applies one server binder, clean, keeping its rules, goal and languages as they came (a newer app's
+ * may be unreadable here); a newer unpushed local edit is kept. Returns whether it wrote.
+ */
+export function applyRemoteBinder(db: SqlDb, owner: number, b: WireBinder): boolean {
+  const local = db
+    .prepare(`SELECT ${BINDER_COLS} FROM binders WHERE owner_id = ? AND uid = ?`)
+    .get(owner, b.uid) as BinderRow | undefined
+  if (!local && b.deletedAt !== null) return false
+  if (local) {
+    const wire = binderToWire(local)
+    if (local.dirty === 0 && sameFields(wire, b)) return false
+    if (local.dirty === 1 && !replaces(b, wire)) return false
+  }
+  db.prepare(
+    `INSERT INTO binders (owner_id, uid, game, name, rules, goal, languages, friends_visible, sort_order,
+                          created_at, updated_at, deleted_at, dirty)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+     ON CONFLICT(owner_id, uid) DO UPDATE SET game = excluded.game, name = excluded.name,
+       rules = excluded.rules, goal = excluded.goal, languages = excluded.languages,
+       friends_visible = excluded.friends_visible, sort_order = excluded.sort_order,
+       created_at = excluded.created_at, updated_at = excluded.updated_at,
+       deleted_at = excluded.deleted_at, dirty = 0`
+  ).run(
+    owner,
+    b.uid,
+    b.game,
+    b.name,
+    b.rules,
+    b.goal,
+    b.languages,
+    b.friendsVisible ? 1 : 0,
+    b.sortOrder,
+    b.createdAt,
+    b.updatedAt,
+    b.deletedAt
+  )
+  return true
+}
+
+/** Deletes the owner's binder tombstones the server already has. */
+export function purgeCleanBinders(db: SqlDb, owner: number): void {
+  db.prepare('DELETE FROM binders WHERE owner_id = ? AND deleted_at IS NOT NULL AND dirty = 0').run(
+    owner
+  )
+}
+
+interface BinderEditRow {
+  binder_uid: string
+  level: BinderEditLevel
+  target: string
+  game: GameId
+  action: BinderEditAction
+  created_at: string
+  updated_at: string
+  deleted_at: string | null
+  dirty: number
+}
+
+const EDIT_COLS =
+  'binder_uid, level, target, game, action, created_at, updated_at, deleted_at, dirty'
+
+const editToWire = (r: BinderEditRow): WireBinderEdit => ({
+  binderUid: r.binder_uid,
+  level: r.level,
+  target: r.target,
+  game: r.game,
+  action: r.action,
+  createdAt: r.created_at,
+  updatedAt: r.updated_at,
+  deletedAt: r.deleted_at
+})
+
+/** Up to `limit` of the owner's unpushed binder edits, tombstones included, leaving out those whose binderEditKey is in `skip`. */
+export function dirtyBinderEdits(
+  db: SqlDb,
+  owner: number,
+  limit: number,
+  skip: ReadonlySet<string>
+): WireBinderEdit[] {
+  const rows = db
+    .prepare(
+      `SELECT ${EDIT_COLS} FROM binder_edits
+       WHERE owner_id = ? AND dirty = 1
+         AND binder_uid || char(31) || level || char(31) || target NOT IN (SELECT value FROM json_each(?))
+       ORDER BY updated_at, binder_uid, level, target LIMIT ?`
+    )
+    .all(owner, JSON.stringify([...skip]), limit) as BinderEditRow[]
+  return rows.map(editToWire)
+}
+
+/** Marks a pushed binder edit clean, unless it was edited again since `e` was read. */
+export function markBinderEditPushed(db: SqlDb, owner: number, e: WireBinderEdit): void {
+  db.prepare(
+    `UPDATE binder_edits SET dirty = 0
+     WHERE owner_id = ? AND binder_uid = ? AND level = ? AND target = ? AND updated_at = ? AND deleted_at IS ?`
+  ).run(owner, e.binderUid, e.level, e.target, e.updatedAt, e.deletedAt)
+}
+
+/**
+ * Applies one server binder edit, clean; a newer unpushed local edit is kept. Returns whether it wrote.
+ * An edit is stored whether or not its binder is here: the binder may be on its way, and this edit's
+ * cursor won't come back to it. Reads only look at live binders' edits, so an orphan does nothing.
+ */
+export function applyRemoteBinderEdit(db: SqlDb, owner: number, e: WireBinderEdit): boolean {
+  const local = db
+    .prepare(
+      `SELECT ${EDIT_COLS} FROM binder_edits
+       WHERE owner_id = ? AND binder_uid = ? AND level = ? AND target = ?`
+    )
+    .get(owner, e.binderUid, e.level, e.target) as BinderEditRow | undefined
+  if (!local && e.deletedAt !== null) return false
+  if (local) {
+    const wire = editToWire(local)
+    if (local.dirty === 0 && sameFields(wire, e)) return false
+    if (local.dirty === 1 && !replaces(e, wire)) return false
+  }
+  db.prepare(
+    `INSERT INTO binder_edits (owner_id, binder_uid, level, target, game, action, created_at, updated_at,
+                               deleted_at, dirty)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+     ON CONFLICT(owner_id, binder_uid, level, target) DO UPDATE SET game = excluded.game,
+       action = excluded.action, created_at = excluded.created_at, updated_at = excluded.updated_at,
+       deleted_at = excluded.deleted_at, dirty = 0`
+  ).run(
+    owner,
+    e.binderUid,
+    e.level,
+    e.target,
+    e.game,
+    e.action,
+    e.createdAt,
+    e.updatedAt,
+    e.deletedAt
+  )
+  return true
+}
+
+/** Deletes the owner's binder edit tombstones the server already has. */
+export function purgeCleanBinderEdits(db: SqlDb, owner: number): void {
+  db.prepare(
+    'DELETE FROM binder_edits WHERE owner_id = ? AND deleted_at IS NOT NULL AND dirty = 0'
   ).run(owner)
 }
 

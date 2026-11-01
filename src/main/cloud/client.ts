@@ -7,6 +7,10 @@ import type {
 import type { ErrorReport } from '../../shared/errorReports'
 import type { UsageReport } from '../../shared/usage'
 import type {
+  BinderEditPullResponse,
+  BinderEditPushResult,
+  BinderPullResponse,
+  BinderPushResult,
   Me,
   PriceChangesResponse,
   PriceRequestResponse,
@@ -14,6 +18,8 @@ import type {
   PullResponse,
   PushResponse,
   PushResult,
+  WireBinder,
+  WireBinderEdit,
   WireEntry,
   WireWish,
   WishPullResponse,
@@ -56,6 +62,14 @@ export interface CloudClient {
   wishlistPush(entries: WireWish[]): Promise<WishPushResult[]>
   /** One page of the account's wishlist rows of `game` after `cursor`; as `wishlistPush` on an old portal. */
   wishlistPull(cursor: number, game: GameId): Promise<WishPullResponse>
+  /** Pushes binders; a portal without binders rejects with CloudNotFoundError. */
+  bindersPush(entries: WireBinder[]): Promise<BinderPushResult[]>
+  /** One page of the account's binders of `game` after `cursor`; as `bindersPush` on an old portal. */
+  bindersPull(cursor: number, game: GameId): Promise<BinderPullResponse>
+  /** Pushes binder edits; as `bindersPush` on an old portal. */
+  binderEditsPush(entries: WireBinderEdit[]): Promise<BinderEditPushResult[]>
+  /** One page of the account's binder edits of `game` after `cursor`; as `bindersPush` on an old portal. */
+  binderEditsPull(cursor: number, game: GameId): Promise<BinderEditPullResponse>
   prices(pkeys: string[]): Promise<PricesResponse>
   /** One page of server price changes of `game` (default Yu-Gi-Oh!) after `since` (the price change feed). */
   priceChanges(since: number, game?: GameId): Promise<PriceChangesResponse>
@@ -172,11 +186,26 @@ export function createCloudClient(opts: {
     pull: (cursor, game = 'ygo') =>
       call<PullResponse>(`/api/sync/pull?cursor=${cursor}&game=${game}`, 'GET'),
     wishlistPush: async (entries) =>
-      (
-        await call<{ results: WishPushResult[] }>('/api/sync/wishlist-push', 'POST', { entries })
-      ).results,
+      (await call<{ results: WishPushResult[] }>('/api/sync/wishlist-push', 'POST', { entries }))
+        .results,
     wishlistPull: (cursor, game) =>
       call<WishPullResponse>(`/api/sync/wishlist-pull?cursor=${cursor}&game=${game}`, 'GET'),
+    bindersPush: async (entries) =>
+      (await call<{ results: BinderPushResult[] }>('/api/sync/binders-push', 'POST', { entries }))
+        .results,
+    bindersPull: (cursor, game) =>
+      call<BinderPullResponse>(`/api/sync/binders-pull?cursor=${cursor}&game=${game}`, 'GET'),
+    binderEditsPush: async (entries) =>
+      (
+        await call<{ results: BinderEditPushResult[] }>('/api/sync/binder-edits-push', 'POST', {
+          entries
+        })
+      ).results,
+    binderEditsPull: (cursor, game) =>
+      call<BinderEditPullResponse>(
+        `/api/sync/binder-edits-pull?cursor=${cursor}&game=${game}`,
+        'GET'
+      ),
     prices: (pkeys) => call<PricesResponse>('/api/sync/prices', 'POST', { pkeys }),
     priceChanges: (since, game = 'ygo') =>
       call<PriceChangesResponse>(`/api/sync/price-changes?since=${since}&game=${game}`, 'GET'),

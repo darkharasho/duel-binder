@@ -4,7 +4,14 @@ import { recordSnapshot } from '../repo/stats'
 import { MAX_CONTRIBUTE, type ContributeResult } from '../../shared/catalogFeed'
 import { settleWishlist } from '../repo/wishlist'
 import { localScope } from '../repo/scope'
-import { MAX_PULL, MAX_PUSH, editTime, gamesOf, type WireEntry } from '../../shared/cloud'
+import {
+  MAX_PULL,
+  MAX_PUSH,
+  binderEditKey,
+  editTime,
+  gamesOf,
+  type WireEntry
+} from '../../shared/cloud'
 import type { GameId } from '../../shared/games'
 import { CloudAuthError, CloudNotFoundError, CloudOfflineError, type CloudClient } from './client'
 import {
@@ -12,17 +19,25 @@ import {
   applyPending,
   applyPrices,
   applyRemote,
+  applyRemoteBinder,
+  applyRemoteBinderEdit,
   applyRemoteWish,
   contributionGroups,
+  dirtyBinderEdits,
+  dirtyBinders,
   dirtyEntries,
   dirtyWishes,
   gameCursor,
   pullPriceChanges,
   dropEntry,
+  markBinderEditPushed,
+  markBinderPushed,
   markPushed,
   markWishPushed,
   pendingCount,
   pruneSyncIssues,
+  purgeCleanBinderEdits,
+  purgeCleanBinders,
   purgeCleanTombstones,
   purgeCleanWishes,
   recordSyncIssue,
@@ -115,6 +130,86 @@ async function syncWishlist(
     if (e instanceof CloudAuthError) throw e
     if (!(e instanceof CloudNotFoundError) && !(e instanceof CloudOfflineError))
       console.warn('Wishlist sync failed; it stays queued', e)
+  }
+  return changed
+}
+
+/**
+ * Syncs `owner`'s binders, then their edits, on their own routes: pull each game from its own cursor,
+ * then push. Best effort as syncWishlist is; a row the server skips (a cap, or a game outside `games`)
+ * stays dirty for a later run. Resolves whether anything changed.
+ */
+async function syncBinders(
+  db: SqlDb,
+  owner: number,
+  client: CloudClient,
+  games: GameId[]
+): Promise<boolean> {
+  let changed = false
+  try {
+    for (const game of games) {
+      let cursor = gameCursor(db, owner, game, 'binders')
+      for (;;) {
+        const page = await client.bindersPull(cursor, game)
+        db.transaction(() => {
+          for (const b of page.entries) if (applyRemoteBinder(db, owner, b)) changed = true
+          saveGameCursor(db, owner, game, 'binders', page.cursor)
+        })()
+        cursor = page.cursor
+        if (!page.more || page.entries.length === 0) break
+      }
+    }
+
+    const sentBinders = new Set<string>()
+    for (;;) {
+      const batch = dirtyBinders(db, owner, MAX_PUSH, sentBinders)
+      if (batch.length === 0) break
+      for (const b of batch) sentBinders.add(b.uid)
+      const results = await client.bindersPush(batch)
+      const byUid = new Map(batch.map((b) => [b.uid, b]))
+      db.transaction(() => {
+        for (const r of results) {
+          const b = byUid.get(r.uid)
+          if (!b || r.status === 'skipped') continue
+          markBinderPushed(db, owner, b)
+          if (r.status === 'stale' && applyRemoteBinder(db, owner, r.current)) changed = true
+        }
+      })()
+    }
+
+    for (const game of games) {
+      let cursor = gameCursor(db, owner, game, 'binderEdits')
+      for (;;) {
+        const page = await client.binderEditsPull(cursor, game)
+        db.transaction(() => {
+          for (const e of page.entries) if (applyRemoteBinderEdit(db, owner, e)) changed = true
+          saveGameCursor(db, owner, game, 'binderEdits', page.cursor)
+        })()
+        cursor = page.cursor
+        if (!page.more || page.entries.length === 0) break
+      }
+    }
+
+    const sentEdits = new Set<string>()
+    for (;;) {
+      const batch = dirtyBinderEdits(db, owner, MAX_PUSH, sentEdits)
+      if (batch.length === 0) break
+      for (const e of batch) sentEdits.add(binderEditKey(e))
+      const results = await client.binderEditsPush(batch)
+      const byKey = new Map(batch.map((e) => [binderEditKey(e), e]))
+      db.transaction(() => {
+        for (const r of results) {
+          const e = byKey.get(r.key)
+          if (!e || r.status === 'skipped') continue
+          markBinderEditPushed(db, owner, e)
+          if (r.status === 'stale' && applyRemoteBinderEdit(db, owner, r.current)) changed = true
+        }
+      })()
+    }
+  } catch (e) {
+    if (e instanceof CloudAuthError) throw e
+    if (!(e instanceof CloudNotFoundError) && !(e instanceof CloudOfflineError))
+      console.warn('Binder sync failed; it stays queued', e)
   }
   return changed
 }
@@ -285,10 +380,15 @@ export async function syncOnce(
   // 4. The wishlist, which has its own routes.
   if (await syncWishlist(db, owner, client, games, now)) changed = true
 
-  // 5. Tidy up and record the run.
+  // 5. Binders, then their edits, which have their own routes too.
+  if (await syncBinders(db, owner, client, games)) changed = true
+
+  // 6. Tidy up and record the run.
   db.transaction(() => {
     purgeCleanTombstones(db, owner)
     purgeCleanWishes(db, owner)
+    purgeCleanBinders(db, owner)
+    purgeCleanBinderEdits(db, owner)
     saveAccountState(db, owner, { syncedAt: now().toISOString() })
     // recordSnapshot writes the active owner's (LOCAL) snapshot.
     if (changed && activeOwner(db) === owner) recordSnapshot(db, now())

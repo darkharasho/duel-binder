@@ -1,14 +1,5 @@
-export interface Asset {
-  name: string
-  size: number
-  url: string
-}
-export interface Downloads {
-  version: string | null
-  windows: Asset | null
-  mac: Asset | null
-  linux: Asset | null
-}
+export interface Asset { name: string; size: number; url: string }
+export interface Downloads { version: string | null; windows: Asset | null; mac: Asset | null; linux: Asset | null }
 
 export const RELEASES_FALLBACK = 'https://github.com/darkharasho/duel-binder/releases/latest'
 
@@ -29,12 +20,7 @@ export function pickDownloads(release: unknown): Downloads {
   const assets: Asset[] = []
   if (Array.isArray(release.assets)) {
     for (const a of release.assets) {
-      if (
-        isRecord(a) &&
-        typeof a.name === 'string' &&
-        typeof a.size === 'number' &&
-        typeof a.browser_download_url === 'string'
-      ) {
+      if (isRecord(a) && typeof a.name === 'string' && typeof a.size === 'number' && typeof a.browser_download_url === 'string') {
         assets.push({ name: a.name, size: a.size, url: a.browser_download_url })
       }
     }
@@ -46,11 +32,7 @@ export function pickDownloads(release: unknown): Downloads {
 }
 
 /** `token` is an optional GitHub PAT; without it the API allows 60 requests an hour per IP. */
-export function createReleaseSource(deps: {
-  fetch: typeof fetch
-  now: () => Date
-  token?: string
-}): () => Promise<Downloads> {
+export function createReleaseSource(deps: { fetch: typeof fetch; now: () => Date; token?: string }): () => Promise<Downloads> {
   let lastGood: Downloads | null = null
   let cached: Downloads | null = null
   let expires = 0
@@ -59,14 +41,11 @@ export function createReleaseSource(deps: {
   async function refresh(): Promise<Downloads> {
     const t = deps.now().getTime()
     try {
-      const headers: Record<string, string> = {
-        accept: 'application/vnd.github+json',
-        'user-agent': 'duel-binder-portal'
-      }
+      const headers: Record<string, string> = { accept: 'application/vnd.github+json', 'user-agent': 'duel-binder-portal' }
       if (deps.token) headers.authorization = `Bearer ${deps.token}`
       const res = await deps.fetch(API_URL, {
         headers,
-        signal: AbortSignal.timeout(3000)
+        signal: AbortSignal.timeout(3000),
       })
       if (!res.ok) throw new Error(`GitHub responded ${res.status}`)
       const result = pickDownloads(await res.json())
@@ -84,9 +63,7 @@ export function createReleaseSource(deps: {
 
   return async () => {
     if (cached && deps.now().getTime() < expires) return cached
-    pending ??= refresh().finally(() => {
-      pending = null
-    })
+    pending ??= refresh().finally(() => { pending = null })
     return pending
   }
 }

@@ -91,14 +91,11 @@ export function sweepClientFor(env: PriceEnv): SweepClient | null {
       return body as SetResult
     },
     async pokemonListings(codes, lang) {
-      const res = await get(
-        `/v1/pokemon-listings?${new URLSearchParams({ codes: codes.join(','), lang })}`
-      )
+      const res = await get(`/v1/pokemon-listings?${new URLSearchParams({ codes: codes.join(','), lang })}`)
       if (res.status === 429) throw new SweepRateLimited()
       if (res.status !== 200) throw new Error(`Pokémon sweep returned ${res.status}`)
       const body = (await res.json()) as Partial<PokemonListings> | null
-      if (!body || !Array.isArray(body.items))
-        throw new Error('Pokémon sweep returned an unexpected response')
+      if (!body || !Array.isArray(body.items)) throw new Error('Pokémon sweep returned an unexpected response')
       return body as PokemonListings
     },
     async quota() {
@@ -146,11 +143,7 @@ export function refreshSweepQueue(db: SqlDb, now: Date): number {
         if (r.d) released.set(r.set_name, r.d)
       const ownedKeys = new Set<string>()
       const keys = new Map<string, string | null>()
-      for (const r of codes.all(language) as {
-        set_name: string
-        set_code: string
-        owned: number
-      }[]) {
+      for (const r of codes.all(language) as { set_name: string; set_code: string; owned: number }[]) {
         const key = sweepKey(r.set_code).toUpperCase()
         if (!key) continue
         if (r.owned) ownedKeys.add(key)
@@ -199,18 +192,19 @@ export function assignSweep(
   const fresherThan = state?.swept_at ?? new Date(now.getTime() - WEEK_MS).toISOString()
   const checkedAt = result.checkedAt ?? now.toISOString()
   const rows = (
-    db.prepare(ASSIGN_PRINTINGS_SQL).all(language, `${key}%`) as {
-      id: number
-      code: string
-      rarity: string
-      checkedAt: string | null
-      price: number | null
-    }[]
+    db
+      .prepare(ASSIGN_PRINTINGS_SQL)
+      .all(language, `${key}%`) as {
+        id: number
+        code: string
+        rarity: string
+        checkedAt: string | null
+        price: number | null
+      }[]
   ).filter((r) => sweepKey(r.code).toUpperCase() === key.toUpperCase())
 
   const perCode = new Map<string, number>()
-  for (const r of rows)
-    perCode.set(r.code.toUpperCase(), (perCode.get(r.code.toUpperCase()) ?? 0) + 1)
+  for (const r of rows) perCode.set(r.code.toUpperCase(), (perCode.get(r.code.toUpperCase()) ?? 0) + 1)
 
   const upsert = db.prepare(
     `INSERT INTO intl_prices (printing_id, price, listing_count, checked_at) VALUES (?, ?, ?, ?)
@@ -224,17 +218,13 @@ export function assignSweep(
   db.transaction(() => {
     for (const r of rows) {
       const code = result.codes[r.code.toUpperCase()]
-      const byRarity =
-        code && Object.hasOwn(code.byRarity ?? {}, r.rarity) ? code.byRarity[r.rarity] : undefined
+      const byRarity = code && Object.hasOwn(code.byRarity ?? {}, r.rarity) ? code.byRarity[r.rarity] : undefined
       let entry: SetEntry | undefined
       if (code) {
         if (perCode.get(r.code.toUpperCase()) === 1) entry = usable(byRarity) ? byRarity : code.all
         else entry = byRarity
       }
-      if (
-        !usable(entry) ||
-        (r.price !== null && r.checkedAt !== null && r.checkedAt > fresherThan)
-      ) {
+      if (!usable(entry) || (r.price !== null && r.checkedAt !== null && r.checkedAt > fresherThan)) {
         skipped++
         continue
       }
@@ -316,11 +306,9 @@ export async function runSweep(
       // A failed search may still have spent a Browse call; count one (already counted if it returned).
       if (!searched) used += 1
       // Back off: due again in about a day, so a permanent failure can't hold the head of the queue.
-      db.prepare('UPDATE price_sweeps SET swept_at = ? WHERE key = ? AND language = ?').run(
-        new Date(now.getTime() - 6 * DAY_MS).toISOString(),
-        key,
-        language
-      )
+      db.prepare(
+        'UPDATE price_sweeps SET swept_at = ? WHERE key = ? AND language = ?'
+      ).run(new Date(now.getTime() - 6 * DAY_MS).toISOString(), key, language)
     }
   }
   setMeta(db, 'sweep_calls_day', `${today}:${used}`)

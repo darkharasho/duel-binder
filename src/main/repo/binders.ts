@@ -363,6 +363,7 @@ function binderCards(db: SqlDb, slots: Slot[], scope: Scope): BinderCard[] {
         card: found.card,
         imageId: slot.imageId ?? found.firstImage ?? 0,
         printing: (slot.printing && printings.get(slot.printing.printingId)) ?? null,
+        printingScan: true,
         owned: slot.owned,
         added: slot.added,
         price: slot.price

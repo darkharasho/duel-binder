@@ -490,6 +490,8 @@ export interface BinderCard {
   /** The slot's art, or else the card's first; 0 when the card has none. */
   imageId: number
   printing: Printing | null
+  /** As on EntryView: false for a friend's binder seen from the desktop or phone app. */
+  printingScan: boolean
   owned: number
   added: boolean
   /** The cheapest known price of a missing slot; null when owned or unpriced. */

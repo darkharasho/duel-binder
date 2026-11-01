@@ -44,7 +44,12 @@ const fakeAccount = (signedIn = false): FakeAccount => ({
 async function makeHandlers(opts: { signedIn?: boolean } = {}) {
   const db = await seededDb()
   const account = fakeAccount(opts.signedIn)
-  const scanWindow = { open: vi.fn(), isOpen: vi.fn(() => true), toggleFullScreen: vi.fn(), setSize: vi.fn() }
+  const scanWindow = {
+    open: vi.fn(),
+    isOpen: vi.fn(() => true),
+    toggleFullScreen: vi.fn(),
+    setSize: vi.fn()
+  }
   const catalog = { status: vi.fn(() => ({ ...CATALOG_STATUS })) }
   const images = {
     get: vi.fn(),
@@ -388,6 +393,18 @@ describe('friends handlers', () => {
       { id: 1, printingScan: false },
       { id: 2, printingScan: false }
     ])
+  })
+
+  it('a friend binder is forwarded with every card marked as having no printing scan', async () => {
+    const { handlers, account } = await makeHandlers({ signedIn: true })
+    account.portal.mockResolvedValue({ uid: 'u', cards: [{ key: 'a', printingScan: true }] })
+    expect(await handlers['friends:binder'](7, 'u')).toEqual({
+      uid: 'u',
+      cards: [{ key: 'a', printingScan: false }]
+    })
+    expect(account.portal).toHaveBeenCalledWith('friends:binder', [7, 'u'])
+    account.portal.mockResolvedValue(null)
+    expect(await handlers['friends:binder'](7, 'u')).toBeNull()
   })
 
   it('the other channels forward their arguments', async () => {

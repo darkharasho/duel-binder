@@ -127,6 +127,22 @@ describe('friends read binders', () => {
     expect((await call('friends:binder', [bob, uid], ca)).body).toEqual(NOT)
   })
 
+  it('refuses a block from either side', async () => {
+    const uid = saveBinder(db, draft(), NOW, bobScope())
+    const NOT = { error: "You aren't friends with this user" }
+    await befriend()
+    await call('friends:block', [bob], ca)
+    expect((await call('friends:binder', [bob, uid], ca)).body).toEqual(NOT)
+    expect((await call('friends:binders', [alice], cb)).body).toEqual(NOT)
+  })
+
+  it('answers null for a visible uid under the wrong game', () => {
+    const uid = saveBinder(db, draft(), NOW, bobScope())
+    expect(friendBinder(db, bob, 'ygo', uid)).not.toBeNull()
+    expect(friendBinder(db, bob, 'pkm', uid)).toBeNull()
+    expect(friendBinders(db, bob, 'pkm')).toEqual([])
+  })
+
   it('checks arguments', async () => {
     await befriend()
     for (const args of [

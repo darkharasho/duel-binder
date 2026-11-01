@@ -6,6 +6,7 @@ import { cardLanguage } from '../shared/scan/cardLanguage'
 import { checkOcrBands, isOcrKind, isTextModel, readTexts, type Ocr } from '../shared/scan/ocr'
 import type {
   AccountStatus,
+  BinderDetail,
   CollectionFilters,
   EntryView,
   FriendStats,
@@ -241,9 +242,12 @@ export function createPhoneApi(deps: {
           ...w,
           printingScan: false
         })),
-      // Binder cards carry no scan flag, so nothing to map; their keys are portable pkeys.
+      // A friend's printing ids are the server's, so their binder cards show no printing scan.
       binders: portal('friends:binders'),
-      binder: portal('friends:binder'),
+      binder: async (userId: number, uid: string) => {
+        const b = await store.portal<BinderDetail | null>('friends:binder', [userId, uid])
+        return b && { ...b, cards: b.cards.map((c) => ({ ...c, printingScan: false })) }
+      },
       wanting: (cardId: number) => store.portalRead('friends:wanting', [cardId]),
       owning: (pkeys: string[]) => store.portalRead('friends:owning', [pkeys]),
       wishlistVisible: portal('friends:wishlistVisible'),

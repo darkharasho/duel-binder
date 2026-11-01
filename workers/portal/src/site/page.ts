@@ -1,11 +1,7 @@
 import { RELEASES_FALLBACK, type Asset, type Downloads } from './releases'
 import type { Os } from './os'
 
-export interface PageView {
-  downloads: Downloads
-  os: Os | null
-  appUrl: string
-}
+export interface PageView { downloads: Downloads; os: Os | null; appUrl: string }
 
 export const REPO_URL = 'https://github.com/darkharasho/duel-binder'
 const TITLE = 'Duel Binder — a binder for your Yu-Gi-Oh! and Pokémon cards'
@@ -20,12 +16,7 @@ export const MARK = `<img src="/favicon.svg" width="28" height="28" alt="">`
 const OS_LABEL: Record<Os, string> = { windows: 'Windows', mac: 'macOS', linux: 'Linux' }
 
 export const esc = (s: string): string =>
-  s
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;')
+  s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;')
 
 /** Decimal megabytes, rounded. */
 export function formatSize(bytes: number): string {
@@ -55,12 +46,7 @@ function hero(v: PageView): string {
 <figure class="frame shot"><img src="/shots/collection.webp" width="2560" height="1600" alt="The Collection page of the Duel Binder desktop app: a grid of cards sorted by value, with filters for type, set, rarity and condition."></figure>`
 }
 
-function feature(
-  id: string,
-  heading: string,
-  body: string,
-  img?: { src: string; alt: string }
-): string {
+function feature(id: string, heading: string, body: string, img?: { src: string; alt: string }): string {
   const shot = img
     ? `<figure class="frame shot"><img src="${img.src}" width="2560" height="1600" alt="${esc(img.alt)}" loading="lazy"></figure>`
     : ''
@@ -73,34 +59,25 @@ function features(): string {
       'features',
       "What it's worth",
       'Total value, card counts and your most valuable pulls, from the latest prices.',
-      {
-        src: '/shots/dashboard.webp',
-        alt: 'The Dashboard page: the total value of the collection over time, with card counts and the most valuable cards.'
-      }
+      { src: '/shots/dashboard.webp', alt: 'The Dashboard page: the total value of the collection over time, with card counts and the most valuable cards.' },
     ),
     feature(
       '',
       'Yu-Gi-Oh! and Pokémon',
       'Both games in one app. Switch between them from the sidebar, each with its own collection and prices.',
-      {
-        src: '/shots/collection-pokemon.webp',
-        alt: 'The Collection page showing Pokémon cards sorted by value, with filters for category, type, stage, rarity, set and version.'
-      }
+      { src: '/shots/collection-pokemon.webp', alt: 'The Collection page showing Pokémon cards sorted by value, with filters for category, type, stage, rarity, set and version.' },
     ),
     feature(
       '',
       'Finish your sets',
       'Every set and printing from the full catalog, with a checklist of what you still need.',
-      {
-        src: '/shots/sets.webp',
-        alt: 'The Sets page showing the Pokémon Base Set with 72 of 102 cards owned; the cards still missing are greyed out.'
-      }
+      { src: '/shots/sets.webp', alt: 'The Sets page showing the Pokémon Base Set with 72 of 102 cards owned; the cards still missing are greyed out.' },
     ),
     feature(
       '',
       'Friends',
-      "Sign in with Discord, add your friends, and look through each other's binders at app.duelbinder.com."
-    )
+      "Sign in with Discord, add your friends, and look through each other's binders at app.duelbinder.com.",
+    ),
   ].join('\n')
 }
 

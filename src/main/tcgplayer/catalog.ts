@@ -460,6 +460,9 @@ function saveMissingPrintings(db: Database.Database, seen: Set<number>): number 
   return added
 }
 
+/** A name's letters and digits, as a product's name holds a card's name with other words around it. */
+const foldName = (name: string): string => name.toLowerCase().replace(/[^\p{L}\p{N}]/gu, '')
+
 export interface TcgProductMatch {
   product_id: number
   group_id: number
@@ -472,12 +475,20 @@ export interface TcgProductMatch {
  * plain product with the same card number and rarity. Failing those (`exact: false`), the only
  * product with that number when TCGplayer names the rarity differently, or the plain product of
  * the "Prismatic" form of this printing's rarity ("Prismatic Collector's Rare" for "Collector's Rare").
+ * A code listed under two cards is one card's and a mistake on the other, so there the number isn't
+ * enough: only a product named for the card is its own, and without one it has no product.
  */
 export function createTcgProductResolver(
   db: SqlDb
 ): (printingId: number) => TcgProductMatch | null {
   const printing = db.prepare(
-    "SELECT set_code, set_rarity, tcg_product_id FROM card_printings WHERE id = ? AND language = 'en'"
+    `SELECT p.set_code, p.set_rarity, p.tcg_product_id, c.name FROM card_printings p
+     JOIN cards c ON c.id = p.card_id WHERE p.id = ? AND p.language = 'en'`
+  )
+  const sharedCode = db.prepare(
+    `SELECT 1 FROM card_printings p WHERE p.set_code = ? COLLATE NOCASE AND p.language = 'en' AND p.card_id <> (
+       SELECT card_id FROM card_printings WHERE id = ?
+     ) LIMIT 1`
   )
   const byId = db.prepare(
     'SELECT product_id, group_id, image_url FROM tcgplayer_products WHERE product_id = ?'
@@ -488,13 +499,17 @@ export function createTcgProductResolver(
   )
   return (printingId) => {
     const p = printing.get(printingId) as
-      { set_code: string; set_rarity: string; tcg_product_id: number | null } | undefined
+      | { set_code: string; set_rarity: string; tcg_product_id: number | null; name: string }
+      | undefined
     if (!p || !p.set_code) return null
     if (p.tcg_product_id !== null) {
       const own = byId.get(p.tcg_product_id) as Omit<TcgProductMatch, 'exact'> | undefined
       return own ? { ...own, exact: true } : null
     }
-    const rows = products.all(p.set_code) as (ProductRow & { group_id: number })[]
+    const listed = products.all(p.set_code) as (ProductRow & { group_id: number })[]
+    const rows = sharedCode.get(p.set_code, printingId)
+      ? listed.filter((r) => foldName(r.name).includes(foldName(p.name)))
+      : listed
     const pick = (r: ProductRow & { group_id: number }, exact: boolean): TcgProductMatch => ({
       product_id: r.product_id,
       group_id: r.group_id,

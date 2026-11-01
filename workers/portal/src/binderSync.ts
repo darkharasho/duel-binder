@@ -4,6 +4,7 @@ import { CollectionError } from '../../../src/main/repo/collection'
 import {
   MAX_BINDER_EDITS,
   MAX_BINDER_NAME,
+  MAX_BINDER_RULES_BYTES,
   MAX_BINDERS,
   type BinderEditAction,
   type BinderEditLevel
@@ -24,7 +25,6 @@ import { NEXT_BINDER_EDIT_SEQ, NEXT_BINDER_SEQ } from './scope'
 import { MAX_PKEY, checkTime, pageCursor } from './sync'
 
 /** Opaque text the server stores for a binder; it never parses these, so a newer client's rule version passes. */
-const MAX_RULES = 8 * 1024
 const MAX_SMALL = 256
 const MAX_UID = 64
 const MAX_SORT = 1_000_000
@@ -57,7 +57,7 @@ export function checkBinderPush(body: unknown, now: Date): WireBinder[] {
       uid: text(o.uid, 'uid', 1, MAX_UID),
       game: o.game,
       name: text(o.name, 'name', 1, MAX_BINDER_NAME),
-      rules: text(o.rules, 'rules', 0, MAX_RULES),
+      rules: text(o.rules, 'rules', 0, MAX_BINDER_RULES_BYTES),
       goal: text(o.goal, 'goal', 0, MAX_SMALL),
       languages: text(o.languages, 'languages', 0, MAX_SMALL),
       friendsVisible: o.friendsVisible,

@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { draftProblem, rulesEditable, type BinderDraft } from '../../src/shared/binders'
+import {
+  MAX_BINDER_RULES_BYTES,
+  draftProblem,
+  rulesEditable,
+  type BinderDraft
+} from '../../src/shared/binders'
 
 const draft = (over: Partial<BinderDraft> = {}): BinderDraft => ({
   name: 'Blue-Eyes',
@@ -25,6 +30,16 @@ describe('draftProblem', () => {
     const d = draft({ rules: { version: 1, rules: [{ field: 'artist', values: ['Mitsuhiro Arita'] }] } })
     expect(draftProblem(d, 'ygo')).not.toBeNull()
     expect(draftProblem(d, 'pkm')).toBeNull()
+  })
+  it('rejects rules that serialize past what the server stores', () => {
+    const sized = (length: number): BinderDraft['rules'] => {
+      const rules = { version: 1, rules: [{ field: 'name' as const, op: 'is' as const, value: '' }] }
+      rules.rules[0].value = 'x'.repeat(length - JSON.stringify(rules).length)
+      return rules
+    }
+    expect(JSON.stringify(sized(MAX_BINDER_RULES_BYTES))).toHaveLength(8192)
+    expect(draftProblem(draft({ rules: sized(MAX_BINDER_RULES_BYTES) }), 'ygo')).toBeNull()
+    expect(draftProblem(draft({ rules: sized(MAX_BINDER_RULES_BYTES + 1) }), 'ygo')).not.toBeNull()
   })
   it('rejects empty and over-long names', () => {
     expect(draftProblem(draft({ name: '' }), 'ygo')).not.toBeNull()

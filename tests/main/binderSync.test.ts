@@ -176,7 +176,43 @@ describe('binder sync', () => {
     const broken = breakBinders(() => Response.json({ error: 'no' }, { status }))
     await expect(syncOnce(a, user, await clientFor(broken), NOW)).resolves.toBeDefined()
     expect(binderRows(a)).toEqual([expect.objectContaining({ dirty: 1 })])
-    expect(warn).toHaveBeenCalledTimes(warns ? 1 : 0)
+    expect(warn).toHaveBeenCalledTimes(warns ? 2 : 0) // the binder step and the edit step
+
+    await sync(a)
+    expect(serverBinders()).toHaveLength(1)
+    expect(binderRows(a)).toEqual([expect.objectContaining({ dirty: 0 })])
+  })
+
+  it('a binder the server refuses holds up no edits, pulled or pushed', async () => {
+    const b = await device()
+    const shared = saveBinder(b, draft({ name: 'Shared' }), T1)
+    setBinderEdit(b, shared, { level: 'card', target: '1' }, 'add', T1)
+    await sync(b)
+
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    const refused = saveBinder(a, draft({ name: 'Too big' }), T1)
+    a.prepare('UPDATE binders SET rules = ? WHERE uid = ?').run('x'.repeat(9000), refused)
+    setBinderEdit(a, refused, { level: 'card', target: '2' }, 'add', T2)
+    await sync(a)
+
+    expect(warn).toHaveBeenCalledTimes(1)
+    expect(serverBinders()).toMatchObject([{ uid: shared }])
+    expect(binderRows(a).filter((r) => r.dirty === 1)).toMatchObject([{ uid: refused }])
+    expect(
+      editRows(a)
+        .map((r) => [r.binder_uid, r.dirty])
+        .sort()
+    ).toEqual(
+      [
+        [shared, 0],
+        [refused, 0]
+      ].sort()
+    )
+    expect(
+      serverEdits()
+        .map((r) => r.binder_uid)
+        .sort()
+    ).toEqual([shared, refused].sort())
   })
 
   it('a signed-out answer on the binder routes still ends the run', async () => {
@@ -258,6 +294,22 @@ describe('binder sync', () => {
     expect(editRows(a)).toEqual([])
     expect(serverBinders()).toMatchObject([{ deleted_at: T2.toISOString() }])
     expect(serverEdits()).toMatchObject([{ deleted_at: T2.toISOString() }])
+  })
+
+  it('keeps a tombstone the server skipped, dirty, through the purge', async () => {
+    const pkm = localScope("'pkm'")
+    seedPokemon(a)
+    const uid = saveBinder(a, draft({ name: 'Pikas' }), T1, pkm)
+    setBinderEdit(a, uid, { level: 'card', target: '1' }, 'add', T1, pkm)
+    removeBinder(a, uid, T2, pkm)
+    await sync(a)
+    expect(binderRows(a)).toEqual([
+      expect.objectContaining({ deleted_at: T2.toISOString(), dirty: 1 })
+    ])
+    expect(editRows(a)).toEqual([
+      expect.objectContaining({ deleted_at: T2.toISOString(), dirty: 1 })
+    ])
+    expect(serverBinders()).toEqual([])
   })
 
   it('a binder deleted on A while B adds an edit stays deleted on both, the edit ignored', async () => {

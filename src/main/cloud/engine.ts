@@ -136,8 +136,9 @@ async function syncWishlist(
 
 /**
  * Syncs `owner`'s binders, then their edits, on their own routes: pull each game from its own cursor,
- * then push. Best effort as syncWishlist is; a row the server skips (a cap, or a game outside `games`)
- * stays dirty for a later run. Resolves whether anything changed.
+ * then push. Each of the two is best effort as syncWishlist is, on its own, so a binder the server
+ * refuses can't hold up the edits; a row the server skips (a cap, or a game outside `games`) stays
+ * dirty for a later run. Resolves whether anything changed.
  */
 async function syncBinders(
   db: SqlDb,
@@ -146,6 +147,11 @@ async function syncBinders(
   games: GameId[]
 ): Promise<boolean> {
   let changed = false
+  const stayQueued = (e: unknown): void => {
+    if (e instanceof CloudAuthError) throw e
+    if (!(e instanceof CloudNotFoundError) && !(e instanceof CloudOfflineError))
+      console.warn('Binder sync failed; it stays queued', e)
+  }
   try {
     for (const game of games) {
       let cursor = gameCursor(db, owner, game, 'binders')
@@ -176,7 +182,11 @@ async function syncBinders(
         }
       })()
     }
+  } catch (e) {
+    stayQueued(e)
+  }
 
+  try {
     for (const game of games) {
       let cursor = gameCursor(db, owner, game, 'binderEdits')
       for (;;) {
@@ -207,9 +217,7 @@ async function syncBinders(
       })()
     }
   } catch (e) {
-    if (e instanceof CloudAuthError) throw e
-    if (!(e instanceof CloudNotFoundError) && !(e instanceof CloudOfflineError))
-      console.warn('Binder sync failed; it stays queued', e)
+    stayQueued(e)
   }
   return changed
 }

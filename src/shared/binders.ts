@@ -8,6 +8,8 @@ export const MAX_BINDER_EDITS = 2_000 // per binder
 export const MAX_BINDER_NAME = 80
 export const MAX_RULES = 8
 export const MAX_RULE_VALUES = 20
+/** The longest serialized `rules` the server stores, measured as `string.length` on both sides. */
+export const MAX_BINDER_RULES_BYTES = 8192
 
 export type RuleField =
   | 'name'
@@ -89,6 +91,7 @@ export function draftProblem(draft: unknown, game: GameId): string | null {
     const problem = ruleProblem(rule, RULE_FIELDS[game])
     if (problem) return problem
   }
+  if (JSON.stringify(draft.rules).length > MAX_BINDER_RULES_BYTES) return 'These binder rules are too long.'
   if (!(GOALS[game] as readonly unknown[]).includes(draft.goal)) return 'That goal is not available for this game.'
   if (!Array.isArray(draft.languages)) return 'Languages must be a list (empty means every language).'
   const known = new Set<string>(LANGUAGES.map((l) => l.code))

@@ -378,6 +378,32 @@ describe('the job step', () => {
     ).toBeNull()
   })
 
+  it('still takes the TCGplayer pack the night the archive refuses, keeping stored packs', async () => {
+    const db = await pokemonDb()
+    const run = (down: boolean): Promise<unknown> =>
+      refreshPokemonSetArt(db, {
+        version: 'test',
+        fetch: fakeSources({ archiveDown: down }) as unknown as typeof fetch,
+        pause: noPause,
+        retryDelayMs: 1
+      })
+    const packs = (): string[] =>
+      (
+        db.prepare("SELECT set_name FROM pokemon_set_art WHERE kind = 'pack'").all() as {
+          set_name: string
+        }[]
+      ).map((r) => r.set_name)
+    await run(false)
+    const before = packs()
+    db.prepare(
+      "INSERT INTO sets (game, language, set_name, set_code) VALUES ('pkm', 'en', 'Delta Reign', 'DLR')"
+    ).run()
+    await run(true)
+    expect(packs().sort()).toEqual([...before, 'Delta Reign'].sort())
+    await run(true) // a stored TCGplayer pack isn't asked for, or written, twice
+    expect(packs().sort()).toEqual([...before, 'Delta Reign'].sort())
+  })
+
   it('writes every design, the main one first, and stamps the week', async () => {
     const db = await pokemonDb()
     const now = new Date('2026-10-30T06:00:00Z')

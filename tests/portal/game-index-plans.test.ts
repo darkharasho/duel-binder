@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, it } from 'vitest'
 import type Database from 'better-sqlite3'
 import type { SqlDb } from '../../src/main/db/sql'
+import { ruleFieldValues } from '../../src/main/repo/binderRules'
 import { previewBinder } from '../../src/main/repo/binders'
 import { browseCards, browseFacets } from '../../src/main/repo/browse'
 import { getChecklist, listSets } from '../../src/main/repo/sets'
@@ -11,7 +12,7 @@ import { getFacets, listEntries } from '../../src/main/repo/collection'
 import { getStats } from '../../src/main/repo/stats'
 import { catalogChanges } from '../../workers/portal/src/catalogFeed'
 import { userScope } from '../../workers/portal/src/scope'
-import type { BinderRule } from '../../src/shared/binders'
+import type { BinderRule, RuleField } from '../../src/shared/binders'
 import { addUser, seededServerDb } from './helpers'
 
 // The server has `(game, catalog_seq)` indexes for the per-game catalog feed. With no ANALYZE stats
@@ -46,6 +47,22 @@ function planned(db: Database.Database): { sql: SqlDb; plans: string[][] } {
 
 const gameIndexLines = (plans: string[][]): string[] => plans.flat().filter((d) => GAME_INDEX.test(d))
 
+const RULE_VALUE_FIELDS: RuleField[] = [
+  'name',
+  'artist',
+  'cardType',
+  'frameType',
+  'race',
+  'category',
+  'energyType',
+  'stage',
+  'attribute',
+  'level',
+  'archetype',
+  'set',
+  'rarity'
+]
+
 describe('game index plans on a migrated server', () => {
   let db: Database.Database
   let userId: number
@@ -67,6 +84,10 @@ describe('game index plans on a migrated server', () => {
     ['binder archetype rule', (sql) => preview(sql, { field: 'archetype', values: ['x'] })],
     ['binder set rule', (sql) => preview(sql, { field: 'set', values: ['x'] })],
     ['binder rarity rule', (sql) => preview(sql, { field: 'rarity', values: ['x'] })],
+    ...(RULE_VALUE_FIELDS.map((field) => [
+      `${field} suggestions`,
+      (sql: SqlDb) => ruleFieldValues(sql, field, 'x', userScope(userId, 'ygo'))
+    ]) as [string, (sql: SqlDb) => unknown][]),
     ['browseCards page', (sql) => browseCards(sql, { sort: 'name', dir: 'asc' }, userScope(userId, 'ygo'))],
     ['browseCards search', (sql) => browseCards(sql, { q: 'LOB', sort: 'name', dir: 'asc' }, userScope(userId, 'ygo'))],
     [
@@ -105,6 +126,22 @@ describe('game index plans on a migrated server', () => {
     const lines = plans.flat().join('\n')
     for (const index of ['ix_cards_name', 'ix_cards_archetype', 'ix_printings_set_name'])
       expect(lines).toContain(index)
+  })
+
+  it('rule value suggestions read one table each, and sets through their index', () => {
+    const plansOf = (field: RuleField, game: 'ygo' | 'pkm'): string => {
+      const { sql, plans } = planned(db)
+      ruleFieldValues(sql, field, 'x', userScope(userId, game))
+      return plans.flat().join('\n')
+    }
+    for (const field of ['name', 'cardType', 'frameType', 'race', 'level', 'archetype'] as const) {
+      expect(plansOf(field, 'ygo')).toMatch(/\bc\b/)
+      expect(plansOf(field, 'ygo')).not.toMatch(/\bp\b|ix_printings|ux_printings|card_printings/)
+    }
+    expect(plansOf('artist', 'pkm')).toContain('ix_pokemon_cards_illustrator')
+    expect(plansOf('set', 'ygo')).toContain('ix_printings_set_name')
+    expect(plansOf('set', 'ygo')).not.toContain('TEMP B-TREE')
+    expect(plansOf('rarity', 'ygo')).toContain('COVERING INDEX ix_printings_rarity')
   })
 
   it('the per-game catalog feed uses the ix_*_game_seq indexes', () => {

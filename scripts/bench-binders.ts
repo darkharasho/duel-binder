@@ -8,7 +8,8 @@
  *   npx vite build --ssr scripts/bench-binders.ts --outDir out/bench --emptyOutDir \
  *     && ELECTRON_RUN_AS_NODE=1 npx electron out/bench/bench-binders.mjs [path/to/collection.db]
  *
- * Limits: each single-binder call < 150 ms, listBinders of 50 < 1 s, Rarity = Common tooBroad < 50 ms.
+ * Limits: each single-binder call < 150 ms, listBinders of 50 < 1 s, Rarity = Common tooBroad < 50 ms,
+ * ruleFieldValues < 50 ms (it runs per debounced keystroke).
  */
 import Database from 'better-sqlite3'
 import os from 'node:os'
@@ -17,9 +18,9 @@ import fs from 'node:fs'
 import { performance } from 'node:perf_hooks'
 import { migrate } from '../src/main/db/database'
 import { LOCAL, localScope } from '../src/main/repo/scope'
-import { narrowedRuleSql } from '../src/main/repo/binderRules'
+import { narrowedRuleSql, ruleFieldValues } from '../src/main/repo/binderRules'
 import { getBinder, listBinders, previewBinder, removeBinder, saveBinder } from '../src/main/repo/binders'
-import { MAX_BINDERS, type BinderDraft, type BinderGoal, type BinderRule } from '../src/shared/binders'
+import { MAX_BINDERS, type BinderDraft, type BinderGoal, type BinderRule, type RuleField } from '../src/shared/binders'
 import type { Language } from '../src/shared/languages'
 
 const src = process.argv[2] ?? path.join(os.homedir(), '.config', 'duel-binder', 'collection.db')
@@ -51,6 +52,21 @@ async function main(): Promise<void> {
     const YGO = localScope("'ygo'")
     const PKM = localScope("'pkm'")
     const q = <T>(sql: string): T[] => db.prepare(sql).all() as T[]
+
+    const fieldValues: [string, RuleField, string, typeof YGO][] = [
+      ['ygo name "dra"', 'name', 'dra', YGO],
+      ['ygo name empty q', 'name', '', YGO],
+      ['ygo rarity', 'rarity', '', YGO],
+      ['ygo rarity with no match', 'rarity', 'zzz', YGO],
+      ['pkm rarity', 'rarity', '', PKM],
+      ['pkm artist', 'artist', '', PKM],
+      ['pkm name "pika"', 'name', 'pika', PKM],
+      ['ygo set', 'set', '', YGO],
+      ['ygo set "dragon"', 'set', 'dragon', YGO],
+      ['pkm set', 'set', '', PKM]
+    ]
+    for (const [label, field, value, scope] of fieldValues)
+      record(`ruleFieldValues: ${label}`, 50, () => ruleFieldValues(db, field, value, scope))
 
     const draft = (name: string, rules: BinderRule[], goal: BinderGoal, languages: Language[] = []): BinderDraft => ({
       name, rules: { version: 1, rules }, goal, languages, friendsVisible: false
@@ -144,7 +160,7 @@ async function main(): Promise<void> {
     const everyName = draft('Broad', [{ field: 'name', op: 'contains', value: 'a' }], 'card')
     record('previewBinder: pkm contains "a", past the candidate limit', 150, () => previewBinder(db, everyName, PKM))
 
-    // Rarity-only binders under the cap each scan every printing. Over 1 s here is a known limit.
+    // Rarity-only binders under the cap each walk that rarity's printings.
     const rarities = q<{ v: string; n: number }>(
       "SELECT set_rarity v, count(*) n FROM card_printings WHERE game = 'ygo' GROUP BY 1 HAVING n <= 10000 ORDER BY abs(n - 6000) LIMIT 1"
     )
@@ -153,7 +169,7 @@ async function main(): Promise<void> {
     for (const b of listBinders(db, YGO)) removeBinder(db, b.uid, new Date(), YGO)
     for (let i = 0; i < MAX_BINDERS; i++)
       saveBinder(db, draft(`R${i}`, [{ field: 'rarity', values: [rarity] }], goals[i % 4]), new Date(), YGO)
-    record('listBinders: 50 rarity-only binders under the cap (known limit)', 1000, () => listBinders(db, YGO))
+    record('listBinders: 50 rarity-only binders under the cap', 1000, () => listBinders(db, YGO))
 
     console.log('\ncase | median ms | worst ms | limit | result')
     for (const r of rows)

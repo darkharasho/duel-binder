@@ -444,6 +444,12 @@ CREATE INDEX ix_printings_set_name ON card_printings(set_name);
 CREATE INDEX ix_cards_archetype ON cards(archetype);
 `
 
+/**
+ * A game's rarities, read from the index alone for the rule editor's suggestions; rarity rules start
+ * from it too. Desktop only: the server gets this as server-26.
+ */
+export const SCHEMA_V33 = 'CREATE INDEX ix_printings_rarity ON card_printings(set_rarity, game);'
+
 /** A printing's rarity as shown: "Starlight Rare (Extended Art)" for a labelled variant. */
 export const RARITY_LABEL = "p.set_rarity || COALESCE(' (' || p.variant || ')', '')"
 
@@ -480,5 +486,6 @@ export const MIGRATIONS: Migration[] = [
   { version: 29, sql: SCHEMA_V29 },
   { version: 30, sql: SCHEMA_V30, server: false },
   { version: 31, sql: SCHEMA_V31, server: false },
-  { version: 32, sql: SCHEMA_V32, server: false }
+  { version: 32, sql: SCHEMA_V32, server: false },
+  { version: 33, sql: SCHEMA_V33, server: false }
 ]

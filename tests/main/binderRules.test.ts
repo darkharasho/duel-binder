@@ -108,6 +108,57 @@ describe('binder rules to SQL', () => {
     expect(ruleFieldValues(db, 'energyType', 'light', localScope("'pkm'"))).toEqual(['Lightning'])
     expect(ruleFieldValues(db, 'rarity', '', LOCAL).length).toBeLessThanOrEqual(50)
   })
+
+  it('ruleFieldValues finds a Pokémon by its local name too', async () => {
+    const db = await seededDb()
+    const { cardIds } = seedPokemon(db)
+    db.prepare("UPDATE pokemon_cards SET local_name = 'Pikachu ja' WHERE card_id = ?").run(cardIds[1])
+    const PKM = localScope("'pkm'")
+    expect(ruleFieldValues(db, 'name', 'pika', PKM)).toEqual(['Pikachu', 'Pikachu ja'])
+    expect(ruleFieldValues(db, 'name', 'ピカ', PKM)).toEqual(['ピカチュウ'])
+    expect(ruleFieldValues(db, 'name', 'pika', LOCAL)).toEqual([])
+  })
+
+  it('ruleFieldValues stays in the scope game, for every source', async () => {
+    const db = await seededDb()
+    seedPokemon(db)
+    const PKM = localScope("'pkm'")
+    expect(ruleFieldValues(db, 'artist', '', LOCAL)).toEqual([])
+    expect(ruleFieldValues(db, 'artist', 'nishida', PKM)).toEqual(['Atsuko Nishida'])
+    expect(ruleFieldValues(db, 'stage', '', LOCAL)).toEqual([])
+    expect(ruleFieldValues(db, 'stage', '', PKM)).toEqual(['Basic'])
+    expect(ruleFieldValues(db, 'name', 'dark', PKM)).toEqual([])
+    expect(ruleFieldValues(db, 'name', 'dark', LOCAL)).toContain('Dark Magician')
+    expect(ruleFieldValues(db, 'rarity', 'holo', PKM)).toEqual(['Reverse Holo'])
+    expect(ruleFieldValues(db, 'rarity', 'holo', LOCAL)).toEqual([])
+    expect(ruleFieldValues(db, 'set', 'クレイ', PKM)).toEqual(['クレイバースト'])
+    expect(ruleFieldValues(db, 'set', 'クレイ', LOCAL)).toEqual([])
+  })
+
+  it('ruleFieldValues reads a numeric level as text, and treats % literally', async () => {
+    const db = await seededDb()
+    const levels = ruleFieldValues(db, 'level', '', LOCAL)
+    expect(levels.length).toBeGreaterThan(0)
+    expect(levels.every((v) => typeof v === 'string')).toBe(true)
+    expect(ruleFieldValues(db, 'name', '%', LOCAL)).toEqual([])
+  })
+
+  it('ruleFieldValues caps a merged name list at 50, in order', async () => {
+    const db = await seededDb()
+    const { cardIds } = seedPokemon(db)
+    const ins = db.prepare(
+      `INSERT INTO cards (id, game, name, type, frame_type, race, "desc", updated_at)
+       VALUES (?, 'pkm', ?, 'Pokemon', '', '', '', '2026-01-01')`
+    )
+    for (let i = 0; i < 49; i++) ins.run(9_000_000 + i, `Zed ${String(i).padStart(2, '0')}`)
+    db.prepare("UPDATE pokemon_cards SET local_name = 'Zed 00a' WHERE card_id = ?").run(cardIds[0])
+    db.prepare("UPDATE pokemon_cards SET local_name = 'Zed 99' WHERE card_id = ?").run(cardIds[1])
+    const found = ruleFieldValues(db, 'name', 'zed', localScope("'pkm'"))
+    expect(found).toHaveLength(50)
+    expect(found[1]).toBe('Zed 00a')
+    expect(found).toEqual([...found].sort())
+    expect(found).not.toContain('Zed 99')
+  })
 })
 
 describe('rule queries narrowed through the cards', () => {

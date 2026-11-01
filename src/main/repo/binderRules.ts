@@ -72,7 +72,7 @@ const FROM = (scope: Scope): string => `
   WHERE +p.game = ${scope.game}`
 
 /** Read from the printing itself. Every other field is the card's. */
-const onPrinting = (rule: BinderRule): boolean => rule.field === 'set' || rule.field === 'rarity'
+const onPrinting = (field: RuleField): boolean => field === 'set' || field === 'rarity'
 
 /** Card fields with an index to find cards by. */
 const CARD_INDEXED: ReadonlySet<RuleField> = new Set<RuleField>(['artist', 'archetype'])
@@ -111,7 +111,7 @@ function cardIds(
 /**
  * The cards that could meet the rules' card fields, or null when the printings have to drive: no
  * card field, or a set rule (indexed) with no indexed card field to beat it. Rarity alone is the
- * no-card-field case: it scans all the printings unless it passes the cap, where LIMIT stops it.
+ * no-card-field case: it walks that rarity's printings unless it passes the cap, where LIMIT stops it.
  * It only narrows: a printing must still pass ruleSql, so a rule can't be met by two different
  * printings.
  *
@@ -124,7 +124,7 @@ function candidateCards(
   scope: Scope,
   lookups?: CardLookups
 ): number[] | null {
-  const cardRules = rules.rules.filter((r) => !onPrinting(r))
+  const cardRules = rules.rules.filter((r) => !onPrinting(r.field))
   if (cardRules.length === 0) return null
   const name = cardRules.find((r): r is NameRule => r.field === 'name')
   const indexed = cardRules.some((r) => CARD_INDEXED.has(r.field))
@@ -197,23 +197,57 @@ export function matchedPrintingCount(
   return row.n
 }
 
-/** Up to 50 distinct, non-empty values of `field` containing `q`, for the rule editor's suggestions. */
+const MAX_FIELD_VALUES = 50
+
+const POKEMON_VALUES = (scope: Scope): string => `pokemon_cards pc WHERE ${scope.game} = 'pkm'`
+
+/** The one table a field's suggestions are read from, as `<table> WHERE <scope>`. */
+const valueSource = (field: RuleField, scope: Scope): string =>
+  onPrinting(field)
+    ? `card_printings p WHERE +p.game = ${scope.game}`
+    : POKEMON_ONLY.has(field)
+      ? POKEMON_VALUES(scope)
+      : `cards c WHERE +c.game = ${scope.game}`
+
+function columnValues(
+  db: SqlDb,
+  col: string,
+  source: string,
+  like: string,
+  isText: boolean
+): string[] {
+  // A CAST would hide a text column from its index, and the ORDER BY with it.
+  const text = isText ? col : `CAST(${col} AS TEXT)`
+  const rows = db
+    .prepare(
+      `SELECT DISTINCT ${text} AS v FROM ${source}
+       AND ${text} <> '' AND ${text} LIKE ? ESCAPE '\\'
+       ORDER BY v LIMIT ${MAX_FIELD_VALUES}`
+    )
+    .all(like) as { v: string }[]
+  return rows.map((r) => r.v)
+}
+
+/**
+ * Up to 50 distinct, non-empty values of `field` containing `q`, for the rule editor's suggestions.
+ * Runs per debounced keystroke, on the Durable Object too, so each field reads only the table that
+ * holds it. `game` stays unary in the indexed reads, as everywhere: it only filters what they walk.
+ */
 export function ruleFieldValues(db: SqlDb, field: RuleField, q: string, scope: Scope): string[] {
   const like = `%${escapeLike(q.trim())}%`
-  let sql: string
-  const params: unknown[] = []
   if (field === 'energyType') {
-    sql = `SELECT DISTINCT j.value AS v FROM pokemon_cards pc
+    const sql = `SELECT DISTINCT j.value AS v FROM pokemon_cards pc
       JOIN cards c ON c.id = pc.card_id AND +c.game = ${scope.game}, json_each(pc.types) j
-      WHERE j.value <> '' AND j.value LIKE ? ESCAPE '\\' ORDER BY v LIMIT 50`
-    params.push(like)
-  } else {
-    const col = field === 'name' ? 'c.name' : COLUMN[field]
-    if (!col) return []
-    sql = `SELECT DISTINCT CAST(${col} AS TEXT) AS v ${FROM(scope)}
-      AND ${col} IS NOT NULL AND CAST(${col} AS TEXT) <> '' AND CAST(${col} AS TEXT) LIKE ? ESCAPE '\\'
-      ORDER BY v LIMIT 50`
-    params.push(like)
+      WHERE j.value <> '' AND j.value LIKE ? ESCAPE '\\' ORDER BY v LIMIT ${MAX_FIELD_VALUES}`
+    return (db.prepare(sql).all(like) as { v: string }[]).map((r) => r.v)
   }
-  return (db.prepare(sql).all(...params) as { v: string }[]).map((r) => r.v)
+  if (field === 'name') {
+    // A name rule matches either name; two reads, since no compound SELECT runs on the server.
+    const names = columnValues(db, 'c.name', valueSource(field, scope), like, true)
+    const locals = columnValues(db, 'pc.local_name', POKEMON_VALUES(scope), like, true)
+    return [...new Set([...names, ...locals])].sort().slice(0, MAX_FIELD_VALUES)
+  }
+  const col = COLUMN[field]
+  if (!col) return []
+  return columnValues(db, col, valueSource(field, scope), like, field !== 'level')
 }

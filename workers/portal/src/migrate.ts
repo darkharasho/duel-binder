@@ -497,7 +497,8 @@ CREATE INDEX ix_binder_edits_user_seq ON binder_edits(user_id, seq);
   { name: 'server-22', sql: 'CREATE INDEX ix_cards_name ON cards(name COLLATE NOCASE);' },
   { name: 'server-23', sql: 'CREATE INDEX ix_pokemon_cards_local_name ON pokemon_cards(local_name COLLATE NOCASE);' },
   { name: 'server-24', sql: 'CREATE INDEX ix_printings_set_name ON card_printings(set_name);' },
-  { name: 'server-25', sql: 'CREATE INDEX ix_cards_archetype ON cards(archetype);' }
+  { name: 'server-25', sql: 'CREATE INDEX ix_cards_archetype ON cards(archetype);' },
+  { name: 'server-26', sql: 'CREATE INDEX ix_printings_rarity ON card_printings(set_rarity, game);' }
 ]
 
 /**

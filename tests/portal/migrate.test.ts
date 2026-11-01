@@ -32,7 +32,7 @@ describe('migrateServer', () => {
   it('is a no-op when run again', () => {
     const db = freshDb()
     migrateServer(db)
-    const count = () => (db.prepare('SELECT count(*) AS n FROM server_migrations').get() as { n: number }).n
+    const count = (): number => (db.prepare('SELECT count(*) AS n FROM server_migrations').get() as { n: number }).n
     const before = count()
     expect(() => migrateServer(db)).not.toThrow()
     expect(count()).toBe(before)
@@ -130,7 +130,7 @@ function serverBefore12(): Database.Database {
   const db = freshDb()
   runSteps(db, [
     ...MIGRATIONS.filter((m) => m.version <= 18),
-    ...SERVER_STEPS.filter((s) => !['server-12', 'server-13', 'server-14', 'server-16', 'server-18', 'server-21', 'server-23'].includes(s.name))
+    ...SERVER_STEPS.filter((s) => !['server-12', 'server-13', 'server-14', 'server-16', 'server-18', 'server-21', 'server-23', 'server-26'].includes(s.name))
   ])
   db.exec(`
     INSERT INTO users (id, discord_id, username, created_at, updated_at) VALUES (1, 'd1', 'one', 'x', 'x');

@@ -1,5 +1,6 @@
 import { openCardCache, cardIsUsable, traditionalCardIsUsable } from './cache'
 import { chineseCards, chineseFiles, chineseIndex, chineseListSets, chineseSet, type ZhCard } from './chinese'
+import { chinesePromoSets } from './chinesePromos'
 import { createLimiter, REPO_URL, MAX_CONCURRENCY, type GetJsonOpts } from './http'
 import { tcgcsvCardRows, tcgcsvGroups, tcgcsvPrices, tcgcsvProducts } from './tcgcsv'
 import { tcgdexCard, tcgdexSet, tcgdexSetList } from './tcgdex'
@@ -69,7 +70,7 @@ export function createPokemonSources(opts: PokemonSourcesOpts): PokemonSources &
           `Pokémon zh-hans: ${list.sets.length + 1} sets; ${list.named} cards named from other rows, ` +
             `${list.unnamed} left unnamed, ${list.oddNumbers} odd numbers, ${list.repeats} repeats left out`
         )
-        const built = [chineseSet(rows.get('30thC')!), ...list.sets]
+        const built = [chineseSet(rows.get('30thC')!), ...list.sets, ...chinesePromoSets()]
         for (const b of built) for (const c of b.cards) chinese.set(c.id, c)
         return built.map((b) => b.set)
       }

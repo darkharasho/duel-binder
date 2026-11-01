@@ -1,3 +1,4 @@
+import { useTileImage } from '@/lib/cardSize'
 import type { EntryView } from '@shared/types'
 import { Badge } from '@/components/ui/badge'
 import { CardArt } from '@/components/CardArt'
@@ -15,13 +16,14 @@ interface Props {
 
 export function CollectionGrid({ entries, selectedId, onSelect }: Props): React.JSX.Element {
   const shown = useChunkedList(entries)
+  const tileImage = useTileImage()
   return (
     <ul
-      className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-x-4 gap-y-6 max-md:grid-cols-3 max-md:gap-x-2 max-md:gap-y-4"
+      className="grid grid-cols-[repeat(auto-fill,minmax(calc(150px*var(--card-scale,1)),1fr))] gap-x-4 gap-y-6 max-md:grid-cols-3 max-md:gap-x-2 max-md:gap-y-4"
       aria-label="Collection grid"
     >
       {shown.map((e) => (
-        <li key={e.id} className="lazy-item [--lazy-h:310px]">
+        <li key={e.id} className="lazy-item [--lazy-h:calc(310px*var(--card-scale,1))]">
           <button
             type="button"
             data-nav-key={e.id}
@@ -33,7 +35,7 @@ export function CollectionGrid({ entries, selectedId, onSelect }: Props): React.
               <CardArt
                 imageId={e.imageId}
                 printingId={scanFor(e)}
-                size="small"
+                size={tileImage}
                 alt={e.card.name}
                 className="w-full rounded-[4px] shadow-[0_8px_20px_rgb(0_0_0/0.45)]"
               />

@@ -6,6 +6,7 @@ import { cardArtUrl, useArtWash } from '@/components/artWashContext'
 import { CardArt } from '@/components/CardArt'
 import { CardSheet } from '@/components/CardSheet'
 import { TiltCard } from '@/components/TiltCard'
+import { useTileImage } from '@/lib/cardSize'
 import { FilterBar } from '@/components/FilterBar'
 import { CardFilterSections, FilterPanel } from '@/components/FilterPanel'
 import { PageHeader } from '@/components/PageHeader'
@@ -67,6 +68,7 @@ interface Props {
 
 export function BrowsePage({ onAddCard }: Props): React.JSX.Element {
   const [filters, setFilters] = useState<Filters>(DEFAULTS)
+  const tileImage = useTileImage()
   const [selected, setSelected] = useState<{ cardId: number; entryId: number } | null>(null)
   // A card not owned yet opens with a stepper per printing instead of an entry editor.
   const [unowned, setUnowned] = useState<BrowseCard | null>(null)
@@ -172,6 +174,7 @@ export function BrowsePage({ onAddCard }: Props): React.JSX.Element {
             />
           </div>
           <FilterBar
+            sizable
             search={
               <SearchInput
                 label="Search cards"
@@ -214,10 +217,10 @@ export function BrowsePage({ onAddCard }: Props): React.JSX.Element {
         ) : (
           <ul
             aria-label="All cards"
-            className="grid grid-cols-[repeat(auto-fill,minmax(140px,1fr))] gap-x-4 gap-y-6 max-md:grid-cols-3 max-md:gap-x-2 max-md:gap-y-4"
+            className="grid grid-cols-[repeat(auto-fill,minmax(calc(140px*var(--card-scale,1)),1fr))] gap-x-4 gap-y-6 max-md:grid-cols-3 max-md:gap-x-2 max-md:gap-y-4"
           >
             {cards.map((c) => (
-              <li key={c.id} className="lazy-item [--lazy-h:290px]">
+              <li key={c.id} className="lazy-item [--lazy-h:calc(290px*var(--card-scale,1))]">
                 <button
                   type="button"
                   data-nav-key={c.id}
@@ -227,7 +230,7 @@ export function BrowsePage({ onAddCard }: Props): React.JSX.Element {
                   <TiltCard>
                     <CardArt
                       imageId={c.imageId}
-                      size="small"
+                      size={tileImage}
                       alt={c.name}
                       className="w-full rounded-[4px] shadow-[0_8px_20px_rgb(0_0_0/0.45)]"
                     />

@@ -14,6 +14,7 @@ import type {
 } from '@shared/types'
 import { CardArt } from '@/components/CardArt'
 import { checklistUnpriced, useRequestPrices } from '@/lib/priceRequests'
+import { useTileImage } from '@/lib/cardSize'
 import { useChunkedList } from '@/lib/useChunkedList'
 import { CardSheet } from '@/components/CardSheet'
 import { FilterBar } from '@/components/FilterBar'
@@ -214,6 +215,7 @@ export function SetChecklist({
     [data, mode, filter, pickedRarities, q, sort]
   )
   const shownTiles = useChunkedList(tiles)
+  const tileImage = useTileImage()
 
   // Recompute the frozen ids on entering bulk mode and when the filter or count mode changes.
   if (bulk && data && (!frozen || frozen.filter !== filter || frozen.mode !== mode)) {
@@ -445,6 +447,7 @@ export function SetChecklist({
               </div>
             </div>
             <FilterBar
+              sizable
               // Bulk mode has its own search box, and shows every rarity.
               search={
                 !bulk && (
@@ -533,11 +536,11 @@ export function SetChecklist({
               adjust={adjust}
             />
           ) : (
-            <ul className="grid grid-cols-[repeat(auto-fill,minmax(7.5rem,1fr))] gap-3 max-md:grid-cols-3 max-md:gap-1.5">
+            <ul className="grid grid-cols-[repeat(auto-fill,minmax(calc(7.5rem*var(--card-scale,1)),1fr))] gap-3 max-md:grid-cols-3 max-md:gap-1.5">
               {shownTiles.map((t) => {
                 const owned = t.owned > 0
                 return (
-                  <li key={t.key} className="lazy-item [--lazy-h:240px]">
+                  <li key={t.key} className="lazy-item [--lazy-h:calc(240px*var(--card-scale,1))]">
                     <button
                       type="button"
                       data-owned={owned}
@@ -559,7 +562,7 @@ export function SetChecklist({
                               t.card.rarities[0]
                             )?.defaultPrintingId
                           }
-                          size="small"
+                          size={tileImage}
                           alt=""
                           className="w-full"
                         />

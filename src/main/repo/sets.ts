@@ -51,7 +51,7 @@ const SET_JOINS = `LEFT JOIN sets s ON s.game = p.game AND s.language = p.langua
 // One row per distinct (language, set_name); callers limit it to the scope's game with `p.game = <game>`.
 // A (card, rarity) pair is keyed as "<card_id>|<rarity>"; card_id is an integer, so the first "|"
 // always ends it. Yu-Gi-Oh! pack art and logos are English only, keyed by set name alone; Pokémon
-// pack art (its main design) and fallback logos come from pokemon_set_art, per language.
+// pack art and fallback logos come from pokemon_set_art, per language.
 // Ownership is an uncorrelated IN list (built once, then a keyed lookup per printing). A LEFT JOIN
 // to the owned printings made SQLite scan them for every printing (~1 s on a full catalog).
 const summary = (scope: Scope): string => {
@@ -132,9 +132,8 @@ function coverImages(
 }
 
 function toSummary(r: SummaryDbRow, covers: Map<string, number>): SetSummary {
-  // A Pokémon booster shows the set's logo printed on it, so its pack art goes in front and the
-  // logo (TCGdex's, else the Pokémon TCG API's) only stands in where there's no pack.
-  const logo = r.is_pkm ? (r.pack_key !== null ? null : (r.pkm_logo_key ?? r.logo_key)) : r.logo_key
+  // A Pokémon logo is TCGdex's, else the Pokémon TCG API's; a pack only stands in where there's neither.
+  const logo = r.is_pkm ? (r.pkm_logo_key ?? r.logo_key) : r.logo_key
   return {
     language: r.language,
     setName: r.set_name,

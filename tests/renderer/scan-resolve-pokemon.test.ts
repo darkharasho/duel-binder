@@ -294,7 +294,13 @@ describe('resolvePokemonSignals', () => {
       }
     })
     expect(await recognized(raw({ art: [twins[0]] }), ctx(136))).toMatchObject({ cardId: 1 })
-    expect(await resolveSignals(raw({ art: [twins[0]] }), ctx(104))).toEqual({ kind: 'unsure' })
+    expect(await resolveSignals(raw({ art: [twins[0]] }), ctx(96))).toEqual({ kind: 'unsure' })
+    // Close enough to be either: named, but only as a best guess.
+    const maybe = { ...ctx(110), guessRules: ['twin-maybe' as const] }
+    expect(await recognized(raw({ art: [twins[0]] }), maybe)).toMatchObject({
+      cardId: 1,
+      guess: true
+    })
   })
 
   it('never names a card whose reprint of the art has no artwork to match', async () => {

@@ -13,6 +13,7 @@ import {
   ART_MAX_DISTANCE,
   PKM_ART_MIN_MARGIN,
   PKM_GUESS_NAME_LIKENESS,
+  PKM_TWIN_MAYBE_ART,
   PKM_TWIN_OTHER_ART,
   PKM_GUESS_REPRINT_LEAD,
   PKM_GUESS_RULES,
@@ -293,28 +294,33 @@ export async function resolvePokemonSignals(
   // A card with a reprint of its art that has no artwork of its own is named only as a guess: the
   // art can't tell them apart. A number read can, unless the reprint prints the same one, as a
   // Classic Collection reprint does its original's.
-  // Nor is it a reprint when its product photo is other art: same name, same illustrator.
-  const untold = async (p: ScanPrinting): Promise<boolean> => {
+  // Nor is it a reprint when its product photo is other art: same name, same illustrator. A photo
+  // only nearly that far could be either, so the card is named, marked as a guess.
+  const untold = async (p: ScanPrinting): Promise<'yes' | 'maybe' | false> => {
     if (!p.unseenTwin) return false
     const read = numbered.filter((n) => n.cardId === p.cardId).map((n) => numberOf(n.setCode))
     const told = !!p.unseenTwinCodes?.length && read.length > 0
     if (told && !p.unseenTwinCodes!.some((c) => read.includes(numberOf(c)))) return false
     const twins = p.unseenTwinImages ?? []
     if (!ctx.artDistance || !twins.length || twins.length < new Set(p.unseenTwinCodes).size)
-      return true
+      return 'yes'
+    let closest = Infinity
     for (const twin of twins) {
       for (const own of p.imageIds) {
         const distance = await ctx.artDistance(own, twin)
-        if (distance === null || distance < PKM_TWIN_OTHER_ART) return true
+        if (distance === null) return 'yes'
+        closest = Math.min(closest, distance)
       }
     }
-    return false
+    if (closest >= PKM_TWIN_OTHER_ART) return false
+    return closest < PKM_TWIN_MAYBE_ART ? 'yes' : 'maybe'
   }
   const named = async (cardId: number, via: 'code' | 'art'): Promise<ScanOutcome> => {
     const item = await draft(cardId, raw, ctx, via)
     if (!item) return unsure
     const twinned = item.options.filter((p) => p.unseenTwin)
-    if (twinned.length && (await untold(twinned[0])) && !may('twin')) return unsure
+    const twin = twinned.length ? await untold(twinned[0]) : false
+    if (twin && !may(twin === 'maybe' ? 'twin-maybe' : 'twin')) return unsure
     return { kind: 'recognized', item: guess ? { ...item, guess: true } : item }
   }
 

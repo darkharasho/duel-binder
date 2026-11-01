@@ -22,6 +22,11 @@ export interface Scope {
    * every row of the game through them instead of using the query's real index.
    */
   game: string
+  /**
+   * SQL condition for showing eBay prices. `intl_prices` joins on it, so with it false every price,
+   * total and sort falls to what the printing has without them.
+   */
+  ebayPrices: string
   /** SQL predicate limiting `alias` (a collection_entries alias) to this owner's live rows of the game. */
   where(alias: string): string
   /** Inserts a new entry for this owner and returns its id. */
@@ -63,6 +68,23 @@ export const ACTIVE_OWNER =
 export const ACTIVE_GAME =
   "(SELECT COALESCE((SELECT value FROM meta WHERE key = 'active_game'), 'ygo'))"
 
+/** SQL for this device showing eBay prices: on until the Settings toggle turns it off. */
+export const EBAY_PRICES =
+  "(SELECT COALESCE((SELECT value FROM meta WHERE key = 'hide_ebay_prices'), '0') = '0')"
+
+export const ebayPricesHidden = (db: SqlDb): boolean =>
+  (
+    db.prepare("SELECT value FROM meta WHERE key = 'hide_ebay_prices'").get() as
+      { value: string } | undefined
+  )?.value === '1'
+
+export function setEbayPricesHidden(db: SqlDb, hidden: boolean): void {
+  db.prepare(
+    `INSERT INTO meta (key, value) VALUES ('hide_ebay_prices', ?)
+     ON CONFLICT(key) DO UPDATE SET value = excluded.value`
+  ).run(hidden ? '1' : '0')
+}
+
 /** The game a scope shows, resolved to 'ygo' or 'pkm' for code that picks game-specific filters. */
 export function scopeGame(db: SqlDb, scope: Scope): GameId {
   const { game } = db.prepare(`SELECT ${scope.game} AS game`).get() as { game: string }
@@ -76,6 +98,7 @@ export function scopeGame(db: SqlDb, scope: Scope): GameId {
 export function localScope(game: string): Scope {
   return {
     game,
+    ebayPrices: EBAY_PRICES,
     where: (alias) =>
       `${alias}.owner_id = ${ACTIVE_OWNER} AND ${alias}.game = ${game} AND ${alias}.deleted_at IS NULL`,
     insertEntry(db, row) {

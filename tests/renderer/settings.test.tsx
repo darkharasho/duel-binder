@@ -49,7 +49,7 @@ describe('SettingsPage', () => {
   it('says prices come from the account', async () => {
     renderWithProviders(<SettingsPage />, { api: createMockApi() })
     expect(await screen.findByText('Prices come from your Duel Binder account.')).toBeInTheDocument()
-    expect(screen.queryByText(/eBay/i)).not.toBeInTheDocument()
+    expect(await screen.findByLabelText(/Show eBay prices/)).toBeChecked()
   })
 
   it('lists the cards that cannot sync when asked', async () => {

@@ -25,7 +25,7 @@ export function listWishlist(db: SqlDb, scope: Scope = LOCAL): WishlistItem[] {
        JOIN card_printings p ON p.pkey = w.pkey AND +p.game = ${scope.game}
        JOIN cards c ON c.id = p.card_id AND +c.game = ${scope.game}
        LEFT JOIN pokemon_cards pc ON pc.card_id = c.id
-       LEFT JOIN intl_prices ip ON ip.printing_id = p.id
+       LEFT JOIN intl_prices ip ON ip.printing_id = p.id AND ${scope.ebayPrices}
        WHERE ${scope.where('w')}
        ORDER BY w.created_at DESC, w.pkey`
     )

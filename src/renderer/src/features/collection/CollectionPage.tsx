@@ -250,6 +250,7 @@ export function CollectionPage({
             )}
 
             <FilterBar
+              sizable
               search={
                 <SearchInput
                   label="Search collection"

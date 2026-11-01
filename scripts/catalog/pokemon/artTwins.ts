@@ -9,6 +9,14 @@ import type { TdCard, TdSet } from './types'
  * English card at all.
  * Borrowed art is only ever a link (`art_twin_id`): `image_url` stays the card's own, so own art
  * wins whenever it arrives and the scanner's fingerprints never see English art on a Chinese card.
+ *
+ * Traditional Chinese art is the better borrow: own art, then Traditional, then English, then the
+ * placeholder. No list ties the two Chinese catalogs together, so a card takes a Traditional card
+ * by English name and category, the same rarity if the card has one, and only when exactly one remains
+ * (`traditionalTwins`); anything else keeps its English twin. The link is its own column,
+ * `traditional_twin_id`, beside `art_twin_id`: an app from before the column ignores it and goes on
+ * showing the English twin, correctly labelled, where `art_twin_id` holding a Traditional card
+ * would have it call that "English art".
  */
 
 export type TwinOutcome =
@@ -28,6 +36,15 @@ const nameKey = (name: string): string =>
     .toLowerCase()
 
 const numberKey = (n: string): string => n.replace(/^0+(?=\d)/, '').toUpperCase()
+
+/** Traditional card names are only trusted once `nameTraditional` has run. */
+export type TraditionalOutcome =
+  | 'linked'
+  | 'unnamed'
+  | 'no candidate'
+  | 'category mismatch'
+  | 'rarity mismatch'
+  | 'ambiguous'
 
 export interface EnglishPlan {
   set: TdSet
@@ -63,6 +80,53 @@ export function englishTwins(sets: EnglishPlan[]): TwinFinder {
       const twin = hit.card
       if (nameKey(twin.name) !== nameKey(name)) return no('name mismatch')
       return hit.imageUrl ? { outcome: 'linked', twin } : no('no English art')
+    }
+  }
+}
+
+export interface TraditionalPlan {
+  set: TdSet
+  cards: { card: TdCard; name: string; imageUrl: string | null }[]
+}
+
+export interface TraditionalFinder {
+  find(card: TdCard, name: string, setId: string): { outcome: TraditionalOutcome; twin: TdCard | null }
+}
+
+/** The name `nameTraditional` and the Simplified list give a card nothing names. */
+const isUnnamed = (name: string, setId: string, localId: string): boolean =>
+  name === `${setId} ${localId}`
+
+/** "Triple rare" and "Triple Rare" are one rarity. */
+const rarityKey = (rarity: string | null | undefined): string => rarity?.trim().toLowerCase() ?? ''
+
+export function traditionalTwins(sets: TraditionalPlan[]): TraditionalFinder {
+  const byName = new Map<string, TdCard[]>()
+  for (const { set, cards } of sets) {
+    for (const { card, name, imageUrl } of cards) {
+      if (!imageUrl || isUnnamed(name, set.id, card.localId)) continue
+      const key = nameKey(name)
+      byName.set(key, [...(byName.get(key) ?? []), card])
+    }
+  }
+
+  return {
+    find(card, name, setId) {
+      const no = (outcome: TraditionalOutcome): { outcome: TraditionalOutcome; twin: null } => ({
+        outcome,
+        twin: null
+      })
+      if (isUnnamed(name, setId, card.localId)) return no('unnamed')
+      const named = byName.get(nameKey(name)) ?? []
+      if (named.length === 0) return no('no candidate')
+      const sameKind = card.category ? named.filter((c) => c.category === card.category) : []
+      if (sameKind.length === 0) return no('category mismatch')
+      const rarity = rarityKey(card.rarity)
+      // A rated card needs a rated match: most unrated Traditional cards are of another print, and
+      // an Illustration Rare must not show the plain card.
+      const left = sameKind.filter((c) => !rarity || rarity === rarityKey(c.rarity))
+      if (left.length === 0) return no('rarity mismatch')
+      return left.length === 1 ? { outcome: 'linked', twin: left[0] } : no('ambiguous')
     }
   }
 }

@@ -146,6 +146,8 @@ function logPokemon(reports: PokemonReport[], log: (line: string) => void): void
     if (noArt(r) > 0) log(`Pokémon ${r.lang}: no art: ${JSON.stringify(r.artMissing)}`)
     if (Object.keys(r.artTwins).length > 0)
       log(`Pokémon ${r.lang}: English art: ${JSON.stringify(r.artTwins)}`)
+    if (Object.keys(r.artTraditional).length > 0)
+      log(`Pokémon ${r.lang}: Traditional art: ${JSON.stringify(r.artTraditional)}`)
     for (const p of r.problems) log(`Pokémon ${r.lang}: ${p}`)
   }
 }

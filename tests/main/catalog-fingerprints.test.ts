@@ -528,9 +528,9 @@ describe('buildFingerprints for Pokémon', () => {
         .run(id + 1000, id)
       work
         .prepare(
-          "INSERT INTO pokemon_cards (card_id, category, source_id, image_url, art_twin_id) VALUES (?, 'Pokemon', ?, ?, ?)"
+          "INSERT INTO pokemon_cards (card_id, category, source_id, image_url, art_twin_id, traditional_twin_id) VALUES (?, 'Pokemon', ?, ?, ?, ?)"
         )
-        .run(id, sourceId, url, twin)
+        .run(id, sourceId, url, twin, twin)
     }
     const asked: string[] = []
     const out = await buildFingerprints({

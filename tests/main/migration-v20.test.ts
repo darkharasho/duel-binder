@@ -22,7 +22,8 @@ describe('migration V20 (pokemon_cards image_url and local_name)', () => {
       'source_id',
       'image_url',
       'local_name',
-      'art_twin_id'
+      'art_twin_id',
+      'traditional_twin_id'
     ])
     db.close()
   })

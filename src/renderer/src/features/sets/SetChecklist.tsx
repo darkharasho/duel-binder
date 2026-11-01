@@ -203,9 +203,10 @@ export function SetChecklist({
     () =>
       data
         ? sortTiles(
-            filterTilesByRarity(filterTiles(checklistTiles(data, mode), filter), pickedRarities).filter(
-              (t) => matchesCardSearch(t.card, q)
-            ),
+            filterTilesByRarity(
+              filterTiles(checklistTiles(data, mode), filter),
+              pickedRarities
+            ).filter((t) => matchesCardSearch(t.card, q)),
             sort.by,
             sort.dir
           )

@@ -164,17 +164,31 @@ export const LANGUAGE_RETRY_FRAMES = 8
  * - reprint: several cards of one name in the language; the closest art.
  * - misread: a number naming nothing in the art group; taken as a misread and ignored.
  * - twin: a reprint with no artwork to match (ScanPrinting.unseenTwin).
+ * - twin-maybe: such a reprint whose product photo may be other art (PKM_TWIN_MAYBE_ART).
  * - behind: a reprint past the art group's margin (reprintBehind).
  * - holder: art found by the holder search, with another name close (clearOfOtherNames).
  */
 export type PkmGuessRule =
-  'language' | 'language-default' | 'reprint' | 'misread' | 'twin' | 'behind' | 'holder'
+  | 'language'
+  | 'language-default'
+  | 'reprint'
+  | 'misread'
+  | 'twin'
+  | 'twin-maybe'
+  | 'behind'
+  | 'holder'
 /**
  * The rules on, the most right answers with wrong at most PKM_MAX_WRONG_SHARE on the owner's photos
  * and overall (tests/main/scan-pkm-guess-curve.test.ts replays the others). Language-default costs
  * 12 Chinese photos; twin is right less often than wrong.
  */
-export const PKM_GUESS_RULES: readonly PkmGuessRule[] = ['language', 'reprint', 'misread', 'holder']
+export const PKM_GUESS_RULES: readonly PkmGuessRule[] = [
+  'language',
+  'reprint',
+  'misread',
+  'twin-maybe',
+  'holder'
+]
 /**
  * How nearly a name band must read a card's name (englishNameLikeness, japaneseNameLikeness) for
  * the language rule. On the 200 photos whose art matched and whose text told no language, 0.5
@@ -188,6 +202,12 @@ export const PKM_GUESS_NAME_LIKENESS = 0.5
  * photos reach about 104) and other art gathers at 120 to 130.
  */
 export const PKM_TWIN_OTHER_ART = 120
+/**
+ * Below PKM_TWIN_OTHER_ART, how far a product photo must be for the card to be named as a best
+ * guess, not left unnamed. From here up the pairs are a mix: 30th Celebration's 031 and its
+ * same-artist Trainer Gallery Pikachu at 110 are other art, Energy Search's reprint at 110 isn't.
+ */
+export const PKM_TWIN_MAYBE_ART = 100
 /**
  * How much closer the closest reprint's art must be than the next's for the reprint rule to name
  * it. Art hardly tells reprints apart: of 35 guesses, 15 were right with no lead asked, 12 of 30

@@ -260,6 +260,25 @@ describe('resolvePokemonSignals', () => {
     expect(await recognized(raw({ art: twins }), ctx)).toMatchObject({ cardId: 2 })
   })
 
+  it('a read number tells a card from its unseen twin, unless the twin prints the same number', async () => {
+    const ctx = (code: string): ResolveContext => ({
+      ...pkm('en'),
+      lookups: {
+        ...lookups,
+        printingsForCards: async (ids) =>
+          PKM.filter((p) => ids.includes(p.cardId)).map((p) =>
+            p.cardId === 1 ? { ...p, unseenTwin: true as const, unseenTwinCodes: [code] } : p
+          )
+      }
+    })
+    const own = PKM.find((p) => p.cardId === 1 && p.language === 'en')!.setCode
+    const signals = raw({ art: [twins[0]], codeTexts: [own] })
+    expect(await recognized(signals, ctx('SVP 223/225'))).toMatchObject({ cardId: 1, via: 'code' })
+    // A Classic Collection reprint prints its original's number.
+    const original = own.split(' ').at(-1)!
+    expect(await resolveSignals(signals, ctx(`CLC ${original}`))).toEqual({ kind: 'unsure' })
+  })
+
   it('never names a card whose reprint of the art has no artwork to match', async () => {
     const ctx = (twinned: boolean): ResolveContext => ({
       ...pkm('en'),

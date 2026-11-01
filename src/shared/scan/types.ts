@@ -36,6 +36,8 @@ export interface ScanPrinting {
    * two apart. Set by printingsForCards only; left out otherwise.
    */
   unseenTwin?: true
+  /** Those cards' set codes: a number read can still tell the two apart. Set with unseenTwin. */
+  unseenTwinCodes?: string[]
 }
 
 export type FingerprintStatus = {

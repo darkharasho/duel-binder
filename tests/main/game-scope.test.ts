@@ -8,6 +8,8 @@ import { browseCards, browseFacets } from '../../src/main/repo/browse'
 import { getChecklist, listSets } from '../../src/main/repo/sets'
 import { getStats, recordSnapshot } from '../../src/main/repo/stats'
 import { cardsForImages, matchName, printingsByCode } from '../../src/main/repo/scan'
+import { shownPrinting } from '../../src/main/repo/shownPrinting'
+import { LOCAL } from '../../src/main/repo/scope'
 import { ripPool } from '../../src/main/repo/rip'
 import { refreshSets } from '../../src/main/sync/sets'
 import { runSync } from '../../src/main/sync/sync'
@@ -144,18 +146,43 @@ describe('game-scoped repo queries', () => {
     expect(matchName(db, 'Pikachu')?.cardId).toBe(pkm.cardIds[0])
   })
 
+  it('hides a one-digit Yu-Gi-Oh rarity, a deck quantity, unless an entry is on it', () => {
+    const { id: other } = db
+      .prepare("SELECT id FROM card_printings WHERE game = 'ygo' AND id <> ? LIMIT 1")
+      .get(ygo.id) as { id: number }
+    db.prepare("UPDATE card_printings SET set_rarity = '2' WHERE id IN (?, ?)").run(ygo.id, other)
+    addEntry(db, { printingId: ygo.id, imageId: ygo.imageId, quantity: 1 }, now)
+    const shown = (id: number): number =>
+      (
+        db
+          .prepare(
+            `SELECT count(*) AS n FROM card_printings p WHERE p.id = ? AND ${shownPrinting(LOCAL)}`
+          )
+          .get(id) as { n: number }
+      ).n
+    expect(shown(ygo.id)).toBe(1)
+    expect(shown(other)).toBe(0)
+  })
+
   it('hides a Pokémon finish the catalog flags missing unless an entry is on it', () => {
     setGame(db, 'pkm')
     // printingIds[1] is the English card's Reverse Holo; nobody owns it.
-    db.prepare('UPDATE card_printings SET missing_from_api = 1 WHERE id IN (?, ?)').run(pkm.printingIds[0], pkm.printingIds[1])
+    db.prepare('UPDATE card_printings SET missing_from_api = 1 WHERE id IN (?, ?)').run(
+      pkm.printingIds[0],
+      pkm.printingIds[1]
+    )
     const rarities = (): string[] =>
       getChecklist(db, SHARED_SET_NAME, 'en')!.cards.flatMap((c) => c.rarities.map((r) => r.rarity))
     // printingIds[0] (Normal) is owned, so it stays; the unowned Reverse Holo is gone everywhere.
     expect(rarities()).toEqual(['Normal'])
-    expect(getCardDetail(db, pkm.cardIds[0])?.printings.map((p) => p.id)).toEqual([pkm.printingIds[0]])
+    expect(getCardDetail(db, pkm.cardIds[0])?.printings.map((p) => p.id)).toEqual([
+      pkm.printingIds[0]
+    ])
     expect(printingsByCode(db, PKM_CODE).map((p) => p.printingId)).toEqual([pkm.printingIds[0]])
     expect(listSets(db)[0].totalRarities).toBe(1)
-    expect(listEntries(db, ALL).map((e) => [e.printing.id, e.printing.missingFromApi])).toEqual([[pkm.printingIds[0], true]])
+    expect(listEntries(db, ALL).map((e) => [e.printing.id, e.printing.missingFromApi])).toEqual([
+      [pkm.printingIds[0], true]
+    ])
 
     addEntry(db, { printingId: pkm.printingIds[1], imageId: pkm.cardIds[0], quantity: 1 }, now)
     expect(rarities()).toEqual(['Normal', 'Reverse Holo'])

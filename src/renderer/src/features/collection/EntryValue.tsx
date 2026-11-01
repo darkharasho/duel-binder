@@ -42,7 +42,9 @@ function ebayPriceDetail(entry: EntryView): string {
   const parts = ['eBay asking price']
   if (entry.priceCheckedAt !== null) parts.push(`checked ${formatRelative(entry.priceCheckedAt)}`)
   if (entry.priceListingCount !== null)
-    parts.push(`${entry.priceListingCount} ${entry.priceListingCount === 1 ? 'listing' : 'listings'}`)
+    parts.push(
+      `${entry.priceListingCount} ${entry.priceListingCount === 1 ? 'listing' : 'listings'}`
+    )
   return parts.join(' · ')
 }
 
@@ -99,7 +101,8 @@ export function EntryValue({
 
 /** Visible price details for a TCGplayer- or eBay-priced copy (entry detail); null for YGOPRODeck-priced ones. */
 export function EbayPriceLine({ entry }: { entry: EntryView }): React.JSX.Element | null {
-  if (entry.priceSource === 'tcgplayer') return <p className="text-xs text-muted-foreground">{TCG_TIP}</p>
+  if (entry.priceSource === 'tcgplayer')
+    return <p className="text-xs text-muted-foreground">{TCG_TIP}</p>
   if (entry.priceSource !== 'ebay') return null
   return <p className="text-xs text-muted-foreground">{ebayPriceDetail(entry)}</p>
 }
@@ -111,7 +114,10 @@ export const displayTotal = (e: EntryView): number | null =>
 export function StaleBadge({ entry }: { entry: EntryView }): React.JSX.Element | null {
   if (!entry.printing.missingFromApi) return null
   return (
-    <Badge variant="outline" className="border-amber-500/60 text-amber-700 dark:text-amber-400">
+    <Badge
+      variant="outline"
+      className="w-auto rounded-md whitespace-normal border-amber-500/60 text-left text-amber-700 dark:text-amber-400"
+    >
       No longer in database — price may be stale
     </Badge>
   )

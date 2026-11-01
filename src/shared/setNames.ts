@@ -81,7 +81,7 @@ export function hasNativeScript(name: string): boolean {
 export function englishSetName(name: string, code?: string | null): string {
   const known = ENGLISH_SET_NAMES[name] ?? EUROPEAN_SET_NAMES[name]
   if (known) return known
-  if (!hasNativeScript(name)) return name
+  if (!hasNativeScript(name)) return name.replace(/&apos;/g, "'").replace(/&amp;/g, '&')
   const taken = TAKEN_SUFFIX.exec(name)
   const base = taken ? ENGLISH_SET_NAMES[taken[1]] : undefined
   if (base) return `${base} ${taken![2]}`

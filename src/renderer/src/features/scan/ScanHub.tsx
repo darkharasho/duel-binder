@@ -7,6 +7,7 @@ import {
   isFromScanWindow,
   isPokemonLanguage,
   type ScanFit,
+  type ScanSummary,
   type ScanWindowSettings,
   type ScanWindowState
 } from '@shared/scanWindow'
@@ -14,6 +15,7 @@ import { api } from '@/lib/api'
 import { unpricedIntl, useRequestPrices } from '@/lib/priceRequests'
 import type { ScanDraft } from './resolve'
 import { useScanSession } from './session'
+import { sessionSummary } from './window/summary'
 import { rememberedCamera } from './useCamera'
 
 /** Yu-Gi-Oh!'s keeps the key it always had, so an existing pick survives. */
@@ -49,6 +51,9 @@ export interface ScanHub {
   retryCamera(): void
   retryScan(): void
   takePhoto(): void
+  /** Whether the scan window shows the summary screen over the camera. */
+  summaryOn: boolean
+  toggleSummary(): void
 }
 
 function read<T>(key: string, parse: (raw: string) => T | null): T | null {
@@ -177,6 +182,7 @@ export function ScanHubProvider({ children }: { children: React.ReactNode }): Re
   const [openKnown, setOpenKnown] = useState(false)
   const [state, setState] = useState<ScanWindowState | null>(null)
   const [fresh, setFresh] = useState<string | null>(null)
+  const [summaryOn, setSummaryOn] = useState(false)
   const highlightTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const [seen] = useState(createSeen)
   const { add, refreshPrices } = session
@@ -206,9 +212,21 @@ export function ScanHubProvider({ children }: { children: React.ReactNode }): Re
     [add]
   )
 
+  const summaryRef = useRef<ScanSummary | null>(null)
   const sendSettings = useCallback((): void => {
     window.api.scanWindow.send({ kind: 'settings', settings: settingsRef.current })
+    if (summaryRef.current)
+      window.api.scanWindow.send({ kind: 'summary', summary: summaryRef.current })
   }, [])
+
+  // Worked out here, from the list, so a corrected or removed row corrects the screen too.
+  const summary = JSON.stringify(summaryOn ? sessionSummary(session.rows, settings.hitPrice) : null)
+  useEffect(() => {
+    const next = JSON.parse(summary) as ScanSummary | null
+    if (next === null && summaryRef.current === null) return
+    summaryRef.current = next
+    window.api.scanWindow.send({ kind: 'summary', summary: next })
+  }, [summary])
 
   const setSettings = useCallback(
     (patch: Partial<ScanWindowSettings>): void => {
@@ -259,6 +277,7 @@ export function ScanHubProvider({ children }: { children: React.ReactNode }): Re
       if (isOpen) sendSettings()
       else {
         setState(null)
+        setSummaryOn(false)
         setSettings({ paused: false })
       }
     })
@@ -305,9 +324,11 @@ export function ScanHubProvider({ children }: { children: React.ReactNode }): Re
       openWindow: () => window.api.scanWindow.open(),
       retryCamera: () => window.api.scanWindow.send({ kind: 'retryCamera' }),
       retryScan: () => window.api.scanWindow.send({ kind: 'retryScan' }),
-      takePhoto: () => window.api.scanWindow.send({ kind: 'takePhoto' })
+      takePhoto: () => window.api.scanWindow.send({ kind: 'takePhoto' }),
+      summaryOn,
+      toggleSummary: () => setSummaryOn((on) => !on)
     }),
-    [session, fresh, open, openKnown, state, settings, setSettings, count]
+    [session, fresh, open, openKnown, state, settings, setSettings, count, summaryOn]
   )
   return <HubContext.Provider value={hub}>{children}</HubContext.Provider>
 }

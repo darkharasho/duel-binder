@@ -2,7 +2,12 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import type { Language } from '@shared/languages'
 import { liveLanguage } from '@shared/scanWindow'
-import { isToScanWindow, type ScanWindowSettings, type ScanWindowState } from '@shared/scanWindow'
+import {
+  isToScanWindow,
+  type ScanSummary,
+  type ScanWindowSettings,
+  type ScanWindowState
+} from '@shared/scanWindow'
 import { api } from '@/lib/api'
 import { GameProvider, useGame } from '@/lib/game'
 import { cn } from '@/lib/utils'
@@ -13,6 +18,7 @@ import { useScanLoop } from '../useScanLoop'
 import { createOutbox, type Outbox } from './outbox'
 import { pullOf } from './overlay'
 import { PullOverlay } from './PullOverlay'
+import { SummaryScreen } from './SummaryScreen'
 import { useOverlay } from './useOverlay'
 
 const WINDOW_TITLE = 'Duel Binder — Scan'
@@ -171,6 +177,7 @@ export function ScanWindowApp({
   engineFactory?: EngineFactory
 }): React.JSX.Element {
   const [settings, setSettings] = useState<ScanWindowSettings | null>(null)
+  const [summary, setSummary] = useState<ScanSummary | null>(null)
   const [outbox] = useState(createOutbox)
 
   useEffect(() => {
@@ -178,6 +185,7 @@ export function ScanWindowApp({
     const off = window.api.scanWindow.onMessage((m) => {
       if (!isToScanWindow(m)) return
       if (m.kind === 'ack') outbox.ack(m.id)
+      else if (m.kind === 'summary') setSummary(m.summary)
       else if (m.kind === 'settings') {
         setSettings(m.settings)
         // Settings mean the hub is listening: pulls left from before it (re)loaded, or from a
@@ -198,6 +206,7 @@ export function ScanWindowApp({
   return (
     <GameProvider fallback={black}>
       <Scanner settings={settings} engineFactory={engineFactory} outbox={outbox} />
+      {summary && <SummaryScreen summary={summary} />}
     </GameProvider>
   )
 }

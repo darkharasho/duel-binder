@@ -24,7 +24,12 @@ function read(): LanguageFilter {
 const listeners = new Set<() => void>()
 const subscribe = (cb: () => void): (() => void) => {
   listeners.add(cb)
-  return () => listeners.delete(cb)
+  // Another window, such as the scan window, sharing this localStorage changed it.
+  window.addEventListener('storage', cb)
+  return () => {
+    listeners.delete(cb)
+    window.removeEventListener('storage', cb)
+  }
 }
 
 function write(f: LanguageFilter): void {
@@ -42,6 +47,14 @@ export function useLanguageFilter(): [LanguageFilter, (f: LanguageFilter) => voi
   const filter = useSyncExternalStore(subscribe, read)
   const set = useCallback((f: LanguageFilter) => write(f), [])
   return [filter, set]
+}
+
+/**
+ * The language the filter says cards are in. English is left out: it's only the filter's default,
+ * so it says nothing about a card in hand.
+ */
+export function printedLanguage(filter: LanguageFilter): Language | null {
+  return filter === 'all' || filter === 'en' ? null : filter
 }
 
 export function matchesLanguage(filter: LanguageFilter, language: Language): boolean {

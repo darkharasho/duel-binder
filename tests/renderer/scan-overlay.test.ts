@@ -72,7 +72,7 @@ describe('pullOf', () => {
     expect(pullOf(draft({}, { price: 20 }), 20, 1).hit).toBe(true)
   })
 
-  it('shows the drafted price with the range of its printings under it for a pick-printing draft, never a hit', () => {
+  it('shows the drafted price with the range of its printings under it for a pick-printing draft', () => {
     const d = draft({
       flag: 'pick-printing',
       printingId: 1,
@@ -89,7 +89,7 @@ describe('pullOf', () => {
       rarity: null,
       price: 50,
       range: { low: 2, high: 50 },
-      hit: false
+      hit: true
     })
   })
 

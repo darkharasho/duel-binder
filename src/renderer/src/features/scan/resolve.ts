@@ -1,6 +1,6 @@
 import type { GameId } from '@shared/games/types'
 import type { Api } from '@shared/ipc'
-import { LANGUAGES } from '@shared/languages'
+import { LANGUAGES, type Language } from '@shared/languages'
 import { artVariantName } from '@shared/scan/fingerprintRefs'
 import type { CardLanguage } from '@shared/scan/language'
 import { lookCandidate, pickRarityByLook, type LookModel } from '@shared/scan/look'
@@ -46,6 +46,8 @@ export interface ResolveContext {
    * code read; null when it can't be told. Without it, such a card is taken in its first language.
    */
   cardLanguage?: (cardId: number) => Promise<CardLanguage | null>
+  /** For a card like that, the language the user said they're scanning: taken over reading it. */
+  filterLanguage?: Language | null
   /**
    * For Pokémon: the language the card's text reads as (pokemonLanguageOfBands), asked only when
    * a card is about to be named; null when it can't be told. Without it, never told.
@@ -232,8 +234,8 @@ function inSet(
 
 /**
  * A card with no code read and no set to place it in: an assumed printing among all of its
- * printings, in the language its text reads as when it has printings in it, else in the first
- * language it has (English when it has one), of the rarity pickRarity chooses there (among the
+ * printings, in the filter's language when it has printings in it, else in the language its text
+ * reads as when it has printings in it, else in the first language it has (English when it has one), of the rarity pickRarity chooses there (among the
  * art family a reference scan picked out there, if any), flagged for the user to check unless
  * the card was printed only once.
  */
@@ -245,12 +247,15 @@ async function anyPrinting(
 ): Promise<ScanDraft | null> {
   const options = await ctx.lookups.printingsForCards([cardId])
   const languages = LANGUAGES.filter((l) => options.some((o) => o.language === l.code))
-  const read = languages.length > 1 ? await ctx.cardLanguage?.(cardId) : null
+  const filtered = languages.find((l) => l.code === ctx.filterLanguage)
+  const read = !filtered && languages.length > 1 ? await ctx.cardLanguage?.(cardId) : null
   // Chinese text is either form; its first one the card has.
   const language = (
+    filtered ??
     languages.find(
       (l) => read && (l.code === read || (read === 'zh' && l.code.startsWith('zh')))
-    ) ?? languages[0]
+    ) ??
+    languages[0]
   )?.code
   const ofLanguage = options.filter((o) => o.language === language)
   if (!ofLanguage.length) return null

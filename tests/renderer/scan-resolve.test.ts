@@ -275,6 +275,27 @@ describe('resolveSignals', () => {
       expect(await recognized(art, read('ko'))).toMatchObject({ printingId: 13 })
     })
 
+    it('takes the language the filter is set to, without reading the text', async () => {
+      const ctx = { ...read('de'), filterLanguage: 'ja' as const }
+      expect(await recognized(art, ctx)).toMatchObject({
+        printingId: 15,
+        flag: 'pick-printing'
+      })
+      expect(ctx.cardLanguage).not.toHaveBeenCalled()
+    })
+
+    it('reads the text when the card has no printing in the filter language', async () => {
+      const ctx = { ...read('ja'), filterLanguage: 'ko' as const }
+      expect(await recognized(art, ctx)).toMatchObject({ printingId: 15 })
+    })
+
+    it('a code read beats the filter language', async () => {
+      const ctx = { ...read('ja'), filterLanguage: 'ja' as const }
+      expect(await recognized(raw({ codeTexts: ['SDY-EN006'] }), ctx)).toMatchObject({
+        printingId: 13
+      })
+    })
+
     it('does not read a card printed in one language', async () => {
       const ctx = read('ja', PRINTINGS.slice(0, 3))
       expect(await recognized(art, ctx)).toMatchObject({ printingId: 13 })

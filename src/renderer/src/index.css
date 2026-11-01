@@ -146,6 +146,22 @@
   0% { box-shadow: inset 0 0 0 3px rgb(251 191 36 / 0.95), inset 0 0 40px rgb(251 191 36 / 0.55); }
   100% { box-shadow: inset 0 0 0 3px rgb(251 191 36 / 0), inset 0 0 40px rgb(251 191 36 / 0); }
 }
+@keyframes scan-ring {
+  0% { opacity: 0; transform: scale(0.92); }
+  25% { opacity: 1; }
+  100% { opacity: 0; transform: scale(1.14); }
+}
+@keyframes scan-sheen {
+  0% { opacity: 0; transform: translateX(0) skewX(-12deg); }
+  20% { opacity: 1; }
+  100% { opacity: 0; transform: translateX(400%) skewX(-12deg); }
+}
+@keyframes scan-snap {
+  0% { opacity: 0; transform: scale(1.06); }
+  22% { opacity: 0.95; transform: scale(1); }
+  65% { opacity: 0.95; transform: scale(1); }
+  100% { opacity: 0; transform: scale(0.97); }
+}
 @keyframes scan-spark {
   0% { opacity: 0; transform: translate(-50%, -50%) scale(0.4); }
   30% { opacity: 1; }

@@ -10,6 +10,7 @@ import { isWeb } from '@/lib/platform'
 import { AccountSection } from './AccountSection'
 import { DexImportButton } from './DexImportDialog'
 import { EbayPricesToggle } from './EbayPricesToggle'
+import { ScanPingToggle } from './ScanPingToggle'
 import { UsageToggle } from './UsageToggle'
 import { WishlistToggle } from './WishlistToggle'
 import type { UpdateStatus } from '@shared/types'
@@ -184,6 +185,10 @@ function DesktopSettings(): React.JSX.Element {
         <Button size="sm" disabled={syncing} onClick={() => refresh.mutate()}>
           Refresh card data
         </Button>
+      </Section>
+
+      <Section title="Scanner">
+        <ScanPingToggle />
       </Section>
 
       <Section title="Prices">

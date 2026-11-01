@@ -11,6 +11,7 @@ import {
 } from '@shared/scanWindow'
 import { api } from '@/lib/api'
 import { GameProvider, useGame } from '@/lib/game'
+import { playScanPing } from '@/lib/scanPing'
 import { cn } from '@/lib/utils'
 import { defaultEngine, type EngineFactory } from '../engine'
 import type { ScanDraft } from '../resolve'
@@ -95,6 +96,7 @@ function Scanner({
     (draft: ScanDraft) => {
       sendDraft(outbox.put(draft), draft)
       push(pullOf(draft, hitPrice.current, pulls.current++))
+      playScanPing()
     },
     [push, outbox]
   )

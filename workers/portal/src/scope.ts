@@ -14,6 +14,7 @@ export function userScope(userId: number, game: GameId): Scope {
   const g = `'${game}'`
   return {
     game: g,
+    ebayPrices: '1',
     where: (alias) =>
       `${alias}.user_id = ${userId} AND ${alias}.game = ${g} AND ${alias}.deleted_at IS NULL`,
     insertEntry(db, row) {

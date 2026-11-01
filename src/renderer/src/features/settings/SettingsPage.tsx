@@ -9,11 +9,18 @@ import { useGame } from '@/lib/game'
 import { isWeb } from '@/lib/platform'
 import { AccountSection } from './AccountSection'
 import { DexImportButton } from './DexImportDialog'
+import { EbayPricesToggle } from './EbayPricesToggle'
 import { UsageToggle } from './UsageToggle'
 import { WishlistToggle } from './WishlistToggle'
 import type { UpdateStatus } from '@shared/types'
 
-function Section({ title, children }: { title: string; children: React.ReactNode }): React.JSX.Element {
+function Section({
+  title,
+  children
+}: {
+  title: string
+  children: React.ReactNode
+}): React.JSX.Element {
   return (
     <section className="border-t border-white/[0.08] pt-5">
       <h2 className="mb-3 text-sm font-semibold">{title}</h2>
@@ -39,7 +46,9 @@ function describeUpdate(s: UpdateStatus | undefined): string {
     case 'none':
       return "You're up to date"
     case 'available':
-      return s.mode === 'notify' ? `Update ${s.version} available` : `Update ${s.version} found, downloading…`
+      return s.mode === 'notify'
+        ? `Update ${s.version} available`
+        : `Update ${s.version} found, downloading…`
     case 'downloading':
       return 'Downloading update…'
     case 'ready':
@@ -75,8 +84,9 @@ function AboutSection(): React.JSX.Element {
           className="underline underline-offset-2 hover:text-foreground"
         >
           Bulbagarden Archives
-        </a>
-        {' '}and TCGplayer; set logos from TCGdex and the Pokémon TCG API. Pokémon images © The Pokémon Company.
+        </a>{' '}
+        and TCGplayer; set logos from TCGdex and the Pokémon TCG API. Pokémon images © The Pokémon
+        Company.
       </p>
     </Section>
   )
@@ -89,7 +99,10 @@ function DesktopSettings(): React.JSX.Element {
   const sync = useSyncStatus()
   const { available } = useGame()
   const version = useQuery({ queryKey: ['app', 'version'], queryFn: () => api.app.version() })
-  const cache = useQuery({ queryKey: ['images', 'cacheSize'], queryFn: () => api.images.cacheSize() })
+  const cache = useQuery({
+    queryKey: ['images', 'cacheSize'],
+    queryFn: () => api.images.cacheSize()
+  })
   const update = useUpdateStatus()
   const setUpdate = (s: UpdateStatus): void => {
     qc.setQueryData(queryKeys.update, s)
@@ -98,7 +111,8 @@ function DesktopSettings(): React.JSX.Element {
   const check = useMutation({
     mutationFn: () => api.app.checkForUpdates(),
     onSuccess: setUpdate,
-    onError: (e: Error) => setUpdate({ state: 'error', mode: update?.mode ?? 'auto', version: null, error: e.message })
+    onError: (e: Error) =>
+      setUpdate({ state: 'error', mode: update?.mode ?? 'auto', version: null, error: e.message })
   })
   const refresh = useMutation({
     mutationFn: () => api.sync.run(),
@@ -146,7 +160,12 @@ function DesktopSettings(): React.JSX.Element {
                 Restart now
               </Button>
             )}
-            <Button variant="outline" size="sm" disabled={check.isPending} onClick={() => check.mutate()}>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={check.isPending}
+              onClick={() => check.mutate()}
+            >
               Check for updates
             </Button>
           </div>
@@ -155,7 +174,9 @@ function DesktopSettings(): React.JSX.Element {
 
       <Section title="Card data">
         <Row label="Last synced">
-          {lastSync ? `${formatRelative(lastSync)} (${new Date(lastSync).toLocaleString()})` : 'never'}
+          {lastSync
+            ? `${formatRelative(lastSync)} (${new Date(lastSync).toLocaleString()})`
+            : 'never'}
         </Row>
         <Row label="Cards">{(sync?.cardCount ?? 0).toLocaleString('en-US')}</Row>
         <Row label="Database version">{sync?.dbVersion ?? '—'}</Row>
@@ -171,23 +192,43 @@ function DesktopSettings(): React.JSX.Element {
 
       <Section title="Image cache">
         <Row label="Size">{formatMb(cache.data ?? 0)}</Row>
-        <Button variant="outline" size="sm" disabled={clear.isPending} onClick={() => clear.mutate()}>
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={clear.isPending}
+          onClick={() => clear.mutate()}
+        >
           Clear image cache
         </Button>
       </Section>
 
       <Section title="Data">
         <div className="flex gap-2">
-          <Button variant="outline" size="sm" onClick={() =>
-              api.app.openDataFolder().catch((e: Error) => toast.error(`Couldn't open data folder: ${e.message}`))
-            }>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() =>
+              api.app
+                .openDataFolder()
+                .catch((e: Error) => toast.error(`Couldn't open data folder: ${e.message}`))
+            }
+          >
             Open data folder
           </Button>
-          <Button variant="outline" size="sm" disabled={backup.isPending} onClick={() => backup.mutate()}>
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={backup.isPending}
+            onClick={() => backup.mutate()}
+          >
             Back up collection…
           </Button>
           {available.includes('pkm') && !isWeb() && <DexImportButton />}
         </div>
+      </Section>
+
+      <Section title="Prices">
+        <EbayPricesToggle />
       </Section>
 
       <Section title="Privacy">

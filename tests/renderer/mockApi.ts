@@ -20,7 +20,15 @@ const signedOut = {
   signInRequired: true
 } as const
 
-const emptyStatus = { state: 'idle', lastSyncAt: null, dbVersion: null, cardCount: 1, error: null, blocked: null, blockedRetry: null } as const
+const emptyStatus = {
+  state: 'idle',
+  lastSyncAt: null,
+  dbVersion: null,
+  cardCount: 1,
+  error: null,
+  blocked: null,
+  blockedRetry: null
+} as const
 
 export function createMockApi(overrides: DeepPartial<Api> = {}): Api {
   const base = {
@@ -48,10 +56,24 @@ export function createMockApi(overrides: DeepPartial<Api> = {}): Api {
         throw new Error('collection.update not mocked')
       }),
       remove: vi.fn(async () => undefined),
-      facets: vi.fn(async () => ({ cardTypes: [], attributes: [], archetypes: [], setNames: [], rarities: [], languages: [] }))
+      facets: vi.fn(async () => ({
+        cardTypes: [],
+        attributes: [],
+        archetypes: [],
+        setNames: [],
+        rarities: [],
+        languages: []
+      }))
     },
     dex: {
-      preview: vi.fn(async () => ({ copies: 0, printings: 0, alreadyOwned: 0, zeroRows: 0, repeatRows: 0, notImported: [] })),
+      preview: vi.fn(async () => ({
+        copies: 0,
+        printings: 0,
+        alreadyOwned: 0,
+        zeroRows: 0,
+        repeatRows: 0,
+        notImported: []
+      })),
       apply: vi.fn(async () => ({ copies: 0 })),
       copy: vi.fn(async () => undefined)
     },
@@ -82,7 +104,14 @@ export function createMockApi(overrides: DeepPartial<Api> = {}): Api {
       sets: vi.fn(async () => []),
       checklist: vi.fn(async () => null),
       forCard: vi.fn(async () => []),
-      facets: vi.fn(async () => ({ cardTypes: [], attributes: [], archetypes: [], setNames: [], rarities: [], languages: [] })),
+      facets: vi.fn(async () => ({
+        cardTypes: [],
+        attributes: [],
+        archetypes: [],
+        setNames: [],
+        rarities: [],
+        languages: []
+      })),
       wishlist: vi.fn(async () => []),
       wanting: vi.fn(async () => []),
       owning: vi.fn(async () => []),
@@ -125,7 +154,11 @@ export function createMockApi(overrides: DeepPartial<Api> = {}): Api {
         pricesUpdatedAt: null
       }))
     },
-    prices: { request: vi.fn(async () => undefined) },
+    prices: {
+      request: vi.fn(async () => undefined),
+      ebayHidden: vi.fn(async () => false),
+      setEbayHidden: vi.fn(async () => {})
+    },
     games: {
       available: vi.fn(async () => ['ygo']),
       active: vi.fn(async () => 'ygo'),
@@ -185,9 +218,19 @@ export function createMockApi(overrides: DeepPartial<Api> = {}): Api {
       version: vi.fn(async () => '0.0.0'),
       openDataFolder: vi.fn(async () => undefined),
       backupDatabase: vi.fn(async () => null),
-      checkForUpdates: vi.fn(async () => ({ state: 'none', mode: 'auto', version: null, error: null })),
+      checkForUpdates: vi.fn(async () => ({
+        state: 'none',
+        mode: 'auto',
+        version: null,
+        error: null
+      })),
       applyUpdate: vi.fn(async () => undefined),
-      updateStatus: vi.fn(async () => ({ state: 'idle', mode: 'auto', version: null, error: null })),
+      updateStatus: vi.fn(async () => ({
+        state: 'idle',
+        mode: 'auto',
+        version: null,
+        error: null
+      })),
       onUpdateStatus: vi.fn(() => () => {}),
       onDataChanged: vi.fn(() => () => {})
     },
@@ -207,9 +250,14 @@ export function createMockApi(overrides: DeepPartial<Api> = {}): Api {
   return base as unknown as Api
 }
 
-export function renderWithProviders(ui: ReactElement, { api = createMockApi() }: { api?: Api } = {}) {
+export function renderWithProviders(
+  ui: ReactElement,
+  { api = createMockApi() }: { api?: Api } = {}
+) {
   window.api = api
-  const client = new QueryClient({ defaultOptions: { queries: { retry: false }, mutations: { retry: false } } })
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false }, mutations: { retry: false } }
+  })
   const wrapper = ({ children }: { children: ReactNode }): ReactElement =>
     createElement(QueryClientProvider, { client }, createElement(TooltipProvider, null, children))
   const result = render(ui, { wrapper })

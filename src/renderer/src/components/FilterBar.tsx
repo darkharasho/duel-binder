@@ -1,3 +1,4 @@
+import { CardSizePicker } from './CardSizePicker'
 import { SlidersHorizontal } from 'lucide-react'
 import { FilterChip } from '@/components/FilterChip'
 import { Button } from '@/components/ui/button'
@@ -15,6 +16,7 @@ export function FilterBar({
   onToggleFilters,
   sort,
   toggle,
+  sizable,
   chips = [],
   onClearAll,
   resultCount
@@ -25,6 +27,8 @@ export function FilterBar({
   onToggleFilters?: () => void
   sort?: React.ReactNode
   toggle?: React.ReactNode
+  /** Offers the card size, for a page of card tiles. */
+  sizable?: boolean
   chips?: ActiveChip[]
   /** Clears the filters; the search and sort stay. */
   onClearAll?: () => void
@@ -53,6 +57,7 @@ export function FilterBar({
           </Button>
         )}
         {sort}
+        {sizable && <CardSizePicker />}
         {toggle}
       </div>
       {active > 0 && (

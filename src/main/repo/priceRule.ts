@@ -23,8 +23,9 @@ export const sweptLanguage = (language: string): boolean => SWEPT_LANGUAGES.incl
 export const MARKET_ONLY_PRICE = `CASE WHEN p.language IN (${SWEPT_LANGUAGE_SQL}) THEN COALESCE(p.market_price, ip.price) ELSE p.market_price END`
 
 /** The printing's set_price column: for market-price-only games hidden (NULL), or the swept eBay price of Chinese. */
-export const SET_PRICE = `CASE WHEN ${isMarketOnly} THEN CASE WHEN p.language IN (${SWEPT_LANGUAGE_SQL})
-  THEN (SELECT swept.price FROM intl_prices swept WHERE swept.printing_id = p.id) END ELSE p.set_price END`
+export const setPrice = (ebayPrices: string): string =>
+  `CASE WHEN ${isMarketOnly} THEN CASE WHEN p.language IN (${SWEPT_LANGUAGE_SQL})
+  THEN (SELECT swept.price FROM intl_prices swept WHERE swept.printing_id = p.id AND ${ebayPrices}) END ELSE p.set_price END`
 
 /** True when the game id is priced by its own market price only. */
 export const marketOnlyGame = (id: unknown): boolean =>

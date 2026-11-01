@@ -1,4 +1,5 @@
 import type { SqlDb } from '../db/sql'
+import { ebayPricesHidden } from '../repo/scope'
 import { PRICE_INTERVAL_MS } from '../prices/candidates'
 import { MAX_PRICE_REQUEST } from '../../shared/cloud'
 import type { CloudClient } from './client'
@@ -69,6 +70,7 @@ export async function requestPrices(
   printingIds: number[],
   now: Date
 ): Promise<number> {
+  if (ebayPricesHidden(db)) return 0
   const ask = printingsToRequest(db, printingIds, now)
   if (ask.length === 0) return 0
   const { queued } = await client.requestPrices(ask.map((p) => p.pkey))

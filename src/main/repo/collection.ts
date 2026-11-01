@@ -16,7 +16,7 @@ import { getMeta } from '../db/meta'
 import { LOCAL, scopeGame, type Scope } from './scope'
 import { pokemonFacets, pokemonSearch, pokemonWhere } from './pkmFilters'
 import { enTwinPrice } from './enTwin'
-import { marketOnlyGame, SET_PRICE, sweptLanguage } from './priceRule'
+import { marketOnlyGame, setPrice, sweptLanguage } from './priceRule'
 import { buildFtsQuery, POKEMON_COLS, rowToCard, rowToPrinting, type CardDbRow, type PrintingDbRow } from './cards'
 
 export class CollectionError extends Error {
@@ -41,7 +41,7 @@ interface EntryDbRow {
 export const cardPriceColumns = (scope: Scope): string => `
          c.id AS id, c.name, c.type, c.frame_type, c.race, c.attribute, c.level, c.linkval, c.atk, c.def,
          c.archetype, c.desc, c.tcgplayer_price, ${POKEMON_COLS},
-         p.id AS p_id, p.card_id, p.set_name, p.set_code, ${RARITY_LABEL} AS set_rarity, p.set_rarity_code, ${SET_PRICE} AS set_price,
+         p.id AS p_id, p.card_id, p.set_name, p.set_code, ${RARITY_LABEL} AS set_rarity, p.set_rarity_code, ${setPrice(scope.ebayPrices)} AS set_price,
          p.market_price, ${enTwinPrice(scope.game)} AS en_twin_price, p.game AS p_game,
          p.missing_from_api, p.language,
          ip.printing_id AS ip_id, ip.price AS ip_price, ip.checked_at AS ip_checked_at,
@@ -56,7 +56,7 @@ const select = (scope: Scope): string => `
   JOIN card_printings p ON p.id = e.printing_id AND +p.game = ${scope.game}
   JOIN cards c ON c.id = p.card_id AND +c.game = ${scope.game}
   LEFT JOIN pokemon_cards pc ON pc.card_id = c.id
-  LEFT JOIN intl_prices ip ON ip.printing_id = p.id
+  LEFT JOIN intl_prices ip ON ip.printing_id = p.id AND ${scope.ebayPrices}
   LEFT JOIN sets rs ON rs.game = p.game AND rs.language = p.language AND rs.set_name = p.set_name
   LEFT JOIN sets res ON res.game = p.game AND res.language = 'en' AND res.set_name = p.set_name`
 

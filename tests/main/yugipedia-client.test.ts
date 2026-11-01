@@ -235,6 +235,20 @@ describe('yugipedia client', () => {
     expect([...out]).toEqual([['a_b.png', 'https://ms.yugipedia.com/x/a.png']])
   })
 
+  it("reads the API's new image host as ms.yugipedia.com", async () => {
+    const { client } = setup(() =>
+      res({
+        query: {
+          pages: [
+            { title: 'File:A.png', imageinfo: [{ url: 'https://img.yugipedia.com/x/a.png' }] }
+          ]
+        }
+      })
+    )
+    const out = await client.fetchImageUrls(['A.png'])
+    expect([...out]).toEqual([['A.png', 'https://ms.yugipedia.com/x/a.png']])
+  })
+
   it('listPageImages follows imcontinue and redirects, stripping File:', async () => {
     const { client, calls } = setup((_call, n) =>
       n === 0
@@ -245,7 +259,9 @@ describe('yugipedia client', () => {
               pages: [{ title: 'Card Gallery:New', images: [{ title: 'File:A.png' }] }]
             }
           })
-        : res({ query: { pages: [{ title: 'Card Gallery:New', images: [{ title: 'File:B.png' }] }] } })
+        : res({
+            query: { pages: [{ title: 'Card Gallery:New', images: [{ title: 'File:B.png' }] }] }
+          })
     )
     const out = await client.listPageImages(['Card Gallery:Old', 'Card Gallery:Missing'])
     expect(calls[0].url.searchParams.get('prop')).toBe('images')

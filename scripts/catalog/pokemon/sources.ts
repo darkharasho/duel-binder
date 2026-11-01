@@ -1,12 +1,13 @@
-import { openCardCache, cardIsUsable, traditionalCardIsUsable } from './cache'
+import { openCardCache, cardIsUsable, europeanCardIsUsable, traditionalCardIsUsable } from './cache'
 import { chineseCards, chineseFiles, chineseIndex, chineseListSets, chineseSet, type ZhCard } from './chinese'
 import { chinesePromoSets } from './chinesePromos'
 import { dexSets } from './dexSets'
+import { europeanCards, isEuropean } from './european'
 import { createLimiter, REPO_URL, MAX_CONCURRENCY, type GetJsonOpts } from './http'
 import { tcgcsvCardRows, tcgcsvGroups, tcgcsvPrices, tcgcsvProducts } from './tcgcsv'
 import { tcgdexCard, tcgdexSet, tcgdexSetList } from './tcgdex'
 import { traditionalCard, traditionalSets } from './traditional'
-import type { PkmLang, PokemonSources, TdCard } from './types'
+import type { EuropeanLang, PkmLang, PokemonSources, TdCard } from './types'
 import { upcomingGroups, upcomingSet } from './upcoming'
 
 export interface PokemonSourcesOpts {
@@ -22,9 +23,9 @@ export interface PokemonSourcesOpts {
 /** TCGdex series with no physical cards (Pokémon TCG Pocket); a binder only holds paper. */
 const DIGITAL_SERIES = new Set(['tcgp'])
 
-/** TCGplayer doesn't sell Chinese cards, so they have no groups and the rest never runs. */
-const noGroups = (lang: PkmLang): lang is 'zh-hans' | 'zh-hant' =>
-  lang === 'zh-hans' || lang === 'zh-hant'
+/** TCGCSV has no Chinese or European cards, so they have no groups and the rest never runs. */
+const noGroups = (lang: PkmLang): lang is 'zh-hans' | 'zh-hant' | EuropeanLang =>
+  lang === 'zh-hans' || lang === 'zh-hant' || isEuropean(lang)
 
 export function createPokemonSources(opts: PokemonSourcesOpts): PokemonSources & { close(): void } {
   const cache = openCardCache(opts.cachePath)
@@ -82,6 +83,8 @@ export function createPokemonSources(opts: PokemonSourcesOpts): PokemonSources &
       const list = await tcgdexSetList(lang, o)
       const sets = await allOrNothing(list, (s, oo) => tcgdexSet(lang, s.id, oo))
       const paper = sets.filter((s) => !DIGITAL_SERIES.has(s.serie?.id ?? ''))
+      // A set row is frozen, so a set with no cards waits for them.
+      if (isEuropean(lang)) return paper.filter((s) => (s.cards?.length ?? 0) > 0)
       const groups = upcomingGroups(await tcgcsvGroups(lang, o), sets, lang)
       const built = await allOrNothing(groups, async (g, oo) =>
         upcomingSet(g, await tcgcsvCardRows(lang, g.groupId, oo), lang)
@@ -111,6 +114,17 @@ export function createPokemonSources(opts: PokemonSourcesOpts): PokemonSources &
           cache.put(lang, id, card, t)
           return traditionalCard(card)
         })
+      }
+      if (isEuropean(lang)) {
+        // Cached before they're read, so a value the tables lack doesn't lose a night's fetching.
+        const raw = await allOrNothing(ids, async (id, oo): Promise<TdCard> => {
+          const hit = cache.get(lang, id)
+          if (hit && europeanCardIsUsable(id, hit.fetchedAt, t)) return hit.card
+          const card = await tcgdexCard(lang, id, oo)
+          cache.put(lang, id, card, t)
+          return card
+        })
+        return europeanCards(lang, raw)
       }
       return allOrNothing(ids, async (id, oo): Promise<TdCard> => {
         const built = upcoming.get(`${lang}/${id}`)

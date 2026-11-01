@@ -41,3 +41,20 @@ export function cardIsUsable(card: TdCard, fetchedAt: number, now: number): bool
  */
 export const traditionalCardIsUsable = (fetchedAt: number, now: number): boolean =>
   now - fetchedAt <= CARD_MAX_AGE_MS
+
+/** The share of an extra week a card's id gives it: stable, and even across a set's numbers. */
+function ageJitter(id: string): number {
+  let h = 0x811c9dc5
+  for (let i = 0; i < id.length; i++) h = Math.imul(h ^ id.charCodeAt(i), 0x01000193)
+  h = Math.imul(h ^ (h >>> 15), 0x85ebca6b)
+  h = Math.imul(h ^ (h >>> 13), 0xc2b2ae35)
+  return ((h ^ (h >>> 16)) >>> 0) / 2 ** 32
+}
+
+/**
+ * True when a French, German, Italian or Spanish card is still good. Fresh is enough, for the same
+ * reason as a Traditional Chinese card. A fill reads thousands of them at once, so each card lasts
+ * one to two weeks by its id, and the refetch spreads over a week's nights instead of one.
+ */
+export const europeanCardIsUsable = (id: string, fetchedAt: number, now: number): boolean =>
+  now - fetchedAt <= CARD_MAX_AGE_MS * (1 + ageJitter(id))

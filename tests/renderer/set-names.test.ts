@@ -29,6 +29,19 @@ describe('set names in English', () => {
     expect(setNameTooltip('Shining Legends')).toBe('Shining Legends')
   })
 
+  it('names a European Pokémon set in English, keeping the printed name as the key', () => {
+    expect(englishSetName('Flammes Obsidiennes', 'OBF 125/197')).toBe('Obsidian Flames')
+    expect(setNameTooltip('Flammes Obsidiennes')).toBe('Obsidian Flames (Flammes Obsidiennes)')
+    expect(nativeSetName('Flammes Obsidiennes')).toBe('Flammes Obsidiennes')
+    expect(setLabel('Flammes Obsidiennes', 'OBF')).toBe('OBF - Obsidian Flames')
+  })
+
+  it("shows a European set English doesn't have as it's printed", () => {
+    expect(englishSetName("Collection McDonald's 2018", '2018SM-FR 1')).toBe(
+      "Collection McDonald's 2018"
+    )
+  })
+
   it('keeps the " (code)" the catalog adds to a taken name', () => {
     expect(englishSetName('トリプレットビート (CS1A)')).toBe('Triplet Beat (CS1A)')
     expect(englishSetName('サン＆ムーン (SM1P)')).toBe('Sun & Moon (SM1P)')

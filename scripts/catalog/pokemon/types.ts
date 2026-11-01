@@ -1,8 +1,10 @@
 /** The languages TCGdex and TCGCSV both serve. */
 export type TdLang = 'en' | 'ja'
-export type PkmLang = TdLang | 'zh-hans' | 'zh-hant'
+/** The languages TCGdex serves and TCGCSV doesn't, read in the English vocabulary (european.ts). */
+export type EuropeanLang = 'fr' | 'de' | 'it' | 'es'
+export type PkmLang = TdLang | EuropeanLang | 'zh-hans' | 'zh-hant'
 /** The catalog's languages whose cards come from TCGdex's card pages, so sit in the card cache. */
-export type CachedLang = TdLang | 'zh-hant'
+export type CachedLang = TdLang | EuropeanLang | 'zh-hant'
 /**
  * One TCGdex printing of a card. `variantId` is "generated" when TCGdex had no curated variant list
  * for the card and filled this one in from its legacy `variants` booleans (see GENERATED in versions.ts).

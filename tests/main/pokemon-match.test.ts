@@ -303,6 +303,32 @@ describe('cardVersions', () => {
     expect(r.versions).toEqual([{ label: 'Cosmos Holofoil', productId: 1, subTypeName: 'Cosmos Holofoil', price: 3 }])
     expect(r.problems).toHaveLength(1)
   })
+  it('makes a TCGdex cosmos foil its own version, beside the plain one', () => {
+    const labels = (id: string, variants_detailed: TdVariant[]): string[] =>
+      cardVersions(brief({ id, variants_detailed }), [], new Map()).versions.map((v) => v.label)
+    const plain = { type: 'normal', variantId: 'a' }
+    const cosmosHolo = { type: 'holo', foil: 'cosmos', variantId: 'b' }
+    const cosmosNormal = { type: 'normal', foil: 'cosmos', variantId: 'c' }
+    expect(labels('sv09-135', [plain, cosmosHolo])).toEqual(['Cosmos Holo', 'Normal'])
+    expect(labels('sv03-148', [plain, cosmosNormal])).toEqual(['Cosmos Holo', 'Normal'])
+  })
+  it('leaves a card whose only variant is cosmos under its label, so no key moves', () => {
+    const v = { type: 'holo', foil: 'cosmos', variantId: 'a' }
+    const r = cardVersions(brief({ variants_detailed: [v] }), [], new Map())
+    expect(r.versions.map((x) => x.label)).toEqual(['Holofoil'])
+  })
+  it("doesn't add a Cosmos Holo beside TCGplayer's Cosmos Holofoil row", () => {
+    const p = prod(1, 9, null)
+    const prices = new Map([[1, [{ productId: 1, subTypeName: 'Cosmos Holofoil', marketPrice: 3 }]]])
+    const c = brief({ variants_detailed: [{ type: 'normal', variantId: 'a' }, { type: 'holo', foil: 'cosmos', variantId: 'b' }] })
+    const labels = cardVersions(c, [{ product: p, variantSubtype: null }], prices).versions.map((x) => x.label)
+    expect(labels).toContain('Cosmos Holofoil')
+    expect(labels).not.toContain('Cosmos Holo')
+  })
+  it('adds the Cosmos Holo a Dex export shows and TCGdex lacks', () => {
+    const c = brief({ id: 'sv02-098', variants_detailed: [{ type: 'holo', variantId: 'a' }] })
+    expect(cardVersions(c, [], new Map()).versions.map((v) => v.label)).toEqual(['Cosmos Holo', 'Holofoil'])
+  })
   it('gives a card with no variants and no products a single Normal', () => {
     expect(cardVersions(brief({}), [], new Map()).versions).toEqual([
       { label: 'Normal', productId: null, subTypeName: null, price: null }

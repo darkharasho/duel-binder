@@ -123,6 +123,39 @@ describe('TCGplayer catalog', () => {
     ).toBeNull()
   })
 
+  it('a code two cards share gives each only the product named for it', async () => {
+    const db = await seededDb()
+    const row = db
+      .prepare(
+        "SELECT id, card_id FROM card_printings WHERE set_code = 'LOB-EN005' AND language = 'en'"
+      )
+      .get() as { id: number; card_id: number }
+    const wrong = db
+      .prepare(
+        `INSERT INTO card_printings (card_id, set_name, set_code, set_rarity, set_rarity_code, language, game)
+         SELECT 55144522, set_name, set_code, set_rarity, set_rarity_code, 'en', 'ygo'
+         FROM card_printings WHERE id = ?`
+      )
+      .run(row.id).lastInsertRowid as number
+    const { name } = db.prepare('SELECT name FROM cards WHERE id = ?').get(row.card_id) as {
+      name: string
+    }
+    const rarity = (
+      db.prepare('SELECT set_rarity FROM card_printings WHERE id = ?').get(row.id) as {
+        set_rarity: string
+      }
+    ).set_rarity
+    await refreshTcgCatalog(db, {
+      version: '1',
+      fetchFn: catalogFetch([{ groupId: 10, modifiedOn: 'a' }], {
+        10: [product(1, 'LOB-EN005', rarity, 1, name)]
+      }) as unknown as typeof fetch
+    })
+    const lookup = createTcgplayerLookup(db)
+    expect(lookup(row.id)).toContain('/1_')
+    expect(lookup(wrong)).toBeNull()
+  })
+
   it('never takes a one-word rarity for the end of a longer one', async () => {
     const db = await seededDb()
     await refreshTcgCatalog(db, {

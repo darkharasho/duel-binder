@@ -58,4 +58,8 @@ describe('set names in English', () => {
     expect(setLabel('未知のセット', 'ZZ1')).toBe('ZZ1')
     expect(setLabel('Magnificent Mayhem', 'MAMA-EN001')).toBe('MAMA - Magnificent Mayhem')
   })
+
+  it('shows a name YGOPRODeck left in HTML as text', () => {
+    expect(englishSetName('Legendary 5D&apos;s Decks')).toBe("Legendary 5D's Decks")
+  })
 })

@@ -163,6 +163,10 @@ const sameName = (a: string, b: string): boolean =>
 
 const unique = (ids: number[]): number[] => [...new Set(ids)]
 
+/** A set code's collector number, as printed: "BLK 085/86" and "85/86" are one number. */
+const numberOf = (code: string): string =>
+  (code.trim().split(/\s+/).at(-1) ?? '').replace(/^0+(?=\d)/, '')
+
 /** Printed rarities, lowercased, that are mostly not foil. Any other rarity is a holo. */
 const PLAIN_RARITIES = new Set(['common', 'uncommon', 'rare', 'promo', 'none'])
 
@@ -281,11 +285,17 @@ export async function resolvePokemonSignals(
     return unsure
   const numbered = await byNumber(raw, ctx)
   // A card with a reprint of its art that has no artwork of its own is named only as a guess: the
-  // art can't tell them apart, nor can the number, as a Classic Collection reprint prints its
-  // original's.
+  // art can't tell them apart. A number read can, unless the reprint prints the same one, as a
+  // Classic Collection reprint does its original's.
+  const untold = (p: ScanPrinting): boolean => {
+    if (!p.unseenTwin) return false
+    if (!numbered.some((n) => n.cardId === p.cardId)) return true
+    const read = numbered.filter((n) => n.cardId === p.cardId).map((n) => numberOf(n.setCode))
+    return !p.unseenTwinCodes || p.unseenTwinCodes.some((c) => read.includes(numberOf(c)))
+  }
   const named = async (cardId: number, via: 'code' | 'art'): Promise<ScanOutcome> => {
     const item = await draft(cardId, raw, ctx, via)
-    if (!item || (item.options.some((p) => p.unseenTwin) && !may('twin'))) return unsure
+    if (!item || (item.options.some(untold) && !may('twin'))) return unsure
     return { kind: 'recognized', item: guess ? { ...item, guess: true } : item }
   }
 

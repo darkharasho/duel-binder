@@ -254,14 +254,7 @@ export function ScannerScreen({
         >
           <SettingsIcon aria-hidden className="size-5" />
         </button>
-        {burst > 0 && last && (
-          <FoundBurst
-            key={burst}
-            name={last.name}
-            price={priceOf(last)}
-            imageId={last.imageId}
-          />
-        )}
+        {burst > 0 && last && <FoundBurst key={burst} name={last.name} price={priceOf(last)} />}
       </PhoneCamera>
       <div className="shrink-0 px-3.5 pt-3">
         {last ? (

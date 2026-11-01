@@ -66,14 +66,7 @@ export function InPageScanner({
         loop={loop}
         className="aspect-[3/4] h-[calc(100vh-15rem)] min-h-72 rounded-lg border-2 border-white/10"
       >
-        {found && (
-          <FoundBurst
-            key={found.key}
-            name={found.name}
-            price={found.price}
-            imageId={found.imageId}
-          />
-        )}
+        {found && <FoundBurst key={found.key} name={found.name} price={found.price} />}
       </ScanViewport>
       {setUnreadable && <p className="text-xs text-muted-foreground">{SET_UNREADABLE}</p>}
       {loop.artReady === false && <ArtDataNotice status={loop.artData} />}

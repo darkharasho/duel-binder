@@ -156,12 +156,6 @@
   20% { opacity: 1; }
   100% { opacity: 0; transform: translateX(400%) skewX(-12deg); }
 }
-@keyframes scan-snap {
-  0% { opacity: 0; transform: scale(1.06); }
-  22% { opacity: 0.95; transform: scale(1); }
-  65% { opacity: 0.95; transform: scale(1); }
-  100% { opacity: 0; transform: scale(0.97); }
-}
 @keyframes scan-spark {
   0% { opacity: 0; transform: translate(-50%, -50%) scale(0.4); }
   30% { opacity: 1; }

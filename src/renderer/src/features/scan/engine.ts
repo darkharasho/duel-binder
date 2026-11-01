@@ -60,11 +60,13 @@ export type WorkerRequest =
     }
   /** Narrows live frames' art search to these artworks, or null for all of it, until told again. */
   | { type: 'scope'; imageIds: number[] | null }
+  | { type: 'artDistance'; id: number; a: number; b: number }
 
 /** Messages from it: `ready` answers `init`, and an error with no id is init's. */
 export type WorkerReply =
   | { type: 'ready' }
   | { type: 'result'; id: number; signals: FrameSignals }
+  | { type: 'artDistance'; id: number; distance: number | null }
   | { type: 'error'; id: number | null; message: string }
 
 /** A frame's signals with its bands read. */
@@ -105,6 +107,8 @@ export interface ScanEngine {
   ): Promise<RawSignals>
   /** Live frames match only these artworks from now on; null for every one. */
   scope(imageIds: number[] | null): void
+  /** How far apart two artworks' fingerprints are; null when either has none. */
+  artDistance?(a: number, b: number): Promise<number | null>
   /** Stops the worker and rejects pending calls; init and analyze reject afterwards. */
   dispose(): void
 }
@@ -146,6 +150,7 @@ export function createScanEngine(deps: {
   let nextId = 1
   const inits: Waiter<void>[] = []
   const frames = new Map<number, Waiter<FrameSignals>>()
+  const distances = new Map<number, (distance: number | null) => void>()
   const initMs = deps.timeouts?.initMs ?? INIT_TIMEOUT_MS
   const frameMs = deps.timeouts?.frameMs ?? FRAME_TIMEOUT_MS
 
@@ -191,6 +196,9 @@ export function createScanEngine(deps: {
       } else if (msg.type === 'result') {
         frames.get(msg.id)?.resolve(msg.signals)
         frames.delete(msg.id)
+      } else if (msg.type === 'artDistance') {
+        distances.get(msg.id)?.(msg.distance)
+        distances.delete(msg.id)
       } else if (msg.id === null) {
         inits.shift()?.reject(new Error(msg.message))
       } else {
@@ -223,6 +231,14 @@ export function createScanEngine(deps: {
 
     scope(imageIds) {
       send({ type: 'scope', imageIds })
+    },
+
+    artDistance(a, b) {
+      return new Promise((resolve) => {
+        const id = nextId++
+        distances.set(id, resolve)
+        send({ type: 'artDistance', id, a, b })
+      })
     },
 
     async analyze(frame, { candidates, wantText, wantLook = false, photo = false }) {

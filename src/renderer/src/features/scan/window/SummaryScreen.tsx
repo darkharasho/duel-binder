@@ -2,11 +2,13 @@ import { useEffect, useState } from 'react'
 import type { ScanSummary, ScanSummaryCard } from '@shared/scanWindow'
 import { CardArt } from '@/components/CardArt'
 import { formatUsd } from '@/lib/format'
+import { cn } from '@/lib/utils'
 import { plural } from '../scanText'
 
 /** Row height is in vh, so this many always fit whatever size the window is. */
 export const PAGE_ROWS = 9
 export const PAGE_MS = 7000
+export const SUMMARY_OUT_MS = 300
 
 function Stat({ value, label }: { value: number; label: string }): React.JSX.Element {
   return (
@@ -32,7 +34,10 @@ function usePage(pages: number): number {
 
 function Hit({ card }: { card: ScanSummaryCard }): React.JSX.Element {
   return (
-    <section aria-label="Hit of the night" className="flex w-[min(30vw,40vh)] shrink-0 flex-col">
+    <section
+      aria-label="Hit of the night"
+      className="flex w-[min(30vw,40vh)] shrink-0 flex-col animate-in fade-in slide-in-from-bottom-[3vh] zoom-in-95 duration-700 motion-reduce:animate-none"
+    >
       <p className="mb-[1vh] text-[clamp(0.8rem,1.4vw,1.3rem)] font-semibold tracking-wide text-amber-300">
         Hit of the night
       </p>
@@ -40,7 +45,7 @@ function Hit({ card }: { card: ScanSummaryCard }): React.JSX.Element {
         imageId={card.imageId}
         size="full"
         alt=""
-        className="w-full overflow-hidden rounded-[clamp(0.4rem,0.9vw,0.8rem)] shadow-[0_0_4vw_rgba(251,191,36,0.35)]"
+        className="w-full rounded-[clamp(0.4rem,0.9vw,0.8rem)] bg-transparent shadow-none drop-shadow-[0_0_2vw_rgba(251,191,36,0.35)]"
       />
       <p className="mt-[1vh] truncate text-[clamp(0.9rem,1.8vw,1.7rem)] font-semibold">
         {card.name}
@@ -99,7 +104,13 @@ function Row({ card }: { card: ScanSummaryCard }): React.JSX.Element {
 }
 
 /** The night so far, over the camera blurred behind it: the hit, then every card and price. */
-export function SummaryScreen({ summary }: { summary: ScanSummary }): React.JSX.Element {
+export function SummaryScreen({
+  summary,
+  leaving = false
+}: {
+  summary: ScanSummary
+  leaving?: boolean
+}): React.JSX.Element {
   const { value, cards, hits, unpriced, hit, list } = summary
   const pages = Math.max(1, Math.ceil(list.length / PAGE_ROWS))
   const page = usePage(pages)
@@ -107,7 +118,12 @@ export function SummaryScreen({ summary }: { summary: ScanSummary }): React.JSX.
     <div
       role="status"
       aria-label="Summary"
-      className="absolute inset-0 flex flex-col overflow-hidden bg-neutral-950/65 px-[4vw] py-[4vh] text-white backdrop-blur-[2vw] animate-in fade-in"
+      className={cn(
+        'absolute inset-0 flex flex-col overflow-hidden bg-neutral-950/65 px-[4vw] py-[4vh] text-white backdrop-blur-[2vw] motion-reduce:animate-none',
+        leaving
+          ? 'animate-out fade-out fill-mode-forwards duration-300'
+          : 'animate-in fade-in duration-500'
+      )}
       style={{
         backgroundImage:
           'radial-gradient(ellipse 60% 55% at 50% 0%, rgba(251,191,36,0.16), rgba(251,191,36,0) 70%)'
@@ -129,7 +145,10 @@ export function SummaryScreen({ summary }: { summary: ScanSummary }): React.JSX.
           </div>
           <div className="mt-[2.5vh] flex min-h-0 flex-1 gap-[3vw]">
             {hit && <Hit card={hit} />}
-            <section aria-label="Every card" className="min-w-0 flex-1">
+            <section
+              aria-label="Every card"
+              className="min-w-0 flex-1 animate-in fade-in slide-in-from-right-[2vw] duration-700 motion-reduce:animate-none"
+            >
               <ol>
                 {list.slice(page * PAGE_ROWS, (page + 1) * PAGE_ROWS).map((c) => (
                   <Row key={c.key} card={c} />
@@ -146,4 +165,23 @@ export function SummaryScreen({ summary }: { summary: ScanSummary }): React.JSX.
       )}
     </div>
   )
+}
+
+/** The screen, kept up while it animates out after the main window turns it off. */
+export function SummaryOverlay({
+  summary
+}: {
+  summary: ScanSummary | null
+}): React.JSX.Element | null {
+  const [shown, setShown] = useState(summary)
+  if (summary !== null && summary !== shown) setShown(summary)
+
+  useEffect(() => {
+    if (summary !== null) return
+    const timer = setTimeout(() => setShown(null), SUMMARY_OUT_MS)
+    return () => clearTimeout(timer)
+  }, [summary])
+
+  if (shown === null) return null
+  return <SummaryScreen summary={shown} leaving={summary === null} />
 }

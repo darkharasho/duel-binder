@@ -6,7 +6,15 @@ import { GENERATED_VARIANT_ID } from './versions'
  * export holds, as it prints them. Not whole sets, and no art or price. France's 2018 McDonald's
  * set is English to Dex but only TCGdex's French list has it, so its id is that list's.
  */
-const SETS = [
+interface Held {
+  localId: string
+  name: string
+  rarity: string | null
+  illustrator: string
+  finishes: string[]
+}
+
+const SETS: { id: string; name: string; serie: string; official: number; cards: Held[] }[] = [
   {
     id: 'ba20m',
     name: 'Battle Academy 2020: Mewtwo Deck',

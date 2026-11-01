@@ -1,6 +1,11 @@
 import type { SqlDb } from '../db/sql'
 import type { Language } from '../../shared/languages'
-import type { BinderRule, BinderRules, RuleField } from '../../shared/binders'
+import {
+  MAX_BINDER_MATCHES,
+  type BinderRule,
+  type BinderRules,
+  type RuleField
+} from '../../shared/binders'
 import { escapeLike } from './cards'
 import type { Scope } from './scope'
 
@@ -25,8 +30,7 @@ const COLUMN: Partial<Record<RuleField, string>> = {
  */
 export function ruleSql(
   rules: BinderRules,
-  languages: Language[],
-  _scope: Scope
+  languages: Language[]
 ): { sql: string; params: unknown[] } {
   const parts: string[] = []
   const params: unknown[] = []
@@ -106,8 +110,10 @@ function cardIds(
 
 /**
  * The cards that could meet the rules' card fields, or null when the printings have to drive: no
- * card field, or a set rule (indexed) with no indexed card field to beat it. It only narrows: a
- * printing must still pass ruleSql, so a rule can't be met by two different printings.
+ * card field, or a set rule (indexed) with no indexed card field to beat it. Rarity alone is the
+ * no-card-field case: it scans all the printings unless it passes the cap, where LIMIT stops it.
+ * It only narrows: a printing must still pass ruleSql, so a rule can't be met by two different
+ * printings.
  *
  * A name is two lookups rather than an OR, which no index serves. Other rules join the lookup
  * only as far as they need pokemon_cards, since a join of every card costs more than the filter.
@@ -125,7 +131,7 @@ function candidateCards(
   if (name?.op !== 'is' && !indexed && rules.rules.some((r) => r.field === 'set')) return null
 
   const others = cardRules.filter((r) => r !== name)
-  const rest = ruleSql({ ...rules, rules: others }, [], scope)
+  const rest = ruleSql({ ...rules, rules: others }, [])
   const pokemon = others.some((r) => POKEMON_ONLY.has(r.field))
   const nameTwice = others.some((r) => r.field === 'name')
   const join = pokemon ? 'inner' : 'none'
@@ -149,17 +155,27 @@ function candidateCards(
   ]
 }
 
-/** ruleSql for a printing query, with the printings narrowed to the cards that can match. */
+/**
+ * Most candidate cards to bind as one JSON value. Past this a card list stops narrowing much, and
+ * the whole catalog's ids near the Durable Object's 2 MB string limit.
+ */
+export const MAX_CANDIDATE_CARDS = MAX_BINDER_MATCHES
+
+/**
+ * ruleSql for a printing query, with the printings narrowed to the cards that can match. Too many
+ * candidates return the plain condition, which is just as correct: LIMIT stops it at the cap.
+ */
 export function narrowedRuleSql(
   db: SqlDb,
   rules: BinderRules,
   languages: Language[],
   scope: Scope,
-  lookups?: CardLookups
+  lookups?: CardLookups,
+  maxCandidates = MAX_CANDIDATE_CARDS
 ): { sql: string; params: unknown[] } {
-  const w = ruleSql(rules, languages, scope)
+  const w = ruleSql(rules, languages)
   const cards = candidateCards(db, rules, scope, lookups)
-  if (cards === null) return w
+  if (cards === null || cards.length > maxCandidates) return w
   return {
     sql: `p.card_id IN (SELECT value FROM json_each(?)) AND ${w.sql}`,
     params: [JSON.stringify(cards), ...w.params]

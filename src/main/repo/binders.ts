@@ -607,7 +607,7 @@ export function bindersForCard(db: SqlDb, cardId: number, scope: Scope = LOCAL):
     const { goal, languages, rules } = sourceOf(row)
     let qualifying = new Set<string>()
     if (hasRuleMatches(rules)) {
-      const w = ruleSql(rules, languages, scope)
+      const w = ruleSql(rules, languages)
       const matched = db
         .prepare(`${printingsSql(scope, 'p.pkey')} AND p.card_id = ? AND ${w.sql}`)
         .all(cardId, ...w.params) as { pkey: string }[]

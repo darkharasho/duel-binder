@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import type { BinderRules } from '../../src/shared/binders'
 import {
   MAX_BINDER_RULES_BYTES,
   draftProblem,
@@ -51,7 +52,7 @@ describe('draftProblem', () => {
     const rule = { field: 'race' as const, values: ['Dragon'] }
     expect(draftProblem(draft({ rules: { version: 1, rules: Array(9).fill(rule) } }), 'ygo')).not.toBeNull()
     expect(draftProblem(draft({ rules: { version: 1, rules: Array(8).fill(rule) } }), 'ygo')).toBeNull()
-    const many = (n: number) => ({ version: 1, rules: [{ field: 'race' as const, values: Array.from({ length: n }, (_, i) => `v${i}`) }] })
+    const many = (n: number): BinderRules => ({ version: 1, rules: [{ field: 'race' as const, values: Array.from({ length: n }, (_, i) => `v${i}`) }] })
     expect(draftProblem(draft({ rules: many(21) }), 'ygo')).not.toBeNull()
     expect(draftProblem(draft({ rules: many(20) }), 'ygo')).toBeNull()
   })

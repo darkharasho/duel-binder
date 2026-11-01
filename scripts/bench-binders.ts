@@ -18,7 +18,7 @@ import { performance } from 'node:perf_hooks'
 import { migrate } from '../src/main/db/database'
 import { LOCAL, localScope } from '../src/main/repo/scope'
 import { narrowedRuleSql } from '../src/main/repo/binderRules'
-import { getBinder, listBinders, previewBinder, saveBinder } from '../src/main/repo/binders'
+import { getBinder, listBinders, previewBinder, removeBinder, saveBinder } from '../src/main/repo/binders'
 import { MAX_BINDERS, type BinderDraft, type BinderGoal, type BinderRule } from '../src/shared/binders'
 import type { Language } from '../src/shared/languages'
 
@@ -139,6 +139,21 @@ async function main(): Promise<void> {
     // What the desktop runs: the same binders, with the game read from meta rather than a literal.
     db.prepare("INSERT OR REPLACE INTO meta (key, value) VALUES ('active_game', 'ygo')").run()
     record('listBinders: 50 ygo binders, LOCAL scope', 1000, () => listBinders(db, LOCAL))
+
+    // Past MAX_CANDIDATE_CARDS the card list is dropped and the plain condition runs.
+    const everyName = draft('Broad', [{ field: 'name', op: 'contains', value: 'a' }], 'card')
+    record('previewBinder: pkm contains "a", past the candidate limit', 150, () => previewBinder(db, everyName, PKM))
+
+    // Rarity-only binders under the cap each scan every printing. Over 1 s here is a known limit.
+    const rarities = q<{ v: string; n: number }>(
+      "SELECT set_rarity v, count(*) n FROM card_printings WHERE game = 'ygo' GROUP BY 1 HAVING n <= 10000 ORDER BY abs(n - 6000) LIMIT 1"
+    )
+    const { v: rarity, n: rarityRows } = rarities[0]
+    console.log(`rarity-only case: ${rarity}, ${rarityRows} printings`)
+    for (const b of listBinders(db, YGO)) removeBinder(db, b.uid, new Date(), YGO)
+    for (let i = 0; i < MAX_BINDERS; i++)
+      saveBinder(db, draft(`R${i}`, [{ field: 'rarity', values: [rarity] }], goals[i % 4]), new Date(), YGO)
+    record('listBinders: 50 rarity-only binders under the cap (known limit)', 1000, () => listBinders(db, YGO))
 
     console.log('\ncase | median ms | worst ms | limit | result')
     for (const r of rows)

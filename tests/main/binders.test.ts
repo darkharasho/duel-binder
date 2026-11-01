@@ -21,6 +21,7 @@ import {
   type BinderGoal,
   type BinderRule
 } from '../../src/shared/binders'
+import type { BinderSummary } from '../../src/shared/types'
 import { seedPokemon } from '../fixtures/pokemon'
 import { seededDb } from './helpers'
 
@@ -608,7 +609,7 @@ describe('binders channels', () => {
 })
 
 describe('listBinders summaries', () => {
-  const summaryCounts = (b: { uid: string; ownedSlots: number; missingSlots: number; tooBroad: boolean; coverImageId: number | null; hasRules: boolean }) => ({
+  const summaryCounts = (b: BinderSummary): Partial<BinderSummary> => ({
     uid: b.uid,
     ownedSlots: b.ownedSlots,
     missingSlots: b.missingSlots,
@@ -684,4 +685,3 @@ describe('listBinders summaries', () => {
     expect(shown).toEqual([...shown].sort((a, b) => a - b))
   })
 })
-

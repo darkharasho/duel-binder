@@ -6,13 +6,13 @@ import {
   ruleFieldValues,
   ruleSql
 } from '../../src/main/repo/binderRules'
-import type { BinderRule } from '../../src/shared/binders'
+import type { BinderRule, BinderRules } from '../../src/shared/binders'
 import { seedPokemon } from '../fixtures/pokemon'
 import { seededDb } from './helpers'
 
-const rules = (...r: BinderRule[]) => ({ version: 1, rules: r })
-const find = (db: SqlDb, r: ReturnType<typeof rules>, langs: string[] = []): string[] => {
-  const w = ruleSql(r, langs as never, LOCAL)
+const rules = (...r: BinderRule[]): BinderRules => ({ version: 1, rules: r })
+const find = (db: SqlDb, r: BinderRules, langs: string[] = []): string[] => {
+  const w = ruleSql(r, langs as never)
   return (
     db
       .prepare(
@@ -23,8 +23,8 @@ const find = (db: SqlDb, r: ReturnType<typeof rules>, langs: string[] = []): str
       .all(...w.params) as { k: string }[]
   ).map((x) => x.k)
 }
-const findPkm = (db: SqlDb, r: ReturnType<typeof rules>): string[] => {
-  const w = ruleSql(r, [], LOCAL)
+const findPkm = (db: SqlDb, r: BinderRules): string[] => {
+  const w = ruleSql(r, [])
   return (
     db
       .prepare(
@@ -124,8 +124,8 @@ describe('rule queries narrowed through the cards', () => {
     )
       .map((r) => r.id)
       .sort((a, b) => a - b)
-  const expectSame = (db: SqlDb, r: ReturnType<typeof rules>, langs: never[] = [], scope = YGO): void => {
-    const full = ruleSql(r, langs, scope)
+  const expectSame = (db: SqlDb, r: BinderRules, langs: never[] = [], scope = YGO): void => {
+    const full = ruleSql(r, langs)
     const narrowed = narrowedRuleSql(db, r, langs, scope)
     expect(printings(db, narrowed.sql, narrowed.params, scope)).toEqual(
       printings(db, full.sql, full.params, scope)
@@ -142,6 +142,14 @@ describe('rule queries narrowed through the cards', () => {
     expectSame(db, rules({ field: 'race', values: ['Spellcaster'] }, { field: 'set', values: ['Legend of Blue Eyes White Dragon'] }))
     expectSame(db, rules({ field: 'rarity', values: ['Ultra Rare'] }))
     expectSame(db, rules({ field: 'name', op: 'is', value: 'Dark Magician' }), ['de' as never])
+    expectSame(
+      db,
+      rules({ field: 'name', op: 'contains', value: 'Dark' }, { field: 'name', op: 'is', value: 'Dark Magician' })
+    )
+    expectSame(
+      db,
+      rules({ field: 'name', op: 'is', value: 'Dark Magician' }, { field: 'name', op: 'is', value: 'Pot of Greed' })
+    )
   })
 
   it('finds Pokémon cards by either name, and by artist and energy', async () => {
@@ -158,8 +166,30 @@ describe('rule queries narrowed through the cards', () => {
     expectSame(db, rules({ field: 'name', op: 'contains', value: local.slice(0, 2) }), [], PKM)
     expectSame(db, rules({ field: 'artist', values: [illustrator] }), [], PKM)
     expectSame(db, rules({ field: 'energyType', values: ['Fire'] }), [], PKM)
+    const { stage } = db.prepare('SELECT stage FROM pokemon_cards WHERE stage IS NOT NULL LIMIT 1').get() as {
+      stage: string
+    }
+    expectSame(db, rules({ field: 'stage', values: [stage] }), [], PKM)
+    const named = { field: 'name', op: 'is', value: local } as const
+    expectSame(db, rules(named, { field: 'artist', values: [illustrator] }), [], PKM)
+    expectSame(db, rules(named, { field: 'artist', values: ['Nobody'] }), [], PKM)
+    expectSame(db, rules({ field: 'name', op: 'contains', value: 'a' }, { field: 'artist', values: [illustrator] }), [], PKM)
     const byLocal = narrowedRuleSql(db, rules({ field: 'name', op: 'is', value: local }), [], PKM)
     expect(printings(db, byLocal.sql, byLocal.params, PKM).length).toBeGreaterThan(0)
+  })
+
+  it('falls back to the plain condition past the candidate limit, with the same printings', async () => {
+    const db = await seededDb()
+    const r = rules({ field: 'name', op: 'contains', value: 'a' }, { field: 'rarity', values: ['Ultra Rare'] })
+    const narrowed = narrowedRuleSql(db, r, [], YGO)
+    const candidates = (JSON.parse(narrowed.params[0] as string) as number[]).length
+    expect(candidates).toBeGreaterThan(1)
+    expect(narrowedRuleSql(db, r, [], YGO, undefined, candidates).sql).toBe(narrowed.sql)
+
+    const plain = narrowedRuleSql(db, r, [], YGO, undefined, candidates - 1)
+    expect(plain).toEqual(ruleSql(r, []))
+    expect(printings(db, plain.sql, plain.params)).toEqual(printings(db, narrowed.sql, narrowed.params))
+    expect(printings(db, plain.sql, plain.params).length).toBeGreaterThan(0)
   })
 
   it('a rarity and a name must hold for one printing, not across two', async () => {
@@ -193,7 +223,7 @@ describe('rule queries narrowed through the cards', () => {
   it('reads printings by card, never scanning them, when a card field drives', async () => {
     const db = await seededDb()
     seedPokemon(db)
-    const plan = (r: ReturnType<typeof rules>, scope = YGO): string => {
+    const plan = (r: BinderRules, scope = YGO): string => {
       const w = narrowedRuleSql(db, r, [], scope)
       return (
         db

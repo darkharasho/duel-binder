@@ -80,7 +80,12 @@ const DEX_SETS: Record<string, string> = {
 }
 
 /** The same for Japanese sets, whose ids Dex prefixes and whose names can differ from ours. */
-const DEX_JA_SETS: Record<string, string> = { jpn_m2a: 'M2a', jpn_m6a: 'M6a', jpn_mc: 'MC', jpn_svp: 'SV-P' }
+const DEX_JA_SETS: Record<string, string> = {
+  jpn_m2a: 'M2a',
+  jpn_m6a: 'M6a',
+  jpn_mc: 'MC',
+  jpn_svp: 'SV-P'
+}
 
 /**
  * Sets whose finish Dex and the catalog name differently: every 30th Celebration card is one card
@@ -116,6 +121,9 @@ const BASE_IS_HOLO = new Set(['jpn_m2a'])
 /** Dex lists 25th Classic Collection under each card's original number: only its name finds it. */
 const NAME_KEYED_SETS = new Set(['cel25c'])
 
+/** Dex keeps each basic energy's holo at its own number; TCGdex numbers the holos on after them. */
+const HOLO_AFTER_NUMBERS: Record<string, number> = { mee: 8 }
+
 /**
  * TCGdex numbers 30th Classic Collection in another order than Dex's printed numbers, so its Dex
  * numbers are pinned to ours, each pair confirmed by name and illustrator. The two halves of
@@ -144,7 +152,8 @@ const FINISHES: Record<string, string> = {
   'Cosmos Holo': 'Cosmos Holo',
   'Starlight Holo': 'Starlight Holo',
   'Pokémon Day': 'Pokemon Day Holofoil',
-  'Pokémon Center': 'Pokemon Center Exclusive Holofoil'
+  'Pokémon Center': 'Pokemon Center Exclusive Holofoil',
+  'Jumbo (Lenticular)': 'Lenticular'
 }
 
 /** Dex's "Play! Pokémon" stamp, which lands on a card with exactly one of these. */
@@ -226,7 +235,11 @@ function indexCatalog(catalog: DexCatalogPrinting[]): Map<string, LanguageIndex>
     if (slash < 0 || dash < slash) continue
     const id = p.sourceId.slice(slash + 1, dash)
     let lang = languages.get(p.language)
-    if (!lang) languages.set(p.language, (lang = { byId: new Map(), byName: new Map(), byDexCode: new Map() }))
+    if (!lang)
+      languages.set(
+        p.language,
+        (lang = { byId: new Map(), byName: new Map(), byDexCode: new Map() })
+      )
     let set = lang.byId.get(id)
     if (!set) {
       lang.byId.set(id, (set = { id, cards: new Map() }))
@@ -254,7 +267,8 @@ function findSet(row: DexRow, language: string, index: LanguageIndex): CatalogSe
   }
   const named = index.byName.get(setKey(row.set, row.series)) ?? null
   // Each language's ids are its own; one with no table has only the name to go on.
-  const pinned = language === 'en' ? DEX_SETS[dexId] : language === 'ja' ? DEX_JA_SETS[dexId] : undefined
+  const pinned =
+    language === 'en' ? DEX_SETS[dexId] : language === 'ja' ? DEX_JA_SETS[dexId] : undefined
   if (language === 'zh-hans' && dexId.startsWith('scn_')) {
     const set = index.byDexCode.get(dexId.slice(4).toLowerCase().replace(/\./g, ''))
     if (set) return named && named !== set ? null : set
@@ -277,7 +291,12 @@ function findPrinting(
   if (!set) return index ? 'set' : 'language'
   const printed = numberKey(row.number)
   const pinned = language === 'en' ? DEX_NUMBERS[dexSetId(row.id)] : undefined
-  const number = pinned ? pinned[printed] : printed
+  const holosAfter = row.variant === 'Holo' ? HOLO_AFTER_NUMBERS[dexSetId(row.id)] : undefined
+  const number = holosAfter
+    ? String(Number(printed) + holosAfter)
+    : pinned
+      ? pinned[printed]
+      : printed
   const same = (p: DexCatalogPrinting): boolean =>
     sameCard(row.name, p.cardName) ||
     (language === 'zh-hans' &&

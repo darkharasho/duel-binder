@@ -4,7 +4,8 @@ import { handle, type AppDeps } from '../../workers/portal/src/app'
 import { friendBinder, friendBinders } from '../../workers/portal/src/friendBinders'
 import { userScope } from '../../workers/portal/src/scope'
 import { addEntry } from '../../src/main/repo/collection'
-import { saveBinder } from '../../src/main/repo/binders'
+import type { SqlDb } from '../../src/main/db/sql'
+import { listBinders, saveBinder } from '../../src/main/repo/binders'
 import { addUser, seededServerDb, memoryBucket, noPrintingArt, noPrices } from './helpers'
 
 const BASE = 'https://portal.test'
@@ -102,6 +103,35 @@ describe('friends read binders', () => {
     const one = await call('friends:binder', [bob, shown], ca)
     expect(one.body.result.cards.length).toBeGreaterThan(0)
     expect(one.body.result.missingSlots).toBeGreaterThan(0)
+  })
+
+  it('never builds a private binder for the list', () => {
+    const shown = saveBinder(db, draft(), NOW, bobScope())
+    const priv = saveBinder(db, draft({ friendsVisible: false }), NOW, bobScope())
+    const params: unknown[] = []
+    const spied: SqlDb = {
+      prepare(text) {
+        const stmt = db.prepare(text)
+        return {
+          all: (...p) => (params.push(...p), stmt.all(...p)),
+          get: (...p) => (params.push(...p), stmt.get(...p)),
+          run: (...p) => stmt.run(...p)
+        }
+      },
+      exec: (text) => void db.exec(text),
+      transaction: (fn) => db.transaction(fn)
+    }
+    expect(friendBinders(spied, bob, 'ygo').map((b) => b.uid)).toEqual([shown])
+    expect(params).toContain(shown)
+    expect(params).not.toContain(priv)
+  })
+
+  it('listBinders keeps the saved order among the uids it is given', () => {
+    const a = saveBinder(db, draft(), NOW, bobScope())
+    saveBinder(db, draft(), NOW, bobScope())
+    const c = saveBinder(db, draft(), NOW, bobScope())
+    expect(listBinders(db, bobScope(), new Set([c, a])).map((b) => b.uid)).toEqual([a, c])
+    expect(listBinders(db, bobScope(), new Set())).toEqual([])
   })
 
   it('answers null for a private binder, as for an unknown one', async () => {

@@ -20,7 +20,7 @@ function visibleUids(db: SqlDb, friend: number, game: GameId): Set<string> {
 export function friendBinders(db: SqlDb, friend: number, game: GameId): BinderSummary[] {
   const visible = visibleUids(db, friend, game)
   if (visible.size === 0) return []
-  return listBinders(db, userScope(friend, game)).filter((b) => visible.has(b.uid))
+  return listBinders(db, userScope(friend, game), visible)
 }
 
 /** One visible binder of a friend's; null for a private, deleted, unknown or other-game uid alike. */

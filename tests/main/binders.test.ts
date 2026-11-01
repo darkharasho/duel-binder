@@ -14,6 +14,7 @@ import {
 import { createDataHandlers, DATA_CHANNELS } from '../../src/main/ipc/dataHandlers'
 import { localScope } from '../../src/main/repo/scope'
 import {
+  GOALS,
   MAX_BINDER_EDITS,
   MAX_BINDER_MATCHES,
   MAX_BINDERS,
@@ -184,6 +185,44 @@ describe('saveBinder, listBinders and getBinder', () => {
     ])
     expect(getBinder(db, uid)).toMatchObject({ editable: false, cards: [] })
     expect(() => saveBinder(db, draft({ uid, name: 'Nope' }), T2)).toThrow(CollectionError)
+  })
+
+  describe('a binder saved with a goal or language this app does not know', () => {
+    const cases: [string, string, unknown][] = [
+      ['unknown goal', 'languages', '["en"]'],
+      ['unknown language', 'languages', '["en","xx"]'],
+      ['languages that are not a list', 'languages', '{"en":true}'],
+      ['languages that are not JSON', 'languages', 'en,ja']
+    ]
+    it.each(cases)('%s is unreadable and cannot be saved over', async (label, col, value) => {
+      const db = await seededDb()
+      give(db, LOB_DM)
+      const uid = saveBinder(db, draft({ name: 'Future' }, name('Dark Magician')), T1)
+      if (label === 'unknown goal') db.prepare("UPDATE binders SET goal = 'someday'").run()
+      db.prepare(`UPDATE binders SET ${col} = ?`).run(value)
+      const stored = db.prepare('SELECT * FROM binders WHERE uid = ?').get(uid)
+
+      const [row] = listBinders(db)
+      expect(row).toMatchObject({ uid, editable: false, hasRules: true, ownedSlots: 0, missingSlots: 0 })
+      expect(GOALS.ygo).toContain(row.goal)
+      expect(getBinder(db, uid)).toMatchObject({ editable: false, cards: [] })
+      expect(bindersForCard(db, DARK_MAGICIAN)).toEqual([
+        expect.objectContaining({ uid, inBinder: false })
+      ])
+      expect(() => saveBinder(db, draft({ uid, name: 'Nope' }), T2)).toThrow(
+        'Update the app to edit this binder.'
+      )
+      expect(db.prepare('SELECT * FROM binders WHERE uid = ?').get(uid)).toEqual(stored)
+    })
+
+    it('a goal of the other game is unreadable too', async () => {
+      const db = await seededDb()
+      seedPokemon(db)
+      const pkm = localScope("'pkm'")
+      const uid = saveBinder(db, draft({ goal: 'card', rules: { version: 1, rules: [] } }), T1, pkm)
+      db.prepare("UPDATE binders SET goal = 'art' WHERE uid = ?").run(uid)
+      expect(listBinders(db, pkm)).toEqual([expect.objectContaining({ uid, editable: false })])
+    })
   })
 })
 

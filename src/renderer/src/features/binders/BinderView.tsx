@@ -97,13 +97,20 @@ export function BinderView({ detail, readOnly, onEdit, onRemove }: Props): React
             </Chip>
           )
         })}
-        <Chip label="Goal">{GOAL_LABEL[detail.goal]}</Chip>
-        <Chip label="Languages">{languagesLabel(detail.languages)}</Chip>
-        <Chip label="Friends">{detail.friendsVisible ? 'can see' : 'cannot see'}</Chip>
+        {detail.editable && (
+          <>
+            <Chip label="Goal">{GOAL_LABEL[detail.goal]}</Chip>
+            <Chip label="Languages">{languagesLabel(detail.languages)}</Chip>
+          </>
+        )}
+        {!readOnly && (
+          <Chip label="Friends">{detail.friendsVisible ? 'can see' : 'cannot see'}</Chip>
+        )}
       </div>
       {detail.tooBroad ? (
         <p className="text-sm text-muted-foreground">
-          This rule matches too many cards to track. Edit it to narrow it down.
+          This rule matches too many cards to track.
+          {!readOnly && ' Edit it to narrow it down.'}
         </p>
       ) : (
         <>
@@ -124,7 +131,8 @@ export function BinderView({ detail, readOnly, onEdit, onRemove }: Props): React
           )}
           {detail.cards.length === 0 ? (
             <p className="text-sm text-muted-foreground">
-              Nothing in this binder yet. Open a card to add it.
+              Nothing in this binder yet.
+              {!readOnly && ' Open a card to add it.'}
             </p>
           ) : (
             <BinderGrid cards={shown} onOpen={setOpen} onRemove={onRemove} readOnly={readOnly} />

@@ -124,6 +124,25 @@ describe('a binder', () => {
     ).toBeInTheDocument()
   })
 
+  it('does not tell a friend to edit, add to or look at the sharing of a read-only binder', () => {
+    const { unmount } = renderWithProviders(
+      <BinderView detail={detail({ tooBroad: true, cards: [] })} readOnly />
+    )
+    expect(screen.getByText('This rule matches too many cards to track.')).toBeInTheDocument()
+    unmount()
+    renderWithProviders(<BinderView detail={detail({ cards: [] })} readOnly />)
+    expect(screen.getByText('Nothing in this binder yet.')).toBeInTheDocument()
+    expect(screen.queryByText('Friends')).not.toBeInTheDocument()
+  })
+
+  it('shows neither a goal nor languages it cannot read', () => {
+    renderWithProviders(
+      <BinderView detail={detail({ editable: false, goal: 'none', languages: [] })} />
+    )
+    expect(screen.queryByText('Goal')).not.toBeInTheDocument()
+    expect(screen.queryByText('Languages')).not.toBeInTheDocument()
+  })
+
   it('says a binder this app cannot read must be updated', () => {
     const onEdit = vi.fn()
     renderWithProviders(<BinderView detail={detail({ editable: false })} onEdit={onEdit} />)
@@ -190,6 +209,20 @@ describe('binder edge cases', () => {
     expect(screen.getByText('Nothing to track yet')).toBeInTheDocument()
     expect(screen.queryByRole('progressbar')).not.toBeInTheDocument()
     expect(screen.queryByText('Complete')).not.toBeInTheDocument()
+  })
+
+  it('lists a binder this app cannot read without a goal or languages', async () => {
+    const api = createMockApi({
+      binders: {
+        list: vi.fn(async () => [
+          summary({ editable: false, goal: 'none', languages: [], friendsVisible: false })
+        ])
+      }
+    })
+    renderWithProviders(<BindersPage />, { api })
+    const row = await screen.findByRole('button', { name: /Blue-Eyes/ })
+    expect(row).toHaveTextContent('Rule · needs a newer app · private')
+    expect(row).not.toHaveTextContent('undefined')
   })
 
   it('says so in the list for a goal binder with no slots', async () => {

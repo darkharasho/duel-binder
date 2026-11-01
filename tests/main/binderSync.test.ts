@@ -389,6 +389,29 @@ describe('binder sync', () => {
     })
   })
 
+  it('a known rule format with an unknown goal and language also passes through unchanged', async () => {
+    const rules = JSON.stringify({ version: 1, rules: [{ field: 'name', op: 'is', value: 'x' }] })
+    const at = T1.toISOString()
+    portal.serverDb
+      .prepare(
+        `INSERT INTO binders (user_id, uid, game, name, rules, goal, languages, friends_visible, sort_order,
+                              created_at, updated_at, deleted_at, seq)
+         VALUES (?, 'future', 'ygo', 'Future', ?, 'someday', '["en","xx"]', 1, 4, ?, ?, NULL, 1)`
+      )
+      .run(user, rules, at, at)
+    const before = serverBinders()
+
+    await sync(a)
+    expect(listBinders(a)).toMatchObject([{ uid: 'future', editable: false }])
+    await sync(a)
+    expect(binderRows(a)).toEqual([expect.objectContaining({ rules, dirty: 0 })])
+    expect(serverBinders()).toEqual(before)
+    expect(a.prepare('SELECT goal, languages FROM binders').get()).toEqual({
+      goal: 'someday',
+      languages: '["en","xx"]'
+    })
+  })
+
   it('a newer unpushed edit survives a pull and wins; an older one takes the server row', async () => {
     const b = await device()
     const uid = saveBinder(a, draft({ name: 'One' }), T1)

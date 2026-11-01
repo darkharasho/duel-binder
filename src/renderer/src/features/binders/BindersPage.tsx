@@ -36,8 +36,9 @@ export function Row({ b, onOpen }: { b: BinderSummary; onOpen: () => void }): Re
           <div className="truncate text-xs text-muted-foreground">
             {[
               b.hasRules ? 'Rule' : 'Manual',
-              GOAL_LABEL[b.goal],
-              languagesLabel(b.languages),
+              ...(b.editable
+                ? [GOAL_LABEL[b.goal], languagesLabel(b.languages)]
+                : ['needs a newer app']),
               ...(b.friendsVisible ? [] : ['private'])
             ].join(' · ')}
           </div>

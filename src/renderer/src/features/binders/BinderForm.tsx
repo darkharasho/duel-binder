@@ -4,6 +4,7 @@ import { toast } from 'sonner'
 import {
   GOALS,
   RULE_FIELDS,
+  BINDER_RULES_VERSION,
   draftProblem,
   type BinderDraft,
   type BinderGoal,
@@ -132,7 +133,7 @@ export function BinderForm({
   const draft: BinderDraft = {
     ...(binder ? { uid: binder.uid } : {}),
     name: name.trim(),
-    rules: { version: 1, rules },
+    rules: { version: BINDER_RULES_VERSION, rules },
     goal,
     languages,
     friendsVisible
@@ -151,7 +152,7 @@ export function BinderForm({
       api.binders
         .preview({
           name: 'Preview',
-          rules: { version: 1, rules: r },
+          rules: { version: BINDER_RULES_VERSION, rules: r },
           goal: g,
           languages: l,
           friendsVisible: true

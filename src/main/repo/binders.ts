@@ -1,6 +1,7 @@
 import { RARITY_LABEL } from '../db/schema'
 import type { SqlDb } from '../db/sql'
 import {
+  GOALS,
   MAX_BINDER_EDITS,
   MAX_BINDER_MATCHES,
   MAX_BINDERS,
@@ -13,6 +14,7 @@ import {
   type BinderTarget
 } from '../../shared/binders'
 import { isLanguage, type Language } from '../../shared/languages'
+import type { GameId } from '../../shared/games'
 import type {
   BinderCard,
   BinderDetail,
@@ -40,9 +42,10 @@ import { shownPrinting } from './shownPrinting'
 
 interface BinderDbRow {
   uid: string
+  game: GameId
   name: string
   rules: string
-  goal: BinderGoal
+  goal: string // a newer app's may be one this app doesn't know
   languages: string
   friends_visible: number
 }
@@ -70,34 +73,45 @@ const NO_SLOTS: SlotResult = {
 const NO_RULES: BinderRules = { version: 1, rules: [] }
 const IN_LIST = '(SELECT value FROM json_each(?))'
 
-const parseLanguages = (raw: string): Language[] => {
+/** The stored languages, or null when this app can't read them all. */
+const parseLanguages = (raw: string): Language[] | null => {
   try {
     const parsed: unknown = JSON.parse(raw)
-    return Array.isArray(parsed) ? parsed.filter(isLanguage) : []
+    return Array.isArray(parsed) && parsed.every(isLanguage) ? parsed : null
   } catch {
-    return []
+    return null
   }
 }
 
-const sourceOf = (row: BinderDbRow): BinderSource => ({
-  goal: row.goal,
-  languages: parseLanguages(row.languages),
-  rules: rulesEditable(row.rules)
-})
+/**
+ * A goal or language this app doesn't know makes the whole binder unreadable, like rules it can't
+ * read: it matches nothing and can't be edited, and the stored row stays as it came.
+ */
+const sourceOf = (row: BinderDbRow): BinderSource => {
+  const goal = GOALS[row.game].find((g) => g === row.goal)
+  const languages = parseLanguages(row.languages)
+  return {
+    goal: goal ?? 'none',
+    languages: languages ?? [],
+    rules: goal && languages ? rulesEditable(row.rules) : null
+  }
+}
 
 /** No rules means a hand-made binder, not "every printing". */
 const hasRuleMatches = (rules: BinderRules | null): rules is BinderRules =>
   rules !== null && rules.rules.length > 0
 
-const BINDER_COLS = 'b.uid, b.name, b.rules, b.goal, b.languages, b.friends_visible'
+const BINDER_COLS = 'b.uid, b.game, b.name, b.rules, b.goal, b.languages, b.friends_visible'
 
-function liveBinders(db: SqlDb, scope: Scope): BinderDbRow[] {
+/** The scope's binders, in their saved order; only those in `uids` when given. */
+function liveBinders(db: SqlDb, scope: Scope, uids?: ReadonlySet<string>): BinderDbRow[] {
   return db
     .prepare(
-      `SELECT ${BINDER_COLS} FROM binders b WHERE ${scope.where('b')}
+      `SELECT ${BINDER_COLS} FROM binders b
+       WHERE ${scope.where('b')} ${uids ? `AND b.uid IN ${IN_LIST}` : ''}
        ORDER BY b.sort_order, b.created_at, b.uid`
     )
-    .all() as BinderDbRow[]
+    .all(...(uids ? [JSON.stringify([...uids])] : [])) as BinderDbRow[]
 }
 
 function liveBinder(db: SqlDb, uid: string, scope: Scope): BinderDbRow | undefined {
@@ -320,7 +334,7 @@ function summarize(
   return {
     uid: row.uid,
     name: row.name,
-    goal: row.goal,
+    goal: source.goal,
     languages: source.languages,
     friendsVisible: row.friends_visible === 1,
     hasRules: source.rules === null || source.rules.rules.length > 0,
@@ -332,8 +346,12 @@ function summarize(
   }
 }
 
-/** The scope's binders, in their saved order, with progress. */
-export function listBinders(db: SqlDb, scope: Scope = LOCAL): BinderSummary[] {
+/** The scope's binders, in their saved order, with progress; only those in `uids` when given. */
+export function listBinders(
+  db: SqlDb,
+  scope: Scope = LOCAL,
+  uids?: ReadonlySet<string>
+): BinderSummary[] {
   let owned: SlotCopy[] | undefined
   const copies = (cardIds: number[]): SlotCopy[] => {
     if (cardIds.length === 0) return []
@@ -342,7 +360,7 @@ export function listBinders(db: SqlDb, scope: Scope = LOCAL): BinderSummary[] {
     return owned.filter((c) => wanted.has(c.cardId))
   }
   const shared = { copies, lookups: new Map<string, number[]>() }
-  return liveBinders(db, scope).map((row) => {
+  return liveBinders(db, scope, uids).map((row) => {
     const source = sourceOf(row)
     const readEdits = (): SlotEdit[] => binderEdits(db, row.uid, scope)
     return summarize(db, row, source, loadSlots(db, source, readEdits, scope, shared), scope)
@@ -432,8 +450,8 @@ export function previewBinder(db: SqlDb, draft: BinderDraft, scope: Scope = LOCA
 }
 
 /**
- * Creates a binder, or replaces one this scope has; returns its uid. A binder the rules format has
- * outgrown can't be saved, since that would overwrite rules this app can't read.
+ * Creates a binder, or replaces one this scope has; returns its uid. A binder this app can't read
+ * can't be saved, since that would overwrite what a newer app stored.
  */
 export function saveBinder(
   db: SqlDb,
@@ -447,15 +465,15 @@ export function saveBinder(
   const known = draft.uid
     ? (db
         .prepare(
-          `SELECT b.rules, b.deleted_at, b.game = ${scope.game} AS same_game FROM binders b
+          `SELECT ${BINDER_COLS}, b.deleted_at, b.game = ${scope.game} AS same_game FROM binders b
            WHERE b.uid = ? AND b.${ownerCol} = ${owner}`
         )
         .get(draft.uid) as
-        { rules: string; deleted_at: string | null; same_game: number } | undefined)
+        (BinderDbRow & { deleted_at: string | null; same_game: number }) | undefined)
     : undefined
   if (known && !known.same_game) throw new CollectionError('Binder not found')
   const live = known !== undefined && known.deleted_at === null
-  if (live && !rulesEditable(known.rules))
+  if (live && sourceOf(known).rules === null)
     throw new CollectionError('Update the app to edit this binder.')
   if (!live && liveBinders(db, scope).length >= MAX_BINDERS)
     throw new CollectionError(`You can have at most ${MAX_BINDERS} binders.`)

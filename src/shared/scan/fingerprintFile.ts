@@ -59,6 +59,26 @@ export class FingerprintIndex {
     this.hashes = hashes
   }
 
+  /** The closest two artworks' records come to each other; null when either has none. */
+  distanceBetween(a: number, b: number): number | null {
+    const records = (id: number): number[] => {
+      const out: number[] = []
+      this.ids.forEach((v, i) => {
+        if (v === id) out.push(i)
+      })
+      return out
+    }
+    const ofB = records(b)
+    let best: number | null = null
+    for (const i of records(a)) {
+      for (const j of ofB) {
+        const d = hamming(this.hashes, i * HASH_WORDS, this.hashes, j * HASH_WORDS)
+        if (best === null || d < best) best = d
+      }
+    }
+    return best
+  }
+
   /**
    * Tags the records that are reference scans of known printings (see fingerprintRefs.ts): those
    * whose image id and hash a ref names. Replaces any tagged before; resolves how many it tagged.
@@ -104,7 +124,10 @@ export class FingerprintIndex {
     const hashes = new Uint32Array(kept.length * HASH_WORDS)
     kept.forEach((record, i) => {
       ids[i] = this.ids[record]
-      hashes.set(this.hashes.subarray(record * HASH_WORDS, (record + 1) * HASH_WORDS), i * HASH_WORDS)
+      hashes.set(
+        this.hashes.subarray(record * HASH_WORDS, (record + 1) * HASH_WORDS),
+        i * HASH_WORDS
+      )
     })
     return new FingerprintIndex(ids, hashes)
   }

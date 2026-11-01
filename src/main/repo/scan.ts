@@ -49,7 +49,11 @@ const nameKey = (name: string): string => normalizeName(name) || name
  * reprints), and a printing in that language. A Japanese card may be named in English or
  * Japanese, and names are compared by their letters ("Tapu Lele-GX", "Umbreon ☆").
  */
-function unseenTwins(db: SqlDb, cardIds: number[], scope: Scope): [string, string][] {
+function unseenTwins(
+  db: SqlDb,
+  cardIds: number[],
+  scope: Scope
+): { key: string; code: string; twinId: number }[] {
   // CROSS JOIN keeps this order: the few cards asked for first, then the cards with no artwork.
   const rows = db
     .prepare(
@@ -85,7 +89,7 @@ function unseenTwins(db: SqlDb, cardIds: number[], scope: Scope): [string, strin
   return twins.flatMap((t) =>
     languages
       .filter((l) => l.cardId === t.twinId)
-      .map((l): [string, string] => [`${t.cardId}|${l.language}`, l.setCode])
+      .map((l) => ({ key: `${t.cardId}|${l.language}`, code: l.setCode, twinId: t.twinId }))
   )
 }
 
@@ -98,12 +102,15 @@ function withImages(db: SqlDb, rows: PrintingRow[], scope: Scope, twins = false)
   const ids = [...new Set(rows.map((r) => r.cardId))]
   const images = new Map<number, number[]>()
   // Cards and languages with an art twin the scanner can't see (ScanPrinting.unseenTwin).
-  const twinned = new Map<string, string[]>()
+  const twinned = new Map<string, { codes: string[]; ids: Set<number> }>()
   for (let i = 0; i < ids.length; i += 500) {
     const chunk = ids.slice(i, i + 500)
     if (twins) {
-      for (const [key, code] of unseenTwins(db, chunk, scope)) {
-        twinned.set(key, [...(twinned.get(key) ?? []), code])
+      for (const { key, code, twinId } of unseenTwins(db, chunk, scope)) {
+        const twin = twinned.get(key) ?? { codes: [], ids: new Set() }
+        twin.codes.push(code)
+        twin.ids.add(twinId)
+        twinned.set(key, twin)
       }
     }
     const found = db
@@ -119,9 +126,22 @@ function withImages(db: SqlDb, rows: PrintingRow[], scope: Scope, twins = false)
       else images.set(f.cardId, [f.imageId])
     }
   }
+  const twinIds = [...new Set([...twinned.values()].flatMap((t) => [...t.ids]))]
+  const twinImages = new Map<number, number[]>()
+  for (let i = 0; i < twinIds.length; i += 500) {
+    const chunk = twinIds.slice(i, i + 500)
+    const found = db
+      .prepare(
+        `SELECT card_id AS cardId, image_id AS imageId FROM card_images
+         WHERE +game = ${scope.game} AND card_id IN (${chunk.map(() => '?').join(',')})`
+      )
+      .all(...chunk) as { cardId: number; imageId: number }[]
+    for (const f of found)
+      twinImages.set(f.cardId, [...(twinImages.get(f.cardId) ?? []), f.imageId])
+  }
   return rows
     .map(({ rawPrice, localName, printedRarity, ...r }) => {
-      const twinCodes = twinned.get(`${r.cardId}|${r.language}`)
+      const twin = twinned.get(`${r.cardId}|${r.language}`)
       return {
         ...r,
         price: parsePrice(rawPrice),
@@ -129,7 +149,14 @@ function withImages(db: SqlDb, rows: PrintingRow[], scope: Scope, twins = false)
         // Only where the catalog has one, so a Yu-Gi-Oh printing is as it always was.
         ...(localName ? { localName } : {}),
         ...(printedRarity ? { printedRarity } : {}),
-        ...(twinCodes ? { unseenTwin: true as const, unseenTwinCodes: twinCodes } : {})
+        ...(twin
+          ? {
+              unseenTwin: true as const,
+              unseenTwinCodes: twin.codes,
+              // A twin with no artwork has nothing to compare, so it leaves this short of the count.
+              unseenTwinImages: [...twin.ids].flatMap((id) => twinImages.get(id)?.[0] ?? [])
+            }
+          : {})
       }
     })
     .sort(

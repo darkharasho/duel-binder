@@ -573,6 +573,7 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
             defaultRarity: o.defaultRarity,
             cardLanguage: (cardId) => languageOf(cardId, raw.textBands),
             filterLanguage: o.filterLanguage,
+            artDistance: (x, y) => engine.artDistance?.(x, y) ?? Promise.resolve(null),
             readLanguage: () =>
               tellPokemonLanguage(raw.textBands, (b, model) =>
                 within(api.scan.readText(b, model), LANGUAGE_TIMEOUT_MS)
@@ -689,6 +690,7 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
               defaultRarity: o.defaultRarity,
               cardLanguage: (cardId) => languageOf(cardId, raw.textBands),
               filterLanguage: o.filterLanguage,
+              artDistance: (x, y) => engine.artDistance?.(x, y) ?? Promise.resolve(null),
               readLanguage: o.language
                 ? async () => o.language ?? null
                 : () => pokemonLanguageOf(raw.quad, raw.textBands),

@@ -38,6 +38,8 @@ export interface ScanPrinting {
   unseenTwin?: true
   /** Those cards' set codes: a number read can still tell the two apart. Set with unseenTwin. */
   unseenTwinCodes?: string[]
+  /** Those cards' artworks: a product photo unlike this card's art is no reprint of it. */
+  unseenTwinImages?: number[]
 }
 
 export type FingerprintStatus = {

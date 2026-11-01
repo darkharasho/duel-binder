@@ -1,4 +1,4 @@
-import { act, screen, within } from '@testing-library/react'
+import { act, screen, waitFor, within } from '@testing-library/react'
 import type { SetSummary } from '@shared/types'
 import type { ScanDraft } from '@shared/scan/types'
 import type { ScanWindowSettings, ScanWindowState } from '@shared/scanWindow'
@@ -572,7 +572,9 @@ describe('Scan window', () => {
     expect(screen.getByRole('status', { name: 'Summary' })).toHaveTextContent('$12.50')
     expect(document.querySelector('video')).toBeInTheDocument()
     act(() => bridge.emit({ kind: 'summary', summary: null }))
-    expect(screen.queryByRole('status', { name: 'Summary' })).not.toBeInTheDocument()
+    await waitFor(() =>
+      expect(screen.queryByRole('status', { name: 'Summary' })).not.toBeInTheDocument()
+    )
   })
 
   it('a counted pull shows the bar, then fades out', async () => {

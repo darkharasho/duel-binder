@@ -48,6 +48,8 @@ export interface ResolveContext {
   cardLanguage?: (cardId: number) => Promise<CardLanguage | null>
   /** For a card like that, the language the user said they're scanning: taken over reading it. */
   filterLanguage?: Language | null
+  /** How far apart two artworks' fingerprints are; null when either has none. Without it, unknown. */
+  artDistance?: (a: number, b: number) => Promise<number | null>
   /**
    * For Pokémon: the language the card's text reads as (pokemonLanguageOfBands), asked only when
    * a card is about to be named; null when it can't be told. Without it, never told.

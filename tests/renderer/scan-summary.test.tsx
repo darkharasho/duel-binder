@@ -5,7 +5,13 @@ import { listValue } from '@/features/scan/scanLook'
 import type { ScanRow } from '@/features/scan/session'
 import { launch } from '@/features/scan/window/confettiPieces'
 import { sessionSummary } from '@/features/scan/window/summary'
-import { PAGE_MS, PAGE_ROWS, SummaryScreen } from '@/features/scan/window/SummaryScreen'
+import {
+  PAGE_MS,
+  PAGE_ROWS,
+  SUMMARY_OUT_MS,
+  SummaryOverlay,
+  SummaryScreen
+} from '@/features/scan/window/SummaryScreen'
 import { createMockApi, renderWithProviders } from './mockApi'
 
 let id = 0
@@ -155,4 +161,21 @@ it('confetti fires up and inwards from both sides, evenly', () => {
 
 it('main relays the summary message', () => {
   expect(isToScanWindow({ kind: 'summary', summary: null })).toBe(true)
+})
+
+describe('SummaryOverlay', () => {
+  afterEach(() => vi.useRealTimers())
+
+  it('stays up while it animates out, then goes', () => {
+    vi.useFakeTimers()
+    window.api = createMockApi() as typeof window.api
+    const summary = sessionSummary([row(5)], 20)
+    const { rerender } = renderWithProviders(<SummaryOverlay summary={summary} />)
+    rerender(<SummaryOverlay summary={null} />)
+    expect(screen.getByRole('status', { name: 'Summary' })).toHaveClass('animate-out')
+    act(() => {
+      vi.advanceTimersByTime(SUMMARY_OUT_MS)
+    })
+    expect(screen.queryByRole('status', { name: 'Summary' })).not.toBeInTheDocument()
+  })
 })

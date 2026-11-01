@@ -839,6 +839,7 @@ describe('Pokémon step in the nightly job', () => {
     artRemoved: 0,
     artMissing: {},
     artTwins: {},
+    artTraditional: {},
     japaneseNames: 0,
     unverified: 0,
     problems: [],

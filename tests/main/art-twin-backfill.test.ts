@@ -61,7 +61,70 @@ describe('backfillArtTwins', () => {
   })
 })
 
+describe('backfillArtTwins for Traditional links', () => {
+  const traditionalOf = (db: Database.Database, id: number): unknown =>
+    db.prepare('SELECT traditional_twin_id AS t FROM pokemon_cards WHERE card_id = ?').pluck().get(id)
+
+  it('an app that backfilled English links once more reads Traditional ones only', async () => {
+    const { db, ids } = fresh()
+    setMeta(db, 'catalog_cursor:pkm', '500')
+    setMeta(db, 'art_twins_backfilled', '1')
+    db.prepare('UPDATE pokemon_cards SET art_twin_id = ? WHERE card_id = ?').run(ids[1], ids[0])
+    const fetchPage = vi
+      .fn()
+      .mockResolvedValue(
+        page([{ card_id: ids[0], art_twin_id: ids[0], traditional_twin_id: ids[1] }], 3, false)
+      )
+    await backfillArtTwins(db, fetchPage)
+    await backfillArtTwins(db, fetchPage)
+    expect(fetchPage).toHaveBeenCalledTimes(1)
+    expect(traditionalOf(db, ids[0])).toBe(ids[1])
+    expect(twinOf(db, ids[0])).toBe(ids[1])
+    expect(getMeta(db, 'traditional_twins_backfilled')).toBe('1')
+    db.close()
+  })
+
+  it('both links arrive in one pass for an app that needs both', async () => {
+    const { db, ids } = fresh()
+    setMeta(db, 'catalog_cursor:pkm', '500')
+    const fetchPage = vi
+      .fn()
+      .mockResolvedValue(
+        page([{ card_id: ids[0], art_twin_id: ids[1], traditional_twin_id: ids[1] }], 3, false)
+      )
+    await backfillArtTwins(db, fetchPage)
+    expect(fetchPage).toHaveBeenCalledTimes(1)
+    expect(twinOf(db, ids[0])).toBe(ids[1])
+    expect(traditionalOf(db, ids[0])).toBe(ids[1])
+    db.close()
+  })
+})
+
 describe('a client without the column', () => {
+  it('an older app applies a row carrying traditional_twin_id, keeping its English twin', () => {
+    const { db, ids } = fresh()
+    db.exec(
+      'DROP INDEX ix_pokemon_cards_traditional_twin; ALTER TABLE pokemon_cards DROP COLUMN traditional_twin_id'
+    )
+    db.transaction(() =>
+      applyChanges(db, [
+        {
+          seq: 1,
+          table: 'pokemon_cards',
+          row: {
+            card_id: ids[0],
+            category: 'Pokemon',
+            source_id: 'zh-hans/X-1',
+            art_twin_id: ids[1],
+            traditional_twin_id: ids[2] ?? ids[1]
+          }
+        }
+      ])
+    )()
+    expect(twinOf(db, ids[0])).toBe(ids[1])
+    db.close()
+  })
+
   it('applies a feed row carrying art_twin_id, dropping the column', () => {
     const { db, ids } = fresh()
     db.exec('DROP INDEX ix_pokemon_cards_art_twin; ALTER TABLE pokemon_cards DROP COLUMN art_twin_id')

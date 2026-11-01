@@ -133,7 +133,8 @@ function tooCloseTokens(
  * finished set of records (see TOKEN_MIN_DISTANCE), however their hashes were come by.
  * Traditional Chinese and European Pokémon cards stay out: the scanner reads English and Japanese
  * cards only.
- * Art a Chinese card borrows (art_twin_id) stays out too: only a card's own image_url is hashed.
+ * Art a Chinese card borrows (art_twin_id, traditional_twin_id) stays out too: only a card's own
+ * image_url is hashed.
  */
 export async function buildFingerprints(opts: FingerprintOptions): Promise<FingerprintResult> {
   const fetchFn = opts.fetch ?? fetch

@@ -37,6 +37,7 @@ export type MetaKey =
   | 'catalog_unannounced'
   /** Set once this database has its art links; see backfillArtTwins. */
   | 'art_twins_backfilled'
+  | 'traditional_twins_backfilled'
   /** UTC day (YYYY-MM-DD) the portal last listed its eBay sweep prefixes. */
   | 'price_sweeps_listed_at'
   | 'price_sweeps_pkm_listed_at'

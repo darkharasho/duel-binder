@@ -1,8 +1,16 @@
 import { useEffect, useState } from 'react'
-import { SCAN_ZOOMS, type ScanFit, type ScanWindowState } from '@shared/scanWindow'
+import {
+  SCAN_SIZES,
+  SCAN_SIZE_MAX,
+  SCAN_ZOOM_MAX,
+  SCAN_ZOOM_STEP,
+  type ScanFit,
+  type ScanWindowState
+} from '@shared/scanWindow'
 import { scanProfile } from '@shared/scan/profiles'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import {
   Select,
   SelectContent,
@@ -201,21 +209,31 @@ export function ScanPage({
                 <SelectItem value="whole">Whole picture</SelectItem>
               </SelectContent>
             </Select>
-            <Select
-              value={String(settings.zoom)}
-              onValueChange={(zoom) => setSettings({ zoom: Number(zoom) })}
+            <label className="flex items-center gap-2 text-sm">
+              Zoom
+              <input
+                type="range"
+                aria-label="Zoom"
+                min={1}
+                max={SCAN_ZOOM_MAX}
+                step={SCAN_ZOOM_STEP}
+                value={settings.zoom}
+                onChange={(e) => setSettings({ zoom: Number(e.target.value) })}
+                className="w-28 accent-primary"
+              />
+              <span className="w-11 text-muted-foreground tabular-nums">
+                {settings.zoom.toFixed(2)}×
+              </span>
+            </label>
+            <WindowSize open={open} size={state?.size} />
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={!open}
+              onClick={() => void window.api.scanWindow.toggleFullScreen()}
             >
-              <SelectTrigger size="sm" aria-label="Zoom" className="w-28">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {SCAN_ZOOMS.map((z) => (
-                  <SelectItem key={z} value={String(z)}>
-                    {z === 1 ? 'No zoom' : `${z}× zoom`}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              Full screen
+            </Button>
             <span className="ml-3" />
             {newScansAs}
             {hitPrice}
@@ -262,6 +280,98 @@ export function ScanPage({
         </>
       )}
     </div>
+  )
+}
+
+const sizeLabel = (s: { width: number; height: number }): string => `${s.width} × ${s.height}`
+
+/** The scan window's size, in the pixels a capture sees: a usual one, or any other typed in. */
+function WindowSize({
+  open,
+  size
+}: {
+  open: boolean
+  size: ScanWindowState['size']
+}): React.JSX.Element {
+  const [typing, setTyping] = useState(false)
+  const preset = SCAN_SIZES.find((s) => s.width === size?.width && s.height === size?.height)
+  const custom = typing || (size !== undefined && !preset)
+  const apply = (width: number, height: number): void => {
+    void window.api.scanWindow.setSize(width, height)
+  }
+  return (
+    <>
+      <Select
+        disabled={!open}
+        value={custom ? 'custom' : preset ? sizeLabel(preset) : ''}
+        onValueChange={(v) => {
+          const picked = SCAN_SIZES.find((s) => sizeLabel(s) === v)
+          setTyping(!picked)
+          if (picked) apply(picked.width, picked.height)
+        }}
+      >
+        <SelectTrigger size="sm" aria-label="Window size" className="w-36">
+          <SelectValue placeholder="Window size" />
+        </SelectTrigger>
+        <SelectContent>
+          {SCAN_SIZES.map((s) => (
+            <SelectItem key={sizeLabel(s)} value={sizeLabel(s)}>
+              {sizeLabel(s)}
+            </SelectItem>
+          ))}
+          <SelectItem value="custom">Custom</SelectItem>
+        </SelectContent>
+      </Select>
+      {custom && open && size && (
+        <span className="flex items-center gap-1 text-sm text-muted-foreground">
+          <PixelInput
+            key={`w${size.width}`}
+            label="Window width"
+            value={size.width}
+            onCommit={(width) => apply(width, size.height)}
+          />
+          ×
+          <PixelInput
+            key={`h${size.height}`}
+            label="Window height"
+            value={size.height}
+            onCommit={(height) => apply(size.width, height)}
+          />
+        </span>
+      )}
+    </>
+  )
+}
+
+/** A whole number of pixels that commits on blur or Enter; anything out of range reverts. */
+function PixelInput({
+  label,
+  value,
+  onCommit
+}: {
+  label: string
+  value: number
+  onCommit: (v: number) => void
+}): React.JSX.Element {
+  const [text, setText] = useState(String(value))
+  const commit = (): void => {
+    const n = Number(text)
+    if (Number.isInteger(n) && n > 0 && n <= SCAN_SIZE_MAX) {
+      if (n !== value) onCommit(n)
+    } else setText(String(value))
+  }
+  return (
+    <Input
+      aria-label={label}
+      inputMode="numeric"
+      value={text}
+      onChange={(e) => setText(e.target.value)}
+      onBlur={commit}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') e.currentTarget.blur()
+      }}
+      className="h-8 w-20 tabular-nums"
+    />
   )
 }
 

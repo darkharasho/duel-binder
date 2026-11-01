@@ -1,10 +1,11 @@
-import { describe, it, expect } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { describe, it, expect, vi, afterEach } from 'vitest'
+import { act, render, screen, within } from '@testing-library/react'
 import { isToScanWindow } from '@shared/scanWindow'
 import { listValue } from '@/features/scan/scanLook'
 import type { ScanRow } from '@/features/scan/session'
+import { launch } from '@/features/scan/window/confettiPieces'
 import { sessionSummary } from '@/features/scan/window/summary'
-import { SummaryScreen } from '@/features/scan/window/SummaryScreen'
+import { PAGE_MS, PAGE_ROWS, SummaryScreen } from '@/features/scan/window/SummaryScreen'
 import { createMockApi, renderWithProviders } from './mockApi'
 
 let id = 0
@@ -40,26 +41,31 @@ describe('sessionSummary', () => {
     expect(s.hits).toBe(2)
   })
 
-  it('leaves a version still to pick out of the value and the top, as the list does', () => {
+  it('leaves a version still to pick out of the value and the hit, as the list does', () => {
     const open = row(500, { game: 'pkm', flag: 'pick-printing' })
     const s = sessionSummary([open, row(5)], 20)
     expect(s).toMatchObject({ value: 5, unpriced: 1 })
-    expect(s.top.map((t) => t.price)).toEqual([5])
+    expect(s.hit?.price).toBe(5)
   })
 
-  it('lists the five dearest, dearest first, and marks guesses and slabs', () => {
-    const prices = [3, 9, 1, 7, 5, 8]
-    const s = sessionSummary(
-      [...prices.map((p) => row(p)), row(50, { guess: true, slab: true })],
-      20
-    )
-    expect(s.top.map((t) => t.price)).toEqual([50, 9, 8, 7, 5])
-    expect(s.top[0]).toMatchObject({ guess: true, raw: true })
-    expect(s.top[1]).toMatchObject({ guess: false, raw: false })
+  it('lists every row dearest first, no price last', () => {
+    const rows = [row(null), row(3), row(50, { guess: true, slab: true }), row(9, { quantity: 2 })]
+    const s = sessionSummary(rows, 20)
+    expect(s.list.map((c) => c.price)).toEqual([50, 9, 3, null])
+    expect(s.list[0]).toMatchObject({ guess: true, raw: true, detail: 'X · R' })
+    expect(s.list[1]).toMatchObject({ quantity: 2, guess: false, raw: false })
+  })
+
+  it('the hit of the night is the dearest known card, never a best guess', () => {
+    const s = sessionSummary([row(90, { guess: true }), row(12), row(4)], 20)
+    expect(s.hit?.price).toBe(12)
+    expect(sessionSummary([row(90, { guess: true })], 20).hit).toBeNull()
   })
 })
 
 describe('SummaryScreen', () => {
+  afterEach(() => vi.useRealTimers())
+
   it('shows the numbers, and says when a card has no price', () => {
     window.api = createMockApi() as typeof window.api
     renderWithProviders(<SummaryScreen summary={sessionSummary([row(25), row(null)], 20)} />)
@@ -70,11 +76,53 @@ describe('SummaryScreen', () => {
     expect(s).toHaveTextContent('1 card with no price')
   })
 
+  it('shows the hit and prices each row for all its copies', () => {
+    window.api = createMockApi() as typeof window.api
+    const rows = [row(25, { name: 'Pikachu' }), row(2, { name: 'Bulbasaur', quantity: 3 })]
+    renderWithProviders(<SummaryScreen summary={sessionSummary(rows, 20)} />)
+    expect(screen.getByRole('region', { name: 'Hit of the night' })).toHaveTextContent('Pikachu')
+    const list = within(screen.getByRole('region', { name: 'Every card' }))
+    expect(list.getByText('×3')).toBeInTheDocument()
+    expect(list.getByText('$6.00')).toBeInTheDocument()
+  })
+
+  it('a row with no price says so instead of $0, and no known card means no hit', () => {
+    window.api = createMockApi() as typeof window.api
+    renderWithProviders(<SummaryScreen summary={sessionSummary([row(null)], 20)} />)
+    expect(screen.getByText('No price')).toBeInTheDocument()
+    expect(screen.queryByRole('region', { name: 'Hit of the night' })).not.toBeInTheDocument()
+  })
+
+  it('a long list turns its own pages and comes back round', () => {
+    vi.useFakeTimers()
+    window.api = createMockApi() as typeof window.api
+    const rows = Array.from({ length: PAGE_ROWS + 1 }, (_, i) => row(100 - i))
+    renderWithProviders(<SummaryScreen summary={sessionSummary(rows, 20)} />)
+    const shown = (): number =>
+      within(screen.getByRole('region', { name: 'Every card' })).getAllByRole('listitem').length
+    expect(shown()).toBe(PAGE_ROWS)
+    expect(screen.getByText('Page 1 of 2')).toBeInTheDocument()
+    act(() => vi.advanceTimersByTime(PAGE_MS))
+    expect(shown()).toBe(1)
+    act(() => vi.advanceTimersByTime(PAGE_MS))
+    expect(shown()).toBe(PAGE_ROWS)
+  })
+
   it('an empty list says so instead of $0', () => {
     render(<SummaryScreen summary={sessionSummary([], 20)} />)
     expect(screen.getByText('No cards yet')).toBeInTheDocument()
     expect(screen.queryByText('$0.00')).not.toBeInTheDocument()
   })
+})
+
+it('confetti fires up and inwards from both sides, evenly', () => {
+  const pieces = launch(1280, 720, () => 0.5)
+  const left = pieces.filter((p) => p.x === 0)
+  const right = pieces.filter((p) => p.x === 1280)
+  expect(left.length).toBeGreaterThan(0)
+  expect(right).toHaveLength(left.length)
+  expect(left.every((p) => p.vx > 0 && p.vy < 0)).toBe(true)
+  expect(right.every((p) => p.vx < 0 && p.vy < 0)).toBe(true)
 })
 
 it('main relays the summary message', () => {

@@ -3,7 +3,7 @@ import type { GameId } from '@shared/games/types'
 import { isLanguage } from '@shared/languages'
 import { RARITY_TIERS } from '@shared/scan/rarity'
 import {
-  SCAN_ZOOMS,
+  SCAN_ZOOM_MAX,
   isFromScanWindow,
   isPokemonLanguage,
   type ScanFit,
@@ -88,7 +88,7 @@ const parseHitPrice = (raw: string): number | null => {
 
 const parseZoom = (raw: string): number | null => {
   const n = Number(raw)
-  return (SCAN_ZOOMS as readonly number[]).includes(n) ? n : null
+  return n >= 1 && n <= SCAN_ZOOM_MAX ? n : null
 }
 
 const initialSettings = (): ScanWindowSettings => ({

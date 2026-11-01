@@ -1,5 +1,5 @@
 import { SCAN_WINDOW_MESSAGE, SCAN_WINDOW_OPEN } from '@shared/ipc'
-import { isFromScanWindow, isToScanWindow } from '@shared/scanWindow'
+import { isFromScanWindow, isToScanWindow, SCAN_SIZE_MAX } from '@shared/scanWindow'
 
 export interface Rect {
   x: number
@@ -26,8 +26,10 @@ export interface ScanWindowLike {
   close(): void
   isFullScreen(): boolean
   setFullScreen(on: boolean): void
+  setContentSize(width: number, height: number): void
   getNormalBounds(): Rect
   on(event: 'closed' | 'close', cb: () => void): void
+  once(event: 'leave-full-screen', cb: () => void): void
 }
 
 const MIN_OVERLAP = 100
@@ -37,7 +39,9 @@ const CRASH_LOOP_MS = 60_000
 const isRect = (v: unknown): v is Rect => {
   if (typeof v !== 'object' || v === null) return false
   const r = v as Record<string, unknown>
-  return ['x', 'y', 'width', 'height'].every((k) => typeof r[k] === 'number' && Number.isFinite(r[k]))
+  return ['x', 'y', 'width', 'height'].every(
+    (k) => typeof r[k] === 'number' && Number.isFinite(r[k])
+  )
 }
 
 /** Saved bounds when they overlap a display's work area by at least 100x100 px, else null. */
@@ -55,6 +59,8 @@ export interface ScanWindowManager {
   open(): void
   isOpen(): boolean
   toggleFullScreen(): void
+  /** Sizes the picture in capture pixels, which on a scaled display are not screen points. */
+  setSize(width: number, height: number): void
   /** Forwards scan-window messages to the main window and main-window messages to the scan window; drops anything else. */
   relay(senderId: number, message: unknown): void
   close(): void
@@ -66,6 +72,8 @@ export function createScanWindowManager(deps: {
   readBounds(): unknown
   writeBounds(r: Rect): void
   workAreas(): Rect[]
+  /** Capture pixels per screen point where this window is. */
+  scaleOf(win: ScanWindowLike): number
   now?(): number
 }): ScanWindowManager {
   const now = deps.now ?? Date.now
@@ -109,6 +117,21 @@ export function createScanWindowManager(deps: {
     isOpen: () => live(win),
     toggleFullScreen() {
       if (live(win)) win.setFullScreen(!win.isFullScreen())
+    },
+    setSize(width, height) {
+      if (!live(win)) return
+      const target = win
+      const scale = deps.scaleOf(target)
+      const points = (n: number): number =>
+        Math.round(Math.min(Math.max(n, 1), SCAN_SIZE_MAX) / scale)
+      const apply = (): void => {
+        if (live(target)) target.setContentSize(points(width), points(height))
+      }
+      // A full-screen window ignores a new size until it has left full screen.
+      if (target.isFullScreen()) {
+        target.once('leave-full-screen', apply)
+        target.setFullScreen(false)
+      } else apply()
     },
     relay(senderId, message) {
       const main = deps.mainWindow()

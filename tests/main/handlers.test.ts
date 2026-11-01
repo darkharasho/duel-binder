@@ -43,7 +43,7 @@ const fakeAccount = (signedIn = false): FakeAccount => ({
 async function makeHandlers(opts: { signedIn?: boolean } = {}) {
   const db = await seededDb()
   const account = fakeAccount(opts.signedIn)
-  const scanWindow = { open: vi.fn(), isOpen: vi.fn(() => true), toggleFullScreen: vi.fn() }
+  const scanWindow = { open: vi.fn(), isOpen: vi.fn(() => true), toggleFullScreen: vi.fn(), setSize: vi.fn() }
   const catalog = { status: vi.fn(() => ({ ...CATALOG_STATUS })) }
   const images = {
     get: vi.fn(),
@@ -131,8 +131,12 @@ describe('createHandlers', () => {
     const { handlers, scanWindow } = await makeHandlers()
     await handlers['scanWindow:open']()
     await handlers['scanWindow:toggleFullScreen']()
+    await handlers['scanWindow:setSize'](1280, 720)
+    await handlers['scanWindow:setSize'](NaN, 720)
     expect(scanWindow.open).toHaveBeenCalledTimes(1)
     expect(scanWindow.toggleFullScreen).toHaveBeenCalledTimes(1)
+    expect(scanWindow.setSize).toHaveBeenCalledTimes(1)
+    expect(scanWindow.setSize).toHaveBeenCalledWith(1280, 720)
     await expect(handlers['scanWindow:isOpen']()).resolves.toBe(true)
   })
 

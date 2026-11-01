@@ -34,6 +34,21 @@ const flush = (outbox: Outbox): void => {
   for (const { id, draft } of outbox.pending()) sendDraft(id, draft)
 }
 
+/** The window's size as a capture sees it, kept current as it's dragged or moved between displays. */
+function useCapturePixels(): { width: number; height: number } {
+  const read = (): { width: number; height: number } => ({
+    width: Math.round(window.innerWidth * window.devicePixelRatio),
+    height: Math.round(window.innerHeight * window.devicePixelRatio)
+  })
+  const [size, setSize] = useState(read)
+  useEffect(() => {
+    const update = (): void => setSize(read())
+    window.addEventListener('resize', update)
+    return () => window.removeEventListener('resize', update)
+  }, [])
+  return size
+}
+
 function Scanner({
   settings,
   engineFactory,
@@ -118,6 +133,7 @@ function Scanner({
     if (video) video.srcObject = camera.stream
   }, [camera.stream])
 
+  const size = useCapturePixels()
   const state: ScanWindowState = {
     devices: camera.devices.map((d) => ({ deviceId: d.deviceId, label: d.label })),
     openDeviceId: camera.stream?.getVideoTracks()[0]?.getSettings().deviceId ?? null,
@@ -125,7 +141,8 @@ function Scanner({
     loop: loop.status,
     artReady: loop.artReady,
     artData: loop.artData,
-    setUnreadable
+    setUnreadable,
+    size
   }
   const serialized = JSON.stringify(state)
   // Sent when it changes, and again with every settings message, so a main window that reloaded

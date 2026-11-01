@@ -52,7 +52,7 @@ export interface HandlerDeps {
   catalog: Pick<CatalogService, 'status'>
   app: AppDeps
   window: WindowDeps
-  scanWindow: Pick<ScanWindowManager, 'open' | 'isOpen' | 'toggleFullScreen'>
+  scanWindow: Pick<ScanWindowManager, 'open' | 'isOpen' | 'toggleFullScreen' | 'setSize'>
   account: AccountService
   /** Tells every window that the data shown changed. */
   emitDataChanged(): void
@@ -198,6 +198,9 @@ export function createHandlers({
     'scanWindow:open': async () => scanWindow.open(),
     'scanWindow:isOpen': async () => scanWindow.isOpen(),
     'scanWindow:toggleFullScreen': async () => scanWindow.toggleFullScreen(),
+    'scanWindow:setSize': async (width: number, height: number) => {
+      if (Number.isFinite(width) && Number.isFinite(height)) scanWindow.setSize(width, height)
+    },
     'app:version': async () => app.version(),
     'app:openDataFolder': () => app.openDataFolder(),
     'app:backupDatabase': () => app.backupDatabase(),

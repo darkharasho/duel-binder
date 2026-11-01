@@ -10,7 +10,7 @@ type Send = [string, unknown]
 interface Fake extends ScanWindowLike {
   sends: Send[]
   minimized: boolean
-  fire(event: 'close' | 'closed'): void
+  fire(event: 'close' | 'closed' | 'leave-full-screen'): void
   crash(reason?: string): void
 }
 
@@ -33,8 +33,10 @@ function fakeWindow(id: number, bounds: Rect = { x: 10, y: 20, width: 800, heigh
     close: vi.fn(),
     isFullScreen: vi.fn(() => false),
     setFullScreen: vi.fn(),
+    setContentSize: vi.fn(),
     getNormalBounds: () => bounds,
     on: (event, cb) => void (handlers[event] ??= []).push(cb),
+    once: (event, cb) => void (handlers[event] ??= []).push(cb),
     fire: (event) => handlers[event]?.forEach((cb) => cb()),
     crash: (reason = 'crashed') => gone.forEach((cb) => cb({}, { reason }))
   }
@@ -46,7 +48,7 @@ const draft = { cardId: 1 } as never
 const settings = { deviceId: null } as never
 
 // eslint-disable-next-line @typescript-eslint/explicit-function-return-type
-function setup(saved: unknown = null) {
+function setup(saved: unknown = null, scale = 1) {
   const main = fakeWindow(1)
   const scan = fakeWindow(2)
   const create = vi.fn<(bounds: Rect | null) => ScanWindowLike>(() => scan)
@@ -59,6 +61,7 @@ function setup(saved: unknown = null) {
     readBounds: () => saved,
     writeBounds,
     workAreas: () => [SCREEN],
+    scaleOf: () => scale,
     now: () => clock.now
   })
   return { main, scan, create, writeBounds, manager, mainRef, clock }
@@ -166,6 +169,28 @@ describe('scan window manager', () => {
     manager.open()
     manager.toggleFullScreen()
     expect(scan.setFullScreen).toHaveBeenCalledWith(true)
+  })
+})
+
+describe('setSize', () => {
+  it('turns capture pixels into screen points on a scaled display', () => {
+    const { manager, scan } = setup(null, 1.5)
+    manager.setSize(1920, 1080)
+    expect(scan.setContentSize).not.toHaveBeenCalled()
+    manager.open()
+    manager.setSize(1920, 1080)
+    expect(scan.setContentSize).toHaveBeenCalledWith(1280, 720)
+  })
+
+  it('leaves full screen first, since a full-screen window ignores a size', () => {
+    const { manager, scan } = setup()
+    manager.open()
+    vi.mocked(scan.isFullScreen).mockReturnValue(true)
+    manager.setSize(1280, 720)
+    expect(scan.setFullScreen).toHaveBeenCalledWith(false)
+    expect(scan.setContentSize).not.toHaveBeenCalled()
+    scan.fire('leave-full-screen')
+    expect(scan.setContentSize).toHaveBeenCalledWith(1280, 720)
   })
 })
 

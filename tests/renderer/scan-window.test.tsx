@@ -567,7 +567,7 @@ describe('Scan window', () => {
   it("the summary screen comes and goes on the main window's word, and scanning carries on", async () => {
     stubCamera()
     await renderWindow(fakeEngine())
-    const summary = { value: 12.5, cards: 1, hits: 0, unpriced: 0, top: [] }
+    const summary = { value: 12.5, cards: 1, hits: 0, unpriced: 0, hit: null, list: [] }
     act(() => bridge.emit({ kind: 'summary', summary }))
     expect(screen.getByRole('status', { name: 'Summary' })).toHaveTextContent('$12.50')
     expect(document.querySelector('video')).toBeInTheDocument()
@@ -663,6 +663,7 @@ describe('Scan window', () => {
     await run(1000)
     const hit = screen.getByLabelText('Hit')
     expect(hit).toHaveTextContent('Dark Magician')
+    expect(screen.getByTestId('confetti')).toBeInTheDocument()
     expect(hit).toHaveTextContent('Ultra Rare')
     expect(hit).toHaveTextContent('$20.00')
     expect(screen.queryByRole('status', { name: 'Pull' })).not.toBeInTheDocument()

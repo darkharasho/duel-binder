@@ -1,4 +1,4 @@
-import { act, screen, within } from '@testing-library/react'
+import { act, fireEvent, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { AccountStatus, SetSummary } from '@shared/types'
 import type { ScanDraft } from '@shared/scan/types'
@@ -1077,9 +1077,45 @@ describe('Scan page', () => {
     await renderScan()
     await run()
     expect(screen.getByRole('combobox', { name: 'Picture' })).toHaveTextContent('Whole picture')
-    expect(screen.getByRole('combobox', { name: 'Zoom' })).toHaveTextContent('1.5× zoom')
+    expect(screen.getByRole('slider', { name: 'Zoom' })).toHaveValue('1.5')
+    expect(screen.getByText('1.50×')).toBeInTheDocument()
     act(() => bridge.emit({ kind: 'ready' }))
     expect(lastSettings()).toMatchObject({ fit: 'whole', zoom: 1.5 })
+  })
+
+  it('the zoom slider moves in small steps, not set stops, and is remembered', async () => {
+    bridge = fakeBridge(true)
+    await renderScan()
+    await run()
+    fireEvent.change(screen.getByRole('slider', { name: 'Zoom' }), { target: { value: '1.35' } })
+    expect(lastSettings()).toMatchObject({ zoom: 1.35 })
+    expect(localStorage.getItem('scan.zoom')).toBe('1.35')
+  })
+
+  it('names the window size it is at and sets a picked or typed one', async () => {
+    bridge = fakeBridge(true)
+    await renderScan()
+    await openWindow({ size: { width: 1920, height: 1080 } })
+    const size = screen.getByRole('combobox', { name: 'Window size' })
+    expect(size).toHaveTextContent('1920 × 1080')
+    report({ size: { width: 1111, height: 700 } })
+    expect(size).toHaveTextContent('Custom')
+    const width = screen.getByRole('textbox', { name: 'Window width' })
+    fireEvent.change(width, { target: { value: '1200' } })
+    fireEvent.blur(width)
+    expect(window.api.scanWindow.setSize).toHaveBeenCalledWith(1200, 700)
+    expect(vi.mocked(window.api.scanWindow.setSize)).toHaveBeenCalledTimes(1)
+  })
+
+  it("a typed size it can't use reverts", async () => {
+    bridge = fakeBridge(true)
+    await renderScan()
+    await openWindow({ size: { width: 1111, height: 700 } })
+    const width = screen.getByRole('textbox', { name: 'Window width' })
+    fireEvent.change(width, { target: { value: '99999' } })
+    fireEvent.blur(width)
+    expect(width).toHaveValue('1111')
+    expect(window.api.scanWindow.setSize).not.toHaveBeenCalled()
   })
 
   it("ignores a remembered zoom it doesn't offer", async () => {
@@ -1087,7 +1123,7 @@ describe('Scan page', () => {
     localStorage.setItem('scan.zoom', '7')
     await renderScan()
     await run()
-    expect(screen.getByRole('combobox', { name: 'Zoom' })).toHaveTextContent('No zoom')
+    expect(screen.getByRole('slider', { name: 'Zoom' })).toHaveValue('1')
   })
 
   it('starts from the remembered set, rarity and hit price', async () => {

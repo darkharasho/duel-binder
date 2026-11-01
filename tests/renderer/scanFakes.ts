@@ -147,6 +147,7 @@ export function fakeBridge(startOpen = false): {
     onMessage: Mock<(cb: (m: ScanWindowMessage) => void) => () => void>
     onOpenChange: Mock<(cb: (open: boolean) => void) => () => void>
     toggleFullScreen: Mock<() => Promise<void>>
+    setSize: Mock<(width: number, height: number) => Promise<void>>
   }
   /** Delivers a message to the window, as main's relay would. */
   emit: (m: ScanWindowMessage) => void
@@ -174,7 +175,8 @@ export function fakeBridge(startOpen = false): {
         openCbs.add(cb)
         return () => openCbs.delete(cb)
       }),
-      toggleFullScreen: vi.fn(async () => undefined)
+      toggleFullScreen: vi.fn(async () => undefined),
+      setSize: vi.fn(async () => undefined)
     },
     emit: (m) => messageCbs.forEach((cb) => cb(m)),
     emitOpen: (b) => openCbs.forEach((cb) => cb(b)),

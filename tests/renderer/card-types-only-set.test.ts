@@ -6,9 +6,14 @@ const printing = (id: number, setName: string, language = 'en'): Printing =>
   ({ id, setName, language, setCode: `C-${id}`, setRarity: 'Rare' }) as Printing
 const here = { setName: 'Here', language: 'en' as const }
 const rows = (printings: Printing[], copies: EntryView[] = [], onlySet = true): number[] =>
-  cardTypeRows({ printings, copies, ownedAtOpen: new Set(), preferSet: here, onlySet }).map(
-    (r) => r.printing.id
-  )
+  cardTypeRows({
+    printings,
+    copies,
+    originalImageId: undefined,
+    ownedAtOpen: new Set(),
+    preferSet: here,
+    onlySet
+  }).map((r) => r.printing.id)
 
 describe('cardTypeRows onlySet', () => {
   const printings = [printing(1, 'Here'), printing(2, 'Elsewhere'), printing(3, 'Here', 'ja')]

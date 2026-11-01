@@ -16,8 +16,8 @@ import path from 'node:path'
 import fs from 'node:fs'
 import { performance } from 'node:perf_hooks'
 import { migrate } from '../src/main/db/database'
-import { localScope } from '../src/main/repo/scope'
-import { ruleSql } from '../src/main/repo/binderRules'
+import { LOCAL, localScope } from '../src/main/repo/scope'
+import { narrowedRuleSql } from '../src/main/repo/binderRules'
 import { getBinder, listBinders, previewBinder, saveBinder } from '../src/main/repo/binders'
 import { MAX_BINDERS, type BinderDraft, type BinderGoal, type BinderRule } from '../src/shared/binders'
 import type { Language } from '../src/shared/languages'
@@ -72,7 +72,17 @@ async function main(): Promise<void> {
         label: `Asako Ito artist, goal ${g}`,
         scope: PKM,
         d: draft('Ito', [{ field: 'artist', values: [artist] }], g)
-      }))
+      })),
+      {
+        label: 'race and rarity, no indexed field, goal printing',
+        scope: YGO,
+        d: draft('Race', [{ field: 'race', values: ['Dragon'] }, { field: 'rarity', values: ['Ultra Rare'] }], 'printing')
+      },
+      {
+        label: 'contains Dragon, goal printing',
+        scope: YGO,
+        d: draft('Contains', [{ field: 'name', op: 'contains', value: 'Dragon' }], 'printing')
+      }
     ]
     for (const c of cases) {
       const uid = saveBinder(db, c.d, new Date(), c.scope)
@@ -126,6 +136,9 @@ async function main(): Promise<void> {
     )
     record('listBinders: 50 ygo binders', 1000, () => listBinders(db, YGO))
     record('listBinders: 50 pkm binders', 1000, () => listBinders(db, PKM))
+    // What the desktop runs: the same binders, with the game read from meta rather than a literal.
+    db.prepare("INSERT OR REPLACE INTO meta (key, value) VALUES ('active_game', 'ygo')").run()
+    record('listBinders: 50 ygo binders, LOCAL scope', 1000, () => listBinders(db, LOCAL))
 
     console.log('\ncase | median ms | worst ms | limit | result')
     for (const r of rows)
@@ -136,8 +149,8 @@ async function main(): Promise<void> {
     const slowRuleCase = cases.find((c) => slowest.name.endsWith(c.label))
     const d = slowRuleCase?.d ?? common
     const sc = slowRuleCase?.scope ?? YGO
-    // Plan of the rule scan every call starts with (matchedPrintingCount / loadSlots share this WHERE).
-    const { sql, params } = ruleSql(d.rules, d.languages, sc)
+    // Plan of the printing query every call runs (matchedPrintingCount / loadSlots share this WHERE).
+    const { sql, params } = narrowedRuleSql(db, d.rules, d.languages, sc)
     const plan = db
       .prepare(
         `EXPLAIN QUERY PLAN SELECT p.id FROM card_printings p

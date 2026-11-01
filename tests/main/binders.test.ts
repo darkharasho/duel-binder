@@ -606,3 +606,82 @@ describe('binders channels', () => {
     expect(await h['binders:list']()).toEqual([])
   })
 })
+
+describe('listBinders summaries', () => {
+  const summaryCounts = (b: { uid: string; ownedSlots: number; missingSlots: number; tooBroad: boolean; coverImageId: number | null; hasRules: boolean }) => ({
+    uid: b.uid,
+    ownedSlots: b.ownedSlots,
+    missingSlots: b.missingSlots,
+    tooBroad: b.tooBroad,
+    coverImageId: b.coverImageId,
+    hasRules: b.hasRules
+  })
+
+  it('equal getBinder for every goal, with copies, edits and a too-broad binder', async () => {
+    const db = await seededDb()
+    give(db, LOB_DM)
+    const dmImage = (db.prepare('SELECT image_id FROM card_images WHERE card_id = ? LIMIT 1').get(POT) as { image_id: number }).image_id
+    const potPrinting = (db.prepare('SELECT id FROM card_printings WHERE card_id = ? LIMIT 1').get(POT) as { id: number }).id
+    addEntry(db, { printingId: potPrinting, imageId: dmImage, quantity: 2 }, T1)
+    const goals: BinderGoal[] = ['none', 'card', 'art', 'printing']
+    const ruleSets: BinderRule[][] = [
+      [name('Dark Magician')],
+      [{ field: 'name', op: 'contains', value: 'a' }],
+      [{ field: 'rarity', values: ['Ultra Rare'] }],
+      [{ field: 'cardType', values: ['Spell Card'] }],
+      [name('Dark Magician'), { field: 'rarity', values: ['Ultra Rare'] }],
+      []
+    ]
+    const uids = goals.flatMap((g) =>
+      ruleSets.map((r, i) => saveBinder(db, draft({ goal: g, name: `${g}${i}` }, ...r), T1))
+    )
+    setBinderEdit(db, uids[0], { level: 'card', target: String(POT) }, 'add', T1)
+    setBinderEdit(db, uids[5], { level: 'printing', target: LOB_DM }, 'add', T1)
+    setBinderEdit(db, uids[9], { level: 'card', target: String(DUSTER) }, 'add', T1)
+    setBinderEdit(db, uids[10], { level: 'printing', target: SDY_DM }, 'remove', T1)
+    setBinderEdit(db, uids[11], { level: 'card', target: String(DARK_MAGICIAN) }, 'add', T1)
+    setBinderEdit(db, uids[18], { level: 'card', target: String(DARK_MAGICIAN) }, 'remove', T1)
+
+    const listed = listBinders(db)
+    expect(listed).toHaveLength(uids.length)
+    expect(listed.some((b) => b.ownedSlots > 0)).toBe(true)
+    expect(listed.some((b) => b.missingSlots > 0)).toBe(true)
+    for (const summary of listed) {
+      expect(summaryCounts(summary)).toEqual(summaryCounts(getBinder(db, summary.uid)!))
+    }
+  })
+
+  it('a too-broad binder reads the same in both', async () => {
+    const db = await seededDb()
+    const insert = db.prepare(
+      "INSERT INTO card_printings (game, card_id, language, set_name, set_code, set_rarity) VALUES ('ygo', ?, 'en', 'Bulk', ?, 'Bulk Rare')"
+    )
+    const fill = db.transaction(() => {
+      for (let i = 0; i <= MAX_BINDER_MATCHES; i++) insert.run(POT, `BLK-${i}`)
+    })
+    fill()
+    const uid = saveBinder(db, draft({}, { field: 'name', op: 'is', value: 'Pot of Greed' }), T1)
+    const [summary] = listBinders(db)
+    expect(summary.tooBroad).toBe(true)
+    expect(summaryCounts(summary)).toEqual(summaryCounts(getBinder(db, uid)!))
+  })
+
+  it('a binder with no rules never queries the printings', async () => {
+    const db = await seededDb()
+    const uid = saveBinder(db, draft({ goal: 'printing' }), T1)
+    const prepare = vi.spyOn(db, 'prepare')
+    expect(listBinders(db)[0].missingSlots).toBe(0)
+    expect(getBinder(db, uid)?.cards).toEqual([])
+    const sql = prepare.mock.calls.map(([s]) => s).filter((s) => /card_printings/.test(s))
+    expect(sql).toEqual([])
+    prepare.mockRestore()
+  })
+
+  it('keeps a rule-matched binder ordered by printing whichever way it was read', async () => {
+    const db = await seededDb()
+    const uid = saveBinder(db, draft({ goal: 'printing' }, name('Dark Magician')), T1)
+    const shown = getBinder(db, uid)!.cards.map((c) => c.printing!.id)
+    expect(shown).toEqual([...shown].sort((a, b) => a - b))
+  })
+})
+

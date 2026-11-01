@@ -22,7 +22,7 @@ import type {
   CardRow,
   Printing
 } from '../../shared/types'
-import { matchedPrintingCount, ruleSql } from './binderRules'
+import { matchedPrintingCount, narrowedRuleSql, ruleSql, type CardLookups } from './binderRules'
 import {
   buildSlots,
   type Slot,
@@ -115,18 +115,18 @@ function binderEdits(db: SqlDb, uid: string, scope: Scope): SlotEdit[] {
     .all(uid) as SlotEdit[]
 }
 
-/** Aliases p, c, pc and ip, ready for `AND …`. `listed` is what a slot may be built on. */
-const printingsSql = (scope: Scope, cols: string): string => `
+/** Aliases p, c, pc and (when `priced`) ip, ready for `AND …`. `listed` is what a slot may be built on. */
+const printingsSql = (scope: Scope, cols: string, priced = true): string => `
   SELECT ${cols}
   FROM card_printings p
   JOIN cards c ON c.id = p.card_id AND +c.game = ${scope.game}
-  LEFT JOIN pokemon_cards pc ON pc.card_id = c.id
-  LEFT JOIN intl_prices ip ON ip.printing_id = p.id AND ${scope.ebayPrices}
+  LEFT JOIN pokemon_cards pc ON pc.card_id = c.id AND ${scope.game} = 'pkm'
+  ${priced ? `LEFT JOIN intl_prices ip ON ip.printing_id = p.id AND ${scope.ebayPrices}` : ''}
   WHERE +p.game = ${scope.game}`
 
-const slotPrintingCols = (scope: Scope): string =>
+const slotPrintingCols = (scope: Scope, priced: boolean): string =>
   `p.pkey, p.id AS printing_id, p.card_id, (p.contributed = 0 AND ${shownPrinting(scope)}) AS listed,
-   ${printingPrice(scope)} AS price`
+   ${priced ? printingPrice(scope) : 'NULL'} AS price`
 
 interface SlotPrintingRow {
   pkey: string
@@ -136,17 +136,23 @@ interface SlotPrintingRow {
   price: number | null
 }
 
-/** Printings of the scope's game meeting `where`, each marked as `qualifies` says. */
+/**
+ * Printings of the scope's game meeting `where`, each marked as `qualifies` says, in id order
+ * however the query reached them (sorted here: an ORDER BY would tempt the planner to walk p by id).
+ * Unpriced ones skip the price lookups, for callers that only count slots.
+ */
 function slotPrintings(
   db: SqlDb,
   where: string,
   params: unknown[],
   qualifies: boolean,
-  scope: Scope
+  scope: Scope,
+  priced = true
 ): SlotPrinting[] {
   const rows = db
-    .prepare(`${printingsSql(scope, slotPrintingCols(scope))} AND ${where}`)
+    .prepare(`${printingsSql(scope, slotPrintingCols(scope, priced), priced)} AND ${where}`)
     .all(...params) as SlotPrintingRow[]
+  rows.sort((a, b) => a.printing_id - b.printing_id)
   return rows.map((r) => ({
     pkey: r.pkey,
     printingId: r.printing_id,
@@ -178,27 +184,35 @@ function cardsOfPkeys(db: SqlDb, pkeys: string[], scope: Scope): Map<string, num
   return new Map(rows.map((r) => [r.pkey, r.card_id]))
 }
 
-/** The scope's live copies of these cards. Never from catalogRollup: a binder reads ownership live. */
-function copiesOf(db: SqlDb, cardIds: number[], scope: Scope): SlotCopy[] {
-  if (cardIds.length === 0) return []
+/**
+ * The scope's live copies, of these cards or else all of them, oldest entry first.
+ * Never from catalogRollup: a binder reads ownership live.
+ */
+function readCopies(db: SqlDb, scope: Scope, cardIds?: number[]): SlotCopy[] {
   const rows = db
     .prepare(
-      `SELECT p.pkey, p.card_id, e.image_id, e.quantity FROM collection_entries e
+      `SELECT p.pkey, p.card_id, e.id, e.image_id, e.quantity FROM collection_entries e
        JOIN card_printings p ON p.id = e.printing_id AND +p.game = ${scope.game}
-       WHERE ${scope.where('e')} AND p.card_id IN ${IN_LIST}`
+       WHERE ${scope.where('e')} ${cardIds ? `AND p.card_id IN ${IN_LIST}` : ''}`
     )
-    .all(JSON.stringify(cardIds)) as {
+    .all(...(cardIds ? [JSON.stringify(cardIds)] : [])) as {
     pkey: string
     card_id: number
+    id: number
     image_id: number
     quantity: number
   }[]
+  rows.sort((a, b) => a.id - b.id)
   return rows.map((r) => ({
     pkey: r.pkey,
     cardId: r.card_id,
     imageId: r.image_id,
     quantity: r.quantity
   }))
+}
+
+function copiesOf(db: SqlDb, cardIds: number[], scope: Scope): SlotCopy[] {
+  return cardIds.length === 0 ? [] : readCopies(db, scope, cardIds)
 }
 
 function imagesOf(db: SqlDb, cardIds: number[], scope: Scope): SlotImage[] {
@@ -216,25 +230,31 @@ function imagesOf(db: SqlDb, cardIds: number[], scope: Scope): SlotImage[] {
  * Builds a binder's slots. Over the match cap it stops at the count: no slots, and no other query.
  * Hand adds whose card or printing isn't in this catalog yet are held back until it arrives, so they
  * make no slot and aren't counted as missing.
+ *
+ * With `summary` it builds the same slots with no prices, for the counts alone, and takes the owner's
+ * copies and the card lookups from there, so many binders share one read.
  */
 function loadSlots(
   db: SqlDb,
   source: BinderSource,
   readEdits: () => SlotEdit[],
-  scope: Scope
+  scope: Scope,
+  summary?: { copies: (cardIds: number[]) => SlotCopy[]; lookups: CardLookups }
 ): Loaded {
   const { goal, languages, rules } = source
-  const ruled = hasRuleMatches(rules)
-  if (
-    ruled &&
-    matchedPrintingCount(db, rules, languages, scope, MAX_BINDER_MATCHES) > MAX_BINDER_MATCHES
-  )
-    return { tooBroad: true, printings: [], result: NO_SLOTS }
-
+  const priced = !summary
   const printings = new Map<string, SlotPrinting>()
-  if (ruled) {
-    const w = ruleSql(rules, languages, scope)
-    for (const p of slotPrintings(db, w.sql, w.params, true, scope)) printings.set(p.pkey, p)
+  if (hasRuleMatches(rules)) {
+    const w = narrowedRuleSql(db, rules, languages, scope, summary?.lookups)
+    // A summary's rows are cheap enough to be the count too; priced ones are not.
+    const over = (n: number): boolean => n > MAX_BINDER_MATCHES
+    const tooBroad: Loaded = { tooBroad: true, printings: [], result: NO_SLOTS }
+    if (!summary && over(matchedPrintingCount(db, rules, languages, scope, MAX_BINDER_MATCHES, w)))
+      return tooBroad
+    const limit = summary ? `LIMIT ${MAX_BINDER_MATCHES + 1}` : ''
+    const matched = slotPrintings(db, `${w.sql} ${limit}`, w.params, true, scope, priced)
+    if (over(matched.length)) return tooBroad
+    for (const p of matched) printings.set(p.pkey, p)
   }
 
   const edits = readEdits()
@@ -255,7 +275,8 @@ function loadSlots(
       `p.card_id IN ${IN_LIST}`,
       [JSON.stringify(handCards)],
       false,
-      scope
+      scope,
+      priced
     )
     for (const p of extra) if (!printings.has(p.pkey)) printings.set(p.pkey, p)
   }
@@ -266,7 +287,7 @@ function loadSlots(
     goal,
     list,
     goal === 'art' ? imagesOf(db, cardIds, scope) : [],
-    copiesOf(db, cardIds, scope),
+    summary ? summary.copies(cardIds) : copiesOf(db, cardIds, scope),
     edits.filter(inCatalog)
   )
   return { tooBroad: false, printings: list, result }
@@ -313,10 +334,18 @@ function summarize(
 
 /** The scope's binders, in their saved order, with progress. */
 export function listBinders(db: SqlDb, scope: Scope = LOCAL): BinderSummary[] {
+  let owned: SlotCopy[] | undefined
+  const copies = (cardIds: number[]): SlotCopy[] => {
+    if (cardIds.length === 0) return []
+    owned ??= readCopies(db, scope)
+    const wanted = new Set(cardIds)
+    return owned.filter((c) => wanted.has(c.cardId))
+  }
+  const shared = { copies, lookups: new Map<string, number[]>() }
   return liveBinders(db, scope).map((row) => {
     const source = sourceOf(row)
-    const loaded = loadSlots(db, source, () => binderEdits(db, row.uid, scope), scope)
-    return summarize(db, row, source, loaded, scope)
+    const readEdits = (): SlotEdit[] => binderEdits(db, row.uid, scope)
+    return summarize(db, row, source, loadSlots(db, source, readEdits, scope, shared), scope)
   })
 }
 

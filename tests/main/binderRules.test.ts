@@ -1,6 +1,11 @@
 import type { SqlDb } from '../../src/main/db/sql'
 import { LOCAL, localScope } from '../../src/main/repo/scope'
-import { matchedPrintingCount, ruleFieldValues, ruleSql } from '../../src/main/repo/binderRules'
+import {
+  matchedPrintingCount,
+  narrowedRuleSql,
+  ruleFieldValues,
+  ruleSql
+} from '../../src/main/repo/binderRules'
 import type { BinderRule } from '../../src/shared/binders'
 import { seedPokemon } from '../fixtures/pokemon'
 import { seededDb } from './helpers'
@@ -102,5 +107,128 @@ describe('binder rules to SQL', () => {
     expect(ruleFieldValues(db, 'cardType', 'spell', LOCAL)).toContain('Spell Card')
     expect(ruleFieldValues(db, 'energyType', 'light', localScope("'pkm'"))).toEqual(['Lightning'])
     expect(ruleFieldValues(db, 'rarity', '', LOCAL).length).toBeLessThanOrEqual(50)
+  })
+})
+
+describe('rule queries narrowed through the cards', () => {
+  const YGO = localScope("'ygo'")
+  const PKM = localScope("'pkm'")
+  const printings = (db: SqlDb, sql: string, params: unknown[], scope = YGO): number[] =>
+    (
+      db
+        .prepare(
+          `SELECT p.id FROM card_printings p JOIN cards c ON c.id = p.card_id AND +c.game = ${scope.game}
+           LEFT JOIN pokemon_cards pc ON pc.card_id = c.id WHERE +p.game = ${scope.game} AND ${sql}`
+        )
+        .all(...params) as { id: number }[]
+    )
+      .map((r) => r.id)
+      .sort((a, b) => a - b)
+  const expectSame = (db: SqlDb, r: ReturnType<typeof rules>, langs: never[] = [], scope = YGO): void => {
+    const full = ruleSql(r, langs, scope)
+    const narrowed = narrowedRuleSql(db, r, langs, scope)
+    expect(printings(db, narrowed.sql, narrowed.params, scope)).toEqual(
+      printings(db, full.sql, full.params, scope)
+    )
+  }
+
+  it('matches exactly what the plain rule matches, whichever field drives', async () => {
+    const db = await seededDb()
+    expectSame(db, rules({ field: 'name', op: 'is', value: 'DARK magician' }))
+    expectSame(db, rules({ field: 'name', op: 'contains', value: 'magic' }))
+    expectSame(db, rules({ field: 'name', op: 'is', value: 'No Such Card' }))
+    expectSame(db, rules({ field: 'level', values: ['7'] }))
+    expectSame(db, rules({ field: 'cardType', values: ['Spell Card'] }, { field: 'rarity', values: ['Common'] }))
+    expectSame(db, rules({ field: 'race', values: ['Spellcaster'] }, { field: 'set', values: ['Legend of Blue Eyes White Dragon'] }))
+    expectSame(db, rules({ field: 'rarity', values: ['Ultra Rare'] }))
+    expectSame(db, rules({ field: 'name', op: 'is', value: 'Dark Magician' }), ['de' as never])
+  })
+
+  it('finds Pokémon cards by either name, and by artist and energy', async () => {
+    const db = await seededDb()
+    seedPokemon(db)
+    const local = 'Pikachu-Local'
+    const { illustrator } = db
+      .prepare(
+        `UPDATE pokemon_cards SET local_name = ?
+         WHERE card_id = (SELECT MIN(card_id) FROM pokemon_cards) RETURNING illustrator`
+      )
+      .get(local) as { illustrator: string }
+    expectSame(db, rules({ field: 'name', op: 'is', value: local.toUpperCase() }), [], PKM)
+    expectSame(db, rules({ field: 'name', op: 'contains', value: local.slice(0, 2) }), [], PKM)
+    expectSame(db, rules({ field: 'artist', values: [illustrator] }), [], PKM)
+    expectSame(db, rules({ field: 'energyType', values: ['Fire'] }), [], PKM)
+    const byLocal = narrowedRuleSql(db, rules({ field: 'name', op: 'is', value: local }), [], PKM)
+    expect(printings(db, byLocal.sql, byLocal.params, PKM).length).toBeGreaterThan(0)
+  })
+
+  it('a rarity and a name must hold for one printing, not across two', async () => {
+    const db = await seededDb()
+    const id = (db.prepare("SELECT id FROM cards WHERE name = 'Dark Magician'").get() as { id: number }).id
+    db.prepare('DELETE FROM card_printings WHERE card_id = ?').run(id)
+    const ins = db.prepare(
+      "INSERT INTO card_printings (game, card_id, language, set_name, set_code, set_rarity) VALUES ('ygo', ?, ?, ?, ?, ?)"
+    )
+    ins.run(id, 'en', 'First', 'F-001', 'Common')
+    ins.run(id, 'de', 'Second', 'S-001', 'Ultra Rare')
+    const name = { field: 'name', op: 'is', value: 'Dark Magician' } as const
+    const rare = rules(name, { field: 'rarity', values: ['Ultra Rare'] })
+    expect(matchedPrintingCount(db, rare, [], YGO, 100)).toBe(1)
+    // Each language alone has one of the two; none has both.
+    expect(matchedPrintingCount(db, rare, ['en'], YGO, 100)).toBe(0)
+    expect(matchedPrintingCount(db, rules(name), [], YGO, 100)).toBe(2)
+  })
+
+  it('counts narrowed printings up to cap + 1', async () => {
+    const db = await seededDb()
+    const name = rules({ field: 'name', op: 'contains', value: 'a' })
+    const total = matchedPrintingCount(db, name, [], YGO, 100000)
+    expect(total).toBeGreaterThanOrEqual(2)
+    expect(matchedPrintingCount(db, name, [], YGO, total)).toBe(total)
+    expect(matchedPrintingCount(db, name, [], YGO, total - 1)).toBe(total)
+    expect(matchedPrintingCount(db, name, [], YGO, 1)).toBe(2)
+    expect(matchedPrintingCount(db, rules({ field: 'name', op: 'is', value: 'No Such Card' }), [], YGO, 1)).toBe(0)
+  })
+
+  it('reads printings by card, never scanning them, when a card field drives', async () => {
+    const db = await seededDb()
+    seedPokemon(db)
+    const plan = (r: ReturnType<typeof rules>, scope = YGO): string => {
+      const w = narrowedRuleSql(db, r, [], scope)
+      return (
+        db
+          .prepare(
+            `EXPLAIN QUERY PLAN SELECT p.id FROM card_printings p JOIN cards c ON c.id = p.card_id AND +c.game = ${scope.game}
+             LEFT JOIN pokemon_cards pc ON pc.card_id = c.id WHERE +p.game = ${scope.game} AND ${w.sql}`
+          )
+          .all(...w.params) as { detail: string }[]
+      )
+        .map((d) => d.detail)
+        .join('\n')
+    }
+    for (const [r, scope] of [
+      [rules({ field: 'name', op: 'is', value: 'Dark Magician' }), YGO],
+      [rules({ field: 'name', op: 'contains', value: 'Dark' }), YGO],
+      [rules({ field: 'race', values: ['Spellcaster'] }), YGO],
+      [rules({ field: 'artist', values: ['Asako Ito'] }), PKM]
+    ] as const) {
+      const text = plan(r, scope)
+      expect(text).toContain('ix_printings_card')
+      expect(text).not.toMatch(/SCAN p\b/)
+    }
+    expect(plan(rules({ field: 'set', values: ['Legend of Blue Eyes White Dragon'] }))).toContain(
+      'ix_printings_set_name'
+    )
+  })
+
+  it('finds the candidate cards through their indexes', async () => {
+    const db = await seededDb()
+    seedPokemon(db)
+    const details = (sql: string, ...params: unknown[]): string =>
+      (db.prepare(`EXPLAIN QUERY PLAN ${sql}`).all(...params) as { detail: string }[]).map((d) => d.detail).join('\n')
+    expect(details("SELECT c.id FROM cards c WHERE c.name = ? COLLATE NOCASE AND +c.game = 'ygo'", 'x')).toContain('ix_cards_name')
+    expect(details('SELECT pc.card_id FROM pokemon_cards pc WHERE pc.local_name = ? COLLATE NOCASE', 'x')).toContain(
+      'ix_pokemon_cards_local_name'
+    )
   })
 })

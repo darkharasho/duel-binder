@@ -1,6 +1,7 @@
 import { beforeAll, describe, expect, it } from 'vitest'
 import type Database from 'better-sqlite3'
 import type { SqlDb } from '../../src/main/db/sql'
+import { previewBinder } from '../../src/main/repo/binders'
 import { browseCards, browseFacets } from '../../src/main/repo/browse'
 import { getChecklist, listSets } from '../../src/main/repo/sets'
 import { countCandidates, priceCandidates } from '../../src/main/prices/candidates'
@@ -10,6 +11,7 @@ import { getFacets, listEntries } from '../../src/main/repo/collection'
 import { getStats } from '../../src/main/repo/stats'
 import { catalogChanges } from '../../workers/portal/src/catalogFeed'
 import { userScope } from '../../workers/portal/src/scope'
+import type { BinderRule } from '../../src/shared/binders'
 import { addUser, seededServerDb } from './helpers'
 
 // The server has `(game, catalog_seq)` indexes for the per-game catalog feed. With no ANALYZE stats
@@ -52,7 +54,19 @@ describe('game index plans on a migrated server', () => {
     userId = addUser(db, 'd1', 'alice')
   })
 
+  const preview = (sql: SqlDb, ...rules: BinderRule[]): unknown =>
+    previewBinder(
+      sql,
+      { name: 'x', rules: { version: 1, rules }, goal: 'card', languages: [], friendsVisible: false },
+      userScope(userId, 'ygo')
+    )
+
   const notOnGameIndex: [string, (sql: SqlDb) => unknown][] = [
+    ['binder name rule', (sql) => preview(sql, { field: 'name', op: 'is', value: 'x' })],
+    ['binder contains rule', (sql) => preview(sql, { field: 'name', op: 'contains', value: 'x' })],
+    ['binder archetype rule', (sql) => preview(sql, { field: 'archetype', values: ['x'] })],
+    ['binder set rule', (sql) => preview(sql, { field: 'set', values: ['x'] })],
+    ['binder rarity rule', (sql) => preview(sql, { field: 'rarity', values: ['x'] })],
     ['browseCards page', (sql) => browseCards(sql, { sort: 'name', dir: 'asc' }, userScope(userId, 'ygo'))],
     ['browseCards search', (sql) => browseCards(sql, { q: 'LOB', sort: 'name', dir: 'asc' }, userScope(userId, 'ygo'))],
     [
@@ -82,6 +96,16 @@ describe('game index plans on a migrated server', () => {
       expect(gameIndexLines(plans)).toEqual([])
     })
   }
+
+  it('binder rules reach cards and printings through their own indexes', () => {
+    const { sql, plans } = planned(db)
+    preview(sql, { field: 'name', op: 'is', value: 'x' })
+    preview(sql, { field: 'archetype', values: ['x'] })
+    preview(sql, { field: 'set', values: ['x'] })
+    const lines = plans.flat().join('\n')
+    for (const index of ['ix_cards_name', 'ix_cards_archetype', 'ix_printings_set_name'])
+      expect(lines).toContain(index)
+  })
 
   it('the per-game catalog feed uses the ix_*_game_seq indexes', () => {
     const { sql, plans } = planned(db)

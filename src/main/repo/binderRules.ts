@@ -1,6 +1,6 @@
 import type { SqlDb } from '../db/sql'
 import type { Language } from '../../shared/languages'
-import type { BinderRules, RuleField } from '../../shared/binders'
+import type { BinderRule, BinderRules, RuleField } from '../../shared/binders'
 import { escapeLike } from './cards'
 import type { Scope } from './scope'
 
@@ -23,7 +23,11 @@ const COLUMN: Partial<Record<RuleField, string>> = {
  * Boolean SQL over aliases p, c and pc (LEFT JOIN pokemon_cards), true for a printing that meets
  * every rule and, when `languages` is not empty, is in one of them. No WHERE; values are bound.
  */
-export function ruleSql(rules: BinderRules, languages: Language[], _scope: Scope): { sql: string; params: unknown[] } {
+export function ruleSql(
+  rules: BinderRules,
+  languages: Language[],
+  _scope: Scope
+): { sql: string; params: unknown[] } {
   const parts: string[] = []
   const params: unknown[] = []
   for (const rule of rules.rules) {
@@ -37,7 +41,9 @@ export function ruleSql(rules: BinderRules, languages: Language[], _scope: Scope
         params.push(like, like)
       }
     } else if (rule.field === 'energyType') {
-      parts.push('EXISTS (SELECT 1 FROM json_each(pc.types) WHERE value IN (SELECT value FROM json_each(?)))')
+      parts.push(
+        'EXISTS (SELECT 1 FROM json_each(pc.types) WHERE value IN (SELECT value FROM json_each(?)))'
+      )
       params.push(JSON.stringify(rule.values))
     } else {
       const col = COLUMN[rule.field]
@@ -58,8 +64,107 @@ export function ruleSql(rules: BinderRules, languages: Language[], _scope: Scope
 const FROM = (scope: Scope): string => `
   FROM card_printings p
   JOIN cards c ON c.id = p.card_id AND +c.game = ${scope.game}
-  LEFT JOIN pokemon_cards pc ON pc.card_id = c.id
+  LEFT JOIN pokemon_cards pc ON pc.card_id = c.id AND ${scope.game} = 'pkm'
   WHERE +p.game = ${scope.game}`
+
+/** Read from the printing itself. Every other field is the card's. */
+const onPrinting = (rule: BinderRule): boolean => rule.field === 'set' || rule.field === 'rarity'
+
+/** Card fields with an index to find cards by. */
+const CARD_INDEXED: ReadonlySet<RuleField> = new Set<RuleField>(['artist', 'archetype'])
+
+/** Card fields only a Pokémon card has: a card without a pokemon_cards row can't meet them. */
+const POKEMON_ONLY: ReadonlySet<RuleField> = new Set<RuleField>(['artist', 'stage', 'energyType'])
+
+type NameRule = Extract<BinderRule, { field: 'name' }>
+
+/** Card lookups already run, so binders read in one call can share them. */
+export type CardLookups = Map<string, number[]>
+
+/**
+ * Ids of the scope's cards meeting `where`, read with or without pokemon_cards (alias pc). `game`
+ * comes last: it sits behind the card text in a row, so most rows should fail before reading it.
+ */
+function cardIds(
+  db: SqlDb,
+  join: 'none' | 'inner' | 'left',
+  where: { sql: string; params: unknown[] },
+  scope: Scope,
+  lookups?: CardLookups
+): number[] {
+  const pc = { none: '', inner: 'JOIN', left: 'LEFT JOIN' }[join]
+  const sql = `SELECT c.id FROM cards c ${pc && `${pc} pokemon_cards pc ON pc.card_id = c.id`}
+       WHERE ${where.sql} AND +c.game = ${scope.game}`
+  const key = `${sql}\0${JSON.stringify(where.params)}`
+  const known = lookups?.get(key)
+  if (known) return known
+  const rows = db.prepare(sql).all(...where.params) as { id: number }[]
+  const ids = rows.map((r) => r.id)
+  lookups?.set(key, ids)
+  return ids
+}
+
+/**
+ * The cards that could meet the rules' card fields, or null when the printings have to drive: no
+ * card field, or a set rule (indexed) with no indexed card field to beat it. It only narrows: a
+ * printing must still pass ruleSql, so a rule can't be met by two different printings.
+ *
+ * A name is two lookups rather than an OR, which no index serves. Other rules join the lookup
+ * only as far as they need pokemon_cards, since a join of every card costs more than the filter.
+ */
+function candidateCards(
+  db: SqlDb,
+  rules: BinderRules,
+  scope: Scope,
+  lookups?: CardLookups
+): number[] | null {
+  const cardRules = rules.rules.filter((r) => !onPrinting(r))
+  if (cardRules.length === 0) return null
+  const name = cardRules.find((r): r is NameRule => r.field === 'name')
+  const indexed = cardRules.some((r) => CARD_INDEXED.has(r.field))
+  if (name?.op !== 'is' && !indexed && rules.rules.some((r) => r.field === 'set')) return null
+
+  const others = cardRules.filter((r) => r !== name)
+  const rest = ruleSql({ ...rules, rules: others }, [], scope)
+  const pokemon = others.some((r) => POKEMON_ONLY.has(r.field))
+  const nameTwice = others.some((r) => r.field === 'name')
+  const join = pokemon ? 'inner' : 'none'
+  if (nameTwice) return cardIds(db, 'left', rest, scope, lookups)
+  if (!name) return cardIds(db, join, rest, scope, lookups)
+
+  const exact = name.op === 'is'
+  const test = (col: string): string =>
+    exact ? `${col} = ? COLLATE NOCASE` : `${col} LIKE ? ESCAPE '\\'`
+  const value = exact ? name.value : `%${escapeLike(name.value)}%`
+  const by = (sql: string): { sql: string; params: unknown[] } => ({
+    sql: `${sql} AND ${rest.sql}`,
+    params: [value, ...rest.params]
+  })
+  const local = by(`${scope.game} = 'pkm' AND ${test('pc.local_name')}`)
+  return [
+    ...new Set([
+      ...cardIds(db, join, by(test('c.name')), scope, lookups),
+      ...cardIds(db, 'inner', local, scope, lookups)
+    ])
+  ]
+}
+
+/** ruleSql for a printing query, with the printings narrowed to the cards that can match. */
+export function narrowedRuleSql(
+  db: SqlDb,
+  rules: BinderRules,
+  languages: Language[],
+  scope: Scope,
+  lookups?: CardLookups
+): { sql: string; params: unknown[] } {
+  const w = ruleSql(rules, languages, scope)
+  const cards = candidateCards(db, rules, scope, lookups)
+  if (cards === null) return w
+  return {
+    sql: `p.card_id IN (SELECT value FROM json_each(?)) AND ${w.sql}`,
+    params: [JSON.stringify(cards), ...w.params]
+  }
+}
 
 /** How many printings meet the rules, counting at most `cap + 1` (so a caller can tell "over the cap"). */
 export function matchedPrintingCount(
@@ -67,9 +172,9 @@ export function matchedPrintingCount(
   rules: BinderRules,
   languages: Language[],
   scope: Scope,
-  cap: number
+  cap: number,
+  w: { sql: string; params: unknown[] } = narrowedRuleSql(db, rules, languages, scope)
 ): number {
-  const w = ruleSql(rules, languages, scope)
   const row = db
     .prepare(`SELECT COUNT(*) AS n FROM (SELECT 1 ${FROM(scope)} AND ${w.sql} LIMIT ?)`)
     .get(...w.params, cap + 1) as { n: number }

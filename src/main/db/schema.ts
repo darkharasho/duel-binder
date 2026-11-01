@@ -433,6 +433,17 @@ export const SCHEMA_V31 = `
 CREATE INDEX ix_pokemon_cards_illustrator ON pokemon_cards(illustrator);
 `
 
+/**
+ * Lookups binder rules start from: a card by either name (NOCASE, as the rule compares them) or
+ * archetype, and a printing by set. Desktop only: the server gets these as server-22 to server-25.
+ */
+export const SCHEMA_V32 = `
+CREATE INDEX ix_cards_name ON cards(name COLLATE NOCASE);
+CREATE INDEX ix_pokemon_cards_local_name ON pokemon_cards(local_name COLLATE NOCASE);
+CREATE INDEX ix_printings_set_name ON card_printings(set_name);
+CREATE INDEX ix_cards_archetype ON cards(archetype);
+`
+
 /** A printing's rarity as shown: "Starlight Rare (Extended Art)" for a labelled variant. */
 export const RARITY_LABEL = "p.set_rarity || COALESCE(' (' || p.variant || ')', '')"
 
@@ -468,5 +479,6 @@ export const MIGRATIONS: Migration[] = [
   { version: 28, sql: SCHEMA_V28, server: false },
   { version: 29, sql: SCHEMA_V29 },
   { version: 30, sql: SCHEMA_V30, server: false },
-  { version: 31, sql: SCHEMA_V31, server: false }
+  { version: 31, sql: SCHEMA_V31, server: false },
+  { version: 32, sql: SCHEMA_V32, server: false }
 ]

@@ -13,6 +13,7 @@ import {
   ART_MAX_DISTANCE,
   PKM_ART_MIN_MARGIN,
   PKM_GUESS_NAME_LIKENESS,
+  PKM_TWIN_OTHER_ART,
   PKM_GUESS_REPRINT_LEAD,
   PKM_GUESS_RULES,
   type PkmGuessRule
@@ -177,9 +178,9 @@ const baseVersions = (printedRarity: string | null | undefined): string[] =>
     : ['Holofoil', 'Normal']
 
 /**
- * The card's draft, its versions to pick from: sure when it has one, else flagged pick-printing
- * on the version most copies of its printed rarity are (baseVersions), else the cheapest, which is
- * only a placeholder (the overlay shows the range across them). A reverse holo is often the
+ * The card's draft, its versions to pick from: sure when it has one, else set to the version most
+ * copies of its printed rarity are (baseVersions), flagged check-rarity, else flagged pick-printing
+ * on the cheapest, which is only a placeholder (the overlay shows the range across them). A reverse holo is often the
  * cheapest, and the foil can't tell one yet.
  */
 async function draft(
@@ -219,7 +220,12 @@ async function draft(
     setCode: chosen.setCode,
     rarity: chosen.rarity,
     options,
-    flag: options.length === 1 || named?.length === 1 ? null : 'pick-printing',
+    flag:
+      options.length === 1 || named?.length === 1
+        ? null
+        : plain.length
+          ? 'check-rarity'
+          : 'pick-printing',
     via,
     game: 'pkm',
     // Priced as the raw card either way; the key is left out for a bare one.
@@ -287,15 +293,28 @@ export async function resolvePokemonSignals(
   // A card with a reprint of its art that has no artwork of its own is named only as a guess: the
   // art can't tell them apart. A number read can, unless the reprint prints the same one, as a
   // Classic Collection reprint does its original's.
-  const untold = (p: ScanPrinting): boolean => {
+  // Nor is it a reprint when its product photo is other art: same name, same illustrator.
+  const untold = async (p: ScanPrinting): Promise<boolean> => {
     if (!p.unseenTwin) return false
-    if (!numbered.some((n) => n.cardId === p.cardId)) return true
     const read = numbered.filter((n) => n.cardId === p.cardId).map((n) => numberOf(n.setCode))
-    return !p.unseenTwinCodes || p.unseenTwinCodes.some((c) => read.includes(numberOf(c)))
+    const told = !!p.unseenTwinCodes?.length && read.length > 0
+    if (told && !p.unseenTwinCodes!.some((c) => read.includes(numberOf(c)))) return false
+    const twins = p.unseenTwinImages ?? []
+    if (!ctx.artDistance || !twins.length || twins.length < new Set(p.unseenTwinCodes).size)
+      return true
+    for (const twin of twins) {
+      for (const own of p.imageIds) {
+        const distance = await ctx.artDistance(own, twin)
+        if (distance === null || distance < PKM_TWIN_OTHER_ART) return true
+      }
+    }
+    return false
   }
   const named = async (cardId: number, via: 'code' | 'art'): Promise<ScanOutcome> => {
     const item = await draft(cardId, raw, ctx, via)
-    if (!item || (item.options.some(untold) && !may('twin'))) return unsure
+    if (!item) return unsure
+    const twinned = item.options.filter((p) => p.unseenTwin)
+    if (twinned.length && (await untold(twinned[0])) && !may('twin')) return unsure
     return { kind: 'recognized', item: guess ? { ...item, guess: true } : item }
   }
 

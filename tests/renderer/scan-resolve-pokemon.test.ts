@@ -279,6 +279,24 @@ describe('resolvePokemonSignals', () => {
     expect(await resolveSignals(signals, ctx(`CLC ${original}`))).toEqual({ kind: 'unsure' })
   })
 
+  it('a twin whose product photo is other art does not stop a card', async () => {
+    const ctx = (distance: number): ResolveContext => ({
+      ...pkm('en'),
+      artDistance: async () => distance,
+      lookups: {
+        ...lookups,
+        printingsForCards: async (ids) =>
+          PKM.filter((p) => ids.includes(p.cardId)).map((p) =>
+            p.cardId === 1
+              ? { ...p, unseenTwin: true as const, unseenTwinCodes: ['X 1'], unseenTwinImages: [7] }
+              : p
+          )
+      }
+    })
+    expect(await recognized(raw({ art: [twins[0]] }), ctx(136))).toMatchObject({ cardId: 1 })
+    expect(await resolveSignals(raw({ art: [twins[0]] }), ctx(104))).toEqual({ kind: 'unsure' })
+  })
+
   it('never names a card whose reprint of the art has no artwork to match', async () => {
     const ctx = (twinned: boolean): ResolveContext => ({
       ...pkm('en'),
@@ -414,7 +432,7 @@ describe('resolvePokemonSignals', () => {
       printingId: 42,
       rarity: 'Normal',
       setCode: 'PRE 074/131',
-      flag: 'pick-printing'
+      flag: 'check-rarity'
     })
     expect(several.options.map((o) => o.printingId)).toEqual([41, 42])
   })
@@ -728,17 +746,17 @@ describe('Pokémon version cues (rule 7)', () => {
 
   it('frame foil never names Reverse Holofoil: a webcam frame reads alike either way', async () => {
     const out = await recognized(raw({ art, version: sure(99, 0) }), pkm('en'))
-    expect(out).toMatchObject({ flag: 'pick-printing', printingId: 42 })
+    expect(out).toMatchObject({ flag: 'check-rarity', printingId: 42 })
   })
 
   it('a decisive cue for a version the card lacks keeps pick-printing', async () => {
     const out = await recognized(raw({ art, version: sure(0, 99) }), pkm('en'))
-    expect(out).toMatchObject({ flag: 'pick-printing', printingId: 42 })
+    expect(out).toMatchObject({ flag: 'check-rarity', printingId: 42 })
   })
 
   it('an undecided cue keeps pick-printing on the cheapest', async () => {
     const out = await recognized(raw({ art, version: sure(0.1, 0.1) }), pkm('en'))
-    expect(out).toMatchObject({ flag: 'pick-printing', printingId: 42 })
+    expect(out).toMatchObject({ flag: 'check-rarity', printingId: 42 })
   })
 
   it('an unnamed version falls on Normal, though a reverse holo is cheaper', async () => {
@@ -746,7 +764,7 @@ describe('Pokémon version cues (rule 7)', () => {
       raw({ art, version: sure(0.1, 0.1) }),
       withVersions(['Reverse Holofoil', 'Normal', 'Holofoil'])
     )
-    expect(out).toMatchObject({ flag: 'pick-printing', printingId: 901, rarity: 'Normal' })
+    expect(out).toMatchObject({ flag: 'check-rarity', printingId: 901, rarity: 'Normal' })
   })
 
   it.each([
@@ -762,7 +780,7 @@ describe('Pokémon version cues (rule 7)', () => {
       raw({ art, version: sure(0.1, 0.1) }),
       withVersions(['Reverse Holofoil', 'Normal', 'Holofoil'], printedRarity)
     )
-    expect(out).toMatchObject({ flag: 'pick-printing', rarity })
+    expect(out).toMatchObject({ flag: 'check-rarity', rarity })
   })
 
   it('an unnamed version falls on Holofoil where there is no Normal', async () => {
@@ -770,7 +788,7 @@ describe('Pokémon version cues (rule 7)', () => {
       raw({ art, version: sure(0.1, 0.1) }),
       withVersions(['Reverse Holofoil', 'Holofoil'])
     )
-    expect(out).toMatchObject({ flag: 'pick-printing', printingId: 901, rarity: 'Holofoil' })
+    expect(out).toMatchObject({ flag: 'check-rarity', printingId: 901, rarity: 'Holofoil' })
   })
 
   it('a 1st Edition twin or a repeated label keeps pick-printing', async () => {

@@ -183,6 +183,12 @@ export const PKM_GUESS_RULES: readonly PkmGuessRule[] = ['language', 'reprint', 
  */
 export const PKM_GUESS_NAME_LIKENESS = 0.5
 /**
+ * How far an unseen twin's product photo must be from a card's art to be other art of the same
+ * name and illustrator. Over the 1,058 English pairs, reprints sit mostly under 100 (poor product
+ * photos reach about 104) and other art gathers at 120 to 130.
+ */
+export const PKM_TWIN_OTHER_ART = 120
+/**
  * How much closer the closest reprint's art must be than the next's for the reprint rule to name
  * it. Art hardly tells reprints apart: of 35 guesses, 15 were right with no lead asked, 12 of 30
  * at 2, 9 of 16 at 4. None is asked: a sleeved card's art often ties its reprints exactly, its

@@ -281,6 +281,7 @@ describe.skipIf(!READY)('the Pokémon scanner on real photos', () => {
           setName: null,
           setPrintings: null,
           defaultRarity: null,
+          artDistance: async (a, b) => index.distanceBetween(a, b),
           lookups,
           readLanguage: langOnce,
           readLocalName: namesOnce

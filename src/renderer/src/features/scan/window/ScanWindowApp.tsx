@@ -19,7 +19,7 @@ import { useScanLoop } from '../useScanLoop'
 import { createOutbox, type Outbox } from './outbox'
 import { pullOf } from './overlay'
 import { PullOverlay } from './PullOverlay'
-import { SummaryScreen } from './SummaryScreen'
+import { SummaryOverlay } from './SummaryScreen'
 import { useOverlay } from './useOverlay'
 
 const WINDOW_TITLE = 'Duel Binder — Scan'
@@ -226,7 +226,7 @@ export function ScanWindowApp({
   return (
     <GameProvider fallback={black}>
       <Scanner settings={settings} engineFactory={engineFactory} outbox={outbox} />
-      {summary && <SummaryScreen summary={summary} />}
+      <SummaryOverlay summary={summary} />
     </GameProvider>
   )
 }

@@ -77,6 +77,11 @@ async function handle(msg: WorkerRequest): Promise<void> {
     held = null
     return
   }
+  if (msg.type === 'artDistance') {
+    const distance = index?.distanceBetween(msg.a, msg.b) ?? null
+    scope.postMessage({ type: 'artDistance', id: msg.id, distance })
+    return
+  }
   try {
     const cv = await loadCv()
     if (msg.photo) {

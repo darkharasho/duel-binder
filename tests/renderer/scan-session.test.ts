@@ -553,7 +553,7 @@ describe('useScanLoop', () => {
     expect(onDraft.mock.calls[0][0]).toMatchObject({
       cardId: 5,
       game: 'pkm',
-      flag: 'pick-printing'
+      flag: 'check-rarity'
     })
     expect(readText).toHaveBeenCalledWith([textBand], 'jpn')
     expect(readText).toHaveBeenCalledWith([textBand], 'eng')

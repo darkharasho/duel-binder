@@ -173,8 +173,11 @@ describe('traditionalTwins', () => {
     })
   })
 
-  it('rarity only rules when both cards have one', () => {
-    expect(find(plans(hant('001', 'Oddish')), hans({ rarity: 'Common' })).outcome).toBe('linked')
+  it('a rated card needs a candidate of its rarity, and an unrated card takes any', () => {
+    expect(find(plans(hant('001', 'Oddish')), hans({ rarity: 'Illustration rare' }))).toEqual({
+      outcome: 'rarity mismatch',
+      twin: null
+    })
     expect(find(plans(hant('001', 'Oddish', { rarity: 'Common' }))).outcome).toBe('linked')
   })
 
@@ -186,11 +189,9 @@ describe('traditionalTwins', () => {
     expect(r.twin?.id).toBe('SV8-002')
   })
 
-  it('two candidates left are ambiguous, even if one has no rarity', () => {
+  it('two candidates left are ambiguous', () => {
     const both = plans(hant('001', 'Oddish'), hant('002', 'Oddish'))
     expect(find(both)).toEqual({ outcome: 'ambiguous', twin: null })
-    const unrated = plans(hant('001', 'Oddish', { rarity: 'Rare' }), hant('002', 'Oddish'))
-    expect(find(unrated, hans({ rarity: 'Rare' })).outcome).toBe('ambiguous')
   })
 
   it('a card without an image is no candidate, and leaves the other alone', () => {

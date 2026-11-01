@@ -12,7 +12,7 @@ import type { TdCard, TdSet } from './types'
  *
  * Traditional Chinese art is the better borrow: own art, then Traditional, then English, then the
  * placeholder. No list ties the two Chinese catalogs together, so a card takes a Traditional card
- * by English name and category, rarity too where both have one, and only when exactly one remains
+ * by English name and category, the same rarity if the card has one, and only when exactly one remains
  * (`traditionalTwins`); anything else keeps its English twin. The link is its own column,
  * `traditional_twin_id`, beside `art_twin_id`: an app from before the column ignores it and goes on
  * showing the English twin, correctly labelled, where `art_twin_id` holding a Traditional card
@@ -122,10 +122,9 @@ export function traditionalTwins(sets: TraditionalPlan[]): TraditionalFinder {
       const sameKind = card.category ? named.filter((c) => c.category === card.category) : []
       if (sameKind.length === 0) return no('category mismatch')
       const rarity = rarityKey(card.rarity)
-      const left = sameKind.filter((c) => {
-        const theirs = rarityKey(c.rarity)
-        return !rarity || !theirs || rarity === theirs
-      })
+      // A rated card needs a rated match: most unrated Traditional cards are of another print, and
+      // an Illustration Rare must not show the plain card.
+      const left = sameKind.filter((c) => !rarity || rarity === rarityKey(c.rarity))
       if (left.length === 0) return no('rarity mismatch')
       return left.length === 1 ? { outcome: 'linked', twin: left[0] } : no('ambiguous')
     }

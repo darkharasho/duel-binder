@@ -19,6 +19,7 @@ export type Page =
   | 'dashboard'
   | 'collection'
   | 'wishlist'
+  | 'binders'
   | 'browse'
   | 'scan'
   | 'rip'
@@ -31,6 +32,7 @@ const NAV = [
   { page: 'dashboard', label: 'Dashboard' },
   { page: 'collection', label: 'Collection' },
   { page: 'wishlist', label: 'Wishlist' },
+  { page: 'binders', label: 'Binders' },
   { page: 'sets', label: 'Sets' },
   { page: 'browse', label: 'Browse' },
   { page: 'scan', label: 'Scan' },

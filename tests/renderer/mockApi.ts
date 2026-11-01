@@ -234,6 +234,16 @@ export function createMockApi(overrides: DeepPartial<Api> = {}): Api {
       onUpdateStatus: vi.fn(() => () => {}),
       onDataChanged: vi.fn(() => () => {})
     },
+    binders: {
+      list: vi.fn(async () => []),
+      get: vi.fn(async () => null),
+      preview: vi.fn(async () => ({ printings: 0, cards: 0, owned: 0, tooBroad: false })),
+      save: vi.fn(async () => 'uid'),
+      remove: vi.fn(async () => undefined),
+      edit: vi.fn(async () => undefined),
+      forCard: vi.fn(async () => []),
+      fieldValues: vi.fn(async () => [])
+    },
     account: {
       status: vi.fn(async () => ({ ...signedOut })),
       signIn: vi.fn(async () => ({ ...signedOut })),

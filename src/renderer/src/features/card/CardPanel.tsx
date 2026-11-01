@@ -45,6 +45,8 @@ interface CardPanelProps {
   caption?: string
   /** The set the panel was opened from; its printings are listed first. */
   preferSet?: { setName: string; language: Language }
+  /** Lists only preferSet's printings. */
+  onlySet?: boolean
   nav?: PanelNav
 }
 
@@ -71,6 +73,7 @@ export function CardPanel({
   onMoreOptions,
   caption,
   preferSet,
+  onlySet,
   nav
 }: CardPanelProps): React.JSX.Element {
   const { def } = useGame()
@@ -92,6 +95,7 @@ export function CardPanel({
     originalImageId: detail.data?.images[0]?.imageId,
     ownedAtOpen: ownedAtOpen?.cardId === cardId ? ownedAtOpen.ids : new Set(),
     preferSet,
+    onlySet,
     openedPrintingId: printingId ?? seed?.defaultPrintingId
   })
 

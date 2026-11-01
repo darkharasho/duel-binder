@@ -24,6 +24,8 @@ export interface CardTypeOptions {
   ownedAtOpen: ReadonlySet<number>
   /** The set the panel was opened from, listed next. */
   preferSet?: { setName: string; language: Language }
+  /** List only preferSet's printings, when the card has any; for a Yu-Gi-Oh set's page. */
+  onlySet?: boolean
   /** The printing of the tile opened in that set, first of the set's. */
   openedPrintingId?: number | null
 }
@@ -40,16 +42,21 @@ export function cardTypeRows({
   originalImageId,
   ownedAtOpen,
   preferSet,
+  onlySet = false,
   openedPrintingId
 }: CardTypeOptions): CardTypeRow[] {
   const entries = new Map<number, EntryView[]>()
   for (const c of copies) entries.set(c.printing.id, [...(entries.get(c.printing.id) ?? []), c])
-  const listed = printings.filter((p) => !p.missingFromApi || entries.has(p.id))
+  const inSet = (p: Printing): boolean =>
+    p.setName === preferSet?.setName && p.language === preferSet.language
+  const all = printings.filter((p) => !p.missingFromApi || entries.has(p.id))
+  const listed = onlySet && all.some(inSet) ? all.filter(inSet) : all
   // An entry's own printing can be one the card's list leaves out (a contributed one).
   const known = new Set(listed.map((p) => p.id))
   const own = copies
     .map((c) => c.printing)
-    .filter((p, i, all) => !known.has(p.id) && all.findIndex((x) => x.id === p.id) === i)
+    .filter((p, i, list) => !known.has(p.id) && list.findIndex((x) => x.id === p.id) === i)
+    .filter((p) => !onlySet || !all.some(inSet) || inSet(p))
   const rank = (p: Printing): number => {
     if (ownedAtOpen.has(p.id)) return 0
     if (preferSet && p.setName === preferSet.setName && p.language === preferSet.language) return 1

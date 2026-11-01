@@ -69,7 +69,9 @@ export function contributePrintings(
   const since = new Date(now.getTime() - DAY_MS).toISOString()
   const used = (
     db
-      .prepare('SELECT count(*) AS n FROM printing_contributions WHERE user_id = ? AND created_at > ?')
+      .prepare(
+        'SELECT count(*) AS n FROM printing_contributions WHERE user_id = ? AND created_at > ?'
+      )
       .get(userId, since) as { n: number }
   ).n
   let addedNow = 0
@@ -102,7 +104,15 @@ export function contributePrintings(
       return { pkey, status: 'rejected', reason: 'daily-limit' }
 
     const id = insert.run(
-      c, n, s, r, p.set_rarity_code, l, p.variant, p.tcg_product_id, card.game
+      c,
+      n,
+      s,
+      r,
+      p.set_rarity_code,
+      l,
+      p.variant,
+      p.tcg_product_id,
+      card.game
     ).lastInsertRowid
     log.run(Number(id), userId, nowIso)
     addedNow++

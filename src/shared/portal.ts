@@ -28,6 +28,8 @@ export const PORTAL_CHANNELS = [
   'friends:checklist',
   'friends:forCard',
   'friends:wishlist',
+  'friends:binders',
+  'friends:binder',
   'friends:wanting',
   'friends:owning',
   'friends:wishlistVisible',

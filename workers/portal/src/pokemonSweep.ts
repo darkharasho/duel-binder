@@ -106,7 +106,8 @@ const SLAB =
   /\b(?:psa|bgs|cgc|sgc|ccic|pcg|wcg|ags|hga|gma|ars)\s*\d|\b(?:ccic|pcg|wcg|ags|hga|gma)\b|\b(?:ace|tag)\s+\d|\bgem\s*(?:mt|mint)\b|\bpristine\b|\bgraded?\b|\bgrade\s*\d/i
 const SEVERAL =
   /\b\d+\s*pcs?\b|\b\d+\s*cards\b|[&＆+]\s*\d|[&＆+]\s*(?:rev(?:erse)?|holo)\b|\b(?:complete|master|full)\s+set\b|\b(?:pick|choose|select)\b|\byour\s+choice\b/i
-const NOT_A_CARD = /\b(?:booster|sealed|box|tin|etb|sticker|coins?|sleeves?|playmat|binder|non[- ]?tcg|cases?|display|acrylic|frame[ds]?|magnets?|figures?|keychain|plush|poster)\b/i
+const NOT_A_CARD =
+  /\b(?:booster|sealed|box|tin|etb|sticker|coins?|sleeves?|playmat|binder|non[- ]?tcg|cases?|display|acrylic|frame[ds]?|magnets?|figures?|keychain|plush|poster)\b/i
 const FAKE = /\b(?:reprint|replica|fake|unofficial|handmade|fan\s*art)\b/i
 const BAD_CONDITION = /\b(?:damaged|dmg|creased?|heavily\s+played)\b/i
 const OTHER_PRINTING =
@@ -117,7 +118,10 @@ const EXPANSION_STAMP = /\bexpansion\s+stamp\b|\bset\s+logo\b|\blogo\s+(?:stamp|
 /** Finishes a title can name, each spelled as sellers spell it. */
 const FINISHES: readonly (readonly [Finish, RegExp])[] = [
   ['master', /\bmaster\s*ball\b|大师球/i],
-  ['ball', /\bpok[eé]\s*-?\s*ball\b|(?<!master\s*)\bball\s+(?:pattern|mirror|foil|holo)\b|精灵球|球闪/i],
+  [
+    'ball',
+    /\bpok[eé]\s*-?\s*ball\b|(?<!master\s*)\bball\s+(?:pattern|mirror|foil|holo)\b|精灵球|球闪/i
+  ],
   ['reverse', /\brev(?:erse)?\b|\bmirror\b|镜闪|镜面/i],
   ['starlight', /\bstarlight\b|星光/i],
   ['logo', EXPANSION_STAMP]
@@ -130,7 +134,8 @@ export type Finish = 'plain' | 'holo' | 'master' | 'ball' | 'reverse' | 'starlig
 export function listingFinish(title: string): Finish | null {
   let named = FINISHES.filter(([, re]) => re.test(title)).map(([f]) => f)
   // A ball pattern is a mirror: "Pokeball Mirror" names one finish.
-  if (named.includes('ball') || named.includes('master')) named = named.filter((f) => f !== 'reverse')
+  if (named.includes('ball') || named.includes('master'))
+    named = named.filter((f) => f !== 'reverse')
   if (named.length > 1) return null
   return named[0] ?? (HOLO.test(title) ? 'holo' : 'plain')
 }
@@ -167,7 +172,11 @@ export interface ParsedListing {
  * with one number and at most one finish. A title naming no set code is dropped however good it
  * looks: "Arbok 208/204 AR Chinese" could be any set of that size.
  */
-export function parseListing(title: string, codes: string[], language: string): ParsedListing | null {
+export function parseListing(
+  title: string,
+  codes: string[],
+  language: string
+): ParsedListing | null {
   if (!languageOk(title, language) || !isSingleCard(title)) return null
   if ([SLAB, SEVERAL, NOT_A_CARD, FAKE, BAD_CONDITION].some((re) => re.test(title))) return null
   if (OTHER_PRINTING.test(title.replace(EXPANSION_STAMP, ' '))) return null
@@ -175,7 +184,10 @@ export function parseListing(title: string, codes: string[], language: string): 
   const own = new Set(codes.map((c) => c.toLowerCase()))
   const found = [...title.matchAll(ANY_SET_CODE)].map((m) => m[0].replace(/\.$/, '').toLowerCase())
   if (found.some((c) => !own.has(c))) return null
-  const codeRe = new RegExp(`${BEFORE_CODE}(?:${codes.map(regexEscape).join('|')})${AFTER_CODE}`, 'i')
+  const codeRe = new RegExp(
+    `${BEFORE_CODE}(?:${codes.map(regexEscape).join('|')})${AFTER_CODE}`,
+    'i'
+  )
   if (!codeRe.test(title)) return null
 
   const numbers = titleNumbers(title, new RegExp(`(?:${codes.map(regexEscape).join('|')})`, 'i'))
@@ -197,7 +209,12 @@ const words = (s: string): string[] =>
     .filter(Boolean)
 
 /** True when the title names the card, in English or Chinese; a card we can't name never matches. */
-export function nameOk(title: string, name: string, localName: string | null, set: string): boolean {
+export function nameOk(
+  title: string,
+  name: string,
+  localName: string | null,
+  set: string
+): boolean {
   if (localName) {
     const bare = localName.replace(/\s*(?:ex|EX|GX|V|VMAX|VSTAR|LV\.X)$/, '').trim()
     if (bare && title.includes(bare)) return true
@@ -302,7 +319,11 @@ export function refreshPokemonQueue(db: SqlDb, now: Date): number {
       for (const r of dates.all(language) as { set_name: string; d: string | null }[])
         if (r.d) released.set(r.set_name, r.d)
       const sets = new Map<string, { owned: boolean; released: string | null }>()
-      for (const r of codes.all(language) as { set_name: string; set_code: string; owned: number }[]) {
+      for (const r of codes.all(language) as {
+        set_name: string
+        set_code: string
+        owned: number
+      }[]) {
         const set = pokemonSetOf(r.set_code)
         if (!searchable(set)) continue
         const row = sets.get(set) ?? { owned: false, released: released.get(r.set_name) ?? null }
@@ -345,19 +366,18 @@ export function assignPokemonSweep(
   )
   db.transaction(() => {
     for (const [id, p] of prices) upsert.run(id, p.price, p.listingCount, checkedAt)
-    db.prepare('UPDATE price_sweeps SET swept_at = ?, calls = calls + ? WHERE key = ? AND language = ?').run(
-      now.toISOString(),
-      result.calls ?? 1,
-      `${POKEMON_KEY_PREFIX}${set}`,
-      language
-    )
+    db.prepare(
+      'UPDATE price_sweeps SET swept_at = ?, calls = calls + ? WHERE key = ? AND language = ?'
+    ).run(now.toISOString(), result.calls ?? 1, `${POKEMON_KEY_PREFIX}${set}`, language)
   })()
   return { priced: prices.size }
 }
 
 function readDay(db: SqlDb, today: string): { calls: number; sets: number } {
   const [day, calls, sets] = (getMeta(db, DAY_META) ?? '').split(':')
-  return day === today ? { calls: Number(calls) || 0, sets: Number(sets) || 0 } : { calls: 0, sets: 0 }
+  return day === today
+    ? { calls: Number(calls) || 0, sets: Number(sets) || 0 }
+    : { calls: 0, sets: 0 }
 }
 
 const NOT_POKEMON = `key NOT LIKE '${POKEMON_KEY_PREFIX}%'`
@@ -369,7 +389,9 @@ const NOT_POKEMON = `key NOT LIKE '${POKEMON_KEY_PREFIX}%'`
 function yugiohReserve(db: SqlDb, now: Date): number {
   const dayEnd = new Date(`${utcDay(now)}T00:00:00.000Z`).getTime() + DAY_MS
   const row = db
-    .prepare(`SELECT COUNT(*) AS n FROM price_sweeps WHERE ${NOT_POKEMON} AND (swept_at IS NULL OR swept_at < ?)`)
+    .prepare(
+      `SELECT COUNT(*) AS n FROM price_sweeps WHERE ${NOT_POKEMON} AND (swept_at IS NULL OR swept_at < ?)`
+    )
     .get(new Date(dayEnd - WEEK_MS).toISOString()) as { n: number }
   return row.n * SET_MAX_CALLS
 }
@@ -392,7 +414,9 @@ export async function runPokemonSweep(
   const today = utcDay(now)
   const dueBefore = new Date(now.getTime() - WEEK_MS).toISOString()
   const yugiohDue = db
-    .prepare(`SELECT 1 FROM price_sweeps WHERE ${NOT_POKEMON} AND (swept_at IS NULL OR swept_at < ?) LIMIT 1`)
+    .prepare(
+      `SELECT 1 FROM price_sweeps WHERE ${NOT_POKEMON} AND (swept_at IS NULL OR swept_at < ?) LIMIT 1`
+    )
     .get(dueBefore)
   if (yugiohDue) return stopped
 

@@ -184,8 +184,18 @@ export function applyBinderPush(
       return { uid: b.uid, status: 'skipped' }
     }
     write.run(
-      userId, b.uid, b.game, b.name, b.rules, b.goal, b.languages, b.friendsVisible ? 1 : 0,
-      b.sortOrder, b.createdAt, b.updatedAt, b.deletedAt
+      userId,
+      b.uid,
+      b.game,
+      b.name,
+      b.rules,
+      b.goal,
+      b.languages,
+      b.friendsVisible ? 1 : 0,
+      b.sortOrder,
+      b.createdAt,
+      b.updatedAt,
+      b.deletedAt
     )
     return { uid: b.uid, status: 'applied' }
   }
@@ -232,7 +242,15 @@ export function applyBinderEditPush(
       return { key, status: 'skipped' }
     }
     write.run(
-      userId, e.binderUid, e.level, e.target, e.game, e.action, e.createdAt, e.updatedAt, e.deletedAt
+      userId,
+      e.binderUid,
+      e.level,
+      e.target,
+      e.game,
+      e.action,
+      e.createdAt,
+      e.updatedAt,
+      e.deletedAt
     )
     return { key, status: 'applied' }
   }
@@ -248,15 +266,21 @@ export function binderPullSince(
   game: GameId = 'ygo'
 ): BinderPullResponse {
   const rows = db
-    .prepare('SELECT * FROM binders WHERE user_id = ? AND game = ? AND seq > ? ORDER BY seq LIMIT ?')
+    .prepare(
+      'SELECT * FROM binders WHERE user_id = ? AND game = ? AND seq > ? ORDER BY seq LIMIT ?'
+    )
     .all(userId, game, cursor, limit + 1) as BinderRow[]
   const page = rows.slice(0, limit)
   const more = rows.length > limit
   return {
     entries: page.map(binderWire),
     cursor: pageCursor(
-      db, page.at(-1)?.seq, more, cursor,
-      'SELECT MAX(seq) AS top FROM binders WHERE user_id = ?', userId
+      db,
+      page.at(-1)?.seq,
+      more,
+      cursor,
+      'SELECT MAX(seq) AS top FROM binders WHERE user_id = ?',
+      userId
     ),
     more
   }
@@ -280,8 +304,12 @@ export function binderEditPullSince(
   return {
     entries: page.map(editWire),
     cursor: pageCursor(
-      db, page.at(-1)?.seq, more, cursor,
-      'SELECT MAX(seq) AS top FROM binder_edits WHERE user_id = ?', userId
+      db,
+      page.at(-1)?.seq,
+      more,
+      cursor,
+      'SELECT MAX(seq) AS top FROM binder_edits WHERE user_id = ?',
+      userId
     ),
     more
   }

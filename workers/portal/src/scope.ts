@@ -57,7 +57,13 @@ export function userScope(userId: number, game: GameId): Scope {
     },
     binderSync(table) {
       const next = table === 'binders' ? NEXT_BINDER_SEQ : NEXT_BINDER_EDIT_SEQ
-      return { ownerCol: 'user_id', owner: String(userId), markerCol: 'seq', marker: next, touch: `seq = ${next}` }
+      return {
+        ownerCol: 'user_id',
+        owner: String(userId),
+        markerCol: 'seq',
+        marker: next,
+        touch: `seq = ${next}`
+      }
     },
     snapshotTable: {
       insertCols: 'user_id, game, ',

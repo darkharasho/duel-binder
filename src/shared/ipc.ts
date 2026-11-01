@@ -99,6 +99,10 @@ export interface Api {
     forCard(cardId: number): Promise<FriendCardCopies[]>
     /** An accepted friend's wishlist, without what they already have; empty if they hide it. */
     wishlist(userId: number): Promise<WishlistItem[]>
+    /** An accepted friend's visible binders with progress against their collection; a portal without it answers 404. */
+    binders(userId: number): Promise<BinderSummary[]>
+    /** One of those binders with its cards; null if it is private or unknown. */
+    binder(userId: number, uid: string): Promise<BinderDetail | null>
     /** Friends who want this card and don't hide their wishlist. */
     wanting(cardId: number): Promise<FriendWantsCard[]>
     /** Which friends own these printings (sync keys), in one call; only those some friend owns. */
@@ -305,6 +309,8 @@ export const INVOKE_CHANNELS = [
   'friends:checklist',
   'friends:forCard',
   'friends:wishlist',
+  'friends:binders',
+  'friends:binder',
   'friends:wanting',
   'friends:owning',
   'friends:wishlistVisible',

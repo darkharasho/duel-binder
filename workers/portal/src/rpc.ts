@@ -70,6 +70,7 @@ import {
   setWishlistVisible,
   wishlistVisible
 } from './wishlist'
+import { friendBinder, friendBinders } from './friendBinders'
 import { userScope } from './scope'
 import { GAME_HEADER } from '../../../src/shared/cloud'
 import type { GameId } from '../../../src/shared/games'
@@ -227,6 +228,10 @@ const HANDLERS: { [C in PortalChannel]: Handler<C> } = {
     setWish(db, checkId(printingId, 'printingId'), quantity, now(), scope),
   'wishlist:remove': ({ db, now }, scope, printingId) =>
     removeWish(db, checkId(printingId, 'printingId'), now(), scope),
+  'friends:binders': ({ db, userId, game }, _s, id) =>
+    friendBinders(db, friendId(db, userId, id), game),
+  'friends:binder': ({ db, userId, game }, _s, id, uid) =>
+    friendBinder(db, friendId(db, userId, id), game, checkBounded(uid, 'uid', MAX_UID)),
   'binders:list': ({ db }, scope) => listBinders(db, scope),
   'binders:get': ({ db }, scope, uid) => getBinder(db, checkBounded(uid, 'uid', MAX_UID), scope),
   'binders:preview': ({ db }, scope, draft) => previewBinder(db, checkDraft(draft), scope),

@@ -184,7 +184,8 @@ export function applyPush(
   const applyOne = (e: WireEntry): PushResult => {
     const printing = findPrinting.get(e.imageId, e.pkey) as Printing | undefined
     // Never 'rejected' for a game the user can't use yet: that would make the client drop the uid.
-    if (!printing || !games.includes(printing.game)) return { uid: e.uid, status: 'unknown-printing' }
+    if (!printing || !games.includes(printing.game))
+      return { uid: e.uid, status: 'unknown-printing' }
     touched.add(printing.game)
 
     const existing = byUid.get(e.uid) as EntryRow | undefined

@@ -208,6 +208,8 @@ export function createHttpApi(opts: HttpApiOptions = {}): Api {
       checklist: call('friends:checklist'),
       forCard: call('friends:forCard'),
       wishlist: call('friends:wishlist'),
+      binders: call('friends:binders'),
+      binder: call('friends:binder'),
       wanting: call('friends:wanting'),
       owning: call('friends:owning'),
       wishlistVisible: call('friends:wishlistVisible'),

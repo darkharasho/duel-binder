@@ -241,6 +241,9 @@ export function createPhoneApi(deps: {
           ...w,
           printingScan: false
         })),
+      // Binder cards carry no scan flag, so nothing to map; their keys are portable pkeys.
+      binders: portal('friends:binders'),
+      binder: portal('friends:binder'),
       wanting: (cardId: number) => store.portalRead('friends:wanting', [cardId]),
       owning: (pkeys: string[]) => store.portalRead('friends:owning', [pkeys]),
       wishlistVisible: portal('friends:wishlistVisible'),

@@ -55,9 +55,16 @@ export class Store extends DurableObject<WorkerEnv> {
 
   /** Keeps eBay prices fresh for every printing any user owns; re-arms itself. */
   async alarm(): Promise<void> {
-    await runPriceAlarm(this.db, priceClientFor(this.env), this.ctx.storage, () => new Date(), sweepClientFor(this.env), {
-      pokemonDailyCalls: pokemonDailyCalls(this.env.POKEMON_SWEEP_DAILY_CALLS)
-    })
+    await runPriceAlarm(
+      this.db,
+      priceClientFor(this.env),
+      this.ctx.storage,
+      () => new Date(),
+      sweepClientFor(this.env),
+      {
+        pokemonDailyCalls: pokemonDailyCalls(this.env.POKEMON_SWEEP_DAILY_CALLS)
+      }
+    )
   }
 
   fetch(req: Request): Promise<Response> {

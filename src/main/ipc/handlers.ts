@@ -150,6 +150,9 @@ export function createHandlers({
         ...w,
         printingScan: false
       })),
+    'friends:binders': async (userId: number) => account.portal('friends:binders', [userId]),
+    'friends:binder': async (userId: number, uid: string) =>
+      account.portal('friends:binder', [userId, uid]),
     'friends:wanting': async (cardId: number) => account.portal('friends:wanting', [cardId]),
     'friends:owning': async (pkeys: string[]) => account.portal('friends:owning', [pkeys]),
     'friends:wishlistVisible': async () => account.portal('friends:wishlistVisible', []),

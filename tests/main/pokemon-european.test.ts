@@ -205,9 +205,19 @@ describe('variants', () => {
     }
   })
 
-  it('keeps a stamp TCGdex left as its English slug', () => {
-    const c = europeanCard('fr', card('x-1', 'a', { variants_detailed: [{ type: 'Holo', stamp: ['worlds-2025'] }] }))
-    expect(c.variants_detailed?.[0].stamp).toEqual(['worlds-2025'])
+  it('leaves out a stamped variant, which may never have been printed in this language', () => {
+    const c = europeanCard(
+      'fr',
+      card('x-1', 'a', {
+        variants_detailed: [{ type: 'Holo' }, { type: 'Holo', stamp: ['worlds-2025'] }]
+      })
+    )
+    expect(c.variants_detailed).toEqual([expect.objectContaining({ type: 'holo' })])
+  })
+
+  it('keeps a 1st Edition variant', () => {
+    const c = europeanCard('fr', card('x-1', 'a', { variants_detailed: [{ type: 'Holo', stamp: ['1re Édition'] }] }))
+    expect(c.variants_detailed?.[0].stamp).toEqual(['1st-edition'])
   })
 })
 

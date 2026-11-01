@@ -43,6 +43,8 @@ A `europeanCard()` step, like `traditionalCard()`, maps to the English vocabular
 
 Tables are built from TCGdex's own lists for all four languages. Any value we can't map confidently fails the language, not the night.
 
+Variant type, subtype, stamp and foil are localized too and go through the same tables. TCGdex shares variant lists across languages, so a stamped variant other than 1st Edition is left out: a real one can be added later, a wrong one stays in the key.
+
 ## Names
 
 `cards.name` is the English name from the same-id `en` card; the printed name goes to `local_name`. Without an English twin, the local name stays as `name`. The English-name lookup covers ids en lacks (`2013bw`, `2018sm-fr`, `2019sm-fr`).

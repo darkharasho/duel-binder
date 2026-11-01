@@ -17,6 +17,13 @@ export const EUROPEAN_LANGS = ['fr', 'de', 'it', 'es'] as const satisfies readon
 export const isEuropean = (lang: PkmLang): lang is EuropeanLang =>
   (EUROPEAN_LANGS as readonly string[]).includes(lang)
 
+/**
+ * TCGdex shares a card's variant list across languages, so a French card can list a stamp never
+ * printed in French. A wrong version is in the key for good and a missing one can be added, so only
+ * 1st Edition, which sets carry in every language, is taken.
+ */
+const printedHere = (v: TdVariant): boolean => (v.stamp ?? []).every((s) => s === '1st-edition')
+
 /** Turns a card into English words, adding any it can't to `unmapped`. */
 function normalise(lang: EuropeanLang, card: TdCard, unmapped: Set<string>): TdCard {
   const english = (kind: VocabKind, value: string): string => {
@@ -41,7 +48,7 @@ function normalise(lang: EuropeanLang, card: TdCard, unmapped: Set<string>): TdC
     ...(card.category ? { category: english('category', card.category) } : {}),
     ...(card.stage ? { stage: english('stage', card.stage) } : {}),
     ...(card.types ? { types: card.types.map((t) => english('types', t)) } : {}),
-    variants_detailed: card.variants_detailed?.map(variant),
+    variants_detailed: card.variants_detailed?.map(variant).filter(printedHere),
     thirdParty: undefined
   }
 }

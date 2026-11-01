@@ -511,6 +511,17 @@ export interface SetArtOpts {
   retryDelayMs?: number
 }
 
+/** A language's sets with no stored pack, for a night the archive can't be read. */
+const packlessSets = (db: Database.Database, lang: TdLang): string[] =>
+  (
+    db
+      .prepare(
+        `SELECT s.set_name FROM sets s WHERE s.game = 'pkm' AND s.language = ? AND NOT EXISTS
+         (SELECT 1 FROM pokemon_set_art a WHERE a.language = s.language AND a.set_name = s.set_name AND a.kind = 'pack')`
+      )
+      .all(lang) as { set_name: string }[]
+  ).map((r) => r.set_name)
+
 const setsOf = (db: Database.Database, lang: TdLang): SetRow[] =>
   db
     .prepare(
@@ -568,18 +579,28 @@ export async function refreshPokemonSetArt(
       report.unmatchedFiles[lang] = unmatchedFiles
       return art
     })
+  } catch (e) {
+    report.problems.push(`Pack art: ${e instanceof Error ? e.message : String(e)}`)
+  }
+
+  // Apart from the archive, which can refuse the job: a set with no pack still gets TCGplayer's.
+  let extraPacks: Map<string, ArchiveFile[]>[] | null = null
+  try {
     const get = <T>(url: string): Promise<{ results?: T[] }> =>
       getJsonRetrying<{ results?: T[] }>(fetchFn, url, userAgent, opts.retryDelayMs)
-    for (const [i, lang] of (['en', 'ja'] as const).entries()) {
-      const extra = await tcgplayerPacks(lang, report.packs[lang].unmatchedSets, get)
-      for (const [set, list] of extra) packs[i].set(set, list)
+    extraPacks = []
+    for (const lang of ['en', 'ja'] as const) {
+      const missing = packs ? report.packs[lang].unmatchedSets : packlessSets(db, lang)
+      const extra = await tcgplayerPacks(lang, missing, get)
+      extraPacks.push(extra)
       report.packs[lang].matched += extra.size
       report.packs[lang].unmatchedSets = report.packs[lang].unmatchedSets.filter(
         (s) => !extra.has(s)
       )
     }
   } catch (e) {
-    report.problems.push(`Pack art: ${e instanceof Error ? e.message : String(e)}`)
+    extraPacks = null
+    report.problems.push(`TCGplayer packs: ${e instanceof Error ? e.message : String(e)}`)
   }
 
   let logos: Map<string, string> | null = null
@@ -617,10 +638,13 @@ export async function refreshPokemonSetArt(
      VALUES (?, ?, ?, ?, ?, ?)`
   )
   db.transaction(() => {
-    if (packs) {
-      db.exec("DELETE FROM pokemon_set_art WHERE kind = 'pack'")
+    // A source that failed keeps what it stored, so TCGplayer's packs aren't dropped on its bad night.
+    const replacing = packs !== null && extraPacks !== null
+    if (replacing) db.exec("DELETE FROM pokemon_set_art WHERE kind = 'pack'")
+    for (const found of [replacing ? packs : null, extraPacks]) {
+      if (!found) continue
       ;(['en', 'ja'] as const).forEach((lang, i) => {
-        for (const [set, list] of packs![i]) {
+        for (const [set, list] of found[i]) {
           list.forEach((f, order) => {
             const key = bulbagardenKey(f.url) ?? tcgplayerPackKey(f.url)
             if (key) insert.run(lang, set, 'pack', order, f.url, key)
@@ -636,7 +660,8 @@ export async function refreshPokemonSetArt(
       }
     }
   })()
-  if (packs && logos) setMeta(db, 'pkm_set_art_synced_at', (opts.now ?? new Date()).toISOString())
+  if (packs && extraPacks && logos)
+    setMeta(db, 'pkm_set_art_synced_at', (opts.now ?? new Date()).toISOString())
   return report
 }
 

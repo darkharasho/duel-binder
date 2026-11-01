@@ -233,8 +233,8 @@ describe('image route', () => {
     it('serves owner-supplied art from R2 only, and never fetches it', async () => {
       const id = addPokemon(9, `${HAND_ART_PREFIX}en-me06-011`)
       expect((await get(`small/${id}`)).status).toBe(404)
-      await bucket.put('hand/en-me06-011/low.jpg', JPEG, { httpMetadata: { contentType: 'image/jpeg' } })
-      await bucket.put('hand/en-me06-011/high.jpg', JPEG, { httpMetadata: { contentType: 'image/jpeg' } })
+      await bucket.put('hand/en-me06-011/low.jpg', JPEG.buffer, { httpMetadata: { contentType: 'image/jpeg' } })
+      await bucket.put('hand/en-me06-011/high.jpg', JPEG.buffer, { httpMetadata: { contentType: 'image/jpeg' } })
       expect((await getAnon(`small/${id}`)).status).toBe(200)
       expect((await getAnon(`full/${id}`)).status).toBe(200)
       // The catalog job fingerprints the file itself, at its URL.

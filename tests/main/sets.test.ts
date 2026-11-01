@@ -132,6 +132,20 @@ describe('listSets', () => {
     })
   })
 
+  it('backs a set with its hit: the dearest card, whatever its rarity', async () => {
+    const db = await setup()
+    const price = (code: string, v: number): void => {
+      db.prepare('UPDATE card_printings SET market_price = ? WHERE set_code = ?').run(v, code)
+    }
+    price('MRD-EN010', 40)
+    price('MRD-002', 3)
+    const cover = (): number | null =>
+      listSets(db).find((x) => x.setName === MRD && x.language === 'en')!.coverImageId
+    expect(cover()).toBe(3001) // Gamma Trap, only a Rare, over Alpha Dragon's Secret Rare
+    price('MRD-002', 400)
+    expect(cover()).toBe(2001)
+  })
+
   it('counts ownership only through printings of that set', async () => {
     const db = await setup()
     own(db, 'MRD-E001', 'Ultra Rare', 1001, 2)

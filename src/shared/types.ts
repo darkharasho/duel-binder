@@ -70,6 +70,8 @@ export interface EntryView {
   notes: string
   createdAt: string
   updatedAt: string
+  /** The printing's set's release date, as YYYY-MM-DD; the English set's if its own has none. */
+  releaseDate?: string | null
   card: CardRow
   printing: Printing
   /**
@@ -114,7 +116,7 @@ export interface UpdateEntryInput {
 }
 
 /** 'value' is an entry's total (price × quantity); 'unitPrice' is one copy's price. */
-export type SortKey = 'name' | 'value' | 'unitPrice' | 'quantity' | 'added'
+export type SortKey = 'name' | 'value' | 'unitPrice' | 'quantity' | 'added' | 'released'
 
 export interface CollectionFilters {
   q?: string
@@ -336,7 +338,7 @@ export interface SetSummary {
   imageKey: string | null // file stem under images/sets/, already validated
   packImageKey: string | null // official pack render, under images/sets/ like imageKey
   logoImageKey: string | null // English set logo from Yugipedia, under images/sets/ like imageKey
-  coverImageId: number | null // artwork of the set's headline card (its rarest printing)
+  coverImageId: number | null // artwork of the set's hit, or its rarest printing with no prices
   totalCards: number
   ownedCards: number
   totalRarities: number

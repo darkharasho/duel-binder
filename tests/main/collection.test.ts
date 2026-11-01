@@ -109,6 +109,28 @@ test('update validates and edits in place', () => {
   })
 })
 
+test('sorts by release date, undated sets last either way, a set in its own order', () => {
+  addEntry(db, { printingId: pid('LOB-EN119'), imageId: 55144522, quantity: 1 })
+  addEntry(db, { printingId: pid('LOB-EN005'), imageId: 46986414, quantity: 1 })
+  addEntry(db, { printingId: pid('SDY-006'), imageId: 46986414, quantity: 1 })
+  const date = db.prepare('UPDATE sets SET tcg_date = ? WHERE set_name = ?')
+  const setOf = (code: string): string =>
+    (db.prepare('SELECT set_name FROM card_printings WHERE set_code = ?').get(code) as { set_name: string }).set_name
+  const upsert = db.prepare(
+    "INSERT OR IGNORE INTO sets (game, language, set_name, set_code) VALUES ('ygo', 'en', ?, 'X')"
+  )
+  for (const code of ['LOB-EN005', 'SDY-006']) upsert.run(setOf(code))
+  date.run('2002-03-08', setOf('LOB-EN005'))
+  date.run(null, setOf('SDY-006'))
+  const codes = (dir: 'asc' | 'desc'): string[] =>
+    listEntries(db, { sort: 'released', dir }).map((e) => e.printing.setCode)
+  expect(codes('asc')).toEqual(['LOB-EN005', 'LOB-EN119', 'SDY-006'])
+  expect(codes('desc')).toEqual(['LOB-EN005', 'LOB-EN119', 'SDY-006'])
+  date.run('2002-03-29', setOf('SDY-006'))
+  expect(codes('asc')).toEqual(['LOB-EN005', 'LOB-EN119', 'SDY-006'])
+  expect(codes('desc')).toEqual(['SDY-006', 'LOB-EN005', 'LOB-EN119'])
+})
+
 test('filters and sorting', () => {
   addEntry(db, { printingId: pid('LOB-EN005'), imageId: 46986414, quantity: 1 })
   addEntry(db, { printingId: pid('SDY-006'), imageId: 46986414, quantity: 1 })

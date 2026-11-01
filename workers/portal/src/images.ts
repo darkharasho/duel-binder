@@ -6,6 +6,7 @@ import {
   YUGIPEDIA_IMAGE_PREFIX,
   KONAMI_LOGO_PREFIX,
   BULBAGARDEN_IMAGE_PREFIX,
+  TCGPLAYER_PACK_PREFIX,
   isFallbackLogoUrl,
   type ImageSize
 } from '../../../src/shared/imageSources'
@@ -318,12 +319,16 @@ function resolve(deps: AppDeps, path: string): Target | null {
       if (!row?.image_url || !row.image_url.startsWith(TCGDEX_PREFIX)) return null
       return { key: `set/${id}`, source: fixed(`${row.image_url}.webp`), cache: SET_CACHE }
     }
-    if (prefix === 'bp-' || prefix === 'pt-') {
-      // Pokémon pack art (Bulbagarden Archives) and fallback logos (Pokémon TCG API).
+    if (prefix === 'bp-' || prefix === 'tp-' || prefix === 'pt-') {
+      // Pokémon pack art (Bulbagarden Archives, else TCGplayer) and fallback logos (Pokémon TCG API).
       const source = findPokemonSetArtUrl(deps.db, id)
       if (source === null) return null
       const allowed =
-        prefix === 'bp-' ? source.startsWith(BULBAGARDEN_IMAGE_PREFIX) : isFallbackLogoUrl(source)
+        prefix === 'bp-'
+          ? source.startsWith(BULBAGARDEN_IMAGE_PREFIX)
+          : prefix === 'tp-'
+            ? source.startsWith(TCGPLAYER_PACK_PREFIX)
+            : isFallbackLogoUrl(source)
       if (!allowed) return null
       return {
         key: `set/${id}`,

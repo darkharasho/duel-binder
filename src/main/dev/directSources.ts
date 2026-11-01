@@ -2,6 +2,7 @@ import type Database from 'better-sqlite3'
 import type { SqlDb } from '../db/sql'
 import {
   BULBAGARDEN_IMAGE_PREFIX,
+  TCGPLAYER_PACK_PREFIX,
   imageUrl,
   KONAMI_LOGO_PREFIX,
   isFallbackLogoUrl,
@@ -64,6 +65,7 @@ export function directImageSources(opts: {
       if (source === 'yp-') return resolved(key, YUGIPEDIA_IMAGE_PREFIX)
       if (source === 'yc-') return resolved(key, PACK_ART_PREFIX)
       if (source === 'bp-') return resolved(key, BULBAGARDEN_IMAGE_PREFIX, findPokemonSetArtUrl)
+      if (source === 'tp-') return resolved(key, TCGPLAYER_PACK_PREFIX, findPokemonSetArtUrl)
       if (source === 'pt-') {
         const url = findPokemonSetArtUrl(opts.db, key)
         return url !== null && isFallbackLogoUrl(url) ? { url, headers } : null

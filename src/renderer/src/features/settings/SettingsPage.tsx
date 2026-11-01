@@ -76,7 +76,7 @@ function AboutSection(): React.JSX.Element {
         >
           Bulbagarden Archives
         </a>
-        ; set logos from TCGdex and the Pokémon TCG API. Pokémon images © The Pokémon Company.
+        {' '}and TCGplayer; set logos from TCGdex and the Pokémon TCG API. Pokémon images © The Pokémon Company.
       </p>
     </Section>
   )

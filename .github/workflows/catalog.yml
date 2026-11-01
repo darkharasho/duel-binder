@@ -18,7 +18,7 @@ on:
         type: boolean
         default: false
       refresh_sets:
-        description: Re-read the non-English set lists now instead of on their weekly timer
+        description: Re-read the non-English set lists and Pokémon set art now instead of on their weekly timers
         type: boolean
         default: false
       refresh_cards:

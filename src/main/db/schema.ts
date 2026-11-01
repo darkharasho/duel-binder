@@ -413,6 +413,26 @@ export const SCHEMA_V29 = `
 DELETE FROM printing_art WHERE url IS NULL;
 `
 
+/** Binders: a named subset of the collection (rules, a goal, languages) and its per-card/art edits. Desktop only; the server has these as server-19. */
+export const SCHEMA_V30 = `
+CREATE TABLE binders (owner_id INTEGER NOT NULL DEFAULT 0, uid TEXT NOT NULL, game TEXT NOT NULL,
+  name TEXT NOT NULL, rules TEXT NOT NULL, goal TEXT NOT NULL, languages TEXT NOT NULL,
+  friends_visible INTEGER NOT NULL DEFAULT 1, sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL, updated_at TEXT NOT NULL, deleted_at TEXT,
+  dirty INTEGER NOT NULL DEFAULT 1, PRIMARY KEY (owner_id, uid));
+CREATE TABLE binder_edits (owner_id INTEGER NOT NULL DEFAULT 0, binder_uid TEXT NOT NULL, level TEXT NOT NULL,
+  target TEXT NOT NULL, game TEXT NOT NULL, action TEXT NOT NULL, created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL, deleted_at TEXT, dirty INTEGER NOT NULL DEFAULT 1,
+  PRIMARY KEY (owner_id, binder_uid, level, target));
+CREATE INDEX ix_binders_dirty ON binders(owner_id) WHERE dirty = 1;
+CREATE INDEX ix_binder_edits_dirty ON binder_edits(owner_id) WHERE dirty = 1;
+`
+
+/** Illustrator lookups for binder rules. Desktop only: the server gets this index as server-21. */
+export const SCHEMA_V31 = `
+CREATE INDEX ix_pokemon_cards_illustrator ON pokemon_cards(illustrator);
+`
+
 /** A printing's rarity as shown: "Starlight Rare (Extended Art)" for a labelled variant. */
 export const RARITY_LABEL = "p.set_rarity || COALESCE(' (' || p.variant || ')', '')"
 
@@ -446,5 +466,7 @@ export const MIGRATIONS: Migration[] = [
   { version: 26, sql: SCHEMA_V26, server: false },
   { version: 27, sql: SCHEMA_V27, server: false },
   { version: 28, sql: SCHEMA_V28, server: false },
-  { version: 29, sql: SCHEMA_V29 }
+  { version: 29, sql: SCHEMA_V29 },
+  { version: 30, sql: SCHEMA_V30, server: false },
+  { version: 31, sql: SCHEMA_V31, server: false }
 ]

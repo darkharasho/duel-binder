@@ -7,6 +7,12 @@ export const NEXT_SEQ = '(SELECT COALESCE(MAX(server_seq), 0) + 1 FROM collectio
 /** SQL for the next wishlist seq: one past the highest in use (the column is unique). */
 export const NEXT_WISH_SEQ = '(SELECT COALESCE(MAX(seq), 0) + 1 FROM wishlist_entries)'
 
+/** SQL for the next binders seq: one past the highest in use (the column is unique). */
+export const NEXT_BINDER_SEQ = '(SELECT COALESCE(MAX(seq), 0) + 1 FROM binders)'
+
+/** SQL for the next binder_edits seq: one past the highest in use (the column is unique). */
+export const NEXT_BINDER_EDIT_SEQ = '(SELECT COALESCE(MAX(seq), 0) + 1 FROM binder_edits)'
+
 /** One user's live (non-deleted) rows of one game on the server. */
 export function userScope(userId: number, game: GameId): Scope {
   if (!Number.isSafeInteger(userId)) throw new Error(`Invalid user id: ${userId}`)
@@ -48,6 +54,10 @@ export function userScope(userId: number, game: GameId): Scope {
       markerCol: 'seq',
       marker: NEXT_WISH_SEQ,
       touch: `seq = ${NEXT_WISH_SEQ}`
+    },
+    binderSync(table) {
+      const next = table === 'binders' ? NEXT_BINDER_SEQ : NEXT_BINDER_EDIT_SEQ
+      return { ownerCol: 'user_id', owner: String(userId), markerCol: 'seq', marker: next, touch: `seq = ${next}` }
     },
     snapshotTable: {
       insertCols: 'user_id, game, ',

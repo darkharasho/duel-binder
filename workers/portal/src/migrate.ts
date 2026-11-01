@@ -471,7 +471,29 @@ ALTER TABLE users ADD COLUMN wishlist_hidden INTEGER NOT NULL DEFAULT 0;
     );
     CREATE INDEX ix_error_reports_day ON error_reports(day);`
   },
-  traditionalTwinStep()
+  traditionalTwinStep(),
+  {
+    // Binders and their edits, numbered by their own clocks (`seq`), as wishlist_entries is in server-15.
+    name: 'server-19',
+    sql: `
+CREATE TABLE binders (user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, uid TEXT NOT NULL,
+  game TEXT NOT NULL, name TEXT NOT NULL, rules TEXT NOT NULL, goal TEXT NOT NULL, languages TEXT NOT NULL,
+  friends_visible INTEGER NOT NULL DEFAULT 1, sort_order INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL, updated_at TEXT NOT NULL, deleted_at TEXT,
+  seq INTEGER NOT NULL, PRIMARY KEY (user_id, uid));
+CREATE UNIQUE INDEX ux_binders_seq ON binders(seq);
+CREATE INDEX ix_binders_user_seq ON binders(user_id, seq);
+CREATE TABLE binder_edits (user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, binder_uid TEXT NOT NULL,
+  level TEXT NOT NULL, target TEXT NOT NULL, game TEXT NOT NULL, action TEXT NOT NULL, created_at TEXT NOT NULL,
+  updated_at TEXT NOT NULL, deleted_at TEXT, seq INTEGER NOT NULL,
+  PRIMARY KEY (user_id, binder_uid, level, target));
+CREATE UNIQUE INDEX ux_binder_edits_seq ON binder_edits(seq);
+CREATE INDEX ix_binder_edits_user_seq ON binder_edits(user_id, seq);
+`
+  },
+  // Its own step so a slow build commits alone.
+  { name: 'server-20', sql: 'CREATE INDEX ix_printings_card ON card_printings(card_id);' },
+  { name: 'server-21', sql: 'CREATE INDEX ix_pokemon_cards_illustrator ON pokemon_cards(illustrator);' }
 ]
 
 /**

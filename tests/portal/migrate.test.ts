@@ -130,7 +130,7 @@ function serverBefore12(): Database.Database {
   const db = freshDb()
   runSteps(db, [
     ...MIGRATIONS.filter((m) => m.version <= 18),
-    ...SERVER_STEPS.filter((s) => !['server-12', 'server-13', 'server-14', 'server-16', 'server-18'].includes(s.name))
+    ...SERVER_STEPS.filter((s) => !['server-12', 'server-13', 'server-14', 'server-16', 'server-18', 'server-21'].includes(s.name))
   ])
   db.exec(`
     INSERT INTO users (id, discord_id, username, created_at, updated_at) VALUES (1, 'd1', 'one', 'x', 'x');
@@ -256,7 +256,7 @@ describe('server-13 (pokemon_cards image_url and local_name)', () => {
     const fresh = freshDb()
     migrateServer(fresh)
     const old = freshDb()
-    runSteps(old, [...MIGRATIONS, ...SERVER_STEPS.filter((s) => !['server-13', 'server-16', 'server-18'].includes(s.name))])
+    runSteps(old, [...MIGRATIONS, ...SERVER_STEPS.filter((s) => !['server-13', 'server-16', 'server-18', 'server-21'].includes(s.name))])
     expect(cols(old)).not.toContain('image_url')
     seedPokemon(old)
     migrateServer(old)
@@ -304,7 +304,7 @@ describe('server-16 (pokemon_cards art_twin_id)', () => {
     const fresh = freshDb()
     migrateServer(fresh)
     const old = freshDb()
-    runSteps(old, [...MIGRATIONS, ...SERVER_STEPS.filter((s) => !['server-16', 'server-18'].includes(s.name))])
+    runSteps(old, [...MIGRATIONS, ...SERVER_STEPS.filter((s) => !['server-16', 'server-18', 'server-21'].includes(s.name))])
     expect(cols(old)).not.toContain('art_twin_id')
     seedPokemon(old)
     migrateServer(old)

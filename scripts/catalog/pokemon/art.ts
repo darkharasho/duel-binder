@@ -1,5 +1,16 @@
+import { HAND_ART_PREFIX } from '../../../src/shared/imageSources'
 import { isSameNumber, OWN_NUMBERS, plainName, sameCardName } from './match'
 import type { PkmLang, TcProduct, TdCard, TdSet } from './types'
+
+/** Sets the owner supplied art for, in R2 (HAND_ART_PREFIX), and how many cards each has. */
+const HAND_ART_SETS: Record<string, number> = { 'en/me06': 141 }
+
+/** The owner-supplied art of a card ("en/me06-011"), kept over any other source; null if it has none. */
+export function handArtUrl(sourceId: string): string | null {
+  const [, set, number] = /^(.+)-(\d{3})$/.exec(sourceId) ?? []
+  if (set === undefined || !(Number(number) <= (HAND_ART_SETS[set] ?? 0))) return null
+  return `${HAND_ART_PREFIX}${sourceId.replace('/', '-')}`
+}
 
 /**
  * Art for the cards TCGdex has no image for and product matching left without one, from TCGplayer

@@ -3,6 +3,7 @@ import type Database from 'better-sqlite3'
 import { getMeta, setMeta } from '../../../src/main/db/meta'
 import {
   BULBAGARDEN_IMAGE_PREFIX,
+  HAND_ART_PREFIX,
   isFallbackLogoUrl,
   POKEMONTCG_IMAGE_PREFIX,
   SCRYDEX_IMAGE_PREFIX,
@@ -407,6 +408,7 @@ const TRAINER_KIT_LOGOS = {
  * subset without its own logo has its parent set's.
  */
 const HAND_PICKED_LOGOS: Record<string, string> = {
+  'Delta Reign': `${HAND_ART_PREFIX}me06/logo.png`,
   '30th Celebration': scrydexLogo('me55'),
   '30th Classic Collection': scrydexLogo('me55c'),
   'SVP Black Star Promos': `${POKEMONTCG_IMAGE_PREFIX}svp/logo.png`,

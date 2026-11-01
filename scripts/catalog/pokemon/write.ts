@@ -2,7 +2,7 @@ import type Database from 'better-sqlite3'
 import { movedEnough } from '../../../src/main/tcgplayer/prices'
 import { pokemonId } from '../../../src/shared/games/ids'
 import { hasNativeScript } from '../../../src/shared/setNames'
-import { findArt, findArtByName, NAME_GROUPS } from './art'
+import { findArt, findArtByName, handArtUrl, NAME_GROUPS } from './art'
 import { englishTwins, traditionalTwins } from './artTwins'
 import { englishNamer, type EnglishNamer } from './englishNames'
 import { europeanNamer, isEuropean } from './european'
@@ -282,7 +282,7 @@ async function planLanguage(
           card,
           name,
           localName: card.localName ?? (lang === 'ja' && name !== card.name ? card.name : null),
-          imageUrl: card.image || first?.imageUrl || null,
+          imageUrl: card.image || handArtUrl(`${lang}/${card.id}`) || first?.imageUrl || null,
           artTwinId: null,
           traditionalTwinId: null,
           versions: v.versions

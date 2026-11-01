@@ -3,6 +3,7 @@ import type Database from 'better-sqlite3'
 import { tokenId } from '../../src/shared/games/ids'
 import {
   BULBAGARDEN_IMAGE_PREFIX,
+  HAND_ART_PREFIX,
   KONAMI_LOGO_PREFIX,
   PACK_ART_PREFIX,
   POKEMONTCG_IMAGE_PREFIX,
@@ -227,6 +228,20 @@ describe('image route', () => {
       expect((await getFrom('1.2.3.4', `small/${id}`)).status).toBe(200) // signed-out fill
       expect(upstream.mock.calls[1][0]).toBe('https://assets.tcgdex.net/en/sv/sv01/001/low.webp')
       expect(bucket.store.has(`card/full/${id}`)).toBe(true)
+    })
+
+    it('serves owner-supplied art from R2 only, and never fetches it', async () => {
+      const id = addPokemon(9, `${HAND_ART_PREFIX}en-me06-011`)
+      expect((await get(`small/${id}`)).status).toBe(404)
+      await bucket.put('hand/en-me06-011/low.jpg', JPEG.buffer, { httpMetadata: { contentType: 'image/jpeg' } })
+      await bucket.put('hand/en-me06-011/high.jpg', JPEG.buffer, { httpMetadata: { contentType: 'image/jpeg' } })
+      expect((await getAnon(`small/${id}`)).status).toBe(200)
+      expect((await getAnon(`full/${id}`)).status).toBe(200)
+      // The catalog job fingerprints the file itself, at its URL.
+      expect((await getAnon('hand/en-me06-011/low.jpg')).status).toBe(200)
+      expect((await getAnon('hand/en-me06-011/..%2Fsecret.jpg')).status).toBe(404)
+      expect((await getAnon('hand/en-me06-011')).status).toBe(404)
+      expect(upstream).not.toHaveBeenCalled()
     })
 
     it('fetches TCGplayer art at the requested size', async () => {

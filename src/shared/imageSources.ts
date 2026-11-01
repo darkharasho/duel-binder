@@ -31,5 +31,13 @@ export const POKEMONTCG_IMAGE_PREFIX = 'https://images.pokemontcg.io/'
 /** Where the same API keeps the logos of its newest sets. */
 export const SCRYDEX_IMAGE_PREFIX = 'https://images.scrydex.com/pokemon/'
 
+/**
+ * Art the owner supplied, kept only in the portal's R2 (under hand/, put there by hand; the images
+ * are not in this repo). A card's URL is the base of its low.jpg and high.jpg, as TCGdex's is.
+ */
+export const HAND_ART_PREFIX = 'https://app.duelbinder.com/img/hand/'
+
 export const isFallbackLogoUrl = (url: string): boolean =>
-  url.startsWith(POKEMONTCG_IMAGE_PREFIX) || url.startsWith(SCRYDEX_IMAGE_PREFIX)
+  url.startsWith(POKEMONTCG_IMAGE_PREFIX) ||
+  url.startsWith(SCRYDEX_IMAGE_PREFIX) ||
+  url.startsWith(HAND_ART_PREFIX)

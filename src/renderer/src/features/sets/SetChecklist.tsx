@@ -600,6 +600,7 @@ export function SetChecklist({
                   unownedCard && `${englishSetName(data.set.setName)} · ${unownedCard.numberLabel}`
                 }
                 preferSet={{ setName: data.set.setName, language: data.set.language }}
+                onlySet={game === 'ygo'}
                 onSelectEntry={
                   selected
                     ? (entryId) => setSelected({ cardId: selected.cardId, entryId })

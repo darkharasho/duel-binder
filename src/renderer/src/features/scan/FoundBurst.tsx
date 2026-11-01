@@ -1,4 +1,5 @@
 import { CheckIcon } from 'lucide-react'
+import { CardArt } from '@/components/CardArt'
 import { formatUsd } from '@/lib/format'
 import { cn } from '@/lib/utils'
 
@@ -12,19 +13,23 @@ const SPARKS = [
 ]
 
 /**
- * The "found it" moment laid over the camera preview: a gold glow around it, a few sparkles,
- * and a bubble with the card's name and price that pops up and fades. Remount it (a new key) to
- * replay it. Only decoration: the scan status already says what was added. `stream` is the scan
- * window's: sized to the window, the bubble at the top (the last-scan card is at the bottom).
+ * The "found it" moment laid over the camera preview: a gold glow around it, a ring opening out
+ * and a sheen crossing the picture, a few sparkles, and a bubble with the card's name and price
+ * that pops up and fades. With `imageId` the card found settles over the one in hand for a moment,
+ * to show what was matched. Remount it (a new key) to replay it. Only decoration: the scan status
+ * already says what was added. `stream` is the scan window's: sized to the window, the bubble at
+ * the top (the last-scan card is at the bottom).
  */
 export function FoundBurst({
   name,
   price,
+  imageId = null,
   stream = false,
   bubble = true
 }: {
   name: string
   price: number | null | undefined
+  imageId?: number | null
   stream?: boolean
   bubble?: boolean
 }): React.JSX.Element {
@@ -35,6 +40,22 @@ export function FoundBurst({
       className="pointer-events-none absolute inset-0 rounded-[inherit]"
     >
       <div className="absolute inset-0 rounded-[inherit] animate-[scan-glow_900ms_ease-out_both]" />
+      <div className="absolute inset-0 overflow-hidden rounded-[inherit]">
+        <div className="absolute inset-y-0 -left-1/2 w-1/2 -skew-x-12 bg-linear-to-r from-transparent via-white/25 to-transparent animate-[scan-sheen_750ms_ease-out_both]" />
+      </div>
+      <div className="absolute inset-0 flex items-center justify-center">
+        <div className="relative aspect-[63/88] h-4/5 max-w-[85%]">
+          <div className="absolute inset-0 rounded-[6%] border-2 border-amber-200 animate-[scan-ring_800ms_ease-out_both]" />
+          {imageId !== null && (
+            <CardArt
+              imageId={imageId}
+              size="small"
+              alt=""
+              className="absolute inset-0 overflow-hidden rounded-[4%] shadow-2xl animate-[scan-snap_1100ms_ease-out_both]"
+            />
+          )}
+        </div>
+      </div>
       {SPARKS.map((s, i) => (
         <span
           key={i}

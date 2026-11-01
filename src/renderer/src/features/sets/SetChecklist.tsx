@@ -48,6 +48,7 @@ import { useGame } from '@/lib/game'
 import { isPhone, isWeb } from '@/lib/platform'
 import { createSerialQueue } from '@/lib/serialQueue'
 import { useFilterPanel } from '@/lib/useFilterPanel'
+import { formatUsd } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { PlaceholdersButton } from './PlaceholdersDialog'
 import { BulkMode } from './BulkMode'
@@ -67,6 +68,7 @@ import {
   replaceChecklistCard,
   sortCards,
   sortTiles,
+  tilePrice,
   type ChecklistSort,
   type SortDir,
   type Tile,
@@ -539,6 +541,7 @@ export function SetChecklist({
             <ul className="grid grid-cols-[repeat(auto-fill,minmax(calc(7.5rem*var(--card-scale,1)),1fr))] gap-3 max-md:grid-cols-3 max-md:gap-1.5">
               {shownTiles.map((t) => {
                 const owned = t.owned > 0
+                const priced = sort.by === 'price' ? tilePrice(t) : null
                 return (
                   <li key={t.key} className="lazy-item [--lazy-h:calc(240px*var(--card-scale,1))]">
                     <button
@@ -576,8 +579,16 @@ export function SetChecklist({
                         {t.card.numberLabel}
                       </span>
                       <span className="truncate text-xs font-medium">{t.card.name}</span>
-                      {t.rarity && (
-                        <span className="truncate text-xs text-muted-foreground">{t.rarity}</span>
+                      {(priced?.rarity ?? t.rarity) && (
+                        <span className="truncate text-xs text-muted-foreground">
+                          {priced?.rarity ?? t.rarity}
+                        </span>
+                      )}
+                      {/* A card's own price isn't otherwise on its tile, so the order would be a mystery. */}
+                      {priced?.price != null && (
+                        <span className="text-xs tabular-nums text-emerald-400">
+                          {formatUsd(priced.price)}
+                        </span>
                       )}
                     </button>
                   </li>

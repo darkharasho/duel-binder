@@ -66,7 +66,7 @@ describe('renderPage', () => {
       'A binder for your <span class="nowrap">Yu-Gi-Oh!</span> and Pokémon cards.'
     )
     expect(html).toContain(
-      "Log what you own by set, rarity and condition. Prices update on their own. It runs on your computer and works offline. Sign in with Discord to see your friends' binders on the web."
+      "Log what you own by set, rarity and condition. Prices update on their own. It runs on your computer and works offline. Sign in with Discord to see your friends' collections on the web."
     )
   })
 
@@ -166,7 +166,7 @@ describe('renderPrivacy', () => {
       'your collection, wishlist, notes and value history',
       'friends and blocks',
       'sign-in sessions',
-      'to sync and show your binder',
+      'to sync and show your collection',
       'Nothing is sold or used for ads.',
       'There are no third-party trackers.',
       'the camera picture is processed on your phone and never uploaded',

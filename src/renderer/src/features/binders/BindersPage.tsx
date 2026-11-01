@@ -13,7 +13,7 @@ import { BinderForm } from './BinderForm'
 import { BinderView } from './BinderView'
 import { GOAL_LABEL, binderProgress, languagesLabel } from './binderProgress'
 
-function Row({ b, onOpen }: { b: BinderSummary; onOpen: () => void }): React.JSX.Element {
+export function Row({ b, onOpen }: { b: BinderSummary; onOpen: () => void }): React.JSX.Element {
   const hasGoal = b.goal !== 'none'
   const progress = binderProgress(b)
   const total = progress.total

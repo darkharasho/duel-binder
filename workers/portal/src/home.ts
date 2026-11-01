@@ -22,7 +22,7 @@ function body(v: HomeView): string {
   }
   const failed = v.signInFailed ? `<p class="note">Sign-in didn't go through. Try again.</p>` : ''
   return `<h1>Duel Binder on the web.</h1>
-<p class="lead">Sign in with Discord to open your binder in the browser.</p>
+<p class="lead">Sign in with Discord to open your collection in the browser.</p>
 ${failed}<div class="actions"><a class="btn pri" href="/auth/discord/start">Sign in with Discord</a>${download}</div>`
 }
 

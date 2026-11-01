@@ -8,7 +8,7 @@ const TITLE = 'Duel Binder — a binder for your Yu-Gi-Oh! and Pokémon cards'
 const DESCRIPTION =
   'Duel Binder is a desktop app for cataloging your Yu-Gi-Oh! and Pokémon cards by set, rarity and condition, with prices that update on their own.'
 const LEAD =
-  "Log what you own by set, rarity and condition. Prices update on their own. It runs on your computer and works offline. Sign in with Discord to see your friends' binders on the web."
+  "Log what you own by set, rarity and condition. Prices update on their own. It runs on your computer and works offline. Sign in with Discord to see your friends' collections on the web."
 
 // The favicon, drawn for small sizes (resources/brand/small.svg); so there is only one mark to keep.
 export const MARK = `<img src="/favicon.svg" width="28" height="28" alt="">`
@@ -76,7 +76,7 @@ function features(): string {
     feature(
       '',
       'Friends',
-      "Sign in with Discord, add your friends, and look through each other's binders at app.duelbinder.com.",
+      "Sign in with Discord, add your friends, and look through each other's collections at app.duelbinder.com.",
     ),
   ].join('\n')
 }

@@ -6,6 +6,7 @@ import {
   YUGIPEDIA_IMAGE_PREFIX,
   KONAMI_LOGO_PREFIX,
   BULBAGARDEN_IMAGE_PREFIX,
+  HAND_ART_PREFIX,
   TCGPLAYER_PACK_PREFIX,
   isFallbackLogoUrl,
   type ImageSize
@@ -247,6 +248,7 @@ interface Target {
 }
 
 const TCGDEX_PREFIX = 'https://assets.tcgdex.net/'
+const HAND_PATH_RE = /^[a-z0-9-]+\/[a-z]+\.(?:jpg|png)$/
 const TCGPLAYER_CDN_PREFIX = 'https://tcgplayer-cdn.tcgplayer.com/'
 
 /** The upstream URL of a Pokémon card image at `size`; null for a foreign host. */
@@ -262,9 +264,20 @@ const fixed =
   (url: string, headers?: Record<string, string>): Target['source'] =>
   async () => ({ url, headers })
 
+/** Art that is only ever in R2, at the path after /img/ of its HAND_ART_PREFIX URL. */
+const handArt = (url: string, cache: string): Target => ({
+  key: url.slice(HAND_ART_PREFIX.length - 'hand/'.length),
+  source: async () => null,
+  cache
+})
+
 /** Where a request's artwork comes from and how long browsers may keep it; null when the path names nothing servable. */
 function resolve(deps: AppDeps, path: string): Target | null {
   const [kind, id, ...rest] = path.split('/')
+  if (kind === 'hand') {
+    if (id === undefined || rest.length !== 1 || !HAND_PATH_RE.test(`${id}/${rest[0]}`)) return null
+    return handArt(`${HAND_ART_PREFIX}${id}/${rest[0]}`, CARD_CACHE)
+  }
   if (id === undefined || rest.length > 0) return null
   if (kind === 'small' || kind === 'full' || kind === 'cropped') {
     if (!/^\d+$/.test(id)) return null
@@ -276,6 +289,8 @@ function resolve(deps: AppDeps, path: string): Target | null {
           'SELECT pc.image_url FROM card_images ci JOIN pokemon_cards pc ON pc.card_id = ci.card_id WHERE ci.image_id = ?'
         )
         .get(n) as { image_url: string | null } | undefined
+      if (row?.image_url?.startsWith(HAND_ART_PREFIX))
+        return handArt(`${row.image_url}/${kind === 'full' ? 'high' : 'low'}.jpg`, CARD_CACHE)
       // TCGdex and TCGplayer have no crop, so a Pokémon `cropped` (a set tile's backdrop) is the small art.
       const url = row?.image_url
         ? pokemonArtUrl(row.image_url, kind === 'full' ? 'full' : 'small')
@@ -330,6 +345,7 @@ function resolve(deps: AppDeps, path: string): Target | null {
             ? source.startsWith(TCGPLAYER_PACK_PREFIX)
             : isFallbackLogoUrl(source)
       if (!allowed) return null
+      if (source.startsWith(HAND_ART_PREFIX)) return handArt(source, SET_CACHE)
       return {
         key: `set/${id}`,
         source: fixed(source, { 'User-Agent': USER_AGENT }),

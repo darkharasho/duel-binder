@@ -18,6 +18,8 @@ export interface DexCatalogPrinting {
   version: string
   cardName: string
   language: string
+  /** pokemon_cards.category: "Pokemon", "Trainer" or "Energy". */
+  category?: string | null
 }
 
 export type DexMissReason = 'quantity' | 'language' | 'set' | 'number' | 'name' | 'finish' | 'image'
@@ -85,16 +87,34 @@ const DEX_JA_SETS: Record<string, string> = { jpn_m2a: 'M2a', jpn_mc: 'MC', jpn_
  * to Dex's "Holo" and our "Normal", and a promo is sold in one finish whatever Dex calls it. In
  * these, a card with a single live version takes the row.
  */
-const ONE_FINISH_SETS = new Set(['me55', 'me55cc', 'mep', 'svp', 'swshp', 'xyp', 'basep'])
+const ONE_FINISH_SETS = new Set(['me55', 'me55cc', 'mee', 'mep', 'svp', 'swshp', 'xyp', 'basep'])
 
 /** Dex's name for a pattern in sets where it isn't the catalog's: Dex set id, variant, our version. */
 const SET_FINISHES: Record<string, Record<string, string>> = {
   // Ascended Heroes' plain reverse is its Energy Symbol pattern.
-  me25: { 'Reverse Holo': 'Energy Symbol Pattern' },
+  // Trainers have only the plain reverse, and a Team Rocket card's "Reverse Holofoil" is its R pattern.
+  me25: { 'Reverse Holo': 'Energy Symbol Pattern', 'Team Rocket Holo': 'Reverse Holofoil' },
+  // TCGdex's tinsel foil on a Common, which has no other holo.
+  sv105b: { 'Tinsel Holo': 'Holofoil' },
+  sv105w: { 'Tinsel Holo': 'Holofoil' },
+  // TCGdex's snowflake stamp.
+  swsh8: { 'Holiday Calendar 2023': 'Snowflake Normal' },
+  basep: { 'Movie Stamp': '1st Movie Normal' },
+  // Beside the Pokémon Center version, the plain Holofoil is the 30th Anniversary one.
+  mep: { '30th Anniversary': 'Holofoil' },
   // Japan's reverse in these sets is the Poké Ball pattern; the catalog has one reverse.
   jpn_sv11b: { 'Poké Ball Holo': 'Reverse Holofoil' },
   jpn_sv11w: { 'Poké Ball Holo': 'Reverse Holofoil' }
 }
+
+/**
+ * Sets whose list has no rarity for most cards, so a card Dex calls Holo is a Normal in the catalog.
+ * Taken only when the card has no Holofoil, and no card in an export of these has both from Dex.
+ */
+const BASE_IS_HOLO = new Set(['jpn_m2a'])
+
+/** Dex lists 25th Classic Collection under each card's original number: only its name finds it. */
+const NAME_KEYED_SETS = new Set(['cel25c'])
 
 /**
  * TCGdex numbers 30th Classic Collection in another order than Dex's printed numbers, so its Dex
@@ -122,8 +142,13 @@ const FINISHES: Record<string, string> = {
   'Quick Ball Holo': 'Quick Ball Pattern',
   'Dusk Ball Holo': 'Dusk Ball Pattern',
   'Cosmos Holo': 'Cosmos Holo',
-  'Starlight Holo': 'Starlight Holo'
+  'Starlight Holo': 'Starlight Holo',
+  'Pokémon Day': 'Pokemon Day Holofoil',
+  'Pokémon Center': 'Pokemon Center Exclusive Holofoil'
 }
+
+/** Dex's "Play! Pokémon" stamp, which lands on a card with exactly one of these. */
+const PLAYER_REWARDS = new Set(['Player Rewards Program Holofoil', 'Player Rewards Program Normal'])
 
 /**
  * Dex's "Expansion Stamp" names no finish, and is our "Set Logo" stamp: the 13 Prismatic Evolutions
@@ -158,6 +183,8 @@ function sameCard(dex: string, ours: string): boolean {
   const want = squash(ours)
   return (
     squash(dex) === want ||
+    // Dex writes the Elite Four's Lv. mark as 四, the catalog as E4.
+    squash(dex.replace(/\s*四$/, ' E4')) === want ||
     squash(dex.replace(/^Basic (?=.* Energy$)/, '')) === want ||
     squash(dex.replace(/\s*\([^()]*\)\s*$/, '').replace(/\s+LV\.X$/i, '')) === want
   )
@@ -168,6 +195,9 @@ const sameWords = (dex: string, ours: string): boolean => {
   const words = (s: string): string => s.split(/\s+/).map(squash).sort().join(' ')
   return words(dex) === words(ours)
 }
+
+/** A Chinese list names a regional form; Dex drops it where the species has no other ("Clodsire"). */
+const REGION = /^(?:Alolan|Galarian|Hisuian|Paldean) /
 
 /** A set flagged with a country in Dex ("McDonald's Collection 2018 (🇫🇷)") isn't our set of that name. */
 const REGIONAL = /[\u{1F1E6}-\u{1F1FF}]/u
@@ -245,20 +275,41 @@ function findPrinting(
   const printed = numberKey(row.number)
   const pinned = language === 'en' ? DEX_NUMBERS[dexSetId(row.id)] : undefined
   const number = pinned ? pinned[printed] : printed
-  const versions = number === undefined ? undefined : set.cards.get(number)
-  if (!versions) return 'number'
   const same = (p: DexCatalogPrinting): boolean =>
-    sameCard(row.name, p.cardName) || (language === 'zh-hans' && sameWords(row.name, p.cardName))
+    sameCard(row.name, p.cardName) ||
+    (language === 'zh-hans' &&
+      (sameWords(row.name, p.cardName) || sameCard(row.name, p.cardName.replace(REGION, '')))) ||
+    // Our Japanese Trainers carry their own translation; the set and number say which card it is.
+    (language === 'ja' && p.category === 'Trainer')
+  const dexSet = dexSetId(row.id)
+  let versions = number === undefined ? undefined : set.cards.get(number)
+  if (NAME_KEYED_SETS.has(dexSet)) {
+    const named = [...set.cards.values()].filter((v) => v.every(same))
+    versions = named.length === 1 ? named[0] : undefined
+  }
+  if (!versions) return 'number'
   if (!versions.every(same)) return 'name'
   if (row.variant === 'Expansion Stamp') {
     const stamped = versions.filter((p) => STAMPED.has(p.version))
     return stamped.length === 1 ? stamped[0] : 'finish'
   }
-  const dexSet = dexSetId(row.id)
-  const finish = SET_FINISHES[dexSet]?.[row.variant] ?? FINISHES[row.variant]
-  const exact = versions.find((p) => p.version === finish)
-  if (exact) return exact
-  return ONE_FINISH_SETS.has(dexSet) && versions.length === 1 ? versions[0] : 'finish'
+  if (row.variant === 'Play! Pokémon') {
+    const stamped = versions.filter((p) => PLAYER_REWARDS.has(p.version))
+    return stamped.length === 1 ? stamped[0] : 'finish'
+  }
+  const finishes = [SET_FINISHES[dexSet]?.[row.variant], FINISHES[row.variant]]
+  if (row.variant === 'Holo' && BASE_IS_HOLO.has(dexSet)) finishes.push('Normal')
+  for (const finish of finishes) {
+    const exact = versions.find((p) => p.version === finish)
+    if (exact) return exact
+  }
+  // A single version can't be the wrong finish of the card. Radiant Collection cards are all one
+  // print, and a Chinese finish is the list's rule rather than a source.
+  const onePrint =
+    ONE_FINISH_SETS.has(dexSet) ||
+    /^RC\d/.test(printed) ||
+    (language === 'zh-hans' && (row.variant === 'Normal' || row.variant === 'Holo'))
+  return onePrint && versions.length === 1 ? versions[0] : 'finish'
 }
 
 export const dexMissing = (row: DexRow, reason: DexMissReason): DexMissing => ({

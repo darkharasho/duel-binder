@@ -105,7 +105,7 @@ const coversSql = (scope: Scope): string => `
         WHEN p.set_rarity LIKE '%Rare%' THEN 9
         ELSE 10 END) AS rank
     FROM card_printings p
-    LEFT JOIN intl_prices ip ON ip.printing_id = p.id
+    LEFT JOIN intl_prices ip ON ip.printing_id = p.id AND ${scope.ebayPrices}
     LEFT JOIN pokemon_cards pc ON pc.card_id = p.card_id AND p.game = 'pkm'
     WHERE +p.game = ${scope.game} AND p.missing_from_api = 0 AND p.contributed = 0 %WHERE%
     GROUP BY p.language, p.set_name, p.card_id),
@@ -331,7 +331,7 @@ function checklistCards(
                ORDER BY i.sort_order, i.image_id LIMIT 1) AS image_id,
               pc.rarity AS card_rarity, pc.hp
        FROM card_printings p JOIN cards c ON c.id = p.card_id AND +c.game = ${scope.game}
-       LEFT JOIN intl_prices ip ON ip.printing_id = p.id
+       LEFT JOIN intl_prices ip ON ip.printing_id = p.id AND ${scope.ebayPrices}
        LEFT JOIN pokemon_cards pc ON pc.card_id = p.card_id AND ${scope.game} = 'pkm'
        WHERE +p.game = ${scope.game} AND p.contributed = 0 AND ${shownPrinting(scope)} AND p.language = ? AND p.set_name = ?${cardFilter}`
     )

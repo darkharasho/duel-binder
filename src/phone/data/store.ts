@@ -160,7 +160,8 @@ const READ_CHANNELS: ReadonlySet<DataChannel> = new Set<DataChannel>([
   'rip:session',
   'rip:history',
   'games:available',
-  'games:active'
+  'games:active',
+  'prices:ebayHidden'
 ])
 
 /**

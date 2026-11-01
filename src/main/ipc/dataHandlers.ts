@@ -1,6 +1,6 @@
 import type { Language } from '@shared/languages'
 import type { SqlDb } from '../db/sql'
-import { LOCAL } from '../repo/scope'
+import { ebayPricesHidden, LOCAL, setEbayPricesHidden } from '../repo/scope'
 import { borrowedArt, getCardDetail, searchCards, traditionalArt } from '../repo/cards'
 import { browseCards, browseFacetsFast } from '../repo/browse'
 import { checkLanguage, checkNotesLength } from '../repo/args'
@@ -67,7 +67,9 @@ export const DATA_CHANNELS = [
   'rip:history',
   'games:available',
   'games:active',
-  'games:setActive'
+  'games:setActive',
+  'prices:ebayHidden',
+  'prices:setEbayHidden'
 ] as const
 
 export type DataChannel = (typeof DATA_CHANNELS)[number]
@@ -197,6 +199,8 @@ export function createDataHandlers({
       }),
     'games:available': async () => availableGames(),
     'games:active': async () => activeGame(db, availableGames()),
+    'prices:ebayHidden': async () => ebayPricesHidden(db),
+    'prices:setEbayHidden': async (hidden: unknown) => setEbayPricesHidden(db, hidden === true),
     'games:setActive': async (game: unknown) => {
       const available = availableGames()
       const before = activeGame(db, available)

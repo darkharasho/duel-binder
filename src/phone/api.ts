@@ -281,6 +281,7 @@ export function createPhoneApi(deps: {
     },
     stats: dataPart('stats'),
     prices: {
+      ...dataPart('prices'),
       request: async (printingIds) => {
         if ((await store.requestPrices(printingIds)) > 0) triggers.afterPriceRequest()
       }

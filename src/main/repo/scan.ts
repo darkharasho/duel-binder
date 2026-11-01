@@ -33,7 +33,7 @@ const select = (
   CASE WHEN ${isMarketOnly} THEN ${MARKET_ONLY_PRICE} WHEN p.language = 'en' THEN COALESCE(p.market_price, ip.price, p.set_price) ELSE COALESCE(ip.price, ${enTwinPrice(scope.game)}) END AS rawPrice,
   pc.local_name AS localName, pc.rarity AS printedRarity
   FROM card_printings p JOIN cards c ON c.id = p.card_id AND +c.game = ${scope.game}
-  LEFT JOIN intl_prices ip ON ip.printing_id = p.id
+  LEFT JOIN intl_prices ip ON ip.printing_id = p.id AND ${scope.ebayPrices}
   LEFT JOIN pokemon_cards pc ON pc.card_id = p.card_id
   WHERE +p.game = ${scope.game} AND p.contributed = 0 AND ${shownPrinting(scope)}`
 

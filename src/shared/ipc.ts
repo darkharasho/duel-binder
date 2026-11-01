@@ -171,6 +171,10 @@ export interface Api {
      * nothing signed out, offline or on the web.
      */
     request(printingIds: number[]): Promise<void>
+    /** Whether eBay prices are hidden on this device. */
+    ebayHidden(): Promise<boolean>
+    /** Hides eBay prices from every price and total on this device, or brings them back. */
+    setEbayHidden(hidden: boolean): Promise<void>
   }
   sets: {
     list(): Promise<SetSummary[]>
@@ -341,6 +345,8 @@ export const INVOKE_CHANNELS = [
   'games:available',
   'games:active',
   'games:setActive',
+  'prices:ebayHidden',
+  'prices:setEbayHidden',
   'account:status',
   'account:signIn',
   'account:signOut',

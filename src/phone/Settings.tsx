@@ -10,6 +10,7 @@ import {
   DialogTitle
 } from '@/components/ui/dialog'
 import { DeleteAccount } from '@/features/settings/AccountSection'
+import { EbayPricesToggle } from '@/features/settings/EbayPricesToggle'
 import { UsageToggle } from '@/features/settings/UsageToggle'
 import { WishlistToggle } from '@/features/settings/WishlistToggle'
 import { api } from '@/lib/api'
@@ -189,6 +190,7 @@ export function Settings(): React.JSX.Element {
           <a href={PRIVACY_URL} target="_blank" rel="noreferrer" className={rowButton}>
             Privacy
           </a>
+          <EbayPricesToggle className="flex min-h-12 items-start gap-3 px-4 py-3 text-[15px]" />
           <WishlistToggle className="flex min-h-12 items-start gap-3 px-4 py-3 text-[15px]" />
           <UsageToggle className="flex min-h-12 items-start gap-3 px-4 py-3 text-[15px]" />
           <Row>

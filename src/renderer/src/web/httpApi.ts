@@ -255,7 +255,11 @@ export function createHttpApi(opts: HttpApiOptions = {}): Api {
     },
     stats: { get: call('stats:get') },
     // Not on the web (yet): the desktop and phone ask, by printing key, for what their screens show.
-    prices: { request: async () => {} },
+    prices: {
+      request: async () => {},
+      ebayHidden: async () => false,
+      setEbayHidden: async () => {}
+    },
     usage: {
       report: async (events) => {
         try {

@@ -2,7 +2,7 @@ import type { SqlDb } from '../db/sql'
 import { RARITY_LABEL } from '../db/schema'
 import type { CardDetail, CardImage, CardRow, CardSearchResult, PokemonFacts, Printing } from '../../shared/types'
 import { isLanguage } from '../../shared/languages'
-import { SET_PRICE } from './priceRule'
+import { setPrice } from './priceRule'
 import { shownPrinting } from './shownPrinting'
 import { LOCAL, scopeGame, type Scope } from './scope'
 import { pokemonNumberMatch } from './pkmFilters'
@@ -235,7 +235,7 @@ export function getCardDetail(db: SqlDb, cardId: number, scope: Scope = LOCAL): 
     db
       .prepare(
         `SELECT p.id, p.card_id, p.set_name, p.set_code, ${RARITY_LABEL} AS set_rarity, p.set_rarity_code,
-                ${SET_PRICE} AS set_price, p.market_price, p.missing_from_api, p.language
+                ${setPrice(scope.ebayPrices)} AS set_price, p.market_price, p.missing_from_api, p.language
          FROM card_printings p WHERE p.card_id = ? AND +p.game = ${scope.game} AND p.contributed = 0 AND ${shownPrinting(scope)}
          ORDER BY p.set_code, p.id`
       )

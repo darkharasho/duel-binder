@@ -134,6 +134,13 @@ describe('chinesePromoSets', () => {
   })
 })
 
+describe('chineseListSets Master Ball mirrors', () => {
+  it('adds one only to a card a Dex export holds it on', () => {
+    expect(labels('CSV5C', zh('077', '鬼斯通', 'Haunter', 'C'))).toEqual(['Master Ball Pattern', 'Normal', 'Poke Ball Pattern'])
+    expect(labels('CSV5C', zh('078', '耿鬼', 'Gengar', 'C'))).toEqual(['Normal', 'Poke Ball Pattern'])
+  })
+})
+
 describe('chineseListSets rarity fixes', () => {
   it('takes a mark the list has wrong from the table, finish and all', () => {
     const index: ZhSetEntry[] = [{ id: 'CSV5C', code: 'CSV5C', series: 'SV', count: 2 }]

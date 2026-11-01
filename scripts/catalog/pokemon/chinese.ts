@@ -136,8 +136,8 @@ const STAMPED = 'Set Logo Holofoil'
 /**
  * The sets whose C, U and R a Dex export shows in a mirror, and the mirror. The other sets get none:
  * nothing says they lack one, but a missing version is better than a made-up one, and adding
- * versions later moves no key. Master Ball mirrors of these sets aren't here either: the export has
- * too few to say which cards have one.
+ * versions later moves no key. These sets' Master Ball mirrors are by card, in DEX_MASTERS: the
+ * export has too few to say which other cards have one.
  */
 const MIRRORS: Record<string, string> = {
   CS2aC: 'reverse',
@@ -196,6 +196,13 @@ function listFinishes(setId: string, row: ZhCard): string[] {
     row.cardType !== 'Basic Energy' &&
     !(mirror === BALL && /Energy$/.test(row.cardType))
   return mirrored ? [base, mirror] : [base]
+}
+
+/** The Master Ball mirrors a Dex export holds outside the Gem Packs, by set and number. */
+const DEX_MASTERS: Record<string, ReadonlySet<string>> = {
+  '151C': new Set(['083']),
+  CSV5C: new Set(['077', '103']),
+  CSV6C: new Set(['117', '123'])
 }
 
 /** Marks the list has wrong, by set and number, as a Dex export shows them. */
@@ -278,9 +285,10 @@ export function chineseListSets(index: ZhSetEntry[], rows: Map<string, ZhCard[]>
         localName: row.cardName,
         category: categoryOf(row.cardType),
         rarity: LIST_RARITIES[rarity] ?? null,
-        variants_detailed: listFinishes(id, { ...row, rarity }).map(
-          (type): TdVariant => ({ type, variantId: GENERATED_VARIANT_ID })
-        ),
+        variants_detailed: [
+          ...listFinishes(id, { ...row, rarity }),
+          ...(DEX_MASTERS[id]?.has(number) ? [MASTER] : [])
+        ].map((type): TdVariant => ({ type, variantId: GENERATED_VARIANT_ID })),
         englishTwin: englishTwinOf(row, rarity),
         set: ref
       })

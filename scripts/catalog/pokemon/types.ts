@@ -7,7 +7,7 @@ export type CachedLang = TdLang | 'zh-hant'
  * One TCGdex printing of a card. `variantId` is "generated" when TCGdex had no curated variant list
  * for the card and filled this one in from its legacy `variants` booleans (see GENERATED in versions.ts).
  */
-export interface TdVariant { type: string; subtype?: string; stamp?: string[]; thirdParty?: { tcgplayer?: number }; variantId?: string }
+export interface TdVariant { type: string; subtype?: string; stamp?: string[]; foil?: string; thirdParty?: { tcgplayer?: number }; variantId?: string }
 export interface TdCard {
   id: string; localId: string; name: string; localName?: string; category?: string; rarity?: string | null; hp?: number
   types?: string[]; stage?: string; illustrator?: string; image?: string

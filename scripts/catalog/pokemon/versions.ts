@@ -116,6 +116,7 @@ export interface PkmVersion { label: string; productId: number | null; subTypeNa
  *    whose row says Holofoil even on a Common with no plain holo ("Snivy (Poke Ball Pattern)"), and
  *    TCGdex files it as `reverse`; under either plain label it would make up a finish, and the
  *    label's several rows would leave it unpriced.
+ * 8. TCGdex's cosmos foil is its own version too, whichever type it files it under.
  * Cards that reach rule 3 or 4 have no confirmed finish; the report counts them as unverified.
  */
 export const GENERATED_VARIANT_ID = 'generated'
@@ -165,6 +166,9 @@ export function productTreatment(name: string): string | null {
   if (/^cracked ice$/i.test(raw)) return 'Cracked Ice Holo'
   return /\bball$/i.test(raw) ? `${raw} Pattern` : raw
 }
+
+/** Cards TCGdex has no cosmos variant for, whose Cosmos Holo a Dex export shows. */
+const DEX_COSMOS = new Set(['sv02-098', 'sv04-026'])
 
 /** Whether TCGdex made this variant up from its legacy booleans rather than recording it. */
 export const isGenerated = (v: TdVariant): boolean => v.variantId === GENERATED_VARIANT_ID
@@ -273,7 +277,15 @@ export function cardVersions(
     const base = variantBase(v)
     const pattern = matched.find((m) => m.product.productId === v.thirdParty?.tcgplayer)
     const treatment = pattern && !versionSubtype(v.subtype) && !v.stamp?.length ? productTreatment(pattern.product.name) : null
-    const label = treatment ?? variantLabel(v)
+    // Rule 8. On a card with no other variant it stays that one version, so no key moves.
+    const cosmos =
+      !treatment &&
+      v.foil?.trim().toLowerCase() === 'cosmos' &&
+      !versionSubtype(v.subtype) &&
+      !v.stamp?.length &&
+      card.variants_detailed!.some((o) => !o.foil)
+    if (cosmos && entries.has('Cosmos Holofoil')) continue
+    const label = treatment ?? (cosmos ? 'Cosmos Holo' : variantLabel(v))
     const rival = EXCLUDES[label]
     if (!treatment && rival && sold.has(rival) && !sold.has(label)) continue
     if (!base.known) problems.push(`${card.id}: TCGdex variant ${JSON.stringify(v.type)}${v.stamp?.length ? ` ${JSON.stringify(v.stamp)}` : ''} is not in the version table; labelled "${label}"`)
@@ -285,6 +297,8 @@ export function cardVersions(
       : matched.filter((m) => versionSubtype(m.variantSubtype) === sub)
     for (const m of own) if (!ambiguous.has(m.product.productId)) e.candidates.add(m.product.productId)
   }
+
+  if (DEX_COSMOS.has(card.id)) entry('Cosmos Holo')
 
   const versions: PkmVersion[] = []
   for (const [label, e] of entries) {

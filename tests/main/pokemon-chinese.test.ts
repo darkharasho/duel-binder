@@ -3,6 +3,7 @@ import { chineseFiles, chineseListSets, chineseSet, type ZhCard, type ZhSetEntry
 import { cardVersions } from '../../scripts/catalog/pokemon/versions'
 import { matchDexRows, type DexCatalogPrinting } from '../../src/shared/dex/match'
 import type { DexRow } from '../../src/shared/dex/parse'
+import { chinesePromoSets } from '../../scripts/catalog/pokemon/chinesePromos'
 
 const zh = (cardIndex: string, cardName: string, nameEn: string, rarity = 'C', cardType = 'Pokemon'): ZhCard => ({
   cardIndex,
@@ -98,6 +99,40 @@ const labels = (id: string, row: ZhCard): string[] => {
   const card = list(id, [row]).sets[0].cards[0]
   return cardVersions(card, [], new Map()).versions.map((v) => v.label)
 }
+
+describe('chinesePromoSets', () => {
+  const printings = chinesePromoSets().flatMap(({ set, cards }) =>
+    cards.flatMap((card) =>
+      cardVersions(card, [], new Map()).versions.map((v) => ({
+        id: Number(card.localId),
+        cardId: Number(card.localId),
+        sourceId: `zh-hans/${card.id}`,
+        setName: set.name,
+        version: v.label,
+        cardName: card.name,
+        language: 'zh-hans'
+      }))
+    )
+  )
+  const promo = (id: string, set: string, number: string, name: string, variant: string): DexRow => ({
+    locale: 'Simplified Chinese', series: '', set, id, number, name, variant, quantity: 1
+  })
+
+  it('lands every row of the export', () => {
+    const { missing, wanted } = matchDexRows(
+      [
+        promo('scn_30thp-22', '30th Celebration Promos', '22/9', 'Grookey', 'Holo'),
+        promo('scn_30thp-23', '30th Celebration Promos', '23/9', 'Scorbunny', 'Holo'),
+        promo('scn_30thp-24', '30th Celebration Promos', '24/9', 'Sobble', 'Holo'),
+        promo('scn_svp-131', 'Scarlet & Violet Promos', '131/49', 'Darumaka', 'Poké Ball Holo'),
+        promo('scn_svp-133', 'Scarlet & Violet Promos', '133/49', 'Remoraid', 'Normal')
+      ],
+      printings
+    )
+    expect(missing).toEqual([])
+    expect(wanted.size).toBe(5)
+  })
+})
 
 describe('chineseListSets rarity fixes', () => {
   it('takes a mark the list has wrong from the table, finish and all', () => {

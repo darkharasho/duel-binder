@@ -13,6 +13,7 @@ import {
   finishSignIn,
   isAdmin,
   me,
+  siteAccount,
   revokeDesktopToken,
   signOut,
   startDesktopSignIn,
@@ -96,6 +97,7 @@ async function route(req: Request, deps: AppDeps): Promise<Response> {
   if (req.method === 'POST' && url.pathname === '/auth/desktop/revoke')
     return revokeDesktopToken(req, deps)
   if (req.method === 'GET' && url.pathname === '/api/me') return me(req, deps)
+  if (req.method === 'GET' && url.pathname === '/api/site-account') return siteAccount(req, deps)
   if (url.pathname === '/api/account/delete') return deleteAccountRoute(req, deps)
   if (url.pathname === '/api/usage') return reportUsage(req, deps)
   if (url.pathname === '/api/errors') return reportError(req, deps)

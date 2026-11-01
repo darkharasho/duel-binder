@@ -62,7 +62,9 @@ describe('renderPage', () => {
   it('has the charset, headline and lead', () => {
     const html = page()
     expect(html).toContain('<meta charset="utf-8">')
-    expect(html).toContain('A binder for your <span class="nowrap">Yu-Gi-Oh!</span> and Pokémon cards.')
+    expect(html).toContain(
+      'A binder for your <span class="nowrap">Yu-Gi-Oh!</span> and Pokémon cards.'
+    )
     expect(html).toContain(
       "Log what you own by set, rarity and condition. Prices update on their own. It runs on your computer and works offline. Sign in with Discord to see your friends' binders on the web."
     )
@@ -105,6 +107,7 @@ describe('renderPage', () => {
   it('links sign-in, web app, GitHub and the footer', () => {
     const html = page()
     expect(html).toMatch(new RegExp(`href="${appUrl}"[^>]*>Sign in</a>`))
+    expect(html).toContain('<script src="/account.js" defer></script>')
     expect(html).toMatch(new RegExp(`href="${appUrl}"[^>]*>Open the web app</a>`))
     expect(html).toContain('href="https://github.com/darkharasho/duel-binder"')
     expect(html).toContain(
@@ -123,17 +126,19 @@ describe('renderPage', () => {
     expect(row).not.toContain('<img')
   })
 
-  it('has no script and escapes interpolated values', () => {
+  it('has no script but its account badge and escapes interpolated values', () => {
     const evil = { name: 'a<b"&.exe', size: 5_000_000, url: 'https://x.test/a<b"&.exe' }
     const html = page({ downloads: { ...downloads, windows: evil } })
-    expect(html).not.toContain('<script')
+    expect(html.replace('<script src="/account.js" defer></script>', '')).not.toContain('<script')
     expect(html).not.toContain('a<b"&.exe')
     expect(html).toContain('a&lt;b&quot;&amp;.exe')
   })
 
   it('has the head metadata and well-formed images', () => {
     const html = page()
-    expect(html).toContain('<title>Duel Binder — a binder for your Yu-Gi-Oh! and Pokémon cards</title>')
+    expect(html).toContain(
+      '<title>Duel Binder — a binder for your Yu-Gi-Oh! and Pokémon cards</title>'
+    )
     expect(html).toContain('<meta property="og:image" content="https://duelbinder.com/og.png">')
     expect(html).toContain('<meta property="og:url" content="https://duelbinder.com/">')
     expect(html).toContain('<meta name="twitter:card" content="summary_large_image">')
@@ -181,7 +186,7 @@ describe('renderPrivacy', () => {
       expect(html).toContain(text)
     }
     expect(html).toContain('<link rel="canonical" href="https://duelbinder.com/privacy">')
-    expect(html).not.toMatch(/<script/i)
+    expect(html.replace('<script src="/account.js" defer></script>', '')).not.toMatch(/<script/i)
   })
 })
 
@@ -201,6 +206,6 @@ describe('renderTerms', () => {
       'mailto:support@duelbinder.com'
     ])
       expect(html).toContain(text)
-    expect(html).not.toMatch(/<script/i)
+    expect(html.replace('<script src="/account.js" defer></script>', '')).not.toMatch(/<script/i)
   })
 })

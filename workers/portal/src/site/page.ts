@@ -117,6 +117,7 @@ export function renderPage(view: PageView): string {
 <meta property="og:url" content="https://duelbinder.com/">
 <meta name="twitter:card" content="summary_large_image">
 <link rel="stylesheet" href="/site.css">
+<script src="/account.js" defer></script>
 </head>
 <body>
 <div class="wash" aria-hidden="true"><div></div></div>

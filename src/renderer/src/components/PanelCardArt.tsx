@@ -49,8 +49,8 @@ function NavArrow({
 }
 
 /**
- * A side panel's card: floated large over the blurred page to the panel's left, or kept small
- * at the top of the panel when the window is too narrow for that.
+ * A side panel's card: floated large over the blurred page to the panel's left, or at the top of
+ * the panel when the window is too narrow for that, small on desktop and as wide as a phone allows.
  */
 export function PanelCardArt({
   imageId,
@@ -76,9 +76,12 @@ export function PanelCardArt({
           <NavArrow dir="next" step={nav.next} srOnly />
         </>
       )}
-      <div className="flex items-center justify-center gap-3 min-[900px]:hidden">
+      <div style={aspectVar} className="flex items-center justify-center gap-3 min-[900px]:hidden">
         {arrows && <NavArrow dir="prev" step={arrows.prev} />}
-        <TiltCard className="w-48">
+        {/* The phone's card fills the sheet, short of pushing its title off a short screen. */}
+        <TiltCard
+          className={phone ? 'w-[min(100%,calc((100dvh-11rem)*var(--card-aspect)))]' : 'w-48'}
+        >
           <CardArt
             imageId={imageId}
             printingId={printingId}
@@ -106,7 +109,7 @@ export function PanelCardArt({
               imageId={imageId}
               printingId={printingId}
               size="full"
-            priority
+              priority
               alt=""
               className="w-full rounded-[14px] shadow-[0_30px_80px_rgb(0_0_0/0.65)]"
             />

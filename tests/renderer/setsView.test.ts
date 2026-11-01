@@ -547,7 +547,7 @@ describe('Pokémon rarity chips', () => {
   })
 
   it('keeps every finish tile of the matching cards', () => {
-    const out = filterTilesByRarity(checklistTiles(cl, 'rarities'), 'Illustration Rare')
+    const out = filterTilesByRarity(checklistTiles(cl, 'rarities'), ['Illustration Rare'])
     expect(out.map((t) => t.key)).toEqual([
       '2|Normal',
       '2|Reverse Holofoil',
@@ -561,15 +561,24 @@ describe('filterTilesByRarity', () => {
   const rarity = alpha.rarities[0].rarity
   it('keeps every tile with no rarity chosen', () => {
     const tiles = checklistTiles(checklist, 'rarities')
-    expect(filterTilesByRarity(tiles, null)).toEqual(tiles)
+    expect(filterTilesByRarity(tiles, [])).toEqual(tiles)
   })
   it('keeps the tiles of that rarity in every-rarity mode', () => {
-    const out = filterTilesByRarity(checklistTiles(checklist, 'rarities'), rarity)
+    const out = filterTilesByRarity(checklistTiles(checklist, 'rarities'), [rarity])
     expect(out.every((t) => t.rarity === rarity)).toBe(true)
     expect(out).toHaveLength(1)
   })
   it('keeps a card with that rarity in each-card-once mode', () => {
-    expect(filterTilesByRarity(checklistTiles(checklist, 'cards'), rarity)).toHaveLength(1)
-    expect(filterTilesByRarity(checklistTiles(checklist, 'cards'), 'Nope')).toHaveLength(0)
+    expect(filterTilesByRarity(checklistTiles(checklist, 'cards'), [rarity])).toHaveLength(1)
+    expect(filterTilesByRarity(checklistTiles(checklist, 'cards'), ['Nope'])).toHaveLength(0)
+  })
+  it('keeps the tiles of any picked rarity', () => {
+    const tiles = checklistTiles(checklist, 'rarities')
+    const picked = [...new Set(tiles.map((t) => t.rarity as string))]
+    expect(picked.length).toBeGreaterThan(1)
+    expect(filterTilesByRarity(tiles, picked)).toEqual(tiles)
+    expect(filterTilesByRarity(tiles, [picked[0], 'Nope'])).toEqual(
+      filterTilesByRarity(tiles, [picked[0]])
+    )
   })
 })

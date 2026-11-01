@@ -111,7 +111,7 @@ export function buildFtsQuery(q: string): string | null {
   return tokens.length ? tokens.map((t) => `"${t}"*`).join(' ') : null
 }
 
-const escapeLike = (s: string): string => s.replace(/[\\%_]/g, (c) => `\\${c}`)
+export const escapeLike = (s: string): string => s.replace(/[\\%_]/g, (c) => `\\${c}`)
 
 export function searchCards(db: SqlDb, q: string, limit = 20, scope: Scope = LOCAL): CardSearchResult[] {
   const text = q.trim()

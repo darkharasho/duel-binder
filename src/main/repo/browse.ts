@@ -1,13 +1,12 @@
 import type { SqlDb } from '../db/sql'
 import type { BrowseCard, BrowseFacets, BrowseFilters, BrowsePage } from '../../shared/types'
-import { buildFtsQuery } from './cards'
+import { buildFtsQuery, escapeLike } from './cards'
 import { LOCAL, scopeGame, type Scope } from './scope'
 import { pokemonFacets, pokemonSearch, pokemonWhere } from './pkmFilters'
 import { catalogRollup } from './rollup'
 
 const MAX_LIMIT = 200
 
-const escapeLike = (s: string): string => s.replace(/[\\%_]/g, (c) => `\\${c}`)
 
 // Per card: owned copies, and (only when sorting by it: the join reads every English printing)
 // earliest English release. The page's own dates and printing to preselect are looked up after.

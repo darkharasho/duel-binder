@@ -6,7 +6,6 @@ export interface SlotPrinting {
   cardId: number
   listed: boolean // false for contributed or hidden printings
   qualifies: boolean // passes the binder's rules and languages
-  added: boolean // here only because of a hand edit's card or printing
   price: number | null
 }
 export interface SlotImage {
@@ -161,10 +160,18 @@ export function buildSlots(
       else artsByPrinting.set(c.pkey, new Set([c.imageId]))
     }
     for (const p of addedPrintings) {
-      const arts = artsByPrinting.get(p.pkey)
-      for (const imageId of arts ?? [])
+      for (const imageId of artsByPrinting.get(p.pkey) ?? [])
         if (!removedArts.has(imageId)) putArt(imageId, p.cardId, true)
-      if (!arts && !cardsWithSlots.has(p.cardId)) putCard(p.cardId, p, true)
+    }
+    // After every art slot exists, so the result can't depend on the order of `printings`. A
+    // printing with no copy has no known art, so it adds its card: its art slots, or else a card slot.
+    for (const p of addedPrintings) {
+      if (artsByPrinting.has(p.pkey)) continue
+      if (!cardsWithSlots.has(p.cardId)) putCard(p.cardId, p, true)
+      for (const image of imagesByCard.get(p.cardId) ?? []) {
+        const plan = plans.get(`art:${image.imageId}`)
+        if (plan) plan.added = true
+      }
     }
     for (const cardId of addedCards) if (!imagesByCard.has(cardId)) putCard(cardId, null, true)
   } else {
@@ -177,8 +184,16 @@ export function buildSlots(
       for (const p of listedByCard.get(cardId) ?? []) putPrinting(p, true)
     }
     for (const p of addedPrintings) putPrinting(p, true)
-    // A hand-added card stays until removed, even with no printing to expand to.
-    for (const cardId of addedCards) if (!cardsWithSlots.has(cardId)) putCard(cardId, null, true)
+    // A hand-added card stays until removed, even with no printing to expand to. One whose
+    // printings the user removed has had its slots removed, not lost.
+    const cardsLosingPrintings = new Set(
+      printings.filter((p) => removedPrintings.has(p.pkey)).map((p) => p.cardId)
+    )
+    for (const cardId of addedCards) {
+      if (!cardsWithSlots.has(cardId) && !cardsLosingPrintings.has(cardId)) {
+        putCard(cardId, null, true)
+      }
+    }
   }
 
   const ownedByCard = tally<number>()

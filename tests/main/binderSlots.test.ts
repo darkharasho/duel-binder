@@ -14,7 +14,6 @@ const pr = (pkey: string, cardId: number, over: Partial<SlotPrinting> = {}): Slo
   cardId,
   listed: true,
   qualifies: true,
-  added: false,
   price: null,
   ...over
 })
@@ -71,10 +70,7 @@ describe('art goal', () => {
   })
 
   it('an added printing makes the art slot of its copy, filled by any copy of that art', () => {
-    const ps = [
-      pr('x', 2, { qualifies: false, added: true }),
-      pr('y', 2, { qualifies: false, added: true })
-    ]
+    const ps = [pr('x', 2, { qualifies: false }), pr('y', 2, { qualifies: false })]
     const r = buildSlots(
       'art',
       ps,
@@ -90,7 +86,7 @@ describe('art goal', () => {
   })
 
   it('an added printing with no copy makes a card slot', () => {
-    const ps = [pr('x', 2, { qualifies: false, added: true })]
+    const ps = [pr('x', 2, { qualifies: false })]
     const r = buildSlots('art', ps, [img(21, 2), img(22, 2)], [], [add('printing', 'x')])
     expect(r.slots).toMatchObject([
       { key: 'card:2', level: 'card', imageId: null, added: true, owned: 0 }
@@ -101,10 +97,33 @@ describe('art goal', () => {
   it('an added printing on a matched card gains no extra slot', () => {
     const r = buildSlots('art', printings, images, [], [add('printing', 'a')])
     expect(keys(r.slots)).toEqual(['art:11', 'art:12', 'art:13'])
+    expect(r.slots.every((s) => s.added)).toBe(true)
+  })
+
+  it('a copy-less added printing on a matched card lets any copy of an art fill it', () => {
+    const ps = [pr('a', 1), pr('n', 1, { qualifies: false }), pr('o', 1, { qualifies: false })]
+    const r = buildSlots('art', ps, images, [copy('o', 1, 11)], [add('printing', 'n')])
+    expect(keys(r.slots)).toEqual(['art:11', 'art:12', 'art:13'])
+    expect(r.slots[0]).toMatchObject({ added: true, owned: 1 })
+    expect(r).toMatchObject({ ownedSlots: 1, missingSlots: 2 })
+  })
+
+  it('added printings give the same slots in either order, with one copy filling one slot', () => {
+    const p = pr('p', 2, { qualifies: false })
+    const q = pr('q', 2, { qualifies: false })
+    const edits = [add('printing', 'p'), add('printing', 'q')]
+    for (const ps of [
+      [p, q],
+      [q, p]
+    ]) {
+      const r = buildSlots('art', ps, [img(21, 2), img(22, 2)], [copy('q', 2, 22)], edits)
+      expect(keys(r.slots)).toEqual(['art:22'])
+      expect(r).toMatchObject({ ownedSlots: 1, missingSlots: 0 })
+    }
   })
 
   it('an art removal beats an added printing whose copy has that art', () => {
-    const ps = [pr('x', 2, { qualifies: false, added: true })]
+    const ps = [pr('x', 2, { qualifies: false })]
     const r = buildSlots(
       'art',
       ps,
@@ -171,9 +190,9 @@ describe('contributed and hidden printings', () => {
 describe('added card', () => {
   // Card 2 is not matched by any rule. Its printing in another language still comes through as added.
   const ps = [
-    pr('en', 2, { qualifies: false, added: true }),
-    pr('ja', 2, { qualifies: false, added: true }),
-    pr('hidden', 2, { qualifies: false, listed: false, added: true })
+    pr('en', 2, { qualifies: false }),
+    pr('ja', 2, { qualifies: false }),
+    pr('hidden', 2, { qualifies: false, listed: false })
   ]
   const images = [img(21, 2, 0), img(22, 2, 1), img(23, 2, 2)]
   const edits = [add('card', 2)]
@@ -224,7 +243,7 @@ describe('added card', () => {
   })
 
   it('that the rule matches gains no extra slots, and any copy fills it', () => {
-    const matched = [pr('rule', 1), pr('other', 1, { qualifies: false, added: true })]
+    const matched = [pr('rule', 1), pr('other', 1, { qualifies: false })]
     const imgs = [img(11, 1)]
     const edit = [add('card', 1)]
     const card = buildSlots('card', matched, imgs, [copy('other', 1, 11)], edit)
@@ -237,10 +256,7 @@ describe('added card', () => {
 })
 
 describe('added printing', () => {
-  const ps = [
-    pr('p', 3, { qualifies: false, added: true }),
-    pr('q', 3, { qualifies: false, added: true })
-  ]
+  const ps = [pr('p', 3, { qualifies: false }), pr('q', 3, { qualifies: false })]
   const edits = [add('printing', 'p')]
 
   it('adds its card under card, and any copy of the card fills it', () => {
@@ -249,7 +265,7 @@ describe('added printing', () => {
   })
 
   it('makes one slot under printing, even if unlisted, filled only by that printing', () => {
-    const unlisted = [pr('p', 3, { qualifies: false, listed: false, added: true })]
+    const unlisted = [pr('p', 3, { qualifies: false, listed: false })]
     expect(keys(buildSlots('printing', unlisted, [], [], edits).slots)).toEqual(['printing:p'])
     expect(buildSlots('printing', ps, [], [copy('q', 3)], edits).slots).toMatchObject([
       { key: 'printing:p', added: true, owned: 0 }
@@ -339,15 +355,26 @@ describe('removals', () => {
   })
 
   it('a card matched only through a removed printing is expanded when added', () => {
-    const only = [pr('r', 5), pr('u', 5, { qualifies: false, added: true })]
+    const only = [pr('r', 5), pr('u', 5, { qualifies: false })]
     const r = buildSlots('printing', only, [], [], [add('card', 5), remove('printing', 'r')])
     expect(keys(r.slots)).toEqual(['printing:u'])
+  })
+
+  it('an added card whose only printing was removed makes no printing slot', () => {
+    const r = buildSlots(
+      'printing',
+      [pr('u', 5)],
+      [],
+      [],
+      [add('card', 5), remove('printing', 'u')]
+    )
+    expect(r).toMatchObject({ slots: [], missingSlots: 0 })
   })
 })
 
 describe('goal changes', () => {
   it('gives identical slots after switching art to card and back', () => {
-    const ps = [pr('a', 1), pr('x', 2, { qualifies: false, added: true })]
+    const ps = [pr('a', 1), pr('x', 2, { qualifies: false })]
     const images = [img(11, 1, 0), img(12, 1, 1), img(21, 2)]
     const edits = [remove('art', 11), add('card', 2)]
     const before = buildSlots('art', ps, images, [], edits)
@@ -364,8 +391,8 @@ describe('no goal', () => {
       pr('unowned', 2, { price: 2 }),
       pr('common', 3, { qualifies: false }),
       pr('contrib', 6, { listed: false }),
-      pr('added-card', 4, { qualifies: false, added: true, price: 9 }),
-      pr('added-printing', 5, { qualifies: false, added: true })
+      pr('added-card', 4, { qualifies: false, price: 9 }),
+      pr('added-printing', 5, { qualifies: false })
     ]
     const copies = [copy('owned', 1), copy('common', 3), copy('contrib', 6)]
     const r = buildSlots('none', ps, [], copies, [
@@ -419,10 +446,7 @@ describe('value to finish', () => {
   })
 
   it('prices an added card from any of its printings', () => {
-    const ps = [
-      pr('a', 1, { price: 8 }),
-      pr('common', 1, { qualifies: false, added: true, price: 1 })
-    ]
+    const ps = [pr('a', 1, { price: 8 }), pr('common', 1, { qualifies: false, price: 1 })]
     expect(buildSlots('card', ps, [], [], [add('card', 1)]).valueToFinish).toBe(1)
   })
 

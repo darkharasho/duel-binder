@@ -185,6 +185,20 @@ export function checklistTiles(cl: SetChecklist, mode: CountMode): Tile[] {
   )
 }
 
+/**
+ * What a tile sorts by under Price, and the rarity it comes from: the tile's own, or a card
+ * tile's dearest, since its art is the first rarity's and may be far cheaper.
+ */
+export function tilePrice(t: Tile): { price: number | null; rarity: string | null } {
+  const c = t.card
+  if (t.rarity !== null) {
+    const own = c.rarities.find((x) => x.rarity === t.rarity)
+    return { price: own?.price ?? c.price, rarity: t.rarity }
+  }
+  const dearest = c.rarities.find((x) => x.price !== null && x.price === c.price)
+  return { price: c.price, rarity: dearest?.rarity ?? null }
+}
+
 function sortValue(t: Tile, sort: ChecklistSort): number | string | null {
   const c = t.card
   switch (sort) {
@@ -192,10 +206,8 @@ function sortValue(t: Tile, sort: ChecklistSort): number | string | null {
       return c.number
     case 'name':
       return c.name
-    case 'price': {
-      const r = t.rarity === null ? undefined : c.rarities.find((x) => x.rarity === t.rarity)
-      return r?.price ?? c.price
-    }
+    case 'price':
+      return tilePrice(t).price
     case 'hp':
       return c.hp ?? null
     default:

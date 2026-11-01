@@ -16,6 +16,7 @@ import {
   sortCards,
   sortSets,
   sortTiles,
+  tilePrice,
   type Tile,
   typeCounts,
   upcomingCutoff,
@@ -322,6 +323,31 @@ describe('replaceChecklistCard', () => {
     })
     expect(zeroed.set).toMatchObject({ ownedCards: 1, ownedRarities: 1 })
     expect(metalRaidersChecklist.set.ownedCards).toBe(1)
+  })
+})
+
+describe('tilePrice', () => {
+  const rarity = (name: string, price: number | null): ChecklistCard['rarities'][number] => ({
+    rarity: name,
+    owned: 0,
+    price,
+    codes: [],
+    defaultPrintingId: 1,
+    entryId: null
+  })
+  const card = {
+    rarities: [rarity('Common', 1.23), rarity('Secret Rare (Overframe)', 72.24)],
+    price: 72.24
+  } as ChecklistCard
+
+  it("names a card tile's dearest rarity, not its first", () => {
+    const tile: Tile = { key: '1', card, rarity: null, owned: 0, entryId: null }
+    expect(tilePrice(tile)).toEqual({ price: 72.24, rarity: 'Secret Rare (Overframe)' })
+  })
+
+  it("keeps a rarity tile's own price", () => {
+    const tile: Tile = { key: '1', card, rarity: 'Common', owned: 0, entryId: null }
+    expect(tilePrice(tile)).toEqual({ price: 1.23, rarity: 'Common' })
   })
 })
 

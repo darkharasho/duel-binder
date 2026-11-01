@@ -620,6 +620,25 @@ export function avatarUrl(discordId: string, avatar: string | null): string | nu
   return avatar ? `https://cdn.discordapp.com/avatars/${discordId}/${avatar}.png` : null
 }
 
+/**
+ * Who's signed in, for the marketing site's nav: its host is same-site, so it gets the session
+ * cookie, and only its origin may read the answer. Just a name and picture; 204 when signed out.
+ */
+export async function siteAccount(req: Request, deps: AppDeps): Promise<Response> {
+  const site = new URL(deps.env.SITE_URL).origin
+  const headers: Record<string, string> = { 'cache-control': 'no-store', vary: 'origin' }
+  if (req.headers.get('origin') === site) {
+    headers['access-control-allow-origin'] = site
+    headers['access-control-allow-credentials'] = 'true'
+  }
+  const user = await currentUser(req, deps)
+  if (!user) return new Response(null, { status: 204, headers })
+  const { username, displayName, avatarUrl } = loadMe(deps, user.id)
+  return new Response(JSON.stringify({ name: displayName ?? username, avatarUrl }), {
+    headers: { ...headers, 'content-type': 'application/json' }
+  })
+}
+
 function loadMe(deps: AppDeps, userId: number): Me {
   const row = deps.db
     .prepare('SELECT id, discord_id, username, display_name, avatar FROM users WHERE id = ?')

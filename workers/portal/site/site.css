@@ -16,7 +16,9 @@ nav{position:sticky;top:0;z-index:10;height:60px;border-bottom:1px solid var(--l
 nav a{font-size:13px;color:var(--muted)}
 nav a:hover{color:var(--fg)}
 nav .brand{display:flex;align-items:center;gap:10px;font-weight:600;font-size:14px;color:var(--fg)}
-nav .signin{color:var(--fg)}
+nav .signin{display:inline-flex;align-items:center;gap:8px;min-width:0;max-width:40vw;color:var(--fg)}
+nav .signin span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+nav .signin img{flex:none;border-radius:50%}
 .grow{flex:1}
 .btn{display:inline-flex;align-items:center;height:36px;padding:0 16px;border-radius:6px;font-size:14px;font-weight:500}
 .btn.pri{background:var(--fg);color:var(--bg)}

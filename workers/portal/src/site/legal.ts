@@ -35,6 +35,7 @@ export function renderLegal(page: LegalPage, view: LegalView): string {
 <link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="/apple-touch-icon.png">
 <link rel="stylesheet" href="/site.css">
+<script src="/account.js" defer></script>
 </head>
 <body>
 <div class="wash" aria-hidden="true"><div></div></div>

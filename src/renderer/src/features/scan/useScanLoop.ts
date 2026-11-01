@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } fro
 import type { GameId } from '@shared/games/types'
 import type { LookModel } from '@shared/scan/look'
 import { cuesOver, type RarityCues } from '@shared/scan/rarity'
+import type { Language } from '@shared/languages'
 import type { CardLanguage } from '@shared/scan/language'
 import { tellPokemonLanguage, type PokemonTextLanguage } from '@shared/scan/pokemonLanguage'
 import { scanProfile } from '@shared/scan/profiles'
@@ -88,6 +89,8 @@ export interface ScanLoopOptions {
    * and no frame waits on reading its language. A photo still reads it, this being its fallback.
    */
   language?: PokemonLanguage | null
+  /** The language a card with no code read is taken in (printedLanguage). */
+  filterLanguage?: Language | null
   /**
    * The rarity look model, to read a rarity by after the name and frame rules can't, or null for
    * the rules alone. The phone scanner passes it; the desktop webcam, where it gains nothing,
@@ -569,6 +572,7 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
             setPrintings: o.setPrintings ?? null,
             defaultRarity: o.defaultRarity,
             cardLanguage: (cardId) => languageOf(cardId, raw.textBands),
+            filterLanguage: o.filterLanguage,
             readLanguage: () =>
               tellPokemonLanguage(raw.textBands, (b, model) =>
                 within(api.scan.readText(b, model), LANGUAGE_TIMEOUT_MS)
@@ -684,6 +688,7 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
               setPrintings,
               defaultRarity: o.defaultRarity,
               cardLanguage: (cardId) => languageOf(cardId, raw.textBands),
+              filterLanguage: o.filterLanguage,
               readLanguage: o.language
                 ? async () => o.language ?? null
                 : () => pokemonLanguageOf(raw.quad, raw.textBands),

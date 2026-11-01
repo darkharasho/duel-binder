@@ -24,7 +24,8 @@ export interface Pull {
 
 /**
  * A pull shows the drafted printing's price. A draft whose printing or rarity isn't certain also
- * shows its options' price range; a Pick printing draft shows no set or rarity and is never a hit.
+ * shows its options' price range; a Pick printing draft shows no set or rarity, and is a hit on its
+ * assumed price, as it counts in the summary.
  * A Pokémon card whose version is unsure shows only the range: its drafted printing is a
  * placeholder, so its price is no one version's. A best guess is marked as one and is never a hit:
  * the hit moment is for a card known to be in hand.
@@ -42,15 +43,10 @@ export function pullOf(d: ScanDraft, hitPrice: number, key: number): Pull {
     raw: d.slab === true,
     ...(d.guess ? { guess: true as const } : {})
   }
+  const hit = !d.guess && price !== null && price >= hitPrice
   if (d.flag === 'pick-printing')
-    return { ...base, setCode: null, setName: null, rarity: null, hit: false }
-  return {
-    ...base,
-    setCode: d.setCode,
-    setName: picked?.setName ?? null,
-    rarity: d.rarity,
-    hit: !d.guess && price !== null && price >= hitPrice
-  }
+    return { ...base, setCode: null, setName: null, rarity: null, hit }
+  return { ...base, setCode: d.setCode, setName: picked?.setName ?? null, rarity: d.rarity, hit }
 }
 
 export interface OverlayState {

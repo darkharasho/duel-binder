@@ -678,7 +678,7 @@ describe('Pokémon version cues (rule 7)', () => {
   })
 
   /** Card 4 with its versions replaced by labels (priced 2, 3, ...). */
-  const withVersions = (labels: string[]): ResolveContext => {
+  const withVersions = (labels: string[], printedRarity?: string): ResolveContext => {
     const ctx = pkm('en')
     const [base] = PKM.filter((p) => p.cardId === 4)
     return {
@@ -687,7 +687,13 @@ describe('Pokémon version cues (rule 7)', () => {
         ...ctx.lookups,
         printingsForCards: async (ids) =>
           ids[0] === 4
-            ? labels.map((rarity, i) => ({ ...base, printingId: 900 + i, rarity, price: 2 + i }))
+            ? labels.map((rarity, i) => ({
+                ...base,
+                printingId: 900 + i,
+                rarity,
+                price: 2 + i,
+                printedRarity
+              }))
             : ctx.lookups.printingsForCards(ids)
       }
     }
@@ -722,6 +728,22 @@ describe('Pokémon version cues (rule 7)', () => {
       withVersions(['Reverse Holofoil', 'Normal', 'Holofoil'])
     )
     expect(out).toMatchObject({ flag: 'pick-printing', printingId: 901, rarity: 'Normal' })
+  })
+
+  it.each([
+    ['Holo Rare', 'Holofoil'],
+    ['Ultra Rare', 'Holofoil'],
+    ['Common', 'Normal'],
+    ['Uncommon', 'Normal'],
+    ['Rare', 'Normal'],
+    ['None', 'Normal'],
+    [undefined, 'Normal']
+  ])('a card printed %s falls on its %s version', async (printedRarity, rarity) => {
+    const out = await recognized(
+      raw({ art, version: sure(0.1, 0.1) }),
+      withVersions(['Reverse Holofoil', 'Normal', 'Holofoil'], printedRarity)
+    )
+    expect(out).toMatchObject({ flag: 'pick-printing', rarity })
   })
 
   it('an unnamed version falls on Holofoil where there is no Normal', async () => {

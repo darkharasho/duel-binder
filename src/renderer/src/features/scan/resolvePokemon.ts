@@ -163,10 +163,20 @@ const sameName = (a: string, b: string): boolean =>
 
 const unique = (ids: number[]): number[] => [...new Set(ids)]
 
+/** Printed rarities, lowercased, that are mostly not foil. Any other rarity is a holo. */
+const PLAIN_RARITIES = new Set(['common', 'uncommon', 'rare', 'promo', 'none'])
+
+/** The usual versions of a card of this printed rarity, likeliest first. */
+const baseVersions = (printedRarity: string | null | undefined): string[] =>
+  !printedRarity || PLAIN_RARITIES.has(printedRarity.toLowerCase())
+    ? ['Normal', 'Holofoil']
+    : ['Holofoil', 'Normal']
+
 /**
  * The card's draft, its versions to pick from: sure when it has one, else flagged pick-printing
- * on its Normal version, else its Holofoil, else the cheapest, which is only a placeholder (the overlay shows the range
- * across them). A reverse holo is often the cheapest, and the foil can't tell one yet.
+ * on the version most copies of its printed rarity are (baseVersions), else the cheapest, which is
+ * only a placeholder (the overlay shows the range across them). A reverse holo is often the
+ * cheapest, and the foil can't tell one yet.
  */
 async function draft(
   cardId: number,
@@ -180,7 +190,7 @@ async function draft(
     list.reduce((a, b) => ((b.price ?? Infinity) < (a.price ?? Infinity) ? b : a))
   const printing = cheapest(options)
   const plain =
-    ['Normal', 'Holofoil']
+    baseVersions(options[0].printedRarity)
       .map((label) => options.filter((o) => o.rarity === label))
       .find((list) => list.length) ?? []
   const [top] = raw.art

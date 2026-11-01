@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import type { Language } from '@shared/languages'
 import { liveLanguage } from '@shared/scanWindow'
+import { printedLanguage, useLanguageFilter } from '@/lib/languageFilter'
 import {
   isToScanWindow,
   type ScanSummary,
@@ -97,6 +98,7 @@ function Scanner({
     },
     [push, outbox]
   )
+  const [filter] = useLanguageFilter()
   const loop = useScanLoop({
     videoRef,
     engineFactory,
@@ -107,6 +109,7 @@ function Scanner({
     setPrintings: scanSet === null ? null : setPrintings.data,
     defaultRarity: settings.defaultRarity,
     language: game === 'pkm' ? liveLanguage(settings) : null,
+    filterLanguage: game === 'ygo' ? printedLanguage(filter) : null,
     onDraft,
     onStalled: camera.retry
   })

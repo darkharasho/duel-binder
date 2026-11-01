@@ -23,6 +23,7 @@ interface PrintingRow {
   language: Language
   rawPrice: number | null
   localName: string | null
+  printedRarity: string | null
 }
 
 const select = (
@@ -30,7 +31,7 @@ const select = (
 ): string => `SELECT p.id AS printingId, p.card_id AS cardId, c.name AS name, c.frame_type AS frameType,
   p.set_name AS setName, p.set_code AS setCode, p.set_rarity AS rarity, p.variant AS variant, p.language AS language,
   CASE WHEN ${isMarketOnly} THEN ${MARKET_ONLY_PRICE} WHEN p.language = 'en' THEN COALESCE(p.market_price, ip.price, p.set_price) ELSE COALESCE(ip.price, ${enTwinPrice(scope.game)}) END AS rawPrice,
-  pc.local_name AS localName
+  pc.local_name AS localName, pc.rarity AS printedRarity
   FROM card_printings p JOIN cards c ON c.id = p.card_id AND +c.game = ${scope.game}
   LEFT JOIN intl_prices ip ON ip.printing_id = p.id
   LEFT JOIN pokemon_cards pc ON pc.card_id = p.card_id
@@ -112,12 +113,13 @@ function withImages(db: SqlDb, rows: PrintingRow[], scope: Scope, twins = false)
     }
   }
   return rows
-    .map(({ rawPrice, localName, ...r }) => ({
+    .map(({ rawPrice, localName, printedRarity, ...r }) => ({
       ...r,
       price: parsePrice(rawPrice),
       imageIds: images.get(r.cardId) ?? [],
       // Only where the catalog has one, so a Yu-Gi-Oh printing is as it always was.
       ...(localName ? { localName } : {}),
+      ...(printedRarity ? { printedRarity } : {}),
       ...(twinned.has(`${r.cardId}|${r.language}`) ? { unseenTwin: true as const } : {})
     }))
     .sort(
@@ -246,11 +248,7 @@ export function printingsForCards(
 }
 
 /** Every artwork of a card printed in the language, for narrowing the art search to it. */
-export function imagesForLanguage(
-  db: SqlDb,
-  language: Language,
-  scope: Scope = LOCAL
-): number[] {
+export function imagesForLanguage(db: SqlDb, language: Language, scope: Scope = LOCAL): number[] {
   const rows = db
     .prepare(
       `SELECT DISTINCT i.image_id AS imageId FROM card_images i

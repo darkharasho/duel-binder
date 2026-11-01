@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import type { Language } from '@shared/languages'
 import type { LookModel } from '@shared/scan/look'
 import { liveLanguage } from '@shared/scanWindow'
+import { printedLanguage, useLanguageFilter } from '@/lib/languageFilter'
 import { api } from '@/lib/api'
 import { useGame } from '@/lib/game'
 import type { EngineFactory } from './engine'
@@ -45,6 +46,7 @@ export function useHubScan({
   const setUnreadable = picked !== null && setPrintings.isError
   const scanSet = setUnreadable ? null : picked
 
+  const [filter] = useLanguageFilter()
   const loop = useScanLoop({
     videoRef,
     engineFactory,
@@ -55,6 +57,7 @@ export function useHubScan({
     setPrintings: scanSet === null ? null : setPrintings.data,
     defaultRarity: settings.defaultRarity,
     language: game === 'pkm' ? liveLanguage(settings) : null,
+    filterLanguage: game === 'ygo' ? printedLanguage(filter) : null,
     lookModel,
     onDraft: count,
     onStalled

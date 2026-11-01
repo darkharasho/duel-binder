@@ -56,10 +56,18 @@ describe('sessionSummary', () => {
     expect(s.list[1]).toMatchObject({ quantity: 2, guess: false, raw: false })
   })
 
-  it('the hit of the night is the dearest known card, never a best guess', () => {
+  it('the hit of the night is the dearest known card, over a dearer best guess', () => {
     const s = sessionSummary([row(90, { guess: true }), row(12), row(4)], 20)
     expect(s.hit?.price).toBe(12)
-    expect(sessionSummary([row(90, { guess: true })], 20).hit).toBeNull()
+  })
+
+  it('always has a hit of the night: a known card with no price, then the best guess', () => {
+    const known = row(null)
+    expect(sessionSummary([row(90, { guess: true }), known], 20).hit?.key).toBe(known.key)
+    expect(sessionSummary([row(5, { guess: true }), row(90, { guess: true })], 20).hit?.price).toBe(
+      90
+    )
+    expect(sessionSummary([], 20).hit).toBeNull()
   })
 })
 
@@ -86,11 +94,31 @@ describe('SummaryScreen', () => {
     expect(list.getByText('$6.00')).toBeInTheDocument()
   })
 
-  it('a row with no price says so instead of $0, and no known card means no hit', () => {
+  it('a row and a hit with no price say so instead of $0', () => {
     window.api = createMockApi() as typeof window.api
     renderWithProviders(<SummaryScreen summary={sessionSummary([row(null)], 20)} />)
-    expect(screen.getByText('No price')).toBeInTheDocument()
-    expect(screen.queryByRole('region', { name: 'Hit of the night' })).not.toBeInTheDocument()
+    const hit = within(screen.getByRole('region', { name: 'Hit of the night' }))
+    expect(hit.getByText('No price')).toBeInTheDocument()
+    expect(
+      within(screen.getByRole('region', { name: 'Every card' })).getByText('No price')
+    ).toBeInTheDocument()
+  })
+
+  it('a hit that is only a best guess says so', () => {
+    window.api = createMockApi() as typeof window.api
+    renderWithProviders(<SummaryScreen summary={sessionSummary([row(90, { guess: true })], 20)} />)
+    const hit = within(screen.getByRole('region', { name: 'Hit of the night' }))
+    expect(hit.getByText('Best guess')).toBeInTheDocument()
+    expect(hit.getByText('$90.00')).toBeInTheDocument()
+  })
+
+  it('leaves the camera to show through, blurred', () => {
+    window.api = createMockApi() as typeof window.api
+    renderWithProviders(<SummaryScreen summary={sessionSummary([row(5)], 20)} />)
+    expect(screen.getByRole('status', { name: 'Summary' })).toHaveClass(
+      'backdrop-blur-[2vw]',
+      'bg-neutral-950/65'
+    )
   })
 
   it('a long list turns its own pages and comes back round', () => {

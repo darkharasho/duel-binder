@@ -4,6 +4,7 @@ import { englishSetName } from '@shared/setNames'
 import { CardArt } from '@/components/CardArt'
 import { formatUsd } from '@/lib/format'
 import { FoundBurst } from '../FoundBurst'
+import { Confetti } from './Confetti'
 import { FADE_MS, type Pull } from './overlay'
 
 const fade = { transitionDuration: `${FADE_MS}ms`, animationDuration: `${FADE_MS}ms` }
@@ -114,6 +115,7 @@ export function PullOverlay({ pull }: { pull: Pull | null }): React.JSX.Element 
       style={fade}
       className={`pointer-events-none absolute inset-0 animate-in fade-in transition-opacity ${pull === null ? 'opacity-0' : 'opacity-100'}`}
     >
+      {shown.hit && <Confetti />}
       {shown.hit ? <Hit pull={shown} /> : <Bar pull={shown} />}
       <FoundBurst name={shown.name} price={shown.price} stream bubble={!shown.hit} />
     </div>

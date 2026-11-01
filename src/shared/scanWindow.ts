@@ -33,12 +33,25 @@ export interface ScanWindowSettings {
   hitPrice: number
   /** How the camera fills the window: cropped to fill it, or the whole picture, letterboxed. */
   fit: ScanFit
-  /** How far the picture is zoomed in on its centre, one of SCAN_ZOOMS (1 is not at all). */
+  /** How far the picture is zoomed in on its centre, 1 (not at all) to SCAN_ZOOM_MAX. */
   zoom: number
 }
 
 export type ScanFit = 'fill' | 'whole'
-export const SCAN_ZOOMS = [1, 1.25, 1.5, 2, 2.5, 3] as const
+export const SCAN_ZOOM_MAX = 3
+export const SCAN_ZOOM_STEP = 0.05
+
+/** Sizes a stream layout usually wants, in the pixels a capture sees. */
+export const SCAN_SIZES = [
+  { width: 1280, height: 720 },
+  { width: 1600, height: 900 },
+  { width: 1920, height: 1080 },
+  { width: 2560, height: 1440 },
+  { width: 3840, height: 2160 },
+  { width: 1080, height: 1920 },
+  { width: 1080, height: 1080 }
+] as const
+export const SCAN_SIZE_MAX = 7680
 
 /** What the scan window reports back for the Scan page to show. */
 export interface ScanWindowState {
@@ -51,6 +64,21 @@ export interface ScanWindowState {
   /** Where the artwork data stands, while there is none to match against. */
   artData?: FingerprintStatus | null
   setUnreadable: boolean
+  /** The window's picture in the pixels a capture sees, not screen points. */
+  size?: { width: number; height: number }
+}
+
+export interface ScanSummaryCard {
+  key: string
+  name: string
+  imageId: number
+  /** Set code and rarity, as far as the row knows them. */
+  detail: string
+  quantity: number
+  /** One copy's price. */
+  price: number | null
+  raw: boolean
+  guess: boolean
 }
 
 /** The list so far, for the opaque summary screen the main window can put over the camera. */
@@ -60,8 +88,10 @@ export interface ScanSummary {
   cards: number
   hits: number
   unpriced: number
-  /** The dearest priced rows, dearest first. */
-  top: { key: string; name: string; imageId: number; price: number; raw: boolean; guess: boolean }[]
+  /** The dearest card known to be in hand; a best guess can't be it. */
+  hit: ScanSummaryCard | null
+  /** Every row, dearest first, the ones with no price last. */
+  list: ScanSummaryCard[]
 }
 
 export type ToScanWindow =

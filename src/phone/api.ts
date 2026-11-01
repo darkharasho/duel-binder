@@ -270,6 +270,7 @@ export function createPhoneApi(deps: {
       open: async () => {},
       isOpen: async () => false,
       toggleFullScreen: async () => {},
+      setSize: async () => {},
       send: () => {},
       onMessage: noUnsubscribe,
       onOpenChange: noUnsubscribe

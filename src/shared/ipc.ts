@@ -144,6 +144,7 @@ export interface Api {
     open(): Promise<void>
     isOpen(): Promise<boolean>
     toggleFullScreen(): Promise<void>
+    setSize(width: number, height: number): Promise<void>
     send(m: ScanWindowMessage): void
     onMessage(cb: (m: ScanWindowMessage) => void): () => void
     onOpenChange(cb: (open: boolean) => void): () => void
@@ -299,6 +300,7 @@ export const INVOKE_CHANNELS = [
   'scanWindow:open',
   'scanWindow:isOpen',
   'scanWindow:toggleFullScreen',
+  'scanWindow:setSize',
   'rip:sets',
   'rip:start',
   'rip:openPack',

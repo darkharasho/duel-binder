@@ -372,7 +372,8 @@ async function bootstrap(): Promise<void> {
         // the window just opens at the default size next time
       }
     },
-    workAreas: () => screen.getAllDisplays().map((d) => d.workArea)
+    workAreas: () => screen.getAllDisplays().map((d) => d.workArea),
+    scaleOf: (win) => screen.getDisplayMatching((win as BrowserWindow).getBounds()).scaleFactor
   })
   scanWindows = scanWindow
   ipcMain.on(SCAN_WINDOW_SEND, (e, m) => scanWindow.relay(e.sender.id, m))

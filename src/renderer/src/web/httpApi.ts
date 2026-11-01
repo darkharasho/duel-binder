@@ -239,6 +239,7 @@ export function createHttpApi(opts: HttpApiOptions = {}): Api {
       open: unavailable,
       isOpen: async () => false,
       toggleFullScreen: unavailable,
+      setSize: unavailable,
       send: () => {},
       onMessage: noUnsubscribe,
       onOpenChange: noUnsubscribe

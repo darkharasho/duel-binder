@@ -175,10 +175,14 @@ describe('CardArt aspect', () => {
 describe('CardArt with borrowed art', () => {
   const own = PKM_ID_MIN + 1
   const twin = PKM_ID_MIN + 2
-  const load = (pairs: [number, number][]): ReturnType<typeof vi.fn> => {
+  const load = (
+    pairs: [number, number][],
+    traditional: [number, number][] = []
+  ): ReturnType<typeof vi.fn> => {
     const borrowedArt = vi.fn(async () => pairs)
+    const traditionalArt = vi.fn(async () => traditional)
     const mock = createMockApi()
-    window.api = { ...mock, cards: { ...mock.cards, borrowedArt } }
+    window.api = { ...mock, cards: { ...mock.cards, borrowedArt, traditionalArt } }
     return borrowedArt
   }
   beforeEach(resetBorrowedArt)
@@ -190,15 +194,52 @@ describe('CardArt with borrowed art', () => {
     expect(screen.queryByRole('img', { name: 'Oddish' })?.tagName).not.toBe('IMG')
     const img = await screen.findByAltText('Oddish (English art)')
     expect(img).toHaveAttribute('src', `ygo-img://full/${twin}`)
-    expect(screen.getByTestId('english-art-label')).toHaveTextContent('English art')
+    expect(screen.getByTestId('borrowed-art-label')).toHaveTextContent('English art')
     expect(img.closest('[title="English art"]')).toHaveClass('w-40')
+  })
+
+  it('Traditional art wins over the English twin, and says so', async () => {
+    const hant = PKM_ID_MIN + 3
+    load([[own, twin]], [[own, hant]])
+    render(<CardArt imageId={own} size="full" alt="Oddish" className="w-40" />)
+    const img = await screen.findByAltText('Oddish (Traditional Chinese art)')
+    expect(img).toHaveAttribute('src', `ygo-img://full/${hant}`)
+    const label = screen.getByTestId('borrowed-art-label')
+    expect(label).toHaveTextContent('Traditional Chinese art')
+    expect(label).toHaveTextContent('TC')
+    expect(label).not.toHaveTextContent('English')
+    expect(img.closest('[title="Traditional Chinese art"]')).toHaveClass('w-40')
+  })
+
+  it('a card with only Traditional art shows it', async () => {
+    const hant = PKM_ID_MIN + 3
+    load([], [[own, hant]])
+    render(<CardArt imageId={own} size="full" alt="Oddish" />)
+    expect(await screen.findByAltText('Oddish (Traditional Chinese art)')).toHaveAttribute(
+      'src',
+      `ygo-img://full/${hant}`
+    )
+  })
+
+  it('a Worker without the Traditional channel still shows the English twin', async () => {
+    load([[own, twin]])
+    const mock = window.api
+    window.api = {
+      ...mock,
+      cards: { ...mock.cards, traditionalArt: vi.fn(async () => Promise.reject(new Error('Unknown'))) }
+    }
+    render(<CardArt imageId={own} size="full" alt="Oddish" />)
+    expect(await screen.findByAltText('Oddish (English art)')).toHaveAttribute(
+      'src',
+      `ygo-img://full/${twin}`
+    )
   })
 
   it('a card with its own art has no label', async () => {
     load([[twin, own]])
     render(<CardArt imageId={own} size="full" alt="Oddish" />)
     expect((await screen.findByAltText('Oddish')).getAttribute('src')).toBe(`ygo-img://full/${own}`)
-    expect(screen.queryByTestId('english-art-label')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('borrowed-art-label')).not.toBeInTheDocument()
   })
 
   it('a twin whose image fails falls to the placeholder, keeping the label off nothing else', async () => {

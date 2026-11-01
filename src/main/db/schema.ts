@@ -394,6 +394,17 @@ ALTER TABLE pokemon_cards ADD COLUMN art_twin_id INTEGER;
 CREATE INDEX ix_pokemon_cards_art_twin ON pokemon_cards(card_id) WHERE art_twin_id IS NOT NULL;
 `
 
+/**
+ * The Traditional Chinese card whose art a Pokémon card with none of its own shows, under a
+ * "Traditional Chinese art" label, ahead of `art_twin_id`. Its own column because older clients
+ * call anything in `art_twin_id` English: they ignore this one and keep the English twin, or the
+ * placeholder. Desktop-only for the same reason as V27: server-18 repeats this.
+ */
+export const SCHEMA_V28 = `
+ALTER TABLE pokemon_cards ADD COLUMN traditional_twin_id INTEGER;
+CREATE INDEX ix_pokemon_cards_traditional_twin ON pokemon_cards(card_id) WHERE traditional_twin_id IS NOT NULL;
+`
+
 /** A printing's rarity as shown: "Starlight Rare (Extended Art)" for a labelled variant. */
 export const RARITY_LABEL = "p.set_rarity || COALESCE(' (' || p.variant || ')', '')"
 
@@ -425,5 +436,6 @@ export const MIGRATIONS: Migration[] = [
   { version: 24, sql: SCHEMA_V24, server: false },
   { version: 25, sql: SCHEMA_V25, server: false },
   { version: 26, sql: SCHEMA_V26, server: false },
-  { version: 27, sql: SCHEMA_V27, server: false }
+  { version: 27, sql: SCHEMA_V27, server: false },
+  { version: 28, sql: SCHEMA_V28, server: false }
 ]

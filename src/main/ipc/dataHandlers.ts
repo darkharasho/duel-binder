@@ -1,7 +1,7 @@
 import type { Language } from '@shared/languages'
 import type { SqlDb } from '../db/sql'
 import { LOCAL } from '../repo/scope'
-import { borrowedArt, getCardDetail, searchCards } from '../repo/cards'
+import { borrowedArt, getCardDetail, searchCards, traditionalArt } from '../repo/cards'
 import { browseCards, browseFacetsFast } from '../repo/browse'
 import { checkLanguage, checkNotesLength } from '../repo/args'
 import {
@@ -37,6 +37,7 @@ export const DATA_CHANNELS = [
   'cards:browse',
   'cards:browseFacets',
   'cards:borrowedArt',
+  'cards:traditionalArt',
   'collection:list',
   'collection:forCard',
   'collection:add',
@@ -128,6 +129,7 @@ export function createDataHandlers({
     'cards:browse': async (f) => browseCards(db, f),
     'cards:browseFacets': async () => browseFacetsFast(db),
     'cards:borrowedArt': async () => borrowedArt(db),
+    'cards:traditionalArt': async () => traditionalArt(db),
     'collection:list': async (f) => listEntries(db, f),
     'collection:forCard': async (cardId: number) => entriesForCard(db, cardId),
     'collection:add': async (input) => {

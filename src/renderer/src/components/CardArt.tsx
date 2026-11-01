@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { cn } from '@/lib/utils'
 import { cssAspect, gameOfId } from '@shared/games'
 import { useCardAspect, useCardGame } from '@/lib/game'
-import { useBorrowedArt } from '@/lib/borrowedArt'
+import { useBorrowedArt, type BorrowedArt } from '@/lib/borrowedArt'
 import { cardImageSrc, printingImageSrc } from '@/lib/images'
 import { useArtLoad } from './artLoad'
 import { CardPlaceholder } from './CardPlaceholder'
@@ -52,20 +52,44 @@ function PrintingScan({
   )
 }
 
-const ENGLISH_ART = 'English art'
+/**
+ * What a borrowed picture is labelled. `wide` is the tile the words fit under; both are written out
+ * for Tailwind to find.
+ */
+const ART_LABELS: Record<
+  BorrowedArt['language'],
+  { words: string; letters: string; wide: { words: string; letters: string } }
+> = {
+  en: {
+    words: 'English art',
+    letters: 'EN',
+    wide: { words: '@[5rem]:block', letters: '@[5rem]:hidden' }
+  },
+  'zh-hant': {
+    words: 'Traditional Chinese art',
+    letters: 'TC',
+    wide: { words: '@[9rem]:block', letters: '@[9rem]:hidden' }
+  }
+}
 
 /** Says the art is another printing's. Under a tile wide enough for the words, the two letters. */
-function EnglishArtLabel(): React.JSX.Element {
+function BorrowedArtLabel({ language }: { language: BorrowedArt['language'] }): React.JSX.Element {
+  const label = ART_LABELS[language]
   return (
     <span
-      data-testid="english-art-label"
+      data-testid="borrowed-art-label"
       className="pointer-events-none absolute bottom-[3%] left-[4%] max-w-[92%] rounded-[3px] bg-black/70 font-medium leading-none text-white"
     >
-      <span className="hidden whitespace-nowrap px-1 py-0.5 text-[9px] @[5rem]:block @[12rem]:px-1.5 @[12rem]:py-1 @[12rem]:text-xs">
-        {ENGLISH_ART}
+      <span
+        className={cn(
+          'hidden whitespace-nowrap px-1 py-0.5 text-[9px] @[12rem]:px-1.5 @[12rem]:py-1 @[12rem]:text-xs',
+          label.wide.words
+        )}
+      >
+        {label.words}
       </span>
-      <span aria-hidden className="block px-0.5 py-px text-[7px] @[5rem]:hidden">
-        EN
+      <span aria-hidden className={cn('block px-0.5 py-px text-[7px]', label.wide.letters)}>
+        {label.letters}
       </span>
     </span>
   )
@@ -90,19 +114,20 @@ export function CardArt(props: CardArtProps): React.JSX.Element {
       />
     )
   if (borrowed === null) return <CardArtImage key={imageId} {...props} />
+  const { words } = ART_LABELS[borrowed.language]
   return (
     <span
-      title={ENGLISH_ART}
+      title={words}
       className={cn('@container relative block rounded-[6px] shadow-sm', className)}
     >
       <CardArtImage
-        key={borrowed}
+        key={borrowed.imageId}
         {...props}
-        imageId={borrowed}
-        alt={alt && `${alt} (${ENGLISH_ART})`}
+        imageId={borrowed.imageId}
+        alt={alt && `${alt} (${words})`}
         className="block w-full rounded-[inherit] shadow-none"
       />
-      <EnglishArtLabel />
+      <BorrowedArtLabel language={borrowed.language} />
     </span>
   )
 }

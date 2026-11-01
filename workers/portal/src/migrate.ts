@@ -1,4 +1,4 @@
-import { MIGRATIONS, SCHEMA_V19_SERVER, SCHEMA_V20, SCHEMA_V27, type Migration } from '../../../src/main/db/schema'
+import { MIGRATIONS, SCHEMA_V19_SERVER, SCHEMA_V20, SCHEMA_V27, SCHEMA_V28, type Migration } from '../../../src/main/db/schema'
 import type { SqlDb } from '../../../src/main/db/sql'
 
 export interface ServerStep {
@@ -294,6 +294,25 @@ function artTwinStep(): ServerStep {
   }
 }
 
+/** Frozen, as of server-18: server-16's `pokemon_cards` entry plus `traditional_twin_id`. */
+const SERVER_18_POKEMON_CARDS: FrozenTable = {
+  name: 'pokemon_cards',
+  key: ['card_id'],
+  columns: [...SERVER_16_POKEMON_CARDS.columns, 'traditional_twin_id']
+}
+
+/** `traditional_twin_id` (the server's V28), and the seq triggers recreated over it, as in server-16. */
+function traditionalTwinStep(): ServerStep {
+  return {
+    name: 'server-18',
+    sql: [
+      SCHEMA_V28.trim(),
+      ...['ins', 'upd', 'del'].map((op) => `DROP TRIGGER IF EXISTS trg_pokemon_cards_seq_${op};`),
+      ...seqTriggers(SERVER_18_POKEMON_CARDS, "'pkm'")
+    ].join('\n')
+  }
+}
+
 /**
  * Server-only steps, run after every desktop step. Append only; never edit a shipped step.
  *
@@ -451,7 +470,8 @@ ALTER TABLE users ADD COLUMN wishlist_hidden INTEGER NOT NULL DEFAULT 0;
       stack TEXT
     );
     CREATE INDEX ix_error_reports_day ON error_reports(day);`
-  }
+  },
+  traditionalTwinStep()
 ]
 
 /**

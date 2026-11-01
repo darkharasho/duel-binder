@@ -194,20 +194,31 @@ const toResult = (r: DbHit): CardSearchResult => ({
   matchedSetCode: r.matched
 })
 
-/**
- * `[image id, the image id it shows]` of each card showing a twin's art. Art of its own wins even
- * if a link is left over. Not scoped to a game or an owner: it is the catalog's, and only ids.
- */
-export function borrowedArt(db: SqlDb): [number, number][] {
+/** `[image id, the image id it shows]` of each card linked by `column`. Art of its own wins. */
+function artLinks(db: SqlDb, column: 'art_twin_id' | 'traditional_twin_id'): [number, number][] {
   const rows = db
     .prepare(
       `SELECT i.image_id AS own, t.image_id AS twin FROM pokemon_cards p
        JOIN card_images i ON i.card_id = p.card_id AND i.sort_order = 0
-       JOIN card_images t ON t.card_id = p.art_twin_id AND t.sort_order = 0
-       WHERE p.art_twin_id IS NOT NULL AND p.image_url IS NULL`
+       JOIN card_images t ON t.card_id = p.${column} AND t.sort_order = 0
+       WHERE p.${column} IS NOT NULL AND p.image_url IS NULL`
     )
     .all() as { own: number; twin: number }[]
   return rows.map((r) => [r.own, r.twin])
+}
+
+/**
+ * Each card showing an English twin's art. Art of its own wins even if a link is left over. Not
+ * scoped to a game or an owner: it is the catalog's, and only ids. Older web pages read this over
+ * the portal and label all of it English, so it never holds Traditional art.
+ */
+export function borrowedArt(db: SqlDb): [number, number][] {
+  return artLinks(db, 'art_twin_id')
+}
+
+/** As borrowedArt, for Traditional Chinese art, which a card shows ahead of its English twin. */
+export function traditionalArt(db: SqlDb): [number, number][] {
+  return artLinks(db, 'traditional_twin_id')
 }
 
 export function getCardDetail(db: SqlDb, cardId: number, scope: Scope = LOCAL): CardDetail | null {

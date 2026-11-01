@@ -79,6 +79,7 @@ const coversSql = (scope: Scope): string => `
       MAX(CASE WHEN ${isMarketOnly} THEN ${MARKET_ONLY_PRICE}
         ELSE COALESCE(p.market_price, p.set_price, ip.price) END) AS price,
       MIN(CASE WHEN p.game = 'pkm' AND pc.image_url IS NULL AND pc.art_twin_id IS NULL
+        AND pc.traditional_twin_id IS NULL
         THEN 1 ELSE 0 END) AS no_art,
       MIN(CASE
         WHEN p.game = 'pkm' THEN CASE

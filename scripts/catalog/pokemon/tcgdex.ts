@@ -1,10 +1,10 @@
 import { getJson, type GetJsonOpts } from './http'
-import type { TdLang, TdCard, TdSet } from './types'
+import type { EuropeanLang, TdLang, TdCard, TdSet } from './types'
 
 const BASE = 'https://api.tcgdex.net/v2'
 
 /** TCGdex's own language codes; Traditional Chinese is `zh-tw` there. */
-export type TcgdexLang = TdLang | 'zh-tw'
+export type TcgdexLang = TdLang | EuropeanLang | 'zh-tw'
 
 export const tcgdexSetList = (lang: TcgdexLang, o: GetJsonOpts): Promise<{ id: string }[]> =>
   getJson(`${BASE}/${lang}/sets`, o)

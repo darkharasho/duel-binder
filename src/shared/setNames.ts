@@ -1,3 +1,5 @@
+import { EUROPEAN_SET_NAMES } from './europeanSetNames'
+
 /**
  * Set names as the app shows them. English is the app's language, so a set the catalog names in
  * another script shows its English name. Display only: the catalog's `set_name` stays the key
@@ -72,12 +74,12 @@ export function hasNativeScript(name: string): boolean {
 
 /**
  * The name the app shows for a set: its English name when the catalog's name is in another
- * script ("GXバトルブースト" → "GX Battle Boost", "トリプレットビート (CS1A)" → "Triplet Beat
+ * language or script ("GXバトルブースト" → "GX Battle Boost", "トリプレットビート (CS1A)" → "Triplet Beat
  * (CS1A)"); else, for a name with no known English name, the set's code (the part of `code` before
  * any space, so a printing's "SM4P 121/114" gives "SM4P"); else the name as it is.
  */
 export function englishSetName(name: string, code?: string | null): string {
-  const known = ENGLISH_SET_NAMES[name]
+  const known = ENGLISH_SET_NAMES[name] ?? EUROPEAN_SET_NAMES[name]
   if (known) return known
   if (!hasNativeScript(name)) return name
   const taken = TAKEN_SUFFIX.exec(name)

@@ -66,6 +66,9 @@ export interface FingerprintResult {
   references: { count: number; fetched: number; failed: number }
 }
 
+/** Pokémon languages the scanner doesn't read, by the start of `source_id`. */
+const UNSCANNED_SOURCES = ['zh-hant', 'fr', 'de', 'it', 'es']
+
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
 
 /** Downloads and hashes one cropped art image; 429 and 5xx are retried, anything else rejects. */
@@ -128,7 +131,8 @@ function tooCloseTokens(
  * cache are reused; the rest are downloaded and hashed, and an image that fails is skipped
  * (and counted) so it is tried again next run. Tokens too like another card are left out of the
  * finished set of records (see TOKEN_MIN_DISTANCE), however their hashes were come by.
- * Traditional Chinese Pokémon cards stay out: the scanner reads English and Japanese cards only.
+ * Traditional Chinese and European Pokémon cards stay out: the scanner reads English and Japanese
+ * cards only.
  * Art a Chinese card borrows (art_twin_id, traditional_twin_id) stays out too: only a card's own
  * image_url is hashed.
  */
@@ -149,7 +153,7 @@ export async function buildFingerprints(opts: FingerprintOptions): Promise<Finge
         `SELECT i.image_id, i.card_id, COALESCE(c.frame_type, '') AS frame_type
          FROM card_images i LEFT JOIN cards c ON c.id = i.card_id
          LEFT JOIN pokemon_cards p ON p.card_id = i.card_id
-         WHERE i.game = ? AND COALESCE(p.source_id, '') NOT LIKE 'zh-hant/%'`
+         WHERE i.game = ? AND ${UNSCANNED_SOURCES.map((l) => `COALESCE(p.source_id, '') NOT LIKE '${l}/%'`).join(' AND ')}`
       )
       .all(game) as { image_id: number; card_id: number; frame_type: string }[]
     const frames = new Map(images.map((r) => [r.image_id, r.frame_type]))

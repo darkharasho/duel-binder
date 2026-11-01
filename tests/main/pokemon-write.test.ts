@@ -36,7 +36,7 @@ function fixtureSources(t: Tweaks = {}): PokemonSources & { calls: string[] } {
     calls,
     async sets(lang) {
       calls.push(`sets ${lang}`)
-      if (lang === 'zh-hans' || lang === 'zh-hant') return []
+      if (lang !== 'en' && lang !== 'ja') return []
       return readdirSync(join(FIX, lang))
         .filter((f) => f.startsWith('set-'))
         .map((f) => read<TdSet>(`${lang}/${f}`))
@@ -49,7 +49,7 @@ function fixtureSources(t: Tweaks = {}): PokemonSources & { calls: string[] } {
         .map((c) => (t.card ? t.card(lang, c) : c))
     },
     async groups(lang) {
-      if (lang === 'zh-hans' || lang === 'zh-hant') return []
+      if (lang !== 'en' && lang !== 'ja') return []
       calls.push(`groups ${lang}`)
       const g = read<{
         results: { groupId: number; name: string; abbreviation?: string | null }[]
@@ -553,7 +553,7 @@ describe('runPokemonStep', () => {
         sources: fixtureSources()
       })
       expect(out.error).toBeNull()
-      expect(out.reports.map((r) => r.lang)).toEqual(['en', 'ja', 'zh-hans', 'zh-hant'])
+      expect(out.reports.map((r) => r.lang)).toEqual(['en', 'ja', 'zh-hans', 'zh-hant', 'fr'])
     } finally {
       db.close()
     }

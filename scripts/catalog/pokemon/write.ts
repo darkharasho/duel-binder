@@ -5,6 +5,7 @@ import { hasNativeScript } from '../../../src/shared/setNames'
 import { findArt, findArtByName, NAME_GROUPS } from './art'
 import { englishTwins, traditionalTwins } from './artTwins'
 import { englishNamer, type EnglishNamer } from './englishNames'
+import { europeanNamer, isEuropean } from './european'
 import { traditionalNamer, type JapaneseTwin, type SimplifiedName } from './traditional'
 import { matchGroup, matchProducts, namesCard, plainName, speciesCheck, type MatchedProduct, type NameCheck } from './match'
 import { tcgplayerOnlyCards } from './upcoming'
@@ -605,6 +606,28 @@ function nameTraditional(zh: LangPlan, others: LangPlan[]): void {
   }
 }
 
+/**
+ * Names a European language's cards in English, keeping the printed name as `localName`. A card
+ * nothing names stays as printed. Nothing here is frozen, so it can be named later.
+ */
+function nameEuropean(plan: LangPlan, en: LangPlan | undefined): void {
+  const cards = plan.sets.flatMap((s) => s.cards)
+  const namer = europeanNamer(
+    cards.map((c) => c.card),
+    en?.sets.flatMap((s) => s.cards.map((c) => c.card)) ?? []
+  )
+  for (const cp of cards) {
+    const named = namer.nameOf(cp.card)
+    if (!named) {
+      plan.report.japaneseNames++
+      continue
+    }
+    plan.report.englishNamed++
+    cp.name = named
+    cp.localName = named === cp.card.name ? null : cp.card.name
+  }
+}
+
 /** Art for the cards still without any, once they have their English names. */
 function fillArt(plan: LangPlan, namer: EnglishNamer | null): void {
   const { lang, report } = plan
@@ -691,7 +714,8 @@ function freeName(name: string, alts: string[], taken: (n: string) => boolean): 
 
 /**
  * Refreshes the Pokémon catalog in `work`. Everything is fetched and matched first; any source
- * failure throws before a row is written. Then all languages are written in one transaction.
+ * failure throws before a row is written, except that a European language that fails is logged and
+ * left out for the night, its rows as they were. Then all languages are written in one transaction.
  */
 export async function refreshPokemon(
   work: Database.Database,
@@ -704,7 +728,12 @@ export async function refreshPokemon(
   for (const lang of langs) {
     const en = plans.find((p) => p.lang === 'en')
     const enCards = en ? en.sets.flatMap((s) => s.cards.map((c) => c.card)) : []
-    plans.push(await planLanguage(lang, sources, log, enCards))
+    try {
+      plans.push(await planLanguage(lang, sources, log, enCards))
+    } catch (e) {
+      if (!isEuropean(lang)) throw e
+      log(`Pokémon ${lang}: left out tonight: ${e instanceof Error ? e.message : String(e)}`)
+    }
   }
   const ja = plans.find((p) => p.lang === 'ja')
   const namer = ja
@@ -715,6 +744,9 @@ export async function refreshPokemon(
     : null
   const zh = plans.find((p) => p.lang === 'zh-hant')
   if (zh) nameTraditional(zh, plans)
+  for (const plan of plans) {
+    if (isEuropean(plan.lang)) nameEuropean(plan, plans.find((p) => p.lang === 'en'))
+  }
   for (const plan of plans) fillArt(plan, plan === ja ? namer : null)
   borrowEnglishArt(plans)
   borrowTraditionalArt(plans)

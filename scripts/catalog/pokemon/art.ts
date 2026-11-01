@@ -17,6 +17,10 @@ import type { PkmLang, TcProduct, TdCard, TdSet } from './types'
 export const ART_GROUPS: Record<PkmLang, Readonly<Record<string, readonly number[]>>> = {
   'zh-hans': {},
   'zh-hant': {},
+  fr: {},
+  de: {},
+  it: {},
+  es: {},
   en: {
     '2021swsh': [2782], // McDonald's 25th Anniversary Promos
     '30th-c': [24837], // ME: 30th Celebration Classic Collection

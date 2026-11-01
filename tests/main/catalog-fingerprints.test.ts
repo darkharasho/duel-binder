@@ -473,8 +473,15 @@ describe('buildFingerprints for Pokémon', () => {
     expect(await build()).toMatchObject({ count: 0, fetched: 0 })
   })
 
-  it('leaves Traditional Chinese Pokémon cards out of the pkm file', async () => {
-    for (const sourceId of ['en/sv03-045', 'zh-hant/SV4K-001']) {
+  it('leaves Traditional Chinese and European Pokémon cards out of the pkm file', async () => {
+    for (const sourceId of [
+      'en/sv03-045',
+      'zh-hant/SV4K-001',
+      'fr/sv03-045',
+      'de/sv03-045',
+      'it/sv03-045',
+      'es/sv03-045'
+    ]) {
       const cardId = pokemonId(sourceId)
       work
         .prepare(

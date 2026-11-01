@@ -548,7 +548,7 @@ describe('Pokémon set art in set summaries', () => {
     expect(en).toMatchObject({
       imageKey: 'td-en-sv02',
       packImageKey: 'bp-main',
-      logoImageKey: null
+      logoImageKey: 'td-en-sv02'
     })
     const ja = sets.find((s) => s.language === 'ja')!
     expect(ja).toMatchObject({ packImageKey: null, logoImageKey: 'pt-logo' })

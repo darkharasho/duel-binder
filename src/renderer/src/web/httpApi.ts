@@ -271,6 +271,22 @@ export function createHttpApi(opts: HttpApiOptions = {}): Api {
         }
       }
     },
+    errors: {
+      report: async (details) => {
+        try {
+          await doFetch('/api/errors', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ ...details, platform: 'web' }),
+            credentials: 'same-origin',
+            keepalive: true
+          })
+        } catch {
+          // Best effort, and an older portal has no such route.
+        }
+      },
+      setEnabled: async () => {}
+    },
     sets: {
       list: call('sets:list'),
       checklist: call('sets:checklist'),

@@ -35,6 +35,8 @@ import { seedFakeCollection, seedFakePokemon } from './dev/fakeData'
 import { resolveUserData } from './userData'
 import { captureShots, SHOTS } from './dev/capture'
 import { createAccountService } from './cloud/account'
+import { createMainErrorReports, goneMessage } from './errorReports'
+import { describeError, type ErrorDetails } from '@shared/errorReports'
 import { createCloudClient } from './cloud/client'
 import { GAME_IDS, type GameId } from '@shared/games'
 import { setMeta } from './db/meta'
@@ -75,6 +77,34 @@ if (fakeData)
   app.setPath('userData', `${app.getPath('userData')}-fake-data${captureDir ? '-capture' : ''}`)
 
 registerImageScheme()
+
+/** Set once the account exists; the usage setting can't arrive before that, so nothing is lost. */
+let sendErrorReport: (details: ErrorDetails) => void = () => {}
+const errorReports = createMainErrorReports({
+  version: () => app.getVersion(),
+  send: (details) => sendErrorReport(details)
+})
+
+// The monitor only watches: an 'uncaughtException' listener would replace Electron's crash handling.
+process.on('uncaughtExceptionMonitor', (error) => {
+  const { message, stack } = describeError(error)
+  errorReports.capture(`Main process: ${message}`, stack)
+})
+// Electron only warns about these, and a listener doesn't change that the app carries on; it does
+// silence the warning, so this logs in its place.
+process.on('unhandledRejection', (reason) => {
+  console.warn('Unhandled rejection', reason)
+  const { message, stack } = describeError(reason)
+  errorReports.capture(`Main process rejection: ${message}`, stack)
+})
+app.on('render-process-gone', (_, __, details) => {
+  const message = goneMessage('Renderer process', details)
+  if (message) errorReports.capture(message)
+})
+app.on('child-process-gone', (_, details) => {
+  const message = goneMessage(`${details.type} process`, details)
+  if (message) errorReports.capture(message)
+})
 
 let mainWindow: BrowserWindow | null = null
 let scanWindows: ScanWindowManager | null = null
@@ -340,6 +370,7 @@ async function bootstrap(): Promise<void> {
     signInRequired: !fakeData
   })
   app.on('before-quit', () => account.stop())
+  sendErrorReport = (details) => void account.reportError(details)
   const ocr = createOcr({ packaged: app.isPackaged })
   app.on('will-quit', () => void ocr.dispose().catch(() => {}))
 
@@ -387,6 +418,7 @@ async function bootstrap(): Promise<void> {
       window: windowDeps,
       scanWindow,
       account: fakeData ? { ...account, games: () => [...GAME_IDS] } : account,
+      errorReports,
       emitDataChanged,
       fingerprints,
       ocr

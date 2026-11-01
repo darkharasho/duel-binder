@@ -83,6 +83,11 @@ th:first-child{text-align:left}
 .steps li.done{color:var(--fg)}
 .steps li.live{color:var(--accent)}
 .steps li.bad{color:var(--bad)}
+details.error{padding:8px 0;border-top:1px solid var(--line)}
+details.error:first-of-type{border-top:0}
+details.error summary{cursor:pointer;overflow-wrap:anywhere}
+details.error .count{color:var(--accent);font-weight:600;margin-right:8px}
+details.error pre{margin:4px 0 8px;padding:8px;border-radius:6px;background:rgb(255 255 255 / 4%);font-size:12px;white-space:pre-wrap;overflow-wrap:anywhere}
 [hidden]{display:none!important}
 `
 
@@ -220,6 +225,35 @@ function renderUsage(u) {
   }
   p.append(byEvent.size ? table : el('p', 'Nothing reported yet.', 'note'))
   $('activity').replaceChildren(p)
+}
+
+/** Reports hold text from the apps: it only ever goes in through el(), as text. */
+function renderErrors(groups) {
+  const p = el('section', null, 'panel')
+  p.append(el('h2', 'Latest reports (anonymous)'))
+  for (const g of groups) {
+    const item = el('details', null, 'error')
+    const summary = el('summary')
+    summary.append(el('span', n(g.count) + '×', 'count'), el('span', g.message))
+    item.append(summary)
+    for (const r of g.reports) {
+      item.append(el('p', [r.day, r.platform, r.appVersion].join(' · '), 'note'))
+      if (r.stack) item.append(el('pre', r.stack))
+    }
+    p.append(item)
+  }
+  if (!groups.length) p.append(el('p', 'Nothing reported yet.', 'note'))
+  $('errors').replaceChildren(p)
+}
+
+async function loadErrors() {
+  try {
+    const res = await fetch('/admin/errors', { credentials: 'same-origin' })
+    if (!res.ok) throw new Error('The portal answered ' + res.status)
+    renderErrors(await res.json())
+  } catch (e) {
+    $('errors').replaceChildren(el('p', String(e.message || e), 'note'))
+  }
 }
 
 async function load() {
@@ -449,7 +483,7 @@ async function loadRuns() {
   if (live) pollTimer = setTimeout(loadRuns, POLL_MS)
 }
 
-const TABS = ['overview', 'runs', 'people', 'activity', 'scanner', 'storage']
+const TABS = ['overview', 'runs', 'people', 'activity', 'errors', 'scanner', 'storage']
 
 function showTab() {
   const wanted = location.hash.slice(1)
@@ -463,8 +497,9 @@ function showTab() {
 
 window.addEventListener('hashchange', showTab)
 showTab()
-$('refresh').addEventListener('click', () => { load(); loadRuns() })
+$('refresh').addEventListener('click', () => { load(); loadErrors(); loadRuns() })
 load()
+loadErrors()
 loadRuns()
 `
 
@@ -497,7 +532,7 @@ export function adminPage(): Response {
 <header><div class="wrap">
 <div class="top"><h1>Duel Binder</h1><span class="badge">Admin</span><span class="pulse" id="pulse"></span>
 <span class="grow"></span><span class="at" id="at"></span><a href="/">Back to the app</a><button id="refresh" type="button">Refresh</button></div>
-<nav aria-label="Admin sections"><a href="#overview">Overview</a><a href="#runs">Runs</a><a href="#people">Users</a><a href="#activity">Usage</a><a href="#scanner">Scanner &amp; prices</a><a href="#storage">Storage</a></nav>
+<nav aria-label="Admin sections"><a href="#overview">Overview</a><a href="#runs">Runs</a><a href="#people">Users</a><a href="#activity">Usage</a><a href="#errors">Errors</a><a href="#scanner">Scanner &amp; prices</a><a href="#storage">Storage</a></nav>
 </div></header>
 <main class="wrap">
 <section data-tab id="overview">
@@ -507,6 +542,7 @@ export function adminPage(): Response {
 <section data-tab id="runs" hidden></section>
 <section data-tab class="grid" id="people" hidden></section>
 <section data-tab id="activity" hidden></section>
+<section data-tab id="errors" hidden></section>
 <section data-tab class="grid" id="scanner" hidden></section>
 <section data-tab class="stack" id="storage" hidden></section>
 </main>

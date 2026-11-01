@@ -356,6 +356,37 @@ describe('account service', () => {
     await expect(authCheck(token)).rejects.toBeInstanceOf(CloudAuthError)
   })
 
+  describe('error reports', () => {
+    const details = { appVersion: '1.2.3', message: 'boom at /home/alice/x', stack: 'at y' }
+    const stored = (): unknown[] =>
+      portal.serverDb.prepare('SELECT platform, message FROM error_reports').all()
+
+    it('sends one as the desktop, scrubbed, with nothing about the account', async () => {
+      const service = makeService()
+      await signInAs(service, me(alice, 'alice'))
+      await service.reportError(details)
+      expect(stored()).toEqual([{ platform: 'desktop', message: 'boom at /home/~/x' }])
+    })
+
+    it('drops it signed out, offline, or when it is malformed', async () => {
+      const service = makeService()
+      await service.reportError(details)
+      await signInAs(service, me(alice, 'alice'))
+      await expect(service.reportError(null)).resolves.toBeUndefined()
+      online = false
+      await service.reportError(details)
+      expect(stored()).toEqual([])
+    })
+
+    it('ignores an older portal without the route, and stays signed in', async () => {
+      const service = makeService()
+      await signInAs(service, me(alice, 'alice'))
+      fetchSpy.mockImplementationOnce(async () => new Response('{}', { status: 404 }))
+      await expect(service.reportError(details)).resolves.toBeUndefined()
+      expect(service.isSignedIn()).toBe(true)
+    })
+  })
+
   it('a 401 during sync signs out without losing data', async () => {
     const service = makeService()
     await signInAs(service, me(alice, 'alice'))

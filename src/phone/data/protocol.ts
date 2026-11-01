@@ -26,6 +26,7 @@ export const STORE_METHODS = [
   'portalRead',
   'requestPrices',
   'reportUsage',
+  'reportError',
   'fingerprints',
   'fingerprintRefs',
   'fingerprintStatus',

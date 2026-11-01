@@ -1,5 +1,6 @@
 import type { SqlDb } from '../../main/db/sql'
 import { backfillArtTwins } from '../../main/catalog/artTwinBackfill'
+import type { ErrorReport } from '../../shared/errorReports'
 import type { UsageReport } from '../../shared/usage'
 import { deleteMeta, getMeta, setMeta } from '../../main/db/meta'
 import { applyChanges, catalogCursorKey, finishApply } from '../../main/catalog/apply'
@@ -85,6 +86,8 @@ export interface PhoneStore {
   requestPrices(printingIds: number[]): Promise<number>
   /** Sends anonymous usage totals when signed in; drops them otherwise. Never rejects. */
   reportUsage(report: UsageReport): Promise<void>
+  /** Sends an anonymous error report when signed in; drops it otherwise. Never rejects. */
+  reportError(report: ErrorReport): Promise<void>
   fingerprints(game: GameId): Promise<ArrayBuffer | null>
   /** Yu-Gi-Oh's file's reference scans with this phone's printing ids; empty without them. */
   fingerprintRefs(): Promise<ScanRef[]>
@@ -701,6 +704,16 @@ export function createPhoneStore(deps: {
         await client(t, PORTAL_TIMEOUT_MS).usage(report)
       } catch {
         // Best effort: a lost batch only undercounts.
+      }
+    },
+
+    reportError: async (report) => {
+      const t = token()
+      if (t === null) return
+      try {
+        await client(t, PORTAL_TIMEOUT_MS).errorReport(report)
+      } catch {
+        // Best effort, and an older portal has no such route.
       }
     },
 

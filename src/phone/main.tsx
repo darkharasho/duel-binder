@@ -9,6 +9,7 @@ import './phone.css'
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { isNativeApp } from '@/lib/portal'
+import { installErrorReports } from '@/lib/errorReports'
 import { trackOpen } from '@/lib/usage'
 import { App } from './App'
 import { createBrowserOcr } from './ocr'
@@ -30,6 +31,7 @@ async function start(): Promise<void> {
     ocr: createBrowserOcr(import.meta.env.BASE_URL)
   })
   window.api = runtime.api
+  installErrorReports()
   trackOpen()
   createRoot(document.getElementById('root')!).render(
     <StrictMode>

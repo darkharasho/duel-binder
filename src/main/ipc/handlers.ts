@@ -25,6 +25,7 @@ import { scanRefs } from '../repo/scanRefs'
 import { recordSnapshot } from '../repo/stats'
 import { cardLanguage } from '@shared/scan/cardLanguage'
 import type { AccountService } from '../cloud/account'
+import type { MainErrorReports } from '../errorReports'
 import type { CatalogService } from '../catalog/service'
 import { readPackWrappers } from '../images/packWrappers'
 import { saveDebugFrame } from '../scan/debugFrames'
@@ -54,6 +55,7 @@ export interface HandlerDeps {
   window: WindowDeps
   scanWindow: Pick<ScanWindowManager, 'open' | 'isOpen' | 'toggleFullScreen' | 'setSize'>
   account: AccountService
+  errorReports: Pick<MainErrorReports, 'setEnabled'>
   /** Tells every window that the data shown changed. */
   emitDataChanged(): void
   fingerprints: Record<GameId, FingerprintStore>
@@ -94,6 +96,7 @@ export function createHandlers({
   window,
   scanWindow,
   account,
+  errorReports,
   emitDataChanged,
   fingerprints,
   ocr
@@ -181,6 +184,8 @@ export function createHandlers({
     },
     'prices:request': (printingIds: unknown) => account.requestPrices(printingIds),
     'usage:report': (events: unknown) => account.reportUsage(events),
+    'errors:report': (details: unknown) => account.reportError(details),
+    'errors:setEnabled': async (on: unknown) => errorReports.setEnabled(on === true),
     'rip:packWrappers': async (key: unknown) => {
       if (typeof key !== 'string') throw new Error('Pack image key must be a string')
       // Ahead of the queue, like the pack's own <img>: the pack waits on it.

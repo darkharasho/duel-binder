@@ -441,6 +441,27 @@ describe('foil patterns', () => {
   const master = named(3, 'Carracosta (Master Ball Pattern)')
   const matched = [plain, ball, master].map((product) => ({ product, variantSubtype: null }))
 
+  it('labels a deck-only non-holo as Deck Exclusive, with its own price (me05-028)', () => {
+    const pack = { ...named(704785, 'Miraidon'), number: '028/084' }
+    const deck: TcProduct = { productId: 707026, groupId: 1840, name: 'Miraidon - 028/084 (Non-Holo)', number: '028/084' }
+    const c = brief({ variants_detailed: [variant('holo', 704785, 'a'), variant('reverse', 704785, 'b'), variant('normal', 707026, 'c')] })
+    const prices = new Map<number, TcPrice[]>([
+      [704785, [row(704785, 'Holofoil', 0.2), row(704785, 'Reverse Holofoil', 0.29)]],
+      [707026, [row(707026, 'Normal', 0.55)]]
+    ])
+    const r = cardVersions(c, [pack, deck].map((product) => ({ product, variantSubtype: null })), prices)
+    expect(r.versions).toEqual([
+      { label: 'Deck Exclusive', productId: 707026, subTypeName: 'Normal', price: 0.55 },
+      { label: 'Holofoil', productId: 704785, subTypeName: 'Holofoil', price: 0.2 },
+      { label: 'Reverse Holofoil', productId: 704785, subTypeName: 'Reverse Holofoil', price: 0.29 }
+    ])
+  })
+  it('keeps Normal for a non-holo product outside Deck Exclusives', () => {
+    const p = named(5, 'Sycamore - 107a/122 (Non-Holo)')
+    const prices = new Map<number, TcPrice[]>([[5, [row(5, 'Normal', 1)]]])
+    const r = cardVersions(brief({ variants_detailed: [variant('normal', 5, 'a')] }), [{ product: p, variantSubtype: null }], prices)
+    expect(r.versions.map((v) => v.label)).toEqual(['Normal'])
+  })
   it('keeps a pattern sold as Holofoil out of the plain Holofoil, each with its own price', () => {
     const c = brief({ variants_detailed: [variant('holo', 1, 'a'), variant('reverse', 1, 'b'), variant('reverse', 2, 'c'), variant('reverse', 3, 'd')] })
     const prices = new Map<number, TcPrice[]>([

@@ -117,6 +117,8 @@ export interface PkmVersion { label: string; productId: number | null; subTypeNa
  *    TCGdex files it as `reverse`; under either plain label it would make up a finish, and the
  *    label's several rows would leave it unpriced.
  * 8. TCGdex's cosmos foil is its own version too, whichever type it files it under.
+ * 9. A deck-only non-holo of a card boosters print as a holo is its own version too: TCGplayer files
+ *    it in Deck Exclusives as "(Non-Holo)", so plain Normal would read as a pack printing.
  * Cards that reach rule 3 or 4 have no confirmed finish; the report counts them as unverified.
  */
 export const GENERATED_VARIANT_ID = 'generated'
@@ -165,6 +167,15 @@ export function productTreatment(name: string): string | null {
   if (/^cosmos?\s+(holo|holofoil|foil)$/i.test(raw)) return 'Cosmos Holo'
   if (/^cracked ice$/i.test(raw)) return 'Cracked Ice Holo'
   return /\bball$/i.test(raw) ? `${raw} Pattern` : raw
+}
+
+/** TCGplayer's group of cards sold only in pre-built decks. */
+const DECK_EXCLUSIVES_GROUP = 1840
+
+/** The version a product is sold as on its own: a foil pattern or a deck-only non-holo (rule 9). */
+function productVersion(p: TcProduct): string | null {
+  if (p.groupId === DECK_EXCLUSIVES_GROUP && /\(Non-Holo\)\s*$/.test(p.name)) return 'Deck Exclusive'
+  return productTreatment(p.name)
 }
 
 /** Cards TCGdex has no cosmos variant for, whose Cosmos Holo a Dex export shows. */
@@ -228,7 +239,7 @@ export function cardVersions(
       if (!(name in SUBTYPES)) {
         problems.push(`${card.id}: TCGplayer subtype "${name}" of product ${product.productId} is not in the version table`)
       }
-      const label = (sub === null ? productTreatment(product.name) : null) ?? prefix(sub) + canonicalLabel(name)
+      const label = (sub === null ? productVersion(product) : null) ?? prefix(sub) + canonicalLabel(name)
       const key = `${product.productId}\u0000${name}`
       if (ambiguous.has(product.productId)) {
         entry(label).ambiguous = true
@@ -250,7 +261,7 @@ export function cardVersions(
   const plainProducts = matched.filter(
     ({ product, variantSubtype }) =>
       versionSubtype(variantSubtype) === null &&
-      productTreatment(product.name) === null &&
+      productVersion(product) === null &&
       (prices.get(product.productId)?.length ?? 0) > 0
   )
   const plainRows = plainProducts.length > 0
@@ -276,7 +287,7 @@ export function cardVersions(
     }
     const base = variantBase(v)
     const pattern = matched.find((m) => m.product.productId === v.thirdParty?.tcgplayer)
-    const treatment = pattern && !versionSubtype(v.subtype) && !v.stamp?.length ? productTreatment(pattern.product.name) : null
+    const treatment = pattern && !versionSubtype(v.subtype) && !v.stamp?.length ? productVersion(pattern.product) : null
     // Rule 8. On a card with no other variant it stays that one version, so no key moves.
     const cosmos =
       !treatment &&

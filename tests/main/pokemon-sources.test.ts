@@ -4,6 +4,10 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createPokemonSources } from '../../scripts/catalog/pokemon/sources'
 import { DEFAULT_RETRY_DELAY_MS, MAX_ATTEMPTS, retryDelay } from '../../scripts/catalog/pokemon/http'
+import { dexSets } from '../../scripts/catalog/pokemon/dexSets'
+
+/** The sets every English run adds from a Dex export. */
+const HELD = dexSets().map((s) => s.set.id)
 
 const FIX = join(__dirname, '..', 'fixtures', 'pokemon')
 const read = (p: string): unknown => JSON.parse(readFileSync(join(FIX, p), 'utf8'))
@@ -204,7 +208,7 @@ describe('pokemon sources', () => {
       return json(url.endsWith('/A1') ? pocket : paper)
     }) as typeof fetch
     const s = make({ fetch: f, calls: [], fail: new Map() })
-    expect((await s.sets('en')).map((x) => x.id)).toEqual(['sv01'])
+    expect((await s.sets('en')).map((x) => x.id)).toEqual(['sv01', ...HELD])
     s.close()
   })
 
@@ -228,7 +232,7 @@ describe('pokemon sources', () => {
       return json({}, 404)
     }) as typeof fetch
     const s = make({ fetch: f, calls: [], fail: new Map() })
-    expect((await s.sets('en')).map((x) => x.id)).toEqual(['me06'])
+    expect((await s.sets('en')).map((x) => x.id)).toEqual(['me06', ...HELD])
     const [card] = await s.cards('en', ['me06-011'])
     expect(card.name).toBe('Mega Golisopod ex')
     expect(urls.some((u) => u.includes('tcgdex.net') && u.includes('me06'))).toBe(false)

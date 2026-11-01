@@ -1,6 +1,7 @@
 import { openCardCache, cardIsUsable, traditionalCardIsUsable } from './cache'
 import { chineseCards, chineseFiles, chineseIndex, chineseListSets, chineseSet, type ZhCard } from './chinese'
 import { chinesePromoSets } from './chinesePromos'
+import { dexSets } from './dexSets'
 import { createLimiter, REPO_URL, MAX_CONCURRENCY, type GetJsonOpts } from './http'
 import { tcgcsvCardRows, tcgcsvGroups, tcgcsvPrices, tcgcsvProducts } from './tcgcsv'
 import { tcgdexCard, tcgdexSet, tcgdexSetList } from './tcgdex'
@@ -90,6 +91,12 @@ export function createPokemonSources(opts: PokemonSourcesOpts): PokemonSources &
         opts.log?.(`Pokémon ${lang}: ${b.set.name} built from TCGplayer, ${b.cards.length} cards`)
         paper.push(b.set)
         for (const c of b.cards) upcoming.set(`${lang}/${c.id}`, c)
+      }
+      if (lang === 'en') {
+        for (const b of dexSets()) {
+          paper.push(b.set)
+          for (const c of b.cards) upcoming.set(`${lang}/${c.id}`, c)
+        }
       }
       return paper
     },

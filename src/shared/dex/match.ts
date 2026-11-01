@@ -76,11 +76,11 @@ const DEX_SETS: Record<string, string> = {
   me1: 'me01', me2: 'me02', me5: 'me05', me55: '30th', me55cc: '30th-c',
   swsh12pt5: 'swsh12.5', swsh12pt5gg: 'swsh12.5gg', swsh35: 'swsh3.5', pgo: 'swsh10.5', sm75: 'sm7.5', smp: 'smp',
   tk1a: 'tk-ex-latia', tk3a: 'tk-dp-m', tk8a: 'tk-xy-latio', tk9a: 'tk-xy-p', mcd15: '2015xy', mfbp: 'mfb',
-  mee: 'mee', uen23: 'sve', mep: 'mep', svp: 'svp', swshp: 'swshp', xyp: 'xyp', basep: 'basep'
+  mee: 'mee', uen23: 'sve', ba20m: 'ba20m', mcd18fr: '2018sm-fr', mep: 'mep', svp: 'svp', swshp: 'swshp', xyp: 'xyp', basep: 'basep'
 }
 
 /** The same for Japanese sets, whose ids Dex prefixes and whose names can differ from ours. */
-const DEX_JA_SETS: Record<string, string> = { jpn_m2a: 'M2a', jpn_mc: 'MC', jpn_svp: 'SV-P' }
+const DEX_JA_SETS: Record<string, string> = { jpn_m2a: 'M2a', jpn_m6a: 'M6a', jpn_mc: 'MC', jpn_svp: 'SV-P' }
 
 /**
  * Sets whose finish Dex and the catalog name differently: every 30th Celebration card is one card
@@ -199,7 +199,7 @@ const sameWords = (dex: string, ours: string): boolean => {
 /** A Chinese list names a regional form; Dex drops it where the species has no other ("Clodsire"). */
 const REGION = /^(?:Alolan|Galarian|Hisuian|Paldean) /
 
-/** A set flagged with a country in Dex ("McDonald's Collection 2018 (🇫🇷)") isn't our set of that name. */
+/** A set flagged with a country in Dex ("McDonald's Collection 2018 (🇫🇷)") isn't our set of that name: only its id can find it. */
 const REGIONAL = /[\u{1F1E6}-\u{1F1FF}]/u
 
 interface CatalogSet {
@@ -247,8 +247,11 @@ const dexSetId = (id: string): string => id.slice(0, Math.max(id.lastIndexOf('-'
 
 /** The row's set: by id and name when both know it (they must agree), else null. */
 function findSet(row: DexRow, language: string, index: LanguageIndex): CatalogSet | null {
-  if (REGIONAL.test(row.set)) return null
   const dexId = dexSetId(row.id)
+  if (REGIONAL.test(row.set)) {
+    const pinned = language === 'en' ? DEX_SETS[dexId] : undefined
+    return pinned ? (index.byId.get(pinned) ?? null) : null
+  }
   const named = index.byName.get(setKey(row.set, row.series)) ?? null
   // Each language's ids are its own; one with no table has only the name to go on.
   const pinned = language === 'en' ? DEX_SETS[dexId] : language === 'ja' ? DEX_JA_SETS[dexId] : undefined

@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { matchDexRows, type DexCatalogPrinting } from '../../src/shared/dex/match'
 import type { DexRow } from '../../src/shared/dex/parse'
+import { dexSets } from '../../scripts/catalog/pokemon/dexSets'
+import { cardVersions } from '../../scripts/catalog/pokemon/versions'
 
 let nextId = 1
 const printings = (
@@ -367,6 +369,52 @@ describe('Dex quantities', () => {
       CATALOG
     )
     expect([...m.wanted.values()].map((w) => w.quantity).sort()).toEqual([2, 3])
+  })
+})
+
+describe('sets only an export holds', () => {
+  const held = dexSets().flatMap(({ set, cards }) =>
+    cards.flatMap((card) =>
+      cardVersions(card, [], new Map()).versions.map((v, i) => ({
+        id: Number(card.localId) * 10 + i + (set.id === 'ba20m' ? 1000 : 0),
+        cardId: Number(card.localId),
+        sourceId: `en/${card.id}`,
+        setName: set.name,
+        version: v.label,
+        cardName: card.name,
+        language: 'en'
+      }))
+    )
+  )
+  const catalog = [...held, ...printings('en/2018sm-11', "McDonald's Collection 2018", 'Eevee', ['Holofoil'])]
+  const poliwag = { id: 'mcd18fr-11', set: "McDonald's Collection 2018 (🇫🇷)", number: '11/40', name: 'Poliwag' }
+
+  it("finds France's McDonald's set by id, never the set of its name", () => {
+    const { wanted, missing } = matchDexRows(
+      [row({ ...poliwag, variant: 'Normal' }), row({ ...poliwag, variant: 'Reverse Holo' })],
+      catalog
+    )
+    expect(missing).toEqual([])
+    expect(wanted.size).toBe(2)
+  })
+  it('leaves out a flagged set with no pin', () => {
+    const { missing } = matchDexRows([row({ ...poliwag, id: 'mcd19fr-11' })], catalog)
+    expect(missing[0].reason).toBe('set')
+  })
+  it('finds the Battle Academy deck', () => {
+    const { missing } = matchDexRows(
+      [row({ id: 'ba20m-6', set: 'Battle Academy 2020: Mewtwo Deck', number: '6/17', name: 'Mew' })],
+      catalog
+    )
+    expect(missing).toEqual([])
+  })
+  it('pins Japanese 30th Celebration to its set', () => {
+    const sylveon = printings('ja/M6a-059', 'MEGA Expansion 30th Celebration', 'Sylveon ex', ['Holofoil'], 'ja')
+    const { missing } = matchDexRows(
+      [row({ locale: 'Japanese', id: 'jpn_m6a-59', set: '30th Celebration', number: '59/103', name: 'Sylveon ex', variant: 'Holo' })],
+      sylveon
+    )
+    expect(missing).toEqual([])
   })
 })
 

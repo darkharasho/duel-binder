@@ -17,7 +17,7 @@ function pokemonCatalog(db: SqlDb): DexCatalogPrinting[] {
   return db
     .prepare(
       `SELECT p.id, p.card_id AS cardId, pc.source_id AS sourceId, p.set_name AS setName,
-         p.set_rarity AS version, c.name AS cardName, p.language
+         p.set_rarity AS version, c.name AS cardName, p.language, pc.category
        FROM card_printings p
        JOIN cards c ON c.id = p.card_id AND +c.game = 'pkm'
        JOIN pokemon_cards pc ON pc.card_id = p.card_id

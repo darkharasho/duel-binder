@@ -96,6 +96,10 @@ describe('POST /api/usage', () => {
     expect(rows()).toEqual([])
   })
 
+  it('takes the Android app as a platform', async () => {
+    expect((await post({ platform: 'android', events: { open: 1 } })).status).toBe(204)
+  })
+
   it('refuses events, platforms and counts outside the fixed list', async () => {
     for (const body of [
       { platform: 'desktop', events: { 'card:name:Dark Magician': 1 } },

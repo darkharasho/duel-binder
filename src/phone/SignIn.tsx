@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { isNativeApp } from '@/lib/portal'
+import { APP_PLATFORM, isNativeApp } from '@/lib/portal'
 import { fetchMe } from '@/web/account'
 import type { Me } from '../shared/cloud'
 import { NATIVE_SIGN_IN_COPY, SIGN_IN_COPY, SIGN_IN_FAILED, SIGN_IN_URL } from './copy'
@@ -114,14 +114,16 @@ export function SignIn({
         </p>
       ) : native ? (
         <div className="flex w-full flex-col items-center gap-3">
-          <button
-            type="button"
-            onClick={() => void signInNative(appleSignIn)}
-            className={APPLE_BUTTON}
-          >
-            <AppleLogo />
-            Sign in with Apple
-          </button>
+          {APP_PLATFORM === 'ios' && (
+            <button
+              type="button"
+              onClick={() => void signInNative(appleSignIn)}
+              className={APPLE_BUTTON}
+            >
+              <AppleLogo />
+              Sign in with Apple
+            </button>
+          )}
           <button
             type="button"
             onClick={() => void signInNative(nativeSignIn)}

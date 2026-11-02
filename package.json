@@ -15,6 +15,7 @@
     "build:phone": "cross-env NODE_ENV=production vite build --config vite.phone.config.ts",
     "dev:phone": "vite --config vite.phone.config.ts",
     "build:ios": "cross-env NODE_ENV=production vite build --config vite.phone.config.ts --mode ios && cap sync ios",
+    "build:android": "cross-env NODE_ENV=production vite build --config vite.phone.config.ts --mode android",
     "typecheck": "npm run typecheck:node && npm run typecheck:web && npm run typecheck:phone",
     "start": "electron-vite preview",
     "dev": "electron-vite dev",

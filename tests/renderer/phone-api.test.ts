@@ -6,7 +6,12 @@ import type { PhoneDb } from '../../src/phone/data/wasmSql'
 import type { Me } from '../../src/shared/cloud'
 import { seedPokemon } from '../fixtures/pokemon'
 import { seededDb } from '../main/helpers'
-import { createPhoneApi, createPhoneEvents, type PhoneEvents } from '../../src/phone/api'
+import {
+  createPhoneApi,
+  createPhoneEvents,
+  reportPlatform,
+  type PhoneEvents
+} from '../../src/phone/api'
 import type { Api } from '../../src/shared/ipc'
 import type { Ocr } from '../../src/shared/scan/ocr'
 import type { OcrBand } from '../../src/shared/scan/types'
@@ -227,6 +232,12 @@ describe('phone api', () => {
     await expect(api.scanWindow.open()).resolves.toBeUndefined()
     expect(() => api.scanWindow.send({} as never)).not.toThrow()
     expect(typeof api.scanWindow.onMessage(() => {})).toBe('function')
+  })
+
+  it('reports usage and errors as the app it runs in', () => {
+    expect(reportPlatform('web')).toBe('phone')
+    expect(reportPlatform('ios')).toBe('ios')
+    expect(reportPlatform('android')).toBe('android')
   })
 
   it('reports the phone platform and the build version', async () => {

@@ -1,11 +1,12 @@
 import { registerPlugin } from '@capacitor/core'
 import type { Me } from '../shared/cloud'
-import { PORTAL_ORIGIN } from '@/lib/portal'
+import { APP_PLATFORM, PORTAL_ORIGIN } from '@/lib/portal'
 
 /**
- * The iOS app's sign-in plugin (ios/App/App/WebAuthPlugin.swift): `start` is an
- * ASWebAuthenticationSession that opens `url` and resolves with the URL it ended at on
- * `callbackScheme`; `appleSignIn` is Sign in with Apple, with `nonce` the SHA-256 (hex) of the
+ * The apps' sign-in plugin (ios/App/App/WebAuthPlugin.swift, and WebAuthPlugin.java on Android):
+ * `start` opens `url` in the system's sign-in sheet (ASWebAuthenticationSession on iOS, a Custom
+ * Tab on Android) and resolves with the URL it ended at on `callbackScheme`; `appleSignIn`, iOS
+ * only, is Sign in with Apple, with `nonce` the SHA-256 (hex) of the
  * app's random value. Both reject with the code CANCELLED when the sheet is closed.
  */
 interface WebAuthPlugin {
@@ -59,14 +60,16 @@ async function tradeForToken(
 }
 
 /**
- * Discord sign-in for the iOS app: the portal's desktop flow (`?app=ios`) with a PKCE challenge,
+ * Discord sign-in for the iOS and Android apps: the portal's desktop flow (`?app=ios` or
+ * `?app=android`) with a PKCE challenge,
  * shown in the system's sign-in sheet, which hands back a one-time code on duelbinder://; the code
  * and verifier trade for the app's Bearer token like the desktop's. Rejects with SignInCancelled
  * when the sheet is closed, and with an Error when the sign-in fails.
  */
 export async function nativeSignIn(
-  deps: { start?: WebAuthPlugin['start']; fetch?: typeof fetch } = {}
+  deps: { app?: 'ios' | 'android'; start?: WebAuthPlugin['start']; fetch?: typeof fetch } = {}
 ): Promise<{ token: string; user: Me }> {
+  const app = deps.app ?? (APP_PLATFORM === 'android' ? 'android' : 'ios')
   const start = deps.start ?? ((o) => WebAuth.start(o))
   const doFetch = deps.fetch ?? fetch
   const state = random(24)
@@ -74,7 +77,7 @@ export async function nativeSignIn(
   const challenge = base64Url(
     new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier)))
   )
-  const startUrl = `${PORTAL_ORIGIN}/auth/desktop/start?${new URLSearchParams({ app: 'ios', state, challenge })}`
+  const startUrl = `${PORTAL_ORIGIN}/auth/desktop/start?${new URLSearchParams({ app, state, challenge })}`
 
   const { url: ended } = await sheet(() =>
     start({ url: startUrl, callbackScheme: CALLBACK_SCHEME })

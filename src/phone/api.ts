@@ -1,7 +1,8 @@
 import { DATA_CHANNELS, type DataChannel } from '../main/ipc/dataHandlers'
-import { isNativeApp } from '../renderer/src/lib/portal'
+import { APP_PLATFORM, type AppPlatform } from '../renderer/src/lib/portal'
 import type { Api } from '../shared/ipc'
 import type { PortalChannel } from '../shared/portal'
+import type { UsagePlatform } from '../shared/usage'
 import { cardLanguage } from '../shared/scan/cardLanguage'
 import { checkOcrBands, isOcrKind, isTextModel, readTexts, type Ocr } from '../shared/scan/ocr'
 import type {
@@ -83,6 +84,9 @@ type MethodOf<C, N extends string> = C extends `${N}:${infer M}` ? M : never
 type DataNamespace = NamespaceOf<DataChannel>
 /** The methods of Api[N] that are data channels. */
 type DataPart<N extends DataNamespace> = Pick<Api[N], MethodOf<DataChannel, N> & keyof Api[N]>
+
+/** The platform usage and error reports name: the web scanner is 'phone', the apps their own. */
+export const reportPlatform = (app: AppPlatform): UsagePlatform => (app === 'web' ? 'phone' : app)
 
 /**
  * The phone's `window.api`. Every data channel goes to the store (in the data worker), so a
@@ -308,11 +312,11 @@ export function createPhoneApi(deps: {
     },
     images: { cacheSize: async () => 0, clearCache: async () => {}, onDownloads: () => () => {} },
     usage: {
-      report: (events) => store.reportUsage({ platform: isNativeApp() ? 'ios' : 'phone', events })
+      report: (events) => store.reportUsage({ platform: reportPlatform(APP_PLATFORM), events })
     },
     errors: {
       report: (details) =>
-        store.reportError({ ...details, platform: isNativeApp() ? 'ios' : 'phone' }),
+        store.reportError({ ...details, platform: reportPlatform(APP_PLATFORM) }),
       setEnabled: async () => {}
     },
     window: {

@@ -14,11 +14,14 @@ import tailwindcss from '@tailwindcss/vite'
  */
 const BASE = '/scan/'
 /**
- * `--mode ios` builds the same app for the iOS shell (capacitor.config.ts): its files load from
- * capacitor://localhost/, so they sit at the root of out/ios-web, there is no service worker, and
- * the app calls the portal at IOS_PORTAL with its Bearer token (src/renderer/src/lib/portal.ts).
+ * `--mode ios` and `--mode android` build the same app for the native shells
+ * (capacitor.config.ts): its files load from the app itself (capacitor://localhost/ on iOS,
+ * https://localhost/ on Android), so they sit at the root of out/<mode>-web, there is no service
+ * worker, and the app calls the portal at APP_PORTAL with its Bearer token
+ * (src/renderer/src/lib/portal.ts). ANDROID_CHANNEL=play marks the Google Play build.
  */
-const IOS_PORTAL = 'https://app.duelbinder.com'
+const APP_PORTAL = 'https://app.duelbinder.com'
+const NATIVE_MODES = ['ios', 'android']
 const PUBLIC_DIR = resolve('src/phone/public')
 const OCR_MODELS = ['eng', 'jpn', 'kor', 'chi_sim']
 /**
@@ -169,7 +172,7 @@ function precache(): Plugin {
   }
 }
 
-/** The iOS page has no web manifest or icons to link: the shell is the app. */
+/** The apps' page has no web manifest or icons to link: the shell is the app. */
 function withoutWebAppLinks(): Plugin {
   return {
     name: 'without-web-app-links',
@@ -179,13 +182,13 @@ function withoutWebAppLinks(): Plugin {
 }
 
 export default defineConfig(({ mode }) => {
-  const ios = mode === 'ios'
-  const base = ios ? '/' : BASE
+  const native = NATIVE_MODES.includes(mode)
+  const base = native ? '/' : BASE
   return {
     root: resolve('src/phone'),
     base,
-    // The public files are the service worker's and the home-screen icons; the iOS app has neither.
-    publicDir: ios ? false : PUBLIC_DIR,
+    // The public files are the service worker's and the home-screen icons; the apps have neither.
+    publicDir: native ? false : PUBLIC_DIR,
     resolve: {
       alias: {
         '@': resolve('src/renderer/src'),
@@ -194,7 +197,11 @@ export default defineConfig(({ mode }) => {
     },
     define: {
       __APP_VERSION__: JSON.stringify(version),
-      'import.meta.env.VITE_PORTAL_ORIGIN': JSON.stringify(ios ? IOS_PORTAL : '')
+      'import.meta.env.VITE_PORTAL_ORIGIN': JSON.stringify(native ? APP_PORTAL : ''),
+      'import.meta.env.VITE_APP_PLATFORM': JSON.stringify(native ? mode : 'web'),
+      'import.meta.env.VITE_ANDROID_CHANNEL': JSON.stringify(
+        mode === 'android' && process.env.ANDROID_CHANNEL === 'play' ? 'play' : 'apk'
+      )
     },
     plugins: [
       noNodeBuiltins(),
@@ -202,17 +209,17 @@ export default defineConfig(({ mode }) => {
       tailwindcss(),
       tesseractWithoutCdn(base),
       ocrAssets(base),
-      ios ? withoutWebAppLinks() : precache()
+      native ? withoutWebAppLinks() : precache()
     ],
     optimizeDeps: { exclude: ['@sqlite.org/sqlite-wasm'] },
     worker: { format: 'es', plugins: () => [noNodeBuiltins()] },
     build: {
-      outDir: ios ? resolve('out/ios-web') : resolve('workers/portal/site/app/scan'),
+      outDir: native ? resolve(`out/${mode}-web`) : resolve('workers/portal/site/app/scan'),
       emptyOutDir: true,
       rollupOptions: {
         input: {
           index: resolve('src/phone/index.html'),
-          ...(ios ? {} : { sw: resolve('src/phone/sw.ts') })
+          ...(native ? {} : { sw: resolve('src/phone/sw.ts') })
         },
         output: {
           // The service worker keeps one URL (/scan/sw.js maps to it); everything else is hashed.

@@ -23,6 +23,17 @@ const tokenFetch = (status = 200): Mock<TokenFetch> =>
   )
 
 describe('nativeSignIn', () => {
+  it('opens the Android flow with app=android', async () => {
+    const start = sheet()
+    await nativeSignIn({
+      app: 'android',
+      start,
+      fetch: tokenFetch() as unknown as typeof globalThis.fetch
+    })
+    const url = new URL(start.mock.calls[0][0].url, 'https://portal.test')
+    expect(url.searchParams.get('app')).toBe('android')
+  })
+
   it('opens the iOS desktop flow and trades the code with its PKCE verifier', async () => {
     const start = sheet()
     const fetch = tokenFetch()

@@ -3,7 +3,7 @@
  * the portal adds to per-day counters with no account, device or IP attached.
  */
 
-export const USAGE_PLATFORMS = ['desktop', 'web', 'phone', 'ios'] as const
+export const USAGE_PLATFORMS = ['desktop', 'web', 'phone', 'ios', 'android'] as const
 export type UsagePlatform = (typeof USAGE_PLATFORMS)[number]
 
 export const USAGE_EVENTS = [

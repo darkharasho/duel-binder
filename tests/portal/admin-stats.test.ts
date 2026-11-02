@@ -3,6 +3,7 @@ import { createHash } from 'node:crypto'
 import type Database from 'better-sqlite3'
 import { handle, type AppDeps } from '../../workers/portal/src/app'
 import { currentUser } from '../../workers/portal/src/auth'
+import { adminPage } from '../../workers/portal/src/adminPage'
 import { addUser, memoryBucket, noPrintingArt, noPrices, seededServerDb } from './helpers'
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- loose view of the JSON body
@@ -185,5 +186,13 @@ describe('GET /admin/stats', () => {
     deps.env.ADMIN_DISCORD_ID = '999'
     expect((await meOf('tok-owner')).admin).toBe(true)
     expect((await meOf('tok-other')).admin).toBeUndefined()
+  })
+})
+
+describe('admin page', () => {
+  it('lists every usage platform, Android included', async () => {
+    expect(await adminPage().text()).toContain(
+      "const PLATFORMS = ['desktop', 'web', 'phone', 'ios', 'android']"
+    )
   })
 })

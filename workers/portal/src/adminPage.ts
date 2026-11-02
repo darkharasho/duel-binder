@@ -184,7 +184,7 @@ function render(s) {
   $('at').textContent = 'Updated ' + new Date(s.at).toLocaleString()
 }
 
-const PLATFORMS = ['desktop', 'web', 'phone', 'ios']
+const PLATFORMS = ['desktop', 'web', 'phone', 'ios', 'android']
 
 function renderUsage(u) {
   const opens = el('section', null, 'panel')

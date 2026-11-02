@@ -27,6 +27,7 @@ interface SummaryDbRow {
   is_pkm: 0 | 1
   list_rows: number | null
   unmatched_rows: number | null
+  series: string | null
   total_cards: number
   owned_cards: number
   total_rarities: number
@@ -37,7 +38,7 @@ const SET_ART = `s.set_code AS s_code, s.tcg_date, s.image_url, s.image_key, COA
          COALESCE(sl.image_key, kl.image_key, pl.image_key) AS logo_key,
          CASE WHEN p.game = 'pkm' AND s.image_url IS NOT NULL THEN s.image_key END AS pkm_logo_key,
          p.game = 'pkm' AS is_pkm,
-         s.list_rows, s.unmatched_rows`
+         s.list_rows, s.unmatched_rows, s.series`
 
 const SET_JOINS = `LEFT JOIN sets s ON s.game = p.game AND s.language = p.language AND s.set_name = p.set_name
   LEFT JOIN pack_art pa ON p.game = 'ygo' AND p.language = 'en' AND pa.set_name = p.set_name
@@ -149,7 +150,8 @@ function toSummary(r: SummaryDbRow, covers: Map<string, number>): SetSummary {
     totalRarities: r.total_rarities,
     ownedRarities: r.owned_rarities,
     listRows: r.list_rows,
-    unmatchedRows: r.unmatched_rows
+    unmatchedRows: r.unmatched_rows,
+    series: r.series
   }
 }
 
@@ -181,7 +183,7 @@ export function listSets(db: SqlDb, scope: Scope = LOCAL): SetSummary[] {
 }
 
 /** Bump when `catalogSets` or `toSummary` change what they produce: stored rollups aren't rebuilt otherwise. */
-const SETS_ROLLUP = 2
+const SETS_ROLLUP = 3
 
 /**
  * listSets as the catalog alone has it: nobody owns anything and a flagged Pokémon printing isn't

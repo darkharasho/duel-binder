@@ -470,6 +470,14 @@ DELETE FROM meta WHERE key = 'intl_sets_synced_at';
 export const SCHEMA_V35 =
   'CREATE INDEX ix_printings_language_card ON card_printings(language, contributed, card_id, game);'
 
+/**
+ * A set's series, the header the Sets page groups it under: "Scarlet & Violet", "Mega Evolution".
+ * Pokémon only, from TCGdex, and always the English series, as set names are English. Yu-Gi-Oh!
+ * has no series and leaves it NULL. Desktop-only for the same reason as V27: server-28 repeats this
+ * and recreates the `sets` seq triggers over it.
+ */
+export const SCHEMA_V36 = 'ALTER TABLE sets ADD COLUMN series TEXT;'
+
 /** A printing's rarity as shown: "Starlight Rare (Extended Art)" for a labelled variant. */
 export const RARITY_LABEL = "p.set_rarity || COALESCE(' (' || p.variant || ')', '')"
 
@@ -509,5 +517,6 @@ export const MIGRATIONS: Migration[] = [
   { version: 32, sql: SCHEMA_V32, server: false },
   { version: 33, sql: SCHEMA_V33, server: false },
   { version: 34, sql: SCHEMA_V34 },
-  { version: 35, sql: SCHEMA_V35, server: false }
+  { version: 35, sql: SCHEMA_V35, server: false },
+  { version: 36, sql: SCHEMA_V36, server: false }
 ]

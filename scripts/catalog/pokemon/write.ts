@@ -7,6 +7,7 @@ import { englishTwins, traditionalTwins } from './artTwins'
 import { englishNamer, type EnglishNamer } from './englishNames'
 import { europeanNamer, isEuropean } from './european'
 import { traditionalNamer, type JapaneseTwin, type SimplifiedName } from './traditional'
+import { setSeries } from './series'
 import { matchGroup, matchProducts, namesCard, plainName, speciesCheck, type MatchedProduct, type NameCheck } from './match'
 import { pokemonRarity } from './rarity'
 import { tcgplayerOnlyCards } from './upcoming'
@@ -75,6 +76,8 @@ interface SetPlan {
   groupName: string | null
   /** Its matched TCGCSV group. */
   groupId: number | null
+  /** The English series the Sets page groups it under (see setSeries); null when none matches. */
+  series: string | null
   cards: CardPlan[]
 }
 
@@ -269,6 +272,7 @@ async function planLanguage(
       set,
       groupName: lang === 'ja' && group ? stripCode(group.name) || null : null,
       groupId,
+      series: null,
       cards: cs.map(({ card, products }) => {
         const v = cardVersions(card, products, prices, setFinish)
         problems.push(...v.problems.map((p) => `${lang}/${p}`))
@@ -339,17 +343,17 @@ function productOfImage(url: string, byId: Map<number, TcProduct>): TcProduct | 
 /** Writes the planned languages in one transaction. */
 function writePlans(db: Database.Database, plans: LangPlan[], nowIso: string): void {
   const setByKey = db.prepare(
-    "SELECT set_name, set_code, tcg_date, image_url FROM sets WHERE game = 'pkm' AND language = ? AND image_key = ?"
+    "SELECT set_name, set_code, tcg_date, image_url, series FROM sets WHERE game = 'pkm' AND language = ? AND image_key = ?"
   )
   const setByName = db.prepare(
     "SELECT 1 FROM sets WHERE game = 'pkm' AND language = ? AND set_name = ?"
   )
   const insertSet = db.prepare(
-    `INSERT INTO sets (game, language, set_name, set_code, tcg_date, image_url, image_key)
-     VALUES ('pkm', ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO sets (game, language, set_name, set_code, tcg_date, image_url, image_key, series)
+     VALUES ('pkm', ?, ?, ?, ?, ?, ?, ?)`
   )
   const updateSet = db.prepare(
-    "UPDATE sets SET tcg_date = ?, image_url = ? WHERE game = 'pkm' AND language = ? AND image_key = ?"
+    "UPDATE sets SET tcg_date = ?, image_url = ?, series = ? WHERE game = 'pkm' AND language = ? AND image_key = ?"
   )
   const cardRow = db.prepare(`SELECT name, type, "desc" FROM cards WHERE game = 'pkm' AND id = ?`)
   const insertCard = db.prepare(
@@ -418,6 +422,7 @@ function writePlans(db: Database.Database, plans: LangPlan[], nowIso: string): v
               set_code: string
               tcg_date: string | null
               image_url: string | null
+              series: string | null
             }
           | undefined
         let setName: string
@@ -428,8 +433,10 @@ function writePlans(db: Database.Database, plans: LangPlan[], nowIso: string): v
           setName = old.set_name
           setCode = old.set_code
           const image = old.image_url ?? (set.logo || null)
-          if (old.tcg_date !== date || old.image_url !== image)
-            updateSet.run(date, image, lang, key)
+          // A night no source names the series keeps the one it had.
+          const series = sp.series ?? old.series
+          if (old.tcg_date !== date || old.image_url !== image || old.series !== series)
+            updateSet.run(date, image, series, lang, key)
         } else {
           setCode = setAbbrev(set)
           setName = freeName(
@@ -442,7 +449,7 @@ function writePlans(db: Database.Database, plans: LangPlan[], nowIso: string): v
               `${lang}/${set.id}: set name "${sp.groupName || set.name}" is taken; named "${setName}"`
             )
           }
-          insertSet.run(lang, setName, setCode, date, set.logo || null, key)
+          insertSet.run(lang, setName, setCode, date, set.logo || null, key, sp.series)
         }
 
         for (const cp of sp.cards) {
@@ -703,6 +710,15 @@ function borrowTraditionalArt(plans: LangPlan[]): void {
   }
 }
 
+/** Each set's English series (see setSeries). */
+function nameSeries(plans: LangPlan[]): void {
+  const english = plans.find((p) => p.lang === 'en')?.sets.map((sp) => sp.set) ?? []
+  for (const plan of plans) {
+    const series = setSeries(plan.lang, plan.sets.map((sp) => sp.set), english)
+    plan.sets.forEach((sp, i) => (sp.series = series[i]))
+  }
+}
+
 /** `name`, or the first of "name (alt)" not taken by another set of the language. */
 function freeName(name: string, alts: string[], taken: (n: string) => boolean): string {
   if (!taken(name)) return name
@@ -751,6 +767,7 @@ export async function refreshPokemon(
   for (const plan of plans) fillArt(plan, plan === ja ? namer : null)
   borrowEnglishArt(plans)
   borrowTraditionalArt(plans)
+  nameSeries(plans)
   writePlans(work, plans, (opts.now ?? (() => new Date()))().toISOString())
   return plans.map((p) => p.report)
 }

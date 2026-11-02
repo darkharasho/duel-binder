@@ -60,19 +60,23 @@ describe('migration V19 (game columns, Pokémon card fields)', () => {
 
     migrate(db)
 
-    expect(db.pragma('user_version', { simple: true })).toBe(35)
+    expect(db.pragma('user_version', { simple: true })).toBe(36)
     for (const t of GAME_TABLES) {
       expect(columns(db, t), t).toContain('game')
       expect(all(db, `SELECT DISTINCT game FROM ${t}`), t).toEqual([{ game: 'ygo' }])
     }
     expect(all(db, 'SELECT pkey FROM card_printings ORDER BY id')).toEqual(pkeys)
-    const without = (rows: unknown[]): unknown[] =>
+    const without = (rows: unknown[], later: string[] = []): unknown[] =>
       rows.map((r) => {
         const rest = { ...(r as Record<string, unknown>) }
         delete rest.game
+        for (const c of later) delete rest[c]
         return rest
       })
-    expect(without(all(db, 'SELECT * FROM sets ORDER BY language, set_name'))).toEqual(sets)
+    // `series` comes in a later step (V36).
+    expect(without(all(db, 'SELECT * FROM sets ORDER BY language, set_name'), ['series'])).toEqual(
+      sets
+    )
     expect(without(all(db, 'SELECT * FROM value_snapshots ORDER BY owner_id, date'))).toEqual(
       snapshots
     )

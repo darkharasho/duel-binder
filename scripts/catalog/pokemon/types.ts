@@ -29,7 +29,8 @@ export interface TdCard {
   set: { id: string; name: string }
 }
 export interface TdSet {
-  id: string; name: string; releaseDate?: string; logo?: string; serie?: { id: string }
+  /** `serie.name` is TCGdex's, in the set's language; sets built elsewhere carry only an id. */
+  id: string; name: string; releaseDate?: string; logo?: string; serie?: { id: string; name?: string }
   abbreviation?: { official?: string }; cardCount?: { official?: number; total?: number }
   cards: { id: string; localId: string; name: string }[]
 }

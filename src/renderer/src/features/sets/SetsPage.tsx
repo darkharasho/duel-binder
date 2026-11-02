@@ -165,6 +165,10 @@ export function SetsPage({ onAddCard, onAddMissing }: SetsPageProps): React.JSX.
     [all, filter, q, mode, sort, language, types, game, cutoff]
   )
 
+  // Pokémon sets sit under their series ("Scarlet & Violet") while sorted by date; Yu-Gi-Oh! has
+  // no series, and other sorts would split a series up anyway.
+  const bySeries = game === 'pkm' && sort === 'date'
+
   const counts = useMemo(
     () => typeCounts(all, { filter, mode, language, game }),
     [all, filter, mode, language, game]
@@ -342,7 +346,13 @@ export function SetsPage({ onAddCard, onAddMissing }: SetsPageProps): React.JSX.
                 </div>
               )
             ) : (
-              <SetsList sets={visible} mode={mode} view={view} onOpen={openFromList} />
+              <SetsList
+                sets={visible}
+                mode={mode}
+                view={view}
+                onOpen={openFromList}
+                bySeries={bySeries}
+              />
             )}
           </div>
           <SetsFilterPanel

@@ -48,7 +48,8 @@ const FIXTURES: DeepPartial<Api> = {
         totalRarities: 5,
         ownedRarities: 1,
         listRows: null,
-        unmatchedRows: null
+        unmatchedRows: null,
+        series: null
       }
     ])
   }

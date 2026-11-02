@@ -1,4 +1,12 @@
-import { MIGRATIONS, SCHEMA_V19_SERVER, SCHEMA_V20, SCHEMA_V27, SCHEMA_V28, type Migration } from '../../../src/main/db/schema'
+import {
+  MIGRATIONS,
+  SCHEMA_V19_SERVER,
+  SCHEMA_V20,
+  SCHEMA_V27,
+  SCHEMA_V28,
+  SCHEMA_V36,
+  type Migration
+} from '../../../src/main/db/schema'
 import type { SqlDb } from '../../../src/main/db/sql'
 
 export interface ServerStep {
@@ -313,6 +321,27 @@ function traditionalTwinStep(): ServerStep {
   }
 }
 
+/** Frozen, as of server-28: server-12's `sets` entry plus `series`. */
+const SERVER_28_SETS: FrozenTable & { game: string } = (() => {
+  const t = SERVER_12_TABLES.find((x) => x.name === 'sets')!
+  return { ...t, columns: [...t.columns, 'series'] }
+})()
+
+/**
+ * `series` (the server's V36), and the `sets` seq triggers recreated over it, as in server-16: the
+ * night that first fills it re-stamps every Pokémon set, so installed apps pull their series.
+ */
+function setSeriesStep(): ServerStep {
+  return {
+    name: 'server-28',
+    sql: [
+      SCHEMA_V36.trim(),
+      ...['ins', 'upd', 'del'].map((op) => `DROP TRIGGER IF EXISTS trg_sets_seq_${op};`),
+      ...seqTriggers(SERVER_28_SETS, SERVER_28_SETS.game)
+    ].join('\n')
+  }
+}
+
 /**
  * Server-only steps, run after every desktop step. Append only; never edit a shipped step.
  *
@@ -502,7 +531,8 @@ CREATE INDEX ix_binder_edits_user_seq ON binder_edits(user_id, seq);
   {
     name: 'server-27',
     sql: 'CREATE INDEX ix_printings_language_card ON card_printings(language, contributed, card_id, game);'
-  }
+  },
+  setSeriesStep()
 ]
 
 /**

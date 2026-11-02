@@ -208,7 +208,8 @@ describe('desktop sign-in and bearer tokens', () => {
     expect(res.status).toBe(302)
     expect(cookieOf(res, 'desktop_auth')).toBe(`ios.${STATE}.${CHALLENGE}`)
     for (const path of [
-      `/auth/desktop/start?app=android&state=${STATE}&challenge=${CHALLENGE}`,
+      `/auth/desktop/start?app=windows&state=${STATE}&challenge=${CHALLENGE}`,
+      `/auth/desktop/start?app=android&port=53682&state=${STATE}&challenge=${CHALLENGE}`,
       `/auth/desktop/start?app=ios&port=53682&state=${STATE}&challenge=${CHALLENGE}`,
       iosStartPath('short')
     ]) {
@@ -235,6 +236,25 @@ describe('desktop sign-in and bearer tokens', () => {
     expect(res.headers.get('location')).toBe(
       `duelbinder://auth/callback?error=signin-failed&state=${STATE}`
     )
+  })
+
+  it('the Android app starts the desktop flow without a port, and its code comes back on the URL scheme', async () => {
+    const start = await get(`/auth/desktop/start?app=android&state=${STATE}&challenge=${CHALLENGE}`)
+    expect(start.status).toBe(302)
+    const desktop = cookieOf(start, 'desktop_auth')!
+    expect(desktop).toBe(`android.${STATE}.${CHALLENGE}`)
+    const oauthState = cookieOf(start, 'oauth_state')!
+    const res = await get(`/auth/discord/callback?code=c&state=${oauthState}`, {
+      cookie: `oauth_state=${oauthState}; desktop_auth=${desktop}`
+    })
+    const loc = new URL(res.headers.get('location')!)
+    expect(loc.protocol + loc.host + loc.pathname).toBe('duelbinder:auth/callback')
+    expect(loc.searchParams.get('state')).toBe(STATE)
+    const token = await post('/auth/desktop/token', {
+      code: loc.searchParams.get('code')!,
+      verifier: VERIFIER
+    })
+    expect(token.status).toBe(200)
   })
 
   it('token exchange returns a desktop token for the right verifier only', async () => {
@@ -318,7 +338,7 @@ describe('desktop sign-in and bearer tokens', () => {
       `53682.evil.com/x.${CHALLENGE}`,
       `53682.${STATE}.${CHALLENGE}.extra`,
       `80.${STATE}.${CHALLENGE}`,
-      `android.${STATE}.${CHALLENGE}`
+      `windows.${STATE}.${CHALLENGE}`
     ]) {
       const start = await get('/auth/discord/start')
       const oauthState = cookieOf(start, 'oauth_state')!

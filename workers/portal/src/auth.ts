@@ -187,12 +187,16 @@ export function startSignIn(req: Request, deps: AppDeps): Response {
   return redirect(discordAuthorize(deps, state), cookies)
 }
 
-/** The iOS app's sign-in ends at its own URL scheme instead of a loopback port. */
-const IOS_CALLBACK = 'duelbinder://auth/callback'
+/** The iOS and Android apps' sign-in ends at their own URL scheme instead of a loopback port. */
+const APP_CALLBACK = 'duelbinder://auth/callback'
+
+/** The phone apps that sign in through the desktop flow, by their `?app=` value. */
+type PhoneApp = 'ios' | 'android'
+const isPhoneApp = (app: string | null): app is PhoneApp => app === 'ios' || app === 'android'
 
 interface DesktopAuth {
-  /** The desktop app's loopback port, or 'ios' for the iOS app. */
-  port: number | 'ios'
+  /** The desktop app's loopback port, or the phone app ('ios' or 'android'). */
+  port: number | PhoneApp
   state: string
   challenge: string
 }
@@ -204,7 +208,7 @@ function checkDesktopAuth(
 ): DesktopAuth | null {
   if (port === null || state === null || challenge === null) return null
   if (!STATE_RE.test(state) || !CHALLENGE_RE.test(challenge)) return null
-  if (port === 'ios') return { port, state, challenge }
+  if (isPhoneApp(port)) return { port, state, challenge }
   if (!PORT_RE.test(port)) return null
   const n = Number(port)
   return n >= 1024 && n <= 65535 ? { port: n, state, challenge } : null
@@ -215,20 +219,22 @@ function readDesktopAuth(req: Request): DesktopAuth | null {
   return parts?.length === 3 ? checkDesktopAuth(parts[0], parts[1], parts[2]) : null
 }
 
-/** Where the desktop flow hands back its code or error: the loopback listener, or the iOS app. */
+/** Where the desktop flow hands back its code or error: the loopback listener, or the phone app. */
 function desktopCallback(desktop: DesktopAuth, params: Record<string, string>): string {
-  const base = desktop.port === 'ios' ? IOS_CALLBACK : `http://127.0.0.1:${desktop.port}/callback`
+  const base =
+    typeof desktop.port === 'number' ? `http://127.0.0.1:${desktop.port}/callback` : APP_CALLBACK
   return `${base}?${new URLSearchParams({ ...params, state: desktop.state })}`
 }
 
 /**
  * GET /auth/desktop/start: the desktop app's browser sign-in, which ends at its loopback listener
- * (`?port=`), or the iOS app's, which ends at its URL scheme (`?app=ios`, no port).
+ * (`?port=`), or the iOS or Android app's, which ends at its URL scheme (`?app=ios` or
+ * `?app=android`, no port).
  */
 export function startDesktopSignIn(req: Request, deps: AppDeps): Response {
   const q = new URL(req.url).searchParams
   const app = q.get('app')
-  const port = app === null ? q.get('port') : app === 'ios' && !q.has('port') ? 'ios' : null
+  const port = app === null ? q.get('port') : isPhoneApp(app) && !q.has('port') ? app : null
   const auth = checkDesktopAuth(port, q.get('state'), q.get('challenge'))
   if (!auth) {
     return respond(

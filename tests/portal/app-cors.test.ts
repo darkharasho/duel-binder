@@ -6,6 +6,7 @@ import { migrateServer } from '../../workers/portal/src/migrate'
 
 const BASE = 'https://portal.test'
 const IOS = 'capacitor://localhost'
+const ANDROID = 'https://localhost'
 
 function deps(): AppDeps {
   const db = new Database(':memory:')
@@ -83,5 +84,37 @@ describe("CORS for the iOS app's origin", () => {
     }
     const plain = await handle(new Request(BASE + '/api/me'), deps())
     expect(plain.headers.get('access-control-allow-origin')).toBeNull()
+  })
+})
+
+describe("CORS for the Android app's origin", () => {
+  it('answers preflights and real responses for the Bearer routes, without credentials', async () => {
+    for (const path of ['/api/me', '/api/sync/push', '/auth/desktop/token', '/img/small/1.jpg']) {
+      const res = await preflight(path, ANDROID)
+      expect(res.status, path).toBe(204)
+      expect(res.headers.get('access-control-allow-origin'), path).toBe(ANDROID)
+      expect(res.headers.get('access-control-allow-credentials')).toBeNull()
+    }
+    const res = await handle(
+      new Request(BASE + '/api/me', { headers: { origin: ANDROID } }),
+      deps()
+    )
+    expect(res.headers.get('access-control-allow-origin')).toBe(ANDROID)
+    expect(res.headers.get('access-control-allow-credentials')).toBeNull()
+  })
+
+  it('leaves look-alike origins and the cookie-only routes alone', async () => {
+    for (const origin of [
+      'https://localhost.evil.test',
+      'http://localhost',
+      'https://localhost:8443'
+    ]) {
+      const res = await preflight('/api/me', origin)
+      expect(res.headers.get('access-control-allow-origin'), origin).toBeNull()
+    }
+    for (const path of ['/auth/phone/token', '/auth/logout']) {
+      const res = await preflight(path, ANDROID)
+      expect(res.headers.get('access-control-allow-origin'), path).toBeNull()
+    }
   })
 })

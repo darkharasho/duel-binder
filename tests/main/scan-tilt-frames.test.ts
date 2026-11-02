@@ -1,8 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
   createTiltFrames,
-  keepsForTilt
+  keepsForTilt,
+  keepsOutline
 } from '../../src/renderer/src/features/scan/vision/tiltFrames'
+import { scanProfile } from '../../src/shared/scan/profiles'
 import { ART_MAX_DISTANCE, TILT_MAX_ART_DISTANCE } from '../../src/shared/scan/thresholds'
 import { TILT_H, TILT_W } from '../../src/shared/scan/tiltFeatures'
 import type { RgbaImage } from '../../src/shared/scan/types'
@@ -62,5 +64,15 @@ describe('keepsForTilt', () => {
     expect(keepsForTilt([at(7, TILT_MAX_ART_DISTANCE + 1)], [7])).toBe(false)
     expect(keepsForTilt([at(9, 10), at(7, 12)], [7])).toBe(false)
     expect(keepsForTilt([], [7])).toBe(false)
+  })
+})
+
+describe('keepsOutline', () => {
+  it("stays on a Yu-Gi-Oh card's outline only while it's tilted, and on a Pokémon card's always", () => {
+    expect(keepsOutline(scanProfile('ygo'), true)).toBe(true)
+    // A live Yu-Gi-Oh frame searches every time, as before tilts.
+    expect(keepsOutline(scanProfile('ygo'), false)).toBe(false)
+    expect(keepsOutline(scanProfile('pkm'), true)).toBe(true)
+    expect(keepsOutline(scanProfile('pkm'), false)).toBe(true)
   })
 })

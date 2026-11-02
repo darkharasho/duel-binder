@@ -10,7 +10,7 @@ import { analyze } from './analyze'
 import { loadCv } from './cv'
 import type { Quad } from './detect'
 import { holderBudget } from './holderBudget'
-import { createTiltFrames, keepsForTilt } from './tiltFrames'
+import { createTiltFrames, keepsForTilt, keepsOutline } from './tiltFrames'
 
 interface WorkerScope {
   onmessage: ((e: MessageEvent<WorkerRequest>) => void) | null
@@ -120,6 +120,9 @@ async function handle(msg: WorkerRequest): Promise<void> {
       return
     }
     // The upright card stays in the worker: it's a few MB, and the UI thread has no use for it.
+    // A Yu-Gi-Oh frame keeps its outline only while tilted, and a live frame after a tilt neither
+    // tries the tilt's outline nor keeps one of its own.
+    const keep = keepsOutline(profile, !!msg.tilt)
     const { upright, ...signals } = analyze(
       cv,
       pixels(msg.image),
@@ -129,7 +132,7 @@ async function handle(msg: WorkerRequest): Promise<void> {
       msg.wantLook,
       profile,
       budget.allow(),
-      held,
+      keep ? held : null,
       false,
       !!msg.tilt
     )
@@ -140,11 +143,7 @@ async function handle(msg: WorkerRequest): Promise<void> {
     const distance = signals.art[0]?.distance ?? null
     budget.record(distance)
     held =
-      profile.keepOutline &&
-      signals.quad &&
-      !signals.artVia &&
-      distance !== null &&
-      distance <= ART_MAX_DISTANCE
+      keep && signals.quad && !signals.artVia && distance !== null && distance <= ART_MAX_DISTANCE
         ? signals.quad
         : null
     reply(msg.id, signals)

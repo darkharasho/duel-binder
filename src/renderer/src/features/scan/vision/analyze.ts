@@ -55,7 +55,8 @@ function bandWidth(quad: Quad): number {
  * has one, for a frame the caller has already given its share of them (holderBudget.ts). held is
  * an earlier frame's outline, tried before the frame is searched (recognizeArt). thorough false
  * is a live frame's short holder search (recognizeArt). wantUpright adds the upright card, for
- * keeping a tilted card's frames.
+ * keeping a tilted card's frames, and leaves out the rarity cues, look, version cues and slab:
+ * the loop reads such a frame only for its art, and their time is frames lost to the tilt.
  */
 export function analyze(
   cv: CV,
@@ -143,13 +144,16 @@ function analyzeFrame(
     card = () => warpCard(cv, img, likeliest, bandWidth(likeliest))
   }
   // Read at CARD_W, the size the cues and the look model were tuned at; Yu-Gi-Oh's foils only.
+  // None of these is read off a tilt frame (wantUpright): the tilt reading has the card's foil.
   const { cues, features: look } =
-    upright && profile.rarityLook ? rarityLook(upright, wantLook) : { cues: null, features: null }
+    upright && profile.rarityLook && !wantUpright
+      ? rarityLook(upright, wantLook)
+      : { cues: null, features: null }
   // Pokémon only: its versions are priced apart, and a graded slab changes how it's priced.
   // Yu-Gi-Oh's signals carry no slab key.
   const pokemon = profile.game === 'pkm'
-  const version = pokemon && upright ? pokemonVersionCues(upright, profile) : null
-  const slab = pokemon ? isSlab(cv, img, quad) : undefined
+  const version = pokemon && upright && !wantUpright ? pokemonVersionCues(upright, profile) : null
+  const slab = pokemon && !wantUpright ? isSlab(cv, img, quad) : undefined
   const kept = wantUpright && upright ? { upright } : {}
   if (!wantBands)
     return {

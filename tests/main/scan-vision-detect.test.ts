@@ -688,3 +688,21 @@ describe('the Pokémon profile', () => {
     expect(signals.upright).toMatchObject({ width: CARD_W, height: CARD_H })
   }, 30_000)
 })
+
+describe('a tilt frame', () => {
+  const ygo = scanProfile('ygo')
+
+  it("stays on a Yu-Gi-Oh card's held outline and skips its look, which the tilt doesn't read", () => {
+    const s = shots[0]
+    const img = frames.get(s.file)!
+    const live = analyze(cv, img, index, null, false, true, ygo, true, s.quad, true, false)
+    expect(live.cues).not.toBeNull()
+    expect(live.look).not.toBeNull()
+    const tilted = analyze(cv, img, index, null, false, true, ygo, true, s.quad, true, true)
+    expect(tilted.quad).toEqual(s.quad)
+    expect(tilted.art[0].imageId).toBe(s.imageId)
+    expect(tilted.upright).toMatchObject({ width: CARD_W, height: CARD_H })
+    expect(tilted.cues).toBeNull()
+    expect(tilted.look).toBeNull()
+  }, 30_000)
+})

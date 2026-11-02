@@ -1,5 +1,6 @@
 import type { SqlDb } from '../db/sql'
 import type { Scope } from './scope'
+import { buildFtsQuery } from './fts'
 
 interface PokemonFilterFields {
   pkmCategories?: string[]
@@ -84,14 +85,15 @@ export function pokemonFacets(
 const escapeLike = (s: string): string => s.replace(/[\\%_]/g, (c) => `\\${c}`)
 
 /**
- * The part of a Pokémon printing's `set_code` (`{abbrev} {localId}/{official}`) before the `/`,
- * as its trailing run of digits when a space precedes it, else NULL (so `TG05` has no number).
- * `col` is the set_code column, e.g. `p.set_code`.
+ * The number in a Pokémon printing's `set_code`: the part before the `/` of `{abbrev} {localId}/{official}`,
+ * or the whole code when it has no count (a promo's `MEP 102`, `SV-P 271`, most Chinese sets'
+ * `CSV10C 001`), as its trailing run of digits when a space precedes it, else NULL (so `TG05`
+ * and `MEP Museum` have no number). `col` is the set_code column, e.g. `p.set_code`.
  */
 function numberPart(col: string): string {
-  const head = `substr(${col}, 1, instr(${col}, '/') - 1)`
+  const head = `(CASE WHEN instr(${col}, '/') > 0 THEN substr(${col}, 1, instr(${col}, '/') - 1) ELSE ${col} END)`
   const rest = `rtrim(${head}, '0123456789')`
-  return `(CASE WHEN instr(${col}, '/') > 0 AND length(${head}) > length(${rest}) AND substr(${rest}, -1) = ' '
+  return `(CASE WHEN length(${head}) > length(${rest}) AND substr(${rest}, -1) = ' '
     THEN CAST(substr(${head}, length(${rest}) + 1) AS INTEGER) END)`
 }
 
@@ -110,10 +112,47 @@ export function pokemonNumberMatch(
   }
 }
 
+/** Words, then a card number as pokemonNumberMatch reads one: "Victini 102", "MEP 102", "Pikachu 45/193". */
+const NAMED_NUMBER = /^(.*?\S)\s+(\d+(?:\/\d+)?)$/
+
+/**
+ * SQL (with one `?` per param) true when a printing has the number a typed "{words} {number}"
+ * ends with, and its card is named by the words (in English, by its FTS name; or its local name)
+ * or its set code starts with them ("MEP 102", "SV-P 271"). A name shared by many cards is found
+ * by one printing so. `col` is the printing's set_code, `cardId` its card id. Null for other text.
+ */
+export function pokemonNamedNumber(
+  text: string,
+  col: string,
+  cardId: string
+): { sql: string; params: unknown[] } | null {
+  const m = NAMED_NUMBER.exec(text.trim())
+  if (!m) return null
+  const num = pokemonNumberMatch(m[2], col)
+  if (!num) return null
+  const words = m[1]
+  const fts = buildFtsQuery(words)
+  const named = [
+    `${col} LIKE ? ESCAPE '\\'`,
+    `${cardId} IN (SELECT card_id FROM pokemon_cards WHERE local_name LIKE ? ESCAPE '\\')`,
+    ...(fts ? [`${cardId} IN (SELECT rowid FROM cards_fts WHERE cards_fts MATCH ?)`] : [])
+  ]
+  return {
+    sql: `(${num.sql} AND (${named.join(' OR ')}))`,
+    params: [
+      ...num.params,
+      `${escapeLike(words)} %`,
+      `%${escapeLike(words)}%`,
+      ...(fts ? [fts] : [])
+    ]
+  }
+}
+
 /**
  * OR-alternatives (against a cards alias `c`) for a Pokémon search. A card number (`45`, `45/193`)
  * matches printing numbers and nothing else (`numeric`); any other text matches the card's Japanese
- * name, and the caller adds its own name and set-code matches. With `printingCol` (an alias's
+ * name, or a printing by name and number (pokemonNamedNumber), and the caller adds its own name and
+ * set-code matches. With `printingCol` (an alias's
  * set_code) the number is tested on that printing, else on any of the card's printings in `game`.
  */
 export function pokemonSearch(
@@ -127,9 +166,18 @@ export function pokemonSearch(
       : `c.id IN (SELECT card_id FROM card_printings WHERE +game = ${o.game} AND contributed = 0 AND ${num.sql})`
     return { numeric: true, parts: [sql], params: num.params }
   }
-  return {
-    numeric: false,
-    parts: [`c.id IN (SELECT card_id FROM pokemon_cards WHERE local_name LIKE ? ESCAPE '\\')`],
-    params: [`%${escapeLike(text)}%`]
+  const parts = [`c.id IN (SELECT card_id FROM pokemon_cards WHERE local_name LIKE ? ESCAPE '\\')`]
+  const params: unknown[] = [`%${escapeLike(text)}%`]
+  const named = o.printingCol
+    ? pokemonNamedNumber(text, o.printingCol, 'c.id')
+    : pokemonNamedNumber(text, 'np.set_code', 'np.card_id')
+  if (named) {
+    parts.push(
+      o.printingCol
+        ? named.sql
+        : `c.id IN (SELECT np.card_id FROM card_printings np WHERE +np.game = ${o.game} AND np.contributed = 0 AND ${named.sql})`
+    )
+    params.push(...named.params)
   }
+  return { numeric: false, parts, params }
 }

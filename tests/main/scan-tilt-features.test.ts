@@ -67,7 +67,7 @@ function printed({
 }
 
 describe('tilt features', () => {
-  it('lists the 25 features loco3 ranks, in order', () => {
+  it('lists the 25 features the tilt model is fitted on, in its fixed order', () => {
     expect(TILT_FEATURES).toEqual([
       'rxart',
       'rxname',

@@ -38,3 +38,11 @@ npm test
 3. The `Release` workflow tests, then builds Linux (AppImage), Windows (NSIS) and macOS (dmg + zip, universal) and publishes them to a GitHub release along with the `latest*.yml` update feeds.
 
 macOS signing is optional. Set the repo secrets `CSC_LINK`, `CSC_KEY_PASSWORD`, `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD` and `APPLE_TEAM_ID` to sign and notarize. Without them the mac build is ad-hoc signed and the app shows a download notice instead of auto-installing updates.
+
+## Android app
+
+The phone app (`src/phone`) in a Capacitor shell (`android/`), like the iOS app (`ios/`).
+
+- Build: `npm run build:android`, then `cd android && ./gradlew assembleDebug` (JDK 21 and the Android SDK; `android/local.properties` points at the SDK).
+- Signing: one release key, `~/.android-keys/duel-binder-release.jks` with its passwords in `duel-binder-release.txt` next to it. Keep an offline copy, never replace it: installed APKs (and Google Play, which is set up with this same key) only accept updates signed by it. Certificate SHA-256 `C2:CD:AD:90:43:3C:DC:AB:D5:E5:B8:5F:45:90:F6:E4:E1:81:63:37:41:E7:0A:1E:D4:72:26:1A:4F:FB:38:07`.
+- CI: the `Android` workflow builds the signed APK and Play bundle on each `v*` tag (and on a manual run) as artifacts. It attaches `Duel-Binder-<version>.apk` to the release only when the repo variable `ANDROID_RELEASE` is `true`; duelbinder.com and the app's update banner offer the APK once a release has it.

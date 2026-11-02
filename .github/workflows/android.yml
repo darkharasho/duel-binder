@@ -1,0 +1,121 @@
+name: Android
+
+# Builds the Android app (capacitor.config.ts, android/). Pull requests that touch the app get an
+# unsigned debug build as a compile check. A release tag or a manual run builds the signed APK
+# (GitHub releases) and the signed bundle (Google Play, uploaded by hand for now), both kept as
+# workflow artifacts. A release tag also attaches the APK to its GitHub release, but only once the
+# repo variable ANDROID_RELEASE is 'true' (set after the APK was checked on a real phone).
+#
+# Secrets (the key is ~/.android-keys/duel-binder-release.jks on the owner's machine; never
+# replace it, or installed APKs can't update): ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD,
+# ANDROID_KEY_ALIAS, ANDROID_KEY_PASSWORD. Its certificate's SHA-256 is
+# C2:CD:AD:90:43:3C:DC:AB:D5:E5:B8:5F:45:90:F6:E4:E1:81:63:37:41:E7:0A:1E:D4:72:26:1A:4F:FB:38:07.
+
+on:
+  push:
+    tags: ['v*']
+  pull_request:
+    paths:
+      - 'android/**'
+      - 'capacitor.config.ts'
+      - 'vite.phone.config.ts'
+      - 'src/phone/**'
+      - 'scripts/android-version.ts'
+      - '.github/workflows/android.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    env:
+      CERT_SHA256: C2:CD:AD:90:43:3C:DC:AB:D5:E5:B8:5F:45:90:F6:E4:E1:81:63:37:41:E7:0A:1E:D4:72:26:1A:4F:FB:38:07
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+          cache: gradle
+      # The Android build needs no Electron or native Node modules, which postinstall fetches.
+      - run: npm ci --ignore-scripts
+
+      - name: Check for signing secrets
+        id: secrets
+        env:
+          KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          if [ -n "$KEYSTORE" ] && [ "$GITHUB_EVENT_NAME" != "pull_request" ]; then
+            echo "sign=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "sign=false" >> "$GITHUB_OUTPUT"
+            if [ "$GITHUB_EVENT_NAME" != "pull_request" ]; then
+              echo "::warning::Android signing secrets aren't set: building the debug app only."
+            fi
+          fi
+
+      - name: Compile (debug, unsigned)
+        if: steps.secrets.outputs.sign == 'false'
+        run: |
+          npm run build:android
+          cd android && ./gradlew assembleDebug --console=plain
+
+      - name: Build the signed APK and Play bundle
+        if: steps.secrets.outputs.sign == 'true'
+        env:
+          KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+        run: |
+          export ANDROID_KEYSTORE_FILE="$RUNNER_TEMP/release.jks"
+          printf '%s' "$KEYSTORE" | base64 -d > "$ANDROID_KEYSTORE_FILE"
+          read -r NAME CODE < <(node scripts/android-version.ts 2>/dev/null)
+          VERSIONS=(-PversionName="$NAME" -PversionCode="$CODE")
+          mkdir -p dist
+
+          # The APK: the update banner checks GitHub releases.
+          npm run build:android
+          (cd android && ./gradlew assembleRelease --console=plain "${VERSIONS[@]}")
+          cp android/app/build/outputs/apk/release/app-release.apk "dist/Duel-Binder-$NAME.apk"
+
+          # The Play bundle: Play updates it, so it never shows the banner.
+          ANDROID_CHANNEL=play npm run build:android
+          (cd android && ./gradlew bundleRelease --console=plain "${VERSIONS[@]}")
+          cp android/app/build/outputs/bundle/release/app-release.aab "dist/Duel-Binder-$NAME.aab"
+          rm -f "$ANDROID_KEYSTORE_FILE"
+
+          # Signed with the one release key, or installed APKs couldn't update.
+          APKSIGNER=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)
+          "$APKSIGNER" verify --print-certs "dist/Duel-Binder-$NAME.apk" | tee "$RUNNER_TEMP/certs.txt"
+          WANT=$(echo "$CERT_SHA256" | tr -d ':' | tr 'A-F' 'a-f')
+          grep -q "SHA-256 digest: $WANT" "$RUNNER_TEMP/certs.txt" || {
+            echo "::error::The APK isn't signed with the release key."
+            exit 1
+          }
+          echo "NAME=$NAME" >> "$GITHUB_ENV"
+
+      - uses: actions/upload-artifact@v4
+        if: steps.secrets.outputs.sign == 'true'
+        with:
+          name: android-${{ env.NAME }}
+          path: dist/
+          if-no-files-found: error
+
+      - name: Attach the APK to the release
+        if: steps.secrets.outputs.sign == 'true' && startsWith(github.ref, 'refs/tags/v') && vars.ANDROID_RELEASE == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # release.yml creates the release after its tests; wait for it.
+          for _ in $(seq 1 60); do
+            gh release view "$GITHUB_REF_NAME" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1 && break
+            sleep 30
+          done
+          gh release upload "$GITHUB_REF_NAME" "dist/Duel-Binder-$NAME.apk" --clobber -R "$GITHUB_REPOSITORY"

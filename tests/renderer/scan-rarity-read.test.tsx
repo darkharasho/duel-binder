@@ -74,25 +74,25 @@ const run = (ms = 0): Promise<void> =>
     await vi.advanceTimersByTimeAsync(ms)
   })
 
-type Props = Pick<ScanLoopOptions, 'defaultRarity' | 'setKey'>
+type Props = Pick<ScanLoopOptions, 'defaultRarity' | 'setKey'> & { running?: boolean }
 
 function mount(
   engine: FakeEngine,
-  onDraft: ScanLoopOptions['onDraft'] = vi.fn((): string => 'row-1')
+  onDraft: ScanLoopOptions['onDraft'] = vi.fn((): string => 'row-1'),
+  onRarityRead = vi.fn()
 ): {
   onDraft: ScanLoopOptions['onDraft']
   onRarityRead: ReturnType<typeof vi.fn>
   rerender: (p: Props) => void
 } {
   const video = document.createElement('video')
-  const onRarityRead = vi.fn()
   const { rerender } = renderHook(
-    ({ defaultRarity, setKey }: Props) =>
+    ({ defaultRarity, setKey, running = true }: Props) =>
       useScanLoop({
         videoRef: { current: video },
         engineFactory: () => engine,
         game: 'pkm',
-        running: true,
+        running,
         setName: null,
         setKey,
         setPrintings: null,
@@ -318,5 +318,80 @@ describe('background rarity read', () => {
     await run(1000 + TILT_MS + 1500)
     expect(engine.tiltReading).toHaveBeenCalledTimes(1)
     expect(onRarityRead).not.toHaveBeenCalled()
+  })
+
+  it('pausing mid-read applies nothing and forgets the kept frames', async () => {
+    const engine = tiltEngine(
+      () => held(),
+      () => REVERSE
+    )
+    const out = deferred()
+    vi.mocked(engine.tiltReading!).mockImplementation(() => out.promise)
+    const { onRarityRead, rerender } = mount(engine)
+    await run(1000 + TILT_MS + 200)
+    expect(engine.tiltReading).toHaveBeenCalledTimes(1)
+    rerender({ defaultRarity: null, setKey: 'any', running: false })
+    await run()
+    expect(engine.tiltReset).toHaveBeenCalled()
+    await act(async () => out.resolve(REVERSE))
+    await run(1000)
+    expect(onRarityRead).not.toHaveBeenCalled()
+  })
+
+  it('a card lowered for ABSENT_MS ends its read with nothing applied, and asks stop', async () => {
+    let inView = true
+    const engine = tiltEngine(
+      () => (inView ? held() : NOTHING),
+      () => STILL
+    )
+    const { onDraft, onRarityRead } = mount(engine)
+    await run(1000 + TILT_MS + 200)
+    expect(engine.tiltReading).toHaveBeenCalled()
+    inView = false
+    await run(ABSENT_MS + 400)
+    expect(engine.tiltReset).toHaveBeenCalled()
+    const asks = vi.mocked(engine.tiltReading!).mock.calls.length
+    const frames = engine.analyze.mock.calls.length
+    await run(2000)
+    expect(vi.mocked(engine.tiltReading!).mock.calls.length).toBe(asks)
+    expect(engine.analyze.mock.calls.slice(frames).every(([, o]) => !('tilt' in o))).toBe(true)
+    expect(onDraft).toHaveBeenCalledTimes(1)
+    expect(onRarityRead).not.toHaveBeenCalled()
+  })
+
+  it('an onRarityRead that throws ends the read quietly, and later cards still count', async () => {
+    const rejections: unknown[] = []
+    const onRejection = (e: unknown): void => void rejections.push(e)
+    process.on('unhandledRejection', onRejection)
+    try {
+      let inView = true
+      const engine = tiltEngine(
+        () => (inView ? held() : NOTHING),
+        () => REVERSE
+      )
+      const onRarityRead = vi.fn(() => {
+        throw new Error('row gone')
+      })
+      let rows = 0
+      const { onDraft } = mount(
+        engine,
+        vi.fn((): string => `row-${++rows}`),
+        onRarityRead
+      )
+      await run(1000 + TILT_MS + 400)
+      expect(onRarityRead).toHaveBeenCalledTimes(1)
+      expect(engine.tiltReset).toHaveBeenCalled()
+      inView = false
+      await run(ABSENT_MS + 400)
+      resolved.draft = pikachu({ cardId: 6, name: 'Raichu', imageId: 600 })
+      inView = true
+      await run(1000)
+      expect(onDraft).toHaveBeenCalledTimes(2)
+      // Let any stray rejection surface before looking.
+      await run(200)
+      expect(rejections).toEqual([])
+    } finally {
+      process.off('unhandledRejection', onRejection)
+    }
   })
 })

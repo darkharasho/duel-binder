@@ -596,30 +596,29 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
       const asked = performance.now()
       Promise.resolve()
         .then(() => r.engine.tiltReading!(r.game, asked))
-        .then(
-          (reading) => {
-            const usable =
-              !!reading && reading.frames >= TILT_MIN_FRAMES && reading.motion >= TILT_MIN_MOTION
-            const pick = usable ? pickByRead(r.model, reading.features, r.finishes, r.pairs) : null
-            if (import.meta.env.DEV) {
-              const ms = Math.round(performance.now() - asked)
-              const frames = reading?.frames ?? 0
-              const motion = reading?.motion ?? 0
-              console.debug('[scan] rarity read', JSON.stringify({ ms, frames, motion, pick }))
-            }
-            if (l.read !== r) return
-            if (pick) {
-              endRead(r)
-              const read = withRarityByTilt(r.draft, pick)
-              if (read.printingId !== r.draft.printingId)
-                latest.current.onRarityRead?.(r.rowId, read)
-              return
-            }
-            r.reading = false
-            r.nextRead = performance.now() + TILT_RETRY_MS
-          },
-          () => endRead(r)
-        )
+        .then((reading) => {
+          const usable =
+            !!reading && reading.frames >= TILT_MIN_FRAMES && reading.motion >= TILT_MIN_MOTION
+          const pick = usable ? pickByRead(r.model, reading.features, r.finishes, r.pairs) : null
+          if (import.meta.env.DEV) {
+            const ms = Math.round(performance.now() - asked)
+            const frames = reading?.frames ?? 0
+            const motion = reading?.motion ?? 0
+            console.debug('[scan] rarity read', JSON.stringify({ ms, frames, motion, pick }))
+          }
+          if (l.read !== r) return
+          if (pick) {
+            const read = withRarityByTilt(r.draft, pick)
+            endRead(r)
+            if (read.printingId !== r.draft.printingId) latest.current.onRarityRead?.(r.rowId, read)
+            return
+          }
+          r.reading = false
+          r.nextRead = performance.now() + TILT_RETRY_MS
+        })
+        // A failed reading, or a throw while applying one (onRarityRead's included), ends the read
+        // with nothing applied; after endRead, this one finds nothing left to end.
+        .catch(() => endRead(r))
     }
 
     /**

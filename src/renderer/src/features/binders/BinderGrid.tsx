@@ -2,9 +2,12 @@ import { XIcon } from 'lucide-react'
 import type { BinderCard } from '@shared/types'
 import { Badge } from '@/components/ui/badge'
 import { CardArt } from '@/components/CardArt'
+import { FavouriteHeart } from '@/components/FavouriteHeart'
 import { LanguageTag } from '@/components/LanguageTag'
 import { TiltCard } from '@/components/TiltCard'
+import { TILE, TILE_BUTTON, TILE_HEART, TILE_NAME } from '@/components/tileLayout'
 import { useTileImage } from '@/lib/cardSize'
+import { useFavourites } from '@/lib/favourites'
 import { formatUsd } from '@/lib/format'
 import { useChunkedList } from '@/lib/useChunkedList'
 import { cn } from '@/lib/utils'
@@ -21,6 +24,9 @@ interface Props {
 export function BinderGrid({ cards, onOpen, onRemove, readOnly }: Props): React.JSX.Element {
   const shown = useChunkedList(cards)
   const tileImage = useTileImage()
+  // Favourites are private: a friend's binder (read-only) has no hearts.
+  const ownFavourites = useFavourites(!readOnly)
+  const favourites = readOnly ? undefined : ownFavourites
   return (
     <ul
       className="grid grid-cols-[repeat(auto-fill,minmax(calc(150px*var(--card-scale,1)),1fr))] gap-x-4 gap-y-6 max-md:grid-cols-3 max-md:gap-x-2 max-md:gap-y-4"
@@ -31,15 +37,21 @@ export function BinderGrid({ cards, onOpen, onRemove, readOnly }: Props): React.
         return (
           <li
             key={c.key}
-            className="lazy-item group/slot relative [--lazy-h:calc(310px*var(--card-scale,1))]"
+            className={cn(
+              TILE,
+              'lazy-item group/slot relative [--lazy-h:calc(310px*var(--card-scale,1))]'
+            )}
           >
             <button
               type="button"
               onClick={() => onOpen(c)}
               aria-label={missing ? `${c.card.name}, missing` : c.card.name}
-              className="flex w-full flex-col gap-2 rounded-md p-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              className={cn(
+                TILE_BUTTON,
+                'rounded-md p-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring'
+              )}
             >
-              <TiltCard>
+              <TiltCard className="mb-2">
                 <div
                   className={cn(
                     'overflow-hidden rounded-[4px]',
@@ -71,8 +83,10 @@ export function BinderGrid({ cards, onOpen, onRemove, readOnly }: Props): React.
                   </Badge>
                 )}
               </TiltCard>
-              <div className="min-w-0 space-y-0.5">
-                <div className="truncate text-[13px] font-semibold">{c.card.name}</div>
+              <div className={cn('truncate text-[13px] font-semibold', favourites && TILE_NAME)}>
+                {c.card.name}
+              </div>
+              <div className="mt-0.5 min-w-0 space-y-0.5">
                 <div className="flex items-center gap-1 font-mono text-[11px] text-muted-foreground">
                   {c.printing ? (
                     <>
@@ -90,6 +104,14 @@ export function BinderGrid({ cards, onOpen, onRemove, readOnly }: Props): React.
                 )}
               </div>
             </button>
+            {favourites && (
+              <FavouriteHeart
+                cardId={c.card.id}
+                name={c.card.name}
+                favourites={favourites}
+                className={TILE_HEART}
+              />
+            )}
             {!readOnly && onRemove && (
               <button
                 type="button"

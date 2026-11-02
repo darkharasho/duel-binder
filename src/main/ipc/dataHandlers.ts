@@ -35,6 +35,7 @@ import {
 } from '../repo/binders'
 import { ruleFieldValues } from '../repo/binderRules'
 import { listWishlist, removeWish, setWish, settleWishlist, wishesForCard } from '../repo/wishlist'
+import { listFavourites, setFavourite } from '../repo/favourites'
 import { activeOwner, listSyncIssues } from '../cloud/localSync'
 import { openPack, ripHistory, ripSession, ripSets, startRip } from '../repo/rip'
 import { activeGame, setActiveGame } from '../cloud/activeGame'
@@ -59,6 +60,8 @@ export const DATA_CHANNELS = [
   'wishlist:forCard',
   'wishlist:set',
   'wishlist:remove',
+  'favourites:list',
+  'favourites:set',
   'binders:list',
   'binders:get',
   'binders:preview',
@@ -174,6 +177,9 @@ export function createDataHandlers({
     'wishlist:set': async (printingId: number, quantity: number | null) =>
       edited(setWish(db, printingId, quantity)),
     'wishlist:remove': async (printingId: number) => edited(removeWish(db, printingId)),
+    'favourites:list': async () => listFavourites(db),
+    'favourites:set': async (cardId: number, on: boolean) =>
+      edited(setFavourite(db, wholeNumber(cardId, 'cardId'), on)),
     'binders:list': async () => listBinders(db),
     'binders:get': async (uid: string) => getBinder(db, uid),
     'binders:preview': async (draft: BinderDraft) => previewBinder(db, draft),

@@ -221,6 +221,10 @@ export function createHttpApi(opts: HttpApiOptions = {}): Api {
       set: call('wishlist:set'),
       remove: call('wishlist:remove')
     },
+    favourites: {
+      list: call('favourites:list'),
+      set: call('favourites:set')
+    },
     binders: {
       list: call('binders:list'),
       get: call('binders:get'),

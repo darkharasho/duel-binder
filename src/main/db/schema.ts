@@ -478,6 +478,19 @@ export const SCHEMA_V35 =
  */
 export const SCHEMA_V36 = 'ALTER TABLE sets ADD COLUMN series TEXT;'
 
+/**
+ * Favourites: the cards an owner hearted, one row per card (not per printing or copy), so a heart
+ * shows on every printing and copy of it. Keyed by `card_id` with no foreign key, as the wishlist
+ * is by pkey: a favourite can outlive its card's row (the phone's catalog reset) and shows again
+ * when the card does. The server has its own shape, so this step is desktop-only (see server-29).
+ */
+export const SCHEMA_V37 = `
+CREATE TABLE favourites (owner_id INTEGER NOT NULL DEFAULT 0, card_id INTEGER NOT NULL, game TEXT NOT NULL,
+  created_at TEXT NOT NULL, updated_at TEXT NOT NULL, deleted_at TEXT,
+  dirty INTEGER NOT NULL DEFAULT 1, PRIMARY KEY (owner_id, card_id));
+CREATE INDEX ix_favourites_dirty ON favourites(owner_id) WHERE dirty = 1;
+`
+
 /** A printing's rarity as shown: "Starlight Rare (Extended Art)" for a labelled variant. */
 export const RARITY_LABEL = "p.set_rarity || COALESCE(' (' || p.variant || ')', '')"
 
@@ -518,5 +531,6 @@ export const MIGRATIONS: Migration[] = [
   { version: 33, sql: SCHEMA_V33, server: false },
   { version: 34, sql: SCHEMA_V34 },
   { version: 35, sql: SCHEMA_V35, server: false },
-  { version: 36, sql: SCHEMA_V36, server: false }
+  { version: 36, sql: SCHEMA_V36, server: false },
+  { version: 37, sql: SCHEMA_V37, server: false }
 ]

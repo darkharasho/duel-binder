@@ -2,7 +2,7 @@ import type { SqlDb } from '../db/sql'
 import type { BrowseCard, BrowseFacets, BrowseFilters, BrowsePage } from '../../shared/types'
 import { isLanguage, LANGUAGES, type Language } from '../../shared/languages'
 import { buildFtsQuery, escapeLike } from './cards'
-import { LOCAL, scopeGame, type Scope } from './scope'
+import { LOCAL, favouriteSql, scopeGame, type Scope } from './scope'
 import { pokemonFacets, pokemonSearch, pokemonWhere } from './pkmFilters'
 import { catalogRollup } from './rollup'
 
@@ -154,6 +154,7 @@ function whereClause(db: SqlDb, f: BrowseFilters, scope: Scope): { sql: string; 
   }
   if (f.owned === 'owned') where.push('o.n > 0')
   if (f.owned === 'missing') where.push('o.n IS NULL')
+  if (f.favourites === true) where.push(favouriteSql(scope))
   return { sql: ` WHERE ${where.join(' AND ')}`, params }
 }
 

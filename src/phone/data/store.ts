@@ -620,6 +620,7 @@ export function createPhoneStore(deps: {
             'wishlist_entries',
             'binders',
             'binder_edits',
+            'favourites',
             'value_snapshots',
             'sync_pending',
             'sync_issues',

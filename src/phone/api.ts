@@ -68,6 +68,7 @@ const EDITS: readonly DataChannel[] = [
   'sets:adjust',
   'wishlist:set',
   'wishlist:remove',
+  'favourites:set',
   'binders:save',
   'binders:remove',
   'binders:edit'
@@ -254,6 +255,7 @@ export function createPhoneApi(deps: {
       setWishlistVisible: portal('friends:setWishlistVisible')
     },
     wishlist: dataPart('wishlist'),
+    favourites: dataPart('favourites'),
     binders: dataPart('binders'),
     scan: {
       debugFrame: async () => undefined,

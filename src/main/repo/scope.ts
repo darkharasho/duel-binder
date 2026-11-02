@@ -56,6 +56,8 @@ export interface Scope {
   wishlist: WishlistScope
   /** `binders` / `binder_edits` scoping: the same shape as `wishlist`. */
   binderSync(table: 'binders' | 'binder_edits'): WishlistScope
+  /** `favourites` scoping: the same shape as `wishlist`. */
+  favourites: WishlistScope
   /**
    * value_snapshots scoping. `insertCols`/`insertVals` are comma-terminated fragments placed before
    * `date` / `?` in an INSERT (and `insertCols + 'date'` is the upsert conflict target); `where` limits a read
@@ -94,6 +96,13 @@ export function scopeGame(db: SqlDb, scope: Scope): GameId {
   const { game } = db.prepare(`SELECT ${scope.game} AS game`).get() as { game: string }
   return isGameId(game) ? game : 'ygo'
 }
+
+/**
+ * SQL that is true when the card `card` (an alias of `cards`) is one of the scope's favourites, for
+ * the Favourites filter. Favourites are private: a friend's scope never takes this filter.
+ */
+export const favouriteSql = (scope: Scope, card = 'c'): string =>
+  `${card}.id IN (SELECT f.card_id FROM favourites f WHERE ${scope.where('f')})`
 
 /**
  * The active owner's collection of one game on this device. `game` is trusted SQL: ACTIVE_GAME or a
@@ -148,6 +157,13 @@ export function localScope(game: string): Scope {
       marker: '1',
       touch: 'dirty = 1'
     }),
+    favourites: {
+      ownerCol: 'owner_id',
+      owner: ACTIVE_OWNER,
+      markerCol: 'dirty',
+      marker: '1',
+      touch: 'dirty = 1'
+    },
     snapshotTable: {
       insertCols: 'owner_id, game, ',
       insertVals: `${ACTIVE_OWNER}, ${game}, `,

@@ -120,6 +120,13 @@ export interface Api {
     set(printingId: number, quantity: number | null): Promise<void>
     remove(printingId: number): Promise<void>
   }
+  /** The cards this account hearted, in the game shown; private, so friends never see them. */
+  favourites: {
+    /** The favourite cards' ids. */
+    list(): Promise<number[]>
+    /** Hearts a card (`on`) or takes the heart off it. */
+    set(cardId: number, on: boolean): Promise<void>
+  }
   /** Named sets of cards defined by rules; progress counts what the collection holds. */
   binders: {
     list(): Promise<BinderSummary[]>
@@ -320,6 +327,8 @@ export const INVOKE_CHANNELS = [
   'wishlist:forCard',
   'wishlist:set',
   'wishlist:remove',
+  'favourites:list',
+  'favourites:set',
   'binders:list',
   'binders:get',
   'binders:preview',

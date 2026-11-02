@@ -155,7 +155,7 @@ async function openLobStepper(server: ReturnType<typeof lobServer>): Promise<{
   browse: ReturnType<typeof vi.fn>
 }> {
   const { browse } = setup([card(1, 'Dark Magician')], 1, server.api)
-  await userEvent.click(await screen.findByRole('button', { name: /Dark Magician/ }))
+  await userEvent.click(await screen.findByRole('button', { name: /^Dark Magician/ }))
   const panel = await screen.findByRole('dialog')
   const row = await within(panel).findByRole('group', { name: LOB_ROW })
   return {
@@ -221,7 +221,7 @@ describe('BrowseCardPanel steppers', () => {
     server.release()
     await waitFor(() => expect(server.adjust).toHaveBeenCalledTimes(2))
     server.release()
-    const tile = screen.getAllByRole('button', { name: /Dark Magician/, hidden: true })[0]
+    const tile = screen.getAllByRole('button', { name: /^Dark Magician/, hidden: true })[0]
     await waitFor(() => expect(within(tile).getByText('×2')).toBeInTheDocument())
     // Give any background refetch a chance to run.
     await new Promise((r) => setTimeout(r, 20))
@@ -261,11 +261,11 @@ describe('BrowsePage', () => {
       card(1, 'Dark Magician', { owned: 2 }),
       card(2, 'Pot of Greed', { atk: null, def: null, race: 'Normal' })
     ])
-    const dm = await screen.findByRole('button', { name: /Dark Magician/ })
+    const dm = await screen.findByRole('button', { name: /^Dark Magician/ })
     expect(dm).toHaveTextContent('★7 · 2500 / 2100')
     expect(dm).toHaveTextContent('$7.50')
     expect(within(dm).getByText('×2')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /Pot of Greed/ })).toHaveTextContent('Normal')
+    expect(screen.getByRole('button', { name: /^Pot of Greed/ })).toHaveTextContent('Normal')
     expect(screen.getByText('2 cards')).toBeInTheDocument()
   })
 
@@ -290,7 +290,7 @@ describe('BrowsePage', () => {
           ] as SetSummary[]
       }
     })
-    await screen.findByRole('button', { name: /Dark Magician/ })
+    await screen.findByRole('button', { name: /^Dark Magician/ })
     await userEvent.click(screen.getByRole('button', { name: 'Filters' }))
     expect(
       await screen.findByRole('button', { name: 'LOB - Legend of Blue Eyes White Dragon' })
@@ -299,7 +299,7 @@ describe('BrowsePage', () => {
 
   it('search, the owned tab and sort go to the query', async () => {
     const { browse } = setup([card(1, 'Dark Magician')])
-    await screen.findByRole('button', { name: /Dark Magician/ })
+    await screen.findByRole('button', { name: /^Dark Magician/ })
     await userEvent.type(screen.getByLabelText('Search cards'), 'dark')
     await waitFor(() =>
       expect(browse).toHaveBeenLastCalledWith(expect.objectContaining({ q: 'dark' }))
@@ -326,7 +326,7 @@ describe('BrowsePage', () => {
         })
       }
     })
-    await screen.findByRole('button', { name: /Dark Magician/ })
+    await screen.findByRole('button', { name: /^Dark Magician/ })
     await userEvent.type(screen.getByLabelText('Search cards'), 'dark')
     await userEvent.click(screen.getByRole('combobox', { name: 'Sort by' }))
     await userEvent.click(await screen.findByRole('option', { name: 'Price: low to high' }))
@@ -366,7 +366,7 @@ describe('BrowsePage', () => {
       languages: ['en' as const, 'de' as const]
     }))
     const { browse } = setup([card(1, 'Dark Magician')], 1, { cards: { browseFacets } })
-    await screen.findByRole('button', { name: /Dark Magician/ })
+    await screen.findByRole('button', { name: /^Dark Magician/ })
     expect(browse).toHaveBeenLastCalledWith(expect.objectContaining({ language: 'en' }))
     expect(browseFacets).toHaveBeenLastCalledWith('en')
     await userEvent.click(screen.getByRole('button', { name: 'Filters' }))
@@ -401,7 +401,7 @@ describe('BrowsePage', () => {
   it('clicking a card not owned opens a panel with a stepper per printing, English first', async () => {
     const adjust = vi.fn(async (_s: string, _l: string, id: number) => answer(id, 1))
     setup([card(1, 'Dark Magician')], 1, { sets: { adjust } })
-    await userEvent.click(await screen.findByRole('button', { name: /Dark Magician/ }))
+    await userEvent.click(await screen.findByRole('button', { name: /^Dark Magician/ }))
     const panel = await screen.findByRole('dialog')
     expect(within(panel).getByText('You have none yet')).toBeInTheDocument()
     const rows = await within(panel).findAllByRole('group')
@@ -417,7 +417,7 @@ describe('BrowsePage', () => {
 
   it('the panel prices the printing its art shows, and each printing its own price', async () => {
     setup([card(1, 'Dark Magician')])
-    await userEvent.click(await screen.findByRole('button', { name: /Dark Magician/ }))
+    await userEvent.click(await screen.findByRole('button', { name: /^Dark Magician/ }))
     const panel = await screen.findByRole('dialog')
     const rows = await within(panel).findAllByRole('group')
     expect(within(panel).getByText(/^Market price/).parentElement).toHaveTextContent(
@@ -428,7 +428,7 @@ describe('BrowsePage', () => {
 
   it('the panel falls back to the cheapest-printing price, saying so', async () => {
     setup([card(1, 'Dark Magician', { defaultPrintingId: null })])
-    await userEvent.click(await screen.findByRole('button', { name: /Dark Magician/ }))
+    await userEvent.click(await screen.findByRole('button', { name: /^Dark Magician/ }))
     const panel = await screen.findByRole('dialog')
     await within(panel).findAllByRole('group')
     expect(within(panel).getByText(/^Market price/).parentElement).toHaveTextContent(
@@ -438,7 +438,7 @@ describe('BrowsePage', () => {
 
   it('More options… in the panel opens Add with the default printing', async () => {
     const { onAddCard } = setup([card(1, 'Dark Magician')])
-    await userEvent.click(await screen.findByRole('button', { name: /Dark Magician/ }))
+    await userEvent.click(await screen.findByRole('button', { name: /^Dark Magician/ }))
     const panel = await screen.findByRole('dialog')
     await userEvent.click(within(panel).getByRole('button', { name: 'More options…' }))
     expect(onAddCard).toHaveBeenCalledWith(
@@ -451,7 +451,7 @@ describe('BrowsePage', () => {
     setup([card(1, 'Dark Magician', { owned: 2 })], 1, {
       collection: { forCard: async () => [copy] }
     })
-    await userEvent.click(await screen.findByRole('button', { name: /Dark Magician/ }))
+    await userEvent.click(await screen.findByRole('button', { name: /^Dark Magician/ }))
     const panel = await screen.findByRole('dialog')
     expect(await within(panel).findByLabelText('Quantity')).toBeInTheDocument()
   })
@@ -460,7 +460,7 @@ describe('BrowsePage', () => {
     setup([card(1, 'Dark Magician', { owned: 2 }), card(2, 'Pot of Greed')], 2, {
       collection: { forCard: async (id: number) => (id === 1 ? [copy] : []) }
     })
-    await userEvent.click(await screen.findByRole('button', { name: /Dark Magician/ }))
+    await userEvent.click(await screen.findByRole('button', { name: /^Dark Magician/ }))
     const panel = await screen.findByRole('dialog')
     expect(await within(panel).findByLabelText('Quantity')).toBeInTheDocument()
     expect(screen.getAllByRole('button', { name: 'Previous card' })[0]).toBeDisabled()
@@ -481,10 +481,10 @@ describe('BrowsePage', () => {
       card(i + 1, `Card ${String(i + 1).padStart(3, '0')}`)
     )
     const { browse } = setup(many)
-    await screen.findByRole('button', { name: /Card 001/ })
-    expect(screen.queryByRole('button', { name: /Card 121/ })).not.toBeInTheDocument()
+    await screen.findByRole('button', { name: /^Card 001/ })
+    expect(screen.queryByRole('button', { name: /^Card 121/ })).not.toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Load more' }))
-    expect(await screen.findByRole('button', { name: /Card 121/ })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: /^Card 121/ })).toBeInTheDocument()
     expect(browse).toHaveBeenLastCalledWith(expect.objectContaining({ offset: 120 }))
   })
 })

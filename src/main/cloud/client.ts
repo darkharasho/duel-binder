@@ -11,6 +11,8 @@ import type {
   BinderEditPushResult,
   BinderPullResponse,
   BinderPushResult,
+  FavouritePullResponse,
+  FavouritePushResult,
   Me,
   PriceChangesResponse,
   PriceRequestResponse,
@@ -21,6 +23,7 @@ import type {
   WireBinder,
   WireBinderEdit,
   WireEntry,
+  WireFavourite,
   WireWish,
   WishPullResponse,
   WishPushResult
@@ -70,6 +73,10 @@ export interface CloudClient {
   binderEditsPush(entries: WireBinderEdit[]): Promise<BinderEditPushResult[]>
   /** One page of the account's binder edits of `game` after `cursor`; as `bindersPush` on an old portal. */
   binderEditsPull(cursor: number, game: GameId): Promise<BinderEditPullResponse>
+  /** Pushes favourites; a portal without favourites rejects with CloudNotFoundError. */
+  favouritesPush(entries: WireFavourite[]): Promise<FavouritePushResult[]>
+  /** One page of the account's favourites of `game` after `cursor`; as `favouritesPush` on an old portal. */
+  favouritesPull(cursor: number, game: GameId): Promise<FavouritePullResponse>
   prices(pkeys: string[]): Promise<PricesResponse>
   /** One page of server price changes of `game` (default Yu-Gi-Oh!) after `since` (the price change feed). */
   priceChanges(since: number, game?: GameId): Promise<PriceChangesResponse>
@@ -206,6 +213,14 @@ export function createCloudClient(opts: {
         `/api/sync/binder-edits-pull?cursor=${cursor}&game=${game}`,
         'GET'
       ),
+    favouritesPush: async (entries) =>
+      (
+        await call<{ results: FavouritePushResult[] }>('/api/sync/favourites-push', 'POST', {
+          entries
+        })
+      ).results,
+    favouritesPull: (cursor, game) =>
+      call<FavouritePullResponse>(`/api/sync/favourites-pull?cursor=${cursor}&game=${game}`, 'GET'),
     prices: (pkeys) => call<PricesResponse>('/api/sync/prices', 'POST', { pkeys }),
     priceChanges: (since, game = 'ygo') =>
       call<PriceChangesResponse>(`/api/sync/price-changes?since=${since}&game=${game}`, 'GET'),

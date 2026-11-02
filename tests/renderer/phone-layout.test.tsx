@@ -96,7 +96,7 @@ describe('phone layout', () => {
 
   it('collection opens an entry in a full-screen sheet with a back button', async () => {
     renderWithProviders(<CollectionPage />, { api: phoneApi() })
-    await userEvent.click(await screen.findByRole('button', { name: /Dark Magician/ }))
+    await userEvent.click(await screen.findByRole('button', { name: /^Dark Magician/ }))
     const sheet = await screen.findByRole('dialog')
     expect(sheet).toHaveAttribute('data-layout', 'full-screen')
     // Quantity editing works there as on desktop.
@@ -169,7 +169,7 @@ describe('phone layout', () => {
     api.window.platform = 'linux'
     const view = renderWithProviders(<CollectionPage />, { api })
     expect(await screen.findByRole('radio', { name: 'Table view' })).toBeInTheDocument()
-    await userEvent.click(await screen.findByRole('button', { name: /Dark Magician/ }))
+    await userEvent.click(await screen.findByRole('button', { name: /^Dark Magician/ }))
     expect(await screen.findByRole('dialog')).not.toHaveAttribute('data-layout')
     view.unmount()
     renderWithProviders(<AddCardDialog open onOpenChange={() => {}} />, { api })
@@ -210,7 +210,7 @@ describe('phone layout', () => {
       />,
       { api }
     )
-    await userEvent.click(await screen.findByRole('button', { name: /Beta Knight/ }))
+    await userEvent.click(await screen.findByRole('button', { name: /^Beta Knight/ }))
     const sheet = await screen.findByRole('dialog', { name: 'Beta Knight' })
     expect(sheet).toHaveAttribute('data-layout', 'full-screen')
     // The steppers come before the card text, so they're reachable without a long scroll.
@@ -238,7 +238,7 @@ describe('phone layout', () => {
       />,
       { api }
     )
-    await screen.findByRole('button', { name: /Alpha Dragon/ })
+    await screen.findByRole('button', { name: /^Alpha Dragon/ })
     expect(screen.queryByRole('button', { name: 'Bulk add' })).not.toBeInTheDocument()
     expect(screen.queryByRole('radio', { name: 'Every rarity' })).not.toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'More tools' }))
@@ -272,7 +272,7 @@ describe('phone layout', () => {
     const api = phoneApi()
     api.cards.browse = vi.fn(async () => ({ cards: [result], total: 1 }))
     renderWithProviders(<BrowsePage onAddCard={() => {}} />, { api })
-    await screen.findByRole('button', { name: /Dark Magician/ })
+    await screen.findByRole('button', { name: /^Dark Magician/ })
     // Search stays on the page; the facets wait behind one Filters button.
     expect(screen.getByRole('searchbox', { name: 'Search cards' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Card type/ })).not.toBeInTheDocument()
@@ -286,7 +286,7 @@ describe('phone layout', () => {
     await userEvent.keyboard('{Escape}')
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
     // Card details open full-screen.
-    await userEvent.click(screen.getByRole('button', { name: /Dark Magician/ }))
+    await userEvent.click(screen.getByRole('button', { name: /^Dark Magician/ }))
     expect(await screen.findByRole('dialog')).toHaveAttribute('data-layout', 'full-screen')
   })
 
@@ -310,7 +310,7 @@ describe('phone layout', () => {
     await userEvent.click(pick)
     await userEvent.click(await screen.findByRole('radio', { name: 'Collection' }))
     expect(await screen.findByLabelText('Collection grid')).toBeInTheDocument()
-    await userEvent.click(await screen.findByRole('button', { name: /Dark Magician/ }))
+    await userEvent.click(await screen.findByRole('button', { name: /^Dark Magician/ }))
     const sheet = await screen.findByRole('dialog')
     expect(sheet).toHaveAttribute('data-layout', 'full-screen')
     expect(within(sheet).getByRole('region', { name: 'Their copies' })).toBeInTheDocument()

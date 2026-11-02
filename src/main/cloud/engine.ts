@@ -21,23 +21,27 @@ import {
   applyRemote,
   applyRemoteBinder,
   applyRemoteBinderEdit,
+  applyRemoteFavourite,
   applyRemoteWish,
   contributionGroups,
   dirtyBinderEdits,
   dirtyBinders,
   dirtyEntries,
+  dirtyFavourites,
   dirtyWishes,
   gameCursor,
   pullPriceChanges,
   dropEntry,
   markBinderEditPushed,
   markBinderPushed,
+  markFavouritePushed,
   markPushed,
   markWishPushed,
   pendingCount,
   pruneSyncIssues,
   purgeCleanBinderEdits,
   purgeCleanBinders,
+  purgeCleanFavourites,
   purgeCleanTombstones,
   purgeCleanWishes,
   recordSyncIssue,
@@ -130,6 +134,56 @@ async function syncWishlist(
     if (e instanceof CloudAuthError) throw e
     if (!(e instanceof CloudNotFoundError) && !(e instanceof CloudOfflineError))
       console.warn('Wishlist sync failed; it stays queued', e)
+  }
+  return changed
+}
+
+/**
+ * Syncs `owner`'s favourites on their own routes: pull each game from its own cursor, then push.
+ * Best effort as syncWishlist is: a portal without favourites (404) or a failure leaves them dirty
+ * for the next run. Resolves whether anything changed.
+ */
+async function syncFavourites(
+  db: SqlDb,
+  owner: number,
+  client: CloudClient,
+  games: GameId[]
+): Promise<boolean> {
+  let changed = false
+  try {
+    for (const game of games) {
+      let cursor = gameCursor(db, owner, game, 'favourites')
+      for (;;) {
+        const page = await client.favouritesPull(cursor, game)
+        db.transaction(() => {
+          for (const f of page.entries) if (applyRemoteFavourite(db, owner, f)) changed = true
+          saveGameCursor(db, owner, game, 'favourites', page.cursor)
+        })()
+        cursor = page.cursor
+        if (!page.more || page.entries.length === 0) break
+      }
+    }
+
+    const sent = new Set<number>()
+    for (;;) {
+      const batch = dirtyFavourites(db, owner, MAX_PUSH, sent)
+      if (batch.length === 0) break
+      for (const f of batch) sent.add(f.cardId)
+      const results = await client.favouritesPush(batch)
+      const byCard = new Map(batch.map((f) => [f.cardId, f]))
+      db.transaction(() => {
+        for (const r of results) {
+          const f = byCard.get(r.cardId)
+          if (!f || r.status === 'skipped') continue
+          markFavouritePushed(db, owner, f)
+          if (r.status === 'stale' && applyRemoteFavourite(db, owner, r.current)) changed = true
+        }
+      })()
+    }
+  } catch (e) {
+    if (e instanceof CloudAuthError) throw e
+    if (!(e instanceof CloudNotFoundError) && !(e instanceof CloudOfflineError))
+      console.warn('Favourites sync failed; they stay queued', e)
   }
   return changed
 }
@@ -391,12 +445,16 @@ export async function syncOnce(
   // 5. Binders, then their edits, which have their own routes too.
   if (await syncBinders(db, owner, client, games)) changed = true
 
-  // 6. Tidy up and record the run.
+  // 6. Favourites, on their own routes as well.
+  if (await syncFavourites(db, owner, client, games)) changed = true
+
+  // 7. Tidy up and record the run.
   db.transaction(() => {
     purgeCleanTombstones(db, owner)
     purgeCleanWishes(db, owner)
     purgeCleanBinders(db, owner)
     purgeCleanBinderEdits(db, owner)
+    purgeCleanFavourites(db, owner)
     saveAccountState(db, owner, { syncedAt: now().toISOString() })
     // recordSnapshot writes the active owner's (LOCAL) snapshot.
     if (changed && activeOwner(db) === owner) recordSnapshot(db, now())

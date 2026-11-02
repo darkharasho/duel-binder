@@ -298,7 +298,7 @@ describe('SetChecklist bulk mode', () => {
 
   it('the side panel stepper counts a click before the server answers', async () => {
     const { releaseNext, checklist } = setup()
-    await userEvent.click(await screen.findByRole('button', { name: /Gamma Trap/ }))
+    await userEvent.click(await screen.findByRole('button', { name: /^Gamma Trap/ }))
     const panel = await screen.findByRole('dialog')
     const code = detailOf(3001).printings[0].setCode
     await userEvent.click(

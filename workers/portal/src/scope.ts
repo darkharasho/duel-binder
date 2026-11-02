@@ -13,6 +13,9 @@ export const NEXT_BINDER_SEQ = '(SELECT COALESCE(MAX(seq), 0) + 1 FROM binders)'
 /** SQL for the next binder_edits seq: one past the highest in use (the column is unique). */
 export const NEXT_BINDER_EDIT_SEQ = '(SELECT COALESCE(MAX(seq), 0) + 1 FROM binder_edits)'
 
+/** SQL for the next favourites seq: one past the highest in use (the column is unique). */
+export const NEXT_FAVOURITE_SEQ = '(SELECT COALESCE(MAX(seq), 0) + 1 FROM favourites)'
+
 /** One user's live (non-deleted) rows of one game on the server. */
 export function userScope(userId: number, game: GameId): Scope {
   if (!Number.isSafeInteger(userId)) throw new Error(`Invalid user id: ${userId}`)
@@ -58,6 +61,13 @@ export function userScope(userId: number, game: GameId): Scope {
     binderSync(table) {
       const next = table === 'binders' ? NEXT_BINDER_SEQ : NEXT_BINDER_EDIT_SEQ
       return { ownerCol: 'user_id', owner: String(userId), markerCol: 'seq', marker: next, touch: `seq = ${next}` }
+    },
+    favourites: {
+      ownerCol: 'user_id',
+      owner: String(userId),
+      markerCol: 'seq',
+      marker: NEXT_FAVOURITE_SEQ,
+      touch: `seq = ${NEXT_FAVOURITE_SEQ}`
     },
     snapshotTable: {
       insertCols: 'user_id, game, ',

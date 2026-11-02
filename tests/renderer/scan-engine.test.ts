@@ -23,11 +23,8 @@ interface Posted {
   transfer?: Transferable[]
 }
 
-/** A stand-in for the vision worker that answers every frame with signals, and a tilt reading with reading. */
-function fakeWorker(
-  signals: FrameSignals,
-  reading: TiltReading | null = null
-): { worker: Worker; posted: Posted[] } {
+/** A stand-in for the vision worker that answers every frame with signals, and a tilt reading with two kept frames. */
+function fakeWorker(signals: FrameSignals): { worker: Worker; posted: Posted[] } {
   const posted: Posted[] = []
   const worker = {
     onmessage: null as ((e: MessageEvent) => void) | null,
@@ -40,12 +37,41 @@ function fakeWorker(
         msg.type === 'init'
           ? { type: 'ready' }
           : msg.type === 'tiltReading'
-            ? { type: 'tiltReading', id: msg.id, reading }
+            ? {
+                type: 'tiltFrames',
+                id: msg.id,
+                frames: [new Uint8Array([1, 2]), new Uint8Array([3])]
+              }
             : { type: 'result', id: msg.id, signals }
       queueMicrotask(() => worker.onmessage?.({ data: reply } as MessageEvent))
     }
   }
   return { worker: worker as unknown as Worker, posted }
+}
+
+interface TiltPosted {
+  msg: { type: string; id: number; game: string; frames: Uint8Array[] }
+  transfer?: Transferable[]
+}
+
+/** A stand-in for the tilt worker; answer returns its reply to a request, or null to stay silent. */
+function fakeTiltWorker(answer: (m: TiltPosted['msg']) => object | null): {
+  worker: Worker
+  posted: TiltPosted[]
+  make: () => Worker
+} {
+  const posted: TiltPosted[] = []
+  const worker = {
+    onmessage: null as ((e: MessageEvent) => void) | null,
+    onerror: null as ((e: ErrorEvent) => void) | null,
+    terminate: vi.fn(),
+    postMessage(msg: TiltPosted['msg'], transfer?: Transferable[]) {
+      posted.push({ msg, transfer })
+      const reply = answer(msg)
+      if (reply) queueMicrotask(() => worker.onmessage?.({ data: reply } as MessageEvent))
+    }
+  } as unknown as Worker
+  return { worker, posted, make: () => worker }
 }
 
 const NO_CARD: FrameSignals = {
@@ -353,12 +379,21 @@ describe('createScanEngine', () => {
     expect(late.close).toHaveBeenCalled()
   })
 
-  it('asks the worker for a tilt reading and resolves with it', async () => {
+  it('a tilt reading runs on its own worker, not the vision worker', async () => {
     const reading: TiltReading = { features: [0.5, 1.5], frames: 20, motion: 6 }
-    const { worker, posted } = fakeWorker(NO_CARD, reading)
-    const engine = createScanEngine({ api: createMockApi().scan, makeWorker: () => worker })
+    const { worker, posted } = fakeWorker(NO_CARD)
+    const tilt = fakeTiltWorker((m) => ({ type: 'reading', id: m.id, reading }))
+    const engine = createScanEngine({
+      api: createMockApi().scan,
+      makeWorker: () => worker,
+      makeTiltWorker: tilt.make
+    })
     await engine.init(null)
     await expect(engine.tiltReading!('pkm', 5000)).resolves.toEqual(reading)
+    expect(tilt.posted).toHaveLength(1)
+    expect(tilt.posted[0]!.msg).toMatchObject({ type: 'read', game: 'pkm' })
+    expect(tilt.posted[0]!.msg.frames.map((f) => [...f])).toEqual([[1, 2], [3]])
+    expect(tilt.posted[0]!.transfer).toHaveLength(2)
     // The window ends at the loop's now, not when the worker gets round to it.
     expect(posted.at(-1)!.msg).toEqual({
       type: 'tiltReading',
@@ -368,6 +403,67 @@ describe('createScanEngine', () => {
     })
     engine.tiltReset!()
     expect(posted.at(-1)!.msg).toEqual({ type: 'tiltReset' })
+  })
+
+  it('a live frame is answered while a reading is still running', async () => {
+    const { worker } = fakeWorker(NO_CARD)
+    const tilt = fakeTiltWorker(() => null)
+    const engine = createScanEngine({
+      api: createMockApi().scan,
+      makeWorker: () => worker,
+      makeTiltWorker: tilt.make
+    })
+    await engine.init(null)
+    const pending = engine.tiltReading!('ygo').catch(() => 'x')
+    await Promise.resolve()
+    await expect(
+      engine.analyze(frame(), { candidates: null, wantText: false })
+    ).resolves.toBeTruthy()
+    engine.dispose()
+    await pending
+  })
+
+  it('a tilt worker that fails rejects that reading and the next starts a fresh one', async () => {
+    const { worker } = fakeWorker(NO_CARD)
+    const made: ReturnType<typeof fakeTiltWorker>[] = []
+    const engine = createScanEngine({
+      api: createMockApi().scan,
+      makeWorker: () => worker,
+      makeTiltWorker: () => {
+        const t = fakeTiltWorker(() => null)
+        made.push(t)
+        return t.make()
+      }
+    })
+    await engine.init(null)
+    const first = engine.tiltReading!('ygo')
+    await new Promise((r) => setTimeout(r, 0))
+    made[0]!.worker.onerror?.({ message: 'tilt boom' } as ErrorEvent)
+    await expect(first).rejects.toThrow('tilt boom')
+    expect(made[0]!.worker.terminate).toHaveBeenCalled()
+    const second = engine.tiltReading!('ygo')
+    await new Promise((r) => setTimeout(r, 0))
+    expect(made).toHaveLength(2)
+    made[1]!.worker.onmessage?.({
+      data: { type: 'reading', id: made[1]!.posted[0]!.msg.id, reading: null }
+    } as MessageEvent)
+    await expect(second).resolves.toBeNull()
+  })
+
+  it('dispose ends the tilt worker too', async () => {
+    const { worker } = fakeWorker(NO_CARD)
+    const tilt = fakeTiltWorker(() => null)
+    const engine = createScanEngine({
+      api: createMockApi().scan,
+      makeWorker: () => worker,
+      makeTiltWorker: tilt.make
+    })
+    await engine.init(null)
+    const pending = engine.tiltReading!('ygo').catch(() => 'x')
+    await new Promise((r) => setTimeout(r, 0))
+    engine.dispose()
+    await pending
+    expect(tilt.worker.terminate).toHaveBeenCalled()
   })
 
   it('a tilt reset starts no worker, and does nothing after dispose', () => {

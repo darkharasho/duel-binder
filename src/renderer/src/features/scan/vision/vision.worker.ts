@@ -3,7 +3,6 @@
 import { decodeFingerprints, type FingerprintIndex } from '@shared/scan/fingerprintFile'
 import { SCAN_PROFILES, scanProfile, type ScanProfile } from '@shared/scan/profiles'
 import { ART_MAX_DISTANCE, TILT_MS } from '@shared/scan/thresholds'
-import { tiltFeatures } from '@shared/scan/tiltFeatures'
 import type { RgbaImage } from '@shared/scan/types'
 import type { FrameSignals, WorkerReply, WorkerRequest } from '../engine'
 import { analyze } from './analyze'
@@ -92,12 +91,15 @@ async function handle(msg: WorkerRequest): Promise<void> {
     return
   }
   if (msg.type === 'tiltReading') {
-    // Only the window read: tiltFeatures holds about 3 MB of floats a frame while it works. A
-    // 20-frame window takes it about 0.9 s, and frames sent meanwhile wait behind it. now is the
-    // loop's clock, as the frames' times are.
+    // The window's frames go to the tilt worker, which does the slow reading (about 0.3 s) so a
+    // frame sent meanwhile isn't kept waiting. now is the loop's clock, as the frames' times are.
+    // Copies, transferred: the kept frames stay for the next reading.
     try {
-      const reading = tiltFeatures(tilt.latest(TILT_MS, msg.now), msg.game)
-      scope.postMessage({ type: 'tiltReading', id: msg.id, reading })
+      const frames = tilt.latest(TILT_MS, msg.now).map((f) => f.slice())
+      scope.postMessage(
+        { type: 'tiltFrames', id: msg.id, frames },
+        frames.map((f) => f.buffer as ArrayBuffer)
+      )
     } catch (e) {
       scope.postMessage({ type: 'error', id: msg.id, message: messageOf(e) })
     }

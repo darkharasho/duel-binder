@@ -8,6 +8,7 @@ import type { ScanRef } from '@shared/scan/fingerprintRefs'
 import type { OcrBand, RgbaImage } from '@shared/scan/types'
 import type { Quad } from './vision/detect'
 import type { TiltReading } from '@shared/scan/tiltFeatures'
+import type { TiltReply, TiltRequest } from './vision/tilt.worker'
 
 export type { ArtMatch } from '@shared/scan/fingerprintFile'
 
@@ -81,7 +82,8 @@ export type WorkerReply =
   | { type: 'ready' }
   | { type: 'result'; id: number; signals: FrameSignals }
   | { type: 'artDistance'; id: number; distance: number | null }
-  | { type: 'tiltReading'; id: number; reading: TiltReading | null }
+  /** The kept frames for a tilt reading (copies, transferred), for the tilt worker to read. */
+  | { type: 'tiltFrames'; id: number; frames: Uint8Array[] }
   | { type: 'error'; id: number | null; message: string }
 
 /** A frame's signals with its bands read. */
@@ -166,6 +168,10 @@ const PHOTO_TIMEOUT_MS = 30_000
 export const makeVisionWorker = (): Worker =>
   new Worker(new URL('./vision/vision.worker.ts', import.meta.url), { type: 'module' })
 
+/** The tilt worker, bundled by Vite: it reads the vision worker's kept frames off its thread. */
+export const makeTiltWorker = (): Worker =>
+  new Worker(new URL('./vision/tilt.worker.ts', import.meta.url), { type: 'module' })
+
 const hasPixels = (b: OcrBand): boolean => b.width > 0 && b.height > 0
 
 /**
@@ -176,6 +182,8 @@ const hasPixels = (b: OcrBand): boolean => b.width > 0 && b.height > 0
 export function createScanEngine(deps: {
   api: Api['scan']
   makeWorker: () => Worker
+  /** The tilt worker, started on the first reading (makeTiltWorker when left out). */
+  makeTiltWorker?: () => Worker
   game?: GameId
   timeouts?: { initMs?: number; frameMs?: number }
 }): ScanEngine {
@@ -186,6 +194,10 @@ export function createScanEngine(deps: {
   const frames = new Map<number, Waiter<FrameSignals>>()
   const distances = new Map<number, (distance: number | null) => void>()
   const tilts = new Map<number, Waiter<TiltReading | null>>()
+  // The tilt worker, and the readings (their ids) it owes.
+  let tiltWorker: Worker | null = null
+  const onTiltWorker = new Set<number>()
+  const tiltGames = new Map<number, GameId>()
   const initMs = deps.timeouts?.initMs ?? INIT_TIMEOUT_MS
   const frameMs = deps.timeouts?.frameMs ?? FRAME_TIMEOUT_MS
 
@@ -195,6 +207,65 @@ export function createScanEngine(deps: {
     frames.clear()
     for (const w of tilts.values()) w.reject(error)
     tilts.clear()
+    tiltGames.clear()
+    endTiltWorker()
+  }
+
+  /** Ends the tilt worker; readings it owed are failed by the caller, which knows why. */
+  function endTiltWorker(): void {
+    onTiltWorker.clear()
+    tiltWorker?.terminate()
+    tiltWorker = null
+  }
+
+  /** Throws the tilt worker away, failing only the readings it owes. */
+  const killTilt = (error: Error): void => {
+    for (const id of [...onTiltWorker]) {
+      tilts.get(id)?.reject(error)
+      tilts.delete(id)
+      tiltGames.delete(id)
+    }
+    endTiltWorker()
+  }
+
+  const startTilt = (): Worker => {
+    if (tiltWorker) return tiltWorker
+    const t = (deps.makeTiltWorker ?? makeTiltWorker)()
+    t.onmessage = (e: MessageEvent<TiltReply>) => {
+      const msg = e.data
+      onTiltWorker.delete(msg.id)
+      if (msg.type === 'reading') tilts.get(msg.id)?.resolve(msg.reading)
+      else tilts.get(msg.id)?.reject(new Error(msg.message))
+      tilts.delete(msg.id)
+    }
+    t.onerror = (e) => {
+      if (tiltWorker === t) killTilt(new Error(e.message || 'The tilt worker failed'))
+    }
+    t.onmessageerror = () => {
+      if (tiltWorker === t) killTilt(new Error('A tilt worker reply could not be read'))
+    }
+    tiltWorker = t
+    return t
+  }
+
+  /** The vision worker's frames for reading id, on to the tilt worker. */
+  const readTilt = (id: number, frames: Uint8Array[]): void => {
+    const game = tiltGames.get(id)
+    tiltGames.delete(id)
+    if (game === undefined || !tilts.has(id)) return // gave up on (timed out) meanwhile
+    try {
+      const request: TiltRequest = { type: 'read', id, game, frames }
+      const t = startTilt()
+      onTiltWorker.add(id)
+      t.postMessage(
+        request,
+        frames.map((f) => f.buffer as ArrayBuffer)
+      )
+    } catch (e) {
+      onTiltWorker.delete(id)
+      tilts.get(id)?.reject(e instanceof Error ? e : new Error(String(e)))
+      tilts.delete(id)
+    }
   }
 
   /** Throws the worker away with everything it owes; the next call starts a new one. */
@@ -222,6 +293,32 @@ export function createScanEngine(deps: {
     }
   }
 
+  /**
+   * A reading's waiter, covering its whole round trip: unanswered within frameMs, the worker
+   * holding it is thrown away (the tilt worker if it has the frames, else the vision worker).
+   */
+  const watchedTilt = (
+    id: number,
+    waiter: Waiter<TiltReading | null>
+  ): Waiter<TiltReading | null> => {
+    const w = worker
+    const timer = setTimeout(() => {
+      const error = new Error('The scan worker stopped answering')
+      if (onTiltWorker.has(id)) killTilt(error)
+      else if (w && worker === w) kill(w, error)
+    }, frameMs)
+    return {
+      resolve: (v) => {
+        clearTimeout(timer)
+        waiter.resolve(v)
+      },
+      reject: (e) => {
+        clearTimeout(timer)
+        waiter.reject(e)
+      }
+    }
+  }
+
   const start = (): Worker => {
     if (disposed) throw new Error('The scan engine was disposed')
     if (worker) return worker
@@ -236,9 +333,8 @@ export function createScanEngine(deps: {
       } else if (msg.type === 'artDistance') {
         distances.get(msg.id)?.(msg.distance)
         distances.delete(msg.id)
-      } else if (msg.type === 'tiltReading') {
-        tilts.get(msg.id)?.resolve(msg.reading)
-        tilts.delete(msg.id)
+      } else if (msg.type === 'tiltFrames') {
+        readTilt(msg.id, msg.frames)
       } else if (msg.id === null) {
         inits.shift()?.reject(new Error(msg.message))
       } else {
@@ -246,6 +342,7 @@ export function createScanEngine(deps: {
         frames.delete(msg.id)
         tilts.get(msg.id)?.reject(new Error(msg.message))
         tilts.delete(msg.id)
+        tiltGames.delete(msg.id)
       }
     }
     // A dead worker takes its pending frames with it; the next call starts a new one.
@@ -288,7 +385,8 @@ export function createScanEngine(deps: {
         const id = nextId++
         try {
           send({ type: 'tiltReading', id, game, now })
-          tilts.set(id, watched({ resolve, reject }, frameMs))
+          tiltGames.set(id, game)
+          tilts.set(id, watchedTilt(id, { resolve, reject }))
         } catch (e) {
           reject(e instanceof Error ? e : new Error(String(e)))
         }

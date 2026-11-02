@@ -11,6 +11,10 @@ import {
 import { yugipediaImageKey } from '../../src/main/images/cache'
 import { RARITY_LABEL } from '../../src/main/db/schema'
 import { YugipediaError, type YugipediaClient } from '../../src/main/yugipedia/client'
+import { runSync } from '../../src/main/sync/sync'
+import type { YgoClient } from '../../src/main/ygo/client'
+import type { ApiCard } from '../../src/main/ygo/mapCard'
+import fixture from '../fixtures/cardinfo.sample.json'
 import { seededDb } from './helpers'
 
 const NOW = new Date('2026-11-01T00:00:00.000Z')
@@ -399,20 +403,20 @@ describe('refreshIntlSets', () => {
     expect(intlRows(db).map((r) => r.set_code)).toEqual(['A-1', 'A-3'])
   })
 
-  it('skips English and unknown suffixes', async () => {
+  it('skips unknown suffixes, the regional English lists among them', async () => {
     const f = fake({
       [LB]: listPage(['LB-05; Dark Magician; UR']),
-      'Set Card Lists:Legend of Blue Eyes White Dragon (TCG-EN)': listPage([
-        'LOB-EN005; Dark Magician; UR'
-      ]),
       'Set Card Lists:Legend of Blue Eyes White Dragon (TCG-NA)': listPage([
+        'LOB-E005; Dark Magician; UR'
+      ]),
+      'Set Card Lists:Legend of Blue Eyes White Dragon (TCG-EU)': listPage([
         'LOB-E005; Dark Magician; UR'
       ])
     })
     await refreshIntlSets(db, f.client, NOW)
     const fetched = f.pageCalls.flat()
     expect(fetched).toContain(LB)
-    expect(fetched.filter((t) => t.includes('TCG-EN') || t.includes('TCG-NA'))).toEqual([])
+    expect(fetched.filter((t) => t.includes('TCG-NA') || t.includes('TCG-EU'))).toEqual([])
     expect(intlRows(db)).toHaveLength(1)
   })
 
@@ -647,5 +651,234 @@ describe('refreshIntlSets batching', () => {
       () => (clock += BATCH_NOTE_MS)
     )
     expect(savedAtBatch).toEqual([50, 60])
+  })
+})
+
+describe('English printings from the TCG-EN lists', () => {
+  const MGED = 'Set Card Lists:Maximum Gold: El Dorado (TCG-EN)'
+  const LOB = 'Set Card Lists:Legend of Blue Eyes White Dragon (TCG-EN)'
+  const DM = 46986414
+  const POT = 55144522
+  const DM_MGED = 'MGED-EN002; Dark Magician; PGR // description::(alternate art)'
+
+  interface EnRow {
+    id: number
+    card_id: number
+    set_name: string
+    set_code: string
+    set_rarity: string
+    set_rarity_code: string
+    variant: string | null
+    missing_from_api: number
+    yugipedia: number
+  }
+  const enRows = (): EnRow[] =>
+    db
+      .prepare(
+        `SELECT id, card_id, set_name, set_code, set_rarity, set_rarity_code, variant, missing_from_api,
+           yugipedia FROM card_printings WHERE language = 'en' ORDER BY set_code, set_rarity`
+      )
+      .all() as EnRow[]
+  const filled = (): EnRow[] => enRows().filter((r) => r.yugipedia === 1)
+  const own = (printingId: number): void => {
+    const imageId = db
+      .prepare(
+        'SELECT image_id FROM card_images WHERE card_id = (SELECT card_id FROM card_printings WHERE id = ?)'
+      )
+      .pluck()
+      .get(printingId)
+    db.prepare(
+      "INSERT INTO collection_entries (uid, printing_id, image_id, quantity, created_at, updated_at) VALUES (lower(hex(randomblob(16))), ?, ?, 1, 'x', 'x')"
+    ).run(printingId, imageId)
+  }
+  /** A YGOPRODeck card sync whose Dark Magician also lists `extra`. */
+  const ygoSync = async (
+    extra: {
+      set_name: string
+      set_code: string
+      set_rarity: string
+      set_rarity_code: string
+    }[] = []
+  ): Promise<void> => {
+    const data = (fixture.data as ApiCard[]).map((c) =>
+      c.id === DM ? { ...c, card_sets: [...(c.card_sets ?? []), ...extra] } : c
+    )
+    const client: YgoClient = {
+      fetchDbVersion: async () => ({ databaseVersion: '2', lastUpdate: '2026-11-01' }),
+      fetchCardInfo: async () => data,
+      fetchCardSets: async () => []
+    }
+    await runSync(db, client, () => {}, NOW)
+  }
+
+  beforeEach(() => {
+    db.prepare(
+      "INSERT INTO sets (language, set_name, set_code) VALUES ('en', 'Maximum Gold: El Dorado', 'MGED')"
+    ).run()
+  })
+
+  it('adds the printings YGOPRODeck lacks, under its set names, and none it has', async () => {
+    const before = enRows()
+    const f = fake({
+      [MGED]: listPage([DM_MGED]),
+      [LOB]: listPage([
+        // YGOPRODeck has these two.
+        'LOB-EN005; Dark Magician; UR',
+        'LOB-EN119; Pot of Greed; R',
+        // An art variant of a printing YGOPRODeck has is TCGplayer's to add.
+        'LOB-EN005; Dark Magician; UR // description::(alternate art)',
+        // Another rarity of a code YGOPRODeck has.
+        'LOB-EN005; Dark Magician; ScR',
+        // A code YGOPRODeck gives another card.
+        'LOB-EN119; Dark Magician; SR'
+      ]),
+      // No YGOPRODeck set by this name: the set the code's siblings are in, else the list's own.
+      'Set Card Lists:Yugi Promos (TCG-EN)': listPage([
+        'SDY-050; Pot of Greed; C',
+        'YP-EN001; Pot of Greed; C'
+      ])
+    })
+    const res = await refreshIntlSets(db, f.client, NOW)
+    expect(res.ok).toBe(true)
+    expect(filled()).toEqual([
+      expect.objectContaining({
+        card_id: DM,
+        set_name: 'Legend of Blue Eyes White Dragon',
+        set_code: 'LOB-EN005',
+        set_rarity: 'Secret Rare',
+        variant: null,
+        missing_from_api: 0
+      }),
+      expect.objectContaining({
+        card_id: DM,
+        set_name: 'Maximum Gold: El Dorado',
+        set_code: 'MGED-EN002',
+        set_rarity: 'Premium Gold Rare',
+        set_rarity_code: '',
+        variant: 'Alternate Art'
+      }),
+      expect.objectContaining({
+        card_id: POT,
+        set_name: 'Starter Deck: Yugi',
+        set_code: 'SDY-050'
+      }),
+      expect.objectContaining({ card_id: POT, set_name: 'Yugi Promos', set_code: 'YP-EN001' })
+    ])
+    // YGOPRODeck's rows and the English sets are left as they were; set pages aren't read.
+    expect(f.pageCalls.flat()).not.toContain('Maximum Gold: El Dorado')
+    expect(enRows().filter((r) => r.yugipedia === 0)).toEqual(before)
+    expect(db.prepare("SELECT set_name FROM sets WHERE language = 'en'").pluck().all()).toEqual([
+      'Maximum Gold: El Dorado'
+    ])
+    expect(
+      db
+        .prepare(`SELECT ${RARITY_LABEL} FROM card_printings p WHERE set_code = 'MGED-EN002'`)
+        .pluck()
+        .get()
+    ).toBe('Premium Gold Rare (Alternate Art)')
+  })
+
+  it('gives the rarity code YGOPRODeck gives that rarity', async () => {
+    const f = fake({ [LOB]: listPage(['LOB-EN006; Pot of Greed; UR']) })
+    await refreshIntlSets(db, f.client, NOW)
+    expect(filled()).toEqual([
+      expect.objectContaining({
+        set_code: 'LOB-EN006',
+        set_rarity: 'Ultra Rare',
+        set_rarity_code: '(UR)'
+      })
+    ])
+  })
+
+  it('writes a printing two lists hold once, under the first', async () => {
+    const zeta = 'Set Card Lists:Zeta Promos (TCG-EN)'
+    const alpha = 'Set Card Lists:Alpha Promos (TCG-EN)'
+    const f = fake({
+      [alpha]: listPage(['MGED-EN002; Dark Magician; PGR']),
+      [zeta]: listPage(['MGED-EN002; Dark Magician; PGR'])
+    })
+    f.lists = [zeta, alpha]
+    await refreshIntlSets(db, f.client, NOW)
+    expect(filled().map((r) => r.set_name)).toEqual(['Zeta Promos'])
+  })
+
+  it('survives a YGOPRODeck sync, which takes it over when it lists the printing', async () => {
+    const f = fake({ [MGED]: listPage([DM_MGED]) })
+    await refreshIntlSets(db, f.client, NOW)
+    const [row] = filled()
+    own(row.id)
+    await ygoSync()
+    expect(filled()).toEqual([row])
+
+    await ygoSync([
+      {
+        set_name: 'Maximum Gold: El Dorado',
+        set_code: 'MGED-EN002',
+        set_rarity: 'Premium Gold Rare',
+        set_rarity_code: '(PG)'
+      }
+    ])
+    const taken = enRows().filter((r) => r.set_code === 'MGED-EN002')
+    expect(taken).toEqual([{ ...row, set_rarity_code: '(PG)', yugipedia: 0 }])
+    expect(db.prepare('SELECT printing_id FROM collection_entries').pluck().all()).toEqual([row.id])
+
+    // The next read of the lists leaves YGOPRODeck's row be and adds no twin.
+    await refreshIntlSets(db, f.client, NOW)
+    expect(enRows().filter((r) => r.set_code === 'MGED-EN002')).toEqual(taken)
+  })
+
+  it('gives way to YGOPRODeck listing it under another spelling of the rarity', async () => {
+    const f = fake({
+      [MGED]: listPage(['MGED-EN002; Dark Magician; PGR', 'MGED-EN003; Dark Magician; PGR'])
+    })
+    await refreshIntlSets(db, f.client, NOW)
+    const [owned] = filled()
+    own(owned.id)
+    await ygoSync(
+      ['MGED-EN002', 'MGED-EN003'].map((code) => ({
+        set_name: 'Maximum Gold: El Dorado',
+        set_code: code,
+        set_rarity: 'PGR',
+        set_rarity_code: '(PG)'
+      }))
+    )
+    await refreshIntlSets(db, f.client, NOW)
+    // The owned one stays, flagged, with its entry; the other is gone.
+    expect(filled()).toEqual([{ ...owned, missing_from_api: 1 }])
+    expect(enRows().filter((r) => r.set_rarity === 'PGR')).toHaveLength(2)
+  })
+
+  it('drops the printings no list holds any more, flagging owned ones, only on a full run', async () => {
+    const f = fake({
+      [MGED]: listPage(['MGED-EN002; Dark Magician; PGR', 'MGED-EN003; Dark Magician; PGR']),
+      [LB]: listPage(['LB-05; Dark Magician; UR'])
+    })
+    await refreshIntlSets(db, f.client, NOW)
+    const [kept, dropped] = filled()
+    own(kept.id)
+    f.pages.set(MGED, listPage(['MGED-EN004; Dark Magician; PGR']))
+
+    // A failed fetch keeps them.
+    f.failCall = f.pageCalls.length
+    expect((await refreshIntlSets(db, f.client, NOW)).ok).toBe(false)
+    expect(filled().map((r) => r.set_code)).toEqual(['MGED-EN002', 'MGED-EN003'])
+
+    f.failCall = null
+    expect((await refreshIntlSets(db, f.client, NOW)).ok).toBe(true)
+    expect(filled().map((r) => [r.set_code, r.missing_from_api])).toEqual([
+      ['MGED-EN002', 1],
+      ['MGED-EN004', 0]
+    ])
+    expect(enRows().some((r) => r.id === dropped.id)).toBe(false)
+  })
+
+  it('leaves token cards to the token sync', async () => {
+    db.prepare(
+      `INSERT INTO cards (id, name, type, frame_type, race, "desc", updated_at)
+       VALUES (9000000001, 'Sheep Token', 'Token', 'token', 'Beast', '', 'x')`
+    ).run()
+    const f = fake({ [LOB]: listPage(['LOB-EN200; Sheep Token; C']) })
+    await refreshIntlSets(db, f.client, NOW)
+    expect(filled()).toEqual([])
   })
 })

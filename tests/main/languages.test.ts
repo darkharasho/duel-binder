@@ -3,7 +3,8 @@ import { LANGUAGES, isLanguage, languageForSuffix } from '../../src/shared/langu
 test('languageForSuffix maps Yugipedia suffixes', () => {
   expect(languageForSuffix('OCG-JP')).toBe('ja')
   expect(languageForSuffix('TCG-SP')).toBe('es')
-  expect(languageForSuffix('TCG-EN')).toBeNull()
+  expect(languageForSuffix('TCG-EN')).toBe('en')
+  expect(languageForSuffix('TCG-NA')).toBeNull()
   expect(languageForSuffix('XYZ')).toBeNull()
 })
 

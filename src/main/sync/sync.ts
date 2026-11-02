@@ -122,7 +122,8 @@ function saveCards(
       missing_from_api, language)
     VALUES (@cardId, @setName, @setCode, @setRarity, @setRarityCode, @setPrice, 0, 'en')
     ON CONFLICT(card_id, set_code, set_rarity) WHERE language = 'en' DO UPDATE SET set_name = excluded.set_name,
-      set_rarity_code = excluded.set_rarity_code, set_price = excluded.set_price, missing_from_api = 0
+      set_rarity_code = excluded.set_rarity_code, set_price = excluded.set_price, missing_from_api = 0,
+      yugipedia = 0
     RETURNING id`)
   const upsertImage = db.prepare(`
     INSERT INTO card_images (image_id, card_id, sort_order, missing_from_api)
@@ -148,13 +149,15 @@ function saveCards(
     // Only English printings come from YGOPRODeck; other languages belong to the Yugipedia sync,
     // art variants to the TCGplayer catalog, and printings of token cards and the images of token
     // ids to the token sync (sync/tokens.ts), which reads token cards YGOPRODeck has no codes for.
+    // English printings YGOPRODeck lacks that Yugipedia's lists have are the Yugipedia sync's too;
+    // one YGOPRODeck lists is taken over by the upsert above, keeping its id and entries.
     prune(
       db,
       'card_printings',
       'id',
       'printing_id',
       seenPrintings,
-      `game = 'ygo' AND language = 'en' AND tcg_product_id IS NULL
+      `game = 'ygo' AND language = 'en' AND tcg_product_id IS NULL AND yugipedia = 0
        AND card_id NOT IN (SELECT id FROM cards WHERE frame_type = 'token')`
     )
     prune(db, 'card_images', 'image_id', 'image_id', seenImages, `game = 'ygo' AND image_id < ${TOKEN_ID_MIN}`)

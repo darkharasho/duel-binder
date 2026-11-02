@@ -105,7 +105,11 @@ async function run(
         .all() as { set_code: string; name: string }[]
     ).map((r) => [r.set_code, r.name])
   )
-  /** The cards holding each English code, so no two cards end up under one. */
+  /**
+   * The cards holding each English code, so no two cards end up under one. A printing filled in
+   * from a Yugipedia list doesn't count: the set list sync (intl.ts) drops it once a token holds
+   * its code.
+   */
   const holders = new Map<string, Set<number>>()
   const hold = (code: string, cardId: number): void => {
     const key = code.toUpperCase()
@@ -114,7 +118,7 @@ async function run(
   for (const r of db
     .prepare(
       `SELECT card_id, set_code FROM card_printings
-       WHERE game = 'ygo' AND language = 'en' AND set_code <> ''`
+       WHERE game = 'ygo' AND language = 'en' AND set_code <> '' AND yugipedia = 0`
     )
     .all() as { card_id: number; set_code: string }[]) {
     hold(r.set_code, r.card_id)

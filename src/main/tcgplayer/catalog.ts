@@ -242,7 +242,8 @@ function sameRarity<T extends ProductRow>(rows: T[], rarity: string): T[] {
  * when owned. Misprints are left out. A YGOPRODeck printing whose own product is itself a variant
  * (an overframe-only Starlight Rare) gets that variant in card_printings.variant. Also adds the
  * English printings YGOPRODeck leaves out (see saveMissingPrintings). `added` counts new rows from
- * the latter.
+ * the latter. Printings filled in from Yugipedia's lists (card_printings.yugipedia) count as left
+ * out: they keep their own variant, and one TCGplayer sells becomes TCGplayer's.
  */
 export function saveTcgVariants(db: Database.Database): { saved: number; added: number } {
   const groups = db
@@ -256,14 +257,16 @@ export function saveTcgVariants(db: Database.Database): { saved: number; added: 
   )
   const printings = db.prepare(
     `SELECT card_id, set_name, set_code, set_rarity, set_rarity_code FROM card_printings
-     WHERE game = 'ygo' AND language = 'en' AND tcg_product_id IS NULL AND set_code = ? COLLATE NOCASE`
+     WHERE game = 'ygo' AND language = 'en' AND tcg_product_id IS NULL AND yugipedia = 0
+       AND set_code = ? COLLATE NOCASE`
   )
   const upsert = db.prepare(
     `INSERT INTO card_printings (card_id, set_name, set_code, set_rarity, set_rarity_code, set_price,
        missing_from_api, language, tcg_product_id)
      VALUES (?, ?, ?, ?, ?, NULL, 0, 'en', ?)
      ON CONFLICT(card_id, set_code, set_rarity) WHERE language = 'en' DO UPDATE SET
-       set_name = excluded.set_name, missing_from_api = 0, tcg_product_id = excluded.tcg_product_id
+       set_name = excluded.set_name, missing_from_api = 0, tcg_product_id = excluded.tcg_product_id,
+       yugipedia = 0
      RETURNING id`
   )
   type Base = {
@@ -308,7 +311,7 @@ export function saveTcgVariants(db: Database.Database): { saved: number; added: 
       .prepare(
         `SELECT id, set_code, set_rarity, variant FROM card_printings
        WHERE game = 'ygo' AND language = 'en' AND tcg_product_id IS NULL AND set_code <> ''
-         AND card_id < ${TOKEN_ID_MIN}` // the token sync names these from their scans
+         AND yugipedia = 0 AND card_id < ${TOKEN_ID_MIN}` // the token sync names these from their scans
       )
       .all() as { id: number; set_code: string; set_rarity: string; variant: string | null }[]
     for (const p of plain) {
@@ -355,7 +358,7 @@ function saveMissingPrintings(db: Database.Database, seen: Set<number>): number 
     (
       db
         .prepare(
-          "SELECT DISTINCT upper(set_code) AS code FROM card_printings WHERE game = 'ygo' AND language = 'en' AND tcg_product_id IS NULL"
+          "SELECT DISTINCT upper(set_code) AS code FROM card_printings WHERE game = 'ygo' AND language = 'en' AND tcg_product_id IS NULL AND yugipedia = 0"
         )
         .all() as { code: string }[]
     ).map((r) => r.code)
@@ -403,7 +406,7 @@ function saveMissingPrintings(db: Database.Database, seen: Set<number>): number 
      VALUES (?, ?, ?, ?, ?, NULL, 0, 'en', ?, ?)
      ON CONFLICT(card_id, set_code, set_rarity) WHERE language = 'en' DO UPDATE SET
        set_name = excluded.set_name, missing_from_api = 0, tcg_product_id = excluded.tcg_product_id,
-       variant = excluded.variant
+       variant = excluded.variant, yugipedia = 0
      RETURNING id`
   )
 

@@ -441,4 +441,30 @@ describe('TCGplayer catalog', () => {
     })
     expect(added()).toEqual([])
   })
+
+  it('takes over a printing filled in from Yugipedia that it sells, and leaves the rest be', async () => {
+    const db = await seededDb()
+    const insert = db.prepare(
+      `INSERT INTO card_printings (card_id, set_name, set_code, set_rarity, set_rarity_code, language,
+         variant, yugipedia)
+       VALUES (46986414, 'Legend of Blue Eyes White Dragon', ?, ?, '', 'en', 'Alternate Art', 1)
+       RETURNING id`
+    )
+    const sold = (insert.get('LOB-EN200', 'Ultra Rare') as { id: number }).id
+    const unsold = (insert.get('LOB-EN201', 'Common') as { id: number }).id
+    const r = await refreshTcgCatalog(db, {
+      version: '1',
+      fetchFn: catalogFetch([{ groupId: 10, modifiedOn: 'a', name: 'LOB group' }], {
+        10: [product(1, 'LOB-EN200', 'Ultra Rare', 1, 'Dark Magician')]
+      }) as unknown as typeof fetch,
+      now: new Date('2026-10-24T00:00:00Z')
+    })
+    expect(r.addedPrintings).toBe(0)
+    const row = (id: number): unknown =>
+      db
+        .prepare('SELECT tcg_product_id, variant, yugipedia FROM card_printings WHERE id = ?')
+        .get(id)
+    expect(row(sold)).toEqual({ tcg_product_id: 1, variant: null, yugipedia: 0 })
+    expect(row(unsold)).toEqual({ tcg_product_id: null, variant: 'Alternate Art', yugipedia: 1 })
+  })
 })

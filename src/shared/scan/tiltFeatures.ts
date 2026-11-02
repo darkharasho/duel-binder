@@ -169,18 +169,31 @@ interface Shift {
   score: number
 }
 
-/** Best integer shift of a patch of `a` onto `b` by zero-mean correlation, and its score. */
-function matchPatch(
+/** A reference patch, sampled every `step` px, with its zero-mean values kept for matching. */
+interface Patch {
+  px: number
+  py: number
+  size: number
+  step: number
+  n: number
+  va: number
+  /** The samples less their mean, row by row. */
+  p: Float64Array
+}
+
+const PATCH = 41
+
+/**
+ * A patch of the reference, or null when it's too flat to say anything about a shift (it would
+ * match anywhere). The reference is the same for every frame, so its patches are made once.
+ */
+function patchOf(
   a: Float32Array,
-  b: Float32Array,
   px: number,
   py: number,
   size: number,
-  cx: number,
-  cy: number,
-  reach: number,
   step: number
-): Shift | null {
+): Patch | null {
   let ma = 0
   let n = 0
   for (let y = 0; y < size; y += step) {
@@ -190,28 +203,91 @@ function matchPatch(
     }
   }
   ma /= n
+  const p = new Float64Array(n)
   let va = 0
+  let i = 0
   for (let y = 0; y < size; y += step) {
-    for (let x = 0; x < size; x += step) va += (a[(py + y) * W2 + px + x] - ma) ** 2
+    for (let x = 0; x < size; x += step) {
+      const d = a[(py + y) * W2 + px + x] - ma
+      p[i++] = d
+      va += d ** 2
+    }
   }
-  // A flat patch matches anywhere, so it says nothing about the shift.
   if (va / n < 30) return null
+  return { px, py, size, step, n, va, p }
+}
+
+/** The coarse and fine reference patches alignment matches, on a 52 px grid. */
+function patchesOf(refL: Float32Array): { coarse: Patch; fine: Patch }[] {
+  const out: { coarse: Patch; fine: Patch }[] = []
+  for (let py = 12; py + PATCH < H2 - 12; py += 52) {
+    for (let px = 12; px + PATCH < W2 - 12; px += 52) {
+      const coarse = patchOf(refL, px, py, PATCH, 4)
+      const fine = patchOf(refL, px, py, PATCH, 1)
+      if (coarse && fine) out.push({ coarse, fine })
+    }
+  }
+  return out
+}
+
+/**
+ * Each pixel's sum of the patch's sampled rows below it: the `PATCH / step` rows every `step` px.
+ * It lets matchPatch total a shifted patch from one sum per sampled column instead of every sample.
+ * Luminance from whole-number RGB is a float32 that is a multiple of 2^-27, and a patch sums to
+ * under 2^19, so every partial sum fits a double exactly: any order of adding (or this sliding
+ * window's subtracting) gives the very same total as the plain loop, bit for bit.
+ */
+function columnSums(L: Float64Array, step: number): Float64Array {
+  const rows = Math.ceil(PATCH / step)
+  const reach = (rows - 1) * step
+  const out = new Float64Array(W2 * H2)
+  for (let y = 0; y + reach < H2; y++) {
+    const at = y * W2
+    if (y < step) {
+      for (let x = 0; x < W2; x++) {
+        let s = 0
+        for (let m = 0; m < rows; m++) s += L[at + m * step * W2 + x]
+        out[at + x] = s
+      }
+    } else {
+      const prev = at - step * W2
+      const next = prev + rows * step * W2
+      for (let x = 0; x < W2; x++) out[at + x] = out[prev + x] - L[prev + x] + L[next + x]
+    }
+  }
+  return out
+}
+
+/**
+ * Best integer shift of a reference patch onto `b` by zero-mean correlation, and its score.
+ * `cols` is columnSums of `b` at the patch's step. The correlation sums run in the same order as
+ * a plain loop over the patch, so the scores are bit for bit the same.
+ */
+function matchPatch(
+  patch: Patch,
+  b: Float64Array,
+  cols: Float64Array,
+  cx: number,
+  cy: number,
+  reach: number
+): Shift | null {
+  const { px, py, size, step, n, va, p } = patch
   let best: Shift | null = null
   for (let dy = cy - reach; dy <= cy + reach; dy++) {
     for (let dx = cx - reach; dx <= cx + reach; dx++) {
       if (px + dx < 0 || py + dy < 0 || px + dx + size >= W2 || py + dy + size >= H2) continue
+      const origin = (py + dy) * W2 + px + dx
       let mb = 0
-      for (let y = 0; y < size; y += step) {
-        for (let x = 0; x < size; x += step) mb += b[(py + dy + y) * W2 + px + dx + x]
-      }
+      for (let x = 0; x < size; x += step) mb += cols[origin + x]
       mb /= n
       let s = 0
       let vb = 0
+      let i = 0
       for (let y = 0; y < size; y += step) {
+        const row = origin + y * W2
         for (let x = 0; x < size; x += step) {
-          const p = a[(py + y) * W2 + px + x] - ma
-          const q = b[(py + dy + y) * W2 + px + dx + x] - mb
-          s += p * q
+          const q = b[row + x] - mb
+          s += p[i++] * q
           vb += q * q
         }
       }
@@ -276,23 +352,25 @@ function fitAffine(points: Match[]): Affine | null {
 }
 
 /** The frame resampled onto the reference's pixels; as it was when no fit can be trusted. */
-function align(frame: Uint8Array, refL: Float32Array): Float32Array {
-  const L = lumOf(frame)
-  const SIZE = 41
+function align(
+  frame: Uint8Array,
+  patches: readonly { coarse: Patch; fine: Patch }[]
+): Float32Array {
+  const L = Float64Array.from(lumOf(frame))
+  const cols4 = columnSums(L, 4)
+  const cols1 = columnSums(L, 1)
   const points: Match[] = []
-  for (let py = 12; py + SIZE < H2 - 12; py += 52) {
-    for (let px = 12; px + SIZE < W2 - 12; px += 52) {
-      const coarse = matchPatch(refL, L, px, py, SIZE, 0, 0, 16, 4)
-      if (!coarse || coarse.score < 0.5) continue
-      const fine = matchPatch(refL, L, px, py, SIZE, coarse.dx, coarse.dy, 3, 1)
-      if (fine && fine.score > 0.72) {
-        points.push({
-          x: px + SIZE / 2,
-          y: py + SIZE / 2,
-          u: px + fine.dx + SIZE / 2,
-          v: py + fine.dy + SIZE / 2
-        })
-      }
+  for (const { coarse: cp, fine: fp } of patches) {
+    const coarse = matchPatch(cp, L, cols4, 0, 0, 16)
+    if (!coarse || coarse.score < 0.5) continue
+    const fine = matchPatch(fp, L, cols1, coarse.dx, coarse.dy, 3)
+    if (fine && fine.score > 0.72) {
+      points.push({
+        x: fp.px + PATCH / 2,
+        y: fp.py + PATCH / 2,
+        u: fp.px + fine.dx + PATCH / 2,
+        v: fp.py + fine.dy + PATCH / 2
+      })
     }
   }
   const A = points.length >= 6 ? fitAffine(points) : null
@@ -556,6 +634,7 @@ function amplitude(
   const [x0, y0, x1, y1] = box
   const T = small.length
   const L: number[] = new Array(T)
+  const sorted = new Float64Array(T)
   const amps: number[] = []
   let cosSum = 0
   let sinSum = 0
@@ -564,7 +643,9 @@ function amplitude(
     for (let x = Math.floor(x0 * W); x < x1 * W; x++) {
       const o = (y * W + x) * 3
       for (let t = 0; t < T; t++) L[t] = lum(small[t][o], small[t][o + 1], small[t][o + 2])
-      const sorted = [...L].sort((a, b) => a - b)
+      // A typed array sorts numerically, as the comparator would.
+      sorted.set(L)
+      sorted.sort()
       const amp = pct(sorted, 0.9) - pct(sorted, 0.1)
       amps.push(amp)
       if (!withHue || !(amp > 25)) continue
@@ -675,12 +756,17 @@ function motionOf(big: readonly Float32Array[], art: Box): number {
 
 /** The tilt features over frames from shrinkCard, in time order; null for fewer than 3. */
 export function tiltFeatures(frames: readonly Uint8Array[], game: GameId): TiltReading | null {
+  // A frame of another size would be read at the wrong pixels without any error of its own.
+  const bad = frames.findIndex((f) => f.length !== W2 * H2 * 3)
+  if (bad >= 0) {
+    throw new Error(`Tilt frame ${bad} has ${frames[bad].length} values, not ${W2}x${H2} RGB`)
+  }
   // Fewer than three frames have no consecutive changes to compare.
   if (frames.length < 3) return null
   const regions = REGIONS[game]
   const refAt = frames.length >> 1
-  const refL = lumOf(frames[refAt])
-  const big = frames.map((f, i) => (i === refAt ? Float32Array.from(f) : align(f, refL)))
+  const patches = patchesOf(lumOf(frames[refAt]))
+  const big = frames.map((f, i) => (i === refAt ? Float32Array.from(f) : align(f, patches)))
   const ref = big[refAt]
   for (const f of big) expose(f, ref, game)
   const motion = motionOf(big, regions.art)

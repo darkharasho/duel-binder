@@ -1,9 +1,43 @@
 import { describe, expect, it } from 'vitest'
-import { browseCards, browseFacets } from '../../src/main/repo/browse'
+import type Database from 'better-sqlite3'
+import { browseCards, browseFacets, browseFacetsFast } from '../../src/main/repo/browse'
 import { addEntry } from '../../src/main/repo/collection'
+import { pokemonId } from '../../src/shared/games'
+import { seedPokemon } from '../fixtures/pokemon'
 import { seededDb } from './helpers'
 
 const names = (p: { cards: { name: string }[] }): string[] => p.cards.map((c) => c.name)
+
+const cardId = (db: Database.Database, name: string): number =>
+  (db.prepare('SELECT id FROM cards WHERE name = ?').get(name) as { id: number }).id
+
+/**
+ * The seeded cards plus foreign printings: Pot of Greed in German (a set dated only in English),
+ * Harpie's Feather Duster (no English printing) in Japanese (a dated set) and in German (undated).
+ */
+async function multilingualDb(): Promise<Database.Database> {
+  const db = await seededDb()
+  const set = db.prepare(
+    "INSERT OR REPLACE INTO sets (game, language, set_name, set_code, tcg_date) VALUES ('ygo', ?, ?, ?, ?)"
+  )
+  set.run('en', 'Legendary Collection', 'LCYW', '2010-10-05')
+  set.run('de', 'Legendary Collection', 'LCYW', null)
+  set.run('ja', 'Dark Beginning', 'DB1', '2004-12-01')
+  set.run('de', 'Undated Set', 'UND', null)
+  const printing = db.prepare(
+    "INSERT INTO card_printings (game, card_id, language, set_name, set_code, set_rarity) VALUES ('ygo', ?, ?, ?, ?, ?)"
+  )
+  printing.run(
+    cardId(db, 'Pot of Greed'),
+    'de',
+    'Legendary Collection',
+    'LCYW-DE001',
+    'Secret Rare'
+  )
+  printing.run(cardId(db, "Harpie's Feather Duster"), 'ja', 'Dark Beginning', 'DB1-JP001', 'Rare')
+  printing.run(cardId(db, "Harpie's Feather Duster"), 'de', 'Undated Set', 'UND-DE001', 'Common')
+  return db
+}
 
 describe('browseCards', () => {
   it('lists every card, owned or not, sorted by name', async () => {
@@ -66,7 +100,107 @@ describe('browseCards', () => {
   })
 })
 
+describe('browseCards by language', () => {
+  const BY_NAME = { sort: 'name', dir: 'asc' } as const
+
+  it('lists the cards with a printing in the language; none is every language', async () => {
+    const db = await multilingualDb()
+    expect(names(browseCards(db, { ...BY_NAME, language: 'en' }))).toEqual([
+      'Dark Magician',
+      'Pot of Greed'
+    ])
+    expect(names(browseCards(db, { ...BY_NAME, language: 'de' }))).toEqual([
+      "Harpie's Feather Duster",
+      'Pot of Greed'
+    ])
+    expect(names(browseCards(db, { ...BY_NAME, language: 'ja' }))).toEqual([
+      "Harpie's Feather Duster"
+    ])
+    expect(browseCards(db, { ...BY_NAME, language: 'ko' }).total).toBe(0)
+    expect(browseCards(db, BY_NAME).total).toBe(3)
+    // A code that isn't a language counts as every language rather than reaching the SQL.
+    expect(browseCards(db, { ...BY_NAME, language: "en' OR 1=1 --" as 'en' }).total).toBe(3)
+  })
+
+  it("set, rarity and set-code search match the language's printings", async () => {
+    const db = await multilingualDb()
+    const secret = { ...BY_NAME, rarities: ['Secret Rare'] }
+    expect(names(browseCards(db, { ...secret, language: 'de' }))).toEqual(['Pot of Greed'])
+    expect(browseCards(db, { ...secret, language: 'en' }).total).toBe(0)
+    expect(names(browseCards(db, secret))).toEqual(['Pot of Greed'])
+    const set = { ...BY_NAME, setNames: ['Legendary Collection'] }
+    expect(browseCards(db, { ...set, language: 'en' }).total).toBe(0)
+    expect(names(browseCards(db, { ...set, language: 'de' }))).toEqual(['Pot of Greed'])
+    expect(browseCards(db, { ...BY_NAME, q: 'LCYW', language: 'en' }).total).toBe(0)
+    expect(names(browseCards(db, { ...BY_NAME, q: 'LCYW', language: 'de' }))).toEqual([
+      'Pot of Greed'
+    ])
+  })
+
+  it("dates and preselects the language's printings, an undated set taking its English date", async () => {
+    const db = await multilingualDb()
+    const de = browseCards(db, { sort: 'released', dir: 'desc', language: 'de' }).cards
+    // Pot of Greed's German set has no date of its own; Harpie's is dated nowhere, so it goes last.
+    expect(de.map((c) => [c.name, c.releasedAt])).toEqual([
+      ['Pot of Greed', '2010-10-05'],
+      ["Harpie's Feather Duster", null]
+    ])
+    const lang = (id: number | null): string =>
+      (
+        db.prepare('SELECT language FROM card_printings WHERE id = ?').get(id) as {
+          language: string
+        }
+      ).language
+    expect(de.map((c) => lang(c.defaultPrintingId))).toEqual(['de', 'de'])
+    const ja = browseCards(db, { ...BY_NAME, language: 'ja' }).cards[0]
+    expect(ja.releasedAt).toBe('2004-12-01')
+    // With every language, an English printing is preselected when there is one.
+    const all = browseCards(db, BY_NAME).cards
+    expect(all.map((c) => lang(c.defaultPrintingId))).toEqual(['en', 'ja', 'en'])
+  })
+
+  it('works for Pokémon languages', async () => {
+    const db = await seededDb()
+    seedPokemon(db)
+    const zh = pokemonId('zh-hans/test-001')
+    db.prepare(
+      `INSERT INTO cards (id, game, name, type, frame_type, race, "desc", updated_at)
+       VALUES (?, 'pkm', '皮卡丘', 'Pokémon', 'pokemon', '', '', '2026-10-29')`
+    ).run(zh)
+    db.prepare(
+      `INSERT INTO pokemon_cards (card_id, category, hp, types, stage, rarity, illustrator, source_id)
+       VALUES (?, 'Pokémon', 60, '[]', 'Basic', 'Common', 'x', 'zh-hans/test-001')`
+    ).run(zh)
+    db.prepare(
+      `INSERT INTO card_printings (game, card_id, language, set_name, set_code, set_rarity)
+       VALUES ('pkm', ?, 'zh-hans', '测试', 'CS1 001/100', 'Normal')`
+    ).run(zh)
+    db.prepare("INSERT INTO meta (key, value) VALUES ('active_game', 'pkm')").run()
+    expect(names(browseCards(db, { ...BY_NAME, language: 'en' }))).toEqual(['Pikachu'])
+    expect(names(browseCards(db, { ...BY_NAME, language: 'ja' }))).toEqual(['ピカチュウ'])
+    expect(names(browseCards(db, { ...BY_NAME, language: 'zh-hans' }))).toEqual(['皮卡丘'])
+    expect(browseCards(db, BY_NAME).total).toBe(3)
+    expect(browseFacets(db, undefined, 'zh-hans').setNames).toEqual(['测试'])
+    expect(browseFacets(db).languages).toEqual(['en', 'ja', 'zh-hans'])
+  })
+})
+
 describe('browseFacets', () => {
+  it("lists the language's sets and rarities, and the languages with printings", async () => {
+    const db = await multilingualDb()
+    const de = browseFacets(db, undefined, 'de')
+    expect(de.setNames).toEqual(['Legendary Collection', 'Undated Set'])
+    expect(de.rarities).toEqual(['Common', 'Secret Rare'])
+    const en = browseFacets(db, undefined, 'en')
+    expect(en.setNames).not.toContain('Legendary Collection')
+    expect(en.rarities).toEqual(['Rare', 'Ultra Rare'])
+    expect(browseFacets(db).rarities).toEqual(['Common', 'Rare', 'Secret Rare', 'Ultra Rare'])
+    expect(browseFacets(db).languages).toEqual(['en', 'ja', 'de'])
+    // Each language keeps its own rollup.
+    expect(browseFacetsFast(db, undefined, 'de')).toEqual(de)
+    expect(browseFacetsFast(db, undefined, 'en')).toEqual(en)
+  })
+
   it('lists options from the whole database', async () => {
     const db = await seededDb()
     const f = browseFacets(db)

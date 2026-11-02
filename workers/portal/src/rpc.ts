@@ -139,7 +139,8 @@ const HANDLERS: { [C in PortalChannel]: Handler<C> } = {
   'cards:get': ({ db }, scope, cardId) => getCardDetail(db, checkId(cardId, 'cardId'), scope),
   'cards:browse': ({ db }, scope, f) =>
     browseCards(db, checkObject(f, 'Filters') as unknown as BrowseFilters, scope),
-  'cards:browseFacets': ({ db }, scope) => browseFacets(db, scope),
+  'cards:browseFacets': ({ db }, scope, language) =>
+    browseFacets(db, scope, language == null ? undefined : checkLanguage(language)),
   'cards:borrowedArt': ({ db }) => borrowedArt(db),
   'cards:traditionalArt': ({ db }) => traditionalArt(db),
   'sets:list': ({ db }, scope) => listSets(db, scope),

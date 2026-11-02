@@ -1,7 +1,7 @@
 import type { QueryClient } from '@tanstack/react-query'
 import type { GameId } from '@shared/games'
 import type { Api } from '@shared/ipc'
-import type { Language } from '@shared/languages'
+import type { Language, LanguageFilter } from '@shared/languages'
 import type { BrowseFilters, CollectionFilters } from '@shared/types'
 import { isWeb } from './platform'
 
@@ -29,7 +29,7 @@ export const queryKeys = {
   update: ['update'] as const,
   account: ['account'] as const,
   browse: (f: Omit<BrowseFilters, 'offset' | 'limit'>) => ['browse', f] as const,
-  browseFacets: ['browse', 'facets'] as const,
+  browseFacets: (language: LanguageFilter) => ['browse', 'facets', language] as const,
   friends: ['friends'] as const,
   friendEntries: (id: number, f: CollectionFilters) => ['friends', id, 'entries', f] as const,
   friendFacets: (id: number) => ['friends', id, 'facets'] as const,

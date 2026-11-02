@@ -95,7 +95,17 @@ describe('game index plans on a migrated server', () => {
       (sql) =>
         browseCards(sql, { setNames: ['x'], rarities: ['Common'], sort: 'released', dir: 'asc' }, userScope(userId, 'ygo'))
     ],
+    [
+      'browseCards in a language',
+      (sql) =>
+        browseCards(
+          sql,
+          { language: 'de', sort: 'released', dir: 'desc' },
+          userScope(userId, 'ygo')
+        )
+    ],
     ['browseFacets', (sql) => browseFacets(sql, userScope(userId, 'ygo'))],
+    ['browseFacets in a language', (sql) => browseFacets(sql, userScope(userId, 'ygo'), 'de')],
     ['listSets', (sql) => listSets(sql, userScope(userId, 'ygo'))],
     ['getChecklist', (sql) => getChecklist(sql, 'x', 'en', userScope(userId, 'ygo'))],
     ['searchCards', (sql) => searchCards(sql, 'LOB', 20, userScope(userId, 'ygo'))],
@@ -142,6 +152,12 @@ describe('game index plans on a migrated server', () => {
     expect(plansOf('set', 'ygo')).toContain('ix_printings_set_name')
     expect(plansOf('set', 'ygo')).not.toContain('TEMP B-TREE')
     expect(plansOf('rarity', 'ygo')).toContain('COVERING INDEX ix_printings_rarity')
+  })
+
+  it('the language filter reads its cards from the index alone', () => {
+    const { sql, plans } = planned(db)
+    browseCards(sql, { language: 'en', sort: 'name', dir: 'asc' }, userScope(userId, 'ygo'))
+    expect(plans.flat().join('\n')).toContain('COVERING INDEX ix_printings_language_card')
   })
 
   it('the per-game catalog feed uses the ix_*_game_seq indexes', () => {

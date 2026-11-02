@@ -1,5 +1,6 @@
 import type { SqlDb } from '../db/sql'
 import type { BrowseCard, BrowseFacets, BrowseFilters, BrowsePage } from '../../shared/types'
+import { isLanguage, LANGUAGES, type Language } from '../../shared/languages'
 import { buildFtsQuery, escapeLike } from './cards'
 import { LOCAL, scopeGame, type Scope } from './scope'
 import { pokemonFacets, pokemonSearch, pokemonWhere } from './pkmFilters'
@@ -7,20 +8,39 @@ import { catalogRollup } from './rollup'
 
 const MAX_LIMIT = 200
 
+/**
+ * SQL limiting printings `p` to the language, or nothing for every language. Inlined, not bound:
+ * the language is checked against the known codes first, and the planner then picks its index.
+ */
+const inLanguage = (language: Language | undefined, p = 'p'): string =>
+  language ? ` AND ${p}.language = '${language}'` : ''
 
-// Per card: owned copies, and (only when sorting by it: the join reads every English printing)
-// earliest English release. The page's own dates and printing to preselect are looked up after.
-const base = (scope: Scope, byRelease: boolean): string => `
+// A set's date: its own, else its English namesake's (a few foreign sets the Yugipedia sync
+// couldn't date). `s` is the set and `es` the namesake, joined with ENGLISH_NAMESAKE.
+const SET_DATE = 'COALESCE(s.tcg_date, es.tcg_date)'
+const ENGLISH_NAMESAKE = (s: string): string =>
+  `LEFT JOIN sets es ON es.game = ${s}.game AND es.language = 'en' AND es.set_name = ${s}.set_name`
+
+// Per card: owned copies, and (only when sorting by it: the join reads every printing of the
+// language) earliest release. The page's own dates and printing to preselect are looked up after.
+// The release join starts from the dated sets, so each printing is one indexed lookup by set
+// (`+contributed` keeps it on the (language, set_name) index, not every printing of the language
+// per set), and `+card_id` keeps the planner from walking every printing in card order to group.
+const base = (scope: Scope, byRelease: boolean, language: Language | undefined): string => `
   WITH owned AS (
     SELECT p.card_id, SUM(e.quantity) AS n FROM collection_entries e
     JOIN card_printings p ON p.id = e.printing_id AND +p.game = ${scope.game} WHERE ${scope.where('e')}
     GROUP BY p.card_id
   )${byRelease ? `,
+  set_dates AS (
+    SELECT s.language, s.set_name, ${SET_DATE} AS d FROM sets s ${ENGLISH_NAMESAKE('s')}
+    WHERE +s.game = ${scope.game}${inLanguage(language, 's')} AND ${SET_DATE} IS NOT NULL
+  ),
   released AS (
-    SELECT p.card_id, MIN(s.tcg_date) AS d FROM card_printings p
-    JOIN sets s ON s.game = p.game AND s.language = 'en' AND s.set_name = p.set_name
-    WHERE +p.game = ${scope.game} AND p.language = 'en' AND p.contributed = 0 AND s.tcg_date IS NOT NULL
-    GROUP BY p.card_id
+    SELECT p.card_id, MIN(sd.d) AS d FROM set_dates sd
+    JOIN card_printings p ON p.language = sd.language AND p.set_name = sd.set_name
+    WHERE +p.game = ${scope.game} AND +p.contributed = 0
+    GROUP BY +p.card_id
   )` : ''}
   SELECT c.id, c.name, c.type, c.frame_type, c.attribute, c.race, c.level, c.linkval, c.atk, c.def,
     c.tcgplayer_price AS price, COALESCE(o.n, 0) AS owned
@@ -64,8 +84,13 @@ function sortSql(sort: string, game: string): string {
   return SORT_SQL[sort as BrowseFilters['sort']]
 }
 
+/** The filters' language when it's a known one; anything else (and none) is every language. */
+const languageOf = (f: BrowseFilters): Language | undefined =>
+  isLanguage(f.language) ? f.language : undefined
+
 function whereClause(db: SqlDb, f: BrowseFilters, scope: Scope): { sql: string; params: unknown[] } {
   const where: string[] = [`+c.game = ${scope.game}`]
+  const lang = inLanguage(languageOf(f), 'card_printings')
   const params: unknown[] = []
   const inList = (col: string, values?: string[]): void => {
     if (values?.length) {
@@ -82,7 +107,7 @@ function whereClause(db: SqlDb, f: BrowseFilters, scope: Scope): { sql: string; 
     if (!own?.numeric) {
       const fts = buildFtsQuery(text)
       parts.push(
-        `c.id IN (SELECT card_id FROM card_printings WHERE +game = ${scope.game} AND contributed = 0 AND set_code LIKE ? ESCAPE '\\')`
+        `c.id IN (SELECT card_id FROM card_printings WHERE +game = ${scope.game} AND contributed = 0${lang} AND set_code LIKE ? ESCAPE '\\')`
       )
       params.push(`${escapeLike(text)}%`)
       if (fts) {
@@ -105,7 +130,7 @@ function whereClause(db: SqlDb, f: BrowseFilters, scope: Scope): { sql: string; 
   const printingFilter = (col: string, values?: string[]): void => {
     if (!values?.length) return
     where.push(
-      `c.id IN (SELECT card_id FROM card_printings WHERE +game = ${scope.game} AND contributed = 0 AND language = 'en' AND ${col} IN (${values
+      `c.id IN (SELECT card_id FROM card_printings WHERE +game = ${scope.game} AND contributed = 0${lang} AND ${col} IN (${values
         .map(() => '?')
         .join(',')}))`
     )
@@ -113,6 +138,12 @@ function whereClause(db: SqlDb, f: BrowseFilters, scope: Scope): { sql: string; 
   }
   printingFilter('set_name', f.setNames)
   printingFilter('set_rarity', f.rarities)
+  // A card is listed in a language it has a printing in (a set or rarity filter already asks that).
+  if (lang && !f.setNames?.length && !f.rarities?.length) {
+    where.push(
+      `c.id IN (SELECT card_id FROM card_printings WHERE +game = ${scope.game} AND contributed = 0${lang})`
+    )
+  }
   if (!pkm && f.levelMin !== undefined) {
     where.push('COALESCE(c.level, c.linkval) >= ?')
     params.push(f.levelMin)
@@ -133,21 +164,26 @@ export function browseCards(db: SqlDb, f: BrowseFilters, scope: Scope = LOCAL): 
   const dir = f.dir === 'desc' ? 'DESC' : 'ASC'
   const limit = Math.min(Math.max(1, Math.floor(f.limit ?? 120)), MAX_LIMIT)
   const offset = Math.max(0, Math.floor(f.offset ?? 0))
-  // Art and the default printing are looked up only for the page, after sorting and limiting.
+  const language = languageOf(f)
+  // Art and the default printing are looked up only for the page, after sorting and limiting. With
+  // every language, an English printing is preselected over the rest.
   const rows = db
     .prepare(
       `SELECT page.*,
          COALESCE((SELECT image_id FROM card_images WHERE card_id = page.id AND +game = ${scope.game}
            ORDER BY sort_order, image_id LIMIT 1), page.id) AS image_id,
-         (SELECT MIN(s.tcg_date) FROM card_printings p
-           JOIN sets s ON s.game = p.game AND s.language = 'en' AND s.set_name = p.set_name
-           WHERE p.card_id = page.id AND +p.game = ${scope.game} AND p.language = 'en' AND p.contributed = 0
-             AND s.tcg_date IS NOT NULL) AS released_at,
+         (SELECT MIN(${SET_DATE}) FROM card_printings p
+           JOIN sets s ON s.game = p.game AND s.language = p.language AND s.set_name = p.set_name
+           ${ENGLISH_NAMESAKE('s')}
+           WHERE p.card_id = page.id AND +p.game = ${scope.game}${inLanguage(language)} AND p.contributed = 0
+             AND ${SET_DATE} IS NOT NULL) AS released_at,
          (SELECT p.id FROM card_printings p
-           LEFT JOIN sets s ON s.game = p.game AND s.language = 'en' AND s.set_name = p.set_name
-           WHERE p.card_id = page.id AND +p.game = ${scope.game} AND p.language = 'en' AND p.contributed = 0
-           ORDER BY p.game = 'pkm' AND p.missing_from_api = 1, s.tcg_date IS NULL, s.tcg_date, p.id LIMIT 1) AS default_printing_id
-       FROM (${base(scope, sortCol === SORT_SQL.released)}${sql} ORDER BY ${sortCol} IS NULL, ${sortCol} ${dir}, c.name COLLATE NOCASE, c.id
+           LEFT JOIN sets s ON s.game = p.game AND s.language = p.language AND s.set_name = p.set_name
+           ${ENGLISH_NAMESAKE('s')}
+           WHERE p.card_id = page.id AND +p.game = ${scope.game}${inLanguage(language)} AND p.contributed = 0
+           ORDER BY p.language <> 'en', p.game = 'pkm' AND p.missing_from_api = 1, ${SET_DATE} IS NULL, ${SET_DATE}, p.id
+           LIMIT 1) AS default_printing_id
+       FROM (${base(scope, sortCol === SORT_SQL.released, language)}${sql} ORDER BY ${sortCol} IS NULL, ${sortCol} ${dir}, c.name COLLATE NOCASE, c.id
          LIMIT ? OFFSET ?) page`
     )
     .all(...params, limit, offset) as BrowseRow[]
@@ -182,17 +218,28 @@ export function browseCards(db: SqlDb, f: BrowseFilters, scope: Scope = LOCAL): 
 }
 
 /** Bump when browseFacets changes what it produces: stored rollups aren't rebuilt otherwise. */
-const FACETS_ROLLUP = 1
+const FACETS_ROLLUP = 2
 
 /** browseFacets from its rollup: its answer depends on the catalog alone. */
-export function browseFacetsFast(db: SqlDb, scope: Scope = LOCAL): BrowseFacets {
-  return catalogRollup(db, `browseFacets:${FACETS_ROLLUP}:${scopeGame(db, scope)}`, () =>
-    browseFacets(db, scope)
+export function browseFacetsFast(
+  db: SqlDb,
+  scope: Scope = LOCAL,
+  language?: Language
+): BrowseFacets {
+  const lang = isLanguage(language) ? language : undefined
+  return catalogRollup(
+    db,
+    `browseFacets:${FACETS_ROLLUP}:${scopeGame(db, scope)}:${lang ?? 'all'}`,
+    () => browseFacets(db, scope, lang)
   )
 }
 
-/** Filter options across the game's whole card database (English sets and rarities). */
-export function browseFacets(db: SqlDb, scope: Scope = LOCAL): BrowseFacets {
+/**
+ * Filter options across the game's whole card database: the sets and rarities of the language
+ * (every language's without one), and the languages that have printings.
+ */
+export function browseFacets(db: SqlDb, scope: Scope = LOCAL, language?: Language): BrowseFacets {
+  const lang = inLanguage(isLanguage(language) ? language : undefined, 'card_printings')
   const distinct = (sql: string): string[] =>
     (db.prepare(sql).all() as { v: string }[]).map((r) => r.v)
   const col = (c: string): string[] =>
@@ -207,13 +254,21 @@ export function browseFacets(db: SqlDb, scope: Scope = LOCAL): BrowseFacets {
     races: pkm ? [] : col('race'),
     archetypes: pkm ? [] : col('archetype'),
     setNames: distinct(
-      `SELECT DISTINCT set_name AS v FROM card_printings WHERE +game = ${scope.game} AND contributed = 0 AND language = 'en'
+      `SELECT DISTINCT set_name AS v FROM card_printings WHERE +game = ${scope.game} AND contributed = 0${lang}
        ORDER BY set_name`
     ),
     rarities: distinct(
       `SELECT DISTINCT set_rarity AS v FROM card_printings
-       WHERE +game = ${scope.game} AND contributed = 0 AND language = 'en' AND set_rarity <> ''
+       WHERE +game = ${scope.game} AND contributed = 0${lang} AND set_rarity <> ''
        ORDER BY set_rarity`
+    ),
+    // One indexed probe per language (no UNION: the server's SQLite caps compound selects).
+    languages: LANGUAGES.map((l) => l.code).filter((code) =>
+      db
+        .prepare(
+          `SELECT 1 FROM card_printings WHERE language = ? AND +game = ${scope.game} AND contributed = 0 LIMIT 1`
+        )
+        .get(code)
     ),
     ...(pkm ? pokemonFacets(db, scope, null) : {})
   }

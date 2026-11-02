@@ -157,6 +157,8 @@ export interface BrowseFilters {
   levelMin?: number
   levelMax?: number
   owned?: 'all' | 'owned' | 'missing'
+  /** Only cards with a printing in this language, and its sets and rarities; none is every language. */
+  language?: Language
   /** Pokémon only (ignored on Yu-Gi-Oh!, as the Yu-Gi-Oh! fields are ignored on Pokémon). */
   pkmCategories?: string[]
   pkmTypes?: string[]
@@ -204,6 +206,8 @@ export interface BrowseFacets {
   archetypes: string[]
   setNames: string[]
   rarities: string[]
+  /** The languages the game has printings in. */
+  languages: Language[]
   /** Pokémon only: filled on Pokémon, absent otherwise (the Yu-Gi-Oh! facets are empty arrays there). */
   pkmCategories?: string[]
   pkmTypes?: string[]

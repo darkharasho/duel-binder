@@ -148,7 +148,7 @@ export function createDataHandlers({
     'cards:search': async (q: string) => searchCards(db, q),
     'cards:get': async (cardId: number) => getCardDetail(db, cardId),
     'cards:browse': async (f) => browseCards(db, f),
-    'cards:browseFacets': async () => browseFacetsFast(db),
+    'cards:browseFacets': async (language) => browseFacetsFast(db, undefined, language),
     'cards:borrowedArt': async () => borrowedArt(db),
     'cards:traditionalArt': async () => traditionalArt(db),
     'collection:list': async (f) => listEntries(db, f),

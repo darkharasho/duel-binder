@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query'
 import type { GameId } from '@shared/games'
+import { LANGUAGES } from '@shared/languages'
 import type { BrowseCard, BrowseFilters, BrowseSort, CardSearchResult } from '@shared/types'
 import { cardArtUrl, useArtWash } from '@/components/artWashContext'
 import { CardArt } from '@/components/CardArt'
@@ -8,7 +9,7 @@ import { CardSheet } from '@/components/CardSheet'
 import { TiltCard } from '@/components/TiltCard'
 import { useTileImage } from '@/lib/cardSize'
 import { FilterBar } from '@/components/FilterBar'
-import { CardFilterSections, FilterPanel } from '@/components/FilterPanel'
+import { CardFilterSections, FilterPanel, LanguageSection } from '@/components/FilterPanel'
 import { PageHeader } from '@/components/PageHeader'
 import { listNav } from '@/components/panelNav'
 import { SearchInput } from '@/components/SearchInput'
@@ -17,17 +18,24 @@ import { Button } from '@/components/ui/button'
 import { UnderlineTabs } from '@/components/UnderlineTabs'
 import { CardPanel } from '@/features/card/CardPanel'
 import { api, queryKeys } from '@/lib/api'
-import { cardFilterChips, clearedFilters, facetsFor, sortOptions } from '@/lib/filters'
+import {
+  cardFilterChips,
+  clearedFilters,
+  facetsFor,
+  languageChip,
+  sortOptions
+} from '@/lib/filters'
 import type { SortOption } from '@/lib/filters'
 import { formatUsd } from '@/lib/format'
 import { useGame } from '@/lib/game'
+import { DEFAULT_LANGUAGE, useLanguageFilter } from '@/lib/languageFilter'
 import { rangeFilters } from '@/lib/rangeFilters'
 import { useSetNames } from '@/lib/setLabels'
 import { useFilterPanel } from '@/lib/useFilterPanel'
 
 const PAGE = 120
 
-type Filters = Omit<BrowseFilters, 'offset' | 'limit'>
+type Filters = Omit<BrowseFilters, 'offset' | 'limit' | 'language'>
 
 const SORTS = [
   { value: 'name', label: 'Name', kind: 'text', dir: 'asc' },
@@ -67,7 +75,14 @@ interface Props {
 }
 
 export function BrowsePage({ onAddCard }: Props): React.JSX.Element {
-  const [filters, setFilters] = useState<Filters>(DEFAULTS)
+  const [pageFilters, setFilters] = useState<Filters>(DEFAULTS)
+  const [languageFilter, setLanguageFilter] = useLanguageFilter()
+  // The language is the shared app-wide setting (the Collection page's), not page state.
+  const language = languageFilter === 'all' ? undefined : languageFilter
+  const filters = useMemo<BrowseFilters>(
+    () => ({ ...pageFilters, language }),
+    [pageFilters, language]
+  )
   const tileImage = useTileImage()
   const [selected, setSelected] = useState<{ cardId: number; entryId: number } | null>(null)
   // A card not owned yet opens with a stepper per printing instead of an entry editor.
@@ -80,11 +95,10 @@ export function BrowsePage({ onAddCard }: Props): React.JSX.Element {
   const ranges = rangeFilters(def.filters)
   const sorts = sortsFor(game)
 
-  // Browse lists English printings only.
-  const setNames = useSetNames('en')
+  const setNames = useSetNames(languageFilter)
   const facets = useQuery({
-    queryKey: queryKeys.browseFacets,
-    queryFn: () => api.cards.browseFacets()
+    queryKey: queryKeys.browseFacets(languageFilter),
+    queryFn: () => api.cards.browseFacets(language)
   })
   const pages = useInfiniteQuery({
     queryKey: queryKeys.browse(filters),
@@ -116,10 +130,17 @@ export function BrowsePage({ onAddCard }: Props): React.JSX.Element {
     return () => io.disconnect()
   }, [hasNextPage, isFetchingNextPage, fetchNextPage])
 
-  // Browse lists English printings only, so the app-wide language isn't a filter here.
-  const chips = cardFilterChips(filters, facetList, ranges, setNames.labelOf, change)
+  const cardChips = cardFilterChips(filters, facetList, ranges, setNames.labelOf, change)
+  const chips = [...languageChip(languageFilter, setLanguageFilter), ...cardChips]
   // The Show tabs stay as they are, like the checklist's: Clear all is for the Filters panel.
-  const clear = (): void => setFilters((f) => ({ ...clearedFilters(f, DEFAULTS), owned: f.owned }))
+  const clear = (): void => {
+    setFilters((f) => ({ ...clearedFilters(f, DEFAULTS), owned: f.owned }))
+    setLanguageFilter(DEFAULT_LANGUAGE)
+  }
+  // The language alone hides every card (one the game has no printings in, say).
+  const hiddenByLanguage =
+    language !== undefined && !filters.q && cardChips.length === 0 && filters.owned === 'all'
+  const languageLabel = LANGUAGES.find((l) => l.code === languageFilter)?.label ?? ''
 
   // Stepping quickly can overlap lookups of owned cards; only the latest open lands.
   const opening = useRef(0)
@@ -201,8 +222,14 @@ export function BrowsePage({ onAddCard }: Props): React.JSX.Element {
 
         {pages.isSuccess && cards.length === 0 ? (
           <div className="flex flex-col items-start gap-3 py-16">
-            <p className="text-lg font-medium">No cards match</p>
-            {chips.length > 0 ? (
+            <p className="text-lg font-medium">
+              {hiddenByLanguage ? `No ${languageLabel} cards` : 'No cards match'}
+            </p>
+            {hiddenByLanguage ? (
+              <Button variant="outline" onClick={() => setLanguageFilter('all')}>
+                Show all languages
+              </Button>
+            ) : chips.length > 0 ? (
               <Button variant="outline" onClick={clear}>
                 Clear all
               </Button>
@@ -299,6 +326,11 @@ export function BrowsePage({ onAddCard }: Props): React.JSX.Element {
         description="Filter the card list"
         onClearAll={chips.length > 0 ? clear : undefined}
       >
+        <LanguageSection
+          value={languageFilter}
+          onChange={setLanguageFilter}
+          available={facets.data?.languages ?? []}
+        />
         <CardFilterSections
           facetList={facetList}
           ranges={ranges}

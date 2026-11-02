@@ -66,6 +66,25 @@ export function tiltFinishes(
   return known.filter((f) => isHoloType(game, f)).length >= 2 ? known : null
 }
 
+function scorePair(
+  pair: TiltPair,
+  features: readonly number[]
+): { winner: string; margin: number } {
+  let da = 0
+  let db = 0
+  pair.use.forEach((idx, i) => {
+    const z = ((features[idx] ?? 0) - pair.mean[i]) / (pair.spread[i] || 1)
+    da += (z - pair.ca[i]) ** 2
+    db += (z - pair.cb[i]) ** 2
+  })
+  return { winner: da <= db ? pair.a : pair.b, margin: Math.abs(Math.sqrt(da) - Math.sqrt(db)) }
+}
+
+/** The finish of `pair` whose centroid the features are nearer to. */
+export function pairWinner(pair: TiltPair, features: readonly number[]): string {
+  return scorePair(pair, features).winner
+}
+
 /**
  * The finish among `finishes` the features are nearest to: a round robin over the pairs the
  * model has, the nearer centroid winning each, most wins taking it and the larger summed margin
@@ -84,16 +103,8 @@ export function pickByTilt(
   let scored = 0
   for (const pair of model.pairs) {
     if (!wins.has(pair.a) || !wins.has(pair.b)) continue
-    let da = 0
-    let db = 0
-    pair.use.forEach((idx, i) => {
-      const z = ((features[idx] ?? 0) - pair.mean[i]) / (pair.spread[i] || 1)
-      da += (z - pair.ca[i]) ** 2
-      db += (z - pair.cb[i]) ** 2
-    })
+    const { winner, margin } = scorePair(pair, features)
     scored++
-    const margin = Math.abs(Math.sqrt(da) - Math.sqrt(db))
-    const winner = da <= db ? pair.a : pair.b
     wins.set(winner, wins.get(winner)! + 1)
     margins.set(winner, margins.get(winner)! + margin)
   }

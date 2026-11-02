@@ -33,7 +33,7 @@ import type { EngineFactory, FrameSignals, ScanEngine } from './engine'
 import {
   describeLook,
   resolveSignals,
-  tiltChoicesFor,
+  readChoicesFor,
   withRarityByLook,
   withRarityByTilt,
   type ScanDraft,
@@ -954,7 +954,7 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
         // A card that could be one of several foils waits for a tilt before it counts.
         const model = o.tiltModels?.[o.game]
         const finishes =
-          draft && engine.tiltReading ? tiltChoicesFor(draft, o.defaultRarity, model) : null
+          draft && engine.tiltReading ? readChoicesFor(draft, o.defaultRarity, model) : null
         if (draft && finishes && model) {
           show(outcome, null)
           startTilt(draft, finishes, model, engine, o.game)

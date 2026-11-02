@@ -1,7 +1,7 @@
 import { describe, expect, it, vi, type Mock } from 'vitest'
 import {
   resolveSignals,
-  tiltChoicesFor,
+  readChoicesFor,
   withRarityByLook,
   withRarityByTilt,
   type ResolveContext,
@@ -797,7 +797,15 @@ describe('Manga-Style printings told Color from Monochrome by their scans', () =
 })
 
 describe('tilt', () => {
-  const CLASSES = ['Common', 'Super Rare', 'Ultra Rare', 'Holofoil', 'Cosmos Holo']
+  const CLASSES = [
+    'Common',
+    'Super Rare',
+    'Ultra Rare',
+    'Normal',
+    'Reverse Holofoil',
+    'Holofoil',
+    'Cosmos Holo'
+  ]
   const pairs: TiltPair[] = []
   for (let i = 0; i < CLASSES.length; i++)
     for (let j = i + 1; j < CLASSES.length; j++)
@@ -834,23 +842,27 @@ describe('tilt', () => {
   }
 
   it('no tilt under a default rarity, for a best guess, or once the rules settled it', () => {
-    expect(tiltChoicesFor(draftOf(['Super Rare', 'Ultra Rare']), 'Super Rare', MODEL)).toBeNull()
+    expect(readChoicesFor(draftOf(['Common', 'Ultra Rare']), 'Common', MODEL)).toBeNull()
     expect(
-      tiltChoicesFor({ ...draftOf(['Super Rare', 'Ultra Rare']), guess: true }, null, MODEL)
+      readChoicesFor({ ...draftOf(['Common', 'Ultra Rare']), guess: true }, null, MODEL)
     ).toBeNull()
     expect(
-      tiltChoicesFor({ ...draftOf(['Super Rare', 'Ultra Rare']), flag: null }, null, MODEL)
+      readChoicesFor({ ...draftOf(['Common', 'Ultra Rare']), flag: null }, null, MODEL)
     ).toBeNull()
-    expect(tiltChoicesFor(draftOf(['Super Rare', 'Ultra Rare']), null, undefined)).toBeNull()
-    expect(tiltChoicesFor(draftOf(['Super Rare', 'Ultra Rare']), null, MODEL)).toEqual([
-      'Super Rare',
+    expect(readChoicesFor(draftOf(['Common', 'Ultra Rare']), null, undefined)).toBeNull()
+    expect(readChoicesFor(draftOf(['Common', 'Ultra Rare']), null, MODEL)).toEqual([
+      'Common',
       'Ultra Rare'
     ])
+    expect(readChoicesFor(draftOf(['Super Rare', 'Ultra Rare']), null, MODEL)).toBeNull()
   })
-  it("a Pokémon card's versions tilt even when flagged pick-printing", () => {
+  it("a Pokémon card's Normal and Reverse versions read even when flagged pick-printing", () => {
     expect(
-      tiltChoicesFor(pkmDraftOf(['Holofoil', 'Cosmos Holo'], 'pick-printing'), null, MODEL)
-    ).toEqual(['Holofoil', 'Cosmos Holo'])
+      readChoicesFor(pkmDraftOf(['Normal', 'Reverse Holofoil'], 'pick-printing'), null, MODEL)
+    ).toEqual(['Normal', 'Reverse Holofoil'])
+    expect(
+      readChoicesFor(pkmDraftOf(['Holofoil', 'Cosmos Holo'], 'pick-printing'), null, MODEL)
+    ).toBeNull()
   })
   it('the tilt guess moves the printing and keeps Check rarity', () => {
     const out = withRarityByTilt(draftOf(['Super Rare', 'Ultra Rare']), 'Ultra Rare')

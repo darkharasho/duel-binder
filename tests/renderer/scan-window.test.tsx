@@ -748,18 +748,16 @@ describe('Scan window', () => {
 })
 
 describe('Scan window tilt', () => {
-  // One feature: below 0 reads as Super Rare, above it as Ultra Rare.
+  // One feature: below 0 reads as Common, above it as Ultra Rare.
   const MODEL: TiltModel = {
     features: ['f'],
-    classes: ['Super Rare', 'Ultra Rare'],
-    pairs: [
-      { a: 'Super Rare', b: 'Ultra Rare', use: [0], mean: [0], spread: [1], ca: [-1], cb: [1] }
-    ]
+    classes: ['Common', 'Ultra Rare'],
+    pairs: [{ a: 'Common', b: 'Ultra Rare', use: [0], mean: [0], spread: [1], ca: [-1], cb: [1] }]
   }
   const ULTRA: TiltReading = { features: [1], frames: 20, motion: 50 }
   const FEW: TiltReading = { features: [1], frames: 4, motion: 50 }
   const FOILS = [
-    printing({ rarity: 'Super Rare' }),
+    printing({ rarity: 'Common' }),
     printing({ printingId: 102, rarity: 'Ultra Rare' })
   ]
   const held = (code = 'LOB-EN005', imageId = 46986414): RawSignals => ({
@@ -773,7 +771,7 @@ describe('Scan window tilt', () => {
       cardId: 2,
       name: 'Blue-Eyes White Dragon',
       setCode: 'LOB-EN001',
-      rarity: 'Super Rare',
+      rarity: 'Common',
       imageIds: [777]
     }),
     printing({
@@ -858,12 +856,9 @@ describe('Scan window tilt', () => {
     expect(lastState().loop).toMatchObject({ kind: 'added', name: 'Dark Magician' })
   })
 
-  it('Common against one foil asks for no tilt', async () => {
+  it('Common against a rarity the model lacks asks for no tilt', async () => {
     stubCamera()
-    const one = [
-      printing({ rarity: 'Common' }),
-      printing({ printingId: 102, rarity: 'Ultra Rare' })
-    ]
+    const one = [printing({ rarity: 'Common' }), printing({ printingId: 102, rarity: 'Rare' })]
     await renderTilt(
       tiltEngine(
         () => held(),
@@ -884,9 +879,7 @@ describe('Scan window tilt', () => {
     )
     await renderTilt(engine)
     await run(1000 + TILT_TIMEOUT_MS + 200)
-    expect(drafts()).toEqual([
-      expect.objectContaining({ rarity: 'Super Rare', flag: 'check-rarity' })
-    ])
+    expect(drafts()).toEqual([expect.objectContaining({ rarity: 'Common', flag: 'check-rarity' })])
     // Asked again only TILT_RETRY_MS after each reply, from TILT_MS on.
     const asks = vi.mocked(engine.tiltReading!).mock.calls.length
     expect(asks).toBeGreaterThanOrEqual(2)
@@ -906,7 +899,7 @@ describe('Scan window tilt', () => {
     await renderTilt(engine)
     await run(1000 + TILT_TIMEOUT_MS + 200)
     expect(engine.tiltReading).toHaveBeenCalledTimes(1)
-    expect(drafts()).toEqual([expect.objectContaining({ rarity: 'Super Rare' })])
+    expect(drafts()).toEqual([expect.objectContaining({ rarity: 'Common' })])
     await act(async () => reply(ULTRA))
     await run(500)
     expect(drafts()).toHaveLength(1)
@@ -925,7 +918,7 @@ describe('Scan window tilt', () => {
     act(() => bridge.emit({ kind: 'skipTilt' }))
     act(() => bridge.emit({ kind: 'skipTilt' }))
     await run(TILT_TIMEOUT_MS)
-    expect(drafts()).toEqual([expect.objectContaining({ rarity: 'Super Rare' })])
+    expect(drafts()).toEqual([expect.objectContaining({ rarity: 'Common' })])
   })
 
   it('a Skip after the guess counted changes nothing and skips no next card', async () => {
@@ -962,7 +955,7 @@ describe('Scan window tilt', () => {
     expect(lastState().loop.kind).toBe('tilt')
     lowered = true
     await run(ABSENT_MS + 300)
-    expect(drafts()).toEqual([expect.objectContaining({ rarity: 'Super Rare' })])
+    expect(drafts()).toEqual([expect.objectContaining({ rarity: 'Common' })])
     expect(lastState().loop.kind).not.toBe('tilt')
     await run(2000)
     expect(drafts()).toHaveLength(1)
@@ -1030,7 +1023,7 @@ describe('Scan window tilt', () => {
     other = true
     await run(1000)
     expect(drafts()).toEqual([
-      expect.objectContaining({ cardId: 1, rarity: 'Super Rare' }),
+      expect.objectContaining({ cardId: 1, rarity: 'Common' }),
       expect.objectContaining({ cardId: 2, rarity: 'Ultra Rare' })
     ])
   })
@@ -1043,7 +1036,7 @@ describe('Scan window tilt', () => {
     )
     await renderTilt(engine)
     await run(1000 + TILT_MS + 200)
-    expect(drafts()).toEqual([expect.objectContaining({ rarity: 'Super Rare' })])
+    expect(drafts()).toEqual([expect.objectContaining({ rarity: 'Common' })])
     expect(engine.tiltReset).toHaveBeenCalled()
   })
 
@@ -1051,7 +1044,7 @@ describe('Scan window tilt', () => {
     stubCamera()
     await renderTilt(fakeEngine(() => held()))
     await run(1000)
-    expect(drafts()).toEqual([expect.objectContaining({ rarity: 'Super Rare' })])
+    expect(drafts()).toEqual([expect.objectContaining({ rarity: 'Common' })])
     expect(everTilted()).toBe(false)
   })
 
@@ -1066,7 +1059,7 @@ describe('Scan window tilt', () => {
     expect(lastState().loop.kind).toBe('tilt')
     settings({ paused: true })
     await run(TILT_TIMEOUT_MS)
-    expect(drafts()).toEqual([expect.objectContaining({ rarity: 'Super Rare' })])
+    expect(drafts()).toEqual([expect.objectContaining({ rarity: 'Common' })])
     expect(engine.tiltReset).toHaveBeenCalled()
   })
 
@@ -1079,11 +1072,11 @@ describe('Scan window tilt', () => {
       ),
       undefined,
       {
-        defaultRarity: 'Super Rare'
+        defaultRarity: 'Common'
       }
     )
     await run(1000)
-    expect(drafts()).toEqual([expect.objectContaining({ rarity: 'Super Rare' })])
+    expect(drafts()).toEqual([expect.objectContaining({ rarity: 'Common' })])
     expect(everTilted()).toBe(false)
   })
 })

@@ -488,6 +488,30 @@ describe('refreshPokemon', () => {
     ).toBe('https://assets.tcgdex.net/en/sv/sv01/old')
   })
 
+  it('writes one spelling per rarity, and renames a stored old spelling', async () => {
+    const RAW: Record<string, string> = {
+      'sv01-001': 'Special illustration rare',
+      'sv01-002': 'None',
+      'base1-4': 'Rare Holo'
+    }
+    const spelled = fixtureSources({
+      card: (_l, c) => (c.id in RAW ? { ...c, rarity: RAW[c.id] } : c)
+    })
+    const rarities = (): unknown[] =>
+      ['en/sv01-001', 'en/sv01-002', 'en/base1-4'].map((s) =>
+        db.prepare('SELECT rarity FROM pokemon_cards WHERE card_id = ?').pluck().get(cid(s))
+      )
+    await refreshPokemon(db, spelled, { langs: ['en'] })
+    expect(rarities()).toEqual(['Special Illustration Rare', null, 'Holo Rare'])
+
+    // An install written before the rename gets the new spelling on the next run.
+    db.prepare(
+      "UPDATE pokemon_cards SET rarity = 'Special illustration rare' WHERE card_id = ?"
+    ).run(cid('en/sv01-001'))
+    await refreshPokemon(db, spelled, { langs: ['en'] })
+    expect(rarities()[0]).toBe('Special Illustration Rare')
+  })
+
   it('gives a later set whose name is taken its code as a suffix', async () => {
     const same = fixtureSources({
       set: (_l, s) => (s.id === 'base1' ? { ...s, name: 'Scarlet & Violet' } : s)

@@ -396,7 +396,7 @@ describe('the writer', () => {
     ).toEqual({
       local_name: 'Dracaufeu-ex',
       category: 'Pokemon',
-      rarity: 'Double rare',
+      rarity: 'Double Rare',
       stage: 'Stage2',
       types: '["Darkness"]'
     })

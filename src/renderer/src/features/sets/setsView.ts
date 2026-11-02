@@ -262,6 +262,8 @@ const POKEMON_RARITY_ORDER = [
   'common',
   'uncommon',
   'rare',
+  'holo rare',
+  // The catalog's older name for Holo Rare, until the change feed renames it.
   'rare holo',
   'double rare',
   'art rare',

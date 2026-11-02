@@ -612,6 +612,14 @@ describe('Pokémon rarity chips', () => {
     ])
   })
 
+  it('ranks Holo Rare where its older name Rare Holo goes', () => {
+    const holo: SetChecklist = {
+      set: started,
+      cards: [card(1, 'Double Rare'), card(2, 'Holo Rare'), card(3, 'Rare')]
+    }
+    expect(rarityCounts(holo).map((r) => r.rarity)).toEqual(['Rare', 'Holo Rare', 'Double Rare'])
+  })
+
   it('keeps every finish tile of the matching cards', () => {
     const out = filterTilesByRarity(checklistTiles(cl, 'rarities'), ['Illustration Rare'])
     expect(out.map((t) => t.key)).toEqual([

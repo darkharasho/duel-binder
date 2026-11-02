@@ -277,3 +277,18 @@ export const AUTO_PHOTO_MS = 2500
 export const AUTO_PHOTO_TRIES = 2
 /** After a photo, the live scan counts nothing until the view clears, or this long at most. */
 export const PHOTO_SETTLE_MS = 4000
+
+/** The window of kept frames a tilt reads. */
+export const TILT_MS = 2000
+/** A tilt with no usable reading by now is dropped, and the card counted as without a tilt. */
+export const TILT_TIMEOUT_MS = 4000
+/** The tick during a tilt; the model's fit samples clips on the same grid. */
+export const TILT_FRAME_MS = 100
+/** How often the kept frames are read again after the first window. */
+export const TILT_RETRY_MS = 500
+/** A reading needs at least this many frames. */
+export const TILT_MIN_FRAMES = 12
+/** Frames kept at most (about 31 MB of RGB at 421x614). */
+export const TILT_MAX_FRAMES = 40
+/** A reading needs at least this much motion in the art; set from the corpus. */
+export const TILT_MIN_MOTION = 0

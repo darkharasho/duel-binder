@@ -1,12 +1,16 @@
 import { describe, expect, it, vi, type Mock } from 'vitest'
 import {
   resolveSignals,
+  tiltChoicesFor,
   withRarityByLook,
+  withRarityByTilt,
   type ResolveContext,
   type ScanDraft
 } from '@/features/scan/resolve'
 import type { ArtMatch, RawSignals } from '@/features/scan/engine'
 import type { CardLanguage } from '@shared/scan/language'
+import type { TiltModel, TiltPair } from '@shared/scan/tilt'
+import { printing } from './scanFakes'
 import { LOOK_FEATURES, type LookModel } from '@shared/scan/look'
 import type { ScanPrinting } from '@shared/scan/types'
 import {
@@ -789,5 +793,76 @@ describe('Manga-Style printings told Color from Monochrome by their scans', () =
   it('leaves both tones when only one of them has a scan', async () => {
     const item = await recognized(raw({ art: art({ 43: 30, 44: 32 }) }), ctx)
     expect(item).toMatchObject({ printingId: 41, artPrintings: [41, 42, 43, 44] })
+  })
+})
+
+describe('tilt', () => {
+  const CLASSES = ['Common', 'Super Rare', 'Ultra Rare', 'Holofoil', 'Cosmos Holo']
+  const pairs: TiltPair[] = []
+  for (let i = 0; i < CLASSES.length; i++)
+    for (let j = i + 1; j < CLASSES.length; j++)
+      pairs.push({
+        a: CLASSES[i],
+        b: CLASSES[j],
+        use: [0],
+        mean: [0],
+        spread: [1],
+        ca: [i],
+        cb: [j]
+      })
+  const MODEL: TiltModel = { features: ['f0'], classes: CLASSES, pairs }
+
+  const draftOf = (rarities: string[]): ScanDraft => {
+    const options = rarities.map((rarity, i) => printing({ printingId: 500 + i, rarity }))
+    return {
+      cardId: 1,
+      name: 'Dark Magician',
+      imageId: 46986414,
+      printingId: options[0].printingId,
+      setCode: 'LOB-EN005',
+      rarity: options[0].rarity,
+      options,
+      flag: 'check-rarity',
+      via: 'code'
+    }
+  }
+  const pkmDraftOf = (versions: string[], flag: ScanDraft['flag']): ScanDraft => {
+    const options = versions.map((rarity, i) =>
+      printing({ printingId: 700 + i, rarity, setCode: `BS-${i}` })
+    )
+    return { ...draftOf(versions), game: 'pkm', options, printingId: 700, flag }
+  }
+
+  it('no tilt under a default rarity, for a best guess, or once the rules settled it', () => {
+    expect(tiltChoicesFor(draftOf(['Super Rare', 'Ultra Rare']), 'Super Rare', MODEL)).toBeNull()
+    expect(
+      tiltChoicesFor({ ...draftOf(['Super Rare', 'Ultra Rare']), guess: true }, null, MODEL)
+    ).toBeNull()
+    expect(
+      tiltChoicesFor({ ...draftOf(['Super Rare', 'Ultra Rare']), flag: null }, null, MODEL)
+    ).toBeNull()
+    expect(tiltChoicesFor(draftOf(['Super Rare', 'Ultra Rare']), null, undefined)).toBeNull()
+    expect(tiltChoicesFor(draftOf(['Super Rare', 'Ultra Rare']), null, MODEL)).toEqual([
+      'Super Rare',
+      'Ultra Rare'
+    ])
+  })
+  it("a Pokémon card's versions tilt even when flagged pick-printing", () => {
+    expect(
+      tiltChoicesFor(pkmDraftOf(['Holofoil', 'Cosmos Holo'], 'pick-printing'), null, MODEL)
+    ).toEqual(['Holofoil', 'Cosmos Holo'])
+  })
+  it('the tilt guess moves the printing and keeps Check rarity', () => {
+    const out = withRarityByTilt(draftOf(['Super Rare', 'Ultra Rare']), 'Ultra Rare')
+    expect(out).toMatchObject({ rarity: 'Ultra Rare', flag: 'check-rarity' })
+    expect(out.options.find((o) => o.printingId === out.printingId)?.rarity).toBe('Ultra Rare')
+  })
+  it('a guessed finish with stamped twins takes the unstamped version', () => {
+    const out = withRarityByTilt(
+      pkmDraftOf(['1st Edition Holofoil', 'Holofoil', 'Cosmos Holo'], 'check-rarity'),
+      'Holofoil'
+    )
+    expect(out.rarity).toBe('Holofoil')
+    expect(out.setCode).toBe('BS-1')
   })
 })

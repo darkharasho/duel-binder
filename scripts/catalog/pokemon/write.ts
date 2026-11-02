@@ -76,7 +76,7 @@ interface SetPlan {
   groupName: string | null
   /** Its matched TCGCSV group. */
   groupId: number | null
-  /** The series the Sets page groups it under (see setSeries); null when no source says. */
+  /** The English series the Sets page groups it under (see setSeries); null when none matches. */
   series: string | null
   cards: CardPlan[]
 }
@@ -710,11 +710,11 @@ function borrowTraditionalArt(plans: LangPlan[]): void {
   }
 }
 
-/** Each set's series (see setSeries), falling back to English's. */
+/** Each set's English series (see setSeries). */
 function nameSeries(plans: LangPlan[]): void {
   const english = plans.find((p) => p.lang === 'en')?.sets.map((sp) => sp.set) ?? []
   for (const plan of plans) {
-    const series = setSeries(plan.sets.map((sp) => sp.set), english)
+    const series = setSeries(plan.lang, plan.sets.map((sp) => sp.set), english)
     plan.sets.forEach((sp, i) => (sp.series = series[i]))
   }
 }

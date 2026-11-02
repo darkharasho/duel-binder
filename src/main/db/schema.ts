@@ -472,8 +472,9 @@ export const SCHEMA_V35 =
 
 /**
  * A set's series, the header the Sets page groups it under: "Scarlet & Violet", "Mega Evolution".
- * Pokémon only, from TCGdex; Yu-Gi-Oh! has no series and leaves it NULL. Desktop-only for the same
- * reason as V27: server-28 repeats this and recreates the `sets` seq triggers over it.
+ * Pokémon only, from TCGdex, and always the English series, as set names are English. Yu-Gi-Oh!
+ * has no series and leaves it NULL. Desktop-only for the same reason as V27: server-28 repeats this
+ * and recreates the `sets` seq triggers over it.
  */
 export const SCHEMA_V36 = 'ALTER TABLE sets ADD COLUMN series TEXT;'
 

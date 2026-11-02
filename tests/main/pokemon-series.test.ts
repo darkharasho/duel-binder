@@ -15,39 +15,49 @@ const ENGLISH = [
 ]
 
 describe('setSeries', () => {
-  it("takes TCGdex's own name, in the set's language", () => {
-    const ja = [set('SV1S', { id: 'SV', name: 'ポケモンカードゲーム スカーレット&バイオレット' })]
-    expect(setSeries(ja, ENGLISH)).toEqual(['ポケモンカードゲーム スカーレット&バイオレット'])
-  })
-
-  it('a set built with only an id takes the name another set of its language gives that id', () => {
-    const ja = [set('M6a', { id: 'M' }), set('M1L', { id: 'M', name: 'ポケモンカードゲーム MEGA' })]
-    expect(setSeries(ja, ENGLISH)).toEqual([
-      'ポケモンカードゲーム MEGA',
-      'ポケモンカードゲーム MEGA'
-    ])
-    expect(setSeries([set('me06', { id: 'me' }), ...ENGLISH], ENGLISH)[0]).toBe('Mega Evolution')
-  })
-
-  it('falls back to the English series of the same id, alias or name', () => {
-    const zh = [
-      set('CSV5C', { id: 'Scarlet & Violet' }),
-      set('CS1aC', { id: 'Sword & Shield' }),
-      set('MP', { id: 'Mega' }),
-      set('dex', { id: 'swsh' }),
-      set('ja', { id: 'M' })
-    ]
-    expect(setSeries(zh, ENGLISH)).toEqual([
-      'Scarlet & Violet',
-      'Sword & Shield',
+  it("an English set takes TCGdex's name; one built with only an id takes the English series of it", () => {
+    expect(setSeries('en', [...ENGLISH, set('me06', { id: 'me' })], ENGLISH)).toEqual([
       'Mega Evolution',
+      'Scarlet & Violet',
       'Sword & Shield',
       'Mega Evolution'
     ])
   })
 
-  it('is null when nothing names it', () => {
-    expect(setSeries([set('PR', { id: 'PROMO' }), set('x')], ENGLISH)).toEqual([null, null])
-    expect(setSeries([set('CSV5C', { id: 'Scarlet & Violet' })], [])).toEqual([null])
+  it('a set in another language takes the English series, never its own', () => {
+    const ja = [
+      set('SV1S', { id: 'SV', name: 'ポケモンカードゲーム スカーレット&バイオレット' }),
+      set('M1L', { id: 'M', name: 'ポケモンカードゲーム MEGA' }),
+      set('M6a', { id: 'M' })
+    ]
+    expect(setSeries('ja', ja, ENGLISH)).toEqual([
+      'Scarlet & Violet',
+      'Mega Evolution',
+      'Mega Evolution'
+    ])
+  })
+
+  it('a European set takes the series of the English set with its id', () => {
+    const fr = [set('sv01', { id: 'sv', name: 'Écarlate et Violet' }), set('swsh1', { id: 'x' })]
+    expect(setSeries('fr', fr, ENGLISH)).toEqual(['Scarlet & Violet', 'Sword & Shield'])
+  })
+
+  it('a Chinese list set matches the English series by name or alias', () => {
+    const zh = [
+      set('CSV5C', { id: 'Scarlet & Violet' }),
+      set('CS1aC', { id: 'Sword & Shield' }),
+      set('MP', { id: 'Mega' })
+    ]
+    expect(setSeries('zh-hans', zh, ENGLISH)).toEqual([
+      'Scarlet & Violet',
+      'Sword & Shield',
+      'Mega Evolution'
+    ])
+  })
+
+  it('is null when no English series matches', () => {
+    const ja = [set('PMCG1', { id: 'PMCG', name: 'ポケットモンスターカードゲーム' }), set('x')]
+    expect(setSeries('ja', ja, ENGLISH)).toEqual([null, null])
+    expect(setSeries('zh-hans', [set('CSV5C', { id: 'Scarlet & Violet' })], [])).toEqual([null])
   })
 })

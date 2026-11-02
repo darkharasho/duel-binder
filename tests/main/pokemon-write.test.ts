@@ -411,7 +411,7 @@ describe('refreshPokemon', () => {
     })
   })
 
-  it("gives each set its series in the set's language, filled in on a later night and kept when none says", async () => {
+  it('gives each set its English series, filled in on a later night and kept when none says', async () => {
     const series = (): unknown[] =>
       db.prepare("SELECT image_key, series FROM sets WHERE game = 'pkm' ORDER BY image_key").all()
     // A night before series: no set carries one.
@@ -422,10 +422,11 @@ describe('refreshPokemon', () => {
     expect(series()).toEqual([
       { image_key: 'td-en-base1', series: 'Base' },
       { image_key: 'td-en-sv01', series: 'Scarlet & Violet' },
-      { image_key: 'td-ja-M1L', series: 'ポケモンカードゲーム MEGA' },
-      { image_key: 'td-ja-M4', series: 'ポケモンカードゲーム MEGA' },
-      { image_key: 'td-ja-PMCG1', series: 'ポケットモンスターカードゲーム' },
-      { image_key: 'td-ja-SV1S', series: 'ポケモンカードゲーム スカーレット&バイオレット' }
+      // English, whatever the language; these fixtures hold no English Mega Evolution or PMCG set.
+      { image_key: 'td-ja-M1L', series: null },
+      { image_key: 'td-ja-M4', series: null },
+      { image_key: 'td-ja-PMCG1', series: null },
+      { image_key: 'td-ja-SV1S', series: 'Scarlet & Violet' }
     ])
     // A night no source names it keeps what the set had.
     await refreshPokemon(db, fixtureSources({ set: unnamed }))

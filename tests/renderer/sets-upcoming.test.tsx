@@ -20,6 +20,7 @@ const set = (o: Partial<SetSummary>): SetSummary => ({
   ownedRarities: 0,
   listRows: null,
   unmatchedRows: null,
+  series: null,
   ...o
 })
 

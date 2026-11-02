@@ -352,6 +352,7 @@ export interface SetSummary {
   ownedRarities: number
   listRows: number | null // Yugipedia list rows; null for English
   unmatchedRows: number | null // rows not matched to a card; null for English
+  series: string | null // the series the Sets page groups it under; Pokémon only
 }
 
 export interface ChecklistCode {

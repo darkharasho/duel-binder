@@ -54,7 +54,7 @@ export const CATALOG_TABLES: CatalogTable[] = [
     key: ['game', 'language', 'set_name'],
     columns: [
       'game', 'language', 'set_name', 'set_code', 'tcg_date', 'image_url', 'image_key', 'list_rows',
-      'unmatched_rows'
+      'unmatched_rows', 'series'
     ],
     games: BOTH
   },

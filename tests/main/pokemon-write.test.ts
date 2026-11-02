@@ -287,7 +287,8 @@ describe('refreshPokemon', () => {
           image_url: 'https://assets.tcgdex.net/en/base/base1/logo',
           image_key: 'td-en-base1',
           list_rows: null,
-          unmatched_rows: null
+          unmatched_rows: null,
+          series: 'Base'
         },
         {
           game: 'pkm',
@@ -298,7 +299,8 @@ describe('refreshPokemon', () => {
           image_url: 'https://assets.tcgdex.net/en/sv/sv01/logo',
           image_key: 'td-en-sv01',
           list_rows: null,
-          unmatched_rows: null
+          unmatched_rows: null,
+          series: 'Scarlet & Violet'
         }
       ])
     })
@@ -407,6 +409,29 @@ describe('refreshPokemon', () => {
     expect(db.prepare('SELECT name FROM cards WHERE id = ?').get(cid('ja/SV1S-001'))).not.toEqual({
       name: read<TdCard>('ja/card-SV1S-001.json').name
     })
+  })
+
+  it("gives each set its series in the set's language, filled in on a later night and kept when none says", async () => {
+    const series = (): unknown[] =>
+      db.prepare("SELECT image_key, series FROM sets WHERE game = 'pkm' ORDER BY image_key").all()
+    // A night before series: no set carries one.
+    const unnamed = (_l: PkmLang, s: TdSet): TdSet => ({ ...s, serie: undefined })
+    await refreshPokemon(db, fixtureSources({ set: unnamed }))
+    expect(series()).toEqual(expect.arrayContaining([{ image_key: 'td-en-sv01', series: null }]))
+    await refreshPokemon(db, fixtureSources())
+    expect(series()).toEqual([
+      { image_key: 'td-en-base1', series: 'Base' },
+      { image_key: 'td-en-sv01', series: 'Scarlet & Violet' },
+      { image_key: 'td-ja-M1L', series: 'ポケモンカードゲーム MEGA' },
+      { image_key: 'td-ja-M4', series: 'ポケモンカードゲーム MEGA' },
+      { image_key: 'td-ja-PMCG1', series: 'ポケットモンスターカードゲーム' },
+      { image_key: 'td-ja-SV1S', series: 'ポケモンカードゲーム スカーレット&バイオレット' }
+    ])
+    // A night no source names it keeps what the set had.
+    await refreshPokemon(db, fixtureSources({ set: unnamed }))
+    expect(series()).toEqual(
+      expect.arrayContaining([{ image_key: 'td-en-sv01', series: 'Scarlet & Violet' }])
+    )
   })
 
   it('keeps a version that is no longer produced (sticky)', async () => {

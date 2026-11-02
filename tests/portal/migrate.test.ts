@@ -130,7 +130,7 @@ function serverBefore12(): Database.Database {
   const db = freshDb()
   runSteps(db, [
     ...MIGRATIONS.filter((m) => m.version <= 18),
-    ...SERVER_STEPS.filter((s) => !['server-12', 'server-13', 'server-14', 'server-16', 'server-18', 'server-21', 'server-23', 'server-26', 'server-27'].includes(s.name))
+    ...SERVER_STEPS.filter((s) => !['server-12', 'server-13', 'server-14', 'server-16', 'server-18', 'server-21', 'server-23', 'server-26', 'server-27', 'server-28'].includes(s.name))
   ])
   db.exec(`
     INSERT INTO users (id, discord_id, username, created_at, updated_at) VALUES (1, 'd1', 'one', 'x', 'x');
@@ -256,7 +256,7 @@ describe('server-13 (pokemon_cards image_url and local_name)', () => {
     const fresh = freshDb()
     migrateServer(fresh)
     const old = freshDb()
-    runSteps(old, [...MIGRATIONS, ...SERVER_STEPS.filter((s) => !['server-13', 'server-16', 'server-18', 'server-21', 'server-23'].includes(s.name))])
+    runSteps(old, [...MIGRATIONS, ...SERVER_STEPS.filter((s) => !['server-13', 'server-16', 'server-18', 'server-21', 'server-23', 'server-28'].includes(s.name))])
     expect(cols(old)).not.toContain('image_url')
     seedPokemon(old)
     migrateServer(old)
@@ -304,7 +304,7 @@ describe('server-16 (pokemon_cards art_twin_id)', () => {
     const fresh = freshDb()
     migrateServer(fresh)
     const old = freshDb()
-    runSteps(old, [...MIGRATIONS, ...SERVER_STEPS.filter((s) => !['server-16', 'server-18', 'server-21', 'server-23'].includes(s.name))])
+    runSteps(old, [...MIGRATIONS, ...SERVER_STEPS.filter((s) => !['server-16', 'server-18', 'server-21', 'server-23', 'server-28'].includes(s.name))])
     expect(cols(old)).not.toContain('art_twin_id')
     seedPokemon(old)
     migrateServer(old)
@@ -413,6 +413,44 @@ describe('server-14 (pokemon_set_art in the change feed)', () => {
     expect(catalogChanges(db, since, 100, ['pokemon_set_art'], 'pkm').changes).toEqual([
       expect.objectContaining({ table: 'pokemon_set_art', deleted: key })
     ])
+    db.close()
+  })
+})
+
+describe('server-28 (sets series)', () => {
+  const cols = (db: Database.Database): string[] =>
+    (db.prepare('PRAGMA table_info(sets)').all() as { name: string }[]).map((c) => c.name)
+
+  it('a fresh server and an upgraded one both have the column, and old rows keep null', () => {
+    const fresh = freshDb()
+    migrateServer(fresh)
+    const old = freshDb()
+    runSteps(old, [...MIGRATIONS, ...SERVER_STEPS.filter((s) => s.name !== 'server-28')])
+    expect(cols(old)).not.toContain('series')
+    seedPokemon(old)
+    migrateServer(old)
+    for (const db of [fresh, old]) expect(cols(db)).toContain('series')
+    expect(rows(old, "SELECT DISTINCT series FROM sets WHERE game = 'pkm'")).toEqual([{ series: null }])
+    fresh.close()
+    old.close()
+  })
+
+  it('a change to series alone raises the row catalog_seq, and the Pokémon feed carries it', () => {
+    const db = freshDb()
+    migrateServer(db)
+    seedPokemon(db)
+    const seqOf = (): number =>
+      (db.prepare("SELECT max(catalog_seq) AS s FROM sets WHERE game = 'pkm'").get() as { s: number }).s
+    const before = seqOf()
+    db.prepare("UPDATE sets SET series = 'Scarlet & Violet' WHERE game = 'pkm'").run()
+    expect(seqOf()).toBeGreaterThan(before)
+    const sets = catalogChanges(db, before, 100, ['sets'], 'pkm').changes
+    expect(sets.length).toBeGreaterThan(0)
+    for (const c of sets) expect(c).toMatchObject({ table: 'sets', row: { series: 'Scarlet & Violet' } })
+    // The legacy feed's frozen columns leave it out.
+    for (const c of catalogChanges(db, 0, 100, ['sets']).changes) {
+      expect('row' in c && 'series' in c.row).toBe(false)
+    }
     db.close()
   })
 })

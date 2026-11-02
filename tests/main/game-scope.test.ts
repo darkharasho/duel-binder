@@ -132,6 +132,9 @@ describe('game-scoped repo queries', () => {
     )
     expect(sets[0].coverImageId).toBe(pkm.cardIds[0])
     expect(sets[0].packImageKey).toBeNull()
+    expect(sets[0].series).toBeNull()
+    db.prepare("UPDATE sets SET series = 'Scarlet & Violet' WHERE game = 'pkm' AND language = 'en'").run()
+    expect(listSets(db)[0].series).toBe('Scarlet & Violet')
 
     const byCode = printingsByCode(db, PKM_CODE)
     expect(byCode.map((p) => p.printingId).sort()).toEqual(pkm.printingIds.slice(0, 2).sort())

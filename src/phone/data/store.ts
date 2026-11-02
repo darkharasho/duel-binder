@@ -1,5 +1,6 @@
 import type { SqlDb } from '../../main/db/sql'
 import { backfillArtTwins } from '../../main/catalog/artTwinBackfill'
+import { backfillSetSeries } from '../../main/catalog/seriesBackfill'
 import type { ErrorReport } from '../../shared/errorReports'
 import type { UsageReport } from '../../shared/usage'
 import { deleteMeta, getMeta, setMeta } from '../../main/db/meta'
@@ -401,10 +402,14 @@ export function createPhoneStore(deps: {
       // Yu-Gi-Oh! first, which every account has; then the account's other games.
       await pass('ygo')
       for (const game of await syncedGames(c)) {
-        if (game === 'pkm')
+        if (game === 'pkm') {
           await backfillArtTwins(db, (since) =>
             c.catalogChanges(since, undefined, ['pokemon_cards'], game)
           )
+          await backfillSetSeries(db, (since) =>
+            c.catalogChanges(since, undefined, ['sets'], game)
+          )
+        }
         if (game !== 'ygo') await pass(game)
       }
     } finally {

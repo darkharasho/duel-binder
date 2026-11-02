@@ -26,7 +26,8 @@ export const metalRaidersChecklist: SetChecklist = {
     totalRarities: 4,
     ownedRarities: 1,
     listRows: null,
-    unmatchedRows: null
+    unmatchedRows: null,
+    series: null
   },
   cards: [
     {

@@ -745,7 +745,7 @@ describe('game-aware catalog job', () => {
     work.close()
   })
 
-  it('Yu-Gi-Oh-only work uploads the legacy bodies plus game ygo', async () => {
+  it('Yu-Gi-Oh-only work uploads the legacy bodies plus game ygo (and no set series)', async () => {
     const work = await workDb()
     const { fetch, calls } = recordingFetch(ok)
     await uploadCatalog({ url: URL_BASE, token: TOKEN, work, base: null, fetch })
@@ -758,7 +758,10 @@ describe('game-aware catalog job', () => {
       const stripped = (c.body.rows as Record<string, unknown>[]).map((r) => {
         const { game, ...rest } = r
         if (CATALOG_TABLES.find((x) => x.name === t)!.games.length > 1) expect(game).toBe('ygo')
-        return rest
+        if (t !== 'sets') return rest
+        const { series, ...set } = rest
+        expect(series).toBeNull()
+        return set
       })
       expect(stripped, t).toEqual(expected)
     }

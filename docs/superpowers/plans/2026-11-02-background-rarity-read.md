@@ -191,7 +191,7 @@ Behaviour (each point is a test in Step 1):
 - Modify: `src/renderer/src/features/scan/session.ts` (new `applyRead`)
 - Modify: `src/renderer/src/features/scan/ScanHub.tsx` (new `reread` and `flashed`)
 - Modify: `src/renderer/src/features/scan/useHubScan.ts:67-95` (`onDraft` returns the key; `onRarityRead` → `reread`)
-- Test: `tests/renderer/scan-session.test.ts` (or the existing session test file), `tests/renderer/phone-scanner.test.tsx`
+- Test: `tests/renderer/scan-session.test.ts`, `tests/renderer/phone-scanner.test.tsx`
 
 **Interfaces:**
 - Produces:

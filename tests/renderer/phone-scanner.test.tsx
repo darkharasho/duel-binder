@@ -8,11 +8,26 @@ import { ScannerScreen } from '../../src/phone/ScannerScreen'
 import { PhoneCamera } from '../../src/phone/PhoneCamera'
 import { GameProvider } from '@/lib/game'
 import { LOOK_MODEL } from '@shared/scan/lookModel'
+import { TILT_MODELS } from '@shared/scan/tiltModel'
+import type { TiltModel } from '@shared/scan/tilt'
+import type { TiltReading } from '@shared/scan/tiltFeatures'
+import { useRef } from 'react'
+import { useCamera } from '@/features/scan/useCamera'
+import * as hubScan from '@/features/scan/useHubScan'
 import { createSyncTriggers } from '../../src/phone/syncTriggers'
 import type { PhoneStore } from '../../src/phone/data/store'
 import { createMockApi, renderWithProviders } from './mockApi'
 import { SETO, fakeStore, installPhoneApi, setOnline } from './phoneFakes'
-import { codeFrame, fakeBridge, fakeEngine, printing, stubCamera, stubVideo } from './scanFakes'
+import {
+  codeFrame,
+  fakeBridge,
+  fakeEngine,
+  printing,
+  stubCamera,
+  stubVideo,
+  tiltEngine,
+  type FakeEngine
+} from './scanFakes'
 
 const SESSION_KEY = 'scan.session.v1'
 
@@ -631,5 +646,115 @@ describe('phone scanner on Pokémon', () => {
     expect(within(last).queryByText('Normal')).not.toBeInTheDocument()
     expect(within(last).getByLabelText('Price range of Pikachu')).toHaveTextContent('$1.00 – $3.50')
     expect(screen.queryByRole('button', { name: /New scans as/ })).not.toBeInTheDocument()
+  })
+})
+
+describe('phone scanner tilt', () => {
+  // One feature: below 0 reads as Super Rare, above it as Ultra Rare.
+  const MODEL: TiltModel = {
+    features: ['f'],
+    classes: ['Super Rare', 'Ultra Rare'],
+    pairs: [
+      { a: 'Super Rare', b: 'Ultra Rare', use: [0], mean: [0], spread: [1], ca: [-1], cb: [1] }
+    ]
+  }
+  const FEW: TiltReading = { features: [1], frames: 4, motion: 50 }
+  const FOILS = [
+    printing({ rarity: 'Super Rare' }),
+    printing({ printingId: 102, rarity: 'Ultra Rare' })
+  ]
+  const held = (): ReturnType<typeof codeFrame> => ({
+    ...codeFrame('LOB-EN005'),
+    art: [{ imageId: 46986414, distance: 10 }]
+  })
+
+  /** How many cards the session holds, in the text of a status element. */
+  function Counted(): React.JSX.Element {
+    const { session } = useScanHub()
+    return <p data-testid="counted">{session.rows.length}</p>
+  }
+
+  async function renderCamera(
+    engine: FakeEngine,
+    tiltModels?: React.ComponentProps<typeof PhoneCamera>['tiltModels']
+  ): Promise<void> {
+    vi.useFakeTimers()
+    vi.stubGlobal('jest', { advanceTimersByTime: (ms: number) => vi.advanceTimersByTime(ms) })
+    const api = createMockApi({
+      scanWindow: fakeBridge().scanWindow,
+      scan: { printingsByCode: vi.fn(async () => FOILS) }
+    })
+    renderWithProviders(
+      <GameProvider>
+        <ScanHubProvider>
+          <Counted />
+          <PhoneCamera engineFactory={() => engine} tiltModels={tiltModels} />
+        </ScanHubProvider>
+      </GameProvider>,
+      { api }
+    )
+    await settle()
+    await settle(1000)
+  }
+
+  it('the phone shows the tilt prompt with Skip, and Skip counts the card', async () => {
+    const engine = tiltEngine(
+      () => held(),
+      () => FEW
+    )
+    await renderCamera(engine, { ygo: MODEL })
+    expect(screen.getByText('Tilt the card')).toBeInTheDocument()
+    expect(screen.getByText('Dark Magician')).toBeInTheDocument()
+    expect(screen.getByTestId('counted')).toHaveTextContent('0')
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    await user.click(screen.getByRole('button', { name: 'Skip' }))
+    await settle(500)
+    expect(screen.getByTestId('counted')).toHaveTextContent('1')
+    expect(screen.queryByRole('button', { name: 'Skip' })).toBeNull()
+  })
+
+  it('the phone scanner tilts with the shipped models by default', async () => {
+    const spy = vi.spyOn(hubScan, 'useHubScan')
+    await renderCamera(fakeEngine(() => codeFrame('LOB-EN005')))
+    expect(spy).toHaveBeenCalledWith(expect.objectContaining({ tiltModels: TILT_MODELS }))
+  })
+
+  it('useHubScan never tilts unless given tilt models', async () => {
+    const kinds = new Set<string>()
+    function Bare(): React.JSX.Element {
+      const videoRef = useRef<HTMLVideoElement>(null)
+      const camera = useCamera(null, 'environment')
+      const { loop } = hubScan.useHubScan({
+        videoRef,
+        stream: camera.stream,
+        engineFactory: () =>
+          tiltEngine(
+            () => held(),
+            () => FEW
+          )
+      })
+      kinds.add(loop.status.kind)
+      return <video ref={videoRef} />
+    }
+    vi.useFakeTimers()
+    vi.stubGlobal('jest', { advanceTimersByTime: (ms: number) => vi.advanceTimersByTime(ms) })
+    renderWithProviders(
+      <GameProvider>
+        <ScanHubProvider>
+          <Counted />
+          <Bare />
+        </ScanHubProvider>
+      </GameProvider>,
+      {
+        api: createMockApi({
+          scanWindow: fakeBridge().scanWindow,
+          scan: { printingsByCode: vi.fn(async () => FOILS) }
+        })
+      }
+    )
+    await settle()
+    await settle(1500)
+    expect(screen.getByTestId('counted')).toHaveTextContent('1')
+    expect(kinds.has('tilt')).toBe(false)
   })
 })

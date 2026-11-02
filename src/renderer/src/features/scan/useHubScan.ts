@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useState, type RefObject } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import type { GameId } from '@shared/games/types'
 import type { Language } from '@shared/languages'
 import type { LookModel } from '@shared/scan/look'
+import type { TiltModel } from '@shared/scan/tilt'
 import { liveLanguage } from '@shared/scanWindow'
 import { printedLanguage, useLanguageFilter } from '@/lib/languageFilter'
 import { api } from '@/lib/api'
@@ -19,19 +21,22 @@ const ANY = 'any'
  * Scans `stream` (shown in `videoRef`) for the game shown with the hub's settings, counting pulls
  * through the hub: the in-page scanner of the desktop Scan page and the phone scanner. `setUnreadable`: the picked
  * set's printings couldn't be read, so cards are matched against every set. `lookModel`: the
- * rarity look model, which only the phone scanner uses (see useScanLoop).
+ * rarity look model, which only the phone scanner uses (see useScanLoop). `tiltModels`: the
+ * tilt-to-read-rarity models; a scanner given none never holds a card for a tilt (Stream mode).
  */
 export function useHubScan({
   videoRef,
   stream,
   engineFactory,
   lookModel = null,
+  tiltModels = null,
   onStalled
 }: {
   videoRef: RefObject<HTMLVideoElement | null>
   stream: MediaStream | null
   engineFactory: EngineFactory
   lookModel?: LookModel | null
+  tiltModels?: Partial<Record<GameId, TiltModel>> | null
   /** The camera's picture froze; see useScanLoop. */
   onStalled?: () => void
 }): { loop: ScanLoop; setUnreadable: boolean; found: Pull | null } {
@@ -73,6 +78,7 @@ export function useHubScan({
     language: game === 'pkm' ? liveLanguage(settings) : null,
     filterLanguage: game === 'ygo' ? printedLanguage(filter) : null,
     lookModel,
+    tiltModels,
     onDraft,
     onStalled
   })

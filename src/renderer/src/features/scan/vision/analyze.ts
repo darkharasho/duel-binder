@@ -32,6 +32,12 @@ const NOTHING: FrameSignals = {
 const hasPixels = (b: OcrBand): boolean => b.width > 0 && b.height > 0
 
 /**
+ * A frame's signals in the worker, with the card turned upright at CARD_W when asked for and
+ * known. upright stays in the worker: it's dropped before the signals are posted.
+ */
+export type AnalyzedFrame = FrameSignals & { upright?: RgbaImage }
+
+/**
  * The width to straighten a card to for reading its text: its width in the frame, so a card
  * filmed bigger than CARD_W keeps its detail (a 4K camera's set code is twice a 1080p one's),
  * within CARD_W to MAX_BAND_SCALE times that.
@@ -48,7 +54,9 @@ function bandWidth(quad: Quad): number {
  * of it, and freed whatever happens. holderPass false skips the holder search of a profile that
  * has one, for a frame the caller has already given its share of them (holderBudget.ts). held is
  * an earlier frame's outline, tried before the frame is searched (recognizeArt). thorough false
- * is a live frame's short holder search (recognizeArt).
+ * is a live frame's short holder search (recognizeArt). wantUpright adds the upright card, for
+ * keeping a tilted card's frames, and leaves out the rarity cues, look, version cues and slab:
+ * the loop reads such a frame only for its art, and their time is frames lost to the tilt.
  */
 export function analyze(
   cv: CV,
@@ -60,8 +68,9 @@ export function analyze(
   profile: ScanProfile = SCAN_PROFILES.ygo,
   holderPass = true,
   held: Quad | null = null,
-  thorough = true
-): FrameSignals {
+  thorough = true,
+  wantUpright = false
+): AnalyzedFrame {
   const frame = toMat(cv, img)
   return using([frame], () =>
     analyzeFrame(
@@ -74,7 +83,8 @@ export function analyze(
       profile,
       holderPass,
       held,
-      thorough
+      thorough,
+      wantUpright
     )
   )
 }
@@ -89,8 +99,9 @@ function analyzeFrame(
   profile: ScanProfile,
   holderPass: boolean,
   held: Quad | null,
-  thorough: boolean
-): FrameSignals {
+  thorough: boolean,
+  wantUpright: boolean
+): AnalyzedFrame {
   let quad: Quad
   let art: ArtMatch[] = []
   // The straightened card for its text, made only when bands are wanted.
@@ -133,13 +144,17 @@ function analyzeFrame(
     card = () => warpCard(cv, img, likeliest, bandWidth(likeliest))
   }
   // Read at CARD_W, the size the cues and the look model were tuned at; Yu-Gi-Oh's foils only.
+  // None of these is read off a tilt frame (wantUpright): the tilt reading has the card's foil.
   const { cues, features: look } =
-    upright && profile.rarityLook ? rarityLook(upright, wantLook) : { cues: null, features: null }
+    upright && profile.rarityLook && !wantUpright
+      ? rarityLook(upright, wantLook)
+      : { cues: null, features: null }
   // Pokémon only: its versions are priced apart, and a graded slab changes how it's priced.
   // Yu-Gi-Oh's signals carry no slab key.
   const pokemon = profile.game === 'pkm'
-  const version = pokemon && upright ? pokemonVersionCues(upright, profile) : null
-  const slab = pokemon ? isSlab(cv, img, quad) : undefined
+  const version = pokemon && upright && !wantUpright ? pokemonVersionCues(upright, profile) : null
+  const slab = pokemon && !wantUpright ? isSlab(cv, img, quad) : undefined
+  const kept = wantUpright && upright ? { upright } : {}
   if (!wantBands)
     return {
       found: true,
@@ -152,7 +167,8 @@ function analyzeFrame(
       version,
       ...(slab === undefined ? {} : { slab }),
       ...via,
-      look
+      look,
+      ...kept
     }
   const straight = card()
   // Not knowing which way up the card is, its text is read both ways.
@@ -178,6 +194,7 @@ function analyzeFrame(
     version,
     ...(slab === undefined ? {} : { slab }),
     ...via,
-    look
+    look,
+    ...kept
   }
 }

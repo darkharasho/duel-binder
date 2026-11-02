@@ -419,6 +419,17 @@ describe('Scan page', () => {
     expect(screen.queryByText('Hold a card up')).not.toBeInTheDocument()
   })
 
+  it("Skip shows while the scan window's card is held for a tilt, and sends skipTilt", async () => {
+    await renderScan()
+    await openWindow()
+    expect(screen.queryByRole('button', { name: 'Skip' })).toBeNull()
+    report({ loop: { kind: 'tilt', name: 'Dark Magician' } })
+    expect(screen.getByText('Tilt the card')).toBeInTheDocument()
+    expect(screen.getByText('Dark Magician')).toBeInTheDocument()
+    await user().click(screen.getByRole('button', { name: 'Skip' }))
+    expect(bridge.sent).toContainEqual({ kind: 'skipTilt' })
+  })
+
   it("shows the scan window's notices", async () => {
     await renderScan()
     await openWindow({ setUnreadable: true, artReady: false })

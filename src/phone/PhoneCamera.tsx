@@ -2,6 +2,9 @@ import { useEffect, useRef, useState } from 'react'
 import { FlashlightIcon, FlashlightOffIcon } from 'lucide-react'
 import type { LookModel } from '@shared/scan/look'
 import { LOOK_MODEL } from '@shared/scan/lookModel'
+import type { TiltModel } from '@shared/scan/tilt'
+import { TILT_MODELS } from '@shared/scan/tiltModel'
+import type { GameId } from '@shared/games/types'
 import { scanProfile } from '@shared/scan/profiles'
 import { defaultEngine, type EngineFactory } from '@/features/scan/engine'
 import { useScanHub } from '@/features/scan/ScanHub'
@@ -80,16 +83,19 @@ function CameraBackdrop({ stream }: { stream: MediaStream | null }): React.JSX.E
  * Unlike the desktop's scanners, it reads rarity with the look model after the name and frame
  * rules (useScanLoop's lookModel): it was fitted and tested on photos the size of a phone
  * camera's, and gains nothing on a desktop webcam. It reads Yu-Gi-Oh! rarities only, so a game
- * without them (Pokémon) scans without it. `lookModel` is for tests.
+ * without them (Pokémon) scans without it. It also asks for a tilt to read
+ * a card's rarity (TILT_MODELS), with Skip. `lookModel` and `tiltModels` are for tests.
  */
 export function PhoneCamera({
   engineFactory = defaultEngine,
   lookModel = LOOK_MODEL,
+  tiltModels = TILT_MODELS,
   className,
   children
 }: {
   engineFactory?: EngineFactory
   lookModel?: LookModel | null
+  tiltModels?: Partial<Record<GameId, TiltModel>> | null
   className?: string
   children?: React.ReactNode
 }): React.JSX.Element {
@@ -102,6 +108,7 @@ export function PhoneCamera({
     stream: camera.stream,
     engineFactory,
     lookModel: scanProfile(game).rarityLook ? lookModel : null,
+    tiltModels,
     onStalled: camera.retry
   })
   const torch = useTorch(camera.stream)

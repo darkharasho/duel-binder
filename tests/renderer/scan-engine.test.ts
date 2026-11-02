@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { createScanEngine, type FrameSignals } from '@/features/scan/engine'
 import { createMockApi } from './mockApi'
 import type { OcrBand } from '@shared/scan/types'
+import type { TiltReading } from '@shared/scan/tiltFeatures'
 
 const band = (width: number): OcrBand => ({
   width,
@@ -10,12 +11,23 @@ const band = (width: number): OcrBand => ({
 })
 
 interface Posted {
-  msg: { type: string; wantBands?: boolean; wantLook?: boolean }
+  msg: {
+    type: string
+    wantBands?: boolean
+    wantLook?: boolean
+    tilt?: number[]
+    at?: number
+    game?: string
+    now?: number
+  }
   transfer?: Transferable[]
 }
 
-/** A stand-in for the vision worker that answers every frame with signals. */
-function fakeWorker(signals: FrameSignals): { worker: Worker; posted: Posted[] } {
+/** A stand-in for the vision worker that answers every frame with signals, and a tilt reading with reading. */
+function fakeWorker(
+  signals: FrameSignals,
+  reading: TiltReading | null = null
+): { worker: Worker; posted: Posted[] } {
   const posted: Posted[] = []
   const worker = {
     onmessage: null as ((e: MessageEvent) => void) | null,
@@ -23,12 +35,28 @@ function fakeWorker(signals: FrameSignals): { worker: Worker; posted: Posted[] }
     terminate: vi.fn(),
     postMessage(msg: { type: string; id?: number }, transfer?: Transferable[]) {
       posted.push({ msg, transfer })
+      if (msg.type === 'tiltReset') return
       const reply =
-        msg.type === 'init' ? { type: 'ready' } : { type: 'result', id: msg.id, signals }
+        msg.type === 'init'
+          ? { type: 'ready' }
+          : msg.type === 'tiltReading'
+            ? { type: 'tiltReading', id: msg.id, reading }
+            : { type: 'result', id: msg.id, signals }
       queueMicrotask(() => worker.onmessage?.({ data: reply } as MessageEvent))
     }
   }
   return { worker: worker as unknown as Worker, posted }
+}
+
+const NO_CARD: FrameSignals = {
+  found: false,
+  quad: null,
+  art: [],
+  codeBands: [],
+  nameBands: [],
+  textBands: [],
+  cues: null,
+  look: null
 }
 
 const frame = (): ImageData =>
@@ -323,5 +351,81 @@ describe('createScanEngine', () => {
       'disposed'
     )
     expect(late.close).toHaveBeenCalled()
+  })
+
+  it('asks the worker for a tilt reading and resolves with it', async () => {
+    const reading: TiltReading = { features: [0.5, 1.5], frames: 20, motion: 6 }
+    const { worker, posted } = fakeWorker(NO_CARD, reading)
+    const engine = createScanEngine({ api: createMockApi().scan, makeWorker: () => worker })
+    await engine.init(null)
+    await expect(engine.tiltReading!('pkm', 5000)).resolves.toEqual(reading)
+    // The window ends at the loop's now, not when the worker gets round to it.
+    expect(posted.at(-1)!.msg).toEqual({
+      type: 'tiltReading',
+      id: expect.any(Number),
+      game: 'pkm',
+      now: 5000
+    })
+    engine.tiltReset!()
+    expect(posted.at(-1)!.msg).toEqual({ type: 'tiltReset' })
+  })
+
+  it('a tilt reset starts no worker, and does nothing after dispose', () => {
+    const makeWorker = vi.fn(() => fakeWorker(NO_CARD).worker)
+    const engine = createScanEngine({ api: createMockApi().scan, makeWorker })
+    engine.tiltReset!()
+    expect(makeWorker).not.toHaveBeenCalled()
+    engine.dispose()
+    expect(() => engine.tiltReset!()).not.toThrow()
+    expect(makeWorker).not.toHaveBeenCalled()
+  })
+
+  it('a tilt reading rejects when the worker dies', async () => {
+    const silent = { postMessage: vi.fn(), terminate: vi.fn() } as unknown as Worker
+    const engine = createScanEngine({ api: createMockApi().scan, makeWorker: () => silent })
+    const pending = engine.tiltReading!('ygo')
+    silent.onerror?.({ message: 'boom' } as ErrorEvent)
+    await expect(pending).rejects.toThrow('boom')
+    expect(silent.terminate).toHaveBeenCalled()
+  })
+
+  it('a tilt reading the worker failed rejects with its error', async () => {
+    const worker = {
+      onmessage: null as ((e: MessageEvent) => void) | null,
+      terminate: vi.fn(),
+      postMessage(msg: { type: string; id?: number }) {
+        if (msg.type !== 'tiltReading') return
+        queueMicrotask(() =>
+          worker.onmessage?.({
+            data: { type: 'error', id: msg.id, message: 'bad frame' }
+          } as MessageEvent)
+        )
+      }
+    }
+    const engine = createScanEngine({
+      api: createMockApi().scan,
+      makeWorker: () => worker as unknown as Worker
+    })
+    await expect(engine.tiltReading!('ygo')).rejects.toThrow('bad frame')
+  })
+
+  it('passes the tilt images with a frame, and when it was grabbed', async () => {
+    const { worker, posted } = fakeWorker({ ...NO_CARD, tiltKept: true })
+    const engine = createScanEngine({ api: createMockApi().scan, makeWorker: () => worker })
+    await engine.init(null)
+    const out = await engine.analyze(frame(), {
+      candidates: [7],
+      wantText: false,
+      tilt: [7],
+      at: 1234
+    })
+    expect(posted.at(-1)!.msg).toMatchObject({ type: 'frame', tilt: [7], at: 1234 })
+    expect(out.tiltKept).toBe(true)
+    // Left out, it's taken as the frame is handed over.
+    await engine.analyze(frame(), { candidates: [7], wantText: false, tilt: [7] })
+    expect(posted.at(-1)!.msg.at).toEqual(expect.any(Number))
+    await engine.analyze(frame(), { candidates: null, wantText: false })
+    expect(posted.at(-1)!.msg).not.toHaveProperty('tilt')
+    expect(posted.at(-1)!.msg).not.toHaveProperty('at')
   })
 })

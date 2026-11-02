@@ -6,6 +6,7 @@ import type { CardLanguage } from '@shared/scan/language'
 import { lookCandidate, pickRarityByLook, type LookModel } from '@shared/scan/look'
 import { pickRarity, pickRarityByCues, type RarityCues } from '@shared/scan/rarity'
 import { setCodeCandidates } from '@shared/scan/setCode'
+import { tiltFinish, tiltFinishes, type TiltModel } from '@shared/scan/tilt'
 import {
   ART_FAR_DISTANCE,
   ART_MATCH_DEPTH,
@@ -430,5 +431,56 @@ export function describeLook(
       picks:
         !rules.certain && candidate.allowed && candidate.probability >= look.model.minProbability
     }
+  }
+}
+
+const gameOf = (item: ScanDraft): GameId => item.game ?? 'ygo'
+
+/** The printings a tilt picks among: lookOptions for Yu-Gi-Oh!, the card's own versions for Pokémon. */
+export function tiltOptions(item: ScanDraft): ScanPrinting[] {
+  if (item.game === 'pkm') return item.options.filter((p) => p.cardId === item.cardId)
+  const current = item.options.find((p) => p.printingId === item.printingId)
+  return current ? lookOptions(item, current) : []
+}
+
+/**
+ * The finishes to tilt for, or null when the draft gets no tilt: it needs a tilt model, Auto
+ * rarity, a draft that isn't a best guess and still wants its rarity checked (a Pokémon card may
+ * want its printing picked instead), and two holo-type finishes the model knows among its options
+ * with none overframe or full art.
+ */
+export function tiltChoicesFor(
+  item: ScanDraft,
+  defaultRarity: string | null,
+  model: TiltModel | undefined
+): string[] | null {
+  if (!model || defaultRarity !== null || item.guess) return null
+  if (item.flag !== 'check-rarity' && !(item.game === 'pkm' && item.flag === 'pick-printing'))
+    return null
+  return tiltFinishes(
+    gameOf(item),
+    tiltOptions(item).map((p) => p.rarity),
+    model
+  )
+}
+
+/**
+ * The draft on the printing of `finish`, still flagged Check rarity: the one showing the draft's
+ * artwork when there is one, and of those the unstamped version (rarity equal to the finish)
+ * before a stamped twin.
+ */
+export function withRarityByTilt(item: ScanDraft, finish: string): ScanDraft {
+  const game = gameOf(item)
+  const ofFinish = tiltOptions(item).filter((p) => tiltFinish(game, p.rarity) === finish)
+  const shown = ofFinish.filter((p) => p.imageIds.includes(item.imageId))
+  const pool = shown.length ? shown : ofFinish
+  const printing = pool.find((p) => p.rarity === finish) ?? pool[0]
+  if (!printing) return item
+  return {
+    ...item,
+    printingId: printing.printingId,
+    rarity: printing.rarity,
+    ...(game === 'pkm' ? { setCode: printing.setCode } : {}),
+    flag: 'check-rarity'
   }
 }

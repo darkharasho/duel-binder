@@ -277,3 +277,31 @@ export const AUTO_PHOTO_MS = 2500
 export const AUTO_PHOTO_TRIES = 2
 /** After a photo, the live scan counts nothing until the view clears, or this long at most. */
 export const PHOTO_SETTLE_MS = 4000
+
+/** The window of kept frames a tilt reads. */
+export const TILT_MS = 2000
+/** A tilt with no usable reading by now is dropped, and the card counted as without a tilt. */
+export const TILT_TIMEOUT_MS = 4000
+/** The tick during a tilt; the model's fit samples clips on the same grid. */
+export const TILT_FRAME_MS = 100
+/** How often the kept frames are read again after the first window. */
+export const TILT_RETRY_MS = 500
+/**
+ * A reading needs at least this many frames. A Yu-Gi-Oh! tilt frame costs more than the tick
+ * when its held outline slips and the card is searched for again, so a window holds about 10 to
+ * 11 frames, not the 20 the grid allows.
+ */
+export const TILT_MIN_FRAMES = 10
+/** Frames kept at most (about 31 MB of RGB at 421x614). */
+export const TILT_MAX_FRAMES = 40
+/**
+ * A reading needs at least this much motion in the art (0-255 luminance): the 10th percentile
+ * of motion over the tilt fit's webcam windows, which fit-tilt.ts prints.
+ */
+export const TILT_MIN_MOTION = 30.7
+/**
+ * Largest art distance at which a frame is kept for a tilt. Looser than ART_MAX_DISTANCE: a
+ * tilted foil's glare moves its art's hash, and those frames carry the most of its finish. Still
+ * tight enough that a hand or a bad outline over the held card's art isn't kept.
+ */
+export const TILT_MAX_ART_DISTANCE = ART_MAX_DISTANCE * 1.5

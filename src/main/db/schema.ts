@@ -453,8 +453,9 @@ export const SCHEMA_V33 = 'CREATE INDEX ix_printings_rarity ON card_printings(se
 /**
  * English printings YGOPRODeck lacks are filled in from Yugipedia's TCG-EN set lists (sync/intl.ts);
  * `yugipedia` marks them, so the YGOPRODeck sync leaves them be and takes one over when it lists
- * the same printing. Re-reads the set lists so they fill in. Desktop only: the server never syncs,
- * and the catalog feed doesn't carry the column.
+ * the same printing. Re-reads the set lists so they fill in. The server gets it too, though it never
+ * syncs and the catalog feed doesn't carry the column: the sync code it shares with the desktop (and
+ * its tests seed with) writes the column.
  */
 export const SCHEMA_V34 = `
 ALTER TABLE card_printings ADD COLUMN yugipedia INTEGER NOT NULL DEFAULT 0;
@@ -499,5 +500,5 @@ export const MIGRATIONS: Migration[] = [
   { version: 31, sql: SCHEMA_V31, server: false },
   { version: 32, sql: SCHEMA_V32, server: false },
   { version: 33, sql: SCHEMA_V33, server: false },
-  { version: 34, sql: SCHEMA_V34, server: false }
+  { version: 34, sql: SCHEMA_V34 }
 ]

@@ -41,7 +41,7 @@ const CARD = cn('flex min-h-28 shrink-0 gap-3 rounded-3xl p-2.5', GLASS)
 
 /** The newest row of the session, with its printing cycled or the row removed in place. */
 function LastScan({ row, burst }: { row: ScanRow; burst: number }): React.JSX.Element {
-  const { session } = useScanHub()
+  const { session, flashed } = useScanHub()
   const owned = useOwned(row.cardId, surePrinting(row))
   const scanned = copiesOnList(session.rows, row)
   const language = useScanLanguage()
@@ -67,7 +67,11 @@ function LastScan({ row, burst }: { row: ScanRow; burst: number }): React.JSX.El
       aria-label="Last scan"
       // Keyed by the burst, so each new scan replays the bump and the art dropping in.
       key={burst}
-      className={cn(CARD, burst > 0 && 'motion-safe:animate-[scan-bump_450ms_350ms_both]')}
+      className={cn(
+        CARD,
+        burst > 0 && 'motion-safe:animate-[scan-bump_450ms_350ms_both]',
+        row.key === flashed && 'scan-reread'
+      )}
     >
       <CardArt
         imageId={row.imageId}

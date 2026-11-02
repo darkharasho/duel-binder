@@ -129,6 +129,7 @@ export const ScanRowItem = memo(function ScanRowItem({
   language,
   scanned,
   highlighted = false,
+  flashed = false,
   disabled = false
 }: {
   row: ScanRow
@@ -138,6 +139,8 @@ export const ScanRowItem = memo(function ScanRowItem({
   /** Copies of this card on the whole list, this row's among them. */
   scanned: number
   highlighted?: boolean
+  /** A background rarity read just changed this row: an amber flash, apart from `highlighted`. */
+  flashed?: boolean
   /** While the list is being added to the collection, rows can't change under it. */
   disabled?: boolean
 }): React.JSX.Element {
@@ -157,7 +160,8 @@ export const ScanRowItem = memo(function ScanRowItem({
         'flex gap-3 rounded-[20px] p-2.5 transition-colors duration-700',
         GLASS,
         (row.flag || row.guess) && 'border-amber-400/45',
-        highlighted && 'bg-emerald-400/10'
+        highlighted && 'bg-emerald-400/10',
+        flashed && 'scan-reread'
       )}
     >
       <CardArt

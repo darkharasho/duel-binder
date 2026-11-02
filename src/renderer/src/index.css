@@ -177,6 +177,22 @@
   100% { opacity: 1; transform: none; }
 }
 
+/* A row a background rarity read just changed: one amber tint that fades out. Colour only, so
+   it moves nothing; with reduced motion it is the plain tint for as long as the class stays. */
+@keyframes scan-reread {
+  0% { background-color: rgb(251 191 36 / 0.3); }
+  100% { background-color: rgb(251 191 36 / 0); }
+}
+.scan-reread {
+  animation: scan-reread 900ms ease-out 1;
+}
+@media (prefers-reduced-motion: reduce) {
+  .scan-reread {
+    animation: none;
+    background-color: rgb(251 191 36 / 0.2);
+  }
+}
+
 /* Rip: the pack's strip tears off, the pack drops away as the cards rise into the hand. */
 @keyframes rip-bob {
   0%, 100% { transform: translateY(0); }

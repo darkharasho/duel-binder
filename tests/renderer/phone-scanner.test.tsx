@@ -95,12 +95,35 @@ function FakePull(): React.JSX.Element {
   )
 }
 
+/** Applies a background read to the first row (Common to Rare), as the tilt read does. */
+function FakeReread(): React.JSX.Element {
+  const { reread, session } = useScanHub()
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- the draft is the row without these
+  const { key, quantity, addedAt, ...draft } = row()
+  return (
+    <button
+      type="button"
+      onClick={() =>
+        reread(session.rows[0].key, {
+          ...draft,
+          printingId: 102,
+          rarity: 'Rare',
+          flag: 'check-rarity'
+        })
+      }
+    >
+      Fake reread
+    </button>
+  )
+}
+
 function renderScanner(store: PhoneStore): ReturnType<typeof renderWithProviders> {
   const engine = fakeEngine()
   return renderWithProviders(
     <PhoneContext.Provider value={{ store, user: SETO, signedOut: () => {} }}>
       <ScanHubProvider>
         <FakePull />
+        <FakeReread />
         <ScannerScreen engineFactory={() => engine} onClose={() => {}} onOpenSettings={() => {}} />
         <Toaster />
       </ScanHubProvider>
@@ -811,6 +834,41 @@ describe('phone scanner tilt', () => {
     expect(saved()[0].flag).not.toBeNull()
     expect(saved()[0].quantity).toBe(1)
     expect(screen.getByTestId('counted')).toHaveTextContent('1')
+  })
+
+  describe('the flash of a background read', () => {
+    async function readOnce(): Promise<ReturnType<typeof userEvent.setup>> {
+      vi.useFakeTimers()
+      vi.stubGlobal('jest', { advanceTimersByTime: (ms: number) => vi.advanceTimersByTime(ms) })
+      localStorage.setItem(SESSION_KEY, JSON.stringify([row({ flag: 'check-rarity' })]))
+      renderScanner(fakeStore())
+      await settle()
+      return userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    }
+
+    it('flashes the review sheet row for 900 ms', async () => {
+      const user = await readOnce()
+      await user.click(screen.getByRole('button', { name: 'Review 1 scanned' }))
+      const sheet = screen.getByRole('region', { name: 'Review' })
+      const li = (): HTMLElement | null => within(sheet).getByText('Dark Magician').closest('li')
+      expect(li()).not.toHaveClass('scan-reread')
+      await user.click(screen.getByRole('button', { name: 'Fake reread' }))
+      expect(li()).toHaveClass('scan-reread')
+      await settle(899)
+      expect(li()).toHaveClass('scan-reread')
+      await settle(1)
+      expect(li()).not.toHaveClass('scan-reread')
+    })
+
+    it('flashes the last-card strip for 900 ms', async () => {
+      const user = await readOnce()
+      const strip = screen.getByRole('region', { name: 'Last scan' })
+      expect(strip).not.toHaveClass('scan-reread')
+      await user.click(screen.getByRole('button', { name: 'Fake reread' }))
+      expect(strip).toHaveClass('scan-reread')
+      await settle(900)
+      expect(strip).not.toHaveClass('scan-reread')
+    })
   })
 
   it('the phone scanner tilts with the shipped models by default', async () => {

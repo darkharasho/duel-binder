@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { LOOK_MODEL } from '@shared/scan/lookModel'
 import { scanProfile } from '@shared/scan/profiles'
+import { TILT_MODELS } from '@shared/scan/tiltModel'
 import { Button } from '@/components/ui/button'
 import { ArtDataNotice } from '@/features/scan/ArtDataNotice'
 import type { CropRect } from '@/features/scan/crop'
@@ -104,6 +105,7 @@ export function StreamCamera({
     engineFactory,
     // The phone scanner's recognition as it is, look model and all (see PhoneCamera).
     lookModel: scanProfile(game).rarityLook ? LOOK_MODEL : null,
+    tiltModels: TILT_MODELS,
     onStalled: camera.retry,
     paused,
     onPull: pulled

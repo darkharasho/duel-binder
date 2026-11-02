@@ -296,6 +296,31 @@ describe('Scan page', () => {
     expect(bridge.sent.at(-1)).toEqual({ kind: 'rarityAck', id: 'd1' })
   })
 
+  it('flashes a row a background read changed, for 900 ms', async () => {
+    await renderScan()
+    await openWindow()
+    act(() => bridge.emit({ kind: 'draft', id: 'd1', draft: draft({ flag: 'check-rarity' }) }))
+    const li = (): HTMLElement | null => screen.getByText('Dark Magician').closest('li')
+    expect(li()).not.toHaveClass('scan-reread')
+    act(() =>
+      bridge.emit({
+        kind: 'rarity',
+        id: 'd1',
+        draft: draft({
+          printingId: 102,
+          rarity: 'Rare',
+          flag: 'check-rarity',
+          options: [printing({ rarity: 'Common' }), printing({ printingId: 102, rarity: 'Rare' })]
+        })
+      })
+    )
+    expect(li()).toHaveClass('scan-reread')
+    await run(899)
+    expect(li()).toHaveClass('scan-reread')
+    await run(1)
+    expect(li()).not.toHaveClass('scan-reread')
+  })
+
   it('a rarity read for an unknown pull changes no row and is still acknowledged', async () => {
     await renderScan()
     await openWindow()

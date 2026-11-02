@@ -43,7 +43,7 @@ const STEP =
 
 /** One scanned card: art, code and price, its printing, how many, and remove. */
 function ReviewRow({ row, disabled }: { row: ScanRow; disabled: boolean }): React.JSX.Element {
-  const { session } = useScanHub()
+  const { session, flashed } = useScanHub()
   const language = useScanLanguage()
   const choices = useMemo(() => choicesFor(row, language), [row, language])
   const price = priceOf(row)
@@ -57,7 +57,8 @@ function ReviewRow({ row, disabled }: { row: ScanRow; disabled: boolean }): Reac
       className={cn(
         'flex gap-3 rounded-[20px] p-2.5',
         GLASS,
-        (row.flag || row.guess) && 'border-amber-400/45'
+        (row.flag || row.guess) && 'border-amber-400/45',
+        row.key === flashed && 'scan-reread'
       )}
     >
       <CardArt

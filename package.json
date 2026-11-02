@@ -15,7 +15,7 @@
     "build:phone": "cross-env NODE_ENV=production vite build --config vite.phone.config.ts",
     "dev:phone": "vite --config vite.phone.config.ts",
     "build:ios": "cross-env NODE_ENV=production vite build --config vite.phone.config.ts --mode ios && cap sync ios",
-    "build:android": "cross-env NODE_ENV=production vite build --config vite.phone.config.ts --mode android",
+    "build:android": "cross-env NODE_ENV=production vite build --config vite.phone.config.ts --mode android && cross-env CAP_PLATFORM=android cap sync android",
     "typecheck": "npm run typecheck:node && npm run typecheck:web && npm run typecheck:phone",
     "start": "electron-vite preview",
     "dev": "electron-vite dev",
@@ -33,6 +33,7 @@
     "test": "cross-env ELECTRON_RUN_AS_NODE=1 electron ./node_modules/vitest/vitest.mjs run --maxWorkers=2"
   },
   "dependencies": {
+    "@capacitor/android": "^8.5.3",
     "@capacitor/core": "^8.5.3",
     "@capacitor/ios": "^8.5.3",
     "@electron-toolkit/preload": "^3.0.2",

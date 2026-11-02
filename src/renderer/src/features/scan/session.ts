@@ -3,6 +3,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import type { GameId } from '@shared/games/types'
 import { api, invalidateAfterEdit } from '@/lib/api'
 import { track } from '@/lib/usage'
+import { copiesOnList } from './owned'
 import type { ScanDraft } from './resolve'
 import { printingOf } from './scanLook'
 
@@ -93,6 +94,8 @@ export function useScanSession(game: GameId = 'ygo'): {
   committing: boolean
   /** Adds a row of its own (never merged into another) and returns its key. */
   add(d: ScanDraft): string
+  /** Copies of the draft's card on the list, read at once: an add just made counts. */
+  copiesOf(d: ScanDraft): number
   setPrinting(key: string, printingId: number): void
   setQuantity(key: string, q: number): void
   remove(key: string): void
@@ -141,6 +144,8 @@ export function useScanSession(game: GameId = 'ygo'): {
     },
     [update]
   )
+
+  const copiesOf = useCallback((d: ScanDraft) => copiesOnList(ref.current, d), [])
 
   const setPrinting = useCallback(
     (key: string, printingId: number): void =>
@@ -279,6 +284,7 @@ export function useScanSession(game: GameId = 'ygo'): {
     total,
     committing,
     add,
+    copiesOf,
     setPrinting,
     setQuantity,
     remove,

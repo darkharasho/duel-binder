@@ -265,8 +265,8 @@ describe('Scan page', () => {
     act(() => bridge.emit({ kind: 'draft', id: 'p1', draft: draft() }))
     expect(screen.getByLabelText('Quantity of Dark Magician')).toHaveTextContent('1')
     expect(bridge.sent.filter((m) => m.kind === 'ack')).toEqual([
-      { kind: 'ack', id: 'p1' },
-      { kind: 'ack', id: 'p1' }
+      { kind: 'ack', id: 'p1', scanned: 1 },
+      { kind: 'ack', id: 'p1', scanned: 1 }
     ])
   })
 
@@ -280,7 +280,7 @@ describe('Scan page', () => {
     await run()
     act(() => bridge.emit({ kind: 'draft', id: 'p1', draft: draft() }))
     expect(screen.getByLabelText('Quantity of Dark Magician')).toHaveTextContent('1')
-    expect(bridge.sent.at(-1)).toEqual({ kind: 'ack', id: 'p1' })
+    expect(bridge.sent.at(-1)).toEqual({ kind: 'ack', id: 'p1', scanned: 1 })
   })
 
   it('forgets what a scan window that reloaded reported before', async () => {
@@ -1672,7 +1672,9 @@ describe('The hub with two games', () => {
     await hub.switchTo('pkm')
     // The window sends an unacked pull again.
     act(() => bridge.emit({ kind: 'draft', id: 'k1', draft: pkmDraft() }))
-    expect(bridge.sent.filter((m) => m.kind === 'ack')).toEqual([{ kind: 'ack', id: 'k1' }])
+    expect(bridge.sent.filter((m) => m.kind === 'ack')).toEqual([
+      { kind: 'ack', id: 'k1', scanned: 1 }
+    ])
     expect(JSON.parse(localStorage.getItem(SESSION_KEY)!)).toHaveLength(1)
 
     // And a Yu-Gi-Oh! draft now waits for Yu-Gi-Oh!.

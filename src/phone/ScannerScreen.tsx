@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
 import { englishSetName } from '@shared/setNames'
-import { useQuery } from '@tanstack/react-query'
 import {
   ArrowRightIcon,
   CopyIcon,
@@ -14,12 +13,12 @@ import {
 import { CardArt } from '@/components/CardArt'
 import type { EngineFactory } from '@/features/scan/engine'
 import { useScanLanguage, useScanPickers, type PickerProps } from '@/features/scan/pickerOptions'
+import { copiesOnList, ownedText, surePrinting, useOwned } from '@/features/scan/owned'
 import { choicesFor, flagText } from '@/features/scan/ScanRowItem'
 import { useScanHub } from '@/features/scan/ScanHub'
 import type { PickerOption } from '@/features/scan/SearchPicker'
 import type { ScanRow } from '@/features/scan/session'
 import { scanProfile } from '@shared/scan/profiles'
-import { api, queryKeys } from '@/lib/api'
 import { useGame } from '@/lib/game'
 import { formatUsd } from '@/lib/format'
 import { cn } from '@/lib/utils'
@@ -36,33 +35,13 @@ import {
   versionToPick
 } from '@/features/scan/scanLook'
 
-/**
- * Copies of the row's printing already in the collection, any condition; of any of the card's
- * versions while a Pokémon card's version is still to pick. Null while loading.
- */
-function useOwned(row: ScanRow): number | null {
-  const entries = useQuery({
-    queryKey: queryKeys.forCard(row.cardId),
-    queryFn: () => api.collection.forCard(row.cardId)
-  })
-  if (!entries.data) return null
-  const anyVersion = versionToPick(row)
-  return entries.data
-    .filter((e) => anyVersion || e.printing.id === row.printingId)
-    .reduce((n, e) => n + e.quantity, 0)
-}
-
-function ownedText(owned: number, quantity: number): string {
-  const own = owned > 0 ? `Own ${owned}` : 'Not owned'
-  return owned > 0 && quantity <= 1 ? own : `${own} · ×${quantity} this scan`
-}
-
 const CARD = cn('flex min-h-28 shrink-0 gap-3 rounded-3xl p-2.5', GLASS)
 
 /** The newest row of the session, with its printing cycled or the row removed in place. */
 function LastScan({ row, burst }: { row: ScanRow; burst: number }): React.JSX.Element {
   const { session } = useScanHub()
-  const owned = useOwned(row)
+  const owned = useOwned(row.cardId, surePrinting(row))
+  const scanned = copiesOnList(session.rows, row)
   const language = useScanLanguage()
   const choices = useMemo(() => choicesFor(row, language), [row, language])
   // A Pokémon version still to pick has no printing to show yet, only its card's price range.
@@ -119,7 +98,7 @@ function LastScan({ row, burst }: { row: ScanRow; burst: number }): React.JSX.El
         <p className="flex items-center gap-1 text-white/75">
           <CopyIcon aria-hidden className="size-3.5 shrink-0" />
           <span className="truncate">
-            {owned === null ? `×${row.quantity} this scan` : ownedText(owned, row.quantity)}
+            {owned === null ? `×${scanned} this scan` : ownedText(owned, scanned, row.game)}
           </span>
         </p>
         {flag && <p className="text-amber-300">{flag}</p>}

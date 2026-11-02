@@ -1,7 +1,9 @@
-import { render, screen } from '@testing-library/react'
+import { screen } from '@testing-library/react'
 import { flagText, ScanRowItem, type ScanRowActions } from '@/features/scan/ScanRowItem'
 import { statusText } from '@/features/scan/scanText'
 import type { ScanRow } from '@/features/scan/session'
+import { createMockApi, renderWithProviders } from './mockApi'
+import type { Api } from '@shared/ipc'
 import { printing } from './scanFakes'
 
 const actions: ScanRowActions = { setPrinting: () => {}, setQuantity: () => {}, remove: () => {} }
@@ -35,18 +37,67 @@ const row = (o: Partial<ScanRow> = {}): ScanRow => ({
 })
 
 describe('ScanRowItem', () => {
+  const owned = (entries: { id: number; quantity: number }[]): { api: Api } => {
+    const api = createMockApi()
+    vi.mocked(api.collection.forCard).mockResolvedValue(
+      entries.map((e) => ({
+        quantity: e.quantity,
+        printing: { id: e.id }
+      })) as never
+    )
+    return { api }
+  }
+  const sure = { flag: null, printingId: 61362 }
+
+  it('says a card the collection has none of is new', async () => {
+    renderWithProviders(
+      <ScanRowItem row={row(sure)} actions={actions} language={null} scanned={1} />,
+      owned([])
+    )
+    expect(await screen.findByText('New card')).toBeInTheDocument()
+  })
+
+  it('says how many of the printing the collection has, and how many are on the list', async () => {
+    renderWithProviders(
+      <ScanRowItem row={row(sure)} actions={actions} language={null} scanned={2} />,
+      owned([
+        { id: 61362, quantity: 3 },
+        { id: 7, quantity: 1 }
+      ])
+    )
+    expect(await screen.findByText('Own 3 · ×2 this scan')).toBeInTheDocument()
+  })
+
+  it('tells a new printing of an owned card from a new card', async () => {
+    renderWithProviders(
+      <ScanRowItem row={row(sure)} actions={actions} language={null} scanned={1} />,
+      owned([{ id: 7, quantity: 2 }])
+    )
+    expect(await screen.findByText('New printing · Own 2 others')).toBeInTheDocument()
+  })
+
+  it('counts every printing of the card while the printing is unsure', async () => {
+    renderWithProviders(
+      <ScanRowItem row={row()} actions={actions} language={null} scanned={1} />,
+      owned([{ id: 7, quantity: 2 }])
+    )
+    expect(await screen.findByText('Own 2')).toBeInTheDocument()
+  })
+
   it("shows the printing's own photo when the row keeps the card's first artwork", () => {
-    render(<ScanRowItem row={row()} actions={actions} language={null} />)
+    renderWithProviders(<ScanRowItem row={row()} actions={actions} language={null} scanned={1} />)
     expect(screen.getByTestId('printing-scan')).toHaveAttribute('src', 'ygo-img://printing/61362')
   })
 
   it('keeps an alternate artwork the art match picked', () => {
-    render(<ScanRowItem row={row({ imageId: 78193832 })} actions={actions} language={null} />)
+    renderWithProviders(
+      <ScanRowItem row={row({ imageId: 78193832 })} actions={actions} language={null} scanned={1} />
+    )
     expect(screen.queryByTestId('printing-scan')).not.toBeInTheDocument()
   })
 
   it('names the set of a printing that has no code', () => {
-    render(<ScanRowItem row={row()} actions={actions} language={null} />)
+    renderWithProviders(<ScanRowItem row={row()} actions={actions} language={null} scanned={1} />)
     // The subtitle, and the set's name in the printing picker.
     expect(screen.getAllByText('Original Artwork Collection')).toHaveLength(2)
   })
@@ -62,9 +113,9 @@ describe('a best guess', () => {
   })
 
   it('shows on the row and in the status line', () => {
-    render(
+    renderWithProviders(
       <ul>
-        <ScanRowItem row={row({ guess: true })} actions={actions} language={null} />
+        <ScanRowItem row={row({ guess: true })} actions={actions} language={null} scanned={1} />
       </ul>
     )
     expect(screen.getByText('Best guess, check card')).toBeInTheDocument()

@@ -1,6 +1,7 @@
 import { memo, useMemo } from 'react'
 import {
   ChevronDownIcon,
+  CopyIcon,
   MinusIcon,
   PlusIcon,
   StarIcon,
@@ -14,6 +15,7 @@ import { englishSetName } from '@shared/setNames'
 import { CardArt } from '@/components/CardArt'
 import { formatUsd } from '@/lib/format'
 import { cn } from '@/lib/utils'
+import { ownedText, surePrinting, useOwned } from './owned'
 import type { ScanDraft } from './resolve'
 import { GLASS, priceOf, priceRange, printingOf, versionToPick } from './scanLook'
 import { OptionLabel, SearchPicker, type PickerOption } from './SearchPicker'
@@ -125,6 +127,7 @@ export const ScanRowItem = memo(function ScanRowItem({
   row,
   actions,
   language,
+  scanned,
   highlighted = false,
   disabled = false
 }: {
@@ -132,6 +135,8 @@ export const ScanRowItem = memo(function ScanRowItem({
   actions: ScanRowActions
   /** The scan language the printing dropdown is narrowed to; null lists every language. */
   language: Language | null
+  /** Copies of this card on the whole list, this row's among them. */
+  scanned: number
   highlighted?: boolean
   /** While the list is being added to the collection, rows can't change under it. */
   disabled?: boolean
@@ -141,6 +146,7 @@ export const ScanRowItem = memo(function ScanRowItem({
   const range = versionToPick(row) ? priceRange(row) : null
   const current = printingOf(row)
   const flag = flagText(row)
+  const owned = useOwned(row.cardId, surePrinting(row))
   const where = setLabelFor(row)
   const { key } = row
   const { setPrinting } = actions
@@ -200,6 +206,12 @@ export const ScanRowItem = memo(function ScanRowItem({
             </>
           )}
         />
+        {owned && (
+          <p className="mt-1 flex items-center gap-1 text-xs text-muted-foreground">
+            <CopyIcon aria-hidden className="size-3.5 shrink-0" />
+            <span className="truncate">{ownedText(owned, scanned, row.game)}</span>
+          </p>
+        )}
         {flag && (
           <p className="mt-1 flex items-center gap-1 text-xs text-amber-300">
             <TriangleAlertIcon aria-hidden className="size-3.5 shrink-0" />

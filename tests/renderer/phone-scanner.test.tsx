@@ -288,20 +288,29 @@ describe('phone scanner', () => {
       expect(within(card).getByLabelText('Price of Dark Magician')).toHaveTextContent('$12.50')
       expect(card).toHaveTextContent('Ultra Rare')
       expect(card).toHaveTextContent('Check rarity')
-      expect(await within(card).findByText('Own 2 · ×3 this scan')).toBeInTheDocument()
+      expect(await within(card).findByText('Own 6 · ×3 this scan')).toBeInTheDocument()
       // One printing to choose from: no cycle button.
       expect(
         within(card).queryByRole('button', { name: 'Next printing of Dark Magician' })
       ).not.toBeInTheDocument()
     })
 
-    it('says Not owned when the collection has none of the printing', async () => {
+    it('tells a new printing of an owned card from a new card', async () => {
       localStorage.setItem(SESSION_KEY, JSON.stringify([row()]))
       const store = fakeStore({ invoke: forCard([{ printingId: 102, quantity: 1 }]) })
       installPhoneApi(store)
       renderScanner(store)
       const card = await screen.findByRole('region', { name: 'Last scan' })
-      expect(await within(card).findByText('Not owned · ×1 this scan')).toBeInTheDocument()
+      expect(await within(card).findByText('New printing · Own 1 other')).toBeInTheDocument()
+    })
+
+    it('says New card when the collection has no copy of it, and counts copies on other rows', async () => {
+      localStorage.setItem(SESSION_KEY, JSON.stringify([row({ key: 'a#1' }), row({ key: 'a#2' })]))
+      const store = fakeStore({ invoke: forCard([]) })
+      installPhoneApi(store)
+      renderScanner(store)
+      const card = await screen.findByRole('region', { name: 'Last scan' })
+      expect(await within(card).findByText('New card · ×2 this scan')).toBeInTheDocument()
     })
 
     it('cycles the printing and wraps around', async () => {

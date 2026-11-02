@@ -185,7 +185,7 @@ describe('Scan window', () => {
     expect(sends().get(id)).toBe(1)
     await run(2000)
     expect(sends().get(id)).toBe(2)
-    act(() => bridge.emit({ kind: 'ack', id }))
+    act(() => bridge.emit({ kind: 'ack', id, scanned: 1 }))
     await run(4000)
     expect(sends().get(id)).toBe(2)
     expect(drafts()).toHaveLength(1)
@@ -612,6 +612,25 @@ describe('Scan window', () => {
     expect(screen.queryByRole('status', { name: 'Pull' })).not.toBeInTheDocument()
   })
 
+  it("a counted pull says it's a new card once the main window acknowledges it", async () => {
+    stubCamera()
+    const engine = fakeEngine(() => codeFrame('LOB-EN005'))
+    await renderWindow(engine, {
+      scan: { printingsByCode: vi.fn(async () => [printing({ price: 12.5 })]) }
+    })
+    let draft = bridge.sent.find((m) => m.kind === 'draft')
+    while (!draft) {
+      await run(50)
+      draft = bridge.sent.find((m) => m.kind === 'draft')
+    }
+    const bar = screen.getByRole('status', { name: 'Pull' })
+    await run(0)
+    expect(bar).not.toHaveTextContent('New card')
+    act(() => bridge.emit({ kind: 'ack', id: draft.id, scanned: 1 }))
+    await run(0)
+    expect(bar).toHaveTextContent('New card')
+  })
+
   it('a hit price changed in settings applies to the next pull', async () => {
     stubCamera()
     let card = true
@@ -766,6 +785,9 @@ describe('Scan window and the game', () => {
 describe('PullOverlay for Pokémon pulls', () => {
   const pull = (o: Partial<Pull> = {}): Pull => ({
     key: 1,
+    id: 'p',
+    cardId: 9,
+    printingId: 90,
     name: 'Pikachu',
     imageId: 500,
     setCode: null,
@@ -776,6 +798,35 @@ describe('PullOverlay for Pokémon pulls', () => {
     raw: false,
     hit: false,
     ...o
+  })
+
+  const owning = (quantity: number): { api: Api } => {
+    const api = createMockApi()
+    vi.mocked(api.collection.forCard).mockResolvedValue(
+      (quantity ? [{ quantity, printing: { id: 90 } }] : []) as never
+    )
+    return { api }
+  }
+
+  it('shows nothing about owning a pull until the main window has counted it', async () => {
+    const { api, rerender } = renderWithProviders(<PullOverlay pull={pull()} />, owning(0))
+    await waitFor(() => expect(api.collection.forCard).toHaveBeenCalledWith(9))
+    await act(async () => {})
+    expect(screen.queryByText('New card')).not.toBeInTheDocument()
+    rerender(<PullOverlay pull={pull()} scanned={{ p: 1 }} />)
+    expect(await screen.findByText('New card')).toBeInTheDocument()
+  })
+
+  it('says how many a pull has, on the bar and on the hit moment', async () => {
+    const { rerender } = renderWithProviders(
+      <PullOverlay pull={pull()} scanned={{ p: 2 }} />,
+      owning(3)
+    )
+    expect(await screen.findByText('Own 3 · ×2 this scan')).toBeInTheDocument()
+    rerender(<PullOverlay pull={pull({ key: 2, price: 50, hit: true })} scanned={{ p: 2 }} />)
+    expect(
+      await within(screen.getByLabelText('Hit')).findByText('Own 3 · ×2 this scan')
+    ).toBeInTheDocument()
   })
 
   it('pkm pick-printing pull shows range and is never a hit', () => {

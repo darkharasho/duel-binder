@@ -2,13 +2,15 @@
 // its art against the fingerprints and cutting out its text bands for OCR in main.
 import { decodeFingerprints, type FingerprintIndex } from '@shared/scan/fingerprintFile'
 import { SCAN_PROFILES, scanProfile, type ScanProfile } from '@shared/scan/profiles'
-import { ART_MAX_DISTANCE } from '@shared/scan/thresholds'
+import { ART_MAX_DISTANCE, TILT_MS } from '@shared/scan/thresholds'
+import { tiltFeatures } from '@shared/scan/tiltFeatures'
 import type { RgbaImage } from '@shared/scan/types'
 import type { FrameSignals, WorkerReply, WorkerRequest } from '../engine'
 import { analyze } from './analyze'
 import { loadCv } from './cv'
 import type { Quad } from './detect'
 import { holderBudget } from './holderBudget'
+import { createTiltFrames } from './tiltFrames'
 
 interface WorkerScope {
   onmessage: ((e: MessageEvent<WorkerRequest>) => void) | null
@@ -28,6 +30,8 @@ const budget = holderBudget()
 // Where the last frame's art matched, tried first on the next. Art the holder search found isn't
 // kept: the resolver is warier of it, and only that search can say so.
 let held: Quad | null = null
+// A tilted card's frames, kept from the live frames that ask (their tilt) and read on request.
+const tilt = createTiltFrames()
 
 const messageOf = (e: unknown): string => (e instanceof Error ? e.message : String(e))
 
@@ -64,6 +68,7 @@ async function handle(msg: WorkerRequest): Promise<void> {
       index = msg.fingerprints ? decodeFingerprints(msg.fingerprints) : null
       profile = scanProfile(msg.game)
       held = null
+      tilt.clear()
       if (index && msg.refs?.length) index.withRefs(msg.refs)
       liveIndex = index
       scope.postMessage({ type: 'ready' })
@@ -82,6 +87,21 @@ async function handle(msg: WorkerRequest): Promise<void> {
     scope.postMessage({ type: 'artDistance', id: msg.id, distance })
     return
   }
+  if (msg.type === 'tiltReset') {
+    tilt.clear()
+    return
+  }
+  if (msg.type === 'tiltReading') {
+    // Only the window read: tiltFeatures holds about 3 MB of floats a frame while it works. A
+    // 20-frame window takes it about 0.9 s, and frames sent meanwhile wait behind it.
+    try {
+      const reading = tiltFeatures(tilt.latest(TILT_MS, performance.now()), msg.game)
+      scope.postMessage({ type: 'tiltReading', id: msg.id, reading })
+    } catch (e) {
+      scope.postMessage({ type: 'error', id: msg.id, message: messageOf(e) })
+    }
+    return
+  }
   try {
     const cv = await loadCv()
     if (msg.photo) {
@@ -98,7 +118,8 @@ async function handle(msg: WorkerRequest): Promise<void> {
       reply(msg.id, signals)
       return
     }
-    const signals = analyze(
+    // The upright card stays in the worker: it's a few MB, and the UI thread has no use for it.
+    const { upright, ...signals } = analyze(
       cv,
       pixels(msg.image),
       liveIndex,
@@ -108,8 +129,14 @@ async function handle(msg: WorkerRequest): Promise<void> {
       profile,
       budget.allow(),
       held,
-      false
+      false,
+      !!msg.tilt
     )
+    const top = signals.art[0]?.imageId
+    if (upright && top !== undefined && msg.tilt?.includes(top)) {
+      tilt.keep(upright, performance.now())
+      signals.tiltKept = true
+    }
     const distance = signals.art[0]?.distance ?? null
     budget.record(distance)
     held =

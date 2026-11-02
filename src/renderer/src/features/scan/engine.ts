@@ -7,6 +7,7 @@ import type { ArtMatch } from '@shared/scan/fingerprintFile'
 import type { ScanRef } from '@shared/scan/fingerprintRefs'
 import type { OcrBand, RgbaImage } from '@shared/scan/types'
 import type { Quad } from './vision/detect'
+import type { TiltReading } from '@shared/scan/tiltFeatures'
 
 export type { ArtMatch } from '@shared/scan/fingerprintFile'
 
@@ -41,6 +42,8 @@ export interface FrameSignals {
    * asked for (wantLook) and the card was turned upright, else null.
    */
   look: number[] | null
+  /** The worker kept this frame for the tilt reading (the frame's `tilt` held its art). */
+  tiltKept?: boolean
 }
 
 /** Messages to the vision worker. Frames are answered in the order they're sent. */
@@ -57,16 +60,23 @@ export type WorkerRequest =
       wantLook: boolean
       /** A photo: every language's art, the whole holder search, and bands whatever wantBands says. */
       photo?: true
+      /** Keep the card for the tilt reading when its closest art is one of these images. */
+      tilt?: number[]
     }
   /** Narrows live frames' art search to these artworks, or null for all of it, until told again. */
   | { type: 'scope'; imageIds: number[] | null }
   | { type: 'artDistance'; id: number; a: number; b: number }
+  /** The tilt features of the frames kept in the last TILT_MS. */
+  | { type: 'tiltReading'; id: number; game: GameId }
+  /** Forgets the kept tilt frames (init does too). */
+  | { type: 'tiltReset' }
 
 /** Messages from it: `ready` answers `init`, and an error with no id is init's. */
 export type WorkerReply =
   | { type: 'ready' }
   | { type: 'result'; id: number; signals: FrameSignals }
   | { type: 'artDistance'; id: number; distance: number | null }
+  | { type: 'tiltReading'; id: number; reading: TiltReading | null }
   | { type: 'error'; id: number | null; message: string }
 
 /** A frame's signals with its bands read. */
@@ -88,6 +98,8 @@ export interface RawSignals {
   /** As FrameSignals.artVia. */
   artVia?: 'holder'
   look: number[] | null
+  /** As FrameSignals.tiltKept. */
+  tiltKept?: boolean
 }
 
 export interface ScanEngine {
@@ -99,16 +111,30 @@ export interface ScanEngine {
   /**
    * The frame is handed to the worker, so it can't be used afterwards. A camera frame is best
    * an ImageBitmap: the worker reads its pixels, so the UI thread never copies them. `wantLook`
-   * measures the card's look for the rarity look model as well.
+   * measures the card's look for the rarity look model as well. A live frame whose closest art is
+   * one of `tilt` is kept for the tilt reading (tiltKept).
    */
   analyze(
     frame: ImageBitmap | ImageData,
-    opts: { candidates: number[] | null; wantText: boolean; wantLook?: boolean; photo?: boolean }
+    opts: {
+      candidates: number[] | null
+      wantText: boolean
+      wantLook?: boolean
+      photo?: boolean
+      tilt?: number[]
+    }
   ): Promise<RawSignals>
   /** Live frames match only these artworks from now on; null for every one. */
   scope(imageIds: number[] | null): void
   /** How far apart two artworks' fingerprints are; null when either has none. */
   artDistance?(a: number, b: number): Promise<number | null>
+  /**
+   * The tilt features of the frames kept in the last TILT_MS, read as game's cards; null for too
+   * few of them. It takes the worker about a second, and frames sent meanwhile wait behind it.
+   */
+  tiltReading?(game: GameId): Promise<TiltReading | null>
+  /** Forgets the kept tilt frames. */
+  tiltReset?(): void
   /** Stops the worker and rejects pending calls; init and analyze reject afterwards. */
   dispose(): void
 }
@@ -151,6 +177,7 @@ export function createScanEngine(deps: {
   const inits: Waiter<void>[] = []
   const frames = new Map<number, Waiter<FrameSignals>>()
   const distances = new Map<number, (distance: number | null) => void>()
+  const tilts = new Map<number, Waiter<TiltReading | null>>()
   const initMs = deps.timeouts?.initMs ?? INIT_TIMEOUT_MS
   const frameMs = deps.timeouts?.frameMs ?? FRAME_TIMEOUT_MS
 
@@ -158,6 +185,8 @@ export function createScanEngine(deps: {
     for (const w of inits.splice(0)) w.reject(error)
     for (const w of frames.values()) w.reject(error)
     frames.clear()
+    for (const w of tilts.values()) w.reject(error)
+    tilts.clear()
   }
 
   /** Throws the worker away with everything it owes; the next call starts a new one. */
@@ -199,11 +228,16 @@ export function createScanEngine(deps: {
       } else if (msg.type === 'artDistance') {
         distances.get(msg.id)?.(msg.distance)
         distances.delete(msg.id)
+      } else if (msg.type === 'tiltReading') {
+        tilts.get(msg.id)?.resolve(msg.reading)
+        tilts.delete(msg.id)
       } else if (msg.id === null) {
         inits.shift()?.reject(new Error(msg.message))
       } else {
         frames.get(msg.id)?.reject(new Error(msg.message))
         frames.delete(msg.id)
+        tilts.get(msg.id)?.reject(new Error(msg.message))
+        tilts.delete(msg.id)
       }
     }
     // A dead worker takes its pending frames with it; the next call starts a new one.
@@ -241,7 +275,23 @@ export function createScanEngine(deps: {
       })
     },
 
-    async analyze(frame, { candidates, wantText, wantLook = false, photo = false }) {
+    tiltReading(game) {
+      return new Promise((resolve, reject) => {
+        const id = nextId++
+        try {
+          send({ type: 'tiltReading', id, game })
+          tilts.set(id, watched({ resolve, reject }, frameMs))
+        } catch (e) {
+          reject(e instanceof Error ? e : new Error(String(e)))
+        }
+      })
+    },
+
+    tiltReset() {
+      send({ type: 'tiltReset' })
+    },
+
+    async analyze(frame, { candidates, wantText, wantLook = false, photo = false, tilt }) {
       const id = nextId++
       const signals = await new Promise<FrameSignals>((resolve, reject) => {
         const bitmap = !('data' in frame)
@@ -257,7 +307,8 @@ export function createScanEngine(deps: {
               candidates,
               wantBands: wantText,
               wantLook,
-              ...(photo ? { photo: true as const } : {})
+              ...(photo ? { photo: true as const } : {}),
+              ...(tilt ? { tilt } : {})
             },
             [bitmap ? frame : (frame.data.buffer as ArrayBuffer)]
           )
@@ -273,8 +324,11 @@ export function createScanEngine(deps: {
         }
       })
       const { found, quad, art, cues, version, slab, look } = signals
-      // Only when set, so a Yu-Gi-Oh frame's signals are as they were.
-      const via = signals.artVia ? { artVia: signals.artVia } : {}
+      // Only when set, so a frame's signals are as they were without the holder search or a tilt.
+      const flags = {
+        ...(signals.artVia ? { artVia: signals.artVia } : {}),
+        ...(signals.tiltKept ? { tiltKept: true } : {})
+      }
       if (!wantText || !found)
         return {
           found,
@@ -286,7 +340,7 @@ export function createScanEngine(deps: {
           cues,
           version,
           slab,
-          ...via,
+          ...flags,
           look
         }
       const codeBands = signals.codeBands.filter(hasPixels)
@@ -309,7 +363,7 @@ export function createScanEngine(deps: {
         cues,
         version,
         slab,
-        ...via,
+        ...flags,
         look
       }
     },

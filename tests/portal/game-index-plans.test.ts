@@ -154,6 +154,12 @@ describe('game index plans on a migrated server', () => {
     expect(plansOf('rarity', 'ygo')).toContain('COVERING INDEX ix_printings_rarity')
   })
 
+  it('the language filter reads its cards from the index alone', () => {
+    const { sql, plans } = planned(db)
+    browseCards(sql, { language: 'en', sort: 'name', dir: 'asc' }, userScope(userId, 'ygo'))
+    expect(plans.flat().join('\n')).toContain('COVERING INDEX ix_printings_language_card')
+  })
+
   it('the per-game catalog feed uses the ix_*_game_seq indexes', () => {
     const { sql, plans } = planned(db)
     catalogChanges(sql, 0, 100, undefined, 'ygo')

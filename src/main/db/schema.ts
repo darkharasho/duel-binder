@@ -462,6 +462,14 @@ ALTER TABLE card_printings ADD COLUMN yugipedia INTEGER NOT NULL DEFAULT 0;
 DELETE FROM meta WHERE key = 'intl_sets_synced_at';
 `
 
+/**
+ * The cards with a printing in a language (Browse's language filter), read from the index alone:
+ * English printings are spread through the whole table, so checking `contributed` and `game` on
+ * each row cost a random read per printing. Desktop only: the server gets this as server-27.
+ */
+export const SCHEMA_V35 =
+  'CREATE INDEX ix_printings_language_card ON card_printings(language, contributed, card_id, game);'
+
 /** A printing's rarity as shown: "Starlight Rare (Extended Art)" for a labelled variant. */
 export const RARITY_LABEL = "p.set_rarity || COALESCE(' (' || p.variant || ')', '')"
 
@@ -500,5 +508,6 @@ export const MIGRATIONS: Migration[] = [
   { version: 31, sql: SCHEMA_V31, server: false },
   { version: 32, sql: SCHEMA_V32, server: false },
   { version: 33, sql: SCHEMA_V33, server: false },
-  { version: 34, sql: SCHEMA_V34 }
+  { version: 34, sql: SCHEMA_V34 },
+  { version: 35, sql: SCHEMA_V35, server: false }
 ]

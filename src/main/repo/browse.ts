@@ -23,8 +23,9 @@ const ENGLISH_NAMESAKE = (s: string): string =>
 
 // Per card: owned copies, and (only when sorting by it: the join reads every printing of the
 // language) earliest release. The page's own dates and printing to preselect are looked up after.
-// The release join starts from the dated sets, so each printing is one indexed lookup by set; the
-// `+` keeps the planner from walking every printing in card order (random reads) to group them.
+// The release join starts from the dated sets, so each printing is one indexed lookup by set
+// (`+contributed` keeps it on the (language, set_name) index, not every printing of the language
+// per set), and `+card_id` keeps the planner from walking every printing in card order to group.
 const base = (scope: Scope, byRelease: boolean, language: Language | undefined): string => `
   WITH owned AS (
     SELECT p.card_id, SUM(e.quantity) AS n FROM collection_entries e
@@ -38,7 +39,7 @@ const base = (scope: Scope, byRelease: boolean, language: Language | undefined):
   released AS (
     SELECT p.card_id, MIN(sd.d) AS d FROM set_dates sd
     JOIN card_printings p ON p.language = sd.language AND p.set_name = sd.set_name
-    WHERE +p.game = ${scope.game} AND p.contributed = 0
+    WHERE +p.game = ${scope.game} AND +p.contributed = 0
     GROUP BY +p.card_id
   )` : ''}
   SELECT c.id, c.name, c.type, c.frame_type, c.attribute, c.race, c.level, c.linkval, c.atk, c.def,

@@ -12,7 +12,7 @@ const root = fileURLToPath(new URL('../../../', import.meta.url))
  * them (optionally through synthetic camera conditions); evaluate.mjs scores the name and frame
  * rules on them; dump.mjs measures the rules' cues and the look model's features once, for
  * fit-look.mjs to fit and evaluate the look model by held-out card; bench.mjs times the per-frame
- * work. fit-surface.mjs refits the frame model. fit-tilt.mjs reads straightened tilt clips and
+ * work; bench-read.mjs times the background rarity read. fit-surface.mjs refits the frame model. fit-tilt.mjs reads straightened tilt clips and
  * fits the tilt model on them, held out by card.
  */
 export default defineConfig({
@@ -31,6 +31,7 @@ export default defineConfig({
         features: `${root}scripts/scan/rarity/features.ts`,
         dump: `${root}scripts/scan/rarity/dump.ts`,
         bench: `${root}scripts/scan/rarity/bench.ts`,
+        'bench-read': `${root}scripts/scan/rarity/bench-read.ts`,
         'fit-look': `${root}scripts/scan/rarity/fit-look.ts`,
         'fit-surface': `${root}scripts/scan/rarity/fit-surface.ts`,
         'fit-tilt': `${root}scripts/scan/rarity/fit-tilt.ts`,

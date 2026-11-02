@@ -38,6 +38,7 @@ import { refreshAllFingerprints } from './refreshFingerprints'
 import { ScannerScreen } from './ScannerScreen'
 import { Settings } from './Settings'
 import { StatusLine } from './StatusLine'
+import { UpdateBanner } from './UpdateBanner'
 
 // Loaded on demand, as on the desktop, so Rip stays out of the first load.
 const RipPage = lazy(() => import('@/features/rip/RipPage').then((m) => ({ default: m.RipPage })))
@@ -186,6 +187,9 @@ function Shell({ engineFactory }: { engineFactory?: EngineFactory }): React.JSX.
           className="pointer-events-none absolute inset-x-0 top-0 z-30 h-[env(safe-area-inset-top)] bg-background/60 backdrop-blur-xl"
         />
       )}
+
+      {/* The Android APK's newer version, when there is one. */}
+      {!scan && <UpdateBanner />}
 
       {/* Only there while something waits or fails; pb-7 keeps it clear of the raised Scan button. */}
       {!scan && (

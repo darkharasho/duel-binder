@@ -51,6 +51,8 @@ export interface ScanHub {
   retryCamera(): void
   retryScan(): void
   takePhoto(): void
+  /** Counts the card the scan window holds for a tilt now, as if the tilt timed out. */
+  skipTilt(): void
   /** Whether the scan window shows the summary screen over the camera. */
   summaryOn: boolean
   toggleSummary(): void
@@ -326,6 +328,7 @@ export function ScanHubProvider({ children }: { children: React.ReactNode }): Re
       retryCamera: () => window.api.scanWindow.send({ kind: 'retryCamera' }),
       retryScan: () => window.api.scanWindow.send({ kind: 'retryScan' }),
       takePhoto: () => window.api.scanWindow.send({ kind: 'takePhoto' }),
+      skipTilt: () => window.api.scanWindow.send({ kind: 'skipTilt' }),
       summaryOn,
       toggleSummary: () => setSummaryOn((on) => !on)
     }),

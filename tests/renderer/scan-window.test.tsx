@@ -828,6 +828,21 @@ describe('Scan window tilt', () => {
     act(() => bridge.emit({ kind: 'skipTilt' }))
   })
 
+  it('the scan window shows no tilt prompt, so a stream never captures one', async () => {
+    stubCamera()
+    await renderTilt(
+      tiltEngine(
+        () => held(),
+        () => FEW
+      )
+    )
+    await run(1000)
+    expect(lastState().loop.kind).toBe('tilt')
+    expect(screen.queryByText(/Tilt the card/)).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Skip' })).toBeNull()
+    act(() => bridge.emit({ kind: 'skipTilt' }))
+  })
+
   it('a usable reading pre-selects its guess and keeps Check rarity', async () => {
     stubCamera()
     await renderTilt(

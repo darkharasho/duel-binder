@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react'
+import { TILT_MODELS } from '@shared/scan/tiltModel'
 import { defaultEngine, type EngineFactory } from './engine'
 import { useScanHub } from './ScanHub'
 import { FoundBurst } from './FoundBurst'
@@ -45,6 +46,7 @@ export function InPageScanner({
     videoRef,
     stream: camera.stream,
     engineFactory,
+    tiltModels: TILT_MODELS,
     onStalled: camera.retry
   })
 

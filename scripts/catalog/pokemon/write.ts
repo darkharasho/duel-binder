@@ -8,6 +8,7 @@ import { englishNamer, type EnglishNamer } from './englishNames'
 import { europeanNamer, isEuropean } from './european'
 import { traditionalNamer, type JapaneseTwin, type SimplifiedName } from './traditional'
 import { matchGroup, matchProducts, namesCard, plainName, speciesCheck, type MatchedProduct, type NameCheck } from './match'
+import { pokemonRarity } from './rarity'
 import { tcgplayerOnlyCards } from './upcoming'
 import { cardVersions, groupFinish, versionSubtype, type PkmVersion } from './versions'
 import type { PkmLang, PokemonSources, TcGroup, TcPrice, TcProduct, TdCard, TdSet } from './types'
@@ -467,7 +468,7 @@ function writePlans(db: Database.Database, plans: LangPlan[], nowIso: string): v
             hp: typeof card.hp === 'number' ? card.hp : null,
             types: JSON.stringify(card.types ?? []),
             stage: card.stage ?? null,
-            rarity: card.rarity ?? null,
+            rarity: pokemonRarity(card.rarity),
             illustrator: card.illustrator ?? null,
             sourceId,
             imageUrl: cp.imageUrl,

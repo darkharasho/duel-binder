@@ -117,9 +117,10 @@ describe('game-scoped repo queries', () => {
     expect(browse.cards.map((c) => c.id).sort()).toEqual([...pkm.cardIds].sort())
     expect(browse.cards.find((c) => c.id === pkm.cardIds[0])?.owned).toBe(3)
 
-    const facets = browseFacets(db)
+    const facets = browseFacets(db, undefined, 'en')
     expect(facets.cardTypes).toEqual([])
     expect(facets.setNames).toEqual([SHARED_SET_NAME])
+    expect(browseFacets(db).setNames).toEqual([SHARED_SET_NAME, 'クレイバースト'])
     expect(facets.rarities).toEqual(['Normal', 'Reverse Holo'])
 
     const sets = listSets(db)

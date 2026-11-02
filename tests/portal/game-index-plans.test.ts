@@ -95,7 +95,17 @@ describe('game index plans on a migrated server', () => {
       (sql) =>
         browseCards(sql, { setNames: ['x'], rarities: ['Common'], sort: 'released', dir: 'asc' }, userScope(userId, 'ygo'))
     ],
+    [
+      'browseCards in a language',
+      (sql) =>
+        browseCards(
+          sql,
+          { language: 'de', sort: 'released', dir: 'desc' },
+          userScope(userId, 'ygo')
+        )
+    ],
     ['browseFacets', (sql) => browseFacets(sql, userScope(userId, 'ygo'))],
+    ['browseFacets in a language', (sql) => browseFacets(sql, userScope(userId, 'ygo'), 'de')],
     ['listSets', (sql) => listSets(sql, userScope(userId, 'ygo'))],
     ['getChecklist', (sql) => getChecklist(sql, 'x', 'en', userScope(userId, 'ygo'))],
     ['searchCards', (sql) => searchCards(sql, 'LOB', 20, userScope(userId, 'ygo'))],

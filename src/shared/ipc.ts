@@ -54,7 +54,8 @@ export interface Api {
     get(cardId: number): Promise<CardDetail | null>
     /** One page of every card in the database. */
     browse(f: BrowseFilters): Promise<BrowsePage>
-    browseFacets(): Promise<BrowseFacets>
+    /** Sets and rarities of the language, or of every language without one. */
+    browseFacets(language?: Language): Promise<BrowseFacets>
     /** `[image id, the image id it shows]` of each card showing another card's art. */
     borrowedArt(): Promise<[number, number][]>
     traditionalArt(): Promise<[number, number][]>

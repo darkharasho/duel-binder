@@ -16,6 +16,8 @@ import { TILT_MODELS } from '@shared/scan/tiltModel'
 import type { TiltModel } from '@shared/scan/tilt'
 import type { TiltReading } from '@shared/scan/tiltFeatures'
 import * as hubScan from '@/features/scan/useHubScan'
+import type { ScanDraft, ScanOutcome } from '@/features/scan/resolve'
+import { TILT_MS } from '@shared/scan/thresholds'
 import { createSyncTriggers } from '../../src/phone/syncTriggers'
 import type { PhoneStore } from '../../src/phone/data/store'
 import { createMockApi, renderWithProviders } from './mockApi'
@@ -30,6 +32,21 @@ import {
   tiltEngine,
   type FakeEngine
 } from './scanFakes'
+
+// A test may say what the frames resolve to, to test what the loop does with it; else the real one.
+const resolved = vi.hoisted(() => ({ draft: null as ScanDraft | null }))
+vi.mock('@/features/scan/resolve', async (actual) => {
+  const real = await actual<typeof import('@/features/scan/resolve')>()
+  return {
+    ...real,
+    resolveSignals: vi.fn(
+      async (...args: Parameters<typeof real.resolveSignals>): Promise<ScanOutcome> =>
+        resolved.draft && args[0].found
+          ? { kind: 'recognized', item: resolved.draft }
+          : real.resolveSignals(...args)
+    )
+  }
+})
 
 const SESSION_KEY = 'scan.session.v1'
 
@@ -59,6 +76,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  resolved.draft = null
   vi.useRealTimers()
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
@@ -727,6 +745,72 @@ describe('phone scanner tilt', () => {
     expect(screen.getByTestId('counted')).toHaveTextContent('1')
     expect(screen.queryByText('Tilt the card')).toBeNull()
     expect(screen.queryByRole('button', { name: 'Skip' })).toBeNull()
+  })
+
+  it('the phone updates a counted Normal row to Reverse Holofoil when the reading says so', async () => {
+    const PKM_MODEL: TiltModel = {
+      features: ['f'],
+      classes: ['Normal', 'Reverse Holofoil'],
+      pairs: [
+        { a: 'Normal', b: 'Reverse Holofoil', use: [0], mean: [0], spread: [1], ca: [-1], cb: [1] }
+      ]
+    }
+    const options = [
+      printing({ printingId: 501, cardId: 5, name: 'Pikachu', rarity: 'Normal', imageIds: [500] }),
+      printing({
+        printingId: 502,
+        cardId: 5,
+        name: 'Pikachu',
+        rarity: 'Reverse Holofoil',
+        imageIds: [500]
+      })
+    ]
+    resolved.draft = {
+      cardId: 5,
+      name: 'Pikachu',
+      imageId: 500,
+      printingId: 501,
+      setCode: 'PAL 045/193',
+      rarity: 'Normal',
+      options,
+      flag: 'pick-printing',
+      via: 'art',
+      game: 'pkm'
+    }
+    const engine = tiltEngine(
+      () => ({ ...codeFrame('045/193'), art: [{ imageId: 500, distance: 10 }] }),
+      () => ({ features: [1], frames: 10, motion: 50 })
+    )
+    vi.useFakeTimers()
+    vi.stubGlobal('jest', { advanceTimersByTime: (ms: number) => vi.advanceTimersByTime(ms) })
+    renderWithProviders(
+      <GameProvider>
+        <ScanHubProvider>
+          <Counted />
+          <PhoneCamera engineFactory={() => engine} tiltModels={{ pkm: PKM_MODEL }} />
+        </ScanHubProvider>
+      </GameProvider>,
+      {
+        api: createMockApi({
+          scanWindow: fakeBridge().scanWindow,
+          games: {
+            available: vi.fn(async () => ['ygo', 'pkm'] as never),
+            active: vi.fn(async () => 'pkm' as const)
+          }
+        })
+      }
+    )
+    await settle()
+    await settle(1000)
+    expect(screen.getByTestId('counted')).toHaveTextContent('1')
+    const saved = (): ScanRow[] => JSON.parse(localStorage.getItem(SESSION_KEY) ?? '[]')
+    expect(saved()[0]).toMatchObject({ rarity: 'Normal', printingId: 501 })
+    await settle(TILT_MS + 600)
+    expect(saved()).toHaveLength(1)
+    expect(saved()[0].rarity).toBe('Reverse Holofoil')
+    expect(saved()[0].flag).not.toBeNull()
+    expect(saved()[0].quantity).toBe(1)
+    expect(screen.getByTestId('counted')).toHaveTextContent('1')
   })
 
   it('the phone scanner tilts with the shipped models by default', async () => {

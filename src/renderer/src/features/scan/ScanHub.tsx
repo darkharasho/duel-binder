@@ -28,6 +28,8 @@ const ZOOM_KEY = 'scan.zoom'
 const SEEN_KEY = 'scan.drafts.seen'
 const DEFAULT_HIT_PRICE = 20
 const HIGHLIGHT_MS = 1500
+/** How long a row stays marked after a background rarity read changed it. */
+export const READ_FLASH_MS = 900
 /** Ids of counted scan-window pulls kept, to drop resends; far more than are ever in flight. */
 const MAX_SEEN = 500
 /** Tries at asking main whether the scan window is open, and the wait between them. */
@@ -38,6 +40,8 @@ export interface ScanHub {
   session: ReturnType<typeof useScanSession>
   /** The row last counted, for 1.5 s, to highlight. */
   fresh: string | null
+  /** The row a background rarity read just changed, for READ_FLASH_MS. */
+  flashed: string | null
   open: boolean
   /** False until the app has learnt whether the scan window is already open. */
   openKnown: boolean
@@ -47,6 +51,8 @@ export interface ScanHub {
   setSettings(patch: Partial<ScanWindowSettings>): void
   /** Counts a pull onto the list and highlights its row; the one path for both scanners. */
   count(draft: ScanDraft): string
+  /** Takes a background rarity read onto a row the user hasn't touched, and flashes it. */
+  reread(key: string, next: ScanDraft): void
   /** Hears each row a commit saves (key, copies); returns the unsubscribe. */
   onSaved: ReturnType<typeof useScanSession>['onSaved']
   openWindow(): Promise<void>
@@ -184,10 +190,12 @@ export function ScanHubProvider({ children }: { children: React.ReactNode }): Re
   const [openKnown, setOpenKnown] = useState(false)
   const [state, setState] = useState<ScanWindowState | null>(null)
   const [fresh, setFresh] = useState<string | null>(null)
+  const [flashed, setFlashed] = useState<string | null>(null)
+  const flashTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const [summaryOn, setSummaryOn] = useState(false)
   const highlightTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const [seen] = useState(createSeen)
-  const { add, refreshPrices } = session
+  const { add, applyRead, refreshPrices } = session
 
   // Unpriced non-English pulls on the list: ask for their prices, and fill them in as syncs bring them.
   useRequestPrices(
@@ -215,6 +223,17 @@ export function ScanHubProvider({ children }: { children: React.ReactNode }): Re
     },
     [add]
   )
+
+  const reread = useCallback(
+    (key: string, next: ScanDraft): void => {
+      if (!applyRead(key, next)) return
+      setFlashed(key)
+      clearTimeout(flashTimer.current)
+      flashTimer.current = setTimeout(() => setFlashed(null), READ_FLASH_MS)
+    },
+    [applyRead]
+  )
+  useEffect(() => () => clearTimeout(flashTimer.current), [])
 
   const summaryRef = useRef<ScanSummary | null>(null)
   const sendSettings = useCallback((): void => {
@@ -320,12 +339,14 @@ export function ScanHubProvider({ children }: { children: React.ReactNode }): Re
     () => ({
       session,
       fresh,
+      flashed,
       open,
       openKnown,
       state,
       settings,
       setSettings,
       count,
+      reread,
       onSaved: session.onSaved,
       openWindow: () => window.api.scanWindow.open(),
       retryCamera: () => window.api.scanWindow.send({ kind: 'retryCamera' }),
@@ -334,7 +355,19 @@ export function ScanHubProvider({ children }: { children: React.ReactNode }): Re
       summaryOn,
       toggleSummary: () => setSummaryOn((on) => !on)
     }),
-    [session, fresh, open, openKnown, state, settings, setSettings, count, summaryOn]
+    [
+      session,
+      fresh,
+      flashed,
+      open,
+      openKnown,
+      state,
+      settings,
+      setSettings,
+      count,
+      reread,
+      summaryOn
+    ]
   )
   return <HubContext.Provider value={hub}>{children}</HubContext.Provider>
 }

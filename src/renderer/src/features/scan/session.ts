@@ -98,6 +98,11 @@ export function useScanSession(game: GameId = 'ygo'): {
   add(d: ScanDraft): string
   /** Copies of the draft's card on the list, read at once: an add just made counts. */
   copiesOf(d: ScanDraft): number
+  /**
+   * Takes a background rarity read onto a row the user hasn't touched (any edit clears its flag),
+   * once: the flag stays, quantity and key are kept. False when it didn't apply.
+   */
+  applyRead(key: string, next: ScanDraft): boolean
   setPrinting(key: string, printingId: number): void
   setQuantity(key: string, q: number): void
   remove(key: string): void
@@ -174,6 +179,36 @@ export function useScanSession(game: GameId = 'ygo'): {
         delete next.guess
         return list.map((r) => (r.key === key ? next : r))
       }),
+    [update]
+  )
+
+  const applyRead = useCallback(
+    (key: string, next: ScanDraft): boolean => {
+      const row = ref.current.find((r) => r.key === key)
+      if (
+        !row ||
+        committingRef.current ||
+        row.flag === null ||
+        row.read ||
+        next.cardId !== row.cardId
+      )
+        return false
+      update((list) =>
+        list.map((r) =>
+          r.key === key
+            ? {
+                ...r,
+                printingId: next.printingId,
+                rarity: next.rarity,
+                setCode: next.setCode,
+                flag: next.flag,
+                read: true
+              }
+            : r
+        )
+      )
+      return true
+    },
     [update]
   )
 
@@ -302,6 +337,7 @@ export function useScanSession(game: GameId = 'ygo'): {
     onSaved,
     add,
     copiesOf,
+    applyRead,
     setPrinting,
     setQuantity,
     remove,

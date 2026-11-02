@@ -290,8 +290,9 @@ export const TILT_RETRY_MS = 500
 export const TILT_MIN_FRAMES = 12
 /** Frames kept at most (about 31 MB of RGB at 421x614). */
 export const TILT_MAX_FRAMES = 40
-/** A reading needs at least this much motion in the art; set from the corpus. */
-export const TILT_MIN_MOTION = 0
+/** A reading needs at least this much motion in the art (0-255 luminance). */
+// The 10th percentile of motion over the tilt fit's webcam windows (fit-tilt.ts prints it).
+export const TILT_MIN_MOTION = 30.7
 /**
  * Largest art distance at which a frame is kept for a tilt. Looser than ART_MAX_DISTANCE: a
  * tilted foil's glare moves its art's hash, and those frames carry the most of its finish. Still

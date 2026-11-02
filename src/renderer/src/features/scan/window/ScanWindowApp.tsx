@@ -64,6 +64,7 @@ function Scanner({
   const { game } = useGame()
   const camera = useCamera(settings.deviceId)
   const { overlay, push, clear } = useOverlay()
+  const [scanned, setScanned] = useState<Readonly<Record<string, number>>>({})
   const pulls = useRef(0)
   const hitPrice = useRef(settings.hitPrice)
   useEffect(() => {
@@ -94,8 +95,9 @@ function Scanner({
 
   const onDraft = useCallback(
     (draft: ScanDraft) => {
-      sendDraft(outbox.put(draft), draft)
-      push(pullOf(draft, hitPrice.current, pulls.current++))
+      const id = outbox.put(draft)
+      sendDraft(id, draft)
+      push({ ...pullOf(draft, hitPrice.current, pulls.current++), id })
       playScanPing()
     },
     [push, outbox]
@@ -126,7 +128,8 @@ function Scanner({
     () =>
       window.api.scanWindow.onMessage((m) => {
         if (!isToScanWindow(m)) return
-        if (m.kind === 'retryCamera') retryCamera()
+        if (m.kind === 'ack') setScanned((s) => ({ ...s, [m.id]: m.scanned }))
+        else if (m.kind === 'retryCamera') retryCamera()
         else if (m.kind === 'retryScan') retryScan()
         else if (m.kind === 'takePhoto') takePhoto()
       }),
@@ -174,7 +177,7 @@ function Scanner({
         )}
         style={settings.zoom > 1 ? { transform: `scale(${settings.zoom})` } : undefined}
       />
-      <PullOverlay pull={overlay} />
+      <PullOverlay pull={overlay} scanned={scanned} />
     </div>
   )
 }

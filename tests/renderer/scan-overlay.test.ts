@@ -41,6 +41,8 @@ const draft = (over: Partial<ScanDraft> = {}, opt: Partial<ScanPrinting> = {}): 
 
 const pull = (key: number, hit = false): Pull => ({
   key,
+  cardId: key,
+  printingId: key,
   name: `Card ${key}`,
   imageId: key,
   setCode: null,
@@ -56,6 +58,9 @@ describe('pullOf', () => {
   it('builds the full pull for a certain draft below the hit price', () => {
     expect(pullOf(draft(), 20, 7)).toEqual({
       key: 7,
+      game: undefined,
+      cardId: 10,
+      printingId: 1,
       name: 'Dark Magician',
       imageId: 46986414,
       setCode: 'LOB-005',

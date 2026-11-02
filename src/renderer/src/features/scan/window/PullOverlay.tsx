@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
-import { StarIcon } from 'lucide-react'
+import { CopyIcon, StarIcon } from 'lucide-react'
 import { englishSetName } from '@shared/setNames'
 import { CardArt } from '@/components/CardArt'
 import { formatUsd } from '@/lib/format'
+import { cn } from '@/lib/utils'
 import { FoundBurst } from '../FoundBurst'
+import { isNewCard, ownedText, useOwned } from '../owned'
 import { Confetti } from './Confetti'
 import { FADE_MS, type Pull } from './overlay'
 
@@ -22,8 +24,37 @@ function Raw(): React.JSX.Element {
   return <span className="text-[clamp(0.75rem,1.4vw,1.3rem)] text-emerald-200/80">Raw</span>
 }
 
+/**
+ * "New card" or "Own 3", for a pull the main window has counted: until then the list's copies
+ * aren't known, and a second copy would flash as new.
+ */
+function OwnedLine({
+  pull,
+  scanned,
+  className
+}: {
+  pull: Pull
+  scanned: number | undefined
+  className: string
+}): React.JSX.Element | null {
+  const owned = useOwned(pull.cardId, pull.printingId, { fresh: true })
+  if (owned === null || scanned === undefined) return null
+  return (
+    <p
+      className={cn(
+        'flex items-center gap-[0.4vw]',
+        className,
+        isNewCard(owned) && 'font-semibold text-sky-300'
+      )}
+    >
+      <CopyIcon aria-hidden className="size-[1.1em] shrink-0" />
+      <span className="truncate">{ownedText(owned, scanned, pull.game)}</span>
+    </p>
+  )
+}
+
 /** The phone's last-scan card, sized to the window: art, name, set, price and rarity. */
-function Bar({ pull }: { pull: Pull }): React.JSX.Element {
+function Bar({ pull, scanned }: { pull: Pull; scanned?: number }): React.JSX.Element {
   const sub = [pull.setCode, pull.setName === null ? null : englishSetName(pull.setName)]
     .filter((s) => s !== null)
     .join(' · ')
@@ -58,12 +89,13 @@ function Bar({ pull }: { pull: Pull }): React.JSX.Element {
             <span className="truncate">{pull.rarity}</span>
           </p>
         )}
+        <OwnedLine pull={pull} scanned={scanned} className="mt-[0.2vw] text-white/75" />
       </div>
     </div>
   )
 }
 
-function Hit({ pull }: { pull: Pull }): React.JSX.Element {
+function Hit({ pull, scanned }: { pull: Pull; scanned?: number }): React.JSX.Element {
   return (
     <div
       role="status"
@@ -89,6 +121,11 @@ function Hit({ pull }: { pull: Pull }): React.JSX.Element {
         </p>
       )}
       {pull.range !== null && <Range range={pull.range} />}
+      <OwnedLine
+        pull={pull}
+        scanned={scanned}
+        className="text-[clamp(0.9rem,1.8vw,1.7rem)] text-white/85 [text-shadow:0_2px_12px_rgba(0,0,0,0.6)]"
+      />
     </div>
   )
 }
@@ -97,7 +134,14 @@ function Hit({ pull }: { pull: Pull }): React.JSX.Element {
  * The pull's card or hit moment, with the phone's "found it" glow and sparkles (and, on a card,
  * its bubble). A pull that ends fades out and stays mounted until the fade does.
  */
-export function PullOverlay({ pull }: { pull: Pull | null }): React.JSX.Element | null {
+export function PullOverlay({
+  pull,
+  scanned = {}
+}: {
+  pull: Pull | null
+  /** Copies on the list, by the id of the pull the main window acknowledged with it. */
+  scanned?: Readonly<Record<string, number>>
+}): React.JSX.Element | null {
   const [shown, setShown] = useState<Pull | null>(pull)
   if (pull !== null && pull !== shown) setShown(pull)
 
@@ -108,6 +152,7 @@ export function PullOverlay({ pull }: { pull: Pull | null }): React.JSX.Element 
   }, [pull])
 
   if (shown === null) return null
+  const count = shown.id === undefined ? undefined : scanned[shown.id]
   return (
     <div
       // A new pull mounts afresh and fades in; an ended one fades out where it is.
@@ -116,7 +161,7 @@ export function PullOverlay({ pull }: { pull: Pull | null }): React.JSX.Element 
       className={`pointer-events-none absolute inset-0 animate-in fade-in transition-opacity ${pull === null ? 'opacity-0' : 'opacity-100'}`}
     >
       {shown.hit && <Confetti />}
-      {shown.hit ? <Hit pull={shown} /> : <Bar pull={shown} />}
+      {shown.hit ? <Hit pull={shown} scanned={count} /> : <Bar pull={shown} scanned={count} />}
       <FoundBurst name={shown.name} price={shown.price} stream bubble={!shown.hit} />
     </div>
   )

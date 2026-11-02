@@ -1,3 +1,4 @@
+import { surePrinting } from '../owned'
 import type { ScanDraft } from '../resolve'
 import { priceRange, versionToPick } from '../scanLook'
 
@@ -7,6 +8,12 @@ export const FADE_MS = 250
 
 export interface Pull {
   key: number
+  /** The id it went to the main window under, whose acknowledgement counts its copies. */
+  id?: string
+  game?: ScanDraft['game']
+  cardId: number
+  /** Null while the printing is unsure, so its owned count covers the whole card. */
+  printingId: number | null
   name: string
   imageId: number
   setCode: string | null
@@ -36,6 +43,9 @@ export function pullOf(d: ScanDraft, hitPrice: number, key: number): Pull {
   const range = d.flag === 'pick-printing' || d.flag === 'check-rarity' ? priceRange(d) : null
   const base = {
     key,
+    game: d.game,
+    cardId: d.cardId,
+    printingId: surePrinting(d),
     name: d.name,
     imageId: d.imageId,
     price,

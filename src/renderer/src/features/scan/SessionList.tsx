@@ -15,6 +15,7 @@ import { useScanLanguage } from './pickerOptions'
 import { useScanHub } from './ScanHub'
 import { GLASS, listValue, printingOf } from './scanLook'
 import { plural } from './scanText'
+import { copiesOnList } from './owned'
 import { ScanRowItem } from './ScanRowItem'
 
 /** The copies Add would add, and Add itself with its toasts; shared with the phone's review. */
@@ -138,6 +139,7 @@ export function SessionList({ className }: { className?: string }): React.JSX.El
                   row={row}
                   actions={rowActions}
                   language={language}
+                  scanned={copiesOnList(session.rows, row)}
                   highlighted={row.key === fresh}
                   disabled={session.committing}
                 />

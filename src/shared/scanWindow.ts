@@ -99,8 +99,11 @@ export type ToScanWindow =
   | { kind: 'retryCamera' }
   | { kind: 'retryScan' }
   | { kind: 'takePhoto' }
-  /** The draft with this id is on the list; the scan window stops resending it. */
-  | { kind: 'ack'; id: string }
+  /**
+   * The draft with this id is on the list, which now has `scanned` copies of its card; the scan
+   * window stops resending it.
+   */
+  | { kind: 'ack'; id: string; scanned: number }
   /** Shows the summary screen with these numbers, or takes it away. */
   | { kind: 'summary'; summary: ScanSummary | null }
 

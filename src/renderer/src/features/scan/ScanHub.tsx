@@ -254,6 +254,7 @@ export function ScanHubProvider({ children }: { children: React.ReactNode }): Re
     setSettings({ set: read(setKeyOf(game), parseSet) })
   }, [game, setSettings])
 
+  const { copiesOf } = session
   useEffect(() => {
     let live = true
     const scanWindow = window.api.scanWindow
@@ -300,7 +301,7 @@ export function ScanHubProvider({ children }: { children: React.ReactNode }): Re
           count(m.draft)
         }
         // Acknowledged once it's on the list (saved there), and again for every resend.
-        scanWindow.send({ kind: 'ack', id: m.id })
+        scanWindow.send({ kind: 'ack', id: m.id, scanned: copiesOf(m.draft) })
       }
     })
     return () => {
@@ -309,7 +310,7 @@ export function ScanHubProvider({ children }: { children: React.ReactNode }): Re
       offMessage()
       clearTimeout(highlightTimer.current)
     }
-  }, [count, sendSettings, setSettings, seen])
+  }, [copiesOf, count, sendSettings, setSettings, seen])
 
   const hub = useMemo<ScanHub>(
     () => ({

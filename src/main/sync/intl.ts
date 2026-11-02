@@ -9,6 +9,7 @@ import {
   MANGA_TONES,
   NEW_ART_VARIANT,
   normalizeRarity,
+  onlyTranscludesLists,
   parseInfobox,
   parseSetList,
   releaseDateFor,
@@ -98,6 +99,19 @@ export function deleteOrFlag(db: Database.Database, ids: number[]): void {
   }
 }
 
+interface StoredPrinting {
+  id: number
+  card_id: number
+  set_code: string
+  set_rarity: string
+}
+
+/** A stored rarity with a leading abbreviation spelled out: "PlScR (7th artwork)" -> "Platinum Secret Rare (7th artwork)". */
+function spelledOut(rarity: string): string {
+  const m = /^([A-Za-z0-9]+)( \(.+\))?$/.exec(rarity)
+  return m ? normalizeRarity(m[1]) + (m[2] ?? '') : rarity
+}
+
 interface IntlPrinting {
   cardId: number
   setCode: string
@@ -158,10 +172,12 @@ function listPrintings(matched: { cardId: number; row: SetListRow }[]): IntlPrin
 
 /**
  * The English printings from the TCG-EN lists that YGOPRODeck lacks (MGED-EN002, the alternate-art
- * Dark Magician, which it leaves off the card). YGOPRODeck stays the authority: a list row
- * is skipped when a YGOPRODeck, TCGplayer or token printing already has its card, code and rarity
- * (an art variant of one included: those are TCGplayer's to add), when another card holds its
- * code, or when it has no code. Each row is written once a run, by the first list holding it, under
+ * Dark Magician, which it leaves off the card). YGOPRODeck stays the authority: a list row is
+ * skipped when a YGOPRODeck, TCGplayer or token printing already holds its code, whatever the card
+ * or rarity (rarity spellings, YGOPRODeck's junk rarities like "New" and its reprint sets would
+ * otherwise each give the same printing twice; its other rarities are TCGplayer's to add), when
+ * another list row this run gave the code to another card, or when it has no code or a
+ * placeholder one ("MAMS-EN???"). Each row is written once a run, by the first list holding it, under
  * the set name YGOPRODeck gives the set: the one with the list's name, else the one most of the
  * code's siblings (MGED-EN001...) are in, else the list's name. Rows are marked
  * card_printings.yugipedia, which keeps the YGOPRODeck sync from pruning them and lets it take one
@@ -173,16 +189,14 @@ function englishFill(db: Database.Database): {
   prune: () => void
 } {
   const stem = (code: string): string => code.toUpperCase().replace(/\d+$/, '')
-  const baseRarity = (rarity: string): string =>
-    normalizeRarity(rarity.replace(/\s*\([^()]*\)$/, '').trim())
-  const key = (cardId: number, code: string, rarity: string): string =>
-    `${cardId}\u0000${code.toUpperCase()}\u0000${baseRarity(rarity)}`
 
   const tokens = new Set(
     db.prepare("SELECT id FROM cards WHERE game = 'ygo' AND frame_type = 'token'").pluck().all()
   )
+  /** Codes YGOPRODeck, TCGplayer or the token sync hold. */
   const taken = new Set<string>()
-  const holders = new Map<string, Set<number>>()
+  /** The card each code went to this run. */
+  const holders = new Map<string, number>()
   const stemSets = new Map<string, Map<string, number>>()
   const setNames = new Map<string, string>()
   const others = db
@@ -192,9 +206,8 @@ function englishFill(db: Database.Database): {
     )
     .all() as { card_id: number; set_name: string; set_code: string; set_rarity: string }[]
   for (const r of others) {
-    taken.add(key(r.card_id, r.set_code, r.set_rarity))
     const code = r.set_code.toUpperCase()
-    holders.set(code, (holders.get(code) ?? new Set()).add(r.card_id))
+    taken.add(code)
     const names = stemSets.get(stem(code)) ?? new Map<string, number>()
     stemSets.set(stem(code), names.set(r.set_name, (names.get(r.set_name) ?? 0) + 1))
     const norm = normalizeName(r.set_name)
@@ -240,14 +253,13 @@ function englishFill(db: Database.Database): {
     save(setName, matched) {
       const printings = listPrintings(matched.filter((m) => !tokens.has(m.cardId)))
       for (const p of printings) {
-        if (p.setCode === '' || taken.has(key(p.cardId, p.setCode, p.setRarity))) continue
         const code = p.setCode.toUpperCase()
-        const held = holders.get(code)
-        if (held && [...held].some((c) => c !== p.cardId)) continue
+        if (code === '' || code.includes('?') || taken.has(code)) continue
+        if ((holders.get(code) ?? p.cardId) !== p.cardId) continue
         const once = `${p.cardId}\u0000${code}\u0000${p.setRarity}`
         if (written.has(once)) continue
         written.add(once)
-        holders.set(code, (held ?? new Set()).add(p.cardId))
+        holders.set(code, p.cardId)
         const row = upsert.get({
           ...p,
           setName: setNames.get(normalizeName(setName)) ?? stemName(code) ?? setName,
@@ -351,7 +363,11 @@ async function run(
       image_url = CASE WHEN @keepImage THEN sets.image_url ELSE excluded.image_url END,
       image_key = CASE WHEN @keepImage THEN sets.image_key ELSE excluded.image_key END, list_rows = excluded.list_rows, unmatched_rows = excluded.unmatched_rows`)
   const existing = db.prepare(
-    "SELECT id FROM card_printings WHERE game = 'ygo' AND language = ? AND set_name = ?"
+    `SELECT id, card_id, set_code, set_rarity FROM card_printings
+     WHERE game = 'ygo' AND language = ? AND set_name = ?`
+  )
+  const keepAbbreviated = db.prepare(
+    'UPDATE card_printings SET missing_from_api = 0, variant = ? WHERE id = ?'
   )
 
   const unmatchedExamples: string[] = []
@@ -398,6 +414,9 @@ async function run(
       const text = listFetch.pages.get(job.title)
       const parsed = text === undefined ? null : parseSetList(text)
       if (parsed) loaded.push({ ...job, parsed })
+      // Its subpages are listed on their own; counting it failed would keep the sync from ever
+      // finishing (no stamp, so a full re-read every run, and nothing pruned).
+      else if (text !== undefined && onlyTranscludesLists(text)) continue
       else result.failedSets++
     }
 
@@ -447,8 +466,27 @@ async function run(
       const box = infoboxes.get(s.title) ?? null
       const imageUrl = box?.image ? (imageUrls.get(box.image) ?? null) : null
       db.transaction(() => {
+        const stored = existing.all(s.language, s.setName) as StoredPrinting[]
+        const key = (cardId: number, code: string, rarity: string): string =>
+          `${cardId}\u0000${code}\u0000${rarity}`
+        const exact = new Set(stored.map((r) => key(r.card_id, r.set_code, r.set_rarity)))
+        // A printing stored under a rarity abbreviation since spelled out ("PlScR") keeps its
+        // spelling: renaming it changes its pkey, which the catalog feed and cloud sync carry as a
+        // removed printing and a new one, leaving its entries on a flagged row.
+        const abbreviated = new Map(
+          stored
+            .filter((r) => spelledOut(r.set_rarity) !== r.set_rarity)
+            .map((r) => [key(r.card_id, r.set_code, spelledOut(r.set_rarity)), r.id])
+        )
         const seen = new Set<number>()
         for (const p of printings) {
+          const k = key(p.cardId, p.setCode, p.setRarity)
+          const old = exact.has(k) ? undefined : abbreviated.get(k)
+          if (old !== undefined) {
+            keepAbbreviated.run(p.variant, old)
+            seen.add(old)
+            continue
+          }
           const row = upsertPrinting.get({
             ...p,
             language: s.language,
@@ -456,9 +494,7 @@ async function run(
           }) as { id: number }
           seen.add(row.id)
         }
-        const stale = (existing.all(s.language, s.setName) as { id: number }[])
-          .map((r) => r.id)
-          .filter((id) => !seen.has(id))
+        const stale = stored.map((r) => r.id).filter((id) => !seen.has(id))
         deleteOrFlag(db, stale)
         upsertSet.run({
           language: s.language,

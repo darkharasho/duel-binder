@@ -625,6 +625,60 @@ describe('shouldRefreshIntl', () => {
   })
 })
 
+describe('refreshIntlSets list pages', () => {
+  const DE = 'Set Card Lists:Rarity Pack (TCG-DE)'
+
+  it('keeps a printing stored under a rarity abbreviation it now spells out, and adds no twin', async () => {
+    const insert = db.prepare(
+      `INSERT INTO card_printings (card_id, language, set_name, set_code, set_rarity)
+       VALUES (46986414, 'de', 'Rarity Pack', ?, ?) RETURNING id`
+    )
+    const plain = (insert.get('RP-DE001', 'PlScR') as { id: number }).id
+    const art = (insert.get('RP-DE001', 'PlScR (7th artwork)') as { id: number }).id
+    const imageId = db
+      .prepare('SELECT image_id FROM card_images WHERE card_id = 46986414')
+      .pluck()
+      .get()
+    db.prepare(
+      "INSERT INTO collection_entries (uid, printing_id, image_id, quantity, created_at, updated_at) VALUES ('u1', ?, ?, 1, 'x', 'x')"
+    ).run(plain, imageId)
+    const f = fake({
+      [DE]: listPage([
+        'RP-DE001; Dark Magician; PlScR',
+        'RP-DE001; Dark Magician; PlScR // description::(7th artwork)',
+        'RP-DE002; Dark Magician; PlScR'
+      ])
+    })
+    expect((await refreshIntlSets(db, f.client, NOW)).ok).toBe(true)
+    expect(intlRows(db).map((r) => [r.id, r.set_code, r.set_rarity, r.missing_from_api])).toEqual([
+      [plain, 'RP-DE001', 'PlScR', 0],
+      [art, 'RP-DE001', 'PlScR (7th artwork)', 0],
+      [expect.any(Number), 'RP-DE002', 'Platinum Secret Rare', 0]
+    ])
+  })
+
+  it('passes over a page that only pulls in its subpages, but not a page that is missing', async () => {
+    const parent = 'Set Card Lists:Figure promos (TCG-DE)'
+    const f = fake({
+      [parent]: '{{Set page header}}\n{{Set Card Lists:Figure promos: Series 1 (TCG-DE)}}',
+      'Set Card Lists:Figure promos: Series 1 (TCG-DE)': listPage(['FP-DE001; Dark Magician; UR'])
+    })
+    const res = await refreshIntlSets(db, f.client, NOW)
+    expect(res).toMatchObject({ failedSets: 0, ok: true })
+    expect(getMeta(db, 'intl_sets_synced_at')).toBe(NOW.toISOString())
+    expect(intlRows(db).map((r) => r.set_name)).toEqual(['Figure promos: Series 1'])
+    expect(db.prepare("SELECT set_name FROM sets WHERE language = 'de'").pluck().all()).toEqual([
+      'Figure promos: Series 1'
+    ])
+
+    // A listed page that comes back empty-handed still counts as failed.
+    f.lists.push('Set Card Lists:Gone (TCG-DE)')
+    const later = new Date(NOW.getTime() + INTL_INTERVAL_MS)
+    expect(await refreshIntlSets(db, f.client, later)).toMatchObject({ failedSets: 1, ok: false })
+    expect(getMeta(db, 'intl_sets_synced_at')).toBe(NOW.toISOString())
+  })
+})
+
 describe('refreshIntlSets batching', () => {
   it('saves each batch as it goes, new sets first, and reports each batch', async () => {
     const db = await seededDb()
@@ -725,12 +779,15 @@ describe('English printings from the TCG-EN lists', () => {
         // YGOPRODeck has these two.
         'LOB-EN005; Dark Magician; UR',
         'LOB-EN119; Pot of Greed; R',
-        // An art variant of a printing YGOPRODeck has is TCGplayer's to add.
+        // Codes YGOPRODeck has: an art variant, another rarity, another card.
         'LOB-EN005; Dark Magician; UR // description::(alternate art)',
-        // Another rarity of a code YGOPRODeck has.
         'LOB-EN005; Dark Magician; ScR',
-        // A code YGOPRODeck gives another card.
-        'LOB-EN119; Dark Magician; SR'
+        'LOB-EN119; Dark Magician; SR',
+        // A code YGOPRODeck lacks, its rarity spelled out as YGOPRODeck spells it.
+        'LOB-EN201; Pot of Greed; PlScR',
+        // A placeholder code, and a code this list already gave another card.
+        'LOB-EN2??; Pot of Greed; C',
+        'LOB-EN201; Dark Magician; C'
       ]),
       // No YGOPRODeck set by this name: the set the code's siblings are in, else the list's own.
       'Set Card Lists:Yugi Promos (TCG-EN)': listPage([
@@ -742,10 +799,10 @@ describe('English printings from the TCG-EN lists', () => {
     expect(res.ok).toBe(true)
     expect(filled()).toEqual([
       expect.objectContaining({
-        card_id: DM,
+        card_id: POT,
         set_name: 'Legend of Blue Eyes White Dragon',
-        set_code: 'LOB-EN005',
-        set_rarity: 'Secret Rare',
+        set_code: 'LOB-EN201',
+        set_rarity: 'Platinum Secret Rare',
         variant: null,
         missing_from_api: 0
       }),

@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest'
 import {
   listTitleParts,
   normalizeRarity,
+  onlyTranscludesLists,
   parseInfobox,
   parseReleaseDate,
   parseSetList,
@@ -131,6 +132,15 @@ describe('parseSetList', () => {
     expect(normalizeRarity('PGR')).toBe('Premium Gold Rare')
   })
 
+  it('spells out the codes YGOPRODeck spells out, as it does', () => {
+    expect(normalizeRarity('PlScR')).toBe('Platinum Secret Rare')
+    expect(normalizeRarity('DNPR')).toBe('Duel Terminal Normal Parallel Rare')
+    expect(normalizeRarity('DUPR')).toBe('Duel Terminal Ultra Parallel Rare')
+    expect(normalizeRarity('SP')).toBe('Short Print')
+    expect(normalizeRarity('URPR')).toBe("Ultra Rare (Pharaoh's Rare)")
+    expect(normalizeRarity('GGR')).toBe('Ghost/Gold Rare')
+  })
+
   it('keeps other description:: notes as the variant, without parentheses', () => {
     const r = parseSetList('{{Set list|\nX-001; Some Card; UR // description::(alternate art)\n}}')!
     expect(r.rows[0].variant).toBe('Alternate Art')
@@ -180,6 +190,15 @@ describe('parseSetList', () => {
 
   it('returns null without a template', () => {
     expect(parseSetList('no template')).toBeNull()
+  })
+
+  it('tells a page that only pulls in its subpages’ lists from one that is broken', () => {
+    const parent =
+      '{{Set page header}}\n\n== Series 1 ==\n{{Set Card Lists:Mattel Action Figure promotional cards: Series 1 (TCG-EN)}}'
+    expect(parseSetList(parent)).toBeNull()
+    expect(onlyTranscludesLists(parent)).toBe(true)
+    expect(onlyTranscludesLists('no template')).toBe(false)
+    expect(onlyTranscludesLists('{{Set list|\nX-001; Some Card; UR\n}}')).toBe(false)
   })
 
   it('expands abbreviations, skips comments, strips // suffixes', () => {

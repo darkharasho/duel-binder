@@ -54,7 +54,14 @@ const RARITIES: Record<string, string> = {
   PGR: 'Premium Gold Rare',
   SFR: 'Starfoil Rare',
   SHR: 'Shatterfoil Rare',
-  KCR: 'Kaiba Corporation Rare'
+  KCR: 'Kaiba Corporation Rare',
+  // Spelled as YGOPRODeck's printings spell them most often.
+  PlScR: 'Platinum Secret Rare',
+  DNPR: 'Duel Terminal Normal Parallel Rare',
+  DUPR: 'Duel Terminal Ultra Parallel Rare',
+  SP: 'Short Print',
+  URPR: "Ultra Rare (Pharaoh's Rare)",
+  GGR: 'Ghost/Gold Rare'
 }
 
 export function normalizeRarity(raw: string): string {
@@ -100,6 +107,14 @@ export const NEW_ART_VARIANT = 'New artwork'
 const NEW_ART = /^new art(work)?$/i
 
 const SET_LIST_OPEN = /\{\{[Ss]et list\|/
+
+/**
+ * Whether a list page holds no list of its own, only its subpages' ("Mattel Action Figure promotional
+ * cards" pulls in its Series 1–3 lists, which are listed pages themselves).
+ */
+export function onlyTranscludesLists(wikitext: string): boolean {
+  return !SET_LIST_OPEN.test(wikitext) && /\{\{\s*Set Card Lists:[^{}]+\}\}/.test(wikitext)
+}
 
 export function parseSetList(wikitext: string): ParsedSetList | null {
   const lines = wikitext.split(/\r?\n/)

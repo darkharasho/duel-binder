@@ -13,6 +13,7 @@ import {
   patchSetSummary,
   progressFor,
   replaceChecklistCard,
+  seriesGroups,
   setsHeader,
   sortCards,
   sortSets,
@@ -44,6 +45,7 @@ const mk = (o: Partial<SetSummary>): SetSummary => ({
   ownedRarities: 0,
   listRows: null,
   unmatchedRows: null,
+  series: null,
   ...o
 })
 
@@ -515,6 +517,34 @@ describe('rarityColor', () => {
   })
 })
 
+describe('seriesGroups', () => {
+  const names = (groups: ReturnType<typeof seriesGroups>): [string | null, string[]][] =>
+    groups.map((g) => [g.series, g.sets.map((s) => s.setName)])
+
+  it('orders series by their newest set, keeps the sets in order, and puts no series last', () => {
+    const sets = [
+      mk({ setName: 'A', tcgDate: '2023-03-31', series: 'Scarlet & Violet' }),
+      mk({ setName: 'B', tcgDate: '2026-01-01', series: null }),
+      mk({ setName: 'C', tcgDate: '2022-01-01', series: 'Sword & Shield' }),
+      mk({ setName: 'D', tcgDate: '2024-01-26', series: 'Scarlet & Violet' }),
+      mk({ setName: 'E', tcgDate: null, series: 'Undated' }),
+      mk({ setName: 'F', tcgDate: '2025-09-26', series: ' Mega Evolution ' }),
+      mk({ setName: 'G', tcgDate: null, series: '' })
+    ]
+    expect(names(seriesGroups(sets))).toEqual([
+      ['Mega Evolution', ['F']],
+      ['Scarlet & Violet', ['A', 'D']],
+      ['Sword & Shield', ['C']],
+      ['Undated', ['E']],
+      [null, ['B', 'G']]
+    ])
+  })
+
+  it('is empty for no sets', () => {
+    expect(seriesGroups([])).toEqual([])
+  })
+})
+
 describe('upcoming sets', () => {
   const base = {
     language: 'en',
@@ -529,7 +559,8 @@ describe('upcoming sets', () => {
     totalRarities: 1,
     ownedRarities: 0,
     listRows: null,
-    unmatchedRows: null
+    unmatchedRows: null,
+    series: null
   } as const
 
   it('cutoff is 30 local days after today, across month and year ends', () => {

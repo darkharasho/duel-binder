@@ -1,8 +1,9 @@
-import { fireEvent, screen, waitFor, within } from '@testing-library/react'
+import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { SetSummary } from '@shared/types'
 import { SetsPage } from '@/features/sets/SetsPage'
 import { SetArt } from '@/features/sets/SetArt'
+import { GameProvider } from '@/lib/game'
 import { searchPause } from './filterTestHelpers'
 import { createMockApi, renderWithProviders } from './mockApi'
 import { metalRaidersChecklist } from './setFixtures'
@@ -22,6 +23,7 @@ const set = (o: Partial<SetSummary>): SetSummary => ({
   ownedRarities: 0,
   listRows: null,
   unmatchedRows: null,
+  series: null,
   ...o
 })
 
@@ -265,6 +267,82 @@ describe('SetsPage', () => {
     expect(await screen.findByRole('button', { name: 'Alpha Dragon' })).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: /All sets/ }))
     expect(await screen.findByText(/You've started/)).toBeInTheDocument()
+  })
+})
+
+describe('SetsPage series headers', () => {
+  const PAF = set({
+    setName: 'Paldean Fates',
+    setCode: 'PAF',
+    tcgDate: '2024-01-26',
+    series: 'Scarlet & Violet'
+  })
+  const SVI = set({
+    setName: 'Scarlet & Violet',
+    setCode: 'SVI',
+    tcgDate: '2023-03-31',
+    series: 'Scarlet & Violet'
+  })
+  const MEG = set({
+    setName: 'Mega Evolution',
+    setCode: 'MEG',
+    tcgDate: '2025-09-26',
+    series: 'Mega Evolution'
+  })
+  const CRZ = set({
+    setName: 'Crown Zenith',
+    setCode: 'CRZ',
+    tcgDate: '2023-01-20',
+    series: 'Sword & Shield'
+  })
+  const ODD = set({ setName: 'Odd Promo', setCode: 'ODD', tcgDate: '2025-12-01', series: null })
+  const SETS = [SVI, CRZ, ODD, PAF, MEG]
+
+  function renderGame(game: 'ygo' | 'pkm', sets: SetSummary[] = SETS): void {
+    const api = createMockApi({
+      sets: { list: async () => sets },
+      games: { available: async () => ['ygo', 'pkm'], active: async () => game }
+    })
+    renderWithProviders(
+      <GameProvider>
+        <SetsPage onAddCard={() => {}} onAddMissing={() => {}} />
+      </GameProvider>,
+      { api }
+    )
+  }
+  const sections = (): (string | null)[] =>
+    screen.getAllByRole('region').map((r) => r.getAttribute('aria-label'))
+  const setsIn = (series: string): string[] =>
+    within(screen.getByRole('list', { name: series }))
+      .getAllByRole('button')
+      .map((b) => b.textContent ?? '')
+
+  it('groups Pokémon sets under their series, newest series first, with Other last', async () => {
+    renderGame('pkm')
+    await screen.findByRole('heading', { name: /Scarlet & Violet/ })
+    expect(sections()).toEqual(['Mega Evolution', 'Scarlet & Violet', 'Sword & Shield', 'Other'])
+    const header = within(screen.getByRole('region', { name: 'Scarlet & Violet' })).getByRole(
+      'heading'
+    )
+    expect(header).toHaveTextContent('Scarlet & Violet2 sets')
+    // Inside a series the sets keep the date order.
+    const sv = setsIn('Scarlet & Violet')
+    expect(sv[0]).toMatch(/Paldean Fates/)
+    expect(sv[1]).toMatch(/Scarlet & Violet/)
+    expect(setsIn('Other')[0]).toMatch(/Odd Promo/)
+  })
+
+  it('drops the headers for another sort, and has none for Yu-Gi-Oh!', async () => {
+    renderGame('pkm')
+    await screen.findByRole('heading', { name: /Scarlet & Violet/ })
+    await userEvent.click(screen.getByRole('combobox', { name: 'Sort by' }))
+    await userEvent.click(await screen.findByRole('option', { name: 'Name: A to Z' }))
+    await waitFor(() => expect(screen.queryAllByRole('region')).toEqual([]))
+    expect(screen.getByRole('list', { name: 'Sets' })).toBeInTheDocument()
+    cleanup()
+    renderGame('ygo')
+    await screen.findByRole('button', { name: /Paldean Fates/ })
+    expect(screen.queryAllByRole('region')).toEqual([])
   })
 })
 

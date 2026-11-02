@@ -137,6 +137,38 @@ export function sortSets(sets: SetSummary[], sort: SetSort, mode: CountMode): Se
   })
 }
 
+/** Sets under one series header on the Sets page; a null series is "Other". */
+export interface SeriesGroup {
+  series: string | null
+  sets: SetSummary[]
+}
+
+/**
+ * Sets grouped by series, each group keeping the sets' order. Newest series first, by its newest
+ * set's date; a series with no dated set follows the dated ones, and sets with no series ("Other")
+ * come last.
+ */
+export function seriesGroups(sets: SetSummary[]): SeriesGroup[] {
+  const groups = new Map<string | null, { group: SeriesGroup; newest: string | null }>()
+  for (const s of sets) {
+    const series = s.series?.trim() || null
+    let g = groups.get(series)
+    if (!g) groups.set(series, (g = { group: { series, sets: [] }, newest: null }))
+    g.group.sets.push(s)
+    if (s.tcgDate !== null && (g.newest === null || s.tcgDate > g.newest)) g.newest = s.tcgDate
+  }
+  return [...groups.values()]
+    .sort((a, b) => {
+      if ((a.group.series === null) !== (b.group.series === null))
+        return a.group.series === null ? 1 : -1
+      if (a.newest === b.newest) return 0
+      if (a.newest === null) return 1
+      if (b.newest === null) return -1
+      return a.newest < b.newest ? 1 : -1
+    })
+    .map((g) => g.group)
+}
+
 /** Sets releasing more than this many days from today sit under the "upcoming" banner. */
 export const UPCOMING_DAYS = 30
 

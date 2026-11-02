@@ -968,6 +968,52 @@ describe('Scan window tilt', () => {
     expect(drafts()).toHaveLength(1)
   })
 
+  it('a frame that waited behind a reading is late, not a lowered card: the retry still counts', async () => {
+    stubCamera()
+    // The worker is serial: a frame sent while a reading is out waits for it, then takes its own
+    // time, so the two together leave a gap between frames longer than ABSENT_MS.
+    const READ_MS = 400
+    const FRAME_WAIT_MS = 300
+    expect(READ_MS + FRAME_WAIT_MS).toBeGreaterThan(ABSENT_MS)
+    const engine = tiltEngine(
+      () => held(),
+      () => ULTRA
+    )
+    const analyze = engine.analyze.getMockImplementation() as (
+      ...args: Parameters<FakeEngine['analyze']>
+    ) => Promise<RawSignals>
+    const readings = [FEW, ULTRA]
+    let pending: Promise<unknown> | null = null
+    vi.mocked(engine.tiltReading!).mockImplementation(() => {
+      const r = readings.shift() ?? ULTRA
+      const p = new Promise<TiltReading>((resolve) => setTimeout(() => resolve(r), READ_MS))
+      pending = p
+      void p.then(() => {
+        if (pending === p) pending = null
+      })
+      return p
+    })
+    engine.analyze.mockImplementation(async (...args: Parameters<FakeEngine['analyze']>) => {
+      if (pending) {
+        await pending
+        await new Promise((resolve) => setTimeout(resolve, FRAME_WAIT_MS))
+      }
+      return analyze(...args)
+    })
+    await renderTilt(engine)
+    await run(1000)
+    expect(lastState().loop.kind).toBe('tilt')
+    await run(TILT_MS + 2 * (READ_MS + FRAME_WAIT_MS) + TILT_RETRY_MS + 200)
+    // The first reading had too few frames; the frame stalled behind it didn't end the tilt, so
+    // the retry was asked and its guess counts.
+    expect(engine.tiltReading).toHaveBeenCalledTimes(2)
+    expect(drafts()).toEqual([
+      expect.objectContaining({ printingId: 102, rarity: 'Ultra Rare', flag: 'check-rarity' })
+    ])
+    await run(2000)
+    expect(drafts()).toHaveLength(1)
+  })
+
   it('another card mid-tilt counts the held one as today, then scans the new one', async () => {
     stubCamera()
     let other = false

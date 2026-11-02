@@ -155,8 +155,8 @@ interface Tilt {
   /** The card's artworks: a frame matching one is the card still held. */
   imageIds: number[]
   since: number
-  /** When a frame last showed the card, on the loop's clock. */
-  lastSeen: number
+  /** When the first of the frames since one last showed the card was grabbed, on the loop's clock. */
+  missSince: number | null
   /** When the worker may next be asked for a reading. */
   nextRead: number
   /** A reading is in flight: the worker is serial, so one at a time. */
@@ -718,7 +718,7 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
         engine,
         imageIds: [...new Set([draft.imageId, ...ofCard.flatMap((p) => p.imageIds)])],
         since: now,
-        lastSeen: now,
+        missSince: null,
         nextRead: now + TILT_MS,
         reading: false,
         logged: false
@@ -767,7 +767,7 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
 
     /**
      * One frame of a held card: kept by the worker for the reading while it shows the card's art.
-     * The card counts as recognized once it's gone for ABSENT_MS, or as soon as another card's art
+     * The card counts as recognized once frames have missed it for ABSENT_MS, or as soon as another card's art
      * is close: no text is read and nothing is resolved, so this is all a tilt frame is for.
      */
     const tiltFrame = async (
@@ -775,10 +775,6 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
       video: HTMLVideoElement,
       t: Tilt
     ): Promise<void> => {
-      if (performance.now() - t.lastSeen >= ABSENT_MS) {
-        endTilt(t, t.draft)
-        return
-      }
       if (!t.reading && performance.now() >= t.nextRead) askTilt(t)
       const grabbed = await grab(video).catch(() => null)
       if (!grabbed) return
@@ -803,9 +799,20 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
         return
       }
       if (!live || l.tilt !== t) return
+      if (raw.tiltKept) {
+        t.missSince = null
+        // The outline follows the held card rather than freezing where the tilt began.
+        if (raw.quad) setOutline({ quad: raw.quad, width: grabbed.width, height: grabbed.height })
+        return
+      }
+      // Gone is measured between frames looked at, as show() does: a frame that waited behind a
+      // reading in the worker is late, not a lowered card.
+      t.missSince ??= at
       const top = raw.art[0]
-      if (raw.tiltKept) t.lastSeen = at
-      else if (top && top.distance <= ART_MAX_DISTANCE && !t.imageIds.includes(top.imageId))
+      if (
+        at - t.missSince >= ABSENT_MS ||
+        (top && top.distance <= ART_MAX_DISTANCE && !t.imageIds.includes(top.imageId))
+      )
         endTilt(t, t.draft)
     }
 

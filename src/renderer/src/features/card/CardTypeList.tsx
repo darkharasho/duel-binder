@@ -6,6 +6,7 @@ import { englishSetName } from '@shared/setNames'
 import type { BrowsePage, ChecklistCard, EntryView, Printing, SetChecklist } from '@shared/types'
 import { LanguageTag } from '@/components/LanguageTag'
 import { pickableRow } from '@/components/pickableRow'
+import { SearchInput } from '@/components/SearchInput'
 import { Button } from '@/components/ui/button'
 import { AddToBinder } from '@/features/binders/AddToBinder'
 import { replaceChecklistCard } from '@/features/sets/setsView'
@@ -39,6 +40,21 @@ function countsOf(f: InFlight): Map<string, number> {
   const counts = new Map(f.confirmed)
   for (const op of f.ops) counts.set(op.key, Math.max(0, (counts.get(op.key) ?? 0) + op.delta))
   return counts
+}
+
+/** A Yu-Gi-Oh! card with more types than this gets a box to narrow them. */
+const SEARCH_FROM = 8
+
+/** Whether a row's set name, set code or rarity holds every word of the text, ignoring case. */
+const rowMatches = (row: CardTypeRow, text: string): boolean => {
+  const p = row.printing
+  const hay =
+    `${p.setName} ${englishSetName(p.setName, p.setCode)} ${p.setCode} ${p.setRarity}`.toLowerCase()
+  return text
+    .toLowerCase()
+    .split(/\s+/)
+    .filter(Boolean)
+    .every((w) => hay.includes(w))
 }
 
 /** What a row's −/+ counts: the printing's original-art copies, or the row's own entry. */
@@ -176,13 +192,26 @@ export function CardTypeList({
   }
 
   const selected = rows.find((r) => r.key === selectedKey)
+  const [query, setQuery] = useState('')
+  const searchable = def.id === 'ygo' && rows.length > SEARCH_FROM
+  const shown = searchable && query.trim() ? rows.filter((r) => rowMatches(r, query)) : rows
 
   return (
     <section aria-label="Printings" className="space-y-2">
       <h3 className="text-sm font-medium">
         {total > 0 ? `You have ${total}` : 'You have none yet'}
       </h3>
-      {rows.map((row) => {
+      {searchable && (
+        <SearchInput
+          label="Search printings"
+          placeholder="Search by set, code or rarity"
+          value={query}
+          onChange={setQuery}
+          debounceMs={0}
+        />
+      )}
+      {shown.length === 0 && <p className="text-xs text-muted-foreground">No prints match</p>}
+      {shown.map((row) => {
         const p = row.printing
         const name = `${cardName} ${p.setCode} ${p.setRarity}`
         // Rows of one printing need telling apart.

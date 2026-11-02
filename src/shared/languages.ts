@@ -17,7 +17,10 @@ export interface LanguageInfo {
   /** Short tag shown next to a set's English name. */
   tag: string
   label: string
-  /** Yugipedia "Set Card Lists" page suffix; null for English (synced from YGOPRODeck). */
+  /**
+   * Yugipedia "Set Card Lists" page suffix. English printings come from YGOPRODeck; its TCG-EN
+   * lists only fill in the ones YGOPRODeck lacks (see sync/intl.ts).
+   */
   yugipediaSuffix: string | null
   ebayWord: string
 }
@@ -26,7 +29,7 @@ export type LanguageFilter = Language | 'all'
 
 /** Display order everywhere languages are listed. */
 export const LANGUAGES: readonly LanguageInfo[] = [
-  { code: 'en', tag: 'EN', label: 'English', yugipediaSuffix: null, ebayWord: 'English' },
+  { code: 'en', tag: 'EN', label: 'English', yugipediaSuffix: 'TCG-EN', ebayWord: 'English' },
   { code: 'ja', tag: 'JP', label: 'Japanese', yugipediaSuffix: 'OCG-JP', ebayWord: 'Japanese' },
   { code: 'ko', tag: 'KR', label: 'Korean', yugipediaSuffix: 'OCG-KR', ebayWord: 'Korean' },
   { code: 'de', tag: 'DE', label: 'German', yugipediaSuffix: 'TCG-DE', ebayWord: 'German' },
@@ -55,7 +58,7 @@ export function languageInfo(code: Language): LanguageInfo {
   return info
 }
 
-/** Maps a Yugipedia list suffix such as 'OCG-JP' to its language; null for English or unknown. */
+/** Maps a Yugipedia list suffix such as 'OCG-JP' to its language; null when unknown. */
 export function languageForSuffix(suffix: string): Language | null {
   return BY_SUFFIX.get(suffix) ?? null
 }

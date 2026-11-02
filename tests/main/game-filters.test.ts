@@ -198,6 +198,78 @@ describe('per-game filters and facets', () => {
         expect(found('30')).toEqual(['ピカチュウ'])
       })
 
+      describe('a promo numbered without a count, among many cards of its name', () => {
+        let promo: { cardId: number; printingId: number }
+        beforeEach(() => {
+          // The 30th Celebration Victini (MEP 102) beside a set's Victini, and one of a promo
+          // set's cards with letters for a number.
+          addPokemonCard(db, {
+            source: 't-victini-set',
+            name: 'Victini',
+            category: 'Pokémon',
+            hp: 80,
+            types: ['Fire'],
+            stage: 'Basic',
+            setCode: '30C 013/128'
+          })
+          promo = addPokemonCard(db, {
+            source: 't-victini-promo',
+            name: 'Victini',
+            category: 'Pokémon',
+            hp: 80,
+            types: ['Fire'],
+            stage: 'Basic',
+            rarity: 'Promo',
+            setCode: 'MEP 102'
+          })
+          addPokemonCard(db, {
+            source: 't-museum',
+            name: 'Pikachu at the Museum',
+            category: 'Pokémon',
+            hp: 60,
+            types: ['Lightning'],
+            stage: 'Basic',
+            rarity: 'Promo',
+            setCode: 'MEP Museum'
+          })
+          db.exec(`INSERT INTO cards_fts(cards_fts) VALUES('rebuild')`)
+        })
+
+        const searchedCodes = (q: string): string[] =>
+          searchCards(db, q).map((r) => `${r.name} ${r.matchedSetCode}`)
+
+        it('is found by its number', () => {
+          expect(found('102')).toEqual(['Victini'])
+          expect(searchedCodes('102')).toEqual(['Victini MEP 102'])
+          expect(found('13')).toEqual(['Victini'])
+          expect(found('102/128')).toEqual([])
+        })
+
+        it('is found by its name or set code and its number', () => {
+          for (const q of ['Victini 102', 'victini 102', 'MEP 102', 'mep 102']) {
+            expect(found(q)).toEqual(['Victini'])
+            expect(searchedCodes(q)).toEqual(['Victini MEP 102'])
+          }
+          expect(searchedCodes('Victini 13')).toEqual(['Victini 30C 013/128'])
+          expect(searchedCodes('Victini 13/128')).toEqual(['Victini 30C 013/128'])
+          addEntry(db, { printingId: promo.printingId, imageId: promo.cardId, quantity: 1 }, now)
+          expect(names(listEntries(db, { ...ALL, q: 'Victini 102' }))).toEqual(['Victini'])
+          expect(names(listEntries(db, { ...ALL, q: 'Victini 13' }))).toEqual([])
+        })
+
+        it('needs both to agree', () => {
+          for (const q of ['Pineco 102', 'SVI 102', 'Victini 45', 'MEP 45']) {
+            expect(found(q)).toEqual([])
+            expect(searched(q)).toEqual([])
+          }
+        })
+
+        it('reads no number from a code of letters', () => {
+          expect(searched('Museum')).toEqual(['Pikachu at the Museum'])
+          expect(found('0')).toEqual([])
+        })
+      })
+
       it('never finds Pokémon from a Yu-Gi-Oh scope', () => {
         setGame(db, 'ygo')
         for (const q of ['Pineco', 'マツボックリ', '045', '45/193']) {

@@ -5,7 +5,10 @@ import { isLanguage } from '../../shared/languages'
 import { setPrice } from './priceRule'
 import { shownPrinting } from './shownPrinting'
 import { LOCAL, scopeGame, type Scope } from './scope'
-import { pokemonNumberMatch } from './pkmFilters'
+import { pokemonNamedNumber, pokemonNumberMatch } from './pkmFilters'
+import { buildFtsQuery } from './fts'
+
+export { buildFtsQuery }
 
 export interface CardDbRow {
   id: number
@@ -108,12 +111,6 @@ export function rowToPrinting(row: PrintingDbRow): Printing {
   }
 }
 
-/** Turns free text into a safe FTS5 prefix query, or null when nothing searchable remains. */
-export function buildFtsQuery(q: string): string | null {
-  const tokens = q.split(/[^\p{L}\p{N}]+/u).filter(Boolean)
-  return tokens.length ? tokens.map((t) => `"${t}"*`).join(' ') : null
-}
-
 /** How many of a name search's best matches are put in date order. */
 const NAME_POOL = 300
 
@@ -132,8 +129,8 @@ export function searchCards(db: SqlDb, q: string, limit = 20, scope: Scope = LOC
   }
   const defaultImage = `COALESCE((SELECT image_id FROM card_images WHERE card_id = c.id AND +game = ${scope.game} AND sort_order = 0), c.id)`
 
-  const pkmNumber =
-    scopeGame(db, scope) === 'pkm' ? pokemonNumberMatch(text, 'p.set_code') : null
+  const pkm = scopeGame(db, scope) === 'pkm'
+  const pkmNumber = pkm ? pokemonNumberMatch(text, 'p.set_code') : null
   if (pkmNumber) {
     // A card number (45, 045, 45/193): only printings' numbers match, never names.
     const rows = db
@@ -146,6 +143,20 @@ export function searchCards(db: SqlDb, q: string, limit = 20, scope: Scope = LOC
       .all(...pkmNumber.params, limit) as DbHit[]
     rows.forEach((r) => push(toResult(r)))
     return results
+  }
+
+  // A name or set code and a number ("Victini 102", "MEP 102"): one of a name's many printings.
+  const named = pkm ? pokemonNamedNumber(text, 'p.set_code', 'p.card_id') : null
+  if (named) {
+    const rows = db
+      .prepare(
+        `SELECT c.id, c.name, c.type, ${defaultImage} AS default_image_id, p.set_code AS matched
+         FROM card_printings p JOIN cards c ON c.id = p.card_id AND +c.game = ${scope.game}
+         WHERE +p.game = ${scope.game} AND p.contributed = 0 AND ${named.sql}
+         ORDER BY c.name, p.set_code, p.id LIMIT ?`
+      )
+      .all(...named.params, limit) as DbHit[]
+    rows.forEach((r) => push(toResult(r)))
   }
 
   if (text.includes('-') && !/\s/.test(text)) {

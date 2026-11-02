@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import type { Language } from '@shared/languages'
-import { printingChip, printingTitle } from '@shared/printingLabel'
+import { printingChip, printingParts } from '@shared/printingLabel'
 import type { EntryView, UpdateEntryInput } from '@shared/types'
 import { LanguageTag } from '@/components/LanguageTag'
 import { PrintingLabel } from '@/components/PrintingLabel'
@@ -150,7 +150,7 @@ export function EntryEditor({
                   <SelectItem key={p.id} value={String(p.id)} className="*:[span]:last:min-w-0">
                     <PrintingLabel
                       chip={printingChip(label)}
-                      title={printingTitle(label)}
+                      {...printingParts(label)}
                       tag={<LanguageTag language={p.language} />}
                     />
                   </SelectItem>

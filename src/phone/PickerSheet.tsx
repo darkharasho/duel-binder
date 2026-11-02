@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { CheckIcon, XIcon } from 'lucide-react'
 import { SearchInput } from '@/components/SearchInput'
+import { PrintingTitle } from '@/components/PrintingLabel'
 import { matchOptions, type PickerOption } from '@/features/scan/SearchPicker'
 import { cn } from '@/lib/utils'
 
@@ -162,9 +163,11 @@ function Sheet({
                     {o.badge}
                   </span>
                 )}
-                <span className="min-w-0 flex-1 truncate text-base leading-5">
-                  {o.title ?? o.label}
-                </span>
+                <PrintingTitle
+                  title={o.title ?? o.label}
+                  rarity={o.rarity}
+                  className="flex-1 text-base leading-5"
+                />
                 {o.note && (
                   <span className="shrink-0 text-xs font-medium text-muted-foreground">
                     {o.note}

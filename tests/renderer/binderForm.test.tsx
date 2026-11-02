@@ -26,8 +26,22 @@ function renderForm(
   )
 }
 
-const optionTexts = (label: string): string[] =>
-  Array.from((screen.getByLabelText(label) as HTMLSelectElement).options).map((o) => o.text)
+async function optionTexts(label: string): Promise<string[]> {
+  const user = userEvent.setup()
+  await user.click(screen.getByLabelText(label))
+  const texts = (await screen.findAllByRole('option')).map((o) => o.textContent ?? '')
+  await user.keyboard('{Escape}')
+  return texts
+}
+
+async function pick(
+  user: ReturnType<typeof userEvent.setup>,
+  label: string,
+  option: string
+): Promise<void> {
+  await user.click(await screen.findByLabelText(label))
+  await user.click(await screen.findByRole('option', { name: option }))
+}
 
 afterEach(() => {
   window.api = undefined as never
@@ -37,17 +51,21 @@ describe('the binder form fields', () => {
   it('offers Yu-Gi-Oh! its fields and goals, without artist', async () => {
     renderForm()
     await screen.findByLabelText('Add rule')
-    await waitFor(() => expect(optionTexts('Goal')).toContain('One of each art'))
-    expect(optionTexts('Add rule')).toContain('Archetype')
-    expect(optionTexts('Add rule')).not.toContain('Artist')
-    expect(optionTexts('Add rule')[0]).toBe('Add rule · leave empty for a manual binder')
+    await waitFor(async () => expect(await optionTexts('Goal')).toContain('One of each art'))
+    const fields = await optionTexts('Add rule')
+    expect(fields).toContain('Archetype')
+    expect(fields).not.toContain('Artist')
+    expect(screen.getByLabelText('Add rule')).toHaveTextContent(
+      'Add rule · leave empty for a manual binder'
+    )
   })
 
   it('offers Pokémon an artist, and no art goal', async () => {
     renderForm({}, {}, 'pkm')
-    await waitFor(() => expect(optionTexts('Add rule')).toContain('Artist'))
-    expect(optionTexts('Goal')).not.toContain('One of each art')
-    expect(optionTexts('Goal')).toContain('One of each card')
+    await waitFor(async () => expect(await optionTexts('Add rule')).toContain('Artist'))
+    const goals = await optionTexts('Goal')
+    expect(goals).not.toContain('One of each art')
+    expect(goals).toContain('One of each card')
   })
 
   it('says that no language means every language, and shows friends on by default', () => {
@@ -62,7 +80,7 @@ describe('the live preview', () => {
     const preview = vi.fn(async () => ({ printings: 12, cards: 5, owned: 2, tooBroad: false }))
     renderForm({ binders: { preview } })
     const user = userEvent.setup()
-    await user.selectOptions(screen.getByLabelText('Add rule'), 'name')
+    await pick(user, 'Add rule', 'Name')
     expect(preview).not.toHaveBeenCalled()
     await user.type(screen.getByLabelText('Name value'), 'Blue')
     expect(await screen.findByText(/12 printings/)).toBeInTheDocument()
@@ -77,7 +95,7 @@ describe('the live preview', () => {
   it('shows 0 for an artist rule with no matches', async () => {
     renderForm({ binders: { fieldValues: vi.fn(async () => ['Nobody']) } }, {}, 'pkm')
     const user = userEvent.setup()
-    await user.selectOptions(await screen.findByLabelText('Add rule'), 'artist')
+    await pick(user, 'Add rule', 'Artist')
     await user.click(screen.getByLabelText('Search Artist'))
     await user.click(await screen.findByRole('button', { name: 'Nobody' }))
     expect(await screen.findByText(/^0 printings/)).toBeInTheDocument()
@@ -89,7 +107,7 @@ describe('the live preview', () => {
     })
     renderForm({ binders: { preview } })
     const user = userEvent.setup()
-    await user.selectOptions(screen.getByLabelText('Add rule'), 'name')
+    await pick(user, 'Add rule', 'Name')
     await user.type(screen.getByLabelText('Name value'), 'a')
     await waitFor(() => expect(preview).toHaveBeenCalled())
     expect(screen.queryByText(/printings/)).not.toBeInTheDocument()
@@ -111,7 +129,7 @@ describe('the live preview', () => {
       }
     })
     const user = userEvent.setup()
-    await user.selectOptions(screen.getByLabelText('Add rule'), 'set')
+    await pick(user, 'Add rule', 'Set')
     await user.click(screen.getByLabelText('Search Set'))
     await user.click(
       await screen.findByRole('button', { name: /Legend of Blue Eyes White Dragon/ })
@@ -136,7 +154,7 @@ describe('field value search', () => {
     ])
     renderForm({ binders: { fieldValues } })
     const user = userEvent.setup()
-    await user.selectOptions(screen.getByLabelText('Add rule'), 'archetype')
+    await pick(user, 'Add rule', 'Archetype')
     await user.type(screen.getByLabelText('Search Archetype'), 'blue')
     await waitFor(() => expect(fieldValues).toHaveBeenCalledTimes(2))
     expect(fieldValues.mock.calls.map((c) => c[1])).toEqual(['', 'blue'])
@@ -149,7 +167,7 @@ describe('saving', () => {
     renderForm({ binders: { preview } })
     const user = userEvent.setup()
     await user.type(screen.getByLabelText('Name'), 'Everything')
-    await user.selectOptions(screen.getByLabelText('Add rule'), 'name')
+    await pick(user, 'Add rule', 'Name')
     await user.type(screen.getByLabelText('Name value'), 'a')
     expect(await screen.findByText(/match too many cards/i)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled()
@@ -168,9 +186,9 @@ describe('saving', () => {
     const invalidate = vi.spyOn(client, 'invalidateQueries')
     const user = userEvent.setup()
     await user.type(screen.getByLabelText('Name'), 'Blue-Eyes')
-    await user.selectOptions(screen.getByLabelText('Add rule'), 'name')
+    await pick(user, 'Add rule', 'Name')
     await user.type(screen.getByLabelText('Name value'), 'Blue-Eyes')
-    await user.selectOptions(screen.getByLabelText('Goal'), 'card')
+    await pick(user, 'Goal', 'One of each card')
     await user.click(screen.getByLabelText('Japanese'))
     await user.click(screen.getByLabelText('Friends can see this binder'))
     await user.click(screen.getByRole('button', { name: 'Save' }))

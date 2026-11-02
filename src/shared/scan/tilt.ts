@@ -15,6 +15,7 @@ export interface TiltPair {
   cb: readonly number[]
 }
 
+/** The fitted tilt classifier: the finishes it knows and a nearest-centroid pair for each two of them. */
 export interface TiltModel {
   features: readonly string[]
   /** Finishes, as tiltFinish names them. */
@@ -68,7 +69,8 @@ export function tiltFinishes(
 /**
  * The finish among `finishes` the features are nearest to: a round robin over the pairs the
  * model has, the nearer centroid winning each, most wins taking it and the larger summed margin
- * breaking a tie. Null when fewer than two of the finishes are classes.
+ * breaking a tie. Null when fewer than two of the finishes are classes, or the model has no pair
+ * among them (no evidence to guess from).
  */
 export function pickByTilt(
   model: TiltModel,
@@ -79,6 +81,7 @@ export function pickByTilt(
   if (known.length < 2) return null
   const wins = new Map(known.map((f) => [f, 0]))
   const margins = new Map(known.map((f) => [f, 0]))
+  let scored = 0
   for (const pair of model.pairs) {
     if (!wins.has(pair.a) || !wins.has(pair.b)) continue
     let da = 0
@@ -88,11 +91,13 @@ export function pickByTilt(
       da += (z - pair.ca[i]) ** 2
       db += (z - pair.cb[i]) ** 2
     })
+    scored++
     const margin = Math.abs(Math.sqrt(da) - Math.sqrt(db))
     const winner = da <= db ? pair.a : pair.b
     wins.set(winner, wins.get(winner)! + 1)
     margins.set(winner, margins.get(winner)! + margin)
   }
+  if (!scored) return null
   let best = known[0]
   for (const f of known) {
     const w = wins.get(f)!

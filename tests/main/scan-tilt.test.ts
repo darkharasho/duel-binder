@@ -87,6 +87,10 @@ describe('pickByTilt', () => {
     )
     expect(pickByTilt(MODEL, [at('Super Rare')], ['Super Rare'])).toBeNull()
   })
+  it('no pair among the finishes means no pick', () => {
+    const noPair: TiltModel = { ...MODEL, pairs: [] }
+    expect(pickByTilt(noPair, [0], ['Super Rare', 'Ultra Rare'])).toBeNull()
+  })
   it('a three-way pick goes to the finish that wins most pairs', () => {
     expect(
       pickByTilt(MODEL, [at('Ultra Rare')], ['Common', 'Super Rare', 'Ultra Rare'])?.finish

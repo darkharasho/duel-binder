@@ -2,6 +2,7 @@ import { useInfiniteQuery, useQuery } from '@tanstack/react-query'
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { api, queryKeys } from '@/lib/api'
+import { useBackHandler } from '@/lib/backStack'
 import { rarityColor } from '@/lib/rarityColors'
 import { baseOf } from '../../../../shared/rip/rarity'
 import type { RipSessionSummary } from '../../../../shared/rip/types'
@@ -30,6 +31,7 @@ function Stat({ label, value }: { label: string; value: number }): React.JSX.Ele
 }
 
 function SessionDetail({ id, onBack }: { id: number; onBack: () => void }): React.JSX.Element {
+  useBackHandler(true, onBack)
   const q = useQuery({ queryKey: queryKeys.ripSession(id), queryFn: () => api.rip.session(id) })
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-4">

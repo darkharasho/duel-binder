@@ -5,6 +5,7 @@ import type { BinderSummary, Friend } from '@shared/types'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
 import { api, queryKeys } from '@/lib/api'
+import { useBackHandler } from '@/lib/backStack'
 import { Row } from './BindersPage'
 import { BinderView } from './BinderView'
 
@@ -19,6 +20,7 @@ function Open({
   header: React.ReactNode
   onBack: () => void
 }): React.JSX.Element {
+  useBackHandler(true, onBack)
   const q = useQuery({
     queryKey: queryKeys.friendBinder(friend.id, uid),
     queryFn: () => api.friends.binder(friend.id, uid),

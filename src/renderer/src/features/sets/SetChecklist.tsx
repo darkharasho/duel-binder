@@ -50,6 +50,7 @@ import { TooltipProvider } from '@/components/ui/tooltip'
 import { UnderlineTabs } from '@/components/UnderlineTabs'
 import { CardPanel, type CardPanelSeed } from '@/features/card/CardPanel'
 import { api, invalidateAfterEdit, queryKeys } from '@/lib/api'
+import { useBackHandler } from '@/lib/backStack'
 import { useFavourites } from '@/lib/favourites'
 import type { ActiveChip } from '@/lib/filters'
 import { useGame } from '@/lib/game'
@@ -119,8 +120,9 @@ function BackButton({ onBack }: { onBack: () => void }): React.JSX.Element {
   )
 }
 
-/** Esc and the mouse's back button leave the set, unless a dialog or panel is open. */
+/** Esc, the mouse's back button and Android's back leave the set, unless a dialog or panel is open. */
 function useBackShortcuts(onBack: () => void): void {
+  useBackHandler(true, onBack)
   const latest = useRef(onBack)
   useEffect(() => {
     latest.current = onBack

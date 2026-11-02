@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react'
+import { act, renderHook, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { vi } from 'vitest'
 import { HistoryTab } from '@/features/rip/HistoryTab'
@@ -10,6 +10,7 @@ import type {
   RipSessionSummary
 } from '../../src/shared/rip/types'
 import { createMockApi, renderWithProviders } from './mockApi'
+import { handleBack, useBackHandler } from '../../src/phone/backButton'
 
 const card = (rarity: string, slot: number, name = `Card ${slot}`): RipCard => ({
   pkey: `k${slot}-${rarity}`,
@@ -333,6 +334,24 @@ describe('HistoryTab', () => {
     expect(screen.queryByRole('button', { name: /pick another set/i })).not.toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: /back/i }))
     expect(await screen.findByText(/best pulls ever/i)).toBeInTheDocument()
+  })
+
+  it("Android's back leaves a session for the history before it leaves the page", async () => {
+    const home = vi.fn()
+    renderHook(() => useBackHandler(true, home))
+    renderWithProviders(<HistoryTab />, {
+      api: createMockApi({
+        rip: { history: vi.fn(async () => history()), session: vi.fn(async () => detail()) }
+      })
+    })
+    await userEvent.click(await screen.findByRole('button', { name: /Legend of Blue Eyes/ }))
+    await screen.findByTestId('rip-summary-headline')
+
+    act(() => void handleBack())
+    expect(await screen.findByText(/best pulls ever/i)).toBeInTheDocument()
+    expect(home).not.toHaveBeenCalled()
+    act(() => void handleBack())
+    expect(home).toHaveBeenCalledTimes(1)
   })
 
   it('Show more loads the next page of sessions by offset', async () => {

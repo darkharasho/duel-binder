@@ -158,7 +158,7 @@ describe('handleSite', () => {
   })
 
   it('still renders with fallback links when downloads are all null', async () => {
-    const { d } = deps({ version: null, windows: null, mac: null, linux: null })
+    const { d } = deps({ version: null, windows: null, mac: null, linux: null, android: null })
     const res = await handleSite(new Request('https://duelbinder.com/'), d)
     expect(res.status).toBe(200)
     expect(await res.text()).toContain(RELEASES_FALLBACK)

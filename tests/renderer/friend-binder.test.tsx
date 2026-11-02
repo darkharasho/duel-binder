@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react'
+import { act, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type {
   BinderCard,
@@ -13,6 +13,7 @@ import type {
 import { FriendBinder } from '@/features/friends/FriendBinder'
 import { createMockApi, renderWithProviders } from './mockApi'
 import { metalRaidersChecklist } from './setFixtures'
+import { handleBack } from '../../src/phone/backButton'
 
 const friend: Friend = {
   id: 7,
@@ -171,6 +172,19 @@ describe("a friend's binder", () => {
     expect(within(sheet).getByRole('region', { name: 'Their copies' })).toBeInTheDocument()
     await waitFor(() => expect(api.collection.forCard).not.toHaveBeenCalled())
   })
+
+  it("Android's back leaves their set, then their binder", async () => {
+    const { onBack } = open()
+    await userEvent.click(screen.getByRole('radio', { name: 'Sets' }))
+    await userEvent.click(await screen.findByRole('button', { name: /Metal Raiders/ }))
+    await screen.findByRole('heading', { name: /Metal Raiders/ })
+
+    act(() => void handleBack())
+    expect(await screen.findByRole('button', { name: /Barely/ })).toBeInTheDocument()
+    expect(onBack).not.toHaveBeenCalled()
+    act(() => void handleBack())
+    expect(onBack).toHaveBeenCalledTimes(1)
+  })
 })
 
 describe("a friend's binders tab", () => {
@@ -237,6 +251,22 @@ describe("a friend's binders tab", () => {
     expect(screen.getByText('Card 1')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /remove/i })).not.toBeInTheDocument()
+  })
+
+  it("Android's back leaves their binder for the list, then their page", async () => {
+    const { onBack } = open({
+      binders: vi.fn(async () => [summary]),
+      binder: vi.fn(async () => detail)
+    })
+    await userEvent.click(await screen.findByRole('radio', { name: 'Binders' }))
+    await userEvent.click(await screen.findByRole('button', { name: /Blue-Eyes/ }))
+    await screen.findByRole('heading', { name: 'Blue-Eyes' })
+
+    act(() => void handleBack())
+    expect(await screen.findByRole('button', { name: /Blue-Eyes/ })).toBeInTheDocument()
+    expect(onBack).not.toHaveBeenCalled()
+    act(() => void handleBack())
+    expect(onBack).toHaveBeenCalledTimes(1)
   })
 
   it('says so when a binder is no longer available', async () => {

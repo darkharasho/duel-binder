@@ -1,9 +1,10 @@
-import { screen, within } from '@testing-library/react'
+import { act, renderHook, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { BinderCard, BinderDetail, BinderSummary, CardRow } from '@shared/types'
 import { BindersPage } from '@/features/binders/BindersPage'
 import { BinderView } from '@/features/binders/BinderView'
 import { createMockApi, renderWithProviders } from './mockApi'
+import { handleBack, useBackHandler } from '../../src/phone/backButton'
 
 const summary = (over: Partial<BinderSummary> = {}): BinderSummary => ({
   uid: 'b1',
@@ -87,6 +88,23 @@ describe('the binders page', () => {
     await userEvent.click(await screen.findByRole('button', { name: /^Blue-Eyes/ }))
     expect(await screen.findByRole('heading', { name: 'Blue-Eyes' })).toBeInTheDocument()
     expect(api.binders.get).toHaveBeenCalledWith('b1')
+  })
+
+  it("Android's back leaves the binder for the list before it leaves the page", async () => {
+    const home = vi.fn()
+    renderHook(() => useBackHandler(true, home))
+    const api = createMockApi({
+      binders: { list: vi.fn(async () => [summary()]), get: vi.fn(async () => detail()) }
+    })
+    renderWithProviders(<BindersPage />, { api })
+    await userEvent.click(await screen.findByRole('button', { name: /^Blue-Eyes/ }))
+    await screen.findByRole('heading', { name: 'Blue-Eyes' })
+
+    act(() => void handleBack())
+    expect(await screen.findByRole('button', { name: /^Blue-Eyes/ })).toBeInTheDocument()
+    expect(home).not.toHaveBeenCalled()
+    act(() => void handleBack())
+    expect(home).toHaveBeenCalledTimes(1)
   })
 })
 

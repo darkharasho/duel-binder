@@ -1,4 +1,12 @@
-import { cleanup, fireEvent, screen, waitFor, within } from '@testing-library/react'
+import {
+  act,
+  cleanup,
+  fireEvent,
+  renderHook,
+  screen,
+  waitFor,
+  within
+} from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { SetSummary } from '@shared/types'
 import { SetsPage } from '@/features/sets/SetsPage'
@@ -6,6 +14,7 @@ import { SetArt } from '@/features/sets/SetArt'
 import { GameProvider } from '@/lib/game'
 import { searchPause } from './filterTestHelpers'
 import { createMockApi, renderWithProviders } from './mockApi'
+import { handleBack, useBackHandler } from '../../src/phone/backButton'
 import { metalRaidersChecklist } from './setFixtures'
 
 const set = (o: Partial<SetSummary>): SetSummary => ({
@@ -267,6 +276,23 @@ describe('SetsPage', () => {
     expect(await screen.findByRole('button', { name: 'Alpha Dragon' })).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: /All sets/ }))
     expect(await screen.findByText(/You've started/)).toBeInTheDocument()
+  })
+
+  it("Android's back leaves the set for the list before it leaves the page", async () => {
+    const home = vi.fn()
+    renderHook(() => useBackHandler(true, home))
+    const api = createMockApi({
+      sets: { list: async () => [MR], checklist: async () => metalRaidersChecklist }
+    })
+    renderWithProviders(<SetsPage onAddCard={() => {}} onAddMissing={() => {}} />, { api })
+    await userEvent.click(await screen.findByRole('button', { name: /Metal Raiders/ }))
+    await screen.findByRole('button', { name: 'Alpha Dragon' })
+
+    act(() => void handleBack())
+    expect(await screen.findByText(/You've started/)).toBeInTheDocument()
+    expect(home).not.toHaveBeenCalled()
+    act(() => void handleBack())
+    expect(home).toHaveBeenCalledTimes(1)
   })
 })
 

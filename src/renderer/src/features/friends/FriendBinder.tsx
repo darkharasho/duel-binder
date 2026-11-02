@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import type { Friend } from '@shared/types'
 import { api, queryKeys } from '@/lib/api'
+import { useBackHandler } from '@/lib/backStack'
 import { FriendBinders } from '../binders/FriendBinders'
 import { CollectionPage } from '../collection/CollectionPage'
 import { FriendWishlist } from '../wishlist/FriendWishlist'
@@ -17,6 +18,7 @@ export function FriendBinder({
   friend: Friend
   onBack: () => void
 }): React.JSX.Element {
+  useBackHandler(true, onBack)
   const [chosen, setTabState] = useState<BinderTab>('dashboard')
   // An older portal answers with an error, and a friend may share none: the tab stays hidden.
   const binders = useQuery({

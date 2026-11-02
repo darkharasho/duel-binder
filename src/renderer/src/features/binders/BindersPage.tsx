@@ -8,6 +8,7 @@ import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
 import { SetProgress } from '@/features/sets/SetProgress'
 import { api, queryKeys } from '@/lib/api'
+import { useBackHandler } from '@/lib/backStack'
 import { cn } from '@/lib/utils'
 import { BinderForm } from './BinderForm'
 import { BinderView } from './BinderView'
@@ -80,6 +81,7 @@ function Open({
   onBack: () => void
   onEdit?: (detail: BinderDetail) => void
 }): React.JSX.Element {
+  useBackHandler(true, onBack)
   const qc = useQueryClient()
   const q = useQuery({ queryKey: queryKeys.binder(uid), queryFn: () => api.binders.get(uid) })
   // A slot's key is `${level}:${target}`; a pkey holds colons, so split on the first one only.

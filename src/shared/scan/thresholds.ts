@@ -282,23 +282,32 @@ export const PHOTO_SETTLE_MS = 4000
 export const TILT_MS = 2000
 /** A tilt with no usable reading by now is dropped, and the card counted as without a tilt. */
 export const TILT_TIMEOUT_MS = 4000
-/** The tick during a tilt; the model's fit samples clips on the same grid. */
-export const TILT_FRAME_MS = 100
+/**
+ * A background read with no usable reading this long after its card counted ends; it keeps no
+ * more frames and asks for no more readings.
+ */
+export const TILT_READ_MS = 6000
+/**
+ * The spacing of the frames a reading reads: the live loop's FRAME_MS (useScanLoop.ts), since the
+ * read uses the live loop's own frames. The model's fit samples clips on the same grid.
+ */
+export const TILT_FRAME_MS = 200
 /** How often the kept frames are read again after the first window. */
 export const TILT_RETRY_MS = 500
 /**
- * A reading needs at least this many frames. A Yu-Gi-Oh! tilt frame costs more than the tick
- * when its held outline slips and the card is searched for again, so a window holds about 10 to
- * 11 frames, not the 20 the grid allows.
+ * A reading needs at least this many frames. A TILT_MS window on the TILT_FRAME_MS grid holds at
+ * most 10, and a frame is lost now and then (a Yu-Gi-Oh! card's held outline slips and the card
+ * is searched for again), so the floor leaves room for a couple.
  */
-export const TILT_MIN_FRAMES = 10
+export const TILT_MIN_FRAMES = 8
 /** Frames kept at most (about 31 MB of RGB at 421x614). */
 export const TILT_MAX_FRAMES = 40
 /**
  * A reading needs at least this much motion in the art (0-255 luminance): the 10th percentile
- * of motion over the tilt fit's webcam windows, which fit-tilt.ts prints.
+ * of motion over the tilt fit's webcam windows on the TILT_FRAME_MS grid, which fit-tilt.ts
+ * prints.
  */
-export const TILT_MIN_MOTION = 30.7
+export const TILT_MIN_MOTION = 24.8
 /**
  * Largest art distance at which a frame is kept for a tilt. Looser than ART_MAX_DISTANCE: a
  * tilted foil's glare moves its art's hash, and those frames carry the most of its finish. Still

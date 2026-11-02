@@ -35,7 +35,9 @@
 // --fps, tiltFeatures or the TILT_* constants.
 //
 // tiltModel.ts was written with --k 3 over both cameras' clips pooled, then formatted with
-// prettier.
+// prettier. It was fitted with TILT_FRAME_MS 100 and TILT_MIN_FRAMES 10; after the grid moved to
+// the live loop's 200 ms, a refit at the new constants was checked against it held out by card
+// and it was kept.
 import { appendFileSync, existsSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import type { GameId } from '@shared/games/types'

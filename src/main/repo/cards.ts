@@ -114,6 +114,9 @@ export function buildFtsQuery(q: string): string | null {
   return tokens.length ? tokens.map((t) => `"${t}"*`).join(' ') : null
 }
 
+/** How many of a name search's best matches are put in date order. */
+const NAME_POOL = 300
+
 export const escapeLike = (s: string): string => s.replace(/[\\%_]/g, (c) => `\\${c}`)
 
 export function searchCards(db: SqlDb, q: string, limit = 20, scope: Scope = LOCAL): CardSearchResult[] {
@@ -159,13 +162,22 @@ export function searchCards(db: SqlDb, q: string, limit = 20, scope: Scope = LOC
 
   const fts = buildFtsQuery(text)
   if (fts) {
+    // Newest first: an exact name leads, then by the card's latest printing's set date (undated
+    // last), then by relevance. Only the NAME_POOL best matches are dated, so a broad word stays cheap.
     const rows = db
       .prepare(
-        `SELECT c.id, c.name, c.type, ${defaultImage} AS default_image_id, NULL AS matched
-         FROM cards_fts JOIN cards c ON c.id = cards_fts.rowid
-         WHERE cards_fts MATCH ? AND +c.game = ${scope.game} ORDER BY bm25(cards_fts), c.name LIMIT ?`
+        `SELECT c.id, c.name, c.type, ${defaultImage} AS default_image_id, NULL AS matched,
+           (SELECT MAX(COALESCE(s.tcg_date, es.tcg_date)) FROM card_printings p
+            JOIN sets s ON s.game = p.game AND s.language = p.language AND s.set_name = p.set_name
+            LEFT JOIN sets es ON es.game = s.game AND es.language = 'en' AND es.set_name = s.set_name
+            WHERE p.card_id = c.id AND +p.game = ${scope.game} AND p.contributed = 0) AS newest
+         FROM (SELECT cards_fts.rowid AS id, bm25(cards_fts) AS rank FROM cards_fts
+               JOIN cards c0 ON c0.id = cards_fts.rowid
+               WHERE cards_fts MATCH ? AND +c0.game = ${scope.game} ORDER BY rank LIMIT ${NAME_POOL}) f
+         JOIN cards c ON c.id = f.id
+         ORDER BY (c.name = ? COLLATE NOCASE) DESC, newest IS NULL, newest DESC, f.rank, c.name LIMIT ?`
       )
-      .all(fts, limit) as DbHit[]
+      .all(fts, text, limit) as DbHit[]
     rows.forEach((r) => push(toResult(r)))
   }
   if (scopeGame(db, scope) === 'pkm') {

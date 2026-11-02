@@ -62,8 +62,10 @@ export function getStats(db: SqlDb, scope: Scope = LOCAL): CollectionStats {
     topSingles: [...entries]
       .sort((a, b) => (b.unitPrice ?? 0) - (a.unitPrice ?? 0))
       .slice(0, TOP_ENTRY_LIMIT),
+    // By last change, not first add: an extra copy merges into the entry it matches and keeps
+    // that entry's created_at, so a scan of a card already owned would never show here.
     recentEntries: [...entries]
-      .sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.id - a.id)
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt) || b.id - a.id)
       .slice(0, RECENT_ENTRY_LIMIT),
     valueHistory: db
       .prepare(

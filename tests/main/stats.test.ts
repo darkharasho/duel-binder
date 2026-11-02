@@ -149,11 +149,24 @@ test('recentEntries are newest first, capped at 8', () => {
   // Spread the added times out so the order doesn't rest on the clock.
   ids.forEach((id, i) =>
     db
-      .prepare('UPDATE collection_entries SET created_at = ? WHERE id = ?')
-      .run(`2026-10-${String(10 + i).padStart(2, '0')}T00:00:00.000Z`, id)
+      .prepare('UPDATE collection_entries SET created_at = @at, updated_at = @at WHERE id = @id')
+      .run({ at: `2026-10-${String(10 + i).padStart(2, '0')}T00:00:00.000Z`, id })
   )
   const s = getStats(db)
   expect(s.recentEntries.map((e) => e.id)).toEqual(ids.slice(2).reverse())
+})
+
+// Owner: "my friends arent seeing my recent scans. they see ones from way earlier in the day."
+test('an extra copy of a card already owned puts it back at the top of recentEntries', () => {
+  const old = addEntry(db, { printingId: pid('LOB-EN005'), imageId: 46986414, quantity: 1 })
+  const newer = addEntry(db, { printingId: pid('LOB-EN119'), imageId: 55144522, quantity: 1 })
+  const stamp = db.prepare(
+    'UPDATE collection_entries SET created_at = @at, updated_at = @at WHERE id = @id'
+  )
+  stamp.run({ at: '2026-10-01T00:00:00.000Z', id: old.id })
+  stamp.run({ at: '2026-10-20T00:00:00.000Z', id: newer.id })
+  addEntry(db, { printingId: pid('LOB-EN005'), imageId: 46986414, quantity: 1 })
+  expect(getStats(db).recentEntries.map((e) => e.id)).toEqual([old.id, newer.id])
 })
 
 test('valueHistory lists snapshots oldest first', () => {

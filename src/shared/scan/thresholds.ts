@@ -286,8 +286,12 @@ export const TILT_TIMEOUT_MS = 4000
 export const TILT_FRAME_MS = 100
 /** How often the kept frames are read again after the first window. */
 export const TILT_RETRY_MS = 500
-/** A reading needs at least this many frames. */
-export const TILT_MIN_FRAMES = 12
+/**
+ * A reading needs at least this many frames. A Yu-Gi-Oh! tilt frame costs more than the tick
+ * when its held outline slips and the card is searched for again, so a window holds about 10 to
+ * 11 frames, not the 20 the grid allows.
+ */
+export const TILT_MIN_FRAMES = 10
 /** Frames kept at most (about 31 MB of RGB at 421x614). */
 export const TILT_MAX_FRAMES = 40
 /**

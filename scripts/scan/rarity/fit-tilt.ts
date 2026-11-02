@@ -27,7 +27,12 @@
 //
 // --parity N reads all of N clips' frames at once and prints, per feature, the largest relative
 // and absolute difference from the --clips file's values (which the spike computed on a float
-// downscale of the same frames).
+// downscale of the same frames). Some features differ by tens of percent because shrinkCard
+// rounds the shrunk frame to bytes. That is expected: the fit reads the same path as the scan
+// worker, so the model matches the runtime rather than the clips file.
+//
+// The --cache rows are keyed by clip and window start only. Delete the cache after changing
+// --fps, tiltFeatures or the TILT_* constants.
 //
 // tiltModel.ts was written with --k 3 over both cameras' clips pooled, then formatted with
 // prettier.

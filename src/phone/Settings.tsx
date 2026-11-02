@@ -9,6 +9,8 @@ import {
   DialogHeader,
   DialogTitle
 } from '@/components/ui/dialog'
+import { HitPriceInput } from '@/features/scan/HitPriceInput'
+import { useScanHub } from '@/features/scan/ScanHub'
 import { DeleteAccount } from '@/features/settings/AccountSection'
 import { EbayPricesToggle } from '@/features/settings/EbayPricesToggle'
 import { ScanPingToggle } from '@/features/settings/ScanPingToggle'
@@ -64,9 +66,13 @@ function Row({ children }: { children: React.ReactNode }): React.JSX.Element {
 const rowButton =
   'flex min-h-12 w-full items-center px-4 py-2 text-left text-[15px] active:bg-white/[0.06] disabled:opacity-50'
 
-/** The phone's Settings: the account, card data, sync problems, privacy and the app's version. */
+/**
+ * The phone's Settings: the account, card data, sync problems, privacy, the stream's hit price and
+ * the app's version.
+ */
 export function Settings(): React.JSX.Element {
   const { store, user, signedOut } = usePhone()
+  const { settings, setSettings } = useScanHub()
   const qc = useQueryClient()
   const name = displayName(user)
   const [warnWaiting, setWarnWaiting] = useState<number | null>(null)
@@ -192,6 +198,14 @@ export function Settings(): React.JSX.Element {
             Privacy
           </a>
           <ScanPingToggle className="flex min-h-12 items-start gap-3 px-4 py-3 text-[15px]" />
+          <Row>
+            {/* The stream's hit moment: the same setting as the stream's start screen. */}
+            <HitPriceInput
+              value={settings.hitPrice}
+              onCommit={(hitPrice) => setSettings({ hitPrice })}
+              className="text-base text-foreground"
+            />
+          </Row>
           <EbayPricesToggle className="flex min-h-12 items-start gap-3 px-4 py-3 text-[15px]" />
           <WishlistToggle className="flex min-h-12 items-start gap-3 px-4 py-3 text-[15px]" />
           <UsageToggle className="flex min-h-12 items-start gap-3 px-4 py-3 text-[15px]" />

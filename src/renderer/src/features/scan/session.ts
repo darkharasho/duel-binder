@@ -92,6 +92,8 @@ export function useScanSession(game: GameId = 'ygo'): {
   rows: ScanRow[]
   total: number
   committing: boolean
+  /** Hears each row a commit saves: its key and the copies saved. Returns the unsubscribe. */
+  onSaved(listener: (key: string, quantity: number) => void): () => void
   /** Adds a row of its own (never merged into another) and returns its key. */
   add(d: ScanDraft): string
   /** Copies of the draft's card on the list, read at once: an add just made counts. */
@@ -114,6 +116,13 @@ export function useScanSession(game: GameId = 'ygo'): {
   const ref = useRef(allRows)
   const committingRef = useRef(false)
   const [committing, setCommitting] = useState(false)
+  const listeners = useRef(new Set<(key: string, quantity: number) => void>())
+  const onSaved = useCallback((listener: (key: string, quantity: number) => void) => {
+    listeners.current.add(listener)
+    return () => {
+      listeners.current.delete(listener)
+    }
+  }, [])
 
   const update = useCallback((fn: (rows: ScanRow[]) => ScanRow[]): void => {
     const next = fn(ref.current)
@@ -251,6 +260,13 @@ export function useScanSession(game: GameId = 'ygo'): {
           added++
           cards += row.quantity
           track('scan:add')
+          for (const l of [...listeners.current]) {
+            try {
+              l(row.key, row.quantity)
+            } catch {
+              // A listener's fault mustn't mark a saved card as failed.
+            }
+          }
           // The quantity may have been raised meanwhile: take off only what was added.
           update((list) =>
             list.flatMap((r) =>
@@ -283,6 +299,7 @@ export function useScanSession(game: GameId = 'ygo'): {
     rows,
     total,
     committing,
+    onSaved,
     add,
     copiesOf,
     setPrinting,

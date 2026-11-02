@@ -4,8 +4,16 @@ import UIKit
 
 /// The app's root view controller: Capacitor's bridge, with the app's own plugins registered.
 class MainViewController: CAPBridgeViewController {
+    /// What the app may rotate to: portrait, except while a stream runs (StreamPlugin).
+    static var allowedOrientations: UIInterfaceOrientationMask = .portrait
+
+    override var supportedInterfaceOrientations: UIInterfaceOrientationMask {
+        MainViewController.allowedOrientations
+    }
+
     override func capacitorDidLoad() {
         bridge?.registerPluginInstance(WebAuthPlugin())
+        bridge?.registerPluginInstance(StreamPlugin())
     }
 }
 

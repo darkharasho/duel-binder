@@ -46,7 +46,9 @@ export interface ScanHub {
   settings: ScanWindowSettings
   setSettings(patch: Partial<ScanWindowSettings>): void
   /** Counts a pull onto the list and highlights its row; the one path for both scanners. */
-  count(draft: ScanDraft): void
+  count(draft: ScanDraft): string
+  /** Hears each row a commit saves (key, copies); returns the unsubscribe. */
+  onSaved: ReturnType<typeof useScanSession>['onSaved']
   openWindow(): Promise<void>
   retryCamera(): void
   retryScan(): void
@@ -206,10 +208,12 @@ export function ScanHubProvider({ children }: { children: React.ReactNode }): Re
   )
 
   const count = useCallback(
-    (draft: ScanDraft): void => {
-      setFresh(add(draft))
+    (draft: ScanDraft): string => {
+      const key = add(draft)
+      setFresh(key)
       clearTimeout(highlightTimer.current)
       highlightTimer.current = setTimeout(() => setFresh(null), HIGHLIGHT_MS)
+      return key
     },
     [add]
   )
@@ -324,6 +328,7 @@ export function ScanHubProvider({ children }: { children: React.ReactNode }): Re
       settings,
       setSettings,
       count,
+      onSaved: session.onSaved,
       openWindow: () => window.api.scanWindow.open(),
       retryCamera: () => window.api.scanWindow.send({ kind: 'retryCamera' }),
       retryScan: () => window.api.scanWindow.send({ kind: 'retryScan' }),

@@ -1,3 +1,5 @@
+import type { CameraError } from '@/features/scan/useCamera'
+
 /** The phone app's fixed copy (see the plan's Global Constraints). */
 
 export const UNSUPPORTED =
@@ -33,4 +35,12 @@ export function signOutWarning(waiting: number, name: string): string {
   return waiting === 1
     ? `1 card hasn't synced yet. It'll sync if you sign back in as ${name}.`
     : `${waiting} cards haven't synced yet. They'll sync if you sign back in as ${name}.`
+}
+
+/** What the phone says when its camera fails, on the scanner and on a stream. */
+export const CAMERA_MESSAGES: Record<CameraError, string> = {
+  denied: 'Duel Binder needs the camera to scan. Allow it for this site in your browser settings.',
+  none: "This phone's camera didn't open.",
+  lost: 'The camera stopped.',
+  busy: 'The camera is in use by another app.'
 }

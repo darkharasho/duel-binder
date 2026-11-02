@@ -10,17 +10,11 @@ import { defaultEngine, type EngineFactory } from '@/features/scan/engine'
 import { useScanHub } from '@/features/scan/ScanHub'
 import { ArtDataNotice } from '@/features/scan/ArtDataNotice'
 import { ScanViewport } from '@/features/scan/ScanViewport'
-import { useCamera, type CameraError } from '@/features/scan/useCamera'
+import { useCamera } from '@/features/scan/useCamera'
 import { useHubScan } from '@/features/scan/useHubScan'
 import { useGame } from '@/lib/game'
 import { cn } from '@/lib/utils'
-
-const CAMERA_MESSAGES: Record<CameraError, string> = {
-  denied: 'Duel Binder needs the camera to scan. Allow it for this site in your browser settings.',
-  none: "This phone's camera didn't open.",
-  lost: 'The camera stopped.',
-  busy: 'The camera is in use by another app.'
-}
+import { CAMERA_MESSAGES } from './copy'
 
 /** The video track's torch, where the browser offers one (Chrome on Android; not iPhone). */
 function useTorch(stream: MediaStream | null): {

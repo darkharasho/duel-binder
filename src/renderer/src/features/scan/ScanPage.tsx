@@ -22,6 +22,7 @@ import { defaultEngine, type EngineFactory } from './engine'
 import { InPageScanner, type InPageCamera } from './InPageScanner'
 import { useScanHub } from './ScanHub'
 import { ArtDataNotice } from './ArtDataNotice'
+import { HitPriceInput } from './HitPriceInput'
 import { SET_UNREADABLE, statusText } from './scanText'
 import { SessionList } from './SessionList'
 import { SearchPicker } from './SearchPicker'
@@ -383,42 +384,5 @@ function PixelInput({
       }}
       className="h-8 w-20 tabular-nums"
     />
-  )
-}
-
-/** A dollar amount that commits on blur or Enter; anything but a number above 0 reverts. */
-function HitPriceInput({
-  value,
-  onCommit
-}: {
-  value: number
-  onCommit: (v: number) => void
-}): React.JSX.Element {
-  const [text, setText] = useState(String(value))
-  const commit = (): void => {
-    const n = Number(text)
-    if (text.trim() !== '' && Number.isFinite(n) && n > 0) {
-      onCommit(n)
-      setText(String(n))
-    } else setText(String(value))
-  }
-  return (
-    <div className="flex items-center gap-1.5 text-sm text-muted-foreground">
-      <label htmlFor="scan-hit-price">Hit price</label>
-      <span aria-hidden>$</span>
-      <input
-        id="scan-hit-price"
-        type="number"
-        min={0}
-        step="any"
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        onBlur={commit}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter') commit()
-        }}
-        className="h-8 w-20 rounded-md border border-input bg-transparent px-2 text-foreground tabular-nums"
-      />
-    </div>
   )
 }

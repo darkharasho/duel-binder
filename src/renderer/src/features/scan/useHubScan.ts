@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type RefObject } from 'react'
+import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import type { GameId } from '@shared/games/types'
 import type { Language } from '@shared/languages'
@@ -30,7 +30,9 @@ export function useHubScan({
   engineFactory,
   lookModel = null,
   tiltModels = null,
-  onStalled
+  onStalled,
+  paused = false,
+  onPull
 }: {
   videoRef: RefObject<HTMLVideoElement | null>
   stream: MediaStream | null
@@ -39,8 +41,13 @@ export function useHubScan({
   tiltModels?: Partial<Record<GameId, TiltModel>> | null
   /** The camera's picture froze; see useScanLoop. */
   onStalled?: () => void
+  /** Stops scanning while the camera keeps showing (a stream screen that isn't live). */
+  paused?: boolean
+  /** Hears each pull once it's counted: `pull.id` is the row key, `scanned` the copies on the list. */
+  onPull?: (pull: Pull, scanned: number, draft: ScanDraft) => void
 }): { loop: ScanLoop; setUnreadable: boolean; found: Pull | null } {
-  const { settings, count } = useScanHub()
+  const { settings, count, session } = useScanHub()
+  const { copiesOf } = session
   const { game } = useGame()
   const picked = settings.set
   const setPrintings = useQuery({
@@ -56,13 +63,17 @@ export function useHubScan({
 
   // The latest card found, for the "found it" moment; a new key each time replays it.
   const [found, setFound] = useState<Pull | null>(null)
+  const foundRef = useRef<Pull | null>(null)
   const onDraft = useCallback(
     (draft: ScanDraft): void => {
-      count(draft)
+      const id = count(draft)
       playScanPing()
-      setFound((last) => pullOf(draft, settings.hitPrice, (last?.key ?? 0) + 1))
+      const pull = { ...pullOf(draft, settings.hitPrice, (foundRef.current?.key ?? 0) + 1), id }
+      foundRef.current = pull
+      setFound(pull)
+      onPull?.(pull, copiesOf(draft), draft)
     },
-    [count, settings.hitPrice]
+    [count, copiesOf, onPull, settings.hitPrice]
   )
 
   const [filter] = useLanguageFilter()
@@ -70,7 +81,7 @@ export function useHubScan({
     videoRef,
     engineFactory,
     game,
-    running: stream !== null,
+    running: stream !== null && !paused,
     setName: scanSet?.setName ?? null,
     setKey: scanSet ? `${scanSet.language}|${scanSet.setName}` : ANY,
     setPrintings: scanSet === null ? null : setPrintings.data,

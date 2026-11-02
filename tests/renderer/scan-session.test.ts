@@ -292,6 +292,37 @@ describe('useScanSession', () => {
     expect(result.current.rows.map((r) => r.quantity)).toEqual([2])
   })
 
+  it('commit tells listeners what it saved', async () => {
+    let release!: () => void
+    const add = vi.fn(() => new Promise<never>((res) => (release = () => res({} as never))))
+    const { result } = setup(add)
+    const heard: [string, number][] = []
+    const off = result.current.onSaved((k, q) => heard.push([k, q]))
+    act(() => result.current.add(draft()))
+    const key = result.current.rows[0].key
+    act(() => result.current.setQuantity(key, 2))
+    let done!: Promise<unknown>
+    await act(async () => {
+      done = result.current.commit()
+    })
+    act(() => result.current.setQuantity(key, 3))
+    await act(async () => {
+      release()
+      await done
+    })
+    expect(heard).toEqual([[key, 2]])
+    expect(result.current.rows.map((r) => r.quantity)).toEqual([1])
+
+    off()
+    act(() => result.current.setQuantity(key, 1))
+    await act(async () => {
+      const p = result.current.commit()
+      release()
+      await p
+    })
+    expect(heard).toHaveLength(1)
+  })
+
   it('rows of the same printing are added separately, each under its own id', async () => {
     const { result, add } = setup()
     act(() => result.current.add(draft()))

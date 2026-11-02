@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type {
@@ -252,6 +252,10 @@ describe('BrowseCardPanel picked printing', () => {
 })
 
 describe('BrowsePage', () => {
+  beforeEach(() => {
+    localStorage.clear()
+  })
+
   it('shows every card with stats, price, owned count and the total', async () => {
     setup([
       card(1, 'Dark Magician', { owned: 2 }),
@@ -274,7 +278,8 @@ describe('BrowsePage', () => {
           races: [],
           archetypes: [],
           setNames: ['Legend of Blue Eyes White Dragon'],
-          rarities: []
+          rarities: [],
+          languages: ['en']
         })
       },
       sets: {
@@ -316,7 +321,8 @@ describe('BrowsePage', () => {
           races: [],
           archetypes: [],
           setNames: [],
-          rarities: []
+          rarities: [],
+          languages: ['en', 'de']
         })
       }
     })
@@ -325,12 +331,13 @@ describe('BrowsePage', () => {
     await userEvent.click(screen.getByRole('combobox', { name: 'Sort by' }))
     await userEvent.click(await screen.findByRole('option', { name: 'Price: low to high' }))
     await userEvent.click(screen.getByRole('radio', { name: 'Not owned' }))
-    // Browse lists English only, so the app-wide language is no filter here.
     await userEvent.click(screen.getByRole('button', { name: 'Filters' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'German' }))
     await userEvent.click(await screen.findByRole('button', { name: 'Normal Monster' }))
     await userEvent.keyboard('{Escape}')
-    expect(await screen.findByRole('button', { name: 'Filters, 1 active' })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Filters, 2 active' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Remove Normal Monster filter' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Remove German filter' })).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Clear all' }))
     await waitFor(() =>
       expect(browse).toHaveBeenLastCalledWith(
@@ -338,12 +345,57 @@ describe('BrowsePage', () => {
           q: 'dark',
           sort: 'price',
           dir: 'asc',
-          owned: 'missing'
+          owned: 'missing',
+          language: 'en'
         })
       )
     )
     expect(browse.mock.lastCall?.[0].cardTypes).toBeUndefined()
+    expect(localStorage.getItem('language.filter')).toBe('en')
     expect(screen.getByLabelText('Search cards')).toHaveValue('dark')
+  })
+
+  it('filters by the shared language (English by default), with its sets and rarities', async () => {
+    const browseFacets = vi.fn(async (language?: string) => ({
+      cardTypes: [],
+      attributes: [],
+      races: [],
+      archetypes: [],
+      setNames: [language === 'de' ? 'Duelist Pack' : 'Legend of Blue Eyes'],
+      rarities: [],
+      languages: ['en' as const, 'de' as const]
+    }))
+    const { browse } = setup([card(1, 'Dark Magician')], 1, { cards: { browseFacets } })
+    await screen.findByRole('button', { name: /Dark Magician/ })
+    expect(browse).toHaveBeenLastCalledWith(expect.objectContaining({ language: 'en' }))
+    expect(browseFacets).toHaveBeenLastCalledWith('en')
+    await userEvent.click(screen.getByRole('button', { name: 'Filters' }))
+    expect(screen.getByRole('button', { name: 'Language' })).toBeInTheDocument()
+    // Only the languages the catalog has printings in.
+    expect(screen.queryByRole('button', { name: 'Korean' })).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'German' }))
+    await waitFor(() =>
+      expect(browse).toHaveBeenLastCalledWith(expect.objectContaining({ language: 'de' }))
+    )
+    expect(browseFacets).toHaveBeenLastCalledWith('de')
+    expect(await screen.findByRole('button', { name: 'Duelist Pack' })).toBeInTheDocument()
+    // The Collection page reads the same setting.
+    expect(localStorage.getItem('language.filter')).toBe('de')
+    await userEvent.click(screen.getByRole('button', { name: 'All' }))
+    await waitFor(() =>
+      expect(browse).toHaveBeenLastCalledWith(expect.objectContaining({ language: undefined }))
+    )
+    expect(browseFacets).toHaveBeenLastCalledWith(undefined)
+  })
+
+  it('a language with no cards offers every language', async () => {
+    localStorage.setItem('language.filter', 'ko')
+    const { browse } = setup([])
+    expect(await screen.findByText('No Korean cards')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Show all languages' }))
+    await waitFor(() =>
+      expect(browse).toHaveBeenLastCalledWith(expect.objectContaining({ language: undefined }))
+    )
   })
 
   it('clicking a card not owned opens a panel with a stepper per printing, English first', async () => {

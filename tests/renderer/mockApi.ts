@@ -43,7 +43,8 @@ export function createMockApi(overrides: DeepPartial<Api> = {}): Api {
         races: [],
         archetypes: [],
         setNames: [],
-        rarities: []
+        rarities: [],
+        languages: []
       }))
     },
     collection: {

@@ -1,7 +1,13 @@
 import { RELEASES_FALLBACK, type Asset, type Downloads } from './releases'
 import type { Os } from './os'
 
-export interface PageView { downloads: Downloads; os: Os | null; appUrl: string }
+export interface PageView {
+  downloads: Downloads
+  os: Os | null
+  /** An Android visitor, offered the APK when the latest release has one. */
+  android: boolean
+  appUrl: string
+}
 
 export const REPO_URL = 'https://github.com/darkharasho/duel-binder'
 const TITLE = 'Duel Binder — a binder for your Yu-Gi-Oh! and Pokémon cards'
@@ -31,12 +37,16 @@ function nav(appUrl: string): string {
 </div></nav>`
 }
 
+const ANDROID_NOTE = 'Allow installs from your browser when Android asks.'
+
 function hero(v: PageView): string {
   const { downloads, os, appUrl } = v
+  const apk = v.android ? downloads.android : null
   const asset = os ? downloads[os] : null
-  const label = os ? `Download for ${OS_LABEL[os]}` : 'Download'
-  const href = os ? (asset ? asset.url : RELEASES_FALLBACK) : '#download'
-  const meta = `${downloads.version ? `v${downloads.version} · ` : ''}Windows, macOS, Linux · free`
+  const label = apk ? 'Download for Android' : os ? `Download for ${OS_LABEL[os]}` : 'Download'
+  const href = apk ? apk.url : os ? (asset ? asset.url : RELEASES_FALLBACK) : '#download'
+  const platforms = apk ? `Android · free · ${ANDROID_NOTE}` : 'Windows, macOS, Linux · free'
+  const meta = `${downloads.version ? `v${downloads.version} · ` : ''}${platforms}`
   return `<header class="hero">
 <h1>A binder for your <span class="nowrap">Yu-Gi-Oh!</span> and Pokémon cards.</h1>
 <p class="lead">${LEAD}</p>
@@ -92,6 +102,7 @@ function downloadTable(d: Downloads): string {
 ${downloadRow('Windows', d.windows)}
 ${downloadRow('macOS', d.mac, d.mac ? ' · Apple silicon &amp; Intel' : '')}
 ${downloadRow('Linux', d.linux)}
+${d.android ? downloadRow('Android', d.android, ` · ${ANDROID_NOTE}`) : ''}
 </table></section>`
 }
 

@@ -10,3 +10,8 @@ export function detectOs(userAgent: string | null): Os | null {
   if (/Linux|X11/.test(userAgent)) return 'linux'
   return null
 }
+
+/** An Android phone or tablet, which can install the APK. */
+export function isAndroid(userAgent: string | null): boolean {
+  return userAgent !== null && /Android/.test(userAgent)
+}

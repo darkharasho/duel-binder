@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { detectOs } from '../../workers/portal/src/site/os'
+import { detectOs, isAndroid } from '../../workers/portal/src/site/os'
 import { formatSize, renderPage } from '../../workers/portal/src/site/page'
 import { renderPrivacy } from '../../workers/portal/src/site/privacy'
 import { renderTerms } from '../../workers/portal/src/site/terms'
@@ -9,7 +9,7 @@ import { releaseV021 } from './fixtures/release'
 const downloads = pickDownloads(releaseV021)
 const appUrl = 'https://app.duelbinder.com'
 const page = (over: Partial<Parameters<typeof renderPage>[0]> = {}): string =>
-  renderPage({ downloads, os: null, appUrl, ...over })
+  renderPage({ downloads, os: null, android: false, appUrl, ...over })
 
 describe('brand mark', () => {
   it('shows the favicon in the nav, not a drawing of its own', () => {
@@ -207,5 +207,43 @@ describe('renderTerms', () => {
     ])
       expect(html).toContain(text)
     expect(html.replace('<script src="/account.js" defer></script>', '')).not.toMatch(/<script/i)
+  })
+})
+
+describe('Android', () => {
+  const PIXEL =
+    'Mozilla/5.0 (Linux; Android 15; Pixel 7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0 Mobile Safari/537.36'
+  const apk = { name: 'Duel-Binder-0.48.0.apk', size: 25_000_000, url: 'https://x.test/Duel-Binder-0.48.0.apk' }
+  const withApk = { ...downloads, android: apk }
+
+  it('knows an Android phone', () => {
+    expect(isAndroid(PIXEL)).toBe(true)
+    expect(isAndroid('Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X)')).toBe(false)
+    expect(isAndroid('Mozilla/5.0 (Windows NT 10.0; Win64; x64)')).toBe(false)
+    expect(isAndroid(null)).toBe(false)
+  })
+
+  it('offers an Android phone the APK once a release has one', () => {
+    const html = page({ android: true, downloads: withApk })
+    expect(html).toContain(`<a class="btn pri" href="${apk.url}">Download for Android</a>`)
+    expect(html).toContain('Android · free')
+    expect(html).toContain('Allow installs from your browser when Android asks.')
+  })
+
+  it('leaves the hero as it is for Android without an APK', () => {
+    expect(page({ android: true })).toBe(page())
+  })
+
+  it('lists Android in the download table only when the APK exists', () => {
+    const row = (html: string): string | undefined =>
+      html.split('<tr>').find((r) => r.startsWith('<td class="plat">Android'))
+    expect(row(page())).toBeUndefined()
+    const android = row(page({ downloads: withApk }))!
+    expect(android).toContain('Duel-Binder-0.48.0.apk · 25 MB')
+    expect(android).toContain(`href="${apk.url}"`)
+  })
+
+  it('leaves desktop visitors as they were', () => {
+    expect(page({ os: 'windows', downloads: withApk })).toContain('Download for Windows</a>')
   })
 })

@@ -1,10 +1,10 @@
-import { detectOs } from './os'
+import { detectOs, isAndroid } from './os'
 import { renderPage } from './page'
 import { renderPrivacy } from './privacy'
 import { renderTerms } from './terms'
 import type { Downloads } from './releases'
 
-const NO_DOWNLOADS: Downloads = { version: null, windows: null, mac: null, linux: null }
+const NO_DOWNLOADS: Downloads = { version: null, windows: null, mac: null, linux: null, android: null }
 
 export interface SiteDeps {
   appUrl: string
@@ -38,7 +38,12 @@ export async function handleSite(req: Request, deps: SiteDeps): Promise<Response
   }
   return html(
     req,
-    renderPage({ downloads, os: detectOs(req.headers.get('user-agent')), appUrl: deps.appUrl })
+    renderPage({
+      downloads,
+      os: detectOs(req.headers.get('user-agent')),
+      android: isAndroid(req.headers.get('user-agent')),
+      appUrl: deps.appUrl,
+    })
   )
 }
 

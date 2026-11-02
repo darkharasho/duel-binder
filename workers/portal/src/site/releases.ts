@@ -1,5 +1,14 @@
+import { pickApk } from '../../../../src/shared/androidRelease'
+
 export interface Asset { name: string; size: number; url: string }
-export interface Downloads { version: string | null; windows: Asset | null; mac: Asset | null; linux: Asset | null }
+export interface Downloads {
+  version: string | null
+  windows: Asset | null
+  mac: Asset | null
+  linux: Asset | null
+  /** The Android APK, once releases carry it (.github/workflows/android.yml). */
+  android: Asset | null
+}
 
 export const RELEASES_FALLBACK = 'https://github.com/darkharasho/duel-binder/releases/latest'
 
@@ -7,7 +16,7 @@ const API_URL = 'https://api.github.com/repos/darkharasho/duel-binder/releases/l
 const OK_TTL_MS = 60 * 60_000
 const FAIL_TTL_MS = 5 * 60_000
 
-const empty = (): Downloads => ({ version: null, windows: null, mac: null, linux: null })
+const empty = (): Downloads => ({ version: null, windows: null, mac: null, linux: null, android: null })
 
 function isRecord(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null
@@ -28,6 +37,8 @@ export function pickDownloads(release: unknown): Downloads {
   out.windows = assets.find((a) => a.name.endsWith('-setup.exe')) ?? null
   out.mac = assets.find((a) => a.name.endsWith('.dmg')) ?? null
   out.linux = assets.find((a) => a.name.endsWith('.AppImage')) ?? null
+  const apk = pickApk(release)
+  out.android = apk ? { name: apk.name, size: apk.size, url: apk.url } : null
   return out
 }
 

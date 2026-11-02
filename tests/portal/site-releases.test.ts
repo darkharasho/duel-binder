@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import { createReleaseSource, pickDownloads } from '../../workers/portal/src/site/releases'
 import { releaseV021 } from './fixtures/release'
 
-const EMPTY = { version: null, windows: null, mac: null, linux: null }
+const EMPTY = { version: null, windows: null, mac: null, linux: null, android: null }
 const API = 'https://api.github.com/repos/darkharasho/duel-binder/releases/latest'
 const MIN = 60_000
 
@@ -15,6 +15,7 @@ describe('pickDownloads', () => {
       windows: { name: `${n}-setup.exe`, size: 137045557, url: `${base}/${n}-setup.exe` },
       mac: { name: `${n}.dmg`, size: 252235523, url: `${base}/${n}.dmg` },
       linux: { name: `${n}.AppImage`, size: 146881414, url: `${base}/${n}.AppImage` },
+      android: null,
     })
   })
 
@@ -26,9 +27,16 @@ describe('pickDownloads', () => {
     expect(pickDownloads(r).windows).toEqual({ name: 'duel-binder-0.3.0-setup.exe', size: 1, url: 'https://x/a' })
   })
 
+  it("picks the Android APK once a release carries one", () => {
+    const apk = { name: 'Duel-Binder-0.48.0.apk', size: 25_000_000, browser_download_url: 'https://x/apk' }
+    const r = { tag_name: 'v0.48.0', assets: [...releaseV021.assets, apk] }
+    expect(pickDownloads(r).android).toEqual({ name: 'Duel-Binder-0.48.0.apk', size: 25_000_000, url: 'https://x/apk' })
+    expect(pickDownloads(releaseV021).android).toBeNull()
+  })
+
   it('returns null assets for a release with only yml files', () => {
     const r = { tag_name: 'v1.0.0', assets: releaseV021.assets.filter((a) => a.name.endsWith('.yml')) }
-    expect(pickDownloads(r)).toEqual({ version: '1.0.0', windows: null, mac: null, linux: null })
+    expect(pickDownloads(r)).toEqual({ version: '1.0.0', windows: null, mac: null, linux: null, android: null })
   })
 
   it('returns the empty shape for garbage input', () => {

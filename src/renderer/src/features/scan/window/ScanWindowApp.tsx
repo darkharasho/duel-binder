@@ -1,6 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import type { GameId } from '@shared/games/types'
 import type { Language } from '@shared/languages'
+import type { TiltModel } from '@shared/scan/tilt'
+import { TILT_MODELS } from '@shared/scan/tiltModel'
 import { liveLanguage } from '@shared/scanWindow'
 import { printedLanguage, useLanguageFilter } from '@/lib/languageFilter'
 import {
@@ -51,13 +54,17 @@ function useCapturePixels(): { width: number; height: number } {
   return size
 }
 
+type TiltModels = Partial<Record<GameId, TiltModel>>
+
 function Scanner({
   settings,
   engineFactory,
+  tiltModels,
   outbox
 }: {
   settings: ScanWindowSettings
   engineFactory: EngineFactory
+  tiltModels: TiltModels
   outbox: Outbox
 }): React.JSX.Element {
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -114,6 +121,7 @@ function Scanner({
     defaultRarity: settings.defaultRarity,
     language: game === 'pkm' ? liveLanguage(settings) : null,
     filterLanguage: game === 'ygo' ? printedLanguage(filter) : null,
+    tiltModels,
     onDraft,
     onStalled: camera.retry
   })
@@ -123,7 +131,7 @@ function Scanner({
   }, [settings.paused, clear])
 
   const { retry: retryCamera } = camera
-  const { retry: retryScan, takePhoto } = loop
+  const { retry: retryScan, takePhoto, skipTilt } = loop
   useEffect(
     () =>
       window.api.scanWindow.onMessage((m) => {
@@ -132,8 +140,9 @@ function Scanner({
         else if (m.kind === 'retryCamera') retryCamera()
         else if (m.kind === 'retryScan') retryScan()
         else if (m.kind === 'takePhoto') takePhoto()
+        else if (m.kind === 'skipTilt') skipTilt()
       }),
-    [retryCamera, retryScan, takePhoto]
+    [retryCamera, retryScan, takePhoto, skipTilt]
   )
 
   useEffect(() => {
@@ -197,9 +206,12 @@ function CameraNotAvailable(): React.JSX.Element {
  * data changed (as it does after a switch), and nothing is scanned before it's known.
  */
 export function ScanWindowApp({
-  engineFactory = defaultEngine
+  engineFactory = defaultEngine,
+  tiltModels = TILT_MODELS
 }: {
   engineFactory?: EngineFactory
+  /** The tilt models by game; tests pass their own. */
+  tiltModels?: TiltModels
 }): React.JSX.Element {
   const [settings, setSettings] = useState<ScanWindowSettings | null>(null)
   const [summary, setSummary] = useState<ScanSummary | null>(null)
@@ -230,7 +242,12 @@ export function ScanWindowApp({
   if (settings === null) return black
   return (
     <GameProvider fallback={black}>
-      <Scanner settings={settings} engineFactory={engineFactory} outbox={outbox} />
+      <Scanner
+        settings={settings}
+        engineFactory={engineFactory}
+        tiltModels={tiltModels}
+        outbox={outbox}
+      />
       <SummaryOverlay summary={summary} />
     </GameProvider>
   )

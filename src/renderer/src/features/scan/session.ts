@@ -99,9 +99,9 @@ export function useScanSession(game: GameId = 'ygo'): {
   /** Copies of the draft's card on the list, read at once: an add just made counts. */
   copiesOf(d: ScanDraft): number
   /**
-   * Takes a background rarity read onto a row the user hasn't touched (any edit clears its flag),
-   * once: the flag stays (a guess never changes it), quantity and key
-   * are kept. False when it didn't apply.
+   * Takes a background rarity read onto a row the user hasn't touched (a rarity or printing edit
+   * clears its flag; a quantity change marks it read), once: the flag stays (a guess never
+   * changes it), quantity and key are kept. False when it didn't apply.
    */
   applyRead(key: string, next: ScanDraft): boolean
   setPrinting(key: string, printingId: number): void

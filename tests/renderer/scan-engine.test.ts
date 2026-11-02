@@ -450,6 +450,52 @@ describe('createScanEngine', () => {
     await expect(second).resolves.toBeNull()
   })
 
+  it('a hung tilt worker is thrown away alone: the reading fails and live frames still answer', async () => {
+    const { worker } = fakeWorker(NO_CARD)
+    const tilt = fakeTiltWorker(() => null)
+    const engine = createScanEngine({
+      api: createMockApi().scan,
+      makeWorker: () => worker,
+      makeTiltWorker: tilt.make,
+      timeouts: { frameMs: 20 }
+    })
+    await engine.init(null)
+    const pending = engine.tiltReading!('ygo')
+    await expect(pending).rejects.toThrow('stopped answering')
+    expect(tilt.posted).toHaveLength(1)
+    expect(tilt.worker.terminate).toHaveBeenCalled()
+    expect(worker.terminate).not.toHaveBeenCalled()
+    await expect(
+      engine.analyze(frame(), { candidates: null, wantText: false })
+    ).resolves.toBeTruthy()
+  })
+
+  it('throwing the vision worker away on a frame timeout ends the tilt worker too', async () => {
+    const { worker: vision } = fakeWorker(NO_CARD)
+    // Answers init and tilt reading requests, but never a frame.
+    const answer = vision.postMessage.bind(vision)
+    vision.postMessage = ((msg: { type: string }, transfer?: Transferable[]): void => {
+      if (msg.type !== 'frame') answer(msg, transfer as Transferable[])
+    }) as Worker['postMessage']
+    const tilt = fakeTiltWorker(() => null)
+    const engine = createScanEngine({
+      api: createMockApi().scan,
+      makeWorker: () => vision,
+      makeTiltWorker: tilt.make,
+      timeouts: { frameMs: 50 }
+    })
+    await engine.init(null)
+    const reading = engine.tiltReading!('ygo').catch((e: Error) => e)
+    await new Promise((r) => setTimeout(r, 0))
+    expect(tilt.posted).toHaveLength(1)
+    await expect(engine.analyze(frame(), { candidates: null, wantText: false })).rejects.toThrow(
+      'stopped answering'
+    )
+    expect(vision.terminate).toHaveBeenCalled()
+    expect(tilt.worker.terminate).toHaveBeenCalled()
+    expect(await reading).toBeInstanceOf(Error)
+  })
+
   it('dispose ends the tilt worker too', async () => {
     const { worker } = fakeWorker(NO_CARD)
     const tilt = fakeTiltWorker(() => null)

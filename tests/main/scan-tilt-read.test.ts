@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { TiltModel, TiltPair } from '../../src/shared/scan/tilt'
+import { tiltFinish, type TiltModel, type TiltPair } from '../../src/shared/scan/tilt'
 import { pickByRead, readFinishes } from '../../src/shared/scan/tiltRead'
 
 const pairOf = (a: string, b: string): TiltPair => ({
@@ -32,11 +32,29 @@ describe('readFinishes', () => {
       'Holofoil'
     ])
   })
-  it('is null without an enabled pair, for an unknown finish or an overframe option', () => {
-    expect(readFinishes('pkm', ['Normal', 'Cosmos Holo'], M, NR)).toBeNull()
+  it('is null without an enabled pair', () => {
     expect(readFinishes('pkm', ['Holofoil', 'Reverse Holofoil'], M, NR)).toBeNull()
-    expect(readFinishes('pkm', ['Normal', 'Reverse Holofoil', 'Full Art'], M, NR)).toBeNull()
-    expect(readFinishes('ygo', ['Common', 'Ultra Rare (Overframe)'], M, NR)).toBeNull()
+  })
+  it('is null when any finish is one the model does not know', () => {
+    // Cosmos Holo and Master Ball Pattern are kept as their own finishes by tiltFinish.
+    expect(tiltFinish('pkm', 'Master Ball Pattern')).toBe('Master Ball Pattern')
+    expect(readFinishes('pkm', ['Normal', 'Reverse Holofoil'], M, NR)).not.toBeNull()
+    expect(
+      readFinishes('pkm', ['Normal', 'Reverse Holofoil', 'Master Ball Pattern'], M, NR)
+    ).toBeNull()
+    expect(readFinishes('pkm', ['Normal', 'Reverse Holofoil', 'Cosmos Holo'], M, NR)).toBeNull()
+  })
+  it('is null when an option is overframe or full art and nothing else rules the row out', () => {
+    // Every finish is known and an enabled pair is among them: only the option itself decides.
+    const FA = split(['Normal', 'Reverse Holofoil', 'Full Art'])
+    expect(readFinishes('pkm', ['Normal', 'Reverse Holofoil'], FA, NR)).not.toBeNull()
+    expect(readFinishes('pkm', ['Normal', 'Reverse Holofoil', 'Full Art'], FA, NR)).toBeNull()
+    const Y = split(['Common', 'Ultra Rare'])
+    const CU: [string, string][] = [['Common', 'Ultra Rare']]
+    expect(readFinishes('ygo', ['Common', 'Ultra Rare'], Y, CU)).toEqual(['Common', 'Ultra Rare'])
+    expect(
+      readFinishes('ygo', ['Common', 'Ultra Rare', 'Ultra Rare (Overframe)'], Y, CU)
+    ).toBeNull()
   })
   it('defaults to the game allowlist', () => {
     expect(readFinishes('pkm', ['Normal', 'Reverse Holofoil'], M)).toEqual([

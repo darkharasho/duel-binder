@@ -1,6 +1,6 @@
 import { act, screen, waitFor, within } from '@testing-library/react'
 import type { SetSummary } from '@shared/types'
-import type { ScanDraft, ScanPrinting } from '@shared/scan/types'
+import type { ScanDraft } from '@shared/scan/types'
 import type { TiltModel } from '@shared/scan/tilt'
 import type { TiltReading } from '@shared/scan/tiltFeatures'
 import type { ScanWindowSettings, ScanWindowState } from '@shared/scanWindow'
@@ -762,32 +762,25 @@ describe('Scan window tilt', () => {
     ...codeFrame(code),
     art: [{ imageId, distance: 10 }]
   })
-  async function renderTilt(
-    engine: FakeEngine,
-    printings: Record<string, ScanPrinting[]> = { 'LOB-EN005': FOILS },
-    s: Partial<ScanWindowSettings> = {}
-  ): Promise<void> {
+  it('a card with unsure Common/Ultra Rare options counts on its first recognized frame', async () => {
+    stubCamera()
+    const engine = tiltEngine(
+      () => held(),
+      () => FEW
+    )
     renderWithProviders(
       <ScanWindowApp engineFactory={() => engine} tiltModels={{ ygo: MODEL }} />,
       {
         api: createMockApi({
           scanWindow: bridge.scanWindow,
-          scan: { printingsByCode: vi.fn(async (code: string) => printings[code] ?? []) }
+          scan: {
+            printingsByCode: vi.fn(async (code: string) => (code === 'LOB-EN005' ? FOILS : []))
+          }
         })
       }
     )
-    act(() => bridge.emit({ kind: 'settings', settings: { ...SETTINGS, ...s } }))
+    act(() => bridge.emit({ kind: 'settings', settings: SETTINGS }))
     await run()
-  }
-
-  it('a card with unsure Common/Ultra Rare options counts on its first recognized frame', async () => {
-    stubCamera()
-    await renderTilt(
-      tiltEngine(
-        () => held(),
-        () => FEW
-      )
-    )
     await run(1000)
     expect(drafts()).toEqual([expect.objectContaining({ name: 'Dark Magician' })])
     expect(lastState().loop).toMatchObject({ kind: 'added', name: 'Dark Magician' })

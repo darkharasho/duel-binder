@@ -23,18 +23,6 @@ export interface TiltModel {
   pairs: readonly TiltPair[]
 }
 
-const YGO_PLAIN = new Set([
-  'Common',
-  'Short Print',
-  'Super Short Print',
-  'Normal Rare',
-  'Kaiba Corporation Common',
-  'Kaiba Corporation Rare',
-  'Duel Terminal Technology Common',
-  'c',
-  'SP'
-])
-
 /** A catalog rarity's finish: a Yu-Gi-Oh! rarity's family, or a Pokémon version without its stamp. */
 export function tiltFinish(game: GameId, rarity: string): string {
   if (game === 'ygo') return rarityFamily(rarity)
@@ -45,25 +33,6 @@ export function tiltFinish(game: GameId, rarity: string): string {
   // Normal, any stamped Normal, and a bare stamp ("1st Edition") are all plain.
   if (/normal$/i.test(rarity) || /^(shadowless )?1st edition$/i.test(rarity)) return 'Normal'
   return rarity
-}
-
-/** Whether a finish is one the card shows a shifting shine in; unknown labels count as holo-type. */
-export function isHoloType(game: GameId, finish: string): boolean {
-  if (game === 'ygo') return !(YGO_PLAIN.has(finish) || /^Rare\b/.test(finish))
-  return !(finish === 'Normal' || finish === 'Reverse Holofoil' || /pattern$/i.test(finish))
-}
-
-/** The known finishes among `rarities` to pick from, or null when no tilt is due. */
-export function tiltFinishes(
-  game: GameId,
-  rarities: readonly string[],
-  model: TiltModel
-): string[] | null {
-  if (rarities.some((r) => /overframe|full art/i.test(r))) return null
-  const known = [...new Set(rarities.map((r) => tiltFinish(game, r)))].filter((f) =>
-    model.classes.includes(f)
-  )
-  return known.filter((f) => isHoloType(game, f)).length >= 2 ? known : null
 }
 
 function scorePair(

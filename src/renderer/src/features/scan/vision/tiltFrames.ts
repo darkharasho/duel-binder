@@ -3,7 +3,7 @@
 // them (about 31 MB of RGB), so a long tilt can't grow the worker without bound.
 import type { ArtMatch } from '@shared/scan/fingerprintFile'
 import type { ScanProfile } from '@shared/scan/profiles'
-import { TILT_MAX_ART_DISTANCE, TILT_MAX_FRAMES } from '@shared/scan/thresholds'
+import { TILT_MAX_ART_DISTANCE, TILT_MAX_FRAMES, TILT_MS } from '@shared/scan/thresholds'
 import { shrinkCard } from '@shared/scan/tiltFeatures'
 import type { RgbaImage } from '@shared/scan/types'
 
@@ -38,6 +38,14 @@ export function keepsForTilt(art: readonly ArtMatch[], tilt: readonly number[]):
  */
 export function keepsOutline(profile: Pick<ScanProfile, 'keepOutline'>, tilt: boolean): boolean {
   return profile.keepOutline || tilt
+}
+
+/**
+ * The kept frames of the last TILT_MS before now as copies, for the tilt worker: the worker takes
+ * their buffers (transfers them), and the kept frames stay whole for the next reading.
+ */
+export function framesForTilt(tilt: TiltFrames, now: number): Uint8Array[] {
+  return tilt.latest(TILT_MS, now).map((f) => f.slice())
 }
 
 /** An empty store of at most max frames (TILT_MAX_FRAMES unless given). */

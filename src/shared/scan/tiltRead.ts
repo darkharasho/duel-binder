@@ -27,8 +27,8 @@ function enabledPairs(model: TiltModel, finishes: readonly string[], pairs: Pair
 
 /**
  * The finishes among `rarities` a tilt reading may choose between, or null when it may not
- * update the row: none overframe or full art, and at least one enabled pair among the finishes
- * the model knows.
+ * update the row: none overframe or full art, every finish one the model knows (an unknown one
+ * could be the true finish), and at least one enabled pair among them.
  */
 export function readFinishes(
   game: GameId,
@@ -37,9 +37,8 @@ export function readFinishes(
   pairs: Pairs = TILT_READ_PAIRS[game] ?? []
 ): string[] | null {
   if (rarities.some((r) => /overframe|full art/i.test(r))) return null
-  const known = [...new Set(rarities.map((r) => tiltFinish(game, r)))].filter((f) =>
-    model.classes.includes(f)
-  )
+  const known = [...new Set(rarities.map((r) => tiltFinish(game, r)))]
+  if (known.some((f) => !model.classes.includes(f))) return null
   return enabledPairs(model, known, pairs).length ? known : null
 }
 

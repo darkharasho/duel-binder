@@ -2,14 +2,14 @@
 // its art against the fingerprints and cutting out its text bands for OCR in main.
 import { decodeFingerprints, type FingerprintIndex } from '@shared/scan/fingerprintFile'
 import { SCAN_PROFILES, scanProfile, type ScanProfile } from '@shared/scan/profiles'
-import { ART_MAX_DISTANCE, TILT_MS } from '@shared/scan/thresholds'
+import { ART_MAX_DISTANCE } from '@shared/scan/thresholds'
 import type { RgbaImage } from '@shared/scan/types'
 import type { FrameSignals, WorkerReply, WorkerRequest } from '../engine'
 import { analyze } from './analyze'
 import { loadCv } from './cv'
 import type { Quad } from './detect'
 import { holderBudget } from './holderBudget'
-import { createTiltFrames, keepsForTilt, keepsOutline } from './tiltFrames'
+import { createTiltFrames, framesForTilt, keepsForTilt, keepsOutline } from './tiltFrames'
 
 interface WorkerScope {
   onmessage: ((e: MessageEvent<WorkerRequest>) => void) | null
@@ -95,7 +95,7 @@ async function handle(msg: WorkerRequest): Promise<void> {
     // frame sent meanwhile isn't kept waiting. now is the loop's clock, as the frames' times are.
     // Copies, transferred: the kept frames stay for the next reading.
     try {
-      const frames = tilt.latest(TILT_MS, msg.now).map((f) => f.slice())
+      const frames = framesForTilt(tilt, msg.now)
       scope.postMessage(
         { type: 'tiltFrames', id: msg.id, frames },
         frames.map((f) => f.buffer as ArrayBuffer)

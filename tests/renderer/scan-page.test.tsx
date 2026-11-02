@@ -333,6 +333,31 @@ describe('Scan page', () => {
     expect(bridge.sent.at(-1)).toEqual({ kind: 'rarityAck', id: 'zzz' })
   })
 
+  it('a second rarity read for the same pull is ignored, even when the first did not apply', async () => {
+    await renderScan()
+    await openWindow()
+    act(() => bridge.emit({ kind: 'draft', id: 'd1', draft: draft({ flag: 'check-rarity' }) }))
+    // The first reading names another card, so no row takes it.
+    act(() =>
+      bridge.emit({ kind: 'rarity', id: 'd1', draft: draft({ cardId: 2, rarity: 'Rare' }) })
+    )
+    act(() =>
+      bridge.emit({
+        kind: 'rarity',
+        id: 'd1',
+        draft: draft({
+          printingId: 102,
+          rarity: 'Rare',
+          options: [printing({ rarity: 'Common' }), printing({ printingId: 102, rarity: 'Rare' })]
+        })
+      })
+    )
+    const saved = JSON.parse(localStorage.getItem(SESSION_KEY)!) as ScanRow[]
+    expect(saved[0]).toMatchObject({ printingId: 101, rarity: 'Ultra Rare' })
+    expect(saved[0].read).toBeUndefined()
+    expect(bridge.sent.at(-1)).toEqual({ kind: 'rarityAck', id: 'd1' })
+  })
+
   it('drops a pull resent after the main window reloads', async () => {
     const { unmount } = await renderScan()
     await openWindow()

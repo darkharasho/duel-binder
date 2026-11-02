@@ -100,7 +100,8 @@ export function useScanSession(game: GameId = 'ygo'): {
   copiesOf(d: ScanDraft): number
   /**
    * Takes a background rarity read onto a row the user hasn't touched (any edit clears its flag),
-   * once: the flag stays, quantity and key are kept. False when it didn't apply.
+   * once: the flag stays (a guess never changes it), quantity and key
+   * are kept. False when it didn't apply.
    */
   applyRead(key: string, next: ScanDraft): boolean
   setPrinting(key: string, printingId: number): void
@@ -201,7 +202,6 @@ export function useScanSession(game: GameId = 'ygo'): {
                 printingId: next.printingId,
                 rarity: next.rarity,
                 setCode: next.setCode,
-                flag: next.flag,
                 read: true
               }
             : r
@@ -219,7 +219,10 @@ export function useScanSession(game: GameId = 'ygo'): {
           ? list
           : q < 1
             ? list.filter((r) => r.key !== key)
-            : list.map((r) => (r.key === key ? { ...r, quantity: Math.floor(q) } : r))
+            : // Changing the count is touching the row: marked read, so a background read leaves it be.
+              list.map((r) =>
+                r.key === key ? { ...r, quantity: Math.floor(q), read: true as const } : r
+              )
       ),
     [update]
   )

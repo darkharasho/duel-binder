@@ -701,7 +701,7 @@ describe('phone scanner tilt', () => {
   }
   const FEW: TiltReading = { features: [1], frames: 4, motion: 50 }
   const FOILS = [
-    printing({ rarity: 'Super Rare' }),
+    printing({ rarity: 'Common' }),
     printing({ printingId: 102, rarity: 'Ultra Rare' })
   ]
   const held = (): ReturnType<typeof codeFrame> => ({

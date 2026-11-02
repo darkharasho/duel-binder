@@ -446,14 +446,13 @@ describe('useScanSession', () => {
       const { result } = setup()
       let key = ''
       act(() => void (key = result.current.add(draft())))
-      act(() => void result.current.setQuantity(key, 3))
       let ok = false
       act(() => void (ok = result.current.applyRead(key, reread())))
       expect(ok).toBe(true)
       const row = result.current.rows[0]
       expect(row).toMatchObject({
         key,
-        quantity: 3,
+        quantity: 1,
         printingId: 102,
         setCode: 'SET-EN002',
         rarity: 'Rare',
@@ -480,6 +479,35 @@ describe('useScanSession', () => {
         flag: null
       })
       expect(result.current.rows[0].read).toBeUndefined()
+    })
+
+    it('refuses a row whose quantity the user has changed', () => {
+      const { result } = setup()
+      let key = ''
+      act(() => void (key = result.current.add(draft())))
+      act(() => result.current.setQuantity(key, 3))
+      let ok = true
+      act(() => void (ok = result.current.applyRead(key, reread())))
+      expect(ok).toBe(false)
+      expect(result.current.rows[0]).toMatchObject({
+        quantity: 3,
+        printingId: 101,
+        rarity: 'Common',
+        flag: 'check-rarity'
+      })
+    })
+
+    it('keeps a pick-printing flag, and Add still skips the row', async () => {
+      const add = vi.fn(async () => ({}) as never)
+      const { result } = setup(add, 'pkm')
+      let key = ''
+      act(() => void (key = result.current.add(draft({ game: 'pkm', flag: 'pick-printing' }))))
+      let ok = false
+      act(() => void (ok = result.current.applyRead(key, reread({ game: 'pkm', flag: null }))))
+      expect(ok).toBe(true)
+      expect(result.current.rows[0]).toMatchObject({ flag: 'pick-printing', rarity: 'Rare' })
+      await act(async () => void (await result.current.commit()))
+      expect(add).not.toHaveBeenCalled()
     })
 
     it('refuses a removed row', () => {

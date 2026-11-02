@@ -468,7 +468,7 @@ export function readChoicesFor(
 }
 
 /**
- * The draft on the printing of `finish`, still flagged Check rarity: the one showing the draft's
+ * The draft on the printing of `finish`, its flag as it was (a guess settles nothing): the one showing the draft's
  * artwork when there is one, and of those the unstamped version (rarity equal to the finish)
  * before a stamped twin.
  */
@@ -483,7 +483,6 @@ export function withRarityByTilt(item: ScanDraft, finish: string): ScanDraft {
     ...item,
     printingId: printing.printingId,
     rarity: printing.rarity,
-    ...(game === 'pkm' ? { setCode: printing.setCode } : {}),
-    flag: 'check-rarity'
+    ...(game === 'pkm' ? { setCode: printing.setCode } : {})
   }
 }

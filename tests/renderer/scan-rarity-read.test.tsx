@@ -147,7 +147,8 @@ describe('background rarity read', () => {
       expect.objectContaining({
         printingId: 502,
         rarity: 'Reverse Holofoil',
-        flag: 'check-rarity'
+        // A guess never changes the flag: the version still wants picking.
+        flag: 'pick-printing'
       })
     )
     await run(3000)

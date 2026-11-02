@@ -319,7 +319,11 @@ export function ScanHubProvider({ children }: { children: React.ReactNode }): Re
       } else if (m.kind === 'state') setState(m.state)
       else if (m.kind === 'rarity') {
         const key = rowKeys.get(m.id)
-        if (key !== undefined) reread(key, m.draft)
+        if (key !== undefined) {
+          reread(key, m.draft)
+          // A row is read once, applied or not: a second reading for the id is ignored.
+          rowKeys.delete(m.id)
+        }
         // Acknowledged either way, so the window stops resending it.
         scanWindow.send({ kind: 'rarityAck', id: m.id })
       } else {

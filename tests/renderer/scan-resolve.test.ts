@@ -856,6 +856,22 @@ describe('tilt', () => {
     ])
     expect(readChoicesFor(draftOf(['Super Rare', 'Ultra Rare']), null, MODEL)).toBeNull()
   })
+  it('a Yu-Gi-Oh! Common/Ultra Rare draft reads under the default list, Super/Ultra does not', () => {
+    const Y: TiltModel = {
+      features: ['f'],
+      classes: ['Common', 'Super Rare', 'Ultra Rare'],
+      pairs: [
+        ['Common', 'Super Rare'],
+        ['Common', 'Ultra Rare'],
+        ['Super Rare', 'Ultra Rare']
+      ].map(([a, b]) => ({ a, b, use: [0], mean: [0], spread: [1], ca: [-1], cb: [1] }))
+    }
+    expect(readChoicesFor(draftOf(['Common', 'Ultra Rare']), null, Y)).toEqual([
+      'Common',
+      'Ultra Rare'
+    ])
+    expect(readChoicesFor(draftOf(['Super Rare', 'Ultra Rare']), null, Y)).toBeNull()
+  })
   it("a Pokémon card's Normal and Reverse versions read even when flagged pick-printing", () => {
     expect(
       readChoicesFor(pkmDraftOf(['Normal', 'Reverse Holofoil'], 'pick-printing'), null, MODEL)
@@ -864,9 +880,15 @@ describe('tilt', () => {
       readChoicesFor(pkmDraftOf(['Holofoil', 'Cosmos Holo'], 'pick-printing'), null, MODEL)
     ).toBeNull()
   })
-  it('the tilt guess moves the printing and keeps Check rarity', () => {
+  it('the tilt guess moves the printing and keeps the flag', () => {
     const out = withRarityByTilt(draftOf(['Super Rare', 'Ultra Rare']), 'Ultra Rare')
     expect(out).toMatchObject({ rarity: 'Ultra Rare', flag: 'check-rarity' })
+    expect(
+      withRarityByTilt(
+        pkmDraftOf(['Normal', 'Reverse Holofoil'], 'pick-printing'),
+        'Reverse Holofoil'
+      )
+    ).toMatchObject({ rarity: 'Reverse Holofoil', flag: 'pick-printing' })
     expect(out.options.find((o) => o.printingId === out.printingId)?.rarity).toBe('Ultra Rare')
   })
   it('a guessed finish with stamped twins takes the unstamped version', () => {

@@ -1,12 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import {
-  isHoloType,
-  pickByTilt,
-  tiltFinish,
-  tiltFinishes,
-  type TiltModel,
-  type TiltPair
-} from '../../src/shared/scan/tilt'
+import { pickByTilt, tiltFinish, type TiltModel, type TiltPair } from '../../src/shared/scan/tilt'
 
 const CLASSES = [
   'Common',
@@ -41,42 +34,6 @@ describe('tilt finishes', () => {
     expect(tiltFinish('pkm', 'Shadowless Normal')).toBe('Normal')
     expect(tiltFinish('pkm', '1st Edition')).toBe('Normal')
     expect(tiltFinish('pkm', 'Poke Ball Pattern')).toBe('Poke Ball Pattern')
-  })
-  it('names holo-type finishes per game', () => {
-    for (const r of ['Common', 'Rare', 'Short Print', 'Rare (Purple)', 'Kaiba Corporation Rare'])
-      expect(isHoloType('ygo', tiltFinish('ygo', r))).toBe(false)
-    for (const r of [
-      'Super Rare',
-      'Ultra Rare',
-      'Secret Rare',
-      'Prismatic Secret Rare',
-      'Starfoil Rare',
-      'PlScR'
-    ])
-      expect(isHoloType('ygo', tiltFinish('ygo', r))).toBe(true)
-    for (const r of ['Normal', 'Reverse Holofoil', 'Poke Ball Pattern', 'Master Ball Pattern'])
-      expect(isHoloType('pkm', tiltFinish('pkm', r))).toBe(false)
-    for (const r of ['Holofoil', 'Cosmos Holo', 'Cracked Ice Holo'])
-      expect(isHoloType('pkm', tiltFinish('pkm', r))).toBe(true)
-  })
-  it('tilts only for two known holo-type finishes', () => {
-    expect(tiltFinishes('ygo', ['Common', 'Rare'], MODEL)).toBeNull()
-    expect(tiltFinishes('ygo', ['Common', 'Ultra Rare'], MODEL)).toBeNull()
-    expect(tiltFinishes('ygo', ['Super Rare', 'Ultimate Rare'], MODEL)).toBeNull()
-    expect(tiltFinishes('ygo', ['Common', 'Super Rare', 'Ultra Rare'], MODEL)).toEqual([
-      'Common',
-      'Super Rare',
-      'Ultra Rare'
-    ])
-    expect(
-      tiltFinishes('ygo', ['Ultra Rare', 'Ultra Rare (Overframe)', 'Secret Rare'], MODEL)
-    ).toBeNull()
-    expect(tiltFinishes('pkm', ['Normal', 'Reverse Holofoil'], MODEL)).toBeNull()
-    expect(tiltFinishes('pkm', ['Holofoil', 'Reverse Holofoil'], MODEL)).toBeNull()
-    expect(tiltFinishes('pkm', ['Holofoil', 'Cosmos Holo', 'Master Ball Pattern'], MODEL)).toEqual([
-      'Holofoil',
-      'Cosmos Holo'
-    ])
   })
 })
 

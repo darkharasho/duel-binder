@@ -304,6 +304,7 @@ export function createScanEngine(deps: {
     const w = worker
     const timer = setTimeout(() => {
       const error = new Error('The scan worker stopped answering')
+      // Killing a hung tilt worker rejects every reading queued on it, not just this one.
       if (onTiltWorker.has(id)) killTilt(error)
       else if (w && worker === w) kill(w, error)
     }, frameMs)

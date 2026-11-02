@@ -38,6 +38,8 @@ export const PORTAL_CHANNELS = [
   'wishlist:forCard',
   'wishlist:set',
   'wishlist:remove',
+  'favourites:list',
+  'favourites:set',
   'binders:list',
   'binders:get',
   'binders:preview',

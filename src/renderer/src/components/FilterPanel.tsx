@@ -181,6 +181,27 @@ export function LanguageSection({
   )
 }
 
+/** Favourites: one chip that limits the page to the cards the user hearted. Never on a friend's page. */
+export function FavouritesSection({
+  on,
+  onChange
+}: {
+  on: boolean
+  onChange: (patch: { favourites: true | undefined }) => void
+}): React.JSX.Element {
+  return (
+    <FilterSection title="Favourites" defaultOpen picked={on ? 1 : 0}>
+      <ChipOptions>
+        <FilterOptionChip
+          label="Favourites only"
+          selected={on}
+          onClick={() => onChange({ favourites: on ? undefined : true })}
+        />
+      </ChipOptions>
+    </FilterSection>
+  )
+}
+
 /** A multi-select facet: chips while it's short, a collapsed searchable list when it's long. */
 function FacetSection({
   label,

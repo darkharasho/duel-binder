@@ -6,7 +6,12 @@ import type { CollectionFilters, EntryView, Friend, SortKey } from '@shared/type
 import { cardArtUrl, useArtWash } from '@/components/artWashContext'
 import { CardSheet } from '@/components/CardSheet'
 import { FilterBar } from '@/components/FilterBar'
-import { CardFilterSections, FilterPanel, LanguageSection } from '@/components/FilterPanel'
+import {
+  CardFilterSections,
+  FavouritesSection,
+  FilterPanel,
+  LanguageSection
+} from '@/components/FilterPanel'
 import { PageHeader } from '@/components/PageHeader'
 import { listNav } from '@/components/panelNav'
 import { SearchInput } from '@/components/SearchInput'
@@ -19,9 +24,11 @@ import {
   cardFilterChips,
   clearedFilters,
   facetsFor,
+  favouritesChip,
   languageChip,
   sortOptions
 } from '@/lib/filters'
+import { useFavourites } from '@/lib/favourites'
 import { formatRelative } from '@/lib/format'
 import { friendsErrorMessage } from '@/lib/friends'
 import { useGame } from '@/lib/game'
@@ -200,7 +207,13 @@ export function CollectionPage({
   const setNames = useSetNames(languageFilter)
   const facetList = facetsFor(def)
   const ranges = rangeFilters(def.filters)
-  const cardChips = cardFilterChips(filters, facetList, ranges, setNames.labelOf, onChange)
+  // Favourites are private: a friend's collection has no hearts and no Favourites filter.
+  const favourites = useFavourites(!friend)
+  const ownFavourites = friend ? undefined : favourites
+  const cardChips = [
+    ...(friend ? [] : favouritesChip(filters.favourites, onChange)),
+    ...cardFilterChips(filters, facetList, ranges, setNames.labelOf, onChange)
+  ]
   const chips = [...languageChip(languageFilter, setLanguageFilter), ...cardChips]
   const filtered = Boolean(filters.q) || cardChips.length > 0
   // Entries exist, but the language filter alone hides them all.
@@ -323,7 +336,12 @@ export function CollectionPage({
               )}
             </div>
           ) : view === 'grid' ? (
-            <CollectionGrid entries={list} selectedId={selectedId} onSelect={select} />
+            <CollectionGrid
+              entries={list}
+              selectedId={selectedId}
+              onSelect={select}
+              favourites={ownFavourites}
+            />
           ) : (
             <CollectionTable
               entries={list}
@@ -332,6 +350,7 @@ export function CollectionPage({
               dir={filters.dir}
               onSort={onSort}
               onSelect={select}
+              favourites={ownFavourites}
             />
           )}
 
@@ -371,6 +390,7 @@ export function CollectionPage({
             onChange={setLanguageFilter}
             available={facets.data?.languages ?? []}
           />
+          {!friend && <FavouritesSection on={filters.favourites === true} onChange={onChange} />}
           <CardFilterSections
             facetList={facetList}
             ranges={ranges}

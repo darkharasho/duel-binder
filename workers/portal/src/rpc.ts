@@ -49,6 +49,7 @@ import {
   settleWishlist,
   wishesForCard
 } from '../../../src/main/repo/wishlist'
+import { listFavourites, setFavourite } from '../../../src/main/repo/favourites'
 import type { AppDeps } from './app'
 import { currentUser, gamesFor } from './auth'
 import {
@@ -196,7 +197,11 @@ const HANDLERS: { [C in PortalChannel]: Handler<C> } = {
   // A friend's binder shows the caller's game; a friend who can't use it simply has no rows there.
   'friends:collection': ({ db, userId, game }, _s, id, f) => {
     const friend = friendId(db, userId, id)
-    const filters = checkObject(f, 'Filters') as unknown as CollectionFilters
+    // Favourites are private: the friend's never filter what the caller sees.
+    const filters = {
+      ...(checkObject(f, 'Filters') as unknown as CollectionFilters),
+      favourites: undefined
+    }
     return listEntries(db, filters, userScope(friend, game)).map((e) => ({ ...e, notes: '' }))
   },
   'friends:facets': ({ db, userId, game }, _s, id) =>
@@ -233,6 +238,9 @@ const HANDLERS: { [C in PortalChannel]: Handler<C> } = {
     friendBinders(db, friendId(db, userId, id), game),
   'friends:binder': ({ db, userId, game }, _s, id, uid) =>
     friendBinder(db, friendId(db, userId, id), game, checkBounded(uid, 'uid', MAX_UID)),
+  'favourites:list': ({ db }, scope) => listFavourites(db, scope),
+  'favourites:set': ({ db, now }, scope, cardId, on) =>
+    setFavourite(db, checkId(cardId, 'cardId'), on, now(), scope),
   'binders:list': ({ db }, scope) => listBinders(db, scope),
   'binders:get': ({ db }, scope, uid) => getBinder(db, checkBounded(uid, 'uid', MAX_UID), scope),
   'binders:preview': ({ db }, scope, draft) => previewBinder(db, checkDraft(draft), scope),

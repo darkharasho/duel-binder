@@ -20,7 +20,14 @@ import { CardSheet } from '@/components/CardSheet'
 import { FilterBar } from '@/components/FilterBar'
 import { FilterOptionChip } from '@/components/FilterChip'
 import { ChipOptions, FilterPanel, FilterSection } from '@/components/FilterPanel'
+import { FavouriteHeart } from '@/components/FavouriteHeart'
 import { TiltCard } from '@/components/TiltCard'
+import {
+  NUMBERED_TILE,
+  NUMBERED_TILE_BUTTON,
+  NUMBERED_TILE_HEART,
+  TILE_NAME
+} from '@/components/tileLayout'
 import { coverArtUrl, setArtUrl, useArtWash } from '@/components/artWashContext'
 import { LanguageTag } from '@/components/LanguageTag'
 import { PageHeader } from '@/components/PageHeader'
@@ -43,6 +50,7 @@ import { TooltipProvider } from '@/components/ui/tooltip'
 import { UnderlineTabs } from '@/components/UnderlineTabs'
 import { CardPanel, type CardPanelSeed } from '@/features/card/CardPanel'
 import { api, invalidateAfterEdit, queryKeys } from '@/lib/api'
+import { useFavourites } from '@/lib/favourites'
 import type { ActiveChip } from '@/lib/filters'
 import { useGame } from '@/lib/game'
 import { isPhone, isWeb } from '@/lib/platform'
@@ -173,6 +181,9 @@ export function SetChecklist({
   // The opened tile, for stepping to its neighbours (a card has one tile per rarity).
   const [openKey, setOpenKey] = useState<string | null>(null)
   const [friendCard, setFriendCard] = useState<{ cardId: number; entryId: number } | null>(null)
+  // Favourites are private: a friend's set has no hearts.
+  const ownFavourites = useFavourites(!friend)
+  const favourites = friend ? undefined : ownFavourites
   const [bulk, setBulk] = useState(false)
   // Card ids shown in bulk mode, frozen so saves never re-filter a card away mid-click.
   const [frozen, setFrozen] = useState<{
@@ -560,7 +571,13 @@ export function SetChecklist({
                 const owned = t.owned > 0
                 const priced = sort.by === 'price' ? tilePrice(t) : null
                 return (
-                  <li key={t.key} className="lazy-item [--lazy-h:calc(240px*var(--card-scale,1))]">
+                  <li
+                    key={t.key}
+                    className={cn(
+                      NUMBERED_TILE,
+                      'lazy-item [--lazy-h:calc(240px*var(--card-scale,1))]'
+                    )}
+                  >
                     <button
                       type="button"
                       data-owned={owned}
@@ -569,11 +586,13 @@ export function SetChecklist({
                       disabled={friend !== undefined && !owned}
                       onClick={() => open(t)}
                       className={cn(
-                        'relative flex w-full flex-col gap-1 rounded-lg p-1.5 text-left outline-none hover:bg-accent focus-visible:ring-2 focus-visible:ring-ring',
+                        NUMBERED_TILE_BUTTON,
+                        // On the tile, so the hover stays while the pointer is on the heart.
+                        'relative rounded-lg p-1.5 text-left outline-none group-hover/tile:bg-accent focus-visible:ring-2 focus-visible:ring-ring',
                         !owned && 'grayscale opacity-40'
                       )}
                     >
-                      <TiltCard>
+                      <TiltCard className="mb-1">
                         <CardArt
                           imageId={t.card.imageId}
                           printingId={
@@ -592,22 +611,34 @@ export function SetChecklist({
                           ×{t.owned}
                         </span>
                       )}
-                      <span className="text-xs tabular-nums text-muted-foreground">
+                      <span className="mb-1 text-xs tabular-nums text-muted-foreground">
                         {t.card.numberLabel}
                       </span>
-                      <span className="truncate text-xs font-medium">{t.card.name}</span>
-                      {(priced?.rarity ?? t.rarity) && (
-                        <span className="truncate text-xs text-muted-foreground">
-                          {priced?.rarity ?? t.rarity}
-                        </span>
-                      )}
-                      {/* A card's own price isn't otherwise on its tile, so the order would be a mystery. */}
-                      {priced?.price != null && (
-                        <span className="text-xs tabular-nums text-emerald-400">
-                          {formatUsd(priced.price)}
-                        </span>
-                      )}
+                      <span className={cn('truncate text-xs font-medium', favourites && TILE_NAME)}>
+                        {t.card.name}
+                      </span>
+                      <span className="mt-1 flex min-w-0 flex-col gap-1">
+                        {(priced?.rarity ?? t.rarity) && (
+                          <span className="truncate text-xs text-muted-foreground">
+                            {priced?.rarity ?? t.rarity}
+                          </span>
+                        )}
+                        {/* A card's own price isn't otherwise on its tile, so the order would be a mystery. */}
+                        {priced?.price != null && (
+                          <span className="text-xs tabular-nums text-emerald-400">
+                            {formatUsd(priced.price)}
+                          </span>
+                        )}
+                      </span>
                     </button>
+                    {favourites && (
+                      <FavouriteHeart
+                        cardId={t.card.cardId}
+                        name={t.card.name}
+                        favourites={favourites}
+                        className={NUMBERED_TILE_HEART}
+                      />
+                    )}
                   </li>
                 )
               })}

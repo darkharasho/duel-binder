@@ -13,7 +13,7 @@ import type {
   UpdateEntryInput
 } from '../../shared/types'
 import { getMeta } from '../db/meta'
-import { LOCAL, scopeGame, type Scope } from './scope'
+import { LOCAL, favouriteSql, scopeGame, type Scope } from './scope'
 import { pokemonFacets, pokemonSearch, pokemonWhere } from './pkmFilters'
 import { enTwinPrice } from './enTwin'
 import { marketOnlyGame, setPrice, sweptLanguage } from './priceRule'
@@ -296,6 +296,7 @@ export function listEntries(db: SqlDb, f: CollectionFilters, scope: Scope = LOCA
     where.push('p.language = ?')
     params.push(f.language)
   }
+  if (f.favourites === true) where.push(favouriteSql(scope))
   const status = getMeta(db, 'price_service_status')
   const sql = `${select(scope)} WHERE ${where.join(' AND ')}`
   const entries = (db.prepare(sql).all(...params) as EntryDbRow[]).map((r) => toView(r, status))

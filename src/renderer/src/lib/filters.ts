@@ -99,6 +99,17 @@ export function cardFilterChips(
   return [...values, ...bounds]
 }
 
+/** The Favourites filter's chip, while it's on; removing it shows every card again. */
+export function favouritesChip(
+  on: boolean | undefined,
+  onChange: (patch: { favourites: undefined }) => void
+): ActiveChip[] {
+  if (on !== true) return []
+  return [
+    { key: 'favourites', label: 'Favourites', onRemove: () => onChange({ favourites: undefined }) }
+  ]
+}
+
 /** The language's chip: none on the default, which isn't a filter; removing it goes back there. */
 export function languageChip(
   language: LanguageFilter,

@@ -532,7 +532,18 @@ CREATE INDEX ix_binder_edits_user_seq ON binder_edits(user_id, seq);
     name: 'server-27',
     sql: 'CREATE INDEX ix_printings_language_card ON card_printings(language, contributed, card_id, game);'
   },
-  setSeriesStep()
+  setSeriesStep(),
+  {
+    // Favourite cards, numbered by their own clock (`seq`), as wishlist_entries is in server-15.
+    name: 'server-29',
+    sql: `
+CREATE TABLE favourites (user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, card_id INTEGER NOT NULL,
+  game TEXT NOT NULL, created_at TEXT NOT NULL, updated_at TEXT NOT NULL, deleted_at TEXT,
+  seq INTEGER NOT NULL, PRIMARY KEY (user_id, card_id));
+CREATE UNIQUE INDEX ux_favourites_seq ON favourites(seq);
+CREATE INDEX ix_favourites_user_seq ON favourites(user_id, seq);
+`
+  }
 ]
 
 /**

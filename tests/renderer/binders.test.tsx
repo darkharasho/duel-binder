@@ -84,7 +84,7 @@ describe('the binders page', () => {
       binders: { list: vi.fn(async () => [summary()]), get: vi.fn(async () => detail()) }
     })
     renderWithProviders(<BindersPage />, { api })
-    await userEvent.click(await screen.findByRole('button', { name: /Blue-Eyes/ }))
+    await userEvent.click(await screen.findByRole('button', { name: /^Blue-Eyes/ }))
     expect(await screen.findByRole('heading', { name: 'Blue-Eyes' })).toBeInTheDocument()
     expect(api.binders.get).toHaveBeenCalledWith('b1')
   })
@@ -162,7 +162,7 @@ describe('a binder', () => {
 
   it('opens the card panel from a missing slot', async () => {
     renderWithProviders(<BinderView detail={detail()} />)
-    await userEvent.click(screen.getByRole('button', { name: /Card 2/ }))
+    await userEvent.click(screen.getByRole('button', { name: /^Card 2/ }))
     expect(await screen.findByRole('dialog')).toBeInTheDocument()
   })
 
@@ -220,7 +220,7 @@ describe('binder edge cases', () => {
       }
     })
     renderWithProviders(<BindersPage />, { api })
-    const row = await screen.findByRole('button', { name: /Blue-Eyes/ })
+    const row = await screen.findByRole('button', { name: /^Blue-Eyes/ })
     expect(row).toHaveTextContent('Rule · needs a newer app · private')
     expect(row).not.toHaveTextContent('undefined')
   })

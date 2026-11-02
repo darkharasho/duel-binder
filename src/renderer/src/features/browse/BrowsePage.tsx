@@ -6,10 +6,17 @@ import type { BrowseCard, BrowseFilters, BrowseSort, CardSearchResult } from '@s
 import { cardArtUrl, useArtWash } from '@/components/artWashContext'
 import { CardArt } from '@/components/CardArt'
 import { CardSheet } from '@/components/CardSheet'
+import { FavouriteHeart } from '@/components/FavouriteHeart'
 import { TiltCard } from '@/components/TiltCard'
+import { TILE, TILE_BUTTON, TILE_HEART, TILE_NAME } from '@/components/tileLayout'
 import { useTileImage } from '@/lib/cardSize'
 import { FilterBar } from '@/components/FilterBar'
-import { CardFilterSections, FilterPanel, LanguageSection } from '@/components/FilterPanel'
+import {
+  CardFilterSections,
+  FavouritesSection,
+  FilterPanel,
+  LanguageSection
+} from '@/components/FilterPanel'
 import { PageHeader } from '@/components/PageHeader'
 import { listNav } from '@/components/panelNav'
 import { SearchInput } from '@/components/SearchInput'
@@ -23,15 +30,18 @@ import {
   clearedFilters,
   facetsFor,
   languageChip,
+  favouritesChip,
   sortOptions
 } from '@/lib/filters'
 import type { SortOption } from '@/lib/filters'
+import { useFavourites } from '@/lib/favourites'
 import { formatUsd } from '@/lib/format'
 import { useGame } from '@/lib/game'
 import { DEFAULT_LANGUAGE, useLanguageFilter } from '@/lib/languageFilter'
 import { rangeFilters } from '@/lib/rangeFilters'
 import { useSetNames } from '@/lib/setLabels'
 import { useFilterPanel } from '@/lib/useFilterPanel'
+import { cn } from '@/lib/utils'
 
 const PAGE = 120
 
@@ -131,7 +141,12 @@ export function BrowsePage({ onAddCard }: Props): React.JSX.Element {
   }, [hasNextPage, isFetchingNextPage, fetchNextPage])
 
   const cardChips = cardFilterChips(filters, facetList, ranges, setNames.labelOf, change)
-  const chips = [...languageChip(languageFilter, setLanguageFilter), ...cardChips]
+  const chips = [
+    ...languageChip(languageFilter, setLanguageFilter),
+    ...favouritesChip(filters.favourites, change),
+    ...cardChips
+  ]
+  const favourites = useFavourites()
   // The Show tabs stay as they are, like the checklist's: Clear all is for the Filters panel.
   const clear = (): void => {
     setFilters((f) => ({ ...clearedFilters(f, DEFAULTS), owned: f.owned }))
@@ -139,7 +154,11 @@ export function BrowsePage({ onAddCard }: Props): React.JSX.Element {
   }
   // The language alone hides every card (one the game has no printings in, say).
   const hiddenByLanguage =
-    language !== undefined && !filters.q && cardChips.length === 0 && filters.owned === 'all'
+    language !== undefined &&
+    !filters.q &&
+    cardChips.length === 0 &&
+    filters.owned === 'all' &&
+    !filters.favourites
   const languageLabel = LANGUAGES.find((l) => l.code === languageFilter)?.label ?? ''
 
   // Stepping quickly can overlap lookups of owned cards; only the latest open lands.
@@ -247,14 +266,20 @@ export function BrowsePage({ onAddCard }: Props): React.JSX.Element {
             className="grid grid-cols-[repeat(auto-fill,minmax(calc(140px*var(--card-scale,1)),1fr))] gap-x-4 gap-y-6 max-md:grid-cols-3 max-md:gap-x-2 max-md:gap-y-4"
           >
             {cards.map((c) => (
-              <li key={c.id} className="lazy-item [--lazy-h:calc(290px*var(--card-scale,1))]">
+              <li
+                key={c.id}
+                className={cn(TILE, 'lazy-item [--lazy-h:calc(290px*var(--card-scale,1))]')}
+              >
                 <button
                   type="button"
                   data-nav-key={c.id}
                   onClick={() => void open(c)}
-                  className="group flex w-full flex-col gap-2 rounded-md p-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                  className={cn(
+                    TILE_BUTTON,
+                    'group rounded-md p-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring'
+                  )}
                 >
-                  <TiltCard>
+                  <TiltCard className="mb-2">
                     <CardArt
                       imageId={c.imageId}
                       size={tileImage}
@@ -267,8 +292,10 @@ export function BrowsePage({ onAddCard }: Props): React.JSX.Element {
                       </span>
                     )}
                   </TiltCard>
-                  <div className="min-w-0 space-y-0.5">
-                    <div className="truncate text-[13px] font-semibold">{c.name}</div>
+                  <div className={cn('truncate text-[13px] font-semibold', TILE_NAME)}>
+                    {c.name}
+                  </div>
+                  <div className="mt-0.5 min-w-0 space-y-0.5">
                     <div className="truncate font-mono text-[11px] text-muted-foreground">
                       {statsLine(c)}
                     </div>
@@ -280,6 +307,12 @@ export function BrowsePage({ onAddCard }: Props): React.JSX.Element {
                     </div>
                   </div>
                 </button>
+                <FavouriteHeart
+                  cardId={c.id}
+                  name={c.name}
+                  favourites={favourites}
+                  className={TILE_HEART}
+                />
               </li>
             ))}
           </ul>
@@ -331,6 +364,7 @@ export function BrowsePage({ onAddCard }: Props): React.JSX.Element {
           onChange={setLanguageFilter}
           available={facets.data?.languages ?? []}
         />
+        <FavouritesSection on={filters.favourites === true} onChange={change} />
         <CardFilterSections
           facetList={facetList}
           ranges={ranges}

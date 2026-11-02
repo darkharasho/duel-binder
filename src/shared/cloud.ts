@@ -108,6 +108,28 @@ export interface WishPullResponse {
   more: boolean
 }
 
+/** One favourite card as the sync protocol carries it; a user has one per card, tombstones included. */
+export interface WireFavourite {
+  cardId: number
+  game: GameId
+  createdAt: string
+  updatedAt: string
+  deletedAt: string | null
+}
+
+export type FavouritePushResult =
+  | { cardId: number; status: 'applied' }
+  /** The server kept its newer row for this card. */
+  | { cardId: number; status: 'stale'; current: WireFavourite }
+  /** The account can't use the row's game yet; the client keeps it and retries later. */
+  | { cardId: number; status: 'skipped' }
+
+export interface FavouritePullResponse {
+  entries: WireFavourite[]
+  cursor: number
+  more: boolean
+}
+
 /** One binder as the sync protocol carries it; `rules`, `goal` and `languages` are opaque JSON text to the server. */
 export interface WireBinder {
   uid: string

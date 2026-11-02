@@ -1,8 +1,10 @@
+import { createContext, useContext } from 'react'
 import { createColumnHelper, tableFeatures, useTable } from '@tanstack/react-table'
 import { ArrowDown, ArrowUp } from 'lucide-react'
 import { englishSetName } from '@shared/setNames'
 import type { CollectionFilters, EntryView, SortKey } from '@shared/types'
 import { CardArt } from '@/components/CardArt'
+import { FavouriteHeart } from '@/components/FavouriteHeart'
 import { scanFor } from '@/components/scanFor'
 import {
   Table,
@@ -13,6 +15,7 @@ import {
   TableRow
 } from '@/components/ui/table'
 import { LanguageTag } from '@/components/LanguageTag'
+import type { Favourites } from '@/lib/favourites'
 import { useGame } from '@/lib/game'
 import { EntryValue, StaleBadge, displayTotal } from './EntryValue'
 
@@ -23,6 +26,27 @@ interface Props {
   dir: CollectionFilters['dir']
   onSort: (key: SortKey) => void
   onSelect: (entry: EntryView) => void
+  /** The owner's favourites, for a heart on each row; left out on a friend's collection. */
+  favourites?: Favourites
+}
+
+/** The table's favourites, for its name cells (columns are defined once, outside the table). */
+const FavouritesOfTable = createContext<Favourites | undefined>(undefined)
+
+/** A row's name, its stale badge, and the heart at the right of the name. */
+function NameCell({ entry }: { entry: EntryView }): React.JSX.Element {
+  const favourites = useContext(FavouritesOfTable)
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center justify-between gap-2">
+        <span className="font-medium">{entry.card.name}</span>
+        {favourites && (
+          <FavouriteHeart cardId={entry.card.id} name={entry.card.name} favourites={favourites} />
+        )}
+      </div>
+      <StaleBadge entry={entry} />
+    </div>
+  )
 }
 
 /** A column heading in the game's words ("Set code" and "Rarity" on Yu-Gi-Oh!). */
@@ -58,12 +82,7 @@ const columns = helper.columns([
   helper.accessor((e) => e.card.name, {
     id: 'name',
     header: 'Name',
-    cell: ({ row }) => (
-      <div className="space-y-1">
-        <div className="font-medium">{row.original.card.name}</div>
-        <StaleBadge entry={row.original} />
-      </div>
-    )
+    cell: ({ row }) => <NameCell entry={row.original} />
   }),
   helper.accessor((e) => e.printing.setCode, {
     id: 'setCode',
@@ -106,67 +125,70 @@ export function CollectionTable({
   sort,
   dir,
   onSort,
-  onSelect
+  onSelect,
+  favourites
 }: Props): React.JSX.Element {
   const table = useTable({ features, columns, data: entries })
 
   return (
-    <Table>
-      <TableHeader>
-        {table.getHeaderGroups().map((group) => (
-          <TableRow key={group.id}>
-            {group.headers.map((header) => {
-              const key = SORT_BY[header.column.id]
-              const active = key !== undefined && key === sort
-              return (
-                <TableHead
-                  key={header.id}
-                  aria-sort={active ? (dir === 'asc' ? 'ascending' : 'descending') : undefined}
-                >
-                  {key ? (
-                    <button
-                      type="button"
-                      onClick={() => onSort(key)}
-                      className="inline-flex items-center gap-1 rounded outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
-                    >
+    <FavouritesOfTable.Provider value={favourites}>
+      <Table>
+        <TableHeader>
+          {table.getHeaderGroups().map((group) => (
+            <TableRow key={group.id}>
+              {group.headers.map((header) => {
+                const key = SORT_BY[header.column.id]
+                const active = key !== undefined && key === sort
+                return (
+                  <TableHead
+                    key={header.id}
+                    aria-sort={active ? (dir === 'asc' ? 'ascending' : 'descending') : undefined}
+                  >
+                    {key ? (
+                      <button
+                        type="button"
+                        onClick={() => onSort(key)}
+                        className="inline-flex items-center gap-1 rounded outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring"
+                      >
+                        <table.FlexRender header={header} />
+                        {active &&
+                          (dir === 'asc' ? (
+                            <ArrowUp className="size-3" />
+                          ) : (
+                            <ArrowDown className="size-3" />
+                          ))}
+                      </button>
+                    ) : (
                       <table.FlexRender header={header} />
-                      {active &&
-                        (dir === 'asc' ? (
-                          <ArrowUp className="size-3" />
-                        ) : (
-                          <ArrowDown className="size-3" />
-                        ))}
-                    </button>
-                  ) : (
-                    <table.FlexRender header={header} />
-                  )}
-                </TableHead>
-              )
-            })}
-          </TableRow>
-        ))}
-      </TableHeader>
-      <TableBody>
-        {table.getRowModel().rows.map((row) => (
-          <TableRow
-            key={row.id}
-            data-nav-key={row.original.id}
-            data-state={row.original.id === selectedId ? 'selected' : undefined}
-            onClick={() => onSelect(row.original)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') onSelect(row.original)
-            }}
-            tabIndex={0}
-            className="cursor-pointer"
-          >
-            {row.getAllCells().map((cell) => (
-              <TableCell key={cell.id}>
-                <table.FlexRender cell={cell} />
-              </TableCell>
-            ))}
-          </TableRow>
-        ))}
-      </TableBody>
-    </Table>
+                    )}
+                  </TableHead>
+                )
+              })}
+            </TableRow>
+          ))}
+        </TableHeader>
+        <TableBody>
+          {table.getRowModel().rows.map((row) => (
+            <TableRow
+              key={row.id}
+              data-nav-key={row.original.id}
+              data-state={row.original.id === selectedId ? 'selected' : undefined}
+              onClick={() => onSelect(row.original)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') onSelect(row.original)
+              }}
+              tabIndex={0}
+              className="group/tile cursor-pointer"
+            >
+              {row.getAllCells().map((cell) => (
+                <TableCell key={cell.id}>
+                  <table.FlexRender cell={cell} />
+                </TableCell>
+              ))}
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
+    </FavouritesOfTable.Provider>
   )
 }

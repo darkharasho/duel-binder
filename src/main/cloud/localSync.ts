@@ -15,6 +15,7 @@ import {
   type WireBinder,
   type WireBinderEdit,
   type WireEntry,
+  type WireFavourite,
   type WirePrice,
   type WireWish
 } from '../../shared/cloud'
@@ -73,8 +74,9 @@ export function saveAccountState(
   ).run(owner, s.cursor ?? null, s.syncedAt ?? null, s.cursor ?? null, s.syncedAt ?? null)
 }
 
-/** A per-game sync feed: the account's entries, wishlist, binders or binder edits, or the server's price changes. */
-export type SyncStream = 'entries' | 'prices' | 'wishlist' | 'binders' | 'binderEdits'
+/** A per-game sync feed: the account's entries, wishlist, binders, binder edits or favourites, or the server's price changes. */
+export type SyncStream =
+  'entries' | 'prices' | 'wishlist' | 'binders' | 'binderEdits' | 'favourites'
 
 const hasLegacyCursor = (game: GameId, stream: SyncStream): boolean =>
   game === 'ygo' && (stream === 'entries' || stream === 'prices')
@@ -113,9 +115,9 @@ export function saveGameCursor(
   ).run(owner, game, stream, cursor)
 }
 
-/** Whether this computer has never-signed-in entries, wishes or binders (owner 0), tombstones included. */
+/** Whether this computer has never-signed-in entries, wishes, binders or favourites (owner 0), tombstones included. */
 export function hasLocalData(db: SqlDb): boolean {
-  return ['collection_entries', 'wishlist_entries', 'binders', 'binder_edits'].some(
+  return ['collection_entries', 'wishlist_entries', 'binders', 'binder_edits', 'favourites'].some(
     (table) => db.prepare(`SELECT 1 FROM ${table} WHERE owner_id = 0 LIMIT 1`).get() !== undefined
   )
 }
@@ -142,6 +144,10 @@ export function adoptLocalData(db: SqlDb, owner: number): number {
       owner
     )
     db.prepare('DELETE FROM binder_edits WHERE owner_id = 0').run()
+    db.prepare('UPDATE OR IGNORE favourites SET owner_id = ?, dirty = 1 WHERE owner_id = 0').run(
+      owner
+    )
+    db.prepare('DELETE FROM favourites WHERE owner_id = 0').run()
     return moved.changes
   })()
 }
@@ -479,6 +485,83 @@ const toWishRow = (w: WireWish): WishRow => ({
 export function purgeCleanWishes(db: SqlDb, owner: number): void {
   db.prepare(
     'DELETE FROM wishlist_entries WHERE owner_id = ? AND deleted_at IS NOT NULL AND dirty = 0'
+  ).run(owner)
+}
+
+interface FavouriteRow {
+  card_id: number
+  game: GameId
+  created_at: string
+  updated_at: string
+  deleted_at: string | null
+  dirty: number
+}
+
+const FAVOURITE_COLS = 'card_id, game, created_at, updated_at, deleted_at, dirty'
+
+const favouriteToWire = (r: FavouriteRow): WireFavourite => ({
+  cardId: r.card_id,
+  game: r.game,
+  createdAt: r.created_at,
+  updatedAt: r.updated_at,
+  deletedAt: r.deleted_at
+})
+
+/** Up to `limit` of the owner's unpushed favourites, tombstones included, leaving out the cards in `skip`. */
+export function dirtyFavourites(
+  db: SqlDb,
+  owner: number,
+  limit: number,
+  skip: ReadonlySet<number>
+): WireFavourite[] {
+  const rows = db
+    .prepare(
+      `SELECT ${FAVOURITE_COLS} FROM favourites
+       WHERE owner_id = ? AND dirty = 1 AND card_id NOT IN (SELECT value FROM json_each(?))
+       ORDER BY updated_at, card_id LIMIT ?`
+    )
+    .all(owner, JSON.stringify([...skip]), limit) as FavouriteRow[]
+  return rows.map(favouriteToWire)
+}
+
+/** Marks a pushed favourite clean, unless it was edited again since `f` was read. */
+export function markFavouritePushed(db: SqlDb, owner: number, f: WireFavourite): void {
+  db.prepare(
+    `UPDATE favourites SET dirty = 0
+     WHERE owner_id = ? AND card_id = ? AND updated_at = ? AND deleted_at IS ?`
+  ).run(owner, f.cardId, f.updatedAt, f.deletedAt)
+}
+
+/** Applies one server favourite, clean; a newer unpushed local edit is kept. Returns whether it wrote. */
+export function applyRemoteFavourite(db: SqlDb, owner: number, f: WireFavourite): boolean {
+  const local = db
+    .prepare(`SELECT ${FAVOURITE_COLS} FROM favourites WHERE owner_id = ? AND card_id = ?`)
+    .get(owner, f.cardId) as FavouriteRow | undefined
+  if (!local && f.deletedAt !== null) return false
+  if (local) {
+    const wire = favouriteToWire(local)
+    const same =
+      wire.game === f.game &&
+      wire.createdAt === f.createdAt &&
+      wire.updatedAt === f.updatedAt &&
+      wire.deletedAt === f.deletedAt
+    if (local.dirty === 0 && same) return false
+    if (local.dirty === 1 && !replaces(f, wire)) return false
+  }
+  db.prepare(
+    `INSERT INTO favourites (owner_id, card_id, game, created_at, updated_at, deleted_at, dirty)
+     VALUES (?, ?, ?, ?, ?, ?, 0)
+     ON CONFLICT(owner_id, card_id) DO UPDATE SET game = excluded.game,
+       created_at = excluded.created_at, updated_at = excluded.updated_at,
+       deleted_at = excluded.deleted_at, dirty = 0`
+  ).run(owner, f.cardId, f.game, f.createdAt, f.updatedAt, f.deletedAt)
+  return true
+}
+
+/** Deletes the owner's favourite tombstones the server already has. */
+export function purgeCleanFavourites(db: SqlDb, owner: number): void {
+  db.prepare(
+    'DELETE FROM favourites WHERE owner_id = ? AND deleted_at IS NOT NULL AND dirty = 0'
   ).run(owner)
 }
 

@@ -138,6 +138,8 @@ export interface CollectionFilters {
   pkmRarities?: string[]
   hpMin?: number
   hpMax?: number
+  /** Only the cards the owner hearted. Never applied to a friend's collection: favourites are private. */
+  favourites?: boolean
   sort: SortKey
   dir: 'asc' | 'desc'
 }
@@ -159,6 +161,8 @@ export interface BrowseFilters {
   owned?: 'all' | 'owned' | 'missing'
   /** Only cards with a printing in this language, and its sets and rarities; none is every language. */
   language?: Language
+  /** Only the cards the user hearted. */
+  favourites?: boolean
   /** Pokémon only (ignored on Yu-Gi-Oh!, as the Yu-Gi-Oh! fields are ignored on Pokémon). */
   pkmCategories?: string[]
   pkmTypes?: string[]

@@ -79,7 +79,7 @@ describe('SetChecklist', () => {
   it('lists cards in set order with number labels and owned state', async () => {
     renderChecklist()
     const tiles = await screen.findAllByRole('button', {
-      name: /Alpha Dragon|Beta Knight|Gamma Trap/
+      name: /^(Alpha Dragon|Beta Knight|Gamma Trap)/
     })
     expect(tiles.map((t) => t.textContent)).toEqual([
       expect.stringContaining('Alpha Dragon'),
@@ -97,23 +97,23 @@ describe('SetChecklist', () => {
 
   it('Missing filter hides owned cards', async () => {
     renderChecklist()
-    await screen.findByRole('button', { name: /Alpha Dragon/ })
+    await screen.findByRole('button', { name: /^Alpha Dragon/ })
     await userEvent.click(screen.getByRole('radio', { name: 'Missing' }))
-    expect(screen.queryByRole('button', { name: /Alpha Dragon/ })).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /Beta Knight/ })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Alpha Dragon/ })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^Beta Knight/ })).toBeInTheDocument()
   })
 
   it('rarities mode shows one tile per rarity', async () => {
     renderChecklist({ mode: 'rarities' })
-    const ultra = await screen.findByRole('button', { name: /Alpha Dragon.*Ultra Rare/ })
-    const secret = screen.getByRole('button', { name: /Alpha Dragon.*Secret Rare/ })
+    const ultra = await screen.findByRole('button', { name: /^Alpha Dragon.*Ultra Rare/ })
+    const secret = screen.getByRole('button', { name: /^Alpha Dragon.*Secret Rare/ })
     expect(ultra).toHaveAttribute('data-owned', 'true')
     expect(secret).toHaveAttribute('data-owned', 'false')
   })
 
   it('clicking an owned tile opens the detail panel', async () => {
     const { forCard } = renderChecklist()
-    await userEvent.click(await screen.findByRole('button', { name: /Alpha Dragon/ }))
+    await userEvent.click(await screen.findByRole('button', { name: /^Alpha Dragon/ }))
     expect(forCard).toHaveBeenCalledWith(1001)
   })
 
@@ -175,7 +175,7 @@ describe('SetChecklist', () => {
       />,
       { api }
     )
-    await userEvent.click(await screen.findByRole('button', { name: /Gamma Trap/ }))
+    await userEvent.click(await screen.findByRole('button', { name: /^Gamma Trap/ }))
     const panel = await screen.findByRole('dialog')
     expect(await within(panel).findByText('You have none yet')).toBeInTheDocument()
     expect(onAddMissing).not.toHaveBeenCalled()
@@ -204,7 +204,7 @@ describe('SetChecklist', () => {
 
   it('arrows step through the visible tiles, opening each as a click would', async () => {
     const { forCard } = renderChecklist()
-    await userEvent.click(await screen.findByRole('button', { name: /Beta Knight/ }))
+    await userEvent.click(await screen.findByRole('button', { name: /^Beta Knight/ }))
     const panel = await screen.findByRole('dialog')
     expect(within(panel).getByRole('heading', { name: 'Beta Knight' })).toBeInTheDocument()
 
@@ -220,7 +220,7 @@ describe('SetChecklist', () => {
 
   it('All sets goes back', async () => {
     const { onBack } = renderChecklist()
-    await screen.findByRole('button', { name: /Alpha Dragon/ })
+    await screen.findByRole('button', { name: /^Alpha Dragon/ })
     await userEvent.click(await screen.findByRole('button', { name: /All sets/ }))
     expect(onBack).toHaveBeenCalled()
   })

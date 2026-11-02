@@ -2,8 +2,8 @@ import { registerPlugin } from '@capacitor/core'
 import { isNativeApp } from '@/lib/portal'
 
 /**
- * The iOS app's stream plugin (ios/App/App/StreamPlugin.swift): `enter` lets the phone rotate to
- * landscape and keeps the screen on, `exit` puts both back.
+ * The apps' stream plugin (ios/App/App/StreamPlugin.swift, StreamPlugin.java on Android): `enter`
+ * lets the phone rotate to landscape and keeps the screen on, `exit` puts both back.
  */
 interface StreamPlugin {
   enter(): Promise<void>

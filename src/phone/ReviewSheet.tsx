@@ -23,6 +23,7 @@ import { ClearSessionDialog, useSessionCommit } from '@/features/scan/SessionLis
 import { plural } from '@/features/scan/scanText'
 import { formatUsd } from '@/lib/format'
 import { cn } from '@/lib/utils'
+import { useBackHandler } from './backButton'
 import { PickerSheet } from './PickerSheet'
 import {
   GLASS,
@@ -166,6 +167,7 @@ export function ReviewSheet({
   onClose: () => void
   stream?: boolean
 }): React.JSX.Element {
+  useBackHandler(true, onClose)
   const { session } = useScanHub()
   const { addable, commit } = useSessionCommit()
   const [checkOnly, setCheckOnly] = useState(() => session.rows.some((r) => flagText(r) !== null))

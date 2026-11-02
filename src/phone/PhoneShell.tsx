@@ -32,6 +32,7 @@ import { api, mutationInvalidationKeys } from '@/lib/api'
 import { useFriendsOverview } from '@/lib/friends'
 import { GameProvider, pageInGame, useGame } from '@/lib/game'
 import { cn } from '@/lib/utils'
+import { useBackHandler } from './backButton'
 import { usePhone } from './context'
 import { refreshAllFingerprints } from './refreshFingerprints'
 import { ScannerScreen } from './ScannerScreen'
@@ -135,6 +136,8 @@ function Shell({ engineFactory }: { engineFactory?: EngineFactory }): React.JSX.
     setMoreOpen(false)
     onNavigate(next)
   }
+  // Android's back from any other page (the scanner included) goes Home; from Home it leaves.
+  useBackHandler(page !== 'dashboard', () => go('dashboard'))
 
   return (
     <div

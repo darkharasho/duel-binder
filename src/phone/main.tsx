@@ -8,10 +8,11 @@ import './phone.css'
 
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-import { isNativeApp } from '@/lib/portal'
+import { APP_PLATFORM, isNativeApp } from '@/lib/portal'
 import { installErrorReports } from '@/lib/errorReports'
 import { trackOpen } from '@/lib/usage'
 import { App } from './App'
+import { listenForBack } from './backButton'
 import { createBrowserOcr } from './ocr'
 import { createPhoneRuntime, type WorkerLike } from './runtime'
 
@@ -42,8 +43,11 @@ async function start(): Promise<void> {
 
 void start()
 
+// Android's back button closes what's open, then goes Home, then leaves (see backButton.ts).
+if (APP_PLATFORM === 'android') void listenForBack()
+
 // The page, the service worker and every app file are under /scan/ (see vite.phone.config.ts).
-// The iOS app ships its files inside the app and has no service worker.
+// The iOS and Android apps ship their files inside the app and have no service worker.
 if (import.meta.env.PROD && !isNativeApp() && 'serviceWorker' in navigator)
   navigator.serviceWorker.register('/scan/sw.js', { scope: '/scan/' }).catch((err: unknown) => {
     console.warn('Service worker registration failed:', err)

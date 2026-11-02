@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { EngineFactory } from '@/features/scan/engine'
+import { useBackHandler } from '../backButton'
 import { useScanHub } from '@/features/scan/ScanHub'
 import { flagText } from '@/features/scan/ScanRowItem'
 import { plural } from '@/features/scan/scanText'
@@ -142,6 +143,8 @@ export function StreamScreen({
   const pulled = useCallback((row: ScanRow) => setRecord((r) => r && recordPull(r, row)), [])
 
   const started = phase !== 'start'
+  // Android's back leaves the start screen, but never ends a running stream: it just shows the controls.
+  useBackHandler(true, () => (started ? showControls() : onExit()))
   useEffect(() => {
     if (!started) return
     // The browser drops the wake lock whenever the page is hidden (a trip to Discord, a call).

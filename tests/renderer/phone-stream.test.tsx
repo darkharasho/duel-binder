@@ -7,6 +7,7 @@ import type { ScanRow } from '@/features/scan/session'
 import { PhoneContext } from '../../src/phone/context'
 import { ScannerScreen } from '../../src/phone/ScannerScreen'
 import { StreamScreen } from '../../src/phone/stream/StreamScreen'
+import { handleBack } from '../../src/phone/backButton'
 import { enterStream, exitStream, reacquireStream } from '../../src/phone/stream/device'
 import { scanArea } from '../../src/phone/stream/scanArea'
 import type { StreamRecord } from '../../src/phone/stream/record'
@@ -238,9 +239,23 @@ describe('phone stream start screen', () => {
     expect(onExit).toHaveBeenCalled()
     expect(enterStream).not.toHaveBeenCalled()
   })
+
+  it("Android's back leaves the start screen", () => {
+    const { onExit } = renderStream()
+    act(() => void handleBack())
+    expect(onExit).toHaveBeenCalledTimes(1)
+  })
 })
 
 describe('phone stream live screen', () => {
+  it("Android's back never ends a running stream", async () => {
+    const user = fakeTime()
+    const { onExit } = await goLive(user, 4)
+    act(() => void handleBack())
+    expect(onExit).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: 'Review' })).toBeInTheDocument()
+  })
+
   it('shows a pull and counts it', async () => {
     const user = fakeTime()
     await goLive(user, 4)

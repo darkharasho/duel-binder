@@ -1,4 +1,4 @@
-import { printingChip, printingTitle } from '@shared/printingLabel'
+import { printingChip, printingParts } from '@shared/printingLabel'
 import { englishSetName } from '@shared/setNames'
 import type { ChecklistRarity } from '@shared/types'
 import { PrintingLabel } from '@/components/PrintingLabel'
@@ -62,7 +62,7 @@ export function CodeOptions({
           >
             <PrintingLabel
               chip={printingChip(label)}
-              title={printingTitle(label)}
+              {...printingParts(label)}
               tag={
                 note && <span className="shrink-0 tabular-nums text-muted-foreground">{note}</span>
               }

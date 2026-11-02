@@ -9,7 +9,7 @@ import { priceFor } from '@shared/pricing'
 import {
   printingChip,
   printingText,
-  printingTitle,
+  printingParts,
   type PrintingLabelInput
 } from '@shared/printingLabel'
 import { englishSetName } from '@shared/setNames'
@@ -364,7 +364,7 @@ export function AddCardDialog({
                   >
                     <PrintingLabel
                       chip={printingChip(labelOf(p))}
-                      title={printingTitle(labelOf(p))}
+                      {...printingParts(labelOf(p))}
                       tag={<LanguageTag language={p.language} />}
                     />
                     <span className="w-16 text-right text-xs">

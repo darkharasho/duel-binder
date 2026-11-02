@@ -9,7 +9,7 @@ import {
 } from 'lucide-react'
 import { GAMES } from '@shared/games'
 import { languageInfo, type Language } from '@shared/languages'
-import { printingChip, printingSearch, printingText, printingTitle } from '@shared/printingLabel'
+import { printingChip, printingParts, printingSearch, printingText } from '@shared/printingLabel'
 import { englishSetName } from '@shared/setNames'
 import { CardArt } from '@/components/CardArt'
 import { formatUsd } from '@/lib/format'
@@ -85,7 +85,7 @@ export function choicesFor(row: ScanRow, language: Language | null): PickerOptio
       label: printingText(p, languages ? tag : undefined),
       search: printingSearch(p, tag),
       badge: printingChip(p) ?? undefined,
-      title: printingTitle(p),
+      ...printingParts(p),
       note: languages ? tag : undefined
     }
   })

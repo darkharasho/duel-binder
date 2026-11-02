@@ -47,7 +47,8 @@ describe('ScanRowItem', () => {
 
   it('names the set of a printing that has no code', () => {
     render(<ScanRowItem row={row()} actions={actions} language={null} />)
-    expect(screen.getByText('Original Artwork Collection')).toBeInTheDocument()
+    // The subtitle, and the set's name in the printing picker.
+    expect(screen.getAllByText('Original Artwork Collection')).toHaveLength(2)
   })
 })
 

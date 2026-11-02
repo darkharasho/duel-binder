@@ -41,11 +41,11 @@ describe('choicesFor', () => {
       printing(3, 'Prismatic Secret Rare', 'Overframe'),
       printing(4, 'Ultra Rare', 'Manga-Style')
     ]
-    expect(choicesFor(rowOf(options), 'ja').map((c) => c.title)).toEqual([
-      'Original Artwork Collection - Ultra Rare',
-      'Original Artwork Collection - Ultra Rare (Overframe)',
-      'Original Artwork Collection - Prismatic Secret Rare (Overframe)',
-      'Original Artwork Collection - Ultra Rare (Manga-Style)'
+    expect(choicesFor(rowOf(options), 'ja').map((c) => c.rarity)).toEqual([
+      'Ultra Rare',
+      'Ultra Rare (Overframe)',
+      'Prismatic Secret Rare (Overframe)',
+      'Ultra Rare (Manga-Style)'
     ])
   })
 
@@ -56,7 +56,8 @@ describe('choicesFor', () => {
       label: 'YAC1-JP006 Original Artwork Collection - Super Rare',
       search: 'yac1-jp006 original artwork collection super rare jp',
       badge: 'YAC1-JP006',
-      title: 'Original Artwork Collection - Super Rare',
+      title: 'Original Artwork Collection',
+      rarity: 'Super Rare',
       note: undefined
     })
   })
@@ -71,7 +72,8 @@ describe('choicesFor', () => {
     expect(uncoded).toMatchObject({
       label: 'Original Artwork Collection - Ultra Rare (Manga-Style, Color)',
       badge: undefined,
-      title: 'Original Artwork Collection - Ultra Rare (Manga-Style, Color)'
+      title: 'Original Artwork Collection',
+      rarity: 'Ultra Rare (Manga-Style, Color)'
     })
     expect(uncoded.search).toContain('original artwork collection')
   })

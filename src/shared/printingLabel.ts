@@ -27,11 +27,19 @@ export function rarityLabel(rarity: string, variant?: string | null): string {
  * already shows the code.
  */
 export function printingTitle(p: PrintingLabelInput): string {
+  const { title, rarity } = printingParts(p)
+  return rarity ? `${title} - ${rarity}` : title
+}
+
+/**
+ * printingTitle in two, for where the set's name truncates and the rarity stays whole: `title` is
+ * the set's name, with the rarity on its own in `rarity`, or the rarity alone with no set to show.
+ */
+export function printingParts(p: PrintingLabelInput): { title: string; rarity?: string } {
   const rarity = rarityLabel(p.rarity, p.variant)
-  const name = p.setName.trim()
-  const set = englishSetName(name)
-  if (hasNativeScript(set)) return p.setCode.trim() ? rarity : `${set} - ${rarity}`
-  return set ? `${set} - ${rarity}` : rarity
+  const set = englishSetName(p.setName.trim())
+  const showSet = hasNativeScript(set) ? !p.setCode.trim() : set
+  return showSet ? { title: set, rarity } : { title: rarity }
 }
 
 /** The chip's text, the printing's code; null when it has none, so no chip shows. */

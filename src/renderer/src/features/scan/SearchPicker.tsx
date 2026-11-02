@@ -20,9 +20,11 @@ export interface PickerOption {
   /**
    * A short code shown as a badge (a printing's code, a set's prefix), the label without it as
    * the title, and a note such as a language tag; the label is the plain-text form of them all.
+   * A printing's title is its set's name, with its rarity apart to stay whole (see PrintingTitle).
    */
   badge?: string
   title?: string
+  rarity?: string
   note?: string
 }
 
@@ -43,7 +45,8 @@ export function OptionLabel({
   return (
     <PrintingLabel
       chip={option.badge}
-      title={option.title ?? option.label}
+      title={option.title}
+      rarity={option.rarity}
       chipClassName={compact ? 'px-1.5 py-0 text-[11px]' : undefined}
       className={compact ? 'gap-1.5' : undefined}
       tag={

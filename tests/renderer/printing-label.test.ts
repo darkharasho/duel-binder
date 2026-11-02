@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   printingChip,
+  printingParts,
   printingSearch,
   printingText,
   printingTitle,
@@ -57,5 +58,10 @@ describe('printing labels', () => {
     const p = { setCode: 'ZZ1 001/010', setName: '未知のセット', rarity: 'Common' }
     expect(printingTitle(p)).toBe('Common')
     expect(printingTitle({ ...p, setCode: '' })).toBe('未知のセット - Common')
+  })
+
+  it('splits the title so the rarity can stay whole', () => {
+    expect(printingParts(coded)).toEqual({ title: 'Original Art Collection', rarity: 'Super Rare' })
+    expect(printingParts({ setCode: 'X-1', setName: '', rarity: 'Rare' })).toEqual({ title: 'Rare' })
   })
 })

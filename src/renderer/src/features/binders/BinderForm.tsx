@@ -15,14 +15,19 @@ import { LANGUAGES, type Language } from '@shared/languages'
 import type { BinderDetail, BinderPreview } from '@shared/types'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from '@/components/ui/select'
 import { PageHeader } from '@/components/PageHeader'
 import { api, queryKeys } from '@/lib/api'
 import { useGame } from '@/lib/game'
 import { useSetNames } from '@/lib/setLabels'
 
 const PREVIEW_DELAY_MS = 300
-const SELECT =
-  'h-9 rounded-md border border-input bg-transparent px-2 text-sm outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50'
 
 const FIELD_LABEL = (f: RuleField): string =>
   f.replace(/([A-Z])/g, ' $1').replace(/^./, (c) => c.toUpperCase())
@@ -227,15 +232,18 @@ export function BinderForm({
             </div>
             {r.field === 'name' ? (
               <div className="flex gap-2">
-                <select
-                  aria-label="Name match"
-                  className={SELECT}
+                <Select
                   value={r.op}
-                  onChange={(e) => changeRule(i, { ...r, op: e.target.value as 'is' | 'contains' })}
+                  onValueChange={(op) => changeRule(i, { ...r, op: op as 'is' | 'contains' })}
                 >
-                  <option value="contains">contains</option>
-                  <option value="is">is</option>
-                </select>
+                  <SelectTrigger aria-label="Name match">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="contains">contains</SelectItem>
+                    <SelectItem value="is">is</SelectItem>
+                  </SelectContent>
+                </Select>
                 <Input
                   aria-label="Name value"
                   value={r.value}
@@ -251,21 +259,22 @@ export function BinderForm({
             )}
           </div>
         ))}
-        <select
-          aria-label="Add rule"
-          className={SELECT}
+        {/* Always empty, so the same field can be added twice. */}
+        <Select
           value=""
-          onChange={(e) => {
-            if (e.target.value) setRules((all) => [...all, newRule(e.target.value as RuleField)])
-          }}
+          onValueChange={(f) => setRules((all) => [...all, newRule(f as RuleField)])}
         >
-          <option value="">Add rule · leave empty for a manual binder</option>
-          {RULE_FIELDS[game].map((f) => (
-            <option key={f} value={f}>
-              {FIELD_LABEL(f)}
-            </option>
-          ))}
-        </select>
+          <SelectTrigger aria-label="Add rule">
+            <SelectValue placeholder="Add rule · leave empty for a manual binder" />
+          </SelectTrigger>
+          <SelectContent position="popper">
+            {RULE_FIELDS[game].map((f) => (
+              <SelectItem key={f} value={f}>
+                {FIELD_LABEL(f)}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
         {preview && !preview.tooBroad && (
           <p className="text-sm text-muted-foreground tabular-nums">
             {`${preview.printings} ${preview.printings === 1 ? 'printing' : 'printings'} · ${preview.cards} ${preview.cards === 1 ? 'card' : 'cards'} · ${preview.owned} owned`}
@@ -275,18 +284,18 @@ export function BinderForm({
 
       <label className="block space-y-1.5 text-sm">
         <span className="font-medium">Goal</span>
-        <select
-          aria-label="Goal"
-          className={`${SELECT} block`}
-          value={goal}
-          onChange={(e) => setGoal(e.target.value as BinderGoal)}
-        >
-          {GOALS[game].map((g) => (
-            <option key={g} value={g}>
-              {GOAL_OPTION[g]}
-            </option>
-          ))}
-        </select>
+        <Select value={goal} onValueChange={(g) => setGoal(g as BinderGoal)}>
+          <SelectTrigger aria-label="Goal">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {GOALS[game].map((g) => (
+              <SelectItem key={g} value={g}>
+                {GOAL_OPTION[g]}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </label>
 
       <fieldset className="space-y-1.5">

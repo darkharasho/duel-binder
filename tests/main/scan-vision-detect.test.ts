@@ -687,22 +687,65 @@ describe('the Pokémon profile', () => {
     expect(signals.art[0].imageId).toBe(PKM_IMAGE)
     expect(signals.upright).toMatchObject({ width: CARD_W, height: CARD_H })
   }, 30_000)
+
+  it('keeps a Pokémon frame version cues and slab', () => {
+    const pkmIndex = decodeFingerprints(
+      encodeFingerprints([
+        { imageId: PKM_IMAGE, hash: artHash(fingerprintSource(reference(), 'pokemon', pkm)) }
+      ])
+    )
+    const { img } = framed(reference(), 600)
+    const live = analyze(cv, img, pkmIndex, null, false, true, pkm, true, null, true, false)
+    const { upright, ...kept } = analyze(
+      cv,
+      img,
+      pkmIndex,
+      null,
+      false,
+      true,
+      pkm,
+      true,
+      null,
+      true,
+      true
+    )
+    expect(upright).toBeDefined()
+    expect(live.slab).toBeDefined()
+    expect(kept.slab).toEqual(live.slab)
+    expect(kept.version).toEqual(live.version)
+    expect(kept.cues).toEqual(live.cues)
+    expect(kept.look).toEqual(live.look)
+  }, 30_000)
 })
 
-describe('a tilt frame', () => {
+describe('a frame kept for a read', () => {
   const ygo = scanProfile('ygo')
 
-  it("stays on a Yu-Gi-Oh card's held outline and skips its look, which the tilt doesn't read", () => {
+  it('keeps its rarity cues and version cues', () => {
     const s = shots[0]
     const img = frames.get(s.file)!
     const live = analyze(cv, img, index, null, false, true, ygo, true, s.quad, true, false)
+    const { upright, ...kept } = analyze(
+      cv,
+      img,
+      index,
+      null,
+      false,
+      true,
+      ygo,
+      true,
+      s.quad,
+      true,
+      true
+    )
     expect(live.cues).not.toBeNull()
     expect(live.look).not.toBeNull()
-    const tilted = analyze(cv, img, index, null, false, true, ygo, true, s.quad, true, true)
-    expect(tilted.quad).toEqual(s.quad)
-    expect(tilted.art[0].imageId).toBe(s.imageId)
-    expect(tilted.upright).toMatchObject({ width: CARD_W, height: CARD_H })
-    expect(tilted.cues).toBeNull()
-    expect(tilted.look).toBeNull()
+    expect(kept.quad).toEqual(s.quad)
+    expect(kept.art[0].imageId).toBe(s.imageId)
+    expect(upright).toMatchObject({ width: CARD_W, height: CARD_H })
+    expect(kept.cues).toEqual(live.cues)
+    expect(kept.look).toEqual(live.look)
+    expect(kept.version).toEqual(live.version)
+    expect(live).not.toHaveProperty('upright')
   }, 30_000)
 })

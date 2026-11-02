@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } fro
 import type { GameId } from '@shared/games/types'
 import type { LookModel } from '@shared/scan/look'
 import type { TiltModel } from '@shared/scan/tilt'
+import { pickByRead, TILT_READ_PAIRS } from '@shared/scan/tiltRead'
 import { cuesOver, type RarityCues } from '@shared/scan/rarity'
 import type { Language } from '@shared/languages'
 import type { CardLanguage } from '@shared/scan/language'
@@ -9,6 +10,7 @@ import { tellPokemonLanguage, type PokemonTextLanguage } from '@shared/scan/poke
 import { scanProfile } from '@shared/scan/profiles'
 import {
   ABSENT_MS,
+  ART_MAX_DISTANCE,
   LANGUAGE_MAX_READS,
   LANGUAGE_RETRY_FRAMES,
   AUTO_PHOTO_MS,
@@ -16,7 +18,12 @@ import {
   PHOTO_FRAMES,
   PHOTO_GAP_MS,
   PKM_PHOTO_REPRINT_LEAD,
-  RARITY_MAX_READINGS
+  RARITY_MAX_READINGS,
+  TILT_MIN_FRAMES,
+  TILT_MIN_MOTION,
+  TILT_MS,
+  TILT_READ_MS,
+  TILT_RETRY_MS
 } from '@shared/scan/thresholds'
 import type { FingerprintStatus, OcrBand, ScanPrinting } from '@shared/scan/types'
 import type { PokemonLanguage, ScanStatus } from '@shared/scanWindow'
@@ -25,8 +32,10 @@ import { centreCrop } from './crop'
 import type { EngineFactory, FrameSignals, ScanEngine } from './engine'
 import {
   describeLook,
+  readChoicesFor,
   resolveSignals,
   withRarityByLook,
+  withRarityByTilt,
   type ScanDraft,
   type ScanOutcome
 } from './resolve'
@@ -105,9 +114,18 @@ export interface ScanLoopOptions {
    * never used on a game whose profile has no rarity look.
    */
   lookModel?: LookModel | null
-  /** Tilt models by game; a game without one, or a scanner without them (Stream), never tilts. */
+  /**
+   * Tilt models by game, for reading a counted card's rarity from the live frames while it stays
+   * in view; a game without one, or a scanner without them (Stream), never reads one.
+   */
   tiltModels?: Partial<Record<GameId, TiltModel>> | null
-  onDraft: (d: ScanDraft) => void
+  /** Counts a card; returns the counted row's id, without which the row is never read. */
+  onDraft: (d: ScanDraft) => string | void
+  /**
+   * A read of row `rowId`'s rarity picked another printing: the counted draft on it (still
+   * flagged). Called at most once per row, never with the printing it counted on.
+   */
+  onRarityRead?: (rowId: string, draft: ScanDraft) => void
   /** The camera's picture stopped moving; reopening the camera is the cure. */
   onStalled?: () => void
 }
@@ -130,6 +148,35 @@ const sameStatus = (a: ScanStatus, b: ScanStatus): boolean =>
   a.kind === b.kind &&
   (a.kind !== 'added' ||
     (b.kind === 'added' && a.name === b.name && a.setCode === b.setCode && a.guess === b.guess))
+
+/**
+ * A counted card whose rarity was unsure, read from the live frames while it stays in view. The
+ * loop never waits on it: frames carry `tilt` for the worker to keep, and a reading is asked for
+ * now and then; a usable pick updates the counted row once (onRarityRead).
+ */
+interface RarityRead {
+  rowId: string
+  /** The draft as counted. */
+  draft: ScanDraft
+  finishes: string[]
+  model: TiltModel
+  pairs: readonly (readonly [string, string])[]
+  game: GameId
+  /** The engine keeping its frames, which a later game's engine never has. */
+  engine: ScanEngine
+  /** The card's artworks (the draft's and its card's printings'): a frame matching one is the card. */
+  imageIds: number[]
+  /** The card's outline when last kept (or counted): one elsewhere is another card. */
+  quad: Quad | null
+  /** When its row counted, on the loop's clock. */
+  since: number
+  /** When the first of the frames since one was last kept was grabbed. */
+  missSince: number | null
+  /** When the worker may next be asked for a reading. */
+  nextRead: number
+  /** A reading is in flight: the worker is serial, so one at a time. */
+  reading: boolean
+}
 
 /**
  * The part of the video's current frame the preview shows (its centre crop), at full camera
@@ -265,8 +312,23 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
     pokemonLanguage: { ...NO_POKEMON_LANGUAGE },
     // A Pokémon card's name band as the Japanese model reads it, every read so far, likewise.
     pokemonNames: { ...NO_POKEMON_NAMES, reads: [] as string[][] },
+    // The counted card whose rarity is being read, if one is.
+    read: null as RarityRead | null,
     status: { kind: 'idle' } as ScanStatus
   })
+
+  /**
+   * Ends read r (any read when left out), once, forgetting its kept frames: a late reading or a
+   * later end finds nothing to end.
+   */
+  // Only refs, so made once.
+  const endRead = useCallback((r?: RarityRead): void => {
+    const l = loop.current
+    const read = r ?? l.read
+    if (!read || l.read !== read) return
+    l.read = null
+    read.engine.tiltReset?.()
+  }, [])
 
   /** Live frames search only the language's art; on trouble, all of it, which is just slower. */
   const narrow = async (engine: ScanEngine): Promise<void> => {
@@ -389,6 +451,7 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
   // A new set, game or language is a new start: nothing counted yet, nothing in view.
   useEffect(() => {
     const l = loop.current
+    endRead()
     tracker.current.reset()
     l.lastFound = false
     l.shown = null
@@ -401,7 +464,11 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
     if (l.stopped) return
     l.status = { kind: 'idle' }
     setStatusState(l.status)
-  }, [opts.setKey, game, language])
+  }, [opts.setKey, game, language, endRead])
+
+  // Another default rarity: a read started under the old one updates nothing.
+  const { defaultRarity } = opts
+  useEffect(() => endRead(), [defaultRarity, endRead])
 
   const takePhoto = useCallback(() => {
     if (!latest.current.running || loop.current.stopped) return
@@ -468,6 +535,114 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
       ) {
         setStatus({ kind: 'unsure' })
       }
+    }
+
+    /**
+     * Counts `draft`, the one way live frames and photos both count a card: any read in progress
+     * ends, the card shows as counted and goes to onDraft, and when its rarity is one a tilt may
+     * read, and onDraft gave its row's id, a read of it starts on the frames that follow. `quad`
+     * is its outline in the frame that counted it, if any. Nothing here waits.
+     */
+    const counted = (
+      draft: ScanDraft,
+      engine: ScanEngine,
+      o: typeof latest.current,
+      quad: Quad | null
+    ): void => {
+      endRead()
+      showCounted(draft)
+      const rowId = latest.current.onDraft(draft)
+      if (typeof rowId !== 'string' || !engine.tiltReading) return
+      // Options that changed since the frame was taken: a read under them would be the old ones'.
+      const cur = latest.current
+      if (
+        cur.game !== o.game ||
+        cur.setKey !== o.setKey ||
+        cur.language !== o.language ||
+        cur.defaultRarity !== o.defaultRarity
+      )
+        return
+      const model = o.tiltModels?.[o.game]
+      const pairs = TILT_READ_PAIRS[o.game]
+      const finishes = readChoicesFor(draft, o.defaultRarity, model)
+      if (!model || !pairs || !finishes) return
+      const at = performance.now()
+      const ofCard = draft.options.filter((p) => p.cardId === draft.cardId)
+      l.read = {
+        rowId,
+        draft,
+        finishes,
+        model,
+        pairs,
+        game: o.game,
+        engine,
+        imageIds: [...new Set([draft.imageId, ...ofCard.flatMap((p) => p.imageIds)])],
+        quad,
+        since: at,
+        missSince: null,
+        nextRead: at + TILT_MS,
+        reading: false
+      }
+    }
+
+    /**
+     * Asks the worker for r's reading, without waiting on it. A usable one with a pick ends the
+     * read and, when it picks another printing, updates the row; one without is asked for again
+     * TILT_RETRY_MS after its reply; a failed one ends the read. A reply after the read ended is
+     * ignored.
+     */
+    const askRead = (r: RarityRead): void => {
+      r.reading = true
+      const asked = performance.now()
+      Promise.resolve()
+        .then(() => r.engine.tiltReading!(r.game, asked))
+        .then(
+          (reading) => {
+            const usable =
+              !!reading && reading.frames >= TILT_MIN_FRAMES && reading.motion >= TILT_MIN_MOTION
+            const pick = usable ? pickByRead(r.model, reading.features, r.finishes, r.pairs) : null
+            if (import.meta.env.DEV) {
+              const ms = Math.round(performance.now() - asked)
+              const frames = reading?.frames ?? 0
+              const motion = reading?.motion ?? 0
+              console.debug('[scan] rarity read', JSON.stringify({ ms, frames, motion, pick }))
+            }
+            if (l.read !== r) return
+            if (pick) {
+              endRead(r)
+              const read = withRarityByTilt(r.draft, pick)
+              if (read.printingId !== r.draft.printingId)
+                latest.current.onRarityRead?.(r.rowId, read)
+              return
+            }
+            r.reading = false
+            r.nextRead = performance.now() + TILT_RETRY_MS
+          },
+          () => endRead(r)
+        )
+    }
+
+    /**
+     * One live frame, grabbed at `at`, of read r: it ends when another card's art is close, when
+     * a kept frame's outline is elsewhere, when no frame has been kept for ABSENT_MS, or when
+     * TILT_READ_MS have passed since its card counted; else a reading is asked for when due.
+     */
+    const readFrame = (r: RarityRead, raw: FrameSignals, at: number): void => {
+      if (l.read !== r) return
+      const top = raw.art[0]
+      const other = !!top && top.distance <= ART_MAX_DISTANCE && !r.imageIds.includes(top.imageId)
+      if (raw.tiltKept) {
+        r.missSince = null
+        if (raw.quad && r.quad && !sameSpot(r.quad, raw.quad)) return endRead(r)
+        r.quad = raw.quad ?? r.quad
+      } else {
+        // Gone is measured between frames looked at, as show() does: a frame that waited behind a
+        // reading in the worker is late, not a lowered card.
+        r.missSince ??= at
+      }
+      if (other || at - (r.missSince ?? at) >= ABSENT_MS || at - r.since >= TILT_READ_MS)
+        return endRead(r)
+      if (!r.reading && at >= r.nextRead) askRead(r)
     }
 
     /**
@@ -624,8 +799,7 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
       if (stale() || (quiet && best === null)) return
       tracker.current.settle(performance.now())
       if (best?.kind === 'recognized') {
-        show(best, best.item)
-        latest.current.onDraft(best.item)
+        counted(best.item, engine, o, null)
       } else {
         l.photoFailedUntil = performance.now() + PHOTO_FAILED_MS
         setStatus({ kind: 'photo-failed' })
@@ -683,20 +857,27 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
         const candidates = o.candidates
         const shot = KEEP_FRAMES ? debugShot(frame, width, height, l) : null
         const started = performance.now()
+        // A counted card being read: its frames are kept for the reading, as grabbed.
+        const read = l.read
         let raw
         try {
           raw = await engine.analyze(frame, {
             candidates,
             wantText: l.lastFound,
-            wantLook: !!o.lookModel && profile.rarityLook
+            wantLook: !!o.lookModel && profile.rarityLook,
+            ...(read ? { tilt: read.imageIds, at: started } : {})
           })
         } catch {
           // An engine thrown away for another game owes nothing.
-          if (live && engineRef.current === engine) fail()
+          if (live && engineRef.current === engine) {
+            if (read) endRead(read)
+            fail()
+          }
           return
         }
         // Another game's engine took over mid-frame: this frame is the old game's.
         if (!live || engineRef.current !== engine) return
+        if (read) readFrame(read, raw, started)
         l.lastFound = raw.found
         const analyzed = performance.now()
         // A card that left the view takes its language with it.
@@ -763,8 +944,8 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
           void keepDebugShot(shot, o.game, raw, outcome, draft !== null, l.debugTimes)
           l.debugTimes = []
         }
-        show(outcome, draft)
-        if (draft) latest.current.onDraft(draft)
+        if (draft) counted(draft, engine, o, raw.quad)
+        else show(outcome, null)
       } finally {
         l.busy = false
       }
@@ -775,10 +956,12 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
     return () => {
       live = false
       clearInterval(timer)
+      // Paused or the camera gone: a read in progress ends with nothing applied.
+      endRead()
       l.lastFound = false
       setOutline(null)
     }
-  }, [opts.running, showCounted])
+  }, [opts.running, showCounted, endRead])
 
   return { status, retry, takePhoto, outline, artReady, artData }
 }

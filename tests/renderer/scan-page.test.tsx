@@ -2,7 +2,7 @@ import { act, fireEvent, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { AccountStatus, SetSummary } from '@shared/types'
 import type { ScanDraft } from '@shared/scan/types'
-import type { ScanWindowSettings, ScanWindowState } from '@shared/scanWindow'
+import { isToScanWindow, type ScanWindowSettings, type ScanWindowState } from '@shared/scanWindow'
 import type { RawSignals } from '@/features/scan/engine'
 import App from '@/App'
 import { Toaster } from '@/components/ui/sonner'
@@ -270,6 +270,94 @@ describe('Scan page', () => {
     ])
   })
 
+  it("a rarity read from the window updates that pull's row and is acknowledged", async () => {
+    await renderScan()
+    await openWindow()
+    act(() => bridge.emit({ kind: 'draft', id: 'd1', draft: draft({ flag: 'check-rarity' }) }))
+    act(() =>
+      bridge.emit({
+        kind: 'rarity',
+        id: 'd1',
+        draft: draft({
+          printingId: 102,
+          rarity: 'Rare',
+          flag: 'check-rarity',
+          options: [printing({ rarity: 'Common' }), printing({ printingId: 102, rarity: 'Rare' })]
+        })
+      })
+    )
+    const saved = JSON.parse(localStorage.getItem(SESSION_KEY)!) as ScanRow[]
+    expect(saved[0]).toMatchObject({
+      printingId: 102,
+      rarity: 'Rare',
+      flag: 'check-rarity',
+      read: true
+    })
+    expect(bridge.sent.at(-1)).toEqual({ kind: 'rarityAck', id: 'd1' })
+  })
+
+  it('flashes a row a background read changed, for 900 ms', async () => {
+    await renderScan()
+    await openWindow()
+    act(() => bridge.emit({ kind: 'draft', id: 'd1', draft: draft({ flag: 'check-rarity' }) }))
+    const li = (): HTMLElement | null => screen.getByText('Dark Magician').closest('li')
+    expect(li()).not.toHaveClass('scan-reread')
+    act(() =>
+      bridge.emit({
+        kind: 'rarity',
+        id: 'd1',
+        draft: draft({
+          printingId: 102,
+          rarity: 'Rare',
+          flag: 'check-rarity',
+          options: [printing({ rarity: 'Common' }), printing({ printingId: 102, rarity: 'Rare' })]
+        })
+      })
+    )
+    expect(li()).toHaveClass('scan-reread')
+    await run(899)
+    expect(li()).toHaveClass('scan-reread')
+    await run(1)
+    expect(li()).not.toHaveClass('scan-reread')
+  })
+
+  it('a rarity read for an unknown pull changes no row and is still acknowledged', async () => {
+    await renderScan()
+    await openWindow()
+    act(() => bridge.emit({ kind: 'draft', id: 'd1', draft: draft({ flag: 'check-rarity' }) }))
+    act(() =>
+      bridge.emit({ kind: 'rarity', id: 'zzz', draft: draft({ printingId: 102, rarity: 'Rare' }) })
+    )
+    const saved = JSON.parse(localStorage.getItem(SESSION_KEY)!) as ScanRow[]
+    expect(saved[0]).toMatchObject({ printingId: 101, rarity: 'Ultra Rare' })
+    expect(bridge.sent.at(-1)).toEqual({ kind: 'rarityAck', id: 'zzz' })
+  })
+
+  it('a second rarity read for the same pull is ignored, even when the first did not apply', async () => {
+    await renderScan()
+    await openWindow()
+    act(() => bridge.emit({ kind: 'draft', id: 'd1', draft: draft({ flag: 'check-rarity' }) }))
+    // The first reading names another card, so no row takes it.
+    act(() =>
+      bridge.emit({ kind: 'rarity', id: 'd1', draft: draft({ cardId: 2, rarity: 'Rare' }) })
+    )
+    act(() =>
+      bridge.emit({
+        kind: 'rarity',
+        id: 'd1',
+        draft: draft({
+          printingId: 102,
+          rarity: 'Rare',
+          options: [printing({ rarity: 'Common' }), printing({ printingId: 102, rarity: 'Rare' })]
+        })
+      })
+    )
+    const saved = JSON.parse(localStorage.getItem(SESSION_KEY)!) as ScanRow[]
+    expect(saved[0]).toMatchObject({ printingId: 101, rarity: 'Ultra Rare' })
+    expect(saved[0].read).toBeUndefined()
+    expect(bridge.sent.at(-1)).toEqual({ kind: 'rarityAck', id: 'd1' })
+  })
+
   it('drops a pull resent after the main window reloads', async () => {
     const { unmount } = await renderScan()
     await openWindow()
@@ -419,15 +507,8 @@ describe('Scan page', () => {
     expect(screen.queryByText('Hold a card up')).not.toBeInTheDocument()
   })
 
-  it("Skip shows while the scan window's card is held for a tilt, and sends skipTilt", async () => {
-    await renderScan()
-    await openWindow()
-    expect(screen.queryByRole('button', { name: 'Skip' })).toBeNull()
-    report({ loop: { kind: 'tilt', name: 'Dark Magician' } })
-    expect(screen.getByText('Tilt the card')).toBeInTheDocument()
-    expect(screen.getByText('Dark Magician')).toBeInTheDocument()
-    await user().click(screen.getByRole('button', { name: 'Skip' }))
-    expect(bridge.sent).toContainEqual({ kind: 'skipTilt' })
+  it('the scan window no longer takes a skipTilt message', () => {
+    expect(isToScanWindow({ kind: 'skipTilt' })).toBe(false)
   })
 
   it("shows the scan window's notices", async () => {

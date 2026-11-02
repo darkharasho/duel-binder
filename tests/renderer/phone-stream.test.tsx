@@ -1,6 +1,8 @@
 import { act, fireEvent, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { ScanHubProvider } from '@/features/scan/ScanHub'
+import * as hubScan from '@/features/scan/useHubScan'
+import { TILT_MODELS } from '@shared/scan/tiltModel'
 import type { ScanRow } from '@/features/scan/session'
 import { PhoneContext } from '../../src/phone/context'
 import { ScannerScreen } from '../../src/phone/ScannerScreen'
@@ -112,6 +114,20 @@ async function goLive(
 }
 
 const savedRecord = (rows: ScanRow[]): StreamRecord => ({ game: 'ygo', rows, saved: {} })
+
+describe('phone stream camera', () => {
+  it('reads rarity from the tilt with the shipped models', async () => {
+    fakeTime()
+    const spy = vi.spyOn(hubScan, 'useHubScan')
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    renderStream()
+    await settle()
+    await user.click(screen.getByRole('button', { name: 'Start' }))
+    await settle()
+    expect(spy).toHaveBeenCalledWith(expect.objectContaining({ tiltModels: TILT_MODELS }))
+    spy.mockRestore()
+  })
+})
 
 describe('phone stream start screen', () => {
   it("opens from the scanner's Stream button", async () => {

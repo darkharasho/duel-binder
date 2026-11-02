@@ -16,6 +16,8 @@ import { TILT_MODELS } from '@shared/scan/tiltModel'
 import type { TiltModel } from '@shared/scan/tilt'
 import type { TiltReading } from '@shared/scan/tiltFeatures'
 import * as hubScan from '@/features/scan/useHubScan'
+import type { ScanDraft, ScanOutcome } from '@/features/scan/resolve'
+import { TILT_MS } from '@shared/scan/thresholds'
 import { createSyncTriggers } from '../../src/phone/syncTriggers'
 import type { PhoneStore } from '../../src/phone/data/store'
 import { createMockApi, renderWithProviders } from './mockApi'
@@ -30,6 +32,21 @@ import {
   tiltEngine,
   type FakeEngine
 } from './scanFakes'
+
+// A test may say what the frames resolve to, to test what the loop does with it; else the real one.
+const resolved = vi.hoisted(() => ({ draft: null as ScanDraft | null }))
+vi.mock('@/features/scan/resolve', async (actual) => {
+  const real = await actual<typeof import('@/features/scan/resolve')>()
+  return {
+    ...real,
+    resolveSignals: vi.fn(
+      async (...args: Parameters<typeof real.resolveSignals>): Promise<ScanOutcome> =>
+        resolved.draft && args[0].found
+          ? { kind: 'recognized', item: resolved.draft }
+          : real.resolveSignals(...args)
+    )
+  }
+})
 
 const SESSION_KEY = 'scan.session.v1'
 
@@ -59,6 +76,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  resolved.draft = null
   vi.useRealTimers()
   vi.restoreAllMocks()
   vi.unstubAllGlobals()
@@ -77,12 +95,35 @@ function FakePull(): React.JSX.Element {
   )
 }
 
+/** Applies a background read to the first row (Common to Rare), as the tilt read does. */
+function FakeReread(): React.JSX.Element {
+  const { reread, session } = useScanHub()
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- the draft is the row without these
+  const { key, quantity, addedAt, ...draft } = row()
+  return (
+    <button
+      type="button"
+      onClick={() =>
+        reread(session.rows[0].key, {
+          ...draft,
+          printingId: 102,
+          rarity: 'Rare',
+          flag: 'check-rarity'
+        })
+      }
+    >
+      Fake reread
+    </button>
+  )
+}
+
 function renderScanner(store: PhoneStore): ReturnType<typeof renderWithProviders> {
   const engine = fakeEngine()
   return renderWithProviders(
     <PhoneContext.Provider value={{ store, user: SETO, signedOut: () => {} }}>
       <ScanHubProvider>
         <FakePull />
+        <FakeReread />
         <ScannerScreen engineFactory={() => engine} onClose={() => {}} onOpenSettings={() => {}} />
         <Toaster />
       </ScanHubProvider>
@@ -652,17 +693,15 @@ describe('phone scanner on Pokémon', () => {
 })
 
 describe('phone scanner tilt', () => {
-  // One feature: below 0 reads as Super Rare, above it as Ultra Rare.
+  // One feature: below 0 reads as Common, above it as Ultra Rare.
   const MODEL: TiltModel = {
     features: ['f'],
-    classes: ['Super Rare', 'Ultra Rare'],
-    pairs: [
-      { a: 'Super Rare', b: 'Ultra Rare', use: [0], mean: [0], spread: [1], ca: [-1], cb: [1] }
-    ]
+    classes: ['Common', 'Ultra Rare'],
+    pairs: [{ a: 'Common', b: 'Ultra Rare', use: [0], mean: [0], spread: [1], ca: [-1], cb: [1] }]
   }
   const FEW: TiltReading = { features: [1], frames: 4, motion: 50 }
   const FOILS = [
-    printing({ rarity: 'Super Rare' }),
+    printing({ rarity: 'Common' }),
     printing({ printingId: 102, rarity: 'Ultra Rare' })
   ]
   const held = (): ReturnType<typeof codeFrame> => ({
@@ -699,20 +738,137 @@ describe('phone scanner tilt', () => {
     await settle(1000)
   }
 
-  it('the phone shows the tilt prompt with Skip, and Skip counts the card', async () => {
+  it('counts a card with an unsure Common/Ultra Rare rarity on its first recognized frame, with tilt models given', async () => {
     const engine = tiltEngine(
       () => held(),
       () => FEW
     )
-    await renderCamera(engine, { ygo: MODEL })
-    expect(screen.getByText('Tilt the card')).toBeInTheDocument()
-    expect(screen.getByText('Dark Magician')).toBeInTheDocument()
-    expect(screen.getByTestId('counted')).toHaveTextContent('0')
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
-    await user.click(screen.getByRole('button', { name: 'Skip' }))
-    await settle(500)
+    const options = [
+      printing({ rarity: 'Common' }),
+      printing({ printingId: 102, rarity: 'Ultra Rare' })
+    ]
+    vi.useFakeTimers()
+    vi.stubGlobal('jest', { advanceTimersByTime: (ms: number) => vi.advanceTimersByTime(ms) })
+    renderWithProviders(
+      <GameProvider>
+        <ScanHubProvider>
+          <Counted />
+          <PhoneCamera engineFactory={() => engine} tiltModels={{ ygo: MODEL }} />
+        </ScanHubProvider>
+      </GameProvider>,
+      {
+        api: createMockApi({
+          scanWindow: fakeBridge().scanWindow,
+          scan: { printingsByCode: vi.fn(async () => options) }
+        })
+      }
+    )
+    await settle()
+    await settle(1000)
     expect(screen.getByTestId('counted')).toHaveTextContent('1')
+    expect(screen.queryByText('Tilt the card')).toBeNull()
     expect(screen.queryByRole('button', { name: 'Skip' })).toBeNull()
+  })
+
+  it('the phone updates a counted Normal row to Reverse Holofoil when the reading says so', async () => {
+    const PKM_MODEL: TiltModel = {
+      features: ['f'],
+      classes: ['Normal', 'Reverse Holofoil'],
+      pairs: [
+        { a: 'Normal', b: 'Reverse Holofoil', use: [0], mean: [0], spread: [1], ca: [-1], cb: [1] }
+      ]
+    }
+    const options = [
+      printing({ printingId: 501, cardId: 5, name: 'Pikachu', rarity: 'Normal', imageIds: [500] }),
+      printing({
+        printingId: 502,
+        cardId: 5,
+        name: 'Pikachu',
+        rarity: 'Reverse Holofoil',
+        imageIds: [500]
+      })
+    ]
+    resolved.draft = {
+      cardId: 5,
+      name: 'Pikachu',
+      imageId: 500,
+      printingId: 501,
+      setCode: 'PAL 045/193',
+      rarity: 'Normal',
+      options,
+      flag: 'pick-printing',
+      via: 'art',
+      game: 'pkm'
+    }
+    const engine = tiltEngine(
+      () => ({ ...codeFrame('045/193'), art: [{ imageId: 500, distance: 10 }] }),
+      () => ({ features: [1], frames: 10, motion: 50 })
+    )
+    vi.useFakeTimers()
+    vi.stubGlobal('jest', { advanceTimersByTime: (ms: number) => vi.advanceTimersByTime(ms) })
+    renderWithProviders(
+      <GameProvider>
+        <ScanHubProvider>
+          <Counted />
+          <PhoneCamera engineFactory={() => engine} tiltModels={{ pkm: PKM_MODEL }} />
+        </ScanHubProvider>
+      </GameProvider>,
+      {
+        api: createMockApi({
+          scanWindow: fakeBridge().scanWindow,
+          games: {
+            available: vi.fn(async () => ['ygo', 'pkm'] as never),
+            active: vi.fn(async () => 'pkm' as const)
+          }
+        })
+      }
+    )
+    await settle()
+    await settle(1000)
+    expect(screen.getByTestId('counted')).toHaveTextContent('1')
+    const saved = (): ScanRow[] => JSON.parse(localStorage.getItem(SESSION_KEY) ?? '[]')
+    expect(saved()[0]).toMatchObject({ rarity: 'Normal', printingId: 501 })
+    await settle(TILT_MS + 600)
+    expect(saved()).toHaveLength(1)
+    expect(saved()[0].rarity).toBe('Reverse Holofoil')
+    expect(saved()[0].flag).not.toBeNull()
+    expect(saved()[0].quantity).toBe(1)
+    expect(screen.getByTestId('counted')).toHaveTextContent('1')
+  })
+
+  describe('the flash of a background read', () => {
+    async function readOnce(): Promise<ReturnType<typeof userEvent.setup>> {
+      vi.useFakeTimers()
+      vi.stubGlobal('jest', { advanceTimersByTime: (ms: number) => vi.advanceTimersByTime(ms) })
+      localStorage.setItem(SESSION_KEY, JSON.stringify([row({ flag: 'check-rarity' })]))
+      renderScanner(fakeStore())
+      await settle()
+      return userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+    }
+
+    it('flashes the review sheet row for 900 ms', async () => {
+      const user = await readOnce()
+      await user.click(screen.getByRole('button', { name: 'Review 1 scanned' }))
+      const sheet = screen.getByRole('region', { name: 'Review' })
+      const li = (): HTMLElement | null => within(sheet).getByText('Dark Magician').closest('li')
+      expect(li()).not.toHaveClass('scan-reread')
+      await user.click(screen.getByRole('button', { name: 'Fake reread' }))
+      expect(li()).toHaveClass('scan-reread')
+      await settle(899)
+      expect(li()).toHaveClass('scan-reread')
+      await settle(1)
+      expect(li()).not.toHaveClass('scan-reread')
+    })
+
+    it('flashes the last-card strip for 900 ms', async () => {
+      const user = await readOnce()
+      const strip = screen.getByRole('region', { name: 'Last scan' })
+      expect(strip).not.toHaveClass('scan-reread')
+      await user.click(screen.getByRole('button', { name: 'Fake reread' }))
+      expect(strip).toHaveClass('scan-reread')
+      await settle(900)
+      expect(strip).not.toHaveClass('scan-reread')
+    })
   })
 
   it('the phone scanner tilts with the shipped models by default', async () => {
@@ -722,11 +878,10 @@ describe('phone scanner tilt', () => {
   })
 
   it('useHubScan never tilts unless given tilt models', async () => {
-    const kinds = new Set<string>()
     function Bare(): React.JSX.Element {
       const videoRef = useRef<HTMLVideoElement>(null)
       const camera = useCamera(null, 'environment')
-      const { loop } = hubScan.useHubScan({
+      hubScan.useHubScan({
         videoRef,
         stream: camera.stream,
         engineFactory: () =>
@@ -735,7 +890,6 @@ describe('phone scanner tilt', () => {
             () => FEW
           )
       })
-      kinds.add(loop.status.kind)
       return <video ref={videoRef} />
     }
     vi.useFakeTimers()
@@ -757,7 +911,6 @@ describe('phone scanner tilt', () => {
     await settle()
     await settle(1500)
     expect(screen.getByTestId('counted')).toHaveTextContent('1')
-    expect(kinds.has('tilt')).toBe(false)
   })
 })
 

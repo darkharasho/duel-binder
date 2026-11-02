@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   createTiltFrames,
+  framesForTilt,
   keepsForTilt,
   keepsOutline
 } from '../../src/renderer/src/features/scan/vision/tiltFrames'
@@ -37,6 +38,17 @@ describe('createTiltFrames', () => {
     const [rgb] = f.latest(1000, 0)
     expect(rgb.length).toBe(TILT_W * TILT_H * 3)
     expect([...rgb.subarray(0, 3)]).toEqual([9, 8, 7])
+  })
+
+  it('hands the tilt worker copies: changing them leaves the kept frames whole', () => {
+    const f = createTiltFrames()
+    f.keep(solid(842, 1228, [9, 8, 7]), 0)
+    const first = framesForTilt(f, 100)
+    expect(first).toHaveLength(1)
+    first[0].fill(0)
+    const second = framesForTilt(f, 100)
+    expect([...second[0].subarray(0, 3)]).toEqual([9, 8, 7])
+    expect(second[0].length).toBe(TILT_W * TILT_H * 3)
   })
 
   it('places frames by when they were captured, however late they were kept', () => {

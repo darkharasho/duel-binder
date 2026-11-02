@@ -85,4 +85,6 @@ export interface ScanDraft {
    * which the rarity's look then picks among; absent when no scan did.
    */
   artPrintings?: number[]
+  /** A background rarity read has already updated this row; it is never read again. */
+  read?: true
 }

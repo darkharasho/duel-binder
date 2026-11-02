@@ -2,15 +2,14 @@
 // its art against the fingerprints and cutting out its text bands for OCR in main.
 import { decodeFingerprints, type FingerprintIndex } from '@shared/scan/fingerprintFile'
 import { SCAN_PROFILES, scanProfile, type ScanProfile } from '@shared/scan/profiles'
-import { ART_MAX_DISTANCE, TILT_MS } from '@shared/scan/thresholds'
-import { tiltFeatures } from '@shared/scan/tiltFeatures'
+import { ART_MAX_DISTANCE } from '@shared/scan/thresholds'
 import type { RgbaImage } from '@shared/scan/types'
 import type { FrameSignals, WorkerReply, WorkerRequest } from '../engine'
 import { analyze } from './analyze'
 import { loadCv } from './cv'
 import type { Quad } from './detect'
 import { holderBudget } from './holderBudget'
-import { createTiltFrames, keepsForTilt, keepsOutline } from './tiltFrames'
+import { createTiltFrames, framesForTilt, keepsForTilt, keepsOutline } from './tiltFrames'
 
 interface WorkerScope {
   onmessage: ((e: MessageEvent<WorkerRequest>) => void) | null
@@ -92,12 +91,15 @@ async function handle(msg: WorkerRequest): Promise<void> {
     return
   }
   if (msg.type === 'tiltReading') {
-    // Only the window read: tiltFeatures holds about 3 MB of floats a frame while it works. A
-    // 20-frame window takes it about 0.9 s, and frames sent meanwhile wait behind it. now is the
-    // loop's clock, as the frames' times are.
+    // The window's frames go to the tilt worker, which does the slow reading (about 0.3 s) so a
+    // frame sent meanwhile isn't kept waiting. now is the loop's clock, as the frames' times are.
+    // Copies, transferred: the kept frames stay for the next reading.
     try {
-      const reading = tiltFeatures(tilt.latest(TILT_MS, msg.now), msg.game)
-      scope.postMessage({ type: 'tiltReading', id: msg.id, reading })
+      const frames = framesForTilt(tilt, msg.now)
+      scope.postMessage(
+        { type: 'tiltFrames', id: msg.id, frames },
+        frames.map((f) => f.buffer as ArrayBuffer)
+      )
     } catch (e) {
       scope.postMessage({ type: 'error', id: msg.id, message: messageOf(e) })
     }
@@ -120,8 +122,9 @@ async function handle(msg: WorkerRequest): Promise<void> {
       return
     }
     // The upright card stays in the worker: it's a few MB, and the UI thread has no use for it.
-    // A Yu-Gi-Oh frame keeps its outline only while tilted, and a live frame after a tilt neither
-    // tries the tilt's outline nor keeps one of its own.
+    // A frame kept for a rarity read is still a whole live frame: it resolves and counts like any
+    // other. A Yu-Gi-Oh frame keeps its outline only while kept for a read, and a live frame after
+    // one neither tries that outline nor keeps one of its own.
     const keep = keepsOutline(profile, !!msg.tilt)
     const { upright, ...signals } = analyze(
       cv,

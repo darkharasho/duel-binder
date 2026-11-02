@@ -16,8 +16,6 @@ export function statusText(s: ScanStatus): string {
       return "Couldn't read that photo. Hold the card still and try again."
     case 'added':
       return `${s.setCode ? `${s.name} ${s.setCode}` : s.name} · ${s.guess ? 'added as a best guess' : 'added'}, lower it to scan the next card`
-    case 'tilt':
-      return 'Tilt the card to read its rarity'
     case 'stopped':
       return 'Scanning stopped after repeated errors.'
   }

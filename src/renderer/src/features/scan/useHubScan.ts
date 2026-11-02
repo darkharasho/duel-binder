@@ -46,7 +46,7 @@ export function useHubScan({
   /** Hears each pull once it's counted: `pull.id` is the row key, `scanned` the copies on the list. */
   onPull?: (pull: Pull, scanned: number, draft: ScanDraft) => void
 }): { loop: ScanLoop; setUnreadable: boolean; found: Pull | null } {
-  const { settings, count, session } = useScanHub()
+  const { settings, count, reread, session } = useScanHub()
   const { copiesOf } = session
   const { game } = useGame()
   const picked = settings.set
@@ -65,13 +65,14 @@ export function useHubScan({
   const [found, setFound] = useState<Pull | null>(null)
   const foundRef = useRef<Pull | null>(null)
   const onDraft = useCallback(
-    (draft: ScanDraft): void => {
+    (draft: ScanDraft): string => {
       const id = count(draft)
       playScanPing()
       const pull = { ...pullOf(draft, settings.hitPrice, (foundRef.current?.key ?? 0) + 1), id }
       foundRef.current = pull
       setFound(pull)
       onPull?.(pull, copiesOf(draft), draft)
+      return id
     },
     [count, copiesOf, onPull, settings.hitPrice]
   )
@@ -91,6 +92,7 @@ export function useHubScan({
     lookModel,
     tiltModels,
     onDraft,
+    onRarityRead: reread,
     onStalled
   })
 

@@ -77,7 +77,7 @@ export function ClearSessionDialog({
  * the phone's review: a header with the list's value, glass cards, and pill buttons.
  */
 export function SessionList({ className }: { className?: string }): React.JSX.Element {
-  const { session, fresh } = useScanHub()
+  const { session, fresh, flashed } = useScanHub()
   const [clearing, setClearing] = useState(false)
   const { addable, commit } = useSessionCommit()
   const language = useScanLanguage()
@@ -141,6 +141,7 @@ export function SessionList({ className }: { className?: string }): React.JSX.El
                   language={language}
                   scanned={copiesOnList(session.rows, row)}
                   highlighted={row.key === fresh}
+                  flashed={row.key === flashed}
                   disabled={session.committing}
                 />
               ))}

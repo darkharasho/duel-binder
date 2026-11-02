@@ -6,10 +6,12 @@ import type { GameId } from '@shared/games'
 import type { OcrBand, ScanPrinting } from '@shared/scan/types'
 import type { RawSignals } from '@/features/scan/engine'
 import { useScanSession } from '@/features/scan/session'
+import { ScanHubProvider, useScanHub, READ_FLASH_MS, type ScanHub } from '@/features/scan/ScanHub'
+import { GameProvider } from '@/lib/game'
 import type { ScanDraft } from '@/features/scan/resolve'
 import { useScanLoop } from '@/features/scan/useScanLoop'
-import { createMockApi } from './mockApi'
-import { fakeEngine, quad, stubVideo, type FakeEngine } from './scanFakes'
+import { createMockApi, renderWithProviders } from './mockApi'
+import { fakeBridge, fakeEngine, quad, stubVideo, type FakeEngine } from './scanFakes'
 
 const KEY = 'scan.session.v1'
 const ids = (r: Session): string[] => r.rows.map((x) => x.key)
@@ -435,6 +437,142 @@ describe('useScanSession', () => {
     // The list itself carries on for this session.
     expect(result.current.rows).toHaveLength(2)
   })
+
+  describe('applyRead', () => {
+    const reread = (extra: Partial<ScanDraft> = {}): ScanDraft =>
+      draft({ printingId: 102, setCode: 'SET-EN002', rarity: 'Rare', ...extra })
+
+    it('applies to an untouched flagged row, keeping the flag and everything else', () => {
+      const { result } = setup()
+      let key = ''
+      act(() => void (key = result.current.add(draft())))
+      let ok = false
+      act(() => void (ok = result.current.applyRead(key, reread())))
+      expect(ok).toBe(true)
+      const row = result.current.rows[0]
+      expect(row).toMatchObject({
+        key,
+        quantity: 1,
+        printingId: 102,
+        setCode: 'SET-EN002',
+        rarity: 'Rare',
+        flag: 'check-rarity',
+        read: true
+      })
+      expect(JSON.parse(localStorage.getItem(KEY)!)[0]).toMatchObject({
+        rarity: 'Rare',
+        read: true
+      })
+    })
+
+    it('refuses a row the user has touched', () => {
+      const { result } = setup()
+      let key = ''
+      act(() => void (key = result.current.add(draft())))
+      act(() => result.current.setPrinting(key, 101))
+      let ok = true
+      act(() => void (ok = result.current.applyRead(key, reread())))
+      expect(ok).toBe(false)
+      expect(result.current.rows[0]).toMatchObject({
+        printingId: 101,
+        rarity: 'Common',
+        flag: null
+      })
+      expect(result.current.rows[0].read).toBeUndefined()
+    })
+
+    it('refuses a row whose quantity the user has changed', () => {
+      const { result } = setup()
+      let key = ''
+      act(() => void (key = result.current.add(draft())))
+      act(() => result.current.setQuantity(key, 3))
+      let ok = true
+      act(() => void (ok = result.current.applyRead(key, reread())))
+      expect(ok).toBe(false)
+      expect(result.current.rows[0]).toMatchObject({
+        quantity: 3,
+        printingId: 101,
+        rarity: 'Common',
+        flag: 'check-rarity'
+      })
+    })
+
+    it('keeps a pick-printing flag, and Add still skips the row', async () => {
+      const add = vi.fn(async () => ({}) as never)
+      const { result } = setup(add, 'pkm')
+      let key = ''
+      act(() => void (key = result.current.add(draft({ game: 'pkm', flag: 'pick-printing' }))))
+      let ok = false
+      act(() => void (ok = result.current.applyRead(key, reread({ game: 'pkm', flag: null }))))
+      expect(ok).toBe(true)
+      expect(result.current.rows[0]).toMatchObject({ flag: 'pick-printing', rarity: 'Rare' })
+      await act(async () => void (await result.current.commit()))
+      expect(add).not.toHaveBeenCalled()
+    })
+
+    it('refuses a removed row', () => {
+      const { result } = setup()
+      let key = ''
+      act(() => void (key = result.current.add(draft())))
+      act(() => result.current.remove(key))
+      let ok = true
+      act(() => void (ok = result.current.applyRead(key, reread())))
+      expect(ok).toBe(false)
+      expect(result.current.rows).toEqual([])
+    })
+
+    it('refuses while a commit is pending', async () => {
+      let release!: () => void
+      const add = vi.fn(() => new Promise<never>((res) => (release = () => res({} as never))))
+      const { result } = setup(add)
+      let key = ''
+      act(() => void (key = result.current.add(draft({ flag: 'check-rarity' }))))
+      let done!: Promise<unknown>
+      await act(async () => {
+        done = result.current.commit()
+        await Promise.resolve()
+      })
+      let ok = true
+      act(() => void (ok = result.current.applyRead(key, reread())))
+      expect(ok).toBe(false)
+      await act(async () => {
+        release()
+        await done
+      })
+    })
+
+    it('applies once to a row, never flipping back', () => {
+      const { result } = setup()
+      let key = ''
+      act(() => void (key = result.current.add(draft())))
+      act(() => void result.current.applyRead(key, reread()))
+      let ok = true
+      act(() => void (ok = result.current.applyRead(key, draft())))
+      expect(ok).toBe(false)
+      expect(result.current.rows[0].rarity).toBe('Rare')
+    })
+
+    it('refuses a reading of another card', () => {
+      const { result } = setup()
+      let key = ''
+      act(() => void (key = result.current.add(draft())))
+      let ok = true
+      act(() => void (ok = result.current.applyRead(key, reread({ cardId: 2 }))))
+      expect(ok).toBe(false)
+      expect(result.current.rows[0].rarity).toBe('Common')
+    })
+
+    it('a saved read marker survives a reload', () => {
+      const first = setup()
+      let key = ''
+      act(() => void (key = first.result.current.add(draft())))
+      act(() => void first.result.current.applyRead(key, reread()))
+      const again = setup()
+      let ok = true
+      act(() => void (ok = again.result.current.applyRead(key, draft())))
+      expect(ok).toBe(false)
+    })
+  })
 })
 
 const textBand: OcrBand = { width: 4, height: 2, data: new Uint8Array(8) }
@@ -669,5 +807,64 @@ describe('useScanSession per game', () => {
     localStorage.setItem(KEY, JSON.stringify([{ ...draft(), key: 'x', quantity: 1, addedAt: 1 }]))
     expect(setup().result.current.total).toBe(1)
     expect(setup(undefined, 'pkm').result.current.total).toBe(0)
+  })
+})
+
+describe('the hub applies a read and flashes the row', () => {
+  const next = draft({ printingId: 102, setCode: 'SET-EN002', rarity: 'Rare' })
+
+  function Probe({ out }: { out: { hub?: ScanHub } }): null {
+    out.hub = useScanHub()
+    return null
+  }
+  function mountHub(): { hub: ScanHub } {
+    const out: { hub?: ScanHub } = {}
+    renderWithProviders(
+      createElement(
+        GameProvider,
+        null,
+        createElement(ScanHubProvider, null, createElement(Probe, { out }))
+      ),
+      { api: createMockApi({ scanWindow: fakeBridge().scanWindow }) }
+    )
+    return out as { hub: ScanHub }
+  }
+
+  beforeEach(() => {
+    localStorage.clear()
+    vi.useFakeTimers()
+  })
+  afterEach(() => vi.useRealTimers())
+
+  it('flashes an applied row for READ_FLASH_MS, and a refused one not at all', async () => {
+    const out = mountHub()
+    await act(async () => void (await vi.advanceTimersByTimeAsync(0)))
+    let key = ''
+    act(() => void (key = out.hub.count(draft())))
+    act(() => out.hub.reread(key, next))
+    expect(out.hub.flashed).toBe(key)
+    act(() => void vi.advanceTimersByTime(READ_FLASH_MS - 1))
+    expect(out.hub.flashed).toBe(key)
+    act(() => void vi.advanceTimersByTime(1))
+    expect(out.hub.flashed).toBeNull()
+    act(() => out.hub.reread(key, next))
+    expect(out.hub.flashed).toBeNull()
+  })
+
+  it('a newer reread takes the flash and restarts its timer', async () => {
+    const out = mountHub()
+    await act(async () => void (await vi.advanceTimersByTimeAsync(0)))
+    let a = ''
+    let b = ''
+    act(() => void (a = out.hub.count(draft())))
+    act(() => void (b = out.hub.count(draft())))
+    act(() => out.hub.reread(a, next))
+    act(() => void vi.advanceTimersByTime(READ_FLASH_MS - 100))
+    act(() => out.hub.reread(b, next))
+    expect(out.hub.flashed).toBe(b)
+    act(() => void vi.advanceTimersByTime(READ_FLASH_MS - 100))
+    expect(out.hub.flashed).toBe(b)
+    act(() => void vi.advanceTimersByTime(100))
+    expect(out.hub.flashed).toBeNull()
   })
 })

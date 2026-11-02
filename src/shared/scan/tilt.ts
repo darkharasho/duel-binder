@@ -23,18 +23,6 @@ export interface TiltModel {
   pairs: readonly TiltPair[]
 }
 
-const YGO_PLAIN = new Set([
-  'Common',
-  'Short Print',
-  'Super Short Print',
-  'Normal Rare',
-  'Kaiba Corporation Common',
-  'Kaiba Corporation Rare',
-  'Duel Terminal Technology Common',
-  'c',
-  'SP'
-])
-
 /** A catalog rarity's finish: a Yu-Gi-Oh! rarity's family, or a Pokémon version without its stamp. */
 export function tiltFinish(game: GameId, rarity: string): string {
   if (game === 'ygo') return rarityFamily(rarity)
@@ -47,23 +35,23 @@ export function tiltFinish(game: GameId, rarity: string): string {
   return rarity
 }
 
-/** Whether a finish is one the card shows a shifting shine in; unknown labels count as holo-type. */
-export function isHoloType(game: GameId, finish: string): boolean {
-  if (game === 'ygo') return !(YGO_PLAIN.has(finish) || /^Rare\b/.test(finish))
-  return !(finish === 'Normal' || finish === 'Reverse Holofoil' || /pattern$/i.test(finish))
+function scorePair(
+  pair: TiltPair,
+  features: readonly number[]
+): { winner: string; margin: number } {
+  let da = 0
+  let db = 0
+  pair.use.forEach((idx, i) => {
+    const z = ((features[idx] ?? 0) - pair.mean[i]) / (pair.spread[i] || 1)
+    da += (z - pair.ca[i]) ** 2
+    db += (z - pair.cb[i]) ** 2
+  })
+  return { winner: da <= db ? pair.a : pair.b, margin: Math.abs(Math.sqrt(da) - Math.sqrt(db)) }
 }
 
-/** The known finishes among `rarities` to pick from, or null when no tilt is due. */
-export function tiltFinishes(
-  game: GameId,
-  rarities: readonly string[],
-  model: TiltModel
-): string[] | null {
-  if (rarities.some((r) => /overframe|full art/i.test(r))) return null
-  const known = [...new Set(rarities.map((r) => tiltFinish(game, r)))].filter((f) =>
-    model.classes.includes(f)
-  )
-  return known.filter((f) => isHoloType(game, f)).length >= 2 ? known : null
+/** The finish of `pair` whose centroid the features are nearer to. */
+export function pairWinner(pair: TiltPair, features: readonly number[]): string {
+  return scorePair(pair, features).winner
 }
 
 /**
@@ -84,16 +72,8 @@ export function pickByTilt(
   let scored = 0
   for (const pair of model.pairs) {
     if (!wins.has(pair.a) || !wins.has(pair.b)) continue
-    let da = 0
-    let db = 0
-    pair.use.forEach((idx, i) => {
-      const z = ((features[idx] ?? 0) - pair.mean[i]) / (pair.spread[i] || 1)
-      da += (z - pair.ca[i]) ** 2
-      db += (z - pair.cb[i]) ** 2
-    })
+    const { winner, margin } = scorePair(pair, features)
     scored++
-    const margin = Math.abs(Math.sqrt(da) - Math.sqrt(db))
-    const winner = da <= db ? pair.a : pair.b
     wins.set(winner, wins.get(winner)! + 1)
     margins.set(winner, margins.get(winner)! + margin)
   }

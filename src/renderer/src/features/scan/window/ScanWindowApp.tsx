@@ -34,9 +34,22 @@ const RESEND_MS = 2000
 const sendDraft = (id: string, draft: ScanDraft): void =>
   window.api.scanWindow.send({ kind: 'draft', id, draft })
 
-/** Sends every pull still waiting for its acknowledgement. */
-const flush = (outbox: Outbox): void => {
-  for (const { id, draft } of outbox.pending()) sendDraft(id, draft)
+/** Background rarity reads by draft id, until the hub acknowledges them. Memory only. */
+type Rereads = Map<string, ScanDraft>
+
+const sendReread = (id: string, draft: ScanDraft): void =>
+  window.api.scanWindow.send({ kind: 'rarity', id, draft })
+
+/**
+ * Sends every pull still waiting for its acknowledgement, and every rarity read whose pull the
+ * hub has acknowledged (a read for a pull it hasn't counted yet has no row to land on).
+ */
+const flush = (outbox: Outbox, rereads: Rereads): void => {
+  const pending = outbox.pending()
+  for (const { id, draft } of pending) sendDraft(id, draft)
+  for (const [id, draft] of rereads) {
+    if (!pending.some((e) => e.id === id)) sendReread(id, draft)
+  }
 }
 
 /** The window's size as a capture sees it, kept current as it's dragged or moved between displays. */
@@ -60,12 +73,14 @@ function Scanner({
   settings,
   engineFactory,
   tiltModels,
-  outbox
+  outbox,
+  rereads
 }: {
   settings: ScanWindowSettings
   engineFactory: EngineFactory
   tiltModels: TiltModels
   outbox: Outbox
+  rereads: Rereads
 }): React.JSX.Element {
   const videoRef = useRef<HTMLVideoElement>(null)
   const { game } = useGame()
@@ -101,13 +116,22 @@ function Scanner({
   const scanSet = setUnreadable ? null : picked
 
   const onDraft = useCallback(
-    (draft: ScanDraft) => {
+    (draft: ScanDraft): string => {
       const id = outbox.put(draft)
       sendDraft(id, draft)
       push({ ...pullOf(draft, hitPrice.current, pulls.current++), id })
       playScanPing()
+      return id
     },
     [push, outbox]
+  )
+  const onRarityRead = useCallback(
+    (id: string, draft: ScanDraft): void => {
+      rereads.set(id, draft)
+      // Held until the pull is acknowledged; the resend timer sends it then.
+      if (!outbox.pending().some((e) => e.id === id)) sendReread(id, draft)
+    },
+    [outbox, rereads]
   )
   const [filter] = useLanguageFilter()
   const loop = useScanLoop({
@@ -123,6 +147,7 @@ function Scanner({
     filterLanguage: game === 'ygo' ? printedLanguage(filter) : null,
     tiltModels,
     onDraft,
+    onRarityRead,
     onStalled: camera.retry
   })
 
@@ -131,7 +156,7 @@ function Scanner({
   }, [settings.paused, clear])
 
   const { retry: retryCamera } = camera
-  const { retry: retryScan, takePhoto, skipTilt } = loop
+  const { retry: retryScan, takePhoto } = loop
   useEffect(
     () =>
       window.api.scanWindow.onMessage((m) => {
@@ -140,9 +165,8 @@ function Scanner({
         else if (m.kind === 'retryCamera') retryCamera()
         else if (m.kind === 'retryScan') retryScan()
         else if (m.kind === 'takePhoto') takePhoto()
-        else if (m.kind === 'skipTilt') skipTilt()
       }),
-    [retryCamera, retryScan, takePhoto, skipTilt]
+    [retryCamera, retryScan, takePhoto]
   )
 
   useEffect(() => {
@@ -216,27 +240,29 @@ export function ScanWindowApp({
   const [settings, setSettings] = useState<ScanWindowSettings | null>(null)
   const [summary, setSummary] = useState<ScanSummary | null>(null)
   const [outbox] = useState(createOutbox)
+  const [rereads] = useState<Rereads>(() => new Map())
 
   useEffect(() => {
     document.title = WINDOW_TITLE
     const off = window.api.scanWindow.onMessage((m) => {
       if (!isToScanWindow(m)) return
       if (m.kind === 'ack') outbox.ack(m.id)
+      else if (m.kind === 'rarityAck') rereads.delete(m.id)
       else if (m.kind === 'summary') setSummary(m.summary)
       else if (m.kind === 'settings') {
         setSettings(m.settings)
         // Settings mean the hub is listening: pulls left from before it (re)loaded, or from a
         // scan window that closed or crashed with them unacknowledged, go now.
-        flush(outbox)
+        flush(outbox, rereads)
       }
     })
-    const resend = setInterval(() => flush(outbox), RESEND_MS)
+    const resend = setInterval(() => flush(outbox, rereads), RESEND_MS)
     window.api.scanWindow.send({ kind: 'ready' })
     return () => {
       off()
       clearInterval(resend)
     }
-  }, [outbox])
+  }, [outbox, rereads])
 
   const black = <div className="absolute inset-0 bg-black" />
   if (settings === null) return black
@@ -247,6 +273,7 @@ export function ScanWindowApp({
         engineFactory={engineFactory}
         tiltModels={tiltModels}
         outbox={outbox}
+        rereads={rereads}
       />
       <SummaryOverlay summary={summary} />
     </GameProvider>

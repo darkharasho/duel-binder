@@ -98,6 +98,12 @@ export function useScanSession(game: GameId = 'ygo'): {
   add(d: ScanDraft): string
   /** Copies of the draft's card on the list, read at once: an add just made counts. */
   copiesOf(d: ScanDraft): number
+  /**
+   * Takes a background rarity read onto a row the user hasn't touched (a rarity or printing edit
+   * clears its flag; a quantity change marks it read), once: the flag stays (a guess never
+   * changes it), quantity and key are kept. False when it didn't apply.
+   */
+  applyRead(key: string, next: ScanDraft): boolean
   setPrinting(key: string, printingId: number): void
   setQuantity(key: string, q: number): void
   remove(key: string): void
@@ -177,6 +183,35 @@ export function useScanSession(game: GameId = 'ygo'): {
     [update]
   )
 
+  const applyRead = useCallback(
+    (key: string, next: ScanDraft): boolean => {
+      const row = ref.current.find((r) => r.key === key)
+      if (
+        !row ||
+        committingRef.current ||
+        row.flag === null ||
+        row.read ||
+        next.cardId !== row.cardId
+      )
+        return false
+      update((list) =>
+        list.map((r) =>
+          r.key === key
+            ? {
+                ...r,
+                printingId: next.printingId,
+                rarity: next.rarity,
+                setCode: next.setCode,
+                read: true
+              }
+            : r
+        )
+      )
+      return true
+    },
+    [update]
+  )
+
   const setQuantity = useCallback(
     (key: string, q: number): void =>
       update((list) =>
@@ -184,7 +219,10 @@ export function useScanSession(game: GameId = 'ygo'): {
           ? list
           : q < 1
             ? list.filter((r) => r.key !== key)
-            : list.map((r) => (r.key === key ? { ...r, quantity: Math.floor(q) } : r))
+            : // Changing the count is touching the row: marked read, so a background read leaves it be.
+              list.map((r) =>
+                r.key === key ? { ...r, quantity: Math.floor(q), read: true as const } : r
+              )
       ),
     [update]
   )
@@ -302,6 +340,7 @@ export function useScanSession(game: GameId = 'ygo'): {
     onSaved,
     add,
     copiesOf,
+    applyRead,
     setPrinting,
     setQuantity,
     remove,

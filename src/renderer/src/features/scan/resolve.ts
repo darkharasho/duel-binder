@@ -6,7 +6,8 @@ import type { CardLanguage } from '@shared/scan/language'
 import { lookCandidate, pickRarityByLook, type LookModel } from '@shared/scan/look'
 import { pickRarity, pickRarityByCues, type RarityCues } from '@shared/scan/rarity'
 import { setCodeCandidates } from '@shared/scan/setCode'
-import { tiltFinish, tiltFinishes, type TiltModel } from '@shared/scan/tilt'
+import { tiltFinish, type TiltModel } from '@shared/scan/tilt'
+import { readFinishes, TILT_READ_PAIRS } from '@shared/scan/tiltRead'
 import {
   ART_FAR_DISTANCE,
   ART_MATCH_DEPTH,
@@ -444,12 +445,12 @@ export function tiltOptions(item: ScanDraft): ScanPrinting[] {
 }
 
 /**
- * The finishes to tilt for, or null when the draft gets no tilt: it needs a tilt model, Auto
- * rarity, a draft that isn't a best guess and still wants its rarity checked (a Pokémon card may
- * want its printing picked instead), and two holo-type finishes the model knows among its options
- * with none overframe or full art.
+ * The finishes a tilt reading may choose among for a counted row, or null when it may not update
+ * this one: it needs a tilt model, Auto rarity, a draft that isn't a best guess and still wants
+ * its rarity checked (a Pokémon card may want its printing picked instead), and a pair of its
+ * finishes the reading is allowed to settle.
  */
-export function tiltChoicesFor(
+export function readChoicesFor(
   item: ScanDraft,
   defaultRarity: string | null,
   model: TiltModel | undefined
@@ -457,15 +458,17 @@ export function tiltChoicesFor(
   if (!model || defaultRarity !== null || item.guess) return null
   if (item.flag !== 'check-rarity' && !(item.game === 'pkm' && item.flag === 'pick-printing'))
     return null
-  return tiltFinishes(
-    gameOf(item),
+  const game = gameOf(item)
+  return readFinishes(
+    game,
     tiltOptions(item).map((p) => p.rarity),
-    model
+    model,
+    TILT_READ_PAIRS[game]
   )
 }
 
 /**
- * The draft on the printing of `finish`, still flagged Check rarity: the one showing the draft's
+ * The draft on the printing of `finish`, its flag as it was (a guess settles nothing): the one showing the draft's
  * artwork when there is one, and of those the unstamped version (rarity equal to the finish)
  * before a stamped twin.
  */
@@ -480,7 +483,6 @@ export function withRarityByTilt(item: ScanDraft, finish: string): ScanDraft {
     ...item,
     printingId: printing.printingId,
     rarity: printing.rarity,
-    ...(game === 'pkm' ? { setCode: printing.setCode } : {}),
-    flag: 'check-rarity'
+    ...(game === 'pkm' ? { setCode: printing.setCode } : {})
   }
 }

@@ -376,6 +376,19 @@ describe('phone app', () => {
     expect(store.signIn).not.toHaveBeenCalled()
   })
 
+  it("sets the stream's hit price", async () => {
+    const user = userEvent.setup()
+    const store = fakeStore()
+    installPhoneApi(store)
+    renderApp(store)
+    await openSettings(user)
+    const input = screen.getByLabelText('Hit price')
+    expect(input).toHaveValue(20)
+    await user.clear(input)
+    await user.type(input, '35{Enter}')
+    expect(localStorage.getItem('scan.hitPrice')).toBe('35')
+  })
+
   it('sign out with nothing waiting signs out at once', async () => {
     const user = userEvent.setup()
     const store = fakeStore()

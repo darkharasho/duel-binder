@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Toaster } from '@/components/ui/sonner'
+import { isNativeApp } from '@/lib/portal'
 import type { EngineFactory } from '@/features/scan/engine'
 import { ScanHubProvider } from '@/features/scan/ScanHub'
 import type { Me } from '../shared/cloud'
@@ -13,6 +14,7 @@ import { PhoneScreen } from './PhoneScreen'
 import { PhoneShell } from './PhoneShell'
 import { claimSavedScans } from './savedScans'
 import { SignIn } from './SignIn'
+import { exitStream } from './stream/device'
 
 type View =
   | { kind: 'loading' }
@@ -56,6 +58,11 @@ export function App({
   // The app has one dark theme; `dark` keeps shadcn's dark: variants in step with it.
   useEffect(() => {
     document.documentElement.classList.add('dark')
+  }, [])
+
+  // A reloaded page can't know the app was left sideways and awake by a stream, so it starts upright.
+  useEffect(() => {
+    if (isNativeApp()) void exitStream()
   }, [])
 
   // A fatal wins over every other view, whenever it comes.

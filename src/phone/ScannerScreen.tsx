@@ -5,6 +5,7 @@ import {
   CopyIcon,
   LanguagesIcon,
   LayersIcon,
+  RadioIcon,
   SettingsIcon,
   ShuffleIcon,
   StarIcon,
@@ -26,6 +27,7 @@ import { FoundBurst } from '@/features/scan/FoundBurst'
 import { PhoneCamera } from './PhoneCamera'
 import { PickerSheet } from './PickerSheet'
 import { ReviewSheet } from './ReviewSheet'
+import { StreamScreen } from './stream/StreamScreen'
 import {
   GLASS,
   listValue,
@@ -176,7 +178,8 @@ const ROUND = 'flex size-11 items-center justify-center rounded-full backdrop-bl
 /**
  * The phone's scanner, full screen over the camera's own blurred picture: the camera on top, the
  * last card scanned under it, the language, set and rarity chips, and the session's count and
- * value with a button to the full list. The × goes back to Home; the gear opens Settings.
+ * value with a button to the full list. The × goes back to Home; the gear opens Settings; Stream
+ * swaps it for Stream mode.
  */
 export function ScannerScreen({
   engineFactory,
@@ -192,6 +195,7 @@ export function ScannerScreen({
   // A game priced by version rather than Yu-Gi-Oh!'s rarities has no rarity for new scans.
   const rarities = scanProfile(useGame().game).rarityLook
   const [reviewing, setReviewing] = useState(false)
+  const [streaming, setStreaming] = useState(false)
 
   const last = session.rows.reduce<ScanRow | null>(
     (a, r) => (a === null || r.addedAt > a.addedAt ? r : a),
@@ -207,12 +211,25 @@ export function ScannerScreen({
   const [burst, setBurst] = useState(0)
   if (stamp !== seen) {
     setSeen(stamp)
-    if (stamp > seen) setBurst(burst + 1)
+    // A stream shows its own pulls; coming back from one replays none of them here.
+    if (stamp > seen && !streaming) setBurst(burst + 1)
   }
   useEffect(() => {
     // A short buzz where the phone allows it (Android; iPhone browsers have no vibration).
     if (burst > 0) navigator.vibrate?.(30)
   }, [burst])
+
+  // In place of the scanner, so its camera closes and only the stream's is open.
+  if (streaming)
+    return (
+      <StreamScreen
+        engineFactory={engineFactory}
+        onExit={() => {
+          setStreaming(false)
+          setBurst(0)
+        }}
+      />
+    )
 
   return (
     <div className="relative isolate flex h-full min-h-0 w-full flex-col overflow-hidden pt-[env(safe-area-inset-top)]">
@@ -224,6 +241,14 @@ export function ScannerScreen({
           className={cn(ROUND, 'absolute left-2 top-2 bg-black/45 text-white')}
         >
           <XIcon aria-hidden className="size-5" />
+        </button>
+        <button
+          type="button"
+          aria-label="Stream"
+          onClick={() => setStreaming(true)}
+          className={cn(ROUND, 'absolute left-14 top-2 bg-black/45 text-white')}
+        >
+          <RadioIcon aria-hidden className="size-5" />
         </button>
         <button
           type="button"

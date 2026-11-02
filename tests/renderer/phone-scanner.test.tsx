@@ -1,6 +1,10 @@
+import { useRef } from 'react'
 import { act, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Toaster } from '@/components/ui/sonner'
+import { useCamera } from '@/features/scan/useCamera'
+import { useHubScan } from '@/features/scan/useHubScan'
+import type { Pull } from '@/features/scan/window/overlay'
 import { ScanHubProvider, useScanHub } from '@/features/scan/ScanHub'
 import type { ScanRow } from '@/features/scan/session'
 import { PhoneContext } from '../../src/phone/context'
@@ -11,8 +15,6 @@ import { LOOK_MODEL } from '@shared/scan/lookModel'
 import { TILT_MODELS } from '@shared/scan/tiltModel'
 import type { TiltModel } from '@shared/scan/tilt'
 import type { TiltReading } from '@shared/scan/tiltFeatures'
-import { useRef } from 'react'
-import { useCamera } from '@/features/scan/useCamera'
 import * as hubScan from '@/features/scan/useHubScan'
 import { createSyncTriggers } from '../../src/phone/syncTriggers'
 import type { PhoneStore } from '../../src/phone/data/store'
@@ -756,5 +758,69 @@ describe('phone scanner tilt', () => {
     await settle(1500)
     expect(screen.getByTestId('counted')).toHaveTextContent('1')
     expect(kinds.has('tilt')).toBe(false)
+  })
+})
+
+describe('useHubScan for a phone stream', () => {
+  const BOTH = [printing({ rarity: 'Ultra Rare' })]
+
+  function Harness({
+    paused,
+    onPull
+  }: {
+    paused: boolean
+    onPull: (pull: Pull, scanned: number) => void
+  }): React.JSX.Element {
+    const videoRef = useRef<HTMLVideoElement>(null)
+    const camera = useCamera(null, 'environment')
+    useHubScan({
+      videoRef,
+      stream: camera.stream,
+      engineFactory: () => engine,
+      paused,
+      onPull
+    })
+    return <video ref={videoRef} />
+  }
+  let engine: ReturnType<typeof fakeEngine>
+
+  async function mount(
+    paused: boolean,
+    onPull: (pull: Pull, scanned: number) => void
+  ): Promise<unknown> {
+    vi.useFakeTimers()
+    vi.stubGlobal('jest', { advanceTimersByTime: (ms: number) => vi.advanceTimersByTime(ms) })
+    localStorage.clear()
+    engine = fakeEngine(() => codeFrame('LOB-EN005'))
+    const api = createMockApi({
+      scan: { printingsByCode: vi.fn(async () => BOTH) },
+      scanWindow: fakeBridge().scanWindow
+    })
+    const view = renderWithProviders(
+      <ScanHubProvider>
+        <Harness paused={paused} onPull={onPull} />
+      </ScanHubProvider>,
+      { api }
+    )
+    await settle()
+    await settle(1500)
+    return view
+  }
+
+  it('hands each pull on with its row key and the copies on the list', async () => {
+    const onPull = vi.fn()
+    await mount(false, onPull)
+    expect(onPull).toHaveBeenCalled()
+    const [pull, scanned] = onPull.mock.calls[0]
+    const rows = JSON.parse(localStorage.getItem('scan.session.v1') ?? '[]') as ScanRow[]
+    expect(pull.id).toBe(rows[0].key)
+    expect(scanned).toBe(1)
+  })
+
+  it('counts nothing while paused', async () => {
+    const onPull = vi.fn()
+    await mount(true, onPull)
+    expect(engine.analyze).not.toHaveBeenCalled()
+    expect(onPull).not.toHaveBeenCalled()
   })
 })

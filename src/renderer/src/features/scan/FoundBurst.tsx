@@ -16,18 +16,20 @@ const SPARKS = [
  * and a sheen crossing the picture, a few sparkles, and a bubble with the card's name and price
  * that pops up and fades. Remount it (a new key) to replay it. Only decoration: the scan status
  * already says what was added. `stream` is the scan window's: sized to the window, the bubble at
- * the top (the last-scan card is at the bottom).
+ * the top (the last-scan card is at the bottom). `phone` puts that bubble below the safe area.
  */
 export function FoundBurst({
   name,
   price,
   stream = false,
-  bubble = true
+  bubble = true,
+  phone = false
 }: {
   name: string
   price: number | null | undefined
   stream?: boolean
   bubble?: boolean
+  phone?: boolean
 }): React.JSX.Element {
   return (
     <div
@@ -60,7 +62,12 @@ export function FoundBurst({
         <div
           className={cn(
             'absolute inset-x-0 flex justify-center',
-            stream ? 'top-[4vw] px-[4vw]' : 'bottom-12 px-4'
+            stream
+              ? phone
+                ? // Below the clock and the stream's count pills, and clear of the notch sideways.
+                  'top-[calc(env(safe-area-inset-top)+3.5rem)] px-[4vw] landscape:pl-[max(4vw,env(safe-area-inset-left))] landscape:pr-[max(4vw,env(safe-area-inset-right))]'
+                : 'top-[4vw] px-[4vw]'
+              : 'bottom-12 px-4'
           )}
         >
           <div

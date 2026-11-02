@@ -155,10 +155,21 @@ function ReviewRow({ row, disabled }: { row: ScanRow; disabled: boolean }): Reac
 /**
  * The full scanned list as a near full-height glass sheet over the blurred camera, closed by
  * tapping or dragging its handle down: each card with its printing and count, then Clear and Add.
+ * `stream`: the drawer of a stream, shorter (a side panel sideways) with the camera left clear,
+ * and showing only the cards to check until All is chosen. Add still covers the whole list.
  */
-export function ReviewSheet({ onClose }: { onClose: () => void }): React.JSX.Element {
+export function ReviewSheet({
+  onClose,
+  stream = false
+}: {
+  onClose: () => void
+  stream?: boolean
+}): React.JSX.Element {
   const { session } = useScanHub()
   const { addable, commit } = useSessionCommit()
+  const [checkOnly, setCheckOnly] = useState(() => session.rows.some((r) => flagText(r) !== null))
+  const shown =
+    stream && checkOnly ? session.rows.filter((r) => flagText(r) !== null) : session.rows
   const [clearing, setClearing] = useState(false)
   const [dy, setDy] = useState(0)
   const start = useRef<number | null>(null)
@@ -193,15 +204,22 @@ export function ReviewSheet({ onClose }: { onClose: () => void }): React.JSX.Ele
 
   return (
     <>
-      <div
-        aria-hidden
-        className="absolute inset-0 z-20 bg-black/40 animate-in fade-in"
-        onClick={onClose}
-      />
+      {!stream && (
+        <div
+          aria-hidden
+          className="absolute inset-0 z-20 bg-black/40 animate-in fade-in"
+          onClick={onClose}
+        />
+      )}
       <section
         aria-labelledby="phone-review-title"
         style={dy > 0 ? { transform: `translateY(${dy}px)` } : undefined}
-        className="absolute inset-x-0 bottom-0 top-[calc(env(safe-area-inset-top)+0.75rem)] z-30 flex flex-col rounded-t-[28px] border-t border-white/[0.1] bg-background/80 shadow-2xl backdrop-blur-2xl animate-in slide-in-from-bottom duration-200"
+        className={cn(
+          'absolute z-30 flex flex-col rounded-t-[28px] border-t border-white/[0.1] bg-background/80 shadow-2xl backdrop-blur-2xl animate-in slide-in-from-bottom duration-200',
+          stream
+            ? 'inset-x-0 bottom-0 h-[60%] landscape:inset-y-0 landscape:right-0 landscape:left-auto landscape:h-full landscape:w-[45%] landscape:rounded-l-[28px] landscape:rounded-tr-none landscape:border-l landscape:border-t-0 landscape:pt-[env(safe-area-inset-top)] landscape:pr-[max(0.75rem,env(safe-area-inset-right))]'
+            : 'inset-x-0 bottom-0 top-[calc(env(safe-area-inset-top)+0.75rem)]'
+        )}
       >
         <button
           type="button"
@@ -242,14 +260,35 @@ export function ReviewSheet({ onClose }: { onClose: () => void }): React.JSX.Ele
             )}
           </div>
         </header>
+        {stream && (
+          <div className="flex shrink-0 gap-2 px-[18px] pb-3">
+            {[
+              ['To check', true],
+              ['All', false]
+            ].map(([label, only]) => (
+              <button
+                key={String(label)}
+                type="button"
+                aria-pressed={checkOnly === only}
+                onClick={() => setCheckOnly(only as boolean)}
+                className={cn(
+                  'h-8 rounded-full px-3.5 text-[13px] font-medium active:bg-white/[0.14]',
+                  checkOnly === only ? 'bg-white text-black' : GLASS
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+        )}
         <div className="min-h-0 flex-1 overflow-auto overscroll-contain px-3">
-          {session.rows.length === 0 ? (
+          {shown.length === 0 ? (
             <p className="px-2 py-10 text-center text-sm text-muted-foreground">
-              Cards you scan show up here.
+              {session.rows.length === 0 ? 'Cards you scan show up here.' : 'Nothing to check.'}
             </p>
           ) : (
             <ul aria-label="This session" className="flex flex-col gap-2 pb-3">
-              {session.rows.map((row) => (
+              {shown.map((row) => (
                 <ReviewRow key={row.key} row={row} disabled={session.committing} />
               ))}
             </ul>

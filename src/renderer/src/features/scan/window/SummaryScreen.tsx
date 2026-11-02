@@ -36,7 +36,7 @@ function Hit({ card }: { card: ScanSummaryCard }): React.JSX.Element {
   return (
     <section
       aria-label="Hit of the night"
-      className="flex w-[min(30vw,40vh)] shrink-0 flex-col animate-in fade-in slide-in-from-bottom-[3vh] zoom-in-95 duration-700 motion-reduce:animate-none"
+      className="flex w-[min(30vw,40vh)] shrink-0 flex-col portrait:w-[min(30vw,13vh)] portrait:self-center animate-in fade-in slide-in-from-bottom-[3vh] zoom-in-95 duration-700 motion-reduce:animate-none"
     >
       <p className="mb-[1vh] text-[clamp(0.8rem,1.4vw,1.3rem)] font-semibold tracking-wide text-amber-300">
         Hit of the night
@@ -68,7 +68,7 @@ function Hit({ card }: { card: ScanSummaryCard }): React.JSX.Element {
 function Row({ card }: { card: ScanSummaryCard }): React.JSX.Element {
   const { name, imageId, detail, quantity, price, raw, guess } = card
   return (
-    <li className="flex h-[7.4vh] min-w-0 items-center gap-[1vw] border-b border-white/10">
+    <li className="flex h-[7.4vh] min-w-0 portrait:h-[5.6vh] items-center gap-[1vw] border-b border-white/10">
       <CardArt
         imageId={imageId}
         size="small"
@@ -89,7 +89,7 @@ function Row({ card }: { card: ScanSummaryCard }): React.JSX.Element {
           ×{quantity}
         </p>
       )}
-      <p className="w-[11vw] shrink-0 text-right text-[clamp(0.85rem,2.8vh,1.6rem)] font-bold tabular-nums">
+      <p className="w-[11vw] shrink-0 text-right portrait:w-[22vw] text-[clamp(0.85rem,2.8vh,1.6rem)] font-bold tabular-nums">
         {price == null ? (
           <span className="font-normal text-white/45">No price</span>
         ) : (
@@ -106,13 +106,19 @@ function Row({ card }: { card: ScanSummaryCard }): React.JSX.Element {
 /** The night so far, over the camera blurred behind it: the hit, then every card and price. */
 export function SummaryScreen({
   summary,
-  leaving = false
+  leaving = false,
+  pageRows = PAGE_ROWS,
+  className
 }: {
   summary: ScanSummary
   leaving?: boolean
+  /** Rows to a page, for a box with less room than the stream window (the phone's). */
+  pageRows?: number
+  /** Extra classes for the screen, such as padding clear of a notch. */
+  className?: string
 }): React.JSX.Element {
   const { value, cards, hits, unpriced, hit, list } = summary
-  const pages = Math.max(1, Math.ceil(list.length / PAGE_ROWS))
+  const pages = Math.max(1, Math.ceil(list.length / pageRows))
   const page = usePage(pages)
   return (
     <div
@@ -122,7 +128,8 @@ export function SummaryScreen({
         'absolute inset-0 flex flex-col overflow-hidden bg-neutral-950/65 px-[4vw] py-[4vh] text-white backdrop-blur-[2vw] motion-reduce:animate-none',
         leaving
           ? 'animate-out fade-out fill-mode-forwards duration-300'
-          : 'animate-in fade-in duration-500'
+          : 'animate-in fade-in duration-500',
+        className
       )}
       style={{
         backgroundImage:
@@ -143,14 +150,14 @@ export function SummaryScreen({
             <Stat value={cards} label={cards === 1 ? 'card' : 'cards'} />
             <Stat value={hits} label={hits === 1 ? 'hit' : 'hits'} />
           </div>
-          <div className="mt-[2.5vh] flex min-h-0 flex-1 gap-[3vw]">
+          <div className="mt-[2.5vh] flex min-h-0 flex-1 gap-[3vw] portrait:flex-col portrait:gap-[2vh]">
             {hit && <Hit card={hit} />}
             <section
               aria-label="Every card"
               className="min-w-0 flex-1 animate-in fade-in slide-in-from-right-[2vw] duration-700 motion-reduce:animate-none"
             >
               <ol>
-                {list.slice(page * PAGE_ROWS, (page + 1) * PAGE_ROWS).map((c) => (
+                {list.slice(page * pageRows, (page + 1) * pageRows).map((c) => (
                   <Row key={c.key} card={c} />
                 ))}
               </ol>

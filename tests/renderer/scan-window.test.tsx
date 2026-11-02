@@ -1197,4 +1197,37 @@ describe('PullOverlay for Pokémon pulls', () => {
     rerender(<PullOverlay pull={pull({ key: 3, price: 5 })} />)
     expect(screen.getByRole('status', { name: 'Pull' })).not.toHaveTextContent('Raw')
   })
+
+  it('lays the bar out for a phone stream, leaving the desktop bar as it was', () => {
+    const { rerender } = renderWithProviders(<PullOverlay pull={pull()} />)
+    const desktop = screen.getByLabelText('Pull').className
+    expect(desktop).toContain('left-[3vw]')
+    expect(desktop).not.toContain('safe-area')
+    rerender(<PullOverlay pull={pull()} phone />)
+    const bar = screen.getByLabelText('Pull').className
+    expect(bar).toContain('inset-x-3')
+    expect(bar).toContain('env(safe-area-inset-bottom)')
+    expect(bar).toContain('landscape:max-w-[55vw]')
+    expect(bar).not.toContain('left-[3vw]')
+  })
+
+  it('puts the found bubble below the safe area on a phone, and leaves the desktop one', () => {
+    const bubbleBox = (container: HTMLElement): string =>
+      container.querySelector('[data-found-burst] > .inset-x-0.flex')!.className
+    const { container, rerender } = renderWithProviders(<PullOverlay pull={pull()} />)
+    const desktop = bubbleBox(container)
+    expect(desktop).toContain('top-[4vw]')
+    expect(desktop).not.toContain('safe-area')
+    rerender(<PullOverlay pull={pull()} phone />)
+    const phone = bubbleBox(container)
+    expect(phone).toContain('top-[calc(env(safe-area-inset-top)+3.5rem)]')
+    expect(phone).toContain('landscape:pl-[max(4vw,env(safe-area-inset-left))]')
+    expect(phone).toContain('landscape:pr-[max(4vw,env(safe-area-inset-right))]')
+    expect(phone).not.toContain('top-[4vw]')
+  })
+
+  it('keeps the phone hit moment under the clock', () => {
+    renderWithProviders(<PullOverlay pull={pull({ hit: true, price: 90 })} phone />)
+    expect(screen.getByLabelText('Hit').className).toContain('env(safe-area-inset-top)')
+  })
 })

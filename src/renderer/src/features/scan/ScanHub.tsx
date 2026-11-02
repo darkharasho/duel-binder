@@ -195,6 +195,8 @@ export function ScanHubProvider({ children }: { children: React.ReactNode }): Re
   const [summaryOn, setSummaryOn] = useState(false)
   const highlightTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const [seen] = useState(createSeen)
+  // The row each draft became, in memory: after a reload a read has no row to find, and is dropped.
+  const [rowKeys] = useState(() => new Map<string, string>())
   const { add, applyRead, refreshPrices } = session
 
   // Unpriced non-English pulls on the list: ask for their prices, and fill them in as syncs bring them.
@@ -315,13 +317,18 @@ export function ScanHubProvider({ children }: { children: React.ReactNode }): Re
         setState(null)
         sendSettings()
       } else if (m.kind === 'state') setState(m.state)
-      else {
+      else if (m.kind === 'rarity') {
+        const key = rowKeys.get(m.id)
+        if (key !== undefined) reread(key, m.draft)
+        // Acknowledged either way, so the window stops resending it.
+        scanWindow.send({ kind: 'rarityAck', id: m.id })
+      } else {
         // A pull of the other game waits, unacknowledged (so the window sends it again), until
         // that game is the one shown.
         if ((m.draft.game ?? 'ygo') !== gameRef.current) return
         if (!seen.has(m.id)) {
           seen.add(m.id)
-          count(m.draft)
+          rowKeys.set(m.id, count(m.draft))
         }
         // Acknowledged once it's on the list (saved there), and again for every resend.
         scanWindow.send({ kind: 'ack', id: m.id, scanned: copiesOf(m.draft) })
@@ -333,7 +340,7 @@ export function ScanHubProvider({ children }: { children: React.ReactNode }): Re
       offMessage()
       clearTimeout(highlightTimer.current)
     }
-  }, [copiesOf, count, sendSettings, setSettings, seen])
+  }, [copiesOf, count, reread, rowKeys, sendSettings, setSettings, seen])
 
   const hub = useMemo<ScanHub>(
     () => ({

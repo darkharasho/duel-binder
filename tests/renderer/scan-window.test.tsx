@@ -796,6 +796,73 @@ describe('Scan window tilt', () => {
   })
 })
 
+describe('Scan window rarity reads', () => {
+  const MODEL: TiltModel = {
+    features: ['f'],
+    classes: ['Common', 'Ultra Rare'],
+    pairs: [{ a: 'Common', b: 'Ultra Rare', use: [0], mean: [0], spread: [1], ca: [-1], cb: [1] }]
+  }
+  const USABLE: TiltReading = { features: [1], frames: 10, motion: 50 }
+  const FOILS = [
+    printing({ rarity: 'Common' }),
+    printing({ printingId: 102, rarity: 'Ultra Rare' })
+  ]
+  const held = (): RawSignals => ({
+    ...codeFrame('LOB-EN005'),
+    art: [{ imageId: 46986414, distance: 10 }]
+  })
+  const rarities = (): { id: string; draft: ScanDraft }[] =>
+    bridge.sent.flatMap((m) => (m.kind === 'rarity' ? [{ id: m.id, draft: m.draft }] : []))
+
+  async function start(): Promise<string> {
+    stubCamera()
+    const engine = tiltEngine(
+      () => held(),
+      () => USABLE
+    )
+    renderWithProviders(
+      <ScanWindowApp engineFactory={() => engine} tiltModels={{ ygo: MODEL }} />,
+      {
+        api: createMockApi({
+          scanWindow: bridge.scanWindow,
+          scan: { printingsByCode: vi.fn(async () => FOILS) }
+        })
+      }
+    )
+    act(() => bridge.emit({ kind: 'settings', settings: SETTINGS }))
+    await run()
+    await run(1000)
+    return [...sends().keys()][0]
+  }
+
+  it('sends no rarity for a pull the main window has not acknowledged', async () => {
+    const id = await start()
+    await run(10000)
+    expect(id).toBeTruthy()
+    expect(rarities()).toEqual([])
+  })
+
+  it('once acknowledged, resends the read every 2 s until rarityAck, then stops', async () => {
+    const id = await start()
+    act(() => bridge.emit({ kind: 'ack', id, scanned: 1 }))
+    await run(10000)
+    const n = rarities().length
+    expect(n).toBeGreaterThanOrEqual(2)
+    expect(rarities()[0]).toMatchObject({ id, draft: { rarity: 'Ultra Rare' } })
+    act(() => bridge.emit({ kind: 'rarityAck', id }))
+    await run(10000)
+    expect(rarities()).toHaveLength(n)
+  })
+
+  it('ignores a rarityAck for an id it does not hold', async () => {
+    const id = await start()
+    act(() => bridge.emit({ kind: 'rarityAck', id: 'nope' }))
+    act(() => bridge.emit({ kind: 'ack', id, scanned: 1 }))
+    await run(4000)
+    expect(rarities().length).toBeGreaterThan(0)
+  })
+})
+
 describe('Scan window and the game', () => {
   it('scans the active game, and re-inits when the game changes', async () => {
     stubCamera()

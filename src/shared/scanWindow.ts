@@ -104,6 +104,8 @@ export type ToScanWindow =
    * window stops resending it.
    */
   | { kind: 'ack'; id: string; scanned: number }
+  /** The hub has handled the background rarity read for this id (applied or not); stop resending it. */
+  | { kind: 'rarityAck'; id: string }
   /** Shows the summary screen with these numbers, or takes it away. */
   | { kind: 'summary'; summary: ScanSummary | null }
 
@@ -112,6 +114,11 @@ export type FromScanWindow =
   | { kind: 'state'; state: ScanWindowState }
   /** A pull to count. Resent until acknowledged, so the same id can arrive more than once. */
   | { kind: 'draft'; id: string; draft: ScanDraft }
+  /**
+   * A quiet second look at the card of the draft with this id, its rarity read from the frames
+   * that followed. Sent only once that draft is acknowledged; resent until `rarityAck`.
+   */
+  | { kind: 'rarity'; id: string; draft: ScanDraft }
 
 export type ScanWindowMessage = ToScanWindow | FromScanWindow
 
@@ -121,9 +128,10 @@ const TO: readonly string[] = [
   'retryScan',
   'takePhoto',
   'ack',
+  'rarityAck',
   'summary'
 ]
-const FROM: readonly string[] = ['ready', 'state', 'draft']
+const FROM: readonly string[] = ['ready', 'state', 'draft', 'rarity']
 
 const kindOf = (v: unknown): unknown =>
   typeof v === 'object' && v !== null ? (v as { kind?: unknown }).kind : undefined

@@ -270,6 +270,44 @@ describe('Scan page', () => {
     ])
   })
 
+  it("a rarity read from the window updates that pull's row and is acknowledged", async () => {
+    await renderScan()
+    await openWindow()
+    act(() => bridge.emit({ kind: 'draft', id: 'd1', draft: draft({ flag: 'check-rarity' }) }))
+    act(() =>
+      bridge.emit({
+        kind: 'rarity',
+        id: 'd1',
+        draft: draft({
+          printingId: 102,
+          rarity: 'Rare',
+          flag: 'check-rarity',
+          options: [printing({ rarity: 'Common' }), printing({ printingId: 102, rarity: 'Rare' })]
+        })
+      })
+    )
+    const saved = JSON.parse(localStorage.getItem(SESSION_KEY)!) as ScanRow[]
+    expect(saved[0]).toMatchObject({
+      printingId: 102,
+      rarity: 'Rare',
+      flag: 'check-rarity',
+      read: true
+    })
+    expect(bridge.sent.at(-1)).toEqual({ kind: 'rarityAck', id: 'd1' })
+  })
+
+  it('a rarity read for an unknown pull changes no row and is still acknowledged', async () => {
+    await renderScan()
+    await openWindow()
+    act(() => bridge.emit({ kind: 'draft', id: 'd1', draft: draft({ flag: 'check-rarity' }) }))
+    act(() =>
+      bridge.emit({ kind: 'rarity', id: 'zzz', draft: draft({ printingId: 102, rarity: 'Rare' }) })
+    )
+    const saved = JSON.parse(localStorage.getItem(SESSION_KEY)!) as ScanRow[]
+    expect(saved[0]).toMatchObject({ printingId: 101, rarity: 'Ultra Rare' })
+    expect(bridge.sent.at(-1)).toEqual({ kind: 'rarityAck', id: 'zzz' })
+  })
+
   it('drops a pull resent after the main window reloads', async () => {
     const { unmount } = await renderScan()
     await openWindow()

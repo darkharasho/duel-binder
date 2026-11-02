@@ -280,8 +280,6 @@ export const PHOTO_SETTLE_MS = 4000
 
 /** The window of kept frames a tilt reads. */
 export const TILT_MS = 2000
-/** A tilt with no usable reading by now is dropped, and the card counted as without a tilt. */
-export const TILT_TIMEOUT_MS = 4000
 /**
  * A background read with no usable reading this long after its card counted ends; it keeps no
  * more frames and asks for no more readings.

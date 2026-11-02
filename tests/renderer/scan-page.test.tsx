@@ -2,7 +2,7 @@ import { act, fireEvent, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { AccountStatus, SetSummary } from '@shared/types'
 import type { ScanDraft } from '@shared/scan/types'
-import type { ScanWindowSettings, ScanWindowState } from '@shared/scanWindow'
+import { isToScanWindow, type ScanWindowSettings, type ScanWindowState } from '@shared/scanWindow'
 import type { RawSignals } from '@/features/scan/engine'
 import App from '@/App'
 import { Toaster } from '@/components/ui/sonner'
@@ -419,15 +419,8 @@ describe('Scan page', () => {
     expect(screen.queryByText('Hold a card up')).not.toBeInTheDocument()
   })
 
-  it("Skip shows while the scan window's card is held for a tilt, and sends skipTilt", async () => {
-    await renderScan()
-    await openWindow()
-    expect(screen.queryByRole('button', { name: 'Skip' })).toBeNull()
-    report({ loop: { kind: 'tilt', name: 'Dark Magician' } })
-    expect(screen.getByText('Tilt the card')).toBeInTheDocument()
-    expect(screen.getByText('Dark Magician')).toBeInTheDocument()
-    await user().click(screen.getByRole('button', { name: 'Skip' }))
-    expect(bridge.sent).toContainEqual({ kind: 'skipTilt' })
+  it('the scan window no longer takes a skipTilt message', () => {
+    expect(isToScanWindow({ kind: 'skipTilt' })).toBe(false)
   })
 
   it("shows the scan window's notices", async () => {

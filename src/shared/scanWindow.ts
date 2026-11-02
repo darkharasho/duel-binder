@@ -8,8 +8,6 @@ export type ScanStatus =
   | { kind: 'reading' }
   | { kind: 'photo-failed' }
   | { kind: 'added'; name: string; setCode: string | null; guess?: true }
-  /** Holding a recognized card, with foils it could be, for the user to tilt. */
-  | { kind: 'tilt'; name: string }
   | { kind: 'stopped' }
 
 /** The languages a Pokémon card is catalogued in. */
@@ -108,8 +106,6 @@ export type ToScanWindow =
   | { kind: 'ack'; id: string; scanned: number }
   /** Shows the summary screen with these numbers, or takes it away. */
   | { kind: 'summary'; summary: ScanSummary | null }
-  /** Ends the tilt now; the held card counts as it would have without one. */
-  | { kind: 'skipTilt' }
 
 export type FromScanWindow =
   | { kind: 'ready' }
@@ -125,8 +121,7 @@ const TO: readonly string[] = [
   'retryScan',
   'takePhoto',
   'ack',
-  'summary',
-  'skipTilt'
+  'summary'
 ]
 const FROM: readonly string[] = ['ready', 'state', 'draft']
 

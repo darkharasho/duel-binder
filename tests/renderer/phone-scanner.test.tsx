@@ -652,13 +652,11 @@ describe('phone scanner on Pokémon', () => {
 })
 
 describe('phone scanner tilt', () => {
-  // One feature: below 0 reads as Super Rare, above it as Ultra Rare.
+  // One feature: below 0 reads as Common, above it as Ultra Rare.
   const MODEL: TiltModel = {
     features: ['f'],
-    classes: ['Super Rare', 'Ultra Rare'],
-    pairs: [
-      { a: 'Super Rare', b: 'Ultra Rare', use: [0], mean: [0], spread: [1], ca: [-1], cb: [1] }
-    ]
+    classes: ['Common', 'Ultra Rare'],
+    pairs: [{ a: 'Common', b: 'Ultra Rare', use: [0], mean: [0], spread: [1], ca: [-1], cb: [1] }]
   }
   const FEW: TiltReading = { features: [1], frames: 4, motion: 50 }
   const FOILS = [
@@ -699,19 +697,35 @@ describe('phone scanner tilt', () => {
     await settle(1000)
   }
 
-  it('the phone shows the tilt prompt with Skip, and Skip counts the card', async () => {
+  it('counts a card with an unsure Common/Ultra Rare rarity on its first recognized frame, with tilt models given', async () => {
     const engine = tiltEngine(
       () => held(),
       () => FEW
     )
-    await renderCamera(engine, { ygo: MODEL })
-    expect(screen.getByText('Tilt the card')).toBeInTheDocument()
-    expect(screen.getByText('Dark Magician')).toBeInTheDocument()
-    expect(screen.getByTestId('counted')).toHaveTextContent('0')
-    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
-    await user.click(screen.getByRole('button', { name: 'Skip' }))
-    await settle(500)
+    const options = [
+      printing({ rarity: 'Common' }),
+      printing({ printingId: 102, rarity: 'Ultra Rare' })
+    ]
+    vi.useFakeTimers()
+    vi.stubGlobal('jest', { advanceTimersByTime: (ms: number) => vi.advanceTimersByTime(ms) })
+    renderWithProviders(
+      <GameProvider>
+        <ScanHubProvider>
+          <Counted />
+          <PhoneCamera engineFactory={() => engine} tiltModels={{ ygo: MODEL }} />
+        </ScanHubProvider>
+      </GameProvider>,
+      {
+        api: createMockApi({
+          scanWindow: fakeBridge().scanWindow,
+          scan: { printingsByCode: vi.fn(async () => options) }
+        })
+      }
+    )
+    await settle()
+    await settle(1000)
     expect(screen.getByTestId('counted')).toHaveTextContent('1')
+    expect(screen.queryByText('Tilt the card')).toBeNull()
     expect(screen.queryByRole('button', { name: 'Skip' })).toBeNull()
   })
 
@@ -722,11 +736,10 @@ describe('phone scanner tilt', () => {
   })
 
   it('useHubScan never tilts unless given tilt models', async () => {
-    const kinds = new Set<string>()
     function Bare(): React.JSX.Element {
       const videoRef = useRef<HTMLVideoElement>(null)
       const camera = useCamera(null, 'environment')
-      const { loop } = hubScan.useHubScan({
+      hubScan.useHubScan({
         videoRef,
         stream: camera.stream,
         engineFactory: () =>
@@ -735,7 +748,6 @@ describe('phone scanner tilt', () => {
             () => FEW
           )
       })
-      kinds.add(loop.status.kind)
       return <video ref={videoRef} />
     }
     vi.useFakeTimers()
@@ -757,7 +769,6 @@ describe('phone scanner tilt', () => {
     await settle()
     await settle(1500)
     expect(screen.getByTestId('counted')).toHaveTextContent('1')
-    expect(kinds.has('tilt')).toBe(false)
   })
 })
 

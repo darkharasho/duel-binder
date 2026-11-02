@@ -3,7 +3,6 @@ import type { SetSummary } from '@shared/types'
 import type { ScanDraft, ScanPrinting } from '@shared/scan/types'
 import type { TiltModel } from '@shared/scan/tilt'
 import type { TiltReading } from '@shared/scan/tiltFeatures'
-import { ABSENT_MS, TILT_MS, TILT_RETRY_MS, TILT_TIMEOUT_MS } from '@shared/scan/thresholds'
 import type { ScanWindowSettings, ScanWindowState } from '@shared/scanWindow'
 import type { RawSignals } from '@/features/scan/engine'
 import { ScanWindowApp } from '@/features/scan/window/ScanWindowApp'
@@ -754,7 +753,6 @@ describe('Scan window tilt', () => {
     classes: ['Common', 'Ultra Rare'],
     pairs: [{ a: 'Common', b: 'Ultra Rare', use: [0], mean: [0], spread: [1], ca: [-1], cb: [1] }]
   }
-  const ULTRA: TiltReading = { features: [1], frames: 20, motion: 50 }
   const FEW: TiltReading = { features: [1], frames: 4, motion: 50 }
   const FOILS = [
     printing({ rarity: 'Common' }),
@@ -764,26 +762,6 @@ describe('Scan window tilt', () => {
     ...codeFrame(code),
     art: [{ imageId, distance: 10 }]
   })
-  // Another card with two foils of its own.
-  const OTHER = [
-    printing({
-      printingId: 201,
-      cardId: 2,
-      name: 'Blue-Eyes White Dragon',
-      setCode: 'LOB-EN001',
-      rarity: 'Common',
-      imageIds: [777]
-    }),
-    printing({
-      printingId: 202,
-      cardId: 2,
-      name: 'Blue-Eyes White Dragon',
-      setCode: 'LOB-EN001',
-      rarity: 'Ultra Rare',
-      imageIds: [777]
-    })
-  ]
-
   async function renderTilt(
     engine: FakeEngine,
     printings: Record<string, ScanPrinting[]> = { 'LOB-EN005': FOILS },
@@ -802,31 +780,7 @@ describe('Scan window tilt', () => {
     await run()
   }
 
-  const everTilted = (): boolean =>
-    bridge.sent.some((m) => m.kind === 'state' && m.state.loop.kind === 'tilt')
-
-  it('a code with Super and Ultra holds the card and asks for a tilt', async () => {
-    stubCamera()
-    const engine = tiltEngine(
-      () => held(),
-      () => FEW
-    )
-    await renderTilt(engine)
-    await run(1000)
-    expect(lastState().loop).toEqual({ kind: 'tilt', name: 'Dark Magician' })
-    expect(drafts()).toHaveLength(0)
-    // Tilt frames are kept for the card's art, stamped when grabbed, and read no text.
-    const tiltCall = engine.analyze.mock.calls.find(([, o]) => o.tilt)
-    expect(tiltCall?.[1]).toMatchObject({
-      tilt: [46986414],
-      wantText: false,
-      at: expect.any(Number)
-    })
-    // Unmounting counts a held card, and teardown takes window.api away before it unmounts.
-    act(() => bridge.emit({ kind: 'skipTilt' }))
-  })
-
-  it('the scan window shows no tilt prompt, so a stream never captures one', async () => {
+  it('a card with unsure Common/Ultra Rare options counts on its first recognized frame', async () => {
     stubCamera()
     await renderTilt(
       tiltEngine(
@@ -835,249 +789,10 @@ describe('Scan window tilt', () => {
       )
     )
     await run(1000)
-    expect(lastState().loop.kind).toBe('tilt')
+    expect(drafts()).toEqual([expect.objectContaining({ name: 'Dark Magician' })])
+    expect(lastState().loop).toMatchObject({ kind: 'added', name: 'Dark Magician' })
     expect(screen.queryByText(/Tilt the card/)).toBeNull()
     expect(screen.queryByRole('button', { name: 'Skip' })).toBeNull()
-    act(() => bridge.emit({ kind: 'skipTilt' }))
-  })
-
-  it('a usable reading pre-selects its guess and keeps Check rarity', async () => {
-    stubCamera()
-    await renderTilt(
-      tiltEngine(
-        () => held(),
-        () => ULTRA
-      )
-    )
-    await run(1000 + TILT_MS + 200)
-    expect(drafts()).toEqual([
-      expect.objectContaining({ printingId: 102, rarity: 'Ultra Rare', flag: 'check-rarity' })
-    ])
-    expect(lastState().loop).toMatchObject({ kind: 'added', name: 'Dark Magician' })
-  })
-
-  it('Common against a rarity the model lacks asks for no tilt', async () => {
-    stubCamera()
-    const one = [printing({ rarity: 'Common' }), printing({ printingId: 102, rarity: 'Rare' })]
-    await renderTilt(
-      tiltEngine(
-        () => held(),
-        () => ULTRA
-      ),
-      { 'LOB-EN005': one }
-    )
-    await run(1000)
-    expect(drafts()).toEqual([expect.objectContaining({ rarity: 'Common' })])
-    expect(everTilted()).toBe(false)
-  })
-
-  it('no usable tilt in TILT_TIMEOUT_MS counts the card as today', async () => {
-    stubCamera()
-    const engine = tiltEngine(
-      () => held(),
-      () => FEW
-    )
-    await renderTilt(engine)
-    await run(1000 + TILT_TIMEOUT_MS + 200)
-    expect(drafts()).toEqual([expect.objectContaining({ rarity: 'Common', flag: 'check-rarity' })])
-    // Asked again only TILT_RETRY_MS after each reply, from TILT_MS on.
-    const asks = vi.mocked(engine.tiltReading!).mock.calls.length
-    expect(asks).toBeGreaterThanOrEqual(2)
-    expect(asks).toBeLessThanOrEqual((TILT_TIMEOUT_MS - TILT_MS) / TILT_RETRY_MS + 1)
-  })
-
-  it('a reading still out at the timeout counts the card once; its late reply changes nothing', async () => {
-    stubCamera()
-    const engine = tiltEngine(
-      () => held(),
-      () => ULTRA
-    )
-    let reply: (r: TiltReading) => void = () => {}
-    vi.mocked(engine.tiltReading!).mockImplementation(
-      () => new Promise<TiltReading>((resolve) => (reply = resolve))
-    )
-    await renderTilt(engine)
-    await run(1000 + TILT_TIMEOUT_MS + 200)
-    expect(engine.tiltReading).toHaveBeenCalledTimes(1)
-    expect(drafts()).toEqual([expect.objectContaining({ rarity: 'Common' })])
-    await act(async () => reply(ULTRA))
-    await run(500)
-    expect(drafts()).toHaveLength(1)
-  })
-
-  it('Skip counts the card as today, once, even pressed twice', async () => {
-    stubCamera()
-    await renderTilt(
-      tiltEngine(
-        () => held(),
-        () => FEW
-      )
-    )
-    await run(1000)
-    expect(lastState().loop.kind).toBe('tilt')
-    act(() => bridge.emit({ kind: 'skipTilt' }))
-    act(() => bridge.emit({ kind: 'skipTilt' }))
-    await run(TILT_TIMEOUT_MS)
-    expect(drafts()).toEqual([expect.objectContaining({ rarity: 'Common' })])
-  })
-
-  it('a Skip after the guess counted changes nothing and skips no next card', async () => {
-    stubCamera()
-    let other = false
-    const engine = tiltEngine(
-      () => (other ? held('LOB-EN001', 777) : held()),
-      () => ULTRA
-    )
-    await renderTilt(engine, { 'LOB-EN005': FOILS, 'LOB-EN001': OTHER })
-    await run(1000 + TILT_MS + 200)
-    expect(drafts()).toHaveLength(1)
-    act(() => bridge.emit({ kind: 'skipTilt' }))
-    other = true
-    await run(1000)
-    expect(lastState().loop).toEqual({ kind: 'tilt', name: 'Blue-Eyes White Dragon' })
-    await run(TILT_MS + 200)
-    expect(drafts()).toEqual([
-      expect.objectContaining({ cardId: 1, rarity: 'Ultra Rare' }),
-      expect.objectContaining({ cardId: 2, printingId: 202, rarity: 'Ultra Rare' })
-    ])
-  })
-
-  it('a card lowered mid-tilt counts once as today', async () => {
-    stubCamera()
-    let lowered = false
-    await renderTilt(
-      tiltEngine(
-        () => (lowered ? NOTHING : held()),
-        () => FEW
-      )
-    )
-    await run(1000)
-    expect(lastState().loop.kind).toBe('tilt')
-    lowered = true
-    await run(ABSENT_MS + 300)
-    expect(drafts()).toEqual([expect.objectContaining({ rarity: 'Common' })])
-    expect(lastState().loop.kind).not.toBe('tilt')
-    await run(2000)
-    expect(drafts()).toHaveLength(1)
-  })
-
-  it('a frame that waited behind a reading is late, not a lowered card: the retry still counts', async () => {
-    stubCamera()
-    // The worker is serial: a frame sent while a reading is out waits for it, then takes its own
-    // time, so the two together leave a gap between frames longer than ABSENT_MS.
-    const READ_MS = 400
-    const FRAME_WAIT_MS = 300
-    expect(READ_MS + FRAME_WAIT_MS).toBeGreaterThan(ABSENT_MS)
-    const engine = tiltEngine(
-      () => held(),
-      () => ULTRA
-    )
-    const analyze = engine.analyze.getMockImplementation() as (
-      ...args: Parameters<FakeEngine['analyze']>
-    ) => Promise<RawSignals>
-    const readings = [FEW, ULTRA]
-    let pending: Promise<unknown> | null = null
-    vi.mocked(engine.tiltReading!).mockImplementation(() => {
-      const r = readings.shift() ?? ULTRA
-      const p = new Promise<TiltReading>((resolve) => setTimeout(() => resolve(r), READ_MS))
-      pending = p
-      void p.then(() => {
-        if (pending === p) pending = null
-      })
-      return p
-    })
-    engine.analyze.mockImplementation(async (...args: Parameters<FakeEngine['analyze']>) => {
-      if (pending) {
-        await pending
-        await new Promise((resolve) => setTimeout(resolve, FRAME_WAIT_MS))
-      }
-      return analyze(...args)
-    })
-    await renderTilt(engine)
-    await run(1000)
-    expect(lastState().loop.kind).toBe('tilt')
-    await run(TILT_MS + 2 * (READ_MS + FRAME_WAIT_MS) + TILT_RETRY_MS + 200)
-    // The first reading had too few frames; the frame stalled behind it didn't end the tilt, so
-    // the retry was asked and its guess counts.
-    expect(engine.tiltReading).toHaveBeenCalledTimes(2)
-    expect(drafts()).toEqual([
-      expect.objectContaining({ printingId: 102, rarity: 'Ultra Rare', flag: 'check-rarity' })
-    ])
-    await run(2000)
-    expect(drafts()).toHaveLength(1)
-  })
-
-  it('another card mid-tilt counts the held one as today, then scans the new one', async () => {
-    stubCamera()
-    let other = false
-    const single = [OTHER[1]]
-    await renderTilt(
-      tiltEngine(
-        () => (other ? held('LOB-EN001', 777) : held()),
-        () => FEW
-      ),
-      { 'LOB-EN005': FOILS, 'LOB-EN001': single }
-    )
-    await run(1000)
-    expect(lastState().loop.kind).toBe('tilt')
-    other = true
-    await run(1000)
-    expect(drafts()).toEqual([
-      expect.objectContaining({ cardId: 1, rarity: 'Common' }),
-      expect.objectContaining({ cardId: 2, rarity: 'Ultra Rare' })
-    ])
-  })
-
-  it('a worker that fails the reading counts the card as today', async () => {
-    stubCamera()
-    const engine = tiltEngine(
-      () => held(),
-      () => new Error('worker gone')
-    )
-    await renderTilt(engine)
-    await run(1000 + TILT_MS + 200)
-    expect(drafts()).toEqual([expect.objectContaining({ rarity: 'Common' })])
-    expect(engine.tiltReset).toHaveBeenCalled()
-  })
-
-  it('an engine without tilt support never asks for a tilt', async () => {
-    stubCamera()
-    await renderTilt(fakeEngine(() => held()))
-    await run(1000)
-    expect(drafts()).toEqual([expect.objectContaining({ rarity: 'Common' })])
-    expect(everTilted()).toBe(false)
-  })
-
-  it('pausing mid-tilt counts the card once and clears the frames', async () => {
-    stubCamera()
-    const engine = tiltEngine(
-      () => held(),
-      () => FEW
-    )
-    await renderTilt(engine)
-    await run(1000)
-    expect(lastState().loop.kind).toBe('tilt')
-    settings({ paused: true })
-    await run(TILT_TIMEOUT_MS)
-    expect(drafts()).toEqual([expect.objectContaining({ rarity: 'Common' })])
-    expect(engine.tiltReset).toHaveBeenCalled()
-  })
-
-  it('under a default rarity no tilt is asked for', async () => {
-    stubCamera()
-    await renderTilt(
-      tiltEngine(
-        () => held(),
-        () => ULTRA
-      ),
-      undefined,
-      {
-        defaultRarity: 'Common'
-      }
-    )
-    await run(1000)
-    expect(drafts()).toEqual([expect.objectContaining({ rarity: 'Common' })])
-    expect(everTilted()).toBe(false)
   })
 })
 

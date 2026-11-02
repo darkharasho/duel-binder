@@ -131,7 +131,7 @@ function Scanner({
   }, [settings.paused, clear])
 
   const { retry: retryCamera } = camera
-  const { retry: retryScan, takePhoto, skipTilt } = loop
+  const { retry: retryScan, takePhoto } = loop
   useEffect(
     () =>
       window.api.scanWindow.onMessage((m) => {
@@ -140,9 +140,8 @@ function Scanner({
         else if (m.kind === 'retryCamera') retryCamera()
         else if (m.kind === 'retryScan') retryScan()
         else if (m.kind === 'takePhoto') takePhoto()
-        else if (m.kind === 'skipTilt') skipTilt()
       }),
-    [retryCamera, retryScan, takePhoto, skipTilt]
+    [retryCamera, retryScan, takePhoto]
   )
 
   useEffect(() => {

@@ -254,24 +254,13 @@ export function ScanPage({
               </div>
             ) : (
               <div className="flex items-center gap-3">
-                {!settings.paused && state?.openDeviceId && state.loop.kind === 'tilt' ? (
-                  <p role="status">
-                    Tilt the card <span className="text-muted-foreground">{state.loop.name}</span>
-                  </p>
-                ) : (
-                  <p role="status">
-                    {settings.paused
-                      ? 'Paused'
-                      : !state || state.openDeviceId === null
-                        ? 'Starting camera…'
-                        : statusText(state.loop)}
-                  </p>
-                )}
-                {!settings.paused && state?.openDeviceId && state.loop.kind === 'tilt' && (
-                  <Button variant="outline" size="xs" onClick={hub.skipTilt}>
-                    Skip
-                  </Button>
-                )}
+                <p role="status">
+                  {settings.paused
+                    ? 'Paused'
+                    : !state || state.openDeviceId === null
+                      ? 'Starting camera…'
+                      : statusText(state.loop)}
+                </p>
                 {!settings.paused && state?.loop.kind === 'stopped' && (
                   <Button variant="outline" size="xs" onClick={hub.retryScan}>
                     Retry

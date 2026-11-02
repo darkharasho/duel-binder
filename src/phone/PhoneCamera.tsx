@@ -77,8 +77,7 @@ function CameraBackdrop({ stream }: { stream: MediaStream | null }): React.JSX.E
  * Unlike the desktop's scanners, it reads rarity with the look model after the name and frame
  * rules (useScanLoop's lookModel): it was fitted and tested on photos the size of a phone
  * camera's, and gains nothing on a desktop webcam. It reads Yu-Gi-Oh! rarities only, so a game
- * without them (Pokémon) scans without it. It also asks for a tilt to read
- * a card's rarity (TILT_MODELS), with Skip. `lookModel` and `tiltModels` are for tests.
+ * without them (Pokémon) scans without it. `lookModel` and `tiltModels` are for tests.
  */
 export function PhoneCamera({
   engineFactory = defaultEngine,

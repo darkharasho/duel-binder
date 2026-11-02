@@ -292,3 +292,9 @@ export const TILT_MIN_FRAMES = 12
 export const TILT_MAX_FRAMES = 40
 /** A reading needs at least this much motion in the art; set from the corpus. */
 export const TILT_MIN_MOTION = 0
+/**
+ * Largest art distance at which a frame is kept for a tilt. Looser than ART_MAX_DISTANCE: a
+ * tilted foil's glare moves its art's hash, and those frames carry the most of its finish. Still
+ * tight enough that a hand or a bad outline over the held card's art isn't kept.
+ */
+export const TILT_MAX_ART_DISTANCE = ART_MAX_DISTANCE * 1.5

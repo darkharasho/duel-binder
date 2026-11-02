@@ -11,7 +11,15 @@ const band = (width: number): OcrBand => ({
 })
 
 interface Posted {
-  msg: { type: string; wantBands?: boolean; wantLook?: boolean; tilt?: number[]; game?: string }
+  msg: {
+    type: string
+    wantBands?: boolean
+    wantLook?: boolean
+    tilt?: number[]
+    at?: number
+    game?: string
+    now?: number
+  }
   transfer?: Transferable[]
 }
 
@@ -350,10 +358,26 @@ describe('createScanEngine', () => {
     const { worker, posted } = fakeWorker(NO_CARD, reading)
     const engine = createScanEngine({ api: createMockApi().scan, makeWorker: () => worker })
     await engine.init(null)
-    await expect(engine.tiltReading!('pkm')).resolves.toEqual(reading)
-    expect(posted.at(-1)!.msg).toEqual({ type: 'tiltReading', id: expect.any(Number), game: 'pkm' })
+    await expect(engine.tiltReading!('pkm', 5000)).resolves.toEqual(reading)
+    // The window ends at the loop's now, not when the worker gets round to it.
+    expect(posted.at(-1)!.msg).toEqual({
+      type: 'tiltReading',
+      id: expect.any(Number),
+      game: 'pkm',
+      now: 5000
+    })
     engine.tiltReset!()
     expect(posted.at(-1)!.msg).toEqual({ type: 'tiltReset' })
+  })
+
+  it('a tilt reset starts no worker, and does nothing after dispose', () => {
+    const makeWorker = vi.fn(() => fakeWorker(NO_CARD).worker)
+    const engine = createScanEngine({ api: createMockApi().scan, makeWorker })
+    engine.tiltReset!()
+    expect(makeWorker).not.toHaveBeenCalled()
+    engine.dispose()
+    expect(() => engine.tiltReset!()).not.toThrow()
+    expect(makeWorker).not.toHaveBeenCalled()
   })
 
   it('a tilt reading rejects when the worker dies', async () => {
@@ -385,14 +409,23 @@ describe('createScanEngine', () => {
     await expect(engine.tiltReading!('ygo')).rejects.toThrow('bad frame')
   })
 
-  it('passes the tilt images with a frame', async () => {
+  it('passes the tilt images with a frame, and when it was grabbed', async () => {
     const { worker, posted } = fakeWorker({ ...NO_CARD, tiltKept: true })
     const engine = createScanEngine({ api: createMockApi().scan, makeWorker: () => worker })
     await engine.init(null)
-    const out = await engine.analyze(frame(), { candidates: [7], wantText: false, tilt: [7] })
-    expect(posted.at(-1)!.msg).toMatchObject({ type: 'frame', tilt: [7] })
+    const out = await engine.analyze(frame(), {
+      candidates: [7],
+      wantText: false,
+      tilt: [7],
+      at: 1234
+    })
+    expect(posted.at(-1)!.msg).toMatchObject({ type: 'frame', tilt: [7], at: 1234 })
     expect(out.tiltKept).toBe(true)
+    // Left out, it's taken as the frame is handed over.
+    await engine.analyze(frame(), { candidates: [7], wantText: false, tilt: [7] })
+    expect(posted.at(-1)!.msg.at).toEqual(expect.any(Number))
     await engine.analyze(frame(), { candidates: null, wantText: false })
     expect(posted.at(-1)!.msg).not.toHaveProperty('tilt')
+    expect(posted.at(-1)!.msg).not.toHaveProperty('at')
   })
 })

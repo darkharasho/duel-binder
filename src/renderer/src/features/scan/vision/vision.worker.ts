@@ -10,7 +10,7 @@ import { analyze } from './analyze'
 import { loadCv } from './cv'
 import type { Quad } from './detect'
 import { holderBudget } from './holderBudget'
-import { createTiltFrames } from './tiltFrames'
+import { createTiltFrames, keepsForTilt } from './tiltFrames'
 
 interface WorkerScope {
   onmessage: ((e: MessageEvent<WorkerRequest>) => void) | null
@@ -93,9 +93,10 @@ async function handle(msg: WorkerRequest): Promise<void> {
   }
   if (msg.type === 'tiltReading') {
     // Only the window read: tiltFeatures holds about 3 MB of floats a frame while it works. A
-    // 20-frame window takes it about 0.9 s, and frames sent meanwhile wait behind it.
+    // 20-frame window takes it about 0.9 s, and frames sent meanwhile wait behind it. now is the
+    // loop's clock, as the frames' times are.
     try {
-      const reading = tiltFeatures(tilt.latest(TILT_MS, performance.now()), msg.game)
+      const reading = tiltFeatures(tilt.latest(TILT_MS, msg.now), msg.game)
       scope.postMessage({ type: 'tiltReading', id: msg.id, reading })
     } catch (e) {
       scope.postMessage({ type: 'error', id: msg.id, message: messageOf(e) })
@@ -132,9 +133,8 @@ async function handle(msg: WorkerRequest): Promise<void> {
       false,
       !!msg.tilt
     )
-    const top = signals.art[0]?.imageId
-    if (upright && top !== undefined && msg.tilt?.includes(top)) {
-      tilt.keep(upright, performance.now())
+    if (upright && msg.tilt && msg.at !== undefined && keepsForTilt(signals.art, msg.tilt)) {
+      tilt.keep(upright, msg.at)
       signals.tiltKept = true
     }
     const distance = signals.art[0]?.distance ?? null

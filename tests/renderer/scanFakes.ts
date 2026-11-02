@@ -3,6 +3,7 @@ import type { ScanPrinting } from '@shared/scan/types'
 import type { ScanWindowMessage } from '@shared/scanWindow'
 import type { TiltReading } from '@shared/scan/tiltFeatures'
 import type { RawSignals, ScanEngine } from '@/features/scan/engine'
+import { keepsForTilt } from '@/features/scan/vision/tiltFrames'
 
 export const printing = (o: Partial<ScanPrinting> = {}): ScanPrinting => ({
   printingId: 101,
@@ -69,7 +70,8 @@ export function fakeEngine(frame: (n: number) => RawSignals | Error = () => NOTH
 
 /**
  * fakeEngine with tilt readings: a frame is kept (tiltKept) whenever opts.tilt holds its closest
- * art, as the worker keeps it, and tiltReading answers with `reading()`.
+ * art, close enough, as the worker keeps it (keepsForTilt), and tiltReading answers with
+ * `reading()`.
  */
 export function tiltEngine(
   frame: (n: number) => RawSignals | Error,
@@ -81,8 +83,7 @@ export function tiltEngine(
     analyze: vi.fn(async (_img: ImageData, opts: { wantText: boolean; tilt?: number[] }) => {
       const out = frame(n++)
       if (out instanceof Error) throw out
-      const top = out.art[0]?.imageId
-      const kept = top !== undefined && opts.tilt?.includes(top) ? { tiltKept: true } : {}
+      const kept = opts.tilt && keepsForTilt(out.art, opts.tilt) ? { tiltKept: true } : {}
       return { ...(opts.wantText ? out : { ...out, codeTexts: [], nameTexts: [] }), ...kept }
     }),
     tiltReading: vi.fn(async () => {

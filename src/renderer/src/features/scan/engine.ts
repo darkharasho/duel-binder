@@ -60,14 +60,19 @@ export type WorkerRequest =
       wantLook: boolean
       /** A photo: every language's art, the whole holder search, and bands whatever wantBands says. */
       photo?: true
-      /** Keep the card for the tilt reading when its closest art is one of these images. */
+      /**
+       * Keep the card for the tilt reading when its closest art is one of these images, close
+       * enough (keepsForTilt), as captured at `at`.
+       */
       tilt?: number[]
+      /** When the frame was grabbed, on the scan loop's clock (performance.now()); sent with tilt. */
+      at?: number
     }
   /** Narrows live frames' art search to these artworks, or null for all of it, until told again. */
   | { type: 'scope'; imageIds: number[] | null }
   | { type: 'artDistance'; id: number; a: number; b: number }
-  /** The tilt features of the frames kept in the last TILT_MS. */
-  | { type: 'tiltReading'; id: number; game: GameId }
+  /** The tilt features of the frames kept in the TILT_MS before now (the loop's clock, as at). */
+  | { type: 'tiltReading'; id: number; game: GameId; now: number }
   /** Forgets the kept tilt frames (init does too). */
   | { type: 'tiltReset' }
 
@@ -112,7 +117,8 @@ export interface ScanEngine {
    * The frame is handed to the worker, so it can't be used afterwards. A camera frame is best
    * an ImageBitmap: the worker reads its pixels, so the UI thread never copies them. `wantLook`
    * measures the card's look for the rarity look model as well. A live frame whose closest art is
-   * one of `tilt` is kept for the tilt reading (tiltKept).
+   * one of `tilt` is kept for the tilt reading (tiltKept), as grabbed at `at` (performance.now()
+   * when left out: grab it as the frame is, so a frame that waits in the worker isn't misplaced).
    */
   analyze(
     frame: ImageBitmap | ImageData,
@@ -122,6 +128,7 @@ export interface ScanEngine {
       wantLook?: boolean
       photo?: boolean
       tilt?: number[]
+      at?: number
     }
   ): Promise<RawSignals>
   /** Live frames match only these artworks from now on; null for every one. */
@@ -129,11 +136,12 @@ export interface ScanEngine {
   /** How far apart two artworks' fingerprints are; null when either has none. */
   artDistance?(a: number, b: number): Promise<number | null>
   /**
-   * The tilt features of the frames kept in the last TILT_MS, read as game's cards; null for too
-   * few of them. It takes the worker about a second, and frames sent meanwhile wait behind it.
+   * The tilt features of the frames kept in the TILT_MS before now (performance.now() when left
+   * out), read as game's cards; null for too few of them. It takes the worker about a second, and
+   * frames sent meanwhile wait behind it.
    */
-  tiltReading?(game: GameId): Promise<TiltReading | null>
-  /** Forgets the kept tilt frames. */
+  tiltReading?(game: GameId, now?: number): Promise<TiltReading | null>
+  /** Forgets the kept tilt frames; nothing to do while no worker is running. */
   tiltReset?(): void
   /** Stops the worker and rejects pending calls; init and analyze reject afterwards. */
   dispose(): void
@@ -275,11 +283,11 @@ export function createScanEngine(deps: {
       })
     },
 
-    tiltReading(game) {
+    tiltReading(game, now = performance.now()) {
       return new Promise((resolve, reject) => {
         const id = nextId++
         try {
-          send({ type: 'tiltReading', id, game })
+          send({ type: 'tiltReading', id, game, now })
           tilts.set(id, watched({ resolve, reject }, frameMs))
         } catch (e) {
           reject(e instanceof Error ? e : new Error(String(e)))
@@ -288,11 +296,13 @@ export function createScanEngine(deps: {
     },
 
     tiltReset() {
-      send({ type: 'tiltReset' })
+      // A worker not running keeps no frames, so there's none to start (or to fail after dispose).
+      worker?.postMessage({ type: 'tiltReset' } satisfies WorkerRequest)
     },
 
-    async analyze(frame, { candidates, wantText, wantLook = false, photo = false, tilt }) {
+    async analyze(frame, { candidates, wantText, wantLook = false, photo = false, tilt, at }) {
       const id = nextId++
+      const grabbed = at ?? performance.now()
       const signals = await new Promise<FrameSignals>((resolve, reject) => {
         const bitmap = !('data' in frame)
         const image: RgbaImage | ImageBitmap = bitmap
@@ -308,7 +318,7 @@ export function createScanEngine(deps: {
               wantBands: wantText,
               wantLook,
               ...(photo ? { photo: true as const } : {}),
-              ...(tilt ? { tilt } : {})
+              ...(tilt ? { tilt, at: grabbed } : {})
             },
             [bitmap ? frame : (frame.data.buffer as ArrayBuffer)]
           )

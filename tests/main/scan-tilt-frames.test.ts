@@ -1,5 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { createTiltFrames } from '../../src/renderer/src/features/scan/vision/tiltFrames'
+import {
+  createTiltFrames,
+  keepsForTilt
+} from '../../src/renderer/src/features/scan/vision/tiltFrames'
+import { ART_MAX_DISTANCE, TILT_MAX_ART_DISTANCE } from '../../src/shared/scan/thresholds'
 import { TILT_H, TILT_W } from '../../src/shared/scan/tiltFeatures'
 import type { RgbaImage } from '../../src/shared/scan/types'
 
@@ -31,5 +35,32 @@ describe('createTiltFrames', () => {
     const [rgb] = f.latest(1000, 0)
     expect(rgb.length).toBe(TILT_W * TILT_H * 3)
     expect([...rgb.subarray(0, 3)]).toEqual([9, 8, 7])
+  })
+
+  it('places frames by when they were captured, however late they were kept', () => {
+    const f = createTiltFrames()
+    // Captured at 0-400 ms, but kept in a burst after waiting behind a reading.
+    for (let t = 0; t < 5; t++) f.keep(solid(842, 1228, [t, t, t]), t * 100)
+    expect(f.latest(250, 400).map((x) => x[0])).toEqual([2, 3, 4])
+    // A reading asked for at 200 ms leaves out frames captured after it.
+    expect(f.latest(250, 200).map((x) => x[0])).toEqual([0, 1, 2])
+  })
+})
+
+describe('keepsForTilt', () => {
+  it("keeps a held card's art, glare and all, but not a far match or another card", () => {
+    expect(TILT_MAX_ART_DISTANCE).toBe(ART_MAX_DISTANCE * 1.5)
+    const at = (imageId: number, distance: number): { imageId: number; distance: number } => ({
+      imageId,
+      distance
+    })
+    expect(keepsForTilt([at(7, 20)], [7, 8])).toBe(true)
+    // Glare past a match's distance is still the held card.
+    expect(keepsForTilt([at(8, ART_MAX_DISTANCE + 20)], [7, 8])).toBe(true)
+    expect(keepsForTilt([at(7, TILT_MAX_ART_DISTANCE)], [7])).toBe(true)
+    // A hand or a bad outline over it.
+    expect(keepsForTilt([at(7, TILT_MAX_ART_DISTANCE + 1)], [7])).toBe(false)
+    expect(keepsForTilt([at(9, 10), at(7, 12)], [7])).toBe(false)
+    expect(keepsForTilt([], [7])).toBe(false)
   })
 })

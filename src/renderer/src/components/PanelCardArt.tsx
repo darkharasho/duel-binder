@@ -76,12 +76,31 @@ export function PanelCardArt({
           <NavArrow dir="next" step={nav.next} srOnly />
         </>
       )}
-      <div style={aspectVar} className="flex items-center justify-center gap-3 min-[900px]:hidden">
+      <div
+        style={aspectVar}
+        className="relative flex items-center justify-center gap-3 min-[900px]:hidden"
+      >
         {arrows && <NavArrow dir="prev" step={arrows.prev} />}
-        {/* The phone's card fills the sheet, short of pushing its title off a short screen. */}
+        {/* The phone's card floats over a soft, blurred glow of its own art. */}
+        {phone && (
+          <div
+            aria-hidden="true"
+            data-testid="card-glow"
+            className="pointer-events-none absolute inset-x-6 inset-y-4 -z-10 scale-110 opacity-60 blur-3xl saturate-150"
+          >
+            <CardArt
+              imageId={imageId}
+              printingId={printingId}
+              size="full"
+              alt=""
+              className="h-full w-full object-cover"
+            />
+          </div>
+        )}
+        {/* The phone's card fills the sheet, leaving room for the gap and the drawer's title. */}
         <TiltCard
           touch={phone}
-          className={phone ? 'w-[min(100%,calc((100dvh-11rem)*var(--card-aspect)))]' : 'w-48'}
+          className={phone ? 'w-[min(100%,calc((100dvh-13rem)*var(--card-aspect)))]' : 'w-48'}
         >
           <CardArt
             imageId={imageId}

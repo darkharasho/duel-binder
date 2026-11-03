@@ -213,4 +213,16 @@ describe('phone card swipes', () => {
     expect(nav.next).toHaveBeenCalledTimes(1)
     expect(onClose).not.toHaveBeenCalled()
   })
+  it('floats the phone card over a blurred glow of its own art, hidden from screen readers', () => {
+    renderSheet('phone', undefined)
+    const glow = screen.getByTestId('card-glow')
+    expect(glow).toHaveAttribute('aria-hidden', 'true')
+    expect(glow.className).toContain('blur')
+    expect(screen.getAllByRole('img', { name: /Dark Magician/ })).toHaveLength(1)
+  })
+
+  it('has no glow on desktop', () => {
+    renderSheet('linux', undefined)
+    expect(screen.queryByTestId('card-glow')).toBeNull()
+  })
 })

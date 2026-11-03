@@ -103,6 +103,14 @@ const rowNames = (section: HTMLElement): (string | null)[] =>
     .map((r) => r.getAttribute('aria-label'))
 
 describe('one card panel, owned or not', () => {
+  it('copies the card name from beside the title', async () => {
+    const user = userEvent.setup()
+    const writeText = vi.spyOn(navigator.clipboard, 'writeText').mockResolvedValue()
+    setup([], { seed })
+    await user.click(await screen.findByRole('button', { name: 'Copy name' }))
+    expect(writeText).toHaveBeenCalledWith('Dark Magician')
+  })
+
   it('lists the same types, with quantities on the owned ones', async () => {
     setup([], { seed })
     const unowned = rowNames(await list())

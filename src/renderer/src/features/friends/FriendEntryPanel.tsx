@@ -1,5 +1,6 @@
 import type { EntryView } from '@shared/types'
 import { CardDetails } from '@/components/CardDetails'
+import { CopyNameButton } from '@/components/CopyNameButton'
 import { LanguageTag } from '@/components/LanguageTag'
 import { PanelCardArt } from '@/components/PanelCardArt'
 import type { PanelNav } from '@/components/panelNav'
@@ -25,7 +26,10 @@ export function FriendEntryPanel({
   return (
     <>
       <SheetHeader>
-        <SheetTitle>{card.name}</SheetTitle>
+        <div className="flex items-center gap-1">
+          <SheetTitle>{card.name}</SheetTitle>
+          <CopyNameButton name={card.name} />
+        </div>
         <SheetDescription>{typeLine}</SheetDescription>
       </SheetHeader>
       <div className="space-y-5 px-4 pb-6">

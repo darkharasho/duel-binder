@@ -449,7 +449,7 @@ export async function finishSignIn(req: Request, deps: AppDeps): Promise<Respons
   // an account (the web always; an app only when it asked). See emailClaim.ts.
   const discordEmail = verifiedEmail(user.email, user.verified)
   const claimFor = (kind: 'web' | 'desktop', challenge: string | null): Promise<string> | null => {
-    if (discordEmail === null) return null
+    if (!emailEnabled(deps) || discordEmail === null) return null
     if (findAccount(deps.db, { provider: 'discord', subject: user.id }) !== null) return null
     const target = claimTarget(deps.db, discordEmail)
     if (target === null) return null
@@ -696,7 +696,7 @@ export async function exchangeAppleToken(req: Request, deps: AppDeps): Promise<R
   const name = appleName(givenName, familyName)
   // An app that asked (`offerLink`) is told, instead of getting a new account, when this first
   // sign-in's verified email belongs to an email account. Old apps never ask.
-  const target = offerLink === true ? claimTarget(deps.db, email) : null
+  const target = offerLink === true && emailEnabled(deps) ? claimTarget(deps.db, email) : null
   if (target !== null && email !== null && findAccount(deps.db, apple) === null) {
     const claim = await makeClaim(deps, {
       provider: 'apple',

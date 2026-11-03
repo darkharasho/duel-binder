@@ -296,15 +296,16 @@ async function createStep(
   const problem = emailProblem(email) ?? passwordProblem(password)
   if (problem) throw new EmailAuthError(problem, 400)
   if (hasEmailSignIn(db, email)) throw new EmailAuthError(EMAIL_COPY.emailTaken, 400)
+  const now = deps.now()
+  const nowIso = now.toISOString()
+  // Limits first, before the costly hash: a refused request must do no work and leave the
+  // pending sign-up and its code alone.
+  if (!takeCodeLimits(db, email, ip, now)) throw new EmailAuthError(EMAIL_COPY.tooManyCodes, 429)
   const passwordHash = await hashPassword(password)
   const ticket = randomToken()
   const ticketHash = await sha256Hex(ticket)
-  const now = deps.now()
-  const nowIso = now.toISOString()
-  const created = db.transaction(() => {
+  db.transaction(() => {
     pruneExpired(deps, nowIso)
-    // Limits first: a refused request must leave the pending sign-up and its code alone.
-    if (!takeCodeLimits(db, email, ip, now)) return false
     db.prepare("DELETE FROM email_flows WHERE purpose = 'signup' AND email = ?").run(email)
     db.prepare(
       `INSERT INTO email_flows (ticket_hash, purpose, email, password_hash, expires_at, created_at)
@@ -316,9 +317,7 @@ async function createStep(
       new Date(now.getTime() + FLOW_TTL_MS).toISOString(),
       nowIso
     )
-    return true
   })()
-  if (!created) throw new EmailAuthError(EMAIL_COPY.tooManyCodes, 429)
   try {
     await issueCode(deps, { ticketHash, email, purpose: 'signup' }, now)
   } catch (err) {

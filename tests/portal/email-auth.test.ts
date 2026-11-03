@@ -216,6 +216,15 @@ describe('email sign-up, sign-in and reset', () => {
     expect(ok.body.next).toBe('signed-in')
   })
 
+  it('a limited create is refused before any password is hashed', async () => {
+    await step('create', { email: 'a@x.io', password: 'hunter2hunter2' })
+    const derive = vi.spyOn(crypto.subtle, 'deriveBits')
+    const two = await step('create', { email: 'a@x.io', password: 'hunter2hunter2' })
+    expect(two.status).toBe(429)
+    expect(two.body.error).toBe(EMAIL_COPY.tooManyCodes)
+    expect(derive).not.toHaveBeenCalled()
+  })
+
   it('a refused forgot leaves the pending reset and its code alone', async () => {
     await signUp('ann@x.io', 'old password 1')
     advance(HOUR)

@@ -143,6 +143,25 @@ describe('offering a first Discord or Apple sign-in the email account that uses 
     expect(count("SELECT count(*) AS n FROM sign_ins WHERE provider = 'discord'")).toBe(0)
   })
 
+  it('with the email switch off a desktop offer=email gets a plain sign-in, no claim', async () => {
+    deps.env.EMAIL_SIGN_IN = 'off'
+    const before = users()
+    const loc = await desktopCallback(true)
+    expect(loc.searchParams.get('claim')).toBeNull()
+    expect(loc.searchParams.get('code')).not.toBeNull()
+    expect(users()).toBe(before + 1)
+  })
+
+  it('with the email switch off a web Discord sign-in is not sent to the claim page', async () => {
+    deps.env.EMAIL_SIGN_IN = 'off'
+    const start = await get('/auth/discord/start')
+    const oauth = cookieOf(start, 'oauth_state')!
+    const res = await get(`/auth/discord/callback?code=c&state=${oauth}`, `oauth_state=${oauth}`)
+    expect(res.headers.get('location') ?? '').not.toContain('/auth/email/claim')
+    expect(cookieOf(res, 'email_claim')).toBeUndefined()
+    expect(count("SELECT count(*) AS n FROM sign_ins WHERE provider = 'discord'")).toBe(1)
+  })
+
   it('no offer without offer=email', async () => {
     const before = users()
     const loc = await desktopCallback(false)
@@ -405,6 +424,13 @@ describe('offering a first Discord or Apple sign-in the email account that uses 
       const r = await post('/auth/apple/token', appleBody())
       expect(r.body.token).toBeTruthy()
       expect(r.body.claim).toBeUndefined()
+    })
+
+    it('with the email switch off offerLink gets a token, no claim', async () => {
+      deps.env.EMAIL_SIGN_IN = 'off'
+      const r = await post('/auth/apple/token', appleBody({ offerLink: true }))
+      expect(r.body.claim).toBeUndefined()
+      expect(r.body.token).toBeTruthy()
     })
 
     it('claim-separate makes the Apple account', async () => {

@@ -321,7 +321,10 @@ describe('linking a sign-in', () => {
     const other = addUser(db, '222', 'other')
     addAppleSignIn(other)
     addSession('mine', me)
-    expect(await result(await linkApple('mine'))).toEqual({ status: 'has-provider' })
+    expect(await result(await linkApple('mine'))).toEqual({
+      status: 'has-provider',
+      provider: 'discord'
+    })
     expect(count('SELECT count(*) AS n FROM merge_tickets')).toBe(0)
   })
 
@@ -334,7 +337,8 @@ describe('linking a sign-in', () => {
     ).run(me)
     const code = await linkCode()
     expect(await result(await rpc('mine', 'account:linkCode', [code, VERIFIER]))).toEqual({
-      status: 'has-provider'
+      status: 'has-provider',
+      provider: 'discord'
     })
     expect(count("SELECT count(*) AS n FROM sign_ins WHERE subject = '333'")).toBe(0)
   })

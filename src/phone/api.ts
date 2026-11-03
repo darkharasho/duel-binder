@@ -368,6 +368,11 @@ export function createPhoneApi(deps: {
         return me
       },
       removeSignIn: portal('account:removeSignIn'),
+      addEmail: portal('account:addEmail'),
+      confirmEmail: portal('account:confirmEmail'),
+      resendEmailCode: portal('account:resendEmailCode'),
+      changePassword: portal('account:changePassword'),
+      changeEmail: portal('account:changeEmail'),
       dismissLinkHint: async () => {
         const me = await store.portal<Me>('account:dismissLinkHint', [])
         await store.updateUser(me)

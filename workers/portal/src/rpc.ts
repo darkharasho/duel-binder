@@ -52,6 +52,15 @@ import {
 import { listFavourites, setFavourite } from '../../../src/main/repo/favourites'
 import type { AppDeps } from './app'
 import { currentUser, gamesFor } from './auth'
+import { EmailAuthError } from './emailAuth'
+import { clientIp } from './authLimits'
+import {
+  addEmail,
+  changeEmail,
+  changePassword,
+  confirmEmail,
+  resendEmailCode
+} from './emailAccount'
 import {
   FriendError,
   acceptFriend,
@@ -89,7 +98,7 @@ type ChannelMethod<C extends InvokeChannel> = C extends `${infer N}:${infer M}`
     : never
   : never
 
-type RpcDeps = AppDeps & { userId: number; game: GameId }
+type RpcDeps = AppDeps & { userId: number; game: GameId; ip: string; sessionHash: string }
 
 type Handler<C extends InvokeChannel> = (
   deps: RpcDeps,
@@ -285,6 +294,11 @@ const HANDLERS: { [C in Exclude<PortalChannel, AccountLinkChannel>]: Handler<C> 
   'account:setUsername': (deps, _s, name) => setUsername(deps, deps.userId, name),
   'account:removeSignIn': (deps, _s, provider) => removeSignIn(deps, deps.userId, provider),
   'account:dismissLinkHint': (deps) => dismissLinkHint(deps, deps.userId),
+  'account:addEmail': (deps, _s, email, password) => addEmail(deps, email, password),
+  'account:confirmEmail': (deps, _s, ticket, code) => confirmEmail(deps, ticket, code),
+  'account:resendEmailCode': (deps, _s, ticket) => resendEmailCode(deps, ticket),
+  'account:changePassword': (deps, _s, current, next) => changePassword(deps, current, next),
+  'account:changeEmail': (deps, _s, current, newEmail) => changeEmail(deps, current, newEmail),
   'account:linkCode': (deps, _s, code, verifier) => linkCode(deps, deps.userId, code, verifier),
   'account:linkApple': (deps, _s, input) => linkApple(deps, deps.userId, input),
   'account:merge': (deps, _s, ticket, choice) => mergeWithTicket(deps, deps.userId, ticket, choice)
@@ -333,11 +347,16 @@ export async function rpcRoute(req: Request, deps: AppDeps, channel: string): Pr
       ...a: unknown[]
     ) => unknown
     const result =
-      (await handler({ ...deps, userId: user.id, game }, userScope(user.id, game), ...args)) ?? null
+      (await handler(
+        { ...deps, userId: user.id, game, ip: clientIp(req), sessionHash: user.tokenHash },
+        userScope(user.id, game),
+        ...args
+      )) ?? null
     if (QUEUES_PRICES.has(channel)) await deps.prices.soon()
     return json({ result })
   } catch (e) {
     if (e instanceof CollectionError) return json({ error: e.message }, 400)
+    if (e instanceof EmailAuthError) return json({ error: e.message }, e.status)
     throw e
   }
 }

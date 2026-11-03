@@ -39,7 +39,7 @@ export function changedNotice(to: string, newEmail: string): EmailMessage {
   const body = `The email on your Duel Binder account was changed to ${newEmail}. If this wasn't you, sign in with another method and review your account.`
   return {
     to,
-    subject: 'Your Duel Binder email was changed',
+    subject: 'Your Duel Binder sign-in email was changed',
     text: `${body}\n`,
     html: `<p>${escapeHtml(body)}</p>`
   }

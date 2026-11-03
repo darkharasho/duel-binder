@@ -1,10 +1,11 @@
 import { createHash } from 'node:crypto'
 import { beforeEach, describe, expect, it } from 'vitest'
 import type Database from 'better-sqlite3'
-import { addUser, memoryBucket, noPrintingArt, noPrices, seededServerDb } from './helpers'
+import { addUser, fakeSender, memoryBucket, noPrintingArt, noPrices, seededServerDb } from './helpers'
 import { handle, type AppDeps } from '../../workers/portal/src/app'
 import { mergeAccounts, purgeHolds } from '../../workers/portal/src/merge'
 import { findAccount } from '../../workers/portal/src/signIns'
+import { hashPassword } from '../../workers/portal/src/password'
 
 const BASE = 'https://portal.test'
 const DAY = 24 * 60 * 60 * 1000
@@ -131,6 +132,67 @@ describe('owner undo of a merge', () => {
     ).toEqual({ refresh_token: 'rt-1' })
     expect(db.prepare('SELECT COUNT(*) AS n FROM account_merges').get()).toEqual({ n: 0 })
     expect(((await (await list('tok-owner')).json()) as { merges: unknown[] }).merges).toEqual([])
+  })
+
+  /** A new account whose only sign-in is an email with a password. */
+  async function addEmailUser(email: string, password: string): Promise<number> {
+    const id = addUser(db, `tmp-${++seq}`, `emailer-${seq}`)
+    db.prepare(
+      "UPDATE sign_ins SET provider = 'email', subject = ?, email = ?, password_hash = ? WHERE user_id = ?"
+    ).run(email, email, await hashPassword(password), id)
+    return id
+  }
+  const emailSignIn = async (email: string, password: string): Promise<{ next?: string; user?: { id: number } }> => {
+    deps.email = fakeSender()
+    deps.env.EMAIL_SIGN_IN = 'on'
+    const res = await handle(
+      new Request(BASE + '/auth/email/password', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json', 'cf-connecting-ip': '3.3.3.3' },
+        body: JSON.stringify({ email, password })
+      }),
+      deps
+    )
+    return (await res.json()) as { next?: string; user?: { id: number } }
+  }
+  const mergeEmail = (closed: number, email: string): void =>
+    mergeAccounts(db, {
+      survivor: me,
+      closed,
+      cards: 'sum',
+      username: 'mine',
+      moved: { provider: 'email', subject: email },
+      appleRefreshToken: null,
+      now: START
+    })
+
+  it('merge undo moves the email sign-in and its password back', async () => {
+    const closed = await addEmailUser('e@x.io', 'hunter2hunter2')
+    mergeEmail(closed, 'e@x.io')
+    expect(findAccount(db, { provider: 'email', subject: 'e@x.io' })).toBe(me)
+    expect((await undo('tok-owner', { closedId: closed })).status).toBe(204)
+    expect(findAccount(db, { provider: 'email', subject: 'e@x.io' })).toBe(closed)
+    const reply = await emailSignIn('e@x.io', 'hunter2hunter2')
+    expect(reply.next).toBe('signed-in')
+    expect(reply.user?.id).toBe(closed)
+  })
+
+  it('undo leaves the email off when the address was taken since', async () => {
+    const closed = await addEmailUser('e@x.io', 'hunter2hunter2')
+    // The closed account also keeps a second sign-in, so undo has one to give back.
+    db.prepare(
+      "INSERT INTO sign_ins (provider, subject, user_id, created_at) VALUES ('apple', 'sub9', ?, 'x')"
+    ).run(closed)
+    mergeEmail(closed, 'e@x.io')
+    db.prepare("DELETE FROM sign_ins WHERE provider = 'email' AND subject = 'e@x.io'").run()
+    const elsewhere = await addEmailUser('e@x.io', 'other-password-1')
+    const res = await undo('tok-owner', { closedId: closed })
+    expect(res.status).toBe(204)
+    expect(findAccount(db, { provider: 'email', subject: 'e@x.io' })).toBe(elsewhere)
+    expect(
+      db.prepare("SELECT 1 FROM sign_ins WHERE user_id = ? AND provider = 'email'").get(closed)
+    ).toBeUndefined()
+    expect(findAccount(db, { provider: 'apple', subject: 'sub9' })).toBe(closed)
   })
 
   it('undo when the name was taken gives a generated one', async () => {

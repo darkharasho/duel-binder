@@ -55,7 +55,12 @@ export const PORTAL_CHANNELS = [
   'account:signIns',
   'account:setUsername',
   'account:removeSignIn',
-  'account:dismissLinkHint'
+  'account:dismissLinkHint',
+  'account:addEmail',
+  'account:confirmEmail',
+  'account:resendEmailCode',
+  'account:changePassword',
+  'account:changeEmail'
 ] as const satisfies readonly InvokeChannel[]
 
 /**

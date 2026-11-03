@@ -175,7 +175,7 @@ describe('account RPCs', () => {
       body: { error: "This is your only way to sign in, so it can't be removed" }
     })
     expect((await call('account:signIns', [])).body.result).toHaveLength(1)
-    expect((await call('account:removeSignIn', ['email'])).status).toBe(400)
+    expect((await call('account:removeSignIn', ['google'])).status).toBe(400)
   })
 
   it('removeSignIn of Apple revokes its token and drops apple_tokens', async () => {

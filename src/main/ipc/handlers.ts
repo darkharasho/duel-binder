@@ -240,6 +240,16 @@ export function createHandlers({
       account.updateUser(me)
       return me
     },
+    'account:addEmail': async (email: string, password: string) =>
+      account.portal('account:addEmail', [email, password]),
+    'account:confirmEmail': async (ticket: string, code: string) =>
+      account.portal('account:confirmEmail', [ticket, code]),
+    'account:resendEmailCode': async (ticket: string) =>
+      account.portal('account:resendEmailCode', [ticket]),
+    'account:changePassword': async (current: string, next: string) =>
+      account.portal('account:changePassword', [current, next]),
+    'account:changeEmail': async (currentPassword: string, newEmail: string) =>
+      account.portal('account:changeEmail', [currentPassword, newEmail]),
     'account:merge': async () => {
       throw new Error('Not available here')
     }

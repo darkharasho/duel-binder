@@ -61,8 +61,17 @@ export interface MergePreview {
 export type LinkResult =
   | { status: 'linked' }
   | { status: 'already' }
-  | { status: 'has-provider' }
+  | { status: 'has-provider'; provider?: SignInProvider }
   | { status: 'merge'; ticket: string; preview: MergePreview }
+
+/** A code was mailed to the address; `ticket` goes back with the code to `account:confirmEmail`. */
+export interface EmailCodeResult {
+  status: 'code'
+  ticket: string
+}
+
+/** What `account:addEmail` answers: a mailed code, or the link outcome when the address already has an account. */
+export type AddEmailResult = EmailCodeResult | LinkResult
 
 /** What `account:linkApple` takes: the iPhone app's Sign in with Apple result. */
 export interface AppleLinkInput {

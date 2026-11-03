@@ -93,7 +93,7 @@ describe('GET /admin/stats', () => {
     ).run(a, b)
 
     const body = (await (await stats()).json()) as Stats
-    expect(body.users).toEqual({ total: 2, discord: 1, apple: 1, new7d: 1, new30d: 1 })
+    expect(body.users).toEqual({ total: 2, discord: 1, apple: 1, email: 0, new7d: 1, new30d: 1 })
     expect(body.sessions).toEqual({ web: 1, desktop: 1 })
     expect(body.collections).toMatchObject({ collectors: 2, entries: 3, cards: 6 })
     expect(body.collections.largest[0]).toEqual({ username: 'alice', entries: 2, cards: 4 })
@@ -103,12 +103,23 @@ describe('GET /admin/stats', () => {
     expect(body.active).toEqual({ day: 0, week: 0, month: 0 })
   })
 
+  it('counts accounts with an email sign-in', async () => {
+    const a = addUser(db, '111', 'alice')
+    const b = addUser(db, '222', 'bob')
+    db.prepare(
+      "INSERT INTO sign_ins (provider, subject, user_id, created_at, email) VALUES ('email', 'a@x.io', ?, 'x', 'a@x.io')"
+    ).run(a)
+    db.prepare("UPDATE sign_ins SET provider = 'email', subject = 'b@x.io' WHERE user_id = ?").run(b)
+    const body = (await (await stats()).json()) as Stats
+    expect(body.users).toMatchObject({ total: 2, discord: 1, apple: 0, email: 2 })
+  })
+
   it('does not count closed (held) accounts as users', async () => {
     addUser(db, '111', 'alice')
     const held = addUser(db, 'apple:xyz', 'bob')
     db.prepare("UPDATE users SET closed_at = '2026-10-28T00:00:00.000Z' WHERE id = ?").run(held)
     const body = (await (await stats()).json()) as Stats
-    expect(body.users).toMatchObject({ total: 1, discord: 1, apple: 0, new7d: 1, new30d: 1 })
+    expect(body.users).toMatchObject({ total: 1, discord: 1, apple: 0, email: 0, new7d: 1, new30d: 1 })
   })
 
   it('stamps last_seen_at on a signed-in request, at most hourly', async () => {

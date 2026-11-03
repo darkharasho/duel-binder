@@ -18,7 +18,7 @@ export type AccountChangeKind = 'username' | 'link'
 export const DAILY_ACCOUNT_CHANGES: Record<AccountChangeKind, number> = { username: 5, link: 10 }
 
 const DAY_MS = 24 * 60 * 60 * 1000
-const PROVIDERS: readonly SignInProvider[] = ['discord', 'apple']
+const PROVIDERS: readonly SignInProvider[] = ['discord', 'apple', 'email']
 
 /**
  * Counts one `kind` change for this user against its daily limit (the rolling 24 hours of
@@ -102,7 +102,7 @@ export async function removeSignIn(
   provider: unknown
 ): Promise<void> {
   if (!PROVIDERS.includes(provider as SignInProvider))
-    throw new CollectionError('provider must be discord or apple')
+    throw new CollectionError('provider must be discord, apple or email')
   const { db } = deps
   const apple =
     provider === 'apple'
@@ -120,6 +120,11 @@ export async function removeSignIn(
       throw new CollectionError(LAST_SIGN_IN)
     db.prepare('DELETE FROM sign_ins WHERE user_id = ? AND provider = ?').run(userId, provider)
     if (provider === 'apple') db.prepare('DELETE FROM apple_tokens WHERE user_id = ?').run(userId)
+    // A pending add or change would otherwise outlive the sign-in it belongs to.
+    if (provider === 'email')
+      db.prepare("DELETE FROM email_flows WHERE user_id = ? AND purpose IN ('add', 'change')").run(
+        userId
+      )
     refreshLegacyDiscordId(db, userId)
     return true
   })()

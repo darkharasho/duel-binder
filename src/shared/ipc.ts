@@ -38,7 +38,7 @@ import type {
 import type { ScanWindowMessage } from './scanWindow'
 import type { ScanRef } from './scan/fingerprintRefs'
 import type { FingerprintStatus, OcrBand, ScanPrinting } from './scan/types'
-import type { MergeChoice, SignInMethod, SignInProvider } from './account'
+import type { AddEmailResult, EmailCodeResult, MergeChoice, SignInMethod, SignInProvider } from './account'
 import type { Me } from './cloud'
 import type { CollectorNumber } from './scan/collectorNumber'
 import type { DexPreview } from './dex/match'
@@ -297,6 +297,20 @@ export interface Api {
     /** Stops suggesting to link another sign-in. */
     dismissLinkHint(): Promise<Me>
     /**
+     * Adds an email sign-in: mails a code to the address (answers `code`), or, when another account
+     * already signs in with it, checks `password` against that account and answers the link result.
+     * Rejects when email sign-in is off.
+     */
+    addEmail(email: string, password: string): Promise<AddEmailResult>
+    /** Confirms the mailed code and attaches the email (or the changed address) to the account. */
+    confirmEmail(ticket: string, code: string): Promise<{ status: 'linked' }>
+    /** Mails a fresh code for a pending add or change. */
+    resendEmailCode(ticket: string): Promise<EmailCodeResult>
+    /** Changes the email sign-in's password and signs out the account's other sessions. */
+    changePassword(current: string, next: string): Promise<void>
+    /** Starts changing the email address: mails a code to the new one, which stays unused until confirmed. */
+    changeEmail(currentPassword: string, newEmail: string): Promise<EmailCodeResult>
+    /**
      * Merges the account a link's merge ticket found into the signed-in one, and answers its `Me`.
      * Only the phone app has it; the desktop app and the web reject with `Not available here`.
      */
@@ -419,6 +433,11 @@ export const INVOKE_CHANNELS = [
   'account:setUsername',
   'account:removeSignIn',
   'account:dismissLinkHint',
+  'account:addEmail',
+  'account:confirmEmail',
+  'account:resendEmailCode',
+  'account:changePassword',
+  'account:changeEmail',
   'account:merge'
 ] as const
 

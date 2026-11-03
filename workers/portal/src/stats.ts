@@ -50,6 +50,7 @@ export function collectStats(deps: AppDeps): Record<string, unknown> {
       total,
       discord: withSignIn('discord'),
       apple: withSignIn('apple'),
+      email: withSignIn('email'),
       new7d: count('SELECT COUNT(*) AS n FROM users WHERE closed_at IS NULL AND created_at >= ?', since(7)),
       new30d: count('SELECT COUNT(*) AS n FROM users WHERE closed_at IS NULL AND created_at >= ?', since(30))
     },

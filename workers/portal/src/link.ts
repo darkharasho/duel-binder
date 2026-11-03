@@ -3,7 +3,8 @@ import type {
   AccountSummary,
   CardChoice,
   LinkResult,
-  MergePreview
+  MergePreview,
+  SignInProvider
 } from '../../../src/shared/account'
 import type { AppDeps } from './app'
 import { takeDailyAllowance } from './accountRpc'
@@ -106,7 +107,7 @@ export async function beginLink(
     const owner = findAccount(db, id)
     if (owner === userId) return { status: 'already' }
     const mine = providersOf(db, userId)
-    if (mine.includes(id.provider)) return { status: 'has-provider' }
+    if (mine.includes(id.provider)) return { status: 'has-provider', provider: id.provider }
     if (owner === null) {
       // findAccount skips closed accounts; a held account's sign-in can't be taken.
       if (
@@ -115,8 +116,9 @@ export async function beginLink(
           .get(id.provider, id.subject)
       )
         throw new CollectionError('This sign-in belongs to a closed account')
-    } else if (providersOf(db, owner).some((p) => mine.includes(p))) {
-      return { status: 'has-provider' }
+    } else {
+      const shared = providersOf(db, owner).find((p) => mine.includes(p))
+      if (shared) return { status: 'has-provider', provider: shared as SignInProvider }
     }
     if (!takeDailyAllowance(db, userId, 'link', now))
       throw new CollectionError("You've linked sign-ins too often today. Try again tomorrow.")

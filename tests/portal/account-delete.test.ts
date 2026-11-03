@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto'
 import { beforeEach, describe, expect, it } from 'vitest'
 import type Database from 'better-sqlite3'
-import { addUser, memoryBucket, noPrintingArt, noPrices, seededServerDb } from './helpers'
+import { addUser, fakeSender, memoryBucket, noPrintingArt, noPrices, seededServerDb } from './helpers'
 import { handle, type AppDeps } from '../../workers/portal/src/app'
 
 const BASE = 'https://portal.test'
@@ -168,6 +168,26 @@ describe('POST /api/account/delete', () => {
       deps
     )
     expect(bobPull.status).toBe(200)
+  })
+
+  it('deleting frees the email at once', async () => {
+    deps.email = fakeSender()
+    deps.env.EMAIL_SIGN_IN = 'on'
+    db.prepare(
+      "INSERT INTO sign_ins (provider, subject, user_id, created_at, email, password_hash) VALUES ('email', 'a@x.io', ?, 'x', 'a@x.io', 'h')"
+    ).run(alice)
+    const create = (): Promise<Response> =>
+      handle(
+        new Request(BASE + '/auth/email/create', {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', 'cf-connecting-ip': '4.4.4.4' },
+          body: JSON.stringify({ email: 'a@x.io', password: 'hunter2hunter2' })
+        }),
+        deps
+      )
+    expect(((await (await create()).json()) as { error?: string }).error).toBeTruthy()
+    expect((await del({ origin: BASE, cookie: 'session=alice-web' })).status).toBe(204)
+    expect(((await (await create()).json()) as { next?: string }).next).toBe('code')
   })
 
   it('signed out is a 401', async () => {

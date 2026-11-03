@@ -62,7 +62,7 @@ export function FriendSets({
         {started.length > 0 && (
           <SearchInput
             label="Search sets"
-            placeholder="Search sets by name or code"
+            placeholder="Set name or code"
             value={q}
             onChange={setQ}
           />

@@ -27,7 +27,7 @@ export function SearchInput({
   onChange: (text: string) => void
   /** The box's accessible name. */
   label: string
-  /** Says what the box matches: "Search sets by name or code". */
+  /** Says what the box matches, short enough for a phone: "Set name or code". */
   placeholder?: string
   debounceMs?: number
   className?: string

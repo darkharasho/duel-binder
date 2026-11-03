@@ -233,7 +233,7 @@ describe('SetsPage', () => {
   it('search filters by code', async () => {
     renderPage()
     await screen.findByRole('button', { name: /Metal Raiders/ })
-    await userEvent.type(screen.getByPlaceholderText('Search sets by name or code'), 'mrd')
+    await userEvent.type(screen.getByPlaceholderText('Set name or code'), 'mrd')
     await searchPause()
     expect(screen.getByRole('button', { name: /Metal Raiders/ })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Albaz Strike/ })).not.toBeInTheDocument()
@@ -262,7 +262,7 @@ describe('SetsPage', () => {
   it('shows No sets match when search finds nothing', async () => {
     renderPage()
     await screen.findByRole('button', { name: /Metal Raiders/ })
-    await userEvent.type(screen.getByPlaceholderText('Search sets by name or code'), 'zzz')
+    await userEvent.type(screen.getByPlaceholderText('Set name or code'), 'zzz')
     await searchPause()
     expect(screen.getByText('No sets match')).toBeInTheDocument()
   })

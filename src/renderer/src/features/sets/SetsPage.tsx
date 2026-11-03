@@ -275,7 +275,7 @@ export function SetsPage({ onAddCard, onAddMissing }: SetsPageProps): React.JSX.
                 search={
                   <SearchInput
                     label="Search sets"
-                    placeholder="Search sets by name or code"
+                    placeholder="Set name or code"
                     value={q}
                     onChange={(text) => {
                       setQ(text)

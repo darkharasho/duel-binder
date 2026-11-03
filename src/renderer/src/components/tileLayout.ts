@@ -9,8 +9,12 @@
 
 /** On the tile (the `li`): art, name and the rest, in three rows. */
 export const TILE = 'group/tile grid grid-cols-[minmax(0,1fr)] grid-rows-[auto_auto_1fr]'
-/** On the tile's button: spans the three rows, laying its children into them. */
-export const TILE_BUTTON = 'row-span-3 grid min-w-0 grid-cols-[minmax(0,1fr)] grid-rows-subgrid'
+/**
+ * On the tile's button: spans the three rows from the first cell, laying its children into them. Its
+ * start is fixed: auto-placed, it would go below the heart's fixed cell and leave the heart on top.
+ */
+export const TILE_BUTTON =
+  '[grid-area:1/1/span_3] grid min-w-0 grid-cols-[minmax(0,1fr)] grid-rows-subgrid'
 /** On the name: leaves room for the heart, so a long name truncates before it. */
 export const TILE_NAME = 'pr-7'
 /** On the heart: the name's row, at its right, inside the button's `p-1`. */
@@ -20,6 +24,6 @@ export const TILE_HEART = 'col-start-1 row-start-2 mr-1 self-center justify-self
 export const NUMBERED_TILE =
   'group/tile grid grid-cols-[minmax(0,1fr)] grid-rows-[auto_auto_auto_1fr]'
 export const NUMBERED_TILE_BUTTON =
-  'row-span-4 grid min-w-0 grid-cols-[minmax(0,1fr)] grid-rows-subgrid'
+  '[grid-area:1/1/span_4] grid min-w-0 grid-cols-[minmax(0,1fr)] grid-rows-subgrid'
 /** On a checklist tile's heart: the name's row, inside the button's `p-1.5`. */
 export const NUMBERED_TILE_HEART = 'col-start-1 row-start-3 mr-1.5 self-center justify-self-end'

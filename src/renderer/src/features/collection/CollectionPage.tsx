@@ -267,7 +267,7 @@ export function CollectionPage({
               search={
                 <SearchInput
                   label="Search collection"
-                  placeholder="Search collection by name or set code"
+                  placeholder="Name or set code"
                   value={filters.q ?? ''}
                   onChange={changeSearch}
                 />

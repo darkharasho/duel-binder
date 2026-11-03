@@ -89,7 +89,7 @@ export function SetPicker({ onRip, initialSetName = null }: Props): React.JSX.El
     <div className="space-y-5">
       <SearchInput
         label="Search sets"
-        placeholder="Search sets by name or code"
+        placeholder="Set name or code"
         value={q}
         onChange={setQ}
         className="w-72 max-md:w-full"

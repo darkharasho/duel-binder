@@ -157,19 +157,17 @@ export async function beginLink(
 }
 
 /**
- * `account:linkCode(code, verifier)`: links the Discord account a `/auth/desktop/start?intent=link`
- * flow handed back as `code`. Like the desktop token exchange, the verifier must match the flow's
- * PKCE challenge and the code is spent whatever happens.
+ * Spends a `/auth/desktop/start?intent=link` code: like the desktop token exchange, the verifier
+ * must match the flow's PKCE challenge and the code is spent whatever happens. Null when the code
+ * is unknown, expired or not a Discord one, or the verifier is wrong.
  */
-export async function linkCode(
+export async function takeLinkCode(
   deps: AppDeps,
-  userId: number,
   code: unknown,
   verifier: unknown
-): Promise<LinkResult> {
-  const invalid = new CollectionError('invalid-code')
+): Promise<{ subject: string; profile: DiscordProfile } | null> {
   const checked = await codeAndChallenge(code, verifier)
-  if (!checked) throw invalid
+  if (!checked) return null
   const { codeHash, challenge } = checked
   const nowIso = deps.now().toISOString()
   const row = deps.db.transaction(() => {
@@ -198,13 +196,26 @@ export async function linkCode(
       return null
     return found
   })()
-  if (!row) throw invalid
-  const profile = JSON.parse(row.profile) as DiscordProfile
+  return row ? { subject: row.subject, profile: JSON.parse(row.profile) as DiscordProfile } : null
+}
+
+/**
+ * `account:linkCode(code, verifier)`: links the Discord account a `/auth/desktop/start?intent=link`
+ * flow handed back as `code` (see `takeLinkCode`).
+ */
+export async function linkCode(
+  deps: AppDeps,
+  userId: number,
+  code: unknown,
+  verifier: unknown
+): Promise<LinkResult> {
+  const taken = await takeLinkCode(deps, code, verifier)
+  if (!taken) throw new CollectionError('invalid-code')
   return beginLink(
     deps,
     userId,
-    { provider: 'discord', subject: row.subject },
-    { profile, email: profile.email ?? null }
+    { provider: 'discord', subject: taken.subject },
+    { profile: taken.profile, email: taken.profile.email ?? null }
   )
 }
 

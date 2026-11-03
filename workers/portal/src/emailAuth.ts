@@ -18,13 +18,15 @@ import {
   pruneExpired,
   randomToken,
   sameString,
-  sha256Hex
+  sha256Hex,
+  verifyAppleSignIn
 } from './auth'
 import { clientIp, forgetAttempt, isLimited, recordAttempt, takeLimit } from './authLimits'
 import { codeMessage, emailEnabled } from './emailSend'
 import { logServerError } from './errors'
 import { hashPassword, verifyPassword } from './password'
-import { createAccount, findAccount, refreshLegacyDiscordId } from './signIns'
+import { takeLinkCode } from './link'
+import { createAccount, findAccount, refreshLegacyDiscordId, type Identity } from './signIns'
 
 const MINUTE_MS = 60 * 1000
 const CODE_TTL_MS = 15 * MINUTE_MS
@@ -266,6 +268,93 @@ async function createStep(
   return { next: 'code', ticket, email, purpose: 'signup' }
 }
 
+/** Makes the email account a confirmed sign-up asked for and spends the flow. Call inside a transaction. */
+function createFromFlow(db: SqlDb, flow: FlowRow, nowIso: string): number {
+  if (hasEmailSignIn(db, flow.email)) throw new EmailAuthError(EMAIL_COPY.emailTaken, 400)
+  const userId = createAccount(
+    db,
+    { provider: 'email', subject: flow.email },
+    { displayName: null, avatar: null },
+    nowIso
+  )
+  db.prepare(
+    "UPDATE sign_ins SET email = ?, password_hash = ? WHERE provider = 'email' AND subject = ?"
+  ).run(flow.email, flow.password_hash, flow.email)
+  db.prepare('DELETE FROM email_flows WHERE ticket_hash = ?').run(flow.ticket_hash)
+  return userId
+}
+
+/**
+ * The open accounts whose Discord or Apple sign-in vouched for this email, oldest first. Open
+ * means not closed (which a merge also does to the account it folds away).
+ */
+function accountsUsingEmail(db: SqlDb, email: string): number[] {
+  const rows = db
+    .prepare(
+      `SELECT s.user_id AS id FROM sign_ins s JOIN users u ON u.id = s.user_id
+        WHERE s.email = ? AND s.provider IN ('discord', 'apple') AND u.closed_at IS NULL
+        ORDER BY u.created_at, u.id`
+    )
+    .all(email) as { id: number }[]
+  return [...new Set(rows.map((r) => r.id))]
+}
+
+const hasEmailOn = (db: SqlDb, userId: number): boolean =>
+  db.prepare("SELECT 1 FROM sign_ins WHERE user_id = ? AND provider = 'email'").get(userId) !==
+  undefined
+
+/** The account a sign-up for this email is offered: the oldest user of it without an email sign-in. */
+function matchedAccount(
+  db: SqlDb,
+  email: string
+): { userId: number; providers: ('discord' | 'apple')[] } | null {
+  const userId = accountsUsingEmail(db, email).find((id) => !hasEmailOn(db, id))
+  if (userId === undefined) return null
+  const rows = db
+    .prepare("SELECT provider FROM sign_ins WHERE user_id = ? AND provider IN ('discord', 'apple')")
+    .all(userId) as { provider: 'discord' | 'apple' }[]
+  return { userId, providers: rows.map((r) => r.provider).sort() }
+}
+
+/** A confirmed, unexpired sign-up flow, or undefined. */
+function confirmedSignup(db: SqlDb, ticketHash: string, nowIso: string): FlowRow | undefined {
+  return db
+    .prepare(
+      `SELECT ${FLOW_COLUMNS} FROM email_flows WHERE ticket_hash = ? AND purpose = 'signup' AND confirmed = 1 AND expires_at > ?`
+    )
+    .get(ticketHash, nowIso) as FlowRow | undefined
+}
+
+/**
+ * Proves the offered account with the provider sign-in `id` and attaches the flow's email to it
+ * (with the flow's password), spending the flow. The identity must belong to the matched account;
+ * anything else is refused with the flow intact, so `separate` still works. Returns the account.
+ */
+export async function attachFromFlow(
+  deps: AppDeps,
+  ticket: string,
+  id: Identity,
+  nowIso: string
+): Promise<number> {
+  const { db } = deps
+  const ticketHash = await sha256Hex(ticket)
+  const out = db.transaction((): number | Refusal => {
+    const flow = confirmedSignup(db, ticketHash, nowIso)
+    if (!flow) return refuse(EMAIL_COPY.codeExpired)
+    const userId = findAccount(db, id)
+    const using = accountsUsingEmail(db, flow.email)
+    if (userId === null || !using.includes(userId))
+      return refuse(EMAIL_COPY.otherAccount(id.provider))
+    if (hasEmailOn(db, userId)) return refuse(EMAIL_COPY.alsoHas('email'))
+    if (userId !== matchedAccount(db, flow.email)?.userId)
+      return refuse(EMAIL_COPY.otherAccount(id.provider))
+    attachEmail(db, userId, flow.email, flow.password_hash ?? '', nowIso)
+    db.prepare('DELETE FROM email_flows WHERE ticket_hash = ?').run(ticketHash)
+    return userId
+  })()
+  return unwrap(out)
+}
+
 async function confirmStep(deps: AppDeps, body: Record<string, unknown>): Promise<StepOutcome> {
   const { db } = deps
   const ticket = text(body, 'ticket')
@@ -301,17 +390,14 @@ async function confirmStep(deps: AppDeps, body: Record<string, unknown>): Promis
       return { next: 'new-password', ticket }
     }
     if (hasEmailSignIn(db, flow.email)) return refuse(EMAIL_COPY.emailTaken)
-    const userId = createAccount(
-      db,
-      { provider: 'email', subject: flow.email },
-      { displayName: null, avatar: null },
-      nowIso
-    )
-    db.prepare(
-      "UPDATE sign_ins SET email = ?, password_hash = ? WHERE provider = 'email' AND subject = ?"
-    ).run(flow.email, flow.password_hash, flow.email)
-    db.prepare('DELETE FROM email_flows WHERE ticket_hash = ?').run(ticketHash)
-    return { next: 'signed-in', userId, created: true }
+    const matched = matchedAccount(db, flow.email)
+    if (matched) {
+      db.prepare(
+        'UPDATE email_flows SET confirmed = 1, code_hash = NULL, code_expires_at = NULL, expires_at = ? WHERE ticket_hash = ?'
+      ).run(new Date(now.getTime() + CONFIRMED_TTL_MS).toISOString(), ticketHash)
+      return { next: 'match', ticket, email: flow.email, providers: matched.providers }
+    }
+    return { next: 'signed-in', userId: createFromFlow(db, flow, nowIso), created: true }
   })()
   return unwrap(out)
 }
@@ -405,6 +491,47 @@ async function resetStep(deps: AppDeps, body: Record<string, unknown>): Promise<
   return unwrap(out)
 }
 
+async function separateStep(deps: AppDeps, body: Record<string, unknown>): Promise<StepOutcome> {
+  const { db } = deps
+  const ticketHash = await sha256Hex(text(body, 'ticket'))
+  const nowIso = deps.now().toISOString()
+  const out = db.transaction((): StepOutcome | Refusal => {
+    const flow = confirmedSignup(db, ticketHash, nowIso)
+    if (!flow) return refuse(EMAIL_COPY.codeExpired)
+    if (hasEmailSignIn(db, flow.email)) return refuse(EMAIL_COPY.emailTaken)
+    return { next: 'signed-in', userId: createFromFlow(db, flow, nowIso), created: true }
+  })()
+  return unwrap(out)
+}
+
+async function linkDiscordStep(deps: AppDeps, body: Record<string, unknown>): Promise<StepOutcome> {
+  const taken = await takeLinkCode(deps, body.code, body.verifier)
+  if (!taken) throw new EmailAuthError(EMAIL_COPY.codeExpired, 400)
+  const userId = await attachFromFlow(
+    deps,
+    text(body, 'ticket'),
+    { provider: 'discord', subject: taken.subject },
+    deps.now().toISOString()
+  )
+  return { next: 'signed-in', userId, created: false }
+}
+
+async function linkAppleStep(deps: AppDeps, body: Record<string, unknown>): Promise<StepOutcome> {
+  // Only the token and nonce: an authorization code would be traded for a refresh token we'd drop.
+  const verified = await verifyAppleSignIn(
+    { identityToken: body.identityToken, nonce: body.nonce },
+    deps
+  )
+  if (!verified) throw new EmailAuthError(EMAIL_COPY.codeExpired, 400)
+  const userId = await attachFromFlow(
+    deps,
+    text(body, 'ticket'),
+    { provider: 'apple', subject: verified.sub },
+    deps.now().toISOString()
+  )
+  return { next: 'signed-in', userId, created: false }
+}
+
 export async function runEmailStep(
   deps: AppDeps,
   step: EmailStep,
@@ -426,6 +553,12 @@ export async function runEmailStep(
       return forgotStep(deps, body, ctx.ip)
     case 'reset':
       return resetStep(deps, body)
+    case 'separate':
+      return separateStep(deps, body)
+    case 'link-discord':
+      return linkDiscordStep(deps, body)
+    case 'link-apple':
+      return linkAppleStep(deps, body)
     default:
       throw new Error(`email step not implemented: ${step}`)
   }
@@ -438,7 +571,10 @@ const STEPS: readonly string[] = [
   'confirm',
   'resend',
   'forgot',
-  'reset'
+  'reset',
+  'separate',
+  'link-discord',
+  'link-apple'
 ]
 
 const json = (body: unknown, status = 200): Response =>

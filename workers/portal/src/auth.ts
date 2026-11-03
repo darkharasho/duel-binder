@@ -2,7 +2,9 @@ import type { Me } from '../../../src/shared/cloud'
 import { allowedGames, type GameId } from '../../../src/shared/games'
 import type { AppDeps } from './app'
 import { appleRefreshToken, verifyAppleIdentityToken } from './apple'
+import { attachFromFlow, EmailAuthError } from './emailAuth'
 import { emailEnabled } from './emailSend'
+import { EMAIL_COPY } from '../../../src/shared/emailAuth'
 import { mergedFrom, purgeHolds } from './merge'
 import { signInWith, verifiedEmail, type DiscordProfile, type Identity } from './signIns'
 
@@ -58,9 +60,15 @@ function readCookie(req: Request, name: string): string | null {
   return null
 }
 
-const cookie = (name: string, value: string, maxAge: number): string =>
-  `${name}=${value}; HttpOnly; Secure; SameSite=Lax; Path=/; Max-Age=${maxAge}`
-const clearCookie = (name: string): string => cookie(name, '', 0)
+const cookie = (name: string, value: string, maxAge: number, path = '/'): string =>
+  `${name}=${value}; HttpOnly; Secure; SameSite=Lax; Path=${path}; Max-Age=${maxAge}`
+const clearCookie = (name: string, path = '/'): string => cookie(name, '', 0, path)
+
+/** The raw ticket of a confirmed sign-up that is choosing which account to link its email to. */
+export const EMAIL_LINK_COOKIE = 'email_link'
+export const EMAIL_LINK_PATH = '/auth'
+export const EMAIL_LINK_MAX_AGE = 900
+const MATCH_PAGE = '/auth/email/match'
 
 function respond(
   status: number,
@@ -210,6 +218,12 @@ export function startSignIn(req: Request, deps: AppDeps): Response {
   if (new URL(req.url).searchParams.get('next') === 'scan')
     cookies.push(cookie(NEXT_COOKIE, 'scan', STATE_MAX_AGE))
   else if (readCookie(req, NEXT_COOKIE) !== null) cookies.push(clearCookie(NEXT_COOKIE))
+  // `link=email` keeps the cookie the sign-up page set; any other start drops a leftover one.
+  if (
+    new URL(req.url).searchParams.get('link') !== 'email' &&
+    readCookie(req, EMAIL_LINK_COOKIE) !== null
+  )
+    cookies.push(clearCookie(EMAIL_LINK_COOKIE, EMAIL_LINK_PATH))
   return redirect(discordAuthorize(deps, state), cookies)
 }
 
@@ -425,6 +439,36 @@ export async function finishSignIn(req: Request, deps: AppDeps): Promise<Respons
       clearCookie('oauth_state'),
       clearCookie('desktop_auth')
     ])
+  }
+
+  const emailLink = readCookie(req, EMAIL_LINK_COOKIE)
+  if (emailLink) {
+    // Choosing which account a sign-up's email joins: this Discord sign-in is the proof, and it
+    // must already be that account (no account is made here).
+    const spent = [clearCookie('oauth_state'), clearCookie(EMAIL_LINK_COOKIE, EMAIL_LINK_PATH)]
+    try {
+      const userId = await attachFromFlow(
+        deps,
+        emailLink,
+        { provider: 'discord', subject: user.id },
+        nowIso
+      )
+      deps.db
+        .prepare(
+          "INSERT INTO sessions (token_hash, user_id, kind, created_at, expires_at) VALUES (?, ?, 'web', ?, ?)"
+        )
+        .run(
+          secretHash,
+          userId,
+          nowIso,
+          new Date(now.getTime() + SESSION_MAX_AGE * 1000).toISOString()
+        )
+      return redirect('/', [cookie('session', secret, SESSION_MAX_AGE), ...spent])
+    } catch (err) {
+      if (!(err instanceof EmailAuthError)) throw err
+      const reason = err.message === EMAIL_COPY.codeExpired ? 'expired' : 'other-account'
+      return redirect(`${MATCH_PAGE}?error=${reason}`, spent)
+    }
   }
 
   deps.db.transaction(() => {

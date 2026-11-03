@@ -187,12 +187,26 @@ describe('owner undo of a merge', () => {
     db.prepare("DELETE FROM sign_ins WHERE provider = 'email' AND subject = 'e@x.io'").run()
     const elsewhere = await addEmailUser('e@x.io', 'other-password-1')
     const res = await undo('tok-owner', { closedId: closed })
-    expect(res.status).toBe(204)
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ skipped: [{ provider: 'email', subject: 'e@x.io' }] })
     expect(findAccount(db, { provider: 'email', subject: 'e@x.io' })).toBe(elsewhere)
     expect(
       db.prepare("SELECT 1 FROM sign_ins WHERE user_id = ? AND provider = 'email'").get(closed)
     ).toBeUndefined()
     expect(findAccount(db, { provider: 'apple', subject: 'sub9' })).toBe(closed)
+  })
+
+  it('undo lists an email the survivor changed since the merge as skipped', async () => {
+    const closed = await addEmailUser('e@x.io', 'hunter2hunter2')
+    db.prepare(
+      "INSERT INTO sign_ins (provider, subject, user_id, created_at) VALUES ('apple', 'sub9', ?, 'x')"
+    ).run(closed)
+    mergeEmail(closed, 'e@x.io')
+    db.prepare("UPDATE sign_ins SET subject = 'new@x.io' WHERE subject = 'e@x.io'").run()
+    const res = await undo('tok-owner', { closedId: closed })
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ skipped: [{ provider: 'email', subject: 'e@x.io' }] })
+    expect(findAccount(db, { provider: 'email', subject: 'new@x.io' })).toBe(me)
   })
 
   it('undo when the name was taken gives a generated one', async () => {

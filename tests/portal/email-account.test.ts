@@ -354,6 +354,57 @@ describe('email sign-in in Settings', () => {
     expect(count('SELECT count(*) AS n FROM sign_ins WHERE user_id = ?', solo)).toBe(1)
   })
 
+  it('removing the email sign-in deletes every pending flow of the user', async () => {
+    await addEmailTo('ann', 'ann@x.io', 'hunter2hunter2')
+    await rpc('ann', 'account:changeEmail', ['hunter2hunter2', 'new@x.io'])
+    const reset = await emailStep('forgot', { email: 'ann@x.io' })
+    expect(reset.body.next).toBe('code')
+    const bob = addUser(db, '222', 'Bob')
+    db.prepare(
+      "INSERT INTO email_flows (ticket_hash, purpose, email, user_id, expires_at, created_at) VALUES ('keep', 'add', 'b@x.io', ?, 'z', 'x')"
+    ).run(bob)
+    expect(count('SELECT count(*) AS n FROM email_flows WHERE user_id = ?', ann)).toBe(2)
+    await rpc('ann', 'account:removeSignIn', ['email'])
+    expect(count('SELECT count(*) AS n FROM email_flows WHERE user_id = ?', ann)).toBe(0)
+    expect(count('SELECT count(*) AS n FROM email_flows WHERE user_id = ?', bob)).toBe(1)
+  })
+
+  it('an add ticket does nothing on the unauthenticated confirm and resend', async () => {
+    const added = await rpc('ann', 'account:addEmail', ['ann@x.io', 'hunter2hunter2'])
+    const ticket = (added.body.result as { ticket: string }).ticket
+    const code = sender.lastCode()
+    const flow = (): unknown =>
+      db.prepare('SELECT code_hash, code_expires_at, tries, confirmed FROM email_flows').get()
+    const before = flow()
+    const sentBefore = sender.sent.length
+    advance(2 * MIN)
+    const confirm = await emailStep('confirm', { ticket, code: '000000' })
+    expect(confirm.body.error).toBe(EMAIL_COPY.codeExpired)
+    const right = await emailStep('confirm', { ticket, code })
+    expect(right.body.error).toBe(EMAIL_COPY.codeExpired)
+    const resend = await emailStep('resend', { ticket })
+    expect(resend.body.error).toBe(EMAIL_COPY.codeExpired)
+    expect(flow()).toEqual(before)
+    expect(sender.sent).toHaveLength(sentBefore)
+    expect(count('SELECT count(*) AS n FROM users')).toBe(1)
+  })
+
+  it('changePassword and changeEmail refuse a wrong current password and change nothing', async () => {
+    await addEmailTo('ann', 'ann@x.io', 'hunter2hunter2')
+    session('ann2', ann)
+    const hash = (): unknown =>
+      db.prepare("SELECT subject, password_hash FROM sign_ins WHERE provider = 'email'").get()
+    const before = hash()
+    const flows = count('SELECT count(*) AS n FROM email_flows')
+    const a = await rpc('ann', 'account:changePassword', ['wrong-password', 'brand-new-pass'])
+    expect(a).toMatchObject({ status: 400, body: { error: EMAIL_COPY.wrongPassword } })
+    const b = await rpc('ann', 'account:changeEmail', ['wrong-password', 'new@x.io'])
+    expect(b).toMatchObject({ status: 400, body: { error: EMAIL_COPY.wrongPassword } })
+    expect(hash()).toEqual(before)
+    expect(alive('ann2')).toBe(true)
+    expect(count('SELECT count(*) AS n FROM email_flows')).toBe(flows)
+  })
+
   it('listSignIns shows the address', async () => {
     await addEmailTo('ann', 'ann@x.io', 'hunter2hunter2')
     const r = await rpc('ann', 'account:signIns', [])

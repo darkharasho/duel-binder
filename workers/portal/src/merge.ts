@@ -499,10 +499,12 @@ const PAST_HOLD = 'This merge is past its 30 days'
 /**
  * Owner undo: reopens the closed account with the rows it kept, gives back the sign-ins it brought
  * (those still on the survivor) and its Apple token, and drops the merge row. The survivor keeps
- * everything it has now, so no card is lost. Throws a CollectionError for a missing or purged merge.
+ * everything it has now, so no card is lost. Returns the sign-ins it couldn't give back (gone from
+ * the survivor, taken by someone else, or an email the survivor changed). Throws a CollectionError
+ * for a missing or purged merge.
  */
-export function undoMerge(db: SqlDb, closedId: number, now: Date): void {
-  db.transaction(() => {
+export function undoMerge(db: SqlDb, closedId: number, now: Date): Identity[] {
+  return db.transaction((): Identity[] => {
     const m = db.prepare('SELECT * FROM account_merges WHERE closed_id = ?').get(closedId) as
       | {
           survivor_id: number
@@ -520,6 +522,7 @@ export function undoMerge(db: SqlDb, closedId: number, now: Date): void {
     const moved = JSON.parse(m.moved_sign_ins) as Identity[]
     let backApple = false
     let given = 0
+    const skipped: Identity[] = []
     for (const id of moved) {
       const changed = db
         .prepare(
@@ -527,6 +530,7 @@ export function undoMerge(db: SqlDb, closedId: number, now: Date): void {
         )
         .run(closedId, id.provider, id.subject, survivor).changes
       if (changed) given++
+      else skipped.push({ provider: id.provider, subject: id.subject })
       if (changed && id.provider === 'apple') backApple = true
     }
     // Without one, the reopened account could never be signed in to (and its hold row would go).
@@ -567,6 +571,7 @@ export function undoMerge(db: SqlDb, closedId: number, now: Date): void {
     refreshLegacyDiscordId(db, survivor)
     refreshLegacyDiscordId(db, closedId)
     db.prepare('DELETE FROM account_merges WHERE closed_id = ?').run(closedId)
+    return skipped
   })()
 }
 
@@ -598,13 +603,14 @@ export async function adminMergeRoute(req: Request, deps: AppDeps): Promise<Resp
     const body = (await req.json().catch(() => null)) as { closedId?: unknown } | null
     const id = body?.closedId
     if (typeof id !== 'number' || !Number.isInteger(id)) return json({ error: 'Bad request' }, 400)
+    let skipped: Identity[]
     try {
-      undoMerge(deps.db, id, deps.now())
+      skipped = undoMerge(deps.db, id, deps.now())
     } catch (e) {
       if (e instanceof CollectionError) return json({ error: e.message }, 400)
       throw e
     }
-    return new Response(null, { status: 204 })
+    return skipped.length > 0 ? json({ skipped }) : new Response(null, { status: 204 })
   }
   return notFound
 }

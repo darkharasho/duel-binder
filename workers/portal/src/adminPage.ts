@@ -511,6 +511,10 @@ async function loadMerges() {
             body: JSON.stringify({ closedId: m.closedId })
           })
           if (!r.ok) alert('Undo failed: ' + ((await r.json().catch(() => ({}))).error ?? 'HTTP ' + r.status))
+          else if (r.status === 200) {
+            const skipped = (await r.json().catch(() => ({}))).skipped ?? []
+            if (skipped.length) alert('Undone, but these sign-ins could not be given back: ' + skipped.map((s) => s.provider + ' ' + s.subject).join(', '))
+          }
           loadMerges()
         })
         const cell = el('td')

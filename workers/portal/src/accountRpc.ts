@@ -120,11 +120,8 @@ export async function removeSignIn(
       throw new CollectionError(LAST_SIGN_IN)
     db.prepare('DELETE FROM sign_ins WHERE user_id = ? AND provider = ?').run(userId, provider)
     if (provider === 'apple') db.prepare('DELETE FROM apple_tokens WHERE user_id = ?').run(userId)
-    // A pending add or change would otherwise outlive the sign-in it belongs to.
-    if (provider === 'email')
-      db.prepare("DELETE FROM email_flows WHERE user_id = ? AND purpose IN ('add', 'change')").run(
-        userId
-      )
+    // Pending add, change and reset flows would otherwise outlive the sign-in they belong to.
+    if (provider === 'email') db.prepare('DELETE FROM email_flows WHERE user_id = ?').run(userId)
     refreshLegacyDiscordId(db, userId)
     return true
   })()

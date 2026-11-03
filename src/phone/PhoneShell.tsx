@@ -26,6 +26,7 @@ import {
   SheetHeader,
   SheetTitle
 } from '@/components/ui/sheet'
+import { AccountNotices } from '@/features/account/AccountNotices'
 import type { EngineFactory } from '@/features/scan/engine'
 import { GameSegments } from '@/components/GameSwitch'
 import { api, mutationInvalidationKeys } from '@/lib/api'
@@ -38,7 +39,6 @@ import { refreshAllFingerprints } from './refreshFingerprints'
 import { ScannerScreen } from './ScannerScreen'
 import { Settings } from './Settings'
 import { StatusLine } from './StatusLine'
-import { AccountNotices } from '@/features/account/AccountNotices'
 import { UpdateBanner } from './UpdateBanner'
 
 // Loaded on demand, as on the desktop, so Rip stays out of the first load.

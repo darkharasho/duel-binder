@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react'
+import { act, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { LAST_SIGN_IN } from '@shared/account'
 import type { Api } from '@shared/ipc'
@@ -7,6 +7,14 @@ import type { AccountStatus } from '@shared/types'
 import { AccountNotices } from '@/features/account/AccountNotices'
 import { SignInMethods } from '@/features/settings/SignInMethods'
 import { createMockApi, renderWithProviders } from './mockApi'
+
+const build = vi.hoisted(() => ({ platform: 'web' as 'web' | 'ios' | 'android' }))
+vi.mock('@/lib/portal', async (orig) => ({
+  ...(await orig<typeof import('@/lib/portal')>()),
+  get APP_PLATFORM() {
+    return build.platform
+  }
+}))
 
 const me = (over: Partial<Me> = {}): Me => ({
   id: 1,
@@ -43,6 +51,7 @@ const make = (
   })
 
 afterEach(() => {
+  build.platform = 'web'
   window.api = undefined as never
 })
 
@@ -61,8 +70,15 @@ describe('username prompt', () => {
 
   it("doesn't prompt a chosen username", async () => {
     const api = make(me({ username: 'ann', usernameChosen: true }))
-    renderWithProviders(<AccountNotices />, { api })
-    await waitFor(() => expect(api.account.status).toHaveBeenCalled())
+    renderWithProviders(
+      <>
+        <AccountNotices />
+        <SignInMethods />
+      </>,
+      { api }
+    )
+    // The user has loaded and rendered, so a prompt would be showing by now.
+    expect(await screen.findByText('@ann')).toBeInTheDocument()
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
@@ -129,9 +145,7 @@ describe('sign-in methods', () => {
       screen.getByText("You won't be able to sign in with Apple until you link it again.")
     ).toBeInTheDocument()
     const dialog = screen.getByRole('dialog')
-    await u.click(
-      dialog.querySelector('button.bg-destructive, button[data-variant="destructive"]')!
-    )
+    await u.click(within(dialog).getByRole('button', { name: 'Remove' }))
     await waitFor(() => expect(api.account.removeSignIn).toHaveBeenCalledWith('apple'))
   })
 
@@ -149,13 +163,40 @@ describe('sign-in methods', () => {
 describe('link hint', () => {
   it('shows the right copy and dismisses', async () => {
     const u = userEvent.setup()
-    const api = make(me({ usernameChosen: true, linkHint: 'discord' }))
+    let emit: (s: AccountStatus) => void = () => {}
+    const cleared = me({ usernameChosen: true, linkHint: null })
+    const api = make(me({ usernameChosen: true, linkHint: 'discord' }), ['discord'], {
+      onChange: vi.fn((cb: (s: AccountStatus) => void) => {
+        emit = cb
+        return () => {}
+      }),
+      dismissLinkHint: vi.fn(async () => {
+        // The desktop's account.onChange brings the stored account back changed.
+        act(() => emit(status(cleared)))
+        return cleared
+      })
+    })
     renderWithProviders(<AccountNotices />, { api })
     expect(
       await screen.findByText('Already use Duel Binder with Discord? Link it in Settings.')
     ).toBeInTheDocument()
     await u.click(screen.getByRole('button', { name: 'Dismiss' }))
     expect(api.account.dismissLinkHint).toHaveBeenCalled()
+    await waitFor(() =>
+      expect(
+        screen.queryByText('Already use Duel Binder with Discord? Link it in Settings.')
+      ).not.toBeInTheDocument()
+    )
+  })
+
+  it('apple on the iPhone app points at Settings', async () => {
+    build.platform = 'ios'
+    renderWithProviders(<AccountNotices />, {
+      api: make(me({ usernameChosen: true, linkHint: 'apple' }))
+    })
+    expect(
+      await screen.findByText('Already use Duel Binder with Apple? Link it in Settings.')
+    ).toBeInTheDocument()
   })
 
   it('apple off the iPhone points at the iPhone', async () => {

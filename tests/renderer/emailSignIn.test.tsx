@@ -1,6 +1,9 @@
+import * as React from 'react'
 import { act, fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { CodeBoxes } from '@/features/account/CodeBoxes'
+import { EmailClaim } from '@/features/account/EmailClaim'
 import { EmailSignIn } from '@/features/account/EmailSignIn'
 import type { EmailAuthClient } from '@/features/account/emailClient'
 import { EMAIL_COPY, type EmailAuthView } from '@shared/emailAuth'
@@ -145,7 +148,7 @@ describe('EmailSignIn', () => {
     await enterEmail(user)
     expect(screen.getByRole('button', { name: 'Make a separate account' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /^Link/ })).toBeNull()
-    expect(screen.getByText(EMAIL_COPY.mergeOnPhone)).toBeInTheDocument()
+    expect(screen.getByText(EMAIL_COPY.linkOnIphone)).toBeInTheDocument()
   })
 
   it('match with linkDiscord calls it with the ticket', async () => {
@@ -161,5 +164,91 @@ describe('EmailSignIn', () => {
     await user.click(screen.getByRole('button', { name: 'Link with Discord' }))
     expect(linkDiscord).toHaveBeenCalledWith('mt')
     expect(onSignedIn).toHaveBeenCalledWith(USER, false)
+  })
+
+  it('match offers Back to the email screen', async () => {
+    const user = userEvent.setup()
+    render(<EmailSignIn client={fakeClient([match])} onSignedIn={() => {}} onBack={() => {}} />)
+    await enterEmail(user)
+    await user.click(screen.getByRole('button', { name: 'Back' }))
+    expect(screen.getByLabelText('Email')).toBeInTheDocument()
+  })
+
+  it('new-password offers Back to the email screen', async () => {
+    const user = userEvent.setup()
+    const client = fakeClient([
+      { next: 'password', email: 'a@b.co' },
+      code('reset'),
+      { next: 'new-password', ticket: 'tk2' }
+    ])
+    render(<EmailSignIn client={client} onSignedIn={() => {}} onBack={() => {}} />)
+    await enterEmail(user)
+    await user.click(screen.getByRole('button', { name: 'Forgot password?' }))
+    await user.type(screen.getByLabelText('Digit 1'), '654321')
+    await user.click(screen.getByRole('button', { name: 'Confirm' }))
+    await user.click(screen.getByRole('button', { name: 'Back' }))
+    expect(screen.getByLabelText('Email')).toBeInTheDocument()
+  })
+
+  it('only the wrong-password copy gets the Forgot password? emphasis', async () => {
+    const user = userEvent.setup()
+    const client = fakeClient([
+      { next: 'password', email: 'a@b.co' },
+      new Error(EMAIL_COPY.tooManyTries)
+    ])
+    render(<EmailSignIn client={client} onSignedIn={() => {}} onBack={() => {}} />)
+    await enterEmail(user)
+    await user.type(screen.getByLabelText('Password'), 'nope-nope')
+    await user.click(screen.getByRole('button', { name: 'Sign in' }))
+    expect(await screen.findByText(EMAIL_COPY.tooManyTries)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Forgot password?' })).toHaveAttribute(
+      'data-variant',
+      'link'
+    )
+  })
+})
+
+describe('CodeBoxes', () => {
+  function Harness({ initial }: { initial: string }): React.JSX.Element {
+    const [v, setV] = React.useState(initial)
+    return <CodeBoxes value={v} onChange={setV} />
+  }
+  const digits = (): string =>
+    [1, 2, 3, 4, 5, 6]
+      .map((i) => (screen.getByLabelText(`Digit ${i}`) as HTMLInputElement).value)
+      .join('|')
+
+  it('typing over a filled box replaces just that digit', async () => {
+    const user = userEvent.setup()
+    render(<Harness initial="123456" />)
+    await user.type(screen.getByLabelText('Digit 3'), '9')
+    expect(digits()).toBe('1|2|9|4|5|6')
+  })
+
+  it('Backspace clears only that box', async () => {
+    const user = userEvent.setup()
+    render(<Harness initial="123456" />)
+    await user.click(screen.getByLabelText('Digit 3'))
+    await user.keyboard('{Backspace}')
+    expect(digits()).toBe('1|2||4|5|6')
+  })
+})
+
+describe('EmailClaim', () => {
+  it('Cancel calls onCancel', async () => {
+    const user = userEvent.setup()
+    const onCancel = vi.fn()
+    render(
+      <EmailClaim
+        email="a@b.co"
+        provider="discord"
+        client={fakeClient([])}
+        onSignedIn={() => {}}
+        onForgot={() => {}}
+        onCancel={onCancel}
+      />
+    )
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(onCancel).toHaveBeenCalled()
   })
 })

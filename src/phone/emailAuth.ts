@@ -6,6 +6,7 @@ import {
   type EmailAuthView,
   type EmailStep
 } from '../shared/emailAuth'
+import { SIGN_IN_FAILED } from './copy'
 import type { PhoneStore } from './data/store'
 import { appleSheet, nativeSignIn, SignInCancelled } from './nativeSignIn'
 
@@ -53,7 +54,8 @@ export function phoneEmailClient(
       const message = (out as { error?: unknown } | null)?.error
       throw new Error(typeof message === 'string' ? message : EMAIL_COPY.linkFailed)
     }
-    const reply = out as EmailAuthReply
+    const reply = out as EmailAuthReply | null
+    if (typeof reply?.next !== 'string') throw new Error(SIGN_IN_FAILED)
     if (reply.next !== 'signed-in') return reply
     await store.signIn(reply.token, reply.user)
     return { next: 'signed-in', user: reply.user, created: reply.created }

@@ -150,7 +150,7 @@ function matchPage(c: Carry, providers: string[], error?: string): Page {
         c,
         `<div class="actions">${submit('Sign in with Discord to link')}</div>`
       )
-    : `<p class="lead">You can link them later from the Duel Binder iPhone app.</p>`
+    : `<p class="lead">${EMAIL_COPY.linkOnIphone}</p>`
   return {
     title: 'Link your accounts',
     html: `<h1>Link your accounts</h1>

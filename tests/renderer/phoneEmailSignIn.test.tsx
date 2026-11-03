@@ -72,6 +72,15 @@ describe('phoneEmailClient', () => {
     ).rejects.toThrow("That code doesn't match.")
   })
 
+  it('a reply that is not JSON, or has no next, rejects with generic copy', async () => {
+    for (const body of ['<html>oops</html>', '{"hello":1}']) {
+      const f = vi.fn(async () => new Response(body))
+      await expect(
+        phoneEmailClient({ signIn: vi.fn() }, f as never).step('check', {})
+      ).rejects.toThrow("Sign-in didn't go through. Try again.")
+    }
+  })
+
   it('links Discord through the sheet, sending the code and verifier with the ticket', async () => {
     vi.mocked(nativeSignIn).mockResolvedValue({ code: 'c', verifier: 'v' } as never)
     const f = portal(true, {

@@ -49,6 +49,7 @@ export const EMAIL_COPY = {
     `There's already a Duel Binder account using this email. Link ${label(p)} to it?`,
   alsoHas: (p: string): string =>
     `That account also has ${label(p)}. Sign in to it and remove one first.`,
+  linkOnIphone: 'You can link them later from the Duel Binder iPhone app.',
   mergeOnPhone: 'That email belongs to another account. Link it from the Duel Binder phone app.',
   otherAccount: (p: string): string => `That ${label(p)} account isn't the one using this email.`
 }

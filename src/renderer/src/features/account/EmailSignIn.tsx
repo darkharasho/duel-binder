@@ -47,7 +47,6 @@ export function EmailSignIn({
   const [password, setPassword] = useState('')
   const [code, setCode] = useState('')
   const [error, setError] = useState<string | null>(null)
-  const [wrongPassword, setWrongPassword] = useState(false)
   const [busy, setBusy] = useState(false)
   const [until, setUntil] = useState(0)
   const [now, setNow] = useState(() => Date.now())
@@ -69,7 +68,6 @@ export function EmailSignIn({
 
   const follow = (reply: EmailAuthView): void => {
     setError(null)
-    setWrongPassword(false)
     switch (reply.next) {
       case 'password':
       case 'create':
@@ -97,17 +95,13 @@ export function EmailSignIn({
     }
   }
 
-  const run = async (
-    go: () => Promise<EmailAuthView>,
-    opts: { wrong?: boolean } = {}
-  ): Promise<void> => {
+  const run = async (go: () => Promise<EmailAuthView>): Promise<void> => {
     setBusy(true)
     setError(null)
     try {
       follow(await go())
     } catch (e) {
       setError((e as Error).message)
-      setWrongPassword(opts.wrong === true)
     }
     setBusy(false)
   }
@@ -140,6 +134,8 @@ export function EmailSignIn({
       onChange={(e) => setPassword(e.target.value)}
     />
   )
+  const codeReady = new RegExp(`^\\d{${CODE_LENGTH}}$`).test(code)
+  const wrongPassword = error === EMAIL_COPY.wrongPassword
   const form = 'flex w-full max-w-xs flex-col gap-3 text-left'
 
   if (screen.at === 'email') {
@@ -183,9 +179,7 @@ export function EmailSignIn({
         onSubmit={(e) =>
           submit(e, () => {
             if (!bad)
-              void run(() => client.step(creating ? 'create' : 'password', { email, password }), {
-                wrong: !creating
-              })
+              void run(() => client.step(creating ? 'create' : 'password', { email, password }))
           })
         }
       >
@@ -194,10 +188,11 @@ export function EmailSignIn({
           <p className="text-sm text-muted-foreground">Choose a password to make your account.</p>
         )}
         {passwordBox(creating ? 'new-password' : 'current-password')}
+        {!wrongPassword && err}
         <Button type="submit" disabled={busy || bad !== null}>
           {creating ? 'Create account' : 'Sign in'}
         </Button>
-        {err}
+        {wrongPassword && err}
         {!creating && (
           <Button
             type="button"
@@ -231,15 +226,14 @@ export function EmailSignIn({
         className={form}
         onSubmit={(e) =>
           submit(e, () => {
-            if (code.length === CODE_LENGTH)
-              void run(() => client.step('confirm', { ticket, code }))
+            if (codeReady) void run(() => client.step('confirm', { ticket, code }))
           })
         }
       >
         <p className="text-sm text-muted-foreground">We sent a code to {email}.</p>
         <CodeBoxes value={code} onChange={setCode} disabled={busy} />
         {err}
-        <Button type="submit" disabled={busy || code.length !== CODE_LENGTH}>
+        <Button type="submit" disabled={busy || !codeReady}>
           Confirm
         </Button>
         <Button
@@ -284,6 +278,17 @@ export function EmailSignIn({
         <Button type="submit" disabled={busy || bad !== null}>
           Set password and sign in
         </Button>
+        <Button
+          type="button"
+          variant="ghost"
+          disabled={busy}
+          onClick={() => {
+            setError(null)
+            setScreen({ at: 'email' })
+          }}
+        >
+          Back
+        </Button>
       </form>
     )
   }
@@ -298,7 +303,7 @@ export function EmailSignIn({
       </p>
       <p className="text-sm font-medium">{email}</p>
       {!canDiscord && !canApple && (
-        <p className="text-sm text-muted-foreground">{EMAIL_COPY.mergeOnPhone}</p>
+        <p className="text-sm text-muted-foreground">{EMAIL_COPY.linkOnIphone}</p>
       )}
       {err}
       {canDiscord && (
@@ -317,6 +322,17 @@ export function EmailSignIn({
         onClick={() => void run(() => client.step('separate', { ticket }))}
       >
         Make a separate account
+      </Button>
+      <Button
+        type="button"
+        variant="ghost"
+        disabled={busy}
+        onClick={() => {
+          setError(null)
+          setScreen({ at: 'email' })
+        }}
+      >
+        Back
       </Button>
     </div>
   )

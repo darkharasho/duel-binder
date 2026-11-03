@@ -15,13 +15,15 @@ export function EmailClaim({
   provider,
   client,
   onSignedIn,
-  onForgot
+  onForgot,
+  onCancel
 }: {
   email: string
   provider: string
   client: EmailAuthClient
   onSignedIn: (user: Me, created: boolean) => void
   onForgot: () => void
+  onCancel?: () => void
 }): React.JSX.Element {
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -83,6 +85,11 @@ export function EmailClaim({
       >
         Make a separate account
       </Button>
+      {onCancel && (
+        <Button type="button" variant="ghost" disabled={busy} onClick={onCancel}>
+          Cancel
+        </Button>
+      )}
     </form>
   )
 }

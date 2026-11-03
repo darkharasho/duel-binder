@@ -165,6 +165,7 @@ export function SignIn({
           provider={emailFlow.provider}
           client={claimEmailClient(emailClient, emailFlow)}
           onSignedIn={(user) => onSignedIn(user)}
+          onCancel={() => setEmailFlow(null)}
           onForgot={() => setEmailFlow({ at: 'email', forgotFor: emailFlow.email })}
         />
       ) : native ? (

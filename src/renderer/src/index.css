@@ -383,3 +383,24 @@
     transition: none;
   }
 }
+
+/* The phone card view's pinned art (CardDrawer): it sinks back and dims as the drawer is pulled up
+   over it, driven by the sheet's scroll where the browser supports scroll timelines. */
+@supports (animation-timeline: scroll()) {
+  .card-drawer-art {
+    animation: card-drawer-art linear both;
+    animation-timeline: scroll(nearest block);
+    animation-range: 0 60vh;
+  }
+}
+@keyframes card-drawer-art {
+  to {
+    opacity: 0.45;
+    transform: scale(0.92);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .card-drawer-art {
+    animation: none;
+  }
+}

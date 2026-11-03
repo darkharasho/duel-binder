@@ -4,6 +4,7 @@ import type { Language } from '@shared/languages'
 import type { CardSearchResult } from '@shared/types'
 import { CardDetails } from '@/components/CardDetails'
 import { CopyNameButton } from '@/components/CopyNameButton'
+import { CardDrawer } from '@/components/CardDrawer'
 import { PanelCardArt } from '@/components/PanelCardArt'
 import type { PanelNav } from '@/components/panelNav'
 import { PanelPrice } from '@/components/PanelPrice'
@@ -190,81 +191,84 @@ export function CardPanel({
   const phone = isPhone()
 
   return (
-    <>
-      <SheetHeader>
-        <div className="flex items-center gap-1">
-          <SheetTitle>{name ?? 'Card'}</SheetTitle>
-          {name && <CopyNameButton name={name} />}
-        </div>
-        <SheetDescription>{typeLine}</SheetDescription>
-      </SheetHeader>
-      <div className="space-y-5 px-4 pb-6">
-        {panelArt?.imageId !== undefined && (
+    <CardDrawer
+      header={
+        <SheetHeader>
+          <div className="flex items-center gap-1">
+            <SheetTitle>{name ?? 'Card'}</SheetTitle>
+            {name && <CopyNameButton name={name} />}
+          </div>
+          <SheetDescription>{typeLine}</SheetDescription>
+        </SheetHeader>
+      }
+      art={
+        panelArt?.imageId !== undefined && (
           <PanelCardArt
             imageId={panelArt.imageId}
             printingId={panelArt.printingId}
             alt={name ?? ''}
             nav={nav}
           />
-        )}
-        <div className="space-y-1">
-          {/* Pokémon versions share their art, so nothing else shows which one is selected. */}
-          {pokemonVersion && (
-            <p
-              data-testid="selected-version"
-              className="mb-2 w-fit rounded-full px-3 py-1 text-sm font-semibold"
-              style={{
-                backgroundColor: rarityColor(pokemonVersion, 'pkm'),
-                color: rarityTextColor(pokemonVersion, 'pkm')
-              }}
-            >
-              {pokemonVersion}
-            </p>
-          )}
-          {caption && inPreferredSet && (
-            <p className="font-mono text-[13px] text-muted-foreground">{caption}</p>
-          )}
-          <PanelPrice entry={entry} price={price} label={priceLabel} plain={!!pokemonVersion} />
-        </div>
-
-        {phone && list}
-        <CardDetails card={info} printing={shown} />
-        {!phone && list}
-
-        {entry && (
-          <EntryEditor
-            key={entry.id}
-            entry={entry}
-            printings={detail.data?.printings ?? []}
-            onSelectEntry={selectEntry}
-            onClose={onClose}
-          />
-        )}
-
-        {onMoreOptions && moreFor !== undefined && moreFor !== null && name && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() =>
-              onMoreOptions(
-                {
-                  id: cardId,
-                  name,
-                  type: info?.type ?? seed?.type ?? '',
-                  defaultImageId: panelArt?.imageId ?? 0,
-                  matchedSetCode: null
-                },
-                moreFor
-              )
-            }
+        )
+      }
+    >
+      <div className="space-y-1">
+        {/* Pokémon versions share their art, so nothing else shows which one is selected. */}
+        {pokemonVersion && (
+          <p
+            data-testid="selected-version"
+            className="mb-2 w-fit rounded-full px-3 py-1 text-sm font-semibold"
+            style={{
+              backgroundColor: rarityColor(pokemonVersion, 'pkm'),
+              color: rarityTextColor(pokemonVersion, 'pkm')
+            }}
           >
-            More options…
-          </Button>
+            {pokemonVersion}
+          </p>
         )}
-
-        <FriendCopies cardId={cardId} />
-        <FriendWants cardId={cardId} owned={(copies.data?.length ?? 0) > 0} />
+        {caption && inPreferredSet && (
+          <p className="font-mono text-[13px] text-muted-foreground">{caption}</p>
+        )}
+        <PanelPrice entry={entry} price={price} label={priceLabel} plain={!!pokemonVersion} />
       </div>
-    </>
+
+      {phone && list}
+      <CardDetails card={info} printing={shown} />
+      {!phone && list}
+
+      {entry && (
+        <EntryEditor
+          key={entry.id}
+          entry={entry}
+          printings={detail.data?.printings ?? []}
+          onSelectEntry={selectEntry}
+          onClose={onClose}
+        />
+      )}
+
+      {onMoreOptions && moreFor !== undefined && moreFor !== null && name && (
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() =>
+            onMoreOptions(
+              {
+                id: cardId,
+                name,
+                type: info?.type ?? seed?.type ?? '',
+                defaultImageId: panelArt?.imageId ?? 0,
+                matchedSetCode: null
+              },
+              moreFor
+            )
+          }
+        >
+          More options…
+        </Button>
+      )}
+
+      <FriendCopies cardId={cardId} />
+      <FriendWants cardId={cardId} owned={(copies.data?.length ?? 0) > 0} />
+    </CardDrawer>
   )
 }

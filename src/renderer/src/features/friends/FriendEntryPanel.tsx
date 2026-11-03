@@ -2,6 +2,7 @@ import type { EntryView } from '@shared/types'
 import { CardDetails } from '@/components/CardDetails'
 import { CopyNameButton } from '@/components/CopyNameButton'
 import { LanguageTag } from '@/components/LanguageTag'
+import { CardDrawer } from '@/components/CardDrawer'
 import { PanelCardArt } from '@/components/PanelCardArt'
 import type { PanelNav } from '@/components/panelNav'
 import { scanFor } from '@/components/scanFor'
@@ -24,56 +25,59 @@ export function FriendEntryPanel({
   const card = entry.card
   const typeLine = [card.type, card.attribute, card.race].filter(Boolean).join(' · ')
   return (
-    <>
-      <SheetHeader>
-        <div className="flex items-center gap-1">
-          <SheetTitle>{card.name}</SheetTitle>
-          <CopyNameButton name={card.name} />
-        </div>
-        <SheetDescription>{typeLine}</SheetDescription>
-      </SheetHeader>
-      <div className="space-y-5 px-4 pb-6">
+    <CardDrawer
+      header={
+        <SheetHeader>
+          <div className="flex items-center gap-1">
+            <SheetTitle>{card.name}</SheetTitle>
+            <CopyNameButton name={card.name} />
+          </div>
+          <SheetDescription>{typeLine}</SheetDescription>
+        </SheetHeader>
+      }
+      art={
         <PanelCardArt
           imageId={entry.imageId}
           printingId={scanFor(entry)}
           alt={card.name}
           nav={nav}
         />
-        <CardDetails card={card} printing={entry.printing} />
+      }
+    >
+      <CardDetails card={card} printing={entry.printing} />
 
-        {copies.length > 0 && (
-          <section aria-label="Their copies" className="space-y-1.5">
-            <h3 className="text-sm font-medium">Their copies</h3>
-            <ul className="space-y-1">
-              {copies.map((c) => (
-                <li key={c.id}>
-                  <button
-                    type="button"
-                    aria-current={c.id === entry.id}
-                    onClick={() => onSelectEntry(c.id)}
-                    className={cn(
-                      'flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                      c.id === entry.id ? 'bg-accent' : 'hover:bg-accent/50'
-                    )}
-                  >
-                    <span className="flex items-center gap-1.5">
-                      {c.printing.setCode} · {c.printing.setRarity}
-                      <LanguageTag language={c.printing.language} />
-                    </span>
-                    <span className="tabular-nums text-muted-foreground">×{c.quantity}</span>
-                  </button>
-                </li>
-              ))}
-            </ul>
-          </section>
-        )}
+      {copies.length > 0 && (
+        <section aria-label="Their copies" className="space-y-1.5">
+          <h3 className="text-sm font-medium">Their copies</h3>
+          <ul className="space-y-1">
+            {copies.map((c) => (
+              <li key={c.id}>
+                <button
+                  type="button"
+                  aria-current={c.id === entry.id}
+                  onClick={() => onSelectEntry(c.id)}
+                  className={cn(
+                    'flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-sm outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                    c.id === entry.id ? 'bg-accent' : 'hover:bg-accent/50'
+                  )}
+                >
+                  <span className="flex items-center gap-1.5">
+                    {c.printing.setCode} · {c.printing.setRarity}
+                    <LanguageTag language={c.printing.language} />
+                  </span>
+                  <span className="tabular-nums text-muted-foreground">×{c.quantity}</span>
+                </button>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
-        <div className="flex items-center gap-2 text-sm">
-          <span className="text-muted-foreground">Value</span>
-          <EntryValue entry={entry} amount={displayTotal(entry)} />
-        </div>
-        <EbayPriceLine entry={entry} />
+      <div className="flex items-center gap-2 text-sm">
+        <span className="text-muted-foreground">Value</span>
+        <EntryValue entry={entry} amount={displayTotal(entry)} />
       </div>
-    </>
+      <EbayPriceLine entry={entry} />
+    </CardDrawer>
   )
 }

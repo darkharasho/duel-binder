@@ -1,0 +1,95 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{width:1080px;height:1920px;overflow:hidden;font-family:'IBM Plex Sans',sans-serif;color:#ecebe8;background:#0c0d10}
+.stage{position:relative;width:1080px;height:1920px;overflow:hidden;
+ background:radial-gradient(900px 700px at 15% 0%,#3a2a6b 0%,transparent 60%),radial-gradient(800px 700px at 100% 30%,#5a3a10 0%,transparent 55%),#0c0d10}
+.head{position:absolute;top:110px;left:0;right:0;text-align:center}
+.head h1{font-size:76px;font-weight:600;line-height:1.08;letter-spacing:-1.5px}
+.head p{margin-top:22px;font-size:34px;color:#a9a7b3}
+.phone{position:absolute;left:150px;top:470px;width:780px;height:1620px;border-radius:96px;background:#1b1c21;padding:18px;
+ box-shadow:0 0 0 3px #34363e,0 60px 120px rgba(0,0,0,.6)}
+.screen{position:relative;width:100%;height:100%;border-radius:80px;overflow:hidden;background:#111113}
+.mono{font-family:'IBM Plex Mono',monospace}
+/* cards */
+.card{position:relative;border-radius:10px;padding:6px;box-shadow:0 10px 24px rgba(0,0,0,.5)}
+.card .art{position:absolute;left:9%;right:9%;top:16%;height:48%;border-radius:3px;overflow:hidden}
+.card .nm{position:absolute;left:8%;right:8%;top:5%;height:8%;border-radius:2px;background:rgba(255,255,255,.18)}
+.card .tx{position:absolute;left:8%;right:8%;top:69%;bottom:6%;border-radius:2px;background:rgba(255,250,235,.75)}
+.c1{background:linear-gradient(160deg,#e05a35,#9c2a18)}
+.c1 .art{background:radial-gradient(circle at 35% 30%,#ffd27a,#e0672b 35%,#5a1712 75%)}
+.c2{background:linear-gradient(160deg,#3d7bd8,#1d3f86)}
+.c2 .art{background:radial-gradient(circle at 60% 40%,#bff3ff,#3aa0d8 35%,#14254f 80%)}
+.c3{background:linear-gradient(160deg,#2f9e6a,#16573a)}
+.c3 .art{background:radial-gradient(circle at 40% 60%,#d8ffb0,#4fb35a 35%,#123a22 80%)}
+.c4{background:linear-gradient(160deg,#8c55d6,#4a2588)}
+.c4 .art{background:radial-gradient(circle at 50% 35%,#ffe3ff,#b46ae0 35%,#2a1250 80%)}
+.foil::after{content:"";position:absolute;inset:0;border-radius:10px;background:linear-gradient(115deg,transparent 30%,rgba(255,255,255,.35) 45%,rgba(160,220,255,.2) 52%,transparent 65%)}
+/* nav */
+.nav{position:absolute;left:0;right:0;bottom:0;height:150px;background:rgba(17,17,19,.92);border-top:1px solid #26272d;display:flex;justify-content:space-around;align-items:center;padding-bottom:20px}
+.nav div{font-size:22px;color:#8d8b96;text-align:center;width:120px}
+.nav div.on{color:#fff}
+.nav i{display:block;margin:0 auto 8px;width:38px;height:38px;border:3.5px solid currentColor;border-radius:10px}
+.nav .scan{position:relative;top:-28px}
+.nav .scan i{width:96px;height:96px;border-radius:50%;background:#1f2026;border:none;box-shadow:0 0 0 1px #2c2d34;margin-bottom:6px}
+</style></head><body>
+
+<!-- SHOT 1 -->
+<div class="stage" id="s1">
+ <div class="head"><h1>Know what your<br>collection is worth</h1><p>Daily prices for every card you own</p></div>
+ <div class="phone"><div class="screen" style="background:radial-gradient(500px 420px at 0% 0%,#3b2b6e,transparent 70%),radial-gradient(500px 420px at 100% 0%,#5b3b0f,transparent 70%),#111113">
+  <div style="padding:110px 44px 0">
+   <div style="font-size:28px;color:#c9c6d2">Your collection is worth</div>
+   <div style="font-size:92px;font-weight:700;letter-spacing:-2px;margin-top:4px">$4,812.40</div>
+   <div style="font-size:26px;color:#5fd18b;margin-top:2px">▲ $212.75 this month</div>
+   <div style="display:flex;gap:18px;margin-top:30px">
+    <div style="flex:1;border:1px solid #33343c;border-radius:16px;padding:22px 24px;font-size:26px;background:rgba(255,255,255,.03)"><b>1,284</b>&nbsp; Total cards</div>
+    <div style="flex:1;border:1px solid #33343c;border-radius:16px;padding:22px 24px;font-size:26px;background:rgba(255,255,255,.03)"><b>612</b>&nbsp; Unique cards</div>
+   </div>
+   <div style="font-size:32px;font-weight:600;margin-top:52px">Value over time</div>
+   <svg viewBox="0 0 660 260" style="width:100%;height:260px;margin-top:18px">
+    <defs><linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#9b7bff" stop-opacity=".45"/><stop offset="1" stop-color="#9b7bff" stop-opacity="0"/></linearGradient></defs>
+    <g stroke="#26272d" stroke-width="1.5"><line x1="0" y1="60" x2="660" y2="60"/><line x1="0" y1="140" x2="660" y2="140"/><line x1="0" y1="220" x2="660" y2="220"/></g>
+    <path d="M0 210 C40 205 60 190 100 192 S160 170 200 172 S260 150 300 158 S360 120 400 124 S470 96 510 100 S580 60 620 54 L660 40 L660 260 L0 260Z" fill="url(#g)"/>
+    <path d="M0 210 C40 205 60 190 100 192 S160 170 200 172 S260 150 300 158 S360 120 400 124 S470 96 510 100 S580 60 620 54 L660 40" fill="none" stroke="#b49bff" stroke-width="5" stroke-linecap="round"/>
+    <circle cx="660" cy="40" r="9" fill="#fff"/>
+   </svg>
+   <div style="display:flex;align-items:baseline;gap:30px;margin-top:44px">
+    <div style="font-size:32px;font-weight:600">Most valuable</div>
+    <div style="font-size:28px;border-bottom:4px solid #fff;padding-bottom:4px">Total</div><div style="font-size:28px;color:#8d8b96">Single</div>
+   </div>
+   <div style="display:flex;gap:26px;margin-top:28px">
+    <div style="width:200px"><div class="card c1 foil" style="height:290px"><div class="nm"></div><div class="art"></div><div class="tx"></div></div>
+     <div style="font-size:24px;margin-top:16px">Ember Wyrm</div><div class="mono" style="font-size:20px;color:#8d8b96">ASH-EN012 ×2</div><div class="mono" style="font-size:22px">$412.00</div></div>
+    <div style="width:200px"><div class="card c2 foil" style="height:290px"><div class="nm"></div><div class="art"></div><div class="tx"></div></div>
+     <div style="font-size:24px;margin-top:16px">Tidecaller Sage</div><div class="mono" style="font-size:20px;color:#8d8b96">SEA-EN003</div><div class="mono" style="font-size:22px">$186.50</div></div>
+    <div style="width:200px"><div class="card c4" style="height:290px"><div class="nm"></div><div class="art"></div><div class="tx"></div></div>
+     <div style="font-size:24px;margin-top:16px">Veil Oracle</div><div class="mono" style="font-size:20px;color:#8d8b96">MYS-EN041 ×3</div><div class="mono" style="font-size:22px">$94.20</div></div>
+   </div>
+  </div>
+ </div></div>
+</div>
+
+<!-- SHOT 2 -->
+<div class="stage" id="s2" style="background:radial-gradient(900px 700px at 85% 0%,#3a2a6b 0%,transparent 60%),radial-gradient(800px 700px at 0% 35%,#0f3f4a 0%,transparent 55%),#0c0d10">
+ <div class="head"><h1>Point. Scan.<br>It's in your binder.</h1><p>Your camera reads the card, set and rarity</p></div>
+ <div class="phone"><div class="screen" style="background:radial-gradient(420px 520px at 50% 40%,#4a3a2c,#1e1712 70%,#0d0a08)">
+  <div style="position:absolute;inset:0;background:repeating-linear-gradient(8deg,rgba(255,255,255,.025) 0 3px,transparent 3px 22px)"></div>
+  <div style="position:absolute;top:90px;left:0;right:0;text-align:center;font-size:26px;color:#e8e3da"><span style="background:rgba(0,0,0,.45);padding:12px 26px;border-radius:40px">● Scanning — hold steady</span></div>
+  <div style="position:absolute;left:170px;top:250px;width:404px;height:588px;transform:rotate(-3deg)">
+   <div class="card c1 foil" style="width:100%;height:100%;border-radius:18px"><div class="nm"></div><div class="art"></div><div class="tx"></div></div>
+  </div>
+  <svg style="position:absolute;left:140px;top:220px;width:464px;height:648px" viewBox="0 0 464 648" fill="none" stroke="#fff" stroke-width="8" stroke-linecap="round">
+   <path d="M4 70V24Q4 4 24 4H70"/><path d="M394 4H440Q460 4 460 24V70"/><path d="M460 578V624Q460 644 440 644H394"/><path d="M70 644H24Q4 644 4 624V578"/>
+  </svg>
+  <div style="position:absolute;left:28px;right:28px;bottom:190px;border-radius:36px;padding:30px;background:rgba(28,29,34,.82);backdrop-filter:blur(20px);border:1px solid rgba(255,255,255,.08);display:flex;gap:26px;align-items:center">
+   <div class="card c1 foil" style="width:120px;height:174px;flex:none"><div class="nm"></div><div class="art"></div><div class="tx"></div></div>
+   <div style="flex:1">
+    <div style="font-size:22px;color:#5fd18b;font-weight:600;letter-spacing:1px">✓ ADDED TO COLLECTION</div>
+    <div style="font-size:34px;font-weight:600;margin-top:8px">Ember Wyrm of the Ash Crown</div>
+    <div class="mono" style="font-size:22px;color:#a9a7b3;margin-top:8px">ASH-EN012 · Secret Rare</div>
+    <div style="display:flex;justify-content:space-between;margin-top:14px;font-size:26px"><span class="mono">$206.00</span><span style="color:#a9a7b3">Near Mint · ×2</span></div>
+   </div>
+  </div>
+ </div></div>
+</div>
+</body></html>

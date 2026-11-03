@@ -483,7 +483,52 @@ async function loadRuns() {
   if (live) pollTimer = setTimeout(loadRuns, POLL_MS)
 }
 
-const TABS = ['overview', 'runs', 'people', 'activity', 'errors', 'scanner', 'storage']
+/** Recent merges still inside their 30 days, each with an Undo. */
+async function loadMerges() {
+  const p = el('section', null, 'panel')
+  p.append(el('h2', 'Merges'))
+  try {
+    const res = await fetch('/admin/merges', { credentials: 'same-origin' })
+    if (!res.ok) throw new Error('HTTP ' + res.status)
+    const merges = (await res.json()).merges
+    if (!merges.length) p.append(el('p', 'No merges to undo.', 'note'))
+    else {
+      const table = el('table', null, 'history')
+      const head = el('tr')
+      for (const h of ['Closed', 'Into', 'Cards', 'Merged', 'Held until', '']) head.append(el('th', h))
+      table.append(head)
+      for (const m of merges) {
+        const tr = el('tr')
+        const undo = el('button', 'Undo')
+        undo.type = 'button'
+        undo.addEventListener('click', async () => {
+          if (!confirm('Undo merge of @' + m.closedUsername + ' into @' + m.survivorUsername + '?')) return
+          undo.disabled = true
+          const r = await fetch('/admin/merges/undo', {
+            method: 'POST',
+            credentials: 'same-origin',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ closedId: m.closedId })
+          })
+          if (!r.ok) alert('Undo failed: ' + ((await r.json().catch(() => ({}))).error ?? 'HTTP ' + r.status))
+          loadMerges()
+        })
+        const cell = el('td')
+        cell.append(undo)
+        tr.append(el('td', '@' + m.closedUsername), el('td', '@' + m.survivorUsername), el('td', m.cards, 'v'),
+          el('td', new Date(m.mergedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }), 'v'),
+          el('td', new Date(m.purgeAfter).toLocaleDateString(), 'v'), cell)
+        table.append(tr)
+      }
+      p.append(table)
+    }
+  } catch (e) {
+    p.append(el('p', 'Could not load merges: ' + e.message, 'note'))
+  }
+  $('merges').replaceChildren(p)
+}
+
+const TABS = ['overview', 'runs', 'people', 'activity', 'errors', 'scanner', 'storage', 'merges']
 
 function showTab() {
   const wanted = location.hash.slice(1)
@@ -497,10 +542,11 @@ function showTab() {
 
 window.addEventListener('hashchange', showTab)
 showTab()
-$('refresh').addEventListener('click', () => { load(); loadErrors(); loadRuns() })
+$('refresh').addEventListener('click', () => { load(); loadErrors(); loadRuns(); loadMerges() })
 load()
 loadErrors()
 loadRuns()
+loadMerges()
 `
 
 function csp(nonce: string): string {
@@ -532,7 +578,7 @@ export function adminPage(): Response {
 <header><div class="wrap">
 <div class="top"><h1>Duel Binder</h1><span class="badge">Admin</span><span class="pulse" id="pulse"></span>
 <span class="grow"></span><span class="at" id="at"></span><a href="/">Back to the app</a><button id="refresh" type="button">Refresh</button></div>
-<nav aria-label="Admin sections"><a href="#overview">Overview</a><a href="#runs">Runs</a><a href="#people">Users</a><a href="#activity">Usage</a><a href="#errors">Errors</a><a href="#scanner">Scanner &amp; prices</a><a href="#storage">Storage</a></nav>
+<nav aria-label="Admin sections"><a href="#overview">Overview</a><a href="#runs">Runs</a><a href="#people">Users</a><a href="#activity">Usage</a><a href="#errors">Errors</a><a href="#scanner">Scanner &amp; prices</a><a href="#storage">Storage</a><a href="#merges">Merges</a></nav>
 </div></header>
 <main class="wrap">
 <section data-tab id="overview">
@@ -545,6 +591,7 @@ export function adminPage(): Response {
 <section data-tab id="errors" hidden></section>
 <section data-tab class="grid" id="scanner" hidden></section>
 <section data-tab class="stack" id="storage" hidden></section>
+<section data-tab id="merges" hidden></section>
 </main>
 <script nonce="${nonce}">${SCRIPT}</script>
 </body>

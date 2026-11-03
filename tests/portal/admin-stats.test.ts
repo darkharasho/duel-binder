@@ -103,6 +103,14 @@ describe('GET /admin/stats', () => {
     expect(body.active).toEqual({ day: 0, week: 0, month: 0 })
   })
 
+  it('does not count closed (held) accounts as users', async () => {
+    addUser(db, '111', 'alice')
+    const held = addUser(db, 'apple:xyz', 'bob')
+    db.prepare("UPDATE users SET closed_at = '2026-10-28T00:00:00.000Z' WHERE id = ?").run(held)
+    const body = (await (await stats()).json()) as Stats
+    expect(body.users).toMatchObject({ total: 1, discord: 1, apple: 0, new7d: 1, new30d: 1 })
+  })
+
   it('stamps last_seen_at on a signed-in request, at most hourly', async () => {
     const a = addUser(db, '111', 'alice')
     addSession(a, 'tok-a')
@@ -190,6 +198,14 @@ describe('GET /admin/stats', () => {
 })
 
 describe('admin page', () => {
+  it('has a Merges tab', async () => {
+    const html = await adminPage().text()
+    expect(html).toContain('<a href="#merges">Merges</a>')
+    expect(html).toContain('id="merges"')
+    expect(html).toContain("'merges'")
+    expect(html).toContain('/admin/merges')
+  })
+
   it('lists every usage platform, Android included', async () => {
     expect(await adminPage().text()).toContain(
       "const PLATFORMS = ['desktop', 'web', 'phone', 'ios', 'android']"

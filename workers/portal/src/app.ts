@@ -3,6 +3,7 @@ import { adminPage } from './adminPage'
 import { reportUsage } from './usage'
 import { reportError } from './errors'
 import { adminRoute } from './catalogLoad'
+import { adminMergeRoute } from './merge'
 import { rpcRoute } from './rpc'
 import { syncRoute } from './sync'
 import { catalogRoute } from './catalogFeed'
@@ -122,6 +123,8 @@ async function route(req: Request, deps: AppDeps): Promise<Response> {
     return getFingerprintRefs(req, deps)
   if (req.method === 'GET' && url.pathname === '/admin')
     return (await isAdmin(req, deps)) ? adminPage() : json({ error: 'Not found' }, 404)
+  if (url.pathname === '/admin/merges' || url.pathname === '/admin/merges/undo')
+    return adminMergeRoute(req, deps)
   if (url.pathname.startsWith('/admin/')) return adminRoute(req, deps)
   return json({ error: 'Not found' }, 404)
 }

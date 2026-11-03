@@ -7,7 +7,7 @@ import type { Me } from '../../../src/shared/cloud'
 import { isGameId } from '../../../src/shared/games'
 import type { AppDeps } from './app'
 import { deleteUserData } from './account'
-import { loadMe, sha256Hex } from './auth'
+import { fromPublicOrigin, isAdmin, loadMe, sha256Hex } from './auth'
 import { planCardMerge } from './mergePlan'
 import {
   NEXT_BINDER_EDIT_SEQ,
@@ -17,7 +17,7 @@ import {
   NEXT_WISH_SEQ,
   userScope
 } from './scope'
-import { findAccount, refreshLegacyDiscordId, type Identity } from './signIns'
+import { findAccount, generatedUsername, refreshLegacyDiscordId, type Identity } from './signIns'
 
 /** How long a closed account's data is held, so the owner can undo a bad merge. */
 export const MERGE_HOLD_MS = 30 * 24 * 60 * 60 * 1000
@@ -482,4 +482,112 @@ export async function mergeWithTicket(
   })()
   if (!done) throw new CollectionError(STALE_TICKET)
   return loadMe(deps, userId)
+}
+
+const PAST_HOLD = 'This merge is past its 30 days'
+
+/**
+ * Owner undo: reopens the closed account with the rows it kept, gives back the sign-ins it brought
+ * (those still on the survivor) and its Apple token, and drops the merge row. The survivor keeps
+ * everything it has now, so no card is lost. Throws a CollectionError for a missing or purged merge.
+ */
+export function undoMerge(db: SqlDb, closedId: number, now: Date): void {
+  db.transaction(() => {
+    const m = db.prepare('SELECT * FROM account_merges WHERE closed_id = ?').get(closedId) as
+      | {
+          survivor_id: number
+          purged_at: string | null
+          closed_username: string
+          moved_sign_ins: string
+          moved_apple_token: number
+        }
+      | undefined
+    if (!m) throw new CollectionError('That merge was not found')
+    if (m.purged_at !== null) throw new CollectionError(PAST_HOLD)
+    const nowIso = now.toISOString()
+    const survivor = m.survivor_id
+
+    const moved = JSON.parse(m.moved_sign_ins) as Identity[]
+    let backApple = false
+    for (const id of moved) {
+      const changed = db
+        .prepare('UPDATE sign_ins SET user_id = ? WHERE provider = ? AND subject = ? AND user_id = ?')
+        .run(closedId, id.provider, id.subject, survivor).changes
+      if (changed && id.provider === 'apple') backApple = true
+    }
+    if (m.moved_apple_token && backApple) {
+      const t = db.prepare('SELECT refresh_token FROM apple_tokens WHERE user_id = ?').get(survivor) as
+        | { refresh_token: string }
+        | undefined
+      if (t) {
+        db.prepare('DELETE FROM apple_tokens WHERE user_id = ?').run(survivor)
+        db.prepare(
+          `INSERT INTO apple_tokens (user_id, refresh_token, updated_at) VALUES (?, ?, ?)
+           ON CONFLICT (user_id) DO UPDATE SET refresh_token = excluded.refresh_token,
+             updated_at = excluded.updated_at`
+        ).run(closedId, t.refresh_token, nowIso)
+      }
+    }
+
+    const holder = db
+      .prepare('SELECT id FROM users WHERE username = ? COLLATE NOCASE')
+      .get(m.closed_username) as { id: number } | undefined
+    if (holder?.id === closedId) {
+      db.prepare('UPDATE users SET closed_at = NULL, updated_at = ? WHERE id = ?').run(nowIso, closedId)
+    } else if (holder === undefined) {
+      db.prepare('UPDATE users SET closed_at = NULL, username = ?, updated_at = ? WHERE id = ?').run(
+        m.closed_username,
+        nowIso,
+        closedId
+      )
+    } else {
+      db.prepare(
+        'UPDATE users SET closed_at = NULL, username = ?, username_chosen = 0, updated_at = ? WHERE id = ?'
+      ).run(generatedUsername(db), nowIso, closedId)
+    }
+    db.prepare('UPDATE users SET updated_at = ? WHERE id = ?').run(nowIso, survivor)
+    // The survivor gives up the Discord id first, so the reopened account can take it.
+    refreshLegacyDiscordId(db, survivor)
+    refreshLegacyDiscordId(db, closedId)
+    db.prepare('DELETE FROM account_merges WHERE closed_id = ?').run(closedId)
+  })()
+}
+
+const json = (body: unknown, status = 200): Response =>
+  new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
+
+/** GET /admin/merges and POST /admin/merges/undo; owner-only, otherwise 404. */
+export async function adminMergeRoute(req: Request, deps: AppDeps): Promise<Response> {
+  const path = new URL(req.url).pathname
+  const notFound = json({ error: 'Not found' }, 404)
+  if (req.method === 'GET' && path === '/admin/merges') {
+    if (!(await isAdmin(req, deps))) return notFound
+    const rows = deps.db
+      .prepare(
+        `SELECT m.closed_id AS closedId, m.survivor_id AS survivorId, u.username AS survivorUsername,
+                m.closed_username AS closedUsername, m.merged_at AS mergedAt,
+                m.purge_after AS purgeAfter, m.cards AS cards
+           FROM account_merges m LEFT JOIN users u ON u.id = m.survivor_id
+          WHERE m.purged_at IS NULL ORDER BY m.merged_at DESC, m.closed_id DESC`
+      )
+      .all()
+    return json({ merges: rows })
+  }
+  if (req.method === 'POST' && path === '/admin/merges/undo') {
+    if (!(await isAdmin(req, deps)) || !fromPublicOrigin(req, deps)) return notFound
+    const type = req.headers.get('content-type')
+    if (type === null || type.split(';')[0].trim().toLowerCase() !== 'application/json')
+      return json({ error: 'unsupported-media-type' }, 415)
+    const body = (await req.json().catch(() => null)) as { closedId?: unknown } | null
+    const id = body?.closedId
+    if (typeof id !== 'number' || !Number.isInteger(id)) return json({ error: 'Bad request' }, 400)
+    try {
+      undoMerge(deps.db, id, deps.now())
+    } catch (e) {
+      if (e instanceof CollectionError) return json({ error: e.message }, 400)
+      throw e
+    }
+    return new Response(null, { status: 204 })
+  }
+  return notFound
 }

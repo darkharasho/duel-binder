@@ -29,7 +29,7 @@ export function collectStats(deps: AppDeps): Record<string, unknown> {
   const one = <T>(sql: string, ...args: unknown[]): T => db.prepare(sql).get(...args) as T
   const count = (sql: string, ...args: unknown[]): number => one<{ n: number }>(sql, ...args).n
 
-  const total = count('SELECT COUNT(*) AS n FROM users')
+  const total = count('SELECT COUNT(*) AS n FROM users WHERE closed_at IS NULL')
   /** Open accounts with this sign-in; a linked account counts once for each. */
   const withSignIn = (provider: string): number =>
     count(
@@ -50,8 +50,8 @@ export function collectStats(deps: AppDeps): Record<string, unknown> {
       total,
       discord: withSignIn('discord'),
       apple: withSignIn('apple'),
-      new7d: count('SELECT COUNT(*) AS n FROM users WHERE created_at >= ?', since(7)),
-      new30d: count('SELECT COUNT(*) AS n FROM users WHERE created_at >= ?', since(30))
+      new7d: count('SELECT COUNT(*) AS n FROM users WHERE closed_at IS NULL AND created_at >= ?', since(7)),
+      new30d: count('SELECT COUNT(*) AS n FROM users WHERE closed_at IS NULL AND created_at >= ?', since(30))
     },
     // Stamped at most hourly per user, so these are accurate to the hour.
     active: {

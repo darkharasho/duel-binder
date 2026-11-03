@@ -364,7 +364,7 @@ const hasEmailOn = (db: SqlDb, userId: number): boolean =>
   undefined
 
 /** The account a sign-up for this email is offered: the oldest user of it without an email sign-in. */
-function matchedAccount(
+export function matchedAccount(
   db: SqlDb,
   email: string
 ): { userId: number; providers: ('discord' | 'apple')[] } | null {
@@ -377,7 +377,7 @@ function matchedAccount(
 }
 
 /** A confirmed, unexpired sign-up flow, or undefined. */
-function confirmedSignup(db: SqlDb, ticketHash: string, nowIso: string): FlowRow | undefined {
+export function confirmedSignup(db: SqlDb, ticketHash: string, nowIso: string): FlowRow | undefined {
   return db
     .prepare(
       `SELECT ${FLOW_COLUMNS} FROM email_flows WHERE ticket_hash = ? AND purpose = 'signup' AND confirmed = 1 AND expires_at > ?`
@@ -691,7 +691,7 @@ async function claimSeparateStep(
   return unwrap(out)
 }
 
-interface StepContext {
+export interface StepContext {
   ip: string
   keepSession?: string
   /** Which kind of sign-in is claiming: the JSON route is 'desktop'; the web adapter is 'web'. */

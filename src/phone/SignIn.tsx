@@ -13,6 +13,20 @@ const BUTTON =
 const DISCORD_BUTTON = `${BUTTON} bg-[#5865F2] text-white`
 /** Apple's white style, for dark backgrounds. */
 const APPLE_BUTTON = `${BUTTON} bg-white text-black`
+const EMAIL_BUTTON = `${BUTTON} border border-border text-foreground`
+/** Where the browser's email sign-in comes back to /scan/. */
+const EMAIL_URL = '/auth/email?next=scan'
+
+/** Whether the portal has email sign-in on; any failure counts as off. */
+async function emailSignInOn(): Promise<boolean> {
+  try {
+    const res = await fetch('/auth/email/status')
+    if (!res.ok) return false
+    return ((await res.json()) as { enabled?: unknown }).enabled === true
+  } catch {
+    return false
+  }
+}
 
 function AppleLogo(): React.JSX.Element {
   return (
@@ -57,6 +71,7 @@ export function SignIn({
   const native = isNativeApp()
   const [checking, setChecking] = useState(!native)
   const [nativeFailed, setNativeFailed] = useState(false)
+  const [emailOn, setEmailOn] = useState(false)
   const failed =
     nativeFailed || new URLSearchParams(window.location.search).get('signin') === 'failed'
 
@@ -79,6 +94,9 @@ export function SignIn({
   }
   useOnce(() => {
     if (native) return
+    void emailSignInOn().then((on) => {
+      if (mounted.current) setEmailOn(on)
+    })
     void (async () => {
       try {
         const signedIn = await exchangeCookie()
@@ -133,9 +151,16 @@ export function SignIn({
           </button>
         </div>
       ) : (
-        <a href={SIGN_IN_URL} className={DISCORD_BUTTON}>
-          Sign in with Discord
-        </a>
+        <div className="flex w-full flex-col items-center gap-3">
+          <a href={SIGN_IN_URL} className={DISCORD_BUTTON}>
+            Sign in with Discord
+          </a>
+          {emailOn && (
+            <a href={EMAIL_URL} className={EMAIL_BUTTON}>
+              Continue with email
+            </a>
+          )}
+        </div>
       )}
     </PhoneScreen>
   )

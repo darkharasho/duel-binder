@@ -15,7 +15,7 @@ import {
 } from './signIns'
 
 const DAY_MS = 24 * 60 * 60 * 1000
-const SESSION_MAX_AGE = 30 * 24 * 60 * 60
+export const SESSION_MAX_AGE = 30 * 24 * 60 * 60
 const STATE_MAX_AGE = 600
 const FAILED = '/?signin=failed'
 /** Where a web sign-in started with `?next=scan` lands, and where it lands when it fails. */
@@ -58,7 +58,7 @@ export function sameString(a: string, b: string): boolean {
   return diff === 0
 }
 
-function readCookie(req: Request, name: string): string | null {
+export function readCookie(req: Request, name: string): string | null {
   for (const part of (req.headers.get('cookie') ?? '').split(';')) {
     const eq = part.indexOf('=')
     if (eq > 0 && part.slice(0, eq).trim() === name) return part.slice(eq + 1).trim()
@@ -66,9 +66,9 @@ function readCookie(req: Request, name: string): string | null {
   return null
 }
 
-const cookie = (name: string, value: string, maxAge: number, path = '/'): string =>
+export const cookie = (name: string, value: string, maxAge: number, path = '/'): string =>
   `${name}=${value}; HttpOnly; Secure; SameSite=Lax; Path=${path}; Max-Age=${maxAge}`
-const clearCookie = (name: string, path = '/'): string => cookie(name, '', 0, path)
+export const clearCookie = (name: string, path = '/'): string => cookie(name, '', 0, path)
 
 /** The raw ticket of a confirmed sign-up that is choosing which account to link its email to. */
 export const EMAIL_LINK_COOKIE = 'email_link'

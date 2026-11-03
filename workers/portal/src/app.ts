@@ -30,6 +30,7 @@ import { deleteAccountRoute } from './account'
 import type { AppleSignInEnv } from './apple'
 import type { EmailSender } from './emailSend'
 import { emailAuthRoute, emailStatusRoute } from './emailAuth'
+import { emailClaimPage, emailFormRoute, emailMatchPage, emailStartPage } from './emailPages'
 import { appPreflight, withAppCors } from './appCors'
 
 /** Vars and secrets the request handlers read. */
@@ -104,6 +105,11 @@ async function route(req: Request, deps: AppDeps): Promise<Response> {
   if (req.method === 'POST' && url.pathname === '/auth/desktop/revoke')
     return revokeDesktopToken(req, deps)
   if (req.method === 'GET' && url.pathname === '/auth/email/status') return emailStatusRoute(deps)
+  if (req.method === 'GET' && url.pathname === '/auth/email') return emailStartPage(req, deps)
+  if (req.method === 'GET' && url.pathname === '/auth/email/match') return emailMatchPage(req, deps)
+  if (req.method === 'GET' && url.pathname === '/auth/email/claim') return emailClaimPage(req, deps)
+  if (req.method === 'POST' && url.pathname.startsWith('/auth/email/form/'))
+    return emailFormRoute(req, deps, url.pathname.slice('/auth/email/form/'.length))
   if (req.method === 'POST' && url.pathname.startsWith('/auth/email/'))
     return emailAuthRoute(req, deps, url.pathname.slice('/auth/email/'.length))
   if (req.method === 'GET' && url.pathname === '/api/me') return me(req, deps)

@@ -509,12 +509,16 @@ export function undoMerge(db: SqlDb, closedId: number, now: Date): void {
 
     const moved = JSON.parse(m.moved_sign_ins) as Identity[]
     let backApple = false
+    let given = 0
     for (const id of moved) {
       const changed = db
         .prepare('UPDATE sign_ins SET user_id = ? WHERE provider = ? AND subject = ? AND user_id = ?')
         .run(closedId, id.provider, id.subject, survivor).changes
+      if (changed) given++
       if (changed && id.provider === 'apple') backApple = true
     }
+    // Without one, the reopened account could never be signed in to (and its hold row would go).
+    if (given === 0) throw new CollectionError('None of its sign-ins can be given back')
     if (m.moved_apple_token && backApple) {
       const t = db.prepare('SELECT refresh_token FROM apple_tokens WHERE user_id = ?').get(survivor) as
         | { refresh_token: string }

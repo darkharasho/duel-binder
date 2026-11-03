@@ -147,11 +147,42 @@ describe('owner undo of a merge', () => {
     ).toBe('appleuser')
   })
 
-  it('leaves a sign-in the survivor removed since', async () => {
+  const NONE = { error: 'None of its sign-ins can be given back' }
+  const heldState = (): unknown => ({
+    merges: db.prepare('SELECT * FROM account_merges ORDER BY closed_id').all(),
+    closed: db.prepare('SELECT closed_at FROM users WHERE id = ?').get(other),
+    signIns: db.prepare('SELECT * FROM sign_ins ORDER BY provider, subject').all()
+  })
+
+  it('refuses when the survivor removed every sign-in it brought', async () => {
     doMerge()
     db.prepare("DELETE FROM sign_ins WHERE provider = 'apple'").run()
-    expect((await undo('tok-owner')).status).toBe(204)
-    expect(findAccount(db, { provider: 'apple', subject: 'sub1' })).toBeNull()
+    const before = heldState()
+    const res = await undo('tok-owner')
+    expect(res.status).toBe(400)
+    expect(await res.json()).toEqual(NONE)
+    expect(heldState()).toEqual(before)
+  })
+
+  it('refuses when the survivor was itself merged into a third account', async () => {
+    doMerge()
+    const third = addUser(db, '222', 'third')
+    // A provider of its own, so it shares none with the survivor.
+    db.prepare("UPDATE sign_ins SET provider = 'email' WHERE user_id = ?").run(third)
+    mergeAccounts(db, {
+      survivor: third,
+      closed: me,
+      cards: 'sum',
+      username: 'mine',
+      moved: { provider: 'discord', subject: '111' },
+      appleRefreshToken: null,
+      now: START
+    })
+    const before = heldState()
+    const res = await undo('tok-owner')
+    expect(res.status).toBe(400)
+    expect(await res.json()).toEqual(NONE)
+    expect(heldState()).toEqual(before)
   })
 
   it('undo routes are owner-only', async () => {

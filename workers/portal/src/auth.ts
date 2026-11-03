@@ -449,9 +449,10 @@ export async function finishSignIn(req: Request, deps: AppDeps): Promise<Respons
   // an account (the web always; an app only when it asked). See emailClaim.ts.
   const discordEmail = verifiedEmail(user.email, user.verified)
   const claimFor = (kind: 'web' | 'desktop', challenge: string | null): Promise<string> | null => {
-    const target = claimTarget(deps.db, discordEmail)
-    if (target === null || discordEmail === null) return null
+    if (discordEmail === null) return null
     if (findAccount(deps.db, { provider: 'discord', subject: user.id }) !== null) return null
+    const target = claimTarget(deps.db, discordEmail)
+    if (target === null) return null
     return makeClaim(deps, {
       provider: 'discord',
       subject: user.id,

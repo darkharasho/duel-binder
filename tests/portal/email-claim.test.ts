@@ -4,7 +4,7 @@ import type Database from 'better-sqlite3'
 import { fakeSender, memoryBucket, noPrintingArt, noPrices, seededServerDb } from './helpers'
 import { APPLE_NONCE, appleIdentityToken, appleTestKeys } from './appleKeys'
 import { handle, type AppDeps } from '../../workers/portal/src/app'
-import { APPLE_KEYS_URL, resetAppleKeys } from '../../workers/portal/src/apple'
+import { APPLE_KEYS_URL, APPLE_TOKEN_URL, resetAppleKeys } from '../../workers/portal/src/apple'
 import { EMAIL_COPY } from '../../src/shared/emailAuth'
 import { hashPassword } from '../../workers/portal/src/password'
 
@@ -278,6 +278,72 @@ describe('offering a first Discord or Apple sign-in the email account that uses 
     expect(s.body.error).toBe(EMAIL_COPY.codeExpired)
   })
 
+  it('a right password that is then refused does not count against the limits', async () => {
+    const claim = await desktopClaim()
+    db.prepare(
+      "INSERT INTO sign_ins (provider, subject, user_id, created_at) VALUES ('discord', '999', ?, ?)"
+    ).run(emailUser, START.toISOString())
+    const r = await step('claim', { ticket: claim, password: PASSWORD, verifier: VERIFIER })
+    expect(r.body.error).toBe(EMAIL_COPY.alsoHas('discord'))
+    expect(count('SELECT count(*) AS n FROM auth_limits')).toBe(0)
+  })
+
+  it('a desktop ticket used as a web one is expired', async () => {
+    const claim = await desktopClaim()
+    const { runEmailStep } = await import('../../workers/portal/src/emailAuth')
+    await expect(
+      runEmailStep(
+        deps,
+        'claim',
+        { password: PASSWORD },
+        {
+          ip: '1.1.1.1',
+          claimKind: 'web',
+          claimTicket: claim
+        }
+      )
+    ).rejects.toMatchObject({ message: EMAIL_COPY.codeExpired, code: 'expired' })
+    expect(providersOf(emailUser)).toEqual(['email'])
+  })
+
+  it('12 parallel wrong passwords: exactly 10 are answered, the rest are limited', async () => {
+    const claim = await desktopClaim()
+    const all = await Promise.all(
+      Array.from({ length: 12 }, () =>
+        step('claim', { ticket: claim, password: 'nope-nope-nope', verifier: VERIFIER })
+      )
+    )
+    expect(all.filter((r) => r.status === 400)).toHaveLength(10)
+    expect(all.filter((r) => r.status === 429)).toHaveLength(2)
+  })
+
+  it('an email account closed after the claim was made is not linked', async () => {
+    const claim = await desktopClaim()
+    db.prepare('UPDATE users SET closed_at = ? WHERE id = ?').run(START.toISOString(), emailUser)
+    const r = await step('claim', { ticket: claim, password: PASSWORD, verifier: VERIFIER })
+    expect(r.status).toBe(400)
+    expect(r.body.token).toBeUndefined()
+    expect(providersOf(emailUser)).toEqual(['email'])
+  })
+
+  it('a link flow ignores offer=email', async () => {
+    const start = await get(
+      `/auth/desktop/start?port=53682&state=${STATE}&challenge=${CHALLENGE}&intent=link&offer=email`
+    )
+    const cookie = cookieOf(start, 'desktop_auth')!
+    expect(cookie).toBe(`53682.${STATE}.${CHALLENGE}.link`)
+    const oauth = cookieOf(start, 'oauth_state')!
+    const res = await get(
+      `/auth/discord/callback?code=c&state=${oauth}`,
+      `oauth_state=${oauth}; desktop_auth=${cookie}`
+    )
+    const loc = new URL(res.headers.get('location')!)
+    expect(loc.searchParams.get('code')).not.toBeNull()
+    expect(loc.searchParams.get('claim')).toBeNull()
+    expect(count('SELECT count(*) AS n FROM link_codes')).toBe(1)
+    expect(count('SELECT count(*) AS n FROM provider_claims')).toBe(0)
+  })
+
   describe('Apple', () => {
     const appleBody = (extra: Record<string, unknown> = {}): Record<string, unknown> => ({
       identityToken: appleIdentityToken(clock, { email: EMAIL, email_verified: true }),
@@ -298,6 +364,41 @@ describe('offering a first Discord or Apple sign-in the email account that uses 
       expect(done.body).toMatchObject({ next: 'signed-in', created: false })
       expect(done.body.user!.id).toBe(emailUser)
       expect(providersOf(emailUser)).toEqual(['apple', 'email'])
+    })
+
+    it('a successful claim keeps the refresh token in apple_tokens, never returned', async () => {
+      const { signinPem } = appleTestKeys()
+      deps.env = {
+        ...deps.env,
+        APPLE_TEAM_ID: 'TEAM123456',
+        APPLE_SIGNIN_KEY_ID: 'KEY1234567',
+        APPLE_SIGNIN_KEY: signinPem
+      }
+      const inner = deps.fetch
+      deps.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+        if (String(input) === APPLE_TOKEN_URL) {
+          const b64 = (v: unknown): string => Buffer.from(JSON.stringify(v)).toString('base64url')
+          return new Response(
+            JSON.stringify({
+              refresh_token: 'rt-claim',
+              access_token: 'at',
+              id_token: `${b64({ alg: 'RS256' })}.${b64({ sub: '000123.abc' })}.sig`
+            })
+          )
+        }
+        return inner(input, init)
+      }) as typeof fetch
+      const r = await post(
+        '/auth/apple/token',
+        appleBody({ offerLink: true, authorizationCode: 'c0de' })
+      )
+      expect(JSON.stringify(r.body)).not.toContain('rt-claim')
+      expect(count('SELECT count(*) AS n FROM apple_tokens')).toBe(0)
+      await step('claim', { ticket: r.body.claim, password: PASSWORD })
+      expect(db.prepare('SELECT user_id, refresh_token FROM apple_tokens').get()).toEqual({
+        user_id: emailUser,
+        refresh_token: 'rt-claim'
+      })
     })
 
     it('without offerLink the sign-in makes an account as before', async () => {

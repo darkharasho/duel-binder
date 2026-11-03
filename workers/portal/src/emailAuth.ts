@@ -598,6 +598,8 @@ async function claimStep(
     !(await verifyPassword(password, row.password_hash))
   )
     throw new EmailAuthError(EMAIL_COPY.wrongPassword, 400)
+  // Only a wrong password counts: the right one takes its attempts back even if the claim is refused.
+  for (const id of attempts) forgetAttempt(db, id)
   const out = db.transaction((): StepOutcome | Refusal => {
     const live = peekClaim(db, key, kind, nowIso)
     if (!live || findAccount(db, { provider: 'email', subject: live.email }) !== live.userId)
@@ -623,9 +625,7 @@ async function claimStep(
     spendClaim(db, live.ticketHash)
     return { next: 'signed-in', userId: live.userId, created: false }
   })()
-  const result = unwrap(out)
-  for (const id of attempts) forgetAttempt(db, id)
-  return result
+  return unwrap(out)
 }
 
 /** Makes the claimed Discord or Apple sign-in its own account instead of linking it. */
@@ -657,7 +657,9 @@ async function claimSeparateStep(
 interface StepContext {
   ip: string
   keepSession?: string
-  claimKind?: 'web'
+  /** Which kind of sign-in is claiming: the JSON route is 'desktop'; the web adapter is 'web'. */
+  claimKind: 'web' | 'desktop'
+  /** The web claim's ticket (the `email_claim` cookie); a desktop claim sends it in the body. */
   claimTicket?: string
 }
 
@@ -737,7 +739,8 @@ export async function emailAuthRoute(req: Request, deps: AppDeps, step: string):
     return json({ error: 'bad-json' }, 400)
   try {
     const out = await runEmailStep(deps, step as EmailStep, body as Record<string, unknown>, {
-      ip: clientIp(req)
+      ip: clientIp(req),
+      claimKind: 'desktop'
     })
     if (out.next !== 'signed-in') return json(out)
     const token = await mintSession(deps, out.userId, 'desktop', deps.now().toISOString())

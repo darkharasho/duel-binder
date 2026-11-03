@@ -14,15 +14,21 @@ const STEP_SHARE = 0.25
 const FLICK = 0.5
 /** A flick still has to travel this far, so a tap's wobble isn't one. */
 const FLICK_MIN = 30
-const SETTLE = 'transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1)'
+const SETTLE = 'transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1), opacity 220ms ease-out'
+/** How the next card arrives: a short glide in from the side the swipe came from. */
+const ENTER = 'transform 300ms cubic-bezier(0.16, 1, 0.3, 1), opacity 240ms ease-out'
+/** Share of the width the next card starts off to the side. */
+const ENTER_SHARE = 0.3
 
 /** How far the card follows a drag toward a missing neighbour: a little, then less and less. */
 const rubberBand = (dx: number): number => Math.sign(dx) * 48 * (1 - Math.exp(-Math.abs(dx) / 160))
 
-function place(el: HTMLElement | null, x: number): void {
+/** Moves `el` to `x` at once; `fade` dims it as it leaves, for the card being swiped away. */
+function place(el: HTMLElement | null, x: number, fade = false): void {
   if (!el) return
   el.style.transition = 'none'
   el.style.transform = x === 0 ? '' : `translateX(${x}px)`
+  el.style.opacity = fade && x !== 0 ? String(1 - Math.min(0.5, Math.abs(x) / 600)) : ''
 }
 
 /** Eases `el` back to where it sat; at once when motion is reduced. */
@@ -30,6 +36,20 @@ function settle(el: HTMLElement | null): void {
   if (!el) return
   el.style.transition = prefersReducedMotion() ? 'none' : SETTLE
   el.style.transform = ''
+  el.style.opacity = ''
+}
+
+/** Glides `el` in from `from` px to the side; at once when motion is reduced. */
+function enter(el: HTMLElement | null, from: number): void {
+  if (!el) return
+  if (prefersReducedMotion()) return place(el, 0)
+  place(el, from)
+  el.style.opacity = '0'
+  // Commit the start position before the transition, or the browser skips straight to the end.
+  void el.getBoundingClientRect()
+  el.style.transition = ENTER
+  el.style.transform = ''
+  el.style.opacity = ''
 }
 
 /** Slides `el` off to the right, `width` px. */
@@ -74,7 +94,7 @@ export function CardSheet({
     enabled: phone && !isLeaving,
     onDrag: (zone, dx) => {
       if (zone === 'edge') place(sheet, Math.max(0, dx))
-      else place(page.current, stepFor(dx) ? dx : rubberBand(dx))
+      else place(page.current, stepFor(dx) ? dx : rubberBand(dx), stepFor(dx) !== undefined)
     },
     onRelease: (zone, dx, velocity) => {
       const width = sheet?.clientWidth || window.innerWidth
@@ -88,9 +108,9 @@ export function CardSheet({
       }
       const step = stepFor(dx)
       if (step && passed(dx, velocity, width, STEP_SHARE)) {
-        // The next card takes the place at once; the swipe was the motion.
-        place(page.current, 0)
+        // The swipe carried this card away; the next one glides in from the side it came from.
         step()
+        enter(page.current, -Math.sign(dx) * width * ENTER_SHARE)
       } else settle(page.current)
     }
   })

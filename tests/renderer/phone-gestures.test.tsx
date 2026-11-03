@@ -82,6 +82,25 @@ describe('phone card swipes', () => {
     expect(onClose).not.toHaveBeenCalled()
   })
 
+  it('the card dims as it is swiped away and the next one glides in', () => {
+    const nav = { prev: vi.fn(), next: vi.fn() }
+    const { sheet } = renderSheet('phone', nav)
+    const page = screen.getByRole('slider', { name: 'Slider' }).parentElement!
+    const one = (x: number): { touches: object[]; changedTouches: object[] } => ({
+      touches: [{ clientX: x, clientY: 300 }],
+      changedTouches: [{ clientX: x, clientY: 300 }]
+    })
+    fireEvent.touchStart(sheet, one(700))
+    fireEvent.touchMove(sheet, one(650))
+    fireEvent.touchMove(sheet, one(400))
+    expect(Number(page.style.opacity)).toBeLessThan(1)
+    swipe(sheet, [700, 300], [200, 300])
+    expect(nav.next).toHaveBeenCalled()
+    expect(page.style.transition).toContain('transform 300ms')
+    expect(page.style.transform).toBe('')
+    expect(page.style.opacity).toBe('')
+  })
+
   it('a short swipe across the card does not step', () => {
     const nav = { prev: vi.fn(), next: vi.fn() }
     const { sheet } = renderSheet('phone', nav)

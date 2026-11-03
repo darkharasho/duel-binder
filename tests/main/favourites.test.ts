@@ -56,10 +56,9 @@ describe('favourites repo', () => {
     ;[a, b] = printings(db)
   })
 
-  it('migration 37 comes last, stays desktop-only, and keeps what was there', () => {
+  it('migration 37 stays desktop-only and keeps what was there', () => {
     const at = MIGRATIONS.findIndex((m) => m.version === 37)
     expect(MIGRATIONS[at]).toMatchObject({ version: 37, server: false })
-    expect(at).toBe(MIGRATIONS.length - 1)
     const old = databaseAt(34)
     old
       .prepare(

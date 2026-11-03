@@ -392,6 +392,11 @@ describe('phone api', () => {
     await api.account.removeSignIn('apple')
     expect(store.portal).toHaveBeenLastCalledWith('account:removeSignIn', ['apple'])
     expect(store.updateUser).toHaveBeenCalledTimes(2)
+    const choice = { cards: 'sum', username: 'theirs' } as const
+    await expect(api.account.merge('ticket-1', choice)).resolves.toEqual(changed)
+    expect(store.portal).toHaveBeenLastCalledWith('account:merge', ['ticket-1', choice])
+    expect(store.updateUser).toHaveBeenCalledTimes(3)
+    expect(seen).toHaveLength(3)
   })
 
   describe('active game', () => {

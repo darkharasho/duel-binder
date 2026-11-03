@@ -230,6 +230,13 @@ describe('createHandlers', () => {
     expect(account.updateUser).toHaveBeenCalledTimes(2)
   })
 
+  it('account:merge rejects on the desktop', async () => {
+    const { handlers } = await makeHandlers({ signedIn: true })
+    await expect(
+      handlers['account:merge']('t', { cards: 'higher', username: 'mine' })
+    ).rejects.toThrow(new Error('Not available here'))
+  })
+
   it('account:deleteAccount rejects', async () => {
     const { handlers } = await makeHandlers({ signedIn: true })
     await expect(handlers['account:deleteAccount']()).rejects.toThrow(

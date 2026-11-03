@@ -357,6 +357,7 @@ export function createHttpApi(opts: HttpApiOptions = {}): Api {
       setUsername: call('account:setUsername'),
       removeSignIn: call('account:removeSignIn'),
       dismissLinkHint: call('account:dismissLinkHint'),
+      merge: () => Promise.reject(new Error('Not available here')),
       onChange: noUnsubscribe
     }
   }

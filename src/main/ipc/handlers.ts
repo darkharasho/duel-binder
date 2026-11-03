@@ -239,6 +239,9 @@ export function createHandlers({
       const me = await account.portal<Me>('account:dismissLinkHint', [])
       account.updateUser(me)
       return me
+    },
+    'account:merge': async () => {
+      throw new Error('Not available here')
     }
   }
 }

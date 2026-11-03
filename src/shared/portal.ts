@@ -59,13 +59,16 @@ export const PORTAL_CHANNELS = [
 ] as const satisfies readonly InvokeChannel[]
 
 /**
- * Worker-only RPC channels for linking a sign-in. They aren't InvokeChannels: each client calls
- * them from its own linking flow, not through the shared Api.
+ * RPC channels for linking a sign-in, which the web portal's Api doesn't call. The first two
+ * aren't InvokeChannels: each client calls them from its own linking flow, not through the shared
+ * Api. Both answer a `LinkResult` (shared/account.ts).
  * - `account:linkCode(code, verifier)`: a Discord link code from `/auth/desktop/start?intent=link`.
  * - `account:linkApple({ identityToken, nonce, authorizationCode? })`: Sign in with Apple.
- * Both answer a `LinkResult` (shared/account.ts).
+ * - `account:merge(ticket, { cards, username })`: merges the account a `merge` LinkResult found,
+ *   answering the signed-in account's `Me`. It is `Api.account.merge`, which only the phone app
+ *   implements; the desktop app and the web reject it.
  */
-export const ACCOUNT_LINK_CHANNELS = ['account:linkCode', 'account:linkApple'] as const
+export const ACCOUNT_LINK_CHANNELS = ['account:linkCode', 'account:linkApple', 'account:merge'] as const
 
 export type AccountLinkChannel = (typeof ACCOUNT_LINK_CHANNELS)[number]
 

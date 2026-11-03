@@ -588,6 +588,17 @@ CREATE TABLE merge_tickets (ticket_hash TEXT PRIMARY KEY,
   other_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
   provider TEXT NOT NULL, subject TEXT NOT NULL, apple_refresh_token TEXT, expires_at TEXT NOT NULL);
 `
+  },
+  {
+    // Merged accounts (merge.ts): the closed account is held 30 days, then its data is purged.
+    // No foreign keys: rows outlive the purged user so clients can still map ids.
+    name: 'server-33',
+    sql: `
+CREATE TABLE account_merges (closed_id INTEGER PRIMARY KEY, survivor_id INTEGER NOT NULL, merged_at TEXT NOT NULL,
+  purge_after TEXT NOT NULL, purged_at TEXT, cards TEXT NOT NULL, closed_username TEXT NOT NULL,
+  moved_sign_ins TEXT NOT NULL, moved_apple_token INTEGER NOT NULL);
+CREATE INDEX ix_account_merges_survivor ON account_merges(survivor_id);
+`
   }
 ]
 

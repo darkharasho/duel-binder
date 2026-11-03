@@ -38,7 +38,7 @@ import type {
 import type { ScanWindowMessage } from './scanWindow'
 import type { ScanRef } from './scan/fingerprintRefs'
 import type { FingerprintStatus, OcrBand, ScanPrinting } from './scan/types'
-import type { SignInMethod, SignInProvider } from './account'
+import type { MergeChoice, SignInMethod, SignInProvider } from './account'
 import type { Me } from './cloud'
 import type { CollectorNumber } from './scan/collectorNumber'
 import type { DexPreview } from './dex/match'
@@ -291,6 +291,11 @@ export interface Api {
     removeSignIn(provider: SignInProvider): Promise<void>
     /** Stops suggesting to link another sign-in. */
     dismissLinkHint(): Promise<Me>
+    /**
+     * Merges the account a link's merge ticket found into the signed-in one, and answers its `Me`.
+     * Only the phone app has it; the desktop app and the web reject with `Not available here`.
+     */
+    merge(ticket: string, choice: MergeChoice): Promise<Me>
     onChange(cb: (s: AccountStatus) => void): () => void
   }
 }
@@ -408,7 +413,8 @@ export const INVOKE_CHANNELS = [
   'account:signIns',
   'account:setUsername',
   'account:removeSignIn',
-  'account:dismissLinkHint'
+  'account:dismissLinkHint',
+  'account:merge'
 ] as const
 
 export type InvokeChannel = (typeof INVOKE_CHANNELS)[number]

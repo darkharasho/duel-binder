@@ -2,6 +2,7 @@ import type { Me } from '../../../src/shared/cloud'
 import { allowedGames, type GameId } from '../../../src/shared/games'
 import type { AppDeps } from './app'
 import { appleRefreshToken, verifyAppleIdentityToken } from './apple'
+import { mergedFrom, purgeHolds } from './merge'
 import { signInWith, type DiscordProfile, type Identity } from './signIns'
 
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -311,12 +312,13 @@ function discordSignIn(du: DiscordUser, deps: AppDeps, nowIso: string): number {
   ).userId
 }
 
-/** Drops expired sessions, desktop and link codes, and merge tickets. */
+/** Drops expired sessions, desktop and link codes, and merge tickets, and purges merge holds past their 30 days. */
 export function pruneExpired(deps: AppDeps, nowIso: string): void {
   deps.db.prepare('DELETE FROM sessions WHERE expires_at <= ?').run(nowIso)
   deps.db.prepare('DELETE FROM desktop_codes WHERE expires_at <= ?').run(nowIso)
   deps.db.prepare('DELETE FROM link_codes WHERE expires_at <= ?').run(nowIso)
   deps.db.prepare('DELETE FROM merge_tickets WHERE expires_at <= ?').run(nowIso)
+  purgeHolds(deps.db, new Date(nowIso))
 }
 
 export async function finishSignIn(req: Request, deps: AppDeps): Promise<Response> {
@@ -694,7 +696,7 @@ export function loadMe(deps: AppDeps, userId: number): Me {
     username_chosen: number
     link_hint: number
   }
-  return {
+  const me: Me = {
     id: row.id,
     username: row.username,
     displayName: row.display_name,
@@ -703,6 +705,9 @@ export function loadMe(deps: AppDeps, userId: number): Me {
     usernameChosen: row.username_chosen === 1,
     linkHint: linkHintFor(deps, row.id, row.link_hint)
   }
+  // Left out when empty, as old servers do.
+  const merged = mergedFrom(deps.db, row.id)
+  return merged.length > 0 ? { ...me, mergedFrom: merged } : me
 }
 
 export async function me(req: Request, deps: AppDeps): Promise<Response> {

@@ -241,6 +241,10 @@ const ENTRY_REFS: Record<string, [count: number, kind: string]> = {
   'workers/portal/src/auth.ts': [1, LIVE],
   'workers/portal/src/link.ts': [1, LIVE],
   'workers/portal/src/mergePlan.ts': [1, LIVE],
+  'workers/portal/src/merge.ts': [
+    6,
+    'merging accounts: live rows by id from the plan, with fresh server_seq; the snapshot game list'
+  ],
   'workers/portal/src/priceRequests.ts': [1, LIVE],
   'workers/portal/src/sweep.ts': [1, LIVE],
   'workers/portal/src/pokemonSweep.ts': [1, LIVE],

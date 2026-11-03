@@ -149,6 +149,9 @@ describe('createHttpApi', () => {
     await expect(api.account.signIn()).rejects.toThrow('Not available on the web')
     await expect(api.account.signOut()).rejects.toThrow('Not available on the web')
     await expect(api.account.syncNow()).rejects.toThrow('Not available on the web')
+    await expect(api.account.merge('t', { cards: 'higher', username: 'mine' })).rejects.toThrow(
+      'Not available here'
+    )
     expect(fetch).not.toHaveBeenCalled()
   })
 

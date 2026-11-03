@@ -75,6 +75,7 @@ import { friendBinder, friendBinders } from './friendBinders'
 import { userScope } from './scope'
 import { dismissLinkHint, listSignIns, removeSignIn, setUsername } from './accountRpc'
 import { linkApple, linkCode } from './link'
+import { mergeWithTicket } from './merge'
 import { GAME_HEADER } from '../../../src/shared/cloud'
 import type { GameId } from '../../../src/shared/games'
 
@@ -285,11 +286,13 @@ const HANDLERS: { [C in Exclude<PortalChannel, AccountLinkChannel>]: Handler<C> 
   'account:removeSignIn': (deps, _s, provider) => removeSignIn(deps, deps.userId, provider),
   'account:dismissLinkHint': (deps) => dismissLinkHint(deps, deps.userId),
   'account:linkCode': (deps, _s, code, verifier) => linkCode(deps, deps.userId, code, verifier),
-  'account:linkApple': (deps, _s, input) => linkApple(deps, deps.userId, input)
+  'account:linkApple': (deps, _s, input) => linkApple(deps, deps.userId, input),
+  'account:merge': (deps, _s, ticket, choice) => mergeWithTicket(deps, deps.userId, ticket, choice)
 }
 
 /** Writes that can leave a printing owned with no fresh price. */
 const QUEUES_PRICES: ReadonlySet<string> = new Set([
+  'account:merge',
   'collection:add',
   'collection:update',
   'sets:adjust'

@@ -12,6 +12,12 @@ export interface SignInMethod {
 /** Which count of a card a merge keeps: the higher, the signed-in account's, the other's, or both added. */
 export type CardChoice = 'higher' | 'mine' | 'theirs' | 'sum'
 
+/** What a merge keeps (`account:merge`): how cards combine, and whose username the account takes. */
+export interface MergeChoice {
+  cards: CardChoice
+  username: 'mine' | 'theirs'
+}
+
 /** A username that may be chosen: 3 to 20 letters, digits, `_` and `-`. */
 export const USERNAME_RE = /^[A-Za-z0-9_-]{3,20}$/
 

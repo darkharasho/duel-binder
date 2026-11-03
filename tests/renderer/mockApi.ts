@@ -276,6 +276,12 @@ export function createMockApi(overrides: DeepPartial<Api> = {}): Api {
         avatarUrl: null,
         linkHint: null
       })),
+      merge: vi.fn(async () => ({
+        id: 1,
+        username: 'alice',
+        displayName: null,
+        avatarUrl: null
+      })),
       onChange: vi.fn(() => () => {})
     }
   }

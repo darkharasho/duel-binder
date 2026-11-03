@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { LAST_SIGN_IN, type SignInProvider } from '@shared/account'
+import { LAST_SIGN_IN, type MergePreview, type SignInProvider } from '@shared/account'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -10,6 +10,7 @@ import {
   DialogHeader,
   DialogTitle
 } from '@/components/ui/dialog'
+import { AddEmailDialog, ChangeEmailDialog, ChangePasswordDialog } from './EmailDialogs'
 import { UsernameDialog } from '@/features/account/UsernameDialog'
 import { api } from '@/lib/api'
 import { useAccountUser } from '@/lib/accountUser'
@@ -25,18 +26,22 @@ const KEY = ['account', 'signIns'] as const
 export function SignInMethods({
   linkable = [],
   linking = false,
-  onLink
+  onLink,
+  onMerge
 }: {
   linkable?: SignInProvider[]
   /** A link is in progress: the Link buttons wait. */
   linking?: boolean
   onLink?(p: SignInProvider): void
+  /** Adding an email found another account to merge; the phone opens its merge screen. */
+  onMerge?(ticket: string, preview: MergePreview): void
 }): React.JSX.Element | null {
   const qc = useQueryClient()
   const { user, apply } = useAccountUser()
   const methods = useQuery({ queryKey: KEY, queryFn: () => api.account.signIns() })
   const [renaming, setRenaming] = useState(false)
   const [removing, setRemoving] = useState<SignInProvider | null>(null)
+  const [emailDialog, setEmailDialog] = useState<'add' | 'password' | 'change' | null>(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   if (!user) return null
@@ -84,19 +89,46 @@ export function SignInMethods({
       <ul className="space-y-2">
         {list.map((m) => (
           <li key={m.provider} className="flex items-center justify-between gap-4">
-            <span>{LABEL[m.provider]}</span>
-            <Button
-              variant="outline"
-              size="sm"
-              disabled={list.length <= 1}
-              title={list.length <= 1 ? LAST_SIGN_IN : undefined}
-              onClick={() => setRemoving(m.provider)}
-            >
-              Remove
-            </Button>
+            <span>
+              {LABEL[m.provider]}
+              {m.provider === 'email' && m.email && ` · ${m.email}`}
+            </span>
+            <span className="flex flex-wrap justify-end gap-2">
+              {m.provider === 'email' && (
+                <>
+                  <Button variant="outline" size="sm" onClick={() => setEmailDialog('password')}>
+                    Change password
+                  </Button>
+                  <Button variant="outline" size="sm" onClick={() => setEmailDialog('change')}>
+                    Change email
+                  </Button>
+                </>
+              )}
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={list.length <= 1}
+                title={list.length <= 1 ? LAST_SIGN_IN : undefined}
+                onClick={() => setRemoving(m.provider)}
+              >
+                Remove
+              </Button>
+            </span>
           </li>
         ))}
       </ul>
+      {user.emailSignIn && methods.data && !list.some((m) => m.provider === 'email') && (
+        <div>
+          <Button variant="outline" size="sm" onClick={() => setEmailDialog('add')}>
+            Add email
+          </Button>
+        </div>
+      )}
+      {emailDialog === 'add' && (
+        <AddEmailDialog onClose={() => setEmailDialog(null)} onMerge={onMerge} />
+      )}
+      {emailDialog === 'password' && <ChangePasswordDialog onClose={() => setEmailDialog(null)} />}
+      {emailDialog === 'change' && <ChangeEmailDialog onClose={() => setEmailDialog(null)} />}
       {linkable.length > 0 && (
         <div className="flex flex-wrap gap-2">
           {linkable.map((p) => (

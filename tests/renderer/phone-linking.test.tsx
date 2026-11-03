@@ -2,6 +2,7 @@ import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { toast } from 'sonner'
 import type { MergePreview } from '@shared/account'
+import type { Me } from '@shared/cloud'
 import { App } from '../../src/phone/App'
 import { linkableProviders, linkSignIn } from '../../src/phone/linking'
 import { nativeSignIn, SignInCancelled } from '../../src/phone/nativeSignIn'
@@ -191,13 +192,18 @@ describe('phone Settings linking', () => {
     window.api = undefined as never
   })
 
-  function setup(link: unknown): {
+  function setup(
+    link: unknown,
+    extra: Record<string, unknown> = {},
+    user: Me = SETO
+  ): {
     store: ReturnType<typeof fakeStore>
     signIns: ReturnType<typeof vi.fn>
   } {
     const signIns = vi.fn(async () => [{ provider: 'apple', addedAt: at }])
-    const store = fakeStore()
+    const store = fakeStore({}, { account: { state: 'signed-in', user } })
     vi.mocked(store.portal).mockImplementation((async (channel: string) => {
+      if (channel in extra) return extra[channel]
       if (channel === 'account:signIns') return signIns()
       if (channel === 'account:linkCode') return link
       if (channel === 'account:merge') return { ...SETO, username: 'seto' }
@@ -244,6 +250,23 @@ describe('phone Settings linking', () => {
     await openSettings(user)
     await user.click(await screen.findByRole('button', { name: 'Link Discord' }))
     await waitFor(() => expect(toast.error).toHaveBeenCalledWith("Couldn't link Discord"))
+  })
+
+  it('adding an email that finds another account opens the merge dialog', async () => {
+    const user = userEvent.setup()
+    setup(
+      { status: 'linked' },
+      { 'account:addEmail': { status: 'merge', ticket: 'tk', preview: PREVIEW } },
+      { ...SETO, emailSignIn: true }
+    )
+    await openSettings(user)
+    await user.click(await screen.findByRole('button', { name: 'Add email' }))
+    const form = await screen.findByRole('dialog', { name: 'Add email sign-in' })
+    await user.type(within(form).getByRole('textbox', { name: 'Email' }), 'kaiba@example.com')
+    await user.type(within(form).getByLabelText('Password'), 'hunter22!')
+    await user.click(within(form).getByRole('button', { name: 'Send code' }))
+    expect(await screen.findByRole('dialog', { name: 'Merge accounts' })).toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: 'Add email sign-in' })).toBeNull()
   })
 
   it('says the account already has a Discord sign-in when the portal refuses', async () => {

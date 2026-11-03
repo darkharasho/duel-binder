@@ -215,7 +215,12 @@ export function Settings(): React.JSX.Element {
           </button>
         </Group>
         <div className="rounded-2xl border border-white/[0.06] bg-card p-4">
-          <SignInMethods linkable={linkable} linking={linking} onLink={(p) => void link(p)} />
+          <SignInMethods
+            linkable={linkable}
+            linking={linking}
+            onLink={(p) => void link(p)}
+            onMerge={(ticket, preview) => setMerge({ ticket, preview })}
+          />
           {merge && (
             <MergeDialog
               preview={merge.preview}

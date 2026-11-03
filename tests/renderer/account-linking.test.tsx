@@ -2,6 +2,7 @@ import { act, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { LAST_SIGN_IN } from '@shared/account'
 import type { Api } from '@shared/ipc'
+import { EMAIL_COPY } from '@shared/emailAuth'
 import type { Me } from '@shared/cloud'
 import type { AccountStatus } from '@shared/types'
 import { AccountNotices } from '@/features/account/AccountNotices'
@@ -157,6 +158,114 @@ describe('sign-in methods', () => {
     })
     await u.click(await screen.findByRole('button', { name: 'Link Apple' }))
     expect(onLink).toHaveBeenCalledWith('apple')
+  })
+})
+
+describe('email sign-in settings', () => {
+  const emailMethod = {
+    provider: 'email' as const,
+    email: 'ann@example.com',
+    addedAt: '2026-10-23T12:00:00.000Z'
+  }
+  const discord = { provider: 'discord' as const, addedAt: '2026-10-23T12:00:00.000Z' }
+  const makeEmail = (
+    methods: unknown[],
+    over: Partial<Me> = {},
+    account: Record<string, unknown> = {}
+  ): Api =>
+    make(me({ usernameChosen: true, emailSignIn: true, ...over }), [], {
+      signIns: vi.fn(async () => methods),
+      ...account
+    })
+
+  it('shows the address and Change password for an email sign-in', async () => {
+    renderWithProviders(<SignInMethods />, { api: makeEmail([discord, emailMethod]) })
+    expect(await screen.findByText('Email · ann@example.com')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Change password' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Change email' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Add email' })).toBeNull()
+  })
+
+  it('Add email hidden without emailSignIn', async () => {
+    renderWithProviders(<SignInMethods />, {
+      api: makeEmail([discord], { emailSignIn: undefined })
+    })
+    await screen.findByText('Discord')
+    expect(screen.queryByRole('button', { name: 'Add email' })).toBeNull()
+  })
+
+  it('add email → code → listed', async () => {
+    const u = userEvent.setup()
+    let listed: unknown[] = [discord]
+    const api = makeEmail(
+      [],
+      {},
+      {
+        signIns: vi.fn(async () => listed),
+        addEmail: vi.fn(async () => ({ status: 'code', ticket: 'tk' })),
+        confirmEmail: vi.fn(async () => {
+          listed = [discord, emailMethod]
+          return { status: 'linked' }
+        })
+      }
+    )
+    renderWithProviders(<SignInMethods />, { api })
+    await u.click(await screen.findByRole('button', { name: 'Add email' }))
+    const dialog = await screen.findByRole('dialog')
+    await u.type(within(dialog).getByRole('textbox', { name: 'Email' }), ' Ann@Example.com ')
+    await u.type(within(dialog).getByLabelText('Password'), 'hunter22!')
+    await u.click(within(dialog).getByRole('button', { name: 'Send code' }))
+    await waitFor(() =>
+      expect(api.account.addEmail).toHaveBeenCalledWith('ann@example.com', 'hunter22!')
+    )
+    const confirm = await within(dialog).findByRole('button', { name: 'Confirm' })
+    expect(confirm).toBeDisabled()
+    await u.type(within(dialog).getAllByRole('textbox')[0], '123456')
+    await u.click(confirm)
+    await waitFor(() => expect(api.account.confirmEmail).toHaveBeenCalledWith('tk', '123456'))
+    await u.click(await screen.findByRole('button', { name: 'Done' }))
+    expect(await screen.findByText('Email · ann@example.com')).toBeInTheDocument()
+  })
+
+  it('a merge result on desktop shows the phone copy', async () => {
+    const u = userEvent.setup()
+    const api = makeEmail(
+      [discord],
+      {},
+      {
+        addEmail: vi.fn(async () => ({ status: 'merge', ticket: 'tk', preview: {} }))
+      }
+    )
+    renderWithProviders(<SignInMethods />, { api })
+    await u.click(await screen.findByRole('button', { name: 'Add email' }))
+    const dialog = await screen.findByRole('dialog')
+    await u.type(within(dialog).getByRole('textbox', { name: 'Email' }), 'ann@example.com')
+    await u.type(within(dialog).getByLabelText('Password'), 'hunter22!')
+    await u.click(within(dialog).getByRole('button', { name: 'Send code' }))
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent(EMAIL_COPY.mergeOnPhone)
+  })
+
+  it("change password shows the portal's error", async () => {
+    const u = userEvent.setup()
+    const api = makeEmail(
+      [discord, emailMethod],
+      {},
+      {
+        changePassword: vi.fn(async () => {
+          throw new Error("That password doesn't match.")
+        })
+      }
+    )
+    renderWithProviders(<SignInMethods />, { api })
+    await u.click(await screen.findByRole('button', { name: 'Change password' }))
+    const dialog = await screen.findByRole('dialog')
+    await u.type(within(dialog).getByLabelText('Current password'), 'wrongpass')
+    await u.type(within(dialog).getByLabelText('New password'), 'newpass123')
+    await u.click(within(dialog).getByRole('button', { name: 'Change password' }))
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent(
+      "That password doesn't match."
+    )
+    expect(api.account.changePassword).toHaveBeenCalledWith('wrongpass', 'newpass123')
   })
 })
 

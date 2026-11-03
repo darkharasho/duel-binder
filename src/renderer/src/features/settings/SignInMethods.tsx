@@ -20,9 +20,12 @@ const KEY = ['account', 'signIns'] as const
 /** Settings: the username, and the ways to sign in (remove one, or link another). */
 export function SignInMethods({
   linkable = [],
+  linking = false,
   onLink
 }: {
   linkable?: SignInProvider[]
+  /** A link is in progress: the Link buttons wait. */
+  linking?: boolean
   onLink?(p: SignInProvider): void
 }): React.JSX.Element | null {
   const qc = useQueryClient()
@@ -93,7 +96,13 @@ export function SignInMethods({
       {linkable.length > 0 && (
         <div className="flex flex-wrap gap-2">
           {linkable.map((p) => (
-            <Button key={p} variant="outline" size="sm" onClick={() => onLink?.(p)}>
+            <Button
+              key={p}
+              variant="outline"
+              size="sm"
+              disabled={linking}
+              onClick={() => onLink?.(p)}
+            >
               Link {LABEL[p]}
             </Button>
           ))}

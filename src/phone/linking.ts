@@ -29,12 +29,24 @@ export async function linkSignIn(
     appleSheet?: () => Promise<AppleLinkInput>
   }
 ): Promise<LinkResult | null> {
+  const label = provider === 'apple' ? 'Apple' : 'Discord'
+  // Only the sign-in sheet's failures get this fixed copy; the portal's refusals keep its words.
+  const sheetStep = async <T>(open: () => Promise<T>): Promise<T> => {
+    try {
+      return await open()
+    } catch (e) {
+      if (e instanceof SignInCancelled) throw e
+      throw new Error(`Couldn't link ${label}`, { cause: e })
+    }
+  }
   try {
     if (provider === 'discord') {
-      const { code, verifier } = await (deps.nativeSignIn ?? nativeSignIn)({ intent: 'link' })
+      const { code, verifier } = await sheetStep(() =>
+        (deps.nativeSignIn ?? nativeSignIn)({ intent: 'link' })
+      )
       return await deps.store.portal<LinkResult>('account:linkCode', [code, verifier])
     }
-    const apple = await (deps.appleSheet ?? appleSheet)()
+    const apple = await sheetStep(() => (deps.appleSheet ?? appleSheet)())
     const input: AppleLinkInput = {
       identityToken: apple.identityToken,
       nonce: apple.nonce,

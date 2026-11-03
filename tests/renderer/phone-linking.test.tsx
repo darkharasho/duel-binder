@@ -86,6 +86,24 @@ describe('linkSignIn', () => {
     ])
   })
 
+  it('turns a failed sheet into readable copy, but passes the portal refusal on', async () => {
+    const store = fakeStore()
+    const failing = vi.fn(async () => {
+      throw new Error('signin-failed')
+    })
+    await expect(linkSignIn('discord', { store, nativeSignIn: failing as never })).rejects.toThrow(
+      "Couldn't link Discord"
+    )
+    await expect(linkSignIn('apple', { store, appleSheet: failing as never })).rejects.toThrow(
+      "Couldn't link Apple"
+    )
+    vi.mocked(store.portal).mockRejectedValue(new Error('Too many changes today'))
+    const ok = vi.fn(async () => ({ code: 'c', verifier: 'v' }))
+    await expect(linkSignIn('discord', { store, nativeSignIn: ok as never })).rejects.toThrow(
+      'Too many changes today'
+    )
+  })
+
   it('resolves null when the sheet is closed', async () => {
     const store = fakeStore()
     const native = vi.fn(async () => {
@@ -202,6 +220,44 @@ describe('phone Settings linking', () => {
     await waitFor(() =>
       expect(toast.success).toHaveBeenCalledWith('That Discord account is already linked here')
     )
+  })
+
+  it("a failed sign-in sheet says Couldn't link Discord, never the raw code", async () => {
+    const user = userEvent.setup()
+    vi.mocked(nativeSignIn).mockRejectedValue(new Error('signin-failed'))
+    setup({ status: 'linked' })
+    await openSettings(user)
+    await user.click(await screen.findByRole('button', { name: 'Link Discord' }))
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith("Couldn't link Discord"))
+  })
+
+  it('says the account already has a Discord sign-in when the portal refuses', async () => {
+    const user = userEvent.setup()
+    vi.mocked(nativeSignIn).mockResolvedValue({ code: 'c', verifier: 'v' } as never)
+    setup({ status: 'has-provider' })
+    await openSettings(user)
+    await user.click(await screen.findByRole('button', { name: 'Link Discord' }))
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith(
+        "This account already has a Discord sign-in, so that one can't be added"
+      )
+    )
+  })
+
+  it('disables the Link buttons while a link is in progress', async () => {
+    const user = userEvent.setup()
+    let finish!: (v: { code: string; verifier: string }) => void
+    vi.mocked(nativeSignIn).mockReturnValue(
+      new Promise((r) => {
+        finish = r
+      }) as never
+    )
+    setup({ status: 'linked' })
+    await openSettings(user)
+    await user.click(await screen.findByRole('button', { name: 'Link Discord' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Link Discord' })).toBeDisabled())
+    finish({ code: 'c', verifier: 'v' })
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Link Discord' })).toBeEnabled())
   })
 
   it('a cancelled sign-in sheet does nothing', async () => {

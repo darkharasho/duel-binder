@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import type { Language } from '@shared/languages'
 import type { CardSearchResult } from '@shared/types'
 import { CardDetails } from '@/components/CardDetails'
+import { CopyNameButton } from '@/components/CopyNameButton'
 import { PanelCardArt } from '@/components/PanelCardArt'
 import type { PanelNav } from '@/components/panelNav'
 import { PanelPrice } from '@/components/PanelPrice'
@@ -191,7 +192,10 @@ export function CardPanel({
   return (
     <>
       <SheetHeader>
-        <SheetTitle>{name ?? 'Card'}</SheetTitle>
+        <div className="flex items-center gap-1">
+          <SheetTitle>{name ?? 'Card'}</SheetTitle>
+          {name && <CopyNameButton name={name} />}
+        </div>
         <SheetDescription>{typeLine}</SheetDescription>
       </SheetHeader>
       <div className="space-y-5 px-4 pb-6">

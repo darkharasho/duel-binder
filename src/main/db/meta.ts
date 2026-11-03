@@ -4,6 +4,11 @@ export type MetaKey =
   | 'last_sync_at'
   | 'db_version'
   | 'intl_sets_synced_at'
+  /**
+   * Passwords read off Yugipedia card pages for set-list names YGOPRODeck spells otherwise, and
+   * when each name with none was last asked, as JSON (see sync/cardPasswords.ts).
+   */
+  | 'yugipedia_card_passwords'
   | 'price_service_status'
   | 'price_worker_url'
   | 'tcgplayer_synced_at'

@@ -3,6 +3,7 @@ import { languageForSuffix, type Language } from '@shared/languages'
 import { yugipediaImageKey } from '../images/cache'
 import { getMeta, setMeta } from '../db/meta'
 import type { YugipediaClient } from '../yugipedia/client'
+import { cardPasswords } from './cardPasswords'
 import {
   listTitleParts,
   MANGA_STYLE,
@@ -17,6 +18,7 @@ import {
   type SetListRow
 } from '../yugipedia/parse'
 
+export { CARD_MISS_RETRY_MS } from './cardPasswords'
 export const INTL_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000
 const CHUNK_SIZE = 50
 /**
@@ -41,9 +43,13 @@ export function shouldRefreshIntl(db: Database.Database, now: Date): boolean {
   return Number.isNaN(t) || now.getTime() - t >= INTL_INTERVAL_MS
 }
 
+/** Left-to-right marks and zero-width spaces, which some list rows carry after a name. */
+const INVISIBLE = /[\u200b-\u200f\u2060\ufeff]/g
+
 export function normalizeName(name: string): string {
   return name
     .normalize('NFKC')
+    .replace(INVISIBLE, '')
     .toLowerCase()
     .replace(/[‘’´]/g, "'")
     .replace(/[“”]/g, '"')
@@ -51,6 +57,9 @@ export function normalizeName(name: string): string {
     .replace(/\s+/g, ' ')
     .trim()
 }
+
+/** A Rush Duel printing ("RD/SJMP-JP001"), which some OCG lists hold beside their own. */
+const isRushDuel = (row: SetListRow): boolean => /^RD\//i.test(row.code)
 
 interface SetJob {
   title: string
@@ -373,6 +382,7 @@ async function run(
   const unmatchedExamples: string[] = []
   const seenSets = new Set<string>()
   const english = englishFill(db)
+  const passwords = cardPasswords(db, (titles) => fetchChunked(client, titles), now)
 
   // Sets not stored yet go first, so an interrupted first sync fills in rather than starting over;
   // within that, sets with no English release (e.g. Limit Over Collection) first, then Asian-market
@@ -441,13 +451,26 @@ async function run(
       }
     }
 
+    // Yugipedia titles some card pages "Name (card)"; only that suffix is dropped.
+    const byName = (key: string): number | undefined =>
+      cardIds.get(key) ?? cardIds.get(key.replace(/ \(card\)$/, ''))
+    // Names that don't match are looked up by their card page's password, Rush Duel rows aside:
+    // their cards have none.
+    const lookups = new Map<string, string>()
+    for (const s of loaded) {
+      for (const row of s.parsed.rows) {
+        const key = normalizeName(row.name)
+        if (!isRushDuel(row) && byName(key) === undefined) lookups.set(key, row.name)
+      }
+    }
+    await passwords.lookUp(lookups)
+
     for (const s of loaded) {
       let unmatched = 0
       const matched: { cardId: number; row: SetListRow }[] = []
       for (const row of s.parsed.rows) {
         const key = normalizeName(row.name)
-        // Yugipedia titles some card pages "Name (card)"; only that suffix is dropped.
-        const cardId = cardIds.get(key) ?? cardIds.get(key.replace(/ \(card\)$/, ''))
+        const cardId = byName(key) ?? (isRushDuel(row) ? undefined : passwords.cardFor(key))
         if (cardId === undefined) {
           unmatched++
           if (unmatchedExamples.length < MAX_LOGGED_UNMATCHED) unmatchedExamples.push(row.name)

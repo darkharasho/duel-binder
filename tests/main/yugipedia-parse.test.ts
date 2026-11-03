@@ -5,6 +5,7 @@ import {
   listTitleParts,
   normalizeRarity,
   onlyTranscludesLists,
+  parseCardPassword,
   parseInfobox,
   parseReleaseDate,
   parseSetList,
@@ -273,5 +274,31 @@ describe('parseReleaseDate / normalizeRarity', () => {
     expect(normalizeRarity('QCScR')).toBe('Quarter Century Secret Rare')
     expect(normalizeRarity('Weird Rare')).toBe('Weird Rare')
     expect(normalizeRarity('sr')).toBe('sr')
+  })
+})
+
+describe('parseCardPassword', () => {
+  const page = (fields: string): string =>
+    `{{About|x}}\n{{CardTable2\n| ja_name = x\n${fields}\n| effect_types = Condition\n}}\n== Trivia ==`
+
+  it("reads the card table's password as a number", () => {
+    expect(parseCardPassword(page('| atk = 2500\n| password              = 75787708'))).toBe(
+      75787708
+    )
+    expect(parseCardPassword(page('| password = 00423705'))).toBe(423705)
+  })
+
+  it('is null for a page with no card table or no usable password', () => {
+    expect(parseCardPassword('Just a page')).toBeNull()
+    expect(parseCardPassword(page('| atk = 2500'))).toBeNull()
+    expect(parseCardPassword(page('| password = '))).toBeNull()
+    expect(parseCardPassword(page('| password = None'))).toBeNull()
+  })
+})
+
+describe('parseSetList names', () => {
+  it("unwraps {{=}} in a row's name", () => {
+    const parsed = parseSetList('{{Set list|\nCYAC-JP001; Damage {{=}} Reptile; C\n}}')
+    expect(parsed?.rows.map((r) => r.name)).toEqual(['Damage = Reptile'])
   })
 })

@@ -163,7 +163,8 @@ export function parseSetList(wikitext: string): ParsedSetList | null {
       if (line !== '') {
         const fields = line.split(';').map((s) => s.trim())
         const code = noCode ? '' : (fields.shift() ?? '')
-        const name = fields[0] ?? ''
+        // "{{=}}" is the wiki's escape for "=" in a template argument ("Damage {{=}} Reptile").
+        const name = (fields[0] ?? '').replaceAll('{{=}}', '=')
         if (name !== '') {
           // A slot holding only a note or quantity ("New", "2") is no rarity: the list's default
           // stands in, and with none the row stays out. A truly empty slot is a Common.
@@ -306,6 +307,15 @@ function cardTable(wikitext: string): Map<string, string> | null {
     }
   }
   return fields
+}
+
+/**
+ * The password on a card page's {{CardTable2}}, which is YGOPRODeck's id for the card; null when
+ * it has none, as Rush Duel cards, tip cards and some promos don't.
+ */
+export function parseCardPassword(wikitext: string): number | null {
+  const raw = cardTable(wikitext)?.get('password')
+  return raw !== undefined && /^\d{1,10}$/.test(raw) ? Number(raw) : null
 }
 
 /** Card text without its wiki markup. */

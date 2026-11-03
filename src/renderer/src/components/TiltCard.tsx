@@ -36,8 +36,10 @@ export function TiltCard({
   const move = (e: React.PointerEvent<HTMLDivElement>): void => {
     if (e.pointerType !== 'mouse' && !(touch && pressed.current)) return
     const rect = e.currentTarget.getBoundingClientRect()
-    const x = (e.clientX - rect.left) / rect.width
-    const y = (e.clientY - rect.top) / rect.height
+    // A finger keeps reporting after a swipe drags it off the card; the edge is as far as it leans.
+    const clamp = (v: number): number => Math.min(1, Math.max(0, v))
+    const x = clamp((e.clientX - rect.left) / rect.width)
+    const y = clamp((e.clientY - rect.top) / rect.height)
     cancelAnimationFrame(frame.current)
     frame.current = requestAnimationFrame(() => {
       const el = inner.current

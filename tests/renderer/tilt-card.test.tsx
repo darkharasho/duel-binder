@@ -41,4 +41,13 @@ describe('TiltCard', () => {
     await new Promise((r) => setTimeout(r, 30))
     expect(inner.dataset.tilting).toBeUndefined()
   })
+
+  it('tilts no further than the edge when a swipe drags the finger off the card', async () => {
+    const { outer, inner } = setup(true)
+    outer.getBoundingClientRect = () => ({ left: 0, top: 0, width: 100, height: 100 }) as DOMRect
+    fireEvent.pointerDown(outer, { ...finger, clientX: 50, clientY: 50 })
+    fireEvent.pointerMove(outer, { ...finger, clientX: -150, clientY: 250 })
+    await waitFor(() => expect(inner.style.getPropertyValue('--tilt-y')).toBe('-14.00deg'))
+    expect(inner.style.getPropertyValue('--tilt-x')).toBe('-14.00deg')
+  })
 })

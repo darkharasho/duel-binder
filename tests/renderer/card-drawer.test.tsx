@@ -27,4 +27,14 @@ describe('CardDrawer', () => {
     expect(screen.queryByRole('region', { name: 'Card details' })).toBeNull()
     expect(screen.getByRole('heading', { name: 'Dark Magician' })).toBeVisible()
   })
+
+  it('on the phone, only tucks the drawer up over art that is there', () => {
+    renderWithProviders(
+      <CardDrawer header={<h2>Dark Magician</h2>} art={false}>
+        <p>Spellcaster · DARK</p>
+      </CardDrawer>,
+      { api: createMockApi({ window: { platform: 'phone' } }) }
+    )
+    expect(screen.getByRole('region', { name: 'Card details' }).className).not.toContain('-mt-6')
+  })
 })

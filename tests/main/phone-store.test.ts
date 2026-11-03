@@ -998,7 +998,8 @@ describe('phone store', () => {
     expect((await history()).slice(0, 3).map((p) => p.totalValue)).toEqual([10, 99, 30])
   })
 
-  it("fills each game's value chart with that game's history", async () => {
+  /** Alice with both games on the portal, each with its own value history. */
+  async function twoGames(): Promise<void> {
     portal.serverDb.close()
     portal = await inProcessPortal({ ADMIN_DISCORD_ID: 'discord-1-alice' })
     userId = portal.addUser('alice')
@@ -1010,14 +1011,58 @@ describe('phone store', () => {
     snap.run(userId, 'ygo', '2026-01-01', 10, 1)
     snap.run(userId, 'pkm', '2026-01-01', 5, 1)
     snap.run(userId, 'pkm', '2026-01-02', 7, 2)
+  }
+  /** The first two days of the shown game's value chart. */
+  const values = async (): Promise<number[]> =>
+    (
+      (await store.invoke('stats:get', [])) as { valueHistory: { totalValue: number }[] }
+    ).valueHistory
+      .slice(0, 2)
+      .map((p) => p.totalValue)
+  const historyAsked = (game: string): number =>
+    requests.filter(
+      (r) => r.url.endsWith('/api/rpc/stats:get') && r.headers.get('x-duel-game') === game
+    ).length
+
+  it("fills each game's value chart with that game's history", async () => {
+    await twoGames()
     await ready()
-    const values = async (): Promise<number[]> =>
-      (
-        (await store.invoke('stats:get', [])) as { valueHistory: { totalValue: number }[] }
-      ).valueHistory
-        .slice(0, 2)
-        .map((p) => p.totalValue)
     expect((await values())[0]).toBe(10)
+    await store.invoke('games:setActive', ['pkm'])
+    expect(await values()).toEqual([5, 7])
+  })
+
+  it("keeps the other games' history when one game's pull fails, and retries only that one", async () => {
+    await twoGames()
+    let pkmDown = true
+    net = (async (input: RequestInfo | URL, init?: RequestInit) => {
+      const game = new Headers(init?.headers).get('x-duel-game')
+      if (pkmDown && String(input).endsWith('/api/rpc/stats:get') && game === 'pkm')
+        return new Response('down', { status: 503 })
+      return real(input, init)
+    }) as typeof fetch
+    await ready()
+    expect((await values())[0]).toBe(10)
+    pkmDown = false
+    await store.sync()
+    expect(historyAsked('ygo')).toBe(1)
+    expect(historyAsked('pkm')).toBe(2)
+    await store.invoke('games:setActive', ['pkm'])
+    expect(await values()).toEqual([5, 7])
+  })
+
+  it('a phone that pulled today before Pokémon history was pulled still gets it today', async () => {
+    await twoGames()
+    await ready()
+    // As the Yu-Gi-Oh!-only version left it: today's mark, and no Pokémon days.
+    const mark = db.prepare("SELECT value FROM phone_state WHERE key = 'history_pulled'").get() as {
+      value: string
+    }
+    db.prepare("UPDATE phone_state SET value = ? WHERE key = 'history_pulled'").run(
+      mark.value.split(':').slice(0, 2).join(':')
+    )
+    db.prepare("DELETE FROM value_snapshots WHERE game = 'pkm'").run()
+    await store.sync()
     await store.invoke('games:setActive', ['pkm'])
     expect(await values()).toEqual([5, 7])
   })

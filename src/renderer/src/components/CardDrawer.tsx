@@ -1,4 +1,5 @@
 import { isPhone } from '@/lib/platform'
+import { cn } from '@/lib/utils'
 
 /**
  * A card panel's layout. On desktop: the header, then the art and the rest in one column. On the
@@ -33,7 +34,12 @@ export function CardDrawer({
       <section
         aria-label="Card details"
         data-testid="card-drawer"
-        className="relative z-[5] -mt-6 min-h-[70dvh] rounded-t-[28px] border-t border-white/[0.1] bg-background/60 shadow-[0_-12px_40px_rgb(0_0_0/0.35)] backdrop-blur-2xl"
+        className={cn(
+          'relative z-[5] min-h-[70dvh] rounded-t-[28px] border-t border-white/[0.1] bg-background/60 shadow-[0_-12px_40px_rgb(0_0_0/0.35)] backdrop-blur-2xl',
+          // Tucked up over the art's bottom edge; not when there's none (still loading, or the
+          // art sits beside the panel at 900px and wider) or it would slide under the back bar.
+          art && '-mt-6 min-[900px]:mt-0'
+        )}
       >
         <div aria-hidden className="mx-auto mt-2.5 h-1 w-10 rounded-full bg-white/25" />
         {header}

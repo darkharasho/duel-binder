@@ -253,6 +253,62 @@ describe('matching a sign-up to the account that uses its email', () => {
       nonce: APPLE_NONCE
     })
     expect(bad.status).toBe(400)
+    expect(bad.body.error).toBe(EMAIL_COPY.linkFailed)
+    expect((await step('separate', { ticket: m.body.ticket })).body.next).toBe('signed-in')
+  })
+
+  it('a bad Discord link code says so and leaves the ticket usable', async () => {
+    seedDiscord()
+    const m = await signUpTo()
+    const bad = await step('link-discord', {
+      ticket: m.body.ticket,
+      code: 'nope',
+      verifier: VERIFIER
+    })
+    expect(bad).toMatchObject({ status: 400, body: { error: EMAIL_COPY.linkFailed } })
+    const spent = await step('link-discord', {
+      ticket: m.body.ticket,
+      code: discordLinkCode('111'),
+      verifier: 'w'.repeat(43)
+    })
+    expect(spent.body.error).toBe(EMAIL_COPY.linkFailed)
+    expect((await step('separate', { ticket: m.body.ticket })).body.next).toBe('signed-in')
+  })
+
+  it('link steps refuse an unconfirmed sign-up and attach nothing', async () => {
+    const id = seedDiscord()
+    seedApple('other@x.io')
+    const made = await step('create', { email: EMAIL, password: PASSWORD })
+    const d = await step('link-discord', {
+      ticket: made.body.ticket,
+      code: discordLinkCode('111'),
+      verifier: VERIFIER
+    })
+    expect(d.body.error).toBe(EMAIL_COPY.codeExpired)
+    const a = await step('link-apple', {
+      ticket: made.body.ticket,
+      identityToken: appleIdentityToken(clock),
+      nonce: APPLE_NONCE
+    })
+    expect(a.body.error).toBe(EMAIL_COPY.codeExpired)
+    expect(providersOf(id)).toEqual(['discord'])
+    expect(count("SELECT count(*) AS n FROM sign_ins WHERE provider = 'email'")).toBe(0)
+  })
+
+  it('the account having an email by the time it links says so, and the choice stays', async () => {
+    const id = seedDiscord()
+    const m = await signUpTo()
+    db.prepare(
+      "INSERT INTO sign_ins (provider, subject, user_id, created_at, email) VALUES ('email', 'other@x.io', ?, ?, 'other@x.io')"
+    ).run(id, START.toISOString())
+    const r = await step('link-discord', {
+      ticket: m.body.ticket,
+      code: discordLinkCode('111'),
+      verifier: VERIFIER
+    })
+    expect(r).toMatchObject({ status: 400, body: { error: EMAIL_COPY.alsoHas('email') } })
+    expect(providersOf(id)).toEqual(['discord', 'email'])
+    expect((await step('separate', { ticket: m.body.ticket })).body.next).toBe('signed-in')
   })
 
   it('an unverified Discord email never matches', async () => {
@@ -324,6 +380,19 @@ describe('matching a sign-up to the account that uses its email', () => {
     expect(done.body.next).toBe('new-password')
     const sep = await step('separate', { ticket: f.body.ticket })
     expect(sep.body.error).toBe(EMAIL_COPY.codeExpired)
+    const link = await step('link-discord', {
+      ticket: f.body.ticket,
+      code: discordLinkCode('111'),
+      verifier: VERIFIER
+    })
+    expect(link.body.error).toBe(EMAIL_COPY.codeExpired)
+    const apple = await step('link-apple', {
+      ticket: f.body.ticket,
+      identityToken: appleIdentityToken(clock),
+      nonce: APPLE_NONCE
+    })
+    expect(apple.body.error).toBe(EMAIL_COPY.codeExpired)
+    expect(providersOf(id)).toEqual(['discord', 'email'])
   })
 
   describe('on the web', () => {
@@ -377,10 +446,46 @@ describe('matching a sign-up to the account that uses its email', () => {
       const res = await viaDiscord(m.body.ticket!)
       expect(res.headers.get('location')).toBe('/auth/email/match?error=other-account')
       expect(cookieOf(res, 'session')).toBeUndefined()
-      expect(res.headers.getSetCookie().some((c) => c.startsWith('email_link=;'))).toBe(true)
+      // The ticket stays in the HttpOnly cookie so the page can still offer the choice.
+      expect(res.headers.getSetCookie().some((c) => c.startsWith('email_link='))).toBe(false)
+      expect(res.headers.getSetCookie().some((c) => c.startsWith('oauth_state=;'))).toBe(true)
       expect(count('SELECT count(*) AS n FROM sessions')).toBe(0)
       const sep = await step('separate', { ticket: m.body.ticket })
       expect(sep.body.next).toBe('signed-in')
+    })
+
+    it('an account that already has an email goes to also-has and keeps the ticket', async () => {
+      const id = seedDiscord()
+      const m = await signUpTo()
+      db.prepare(
+        "INSERT INTO sign_ins (provider, subject, user_id, created_at, email) VALUES ('email', 'other@x.io', ?, ?, 'other@x.io')"
+      ).run(id, START.toISOString())
+      const res = await viaDiscord(m.body.ticket!)
+      expect(res.headers.get('location')).toBe('/auth/email/match?error=also-has')
+      expect(res.headers.getSetCookie().some((c) => c.startsWith('email_link='))).toBe(false)
+    })
+
+    it('an expired ticket goes to expired and clears the cookie', async () => {
+      seedDiscord()
+      const m = await signUpTo()
+      advance(15 * MIN + 1000)
+      const res = await viaDiscord(m.body.ticket!)
+      expect(res.headers.get('location')).toBe('/auth/email/match?error=expired')
+      expect(res.headers.getSetCookie().some((c) => c.startsWith('email_link=;'))).toBe(true)
+      expect(cookieOf(res, 'session')).toBeUndefined()
+    })
+
+    it('success also drops a leftover signin_next', async () => {
+      seedDiscord()
+      const m = await signUpTo()
+      const start = await get('/auth/discord/start?link=email')
+      const state = cookieOf(start, 'oauth_state')!
+      const res = await get(
+        `/auth/discord/callback?code=c&state=${state}`,
+        `oauth_state=${state}; email_link=${m.body.ticket}; signin_next=scan`
+      )
+      expect(res.headers.get('location')).toBe('/')
+      expect(res.headers.getSetCookie().some((c) => c.startsWith('signin_next=;'))).toBe(true)
     })
 
     it('a Discord identity with no account makes none', async () => {

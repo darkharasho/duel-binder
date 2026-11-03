@@ -43,7 +43,9 @@ export type StepOutcome =
 export class EmailAuthError extends Error {
   constructor(
     message: string,
-    readonly status: 400 | 404 | 429
+    readonly status: 400 | 404 | 429,
+    /** Stable reason, for callers that must not match on the copy. */
+    readonly code: 'expired' | 'other-account' | 'also-has' | 'refused' = 'refused'
   ) {
     super(message)
   }
@@ -65,8 +67,12 @@ interface FlowRow {
 
 /** A refusal found inside a transaction; thrown after commit so the step's other writes (a try count) stay. */
 type Refusal = { refuse: EmailAuthError }
-const refuse = (message: string, status: 400 | 404 | 429 = 400): Refusal => ({
-  refuse: new EmailAuthError(message, status)
+const refuse = (
+  message: string,
+  status: 400 | 404 | 429 = 400,
+  code?: EmailAuthError['code']
+): Refusal => ({
+  refuse: new EmailAuthError(message, status, code)
 })
 const unwrap = <T>(r: T | Refusal): T => {
   if (r !== null && typeof r === 'object' && 'refuse' in r) throw (r as Refusal).refuse
@@ -334,22 +340,24 @@ export async function attachFromFlow(
   deps: AppDeps,
   ticket: string,
   id: Identity,
-  nowIso: string
+  nowIso: string,
+  /** Runs inside the same transaction once the email is attached (a throw undoes the attach). */
+  inTransaction?: (userId: number) => void
 ): Promise<number> {
   const { db } = deps
   const ticketHash = await sha256Hex(ticket)
   const out = db.transaction((): number | Refusal => {
     const flow = confirmedSignup(db, ticketHash, nowIso)
-    if (!flow) return refuse(EMAIL_COPY.codeExpired)
+    if (!flow) return refuse(EMAIL_COPY.codeExpired, 400, 'expired')
     const userId = findAccount(db, id)
     const using = accountsUsingEmail(db, flow.email)
-    if (userId === null || !using.includes(userId))
-      return refuse(EMAIL_COPY.otherAccount(id.provider))
-    if (hasEmailOn(db, userId)) return refuse(EMAIL_COPY.alsoHas('email'))
-    if (userId !== matchedAccount(db, flow.email)?.userId)
-      return refuse(EMAIL_COPY.otherAccount(id.provider))
+    const other = (): Refusal => refuse(EMAIL_COPY.otherAccount(id.provider), 400, 'other-account')
+    if (userId === null || !using.includes(userId)) return other()
+    if (hasEmailOn(db, userId)) return refuse(EMAIL_COPY.alsoHas('email'), 400, 'also-has')
+    if (userId !== matchedAccount(db, flow.email)?.userId) return other()
     attachEmail(db, userId, flow.email, flow.password_hash ?? '', nowIso)
     db.prepare('DELETE FROM email_flows WHERE ticket_hash = ?').run(ticketHash)
+    inTransaction?.(userId)
     return userId
   })()
   return unwrap(out)
@@ -497,7 +505,7 @@ async function separateStep(deps: AppDeps, body: Record<string, unknown>): Promi
   const nowIso = deps.now().toISOString()
   const out = db.transaction((): StepOutcome | Refusal => {
     const flow = confirmedSignup(db, ticketHash, nowIso)
-    if (!flow) return refuse(EMAIL_COPY.codeExpired)
+    if (!flow) return refuse(EMAIL_COPY.codeExpired, 400, 'expired')
     if (hasEmailSignIn(db, flow.email)) return refuse(EMAIL_COPY.emailTaken)
     return { next: 'signed-in', userId: createFromFlow(db, flow, nowIso), created: true }
   })()
@@ -506,7 +514,7 @@ async function separateStep(deps: AppDeps, body: Record<string, unknown>): Promi
 
 async function linkDiscordStep(deps: AppDeps, body: Record<string, unknown>): Promise<StepOutcome> {
   const taken = await takeLinkCode(deps, body.code, body.verifier)
-  if (!taken) throw new EmailAuthError(EMAIL_COPY.codeExpired, 400)
+  if (!taken) throw new EmailAuthError(EMAIL_COPY.linkFailed, 400)
   const userId = await attachFromFlow(
     deps,
     text(body, 'ticket'),
@@ -522,7 +530,7 @@ async function linkAppleStep(deps: AppDeps, body: Record<string, unknown>): Prom
     { identityToken: body.identityToken, nonce: body.nonce },
     deps
   )
-  if (!verified) throw new EmailAuthError(EMAIL_COPY.codeExpired, 400)
+  if (!verified) throw new EmailAuthError(EMAIL_COPY.linkFailed, 400)
   const userId = await attachFromFlow(
     deps,
     text(body, 'ticket'),

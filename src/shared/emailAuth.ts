@@ -21,7 +21,9 @@ export function normalizeEmail(raw: string): string {
 }
 
 export function emailProblem(email: string): string | null {
-  return email.length <= MAX_EMAIL_LEN && EMAIL_SHAPE.test(email) ? null : 'Enter a valid email address'
+  return email.length <= MAX_EMAIL_LEN && EMAIL_SHAPE.test(email)
+    ? null
+    : 'Enter a valid email address'
 }
 
 export function passwordProblem(pw: string): string | null {
@@ -39,12 +41,14 @@ export const EMAIL_COPY = {
   codeWrong: "That code doesn't match.",
   codeExpired: 'That code has expired. Send a new one.',
   noAccount: 'No account uses this email.',
+  linkFailed: "We couldn't confirm that sign-in. Try again.",
   oneBox: "We'll sign you in, or make a new account if this email is new.",
   matchProvider: (p: string): string =>
     `There's already a Duel Binder account using this email. It signs in with ${label(p)}. Link your email to it?`,
   matchClaim: (p: string): string =>
     `There's already a Duel Binder account using this email. Link ${label(p)} to it?`,
-  alsoHas: (p: string): string => `That account also has ${label(p)}. Sign in to it and remove one first.`,
+  alsoHas: (p: string): string =>
+    `That account also has ${label(p)}. Sign in to it and remove one first.`,
   mergeOnPhone: 'That email belongs to another account. Link it from the Duel Binder phone app.',
   otherAccount: (p: string): string => `That ${label(p)} account isn't the one using this email.`
 }
@@ -72,5 +76,4 @@ export type EmailAuthReply =
 
 /** What renderers see: the session token never reaches them. */
 export type EmailAuthView =
-  | Exclude<EmailAuthReply, { next: 'signed-in' }>
-  | { next: 'signed-in'; user: Me; created: boolean }
+  Exclude<EmailAuthReply, { next: 'signed-in' }> | { next: 'signed-in'; user: Me; created: boolean }

@@ -4,7 +4,6 @@ import type { AppDeps } from './app'
 import { appleRefreshToken, verifyAppleIdentityToken } from './apple'
 import { attachFromFlow, EmailAuthError } from './emailAuth'
 import { emailEnabled } from './emailSend'
-import { EMAIL_COPY } from '../../../src/shared/emailAuth'
 import { mergedFrom, purgeHolds } from './merge'
 import { signInWith, verifiedEmail, type DiscordProfile, type Identity } from './signIns'
 
@@ -444,30 +443,41 @@ export async function finishSignIn(req: Request, deps: AppDeps): Promise<Respons
   const emailLink = readCookie(req, EMAIL_LINK_COOKIE)
   if (emailLink) {
     // Choosing which account a sign-up's email joins: this Discord sign-in is the proof, and it
-    // must already be that account (no account is made here).
-    const spent = [clearCookie('oauth_state'), clearCookie(EMAIL_LINK_COOKIE, EMAIL_LINK_PATH)]
+    // must already be that account (no account is made here). The attach and the session are one
+    // transaction. A refusal keeps the ticket cookie (HttpOnly, so the page can't get it back
+    // otherwise); only a gone flow clears it.
+    const spent = [clearCookie('oauth_state')]
+    const dropLink = clearCookie(EMAIL_LINK_COOKIE, EMAIL_LINK_PATH)
     try {
-      const userId = await attachFromFlow(
+      await attachFromFlow(
         deps,
         emailLink,
         { provider: 'discord', subject: user.id },
-        nowIso
+        nowIso,
+        (userId) => {
+          deps.db
+            .prepare(
+              "INSERT INTO sessions (token_hash, user_id, kind, created_at, expires_at) VALUES (?, ?, 'web', ?, ?)"
+            )
+            .run(
+              secretHash,
+              userId,
+              nowIso,
+              new Date(now.getTime() + SESSION_MAX_AGE * 1000).toISOString()
+            )
+        }
       )
-      deps.db
-        .prepare(
-          "INSERT INTO sessions (token_hash, user_id, kind, created_at, expires_at) VALUES (?, ?, 'web', ?, ?)"
-        )
-        .run(
-          secretHash,
-          userId,
-          nowIso,
-          new Date(now.getTime() + SESSION_MAX_AGE * 1000).toISOString()
-        )
-      return redirect('/', [cookie('session', secret, SESSION_MAX_AGE), ...spent])
+      const done = [cookie('session', secret, SESSION_MAX_AGE), ...spent, dropLink]
+      if (readCookie(req, NEXT_COOKIE) !== null) done.push(clearCookie(NEXT_COOKIE))
+      return redirect('/', done)
     } catch (err) {
       if (!(err instanceof EmailAuthError)) throw err
-      const reason = err.message === EMAIL_COPY.codeExpired ? 'expired' : 'other-account'
-      return redirect(`${MATCH_PAGE}?error=${reason}`, spent)
+      if (err.code === 'expired')
+        return redirect(`${MATCH_PAGE}?error=expired`, [...spent, dropLink])
+      return redirect(
+        `${MATCH_PAGE}?error=${err.code === 'also-has' ? 'also-has' : 'other-account'}`,
+        spent
+      )
     }
   }
 

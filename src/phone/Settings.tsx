@@ -17,10 +17,14 @@ import { EbayPricesToggle } from '@/features/settings/EbayPricesToggle'
 import { ScanPingToggle } from '@/features/settings/ScanPingToggle'
 import { UsageToggle } from '@/features/settings/UsageToggle'
 import { WishlistToggle } from '@/features/settings/WishlistToggle'
+import { toast } from 'sonner'
+import type { CardChoice, MergePreview, SignInProvider } from '@shared/account'
+import { MergeDialog } from '@/features/account/MergeDialog'
 import { api } from '@/lib/api'
-import { isNativeApp } from '@/lib/portal'
+import { APP_PLATFORM, isNativeApp } from '@/lib/portal'
 import { PRIVACY_URL, SIGN_OUT_FAILED, cardDataAge, signOutWarning } from './copy'
 import { CATALOG_KEY, SYNC_STATE_KEY, displayName, usePhone } from './context'
+import { linkableProviders, linkSignIn } from './linking'
 import { forgetSavedScans } from './savedScans'
 import { refreshAllFingerprints } from './refreshFingerprints'
 import { ScreenDetails } from './ScreenDetails'
@@ -78,6 +82,49 @@ export function Settings(): React.JSX.Element {
   const name = displayName(user)
   const [warnWaiting, setWarnWaiting] = useState<number | null>(null)
   const [signingOut, setSigningOut] = useState(false)
+  const methods = useQuery({
+    queryKey: ['account', 'signIns'],
+    queryFn: () => api.account.signIns()
+  })
+  const [linking, setLinking] = useState(false)
+  const [merge, setMerge] = useState<{ ticket: string; preview: MergePreview } | null>(null)
+  const linkable = methods.data ? linkableProviders(APP_PLATFORM, methods.data) : []
+  const refreshMethods = (): Promise<void> =>
+    qc.invalidateQueries({ queryKey: ['account', 'signIns'] })
+  const link = async (provider: SignInProvider): Promise<void> => {
+    if (linking) return
+    setLinking(true)
+    const label = provider === 'apple' ? 'Apple' : 'Discord'
+    try {
+      const out = await linkSignIn(provider, { store })
+      if (!out) return
+      if (out.status === 'linked') {
+        toast.success(`${label} linked`)
+        await refreshMethods()
+      } else if (out.status === 'already') {
+        toast.success(`That ${label} account is already linked here`)
+      } else if (out.status === 'has-provider') {
+        toast.error(`This account already has a ${label} sign-in, so that one can't be added`)
+      } else {
+        setMerge({ ticket: out.ticket, preview: out.preview })
+      }
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : `Couldn't link ${label}`)
+    } finally {
+      setLinking(false)
+    }
+  }
+  const doMerge = async (choice: {
+    cards: CardChoice
+    username: 'mine' | 'theirs'
+  }): Promise<void> => {
+    if (!merge) return
+    // Stores the returned account (api.account.merge), then pulls the merged cards.
+    await api.account.merge(merge.ticket, choice)
+    setMerge(null)
+    await refreshMethods()
+    await api.account.syncNow().catch(() => undefined)
+  }
   const [signOutFailed, setSignOutFailed] = useState(false)
   const [refresh, setRefresh] = useState<Refresh>({ state: 'idle' })
   const [problemsOpen, setProblemsOpen] = useState(false)
@@ -160,7 +207,14 @@ export function Settings(): React.JSX.Element {
           </button>
         </Group>
         <div className="rounded-2xl border border-white/[0.06] bg-card p-4">
-          <SignInMethods />
+          <SignInMethods linkable={linkable} onLink={(p) => void link(p)} />
+          {merge && (
+            <MergeDialog
+              preview={merge.preview}
+              onMerge={doMerge}
+              onCancel={() => setMerge(null)}
+            />
+          )}
         </div>
         {signOutFailed && (
           <p role="alert" className="px-4 text-[13px] text-destructive">

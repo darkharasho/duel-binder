@@ -66,9 +66,25 @@ async function tradeForToken(
  * and verifier trade for the app's Bearer token like the desktop's. Rejects with SignInCancelled
  * when the sheet is closed, and with an Error when the sign-in fails.
  */
+export async function nativeSignIn(deps: {
+  app?: 'ios' | 'android'
+  intent: 'link'
+  start?: WebAuthPlugin['start']
+  fetch?: typeof fetch
+}): Promise<{ code: string; verifier: string }>
+export async function nativeSignIn(deps?: {
+  app?: 'ios' | 'android'
+  start?: WebAuthPlugin['start']
+  fetch?: typeof fetch
+}): Promise<{ token: string; user: Me }>
 export async function nativeSignIn(
-  deps: { app?: 'ios' | 'android'; start?: WebAuthPlugin['start']; fetch?: typeof fetch } = {}
-): Promise<{ token: string; user: Me }> {
+  deps: {
+    app?: 'ios' | 'android'
+    intent?: 'link'
+    start?: WebAuthPlugin['start']
+    fetch?: typeof fetch
+  } = {}
+): Promise<{ token: string; user: Me } | { code: string; verifier: string }> {
   const app = deps.app ?? (APP_PLATFORM === 'android' ? 'android' : 'ios')
   const start = deps.start ?? ((o) => WebAuth.start(o))
   const doFetch = deps.fetch ?? fetch
@@ -77,7 +93,9 @@ export async function nativeSignIn(
   const challenge = base64Url(
     new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(verifier)))
   )
-  const startUrl = `${PORTAL_ORIGIN}/auth/desktop/start?${new URLSearchParams({ app, state, challenge })}`
+  const params = new URLSearchParams({ app, state, challenge })
+  if (deps.intent === 'link') params.set('intent', 'link')
+  const startUrl = `${PORTAL_ORIGIN}/auth/desktop/start?${params}`
 
   const { url: ended } = await sheet(() =>
     start({ url: startUrl, callbackScheme: CALLBACK_SCHEME })
@@ -85,6 +103,8 @@ export async function nativeSignIn(
   const q = new URL(ended).searchParams
   const code = q.get('code')
   if (q.get('state') !== state || q.has('error') || !code) throw new Error('signin-failed')
+  // Linking hands the code to the signed-in portal call instead of trading it for a token.
+  if (deps.intent === 'link') return { code, verifier }
   return tradeForToken(doFetch, '/auth/desktop/token', { code, verifier })
 }
 
@@ -97,6 +117,30 @@ export async function nativeSignIn(
 export async function appleSignIn(
   deps: { appleSignIn?: WebAuthPlugin['appleSignIn']; fetch?: typeof fetch } = {}
 ): Promise<{ token: string; user: Me }> {
+  const apple = await appleSheet(deps)
+  return tradeForToken(deps.fetch ?? fetch, '/auth/apple/token', {
+    identityToken: apple.identityToken,
+    authorizationCode: apple.authorizationCode,
+    nonce: apple.nonce,
+    givenName: apple.givenName,
+    familyName: apple.familyName
+  })
+}
+
+/**
+ * The Apple sheet alone: the identity token Apple signed for a random nonce, with that nonce (the
+ * raw value; Apple got its SHA-256) and the authorization code. Sign-in trades them for a token;
+ * linking sends them to the signed-in portal call. Rejects with SignInCancelled when closed.
+ */
+export async function appleSheet(
+  deps: { appleSignIn?: WebAuthPlugin['appleSignIn'] } = {}
+): Promise<{
+  identityToken: string
+  nonce: string
+  authorizationCode?: string
+  givenName?: string
+  familyName?: string
+}> {
   const open = deps.appleSignIn ?? ((o) => WebAuth.appleSignIn(o))
   const nonce = random(24)
   const hashed = [
@@ -105,11 +149,5 @@ export async function appleSignIn(
     .map((b) => b.toString(16).padStart(2, '0'))
     .join('')
   const apple = await sheet(() => open({ nonce: hashed }))
-  return tradeForToken(deps.fetch ?? fetch, '/auth/apple/token', {
-    identityToken: apple.identityToken,
-    authorizationCode: apple.authorizationCode,
-    nonce,
-    givenName: apple.givenName,
-    familyName: apple.familyName
-  })
+  return { ...apple, nonce }
 }

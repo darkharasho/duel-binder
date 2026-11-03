@@ -1,6 +1,11 @@
 import { createHash } from 'node:crypto'
 import { describe, expect, it, vi, type Mock } from 'vitest'
-import { appleSignIn, nativeSignIn, SignInCancelled } from '../../src/phone/nativeSignIn'
+import {
+  appleSheet,
+  appleSignIn,
+  nativeSignIn,
+  SignInCancelled
+} from '../../src/phone/nativeSignIn'
 
 const USER = { id: 1, username: 'kaiba', displayName: 'Seto', avatarUrl: null }
 
@@ -77,6 +82,33 @@ describe('nativeSignIn', () => {
   })
 })
 
+describe('nativeSignIn with a link intent', () => {
+  it('returns the code and verifier, and trades nothing', async () => {
+    const start = sheet()
+    const fetch = tokenFetch()
+    const result = await nativeSignIn({
+      intent: 'link',
+      start,
+      fetch: fetch as unknown as typeof globalThis.fetch
+    })
+    const startUrl = new URL(start.mock.calls[0][0].url, 'https://portal.test')
+    expect(startUrl.searchParams.get('intent')).toBe('link')
+    expect(result.code).toBe('c0de')
+    expect(createHash('sha256').update(result.verifier).digest('base64url')).toBe(
+      startUrl.searchParams.get('challenge')
+    )
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
+  it('a sign-in has no intent in its start URL', async () => {
+    const start = sheet()
+    await nativeSignIn({ start, fetch: tokenFetch() as unknown as typeof globalThis.fetch })
+    expect(
+      new URL(start.mock.calls[0][0].url, 'https://portal.test').searchParams.has('intent')
+    ).toBe(false)
+  })
+})
+
 describe('appleSignIn', () => {
   it('hands Apple the nonce hash and the portal the nonce, token, code and name', async () => {
     const open = vi.fn<AppleSheet>(async () => ({
@@ -117,5 +149,18 @@ describe('appleSignIn', () => {
         fetch: tokenFetch(400) as unknown as typeof globalThis.fetch
       })
     ).rejects.toThrow('signin-failed')
+  })
+})
+
+describe('appleSheet', () => {
+  it('returns the token, the raw nonce and the code without trading them', async () => {
+    const open = vi.fn<AppleSheet>(async () => ({
+      identityToken: 'id.tok',
+      authorizationCode: 'c'
+    }))
+    const out = await appleSheet({ appleSignIn: open })
+    expect(out).toMatchObject({ identityToken: 'id.tok', authorizationCode: 'c' })
+    const hashed = open.mock.calls[0][0].nonce
+    expect(createHash('sha256').update(out.nonce).digest('hex')).toBe(hashed)
   })
 })

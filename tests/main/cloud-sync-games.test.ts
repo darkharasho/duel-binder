@@ -2,14 +2,18 @@ import type Database from 'better-sqlite3'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { createCloudClient, CloudOfflineError, type CloudClient } from '../../src/main/cloud/client'
 import { syncOnce } from '../../src/main/cloud/engine'
-import { accountState, ensureAccount, saveAccountState, setActiveOwner } from '../../src/main/cloud/localSync'
+import {
+  accountState,
+  adoptMergedData,
+  ensureAccount,
+  mergeHolds,
+  saveAccountState,
+  setActiveOwner
+} from '../../src/main/cloud/localSync'
+import { addEntry } from '../../src/main/repo/collection'
+import { localScope } from '../../src/main/repo/scope'
 import { getMeta, setMeta } from '../../src/main/db/meta'
-import type {
-  Me,
-  PriceChangesResponse,
-  PullResponse,
-  PulledEntry
-} from '../../src/shared/cloud'
+import type { Me, PriceChangesResponse, PullResponse, PulledEntry } from '../../src/shared/cloud'
 import type { GameId } from '../../src/shared/games'
 import { seedPokemon } from '../fixtures/pokemon'
 import { seededDb } from './helpers'
@@ -166,6 +170,41 @@ describe('per-game syncOnce', () => {
       [0, 'ygo'],
       [0, 'ygo']
     ])
+  })
+
+  it('a failing me() leaves held Pokémon rows waiting for a Pokémon pull', async () => {
+    // A row the closed account (8) never sent, carried into OWNER by a merge.
+    setActiveOwner(db, 8)
+    addEntry(
+      db,
+      { printingId: pkm.printingIds[0], imageId: pkm.cardIds[0], quantity: 1 },
+      NOW(),
+      localScope("'pkm'")
+    )
+    setActiveOwner(db, OWNER)
+    adoptMergedData(db, 8, OWNER, T0)
+    const merged = { ...pkmEntry(5), quantity: 4 }
+    const server = fakeServer({ entries: { pkm: [merged] }, prices: {} })
+    server.games = ['ygo', 'pkm']
+    server.meFails = true
+
+    await syncOnce(db, OWNER, server.client, NOW)
+    // No Pokémon pull, so the carried row must not land (it would beat the merged 4 with a 1).
+    expect(mergeHolds(db, OWNER)).toEqual([8])
+    expect(
+      db.prepare('SELECT COUNT(*) AS n FROM collection_entries WHERE owner_id = ?').get(OWNER)
+    ).toEqual({ n: 0 })
+
+    server.meFails = false
+    await syncOnce(db, OWNER, server.client, NOW)
+    expect(mergeHolds(db, OWNER)).toEqual([])
+    expect(
+      db
+        .prepare(
+          'SELECT quantity FROM collection_entries WHERE owner_id = ? AND deleted_at IS NULL'
+        )
+        .all(OWNER)
+    ).toEqual([{ quantity: 4 }])
   })
 
   it('the client names the game on pulls and price changes', async () => {

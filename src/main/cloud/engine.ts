@@ -77,11 +77,16 @@ const sameAs = (e: WireEntry): string => JSON.stringify(e)
  * Yu-Gi-Oh! only; so does a failing `me()` (other than signed-out), so the rest of the run goes on.
  */
 export async function syncedGames(client: CloudClient): Promise<GameId[]> {
+  return (await meGames(client)) ?? ['ygo']
+}
+
+/** `syncedGames`, but null when `me()` failed, so the caller knows not every game may be pulled. */
+async function meGames(client: CloudClient): Promise<GameId[] | null> {
   try {
     return gamesOf(await client.me())
   } catch (e) {
     if (e instanceof CloudAuthError) throw e
-    return ['ygo']
+    return null
   }
 }
 
@@ -412,9 +417,12 @@ export async function syncOnce(
 
   // 2. Pull, once per game the account may use, each from its own cursor (a game newly allowed
   // starts from 0). Each page and its cursor commit together.
-  const games = await syncedGames(client)
+  const answered = await meGames(client)
+  const games = answered ?? ['ygo']
   // After me() (which may report a merge), before the pull: these holds see the merge once pulled.
-  const holds = mergeHolds(db, owner)
+  // Without an answer from me() some games go unpulled, so the holds wait for a full run: a
+  // carried row resolved against an unpulled game would beat the merged row.
+  const holds = answered ? mergeHolds(db, owner) : []
   let pulled = 0
   for (const game of games) {
     let cursor = gameCursor(db, owner, game, 'entries')

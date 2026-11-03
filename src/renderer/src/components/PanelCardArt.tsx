@@ -80,6 +80,7 @@ export function PanelCardArt({
         {arrows && <NavArrow dir="prev" step={arrows.prev} />}
         {/* The phone's card fills the sheet, short of pushing its title off a short screen. */}
         <TiltCard
+          touch={phone}
           className={phone ? 'w-[min(100%,calc((100dvh-11rem)*var(--card-aspect)))]' : 'w-48'}
         >
           <CardArt

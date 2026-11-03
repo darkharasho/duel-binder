@@ -12,22 +12,29 @@ interface TiltCardProps {
   /** On the part that tilts, e.g. a glow that should lean with the card. */
   innerStyle?: React.CSSProperties
   innerClassName?: string
+  /** Also tilts under a finger held on the card (the phone); otherwise only the mouse tilts it. */
+  touch?: boolean
 }
 
-/** Tilts its contents toward the mouse like a card held in the hand, with a glare that follows. */
+/**
+ * Tilts its contents toward the mouse like a card held in the hand, with a glare that follows.
+ * With `touch`, a finger pressed on the card tilts it too, until it lifts or the page scrolls.
+ */
 export function TiltCard({
   children,
   className,
   maxTilt = 14,
   glareClassName,
   innerStyle,
-  innerClassName
+  innerClassName,
+  touch = false
 }: TiltCardProps): React.JSX.Element {
   const inner = useRef<HTMLDivElement>(null)
   const frame = useRef(0)
+  const pressed = useRef(false)
 
   const move = (e: React.PointerEvent<HTMLDivElement>): void => {
-    if (e.pointerType !== 'mouse') return
+    if (e.pointerType !== 'mouse' && !(touch && pressed.current)) return
     const rect = e.currentTarget.getBoundingClientRect()
     const x = (e.clientX - rect.left) / rect.width
     const y = (e.clientY - rect.top) / rect.height
@@ -43,7 +50,14 @@ export function TiltCard({
     })
   }
 
+  const down = (e: React.PointerEvent<HTMLDivElement>): void => {
+    if (!touch || e.pointerType === 'mouse') return
+    pressed.current = true
+    move(e)
+  }
+
   const leave = (): void => {
+    pressed.current = false
     cancelAnimationFrame(frame.current)
     const el = inner.current
     if (!el) return
@@ -56,8 +70,11 @@ export function TiltCard({
     // The untilted wrapper measures the pointer, so the card's own movement doesn't feed back.
     <div
       className={cn('[perspective:700px]', className)}
+      onPointerDown={down}
       onPointerMove={move}
       onPointerLeave={leave}
+      onPointerUp={touch ? leave : undefined}
+      onPointerCancel={leave}
     >
       <div
         ref={inner}

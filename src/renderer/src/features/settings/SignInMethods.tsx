@@ -14,7 +14,11 @@ import { UsernameDialog } from '@/features/account/UsernameDialog'
 import { api } from '@/lib/api'
 import { useAccountUser } from '@/lib/accountUser'
 
-const LABEL: Record<SignInProvider, string> = { discord: 'Discord', apple: 'Apple' }
+const LABEL: Record<SignInProvider, string> = {
+  discord: 'Discord',
+  apple: 'Apple',
+  email: 'Email'
+}
 const KEY = ['account', 'signIns'] as const
 
 /** Settings: the username, and the ways to sign in (remove one, or link another). */

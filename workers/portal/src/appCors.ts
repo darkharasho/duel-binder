@@ -11,7 +11,8 @@ const BEARER_ROUTES = [
   /^\/img\//,
   /^\/scan\/fingerprint(s|-refs)$/,
   /^\/auth\/desktop\/(token|revoke)$/,
-  /^\/auth\/apple\/token$/
+  /^\/auth\/apple\/token$/,
+  /^\/auth\/email\/[a-z-]+$/
 ]
 
 /** The app origin the request came from when it may cross, else null. */

@@ -1,10 +1,12 @@
 /** The account's sign-in methods and username rules, shared by the Worker and every client. */
 
-export type SignInProvider = 'discord' | 'apple'
+export type SignInProvider = 'discord' | 'apple' | 'email'
 
 /** One way to sign in to the account (`account:signIns`). */
 export interface SignInMethod {
   provider: SignInProvider
+  /** The address, for an email sign-in. */
+  email?: string
   /** When it was added, as an ISO timestamp. */
   addedAt: string
 }

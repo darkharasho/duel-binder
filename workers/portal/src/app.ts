@@ -29,6 +29,7 @@ import { phoneRoute } from './phonePage'
 import { deleteAccountRoute } from './account'
 import type { AppleSignInEnv } from './apple'
 import type { EmailSender } from './emailSend'
+import { emailAuthRoute, emailStatusRoute } from './emailAuth'
 import { appPreflight, withAppCors } from './appCors'
 
 /** Vars and secrets the request handlers read. */
@@ -102,6 +103,9 @@ async function route(req: Request, deps: AppDeps): Promise<Response> {
     return exchangePhoneToken(req, deps)
   if (req.method === 'POST' && url.pathname === '/auth/desktop/revoke')
     return revokeDesktopToken(req, deps)
+  if (req.method === 'GET' && url.pathname === '/auth/email/status') return emailStatusRoute(deps)
+  if (req.method === 'POST' && url.pathname.startsWith('/auth/email/'))
+    return emailAuthRoute(req, deps, url.pathname.slice('/auth/email/'.length))
   if (req.method === 'GET' && url.pathname === '/api/me') return me(req, deps)
   if (req.method === 'GET' && url.pathname === '/api/site-account') return siteAccount(req, deps)
   if (url.pathname === '/api/account/delete') return deleteAccountRoute(req, deps)

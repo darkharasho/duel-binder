@@ -30,6 +30,8 @@ export interface Me {
   linkHint?: 'discord' | 'apple' | null
   /** Ids of accounts merged into this one, whose data this client should adopt. */
   mergedFrom?: number[]
+  /** True when this server offers email + password sign-in. Old servers leave it out. */
+  emailSignIn?: boolean
 }
 
 /**

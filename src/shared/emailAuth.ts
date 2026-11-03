@@ -10,9 +10,10 @@ const EMAIL_SHAPE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 const PROVIDER_LABEL: Record<SignInProvider, string> = {
   discord: 'Discord',
-  apple: 'Apple'
+  apple: 'Apple',
+  email: 'Email'
 }
-const label = (p: string): string => PROVIDER_LABEL[p as SignInProvider] ?? (p === 'email' ? 'Email' : p)
+const label = (p: string): string => PROVIDER_LABEL[p as SignInProvider] ?? p
 
 /** Trim and lowercase; nothing else is rewritten. */
 export function normalizeEmail(raw: string): string {

@@ -53,10 +53,14 @@ export function listSignIns(db: SqlDb, userId: number): SignInMethod[] {
   return (
     db
       .prepare(
-        'SELECT provider, created_at FROM sign_ins WHERE user_id = ? ORDER BY created_at, rowid'
+        'SELECT provider, subject, created_at FROM sign_ins WHERE user_id = ? ORDER BY created_at, rowid'
       )
-      .all(userId) as { provider: SignInProvider; created_at: string }[]
-  ).map((r) => ({ provider: r.provider, addedAt: r.created_at }))
+      .all(userId) as { provider: SignInProvider; subject: string; created_at: string }[]
+  ).map((r) => ({
+    provider: r.provider,
+    addedAt: r.created_at,
+    ...(r.provider === 'email' ? { email: r.subject } : {})
+  }))
 }
 
 /**

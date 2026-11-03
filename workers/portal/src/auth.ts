@@ -2,6 +2,7 @@ import type { Me } from '../../../src/shared/cloud'
 import { allowedGames, type GameId } from '../../../src/shared/games'
 import type { AppDeps } from './app'
 import { appleRefreshToken, verifyAppleIdentityToken } from './apple'
+import { emailEnabled } from './emailSend'
 import { mergedFrom, purgeHolds } from './merge'
 import { signInWith, type DiscordProfile, type Identity } from './signIns'
 
@@ -80,6 +81,8 @@ const redirectUri = (deps: AppDeps): string => `${deps.env.PUBLIC_URL}/auth/disc
 export interface SessionUser {
   id: number
   kind: 'web' | 'desktop'
+  /** The hash of the token this request carried. */
+  tokenHash: string
 }
 
 /**
@@ -99,7 +102,7 @@ function requestToken(req: Request): { token: string; kind: SessionUser['kind'] 
 async function findSession(
   req: Request,
   deps: AppDeps
-): Promise<(SessionUser & { tokenHash: string }) | null> {
+): Promise<SessionUser | null> {
   const found = requestToken(req)
   if (!found) return null
   const tokenHash = await sha256Hex(found.token)
@@ -130,8 +133,30 @@ async function findSession(
 
 /** The signed-in user for this request's desktop Bearer token or web session cookie, or null when absent, unknown, or expired. */
 export async function currentUser(req: Request, deps: AppDeps): Promise<SessionUser | null> {
-  const session = await findSession(req, deps)
-  return session ? { id: session.id, kind: session.kind } : null
+  return findSession(req, deps)
+}
+
+/** Opens a session for the account and returns its token (only its hash is stored). */
+export async function mintSession(
+  deps: AppDeps,
+  userId: number,
+  kind: SessionUser['kind'],
+  nowIso: string
+): Promise<string> {
+  const token = randomToken()
+  const ttl = kind === 'web' ? SESSION_MAX_AGE * 1000 : DESKTOP_TTL_MS
+  deps.db
+    .prepare(
+      'INSERT INTO sessions (token_hash, user_id, kind, created_at, expires_at) VALUES (?, ?, ?, ?, ?)'
+    )
+    .run(
+      await sha256Hex(token),
+      userId,
+      kind,
+      nowIso,
+      new Date(new Date(nowIso).getTime() + ttl).toISOString()
+    )
+  return token
 }
 
 function isAdminUser(deps: AppDeps, userId: number): boolean {
@@ -586,7 +611,7 @@ export function fromPublicOrigin(req: Request, deps: AppDeps): boolean {
 export const clearSessionCookie = (): string => clearCookie('session')
 
 /** True when the request's media type is exactly application/json (parameters such as charset allowed). */
-function isJson(req: Request): boolean {
+export function isJson(req: Request): boolean {
   const type = req.headers.get('content-type')
   return type !== null && type.split(';')[0].trim().toLowerCase() === 'application/json'
 }
@@ -709,6 +734,7 @@ export function loadMe(deps: AppDeps, userId: number): Me {
     usernameChosen: row.username_chosen === 1,
     linkHint: linkHintFor(deps, row.id, row.link_hint)
   }
+  if (emailEnabled(deps)) me.emailSignIn = true
   // Left out when empty, as old servers do.
   const merged = mergedFrom(deps.db, row.id)
   return merged.length > 0 ? { ...me, mergedFrom: merged } : me

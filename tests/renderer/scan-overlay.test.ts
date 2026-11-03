@@ -45,6 +45,7 @@ const pull = (key: number, hit = false): Pull => ({
   printingId: key,
   name: `Card ${key}`,
   imageId: key,
+  photoId: null,
   setCode: null,
   setName: null,
   rarity: null,
@@ -63,6 +64,7 @@ describe('pullOf', () => {
       printingId: 1,
       name: 'Dark Magician',
       imageId: 46986414,
+      photoId: 1,
       setCode: 'LOB-005',
       setName: 'Legend of Blue Eyes',
       rarity: 'Ultra Rare',
@@ -71,6 +73,14 @@ describe('pullOf', () => {
       raw: false,
       hit: false
     })
+  })
+
+  it("shows the printing's own photo only for a sure printing that keeps its first artwork", () => {
+    expect(pullOf(draft({ flag: 'pick-printing' }), 20, 1).photoId).toBeNull()
+    // An alternate artwork the art match picked stays as itself.
+    expect(
+      pullOf(draft({ imageId: 46986415 }, { imageIds: [46986414, 46986415] }), 20, 1).photoId
+    ).toBeNull()
   })
 
   it('is a hit at exactly the hit price', () => {

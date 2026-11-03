@@ -312,7 +312,12 @@ export function createPhoneApi(deps: {
       run: runCatalogUpdate,
       onProgress: (cb) => events.on('syncStatus', cb)
     },
-    images: { cacheSize: async () => 0, clearCache: async () => {}, onDownloads: () => () => {} },
+    images: {
+      cacheSize: async () => 0,
+      clearCache: async () => {},
+      onDownloads: () => () => {},
+      photoIds: (printingIds) => store.printingPhotoIds(printingIds)
+    },
     usage: {
       report: (events) => store.reportUsage({ platform: reportPlatform(APP_PLATFORM), events })
     },

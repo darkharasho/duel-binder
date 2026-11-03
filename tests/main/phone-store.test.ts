@@ -678,6 +678,24 @@ describe('phone store', () => {
     expect(requests.some((r) => r.url.endsWith('/scan/fingerprints?game=pkm'))).toBe(true)
   })
 
+  it("maps this phone's printing ids to the server's, for printing photos", async () => {
+    await ready()
+    const rows = db
+      .prepare("SELECT id, pkey FROM card_printings WHERE game = 'ygo' ORDER BY id LIMIT 2")
+      .all() as { id: number; pkey: string }[]
+    expect(rows.length).toBe(2)
+    const server = rows.map(
+      (r) =>
+        (portal.serverDb.prepare('SELECT id FROM card_printings WHERE pkey = ?').get(r.pkey) as { id: number }).id
+    )
+    expect(await store.printingPhotoIds([rows[0].id, rows[1].id, 999_999_999])).toEqual([
+      [rows[0].id, server[0]],
+      [rows[1].id, server[1]]
+    ])
+    expect(await store.printingPhotoIds([])).toEqual([])
+    await expect(store.printingPhotoIds(['1' as unknown as number])).rejects.toThrow()
+  })
+
   it("fingerprint refs come down beside the fingerprints, as this phone's printing ids", async () => {
     await ready()
     const printing = db

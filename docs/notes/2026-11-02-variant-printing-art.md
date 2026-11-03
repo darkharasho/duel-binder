@@ -69,7 +69,7 @@ Two things in the brief point the wrong way:
 
 ## Parked
 
-- The phone needs printing photos (Worker route by pkey).
+- ~~The phone needs printing photos.~~ Fixed in `fix/phone-printing-photos`. The phone's catalog already holds each printing's server id (`remote_id`), so no new route was needed. The phone looks the ids up in batches and asks `/img/printing/<server id>`, which now serves known printings to signed-out requests, metered per address like card art. The scanner's pull overlay, summary and phone last-scan card show the printing's photo when the printing is sure.
 - BLGG-EN chibi rows carry no variant. The scanner can't name them, and its overlay shows the usual art.
 - `normalizeRarity` doesn't spell out `PlScR` (3,293 rows). It is a pkey change, so it was left alone.
 - MAMO-EN013's gallery isn't found (name mismatch). That belongs to the parallel `fix/yugipedia-name-mismatch` work.

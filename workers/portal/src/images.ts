@@ -389,6 +389,9 @@ function resolve(deps: AppDeps, path: string): Target | null {
     return {
       key: `printing/${n}${printing ? printingPhotoSuffix(printing) : ''}`,
       cache: SET_CACHE,
+      // The phone's <img> tags carry no session. A printing the catalog has may be looked up
+      // signed out too, metered per address before the lookup, as card art is.
+      anonymous: printing !== undefined,
       meterFirst: true,
       source: async () => {
         const url = await withTimeout(

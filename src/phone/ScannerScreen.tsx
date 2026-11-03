@@ -31,6 +31,7 @@ import { StreamScreen } from './stream/StreamScreen'
 import {
   GLASS,
   listValue,
+  photoFor,
   priceOf,
   priceRange,
   printingOf,
@@ -75,6 +76,7 @@ function LastScan({ row, burst }: { row: ScanRow; burst: number }): React.JSX.El
     >
       <CardArt
         imageId={row.imageId}
+        printingId={photoFor(row)}
         size="small"
         alt=""
         className={cn(

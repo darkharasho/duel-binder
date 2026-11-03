@@ -16,9 +16,11 @@ import {
   accountState,
   activeOwner,
   adoptLocalData,
+  adoptMergedData,
   applyPending,
   ensureAccount,
   hasLocalData,
+  hasOwnerRows,
   pendingCount,
   syncIssueCount,
   setActiveOwner
@@ -244,6 +246,10 @@ export function createAccountService(deps: AccountDeps): AccountService {
         if (me.id === owner) {
           ensureAccount(db, owner, me.displayName ?? me.username)
           setMeta(db, 'cloud_user', JSON.stringify(me))
+          if (db.transaction(() => adoptMerged(me))()) {
+            deps.emitDataChanged()
+            scheduler.poke(0)
+          }
         }
         meRefreshed = true
       }
@@ -293,12 +299,24 @@ export function createAccountService(deps: AccountDeps): AccountService {
     }
   }
 
+  /** Carries unsent rows of accounts merged into `user` over to it; returns whether any were found. */
+  function adoptMerged(user: Me): boolean {
+    let found = false
+    for (const from of user.mergedFrom ?? []) {
+      if (from === user.id || !hasOwnerRows(db, from)) continue
+      adoptMergedData(db, from, user.id, now().toISOString())
+      found = true
+    }
+    return found
+  }
+
   /** Makes `user` the signed-in account and shows its cards; the previous owner's rows aren't touched. */
   function becomeSignedIn(newToken: string, user: Me): void {
     const before = activeOwner(db)
     db.transaction(() => {
       ensureAccount(db, user.id, user.displayName ?? user.username)
       if (hasLocalData(db)) adoptLocalData(db, user.id)
+      adoptMerged(user)
       setActiveOwner(db, user.id)
     })()
     tokens.set(newToken)

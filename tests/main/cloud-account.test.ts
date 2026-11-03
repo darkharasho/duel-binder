@@ -14,7 +14,7 @@ import {
   type AccountService
 } from '../../src/main/cloud/account'
 import { CloudAuthError, createCloudClient } from '../../src/main/cloud/client'
-import { activeOwner } from '../../src/main/cloud/localSync'
+import { activeOwner, setActiveOwner } from '../../src/main/cloud/localSync'
 import { TokenStore, type Cipher } from '../../src/main/cloud/tokenStore'
 import { addEntry, listEntries, updateEntry } from '../../src/main/repo/collection'
 import type { Me } from '../../src/shared/cloud'
@@ -271,6 +271,21 @@ describe('account service', () => {
       error: null
     })
     expect(service.isSignedIn()).toBe(true)
+  })
+
+  it("signing in to a merged account adopts the old owner's unsent rows", async () => {
+    setActiveOwner(db, alice)
+    addEntry(db, { printingId: pid(db, 'LOB-EN005'), imageId: DM, quantity: 3 }, T1)
+    const oldUid = localRows()[0].uid
+    const service = makeService()
+    await signInAs(service, { ...me(bob, 'bob'), mergedFrom: [alice] })
+
+    expect(activeOwner(db)).toBe(bob)
+    const rows = localRows()
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({ owner_id: bob, quantity: 3, dirty: 0 })
+    expect(rows[0].uid).not.toBe(oldUid)
+    expect(serverRows(bob).map((r) => r.uid)).toEqual([rows[0].uid])
   })
 
   it("switching A→B→A restores A, including A's signed-out edit", async () => {

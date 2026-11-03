@@ -4,6 +4,7 @@ import {
   accountState,
   activeOwner,
   adoptLocalData,
+  adoptMergedData,
   applyPending,
   applyPrices,
   applyRemote,
@@ -514,4 +515,77 @@ test('fresher server prices replace older local ones only', () => {
   ).toBe(1)
   // A server miss stamps the check but never erases the local price.
   expect(price(a.id)).toEqual({ price: 5, listing_count: 3, checked_at: later.toISOString() })
+})
+
+describe('adoptMergedData', () => {
+  const NOW_ISO = '2026-10-26T09:00:00.000Z'
+  const count = (table: string, owner: number): number =>
+    (
+      db.prepare(`SELECT COUNT(*) AS n FROM ${table} WHERE owner_id = ?`).get(owner) as {
+        n: number
+      }
+    ).n
+
+  test('carries unsent edits into the merged account with fresh uids', () => {
+    const dirty = addAs(7, 'LOB-EN005', DM, now, 4)
+    const clean = addAs(7, 'LOB-EN119', POT)
+    db.prepare('UPDATE collection_entries SET dirty = 0 WHERE uid = ?').run(clean)
+    expect(adoptMergedData(db, 7, 9, NOW_ISO)).toBe(1)
+    const rows = db.prepare('SELECT * FROM collection_entries').all() as Row[]
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({ owner_id: 9, quantity: 4, dirty: 1, updated_at: NOW_ISO })
+    expect(rows[0].uid).not.toBe(dirty)
+    expect(count('collection_entries', 7)).toBe(0)
+  })
+
+  test('drops unsent deletions and clean rows, and the old account’s bookkeeping', () => {
+    const tomb = addAs(7, 'LOB-EN005', DM)
+    db.prepare('UPDATE collection_entries SET deleted_at = ? WHERE uid = ?').run(t0, tomb)
+    const clean = addAs(7, 'LOB-EN119', POT)
+    db.prepare('UPDATE collection_entries SET dirty = 0 WHERE uid = ?').run(clean)
+    ensureAccount(db, 7, 'old')
+    db.prepare(
+      'INSERT INTO value_snapshots (owner_id, date, total_value, total_cards) VALUES (7, ?, 1, 1)'
+    ).run('2026-10-01')
+    db.prepare(
+      'INSERT INTO sync_issues (owner_id, uid, pkey, reason, since) VALUES (7, ?, ?, ?, ?)'
+    ).run('x', 'p', 'r', t0)
+    expect(adoptMergedData(db, 7, 9, NOW_ISO)).toBe(0)
+    for (const table of ['collection_entries', 'value_snapshots', 'sync_issues', 'cloud_accounts'])
+      expect(count(table, 7)).toBe(0)
+    expect(count('collection_entries', 9)).toBe(0)
+  })
+
+  test('moves unsent wishes, favourites and binders keeping their keys', () => {
+    const w = db.prepare(
+      `INSERT INTO wishlist_entries (owner_id, pkey, game, quantity, created_at, updated_at, dirty)
+       VALUES (?, ?, 'ygo', 1, ?, ?, ?)`
+    )
+    w.run(7, 'a', t0, t0, 1)
+    w.run(7, 'b', t0, t0, 0)
+    db.prepare(
+      `INSERT INTO favourites (owner_id, card_id, game, created_at, updated_at, dirty) VALUES (7, ?, 'ygo', ?, ?, 1)`
+    ).run(DM, t0, t0)
+    db.prepare(
+      `INSERT INTO binders (owner_id, uid, game, name, rules, goal, languages, created_at, updated_at, dirty)
+       VALUES (7, 'bu', 'ygo', 'B', '{}', '{}', '[]', ?, ?, 1)`
+    ).run(t0, t0)
+    db.prepare(
+      `INSERT INTO binder_edits (owner_id, binder_uid, level, target, game, action, created_at, updated_at, dirty)
+       VALUES (7, 'bu', 'card', '1', 'ygo', 'add', ?, ?, 1)`
+    ).run(t0, t0)
+    adoptMergedData(db, 7, 9, NOW_ISO)
+    expect(db.prepare('SELECT pkey, updated_at, dirty FROM wishlist_entries').all()).toEqual([
+      { pkey: 'a', updated_at: NOW_ISO, dirty: 1 }
+    ])
+    expect(db.prepare('SELECT owner_id, card_id FROM favourites').all()).toEqual([
+      { owner_id: 9, card_id: DM }
+    ])
+    expect(db.prepare('SELECT owner_id, uid FROM binders').all()).toEqual([
+      { owner_id: 9, uid: 'bu' }
+    ])
+    expect(db.prepare('SELECT owner_id, binder_uid FROM binder_edits').all()).toEqual([
+      { owner_id: 9, binder_uid: 'bu' }
+    ])
+  })
 })

@@ -152,6 +152,58 @@ export function adoptLocalData(db: SqlDb, owner: number): number {
   })()
 }
 
+const OWNED_TABLES = [
+  'collection_entries',
+  'wishlist_entries',
+  'binders',
+  'binder_edits',
+  'favourites',
+  'value_snapshots',
+  'sync_pending',
+  'sync_issues'
+]
+
+/** Whether this computer holds any row of `owner` (an account the server has since merged away). */
+export function hasOwnerRows(db: SqlDb, owner: number): boolean {
+  return OWNED_TABLES.some(
+    (table) =>
+      db.prepare(`SELECT 1 FROM ${table} WHERE owner_id = ? LIMIT 1`).get(owner) !== undefined
+  )
+}
+
+/**
+ * Carries the unsent changes of `from`, an account merged into `to`, over to `to`; returns the
+ * collection rows carried. Collection rows get fresh uids (the old ones now belong to the merge on
+ * the server) and are pushed as new. Unsent deletions and everything already sent are dropped: the
+ * server's merged state reaches this device through the normal cursor sync, and a stale row of `from`
+ * must never be pushed over it. Wishes, favourites, binders and edits keep their keys.
+ */
+export function adoptMergedData(db: SqlDb, from: number, to: number, now: string): number {
+  return db.transaction(() => {
+    const live = db
+      .prepare(
+        'SELECT id FROM collection_entries WHERE owner_id = ? AND dirty = 1 AND deleted_at IS NULL'
+      )
+      .all(from) as { id: number }[]
+    const rekeyRow = db.prepare(
+      'UPDATE collection_entries SET uid = ?, owner_id = ?, updated_at = ?, dirty = 1 WHERE id = ?'
+    )
+    for (const r of live) rekeyRow.run(crypto.randomUUID(), to, now, r.id)
+    db.prepare('DELETE FROM collection_entries WHERE owner_id = ?').run(from)
+    for (const table of ['wishlist_entries', 'binders', 'binder_edits', 'favourites']) {
+      db.prepare(
+        `UPDATE OR IGNORE ${table} SET owner_id = ?, updated_at = ?, dirty = 1 WHERE owner_id = ? AND dirty = 1`
+      ).run(to, now, from)
+      db.prepare(`DELETE FROM ${table} WHERE owner_id = ?`).run(from)
+    }
+    for (const table of ['value_snapshots', 'sync_pending', 'sync_issues', 'cloud_accounts']) {
+      db.prepare(`DELETE FROM ${table} WHERE owner_id = ?`).run(from)
+    }
+    db.prepare('DELETE FROM cloud_game_cursors WHERE owner_id = ?').run(from)
+    return live.length
+  })()
+}
+
 interface LocalRow {
   id: number
   uid: string

@@ -522,4 +522,41 @@ describe('phone api', () => {
       expect(await listedGames(api, db)).toEqual(['ygo'])
     })
   })
+
+  describe('merged accounts', () => {
+    it("signing in to a merged account adopts the old owner's unsent rows", async () => {
+      const db = await seededDb()
+      applyPhoneSchema(db)
+      const p = db
+        .prepare(
+          `SELECT p.id, (SELECT image_id FROM card_images WHERE card_id = p.card_id LIMIT 1) AS imageId
+           FROM card_printings p WHERE p.game = 'ygo' ORDER BY p.id LIMIT 1`
+        )
+        .get() as { id: number; imageId: number }
+      const T = '2026-10-29T12:00:00.000Z'
+      db.prepare(
+        `INSERT INTO collection_entries (uid, owner_id, game, printing_id, image_id, quantity, created_at, updated_at, dirty)
+         VALUES ('old-uid', 7, 'ygo', ?, ?, 2, ?, ?, 1)`
+      ).run(p.id, p.imageId, T, T)
+      db.prepare(
+        "INSERT OR REPLACE INTO meta (key, value) VALUES ('cloud_active_owner', '7')"
+      ).run()
+      const phoneDb: PhoneDb = {
+        prepare: (sql) => db.prepare(sql),
+        exec: (sql) => void db.exec(sql),
+        transaction: (fn) => db.transaction(fn),
+        inTransaction: () => db.inTransaction
+      }
+      const store = createPhoneStore({ db: phoneDb, portal: 'https://portal.test', fetch: vi.fn() })
+      await store.signIn('token', { ...ME, id: 9, mergedFrom: [7] })
+      const rows = db
+        .prepare('SELECT uid, owner_id, quantity, dirty FROM collection_entries')
+        .all() as {
+        uid: string
+      }[]
+      expect(rows).toHaveLength(1)
+      expect(rows[0]).toMatchObject({ owner_id: 9, quantity: 2, dirty: 1 })
+      expect(rows[0].uid).not.toBe('old-uid')
+    })
+  })
 })

@@ -17,9 +17,11 @@ import {
   accountState,
   activeOwner,
   adoptLocalData,
+  adoptMergedData,
   applyPending,
   ensureAccount,
   hasLocalData,
+  hasOwnerRows,
   setActiveOwner,
   syncIssueCount
 } from '../../main/cloud/localSync'
@@ -263,6 +265,17 @@ export function createPhoneStore(deps: {
   // Before any page reads: the stored game must be one this account may use.
   checkActiveGame(db, games())
 
+  /** Carries unsent rows of accounts merged into `user` over to it; returns whether any were found. */
+  const adoptMerged = (user: Me): boolean => {
+    let found = false
+    for (const from of user.mergedFrom ?? []) {
+      if (from === user.id || !hasOwnerRows(db, from)) continue
+      adoptMergedData(db, from, user.id, now().toISOString())
+      found = true
+    }
+    return found
+  }
+
   const formatCurrent = (): boolean => Number(getState('format') ?? 0) >= PHONE_FORMAT
 
   const client = (t: string, timeoutMs?: number): CloudClient =>
@@ -278,6 +291,7 @@ export function createPhoneStore(deps: {
     return reportingMe(client(t), (me) => {
       const user = storedUser()
       if (token() !== t || user?.id !== me.id) return
+      db.transaction(() => adoptMerged(me))()
       const next = withGamesOf(user, me)
       if (next === null) return
       setState('user', JSON.stringify(next))
@@ -411,9 +425,7 @@ export function createPhoneStore(deps: {
           await backfillArtTwins(db, (since) =>
             c.catalogChanges(since, undefined, ['pokemon_cards'], game)
           )
-          await backfillSetSeries(db, (since) =>
-            c.catalogChanges(since, undefined, ['sets'], game)
-          )
+          await backfillSetSeries(db, (since) => c.catalogChanges(since, undefined, ['sets'], game))
         }
         if (game !== 'ygo') await pass(game)
       }
@@ -572,6 +584,7 @@ export function createPhoneStore(deps: {
         db.transaction(() => {
           ensureAccount(db, user.id, user.displayName ?? user.username)
           if (hasLocalData(db)) adoptLocalData(db, user.id)
+          adoptMerged(user)
           setActiveOwner(db, user.id)
           // An account that never synced here pulls its entries before first run is done (see fillCatalog).
           if (accountState(db, user.id).syncedAt === null) deleteState('catalog_filled')

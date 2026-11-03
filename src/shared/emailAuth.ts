@@ -37,6 +37,62 @@ export function passwordProblem(pw: string): string | null {
   return null
 }
 
+export const PASSWORDS_DIFFER = "Passwords don't match"
+
+/** A new password and its confirmation: the length rules first, then that they match. */
+export function newPasswordProblem(pw: string, confirm: string): string | null {
+  return passwordProblem(pw) ?? (pw === confirm ? null : PASSWORDS_DIFFER)
+}
+
+export type PasswordStrength =
+  | { score: 0; label: 'Too short' }
+  | { score: 1; label: 'Weak' }
+  | { score: 2; label: 'Okay' }
+  | { score: 3; label: 'Strong' }
+
+/** Passwords people guess first, compared after dropping case and trailing digits/symbols. */
+const COMMON = new Set([
+  'password',
+  'passw0rd',
+  'qwerty',
+  'qwertyuiop',
+  'letmein',
+  'welcome',
+  'iloveyou',
+  'admin',
+  'dragon',
+  'monkey',
+  'football',
+  'baseball',
+  'sunshine',
+  'princess',
+  'trustno1',
+  'whatever',
+  'abc',
+  'abcdef',
+  'abcdefgh',
+  'yugioh',
+  'pokemon',
+  'pikachu',
+  'duelbinder'
+])
+
+/**
+ * A rough guide shown under a new password; it never blocks. Length counts most, then a mix of
+ * lowercase, uppercase, digits and other characters; common and one-note passwords stay weak.
+ */
+export function passwordStrength(pw: string): PasswordStrength {
+  if (pw.length < MIN_PASSWORD) return { score: 0, label: 'Too short' }
+  const stem = pw.toLowerCase().replace(/[^a-z]+$/, '')
+  const kinds = [/[a-z]/, /[A-Z]/, /\d/, /[^a-zA-Z\d]/].filter((r) => r.test(pw)).length
+  const len = pw.length
+  if (COMMON.has(stem) || new Set(pw).size < 5 || (kinds === 1 && len < 16))
+    return { score: 1, label: 'Weak' }
+  if ((len >= 14 && kinds >= 3) || (len >= 20 && kinds >= 2)) return { score: 3, label: 'Strong' }
+  if ((len >= 10 && kinds >= 3) || len >= 12) return { score: 2, label: 'Okay' }
+  return { score: 1, label: 'Weak' }
+}
+
 export const EMAIL_COPY = {
   wrongPassword: "That password doesn't match.",
   tooManyCodes: 'Too many codes. Try again in a few minutes.',

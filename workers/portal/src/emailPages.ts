@@ -1,4 +1,4 @@
-import { EMAIL_COPY, type EmailStep } from '../../../src/shared/emailAuth'
+import { EMAIL_COPY, PASSWORDS_DIFFER, type EmailStep } from '../../../src/shared/emailAuth'
 import type { AppDeps } from './app'
 import {
   EMAIL_CLAIM_COOKIE,
@@ -71,6 +71,14 @@ const emailField = (c: Carry): string =>
     `type="email" autocomplete="email" required maxlength="254"${c.email ? ` value="${esc(c.email)}"` : ''}`
   )
 
+const NEW_PASSWORD =
+  'type="password" autocomplete="new-password" required minlength="8" maxlength="128"'
+
+/** A new password and a second box to confirm it; the form route checks they match. */
+const newPassword = (label: string): string =>
+  input('password', label, NEW_PASSWORD) +
+  input('password_confirm', `Confirm ${label.toLowerCase()}`, NEW_PASSWORD)
+
 const submit = (label: string): string => `<button class="btn pri" type="submit">${label}</button>`
 const extra = (label: string, step: string): string =>
   `<button class="btn out" type="submit" formaction="${FORM}/${step}" formnovalidate>${label}</button>`
@@ -110,7 +118,7 @@ function createPage(c: Carry, error?: string): Page {
 ${note(error)}${form(
       'create',
       c,
-      `${input('password', 'Password', 'type="password" autocomplete="new-password" required minlength="8" maxlength="128"')}<div class="actions">${submit('Create account')}</div>`
+      `${newPassword('Password')}<div class="actions">${submit('Create account')}</div>`
     )}`
   }
 }
@@ -135,7 +143,7 @@ function newPasswordPage(c: Carry, error?: string): Page {
 ${note(error)}${form(
       'reset',
       c,
-      `${input('password', 'New password', 'type="password" autocomplete="new-password" required minlength="8" maxlength="128"')}<div class="actions">${submit('Set password')}</div>`
+      `${newPassword('New password')}<div class="actions">${submit('Set password')}</div>`
     )}`
   }
 }
@@ -284,6 +292,9 @@ export async function emailFormRoute(req: Request, deps: AppDeps, step: string):
 
   const claimTicket = readCookie(req, EMAIL_CLAIM_COOKIE) ?? undefined
   try {
+    // Pages have no scripts, so the two new-password boxes are compared here.
+    if ((step === 'create' || step === 'reset') && f.password !== (f.password_confirm ?? ''))
+      throw new EmailAuthError(PASSWORDS_DIFFER, 400)
     const out = await runEmailStep(deps, step as EmailStep, f, {
       ip: clientIp(req),
       claimKind: 'web',

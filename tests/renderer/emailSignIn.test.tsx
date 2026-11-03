@@ -54,12 +54,24 @@ describe('EmailSignIn', () => {
     await enterEmail(user)
     expect(screen.getByPlaceholderText('Password (at least 8 characters)')).toBeInTheDocument()
     await user.type(screen.getByLabelText('Password'), 'hunter22!')
+    await user.type(screen.getByLabelText('Confirm password'), 'hunter22!')
     await user.click(screen.getByRole('button', { name: 'Create account' }))
     await user.type(screen.getByLabelText('Digit 1'), '123456')
     await user.click(screen.getByRole('button', { name: 'Confirm' }))
     expect(client.step.mock.calls.map((c) => c[0])).toEqual(['check', 'create', 'confirm'])
     expect(client.step).toHaveBeenLastCalledWith('confirm', { ticket: 'tk', code: '123456' })
     expect(onSignedIn).toHaveBeenCalledWith(USER, true)
+  })
+
+  it("a new password that doesn't match its confirmation can't be sent", async () => {
+    const user = userEvent.setup()
+    const client = fakeClient([{ next: 'create', email: 'a@b.co' }])
+    render(<EmailSignIn client={client} onSignedIn={() => {}} onBack={() => {}} />)
+    await enterEmail(user)
+    await user.type(screen.getByLabelText('Password'), 'hunter22!')
+    await user.type(screen.getByLabelText('Confirm password'), 'hunter22?')
+    expect(screen.getByRole('button', { name: 'Create account' })).toBeDisabled()
+    expect(client.step).toHaveBeenCalledTimes(1)
   })
 
   it('known email -> wrong password shows the copy and Forgot password?', async () => {
@@ -92,6 +104,7 @@ describe('EmailSignIn', () => {
     await user.type(screen.getByLabelText('Digit 1'), '654321')
     await user.click(screen.getByRole('button', { name: 'Confirm' }))
     await user.type(screen.getByLabelText('New password'), 'brand-new-pw')
+    await user.type(screen.getByLabelText('Confirm new password'), 'brand-new-pw')
     await user.click(screen.getByRole('button', { name: 'Set password and sign in' }))
     expect(client.step).toHaveBeenLastCalledWith('reset', {
       ticket: 'tk2',
@@ -106,6 +119,7 @@ describe('EmailSignIn', () => {
     render(<EmailSignIn client={client} onSignedIn={() => {}} onBack={() => {}} />)
     await enterEmail(user)
     await user.type(screen.getByLabelText('Password'), 'hunter22!')
+    await user.type(screen.getByLabelText('Confirm password'), 'hunter22!')
     await user.click(screen.getByRole('button', { name: 'Create account' }))
     const first = screen.getByLabelText('Digit 1')
     expect(first).toHaveAttribute('autocomplete', 'one-time-code')
@@ -121,6 +135,7 @@ describe('EmailSignIn', () => {
     fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'a@b.co' } })
     fireEvent.click(screen.getByRole('button', { name: 'Continue' }))
     fireEvent.change(await screen.findByLabelText('Password'), { target: { value: 'hunter22!' } })
+    fireEvent.change(screen.getByLabelText('Confirm password'), { target: { value: 'hunter22!' } })
     fireEvent.click(screen.getByRole('button', { name: 'Create account' }))
     const resend = await screen.findByRole('button', { name: 'Send a new code' })
     expect(resend).toBeDisabled()

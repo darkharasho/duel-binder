@@ -264,6 +264,7 @@ describe('phone Settings linking', () => {
     const form = await screen.findByRole('dialog', { name: 'Add email sign-in' })
     await user.type(within(form).getByRole('textbox', { name: 'Email' }), 'kaiba@example.com')
     await user.type(within(form).getByLabelText('Password'), 'hunter22!')
+    await user.type(within(form).getByLabelText('Confirm password'), 'hunter22!')
     await user.click(within(form).getByRole('button', { name: 'Send code' }))
     expect(await screen.findByRole('dialog', { name: 'Merge accounts' })).toBeInTheDocument()
     expect(screen.queryByRole('dialog', { name: 'Add email sign-in' })).toBeNull()

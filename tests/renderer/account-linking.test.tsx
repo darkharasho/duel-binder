@@ -218,6 +218,7 @@ describe('email sign-in settings', () => {
     ).toBeInTheDocument()
     await u.type(within(dialog).getByRole('textbox', { name: 'Email' }), ' Ann@Example.com ')
     await u.type(within(dialog).getByLabelText('Password'), 'hunter22!')
+    await u.type(within(dialog).getByLabelText('Confirm password'), 'hunter22!')
     await u.click(within(dialog).getByRole('button', { name: 'Send code' }))
     await waitFor(() =>
       expect(api.account.addEmail).toHaveBeenCalledWith('ann@example.com', 'hunter22!')
@@ -245,6 +246,7 @@ describe('email sign-in settings', () => {
     const dialog = await screen.findByRole('dialog')
     await u.type(within(dialog).getByRole('textbox', { name: 'Email' }), 'ann@example.com')
     await u.type(within(dialog).getByLabelText('Password'), 'hunter22!')
+    await u.type(within(dialog).getByLabelText('Confirm password'), 'hunter22!')
     await u.click(within(dialog).getByRole('button', { name: 'Send code' }))
     expect(await within(dialog).findByRole('alert')).toHaveTextContent(EMAIL_COPY.mergeOnPhone)
   })
@@ -265,6 +267,7 @@ describe('email sign-in settings', () => {
     const dialog = await screen.findByRole('dialog')
     await u.type(within(dialog).getByLabelText('Current password'), 'wrongpass')
     await u.type(within(dialog).getByLabelText('New password'), 'newpass123')
+    await u.type(within(dialog).getByLabelText('Confirm new password'), 'newpass123')
     await u.click(within(dialog).getByRole('button', { name: 'Change password' }))
     expect(await within(dialog).findByRole('alert')).toHaveTextContent(
       "That password doesn't match."

@@ -76,6 +76,7 @@ describe('email sign-in pages', () => {
     const created = await post('create', {
       email,
       password: 'hunter2hunter2',
+      password_confirm: 'hunter2hunter2',
       ...(next ? { next } : {})
     })
     const ticket = ticketOf(await created.text())
@@ -151,8 +152,28 @@ describe('email sign-in pages', () => {
     expect(html).toContain('action="/auth/email/form/password"')
   })
 
+  it("a sign-up whose passwords don't match stays on the create page", async () => {
+    const check = await post('check', { email: 'pair@example.io' })
+    expect(await check.text()).toContain('name="password_confirm"')
+    const res = await post('create', {
+      email: 'pair@example.io',
+      password: 'hunter2hunter2',
+      password_confirm: 'hunter2hunter3'
+    })
+    expect(res.status).toBe(400)
+    const html = await res.text()
+    expect(html).toContain('Passwords don&#39;t match')
+    expect(html).toContain('action="/auth/email/form/create"')
+    expect(html).toContain('value="pair@example.io"')
+    expect(sender.sent).toHaveLength(0)
+  })
+
   it('the code page takes a 6-digit code and shows a wrong code on the same step', async () => {
-    const created = await post('create', { email: 'c@example.io', password: 'hunter2hunter2' })
+    const created = await post('create', {
+      email: 'c@example.io',
+      password: 'hunter2hunter2',
+      password_confirm: 'hunter2hunter2'
+    })
     const html = await created.text()
     expect(html).toContain('inputmode="numeric"')
     expect(html).toContain('autocomplete="one-time-code"')
@@ -179,7 +200,21 @@ describe('email sign-in pages', () => {
     })
     const html = await confirmed.text()
     expect(html).toContain('action="/auth/email/form/reset"')
-    const res = await post('reset', { ticket: ticketOf(html), password: 'brand-new-pass' })
+    expect(html).toContain('name="password_confirm"')
+    const differ = await post('reset', {
+      ticket: ticketOf(html),
+      password: 'brand-new-pass',
+      password_confirm: 'brand-new-pas'
+    })
+    expect(differ.status).toBe(400)
+    const again = await differ.text()
+    expect(again).toContain('Passwords don&#39;t match')
+    expect(again).toContain('action="/auth/email/form/reset"')
+    const res = await post('reset', {
+      ticket: ticketOf(again),
+      password: 'brand-new-pass',
+      password_confirm: 'brand-new-pass'
+    })
     expect(res.status).toBe(303)
     expect(cookieOf(res, 'session')).toBeTruthy()
   })

@@ -7,9 +7,9 @@ import {
   MAX_EMAIL_LEN,
   MAX_PASSWORD,
   emailProblem,
+  newPasswordProblem,
   normalizeEmail,
-  passwordPlaceholder,
-  passwordProblem
+  passwordPlaceholder
 } from '@shared/emailAuth'
 import { Button } from '@/components/ui/button'
 import {
@@ -22,6 +22,7 @@ import {
 } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { CodeBoxes } from '@/features/account/CodeBoxes'
+import { NewPasswordFields } from '@/features/account/NewPasswordFields'
 import { api } from '@/lib/api'
 
 const KEY = ['account', 'signIns'] as const
@@ -106,6 +107,7 @@ function EmailCodeFlow({
   const qc = useQueryClient()
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [confirm, setConfirm] = useState('')
   const [ticket, setTicket] = useState<string | null>(null)
   const [code, setCode] = useState('')
   const [done, setDone] = useState(false)
@@ -124,7 +126,10 @@ function EmailCodeFlow({
     setBusy(false)
   }
   const address = normalizeEmail(email)
-  const formBad = emailProblem(address) ?? (password ? null : 'Enter your password')
+  const fresh = passwordAutoComplete === 'new-password'
+  const formBad =
+    emailProblem(address) ??
+    (fresh ? newPasswordProblem(password, confirm) : password ? null : 'Enter your password')
 
   if (done) {
     return (
@@ -211,15 +216,25 @@ function EmailCodeFlow({
           value={email}
           onChange={(e) => setEmail(e.target.value)}
         />
-        <Input
-          type="password"
-          aria-label={passwordLabel}
-          placeholder={passwordPlaceholder(passwordLabel, passwordAutoComplete)}
-          autoComplete={passwordAutoComplete}
-          maxLength={MAX_PASSWORD}
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-        />
+        {fresh ? (
+          <NewPasswordFields
+            label={passwordLabel}
+            value={password}
+            onChange={setPassword}
+            confirm={confirm}
+            onConfirmChange={setConfirm}
+          />
+        ) : (
+          <Input
+            type="password"
+            aria-label={passwordLabel}
+            placeholder={passwordPlaceholder(passwordLabel, passwordAutoComplete)}
+            autoComplete={passwordAutoComplete}
+            maxLength={MAX_PASSWORD}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+        )}
         <Problem text={error} />
         <DialogFooter>
           <Button type="button" variant="outline" disabled={busy} onClick={onClose}>
@@ -298,10 +313,11 @@ export function ChangeEmailDialog({ onClose }: { onClose(): void }): React.JSX.E
 export function ChangePasswordDialog({ onClose }: { onClose(): void }): React.JSX.Element {
   const [current, setCurrent] = useState('')
   const [next, setNext] = useState('')
+  const [again, setAgain] = useState('')
   const [done, setDone] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
-  const bad = current ? passwordProblem(next) : 'Enter your current password'
+  const bad = current ? newPasswordProblem(next, again) : 'Enter your current password'
 
   if (done) {
     return (
@@ -337,14 +353,12 @@ export function ChangePasswordDialog({ onClose }: { onClose(): void }): React.JS
           value={current}
           onChange={(e) => setCurrent(e.target.value)}
         />
-        <Input
-          type="password"
-          aria-label="New password"
-          placeholder={passwordPlaceholder('New password', 'new-password')}
-          autoComplete="new-password"
-          maxLength={MAX_PASSWORD}
+        <NewPasswordFields
+          label="New password"
           value={next}
-          onChange={(e) => setNext(e.target.value)}
+          onChange={setNext}
+          confirm={again}
+          onConfirmChange={setAgain}
         />
         <Problem text={error} />
         <DialogFooter>

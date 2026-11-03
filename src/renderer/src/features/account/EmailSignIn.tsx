@@ -8,12 +8,13 @@ import {
   MAX_EMAIL_LEN,
   MAX_PASSWORD,
   emailProblem,
+  newPasswordProblem,
   normalizeEmail,
-  passwordProblem,
   passwordPlaceholder,
   type EmailAuthView
 } from '@shared/emailAuth'
 import { CodeBoxes } from './CodeBoxes'
+import { NewPasswordFields } from './NewPasswordFields'
 import type { EmailAuthClient } from './emailClient'
 
 const RESEND_SECONDS = 60
@@ -46,6 +47,7 @@ export function EmailSignIn({
   const [screen, setScreen] = useState<Screen>({ at: 'email' })
   const [email, setEmail] = useState(forgotFor ?? '')
   const [password, setPassword] = useState('')
+  const [confirm, setConfirm] = useState('')
   const [code, setCode] = useState('')
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
@@ -74,6 +76,7 @@ export function EmailSignIn({
       case 'create':
         setEmail(reply.email)
         setPassword('')
+        setConfirm('')
         setScreen({ at: reply.next })
         break
       case 'code':
@@ -84,6 +87,7 @@ export function EmailSignIn({
         break
       case 'new-password':
         setPassword('')
+        setConfirm('')
         setScreen({ at: 'new-password', ticket: reply.ticket })
         break
       case 'match':
@@ -136,6 +140,15 @@ export function EmailSignIn({
       onChange={(e) => setPassword(e.target.value)}
     />
   )
+  const newPasswordBoxes = (label?: string): React.JSX.Element => (
+    <NewPasswordFields
+      label={label}
+      value={password}
+      onChange={setPassword}
+      confirm={confirm}
+      onConfirmChange={setConfirm}
+    />
+  )
   const codeReady = new RegExp(`^\\d{${CODE_LENGTH}}$`).test(code)
   const wrongPassword = error === EMAIL_COPY.wrongPassword
   const form = 'flex w-full max-w-xs flex-col gap-3 text-left'
@@ -175,7 +188,11 @@ export function EmailSignIn({
 
   if (screen.at === 'password' || screen.at === 'create') {
     const creating = screen.at === 'create'
-    const bad = creating ? passwordProblem(password) : password ? null : 'Enter your password'
+    const bad = creating
+      ? newPasswordProblem(password, confirm)
+      : password
+        ? null
+        : 'Enter your password'
     return (
       <form
         className={form}
@@ -190,7 +207,7 @@ export function EmailSignIn({
         {creating && (
           <p className="text-sm text-muted-foreground">Choose a password to make your account.</p>
         )}
-        {passwordBox(creating ? 'new-password' : 'current-password')}
+        {creating ? newPasswordBoxes() : passwordBox('current-password')}
         {!wrongPassword && err}
         <Button type="submit" disabled={busy || bad !== null}>
           {creating ? 'Create account' : 'Sign in'}
@@ -265,7 +282,7 @@ export function EmailSignIn({
 
   if (screen.at === 'new-password') {
     const { ticket } = screen
-    const bad = passwordProblem(password)
+    const bad = newPasswordProblem(password, confirm)
     return (
       <form
         className={form}
@@ -276,7 +293,7 @@ export function EmailSignIn({
         }
       >
         <p className="text-sm text-muted-foreground">Choose a new password.</p>
-        {passwordBox('new-password', 'New password')}
+        {newPasswordBoxes('New password')}
         {err}
         <Button type="submit" disabled={busy || bad !== null}>
           Set password and sign in

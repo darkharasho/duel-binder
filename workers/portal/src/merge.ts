@@ -334,6 +334,10 @@ function applyMerge(db: SqlDb, a: MergeArgs): void {
   refreshLegacyDiscordId(db, a.closed)
   refreshLegacyDiscordId(db, a.survivor)
 
+  // A purged merge row may name this id from before it was reused; it records nothing held.
+  db.prepare('DELETE FROM account_merges WHERE closed_id = ? AND purged_at IS NOT NULL').run(
+    a.closed
+  )
   db.prepare(
     `INSERT INTO account_merges (closed_id, survivor_id, merged_at, purge_after, cards,
        closed_username, moved_sign_ins, moved_apple_token) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
@@ -373,9 +377,15 @@ export function mergeAccounts(db: SqlDb, args: MergeArgs): void {
   db.transaction(() => applyMerge(db, args))()
 }
 
-/** Every account merged into `userId`, and into those, and so on: purged ones included. */
+/**
+ * Every account merged into `userId`, and into those, and so on, while held. A purged hold is left
+ * out: its id may already belong to a new user (`users.id` is reused), whose rows no device or
+ * account deletion may touch.
+ */
 export function mergedFrom(db: SqlDb, userId: number): number[] {
-  const into = db.prepare('SELECT closed_id FROM account_merges WHERE survivor_id = ?')
+  const into = db.prepare(
+    'SELECT closed_id FROM account_merges WHERE survivor_id = ? AND purged_at IS NULL'
+  )
   const seen = new Set([userId])
   const out: number[] = []
   for (let i = -1; i < out.length; i++) {
@@ -512,7 +522,9 @@ export function undoMerge(db: SqlDb, closedId: number, now: Date): void {
     let given = 0
     for (const id of moved) {
       const changed = db
-        .prepare('UPDATE sign_ins SET user_id = ? WHERE provider = ? AND subject = ? AND user_id = ?')
+        .prepare(
+          'UPDATE sign_ins SET user_id = ? WHERE provider = ? AND subject = ? AND user_id = ?'
+        )
         .run(closedId, id.provider, id.subject, survivor).changes
       if (changed) given++
       if (changed && id.provider === 'apple') backApple = true
@@ -520,9 +532,9 @@ export function undoMerge(db: SqlDb, closedId: number, now: Date): void {
     // Without one, the reopened account could never be signed in to (and its hold row would go).
     if (given === 0) throw new CollectionError('None of its sign-ins can be given back')
     if (m.moved_apple_token && backApple) {
-      const t = db.prepare('SELECT refresh_token FROM apple_tokens WHERE user_id = ?').get(survivor) as
-        | { refresh_token: string }
-        | undefined
+      const t = db
+        .prepare('SELECT refresh_token FROM apple_tokens WHERE user_id = ?')
+        .get(survivor) as { refresh_token: string } | undefined
       if (t) {
         db.prepare('DELETE FROM apple_tokens WHERE user_id = ?').run(survivor)
         db.prepare(
@@ -537,13 +549,14 @@ export function undoMerge(db: SqlDb, closedId: number, now: Date): void {
       .prepare('SELECT id FROM users WHERE username = ? COLLATE NOCASE')
       .get(m.closed_username) as { id: number } | undefined
     if (holder?.id === closedId) {
-      db.prepare('UPDATE users SET closed_at = NULL, updated_at = ? WHERE id = ?').run(nowIso, closedId)
-    } else if (holder === undefined) {
-      db.prepare('UPDATE users SET closed_at = NULL, username = ?, updated_at = ? WHERE id = ?').run(
-        m.closed_username,
+      db.prepare('UPDATE users SET closed_at = NULL, updated_at = ? WHERE id = ?').run(
         nowIso,
         closedId
       )
+    } else if (holder === undefined) {
+      db.prepare(
+        'UPDATE users SET closed_at = NULL, username = ?, updated_at = ? WHERE id = ?'
+      ).run(m.closed_username, nowIso, closedId)
     } else {
       db.prepare(
         'UPDATE users SET closed_at = NULL, username = ?, username_chosen = 0, updated_at = ? WHERE id = ?'

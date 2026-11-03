@@ -6,7 +6,7 @@ import { APPLE_NONCE, appleIdentityToken, appleTestKeys } from './appleKeys'
 import { handle, type AppDeps } from '../../workers/portal/src/app'
 import { APPLE_KEYS_URL, APPLE_TOKEN_URL, resetAppleKeys } from '../../workers/portal/src/apple'
 import { pruneExpired } from '../../workers/portal/src/auth'
-import { mergeAccounts } from '../../workers/portal/src/merge'
+import { mergeAccounts, undoMerge } from '../../workers/portal/src/merge'
 import { pullSince } from '../../workers/portal/src/sync'
 import type { CardChoice, LinkResult, MergePreview } from '../../src/shared/account'
 import type { Me } from '../../src/shared/cloud'
@@ -714,6 +714,69 @@ describe('merging two accounts', () => {
     // The survivor keeps the merged collection.
     expect(liveTotal(me)).toBe(preview.totals.higher)
     expect((await get('/api/me', { authorization: 'Bearer mine' })).status).toBe(200)
+  })
+
+  describe('a purged closed id reused by a new user', () => {
+    /** Merges, purges the hold, then signs up a new user who gets the closed account's old id. */
+    async function reused(): Promise<{ me: number; other: number; fresh: number }> {
+      const { me, other } = discordAndApple()
+      cardFixture(me, other)
+      const { ticket } = await appleTicket('mine')
+      await merged(await merge('mine', ticket))
+      clock = new Date(START.getTime() + 31 * DAY)
+      pruneExpired(deps, clock.toISOString())
+      const fresh = addUser(db, '777', 'newcomer')
+      // users.id has no AUTOINCREMENT: the highest id, once deleted, is handed out again.
+      expect(fresh).toBe(other)
+      addSession('fresh', fresh)
+      // Past the merge's seqs, which follow the fixture's.
+      seq += 100
+      addCard(fresh, printings[0], 2)
+      return { me, other, fresh }
+    }
+
+    it("is not in the survivor's mergedFrom", async () => {
+      await reused()
+      const me = (await (await get('/api/me', { authorization: 'Bearer mine' })).json()) as Me
+      expect(me.mergedFrom).toBeUndefined()
+    })
+
+    it('is left intact when the survivor deletes its account', async () => {
+      const { me, fresh } = await reused()
+      const res = await post(
+        '/api/account/delete',
+        { confirm: 'delete' },
+        { authorization: 'Bearer mine' }
+      )
+      expect(res.status).toBe(204)
+      expect(count('SELECT count(*) AS n FROM users WHERE id = ?', me)).toBe(0)
+      expect(count('SELECT count(*) AS n FROM users WHERE id = ?', fresh)).toBe(1)
+      expect(liveTotal(fresh)).toBe(2)
+      expect((await get('/api/me', { authorization: 'Bearer fresh' })).status).toBe(200)
+    })
+
+    it("can't be undone into, and can itself be merged away later", async () => {
+      const { fresh } = await reused()
+      expect(() => undoMerge(db, fresh, clock)).toThrow('This merge is past its 30 days')
+      expect(
+        count('SELECT count(*) AS n FROM users WHERE id = ? AND closed_at IS NULL', fresh)
+      ).toBe(1)
+      const third = addUser(db, 'apple:third-sub', 'third')
+      mergeAccounts(db, {
+        survivor: third,
+        closed: fresh,
+        cards: 'higher',
+        username: 'mine',
+        moved: { provider: 'discord', subject: '777' },
+        appleRefreshToken: null,
+        now: clock
+      })
+      expect(
+        db
+          .prepare('SELECT survivor_id, purged_at FROM account_merges WHERE closed_id = ?')
+          .get(fresh)
+      ).toEqual({ survivor_id: third, purged_at: null })
+    })
   })
 
   it('deleting the survivor deletes its held accounts too', async () => {

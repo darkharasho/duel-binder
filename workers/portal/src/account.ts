@@ -64,7 +64,7 @@ export async function deleteAccountRoute(req: Request, deps: AppDeps): Promise<R
     .get(userId) as { refresh_token: string } | undefined
   deps.db.transaction(() => {
     const dropMerge = deps.db.prepare('DELETE FROM account_merges WHERE closed_id = ?')
-    // Purged holds are already gone; deleting them again changes nothing.
+    // Held accounts only: a purged hold's id may now be a new user's (mergedFrom leaves it out).
     for (const held of mergedFrom(deps.db, userId)) {
       deleteUserData(deps.db, held)
       dropMerge.run(held)

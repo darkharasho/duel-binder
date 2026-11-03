@@ -425,7 +425,9 @@ export function createPhoneStore(deps: {
           await backfillArtTwins(db, (since) =>
             c.catalogChanges(since, undefined, ['pokemon_cards'], game)
           )
-          await backfillSetSeries(db, (since) => c.catalogChanges(since, undefined, ['sets'], game))
+          await backfillSetSeries(db, (since) =>
+            c.catalogChanges(since, undefined, ['sets'], game)
+          )
         }
         if (game !== 'ygo') await pass(game)
       }

@@ -558,5 +558,67 @@ describe('phone api', () => {
       expect(rows[0]).toMatchObject({ owner_id: 9, quantity: 2, dirty: 1 })
       expect(rows[0].uid).not.toBe('old-uid')
     })
+
+    it("a sync whose me() reports a merge adopts the old owner's unsent rows and pushes them", async () => {
+      const db = await seededDb()
+      applyPhoneSchema(db)
+      const ps = db
+        .prepare(
+          `SELECT p.id, (SELECT image_id FROM card_images WHERE card_id = p.card_id LIMIT 1) AS imageId
+           FROM card_printings p WHERE p.game = 'ygo' ORDER BY p.id LIMIT 2`
+        )
+        .all() as { id: number; imageId: number }[]
+      const T = '2026-10-29T12:00:00.000Z'
+      const insert = db.prepare(
+        `INSERT INTO collection_entries (uid, owner_id, game, printing_id, image_id, quantity, created_at, updated_at, dirty)
+         VALUES (?, ?, 'ygo', ?, ?, ?, ?, ?, ?)`
+      )
+      // Account 9 is signed in with a clean row; account 7's unsent rows include one on the same card.
+      insert.run('own-uid', 9, ps[0].id, ps[0].imageId, 1, T, T, 0)
+      insert.run('old-1', 7, ps[0].id, ps[0].imageId, 4, T, T, 1)
+      insert.run('old-2', 7, ps[1].id, ps[1].imageId, 2, T, T, 1)
+      const pushed: { uid: string; quantity: number }[] = []
+      const fetchMock = (async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input)
+        if (url.endsWith('/api/me'))
+          return Response.json({ ...ME, id: 9, games: ['ygo'], mergedFrom: [7] })
+        if (url.includes('/api/sync/push')) {
+          const { entries } = JSON.parse(String(init?.body)) as {
+            entries: { uid: string; quantity: number }[]
+          }
+          pushed.push(...entries)
+          return Response.json({ results: entries.map((e) => ({ uid: e.uid, status: 'applied' })) })
+        }
+        if (url.includes('/api/sync/pull'))
+          return Response.json({ entries: [], cursor: 0, more: false })
+        if (url.includes('/api/sync/price-changes'))
+          return Response.json({ prices: [], cursor: 0, more: false })
+        if (url.includes('/api/sync/prices')) return Response.json({ prices: [], status: null })
+        return new Response('{}', { status: 404 })
+      }) as typeof fetch
+      const phoneDb: PhoneDb = {
+        prepare: (sql) => db.prepare(sql),
+        exec: (sql) => void db.exec(sql),
+        transaction: (fn) => db.transaction(fn),
+        inTransaction: () => db.inTransaction
+      }
+      const store = createPhoneStore({
+        db: phoneDb,
+        portal: 'https://portal.test',
+        fetch: fetchMock
+      })
+      await store.signIn('token', { ...ME, id: 9 })
+      await store.sync()
+      await store.sync()
+      const rows = db
+        .prepare('SELECT uid, owner_id, quantity, dirty FROM collection_entries ORDER BY quantity')
+        .all() as { uid: string; owner_id: number; quantity: number; dirty: number }[]
+      expect(rows.map((r) => [r.owner_id, r.quantity, r.dirty])).toEqual([
+        [9, 2, 0],
+        [9, 4, 0]
+      ])
+      expect(rows.find((r) => r.quantity === 4)?.uid).toBe('own-uid')
+      expect(pushed.map((e) => e.quantity).sort()).toEqual([2, 4])
+    })
   })
 })

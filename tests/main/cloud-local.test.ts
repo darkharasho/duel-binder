@@ -588,4 +588,40 @@ describe('adoptMergedData', () => {
       { owner_id: 9, binder_uid: 'bu' }
     ])
   })
+
+  test("carries an unsent edit onto the merged account's own row for the same card", () => {
+    const own = addAs(9, 'LOB-EN005', DM, now, 1)
+    cleanAll()
+    addAs(7, 'LOB-EN005', DM, now, 4)
+    db.prepare("UPDATE collection_entries SET notes = 'mine' WHERE owner_id = 7").run()
+    expect(adoptMergedData(db, 7, 9, NOW_ISO)).toBe(1)
+    const rows = db.prepare('SELECT * FROM collection_entries').all() as Row[]
+    expect(rows).toHaveLength(1)
+    expect(rows[0]).toMatchObject({
+      uid: own,
+      owner_id: 9,
+      quantity: 4,
+      notes: 'mine',
+      dirty: 1,
+      updated_at: NOW_ISO
+    })
+  })
+
+  test("an unsent wish or favourite replaces the merged account's own row for the same key", () => {
+    db.prepare(
+      `INSERT INTO wishlist_entries (owner_id, pkey, game, quantity, created_at, updated_at, dirty)
+       VALUES (9, 'a', 'ygo', 1, ?, ?, 0), (7, 'a', 'ygo', 5, ?, ?, 1)`
+    ).run(t0, t0, t0, t0)
+    db.prepare(
+      `INSERT INTO favourites (owner_id, card_id, game, created_at, updated_at, deleted_at, dirty)
+       VALUES (9, ?, 'ygo', ?, ?, NULL, 0), (7, ?, 'ygo', ?, ?, ?, 1)`
+    ).run(DM, t0, t0, DM, t0, t0, t0)
+    adoptMergedData(db, 7, 9, NOW_ISO)
+    expect(
+      db.prepare('SELECT owner_id, quantity, updated_at, dirty FROM wishlist_entries').all()
+    ).toEqual([{ owner_id: 9, quantity: 5, updated_at: NOW_ISO, dirty: 1 }])
+    expect(db.prepare('SELECT owner_id, deleted_at, dirty FROM favourites').all()).toEqual([
+      { owner_id: 9, deleted_at: t0, dirty: 1 }
+    ])
+  })
 })

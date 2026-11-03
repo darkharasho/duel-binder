@@ -60,6 +60,8 @@ type Fetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>
 let fetchSpy: Mock<Fetch>
 /** While set, push requests wait for it, failing like a real fetch when their signal aborts. */
 let pushGate: Promise<void> | null
+/** When set, the portal's /api/me answers with this `mergedFrom`. */
+let meMergedFrom: number[] | null
 let nextSignIn: { token: string; user: Me } | null
 let emitted: AccountStatus[]
 let emitDataChanged: Mock<() => void>
@@ -176,6 +178,7 @@ beforeEach(async () => {
   online = true
   unreachable = false
   pushGate = null
+  meMergedFrom = null
   nextSignIn = null
   emitted = []
   emitDataChanged = vi.fn<() => void>()
@@ -198,7 +201,11 @@ beforeEach(async () => {
         )
       })
     }
-    return portal.fetch(input, init)
+    const res = await portal.fetch(input, init)
+    if (meMergedFrom && String(input).endsWith('/api/me')) {
+      return Response.json({ ...(await res.json()), mergedFrom: meMergedFrom })
+    }
+    return res
   })
 })
 
@@ -286,6 +293,34 @@ describe('account service', () => {
     expect(rows[0]).toMatchObject({ owner_id: bob, quantity: 3, dirty: 0 })
     expect(rows[0].uid).not.toBe(oldUid)
     expect(serverRows(bob).map((r) => r.uid)).toEqual([rows[0].uid])
+  })
+
+  it("a sync whose me() reports a merge adopts the old owner's unsent rows and pushes them", async () => {
+    addEntry(db, { printingId: pid(db, 'LOB-EN005'), imageId: DM, quantity: 1 }, T1)
+    const service = makeService()
+    await signInAs(service, me(bob, 'bob'))
+    // Signed out, this device holds unsent rows of alice, one on a card bob already has.
+    await service.signOut()
+    setActiveOwner(db, alice)
+    addEntry(db, { printingId: pid(db, 'LOB-EN005'), imageId: DM, quantity: 4 }, T2)
+    addEntry(db, { printingId: pid(db, 'LOB-EN119'), imageId: POT, quantity: 2 }, T2)
+    await willSignInAs(me(bob, 'bob'))
+    await service.signIn()
+    meMergedFrom = [alice]
+    await service.syncNow()
+    await service.syncNow()
+
+    expect(localRows().every((r) => r.owner_id === bob && r.dirty === 0)).toBe(true)
+    expect(
+      localRows()
+        .map((r) => r.quantity)
+        .sort()
+    ).toEqual([2, 4])
+    expect(
+      serverRows(bob)
+        .map((r) => r.quantity)
+        .sort()
+    ).toEqual([2, 4])
   })
 
   it("switching A→B→A restores A, including A's signed-out edit", async () => {

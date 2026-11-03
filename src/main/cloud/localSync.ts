@@ -173,26 +173,56 @@ export function hasOwnerRows(db: SqlDb, owner: number): boolean {
 
 /**
  * Carries the unsent changes of `from`, an account merged into `to`, over to `to`; returns the
- * collection rows carried. Collection rows get fresh uids (the old ones now belong to the merge on
- * the server) and are pushed as new. Unsent deletions and everything already sent are dropped: the
- * server's merged state reaches this device through the normal cursor sync, and a stale row of `from`
- * must never be pushed over it. Wishes, favourites, binders and edits keep their keys.
+ * collection rows carried. Nothing unsent is thrown away except collection deletions: an unsent
+ * collection tombstone is dropped, since the merged account's own rows for that card stand.
+ * - Collection: an unsent live row gets a fresh uid (the old one now belongs to the merge on the
+ *   server) and is pushed as new; if `to` already has a live row for the same printing and art, the
+ *   carried quantity and notes are copied onto that row instead.
+ * - Wishes, favourites, binders and binder edits keep their keys, and replace `to`'s row on the same
+ *   key. Their unsent tombstones move too, so a deletion still reaches the server.
+ * Everything already sent is dropped, as is the old account's bookkeeping: the server's merged state
+ * reaches this device through the normal cursor sync, and a stale row of `from` must never be pushed
+ * over it.
  */
 export function adoptMergedData(db: SqlDb, from: number, to: number, now: string): number {
   return db.transaction(() => {
     const live = db
       .prepare(
-        'SELECT id FROM collection_entries WHERE owner_id = ? AND dirty = 1 AND deleted_at IS NULL'
+        `SELECT id, printing_id, image_id, quantity, notes FROM collection_entries
+         WHERE owner_id = ? AND dirty = 1 AND deleted_at IS NULL`
       )
-      .all(from) as { id: number }[]
+      .all(from) as {
+      id: number
+      printing_id: number
+      image_id: number
+      quantity: number
+      notes: string
+    }[]
+    // Out of the way first, so a carried row can't collide with another carried row's key.
+    db.prepare(
+      'DELETE FROM collection_entries WHERE owner_id = ? AND NOT (dirty = 1 AND deleted_at IS NULL)'
+    ).run(from)
+    const findOwn = db.prepare(
+      `SELECT id FROM collection_entries
+       WHERE owner_id = ? AND printing_id = ? AND image_id = ? AND deleted_at IS NULL`
+    )
+    const copyOnto = db.prepare(
+      'UPDATE collection_entries SET quantity = ?, notes = ?, updated_at = ?, dirty = 1 WHERE id = ?'
+    )
+    const dropRow = db.prepare('DELETE FROM collection_entries WHERE id = ?')
     const rekeyRow = db.prepare(
       'UPDATE collection_entries SET uid = ?, owner_id = ?, updated_at = ?, dirty = 1 WHERE id = ?'
     )
-    for (const r of live) rekeyRow.run(crypto.randomUUID(), to, now, r.id)
-    db.prepare('DELETE FROM collection_entries WHERE owner_id = ?').run(from)
+    for (const r of live) {
+      const own = findOwn.get(to, r.printing_id, r.image_id) as { id: number } | undefined
+      if (own) {
+        copyOnto.run(r.quantity, r.notes, now, own.id)
+        dropRow.run(r.id)
+      } else rekeyRow.run(crypto.randomUUID(), to, now, r.id)
+    }
     for (const table of ['wishlist_entries', 'binders', 'binder_edits', 'favourites']) {
       db.prepare(
-        `UPDATE OR IGNORE ${table} SET owner_id = ?, updated_at = ?, dirty = 1 WHERE owner_id = ? AND dirty = 1`
+        `UPDATE OR REPLACE ${table} SET owner_id = ?, updated_at = ?, dirty = 1 WHERE owner_id = ? AND dirty = 1`
       ).run(to, now, from)
       db.prepare(`DELETE FROM ${table} WHERE owner_id = ?`).run(from)
     }

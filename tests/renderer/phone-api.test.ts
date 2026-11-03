@@ -547,15 +547,38 @@ describe('phone api', () => {
         transaction: (fn) => db.transaction(fn),
         inTransaction: () => db.inTransaction
       }
-      const store = createPhoneStore({ db: phoneDb, portal: 'https://portal.test', fetch: vi.fn() })
+      const fetchMock = (async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input)
+        if (url.endsWith('/api/me')) return Response.json({ ...ME, id: 9, games: ['ygo'] })
+        if (url.includes('/api/sync/push')) {
+          const { entries } = JSON.parse(String(init?.body)) as { entries: { uid: string }[] }
+          return Response.json({ results: entries.map((e) => ({ uid: e.uid, status: 'applied' })) })
+        }
+        if (url.includes('/api/sync/pull'))
+          return Response.json({ entries: [], cursor: 0, more: false })
+        if (url.includes('/api/sync/price-changes'))
+          return Response.json({ prices: [], cursor: 0, more: false })
+        if (url.includes('/api/sync/prices')) return Response.json({ prices: [], status: null })
+        return new Response('{}', { status: 404 })
+      }) as typeof fetch
+      const store = createPhoneStore({
+        db: phoneDb,
+        portal: 'https://portal.test',
+        fetch: fetchMock
+      })
       await store.signIn('token', { ...ME, id: 9, mergedFrom: [7] })
+      // Held until the merged account is pulled, so it can't beat a merged row it hasn't seen.
+      expect(db.prepare('SELECT owner_id, dirty FROM collection_entries').all()).toEqual([
+        { owner_id: 7, dirty: 1 }
+      ])
+      await store.sync()
       const rows = db
         .prepare('SELECT uid, owner_id, quantity, dirty FROM collection_entries')
         .all() as {
         uid: string
       }[]
       expect(rows).toHaveLength(1)
-      expect(rows[0]).toMatchObject({ owner_id: 9, quantity: 2, dirty: 1 })
+      expect(rows[0]).toMatchObject({ owner_id: 9, quantity: 2, dirty: 0 })
       expect(rows[0].uid).not.toBe('old-uid')
     })
 

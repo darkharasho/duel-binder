@@ -37,8 +37,10 @@ import {
   markFavouritePushed,
   markPushed,
   markWishPushed,
+  mergeHolds,
   pendingCount,
   pruneSyncIssues,
+  resolveMergeHolds,
   purgeCleanBinderEdits,
   purgeCleanBinders,
   purgeCleanFavourites,
@@ -411,6 +413,8 @@ export async function syncOnce(
   // 2. Pull, once per game the account may use, each from its own cursor (a game newly allowed
   // starts from 0). Each page and its cursor commit together.
   const games = await syncedGames(client)
+  // After me() (which may report a merge), before the pull: these holds see the merge once pulled.
+  const holds = mergeHolds(db, owner)
   let pulled = 0
   for (const game of games) {
     let cursor = gameCursor(db, owner, game, 'entries')
@@ -426,6 +430,12 @@ export async function syncOnce(
       cursor = page.cursor
       if (!page.more || page.entries.length === 0) break
     }
+  }
+  // 2b. Rows carried from an account merged into this one, now compared with the merged rows, and
+  // pushed in this run.
+  if (holds.length > 0 && resolveMergeHolds(db, owner, holds, now().toISOString()) > 0) {
+    changed = true
+    await pushDirty()
   }
 
   // 3. Every price change the server has made in each game, then prices for printings whose local

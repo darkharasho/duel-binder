@@ -323,6 +323,36 @@ describe('account service', () => {
     ).toEqual([2, 4])
   })
 
+  it('a carried lower count never lowers the merged count on a device that never held it', async () => {
+    // Bob (the merged account) has 4 on the server; this device only ever held alice, with an unsent 2.
+    portal.serverDb
+      .prepare(
+        `INSERT INTO collection_entries (user_id, uid, game, printing_id, image_id, quantity, notes, created_at, updated_at, deleted_at, server_seq)
+         VALUES (?, 'merged-uid', 'ygo', ?, ?, 4, '', ?, ?, NULL,
+           (SELECT COALESCE(MAX(server_seq), 0) + 1 FROM collection_entries))`
+      )
+      .run(bob, pid(portal.serverDb, 'LOB-EN005'), DM, T1.toISOString(), T1.toISOString())
+    setActiveOwner(db, alice)
+    addEntry(db, { printingId: pid(db, 'LOB-EN005'), imageId: DM, quantity: 2 }, T2)
+    addEntry(db, { printingId: pid(db, 'LOB-EN119'), imageId: POT, quantity: 3 }, T2)
+    const service = makeService()
+    await signInAs(service, { ...me(bob, 'bob'), mergedFrom: [alice] })
+    await service.syncNow()
+
+    const live = serverRows(bob).filter((r) => r.deleted_at === null)
+    expect(live.map((r) => r.quantity).sort()).toEqual([3, 4])
+    expect(live.find((r) => r.quantity === 4)?.uid).toBe('merged-uid')
+    expect(
+      localRows()
+        .filter((r) => r.deleted_at === null)
+        .map((r) => [r.owner_id, r.quantity])
+        .sort()
+    ).toEqual([
+      [bob, 3],
+      [bob, 4]
+    ])
+  })
+
   it("switching A→B→A restores A, including A's signed-out edit", async () => {
     addEntry(db, { printingId: pid(db, 'LOB-EN005'), imageId: DM, quantity: 2 }, T1)
     const service = makeService()

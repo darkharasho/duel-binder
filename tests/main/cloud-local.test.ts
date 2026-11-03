@@ -12,9 +12,11 @@ import {
   dropEntry,
   ensureAccount,
   markPushed,
+  mergeHolds,
   pendingCount,
   purgeCleanTombstones,
   rekey,
+  resolveMergeHolds,
   saveAccountState,
   setActiveOwner,
   stalePricePkeys,
@@ -526,11 +528,21 @@ describe('adoptMergedData', () => {
       }
     ).n
 
+  /** What the sync engine does after pulling `to`: resolves the holds it saw before the pull. */
+  const afterPull = (to = 9): number => resolveMergeHolds(db, to, mergeHolds(db, to), NOW_ISO)
+  /** The merged account's row as the server sends it: written by the merge, before NOW_ISO. */
+  const MERGE_AT = '2026-10-26T08:00:00.000Z'
+  const live = (owner: number): Row[] =>
+    db
+      .prepare('SELECT * FROM collection_entries WHERE owner_id = ? AND deleted_at IS NULL')
+      .all(owner) as Row[]
+
   test('carries unsent edits into the merged account with fresh uids', () => {
     const dirty = addAs(7, 'LOB-EN005', DM, now, 4)
     const clean = addAs(7, 'LOB-EN119', POT)
     db.prepare('UPDATE collection_entries SET dirty = 0 WHERE uid = ?').run(clean)
     expect(adoptMergedData(db, 7, 9, NOW_ISO)).toBe(1)
+    expect(afterPull()).toBe(1)
     const rows = db.prepare('SELECT * FROM collection_entries').all() as Row[]
     expect(rows).toHaveLength(1)
     expect(rows[0]).toMatchObject({ owner_id: 9, quantity: 4, dirty: 1, updated_at: NOW_ISO })
@@ -589,12 +601,13 @@ describe('adoptMergedData', () => {
     ])
   })
 
-  test("carries an unsent edit onto the merged account's own row for the same card", () => {
+  test("a higher unsent count is carried onto the merged account's own row for the same card", () => {
     const own = addAs(9, 'LOB-EN005', DM, now, 1)
     cleanAll()
     addAs(7, 'LOB-EN005', DM, now, 4)
     db.prepare("UPDATE collection_entries SET notes = 'mine' WHERE owner_id = 7").run()
     expect(adoptMergedData(db, 7, 9, NOW_ISO)).toBe(1)
+    afterPull()
     const rows = db.prepare('SELECT * FROM collection_entries').all() as Row[]
     expect(rows).toHaveLength(1)
     expect(rows[0]).toMatchObject({
@@ -605,6 +618,58 @@ describe('adoptMergedData', () => {
       dirty: 1,
       updated_at: NOW_ISO
     })
+  })
+
+  test("(a) a lower carried count never lowers the merged account's local row", () => {
+    const own = addAs(9, 'LOB-EN005', DM, now, 4)
+    cleanAll()
+    addAs(7, 'LOB-EN005', DM, now, 2)
+    adoptMergedData(db, 7, 9, NOW_ISO)
+    afterPull()
+    expect(db.prepare('SELECT * FROM collection_entries').all()).toEqual([
+      expect.objectContaining({ uid: own, owner_id: 9, quantity: 4, dirty: 0 })
+    ])
+    expect(dirtyEntries(db, 9, 10)).toEqual([])
+  })
+
+  test("(b) a lower carried count never beats the merged row the device hasn't pulled yet", () => {
+    // This device never held account 9: its merged rows arrive only with the next pull.
+    addAs(7, 'LOB-EN005', DM, now, 2)
+    adoptMergedData(db, 7, 9, NOW_ISO)
+    // Nothing carried is pushed before the pull, so it can't beat the merged row on the server.
+    expect(dirtyEntries(db, 9, 10)).toEqual([])
+    const merged = wire({ quantity: 4, createdAt: MERGE_AT, updatedAt: MERGE_AT })
+    expect(applyRemote(db, 9, merged)).toBe('applied')
+    afterPull()
+    expect(live(9)).toEqual([expect.objectContaining({ uid: merged.uid, quantity: 4, dirty: 0 })])
+    expect(dirtyEntries(db, 9, 10)).toEqual([])
+    expect(count('collection_entries', 7)).toBe(0)
+    expect(mergeHolds(db, 9)).toEqual([])
+  })
+
+  test('a carried card the merged account lacks still arrives after the pull', () => {
+    addAs(7, 'LOB-EN005', DM, now, 2)
+    const pot = addAs(7, 'LOB-EN119', POT, now, 3)
+    adoptMergedData(db, 7, 9, NOW_ISO)
+    applyRemote(db, 9, wire({ quantity: 4, createdAt: MERGE_AT, updatedAt: MERGE_AT }))
+    afterPull()
+    const carried = live(9).find((r) => r.image_id === POT)
+    expect(carried).toMatchObject({ quantity: 3, dirty: 1, updated_at: NOW_ISO })
+    expect(carried!.uid).not.toBe(pot)
+    expect(dirtyEntries(db, 9, 10).map((e) => e.quantity)).toEqual([3])
+  })
+
+  test('a hold resolves only for the account it was carried to, after that pull', () => {
+    addAs(7, 'LOB-EN005', DM, now, 2)
+    adoptMergedData(db, 7, 9, NOW_ISO)
+    expect(mergeHolds(db, 8)).toEqual([])
+    expect(resolveMergeHolds(db, 8, [7], NOW_ISO)).toBe(0)
+    expect(count('collection_entries', 7)).toBe(1)
+    // Adopting again (the next me()) changes nothing.
+    adoptMergedData(db, 7, 9, NOW_ISO)
+    expect(mergeHolds(db, 9)).toEqual([7])
+    expect(afterPull()).toBe(1)
+    expect(live(9).map((r) => r.quantity)).toEqual([2])
   })
 
   test("an unsent wish or favourite replaces the merged account's own row for the same key", () => {

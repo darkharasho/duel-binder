@@ -171,13 +171,15 @@ export function hasOwnerRows(db: SqlDb, owner: number): boolean {
   )
 }
 
+const holdKey = (from: number): string => `merge_hold:${from}`
+
 /**
  * Carries the unsent changes of `from`, an account merged into `to`, over to `to`; returns the
  * collection rows carried. Nothing unsent is thrown away except collection deletions: an unsent
  * collection tombstone is dropped, since the merged account's own rows for that card stand.
- * - Collection: an unsent live row gets a fresh uid (the old one now belongs to the merge on the
- *   server) and is pushed as new; if `to` already has a live row for the same printing and art, the
- *   carried quantity and notes are copied onto that row instead.
+ * - Collection: unsent live rows stay held under `from` (never pushed, never shown) until `to` has
+ *   pulled the merge (`resolveMergeHolds`), so a carried count is compared with the merged one and
+ *   never lowers it. Calling this again before then changes nothing.
  * - Wishes, favourites, binders and binder edits keep their keys, and replace `to`'s row on the same
  *   key. Their unsent tombstones move too, so a deletion still reaches the server.
  * Everything already sent is dropped, as is the old account's bookkeeping: the server's merged state
@@ -186,40 +188,15 @@ export function hasOwnerRows(db: SqlDb, owner: number): boolean {
  */
 export function adoptMergedData(db: SqlDb, from: number, to: number, now: string): number {
   return db.transaction(() => {
-    const live = db
-      .prepare(
-        `SELECT id, printing_id, image_id, quantity, notes FROM collection_entries
-         WHERE owner_id = ? AND dirty = 1 AND deleted_at IS NULL`
-      )
-      .all(from) as {
-      id: number
-      printing_id: number
-      image_id: number
-      quantity: number
-      notes: string
-    }[]
-    // Out of the way first, so a carried row can't collide with another carried row's key.
     db.prepare(
       'DELETE FROM collection_entries WHERE owner_id = ? AND NOT (dirty = 1 AND deleted_at IS NULL)'
     ).run(from)
-    const findOwn = db.prepare(
-      `SELECT id FROM collection_entries
-       WHERE owner_id = ? AND printing_id = ? AND image_id = ? AND deleted_at IS NULL`
-    )
-    const copyOnto = db.prepare(
-      'UPDATE collection_entries SET quantity = ?, notes = ?, updated_at = ?, dirty = 1 WHERE id = ?'
-    )
-    const dropRow = db.prepare('DELETE FROM collection_entries WHERE id = ?')
-    const rekeyRow = db.prepare(
-      'UPDATE collection_entries SET uid = ?, owner_id = ?, updated_at = ?, dirty = 1 WHERE id = ?'
-    )
-    for (const r of live) {
-      const own = findOwn.get(to, r.printing_id, r.image_id) as { id: number } | undefined
-      if (own) {
-        copyOnto.run(r.quantity, r.notes, now, own.id)
-        dropRow.run(r.id)
-      } else rekeyRow.run(crypto.randomUUID(), to, now, r.id)
-    }
+    const held = (
+      db.prepare('SELECT COUNT(*) AS n FROM collection_entries WHERE owner_id = ?').get(from) as {
+        n: number
+      }
+    ).n
+    if (held > 0) setMeta(db, holdKey(from), String(to))
     for (const table of ['wishlist_entries', 'binders', 'binder_edits', 'favourites']) {
       db.prepare(
         `UPDATE OR REPLACE ${table} SET owner_id = ?, updated_at = ?, dirty = 1 WHERE owner_id = ? AND dirty = 1`
@@ -230,7 +207,66 @@ export function adoptMergedData(db: SqlDb, from: number, to: number, now: string
       db.prepare(`DELETE FROM ${table} WHERE owner_id = ?`).run(from)
     }
     db.prepare('DELETE FROM cloud_game_cursors WHERE owner_id = ?').run(from)
-    return live.length
+    return held
+  })()
+}
+
+/** The merged-away accounts whose carried collection rows wait for a pull of `to`. */
+export function mergeHolds(db: SqlDb, to: number): number[] {
+  const rows = db
+    .prepare("SELECT key FROM meta WHERE key LIKE 'merge_hold:%' AND value = ?")
+    .all(String(to)) as { key: string }[]
+  return rows.map((r) => Number(r.key.slice('merge_hold:'.length)))
+}
+
+/**
+ * Lands the held collection rows of `froms` on `to`; returns the rows resolved. `froms` are holds of
+ * `to` read before a pull of `to` began, so `to`'s local rows now include the merge. On a printing
+ * and art `to` already has, the larger count is kept: a carried row raises the merged count, never
+ * lowers it. A carried card `to` lacks gets a fresh uid (the old one belongs to the merge on the
+ * server). Either way the change is stamped `now`, an edit made after the merge.
+ */
+export function resolveMergeHolds(db: SqlDb, to: number, froms: number[], now: string): number {
+  return db.transaction(() => {
+    const findOwn = db.prepare(
+      `SELECT id, quantity FROM collection_entries
+       WHERE owner_id = ? AND printing_id = ? AND image_id = ? AND deleted_at IS NULL`
+    )
+    const raise = db.prepare(
+      'UPDATE collection_entries SET quantity = ?, notes = ?, updated_at = ?, dirty = 1 WHERE id = ?'
+    )
+    const dropRow = db.prepare('DELETE FROM collection_entries WHERE id = ?')
+    const rekeyRow = db.prepare(
+      'UPDATE collection_entries SET uid = ?, owner_id = ?, updated_at = ?, dirty = 1 WHERE id = ?'
+    )
+    let resolved = 0
+    for (const from of froms) {
+      if (getMeta(db, holdKey(from)) !== String(to)) continue
+      const live = db
+        .prepare(
+          `SELECT id, printing_id, image_id, quantity, notes FROM collection_entries
+           WHERE owner_id = ? AND dirty = 1 AND deleted_at IS NULL`
+        )
+        .all(from) as {
+        id: number
+        printing_id: number
+        image_id: number
+        quantity: number
+        notes: string
+      }[]
+      for (const r of live) {
+        const own = findOwn.get(to, r.printing_id, r.image_id) as
+          { id: number; quantity: number } | undefined
+        if (own) {
+          if (r.quantity > own.quantity) raise.run(r.quantity, r.notes, now, own.id)
+          dropRow.run(r.id)
+        } else rekeyRow.run(crypto.randomUUID(), to, now, r.id)
+      }
+      db.prepare('DELETE FROM collection_entries WHERE owner_id = ?').run(from)
+      deleteMeta(db, holdKey(from))
+      resolved += live.length
+    }
+    return resolved
   })()
 }
 

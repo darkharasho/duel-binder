@@ -445,6 +445,40 @@ describe('buildReferences', () => {
     })
   })
 
+  it('chooses every scan again once, after the way scans are chosen changed', async () => {
+    // A cache from before alternate arts took their "-AA" scans: Shi En's had the plain one.
+    const alt = work
+      .prepare(
+        `INSERT INTO card_printings (card_id, set_name, set_code, set_rarity, set_rarity_code, language)
+         VALUES (1, 'Gold Glory', 'BLGG-EN007', 'Secret Rare (Alternate Art)', '', 'en') RETURNING id`
+      )
+      .get() as { id: number }
+    cache.exec(`
+      CREATE TABLE ref_printing (printing_id INTEGER PRIMARY KEY, file TEXT, checked_at TEXT NOT NULL);
+      CREATE TABLE ref_file (file TEXT PRIMARY KEY, hash BLOB, checked_at TEXT NOT NULL);
+    `)
+    cache
+      .prepare("INSERT INTO ref_printing VALUES (?, 'ShiEn-BLGG-EN-ScR-1E.png', '2026-10-01')")
+      .run(alt.id)
+    const files = [...FILES, 'ShiEn-BLGG-EN-ScR-1E-AA.png']
+    const yugipedia = fakeYugipedia(files)
+    const run = (): ReturnType<typeof buildReferences> =>
+      buildReferences({
+        work,
+        cache,
+        yugipedia,
+        fetch: scans(Object.fromEntries(files.map((f) => [f, png(SCAN)]))),
+        userAgent: 'test'
+      })
+    await run()
+    expect(
+      cache.prepare('SELECT file FROM ref_printing WHERE printing_id = ?').pluck().get(alt.id)
+    ).toBe('ShiEn-BLGG-EN-ScR-1E-AA.png')
+    expect(yugipedia.listPageImages).toHaveBeenCalledTimes(1)
+    await run()
+    expect(yugipedia.listPageImages).toHaveBeenCalledTimes(1)
+  })
+
   it('looks a printing up again after three days when its gallery had no scan for it', async () => {
     // The gallery has the Starlight scan but none for the Overframe printing.
     const yugipedia = fakeYugipedia(['ShiEn-BLGG-EN-StR-1E.png'])

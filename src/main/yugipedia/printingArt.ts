@@ -60,6 +60,7 @@ const RARITY_ABBR: Record<string, string> = {
   'millennium super rare': 'MLSR',
   'millennium gold rare': 'MLGR'
 }
+const ABBREVIATIONS = new Set(Object.values(RARITY_ABBR))
 
 /**
  * File-name rarity code from the rarity name; the stored YGOPRODeck code like "(UR)" only as a
@@ -68,6 +69,8 @@ const RARITY_ABBR: Record<string, string> = {
 export function rarityAbbr(rarity: string, rarityCode = ''): string | null {
   const byName = RARITY_ABBR[rarity.trim().toLowerCase()]
   if (byName) return byName
+  // Some set lists' rarities are stored as the abbreviation itself ("PlScR" in RA03/RA04).
+  if (ABBREVIATIONS.has(rarity.trim())) return rarity.trim()
   return /^\(([A-Za-z0-9]+)\)$/.exec(rarityCode.trim())?.[1] ?? null
 }
 
@@ -99,8 +102,15 @@ export interface PrintingKey {
   variant?: string | null
 }
 
-/** File-name suffixes Yugipedia uses for an art variant, by variant name (lower case). */
-const VARIANT_SUFFIX: Record<string, string> = { overframe: 'EA' }
+/**
+ * File-name suffixes Yugipedia uses for an art variant, by variant name (lower case): "EA"
+ * (extended art) for an overframe, "AA" for an alternate art ("KnightmareUnicorn-RA01-IT-UR-1E-AA").
+ */
+const VARIANT_SUFFIX: Record<string, string> = {
+  overframe: 'EA',
+  'alternate art': 'AA',
+  'alternate artwork': 'AA'
+}
 const suffixKey = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]/g, '')
 const variantSuffix = (variant: string): string =>
   suffixKey(VARIANT_SUFFIX[variant.toLowerCase()] ?? variant)
@@ -127,6 +137,32 @@ function splitVariant(p: PrintingKey): { rarity: string; variant: string | null 
 
 /** Variants whose scans carry no suffix: a New artwork printing's file is named like a plain one. */
 const UNSUFFIXED_VARIANT = /^new art(work)?$/i
+
+/**
+ * Variants of the usual art's foil, colour, edition or stamp, not of the art, so the plain scan
+ * shows them well enough: the foil colours and NOT_ART of src/shared/scan/fingerprintRefs.ts
+ * (kept apart so this file imports nothing), plus "Special Red Version" and "Emblazoned".
+ */
+const SAME_ART_VARIANT =
+  /^(red|blue|green|purple|silver|bronze|gold|yellow|orange|white|pink)$|edition$|pharaoh's rare|^stamp$|promo|qualifier|date reprint|^replica$|^(chinese|english)$|^special \w+ version$|^emblazoned$/i
+
+/** A printing's rarity and its variant, from the variant column or "Ultra Rare (Overframe)". */
+export function printingVariant(p: Pick<PrintingKey, 'rarity' | 'variant'>): {
+  rarity: string
+  variant: string | null
+} {
+  return splitVariant({ setCode: '', language: 'en', ...p })
+}
+
+/**
+ * Whether a printing shows an art the plain scan doesn't (an overframe, alternate, chibi or
+ * manga art), so only a scan named for it, or its rarity's only scan, may stand for it. False for
+ * plain printings, New artwork (filed unsuffixed) and variants of the foil (SAME_ART_VARIANT).
+ */
+export function needsOwnScan(p: Pick<PrintingKey, 'rarity' | 'variant'>): boolean {
+  const variant = printingVariant(p).variant?.trim()
+  return !!variant && !UNSUFFIXED_VARIANT.test(variant) && !SAME_ART_VARIANT.test(variant)
+}
 
 /**
  * Whether a scan (as choosePrintingFile names it) shows the printing's art variant: its file is
@@ -222,4 +258,31 @@ export function choosePrintingFile(files: string[], p: PrintingKey): string | nu
       a.file.localeCompare(b.file)
   )
   return pool[0].file
+}
+
+/**
+ * The scan to show for a printing: choosePrintingFile's pick, unless the printing needs a scan of
+ * its own art (needsOwnScan) and the pick doesn't show it (fileShowsVariant, with
+ * `onlyVariantOfRarity` as there). Then null: a missing photo beats one of another art, as when
+ * an alternate art fell back to the plain card's scan.
+ */
+export function choosePrintingScan(
+  files: string[],
+  p: PrintingKey,
+  onlyVariantOfRarity = false
+): string | null {
+  const file = choosePrintingFile(files, p)
+  if (file === null || !needsOwnScan(p)) return file
+  return fileShowsVariant(file, p, onlyVariantOfRarity) ? file : null
+}
+
+/**
+ * Added to the key a printing's photo is kept under, on the server (R2) and on the desktop: "-v38"
+ * for the printings whose photo SCHEMA_V38 looks up again (an art variant, or a rarity stored
+ * abbreviated: the rows its SQL picks), so a photo chosen before (the plain card's, for an
+ * alternate art) is never served or shown again. "" for every other printing.
+ */
+export function printingPhotoSuffix(p: { rarity: string; variant?: string | null }): string {
+  const revised = !!p.variant?.trim() || /\)$/.test(p.rarity) || /[a-z][A-Z]/.test(p.rarity)
+  return revised ? '-v38' : ''
 }

@@ -25,6 +25,11 @@ const NO_SCAN_RETRY_MS = 3 * DAY_MS
 /** A scan that failed to download is tried again after this long. */
 const RETRY_MS = 30 * DAY_MS
 const RETRY_DELAYS_MS = [1000, 2000]
+/**
+ * Bump when choosePrintingFile picks differently, so each printing's scan is chosen again. "2":
+ * alternate arts take their "-AA" scans, and rarities stored abbreviated ("PlScR") their own.
+ */
+const REF_CHOICE_VERSION = '2'
 /** Width over height of a card; a file far from it is art or a photo, not a scan of the card. */
 const CARD_RATIO = 59 / 86
 const RATIO_TOLERANCE = 0.05
@@ -154,7 +159,18 @@ export async function buildReferences(opts: ReferenceOptions): Promise<Reference
   cache.exec(`
     CREATE TABLE IF NOT EXISTS ref_printing (printing_id INTEGER PRIMARY KEY, file TEXT, checked_at TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS ref_file (file TEXT PRIMARY KEY, hash BLOB, checked_at TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
   `)
+  // Scans chosen another way before are chosen again (their hashes, by file, are kept).
+  const choice = cache.prepare("SELECT value FROM meta WHERE key = 'ref_choice_version'").pluck()
+  if (choice.get() !== REF_CHOICE_VERSION) {
+    cache.transaction(() => {
+      cache.exec('DELETE FROM ref_printing')
+      cache
+        .prepare("INSERT OR REPLACE INTO meta (key, value) VALUES ('ref_choice_version', ?)")
+        .run(REF_CHOICE_VERSION)
+    })()
+  }
 
   const languages = REFERENCE_LANGUAGES.map((l) => `'${l}'`).join(', ')
   // An uncoded printing (YAC1's Manga-Style ones, say) is filed on Yugipedia under its set's

@@ -1,7 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import {
   choosePrintingFile,
+  choosePrintingScan,
   fileShowsVariant,
+  needsOwnScan,
+  printingPhotoSuffix,
   rarityAbbr
 } from '../../src/main/yugipedia/printingArt'
 
@@ -249,5 +252,275 @@ describe('rarityAbbr', () => {
     expect(rarityAbbr('Platinum Secret Rare', '(PS)')).toBe('PlScR')
     expect(rarityAbbr('Grand Master Rare')).toBe('GMR')
     expect(rarityAbbr('Unknown Shiny')).toBeNull()
+  })
+
+  it('takes a rarity stored as its own file-name abbreviation', () => {
+    expect(rarityAbbr('PlScR')).toBe('PlScR')
+    expect(rarityAbbr('QCScR')).toBe('QCScR')
+  })
+})
+
+// Real Yugipedia gallery file names (asked for on 2026-11-02).
+const PHARAOHS_SERVANT = [
+  'DarkMagicianthePharaohsServant-LOCH-JP-GMR.png',
+  'DarkMagicianthePharaohsServant-LOCH-JP-OP-EA.png',
+  'DarkMagicianthePharaohsServant-LOCH-JP-OP.png',
+  'DarkMagicianthePharaohsServant-LOCH-JP-PScR.png',
+  'DarkMagicianthePharaohsServant-LOCH-JP-ScR.png',
+  'DarkMagicianthePharaohsServant-LOCH-JP-UR-EA.png',
+  'DarkMagicianthePharaohsServant-LOCH-JP-UR.png',
+  'DarkMagicianthePharaohsServant-LOCH-KR-GMR-UE.png',
+  'DarkMagicianthePharaohsServant-LOCH-KR-PScR-UE.png',
+  'DarkMagicianthePharaohsServant-LOCH-KR-ScR-UE.png',
+  'DarkMagicianthePharaohsServant-LOCH-KR-UR-UE-EA.png',
+  'DarkMagicianthePharaohsServant-LOCH-KR-UR-UE.png',
+  'DarkMagicianthePharaohsServant-LOCH-SC-PScR.png',
+  'DarkMagicianthePharaohsServant-LOCH-SC-UR-EA.png',
+  'DarkMagicianthePharaohsServant-LOCH-SC-UR.png',
+  'DarkMagicianthePharaohsServant-MAMO-EN-GMR-1E.png',
+  'DarkMagicianthePharaohsServant-MAMO-EN-StR-1E.png',
+  'DarkMagicianthePharaohsServant-MAMO-EN-UE-OP.png',
+  'DarkMagicianthePharaohsServant-MAMO-EN-UR-1E-EA.png',
+  'DarkMagicianthePharaohsServant-MAMO-EN-UR-1E.png'
+]
+const KNIGHTMARE_UNICORN = [
+  'KnightmareUnicorn-RA01-IT-UR-1E-AA.png',
+  'KnightmareUnicorn-RA01-IT-UR-1E.png',
+  'KnightmareUnicorn-RC04-JP-CR-AA.png',
+  'KnightmareUnicorn-RC04-JP-CR.png',
+  'KnightmareUnicorn-RC04-JP-UtR-AA.png',
+  'KnightmareUnicorn-RC04-JP-UtR.png'
+]
+const AUSSA = [
+  'FamiliarPossessedAussa-SD39-JP-ScR-AA.png',
+  'FamiliarPossessedAussa-SD39-JP-ScR.png',
+  'FamiliarPossessedAussa-SD39-KR-ScR-UE-AA.png',
+  'FamiliarPossessedAussa-SD39-KR-ScR-UE.png'
+]
+const ALEISTER = [
+  'AleistertheInvoker-RA04-DE-CR-1E.png',
+  'AleistertheInvoker-RA04-DE-PlScR-1E-AA.png',
+  'AleistertheInvoker-RA04-DE-PlScR-1E.png',
+  'AleistertheInvoker-RA04-DE-QCScR-1E-AA.png',
+  'AleistertheInvoker-RA04-DE-QCScR-1E.png'
+]
+
+describe('choosePrintingScan', () => {
+  it('takes the overframe scan in OCG languages; an unsuffixed one only when its rarity is all overframe', () => {
+    const scan = (
+      setCode: string,
+      language: 'ja' | 'ko' | 'zh-hans',
+      rarity: string,
+      variant?: string,
+      only = false
+    ): string | null =>
+      choosePrintingScan(PHARAOHS_SERVANT, { setCode, language, rarity, variant }, only)
+    expect(scan('LOCH-KR001', 'ko', 'Ultra Rare (Overframe)')).toBe(
+      'DarkMagicianthePharaohsServant-LOCH-KR-UR-UE-EA.png'
+    )
+    expect(scan('LOCH-JP001', 'ja', 'Ultra Rare (Overframe)')).toBe(
+      'DarkMagicianthePharaohsServant-LOCH-JP-UR-EA.png'
+    )
+    expect(scan('LOCH-SC001', 'zh-hans', 'Ultra Rare', 'Overframe')).toBe(
+      'DarkMagicianthePharaohsServant-LOCH-SC-UR-EA.png'
+    )
+    // LOCH's Prismatic Secret and Grand Master Rares are all overframe, filed with no suffix.
+    expect(scan('LOCH-KR001', 'ko', 'Prismatic Secret Rare', 'Overframe', true)).toBe(
+      'DarkMagicianthePharaohsServant-LOCH-KR-PScR-UE.png'
+    )
+    expect(scan('LOCH-KR001', 'ko', 'Grand Master Rare', 'Overframe', true)).toBe(
+      'DarkMagicianthePharaohsServant-LOCH-KR-GMR-UE.png'
+    )
+    // Were a plain Prismatic Secret Rare printed too, its scan would not be the overframe's.
+    expect(scan('LOCH-KR001', 'ko', 'Prismatic Secret Rare', 'Overframe')).toBeNull()
+  })
+
+  it('takes the overframe scan of an English printing', () => {
+    expect(
+      choosePrintingScan(PHARAOHS_SERVANT, {
+        setCode: 'MAMO-EN001',
+        language: 'en',
+        rarity: 'Ultra Rare (Overframe)'
+      })
+    ).toBe('DarkMagicianthePharaohsServant-MAMO-EN-UR-1E-EA.png')
+    expect(
+      choosePrintingScan(
+        PHARAOHS_SERVANT,
+        { setCode: 'MAMO-EN001', language: 'en', rarity: 'Starlight Rare', variant: 'Overframe' },
+        true
+      )
+    ).toBe('DarkMagicianthePharaohsServant-MAMO-EN-StR-1E.png')
+  })
+
+  it("takes an overframe from its rarity's scan when Yugipedia names no variant (RV01)", () => {
+    const files = [
+      'BlueEyesToonDragon-RV01-JP-C.png',
+      'BlueEyesToonDragon-RV01-JP-OP.png',
+      'BlueEyesToonDragon-RV01-JP-ScR.png'
+    ]
+    const p = {
+      setCode: 'RV01-JP008',
+      language: 'ja' as const,
+      rarity: 'Secret Rare',
+      variant: 'Overframe'
+    }
+    expect(choosePrintingScan(files, p, true)).toBe('BlueEyesToonDragon-RV01-JP-ScR.png')
+  })
+
+  it("takes a chibi printing's scan when its code was only printed chibi (BLGG), else none", () => {
+    const files = [
+      'SummonedSkull-BLGG-DE-ScR-1E.png',
+      'SummonedSkull-BLGG-DE-StR-1E.png',
+      'SummonedSkull-BLGG-EN-StR-1E.png'
+    ]
+    const p = {
+      setCode: 'BLGG-DE001',
+      language: 'de' as const,
+      rarity: 'Starlight Rare',
+      variant: 'Chibi artwork'
+    }
+    expect(choosePrintingScan(files, p, true)).toBe('SummonedSkull-BLGG-DE-StR-1E.png')
+    expect(choosePrintingScan(files, p, false)).toBeNull()
+  })
+
+  it('takes the alternate-art (AA) scan, in either spelling of the variant', () => {
+    expect(
+      choosePrintingScan(KNIGHTMARE_UNICORN, {
+        setCode: 'RA01-IT043',
+        language: 'it',
+        rarity: 'Ultra Rare (Alternate Art)'
+      })
+    ).toBe('KnightmareUnicorn-RA01-IT-UR-1E-AA.png')
+    expect(
+      choosePrintingScan(KNIGHTMARE_UNICORN, {
+        setCode: 'RC04-JP044',
+        language: 'ja',
+        rarity: "Collector's Rare (Alternate Art)"
+      })
+    ).toBe('KnightmareUnicorn-RC04-JP-CR-AA.png')
+    expect(
+      choosePrintingScan(AUSSA, {
+        setCode: 'SD39-KRP01',
+        language: 'ko',
+        rarity: 'Secret Rare (Alternate Art)'
+      })
+    ).toBe('FamiliarPossessedAussa-SD39-KR-ScR-UE-AA.png')
+    expect(
+      choosePrintingScan(['HouseDragonmaid-WT01-SC-UR-AA.png', 'HouseDragonmaid-WT01-SC-UR.png'], {
+        setCode: 'WT01-SC011',
+        language: 'zh-hans',
+        rarity: 'Ultra Rare (Alternate artwork)'
+      })
+    ).toBe('HouseDragonmaid-WT01-SC-UR-AA.png')
+    // The plain printing keeps the plain scan.
+    expect(
+      choosePrintingScan(AUSSA, { setCode: 'SD39-JPP01', language: 'ja', rarity: 'Secret Rare' })
+    ).toBe('FamiliarPossessedAussa-SD39-JP-ScR.png')
+  })
+
+  it('reads a rarity stored as its abbreviation (PlScR)', () => {
+    const p = { setCode: 'RA04-DE024', language: 'de' as const }
+    expect(choosePrintingScan(ALEISTER, { ...p, rarity: 'PlScR' })).toBe(
+      'AleistertheInvoker-RA04-DE-PlScR-1E.png'
+    )
+    expect(
+      choosePrintingScan(ALEISTER, { ...p, rarity: 'PlScR', variant: 'Alternate artwork' })
+    ).toBe('AleistertheInvoker-RA04-DE-PlScR-1E-AA.png')
+    expect(choosePrintingScan(ALEISTER, { ...p, rarity: 'PlScR (Alternate Art)' })).toBe(
+      'AleistertheInvoker-RA04-DE-PlScR-1E-AA.png'
+    )
+  })
+
+  it("never takes a plain scan for an art the gallery doesn't name: none over the wrong art", () => {
+    // LART-DE015's Japanese-artwork Ultra Rare; the one scan is of one of its two Ultra Rares.
+    expect(
+      choosePrintingScan(['EdgeImpSabres-LART-DE-UR-LE.png'], {
+        setCode: 'LART-DE015',
+        language: 'de',
+        rarity: 'Ultra Rare',
+        variant: 'Japanese artwork'
+      })
+    ).toBeNull()
+    // RA04's 7th and 8th Blue-Eyes arts, both scanned with numbered suffixes: no telling which.
+    expect(
+      choosePrintingScan(
+        [
+          'BlueEyesWhiteDragon-RA04-DE-PlScR-1E-AA.png',
+          'BlueEyesWhiteDragon-RA04-DE-PlScR-1E-AA2.png'
+        ],
+        { setCode: 'RA04-DE108', language: 'de', rarity: 'PlScR (7th artwork)' },
+        true
+      )
+    ).toBeNull()
+    // An alternate art with only plain and numbered scans.
+    expect(
+      choosePrintingScan(
+        [
+          'BlueEyesWhiteDragon-LDK2-FR-C-1E-2.png',
+          'BlueEyesWhiteDragon-LDK2-FR-C-1E-3.png',
+          'BlueEyesWhiteDragon-LDK2-FR-C-1E.png'
+        ],
+        { setCode: 'LDK2-FRK01', language: 'fr', rarity: 'Common (Alternate Art)' }
+      )
+    ).toBeNull()
+    // An overframe whose own scan isn't up yet.
+    expect(
+      choosePrintingScan(['BlueEyesWhiteDragontheWhitePhantomBeast-MAMS-EN-UR-1E.png'], {
+        setCode: 'MAMS-EN001',
+        language: 'en',
+        rarity: 'Ultra Rare (Overframe)'
+      })
+    ).toBeNull()
+  })
+
+  it("takes the plain scan for a variant of the usual art's foil, not of its art", () => {
+    expect(
+      choosePrintingScan(['Division-24PP-JP-C.png', 'Division-24PP-JP-ScR.png'], {
+        setCode: '24PP-JP005',
+        language: 'ja',
+        rarity: 'Secret Rare (Special Red Version)'
+      })
+    ).toBe('Division-24PP-JP-ScR.png')
+    expect(
+      choosePrintingScan(['ACaseforK9-26LP-EN-UR-1E.png'], {
+        setCode: '26LP-EN011',
+        language: 'en',
+        rarity: 'Ultra Rare (Emblazoned)'
+      })
+    ).toBe('ACaseforK9-26LP-EN-UR-1E.png')
+  })
+
+  it("takes a New artwork printing's unsuffixed scan", () => {
+    expect(
+      choosePrintingScan(['ShiEn-LOCR-JP-UR.png'], {
+        setCode: 'LOCR-JP032',
+        language: 'ja',
+        rarity: 'Ultra Rare',
+        variant: 'New artwork'
+      })
+    ).toBe('ShiEn-LOCR-JP-UR.png')
+  })
+})
+
+describe('printingPhotoSuffix', () => {
+  it('re-keys the photos of printings whose scan choice changed (art variants, abbreviated rarities)', () => {
+    expect(printingPhotoSuffix({ rarity: 'Ultra Rare' })).toBe('')
+    expect(printingPhotoSuffix({ rarity: 'Ultra Rare', variant: null })).toBe('')
+    expect(printingPhotoSuffix({ rarity: 'Ultra Rare (Alternate Art)' })).toBe('-v38')
+    expect(printingPhotoSuffix({ rarity: 'Starlight Rare', variant: 'Chibi artwork' })).toBe('-v38')
+    expect(printingPhotoSuffix({ rarity: 'PlScR' })).toBe('-v38')
+  })
+})
+
+describe('needsOwnScan', () => {
+  it('is true for art variants; false for plain printings, new art and foil-only variants', () => {
+    expect(needsOwnScan({ rarity: 'Ultra Rare (Overframe)' })).toBe(true)
+    expect(needsOwnScan({ rarity: 'Starlight Rare', variant: 'Chibi artwork' })).toBe(true)
+    expect(needsOwnScan({ rarity: 'PlScR (7th artwork)' })).toBe(true)
+    expect(needsOwnScan({ rarity: 'Ultra Rare' })).toBe(false)
+    expect(needsOwnScan({ rarity: 'Ultra Rare', variant: 'New artwork' })).toBe(false)
+    expect(needsOwnScan({ rarity: 'Secret Rare (Special Red Version)' })).toBe(false)
+    expect(needsOwnScan({ rarity: 'Ultra Rare (25th Anniversary Edition)' })).toBe(false)
+    expect(needsOwnScan({ rarity: 'Ultra Rare (Blue)' })).toBe(false)
   })
 })

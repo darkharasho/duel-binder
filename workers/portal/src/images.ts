@@ -14,6 +14,7 @@ import {
 import { isTokenId, PKM_ID_MIN } from '../../../src/shared/games/ids'
 import { findPokemonSetArtUrl, findSetImageUrl } from '../../../src/main/repo/sets'
 import { TCGPLAYER_IMAGE_PREFIX } from '../../../src/main/tcgplayer/catalog'
+import { printingPhotoSuffix } from '../../../src/main/yugipedia/printingArt'
 import type { AppDeps } from './app'
 import { currentUser } from './auth'
 
@@ -382,8 +383,11 @@ function resolve(deps: AppDeps, path: string): Target | null {
     if (!/^\d+$/.test(id)) return null
     const n = Number(id)
     if (!Number.isSafeInteger(n) || n <= 0) return null
+    const printing = deps.db
+      .prepare('SELECT set_rarity AS rarity, variant FROM card_printings WHERE id = ?')
+      .get(n) as { rarity: string; variant: string | null } | undefined
     return {
-      key: `printing/${n}`,
+      key: `printing/${n}${printing ? printingPhotoSuffix(printing) : ''}`,
       cache: SET_CACHE,
       meterFirst: true,
       source: async () => {

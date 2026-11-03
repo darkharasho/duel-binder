@@ -6,6 +6,8 @@ export function portalImageSources(opts: {
   token: () => string | null
   /** The server's id for a local printing; null when the catalog feed hasn't given it one. */
   remoteId: (printingId: number) => number | null
+  /** Added to a printing photo's file name (printingPhotoSuffix); none by default. */
+  photoSuffix?: (printingId: number) => string
 }): ImageSources {
   const base = opts.portal.replace(/\/+$/, '')
   const at = (route: string): ImageSource | null => {
@@ -21,7 +23,7 @@ export function portalImageSources(opts: {
     printing: async (printingId) => {
       const remote = opts.remoteId(printingId)
       const source = remote === null ? null : at(`printing/${remote}`)
-      return source && { ...source, key: `srv-${remote}` }
+      return source && { ...source, key: `srv-${remote}${opts.photoSuffix?.(printingId) ?? ''}` }
     }
   }
 }

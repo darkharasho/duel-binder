@@ -2,7 +2,7 @@ import type { SqlDb } from '../db/sql'
 import { isLanguage } from '../../shared/languages'
 import type { YugipediaClient } from './client'
 import { listCardGalleries } from './cardGallery'
-import { choosePrintingFile } from './printingArt'
+import { choosePrintingScan, printingVariant } from './printingArt'
 
 const BATCH = 50
 const BATCH_WAIT_MS = 40
@@ -64,6 +64,23 @@ export function createPrintingArtResolver(opts: {
     for (const [prefix, n] of counts) if (n > (counts.get(best) ?? 0)) best = prefix
     return best
   }
+  const plainTwin = db.prepare(
+    `SELECT 1 FROM card_printings WHERE card_id = (SELECT card_id FROM card_printings WHERE id = ?)
+       AND language = ? AND set_name = ? AND set_code = ? AND set_rarity = ?
+       AND (variant IS NULL OR variant = '') LIMIT 1`
+  )
+  /**
+   * Whether no plain printing shares this one's code and rarity, so its rarity's unsuffixed scan
+   * is of it (LOCH's all-overframe Prismatic Secret Rares, BLGG's all-chibi Starlight Rares).
+   */
+  const onlyVariantOfRarity = (p: PrintingInfo): boolean =>
+    plainTwin.get(
+      p.id,
+      p.language,
+      p.set_name,
+      p.set_code,
+      printingVariant({ rarity: p.set_rarity, variant: p.variant }).rarity
+    ) === undefined
   const save = db.prepare(
     `INSERT INTO printing_art (printing_id, url, checked_at) VALUES (?, ?, ?)
      ON CONFLICT(printing_id) DO UPDATE SET url = excluded.url, checked_at = excluded.checked_at`
@@ -91,13 +108,17 @@ export function createPrintingArtResolver(opts: {
         chosen.set(
           p.id,
           isLanguage(p.language)
-            ? choosePrintingFile(files, {
-                setCode: p.set_code || setPrefix(p),
-                language: p.language,
-                rarity: p.set_rarity,
-                rarityCode: p.set_rarity_code,
-                variant: p.variant
-              })
+            ? choosePrintingScan(
+                files,
+                {
+                  setCode: p.set_code || setPrefix(p),
+                  language: p.language,
+                  rarity: p.set_rarity,
+                  rarityCode: p.set_rarity_code,
+                  variant: p.variant
+                },
+                onlyVariantOfRarity(p)
+              )
             : null
         )
       }

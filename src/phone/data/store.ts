@@ -430,9 +430,7 @@ export function createPhoneStore(deps: {
           await backfillArtTwins(db, (since) =>
             c.catalogChanges(since, undefined, ['pokemon_cards'], game)
           )
-          await backfillSetSeries(db, (since) =>
-            c.catalogChanges(since, undefined, ['sets'], game)
-          )
+          await backfillSetSeries(db, (since) => c.catalogChanges(since, undefined, ['sets'], game))
         }
         if (game !== 'ygo') await pass(game)
       }
@@ -472,19 +470,22 @@ export function createPhoneStore(deps: {
   async function pullValueHistory(c: CloudClient, owner: number): Promise<boolean> {
     const mark = `${owner}:${now().toISOString().slice(0, 10)}`
     if (getState('history_pulled') === mark) return false
-    let history: CollectionStats['valueHistory']
+    // Each game keeps its own history; the portal answers for the game the call names.
+    const pulled: [GameId, CollectionStats['valueHistory']][] = []
     try {
-      history = (await c.rpc<CollectionStats>('stats:get', [])).valueHistory
+      for (const game of games())
+        pulled.push([game, (await c.rpc<CollectionStats>('stats:get', [], game)).valueHistory])
     } catch {
       return false
     }
     let added = 0
     db.transaction(() => {
       const insert = db.prepare(
-        'INSERT OR IGNORE INTO value_snapshots (owner_id, date, total_value, total_cards) VALUES (?, ?, ?, ?)'
+        'INSERT OR IGNORE INTO value_snapshots (owner_id, game, date, total_value, total_cards) VALUES (?, ?, ?, ?, ?)'
       )
-      for (const p of history)
-        added += insert.run(owner, p.date, p.totalValue, p.totalCards).changes
+      for (const [game, history] of pulled)
+        for (const p of history)
+          added += insert.run(owner, game, p.date, p.totalValue, p.totalCards).changes
       setState('history_pulled', mark)
     })()
     return added > 0

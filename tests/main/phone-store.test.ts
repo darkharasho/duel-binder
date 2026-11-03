@@ -686,7 +686,11 @@ describe('phone store', () => {
     expect(rows.length).toBe(2)
     const server = rows.map(
       (r) =>
-        (portal.serverDb.prepare('SELECT id FROM card_printings WHERE pkey = ?').get(r.pkey) as { id: number }).id
+        (
+          portal.serverDb.prepare('SELECT id FROM card_printings WHERE pkey = ?').get(r.pkey) as {
+            id: number
+          }
+        ).id
     )
     expect(await store.printingPhotoIds([rows[0].id, rows[1].id, 999_999_999])).toEqual([
       [rows[0].id, server[0]],
@@ -707,7 +711,9 @@ describe('phone store', () => {
       encodeFingerprints([{ imageId: 1, hash }]).slice().buffer,
       { httpMetadata: { contentType: 'application/octet-stream' } }
     )
-    expect(await store.refreshFingerprints({ game: 'ygo', force: true })).toMatchObject({ updated: true })
+    expect(await store.refreshFingerprints({ game: 'ygo', force: true })).toMatchObject({
+      updated: true
+    })
     // No refs on the server yet: none, and the fingerprints are as they were.
     expect(await store.fingerprintRefs()).toEqual([])
 
@@ -726,7 +732,10 @@ describe('phone store', () => {
       { h: hashHex(hash), imageId: 1, printingIds: [printing.id] }
     ])
     // Unchanged: revalidated, nothing new.
-    expect(await store.refreshFingerprints({ game: 'ygo', force: true })).toEqual({ state: 'ready', count: 1 })
+    expect(await store.refreshFingerprints({ game: 'ygo', force: true })).toEqual({
+      state: 'ready',
+      count: 1
+    })
     const refsAsked = requests.filter((r) => r.url.endsWith('/scan/fingerprint-refs'))
     expect(refsAsked.at(-1)!.headers.get('if-none-match')).toBe(
       portal.images.store.get('scan/fingerprint-refs.json')!.etag
@@ -987,6 +996,30 @@ describe('phone store', () => {
     await store.sync()
     expect(asked()).toBe(2)
     expect((await history()).slice(0, 3).map((p) => p.totalValue)).toEqual([10, 99, 30])
+  })
+
+  it("fills each game's value chart with that game's history", async () => {
+    portal.serverDb.close()
+    portal = await inProcessPortal({ ADMIN_DISCORD_ID: 'discord-1-alice' })
+    userId = portal.addUser('alice')
+    token = await portal.desktopToken(userId)
+    me = { ...me, id: userId, games: ['ygo', 'pkm'] }
+    const snap = portal.serverDb.prepare(
+      'INSERT INTO value_snapshots (user_id, game, date, total_value, total_cards) VALUES (?, ?, ?, ?, ?)'
+    )
+    snap.run(userId, 'ygo', '2026-01-01', 10, 1)
+    snap.run(userId, 'pkm', '2026-01-01', 5, 1)
+    snap.run(userId, 'pkm', '2026-01-02', 7, 2)
+    await ready()
+    const values = async (): Promise<number[]> =>
+      (
+        (await store.invoke('stats:get', [])) as { valueHistory: { totalValue: number }[] }
+      ).valueHistory
+        .slice(0, 2)
+        .map((p) => p.totalValue)
+    expect((await values())[0]).toBe(10)
+    await store.invoke('games:setActive', ['pkm'])
+    expect(await values()).toEqual([5, 7])
   })
 })
 

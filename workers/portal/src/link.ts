@@ -93,7 +93,7 @@ export async function beginLink(
   deps: AppDeps,
   userId: number,
   id: Identity,
-  extra: { profile?: DiscordProfile; appleRefreshToken?: string | null }
+  extra: { profile?: DiscordProfile; email?: string | null; appleRefreshToken?: string | null }
 ): Promise<LinkResult> {
   const { db } = deps
   const ticket = randomToken()
@@ -138,8 +138,8 @@ export async function beginLink(
     }
 
     db.prepare(
-      'INSERT INTO sign_ins (provider, subject, user_id, created_at) VALUES (?, ?, ?, ?)'
-    ).run(id.provider, id.subject, userId, nowIso)
+      'INSERT INTO sign_ins (provider, subject, user_id, created_at, email) VALUES (?, ?, ?, ?, ?)'
+    ).run(id.provider, id.subject, userId, nowIso, extra.email ?? null)
     refreshLegacyDiscordId(db, userId)
     const profile = id.provider === 'discord' ? extra.profile : undefined
     db.prepare(
@@ -199,11 +199,12 @@ export async function linkCode(
     return found
   })()
   if (!row) throw invalid
+  const profile = JSON.parse(row.profile) as DiscordProfile
   return beginLink(
     deps,
     userId,
     { provider: 'discord', subject: row.subject },
-    { profile: JSON.parse(row.profile) as DiscordProfile }
+    { profile, email: profile.email ?? null }
   )
 }
 
@@ -223,6 +224,6 @@ export async function linkApple(
     deps,
     userId,
     { provider: 'apple', subject: verified.sub },
-    { appleRefreshToken: verified.refreshToken }
+    { email: verified.email, appleRefreshToken: verified.refreshToken }
   )
 }

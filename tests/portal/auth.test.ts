@@ -12,7 +12,7 @@ let clock = new Date('2026-10-24T12:00:00.000Z')
 
 interface Discord {
   tokenStatus: number
-  user: { id: string; username: string; global_name?: string | null; avatar?: string | null }
+  user: Record<string, unknown> & { id: string; username: string }
 }
 
 describe('Discord sign-in and sessions', () => {
@@ -88,7 +88,7 @@ describe('Discord sign-in and sessions', () => {
     expect(res.status).toBe(302)
     const loc = new URL(res.headers.get('location')!)
     expect(loc.origin + loc.pathname).toBe('https://discord.com/oauth2/authorize')
-    expect(loc.searchParams.get('scope')).toBe('identify')
+    expect(loc.searchParams.get('scope')).toBe('identify email')
     expect(loc.searchParams.get('client_id')).toBe('cid')
     expect(loc.searchParams.get('redirect_uri')).toBe(`${BASE}/auth/discord/callback`)
     const state = cookieOf(res, 'oauth_state')
@@ -99,6 +99,27 @@ describe('Discord sign-in and sessions', () => {
     expect(raw).toMatch(/Secure/)
     expect(raw).toMatch(/SameSite=Lax/)
     expect(raw).toMatch(/Max-Age=600/)
+  })
+
+  it("stores Discord's email only when verified", async () => {
+    const emailOf = (): unknown =>
+      (
+        db.prepare('SELECT email FROM sign_ins WHERE provider = ?').get('discord') as {
+          email: string | null
+        }
+      ).email
+    discord.user = { ...discord.user, email: 'Ann@X.io', verified: true }
+    await signIn()
+    expect(emailOf()).toBe('ann@x.io')
+    discord.user = { ...discord.user, email: 'Ann@X.io', verified: false }
+    await signIn()
+    expect(emailOf()).toBeNull()
+    discord.user = { ...discord.user, email: 'Ann@X.io', verified: 'true' }
+    await signIn()
+    expect(emailOf()).toBe('ann@x.io')
+    discord.user = { id: '111', username: 'kaiba' }
+    await signIn()
+    expect(emailOf()).toBeNull()
   })
 
   it('start on another host redirects to PUBLIC_URL before setting a cookie', async () => {

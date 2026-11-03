@@ -4,7 +4,7 @@ import type { AppDeps } from './app'
 import { appleRefreshToken, verifyAppleIdentityToken } from './apple'
 import { emailEnabled } from './emailSend'
 import { mergedFrom, purgeHolds } from './merge'
-import { signInWith, type DiscordProfile, type Identity } from './signIns'
+import { signInWith, verifiedEmail, type DiscordProfile, type Identity } from './signIns'
 
 const DAY_MS = 24 * 60 * 60 * 1000
 const SESSION_MAX_AGE = 30 * 24 * 60 * 60
@@ -99,10 +99,7 @@ function requestToken(req: Request): { token: string; kind: SessionUser['kind'] 
   return token ? { token, kind: 'web' } : null
 }
 
-async function findSession(
-  req: Request,
-  deps: AppDeps
-): Promise<SessionUser | null> {
+async function findSession(req: Request, deps: AppDeps): Promise<SessionUser | null> {
   const found = requestToken(req)
   if (!found) return null
   const tokenHash = await sha256Hex(found.token)
@@ -196,7 +193,7 @@ function discordAuthorize(
   const params = new URLSearchParams({
     response_type: 'code',
     client_id: deps.env.DISCORD_CLIENT_ID,
-    scope: 'identify',
+    scope: 'identify email',
     redirect_uri: redirectUri(deps),
     state,
     ...extra
@@ -302,6 +299,8 @@ interface DiscordUser {
   username: string
   global_name?: string | null
   avatar?: string | null
+  email?: string | null
+  verified?: boolean | string
 }
 
 async function fetchDiscordUser(code: string, deps: AppDeps): Promise<DiscordUser | null> {
@@ -332,7 +331,12 @@ function discordSignIn(du: DiscordUser, deps: AppDeps, nowIso: string): number {
   return signInWith(
     deps.db,
     { provider: 'discord', subject: du.id },
-    { username: du.username, displayName: du.global_name ?? null, avatar: du.avatar ?? null },
+    {
+      username: du.username,
+      displayName: du.global_name ?? null,
+      avatar: du.avatar ?? null,
+      email: verifiedEmail(du.email, du.verified)
+    },
     nowIso
   ).userId
 }
@@ -390,6 +394,8 @@ export async function finishSignIn(req: Request, deps: AppDeps): Promise<Respons
       displayName: user.global_name ?? null,
       avatar: user.avatar ?? null
     }
+    const email = verifiedEmail(user.email, user.verified)
+    if (email) profile.email = email
     deps.db.transaction(() => {
       pruneExpired(deps, nowIso)
       deps.db
@@ -527,18 +533,19 @@ function appleName(given: unknown, family: unknown): string | null {
 export async function verifyAppleSignIn(
   body: unknown,
   deps: AppDeps
-): Promise<{ sub: string; refreshToken: string | null } | null> {
+): Promise<{ sub: string; email: string | null; refreshToken: string | null } | null> {
   if (body === null || typeof body !== 'object') return null
   const { identityToken, nonce, authorizationCode } = body as Record<string, unknown>
   if (typeof identityToken !== 'string' || typeof nonce !== 'string' || !NONCE_RE.test(nonce))
     return null
-  let sub: string | null
+  let token: { sub: string; email: string | null } | null
   try {
-    sub = await verifyAppleIdentityToken(identityToken, nonce, deps)
+    token = await verifyAppleIdentityToken(identityToken, nonce, deps)
   } catch {
-    sub = null
+    token = null
   }
-  if (!sub) return null
+  if (!token) return null
+  const { sub, email } = token
   let refreshToken: string | null = null
   if (typeof authorizationCode === 'string' && authorizationCode.length <= MAX_APPLE_CODE_LEN) {
     try {
@@ -547,7 +554,7 @@ export async function verifyAppleSignIn(
       console.warn('Apple code exchange failed', err)
     }
   }
-  return { sub, refreshToken }
+  return { sub, email, refreshToken }
 }
 
 /**
@@ -570,7 +577,7 @@ export async function exchangeAppleToken(req: Request, deps: AppDeps): Promise<R
   const { givenName, familyName } = (body ?? {}) as Record<string, unknown>
   const verified = await verifyAppleSignIn(body, deps)
   if (!verified) return invalid
-  const { sub, refreshToken } = verified
+  const { sub, email, refreshToken } = verified
 
   const apple: Identity = { provider: 'apple', subject: sub }
   const name = appleName(givenName, familyName)
@@ -580,7 +587,12 @@ export async function exchangeAppleToken(req: Request, deps: AppDeps): Promise<R
   const tokenHash = await sha256Hex(token)
   const userId = deps.db.transaction((): number => {
     pruneExpired(deps, nowIso)
-    const { userId: id } = signInWith(deps.db, apple, { displayName: name, avatar: null }, nowIso)
+    const { userId: id } = signInWith(
+      deps.db,
+      apple,
+      { displayName: name, avatar: null, email },
+      nowIso
+    )
     deps.db
       .prepare(
         "INSERT INTO sessions (token_hash, user_id, kind, created_at, expires_at) VALUES (?, ?, 'desktop', ?, ?)"

@@ -151,6 +151,36 @@ describe('Sign in with Apple', () => {
     expect(keyFetches).toBe(1)
   })
 
+  it('keeps a verified Apple email but not a private relay', async () => {
+    const emailOf = (): unknown =>
+      (
+        db.prepare("SELECT email FROM sign_ins WHERE provider = 'apple'").get() as {
+          email: string | null
+        }
+      ).email
+    const withClaims = async (claims: Record<string, unknown>): Promise<void> => {
+      const res = await signIn({ identityToken: identityToken(claims), nonce: NONCE })
+      expect(res.status).toBe(200)
+    }
+    await withClaims({ email: 'Ann@X.io', email_verified: true })
+    expect(emailOf()).toBe('ann@x.io')
+    await withClaims({
+      email: 'abc@privaterelay.appleid.com',
+      email_verified: true,
+      is_private_email: true
+    })
+    expect(emailOf()).toBeNull()
+    await withClaims({ email: 'Ann@X.io', email_verified: 'true', is_private_email: 'false' })
+    expect(emailOf()).toBe('ann@x.io')
+    await withClaims({ email: 'x@y.io', email_verified: 'true', is_private_email: 'true' })
+    expect(emailOf()).toBeNull()
+    await withClaims({ email: 'Ann@X.io', email_verified: false })
+    expect(emailOf()).toBeNull()
+    await withClaims({ email: 'Ann@X.io', email_verified: true })
+    await withClaims({})
+    expect(emailOf()).toBeNull()
+  })
+
   it("refetches Apple's keys for an unknown key id at most once a minute", async () => {
     await signIn({ identityToken: identityToken(), nonce: NONCE })
     await signIn({ identityToken: identityToken({}, { kid: 'new' }), nonce: NONCE })
@@ -175,7 +205,9 @@ describe('Sign in with Apple', () => {
   })
 
   it('/api/me linkHint suggests Discord for a new Apple account', async () => {
-    const { token } = (await (await signIn({ identityToken: identityToken(), nonce: NONCE })).json()) as {
+    const { token } = (await (
+      await signIn({ identityToken: identityToken(), nonce: NONCE })
+    ).json()) as {
       token: string
     }
     const me = await handle(

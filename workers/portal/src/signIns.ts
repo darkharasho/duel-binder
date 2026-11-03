@@ -1,5 +1,6 @@
 import type { SqlDb } from '../../../src/main/db/sql'
 import { USERNAME_RE, type SignInProvider } from '../../../src/shared/account'
+import { emailProblem, normalizeEmail } from '../../../src/shared/emailAuth'
 
 /**
  * Sign-in methods (server-30's `sign_ins`): each account has at most one per provider, and each
@@ -17,6 +18,21 @@ export interface DiscordProfile {
   username: string
   displayName: string | null
   avatar: string | null
+  /** Discord's verified email, normalized; left out when there is none. */
+  email?: string | null
+}
+
+/** Providers send their flags as booleans or as the string "true"; only those count as set. */
+export const isTrueFlag = (v: unknown): boolean => v === true || v === 'true'
+
+/**
+ * A provider's email as kept on its sign-in (for matching only): normalized, and null unless the
+ * provider vouches for it (`verified`) and it's a plausible address.
+ */
+export function verifiedEmail(email: unknown, verified: unknown): string | null {
+  if (typeof email !== 'string' || !isTrueFlag(verified)) return null
+  const clean = normalizeEmail(email)
+  return emailProblem(clean) === null ? clean : null
 }
 
 /** What a sign-in brings: Discord sends a username and avatar, Apple at most a name. */
@@ -24,6 +40,8 @@ export interface SignInProfile {
   username?: string
   displayName: string | null
   avatar: string | null
+  /** The provider's verified email; null or missing clears the stored one. */
+  email?: string | null
 }
 
 const USERNAME_ALPHABET = 'abcdefghijkmnpqrstuvwxyz23456789'
@@ -102,8 +120,8 @@ export function createAccount(
       .run(legacy, username, profile.displayName, profile.avatar, nowIso, nowIso).lastInsertRowid
   )
   db.prepare(
-    'INSERT INTO sign_ins (provider, subject, user_id, created_at) VALUES (?, ?, ?, ?)'
-  ).run(id.provider, id.subject, userId, nowIso)
+    'INSERT INTO sign_ins (provider, subject, user_id, created_at, email) VALUES (?, ?, ?, ?, ?)'
+  ).run(id.provider, id.subject, userId, nowIso, profile.email ?? null)
   refreshLegacyDiscordId(db, userId)
   return userId
 }
@@ -121,6 +139,13 @@ export function signInWith(
 ): { userId: number; created: boolean } {
   const userId = findAccount(db, id)
   if (userId === null) return { userId: createAccount(db, id, profile, nowIso), created: true }
+  // Every Discord or Apple sign-in replaces the stored email. Email sign-ins keep theirs.
+  if (id.provider === 'discord' || id.provider === 'apple')
+    db.prepare('UPDATE sign_ins SET email = ? WHERE provider = ? AND subject = ?').run(
+      profile.email ?? null,
+      id.provider,
+      id.subject
+    )
   if (id.provider === 'discord') {
     db.prepare('UPDATE users SET display_name = ?, avatar = ?, updated_at = ? WHERE id = ?').run(
       profile.displayName,

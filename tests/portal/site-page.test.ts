@@ -175,7 +175,7 @@ describe('renderPrivacy', () => {
       'the desktop app checks GitHub for updates',
       'Settings → Delete account',
       'https://github.com/darkharasho/duel-binder/issues',
-      'only for the <code>identify</code> scope',
+      'The portal also asks Discord and Apple for your email',
       'when your account last used the portal, to the hour',
       'Anonymous usage counts',
       'You can turn them off in Settings',

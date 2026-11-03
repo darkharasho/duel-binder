@@ -78,7 +78,7 @@ public class WebAuthPlugin: CAPPlugin, CAPBridgedPlugin, ASWebAuthenticationPres
                 pending.reject("Sign-in was cancelled", "CANCELLED")
             }
             let request = ASAuthorizationAppleIDProvider().createRequest()
-            request.requestedScopes = [.fullName]
+            request.requestedScopes = [.fullName, .email]
             request.nonce = nonce
             let controller = ASAuthorizationController(authorizationRequests: [request])
             controller.delegate = self

@@ -221,6 +221,30 @@ describe('linking a sign-in', () => {
     expect(res.status).toBe(400)
   })
 
+  it('a linked Discord brings its verified email', async () => {
+    const me = addUser(db, `apple:${APPLE_SUB}`, 'appleuser')
+    addSession('mine', me)
+    discordUser = { ...discordUser, email: 'Kaiba@Corp.io', verified: true }
+    const code = await linkCode()
+    expect(await result(await rpc('mine', 'account:linkCode', [code, VERIFIER]))).toEqual({
+      status: 'linked'
+    })
+    expect(
+      db.prepare("SELECT email FROM sign_ins WHERE provider = 'discord' AND user_id = ?").get(me)
+    ).toEqual({ email: 'kaiba@corp.io' })
+  })
+
+  it('a linked Apple brings its verified email', async () => {
+    const me = addUser(db, '222', 'discorduser')
+    addSession('mine', me)
+    const identityToken = appleIdentityToken(clock, { email: 'Ann@X.io', email_verified: 'true' })
+    const res = await rpc('mine', 'account:linkApple', [{ identityToken, nonce: APPLE_NONCE }])
+    expect(await result(res)).toEqual({ status: 'linked' })
+    expect(
+      db.prepare("SELECT email FROM sign_ins WHERE provider = 'apple' AND user_id = ?").get(me)
+    ).toEqual({ email: 'ann@x.io' })
+  })
+
   it("linkCode answers already for this account's own Discord", async () => {
     const me = addUser(db, '111', 'kaiba')
     addSession('mine', me)

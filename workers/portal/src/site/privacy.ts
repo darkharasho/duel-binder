@@ -18,7 +18,7 @@ export function renderPrivacy(view: PrivacyView): string {
         [
           'What is stored',
           p(
-            'When you sign in with Discord, the portal stores your Discord id, username, display name and avatar. It asks Discord only for the <code>identify</code> scope: not your email, your servers or your messages. When you sign in with Apple, in the iPhone app, it stores Apple’s id for your account and, if you share it, your name; not your email.',
+            'When you sign in with Discord, the portal stores your Discord id, username, display name and avatar. It asks Discord for the <code>identify</code> and <code>email</code> scopes, not your servers or your messages. When you sign in with Apple, in the iPhone app, it stores Apple’s id for your account and, if you share it, your name. The portal also asks Discord and Apple for your email, and keeps it, and any email you sign up with, only to sign you in, send you codes and offer to link your accounts. Nothing else.',
             'Either way it also stores your collection, wishlist, notes and value history; your friends and blocks; your sign-in sessions; and when your account last used the portal, to the hour.'
           )
         ],

@@ -2,6 +2,8 @@
  * Sign in with Apple, from the iOS app: checks the identity token the app gets from Apple, an
  * RS256 JWT signed with one of Apple's published keys (https://appleid.apple.com/auth/keys).
  */
+import { isTrueFlag, verifiedEmail } from './signIns'
+
 export const APPLE_ISSUER = 'https://appleid.apple.com'
 export const APPLE_KEYS_URL = 'https://appleid.apple.com/auth/keys'
 /** The iOS app's bundle id, which Apple puts in the token's `aud`. */
@@ -58,18 +60,28 @@ async function sha256Hex(text: string): Promise<string> {
 /**
  * The Apple user id (`sub`) of a valid identity token, or null. Valid means signed by one of
  * Apple's keys, issued by Apple for this app, not expired, and carrying the SHA-256 (hex) of
- * `nonce`, the random value the app made for this one sign-in.
+ * `nonce`, the random value the app made for this one sign-in. `email` is Apple's email when
+ * Apple verified it and it isn't a private relay address, else null.
  */
 export async function verifyAppleIdentityToken(
   token: string,
   nonce: string,
   deps: { fetch: typeof fetch; now: () => Date }
-): Promise<string | null> {
+): Promise<{ sub: string; email: string | null } | null> {
   if (token.length > MAX_TOKEN_LEN) return null
   const parts = token.split('.')
   if (parts.length !== 3) return null
   let header: { alg?: unknown; kid?: unknown }
-  let claims: { iss?: unknown; aud?: unknown; exp?: unknown; sub?: unknown; nonce?: unknown }
+  let claims: {
+    iss?: unknown
+    aud?: unknown
+    exp?: unknown
+    sub?: unknown
+    nonce?: unknown
+    email?: unknown
+    email_verified?: unknown
+    is_private_email?: unknown
+  }
   try {
     header = decodeJson(parts[0]) as typeof header
     claims = decodeJson(parts[1]) as typeof claims
@@ -108,7 +120,10 @@ export async function verifyAppleIdentityToken(
   if (typeof claims.sub !== 'string' || claims.sub.length === 0 || claims.sub.length > 255)
     return null
   if (typeof claims.nonce !== 'string' || claims.nonce !== (await sha256Hex(nonce))) return null
-  return claims.sub
+  const email = isTrueFlag(claims.is_private_email)
+    ? null
+    : verifiedEmail(claims.email, claims.email_verified)
+  return { sub: claims.sub, email }
 }
 
 export const APPLE_TOKEN_URL = 'https://appleid.apple.com/auth/token'

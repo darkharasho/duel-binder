@@ -10,6 +10,7 @@ import {
   emailProblem,
   normalizeEmail,
   passwordProblem,
+  passwordPlaceholder,
   type EmailAuthView
 } from '@shared/emailAuth'
 import { CodeBoxes } from './CodeBoxes'
@@ -128,6 +129,7 @@ export function EmailSignIn({
     <Input
       type="password"
       aria-label={label}
+      placeholder={passwordPlaceholder(label, autoComplete)}
       autoComplete={autoComplete}
       maxLength={MAX_PASSWORD}
       value={password}
@@ -152,6 +154,7 @@ export function EmailSignIn({
         <Input
           type="email"
           aria-label="Email"
+          placeholder="Email"
           autoComplete="email"
           inputMode="email"
           maxLength={MAX_EMAIL_LEN}

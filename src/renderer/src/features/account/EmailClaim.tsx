@@ -55,6 +55,7 @@ export function EmailClaim({
       <Input
         type="password"
         aria-label="Password"
+        placeholder="Password"
         autoComplete="current-password"
         maxLength={MAX_PASSWORD}
         value={password}

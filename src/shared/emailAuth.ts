@@ -4,6 +4,11 @@ import type { Me } from './cloud'
 export const MAX_EMAIL_LEN = 254
 export const MIN_PASSWORD = 8
 export const MAX_PASSWORD = 128
+
+/** Visible hint in a password box; a new password also says the minimum length. */
+export function passwordPlaceholder(label: string, autoComplete: string): string {
+  return autoComplete === 'new-password' ? `${label} (at least ${MIN_PASSWORD} characters)` : label
+}
 export const CODE_LENGTH = 6
 
 const EMAIL_SHAPE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/

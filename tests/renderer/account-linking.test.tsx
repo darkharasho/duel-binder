@@ -212,6 +212,10 @@ describe('email sign-in settings', () => {
     renderWithProviders(<SignInMethods />, { api })
     await u.click(await screen.findByRole('button', { name: 'Add email' }))
     const dialog = await screen.findByRole('dialog')
+    expect(within(dialog).getByPlaceholderText('Email')).toBeInTheDocument()
+    expect(
+      within(dialog).getByPlaceholderText('Password (at least 8 characters)')
+    ).toBeInTheDocument()
     await u.type(within(dialog).getByRole('textbox', { name: 'Email' }), ' Ann@Example.com ')
     await u.type(within(dialog).getByLabelText('Password'), 'hunter22!')
     await u.click(within(dialog).getByRole('button', { name: 'Send code' }))

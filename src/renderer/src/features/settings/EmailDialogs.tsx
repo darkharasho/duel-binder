@@ -8,6 +8,7 @@ import {
   MAX_PASSWORD,
   emailProblem,
   normalizeEmail,
+  passwordPlaceholder,
   passwordProblem
 } from '@shared/emailAuth'
 import { Button } from '@/components/ui/button'
@@ -203,6 +204,7 @@ function EmailCodeFlow({
         <Input
           type="email"
           aria-label="Email"
+          placeholder="Email"
           autoComplete="email"
           inputMode="email"
           maxLength={MAX_EMAIL_LEN}
@@ -212,6 +214,7 @@ function EmailCodeFlow({
         <Input
           type="password"
           aria-label={passwordLabel}
+          placeholder={passwordPlaceholder(passwordLabel, passwordAutoComplete)}
           autoComplete={passwordAutoComplete}
           maxLength={MAX_PASSWORD}
           value={password}
@@ -328,6 +331,7 @@ export function ChangePasswordDialog({ onClose }: { onClose(): void }): React.JS
         <Input
           type="password"
           aria-label="Current password"
+          placeholder="Current password"
           autoComplete="current-password"
           maxLength={MAX_PASSWORD}
           value={current}
@@ -336,6 +340,7 @@ export function ChangePasswordDialog({ onClose }: { onClose(): void }): React.JS
         <Input
           type="password"
           aria-label="New password"
+          placeholder={passwordPlaceholder('New password', 'new-password')}
           autoComplete="new-password"
           maxLength={MAX_PASSWORD}
           value={next}

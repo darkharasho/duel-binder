@@ -90,6 +90,9 @@ export function fakeStore(
     signIn: vi.fn(async (_token: string, user: Me) => {
       state.account = { state: 'signed-in', user }
     }),
+    updateUser: vi.fn(async (user: Me) => {
+      if (state.account.state === 'signed-in') state.account = { state: 'signed-in', user }
+    }),
     signOut: vi.fn(async () => {
       state.account = { state: 'signed-out' }
       return { waiting: state.sync.waiting }

@@ -23,6 +23,7 @@ function fakeStore(over: Partial<PhoneStore> = {}): PhoneStore {
   return {
     account: vi.fn(async () => ({ state: 'signed-in' as const, user: ME })),
     signIn: vi.fn(async () => {}),
+    updateUser: vi.fn(async () => {}),
     signOut: vi.fn(async () => ({ waiting: 0 })),
     deleteAccount: vi.fn(async () => {}),
     catalog: vi.fn(async () => ({
@@ -370,6 +371,27 @@ describe('phone api', () => {
     expect(store.invoke).toHaveBeenCalledWith('account:unsynced', [])
     await api.account.deleteAccount()
     expect(store.deleteAccount).toHaveBeenCalled()
+  })
+
+  it('account RPCs go to the portal; a returned me is stored and emitted', async () => {
+    const changed = { ...ME, username: 'Alice_2', usernameChosen: true }
+    const store = fakeStore({ portal: vi.fn(async () => changed) as PhoneStore['portal'] })
+    const { api, events } = setup(store)
+    const seen: unknown[] = []
+    events.on('account', (s) => seen.push(s))
+    await expect(api.account.setUsername('Alice_2')).resolves.toEqual(changed)
+    expect(store.portal).toHaveBeenLastCalledWith('account:setUsername', ['Alice_2'])
+    expect(store.updateUser).toHaveBeenLastCalledWith(changed)
+    expect(seen).toHaveLength(1)
+    await api.account.dismissLinkHint()
+    expect(store.portal).toHaveBeenLastCalledWith('account:dismissLinkHint', [])
+    expect(store.updateUser).toHaveBeenCalledTimes(2)
+    expect(seen).toHaveLength(2)
+    await api.account.signIns()
+    expect(store.portal).toHaveBeenLastCalledWith('account:signIns', [])
+    await api.account.removeSignIn('apple')
+    expect(store.portal).toHaveBeenLastCalledWith('account:removeSignIn', ['apple'])
+    expect(store.updateUser).toHaveBeenCalledTimes(2)
   })
 
   describe('active game', () => {

@@ -63,6 +63,11 @@ export interface PhoneSyncState {
 export interface PhoneStore {
   account(): Promise<PhoneAccount>
   signIn(token: string, user: Me): Promise<void>
+  /**
+   * Stores the signed-in account's `me` as the portal just returned it (a new username, a dismissed
+   * hint). A `me` of another account, or signed out, changes nothing.
+   */
+  updateUser(me: Me): Promise<void>
   signOut(): Promise<{ waiting: number }>
   deleteAccount(): Promise<void>
   catalog(): Promise<CatalogState>
@@ -572,6 +577,16 @@ export function createPhoneStore(deps: {
           if (accountState(db, user.id).syncedAt === null) deleteState('catalog_filled')
           setState('token', newToken)
           setState('user', JSON.stringify(user))
+          recheckGame()
+        })()
+      }),
+
+    updateUser: (me) =>
+      serial(() => {
+        if (token() === null || storedUser()?.id !== me.id) return
+        db.transaction(() => {
+          setState('user', JSON.stringify(me))
+          ensureAccount(db, me.id, me.displayName ?? me.username)
           recheckGame()
         })()
       }),

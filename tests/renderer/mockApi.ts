@@ -258,6 +258,24 @@ export function createMockApi(overrides: DeepPartial<Api> = {}): Api {
       syncNow: vi.fn(async () => ({ ...signedOut })),
       unsynced: vi.fn(async () => []),
       deleteAccount: vi.fn(async () => undefined),
+      signIns: vi.fn(async () => [
+        { provider: 'discord' as const, addedAt: '2026-10-23T12:00:00.000Z' }
+      ]),
+      setUsername: vi.fn(async (username: string) => ({
+        id: 1,
+        username,
+        displayName: null,
+        avatarUrl: null,
+        usernameChosen: true
+      })),
+      removeSignIn: vi.fn(async () => undefined),
+      dismissLinkHint: vi.fn(async () => ({
+        id: 1,
+        username: 'alice',
+        displayName: null,
+        avatarUrl: null,
+        linkHint: null
+      })),
       onChange: vi.fn(() => () => {})
     }
   }

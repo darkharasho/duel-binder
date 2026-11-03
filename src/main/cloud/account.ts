@@ -74,6 +74,11 @@ export interface AccountService {
    */
   portal<T>(channel: PortalChannel, args: unknown[]): Promise<T>
   /**
+   * Stores the signed-in account's `me` as the portal just returned it (a new username, a dismissed
+   * hint) and emits the new status. A `me` of another account, or signed out, changes nothing.
+   */
+  updateUser(me: Me): AccountStatus
+  /**
    * Asks the portal to price these printings (the unpriced non-English ones not asked for lately), then
    * syncs shortly after to bring the prices in. Fire and forget: does nothing signed out or offline, and
    * never rejects (except for ids that aren't a list of whole numbers).
@@ -457,6 +462,15 @@ export function createAccountService(deps: AccountDeps): AccountService {
       // The account changed while the call was in flight: its result belongs to the previous session.
       if (mine !== session) throw new Error(FRIENDS_SIGNED_OUT)
       return result
+    },
+
+    updateUser(me: Me): AccountStatus {
+      if (token === null || storedUser()?.id !== me.id) return status()
+      setMeta(db, 'cloud_user', JSON.stringify(me))
+      if (activeOwner(db) === me.id) ensureAccount(db, me.id, me.displayName ?? me.username)
+      recheckGame()
+      deps.emit(status())
+      return status()
     },
 
     async requestPrices(printingIds: unknown): Promise<void> {

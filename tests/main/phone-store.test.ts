@@ -147,6 +147,15 @@ const count = (table: string): number =>
   Number((db.prepare(`SELECT COUNT(*) AS n FROM ${table}`).get() as { n: number }).n)
 
 describe('phone store', () => {
+  it("updateUser stores the signed-in account's new me, and nothing else", async () => {
+    await store.signIn(token, me)
+    const changed = await store.portal<Me>('account:setUsername', ['Seto_2'])
+    await store.updateUser(changed)
+    expect(await store.account()).toEqual({ state: 'signed-in', user: changed })
+    await store.updateUser({ ...changed, id: changed.id + 1, username: 'someone' })
+    expect(await store.account()).toEqual({ state: 'signed-in', user: changed })
+  })
+
   it('fill downloads the phone tables page by page and reports progress', async () => {
     // Dark Magician changed after its printings: the feed lists the card after them, on a later page.
     portal.serverDb.prepare('UPDATE cards SET "desc" = "desc" || \' \' WHERE id = ?').run(DM)

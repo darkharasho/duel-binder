@@ -1,6 +1,7 @@
 import { DATA_CHANNELS, type DataChannel } from '../main/ipc/dataHandlers'
 import { APP_PLATFORM, type AppPlatform } from '../renderer/src/lib/portal'
 import type { Api } from '../shared/ipc'
+import type { Me } from '../shared/cloud'
 import type { PortalChannel } from '../shared/portal'
 import type { UsagePlatform } from '../shared/usage'
 import { cardLanguage } from '../shared/scan/cardLanguage'
@@ -352,6 +353,20 @@ export function createPhoneApi(deps: {
         await store.deleteAccount()
         accountRun = { state: 'idle', error: null }
         await emitAccount().catch(() => {})
+      },
+      signIns: portal('account:signIns'),
+      setUsername: async (name: string) => {
+        const me = await store.portal<Me>('account:setUsername', [name])
+        await store.updateUser(me)
+        await emitAccount().catch(() => {})
+        return me
+      },
+      removeSignIn: portal('account:removeSignIn'),
+      dismissLinkHint: async () => {
+        const me = await store.portal<Me>('account:dismissLinkHint', [])
+        await store.updateUser(me)
+        await emitAccount().catch(() => {})
+        return me
       },
       onChange: (cb) => events.on('account', cb)
     }

@@ -344,6 +344,8 @@ export function createHttpApi(opts: HttpApiOptions = {}): Api {
       }
     },
     // The web is always signed in through its own session; desktop sign-in and sync don't apply.
+    // It has no account status to emit, so a page that changes the account updates its own `me`
+    // query from the `Me` these return.
     account: {
       status: unavailable,
       signIn: unavailable,
@@ -351,6 +353,10 @@ export function createHttpApi(opts: HttpApiOptions = {}): Api {
       syncNow: unavailable,
       unsynced: unavailable,
       deleteAccount,
+      signIns: call('account:signIns'),
+      setUsername: call('account:setUsername'),
+      removeSignIn: call('account:removeSignIn'),
+      dismissLinkHint: call('account:dismissLinkHint'),
       onChange: noUnsubscribe
     }
   }

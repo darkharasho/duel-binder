@@ -38,6 +38,8 @@ import type {
 import type { ScanWindowMessage } from './scanWindow'
 import type { ScanRef } from './scan/fingerprintRefs'
 import type { FingerprintStatus, OcrBand, ScanPrinting } from './scan/types'
+import type { SignInMethod, SignInProvider } from './account'
+import type { Me } from './cloud'
 import type { CollectorNumber } from './scan/collectorNumber'
 import type { DexPreview } from './dex/match'
 import type { DexRow } from './dex/parse'
@@ -281,6 +283,14 @@ export interface Api {
      * leaves the page; the desktop app rejects (delete from app.duelbinder.com instead).
      */
     deleteAccount(): Promise<void>
+    /** The signed-in account's sign-in methods, oldest first. */
+    signIns(): Promise<SignInMethod[]>
+    /** Sets the username (see `usernameProblem` for the rules); rejects with the reason it can't. */
+    setUsername(name: string): Promise<Me>
+    /** Removes a sign-in method; rejects for the account's last one. */
+    removeSignIn(provider: SignInProvider): Promise<void>
+    /** Stops suggesting to link another sign-in. */
+    dismissLinkHint(): Promise<Me>
     onChange(cb: (s: AccountStatus) => void): () => void
   }
 }
@@ -394,7 +404,11 @@ export const INVOKE_CHANNELS = [
   'account:signOut',
   'account:syncNow',
   'account:unsynced',
-  'account:deleteAccount'
+  'account:deleteAccount',
+  'account:signIns',
+  'account:setUsername',
+  'account:removeSignIn',
+  'account:dismissLinkHint'
 ] as const
 
 export type InvokeChannel = (typeof INVOKE_CHANNELS)[number]

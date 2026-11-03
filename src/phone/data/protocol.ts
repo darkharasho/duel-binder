@@ -13,6 +13,7 @@ export interface MessagePortLike {
 export const STORE_METHODS = [
   'account',
   'signIn',
+  'updateUser',
   'signOut',
   'deleteAccount',
   'catalog',

@@ -1,11 +1,12 @@
 import type { SqlDb } from '../../../src/main/db/sql'
+import { USERNAME_RE, type SignInProvider } from '../../../src/shared/account'
 
 /**
  * Sign-in methods (server-30's `sign_ins`): each account has at most one per provider, and each
  * provider's subject (Discord's user id, Apple's `sub`) belongs to one account. A sign-in never
  * renames an account: its username is the user's to choose.
  */
-export type Provider = 'discord' | 'apple'
+export type Provider = SignInProvider
 
 export interface Identity {
   provider: Provider
@@ -25,7 +26,6 @@ export interface SignInProfile {
   avatar: string | null
 }
 
-const USERNAME_RE = /^[A-Za-z0-9_-]{3,20}$/
 const USERNAME_ALPHABET = 'abcdefghijkmnpqrstuvwxyz23456789'
 
 export function isValidUsername(name: string): boolean {

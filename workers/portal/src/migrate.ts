@@ -566,6 +566,15 @@ UPDATE users SET username_chosen = 0 WHERE username LIKE 'duelist-%';
 ALTER TABLE users ADD COLUMN link_hint INTEGER NOT NULL DEFAULT 0;
 ALTER TABLE users ADD COLUMN closed_at TEXT;
 `
+  },
+  {
+    // Account changes counted against a daily limit (accountRpc.ts): kind 'username' or 'link'.
+    name: 'server-31',
+    sql: `
+CREATE TABLE account_change_log (user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  kind TEXT NOT NULL, created_at TEXT NOT NULL);
+CREATE INDEX ix_account_change_log ON account_change_log(user_id, kind, created_at);
+`
   }
 ]
 

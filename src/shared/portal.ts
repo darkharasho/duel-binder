@@ -51,7 +51,11 @@ export const PORTAL_CHANNELS = [
   'stats:get',
   'sets:list',
   'sets:checklist',
-  'sets:adjust'
+  'sets:adjust',
+  'account:signIns',
+  'account:setUsername',
+  'account:removeSignIn',
+  'account:dismissLinkHint'
 ] as const satisfies readonly InvokeChannel[]
 
 export type PortalChannel = (typeof PORTAL_CHANNELS)[number]

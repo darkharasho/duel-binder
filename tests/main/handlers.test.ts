@@ -36,6 +36,7 @@ const fakeAccount = (signedIn = false): FakeAccount => ({
   start: vi.fn(),
   stop: vi.fn(),
   portal: vi.fn(),
+  updateUser: vi.fn(),
   requestPrices: vi.fn(async () => {}),
   reportUsage: vi.fn(async () => {}),
   reportError: vi.fn(async () => {})
@@ -202,6 +203,31 @@ describe('createHandlers', () => {
     const { handlers, account } = await makeHandlers({ signedIn: true })
     await expect(handlers['prices:request']([3, 4])).resolves.toBeUndefined()
     expect(account.requestPrices).toHaveBeenCalledWith([3, 4])
+  })
+
+  it('account RPCs go to the portal; a returned me is stored', async () => {
+    const { handlers, account } = await makeHandlers({ signedIn: true })
+    const me = {
+      id: 1,
+      username: 'Ann_2',
+      displayName: null,
+      avatarUrl: null,
+      usernameChosen: true
+    }
+    account.portal.mockResolvedValue(me)
+    await expect(handlers['account:setUsername']('Ann_2')).resolves.toEqual(me)
+    expect(account.portal).toHaveBeenLastCalledWith('account:setUsername', ['Ann_2'])
+    expect(account.updateUser).toHaveBeenLastCalledWith(me)
+    await expect(handlers['account:dismissLinkHint']()).resolves.toEqual(me)
+    expect(account.portal).toHaveBeenLastCalledWith('account:dismissLinkHint', [])
+    expect(account.updateUser).toHaveBeenCalledTimes(2)
+    account.portal.mockResolvedValue([])
+    await handlers['account:signIns']()
+    expect(account.portal).toHaveBeenLastCalledWith('account:signIns', [])
+    account.portal.mockResolvedValue(null)
+    await handlers['account:removeSignIn']('apple')
+    expect(account.portal).toHaveBeenLastCalledWith('account:removeSignIn', ['apple'])
+    expect(account.updateUser).toHaveBeenCalledTimes(2)
   })
 
   it('account:deleteAccount rejects', async () => {

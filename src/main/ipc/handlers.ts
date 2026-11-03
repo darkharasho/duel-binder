@@ -20,6 +20,8 @@ import type { FingerprintStore } from '../scan/fingerprints'
 import { checkOcrBands, type Ocr } from '../scan/ocr'
 import { isOcrKind, isTextModel, readTexts } from '@shared/scan/ocr'
 import type { GameId } from '@shared/games'
+import type { Me } from '@shared/cloud'
+import type { SignInProvider } from '@shared/account'
 import { applyDexImport, previewDexImport } from '../repo/dexImport'
 import { savePlaceholders } from '../placeholders'
 import { scanRefs } from '../repo/scanRefs'
@@ -224,6 +226,19 @@ export function createHandlers({
     'account:syncNow': async () => account.syncNow(),
     'account:deleteAccount': async () => {
       throw new Error('Delete your account from app.duelbinder.com')
+    },
+    'account:signIns': async () => account.portal('account:signIns', []),
+    'account:setUsername': async (name: string) => {
+      const me = await account.portal<Me>('account:setUsername', [name])
+      account.updateUser(me)
+      return me
+    },
+    'account:removeSignIn': async (provider: SignInProvider) =>
+      account.portal('account:removeSignIn', [provider]),
+    'account:dismissLinkHint': async () => {
+      const me = await account.portal<Me>('account:dismissLinkHint', [])
+      account.updateUser(me)
+      return me
     }
   }
 }

@@ -73,6 +73,7 @@ import {
 } from './wishlist'
 import { friendBinder, friendBinders } from './friendBinders'
 import { userScope } from './scope'
+import { dismissLinkHint, listSignIns, removeSignIn, setUsername } from './accountRpc'
 import { GAME_HEADER } from '../../../src/shared/cloud'
 import type { GameId } from '../../../src/shared/games'
 
@@ -272,7 +273,11 @@ const HANDLERS: { [C in PortalChannel]: Handler<C> } = {
     if (query.length > MAX_QUERY) throw new CollectionError('q is too long')
     return ruleFieldValues(db, field, query, scope)
   },
-  'stats:get': ({ db }, scope) => getStats(db, scope)
+  'stats:get': ({ db }, scope) => getStats(db, scope),
+  'account:signIns': ({ db, userId }) => listSignIns(db, userId),
+  'account:setUsername': (deps, _s, name) => setUsername(deps, deps.userId, name),
+  'account:removeSignIn': (deps, _s, provider) => removeSignIn(deps, deps.userId, provider),
+  'account:dismissLinkHint': (deps) => dismissLinkHint(deps, deps.userId)
 }
 
 /** Writes that can leave a printing owned with no fresh price. */
@@ -317,7 +322,7 @@ export async function rpcRoute(req: Request, deps: AppDeps, channel: string): Pr
       ...a: unknown[]
     ) => unknown
     const result =
-      handler({ ...deps, userId: user.id, game }, userScope(user.id, game), ...args) ?? null
+      (await handler({ ...deps, userId: user.id, game }, userScope(user.id, game), ...args)) ?? null
     if (QUEUES_PRICES.has(channel)) await deps.prices.soon()
     return json({ result })
   } catch (e) {

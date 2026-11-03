@@ -97,7 +97,8 @@ export function requestFriend(
   if (!name) throw new FriendError('Enter a username')
   const target = db
     .prepare(
-      'SELECT id, discord_id, username, display_name, avatar FROM users WHERE username = ? COLLATE NOCASE'
+      `SELECT id, discord_id, username, display_name, avatar FROM users
+        WHERE username = ? COLLATE NOCASE AND closed_at IS NULL`
     )
     .get(name) as UserRow | undefined
   if (!target) throw new FriendError(`No Duel Binder user called "${name}"`)

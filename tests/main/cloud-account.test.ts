@@ -941,3 +941,28 @@ describe('price requests', () => {
     await expect(service.requestPrices([1.5])).rejects.toThrow(/Printing ids/)
   })
 })
+
+describe('updateUser', () => {
+  it("stores the portal's new me and emits it", async () => {
+    const service = makeService()
+    await signInAs(service, me(alice, 'alice'))
+    const changed = await service.portal<Me>('account:setUsername', ['Alice_2'])
+    expect(changed.username).toBe('Alice_2')
+    emitted = []
+    const s = service.updateUser(changed)
+    expect(s.user?.username).toBe('Alice_2')
+    expect(s.localOwner).toBe('Alice_2')
+    expect(emitted.at(-1)?.user?.username).toBe('Alice_2')
+    expect(service.status().user?.usernameChosen).toBe(true)
+  })
+
+  it("ignores another account's me, and any signed out", async () => {
+    const service = makeService()
+    await signInAs(service, me(alice, 'alice'))
+    emitted = []
+    expect(service.updateUser(me(bob, 'bob')).user?.username).toBe('alice')
+    expect(emitted).toEqual([])
+    await service.signOut()
+    expect(service.updateUser(me(alice, 'Alice_3')).user).toBeNull()
+  })
+})

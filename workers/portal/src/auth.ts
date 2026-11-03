@@ -616,7 +616,8 @@ function linkHintFor(deps: AppDeps, userId: number, hint: number): Me['linkHint'
       : null
 }
 
-function loadMe(deps: AppDeps, userId: number): Me {
+/** The signed-in user's `Me`, as `GET /api/me` answers (without `admin`). */
+export function loadMe(deps: AppDeps, userId: number): Me {
   const row = deps.db
     .prepare(
       `SELECT id, discord_id, username, display_name, avatar, username_chosen, link_hint

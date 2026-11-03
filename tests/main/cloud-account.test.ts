@@ -1046,3 +1046,124 @@ describe('updateUser', () => {
     expect(service.updateUser(me(alice, 'Alice_3')).user).toBeNull()
   })
 })
+
+describe('email sign-in', () => {
+  const user = me(7, 'mailer')
+  function makeEmailService(opts: {
+    reply?: (step: string, body: Record<string, unknown>) => unknown
+    claimOutcome?: { claim: string; email: string; verifier: string }
+  }): { service: AccountService; calls: { step: string; body: Record<string, unknown> }[] } {
+    const calls: { step: string; body: Record<string, unknown> }[] = []
+    const service = createAccountService({
+      db,
+      tokens: new TokenStore(tokenFile(), fakeCipher),
+      client: (token, o = {}) =>
+        createCloudClient({
+          baseUrl: PORTAL,
+          token,
+          fetch: fetchSpy as unknown as typeof fetch,
+          timeoutMs: o.timeoutMs,
+          signal: o.signal
+        }),
+      signIn: async () => opts.claimOutcome ?? { token: 'unused', user },
+      linkDiscord: async () => ({ code: 'link-code', verifier: 'ver-1' }),
+      emailAuth: async (step, body) => {
+        calls.push({ step, body })
+        return opts.reply!(step, body) as never
+      },
+      emailEnabled: async () => true,
+      emit: (s) => emitted.push(s),
+      emitDataChanged,
+      isOnline: () => false,
+      catalog,
+      onCatalogChanged,
+      now: NOW
+    })
+    services.push(service)
+    return { service, calls }
+  }
+  const signedInReply = { next: 'signed-in', token: 'secret-tok', user, created: false }
+
+  it('emailAuth signed-in stores the token and the renderer never sees it', async () => {
+    const { service } = makeEmailService({ reply: () => signedInReply })
+    const view = await service.emailAuth('password', { email: 'a@b.co', password: 'pw123456' })
+    expect(view).toEqual({ next: 'signed-in', user, created: false })
+    expect(JSON.stringify(view)).not.toContain('secret-tok')
+    expect(JSON.stringify(service.status())).not.toContain('secret-tok')
+    expect(service.isSignedIn()).toBe(true)
+    expect(service.status().user).toEqual(user)
+    expect(new TokenStore(tokenFile(), fakeCipher).get()).toBe('secret-tok')
+  })
+
+  it('other replies pass through and sign nobody in', async () => {
+    const { service } = makeEmailService({
+      reply: () => ({ next: 'code', ticket: 't', email: 'a@b.co', purpose: 'signup' })
+    })
+    expect(await service.emailAuth('create', {})).toMatchObject({ next: 'code', ticket: 't' })
+    expect(service.isSignedIn()).toBe(false)
+  })
+
+  it('emailLinkDiscord sends the link code and verifier with the ticket', async () => {
+    const { service, calls } = makeEmailService({ reply: () => signedInReply })
+    await service.emailLinkDiscord('tk')
+    expect(calls).toEqual([
+      { step: 'link-discord', body: { ticket: 'tk', code: 'link-code', verifier: 'ver-1' } }
+    ])
+    expect(service.isSignedIn()).toBe(true)
+  })
+
+  it('a Discord claim shows in status and claim(password) signs in', async () => {
+    const { service, calls } = makeEmailService({
+      claimOutcome: { claim: 'claim-tk', email: 'a@b.co', verifier: 'v-9' },
+      reply: () => signedInReply
+    })
+    const status = await service.signIn()
+    expect(status).toMatchObject({
+      state: 'signed-out',
+      claim: { email: 'a@b.co', provider: 'discord' }
+    })
+    expect(JSON.stringify(status)).not.toContain('claim-tk')
+    expect(JSON.stringify(status)).not.toContain('v-9')
+    expect(emitted.at(-1)?.claim).toEqual({ email: 'a@b.co', provider: 'discord' })
+
+    await service.claim('hunter22')
+    expect(calls).toEqual([
+      { step: 'claim', body: { ticket: 'claim-tk', verifier: 'v-9', password: 'hunter22' } }
+    ])
+    expect(service.isSignedIn()).toBe(true)
+    expect(service.status().claim).toBeUndefined()
+  })
+
+  it('claim(null) makes the separate account', async () => {
+    const { service, calls } = makeEmailService({
+      claimOutcome: { claim: 'claim-tk', email: 'a@b.co', verifier: 'v-9' },
+      reply: () => ({ ...signedInReply, created: true })
+    })
+    await service.signIn()
+    expect(await service.claim(null)).toEqual({ next: 'signed-in', user, created: true })
+    expect(calls).toEqual([
+      { step: 'claim-separate', body: { ticket: 'claim-tk', verifier: 'v-9' } }
+    ])
+  })
+
+  it('a wrong password keeps the claim, and signing out drops it', async () => {
+    const { service } = makeEmailService({
+      claimOutcome: { claim: 'claim-tk', email: 'a@b.co', verifier: 'v-9' },
+      reply: () => {
+        throw new Error("That password doesn't match.")
+      }
+    })
+    await service.signIn()
+    await expect(service.claim('nope-nope')).rejects.toThrow("That password doesn't match.")
+    expect(service.status().claim).toBeDefined()
+    const out = await service.signOut()
+    expect(out.claim).toBeUndefined()
+    expect(emitted.at(-1)?.claim).toBeUndefined()
+    await expect(service.claim('x')).rejects.toThrow()
+  })
+
+  it('emailEnabled asks the portal', async () => {
+    const { service } = makeEmailService({ reply: () => signedInReply })
+    expect(await service.emailEnabled()).toBe(true)
+  })
+})

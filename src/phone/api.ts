@@ -349,6 +349,10 @@ export function createPhoneApi(deps: {
       status: accountStatus,
       // The phone signs in from its own sign-in screen (store.signIn).
       signIn: notHere,
+      emailAuth: notHere,
+      emailLinkDiscord: notHere,
+      claim: notHere,
+      emailEnabled: notHere,
       signOut: async () => {
         await store.signOut()
         accountRun = { state: 'idle', error: null }

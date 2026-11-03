@@ -309,3 +309,73 @@ describe('portalUrl', () => {
     expect(portalUrl({}, false)).toBe('https://app.duelbinder.com')
   })
 })
+
+describe('signInWithBrowser email options', () => {
+  it('offer adds offer=email and a claim callback resolves the claim', async () => {
+    const exchange = vi.fn<typeof fetch>()
+    let opened!: (url: URL) => void
+    const started = new Promise<URL>((r) => (opened = r))
+    const result = signInWithBrowser({
+      portalUrl: PORTAL,
+      openExternal: async (url) => opened(new URL(url)),
+      fetch: exchange,
+      offer: true
+    })
+    const start = await started
+    expect(start.searchParams.get('offer')).toBe('email')
+    expect(start.searchParams.get('intent')).toBeNull()
+    const state = start.searchParams.get('state')!
+    const page = await callback(start, { claim: 'ticket-1', email: 'a@b.co', state })
+    expect(page.status).toBe(200)
+    const out = await result
+    expect(out).toEqual({
+      claim: 'ticket-1',
+      email: 'a@b.co',
+      verifier: expect.stringMatching(/^[A-Za-z0-9\-._~]{43,128}$/)
+    })
+    const verifier = (out as { verifier: string }).verifier
+    expect(base64url(createHash('sha256').update(verifier).digest())).toBe(
+      start.searchParams.get('challenge')
+    )
+    expect(exchange).not.toHaveBeenCalled()
+  })
+
+  it('a claim callback is ignored when the app did not offer', async () => {
+    const controller = new AbortController()
+    const { result, started } = startSignIn({ signal: controller.signal })
+    const rejected = expect(result).rejects.toThrow('Sign-in was cancelled')
+    const start = await started
+    expect(start.searchParams.get('offer')).toBeNull()
+    const page = await callback(start, {
+      claim: 't',
+      email: 'a@b.co',
+      state: start.searchParams.get('state')!
+    })
+    expect(page.status).toBe(400)
+    controller.abort()
+    await rejected
+  })
+
+  it('intent link resolves the code without exchanging', async () => {
+    const exchange = vi.fn<typeof fetch>()
+    let opened!: (url: URL) => void
+    const started = new Promise<URL>((r) => (opened = r))
+    const result = signInWithBrowser({
+      portalUrl: PORTAL,
+      openExternal: async (url) => opened(new URL(url)),
+      fetch: exchange,
+      intent: 'link'
+    })
+    const start = await started
+    expect(start.searchParams.get('intent')).toBe('link')
+    expect(start.searchParams.get('offer')).toBeNull()
+    const page = await callback(start, {
+      code: 'link-code',
+      state: start.searchParams.get('state')!
+    })
+    expect(page.status).toBe(200)
+    const out = await result
+    expect(out).toEqual({ code: 'link-code', verifier: expect.any(String) })
+    expect(exchange).not.toHaveBeenCalled()
+  })
+})

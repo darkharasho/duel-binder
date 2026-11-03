@@ -16,6 +16,7 @@ export interface HttpApiOptions {
 /** The `localStorage` key of the game this browser shows. */
 export const GAME_KEY = 'duel-binder.game'
 
+const notHere = (): Promise<never> => Promise.reject(new Error('Not available here'))
 const unavailable = (): Promise<never> => Promise.reject(new Error('Not available on the web'))
 const scanUnavailable = (): Promise<never> =>
   Promise.reject(new Error('Scan is only in the desktop app'))
@@ -350,6 +351,10 @@ export function createHttpApi(opts: HttpApiOptions = {}): Api {
       status: unavailable,
       signIn: unavailable,
       signOut: unavailable,
+      emailAuth: notHere,
+      emailLinkDiscord: notHere,
+      claim: notHere,
+      emailEnabled: notHere,
       syncNow: unavailable,
       unsynced: unavailable,
       deleteAccount,

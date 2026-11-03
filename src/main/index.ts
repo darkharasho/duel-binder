@@ -45,6 +45,7 @@ import { createFingerprintStore } from './scan/fingerprints'
 import { createOcr } from './scan/ocr'
 import { portalUrl } from './cloud/config'
 import { printingPhotoSuffix } from './yugipedia/printingArt'
+import { emailAuthRequest, emailSignInEnabled } from './cloud/emailAuth'
 import { signInWithBrowser } from './cloud/signIn'
 import { TokenStore, electronCipher } from './cloud/tokenStore'
 
@@ -365,8 +366,18 @@ async function bootstrap(): Promise<void> {
       signInWithBrowser({
         portalUrl: portal,
         openExternal: (url) => shell.openExternal(url),
+        offer: true,
         signal
       }),
+    linkDiscord: (signal) =>
+      signInWithBrowser({
+        portalUrl: portal,
+        openExternal: (url) => shell.openExternal(url),
+        intent: 'link',
+        signal
+      }),
+    emailAuth: (step, body) => emailAuthRequest(portal, step, body),
+    emailEnabled: () => emailSignInEnabled(portal),
     emit: (s: AccountStatus) => broadcast(ACCOUNT_CHANGED, s),
     emitDataChanged,
     isOnline: () => net.isOnline(),

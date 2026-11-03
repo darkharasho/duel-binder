@@ -308,6 +308,8 @@ export interface AccountStatus {
   unsyncedCount: number
   /** The app can't be used signed out; false only in the dev fake-data profile. */
   signInRequired: boolean
+  /** A Discord sign-in whose email an email account uses; the app asks for that account's password (`account.claim`). */
+  claim?: { email: string; provider: 'discord' }
 }
 
 /** A collection entry the server can't take, with why. */

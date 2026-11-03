@@ -5,6 +5,7 @@ import { deleteMeta, getMeta, setMeta } from '../db/meta'
 import { gamesOf, type Me } from '../../shared/cloud'
 import { FRIENDS_SIGNED_OUT, OFFLINE_MESSAGE } from '../../shared/friends'
 import type { PortalChannel } from '../../shared/portal'
+import type { EmailAuthReply, EmailAuthView, EmailStep } from '../../shared/emailAuth'
 import type { AccountStatus, SyncStatus } from '../../shared/types'
 import type { CatalogService } from '../catalog/service'
 import type { GameId } from '../../shared/games'
@@ -45,7 +46,14 @@ export interface AccountDeps {
   db: Database.Database
   tokens: TokenStore
   client(token: string, opts?: ClientOptions): CloudClient
-  signIn(signal: AbortSignal): Promise<{ token: string; user: Me }>
+  /** The browser sign-in (asking for a claim when an email account uses the Discord email). */
+  signIn(signal: AbortSignal): Promise<{ token: string; user: Me } | DiscordClaim>
+  /** The browser link flow for Discord: its one-time code and PKCE verifier, not yet exchanged. */
+  linkDiscord?(signal: AbortSignal): Promise<{ code: string; verifier: string }>
+  /** One email sign-in step against the portal; the reply may carry a token. */
+  emailAuth?(step: EmailStep, body: Record<string, unknown>): Promise<EmailAuthReply>
+  /** Whether the portal has email sign-in on. */
+  emailEnabled?(): Promise<boolean>
   emit(s: AccountStatus): void
   emitDataChanged(): void
   isOnline(): boolean
@@ -58,9 +66,23 @@ export interface AccountDeps {
   now?: () => Date
 }
 
+/** A first Discord sign-in whose email an email account uses; main keeps it until the password or a separate account. */
+export interface DiscordClaim {
+  claim: string
+  email: string
+  verifier: string
+}
+
 export interface AccountService {
   status(): AccountStatus
   signIn(): Promise<AccountStatus>
+  /** One email sign-in step. On `signed-in` the account signs in and the token stays in main. */
+  emailAuth(step: EmailStep, body: Record<string, unknown>): Promise<EmailAuthView>
+  /** Links Discord (browser flow) to the email account a mailed-code `match` step is about. */
+  emailLinkDiscord(ticket: string): Promise<EmailAuthView>
+  /** Finishes a Discord claim with the email account's password, or `null` for a separate account. */
+  claim(password: string | null): Promise<EmailAuthView>
+  emailEnabled(): Promise<boolean>
   signOut(): Promise<AccountStatus>
   syncNow(): Promise<AccountStatus>
   isSignedIn(): boolean
@@ -124,6 +146,9 @@ export function createAccountService(deps: AccountDeps): AccountService {
   let catalogUpdated = false
   let stopped = false
   let signInAbort: AbortController | null = null
+  let linkAbort: AbortController | null = null
+  /** A Discord sign-in waiting for a password (or a separate account); never leaves main. */
+  let pendingClaim: (DiscordClaim & { provider: 'discord' }) | null = null
   let signingIn: Promise<AccountStatus> | null = null
   let signingOut: Promise<AccountStatus> | null = null
   let runAbort: AbortController | null = null
@@ -169,7 +194,10 @@ export function createAccountService(deps: AccountDeps): AccountService {
       error,
       pendingCount: owner === 0 ? 0 : pendingCount(db, owner),
       unsyncedCount: owner === 0 ? 0 : syncIssueCount(db, owner),
-      signInRequired: deps.signInRequired ?? true
+      signInRequired: deps.signInRequired ?? true,
+      ...(pendingClaim
+        ? { claim: { email: pendingClaim.email, provider: pendingClaim.provider } }
+        : {})
     }
   }
 
@@ -336,7 +364,14 @@ export function createAccountService(deps: AccountDeps): AccountService {
     signInAbort = abort
     set('signing-in')
     try {
-      const { token: newToken, user } = await deps.signIn(abort.signal)
+      const outcome = await deps.signIn(abort.signal)
+      if ('claim' in outcome) {
+        if (abort.signal.aborted || stopped) return status()
+        pendingClaim = { ...outcome, provider: 'discord' }
+        set('signed-out')
+        return status()
+      }
+      const { token: newToken, user } = outcome
       if (abort.signal.aborted || stopped) {
         // Cancelled as the browser finished: this token was never used, so don't leave it valid.
         if (!(await revoke(newToken))) tokens.addPendingRevoke(newToken)
@@ -353,6 +388,12 @@ export function createAccountService(deps: AccountDeps): AccountService {
   }
 
   async function doSignOut(): Promise<AccountStatus> {
+    linkAbort?.abort()
+    linkAbort = null
+    if (pendingClaim) {
+      pendingClaim = null
+      if (token === null) set('signed-out')
+    }
     if (signInAbort) {
       signInAbort.abort()
       signInAbort = null
@@ -401,6 +442,16 @@ export function createAccountService(deps: AccountDeps): AccountService {
     return status()
   }
 
+  async function emailAuth(step: EmailStep, body: Record<string, unknown>): Promise<EmailAuthView> {
+    if (!deps.emailAuth) throw new Error('Email sign-in is not available here')
+    const reply = await deps.emailAuth(step, body)
+    if (reply.next !== 'signed-in') return reply
+    if (stopped) throw new Error('Sign-in was cancelled')
+    pendingClaim = null
+    becomeSignedIn(reply.token, reply.user)
+    return { next: 'signed-in', user: reply.user, created: reply.created }
+  }
+
   function signIn(): Promise<AccountStatus> {
     // A sign-out still finishing (final push, revoke) completes first.
     if (signingOut) return signingOut.then(signIn)
@@ -417,6 +468,33 @@ export function createAccountService(deps: AccountDeps): AccountService {
     games,
 
     signIn,
+
+    emailAuth,
+
+    async emailLinkDiscord(ticket: string): Promise<EmailAuthView> {
+      if (!deps.linkDiscord) throw new Error('Not available here')
+      const abort = new AbortController()
+      linkAbort?.abort()
+      linkAbort = abort
+      try {
+        const { code, verifier } = await deps.linkDiscord(abort.signal)
+        return await emailAuth('link-discord', { ticket, code, verifier })
+      } finally {
+        if (linkAbort === abort) linkAbort = null
+      }
+    },
+
+    async claim(password: string | null): Promise<EmailAuthView> {
+      const held = pendingClaim
+      if (!held) throw new Error('That sign-in has expired. Start again.')
+      return emailAuth(password === null ? 'claim-separate' : 'claim', {
+        ticket: held.claim,
+        verifier: held.verifier,
+        ...(password === null ? {} : { password })
+      })
+    },
+
+    emailEnabled: async () => (deps.emailEnabled ? deps.emailEnabled() : false),
 
     signOut() {
       signingOut ??= doSignOut().finally(() => {
@@ -549,6 +627,8 @@ export function createAccountService(deps: AccountDeps): AccountService {
       scheduler.stop()
       signInAbort?.abort()
       signInAbort = null
+      linkAbort?.abort()
+      linkAbort = null
       runAbort?.abort()
     }
   }

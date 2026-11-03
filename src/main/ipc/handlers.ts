@@ -22,6 +22,7 @@ import { isOcrKind, isTextModel, readTexts } from '@shared/scan/ocr'
 import type { GameId } from '@shared/games'
 import type { Me } from '@shared/cloud'
 import type { SignInProvider } from '@shared/account'
+import type { EmailStep } from '@shared/emailAuth'
 import { applyDexImport, previewDexImport } from '../repo/dexImport'
 import { savePlaceholders } from '../placeholders'
 import { scanRefs } from '../repo/scanRefs'
@@ -223,6 +224,11 @@ export function createHandlers({
     'account:status': async () => account.status(),
     'account:signIn': async () => account.signIn(),
     'account:signOut': async () => account.signOut(),
+    'account:emailAuth': async (step: EmailStep, body: Record<string, unknown>) =>
+      account.emailAuth(step, body),
+    'account:emailLinkDiscord': async (ticket: string) => account.emailLinkDiscord(ticket),
+    'account:claim': async (password: string | null) => account.claim(password),
+    'account:emailEnabled': async () => account.emailEnabled(),
     'account:syncNow': async () => account.syncNow(),
     'account:deleteAccount': async () => {
       throw new Error('Delete your account from app.duelbinder.com')

@@ -38,6 +38,7 @@ import type {
 import type { ScanWindowMessage } from './scanWindow'
 import type { ScanRef } from './scan/fingerprintRefs'
 import type { FingerprintStatus, OcrBand, ScanPrinting } from './scan/types'
+import type { EmailAuthView, EmailStep } from './emailAuth'
 import type { AddEmailResult, EmailCodeResult, MergeChoice, SignInMethod, SignInProvider } from './account'
 import type { Me } from './cloud'
 import type { CollectorNumber } from './scan/collectorNumber'
@@ -278,6 +279,14 @@ export interface Api {
     status(): Promise<AccountStatus>
     /** Resolves when sign-in finishes or fails. */
     signIn(): Promise<AccountStatus>
+    /** One email sign-in step; on `signed-in` the desktop is signed in and the token stays in the main process. */
+    emailAuth(step: EmailStep, body: Record<string, unknown>): Promise<EmailAuthView>
+    /** Links Discord (in the browser) to the email account a `match` step found. */
+    emailLinkDiscord(ticket: string): Promise<EmailAuthView>
+    /** Finishes `AccountStatus.claim` with the email account's password, or `null` for a separate account. */
+    claim(password: string | null): Promise<EmailAuthView>
+    /** Whether the portal has email sign-in on (false on any failure). */
+    emailEnabled(): Promise<boolean>
     /** Also cancels a sign-in in progress. */
     signOut(): Promise<AccountStatus>
     syncNow(): Promise<AccountStatus>
@@ -426,6 +435,10 @@ export const INVOKE_CHANNELS = [
   'account:status',
   'account:signIn',
   'account:signOut',
+  'account:emailAuth',
+  'account:emailLinkDiscord',
+  'account:claim',
+  'account:emailEnabled',
   'account:syncNow',
   'account:unsynced',
   'account:deleteAccount',

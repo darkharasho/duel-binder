@@ -115,4 +115,44 @@ describe('sign-in gate', () => {
       screen.queryByRole('heading', { name: 'Sign in to Duel Binder' })
     ).not.toBeInTheDocument()
   })
+
+  it('shows Continue with email only when enabled', async () => {
+    const off = make(base)
+    const { unmount } = renderWithProviders(<App />, { api: off })
+    await screen.findByRole('button', { name: 'Sign in with Discord' })
+    expect(off.account.emailEnabled).toHaveBeenCalled()
+    expect(screen.queryByRole('button', { name: 'Continue with email' })).not.toBeInTheDocument()
+    unmount()
+    window.api = undefined as never
+
+    const on = createMockApi({
+      window: { platform: 'linux' },
+      account: { status: vi.fn(async () => base), emailEnabled: vi.fn(async () => true) }
+    })
+    renderWithProviders(<App />, { api: on })
+    const user = userEvent.setup()
+    await user.click(await screen.findByRole('button', { name: 'Continue with email' }))
+    expect(await screen.findByLabelText(/email/i)).toBeInTheDocument()
+  })
+
+  it('shows the claim screen when status.claim is set', async () => {
+    const user = userEvent.setup()
+    const claim = vi.fn(async () => ({ next: 'signed-in' as const, user: seto, created: false }))
+    const api = createMockApi({
+      window: { platform: 'linux' },
+      account: {
+        status: vi.fn(async () => ({
+          ...base,
+          claim: { email: 'a@b.co', provider: 'discord' as const }
+        })),
+        claim
+      }
+    })
+    renderWithProviders(<App />, { api })
+    expect(await screen.findByText(/Link Discord to it\?/)).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Sign in with Discord' })).not.toBeInTheDocument()
+    await user.type(screen.getByLabelText(/password/i), 'hunter22')
+    await user.click(screen.getByRole('button', { name: /link|continue|sign in/i }))
+    expect(claim).toHaveBeenCalledWith('hunter22')
+  })
 })

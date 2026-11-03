@@ -25,13 +25,41 @@ const LISTEN_ATTEMPTS = 5
  * Signs in through the system browser: a loopback server on 127.0.0.1 receives the portal's
  * one-time code, which is exchanged with the PKCE verifier for a desktop token.
  */
-export async function signInWithBrowser(deps: {
+export interface BrowserSignInDeps {
   portalUrl: string
   openExternal(url: string): Promise<void>
   fetch?: typeof fetch
   timeoutMs?: number
   signal?: AbortSignal
-}): Promise<{ token: string; user: Me }> {
+}
+
+/** A first Discord sign-in whose email an email account uses: the app asks for that account's password. */
+export interface BrowserClaim {
+  claim: string
+  email: string
+  verifier: string
+}
+/** A Discord link code that the app hands to the portal itself; nothing was exchanged. */
+export interface BrowserLinkCode {
+  code: string
+  verifier: string
+}
+export type BrowserSignedIn = { token: string; user: Me }
+
+/**
+ * `intent: 'link'` links Discord to the signed-in account: it resolves the code and verifier
+ * without exchanging them. `offer: true` lets the portal answer a claim in place of a code.
+ */
+export function signInWithBrowser(
+  deps: BrowserSignInDeps & { intent: 'link' }
+): Promise<BrowserLinkCode>
+export function signInWithBrowser(
+  deps: BrowserSignInDeps & { offer: true }
+): Promise<BrowserSignedIn | BrowserClaim>
+export function signInWithBrowser(deps: BrowserSignInDeps): Promise<BrowserSignedIn>
+export async function signInWithBrowser(
+  deps: BrowserSignInDeps & { intent?: 'link'; offer?: boolean }
+): Promise<BrowserSignedIn | BrowserClaim | BrowserLinkCode> {
   const doFetch = deps.fetch ?? fetch
   const timeoutMs = deps.timeoutMs ?? DEFAULT_TIMEOUT_MS
   const base = deps.portalUrl.replace(/\/+$/, '')
@@ -43,13 +71,13 @@ export async function signInWithBrowser(deps: {
 
   const { server, port } = await listenOnLoopback()
 
-  return new Promise((resolve, reject) => {
+  return new Promise<BrowserSignedIn | BrowserClaim | BrowserLinkCode>((resolve, reject) => {
     let settled = false
     let answered = false
     const exchangeAbort = new AbortController()
 
     const finish = (
-      outcome: { error: SignInError } | { value: { token: string; user: Me } }
+      outcome: { error: SignInError } | { value: BrowserSignedIn | BrowserClaim | BrowserLinkCode }
     ): void => {
       if (settled) return
       settled = true
@@ -76,10 +104,19 @@ export async function signInWithBrowser(deps: {
       return
     }
 
-    async function exchange(params: URLSearchParams): Promise<{ token: string; user: Me }> {
+    async function exchange(
+      params: URLSearchParams
+    ): Promise<BrowserSignedIn | BrowserClaim | BrowserLinkCode> {
       if (params.has('error')) throw new SignInError(FAILED)
+      if (deps.offer && !deps.intent && params.has('claim')) {
+        const claim = params.get('claim')
+        const email = params.get('email')
+        if (!claim || !email) throw new SignInError(FAILED)
+        return { claim, email, verifier }
+      }
       const code = params.get('code')
       if (!code) throw new SignInError(FAILED)
+      if (deps.intent === 'link') return { code, verifier }
       let res: Response
       try {
         res = await doFetch(`${base}/auth/desktop/token`, {
@@ -116,7 +153,8 @@ export async function signInWithBrowser(deps: {
       // callback decides the outcome.
       const params = url.searchParams
       const valid =
-        sameSecret(params.get('state') ?? '', state) && (params.has('code') || params.has('error'))
+        sameSecret(params.get('state') ?? '', state) &&
+        (params.has('code') || params.has('error') || (!!deps.offer && params.has('claim')))
       if (!valid || answered || settled) {
         reply(res, 400, FAILED_PAGE)
         return
@@ -134,8 +172,10 @@ export async function signInWithBrowser(deps: {
       )
     })
 
-    const startUrl =
-      `${base}/auth/desktop/start?` + new URLSearchParams({ port: String(port), state, challenge })
+    const query = new URLSearchParams({ port: String(port), state, challenge })
+    if (deps.intent === 'link') query.set('intent', 'link')
+    else if (deps.offer) query.set('offer', 'email')
+    const startUrl = `${base}/auth/desktop/start?${query}`
     // A synchronous throw from openExternal also settles through finish.
     Promise.resolve()
       .then(() => deps.openExternal(startUrl))

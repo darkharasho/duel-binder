@@ -1,7 +1,8 @@
-import { createHash, generateKeyPairSync, sign, verify, type KeyObject } from 'node:crypto'
+import { createHash, verify, type KeyObject } from 'node:crypto'
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import Database from 'better-sqlite3'
 import { memoryBucket, noPrintingArt, noPrices } from './helpers'
+import { APPLE_NONCE, appleIdentityToken, appleTestKeys } from './appleKeys'
 import { handle, type AppDeps } from '../../workers/portal/src/app'
 import { migrateServer } from '../../workers/portal/src/migrate'
 import {
@@ -14,36 +15,22 @@ import {
 } from '../../workers/portal/src/apple'
 
 const BASE = 'https://portal.test'
-const NONCE = 'nonce_0123456789abcdef'
+const NONCE = APPLE_NONCE
 const NOW = new Date('2026-10-27T12:00:00.000Z')
 const nowSec = NOW.getTime() / 1000
 const b64url = (v: unknown): string => Buffer.from(JSON.stringify(v)).toString('base64url')
 const sha256Hex = (s: string): string => createHash('sha256').update(s).digest('hex')
 
-let appleKey: KeyObject
 let otherKey: KeyObject
 let jwks: unknown
 /** The Sign in with Apple key the Worker signs its client secret with. */
 let signinKey: KeyObject
 let signinPem: string
 
-function identityToken(
+const identityToken = (
   claims: Record<string, unknown> = {},
-  { key = appleKey, kid = 'k1' }: { key?: KeyObject; kid?: string } = {}
-): string {
-  const head = b64url({ alg: 'RS256', kid })
-  const body = b64url({
-    iss: APPLE_ISSUER,
-    aud: APPLE_AUDIENCE,
-    sub: '000123.abc',
-    iat: nowSec - 10,
-    exp: nowSec + 600,
-    nonce: sha256Hex(NONCE),
-    ...claims
-  })
-  const sig = sign('sha256', Buffer.from(`${head}.${body}`), key).toString('base64url')
-  return `${head}.${body}.${sig}`
-}
+  opts: { key?: KeyObject; kid?: string } = {}
+): string => appleIdentityToken(NOW, claims, opts)
 
 describe('Sign in with Apple', () => {
   let db: Database.Database
@@ -56,13 +43,7 @@ describe('Sign in with Apple', () => {
   let tokenReply: () => Response
 
   beforeAll(() => {
-    appleKey = generateKeyPairSync('rsa', { modulusLength: 2048 }).privateKey
-    otherKey = generateKeyPairSync('rsa', { modulusLength: 2048 }).privateKey
-    const pub = appleKey.export({ format: 'jwk' })
-    jwks = { keys: [{ kty: 'RSA', kid: 'k1', alg: 'RS256', use: 'sig', n: pub.n, e: pub.e }] }
-    const ec = generateKeyPairSync('ec', { namedCurve: 'prime256v1' })
-    signinKey = ec.publicKey
-    signinPem = ec.privateKey.export({ format: 'pem', type: 'pkcs8' }).toString()
+    ;({ otherKey, jwks, signinKey, signinPem } = appleTestKeys())
   })
 
   beforeEach(() => {

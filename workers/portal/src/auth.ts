@@ -2,7 +2,7 @@ import type { Me } from '../../../src/shared/cloud'
 import { allowedGames, type GameId } from '../../../src/shared/games'
 import type { AppDeps } from './app'
 import { appleRefreshToken, verifyAppleIdentityToken } from './apple'
-import { signInWith, type Identity } from './signIns'
+import { signInWith, type DiscordProfile, type Identity } from './signIns'
 
 const DAY_MS = 24 * 60 * 60 * 1000
 const SESSION_MAX_AGE = 30 * 24 * 60 * 60
@@ -31,17 +31,17 @@ const toBase64Url = (bytes: Uint8Array): string =>
     .replace(/\//g, '_')
     .replace(/=+$/, '')
 
-const randomToken = (): string => toBase64Url(crypto.getRandomValues(new Uint8Array(32)))
+export const randomToken = (): string => toBase64Url(crypto.getRandomValues(new Uint8Array(32)))
 
 const sha256 = async (text: string): Promise<Uint8Array> =>
   new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text)))
 
-async function sha256Hex(text: string): Promise<string> {
+export async function sha256Hex(text: string): Promise<string> {
   return [...(await sha256(text))].map((b) => b.toString(16).padStart(2, '0')).join('')
 }
 
 /** Compares two strings without an early exit on the first differing character. */
-function sameString(a: string, b: string): boolean {
+export function sameString(a: string, b: string): boolean {
   if (a.length !== b.length) return false
   let diff = 0
   for (let i = 0; i < a.length; i++) diff |= a.charCodeAt(i) ^ b.charCodeAt(i)
@@ -197,29 +197,38 @@ const APP_CALLBACK = 'duelbinder://auth/callback'
 type PhoneApp = 'ios' | 'android'
 const isPhoneApp = (app: string | null): app is PhoneApp => app === 'ios' || app === 'android'
 
+/** The `desktop_auth` cookie's fourth part when the flow links a sign-in instead of signing in. */
+const LINK_INTENT = 'link'
+
 interface DesktopAuth {
   /** The desktop app's loopback port, or the phone app ('ios' or 'android'). */
   port: number | PhoneApp
   state: string
   challenge: string
+  /** Linking a sign-in to the app's account (`intent=link`): the callback signs nobody in. */
+  link: boolean
 }
 
 function checkDesktopAuth(
   port: string | null,
   state: string | null,
-  challenge: string | null
+  challenge: string | null,
+  link: boolean
 ): DesktopAuth | null {
   if (port === null || state === null || challenge === null) return null
   if (!STATE_RE.test(state) || !CHALLENGE_RE.test(challenge)) return null
-  if (isPhoneApp(port)) return { port, state, challenge }
+  if (isPhoneApp(port)) return { port, state, challenge, link }
   if (!PORT_RE.test(port)) return null
   const n = Number(port)
-  return n >= 1024 && n <= 65535 ? { port: n, state, challenge } : null
+  return n >= 1024 && n <= 65535 ? { port: n, state, challenge, link } : null
 }
 
 function readDesktopAuth(req: Request): DesktopAuth | null {
   const parts = readCookie(req, 'desktop_auth')?.split('.')
-  return parts?.length === 3 ? checkDesktopAuth(parts[0], parts[1], parts[2]) : null
+  if (parts?.length === 3) return checkDesktopAuth(parts[0], parts[1], parts[2], false)
+  if (parts?.length === 4 && parts[3] === LINK_INTENT)
+    return checkDesktopAuth(parts[0], parts[1], parts[2], true)
+  return null
 }
 
 /** Where the desktop flow hands back its code or error: the loopback listener, or the phone app. */
@@ -232,13 +241,18 @@ function desktopCallback(desktop: DesktopAuth, params: Record<string, string>): 
 /**
  * GET /auth/desktop/start: the desktop app's browser sign-in, which ends at its loopback listener
  * (`?port=`), or the iOS or Android app's, which ends at its URL scheme (`?app=ios` or
- * `?app=android`, no port).
+ * `?app=android`, no port). With `&intent=link` it links the Discord account to the app's signed-in
+ * account instead: the code it hands back is for `account:linkCode`, not the token exchange.
  */
 export function startDesktopSignIn(req: Request, deps: AppDeps): Response {
   const q = new URL(req.url).searchParams
   const app = q.get('app')
+  const intent = q.get('intent')
   const port = app === null ? q.get('port') : isPhoneApp(app) && !q.has('port') ? app : null
-  const auth = checkDesktopAuth(port, q.get('state'), q.get('challenge'))
+  const auth =
+    intent === null || intent === LINK_INTENT
+      ? checkDesktopAuth(port, q.get('state'), q.get('challenge'), intent === LINK_INTENT)
+      : null
   if (!auth) {
     return respond(
       400,
@@ -250,8 +264,9 @@ export function startDesktopSignIn(req: Request, deps: AppDeps): Response {
   const bounce = publicBounce(req, deps)
   if (bounce) return redirect(bounce, [])
   const state = randomToken()
+  const value = `${auth.port}.${auth.state}.${auth.challenge}${auth.link ? `.${LINK_INTENT}` : ''}`
   return redirect(discordAuthorize(deps, state, { prompt: 'consent' }), [
-    cookie('desktop_auth', `${auth.port}.${auth.state}.${auth.challenge}`, STATE_MAX_AGE),
+    cookie('desktop_auth', value, STATE_MAX_AGE),
     cookie('oauth_state', state, STATE_MAX_AGE)
   ])
 }
@@ -296,10 +311,12 @@ function discordSignIn(du: DiscordUser, deps: AppDeps, nowIso: string): number {
   ).userId
 }
 
-/** Drops expired sessions and desktop codes. */
-function pruneExpired(deps: AppDeps, nowIso: string): void {
+/** Drops expired sessions, desktop and link codes, and merge tickets. */
+export function pruneExpired(deps: AppDeps, nowIso: string): void {
   deps.db.prepare('DELETE FROM sessions WHERE expires_at <= ?').run(nowIso)
   deps.db.prepare('DELETE FROM desktop_codes WHERE expires_at <= ?').run(nowIso)
+  deps.db.prepare('DELETE FROM link_codes WHERE expires_at <= ?').run(nowIso)
+  deps.db.prepare('DELETE FROM merge_tickets WHERE expires_at <= ?').run(nowIso)
 }
 
 export async function finishSignIn(req: Request, deps: AppDeps): Promise<Response> {
@@ -333,6 +350,29 @@ export async function finishSignIn(req: Request, deps: AppDeps): Promise<Respons
   const secret = randomToken()
   const secretHash = await sha256Hex(secret)
   const user = du
+  const codeExpires = new Date(now.getTime() + DESKTOP_CODE_TTL_MS).toISOString()
+
+  if (desktop?.link) {
+    // A link only records who Discord says this is; account:linkCode attaches it.
+    const profile: DiscordProfile = {
+      username: user.username,
+      displayName: user.global_name ?? null,
+      avatar: user.avatar ?? null
+    }
+    deps.db.transaction(() => {
+      pruneExpired(deps, nowIso)
+      deps.db
+        .prepare(
+          `INSERT INTO link_codes (code_hash, challenge, provider, subject, profile, expires_at)
+           VALUES (?, ?, 'discord', ?, ?, ?)`
+        )
+        .run(secretHash, desktop.challenge, user.id, JSON.stringify(profile), codeExpires)
+    })()
+    return redirect(desktopCallback(desktop, { code: secret }), [
+      clearCookie('oauth_state'),
+      clearCookie('desktop_auth')
+    ])
+  }
 
   if (desktop) {
     deps.db.transaction(() => {
@@ -342,12 +382,7 @@ export async function finishSignIn(req: Request, deps: AppDeps): Promise<Respons
         .prepare(
           'INSERT INTO desktop_codes (code_hash, user_id, challenge, expires_at) VALUES (?, ?, ?, ?)'
         )
-        .run(
-          secretHash,
-          userId,
-          desktop.challenge,
-          new Date(now.getTime() + DESKTOP_CODE_TTL_MS).toISOString()
-        )
+        .run(secretHash, userId, desktop.challenge, codeExpires)
     })()
     return redirect(desktopCallback(desktop, { code: secret }), [
       clearCookie('oauth_state'),
@@ -382,6 +417,22 @@ const jsonResponse = (status: number, body: unknown): Response =>
     JSON.stringify(body)
   )
 
+/**
+ * A one-time code's hash, and the PKCE challenge its verifier makes (null when the verifier isn't
+ * one, so no stored challenge matches it); null when the code itself can't be one.
+ */
+export async function codeAndChallenge(
+  code: unknown,
+  verifier: unknown
+): Promise<{ codeHash: string; challenge: string | null } | null> {
+  if (typeof code !== 'string' || code.length === 0 || code.length > MAX_CODE_LEN) return null
+  const challenge =
+    typeof verifier === 'string' && VERIFIER_RE.test(verifier)
+      ? toBase64Url(await sha256(verifier))
+      : null
+  return { codeHash: await sha256Hex(code), challenge }
+}
+
 /** POST /auth/desktop/token `{ code, verifier }`: trades a one-time code for a desktop token. The code is spent whatever happens. */
 export async function exchangeDesktopCode(req: Request, deps: AppDeps): Promise<Response> {
   const invalid = jsonResponse(400, { error: 'invalid-code' })
@@ -392,15 +443,12 @@ export async function exchangeDesktopCode(req: Request, deps: AppDeps): Promise<
     return invalid
   }
   const { code, verifier } = (body ?? {}) as { code?: unknown; verifier?: unknown }
-  if (typeof code !== 'string' || code.length === 0 || code.length > MAX_CODE_LEN) return invalid
-  const codeHash = await sha256Hex(code)
+  const checked = await codeAndChallenge(code, verifier)
+  if (!checked) return invalid
+  const { codeHash, challenge } = checked
 
   const now = deps.now()
   const nowIso = now.toISOString()
-  const challenge =
-    typeof verifier === 'string' && VERIFIER_RE.test(verifier)
-      ? toBase64Url(await sha256(verifier))
-      : null
   const token = randomToken()
   const tokenHash = await sha256Hex(token)
 
@@ -441,6 +489,37 @@ function appleName(given: unknown, family: unknown): string | null {
 }
 
 /**
+ * The Apple user id of a Sign in with Apple result `{ identityToken, nonce, authorizationCode? }`,
+ * and the refresh token its authorization code trades for (null when there's none or the trade
+ * fails, which is only logged); null when the identity token isn't valid.
+ */
+export async function verifyAppleSignIn(
+  body: unknown,
+  deps: AppDeps
+): Promise<{ sub: string; refreshToken: string | null } | null> {
+  if (body === null || typeof body !== 'object') return null
+  const { identityToken, nonce, authorizationCode } = body as Record<string, unknown>
+  if (typeof identityToken !== 'string' || typeof nonce !== 'string' || !NONCE_RE.test(nonce))
+    return null
+  let sub: string | null
+  try {
+    sub = await verifyAppleIdentityToken(identityToken, nonce, deps)
+  } catch {
+    sub = null
+  }
+  if (!sub) return null
+  let refreshToken: string | null = null
+  if (typeof authorizationCode === 'string' && authorizationCode.length <= MAX_APPLE_CODE_LEN) {
+    try {
+      refreshToken = await appleRefreshToken(authorizationCode, sub, deps)
+    } catch (err) {
+      console.warn('Apple code exchange failed', err)
+    }
+  }
+  return { sub, refreshToken }
+}
+
+/**
  * POST /auth/apple/token `{ identityToken, nonce, authorizationCode?, givenName?, familyName? }`:
  * the iOS app's Sign in with Apple. A valid identity token (apple.ts) signs in its Apple account,
  * made on first use, and gets a desktop-kind Bearer token like the Discord sign-in's. The name,
@@ -457,27 +536,10 @@ export async function exchangeAppleToken(req: Request, deps: AppDeps): Promise<R
   } catch {
     return invalid
   }
-  const { identityToken, nonce, authorizationCode, givenName, familyName } = (body ?? {}) as Record<
-    string,
-    unknown
-  >
-  if (typeof identityToken !== 'string' || typeof nonce !== 'string' || !NONCE_RE.test(nonce))
-    return invalid
-  let sub: string | null
-  try {
-    sub = await verifyAppleIdentityToken(identityToken, nonce, deps)
-  } catch {
-    sub = null
-  }
-  if (!sub) return invalid
-  let refreshToken: string | null = null
-  if (typeof authorizationCode === 'string' && authorizationCode.length <= MAX_APPLE_CODE_LEN) {
-    try {
-      refreshToken = await appleRefreshToken(authorizationCode, sub, deps)
-    } catch (err) {
-      console.warn('Apple code exchange failed', err)
-    }
-  }
+  const { givenName, familyName } = (body ?? {}) as Record<string, unknown>
+  const verified = await verifyAppleSignIn(body, deps)
+  if (!verified) return invalid
+  const { sub, refreshToken } = verified
 
   const apple: Identity = { provider: 'apple', subject: sub }
   const name = appleName(givenName, familyName)

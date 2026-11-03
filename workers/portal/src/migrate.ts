@@ -575,6 +575,19 @@ CREATE TABLE account_change_log (user_id INTEGER NOT NULL REFERENCES users(id) O
   kind TEXT NOT NULL, created_at TEXT NOT NULL);
 CREATE INDEX ix_account_change_log ON account_change_log(user_id, kind, created_at);
 `
+  },
+  {
+    // Linking a sign-in (link.ts): one-time codes from a Discord link flow, and tickets for a
+    // merge the signed-in account (user_id) may then make with the sign-in's owner (other_id).
+    name: 'server-32',
+    sql: `
+CREATE TABLE link_codes (code_hash TEXT PRIMARY KEY, challenge TEXT NOT NULL, provider TEXT NOT NULL,
+  subject TEXT NOT NULL, profile TEXT NOT NULL, expires_at TEXT NOT NULL);
+CREATE TABLE merge_tickets (ticket_hash TEXT PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  other_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  provider TEXT NOT NULL, subject TEXT NOT NULL, apple_refresh_token TEXT, expires_at TEXT NOT NULL);
+`
   }
 ]
 

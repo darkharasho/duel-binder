@@ -239,6 +239,8 @@ const ENTRY_REFS: Record<string, [count: number, kind: string]> = {
   ],
   'workers/portal/src/sync.ts': [6, SYNC],
   'workers/portal/src/auth.ts': [1, LIVE],
+  'workers/portal/src/link.ts': [1, LIVE],
+  'workers/portal/src/mergePlan.ts': [1, LIVE],
   'workers/portal/src/priceRequests.ts': [1, LIVE],
   'workers/portal/src/sweep.ts': [1, LIVE],
   'workers/portal/src/pokemonSweep.ts': [1, LIVE],

@@ -1,5 +1,5 @@
 import type { Api, InvokeChannel } from '../../../src/shared/ipc'
-import type { PortalChannel } from '../../../src/shared/portal'
+import type { AccountLinkChannel, PortalChannel } from '../../../src/shared/portal'
 import type { BrowseFilters, CollectionFilters } from '../../../src/shared/types'
 import type { Scope } from '../../../src/main/repo/scope'
 import {
@@ -74,6 +74,7 @@ import {
 import { friendBinder, friendBinders } from './friendBinders'
 import { userScope } from './scope'
 import { dismissLinkHint, listSignIns, removeSignIn, setUsername } from './accountRpc'
+import { linkApple, linkCode } from './link'
 import { GAME_HEADER } from '../../../src/shared/cloud'
 import type { GameId } from '../../../src/shared/games'
 
@@ -135,8 +136,13 @@ function friendId(db: AppDeps['db'], me: number, id: unknown): number {
   return friend
 }
 
+/** A Worker-only channel's handler (shared/portal.ts's ACCOUNT_LINK_CHANNELS): no Api method types it. */
+type WorkerHandler = (deps: RpcDeps, scope: Scope, ...args: unknown[]) => unknown
+
 // Arguments come off the wire untyped: every handler checks its own before use.
-const HANDLERS: { [C in PortalChannel]: Handler<C> } = {
+const HANDLERS: { [C in Exclude<PortalChannel, AccountLinkChannel>]: Handler<C> } & {
+  [C in AccountLinkChannel]: WorkerHandler
+} = {
   'cards:search': ({ db }, scope, q) => searchCards(db, checkString(q, 'q'), undefined, scope),
   'cards:get': ({ db }, scope, cardId) => getCardDetail(db, checkId(cardId, 'cardId'), scope),
   'cards:browse': ({ db }, scope, f) =>
@@ -277,7 +283,9 @@ const HANDLERS: { [C in PortalChannel]: Handler<C> } = {
   'account:signIns': ({ db, userId }) => listSignIns(db, userId),
   'account:setUsername': (deps, _s, name) => setUsername(deps, deps.userId, name),
   'account:removeSignIn': (deps, _s, provider) => removeSignIn(deps, deps.userId, provider),
-  'account:dismissLinkHint': (deps) => dismissLinkHint(deps, deps.userId)
+  'account:dismissLinkHint': (deps) => dismissLinkHint(deps, deps.userId),
+  'account:linkCode': (deps, _s, code, verifier) => linkCode(deps, deps.userId, code, verifier),
+  'account:linkApple': (deps, _s, input) => linkApple(deps, deps.userId, input)
 }
 
 /** Writes that can leave a printing owned with no fresh price. */

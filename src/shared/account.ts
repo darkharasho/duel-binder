@@ -21,3 +21,39 @@ export function usernameProblem(name: string): string | null {
   if (!USERNAME_RE.test(name)) return 'Use letters, numbers, _ and - only'
   return null
 }
+
+/** One side of a merge, as the merge screen shows it. */
+export interface AccountSummary {
+  username: string
+  displayName: string | null
+  avatarUrl: string | null
+  /** Copies of every live card, all games. */
+  cards: number
+  binders: number
+  wishes: number
+}
+
+/** Both accounts, and the signed-in account's card total after merging under each choice. */
+export interface MergePreview {
+  mine: AccountSummary
+  theirs: AccountSummary
+  totals: Record<CardChoice, number>
+}
+
+/**
+ * What linking a sign-in did: attached it, found it already on this account, refused because the
+ * account (or the merged one) would have two of a provider, or found another account to merge,
+ * with a 15-minute ticket for the merge.
+ */
+export type LinkResult =
+  | { status: 'linked' }
+  | { status: 'already' }
+  | { status: 'has-provider' }
+  | { status: 'merge'; ticket: string; preview: MergePreview }
+
+/** What `account:linkApple` takes: the iPhone app's Sign in with Apple result. */
+export interface AppleLinkInput {
+  identityToken: string
+  nonce: string
+  authorizationCode?: string
+}

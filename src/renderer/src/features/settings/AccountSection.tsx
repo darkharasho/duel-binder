@@ -17,6 +17,7 @@ import { formatRelative } from '@/lib/format'
 import { isWeb } from '@/lib/platform'
 import { fetchMe } from '@/web/account'
 import type { Me } from '@shared/cloud'
+import { SignInMethods } from './SignInMethods'
 import { DELETE_WARNING, reasonText } from './accountText'
 
 function Identity({ user }: { user: Me }): React.JSX.Element {
@@ -162,6 +163,7 @@ function DesktopAccount(): React.JSX.Element {
       {s.state === 'error' && <p className="text-destructive">Sync failed: {s.error}</p>}
       {pending}
       {unsynced}
+      <SignInMethods />
       <div className="flex items-center gap-2">
         <Button
           size="sm"
@@ -246,16 +248,19 @@ function WebAccount(): React.JSX.Element {
     )
   }
   return (
-    <div className="flex items-center justify-between gap-4 text-sm">
-      <Identity user={me.data} />
-      <div className="flex items-center gap-2">
-        <form method="post" action="/auth/logout">
-          <Button type="submit" variant="outline" size="sm">
-            Sign out
-          </Button>
-        </form>
-        <DeleteAccount />
+    <div className="space-y-3 text-sm">
+      <div className="flex items-center justify-between gap-4">
+        <Identity user={me.data} />
+        <div className="flex items-center gap-2">
+          <form method="post" action="/auth/logout">
+            <Button type="submit" variant="outline" size="sm">
+              Sign out
+            </Button>
+          </form>
+          <DeleteAccount />
+        </div>
       </div>
+      <SignInMethods />
     </div>
   )
 }

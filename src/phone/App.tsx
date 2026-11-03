@@ -110,6 +110,15 @@ export function App({
     if (!ready) return
     return window.api.account.onChange((s) => {
       if (s.state === 'signed-out') signedOut()
+      else if (s.user) {
+        // A changed username or dismissed hint: the screens read it from the session.
+        const next = s.user
+        setView((v) =>
+          v.kind === 'ready' && JSON.stringify(v.user) !== JSON.stringify(next)
+            ? { ...v, user: next }
+            : v
+        )
+      }
     })
   }, [ready, signedOut])
 

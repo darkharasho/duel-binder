@@ -38,6 +38,7 @@ import { refreshAllFingerprints } from './refreshFingerprints'
 import { ScannerScreen } from './ScannerScreen'
 import { Settings } from './Settings'
 import { StatusLine } from './StatusLine'
+import { AccountNotices } from '@/features/account/AccountNotices'
 import { UpdateBanner } from './UpdateBanner'
 
 // Loaded on demand, as on the desktop, so Rip stays out of the first load.
@@ -190,6 +191,7 @@ function Shell({ engineFactory }: { engineFactory?: EngineFactory }): React.JSX.
 
       {/* The Android APK's newer version, when there is one. */}
       {!scan && <UpdateBanner />}
+      {!scan && <AccountNotices />}
 
       {/* Only there while something waits or fails; pb-7 keeps it clear of the raised Scan button. */}
       {!scan && (

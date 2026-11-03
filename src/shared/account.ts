@@ -28,6 +28,9 @@ export function usernameProblem(name: string): string | null {
   return null
 }
 
+/** Why the account's last sign-in can't be removed. */
+export const LAST_SIGN_IN = "This is your only way to sign in, so it can't be removed"
+
 /** One side of a merge, as the merge screen shows it. */
 export interface AccountSummary {
   username: string

@@ -6,6 +6,7 @@ import { SettingsPage } from '@/features/settings/SettingsPage'
 import { isWeb } from '@/lib/platform'
 import { useAccountState } from '@/lib/account'
 import { GameProvider } from '@/lib/game'
+import { AccountNotices } from '@/features/account/AccountNotices'
 import { SignInScreen } from '@/features/account/SignInScreen'
 import { TitleBar } from '@/components/TitleBar'
 import { ScanHubProvider } from '@/features/scan/ScanHub'
@@ -86,6 +87,7 @@ function SignedInApp(): React.JSX.Element {
     <>
       {!isWeb() && <DesktopOnlyEffects />}
       <AppShell page={page} onNavigate={onNavigate} onAddCard={() => openAdd()}>
+        <AccountNotices />
         <PageSwitch
           pages={pages}
           scan={

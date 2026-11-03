@@ -2,6 +2,7 @@ import type { SqlDb } from '../../../src/main/db/sql'
 import { CollectionError } from '../../../src/main/repo/collection'
 import type { Me } from '../../../src/shared/cloud'
 import {
+  LAST_SIGN_IN,
   usernameProblem,
   type SignInMethod,
   type SignInProvider
@@ -112,7 +113,7 @@ export async function removeSignIn(
     ).map((r) => r.provider)
     if (!providers.includes(provider as string)) return false
     if (providers.length <= 1)
-      throw new CollectionError("This is your only way to sign in, so it can't be removed")
+      throw new CollectionError(LAST_SIGN_IN)
     db.prepare('DELETE FROM sign_ins WHERE user_id = ? AND provider = ?').run(userId, provider)
     if (provider === 'apple') db.prepare('DELETE FROM apple_tokens WHERE user_id = ?').run(userId)
     refreshLegacyDiscordId(db, userId)

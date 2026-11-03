@@ -12,6 +12,7 @@ import {
 import { HitPriceInput } from '@/features/scan/HitPriceInput'
 import { useScanHub } from '@/features/scan/ScanHub'
 import { DeleteAccount } from '@/features/settings/AccountSection'
+import { SignInMethods } from '@/features/settings/SignInMethods'
 import { EbayPricesToggle } from '@/features/settings/EbayPricesToggle'
 import { ScanPingToggle } from '@/features/settings/ScanPingToggle'
 import { UsageToggle } from '@/features/settings/UsageToggle'
@@ -158,6 +159,9 @@ export function Settings(): React.JSX.Element {
             Sign out
           </button>
         </Group>
+        <div className="rounded-2xl border border-white/[0.06] bg-card p-4">
+          <SignInMethods />
+        </div>
         {signOutFailed && (
           <p role="alert" className="px-4 text-[13px] text-destructive">
             {SIGN_OUT_FAILED}

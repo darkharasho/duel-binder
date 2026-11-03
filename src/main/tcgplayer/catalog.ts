@@ -4,6 +4,7 @@ import type { SqlDb } from '../db/sql'
 import { getMeta, setMeta } from '../db/meta'
 import { canonRarity } from '../ygo/rarity'
 import { createLimiter } from '../images/limiter'
+import { needsOwnScan, printingVariant } from '../yugipedia/printingArt'
 
 /**
  * TCGplayer's Yu-Gi-Oh catalog, read from TCGCSV (a free daily public copy of it). Used only to
@@ -531,8 +532,28 @@ export function createTcgProductResolver(
   }
 }
 
-/** The TCGplayer photo of an English printing (see createTcgProductResolver). */
+/**
+ * The TCGplayer photo of an English printing (see createTcgProductResolver). An art variant
+ * (needsOwnScan) with no product of its own takes only a product TCGplayer labels with its art,
+ * never the plain card's photo; otherwise none, and its Yugipedia scan is looked for instead.
+ */
 export function createTcgplayerLookup(db: SqlDb): (printingId: number) => string | null {
   const resolve = createTcgProductResolver(db)
-  return (printingId) => resolve(printingId)?.image_url ?? null
+  const printing = db.prepare(
+    'SELECT set_rarity AS rarity, variant, tcg_product_id FROM card_printings WHERE id = ?'
+  )
+  const product = db.prepare('SELECT name, rarity FROM tcgplayer_products WHERE product_id = ?')
+  const key = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]/g, '')
+  return (printingId) => {
+    const match = resolve(printingId)
+    if (!match) return null
+    const p = printing.get(printingId) as
+      { rarity: string; variant: string | null; tcg_product_id: number | null } | undefined
+    if (!p || p.tcg_product_id !== null || !needsOwnScan(p)) return match.image_url
+    const variant = printingVariant(p).variant ?? ''
+    const sold = product.get(match.product_id) as { name: string; rarity: string } | undefined
+    return sold && key(variantLabel(sold.name, sold.rarity)) === key(variant)
+      ? match.image_url
+      : null
+  }
 }

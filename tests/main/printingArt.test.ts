@@ -418,6 +418,22 @@ describe('choosePrintingScan', () => {
     ).toBe('FamiliarPossessedAussa-SD39-JP-ScR.png')
   })
 
+  it("takes a stamp-artwork printing's AA scan, as RA05's are filed", () => {
+    const files = [
+      'VanquishSoulRazen-RA05-DE-StR-1E-AA.png',
+      'VanquishSoulRazen-RA05-DE-StR-1E.png',
+      'VanquishSoulRazen-RA05-DE-UR-1E-AA.png',
+      'VanquishSoulRazen-RA05-DE-UR-1E.png'
+    ]
+    const p = { setCode: 'RA05-DE134', language: 'de' as const }
+    expect(choosePrintingScan(files, { ...p, rarity: 'Ultra Rare (Stamp artwork)' })).toBe(
+      'VanquishSoulRazen-RA05-DE-UR-1E-AA.png'
+    )
+    expect(choosePrintingScan(files, { ...p, rarity: 'Ultra Rare' })).toBe(
+      'VanquishSoulRazen-RA05-DE-UR-1E.png'
+    )
+  })
+
   it('reads a rarity stored as its abbreviation (PlScR)', () => {
     const p = { setCode: 'RA04-DE024', language: 'de' as const }
     expect(choosePrintingScan(ALEISTER, { ...p, rarity: 'PlScR' })).toBe(

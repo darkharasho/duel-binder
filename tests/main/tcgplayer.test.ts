@@ -156,6 +156,48 @@ describe('TCGplayer catalog', () => {
     expect(lookup(wrong)).toBeNull()
   })
 
+  it('gives an art variant with no product of its own only a product labelled with its art', async () => {
+    const db = await seededDb()
+    const insert = db.prepare(
+      `INSERT INTO card_printings (card_id, set_name, set_code, set_rarity, set_rarity_code, language,
+         variant, yugipedia)
+       VALUES (46986414, 'Legend of Blue Eyes White Dragon', ?, ?, '', 'en', ?, ?) RETURNING id`
+    )
+    const id = (code: string, rarity: string, variant: string | null, yugipedia = 1): number =>
+      (insert.get(code, rarity, variant, yugipedia) as { id: number }).id
+    // Filled in from Yugipedia's lists, beside codes TCGplayer sells only plain: an alternate-art
+    // Secret Rare (TCGplayer's lone product is another rarity), and an overframe beside a plain
+    // Ultra Rare (MAMS-EN001's before release).
+    const alt = id('LOB-EN300', 'Secret Rare', 'Alternate Art')
+    const over = id('LOB-EN301', 'Ultra Rare (Overframe)', null)
+    // YGOPRODeck's overframe-only Starlight Rare, its one product labelled so (MAMO-EN013's).
+    const starlight = id('LOB-EN302', 'Starlight Rare', null, 0)
+    // A foil colour of the usual art takes the plain photo.
+    const blue = id('LOB-EN303', 'Rare', 'Blue')
+    await refreshTcgCatalog(db, {
+      version: '1',
+      fetchFn: catalogFetch([{ groupId: 10, modifiedOn: 'a' }], {
+        10: [
+          product(1, 'LOB-EN300', 'Ultra Rare', 1, 'Dark Magician'),
+          product(2, 'LOB-EN301', 'Ultra Rare', 1, 'Dark Magician'),
+          product(
+            3,
+            'LOB-EN302',
+            'Starlight Rare',
+            1,
+            'Dark Magician (Starlight Rare) (Extended Art)'
+          ),
+          product(4, 'LOB-EN303', 'Rare', 1, 'Dark Magician')
+        ]
+      }) as unknown as typeof fetch
+    })
+    const lookup = createTcgplayerLookup(db)
+    expect(lookup(alt)).toBeNull()
+    expect(lookup(over)).toBeNull()
+    expect(lookup(starlight)).toContain('/3_')
+    expect(lookup(blue)).toContain('/4_')
+  })
+
   it('never takes a one-word rarity for the end of a longer one', async () => {
     const db = await seededDb()
     await refreshTcgCatalog(db, {

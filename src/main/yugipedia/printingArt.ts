@@ -104,12 +104,14 @@ export interface PrintingKey {
 
 /**
  * File-name suffixes Yugipedia uses for an art variant, by variant name (lower case): "EA"
- * (extended art) for an overframe, "AA" for an alternate art ("KnightmareUnicorn-RA01-IT-UR-1E-AA").
+ * (extended art) for an overframe, "AA" for an alternate art ("KnightmareUnicorn-RA01-IT-UR-1E-AA")
+ * and for RA05's stamp artworks, the only stamped printings, none beside another alternate art.
  */
 const VARIANT_SUFFIX: Record<string, string> = {
   overframe: 'EA',
   'alternate art': 'AA',
-  'alternate artwork': 'AA'
+  'alternate artwork': 'AA',
+  'stamp artwork': 'AA'
 }
 const suffixKey = (s: string): string => s.toLowerCase().replace(/[^a-z0-9]/g, '')
 const variantSuffix = (variant: string): string =>

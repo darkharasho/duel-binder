@@ -8,7 +8,7 @@ describe('branded emails', () => {
     expect(m.text).toContain('123456')
     expect(m.html).toContain('<h1')
     expect(m.html).toContain('Reset your password')
-    expect(m.html).toContain('https://duelbinder.com/apple-touch-icon.png')
+    expect(m.html).toContain('https://duelbinder.com/email-mark.png')
     expect(m.html).toContain('>123456</span>')
   })
 

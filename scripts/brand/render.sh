@@ -34,4 +34,6 @@ magick "$tmp/16.png" "$tmp/32.png" "$tmp/48.png" "$SITE/favicon.ico"
 cp "$B/small.svg" "$SITE/favicon.svg"
 cp "$B/square.svg" src/renderer/src/assets/logo.svg
 rsvg-convert -w 1200 -h 630 "$B/og.svg" -o "$SITE/og.png"
+# The bare mark for emails, which cannot show SVG: 2x of its 37x40 slot.
+rsvg-convert -w 74 -h 80 "$B/mark.svg" -o "$SITE/email-mark.png"
 echo "brand assets rendered"

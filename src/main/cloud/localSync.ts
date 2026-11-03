@@ -171,7 +171,7 @@ export function hasOwnerRows(db: SqlDb, owner: number): boolean {
   )
 }
 
-const holdKey = (from: number): string => `merge_hold:${from}`
+const holdKey = (from: number): `merge_hold:${number}` => `merge_hold:${from}`
 
 /**
  * Carries the unsent changes of `from`, an account merged into `to`, over to `to`; returns the

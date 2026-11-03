@@ -52,6 +52,11 @@ export type MetaKey =
   | 'price_feed_cursor'
   /** The game this device shows ('ygo' or 'pkm'); absent means 'ygo'. Read in SQL as ACTIVE_GAME. */
   | 'active_game'
+  /**
+   * Account N, merged into another, has unsent collection rows held here; the value is the account
+   * they go to once it has been pulled (see adoptMergedData).
+   */
+  | `merge_hold:${number}`
 
 export function getMeta(db: SqlDb, key: MetaKey): string | null {
   const row = db.prepare('SELECT value FROM meta WHERE key = ?').get(key) as

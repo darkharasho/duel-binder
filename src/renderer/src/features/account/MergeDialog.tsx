@@ -71,7 +71,10 @@ export function MergeDialog({
 }): React.JSX.Element {
   const { mine, theirs, totals } = preview
   const [cards, setCards] = useState<CardChoice>('higher')
-  const [username, setUsername] = useState<'mine' | 'theirs'>('mine')
+  // A generated name this account never chose shouldn't win over the other account's own name.
+  const [username, setUsername] = useState<'mine' | 'theirs'>(
+    mine.usernameChosen === false && theirs.usernameChosen !== false ? 'theirs' : 'mine'
+  )
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   useBackHandler(true, () => {

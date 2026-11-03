@@ -38,15 +38,19 @@ const countOf = (db: Db, sql: string, userId: number): number =>
 /** The merge screen's view of one account: who it is, and how much it holds across all games. */
 function accountSummary(db: Db, userId: number): AccountSummary {
   const user = db
-    .prepare('SELECT discord_id, username, display_name, avatar FROM users WHERE id = ?')
+    .prepare(
+      'SELECT discord_id, username, username_chosen, display_name, avatar FROM users WHERE id = ?'
+    )
     .get(userId) as {
     discord_id: string
     username: string
+    username_chosen: number
     display_name: string | null
     avatar: string | null
   }
   return {
     username: user.username,
+    usernameChosen: user.username_chosen === 1,
     displayName: user.display_name,
     avatarUrl: avatarUrl(user.discord_id, user.avatar),
     cards: countOf(

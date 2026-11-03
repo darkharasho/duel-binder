@@ -34,6 +34,8 @@ export const LAST_SIGN_IN = "This is your only way to sign in, so it can't be re
 /** One side of a merge, as the merge screen shows it. */
 export interface AccountSummary {
   username: string
+  /** False while the username is the generated `duelist-` one (as `Me.usernameChosen`); older portals leave it out. */
+  usernameChosen?: boolean
   displayName: string | null
   avatarUrl: string | null
   /** Copies of every live card, all games. */

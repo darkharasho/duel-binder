@@ -235,6 +235,7 @@ describe('linking a sign-in', () => {
     const me = addUser(db, `apple:${APPLE_SUB}`, 'appleuser')
     const other = addUser(db, '111', 'kaiba')
     db.prepare("UPDATE users SET display_name = 'Seto', avatar = 'av' WHERE id = ?").run(other)
+    db.prepare('UPDATE users SET username_chosen = 0 WHERE id = ?').run(me)
     addSession('mine', me)
     addCard(me, printings[0], 3)
     addCard(me, printings[1], 2)
@@ -257,6 +258,7 @@ describe('linking a sign-in', () => {
     expect(res.preview).toEqual({
       mine: {
         username: 'appleuser',
+        usernameChosen: false,
         displayName: null,
         avatarUrl: null,
         cards: 5,
@@ -265,6 +267,7 @@ describe('linking a sign-in', () => {
       },
       theirs: {
         username: 'kaiba',
+        usernameChosen: true,
         displayName: 'Seto',
         avatarUrl: 'https://cdn.discordapp.com/avatars/111/av.png',
         cards: 9,

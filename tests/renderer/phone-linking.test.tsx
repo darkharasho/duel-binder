@@ -133,6 +133,21 @@ describe('MergeDialog', () => {
     ).toBeInTheDocument()
   })
 
+  it("pre-selects the other account's username when this one's was never chosen", async () => {
+    const fresh = {
+      ...PREVIEW,
+      mine: { ...PREVIEW.mine, username: 'duelist-k3m8qpza', usernameChosen: false },
+      theirs: { ...PREVIEW.theirs, usernameChosen: true }
+    }
+    const { unmount } = render(<MergeDialog preview={fresh} onMerge={vi.fn()} onCancel={vi.fn()} />)
+    expect(screen.getByRole('radio', { name: '@kaiba' })).toBeChecked()
+    unmount()
+    // Neither chosen (or both generated): this account's stays the default.
+    const both = { ...fresh, theirs: { ...fresh.theirs, usernameChosen: false } }
+    render(<MergeDialog preview={both} onMerge={vi.fn()} onCancel={vi.fn()} />)
+    expect(screen.getByRole('radio', { name: '@duelist-k3m8qpza' })).toBeChecked()
+  })
+
   it("warns that the other account's cards won't be kept, and merges with the choice", async () => {
     const user = userEvent.setup()
     const onMerge = vi.fn(async () => {})

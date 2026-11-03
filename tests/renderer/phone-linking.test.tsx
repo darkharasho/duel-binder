@@ -289,6 +289,80 @@ describe('phone Settings linking', () => {
     await waitFor(() => expect(toast.error).toHaveBeenCalledWith('Too many changes today'))
   })
 
+  const SYNC_FIRST = "Sync your cards first. You're offline or changes are still waiting."
+  const order = (fn: unknown, i = 0): number =>
+    (fn as ReturnType<typeof vi.fn>).mock.invocationCallOrder[i]
+  const portalOrder = (store: PhoneStore, channel: string): number => {
+    const calls = vi.mocked(store.portal).mock.calls
+    const i = calls.findIndex(([c]) => c === channel)
+    return i < 0 ? Infinity : vi.mocked(store.portal).mock.invocationCallOrder[i]
+  }
+
+  it('pushes an unsent add before linking, and again before account:merge', async () => {
+    const user = userEvent.setup()
+    vi.mocked(nativeSignIn).mockResolvedValue({ code: 'c', verifier: 'v' } as never)
+    const { store } = setup({ status: 'merge', ticket: 'tk', preview: PREVIEW })
+    await openSettings(user)
+    const s = store as ReturnType<typeof fakeStore>
+    // A scanned card waits to be sent; a sync sends it.
+    s.state.sync = { ...s.state.sync, waiting: 1 }
+    vi.mocked(store.sync).mockClear()
+    vi.mocked(store.sync).mockImplementation(async () => {
+      s.state.sync = { ...s.state.sync, waiting: 0 }
+      return { ...s.state.sync, changed: false, awaitingPrices: false }
+    })
+    await user.click(await screen.findByRole('button', { name: 'Link Discord' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Merge accounts' })
+    expect(order(store.sync)).toBeLessThan(portalOrder(store, 'account:linkCode'))
+    // Another add lands while the merge screen is open.
+    s.state.sync = { ...s.state.sync, waiting: 1 }
+    await user.click(within(dialog).getByRole('button', { name: 'Merge accounts' }))
+    await waitFor(() =>
+      expect(store.portal).toHaveBeenCalledWith('account:merge', expect.anything())
+    )
+    expect(order(store.sync, 1)).toBeLessThan(portalOrder(store, 'account:merge'))
+    expect(order(store.sync, 1)).toBeGreaterThan(portalOrder(store, 'account:linkCode'))
+  })
+
+  it("won't link when the sync fails, and says why", async () => {
+    const user = userEvent.setup()
+    vi.mocked(nativeSignIn).mockResolvedValue({ code: 'c', verifier: 'v' } as never)
+    const { store } = setup({ status: 'linked' })
+    await openSettings(user)
+    vi.mocked(store.sync).mockRejectedValue(new Error('offline'))
+    await user.click(await screen.findByRole('button', { name: 'Link Discord' }))
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith(SYNC_FIRST))
+    expect(nativeSignIn).not.toHaveBeenCalled()
+    expect(store.portal).not.toHaveBeenCalledWith('account:linkCode', expect.anything())
+  })
+
+  it("won't link while changes are still waiting after the sync", async () => {
+    const user = userEvent.setup()
+    vi.mocked(nativeSignIn).mockResolvedValue({ code: 'c', verifier: 'v' } as never)
+    const { store } = setup({ status: 'linked' })
+    await openSettings(user)
+    const s = store as ReturnType<typeof fakeStore>
+    s.state.sync = { ...s.state.sync, waiting: 2 }
+    await user.click(await screen.findByRole('button', { name: 'Link Discord' }))
+    await waitFor(() => expect(toast.error).toHaveBeenCalledWith(SYNC_FIRST))
+    expect(nativeSignIn).not.toHaveBeenCalled()
+  })
+
+  it("won't merge when the sync before it fails", async () => {
+    const user = userEvent.setup()
+    vi.mocked(nativeSignIn).mockResolvedValue({ code: 'c', verifier: 'v' } as never)
+    const { store } = setup({ status: 'merge', ticket: 'tk', preview: PREVIEW })
+    await openSettings(user)
+    await user.click(await screen.findByRole('button', { name: 'Link Discord' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Merge accounts' })
+    vi.mocked(store.sync).mockRejectedValue(new Error('offline'))
+    await user.click(within(dialog).getByRole('button', { name: 'Merge accounts' }))
+    expect(await within(dialog).findByRole('alert')).toHaveTextContent(SYNC_FIRST)
+    expect(store.portal).not.toHaveBeenCalledWith('account:merge', expect.anything())
+    // The person can try again once synced.
+    expect(within(dialog).getByRole('button', { name: 'Merge accounts' })).toBeEnabled()
+  })
+
   it('a merge opens the merge screen; choosing theirs sends the choice, then syncs', async () => {
     const user = userEvent.setup()
     vi.mocked(nativeSignIn).mockResolvedValue({ code: 'c', verifier: 'v' } as never)

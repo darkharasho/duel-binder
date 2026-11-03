@@ -16,6 +16,27 @@ export function linkableProviders(
   return out
 }
 
+/** Why a link or merge didn't start: this phone's own changes must reach the server first. */
+export const SYNC_FIRST = "Sync your cards first. You're offline or changes are still waiting."
+
+/**
+ * Syncs before a link or a merge, so this phone's unsent changes are on the server when the merge
+ * copies cards (the merge's rows would otherwise win over them). Resolves whether the sync worked
+ * and nothing is still waiting to be sent.
+ */
+export async function syncedFirst(deps: {
+  syncNow(): Promise<{ error: string | null }>
+  syncState(): Promise<{ waiting: number }>
+}): Promise<boolean> {
+  try {
+    const status = await deps.syncNow()
+    if (status.error !== null) return false
+    return (await deps.syncState()).waiting === 0
+  } catch {
+    return false
+  }
+}
+
 /**
  * Adds a sign-in to the signed-in account: shows the system's sign-in sheet, then hands the
  * result to the portal's link call. Resolves null when the person closes the sheet; rejects with

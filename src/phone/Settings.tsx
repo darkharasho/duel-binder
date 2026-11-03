@@ -24,7 +24,7 @@ import { api } from '@/lib/api'
 import { APP_PLATFORM, isNativeApp } from '@/lib/portal'
 import { PRIVACY_URL, SIGN_OUT_FAILED, cardDataAge, signOutWarning } from './copy'
 import { CATALOG_KEY, SYNC_STATE_KEY, displayName, usePhone } from './context'
-import { linkableProviders, linkSignIn } from './linking'
+import { SYNC_FIRST, linkableProviders, linkSignIn, syncedFirst } from './linking'
 import { forgetSavedScans } from './savedScans'
 import { refreshAllFingerprints } from './refreshFingerprints'
 import { ScreenDetails } from './ScreenDetails'
@@ -91,11 +91,17 @@ export function Settings(): React.JSX.Element {
   const linkable = methods.data ? linkableProviders(APP_PLATFORM, methods.data) : []
   const refreshMethods = (): Promise<void> =>
     qc.invalidateQueries({ queryKey: ['account', 'signIns'] })
+  const syncFirst = (): Promise<boolean> =>
+    syncedFirst({ syncNow: () => api.account.syncNow(), syncState: () => store.syncState() })
   const link = async (provider: SignInProvider): Promise<void> => {
     if (linking) return
     setLinking(true)
     const label = provider === 'apple' ? 'Apple' : 'Discord'
     try {
+      if (!(await syncFirst())) {
+        toast.error(SYNC_FIRST)
+        return
+      }
       const out = await linkSignIn(provider, { store })
       if (!out) return
       if (out.status === 'linked') {
@@ -119,6 +125,8 @@ export function Settings(): React.JSX.Element {
     username: 'mine' | 'theirs'
   }): Promise<void> => {
     if (!merge) return
+    // The merge screen shows the refusal and lets the person try again.
+    if (!(await syncFirst())) throw new Error(SYNC_FIRST)
     // Stores the returned account (api.account.merge), then pulls the merged cards.
     await api.account.merge(merge.ticket, choice)
     setMerge(null)

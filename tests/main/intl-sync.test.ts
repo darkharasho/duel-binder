@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { getMeta } from '../../src/main/db/meta'
 import {
   BATCH_NOTE_MS,
+  CARD_MISS_RETRY_MS,
   INTL_INTERVAL_MS,
   normalizeName,
   refreshIntlSets,
@@ -388,6 +389,11 @@ describe('refreshIntlSets', () => {
         .sort()
     ).toEqual(["Harpie's Feather Duster", 'Pot of Greed'])
     expect(normalizeName('  Ａ‐B – C  “x” ‘y’ ')).toBe('a-b - c "x" \'y\'')
+  })
+
+  it('ignores invisible marks a list leaves in a name', () => {
+    expect(normalizeName('Photon Change\u200e')).toBe('photon change')
+    expect(normalizeName('Blue-Eyes\u200b Solid Dragon\u200e\u200e')).toBe('blue-eyes solid dragon')
   })
 
   it('matches a page title disambiguated with (card), and only that suffix', async () => {
@@ -937,5 +943,142 @@ describe('English printings from the TCG-EN lists', () => {
     const f = fake({ [LOB]: listPage(['LOB-EN200; Sheep Token; C']) })
     await refreshIntlSets(db, f.client, NOW)
     expect(filled()).toEqual([])
+  })
+})
+
+describe('set-list rows named unlike YGOPRODeck', () => {
+  const LOCH = 'Set Card Lists:Limit Over Collection: The Heroes (OCG-KR)'
+  const ODD_EYES = 'Odd-Eyes Pendulum Dragon, Four Heavenly Dragons'
+  const cardPage = (password: string): string =>
+    `{{CardTable2\n| ko_name = 사천의 용\n| attribute = DARK\n| password              = ${password}\n}}`
+  const addOddEyes = (): void => {
+    db.prepare(
+      `INSERT INTO cards (id, name, type, frame_type, race, "desc", updated_at)
+       VALUES (75787708, 'Odd-Eyes Pendulum Dragon of the Four Heavenly Dragons',
+         'Pendulum Effect Monster', 'effect_pendulum', 'Dragon', '', 'x')`
+    ).run()
+  }
+  beforeEach(addOddEyes)
+
+  const lochRows = (): unknown[] =>
+    intlRows(db)
+      .filter((r) => r.set_name === 'Limit Over Collection: The Heroes')
+      .map((r) => [r.name, r.set_code, r.set_rarity])
+  const cardFetches = (f: Fake, title: string): number =>
+    f.pageCalls.filter((c) => c.includes(title)).length
+
+  it("matches a row by the password on its card page when the name doesn't match", async () => {
+    const f = fake({
+      [LOCH]: listPage([`LOCH-KR013; ${ODD_EYES}; Ultra Rare`]),
+      [ODD_EYES]: cardPage('75787708')
+    })
+    const res = await refreshIntlSets(db, f.client, NOW)
+    expect(res.unmatchedRows).toBe(0)
+    expect(lochRows()).toEqual([
+      ['Odd-Eyes Pendulum Dragon of the Four Heavenly Dragons', 'LOCH-KR013', 'Ultra Rare']
+    ])
+    expect(db.prepare("SELECT unmatched_rows FROM sets WHERE language = 'ko'").pluck().get()).toBe(
+      0
+    )
+  })
+
+  it('takes a password that is an alternate artwork id as its card', async () => {
+    const f = fake({
+      [LB]: listPage(['LB-05; Dark Magician (Arkana); UR']),
+      'Dark Magician (Arkana)': cardPage('46986415')
+    })
+    expect((await refreshIntlSets(db, f.client, NOW)).unmatchedRows).toBe(0)
+    expect(intlRows(db).map((r) => r.name)).toEqual(['Dark Magician'])
+  })
+
+  it('never fetches a card page for a row whose name matches', async () => {
+    const f = fake({
+      [LB]: listPage(['LB-05; Dark Magician; UR', 'LB-06; Pot of Greed (card); R'])
+    })
+    await refreshIntlSets(db, f.client, NOW)
+    const fetched = f.pageCalls.flat()
+    expect(fetched).not.toContain('Dark Magician')
+    expect(fetched).not.toContain('Pot of Greed (card)')
+    expect(intlRows(db)).toHaveLength(2)
+  })
+
+  it('never fetches a card page for a Rush Duel row', async () => {
+    const f = fake({ [LB]: listPage(['RD/SJMP-JP001; Road Magic - Explosion; UR']) })
+    const res = await refreshIntlSets(db, f.client, NOW)
+    expect(res.unmatchedRows).toBe(1)
+    expect(f.pageCalls.flat()).not.toContain('Road Magic - Explosion')
+  })
+
+  it('remembers a resolved name, so the next run fetches no card page', async () => {
+    const f = fake({
+      [LOCH]: listPage([`LOCH-KR013; ${ODD_EYES}; Ultra Rare`]),
+      [ODD_EYES]: cardPage('75787708')
+    })
+    await refreshIntlSets(db, f.client, NOW)
+    expect(cardFetches(f, ODD_EYES)).toBe(1)
+    f.pages.delete(ODD_EYES)
+    const res = await refreshIntlSets(db, f.client, new Date(NOW.getTime() + INTL_INTERVAL_MS))
+    expect(cardFetches(f, ODD_EYES)).toBe(1)
+    expect(res.unmatchedRows).toBe(0)
+    expect(lochRows()).toHaveLength(1)
+  })
+
+  it('remembers a password YGOPRODeck lacks, and matches once the card arrives', async () => {
+    db.prepare('DELETE FROM cards WHERE id = 75787708').run()
+    const f = fake({
+      [LOCH]: listPage([`LOCH-KR013; ${ODD_EYES}; Ultra Rare`]),
+      [ODD_EYES]: cardPage('75787708')
+    })
+    expect((await refreshIntlSets(db, f.client, NOW)).unmatchedRows).toBe(1)
+    addOddEyes()
+    expect((await refreshIntlSets(db, f.client, NOW)).unmatchedRows).toBe(0)
+    expect(cardFetches(f, ODD_EYES)).toBe(1)
+    expect(lochRows()).toHaveLength(1)
+  })
+
+  it('remembers a miss, and asks again only after CARD_MISS_RETRY_MS', async () => {
+    const tip = 'The strategy of Warriors, part 1'
+    const f = fake({
+      [LB]: listPage([`DB2-DE001; ${tip}; C`, 'LB-07; Not A Page; C']),
+      [tip]: '{{CardTable2\n| lore = Tip card\n}}'
+    })
+    await refreshIntlSets(db, f.client, NOW)
+    expect(cardFetches(f, tip)).toBe(1)
+    expect(cardFetches(f, 'Not A Page')).toBe(1)
+
+    await refreshIntlSets(db, f.client, new Date(NOW.getTime() + CARD_MISS_RETRY_MS - 1))
+    expect(cardFetches(f, tip)).toBe(1)
+    expect(cardFetches(f, 'Not A Page')).toBe(1)
+
+    f.pages.set('Not A Page', cardPage('55144522'))
+    const res = await refreshIntlSets(db, f.client, new Date(NOW.getTime() + CARD_MISS_RETRY_MS))
+    expect(cardFetches(f, tip)).toBe(2)
+    expect(cardFetches(f, 'Not A Page')).toBe(2)
+    expect(res.unmatchedRows).toBe(1)
+    expect(intlRows(db).map((r) => r.name)).toEqual(['Pot of Greed'])
+  })
+
+  it("doesn't remember names whose card page fetch failed", async () => {
+    const f = fake({
+      [LOCH]: listPage([`LOCH-KR013; ${ODD_EYES}; Ultra Rare`]),
+      [ODD_EYES]: cardPage('75787708')
+    })
+    f.failCall = 2 // set lists (0), set pages (1), card pages (2)
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+    expect(await refreshIntlSets(db, f.client, NOW)).toMatchObject({ ok: true, unmatchedRows: 1 })
+    f.failCall = null
+    expect((await refreshIntlSets(db, f.client, NOW)).unmatchedRows).toBe(0)
+    expect(lochRows()).toHaveLength(1)
+  })
+
+  it('looks each name up once a run, 50 titles a request', async () => {
+    const names = Array.from({ length: 60 }, (_, i) => `Unknown Card ${i}`)
+    const f = fake({
+      [LB]: listPage(names.map((n, i) => `LB-${i}; ${n}; C`)),
+      [LOCH]: listPage(names.slice(0, 5).map((n, i) => `LOCH-KR${i}; ${n}; C`))
+    })
+    await refreshIntlSets(db, f.client, NOW)
+    const cardCalls = f.pageCalls.filter((c) => c.some((t) => t.startsWith('Unknown Card')))
+    expect(cardCalls.map((c) => c.length)).toEqual([50, 10])
   })
 })

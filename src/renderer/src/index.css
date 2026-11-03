@@ -404,3 +404,14 @@
     animation: none;
   }
 }
+
+/* The phone's sign-in and first-run screens (PhoneScreen): blobs drifting slowly behind them. */
+@keyframes phone-blob-a {
+  to { transform: translate(18vw, 14vh) scale(1.15); }
+}
+@keyframes phone-blob-b {
+  to { transform: translate(-22vw, 20vh) scale(0.9); }
+}
+@keyframes phone-blob-c {
+  to { transform: translate(14vw, -18vh) scale(1.1); }
+}

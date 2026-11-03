@@ -1,7 +1,8 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type Database from 'better-sqlite3'
 import { fakeSender, memoryBucket, noPrintingArt, noPrices, seededServerDb } from './helpers'
 import { handle, type AppDeps } from '../../workers/portal/src/app'
+import { sendCode } from '../../workers/portal/src/emailAuth'
 import { EMAIL_COPY } from '../../src/shared/emailAuth'
 
 const BASE = 'https://portal.test'
@@ -50,6 +51,8 @@ describe('email sign-up, sign-in and reset', () => {
       fetch: (async () => new Response('?', { status: 404 })) as unknown as typeof fetch
     }
   })
+
+  afterEach(() => vi.restoreAllMocks())
 
   const advance = (ms: number): void => {
     clock = new Date(clock.getTime() + ms)
@@ -182,18 +185,79 @@ describe('email sign-up, sign-in and reset', () => {
   })
 
   it('resend replaces the code', async () => {
+    const draws = [111111, 222222]
+    const real = crypto.getRandomValues.bind(crypto)
+    vi.spyOn(crypto, 'getRandomValues').mockImplementation(((a: ArrayBufferView) => {
+      if (a instanceof Uint32Array && draws.length > 0) {
+        a[0] = draws.shift()!
+        return a
+      }
+      return real(a as Uint8Array)
+    }) as typeof crypto.getRandomValues)
     const made = await step('create', { email: 'a@x.io', password: 'hunter2hunter2' })
-    const first = sender.lastCode()
+    expect(sender.lastCode()).toBe('111111')
     advance(61 * 1000)
     const again = await step('resend', { ticket: made.body.ticket })
     expect(again.body).toMatchObject({ next: 'code', purpose: 'signup' })
-    const second = sender.lastCode()
-    if (first !== second) {
-      const old = await step('confirm', { ticket: made.body.ticket, code: first })
-      expect(old.body.error).toBe(EMAIL_COPY.codeWrong)
-    }
-    const ok = await step('confirm', { ticket: made.body.ticket, code: second })
+    expect(sender.lastCode()).toBe('222222')
+    const old = await step('confirm', { ticket: made.body.ticket, code: '111111' })
+    expect(old.body.error).toBe(EMAIL_COPY.codeWrong)
+    const ok = await step('confirm', { ticket: made.body.ticket, code: '222222' })
     expect(ok.body.next).toBe('signed-in')
+  })
+
+  it('a refused create leaves the pending sign-up and its code alone', async () => {
+    const one = await step('create', { email: 'a@x.io', password: 'hunter2hunter2' })
+    const code = sender.lastCode()
+    const two = await step('create', { email: 'a@x.io', password: 'hunter2hunter2' })
+    expect(two.status).toBe(429)
+    expect(two.body.error).toBe(EMAIL_COPY.tooManyCodes)
+    const ok = await step('confirm', { ticket: one.body.ticket, code })
+    expect(ok.body.next).toBe('signed-in')
+  })
+
+  it('a refused forgot leaves the pending reset and its code alone', async () => {
+    await signUp('ann@x.io', 'old password 1')
+    advance(HOUR)
+    const one = await step('forgot', { email: 'ann@x.io' })
+    const code = sender.lastCode()
+    const two = await step('forgot', { email: 'ann@x.io' })
+    expect(two.status).toBe(429)
+    expect(two.body.error).toBe(EMAIL_COPY.tooManyCodes)
+    const ok = await step('confirm', { ticket: one.body.ticket, code })
+    expect(ok.body.next).toBe('new-password')
+  })
+
+  it('parallel wrong passwords cannot get past the cap', async () => {
+    await signUp('ann@x.io', 'correct horse')
+    const results = await Promise.all(
+      Array.from({ length: 15 }, () =>
+        step('password', { email: 'ann@x.io', password: 'wrong wrong' })
+      )
+    )
+    expect(results.filter((r) => r.status === 400)).toHaveLength(10)
+    expect(results.filter((r) => r.status === 429)).toHaveLength(5)
+  })
+
+  it('a right password does not use up the allowance', async () => {
+    await signUp('ann@x.io', 'correct horse')
+    for (let i = 0; i < 12; i++)
+      expect(
+        (await step('password', { email: 'ann@x.io', password: 'correct horse' })).status
+      ).toBe(200)
+  })
+
+  it('forgot is limited per client like check', async () => {
+    let last = 0
+    for (let i = 0; i < 101; i++) last = (await step('forgot', { email: `g${i}@x.io` })).status
+    expect(last).toBe(429)
+  })
+
+  it('sendCode sends nothing when the flow is gone', async () => {
+    await expect(
+      sendCode(deps, { ticketHash: 'gone', email: 'a@x.io', purpose: 'signup' }, ip, clock)
+    ).rejects.toMatchObject({ message: EMAIL_COPY.codeExpired, status: 400 })
+    expect(sender.sent).toHaveLength(0)
   })
 
   it('a second code within a minute is refused, and so is a sixth in an hour', async () => {

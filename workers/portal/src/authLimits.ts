@@ -1,12 +1,7 @@
 import type { SqlDb } from '../../../src/main/db/sql'
 
 export type LimitKind =
-  | 'code-email-min'
-  | 'code-email-hour'
-  | 'code-ip'
-  | 'password-email'
-  | 'password-ip'
-  | 'check-ip'
+  'code-email-min' | 'code-email-hour' | 'code-ip' | 'password-email' | 'password-ip' | 'check-ip'
 
 const MIN = 60 * 1000
 const HOUR = 60 * MIN
@@ -29,12 +24,18 @@ export function isLimited(db: SqlDb, kind: LimitKind, key: string, now: Date): b
   return row.n >= max
 }
 
-export function recordAttempt(db: SqlDb, kind: LimitKind, key: string, now: Date): void {
-  db.prepare('INSERT INTO auth_limits (kind, key, created_at) VALUES (?, ?, ?)').run(
-    kind,
-    key,
-    now.toISOString()
+/** Records one attempt and returns its row id, for `forgetAttempt`. */
+export function recordAttempt(db: SqlDb, kind: LimitKind, key: string, now: Date): number {
+  return Number(
+    db
+      .prepare('INSERT INTO auth_limits (kind, key, created_at) VALUES (?, ?, ?)')
+      .run(kind, key, now.toISOString()).lastInsertRowid
   )
+}
+
+/** Takes back an attempt `recordAttempt` made. */
+export function forgetAttempt(db: SqlDb, rowid: number): void {
+  db.prepare('DELETE FROM auth_limits WHERE rowid = ?').run(rowid)
 }
 
 /** Checks, then records when under the limit; false means refused. */

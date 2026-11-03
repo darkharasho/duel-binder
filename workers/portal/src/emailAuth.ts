@@ -2,6 +2,7 @@ import type { SqlDb } from '../../../src/main/db/sql'
 import {
   CODE_LENGTH,
   EMAIL_COPY,
+  MAX_EMAIL_LEN,
   MAX_PASSWORD,
   emailProblem,
   normalizeEmail,
@@ -19,7 +20,7 @@ import {
   sameString,
   sha256Hex
 } from './auth'
-import { isLimited, clientIp, recordAttempt, takeLimit } from './authLimits'
+import { clientIp, forgetAttempt, isLimited, recordAttempt, takeLimit } from './authLimits'
 import { codeMessage, emailEnabled } from './emailSend'
 import { logServerError } from './errors'
 import { hashPassword, verifyPassword } from './password'
@@ -122,28 +123,31 @@ export function attachEmail(
   refreshLegacyDiscordId(db, userId)
 }
 
-/**
- * Makes a fresh code for the flow and mails it. The three send limits apply first (a refusal
- * records nothing); a new code replaces the old one and resets the tries.
- */
-export async function sendCode(deps: AppDeps, flow: Flow, ip: string, now: Date): Promise<void> {
-  const { db } = deps
+/** Checks the three code limits and, when all are clear, records a send against each. False means refused. */
+function takeCodeLimits(db: SqlDb, email: string, ip: string, now: Date): boolean {
   const kinds = [
-    ['code-email-min', flow.email],
-    ['code-email-hour', flow.email],
+    ['code-email-min', email],
+    ['code-email-hour', email],
     ['code-ip', ip]
   ] as const
+  if (kinds.some(([kind, key]) => isLimited(db, kind, key, now))) return false
+  for (const [kind, key] of kinds) recordAttempt(db, kind, key, now)
+  return true
+}
+
+/**
+ * Stores a fresh code on the flow (resetting the tries) and mails it. A flow that is gone
+ * answers `codeExpired` and sends nothing. Does not touch the limits.
+ */
+async function issueCode(deps: AppDeps, flow: Flow, now: Date): Promise<void> {
   const code = newCode()
   const codeHash = await sha256Hex(`${flow.ticketHash}:${code}`)
-  const limited = db.transaction(() => {
-    if (kinds.some(([kind, key]) => isLimited(db, kind, key, now))) return true
-    for (const [kind, key] of kinds) recordAttempt(db, kind, key, now)
-    db.prepare(
+  const { changes } = deps.db
+    .prepare(
       'UPDATE email_flows SET code_hash = ?, code_expires_at = ?, tries = 0 WHERE ticket_hash = ?'
-    ).run(codeHash, new Date(now.getTime() + CODE_TTL_MS).toISOString(), flow.ticketHash)
-    return false
-  })()
-  if (limited) throw new EmailAuthError(EMAIL_COPY.tooManyCodes, 429)
+    )
+    .run(codeHash, new Date(now.getTime() + CODE_TTL_MS).toISOString(), flow.ticketHash)
+  if (changes === 0) throw new EmailAuthError(EMAIL_COPY.codeExpired, 400)
   try {
     await deps.email!.send(codeMessage(flow.email, code, flow.purpose))
   } catch (err) {
@@ -153,6 +157,16 @@ export async function sendCode(deps: AppDeps, flow: Flow, ip: string, now: Date)
     )
     throw new EmailAuthError(EMAIL_COPY.sendFailed, 400)
   }
+}
+
+/**
+ * Makes a fresh code for an existing flow and mails it. The three send limits apply first (a
+ * refusal changes nothing); a new code replaces the old one and resets the tries.
+ */
+export async function sendCode(deps: AppDeps, flow: Flow, ip: string, now: Date): Promise<void> {
+  if (!takeCodeLimits(deps.db, flow.email, ip, now))
+    throw new EmailAuthError(EMAIL_COPY.tooManyCodes, 429)
+  await issueCode(deps, flow, now)
 }
 
 async function checkStep(
@@ -178,8 +192,17 @@ async function passwordStep(
   const now = deps.now()
   const email = normalizeEmail(text(body, 'email'))
   const password = text(body, 'password')
-  if (isLimited(db, 'password-email', email, now) || isLimited(db, 'password-ip', ip, now))
+  // Check and record before any await, so parallel guesses can't all pass the cap; a right
+  // password takes its attempt back.
+  if (
+    isLimited(db, 'password-email', email.slice(0, MAX_EMAIL_LEN), now) ||
+    isLimited(db, 'password-ip', ip, now)
+  )
     throw new EmailAuthError(EMAIL_COPY.tooManyTries, 429)
+  const attempts = [
+    recordAttempt(db, 'password-email', email.slice(0, MAX_EMAIL_LEN), now),
+    recordAttempt(db, 'password-ip', ip, now)
+  ]
   const row =
     emailProblem(email) === null && password.length <= MAX_PASSWORD
       ? (db
@@ -189,10 +212,14 @@ async function passwordStep(
           .get(email) as { user_id: number; password_hash: string | null } | undefined)
       : undefined
   const userId = row?.password_hash ? findAccount(db, { provider: 'email', subject: email }) : null
-  if (row?.password_hash && userId !== null && (await verifyPassword(password, row.password_hash)))
+  if (
+    row?.password_hash &&
+    userId !== null &&
+    (await verifyPassword(password, row.password_hash))
+  ) {
+    for (const id of attempts) forgetAttempt(db, id)
     return { next: 'signed-in', userId, created: false }
-  recordAttempt(db, 'password-email', email.slice(0, 254), now)
-  recordAttempt(db, 'password-ip', ip, now)
+  }
   throw new EmailAuthError(EMAIL_COPY.wrongPassword, 400)
 }
 
@@ -212,8 +239,10 @@ async function createStep(
   const ticketHash = await sha256Hex(ticket)
   const now = deps.now()
   const nowIso = now.toISOString()
-  db.transaction(() => {
+  const created = db.transaction(() => {
     pruneExpired(deps, nowIso)
+    // Limits first: a refused request must leave the pending sign-up and its code alone.
+    if (!takeCodeLimits(db, email, ip, now)) return false
     db.prepare("DELETE FROM email_flows WHERE purpose = 'signup' AND email = ?").run(email)
     db.prepare(
       `INSERT INTO email_flows (ticket_hash, purpose, email, password_hash, expires_at, created_at)
@@ -225,9 +254,11 @@ async function createStep(
       new Date(now.getTime() + FLOW_TTL_MS).toISOString(),
       nowIso
     )
+    return true
   })()
+  if (!created) throw new EmailAuthError(EMAIL_COPY.tooManyCodes, 429)
   try {
-    await sendCode(deps, { ticketHash, email, purpose: 'signup' }, ip, now)
+    await issueCode(deps, { ticketHash, email, purpose: 'signup' }, now)
   } catch (err) {
     db.prepare('DELETE FROM email_flows WHERE ticket_hash = ?').run(ticketHash)
     throw err
@@ -311,6 +342,8 @@ async function forgotStep(
 ): Promise<StepOutcome> {
   const { db } = deps
   const email = normalizeEmail(text(body, 'email'))
+  if (!takeLimit(db, 'check-ip', ip, deps.now()))
+    throw new EmailAuthError(EMAIL_COPY.tooManyTries, 429)
   const userId =
     emailProblem(email) === null ? findAccount(db, { provider: 'email', subject: email }) : null
   if (userId === null) throw new EmailAuthError(EMAIL_COPY.noAccount, 404)
@@ -318,16 +351,19 @@ async function forgotStep(
   const ticketHash = await sha256Hex(ticket)
   const now = deps.now()
   const nowIso = now.toISOString()
-  db.transaction(() => {
+  const ok = db.transaction(() => {
     pruneExpired(deps, nowIso)
+    if (!takeCodeLimits(db, email, ip, now)) return false
     db.prepare("DELETE FROM email_flows WHERE purpose = 'reset' AND email = ?").run(email)
     db.prepare(
       `INSERT INTO email_flows (ticket_hash, purpose, email, user_id, expires_at, created_at)
        VALUES (?, 'reset', ?, ?, ?, ?)`
     ).run(ticketHash, email, userId, new Date(now.getTime() + FLOW_TTL_MS).toISOString(), nowIso)
+    return true
   })()
+  if (!ok) throw new EmailAuthError(EMAIL_COPY.tooManyCodes, 429)
   try {
-    await sendCode(deps, { ticketHash, email, purpose: 'reset' }, ip, now)
+    await issueCode(deps, { ticketHash, email, purpose: 'reset' }, now)
   } catch (err) {
     db.prepare('DELETE FROM email_flows WHERE ticket_hash = ?').run(ticketHash)
     throw err

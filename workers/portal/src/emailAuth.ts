@@ -26,7 +26,14 @@ import { codeMessage, emailEnabled } from './emailSend'
 import { logServerError } from './errors'
 import { hashPassword, verifyPassword } from './password'
 import { takeLinkCode } from './link'
-import { createAccount, findAccount, refreshLegacyDiscordId, type Identity } from './signIns'
+import { claimKey, keepAppleToken, peekClaim, spendClaim, type ClaimRow } from './emailClaim'
+import {
+  createAccount,
+  findAccount,
+  refreshLegacyDiscordId,
+  signInWith,
+  type Identity
+} from './signIns'
 
 const MINUTE_MS = 60 * 1000
 const CODE_TTL_MS = 15 * MINUTE_MS
@@ -540,11 +547,125 @@ async function linkAppleStep(deps: AppDeps, body: Record<string, unknown>): Prom
   return { next: 'signed-in', userId, created: false }
 }
 
+/**
+ * A provider claim's ticket, as the step reads it. The JSON route sends it in the body for a
+ * desktop-kind claim; the web adapter passes `claimKind: 'web'` and the `email_claim` cookie's
+ * value as `claimTicket` (the body is ignored then).
+ */
+function claimTicket(
+  body: Record<string, unknown>,
+  ctx: StepContext
+): { ticket: string; kind: ClaimRow['kind'] } {
+  return ctx.claimKind === 'web'
+    ? { ticket: ctx.claimTicket ?? '', kind: 'web' }
+    : { ticket: text(body, 'ticket'), kind: 'desktop' }
+}
+
+/** Links the claimed Discord or Apple sign-in to the email account, given its password. */
+async function claimStep(
+  deps: AppDeps,
+  body: Record<string, unknown>,
+  ctx: StepContext
+): Promise<StepOutcome> {
+  const { db } = deps
+  const now = deps.now()
+  const nowIso = now.toISOString()
+  const { ticket, kind } = claimTicket(body, ctx)
+  const key = await claimKey(ticket, body.verifier)
+  const claim = key && peekClaim(db, key, kind, nowIso)
+  if (!key || !claim) throw new EmailAuthError(EMAIL_COPY.codeExpired, 400, 'expired')
+  const password = text(body, 'password')
+  // Keyed by the claimed account's email. Check and record before any await, as passwordStep does.
+  if (
+    isLimited(db, 'password-email', claim.email.slice(0, MAX_EMAIL_LEN), now) ||
+    isLimited(db, 'password-ip', ctx.ip, now)
+  )
+    throw new EmailAuthError(EMAIL_COPY.tooManyTries, 429)
+  const attempts = [
+    recordAttempt(db, 'password-email', claim.email.slice(0, MAX_EMAIL_LEN), now),
+    recordAttempt(db, 'password-ip', ctx.ip, now)
+  ]
+  const row = db
+    .prepare(
+      "SELECT password_hash FROM sign_ins WHERE provider = 'email' AND subject = ? AND user_id = ?"
+    )
+    .get(claim.email, claim.userId) as { password_hash: string | null } | undefined
+  const open = findAccount(db, { provider: 'email', subject: claim.email }) === claim.userId
+  if (
+    !row?.password_hash ||
+    !open ||
+    password.length > MAX_PASSWORD ||
+    !(await verifyPassword(password, row.password_hash))
+  )
+    throw new EmailAuthError(EMAIL_COPY.wrongPassword, 400)
+  const out = db.transaction((): StepOutcome | Refusal => {
+    const live = peekClaim(db, key, kind, nowIso)
+    if (!live || findAccount(db, { provider: 'email', subject: live.email }) !== live.userId)
+      return refuse(EMAIL_COPY.codeExpired, 400, 'expired')
+    const has = (sql: string, ...args: unknown[]): boolean =>
+      db.prepare(sql).get(...args) !== undefined
+    if (
+      has('SELECT 1 FROM sign_ins WHERE user_id = ? AND provider = ?', live.userId, live.provider)
+    )
+      return refuse(EMAIL_COPY.alsoHas(live.provider), 400, 'also-has')
+    if (
+      has('SELECT 1 FROM sign_ins WHERE provider = ? AND subject = ?', live.provider, live.subject)
+    ) {
+      // Another account took this identity since the claim was made; it is stale.
+      spendClaim(db, live.ticketHash)
+      return refuse(EMAIL_COPY.codeExpired, 400, 'expired')
+    }
+    db.prepare(
+      'INSERT INTO sign_ins (provider, subject, user_id, created_at, email) VALUES (?, ?, ?, ?, ?)'
+    ).run(live.provider, live.subject, live.userId, nowIso, live.email)
+    keepAppleToken(db, live, live.userId, nowIso)
+    refreshLegacyDiscordId(db, live.userId)
+    spendClaim(db, live.ticketHash)
+    return { next: 'signed-in', userId: live.userId, created: false }
+  })()
+  const result = unwrap(out)
+  for (const id of attempts) forgetAttempt(db, id)
+  return result
+}
+
+/** Makes the claimed Discord or Apple sign-in its own account instead of linking it. */
+async function claimSeparateStep(
+  deps: AppDeps,
+  body: Record<string, unknown>,
+  ctx: StepContext
+): Promise<StepOutcome> {
+  const { db } = deps
+  const nowIso = deps.now().toISOString()
+  const { ticket, kind } = claimTicket(body, ctx)
+  const key = await claimKey(ticket, body.verifier)
+  const out = db.transaction((): StepOutcome | Refusal => {
+    const claim = key && peekClaim(db, key, kind, nowIso)
+    if (!claim) return refuse(EMAIL_COPY.codeExpired, 400, 'expired')
+    const { userId, created } = signInWith(
+      db,
+      { provider: claim.provider, subject: claim.subject },
+      claim.profile,
+      nowIso
+    )
+    keepAppleToken(db, claim, userId, nowIso)
+    spendClaim(db, claim.ticketHash)
+    return { next: 'signed-in', userId, created }
+  })()
+  return unwrap(out)
+}
+
+interface StepContext {
+  ip: string
+  keepSession?: string
+  claimKind?: 'web'
+  claimTicket?: string
+}
+
 export async function runEmailStep(
   deps: AppDeps,
   step: EmailStep,
   body: Record<string, unknown>,
-  ctx: { ip: string; keepSession?: string }
+  ctx: StepContext
 ): Promise<StepOutcome> {
   switch (step) {
     case 'check':
@@ -567,6 +688,10 @@ export async function runEmailStep(
       return linkDiscordStep(deps, body)
     case 'link-apple':
       return linkAppleStep(deps, body)
+    case 'claim':
+      return claimStep(deps, body, ctx)
+    case 'claim-separate':
+      return claimSeparateStep(deps, body, ctx)
     default:
       throw new Error(`email step not implemented: ${step}`)
   }
@@ -582,7 +707,9 @@ const STEPS: readonly string[] = [
   'reset',
   'separate',
   'link-discord',
-  'link-apple'
+  'link-apple',
+  'claim',
+  'claim-separate'
 ]
 
 const json = (body: unknown, status = 200): Response =>

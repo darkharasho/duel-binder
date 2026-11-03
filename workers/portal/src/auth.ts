@@ -3,9 +3,16 @@ import { allowedGames, type GameId } from '../../../src/shared/games'
 import type { AppDeps } from './app'
 import { appleRefreshToken, verifyAppleIdentityToken } from './apple'
 import { attachFromFlow, EmailAuthError } from './emailAuth'
+import { claimTarget, makeClaim } from './emailClaim'
 import { emailEnabled } from './emailSend'
 import { mergedFrom, purgeHolds } from './merge'
-import { signInWith, verifiedEmail, type DiscordProfile, type Identity } from './signIns'
+import {
+  findAccount,
+  signInWith,
+  verifiedEmail,
+  type DiscordProfile,
+  type Identity
+} from './signIns'
 
 const DAY_MS = 24 * 60 * 60 * 1000
 const SESSION_MAX_AGE = 30 * 24 * 60 * 60
@@ -68,6 +75,12 @@ export const EMAIL_LINK_COOKIE = 'email_link'
 export const EMAIL_LINK_PATH = '/auth'
 export const EMAIL_LINK_MAX_AGE = 900
 const MATCH_PAGE = '/auth/email/match'
+
+/** The raw ticket of a provider claim: a first Discord sign-in whose email an email account uses. */
+export const EMAIL_CLAIM_COOKIE = 'email_claim'
+export const EMAIL_CLAIM_PATH = '/auth'
+export const EMAIL_CLAIM_MAX_AGE = 900
+const CLAIM_PAGE = '/auth/email/claim'
 
 function respond(
   status: number,
@@ -235,6 +248,8 @@ const isPhoneApp = (app: string | null): app is PhoneApp => app === 'ios' || app
 
 /** The `desktop_auth` cookie's fourth part when the flow links a sign-in instead of signing in. */
 const LINK_INTENT = 'link'
+/** A trailing part when the app (`?offer=email`) understands a claim in place of a code. */
+const OFFER_PART = 'offer'
 
 interface DesktopAuth {
   /** The desktop app's loopback port, or the phone app ('ios' or 'android'). */
@@ -243,28 +258,33 @@ interface DesktopAuth {
   challenge: string
   /** Linking a sign-in to the app's account (`intent=link`): the callback signs nobody in. */
   link: boolean
+  /** The app can take a claim (`?claim=&email=`) in place of a code. Never set on a link flow. */
+  offer: boolean
 }
 
 function checkDesktopAuth(
   port: string | null,
   state: string | null,
   challenge: string | null,
-  link: boolean
+  link: boolean,
+  offer = false
 ): DesktopAuth | null {
   if (port === null || state === null || challenge === null) return null
   if (!STATE_RE.test(state) || !CHALLENGE_RE.test(challenge)) return null
-  if (isPhoneApp(port)) return { port, state, challenge, link }
+  if (isPhoneApp(port)) return { port, state, challenge, link, offer: offer && !link }
   if (!PORT_RE.test(port)) return null
   const n = Number(port)
-  return n >= 1024 && n <= 65535 ? { port: n, state, challenge, link } : null
+  return n >= 1024 && n <= 65535 ? { port: n, state, challenge, link, offer: offer && !link } : null
 }
 
 function readDesktopAuth(req: Request): DesktopAuth | null {
   const parts = readCookie(req, 'desktop_auth')?.split('.')
-  if (parts?.length === 3) return checkDesktopAuth(parts[0], parts[1], parts[2], false)
-  if (parts?.length === 4 && parts[3] === LINK_INTENT)
-    return checkDesktopAuth(parts[0], parts[1], parts[2], true)
-  return null
+  if (!parts || parts.length < 3 || parts.length > 5) return null
+  const extra = parts.slice(3)
+  const link = extra.includes(LINK_INTENT)
+  const offer = extra.includes(OFFER_PART)
+  if (extra.length !== Number(link) + Number(offer)) return null
+  return checkDesktopAuth(parts[0], parts[1], parts[2], link, offer)
 }
 
 /** Where the desktop flow hands back its code or error: the loopback listener, or the phone app. */
@@ -300,7 +320,8 @@ export function startDesktopSignIn(req: Request, deps: AppDeps): Response {
   const bounce = publicBounce(req, deps)
   if (bounce) return redirect(bounce, [])
   const state = randomToken()
-  const value = `${auth.port}.${auth.state}.${auth.challenge}${auth.link ? `.${LINK_INTENT}` : ''}`
+  const offer = !auth.link && q.get('offer') === 'email'
+  const value = `${auth.port}.${auth.state}.${auth.challenge}${auth.link ? `.${LINK_INTENT}` : ''}${offer ? `.${OFFER_PART}` : ''}`
   return redirect(discordAuthorize(deps, state, { prompt: 'consent' }), [
     cookie('desktop_auth', value, STATE_MAX_AGE),
     cookie('oauth_state', state, STATE_MAX_AGE)
@@ -424,7 +445,37 @@ export async function finishSignIn(req: Request, deps: AppDeps): Promise<Respons
     ])
   }
 
+  // A first Discord sign-in whose verified email an email account uses gets a claim instead of
+  // an account (the web always; an app only when it asked). See emailClaim.ts.
+  const discordEmail = verifiedEmail(user.email, user.verified)
+  const claimFor = (kind: 'web' | 'desktop', challenge: string | null): Promise<string> | null => {
+    const target = claimTarget(deps.db, discordEmail)
+    if (target === null || discordEmail === null) return null
+    if (findAccount(deps.db, { provider: 'discord', subject: user.id }) !== null) return null
+    return makeClaim(deps, {
+      provider: 'discord',
+      subject: user.id,
+      profile: {
+        username: user.username,
+        displayName: user.global_name ?? null,
+        avatar: user.avatar ?? null,
+        email: discordEmail
+      },
+      email: discordEmail,
+      appleRefreshToken: null,
+      userId: target,
+      challenge,
+      kind
+    })
+  }
+
   if (desktop) {
+    const claim = desktop.offer ? await claimFor('desktop', desktop.challenge) : null
+    if (claim !== null)
+      return redirect(desktopCallback(desktop, { claim, email: discordEmail! }), [
+        clearCookie('oauth_state'),
+        clearCookie('desktop_auth')
+      ])
     deps.db.transaction(() => {
       pruneExpired(deps, nowIso)
       const userId = discordSignIn(user, deps, nowIso)
@@ -480,6 +531,13 @@ export async function finishSignIn(req: Request, deps: AppDeps): Promise<Respons
       )
     }
   }
+
+  const webClaim = await claimFor('web', null)
+  if (webClaim !== null)
+    return redirect(CLAIM_PAGE, [
+      cookie(EMAIL_CLAIM_COOKIE, webClaim, EMAIL_CLAIM_MAX_AGE, EMAIL_CLAIM_PATH),
+      clearCookie('oauth_state')
+    ])
 
   deps.db.transaction(() => {
     pruneExpired(deps, nowIso)
@@ -628,13 +686,29 @@ export async function exchangeAppleToken(req: Request, deps: AppDeps): Promise<R
   } catch {
     return invalid
   }
-  const { givenName, familyName } = (body ?? {}) as Record<string, unknown>
+  const { givenName, familyName, offerLink } = (body ?? {}) as Record<string, unknown>
   const verified = await verifyAppleSignIn(body, deps)
   if (!verified) return invalid
   const { sub, email, refreshToken } = verified
 
   const apple: Identity = { provider: 'apple', subject: sub }
   const name = appleName(givenName, familyName)
+  // An app that asked (`offerLink`) is told, instead of getting a new account, when this first
+  // sign-in's verified email belongs to an email account. Old apps never ask.
+  const target = offerLink === true ? claimTarget(deps.db, email) : null
+  if (target !== null && email !== null && findAccount(deps.db, apple) === null) {
+    const claim = await makeClaim(deps, {
+      provider: 'apple',
+      subject: sub,
+      profile: { displayName: name, avatar: null, email },
+      email,
+      appleRefreshToken: refreshToken,
+      userId: target,
+      challenge: null,
+      kind: 'desktop'
+    })
+    return jsonResponse(200, { claim, email, provider: 'apple' })
+  }
   const now = deps.now()
   const nowIso = now.toISOString()
   const token = randomToken()

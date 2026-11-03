@@ -2,9 +2,11 @@ name: Android
 
 # Builds the Android app (capacitor.config.ts, android/). Pull requests that touch the app get an
 # unsigned debug build as a compile check. A release tag or a manual run builds the signed APK
-# (GitHub releases) and the signed bundle (Google Play, uploaded by hand for now), both kept as
-# workflow artifacts. A release tag also attaches the APK to its GitHub release, but only once the
-# repo variable ANDROID_RELEASE is 'true' (set after the APK was checked on a real phone).
+# (GitHub releases) and the signed bundle (Google Play), both kept as workflow artifacts. A release
+# tag also attaches the APK to its GitHub release, but only once the repo variable ANDROID_RELEASE
+# is 'true' (set after the APK was checked on a real phone), and sends the bundle to Play's
+# internal testing track once the secret PLAY_SERVICE_ACCOUNT_JSON is set (a Google Cloud service
+# account's JSON key, invited in Play Console with release-to-testing-tracks access to the app).
 #
 # Secrets (the key is ~/.android-keys/duel-binder-release.jks on the owner's machine; never
 # replace it, or installed APKs can't update): ANDROID_KEYSTORE_BASE64, ANDROID_KEYSTORE_PASSWORD,
@@ -50,7 +52,9 @@ jobs:
         id: secrets
         env:
           KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          PLAY_JSON: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
         run: |
+          if [ -n "$PLAY_JSON" ]; then echo "play=true" >> "$GITHUB_OUTPUT"; fi
           if [ -n "$KEYSTORE" ] && [ "$GITHUB_EVENT_NAME" != "pull_request" ]; then
             echo "sign=true" >> "$GITHUB_OUTPUT"
           else
@@ -119,3 +123,15 @@ jobs:
             sleep 30
           done
           gh release upload "$GITHUB_REF_NAME" "dist/Duel-Binder-$NAME.apk" --clobber -R "$GITHUB_REPOSITORY"
+
+      # Play refuses a version code it already has, so only release tags upload (not manual runs).
+      - name: Send the bundle to Play internal testing
+        if: steps.secrets.outputs.sign == 'true' && steps.secrets.outputs.play == 'true' && startsWith(github.ref, 'refs/tags/v')
+        uses: r0adkll/upload-google-play@e738b9dd8f2476ea806d921b64aacd24f34515a5 # v1.1.5
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: com.darkharasho.duelbinder
+          releaseFiles: dist/Duel-Binder-${{ env.NAME }}.aab
+          releaseName: ${{ env.NAME }}
+          track: internal
+          status: completed

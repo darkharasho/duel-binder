@@ -458,7 +458,7 @@ describe('server-28 (sets series)', () => {
 describe('server-30 (sign-ins)', () => {
   it('server-30 backfills sign-ins from discord_id', () => {
     const db = freshDb()
-    runSteps(db, [...MIGRATIONS, ...SERVER_STEPS.filter((s) => s.name !== 'server-30')])
+    runSteps(db, [...MIGRATIONS, ...SERVER_STEPS.filter((s) => s.name !== 'server-30' && s.name !== 'server-34')])
     const add = db.prepare(
       "INSERT INTO users (discord_id, username, created_at, updated_at) VALUES (?, ?, '2026-10-01T00:00:00.000Z', 'x')"
     )
@@ -474,5 +474,25 @@ describe('server-30 (sign-ins)', () => {
       { id: appleId, username_chosen: 0, link_hint: 0, closed_at: null }
     ])
     db.close()
+  })
+})
+
+describe('server-34 (email sign-in)', () => {
+  it('server-34 adds email columns and tables', () => {
+    const db = freshDb()
+    runSteps(db, [...MIGRATIONS, ...SERVER_STEPS.filter((s) => s.name !== 'server-34')])
+    const now = '2026-11-02T12:00:00.000Z'
+    const uid = Number(
+      db.prepare('INSERT INTO users (discord_id, username, created_at, updated_at) VALUES (?, ?, ?, ?)').run('d1', 'ann', now, now)
+        .lastInsertRowid
+    )
+    db.prepare('INSERT INTO sign_ins (provider, subject, user_id, created_at) VALUES (?, ?, ?, ?)').run('discord', 'd2', uid, now)
+    migrateServer(db)
+    const cols = (db.prepare('PRAGMA table_info(sign_ins)').all() as { name: string }[]).map((c) => c.name)
+    expect(cols).toEqual(expect.arrayContaining(['email', 'password_hash']))
+    expect(tableNames(db)).toEqual(expect.arrayContaining(['email_flows', 'provider_claims', 'auth_limits']))
+    const rows = db.prepare('SELECT email, password_hash FROM sign_ins').all() as { email: unknown; password_hash: unknown }[]
+    expect(rows.length).toBeGreaterThan(0)
+    for (const r of rows) expect(r).toEqual({ email: null, password_hash: null })
   })
 })

@@ -28,6 +28,7 @@ import { getFingerprintRefs, getFingerprints } from './scanFiles'
 import { phoneRoute } from './phonePage'
 import { deleteAccountRoute } from './account'
 import type { AppleSignInEnv } from './apple'
+import type { EmailSender } from './emailSend'
 import { appPreflight, withAppCors } from './appCors'
 
 /** Vars and secrets the request handlers read. */
@@ -44,6 +45,8 @@ export interface Env extends AppleSignInEnv {
   ADMIN_DISCORD_ID?: string
   /** The eBay price Worker the price alarm asks. */
   PRICE_WORKER_URL: string
+  /** 'on' turns email + password sign-in on (it also needs `AppDeps.email`). */
+  EMAIL_SIGN_IN?: string
 }
 
 export interface AppDeps {
@@ -63,6 +66,8 @@ export interface AppDeps {
   /** Queues an eBay price run after a write. */
   prices: PriceQueue
   env: Env
+  /** Sends sign-in code emails; absent means email sign-in is off. */
+  email?: EmailSender
   /** Bytes the database takes on disk; absent outside a Durable Object. */
   storageBytes?: () => number
   now: () => Date

@@ -66,6 +66,28 @@ export async function reportError(req: Request, deps: AppDeps): Promise<Response
   return new Response(null, { status: 204 })
 }
 
+/** Records a server-side failure for the admin dashboard; never throws. */
+export function logServerError(deps: AppDeps, message: string): void {
+  try {
+    const now = deps.now()
+    const cutoff = new Date(now.getTime() - KEEP_DAYS * DAY_MS).toISOString().slice(0, 10)
+    deps.db.prepare('DELETE FROM error_reports WHERE day < ?').run(cutoff)
+    deps.db
+      .prepare(
+        'INSERT INTO error_reports (day, platform, app_version, message, stack) VALUES (?, ?, ?, ?, ?)'
+      )
+      .run(
+        now.toISOString().slice(0, 10),
+        'server',
+        'worker',
+        scrubErrorDetails({ appVersion: 'worker', message }).message,
+        null
+      )
+  } catch {
+    // Logging must never break the request it describes.
+  }
+}
+
 interface ErrorRow {
   day: string
   platform: string

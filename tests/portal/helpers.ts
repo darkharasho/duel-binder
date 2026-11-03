@@ -6,6 +6,7 @@ import { migrateServer } from '../../workers/portal/src/migrate'
 import type { ImageBucket } from '../../workers/portal/src/images'
 import type { PrintingArtResolver } from '../../src/main/yugipedia/artResolver'
 import type { PriceQueue } from '../../workers/portal/src/prices'
+import type { EmailMessage, EmailSender } from '../../workers/portal/src/emailSend'
 import fixture from '../fixtures/cardinfo.sample.json'
 
 /** In-memory server-schema database loaded with the sample fixture through the real sync path. */
@@ -58,3 +59,32 @@ export const noPrintingArt: PrintingArtResolver = { url: async () => null }
 
 /** Price queue stand-in that queues nothing. */
 export const noPrices: PriceQueue = { soon: async () => {} }
+
+/** Records the emails the Worker would send; `failNext()` makes the next send reject. */
+export function fakeSender(): EmailSender & {
+  sent: EmailMessage[]
+  failNext(): void
+  lastCode(): string
+} {
+  let fail = false
+  const sent: EmailMessage[] = []
+  return {
+    sent,
+    failNext() {
+      fail = true
+    },
+    lastCode() {
+      const m = sent[sent.length - 1]
+      const code = m?.subject.match(/(\d{6})$/)?.[1]
+      if (!code) throw new Error('no code email sent')
+      return code
+    },
+    async send(m) {
+      if (fail) {
+        fail = false
+        throw new Error('send failed')
+      }
+      sent.push(m)
+    }
+  }
+}

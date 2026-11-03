@@ -318,6 +318,10 @@ export function pruneExpired(deps: AppDeps, nowIso: string): void {
   deps.db.prepare('DELETE FROM desktop_codes WHERE expires_at <= ?').run(nowIso)
   deps.db.prepare('DELETE FROM link_codes WHERE expires_at <= ?').run(nowIso)
   deps.db.prepare('DELETE FROM merge_tickets WHERE expires_at <= ?').run(nowIso)
+  const hourAgo = new Date(new Date(nowIso).getTime() - 60 * 60 * 1000).toISOString()
+  deps.db.prepare('DELETE FROM email_flows WHERE expires_at <= ?').run(nowIso)
+  deps.db.prepare('DELETE FROM provider_claims WHERE expires_at <= ?').run(nowIso)
+  deps.db.prepare('DELETE FROM auth_limits WHERE created_at <= ?').run(hourAgo)
   purgeHolds(deps.db, new Date(nowIso))
 }
 

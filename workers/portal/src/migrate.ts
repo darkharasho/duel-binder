@@ -599,6 +599,28 @@ CREATE TABLE account_merges (closed_id INTEGER PRIMARY KEY, survivor_id INTEGER 
   moved_sign_ins TEXT NOT NULL, moved_apple_token INTEGER NOT NULL);
 CREATE INDEX ix_account_merges_survivor ON account_merges(survivor_id);
 `
+  },
+  {
+    // Email + password sign-in: the email sign-in's address and hash, pending code flows, provider
+    // claims on an email account, and sliding-window attempt limits.
+    name: 'server-34',
+    sql: `
+ALTER TABLE sign_ins ADD COLUMN email TEXT;
+ALTER TABLE sign_ins ADD COLUMN password_hash TEXT;
+CREATE INDEX ix_sign_ins_email ON sign_ins(email);
+CREATE TABLE email_flows (ticket_hash TEXT PRIMARY KEY,
+  purpose TEXT NOT NULL CHECK (purpose IN ('signup','reset','add','change')),
+  email TEXT NOT NULL, user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  password_hash TEXT, code_hash TEXT, code_expires_at TEXT, tries INTEGER NOT NULL DEFAULT 0,
+  confirmed INTEGER NOT NULL DEFAULT 0, expires_at TEXT NOT NULL, created_at TEXT NOT NULL);
+CREATE INDEX ix_email_flows_email ON email_flows(email);
+CREATE TABLE provider_claims (ticket_hash TEXT PRIMARY KEY, provider TEXT NOT NULL,
+  subject TEXT NOT NULL, profile TEXT NOT NULL, email TEXT NOT NULL, apple_refresh_token TEXT,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  challenge TEXT, kind TEXT NOT NULL CHECK (kind IN ('web','desktop')), expires_at TEXT NOT NULL);
+CREATE TABLE auth_limits (kind TEXT NOT NULL, key TEXT NOT NULL, created_at TEXT NOT NULL);
+CREATE INDEX ix_auth_limits ON auth_limits(kind, key, created_at);
+`
   }
 ]
 

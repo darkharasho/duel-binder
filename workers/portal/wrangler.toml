@@ -49,7 +49,7 @@ POKEMON_SWEEP_DAILY_CALLS = "100"
 # The only account the /admin dashboard opens for (.harasho). Not a secret: it only names who.
 ADMIN_DISCORD_ID = "201537071804973056"
 # Email + password sign-in: "off" hides it; "on" turns it on once Email Sending works (see README, Email sign-in).
-EMAIL_SIGN_IN = "off"
+EMAIL_SIGN_IN = "on"
 
 # Workers Logs: request logs and console output, searchable in the dashboard for a few days.
 [observability]

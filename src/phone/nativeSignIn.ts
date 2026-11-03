@@ -42,19 +42,34 @@ async function sheet<T>(open: () => Promise<T>): Promise<T> {
   }
 }
 
-/** POSTs `body` to a portal sign-in route and reads its `{ token, user }`. */
+/**
+ * What a sign-in ends with: the app's token, or (a first Discord or Apple sign-in whose email an
+ * email account uses) a claim to link it to that account. Discord's claim carries the PKCE
+ * verifier the phone made, which the claim steps send back.
+ */
+export type SignInResult =
+  { token: string; user: Me } | { claim: string; email: string; verifier?: string }
+
+/** POSTs `body` to a portal sign-in route and reads its `{ token, user }`, or an offered claim. */
 async function tradeForToken(
   doFetch: typeof fetch,
   path: string,
   body: unknown
-): Promise<{ token: string; user: Me }> {
+): Promise<SignInResult> {
   const res = await doFetch(`${PORTAL_ORIGIN}${path}`, {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify(body)
   })
   if (!res.ok) throw new Error('signin-failed')
-  const out = (await res.json()) as { token?: unknown; user?: Me }
+  const out = (await res.json()) as {
+    token?: unknown
+    user?: Me
+    claim?: unknown
+    email?: unknown
+  }
+  if (typeof out.claim === 'string' && typeof out.email === 'string')
+    return { claim: out.claim, email: out.email }
   if (typeof out.token !== 'string' || !out.user) throw new Error('signin-failed')
   return { token: out.token, user: out.user }
 }
@@ -76,7 +91,7 @@ export async function nativeSignIn(deps?: {
   app?: 'ios' | 'android'
   start?: WebAuthPlugin['start']
   fetch?: typeof fetch
-}): Promise<{ token: string; user: Me }>
+}): Promise<SignInResult>
 export async function nativeSignIn(
   deps: {
     app?: 'ios' | 'android'
@@ -84,7 +99,7 @@ export async function nativeSignIn(
     start?: WebAuthPlugin['start']
     fetch?: typeof fetch
   } = {}
-): Promise<{ token: string; user: Me } | { code: string; verifier: string }> {
+): Promise<SignInResult | { code: string; verifier: string }> {
   const app = deps.app ?? (APP_PLATFORM === 'android' ? 'android' : 'ios')
   const start = deps.start ?? ((o) => WebAuth.start(o))
   const doFetch = deps.fetch ?? fetch
@@ -95,6 +110,7 @@ export async function nativeSignIn(
   )
   const params = new URLSearchParams({ app, state, challenge })
   if (deps.intent === 'link') params.set('intent', 'link')
+  else params.set('offer', 'email')
   const startUrl = `${PORTAL_ORIGIN}/auth/desktop/start?${params}`
 
   const { url: ended } = await sheet(() =>
@@ -102,7 +118,13 @@ export async function nativeSignIn(
   )
   const q = new URL(ended).searchParams
   const code = q.get('code')
-  if (q.get('state') !== state || q.has('error') || !code) throw new Error('signin-failed')
+  const claim = q.get('claim')
+  const claimEmail = q.get('email')
+  if (q.get('state') !== state || q.has('error')) throw new Error('signin-failed')
+  // An email account uses this Discord email: the callback carries a claim in place of a code.
+  if (deps.intent !== 'link' && !code && claim && claimEmail)
+    return { claim, email: claimEmail, verifier }
+  if (!code) throw new Error('signin-failed')
   // Linking hands the code to the signed-in portal call instead of trading it for a token.
   if (deps.intent === 'link') return { code, verifier }
   return tradeForToken(doFetch, '/auth/desktop/token', { code, verifier })
@@ -116,14 +138,15 @@ export async function nativeSignIn(
  */
 export async function appleSignIn(
   deps: { appleSignIn?: WebAuthPlugin['appleSignIn']; fetch?: typeof fetch } = {}
-): Promise<{ token: string; user: Me }> {
+): Promise<SignInResult> {
   const apple = await appleSheet(deps)
   return tradeForToken(deps.fetch ?? fetch, '/auth/apple/token', {
     identityToken: apple.identityToken,
     authorizationCode: apple.authorizationCode,
     nonce: apple.nonce,
     givenName: apple.givenName,
-    familyName: apple.familyName
+    familyName: apple.familyName,
+    offerLink: true
   })
 }
 

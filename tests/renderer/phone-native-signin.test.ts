@@ -164,3 +164,44 @@ describe('appleSheet', () => {
     expect(createHash('sha256').update(out.nonce).digest('hex')).toBe(hashed)
   })
 })
+
+describe('nativeSignIn offering an email claim', () => {
+  it('adds offer=email and returns a claim with the verifier, trading nothing', async () => {
+    const start = sheet({ claim: 'tick3t', email: 'a@b.co' })
+    const fetch = tokenFetch()
+    const result = await nativeSignIn({ start, fetch: fetch as unknown as typeof globalThis.fetch })
+    const startUrl = new URL(start.mock.calls[0][0].url, 'https://portal.test')
+    expect(startUrl.searchParams.get('offer')).toBe('email')
+    expect(result).toMatchObject({ claim: 'tick3t', email: 'a@b.co' })
+    expect(
+      createHash('sha256')
+        .update((result as { verifier: string }).verifier)
+        .digest('base64url')
+    ).toBe(startUrl.searchParams.get('challenge'))
+    expect(fetch).not.toHaveBeenCalled()
+  })
+
+  it('a link intent does not offer email', async () => {
+    const start = sheet()
+    await nativeSignIn({ intent: 'link', start })
+    expect(
+      new URL(start.mock.calls[0][0].url, 'https://portal.test').searchParams.has('offer')
+    ).toBe(false)
+  })
+})
+
+describe('appleSignIn offering an email claim', () => {
+  it('sends offerLink and returns the claim', async () => {
+    const open = vi.fn<AppleSheet>(async () => ({ identityToken: 't' }))
+    const fetch = vi.fn<TokenFetch>(
+      async () =>
+        new Response(JSON.stringify({ claim: 'tick3t', email: 'a@b.co', provider: 'apple' }))
+    )
+    const result = await appleSignIn({
+      appleSignIn: open,
+      fetch: fetch as unknown as typeof globalThis.fetch
+    })
+    expect(result).toEqual({ claim: 'tick3t', email: 'a@b.co' })
+    expect(JSON.parse(fetch.mock.calls[0][1]!.body as string).offerLink).toBe(true)
+  })
+})

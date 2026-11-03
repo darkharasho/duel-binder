@@ -1,9 +1,12 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { APP_PLATFORM, isNativeApp } from '@/lib/portal'
 import { fetchMe } from '@/web/account'
 import type { Me } from '../shared/cloud'
+import { EmailClaim } from '@/features/account/EmailClaim'
+import { EmailSignIn } from '@/features/account/EmailSignIn'
+import { claimEmailClient, emailSignInEnabled, phoneEmailClient } from './emailAuth'
 import { NATIVE_SIGN_IN_COPY, SIGN_IN_COPY, SIGN_IN_FAILED, SIGN_IN_URL } from './copy'
-import { appleSignIn, nativeSignIn, SignInCancelled } from './nativeSignIn'
+import { appleSignIn, nativeSignIn, SignInCancelled, type SignInResult } from './nativeSignIn'
 import type { PhoneStore } from './data/store'
 import { PhoneScreen } from './PhoneScreen'
 import { useMounted, useOnce } from './useOnce'
@@ -72,18 +75,32 @@ export function SignIn({
   const [checking, setChecking] = useState(!native)
   const [nativeFailed, setNativeFailed] = useState(false)
   const [emailOn, setEmailOn] = useState(false)
+  /** The in-app email flow (`forgot`: straight to a password reset) or a claim to link. */
+  const [emailFlow, setEmailFlow] = useState<
+    | null
+    | { at: 'email'; forgotFor?: string }
+    | { at: 'claim'; email: string; provider: string; claim: string; verifier?: string }
+  >(null)
   const failed =
     nativeFailed || new URLSearchParams(window.location.search).get('signin') === 'failed'
 
   const mounted = useMounted()
+  const emailClient = useMemo(() => phoneEmailClient(store), [store])
   const signInNative = async (
-    signInWith: () => Promise<{ token: string; user: Me }>
+    signInWith: () => Promise<SignInResult>,
+    provider: string
   ): Promise<void> => {
     setNativeFailed(false)
     setChecking(true)
     try {
       const signedIn = await signInWith()
       if (!mounted.current) return
+      if ('claim' in signedIn) {
+        // An email account uses this email: link to it with its password, or go separate.
+        setEmailFlow({ at: 'claim', provider, ...signedIn })
+        setChecking(false)
+        return
+      }
       await store.signIn(signedIn.token, signedIn.user)
       if (mounted.current) onSignedIn(signedIn.user)
       return
@@ -93,7 +110,12 @@ export function SignIn({
     if (mounted.current) setChecking(false)
   }
   useOnce(() => {
-    if (native) return
+    if (native) {
+      void emailSignInEnabled().then((on) => {
+        if (mounted.current) setEmailOn(on)
+      })
+      return
+    }
     void emailSignInOn().then((on) => {
       if (mounted.current) setEmailOn(on)
     })
@@ -130,12 +152,27 @@ export function SignIn({
         <p role="status" className="flex h-12 items-center text-sm text-muted-foreground">
           Checking sign-in…
         </p>
+      ) : native && emailFlow?.at === 'email' ? (
+        <EmailSignIn
+          client={emailClient}
+          forgotFor={emailFlow.forgotFor}
+          onSignedIn={(user) => onSignedIn(user)}
+          onBack={() => setEmailFlow(null)}
+        />
+      ) : native && emailFlow?.at === 'claim' ? (
+        <EmailClaim
+          email={emailFlow.email}
+          provider={emailFlow.provider}
+          client={claimEmailClient(emailClient, emailFlow)}
+          onSignedIn={(user) => onSignedIn(user)}
+          onForgot={() => setEmailFlow({ at: 'email', forgotFor: emailFlow.email })}
+        />
       ) : native ? (
         <div className="flex w-full flex-col items-center gap-3">
           {APP_PLATFORM === 'ios' && (
             <button
               type="button"
-              onClick={() => void signInNative(appleSignIn)}
+              onClick={() => void signInNative(appleSignIn, 'apple')}
               className={APPLE_BUTTON}
             >
               <AppleLogo />
@@ -144,11 +181,20 @@ export function SignIn({
           )}
           <button
             type="button"
-            onClick={() => void signInNative(nativeSignIn)}
+            onClick={() => void signInNative(nativeSignIn, 'discord')}
             className={DISCORD_BUTTON}
           >
             Sign in with Discord
           </button>
+          {emailOn && (
+            <button
+              type="button"
+              onClick={() => setEmailFlow({ at: 'email' })}
+              className={EMAIL_BUTTON}
+            >
+              Continue with email
+            </button>
+          )}
         </div>
       ) : (
         <div className="flex w-full flex-col items-center gap-3">

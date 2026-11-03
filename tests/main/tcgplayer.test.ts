@@ -467,4 +467,40 @@ describe('TCGplayer catalog', () => {
     expect(row(sold)).toEqual({ tcg_product_id: 1, variant: null, yugipedia: 0 })
     expect(row(unsold)).toEqual({ tcg_product_id: null, variant: 'Alternate Art', yugipedia: 1 })
   })
+
+  it('takes over an overframe filled in beside a YGOPRODeck rarity once it sells it, adding no twin', async () => {
+    const db = await seededDb()
+    const filled = (
+      db
+        .prepare(
+          `INSERT INTO card_printings (card_id, set_name, set_code, set_rarity, set_rarity_code, language,
+             yugipedia)
+           VALUES (46986414, 'Legend of Blue Eyes White Dragon', 'LOB-EN005', 'Ultra Rare (Overframe)',
+             '(UR)', 'en', 1)
+           RETURNING id`
+        )
+        .get() as { id: number }
+    ).id
+    await refreshTcgCatalog(db, {
+      version: '1',
+      fetchFn: catalogFetch([{ groupId: 10, modifiedOn: 'a', name: 'LOB group' }], {
+        10: [
+          product(1, 'LOB-EN005', 'Ultra Rare', 1, 'Dark Magician'),
+          product(2, 'LOB-EN005', 'Ultra Rare', 1, 'Dark Magician (Extended Art)')
+        ]
+      }) as unknown as typeof fetch,
+      now: new Date('2026-10-24T00:00:00Z')
+    })
+    expect(
+      db
+        .prepare(
+          `SELECT id, set_rarity, tcg_product_id, yugipedia FROM card_printings
+           WHERE set_code = 'LOB-EN005' ORDER BY set_rarity`
+        )
+        .all()
+    ).toEqual([
+      expect.objectContaining({ set_rarity: 'Ultra Rare' }),
+      { id: filled, set_rarity: 'Ultra Rare (Overframe)', tcg_product_id: 2, yugipedia: 0 }
+    ])
+  })
 })

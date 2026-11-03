@@ -779,7 +779,8 @@ describe('English printings from the TCG-EN lists', () => {
         // YGOPRODeck has these two.
         'LOB-EN005; Dark Magician; UR',
         'LOB-EN119; Pot of Greed; R',
-        // Codes YGOPRODeck has: an art variant, another rarity, another card.
+        // Codes YGOPRODeck has: an art variant beside its plain rarity (added), another rarity
+        // and another card (not).
         'LOB-EN005; Dark Magician; UR // description::(alternate art)',
         'LOB-EN005; Dark Magician; ScR',
         'LOB-EN119; Dark Magician; SR',
@@ -798,6 +799,12 @@ describe('English printings from the TCG-EN lists', () => {
     const res = await refreshIntlSets(db, f.client, NOW)
     expect(res.ok).toBe(true)
     expect(filled()).toEqual([
+      expect.objectContaining({
+        card_id: DM,
+        set_code: 'LOB-EN005',
+        set_rarity: 'Ultra Rare (Alternate Art)',
+        variant: null
+      }),
       expect.objectContaining({
         card_id: POT,
         set_name: 'Legend of Blue Eyes White Dragon',
@@ -927,6 +934,51 @@ describe('English printings from the TCG-EN lists', () => {
       ['MGED-EN004', 0]
     ])
     expect(enRows().some((r) => r.id === dropped.id)).toBe(false)
+  })
+
+  it("adds an overframe beside the plain rarity YGOPRODeck has, as MAMS-EN001's before TCGplayer lists it", async () => {
+    // YGOPRODeck has LOB-EN005's plain Ultra Rare; the list adds overframe Ultra and Secret Rares.
+    const f = fake({
+      [LOB]: listPage([
+        'LOB-EN005; Dark Magician; UR',
+        'LOB-EN005; Dark Magician; UR, ScR // description::(extended art)'
+      ])
+    })
+    await refreshIntlSets(db, f.client, NOW)
+    expect(filled()).toEqual([
+      expect.objectContaining({
+        card_id: DM,
+        set_name: 'Legend of Blue Eyes White Dragon',
+        set_code: 'LOB-EN005',
+        set_rarity: 'Ultra Rare (Overframe)',
+        set_rarity_code: '(UR)',
+        variant: null
+      })
+    ])
+    // A rarity YGOPRODeck lacks (the Secret Rare) stays TCGplayer's to add.
+    expect(
+      enRows()
+        .filter((r) => r.set_code === 'LOB-EN005')
+        .map((r) => r.set_rarity)
+    ).toEqual(['Ultra Rare', 'Ultra Rare (Overframe)'])
+  })
+
+  it('adds no art variant of a rarity that already has one, nor of another card', async () => {
+    db.prepare(
+      `INSERT INTO card_printings (card_id, language, set_name, set_code, set_rarity, set_rarity_code)
+       VALUES (?, 'en', 'Legend of Blue Eyes White Dragon', 'LOB-EN005', 'Ultra Rare (Alternate Art)', '(UR)')`
+    ).run(DM)
+    const f = fake({
+      [LOB]: listPage([
+        'LOB-EN005; Dark Magician; UR',
+        'LOB-EN005; Dark Magician; UR // description::(extended art)',
+        // Pot of Greed's code.
+        'LOB-EN119; Dark Magician; R',
+        'LOB-EN119; Dark Magician; R // description::(extended art)'
+      ])
+    })
+    await refreshIntlSets(db, f.client, NOW)
+    expect(filled()).toEqual([])
   })
 
   it('leaves token cards to the token sync', async () => {

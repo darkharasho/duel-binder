@@ -719,6 +719,29 @@ describe('image route', () => {
       expect(upstream).toHaveBeenCalledTimes(1)
     })
 
+    it("keeps an art variant's photo under a new key, so one chosen before V38 isn't served", async () => {
+      const p = db
+        .prepare(
+          `INSERT INTO card_printings (card_id, language, set_name, set_code, set_rarity, set_rarity_code)
+           SELECT card_id, 'it', 'Rarity Collection', 'RA01-IT043', 'Ultra Rare (Alternate Art)', ''
+           FROM card_printings LIMIT 1 RETURNING id`
+        )
+        .get() as { id: number }
+      const plain = (db.prepare('SELECT min(id) AS id FROM card_printings').get() as { id: number })
+        .id
+      bucket.store.set(`printing/${p.id}`, {
+        bytes: new Uint8Array([1]).buffer,
+        contentType: 'image/png',
+        etag: '"old"'
+      })
+      printingUrl = `${YUGIPEDIA_IMAGE_PREFIX}a/ab/Card-AA.png`
+      expect((await get(`printing/${p.id}`)).status).toBe(200)
+      expect(upstream).toHaveBeenCalledTimes(1)
+      expect(bucket.store.has(`printing/${p.id}-v38`)).toBe(true)
+      expect((await get(`printing/${plain}`)).status).toBe(200)
+      expect(bucket.store.has(`printing/${plain}`)).toBe(true)
+    })
+
     it('a Yugipedia photo is fetched with a User-Agent', async () => {
       printingUrl = `${YUGIPEDIA_IMAGE_PREFIX}a/ab/Card.png`
       expect((await get('printing/7')).status).toBe(200)

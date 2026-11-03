@@ -112,6 +112,56 @@ describe('createPrintingArtResolver', () => {
     )
   })
 
+  it("never answers an art variant with the plain scan; takes its rarity's only scan when it has no plain twin", async () => {
+    const db = await seededDb()
+    const card = (
+      db.prepare("SELECT id FROM cards WHERE name = 'Dark Magician'").get() as { id: number }
+    ).id
+    const insert = db.prepare(
+      `INSERT INTO card_printings (card_id, language, set_name, set_code, set_rarity, set_rarity_code,
+         missing_from_api, variant)
+       VALUES (?, 'ko', ?, ?, ?, '', 0, ?) RETURNING id`
+    )
+    const id = (set: string, code: string, rarity: string, variant: string | null): number =>
+      (insert.get(card, set, code, rarity, variant) as { id: number }).id
+    // LOCH-KR: a plain and an overframe Ultra Rare, an all-overframe Prismatic Secret Rare.
+    const plainUr = id('Limit Over Collection: The Heroes', 'LOCH-KR001', 'Ultra Rare', null)
+    const overUr = id(
+      'Limit Over Collection: The Heroes',
+      'LOCH-KR001',
+      'Ultra Rare (Overframe)',
+      null
+    )
+    const overPscr = id(
+      'Limit Over Collection: The Heroes',
+      'LOCH-KR001',
+      'Prismatic Secret Rare',
+      'Overframe'
+    )
+    // An alternate art beside a plain Secret Rare, with no scan of its own.
+    id('Structure Deck: Spirit Charmers', 'SD39-KRP01', 'Secret Rare', null)
+    const altScr = id(
+      'Structure Deck: Spirit Charmers',
+      'SD39-KRP01',
+      'Secret Rare (Alternate Art)',
+      null
+    )
+    const client = fakeClient({
+      'Card Gallery:Dark Magician': [
+        'DarkMagician-LOCH-KR-UR-UE-EA.png',
+        'DarkMagician-LOCH-KR-UR-UE.png',
+        'DarkMagician-LOCH-KR-PScR-UE.png',
+        'DarkMagician-SD39-KR-ScR-UE.png'
+      ]
+    })
+    const art = createPrintingArtResolver({ db, client, batchWaitMs: 0 })
+    const [a, b, c, d] = await Promise.all([plainUr, overUr, overPscr, altScr].map(art.url))
+    expect(a).toBe('https://ms.yugipedia.com/a/DarkMagician-LOCH-KR-UR-UE.png')
+    expect(b).toBe('https://ms.yugipedia.com/a/DarkMagician-LOCH-KR-UR-UE-EA.png')
+    expect(c).toBe('https://ms.yugipedia.com/a/DarkMagician-LOCH-KR-PScR-UE.png')
+    expect(d).toBeNull()
+  })
+
   it("asks for a '#' card's gallery under Yugipedia's title and answers by card name", async () => {
     const db = await seededDb()
     const card = (

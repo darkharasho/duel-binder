@@ -184,7 +184,8 @@ function listPrintings(matched: { cardId: number; row: SetListRow }[]): IntlPrin
  * Dark Magician, which it leaves off the card). YGOPRODeck stays the authority: a list row is
  * skipped when a YGOPRODeck, TCGplayer or token printing already holds its code, whatever the card
  * or rarity (rarity spellings, YGOPRODeck's junk rarities like "New" and its reprint sets would
- * otherwise each give the same printing twice; its other rarities are TCGplayer's to add), when
+ * otherwise each give the same printing twice; its other rarities are TCGplayer's to add; the one
+ * exception is an overframe or alternate art beside a plain rarity it holds, see besideHeld), when
  * another list row this run gave the code to another card, or when it has no code or a
  * placeholder one ("MAMS-EN???"). Each row is written once a run, by the first list holding it, under
  * the set name YGOPRODeck gives the set: the one with the list's name, else the one most of the
@@ -210,13 +211,28 @@ function englishFill(db: Database.Database): {
   const setNames = new Map<string, string>()
   const others = db
     .prepare(
-      `SELECT card_id, set_name, set_code, set_rarity FROM card_printings
+      `SELECT card_id, set_name, set_code, set_rarity, variant FROM card_printings
        WHERE game = 'ygo' AND language = 'en' AND yugipedia = 0 AND set_code <> ''`
     )
-    .all() as { card_id: number; set_name: string; set_code: string; set_rarity: string }[]
+    .all() as {
+    card_id: number
+    set_name: string
+    set_code: string
+    set_rarity: string
+    variant: string | null
+  }[]
+  /** Each held code's cards, and its plain and art-variant rarities by card (`card|CODE|rarity`). */
+  const codeCards = new Map<string, Set<number>>()
+  const plainHeld = new Set<string>()
+  const variantHeld = new Set<string>()
   for (const r of others) {
     const code = r.set_code.toUpperCase()
     taken.add(code)
+    codeCards.set(code, (codeCards.get(code) ?? new Set()).add(r.card_id))
+    const variantOf = /^(.+?) \(([^()]+)\)$/.exec(r.set_rarity)
+    if (variantOf) variantHeld.add(`${r.card_id}|${code}|${variantOf[1]}`)
+    else if (r.variant) variantHeld.add(`${r.card_id}|${code}|${r.set_rarity}`)
+    else plainHeld.add(`${r.card_id}|${code}|${r.set_rarity}`)
     const names = stemSets.get(stem(code)) ?? new Map<string, number>()
     stemSets.set(stem(code), names.set(r.set_name, (names.get(r.set_name) ?? 0) + 1))
     const norm = normalizeName(r.set_name)
@@ -257,13 +273,32 @@ function englishFill(db: Database.Database): {
     RETURNING id`)
   const written = new Set<string>()
   const seen = new Set<number>()
+  /**
+   * An overframe or alternate art the list prints beside a plain rarity YGOPRODeck holds for the
+   * same card and code, when nothing holds an art variant of that rarity yet: "Ultra Rare
+   * (Overframe)" for MAMS-EN001 before TCGplayer sells it (then TCGplayer takes it over, under the
+   * same name).
+   */
+  const besideHeld = (p: IntlPrinting, code: string): boolean => {
+    const m = /^(.+) \((Overframe|Alternate Art)\)$/.exec(p.setRarity)
+    const cards = codeCards.get(code)
+    return (
+      m !== null &&
+      p.variant === null &&
+      cards?.size === 1 &&
+      cards.has(p.cardId) &&
+      plainHeld.has(`${p.cardId}|${code}|${m[1]}`) &&
+      !variantHeld.has(`${p.cardId}|${code}|${m[1]}`)
+    )
+  }
 
   return {
     save(setName, matched) {
       const printings = listPrintings(matched.filter((m) => !tokens.has(m.cardId)))
       for (const p of printings) {
         const code = p.setCode.toUpperCase()
-        if (code === '' || code.includes('?') || taken.has(code)) continue
+        if (code === '' || code.includes('?')) continue
+        if (taken.has(code) && !besideHeld(p, code)) continue
         if ((holders.get(code) ?? p.cardId) !== p.cardId) continue
         const once = `${p.cardId}\u0000${code}\u0000${p.setRarity}`
         if (written.has(once)) continue
@@ -272,7 +307,11 @@ function englishFill(db: Database.Database): {
         const row = upsert.get({
           ...p,
           setName: setNames.get(normalizeName(setName)) ?? stemName(code) ?? setName,
-          rarityCode: rarityCodes.get(p.setRarity) ?? ''
+          // An art variant takes its rarity's code, as TCGplayer's variants do.
+          rarityCode:
+            rarityCodes.get(p.setRarity) ??
+            rarityCodes.get(p.setRarity.replace(/ \([^()]+\)$/, '')) ??
+            ''
         }) as { id: number } | undefined
         if (row) seen.add(row.id)
       }

@@ -44,6 +44,7 @@ import type { FingerprintStore } from './scan/fingerprints'
 import { createFingerprintStore } from './scan/fingerprints'
 import { createOcr } from './scan/ocr'
 import { portalUrl } from './cloud/config'
+import { printingPhotoSuffix } from './yugipedia/printingArt'
 import { signInWithBrowser } from './cloud/signIn'
 import { TokenStore, electronCipher } from './cloud/tokenStore'
 
@@ -259,6 +260,9 @@ async function bootstrap(): Promise<void> {
   const portal = portalUrl(process.env, app.isPackaged)
   const tokens = new TokenStore(join(userData, 'account.json'), await electronCipher())
   const remoteIdOf = db.prepare('SELECT remote_id FROM card_printings WHERE id = ?').pluck()
+  const rarityOf = db.prepare(
+    'SELECT set_rarity AS rarity, variant FROM card_printings WHERE id = ?'
+  )
   const images = createImageCache({
     dir: join(userData, 'images'),
     sources: fakeData
@@ -270,7 +274,11 @@ async function bootstrap(): Promise<void> {
       : portalImageSources({
           portal,
           token: () => tokens.get(),
-          remoteId: (id) => (remoteIdOf.get(id) as number | null | undefined) ?? null
+          remoteId: (id) => (remoteIdOf.get(id) as number | null | undefined) ?? null,
+          photoSuffix: (id) => {
+            const p = rarityOf.get(id) as { rarity: string; variant: string | null } | undefined
+            return p ? printingPhotoSuffix(p) : ''
+          }
         }),
     prepareLogo,
     onDownloads: throttleDownloads((d) => broadcast(IMAGE_DOWNLOADS, d), 250)

@@ -420,6 +420,27 @@ describe('images through the portal', () => {
     expect(await fs.readdir(path.join(dir, 'sets'))).toEqual([])
   })
 
+  it("keeps an art variant's photo under a new name, so one saved before V38 isn't shown", async () => {
+    const fetchFn = vi.fn<Fetch>(async () => okResponse('png', 'image/png'))
+    await fs.mkdir(path.join(dir, 'printings'), { recursive: true })
+    await fs.writeFile(path.join(dir, 'printings', 'srv-77.png'), 'old plain scan')
+    const cache = createImageCache({
+      dir,
+      fetchFn: fetchFn as unknown as typeof fetch,
+      limit: noLimit,
+      sources: portalImageSources({
+        portal: PORTAL,
+        token: () => 'tok',
+        remoteId: () => 77,
+        photoSuffix: (id) => (id === 1 ? '-v38' : '')
+      })
+    })
+    expect(await cache.getPrinting(1)).toBe(path.join(dir, 'printings', 'srv-77-v38.png'))
+    expect(fetchFn.mock.calls[0][0]).toBe(`${PORTAL}/img/printing/77`)
+    expect(await cache.getPrinting(2)).toBe(path.join(dir, 'printings', 'srv-77.png'))
+    expect(fetchFn).toHaveBeenCalledTimes(1)
+  })
+
   it('keys printing files by the server id, not the local one', async () => {
     const fetchFn = vi.fn<Fetch>(async () => okResponse('png', 'image/png'))
     const ids = new Map<number, number>([[1, 77], [2, 77]])

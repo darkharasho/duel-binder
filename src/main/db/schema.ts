@@ -491,6 +491,21 @@ CREATE TABLE favourites (owner_id INTEGER NOT NULL DEFAULT 0, card_id INTEGER NO
 CREATE INDEX ix_favourites_dirty ON favourites(owner_id) WHERE dirty = 1;
 `
 
+/**
+ * Printing photos are chosen anew for art variants: an alternate art now takes its "-AA" scan, a
+ * rarity stored abbreviated ("PlScR") its own rarity's, and an art variant with no scan of its own
+ * gets none instead of the plain card's (see choosePrintingScan). Every photo stored for an art
+ * variant or an abbreviated rarity is looked up again (lazily, as printings are shown), and so is
+ * every stored miss. The server needs this too; its photos of these printings are kept under new
+ * keys (printingPhotoKey), so the old ones are never served again.
+ */
+export const SCHEMA_V38 = `
+DELETE FROM printing_art WHERE url IS NULL OR printing_id IN (
+  SELECT id FROM card_printings
+  WHERE (variant IS NOT NULL AND variant <> '') OR set_rarity LIKE '%)' OR set_rarity GLOB '*[a-z][A-Z]*'
+);
+`
+
 /** A printing's rarity as shown: "Starlight Rare (Extended Art)" for a labelled variant. */
 export const RARITY_LABEL = "p.set_rarity || COALESCE(' (' || p.variant || ')', '')"
 
@@ -532,5 +547,6 @@ export const MIGRATIONS: Migration[] = [
   { version: 34, sql: SCHEMA_V34 },
   { version: 35, sql: SCHEMA_V35, server: false },
   { version: 36, sql: SCHEMA_V36, server: false },
-  { version: 37, sql: SCHEMA_V37, server: false }
+  { version: 37, sql: SCHEMA_V37, server: false },
+  { version: 38, sql: SCHEMA_V38 }
 ]

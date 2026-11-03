@@ -72,6 +72,8 @@ export interface ScanSummaryCard {
   key: string
   name: string
   imageId: number
+  /** The printing whose own photo shows; null for the card's art (a printing still to pick). */
+  photoId?: number | null
   /** Set code and rarity, as far as the row knows them. */
   detail: string
   quantity: number

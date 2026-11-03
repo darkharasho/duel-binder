@@ -17,7 +17,7 @@ import { formatUsd } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { ownedText, surePrinting, useOwned } from './owned'
 import type { ScanDraft } from './resolve'
-import { GLASS, priceOf, priceRange, printingOf, versionToPick } from './scanLook'
+import { GLASS, photoFor, priceOf, priceRange, printingOf, versionToPick } from './scanLook'
 import { OptionLabel, SearchPicker, type PickerOption } from './SearchPicker'
 import type { ScanRow } from './session'
 
@@ -91,18 +91,6 @@ export function choicesFor(row: ScanRow, language: Language | null): PickerOptio
       note: languages ? tag : undefined
     }
   })
-}
-
-/**
- * The printing whose own photo shows for a row, as for a collection entry (scanFor): only when
- * the row keeps its card's first artwork, so an alternate artwork the art match picked stays.
- * The photo is how a printing whose art YGOPRODeck doesn't have (Manga-Style, an overframe)
- * shows as itself.
- */
-// eslint-disable-next-line react-refresh/only-export-components -- shared with the phone's review
-export function photoFor(row: ScanRow): number | null {
-  const own = row.options.find((o) => o.printingId === row.printingId)
-  return own && own.imageIds[0] === row.imageId ? own.printingId : null
 }
 
 /** The printing's set as the row's subtitle names it: its code, or its set's name when it has none. */

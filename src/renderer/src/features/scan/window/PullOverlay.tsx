@@ -79,6 +79,7 @@ function Bar({
     >
       <CardArt
         imageId={pull.imageId}
+        printingId={pull.photoId}
         size="small"
         alt=""
         className={

@@ -13,8 +13,13 @@ export const cardImageSrc = (
   imageId: number,
   opts?: { now?: boolean }
 ): string => imageSrc(`${size}/${imageId}`) + now(opts)
-/** Null on the phone: its printing ids aren't the server's, so it has no printing scans. */
+/**
+ * Null on the phone: its printing ids aren't the server's. There a printing's photo is found by
+ * the server's id instead (usePrintingPhotoSrc in printingPhotos.ts, then printingPhotoSrc).
+ */
 export const printingImageSrc = (printingId: number): string | null =>
   isPhone() ? null : imageSrc(`printing/${printingId}`)
+/** A printing's photo by the server's printing id: the phone's way to it. */
+export const printingPhotoSrc = (serverId: number): string => imageSrc(`printing/${serverId}`)
 export const setImageSrc = (key: string, opts?: { now?: boolean }): string =>
   imageSrc(`set/${key}`) + now(opts)

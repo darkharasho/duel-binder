@@ -54,3 +54,16 @@ export function listValue(rows: ScanRow[]): { value: number; priced: number; unp
   }
   return { value, priced, unpriced }
 }
+
+/**
+ * The printing whose own photo shows for a row, as for a collection entry (scanFor): only when
+ * the row keeps its card's first artwork, so an alternate artwork the art match picked stays.
+ * The photo is how a printing whose art YGOPRODeck doesn't have (Manga-Style, an overframe)
+ * shows as itself.
+ */
+export function photoFor(
+  row: Pick<ScanDraft, 'options' | 'printingId' | 'imageId'>
+): number | null {
+  const own = row.options.find((o) => o.printingId === row.printingId)
+  return own && own.imageIds[0] === row.imageId ? own.printingId : null
+}

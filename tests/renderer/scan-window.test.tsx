@@ -903,6 +903,7 @@ describe('PullOverlay for Pokémon pulls', () => {
     printingId: 90,
     name: 'Pikachu',
     imageId: 500,
+    photoId: null,
     setCode: null,
     setName: null,
     rarity: null,

@@ -43,6 +43,7 @@ function Hit({ card }: { card: ScanSummaryCard }): React.JSX.Element {
       </p>
       <CardArt
         imageId={card.imageId}
+        printingId={card.photoId}
         size="full"
         alt=""
         className="w-full rounded-[clamp(0.4rem,0.9vw,0.8rem)] bg-transparent shadow-none drop-shadow-[0_0_2vw_rgba(251,191,36,0.35)]"
@@ -66,11 +67,12 @@ function Hit({ card }: { card: ScanSummaryCard }): React.JSX.Element {
 }
 
 function Row({ card }: { card: ScanSummaryCard }): React.JSX.Element {
-  const { name, imageId, detail, quantity, price, raw, guess } = card
+  const { name, imageId, photoId, detail, quantity, price, raw, guess } = card
   return (
     <li className="flex h-[7.4vh] min-w-0 portrait:h-[5.6vh] items-center gap-[1vw] border-b border-white/10">
       <CardArt
         imageId={imageId}
+        printingId={photoId}
         size="small"
         alt=""
         className="w-[4vh] shrink-0 overflow-hidden rounded-sm"

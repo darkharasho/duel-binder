@@ -121,6 +121,7 @@ export function fakeStore(
     reportError: vi.fn(async () => {}),
     fingerprints: vi.fn(async () => null),
     fingerprintRefs: vi.fn(async () => []),
+    printingPhotoIds: vi.fn(async () => []),
     fingerprintStatus: vi.fn(async () => ({ state: 'ready' as const, count: 3 })),
     refreshFingerprints: vi.fn(async () => ({ state: 'ready' as const, count: 3 })),
     ...over

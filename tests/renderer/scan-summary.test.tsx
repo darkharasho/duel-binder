@@ -29,7 +29,7 @@ const row = (price: number | null, over: Partial<ScanRow> = {}): ScanRow => {
     via: 'code',
     quantity: 1,
     addedAt: 0,
-    options: [{ printingId: id, cardId: id, price } as ScanRow['options'][number]],
+    options: [{ printingId: id, cardId: id, price, imageIds: [id] } as ScanRow['options'][number]],
     ...over
   } as ScanRow
 }
@@ -52,6 +52,13 @@ describe('sessionSummary', () => {
     const s = sessionSummary([open, row(5)], 20)
     expect(s).toMatchObject({ value: 5, unpriced: 1 })
     expect(s.hit?.price).toBe(5)
+  })
+
+  it("carries each row's printing photo, none while the printing is still to pick", () => {
+    const sure = row(5)
+    const open = row(6, { flag: 'pick-printing' })
+    const s = sessionSummary([sure, open], 20)
+    expect(s.list.map((c) => c.photoId)).toEqual([null, sure.printingId])
   })
 
   it('lists every row dearest first, no price last', () => {

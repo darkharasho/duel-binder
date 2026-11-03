@@ -99,6 +99,11 @@ export interface PhoneStore {
   fingerprints(game: GameId): Promise<ArrayBuffer | null>
   /** Yu-Gi-Oh's file's reference scans with this phone's printing ids; empty without them. */
   fingerprintRefs(): Promise<ScanRef[]>
+  /**
+   * `[this phone's printing id, the server's]` for those of these the catalog feed gave a server
+   * id: the server's id names a printing's photo (/img/printing/<id>). Others are left out.
+   */
+  printingPhotoIds(printingIds: number[]): Promise<[number, number][]>
   fingerprintStatus(game: GameId): Promise<FingerprintStatus>
   refreshFingerprints(opts: { game: GameId; force?: boolean }): Promise<FingerprintStatus>
 }
@@ -792,6 +797,21 @@ export function createPhoneStore(deps: {
           return []
         }
       }),
+
+    printingPhotoIds: async (printingIds) => {
+      const ids = checkPrintingIds(printingIds)
+      return read(() => {
+        const get = db.prepare(
+          'SELECT remote_id FROM card_printings WHERE id = ? AND remote_id IS NOT NULL'
+        )
+        const out: [number, number][] = []
+        for (const id of ids) {
+          const row = get.get(id) as { remote_id: number } | undefined
+          if (row) out.push([id, row.remote_id])
+        }
+        return out
+      })
+    },
 
     fingerprintStatus: (game) =>
       read(() =>

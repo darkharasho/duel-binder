@@ -5,6 +5,7 @@ import { CardArt } from '@/components/CardArt'
 import { CardSheet } from '@/components/CardSheet'
 import { PanelCardArt } from '@/components/PanelCardArt'
 import { resetBorrowedArt } from '@/lib/borrowedArt'
+import { resetPrintingPhotos } from '@/lib/printingPhotos'
 import { GameProvider } from '@/lib/game'
 import { createMockApi, renderWithProviders } from './mockApi'
 
@@ -50,15 +51,52 @@ describe('CardArt', () => {
     expect(screen.getByAltText('Kuriboh')).not.toHaveClass('opacity-0')
   })
 
-  it('on the phone it shows the default art and no printing scan', () => {
+  it("on the phone it shows the printing's photo under the server's id", async () => {
     const saved = window.api
+    resetPrintingPhotos()
+    const photoIds = vi.fn(async (ids: number[]) =>
+      ids.filter((i) => i === 9).map((i) => [i, 4321] as [number, number])
+    )
     window.api = createMockApi({ window: { platform: 'phone' } })
+    window.api.images.photoIds = photoIds
     try {
-      render(<CardArt imageId={5} printingId={9} size="small" alt="Kuriboh" />)
+      render(
+        <>
+          <CardArt imageId={5} printingId={9} size="small" alt="Kuriboh" />
+          <CardArt imageId={6} printingId={10} size="small" alt="Winged Kuriboh" />
+        </>
+      )
       expect(screen.getByAltText('Kuriboh')).toHaveAttribute('src', '/img/small/5')
-      expect(screen.queryByTestId('printing-scan')).not.toBeInTheDocument()
+      expect(await screen.findByTestId('printing-scan')).toHaveAttribute(
+        'src',
+        '/img/printing/4321'
+      )
+      // One batched lookup for both; the printing with no server id keeps its default art.
+      expect(photoIds).toHaveBeenCalledTimes(1)
+      expect(photoIds.mock.calls[0][0]).toEqual([9, 10])
+      expect(screen.getAllByTestId('printing-scan')).toHaveLength(1)
+      expect(screen.getByAltText('Winged Kuriboh')).toHaveAttribute('src', '/img/small/6')
     } finally {
       window.api = saved
+      resetPrintingPhotos()
+    }
+  })
+
+  it('on the phone a failed lookup leaves the default art', async () => {
+    const saved = window.api
+    resetPrintingPhotos()
+    window.api = createMockApi({ window: { platform: 'phone' } })
+    window.api.images.photoIds = vi.fn(async () => {
+      throw new Error('offline')
+    })
+    try {
+      render(<CardArt imageId={5} printingId={9} size="small" alt="Kuriboh" />)
+      await vi.waitFor(() => expect(window.api.images.photoIds).toHaveBeenCalled())
+      expect(screen.queryByTestId('printing-scan')).not.toBeInTheDocument()
+      expect(screen.getByAltText('Kuriboh')).toHaveAttribute('src', '/img/small/5')
+    } finally {
+      window.api = saved
+      resetPrintingPhotos()
     }
   })
 })
@@ -226,7 +264,10 @@ describe('CardArt with borrowed art', () => {
     const mock = window.api
     window.api = {
       ...mock,
-      cards: { ...mock.cards, traditionalArt: vi.fn(async () => Promise.reject(new Error('Unknown'))) }
+      cards: {
+        ...mock.cards,
+        traditionalArt: vi.fn(async () => Promise.reject(new Error('Unknown')))
+      }
     }
     render(<CardArt imageId={own} size="full" alt="Oddish" />)
     expect(await screen.findByAltText('Oddish (English art)')).toHaveAttribute(

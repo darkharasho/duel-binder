@@ -30,6 +30,7 @@ export const STORE_METHODS = [
   'reportError',
   'fingerprints',
   'fingerprintRefs',
+  'printingPhotoIds',
   'fingerprintStatus',
   'refreshFingerprints'
 ] as const satisfies readonly (keyof PhoneStore)[]

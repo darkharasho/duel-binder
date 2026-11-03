@@ -228,6 +228,11 @@ export interface Api {
     clearCache(): Promise<void>
     /** Art downloads under way, as they change; never fires on the web or the phone. */
     onDownloads(cb: (d: ImageDownloads) => void): () => void
+    /**
+     * The phone only: `[local printing id, server id]` for those of these printings the server
+     * knows, since a printing's photo is named by the server's id. Absent elsewhere.
+     */
+    photoIds?(printingIds: number[]): Promise<[number, number][]>
   }
   window: {
     /** `process.platform`, for drawing the title bar the way the OS does. */

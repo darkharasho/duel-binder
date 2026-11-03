@@ -3,7 +3,8 @@ import { cn } from '@/lib/utils'
 import { cssAspect, gameOfId } from '@shared/games'
 import { useCardAspect, useCardGame } from '@/lib/game'
 import { useBorrowedArt, type BorrowedArt } from '@/lib/borrowedArt'
-import { cardImageSrc, printingImageSrc } from '@/lib/images'
+import { cardImageSrc } from '@/lib/images'
+import { usePrintingPhotoSrc } from '@/lib/printingPhotos'
 import { useArtLoad } from './artLoad'
 import { CardPlaceholder } from './CardPlaceholder'
 
@@ -149,10 +150,10 @@ function CardArtImage({
   // A shimmer in the frame's shape while the art downloads, then a fade into it.
   const art = useArtLoad()
   const src = cardImageSrc(size, imageId, { now: priority })
-  // No scan where there are no printing scans (the phone).
-  // Nor for Pokémon: scans are Yugipedia's, Yu-Gi-Oh! only.
-  const scanSrc =
-    printingId == null || gameOfId(imageId) === 'pkm' ? null : printingImageSrc(printingId)
+  // No scan for Pokémon: scans are Yugipedia's, Yu-Gi-Oh! only. On the phone, none until the
+  // printing's server id is known.
+  const photo = usePrintingPhotoSrc(gameOfId(imageId) === 'pkm' ? null : (printingId ?? null))
+  const scanSrc = printingId == null ? null : photo
   if (printingId == null || scanSrc === null) {
     if (failed)
       return <CardPlaceholder game={game} className={className} label={alt} aspect={aspect} />

@@ -406,20 +406,41 @@ describe('image route', () => {
       expect(upstream).not.toHaveBeenCalled()
     })
 
-    it('printing, set and konami misses still need a session', async () => {
+    it('fetches a known printing\'s photo for the phone, metered before the lookup', async () => {
+      const id = (db.prepare('SELECT id FROM card_printings LIMIT 1').get() as { id: number }).id
       printingUrl = `${YUGIPEDIA_IMAGE_PREFIX}x.jpg`
+      const res = await getFrom(IP, `printing/${id}`)
+      expect(res.status).toBe(200)
+      expect(printingArt.url).toHaveBeenCalledWith(id)
+      expect([...bucket.store.keys()].some((k) => k.startsWith(`printing/${id}`))).toBe(true)
+      // An id the catalog doesn't have isn't looked up for a signed-out caller.
+      printingArt.url.mockClear()
+      expect((await getFrom(IP, 'printing/999999999')).status).toBe(404)
+      expect(printingArt.url).not.toHaveBeenCalled()
+    })
+
+    it('a signed-out printing lookup spends the address\'s quota even when no photo is found', async () => {
+      const t = 1_000_000
+      deps.anonImageQuota = createImageQuota<string>(() => t, { limit: 1, windowMs: 3_600_000 })
+      const ids = (db.prepare('SELECT id FROM card_printings LIMIT 2').all() as { id: number }[]).map((r) => r.id)
+      printingUrl = null
+      expect((await getFrom(IP, `printing/${ids[0]}`)).status).toBe(404)
+      expect((await getFrom(IP, `printing/${ids[1]}`)).status).toBe(429)
+      expect(printingArt.url).toHaveBeenCalledTimes(1)
+    })
+
+    it('set and konami misses still need a session', async () => {
       db.prepare("INSERT INTO konami_logos (set_name, image_url, image_key) VALUES ('Set', ?, 'km-abc')").run(
         `${KONAMI_LOGO_PREFIX}logos/a.png`
       )
       db.prepare("INSERT INTO sets (language, set_name, set_code, image_url, image_key) VALUES ('en', 'Cover Set', 'CVR', ?, 'yp-abc123')").run(
         'https://ms.yugipedia.com/a/ab/Cover.png'
       )
-      for (const path of ['printing/1', 'set/LOB', 'set/yp-abc123', 'konami/km-abc']) {
+      for (const path of ['set/LOB', 'set/yp-abc123', 'konami/km-abc']) {
         const res = await getFrom(IP, path)
         expect(res.status).toBe(404)
       }
       expect(upstream).not.toHaveBeenCalled()
-      expect(printingArt.url).not.toHaveBeenCalled()
       expect(bucket.store.size).toBe(0)
     })
 

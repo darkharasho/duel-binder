@@ -1,6 +1,6 @@
 import { surePrinting } from '../owned'
 import type { ScanDraft } from '../resolve'
-import { priceRange, versionToPick } from '../scanLook'
+import { photoFor, priceRange, versionToPick } from '../scanLook'
 
 export const NORMAL_MS = 4000
 export const HIT_MS = 8000
@@ -16,6 +16,8 @@ export interface Pull {
   printingId: number | null
   name: string
   imageId: number
+  /** The printing whose own photo shows (photoFor), only when the printing is sure; else null. */
+  photoId: number | null
   setCode: string | null
   setName: string | null
   rarity: string | null
@@ -48,6 +50,7 @@ export function pullOf(d: ScanDraft, hitPrice: number, key: number): Pull {
     printingId: surePrinting(d),
     name: d.name,
     imageId: d.imageId,
+    photoId: surePrinting(d) === null ? null : photoFor(d),
     price,
     range,
     raw: d.slab === true,

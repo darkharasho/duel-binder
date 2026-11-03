@@ -8,12 +8,12 @@ import {
   XIcon
 } from 'lucide-react'
 import { CardArt } from '@/components/CardArt'
+import { photoFor } from '@/features/scan/scanLook'
 import { useScanLanguage } from '@/features/scan/pickerOptions'
 import { useScanHub } from '@/features/scan/ScanHub'
 import {
   choicesFor,
   flagText,
-  photoFor,
   pickerLabel,
   setLabelFor
 } from '@/features/scan/ScanRowItem'

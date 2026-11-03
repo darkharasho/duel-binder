@@ -238,6 +238,7 @@ const ENTRY_REFS: Record<string, [count: number, kind: string]> = {
     'live rows for the card count; all rows incl. tombstones for the last-change time'
   ],
   'workers/portal/src/sync.ts': [6, SYNC],
+  'workers/portal/src/auth.ts': [1, LIVE],
   'workers/portal/src/priceRequests.ts': [1, LIVE],
   'workers/portal/src/sweep.ts': [1, LIVE],
   'workers/portal/src/pokemonSweep.ts': [1, LIVE],

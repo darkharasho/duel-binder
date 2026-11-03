@@ -59,6 +59,9 @@ function addUser(db: SqlDb, id: number, tokenHash: string, discord = `d${id}`): 
     `INSERT INTO users (id, discord_id, username, created_at, updated_at) VALUES (?, ?, ?, ?, ?)`
   ).run(id, discord, `user${id}`, TS, TS)
   db.prepare(
+    `INSERT INTO sign_ins (provider, subject, user_id, created_at) VALUES ('discord', ?, ?, ?)`
+  ).run(discord, id, TS)
+  db.prepare(
     `INSERT INTO sessions (token_hash, user_id, kind, created_at, expires_at) VALUES (?, ?, 'desktop', ?, ?)`
   ).run(tokenHash, id, TS, '2999-01-01T00:00:00.000Z')
 }
@@ -292,6 +295,8 @@ describe('wishlist on Durable Object SQLite', () => {
     await s.db((db) => {
       db.prepare('UPDATE users SET discord_id = ? WHERE id = 1').run('swap')
       db.prepare('UPDATE users SET discord_id = ? WHERE id = 2').run(OWNER_DISCORD)
+      db.prepare('UPDATE sign_ins SET subject = ? WHERE user_id = 1').run('swap')
+      db.prepare('UPDATE sign_ins SET subject = ? WHERE user_id = 2').run(OWNER_DISCORD)
     })
     const wanted = (game: string): Promise<{ result: WishlistItem[] }> =>
       s.rpc<WishlistItem[]>('pal', 'friends:wishlist', [1], game)

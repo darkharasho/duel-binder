@@ -543,6 +543,29 @@ CREATE TABLE favourites (user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE
 CREATE UNIQUE INDEX ux_favourites_seq ON favourites(seq);
 CREATE INDEX ix_favourites_user_seq ON favourites(user_id, seq);
 `
+  },
+  {
+    // Sign-in methods, one per provider per account, backfilled from discord_id ('apple:' + sub
+    // for Apple). discord_id stays as a legacy id (signIns.ts keeps it filled). Generated
+    // `duelist-` usernames count as not chosen; every other existing name was the user's own.
+    name: 'server-30',
+    sql: `
+CREATE TABLE sign_ins (
+  provider TEXT NOT NULL CHECK (provider IN ('discord','apple','email','google')),
+  subject TEXT NOT NULL,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at TEXT NOT NULL,
+  PRIMARY KEY (provider, subject));
+CREATE UNIQUE INDEX ux_sign_ins_user_provider ON sign_ins(user_id, provider);
+INSERT INTO sign_ins (provider, subject, user_id, created_at)
+  SELECT CASE WHEN discord_id LIKE 'apple:%' THEN 'apple' ELSE 'discord' END,
+         CASE WHEN discord_id LIKE 'apple:%' THEN substr(discord_id, 7) ELSE discord_id END,
+         id, created_at FROM users;
+ALTER TABLE users ADD COLUMN username_chosen INTEGER NOT NULL DEFAULT 1;
+UPDATE users SET username_chosen = 0 WHERE username LIKE 'duelist-%';
+ALTER TABLE users ADD COLUMN link_hint INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE users ADD COLUMN closed_at TEXT;
+`
   }
 ]
 

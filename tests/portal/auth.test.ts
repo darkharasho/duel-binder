@@ -142,11 +142,37 @@ describe('Discord sign-in and sessions', () => {
       username: 'kaiba',
       displayName: 'Seto',
       avatarUrl: 'https://cdn.discordapp.com/avatars/111/abc.png',
-      games: ['ygo']
+      games: ['ygo'],
+      usernameChosen: false,
+      linkHint: 'apple'
     })
   })
 
-  it('signing in again updates the username, keeps the user id', async () => {
+  it('/api/me reports usernameChosen and linkHint', async () => {
+    const token = await signIn()
+    const me = async (): Promise<{ usernameChosen: boolean; linkHint: string | null }> =>
+      (await (await get('/api/me', `session=${token}`)).json()) as {
+        usernameChosen: boolean
+        linkHint: string | null
+      }
+    expect(await me()).toMatchObject({ usernameChosen: false, linkHint: 'apple' })
+
+    const { id } = db.prepare('SELECT id FROM users').get() as { id: number }
+    // No catalog here: the entry's printing and image need not exist.
+    db.pragma('foreign_keys = OFF')
+    db.prepare(
+      "INSERT INTO collection_entries (user_id, uid, printing_id, image_id, quantity, created_at, updated_at, server_seq) VALUES (?, 'u1', 1, 1, 1, 'x', 'x', 1)"
+    ).run(id)
+    db.pragma('foreign_keys = ON')
+    expect((await me()).linkHint).toBeNull()
+
+    db.prepare("UPDATE collection_entries SET deleted_at = 'x'").run()
+    expect((await me()).linkHint).toBe('apple')
+    db.prepare('UPDATE users SET link_hint = 0').run()
+    expect((await me()).linkHint).toBeNull()
+  })
+
+  it('signing in again refreshes the name and picture, keeps the username and user id', async () => {
     await signIn()
     const before = db.prepare('SELECT id FROM users').get() as { id: number }
     discord.user = { id: '111', username: 'kaiba2', global_name: 'Seto K', avatar: null }
@@ -155,25 +181,26 @@ describe('Discord sign-in and sessions', () => {
     const me = await (await get('/api/me', `session=${token}`)).json()
     expect(me).toEqual({
       id: before.id,
-      username: 'kaiba2',
+      username: 'kaiba',
       displayName: 'Seto K',
       avatarUrl: null,
-      games: ['ygo']
+      games: ['ygo'],
+      usernameChosen: false,
+      linkHint: 'apple'
     })
   })
 
-  it('renaming into a username held by a stale row moves the stale row aside', async () => {
+  it('a new account whose Discord username is held gets a generated one; the holder keeps it', async () => {
     await signIn() // discord 111 = kaiba
-    discord.user = { id: '222', username: 'yugi' }
-    await signIn()
-    // 111 still holds 'kaiba' (stale); 222 now takes it
     discord.user = { id: '222', username: 'Kaiba' }
     await signIn()
-    const rows = db.prepare('SELECT discord_id, username FROM users ORDER BY discord_id').all()
-    expect(rows).toEqual([
-      { discord_id: '111', username: 'Kaiba#111' },
-      { discord_id: '222', username: 'Kaiba' }
-    ])
+    const rows = db.prepare('SELECT discord_id, username FROM users ORDER BY discord_id').all() as {
+      discord_id: string
+      username: string
+    }[]
+    expect(rows[0]).toEqual({ discord_id: '111', username: 'kaiba' })
+    expect(rows[1].discord_id).toBe('222')
+    expect(rows[1].username).toMatch(/^duelist-[a-z2-9]{8}$/)
   })
 
   it('state mismatch → /?signin=failed and no user', async () => {

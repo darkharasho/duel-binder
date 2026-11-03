@@ -29,9 +29,14 @@ export function collectStats(deps: AppDeps): Record<string, unknown> {
   const one = <T>(sql: string, ...args: unknown[]): T => db.prepare(sql).get(...args) as T
   const count = (sql: string, ...args: unknown[]): number => one<{ n: number }>(sql, ...args).n
 
-  const users = one<{ total: number; apple: number }>(
-    "SELECT COUNT(*) AS total, COALESCE(SUM(discord_id LIKE 'apple:%'), 0) AS apple FROM users"
-  )
+  const total = count('SELECT COUNT(*) AS n FROM users')
+  /** Open accounts with this sign-in; a linked account counts once for each. */
+  const withSignIn = (provider: string): number =>
+    count(
+      `SELECT COUNT(*) AS n FROM sign_ins s JOIN users u ON u.id = s.user_id
+        WHERE s.provider = ? AND u.closed_at IS NULL`,
+      provider
+    )
   const collections = one<{ collectors: number; entries: number; cards: number }>(
     `SELECT COUNT(DISTINCT user_id) AS collectors, COUNT(*) AS entries, COALESCE(SUM(quantity), 0) AS cards
      FROM collection_entries WHERE deleted_at IS NULL`
@@ -42,9 +47,9 @@ export function collectStats(deps: AppDeps): Record<string, unknown> {
   return {
     at: nowIso,
     users: {
-      total: users.total,
-      discord: users.total - users.apple,
-      apple: users.apple,
+      total,
+      discord: withSignIn('discord'),
+      apple: withSignIn('apple'),
       new7d: count('SELECT COUNT(*) AS n FROM users WHERE created_at >= ?', since(7)),
       new30d: count('SELECT COUNT(*) AS n FROM users WHERE created_at >= ?', since(30))
     },

@@ -2,6 +2,7 @@ import type { Me } from '../../../src/shared/cloud'
 import { allowedGames, type GameId } from '../../../src/shared/games'
 import type { AppDeps } from './app'
 import { appleRefreshToken, verifyAppleIdentityToken } from './apple'
+import { signInWith, type Identity } from './signIns'
 
 const DAY_MS = 24 * 60 * 60 * 1000
 const SESSION_MAX_AGE = 30 * 24 * 60 * 60
@@ -135,9 +136,11 @@ export async function currentUser(req: Request, deps: AppDeps): Promise<SessionU
 function isAdminUser(deps: AppDeps, userId: number): boolean {
   const admin = deps.env.ADMIN_DISCORD_ID
   if (!admin) return false
-  const row = deps.db.prepare('SELECT discord_id FROM users WHERE id = ?').get(userId) as
-    { discord_id: string } | undefined
-  return row?.discord_id === admin
+  return (
+    deps.db
+      .prepare("SELECT 1 FROM sign_ins WHERE user_id = ? AND provider = 'discord' AND subject = ?")
+      .get(userId, admin) !== undefined
+  )
 }
 
 /** The games this user may use; the server's gate for every game-scoped route. */
@@ -283,29 +286,14 @@ async function fetchDiscordUser(code: string, deps: AppDeps): Promise<DiscordUse
   return user.id && user.username ? user : null
 }
 
-/** Insert or refresh the user, moving aside a stale row that still holds the same username. Call inside a transaction. */
-function upsertUser(du: DiscordUser, deps: AppDeps, nowIso: string): number {
-  const stale = deps.db
-    .prepare(
-      'SELECT id, discord_id FROM users WHERE username = ? COLLATE NOCASE AND discord_id <> ?'
-    )
-    .get(du.username, du.id) as { id: number; discord_id: string } | undefined
-  if (stale) {
-    deps.db
-      .prepare('UPDATE users SET username = ?, updated_at = ? WHERE id = ?')
-      .run(`${du.username}#${stale.discord_id}`, nowIso, stale.id)
-  }
-  deps.db
-    .prepare(
-      `INSERT INTO users (discord_id, username, display_name, avatar, created_at, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?)
-       ON CONFLICT(discord_id) DO UPDATE SET
-         username = excluded.username, display_name = excluded.display_name,
-         avatar = excluded.avatar, updated_at = excluded.updated_at`
-    )
-    .run(du.id, du.username, du.global_name ?? null, du.avatar ?? null, nowIso, nowIso)
-  return (deps.db.prepare('SELECT id FROM users WHERE discord_id = ?').get(du.id) as { id: number })
-    .id
+/** Signs this Discord user in, making the account on first use. Call inside a transaction. */
+function discordSignIn(du: DiscordUser, deps: AppDeps, nowIso: string): number {
+  return signInWith(
+    deps.db,
+    { provider: 'discord', subject: du.id },
+    { username: du.username, displayName: du.global_name ?? null, avatar: du.avatar ?? null },
+    nowIso
+  ).userId
 }
 
 /** Drops expired sessions and desktop codes. */
@@ -349,7 +337,7 @@ export async function finishSignIn(req: Request, deps: AppDeps): Promise<Respons
   if (desktop) {
     deps.db.transaction(() => {
       pruneExpired(deps, nowIso)
-      const userId = upsertUser(user, deps, nowIso)
+      const userId = discordSignIn(user, deps, nowIso)
       deps.db
         .prepare(
           'INSERT INTO desktop_codes (code_hash, user_id, challenge, expires_at) VALUES (?, ?, ?, ?)'
@@ -369,7 +357,7 @@ export async function finishSignIn(req: Request, deps: AppDeps): Promise<Respons
 
   deps.db.transaction(() => {
     pruneExpired(deps, nowIso)
-    const userId = upsertUser(user, deps, nowIso)
+    const userId = discordSignIn(user, deps, nowIso)
     deps.db
       .prepare(
         "INSERT INTO sessions (token_hash, user_id, kind, created_at, expires_at) VALUES (?, ?, 'web', ?, ?)"
@@ -440,28 +428,10 @@ export async function exchangeDesktopCode(req: Request, deps: AppDeps): Promise<
   return jsonResponse(200, { token, user: loadMe(deps, userId) })
 }
 
-/**
- * Apple accounts have no Discord id: their `discord_id` is `apple:` and Apple's user id, which
- * can't clash with a Discord id (all digits). Their username is `duelist-` and random letters,
- * which can't clash with a Discord username either (Discord doesn't allow hyphens).
- */
-const APPLE_ID_PREFIX = 'apple:'
 const NONCE_RE = /^[A-Za-z0-9_-]{16,128}$/
 const MAX_NAME_LEN = 64
 /** Apple's authorization codes are short; anything longer isn't one. */
 const MAX_APPLE_CODE_LEN = 512
-const USERNAME_ALPHABET = 'abcdefghijkmnpqrstuvwxyz23456789'
-
-function appleUsername(deps: AppDeps): string {
-  const taken = deps.db.prepare('SELECT 1 FROM users WHERE username = ? COLLATE NOCASE')
-  for (;;) {
-    const letters = [...crypto.getRandomValues(new Uint8Array(8))]
-      .map((b) => USERNAME_ALPHABET[b % USERNAME_ALPHABET.length])
-      .join('')
-    const name = `duelist-${letters}`
-    if (!taken.get(name)) return name
-  }
-}
 
 /** The name Apple shares on the first sign-in only (and only if the person allows it), or null. */
 function appleName(given: unknown, family: unknown): string | null {
@@ -509,7 +479,7 @@ export async function exchangeAppleToken(req: Request, deps: AppDeps): Promise<R
     }
   }
 
-  const appleId = APPLE_ID_PREFIX + sub
+  const apple: Identity = { provider: 'apple', subject: sub }
   const name = appleName(givenName, familyName)
   const now = deps.now()
   const nowIso = now.toISOString()
@@ -517,29 +487,7 @@ export async function exchangeAppleToken(req: Request, deps: AppDeps): Promise<R
   const tokenHash = await sha256Hex(token)
   const userId = deps.db.transaction((): number => {
     pruneExpired(deps, nowIso)
-    const found = deps.db.prepare('SELECT id FROM users WHERE discord_id = ?').get(appleId) as
-      { id: number } | undefined
-    let id: number
-    if (found) {
-      id = found.id
-      deps.db
-        .prepare(
-          'UPDATE users SET display_name = COALESCE(display_name, ?), updated_at = ? WHERE id = ?'
-        )
-        .run(name, nowIso, id)
-    } else {
-      deps.db
-        .prepare(
-          `INSERT INTO users (discord_id, username, display_name, avatar, created_at, updated_at)
-           VALUES (?, ?, ?, NULL, ?, ?)`
-        )
-        .run(appleId, appleUsername(deps), name, nowIso, nowIso)
-      id = (
-        deps.db.prepare('SELECT id FROM users WHERE discord_id = ?').get(appleId) as {
-          id: number
-        }
-      ).id
-    }
+    const { userId: id } = signInWith(deps.db, apple, { displayName: name, avatar: null }, nowIso)
     deps.db
       .prepare(
         "INSERT INTO sessions (token_hash, user_id, kind, created_at, expires_at) VALUES (?, ?, 'desktop', ?, ?)"
@@ -645,22 +593,52 @@ export async function siteAccount(req: Request, deps: AppDeps): Promise<Response
   })
 }
 
+/**
+ * The other provider to suggest linking: only while the hint is on (new accounts), the account has
+ * no live collection entries and it has exactly one sign-in.
+ */
+function linkHintFor(deps: AppDeps, userId: number, hint: number): Me['linkHint'] {
+  if (hint !== 1) return null
+  const hasCards = deps.db
+    .prepare('SELECT 1 FROM collection_entries WHERE user_id = ? AND deleted_at IS NULL LIMIT 1')
+    .get(userId)
+  if (hasCards) return null
+  const signIns = deps.db
+    .prepare('SELECT provider FROM sign_ins WHERE user_id = ?')
+    .all(userId) as {
+    provider: string
+  }[]
+  if (signIns.length !== 1) return null
+  return signIns[0].provider === 'discord'
+    ? 'apple'
+    : signIns[0].provider === 'apple'
+      ? 'discord'
+      : null
+}
+
 function loadMe(deps: AppDeps, userId: number): Me {
   const row = deps.db
-    .prepare('SELECT id, discord_id, username, display_name, avatar FROM users WHERE id = ?')
+    .prepare(
+      `SELECT id, discord_id, username, display_name, avatar, username_chosen, link_hint
+         FROM users WHERE id = ?`
+    )
     .get(userId) as {
     id: number
     discord_id: string
     username: string
     display_name: string | null
     avatar: string | null
+    username_chosen: number
+    link_hint: number
   }
   return {
     id: row.id,
     username: row.username,
     displayName: row.display_name,
     avatarUrl: avatarUrl(row.discord_id, row.avatar),
-    games: gamesFor(deps, row.id)
+    games: gamesFor(deps, row.id),
+    usernameChosen: row.username_chosen === 1,
+    linkHint: linkHintFor(deps, row.id, row.link_hint)
   }
 }
 

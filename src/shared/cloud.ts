@@ -24,6 +24,12 @@ export interface Me {
   admin?: true
   /** The games this account may use. Old servers leave it out, which means `['ygo']`. */
   games?: GameId[]
+  /** False while the username is one the server picked (from Discord or generated). Old servers leave it out. */
+  usernameChosen?: boolean
+  /** The sign-in to suggest linking on a new, empty, single-sign-in account; null when none. */
+  linkHint?: 'discord' | 'apple' | null
+  /** Ids of accounts merged into this one, whose data this client should adopt. */
+  mergedFrom?: number[]
 }
 
 /**

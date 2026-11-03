@@ -193,6 +193,17 @@ describe('Sign in with Apple', () => {
     expect(db.prepare('SELECT count(*) AS n FROM users').get()).toEqual({ n: 0 })
   })
 
+  it('/api/me linkHint suggests Discord for a new Apple account', async () => {
+    const { token } = (await (await signIn({ identityToken: identityToken(), nonce: NONCE })).json()) as {
+      token: string
+    }
+    const me = await handle(
+      new Request(`${BASE}/api/me`, { headers: { authorization: `Bearer ${token}` } }),
+      deps
+    )
+    expect(await me.json()).toMatchObject({ usernameChosen: false, linkHint: 'discord' })
+  })
+
   it('refuses a missing or malformed nonce and a non-JSON body', async () => {
     expect((await signIn({ identityToken: identityToken() })).status).toBe(400)
     expect((await signIn({ identityToken: identityToken(), nonce: 'short' })).status).toBe(400)

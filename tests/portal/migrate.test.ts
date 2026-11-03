@@ -454,3 +454,25 @@ describe('server-28 (sets series)', () => {
     db.close()
   })
 })
+
+describe('server-30 (sign-ins)', () => {
+  it('server-30 backfills sign-ins from discord_id', () => {
+    const db = freshDb()
+    runSteps(db, [...MIGRATIONS, ...SERVER_STEPS.filter((s) => s.name !== 'server-30')])
+    const add = db.prepare(
+      "INSERT INTO users (discord_id, username, created_at, updated_at) VALUES (?, ?, '2026-10-01T00:00:00.000Z', 'x')"
+    )
+    const annId = Number(add.run('123', 'ann').lastInsertRowid)
+    const appleId = Number(add.run('apple:abc', 'duelist-k3m8qpza').lastInsertRowid)
+    migrateServer(db)
+    expect(db.prepare('SELECT provider, subject, user_id, created_at FROM sign_ins ORDER BY user_id').all()).toEqual([
+      { provider: 'discord', subject: '123', user_id: annId, created_at: '2026-10-01T00:00:00.000Z' },
+      { provider: 'apple', subject: 'abc', user_id: appleId, created_at: '2026-10-01T00:00:00.000Z' }
+    ])
+    expect(db.prepare('SELECT id, username_chosen, link_hint, closed_at FROM users ORDER BY id').all()).toEqual([
+      { id: annId, username_chosen: 1, link_hint: 0, closed_at: null },
+      { id: appleId, username_chosen: 0, link_hint: 0, closed_at: null }
+    ])
+    db.close()
+  })
+})

@@ -27,7 +27,13 @@ export function addUser(db: Database.Database, discordId: string, username: stri
   const r = db
     .prepare('INSERT INTO users (discord_id, username, created_at, updated_at) VALUES (?, ?, ?, ?)')
     .run(discordId, username, now, now)
-  return Number(r.lastInsertRowid)
+  const id = Number(r.lastInsertRowid)
+  // Its sign-in, as server-30 backfills one from discord_id.
+  const apple = discordId.startsWith('apple:')
+  db.prepare(
+    'INSERT INTO sign_ins (provider, subject, user_id, created_at) VALUES (?, ?, ?, ?)'
+  ).run(apple ? 'apple' : 'discord', apple ? discordId.slice('apple:'.length) : discordId, id, now)
+  return id
 }
 
 /** In-memory stand-in for the R2 bucket; `store` is exposed so tests can look inside. */

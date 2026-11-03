@@ -30,6 +30,11 @@ bucket_name = "duel-binder-images"
 binding = "PRICES"
 service = "ygo-ebay-prices"
 
+# Email Sending (sign-in codes). Only this sender address may be used. The domain must be onboarded in Email Sending.
+[[send_email]]
+name = "EMAIL"
+allowed_sender_addresses = ["no-reply@duelbinder.com"]
+
 [[migrations]]
 tag = "v1"
 new_sqlite_classes = ["Store"]
@@ -43,6 +48,8 @@ PRICE_WORKER_URL = "https://ygo-ebay-prices.project96.workers.dev"
 POKEMON_SWEEP_DAILY_CALLS = "100"
 # The only account the /admin dashboard opens for (.harasho). Not a secret: it only names who.
 ADMIN_DISCORD_ID = "201537071804973056"
+# Email + password sign-in: "off" hides it; "on" turns it on once Email Sending works (see README, Email sign-in).
+EMAIL_SIGN_IN = "off"
 
 # Workers Logs: request logs and console output, searchable in the dashboard for a few days.
 [observability]

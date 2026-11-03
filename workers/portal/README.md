@@ -68,6 +68,16 @@ Migration `server-2` adds `collection_entries.server_seq INTEGER NOT NULL` with 
 
 **Do not roll the Worker back to a build from before server-2.** The older code inserts entries without `server_seq`, so every new row gets the default 0. After the first one, the unique index rejects the rest, and web adds break. If something goes wrong after deploying, fix it with a new deploy rather than a rollback.
 
+## Email sign-in
+
+Email + password sign-in sends 6-digit codes from `Duel Binder <no-reply@duelbinder.com>` through Cloudflare Email Sending (the `EMAIL` binding, restricted to that sender). It stays hidden while `EMAIL_SIGN_IN = "off"` in `wrangler.toml` (also when the binding is missing). Steps to turn it on, in order:
+
+1. In the Cloudflare dashboard, open Compute & AI, then Email Service, and onboard `duelbinder.com` for Email Sending. Add the SPF and DKIM records it shows (automatic with Cloudflare DNS).
+2. Check the DNS records: SPF and DKIM are verified in the dashboard, and a DMARC record (`_dmarc.duelbinder.com`, for example `v=DMARC1; p=none`) exists.
+3. Deploy the Worker with `EMAIL_SIGN_IN = "off"` (`npm run deploy`). The `EMAIL` binding goes live, and the sign-in stays hidden.
+4. Test: this needs the switch on, so set `EMAIL_SIGN_IN = "on"` and deploy, then start a sign-up with your own address on `https://app.duelbinder.com/auth/email` and check the code arrives (not in spam). If it does not, set it back to `"off"`, deploy and look at the Email Sending logs.
+5. Leave it `"on"` once the test works. Turning it off again is the same one-line change plus a deploy; accounts already made keep their passwords.
+
 ## Catalog
 
 The nightly `catalog.yml` workflow loads YGOPRODeck data into the Store. For a first or full reload, run `gh workflow run catalog.yml -f full=true`. To check progress, call `GET /admin/catalog/status` with `Authorization: Bearer $PORTAL_ADMIN_TOKEN`.

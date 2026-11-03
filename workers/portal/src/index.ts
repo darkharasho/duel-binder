@@ -8,6 +8,7 @@ import { createTcgplayerLookup } from '../../../src/main/tcgplayer/catalog'
 import { createYugipediaClient } from '../../../src/main/yugipedia/client'
 import { TOKEN_ID_MIN } from '../../../src/shared/games/ids'
 import { handle, type Env } from './app'
+import { bindingSender } from './emailSend'
 import { createAnonImageQuota, createImageQuota, createMissCache } from './images'
 import { doSql } from './doSql'
 import { migrateServer } from './migrate'
@@ -25,6 +26,8 @@ export interface WorkerEnv extends Env {
   GITHUB_TOKEN?: string
   /** Service binding to the eBay price Worker; see priceClientFor. */
   PRICES?: Fetcher
+  /** Cloudflare Email Sending binding (`[[send_email]]`); email sign-in also needs EMAIL_SIGN_IN = "on". */
+  EMAIL?: SendEmail
 }
 
 /** The single Durable Object holding the catalog and every user's collection. */
@@ -75,6 +78,7 @@ export class Store extends DurableObject<WorkerEnv> {
       },
       prices: this.prices,
       env: this.env,
+      email: this.env.EMAIL ? bindingSender(this.env.EMAIL) : undefined,
       storageBytes: () => this.ctx.storage.sql.databaseSize,
       now: () => new Date(),
       fetch: (input, init) => fetch(input, init)

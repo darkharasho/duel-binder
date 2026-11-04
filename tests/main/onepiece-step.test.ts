@@ -90,6 +90,8 @@ interface Night {
   /** productId to a picture (seed, tweak). */
   tcgArt?: Record<number, [number, number]>
   throwOn?: 'prices'
+  /** This group's products and prices requests fail. */
+  failGroup?: number
 }
 
 function fakeSources(n: Night = {}): OnePieceSources {
@@ -108,11 +110,13 @@ function fakeSources(n: Night = {}): OnePieceSources {
       return GROUPS
     },
     async products(groupId) {
+      if (groupId === n.failGroup) throw new Error(`GET https://tcgcsv.com/tcgplayer/68/${groupId}/products returned 404`)
       return groupId === OP17_GROUP ? products : []
     },
     async prices(groupId) {
       if (n.throwOn === 'prices')
         throw new Error('GET https://tcgcsv.com/tcgplayer/68/24736/prices returned 503')
+      if (groupId === n.failGroup) throw new Error(`GET https://tcgcsv.com/tcgplayer/68/${groupId}/prices returned 404`)
       return groupId === OP17_GROUP ? (n.prices ?? PRICES) : []
     },
     async bandaiImage(id) {
@@ -254,11 +258,38 @@ describe('runOnePieceStep', () => {
   test('a throwing source writes nothing', async () => {
     const out = await night(fakeSources({ throwOn: 'prices' }))
     expect(out.report).toBeNull()
+    expect(out.error).toContain('every TCGCSV group failed')
     expect(out.error).toContain('returned 503')
     expect(opRows()).toBe(0)
     expect(
       (work.prepare("SELECT COUNT(*) AS n FROM cards WHERE game = 'op'").get() as { n: number }).n
     ).toBe(0)
+  })
+
+  test('one failing TCGCSV group sits the night out: a problem the first night, a note after', async () => {
+    await night(fakeSources())
+    const before = ['OP17-005', 'OP17-005_p1', 'OP17-005_p2'].map(row)
+    const doubled = PRICES.map((p) => ({ ...p, marketPrice: p.marketPrice === null ? null : p.marketPrice * 2 }))
+    const name = GROUPS.find((g) => g.groupId === OP17_GROUP)!.name
+    const line = `TCGCSV group 24736 (${name}) failed: GET https://tcgcsv.com/tcgplayer/68/24736/products returned 404; its printings keep their products and prices`
+
+    const second = await night(fakeSources({ failGroup: OP17_GROUP, prices: doubled }), NOW + DAY)
+    expect(second.error).toBeNull()
+    expect(second.problems).toEqual([line])
+    expect(['OP17-005', 'OP17-005_p1', 'OP17-005_p2'].map(row)).toEqual(before)
+
+    const third = await night(fakeSources({ failGroup: OP17_GROUP, prices: doubled }), NOW + 2 * DAY)
+    expect(third.error).toBeNull()
+    expect(third.problems).toEqual([])
+    expect(third.report!.notes).toContain(`${line} (failing since 2026-11-05)`)
+    expect(['OP17-005', 'OP17-005_p1', 'OP17-005_p2'].map(row)).toEqual(before)
+
+    // A good night ends the run and prices move again; the next failure is news.
+    const fourth = await night(fakeSources({ prices: doubled }), NOW + 3 * DAY)
+    expect(fourth.problems).toEqual([])
+    expect(row('OP17-005')?.market_price).toBe(1.5)
+    const fifth = await night(fakeSources({ failGroup: OP17_GROUP }), NOW + 4 * DAY)
+    expect(fifth.problems).toHaveLength(1)
   })
 
   test('a cache file that is not SQLite is an error, and nothing is written', async () => {

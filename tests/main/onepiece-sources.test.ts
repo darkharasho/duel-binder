@@ -99,6 +99,43 @@ describe('One Piece sources', () => {
     expect(n2.problems).toEqual([`Bandai OP17 parsed to 0 entries (was ${OP17_COUNT}); kept the last copy`])
   })
 
+  it('a short page is a problem the first night only, then a note until it parses in full', async () => {
+    const short = { ...PAGES, '?series=569117': noBlocks(OP17) }
+    const line = `Bandai OP17 parsed to 0 entries (was ${OP17_COUNT}); kept the last copy`
+    const clock = { t: at('2026-09-15') }
+    await mk(fakeFetch(PAGES), clock).entries(SERIES, published)
+    clock.t = at('2026-09-16')
+    expect((await mk(fakeFetch(short), clock).entries(SERIES, published)).problems).toEqual([line])
+    clock.t = at('2026-09-17')
+    const n3 = await mk(fakeFetch(short), clock).entries(SERIES, published)
+    expect(n3.problems).toEqual([])
+    expect(n3.notes).toContain(`${line} (short since 2026-09-16)`)
+    expect(n3.entries.filter((e) => e.seriesId === '569117')).toHaveLength(OP17_COUNT)
+    // A full parse ends the run; the next short page is news again.
+    clock.t = at('2026-09-18')
+    const n4 = await mk(fakeFetch(PAGES), clock).entries(SERIES, published)
+    expect(n4.problems).toEqual([])
+    expect(n4.notes.filter((n) => n.includes('parsed to'))).toEqual([])
+    clock.t = at('2026-09-19')
+    expect((await mk(fakeFetch(short), clock).entries(SERIES, published)).problems).toEqual([line])
+  })
+
+  it('a request that runs over its time limit is retried', async () => {
+    let calls = 0
+    const f = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+      if (calls++ === 0) {
+        // Hangs until the time limit aborts it.
+        return new Promise<Response>((_, reject) =>
+          init?.signal?.addEventListener('abort', () => reject(init.signal!.reason))
+        )
+      }
+      return new Response(OP17, { status: 200 })
+    }) as typeof fetch
+    const r = await mk(f, { t: at('2026-09-15') }, { requestTimeoutMs: 20 }).series()
+    expect(calls).toBe(2)
+    expect(r.series.length).toBeGreaterThan(0)
+  })
+
   it('a series with no cards yet is a note', async () => {
     const r = await mk(fakeFetch({ ...PAGES, '?series=569901': noBlocks(PROMO) }), { t: at('2026-09-15') }).entries(SERIES, published)
     expect(r.problems).toEqual([])

@@ -6,6 +6,8 @@ import { opGroups, opPrices, opProducts, type OpProduct } from './tcgcsv'
 import type { BandaiEntry, BandaiSeries, OpSeriesKind } from './types'
 
 export const PAGE_GAP_MS = 1000
+/** One request's limit, body included; a request that runs over is a failed attempt and retried. */
+export const REQUEST_TIMEOUT_MS = 60_000
 const DAY_MS = 24 * 60 * 60 * 1000
 const RECENT_MS = 60 * DAY_MS
 const STALE_MS = 7 * DAY_MS
@@ -35,6 +37,21 @@ export interface OnePieceSourcesOpts {
   retryDelayMs?: number
   /** The wait between Bandai pages; tests pass 0. */
   pageGapMs?: number
+  /** Per-request limit; defaults to REQUEST_TIMEOUT_MS. */
+  requestTimeoutMs?: number
+}
+
+/**
+ * `fetch` with a time limit that covers the body: a 2xx body is read before the call returns, so a
+ * stalled download fails inside the caller's try and counts as one more failed attempt.
+ */
+export function timedFetch(f: typeof fetch, ms: number): typeof fetch {
+  return (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const res = await f(input, { ...init, signal: AbortSignal.timeout(ms) })
+    if (!res.ok || res.status === 204 || res.status === 205) return res
+    const body = await res.arrayBuffer()
+    return new Response(body, { status: res.status, statusText: res.statusText, headers: res.headers })
+  }) as typeof fetch
 }
 
 /** True when tonight's run should fetch the series' page again. */
@@ -54,7 +71,7 @@ const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms
 
 export function createOnePieceSources(o: OnePieceSourcesOpts): OnePieceSources {
   const { cache } = o
-  const doFetch = o.fetch ?? fetch
+  const doFetch = timedFetch(o.fetch ?? fetch, o.requestTimeoutMs ?? REQUEST_TIMEOUT_MS)
   const now = o.now ?? Date.now
   const userAgent = `DuelBinder/${o.version} (${REPO_URL})`
   const baseDelay = o.retryDelayMs ?? DEFAULT_RETRY_DELAY_MS
@@ -125,10 +142,19 @@ export function createOnePieceSources(o: OnePieceSourcesOpts): OnePieceSources {
         const n = entries.length
         const m = cached.length
         if (m > 0 && (n === 0 || (m >= 20 && n < m * 0.98))) {
-          problems.push(`Bandai ${s.setCode} parsed to ${n} entries (was ${m}); kept the last copy`)
+          // A problem the first night only: a page that stays short (Bandai really removed cards)
+          // must not turn every night red. The last full copy stays until a page parses in full.
+          const line = `Bandai ${s.setCode} parsed to ${n} entries (was ${m}); kept the last copy`
+          if (row.shrinkNotedAt === null) {
+            problems.push(line)
+            cache.markShrink(s.id, t)
+          } else {
+            notes.push(`${line} (short since ${new Date(row.shrinkNotedAt).toISOString().slice(0, 10)})`)
+          }
           out.push(...cached)
           continue
         }
+        if (row.shrinkNotedAt !== null) cache.markShrink(s.id, null)
         if (n === 0) notes.push(`Bandai ${s.setCode} lists no cards yet`)
         cache.replaceEntries(s.id, entries, t)
         cache.markFetched(s.id, t)

@@ -79,7 +79,8 @@ export async function runOnePieceStep(
     const listed = await sources.series()
     notes.push(...listed.notes)
     const series = listed.series
-    const { bySeries, promoPool } = mapGroups(series, await sources.groups())
+    const groups = await sources.groups()
+    const { bySeries, promoPool } = mapGroups(series, groups)
     const published = new Map<string, number>()
     for (const [id, g] of bySeries) {
       const t = publishedMs(g.publishedOn)
@@ -95,20 +96,57 @@ export async function runOnePieceStep(
     const limit = createLimiter(4)
     const groupIds = [...new Set([...bySeries.values(), ...promoPool].map((g) => g.groupId))]
     const products = new Map<number, OpProduct[]>()
-    const priceRows: TcPrice[] = []
+    const groupPrices = new Map<number, TcPrice[]>()
+    /** Group id to its first error tonight. */
+    const failed = new Map<number, string>()
+    const attempt = (id: number, fn: () => Promise<void>) =>
+      limit(async () => {
+        try {
+          await fn()
+        } catch (e) {
+          if (!failed.has(id)) failed.set(id, e instanceof Error ? e.message : String(e))
+        }
+      })
     await Promise.all(
       groupIds.flatMap((id) => [
-        limit(async () => {
+        attempt(id, async () => {
           products.set(id, await sources.products(id))
         }),
-        limit(async () => {
-          priceRows.push(...(await sources.prices(id)))
+        attempt(id, async () => {
+          groupPrices.set(id, await sources.prices(id))
         })
       ])
     )
+    if (groupIds.length > 0 && failed.size === groupIds.length) {
+      throw new Error(`every TCGCSV group failed (${groupIds.length}); first: ${failed.values().next().value}`)
+    }
+    // A failed group sits tonight out: its series aren't matched, so their printings keep last
+    // night's products and prices. Raised the first night of a run of failures, noted after.
+    const failingSince = cache.failingGroups()
+    const failing = new Map<number, number>()
+    const groupName = new Map(groups.map((g) => [g.groupId, g.name]))
+    for (const [id, err] of failed) {
+      products.delete(id)
+      groupPrices.delete(id)
+      const since = failingSince.get(id)
+      failing.set(id, since ?? now)
+      const line = `TCGCSV group ${id} (${groupName.get(id) ?? '?'}) failed: ${err}; its printings keep their products and prices`
+      if (since === undefined) problems.push(line)
+      else notes.push(`${line} (failing since ${new Date(since).toISOString().slice(0, 10)})`)
+    }
+    cache.setFailingGroups(failing)
+    const priceRows: TcPrice[] = [...groupPrices.values()].flat()
+    const poolFailed = promoPool.some((g) => failed.has(g.groupId))
+    /** True when a group this series' products come from failed tonight. */
+    const sitsOut = (s: BandaiSeries): boolean => {
+      if (isPool(s)) return poolFailed
+      const g = bySeries.get(s.id)
+      return !!g && failed.has(g.groupId)
+    }
     const poolProducts = promoPool.flatMap((g) => products.get(g.groupId) ?? [])
-    /** A series' candidates: its mapped group's products, or the promo pool's. */
+    /** A series' candidates: its mapped group's products, or the promo pool's; none while it sits out. */
     const productsOf = (s: BandaiSeries): OpProduct[] => {
+      if (sitsOut(s)) return []
       if (isPool(s)) return poolProducts
       const g = bySeries.get(s.id)
       return g ? (products.get(g.groupId) ?? []) : []
@@ -161,6 +199,8 @@ export async function runOnePieceStep(
       budget: o.budget
     })
     for (const id of art.firstNoticed) problems.push(`Bandai art changed: ${id}`)
+    for (const id of art.tooLarge)
+      notes.push(`${id}: Bandai art is too large for the portal; not downloaded again until its re-check`)
 
     // 4. The art state.
     const hashed = new Set<string>()
@@ -187,7 +227,7 @@ export async function runOnePieceStep(
     }
     for (const s of order) {
       const own = entriesOf.get(s.id)
-      if (!own) continue
+      if (!own || sitsOut(s)) continue
       const r = matchSeries({
         series: s,
         entries: own,

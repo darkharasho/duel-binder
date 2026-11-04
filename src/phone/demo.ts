@@ -20,7 +20,14 @@ import type { WorkerLike } from './runtime'
  */
 export const DEMO_MARKER = 'duel-binder-phone-demo'
 
-const DEMO_USER: Me = { id: 1, username: 'demo', displayName: 'Demo Duelist', avatarUrl: null }
+const DEMO_USER: Me = {
+  id: 1,
+  username: 'demo',
+  displayName: 'Demo Duelist',
+  avatarUrl: null,
+  // Every game, so the switch can be looked at; the demo catalog is Yu-Gi-Oh! only.
+  games: ['ygo', 'pkm', 'op']
+}
 
 /** The fixture as catalog feed rows. */
 function fixtureChanges(): CatalogChange[] {

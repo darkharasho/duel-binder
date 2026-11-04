@@ -1,6 +1,7 @@
 import type Database from 'better-sqlite3'
 import type { SqlDb } from '../db/sql'
 import {
+  isOpPackUrl,
   opBandaiArtUrl,
   opTcgArtUrl,
   BULBAGARDEN_IMAGE_PREFIX,
@@ -74,6 +75,10 @@ export function directImageSources(opts: {
       const tcgdexLogo = findSetImageUrl(opts.db, key)
       if (tcgdexLogo?.startsWith('https://assets.tcgdex.net/'))
         return { url: `${tcgdexLogo}.webp` }
+      if (source === 'ob-') {
+        const url = findSetImageUrl(opts.db, key)
+        return url !== null && isOpPackUrl(url) ? { url, headers } : null
+      }
       if (source === 'yp-') return resolved(key, YUGIPEDIA_IMAGE_PREFIX)
       if (source === 'yc-') return resolved(key, PACK_ART_PREFIX)
       if (source === 'bp-') return resolved(key, BULBAGARDEN_IMAGE_PREFIX, findPokemonSetArtUrl)

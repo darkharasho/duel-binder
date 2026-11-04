@@ -343,6 +343,17 @@ describe('image route', () => {
       for (const k of ['td-en-nope', 'td-en-bad', 'td-en-ygo']) expect((await get(`set/${k}`)).status).toBe(404)
       expect(upstream).not.toHaveBeenCalled()
     })
+
+    it('serves a One Piece pack shot from Bandai, and 404s one off Bandai or on another game', async () => {
+      const shot = 'https://en.onepiece-cardgame.com/renewal/images/products/boosters/op01/img_item01.webp'
+      addSet('ob-0123456789abcdef0123', shot, 'op')
+      addSet('ob-bad', 'https://evil.example/pack.webp', 'op')
+      addSet('ob-ygo', shot, 'ygo')
+      for (const k of ['ob-nope', 'ob-bad', 'ob-ygo']) expect((await get(`set/${k}`)).status).toBe(404)
+      expect(upstream).not.toHaveBeenCalled()
+      expect((await get('set/ob-0123456789abcdef0123')).status).toBe(200)
+      expect(upstream.mock.calls[0][0]).toBe(shot)
+    })
   })
 
   it('an op id never takes the Yu-Gi-Oh path', async () => {

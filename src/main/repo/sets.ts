@@ -35,7 +35,7 @@ interface SummaryDbRow {
   owned_rarities: number
 }
 
-const SET_ART = `s.set_code AS s_code, s.tcg_date, s.image_url, s.image_key, COALESCE(pa.image_key, pp.image_key) AS pack_key,
+const SET_ART = `s.set_code AS s_code, s.tcg_date, s.image_url, s.image_key, COALESCE(pa.image_key, pp.image_key, CASE WHEN p.game = 'op' THEN s.image_key END) AS pack_key,
          COALESCE(sl.image_key, kl.image_key, pl.image_key) AS logo_key,
          CASE WHEN p.game = 'pkm' AND s.image_url IS NOT NULL THEN s.image_key END AS pkm_logo_key,
          p.game = 'pkm' AS is_pkm,
@@ -53,7 +53,8 @@ const SET_JOINS = `LEFT JOIN sets s ON s.game = p.game AND s.language = p.langua
 // One row per distinct (language, set_name); callers limit it to the scope's game with `p.game = <game>`.
 // A (card, rarity) pair is keyed as "<card_id>|<rarity>"; card_id is an integer, so the first "|"
 // always ends it. Yu-Gi-Oh! pack art and logos are English only, keyed by set name alone; Pokémon
-// pack art and fallback logos come from pokemon_set_art, per language.
+// pack art and fallback logos come from pokemon_set_art, per language; a One Piece set's pack shot
+// is its own sets.image_key (an 'ob-' key).
 // Ownership is an uncorrelated IN list (built once, then a keyed lookup per printing). A LEFT JOIN
 // to the owned printings made SQLite scan them for every printing (~1 s on a full catalog).
 const summary = (scope: Scope): string => {
@@ -157,7 +158,7 @@ function toSummary(r: SummaryDbRow, covers: Map<string, number>): SetSummary {
 }
 
 /** Completion summary of every (language, set); English first within a name. */
-/** Source URL of a stored set image key: a Yugipedia set image or logo, an official pack render, or a Konami logo. */
+/** Source URL of a stored set image key: a Yugipedia set image or logo, an official pack render, a Konami logo, or a One Piece pack shot. */
 export function findSetImageUrl(db: SqlDb, key: string): string | null {
   const row = db
     .prepare(
@@ -184,7 +185,7 @@ export function listSets(db: SqlDb, scope: Scope = LOCAL): SetSummary[] {
 }
 
 /** Bump when `catalogSets` or `toSummary` change what they produce: stored rollups aren't rebuilt otherwise. */
-const SETS_ROLLUP = 3
+const SETS_ROLLUP = 4
 
 /**
  * listSets as the catalog alone has it: nobody owns anything and a flagged Pokémon printing isn't

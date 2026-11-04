@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import type Database from 'better-sqlite3'
 import { movedEnough } from '../../../src/main/tcgplayer/prices'
 import { onePieceCardId, onePieceDonCardId, onePieceDonImageId, onePieceImageId } from '../../../src/shared/games'
@@ -49,7 +50,16 @@ export interface OpPlan {
    * parallel takes it when first written, else `Parallel`; there is no TCGplayer match to wait for.
    */
   labels?: Map<string, string>
+  /**
+   * Series id to its pack (or deck box) shot on Bandai's product listing (packShots). Absent (the
+   * listing wasn't read tonight), or a series not in it: its set keeps the shot it has.
+   */
+  packShots?: Map<string, string>
 }
+
+/** A One Piece set's pack shot key: 'ob-' + the first 20 hex chars of sha1(url), as Pokémon's 'bp-'. */
+export const opPackKey = (url: string): string =>
+  `ob-${createHash('sha1').update(url).digest('hex').slice(0, 20)}`
 
 export interface OnePieceReport {
   series: number
@@ -216,7 +226,10 @@ export function writeOnePiece(work: Database.Database, plan: OpPlan, o: WriteOne
   )
 
   const setByCode = work.prepare(
-    `SELECT set_name, tcg_date FROM sets WHERE game = 'op' AND language = '${region}' AND set_code = ?`
+    `SELECT set_name, tcg_date, image_url FROM sets WHERE game = 'op' AND language = '${region}' AND set_code = ?`
+  )
+  const updateSetShot = work.prepare(
+    `UPDATE sets SET image_url = ?, image_key = ? WHERE game = 'op' AND language = '${region}' AND set_name = ?`
   )
   const insertSet = work.prepare(
     `INSERT INTO sets (game, language, set_name, set_code, tcg_date) VALUES ('op', '${region}', ?, ?, ?)`
@@ -280,10 +293,15 @@ export function writeOnePiece(work: Database.Database, plan: OpPlan, o: WriteOne
     for (const s of plan.series) {
       if (!seriesWritten.has(s.id)) continue
       const date = plan.groupOf.get(s.id)?.publishedOn?.slice(0, 10) ?? null
-      const old = setByCode.get(s.setCode) as { set_name: string; tcg_date: string | null } | undefined
+      const old = setByCode.get(s.setCode) as
+        { set_name: string; tcg_date: string | null; image_url: string | null } | undefined
       if (!old) insertSet.run(s.setName, s.setCode, date)
       else if (date !== null && old.tcg_date !== date) updateSetDate.run(date, old.set_name)
-      setNameOf.set(s.id, old?.set_name ?? s.setName)
+      const name = old?.set_name ?? s.setName
+      setNameOf.set(s.id, name)
+      // A booster's or deck's own product shot; the promotion and other-product pages have none.
+      const shot = s.kind === 'booster' || s.kind === 'deck' ? plan.packShots?.get(s.id) : undefined
+      if (shot !== undefined && shot !== (old?.image_url ?? null)) updateSetShot.run(shot, opPackKey(shot), name)
       report.series++
     }
 

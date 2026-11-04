@@ -59,6 +59,17 @@ export const isFallbackLogoUrl = (url: string): boolean =>
 export const BANDAI_EN_IMAGE_PREFIX = 'https://en.onepiece-cardgame.com/images/cardlist/card/'
 /** Japanese One Piece card art on Bandai's Japanese site. */
 export const BANDAI_JA_IMAGE_PREFIX = 'https://www.onepiece-cardgame.com/images/cardlist/card/'
+/**
+ * Where Bandai keeps its product shots (the pack or deck box on each set's product tile), on the
+ * English and Japanese sites. A One Piece set's `sets.image_url` is one of these, under an `ob-` key.
+ */
+export const OP_PACK_PREFIXES = [
+  'https://en.onepiece-cardgame.com/renewal/images/products/',
+  'https://en.onepiece-cardgame.com/onepiececg/bccard/',
+  'https://www.onepiece-cardgame.com/renewal/images/products/',
+  'https://www.onepiece-cardgame.com/onepiececg/bccard/'
+]
+export const isOpPackUrl = (url: string): boolean => OP_PACK_PREFIXES.some((p) => url.startsWith(p))
 /** A Bandai card id such as OP01-001 or OP01-001_p1; the only ids the art URL is built from. */
 export const BANDAI_ID_RE = /^[A-Z]+[0-9]*-[0-9]{3}(_[a-z][0-9]{1,2})?$/
 /**

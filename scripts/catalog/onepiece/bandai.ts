@@ -1,4 +1,4 @@
-import { BANDAI_ID_RE } from '../../../src/shared/imageSources'
+import { BANDAI_ID_RE, isOpPackUrl } from '../../../src/shared/imageSources'
 import type { BandaiEntry, BandaiSeries } from './types'
 
 export const BANDAI_EN = 'https://en.onepiece-cardgame.com'
@@ -108,6 +108,64 @@ export function parseSeriesList(html: string): { series: BandaiSeries[]; notes: 
     series.push({ id, kind, title, code, setName: `${title} [${code}]`, setCode: setCodeOf(code) })
   }
   return { series, notes }
+}
+
+// ------------------------------------------------------------- product tiles
+
+/** The product listing's subcategories, in the order a series' pack shot is taken from. */
+export const PRODUCT_SUBCATEGORIES = ['boosters', 'decks', 'others'] as const
+
+/** One tile of `/products/`: its product page, its shot, and the card list series its CARDS button opens. */
+export interface ProductTile {
+  href: string
+  /** Null for a product with no cards of its own (sleeves, playmats). */
+  seriesId: string | null
+  /** Null when the tile has no shot from Bandai's image folders. */
+  imageUrl: string | null
+}
+
+/**
+ * Every tile of one `/products/?subcategory=..&page=N` page. The shot is lazy-loaded (`data-src`),
+ * absolute or site-relative; its `?_=` query is a site-wide cache buster that changes with each
+ * deploy of Bandai's site, so it is dropped.
+ */
+export function parseProductTiles(html: string, site: string): ProductTile[] {
+  const out: ProductTile[] = []
+  for (const m of html.matchAll(/<li class="linkListColBox"[\s\S]*?<\/li>/g)) {
+    const tile = m[0]
+    const href = /<a href="([^"]+)"/.exec(tile)?.[1] ?? ''
+    const series = /cardlist\/\?series=(\d+)/.exec(tile)?.[1] ?? null
+    const src = /data-src="([^"]+)"/.exec(tile)?.[1]
+    let imageUrl: string | null = null
+    if (src) {
+      try {
+        const url = new URL(decodeEntities(src), `${site}/`).toString().replace(/[?#].*$/, '')
+        if (isOpPackUrl(url)) imageUrl = url
+      } catch {
+        // An unreadable src is a tile without a shot.
+      }
+    }
+    out.push({ href, seriesId: series, imageUrl })
+  }
+  return out
+}
+
+/**
+ * Series id to its pack shot, from every subcategory's pages in PRODUCT_SUBCATEGORIES order: the
+ * first subcategory listing a series gives it, and within that the oldest tile (pages run newest
+ * first), which is the set's own product rather than a later reprint or bundle.
+ */
+export function packShots(pages: { subcategory: string; tiles: ProductTile[] }[]): Map<string, string> {
+  const out = new Map<string, string>()
+  for (const sub of PRODUCT_SUBCATEGORIES) {
+    const mine = new Map<string, string>()
+    for (const p of pages) {
+      if (p.subcategory !== sub) continue
+      for (const t of p.tiles) if (t.seriesId !== null && t.imageUrl !== null) mine.set(t.seriesId, t.imageUrl)
+    }
+    for (const [id, url] of mine) if (!out.has(id)) out.set(id, url)
+  }
+  return out
 }
 
 // ------------------------------------------------------------------ card list

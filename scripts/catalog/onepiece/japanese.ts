@@ -3,7 +3,7 @@ import Database from 'better-sqlite3'
 import { distance, isFrozen, refreshArt, type ArtBatch, type ArtPortal } from './art'
 import { BANDAI_JA } from './bandai'
 import { openOpCache, type OpCache } from './cache'
-import { createOnePieceSources, dedupeEntries, type OnePieceSources } from './sources'
+import { createOnePieceSources, dedupeEntries, readPackShots, type OnePieceSources } from './sources'
 import type { BandaiEntry, BandaiSeries } from './types'
 import { entryKind } from './versions'
 import { writeOnePiece, type OnePieceReport } from './write'
@@ -124,6 +124,8 @@ export async function runOnePieceJapaneseStep(
     const listed = await sources.series()
     notes.push(...listed.notes)
     const series = englishNames(work, listed.series)
+    const packs = await readPackShots(sources, series)
+    notes.push(...packs.notes)
     const published = new Map<string, number>()
     const fetched = await sources.entries(series, published)
     problems.push(...fetched.problems)
@@ -209,7 +211,8 @@ export async function runOnePieceJapaneseStep(
         hashed,
         frozen,
         firstSeen,
-        labels
+        labels,
+        packShots: packs.shots
       },
       { now, nowIso: date.toISOString(), region: 'ja' }
     )

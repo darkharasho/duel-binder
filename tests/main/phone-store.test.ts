@@ -15,6 +15,7 @@ import { PHONE_FORMAT } from '../../src/phone/data/phoneSchema'
 import { createPhoneStore, type PhoneStore } from '../../src/phone/data/store'
 import { inProcessPortal, PORTAL, SERVER_NOW } from './cloudHelpers'
 import { seedPokemon } from '../fixtures/pokemon'
+import { seedOnePiece } from '../fixtures/onePiece'
 import { GAMES } from '../../src/shared/games'
 import { withOwnerOnlyPokemon } from '../fixtures/ownerOnlyGame'
 
@@ -887,6 +888,29 @@ describe('phone store', () => {
     requests = []
     expect(await store.updateCatalog()).toBe(false)
     expect(catalogRequests()).toEqual([])
+  })
+
+  it('the daily limit holds for an op account once its catalog exists', async () => {
+    portal.serverDb.close()
+    portal = await inProcessPortal({ ADMIN_DISCORD_ID: 'discord-1-alice' })
+    userId = portal.addUser('alice')
+    token = await portal.desktopToken(userId)
+    me = { ...me, id: userId }
+    seedPokemon(portal.serverDb)
+    seedOnePiece(portal.serverDb)
+
+    await ready()
+    expect(
+      Number((db.prepare("SELECT COUNT(*) AS n FROM cards WHERE game = 'op'").get() as { n: number }).n)
+    ).toBe(1)
+
+    clock = new Date(SERVER_NOW.getTime() + 3_600_000)
+    requests = []
+    expect(await store.updateCatalog()).toBe(false)
+    expect(catalogRequests()).toEqual([])
+
+    await store.updateCatalog({ force: true })
+    expect(catalogRequests().some((u) => u.includes('game=op'))).toBe(true)
   })
 
   it('runs one call at a time', async () => {

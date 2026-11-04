@@ -6,6 +6,7 @@ import { searchCards } from '../../src/main/repo/cards'
 import type { CatalogChange } from '../../src/shared/catalogFeed'
 import { seededDb } from './helpers'
 import { seedPokemon } from '../fixtures/pokemon'
+import { seedOnePiece } from '../fixtures/onePiece'
 
 interface P {
   id: number
@@ -260,6 +261,65 @@ describe('applyChanges', () => {
       expect(db.prepare('SELECT card_id FROM pokemon_cards').all()).toEqual([
         { card_id: cardIds[0] }
       ])
+    })
+  })
+
+  describe('One Piece image tombstones', () => {
+    const rows = (db: Database.Database, id: number): number[] =>
+      [
+        'SELECT COUNT(*) AS n FROM card_images WHERE image_id = ?',
+        'SELECT COUNT(*) AS n FROM onepiece_images WHERE image_id = ?'
+      ].map((q) => (db.prepare(q).get(id) as { n: number }).n)
+    const apply = (db: Database.Database, changes: CatalogChange[]): void =>
+      db.transaction(() => {
+        applyChanges(db, changes)
+      })()
+    const fkClean = (db: Database.Database): void =>
+      expect(db.prepare('PRAGMA foreign_key_check').all()).toEqual([])
+
+    it('an op image tombstone alone commits', async () => {
+      const db = await seededDb()
+      const { imageIds } = seedOnePiece(db)
+      apply(db, [{ seq: 1, table: 'card_images', deleted: [imageIds[1]] }])
+      expect(rows(db, imageIds[1])).toEqual([0, 0])
+      fkClean(db)
+    })
+
+    it('child then parent commits', async () => {
+      const db = await seededDb()
+      const { imageIds } = seedOnePiece(db)
+      apply(db, [
+        { seq: 1, table: 'onepiece_images', deleted: [imageIds[1]] },
+        { seq: 2, table: 'card_images', deleted: [imageIds[1]] }
+      ])
+      expect(rows(db, imageIds[1])).toEqual([0, 0])
+      fkClean(db)
+    })
+
+    it('parent then child commits', async () => {
+      const db = await seededDb()
+      const { imageIds } = seedOnePiece(db)
+      apply(db, [
+        { seq: 1, table: 'card_images', deleted: [imageIds[1]] },
+        { seq: 2, table: 'onepiece_images', deleted: [imageIds[1]] }
+      ])
+      expect(rows(db, imageIds[1])).toEqual([0, 0])
+      fkClean(db)
+    })
+
+    it('an image an entry uses keeps both rows', async () => {
+      const db = await seededDb()
+      const { imageIds, printingIds } = seedOnePiece(db)
+      db.prepare(
+        `INSERT INTO collection_entries (uid, game, printing_id, image_id, quantity, created_at, updated_at)
+         VALUES ('op-entry', 'op', ?, ?, 1, 'x', 'x')`
+      ).run(printingIds[0], imageIds[1])
+      apply(db, [
+        { seq: 1, table: 'card_images', deleted: [imageIds[1]] },
+        { seq: 2, table: 'onepiece_images', deleted: [imageIds[1]] }
+      ])
+      expect(rows(db, imageIds[1])).toEqual([1, 1])
+      fkClean(db)
     })
   })
 })

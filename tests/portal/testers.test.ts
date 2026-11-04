@@ -56,7 +56,12 @@ describe('game tester list', () => {
   function session(userId: number, token: string): void {
     db.prepare(
       "INSERT INTO sessions (token_hash, user_id, kind, created_at, expires_at) VALUES (?, ?, 'web', ?, ?)"
-    ).run(sha256Hex(token), userId, START.toISOString(), new Date(START.getTime() + 30 * DAY).toISOString())
+    ).run(
+      sha256Hex(token),
+      userId,
+      START.toISOString(),
+      new Date(START.getTime() + 30 * DAY).toISOString()
+    )
   }
   const cookie = (token: string): Record<string, string> => ({ cookie: `session=${token}` })
   const post = (
@@ -75,10 +80,22 @@ describe('game tester list', () => {
     )
   const list = async (
     token: string
-  ): Promise<{ id: number; game: string; discordUsername: string | null; userId: number | null; username: string | null }[]> =>
-    ((await (await handle(new Request(BASE + '/admin/testers', { headers: cookie(token) }), deps)).json()) as {
-      testers: never[]
-    }).testers
+  ): Promise<
+    {
+      id: number
+      game: string
+      discordUsername: string | null
+      userId: number | null
+      username: string | null
+    }[]
+  > =>
+    (
+      (await (
+        await handle(new Request(BASE + '/admin/testers', { headers: cookie(token) }), deps)
+      ).json()) as {
+        testers: never[]
+      }
+    ).testers
 
   async function signInDiscord(): Promise<string> {
     const start = await handle(new Request(BASE + '/auth/discord/start'), deps)
@@ -94,11 +111,15 @@ describe('game tester list', () => {
 
   it('the seeded row binds on Discord sign-in', async () => {
     const token = await signInDiscord()
-    const me = (await (await handle(new Request(BASE + '/api/me', { headers: cookie(token) }), deps)).json()) as {
+    const me = (await (
+      await handle(new Request(BASE + '/api/me', { headers: cookie(token) }), deps)
+    ).json()) as {
       games: string[]
     }
     expect(me.games).toEqual(['ygo', 'pkm', 'op'])
-    const rows = db.prepare("SELECT user_id FROM game_testers WHERE game = 'op'").all() as { user_id: number }[]
+    const rows = db.prepare("SELECT user_id FROM game_testers WHERE game = 'op'").all() as {
+      user_id: number
+    }[]
     expect(rows).toHaveLength(1)
     expect(rows[0].user_id).not.toBeNull()
   })
@@ -115,7 +136,9 @@ describe('game tester list', () => {
     const res = await post('/admin/testers', 'tok-owner', { game: 'op', username: 'Kaiba' })
     expect(res.status).toBe(200)
     expect(gamesFor(deps, kaiba)).toContain('op')
-    expect(await post('/admin/testers', 'tok-owner', { game: 'op', username: 'Kaiba' })).toMatchObject({ status: 200 })
+    expect(
+      await post('/admin/testers', 'tok-owner', { game: 'op', username: 'Kaiba' })
+    ).toMatchObject({ status: 200 })
     expect((await list('tok-owner')).filter((r) => r.userId === kaiba)).toHaveLength(1)
     const missing = await post('/admin/testers', 'tok-owner', { game: 'op', username: 'nobody' })
     expect(missing.status).toBe(404)
@@ -134,25 +157,42 @@ describe('game tester list', () => {
   it('remove takes the game away', async () => {
     await post('/admin/testers', 'tok-owner', { game: 'op', username: 'kaiba' })
     const row = (await list('tok-owner')).find((r) => r.userId === kaiba)!
-    expect(await (await post('/admin/testers/remove', 'tok-owner', { id: row.id })).json()).toEqual({ ok: true })
+    expect(await (await post('/admin/testers/remove', 'tok-owner', { id: row.id })).json()).toEqual(
+      { ok: true }
+    )
     expect(gamesFor(deps, kaiba)).toEqual(['ygo', 'pkm'])
   })
 
   it('only the owner', async () => {
-    expect((await handle(new Request(BASE + '/admin/testers', { headers: cookie('tok-kaiba') }), deps)).status).toBe(404)
+    expect(
+      (await handle(new Request(BASE + '/admin/testers', { headers: cookie('tok-kaiba') }), deps))
+        .status
+    ).toBe(404)
     expect((await handle(new Request(BASE + '/admin/testers'), deps)).status).toBe(404)
-    expect((await post('/admin/testers', 'tok-kaiba', { game: 'op', username: 'kaiba' })).status).toBe(404)
+    expect(
+      (await post('/admin/testers', 'tok-kaiba', { game: 'op', username: 'kaiba' })).status
+    ).toBe(404)
     expect((await post('/admin/testers/remove', 'tok-kaiba', { id: 1 })).status).toBe(404)
     expect(gamesFor(deps, kaiba)).toEqual(['ygo', 'pkm'])
-    const foreign = await post('/admin/testers', 'tok-owner', { game: 'op', username: 'kaiba' }, {
-      'content-type': 'application/json',
-      origin: 'https://evil.test'
-    })
+    const foreign = await post(
+      '/admin/testers',
+      'tok-owner',
+      { game: 'op', username: 'kaiba' },
+      {
+        'content-type': 'application/json',
+        origin: 'https://evil.test'
+      }
+    )
     expect(foreign.status).toBe(404)
-    const text = await post('/admin/testers', 'tok-owner', { game: 'op', username: 'kaiba' }, {
-      'content-type': 'text/plain',
-      origin: BASE
-    })
+    const text = await post(
+      '/admin/testers',
+      'tok-owner',
+      { game: 'op', username: 'kaiba' },
+      {
+        'content-type': 'text/plain',
+        origin: BASE
+      }
+    )
     expect(text.status).toBe(415)
     const pkm = await post('/admin/testers', 'tok-owner', { game: 'pkm', username: 'kaiba' })
     expect(pkm.status).toBe(400)

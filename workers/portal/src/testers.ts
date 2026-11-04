@@ -55,7 +55,9 @@ export async function adminTestersRoute(req: Request, deps: AppDeps): Promise<Re
   if (req.method === 'GET' && path === '/admin/testers') {
     const testers = (
       db
-        .prepare(`${SELECT_ROWS} ORDER BY t.game, COALESCE(u.username, t.discord_username) COLLATE NOCASE, t.id`)
+        .prepare(
+          `${SELECT_ROWS} ORDER BY t.game, COALESCE(u.username, t.discord_username) COLLATE NOCASE, t.id`
+        )
         .all() as TesterRow[]
     ).filter((r) => isGameId(r.game))
     return json({ testers })

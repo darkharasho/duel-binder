@@ -8,6 +8,15 @@
  * load already fetched; switching tabs reads nothing.
  */
 
+import { GAMES } from '../../../src/shared/games'
+import { GAME_IDS } from '../../../src/shared/games/types'
+
+/** The games only listed testers see: the panel's tables and its add form. */
+const TESTER_GAMES = GAME_IDS.filter((id) => GAMES[id].access === 'testers').map((id) => ({
+  id,
+  name: GAMES[id].name
+}))
+
 /** Free-plan SQLite storage for the whole account (Durable Objects pricing, Workers Free). */
 const FREE_STORAGE_BYTES = 5 * 1000 ** 3
 
@@ -56,6 +65,9 @@ td.v{text-align:right;font-weight:500}
 .bar{height:8px;border-radius:4px;background:rgb(255 255 255 / 8%);overflow:hidden;margin:8px 0 4px}
 .bar div{height:100%;background:var(--accent)}
 .note{color:var(--muted);font-size:12px;margin:4px 0 0}
+h3{font-size:13px;font-weight:600;margin:16px 0 6px}
+.adder{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:16px}
+.adder select,.adder input{height:30px;border-radius:6px;border:1px solid rgb(255 255 255 / 14%);background:var(--card);color:var(--fg);font:inherit;font-size:13px;padding:0 8px}
 .chart{display:flex;align-items:flex-end;gap:3px;height:225px}
 .chart div{flex:1;min-height:2px;background:var(--accent);border-radius:2px 2px 0 0;opacity:.85}
 th{padding:6px 0;text-align:right;font-size:12px;font-weight:500;color:var(--muted)}
@@ -94,6 +106,7 @@ details.error pre{margin:4px 0 8px;padding:8px;border-radius:6px;background:rgb(
 const SCRIPT = `
 const $ = (id) => document.getElementById(id)
 const FREE = ${FREE_STORAGE_BYTES}
+const TESTER_GAMES = ${JSON.stringify(TESTER_GAMES)}
 const n = (v) => (v ?? 0).toLocaleString()
 const bytes = (b) => b == null ? 'unknown' : b < 1e6 ? (b / 1e3).toFixed(1) + ' KB' : b < 1e9 ? (b / 1e6).toFixed(1) + ' MB' : (b / 1e9).toFixed(2) + ' GB'
 
@@ -532,7 +545,92 @@ async function loadMerges() {
   $('merges').replaceChildren(p)
 }
 
-const TABS = ['overview', 'runs', 'people', 'activity', 'errors', 'scanner', 'storage', 'merges']
+/** Who may use each tester-only game: a table per game, and a form to add an account. */
+async function loadTesters() {
+  const p = el('section', null, 'panel')
+  p.append(el('h2', 'Testers'))
+  try {
+    const res = await fetch('/admin/testers', { credentials: 'same-origin' })
+    if (!res.ok) throw new Error('HTTP ' + res.status)
+    const testers = (await res.json()).testers
+    for (const g of TESTER_GAMES) {
+      p.append(el('h3', g.name))
+      const mine = testers.filter((t) => t.game === g.id)
+      if (!mine.length) p.append(el('p', 'No testers yet.', 'note'))
+      else {
+        const table = el('table', null, 'history')
+        const head = el('tr')
+        for (const h of ['Account', 'Discord', 'Status', '']) head.append(el('th', h))
+        table.append(head)
+        for (const t of mine) {
+          const tr = el('tr')
+          const remove = el('button', 'Remove')
+          remove.type = 'button'
+          remove.addEventListener('click', async () => {
+            if (!confirm('Remove ' + (t.username ? '@' + t.username : t.discordUsername) + ' from ' + g.name + ' testers?')) return
+            remove.disabled = true
+            const r = await fetch('/admin/testers/remove', {
+              method: 'POST',
+              credentials: 'same-origin',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({ id: t.id })
+            })
+            if (!r.ok) alert('Remove failed: ' + ((await r.json().catch(() => ({}))).error ?? 'HTTP ' + r.status))
+            loadTesters()
+          })
+          const cell = el('td')
+          cell.append(remove)
+          tr.append(el('td', t.username ? '@' + t.username : '-'), el('td', t.discordUsername ?? '-'),
+            el('td', t.userId === null ? 'Pending' : 'Bound'), cell)
+          table.append(tr)
+        }
+        p.append(table)
+      }
+    }
+    const form = el('form', null, 'adder')
+    const game = el('select')
+    for (const g of TESTER_GAMES) {
+      const o = el('option', g.name)
+      o.value = g.id
+      game.append(o)
+    }
+    const kind = el('select')
+    for (const [v, label] of [['username', 'App username'], ['discordUsername', 'Discord username']]) {
+      const o = el('option', label)
+      o.value = v
+      kind.append(o)
+    }
+    const name = el('input')
+    name.type = 'text'
+    name.required = true
+    name.placeholder = 'username'
+    name.setAttribute('aria-label', 'Username')
+    const add = el('button', 'Add')
+    add.type = 'submit'
+    const msg = el('span', null, 'note')
+    form.append(game, kind, name, add, msg)
+    form.addEventListener('submit', async (ev) => {
+      ev.preventDefault()
+      add.disabled = true
+      msg.textContent = ''
+      const r = await fetch('/admin/testers', {
+        method: 'POST',
+        credentials: 'same-origin',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ game: game.value, [kind.value]: name.value })
+      })
+      if (r.ok) return loadTesters()
+      msg.textContent = (await r.json().catch(() => ({}))).error ?? 'HTTP ' + r.status
+      add.disabled = false
+    })
+    p.append(form)
+  } catch (e) {
+    p.append(el('p', 'Could not load testers: ' + e.message, 'note'))
+  }
+  $('testers').replaceChildren(p)
+}
+
+const TABS = ['overview', 'runs', 'people', 'activity', 'errors', 'scanner', 'storage', 'merges', 'testers']
 
 function showTab() {
   const wanted = location.hash.slice(1)
@@ -546,11 +644,12 @@ function showTab() {
 
 window.addEventListener('hashchange', showTab)
 showTab()
-$('refresh').addEventListener('click', () => { load(); loadErrors(); loadRuns(); loadMerges() })
+$('refresh').addEventListener('click', () => { load(); loadErrors(); loadRuns(); loadMerges(); loadTesters() })
 load()
 loadErrors()
 loadRuns()
 loadMerges()
+loadTesters()
 `
 
 function csp(nonce: string): string {
@@ -582,7 +681,7 @@ export function adminPage(): Response {
 <header><div class="wrap">
 <div class="top"><h1>Duel Binder</h1><span class="badge">Admin</span><span class="pulse" id="pulse"></span>
 <span class="grow"></span><span class="at" id="at"></span><a href="/">Back to the app</a><button id="refresh" type="button">Refresh</button></div>
-<nav aria-label="Admin sections"><a href="#overview">Overview</a><a href="#runs">Runs</a><a href="#people">Users</a><a href="#activity">Usage</a><a href="#errors">Errors</a><a href="#scanner">Scanner &amp; prices</a><a href="#storage">Storage</a><a href="#merges">Merges</a></nav>
+<nav aria-label="Admin sections"><a href="#overview">Overview</a><a href="#runs">Runs</a><a href="#people">Users</a><a href="#activity">Usage</a><a href="#errors">Errors</a><a href="#scanner">Scanner &amp; prices</a><a href="#storage">Storage</a><a href="#merges">Merges</a><a href="#testers">Testers</a></nav>
 </div></header>
 <main class="wrap">
 <section data-tab id="overview">
@@ -596,6 +695,7 @@ export function adminPage(): Response {
 <section data-tab class="grid" id="scanner" hidden></section>
 <section data-tab class="stack" id="storage" hidden></section>
 <section data-tab id="merges" hidden></section>
+<section data-tab id="testers" hidden></section>
 </main>
 <script nonce="${nonce}">${SCRIPT}</script>
 </body>

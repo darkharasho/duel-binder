@@ -5,6 +5,18 @@ export const OP_CARD_TYPES = ['Leader', 'Character', 'Event', 'Stage', 'DON!!'] 
 export const OP_RARITIES = ['L', 'C', 'UC', 'R', 'SR', 'SEC', 'SP', 'TR', 'P'] as const
 export const OP_ATTRIBUTES = ['Strike', 'Slash', 'Ranged', 'Special', 'Wisdom'] as const
 
+/**
+ * SQL for the version of a printing label in `col`: the text between its first ` (` and its final
+ * `)` (`SR (Alternate Art)` is `Alternate Art`, `SR (Alternate Art 2)` is `Alternate Art 2`, a
+ * promo's product name), else `'Base'`: a label with no ` (` (`SR`), or one whose remainder is all
+ * digits (`SP (2)`). A number is kept, not stripped: it would also cut product names (`… Season 1`).
+ */
+export function opVersionSql(col: string): string {
+  const rest = `substr(${col}, instr(${col}, ' (') + 2)`
+  const inner = `(CASE WHEN substr(${rest}, -1) = ')' THEN substr(${rest}, 1, length(${rest}) - 1) ELSE ${rest} END)`
+  return `(CASE WHEN instr(${col}, ' (') = 0 OR ${inner} NOT GLOB '*[^0-9]*' THEN 'Base' ELSE ${inner} END)`
+}
+
 export const ONE_PIECE: GameDef = {
   id: 'op',
   name: 'One Piece',
@@ -26,6 +38,7 @@ export const ONE_PIECE: GameDef = {
     { key: 'opAttributes', label: 'Attribute', kind: 'multi' },
     { key: 'opTraits', label: 'Trait', kind: 'multi' },
     { key: 'opRarities', label: 'Rarity', kind: 'multi' },
+    { key: 'opVersions', label: 'Version', kind: 'multi' },
     { key: 'opBlocks', label: 'Block', kind: 'multi' },
     { key: 'cost', label: 'Cost', kind: 'range' },
     { key: 'power', label: 'Power', kind: 'range' },

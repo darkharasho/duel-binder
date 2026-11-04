@@ -18,6 +18,7 @@ type GameKey =
   | 'opAttributes'
   | 'opTraits'
   | 'opRarities'
+  | 'opVersions'
   | 'opBlocks'
 export type ListKey = GameKey | 'setNames' | 'rarities'
 
@@ -39,6 +40,7 @@ const GAME_KEYS: readonly string[] = [
   'opAttributes',
   'opTraits',
   'opRarities',
+  'opVersions',
   'opBlocks'
 ] satisfies GameKey[]
 
@@ -156,12 +158,12 @@ const SORT_WORDS = {
 } as const
 
 /**
- * Sorts a game has no column for: ATK, DEF and Level are Yu-Gi-Oh!'s, HP is Pokémon's. One Piece
- * has none of them until step 2 adds cost and power.
+ * Sorts a game has no column for: ATK, DEF and Level are Yu-Gi-Oh!'s, HP is Pokémon's, Cost and
+ * Power are One Piece's.
  */
 export const HIDDEN_SORTS: Record<GameId, readonly string[]> = {
-  ygo: ['hp'],
-  pkm: ['atk', 'def', 'level'],
+  ygo: ['hp', 'cost', 'power'],
+  pkm: ['atk', 'def', 'level', 'cost', 'power'],
   op: ['atk', 'def', 'level', 'hp']
 }
 

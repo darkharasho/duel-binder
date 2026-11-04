@@ -54,8 +54,8 @@ describe('CardPlaceholder by game', () => {
 
 describe('sort lists by game', () => {
   it('hides each game’s missing columns', () => {
-    expect(HIDDEN_SORTS.ygo).toEqual(['hp'])
-    expect(HIDDEN_SORTS.pkm).toEqual(['atk', 'def', 'level'])
+    expect(HIDDEN_SORTS.ygo).toEqual(['hp', 'cost', 'power'])
+    expect(HIDDEN_SORTS.pkm).toEqual(['atk', 'def', 'level', 'cost', 'power'])
     expect(HIDDEN_SORTS.op).toEqual(['atk', 'def', 'level', 'hp'])
     const values = (g: GameId): string[] => checklistSorts(g).map((s) => s.value)
     expect(values('ygo')).toContain('atk')

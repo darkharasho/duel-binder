@@ -8,18 +8,31 @@ import { LOCAL, scopeGame, type Scope } from './scope'
 const TOP_ENTRY_LIMIT = 10
 const RECENT_ENTRY_LIMIT = 8
 
-/** Owned copies per Pokémon category (Pokémon/Trainer/Energy): the Pokémon stand-in for frame types. */
-function pokemonCategories(db: SqlDb, scope: Scope): [string, number][] {
+/** Owned copies per value of `col` in the game's facts table (joined on card_id). */
+function copiesBy(
+  db: SqlDb,
+  scope: Scope,
+  table: 'pokemon_cards' | 'onepiece_cards',
+  col: 'category' | 'card_type'
+): [string, number][] {
   const rows = db
     .prepare(
-      `SELECT pc.category AS category, SUM(e.quantity) AS n FROM collection_entries e
+      `SELECT d.${col} AS v, SUM(e.quantity) AS n FROM collection_entries e
        JOIN card_printings p ON p.id = e.printing_id AND +p.game = ${scope.game}
-       JOIN pokemon_cards pc ON pc.card_id = p.card_id
-       WHERE ${scope.where('e')} GROUP BY pc.category`
+       JOIN ${table} d ON d.card_id = p.card_id
+       WHERE ${scope.where('e')} GROUP BY d.${col}`
     )
-    .all() as { category: string; n: number }[]
-  return rows.map((r) => [r.category, r.n])
+    .all() as { v: string; n: number }[]
+  return rows.map((r) => [r.v, r.n])
 }
+
+/** Owned copies per Pokémon category (Pokémon/Trainer/Energy): the Pokémon stand-in for frame types. */
+const pokemonCategories = (db: SqlDb, scope: Scope): [string, number][] =>
+  copiesBy(db, scope, 'pokemon_cards', 'category')
+
+/** Owned copies per One Piece card type (Leader/Character/Event/…), the same way. */
+const onePieceCardTypes = (db: SqlDb, scope: Scope): [string, number][] =>
+  copiesBy(db, scope, 'onepiece_cards', 'card_type')
 
 export function getStats(db: SqlDb, scope: Scope = LOCAL): CollectionStats {
   const entries = listEntries(db, { sort: 'value', dir: 'desc' }, scope)
@@ -59,7 +72,7 @@ export function getStats(db: SqlDb, scope: Scope = LOCAL): CollectionStats {
     byFrameType: byGame<() => [string, number][]>(scopeGame(db, scope), {
       ygo: () => [...frames],
       pkm: () => pokemonCategories(db, scope),
-      op: () => [] // op: step 2 puts card types here
+      op: () => onePieceCardTypes(db, scope)
     })()
       .map(([frameType, count]) => ({ frameType, count }))
       .sort((a, b) => b.count - a.count),

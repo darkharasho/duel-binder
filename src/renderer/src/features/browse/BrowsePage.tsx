@@ -54,10 +54,12 @@ const SORTS = [
   { value: 'atk', label: 'ATK', kind: 'number', dir: 'desc' },
   { value: 'def', label: 'DEF', kind: 'number', dir: 'desc' },
   { value: 'level', label: 'Level / Link', kind: 'number', dir: 'desc' },
-  { value: 'hp', label: 'HP', kind: 'number', dir: 'desc' }
+  { value: 'hp', label: 'HP', kind: 'number', dir: 'desc' },
+  { value: 'cost', label: 'Cost', kind: 'number', dir: 'asc' },
+  { value: 'power', label: 'Power', kind: 'number', dir: 'desc' }
 ] as const
 
-/** The game's sorts: ATK, DEF and Level are Yu-Gi-Oh!'s, HP is Pokémon's. */
+/** The game's sorts: ATK, DEF and Level are Yu-Gi-Oh!'s, HP is Pokémon's, Cost and Power One Piece's. */
 const sortsFor = (game: GameId): SortOption<BrowseSort>[] =>
   sortOptions<BrowseSort>(
     SORTS.filter((s) => !HIDDEN_SORTS[game].includes(s.value))

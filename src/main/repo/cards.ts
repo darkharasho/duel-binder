@@ -1,6 +1,15 @@
 import type { SqlDb } from '../db/sql'
 import { RARITY_LABEL } from '../db/schema'
-import type { CardDetail, CardImage, CardRow, CardSearchResult, PokemonFacts, Printing } from '../../shared/types'
+import type {
+  CardDetail,
+  CardImage,
+  CardRow,
+  CardSearchResult,
+  OnePieceFacts,
+  PokemonFacts,
+  Printing
+} from '../../shared/types'
+import { byGame, type GameId } from '../../shared/games'
 import { isLanguage } from '../../shared/languages'
 import { setPrice } from './priceRule'
 import { shownPrinting } from './shownPrinting'
@@ -32,11 +41,40 @@ export interface CardDbRow {
   pk_rarity?: string | null
   pk_illustrator?: string | null
   pk_local_name?: string | null
+  /** Set when the query reads onepiece_cards as `oc` (see onePieceRead); absent on the other games. */
+  op_number?: string | null
+  op_card_type?: string | null
+  op_colors?: string | null
+  op_cost?: number | null
+  op_life?: number | null
+  op_power?: number | null
+  op_counter?: number | null
+  op_attribute?: string | null
+  op_traits?: string | null
+  op_block_icon?: number | null
 }
 
 /** The pokemon_cards columns rowToCard reads, from a `LEFT JOIN pokemon_cards pc ON pc.card_id = c.id`. */
 export const POKEMON_COLS = `pc.category AS pk_category, pc.hp AS pk_hp, pc.types AS pk_types, pc.stage AS pk_stage,
   pc.rarity AS pk_rarity, pc.illustrator AS pk_illustrator, pc.local_name AS pk_local_name`
+
+/** The onepiece_cards columns rowToCard reads, from a `LEFT JOIN onepiece_cards oc ON oc.card_id = c.id`. */
+export const ONEPIECE_COLS = `oc.number AS op_number, oc.card_type AS op_card_type, oc.colors AS op_colors,
+  oc.cost AS op_cost, oc.life AS op_life, oc.power AS op_power, oc.counter AS op_counter,
+  oc.attribute AS op_attribute, oc.traits AS op_traits, oc.block_icon AS op_block_icon`
+
+const NO_ONEPIECE = { cols: '', join: '' }
+
+/**
+ * What a card query adds to read One Piece facts: `, ONEPIECE_COLS` (after its last column) and
+ * its join (after the join of `c`). Nothing on the other games, so their reads skip the join.
+ */
+export const onePieceRead = (game: GameId): { cols: string; join: string } =>
+  byGame(game, {
+    ygo: NO_ONEPIECE,
+    pkm: NO_ONEPIECE,
+    op: { cols: `, ${ONEPIECE_COLS}`, join: 'LEFT JOIN onepiece_cards oc ON oc.card_id = c.id' }
+  })
 
 function parseTypes(json: string | null | undefined): string[] {
   try {
@@ -60,6 +98,22 @@ function pokemonFacts(row: CardDbRow): PokemonFacts | undefined {
   }
 }
 
+function onePieceFacts(row: CardDbRow): OnePieceFacts | undefined {
+  if (row.op_number === null || row.op_number === undefined) return undefined
+  return {
+    cardType: row.op_card_type ?? '',
+    colors: parseTypes(row.op_colors),
+    cost: row.op_cost ?? null,
+    life: row.op_life ?? null,
+    power: row.op_power ?? null,
+    counter: row.op_counter ?? null,
+    attribute: parseTypes(row.op_attribute),
+    traits: parseTypes(row.op_traits),
+    blockIcon: row.op_block_icon ?? null,
+    number: row.op_number
+  }
+}
+
 export interface PrintingDbRow {
   id: number
   card_id: number
@@ -78,6 +132,7 @@ export interface PrintingDbRow {
 
 export function rowToCard(row: CardDbRow): CardRow {
   const pokemon = pokemonFacts(row)
+  const onePiece = onePieceFacts(row)
   return {
     id: row.id,
     name: row.name,
@@ -92,7 +147,8 @@ export function rowToCard(row: CardDbRow): CardRow {
     archetype: row.archetype,
     desc: row.desc,
     tcgplayerPrice: row.tcgplayer_price,
-    ...(pokemon ? { pokemon } : {})
+    ...(pokemon ? { pokemon } : {}),
+    ...(onePiece ? { onePiece } : {})
   }
 }
 
@@ -263,10 +319,11 @@ export function traditionalArt(db: SqlDb): [number, number][] {
 }
 
 export function getCardDetail(db: SqlDb, cardId: number, scope: Scope = LOCAL): CardDetail | null {
+  const op = onePieceRead(scopeGame(db, scope))
   const row = db
     .prepare(
-      `SELECT c.*, ${POKEMON_COLS} FROM cards c LEFT JOIN pokemon_cards pc ON pc.card_id = c.id
-       WHERE c.id = ? AND +c.game = ${scope.game}`
+      `SELECT c.*, ${POKEMON_COLS}${op.cols} FROM cards c LEFT JOIN pokemon_cards pc ON pc.card_id = c.id
+       ${op.join} WHERE c.id = ? AND +c.game = ${scope.game}`
     )
     .get(cardId) as
     | CardDbRow

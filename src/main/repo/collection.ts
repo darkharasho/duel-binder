@@ -15,9 +15,18 @@ import type {
 import { getMeta } from '../db/meta'
 import { LOCAL, favouriteSql, scopeGame, type Scope } from './scope'
 import { pokemonFacets, pokemonSearch, pokemonWhere } from './pkmFilters'
+import { onePieceFacets, onePieceWhere, opRarityWhere, opVersionWhere } from './opFilters'
 import { enTwinPrice } from './enTwin'
 import { marketOnlyGame, setPrice, sweptLanguage } from './priceRule'
-import { buildFtsQuery, POKEMON_COLS, rowToCard, rowToPrinting, type CardDbRow, type PrintingDbRow } from './cards'
+import {
+  buildFtsQuery,
+  onePieceRead,
+  POKEMON_COLS,
+  rowToCard,
+  rowToPrinting,
+  type CardDbRow,
+  type PrintingDbRow
+} from './cards'
 
 export class CollectionError extends Error {
   constructor(message: string) {
@@ -37,25 +46,30 @@ interface EntryDbRow {
   [col: string]: unknown
 }
 
-/** The card, printing and price columns `entryPrice` and rowToCard read; `c`, `p`, `ip` and `pc` joined as below. */
-export const cardPriceColumns = (scope: Scope): string => `
+/**
+ * The card, printing and price columns `entryPrice` and rowToCard read; `c`, `p`, `ip` and `pc`
+ * joined as below, and `oc` when `opCols` (onePieceRead's `cols`) is given.
+ */
+export const cardPriceColumns = (scope: Scope, opCols = ''): string => `
          c.id AS id, c.name, c.type, c.frame_type, c.race, c.attribute, c.level, c.linkval, c.atk, c.def,
-         c.archetype, c.desc, c.tcgplayer_price, ${POKEMON_COLS},
+         c.archetype, c.desc, c.tcgplayer_price, ${POKEMON_COLS}${opCols},
          p.id AS p_id, p.card_id, p.set_name, p.set_code, ${RARITY_LABEL} AS set_rarity, p.set_rarity_code, ${setPrice(scope.ebayPrices)} AS set_price,
          p.market_price, ${enTwinPrice(scope.game)} AS en_twin_price, p.game AS p_game,
          p.missing_from_api, p.language,
          ip.printing_id AS ip_id, ip.price AS ip_price, ip.checked_at AS ip_checked_at,
          ip.listing_count AS ip_listing_count`
 
-const select = (scope: Scope): string => `
+/** The entry query; `op` is onePieceRead of the scope's game. */
+const select = (scope: Scope, op: { cols: string; join: string }): string => `
   SELECT e.id AS e_id, e.quantity AS e_quantity, e.notes AS e_notes, e.created_at AS e_created_at,
          e.updated_at AS e_updated_at, e.image_id AS e_image_id,
          COALESCE(rs.tcg_date, res.tcg_date) AS e_release_date,
-         ${cardPriceColumns(scope)}
+         ${cardPriceColumns(scope, op.cols)}
   FROM collection_entries e
   JOIN card_printings p ON p.id = e.printing_id AND +p.game = ${scope.game}
   JOIN cards c ON c.id = p.card_id AND +c.game = ${scope.game}
   LEFT JOIN pokemon_cards pc ON pc.card_id = c.id
+  ${op.join}
   LEFT JOIN intl_prices ip ON ip.printing_id = p.id AND ${scope.ebayPrices}
   LEFT JOIN sets rs ON rs.game = p.game AND rs.language = p.language AND rs.set_name = p.set_name
   LEFT JOIN sets res ON res.game = p.game AND res.language = 'en' AND res.set_name = p.set_name`
@@ -143,7 +157,8 @@ function toView(r: EntryDbRow, priceStatus: string | null): EntryView {
 }
 
 export function getEntry(db: SqlDb, id: number, scope: Scope = LOCAL): EntryView | null {
-  const row = db.prepare(`${select(scope)} WHERE e.id = ? AND ${scope.where('e')}`).get(id) as EntryDbRow | undefined
+  const op = onePieceRead(scopeGame(db, scope))
+  const row = db.prepare(`${select(scope, op)} WHERE e.id = ? AND ${scope.where('e')}`).get(id) as EntryDbRow | undefined
   return row ? toView(row, getMeta(db, 'price_service_status')) : null
 }
 
@@ -256,7 +271,8 @@ export function listEntries(db: SqlDb, f: CollectionFilters, scope: Scope = LOCA
       params.push(...values)
     }
   }
-  const pkm = scopeGame(db, scope) === 'pkm'
+  const game = scopeGame(db, scope)
+  const pkm = game === 'pkm'
   const text = f.q?.trim()
   if (text) {
     const own = pkm ? pokemonSearch(text, { game: scope.game, printingCol: 'p.set_code' }) : null
@@ -278,6 +294,15 @@ export function listEntries(db: SqlDb, f: CollectionFilters, scope: Scope = LOCA
     const pkm = pokemonWhere(f)
     where.push(...pkm.where)
     params.push(...pkm.params)
+  } else if (game === 'op') {
+    const op = onePieceWhere(f)
+    where.push(...op.where)
+    params.push(...op.params)
+    for (const label of [opRarityWhere(f.opRarities, 'p.set_rarity'), opVersionWhere(f.opVersions, 'p.set_rarity')]) {
+      if (!label) continue
+      where.push(label.sql)
+      params.push(...label.params)
+    }
   } else {
     inList('c.type', f.cardTypes)
     inList('c.attribute', f.attributes)
@@ -299,7 +324,7 @@ export function listEntries(db: SqlDb, f: CollectionFilters, scope: Scope = LOCA
   }
   if (f.favourites === true) where.push(favouriteSql(scope))
   const status = getMeta(db, 'price_service_status')
-  const sql = `${select(scope)} WHERE ${where.join(' AND ')}`
+  const sql = `${select(scope, onePieceRead(game))} WHERE ${where.join(' AND ')}`
   const entries = (db.prepare(sql).all(...params) as EntryDbRow[]).map((r) => toView(r, status))
 
   const dir = f.dir === 'desc' ? -1 : 1
@@ -340,8 +365,9 @@ export function listEntries(db: SqlDb, f: CollectionFilters, scope: Scope = LOCA
 
 export function entriesForCard(db: SqlDb, cardId: number, scope: Scope = LOCAL): EntryView[] {
   const status = getMeta(db, 'price_service_status')
+  const op = onePieceRead(scopeGame(db, scope))
   return (
-    db.prepare(`${select(scope)} WHERE c.id = ? AND ${scope.where('e')} ORDER BY p.set_code, e.id`).all(cardId) as EntryDbRow[]
+    db.prepare(`${select(scope, op)} WHERE c.id = ? AND ${scope.where('e')} ORDER BY p.set_code, e.id`).all(cardId) as EntryDbRow[]
   ).map((r) => toView(r, status))
 }
 
@@ -360,8 +386,9 @@ export function getFacets(db: SqlDb, scope: Scope = LOCAL): Facets {
   const owned = new Set(distinct('p.language'))
   const game = scopeGame(db, scope)
   const pkm = game === 'pkm'
-  // These three are Yu-Gi-Oh columns; 'op' gets its own facets in step 2.
+  // These three are Yu-Gi-Oh columns; 'op' has its own facets below.
   const ygo = game === 'ygo'
+  const ownedCards = `SELECT p.card_id FROM collection_entries e JOIN card_printings p ON p.id = e.printing_id AND +p.game = ${scope.game} WHERE ${scope.where('e')}`
   return {
     cardTypes: ygo ? distinct('c.type') : [],
     attributes: ygo ? distinct('c.attribute') : [],
@@ -369,12 +396,7 @@ export function getFacets(db: SqlDb, scope: Scope = LOCAL): Facets {
     setNames: distinct('p.set_name'),
     rarities: distinct('p.set_rarity'),
     languages: LANGUAGES.map((l) => l.code).filter((code) => owned.has(code)),
-    ...(pkm
-      ? pokemonFacets(
-          db,
-          scope,
-          `SELECT p.card_id FROM collection_entries e JOIN card_printings p ON p.id = e.printing_id AND +p.game = ${scope.game} WHERE ${scope.where('e')}`
-        )
-      : {})
+    ...(pkm ? pokemonFacets(db, scope, ownedCards) : {}),
+    ...(game === 'op' ? onePieceFacets(db, scope, ownedCards) : {})
   }
 }

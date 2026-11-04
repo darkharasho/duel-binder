@@ -34,7 +34,7 @@ import {
   type SlotPrinting,
   type SlotResult
 } from './binderSlots'
-import { POKEMON_COLS, rowToCard, rowToPrinting, type CardDbRow, type PrintingDbRow } from './cards'
+import { onePieceRead, POKEMON_COLS, rowToCard, rowToPrinting, type CardDbRow, type PrintingDbRow } from './cards'
 import { CollectionError } from './collection'
 import { LOCAL, scopeGame, type Scope } from './scope'
 import { printingPrice } from './sets'
@@ -373,12 +373,13 @@ const CARD_COLS = `c.id, c.name, c.type, c.frame_type, c.race, c.attribute, c.le
 function binderCards(db: SqlDb, slots: Slot[], scope: Scope): BinderCard[] {
   if (slots.length === 0) return []
   const cardIds = [...new Set(slots.map((s) => s.cardId))]
+  const op = onePieceRead(scopeGame(db, scope))
   const cardRows = db
     .prepare(
-      `SELECT ${CARD_COLS},
+      `SELECT ${CARD_COLS}${op.cols},
               (SELECT i.image_id FROM card_images i WHERE i.card_id = c.id AND +i.game = ${scope.game}
                ORDER BY i.sort_order, i.image_id LIMIT 1) AS first_image
-       FROM cards c LEFT JOIN pokemon_cards pc ON pc.card_id = c.id
+       FROM cards c LEFT JOIN pokemon_cards pc ON pc.card_id = c.id ${op.join}
        WHERE +c.game = ${scope.game} AND c.id IN ${IN_LIST}`
     )
     .all(JSON.stringify(cardIds)) as (CardDbRow & { first_image: number | null })[]

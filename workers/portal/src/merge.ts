@@ -281,6 +281,11 @@ function moveSignIns(
     a.survivor,
     a.closed
   )
+  // Training photos follow too, keeping their R2 keys; an undo leaves them with the survivor.
+  db.prepare('UPDATE OR IGNORE training_photos SET user_id = ? WHERE user_id = ?').run(
+    a.survivor,
+    a.closed
+  )
   const theirs = db
     .prepare('SELECT refresh_token FROM apple_tokens WHERE user_id = ?')
     .get(a.closed) as { refresh_token: string } | undefined

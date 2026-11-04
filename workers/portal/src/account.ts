@@ -15,8 +15,9 @@ const json = (body: unknown, status: number): Response =>
  * - `collection_entries` and `value_snapshots` don't cascade from `users`, so they go first;
  * - deleting the `users` row cascades to sessions, desktop_codes, friendships,
  *   friend_request_log, friend_blocks, printing_contributions, price_request_log, wishlist_entries,
- *   binders, binder_edits, favourites, sign_ins, apple_tokens, account_change_log and merge_tickets
- *   (foreign keys are always on in a Durable Object).
+ *   binders, binder_edits, favourites, sign_ins, apple_tokens, account_change_log, merge_tickets
+ *   and training_photos (foreign keys are always on in a Durable Object); deleteAccountRoute
+ *   deletes the training photos' R2 objects.
  * One statement per table: Durable Object SQLite rejects large compound queries. `account_merges`
  * rows have no foreign key and stay.
  */
@@ -62,15 +63,27 @@ export async function deleteAccountRoute(req: Request, deps: AppDeps): Promise<R
   const apple = deps.db
     .prepare('SELECT refresh_token FROM apple_tokens WHERE user_id = ?')
     .get(userId) as { refresh_token: string } | undefined
+  // Held accounts only: a purged hold's id may now be a new user's (mergedFrom leaves it out).
+  const held = mergedFrom(deps.db, userId)
+  // Training photos' rows cascade with the users row; their R2 objects are deleted after.
+  const photoKey = deps.db.prepare('SELECT r2_key FROM training_photos WHERE user_id = ?')
+  const photoKeys = [userId, ...held].flatMap((id) =>
+    (photoKey.all(id) as { r2_key: string }[]).map((r) => r.r2_key)
+  )
   deps.db.transaction(() => {
     const dropMerge = deps.db.prepare('DELETE FROM account_merges WHERE closed_id = ?')
-    // Held accounts only: a purged hold's id may now be a new user's (mergedFrom leaves it out).
-    for (const held of mergedFrom(deps.db, userId)) {
-      deleteUserData(deps.db, held)
-      dropMerge.run(held)
+    for (const id of held) {
+      deleteUserData(deps.db, id)
+      dropMerge.run(id)
     }
     deleteUserData(deps.db, userId)
   })()
+  if (deps.training && photoKeys.length > 0) {
+    const training = deps.training
+    const results = await Promise.allSettled(photoKeys.map((k) => training.delete(k)))
+    const failed = results.filter((r) => r.status === 'rejected').length
+    if (failed > 0) console.warn(`${failed} training photo(s) of a deleted account not deleted`)
+  }
   if (apple) {
     const revoked = await revokeAppleToken(apple.refresh_token, deps).catch(() => false)
     if (!revoked) console.warn('Apple token revoke failed for a deleted account')

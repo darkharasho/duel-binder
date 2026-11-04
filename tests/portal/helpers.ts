@@ -4,6 +4,7 @@ import type { YgoClient } from '../../src/main/ygo/client'
 import type { ApiCard } from '../../src/main/ygo/mapCard'
 import { migrateServer } from '../../workers/portal/src/migrate'
 import type { ImageBucket } from '../../workers/portal/src/images'
+import type { TrainingBucket } from '../../workers/portal/src/training'
 import type { PrintingArtResolver } from '../../src/main/yugipedia/artResolver'
 import type { PriceQueue } from '../../workers/portal/src/prices'
 import type { EmailMessage, EmailSender } from '../../workers/portal/src/emailSend'
@@ -38,7 +39,8 @@ export function addUser(db: Database.Database, discordId: string, username: stri
 }
 
 /** In-memory stand-in for the R2 bucket; `store` is exposed so tests can look inside. */
-export function memoryBucket(): ImageBucket & { store: Map<string, { bytes: ArrayBuffer; contentType: string; etag: string }> } {
+export function memoryBucket(): ImageBucket &
+  TrainingBucket & { store: Map<string, { bytes: ArrayBuffer; contentType: string; etag: string }> } {
   const store = new Map<string, { bytes: ArrayBuffer; contentType: string; etag: string }>()
   let writes = 0
   return {
@@ -50,6 +52,9 @@ export function memoryBucket(): ImageBucket & { store: Map<string, { bytes: Arra
     },
     async put(key, value, opts) {
       store.set(key, { bytes: value, contentType: opts.httpMetadata.contentType, etag: `"v${++writes}"` })
+    },
+    async delete(key) {
+      store.delete(key)
     }
   }
 }

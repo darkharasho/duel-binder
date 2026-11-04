@@ -195,4 +195,16 @@ describe('artwork from the edge, ahead of the Durable Object', () => {
     expect(res?.status).toBe(404)
     expect(edge.store.size).toBe(0)
   })
+
+  it("never reads a training photo's key from R2", async () => {
+    const store = durableObject()
+    const reads: string[] = []
+    const bucket = memoryBucket()
+    const key = 'training/op/7/11111111-1111-4111-8111-111111111111.jpg'
+    await bucket.put(key, JPEG.buffer, { httpMetadata: { contentType: 'image/jpeg' } })
+    const spy = { get: async (k: string) => (reads.push(k), bucket.get(k)) }
+    const res = await edgeImage(new Request(url(key)), spy, memoryEdge(), () => {}, store.fetch)
+    expect(res?.status).toBe(404)
+    expect(reads).toEqual([])
+  })
 })

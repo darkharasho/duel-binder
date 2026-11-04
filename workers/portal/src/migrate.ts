@@ -669,6 +669,20 @@ CREATE UNIQUE INDEX ux_game_testers_pending ON game_testers(game, discord_userna
 CREATE INDEX ix_game_testers_user_id ON game_testers(user_id);
 INSERT INTO game_testers (game, discord_username, user_id) VALUES ('op', 'dubgrumble', NULL);
 `
+  },
+  {
+    // Testers' labelled phone photos for scanner training (training.ts); the JPEG is in R2 at r2_key.
+    name: 'server-37',
+    sql: `
+CREATE TABLE training_photos (id INTEGER PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  client_id TEXT NOT NULL, game TEXT NOT NULL, card_id INTEGER NOT NULL, printing_id INTEGER NOT NULL,
+  holder TEXT NOT NULL, device TEXT NOT NULL, app_version TEXT NOT NULL, taken_at TEXT NOT NULL,
+  created_at TEXT NOT NULL, bytes INTEGER NOT NULL, r2_key TEXT NOT NULL);
+CREATE UNIQUE INDEX ux_training_photos_client ON training_photos(user_id, client_id);
+CREATE INDEX ix_training_photos_user_created ON training_photos(user_id, created_at);
+CREATE INDEX ix_training_photos_game ON training_photos(game, id);
+`
   }
 ]
 

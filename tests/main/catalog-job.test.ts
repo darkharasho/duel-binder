@@ -18,13 +18,24 @@ import {
 import { diffTable } from '../../scripts/catalog/diff'
 import { uploadCatalog } from '../../scripts/catalog/upload'
 import type { AccuracyReport } from '../../scripts/catalog/accuracy'
-import { findShrinks, runJob as runRealJob, type JobOptions } from '../../scripts/catalog/build'
+import {
+  findShrinks,
+  onePieceArtBudget,
+  runJob as runRealJob,
+  type JobOptions
+} from '../../scripts/catalog/build'
+import { ART_BUDGET } from '../../scripts/catalog/onepiece/art'
 import type { PokemonReport } from '../../scripts/catalog/pokemon'
 import fixture from '../fixtures/cardinfo.sample.json'
+import { seedOnePiece } from '../fixtures/onePiece'
 
-/** The job with a Pokémon step that does nothing, so no test reaches the live sources. */
+/** The job with Pokémon and One Piece steps that do nothing, so no test reaches the live sources. */
 const runJob = (o: JobOptions): ReturnType<typeof runRealJob> =>
-  runRealJob({ pokemon: async () => ({ reports: [], error: null }), ...o })
+  runRealJob({
+    pokemon: async () => ({ reports: [], error: null }),
+    onePiece: async () => ({ report: null, error: null, problems: [] }),
+    ...o
+  })
 
 const NOW = new Date('2026-10-23T12:00:00.000Z')
 const HOUR = 60 * 60 * 1000
@@ -1030,5 +1041,163 @@ describe('Pokémon step in the nightly job', () => {
 
   it('--stage does not go with --dry-run', async () => {
     await expect(runJob({ dir, dryRun: true, stage: 'ygo' })).rejects.toThrow('--dry-run')
+  })
+})
+
+describe('One Piece step in the nightly job', () => {
+  /** A fake op step that seeds the fixture's op rows once. */
+  const seeding = async (
+    work: Database.Database
+  ): Promise<{ report: null; error: null; problems: string[] }> => {
+    if (!work.prepare("SELECT 1 FROM cards WHERE game = 'op'").get()) seedOnePiece(work)
+    return { report: null, error: null, problems: [] }
+  }
+  const common = (): Partial<JobOptions> => ({
+    dir,
+    imageFetch: noImages,
+    checkAccuracy: passing,
+    refresh: async () => {},
+    log: () => {}
+  })
+  async function ygoAndPkm(): Promise<void> {
+    const work = await workDb()
+    addPokemon(work)
+    work.close()
+  }
+  const rowsOf = (calls: Call[], t: string): Record<string, unknown>[] =>
+    calls
+      .filter((c) => c.body.table === t)
+      .flatMap((c) => (c.body.rows ?? []) as Record<string, unknown>[])
+
+  it('a failed op step is a problem; ygo and pkm still upload', async () => {
+    await ygoAndPkm()
+    const { fetch, calls } = recordingFetch(ok)
+    const out = await runJob({
+      ...common(),
+      dir,
+      url: URL_BASE,
+      token: TOKEN,
+      fetch,
+      onePiece: async () => ({ report: null, error: 'boom', problems: [] })
+    })
+    expect(out.problems).toContain('One Piece refresh skipped: boom')
+    expect(calls.map((c) => c.path)).toContain('/admin/catalog/finish')
+    const games = new Set(rowsOf(calls, 'card_printings').map((r) => r['game']))
+    expect([...games].sort()).toEqual(['pkm', 'ygo'])
+  })
+
+  it('op problems fail the run but the upload goes ahead', async () => {
+    await ygoAndPkm()
+    const { fetch, calls } = recordingFetch(ok)
+    const out = await runJob({
+      ...common(),
+      dir,
+      url: URL_BASE,
+      token: TOKEN,
+      fetch,
+      onePiece: async (work) => ({
+        ...(await seeding(work)),
+        problems: ['Bandai art changed: OP17-005_p1']
+      })
+    })
+    expect(out.problems).toEqual(['Bandai art changed: OP17-005_p1'])
+    expect(calls.map((c) => c.path)).toContain('/admin/catalog/finish')
+    expect(rowsOf(calls, 'card_printings').filter((r) => r['game'] === 'op')).toHaveLength(2)
+  })
+
+  it('ONEPIECE_ART_BUDGET overrides the art budget only when it is a positive integer', () => {
+    expect(onePieceArtBudget('500')).toBe(500)
+    for (const v of [undefined, '', '0', '-3', '2.5', 'lots']) expect(onePieceArtBudget(v)).toBe(ART_BUDGET)
+  })
+
+  it('skipOnePiece leaves the step out', async () => {
+    await ygoAndPkm()
+    const onePiece = vi.fn(seeding)
+    await runJob({ ...common(), dir, dryRun: true, skipOnePiece: true, onePiece })
+    expect(onePiece).not.toHaveBeenCalled()
+  })
+
+  it('--stage onepiece runs it alone', async () => {
+    await ygoAndPkm()
+    const refresh = vi.fn(async () => {})
+    const pokemon = vi.fn(async () => ({ reports: [], error: null }))
+    const onePiece = vi.fn(seeding)
+    const gate = vi.fn<NonNullable<JobOptions['checkAccuracy']>>(passing)
+    const upload = vi.fn(async () => Response.json({ ok: true }))
+    const out = await runJob({
+      ...common(),
+      dir,
+      url: URL_BASE,
+      token: TOKEN,
+      fetch: upload as never,
+      checkAccuracy: gate,
+      refresh,
+      pokemon,
+      onePiece,
+      stage: 'onepiece'
+    })
+    expect(out.problems).toEqual([])
+    expect([
+      onePiece.mock.calls.length,
+      refresh.mock.calls.length,
+      pokemon.mock.calls.length
+    ]).toEqual([1, 0, 0])
+    expect(upload).not.toHaveBeenCalled()
+    expect(gate).not.toHaveBeenCalled()
+    // Its rows wait in the work database for the upload stage.
+    const work = openDatabase(join(dir, 'work.sqlite'))
+    expect(count(work, "card_printings WHERE game = 'op'")).toBe(2)
+    work.close()
+  })
+
+  it('the op step adds only op rows to the diff', async () => {
+    await ygoAndPkm()
+    const without = await runJob({ ...common(), dir, dryRun: true, skipOnePiece: true })
+    const withOp = await runJob({ ...common(), dir, dryRun: true, onePiece: seeding })
+    const others = (c: Record<string, unknown> | null): Record<string, unknown> =>
+      Object.fromEntries(
+        Object.entries(c ?? {}).filter(([k]) => k.endsWith(':ygo') || k.endsWith(':pkm'))
+      )
+    expect(Object.keys(others(withOp.counts)).length).toBeGreaterThan(0)
+    expect(others(withOp.counts)).toEqual(others(without.counts))
+    expect(withOp.counts?.['cards:op']).toEqual({ upserts: 1, deletes: 0 })
+    expect(without.counts?.['cards:op']).toEqual({ upserts: 0, deletes: 0 })
+  })
+
+  it('the op rows upload with game op and pass findShrinks on a second night with no change', async () => {
+    await ygoAndPkm()
+    const first = recordingFetch(ok)
+    const night1 = await runJob({
+      ...common(),
+      dir,
+      url: URL_BASE,
+      token: TOKEN,
+      fetch: first.fetch,
+      onePiece: seeding
+    })
+    expect(night1.problems).toEqual([])
+    for (const t of ['cards', 'card_images', 'card_printings']) {
+      expect(rowsOf(first.calls, t).filter((r) => r['game'] === 'op').length, t).toBeGreaterThan(0)
+    }
+    expect(rowsOf(first.calls, 'onepiece_cards')).toHaveLength(1)
+    expect(rowsOf(first.calls, 'onepiece_images')).toHaveLength(2)
+
+    const second = recordingFetch(ok)
+    const night2 = await runJob({
+      ...common(),
+      dir,
+      url: URL_BASE,
+      token: TOKEN,
+      fetch: second.fetch,
+      onePiece: seeding
+    })
+    expect(night2.problems).toEqual([])
+    const work = openDatabase(join(dir, 'work.sqlite'))
+    const base = openDatabase(join(dir, 'base.sqlite'))
+    expect(findShrinks(work, base)).toEqual([])
+    base.close()
+    work.close()
+    expect(rowsOf(second.calls, 'card_printings').filter((r) => r['game'] === 'op')).toEqual([])
+    expect(second.calls.flatMap((c) => (c.body.keys ?? []) as unknown[])).toEqual([])
   })
 })

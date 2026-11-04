@@ -14,6 +14,7 @@ import { artHash } from '../../src/shared/scan/fingerprint'
 import { decodeFingerprints } from '../../src/shared/scan/fingerprintFile'
 import { hashHex, parseFingerprintRefs } from '../../src/shared/scan/fingerprintRefs'
 import type { RgbaImage } from '../../src/shared/scan/types'
+import { seedOnePiece } from '../fixtures/onePiece'
 
 describe('wantsReference', () => {
   it.each([
@@ -607,6 +608,38 @@ describe('buildReferences', () => {
       userAgent: 'test'
     })
     expect(out).toMatchObject({ entries: [], fetched: 0, failed: 1 })
+  })
+
+  it('op printings get no Yugipedia lookup', async () => {
+    // The same work database and cache, without the One Piece rows.
+    work.prepare('VACUUM INTO ?').run(join(dir, 'plain.sqlite'))
+    cache.prepare('VACUUM INTO ?').run(join(dir, 'plain-fp.sqlite'))
+    const plainWork = openDatabase(join(dir, 'plain.sqlite'))
+    const plainCache = new Database(join(dir, 'plain-fp.sqlite'))
+    // Its 'L (Alternate Art)' printing would pass wantsReference.
+    seedOnePiece(work)
+    const bodies = { 'ShiEn-BLGG-EN-StR-1E.png': png(SCAN) }
+    const yugipedia = fakeYugipedia()
+    const withOp = await buildReferences({
+      work,
+      cache,
+      yugipedia,
+      fetch: scans(bodies),
+      userAgent: 'test'
+    })
+    const without = await buildReferences({
+      work: plainWork,
+      cache: plainCache,
+      yugipedia: fakeYugipedia(),
+      fetch: scans(bodies),
+      userAgent: 'test'
+    })
+    plainCache.close()
+    plainWork.close()
+    expect(withOp.entries).toEqual(without.entries)
+    const titles = yugipedia.listPageImages.mock.calls.flatMap((c) => c[0])
+    expect(titles.length).toBeGreaterThan(0)
+    expect(titles.filter((t) => t.includes('Monkey.D.Luffy'))).toEqual([])
   })
 })
 

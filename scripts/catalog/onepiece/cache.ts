@@ -40,6 +40,8 @@ export interface OpCache {
   replaceEntries(seriesId: string, entries: BandaiEntry[], now: number): void
   /** The earliest time any series stored this Bandai id, or null. */
   firstSeenAt(bandaiId: string): number | null
+  /** firstSeenAt of every stored Bandai id, in one query. */
+  firstSeenAll(): Map<string, number>
 
   getBandaiArt(bandaiId: string): BandaiArtRow | null
   putBandaiArt(row: BandaiArtRow): void
@@ -72,6 +74,7 @@ export function openOpCache(path: string): OpCache {
   const delEntries = db.prepare('DELETE FROM entries WHERE series_id = ?')
   const insEntry = db.prepare('INSERT OR IGNORE INTO entries (series_id, bandai_id, json, first_seen_at) VALUES (?, ?, ?, ?)')
   const minSeen = db.prepare('SELECT MIN(first_seen_at) AS t FROM entries WHERE bandai_id = ?')
+  const allSeen = db.prepare('SELECT bandai_id, MIN(first_seen_at) AS t FROM entries GROUP BY bandai_id')
   const selArt = db.prepare('SELECT * FROM bandai_art WHERE bandai_id = ?')
   const insArt = db.prepare(
     'INSERT OR REPLACE INTO bandai_art (bandai_id, hash, last_modified, checked_at, stored_at, changed_hash, noted_at) VALUES (?, ?, ?, ?, ?, ?, ?)'
@@ -100,6 +103,9 @@ export function openOpCache(path: string): OpCache {
     replaceEntries(seriesId, entries, now) { replace(seriesId, entries, now) },
     firstSeenAt(bandaiId) {
       return (minSeen.get(bandaiId) as { t: number | null }).t
+    },
+    firstSeenAll() {
+      return new Map((allSeen.all() as { bandai_id: string; t: number }[]).map((r) => [r.bandai_id, r.t]))
     },
     getBandaiArt(id) {
       const r = selArt.get(id) as Record<string, unknown> | undefined

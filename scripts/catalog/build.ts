@@ -3,13 +3,14 @@
  * desktop app does, uploads what changed since catalog-work/base.sqlite (the last snapshot the
  * portal accepted), then makes work the new base.
  *
- *   npm run catalog:job [-- --full | --dry-run | --allow-shrink | --refresh-sets | --refresh-cards | --no-pokemon | --stage <name>]
+ *   npm run catalog:job [-- --full | --dry-run | --allow-shrink | --refresh-sets | --refresh-cards | --no-pokemon | --no-onepiece | --stage <name>]
  *
- * Env: PORTAL_URL, PORTAL_ADMIN_TOKEN (not needed for --dry-run). --full ignores the base and
+ * Env: PORTAL_URL, PORTAL_ADMIN_TOKEN (not needed for --dry-run); ONEPIECE_ART_BUDGET (a positive
+ * integer) replaces the One Piece step's nightly art download budget for one run. --full ignores the base and
  * uploads every row; --dry-run refreshes and prints per-table counts without uploading or
  * touching the base. A refresh that would delete more than a sliver of any table (see
  * `findShrinks`) is refused unless --allow-shrink is passed, since every client applies the
- * deletes. --no-pokemon skips the Pokémon step. --refresh-sets re-reads the non-English set lists and Pokémon set art now instead of on their weekly timers. --refresh-cards reads the YGOPRODeck card list and the TCGplayer catalog now instead of on their daily and weekly timers.
+ * deletes. --no-pokemon skips the Pokémon step, --no-onepiece the One Piece one. --refresh-sets re-reads the non-English set lists and Pokémon set art now instead of on their weekly timers. --refresh-cards reads the YGOPRODeck card list and the TCGplayer catalog now instead of on their daily and weekly timers.
  * Problems that don't stop the upload (a failed card sync, a failed fingerprint build)
  * end the run with a non-zero exit so the workflow shows red. So does a fingerprint file that fails
  * the accuracy gate (see accuracy.ts), which is held back while clients keep the last one. Each
@@ -39,6 +40,8 @@ import {
   type AccuracyReport
 } from './accuracy'
 import { deletesByGame, diffTable, hasGameColumn } from './diff'
+import { ART_BUDGET } from './onepiece/art'
+import { logOnePiece, runOnePieceStep, type OnePieceReport } from './onepiece'
 import { runPokemonStep, type PokemonReport } from './pokemon'
 import { refreshPokemonSetArt, shouldRefreshSetArt, warmSetArt } from './pokemon/setArt'
 import { buildFingerprints, uploadFingerprintRefs, uploadFingerprints } from './fingerprints'
@@ -72,6 +75,16 @@ export interface JobOptions {
   stage?: Stage
   /** Leaves the Pokémon step out (--no-pokemon). */
   skipPokemon?: boolean
+  /**
+   * Refreshes the English One Piece catalog in the work database; defaults to `runOnePieceStep`
+   * over the live sources, cached in onepiece-src.sqlite. A non-null `error` skips One Piece for
+   * the night, and each of `problems` is a job problem.
+   */
+  onePiece?: (
+    work: Database.Database
+  ) => Promise<{ report: OnePieceReport | null; error: string | null; problems: string[] }>
+  /** Leaves the One Piece step out (--no-onepiece). */
+  skipOnePiece?: boolean
   /** Uploads deletes beyond the shrink limit. */
   allowShrink?: boolean
   /** Re-reads the non-English set lists now instead of waiting for their weekly timer. */
@@ -169,8 +182,20 @@ export function newSetArtKeys(work: Database.Database, base: Database.Database |
   return keys(work).filter((k) => !old.has(k))
 }
 
+/** ONEPIECE_ART_BUDGET when it is a positive integer, else ART_BUDGET. */
+export function onePieceArtBudget(value: string | undefined): number {
+  return value && /^[1-9][0-9]*$/.test(value.trim()) ? Number(value.trim()) : ART_BUDGET
+}
+
 /** In run order. They hand over through the files in `dir`, so one can start where the last stopped. */
-export const STAGES = ['ygo', 'pokemon', 'upload', 'fingerprints-ygo', 'fingerprints-pkm'] as const
+export const STAGES = [
+  'ygo',
+  'pokemon',
+  'onepiece',
+  'upload',
+  'fingerprints-ygo',
+  'fingerprints-pkm'
+] as const
 export type Stage = (typeof STAGES)[number]
 
 export async function runJob(opts: JobOptions): Promise<JobResult> {
@@ -310,6 +335,23 @@ export async function runJob(opts: JobOptions): Promise<JobResult> {
       if (out.error !== null) problem(`Pokémon refresh skipped: ${out.error}`)
       logPokemon(out.reports, log)
     }
+    if (on('onepiece') && !opts.skipOnePiece) {
+      const step =
+        opts.onePiece ??
+        ((w: Database.Database) =>
+          runOnePieceStep(w, {
+            cachePath: join(opts.dir, 'onepiece-src.sqlite'),
+            version,
+            log,
+            // A dry run uploads no art.
+            portal: url && token && !opts.dryRun ? { url, token, fetch: opts.fetch } : undefined,
+            budget: onePieceArtBudget(process.env['ONEPIECE_ART_BUDGET'])
+          }))
+      const out = await step(work)
+      if (out.error !== null) problem(`One Piece refresh skipped: ${out.error}`)
+      for (const p of out.problems) problem(p)
+      if (out.report) logOnePiece(out.report, log)
+    }
     if (opts.stage && !on('upload')) {
       if (on('fingerprints-ygo')) await fingerprint(true, 'ygo')
       if (on('fingerprints-pkm')) await pokemonFingerprints(true)
@@ -390,7 +432,15 @@ export async function runJob(opts: JobOptions): Promise<JobResult> {
 
 async function main(): Promise<void> {
   const args = process.argv.slice(2)
-  const flags = ['--full', '--dry-run', '--allow-shrink', '--refresh-sets', '--refresh-cards', '--no-pokemon']
+  const flags = [
+    '--full',
+    '--dry-run',
+    '--allow-shrink',
+    '--refresh-sets',
+    '--refresh-cards',
+    '--no-pokemon',
+    '--no-onepiece'
+  ]
   const at = args.indexOf('--stage')
   const stage = at < 0 ? undefined : (args.splice(at, 2)[1] as Stage)
   if (at >= 0 && !STAGES.includes(stage!)) throw new Error(`--stage takes one of: ${STAGES.join(' ')}`)
@@ -406,6 +456,7 @@ async function main(): Promise<void> {
     refreshSets: args.includes('--refresh-sets'),
     refreshCards: args.includes('--refresh-cards'),
     skipPokemon: args.includes('--no-pokemon'),
+    skipOnePiece: args.includes('--no-onepiece'),
     stage
   })
   for (const p of problems) console.log(`::error::${p}`)

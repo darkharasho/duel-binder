@@ -18,6 +18,8 @@ export interface CardRow {
   tcgplayerPrice: number | null
   /** A Pokémon card's own facts (from pokemon_cards); absent on Yu-Gi-Oh!. */
   pokemon?: PokemonFacts
+  /** A One Piece card's own facts (from onepiece_cards); absent on the other games. */
+  onePiece?: OnePieceFacts
 }
 
 export interface PokemonFacts {
@@ -29,6 +31,20 @@ export interface PokemonFacts {
   illustrator: string | null
   /** The card's Japanese name, when it has one. */
   localName: string | null
+}
+
+export interface OnePieceFacts {
+  cardType: string
+  colors: string[]
+  cost: number | null
+  life: number | null
+  power: number | null
+  counter: number | null
+  attribute: string[]
+  traits: string[]
+  blockIcon: number | null
+  /** The printed base number, e.g. OP01-001. */
+  number: string
 }
 
 export interface Printing {
@@ -44,6 +60,8 @@ export interface Printing {
   language: Language
   /** The printing's sync key, which binders refer to it by. Only where the query selects it. */
   pkey?: string
+  /** One Piece only: the image of this printing's own Bandai entry (an Alternate Art's art). */
+  artImageId?: number
 }
 
 /** sortOrder 0 is the original art. */
@@ -144,6 +162,8 @@ export interface CollectionFilters {
   opAttributes?: string[]
   opTraits?: string[]
   opRarities?: string[]
+  /** The version part of a printing's label ('Base', 'Alternate Art', a product name). */
+  opVersions?: string[]
   opBlocks?: string[]
   costMin?: number
   costMax?: number
@@ -157,8 +177,11 @@ export interface CollectionFilters {
   dir: 'asc' | 'desc'
 }
 
-/** 'atk', 'def' and 'level' are Yu-Gi-Oh! only and 'hp' is Pokémon only; on the other game each sorts by name. */
-export type BrowseSort = 'name' | 'released' | 'price' | 'atk' | 'def' | 'level' | 'hp'
+/**
+ * 'atk', 'def' and 'level' are Yu-Gi-Oh! only, 'hp' is Pokémon only and 'cost' and 'power' are One
+ * Piece only; on another game each sorts by name.
+ */
+export type BrowseSort = 'name' | 'released' | 'price' | 'atk' | 'def' | 'level' | 'hp' | 'cost' | 'power'
 
 /** Filters for the Browse page: every card in the database, not just owned ones. */
 export interface BrowseFilters {
@@ -189,6 +212,8 @@ export interface BrowseFilters {
   opAttributes?: string[]
   opTraits?: string[]
   opRarities?: string[]
+  /** The version part of a printing's label ('Base', 'Alternate Art', a product name). */
+  opVersions?: string[]
   opBlocks?: string[]
   costMin?: number
   costMax?: number
@@ -249,6 +274,8 @@ export interface BrowseFacets {
   opAttributes?: string[]
   opTraits?: string[]
   opRarities?: string[]
+  /** The version part of a printing's label ('Base', 'Alternate Art', a product name). */
+  opVersions?: string[]
   opBlocks?: string[]
 }
 
@@ -270,6 +297,8 @@ export interface Facets {
   opAttributes?: string[]
   opTraits?: string[]
   opRarities?: string[]
+  /** The version part of a printing's label ('Base', 'Alternate Art', a product name). */
+  opVersions?: string[]
   opBlocks?: string[]
 }
 

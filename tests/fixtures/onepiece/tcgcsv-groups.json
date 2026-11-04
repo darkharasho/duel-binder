@@ -1,0 +1,61 @@
+{
+ "totalItems": 6,
+ "success": true,
+ "errors": [],
+ "results": [
+  {
+   "groupId": 24736,
+   "name": "The World's Strongest Warriors",
+   "abbreviation": "OP17",
+   "isSupplemental": false,
+   "publishedOn": "2026-08-28T00:00:00",
+   "modifiedOn": "2026-10-28T14:57:47.407",
+   "categoryId": 68
+  },
+  {
+   "groupId": 24775,
+   "name": "The World's Strongest Warriors Release Event Cards",
+   "abbreviation": "OP17 RE",
+   "isSupplemental": false,
+   "publishedOn": "2026-08-21T00:00:00",
+   "modifiedOn": "2026-09-01T11:12:42.277",
+   "categoryId": 68
+  },
+  {
+   "groupId": 24749,
+   "name": "ST-31: Starter Deck 31 RED Monkey.D.Luffy",
+   "abbreviation": "ST-31",
+   "isSupplemental": false,
+   "publishedOn": "2026-07-31T00:00:00",
+   "modifiedOn": "2026-10-14T17:49:21.957",
+   "categoryId": 68
+  },
+  {
+   "groupId": 24637,
+   "name": "Adventure on Kami's Island",
+   "abbreviation": "OP15-EB04",
+   "isSupplemental": false,
+   "publishedOn": "2026-04-03T00:00:00",
+   "modifiedOn": "2026-10-07T11:48:44.107",
+   "categoryId": 68
+  },
+  {
+   "groupId": 23304,
+   "name": "One Piece Collection Sets",
+   "abbreviation": "OP-CS",
+   "isSupplemental": false,
+   "publishedOn": "2023-11-03T00:00:00",
+   "modifiedOn": "2026-10-07T18:52:04.753",
+   "categoryId": 68
+  },
+  {
+   "groupId": 17675,
+   "name": "One Piece Promotion Cards",
+   "abbreviation": "OP-PR",
+   "isSupplemental": false,
+   "publishedOn": "2022-09-30T00:00:00",
+   "modifiedOn": "2026-11-02T14:53:16.45",
+   "categoryId": 68
+  }
+ ]
+}

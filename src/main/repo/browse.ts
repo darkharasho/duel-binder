@@ -5,6 +5,7 @@ import { byGame, type GameId } from '../../shared/games'
 import { buildFtsQuery, escapeLike } from './cards'
 import { LOCAL, favouriteSql, scopeGame, type Scope } from './scope'
 import { pokemonFacets, pokemonSearch, pokemonWhere } from './pkmFilters'
+import { onePieceFacets, onePieceWhere, opRarityWhere, opVersionWhere } from './opFilters'
 import { catalogRollup } from './rollup'
 
 const MAX_LIMIT = 200
@@ -89,18 +90,21 @@ const SORT_SQL: Record<BrowseFilters['sort'], string> = {
   atk: 'c.atk',
   def: 'c.def',
   level: 'COALESCE(c.level, c.linkval)',
-  hp: '(SELECT hp FROM pokemon_cards WHERE card_id = c.id)'
+  hp: '(SELECT hp FROM pokemon_cards WHERE card_id = c.id)',
+  cost: '(SELECT cost FROM onepiece_cards WHERE card_id = c.id)',
+  power: '(SELECT power FROM onepiece_cards WHERE card_id = c.id)'
 }
 
 const YGO_ONLY_SORTS = ['atk', 'def', 'level']
+const OP_ONLY_SORTS = ['cost', 'power']
 
 /** A sort that doesn't exist on the game (or isn't known at all) sorts by name. */
 function sortSql(sort: string, game: GameId): string {
   if (!Object.hasOwn(SORT_SQL, sort)) return SORT_SQL.name
   const missing = byGame<(s: string) => boolean>(game, {
-    ygo: (s) => s === 'hp',
-    pkm: (s) => YGO_ONLY_SORTS.includes(s),
-    op: (s) => s === 'hp' || YGO_ONLY_SORTS.includes(s) // op: step 2 adds cost and power sorts
+    ygo: (s) => s === 'hp' || OP_ONLY_SORTS.includes(s),
+    pkm: (s) => YGO_ONLY_SORTS.includes(s) || OP_ONLY_SORTS.includes(s),
+    op: (s) => s === 'hp' || YGO_ONLY_SORTS.includes(s)
   })
   if (missing(sort)) return SORT_SQL.name
   return SORT_SQL[sort as BrowseFilters['sort']]
@@ -124,7 +128,8 @@ function whereClause(
       params.push(...values)
     }
   }
-  const pkm = scopeGame(db, scope) === 'pkm'
+  const game = scopeGame(db, scope)
+  const pkm = game === 'pkm'
   const text = f.q?.trim()
   if (text) {
     const own = pkm ? pokemonSearch(text, { game: scope.game }) : null
@@ -147,6 +152,23 @@ function whereClause(
     const p = pokemonWhere(f)
     where.push(...p.where)
     params.push(...p.params)
+  } else if (game === 'op') {
+    const o = onePieceWhere(f)
+    where.push(...o.where)
+    params.push(...o.params)
+    // Rarity and version are a printing's: one printing has to match both.
+    const labels = [
+      opRarityWhere(f.opRarities, 'set_rarity'),
+      opVersionWhere(f.opVersions, 'set_rarity')
+    ].filter((l) => l !== null)
+    if (labels.length) {
+      where.push(
+        `c.id IN (SELECT card_id FROM card_printings WHERE +game = ${scope.game} AND contributed = 0${lang} AND ${labels
+          .map((l) => l.sql)
+          .join(' AND ')})`
+      )
+      params.push(...labels.flatMap((l) => l.params))
+    }
   } else {
     inList('c.type', f.cardTypes)
     inList('c.attribute', f.attributes)
@@ -260,7 +282,7 @@ export function browseCards(db: SqlDb, f: BrowseFilters, scope: Scope = LOCAL): 
 }
 
 /** Bump when browseFacets changes what it produces: stored rollups aren't rebuilt otherwise. */
-const FACETS_ROLLUP = 3
+const FACETS_ROLLUP = 4
 
 /** browseFacets from its rollup: its answer depends on the catalog alone. */
 export function browseFacetsFast(
@@ -291,7 +313,7 @@ export function browseFacets(db: SqlDb, scope: Scope = LOCAL, language?: Languag
     )
   const game = scopeGame(db, scope)
   const pkm = game === 'pkm'
-  // These four are Yu-Gi-Oh columns; 'op' gets its own facets in step 2.
+  // These four are Yu-Gi-Oh columns; 'op' has its own facets below.
   const ygo = game === 'ygo'
   return {
     cardTypes: ygo ? col('type') : [],
@@ -315,6 +337,7 @@ export function browseFacets(db: SqlDb, scope: Scope = LOCAL, language?: Languag
         )
         .get(code)
     ),
-    ...(pkm ? pokemonFacets(db, scope, null) : {})
+    ...(pkm ? pokemonFacets(db, scope, null) : {}),
+    ...(game === 'op' ? onePieceFacets(db, scope, null) : {})
   }
 }

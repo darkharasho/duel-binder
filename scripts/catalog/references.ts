@@ -177,6 +177,7 @@ export async function buildReferences(opts: ReferenceOptions): Promise<Reference
   }
 
   const languages = REFERENCE_LANGUAGES.map((l) => `'${l}'`).join(', ')
+  // Printing scans are Yu-Gi-Oh's only: another game's `… (Alternate Art)` label is no Yugipedia gallery.
   // An uncoded printing (YAC1's Manga-Style ones, say) is filed on Yugipedia under its set's
   // prefix, which its set's coded printings carry.
   const setCodes = new Map(
@@ -184,7 +185,7 @@ export async function buildReferences(opts: ReferenceOptions): Promise<Reference
       work
         .prepare(
           `SELECT language, set_name, MIN(set_code) AS code FROM card_printings
-           WHERE language IN (${languages}) AND set_code <> '' GROUP BY language, set_name`
+           WHERE +game = 'ygo' AND language IN (${languages}) AND set_code <> '' GROUP BY language, set_name`
         )
         .all() as { language: string; set_name: string; code: string }[]
     ).map((r) => [`${r.language}|${r.set_name}`, r.code])
@@ -196,7 +197,7 @@ export async function buildReferences(opts: ReferenceOptions): Promise<Reference
            p.set_rarity_code, p.variant
          FROM card_printings p JOIN cards c ON c.id = p.card_id
          LEFT JOIN sets s ON s.game = p.game AND s.language = p.language AND s.set_name = p.set_name
-         WHERE p.language IN (${languages})
+         WHERE +p.game = 'ygo' AND p.language IN (${languages})
          -- Newest sets first, so their scans aren't left behind maxDownloads.
          ORDER BY s.tcg_date IS NULL, s.tcg_date DESC, p.id`
       )
@@ -218,7 +219,7 @@ export async function buildReferences(opts: ReferenceOptions): Promise<Reference
       work
         .prepare(
           `SELECT language, set_name, set_code, set_rarity, variant FROM card_printings
-           WHERE language IN (${languages})`
+           WHERE +game = 'ygo' AND language IN (${languages})`
         )
         .all() as {
         language: string

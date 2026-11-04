@@ -75,6 +75,11 @@ export function thumbnail(bytes: Uint8Array): Uint8Array | null {
   if (!img || img.width <= 0 || img.height <= 0) return null
   if (img.width <= THUMB_WIDTH && isJpeg(bytes) && bytes.length <= MAX_THUMB_BYTES) return bytes
   if (!isJpeg(bytes) && hasTransparency(img)) return null
+  return smallJpeg(img)
+}
+
+/** The image shrunk to THUMB_WIDTH and encoded as a JPEG; null when that is over the Worker's limit. */
+export function smallJpeg(img: RgbaImage): Uint8Array | null {
   const small = shrink(img, THUMB_WIDTH)
   const out = new Uint8Array(encodeJpeg({ ...small, data: Buffer.from(small.data) }, QUALITY).data)
   return out.length <= MAX_THUMB_BYTES ? out : null

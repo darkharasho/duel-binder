@@ -27,12 +27,20 @@ const RULES: [SetType, RegExp][] = [
   ]
 ]
 
+/** A One Piece set by its code: ST decks, the Promotion and Other Product series, else boosters. */
+function onePieceSetType(setCode: string): SetType {
+  if (setCode.startsWith('ST')) return 'deck'
+  if (setCode === 'P') return 'promo'
+  if (setCode === 'OPC') return 'collection'
+  return 'booster'
+}
+
 /**
- * Classify a set into one of the five set types from its name (the code is accepted for
- * overrides/future rules). The name rules are Yu-Gi-Oh!'s; another game's sets are all boosters
- * until it has rules of its own.
+ * Classify a set into one of the five set types. Yu-Gi-Oh! sets go by name (the rules below); One
+ * Piece sets by code (onePieceSetType). Pokémon sets are all boosters until it has rules of its own.
  */
 export function setType(s: { setName: string; setCode: string }, game: GameId = 'ygo'): SetType {
+  if (game === 'op') return onePieceSetType(s.setCode)
   if (game !== 'ygo') return 'booster'
   const override = OVERRIDES[s.setName]
   if (override) return override

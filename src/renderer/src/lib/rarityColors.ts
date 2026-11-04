@@ -61,7 +61,8 @@ export function rarityColor(rarity: string, game: GameId = 'ygo'): string {
   const own = byGame<() => string | undefined>(game, {
     ygo: () => RARITY_COLORS[rarity],
     pkm: () => pokemonColor(rarity),
-    op: () => ONE_PIECE_COLORS[rarity]
+    // A version label ("SR (Alternate Art)") takes its rarity code's colour.
+    op: () => ONE_PIECE_COLORS[rarity.split(' ')[0]]
   })()
   return own ?? '#9ca3af'
 }

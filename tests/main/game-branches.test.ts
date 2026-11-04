@@ -52,8 +52,8 @@ describe('string branches on game, One Piece decided explicitly', () => {
     ).run(id)
   })
 
-  it("stats: byFrameType is empty on 'op' and unchanged on the other games", () => {
-    expect(getStats(db).byFrameType).toEqual([])
+  it("stats: byFrameType counts card types on 'op' and is unchanged on the other games", () => {
+    expect(getStats(db).byFrameType).toEqual([{ frameType: 'Leader', count: 4 }])
     setGame(db, 'ygo')
     expect(getStats(db).byFrameType.length).toBeGreaterThan(0)
     setGame(db, 'pkm')

@@ -55,6 +55,6 @@ describe('catalog parity', () => {
       db.prepare("SELECT pkey FROM card_printings WHERE game = 'ygo'").all() as { pkey: string }[]
     ).map((r) => r.pkey)
     const missing = await missingPkeysByGame(db, async () => ({ pkeys: ygo, more: false }))
-    expect(missing).toEqual({ ygo: [], pkm: ['en|900001|BS-58|Common'] })
+    expect(missing).toEqual({ ygo: [], pkm: ['en|900001|BS-58|Common'], op: [] })
   })
 })

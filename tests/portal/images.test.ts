@@ -18,8 +18,10 @@ import {
   clientAddressKey,
   createAnonImageQuota,
   createImageQuota,
-  createMissCache
+  createMissCache,
+  edgeImage
 } from '../../workers/portal/src/images'
+import { seedOnePiece } from '../fixtures/onePiece'
 import { addUser, memoryBucket, noPrices, seededServerDb } from './helpers'
 
 const BASE = 'https://app.test'
@@ -32,7 +34,7 @@ describe('token card art', () => {
   let db: Database.Database
   let upstream: ReturnType<typeof vi.fn>
   let deps: AppDeps
-  const tokenArt = vi.fn(async (_id: number): Promise<string | null> => `${YP}a/ab/Token.png`)
+  const tokenArt = vi.fn(async (): Promise<string | null> => `${YP}a/ab/Token.png`)
 
   beforeEach(async () => {
     db = await seededServerDb()
@@ -58,7 +60,7 @@ describe('token card art', () => {
   })
   afterEach(() => db.close())
 
-  const get = (path: string) =>
+  const get = (path: string): Promise<Response> =>
     handle(new Request(`${BASE}/img/${path}`, { headers: { 'cf-connecting-ip': '198.51.100.7' } }), deps)
 
   test('comes from Yugipedia, signed out too, and never from YGOPRODeck', async () => {
@@ -72,7 +74,7 @@ describe('token card art', () => {
     const TOO_BIG = 16 * 1024 * 1024
     const header = (): Response =>
       new Response(JPEG, { headers: { 'content-type': 'image/jpeg', 'content-length': String(TOO_BIG) } })
-    const signedIn = (path: string) =>
+    const signedIn = (path: string): Promise<Response> =>
       handle(new Request(`${BASE}/img/${path}`, { headers: { cookie: 'session=tok' } }), deps)
 
     beforeEach(() => {
@@ -194,10 +196,10 @@ describe('image route', () => {
   afterEach(() => db.close())
 
   let cookie = ''
-  const get = (path: string, method = 'GET') =>
+  const get = (path: string, method = 'GET'): Promise<Response> =>
     handle(new Request(`${BASE}/img/${path}`, { method, headers: { cookie } }), deps)
-  const getAnon = (path: string) => handle(new Request(`${BASE}/img/${path}`), deps)
-  const getFrom = (ip: string, path: string, withCookie = false) =>
+  const getAnon = (path: string): Promise<Response> => handle(new Request(`${BASE}/img/${path}`), deps)
+  const getFrom = (ip: string, path: string, withCookie = false): Promise<Response> =>
     handle(
       new Request(`${BASE}/img/${path}`, {
         headers: { 'cf-connecting-ip': ip, ...(withCookie && { cookie }) }
@@ -486,7 +488,7 @@ describe('image route', () => {
     })
 
     it('unwraps IPv4-mapped IPv6 and groups other IPv6 by /56', () => {
-      const key = (ip: string) => clientAddressKey(new Request(BASE, { headers: { 'cf-connecting-ip': ip } }))
+      const key = (ip: string): string | null => clientAddressKey(new Request(BASE, { headers: { 'cf-connecting-ip': ip } }))
       expect(key('203.0.113.7')).toBe('203.0.113.7')
       expect(key('::ffff:203.0.113.7')).toBe('203.0.113.7')
       expect(key('0:0:0:0:0:FFFF:203.0.113.7')).toBe('203.0.113.7')
@@ -536,7 +538,7 @@ describe('image route', () => {
     })
 
     it('remembers an upstream failure and answers signed-out callers 404 without refetching', async () => {
-      let t = 0
+      const t = 0
       deps.anonMisses = createMissCache(() => t, { ttlMs: 3_600_000, maxKeys: 100 })
       upstream.mockResolvedValueOnce(new Response('nope', { status: 404, headers: { 'content-type': 'image/jpeg' } }))
       expect((await getFrom(IP, `cropped/${imageId}`)).status).toBe(404)
@@ -928,5 +930,99 @@ describe('image route', () => {
 
   it('POST answers 405', async () => {
     expect((await get(`small/${imageId}`, 'POST')).status).toBe(405)
+  })
+})
+
+describe('op art', () => {
+  let db: Database.Database
+  let upstream: ReturnType<typeof vi.fn>
+  let deps: AppDeps
+  let bucket: ReturnType<typeof memoryBucket>
+  let printingUrl: ReturnType<typeof vi.fn<(id: number) => Promise<string | null>>>
+  let ids: number[]
+  let printingIds: number[]
+
+  beforeEach(async () => {
+    db = await seededServerDb()
+    ;({ imageIds: ids, printingIds } = seedOnePiece(db))
+    bucket = memoryBucket()
+    upstream = vi.fn(async () => imageResponse())
+    printingUrl = vi.fn(async (): Promise<string | null> => null)
+    deps = {
+      db,
+      assets: { fetch: async () => new Response('nope', { status: 404 }) },
+      images: bucket,
+      printingArt: { url: printingUrl },
+      prices: noPrices,
+      env: { PUBLIC_URL: BASE, SITE_URL: 'https://site.test', DISCORD_CLIENT_ID: 'c', DISCORD_CLIENT_SECRET: 's', ADMIN_TOKEN: 'a', PRICE_WORKER_URL: 'https://prices.test' },
+      now: () => new Date('2026-11-04T12:00:00.000Z'),
+      fetch: upstream as unknown as typeof fetch
+    }
+  })
+  afterEach(() => db.close())
+
+  const get = (path: string): Promise<Response> =>
+    handle(new Request(`${BASE}/img/${path}`, { headers: { 'cf-connecting-ip': '198.51.100.7' } }), deps)
+  const stored = (key: string): void => {
+    bucket.store.set(key, { bytes: JPEG.buffer.slice(0) as ArrayBuffer, contentType: 'image/jpeg', etag: '"s"' })
+  }
+
+  it('serves a stored small copy for small and cropped', async () => {
+    stored(`card/small/${ids[0]}`)
+    for (const size of ['small', 'cropped']) {
+      // The edge path reads R2 by cardArtKey before anything reaches the resolver.
+      const res = await edgeImage(
+        new Request(`${BASE}/img/${size}/${ids[0]}`),
+        bucket,
+        null,
+        () => undefined,
+        async () => new Response('forwarded', { status: 500 })
+      )
+      expect(res!.status).toBe(200)
+      expect(new Uint8Array(await res!.arrayBuffer())).toEqual(JPEG)
+    }
+    expect(upstream).not.toHaveBeenCalled()
+  })
+
+  it('an R2 miss on full fetches the Bandai PNG and stores it for a year', async () => {
+    const res = await get(`full/${ids[0]}`)
+    expect(res.status).toBe(200)
+    expect(res.headers.get('cache-control')).toBe('public, max-age=31536000, immutable')
+    expect(upstream).toHaveBeenCalledTimes(1)
+    expect(upstream.mock.calls[0][0]).toBe('https://en.onepiece-cardgame.com/images/cardlist/card/OP01-001.png')
+    expect(bucket.store.has(`card/full/${ids[0]}`)).toBe(true)
+  })
+
+  it('an R2 miss on small serves the full PNG for an hour and leaves card/small absent', async () => {
+    const res = await get(`small/${ids[1]}`)
+    expect(res.status).toBe(200)
+    expect(res.headers.get('cache-control')).toBe('public, max-age=3600')
+    expect(upstream.mock.calls[0][0]).toBe('https://en.onepiece-cardgame.com/images/cardlist/card/OP01-001_p1.png')
+    expect(bucket.store.has(`card/full/${ids[1]}`)).toBe(true)
+    expect(bucket.store.has(`card/small/${ids[1]}`)).toBe(false)
+  })
+
+  it('an op printing with no photo is a 404 and never asks Yugipedia', async () => {
+    expect((await get(`printing/${printingIds[0]}`)).status).toBe(404)
+    expect(printingUrl).not.toHaveBeenCalled()
+    expect(upstream).not.toHaveBeenCalled()
+  })
+
+  it('an op id with no onepiece_images row is a 404', async () => {
+    db.prepare('DELETE FROM onepiece_images WHERE image_id = ?').run(ids[0])
+    expect((await get(`full/${ids[0]}`)).status).toBe(404)
+    expect(upstream).not.toHaveBeenCalled()
+  })
+
+  it('a bandai_id that is not an id is a 404 with no fetch', async () => {
+    db.prepare('UPDATE onepiece_images SET bandai_id = ? WHERE image_id = ?').run('../x', ids[0])
+    expect((await get(`full/${ids[0]}`)).status).toBe(404)
+    expect(upstream).not.toHaveBeenCalled()
+  })
+
+  it('Yu-Gi-Oh! keys stay card/<size>/<passcode>', async () => {
+    const pass = (db.prepare('SELECT min(image_id) AS id FROM card_images WHERE image_id < 100000000').get() as { id: number }).id
+    expect((await get(`cropped/${pass}`)).status).toBe(200)
+    expect(bucket.store.has(`card/cropped/${pass}`)).toBe(true)
   })
 })

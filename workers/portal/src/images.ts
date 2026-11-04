@@ -1,4 +1,6 @@
 import {
+  BANDAI_EN_IMAGE_PREFIX,
+  BANDAI_ID_RE,
   imageUrl,
   PACK_ART_PREFIX,
   SET_KEY_RE,
@@ -278,7 +280,11 @@ const handArt = (url: string, cache: string): Target => ({
  * art only ever in R2 (HAND_ART_PREFIX) lives elsewhere; for those this key is simply never stored.
  */
 const cardArtKey = (size: ImageSize, n: number): string =>
-  isTokenId(n) ? `card/full/${n}` : `card/${size}/${n}`
+  isTokenId(n)
+    ? `card/full/${n}`
+    : gameOfId(n) === 'op'
+      ? `card/${size === 'full' ? 'full' : 'small'}/${n}`
+      : `card/${size}/${n}`
 
 const CARD_PATH_RE = /^\/img\/(small|full|cropped)\/(\d+)$/
 /** A printing photo's small copy, by the server's printing id (see thumbs.ts). */
@@ -386,8 +392,21 @@ function resolve(deps: AppDeps, path: string): Target | null {
     const n = Number(id)
     if (!Number.isSafeInteger(n) || n <= 0) return null
     const game = gameOfId(n)
-    // Step 2 adds One Piece art sources; until then no op id may reach the Yu-Gi-Oh! path.
-    if (game === 'op') return null
+    if (game === 'op') {
+      const row = deps.db
+        .prepare('SELECT bandai_id FROM onepiece_images WHERE image_id = ?')
+        .get(n) as { bandai_id: string } | undefined
+      if (!row || !BANDAI_ID_RE.test(row.bandai_id)) return null
+      // The PNG is always stored under card/full; the job's small copy takes card/small later.
+      return {
+        key: `card/full/${n}`,
+        source: fixed(`${BANDAI_EN_IMAGE_PREFIX}${row.bandai_id}.png`, {
+          'User-Agent': USER_AGENT
+        }),
+        cache: kind === 'full' ? CARD_CACHE : FALLBACK_CACHE,
+        anonymous: true
+      }
+    }
     if (game === 'pkm') {
       const row = deps.db
         .prepare(
@@ -488,8 +507,8 @@ function resolve(deps: AppDeps, path: string): Target | null {
     const n = Number(id)
     if (!Number.isSafeInteger(n) || n <= 0) return null
     const printing = deps.db
-      .prepare('SELECT set_rarity AS rarity, variant FROM card_printings WHERE id = ?')
-      .get(n) as { rarity: string; variant: string | null } | undefined
+      .prepare('SELECT set_rarity AS rarity, variant, game FROM card_printings WHERE id = ?')
+      .get(n) as { rarity: string; variant: string | null; game: string } | undefined
     return {
       key: `printing/${n}${printing ? printingPhotoSuffix(printing) : ''}`,
       cache: SET_CACHE,
@@ -498,6 +517,8 @@ function resolve(deps: AppDeps, path: string): Target | null {
       anonymous: printing !== undefined,
       meterFirst: true,
       source: async () => {
+        // One Piece has no printing photos to look up.
+        if (printing?.game === 'op') return null
         const url = await withTimeout(
           deps.printingArt.url(n).catch(() => null),
           IMAGE_TIMEOUT_MS

@@ -18,6 +18,7 @@ type GameKey =
   | 'opAttributes'
   | 'opTraits'
   | 'opRarities'
+  | 'opVersions'
   | 'opBlocks'
 export type ListKey = GameKey | 'setNames' | 'rarities'
 
@@ -39,6 +40,7 @@ const GAME_KEYS: readonly string[] = [
   'opAttributes',
   'opTraits',
   'opRarities',
+  'opVersions',
   'opBlocks'
 ] satisfies GameKey[]
 
@@ -51,8 +53,8 @@ const LABELS: Partial<Record<GameKey, string>> = {
 export type FacetScope = 'collection' | 'browse'
 
 /**
- * The game's list filters, then Set and the game's word for rarity, in the order they show. The
- * collection has no Race facet; Browse does.
+ * The game's list filters, then Set and the game's word for rarity (not on One Piece, whose own
+ * filters have its rarity codes), in the order they show. The collection has no Race facet; Browse does.
  */
 export function facetsFor(
   def: GameDef,
@@ -68,7 +70,8 @@ export function facetsFor(
       )
       .map((f) => ({ key: f.key, label: LABELS[f.key] ?? f.label })),
     { key: 'setNames', label: 'Set' },
-    { key: 'rarities', label: def.vocab.rarity }
+    // One Piece's rarity is its code facet (opRarities); a second Rarity of printing labels would repeat it.
+    ...(def.id === 'op' ? [] : [{ key: 'rarities' as const, label: def.vocab.rarity }])
   ]
 }
 
@@ -156,12 +159,12 @@ const SORT_WORDS = {
 } as const
 
 /**
- * Sorts a game has no column for: ATK, DEF and Level are Yu-Gi-Oh!'s, HP is Pokémon's. One Piece
- * has none of them until step 2 adds cost and power.
+ * Sorts a game has no column for: ATK, DEF and Level are Yu-Gi-Oh!'s, HP is Pokémon's, Cost and
+ * Power are One Piece's.
  */
 export const HIDDEN_SORTS: Record<GameId, readonly string[]> = {
-  ygo: ['hp'],
-  pkm: ['atk', 'def', 'level'],
+  ygo: ['hp', 'cost', 'power'],
+  pkm: ['atk', 'def', 'level', 'cost', 'power'],
   op: ['atk', 'def', 'level', 'hp']
 }
 

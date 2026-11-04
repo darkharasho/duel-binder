@@ -126,9 +126,11 @@ export function AddCardDialog({
   const images = [...(detail.data?.images ?? [])].sort((a, b) => a.sortOrder - b.sortOrder)
   // Users don't pick artwork: the printing's own scan shows it. The stored art is the fallback
   // when the printing has no scan: a copy already owned keeps its art (so the add tops it up
-  // instead of starting a second entry), otherwise the card's original art.
+  // instead of starting a second entry), then a One Piece version's own art, otherwise the
+  // card's original art.
   const imageId = (p: Printing | null): number =>
     owned.data?.find((e) => p !== null && e.printing.id === p.id)?.imageId ??
+    p?.artImageId ??
     images[0]?.imageId ??
     card!.defaultImageId
   const labelOf = (p: Printing): PrintingLabelInput => ({

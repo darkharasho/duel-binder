@@ -1,0 +1,561 @@
+{
+ "totalItems": 10,
+ "success": true,
+ "errors": [],
+ "results": [
+  {
+   "productId": 711499,
+   "name": "Edward.Newgate (005)",
+   "cleanName": "EdwardNewgate 005",
+   "imageUrl": "https://tcgplayer-cdn.tcgplayer.com/product/711499_200w.jpg",
+   "categoryId": 68,
+   "groupId": 24736,
+   "url": "https://www.tcgplayer.com/product/711499/one-piece-card-game-the-worlds-strongest-warriors-edwardnewgate-005",
+   "modifiedOn": "2026-08-28T04:10:21.193",
+   "imageCount": 1,
+   "presaleInfo": {
+    "isPresale": false,
+    "releasedOn": "2026-08-28T00:00:00",
+    "note": null
+   },
+   "extendedData": [
+    {
+     "name": "Rarity",
+     "displayName": "Rarity",
+     "value": "SR"
+    },
+    {
+     "name": "Number",
+     "displayName": "Number",
+     "value": "OP17-005"
+    },
+    {
+     "name": "Description",
+     "displayName": "Description",
+     "value": "If your opponent has a Character with 10000 power or more, give this card in your hand -4 cost.\r\n<br>[On Play] Your monocolored Leader's base power becomes 8000 until the end of your opponent's next End Phase."
+    },
+    {
+     "name": "Color",
+     "displayName": "Color",
+     "value": "Red"
+    },
+    {
+     "name": "CardType",
+     "displayName": "Card Type",
+     "value": "Character"
+    },
+    {
+     "name": "Cost",
+     "displayName": "Cost",
+     "value": "10"
+    },
+    {
+     "name": "Power",
+     "displayName": "Power",
+     "value": "12000"
+    },
+    {
+     "name": "Subtypes",
+     "displayName": "Subtype(s)",
+     "value": "The Four Emperors;Whitebeard Pirates"
+    },
+    {
+     "name": "Attribute",
+     "displayName": "Attribute",
+     "value": "Special"
+    }
+   ]
+  },
+  {
+   "productId": 708077,
+   "name": "Edward.Newgate (005) (Alternate Art)",
+   "cleanName": "EdwardNewgate 005 Alternate Art",
+   "imageUrl": "https://tcgplayer-cdn.tcgplayer.com/product/708077_200w.jpg",
+   "categoryId": 68,
+   "groupId": 24736,
+   "url": "https://www.tcgplayer.com/product/708077/one-piece-card-game-the-worlds-strongest-warriors-edwardnewgate-005-alternate-art",
+   "modifiedOn": "2026-08-28T04:10:21.193",
+   "imageCount": 1,
+   "presaleInfo": {
+    "isPresale": false,
+    "releasedOn": "2026-08-28T00:00:00",
+    "note": null
+   },
+   "extendedData": [
+    {
+     "name": "Rarity",
+     "displayName": "Rarity",
+     "value": "SR"
+    },
+    {
+     "name": "Number",
+     "displayName": "Number",
+     "value": "OP17-005"
+    },
+    {
+     "name": "Description",
+     "displayName": "Description",
+     "value": "If your opponent has a Character with 10000 power or more, give this card in your hand -4 cost.\r\n<br>[On Play] Your monocolored Leader's base power becomes 8000 until the end of your opponent's next End Phase."
+    },
+    {
+     "name": "Color",
+     "displayName": "Color",
+     "value": "Red"
+    },
+    {
+     "name": "CardType",
+     "displayName": "Card Type",
+     "value": "Character"
+    },
+    {
+     "name": "Cost",
+     "displayName": "Cost",
+     "value": "10"
+    },
+    {
+     "name": "Power",
+     "displayName": "Power",
+     "value": "12000"
+    },
+    {
+     "name": "Subtypes",
+     "displayName": "Subtype(s)",
+     "value": "The Four Emperors;Whitebeard Pirates"
+    },
+    {
+     "name": "Attribute",
+     "displayName": "Attribute",
+     "value": "Special"
+    }
+   ]
+  },
+  {
+   "productId": 712083,
+   "name": "Edward.Newgate (005) (Manga)",
+   "cleanName": "EdwardNewgate 005 Manga",
+   "imageUrl": "https://tcgplayer-cdn.tcgplayer.com/product/712083_200w.jpg",
+   "categoryId": 68,
+   "groupId": 24736,
+   "url": "https://www.tcgplayer.com/product/712083/one-piece-card-game-the-worlds-strongest-warriors-edwardnewgate-005-manga",
+   "modifiedOn": "2026-08-28T04:10:21.193",
+   "imageCount": 1,
+   "presaleInfo": {
+    "isPresale": false,
+    "releasedOn": "2026-08-28T00:00:00",
+    "note": null
+   },
+   "extendedData": [
+    {
+     "name": "Rarity",
+     "displayName": "Rarity",
+     "value": "SR"
+    },
+    {
+     "name": "Number",
+     "displayName": "Number",
+     "value": "OP17-005"
+    },
+    {
+     "name": "Description",
+     "displayName": "Description",
+     "value": "If your opponent has a Character with 10000 power or more, give this card in your hand -4 cost.\r\n<br>[On Play] Your monocolored Leader's base power becomes 8000 until the end of your opponent's next End Phase."
+    },
+    {
+     "name": "Color",
+     "displayName": "Color",
+     "value": "Red"
+    },
+    {
+     "name": "CardType",
+     "displayName": "Card Type",
+     "value": "Character"
+    },
+    {
+     "name": "Cost",
+     "displayName": "Cost",
+     "value": "10"
+    },
+    {
+     "name": "Power",
+     "displayName": "Power",
+     "value": "12000"
+    },
+    {
+     "name": "Subtypes",
+     "displayName": "Subtype(s)",
+     "value": "The Four Emperors;Whitebeard Pirates"
+    },
+    {
+     "name": "Attribute",
+     "displayName": "Attribute",
+     "value": "Special"
+    }
+   ]
+  },
+  {
+   "productId": 707133,
+   "name": "Kaido (062)",
+   "cleanName": "Kaido 062",
+   "imageUrl": "https://tcgplayer-cdn.tcgplayer.com/product/707133_200w.jpg",
+   "categoryId": 68,
+   "groupId": 24736,
+   "url": "https://www.tcgplayer.com/product/707133/one-piece-card-game-the-worlds-strongest-warriors-kaido-062",
+   "modifiedOn": "2026-08-28T04:10:21.193",
+   "imageCount": 1,
+   "presaleInfo": {
+    "isPresale": false,
+    "releasedOn": "2026-08-28T00:00:00",
+    "note": null
+   },
+   "extendedData": [
+    {
+     "name": "Rarity",
+     "displayName": "Rarity",
+     "value": "SR"
+    },
+    {
+     "name": "Number",
+     "displayName": "Number",
+     "value": "OP17-062"
+    },
+    {
+     "name": "Description",
+     "displayName": "Description",
+     "value": "[Blocker]\r\n<br>[Your Turn] [Once Per Turn] When a DON!! card on your field is returned to your DON!! deck, add up to 1 DON!! card as active from your DON!! deck. Then, set up to 1 of your DON!! cards as active."
+    },
+    {
+     "name": "Color",
+     "displayName": "Color",
+     "value": "Purple"
+    },
+    {
+     "name": "CardType",
+     "displayName": "Card Type",
+     "value": "Character"
+    },
+    {
+     "name": "Cost",
+     "displayName": "Cost",
+     "value": "10"
+    },
+    {
+     "name": "Power",
+     "displayName": "Power",
+     "value": "12000"
+    },
+    {
+     "name": "Subtypes",
+     "displayName": "Subtype(s)",
+     "value": "Animal Kingdom Pirates;The Four Emperors"
+    },
+    {
+     "name": "Attribute",
+     "displayName": "Attribute",
+     "value": "Strike"
+    }
+   ]
+  },
+  {
+   "productId": 707135,
+   "name": "Kaido (062) (Alternate Art)",
+   "cleanName": "Kaido 062 Alternate Art",
+   "imageUrl": "https://tcgplayer-cdn.tcgplayer.com/product/707135_200w.jpg",
+   "categoryId": 68,
+   "groupId": 24736,
+   "url": "https://www.tcgplayer.com/product/707135/one-piece-card-game-the-worlds-strongest-warriors-kaido-062-alternate-art",
+   "modifiedOn": "2026-08-28T04:10:21.193",
+   "imageCount": 1,
+   "presaleInfo": {
+    "isPresale": false,
+    "releasedOn": "2026-08-28T00:00:00",
+    "note": null
+   },
+   "extendedData": [
+    {
+     "name": "Rarity",
+     "displayName": "Rarity",
+     "value": "SR"
+    },
+    {
+     "name": "Number",
+     "displayName": "Number",
+     "value": "OP17-062"
+    },
+    {
+     "name": "Description",
+     "displayName": "Description",
+     "value": "[Blocker]\r\n<br>[Your Turn] [Once Per Turn] When a DON!! card on your field is returned to your DON!! deck, add up to 1 DON!! card as active from your DON!! deck. Then, set up to 1 of your DON!! cards as active."
+    },
+    {
+     "name": "Color",
+     "displayName": "Color",
+     "value": "Purple"
+    },
+    {
+     "name": "CardType",
+     "displayName": "Card Type",
+     "value": "Character"
+    },
+    {
+     "name": "Cost",
+     "displayName": "Cost",
+     "value": "10"
+    },
+    {
+     "name": "Power",
+     "displayName": "Power",
+     "value": "12000"
+    },
+    {
+     "name": "Subtypes",
+     "displayName": "Subtype(s)",
+     "value": "Animal Kingdom Pirates;The Four Emperors"
+    },
+    {
+     "name": "Attribute",
+     "displayName": "Attribute",
+     "value": "Strike"
+    }
+   ]
+  },
+  {
+   "productId": 712090,
+   "name": "Kaido (062) (Manga)",
+   "cleanName": "Kaido 062 Manga",
+   "imageUrl": "https://tcgplayer-cdn.tcgplayer.com/product/712090_200w.jpg",
+   "categoryId": 68,
+   "groupId": 24736,
+   "url": "https://www.tcgplayer.com/product/712090/one-piece-card-game-the-worlds-strongest-warriors-kaido-062-manga",
+   "modifiedOn": "2026-08-28T04:10:21.193",
+   "imageCount": 1,
+   "presaleInfo": {
+    "isPresale": false,
+    "releasedOn": "2026-08-28T00:00:00",
+    "note": null
+   },
+   "extendedData": [
+    {
+     "name": "Rarity",
+     "displayName": "Rarity",
+     "value": "SR"
+    },
+    {
+     "name": "Number",
+     "displayName": "Number",
+     "value": "OP17-062"
+    },
+    {
+     "name": "Description",
+     "displayName": "Description",
+     "value": "[Blocker]\r\n<br>[Your Turn] [Once Per Turn] When a DON!! card on your field is returned to your DON!! deck, add up to 1 DON!! card as active from your DON!! deck. Then, set up to 1 of your DON!! cards as active."
+    },
+    {
+     "name": "Color",
+     "displayName": "Color",
+     "value": "Purple"
+    },
+    {
+     "name": "CardType",
+     "displayName": "Card Type",
+     "value": "Character"
+    },
+    {
+     "name": "Cost",
+     "displayName": "Cost",
+     "value": "10"
+    },
+    {
+     "name": "Power",
+     "displayName": "Power",
+     "value": "12000"
+    },
+    {
+     "name": "Subtypes",
+     "displayName": "Subtype(s)",
+     "value": "Animal Kingdom Pirates;The Four Emperors"
+    },
+    {
+     "name": "Attribute",
+     "displayName": "Attribute",
+     "value": "Strike"
+    }
+   ]
+  },
+  {
+   "productId": 712091,
+   "name": "Kaido (062) (Super Alternate Art)",
+   "cleanName": "Kaido 062 Super Alternate Art",
+   "imageUrl": "https://tcgplayer-cdn.tcgplayer.com/product/712091_200w.jpg",
+   "categoryId": 68,
+   "groupId": 24736,
+   "url": "https://www.tcgplayer.com/product/712091/one-piece-card-game-the-worlds-strongest-warriors-kaido-062-super-alternate-art",
+   "modifiedOn": "2026-08-28T04:10:21.193",
+   "imageCount": 1,
+   "presaleInfo": {
+    "isPresale": false,
+    "releasedOn": "2026-08-28T00:00:00",
+    "note": null
+   },
+   "extendedData": [
+    {
+     "name": "Rarity",
+     "displayName": "Rarity",
+     "value": "SR"
+    },
+    {
+     "name": "Number",
+     "displayName": "Number",
+     "value": "OP17-062"
+    },
+    {
+     "name": "Description",
+     "displayName": "Description",
+     "value": "[Blocker]\r\n<br>[Your Turn] [Once Per Turn] When a DON!! card on your field is returned to your DON!! deck, add up to 1 DON!! card as active from your DON!! deck. Then, set up to 1 of your DON!! cards as active."
+    },
+    {
+     "name": "Color",
+     "displayName": "Color",
+     "value": "Purple"
+    },
+    {
+     "name": "CardType",
+     "displayName": "Card Type",
+     "value": "Character"
+    },
+    {
+     "name": "Cost",
+     "displayName": "Cost",
+     "value": "10"
+    },
+    {
+     "name": "Power",
+     "displayName": "Power",
+     "value": "12000"
+    },
+    {
+     "name": "Subtypes",
+     "displayName": "Subtype(s)",
+     "value": "Animal Kingdom Pirates;The Four Emperors"
+    },
+    {
+     "name": "Attribute",
+     "displayName": "Attribute",
+     "value": "Strike"
+    }
+   ]
+  },
+  {
+   "productId": 710857,
+   "name": "Monkey.D.Luffy (EB04-061) (SP)",
+   "cleanName": "MonkeyDLuffy EB04 061 SP",
+   "imageUrl": "https://tcgplayer-cdn.tcgplayer.com/product/710857_200w.jpg",
+   "categoryId": 68,
+   "groupId": 24736,
+   "url": "https://www.tcgplayer.com/product/710857/one-piece-card-game-the-worlds-strongest-warriors-monkeydluffy-eb04-061-sp",
+   "modifiedOn": "2026-08-28T04:10:21.193",
+   "imageCount": 1,
+   "presaleInfo": {
+    "isPresale": false,
+    "releasedOn": "2026-08-28T00:00:00",
+    "note": null
+   },
+   "extendedData": [
+    {
+     "name": "Rarity",
+     "displayName": "Rarity",
+     "value": "SEC"
+    },
+    {
+     "name": "Number",
+     "displayName": "Number",
+     "value": "EB04-061"
+    },
+    {
+     "name": "Description",
+     "displayName": "Description",
+     "value": "If you have 1 or less Life cards, give this card in your hand -1 cost.<br>\r\n[On Play] <strong>You may trash 1 card from your hand:</strong> Your Leader gains +2000 power until the end of your opponent's next End Phase. Then, this Character gains [Blocker] until the end of your opponent's next End Phase."
+    },
+    {
+     "name": "Color",
+     "displayName": "Color",
+     "value": "Yellow"
+    },
+    {
+     "name": "CardType",
+     "displayName": "Card Type",
+     "value": "Character"
+    },
+    {
+     "name": "Cost",
+     "displayName": "Cost",
+     "value": "10"
+    },
+    {
+     "name": "Power",
+     "displayName": "Power",
+     "value": "12000"
+    },
+    {
+     "name": "Subtypes",
+     "displayName": "Subtype(s)",
+     "value": "Straw Hat Crew;The Four Emperors;Egghead"
+    },
+    {
+     "name": "Attribute",
+     "displayName": "Attribute",
+     "value": "Strike"
+    }
+   ]
+  },
+  {
+   "productId": 704752,
+   "name": "The World's Strongest Warriors Booster Box",
+   "cleanName": "The Worlds Strongest Warriors Booster Box",
+   "imageUrl": "https://tcgplayer-cdn.tcgplayer.com/product/704752_200w.jpg",
+   "categoryId": 68,
+   "groupId": 24736,
+   "url": "https://www.tcgplayer.com/product/704752/one-piece-card-game-the-worlds-strongest-warriors-the-worlds-strongest-warriors-booster-box",
+   "modifiedOn": "2026-08-28T04:10:21.193",
+   "imageCount": 1,
+   "presaleInfo": {
+    "isPresale": false,
+    "releasedOn": "2026-08-28T00:00:00",
+    "note": null
+   },
+   "extendedData": []
+  },
+  {
+   "productId": 710859,
+   "name": "DON!! Card (Alternate Art) (Gold)",
+   "cleanName": "DON Card Alternate Art Gold",
+   "imageUrl": "https://tcgplayer-cdn.tcgplayer.com/product/710859_200w.jpg",
+   "categoryId": 68,
+   "groupId": 24736,
+   "url": "https://www.tcgplayer.com/product/710859/one-piece-card-game-the-worlds-strongest-warriors-don-card-alternate-art-gold",
+   "modifiedOn": "2026-09-21T13:02:45.923",
+   "imageCount": 1,
+   "presaleInfo": {
+    "isPresale": false,
+    "releasedOn": null,
+    "note": null
+   },
+   "extendedData": [
+    {
+     "name": "Rarity",
+     "displayName": "Rarity",
+     "value": "DON!!"
+    },
+    {
+     "name": "Description",
+     "displayName": "Description",
+     "value": "Your Turn +1000"
+    },
+    {
+     "name": "CardType",
+     "displayName": "Card Type",
+     "value": "DON!!"
+    }
+   ]
+  }
+ ]
+}

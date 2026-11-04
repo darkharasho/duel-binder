@@ -77,6 +77,16 @@ jobs:
           path: catalog-work/thumbs-skip.json
           key: catalog-thumbs-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: catalog-thumbs-
+      # Its own cache: adding these files to the work database's path list would orphan every saved
+      # work database (see above), so that list stays exactly as it is.
+      - name: Restore One Piece sources
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            catalog-work/onepiece-src.sqlite
+            catalog-work/onepiece-src.sqlite-wal
+          key: catalog-onepiece-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: catalog-onepiece-
       - name: Restore base snapshot
         uses: actions/cache/restore@v4
         with:
@@ -92,6 +102,16 @@ jobs:
           ${{ inputs.refresh_cards && '--refresh-cards' || '' }}
       - name: Refresh Pokémon
         run: npm run catalog:job -- --stage pokemon
+      # Bounded and never blocks the upload: a hang or crash here still lets Yu-Gi-Oh and Pokémon
+      # upload, and the next step turns the night red.
+      - name: Refresh One Piece
+        id: onepiece
+        timeout-minutes: 90
+        continue-on-error: true
+        run: npm run catalog:job -- --stage onepiece
+      - name: Flag a failed One Piece step
+        if: steps.onepiece.outcome == 'failure'
+        run: echo "CATALOG_PROBLEMS=1" >> "$GITHUB_ENV"
       - name: Upload catalog
         run: >-
           npm run catalog:job -- --stage upload
@@ -130,6 +150,15 @@ jobs:
         with:
           path: catalog-work/thumbs-skip.json
           key: catalog-thumbs-${{ github.run_id }}-${{ github.run_attempt }}
+      # Its own cache, not the work database's (see "Restore One Piece sources").
+      - name: Save One Piece sources
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            catalog-work/onepiece-src.sqlite
+            catalog-work/onepiece-src.sqlite-wal
+          key: catalog-onepiece-${{ github.run_id }}-${{ github.run_attempt }}
       - name: Save base snapshot
         if: success()
         uses: actions/cache/save@v4

@@ -4,7 +4,7 @@ import { handle, type AppDeps } from '../../workers/portal/src/app'
 import { searchCards } from '../../src/main/repo/cards'
 import { openDatabase } from '../../src/main/db/database'
 import { CATALOG_TABLES, LEGACY_CATALOG_TABLES } from '../../src/shared/catalogTables'
-import { pokemonId } from '../../src/shared/games/ids'
+import { onePieceCardId, pokemonId } from '../../src/shared/games/ids'
 import { addUser, memoryBucket, noPrintingArt, noPrices } from './helpers'
 import { seededDb } from '../main/helpers'
 
@@ -35,7 +35,7 @@ describe('admin catalog loader', () => {
     }
   })
 
-  const call = (path: string, body?: unknown, token: string | null = TOKEN) =>
+  const call = (path: string, body?: unknown, token: string | null = TOKEN): Promise<Response> =>
     handle(
       new Request(BASE + path, {
         method: body === undefined ? 'GET' : 'POST',
@@ -162,6 +162,18 @@ describe('admin catalog loader', () => {
     expect(await upload(0)).toEqual({ missing_from_api: 0 })
   })
 
+  it('op printings stay flagged when uploaded flagged', async () => {
+    await loadCatalog()
+    const id = onePieceCardId('en', 'OP01-001')
+    const card = { ...sourceRows('cards')[0], id, game: 'op' }
+    expect((await call('/admin/catalog/rows', { table: 'cards', rows: [card] })).status).toBe(200)
+    const row = { ...sourceRows('card_printings')[0], card_id: id, game: 'op', missing_from_api: 1 }
+    expect((await call('/admin/catalog/rows', { table: 'card_printings', rows: [row] })).status).toBe(200)
+    expect(db.prepare('SELECT missing_from_api FROM card_printings WHERE card_id = ?').get(id)).toEqual({
+      missing_from_api: 1
+    })
+  })
+
   it('delete never removes a contributed printing', async () => {
     await loadCatalog()
     const pkey = (source.prepare('SELECT pkey FROM card_printings LIMIT 1').get() as { pkey: string }).pkey
@@ -267,7 +279,7 @@ describe('admin catalog loader', () => {
   })
 
   it('rejects unknown tables and columns', async () => {
-    const bad = async (path: string, body: unknown) => (await call(path, body)).status
+    const bad = async (path: string, body: unknown): Promise<number> => (await call(path, body)).status
     expect(await bad('/admin/catalog/rows', { table: 'users', rows: [{ id: 1 }] })).toBe(400)
     expect(await bad('/admin/catalog/rows', { table: 'cards', rows: [{ id: 1, nope: 1 }] })).toBe(400)
     expect(await bad('/admin/catalog/rows', { table: 'cards', rows: [{ name: 'x' }] })).toBe(400)

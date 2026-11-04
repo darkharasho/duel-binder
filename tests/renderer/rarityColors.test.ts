@@ -29,3 +29,11 @@ describe('Pokémon version colours', () => {
     expect(rarityColor('Ultra Rare')).toBe('#e9c46a')
   })
 })
+
+describe('One Piece version colours', () => {
+  it("op labels take their rarity's colour", () => {
+    expect(rarityColor('SR (Alternate Art)', 'op')).toBe(rarityColor('SR', 'op'))
+    expect(rarityColor('SR', 'op')).toBe('#e9c46a')
+    expect(rarityColor('Unknown', 'op')).toBe('#9ca3af')
+  })
+})

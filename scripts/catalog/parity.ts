@@ -11,7 +11,7 @@ import { pathToFileURL } from 'node:url'
 import { openDatabase } from '../../src/main/db/database'
 import type { SqlDb } from '../../src/main/db/sql'
 
-const GAMES = ['ygo', 'pkm']
+const GAMES = ['ygo', 'pkm', 'op']
 const PAGE_SIZE = 5000
 const SHOW = 50
 

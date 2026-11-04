@@ -54,3 +54,8 @@ export const isFallbackLogoUrl = (url: string): boolean =>
   url.startsWith(POKEMONTCG_IMAGE_PREFIX) ||
   url.startsWith(SCRYDEX_IMAGE_PREFIX) ||
   url.startsWith(HAND_ART_PREFIX)
+
+/** English One Piece card art on Bandai's site: `<bandai id>.png`. */
+export const BANDAI_EN_IMAGE_PREFIX = 'https://en.onepiece-cardgame.com/images/cardlist/card/'
+/** A Bandai card id such as OP01-001 or OP01-001_p1; the only ids the art URL is built from. */
+export const BANDAI_ID_RE = /^[A-Z]+[0-9]*-[0-9]{3}(_[a-z][0-9]{1,2})?$/

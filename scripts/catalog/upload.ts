@@ -16,7 +16,7 @@ export interface UploadOptions {
   batch?: number
 }
 
-class HttpError extends Error {
+export class HttpError extends Error {
   constructor(
     readonly status: number,
     message: string
@@ -30,6 +30,22 @@ const retryable = (e: unknown): boolean =>
   !(e instanceof HttpError) || e.status === 429 || e.status >= 500
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
+
+/**
+ * Runs `fn`, retrying network errors, 429 and 5xx after RETRY_DELAYS_MS; any other failure
+ * rejects at once. Each retry warns with `label`.
+ */
+export async function withRetry<T>(label: string, fn: () => Promise<T>): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await fn()
+    } catch (e) {
+      if (attempt >= RETRY_DELAYS_MS.length || !retryable(e)) throw e
+      console.warn(`${label} attempt ${attempt + 1} failed, retrying:`, e instanceof Error ? e.message : e)
+      await sleep(RETRY_DELAYS_MS[attempt])
+    }
+  }
+}
 
 function chunk<T>(items: T[], size: number): T[][] {
   const out: T[][] = []
@@ -50,29 +66,18 @@ export async function uploadCatalog(
   const batch = opts.batch ?? DEFAULT_BATCH
   const root = opts.url.replace(/\/+$/, '')
 
-  const post = async (path: string, body: unknown): Promise<void> => {
-    for (let attempt = 0; ; attempt++) {
-      try {
-        const res = await fetchFn(`${root}${path}`, {
-          method: 'POST',
-          headers: { authorization: `Bearer ${opts.token}`, 'content-type': 'application/json' },
-          body: JSON.stringify(body)
-        })
-        if (!res.ok) {
-          const text = await res.text().catch(() => '')
-          throw new HttpError(res.status, `${path} failed: HTTP ${res.status} ${text}`.trim())
-        }
-        return
-      } catch (e) {
-        if (attempt >= RETRY_DELAYS_MS.length || !retryable(e)) throw e
-        console.warn(
-          `${path} attempt ${attempt + 1} failed, retrying:`,
-          e instanceof Error ? e.message : e
-        )
-        await sleep(RETRY_DELAYS_MS[attempt])
+  const post = (path: string, body: unknown): Promise<void> =>
+    withRetry(path, async () => {
+      const res = await fetchFn(`${root}${path}`, {
+        method: 'POST',
+        headers: { authorization: `Bearer ${opts.token}`, 'content-type': 'application/json' },
+        body: JSON.stringify(body)
+      })
+      if (!res.ok) {
+        const text = await res.text().catch(() => '')
+        throw new HttpError(res.status, `${path} failed: HTTP ${res.status} ${text}`.trim())
       }
-    }
-  }
+    })
 
   const diffs = CATALOG_TABLES.map((t) => ({ t, ...diffTable(opts.work, opts.base, t) }))
   let upserted = 0

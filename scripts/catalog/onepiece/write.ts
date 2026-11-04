@@ -10,7 +10,7 @@ import type { BandaiEntry, BandaiSeries } from './types'
 import { entryKind } from './versions'
 
 /**
- * The One Piece writer: writes the English game = 'op' catalog rows into the job's work database
+ * The One Piece writer: writes one region's (English, or Japanese) game = 'op' catalog rows into the job's work database
  * in one transaction, in the card model of the SCHEMA_V40 doc comment (one printing per Bandai
  * entry, Builder's call 1). Every statement names game = 'op' or an onepiece_* table. Keys never
  * move: a written set keeps its name and code, a written printing its set name, code and label.
@@ -44,6 +44,11 @@ export interface OpPlan {
    * every TCGCSV group was read, so a stored DON!! product not listed is really gone. Absent: none.
    */
   don?: { cards: DonCard[]; listed: Set<number>; complete: boolean }
+  /**
+   * Japanese: Bandai id to the version label its English twin (by art) has, e.g. `Manga`. A Japanese
+   * parallel takes it when first written, else `Parallel`; there is no TCGplayer match to wait for.
+   */
+  labels?: Map<string, string>
 }
 
 export interface OnePieceReport {
@@ -66,7 +71,21 @@ export interface WriteOnePieceOpts {
   nowIso: string
   /** Test-only: replaces onePieceCardId / onePieceImageId to force a collision. */
   idOf?: { card: (number: string) => number; image: (bandaiId: string) => number }
+  /**
+   * The card list's region, 'en' by default. Every read and write keeps to its language, so one
+   * region's run never flags, prices or counts the other's rows.
+   */
+  region?: 'en' | 'ja'
 }
+
+/**
+ * The `onepiece_images.bandai_id` of a region's Bandai entry: the id itself in English (as shipped),
+ * `ja:<id>` in Japanese, which tells the image proxy which site the art is on.
+ */
+export const opArtKey = (region: string, bandaiId: string): string =>
+  region === 'en' ? bandaiId : `${region}:${bandaiId}`
+/** The region of a stored `bandai_id`: a two-letter prefix, else English (a bare id, or DON!!'s `tcg:`). */
+const keyRegion = (key: string): string => /^([a-z]{2}):/.exec(key)?.[1] ?? 'en'
 
 interface ExistingPrinting {
   id: number
@@ -78,6 +97,15 @@ interface ExistingPrinting {
   tcg_product_id: number | null
   market_price: number | null
   missing_from_api: number
+}
+
+/** The English card a Japanese one of the same number reads as. */
+interface EnglishTwin {
+  name: string
+  desc: string
+  traits: string
+  effect: string | null
+  trigger: string | null
 }
 
 const byBandaiId = (a: string, b: string): number => a.localeCompare(b, 'en', { numeric: true })
@@ -121,13 +149,17 @@ const donProduct = (code: string): number | null => {
 }
 
 export function writeOnePiece(work: Database.Database, plan: OpPlan, o: WriteOnePieceOpts): OnePieceReport {
-  const cardIdOf = o.idOf?.card ?? ((n: string) => onePieceCardId('en', n))
-  const imageIdOf = o.idOf?.image ?? ((b: string) => onePieceImageId('en', b))
+  const region = o.region ?? 'en'
+  const english = region === 'en'
+  const cardIdOf = o.idOf?.card ?? ((n: string) => onePieceCardId(region, n))
+  const imageIdOf = o.idOf?.image ?? ((b: string) => onePieceImageId(region, b))
+  const artKey = (b: string): string => opArtKey(region, b)
   const seriesById = new Map(plan.series.map((s) => [s.id, s]))
   const report: OnePieceReport = {
     series: 0, cards: 0, printings: 0, priced: 0, held: 0, images: 0, don: 0, donPriced: 0, perSet: [], notes: []
   }
-  const don = plan.don ?? { cards: [], listed: new Set<number>(), complete: true }
+  // DON!! cards come from TCGplayer, which is English only.
+  const don = (english ? plan.don : undefined) ?? { cards: [], listed: new Set<number>(), complete: true }
   const donCards = don.cards.filter((d) => {
     if (seriesById.has(d.seriesId)) return true
     report.notes.push(`DON!! ${d.productId}: series ${d.seriesId} is not in the series list; skipped`)
@@ -154,7 +186,10 @@ export function writeOnePiece(work: Database.Database, plan: OpPlan, o: WriteOne
   }
 
   const storedNumbers = (work.prepare('SELECT number FROM onepiece_cards').all() as { number: string }[]).map((r) => r.number)
-  const storedImages = work.prepare('SELECT image_id, bandai_id FROM onepiece_images').all() as { image_id: number; bandai_id: string }[]
+  // This region's images, by the bare Bandai id (or DON!!'s `tcg:` key).
+  const storedImages = (work.prepare('SELECT image_id, bandai_id FROM onepiece_images').all() as { image_id: number; bandai_id: string }[])
+    .filter((r) => keyRegion(r.bandai_id) === region)
+    .map((r) => ({ image_id: r.image_id, bandai_id: english ? r.bandai_id : r.bandai_id.slice(region.length + 1) }))
   // DON!! ids come from product ids (tonight's and the stored ones), in the same id range.
   const donPids = [
     ...new Set([...donCards.map((d) => d.productId), ...storedImages.map((r) => donProduct(r.bandai_id)).filter((x): x is number => x !== null)])
@@ -171,13 +206,13 @@ export function writeOnePiece(work: Database.Database, plan: OpPlan, o: WriteOne
   )
 
   const setByCode = work.prepare(
-    "SELECT set_name, tcg_date FROM sets WHERE game = 'op' AND language = 'en' AND set_code = ?"
+    `SELECT set_name, tcg_date FROM sets WHERE game = 'op' AND language = '${region}' AND set_code = ?`
   )
   const insertSet = work.prepare(
-    "INSERT INTO sets (game, language, set_name, set_code, tcg_date) VALUES ('op', 'en', ?, ?, ?)"
+    `INSERT INTO sets (game, language, set_name, set_code, tcg_date) VALUES ('op', '${region}', ?, ?, ?)`
   )
   const updateSetDate = work.prepare(
-    "UPDATE sets SET tcg_date = ? WHERE game = 'op' AND language = 'en' AND set_name = ?"
+    `UPDATE sets SET tcg_date = ? WHERE game = 'op' AND language = '${region}' AND set_name = ?`
   )
   const cardRow = work.prepare(`SELECT name, type, "desc" FROM cards WHERE game = 'op' AND id = ?`)
   const insertCard = work.prepare(
@@ -213,13 +248,17 @@ export function writeOnePiece(work: Database.Database, plan: OpPlan, o: WriteOne
   const insertPrinting = work.prepare(
     `INSERT INTO card_printings (card_id, set_name, set_code, set_rarity, set_rarity_code, set_price,
        missing_from_api, language, tcg_product_id, variant, market_price, game)
-     VALUES (?, ?, ?, ?, ?, NULL, 0, 'en', ?, NULL, ?, 'op')`
+     VALUES (?, ?, ?, ?, ?, NULL, 0, '${region}', ?, NULL, ?, 'op')`
   )
   const updatePrinting = work.prepare(
     "UPDATE card_printings SET missing_from_api = ?, tcg_product_id = ?, market_price = ? WHERE game = 'op' AND id = ?"
   )
   const flagImage = work.prepare(
     "UPDATE card_images SET missing_from_api = 1 WHERE game = 'op' AND image_id = ? AND missing_from_api = 0"
+  )
+  const twinOf = work.prepare(
+    `SELECT c.name, c."desc" AS "desc", oc.traits, oc.effect, oc.trigger
+     FROM cards c JOIN onepiece_cards oc ON oc.card_id = c.id WHERE c.game = 'op' AND c.id = ?`
   )
 
   let cardsChanged = false
@@ -244,19 +283,25 @@ export function writeOnePiece(work: Database.Database, plan: OpPlan, o: WriteOne
       const src = cardSource.get(number)!
       const id = cardIdOf(number)
       const type = cardType(src.cardType)
-      const desc = [src.effect, src.trigger].filter((x): x is string => !!x).join('\n')
+      // A Japanese card whose number English has reads as the English card: its name, text and traits.
+      const twin = english ? undefined : (twinOf.get(onePieceCardId('en', number)) as EnglishTwin | undefined)
+      const name = twin?.name ?? src.name
+      const effect = twin ? twin.effect : src.effect
+      const trigger = twin ? twin.trigger : src.trigger
+      const traits = twin?.traits ?? JSON.stringify(src.traits)
+      const desc = twin?.desc ?? [effect, trigger].filter((x): x is string => !!x).join('\n')
       const row = cardRow.get(id) as { name: string; type: string; desc: string } | undefined
       if (!row) {
-        insertCard.run(id, src.name, type, desc, o.nowIso)
+        insertCard.run(id, name, type, desc, o.nowIso)
         cardsChanged = true
-      } else if (row.name !== src.name || row.type !== type || row.desc !== desc) {
-        updateCard.run(src.name, type, desc, o.nowIso, id)
+      } else if (row.name !== name || row.type !== type || row.desc !== desc) {
+        updateCard.run(name, type, desc, o.nowIso, id)
         cardsChanged = true
       }
       upsertDetails.run({
         cardId: id, number, colors: JSON.stringify(src.colors), cardType: type, cost: src.cost, power: src.power,
-        counter: src.counter, life: src.life, attribute: JSON.stringify(src.attribute), traits: JSON.stringify(src.traits),
-        effect: src.effect, trigger: src.trigger, block: src.block
+        counter: src.counter, life: src.life, attribute: JSON.stringify(src.attribute), traits,
+        effect, trigger, block: src.block
       })
       report.cards++
     }
@@ -297,7 +342,7 @@ export function writeOnePiece(work: Database.Database, plan: OpPlan, o: WriteOne
     for (const p of work
       .prepare(
         `SELECT id, card_id, set_name, set_code, set_rarity, set_rarity_code, tcg_product_id, market_price, missing_from_api
-         FROM card_printings WHERE game = 'op' AND contributed = 0`
+         FROM card_printings WHERE game = 'op' AND language = '${region}' AND contributed = 0`
       )
       .all() as ExistingPrinting[]) {
       existing.set(p.set_rarity_code, p)
@@ -318,9 +363,10 @@ export function writeOnePiece(work: Database.Database, plan: OpPlan, o: WriteOne
       }
 
       upsertImage.run(imageIdOf(e.bandaiId), cardId, sortOrder(e.bandaiId))
-      insertBandaiId.run(imageIdOf(e.bandaiId), e.bandaiId)
+      insertBandaiId.run(imageIdOf(e.bandaiId), artKey(e.bandaiId))
       report.images++
 
+      const borrowed = plan.labels?.get(e.bandaiId)
       const match = plan.matches.get(e.bandaiId)
       const product = match ? match.product.productId : null
       const price = product === null ? null : (plan.prices.get(product) ?? null)
@@ -342,6 +388,9 @@ export function writeOnePiece(work: Database.Database, plan: OpPlan, o: WriteOne
         if (kind === 'parallel' && match?.label && unnumbered(p.set_rarity) !== `${e.rarity} (${match.label})`) {
           report.notes.push(`${e.bandaiId}: matches ${product} (${match.label}), keeps "${p.set_rarity}"`)
         }
+        if (kind === 'parallel' && borrowed && unnumbered(p.set_rarity) !== `${e.rarity} (${borrowed})`) {
+          report.notes.push(`${e.bandaiId}: its English twin is ${borrowed}, keeps "${p.set_rarity}"`)
+        }
         report.printings++
         if (nextPrice !== null) report.priced++
         continue
@@ -354,6 +403,8 @@ export function writeOnePiece(work: Database.Database, plan: OpPlan, o: WriteOne
       else if (kind === 'reprint') label = `${e.rarity} (Reprint)`
       else if (kind === 'promo') label = e.cardSets ? `${e.rarity} (${e.cardSets})` : e.rarity
       else if (match) label = `${e.rarity} (${match.label ?? 'Parallel'})`
+      // Japanese has no TCGplayer match to wait for.
+      else if (!english) label = `${e.rarity} (${borrowed ?? 'Parallel'})`
       else if (o.now - (plan.firstSeen.get(e.bandaiId) ?? o.now) >= HOLD_UNMATCHED_MS) label = `${e.rarity} (Parallel)`
       else {
         report.held++
@@ -424,7 +475,7 @@ export function writeOnePiece(work: Database.Database, plan: OpPlan, o: WriteOne
       .prepare(
         `SELECT s.set_code AS setCode, COUNT(*) AS printings, COUNT(p.market_price) AS priced
          FROM card_printings p JOIN sets s ON s.game = 'op' AND s.language = p.language AND s.set_name = p.set_name
-         WHERE p.game = 'op' GROUP BY s.set_code ORDER BY s.set_code`
+         WHERE p.game = 'op' AND p.language = '${region}' GROUP BY s.set_code ORDER BY s.set_code`
       )
       .all() as { setCode: string; printings: number; priced: number }[]
   )

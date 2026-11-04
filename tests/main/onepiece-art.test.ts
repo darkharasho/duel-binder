@@ -5,7 +5,7 @@ import { PNG } from 'pngjs'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { decodeImage } from '../../scripts/catalog/references'
 import {
-  distance, hexHash, isFrozen, refreshArt, smallCopy, uploadArt, type ArtBatch, type ArtResult
+  distance, FULL_LIMIT_RAISED_AT, hexHash, isFrozen, refreshArt, smallCopy, uploadArt, type ArtBatch, type ArtResult
 } from '../../scripts/catalog/onepiece/art'
 import { openOpCache, type OpCache } from '../../scripts/catalog/onepiece/cache'
 import type { OnePieceSources } from '../../scripts/catalog/onepiece/sources'
@@ -257,24 +257,36 @@ describe('One Piece art', () => {
   })
 
   it('art the portal refuses as too large waits for its re-check, noted once', async () => {
+    const T0 = FULL_LIMIT_RAISED_AT
     const tooBig = { url: 'https://p', token: 't', fetch: (async () => new Response('{"error":"too-large"}', { status: 413 })) as typeof fetch }
-    const r1 = await run({ now: 0, portal: tooBig })
+    const r1 = await run({ now: T0, portal: tooBig })
     expect(r1).toMatchObject({ failed: 1, uploaded: 0, tooLarge: ['100_p1'] })
-    expect(cache.getBandaiArt('100_p1')!.tooLargeAt).toBe(0)
+    expect(cache.getBandaiArt('100_p1')!.tooLargeAt).toBe(T0)
     // The next nights don't download it again.
     const puts: Put[] = []
-    const r2 = await run({ now: DAY, portal: portal(puts) })
+    const r2 = await run({ now: T0 + DAY, portal: portal(puts) })
     expect(r2).toMatchObject({ fetched: 0, failed: 0, tooLarge: [] })
     expect(served.log).toEqual(['bandai 100_p1'])
     // At its re-check it is tried again; still too large is no new note.
-    const r3 = await run({ now: 15 * DAY, portal: tooBig })
+    const r3 = await run({ now: T0 + 15 * DAY, portal: tooBig })
     expect(r3).toMatchObject({ fetched: 1, failed: 1, tooLarge: [] })
-    expect(cache.getBandaiArt('100_p1')!.tooLargeAt).toBe(15 * DAY)
+    expect(cache.getBandaiArt('100_p1')!.tooLargeAt).toBe(T0 + 15 * DAY)
     // Once it fits, it is stored and the stamp cleared.
-    const r4 = await run({ now: 30 * DAY, portal: portal(puts) })
+    const r4 = await run({ now: T0 + 30 * DAY, portal: portal(puts) })
     expect(r4).toMatchObject({ uploaded: 1, failed: 0 })
     expect(puts).toHaveLength(2)
-    expect(cache.getBandaiArt('100_p1')).toMatchObject({ storedAt: 30 * DAY, tooLargeAt: null })
+    expect(cache.getBandaiArt('100_p1')).toMatchObject({ storedAt: T0 + 30 * DAY, tooLargeAt: null })
+  })
+
+  it('art refused as too large before the portal limit was raised is tried again the next night', async () => {
+    const tooBig = { url: 'https://p', token: 't', fetch: (async () => new Response('{"error":"too-large"}', { status: 413 })) as typeof fetch }
+    const before = FULL_LIMIT_RAISED_AT - DAY
+    await run({ now: before, portal: tooBig })
+    expect(cache.getBandaiArt('100_p1')!.tooLargeAt).toBe(before)
+    const puts: Put[] = []
+    const r = await run({ now: FULL_LIMIT_RAISED_AT + DAY, portal: portal(puts) })
+    expect(r).toMatchObject({ uploaded: 1, failed: 0 })
+    expect(cache.getBandaiArt('100_p1')).toMatchObject({ storedAt: FULL_LIMIT_RAISED_AT + DAY, tooLargeAt: null })
   })
 
   it('an upload that runs over its time limit is retried', async () => {

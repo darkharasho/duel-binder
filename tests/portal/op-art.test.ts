@@ -52,8 +52,11 @@ describe('One Piece art upload (admin)', () => {
     expect(bucket.store.size).toBe(0)
   })
 
-  it('413 for a 3 MiB PNG', async () => {
-    const big = new Uint8Array(3 * 1024 * 1024)
+  it('stores a 3 MiB PNG (OP02 art is 868x1212, about 2.3 MB) and 413s one over 4 MiB', async () => {
+    const ok = new Uint8Array(3 * 1024 * 1024)
+    ok.set(PNG)
+    expect((await opArtRoute(put('full', id, ok, 'image/png'), memoryBucket(), TOKEN))!.status).toBe(200)
+    const big = new Uint8Array(5 * 1024 * 1024)
     big.set(PNG)
     expect((await opArtRoute(put('full', id, big, 'image/png'), memoryBucket(), TOKEN))!.status).toBe(413)
   })
@@ -65,7 +68,7 @@ describe('One Piece art upload (admin)', () => {
       method: 'PUT',
       headers: new Headers({
         'content-type': 'image/png',
-        'content-length': String(3 * 1024 * 1024),
+        'content-length': String(5 * 1024 * 1024),
         authorization: `Bearer ${TOKEN}`
       }),
       arrayBuffer: async () => {

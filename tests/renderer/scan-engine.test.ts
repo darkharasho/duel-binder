@@ -163,6 +163,33 @@ describe('createScanEngine', () => {
     expect(api.ocr).toHaveBeenCalledWith([band(7), band(8), band(9)], 'name')
   })
 
+  it('codesOnly reads the code bands and leaves the names unread', async () => {
+    const api = createMockApi().scan
+    vi.mocked(api.ocr).mockImplementation(async (bands) => bands.map(() => 'OP05-119SEC2'))
+    const { worker, posted } = fakeWorker({
+      found: true,
+      quad: null,
+      art: [],
+      codeBands: [band(10), band(11)],
+      nameBands: [band(7)],
+      textBands: [],
+      cues: null,
+      look: null
+    })
+    const engine = createScanEngine({ api, makeWorker: () => worker, game: 'op' })
+    await engine.init(null)
+    const read = await engine.analyze(frame(), {
+      candidates: null,
+      wantText: true,
+      codesOnly: true
+    })
+    expect(read.codeTexts).toEqual(['OP05-119SEC2', 'OP05-119SEC2'])
+    expect(read.nameTexts).toEqual([])
+    expect(api.ocr).toHaveBeenCalledTimes(1)
+    expect(api.ocr).toHaveBeenCalledWith([band(10), band(11)], 'code')
+    expect(posted[0].msg.game).toBe('op')
+  })
+
   it('passes the text bands on unread, without the empty ones', async () => {
     const api = createMockApi().scan
     vi.mocked(api.ocr).mockResolvedValue([])

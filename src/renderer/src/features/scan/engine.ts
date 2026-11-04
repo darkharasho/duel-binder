@@ -131,6 +131,8 @@ export interface ScanEngine {
       photo?: boolean
       tilt?: number[]
       at?: number
+      /** Read only the code bands, not the names: a number reader's frame (the Contribute screen). */
+      codesOnly?: boolean
     }
   ): Promise<RawSignals>
   /** Live frames match only these artworks from now on; null for every one. */
@@ -399,7 +401,10 @@ export function createScanEngine(deps: {
       worker?.postMessage({ type: 'tiltReset' } satisfies WorkerRequest)
     },
 
-    async analyze(frame, { candidates, wantText, wantLook = false, photo = false, tilt, at }) {
+    async analyze(
+      frame,
+      { candidates, wantText, wantLook = false, photo = false, tilt, at, codesOnly = false }
+    ) {
       const id = nextId++
       const grabbed = at ?? performance.now()
       const signals = await new Promise<FrameSignals>((resolve, reject) => {
@@ -453,7 +458,7 @@ export function createScanEngine(deps: {
           look
         }
       const codeBands = signals.codeBands.filter(hasPixels)
-      const nameBands = signals.nameBands.filter(hasPixels)
+      const nameBands = codesOnly ? [] : signals.nameBands.filter(hasPixels)
       // Text is a helper to the art: a failed or timed-out read counts as nothing read, so OCR
       // trouble never stops art matching.
       const read = (bands: OcrBand[], kind: OcrKind): Promise<string[]> =>

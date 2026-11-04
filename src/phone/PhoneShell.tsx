@@ -230,7 +230,11 @@ function Shell({ engineFactory }: { engineFactory?: EngineFactory }): React.JSX.
 
       {contribute !== null && (
         <div className="fixed inset-0 z-50">
-          <ContributeScreen game={contribute} onClose={closeContribute} />
+          <ContributeScreen
+            game={contribute}
+            onClose={closeContribute}
+            engineFactory={engineFactory}
+          />
         </div>
       )}
 

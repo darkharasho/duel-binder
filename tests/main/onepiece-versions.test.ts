@@ -55,6 +55,13 @@ describe('One Piece TCGplayer versions', () => {
     expect(entryKind(entry({ bandaiId: 'EB04-061_p2', number: 'EB04-061', rarity: 'SEC' }), OP17)).toBe('sp')
     expect(entryKind(entry({ bandaiId: 'EB04-061_p1', number: 'EB04-061', rarity: 'SEC', seriesId: '569115' }), EB04)).toBe('parallel')
   })
+  test('the number prefix must equal a part of the set code, not sit inside it', () => {
+    // `P` is inside `OP17`, but a P- card on the OP-17 page is borrowed.
+    expect(entryKind(entry({ bandaiId: 'P-084_p1', number: 'P-084', rarity: 'P' }), OP17)).toBe('sp')
+    expect(entryKind(entry({ bandaiId: 'EB04-061_p1', number: 'EB04-061', rarity: 'SEC', seriesId: '569115' }), EB04)).toBe('parallel')
+    expect(entryKind(entry({ bandaiId: 'EB04-061_p2', number: 'EB04-061', rarity: 'SEC' }), OP17)).toBe('sp')
+    expect(entryKind(entry({ bandaiId: 'OP15-001_p1', number: 'OP15-001', rarity: 'L', seriesId: '569115' }), EB04)).toBe('parallel')
+  })
   test('series map to groups; stamps and promos apart', () => {
     const m = mapGroups([OP17, EB04, ST31, PROMO], readJson('tcgcsv-groups.json').results as TcGroup[])
     expect(m.bySeries.get('569117')?.groupId).toBe(24736)

@@ -42,8 +42,9 @@ export function entryKind(e: BandaiEntry, series: Pick<BandaiSeries, 'kind' | 's
   if (e.rarity === 'SP') return 'sp'
   if (e.rarity === 'TR') return 'tr'
   if (!e.bandaiId.includes('_')) return 'base'
+  // Whole parts only: `P` sits inside `OP17` but is not one of its parts.
   const prefix = normalizeCode(e.number.split('-')[0])
-  return normalizeCode(series.setCode).includes(prefix) ? 'parallel' : 'sp'
+  return series.setCode.split('-').map(normalizeCode).includes(prefix) ? 'parallel' : 'sp'
 }
 
 export function mapGroups(series: BandaiSeries[], groups: TcGroup[]): {

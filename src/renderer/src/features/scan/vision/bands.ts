@@ -149,6 +149,19 @@ export function toBand(img: RgbaImage, box: Box, scale = 2): OcrBand {
 }
 
 /**
+ * The text in box on a straightened card as it is, for a short number tesseract reads better than
+ * a cut-out line: cropped, grayscale, scaled up `scale` times and contrast-stretched. A small
+ * light number on a coloured bar runs together or loses its letters to their holes when cut down
+ * to its ink; tesseract finds the line and the ink itself (either polarity). Pure, so the vision
+ * worker can use it.
+ */
+export function toGrayBand(img: RgbaImage, box: Box, scale = 3): OcrBand {
+  const { width, height, data: px } = grayScaled(crop(img, box), scale)
+  stretch(px)
+  return { width, height, data: Uint8Array.from(px, Math.round) }
+}
+
+/**
  * The block of text in box on a straightened card, for reading whole: cropped, grayscale and
  * contrast-stretched, at the card's own scale. Pure, so the vision worker can use it.
  */

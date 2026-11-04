@@ -25,8 +25,8 @@ describe('scan profiles', () => {
     expect(ygo.rarityLook).toBe(true)
   })
 
-  it('a game with no scanner has no profile', () => {
-    expect(() => scanProfile('op')).toThrow('No scan profile for op')
+  it('a game with no profile throws', () => {
+    expect(() => scanProfile('mtg' as never)).toThrow('No scan profile for mtg')
   })
 
   it('every scanning game has a profile of boxes on the card', () => {
@@ -56,5 +56,76 @@ describe('scan profiles', () => {
 
   it("pkm doesn't run the Yu-Gi-Oh rarity look", () => {
     expect(scanProfile('pkm').rarityLook).toBe(false)
+  })
+
+  describe('op', () => {
+    const op = (): ReturnType<typeof scanProfile> => scanProfile('op')
+    // The printed number's box on Bandai's renders (en.onepiece-cardgame.com, 600 x 838), as
+    // shares of the card: a Leader, Characters, an Event, a Stage, a promo, a premium booster, an
+    // alternate art, a manga-style SP and a full-art SEC. The number is right-aligned against the
+    // rarity box, so only where it starts depends on its length.
+    const NUMBERS: Record<string, Box> = {
+      'OP01-001 (Leader)': [0.77, 0.949, 0.873, 0.962],
+      'OP01-026 (Event)': [0.77, 0.948, 0.873, 0.962],
+      'ST01-017 (Stage)': [0.773, 0.948, 0.868, 0.962],
+      'PRB01-001': [0.755, 0.949, 0.873, 0.962],
+      'P-001': [0.811, 0.948, 0.873, 0.962],
+      'OP07-109 (yellow bar)': [0.77, 0.945, 0.868, 0.958],
+      'OP14-108_p3 (SP)': [0.764, 0.946, 0.873, 0.961],
+      'EB04-061_p2 (full art)': [0.77, 0.947, 0.873, 0.962]
+    }
+
+    it('reads the number bottom right with room for a loose outline', () => {
+      const [band] = op().codeBands
+      expect(inside(band)).toBe(true)
+      for (const [card, n] of Object.entries(NUMBERS)) {
+        // Off by a few percent either way, the number is still inside the band.
+        expect([card, band[0] <= n[0] - 0.015]).toEqual([card, true])
+        expect([card, band[2] >= n[2] + 0.01]).toEqual([card, true])
+        expect([card, band[1] <= n[1] - 0.01]).toEqual([card, true])
+        expect([card, band[3] >= n[3] + 0.01]).toEqual([card, true])
+      }
+      // Under the name and the traits bar's text (which ends by 0.935), above the card's edge.
+      expect(band[1]).toBeGreaterThanOrEqual(0.93)
+      expect(band[3]).toBeLessThanOrEqual(0.985)
+    })
+
+    it('reads it too off an outline that stops at the bottom bar, past the outline', () => {
+      const [, low] = op().codeBands
+      const reach = op().codeReach ?? 0
+      // Within the card and the reach around it.
+      expect(low.every((v) => v >= -reach && v <= 1 + reach)).toBe(true)
+      expect(low[3]).toBeGreaterThan(1)
+      // Held by its long sides, a card's outline can lose its bottom strip and end at the bottom
+      // bar's top edge (0.93 to 0.95 of the card): the number is then below the outline's end.
+      for (const end of [0.93, 0.95])
+        for (const [card, n] of Object.entries(NUMBERS)) {
+          const [top, bottom] = [n[1] / end, n[3] / end]
+          expect([card, end, low[1] <= top - 0.005 && low[3] >= bottom + 0.005]).toEqual([
+            card,
+            end,
+            true
+          ])
+          expect([card, low[0] <= n[0] - 0.015 && low[2] >= n[2] + 0.01]).toEqual([card, true])
+        }
+    })
+
+    it('has its profile for the number reader while its scanner stays off', () => {
+      expect(GAMES.op.features.scan).toBe(false)
+      expect(op().game).toBe('op')
+      for (const b of [...op().artBoxes, op().nameBand, op().textBox]) expect(inside(b)).toBe(true)
+    })
+
+    it('needs no fingerprints, foil, holder search or rarity look', () => {
+      expect(op()).toMatchObject({
+        rarityLook: false,
+        foil: null,
+        holderSearch: false,
+        keepOutline: false,
+        windowArt: false,
+        windowShape: null,
+        innerFrames: []
+      })
+    })
   })
 })

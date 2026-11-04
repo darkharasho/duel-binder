@@ -239,13 +239,34 @@ export function withMat<T>(cv: CV, img: FrameSource, fn: (frame: Mat) => T): T {
   return using([frame], () => fn(frame))
 }
 
-/** The card inside quad, straightened to width x (width * 1228 / 842). */
-export function warpCard(cv: CV, img: FrameSource, quad: Quad, width = CARD_W): RgbaImage {
+/**
+ * The card inside quad, straightened to width x (width * 1228 / 842), with `margin` (a share of
+ * each side) of what's around it kept on every side.
+ */
+export function warpCard(
+  cv: CV,
+  img: FrameSource,
+  quad: Quad,
+  width = CARD_W,
+  margin = 0
+): RgbaImage {
   const height = Math.round((width * CARD_H) / CARD_W)
+  // The card at width x height, with `margin` of its width and height around it on every side.
+  const mx = Math.round(margin * width)
+  const my = Math.round(margin * height)
   return withMat(cv, img, (src) => {
     const from = cv.matFromArray(4, 1, cv.CV_32FC2, quad.flat())
     return using([from], () => {
-      const to = cv.matFromArray(4, 1, cv.CV_32FC2, [0, 0, width, 0, width, height, 0, height])
+      const to = cv.matFromArray(4, 1, cv.CV_32FC2, [
+        mx,
+        my,
+        mx + width,
+        my,
+        mx + width,
+        my + height,
+        mx,
+        my + height
+      ])
       const out = new cv.Mat()
       return using([to, out], () => {
         const m = cv.getPerspectiveTransform(from, to)
@@ -254,14 +275,18 @@ export function warpCard(cv: CV, img: FrameSource, quad: Quad, width = CARD_W): 
             src,
             out,
             m,
-            new cv.Size(width, height),
+            new cv.Size(width + 2 * mx, height + 2 * my),
             cv.INTER_LINEAR,
             cv.BORDER_REPLICATE
           )
         } finally {
           m.delete()
         }
-        return { width, height, data: new Uint8ClampedArray(out.data) }
+        return {
+          width: width + 2 * mx,
+          height: height + 2 * my,
+          data: new Uint8ClampedArray(out.data)
+        }
       })
     })
   })

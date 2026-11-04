@@ -3,6 +3,8 @@
 export const CONTRIBUTE_TITLE = 'Contribute photos'
 export const NUMBER_LABEL = 'Card number'
 export const NUMBER_PLACEHOLDER = 'OP05-119'
+/** Before the number the camera read, on the button that fills it in. */
+export const READ_LABEL = 'Camera read'
 export const NO_VERSIONS = 'No card with that number in your card data.'
 export const NOT_SYNCED = "This version isn't synced yet. Sync, then try again."
 export const GRAB_FAILED = "Couldn't take the photo. Try again."

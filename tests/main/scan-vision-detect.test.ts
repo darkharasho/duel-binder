@@ -492,6 +492,21 @@ describe('warpCard', () => {
     expect([card.width, card.height]).toEqual([842, 1228])
     expect(card.data.length).toBe(842 * 1228 * 4)
   })
+
+  it('keeps a margin around the card when asked, with the card in the middle', () => {
+    const s = shots[0]
+    const img = frames.get(s.file)!
+    const card = warpCard(cv, img, s.quad, 421)
+    const around = warpCard(cv, img, s.quad, 421, 0.1)
+    expect([around.width, around.height]).toEqual([421 + 2 * 42, 614 + 2 * 61])
+    // The card's middle row, the same either way, give or take interpolation.
+    const row = (im: RgbaImage, x0: number, y: number): number[] =>
+      Array.from({ length: 50 }, (_, i) => im.data[((y * im.width + x0 + i * 8) * 4) | 0])
+    const a = row(card, 0, 307)
+    const b = row(around, 42, 307 + 61)
+    const off = a.map((v, i) => Math.abs(v - b[i]))
+    expect(Math.max(...off)).toBeLessThan(40)
+  })
 })
 
 describe('the Pokémon profile', () => {

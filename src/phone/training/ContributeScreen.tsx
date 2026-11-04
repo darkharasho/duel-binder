@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { CameraIcon, Trash2Icon, XIcon } from 'lucide-react'
+import { CameraIcon, ScanLineIcon, Trash2Icon, XIcon } from 'lucide-react'
+import { defaultEngine, type EngineFactory } from '@/features/scan/engine'
 import { useScanHub } from '@/features/scan/ScanHub'
 import { useCamera } from '@/features/scan/useCamera'
 import { api } from '@/lib/api'
@@ -28,11 +29,13 @@ import {
   NUMBER_LABEL,
   NUMBER_PLACEHOLDER,
   OFFLINE_WAIT,
+  READ_LABEL,
   SAVED,
   WHAT_TO_SHOOT,
   WHAT_TO_SHOOT_TITLE,
   photoCount
 } from './copy'
+import { useNumberReader } from './numberReader'
 import { trainingOutbox, type DrainResult, type Outbox } from './outbox'
 
 const HOLDER_KEY = 'training.holder'
@@ -87,23 +90,31 @@ type Selected = Version & { serverId: number | null | undefined }
 
 const panel = 'rounded-2xl border border-white/[0.08] bg-black/45 backdrop-blur-md'
 
+/** Whether the catalog has a card with this number. */
+const numberExists = async (number: string): Promise<boolean> =>
+  (await api.scan.printingsByCode(number)).length > 0
+
 /**
- * Testers' training photos: type a card's number, pick the version in hand and its holder, then
- * shoot. Each shot goes to the outbox with its own label and uploads from there (also after this
- * screen closes, through the shell's drain).
+ * Testers' training photos: type a card's number (or, for One Piece, take the one the camera
+ * read), pick the version in hand and its holder, then shoot. Each shot goes to the outbox with
+ * its own label and uploads from there (also after this screen closes, through the shell's drain).
  */
 export function ContributeScreen({
   game,
   onClose,
   outbox: given,
   grab = grabFrame,
-  now = () => new Date()
+  now = () => new Date(),
+  engineFactory = defaultEngine,
+  readPauseMs
 }: {
   game: GameId
   onClose(): void
   /** Tests. Default `trainingOutbox()`. */ outbox?: Outbox
   /** Tests. */ grab?: (video: HTMLVideoElement) => Promise<ArrayBuffer>
   /** Tests. */ now?: () => Date
+  /** Tests. The number reader's engine. */ engineFactory?: EngineFactory
+  /** Tests. The number reader's pause between tries. */ readPauseMs?: number
 }): React.JSX.Element {
   const { store, user } = usePhone()
   const outbox = useMemo(() => given ?? trainingOutbox(), [given])
@@ -124,6 +135,20 @@ export function ContributeScreen({
     queryFn: () => api.scan.numberPrefixes()
   })
   const chips = prefixSuggestions(text, prefixes.data ?? [])
+
+  // One Piece numbers read off the camera while nothing is typed, offered for one tap. The card
+  // just done (Next card) isn't offered again while it's still in front of the camera.
+  const [done, setDone] = useState<string | null>(null)
+  const read = useNumberReader({
+    video: videoRef,
+    active: game === 'op' && text === '' && camera.stream !== null,
+    game,
+    engineFactory,
+    prefixes: prefixes.data,
+    exists: numberExists,
+    skip: done,
+    pauseMs: readPauseMs
+  })
   const versions = useQuery({
     queryKey: ['training', 'versions', number],
     queryFn: () => versionsOf(number!),
@@ -264,6 +289,7 @@ export function ContributeScreen({
   }
 
   const nextCard = (): void => {
+    setDone(number)
     setText('')
     setSelected(null)
     setShotError(false)
@@ -348,6 +374,22 @@ export function ContributeScreen({
             }}
             className="h-11 w-full rounded-xl border border-white/[0.08] bg-card px-3 text-base uppercase outline-none placeholder:normal-case placeholder:text-muted-foreground focus:border-white/25"
           />
+          {read !== null && (
+            <button
+              type="button"
+              aria-label={`Use ${read}`}
+              onClick={() => {
+                setText(read)
+                setSelected(null)
+              }}
+              className="flex min-h-11 w-full items-center gap-2 rounded-xl bg-primary/15 px-3 text-left ring-1 ring-primary/40 active:bg-primary/25"
+            >
+              <ScanLineIcon aria-hidden className="size-4 shrink-0 text-primary" />
+              <span className="text-[13px] text-muted-foreground">{READ_LABEL}</span>
+              <span className="text-[15px] font-semibold tracking-wide">{read}</span>
+              <span className="ml-auto text-[13px] font-medium text-primary">Use</span>
+            </button>
+          )}
           {chips.length > 0 && (
             <div className="flex flex-wrap gap-2">
               {chips.map((c) => (

@@ -22,7 +22,8 @@ export default defineConfig({
         parity: `${root}scripts/catalog/parity.ts`,
         'set-art': `${root}scripts/catalog/setArtDryRun.ts`,
         thumbs: `${root}scripts/catalog/thumbs.ts`,
-        'pull-training': `${root}scripts/scan/pull-training.ts`
+        'pull-training': `${root}scripts/scan/pull-training.ts`,
+        'op-number-replay': `${root}scripts/scan/op-number-replay.ts`
       },
       output: { format: 'es', entryFileNames: '[name].mjs' }
     }

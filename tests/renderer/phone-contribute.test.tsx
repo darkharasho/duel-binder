@@ -26,7 +26,10 @@ import {
 } from '../../src/phone/training/outbox'
 import { renderWithProviders } from './mockApi'
 import { SETO, fakeStore, installPhoneApi, setOnline } from './phoneFakes'
-import { stubCamera, stubVideo } from './scanFakes'
+import { NOTHING, fakeEngine, stubCamera, stubVideo, type FakeEngine } from './scanFakes'
+import type { Mock } from 'vitest'
+import type { EngineFactory } from '@/features/scan/engine'
+import type { GameId } from '@shared/games'
 
 const CARD_ID = 2 ** 39 + 5
 const NOW = new Date('2026-11-04T12:00:00.000Z')
@@ -94,24 +97,39 @@ let grab: ReturnType<typeof vi.fn>
 
 function renderScreen(
   store: PhoneStore,
-  onClose: () => void = () => {}
+  onClose: () => void = () => {},
+  o: { engineFactory?: EngineFactory; game?: GameId } = {}
 ): ReturnType<typeof renderWithProviders> {
   installPhoneApi(store)
   return renderWithProviders(
     <PhoneContext.Provider value={{ store, user: SETO, signedOut: () => {} }}>
       <ScanHubProvider>
         <ContributeScreen
-          game="op"
+          game={o.game ?? 'op'}
           onClose={onClose}
           outbox={outbox}
           grab={grab as (v: HTMLVideoElement) => Promise<ArrayBuffer>}
           now={() => NOW}
+          engineFactory={o.engineFactory ?? (() => fakeEngine())}
+          readPauseMs={5}
         />
       </ScanHubProvider>
     </PhoneContext.Provider>,
     { api: window.api }
   )
 }
+
+/** An engine whose frames' number band reads texts(n) (n counts from 0). */
+function readingEngine(texts: (n: number) => string[]): {
+  engine: FakeEngine
+  factory: Mock<EngineFactory>
+} {
+  const engine = fakeEngine((n) => ({ ...NOTHING, found: true, codeTexts: texts(n) }))
+  return { engine, factory: vi.fn<EngineFactory>(() => engine) }
+}
+
+const suggestion = (n: string): HTMLElement | null =>
+  screen.queryByRole('button', { name: `Use ${n}` })
 
 const numberBox = (): HTMLElement => screen.getByRole('textbox', { name: 'Card number' })
 const shutter = (): HTMLElement => screen.getByRole('button', { name: 'Take photo' })
@@ -406,5 +424,106 @@ describe('contribute photos screen', () => {
     expect(CAP_REACHED).toBe('Daily limit reached. The rest upload tomorrow.')
     expect(OFFLINE_WAIT).toBe("Offline: photos upload when you're back online.")
     expect(DROPPED).toBe('A photo was refused by the server and removed.')
+  })
+})
+
+describe('reading the number off the camera', () => {
+  it('offers a number that reads twice running and is in the catalog; one tap uses it', async () => {
+    const user = userEvent.setup()
+    const { engine, factory } = readingEngine(() => ['OP01-001L1', ''])
+    renderScreen(opStore(), undefined, { engineFactory: factory })
+    const use = await screen.findByRole('button', { name: 'Use OP01-001' })
+    expect(factory).toHaveBeenCalledWith('op')
+    expect(engine.init).toHaveBeenCalledWith(null)
+    // Only the number band is read, off the live camera, as text.
+    expect(engine.analyze.mock.calls[0][1]).toEqual({
+      candidates: null,
+      wantText: true,
+      codesOnly: true
+    })
+    expect(numberBox()).toHaveValue('')
+    await user.click(use)
+    expect(numberBox()).toHaveValue('OP01-001')
+    expect(await screen.findByRole('button', { name: 'L' })).toBeInTheDocument()
+    expect(suggestion('OP01-001')).not.toBeInTheDocument()
+  })
+
+  it('a number read once, between misses, is not offered', async () => {
+    const { engine, factory } = readingEngine((n) => (n % 2 === 0 ? ['OP01-001'] : ['HAT CREW']))
+    renderScreen(opStore(), undefined, { engineFactory: factory })
+    await waitFor(() => expect(engine.analyze.mock.calls.length).toBeGreaterThan(6))
+    expect(suggestion('OP01-001')).not.toBeInTheDocument()
+  })
+
+  it('a number the catalog does not have is not offered', async () => {
+    const { engine, factory } = readingEngine(() => ['OP02-999'])
+    const store = opStore()
+    renderScreen(store, undefined, { engineFactory: factory })
+    await waitFor(() => expect(engine.analyze.mock.calls.length).toBeGreaterThan(4))
+    expect(screen.queryByRole('button', { name: /^Use / })).not.toBeInTheDocument()
+    expect(store.invoke).toHaveBeenCalledWith('scan:printingsByCode', ['OP02-999'])
+  })
+
+  it('never touches what the tester typed, and stops reading while there is text', async () => {
+    const user = userEvent.setup()
+    const { engine, factory } = readingEngine(() => ['OP01-001'])
+    renderScreen(opStore(), undefined, { engineFactory: factory })
+    await user.type(numberBox(), 'OP0')
+    const calls = engine.analyze.mock.calls.length
+    await new Promise((r) => setTimeout(r, 60))
+    expect(engine.analyze.mock.calls.length).toBeLessThanOrEqual(calls + 1)
+    expect(numberBox()).toHaveValue('OP0')
+    expect(suggestion('OP01-001')).not.toBeInTheDocument()
+  })
+
+  it('after Next card, the card just done is not offered again until another is seen', async () => {
+    const user = userEvent.setup()
+    let card = 'OP01-001'
+    const { engine, factory } = readingEngine(() => [card])
+    renderScreen(opStore(), undefined, { engineFactory: factory })
+    await user.click(await screen.findByRole('button', { name: 'Use OP01-001' }))
+    await user.click(screen.getByRole('button', { name: 'Next card' }))
+    const calls = engine.analyze.mock.calls.length
+    await waitFor(() => expect(engine.analyze.mock.calls.length).toBeGreaterThan(calls + 4))
+    expect(suggestion('OP01-001')).not.toBeInTheDocument()
+    // The next card in the frame, then the first one back again.
+    card = 'OP02-024'
+    await waitFor(() => expect(engine.analyze.mock.calls.length).toBeGreaterThan(calls + 8))
+    card = 'OP01-001'
+    expect(await screen.findByRole('button', { name: 'Use OP01-001' })).toBeInTheDocument()
+  })
+
+  it('drops the offer once the card has gone', async () => {
+    let texts = ['OP01-001']
+    const { factory } = readingEngine(() => texts)
+    renderScreen(opStore(), undefined, { engineFactory: factory })
+    expect(await screen.findByRole('button', { name: 'Use OP01-001' })).toBeInTheDocument()
+    texts = []
+    await waitFor(() => expect(suggestion('OP01-001')).not.toBeInTheDocument())
+  })
+
+  it('an engine that fails says nothing, and typing still works', async () => {
+    const user = userEvent.setup()
+    const engine = fakeEngine(() => new Error('no worker'))
+    engine.init.mockRejectedValue(new Error('no OpenCV'))
+    renderScreen(opStore(), undefined, { engineFactory: () => engine })
+    await user.type(numberBox(), 'op01001')
+    expect(await screen.findByRole('button', { name: 'L' })).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  it("other games' contribute screens don't read numbers", async () => {
+    const factory = vi.fn<EngineFactory>(() => fakeEngine())
+    renderScreen(opStore(), undefined, { engineFactory: factory, game: 'pkm' })
+    await new Promise((r) => setTimeout(r, 30))
+    expect(factory).not.toHaveBeenCalled()
+  })
+
+  it('stops the engine on close', async () => {
+    const { engine, factory } = readingEngine(() => [])
+    const view = renderScreen(opStore(), undefined, { engineFactory: factory })
+    await waitFor(() => expect(engine.analyze).toHaveBeenCalled())
+    view.unmount()
+    expect(engine.dispose).toHaveBeenCalled()
   })
 })

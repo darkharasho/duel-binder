@@ -3,13 +3,22 @@
 import type { FingerprintIndex } from '@shared/scan/fingerprintFile'
 import { ART_MATCH_DEPTH } from '@shared/scan/thresholds'
 import type { Mat } from '@techstark/opencv-js'
-import { SCAN_PROFILES, type ScanProfile } from '@shared/scan/profiles'
+import { SCAN_PROFILES, type Box, type ScanProfile } from '@shared/scan/profiles'
 import type { OcrBand, RgbaImage } from '@shared/scan/types'
 import type { ArtMatch, FrameSignals } from '../engine'
-import { toBand, toBlock, toInkBlock } from './bands'
+import { toBand, toBlock, toGrayBand, toInkBlock } from './bands'
 import { findCandidates, preferOuter, recognizeArt } from './candidates'
 import type { CV } from './cv'
-import { CARD_W, dist, rotate180, toMat, using, warpCard, type Quad } from './detect'
+import {
+  CARD_W,
+  dist,
+  rotate180,
+  toMat,
+  using,
+  warpCard,
+  type FrameSource,
+  type Quad
+} from './detect'
 import { isSlab } from './holder'
 import { pokemonVersionCues } from './pokemonVersion'
 import { rarityLook } from './rarityCues'
@@ -42,9 +51,39 @@ export type AnalyzedFrame = FrameSignals & { upright?: RgbaImage }
  * filmed bigger than CARD_W keeps its detail (a 4K camera's set code is twice a 1080p one's),
  * within CARD_W to MAX_BAND_SCALE times that.
  */
-function bandWidth(quad: Quad): number {
+export function bandWidth(quad: Quad): number {
   const shown = (dist(quad[0], quad[1]) + dist(quad[2], quad[3])) / 2
   return Math.round(Math.min(MAX_BAND_SCALE * CARD_W, Math.max(CARD_W, shown)))
+}
+
+/**
+ * A profile's code bands off the card in quad: `ways` is the straightened card (at bandWidth) as
+ * analyze reads it, upright or both ways up. Each band as it is (codeGray) or cut down to its line
+ * of ink. With codeReach they're cut instead from the card warped with that margin around it
+ * (turned as `upsideDown` says, or both ways when that's unknown), each box mapped into it, so a
+ * band past the outline holds what's printed there. Without it, this is exactly the bands off
+ * `ways`, as before codeReach.
+ */
+export function cutCodeBands(
+  cv: CV,
+  img: FrameSource,
+  quad: Quad,
+  profile: ScanProfile,
+  ways: RgbaImage[],
+  upsideDown: boolean | null
+): OcrBand[] {
+  const cut = profile.codeGray ? toGrayBand : toBand
+  const reach = profile.codeReach ?? 0
+  if (reach <= 0)
+    return ways.flatMap((c) => profile.codeBands.map((box) => cut(c, box))).filter(hasPixels)
+  const around = warpCard(cv, img, quad, bandWidth(quad), reach)
+  const cards =
+    upsideDown === null ? [around, rotate180(around)] : [upsideDown ? rotate180(around) : around]
+  const inAround = (box: Box): Box =>
+    box.map((v) => (v + reach) / (1 + 2 * reach)) as unknown as Box
+  return cards
+    .flatMap((c) => profile.codeBands.map((box) => cut(c, inAround(box))))
+    .filter(hasPixels)
 }
 
 /**
@@ -110,6 +149,8 @@ function analyzeFrame(
   let upright: RgbaImage | null = null
   // Set only when the art matched on the holder search's second look.
   let via: { artVia?: 'holder' } = {}
+  // Which way up the card is, when art matching found it (null: unknown, read both ways).
+  let upsideDown: boolean | null = null
   if (index) {
     const found = recognizeArt(
       cv,
@@ -127,6 +168,7 @@ function analyzeFrame(
     art = found.matches
     if (found.via) via = { artVia: found.via }
     upright = found.upsideDown === null ? null : found.card
+    upsideDown = found.upsideDown
     // Art is matched at CARD_W, the size it was tuned for; text is read at the card's own size.
     card = () => {
       const width = bandWidth(found.quad)
@@ -174,9 +216,7 @@ function analyzeFrame(
     found: true,
     quad,
     art,
-    codeBands: ways
-      .flatMap((c) => profile.codeBands.map((box) => toBand(c, box)))
-      .filter(hasPixels),
+    codeBands: cutCodeBands(cv, img, quad, profile, ways, upsideDown),
     nameBands: ways.map((c) => toBand(c, profile.nameBand)).filter(hasPixels),
     // Only a card whose art matched: read off a guessed outline, it reads as a language too often.
     // A Pokémon card's is cut out twice, as it is and as ink on white (each read on its own): a

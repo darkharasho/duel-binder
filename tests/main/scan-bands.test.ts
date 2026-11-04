@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { toInkBlock } from '../../src/renderer/src/features/scan/vision/bands'
+import { toGrayBand, toInkBlock } from '../../src/renderer/src/features/scan/vision/bands'
 import type { RgbaImage } from '../../src/shared/scan/types'
 
 /** A 200x60 box shading from light to mid grey, with a 2px dark stroke across it at y 30. */
@@ -25,5 +25,23 @@ describe('toInkBlock', () => {
     expect(band.data[61 * 400 + 390]).toBe(0)
     expect(band.data[20 * 400 + 10]).toBe(255)
     expect(band.data[100 * 400 + 390]).toBe(255)
+  })
+})
+
+describe('toGrayBand', () => {
+  it('keeps the box as it is, three times the size and stretched to full contrast', () => {
+    const band = toGrayBand(shadedLine(), [0.5, 0, 1, 1])
+    expect([band.width, band.height]).toEqual([300, 180])
+    expect(band.data).toHaveLength(300 * 180)
+    // The stroke is darkest and the lightest box white, with the shading in between kept.
+    expect(band.data[92 * 300 + 150]).toBe(0)
+    expect(band.data[10 * 300 + 3]).toBeGreaterThan(240)
+    expect(band.data[10 * 300 + 296]).toBeGreaterThan(0)
+    expect(band.data[10 * 300 + 296]).toBeLessThan(band.data[10 * 300 + 3])
+  })
+
+  it('is empty for an empty box', () => {
+    const band = toGrayBand(shadedLine(), [0.5, 0.5, 0.5, 0.5])
+    expect([band.width, band.height, band.data.length]).toEqual([0, 0, 0])
   })
 })

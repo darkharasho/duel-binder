@@ -60,6 +60,18 @@ export interface ScanProfile {
    * stays where it is between frames, and the search is most of a frame's cost.
    */
   keepOutline: boolean
+  /**
+   * Whether code bands are handed to OCR as grayscale crops (toGrayBand) rather than cut down to
+   * their line of ink (toBand): a small, soft, light number on a coloured bar reads far better so.
+   */
+  codeGray?: boolean
+  /**
+   * How far past the outline code bands may reach, as a share of the card's width and height
+   * (0 when left out). An outline found without art can stop at a printed bar's edge a few
+   * percent short of the card's end, which puts a number printed near that end outside it; with
+   * a reach, code bands may run past 0 or 1 by up to this much.
+   */
+  codeReach?: number
 }
 
 /**
@@ -91,8 +103,49 @@ const PKM_WINDOWS: readonly Box[] = [
   [0.097, 0.156, 0.9, 0.524]
 ]
 
-// The Record<'ygo' | 'pkm'> part lists the games that have a scan profile today.
-export const SCAN_PROFILES: Record<'ygo' | 'pkm', ScanProfile> & Partial<Record<GameId, ScanProfile>> = {
+/**
+ * One Piece (63 x 88 mm, like Pokémon). Only its number is read for now, by the Contribute photos
+ * screen (step 3b); its scanner (step 4) is still off, so there are no fingerprints to match and
+ * the art box, name and text are where Bandai prints them, unused yet. Measured on Bandai's renders
+ * (en.onepiece-cardgame.com, 600 x 838): a Leader, Characters, an Event and a Stage, a promo, a
+ * premium booster, an alternate art, a manga SP and a full-art SEC. Every layout prints the number
+ * in the same place, bottom right, right-aligned against the rarity box: 0.755 (PRB01-001) or
+ * 0.81 (P-001) to 0.874 across, 0.945 to 0.963 down.
+ */
+const OP_PROFILE: ScanProfile = {
+  game: 'op',
+  // The art above the effect text, which starts at about 0.6 on Characters and Leaders.
+  artBoxes: [[0.08, 0.08, 0.92, 0.56]],
+  // Cards are full art with no printed window, so outlines are scored by their own edges alone.
+  windows: [],
+  windowArt: false,
+  innerFrames: [],
+  windowShape: null,
+  codeBands: [
+    // The number with room either way for an outline a few percent off (outlines found without
+    // art run up to 3% inside the card's edge), which takes in the rarity box and part of the
+    // block icon right of it (findOpNumbers reads past them).
+    [0.735, 0.934, 0.93, 0.98],
+    // The same number below an outline that stops at the bottom bar's top edge (0.93 to 0.95 of
+    // the card), which fingers on a held card's long sides often leave as the likeliest outline.
+    [0.735, 0.975, 0.95, 1.05]
+  ],
+  codeReach: 0.06,
+  // Light numbers on coloured bars, about 15 px high on a 4K phone's frame.
+  codeGray: true,
+  // The name, over the traits bar.
+  nameBand: [0.12, 0.875, 0.88, 0.925],
+  textBox: [0.06, 0.6, 0.94, 0.83],
+  rarityLook: false,
+  foil: null,
+  holderSearch: false,
+  keepOutline: false
+}
+
+// The Record<'ygo' | 'pkm'> part lists the games that scan today; op's profile is for its number
+// reader only (OP_PROFILE).
+export const SCAN_PROFILES: Record<'ygo' | 'pkm', ScanProfile> &
+  Partial<Record<GameId, ScanProfile>> = {
   ygo: {
     game: 'ygo',
     artBoxes: Object.values(ART_BOXES),
@@ -149,7 +202,8 @@ export const SCAN_PROFILES: Record<'ygo' | 'pkm', ScanProfile> & Partial<Record<
     // Cards are often filmed in toploaders, cases and slabs, small in the frame.
     holderSearch: true,
     keepOutline: true
-  }
+  },
+  op: OP_PROFILE
 }
 
 export function scanProfile(game: GameId): ScanProfile {

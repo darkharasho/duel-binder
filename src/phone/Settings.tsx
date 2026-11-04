@@ -21,7 +21,9 @@ import { toast } from 'sonner'
 import type { CardChoice, MergePreview, SignInProvider } from '@shared/account'
 import { MergeDialog } from '@/features/account/MergeDialog'
 import { api } from '@/lib/api'
+import { useGame } from '@/lib/game'
 import { APP_PLATFORM, isNativeApp } from '@/lib/portal'
+import { GAMES, type GameId } from '@shared/games'
 import { PRIVACY_URL, SIGN_OUT_FAILED, cardDataAge, signOutWarning } from './copy'
 import { CATALOG_KEY, SYNC_STATE_KEY, displayName, usePhone } from './context'
 import { SYNC_FIRST, linkableProviders, linkSignIn, syncedFirst } from './linking'
@@ -73,10 +75,17 @@ const rowButton =
 
 /**
  * The phone's Settings: the account, card data, sync problems, privacy, the stream's hit price and
- * the app's version.
+ * the app's version. With `onContribute`, a tester (of a game open to testers only) also gets
+ * Contribute photos, which opens that game's training photo screen.
  */
-export function Settings(): React.JSX.Element {
+export function Settings({
+  onContribute
+}: {
+  onContribute?: (game: GameId) => void
+} = {}): React.JSX.Element {
   const { store, user, signedOut } = usePhone()
+  const { available } = useGame()
+  const testerGame = available.find((g) => GAMES[g].access === 'testers')
   const { settings, setSettings } = useScanHub()
   const qc = useQueryClient()
   const name = displayName(user)
@@ -262,6 +271,16 @@ export function Settings(): React.JSX.Element {
                 : age}
         </p>
       </section>
+
+      {onContribute && testerGame !== undefined && (
+        <section aria-label="Contribute photos" className="space-y-2">
+          <Group>
+            <button type="button" className={rowButton} onClick={() => onContribute(testerGame)}>
+              Contribute photos
+            </button>
+          </Group>
+        </section>
+      )}
 
       <section aria-label="About" className="space-y-2">
         <Group>

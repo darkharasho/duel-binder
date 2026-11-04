@@ -520,4 +520,56 @@ describe('phone app', () => {
     await waitFor(() => expect(store.refreshFingerprints).toHaveBeenCalledWith({ game: 'ygo', force: true }))
     expect(await screen.findByText('Card data is up to date.')).toBeInTheDocument()
   })
+
+  /** A store whose games answer `available`, starting on Yu-Gi-Oh!; setActive switches. */
+  function gamesStore(available: string[]): ReturnType<typeof fakeStore> & { active: string } {
+    const store = fakeStore()
+    const games = { active: 'ygo' }
+    const fallback = store.invoke
+    store.invoke = vi.fn(async (channel: string, args: unknown[]) => {
+      if (channel === 'games:available') return available
+      if (channel === 'games:active') return games.active
+      if (channel === 'games:setActive') {
+        games.active = args[0] as string
+        return undefined
+      }
+      return fallback(channel as never, args)
+    }) as PhoneStore['invoke']
+    return Object.defineProperty(store, 'active', { get: () => games.active }) as ReturnType<
+      typeof fakeStore
+    > & { active: string }
+  }
+
+  it('contribute row only for tester games', async () => {
+    const user = userEvent.setup()
+    const store = gamesStore(['ygo', 'pkm'])
+    installPhoneApi(store)
+    const { unmount } = renderApp(store)
+    await openSettings(user)
+    expect(screen.queryByText('Contribute photos')).not.toBeInTheDocument()
+    unmount()
+
+    const op = gamesStore(['ygo', 'pkm', 'op'])
+    installPhoneApi(op)
+    renderApp(op)
+    await openSettings(user)
+    expect(screen.getByRole('button', { name: 'Contribute photos' })).toBeInTheDocument()
+  })
+
+  it('contribute survives the game switch', async () => {
+    const user = userEvent.setup()
+    vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined)
+    const store = gamesStore(['ygo', 'pkm', 'op'])
+    installPhoneApi(store)
+    renderApp(store)
+    await openSettings(user)
+    await user.click(screen.getByRole('button', { name: 'Contribute photos' }))
+    await waitFor(() => expect(store.active).toBe('op'))
+    // The switch has rendered: One Piece has no Scan tab.
+    const nav = screen.getByRole('navigation', { name: 'Tabs' })
+    await waitFor(() =>
+      expect(within(nav).queryByRole('button', { name: 'Scan' })).not.toBeInTheDocument()
+    )
+    expect(screen.getByRole('textbox', { name: 'Card number' })).toBeInTheDocument()
+  })
 })

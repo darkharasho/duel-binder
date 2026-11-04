@@ -1,0 +1,410 @@
+import { act, screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { ScanHubProvider } from '@/features/scan/ScanHub'
+import { cardImageSrc } from '@/lib/images'
+import type { CardDetail, Printing } from '@shared/types'
+import type { ScanPrinting } from '@shared/scan/types'
+import type { TrainingLabel } from '@shared/training'
+import { PhoneContext } from '../../src/phone/context'
+import type { PhoneStore } from '../../src/phone/data/store'
+import { deviceModel } from '../../src/phone/training/capture'
+import { ContributeScreen } from '../../src/phone/training/ContributeScreen'
+import {
+  DROPPED,
+  GRAB_FAILED,
+  NOT_SYNCED,
+  NO_VERSIONS,
+  OFFLINE_WAIT,
+  CAP_REACHED,
+  WHAT_TO_SHOOT
+} from '../../src/phone/training/copy'
+import {
+  createOutbox,
+  memoryOutboxStorage,
+  type Outbox,
+  type OutboxStorage
+} from '../../src/phone/training/outbox'
+import { renderWithProviders } from './mockApi'
+import { SETO, fakeStore, installPhoneApi, setOnline } from './phoneFakes'
+import { stubCamera, stubVideo } from './scanFakes'
+
+const CARD_ID = 2 ** 39 + 5
+const NOW = new Date('2026-11-04T12:00:00.000Z')
+const JPEG = (): ArrayBuffer => new Uint8Array([0xff, 0xd8, 0xff]).buffer
+
+const printing = (o: Partial<Printing>): Printing => ({
+  id: 501,
+  cardId: CARD_ID,
+  setName: 'Romance Dawn',
+  setCode: 'OP01-001',
+  setRarity: 'L',
+  setRarityCode: 'L',
+  setPrice: null,
+  missingFromApi: false,
+  language: 'en',
+  ...o
+})
+
+const BASE = printing({})
+const PARALLEL = printing({ id: 502, setRarity: 'L (Alternate Art)', artImageId: 7002 })
+/** The same card in another product: not this number's. */
+const PROMO = printing({ id: 503, setCode: 'P-001', setName: 'Promotion Cards', setRarity: 'P' })
+
+const DETAIL: CardDetail = {
+  card: { id: CARD_ID, name: 'Roronoa Zoro' } as CardDetail['card'],
+  printings: [BASE, PARALLEL, PROMO],
+  images: [{ imageId: 7001, cardId: CARD_ID, sortOrder: 0 }]
+}
+
+const scanPrinting = (p: Printing): ScanPrinting =>
+  ({ printingId: p.id, cardId: p.cardId, setCode: p.setCode, imageIds: [7001] }) as ScanPrinting
+
+/** A store whose catalog has the one op card, with server ids as given. */
+function opStore(
+  o: {
+    prefixes?: string[]
+    serverIds?: Record<number, number>
+    over?: Partial<PhoneStore>
+  } = {}
+): ReturnType<typeof fakeStore> {
+  const { prefixes = ['OP01', 'OP02', 'ST01'], serverIds = { 501: 9000, 502: 9001 } } = o
+  const store = fakeStore({
+    printingPhotoIds: vi.fn(async (ids: number[]) =>
+      ids
+        .filter((id) => serverIds[id] !== undefined)
+        .map((id): [number, number] => [id, serverIds[id]])
+    ),
+    trainingSummary: vi.fn(async () => ({ total: 0, today: 0, dailyCap: 500 })),
+    ...o.over
+  })
+  const fallback = store.invoke
+  store.invoke = vi.fn(async (channel: string, args: unknown[]) => {
+    if (channel === 'scan:numberPrefixes') return prefixes
+    if (channel === 'scan:printingsByCode')
+      return args[0] === 'OP01-001' ? [scanPrinting(BASE), scanPrinting(PARALLEL)] : []
+    if (channel === 'cards:get') return args[0] === CARD_ID ? DETAIL : null
+    return fallback(channel as never, args)
+  }) as PhoneStore['invoke']
+  return store
+}
+
+let storage: OutboxStorage
+let outbox: Outbox
+let grab: ReturnType<typeof vi.fn>
+
+function renderScreen(
+  store: PhoneStore,
+  onClose: () => void = () => {}
+): ReturnType<typeof renderWithProviders> {
+  installPhoneApi(store)
+  return renderWithProviders(
+    <PhoneContext.Provider value={{ store, user: SETO, signedOut: () => {} }}>
+      <ScanHubProvider>
+        <ContributeScreen
+          game="op"
+          onClose={onClose}
+          outbox={outbox}
+          grab={grab as (v: HTMLVideoElement) => Promise<ArrayBuffer>}
+          now={() => NOW}
+        />
+      </ScanHubProvider>
+    </PhoneContext.Provider>,
+    { api: window.api }
+  )
+}
+
+const numberBox = (): HTMLElement => screen.getByRole('textbox', { name: 'Card number' })
+const shutter = (): HTMLElement => screen.getByRole('button', { name: 'Take photo' })
+
+/** Types the number and picks the version labelled `rarity`. */
+async function choose(
+  user: ReturnType<typeof userEvent.setup>,
+  rarity: string,
+  typed = 'op01001'
+): Promise<void> {
+  if ((numberBox() as HTMLInputElement).value === '') await user.type(numberBox(), typed)
+  await user.click(await screen.findByRole('button', { name: rarity }))
+}
+
+async function uploads(): Promise<{ id: string; label: TrainingLabel }[]> {
+  return (await storage.all())
+    .filter((i) => i.kind === 'upload')
+    .sort((a, b) => a.queuedAt.localeCompare(b.queuedAt))
+    .map((i) => ({ id: i.id, label: i.label! }))
+}
+
+beforeEach(() => {
+  localStorage.clear()
+  stubVideo()
+  stubCamera()
+  vi.spyOn(HTMLMediaElement.prototype, 'play').mockResolvedValue(undefined)
+  setOnline(true)
+  vi.stubGlobal('__APP_VERSION__', '0.53.0')
+  storage = memoryOutboxStorage()
+  // Distinct, ordered queue times, so the stack and the queue agree.
+  let tick = 0
+  outbox = createOutbox(storage, () => new Date(NOW.getTime() + tick++))
+  grab = vi.fn(async () => JPEG())
+})
+
+afterEach(() => {
+  vi.useRealTimers()
+  vi.restoreAllMocks()
+  vi.unstubAllGlobals()
+  window.api = undefined as never
+})
+
+describe('contribute photos screen', () => {
+  it('typed number lists its versions', async () => {
+    const user = userEvent.setup()
+    renderScreen(opStore())
+    expect(numberBox()).toHaveAttribute('placeholder', 'OP05-119')
+    expect(numberBox()).toHaveAttribute('autocapitalize', 'characters')
+    expect(numberBox()).toHaveAttribute('inputmode', 'text')
+    await user.type(numberBox(), 'op01001')
+
+    const base = await screen.findByRole('button', { name: 'L' })
+    const parallel = screen.getByRole('button', { name: 'L (Alternate Art)' })
+    expect(screen.queryByRole('button', { name: 'P' })).not.toBeInTheDocument()
+    expect(base.querySelector('img')).toHaveAttribute('src', cardImageSrc('small', 7001))
+    expect(parallel.querySelector('img')).toHaveAttribute('src', cardImageSrc('small', 7002))
+    expect(within(base).getByText('Romance Dawn')).toBeInTheDocument()
+  })
+
+  it('a number with no card says so', async () => {
+    const user = userEvent.setup()
+    renderScreen(opStore())
+    await user.type(numberBox(), 'OP09-999')
+    expect(await screen.findByText(NO_VERSIONS)).toBeInTheDocument()
+  })
+
+  it('set-code chips complete the prefix', async () => {
+    const user = userEvent.setup()
+    renderScreen(opStore())
+    await user.type(numberBox(), 'op')
+    const one = await screen.findByRole('button', { name: 'OP01-' })
+    expect(screen.getByRole('button', { name: 'OP02-' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'ST01-' })).not.toBeInTheDocument()
+    await user.click(one)
+    expect(numberBox()).toHaveValue('OP01-')
+  })
+
+  it('shutter waits for a synced version', async () => {
+    const user = userEvent.setup()
+    renderScreen(opStore({ serverIds: {} }))
+    expect(shutter()).toBeDisabled()
+    await choose(user, 'L')
+    expect(await screen.findByText(NOT_SYNCED)).toBeInTheDocument()
+    expect(shutter()).toBeDisabled()
+  })
+
+  it('each shot carries its own label', async () => {
+    const user = userEvent.setup()
+    const store = opStore({
+      over: {
+        trainingUpload: vi.fn(async () => ({ ok: false, retry: true, reason: 'offline' }) as const)
+      }
+    })
+    renderScreen(store)
+    await choose(user, 'L (Alternate Art)')
+    await user.click(screen.getByRole('button', { name: 'Sleeve' }))
+    await waitFor(() => expect(shutter()).toBeEnabled())
+    await user.click(shutter())
+    expect(await screen.findByText('Saved')).toBeInTheDocument()
+    await waitFor(async () => expect(await uploads()).toHaveLength(1))
+    await user.click(shutter())
+    await waitFor(async () => expect(await uploads()).toHaveLength(2))
+
+    const label: TrainingLabel = {
+      game: 'op',
+      cardId: CARD_ID,
+      printingId: 9001,
+      holder: 'sleeve',
+      device: await deviceModel(),
+      appVersion: '0.53.0',
+      takenAt: NOW.toISOString()
+    }
+    const [a, b] = await uploads()
+    expect(a.label).toEqual(label)
+    expect(b.label).toEqual(label)
+    expect(a.id).not.toBe(b.id)
+
+    await user.click(screen.getByRole('button', { name: 'Top loader' }))
+    await user.click(shutter())
+    await waitFor(async () => expect(await uploads()).toHaveLength(3))
+    const all = await uploads()
+    expect(all[2].label).toEqual({ ...label, holder: 'toploader' })
+    expect(all[0].label).toEqual(label)
+    expect(all[1].label).toEqual(label)
+  })
+
+  it('a grab that fails says so and queues nothing', async () => {
+    const user = userEvent.setup()
+    grab.mockRejectedValueOnce(new Error('no-frame'))
+    renderScreen(opStore())
+    await choose(user, 'L')
+    await waitFor(() => expect(shutter()).toBeEnabled())
+    await user.click(shutter())
+    expect(await screen.findByText(GRAB_FAILED)).toBeInTheDocument()
+    expect(await uploads()).toHaveLength(0)
+  })
+
+  it('holder sticks across a remount', async () => {
+    const user = userEvent.setup()
+    const first = renderScreen(opStore())
+    expect(screen.getByRole('button', { name: 'Bare' })).toHaveAttribute('aria-pressed', 'true')
+    await user.click(screen.getByRole('button', { name: 'Slab' }))
+    first.unmount()
+    renderScreen(opStore())
+    expect(screen.getByRole('button', { name: 'Slab' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getByRole('button', { name: 'Bare' })).toHaveAttribute('aria-pressed', 'false')
+  })
+
+  it('a stored holder that is not one falls back to bare', () => {
+    localStorage.setItem('training.holder', 'binder')
+    renderScreen(opStore())
+    expect(screen.getByRole('button', { name: 'Bare' })).toHaveAttribute('aria-pressed', 'true')
+  })
+
+  it('delete last photo forgets the newest shot', async () => {
+    const user = userEvent.setup()
+    const store = opStore({
+      over: {
+        trainingUpload: vi.fn(async () => ({ ok: false, retry: true, reason: 'offline' }) as const)
+      }
+    })
+    renderScreen(store)
+    const forget = vi.spyOn(outbox, 'forget')
+    const count = (): HTMLElement => screen.getByRole('status', { name: 'Photo count' })
+    const del = (): HTMLElement => screen.getByRole('button', { name: 'Delete last photo' })
+    expect(del()).toBeDisabled()
+    await choose(user, 'L')
+    await waitFor(() => expect(shutter()).toBeEnabled())
+    await user.click(shutter())
+    await user.click(shutter())
+    await waitFor(() => expect(count()).toHaveTextContent('2 waiting to upload'))
+    const [first, second] = await uploads()
+
+    await user.click(del())
+    await waitFor(() => expect(count()).toHaveTextContent('1 waiting to upload'))
+    expect(forget).toHaveBeenLastCalledWith(SETO.id, second.id)
+    await user.click(del())
+    await waitFor(() => expect(count()).not.toHaveTextContent('waiting'))
+    expect(forget).toHaveBeenLastCalledWith(SETO.id, first.id)
+    expect(del()).toBeDisabled()
+  })
+
+  it('count shows server total and waiting', async () => {
+    await outbox.addUpload(SETO.id, crypto.randomUUID(), {} as TrainingLabel, JPEG())
+    const store = opStore({
+      over: { trainingSummary: vi.fn(async () => ({ total: 12, today: 3, dailyCap: 500 })) }
+    })
+    renderScreen(store)
+    await waitFor(() =>
+      expect(screen.getByRole('status', { name: 'Photo count' })).toHaveTextContent(
+        '12 photos · 1 waiting to upload · 3/500 today'
+      )
+    )
+    expect(store.trainingSummary).toHaveBeenCalledWith('op')
+  })
+
+  it('daily cap message', async () => {
+    const user = userEvent.setup()
+    const store = opStore({
+      over: {
+        trainingUpload: vi.fn(
+          async () => ({ ok: false, retry: true, reason: 'daily-cap' }) as const
+        )
+      }
+    })
+    renderScreen(store)
+    await choose(user, 'L')
+    await waitFor(() => expect(shutter()).toBeEnabled())
+    await user.click(shutter())
+    expect(await screen.findByText(CAP_REACHED)).toBeInTheDocument()
+  })
+
+  it('offline says the photos wait', async () => {
+    const user = userEvent.setup()
+    const store = opStore({
+      over: {
+        trainingUpload: vi.fn(async () => ({ ok: false, retry: true, reason: 'offline' }) as const)
+      }
+    })
+    renderScreen(store)
+    await choose(user, 'L')
+    await waitFor(() => expect(shutter()).toBeEnabled())
+    await user.click(shutter())
+    expect(await screen.findByText(OFFLINE_WAIT)).toBeInTheDocument()
+  })
+
+  it('a photo the server refuses is reported', async () => {
+    const user = userEvent.setup()
+    const store = opStore({
+      over: {
+        trainingUpload: vi.fn(
+          async () => ({ ok: false, retry: false, reason: 'rejected' }) as const
+        )
+      }
+    })
+    renderScreen(store)
+    await choose(user, 'L')
+    await waitFor(() => expect(shutter()).toBeEnabled())
+    await user.click(shutter())
+    expect(await screen.findByText(DROPPED)).toBeInTheDocument()
+  })
+
+  it('drains again every 30 s while something waits', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    await outbox.addUpload(SETO.id, crypto.randomUUID(), {} as TrainingLabel, JPEG())
+    const upload = vi.fn(async () => ({ ok: false, retry: true, reason: 'offline' }) as const)
+    renderScreen(opStore({ over: { trainingUpload: upload } }))
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(100)
+    })
+    const before = upload.mock.calls.length
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30_000)
+    })
+    expect(upload.mock.calls.length).toBe(before + 1)
+  })
+
+  it('next card clears the number and the version, and keeps the holder', async () => {
+    const user = userEvent.setup()
+    renderScreen(opStore())
+    await user.click(screen.getByRole('button', { name: 'Magnetic case' }))
+    await choose(user, 'L')
+    await waitFor(() => expect(shutter()).toBeEnabled())
+    await user.click(screen.getByRole('button', { name: 'Next card' }))
+    expect(numberBox()).toHaveValue('')
+    expect(shutter()).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Magnetic case' })).toHaveAttribute(
+      'aria-pressed',
+      'true'
+    )
+  })
+
+  it('shows what to shoot, and Close closes', async () => {
+    const user = userEvent.setup()
+    const onClose = vi.fn()
+    renderScreen(opStore(), onClose)
+    for (const line of WHAT_TO_SHOOT) expect(screen.getByText(line)).toBeInTheDocument()
+    expect(WHAT_TO_SHOOT).toEqual([
+      'A spread of sets and rarities: Leaders, Characters, Events, Stages and DON!!.',
+      'Every version you have of the same number, side by side: alternate arts and the base card, plain Parallel foils, SP, manga, Treasure Rare.',
+      "Sleeves and top loaders too, since that's how you'll stream.",
+      'A few angles of each: straight on, tilted, under a light.'
+    ])
+    await user.click(screen.getByRole('button', { name: 'Close' }))
+    expect(onClose).toHaveBeenCalled()
+  })
+
+  it('copy is the brief’s', () => {
+    expect(NO_VERSIONS).toBe('No card with that number in your card data.')
+    expect(NOT_SYNCED).toBe("This version isn't synced yet. Sync, then try again.")
+    expect(GRAB_FAILED).toBe("Couldn't take the photo. Try again.")
+    expect(CAP_REACHED).toBe('Daily limit reached. The rest upload tomorrow.')
+    expect(OFFLINE_WAIT).toBe("Offline: photos upload when you're back online.")
+    expect(DROPPED).toBe('A photo was refused by the server and removed.')
+  })
+})

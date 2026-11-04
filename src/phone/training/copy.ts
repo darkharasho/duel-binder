@@ -1,0 +1,32 @@
+/** The Contribute photos screen's fixed copy. */
+
+export const CONTRIBUTE_TITLE = 'Contribute photos'
+export const NUMBER_LABEL = 'Card number'
+export const NUMBER_PLACEHOLDER = 'OP05-119'
+export const NO_VERSIONS = 'No card with that number in your card data.'
+export const NOT_SYNCED = "This version isn't synced yet. Sync, then try again."
+export const GRAB_FAILED = "Couldn't take the photo. Try again."
+export const SAVED = 'Saved'
+export const CAP_REACHED = 'Daily limit reached. The rest upload tomorrow.'
+export const OFFLINE_WAIT = "Offline: photos upload when you're back online."
+export const DROPPED = 'A photo was refused by the server and removed.'
+
+export const WHAT_TO_SHOOT_TITLE = 'What to shoot'
+export const WHAT_TO_SHOOT = [
+  'A spread of sets and rarities: Leaders, Characters, Events, Stages and DON!!.',
+  'Every version you have of the same number, side by side: alternate arts and the base card, plain Parallel foils, SP, manga, Treasure Rare.',
+  "Sleeves and top loaders too, since that's how you'll stream.",
+  'A few angles of each: straight on, tilted, under a light.'
+] as const
+
+/** "12 photos · 1 waiting to upload · 3/500 today"; the server's part is left out while unknown. */
+export function photoCount(
+  summary: { total: number; today: number; dailyCap: number } | null,
+  waiting: number
+): string {
+  const parts: string[] = []
+  if (summary) parts.push(`${summary.total} ${summary.total === 1 ? 'photo' : 'photos'}`)
+  if (waiting > 0) parts.push(`${waiting} waiting to upload`)
+  if (summary) parts.push(`${summary.today}/${summary.dailyCap} today`)
+  return parts.join(' · ')
+}

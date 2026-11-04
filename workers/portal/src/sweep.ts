@@ -19,6 +19,19 @@ export const POKEMON_KEY_PREFIX = 'pkm:'
 
 export const DAY_MS = 24 * 3600 * 1000
 export const WEEK_MS = 7 * DAY_MS
+/**
+ * A set released this many days ago or less (or due out within NEW_SET_AHEAD_DAYS) is swept daily, not
+ * weekly: one swept before or at release finds few listings, and its first weeks are when it's opened.
+ */
+export const NEW_SET_DAYS = 30
+export const NEW_SET_AHEAD_DAYS = 14
+
+/** True when a prefix's latest set date (YYYY-MM-DD) makes it a new set, swept daily. */
+export function isNewSet(released: string | null, now: Date): boolean {
+  if (!released) return false
+  const day = (offsetDays: number): string => utcDay(new Date(now.getTime() + offsetDays * DAY_MS))
+  return released >= day(-NEW_SET_DAYS) && released <= day(NEW_SET_AHEAD_DAYS)
+}
 const TIMEOUT_MS = 60_000
 
 export interface SetEntry {
@@ -250,8 +263,8 @@ export function readCalls(db: SqlDb, today: string): number {
 }
 
 /**
- * One alarm's worth of sweeping: up to SWEEP_BATCH due prefixes (never swept, or swept over a week
- * ago; owned and newest first), one eBay set search each. Stops at the day's call cap, when the eBay
+ * One alarm's worth of sweeping: up to SWEEP_BATCH due prefixes (never swept, swept over a week ago,
+ * or a new set (isNewSet) swept over a day ago; owned and newest first), one eBay set search each. Stops at the day's call cap, when the eBay
  * quota is down to the reserve, or on a rate limit. `more` means due prefixes and budget remain.
  */
 export async function runSweep(
@@ -265,13 +278,21 @@ export async function runSweep(
   let used = readCalls(db, today)
   if (used >= SWEEP_DAILY_CALLS) return stopped
   const dueBefore = new Date(now.getTime() - WEEK_MS).toISOString()
-  const due = (limit: number): { key: string; language: string }[] =>
+  const newDueBefore = new Date(now.getTime() - DAY_MS).toISOString()
+  const due = (limit: number): { key: string; language: string; released: string | null }[] =>
     db
       .prepare(
-        `SELECT key, language FROM price_sweeps WHERE key NOT LIKE '${POKEMON_KEY_PREFIX}%' AND (swept_at IS NULL OR swept_at < ?)
+        `SELECT key, language, released FROM price_sweeps WHERE key NOT LIKE '${POKEMON_KEY_PREFIX}%'
+           AND (swept_at IS NULL OR swept_at < ? OR (released BETWEEN ? AND ? AND swept_at < ?))
          ORDER BY owned DESC, swept_at, released DESC LIMIT ?`
       )
-      .all(dueBefore, limit) as { key: string; language: string }[]
+      .all(
+        dueBefore,
+        utcDay(new Date(now.getTime() - NEW_SET_DAYS * DAY_MS)),
+        utcDay(new Date(now.getTime() + NEW_SET_AHEAD_DAYS * DAY_MS)),
+        newDueBefore,
+        limit
+      ) as { key: string; language: string; released: string | null }[]
   const batch = due(SWEEP_BATCH)
   if (batch.length === 0) return stopped
   try {
@@ -284,7 +305,7 @@ export async function runSweep(
   let swept = 0
   let calls = 0
   let limited = false
-  for (const { key, language } of batch) {
+  for (const { key, language, released } of batch) {
     if (used >= SWEEP_DAILY_CALLS) break
     let searched = false
     try {
@@ -306,9 +327,10 @@ export async function runSweep(
       // A failed search may still have spent a Browse call; count one (already counted if it returned).
       if (!searched) used += 1
       // Back off: due again in about a day, so a permanent failure can't hold the head of the queue.
+      const backOff = isNewSet(released, now) ? 0 : 6 * DAY_MS
       db.prepare(
         'UPDATE price_sweeps SET swept_at = ? WHERE key = ? AND language = ?'
-      ).run(new Date(now.getTime() - 6 * DAY_MS).toISOString(), key, language)
+      ).run(new Date(now.getTime() - backOff).toISOString(), key, language)
     }
   }
   setMeta(db, 'sweep_calls_day', `${today}:${used}`)

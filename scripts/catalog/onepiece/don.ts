@@ -29,10 +29,12 @@ export interface DonCard {
 }
 
 /** `DON!! Card (Gold)` → `DON!! (Gold)`: the card itself says DON!!. */
-export const donName = (productName: string): string => productName.trim().replace(/^DON!! Card\b/, 'DON!!')
+export const donName = (productName: string): string =>
+  productName.trim().replace(/^DON!! Card\b/, 'DON!!')
 
 /** A DON!! printing's key for a product and TCGCSV subtype. */
-export const donCode = (productId: number, subType: string): string => `${opTcgArtKey(productId)}/${subType}`
+export const donCode = (productId: number, subType: string): string =>
+  `${opTcgArtKey(productId)}/${subType}`
 
 /**
  * Tonight's DON!! cards among `products`. A product with no picture yet, or no price row (so no
@@ -84,7 +86,11 @@ export function donCards(
       versions: subs.map((sub) => {
         const same = bySub.get(sub)!
         // Exactly one row is a price, as for every other One Piece product.
-        return { code: donCode(p.productId, sub), label: sub === 'Normal' ? 'DON!!' : `DON!! (${sub})`, price: same.length === 1 ? same[0].marketPrice : null }
+        return {
+          code: donCode(p.productId, sub),
+          label: sub === 'Normal' ? 'DON!!' : `DON!! (${sub})`,
+          price: same.length === 1 ? same[0].marketPrice : null
+        }
       })
     })
   }

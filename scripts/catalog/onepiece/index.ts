@@ -286,7 +286,14 @@ export async function runOnePieceStep(
     const written = writeOnePiece(
       work,
       {
-        series, entries, groupOf: bySeries, matches, prices, hashed, frozen, firstSeen,
+        series,
+        entries,
+        groupOf: bySeries,
+        matches,
+        prices,
+        hashed,
+        frozen,
+        firstSeen,
         don: { cards: don.cards, listed: don.listed, complete: failed.size === 0 }
       },
       { now, nowIso: date.toISOString() }

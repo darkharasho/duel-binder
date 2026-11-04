@@ -91,7 +91,7 @@ export function setEbayPricesHidden(db: SqlDb, hidden: boolean): void {
   ).run(hidden ? '1' : '0')
 }
 
-/** The game a scope shows, resolved to 'ygo' or 'pkm' for code that picks game-specific filters. */
+/** The game a scope shows, resolved to a GameId for code that picks game-specific filters. */
 export function scopeGame(db: SqlDb, scope: Scope): GameId {
   const { game } = db.prepare(`SELECT ${scope.game} AS game`).get() as { game: string }
   return isGameId(game) ? game : 'ygo'

@@ -28,6 +28,10 @@ export function allowedGames(viewer: ViewerFacts): GameId[] {
   })
 }
 
+/** What a game calls one of a card's printings: Pokémon and One Piece say "version". */
+export const printingNoun = (game: GameId): 'printing' | 'version' =>
+  byGame<'printing' | 'version'>(game, { ygo: 'printing', pkm: 'version', op: 'version' })
+
 /** The exhaustive per-game value: a missing game is a compile error. */
 export function byGame<T>(game: GameId, values: Record<GameId, T>): T {
   return values[game]

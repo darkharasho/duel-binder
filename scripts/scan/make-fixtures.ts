@@ -27,13 +27,18 @@ const { imageUrl } = (await import(
 const { pokemonId } = (await import(
   appModule('shared/games/ids.ts')
 )) as typeof import('../../src/shared/games/ids')
+const { isGameId } = (await import(
+  appModule('shared/games/index.ts')
+)) as typeof import('../../src/shared/games/index')
 const { variantLabel } = (await import(
   new URL('../catalog/pokemon/versions.ts', import.meta.url).href
 )) as typeof import('../catalog/pokemon/versions')
 
 const gameArg = process.argv.indexOf('--game')
 const GAME = gameArg === -1 ? 'ygo' : process.argv[gameArg + 1]
-if (GAME !== 'ygo' && GAME !== 'pkm') throw new Error(`Unknown game ${GAME}`)
+if (!isGameId(GAME)) throw new Error(`Unknown game ${GAME}`)
+// op: step 4 adds its fixtures.
+if (GAME === 'op') throw new Error('One Piece has no scan fixtures until step 4')
 
 type Frame = 'normal' | 'pendulum' | 'link'
 

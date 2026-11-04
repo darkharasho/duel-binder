@@ -38,7 +38,7 @@ import { createAccountService } from './cloud/account'
 import { createMainErrorReports, goneMessage } from './errorReports'
 import { describeError, type ErrorDetails } from '@shared/errorReports'
 import { createCloudClient } from './cloud/client'
-import { GAMES, GAME_IDS, type GameId } from '@shared/games'
+import { GAMES, GAME_IDS, isGameId, type GameId } from '@shared/games'
 import { setMeta } from './db/meta'
 import type { FingerprintStore } from './scan/fingerprints'
 import { createFingerprintStore } from './scan/fingerprints'
@@ -72,7 +72,8 @@ app.setPath(
 const captureDir = !app.isPackaged ? process.env['YGO_CAPTURE_DIR'] : undefined
 const fakeData = !app.isPackaged && (process.env['YGO_FAKE_DATA'] === '1' || !!captureDir)
 /** The game to capture, in a profile scripts/site/shots.sh filled with both games' catalogs. */
-const captureGame: GameId = process.env['YGO_CAPTURE_GAME'] === 'pkm' ? 'pkm' : 'ygo'
+const captureEnv = process.env['YGO_CAPTURE_GAME']
+const captureGame: GameId = isGameId(captureEnv) ? captureEnv : 'ygo'
 if (captureDir) app.commandLine.appendSwitch('force-device-scale-factor', '2')
 // Capture uses its own profile so it never collides with a running dev session's instance lock.
 if (fakeData)

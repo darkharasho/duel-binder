@@ -170,6 +170,24 @@ describe('artwork from the edge, ahead of the Durable Object', () => {
     expect(edge.store.get(url('printing-small/12'))?.headers.get('cache-control')).toBe('public, max-age=3600')
   })
 
+  it('?only: no small copy is a 404, never the full photo (the desktop keeps that itself)', async () => {
+    const store = durableObject(() => new Response(JPEG, { headers: { 'content-type': 'image/jpeg' } }))
+    const edge = memoryEdge()
+    const res = await edgeImage(new Request(url('printing-small/12?only')), memoryBucket(), edge, () => {}, store.fetch)
+    expect(res?.status).toBe(404)
+    expect(res?.headers.get('cache-control')).toBe('no-store')
+    expect(store.calls).toEqual([])
+    expect(edge.store.size).toBe(0)
+  })
+
+  it('?only still serves a small copy that exists', async () => {
+    const bucket = memoryBucket()
+    await bucket.put('printing-small/12', JPEG.buffer, { httpMetadata: { contentType: 'image/jpeg' } })
+    const res = await edgeImage(new Request(url('printing-small/12?only')), bucket, null, () => {}, durableObject().fetch)
+    expect(res?.status).toBe(200)
+    expect(res?.headers.get('content-type')).toBe('image/jpeg')
+  })
+
   it("passes on the full photo's 404 uncached", async () => {
     const store = durableObject()
     const edge = memoryEdge()

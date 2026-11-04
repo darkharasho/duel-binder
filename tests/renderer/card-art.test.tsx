@@ -48,7 +48,7 @@ describe('CardArt', () => {
   it('fades the printing scan in over the default art once it loads', () => {
     render(<CardArt imageId={5} printingId={9} size="small" alt="Kuriboh" />)
     const scan = screen.getByTestId('printing-scan')
-    expect(scan).toHaveAttribute('src', 'ygo-img://printing/9')
+    expect(scan).toHaveAttribute('src', 'ygo-img://printing-small/9')
     expect(scan).toHaveClass('opacity-0')
     fireEvent.load(scan)
     expect(scan).toHaveClass('opacity-100')

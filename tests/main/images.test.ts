@@ -6,7 +6,7 @@ import { createLimiter, type Limiter } from '../../src/main/images/limiter'
 import type { ImageSources } from '../../src/main/images/cache'
 import type { ImageDownloads } from '../../src/shared/types'
 import { portalImageSources } from '../../src/main/images/portalSources'
-import { createImageCache, idleDownloads, throttleDownloads, imageUrl, parseImageUrl, parsePrintingImageUrl, parseSetImageUrl, setImageKey, setImageUrl, yugipediaImageKey } from '../../src/main/images/cache'
+import { createImageCache, idleDownloads, throttleDownloads, imageUrl, parseImageUrl, parsePrintingImageUrl, parseSetImageUrl, parseSmallPrintingImageUrl, setImageKey, setImageUrl, SMALL_RETRY_MS, yugipediaImageKey } from '../../src/main/images/cache'
 
 let dir: string
 beforeEach(async () => {
@@ -500,5 +500,89 @@ describe('images through the portal', () => {
     // A new session (a restart) asks again.
     expect(await setup({ fetchFn }).getPrinting(5)).toBeNull()
     expect(fetchFn).toHaveBeenCalledTimes(4)
+  })
+})
+
+describe('printing photo small copies', () => {
+  type Fetch = (url: string, init?: RequestInit) => Promise<Response>
+  const setup = (fetchFn: Fetch, now = () => Date.now()): ReturnType<typeof createImageCache> =>
+    createImageCache({
+      dir,
+      now,
+      fetchFn: fetchFn as unknown as typeof fetch,
+      limit: noLimit,
+      sources: portalImageSources({ portal: PORTAL, token: () => 'tok', remoteId: (id) => (id === 5 ? 77 : null) })
+    })
+  const small = path.join('printings-small', 'srv-77.jpg')
+  const full = path.join('printings', 'srv-77.png')
+
+  it('parses ygo-img://printing-small/<id>', () => {
+    expect(parseSmallPrintingImageUrl('ygo-img://printing-small/42')).toBe(42)
+    expect(parseSmallPrintingImageUrl('ygo-img://printing-small/0')).toBeNull()
+    expect(parseSmallPrintingImageUrl('ygo-img://printing/42')).toBeNull()
+    expect(parsePrintingImageUrl('ygo-img://printing-small/42')).toBeNull()
+  })
+
+  it('downloads the small copy with ?only and keeps it apart from the full photo', async () => {
+    const fetchFn = vi.fn<Fetch>(async () => okResponse('thumb'))
+    const cache = setup(fetchFn)
+    expect(await cache.getPrinting(5, { small: true })).toBe(path.join(dir, small))
+    expect(fetchFn.mock.calls[0][0]).toBe(`${PORTAL}/img/printing-small/77?only`)
+    expect(await cache.getPrinting(5, { small: true })).toBe(path.join(dir, small))
+    expect(fetchFn).toHaveBeenCalledTimes(1)
+  })
+
+  it("no small copy yet: the full photo, and the server isn't asked again for a day", async () => {
+    let t = 1_000_000
+    const fetchFn = vi.fn<Fetch>(async (url) =>
+      url.includes('printing-small') ? new Response('Not found', { status: 404 }) : okResponse('photo', 'image/png')
+    )
+    const cache = setup(fetchFn, () => t)
+    expect(await cache.getPrinting(5, { small: true })).toBe(path.join(dir, full))
+    expect(fetchFn.mock.calls.map((c) => c[0])).toEqual([`${PORTAL}/img/printing-small/77?only`, `${PORTAL}/img/printing/77`])
+    // Same session or a restart, within the day: straight to the full photo on disk.
+    const marker = path.join(dir, 'printings-small', 'srv-77.none')
+    t = (await fs.stat(marker)).mtimeMs + SMALL_RETRY_MS - 1
+    expect(await setup(fetchFn, () => t).getPrinting(5, { small: true })).toBe(path.join(dir, full))
+    expect(fetchFn).toHaveBeenCalledTimes(2)
+    // A day on, asked again.
+    t += 2
+    // (the full photo is on disk, so it shows now and the small copy is asked for behind it)
+    expect(await setup(fetchFn, () => t).getPrinting(5, { small: true })).toBe(path.join(dir, full))
+    await vi.waitFor(() => expect(fetchFn).toHaveBeenCalledTimes(3))
+  })
+
+  it('a full photo already on disk shows at once; the small copy comes for next time', async () => {
+    await fs.mkdir(path.join(dir, 'printings'), { recursive: true })
+    await fs.writeFile(path.join(dir, full), 'photo')
+    let release: () => void = () => {}
+    const gate = new Promise<void>((r) => (release = r))
+    const fetchFn = vi.fn<Fetch>(async () => {
+      await gate
+      return okResponse('thumb')
+    })
+    const cache = setup(fetchFn)
+    expect(await cache.getPrinting(5, { small: true })).toBe(path.join(dir, full))
+    release()
+    await vi.waitFor(async () => expect(await fs.readFile(path.join(dir, small), 'utf8')).toBe('thumb'))
+    expect(await cache.getPrinting(5, { small: true })).toBe(path.join(dir, small))
+  })
+
+  it("a non-JPEG answer isn't kept as the small copy", async () => {
+    const fetchFn = vi.fn<Fetch>(async () => okResponse('photo', 'image/png'))
+    const cache = setup(fetchFn)
+    expect(await cache.getPrinting(5, { small: true })).toBe(path.join(dir, full))
+    await expect(fs.stat(path.join(dir, small))).rejects.toThrow()
+  })
+
+  it('without a small source (dev direct sources), the full photo', async () => {
+    const fetchFn = vi.fn<Fetch>(async () => okResponse('photo', 'image/png'))
+    const cache = createImageCache({
+      dir,
+      fetchFn: fetchFn as unknown as typeof fetch,
+      limit: noLimit,
+      sources: direct({ printing: async () => ({ url: 'https://x/p.png', key: 'k' }) })
+    })
+    expect(await cache.getPrinting(5, { small: true })).toBe(path.join(dir, 'printings', 'k.png'))
   })
 })

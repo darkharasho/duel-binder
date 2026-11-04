@@ -356,6 +356,10 @@ export async function edgeImage(
           })
         )
       )
+    // `?only` (the desktop): no small copy is a 404, so it shows the full photo it keeps on disk
+    // rather than download that again in the small copy's place.
+    if (url.searchParams.has('only'))
+      return new Response('Not found', { status: 404, headers: { 'cache-control': 'no-store' } })
     // No small copy yet: the full photo, kept at the edge only an hour, so the small copy the
     // next nightly job makes takes its place soon after.
     const full = new URL(url)

@@ -272,9 +272,13 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
   const [artReady, setArtReady] = useState<boolean | null>(null)
   const [artData, setArtData] = useState<FingerprintStatus | null>(null)
 
-  // The picked set's artworks, worked out once per set rather than per frame.
+  // The picked set's artworks, worked out once per set rather than per frame. A Chinese set's
+  // cards mostly have none to match: their twins' art is found among all of it.
   const candidates = useMemo(
-    () => (opts.setPrintings ? [...new Set(opts.setPrintings.flatMap((p) => p.imageIds))] : null),
+    () =>
+      opts.setPrintings && !opts.setPrintings.some((p) => p.language === 'zh-hans')
+        ? [...new Set(opts.setPrintings.flatMap((p) => p.imageIds))]
+        : null,
     [opts.setPrintings]
   )
   const latest = useRef({ ...opts, candidates })
@@ -335,15 +339,19 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
     read.engine.tiltReset?.()
   }, [])
 
-  /** Live frames search only the language's art; on trouble, all of it, which is just slower. */
+  /**
+   * Live frames search only the language's art; on trouble, all of it, which is just slower.
+   * Simplified Chinese searches all of it: most of its cards are matched by their twins' art.
+   */
   const narrow = async (engine: ScanEngine): Promise<void> => {
     const { language } = latest.current
-    const ids = language
-      ? await within(
-          Promise.resolve().then(() => api.scan.imagesForLanguage(language)),
-          LOOKUP_TIMEOUT_MS
-        ).catch(() => null)
-      : null
+    const ids =
+      language && language !== 'zh-hans'
+        ? await within(
+            Promise.resolve().then(() => api.scan.imagesForLanguage(language)),
+            LOOKUP_TIMEOUT_MS
+          ).catch(() => null)
+        : null
     if (engineRef.current === engine) engine.scope(ids?.length ? ids : null)
   }
 
@@ -780,12 +788,15 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
             cardLanguage: (cardId) => languageOf(cardId, raw.textBands),
             filterLanguage: o.filterLanguage,
             artDistance: (x, y) => engine.artDistance?.(x, y) ?? Promise.resolve(null),
+            // Simplified Chinese can't be read off the text, so a photo takes it as said.
             readLanguage: () =>
-              tellPokemonLanguage(raw.textBands, (b, model) =>
-                within(api.scan.readText(b, model), LANGUAGE_TIMEOUT_MS)
-              )
-                .catch(() => null)
-                .then((read) => read ?? o.language ?? null),
+              o.language === 'zh-hans'
+                ? Promise.resolve(o.language)
+                : tellPokemonLanguage(raw.textBands, (b, model) =>
+                    within(api.scan.readText(b, model), LANGUAGE_TIMEOUT_MS)
+                  )
+                    .catch(() => null)
+                    .then((read) => read ?? o.language ?? null),
             readLocalName: async () => {
               const reads = api.scan.readText(raw.nameBands ?? [], 'jpn')
               return within(reads, LANGUAGE_TIMEOUT_MS).catch(() => [] as string[])

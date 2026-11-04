@@ -24,7 +24,62 @@ import type { RawSignals } from './engine'
 import { pokemonVersion } from './vision/pokemonVersion'
 import type { ResolveContext, ScanOutcome } from './resolve'
 
-type Read = PokemonTextLanguage
+type Read = PokemonTextLanguage | 'zh-hans'
+
+/** A Pokémon set code's collector number and total: "M6A 036/103" is 036 of 103. */
+function numberOfCode(code: string): { number: string; total: string | null } | null {
+  const printed = code.trim().split(/\s+/).at(-1) ?? ''
+  const [number, total] = printed.split('/')
+  return number ? { number, total: total ?? null } : null
+}
+
+/** A name without its accents: one catalog's "Poké Pad" is another's "Poke Pad". */
+const unaccented = (name: string): string => name.normalize('NFKD').replace(/\p{M}/gu, '')
+
+/**
+ * The Simplified Chinese printings standing in for printings' cards, by the card each stands in
+ * for. Most Chinese cards have no art of their own to match, so a Chinese card stands in for:
+ * - the English card the catalog shows its art from (`art_twin_id`, chineseOfArt): a main set
+ *   such as CSV6C gathers its cards from several English sets, renumbered;
+ * - an English or Japanese card that prints its number, of the same total, under its name: a
+ *   Chinese set is often its Japanese set's twin, card for card (30th Celebration and MEGA
+ *   Expansion 30th Celebration share every number and name, Classic Collection included).
+ * Within the picked set when one is picked.
+ */
+async function chineseTwins(
+  printings: ScanPrinting[],
+  ctx: ResolveContext
+): Promise<Map<number, ScanPrinting[]>> {
+  const out = new Map<number, ScanPrinting[]>()
+  const inSet = ctx.setPrintings ? new Set(ctx.setPrintings.map((p) => p.printingId)) : null
+  const add = (cardId: number, twins: ScanPrinting[]): void => {
+    const list = out.get(cardId) ?? []
+    for (const t of twins) if (!list.some((x) => x.printingId === t.printingId)) list.push(t)
+    if (list.length) out.set(cardId, list)
+  }
+  const others = [
+    ...new Set(printings.filter((p) => p.language !== 'zh-hans').map((p) => p.cardId))
+  ]
+  const linked = others.length ? ((await ctx.lookups.chineseOfArt?.(others)) ?? []) : []
+  for (const { twinId, printing } of linked)
+    if (!inSet || inSet.has(printing.printingId)) add(twinId, [printing])
+  const asked = new Map<string, Promise<ScanPrinting[]>>()
+  for (const p of printings) {
+    if (p.language === 'zh-hans') continue
+    const n = numberOfCode(p.setCode)
+    if (!n) continue
+    const key = `${n.number}/${n.total}`
+    if (!asked.has(key)) asked.set(key, ctx.lookups.printingsByNumber({ setAbbrev: null, ...n }))
+    const twins = (await asked.get(key)!).filter(
+      (t) =>
+        t.language === 'zh-hans' &&
+        sameName(unaccented(t.name), unaccented(p.name)) &&
+        (!inSet || inSet.has(t.printingId))
+    )
+    add(p.cardId, twins)
+  }
+  return out
+}
 
 /**
  * The cards whose art is close enough and within PKM_ART_MIN_MARGIN of the best, closest first. A
@@ -239,8 +294,10 @@ async function draft(
  * agree on one card; else, where a PKM_GUESS_RULES rule allows, named as a best guess (`guess` on
  * the draft). A Chinese, European (or any other uncatalogued) card shares its art and often its number
  * with a Japanese or English twin, so a card is named only in a language read as English or
- * Japanese; anything else, unread included, is `unsure` unless the name band nearly reads a
- * name of the art's cards (likelyInLanguage).
+ * Japanese, or said to be Simplified Chinese (never read off the text: the scanner can't tell it
+ * from a blurred English text box), where it is named through its twin (chineseTwins); anything
+ * else, unread included, is `unsure` unless the name band nearly reads a name of the art's cards
+ * (likelyInLanguage).
  *
  * - With a collector number read: the art's cards that carry it, or with no art close, the
  *   number's cards a name read agrees with; one of them in the read language is named,
@@ -318,11 +375,37 @@ export async function resolvePokemonSignals(
   const named = async (cardId: number, via: 'code' | 'art'): Promise<ScanOutcome> => {
     const item = await draft(cardId, raw, ctx, via)
     if (!item) return unsure
-    const twinned = item.options.filter((p) => p.unseenTwin)
+    // A Chinese card named through its twin is told from its reprints by the number already
+    // (two Chinese cards at one name and number name neither), and having no art of its own, nor
+    // an illustrator on record, every Chinese card of its name looks like an unseen twin.
+    const twinned = stand.has(cardId) ? [] : item.options.filter((p) => p.unseenTwin)
     const twin = twinned.length ? await untold(twinned[0]) : false
     if (twin && !may(twin === 'maybe' ? 'twin-maybe' : 'twin')) return unsure
     return { kind: 'recognized', item: guess ? { ...item, guess: true } : item }
   }
+
+  /**
+   * Chinese cards stood in for (chineseTwins), by card, and the card each stands in for: the art
+   * and number are its twin's, so it ranks, and is checked for reprints, as its twin.
+   */
+  const stand = new Map<number, { twin: number; printing: ScanPrinting }>()
+  const twinOf = (cardId: number): number => stand.get(cardId)?.twin ?? cardId
+  /**
+   * The Simplified Chinese cards among printings, own art or a twin's. A twin with several
+   * Chinese cards (two sets that print one name at one number) can't say which: none.
+   */
+  const inChinese = async (printings: ScanPrinting[]): Promise<number[]> => {
+    const ids = printings.filter((p) => p.language === 'zh-hans').map((p) => p.cardId)
+    for (const [twin, list] of await chineseTwins(printings, ctx)) {
+      const cards = unique(list.map((p) => p.cardId))
+      if (cards.length !== 1) continue
+      stand.set(cards[0], { twin, printing: list[0] })
+      ids.push(cards[0])
+    }
+    return unique(ids)
+  }
+  const printingOf = (printings: ScanPrinting[], cardId: number): ScanPrinting =>
+    printings.find((p) => p.cardId === cardId) ?? stand.get(cardId)!.printing
 
   /**
    * The cards among printings in the language read. With no language read, the name band
@@ -336,6 +419,7 @@ export async function resolvePokemonSignals(
   const inLanguage = async (printings: ScanPrinting[]): Promise<number[]> => {
     const lang = await language()
     if (lang === 'other') return []
+    if (lang === 'zh-hans') return inChinese(printings)
     if (lang === 'en' || lang === 'ja')
       return unique(printings.filter((p) => p.language === lang).map((p) => p.cardId))
     if (!group.length) return []
@@ -387,11 +471,15 @@ export async function resolvePokemonSignals(
       if (!ids.length) return null
     }
     if (ids.length < 2) return ids[0] ?? null
-    const closest = group.find((id) => ids.includes(id))!
-    const name = printings.find((p) => p.cardId === closest)!.name
-    const reprints = printings.every((p) => !ids.includes(p.cardId) || sameName(p.name, name))
+    const rank = (id: number): number => group.indexOf(twinOf(id))
+    const closest = [...ids].sort((a, b) => rank(a) - rank(b))[0]
+    const name = printingOf(printings, closest).name
+    const reprints = ids.every((id) => sameName(printingOf(printings, id).name, name))
     const lead = ctx.reprintLead ?? PKM_GUESS_REPRINT_LEAD
-    if (!reprints || (await artLead(raw, ids, ctx)) < lead) return null
+    const twins = unique(ids.map(twinOf))
+    // Two Chinese cards standing in for one card: the art can't tell them apart.
+    if (twins.length < ids.length) return null
+    if (!reprints || (await artLead(raw, twins, ctx)) < lead) return null
     return may('reprint') ? closest : null
   }
 
@@ -416,6 +504,7 @@ export async function resolvePokemonSignals(
   const printings = await ctx.lookups.printingsForCards(group)
   const id = await pick(printings)
   if (id === null) return unsure
-  const card = printings.find((p) => p.cardId === id)!
+  // A Chinese card's reprints are its twin's.
+  const card = printingOf(printings, twinOf(id))
   return (await reprintBehind(raw, card, ctx)) && !may('behind') ? unsure : named(id, 'art')
 }

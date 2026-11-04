@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   cardsForImages,
+  chineseOfArt,
   matchName,
   printingsByCode,
   printingsByNumber,
@@ -386,5 +387,48 @@ describe('a Pokémon art twin with no artwork', () => {
     add(9007, 'Umbreon ☆', 'Naoyo Kimura', 'en/cel25cc-3', null)
     expect(twinned()).toEqual([true, true])
     expect(printingsByCode(db, 'LOB-EN005').every((r) => !('unseenTwin' in r))).toBe(true)
+  })
+})
+
+describe('chineseOfArt', () => {
+  const PKM = localScope("'pkm'")
+
+  it("gives the Simplified Chinese printings showing a card's art, unless their rarities' art differs", async () => {
+    const db = await seededDb()
+    const { cardIds } = seedPokemon(db)
+    const [pikachu] = cardIds
+    const add = (
+      id: number,
+      rarity: string | null,
+      language: string,
+      twin: number | null
+    ): void => {
+      db.prepare(
+        `INSERT INTO cards (id, game, name, type, frame_type, race, "desc", updated_at)
+         VALUES (?, 'pkm', 'Pikachu', 'Pokémon', 'pokemon', 'Basic', '', '2026-11-03')`
+      ).run(id)
+      db.prepare(
+        `INSERT INTO pokemon_cards (card_id, category, hp, types, stage, rarity, source_id, art_twin_id)
+         VALUES (?, 'Pokémon', 60, '[]', 'Basic', ?, ?, ?)`
+      ).run(id, rarity, `${language}/X-${id}`, twin)
+      db.prepare(
+        `INSERT INTO card_printings (game, card_id, language, set_name, set_code, set_rarity)
+         VALUES ('pkm', ?, ?, 'Ardent Obsidian', ?, 'Common')`
+      ).run(id, language, `CSV5C ${id}`)
+    }
+    db.prepare("UPDATE pokemon_cards SET rarity = 'Common' WHERE card_id = ?").run(pikachu)
+    add(9101, 'Common', 'zh-hans', pikachu)
+    add(9102, null, 'zh-hans', pikachu)
+    // An Illustration Rare linked to the regular card by name and number: not its art.
+    add(9103, 'Illustration Rare', 'zh-hans', pikachu)
+    // Not Simplified, or linked elsewhere.
+    add(9104, 'Common', 'zh-hant', pikachu)
+    add(9105, 'Common', 'zh-hans', null)
+    const found = chineseOfArt(db, [pikachu], PKM)
+    expect(found.map((f) => [f.twinId, f.printing.cardId, f.printing.language])).toEqual([
+      [pikachu, 9101, 'zh-hans'],
+      [pikachu, 9102, 'zh-hans']
+    ])
+    expect(chineseOfArt(db, [], PKM)).toEqual([])
   })
 })

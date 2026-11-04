@@ -53,10 +53,11 @@ export interface ResolveContext {
   /** How far apart two artworks' fingerprints are; null when either has none. Without it, unknown. */
   artDistance?: (a: number, b: number) => Promise<number | null>
   /**
-   * For Pokémon: the language the card's text reads as (pokemonLanguageOfBands), asked only when
+   * For Pokémon: the language the card's text reads as (pokemonLanguageOfBands), or the one the
+   * user said they're scanning (Simplified Chinese is only ever said, never read), asked only when
    * a card is about to be named; null when it can't be told. Without it, never told.
    */
-  readLanguage?: () => Promise<PokemonTextLanguage>
+  readLanguage?: () => Promise<PokemonTextLanguage | 'zh-hans'>
   /**
    * For Pokémon: the name band read with the Japanese model, asked only when the language can't
    * be told from the text. Without it, nothing read.
@@ -65,7 +66,9 @@ export interface ResolveContext {
   lookups: Pick<
     Api['scan'],
     'printingsByCode' | 'printingsByNumber' | 'printingsForCards' | 'matchName' | 'cardsForImages'
-  >
+  > &
+    /** For Simplified Chinese: without it, a Chinese card stands in only by number (chineseTwins). */
+    Partial<Pick<Api['scan'], 'chineseOfArt'>>
 }
 
 /** The art's best match when it is one of the card's artworks, else the card's first. */

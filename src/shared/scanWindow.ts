@@ -10,8 +10,11 @@ export type ScanStatus =
   | { kind: 'added'; name: string; setCode: string | null; guess?: true }
   | { kind: 'stopped' }
 
-/** The languages a Pokémon card is catalogued in. */
-export const POKEMON_LANGUAGES = ['en', 'ja'] as const
+/**
+ * The languages a Pokémon card can be scanned in. Simplified Chinese cards are mostly matched by
+ * their Japanese or English twin's art (resolvePokemon's chineseTwins).
+ */
+export const POKEMON_LANGUAGES = ['en', 'ja', 'zh-hans'] as const
 export type PokemonLanguage = (typeof POKEMON_LANGUAGES)[number]
 
 export const isPokemonLanguage = (v: unknown): v is PokemonLanguage =>

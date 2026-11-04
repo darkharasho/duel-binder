@@ -478,6 +478,193 @@ describe('resolvePokemonSignals', () => {
   })
 })
 
+describe('Simplified Chinese, as the user said', () => {
+  // MEGA Expansion 30th Celebration (ja) and 30th Celebration (zh-hans) share every number and
+  // name; the Chinese cards have no art of their own. Gengar's Classic Collection reprint prints
+  // 150/103 with Base Set's art. Two Chinese sets print an Eevee at 020/103. Chinese Pikachu has
+  // its own art.
+  const p = (
+    printingId: number,
+    cardId: number,
+    name: string,
+    language: 'en' | 'ja' | 'zh-hans',
+    setName: string,
+    setCode: string,
+    imageId: number
+  ): ScanPrinting =>
+    printing({
+      printingId,
+      cardId,
+      name,
+      frameType: 'pokemon',
+      setName,
+      setCode,
+      rarity: 'Holofoil',
+      language,
+      price: 1,
+      imageIds: [imageId]
+    })
+  const ZH: ScanPrinting[] = [
+    p(911, 91, 'Gengar', 'ja', 'MEGA Expansion 30th Celebration', 'M6A 150/103', 901),
+    p(921, 92, 'Gengar', 'en', 'Base Set', 'BS 5/102', 902),
+    p(931, 93, 'Gengar', 'zh-hans', '30th Celebration', '30thC 150/103', 903),
+    p(941, 94, 'Exeggcute', 'zh-hans', '30th Celebration', '30thC 001/103', 904),
+    p(951, 95, 'Exeggcute', 'ja', 'MEGA Expansion 30th Celebration', 'M6A 001/103', 905),
+    p(961, 96, 'Pikachu', 'zh-hans', 'Gem Pack', 'CBB1C 010/100', 906),
+    p(971, 97, 'Eevee', 'zh-hans', '30th Celebration', '30thC 020/103', 907),
+    p(981, 98, 'Eevee', 'zh-hans', 'Other Set', 'CSV9C 020/103', 908),
+    p(991, 99, 'Eevee', 'ja', 'MEGA Expansion 30th Celebration', 'M6A 020/103', 909),
+    p(1001, 100, 'Mew', 'ja', 'MEGA Expansion 30th Celebration', 'M6A 151/103', 910),
+    p(1011, 101, 'Poke Pad', 'ja', 'MEGA Expansion 30th Celebration', 'M6A 102/103', 911),
+    p(1021, 102, 'Poké Pad', 'zh-hans', '30th Celebration', '30thC 102/103', 912)
+  ]
+  const zhLookups: ResolveContext['lookups'] = {
+    printingsByCode: async () => [],
+    printingsByNumber: async (n) =>
+      ZH.filter((q) => {
+        const [abbrev, num] = q.setCode.split(' ')
+        const [number, total] = num.split('/')
+        return (
+          Number(number) === Number(n.number) &&
+          (n.total === null || Number(total) === Number(n.total)) &&
+          (n.setAbbrev === null || abbrev.toUpperCase() === n.setAbbrev)
+        )
+      }),
+    printingsForCards: async (ids) => ZH.filter((q) => ids.includes(q.cardId)),
+    matchName: async () => null,
+    cardsForImages: async (ids) =>
+      ZH.map((q) => ({ imageId: q.imageIds[0], cardId: q.cardId })).filter((c) =>
+        ids.includes(c.imageId)
+      )
+  }
+  const zh = (setPrintings: ScanPrinting[] | null = null): ResolveContext => ({
+    game: 'pkm',
+    setName: setPrintings ? '30th Celebration' : null,
+    setPrintings,
+    defaultRarity: null,
+    guessRules: undefined,
+    readLanguage: async () => 'zh-hans',
+    readLocalName: async () => [],
+    lookups: zhLookups
+  })
+  const set = ZH.filter((q) => q.setName === '30th Celebration')
+
+  it("names the Chinese card that prints its Japanese twin's number and name", async () => {
+    const art = [{ imageId: 905, distance: 20 }]
+    expect(await recognized(raw({ art }), zh())).toMatchObject({
+      cardId: 94,
+      printingId: 941,
+      setCode: '30thC 001/103',
+      via: 'art'
+    })
+    // In the picked set too.
+    expect(await recognized(raw({ art }), zh(set))).toMatchObject({ cardId: 94 })
+  })
+
+  it('names a Classic Collection card, whose art its original shares', async () => {
+    const art = [
+      { imageId: 901, distance: 20 },
+      { imageId: 902, distance: 22 }
+    ]
+    expect(await recognized(raw({ art }), zh())).toMatchObject({ cardId: 93, via: 'art' })
+    expect(await recognized(raw({ art, codeTexts: ['150/103'] }), zh(set))).toMatchObject({
+      cardId: 93,
+      via: 'code'
+    })
+  })
+
+  it("names a Chinese card whose name the twin's spells without its accent", async () => {
+    const art = [{ imageId: 911, distance: 20 }]
+    expect(await recognized(raw({ art }), zh())).toMatchObject({ cardId: 102 })
+  })
+
+  it('names a Chinese card by its own art', async () => {
+    const art = [{ imageId: 906, distance: 20 }]
+    expect(await recognized(raw({ art }), zh())).toMatchObject({ cardId: 96 })
+  })
+
+  it('never names the twin itself, nor a card with no Chinese twin', async () => {
+    // Mew has no Chinese card at its number.
+    expect(await resolveSignals(raw({ art: [{ imageId: 910, distance: 20 }] }), zh())).toEqual({
+      kind: 'unsure'
+    })
+    // Exeggcute's twin is outside the picked set.
+    const other = ZH.filter((q) => q.setName === 'Other Set')
+    expect(await resolveSignals(raw({ art: [{ imageId: 905, distance: 20 }] }), zh(other))).toEqual(
+      { kind: 'unsure' }
+    )
+  })
+
+  it("is unsure when two Chinese cards print the twin's name and number", async () => {
+    const art = [{ imageId: 909, distance: 20 }]
+    expect(await resolveSignals(raw({ art }), zh())).toEqual({ kind: 'unsure' })
+    // The picked set tells them apart.
+    expect(await recognized(raw({ art }), zh(set))).toMatchObject({ cardId: 97 })
+  })
+
+  describe("a main set's card, renumbered, through the English card whose art the catalog shows", () => {
+    // Ardent Obsidian (CSV5C) gathers Obsidian Flames and Paradox Rift cards under its own
+    // numbers. Its Kingambit shows OBF Kingambit's art; Deoxys is reprinted in another Chinese set.
+    const MAIN: ScanPrinting[] = [
+      p(2011, 201, 'Kingambit', 'en', 'Obsidian Flames', 'OBF 150/197', 2001),
+      p(2021, 202, 'Kingambit', 'zh-hans', 'Ardent Obsidian', 'CSV5C 098', 2002),
+      p(2031, 203, 'Deoxys', 'en', 'Paradox Rift', 'PAR 074/182', 2003),
+      p(2041, 204, 'Deoxys', 'zh-hans', 'Ardent Obsidian', 'CSV5C 055', 2004),
+      p(2051, 205, 'Deoxys', 'zh-hans', 'Other Set', 'CSVH3C 014', 2005),
+      p(2061, 206, 'Deoxys', 'ja', 'Ancient Roar', 'SV4K 040/66', 2006)
+    ]
+    const ALL = [...ZH, ...MAIN]
+    const links: Record<number, number> = { 202: 201, 204: 203, 205: 203 }
+    const mainLookups: ResolveContext['lookups'] = {
+      ...zhLookups,
+      printingsForCards: async (ids) => ALL.filter((q) => ids.includes(q.cardId)),
+      cardsForImages: async (ids) =>
+        ALL.map((q) => ({ imageId: q.imageIds[0], cardId: q.cardId })).filter((c) =>
+          ids.includes(c.imageId)
+        ),
+      chineseOfArt: async (ids) =>
+        MAIN.filter((q) => ids.includes(links[q.cardId])).map((q) => ({
+          twinId: links[q.cardId],
+          printing: q
+        }))
+    }
+    const main = (setPrintings: ScanPrinting[] | null = null): ResolveContext => ({
+      ...zh(setPrintings),
+      setName: setPrintings?.[0]?.setName ?? null,
+      lookups: mainLookups
+    })
+    const ardent = MAIN.filter((q) => q.setName === 'Ardent Obsidian')
+
+    it('names the Chinese card the English art is linked to', async () => {
+      const art = [{ imageId: 2001, distance: 20 }]
+      expect(await recognized(raw({ art }), main())).toMatchObject({
+        cardId: 202,
+        setCode: 'CSV5C 098',
+        via: 'art'
+      })
+      expect(await recognized(raw({ art }), main(ardent))).toMatchObject({ cardId: 202 })
+    })
+
+    it('is unsure across two Chinese reprints until their set is picked', async () => {
+      // The Japanese print's art is closest; the English one, just behind, carries the link.
+      const art = [
+        { imageId: 2006, distance: 18 },
+        { imageId: 2003, distance: 20 }
+      ]
+      expect(await resolveSignals(raw({ art }), main())).toEqual({ kind: 'unsure' })
+      expect(await recognized(raw({ art }), main(ardent))).toMatchObject({ cardId: 204 })
+    })
+
+    it('stands in only by number without the link lookup', async () => {
+      const art = [{ imageId: 2001, distance: 20 }]
+      const unlinked = { ...mainLookups, chineseOfArt: undefined }
+      expect(await resolveSignals(raw({ art }), { ...main(), lookups: unlinked })).toEqual({
+        kind: 'unsure'
+      })
+    })
+  })
+})
+
 describe('art found only by the holder search', () => {
   // More quads looked at mean more chances of a chance match, so such a match must also clear
   // PKM_ART_MIN_MARGIN against the next card of another name, over every match ranked.

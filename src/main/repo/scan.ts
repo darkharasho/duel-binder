@@ -284,6 +284,68 @@ export function printingsForCards(
   return withImages(db, rows, scope, true)
 }
 
+/**
+ * Rarities whose card has other art than its set's regular print: full art, gold, shiny. Chinese
+ * and English names alike.
+ */
+const OWN_ART_RARITIES = [
+  'Hyper Rare',
+  'Super Rare',
+  'Shiny Rare',
+  'Shiny Ultra Rare',
+  'Ultra Rare',
+  'Illustration Rare',
+  'Special Illustration Rare',
+  'Character Rare',
+  'Character Super Rare',
+  'Secret Rare'
+]
+const ownArt = (column: string): string =>
+  `(${column} IN (${OWN_ART_RARITIES.map((r) => `'${r}'`).join(',')}))`
+
+/**
+ * The Simplified Chinese printings of cards that show one of cardIds' art (`art_twin_id`, the
+ * catalog's English twin of a card with no art of its own), each with the card it shows. Not
+ * where one card is of an own-art rarity and the other isn't: the catalog links a Chinese
+ * Illustration Rare to its regular English card by name and number, whose art it doesn't show.
+ */
+export function chineseOfArt(
+  db: SqlDb,
+  cardIds: number[],
+  scope: Scope = LOCAL
+): { twinId: number; printing: ScanPrinting }[] {
+  const ids = [...new Set(cardIds)]
+  const twinOf = new Map<number, number>()
+  for (let i = 0; i < ids.length; i += 500) {
+    const chunk = ids.slice(i, i + 500)
+    const links = db
+      .prepare(
+        `SELECT z.card_id AS cardId, z.art_twin_id AS twinId FROM pokemon_cards z
+         JOIN pokemon_cards e ON e.card_id = z.art_twin_id
+         WHERE z.art_twin_id IN (${chunk.map(() => '?').join(',')}) AND z.image_url IS NULL
+           AND (z.rarity IS NULL OR ${ownArt('z.rarity')} = ${ownArt('e.rarity')})`
+      )
+      .all(...chunk) as { cardId: number; twinId: number }[]
+    for (const l of links) twinOf.set(l.cardId, l.twinId)
+  }
+  const cards = [...twinOf.keys()]
+  const rows: PrintingRow[] = []
+  for (let i = 0; i < cards.length; i += 500) {
+    const chunk = cards.slice(i, i + 500)
+    rows.push(
+      ...(db
+        .prepare(
+          `${select(scope)} AND p.language = 'zh-hans' AND p.card_id IN (${chunk.map(() => '?').join(',')})`
+        )
+        .all(...chunk) as PrintingRow[])
+    )
+  }
+  return withImages(db, rows, scope).map((printing) => ({
+    twinId: twinOf.get(printing.cardId)!,
+    printing
+  }))
+}
+
 /** Every artwork of a card printed in the language, for narrowing the art search to it. */
 export function imagesForLanguage(db: SqlDb, language: Language, scope: Scope = LOCAL): number[] {
   const rows = db

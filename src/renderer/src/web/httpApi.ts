@@ -245,6 +245,7 @@ export function createHttpApi(opts: HttpApiOptions = {}): Api {
       matchName: scanUnavailable,
       cardsForImages: scanUnavailable,
       imagesForLanguage: scanUnavailable,
+      chineseOfArt: scanUnavailable,
       fingerprints: scanUnavailable,
       fingerprintRefs: scanUnavailable,
       fingerprintStatus: scanUnavailable,

@@ -2,7 +2,7 @@ import { env } from 'cloudflare:workers'
 import { runInDurableObject } from 'cloudflare:test'
 import { describe, expect, it } from 'vitest'
 import type { SqlDb } from '../../../src/main/db/sql'
-import type { TrainingSummary } from '../../../src/shared/training'
+import type { TrainingStats, TrainingSummary } from '../../../src/shared/training'
 import { doSql } from '../src/doSql'
 
 // The training routes' queries on workerd's Durable Object SQLite, with the IMAGES R2 binding.
@@ -162,5 +162,25 @@ describe('training photos on Durable Object SQLite and R2', () => {
         n: 0
       }
     )
+  })
+
+  it('admin stats, labels and photo run on Durable Object SQLite', async () => {
+    const s = await seeded('training-admin')
+    await s.call('tess', 'POST', `/api/training/photos/${CID}?${labelQuery(s.printing)}`, JPEG)
+    const admin = (path: string): Promise<Response> => s.call('admin-token', 'GET', path)
+    const stats = (await (await admin('/admin/training')).json()) as TrainingStats
+    expect(stats.games).toEqual([{ game: 'op', photos: 1, testers: 1, cards: 1, versions: 1 }])
+    expect(stats.testers[0]).toMatchObject({ username: 'user1', photos: 1, today: 1 })
+    expect(stats.holders).toEqual([{ game: 'op', holder: 'toploader', photos: 1, versions: 1 }])
+    const labels = (await (await admin('/admin/training/labels?game=op')).json()) as {
+      labels: { clientId: string; number: string }[]
+      more: boolean
+    }
+    expect(labels.more).toBe(false)
+    expect(labels.labels[0]).toMatchObject({ clientId: CID, number: 'OP01-001' })
+    const photo = await admin('/admin/training/photo/1')
+    expect(photo.headers.get('cache-control')).toBe('no-store')
+    expect(new Uint8Array(await photo.arrayBuffer())).toEqual(JPEG)
+    expect((await s.call('tess', 'GET', '/admin/training/labels?game=op')).status).toBe(401)
   })
 })

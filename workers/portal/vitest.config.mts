@@ -6,6 +6,8 @@ export default defineConfig({
     cloudflareTest({
       wrangler: { configPath: './wrangler.toml' },
       miniflare: {
+        // The Durable Object tests call /admin/training with this token.
+        bindings: { ADMIN_TOKEN: 'admin-token' },
         // wrangler.toml binds PRICES to the eBay price Worker; tests get a stub that never prices anything.
         workers: [
           {

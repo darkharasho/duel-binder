@@ -5,10 +5,14 @@ import {
   TRAINING_DAILY_CAP,
   readLabel,
   trainingKey,
+  type TrainingHolder,
+  type TrainingLabelRow,
+  type TrainingStats,
   type TrainingSummary
 } from '../../../src/shared/training'
 import type { AppDeps } from './app'
-import { currentUser, fromPublicOrigin, gamesFor } from './auth'
+import { currentUser, fromPublicOrigin, gamesFor, isAdmin } from './auth'
+import { adminAuthorized } from './thumbs'
 
 /** The slice of the R2 binding the training routes use. */
 export interface TrainingBucket {
@@ -198,6 +202,90 @@ export async function trainingRoute(req: Request, deps: AppDeps, rest: string): 
     const game = new URL(req.url).searchParams.get('game') ?? ''
     if (!mayContribute(deps, user.id, game)) return notFound()
     return json(summary(deps, user.id, game))
+  }
+  return notFound()
+}
+
+const LABELS_MAX = 500
+
+function stats(deps: AppDeps): TrainingStats {
+  // One statement per breakdown, never a UNION: Durable Object SQLite rejects big compounds.
+  const games = deps.db
+    .prepare(
+      `SELECT game, COUNT(*) AS photos, COUNT(DISTINCT user_id) AS testers,
+              COUNT(DISTINCT card_id) AS cards, COUNT(DISTINCT printing_id) AS versions
+       FROM training_photos GROUP BY game ORDER BY game`
+    )
+    .all() as TrainingStats['games']
+  const testers = deps.db
+    .prepare(
+      `SELECT t.game AS game, t.user_id AS userId, u.username AS username, COUNT(*) AS photos,
+              COALESCE(SUM(t.created_at > ?), 0) AS today, MAX(t.created_at) AS lastAt
+       FROM training_photos t JOIN users u ON u.id = t.user_id
+       GROUP BY t.game, t.user_id ORDER BY t.game, photos DESC, t.user_id`
+    )
+    .all(since(deps)) as TrainingStats['testers']
+  const holders = deps.db
+    .prepare(
+      `SELECT game, holder, COUNT(*) AS photos, COUNT(DISTINCT printing_id) AS versions
+       FROM training_photos GROUP BY game, holder ORDER BY game, holder`
+    )
+    .all() as TrainingStats['holders']
+  return { games, testers, holders }
+}
+
+function labels(deps: AppDeps, q: URLSearchParams): Response {
+  const game = q.get('game') ?? ''
+  if (!isGameId(game)) return json({ error: 'bad-game' }, 400)
+  const after = Number(q.get('after') ?? 0)
+  const wanted = Number(q.get('limit') ?? LABELS_MAX)
+  if (!Number.isSafeInteger(after) || after < 0) return json({ error: 'bad-after' }, 400)
+  const limit = Number.isSafeInteger(wanted) && wanted > 0 ? Math.min(wanted, LABELS_MAX) : LABELS_MAX
+  const found = deps.db
+    .prepare(
+      `SELECT t.id AS id, t.client_id AS clientId, t.game AS game, t.user_id AS userId,
+              u.username AS username, t.card_id AS cardId, t.printing_id AS printingId,
+              t.holder AS holder, t.device AS device, t.app_version AS appVersion,
+              t.taken_at AS takenAt, t.created_at AS createdAt, p.language AS language,
+              p.set_code AS number, p.set_rarity_code AS bandaiId, p.set_rarity AS version
+       FROM training_photos t JOIN users u ON u.id = t.user_id
+       LEFT JOIN card_printings p ON p.id = t.printing_id
+       WHERE t.game = ? AND t.id > ? ORDER BY t.id LIMIT ?`
+    )
+    .all(game, after, limit + 1) as (Omit<TrainingLabelRow, 'holder' | 'game'> & {
+    holder: TrainingHolder
+    game: GameId
+  })[]
+  return json({ labels: found.slice(0, limit), more: found.length > limit })
+}
+
+/**
+ * /admin/training*, the owner's view of the testers' photos:
+ *   GET /admin/training                  counts; the owner's session or the token
+ *   GET /admin/training/labels           label rows, paged by id; token only
+ *   GET /admin/training/photo/<id>       one photo's bytes, never cached; token only
+ * The last two are for the download script alone, so a stolen browser session can't bulk-download.
+ * Anything else answers 401, as the /admin catch-all does.
+ */
+export async function adminTrainingRoute(req: Request, deps: AppDeps): Promise<Response> {
+  const unauthorized = json({ error: 'Unauthorized' }, 401)
+  const url = new URL(req.url)
+  const token = await adminAuthorized(req, deps.env.ADMIN_TOKEN)
+  if (req.method === 'GET' && url.pathname === '/admin/training')
+    return token || (await isAdmin(req, deps)) ? json(stats(deps)) : unauthorized
+  if (!token) return unauthorized
+  if (req.method === 'GET' && url.pathname === '/admin/training/labels')
+    return labels(deps, url.searchParams)
+  const photo = /^\/admin\/training\/photo\/(\d+)$/.exec(url.pathname)
+  if (req.method === 'GET' && photo) {
+    const row = deps.db
+      .prepare('SELECT r2_key FROM training_photos WHERE id = ?')
+      .get(Number(photo[1])) as { r2_key: string } | undefined
+    const object = row && deps.training ? await deps.training.get(row.r2_key) : null
+    if (!object) return notFound()
+    return new Response(object.body, {
+      headers: { 'content-type': 'image/jpeg', 'cache-control': 'no-store' }
+    })
   }
   return notFound()
 }

@@ -33,7 +33,7 @@ import type { EmailSender } from './emailSend'
 import { emailAuthRoute, emailStatusRoute } from './emailAuth'
 import { emailClaimPage, emailFormRoute, emailMatchPage, emailStartPage } from './emailPages'
 import { appPreflight, withAppCors } from './appCors'
-import { trainingRoute, type TrainingBucket } from './training'
+import { adminTrainingRoute, trainingRoute, type TrainingBucket } from './training'
 
 /** Vars and secrets the request handlers read. */
 export interface Env extends AppleSignInEnv {
@@ -148,6 +148,8 @@ async function route(req: Request, deps: AppDeps): Promise<Response> {
     return adminMergeRoute(req, deps)
   if (url.pathname === '/admin/testers' || url.pathname === '/admin/testers/remove')
     return adminTestersRoute(req, deps)
+  if (url.pathname === '/admin/training' || url.pathname.startsWith('/admin/training/'))
+    return adminTrainingRoute(req, deps)
   if (url.pathname.startsWith('/admin/')) return adminRoute(req, deps)
   return json({ error: 'Not found' }, 404)
 }

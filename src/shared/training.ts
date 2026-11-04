@@ -93,6 +93,20 @@ export interface TrainingLabelRow {
   version: string | null
 }
 
+/** /admin/training: what the testers have sent so far. */
+export interface TrainingStats {
+  games: { game: GameId; photos: number; testers: number; cards: number; versions: number }[]
+  testers: {
+    game: GameId
+    userId: number
+    username: string
+    photos: number
+    today: number
+    lastAt: string
+  }[]
+  holders: { game: GameId; holder: TrainingHolder; photos: number; versions: number }[]
+}
+
 export interface TruthRow {
   file: string
   source: 'app'

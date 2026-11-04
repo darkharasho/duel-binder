@@ -483,4 +483,97 @@ describe('/api/training', () => {
     await empty(thumbs!)
     expect(got.filter((k) => k.startsWith('training/'))).toEqual([])
   })
+
+  describe('admin', () => {
+    const cid = (n: number): string => `${String(n).repeat(8)}-1111-4111-8111-111111111111`
+    const send = async (who: string, id: number, printing: number, holder: string): Promise<void> => {
+      const res = await upload(who, cid(id), label({ printing: String(printing), holder }))
+      expect(res.status).toBe(200)
+    }
+    const seedPhotos = async (): Promise<void> => {
+      await send('tess', 1, op.printingIds[0], 'sleeve')
+      await send('tess', 2, op.printingIds[1], 'bare')
+      await send('tess', 3, op.printingIds[0], 'bare')
+      await send('tom', 4, op.printingIds[0], 'sleeve')
+    }
+
+    it('stats count games, testers and holders', async () => {
+      await seedPhotos()
+      const res = await get('/admin/training', 'admin')
+      expect(res.status).toBe(200)
+      const stats = await res.json()
+      expect(stats.games).toEqual([{ game: 'op', photos: 4, testers: 2, cards: 1, versions: 2 }])
+      expect(stats.testers).toEqual([
+        { game: 'op', userId: tess, username: 'tess', photos: 3, today: 3, lastAt: NOW.toISOString() },
+        { game: 'op', userId: tom, username: 'tom', photos: 1, today: 1, lastAt: NOW.toISOString() }
+      ])
+      expect(stats.holders).toEqual([
+        { game: 'op', holder: 'bare', photos: 2, versions: 2 },
+        { game: 'op', holder: 'sleeve', photos: 2, versions: 1 }
+      ])
+      // The owner's session reads the stats too.
+      expect((await get('/admin/training', 'owner')).status).toBe(200)
+    })
+
+    it('stats need the owner or the token', async () => {
+      expect((await get('/admin/training', 'tess')).status).toBe(401)
+      expect((await get('/admin/training')).status).toBe(401)
+    })
+
+    it('labels page by id and carry the printing', async () => {
+      db.prepare('UPDATE card_printings SET set_rarity_code = ? WHERE id = ?').run(
+        'OP01-001_p1',
+        op.printingIds[1]
+      )
+      await seedPhotos()
+      const first = await (await get('/admin/training/labels?game=op&limit=2', 'admin')).json()
+      expect(first.more).toBe(true)
+      expect(first.labels).toHaveLength(2)
+      expect(first.labels[0]).toMatchObject({
+        clientId: cid(1),
+        language: 'en',
+        number: 'OP01-001',
+        holder: 'sleeve',
+        username: 'tess'
+      })
+      const second = first.labels[1]
+      expect(second).toMatchObject({
+        clientId: cid(2),
+        bandaiId: 'OP01-001_p1',
+        language: 'en',
+        number: 'OP01-001',
+        version: (
+          db.prepare('SELECT set_rarity FROM card_printings WHERE id = ?').get(op.printingIds[1]) as {
+            set_rarity: string
+          }
+        ).set_rarity
+      })
+      const rest = await (
+        await get(`/admin/training/labels?game=op&after=${second.id}&limit=2`, 'admin')
+      ).json()
+      expect(rest.more).toBe(false)
+      expect(rest.labels.map((l: { clientId: string }) => l.clientId)).toEqual([cid(3), cid(4)])
+    })
+
+    it('labels and photo are token-only', async () => {
+      await seedPhotos()
+      const id = (db.prepare('SELECT id FROM training_photos ORDER BY id').get() as { id: number }).id
+      for (const path of ['/admin/training/labels?game=op', `/admin/training/photo/${id}`]) {
+        expect((await get(path, 'owner')).status).toBe(401)
+        expect((await get(path, 'tess')).status).toBe(401)
+        expect((await get(path)).status).toBe(401)
+        expect((await get(path, 'admin')).status).toBe(200)
+      }
+      expect((await get('/admin/training/photo/99999', 'admin')).status).toBe(404)
+    })
+
+    it('photo streams the jpeg privately', async () => {
+      await seedPhotos()
+      const id = (db.prepare('SELECT id FROM training_photos ORDER BY id').get() as { id: number }).id
+      const res = await get(`/admin/training/photo/${id}`, 'admin')
+      expect(res.headers.get('content-type')).toBe('image/jpeg')
+      expect(res.headers.get('cache-control')).toBe('no-store')
+      expect(new Uint8Array(await res.arrayBuffer())).toEqual(JPEG)
+    })
+  })
 })

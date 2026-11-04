@@ -18,7 +18,8 @@ export interface TrainingBucket {
     opts: { httpMetadata: { contentType: string } }
   ): Promise<unknown>
   get(key: string): Promise<{ body: ReadableStream } | null>
-  delete(key: string): Promise<void>
+  /** One key, or up to 1000 at once (as R2's binding allows). */
+  delete(keys: string | string[]): Promise<void>
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000
@@ -124,7 +125,15 @@ async function upload(
   await training.put(key, body.buffer as ArrayBuffer, {
     httpMetadata: { contentType: 'image/jpeg' }
   })
-  // Uploads in flight meanwhile may have reached the cap.
+  // An upload of the same client id in flight meanwhile may have stored its row, which points at
+  // this same key: that photo is kept, and this one's answer is the same as a repeat's.
+  if (
+    deps.db
+      .prepare('SELECT 1 FROM training_photos WHERE user_id = ? AND client_id = ?')
+      .get(userId, clientId)
+  )
+    return json(summary(deps, userId, label.game))
+  // Other uploads in flight meanwhile may have reached the cap.
   if (sentToday(deps, userId) >= TRAINING_DAILY_CAP) {
     await training.delete(key).catch(() => undefined)
     return json({ error: 'daily-cap' }, 429)

@@ -4,6 +4,9 @@ import { revokeAppleToken } from './apple'
 import { clearSessionCookie, currentUser, fromPublicOrigin } from './auth'
 import { mergedFrom } from './merge'
 
+/** The most keys one R2 delete call takes. */
+const DELETE_BATCH = 1000
+
 const json = (body: unknown, status: number): Response =>
   new Response(JSON.stringify(body), {
     status,
@@ -78,11 +81,18 @@ export async function deleteAccountRoute(req: Request, deps: AppDeps): Promise<R
     }
     deleteUserData(deps.db, userId)
   })()
-  if (deps.training && photoKeys.length > 0) {
-    const training = deps.training
-    const results = await Promise.allSettled(photoKeys.map((k) => training.delete(k)))
-    const failed = results.filter((r) => r.status === 'rejected').length
-    if (failed > 0) console.warn(`${failed} training photo(s) of a deleted account not deleted`)
+  if (deps.training) {
+    // R2 deletes up to 1000 keys a call; one call per batch, in turn.
+    let failed = 0
+    for (let i = 0; i < photoKeys.length; i += DELETE_BATCH) {
+      const batch = photoKeys.slice(i, i + DELETE_BATCH)
+      await deps.training.delete(batch).catch(() => (failed += batch.length))
+    }
+    // The keys are under training/<game>/<user id>/, so a sweep can find what was left.
+    if (failed > 0)
+      console.warn(
+        `${failed} training photo(s) not deleted for deleted account(s) ${[userId, ...held].join(', ')}`
+      )
   }
   if (apple) {
     const revoked = await revokeAppleToken(apple.refresh_token, deps).catch(() => false)

@@ -53,8 +53,8 @@ export function memoryBucket(): ImageBucket &
     async put(key, value, opts) {
       store.set(key, { bytes: value, contentType: opts.httpMetadata.contentType, etag: `"v${++writes}"` })
     },
-    async delete(key) {
-      store.delete(key)
+    async delete(keys) {
+      for (const key of typeof keys === 'string' ? [keys] : keys) store.delete(key)
     }
   }
 }

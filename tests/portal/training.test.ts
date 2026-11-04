@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type Database from 'better-sqlite3'
 import { handle, type AppDeps } from '../../workers/portal/src/app'
 import { thumbsRoute, type ThumbBucket } from '../../workers/portal/src/thumbs'
@@ -372,6 +372,83 @@ describe('/api/training', () => {
     expect(bucket.store.has(key(tess))).toBe(false)
     expect(bucket.store.has(key(tom))).toBe(true)
     expect(rows().map((r) => r.user_id)).toEqual([tom])
+  })
+
+  it('account deletion deletes over 1000 objects in batches of 1000, and logs a failed batch', async () => {
+    const ins = db.prepare(
+      `INSERT INTO training_photos (user_id, client_id, game, card_id, printing_id, holder, device,
+         app_version, taken_at, created_at, bytes, r2_key)
+       VALUES (?, ?, 'op', ?, ?, 'bare', 'd', '0.54.0', 'x', 'x', 3, ?)`
+    )
+    const keys = Array.from({ length: 1001 }, (_, i) => `training/op/${tess}/c${i}.jpg`)
+    db.transaction(() => {
+      keys.forEach((k, i) => {
+        ins.run(tess, `c${i}`, op.cardIds[0], op.printingIds[0], k)
+        bucket.store.set(k, { bytes: JPEG.buffer, contentType: 'image/jpeg', etag: '"x"' })
+      })
+    })()
+    const calls: (string | string[])[] = []
+    const remove = bucket.delete.bind(bucket)
+    bucket.delete = async (k) => {
+      calls.push(k)
+      return remove(k)
+    }
+    const deleteAccount = (who: string): Promise<Response> =>
+      handle(
+        new Request(`${BASE}/api/account/delete`, {
+          method: 'POST',
+          headers: { ...auth(who), 'content-type': 'application/json' },
+          body: JSON.stringify({ confirm: 'delete' })
+        }),
+        deps
+      )
+    expect((await deleteAccount('tess')).status).toBe(204)
+    expect(calls.map((c) => (Array.isArray(c) ? c.length : 'one'))).toEqual([1000, 1])
+    expect(keys.filter((k) => bucket.store.has(k))).toEqual([])
+
+    // A failing batch is logged with the account, and the account is deleted all the same.
+    ins.run(tom, 'z', op.cardIds[0], op.printingIds[0], `training/op/${tom}/z.jpg`)
+    bucket.delete = async () => {
+      throw new Error('R2 down')
+    }
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    expect((await deleteAccount('tom')).status).toBe(204)
+    expect(warn).toHaveBeenCalledWith(
+      `1 training photo(s) not deleted for deleted account(s) ${tom}`
+    )
+    warn.mockRestore()
+  })
+
+  it('a same-id upload that finishes first at the cap keeps its photo', async () => {
+    const at = new Date(NOW.getTime() - HOUR).toISOString()
+    const ins = db.prepare(
+      `INSERT INTO training_photos (user_id, client_id, game, card_id, printing_id, holder, device,
+         app_version, taken_at, created_at, bytes, r2_key)
+       VALUES (?, ?, 'op', ?, ?, 'bare', 'd', '0.54.0', ?, ?, 3, ?)`
+    )
+    db.transaction(() => {
+      for (let i = 0; i < 499; i++)
+        ins.run(
+          tess,
+          `c${i}`,
+          op.cardIds[0],
+          op.printingIds[0],
+          at,
+          at,
+          `training/op/${tess}/c${i}.jpg`
+        )
+    })()
+    // While this upload's put is in flight, the other upload of the same id stores its row.
+    const put = bucket.put.bind(bucket)
+    bucket.put = async (k, value, opts) => {
+      await put(k, value, opts)
+      ins.run(tess, CID, op.cardIds[0], op.printingIds[0], at, NOW.toISOString(), k)
+    }
+    const res = await upload('tess')
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ total: 500, today: 500, dailyCap: 500 })
+    expect(bucket.store.has(key(tess))).toBe(true)
+    expect(rows().filter((r) => r.client_id === CID)).toHaveLength(1)
   })
 
   it('training keys are never served', async () => {

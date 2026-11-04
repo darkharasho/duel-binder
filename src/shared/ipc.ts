@@ -158,6 +158,7 @@ export interface Api {
      * English twin of a card with none of its own), each with the card whose art it shows.
      */
     chineseOfArt(cardIds: number[]): Promise<{ twinId: number; printing: ScanPrinting }[]>
+    numberPrefixes(): Promise<string[]>
     /** Every artwork of a card printed in the language, in the shown game. */
     imagesForLanguage(language: Language): Promise<number[]>
     fingerprints(game: GameId): Promise<ArrayBuffer | null>
@@ -395,6 +396,7 @@ export const INVOKE_CHANNELS = [
   'scan:cardsForImages',
   'scan:imagesForLanguage',
   'scan:chineseOfArt',
+  'scan:numberPrefixes',
   'scan:fingerprints',
   'scan:fingerprintRefs',
   'scan:fingerprintStatus',

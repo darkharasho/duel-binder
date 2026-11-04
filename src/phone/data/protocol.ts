@@ -32,7 +32,10 @@ export const STORE_METHODS = [
   'fingerprintRefs',
   'printingPhotoIds',
   'fingerprintStatus',
-  'refreshFingerprints'
+  'refreshFingerprints',
+  'trainingUpload',
+  'trainingDelete',
+  'trainingSummary'
 ] as const satisfies readonly (keyof PhoneStore)[]
 
 type StoreMethod = (typeof STORE_METHODS)[number]
@@ -134,14 +137,15 @@ export function connectStore(port: MessagePortLike): PhoneStore {
   const call = (
     method: StoreMethod,
     args: unknown[],
-    onProgress?: Pending['onProgress']
+    onProgress?: Pending['onProgress'],
+    transfer: Transferable[] = []
   ): Promise<unknown> =>
     new Promise((resolve, reject) => {
       if (fatal) return reject(fatal)
       const id = nextId++
       pending.set(id, { resolve, reject, onProgress })
       const req: StoreRequest = { id, method, args }
-      port.postMessage(req)
+      port.postMessage(req, transfer)
     })
 
   const client = {} as Record<StoreMethod, (...a: unknown[]) => Promise<unknown>>
@@ -149,6 +153,12 @@ export function connectStore(port: MessagePortLike): PhoneStore {
     client[method] =
       method === 'fillCatalog'
         ? (onProgress) => call(method, [], onProgress as Pending['onProgress'])
-        : (...args) => call(method, args)
+        : method === 'trainingUpload'
+          ? (clientId, label, jpeg) => {
+              // Moves a copy, so the 8 MB photo isn't cloned and the caller's buffer stays usable.
+              const copy = (jpeg as ArrayBuffer).slice(0)
+              return call(method, [clientId, label, copy], undefined, [copy])
+            }
+          : (...args) => call(method, args)
   return client as unknown as PhoneStore
 }

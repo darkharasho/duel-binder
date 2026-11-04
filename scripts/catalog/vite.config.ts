@@ -21,7 +21,8 @@ export default defineConfig({
         build: `${root}scripts/catalog/build.ts`,
         parity: `${root}scripts/catalog/parity.ts`,
         'set-art': `${root}scripts/catalog/setArtDryRun.ts`,
-        thumbs: `${root}scripts/catalog/thumbs.ts`
+        thumbs: `${root}scripts/catalog/thumbs.ts`,
+        'pull-training': `${root}scripts/scan/pull-training.ts`
       },
       output: { format: 'es', entryFileNames: '[name].mjs' }
     }

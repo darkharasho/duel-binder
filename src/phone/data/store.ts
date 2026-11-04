@@ -38,6 +38,7 @@ import { scanRefs } from '../../main/repo/scanRefs'
 import { readBody } from '../../shared/scan/readBody'
 import type { FingerprintStatus } from '../../shared/scan/types'
 import type { CollectionStats, UnsyncedEntry } from '../../shared/types'
+import { labelParams, type TrainingLabel, type TrainingSummary } from '../../shared/training'
 import { PHONE_FORMAT } from './phoneSchema'
 
 export type PhoneAccount = { state: 'signed-out' } | { state: 'signed-in'; user: Me }
@@ -61,6 +62,15 @@ export interface PhoneSyncState {
   lastSyncedAt: string | null
   signedOut: boolean
 }
+
+/** How a training photo call went; `retry` says whether to keep the outbox item for later. */
+export type TrainingSend =
+  | { ok: true; summary: TrainingSummary | null }
+  | {
+      ok: false
+      retry: boolean
+      reason: 'offline' | 'signed-out' | 'daily-cap' | 'too-big' | 'rejected'
+    }
 
 export interface PhoneStore {
   account(): Promise<PhoneAccount>
@@ -106,6 +116,15 @@ export interface PhoneStore {
   printingPhotoIds(printingIds: number[]): Promise<[number, number][]>
   fingerprintStatus(game: GameId): Promise<FingerprintStatus>
   refreshFingerprints(opts: { game: GameId; force?: boolean }): Promise<FingerprintStatus>
+  /**
+   * Sends one labelled training photo (idempotent per client id). These calls never wait for the
+   * serial queue, so a catalog fill doesn't hold an upload; they never reject.
+   */
+  trainingUpload(clientId: string, label: TrainingLabel, jpeg: ArrayBuffer): Promise<TrainingSend>
+  /** Deletes this account's training photo with that client id, if the server has it. */
+  trainingDelete(clientId: string): Promise<TrainingSend>
+  /** This account's training photo counts for game; null signed out, offline or refused. */
+  trainingSummary(game: GameId): Promise<TrainingSummary | null>
 }
 
 /**
@@ -138,6 +157,9 @@ const FINGERPRINT_CHECK_MS = 60 * 60 * 1000
 const REVOKE_TIMEOUT_MS = 10_000
 /** A portal call the user is waiting on (friends) gives up after this long. */
 const PORTAL_TIMEOUT_MS = 15_000
+/** A training photo is up to 8 MB, so its upload gets longer than the other training calls. */
+const TRAINING_UPLOAD_TIMEOUT_MS = 60_000
+const TRAINING_TIMEOUT_MS = 15_000
 /** The `phone_files` row of a game's fingerprint file; Yu-Gi-Oh!'s keeps its original name. */
 const fingerprintsName = (game: GameId): string =>
   game === 'ygo' ? 'fingerprints' : `fingerprints:${game}`
@@ -172,6 +194,7 @@ const READ_CHANNELS: ReadonlySet<DataChannel> = new Set<DataChannel>([
   'scan:cardsForImages',
   'scan:imagesForLanguage',
   'scan:chineseOfArt',
+  'scan:numberPrefixes',
   'stats:get',
   'sets:list',
   'sets:checklist',
@@ -315,6 +338,48 @@ export function createPhoneStore(deps: {
   const serverSignedOut = (): void => {
     deleteState('token')
     recheckGame()
+  }
+
+  /**
+   * A /api/training/ call with the stored token, outside the serial queue. A 401 signs the phone
+   * out (unless another token was stored meanwhile); `ok` carries the body of a 200.
+   */
+  async function trainingCall(
+    path: string,
+    init: RequestInit & { headers?: Record<string, string> },
+    timeoutMs: number
+  ): Promise<TrainingSend> {
+    const t = token()
+    if (t === null) return { ok: false, retry: true, reason: 'signed-out' }
+    let res: Response
+    try {
+      res = await doFetch(`${base}/api/training/${path}`, {
+        ...init,
+        headers: { ...init.headers, authorization: `Bearer ${t}` },
+        redirect: 'error',
+        signal: AbortSignal.timeout(timeoutMs)
+      })
+    } catch {
+      return { ok: false, retry: true, reason: 'offline' }
+    }
+    if (res.status === 401) {
+      if (token() === t) serverSignedOut()
+      return { ok: false, retry: true, reason: 'signed-out' }
+    }
+    if (res.status >= 500) return { ok: false, retry: true, reason: 'offline' }
+    if (res.status === 429) return { ok: false, retry: true, reason: 'daily-cap' }
+    if (res.status === 413) return { ok: false, retry: false, reason: 'too-big' }
+    if (res.status !== 200 && res.status !== 204)
+      return { ok: false, retry: false, reason: 'rejected' }
+    if (res.status === 204) return { ok: true, summary: null }
+    const body = (await res.json().catch(() => null)) as Partial<TrainingSummary> | null
+    return {
+      ok: true,
+      summary:
+        body && typeof body.total === 'number' && typeof body.today === 'number'
+          ? { total: body.total, today: body.today, dailyCap: Number(body.dailyCap) }
+          : null
+    }
   }
 
   /** Runs a call to the portal; a 401 signs the phone out before the error goes on. */
@@ -869,6 +934,29 @@ export function createPhoneStore(deps: {
         } catch {
           return fingerprintStatus(game, true)
         }
-      })
+      }),
+
+    trainingUpload: (clientId, label, jpeg) =>
+      trainingCall(
+        `photos/${encodeURIComponent(clientId)}?${labelParams(label)}`,
+        { method: 'POST', headers: { 'content-type': 'image/jpeg' }, body: jpeg },
+        TRAINING_UPLOAD_TIMEOUT_MS
+      ),
+
+    trainingDelete: (clientId) =>
+      trainingCall(
+        `photos/${encodeURIComponent(clientId)}`,
+        { method: 'DELETE' },
+        TRAINING_TIMEOUT_MS
+      ),
+
+    trainingSummary: async (game) => {
+      const r = await trainingCall(
+        `summary?game=${encodeURIComponent(game)}`,
+        { method: 'GET' },
+        TRAINING_TIMEOUT_MS
+      )
+      return r.ok ? r.summary : null
+    }
   }
 }

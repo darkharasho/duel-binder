@@ -10,6 +10,7 @@
 
 import { GAMES } from '../../../src/shared/games'
 import { GAME_IDS } from '../../../src/shared/games/types'
+import { HOLDER_LABELS } from '../../../src/shared/training'
 
 /** The games only listed testers see: the panel's tables and its add form. */
 const TESTER_GAMES = GAME_IDS.filter((id) => GAMES[id].access === 'testers').map((id) => ({
@@ -107,6 +108,7 @@ const SCRIPT = `
 const $ = (id) => document.getElementById(id)
 const FREE = ${FREE_STORAGE_BYTES}
 const TESTER_GAMES = ${JSON.stringify(TESTER_GAMES)}
+const HOLDER_LABELS = ${JSON.stringify(HOLDER_LABELS)}
 const n = (v) => (v ?? 0).toLocaleString()
 const bytes = (b) => b == null ? 'unknown' : b < 1e6 ? (b / 1e3).toFixed(1) + ' KB' : b < 1e9 ? (b / 1e6).toFixed(1) + ' MB' : (b / 1e9).toFixed(2) + ' GB'
 
@@ -641,7 +643,47 @@ async function loadTesters() {
   $('testers').replaceChildren(p)
 }
 
-const TABS = ['overview', 'runs', 'people', 'activity', 'errors', 'scanner', 'storage', 'merges', 'testers']
+/** What the testers' training photos add up to: per game, per tester and per holder. */
+async function loadPhotos() {
+  const p = el('section', null, 'panel')
+  p.append(el('h2', 'Photos'))
+  const grid = (heads, rows) => {
+    const table = el('table', null, 'history')
+    const head = el('tr')
+    for (const h of heads) head.append(el('th', h))
+    table.append(head)
+    for (const r of rows) {
+      const tr = el('tr')
+      for (const c of r) tr.append(el('td', String(c)))
+      table.append(tr)
+    }
+    return table
+  }
+  try {
+    const res = await fetch('/admin/training', { credentials: 'same-origin' })
+    if (!res.ok) throw new Error('HTTP ' + res.status)
+    const s = await res.json()
+    if (!s.games.length) p.append(el('p', 'No photos yet.', 'note'))
+    else {
+      const name = (id) => (TESTER_GAMES.find((g) => g.id === id) || { name: id }).name
+      for (const g of s.games) {
+        p.append(el('h3', name(g.game)))
+        p.append(grid(['Photos', 'Testers', 'Cards', 'Versions'], [[g.photos, g.testers, g.cards, g.versions]]))
+        p.append(el('h3', 'By tester'))
+        p.append(grid(['Tester', 'Photos', 'Last 24 h', 'Last photo'],
+          s.testers.filter((t) => t.game === g.game).map((t) => [t.username, t.photos, t.today, new Date(t.lastAt).toLocaleString()])))
+        p.append(el('h3', 'By holder'))
+        p.append(grid(['Holder', 'Photos', 'Versions'],
+          s.holders.filter((h) => h.game === g.game).map((h) => [HOLDER_LABELS[h.holder] || h.holder, h.photos, h.versions])))
+      }
+    }
+  } catch (e) {
+    p.append(el('p', 'Could not load photos: ' + e.message, 'note'))
+  }
+  $('photos').replaceChildren(p)
+}
+
+const TABS = ['overview', 'runs', 'people', 'activity', 'errors', 'scanner', 'storage', 'merges', 'testers', 'photos']
 
 function showTab() {
   const wanted = location.hash.slice(1)
@@ -655,12 +697,13 @@ function showTab() {
 
 window.addEventListener('hashchange', showTab)
 showTab()
-$('refresh').addEventListener('click', () => { load(); loadErrors(); loadRuns(); loadMerges(); loadTesters() })
+$('refresh').addEventListener('click', () => { load(); loadErrors(); loadRuns(); loadMerges(); loadTesters(); loadPhotos() })
 load()
 loadErrors()
 loadRuns()
 loadMerges()
 loadTesters()
+loadPhotos()
 `
 
 function csp(nonce: string): string {
@@ -692,7 +735,7 @@ export function adminPage(): Response {
 <header><div class="wrap">
 <div class="top"><h1>Duel Binder</h1><span class="badge">Admin</span><span class="pulse" id="pulse"></span>
 <span class="grow"></span><span class="at" id="at"></span><a href="/">Back to the app</a><button id="refresh" type="button">Refresh</button></div>
-<nav aria-label="Admin sections"><a href="#overview">Overview</a><a href="#runs">Runs</a><a href="#people">Users</a><a href="#activity">Usage</a><a href="#errors">Errors</a><a href="#scanner">Scanner &amp; prices</a><a href="#storage">Storage</a><a href="#merges">Merges</a><a href="#testers">Testers</a></nav>
+<nav aria-label="Admin sections"><a href="#overview">Overview</a><a href="#runs">Runs</a><a href="#people">Users</a><a href="#activity">Usage</a><a href="#errors">Errors</a><a href="#scanner">Scanner &amp; prices</a><a href="#storage">Storage</a><a href="#merges">Merges</a><a href="#testers">Testers</a><a href="#photos">Photos</a></nav>
 </div></header>
 <main class="wrap">
 <section data-tab id="overview">
@@ -707,6 +750,7 @@ export function adminPage(): Response {
 <section data-tab class="stack" id="storage" hidden></section>
 <section data-tab id="merges" hidden></section>
 <section data-tab id="testers" hidden></section>
+<section data-tab id="photos" hidden></section>
 </main>
 <script nonce="${nonce}">${SCRIPT}</script>
 </body>

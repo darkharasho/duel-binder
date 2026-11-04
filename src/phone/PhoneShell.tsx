@@ -32,13 +32,17 @@ import { GameSegments } from '@/components/GameSwitch'
 import { api, mutationInvalidationKeys } from '@/lib/api'
 import { useFriendsOverview } from '@/lib/friends'
 import { GameProvider, pageInGame, useGame } from '@/lib/game'
+import type { GameId } from '@shared/games'
 import { cn } from '@/lib/utils'
 import { useBackHandler } from './backButton'
 import { usePhone } from './context'
+import type { PhoneStore } from './data/store'
 import { refreshAllFingerprints } from './refreshFingerprints'
 import { ScannerScreen } from './ScannerScreen'
 import { Settings } from './Settings'
 import { StatusLine } from './StatusLine'
+import { ContributeScreen } from './training/ContributeScreen'
+import { trainingOutbox } from './training/outbox'
 import { UpdateBanner } from './UpdateBanner'
 
 // Loaded on demand, as on the desktop, so Rip stays out of the first load.
@@ -62,9 +66,28 @@ const MORE: { page: Page; label: string; icon: LucideIcon }[] = [
 const GRID_COLS: Record<number, string> = { 4: 'grid-cols-4', 5: 'grid-cols-5' }
 const IN_MORE = new Set<Page>(MORE.map((m) => m.page))
 
-/** Once the app is ready: a sync, a daily card data check, the fingerprints, and persistent storage. */
+/** Sends any training photos (and deletes) waiting from earlier; never throws. */
+function drainTraining(store: PhoneStore, userId: number): void {
+  // No IndexedDB (jsdom, or a browser that lacks it): nothing can be waiting.
+  if (typeof indexedDB === 'undefined') return
+  try {
+    void trainingOutbox()
+      .drain(userId, {
+        upload: (id, label, jpeg) => store.trainingUpload(id, label, jpeg),
+        remove: (id) => store.trainingDelete(id)
+      })
+      .catch(() => undefined)
+  } catch {
+    // Best effort: the next start or the next time online tries again.
+  }
+}
+
+/**
+ * Once the app is ready: a sync, a daily card data check, the fingerprints, persistent storage and
+ * the training photo outbox (again whenever the phone comes back online).
+ */
 function useReadyChecks(): void {
-  const { store } = usePhone()
+  const { store, user } = usePhone()
   const qc = useQueryClient()
   const started = useRef(false)
   useEffect(() => {
@@ -82,7 +105,13 @@ function useReadyChecks(): void {
       })
       .catch(() => undefined)
     void refreshAllFingerprints(store).catch(() => undefined)
-  }, [store, qc])
+    drainTraining(store, user.id)
+  }, [store, qc, user.id])
+  useEffect(() => {
+    const online = (): void => drainTraining(store, user.id)
+    window.addEventListener('online', online)
+    return () => window.removeEventListener('online', online)
+  }, [store, user.id])
 }
 
 /**
@@ -107,7 +136,7 @@ function Shell({ engineFactory }: { engineFactory?: EngineFactory }): React.JSX.
   const { page, onNavigate } = pages
   const [moreOpen, setMoreOpen] = useState(false)
   const requests = useFriendsOverview().data?.incoming.length ?? 0
-  const { def, available } = useGame()
+  const { def, available, setGame } = useGame()
   // Scan and Rip only for a game that has them; on Pokémon the raised Scan tab goes.
   const tabs = TABS.filter((t) => pageInGame(t.page, def))
   const more = MORE.filter((m) => pageInGame(m.page, def))
@@ -140,6 +169,17 @@ function Shell({ engineFactory }: { engineFactory?: EngineFactory }): React.JSX.
   }
   // Android's back from any other page (the scanner included) goes Home; from Home it leaves.
   useBackHandler(page !== 'dashboard', () => go('dashboard'))
+
+  // Training photos for a tester game. Held here, outside the page switch's per-game remount, so
+  // the switch to that game doesn't drop it.
+  const [contribute, setContribute] = useState<GameId | null>(null)
+  const openContribute = async (g: GameId): Promise<void> => {
+    await setGame(g)
+    setContribute(g)
+  }
+  const closeContribute = (): void => setContribute(null)
+  // Registered after the page's, so back closes the screen first.
+  useBackHandler(contribute !== null, closeContribute)
 
   return (
     <div
@@ -174,11 +214,17 @@ function Shell({ engineFactory }: { engineFactory?: EngineFactory }): React.JSX.
                   <RipPage />
                 </Suspense>
               }
-              settings={<Settings />}
+              settings={<Settings onContribute={(g) => void openContribute(g)} />}
             />
           </MainScrollContext.Provider>
         </ArtWashContext.Provider>
       </main>
+
+      {contribute !== null && (
+        <div className="fixed inset-0 z-50">
+          <ContributeScreen game={contribute} onClose={closeContribute} />
+        </div>
+      )}
 
       {/* Behind the status bar, which the iOS app draws over the page: frosted like the page
           header below it, so the cards scrolling up under the clock don't show through. */}

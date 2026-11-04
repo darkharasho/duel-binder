@@ -12,7 +12,8 @@ import { encodeFingerprintRefs, hashHex } from '../../src/shared/scan/fingerprin
 import { HASH_WORDS } from '../../src/shared/scan/fingerprint'
 import { openWasmDb } from '../../src/phone/data/wasmSql'
 import { PHONE_FORMAT } from '../../src/phone/data/phoneSchema'
-import { createPhoneStore, type PhoneStore } from '../../src/phone/data/store'
+import { createPhoneStore, type PhoneStore, type TrainingSend } from '../../src/phone/data/store'
+import { labelParams, type TrainingLabel, type TrainingSummary } from '../../src/shared/training'
 import { inProcessPortal, PORTAL, SERVER_NOW } from './cloudHelpers'
 import { seedPokemon } from '../fixtures/pokemon'
 import { seedOnePiece } from '../fixtures/onePiece'
@@ -901,7 +902,9 @@ describe('phone store', () => {
 
     await ready()
     expect(
-      Number((db.prepare("SELECT COUNT(*) AS n FROM cards WHERE game = 'op'").get() as { n: number }).n)
+      Number(
+        (db.prepare("SELECT COUNT(*) AS n FROM cards WHERE game = 'op'").get() as { n: number }).n
+      )
     ).toBe(1)
 
     clock = new Date(SERVER_NOW.getTime() + 3_600_000)
@@ -1143,5 +1146,175 @@ describe('phone store: active game', () => {
     await store.sync()
     expect((await store.account()).state).toBe('signed-out')
     expect(activeGameMeta()).toBe('ygo')
+  })
+})
+
+describe('phone store: training photos', () => {
+  const CID = '0b0f3a52-6c1e-4d3a-9f2e-1a2b3c4d5e6f'
+  const LABEL: TrainingLabel = {
+    game: 'op',
+    cardId: 7,
+    printingId: 12,
+    holder: 'sleeve',
+    device: 'Pixel 8',
+    appVersion: '0.54.0',
+    takenAt: '2026-11-04T10:00:00.000Z'
+  }
+  const JPEG = (): ArrayBuffer => new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3]).buffer
+  const SUMMARY: TrainingSummary = { total: 3, today: 1, dailyCap: 500 }
+
+  /** Answers every /api/training/ request with `answer`; anything else goes to the portal. */
+  function trainingNet(answer: () => Response | Promise<Response>): {
+    calls: { url: string; init?: RequestInit }[]
+  } {
+    const calls: { url: string; init?: RequestInit }[] = []
+    net = (async (input, init) => {
+      const url = String(input)
+      if (!url.includes('/api/training/')) return real(input, init)
+      calls.push({ url, init })
+      return answer()
+    }) as typeof fetch
+    return { calls }
+  }
+  const answer = (status: number, body?: unknown): Response =>
+    new Response(body === undefined ? null : JSON.stringify(body), {
+      status,
+      headers: body === undefined ? {} : { 'content-type': 'application/json' }
+    })
+
+  it('training upload sends the label as params and the jpeg as body', async () => {
+    await store.signIn(token, me)
+    const { calls } = trainingNet(() => answer(200, SUMMARY))
+
+    const r = await store.trainingUpload(CID, LABEL, JPEG())
+
+    expect(r).toEqual({ ok: true, summary: SUMMARY })
+    expect(calls).toHaveLength(1)
+    const url = new URL(calls[0].url)
+    expect(`${url.origin}${url.pathname}`).toBe(`${PORTAL}/api/training/photos/${CID}`)
+    expect(url.search).toBe(`?${labelParams(LABEL)}`)
+    expect(url.searchParams.get('game')).toBe('op')
+    expect(url.searchParams.get('card')).toBe('7')
+    expect(url.searchParams.get('holder')).toBe('sleeve')
+    expect(calls[0].init?.method).toBe('POST')
+    const body = calls[0].init?.body as ArrayBuffer
+    expect([...new Uint8Array(body)]).toEqual([...new Uint8Array(JPEG())])
+    const headers = new Headers(calls[0].init?.headers)
+    expect(headers.get('authorization')).toBe(`Bearer ${token}`)
+    expect(headers.get('content-type')).toBe('image/jpeg')
+  })
+
+  it('training delete and summary name the photo and the game', async () => {
+    await store.signIn(token, me)
+    const { calls } = trainingNet(() => answer(204))
+    expect(await store.trainingDelete(CID)).toEqual({ ok: true, summary: null })
+    expect(calls[0].url).toBe(`${PORTAL}/api/training/photos/${CID}`)
+    expect(calls[0].init?.method).toBe('DELETE')
+    expect(new Headers(calls[0].init?.headers).get('authorization')).toBe(`Bearer ${token}`)
+
+    const summaryCalls = trainingNet(() => answer(200, SUMMARY)).calls
+    expect(await store.trainingSummary('op')).toEqual(SUMMARY)
+    expect(summaryCalls[0].url).toBe(`${PORTAL}/api/training/summary?game=op`)
+    trainingNet(() => answer(404, { error: 'not-found' }))
+    expect(await store.trainingSummary('op')).toBeNull()
+    trainingNet(() => {
+      throw new TypeError('Failed to fetch')
+    })
+    expect(await store.trainingSummary('op')).toBeNull()
+  })
+
+  it('training answers map to retry or drop', async () => {
+    const cases: [string, () => Response, TrainingSend][] = [
+      ['200', () => answer(200, SUMMARY), { ok: true, summary: SUMMARY }],
+      ['204', () => answer(204), { ok: true, summary: null }],
+      [
+        '429',
+        () => answer(429, { error: 'daily-cap' }),
+        { ok: false, retry: true, reason: 'daily-cap' }
+      ],
+      [
+        '413',
+        () => answer(413, { error: 'too-big' }),
+        { ok: false, retry: false, reason: 'too-big' }
+      ],
+      [
+        '404',
+        () => answer(404, { error: 'not-found' }),
+        { ok: false, retry: false, reason: 'rejected' }
+      ],
+      [
+        '415',
+        () => answer(415, { error: 'not-jpeg' }),
+        { ok: false, retry: false, reason: 'rejected' }
+      ],
+      [
+        '503',
+        () => answer(503, { error: 'unavailable' }),
+        { ok: false, retry: true, reason: 'offline' }
+      ],
+      [
+        'a fetch throw',
+        () => {
+          throw new TypeError('Failed to fetch')
+        },
+        { ok: false, retry: true, reason: 'offline' }
+      ]
+    ]
+    await store.signIn(token, me)
+    for (const [name, respond, expected] of cases) {
+      trainingNet(respond)
+      expect([name, await store.trainingUpload(CID, LABEL, JPEG())]).toEqual([name, expected])
+      expect([name, await store.trainingDelete(CID)]).toEqual([
+        name,
+        expected.ok ? { ok: true, summary: name === '200' ? SUMMARY : null } : expected
+      ])
+    }
+  })
+
+  it('a training 401 signs the phone out', async () => {
+    await store.signIn(token, me)
+    trainingNet(() => answer(401, { error: 'signed-out' }))
+    expect(await store.trainingUpload(CID, LABEL, JPEG())).toEqual({
+      ok: false,
+      retry: true,
+      reason: 'signed-out'
+    })
+    expect(await store.account()).toEqual({ state: 'signed-out' })
+  })
+
+  it('signed out, training calls answer signed-out with no fetch made', async () => {
+    const { calls } = trainingNet(() => answer(200, SUMMARY))
+    const signedOut = { ok: false, retry: true, reason: 'signed-out' }
+    expect(await store.trainingUpload(CID, LABEL, JPEG())).toEqual(signedOut)
+    expect(await store.trainingDelete(CID)).toEqual(signedOut)
+    expect(await store.trainingSummary('op')).toBeNull()
+    expect(calls).toEqual([])
+    expect(requests).toEqual([])
+  })
+
+  it("training upload doesn't wait for a catalog fill", async () => {
+    await store.signIn(token, me)
+    let release!: () => void
+    const gate = new Promise<void>((r) => (release = r))
+    let stalled = false
+    net = (async (input, init) => {
+      const url = String(input)
+      if (url.includes('/api/training/')) return answer(200, SUMMARY)
+      if (url.includes('/api/catalog/changes')) {
+        stalled = true
+        await gate
+      }
+      return real(input, init)
+    }) as typeof fetch
+    const fill = store.fillCatalog(() => {})
+    await vi.waitFor(() => expect(stalled).toBe(true))
+
+    const sent = await Promise.race([
+      store.trainingUpload(CID, LABEL, JPEG()),
+      new Promise<'waiting'>((r) => setTimeout(() => r('waiting'), 1000))
+    ])
+    expect(sent).toEqual({ ok: true, summary: SUMMARY })
+    release()
+    await fill
   })
 })

@@ -33,6 +33,7 @@ import type { EmailSender } from './emailSend'
 import { emailAuthRoute, emailStatusRoute } from './emailAuth'
 import { emailClaimPage, emailFormRoute, emailMatchPage, emailStartPage } from './emailPages'
 import { appPreflight, withAppCors } from './appCors'
+import { adminTrainingRoute, trainingRoute, type TrainingBucket } from './training'
 
 /** Vars and secrets the request handlers read. */
 export interface Env extends AppleSignInEnv {
@@ -57,6 +58,8 @@ export interface AppDeps {
   /** The static assets binding; the signed-in front page serves the built web app from it. */
   assets: { fetch(req: Request): Promise<Response> }
   images: ImageBucket
+  /** Where testers' training photos go (the IMAGES bucket, under training/); absent means uploads answer 503. */
+  training?: TrainingBucket
   /** Caps upstream image fetches per user; absent means unlimited. */
   imageQuota?: ImageQuota
   /** Caps signed-out upstream card-image fetches per client address; absent means unlimited. */
@@ -118,6 +121,8 @@ async function route(req: Request, deps: AppDeps): Promise<Response> {
   if (url.pathname === '/api/account/delete') return deleteAccountRoute(req, deps)
   if (url.pathname === '/api/usage') return reportUsage(req, deps)
   if (url.pathname === '/api/errors') return reportError(req, deps)
+  if (url.pathname.startsWith('/api/training/'))
+    return trainingRoute(req, deps, url.pathname.slice('/api/training/'.length))
   if (url.pathname.startsWith('/api/rpc/')) {
     let channel: string
     try {
@@ -143,6 +148,8 @@ async function route(req: Request, deps: AppDeps): Promise<Response> {
     return adminMergeRoute(req, deps)
   if (url.pathname === '/admin/testers' || url.pathname === '/admin/testers/remove')
     return adminTestersRoute(req, deps)
+  if (url.pathname === '/admin/training' || url.pathname.startsWith('/admin/training/'))
+    return adminTrainingRoute(req, deps)
   if (url.pathname.startsWith('/admin/')) return adminRoute(req, deps)
   return json({ error: 'Not found' }, 404)
 }

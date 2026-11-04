@@ -12,6 +12,14 @@ describe('admin page', () => {
     expect(html).not.toMatch(/ on(click|submit)=/)
   })
 
+  it('has a Photos tab', async () => {
+    const html = await adminPage().text()
+    expect(html).toContain('href="#photos"')
+    expect(html).toContain('id="photos"')
+    expect(html).toContain("fetch('/admin/training'")
+    expect(html).toContain('"bare":"Bare"')
+  })
+
   it('ships a script that parses', async () => {
     const html = await adminPage().text()
     const script = /<script nonce="[^"]+">([\s\S]*)<\/script>/.exec(html)![1]

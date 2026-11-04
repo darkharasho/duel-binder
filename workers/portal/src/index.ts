@@ -78,6 +78,7 @@ export class Store extends DurableObject<WorkerEnv> {
       db: this.db,
       assets: this.env.ASSETS,
       images: this.env.IMAGES,
+      training: this.env.IMAGES,
       imageQuota: this.imageQuota,
       anonImageQuota: this.anonImageQuota,
       anonMisses: this.anonMisses,

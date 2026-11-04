@@ -532,6 +532,25 @@ describe('merging two accounts', () => {
     })
   })
 
+  it('a merge moves training photos to the survivor', async () => {
+    const { me, other } = discordAndApple()
+    const ins = db.prepare(
+      `INSERT INTO training_photos (user_id, client_id, game, card_id, printing_id, holder, device,
+         app_version, taken_at, created_at, bytes, r2_key)
+       VALUES (?, ?, 'op', 1, 1, 'bare', 'd', '0.54.0', 'x', 'x', 3, ?)`
+    )
+    const keys = ['a', 'b'].map((c) => `training/op/${other}/${c}.jpg`)
+    ins.run(other, 'a', keys[0])
+    ins.run(other, 'b', keys[1])
+    const photos = (): unknown[] =>
+      db.prepare('SELECT user_id, r2_key FROM training_photos ORDER BY id').all()
+    const { ticket } = await appleTicket('mine')
+    await merged(await merge('mine', ticket))
+    expect(photos()).toEqual(keys.map((r2_key) => ({ user_id: me, r2_key })))
+    undoMerge(db, other, clock)
+    expect(photos()).toEqual(keys.map((r2_key) => ({ user_id: me, r2_key })))
+  })
+
   it('keeping their username moves it', async () => {
     const { me, other } = discordAndApple()
     const { ticket } = await appleTicket('mine')

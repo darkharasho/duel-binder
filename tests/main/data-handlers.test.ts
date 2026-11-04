@@ -161,6 +161,11 @@ describe('data handlers', () => {
     await expect(handlers['scan:cardsForImages']([1, 'x'])).rejects.toThrow('list of integers')
   })
 
+  it('scan:numberPrefixes lists the set codes of the active game', async () => {
+    const { handlers } = await make()
+    expect(await handlers['scan:numberPrefixes']()).toContain('LOB')
+  })
+
   it('games:setActive rejects a game the account may not use, and anything not a game', async () => {
     const { db, handlers, onGameChanged } = await make()
     await expect(handlers['games:setActive']('pkm')).rejects.toThrow("isn't available")

@@ -411,3 +411,14 @@ export function matchName(
   const name = names.find((n) => n.id === best.id)?.name
   return name === undefined ? null : { cardId: best.id, name, score: best.score }
 }
+
+/** The set codes ("OP01", "ST10", "P") before the dash in the game's printed numbers, for typing a number. */
+export function numberPrefixes(db: SqlDb, scope: Scope = LOCAL): string[] {
+  const rows = db
+    .prepare(
+      `SELECT DISTINCT substr(set_code, 1, instr(set_code, '-') - 1) AS prefix FROM card_printings
+       WHERE +game = ${scope.game} AND contributed = 0 AND instr(set_code, '-') > 1 ORDER BY prefix`
+    )
+    .all() as { prefix: string }[]
+  return rows.map((r) => r.prefix)
+}

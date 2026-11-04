@@ -17,6 +17,7 @@ import {
   cardsForImages,
   imagesForLanguage,
   chineseOfArt,
+  numberPrefixes,
   matchName,
   printingsByCode,
   printingsByNumber,
@@ -80,6 +81,7 @@ export const DATA_CHANNELS = [
   'scan:cardsForImages',
   'scan:imagesForLanguage',
   'scan:chineseOfArt',
+  'scan:numberPrefixes',
   'stats:get',
   'sets:list',
   'sets:checklist',
@@ -213,6 +215,7 @@ export function createDataHandlers({
         throw new Error('Card ids must be a list of integers')
       return chineseOfArt(db, cardIds)
     },
+    'scan:numberPrefixes': async () => numberPrefixes(db),
     'scan:imagesForLanguage': async (language: Language) =>
       imagesForLanguage(db, checkLanguage(language)),
     'scan:cardsForImages': async (imageIds: unknown) => {

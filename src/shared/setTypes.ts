@@ -29,7 +29,8 @@ const RULES: [SetType, RegExp][] = [
 
 /** A One Piece set by its code: ST decks, the Promotion and Other Product series, else boosters. */
 function onePieceSetType(setCode: string): SetType {
-  if (setCode.startsWith('ST')) return 'deck'
+  // FDS: the Japanese Family Deck Set.
+  if (setCode.startsWith('ST') || setCode === 'FDS') return 'deck'
   if (setCode === 'P') return 'promo'
   if (setCode === 'OPC') return 'collection'
   return 'booster'

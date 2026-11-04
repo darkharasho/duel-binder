@@ -91,6 +91,7 @@ const PKM_WINDOWS: readonly Box[] = [
   [0.097, 0.156, 0.9, 0.524]
 ]
 
+// The Record<'ygo' | 'pkm'> part lists the games that have a scan profile today.
 export const SCAN_PROFILES: Record<'ygo' | 'pkm', ScanProfile> & Partial<Record<GameId, ScanProfile>> = {
   ygo: {
     game: 'ygo',

@@ -873,10 +873,16 @@ describe('phone store', () => {
     clock = new Date(SERVER_NOW.getTime() + 3_600_000)
     expect(await store.updateCatalog()).toBe(true)
     expect(pkmCards()).toBe(2)
+    // The owner also sees One Piece, which has no catalog yet: a row here keeps its emptiness
+    // from re-opening the daily limit, so the check below is about Pokémon alone.
+    db.prepare(
+      "INSERT INTO cards (id, game, name, type, frame_type, race, \"desc\", updated_at) VALUES (?, 'op', 'Luffy', 'Leader', 'op', '', '', '2026-10-29')"
+    ).run(2 ** 39 + 1)
 
-    // Once it has rows, nothing changes again. (The owner also sees One Piece, whose feed is still
-    // empty until its catalog exists, so the daily limit can't hold yet for this account.)
+    // Once it has rows, the daily limit holds again.
+    requests = []
     expect(await store.updateCatalog()).toBe(false)
+    expect(catalogRequests()).toEqual([])
   })
 
   it('runs one call at a time', async () => {

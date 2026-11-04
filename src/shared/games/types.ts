@@ -4,13 +4,13 @@ export type GameId = 'ygo' | 'pkm' | 'op'
 
 export const GAME_IDS: readonly GameId[] = ['ygo', 'pkm', 'op']
 
-/** The UI words that differ per game. */
 /** What decides which games a viewer sees. */
 export interface ViewerFacts {
   isOwner: boolean
   testerGames: readonly GameId[]
 }
 
+/** The UI words that differ per game. */
 export interface GameVocab {
   cardId: string
   printingCode: string

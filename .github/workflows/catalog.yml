@@ -66,9 +66,17 @@ jobs:
             catalog-work/fingerprints-pkm.sqlite
             catalog-work/pokemon-src.sqlite
             catalog-work/pokemon-src.sqlite-wal
-            catalog-work/thumbs-skip.json
           key: catalog-work-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: catalog-work-
+      # Its own cache: a cache is matched on its exact path list, so adding a file to the work
+      # database's list would orphan every saved work database (a from-scratch rebuild then
+      # trips the shrink guard). Never change that list without a plan to carry the old one over.
+      - name: Restore printing photo skip list
+        uses: actions/cache/restore@v4
+        with:
+          path: catalog-work/thumbs-skip.json
+          key: catalog-thumbs-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: catalog-thumbs-
       - name: Restore base snapshot
         uses: actions/cache/restore@v4
         with:
@@ -115,8 +123,13 @@ jobs:
             catalog-work/fingerprints-pkm.sqlite
             catalog-work/pokemon-src.sqlite
             catalog-work/pokemon-src.sqlite-wal
-            catalog-work/thumbs-skip.json
           key: catalog-work-${{ github.run_id }}-${{ github.run_attempt }}
+      - name: Save printing photo skip list
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: catalog-work/thumbs-skip.json
+          key: catalog-thumbs-${{ github.run_id }}-${{ github.run_attempt }}
       - name: Save base snapshot
         if: success()
         uses: actions/cache/save@v4

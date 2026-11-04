@@ -9,7 +9,7 @@
  * uploads every row; --dry-run refreshes and prints per-table counts without uploading or
  * touching the base. A refresh that would delete more than a sliver of any table (see
  * `findShrinks`) is refused unless --allow-shrink is passed, since every client applies the
- * deletes. --no-pokemon skips the Pokémon step. --refresh-sets re-reads the non-English set lists and Pokémon set art now instead of on their weekly timers. --refresh-cards reads the YGOPRODeck card list now instead of on its daily timer.
+ * deletes. --no-pokemon skips the Pokémon step. --refresh-sets re-reads the non-English set lists and Pokémon set art now instead of on their weekly timers. --refresh-cards reads the YGOPRODeck card list and the TCGplayer catalog now instead of on their daily and weekly timers.
  * Problems that don't stop the upload (a failed card sync, a failed fingerprint build)
  * end the run with a non-zero exit so the workflow shows red. So does a fingerprint file that fails
  * the accuracy gate (see accuracy.ts), which is held back while clients keep the last one. Each
@@ -76,7 +76,10 @@ export interface JobOptions {
   allowShrink?: boolean
   /** Re-reads the non-English set lists now instead of waiting for their weekly timer. */
   refreshSets?: boolean
-  /** Reads the YGOPRODeck card list now instead of on its daily timer. */
+  /**
+   * Reads the YGOPRODeck card list and TCGplayer catalog now instead of on their daily and weekly
+   * timers.
+   */
   refreshCards?: boolean
   /**
    * Checks a game's new fingerprint file before it is uploaded; defaults to `checkAccuracy` on
@@ -282,7 +285,10 @@ export async function runJob(opts: JobOptions): Promise<JobResult> {
         deleteMeta(work, 'intl_sets_synced_at')
         deleteMeta(work, 'pkm_set_art_synced_at')
       }
-      if (opts.refreshCards) deleteMeta(work, 'last_sync_at')
+      if (opts.refreshCards) {
+        deleteMeta(work, 'last_sync_at')
+        deleteMeta(work, 'tcgplayer_synced_at')
+      }
       await refresh(work, problem)
     }
     if (on('pokemon') && !opts.skipPokemon) {

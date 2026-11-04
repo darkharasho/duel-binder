@@ -2,7 +2,7 @@ import type Database from 'better-sqlite3'
 import { TOKEN_ID_MIN } from '../../shared/games/ids'
 import type { SqlDb } from '../db/sql'
 import { getMeta, setMeta } from '../db/meta'
-import { canonRarity } from '../ygo/rarity'
+import { canonRarity, isJunkRarity } from '../ygo/rarity'
 import { createLimiter } from '../images/limiter'
 import { needsOwnScan, printingVariant } from '../yugipedia/printingArt'
 
@@ -280,7 +280,7 @@ export function saveTcgVariants(db: Database.Database): { saved: number; added: 
   const seen = new Set<number>()
   let added = 0
   db.transaction(() => {
-    added = saveMissingPrintings(db, seen)
+    added = saveMissingPrintings(db, seen) + saveMissingRarities(db, seen)
     for (const g of groups) {
       const bases = (printings.all(g.number) as Base[]).filter(
         (p) => rarityKey(p.set_rarity) === rarityKey(g.rarity)
@@ -458,6 +458,148 @@ function saveMissingPrintings(db: Database.Database, seen: Set<number>): number 
         if (used.has(setRarity)) continue
         used.add(setRarity)
         save(setRarity, v.product_id, null)
+      }
+    }
+  }
+  return added
+}
+
+/**
+ * Adds the rarities TCGplayer sells under a card number YGOPRODeck has, when YGOPRODeck lists fewer
+ * rarities there (the Quarter Century Secret Rare of LC01-EN005 that Legendary Collection: 25th
+ * Anniversary Edition reprinted beside the Ultra Rare). Oversized products are left out. Only
+ * numbers one card holds, with no
+ * placeholder rarity ("New") waiting for YGOPRODeck to fill in. Rarities are compared with their
+ * notes dropped, "Prismatic" dropped where the plain rarity is the catalog's name for it
+ * ("Prismatic Collector's Rare" is the Collector's Rare) and a Short Print as a Common. Each new
+ * rarity's plain product becomes the printing and its other products art variants, in the set the
+ * other printings of that number are in. Adds every printing's id to `seen`; returns how many rows
+ * are new.
+ */
+function saveMissingRarities(db: Database.Database, seen: Set<number>): number {
+  const printings = db
+    .prepare(
+      `SELECT card_id, set_name, upper(set_code) AS code, set_rarity, tcg_product_id, yugipedia
+       FROM card_printings WHERE game = 'ygo' AND language = 'en' AND set_code <> ''`
+    )
+    .all() as {
+    card_id: number
+    set_name: string
+    code: string
+    set_rarity: string
+    tcg_product_id: number | null
+    yugipedia: number
+  }[]
+  const rarities = new Set(printings.map((p) => p.set_rarity))
+  /** One name per rarity, as the catalog spells it. */
+  const ownName = (rarity: string): string => {
+    const r = canonRarity(rarity.replace(/\s*\(.*$/, ''))
+    const plain = r.replace(/^prismatic\s+/i, '')
+    return plain !== r && rarities.has(plain) && !rarities.has(r) ? plain : r
+  }
+  const same = (r: string): string => {
+    const key = rarityKey(ownName(r))
+    return key === 'shortprint' ? 'common' : key
+  }
+  type Here = { cards: Set<number>; sets: Set<string>; keys: Set<string>; placeholder: boolean }
+  const byCode = new Map<string, Here>()
+  // Only YGOPRODeck's own rows say what it lists; rows from TCGplayer or Yugipedia are what this adds to.
+  for (const p of printings) {
+    if (p.tcg_product_id !== null || p.yugipedia !== 0) continue
+    const here = byCode.get(p.code) ?? {
+      cards: new Set(),
+      sets: new Set(),
+      keys: new Set(),
+      placeholder: false
+    }
+    byCode.set(p.code, here)
+    here.cards.add(p.card_id)
+    here.keys.add(same(p.set_rarity))
+    if (isJunkRarity(p.set_rarity)) here.placeholder = true
+    if (p.set_name) here.sets.add(p.set_name)
+  }
+  const products = new Map<string, ProductRow[]>()
+  for (const r of db
+    .prepare(
+      "SELECT product_id, upper(number) AS code, rarity, name, image_url FROM tcgplayer_products WHERE rarity <> '' ORDER BY product_id"
+    )
+    .all() as (ProductRow & { code: string })[]) {
+    const here = byCode.get(r.code)
+    // Oversized cards are a box's jumbo copy, not a printing to collect.
+    if (!here || here.sets.size === 0 || /\(oversized\)/i.test(r.name)) continue
+    products.set(r.code, [...(products.get(r.code) ?? []), r])
+  }
+  const rarityCodes = new Map(
+    (
+      db
+        .prepare(
+          `SELECT set_rarity, set_rarity_code FROM card_printings
+           WHERE game = 'ygo' AND language = 'en' AND set_rarity_code <> ''
+           GROUP BY set_rarity, set_rarity_code ORDER BY count(*)`
+        )
+        .all() as { set_rarity: string; set_rarity_code: string }[]
+    ).map((r) => [r.set_rarity, r.set_rarity_code])
+  )
+  const upsert = db.prepare(
+    `INSERT INTO card_printings (card_id, set_name, set_code, set_rarity, set_rarity_code, set_price,
+       missing_from_api, language, tcg_product_id, variant)
+     VALUES (?, ?, ?, ?, ?, NULL, 0, 'en', ?, ?)
+     ON CONFLICT(card_id, set_code, set_rarity) WHERE language = 'en' DO UPDATE SET
+       set_name = excluded.set_name, missing_from_api = 0, tcg_product_id = excluded.tcg_product_id,
+       variant = excluded.variant, yugipedia = 0
+     RETURNING id`
+  )
+  const existing = db.prepare(
+    "SELECT 1 FROM card_printings WHERE game = 'ygo' AND language = 'en' AND card_id = ? AND set_code = ? AND set_rarity = ?"
+  )
+
+  let added = 0
+  for (const [code, rows] of products) {
+    const here = byCode.get(code) as Here
+    if (here.cards.size !== 1 || here.placeholder) continue
+    const sold = new Map<string, string>()
+    for (const r of rows) if (!sold.has(same(r.rarity))) sold.set(same(r.rarity), r.rarity)
+    if (sold.size <= here.keys.size) continue
+    const [cardId] = here.cards
+    const setName = [...here.sets].sort()[0]
+    for (const [key, rarity] of sold) {
+      if (here.keys.has(key)) continue
+      const [plain, ...variants] = rows
+        .filter((r) => same(r.rarity) === key)
+        .sort(
+          (a, b) =>
+            Number(variantLabel(a.name, a.rarity) !== '') -
+              Number(variantLabel(b.name, b.rarity) !== '') || a.product_id - b.product_id
+        )
+      const own = variantLabel(plain.name, plain.rarity)
+      if (/misprint/i.test(own)) continue
+      const setRarity = ownName(rarity)
+      const save = (stored: string, productId: number, variant: string | null): void => {
+        if (!existing.get(cardId, code, stored)) added++
+        const row = upsert.get(
+          cardId,
+          setName,
+          code,
+          stored,
+          rarityCodes.get(setRarity) ?? '',
+          productId,
+          variant
+        ) as { id: number }
+        seen.add(row.id)
+      }
+      save(
+        setRarity,
+        plain.product_id,
+        own && own.split(', ').every((n) => ART_NOTE.test(n)) ? own : null
+      )
+      const used = new Set([setRarity])
+      for (const v of variants) {
+        const label = variantLabel(v.name, v.rarity)
+        if (!label || /misprint/i.test(label)) continue
+        const stored = `${setRarity} (${label})`
+        if (used.has(stored)) continue
+        used.add(stored)
+        save(stored, v.product_id, null)
       }
     }
   }

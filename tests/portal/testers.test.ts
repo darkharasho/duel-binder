@@ -4,6 +4,7 @@ import type Database from 'better-sqlite3'
 import { addUser, memoryBucket, noPrintingArt, noPrices, seededServerDb } from './helpers'
 import { handle, type AppDeps } from '../../workers/portal/src/app'
 import { gamesFor } from '../../workers/portal/src/auth'
+import { beginLink } from '../../workers/portal/src/link'
 import { mergeAccounts } from '../../workers/portal/src/merge'
 import { bindTesterInvites, testerGames } from '../../workers/portal/src/testers'
 
@@ -121,7 +122,10 @@ describe('game tester list', () => {
       user_id: number
     }[]
     expect(rows).toHaveLength(1)
-    expect(rows[0].user_id).not.toBeNull()
+    const created = db
+      .prepare("SELECT user_id FROM sign_ins WHERE provider = 'discord' AND subject = '555'")
+      .get() as { user_id: number }
+    expect(rows[0].user_id).toBe(created.user_id)
   })
 
   it("a second account with the same name doesn't take a bound row", () => {
@@ -197,6 +201,18 @@ describe('game tester list', () => {
     const pkm = await post('/admin/testers', 'tok-owner', { game: 'pkm', username: 'kaiba' })
     expect(pkm.status).toBe(400)
     expect(await pkm.json()).toEqual({ error: 'not-a-tester-game' })
+  })
+
+  it('the link path binds a pending invite whatever the username case', async () => {
+    const apple = addUser(db, 'apple:777', 'appleuser')
+    const res = await beginLink(
+      deps,
+      apple,
+      { provider: 'discord', subject: '888' },
+      { profile: { username: 'DUBgrumble', displayName: null, avatar: null } }
+    )
+    expect(res.status).toBe('linked')
+    expect(testerGames(db, apple)).toEqual(['op'])
   })
 
   it('merge moves tester rows', async () => {

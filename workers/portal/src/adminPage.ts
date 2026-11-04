@@ -569,14 +569,20 @@ async function loadTesters() {
           remove.addEventListener('click', async () => {
             if (!confirm('Remove ' + (t.username ? '@' + t.username : t.discordUsername) + ' from ' + g.name + ' testers?')) return
             remove.disabled = true
-            const r = await fetch('/admin/testers/remove', {
-              method: 'POST',
-              credentials: 'same-origin',
-              headers: { 'content-type': 'application/json' },
-              body: JSON.stringify({ id: t.id })
-            })
-            if (!r.ok) alert('Remove failed: ' + ((await r.json().catch(() => ({}))).error ?? 'HTTP ' + r.status))
-            loadTesters()
+            try {
+              const r = await fetch('/admin/testers/remove', {
+                method: 'POST',
+                credentials: 'same-origin',
+                headers: { 'content-type': 'application/json' },
+                body: JSON.stringify({ id: t.id })
+              })
+              if (!r.ok) alert('Remove failed: ' + ((await r.json().catch(() => ({}))).error ?? 'HTTP ' + r.status))
+              else loadTesters()
+            } catch (e) {
+              alert('Remove failed: ' + e.message)
+            } finally {
+              remove.disabled = false
+            }
           })
           const cell = el('td')
           cell.append(remove)
@@ -613,15 +619,20 @@ async function loadTesters() {
       ev.preventDefault()
       add.disabled = true
       msg.textContent = ''
-      const r = await fetch('/admin/testers', {
-        method: 'POST',
-        credentials: 'same-origin',
-        headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ game: game.value, [kind.value]: name.value })
-      })
-      if (r.ok) return loadTesters()
-      msg.textContent = (await r.json().catch(() => ({}))).error ?? 'HTTP ' + r.status
-      add.disabled = false
+      try {
+        const r = await fetch('/admin/testers', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ game: game.value, [kind.value]: name.value })
+        })
+        if (r.ok) return loadTesters()
+        msg.textContent = (await r.json().catch(() => ({}))).error ?? 'HTTP ' + r.status
+      } catch (e) {
+        msg.textContent = e.message
+      } finally {
+        add.disabled = false
+      }
     })
     p.append(form)
   } catch (e) {

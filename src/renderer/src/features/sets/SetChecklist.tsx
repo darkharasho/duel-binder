@@ -13,6 +13,7 @@ import type {
   SetSummary
 } from '@shared/types'
 import { CardArt } from '@/components/CardArt'
+import { useArtPrefetch } from '@/lib/artPrefetch'
 import { checklistUnpriced, useRequestPrices } from '@/lib/priceRequests'
 import { useTileImage } from '@/lib/cardSize'
 import { useChunkedList } from '@/lib/useChunkedList'
@@ -241,6 +242,17 @@ export function SetChecklist({
     [data, mode, filter, pickedRarities, pickedVersions, q, sort]
   )
   const shownTiles = useChunkedList(tiles)
+  useArtPrefetch(
+    useMemo(
+      () =>
+        tiles.map((t) => ({
+          imageId: t.card.imageId,
+          printingId: (t.card.rarities.find((r) => r.rarity === t.rarity) ?? t.card.rarities[0])
+            ?.defaultPrintingId
+        })),
+      [tiles]
+    )
+  )
   const tileImage = useTileImage()
 
   // Recompute the frozen ids on entering bulk mode and when the filter or count mode changes.

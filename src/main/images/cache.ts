@@ -127,6 +127,12 @@ export function throttleDownloads(
 }
 
 export const defaultLimiter = (): Limiter => createLimiter({ concurrency: 4, minIntervalMs: 100 })
+/**
+ * Downloads through the portal: most are art it already stores, served from Cloudflare's edge in
+ * tens of milliseconds, and the portal paces its own upstream fetches (a per-user hourly quota).
+ * So more at once and no gap, or a first visit to a 200-card set waits 20s on the gap alone.
+ */
+export const portalLimiter = (): Limiter => createLimiter({ concurrency: 8, minIntervalMs: 0 })
 
 export function createImageCache(opts: {
   dir: string

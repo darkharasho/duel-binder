@@ -35,6 +35,21 @@ describe('phone store protocol', () => {
     expect(buffer.byteLength).toBe(0)
   })
 
+  it("a training upload's JPEG arrives whole and the caller's buffer stays usable", async () => {
+    const trainingUpload = vi.fn(async (_id: string, _label: unknown, jpeg: ArrayBuffer) => ({
+      ok: true as const,
+      summary: { total: jpeg.byteLength, today: 1, dailyCap: 500 }
+    }))
+    const client = pair({ trainingUpload: trainingUpload as PhoneStore['trainingUpload'] })
+    const jpeg = new Uint8Array([0xff, 0xd8, 0xff, 1]).buffer
+    const label = { game: 'op' } as Parameters<PhoneStore['trainingUpload']>[1]
+    await expect(client.trainingUpload('a', label, jpeg)).resolves.toMatchObject({
+      summary: { total: 4 }
+    })
+    expect([...new Uint8Array(trainingUpload.mock.calls[0][2])]).toEqual([0xff, 0xd8, 0xff, 1])
+    expect(jpeg.byteLength).toBe(4)
+  })
+
   it("CloudAuthError's name survives", async () => {
     const client = pair({
       sync: async () => {

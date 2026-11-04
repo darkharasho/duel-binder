@@ -124,6 +124,9 @@ export function fakeStore(
     printingPhotoIds: vi.fn(async () => []),
     fingerprintStatus: vi.fn(async () => ({ state: 'ready' as const, count: 3 })),
     refreshFingerprints: vi.fn(async () => ({ state: 'ready' as const, count: 3 })),
+    trainingUpload: vi.fn(async () => ({ ok: true as const, summary: null })),
+    trainingDelete: vi.fn(async () => ({ ok: true as const, summary: null })),
+    trainingSummary: vi.fn(async () => null),
     ...over
   }
   return Object.assign(store, { state })

@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type Database from 'better-sqlite3'
 import { addUser, memoryBucket, noPrintingArt, noPrices, seededServerDb } from './helpers'
 import { handle, type AppDeps } from '../../workers/portal/src/app'
@@ -213,6 +213,30 @@ describe('game tester list', () => {
     )
     expect(res.status).toBe('linked')
     expect(testerGames(db, apple)).toEqual(['op'])
+  })
+
+  it('a Yu-Gi-Oh! request does not read the tester list; an op request by a tester passes', async () => {
+    db.prepare("INSERT INTO game_testers (game, user_id) VALUES ('op', ?)").run(kaiba)
+    const prepare = vi.spyOn(db, 'prepare')
+    const rpc = (game: string): Promise<Response> =>
+      handle(
+        new Request(BASE + '/api/rpc/collection:list', {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/json',
+            cookie: 'session=tok-kaiba',
+            'x-duel-game': game
+          },
+          body: JSON.stringify({ args: [{ sort: 'added', dir: 'desc' }] })
+        }),
+        deps
+      )
+    const readsTesters = (): number =>
+      prepare.mock.calls.filter((c) => String(c[0]).includes('FROM game_testers')).length
+    expect((await rpc('ygo')).status).toBe(200)
+    expect(readsTesters()).toBe(0)
+    expect((await rpc('op')).status).toBe(200)
+    expect(readsTesters()).toBeGreaterThan(0)
   })
 
   it('merge moves tester rows', async () => {

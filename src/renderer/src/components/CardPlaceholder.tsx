@@ -173,9 +173,9 @@ function OpPlaceholder({
 
 /** What shows where a card's art can't: a card-shaped stand-in in the card's game. */
 export function CardPlaceholder({ game, ...rest }: CardPlaceholderProps): React.JSX.Element {
-  return byGame(game, {
-    ygo: <YgoPlaceholder {...rest} />,
-    pkm: <PkmPlaceholder {...rest} />,
-    op: <OpPlaceholder {...rest} />
-  })
+  return byGame<() => React.JSX.Element>(game, {
+    ygo: () => <YgoPlaceholder {...rest} />,
+    pkm: () => <PkmPlaceholder {...rest} />,
+    op: () => <OpPlaceholder {...rest} />
+  })()
 }

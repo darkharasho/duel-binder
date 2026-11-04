@@ -202,7 +202,7 @@ export async function catalogRoute(req: Request, deps: AppDeps, path: string): P
   const q = new URL(req.url).searchParams
   // No `game` is the legacy feed; a game must be one of the user's, as on sync and RPC.
   const asked = q.get('game')
-  const game = asked === null ? undefined : gamesFor(deps, user.id).find((g) => g === asked)
+  const game = asked === null ? undefined : gamesFor(deps, user.id, asked).find((g) => g === asked)
   if (asked !== null && !game) return json({ error: 'game-not-allowed' }, 403)
 
   try {

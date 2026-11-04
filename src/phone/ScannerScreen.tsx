@@ -23,7 +23,7 @@ import { useScanHub } from '@/features/scan/ScanHub'
 import { useScanPingSetting } from '@/lib/useScanPing'
 import type { PickerOption } from '@/features/scan/SearchPicker'
 import type { ScanRow } from '@/features/scan/session'
-import { scanProfile } from '@shared/scan/profiles'
+import { SCAN_PROFILES } from '@shared/scan/profiles'
 import { useGame } from '@/lib/game'
 import { formatUsd } from '@/lib/format'
 import { cn } from '@/lib/utils'
@@ -203,7 +203,7 @@ export function ScannerScreen({
   const { session } = useScanHub()
   const pickers = useScanPickers()
   // A game priced by version rather than Yu-Gi-Oh!'s rarities has no rarity for new scans.
-  const rarities = scanProfile(useGame().game).rarityLook
+  const rarities = SCAN_PROFILES[useGame().game]?.rarityLook ?? false
   const [reviewing, setReviewing] = useState(false)
   const [streaming, setStreaming] = useState(false)
   const [pingOn, setPingOn] = useScanPingSetting()

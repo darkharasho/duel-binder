@@ -1,7 +1,7 @@
 // The Scan page's vision work, off the UI thread: finding the card in a camera frame, matching
 // its art against the fingerprints and cutting out its text bands for OCR in main.
 import { decodeFingerprints, type FingerprintIndex } from '@shared/scan/fingerprintFile'
-import { SCAN_PROFILES, scanProfile, type ScanProfile } from '@shared/scan/profiles'
+import { SCAN_PROFILES, type ScanProfile } from '@shared/scan/profiles'
 import { ART_MAX_DISTANCE } from '@shared/scan/thresholds'
 import type { RgbaImage } from '@shared/scan/types'
 import type { FrameSignals, WorkerReply, WorkerRequest } from '../engine'
@@ -65,7 +65,7 @@ async function handle(msg: WorkerRequest): Promise<void> {
     try {
       await loadCv()
       index = msg.fingerprints ? decodeFingerprints(msg.fingerprints) : null
-      profile = scanProfile(msg.game)
+      profile = SCAN_PROFILES[msg.game] ?? SCAN_PROFILES.ygo
       held = null
       tilt.clear()
       if (index && msg.refs?.length) index.withRefs(msg.refs)

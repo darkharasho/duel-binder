@@ -125,7 +125,7 @@ describe('matching a sign-up to the account that uses its email', () => {
   }
 
   /** A Discord link code, as `/auth/desktop/start?intent=link` leaves behind. */
-  function discordLinkCode(subject: string): string {
+  function discordLinkCode(subject: string, username = 'x'): string {
     const code = `code-${subject}`
     db.prepare(
       `INSERT INTO link_codes (code_hash, challenge, provider, subject, profile, expires_at)
@@ -134,7 +134,7 @@ describe('matching a sign-up to the account that uses its email', () => {
       sha(code).toString('hex'),
       sha(VERIFIER).toString('base64url'),
       subject,
-      JSON.stringify({ username: 'x', displayName: null, avatar: null }),
+      JSON.stringify({ username, displayName: null, avatar: null }),
       new Date(clock.getTime() + 2 * MIN).toISOString()
     )
     return code
@@ -176,6 +176,21 @@ describe('matching a sign-up to the account that uses its email', () => {
     // The ticket is spent.
     const reuse = await step('separate', { ticket: m.body.ticket })
     expect(reuse.body.error).toBe(EMAIL_COPY.codeExpired)
+  })
+
+  it('link-discord binds a pending tester invite for that Discord username', async () => {
+    const discordId = seedDiscord()
+    db.prepare("INSERT INTO game_testers (game, discord_username) VALUES ('op', 'Dub')").run()
+    const m = await signUpTo()
+    const linked = await step('link-discord', {
+      ticket: m.body.ticket,
+      code: discordLinkCode('111', 'dub'),
+      verifier: VERIFIER
+    })
+    expect(linked.body).toMatchObject({ next: 'signed-in', created: false })
+    expect(
+      db.prepare("SELECT user_id FROM game_testers WHERE discord_username = 'Dub'").get()
+    ).toEqual({ user_id: discordId })
   })
 
   it('link-discord with a different Discord account is refused and the choice stays', async () => {

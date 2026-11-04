@@ -1,5 +1,5 @@
 import type { Me } from '../../../src/shared/cloud'
-import { allowedGames, type GameId } from '../../../src/shared/games'
+import { allowedGames, GAMES, isGameId, type GameId } from '../../../src/shared/games'
 import type { AppDeps } from './app'
 import { appleRefreshToken, verifyAppleIdentityToken } from './apple'
 import { attachFromFlow, EmailAuthError } from './emailAuth'
@@ -187,9 +187,17 @@ function isAdminUser(deps: AppDeps, userId: number): boolean {
   )
 }
 
-/** The games this user may use; the server's gate for every game-scoped route. */
-export function gamesFor(deps: AppDeps, userId: number): GameId[] {
-  return allowedGames({ isOwner: isAdminUser(deps, userId), testerGames: testerGames(deps.db, userId) })
+/**
+ * The games this user may use; the server's gate for every game-scoped route. With `asked` (the
+ * one game a request names) that is open to everyone, the tester list is not read: the list then
+ * leaves out tester-only games, so use it only to check `asked`.
+ */
+export function gamesFor(deps: AppDeps, userId: number, asked?: string): GameId[] {
+  const open = asked !== undefined && isGameId(asked) && GAMES[asked].access === 'everyone'
+  return allowedGames({
+    isOwner: isAdminUser(deps, userId),
+    testerGames: open ? [] : testerGames(deps.db, userId)
+  })
 }
 
 /** Whether the request is signed in as the ADMIN_DISCORD_ID account. */
@@ -520,7 +528,8 @@ export async function finishSignIn(req: Request, deps: AppDeps): Promise<Respons
               nowIso,
               new Date(now.getTime() + SESSION_MAX_AGE * 1000).toISOString()
             )
-        }
+        },
+        user.username
       )
       const done = [cookie('session', secret, SESSION_MAX_AGE), ...spent, dropLink]
       if (readCookie(req, NEXT_COOKIE) !== null) done.push(clearCookie(NEXT_COOKIE))

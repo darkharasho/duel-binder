@@ -7,7 +7,7 @@ import {
   type ScanFit,
   type ScanWindowState
 } from '@shared/scanWindow'
-import { scanProfile } from '@shared/scan/profiles'
+import { SCAN_PROFILES } from '@shared/scan/profiles'
 import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -70,7 +70,7 @@ export function ScanPage({
   const pickers = useScanPickers()
   // A game priced by version rather than Yu-Gi-Oh!'s rarities has no rarity for new scans.
   const { game } = useGame()
-  const rarities = scanProfile(game).rarityLook
+  const rarities = SCAN_PROFILES[game]?.rarityLook ?? false
 
   const pickCamera = (id: string): void => {
     // A camera listed before permission has no id: open the default one.

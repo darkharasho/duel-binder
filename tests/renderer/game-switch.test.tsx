@@ -132,6 +132,31 @@ describe('desktop game switch', () => {
     expect(navNames()).not.toContain('Rip')
   })
 
+  it('on Scan, switching to op shows the dashboard without throwing', async () => {
+    let active: GameId = 'ygo'
+    const api = desktopApi(['ygo', 'pkm', 'op'], 'ygo', {
+      games: {
+        active: vi.fn(async () => active),
+        setActive: vi.fn(async (g: GameId) => {
+          active = g
+        })
+      }
+    })
+    await renderDesktop(api)
+    await userEvent.click(
+      within(screen.getByRole('navigation', { name: 'Main' })).getByRole('button', { name: 'Scan' })
+    )
+    await userEvent.click(await screen.findByRole('button', { name: /switch game/i }))
+    await userEvent.click(await screen.findByRole('menuitemradio', { name: /One Piece/ }))
+    expect(await screen.findByRole('button', { name: /switch game/i })).toHaveTextContent(
+      'One Piece'
+    )
+    expect(screen.getByRole('navigation', { name: 'Main' })).toBeInTheDocument()
+    expect(
+      await screen.findByRole('heading', { name: /dashboard|collection/i })
+    ).toBeInTheDocument()
+  })
+
   it('Pokémon shows Scan and not Rip', async () => {
     await renderDesktop(desktopApi(['ygo', 'pkm'], 'pkm'))
     expect(await screen.findByRole('button', { name: /switch game/i })).toHaveTextContent('Pokémon')

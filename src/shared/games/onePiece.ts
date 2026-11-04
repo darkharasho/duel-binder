@@ -40,8 +40,6 @@ export const ONE_PIECE: GameDef = {
     { key: 'counter', label: 'Counter' },
     { key: 'attribute', label: 'Attribute' },
     { key: 'traits', label: 'Traits' },
-    { key: 'effect', label: 'Effect' },
-    { key: 'trigger', label: 'Trigger' },
     { key: 'blockIcon', label: 'Block' },
     { key: 'number', label: 'Card number' }
   ]

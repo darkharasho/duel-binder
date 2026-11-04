@@ -28,6 +28,11 @@ export const SAME_ART_MAX = 24
 export const ART_BUDGET = 3000
 /** How often an entry's art is looked at again. */
 export const RECHECK_MS = 14 * DAY_MS
+/**
+ * When the portal's full-size limit went from 2 MiB to 4 MiB (OP02's PNGs are about 2.3 MB). Art
+ * refused as too large before then is tried again the next night, not at its re-check.
+ */
+export const FULL_LIMIT_RAISED_AT = Date.UTC(2026, 10, 4, 18)
 /** Images in flight at once within a download run. */
 const CONCURRENCY = 2
 
@@ -274,7 +279,7 @@ export async function refreshArt(o: RefreshArtOptions): Promise<ArtResult> {
       const row = cache.getBandaiArt(e.bandaiId)
       return (
         row !== null && row.storedAt === null && row.changedHash === null && row.checkedAt < now &&
-        (row.tooLargeAt === null || now - row.tooLargeAt > RECHECK_MS)
+        (row.tooLargeAt === null || row.tooLargeAt < FULL_LIMIT_RAISED_AT || now - row.tooLargeAt > RECHECK_MS)
       )
     })
     // Left from an earlier night: downloaded again, which costs budget; without budget it waits.

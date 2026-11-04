@@ -1,8 +1,11 @@
 import { gameOfId } from '../../../src/shared/games/ids'
 import { adminAuthorized, isJpegBytes, isPngBytes, MAX_THUMB_BYTES, type ThumbBucket } from './thumbs'
 
-/** A full-size card PNG is never this big; anything over it is refused. */
-const MAX_FULL_BYTES = 2 * 1024 * 1024
+/**
+ * A full-size card PNG is never this big; anything over it is refused. Most are 600x838 and under
+ * 300 KB, but OP02's are 868x1212 RGBA, about 2.3 MB.
+ */
+const MAX_FULL_BYTES = 4 * 1024 * 1024
 
 const json = (body: unknown, status = 200): Response =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })

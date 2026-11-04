@@ -29,7 +29,7 @@ import { createDataHandlers, DATA_CHANNELS, type DataChannel } from '../../main/
 import { awaitingPrices, checkPrintingIds, requestPrices } from '../../main/cloud/priceRequests'
 import { PHONE_TABLES } from '../../shared/catalogFeed'
 import { gamesOf, type Me } from '../../shared/cloud'
-import type { GameId } from '../../shared/games'
+import { GAME_IDS, type GameId } from '../../shared/games'
 import { FRIENDS_SIGNED_OUT, OFFLINE_MESSAGE } from '../../shared/friends'
 import type { PortalChannel } from '../../shared/portal'
 import { decodeFingerprints } from '../../shared/scan/fingerprintFile'
@@ -382,7 +382,7 @@ export function createPhoneStore(deps: {
       `)
       finishApply(db, { applied: 1, cardsChanged: true, imagesChanged: true })
       setMeta(db, 'catalog_cursor', '0')
-      deleteMeta(db, 'catalog_cursor:pkm')
+      for (const g of GAME_IDS) if (g !== 'ygo') deleteMeta(db, `catalog_cursor:${g}` as const)
       for (const k of [
         'catalog_loaded',
         'catalog_filled',

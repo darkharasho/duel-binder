@@ -112,7 +112,13 @@ export function applyChanges(db: SqlDb, changes: CatalogChange[]): ApplyResult {
       continue
     }
     // An entry of a card keeps the card's Pokémon details too.
-    if (table.name === 'pokemon_cards' && owned(key[0])) continue
+    if ((table.name === 'pokemon_cards' || table.name === 'onepiece_cards') && owned(key[0])) continue
+    // An image an entry uses keeps its Bandai id.
+    if (
+      table.name === 'onepiece_images' &&
+      exists('SELECT 1 FROM collection_entries WHERE image_id = ? LIMIT 1', key[0])
+    )
+      continue
     if (table.name === 'cards') {
       const id = key[0]
       const used =

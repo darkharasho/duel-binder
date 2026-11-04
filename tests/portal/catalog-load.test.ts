@@ -250,7 +250,21 @@ describe('admin catalog loader', () => {
     ])
   })
 
-  it.todo('onepiece rows must carry op ids')
+  it('onepiece rows must carry op ids', async () => {
+    const pikachu = pokemonId('sv02-045')
+    const badCard = await call('/admin/catalog/rows', {
+      table: 'onepiece_cards',
+      rows: [{ card_id: pikachu, number: 'OP01-001', card_type: 'Leader' }]
+    })
+    expect(badCard.status).toBe(400)
+    expect(await badCard.text()).toContain('is not a op id')
+    const badImage = await call('/admin/catalog/rows', {
+      table: 'onepiece_images',
+      rows: [{ image_id: pikachu, bandai_id: 'OP01-001' }]
+    })
+    expect(badImage.status).toBe(400)
+    expect(await badImage.text()).toContain('is not a op id')
+  })
 
   it('rejects unknown tables and columns', async () => {
     const bad = async (path: string, body: unknown) => (await call(path, body)).status

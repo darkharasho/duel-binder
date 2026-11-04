@@ -55,11 +55,12 @@ export function getStats(db: SqlDb, scope: Scope = LOCAL): CollectionStats {
     byRarity: [...rarities]
       .map(([rarity, v]) => ({ rarity, ...v }))
       .sort((a, b) => b.value - a.value),
-    byFrameType: byGame<[string, number][]>(scopeGame(db, scope), {
-      ygo: [...frames],
-      pkm: pokemonCategories(db, scope),
-      op: [] // op: step 2 puts card types here
-    })
+    // Thunks: byGame builds every value, and only the shown game's query should run.
+    byFrameType: byGame<() => [string, number][]>(scopeGame(db, scope), {
+      ygo: () => [...frames],
+      pkm: () => pokemonCategories(db, scope),
+      op: () => [] // op: step 2 puts card types here
+    })()
       .map(([frameType, count]) => ({ frameType, count }))
       .sort((a, b) => b.count - a.count),
     topEntries: entries.slice(0, TOP_ENTRY_LIMIT),

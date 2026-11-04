@@ -57,11 +57,12 @@ function pokemonColor(version: string): string | undefined {
 }
 
 export function rarityColor(rarity: string, game: GameId = 'ygo'): string {
-  const own = byGame<string | undefined>(game, {
-    ygo: RARITY_COLORS[rarity],
-    pkm: pokemonColor(rarity),
-    op: ONE_PIECE_COLORS[rarity]
-  })
+  // Thunks: byGame builds every value, and this runs per tile, so only the game's lookup may run.
+  const own = byGame<() => string | undefined>(game, {
+    ygo: () => RARITY_COLORS[rarity],
+    pkm: () => pokemonColor(rarity),
+    op: () => ONE_PIECE_COLORS[rarity]
+  })()
   return own ?? '#9ca3af'
 }
 

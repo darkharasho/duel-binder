@@ -8,8 +8,9 @@ import { createTcgplayerLookup } from '../../../src/main/tcgplayer/catalog'
 import { createYugipediaClient } from '../../../src/main/yugipedia/client'
 import { TOKEN_ID_MIN } from '../../../src/shared/games/ids'
 import { handle, type Env } from './app'
+import { withAppCors } from './appCors'
 import { bindingSender } from './emailSend'
-import { createAnonImageQuota, createImageQuota, createMissCache } from './images'
+import { createAnonImageQuota, createImageQuota, createMissCache, edgeImage } from './images'
 import { doSql } from './doSql'
 import { migrateServer } from './migrate'
 import { alarmQueue, priceClientFor, runPriceAlarm, type PriceQueue } from './prices'
@@ -86,11 +87,15 @@ export class Store extends DurableObject<WorkerEnv> {
   }
 }
 
+/** Cloudflare's per-colo cache; absent outside the Workers runtime (tests). */
+const edgeCache = (): Cache | null =>
+  typeof caches === 'undefined' ? null : (caches as unknown as { default: Cache }).default
+
 // Created on the first site request, once env (and the optional GitHub token) is known.
 let downloads: (() => Promise<Downloads>) | null = null
 
 export default {
-  fetch(req, env) {
+  async fetch(req, env, ctx) {
     const route = routeHost(new URL(req.url), env.SITE_URL)
     if (route.kind === 'site') {
       downloads ??= createReleaseSource({
@@ -104,6 +109,11 @@ export default {
     if (route.kind === 'app-asset') return env.ASSETS.fetch(req)
     if (route.kind === 'scan-asset')
       return env.ASSETS.fetch(new Request(new URL(route.asset, req.url), req))
-    return env.STORE.get(env.STORE.idFromName('main')).fetch(req)
+    const store = (r: Request): Promise<Response> =>
+      env.STORE.get(env.STORE.idFromName('main')).fetch(r)
+    const art = await edgeImage(req, env.IMAGES, edgeCache(), (p) => ctx.waitUntil(p), store)
+    // CORS after the cache, so the cached copy stays the same for every origin.
+    if (art) return withAppCors(req, art)
+    return store(req)
   }
 } satisfies ExportedHandler<WorkerEnv>

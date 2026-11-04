@@ -273,6 +273,74 @@ const handArt = (url: string, cache: string): Target => ({
   cache
 })
 
+/**
+ * The R2 key card art at `size` is stored under, from the id alone (no catalog lookup). Pokémon
+ * art only ever in R2 (HAND_ART_PREFIX) lives elsewhere; for those this key is simply never stored.
+ */
+const cardArtKey = (size: ImageSize, n: number): string =>
+  isTokenId(n) ? `card/full/${n}` : `card/${size}/${n}`
+
+const CARD_PATH_RE = /^\/img\/(small|full|cropped)\/(\d+)$/
+
+/** The slice of Cloudflare's per-colo cache (caches.default) the edge image path uses. */
+export interface EdgeCache {
+  match(req: Request): Promise<Response | undefined>
+  put(req: Request, res: Response): Promise<void>
+}
+
+/** A copy fit for the shared cache: no per-origin CORS headers, which the caller adds back. */
+function cacheable(res: Response): Response {
+  const out = new Response(res.body, res)
+  for (const h of [...out.headers.keys()])
+    if (h.startsWith('access-control-') || h === 'vary') out.headers.delete(h)
+  return out
+}
+
+/**
+ * The stateless Worker's way to artwork, ahead of the Durable Object (one instance for everyone,
+ * busy with sync and prices): from the edge cache; else stored card art straight from R2; else
+ * `forward` (the Durable Object, which resolves and fetches as before), keeping a 200 at the edge.
+ * Null for anything that isn't a GET of /img/. A 200 is stored artwork, public whoever asked, and
+ * its cache-control (a year for card art, a day for sets and printing photos) bounds how long the
+ * edge keeps it, as it already does for browsers.
+ */
+export async function edgeImage(
+  req: Request,
+  bucket: Pick<ImageBucket, 'get'>,
+  edge: EdgeCache | null,
+  waitUntil: (p: Promise<unknown>) => void,
+  forward: (req: Request) => Promise<Response>
+): Promise<Response | null> {
+  const url = new URL(req.url)
+  if (req.method !== 'GET' || !url.pathname.startsWith('/img/')) return null
+  // The cache key drops headers (a desktop's Authorization) so every client shares one entry.
+  const cacheKey = new Request(url.toString(), { method: 'GET' })
+  const hit = await edge?.match(cacheKey).catch(() => undefined)
+  if (hit) return hit
+  const keep = (res: Response): Response => {
+    if (edge && res.status === 200 && /\bpublic\b/.test(res.headers.get('cache-control') ?? ''))
+      waitUntil(edge.put(cacheKey, cacheable(res.clone())).catch(() => undefined))
+    return res
+  }
+  const m = CARD_PATH_RE.exec(url.pathname)
+  const n = m ? Number(m[2]) : NaN
+  if (m && Number.isSafeInteger(n) && n > 0) {
+    const stored = await bucket.get(cardArtKey(m[1] as ImageSize, n)).catch(() => null)
+    if (stored)
+      return keep(
+        locked(
+          new Response(stored.body, {
+            headers: {
+              'content-type': stored.httpMetadata?.contentType ?? 'image/jpeg',
+              'cache-control': CARD_CACHE
+            }
+          })
+        )
+      )
+  }
+  return keep(await forward(req))
+}
+
 /** Where a request's artwork comes from and how long browsers may keep it; null when the path names nothing servable. */
 function resolve(deps: AppDeps, path: string): Target | null {
   const [kind, id, ...rest] = path.split('/')
@@ -298,14 +366,14 @@ function resolve(deps: AppDeps, path: string): Target | null {
         ? pokemonArtUrl(row.image_url, kind === 'full' ? 'full' : 'small')
         : null
       if (url === null) return null
-      return { key: `card/${kind}/${n}`, source: fixed(url), cache: CARD_CACHE, anonymous: true }
+      return { key: cardArtKey(kind, n), source: fixed(url), cache: CARD_CACHE, anonymous: true }
     }
     if (!deps.db.prepare('SELECT 1 FROM card_images WHERE image_id = ?').get(n)) return null
     if (isTokenId(n)) {
       // The id names its Yugipedia file. There is one size of it, the original (Yugipedia makes no
       // crops, nor thumbnails for others), so every size is one stored image and one fetch.
       return {
-        key: `card/full/${n}`,
+        key: cardArtKey(kind, n),
         cache: CARD_CACHE,
         anonymous: true,
         meterFirst: true,
@@ -319,7 +387,7 @@ function resolve(deps: AppDeps, path: string): Target | null {
       }
     }
     return {
-      key: `card/${kind satisfies ImageSize}/${n}`,
+      key: cardArtKey(kind satisfies ImageSize, n),
       source: fixed(imageUrl(kind, n)),
       cache: CARD_CACHE,
       anonymous: true

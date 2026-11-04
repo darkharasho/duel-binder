@@ -23,7 +23,7 @@ import {
   directPrintingArt,
   startDirectCatalog
 } from './dev/directSources'
-import { createImageCache, throttleDownloads } from './images/cache'
+import { createImageCache, defaultLimiter, portalLimiter, throttleDownloads } from './images/cache'
 import { portalImageSources } from './images/portalSources'
 import { prepareLogo } from './images/prepareLogo'
 import { handleImageProtocol, registerImageScheme } from './images/protocol'
@@ -281,6 +281,8 @@ async function bootstrap(): Promise<void> {
             return p ? printingPhotoSuffix(p) : ''
           }
         }),
+    // Dev fake data fetches upstream directly, so it keeps the slow, polite pace.
+    limit: fakeData ? defaultLimiter() : portalLimiter(),
     prepareLogo,
     onDownloads: throttleDownloads((d) => broadcast(IMAGE_DOWNLOADS, d), 250)
   })

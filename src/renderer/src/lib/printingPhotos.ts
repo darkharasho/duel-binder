@@ -41,6 +41,32 @@ function request(printingId: number): void {
   flushing ??= Promise.resolve().then(flush)
 }
 
+/**
+ * The phone's photo URLs for these printings, in one batched lookup (remembered, as the tiles'
+ * own lookups are); a printing the server doesn't know, or a failed lookup, has none.
+ */
+export async function phonePrintingPhotoSrcs(
+  printingIds: readonly number[]
+): Promise<Map<number, string>> {
+  const unknown = printingIds.filter((id) => !serverIds.has(id))
+  const lookup = window.api?.images.photoIds
+  if (unknown.length > 0 && lookup) {
+    try {
+      const found = new Map(await lookup(unknown))
+      for (const id of unknown) serverIds.set(id, found.get(id) ?? null)
+      for (const l of [...listeners]) l()
+    } catch {
+      // Offline: no photos fetched ahead; the tiles ask for themselves.
+    }
+  }
+  const out = new Map<number, string>()
+  for (const id of printingIds) {
+    const server = serverIds.get(id)
+    if (server != null) out.set(id, printingPhotoSrc(server))
+  }
+  return out
+}
+
 /** Forgets every lookup, for tests. (A phone's catalog reset runs as its store opens, before any art.) */
 export function resetPrintingPhotos(): void {
   serverIds.clear()

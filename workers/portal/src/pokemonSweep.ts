@@ -1,5 +1,5 @@
 import type { SqlDb } from '../../../src/main/db/sql'
-import { getMeta, setMeta } from '../../../src/main/db/meta'
+import { getMeta, setMeta, type MetaKey } from '../../../src/main/db/meta'
 import { askingPrice, isSingleCard, keptPrices } from '../../ebay-prices/src/price.js'
 import {
   DAY_MS,
@@ -357,7 +357,7 @@ export function assignPokemonSweep(
 }
 
 /** A game sweep's calls and sets so far today, from its `day:calls:sets` meta row. */
-export function readSweepDay(db: SqlDb, meta: string, today: string): { calls: number; sets: number } {
+export function readSweepDay(db: SqlDb, meta: MetaKey, today: string): { calls: number; sets: number } {
   const [day, calls, sets] = (getMeta(db, meta) ?? '').split(':')
   return day === today ? { calls: Number(calls) || 0, sets: Number(sets) || 0 } : { calls: 0, sets: 0 }
 }

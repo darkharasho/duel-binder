@@ -111,6 +111,7 @@ describe('server eBay prices', () => {
     const sweep: SweepClient = {
       set: vi.fn(async () => ({ codes: {}, calls: 1, checkedAt: NOW.toISOString() })),
       pokemonListings: vi.fn(async () => ({ items: [] })),
+      onePieceListings: vi.fn(async () => ({ items: [] })),
       quota: vi.fn(async () => ({ remaining: 5000 }))
     }
     const storage = fakeStorage()

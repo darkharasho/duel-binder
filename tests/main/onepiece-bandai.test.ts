@@ -25,7 +25,8 @@ describe('Bandai card list parser', () => {
     expect(by['OP17-019'].name).toBe("I Don't Have Time to Chat with Snot-Nosed Brats")
     expect(by['OP17-019']).toMatchObject({ cardType: 'Event', cost: 1, attribute: [], trigger: '[Trigger] Your Leader gains +1000 power during this turn.' })
     expect(by['OP17-005_p2']).toMatchObject({ number: 'OP17-005', rarity: 'SR', block: null })
-    expect(by['EB04-061_p2']).toMatchObject({ number: 'EB04-061', rarity: 'SP', cardSets: 'BOOSTER PACK -THE WORLD’S STRONGEST WARRIORS- [OP-17]' })
+    expect(by['OP14-108_p3']).toMatchObject({ number: 'OP14-108', rarity: 'SP' })
+    expect(by['EB04-061_p2']).toMatchObject({ number: 'EB04-061', rarity: 'SEC', cardSets: 'BOOSTER PACK -THE WORLD’S STRONGEST WARRIORS- [OP-17]' })
   })
   test('a line break in an effect becomes a newline', () => {
     const { entries } = parseCardList(read('bandai-op17.html'), '569117')

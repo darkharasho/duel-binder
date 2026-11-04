@@ -30,7 +30,11 @@ offline and can be deleted. `/admin` counts the photos, and a script pulls them 
   missing JPEGs and writes `~/scan-capture/op-truth.json`.
 
 **OCR scope: typed numbers only in this plan. The One Piece scan profile and number OCR move to
-a follow-up ("step 3b"), replayed against the friend's first photos.**
+a follow-up ("step 3b"), replayed against the friend's first photos.** This is a **deviation from
+the spec**, which puts the scan profile and number OCR in step 3 and allows typed-only only once
+OCR has proven hard. It is not covered by the spec's fallback: the owner signs it off through the
+hand-off note (Task 9 Step 5) and the PR body, which both name step 3b as the next step, with step
+3b's acceptance being a replay against the friend's first photos. The reasons:
 - The tesseract queue and band cutter can be reused as they are:
   - `CODE_CHARS` already covers `OP05-119`.
   - `analyze()` finds an outline and cuts code bands with no fingerprints.
@@ -41,7 +45,6 @@ a follow-up ("step 3b"), replayed against the friend's first photos.**
   test it on tonight.
 - `normalizeOpNumber` (Task 2) is the parser OCR will reuse.
 - The full frames stored here are the OCR's test set.
-- The spec's own fallback ("ships with typed numbers first and OCR follows") applies.
 
 **Tech Stack:** TypeScript, React + Tailwind (phone), sqlite-wasm (phone store), IndexedDB
 (outbox), Durable Object SQLite + R2 (portal), Vitest (jsdom for the phone, better-sqlite3 for
@@ -66,6 +69,8 @@ against `main` after `feat/one-piece-catalog` merges.
    when the user's available games include a game whose `access` is `'testers'` (the server only
    lists such a game for its testers and the owner). Tapping it switches the active game to that
    game, the way the game switch does (`useGame().setGame`), and opens the screen full screen.
+   The open state and the screen live in `Shell` (`PhoneShell.tsx`), outside `PageSwitch`:
+   `PageSwitch` keys every page by game, so a screen inside Settings would unmount on the switch.
    The screen is not on the One Piece Home and is not a new `Page`, so the desktop `Page` union
    doesn't change.
 2. **Other games' testers.** Contribute is off for Yu-Gi-Oh and Pokémon. Both the client and the
@@ -90,8 +95,9 @@ against `main` after `feat/one-piece-catalog` merges.
    visible. Each upload still carries its own full label, fixed at the moment the shutter is
    tapped.
 8. **Delete last photo** pops this screen session's shots, newest first, and can be repeated. A
-   queued upload is dropped locally. An uploaded one, or one in flight, is deleted on the server
-   through the outbox.
+   queued upload that was never sent is dropped locally. An uploaded one, one in flight, or one
+   sent at least once (its response may have been lost) is deleted on the server through the
+   outbox.
 9. **The running count** is `"<total> photos · <waiting> waiting to upload · <today>/500 today"`.
    `total` and `today` come from the server summary, and `waiting` from the outbox.
 10. **The truth file.**
@@ -104,8 +110,12 @@ against `main` after `feat/one-piece-catalog` merges.
     - Extra keys (ignored by readers): `bandaiId` (`OP05-119_p1`, for the image),
       `tester`, `device`, `appVersion`, `takenAt`.
 11. **Merges and deletes.**
-    - An account merge closes the old account without deleting it, so its training rows stay
-      valid and nothing in `merge.ts` changes.
+    - An account merge moves the closed account's training rows to the survivor, in the merge
+      transaction next to the `game_testers` move, because `purgeHolds` deletes the closed
+      account after the 30-day hold and the `users` cascade would take the rows with it.
+      `r2_key` stays as stored (its accountId is just a name). Undo doesn't move them back, as
+      with testers. Parked: `purgeHolds` doesn't delete R2 objects of rows still left on a
+      purged account.
     - Deleting an account deletes its training photos' R2 objects. The rows go with the
       `users` cascade.
 12. **No foreign key on `printing_id`/`card_id`.** A catalog delete must never fail because a
@@ -128,7 +138,8 @@ against `main` after `feat/one-piece-catalog` merges.
   - the Settings row is hidden unless a tester game is available.
 - **One Piece stays hidden** to non-testers.
   - Every `/api/training/*` route answers a non-tester, or a game whose access isn't
-    `'testers'`, with `404 {error:'not-found'}`.
+    `'testers'`, with `404 {error:'not-found'}`, checked right after sign-in and origin and
+    before any 400, so a non-tester can't tell the routes exist.
   - The owner counts as a tester (`gamesFor`).
 - **Training photos are never served publicly:**
   - nothing under `/img/` or `/api/` returns a `training/` key
@@ -141,7 +152,8 @@ against `main` after `feat/one-piece-catalog` merges.
 
 - **"Delete last photo" while that photo is mid-upload.** The photo must end up deleted on the
   server, not dropped locally while the upload lands. Pinned in Task 5
-  (`forget during an in-flight upload queues a delete`).
+  (`forget during an in-flight upload queues a delete`, and
+  `forget after a lost response queues a delete`).
 - **The response to a successful upload is lost (flaky signal), and the outbox retries.** The
   server keeps one photo and one row, and the count goes up once. Pinned in Task 3
   (`same client id twice stores one photo`).
@@ -214,6 +226,11 @@ against `main` after `feat/one-piece-catalog` merges.
 - [ ] **Step 1: Write the failing tests.**
 
 ```ts
+const row: TrainingLabelRow = { id: 1, clientId: '0f8e2c1a-1b2c-4d3e-8f90-123456789abc', game: 'op',
+  userId: 7, username: 'dubgrumble', cardId: 2 ** 39 + 5, printingId: 812, holder: 'bare',
+  device: 'Android 15 Pixel 8', appVersion: '0.53.0', takenAt: '2026-11-05T01:59:00.000Z',
+  createdAt: '2026-11-05T01:59:01.000Z', language: 'en', number: 'OP05-119', bandaiId: '',
+  version: 'SR' }
 const NOW = new Date('2026-11-05T02:00:00.000Z')
 const label: TrainingLabel = { game: 'op', cardId: 2 ** 39 + 5, printingId: 812, holder: 'sleeve',
   device: 'Android 15 Pixel 8', appVersion: '0.53.0', takenAt: '2026-11-05T01:59:00.000Z' }
@@ -250,8 +267,8 @@ test('holder labels', () => {
 ```
 
 - [ ] **Step 2: Run** `npm test -- tests/main/training-shared.test.ts`. Expected: FAIL (module missing).
-- [ ] **Step 3: Implement `src/shared/training.ts`.** It must have no DOM or Node imports, because
-  the pull script loads it by URL under `node --experimental-strip-types`.
+- [ ] **Step 3: Implement `src/shared/training.ts`.** It must have no DOM or Node imports. Its
+  imports stay normal (the pull script is bundled by Vite, Task 8).
 - [ ] **Step 4: Run** the test again. Expected: PASS.
 - [ ] **Step 5: Commit** `feat(training): shared label, caps and truth row for training photos`.
 
@@ -266,6 +283,10 @@ test('holder labels', () => {
   handler)
 - Modify: `src/shared/ipc.ts` (add `numberPrefixes(): Promise<string[]>` to `Api['scan']` and
   `'scan:numberPrefixes'` to the channel list after `'scan:chineseOfArt'`)
+- Modify: `src/phone/data/store.ts` (add `'scan:numberPrefixes'` to `READ_CHANNELS`, so it
+  doesn't wait behind a catalog fill or sync in `serial()`)
+- Modify: `src/renderer/src/web/httpApi.ts` (`numberPrefixes: scanUnavailable` in the `scan:`
+  block)
 - Test: `tests/main/op-number.test.ts`; extend `tests/main/data-handlers.test.ts` (its
   `covers exactly DATA_CHANNELS` test must still pass)
 
@@ -283,9 +304,9 @@ test('holder labels', () => {
   - `numberPrefixes(db: SqlDb, scope: Scope = LOCAL): string[]`:
     `SELECT DISTINCT substr(set_code, 1, instr(set_code, '-') - 1) AS prefix FROM card_printings
     WHERE +game = ${scope.game} AND contributed = 0 AND instr(set_code, '-') > 1 ORDER BY prefix`.
-  - `window.api.scan.numberPrefixes()`. The phone gets it with no extra wiring, because
-    `createPhoneApi` maps every `DATA_CHANNELS` entry. The portal RPC does not get it: the web
-    app has no Contribute screen.
+  - `window.api.scan.numberPrefixes()`. The phone gets it because `createPhoneApi` maps every
+    `DATA_CHANNELS` entry; it is a read channel there. The portal RPC does not get it (the web
+    app has no Contribute screen), so httpApi answers `scanUnavailable`.
 
 - [ ] **Step 1: Write the failing tests.**
 
@@ -308,9 +329,10 @@ test('suggests set codes as typed', () => {
   expect(prefixSuggestions('o', P, 2)).toEqual(['OP01-', 'OP02-'])
 })
 test('numberPrefixes lists the active game only', () => {
-  // seedOnePiece (step 1 helper) + the YGO fixture db; active game 'op'
+  // seedOnePiece (step 1 helper) + the YGO fixture db; the default active game is ygo
+  setActiveGame(db, ['ygo', 'pkm', 'op'], 'op')
   expect(numberPrefixes(db)).toEqual(['OP01'])
-  setActiveGame(db, 'ygo')
+  setActiveGame(db, ['ygo', 'pkm', 'op'], 'ygo')
   // The sample YGO fixture has no OP01 set (check; if it does, seed op as 'ZZ01-001' instead).
   expect(numberPrefixes(db)).not.toContain('OP01')
   expect(numberPrefixes(db).length).toBeGreaterThan(0)
@@ -319,7 +341,8 @@ test('numberPrefixes lists the active game only', () => {
 
 - [ ] **Step 2: Run** `npm test -- tests/main/op-number.test.ts tests/main/data-handlers.test.ts`.
   Expected: FAIL.
-- [ ] **Step 3: Implement** the module, the repo function, the channel and the `Api` type.
+- [ ] **Step 3: Implement** the module, the repo function, the channel, the `Api` type, the
+  phone read channel and the httpApi stub.
 - [ ] **Step 4: Run** the tests, then `npm run typecheck`. Expected: PASS. The typecheck catches
   any `Api['scan']` mock that needs the new method (for example
   `tests/renderer/mockApi.ts`). Add `numberPrefixes: vi.fn(async () => [])` there.
@@ -339,15 +362,19 @@ test('numberPrefixes lists the active game only', () => {
 - Modify: `workers/portal/src/account.ts`. `deleteAccountRoute` collects the `r2_key`s of the user
   and of its held merged accounts before the transaction, and deletes them from
   `deps.training` after it, best effort and logged on failure.
+- Modify: `workers/portal/src/merge.ts`. In the merge transaction, right after the
+  `game_testers` move, `UPDATE OR IGNORE training_photos SET user_id = ? WHERE user_id = ?`
+  (`a.survivor`, `a.closed`). Undo leaves them.
 - Modify: `tests/portal/helpers.ts`. `memoryBucket()` gains
-  `async delete(key) { store.delete(key) }`.
-- Test: `tests/portal/training.test.ts` (better-sqlite3) and `workers/portal/test/training.test.ts`
-  (DO SQLite + R2). If `tests/portal/migrate.test.ts` pins the server step names, add `server-37`
-  there.
+  `async delete(key) { store.delete(key) }`, and its return type widens to
+  `ImageBucket & TrainingBucket & { store: … }`.
+- Test: `tests/portal/training.test.ts` (better-sqlite3), `workers/portal/test/training.test.ts`
+  (DO SQLite + R2), one case in `tests/portal/merge.test.ts` and one in
+  `tests/portal/edge-image.test.ts`.
 
 **Interfaces:**
 - Consumes: Task 1 (`readLabel`, `trainingKey`, `CLIENT_ID_RE`, caps, `TrainingSummary`);
-  `currentUser`, `fromPublicOrigin`, `gamesFor` (auth.ts); `GAMES`.
+  `currentUser`, `fromPublicOrigin`, `gamesFor` (auth.ts); `GAMES`, `GAME_IDS`.
 - Migration `server-37`:
 
   ```sql
@@ -368,25 +395,30 @@ test('numberPrefixes lists the active game only', () => {
   - `trainingRoute(req: Request, deps: AppDeps, rest: string): Promise<Response>`, which handles:
     - `POST photos/<clientId>?<labelParams>` with an `image/jpeg` body. Success is `200`
       `TrainingSummary`.
-    - `DELETE photos/<clientId>`. The answer is `204`, idempotent, and it touches only the
-      caller's own row.
-    - `GET summary?game=<g>`. Success is `200` `TrainingSummary`.
+    - `DELETE photos/<clientId>`. The checks are 401, then the same `403 bad-origin` as the
+      upload, then `404` unless `GAME_IDS.some((g) => mayContribute(deps, userId, g))`. The
+      answer is `204`, idempotent, and it touches only the caller's own row.
+    - `GET summary?game=<g>`. 401, then `404` when `!mayContribute`. Success is `200`
+      `TrainingSummary`.
   - The upload's checks, in order. Each failure gives the status shown:
     1. `401 signed-out`
     2. a web session not from `PUBLIC_URL`: `403 bad-origin`
-    3. `clientId` fails `CLIENT_ID_RE`: `400 bad-id`
-    4. `readLabel` null: `400 bad-label`
-    5. `!mayContribute`: `404 not-found`
+    3. read `game` from the query; `!mayContribute`: `404 not-found`
+    4. `clientId` fails `CLIENT_ID_RE`: `400 bad-id`
+    5. `readLabel` null: `400 bad-label`
     6. the printing is missing, isn't `label.cardId`'s, or its card's game ≠ `label.game`:
        `400 bad-printing`
     7. a row already exists for (user, clientId): `200` summary, with no put
     8. content-type isn't `image/jpeg`: `415`
     9. `content-length` > cap: `413 too-big`, before the body is read
-    10. the body is > cap or doesn't start `FF D8 FF`: `413` or `415`
+    10. read `req.body` with a reader, counting bytes; past the cap, cancel the stream and
+        answer `413 too-big` (never `req.arrayBuffer()`, which buffers up to 100 MB in the one
+        DO). A body not starting `FF D8 FF`: `415`
     11. the rows created in the last 24 h are ≥ `TRAINING_DAILY_CAP`: `429 daily-cap`
     12. no `deps.training`: `503`
     13. `await training.put(key, body, image/jpeg)`
-    14. re-check the cap, then `INSERT OR IGNORE` the row (`created_at` = `deps.now()`)
+    14. re-check the cap (over it: delete the object just put, then `429 daily-cap`), then
+        `INSERT OR IGNORE` the row (`created_at` = `deps.now()`)
     15. `200` summary
   - Summary: `total` = this user's rows for the game, `today` = this user's rows in the last
     24 h (all games), `dailyCap` = 500. These are two `COUNT(*)` statements.
@@ -407,29 +439,37 @@ test('numberPrefixes lists the active game only', () => {
   - `same client id twice stores one photo`: two POSTs, both 200 with `total:1`, one row, one
     R2 put.
   - `too big is 413 before the body`: `content-length: 8388609`, 413, and no put. Then a real
-    8 MiB + 1 byte body without the header, 413.
+    8 MiB + 1 byte body without the header, 413 (this pins the counting reader).
   - `not a jpeg is 415`: a body `89 50 4E 47`.
   - `501st photo in 24 h is 429`. Insert 500 rows directly, with `created_at` = now − 1 h, then
     POST: 429 `daily-cap`. With the rows moved to now − 25 h, it is 200.
-  - `bad label is 400`: `holder=binder`.
+  - `bad label is 400`: a tester with `holder=binder`. A non-tester with `holder=binder` gets
+    404 `not-found`, not 400.
   - `delete removes the row and the object`: 204, the row is gone, the key is gone. A second
-    DELETE is 204. Another user's DELETE of the same id leaves it.
+    DELETE is 204. Another tester's DELETE of the same id leaves it. A non-tester's DELETE is
+    404. A web-session DELETE from another origin is 403 `bad-origin`.
   - `summary`: `GET summary?game=op` gives `{total, today, dailyCap}`. A non-tester gets 404.
   - `account deletion removes its training photos`: POST `/api/account/delete`, then the R2
     key is gone.
-  - `training keys are never served`:
-    - `GET /img/training/op/<uid>/<cid>.jpg` and `GET /img/full/training` are 404, with no
-      `training/` get on the bucket (wrap `get` to record keys).
-    - `GET /api/training/photos/<cid>` is 404.
+  - `training keys are never served`. Use **one** `memoryBucket` (its `get` wrapped to record
+    keys) as both `images` and `training`, and upload a real training photo first. Then
+    `GET /img/training/op/<uid>/<cid>.jpg`, `/img/full/training`, `/img/printing/training`,
+    `GET /api/training/photos/<cid>` and `/api/admin/thumbs/photo?key=training/…` (with the
+    admin token) all return no body bytes, and no recorded `get` starts with `training/`.
+  - `merge.test.ts`, `a merge moves training photos to the survivor`: rows of the closed
+    account have `user_id` = survivor and their `r2_key` unchanged after the merge, and still
+    after an undo.
+  - `edge-image.test.ts`: `/img/training/op/<uid>/<cid>.jpg` doesn't read the bucket.
 
-- [ ] **Step 2: Run** `npm test -- tests/portal/training.test.ts`. Expected: FAIL.
-- [ ] **Step 3: Implement** the migration, `training.ts`, the routing, the deps wiring and the
-  account-delete cleanup.
+- [ ] **Step 2: Run** `npm test -- tests/portal/training.test.ts tests/portal/merge.test.ts
+  tests/portal/edge-image.test.ts`. Expected: FAIL.
+- [ ] **Step 3: Implement** the migration, `training.ts`, the routing, the deps wiring, the
+  account-delete cleanup and the merge move.
 - [ ] **Step 4: Write the DO test** `workers/portal/test/training.test.ts`, in the style of
   `favourites.test.ts`. Through `stub.fetch` it covers: upload, the summary, the 24 h count,
-  delete and account delete, on workerd SQLite and the `IMAGES` R2 binding. If the test pool has
-  no `IMAGES` binding, add it to the pool's miniflare `r2Buckets`.
-- [ ] **Step 5: Run** `npm test -- tests/portal/training.test.ts` and `npm --prefix workers/portal
+  delete and account delete, on workerd SQLite and the `IMAGES` R2 binding (already bound in
+  `wrangler.toml`).
+- [ ] **Step 5: Run** the Step 2 files and `npm --prefix workers/portal
   test -- training`. Expected: PASS. Then run all of `tests/portal` and `workers/portal/test`.
   Expected: PASS (migrations still apply on DO SQLite: `do.test.ts`).
 - [ ] **Step 6: Commit** `feat(portal): tester-only training photo upload, delete and summary`.
@@ -439,9 +479,8 @@ test('numberPrefixes lists the active game only', () => {
 ### Task 4: `/admin` counts, the label list and the photo download
 
 **Files:**
-- Modify: `workers/portal/src/training.ts` (add `adminTrainingRoute`)
-- Modify: `workers/portal/src/catalogLoad.ts` (export the existing token check as
-  `authorized(req, deps): Promise<boolean>`)
+- Modify: `workers/portal/src/training.ts` (add `adminTrainingRoute`; the token check is
+  `adminAuthorized(req, deps.env.ADMIN_TOKEN)` from `thumbs.ts`, and `catalogLoad.ts` is left alone)
 - Modify: `workers/portal/src/app.ts`. Route `/admin/training` and `/admin/training/*` **before**
   the `/admin/` catch-all.
 - Modify: `workers/portal/src/adminPage.ts`:
@@ -449,7 +488,9 @@ test('numberPrefixes lists the active game only', () => {
   - add a nav link `<a href="#photos">Photos</a>` after Testers
   - add `<section data-tab id="photos">`
   - add a panel that fetches `/admin/training` with `credentials: 'same-origin'` on load, like
-    the testers panel
+    the testers panel. The inline script can't import, so inline
+    `JSON.stringify(HOLDER_LABELS)` into it, and render usernames with `textContent`, as the
+    existing panels do
 - Test: extend `tests/portal/training.test.ts` and `tests/portal/admin-page.test.ts`, and the DO
   test from Task 3.
 
@@ -475,8 +516,9 @@ test('numberPrefixes lists the active game only', () => {
   - `GET /admin/training/labels?game=op&after=<id>&limit=<n>`, token only. `limit` is at most
     500, default 500. It returns `{ labels: TrainingLabelRow[], more: boolean }` from one SELECT:
     `training_photos t JOIN users u LEFT JOIN card_printings p ON p.id = t.printing_id WHERE
-    t.game = ? AND t.id > ? ORDER BY t.id LIMIT limit+1`. `number` is `p.set_code`, `bandaiId`
-    is `p.set_rarity_code` and `version` is `p.set_rarity`.
+    t.game = ? AND t.id > ? ORDER BY t.id LIMIT limit+1`. `language` is `p.language`, `number`
+    is `p.set_code`, `bandaiId` is `p.set_rarity_code`, `version` is `p.set_rarity` and
+    `username` is `u.username`.
   - `GET /admin/training/photo/<id>`, token only. It returns the R2 object as `image/jpeg` with
     `cache-control: no-store`. An unknown id is 404.
   - Without the right auth, all three answer as the catch-all does (401). An owner **session** on
@@ -490,13 +532,14 @@ test('numberPrefixes lists the active game only', () => {
 
 - [ ] **Step 1: Write the failing tests.**
   - `stats count games, testers and holders`: 3 photos by A (2 versions of one card, holders
-    bare and sleeve) and 1 by B. Expect
-    `games[0]` = `{game:'op', photos:4, testers:2, cards:…, versions:…}` and holders by
+    bare and sleeve) and 1 by B of the base version. Expect
+    `games[0]` = `{game:'op', photos:4, testers:2, cards:1, versions:2}` and holders by
     holder.
   - `stats need the owner or the token`: a tester's session gets 401.
-  - `labels page by id and carry the printing`:
+  - `labels page by id and carry the printing`. `seedOnePiece` leaves `set_rarity_code` as
+    `''`, so first `UPDATE` the parallel's to `OP01-001_p1`.
     - with `limit=2`, `more:true`, then `after=<2nd id>`
-    - row fields `number:'OP01-001'`, `bandaiId` from `set_rarity_code`, `version`,
+    - row fields `language:'en'`, `number:'OP01-001'`, `bandaiId:'OP01-001_p1'`, `version`,
       `username`.
   - `labels and photo are token-only`: an owner session gets 401, the token gets 200.
   - `photo streams the jpeg privately`: the body equals the uploaded bytes, and
@@ -515,10 +558,15 @@ test('numberPrefixes lists the active game only', () => {
 **Files:**
 - Modify: `src/phone/data/store.ts` (three methods on `PhoneStore` and their implementation)
 - Modify: `src/phone/data/protocol.ts` (add them to `STORE_METHODS`; the compile-time check
-  enforces it)
+  enforces it). The page-side client posts `trainingUpload` with a copy of the JPEG
+  (`jpeg.slice(0)`) in the transfer list, so the 8 MB buffer isn't structured-cloned and the
+  outbox's own buffer stays usable.
 - Create: `src/phone/training/outbox.ts`
-- Modify: `src/phone/PhoneShell.tsx`. In `useReadyChecks`, drain the outbox once on start and on
-  each `online` event.
+- Modify: `src/phone/PhoneShell.tsx`. In `useReadyChecks`, drain the outbox once on start; the
+  `online` listener is registered in its own effect, with cleanup.
+- Modify: `tests/renderer/phoneFakes.ts` (`fakeStore()` implements `trainingUpload`,
+  `trainingDelete` and `trainingSummary`)
+- Modify: `package.json` (devDependency `fake-indexeddb`)
 - Test: extend `tests/main/phone-store.test.ts`; create `tests/renderer/phone-outbox.test.ts`
 
 **Interfaces:**
@@ -555,6 +603,7 @@ test('numberPrefixes lists the active game only', () => {
     kind: 'upload' | 'delete'
     label?: TrainingLabel  // upload only
     jpeg?: ArrayBuffer     // upload only
+    attempts?: number      // upload only: sends started; > 0 means the server may hold it
     queuedAt: string
   }
   interface OutboxStorage { all(): Promise<OutboxItem[]>; put(i: OutboxItem): Promise<void>; remove(key: string): Promise<void> }
@@ -567,24 +616,30 @@ test('numberPrefixes lists the active game only', () => {
   }
   interface Outbox {
     addUpload(userId: number, id: string, label: TrainingLabel, jpeg: ArrayBuffer): Promise<void>
-    /** Drops a queued upload not yet sending ('dropped'), else queues a server delete ('queued'). */
+    /** Drops a queued upload never sent ('dropped'); else removes any upload item and queues a server delete ('queued'). */
     forget(userId: number, id: string): Promise<'dropped' | 'queued'>
     waiting(userId: number): Promise<number> // queued uploads
     drain(userId: number, send: Sender): Promise<DrainResult>
     onChange(cb: () => void): () => void
   }
   function createOutbox(storage: OutboxStorage, now: () => Date): Outbox
-  /** The app's one outbox, on IndexedDB. */
-  export const trainingOutbox: Outbox
+  /** The app's one outbox, on IndexedDB, created on first call (tests never touch it). */
+  export function trainingOutbox(): Outbox
   ```
 
   - `drain`:
     - It sends this user's items oldest first (`queuedAt`), one at a time.
+    - Before each upload send it stores `attempts + 1` on the item.
     - `ok` removes the item.
     - `retry: false` removes the item and lists it in `dropped`.
     - `retry: true` stops the drain with that reason.
-    - Concurrent `drain` calls share one run.
+    - Concurrent `drain` calls **for the same `userId`** share one run; another user's drain
+      gets its own.
     - It remembers the id currently being sent (`inFlight`).
+  - `idbOutboxStorage` opens the database lazily, on first use. `all()` returns `[]` without
+    creating anything when the database doesn't exist yet, so YGO- and Pokémon-only users never
+    get one.
+  - The shell drain does nothing when `typeof indexedDB === 'undefined'`, and catches any error.
   - The outbox stores JPEGs as ArrayBuffers, not Blobs (older WebKit IndexedDB Blob bugs).
 
 - [ ] **Step 1: Write the failing tests.**
@@ -616,13 +671,23 @@ test('numberPrefixes lists the active game only', () => {
     - `forget during an in-flight upload queues a delete`: the sender's upload is held on a
       deferred; `forget` gives 'queued'; release the upload; the drain then calls `remove(id)`
       once.
-    - `concurrent drains share one run`: two `drain()` calls, and each item is sent once.
+    - `forget after a lost response queues a delete`: the sender stores the photo, then
+      answers `{ok:false, retry:true, reason:'offline'}`; `forget` gives 'queued'; the next
+      drain calls `remove(id)` once and `upload` is not called again.
+    - `concurrent drains share one run`: two `drain(1)` calls, and each item is sent once.
+      `drain(1)` and `drain(2)` together each send only their own user's items and get their
+      own results.
+    - `idbOutboxStorage round-trips` (with `import 'fake-indexeddb/auto'`): `put` an upload
+      item with a JPEG, then a **new** `idbOutboxStorage()` on the same name gives it back from
+      `all()` with equal bytes; `remove(key)` empties it.
+  - Shell: the existing `phone-app*.test.tsx` suites still pass with no `indexedDB` in jsdom.
 - [ ] **Step 2: Run** `npm test -- tests/main/phone-store.test.ts tests/renderer/phone-outbox.test.ts`.
   Expected: FAIL.
-- [ ] **Step 3: Implement** the store methods, the protocol entries, `outbox.ts` and the
-  `useReadyChecks` drain. The `useReadyChecks` drain is fire and forget, with errors swallowed,
-  and only when signed in: use `usePhone().user.id`.
-- [ ] **Step 4: Run** the tests, then `npm run typecheck`. Expected: PASS.
+- [ ] **Step 3: Implement** the store methods, the protocol entries, `outbox.ts`, the
+  `fakeStore` methods and the `useReadyChecks` drain. The `useReadyChecks` drain is fire and
+  forget, with errors swallowed, and only when signed in: use `usePhone().user.id`.
+- [ ] **Step 4: Run** the tests, `npm test -- tests/renderer/phone-app`, then
+  `npm run typecheck`. Expected: PASS.
 - [ ] **Step 5: Commit** `feat(phone): training photo outbox with offline retry`.
 
 ---
@@ -657,6 +722,10 @@ test('numberPrefixes lists the active game only', () => {
     - The result is always 1–100 characters (it passes `readLabel`), and it is computed once
       and memoized.
   - `newClientId(): string` = `crypto.randomUUID()`. The test checks it matches `CLIENT_ID_RE`.
+  - `appVersion(): string` = `typeof __APP_VERSION__ === 'string' ? __APP_VERSION__ : '0.0.0-dev'`
+    (vitest doesn't define `__APP_VERSION__`; the fallback passes `readLabel`'s semver rule, where
+    `UpdateBanner`'s `'dev'` would be refused).
+  - `grabFrame` treats a `null` from `toBlob` as a failed encode (`new Error('no-frame')`).
 
 - [ ] **Step 1: Write the failing tests.**
 
@@ -677,6 +746,11 @@ test.each([
   ['', 'unknown']
 ])('device of %j', (ua, want) => expect(deviceFromUa(ua)).toBe(want))
 test('client ids are v4 UUIDs', () => expect(newClientId()).toMatch(CLIENT_ID_RE))
+test('app version passes the label rule', () => {
+  expect(appVersion()).toBe('0.0.0-dev')
+  vi.stubGlobal('__APP_VERSION__', '0.53.0'); expect(appVersion()).toBe('0.53.0')
+  vi.unstubAllGlobals()
+})
 ```
 
 - [ ] **Step 2: Run** `npm test -- tests/renderer/phone-capture.test.ts`. Expected: FAIL.
@@ -691,11 +765,17 @@ test('client ids are v4 UUIDs', () => expect(newClientId()).toMatch(CLIENT_ID_RE
 **Files:**
 - Create: `src/phone/training/ContributeScreen.tsx`
 - Create: `src/phone/training/copy.ts` (the strings below)
-- Modify: `src/phone/Settings.tsx`. Add a "Contribute photos" section/row shown only when
-  `useGame().available.some(g => GAMES[g].access === 'testers')`. Tapping it calls `setGame(g)`
-  for the first such game, then renders `<ContributeScreen game={g} onClose=…/>` as a
-  `fixed inset-0 z-50` overlay. `useBackHandler(open, close)` closes it.
-- Test: create `tests/renderer/phone-contribute.test.tsx`; extend `tests/renderer/settings.test.tsx`
+- Modify: `src/phone/Settings.tsx`. It takes a prop `onContribute?: (game: GameId) => void` and
+  adds a "Contribute photos" section/row shown only when `onContribute` is set and
+  `useGame().available.some(g => GAMES[g].access === 'testers')`. Tapping it calls
+  `onContribute(g)` for the first such game.
+- Modify: `src/phone/PhoneShell.tsx`. `Shell` holds the `contribute: GameId | null` state and
+  `openContribute(g)`, which does `await setGame(g)` and then sets the state. It passes
+  `settings={<Settings onContribute={openContribute} />}` and renders
+  `<ContributeScreen game={contribute} onClose=…/>`, while `contribute` is set, as a `fixed inset-0 z-50` sibling of
+  `<main>`, so it is outside `PageSwitch`'s `<Fragment key={game}>` and the scrolling main.
+  `useBackHandler(contribute !== null, close)` closes it.
+- Test: create `tests/renderer/phone-contribute.test.tsx`; extend `tests/renderer/phone-app.test.tsx`
 
 **Interfaces:**
 - Consumes:
@@ -705,14 +785,14 @@ test('client ids are v4 UUIDs', () => expect(newClientId()).toMatch(CLIENT_ID_RE
     `trainingDelete`) and Task 6 (`grabFrame`, `deviceModel`, `newClientId`)
   - from the app: `useCamera(useScanHub().settings.deviceId, 'environment')`,
     `api.scan.printingsByCode`, `api.cards.get`, `store.printingPhotoIds`, `cardImageSrc`,
-    `__APP_VERSION__`
+    `appVersion()` (Task 6)
 - Produces:
 
   ```ts
   function ContributeScreen(props: {
     game: GameId
     onClose(): void
-    /** Tests. */ outbox?: Outbox
+    /** Tests. Default `trainingOutbox()`. */ outbox?: Outbox
     /** Tests. */ grab?: (video: HTMLVideoElement) => Promise<ArrayBuffer>
     /** Tests. */ now?: () => Date
   }): React.JSX.Element
@@ -768,7 +848,8 @@ test('client ids are v4 UUIDs', () => expect(newClientId()).toMatch(CLIENT_ID_RE
 
 - [ ] **Step 1: Write the failing tests** (`phone-contribute.test.tsx`, with `mockApi` and
   `phoneFakes`, a `memoryOutboxStorage` outbox, a fake `grab` returning `new Uint8Array([0xff,0xd8,0xff]).buffer`,
-  a fake camera stream, and an op card with base `OP01-001` and parallel `OP01-001_p1`):
+  a fake camera stream, `vi.stubGlobal('__APP_VERSION__', '0.53.0')`, and an op card with base
+  `OP01-001` and parallel `OP01-001_p1`):
   - `typed number lists its versions`: typing `op01001` shows two tiles labelled `L` and
     `L (Alternate Art)`, and the parallel's img src uses its `artImageId`.
   - `set-code chips complete the prefix`: with `numberPrefixes` → `['OP01','OP02','ST01']`,
@@ -779,7 +860,7 @@ test('client ids are v4 UUIDs', () => expect(newClientId()).toMatch(CLIENT_ID_RE
     - Choose `L (Alternate Art)` (server id 9001) and Sleeve, then tap twice.
     - Expect the outbox to hold 2 uploads, each with label
       `{game:'op', cardId, printingId:9001, holder:'sleeve', device:<deviceModel>,
-      appVersion:__APP_VERSION__, takenAt:<now>}` and different ids.
+      appVersion:'0.53.0', takenAt:<now>}` and different ids.
     - Then choose Top loader and tap: that label's holder is `toploader`, and the earlier two
       are unchanged.
   - `holder sticks across a remount`: choose Slab, unmount, mount, and Slab has
@@ -789,17 +870,21 @@ test('client ids are v4 UUIDs', () => expect(newClientId()).toMatch(CLIENT_ID_RE
   - `count shows server total and waiting`: the summary is `{total:12,today:3,dailyCap:500}`,
     with 1 queued, so the text is `12 photos · 1 waiting to upload · 3/500 today`.
   - `daily cap message`: the sender returns 429, and the daily-limit copy shows.
-  - Settings (`settings.test.tsx`):
-    - `contribute row only for tester games`: with available `['ygo','pkm']` there is no
-      "Contribute photos". With `['ygo','pkm','op']` it is present, and tapping it calls
-      `games.setActive('op')` and shows the screen.
-- [ ] **Step 2: Run** `npm test -- tests/renderer/phone-contribute.test.tsx tests/renderer/settings.test.tsx`.
+  - Settings row (`phone-app.test.tsx`, through the real `PhoneShell` and `GameProvider`, with
+    `fakeStore`'s games answering available `['ygo','pkm']` or `['ygo','pkm','op']` and active
+    `'ygo'`; More → Settings):
+    - `contribute row only for tester games`: with `['ygo','pkm']` there is no
+      "Contribute photos". With `['ygo','pkm','op']` it is present.
+    - `contribute survives the game switch`: starting on ygo, tapping the row sets the active
+      game to `'op'`, and after the switch has rendered, the Contribute screen (its "Card
+      number" box) is still shown.
+- [ ] **Step 2: Run** `npm test -- tests/renderer/phone-contribute.test.tsx tests/renderer/phone-app.test.tsx`.
   Expected: FAIL.
-- [ ] **Step 3: Implement** the screen, the copy and the Settings row. Use the phone's existing
+- [ ] **Step 3: Implement** the screen, the copy, the Settings row and the shell's overlay. Use the phone's existing
   Tailwind idiom: dark frosted panels and 44 px minimum touch targets, as `PhoneCamera`'s buttons
   are.
 - [ ] **Step 4: Run** the tests, then the whole phone suite `npm test -- tests/renderer/phone-*`
-  plus `settings.test.tsx`, and `npm run typecheck`. Expected: PASS.
+  and `npm run typecheck`. Expected: PASS.
 - [ ] **Step 5: Visual check (controller).** Run `npm run dev:phone` in a browser at 320 and 390
   px, signed in to the demo account with the `op` game. Screenshot the screen with a version
   chosen. Check that the shutter, the holder control and the count line fit with no overlap at
@@ -812,8 +897,11 @@ test('client ids are v4 UUIDs', () => expect(newClientId()).toMatch(CLIENT_ID_RE
 
 **Files:**
 - Create: `scripts/scan/pull-training.ts`
+- Modify: `scripts/catalog/vite.config.ts` (add
+  `'pull-training': \`${root}scripts/scan/pull-training.ts\`` to `rollupOptions.input`)
 - Modify: `package.json` (add a script
-  `"scan:pull-training": "node --experimental-strip-types scripts/scan/pull-training.ts"`)
+  `"scan:pull-training": "vite build --config scripts/catalog/vite.config.ts && node out/catalog/pull-training.mjs"`,
+  as `catalog:thumbs` is built)
 - Test: `tests/main/pull-training.test.ts` (the pure parts, through `src/shared/training.ts`, plus
   `planPull` exported from the script)
 
@@ -826,6 +914,8 @@ test('client ids are v4 UUIDs', () => expect(newClientId()).toMatch(CLIENT_ID_RE
     - Missing env throws `PORTAL_URL and PORTAL_ADMIN_TOKEN must both be set` (as `thumbs.ts`
       does).
   - `planPull(labels: TrainingLabelRow[], have: ReadonlySet<string>): { download: TrainingLabelRow[]; truth: TruthRow[]; stale: string[] }`:
+    - Each `clientId` is re-checked against `CLIENT_ID_RE` before it names a file; a label that
+      fails is left out of `download` and `truth`, with a warning (defence in depth).
     - `download` is the labels whose `<clientId>.jpg` isn't in `have`.
     - `truth` is every label's `truthRowOf`, in id order.
     - `stale` is the names in `have` that no label names. These are photos deleted by the tester.
@@ -837,27 +927,41 @@ test('client ids are v4 UUIDs', () => expect(newClientId()).toMatch(CLIENT_ID_RE
        an interrupted run never leaves a half file under the real name.
     4. Write `<out>/<game>-truth.json` (2-space JSON) only after every download succeeds.
     5. Print `N labels, D downloaded, S stale, by holder: bare 40, sleeve 12, …`.
-  - It loads app modules by URL, as `make-fixtures.ts` does, because Node's type stripping can't
-    resolve extensionless imports.
+  - It imports app modules normally; the Vite bundle resolves them (Node's type stripping can't
+    follow `src/shared/games`' extensionless imports).
+  - `source: 'app'` stays. The Pokémon replay groups only `owner` and `ebay`, so step 4's One
+    Piece replay must treat `'app'` like `'owner'`.
 
 - [ ] **Step 1: Write the failing tests.**
 
 ```ts
+const A = '0f8e2c1a-1b2c-4d3e-8f90-00000000000a', B = A.replace(/a$/, 'b'), C = A.replace(/a$/, 'c')
+const row = (id: number, clientId: string): TrainingLabelRow => ({ id, clientId, game: 'op',
+  userId: 7, username: 'dubgrumble', cardId: 2 ** 39 + 5, printingId: 812, holder: 'bare',
+  device: 'Android 15 Pixel 8', appVersion: '0.53.0', takenAt: '2026-11-05T01:59:00.000Z',
+  createdAt: '2026-11-05T01:59:01.000Z', language: 'en', number: 'OP05-119', bandaiId: null,
+  version: 'SR' })
 test('plans only missing photos and keeps id order', () => {
-  const p = planPull([row(1, 'a'), row(2, 'b'), row(3, 'c')], new Set(['b.jpg', 'z.jpg']))
-  expect(p.download.map((r) => r.clientId)).toEqual(['a', 'c'])
-  expect(p.truth.map((t) => t.file)).toEqual(['shots-op/a.jpg', 'shots-op/b.jpg', 'shots-op/c.jpg'])
+  const p = planPull([row(1, A), row(2, B), row(3, C)], new Set([`${B}.jpg`, 'z.jpg']))
+  expect(p.download.map((r) => r.clientId)).toEqual([A, C])
+  expect(p.truth.map((t) => t.file)).toEqual([`shots-op/${A}.jpg`, `shots-op/${B}.jpg`, `shots-op/${C}.jpg`])
   expect(p.stale).toEqual(['z.jpg'])
 })
 test('truth rows have the pkm-truth keys', () => {
-  const t = planPull([row(1, 'a')], new Set()).truth[0]
+  const t = planPull([row(1, A)], new Set()).truth[0]
   for (const k of ['file', 'source', 'sourceId', 'version', 'language', 'holder']) expect(t).toHaveProperty(k)
+})
+test('a client id that isn\'t a UUID never names a file', () => {
+  const p = planPull([row(1, '../../x'), row(2, A)], new Set())
+  expect(p.download.map((r) => r.clientId)).toEqual([A])
+  expect(p.truth.map((t) => t.file)).toEqual([`shots-op/${A}.jpg`])
 })
 ```
 
 - [ ] **Step 2: Run** `npm test -- tests/main/pull-training.test.ts`. Expected: FAIL.
 - [ ] **Step 3: Implement** the script. Guard `main()` behind `import.meta.url ===
-  pathToFileURL(process.argv[1]).href`, so importing it in the test doesn't run it.
+  pathToFileURL(process.argv[1]).href`, so importing it in the test doesn't run it (the guard
+  still holds in the bundle).
 - [ ] **Step 4: Run** the test. Expected: PASS. Then run the script against an empty local
   `wrangler dev`, or skip this if it isn't feasible headless. Expected: `0 labels` and an empty
   `op-truth.json` (`[]`).
@@ -873,7 +977,9 @@ test('truth rows have the pkm-truth keys', () => {
   - `src/shared/scan/profiles.ts`, `PhoneCamera.tsx` or `StreamCamera.tsx`
   - the fingerprint or catalog stages
   - any ygo/pkm wire type
-- [ ] **Step 2: Deploy the portal first.** `server-37` is one-way. After the deploy:
+- [ ] **Step 2: Deploy the portal first.** `server-37` is one-way. Before the deploy, confirm the
+  `duel-binder-images` bucket (which now also holds `training/`) has no r2.dev public URL and no
+  custom domain. After the deploy:
   - `GET /api/training/summary?game=op` with the owner's token gives `{total:0,today:0,dailyCap:500}`
   - with a non-tester's token it gives 404
   - `/admin#photos` shows "No photos yet."
@@ -886,11 +992,17 @@ test('truth rows have the pkm-truth keys', () => {
   4. DELETE it.
   5. Pull again: the file shows as stale and the truth file is `[]`.
 - [ ] **Step 4: Client release.** Bump the next minor version, tag `v*`. Android AAB uploads to
-  Play internal testing through CI. Merge and release follow the owner's overnight grant.
+  Play internal testing through CI. Merge and release follow the owner's overnight grant. The PR
+  body states the typed-only deviation from the spec (OCR scope above) for the owner to sign off,
+  and names step 3b (One Piece scan profile and number OCR, accepted by a replay against the
+  friend's first photos) as the next step.
 - [ ] **Step 5: Hand-off note for the owner** to pass to the friend:
   - where the screen is (Settings → Contribute photos)
   - the "What to shoot" list
   - the 200–300 target
   - that typed numbers are the way in this release
+  For the owner alone: typed-only is a deviation from the spec awaiting his sign-off, with step
+  3b next (as in the PR body). Parked: `purgeHolds` R2 cleanup for training rows left on a
+  purged account.
   Record the open device checks: real camera resolution on his Android, IndexedDB queue across an
   app kill, the upload time per shot on mobile data.

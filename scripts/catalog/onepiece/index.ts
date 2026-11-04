@@ -2,7 +2,7 @@ import type Database from 'better-sqlite3'
 import { createLimiter } from '../pokemon/http'
 import type { TcPrice } from '../pokemon/types'
 import { isFrozen, refreshArt, type ArtBatch, type ArtPortal } from './art'
-import { openOpCache } from './cache'
+import { openOpCache, type OpCache } from './cache'
 import { matchSeries, type OpMatch } from './match'
 import { createOnePieceSources, dedupeEntries, type OnePieceSources } from './sources'
 import type { OpProduct } from './tcgcsv'
@@ -66,8 +66,10 @@ export async function runOnePieceStep(
   o: OnePieceStepOpts
 ): Promise<OnePieceStepResult> {
   const problems: string[] = []
-  const cache = openOpCache(o.cachePath)
+  let opened: OpCache | undefined
   try {
+    // Inside the try: a corrupt or locked cache file is tonight's error, not a failed job.
+    const cache = (opened = openOpCache(o.cachePath))
     const sources = o.sources ?? createOnePieceSources({ cache, version: o.version, log: o.log })
     const date = o.now?.() ?? new Date()
     const now = date.getTime()
@@ -203,8 +205,15 @@ export async function runOnePieceStep(
       takers.set(m.product.productId, [...(takers.get(m.product.productId) ?? []), m.bandaiId])
     for (const [pid, ids] of takers) {
       if (ids.length < 2) continue
-      for (const id of ids) matches.delete(id)
-      notes.push(`${ids.join(' and ')} all match ${pid}; none takes it`)
+      // A printing already on the product keeps it (Builder's call 5); the newcomers don't take it.
+      const keeper = ids.find((id) => stored.get(id) === pid)
+      const dropped = ids.filter((id) => id !== keeper)
+      for (const id of dropped) matches.delete(id)
+      notes.push(
+        keeper
+          ? `${dropped.join(' and ')} also match ${pid}, which ${keeper} keeps`
+          : `${ids.join(' and ')} all match ${pid}; none takes it`
+      )
     }
     for (const m of matches.values()) {
       const n = rowsOf.get(m.product.productId) ?? 0
@@ -258,7 +267,7 @@ export async function runOnePieceStep(
     // Problems found before the throw still stand: a first-noticed art change isn't raised again.
     return { report: null, error: e instanceof Error ? e.message : String(e), problems }
   } finally {
-    cache.close()
+    opened?.close()
   }
 }
 

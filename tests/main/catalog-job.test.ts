@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, readdirSync, rmSync } from 'node:fs'
+import { existsSync, mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type Database from 'better-sqlite3'
@@ -1086,6 +1086,50 @@ describe('One Piece step in the nightly job', () => {
     expect([...games].sort()).toEqual(['pkm', 'ygo'])
   })
 
+  it('an op step that throws is a problem; ygo and pkm still upload', async () => {
+    await ygoAndPkm()
+    const { fetch, calls } = recordingFetch(ok)
+    const out = await runJob({
+      ...common(),
+      dir,
+      url: URL_BASE,
+      token: TOKEN,
+      fetch,
+      onePiece: async () => {
+        throw new Error('file is not a database')
+      }
+    })
+    expect(out.problems).toEqual(['One Piece refresh skipped: file is not a database'])
+    expect(calls.map((c) => c.path)).toContain('/admin/catalog/finish')
+    const games = new Set(rowsOf(calls, 'card_printings').map((r) => r['game']))
+    expect([...games].sort()).toEqual(['pkm', 'ygo'])
+  })
+
+  it('the default op step over a corrupt source cache is a problem; the upload goes ahead', async () => {
+    await ygoAndPkm()
+    writeFileSync(join(dir, 'onepiece-src.sqlite'), 'garbage '.repeat(64))
+    const { fetch, calls } = recordingFetch(ok)
+    const out = await runRealJob({
+      ...common(),
+      dir,
+      url: URL_BASE,
+      token: TOKEN,
+      fetch,
+      pokemon: async () => ({ reports: [], error: null })
+    })
+    expect(out.problems).toHaveLength(1)
+    expect(out.problems[0]).toMatch(/^One Piece refresh skipped: .*not a database/i)
+    expect(calls.map((c) => c.path)).toContain('/admin/catalog/finish')
+  })
+
+  it('a rejected ONEPIECE_ART_BUDGET is logged', () => {
+    const lines: string[] = []
+    expect(onePieceArtBudget('0500', (l) => lines.push(l))).toBe(ART_BUDGET)
+    expect(lines).toEqual([
+      `ONEPIECE_ART_BUDGET="0500" is not a positive integer; using ${ART_BUDGET}`
+    ])
+  })
+
   it('op problems fail the run but the upload goes ahead', async () => {
     await ygoAndPkm()
     const { fetch, calls } = recordingFetch(ok)
@@ -1107,7 +1151,9 @@ describe('One Piece step in the nightly job', () => {
 
   it('ONEPIECE_ART_BUDGET overrides the art budget only when it is a positive integer', () => {
     expect(onePieceArtBudget('500')).toBe(500)
-    for (const v of [undefined, '', '0', '-3', '2.5', 'lots']) expect(onePieceArtBudget(v)).toBe(ART_BUDGET)
+    for (const v of [undefined, '', '0', '-3', '2.5', 'lots']) {
+      expect(onePieceArtBudget(v)).toBe(ART_BUDGET)
+    }
   })
 
   it('skipOnePiece leaves the step out', async () => {

@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync } from 'node:fs'
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type Database from 'better-sqlite3'
@@ -259,6 +259,24 @@ describe('runOnePieceStep', () => {
     expect(
       (work.prepare("SELECT COUNT(*) AS n FROM cards WHERE game = 'op'").get() as { n: number }).n
     ).toBe(0)
+  })
+
+  test('a cache file that is not SQLite is an error, and nothing is written', async () => {
+    const cachePath = join(dir, 'onepiece-src.sqlite')
+    writeFileSync(
+      cachePath,
+      'not a database, just text that is long enough to fill a header '.repeat(4)
+    )
+    const out = await runOnePieceStep(work, {
+      cachePath,
+      version: 'test',
+      log: () => {},
+      sources: fakeSources(),
+      now: () => new Date(NOW)
+    })
+    expect(out.report).toBeNull()
+    expect(out.error).toMatch(/not a database/i)
+    expect(opRows()).toBe(0)
   })
 
   describe('a share drop is a problem', () => {

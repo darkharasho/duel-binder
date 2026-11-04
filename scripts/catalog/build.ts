@@ -182,9 +182,11 @@ export function newSetArtKeys(work: Database.Database, base: Database.Database |
   return keys(work).filter((k) => !old.has(k))
 }
 
-/** ONEPIECE_ART_BUDGET when it is a positive integer, else ART_BUDGET. */
-export function onePieceArtBudget(value: string | undefined): number {
-  return value && /^[1-9][0-9]*$/.test(value.trim()) ? Number(value.trim()) : ART_BUDGET
+/** ONEPIECE_ART_BUDGET when it is a positive integer, else ART_BUDGET (logged when it was set). */
+export function onePieceArtBudget(value: string | undefined, log?: (line: string) => void): number {
+  if (value && /^[1-9][0-9]*$/.test(value.trim())) return Number(value.trim())
+  if (value) log?.(`ONEPIECE_ART_BUDGET="${value}" is not a positive integer; using ${ART_BUDGET}`)
+  return ART_BUDGET
 }
 
 /** In run order. They hand over through the files in `dir`, so one can start where the last stopped. */
@@ -345,9 +347,14 @@ export async function runJob(opts: JobOptions): Promise<JobResult> {
             log,
             // A dry run uploads no art.
             portal: url && token && !opts.dryRun ? { url, token, fetch: opts.fetch } : undefined,
-            budget: onePieceArtBudget(process.env['ONEPIECE_ART_BUDGET'])
+            budget: onePieceArtBudget(process.env['ONEPIECE_ART_BUDGET'], log)
           }))
-      const out = await step(work)
+      // Whatever the step does, Yu-Gi-Oh and Pokémon still upload.
+      const out = await step(work).catch((e: unknown) => ({
+        report: null,
+        error: e instanceof Error ? e.message : String(e),
+        problems: [] as string[]
+      }))
       if (out.error !== null) problem(`One Piece refresh skipped: ${out.error}`)
       for (const p of out.problems) problem(p)
       if (out.report) logOnePiece(out.report, log)

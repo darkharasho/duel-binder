@@ -58,6 +58,27 @@ describe('One Piece art upload (admin)', () => {
     expect((await opArtRoute(put('full', id, big, 'image/png'), memoryBucket(), TOKEN))!.status).toBe(413)
   })
 
+  it('413 from Content-Length alone, before the body is read', async () => {
+    let read = false
+    const req = {
+      url: `https://app.duelbinder.com/api/admin/op-art/full/${id}`,
+      method: 'PUT',
+      headers: new Headers({
+        'content-type': 'image/png',
+        'content-length': String(3 * 1024 * 1024),
+        authorization: `Bearer ${TOKEN}`
+      }),
+      arrayBuffer: async () => {
+        read = true
+        return PNG.buffer
+      }
+    } as unknown as Request
+    const bucket = memoryBucket()
+    expect((await opArtRoute(req, bucket, TOKEN))!.status).toBe(413)
+    expect(read).toBe(false)
+    expect(bucket.store.size).toBe(0)
+  })
+
   it('413 for a small copy over 200 KiB, and null for other paths', async () => {
     const big = new Uint8Array(201 * 1024)
     big.set(JPEG)

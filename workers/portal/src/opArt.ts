@@ -28,10 +28,12 @@ export async function opArtRoute(
   const type = size === 'full' ? 'image/png' : 'image/jpeg'
   if (req.headers.get('content-type')?.split(';')[0].trim().toLowerCase() !== type)
     return json({ error: 'unsupported-type' }, 415)
+  const max = size === 'full' ? MAX_FULL_BYTES : MAX_THUMB_BYTES
+  // Refused before the body is read when the sender says it is too big; checked again after.
+  if (Number(req.headers.get('content-length') ?? 0) > max) return json({ error: 'too-large' }, 413)
   const bytes = await req.arrayBuffer()
   const b = new Uint8Array(bytes)
-  if (bytes.byteLength > (size === 'full' ? MAX_FULL_BYTES : MAX_THUMB_BYTES))
-    return json({ error: 'too-large' }, 413)
+  if (bytes.byteLength > max) return json({ error: 'too-large' }, 413)
   if (!(size === 'full' ? isPngBytes(b) : isJpegBytes(b)))
     return json({ error: 'unsupported-type' }, 415)
   await bucket.put(`card/${size}/${n}`, bytes, { httpMetadata: { contentType: type } })

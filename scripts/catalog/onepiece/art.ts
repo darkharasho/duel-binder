@@ -84,7 +84,12 @@ export interface ArtPortal {
   url: string
   token: string
   fetch?: typeof fetch
+  /** Per-request limit; defaults to UPLOAD_TIMEOUT_MS. */
+  timeoutMs?: number
 }
+
+/** One PUT's limit; one that runs over is a failed attempt and retried. */
+export const UPLOAD_TIMEOUT_MS = 60_000
 
 /** PUTs one stored copy of an entry's art to the portal. */
 export async function uploadArt(o: ArtPortal, size: 'full' | 'small', imageId: number, bytes: Uint8Array): Promise<void> {
@@ -94,7 +99,8 @@ export async function uploadArt(o: ArtPortal, size: 'full' | 'small', imageId: n
     const res = await fetchFn(`${o.url.replace(/\/+$/, '')}${path}`, {
       method: 'PUT',
       headers: { authorization: `Bearer ${o.token}`, 'content-type': size === 'full' ? 'image/png' : 'image/jpeg' },
-      body: bytes as Uint8Array<ArrayBuffer>
+      body: bytes as Uint8Array<ArrayBuffer>,
+      signal: AbortSignal.timeout(o.timeoutMs ?? UPLOAD_TIMEOUT_MS)
     })
     if (!res.ok) {
       const text = await res.text().catch(() => '')
@@ -125,6 +131,8 @@ export interface ArtResult {
   uploaded: number
   changed: string[]
   firstNoticed: string[]
+  /** Entries the portal refused as too large for the first time tonight. */
+  tooLarge: string[]
 }
 
 export interface RefreshArtOptions {
@@ -149,12 +157,15 @@ async function pool<T>(items: T[], fn: (item: T) => Promise<void>): Promise<void
   await Promise.all(Array.from({ length: Math.min(CONCURRENCY, items.length) }, run))
 }
 
+/** Art no copy of which fits the portal's limits. */
+class TooLarge extends Error {}
+
 const message = (e: unknown): string => (e instanceof Error ? e.message : String(e))
 
 /** Hashes new art, uploads what the portal lacks and re-checks old art, within tonight's download budget. */
 export async function refreshArt(o: RefreshArtOptions): Promise<ArtResult> {
   const { cache, sources, now, log } = o
-  const result: ArtResult = { fetched: 0, failed: 0, uploaded: 0, changed: [], firstNoticed: [] }
+  const result: ArtResult = { fetched: 0, failed: 0, uploaded: 0, changed: [], firstNoticed: [], tooLarge: [] }
   let left = o.budget ?? ART_BUDGET
   /** Takes up to `items.length` downloads out of what is left of the budget. */
   const spend = <T>(items: T[]): T[] => {
@@ -170,13 +181,26 @@ export async function refreshArt(o: RefreshArtOptions): Promise<ArtResult> {
   for (const b of o.batches) for (const e of b.entries) if (!entries.has(e.bandaiId)) entries.set(e.bandaiId, e)
   const ordered = [...entries.values()]
 
-  /** Puts both copies of an entry's art on the portal and stamps `stored_at`; the bytes are not kept. */
+  /**
+   * Puts both copies of an entry's art on the portal and stamps `stored_at`; the bytes are not kept.
+   * Art too large for the portal is stamped `too_large_at`, so step 2 leaves it until RECHECK_MS on.
+   */
   const store = async (portal: ArtPortal, id: string, bytes: Uint8Array): Promise<void> => {
-    const small = smallCopy(bytes)
-    if (!small) throw new Error('no small copy (undecodable or over 200 KiB)')
-    await uploadArt(portal, 'full', onePieceImageId('en', id), bytes)
-    await uploadArt(portal, 'small', onePieceImageId('en', id), small)
-    cache.putBandaiArt({ ...cache.getBandaiArt(id)!, storedAt: now })
+    try {
+      // The PNG decoded before this, so no small copy means none fits under the limit.
+      const small = smallCopy(bytes)
+      if (!small) throw new TooLarge('no small copy under 200 KiB')
+      await uploadArt(portal, 'full', onePieceImageId('en', id), bytes)
+      await uploadArt(portal, 'small', onePieceImageId('en', id), small)
+    } catch (e) {
+      if (e instanceof TooLarge || (e instanceof HttpError && e.status === 413)) {
+        const row = cache.getBandaiArt(id)!
+        if (row.tooLargeAt === null) result.tooLarge.push(id)
+        cache.putBandaiArt({ ...row, tooLargeAt: now })
+      }
+      throw e
+    }
+    cache.putBandaiArt({ ...cache.getBandaiArt(id)!, storedAt: now, tooLargeAt: null })
     result.uploaded++
   }
 
@@ -207,7 +231,7 @@ export async function refreshArt(o: RefreshArtOptions): Promise<ArtResult> {
         if (!img) throw new Error('not a PNG or JPEG')
         cache.putBandaiArt({
           bandaiId: e.bandaiId, hash: hashHex(artHash(img)), lastModified: got.lastModified, checkedAt: now,
-          storedAt: null, changedHash: null, notedAt: null
+          storedAt: null, changedHash: null, notedAt: null, tooLargeAt: null
         })
         // Uploaded at once, so at most CONCURRENCY images are held at a time.
         if (o.portal) await store(o.portal, e.bandaiId, got.bytes)
@@ -244,10 +268,14 @@ export async function refreshArt(o: RefreshArtOptions): Promise<ArtResult> {
   // 2. Uploads.
   if (o.portal) {
     const portal = o.portal
-    // Only entries from earlier nights: tonight's failed uploads wait for tomorrow.
+    // Only entries from earlier nights: tonight's failed uploads wait for tomorrow. Art the portal
+    // refused as too large waits for its re-check.
     const pending = ordered.filter((e) => {
       const row = cache.getBandaiArt(e.bandaiId)
-      return row !== null && row.storedAt === null && row.changedHash === null && row.checkedAt < now
+      return (
+        row !== null && row.storedAt === null && row.changedHash === null && row.checkedAt < now &&
+        (row.tooLargeAt === null || now - row.tooLargeAt > RECHECK_MS)
+      )
     })
     // Left from an earlier night: downloaded again, which costs budget; without budget it waits.
     const todo = spend(pending)

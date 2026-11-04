@@ -256,6 +256,41 @@ describe('One Piece art', () => {
     expect(cache.getBandaiArt('100_p1')!.storedAt).toBe(DAY)
   })
 
+  it('art the portal refuses as too large waits for its re-check, noted once', async () => {
+    const tooBig = { url: 'https://p', token: 't', fetch: (async () => new Response('{"error":"too-large"}', { status: 413 })) as typeof fetch }
+    const r1 = await run({ now: 0, portal: tooBig })
+    expect(r1).toMatchObject({ failed: 1, uploaded: 0, tooLarge: ['100_p1'] })
+    expect(cache.getBandaiArt('100_p1')!.tooLargeAt).toBe(0)
+    // The next nights don't download it again.
+    const puts: Put[] = []
+    const r2 = await run({ now: DAY, portal: portal(puts) })
+    expect(r2).toMatchObject({ fetched: 0, failed: 0, tooLarge: [] })
+    expect(served.log).toEqual(['bandai 100_p1'])
+    // At its re-check it is tried again; still too large is no new note.
+    const r3 = await run({ now: 15 * DAY, portal: tooBig })
+    expect(r3).toMatchObject({ fetched: 1, failed: 1, tooLarge: [] })
+    expect(cache.getBandaiArt('100_p1')!.tooLargeAt).toBe(15 * DAY)
+    // Once it fits, it is stored and the stamp cleared.
+    const r4 = await run({ now: 30 * DAY, portal: portal(puts) })
+    expect(r4).toMatchObject({ uploaded: 1, failed: 0 })
+    expect(puts).toHaveLength(2)
+    expect(cache.getBandaiArt('100_p1')).toMatchObject({ storedAt: 30 * DAY, tooLargeAt: null })
+  })
+
+  it('an upload that runs over its time limit is retried', async () => {
+    let calls = 0
+    const f = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+      if (calls++ === 0) {
+        return new Promise<Response>((_, reject) =>
+          init?.signal?.addEventListener('abort', () => reject(init.signal!.reason))
+        )
+      }
+      return new Response('ok')
+    }) as typeof fetch
+    await uploadArt({ url: 'https://p', token: 't', fetch: f, timeoutMs: 20 }, 'full', 1, new Uint8Array([1]))
+    expect(calls).toBe(2)
+  })
+
   it('a failed download is counted and tried again', async () => {
     served.fail.add('100_p1')
     const r = await run({ now: 0 })

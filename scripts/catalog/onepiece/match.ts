@@ -58,16 +58,20 @@ export function matchSeries(o: MatchOptions): { matches: Map<string, OpMatch>; n
     const b = o.tcgHash(p)
     return a === null || b === null ? null : distance(a, b)
   }
-  /** The product the rule picks among `pool`, or why none. Margin applies once there are two candidates. */
+  /**
+   * The product the rule picks among `pool`, or why none: the best must be within MATCH_MAX and
+   * ahead of the runner-up (any product of the pool with a hash, near or not) by MATCH_MARGIN.
+   */
   const pick = (e: BandaiEntry, pool: OpProduct[]): { product: OpProduct; d: number } | Reason => {
     if (pool.length === 0) return 'no candidate'
-    const scored = pool.map((p) => ({ product: p, d: dist(e, p) }))
-    const near = scored
-      .filter((s): s is { product: OpProduct; d: number } => s.d !== null && s.d <= MATCH_MAX)
+    const hashed = pool
+      .map((p) => ({ product: p, d: dist(e, p) }))
+      .filter((s): s is { product: OpProduct; d: number } => s.d !== null)
       .sort((a, b) => a.d - b.d)
-    if (near.length === 0) return scored.some((s) => s.d === null) ? 'no art yet' : 'art disagrees'
-    if (near.length >= 2 && near[1].d - near[0].d < MATCH_MARGIN) return 'ambiguous'
-    return near[0]
+    if (hashed.length === 0) return 'no art yet'
+    if (hashed[0].d > MATCH_MAX) return 'art disagrees'
+    if (hashed.length >= 2 && hashed[1].d - hashed[0].d < MATCH_MARGIN) return 'ambiguous'
+    return hashed[0]
   }
   const label = (e: BandaiEntry, p: OpProduct): string | null =>
     kinds.get(e.bandaiId) === 'parallel' ? versions.get(p.productId)!.label : null

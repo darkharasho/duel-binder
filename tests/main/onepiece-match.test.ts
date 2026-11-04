@@ -76,6 +76,15 @@ describe('One Piece matching', () => {
     expect(r.matches.size).toBe(0)
     expect(r.notes.join('\n')).toContain('ambiguous')
   })
+  test('the runner-up counts even beyond MATCH_MAX', () => {
+    const e = { 'OP17-005_p1': H0 }
+    const near = bits(range(0, 5))
+    const far = run({ entries: [p1], bandai: e, tcg: { 708077: near, 712083: bits(range(100, 160)) } })
+    expect(far.matches.get('OP17-005_p1')!.product.productId).toBe(708077)
+    const close = run({ entries: [p1], bandai: e, tcg: { 708077: near, 712083: bits(range(100, 130)) } })
+    expect(close.matches.size).toBe(0)
+    expect(close.notes.join('\n')).toContain('ambiguous')
+  })
   test('art disagrees', () => {
     const r = run({ entries: [base], bandai: { 'OP17-005': H0 }, tcg: { 711499: bits(range(0, 100)) } })
     expect(r.matches.size).toBe(0)

@@ -315,6 +315,15 @@ function maxPrice(rows: PrintingDbRow[]): number | null {
 
 const sum = (entries: EntryDbRow[]): number => entries.reduce((n, e) => n + e.quantity, 0)
 
+/** `imageId` when it is one of the card's images, else null (also for a null `imageId`). */
+function cardImage(db: SqlDb, imageId: number | null, cardId: number, scope: Scope): number | null {
+  if (imageId === null) return null
+  const row = db
+    .prepare(`SELECT image_id FROM card_images WHERE image_id = ? AND card_id = ? AND +game = ${scope.game}`)
+    .get(imageId, cardId) as { image_id: number } | undefined
+  return row?.image_id ?? null
+}
+
 /** Checklist cards of a set, optionally limited to one card, sorted by number (nulls last) then name. */
 function checklistCards(
   db: SqlDb,
@@ -398,9 +407,10 @@ function checklistCards(
     }
     const cardEntries = rows.flatMap((p) => entriesByPrinting.get(p.id) ?? [])
     // One Piece: the art of the card's first version in the set, by label (the base L before
-    // L (Alternate Art)). The rows here are never contributed.
+    // L (Alternate Art)), when the card has that image; else its base image. The rows here are
+    // never contributed.
     const first = [...rows].sort((a, b) => cmp(a.set_rarity, b.set_rarity) || cmp(a.set_code, b.set_code))[0]
-    const art = printingArtImageId({ ...first, contributed: 0 })
+    const art = cardImage(db, printingArtImageId({ ...first, contributed: 0 }), id, scope)
     cards.push({
       cardId: id,
       name: rows[0].name,
@@ -467,21 +477,16 @@ export function adjustPrinting(
     if (!p || p.set_name !== setName || p.language !== language)
       throw new CollectionError(`Printing ${printingId} is not in ${setName} (${language})`)
     // One Piece: the printing's own art, when the card has that image; else the original art.
-    const artId = printingArtImageId(p)
-    const own =
-      artId === null
-        ? undefined
-        : (db
-            .prepare(`SELECT image_id FROM card_images WHERE image_id = ? AND card_id = ? AND +game = ${scope.game}`)
-            .get(artId, p.card_id) as { image_id: number } | undefined)
+    const own = cardImage(db, printingArtImageId(p), p.card_id, scope)
     const image =
-      own ??
-      (db
-        .prepare(
-          `SELECT image_id FROM card_images WHERE card_id = ? AND +game = ${scope.game}
-           ORDER BY sort_order, image_id LIMIT 1`
-        )
-        .get(p.card_id) as { image_id: number } | undefined)
+      own !== null
+        ? { image_id: own }
+        : (db
+            .prepare(
+              `SELECT image_id FROM card_images WHERE card_id = ? AND +game = ${scope.game}
+               ORDER BY sort_order, image_id LIMIT 1`
+            )
+            .get(p.card_id) as { image_id: number } | undefined)
 
     if (delta === 1) {
       if (!image) throw new CollectionError('The card has no image')

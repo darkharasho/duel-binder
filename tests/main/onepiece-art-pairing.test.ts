@@ -68,6 +68,21 @@ describe('One Piece versions pair with their own art and price', () => {
     expect(card?.imageId).toBe(op.imageIds[0])
   })
 
+  it("the checklist shows the first version's art only when the card has that image", () => {
+    setGame(db, 'op')
+    const tile = (): number | undefined =>
+      getChecklist(db, SET_NAME, 'en')!.cards.find((c) => c.cardId === op.cardIds[0])?.imageId
+    // The first version names an image the card doesn't have: the base image.
+    db.prepare('UPDATE card_printings SET set_rarity_code = ? WHERE id = ?').run(
+      'OP01-001_p9',
+      op.printingIds[0]
+    )
+    expect(tile()).toBe(op.imageIds[0])
+    // With the base version gone, the Alternate Art is first, and the card has its image.
+    db.prepare('DELETE FROM card_printings WHERE id = ?').run(op.printingIds[0])
+    expect(tile()).toBe(altArt)
+  })
+
   it('a contributed printing never names art', () => {
     db.prepare('UPDATE card_printings SET contributed = 1 WHERE id = ?').run(altId)
     const row = db

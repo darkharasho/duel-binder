@@ -184,10 +184,11 @@ describe('One Piece versions in the UI', () => {
       ['Version', 'Alternate Art'],
       ['Block', '5']
     ]) {
-      // findAll: the printing-label Rarity facet shares the name with One Piece's code facet.
-      expect((await screen.findAllByRole('button', { name: section })).length).toBeGreaterThan(0)
+      expect(await screen.findByRole('button', { name: section })).toBeInTheDocument()
       expect(screen.getByRole('button', { name: option })).toBeInTheDocument()
     }
+    // One Rarity section: the rarity codes, not a second one of printing labels.
+    expect(screen.getAllByRole('button', { name: 'Rarity' })).toHaveLength(1)
     for (const range of ['Cost', 'Power', 'Counter'])
       expect(screen.getByRole('button', { name: range })).toBeInTheDocument()
   })

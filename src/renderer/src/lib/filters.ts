@@ -53,8 +53,8 @@ const LABELS: Partial<Record<GameKey, string>> = {
 export type FacetScope = 'collection' | 'browse'
 
 /**
- * The game's list filters, then Set and the game's word for rarity, in the order they show. The
- * collection has no Race facet; Browse does.
+ * The game's list filters, then Set and the game's word for rarity (not on One Piece, whose own
+ * filters have its rarity codes), in the order they show. The collection has no Race facet; Browse does.
  */
 export function facetsFor(
   def: GameDef,
@@ -70,7 +70,8 @@ export function facetsFor(
       )
       .map((f) => ({ key: f.key, label: LABELS[f.key] ?? f.label })),
     { key: 'setNames', label: 'Set' },
-    { key: 'rarities', label: def.vocab.rarity }
+    // One Piece's rarity is its code facet (opRarities); a second Rarity of printing labels would repeat it.
+    ...(def.id === 'op' ? [] : [{ key: 'rarities' as const, label: def.vocab.rarity }])
   ]
 }
 

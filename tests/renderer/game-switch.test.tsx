@@ -9,6 +9,7 @@ import { SetsPage } from '@/features/sets/SetsPage'
 import { createHttpApi, GAME_KEY } from '@/web/httpApi'
 import { App as PhoneApp } from '../../src/phone/App'
 import type { DataChannel } from '../../src/main/ipc/dataHandlers'
+import { GameSegments } from '@/components/GameSwitch'
 import { GAMES, type GameId } from '@shared/games'
 import type { Api } from '@shared/ipc'
 import type { AccountStatus, CardRow } from '@shared/types'
@@ -92,6 +93,43 @@ describe('desktop game switch', () => {
     )
     await userEvent.click(within(menu).getByRole('menuitemradio', { name: /Pokémon/ }))
     expect(api.games.setActive).toHaveBeenCalledWith('pkm')
+  })
+
+  it('three games in the sidebar menu', async () => {
+    const api = desktopApi(['ygo', 'pkm', 'op'])
+    await renderDesktop(api)
+    await userEvent.click(await screen.findByRole('button', { name: /switch game/i }))
+    const menu = await screen.findByRole('menu')
+    expect(within(menu).getAllByRole('menuitemradio')).toHaveLength(3)
+    expect(within(menu).getByRole('menuitemradio', { name: /Yu-Gi-Oh!/ })).toBeInTheDocument()
+    expect(within(menu).getByRole('menuitemradio', { name: /Pokémon/ })).toBeInTheDocument()
+    await userEvent.click(within(menu).getByRole('menuitemradio', { name: /One Piece/ }))
+    expect(api.games.setActive).toHaveBeenCalledWith('op')
+  })
+
+  it('three phone segments, only the active one checked', async () => {
+    renderWithProviders(
+      <GameProvider>
+        <GameSegments />
+      </GameProvider>,
+      { api: desktopApi(['ygo', 'pkm', 'op'], 'op') }
+    )
+    const group = await screen.findByRole('radiogroup', { name: 'Game' })
+    const radios = within(group).getAllByRole('radio')
+    expect(radios).toHaveLength(3)
+    await waitFor(() =>
+      expect(radios.map((r) => r.getAttribute('aria-checked'))).toEqual(['false', 'false', 'true'])
+    )
+    expect(radios[2]).toHaveTextContent('One Piece')
+  })
+
+  it('op hides Rip and Scan', async () => {
+    await renderDesktop(desktopApi(['ygo', 'pkm', 'op'], 'op'))
+    expect(await screen.findByRole('button', { name: /switch game/i })).toHaveTextContent(
+      'One Piece'
+    )
+    expect(navNames()).not.toContain('Scan')
+    expect(navNames()).not.toContain('Rip')
   })
 
   it('Pokémon shows Scan and not Rip', async () => {

@@ -527,7 +527,7 @@ DELETE FROM printing_art WHERE url IS NULL;
  *   under one set_code apart): the rarity code, plus the version label in parentheses when the
  *   printing isn't the base art ('SR', 'SR (Alternate Art)', 'SEC (Manga)', 'SP'). `variant` stays
  *   NULL. `set_rarity` must be unique per card x set_code ('SR (Alternate Art 2)' for a second one).
- * - `collection_entries`: pair `printing_id` with `image_id`, as Yu-Gi-Oh!'s do.
+ * - collection entries: pair `printing_id` with `image_id`, as Yu-Gi-Oh!'s do.
  * `onepiece_cards` holds only game text. `colors`, `attribute` and `traits` are JSON arrays.
  * `number` is the printed base number and isn't unique (Japanese has its own card per number).
  * `onepiece_images.bandai_id` is what the /img proxy builds Bandai's image URL from.

@@ -38,7 +38,7 @@ export interface OnePieceStepResult {
   problems: string[]
 }
 
-/** A set this size or larger whose priced share falls this much since last night is a problem. */
+/** A set this size or larger whose priced share falls this much since last night, with fewer priced, is a problem. */
 const SHARE_SET_MIN = 20
 /** 20 points: a fifth. */
 const SHARE_DROP_PARTS = 5
@@ -302,7 +302,8 @@ export async function runOnePieceStep(
     // 7. Priced share against last night (Builder's call 14).
     for (const s of written.perSet) {
       const old = cache.getSetStats(s.setCode)
-      if (old && old.printings > 0 && s.printings >= SHARE_SET_MIN) {
+      // A set that only grew (more printings, none of its prices lost) is the catalog filling in, not a drop.
+      if (old && old.printings > 0 && s.printings >= SHARE_SET_MIN && s.priced < old.priced) {
         // old share - new share >= 1 / SHARE_DROP_PARTS, in whole numbers (1 - 0.8 is under 0.2 in floats).
         const fell =
           SHARE_DROP_PARTS * (old.priced * s.printings - s.priced * old.printings) >=

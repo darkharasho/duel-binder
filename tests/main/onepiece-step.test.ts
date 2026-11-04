@@ -369,6 +369,20 @@ describe('runOnePieceStep', () => {
       expect(second.problems).toContain('OP17 priced share fell from 100% to 0%')
     })
 
+    test('a set that grows with unpriced printings, keeping every price, is no problem', async () => {
+      // As the catalog fills in, a set can go from 20 printings to 100 with only the first 20 priced.
+      const small = renumbered(20)
+      await night(fakeSources(small.night(true)))
+      const big = renumbered(100).night(true)
+      const kept = new Set(big.products!.slice(0, 20).map((p) => p.productId))
+      const second = await night(
+        fakeSources({ ...big, prices: big.prices!.filter((p) => kept.has(p.productId)) }),
+        NOW + DAY
+      )
+      expect(second.report!.perSet).toEqual([{ setCode: 'OP17', printings: 100, priced: 20 }])
+      expect(second.problems).toEqual([])
+    })
+
     test('the same drop on 4 printings is no problem', async () => {
       const set = renumbered(4)
       await night(fakeSources(set.night(true)))

@@ -281,6 +281,10 @@ const cardArtKey = (size: ImageSize, n: number): string =>
   isTokenId(n) ? `card/full/${n}` : `card/${size}/${n}`
 
 const CARD_PATH_RE = /^\/img\/(small|full|cropped)\/(\d+)$/
+/** A printing photo's small copy, by the server's printing id (see thumbs.ts). */
+const THUMB_PATH_RE = /^\/img\/printing-small\/([1-9]\d{0,15})$/
+/** How long the edge keeps a full photo served for a small copy not yet made. */
+const FALLBACK_CACHE = 'public, max-age=3600'
 
 /** The slice of Cloudflare's per-colo cache (caches.default) the edge image path uses. */
 export interface EdgeCache {
@@ -337,6 +341,30 @@ export async function edgeImage(
           })
         )
       )
+  }
+  const small = THUMB_PATH_RE.exec(url.pathname)
+  if (small) {
+    const thumb = await bucket.get(`printing-small/${small[1]}`).catch(() => null)
+    if (thumb)
+      return keep(
+        locked(
+          new Response(thumb.body, {
+            headers: {
+              'content-type': thumb.httpMetadata?.contentType ?? 'image/jpeg',
+              'cache-control': SET_CACHE
+            }
+          })
+        )
+      )
+    // No small copy yet: the full photo, kept at the edge only an hour, so the small copy the
+    // next nightly job makes takes its place soon after.
+    const full = new URL(url)
+    full.pathname = `/img/printing/${small[1]}`
+    const res = await forward(new Request(full.toString(), req))
+    if (res.status !== 200) return res
+    const out = new Response(res.body, res)
+    out.headers.set('cache-control', FALLBACK_CACHE)
+    return keep(out)
   }
   return keep(await forward(req))
 }

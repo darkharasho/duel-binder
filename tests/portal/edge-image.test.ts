@@ -141,4 +141,40 @@ describe('artwork from the edge, ahead of the Durable Object', () => {
     expect(res?.status).toBe(404)
     expect(store.calls).toEqual(['/img/small/5'])
   })
+
+  it("serves a printing photo's small copy from R2 without the Durable Object", async () => {
+    const store = durableObject()
+    const bucket = memoryBucket()
+    await bucket.put('printing-small/12', JPEG.buffer, { httpMetadata: { contentType: 'image/jpeg' } })
+    const edge = memoryEdge()
+    const waits: Promise<unknown>[] = []
+    const res = await edgeImage(new Request(url('printing-small/12')), bucket, edge, (p) => waits.push(p), store.fetch)
+    expect(res?.status).toBe(200)
+    expect(res?.headers.get('cache-control')).toBe('public, max-age=86400')
+    await Promise.all(waits)
+    expect(edge.store.has(url('printing-small/12'))).toBe(true)
+    expect(store.calls).toEqual([])
+  })
+
+  it('without a small copy, the full photo, kept at the edge only an hour', async () => {
+    const store = durableObject(
+      () => new Response(JPEG, { headers: { 'content-type': 'image/jpeg', 'cache-control': 'public, max-age=86400' } })
+    )
+    const edge = memoryEdge()
+    const waits: Promise<unknown>[] = []
+    const res = await edgeImage(new Request(url('printing-small/12')), memoryBucket(), edge, (p) => waits.push(p), store.fetch)
+    expect(res?.status).toBe(200)
+    expect(res?.headers.get('cache-control')).toBe('public, max-age=3600')
+    expect(store.calls).toEqual(['/img/printing/12'])
+    await Promise.all(waits)
+    expect(edge.store.get(url('printing-small/12'))?.headers.get('cache-control')).toBe('public, max-age=3600')
+  })
+
+  it("passes on the full photo's 404 uncached", async () => {
+    const store = durableObject()
+    const edge = memoryEdge()
+    const res = await edgeImage(new Request(url('printing-small/12')), memoryBucket(), edge, () => {}, store.fetch)
+    expect(res?.status).toBe(404)
+    expect(edge.store.size).toBe(0)
+  })
 })

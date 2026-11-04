@@ -13,6 +13,7 @@ import { bindingSender } from './emailSend'
 import { createAnonImageQuota, createImageQuota, createMissCache, edgeImage } from './images'
 import { doSql } from './doSql'
 import { migrateServer } from './migrate'
+import { thumbsRoute } from './thumbs'
 import { alarmQueue, priceClientFor, runPriceAlarm, type PriceQueue } from './prices'
 import { sweepClientFor } from './sweep'
 import { pokemonDailyCalls } from './pokemonSweep'
@@ -59,9 +60,16 @@ export class Store extends DurableObject<WorkerEnv> {
 
   /** Keeps eBay prices fresh for every printing any user owns; re-arms itself. */
   async alarm(): Promise<void> {
-    await runPriceAlarm(this.db, priceClientFor(this.env), this.ctx.storage, () => new Date(), sweepClientFor(this.env), {
-      pokemonDailyCalls: pokemonDailyCalls(this.env.POKEMON_SWEEP_DAILY_CALLS)
-    })
+    await runPriceAlarm(
+      this.db,
+      priceClientFor(this.env),
+      this.ctx.storage,
+      () => new Date(),
+      sweepClientFor(this.env),
+      {
+        pokemonDailyCalls: pokemonDailyCalls(this.env.POKEMON_SWEEP_DAILY_CALLS)
+      }
+    )
   }
 
   fetch(req: Request): Promise<Response> {
@@ -111,6 +119,8 @@ export default {
       return env.ASSETS.fetch(new Request(new URL(route.asset, req.url), req))
     const store = (r: Request): Promise<Response> =>
       env.STORE.get(env.STORE.idFromName('main')).fetch(r)
+    const thumbs = await thumbsRoute(req, env.IMAGES, env.ADMIN_TOKEN)
+    if (thumbs) return thumbs
     const art = await edgeImage(req, env.IMAGES, edgeCache(), (p) => ctx.waitUntil(p), store)
     // CORS after the cache, so the cached copy stays the same for every origin.
     if (art) return withAppCors(req, art)

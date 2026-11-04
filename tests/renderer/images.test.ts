@@ -2,7 +2,7 @@ import { createElement } from 'react'
 import { render, screen } from '@testing-library/react'
 import { CardArt } from '@/components/CardArt'
 import { cardArtUrl, coverArtUrl, setArtUrl } from '@/components/artWashContext'
-import { cardImageSrc, printingImageSrc, setImageSrc } from '@/lib/images'
+import { cardImageSrc, printingImageSrc, printingPhotoSrc, setImageSrc } from '@/lib/images'
 import { isMac, isPhone, isWeb } from '@/lib/platform'
 import { createMockApi } from './mockApi'
 
@@ -15,6 +15,8 @@ describe('image URL helpers', () => {
     usePlatformApi('linux')
     expect(cardImageSrc('small', 12)).toBe('ygo-img://small/12')
     expect(printingImageSrc(5)).toBe('ygo-img://printing/5')
+    // One copy on disk: the desktop never asks for the small one.
+    expect(printingImageSrc(5, { small: true })).toBe('ygo-img://printing/5')
     expect(setImageSrc('LOB')).toBe('ygo-img://set/LOB')
   })
 
@@ -23,6 +25,7 @@ describe('image URL helpers', () => {
     expect(cardImageSrc('small', 12)).toBe('/img/small/12')
     expect(cardImageSrc('cropped', 3)).toBe('/img/cropped/3')
     expect(printingImageSrc(5)).toBe('/img/printing/5')
+    expect(printingImageSrc(5, { small: true })).toBe('/img/printing-small/5')
     expect(setImageSrc('LOB')).toBe('/img/set/LOB')
   })
 
@@ -30,6 +33,8 @@ describe('image URL helpers', () => {
     usePlatformApi('phone')
     expect(cardImageSrc('small', 12)).toBe('/img/small/12')
     expect(printingImageSrc(5)).toBeNull()
+    expect(printingPhotoSrc(9)).toBe('/img/printing/9')
+    expect(printingPhotoSrc(9, { small: true })).toBe('/img/printing-small/9')
     expect(setImageSrc('LOB')).toBe('/img/set/LOB')
   })
 

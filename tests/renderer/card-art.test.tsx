@@ -78,15 +78,30 @@ describe('CardArt', () => {
         </>
       )
       expect(screen.getByAltText('Kuriboh')).toHaveAttribute('src', '/img/small/5')
+      // A tile takes the photo's small copy.
       expect(await screen.findByTestId('printing-scan')).toHaveAttribute(
         'src',
-        '/img/printing/4321'
+        '/img/printing-small/4321'
       )
       // One batched lookup for both; the printing with no server id keeps its default art.
       expect(photoIds).toHaveBeenCalledTimes(1)
       expect(photoIds.mock.calls[0][0]).toEqual([9, 10])
       expect(screen.getAllByTestId('printing-scan')).toHaveLength(1)
       expect(screen.getByAltText('Winged Kuriboh')).toHaveAttribute('src', '/img/small/6')
+    } finally {
+      window.api = saved
+      resetPrintingPhotos()
+    }
+  })
+
+  it("on the phone a card's full view takes the full photo", async () => {
+    const saved = window.api
+    resetPrintingPhotos()
+    window.api = createMockApi({ window: { platform: 'phone' } })
+    window.api.images.photoIds = vi.fn(async (ids: number[]) => ids.map((i) => [i, 4321] as [number, number]))
+    try {
+      render(<CardArt imageId={5} printingId={9} size="full" alt="Kuriboh" />)
+      expect(await screen.findByTestId('printing-scan')).toHaveAttribute('src', '/img/printing/4321')
     } finally {
       window.api = saved
       resetPrintingPhotos()

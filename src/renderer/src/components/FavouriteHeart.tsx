@@ -1,6 +1,7 @@
 import { Heart } from 'lucide-react'
 import type { Favourites } from '@/lib/favourites'
 import { cn } from '@/lib/utils'
+import { HEART_BUTTON } from './tileLayout'
 
 /**
  * The heart at the right of a card tile's name row: favourites the card (every printing and copy
@@ -31,12 +32,7 @@ export function FavouriteHeart({
         favourites.toggle(cardId, !on)
       }}
       onKeyDown={(e) => e.stopPropagation()}
-      className={cn(
-        'relative z-10 grid size-6 shrink-0 place-items-center rounded-full text-muted-foreground outline-none transition-opacity hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring',
-        "after:absolute after:-inset-1 after:content-[''] max-md:after:-inset-2.5 [@media(pointer:coarse)]:after:-inset-2.5",
-        'opacity-0 focus-visible:opacity-100 group-hover/tile:opacity-100 group-focus-within/tile:opacity-100 data-[on=true]:opacity-100 max-md:opacity-100 [@media(pointer:coarse)]:opacity-100',
-        className
-      )}
+      className={cn(HEART_BUTTON, className)}
     >
       <Heart className={cn('size-3.5', on && 'fill-rose-400 text-rose-400')} />
     </button>

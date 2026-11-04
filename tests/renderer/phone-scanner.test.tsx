@@ -234,6 +234,20 @@ describe('phone scanner', () => {
     expect(screen.getByRole('button', { name: 'Close scanner' })).toBeInTheDocument()
   })
 
+  it('turns the found-card sound on and off from the scanner', async () => {
+    localStorage.removeItem('scan.ping')
+    const store = fakeStore()
+    installPhoneApi(store)
+    renderScanner(store)
+    const sound = await screen.findByRole('button', { name: 'Sound when a card is found' })
+    expect(sound).toHaveAttribute('aria-pressed', 'false')
+    await userEvent.click(sound)
+    expect(sound).toHaveAttribute('aria-pressed', 'true')
+    expect(localStorage.getItem('scan.ping')).toBe('1')
+    await userEvent.click(sound)
+    expect(localStorage.getItem('scan.ping')).toBeNull()
+  })
+
   it('keeps the close and settings buttons when the camera fails', async () => {
     vi.stubGlobal('navigator', {
       ...navigator,

@@ -43,8 +43,10 @@ export function matchesWishSearch(w: WishlistItem, q: string): boolean {
   )
 }
 
-export function useWishlist(): UseQueryResult<WishlistItem[]> {
-  return useQuery({ queryKey: queryKeys.wishlist, queryFn: () => api.wishlist.list() })
+export function useWishlist({ enabled = true }: { enabled?: boolean } = {}): UseQueryResult<
+  WishlistItem[]
+> {
+  return useQuery({ queryKey: queryKeys.wishlist, queryFn: () => api.wishlist.list(), enabled })
 }
 
 /** The wanted printings of a card; for the hearts on its rows. */

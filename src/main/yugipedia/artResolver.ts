@@ -6,8 +6,11 @@ import { choosePrintingScan, printingVariant } from './printingArt'
 
 const BATCH = 50
 const BATCH_WAIT_MS = 40
-/** A printing with no scan is looked up again after this long. */
-const RETRY_MISSING_MS = 30 * 24 * 60 * 60 * 1000
+/**
+ * A printing with no scan is looked up again after this long: a new set's scans, its art variants'
+ * most of all, reach Yugipedia over its first weeks.
+ */
+export const RETRY_MISSING_MS = 7 * 24 * 60 * 60 * 1000
 
 export interface PrintingArtResolver {
   /** URL of this printing's own photo (TCGplayer's or Yugipedia's scan), or null when there is none (yet). Never rejects. */

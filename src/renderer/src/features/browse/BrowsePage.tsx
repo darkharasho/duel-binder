@@ -282,6 +282,8 @@ export function BrowsePage({ onAddCard }: Props): React.JSX.Element {
                   <TiltCard className="mb-2">
                     <CardArt
                       imageId={c.imageId}
+                      // Filtered to a rarity, the tile shows that rarity's printing (an overframe).
+                      printingId={filters.rarities?.length ? c.defaultPrintingId : undefined}
                       size={tileImage}
                       alt={c.name}
                       className="w-full rounded-[4px] shadow-[0_8px_20px_rgb(0_0_0/0.45)]"

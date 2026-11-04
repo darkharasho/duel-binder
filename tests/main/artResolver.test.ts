@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import { createPrintingArtResolver } from '../../src/main/yugipedia/artResolver'
+import { createPrintingArtResolver, RETRY_MISSING_MS } from '../../src/main/yugipedia/artResolver'
 import { listCardGalleries, yugipediaTitle } from '../../src/main/yugipedia/cardGallery'
 import type { YugipediaClient } from '../../src/main/yugipedia/client'
 import { seededDb } from './helpers'
@@ -83,6 +83,22 @@ describe('createPrintingArtResolver', () => {
     const id = printing(db, 'LOB-EN005')
     expect(await art2.url(id)).toBeNull()
     expect(await art2.url(id)).toBe('https://ms.yugipedia.com/a/DarkMagician-LOB-EN-UR-1E.png')
+  })
+
+  it("looks a printing with no scan up again a week on, as a new set's scans arrive late", async () => {
+    const db = await seededDb()
+    let at = new Date('2026-11-01T00:00:00Z')
+    const files: Record<string, string[]> = {}
+    const client = fakeClient(files)
+    const art = createPrintingArtResolver({ db, client, batchWaitMs: 0, now: () => at })
+    const id = printing(db, 'LOB-EN005')
+    expect(await art.url(id)).toBeNull()
+    // Yugipedia uploads the scan the next day; the miss stands until the week is up.
+    Object.assign(files, GALLERY)
+    at = new Date(at.getTime() + RETRY_MISSING_MS - 1000)
+    expect(await art.url(id)).toBeNull()
+    at = new Date(at.getTime() + 2000)
+    expect(await art.url(id)).toBe('https://ms.yugipedia.com/a/DarkMagician-LOB-EN-UR-1E.png')
   })
 
   it("finds an uncoded printing's scan from its set's prefix, preferring its variant", async () => {

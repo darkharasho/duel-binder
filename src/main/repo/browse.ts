@@ -12,6 +12,18 @@ const MAX_LIMIT = 200
  * SQL limiting printings `p` to the language, or nothing for every language. Inlined, not bound:
  * the language is checked against the known codes first, and the planner then picks its index.
  */
+/**
+ * A printing's rarity as Browse lists and filters it: "Ultra Rare (Overframe)" for an art variant
+ * kept in its own column, as one stored with it in the rarity, so either form is one rarity.
+ */
+const rarityLabel = (p: string): string =>
+  `${p}.set_rarity || COALESCE(' (' || NULLIF(${p}.variant, '') || ')', '')`
+
+/** The stored rarities a label can come from: itself, or its rarity with the variant apart. */
+const storedRarities = (labels: string[]): string[] => [
+  ...new Set(labels.flatMap((l) => [l, l.replace(/ \([^()]*\)$/, '')]))
+]
+
 const inLanguage = (language: Language | undefined, p = 'p'): string =>
   language ? ` AND ${p}.language = '${language}'` : ''
 
@@ -31,7 +43,9 @@ const base = (scope: Scope, byRelease: boolean, language: Language | undefined):
     SELECT p.card_id, SUM(e.quantity) AS n FROM collection_entries e
     JOIN card_printings p ON p.id = e.printing_id AND +p.game = ${scope.game} WHERE ${scope.where('e')}
     GROUP BY p.card_id
-  )${byRelease ? `,
+  )${
+    byRelease
+      ? `,
   set_dates AS (
     SELECT s.language, s.set_name, ${SET_DATE} AS d FROM sets s ${ENGLISH_NAMESAKE('s')}
     WHERE +s.game = ${scope.game}${inLanguage(language, 's')} AND ${SET_DATE} IS NOT NULL
@@ -41,7 +55,9 @@ const base = (scope: Scope, byRelease: boolean, language: Language | undefined):
     JOIN card_printings p ON p.language = sd.language AND p.set_name = sd.set_name
     WHERE +p.game = ${scope.game} AND +p.contributed = 0
     GROUP BY +p.card_id
-  )` : ''}
+  )`
+      : ''
+  }
   SELECT c.id, c.name, c.type, c.frame_type, c.attribute, c.race, c.level, c.linkval, c.atk, c.def,
     c.tcgplayer_price AS price, COALESCE(o.n, 0) AS owned
   FROM cards c
@@ -88,7 +104,11 @@ function sortSql(sort: string, game: string): string {
 const languageOf = (f: BrowseFilters): Language | undefined =>
   isLanguage(f.language) ? f.language : undefined
 
-function whereClause(db: SqlDb, f: BrowseFilters, scope: Scope): { sql: string; params: unknown[] } {
+function whereClause(
+  db: SqlDb,
+  f: BrowseFilters,
+  scope: Scope
+): { sql: string; params: unknown[] } {
   const where: string[] = [`+c.game = ${scope.game}`]
   const lang = inLanguage(languageOf(f), 'card_printings')
   const params: unknown[] = []
@@ -137,7 +157,16 @@ function whereClause(db: SqlDb, f: BrowseFilters, scope: Scope): { sql: string; 
     params.push(...values)
   }
   printingFilter('set_name', f.setNames)
-  printingFilter('set_rarity', f.rarities)
+  if (f.rarities?.length) {
+    // The stored rarity narrows by its index first; the label then picks the variant.
+    const stored = storedRarities(f.rarities)
+    where.push(
+      `c.id IN (SELECT card_id FROM card_printings WHERE +game = ${scope.game} AND contributed = 0${lang}
+         AND set_rarity IN (${stored.map(() => '?').join(',')})
+         AND ${rarityLabel('card_printings')} IN (${f.rarities.map(() => '?').join(',')}))`
+    )
+    params.push(...stored, ...f.rarities)
+  }
   // A card is listed in a language it has a printing in (a set or rarity filter already asks that).
   if (lang && !f.setNames?.length && !f.rarities?.length) {
     where.push(
@@ -166,6 +195,11 @@ export function browseCards(db: SqlDb, f: BrowseFilters, scope: Scope = LOCAL): 
   const limit = Math.min(Math.max(1, Math.floor(f.limit ?? 120)), MAX_LIMIT)
   const offset = Math.max(0, Math.floor(f.offset ?? 0))
   const language = languageOf(f)
+  // A rarity filter's printing comes first, so its photo shows on the tile (an overframe's art).
+  const rarities = f.rarities?.length ? f.rarities : []
+  const ofRarity = rarities.length
+    ? `(${rarityLabel('p')}) NOT IN (${rarities.map(() => '?').join(',')}), `
+    : ''
   // Art and the default printing are looked up only for the page, after sorting and limiting. With
   // every language, an English printing is preselected over the rest.
   const rows = db
@@ -182,12 +216,12 @@ export function browseCards(db: SqlDb, f: BrowseFilters, scope: Scope = LOCAL): 
            LEFT JOIN sets s ON s.game = p.game AND s.language = p.language AND s.set_name = p.set_name
            ${ENGLISH_NAMESAKE('s')}
            WHERE p.card_id = page.id AND +p.game = ${scope.game}${inLanguage(language)} AND p.contributed = 0
-           ORDER BY p.language <> 'en', p.game = 'pkm' AND p.missing_from_api = 1, ${SET_DATE} IS NULL, ${SET_DATE}, p.id
+           ORDER BY ${ofRarity}p.language <> 'en', p.game = 'pkm' AND p.missing_from_api = 1, ${SET_DATE} IS NULL, ${SET_DATE}, p.id
            LIMIT 1) AS default_printing_id
        FROM (${base(scope, sortCol === SORT_SQL.released, language)}${sql} ORDER BY ${sortCol} IS NULL, ${sortCol} ${dir}, c.name COLLATE NOCASE, c.id
          LIMIT ? OFFSET ?) page`
     )
-    .all(...params, limit, offset) as BrowseRow[]
+    .all(...rarities, ...params, limit, offset) as BrowseRow[]
   const { n } = db
     .prepare(
       `SELECT count(*) AS n FROM cards c
@@ -219,7 +253,7 @@ export function browseCards(db: SqlDb, f: BrowseFilters, scope: Scope = LOCAL): 
 }
 
 /** Bump when browseFacets changes what it produces: stored rollups aren't rebuilt otherwise. */
-const FACETS_ROLLUP = 2
+const FACETS_ROLLUP = 3
 
 /** browseFacets from its rollup: its answer depends on the catalog alone. */
 export function browseFacetsFast(
@@ -259,9 +293,9 @@ export function browseFacets(db: SqlDb, scope: Scope = LOCAL, language?: Languag
        ORDER BY set_name`
     ),
     rarities: distinct(
-      `SELECT DISTINCT set_rarity AS v FROM card_printings
+      `SELECT DISTINCT ${rarityLabel('card_printings')} AS v FROM card_printings
        WHERE +game = ${scope.game} AND contributed = 0${lang} AND set_rarity <> ''
-       ORDER BY set_rarity`
+       ORDER BY v`
     ),
     // One indexed probe per language (no UNION: the server's SQLite caps compound selects).
     languages: LANGUAGES.map((l) => l.code).filter((code) =>

@@ -9,6 +9,8 @@ import {
   SettingsIcon,
   ShuffleIcon,
   StarIcon,
+  Volume2Icon,
+  VolumeXIcon,
   XIcon
 } from 'lucide-react'
 import { CardArt } from '@/components/CardArt'
@@ -17,6 +19,7 @@ import { useScanLanguage, useScanPickers, type PickerProps } from '@/features/sc
 import { copiesOnList, ownedText, surePrinting, useOwned } from '@/features/scan/owned'
 import { choicesFor, flagText } from '@/features/scan/ScanRowItem'
 import { useScanHub } from '@/features/scan/ScanHub'
+import { useScanPingSetting } from '@/lib/useScanPing'
 import type { PickerOption } from '@/features/scan/SearchPicker'
 import type { ScanRow } from '@/features/scan/session'
 import { scanProfile } from '@shared/scan/profiles'
@@ -184,8 +187,8 @@ const ROUND = 'flex size-11 items-center justify-center rounded-full backdrop-bl
 /**
  * The phone's scanner, full screen over the camera's own blurred picture: the camera on top, the
  * last card scanned under it, the language, set and rarity chips, and the session's count and
- * value with a button to the full list. The × goes back to Home; the gear opens Settings; Stream
- * swaps it for Stream mode.
+ * value with a button to the full list. The × goes back to Home; the speaker turns the found-card
+ * ping on or off; the gear opens Settings; Stream swaps it for Stream mode.
  */
 export function ScannerScreen({
   engineFactory,
@@ -202,6 +205,7 @@ export function ScannerScreen({
   const rarities = scanProfile(useGame().game).rarityLook
   const [reviewing, setReviewing] = useState(false)
   const [streaming, setStreaming] = useState(false)
+  const [pingOn, setPingOn] = useScanPingSetting()
 
   const last = session.rows.reduce<ScanRow | null>(
     (a, r) => (a === null || r.addedAt > a.addedAt ? r : a),
@@ -255,6 +259,19 @@ export function ScannerScreen({
           className={cn(ROUND, 'absolute left-14 top-2 bg-black/45 text-white')}
         >
           <RadioIcon aria-hidden className="size-5" />
+        </button>
+        <button
+          type="button"
+          aria-label="Sound when a card is found"
+          aria-pressed={pingOn}
+          onClick={() => setPingOn(!pingOn)}
+          className={cn(ROUND, 'absolute right-14 top-2 bg-black/45 text-white')}
+        >
+          {pingOn ? (
+            <Volume2Icon aria-hidden className="size-5" />
+          ) : (
+            <VolumeXIcon aria-hidden className="size-5" />
+          )}
         </button>
         <button
           type="button"

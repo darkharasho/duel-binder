@@ -15,6 +15,7 @@ import {
 import {
   borrowedArt,
   getCardDetail,
+  japaneseArt,
   searchCards,
   traditionalArt
 } from '../../../src/main/repo/cards'
@@ -161,6 +162,7 @@ const HANDLERS: { [C in Exclude<PortalChannel, AccountLinkChannel>]: Handler<C> 
     browseFacets(db, scope, language == null ? undefined : checkLanguage(language)),
   'cards:borrowedArt': ({ db }) => borrowedArt(db),
   'cards:traditionalArt': ({ db }) => traditionalArt(db),
+  'cards:japaneseArt': ({ db }) => japaneseArt(db),
   'sets:list': ({ db }, scope) => listSets(db, scope),
   'sets:checklist': ({ db }, scope, setName, language) =>
     getChecklist(db, checkString(setName, 'setName'), checkLanguage(language), scope),

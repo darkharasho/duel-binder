@@ -1,7 +1,7 @@
 import type { Language } from '@shared/languages'
 import type { SqlDb } from '../db/sql'
 import { ebayPricesHidden, LOCAL, setEbayPricesHidden } from '../repo/scope'
-import { borrowedArt, getCardDetail, searchCards, traditionalArt } from '../repo/cards'
+import { borrowedArt, getCardDetail, japaneseArt, searchCards, traditionalArt } from '../repo/cards'
 import { browseCards, browseFacetsFast } from '../repo/browse'
 import { checkLanguage, checkNotesLength } from '../repo/args'
 import {
@@ -51,6 +51,7 @@ export const DATA_CHANNELS = [
   'cards:browseFacets',
   'cards:borrowedArt',
   'cards:traditionalArt',
+  'cards:japaneseArt',
   'collection:list',
   'collection:forCard',
   'collection:add',
@@ -156,6 +157,7 @@ export function createDataHandlers({
     'cards:browseFacets': async (language) => browseFacetsFast(db, undefined, language),
     'cards:borrowedArt': async () => borrowedArt(db),
     'cards:traditionalArt': async () => traditionalArt(db),
+    'cards:japaneseArt': async () => japaneseArt(db),
     'collection:list': async (f) => listEntries(db, f),
     'collection:forCard': async (cardId: number) => entriesForCard(db, cardId),
     'collection:add': async (input) => {

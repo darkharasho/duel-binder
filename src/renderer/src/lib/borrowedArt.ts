@@ -6,11 +6,12 @@ import { api } from '@/lib/api'
  * Which cards show another card's art: read once as a whole, then again after a data change, since
  * every CardArt on a page wants it at the same moment. A card whose own art arrives drops out of
  * the list, and with it the label. Traditional Chinese art comes first; an older portal doesn't
- * have that list, and the English twins still show.
+ * have that list, and the English twins still show. Some English twins are Japanese cards (a set
+ * printed from a Japanese one): those are labelled Japanese, and an older portal calls them English.
  */
 export interface BorrowedArt {
   imageId: number
-  language: 'en' | 'zh-hant'
+  language: 'en' | 'ja' | 'zh-hant'
 }
 
 let twins: Map<number, BorrowedArt> | null = null
@@ -32,13 +33,15 @@ const pairsOf = async (list: () => Promise<[number, number][]>): Promise<[number
 async function read(): Promise<void> {
   if (reading) return
   reading = true
-  const [english, traditional] = await Promise.all([
+  const [english, japanese, traditional] = await Promise.all([
     pairsOf(() => api.cards.borrowedArt()),
+    pairsOf(() => api.cards.japaneseArt()),
     pairsOf(() => api.cards.traditionalArt())
   ])
   reading = false
   twins = new Map()
   for (const [own, imageId] of english) twins.set(own, { imageId, language: 'en' })
+  for (const [own, imageId] of japanese) twins.set(own, { imageId, language: 'ja' })
   for (const [own, imageId] of traditional) twins.set(own, { imageId, language: 'zh-hant' })
   notify()
 }

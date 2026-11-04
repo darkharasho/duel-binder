@@ -37,6 +37,7 @@ export function createMockApi(overrides: DeepPartial<Api> = {}): Api {
       get: vi.fn(async () => null),
       browse: vi.fn(async () => ({ cards: [], total: 0 })),
       traditionalArt: vi.fn(async () => []),
+      japaneseArt: vi.fn(async () => []),
       browseFacets: vi.fn(async () => ({
         cardTypes: [],
         attributes: [],

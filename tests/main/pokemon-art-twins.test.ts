@@ -4,12 +4,13 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import type Database from 'better-sqlite3'
 import { openDatabase } from '../../src/main/db/database'
-import { borrowedArt, traditionalArt } from '../../src/main/repo/cards'
+import { borrowedArt, japaneseArt, traditionalArt } from '../../src/main/repo/cards'
 import { listSets } from '../../src/main/repo/sets'
 import { setMeta } from '../../src/main/db/meta'
 import { pokemonId } from '../../src/shared/games/ids'
 import {
   englishTwins,
+  japaneseMirror,
   traditionalTwins,
   type EnglishPlan,
   type TraditionalPlan
@@ -414,5 +415,122 @@ describe('refreshPokemon with English art', () => {
       pokemonId('zh-hans/CSV5C-001')
     )
     expect(borrowedArt(db)).toEqual([])
+  })
+})
+
+describe('japaneseMirror', () => {
+  const card = (id: string, name: string): { card: TdCard; name: string } => ({
+    card: { id, localId: id.split('-')[1], name, set: { id: id.split('-')[0], name: 'x' } },
+    name
+  })
+  type JaCard = { card: TdCard; name: string; imageUrl: string | null }
+  const ja = (localId: string, name: string, art = true): JaCard => ({
+    ...card(`M6a-${localId}`, name),
+    imageUrl: art ? `https://assets.tcgdex.net/ja/M/M6a/${localId}` : null
+  })
+  const twins = (zhs: { card: TdCard; name: string }[], jas: JaCard[]): Map<string, string> =>
+    new Map([...japaneseMirror(zhs, jas)].map(([id, r]) => [id, r.twin?.id ?? r.outcome]))
+
+  it('takes the print of the same number and name, spelt either way', () => {
+    expect(
+      twins(
+        [card('30thC-001', 'Pikachu & Zekrom-GX'), card('30thC-002', 'Nidoran♀')],
+        [ja('001', 'Pikachu & Zekrom GX'), ja('002', 'Nidoran')]
+      )
+    ).toEqual(new Map([['30thC-001', 'M6a-001'], ['30thC-002', 'M6a-002']]))
+  })
+
+  it('not where the number holds another card', () => {
+    expect(twins([card('30thC-003', 'Mew')], [ja('003', 'Mewtwo')]).get('30thC-003')).toBe('unmatched')
+  })
+
+  it('finds a card numbered otherwise by its name when it alone is left with it', () => {
+    expect(
+      twins(
+        [card('30thC-169', 'Grass Energy'), card('30thC-170', 'Fire Energy')],
+        [ja('GRA', 'Basic Grass Energy'), ja('FIR', 'Basic Fire Energy')]
+      )
+    ).toEqual(new Map([['30thC-169', 'M6a-GRA'], ['30thC-170', 'M6a-FIR']]))
+  })
+
+  it('leaves cards of one name it cannot tell apart, and a print with no art', () => {
+    const r = twins(
+      [card('30thC-166', 'Mew'), card('30thC-167', 'Mew'), card('30thC-001', 'Pikachu')],
+      [ja('R', 'Mew'), ja('G', 'Mew'), ja('001', 'Pikachu', false)]
+    )
+    expect(r).toEqual(
+      new Map([
+        ['30thC-166', 'unmatched'],
+        ['30thC-167', 'unmatched'],
+        ['30thC-001', 'no Japanese art']
+      ])
+    )
+  })
+})
+
+describe('refreshPokemon with a set printed from a Japanese one', () => {
+  let dir: string
+  let db: Database.Database
+  const M6A: TdSet = { id: 'M6a', name: 'M6a', serie: { id: 'M' }, cards: [] }
+  const C30: TdSet = { id: '30thC', name: '30th Celebration', serie: { id: 'MEGA' }, cards: [] }
+  const jaCard = (localId: string, name: string): TdCard => ({
+    id: `M6a-${localId}`,
+    localId,
+    name,
+    category: 'Pokemon',
+    image: `https://assets.tcgdex.net/ja/M/M6a/${localId}`,
+    variants_detailed: [{ type: 'normal' }],
+    set: { id: 'M6a', name: 'M6a' }
+  })
+  const zhCard = (localId: string, name: string): TdCard => ({
+    id: `30thC-${localId}`,
+    localId,
+    name,
+    localName: '皮卡丘',
+    category: 'Pokemon',
+    variants_detailed: [{ type: 'normal' }],
+    set: { id: '30thC', name: '30th Celebration' }
+  })
+  const jas = [jaCard('001', 'Pikachu'), jaCard('R', 'Mew'), jaCard('G', 'Mew')]
+  const zhs = [zhCard('001', 'Pikachu'), zhCard('166', 'Mew'), zhCard('167', 'Mew')]
+  const sources: PokemonSources = {
+    async sets(lang: PkmLang) {
+      const of = (set: TdSet, cards: TdCard[]): TdSet => ({
+        ...set,
+        cards: cards.map((c) => ({ id: c.id, localId: c.localId, name: c.name }))
+      })
+      return lang === 'ja' ? [of(M6A, jas)] : lang === 'zh-hans' ? [of(C30, zhs)] : []
+    },
+    async cards(lang: PkmLang) {
+      return lang === 'ja' ? jas : lang === 'zh-hans' ? zhs : []
+    },
+    groups: async () => [],
+    products: async () => [],
+    prices: async () => []
+  }
+  const twinOf = (id: string): unknown =>
+    (
+      db.prepare('SELECT art_twin_id FROM pokemon_cards WHERE card_id = ?').get(pokemonId(id)) as {
+        art_twin_id: number | null
+      }
+    ).art_twin_id
+
+  beforeEach(() => {
+    dir = mkdtempSync(join(tmpdir(), 'art-mirror-'))
+    db = openDatabase(join(dir, 'work.sqlite'))
+  })
+  afterEach(() => {
+    db.close()
+    rmSync(dir, { recursive: true, force: true })
+  })
+
+  it('links each card to its Japanese print, labelled Japanese, and leaves the ones it cannot tell', async () => {
+    const reports = await refreshPokemon(db, sources, { langs: ['ja', 'zh-hans'] })
+    expect(twinOf('zh-hans/30thC-001')).toBe(pokemonId('ja/M6a-001'))
+    expect(twinOf('zh-hans/30thC-166')).toBeNull()
+    expect(reports.find((r) => r.lang === 'zh-hans')!.artJapanese).toEqual({ linked: 1, unmatched: 2 })
+    const link = [pokemonId('zh-hans/30thC-001#img'), pokemonId('ja/M6a-001#img')]
+    expect(borrowedArt(db)).toEqual([link])
+    expect(japaneseArt(db)).toEqual([link])
   })
 })

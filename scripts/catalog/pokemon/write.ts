@@ -3,7 +3,7 @@ import { movedEnough } from '../../../src/main/tcgplayer/prices'
 import { pokemonId } from '../../../src/shared/games/ids'
 import { hasNativeScript } from '../../../src/shared/setNames'
 import { findArt, findArtByName, handArtUrl, NAME_GROUPS } from './art'
-import { englishTwins, traditionalTwins } from './artTwins'
+import { englishTwins, JAPANESE_MIRRORS, japaneseMirror, traditionalTwins } from './artTwins'
 import { englishNamer, type EnglishNamer } from './englishNames'
 import { europeanNamer, isEuropean } from './european'
 import { traditionalNamer, type JapaneseTwin, type SimplifiedName } from './traditional'
@@ -46,6 +46,8 @@ export interface PokemonReport {
   artTwins: Record<string, number>
   /** The same cards, by how the search for a Traditional Chinese card's art went (see artTwins.ts). */
   artTraditional: Record<string, number>
+  /** Cards of a set printed from a Japanese one (JAPANESE_MIRRORS), by how the search for their print went. */
+  artJapanese: Record<string, number>
   /** Cards whose finishes no source confirms (only TCGdex's generated defaults or the fallback). */
   unverified: number
   problems: string[]
@@ -63,7 +65,7 @@ interface CardPlan {
   name: string
   localName: string | null
   imageUrl: string | null
-  /** The English card whose art this one shows until it has its own. */
+  /** The English card whose art this one shows until it has its own, or its Japanese print's. */
   artTwinId: number | null
   /** The Traditional Chinese card whose art it shows instead, on apps that know the column. */
   traditionalTwinId: number | null
@@ -318,6 +320,7 @@ async function planLanguage(
       artMissing: {},
       artTwins: {},
       artTraditional: {},
+      artJapanese: {},
       unverified,
       problems
     }
@@ -710,6 +713,32 @@ function borrowTraditionalArt(plans: LangPlan[]): void {
   }
 }
 
+/**
+ * Links the cards of a Simplified set printed from a Japanese one (JAPANESE_MIRRORS) to their
+ * Japanese prints, in `art_twin_id` in place of the English twin, once those have their English
+ * names and art. That picture is the card's own print, so it also beats a Traditional card's, which
+ * is another print of the name: the Traditional link goes. A card with no print keeps both.
+ */
+function borrowJapaneseArt(plans: LangPlan[]): void {
+  const ja = plans.find((p) => p.lang === 'ja')
+  const zh = plans.find((p) => p.lang === 'zh-hans')
+  if (!ja || !zh) return
+  for (const sp of zh.sets) {
+    const mirror = JAPANESE_MIRRORS[sp.set.id]
+    const japanese = mirror && ja.sets.find((s) => s.set.id === mirror)
+    if (!japanese) continue
+    const prints = japaneseMirror(sp.cards, japanese.cards)
+    for (const cp of sp.cards) {
+      if (cp.imageUrl) continue
+      const { outcome, twin } = prints.get(cp.card.id)!
+      zh.report.artJapanese[outcome] = (zh.report.artJapanese[outcome] ?? 0) + 1
+      if (!twin) continue
+      cp.artTwinId = pokemonId(`ja/${twin.id}`)
+      cp.traditionalTwinId = null
+    }
+  }
+}
+
 /** Each set's English series (see setSeries). */
 function nameSeries(plans: LangPlan[]): void {
   const english = plans.find((p) => p.lang === 'en')?.sets.map((sp) => sp.set) ?? []
@@ -767,6 +796,7 @@ export async function refreshPokemon(
   for (const plan of plans) fillArt(plan, plan === ja ? namer : null)
   borrowEnglishArt(plans)
   borrowTraditionalArt(plans)
+  borrowJapaneseArt(plans)
   nameSeries(plans)
   writePlans(work, plans, (opts.now ?? (() => new Date()))().toISOString())
   return plans.map((p) => p.report)

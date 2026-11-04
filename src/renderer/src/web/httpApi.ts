@@ -182,7 +182,8 @@ export function createHttpApi(opts: HttpApiOptions = {}): Api {
       browse: call('cards:browse'),
       browseFacets: call('cards:browseFacets'),
       borrowedArt: call('cards:borrowedArt'),
-      traditionalArt: call('cards:traditionalArt')
+      traditionalArt: call('cards:traditionalArt'),
+      japaneseArt: call('cards:japaneseArt')
     },
     collection: {
       list: call('collection:list'),

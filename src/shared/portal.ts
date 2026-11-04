@@ -8,6 +8,7 @@ export const PORTAL_CHANNELS = [
   'cards:browseFacets',
   'cards:borrowedArt',
   'cards:traditionalArt',
+  'cards:japaneseArt',
   'collection:list',
   'collection:forCard',
   'collection:add',

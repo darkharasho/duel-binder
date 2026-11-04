@@ -7,6 +7,7 @@ import {
   SWEEP_RESERVE,
   SweepRateLimited,
   ASSIGN_PRINTINGS_SQL,
+  isNewSet,
   assignSweep,
   refreshSweepQueue,
   runSweep,
@@ -300,6 +301,17 @@ describe('set sweep', () => {
     })
   })
 
+  it.each([
+    [null, false],
+    ['2026-10-27', true],
+    ['2026-09-28', true],
+    ['2026-09-27', false],
+    ['2026-11-11', true],
+    ['2026-11-12', false]
+  ])('isNewSet(%s) is %s on 2026-10-28', (released, want) => {
+    expect(isNewSet(released, NOW)).toBe(want)
+  })
+
   describe('runSweep', () => {
     function fakeClient(remaining: number | null = 4000, impl?: (key: string) => Promise<SetResult>) {
       const set = vi.fn(impl ? (k: string) => impl(k) : async () => result({}))
@@ -399,6 +411,31 @@ describe('set sweep', () => {
       expect(set).not.toHaveBeenCalled()
       await runSweep(db, client, new Date(NOW.getTime() + 2 * DAY))
       expect(set.mock.calls.map((c) => c[0])).toEqual(['LODT-JP'])
+    })
+
+    it('sweeps a new set daily, an older one weekly', async () => {
+      // Swept two days ago: the set out last week is due again, the one from last year is not.
+      seedQueue('NEW-JP', { released: ago(10).slice(0, 10), swept: ago(2) })
+      seedQueue('OLD-JP', { released: '2025-06-01', swept: ago(2) })
+      // Swept an hour ago: not again today, new or not.
+      seedQueue('HOUR-JP', { released: ago(3).slice(0, 10), swept: new Date(NOW.getTime() - 3600_000).toISOString() })
+      const { client, set } = fakeClient()
+      await runSweep(db, client, NOW)
+      expect(set.mock.calls.map((c) => c[0])).toEqual(['NEW-JP'])
+    })
+
+    it('a failing new set backs off a day, not six', async () => {
+      seedQueue('NEW-JP', { released: ago(5).slice(0, 10) })
+      const { client, set } = fakeClient(4000, async () => {
+        throw new Error('400')
+      })
+      await runSweep(db, client, NOW)
+      expect(sweepRow('NEW-JP').swept_at).toBe(NOW.toISOString())
+      set.mockClear()
+      await runSweep(db, client, new Date(NOW.getTime() + 3600_000))
+      expect(set).not.toHaveBeenCalled()
+      await runSweep(db, client, new Date(NOW.getTime() + DAY + 1000))
+      expect(set).toHaveBeenCalledTimes(1)
     })
 
     it('counts calls spent even when writing the result throws', async () => {

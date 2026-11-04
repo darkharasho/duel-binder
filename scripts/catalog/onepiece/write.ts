@@ -185,11 +185,21 @@ export function writeOnePiece(work: Database.Database, plan: OpPlan, o: WriteOne
     if (!old || (e.bandaiId === e.number && old.bandaiId !== old.number)) cardSource.set(e.number, e)
   }
 
-  const storedNumbers = (work.prepare('SELECT number FROM onepiece_cards').all() as { number: string }[]).map((r) => r.number)
+  const storedCards = work.prepare('SELECT card_id, number FROM onepiece_cards').all() as { card_id: number; number: string }[]
+  const storedNumbers = storedCards.map((r) => r.number)
+  const allImages = work.prepare('SELECT image_id, bandai_id FROM onepiece_images').all() as { image_id: number; bandai_id: string }[]
   // This region's images, by the bare Bandai id (or DON!!'s `tcg:` key).
-  const storedImages = (work.prepare('SELECT image_id, bandai_id FROM onepiece_images').all() as { image_id: number; bandai_id: string }[])
+  const storedImages = allImages
     .filter((r) => keyRegion(r.bandai_id) === region)
     .map((r) => ({ image_id: r.image_id, bandai_id: english ? r.bandai_id : r.bandai_id.slice(region.length + 1) }))
+  // The other region's stored ids share the id range, so tonight's ids must not land on them either.
+  // (This region's DON!! cards are checked through donPids below.)
+  const otherCardIds = storedCards
+    .filter((r) => !(english && r.number === DON_NUMBER) && r.card_id !== cardIdOf(r.number))
+    .map((r): [string, number] => [`stored card ${r.card_id} (${r.number})`, r.card_id])
+  const otherImageIds = allImages
+    .filter((r) => keyRegion(r.bandai_id) !== region)
+    .map((r): [string, number] => [`stored image ${r.bandai_id}`, r.image_id])
   // DON!! ids come from product ids (tonight's and the stored ones), in the same id range.
   const donPids = [
     ...new Set([...donCards.map((d) => d.productId), ...storedImages.map((r) => donProduct(r.bandai_id)).filter((x): x is number => x !== null)])
@@ -197,12 +207,12 @@ export function writeOnePiece(work: Database.Database, plan: OpPlan, o: WriteOne
   checkIds(
     [...listed.map((e) => e.number), ...storedNumbers.filter((n) => n !== DON_NUMBER)],
     cardIdOf,
-    donPids.map((pid) => [`DON!! ${pid}`, onePieceDonCardId('en', pid)])
+    [...donPids.map((pid): [string, number] => [`DON!! ${pid}`, onePieceDonCardId('en', pid)]), ...otherCardIds]
   )
   checkIds(
     [...listed.map((e) => e.bandaiId), ...storedImages.map((r) => r.bandai_id).filter((b) => donProduct(b) === null)],
     imageIdOf,
-    donPids.map((pid) => [opTcgArtKey(pid), onePieceDonImageId('en', pid)])
+    [...donPids.map((pid): [string, number] => [opTcgArtKey(pid), onePieceDonImageId('en', pid)]), ...otherImageIds]
   )
 
   const setByCode = work.prepare(

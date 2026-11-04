@@ -103,6 +103,22 @@ describe('writeOnePiece, Japanese', () => {
     expect(r.perSet).toEqual([{ setCode: 'OP17', printings: 4, priced: 0 }])
   })
 
+  test("a Japanese id that lands on a stored English one is refused before any write", () => {
+    writeEn([en('OP17-001')])
+    const enImage = onePieceImageId('en', 'OP17-001')
+    const before = rows('ja').length
+    expect(() =>
+      writeOnePiece(db, plan(JA_SERIES, [ja('OP17-001')]), {
+        now: NOW,
+        nowIso: new Date(NOW).toISOString(),
+        region: 'ja',
+        idOf: { card: (n) => onePieceCardId('ja', n), image: () => enImage }
+      })
+    ).toThrow('One Piece id collision')
+    expect(rows('ja').length).toBe(before)
+    expect(db.prepare('SELECT bandai_id FROM onepiece_images WHERE image_id = ?').get(enImage)).toEqual({ bandai_id: 'OP17-001' })
+  })
+
   test('a parallel with no English twin is written as Parallel at once', () => {
     writeJa([ja('OP17-001'), ja('OP17-001_p1')])
     expect(rows('ja').map((p) => p.set_rarity)).toEqual(['L', 'L (Parallel)'])

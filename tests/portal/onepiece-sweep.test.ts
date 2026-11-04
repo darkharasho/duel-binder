@@ -496,7 +496,8 @@ describe('the One Piece sweep', () => {
         if (code === 'OP05') throw new Error('502')
         return { items: [], calls: 1 }
       })
-      expect(await runOnePieceSweep(db, failing.client, NOW, 60, 0)).toEqual({ swept: 1, calls: 2 })
+      // The failed prefix counts the most a search can spend (3), the good one its 1.
+      expect(await runOnePieceSweep(db, failing.client, NOW, 60, 0)).toEqual({ swept: 1, calls: 4 })
       const sweptAt = (k: string): unknown =>
         (db.prepare('SELECT swept_at AS s FROM price_sweeps WHERE key = ?').get(k) as { s: string })
           .s

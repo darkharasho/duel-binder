@@ -323,12 +323,13 @@ export async function runOnePieceSweep(
       assignOnePieceSweep(db, prefix, language, result, now)
       swept++
     } catch (e) {
+      // A failed search may have spent some of its pages before failing: count the most it could.
+      if (!searched) spent += ONEPIECE_SET_CALLS
       if (e instanceof SweepRateLimited) {
         limited = true
         break
       }
       console.error('One Piece sweep failed', key, language, e instanceof Error ? e.message : '')
-      if (!searched) spent += 1
       // As Pokémon: due again in about a day, so a failure can't hold the head of the queue.
       db.prepare('UPDATE price_sweeps SET swept_at = ? WHERE key = ? AND language = ?').run(
         new Date(now.getTime() - 6 * DAY_MS).toISOString(),

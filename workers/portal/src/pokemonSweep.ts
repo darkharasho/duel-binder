@@ -3,6 +3,8 @@ import { getMeta, setMeta, type MetaKey } from '../../../src/main/db/meta'
 import { askingPrice, isSingleCard, keptPrices } from '../../ebay-prices/src/price.js'
 import {
   DAY_MS,
+  NEW_SET_AHEAD_DAYS,
+  NEW_SET_DAYS,
   POKEMON_KEY_PREFIX,
   SET_MAX_CALLS,
   SWEEP_DAILY_CALLS,
@@ -379,13 +381,22 @@ export function yugiohDue(db: SqlDb, now: Date): boolean {
 
 /**
  * What Yu-Gi-Oh!'s sweep could still spend today, at its dearest: every prefix that comes due before
- * the UTC day ends, at SET_MAX_CALLS each. Taking none of this is what keeps its sweep unchanged.
+ * the UTC day ends, at SET_MAX_CALLS each. That includes new sets, which runSweep re-sweeps daily.
+ * Taking none of this is what keeps its sweep unchanged.
  */
 export function yugiohReserve(db: SqlDb, now: Date): number {
   const dayEnd = new Date(`${utcDay(now)}T00:00:00.000Z`).getTime() + DAY_MS
   const row = db
-    .prepare(`SELECT COUNT(*) AS n FROM price_sweeps WHERE ${YUGIOH_KEYS} AND (swept_at IS NULL OR swept_at < ?)`)
-    .get(new Date(dayEnd - WEEK_MS).toISOString()) as { n: number }
+    .prepare(
+      `SELECT COUNT(*) AS n FROM price_sweeps WHERE ${YUGIOH_KEYS}
+         AND (swept_at IS NULL OR swept_at < ? OR (released BETWEEN ? AND ? AND swept_at < ?))`
+    )
+    .get(
+      new Date(dayEnd - WEEK_MS).toISOString(),
+      utcDay(new Date(now.getTime() - NEW_SET_DAYS * DAY_MS)),
+      utcDay(new Date(now.getTime() + NEW_SET_AHEAD_DAYS * DAY_MS)),
+      new Date(dayEnd - DAY_MS).toISOString()
+    ) as { n: number }
   return row.n * SET_MAX_CALLS
 }
 

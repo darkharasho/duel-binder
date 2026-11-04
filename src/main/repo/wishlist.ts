@@ -39,7 +39,7 @@ export function listWishlist(db: SqlDb, scope: Scope = LOCAL): WishlistItem[] {
       pkey: r.w_pkey as string,
       card,
       printing,
-      imageId: Number(r.w_image_id ?? 0),
+      imageId: printing.artImageId ?? Number(r.w_image_id ?? 0),
       printingScan: true,
       quantity: r.w_quantity as number | null,
       owned: Number(r.w_owned),

@@ -60,6 +60,8 @@ export interface Printing {
   language: Language
   /** The printing's sync key, which binders refer to it by. Only where the query selects it. */
   pkey?: string
+  /** One Piece only: the image of this printing's own Bandai entry (an Alternate Art's art). */
+  artImageId?: number
 }
 
 /** sortOrder 0 is the original art. */

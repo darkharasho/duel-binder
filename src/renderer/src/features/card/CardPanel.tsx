@@ -135,7 +135,11 @@ export function CardPanel({
   const art = entry
     ? { imageId: entry.imageId, printingId: scanFor(entry) }
     : shown
-      ? { imageId: seed?.imageId || detail.data?.images[0]?.imageId, printingId: shown.id }
+      ? {
+          // A One Piece version shows its own art (an Alternate Art is a different picture).
+          imageId: shown.artImageId ?? (seed?.imageId || detail.data?.images[0]?.imageId),
+          printingId: shown.id
+        }
       : seed
         ? {
             imageId: seed.imageId || detail.data?.images[0]?.imageId,

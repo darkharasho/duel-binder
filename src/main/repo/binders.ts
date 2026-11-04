@@ -392,7 +392,7 @@ function binderCards(db: SqlDb, slots: Slot[], scope: Scope): BinderCard[] {
     ? (db
         .prepare(
           `SELECT p.id, p.card_id, p.set_name, p.set_code, ${RARITY_LABEL} AS set_rarity, p.set_rarity_code,
-                  ${printingPrice(scope)} AS set_price, p.missing_from_api, p.language
+                  ${printingPrice(scope)} AS set_price, p.missing_from_api, p.language, p.contributed
            FROM card_printings p
            LEFT JOIN intl_prices ip ON ip.printing_id = p.id AND ${scope.ebayPrices}
            WHERE +p.game = ${scope.game} AND p.id IN ${IN_LIST}`

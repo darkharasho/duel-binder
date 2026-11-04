@@ -10,7 +10,7 @@ function factText(v: unknown): string {
 /**
  * A card's facts and rules text, shown under its art in the side panels. Yu-Gi-Oh! shows its
  * stats line; Pokémon lists the card's own facts (HP, stage, types, …) and then the printing being
- * viewed in the game's words (its number and version).
+ * viewed in the game's words (its number and version). One Piece does the same with its facts.
  */
 export function CardDetails({
   card,
@@ -31,18 +31,18 @@ export function CardDetails({
           card.linkval !== null && `Link ${card.linkval}`
         ].filter(Boolean)
       : []
+  // Only a Leader has a life, and an unset fact (a null block icon) is empty, so neither shows.
+  const gameFacts = (card.pokemon ?? card.onePiece) as object | undefined
   const own = def.details
-    .map(({ key, label }) => ({
-      label,
-      value: factText((card.pokemon as object | undefined)?.[key as never])
-    }))
+    .map(({ key, label }) => ({ label, value: factText(gameFacts?.[key as never]) }))
     .filter((f) => f.value)
+  // A fact the card already lists (One Piece's card number) isn't repeated for the printing.
   const printed =
     def.id !== 'ygo' && printing
       ? [
           { label: def.vocab.printingCode, value: printing.setCode },
           { label: def.vocab.rarity, value: printing.setRarity }
-        ].filter((f) => f.value)
+        ].filter((f) => f.value && !own.some((o) => o.label === f.label))
       : []
   const facts = [...own, ...printed]
   return (

@@ -1,4 +1,6 @@
+import { BANDAI_ID_RE } from '../imageSources'
 import { languageInfo } from '../languages'
+import { onePieceImageId } from './ids'
 import type { GameDef } from './types'
 
 export const OP_CARD_TYPES = ['Leader', 'Character', 'Event', 'Stage', 'DON!!'] as const
@@ -15,6 +17,16 @@ export function opVersionSql(col: string): string {
   const rest = `substr(${col}, instr(${col}, ' (') + 2)`
   const inner = `(CASE WHEN substr(${rest}, -1) = ')' THEN substr(${rest}, 1, length(${rest}) - 1) ELSE ${rest} END)`
   return `(CASE WHEN instr(${col}, ' (') = 0 OR ${inner} NOT GLOB '*[^0-9]*' THEN 'Base' ELSE ${inner} END)`
+}
+
+/**
+ * The art image of a One Piece printing: its `set_rarity_code` is the Bandai entry it was written
+ * from (`OP01-001_p1`), which names the image. Null when the code is empty or not a Bandai id.
+ */
+export function opPrintingImageId(language: string, setRarityCode: string): number | null {
+  return setRarityCode && BANDAI_ID_RE.test(setRarityCode)
+    ? onePieceImageId(language, setRarityCode)
+    : null
 }
 
 export const ONE_PIECE: GameDef = {

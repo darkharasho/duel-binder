@@ -9,7 +9,8 @@ import type {
   PokemonFacts,
   Printing
 } from '../../shared/types'
-import { byGame, type GameId } from '../../shared/games'
+import { byGame, gameOfId, type GameId } from '../../shared/games'
+import { opPrintingImageId } from '../../shared/games/onePiece'
 import { isLanguage } from '../../shared/languages'
 import { setPrice } from './priceRule'
 import { shownPrinting } from './shownPrinting'
@@ -128,6 +129,19 @@ export interface PrintingDbRow {
   language: string
   /** Absent from queries that don't select it. */
   pkey?: string
+  /** 1 for a client-contributed printing; absent from queries that don't select it. */
+  contributed?: number
+}
+
+/**
+ * A One Piece printing's own art image, from its Bandai id; null for other games and for a
+ * contributed printing, whose `set_rarity_code` is client-chosen and so never names art.
+ */
+export function printingArtImageId(
+  row: Pick<PrintingDbRow, 'card_id' | 'language' | 'set_rarity_code' | 'contributed'>
+): number | null {
+  if (gameOfId(row.card_id) !== 'op' || row.contributed === 1) return null
+  return opPrintingImageId(row.language, row.set_rarity_code ?? '')
 }
 
 export function rowToCard(row: CardDbRow): CardRow {
@@ -153,6 +167,7 @@ export function rowToCard(row: CardDbRow): CardRow {
 }
 
 export function rowToPrinting(row: PrintingDbRow): Printing {
+  const artImageId = printingArtImageId(row)
   return {
     id: row.id,
     cardId: row.card_id,
@@ -163,7 +178,8 @@ export function rowToPrinting(row: PrintingDbRow): Printing {
     setPrice: row.market_price ?? row.set_price,
     missingFromApi: row.missing_from_api === 1,
     language: isLanguage(row.language) ? row.language : 'en',
-    ...(row.pkey ? { pkey: row.pkey } : {})
+    ...(row.pkey ? { pkey: row.pkey } : {}),
+    ...(artImageId !== null ? { artImageId } : {})
   }
 }
 

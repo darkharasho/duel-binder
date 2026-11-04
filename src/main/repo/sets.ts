@@ -5,6 +5,7 @@ import type { ChecklistCard, ChecklistRarity, SetChecklist, SetSummary } from '.
 import type { Language } from '../../shared/languages'
 import { setImageKey } from '../../shared/setImages'
 import { addEntry, CollectionError } from './collection'
+import { printingArtImageId } from './cards'
 import { LOCAL, scopeGame, type Scope } from './scope'
 import { enTwinPrice } from './enTwin'
 import { isMarketOnly, MARKET_ONLY_PRICE } from './priceRule'
@@ -260,6 +261,8 @@ interface PrintingDbRow {
   card_id: number
   set_code: string
   set_rarity: string
+  set_rarity_code: string
+  language: string
   name: string
   type: string
   image_id: number | null
@@ -325,7 +328,7 @@ function checklistCards(
   const pkm = scopeGame(db, scope) === 'pkm'
   const printings = db
     .prepare(
-      `SELECT p.id, p.card_id, p.set_code, ${RARITY_LABEL} AS set_rarity, c.name, c.type,
+      `SELECT p.id, p.card_id, p.set_code, ${RARITY_LABEL} AS set_rarity, p.set_rarity_code, p.language, c.name, c.type,
               ${printingPrice(scope)} AS set_price,
               CASE WHEN p.language = 'en' THEN c.tcgplayer_price END AS card_price,
               c.atk, c.def, COALESCE(c.level, c.linkval) AS level,
@@ -394,13 +397,17 @@ function checklistCards(
       if (n.number !== null && (lowest.number === null || n.number < lowest.number)) lowest = n
     }
     const cardEntries = rows.flatMap((p) => entriesByPrinting.get(p.id) ?? [])
+    // One Piece: the art of the card's first version in the set, by label (the base L before
+    // L (Alternate Art)). The rows here are never contributed.
+    const first = [...rows].sort((a, b) => cmp(a.set_rarity, b.set_rarity) || cmp(a.set_code, b.set_code))[0]
+    const art = printingArtImageId({ ...first, contributed: 0 })
     cards.push({
       cardId: id,
       name: rows[0].name,
       type: rows[0].type,
       number: lowest.number,
       numberLabel: lowest.label,
-      imageId: rows[0].image_id ?? 0,
+      imageId: art ?? rows[0].image_id ?? 0,
       owned: sum(cardEntries),
       entryId: latest(cardEntries),
       rarities,
@@ -434,8 +441,8 @@ export function getChecklist(
 }
 
 /**
- * Adds one copy of a printing (original art) or removes one (original-art entry first,
- * else the most recently updated). Removing with no entry is a no-op.
+ * Adds one copy of a printing (original art; a One Piece version its own art) or removes one
+ * (an entry with that art first, else the most recently updated). Removing with no entry is a no-op.
  * Returns the printing's card as it now appears in the set's checklist.
  */
 export function adjustPrinting(
@@ -450,27 +457,42 @@ export function adjustPrinting(
   if (delta !== 1 && delta !== -1) throw new CollectionError('Adjustment must be +1 or -1')
   return db.transaction(() => {
     const p = db
-      .prepare(`SELECT card_id, set_name, language FROM card_printings WHERE id = ? AND +game = ${scope.game}`)
-      .get(printingId) as { card_id: number; set_name: string; language: Language } | undefined
+      .prepare(
+        `SELECT card_id, set_name, language, set_rarity_code, contributed FROM card_printings
+         WHERE id = ? AND +game = ${scope.game}`
+      )
+      .get(printingId) as
+      | { card_id: number; set_name: string; language: Language; set_rarity_code: string; contributed: number }
+      | undefined
     if (!p || p.set_name !== setName || p.language !== language)
       throw new CollectionError(`Printing ${printingId} is not in ${setName} (${language})`)
-    const original = db
-      .prepare(
-        `SELECT image_id FROM card_images WHERE card_id = ? AND +game = ${scope.game}
-         ORDER BY sort_order, image_id LIMIT 1`
-      )
-      .get(p.card_id) as { image_id: number } | undefined
+    // One Piece: the printing's own art, when the card has that image; else the original art.
+    const artId = printingArtImageId(p)
+    const own =
+      artId === null
+        ? undefined
+        : (db
+            .prepare(`SELECT image_id FROM card_images WHERE image_id = ? AND card_id = ? AND +game = ${scope.game}`)
+            .get(artId, p.card_id) as { image_id: number } | undefined)
+    const image =
+      own ??
+      (db
+        .prepare(
+          `SELECT image_id FROM card_images WHERE card_id = ? AND +game = ${scope.game}
+           ORDER BY sort_order, image_id LIMIT 1`
+        )
+        .get(p.card_id) as { image_id: number } | undefined)
 
     if (delta === 1) {
-      if (!original) throw new CollectionError('The card has no image')
-      addEntry(db, { printingId, imageId: original.image_id, quantity: 1 }, now, scope)
+      if (!image) throw new CollectionError('The card has no image')
+      addEntry(db, { printingId, imageId: image.image_id, quantity: 1 }, now, scope)
     } else {
       const entry = db
         .prepare(
           `SELECT id, quantity FROM collection_entries WHERE printing_id = ? AND ${scope.where('collection_entries')}
            ORDER BY image_id = ? DESC, updated_at DESC, id DESC LIMIT 1`
         )
-        .get(printingId, original?.image_id ?? null) as { id: number; quantity: number } | undefined
+        .get(printingId, image?.image_id ?? null) as { id: number; quantity: number } | undefined
       if (entry && entry.quantity > 1) {
         db.prepare(
           `UPDATE collection_entries SET quantity = quantity - 1, updated_at = ?, ${scope.touch} WHERE id = ?`

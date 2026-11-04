@@ -133,6 +133,37 @@ describe('One Piece matching', () => {
     expect(r.matches.get('OP17-005_p1')!.product.productId).toBe(708077)
     expect(r.notes).toContain('OP17-005_p1: stored product 999999 is gone or disagrees')
   })
+  test('starter-deck reprints match a plain or (Reprint) product of their number', () => {
+    const ST31 = ser('569031', 'deck', 'ST-31', 'ST31')
+    const at = (productId: number, name: string, number: string, rarity: string): OpProduct =>
+      ({ productId, groupId: 24749, name, number, rarity, imageUrl: `https://tcgplayer-cdn.tcgplayer.com/product/${productId}_200w.jpg` })
+    // TCGplayer's ST-31 and ST-23 groups, as listed: no number tag, a number tag, `(Reprint)`.
+    const deck = [
+      at(706310, 'Nami', 'OP01-016', 'R'),
+      at(706313, 'Monkey.D.Luffy (ST21-001)', 'ST21-001', 'L'),
+      at(633760, 'Shanks (Reprint)', 'OP09-001', 'L'),
+      at(706314, 'Sanji', 'ST31-001', 'SR')
+    ]
+    const e = (bandaiId: string, rarity: string): BandaiEntry =>
+      entry({ bandaiId, number: bandaiId.split('_')[0], rarity, seriesId: ST31.id })
+    const entries = [e('OP01-016_p9', 'R'), e('ST21-001_r1', 'L'), e('OP09-001_p2', 'L'), e('OP11-003_r1', 'UC'), e('ST31-001', 'SR')]
+    const r = run({
+      series: ST31, entries, products: deck,
+      bandai: { 'OP01-016_p9': H0, 'ST21-001_r1': H1, 'OP09-001_p2': H2, 'OP11-003_r1': H0, 'ST31-001': H1 },
+      tcg: { 706310: H0, 706313: H1, 633760: H2, 706314: H1 }
+    })
+    const got = Object.fromEntries([...r.matches.values()].map((m) => [m.bandaiId, m.product.productId]))
+    expect(got).toEqual({ 'OP01-016_p9': 706310, 'ST21-001_r1': 706313, 'OP09-001_p2': 633760, 'ST31-001': 706314 })
+    for (const m of r.matches.values()) expect(m.label).toBeNull()
+    // TCGplayer lists the common reprints under their first set only.
+    expect(r.notes).toContain('OP11-003_r1: no unambiguous TCGplayer product (no candidate)')
+  })
+  test('a booster SP does not take a plain product of its number', () => {
+    const plain: OpProduct = { productId: 900002, groupId: 24736, name: 'Kid', number: 'OP14-108', rarity: 'R', imageUrl: null }
+    const sp = entry({ bandaiId: 'OP14-108_p3', number: 'OP14-108', rarity: 'R' })
+    const r = run({ entries: [sp], products: [plain], bandai: { 'OP14-108_p3': H0 }, tcg: { 900002: H0 } })
+    expect(r.matches.size).toBe(0)
+  })
   test('DON!! and sealed are skipped and counted', () => {
     const r = run({ entries: [base], bandai: { 'OP17-005': H0 }, tcg: { 711499: H0 } })
     expect(r.don).toBe(1)

@@ -289,6 +289,7 @@ export function writeOnePiece(work: Database.Database, plan: OpPlan, o: WriteOne
       if (kind === 'base') label = e.rarity
       else if (kind === 'sp') label = 'SP'
       else if (kind === 'tr') label = 'TR'
+      else if (kind === 'reprint') label = `${e.rarity} (Reprint)`
       else if (kind === 'promo') label = e.cardSets ? `${e.rarity} (${e.cardSets})` : e.rarity
       else if (match) label = `${e.rarity} (${match.label ?? 'Parallel'})`
       else if (o.now - (plan.firstSeen.get(e.bandaiId) ?? o.now) >= HOLD_UNMATCHED_MS) label = `${e.rarity} (Parallel)`

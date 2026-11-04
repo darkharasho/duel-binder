@@ -145,6 +145,20 @@ describe('writeOnePiece', () => {
     })
   })
 
+  test('a starter-deck reprint is labelled Reprint, matched or not', () => {
+    const ST31 = { id: '569031', kind: 'deck' as const, title: 'RED Monkey.D.Luffy', code: 'ST-31', setName: 'RED Monkey.D.Luffy [ST-31]', setCode: 'ST31' }
+    const e = (bandaiId: string, rarity: string): BandaiEntry =>
+      entry({ bandaiId, number: bandaiId.split('_')[0], rarity, seriesId: ST31.id, name: 'Nami' })
+    const entries = [e('OP01-016_p9', 'R'), e('OP11-003_r1', 'UC')]
+    const p = plan({ entries, matches: { 'OP01-016_p9': [706310, null] }, prices: { 706310: 0.4 } })
+    const r = writeOnePiece(db, { ...p, series: [...SERIES, ST31] }, { now: NOW, nowIso: new Date(NOW).toISOString() })
+    expect(printings().map((x) => [x.set_rarity_code, x.set_name, x.set_rarity, x.tcg_product_id, x.market_price])).toEqual([
+      ['OP01-016_p9', 'RED Monkey.D.Luffy [ST-31]', 'R (Reprint)', 706310, 0.4],
+      ['OP11-003_r1', 'RED Monkey.D.Luffy [ST-31]', 'UC (Reprint)', null, null]
+    ])
+    expect(r).toMatchObject({ printings: 2, priced: 1, held: 0 })
+  })
+
   test('labels never move, prices move enough', () => {
     write({ entries: TRIO, matches: { 'OP17-005_p1': [712083, 'Manga'] }, prices: { 712083: 12 } })
     write({ entries: TRIO, matches: { 'OP17-005_p1': [712083, 'Gold'] }, prices: { 712083: 12.12 } }, NOW + DAY)

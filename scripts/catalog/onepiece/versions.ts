@@ -2,7 +2,8 @@ import type { TcGroup } from '../pokemon/types'
 import type { OpProduct } from './tcgcsv'
 import type { BandaiEntry, BandaiSeries } from './types'
 
-export type OpKind = 'base' | 'sp' | 'tr' | 'parallel'
+/** `reprint` is an entry's kind only: a card a starter deck borrows from another set. */
+export type OpKind = 'base' | 'sp' | 'tr' | 'parallel' | 'reprint'
 
 /** Upper case with every `-` removed: `OP-17` and `OP17` meet. */
 export const normalizeCode = (code: string): string => code.toUpperCase().replace(/-/g, '')
@@ -29,22 +30,37 @@ export function productVersion(p: OpProduct): { kind: OpKind; label: string | nu
   const core = words.join(' ')
   const kind: OpKind = core === 'SP' ? 'sp' : core === 'TR' ? 'tr' : core === '' ? 'base' : 'parallel'
   const label = [core, suffix].filter(Boolean).join(' ') || null
-  const skip = p.rarity === 'DON!!' || p.name.startsWith('DON!! Card') ? 'don' : p.number === null ? 'sealed' : null
-  return { kind, label, skip }
+  return { kind, label, skip: isDonProduct(p) ? 'don' : p.number === null ? 'sealed' : null }
 }
 
 /**
+ * A DON!! card: TCGplayer's DON!! rarity, or a `DON!! Card` name with a rarity (promo DON!! cards
+ * are PR). A `DON!! Card Pack` has no rarity: it is sealed.
+ */
+export function isDonProduct(p: Pick<OpProduct, 'name' | 'rarity'>): boolean {
+  return p.rarity === 'DON!!' || (p.rarity !== null && /^DON!! Card\b/.test(p.name))
+}
+
+/** A reprint takes a product with no version words (`Nami`, `Luffy (ST21-001)`) or `(Reprint)`. */
+export const reprintProduct = (v: { kind: OpKind; label: string | null }): boolean =>
+  v.kind === 'base' || v.label === 'Reprint'
+
+/**
  * The version a Bandai entry stands for. A `_p` entry whose number belongs to another set than its
- * series is a borrowed card and TCGplayer files it as SP, whatever rarity Bandai gives it.
+ * series is a borrowed card and TCGplayer files it as SP, whatever rarity Bandai gives it; but in a
+ * starter deck a borrowed card is a reprint, as is every `_r` entry, and TCGplayer lists those
+ * under their own number with no version, or as `(Reprint)`.
  */
 export function entryKind(e: BandaiEntry, series: Pick<BandaiSeries, 'kind' | 'setCode'>): OpKind | 'promo' {
   if (series.kind === 'promo' || series.kind === 'other') return 'promo'
   if (e.rarity === 'SP') return 'sp'
   if (e.rarity === 'TR') return 'tr'
+  if (/_r\d+$/.test(e.bandaiId)) return 'reprint'
   if (!e.bandaiId.includes('_')) return 'base'
   // Whole parts only: `P` sits inside `OP17` but is not one of its parts.
   const prefix = normalizeCode(e.number.split('-')[0])
-  return series.setCode.split('-').map(normalizeCode).includes(prefix) ? 'parallel' : 'sp'
+  if (series.setCode.split('-').map(normalizeCode).includes(prefix)) return 'parallel'
+  return series.kind === 'deck' ? 'reprint' : 'sp'
 }
 
 export function mapGroups(series: BandaiSeries[], groups: TcGroup[]): {

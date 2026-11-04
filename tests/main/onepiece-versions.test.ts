@@ -42,6 +42,9 @@ describe('One Piece TCGplayer versions', () => {
     expect(v('Monkey.D.Luffy (EB04-061) (SP)', 'EB04-061', 'SEC').kind).toBe('sp')
     expect(v('Buggy (P-084) (SP)', 'P-084', 'PR').kind).toBe('sp')
     expect(v('DON!! Card (Alternate Art) (Gold)', null, 'DON!!').skip).toBe('don')
+    // Promo DON!! cards carry TCGplayer's PR rarity; a DON!! pack has none and is sealed.
+    expect(v('DON!! Card (Gold)', null, 'PR').skip).toBe('don')
+    expect(v('DON!! Card Pack Vol. 2', null, null).skip).toBe('sealed')
     expect(v("The World's Strongest Warriors Booster Box", null, null).skip).toBe('sealed')
     expect(v('Monkey.D.Luffy (Super Pre-Release) [Participant]', 'P-001', 'PR').label).toBe('Super Pre-Release [Participant]')
   })
@@ -54,6 +57,17 @@ describe('One Piece TCGplayer versions', () => {
     // Bandai lists a borrowed card on the OP-17 page as SEC; TCGplayer calls it SP.
     expect(entryKind(entry({ bandaiId: 'EB04-061_p2', number: 'EB04-061', rarity: 'SEC' }), OP17)).toBe('sp')
     expect(entryKind(entry({ bandaiId: 'EB04-061_p1', number: 'EB04-061', rarity: 'SEC', seriesId: '569115' }), EB04)).toBe('parallel')
+  })
+  test('reprints: a `_r` entry, and a borrowed `_p` entry of a starter deck', () => {
+    const st = { seriesId: ST31.id }
+    expect(entryKind(entry({ ...st, bandaiId: 'OP11-003_r1', number: 'OP11-003', rarity: 'UC' }), ST31)).toBe('reprint')
+    expect(entryKind(entry({ ...st, bandaiId: 'ST21-001_r1', number: 'ST21-001', rarity: 'L' }), ST31)).toBe('reprint')
+    expect(entryKind(entry({ ...st, bandaiId: 'OP01-016_p9', number: 'OP01-016', rarity: 'R' }), ST31)).toBe('reprint')
+    expect(entryKind(entry({ ...st, bandaiId: 'ST31-001', number: 'ST31-001' }), ST31)).toBe('base')
+    // A starter deck's own parallel stays a parallel; a booster's borrowed card stays SP.
+    expect(entryKind(entry({ ...st, bandaiId: 'ST31-001_p1', number: 'ST31-001' }), ST31)).toBe('parallel')
+    expect(entryKind(entry({ bandaiId: 'OP14-108_p3', number: 'OP14-108', rarity: 'R' }), OP17)).toBe('sp')
+    expect(entryKind(entry({ bandaiId: 'OP09-004_r1', number: 'OP09-004', rarity: 'SP' }), OP17)).toBe('sp')
   })
   test('the number prefix must equal a part of the set code, not sit inside it', () => {
     // `P` is inside `OP17`, but a P- card on the OP-17 page is borrowed.

@@ -655,7 +655,21 @@ CREATE TABLE auth_limits (kind TEXT NOT NULL, key TEXT NOT NULL, created_at TEXT
 CREATE INDEX ix_auth_limits ON auth_limits(kind, key, created_at);
 `
   },
-  onePieceStep()
+  onePieceStep(),
+  {
+    // The game tester list: who sees a 'testers' game besides the owner. A row is pending until
+    // its Discord username signs in (or is linked) and binds it to that account.
+    name: 'server-36',
+    sql: `
+CREATE TABLE game_testers (id INTEGER PRIMARY KEY, game TEXT NOT NULL,
+  discord_username TEXT, user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  CHECK (discord_username IS NOT NULL OR user_id IS NOT NULL));
+CREATE UNIQUE INDEX ux_game_testers_user ON game_testers(game, user_id) WHERE user_id IS NOT NULL;
+CREATE UNIQUE INDEX ux_game_testers_pending ON game_testers(game, discord_username COLLATE NOCASE) WHERE user_id IS NULL;
+CREATE INDEX ix_game_testers_user_id ON game_testers(user_id);
+INSERT INTO game_testers (game, discord_username, user_id) VALUES ('op', 'dubgrumble', NULL);
+`
+  }
 ]
 
 /**

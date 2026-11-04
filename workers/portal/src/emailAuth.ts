@@ -26,6 +26,7 @@ import { codeMessage, emailEnabled } from './emailSend'
 import { logServerError } from './errors'
 import { hashPassword, verifyPassword } from './password'
 import { takeLinkCode } from './link'
+import { bindTesterInvites } from './testers'
 import { claimKey, keepAppleToken, peekClaim, spendClaim, type ClaimRow } from './emailClaim'
 import {
   createAccount,
@@ -657,6 +658,8 @@ async function claimStep(
       'INSERT INTO sign_ins (provider, subject, user_id, created_at, email) VALUES (?, ?, ?, ?, ?)'
     ).run(live.provider, live.subject, live.userId, nowIso, live.email)
     keepAppleToken(db, live, live.userId, nowIso)
+    if (live.provider === 'discord' && live.profile.username)
+      bindTesterInvites(db, live.userId, live.profile.username)
     refreshLegacyDiscordId(db, live.userId)
     spendClaim(db, live.ticketHash)
     return { next: 'signed-in', userId: live.userId, created: false }
@@ -684,6 +687,8 @@ async function claimSeparateStep(
       nowIso
     )
     keepAppleToken(db, claim, userId, nowIso)
+    if (claim.provider === 'discord' && claim.profile.username)
+      bindTesterInvites(db, userId, claim.profile.username)
     spendClaim(db, claim.ticketHash)
     return { next: 'signed-in', userId, created }
   })()

@@ -4,6 +4,7 @@ import { reportUsage } from './usage'
 import { reportError } from './errors'
 import { adminRoute } from './catalogLoad'
 import { adminMergeRoute } from './merge'
+import { adminTestersRoute } from './testers'
 import { rpcRoute } from './rpc'
 import { syncRoute } from './sync'
 import { catalogRoute } from './catalogFeed'
@@ -140,6 +141,8 @@ async function route(req: Request, deps: AppDeps): Promise<Response> {
     return (await isAdmin(req, deps)) ? adminPage() : json({ error: 'Not found' }, 404)
   if (url.pathname === '/admin/merges' || url.pathname === '/admin/merges/undo')
     return adminMergeRoute(req, deps)
+  if (url.pathname === '/admin/testers' || url.pathname === '/admin/testers/remove')
+    return adminTestersRoute(req, deps)
   if (url.pathname.startsWith('/admin/')) return adminRoute(req, deps)
   return json({ error: 'Not found' }, 404)
 }

@@ -6,6 +6,7 @@ import { attachFromFlow, EmailAuthError } from './emailAuth'
 import { claimTarget, makeClaim } from './emailClaim'
 import { emailEnabled } from './emailSend'
 import { mergedFrom, purgeHolds } from './merge'
+import { bindTesterInvites, testerGames } from './testers'
 import {
   findAccount,
   signInWith,
@@ -188,7 +189,7 @@ function isAdminUser(deps: AppDeps, userId: number): boolean {
 
 /** The games this user may use; the server's gate for every game-scoped route. */
 export function gamesFor(deps: AppDeps, userId: number): GameId[] {
-  return allowedGames({ isOwner: isAdminUser(deps, userId), testerGames: [] })
+  return allowedGames({ isOwner: isAdminUser(deps, userId), testerGames: testerGames(deps.db, userId) })
 }
 
 /** Whether the request is signed in as the ADMIN_DISCORD_ID account. */
@@ -362,7 +363,7 @@ async function fetchDiscordUser(code: string, deps: AppDeps): Promise<DiscordUse
 
 /** Signs this Discord user in, making the account on first use. Call inside a transaction. */
 function discordSignIn(du: DiscordUser, deps: AppDeps, nowIso: string): number {
-  return signInWith(
+  const { userId } = signInWith(
     deps.db,
     { provider: 'discord', subject: du.id },
     {
@@ -372,7 +373,9 @@ function discordSignIn(du: DiscordUser, deps: AppDeps, nowIso: string): number {
       email: verifiedEmail(du.email, du.verified)
     },
     nowIso
-  ).userId
+  )
+  bindTesterInvites(deps.db, userId, du.username)
+  return userId
 }
 
 /** Drops expired sessions, desktop and link codes, and merge tickets, and purges merge holds past their 30 days. */

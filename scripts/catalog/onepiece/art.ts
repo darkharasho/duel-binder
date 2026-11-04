@@ -169,8 +169,16 @@ export async function refreshArt(o: RefreshArtOptions): Promise<ArtResult> {
   const entries = new Map<string, BandaiEntry>()
   for (const b of o.batches) for (const e of b.entries) if (!entries.has(e.bandaiId)) entries.set(e.bandaiId, e)
   const ordered = [...entries.values()]
-  /** PNGs downloaded tonight, kept only when they are going to be uploaded. */
-  const fresh = new Map<string, Uint8Array>()
+
+  /** Puts both copies of an entry's art on the portal and stamps `stored_at`; the bytes are not kept. */
+  const store = async (portal: ArtPortal, id: string, bytes: Uint8Array): Promise<void> => {
+    const small = smallCopy(bytes)
+    if (!small) throw new Error('no small copy (undecodable or over 200 KiB)')
+    await uploadArt(portal, 'full', onePieceImageId('en', id), bytes)
+    await uploadArt(portal, 'small', onePieceImageId('en', id), small)
+    cache.putBandaiArt({ ...cache.getBandaiArt(id)!, storedAt: now })
+    result.uploaded++
+  }
 
   /** Records art that differs from the stored hash: the stored hash stays. */
   const noteChange = (id: string, hash: string): void => {
@@ -201,9 +209,10 @@ export async function refreshArt(o: RefreshArtOptions): Promise<ArtResult> {
           bandaiId: e.bandaiId, hash: hashHex(artHash(img)), lastModified: got.lastModified, checkedAt: now,
           storedAt: null, changedHash: null, notedAt: null
         })
-        if (o.portal) fresh.set(e.bandaiId, got.bytes)
+        // Uploaded at once, so at most CONCURRENCY images are held at a time.
+        if (o.portal) await store(o.portal, e.bandaiId, got.bytes)
       } catch (err) {
-        fail(`Bandai image ${e.bandaiId}`, err)
+        fail(`Bandai image ${e.bandaiId} (hash or upload)`, err)
       }
     })
 
@@ -239,42 +248,29 @@ export async function refreshArt(o: RefreshArtOptions): Promise<ArtResult> {
       const row = cache.getBandaiArt(e.bandaiId)
       return row !== null && row.storedAt === null && row.changedHash === null
     })
-    // A PNG from an earlier night is downloaded again, which costs budget; without budget it waits.
-    const todo = [
-      ...pending.filter((e) => fresh.has(e.bandaiId)),
-      ...spend(pending.filter((e) => !fresh.has(e.bandaiId)))
-    ]
+    // Left from an earlier night: downloaded again, which costs budget; without budget it waits.
+    const todo = spend(pending)
     await pool(todo, async (e) => {
       const id = e.bandaiId
       try {
-        let bytes = fresh.get(id)
-        if (!bytes) {
-          const got = await sources.bandaiImage(id)
-          result.fetched++
-          if (!got) return
-          const img = decodeImage(got.bytes)
-          if (!img) throw new Error('not a PNG or JPEG')
-          const row = cache.getBandaiArt(id)!
-          const hash = hashHex(artHash(img))
-          if (distance(hash, row.hash) > SAME_ART_MAX) {
-            noteChange(id, hash)
-            return
-          }
-          cache.putBandaiArt({ ...row, hash, lastModified: got.lastModified ?? row.lastModified, checkedAt: now })
-          bytes = got.bytes
+        const got = await sources.bandaiImage(id)
+        result.fetched++
+        if (!got) return
+        const img = decodeImage(got.bytes)
+        if (!img) throw new Error('not a PNG or JPEG')
+        const row = cache.getBandaiArt(id)!
+        const hash = hashHex(artHash(img))
+        if (distance(hash, row.hash) > SAME_ART_MAX) {
+          noteChange(id, hash)
+          return
         }
-        const small = smallCopy(bytes)
-        if (!small) throw new Error('no small copy (undecodable or over 200 KiB)')
-        await uploadArt(portal, 'full', onePieceImageId('en', id), bytes)
-        await uploadArt(portal, 'small', onePieceImageId('en', id), small)
-        cache.putBandaiArt({ ...cache.getBandaiArt(id)!, storedAt: now })
-        result.uploaded++
+        cache.putBandaiArt({ ...row, hash, lastModified: got.lastModified ?? row.lastModified, checkedAt: now })
+        await store(portal, id, got.bytes)
       } catch (err) {
         fail(`art upload ${id}`, err)
       }
     })
   }
-  fresh.clear()
 
   // 3. Re-checks, oldest first.
   const due = ordered

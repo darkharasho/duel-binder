@@ -208,6 +208,32 @@ describe('One Piece art', () => {
     expect(r.uploaded).toBe(0)
   })
 
+  it('uploads each image right after its hash, before the next download', async () => {
+    const events: string[] = []
+    const inner = sources
+    sources = {
+      ...inner,
+      bandaiImage: async (id: string, since?: string) => { events.push(`get ${id}`); return inner.bandaiImage(id, since) }
+    } as OnePieceSources
+    const p = portal([])
+    const f = p.fetch
+    p.fetch = ((u: RequestInfo | URL, i?: RequestInit) => { events.push(`put ${String(u).split('/').slice(-2).join('/')}`); return f(u, i) }) as typeof fetch
+    await run({ now: 0, batches: [batch1(['1', '2', '3', '4'])], portal: p })
+    const first = events.findIndex((e) => e.startsWith('put small'))
+    const third = events.indexOf('get 3')
+    expect(first).toBeGreaterThan(-1)
+    expect(first).toBeLessThan(third)
+    // never more than 2 images are downloaded and not yet stored
+    let open = 0
+    let max = 0
+    for (const e of events) {
+      if (e.startsWith('get')) open++
+      else if (e.startsWith('put small')) open--
+      max = Math.max(max, open)
+    }
+    expect(max).toBeLessThanOrEqual(2)
+  })
+
   it('a retried upload of the same art uploads it', async () => {
     await run({ now: 0 })
     const puts: Put[] = []

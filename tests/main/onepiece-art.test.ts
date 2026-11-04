@@ -5,7 +5,7 @@ import { PNG } from 'pngjs'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { decodeImage } from '../../scripts/catalog/references'
 import {
-  distance, hexHash, isFrozen, refreshArt, smallCopy, uploadArt, type ArtBatch
+  distance, hexHash, isFrozen, refreshArt, smallCopy, uploadArt, type ArtBatch, type ArtResult
 } from '../../scripts/catalog/onepiece/art'
 import { openOpCache, type OpCache } from '../../scripts/catalog/onepiece/cache'
 import type { OnePieceSources } from '../../scripts/catalog/onepiece/sources'
@@ -83,7 +83,7 @@ function portal(puts: Put[]): { url: string; token: string; fetch: typeof fetch 
 }
 const batch1 = (ids: string[] = ['100_p1'], candidates: OpProduct[] = []): ArtBatch =>
   ({ seriesId: 's1', entries: ids.map((id) => entry(id, 'OP17-005')), candidates })
-const run = (o: Partial<Parameters<typeof refreshArt>[0]> & { now: number }) =>
+const run = (o: Partial<Parameters<typeof refreshArt>[0]> & { now: number }): Promise<ArtResult> =>
   refreshArt({ cache, sources, batches: [batch1()], stored: new Map(), log: () => {}, ...o })
 
 describe('One Piece art', () => {

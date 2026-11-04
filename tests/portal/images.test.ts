@@ -34,7 +34,7 @@ describe('token card art', () => {
   let db: Database.Database
   let upstream: ReturnType<typeof vi.fn>
   let deps: AppDeps
-  const tokenArt = vi.fn(async (_id: number): Promise<string | null> => `${YP}a/ab/Token.png`)
+  const tokenArt = vi.fn(async (): Promise<string | null> => `${YP}a/ab/Token.png`)
 
   beforeEach(async () => {
     db = await seededServerDb()
@@ -60,7 +60,7 @@ describe('token card art', () => {
   })
   afterEach(() => db.close())
 
-  const get = (path: string) =>
+  const get = (path: string): Promise<Response> =>
     handle(new Request(`${BASE}/img/${path}`, { headers: { 'cf-connecting-ip': '198.51.100.7' } }), deps)
 
   test('comes from Yugipedia, signed out too, and never from YGOPRODeck', async () => {
@@ -74,7 +74,7 @@ describe('token card art', () => {
     const TOO_BIG = 16 * 1024 * 1024
     const header = (): Response =>
       new Response(JPEG, { headers: { 'content-type': 'image/jpeg', 'content-length': String(TOO_BIG) } })
-    const signedIn = (path: string) =>
+    const signedIn = (path: string): Promise<Response> =>
       handle(new Request(`${BASE}/img/${path}`, { headers: { cookie: 'session=tok' } }), deps)
 
     beforeEach(() => {
@@ -196,10 +196,10 @@ describe('image route', () => {
   afterEach(() => db.close())
 
   let cookie = ''
-  const get = (path: string, method = 'GET') =>
+  const get = (path: string, method = 'GET'): Promise<Response> =>
     handle(new Request(`${BASE}/img/${path}`, { method, headers: { cookie } }), deps)
-  const getAnon = (path: string) => handle(new Request(`${BASE}/img/${path}`), deps)
-  const getFrom = (ip: string, path: string, withCookie = false) =>
+  const getAnon = (path: string): Promise<Response> => handle(new Request(`${BASE}/img/${path}`), deps)
+  const getFrom = (ip: string, path: string, withCookie = false): Promise<Response> =>
     handle(
       new Request(`${BASE}/img/${path}`, {
         headers: { 'cf-connecting-ip': ip, ...(withCookie && { cookie }) }
@@ -488,7 +488,7 @@ describe('image route', () => {
     })
 
     it('unwraps IPv4-mapped IPv6 and groups other IPv6 by /56', () => {
-      const key = (ip: string) => clientAddressKey(new Request(BASE, { headers: { 'cf-connecting-ip': ip } }))
+      const key = (ip: string): string | null => clientAddressKey(new Request(BASE, { headers: { 'cf-connecting-ip': ip } }))
       expect(key('203.0.113.7')).toBe('203.0.113.7')
       expect(key('::ffff:203.0.113.7')).toBe('203.0.113.7')
       expect(key('0:0:0:0:0:FFFF:203.0.113.7')).toBe('203.0.113.7')
@@ -538,7 +538,7 @@ describe('image route', () => {
     })
 
     it('remembers an upstream failure and answers signed-out callers 404 without refetching', async () => {
-      let t = 0
+      const t = 0
       deps.anonMisses = createMissCache(() => t, { ttlMs: 3_600_000, maxKeys: 100 })
       upstream.mockResolvedValueOnce(new Response('nope', { status: 404, headers: { 'content-type': 'image/jpeg' } }))
       expect((await getFrom(IP, `cropped/${imageId}`)).status).toBe(404)
@@ -947,7 +947,7 @@ describe('op art', () => {
     ;({ imageIds: ids, printingIds } = seedOnePiece(db))
     bucket = memoryBucket()
     upstream = vi.fn(async () => imageResponse())
-    printingUrl = vi.fn(async (_id: number): Promise<string | null> => null)
+    printingUrl = vi.fn(async (): Promise<string | null> => null)
     deps = {
       db,
       assets: { fetch: async () => new Response('nope', { status: 404 }) },
@@ -961,7 +961,7 @@ describe('op art', () => {
   })
   afterEach(() => db.close())
 
-  const get = (path: string) =>
+  const get = (path: string): Promise<Response> =>
     handle(new Request(`${BASE}/img/${path}`, { headers: { 'cf-connecting-ip': '198.51.100.7' } }), deps)
   const stored = (key: string): void => {
     bucket.store.set(key, { bytes: JPEG.buffer.slice(0) as ArrayBuffer, contentType: 'image/jpeg', etag: '"s"' })

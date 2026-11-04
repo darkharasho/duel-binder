@@ -20,8 +20,12 @@ const H0near = bits([0, 1])
 const H2far = bits(range(140, 240))
 
 const fixture = JSON.parse(readFileSync(join(__dirname, '../fixtures/onepiece/tcgcsv-op17-products.json'), 'utf8'))
-const products: OpProduct[] = fixture.results.map((p: any) => {
-  const field = (n: string): string | null => p.extendedData?.find((e: any) => e.name === n)?.value ?? null
+interface RawProduct {
+  productId: number; groupId: number; name: string; imageUrl: string
+  extendedData?: { name: string; value: string }[]
+}
+const products: OpProduct[] = (fixture.results as RawProduct[]).map((p) => {
+  const field = (n: string): string | null => p.extendedData?.find((e) => e.name === n)?.value ?? null
   return { productId: p.productId, groupId: p.groupId, name: p.name, number: field('Number'), rarity: field('Rarity'), imageUrl: p.imageUrl }
 })
 
@@ -38,7 +42,7 @@ const PROMO = ser('569901', 'promo', 'P', 'P')
 function run(o: {
   series?: BandaiSeries; entries: BandaiEntry[]; products?: OpProduct[]
   bandai?: Record<string, string>; tcg?: Record<number, string>; stored?: Record<string, number>
-}) {
+}): ReturnType<typeof matchSeries> {
   return matchSeries({
     series: o.series ?? OP17, entries: o.entries, products: o.products ?? products,
     bandaiHash: (id) => o.bandai?.[id] ?? null, tcgHash: (p) => o.tcg?.[p.productId] ?? null,

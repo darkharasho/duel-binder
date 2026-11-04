@@ -4,7 +4,7 @@ import { join } from 'path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { parseCardList, parseSeriesList } from '../../scripts/catalog/onepiece/bandai'
 import { openOpCache, type OpCache } from '../../scripts/catalog/onepiece/cache'
-import { createOnePieceSources, dedupeEntries, seriesDue } from '../../scripts/catalog/onepiece/sources'
+import { createOnePieceSources, dedupeEntries, seriesDue, type OnePieceSources } from '../../scripts/catalog/onepiece/sources'
 
 const fx = (n: string): string => readFileSync(join(__dirname, '../fixtures/onepiece', n), 'utf8')
 const OP17 = fx('bandai-op17.html')
@@ -34,7 +34,7 @@ function fakeFetch(pages: Record<string, string>, requests: string[] = [], extra
     return new Response(pages[key], { status: 200 })
   }) as typeof fetch
 }
-const mk = (f: typeof fetch, clock: { t: number }, extra = {}) =>
+const mk = (f: typeof fetch, clock: { t: number }, extra = {}): OnePieceSources =>
   createOnePieceSources({ cache, fetch: f, version: '1.0.0', now: () => clock.t, pageGapMs: 0, retryDelayMs: 1, ...extra })
 const PAGES = { '?series=569117': OP17, '?series=569115': OP15, '?series=569901': PROMO, '/cardlist/': OP17 }
 const pageReqs = (r: string[]): string[] => r.filter((u) => u.includes('?series=')).map((u) => u.slice(u.indexOf('?')))

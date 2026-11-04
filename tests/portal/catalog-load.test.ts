@@ -35,7 +35,7 @@ describe('admin catalog loader', () => {
     }
   })
 
-  const call = (path: string, body?: unknown, token: string | null = TOKEN) =>
+  const call = (path: string, body?: unknown, token: string | null = TOKEN): Promise<Response> =>
     handle(
       new Request(BASE + path, {
         method: body === undefined ? 'GET' : 'POST',
@@ -279,7 +279,7 @@ describe('admin catalog loader', () => {
   })
 
   it('rejects unknown tables and columns', async () => {
-    const bad = async (path: string, body: unknown) => (await call(path, body)).status
+    const bad = async (path: string, body: unknown): Promise<number> => (await call(path, body)).status
     expect(await bad('/admin/catalog/rows', { table: 'users', rows: [{ id: 1 }] })).toBe(400)
     expect(await bad('/admin/catalog/rows', { table: 'cards', rows: [{ id: 1, nope: 1 }] })).toBe(400)
     expect(await bad('/admin/catalog/rows', { table: 'cards', rows: [{ name: 'x' }] })).toBe(400)

@@ -1,13 +1,13 @@
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { describe, expect, test } from 'vitest'
-import { createLimiter } from '../../scripts/catalog/pokemon/http'
+import { createLimiter, type GetJsonOpts } from '../../scripts/catalog/pokemon/http'
 import type { TcGroup } from '../../scripts/catalog/pokemon/types'
 import type { BandaiEntry, BandaiSeries } from '../../scripts/catalog/onepiece/types'
 import { opGroups, opPrices, opProducts } from '../../scripts/catalog/onepiece/tcgcsv'
 import { entryKind, mapGroups, productVersion, promoKey } from '../../scripts/catalog/onepiece/versions'
 
-const readJson = (name: string): any => JSON.parse(readFileSync(join(__dirname, '../fixtures/onepiece', name), 'utf8'))
+const readJson = (name: string): { results: unknown[] } => JSON.parse(readFileSync(join(__dirname, '../fixtures/onepiece', name), 'utf8'))
 
 function fakeFetch(urls: string[], routes: Record<string, string | object>): typeof fetch {
   return (async (url: string) => {
@@ -18,7 +18,7 @@ function fakeFetch(urls: string[], routes: Record<string, string | object>): typ
     return new Response(JSON.stringify(typeof r === 'string' ? readJson(r) : r), { status: 200 })
   }) as unknown as typeof fetch
 }
-const opts = (f: typeof fetch) => ({ fetch: f, userAgent: 'test', limiter: createLimiter(1), retryDelayMs: 0 })
+const opts = (f: typeof fetch): GetJsonOpts => ({ fetch: f, userAgent: 'test', limiter: createLimiter(1), retryDelayMs: 0 })
 
 const entry = (o: Partial<BandaiEntry>): BandaiEntry => ({
   bandaiId: 'OP17-005', number: 'OP17-005', rarity: 'SR', cardType: 'Character', name: 'x', cost: null, life: null,
@@ -34,7 +34,7 @@ const PROMO = ser('569901', 'promo', 'P', 'P')
 
 describe('One Piece TCGplayer versions', () => {
   test('versions from TCGplayer names', () => {
-    const v = (name: string, number: string | null = 'OP17-005', rarity: string | null = 'SR') =>
+    const v = (name: string, number: string | null = 'OP17-005', rarity: string | null = 'SR'): ReturnType<typeof productVersion> =>
       productVersion({ productId: 1, groupId: 1, name, number, rarity, imageUrl: null })
     expect(v('Edward.Newgate (005)')).toEqual({ kind: 'base', label: null, skip: null })
     expect(v('Edward.Newgate (005) (Alternate Art)')).toEqual({ kind: 'parallel', label: 'Alternate Art', skip: null })

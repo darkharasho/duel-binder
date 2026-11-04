@@ -99,7 +99,7 @@ export async function runOnePieceStep(
     const groupPrices = new Map<number, TcPrice[]>()
     /** Group id to its first error tonight. */
     const failed = new Map<number, string>()
-    const attempt = (id: number, fn: () => Promise<void>) =>
+    const attempt = (id: number, fn: () => Promise<void>): Promise<void> =>
       limit(async () => {
         try {
           await fn()

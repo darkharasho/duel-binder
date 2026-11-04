@@ -218,7 +218,7 @@ describe('writeOnePiece', () => {
     write(p)
     const counts = opCounts()
     const imageId = onePieceImageId('en', 'OP17-005_p2')
-    const flags = () => ({
+    const flags = (): { printing: number; image: number } => ({
       printing: printing('OP17-005_p2')!.missing_from_api,
       image: (db.prepare('SELECT missing_from_api AS m FROM card_images WHERE image_id = ?').get(imageId) as { m: number }).m
     })

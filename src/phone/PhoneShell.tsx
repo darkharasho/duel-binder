@@ -136,7 +136,7 @@ function Shell({ engineFactory }: { engineFactory?: EngineFactory }): React.JSX.
   const { page, onNavigate } = pages
   const [moreOpen, setMoreOpen] = useState(false)
   const requests = useFriendsOverview().data?.incoming.length ?? 0
-  const { def, available, setGame } = useGame()
+  const { game, def, available, setGame } = useGame()
   // Scan and Rip only for a game that has them; on Pokémon the raised Scan tab goes.
   const tabs = TABS.filter((t) => pageInGame(t.page, def))
   const more = MORE.filter((m) => pageInGame(m.page, def))
@@ -172,12 +172,20 @@ function Shell({ engineFactory }: { engineFactory?: EngineFactory }): React.JSX.
 
   // Training photos for a tester game. Held here, outside the page switch's per-game remount, so
   // the switch to that game doesn't drop it.
+  // Closing goes back to the game shown before, so a tester isn't left in the hidden game.
   const [contribute, setContribute] = useState<GameId | null>(null)
+  const returnGame = useRef<GameId | null>(null)
   const openContribute = async (g: GameId): Promise<void> => {
+    returnGame.current = g === game ? null : game
     await setGame(g)
     setContribute(g)
   }
-  const closeContribute = (): void => setContribute(null)
+  const closeContribute = (): void => {
+    setContribute(null)
+    const back = returnGame.current
+    returnGame.current = null
+    if (back !== null) void setGame(back)
+  }
   // Registered after the page's, so back closes the screen first.
   useBackHandler(contribute !== null, closeContribute)
 

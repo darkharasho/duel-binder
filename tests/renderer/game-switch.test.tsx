@@ -575,4 +575,19 @@ describe('phone game switch', () => {
     expect(within(nav).getByRole('button', { name: 'Scan', hidden: true })).toBeInTheDocument()
     expect(within(nav).getAllByRole('button', { hidden: true })).toHaveLength(5)
   })
+
+  it('closing Contribute photos goes back to the game shown before', async () => {
+    const store = phoneStore({ available: ['ygo', 'op'], active: 'ygo' })
+    renderPhone(store)
+    const nav = await tabs()
+    await userEvent.click(within(nav).getByRole('button', { name: 'More' }))
+    const sheet = await screen.findByRole('dialog', { name: 'More' })
+    await userEvent.click(within(sheet).getByRole('button', { name: 'Settings' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Contribute photos' }))
+    expect(store.invoke).toHaveBeenCalledWith('games:setActive', ['op'])
+    await userEvent.click(await screen.findByRole('button', { name: 'Close' }))
+    const switches = (): unknown[] =>
+      vi.mocked(store.invoke).mock.calls.filter((c) => c[0] === 'games:setActive').map((c) => c[1])
+    await waitFor(() => expect(switches()).toEqual([['op'], ['ygo']]))
+  })
 })

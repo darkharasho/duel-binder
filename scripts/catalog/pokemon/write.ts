@@ -8,10 +8,10 @@ import { englishNamer, type EnglishNamer } from './englishNames'
 import { europeanNamer, isEuropean } from './european'
 import { traditionalNamer, type JapaneseTwin, type SimplifiedName } from './traditional'
 import { setSeries } from './series'
-import { matchGroup, matchProducts, namesCard, plainName, speciesCheck, type MatchedProduct, type NameCheck } from './match'
+import { exclusiveProducts, matchGroup, matchProducts, namesCard, plainName, speciesCheck, type MatchedProduct, type NameCheck } from './match'
 import { pokemonRarity } from './rarity'
 import { tcgplayerOnlyCards } from './upcoming'
-import { cardVersions, groupFinish, versionSubtype, type PkmVersion } from './versions'
+import { cardVersions, groupFinish, versionSubtype, withExclusives, type PkmVersion } from './versions'
 import type { PkmLang, PokemonSources, TcGroup, TcPrice, TcProduct, TdCard, TdSet } from './types'
 
 /**
@@ -251,10 +251,28 @@ async function planLanguage(
     matched.push({ set: s, groupId, cards: out })
   }
 
+  // English foil exclusives from boxes, blisters and decks, filed outside the card's set group.
+  const exclusives = new Map<string, TcProduct[]>()
+  if (lang === 'en') {
+    const taken = new Set<number>()
+    for (const c of cards) {
+      if (typeof c.thirdParty?.tcgplayer === 'number') taken.add(c.thirdParty.tcgplayer)
+      for (const v of c.variants_detailed ?? []) if (typeof v.thirdParty?.tcgplayer === 'number') taken.add(v.thirdParty.tcgplayer)
+    }
+    const found = exclusiveProducts(
+      matched.map((s) => ({ set: s.set, cards: s.cards.map((c) => c.card) })),
+      productById.values(),
+      taken
+    )
+    problems.push(...found.problems.map((p) => `${lang}/${p}`))
+    for (const [id, ps] of found.byCard) exclusives.set(id, ps)
+  }
+
   // Prices only for the groups that hold a matched product.
   const priceGroups = new Set<number>()
   for (const s of matched)
     for (const c of s.cards) for (const m of c.products) priceGroups.add(m.product.groupId)
+  for (const ps of exclusives.values()) for (const p of ps) priceGroups.add(p.groupId)
   // A set's own group too: groupFinish reads it even when no card matched a product.
   for (const s of matched) if (s.groupId !== null) priceGroups.add(s.groupId)
   const priceLists = await Promise.all([...priceGroups].map((g) => sources.prices(lang, g)))
@@ -279,7 +297,9 @@ async function planLanguage(
       groupId,
       series: null,
       cards: cs.map(({ card, products }) => {
-        const v = cardVersions(card, products, prices, setFinish)
+        const extras = exclusives.get(card.id)
+        const all = extras ? withExclusives(products, extras, prices) : products
+        const v = cardVersions(card, all, prices, setFinish)
         problems.push(...v.problems.map((p) => `${lang}/${p}`))
         versions += v.versions.length
         if (v.unverified) unverified++

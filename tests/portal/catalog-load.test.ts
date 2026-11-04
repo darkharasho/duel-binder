@@ -118,6 +118,26 @@ describe('admin catalog loader', () => {
     expect(db.prepare('SELECT 1 FROM collection_entries WHERE printing_id = ?').get(p)).toBeDefined()
   })
 
+  it('deleting a printing a training photo is labelled with flags it missing instead', async () => {
+    await loadCatalog()
+    const pkeys = (source.prepare('SELECT pkey FROM card_printings LIMIT 2').all() as { pkey: string }[]).map(
+      (r) => r.pkey
+    )
+    const [p, q] = pkeys.map((k) => printingId(k)!)
+    const user = addUser(db, '1', 'kaiba')
+    db.prepare(
+      `INSERT INTO training_photos (user_id, client_id, game, card_id, printing_id, holder, device, app_version,
+         taken_at, created_at, bytes, r2_key)
+       VALUES (?, 'c1', 'op', 1, ?, 'bare', 'd', '0', 'n', 'n', 1, 'k')`
+    ).run(user, p)
+    const res = await call('/admin/catalog/delete', { table: 'card_printings', keys: pkeys.map((k) => [k]) })
+    expect(res.status).toBe(200)
+    expect(db.prepare('SELECT missing_from_api FROM card_printings WHERE id = ?').get(p)).toEqual({
+      missing_from_api: 1
+    })
+    expect(db.prepare('SELECT 1 FROM card_printings WHERE id = ?').get(q)).toBeUndefined()
+  })
+
   it('a source upsert of a contributed pkey makes it a normal row', async () => {
     await loadCatalog()
     const row = sourceRows('card_printings')[0]

@@ -121,7 +121,9 @@ function deleteKeys(deps: AppDeps, table: CatalogTable, keys: unknown[]): void {
   db.transaction(() => {
     for (const k of tuples) {
       if (table.name === 'card_printings') {
-        const owned = 'id IN (SELECT printing_id FROM collection_entries)'
+        // Kept (flagged) while a collection or a training photo's label still points at it.
+        const owned =
+          '(id IN (SELECT printing_id FROM collection_entries) OR id IN (SELECT printing_id FROM training_photos))'
         // Contributed printings never came from the source, so its deletions don't apply to them.
         db.prepare(
           `UPDATE card_printings SET missing_from_api = 1 WHERE pkey = ? AND contributed = 0 AND ${owned}`

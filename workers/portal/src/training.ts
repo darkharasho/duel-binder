@@ -12,6 +12,7 @@ import {
 } from '../../../src/shared/training'
 import type { AppDeps } from './app'
 import { currentUser, fromPublicOrigin, gamesFor, isAdmin } from './auth'
+import { testerGames } from './testers'
 import { adminAuthorized } from './thumbs'
 
 /** The slice of the R2 binding the training routes use. */
@@ -35,12 +36,19 @@ const json = (body: unknown, status = 200): Response =>
   })
 const notFound = (): Response => json({ error: 'not-found' }, 404)
 
-/** Whether this account may send training photos of `game`: a 'testers' game it sees (the owner sees every one). */
+/**
+ * Whether this account may send training photos of `game`: a 'testers' game it sees (the owner sees
+ * every one). Once the game opens to everyone, its testers, and anyone who already sent photos of it,
+ * still may, so photos still waiting on a phone when it opens get through.
+ */
 export function mayContribute(deps: AppDeps, userId: number, game: string): game is GameId {
+  if (!isGameId(game)) return false
+  if (GAMES[game].access === 'testers') return gamesFor(deps, userId, game).includes(game)
   return (
-    isGameId(game) &&
-    GAMES[game].access === 'testers' &&
-    gamesFor(deps, userId, game).includes(game)
+    testerGames(deps.db, userId).includes(game) ||
+    deps.db
+      .prepare('SELECT 1 FROM training_photos WHERE user_id = ? AND game = ? LIMIT 1')
+      .get(userId, game) !== undefined
   )
 }
 

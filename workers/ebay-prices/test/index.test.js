@@ -585,3 +585,75 @@ describe('GET /v1/pokemon-listings', () => {
     expect((await settle(worker.fetch(req(URL_), env))).status).toBe(429)
   })
 })
+
+describe('GET /v1/onepiece-listings', () => {
+  const URL_ = 'https://w.test/v1/onepiece-listings?code=OP05&lang=ja'
+  beforeEach(() => vi.useFakeTimers({ toFake: ['setTimeout'] }))
+  const listing = (title, extra = {}) => ({
+    title,
+    price: { value: '12.00', currency: 'USD' },
+    seller: { username: 'dealer' },
+    conditionId: '4000',
+    ...extra
+  })
+  const page = (n) => ({ itemSummaries: Array.from({ length: n }, (_, i) => listing(`Card ${i}`)) })
+
+  it('searches the CCG singles category for the prefix and the language, fixed price only', async () => {
+    const f = makeFetch([json({ itemSummaries: [listing('Luffy OP05-119 SEC Japanese')] })])
+    vi.stubGlobal('fetch', f)
+    const res = await settle(worker.fetch(req(URL_), env))
+    expect(res.status).toBe(200)
+    expect(await res.json()).toMatchObject({
+      items: [{ title: 'Luffy OP05-119 SEC Japanese', price: 12, seller: 'dealer' }],
+      calls: 1
+    })
+    const url = new URL(f.mock.calls.at(-1)[0])
+    expect(url.searchParams.get('q')).toBe('OP05 Japanese')
+    expect(url.searchParams.get('category_ids')).toBe('183454')
+    expect(url.searchParams.get('filter')).toBe('buyingOptions:{FIXED_PRICE}')
+  })
+
+  it('leaves out graded and non-USD listings', async () => {
+    vi.stubGlobal(
+      'fetch',
+      makeFetch([
+        json({
+          itemSummaries: [
+            listing('keep'),
+            listing('graded', { conditionId: '2750' }),
+            listing('yen', { price: { value: '1', currency: 'JPY' } })
+          ]
+        })
+      ])
+    )
+    const body = await (await settle(worker.fetch(req(URL_), env))).json()
+    expect(body.items.map((i) => i.title)).toEqual(['keep'])
+  })
+
+  it('stops at three pages', async () => {
+    const f = makeFetch([json(page(200)), json(page(200)), json(page(200)), json(page(200))])
+    vi.stubGlobal('fetch', f)
+    expect((await (await settle(worker.fetch(req(URL_), env))).json()).calls).toBe(3)
+  })
+
+  it.each([
+    ['https://w.test/v1/onepiece-listings?code=OP05&lang=zh-hans'],
+    ['https://w.test/v1/onepiece-listings?lang=ja'],
+    ['https://w.test/v1/onepiece-listings?code=P&lang=ja'],
+    ['https://w.test/v1/onepiece-listings?code=OP05%20OR%20x&lang=ja'],
+    ['https://w.test/v1/onepiece-listings?code=op05&lang=ja']
+  ])('refuses %s', async (url) => {
+    vi.stubGlobal('fetch', makeFetch([]))
+    expect((await worker.fetch(req(url), env)).status).toBe(400)
+  })
+
+  it('refuses a missing X-Client header', async () => {
+    vi.stubGlobal('fetch', makeFetch([]))
+    expect((await worker.fetch(req(URL_, {}), env)).status).toBe(400)
+  })
+
+  it('passes through 429', async () => {
+    vi.stubGlobal('fetch', makeFetch([json({}, 429), json({}, 429), json({}, 429)]))
+    expect((await settle(worker.fetch(req(URL_), env))).status).toBe(429)
+  })
+})

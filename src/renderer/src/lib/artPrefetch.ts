@@ -55,8 +55,8 @@ async function srcsFor(tiles: readonly PrefetchTile[]): Promise<string[]> {
     .map((t) => t.printingId!)
   // On the phone a photo is named by the server's printing id, looked up in one batch.
   const photos = isPhone()
-    ? await phonePrintingPhotoSrcs(ygoPrintings)
-    : new Map(ygoPrintings.map((id) => [id, printingImageSrc(id)]))
+    ? await phonePrintingPhotoSrcs(ygoPrintings, { small: true })
+    : new Map(ygoPrintings.map((id) => [id, printingImageSrc(id, { small: true })]))
   const out: string[] = []
   for (const t of shown) {
     if (t.imageId == null) continue

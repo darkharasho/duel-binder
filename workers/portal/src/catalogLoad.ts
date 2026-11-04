@@ -21,7 +21,7 @@ const digest = async (s: string): Promise<Uint8Array> =>
   new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s)))
 
 /** Constant-time: compares fixed-length digests so neither content nor length leaks. */
-async function tokenMatches(given: string, expected: string): Promise<boolean> {
+export async function tokenMatches(given: string, expected: string): Promise<boolean> {
   const [a, b] = await Promise.all([digest(given), digest(expected)])
   let diff = 0
   for (let i = 0; i < a.length; i++) diff |= a[i] ^ b[i]

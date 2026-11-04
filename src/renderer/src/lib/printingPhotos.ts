@@ -46,7 +46,8 @@ function request(printingId: number): void {
  * own lookups are); a printing the server doesn't know, or a failed lookup, has none.
  */
 export async function phonePrintingPhotoSrcs(
-  printingIds: readonly number[]
+  printingIds: readonly number[],
+  opts?: { small?: boolean }
 ): Promise<Map<number, string>> {
   const unknown = printingIds.filter((id) => !serverIds.has(id))
   const lookup = window.api?.images.photoIds
@@ -62,7 +63,7 @@ export async function phonePrintingPhotoSrcs(
   const out = new Map<number, string>()
   for (const id of printingIds) {
     const server = serverIds.get(id)
-    if (server != null) out.set(id, printingPhotoSrc(server))
+    if (server != null) out.set(id, printingPhotoSrc(server, opts))
   }
   return out
 }
@@ -76,9 +77,14 @@ export function resetPrintingPhotos(): void {
 
 /**
  * The URL of a printing's own photo, or null for none: on desktop and the web at once; on the
- * phone once its server id is known (null meanwhile, so the default art shows).
+ * phone once its server id is known (null meanwhile, so the default art shows). `small` for a
+ * grid tile: the photo's small copy, where there is one.
  */
-export function usePrintingPhotoSrc(printingId: number | null): string | null {
+export function usePrintingPhotoSrc(
+  printingId: number | null,
+  opts?: { small?: boolean }
+): string | null {
+  const small = opts?.small === true
   const phone = isPhone()
   const [, rerender] = useState(0)
   useEffect(() => {
@@ -91,7 +97,7 @@ export function usePrintingPhotoSrc(printingId: number | null): string | null {
     }
   }, [phone, printingId])
   if (printingId == null) return null
-  if (!phone) return printingImageSrc(printingId)
+  if (!phone) return printingImageSrc(printingId, { small })
   const id = serverIds.get(printingId)
-  return id == null ? null : printingPhotoSrc(id)
+  return id == null ? null : printingPhotoSrc(id, { small })
 }

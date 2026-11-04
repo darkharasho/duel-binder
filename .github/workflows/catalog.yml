@@ -66,6 +66,7 @@ jobs:
             catalog-work/fingerprints-pkm.sqlite
             catalog-work/pokemon-src.sqlite
             catalog-work/pokemon-src.sqlite-wal
+            catalog-work/thumbs-skip.json
           key: catalog-work-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: catalog-work-
       - name: Restore base snapshot
@@ -92,6 +93,11 @@ jobs:
         run: npm run catalog:job -- --stage fingerprints-ygo
       - name: Pokémon fingerprints
         run: npm run catalog:job -- --stage fingerprints-pkm
+      # Small copies of the printing photos stored since last night, for grids. Its own step, and
+      # never fails the run: without them the grids show the full photos, as before.
+      - name: Printing photo small copies
+        continue-on-error: true
+        run: npm run catalog:thumbs
       - name: Check for problems
         run: test -z "$CATALOG_PROBLEMS"
       - name: Parity check
@@ -109,6 +115,7 @@ jobs:
             catalog-work/fingerprints-pkm.sqlite
             catalog-work/pokemon-src.sqlite
             catalog-work/pokemon-src.sqlite-wal
+            catalog-work/thumbs-skip.json
           key: catalog-work-${{ github.run_id }}-${{ github.run_attempt }}
       - name: Save base snapshot
         if: success()

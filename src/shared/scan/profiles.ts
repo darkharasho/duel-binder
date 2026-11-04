@@ -114,8 +114,11 @@ const PKM_WINDOWS: readonly Box[] = [
  */
 const OP_PROFILE: ScanProfile = {
   game: 'op',
-  // The art above the effect text, which starts at about 0.6 on Characters and Leaders.
-  artBoxes: [[0.08, 0.08, 0.92, 0.56]],
+  // The art above Bandai's SAMPLE stamp. The reference art (Bandai's site) has SAMPLE across 0.42
+  // to 0.57 of the card's height, which a printed card doesn't; the art below it, down to the
+  // effect text at about 0.6, is left out. Against TCGplayer's stamp-free scans of OP-01 this put
+  // the right card a median 6 bits away, against 36 for the whole card.
+  artBoxes: [[0.06, 0.06, 0.94, 0.4]],
   // Cards are full art with no printed window, so outlines are scored by their own edges alone.
   windows: [],
   windowArt: false,

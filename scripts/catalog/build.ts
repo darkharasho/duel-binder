@@ -206,7 +206,8 @@ export const STAGES = [
   'onepiece',
   'upload',
   'fingerprints-ygo',
-  'fingerprints-pkm'
+  'fingerprints-pkm',
+  'fingerprints-op'
 ] as const
 export type Stage = (typeof STAGES)[number]
 
@@ -250,18 +251,19 @@ export async function runJob(opts: JobOptions): Promise<JobResult> {
   // is reported as a problem instead. Each game's file is gated and uploaded on its own.
   const fingerprint = async (upload: boolean, game: GameId): Promise<void> => {
     const pkm = game === 'pkm'
-    const what = pkm ? 'Pokémon fingerprints' : 'Fingerprints'
+    const ygo = game === 'ygo'
+    const what = pkm ? 'Pokémon fingerprints' : game === 'op' ? 'One Piece fingerprints' : 'Fingerprints'
     let refs: Uint8Array
     const yugipedia = opts.yugipedia ?? createYugipediaClient({ version })
     try {
       const out = await buildFingerprints({
         work,
         game,
-        cachePath: join(opts.dir, pkm ? 'fingerprints-pkm.sqlite' : 'fingerprints.sqlite'),
+        cachePath: join(opts.dir, ygo ? 'fingerprints.sqlite' : `fingerprints-${game}.sqlite`),
         fetch: opts.imageFetch ?? opts.fetch,
         log,
         // Printing scans are Yu-Gi-Oh's only.
-        ...(pkm
+        ...(!ygo
           ? {}
           : {
               tokenArt: yugipedia,
@@ -274,8 +276,15 @@ export async function runJob(opts: JobOptions): Promise<JobResult> {
       })
       const scans = out.references
       log(`${what}: ${out.count} (${out.fetched} new, ${out.failed} failed)`)
-      if (!pkm) log(`Printing scans: ${scans.count} (${scans.fetched} new, ${scans.failed} failed)`)
+      if (ygo) log(`Printing scans: ${scans.count} (${scans.fetched} new, ${scans.failed} failed)`)
       refs = out.refs
+      if (game === 'op' && !opts.checkAccuracy) {
+        // No shots of One Piece cards to check against yet, and no app scans One Piece: the file
+        // goes up ungated so it is whole by the time scanning is turned on (step 4b gates it).
+        log('One Piece accuracy: no shots yet; not gated')
+        if (upload) await uploadFingerprints({ url: url!, token: token!, bytes: out.bytes, game, fetch: opts.fetch })
+        return
+      }
       const report = await gate(work, out.bytes, game)
       log(
         `${pkm ? 'Pokémon accuracy' : 'Accuracy'}: ${report.right} of ${report.shots} shots right, ${report.wrong.length} wrong`
@@ -298,14 +307,23 @@ export async function runJob(opts: JobOptions): Promise<JobResult> {
       problem(`${what} failed: ${e instanceof Error ? e.message : e}`)
       return
     }
-    // Refs go with Yu-Gi-Oh's printing scans; Pokémon has none.
-    if (pkm) return
+    // Refs go with Yu-Gi-Oh's printing scans; Pokémon and One Piece have none.
+    if (!ygo) return
     // After the file they go with: a client holding the other file just finds no refs in it.
     try {
       await uploadFingerprintRefs({ url: url!, token: token!, bytes: refs, fetch: opts.fetch })
     } catch (e) {
       problem(`Fingerprint refs failed: ${e instanceof Error ? e.message : e}`)
     }
+  }
+  /** One Piece's file, once the catalog has One Piece cards (and it isn't skipped). */
+  const onePieceFingerprints = async (upload: boolean): Promise<void> => {
+    if (opts.skipOnePiece) return
+    if (!work.prepare("SELECT 1 FROM card_images WHERE game = 'op' LIMIT 1").get()) {
+      log('One Piece fingerprints: no One Piece cards yet')
+      return
+    }
+    await fingerprint(upload, 'op')
   }
   /** Pokémon's file, once the catalog has Pokémon cards (and it isn't skipped). */
   const pokemonFingerprints = async (upload: boolean): Promise<void> => {
@@ -395,6 +413,7 @@ export async function runJob(opts: JobOptions): Promise<JobResult> {
     if (opts.stage && !on('upload')) {
       if (on('fingerprints-ygo')) await fingerprint(true, 'ygo')
       if (on('fingerprints-pkm')) await pokemonFingerprints(true)
+      if (on('fingerprints-op')) await onePieceFingerprints(true)
       return { counts: null, uploaded: null, problems }
     }
     base = !opts.full && existsSync(basePath) ? openDatabase(basePath) : null
@@ -424,6 +443,7 @@ export async function runJob(opts: JobOptions): Promise<JobResult> {
       }
       await fingerprint(false, 'ygo')
       await pokemonFingerprints(false)
+      await onePieceFingerprints(false)
       return { counts, uploaded: null, problems }
     }
 
@@ -461,6 +481,7 @@ export async function runJob(opts: JobOptions): Promise<JobResult> {
     if (!opts.stage) {
       await fingerprint(true, 'ygo')
       await pokemonFingerprints(true)
+      await onePieceFingerprints(true)
     }
     return { counts: null, uploaded, problems }
   } finally {

@@ -1,6 +1,7 @@
 import {
   BANDAI_EN_IMAGE_PREFIX,
   BANDAI_ID_RE,
+  opTcgArtUrl,
   imageUrl,
   PACK_ART_PREFIX,
   SET_KEY_RE,
@@ -396,6 +397,10 @@ function resolve(deps: AppDeps, path: string): Target | null {
       const row = deps.db
         .prepare('SELECT bandai_id FROM onepiece_images WHERE image_id = ?')
         .get(n) as { bandai_id: string } | undefined
+      // A DON!! card's art is TCGplayer's, in two sizes as Pokémon's is.
+      const tcg = row ? opTcgArtUrl(row.bandai_id, kind === 'full' ? 'full' : 'small') : null
+      if (tcg !== null)
+        return { key: cardArtKey(kind, n), source: fixed(tcg), cache: CARD_CACHE, anonymous: true }
       if (!row || !BANDAI_ID_RE.test(row.bandai_id)) return null
       // The PNG is always stored under card/full; the job's small copy takes card/small later.
       return {

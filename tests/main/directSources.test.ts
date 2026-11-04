@@ -82,6 +82,14 @@ describe('directImageSources', () => {
     ).toBeNull()
   })
 
+  it('a DON!! card (tcg:<product>) gets TCGplayer art per size', () => {
+    const opDb = { prepare: () => ({ get: () => ({ bandai_id: 'tcg:593801' }) }) } as unknown as SqlDb
+    const sources = directImageSources({ db: opDb, version: '1.0.0' })
+    const id = onePieceImageId('en', 'OP01-001')
+    expect(sources.card('full', id)?.url).toBe('https://tcgplayer-cdn.tcgplayer.com/product/593801_in_1000x1000.jpg')
+    expect(sources.card('small', id)?.url).toBe('https://tcgplayer-cdn.tcgplayer.com/product/593801_200w.jpg')
+  })
+
   it('refuses printing art outside Yugipedia and TCGplayer', async () => {
     const { cache, fetchFn } = make(dbWith(null), async () => 'https://evil.example/x.png')
     expect(await cache.getPrinting(1)).toBeNull()

@@ -1020,6 +1020,26 @@ describe('op art', () => {
     expect(upstream).not.toHaveBeenCalled()
   })
 
+  it('a DON!! card (tcg:<product>) fetches TCGplayer art per size, under card/<size>, for a year', async () => {
+    db.prepare('UPDATE onepiece_images SET bandai_id = ? WHERE image_id = ?').run('tcg:593801', ids[0])
+    const full = await get(`full/${ids[0]}`)
+    expect(full.status).toBe(200)
+    expect(full.headers.get('cache-control')).toBe('public, max-age=31536000, immutable')
+    expect(upstream.mock.calls[0][0]).toBe('https://tcgplayer-cdn.tcgplayer.com/product/593801_in_1000x1000.jpg')
+    expect(bucket.store.has(`card/full/${ids[0]}`)).toBe(true)
+    const small = await get(`small/${ids[0]}`)
+    expect(small.status).toBe(200)
+    expect(small.headers.get('cache-control')).toBe('public, max-age=31536000, immutable')
+    expect(upstream.mock.calls[1][0]).toBe('https://tcgplayer-cdn.tcgplayer.com/product/593801_200w.jpg')
+    expect(bucket.store.has(`card/small/${ids[0]}`)).toBe(true)
+  })
+
+  it('a tcg: key that is not a product id is a 404 with no fetch', async () => {
+    db.prepare('UPDATE onepiece_images SET bandai_id = ? WHERE image_id = ?').run('tcg:../1', ids[0])
+    expect((await get(`full/${ids[0]}`)).status).toBe(404)
+    expect(upstream).not.toHaveBeenCalled()
+  })
+
   it('Yu-Gi-Oh! keys stay card/<size>/<passcode>', async () => {
     const pass = (db.prepare('SELECT min(image_id) AS id FROM card_images WHERE image_id < 100000000').get() as { id: number }).id
     expect((await get(`cropped/${pass}`)).status).toBe(200)

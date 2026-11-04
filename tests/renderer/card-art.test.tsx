@@ -25,6 +25,17 @@ describe('CardArt', () => {
     expect(img).toHaveClass('art-reveal')
   })
 
+  it("a clicked card's full art shows the grid's small art until it arrives, loading at once", () => {
+    render(<CardArt imageId={5} size="full" priority alt="Kuriboh" />)
+    const img = screen.getByAltText('Kuriboh')
+    expect(img).toHaveAttribute('loading', 'eager')
+    expect(img).not.toHaveClass('art-loading')
+    expect(img.style.backgroundImage).toContain('ygo-img://small/5')
+    fireEvent.load(img)
+    expect(img.style.backgroundImage).toBe('')
+    expect(img).not.toHaveClass('art-reveal')
+  })
+
   it('with a printing, the frame shimmers until the default art loads', () => {
     const { container } = render(<CardArt imageId={5} printingId={9} size="small" alt="Kuriboh" />)
     const frame = container.firstElementChild!

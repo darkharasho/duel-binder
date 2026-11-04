@@ -1,6 +1,9 @@
 import { useRef } from 'react'
 import { cn } from '@/lib/utils'
 
+/** A finger that moves this far sideways is swiping, and the card lies flat again. */
+const SWIPE_SLOP = 10
+
 interface TiltCardProps {
   children: React.ReactNode
   /** Sizes the card; children placed absolutely (badges) tilt along with it. */
@@ -18,7 +21,8 @@ interface TiltCardProps {
 
 /**
  * Tilts its contents toward the mouse like a card held in the hand, with a glare that follows.
- * With `touch`, a finger pressed on the card tilts it too, until it lifts or the page scrolls.
+ * With `touch`, a finger pressed on the card tilts it too, until it lifts, the page scrolls, or it
+ * swipes sideways to the next card.
  */
 export function TiltCard({
   children,
@@ -32,9 +36,16 @@ export function TiltCard({
   const inner = useRef<HTMLDivElement>(null)
   const frame = useRef(0)
   const pressed = useRef(false)
+  // Where the finger went down; once it heads sideways it's swiping between cards, not tilting.
+  const origin = useRef({ x: 0, y: 0 })
 
   const move = (e: React.PointerEvent<HTMLDivElement>): void => {
     if (e.pointerType !== 'mouse' && !(touch && pressed.current)) return
+    if (e.pointerType !== 'mouse') {
+      const dx = Math.abs(e.clientX - origin.current.x)
+      const dy = Math.abs(e.clientY - origin.current.y)
+      if (dx > SWIPE_SLOP && dx > dy) return leave()
+    }
     const rect = e.currentTarget.getBoundingClientRect()
     // A finger keeps reporting after a swipe drags it off the card; the edge is as far as it leans.
     const clamp = (v: number): number => Math.min(1, Math.max(0, v))
@@ -55,6 +66,7 @@ export function TiltCard({
   const down = (e: React.PointerEvent<HTMLDivElement>): void => {
     if (!touch || e.pointerType === 'mouse') return
     pressed.current = true
+    origin.current = { x: e.clientX, y: e.clientY }
     move(e)
   }
 

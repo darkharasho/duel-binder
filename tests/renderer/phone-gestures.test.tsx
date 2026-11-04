@@ -73,16 +73,23 @@ describe('phone card swipes', () => {
   it('swiping left steps to the next card and right to the previous', () => {
     const nav = { prev: vi.fn(), next: vi.fn() }
     const { onClose, sheet } = renderSheet('phone', nav)
-    swipe(sheet, [700, 300], [200, 300])
-    expect(nav.next).toHaveBeenCalledTimes(1)
-    expect(nav.prev).not.toHaveBeenCalled()
-    swipe(sheet, [200, 300], [700, 300])
-    expect(nav.prev).toHaveBeenCalledTimes(1)
-    expect(nav.next).toHaveBeenCalledTimes(1)
-    expect(onClose).not.toHaveBeenCalled()
+    vi.useFakeTimers()
+    try {
+      swipe(sheet, [700, 300], [200, 300])
+      vi.advanceTimersByTime(200)
+      expect(nav.next).toHaveBeenCalledTimes(1)
+      expect(nav.prev).not.toHaveBeenCalled()
+      swipe(sheet, [200, 300], [700, 300])
+      vi.advanceTimersByTime(200)
+      expect(nav.prev).toHaveBeenCalledTimes(1)
+      expect(nav.next).toHaveBeenCalledTimes(1)
+      expect(onClose).not.toHaveBeenCalled()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
-  it('the card dims as it is swiped away and the next one glides in', () => {
+  it('the card follows the finger, slides off, and the next one slides in from the far side', () => {
     const nav = { prev: vi.fn(), next: vi.fn() }
     const { sheet } = renderSheet('phone', nav)
     const page = screen.getByRole('slider', { name: 'Slider' }).parentElement!
@@ -93,12 +100,23 @@ describe('phone card swipes', () => {
     fireEvent.touchStart(sheet, one(700))
     fireEvent.touchMove(sheet, one(650))
     fireEvent.touchMove(sheet, one(400))
-    expect(Number(page.style.opacity)).toBeLessThan(1)
-    swipe(sheet, [700, 300], [200, 300])
-    expect(nav.next).toHaveBeenCalled()
-    expect(page.style.transition).toContain('transform 300ms')
-    expect(page.style.transform).toBe('')
+    expect(page.style.transform).toMatch(/^translateX\(-/)
     expect(page.style.opacity).toBe('')
+    vi.useFakeTimers()
+    try {
+      swipe(sheet, [700, 300], [200, 300])
+      // It carries on off to the left before the next card is shown.
+      expect(nav.next).not.toHaveBeenCalled()
+      expect(page.style.transform).toMatch(/^translateX\(-/)
+      // A second swipe while it leaves is ignored.
+      swipe(sheet, [700, 300], [200, 300])
+      vi.advanceTimersByTime(200)
+      expect(nav.next).toHaveBeenCalledTimes(1)
+      expect(page.style.transition).toContain('transform 280ms')
+      expect(page.style.transform).toBe('')
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('a short swipe across the card does not step', () => {

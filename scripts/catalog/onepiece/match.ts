@@ -7,7 +7,7 @@
 import { distance, MATCH_MARGIN, MATCH_MAX } from './art'
 import type { OpProduct } from './tcgcsv'
 import type { BandaiEntry, BandaiSeries } from './types'
-import { entryKind, productVersion, promoKey } from './versions'
+import { entryKind, productVersion, promoKey, reprintProduct } from './versions'
 
 export interface OpMatch { bandaiId: string; product: OpProduct; label: string | null }
 
@@ -51,6 +51,7 @@ export function matchSeries(o: MatchOptions): { matches: Map<string, OpMatch>; n
     const kind = kinds.get(e.bandaiId)!
     const v = versions.get(p.productId)!
     if (kind === 'promo') return v.label !== null && promoKey(v.label) === promoKey(e.cardSets)
+    if (kind === 'reprint') return reprintProduct(v)
     return v.kind === kind
   }
   const dist = (e: BandaiEntry, p: OpProduct): number | null => {

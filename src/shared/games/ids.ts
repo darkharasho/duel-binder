@@ -94,7 +94,10 @@ export function pokemonId(sourceId: string): number {
  * - An image is one Bandai entry: `onePieceImageId('en', 'OP05-119')` is the base entry
  *   (`'en/OP05-119#img'`) and `onePieceImageId('en', 'OP05-119_p1')` a parallel
  *   (`'en/OP05-119_p1#img'`). The `#img` suffix follows scripts/catalog/pokemon/write.ts.
- * Callers use the two wrappers, never the strings.
+ * - A DON!! card has no number: it is one TCGplayer product, `onePieceDonCardId('en', 593801)`, i.e.
+ *   `onePieceId('en/don/593801')`, and its one image `'en/don/593801#img'`. No Bandai number has a
+ *   `/`, so these never share a source id with a numbered card.
+ * Callers use the wrappers, never the strings.
  */
 export function onePieceId(sourceId: string): number {
   const d = sha256(new TextEncoder().encode(`op:${sourceId}`))
@@ -108,6 +111,10 @@ export function onePieceId(sourceId: string): number {
 export const onePieceCardId = (region: string, number: string): number => onePieceId(`${region}/${number}`)
 export const onePieceImageId = (region: string, bandaiId: string): number =>
   onePieceId(`${region}/${bandaiId}#img`)
+export const onePieceDonCardId = (region: string, productId: number): number =>
+  onePieceId(`${region}/don/${productId}`)
+export const onePieceDonImageId = (region: string, productId: number): number =>
+  onePieceId(`${region}/don/${productId}#img`)
 
 export function gameOfId(id: number): GameId {
   return id >= PKM_ID_MIN ? 'pkm' : id >= ONEPIECE_ID_MIN ? 'op' : 'ygo'

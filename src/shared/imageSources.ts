@@ -59,3 +59,15 @@ export const isFallbackLogoUrl = (url: string): boolean =>
 export const BANDAI_EN_IMAGE_PREFIX = 'https://en.onepiece-cardgame.com/images/cardlist/card/'
 /** A Bandai card id such as OP01-001 or OP01-001_p1; the only ids the art URL is built from. */
 export const BANDAI_ID_RE = /^[A-Z]+[0-9]*-[0-9]{3}(_[a-z][0-9]{1,2})?$/
+/**
+ * The `onepiece_images.bandai_id` of a One Piece card whose art is TCGplayer's (a DON!! card,
+ * which Bandai's English list doesn't have): `tcg:<TCGplayer product id>`.
+ */
+export const OP_TCG_ART_RE = /^tcg:([1-9][0-9]{0,9})$/
+export const opTcgArtKey = (productId: number): string => `tcg:${productId}`
+/** TCGplayer's picture of an OP_TCG_ART_RE key at `size`, as Pokémon's TCGplayer art; null for any other key. */
+export function opTcgArtUrl(key: string, size: 'small' | 'full'): string | null {
+  const m = OP_TCG_ART_RE.exec(key)
+  if (!m) return null
+  return `${TCGPLAYER_PACK_PREFIX}${m[1]}_${size === 'full' ? 'in_1000x1000' : '200w'}.jpg`
+}

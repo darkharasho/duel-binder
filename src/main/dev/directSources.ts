@@ -3,6 +3,7 @@ import type { SqlDb } from '../db/sql'
 import {
   BANDAI_EN_IMAGE_PREFIX,
   BANDAI_ID_RE,
+  opTcgArtUrl,
   BULBAGARDEN_IMAGE_PREFIX,
   TCGPLAYER_PACK_PREFIX,
   imageUrl,
@@ -52,6 +53,8 @@ export function directImageSources(opts: {
         const op = opts.db
           .prepare('SELECT bandai_id FROM onepiece_images WHERE image_id = ?')
           .get(id) as { bandai_id: string } | undefined
+        const tcg = op ? opTcgArtUrl(op.bandai_id, size === 'full' ? 'full' : 'small') : null
+        if (tcg !== null) return { url: tcg, headers }
         return op && BANDAI_ID_RE.test(op.bandai_id)
           ? { url: `${BANDAI_EN_IMAGE_PREFIX}${op.bandai_id}.png`, headers }
           : null

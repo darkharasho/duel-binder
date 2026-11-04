@@ -4,7 +4,8 @@ import { describe, expect, test } from 'vitest'
 import { createLimiter, type GetJsonOpts } from '../../scripts/catalog/pokemon/http'
 import type { TcGroup } from '../../scripts/catalog/pokemon/types'
 import type { BandaiEntry, BandaiSeries } from '../../scripts/catalog/onepiece/types'
-import { opGroups, opPrices, opProducts } from '../../scripts/catalog/onepiece/tcgcsv'
+import { opGroups, opPrices, opProducts, type OpProduct } from '../../scripts/catalog/onepiece/tcgcsv'
+import { donCards, donName } from '../../scripts/catalog/onepiece/don'
 import { entryKind, mapGroups, productVersion, promoKey } from '../../scripts/catalog/onepiece/versions'
 
 const readJson = (name: string): { results: unknown[] } => JSON.parse(readFileSync(join(__dirname, '../fixtures/onepiece', name), 'utf8'))
@@ -42,6 +43,9 @@ describe('One Piece TCGplayer versions', () => {
     expect(v('Monkey.D.Luffy (EB04-061) (SP)', 'EB04-061', 'SEC').kind).toBe('sp')
     expect(v('Buggy (P-084) (SP)', 'P-084', 'PR').kind).toBe('sp')
     expect(v('DON!! Card (Alternate Art) (Gold)', null, 'DON!!').skip).toBe('don')
+    // Promo DON!! cards carry TCGplayer's PR rarity; a DON!! pack has none and is sealed.
+    expect(v('DON!! Card (Gold)', null, 'PR').skip).toBe('don')
+    expect(v('DON!! Card Pack Vol. 2', null, null).skip).toBe('sealed')
     expect(v("The World's Strongest Warriors Booster Box", null, null).skip).toBe('sealed')
     expect(v('Monkey.D.Luffy (Super Pre-Release) [Participant]', 'P-001', 'PR').label).toBe('Super Pre-Release [Participant]')
   })
@@ -54,6 +58,17 @@ describe('One Piece TCGplayer versions', () => {
     // Bandai lists a borrowed card on the OP-17 page as SEC; TCGplayer calls it SP.
     expect(entryKind(entry({ bandaiId: 'EB04-061_p2', number: 'EB04-061', rarity: 'SEC' }), OP17)).toBe('sp')
     expect(entryKind(entry({ bandaiId: 'EB04-061_p1', number: 'EB04-061', rarity: 'SEC', seriesId: '569115' }), EB04)).toBe('parallel')
+  })
+  test('reprints: a `_r` entry, and a borrowed `_p` entry of a starter deck', () => {
+    const st = { seriesId: ST31.id }
+    expect(entryKind(entry({ ...st, bandaiId: 'OP11-003_r1', number: 'OP11-003', rarity: 'UC' }), ST31)).toBe('reprint')
+    expect(entryKind(entry({ ...st, bandaiId: 'ST21-001_r1', number: 'ST21-001', rarity: 'L' }), ST31)).toBe('reprint')
+    expect(entryKind(entry({ ...st, bandaiId: 'OP01-016_p9', number: 'OP01-016', rarity: 'R' }), ST31)).toBe('reprint')
+    expect(entryKind(entry({ ...st, bandaiId: 'ST31-001', number: 'ST31-001' }), ST31)).toBe('base')
+    // A starter deck's own parallel stays a parallel; a booster's borrowed card stays SP.
+    expect(entryKind(entry({ ...st, bandaiId: 'ST31-001_p1', number: 'ST31-001' }), ST31)).toBe('parallel')
+    expect(entryKind(entry({ bandaiId: 'OP14-108_p3', number: 'OP14-108', rarity: 'R' }), OP17)).toBe('sp')
+    expect(entryKind(entry({ bandaiId: 'OP09-004_r1', number: 'OP09-004', rarity: 'SP' }), OP17)).toBe('sp')
   })
   test('the number prefix must equal a part of the set code, not sit inside it', () => {
     // `P` is inside `OP17`, but a P- card on the OP-17 page is borrowed.
@@ -92,5 +107,52 @@ describe('One Piece TCGplayer versions', () => {
   test('an unsuccessful envelope rejects', async () => {
     const o = opts(fakeFetch([], { '/68/groups': { success: false, errors: ['down'], results: [] } }))
     await expect(opGroups(o)).rejects.toThrow()
+  })
+
+  test('a DON!! card is named as the card says, with TCGplayer\'s version words', () => {
+    expect(donName('DON!! Card')).toBe('DON!!')
+    expect(donName('DON!! Card (Alternate Art) (Luffy and Loki) (Gold)')).toBe('DON!! (Alternate Art) (Luffy and Loki) (Gold)')
+    expect(donName('DON!! Card // Green Compass')).toBe('DON!! // Green Compass')
+    expect(donName('DON!! Card (Tournament Pack Vol. 2) [Winner]')).toBe('DON!! (Tournament Pack Vol. 2) [Winner]')
+  })
+  test('DON!! cards: one per product, a version per price subtype', () => {
+    const p = (productId: number, groupId: number, name: string, rarity: string | null, imageUrl: string | null = `https://x/${productId}_200w.jpg`): OpProduct =>
+      ({ productId, groupId, name, number: null, rarity, imageUrl, description: 'Your Turn +1000' })
+    const products = [
+      p(593801, 23496, 'DON!! Card (Ace)', 'DON!!'),
+      p(586181, 23496, 'DON!! Card (Uta) (Gold)', 'DON!!'),
+      p(482236, 17675, 'DON!! Card (Gold)', 'PR'),
+      p(493339, 17675, 'DON!! Card Pack Vol. 1', null),
+      p(719824, 17675, 'DON!! Card (Judge Promo Championship 26-27)', 'DON!!', null),
+      p(700001, 17675, 'DON!! Card (No Prices Yet)', 'DON!!'),
+      p(527633, 99999, 'DON!! Card', 'DON!!'),
+      { ...p(708077, 23496, 'Edward.Newgate (005) (Alternate Art)', 'SR'), number: 'OP17-005' }
+    ]
+    const prices = [
+      { productId: 593801, subTypeName: 'Normal', marketPrice: 4.85 },
+      { productId: 593801, subTypeName: 'Foil', marketPrice: 13.16 },
+      { productId: 586181, subTypeName: 'Foil', marketPrice: 165.03 },
+      { productId: 482236, subTypeName: 'Normal', marketPrice: null },
+      { productId: 719824, subTypeName: 'Normal', marketPrice: 1 },
+      { productId: 527633, subTypeName: 'Normal', marketPrice: 0.1 }
+    ]
+    const seriesOf = new Map([[23496, 'PRB01'], [17675, 'P']])
+    const r = donCards(products, prices, (g) => seriesOf.get(g))
+    expect(r.cards).toEqual([
+      { productId: 482236, seriesId: 'P', name: 'DON!! (Gold)', description: 'Your Turn +1000',
+        versions: [{ code: 'tcg:482236/Normal', label: 'DON!!', price: null }] },
+      { productId: 586181, seriesId: 'PRB01', name: 'DON!! (Uta) (Gold)', description: 'Your Turn +1000',
+        versions: [{ code: 'tcg:586181/Foil', label: 'DON!! (Foil)', price: 165.03 }] },
+      { productId: 593801, seriesId: 'PRB01', name: 'DON!! (Ace)', description: 'Your Turn +1000',
+        versions: [
+          { code: 'tcg:593801/Normal', label: 'DON!!', price: 4.85 },
+          { code: 'tcg:593801/Foil', label: 'DON!! (Foil)', price: 13.16 }
+        ] }
+    ])
+    // Every DON!! product is listed, held or not; one with no picture or no price rows waits.
+    expect([...r.listed].sort()).toEqual([482236, 527633, 586181, 593801, 700001, 719824])
+    expect(r.held).toBe(2)
+    // A group no series takes is noted, not guessed.
+    expect(r.unplaced).toEqual([527633])
   })
 })

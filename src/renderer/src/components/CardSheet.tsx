@@ -15,20 +15,21 @@ const FLICK = 0.5
 /** A flick still has to travel this far, so a tap's wobble isn't one. */
 const FLICK_MIN = 30
 const SETTLE = 'transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1), opacity 220ms ease-out'
-/** How the next card arrives: a short glide in from the side the swipe came from. */
-const ENTER = 'transform 300ms cubic-bezier(0.16, 1, 0.3, 1), opacity 240ms ease-out'
-/** Share of the width the next card starts off to the side. */
-const ENTER_SHARE = 0.3
+/** How long the swiped card takes to leave the rest of the way. */
+const EXIT_MS = 160
+/** The swiped card carries on off the screen, like a card slid off the top of a hand. */
+const EXIT = `transform ${EXIT_MS}ms cubic-bezier(0.4, 0, 1, 1)`
+/** The next card slides in from the far side and eases to rest. */
+const ENTER = 'transform 280ms cubic-bezier(0.16, 1, 0.3, 1)'
 
 /** How far the card follows a drag toward a missing neighbour: a little, then less and less. */
 const rubberBand = (dx: number): number => Math.sign(dx) * 48 * (1 - Math.exp(-Math.abs(dx) / 160))
 
-/** Moves `el` to `x` at once; `fade` dims it as it leaves, for the card being swiped away. */
-function place(el: HTMLElement | null, x: number, fade = false): void {
+/** Moves `el` to `x` at once. */
+function place(el: HTMLElement | null, x: number): void {
   if (!el) return
   el.style.transition = 'none'
   el.style.transform = x === 0 ? '' : `translateX(${x}px)`
-  el.style.opacity = fade && x !== 0 ? String(1 - Math.min(0.5, Math.abs(x) / 600)) : ''
 }
 
 /** Eases `el` back to where it sat; at once when motion is reduced. */
@@ -36,20 +37,17 @@ function settle(el: HTMLElement | null): void {
   if (!el) return
   el.style.transition = prefersReducedMotion() ? 'none' : SETTLE
   el.style.transform = ''
-  el.style.opacity = ''
 }
 
-/** Glides `el` in from `from` px to the side; at once when motion is reduced. */
+/** Slides `el` in from `from` px to the side; at once when motion is reduced. */
 function enter(el: HTMLElement | null, from: number): void {
   if (!el) return
   if (prefersReducedMotion()) return place(el, 0)
   place(el, from)
-  el.style.opacity = '0'
   // Commit the start position before the transition, or the browser skips straight to the end.
   void el.getBoundingClientRect()
   el.style.transition = ENTER
   el.style.transform = ''
-  el.style.opacity = ''
 }
 
 /** Slides `el` off to the right, `width` px. */
@@ -83,7 +81,24 @@ export function CardSheet({
     nav.current = n
   }, [])
   const leaving = useRef<ReturnType<typeof setTimeout>>(undefined)
-  useEffect(() => () => clearTimeout(leaving.current), [])
+  // Set while a swiped card slides off, so a second swipe can't start mid-step.
+  const stepping = useRef<ReturnType<typeof setTimeout>>(undefined)
+  useEffect(
+    () => () => {
+      clearTimeout(leaving.current)
+      clearTimeout(stepping.current)
+    },
+    []
+  )
+  // The back bar is clear over the card's glow, and frosts once the page scrolls under it.
+  const [scrolled, setScrolled] = useState(false)
+  useEffect(() => {
+    if (!sheet) return
+    const onScroll = (): void => setScrolled(sheet.scrollTop > 4)
+    onScroll()
+    sheet.addEventListener('scroll', onScroll, { passive: true })
+    return () => sheet.removeEventListener('scroll', onScroll)
+  }, [sheet])
   // Touches are ignored while the sheet slides away after a swipe back.
   const [isLeaving, setLeaving] = useState(false)
 
@@ -94,7 +109,7 @@ export function CardSheet({
     enabled: phone && !isLeaving,
     onDrag: (zone, dx) => {
       if (zone === 'edge') place(sheet, Math.max(0, dx))
-      else place(page.current, stepFor(dx) ? dx : rubberBand(dx), stepFor(dx) !== undefined)
+      else if (!stepping.current) place(page.current, stepFor(dx) ? dx : rubberBand(dx))
     },
     onRelease: (zone, dx, velocity) => {
       const width = sheet?.clientWidth || window.innerWidth
@@ -106,12 +121,23 @@ export function CardSheet({
         leaving.current = setTimeout(onClose, 220)
         return
       }
+      if (stepping.current) return
       const step = stepFor(dx)
-      if (step && passed(dx, velocity, width, STEP_SHARE)) {
-        // The swipe carried this card away; the next one glides in from the side it came from.
+      const el = page.current
+      if (!step || !passed(dx, velocity, width, STEP_SHARE)) return settle(el)
+      if (prefersReducedMotion() || !el) {
         step()
-        enter(page.current, -Math.sign(dx) * width * ENTER_SHARE)
-      } else settle(page.current)
+        return place(el, 0)
+      }
+      // The swipe carries this card off the screen, then the next slides in from the other side.
+      const side = Math.sign(dx)
+      el.style.transition = EXIT
+      el.style.transform = `translateX(${side * width}px)`
+      stepping.current = setTimeout(() => {
+        stepping.current = undefined
+        step()
+        enter(el, -side * width)
+      }, EXIT_MS)
     }
   })
 
@@ -122,9 +148,15 @@ export function CardSheet({
           ref={setSheet}
           data-layout="full-screen"
           showCloseButton={false}
-          className="inset-0 h-dvh w-full max-w-none touch-pan-y gap-0 overflow-x-hidden overflow-y-auto overscroll-contain border-0 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] sm:max-w-none"
+          // The sheet covers the page, so the page needn't be blurred behind it (iOS repaints that
+          // blur every frame of the slide); and a quicker, eased-out slide feels lighter.
+          overlayClassName="backdrop-blur-none"
+          className="inset-0 h-dvh data-[state=open]:duration-[240ms] data-[state=open]:ease-out w-full max-w-none touch-pan-y gap-0 overflow-x-hidden overflow-y-auto overscroll-contain border-0 pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)] sm:max-w-none"
         >
-          <div className="sticky top-0 z-10 bg-background/80 px-2 py-1 backdrop-blur-xl">
+          <div
+            data-scrolled={scrolled || undefined}
+            className="sticky top-0 z-10 px-2 py-1 transition-[background-color,backdrop-filter] duration-200 data-[scrolled]:bg-background/80 data-[scrolled]:backdrop-blur-xl"
+          >
             <Button variant="ghost" onClick={onClose}>
               <ChevronLeft />
               Back

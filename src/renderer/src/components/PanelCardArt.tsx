@@ -113,30 +113,33 @@ export function PanelCardArt({
         </TiltCard>
         {arrows && <NavArrow dir="next" step={arrows.next} />}
       </div>
-      {/* Portalled out of the sliding panel so it isn't moved by the panel's transform. */}
-      <SheetPortal>
-        <div
-          style={aspectVar}
-          className="pointer-events-none fixed inset-y-0 left-0 right-[420px] z-50 hidden items-center justify-center gap-6 p-12 duration-500 animate-in fade-in-0 zoom-in-90 min-[900px]:flex"
-        >
-          {arrows && <NavArrow dir="prev" step={arrows.prev} large />}
-          <TiltCard
-            maxTilt={10}
-            glareClassName="rounded-[14px]"
-            className="pointer-events-auto w-[min(26rem,calc((100vh-6rem)*var(--card-aspect)))] min-w-0 [perspective:1400px]"
+      {/* Portalled out of the sliding panel so it isn't moved by the panel's transform. The phone's
+          sheet fills the screen, so it never shows there and isn't built. */}
+      {!phone && (
+        <SheetPortal>
+          <div
+            style={aspectVar}
+            className="pointer-events-none fixed inset-y-0 left-0 right-[420px] z-50 hidden items-center justify-center gap-6 p-12 duration-500 animate-in fade-in-0 zoom-in-90 min-[900px]:flex"
           >
-            <CardArt
-              imageId={imageId}
-              printingId={printingId}
-              size="full"
-              priority
-              alt=""
-              className="w-full rounded-[14px] shadow-[0_30px_80px_rgb(0_0_0/0.65)]"
-            />
-          </TiltCard>
-          {arrows && <NavArrow dir="next" step={arrows.next} large />}
-        </div>
-      </SheetPortal>
+            {arrows && <NavArrow dir="prev" step={arrows.prev} large />}
+            <TiltCard
+              maxTilt={10}
+              glareClassName="rounded-[14px]"
+              className="pointer-events-auto w-[min(26rem,calc((100vh-6rem)*var(--card-aspect)))] min-w-0 [perspective:1400px]"
+            >
+              <CardArt
+                imageId={imageId}
+                printingId={printingId}
+                size="full"
+                priority
+                alt=""
+                className="w-full rounded-[14px] shadow-[0_30px_80px_rgb(0_0_0/0.65)]"
+              />
+            </TiltCard>
+            {arrows && <NavArrow dir="next" step={arrows.next} large />}
+          </div>
+        </SheetPortal>
+      )}
     </>
   )
 }

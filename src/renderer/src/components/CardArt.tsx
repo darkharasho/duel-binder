@@ -155,6 +155,17 @@ function CardArtImage({
   // A shimmer in the frame's shape while the art downloads, then a fade into it.
   const art = useArtLoad()
   const src = cardImageSrc(size, imageId, { now: priority })
+  // A clicked card's full art shows the small one the grid already has until it arrives, in place
+  // of the shimmer, and loads at once rather than lazily.
+  const preview = priority && size === 'full' ? cardImageSrc('small', imageId) : null
+  const previewStyle = preview
+    ? {
+        backgroundImage: `url("${preview}")`,
+        backgroundSize: 'cover',
+        backgroundPosition: 'center'
+      }
+    : undefined
+  const loading = priority ? 'eager' : 'lazy'
   // No scan for Pokémon: scans are Yugipedia's, Yu-Gi-Oh! only. On the phone, none until the
   // printing's server id is known.
   const photo = usePrintingPhotoSrc(gameOfId(imageId) === 'pkm' ? null : (printingId ?? null))
@@ -166,14 +177,15 @@ function CardArtImage({
       <img
         src={src}
         alt={alt}
-        loading="lazy"
+        loading={loading}
         draggable={false}
         onError={() => setFailed(true)}
         {...art.bind(src)}
-        style={aspectStyle}
+        style={preview && !art.loaded(src) ? { ...aspectStyle, ...previewStyle } : aspectStyle}
         className={cn(
           'rounded-[6px] bg-muted object-cover shadow-sm',
-          art.className(src),
+          // The preview stands in for the shimmer, and the full art replaces it without a fade.
+          !preview && art.className(src),
           className
         )}
       />
@@ -182,10 +194,14 @@ function CardArtImage({
   const scanVisible = scanShown === printingId
   return (
     <span
-      style={aspectStyle}
+      style={
+        preview && !failed && !art.loaded(src) && !scanVisible
+          ? { ...aspectStyle, ...previewStyle }
+          : aspectStyle
+      }
       className={cn(
         'relative block overflow-hidden rounded-[6px] bg-muted shadow-sm',
-        !failed && !art.loaded(src) && !scanVisible && 'art-loading',
+        !preview && !failed && !art.loaded(src) && !scanVisible && 'art-loading',
         className
       )}
     >
@@ -200,7 +216,7 @@ function CardArtImage({
         <img
           src={src}
           alt={alt}
-          loading="lazy"
+          loading={loading}
           draggable={false}
           onError={() => setFailed(true)}
           {...art.bind(src)}

@@ -42,12 +42,21 @@ describe('TiltCard', () => {
     expect(inner.dataset.tilting).toBeUndefined()
   })
 
-  it('tilts no further than the edge when a swipe drags the finger off the card', async () => {
+  it('tilts no further than the edge when the finger slides off the card', async () => {
     const { outer, inner } = setup(true)
     outer.getBoundingClientRect = () => ({ left: 0, top: 0, width: 100, height: 100 }) as DOMRect
     fireEvent.pointerDown(outer, { ...finger, clientX: 50, clientY: 50 })
-    fireEvent.pointerMove(outer, { ...finger, clientX: -150, clientY: 250 })
-    await waitFor(() => expect(inner.style.getPropertyValue('--tilt-y')).toBe('-14.00deg'))
-    expect(inner.style.getPropertyValue('--tilt-x')).toBe('-14.00deg')
+    fireEvent.pointerMove(outer, { ...finger, clientX: 55, clientY: 250 })
+    await waitFor(() => expect(inner.style.getPropertyValue('--tilt-x')).toBe('-14.00deg'))
+  })
+
+  it('lies flat once the finger swipes sideways to the next card', async () => {
+    const { outer, inner } = setup(true)
+    fireEvent.pointerDown(outer, { ...finger, clientX: 50, clientY: 50 })
+    await waitFor(() => expect(inner.dataset.tilting).toBe(''))
+    fireEvent.pointerMove(outer, { ...finger, clientX: 20, clientY: 55 })
+    await new Promise((r) => setTimeout(r, 30))
+    expect(inner.dataset.tilting).toBeUndefined()
+    expect(inner.style.getPropertyValue('--tilt-y')).toBe('')
   })
 })

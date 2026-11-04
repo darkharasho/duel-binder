@@ -15,6 +15,7 @@ import { PHONE_FORMAT } from '../../src/phone/data/phoneSchema'
 import { createPhoneStore, type PhoneStore } from '../../src/phone/data/store'
 import { inProcessPortal, PORTAL, SERVER_NOW } from './cloudHelpers'
 import { seedPokemon } from '../fixtures/pokemon'
+import { GAMES } from '../../src/shared/games'
 import { withOwnerOnlyPokemon } from '../fixtures/ownerOnlyGame'
 
 withOwnerOnlyPokemon()
@@ -651,6 +652,9 @@ describe('phone store', () => {
   })
 
   it("refresh pulls each game's fingerprints", async () => {
+    // Pokémon is open to everyone in the product, so its file is a public download. The suite's
+    // owner-only stand-in would (rightly) hide it from this anonymous fetch.
+    GAMES.pkm.access = 'everyone'
     portal.serverDb.close()
     portal = await inProcessPortal({ ADMIN_DISCORD_ID: 'discord-1-alice' })
     userId = portal.addUser('alice')

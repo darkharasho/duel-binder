@@ -1,7 +1,8 @@
 import { decodeFingerprints } from '../../../src/shared/scan/fingerprintFile'
-import { isGameId, type GameId } from '../../../src/shared/games'
+import { GAMES, isGameId, type GameId } from '../../../src/shared/games'
 import { parseFingerprintRefs } from '../../../src/shared/scan/fingerprintRefs'
 import type { AppDeps } from './app'
+import { currentUser, gamesFor } from './auth'
 
 /**
  * Each game has its own file. Yu-Gi-Oh!'s keeps the original keys, so a client that never sends
@@ -139,10 +140,21 @@ async function serve(
   return new Response(object.body, { status: 200, headers })
 }
 
-/** Public download of the request's game's fingerprint file. */
+/**
+ * Download of the request's game's fingerprint file. Public for a game open to everyone. For any
+ * other game it needs a signed-in user who may use it, and answers the same 404 as an empty
+ * bucket otherwise, so it gives nothing away.
+ * TODO(step 4): clients must send credentials on this fetch before a hidden game can scan.
+ */
 export async function getFingerprints(req: Request, deps: AppDeps): Promise<Response> {
   const keys = keysOf(req)
   if (!keys) return BAD_GAME()
+  const game = new URL(req.url).searchParams.get('game') ?? 'ygo'
+  if (isGameId(game) && GAMES[game].access !== 'everyone') {
+    const user = await currentUser(req, deps)
+    if (!user || !gamesFor(deps, user.id).includes(game))
+      return json({ error: 'No fingerprints yet' }, 404)
+  }
   return serve(req, deps, keys.current, 'application/octet-stream', 'No fingerprints yet')
 }
 

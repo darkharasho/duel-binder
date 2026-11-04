@@ -6,6 +6,7 @@ import { thumbsRoute, type ThumbBucket } from '../../workers/portal/src/thumbs'
 import { labelParams, type TrainingLabel } from '../../src/shared/training'
 import { addUser, memoryBucket, noPrices, noPrintingArt, seededServerDb } from './helpers'
 import { seedOnePiece } from '../fixtures/onePiece'
+import { GAMES } from '../../src/shared/games'
 import { seedPokemon } from '../fixtures/pokemon'
 
 const BASE = 'https://portal.test'
@@ -174,6 +175,20 @@ describe('/api/training', () => {
     expect(await res.json()).toEqual({ error: 'not-found' })
     expect(bucket.store.size).toBe(0)
     expect(rows()).toEqual([])
+  })
+
+  it('once the game opens to everyone, its testers and earlier senders still may send', async () => {
+    expect((await upload('owner', CID2)).status).toBe(200)
+    const op = GAMES.op as { access: string }
+    op.access = 'everyone'
+    try {
+      expect((await upload('tess')).status).toBe(200)
+      expect((await upload('owner')).status).toBe(200)
+      expect((await upload('nora')).status).toBe(404)
+      expect((await get('/api/training/summary?game=op', 'tess')).status).toBe(200)
+    } finally {
+      op.access = 'testers'
+    }
   })
 
   it('signed out is 401, a web session from another origin is 403', async () => {

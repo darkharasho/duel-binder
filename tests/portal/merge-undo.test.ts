@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type Database from 'better-sqlite3'
 import { addUser, fakeSender, memoryBucket, noPrintingArt, noPrices, seededServerDb } from './helpers'
 import { handle, type AppDeps } from '../../workers/portal/src/app'
@@ -280,6 +280,27 @@ describe('owner undo of a merge', () => {
     expect(res.status).toBe(400)
     expect(await res.json()).toEqual({ error: 'This merge is past its 30 days' })
     expect(((await (await list('tok-owner')).json()) as { merges: unknown[] }).merges).toEqual([])
+  })
+
+  it('a purge logs the R2 keys of training photos the merge could not move', () => {
+    const photo = db.prepare(
+      `INSERT INTO training_photos (user_id, client_id, game, card_id, printing_id, holder, device,
+         app_version, taken_at, created_at, bytes, r2_key) VALUES (?, ?, 'op', 1, ?, 'bare', 'd', '0', 'n', 'n', 1, ?)`
+    )
+    photo.run(me, 'same', printings[0], 'training/op/me/same.jpg')
+    photo.run(other, 'same', printings[0], 'training/op/other/same.jpg')
+    photo.run(other, 'own', printings[0], 'training/op/other/own.jpg')
+    doMerge()
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    purgeHolds(db, new Date(START.getTime() + 31 * DAY))
+    expect(warn).toHaveBeenCalledTimes(1)
+    expect(warn.mock.calls[0][0]).toContain('training/op/other/same.jpg')
+    expect(warn.mock.calls[0][0]).not.toContain('own.jpg')
+    expect(db.prepare('SELECT r2_key FROM training_photos ORDER BY r2_key').all()).toEqual([
+      { r2_key: 'training/op/me/same.jpg' },
+      { r2_key: 'training/op/other/own.jpg' }
+    ])
+    warn.mockRestore()
   })
 
   it('an unknown merge is a 400', async () => {

@@ -31,6 +31,8 @@ export interface WorkerEnv extends Env {
   PRICES?: Fetcher
   /** Cloudflare Email Sending binding (`[[send_email]]`); email sign-in also needs EMAIL_SIGN_IN = "on". */
   EMAIL?: SendEmail
+  /** Browse calls a day for the Chinese Pokémon sweep (wrangler.toml); see pokemonSweep.ts. */
+  POKEMON_SWEEP_DAILY_CALLS?: string
 }
 
 /** The single Durable Object holding the catalog and every user's collection. */

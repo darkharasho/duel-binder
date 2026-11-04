@@ -419,7 +419,13 @@ export function purgeHolds(db: SqlDb, now: Date): void {
     )
     .all(nowIso) as { closed_id: number }[]
   const stamp = db.prepare('UPDATE account_merges SET purged_at = ? WHERE closed_id = ?')
+  const leftPhotos = db.prepare('SELECT r2_key FROM training_photos WHERE user_id = ?')
   for (const { closed_id } of due) {
+    // The merge moved its training photos; only a client id the survivor also had stays behind (the
+    // same shot twice). This runs inside sync transactions with no R2, so the keys are logged for a sweep.
+    const keys = (leftPhotos.all(closed_id) as { r2_key: string }[]).map((r) => r.r2_key)
+    if (keys.length > 0)
+      console.warn(`purge of account ${closed_id} left ${keys.length} training photo(s) in R2: ${keys.join(', ')}`)
     deleteUserData(db, closed_id)
     stamp.run(nowIso, closed_id)
   }

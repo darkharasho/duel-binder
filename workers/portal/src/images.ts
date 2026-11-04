@@ -4,6 +4,7 @@ import {
   SET_KEY_RE,
   setImageUrl,
   YUGIPEDIA_IMAGE_PREFIX,
+  yugipediaFetchUrl,
   KONAMI_LOGO_PREFIX,
   BULBAGARDEN_IMAGE_PREFIX,
   HAND_ART_PREFIX,
@@ -493,7 +494,8 @@ async function fetchAndStore(
   let bytes: ArrayBuffer
   let contentType: string
   try {
-    const res = await deps.fetch(source.url, {
+    // Stored Yugipedia URLs are on ms, which only redirects to img now.
+    const res = await deps.fetch(yugipediaFetchUrl(source.url), {
       signal: AbortSignal.timeout(IMAGE_TIMEOUT_MS),
       redirect: 'manual', // the prefix check covers only the first hop
       ...(source.headers && { headers: source.headers })

@@ -63,7 +63,8 @@ describe('token card art', () => {
 
   test('comes from Yugipedia, signed out too, and never from YGOPRODeck', async () => {
     expect((await get(`full/${image}`)).status).toBe(200)
-    expect(upstream.mock.calls[0][0]).toBe(`${YP}a/ab/Token.png`)
+    // Fetched from img: ms, the host kept in stored URLs, only redirects there now.
+    expect(upstream.mock.calls[0][0]).toBe('https://img.yugipedia.com/a/ab/Token.png')
     expect(tokenArt).toHaveBeenCalledWith(image)
   })
 
@@ -633,7 +634,7 @@ describe('image route', () => {
       db.prepare("INSERT INTO sets (language, set_name, set_code, image_url, image_key) VALUES ('en', 'Cover Set', 'CVR', ?, 'yp-abc123')").run(url)
       const res = await get('set/yp-abc123')
       expect(res.status).toBe(200)
-      expect(upstream.mock.calls[0][0]).toBe(url)
+      expect(upstream.mock.calls[0][0]).toBe('https://img.yugipedia.com/a/ab/Cover.png')
       expect((upstream.mock.calls[0][1] as RequestInit).headers).toEqual({
         'User-Agent': 'DuelBinder/portal (https://github.com/darkharasho/duel-binder)'
       })

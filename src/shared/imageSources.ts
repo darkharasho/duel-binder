@@ -17,7 +17,20 @@ export function setImageUrl(key: string): string {
 
 export const SET_KEY_RE = /^[A-Za-z0-9_-]+$/
 
+/**
+ * Yugipedia's file URLs as stored and checked. Its files now live on img.yugipedia.com, and ms
+ * answers with a 301 there; stored URLs (and the cache keys hashed from them) keep ms, and are
+ * fetched from img (yugipediaFetchUrl).
+ */
 export const YUGIPEDIA_IMAGE_PREFIX = 'https://ms.yugipedia.com/'
+/** Where Yugipedia serves its files now. */
+export const YUGIPEDIA_FILE_PREFIX = 'https://img.yugipedia.com/'
+
+/** The URL to fetch a stored Yugipedia file URL from: its img host. Any other URL as it is. */
+export const yugipediaFetchUrl = (url: string): string =>
+  url.startsWith(YUGIPEDIA_IMAGE_PREFIX)
+    ? YUGIPEDIA_FILE_PREFIX + url.slice(YUGIPEDIA_IMAGE_PREFIX.length)
+    : url
 /** Official pack renders from the English Yu-Gi-Oh! TCG site. */
 export const PACK_ART_PREFIX = 'https://www.yugioh-card.com/en/wp-content/uploads/'
 export const KONAMI_LOGO_PREFIX = 'https://img.konami.com/'

@@ -1,6 +1,6 @@
 import { describe, expect, test } from 'vitest'
 import type { TrainingLabelRow } from '../../src/shared/training'
-import { planPull } from '../../scripts/scan/pull-training'
+import { planPull, withoutSkipped } from '../../scripts/scan/pull-training'
 
 const A = '0f8e2c1a-1b2c-4d3e-8f90-00000000000a'
 const B = A.replace(/a$/, 'b')
@@ -28,4 +28,9 @@ describe('planPull', () => {
     expect(p.download.map((r) => r.clientId)).toEqual([A])
     expect(p.truth.map((t) => t.file)).toEqual([`shots-op/${A}.jpg`])
   })
+})
+
+test('skipped photos drop out of the truth rows', () => {
+  const p = planPull([row(1, A), row(2, B)], new Set())
+  expect(withoutSkipped(p.truth, new Set([`shots-op/${A}.jpg`])).map((t) => t.file)).toEqual([`shots-op/${B}.jpg`])
 })

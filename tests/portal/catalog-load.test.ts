@@ -250,6 +250,8 @@ describe('admin catalog loader', () => {
     ])
   })
 
+  it.todo('onepiece rows must carry op ids')
+
   it('rejects unknown tables and columns', async () => {
     const bad = async (path: string, body: unknown) => (await call(path, body)).status
     expect(await bad('/admin/catalog/rows', { table: 'users', rows: [{ id: 1 }] })).toBe(400)

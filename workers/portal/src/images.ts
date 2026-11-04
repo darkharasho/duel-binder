@@ -12,7 +12,7 @@ import {
   isFallbackLogoUrl,
   type ImageSize
 } from '../../../src/shared/imageSources'
-import { isTokenId, PKM_ID_MIN } from '../../../src/shared/games/ids'
+import { gameOfId, isTokenId } from '../../../src/shared/games/ids'
 import { findPokemonSetArtUrl, findSetImageUrl } from '../../../src/main/repo/sets'
 import { TCGPLAYER_IMAGE_PREFIX } from '../../../src/main/tcgplayer/catalog'
 import { printingPhotoSuffix } from '../../../src/main/yugipedia/printingArt'
@@ -385,7 +385,10 @@ function resolve(deps: AppDeps, path: string): Target | null {
     if (!/^\d+$/.test(id)) return null
     const n = Number(id)
     if (!Number.isSafeInteger(n) || n <= 0) return null
-    if (n >= PKM_ID_MIN) {
+    const game = gameOfId(n)
+    // Step 2 adds One Piece art sources; until then no op id may reach the Yu-Gi-Oh! path.
+    if (game === 'op') return null
+    if (game === 'pkm') {
       const row = deps.db
         .prepare(
           'SELECT pc.image_url FROM card_images ci JOIN pokemon_cards pc ON pc.card_id = ci.card_id WHERE ci.image_id = ?'

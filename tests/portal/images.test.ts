@@ -1,6 +1,6 @@
 import { createHash } from 'node:crypto'
 import type Database from 'better-sqlite3'
-import { tokenId } from '../../src/shared/games/ids'
+import { onePieceImageId, tokenId } from '../../src/shared/games/ids'
 import {
   BULBAGARDEN_IMAGE_PREFIX,
   HAND_ART_PREFIX,
@@ -341,6 +341,18 @@ describe('image route', () => {
       for (const k of ['td-en-nope', 'td-en-bad', 'td-en-ygo']) expect((await get(`set/${k}`)).status).toBe(404)
       expect(upstream).not.toHaveBeenCalled()
     })
+  })
+
+  it('an op id never takes the Yu-Gi-Oh path', async () => {
+    const id = onePieceImageId('en', 'OP01-001')
+    expect((await get(`small/${id}`)).status).toBe(404)
+    // Even with a catalog row, no YGOPRODeck url is built for it.
+    db.prepare(
+      "INSERT INTO cards (id, name, type, frame_type, race, \"desc\", updated_at, game) VALUES (?, 'Luffy', 'Leader', 'op', '', '', 'x', 'op')"
+    ).run(id)
+    db.prepare("INSERT INTO card_images (image_id, card_id, sort_order, game) VALUES (?, ?, 0, 'op')").run(id, id)
+    expect((await get(`small/${id}`)).status).toBe(404)
+    expect(upstream.mock.calls.map((c) => String(c[0])).filter((u) => u.includes('ygoprodeck'))).toEqual([])
   })
 
   it('serves a card image from upstream once, then from R2', async () => {

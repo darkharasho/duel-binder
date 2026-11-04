@@ -34,6 +34,7 @@ const runJob = (o: JobOptions): ReturnType<typeof runRealJob> =>
   runRealJob({
     pokemon: async () => ({ reports: [], error: null }),
     onePiece: async () => ({ report: null, error: null, problems: [] }),
+    onePieceJapanese: async () => ({ report: null, error: null, problems: [] }),
     ...o
   })
 
@@ -1115,7 +1116,8 @@ describe('One Piece step in the nightly job', () => {
       url: URL_BASE,
       token: TOKEN,
       fetch,
-      pokemon: async () => ({ reports: [], error: null })
+      pokemon: async () => ({ reports: [], error: null }),
+      onePieceJapanese: async () => ({ report: null, error: null, problems: [] })
     })
     expect(out.problems).toHaveLength(1)
     expect(out.problems[0]).toMatch(/^One Piece refresh skipped: .*not a database/i)
@@ -1159,8 +1161,41 @@ describe('One Piece step in the nightly job', () => {
   it('skipOnePiece leaves the step out', async () => {
     await ygoAndPkm()
     const onePiece = vi.fn(seeding)
-    await runJob({ ...common(), dir, dryRun: true, skipOnePiece: true, onePiece })
+    const onePieceJapanese = vi.fn(async () => ({ report: null, error: null, problems: [] }))
+    await runJob({ ...common(), dir, dryRun: true, skipOnePiece: true, onePiece, onePieceJapanese })
     expect(onePiece).not.toHaveBeenCalled()
+    expect(onePieceJapanese).not.toHaveBeenCalled()
+  })
+
+  it('the Japanese op step runs after the English one; skipOnePieceJapanese leaves only it out', async () => {
+    await ygoAndPkm()
+    const order: string[] = []
+    const onePiece = vi.fn(async (w: Database.Database) => (order.push('en'), seeding(w)))
+    const onePieceJapanese = vi.fn(async () => (order.push('ja'), { report: null, error: null, problems: ['Bandai Japanese art changed: OP17-001'] }))
+    const out = await runJob({ ...common(), dir, dryRun: true, onePiece, onePieceJapanese })
+    expect(order).toEqual(['en', 'ja'])
+    expect(out.problems).toContain('Bandai Japanese art changed: OP17-001')
+    order.length = 0
+    await runJob({ ...common(), dir, dryRun: true, onePiece, onePieceJapanese, skipOnePieceJapanese: true })
+    expect(order).toEqual(['en'])
+  })
+
+  it('a Japanese op step that fails is a problem; English op still uploads', async () => {
+    await ygoAndPkm()
+    const { fetch, calls } = recordingFetch(ok)
+    const out = await runJob({
+      ...common(),
+      dir,
+      url: URL_BASE,
+      token: TOKEN,
+      fetch,
+      onePiece: seeding,
+      onePieceJapanese: async () => {
+        throw new Error('file is not a database')
+      }
+    })
+    expect(out.problems).toEqual(['One Piece Japanese refresh skipped: file is not a database'])
+    expect(rowsOf(calls, 'card_printings').filter((r) => r['game'] === 'op')).toHaveLength(2)
   })
 
   it('--stage onepiece runs it alone', async () => {

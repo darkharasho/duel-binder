@@ -152,6 +152,8 @@ export interface RefreshArtOptions {
   now: number
   log: (line: string) => void
   budget?: number
+  /** The card list's region, which the uploaded image ids are in; 'en' by default. */
+  region?: string
 }
 
 async function pool<T>(items: T[], fn: (item: T) => Promise<void>): Promise<void> {
@@ -170,6 +172,7 @@ const message = (e: unknown): string => (e instanceof Error ? e.message : String
 /** Hashes new art, uploads what the portal lacks and re-checks old art, within tonight's download budget. */
 export async function refreshArt(o: RefreshArtOptions): Promise<ArtResult> {
   const { cache, sources, now, log } = o
+  const region = o.region ?? 'en'
   const result: ArtResult = { fetched: 0, failed: 0, uploaded: 0, changed: [], firstNoticed: [], tooLarge: [] }
   let left = o.budget ?? ART_BUDGET
   /** Takes up to `items.length` downloads out of what is left of the budget. */
@@ -195,8 +198,8 @@ export async function refreshArt(o: RefreshArtOptions): Promise<ArtResult> {
       // The PNG decoded before this, so no small copy means none fits under the limit.
       const small = smallCopy(bytes)
       if (!small) throw new TooLarge('no small copy under 200 KiB')
-      await uploadArt(portal, 'full', onePieceImageId('en', id), bytes)
-      await uploadArt(portal, 'small', onePieceImageId('en', id), small)
+      await uploadArt(portal, 'full', onePieceImageId(region, id), bytes)
+      await uploadArt(portal, 'small', onePieceImageId(region, id), small)
     } catch (e) {
       if (e instanceof TooLarge || (e instanceof HttpError && e.status === 413)) {
         const row = cache.getBandaiArt(id)!

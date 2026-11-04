@@ -104,6 +104,15 @@ describe('One Piece art', () => {
     expect(row.hash).toMatch(/^[0-9a-f]{64}$/)
   })
 
+  it("Japanese art is stored under the Japanese image's id", async () => {
+    const puts: Put[] = []
+    await run({ now: 1000, portal: portal(puts), region: 'ja' })
+    expect(puts.map((p) => p.url)).toEqual([
+      `https://portal.test/api/admin/op-art/full/${onePieceImageId('ja', '100_p1')}`,
+      `https://portal.test/api/admin/op-art/small/${onePieceImageId('ja', '100_p1')}`
+    ])
+  })
+
   it('smallCopy fills transparent corners from the row', () => {
     const img = decodeImage(smallCopy(png('A'))!)!
     expect(img.width).toBe(60)

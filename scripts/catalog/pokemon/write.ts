@@ -42,7 +42,10 @@ export interface PokemonReport {
   artRemoved: number
   /** Cards left with no art, by why (see ArtOutcome). */
   artMissing: Record<string, number>
-  /** Simplified Chinese cards with no art of their own, by how the English twin went (see artTwins.ts). */
+  /**
+   * Cards with no art of their own, by how the English twin went: Simplified Chinese ones by rules
+   * (see artTwins.ts), European ones by print (see borrowEuropeanArt).
+   */
   artTwins: Record<string, number>
   /** The same cards, by how the search for a Traditional Chinese card's art went (see artTwins.ts). */
   artTraditional: Record<string, number>
@@ -695,6 +698,37 @@ function borrowEnglishArt(plans: LangPlan[]): void {
 }
 
 /**
+ * Links the cards of a European language still without art to the English card of the same TCGdex
+ * id, once the English cards have their art. TCGdex keeps one file per card across these languages
+ * (fr/dp1-24 is en/dp1-24), so the picture is the card's own print; a card named other than its
+ * twin (see europeanNamer) is passed over. Older French sets have no French scans.
+ */
+function borrowEuropeanArt(plans: LangPlan[]): void {
+  const en = plans.find((p) => p.lang === 'en')
+  if (!en) return
+  const english = new Map<string, CardPlan>()
+  for (const sp of en.sets) for (const cp of sp.cards) english.set(cp.card.id, cp)
+  for (const plan of plans) {
+    if (!isEuropean(plan.lang)) continue
+    for (const sp of plan.sets) {
+      for (const cp of sp.cards) {
+        if (cp.imageUrl) continue
+        const twin = english.get(cp.card.id)
+        const outcome = !twin
+          ? 'no twin'
+          : twin.name !== cp.name
+            ? 'name mismatch'
+            : twin.imageUrl
+              ? 'linked'
+              : 'no English art'
+        plan.report.artTwins[outcome] = (plan.report.artTwins[outcome] ?? 0) + 1
+        if (outcome === 'linked') cp.artTwinId = pokemonId(`en/${cp.card.id}`)
+      }
+    }
+  }
+}
+
+/**
  * Links the Simplified Chinese cards still without art to a Traditional Chinese card's, once those
  * have their English names and art. The English twin stays: apps from before the column show it.
  */
@@ -795,6 +829,7 @@ export async function refreshPokemon(
   }
   for (const plan of plans) fillArt(plan, plan === ja ? namer : null)
   borrowEnglishArt(plans)
+  borrowEuropeanArt(plans)
   borrowTraditionalArt(plans)
   borrowJapaneseArt(plans)
   nameSeries(plans)

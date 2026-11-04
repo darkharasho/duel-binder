@@ -11,7 +11,7 @@ Collectors of European printings can't catalog them today. TCGdex already feeds 
 - Prices stay USD, with no fallback from another language. These languages have no TCGCSV data, so they start unpriced. `tcg_product_id` and price stay NULL. The eBay sweep is not extended here.
 - Yu-Gi-Oh keys, the wire format and the Yu-Gi-Oh DBFP file stay byte-identical. The Pokémon DBFP file must not change: `scripts/catalog/fingerprints.ts` excludes these languages like `zh-hant`.
 - Portuguese and Latin American Spanish are out of scope. So is malie.io, and Dex import for these languages until a real export shows Dex's locale strings.
-- Art is TCGdex's language-specific image. A card with no image shows the placeholder. No English art is borrowed in this project (TCGdex has no German Base Set images; a German card must not look English without a label).
+- Art is TCGdex's language-specific image. A card with no image shows the placeholder. No English art is borrowed in this project (TCGdex has no German Base Set images; a German card must not look English without a label). Since 2026-11-03 a card with no image links the English card of the same TCGdex id (`art_twin_id`), shown under the "English art" label, when the two agree on the English name.
 
 ## Rollout
 

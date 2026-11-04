@@ -12,8 +12,16 @@ or a tester.
   (`{ isOwner, testerGames }`). `byGame()` is a new exhaustive switch helper for per-game values.
 - **Ids.** One Piece ids are hashed into `[2^39, 2^40)` (`onePieceId`). `gameOfId` splits at 2^40
   (pkm) and 2^39 (op). Everything that decides game from an id goes through `gameOfId`.
-- **Tables.** `onepiece_cards` is created by desktop step V40, which also runs on the DO and the
-  phone's wasm SQLite. On the server, `server-35` adds its `catalog_seq`, index and seq triggers.
+- **Card model (Yu-Gi-Oh-like).**
+  - A `cards` row is one number per region, with id `onePieceId('en/OP05-119')`. Alternate arts
+    share it.
+  - A `card_images` row is one Bandai entry, with id `onePieceId('en/OP05-119_p1#img')`. The base
+    entry is `'en/OP05-119#img'`.
+  - A `card_printings` row is one set appearance × version. Collection entries pair `printing_id`
+    with `image_id`, as Yu-Gi-Oh entries do.
+- **Tables.** Desktop step V40 creates `onepiece_cards` (game text) and `onepiece_images`
+  (`image_id → bandai_id`, for the `/img` proxy). V40 also runs on the DO and in the phone's wasm
+  SQLite. On the server, `server-35` adds their `catalog_seq`, indexes and seq triggers.
   `server-36` adds `game_testers`, seeded with the owner's friend.
 - **Access.** `gamesFor(deps, userId)` reads `game_testers`. Every route that already gates on
   `gamesFor` (RPC header, sync `?game`, catalog feed, push `games` lists) hides One Piece through
@@ -120,10 +128,15 @@ The pattern it copies is `docs/superpowers/plans/2026-10-29-multi-game.md`.
     the fold differs.
   - `gameOfId(id)`: `'pkm'` at or above 2^40, `'op'` at or above 2^39, `'ygo'` below.
   - **The source-id convention, in a doc comment on `onePieceId` (permanent once shipped):**
-    - A card's `sourceId` is the region, a slash, and Bandai's card id, as in `en/OP05-119_p1`.
-    - Each Bandai entry is its own card row, as each TCGdex card is for Pokémon. The base number
-      (`OP05-119`) groups a number's versions (Task 3's `number` column).
-    - Its image id is `onePieceId(`${sourceId}#img`)`, as in `scripts/catalog/pokemon/write.ts:501`.
+    - A card is one number per region. Its id is `onePieceId('<region>/<number>')`, as in
+      `onePieceId('en/OP05-119')`. Alternate arts, manga, SP and TR share the card, so they share
+      its number and game text.
+    - An image is one Bandai entry. Its id is `onePieceId('<region>/<bandai id>#img')`: the base
+      entry is `'en/OP05-119#img'`, a parallel is `'en/OP05-119_p1#img'`. The `#img` suffix
+      follows `scripts/catalog/pokemon/write.ts:501`.
+    - Export two thin wrappers so no caller builds the strings by hand:
+      `onePieceCardId(region: string, number: string)` and
+      `onePieceImageId(region: string, bandaiId: string)`.
   - `ONE_PIECE: GameDef` in `onePiece.ts`:
     - `color: '#3b82c4'` (the owner may change it)
     - `vocab`: `cardId: 'Card'`, `printingCode: 'Card number'`, `rarity: 'Rarity'`, and
@@ -153,11 +166,17 @@ The pattern it copies is `docs/superpowers/plans/2026-10-29-multi-game.md`.
 
 ```ts
 test('onePieceId golden values', () => {
-  expect(onePieceId('en/OP05-119_p1')).toBe(651883627180)
-  expect(onePieceId('en/OP05-119')).toBe(668695884659)
-  expect(onePieceId('en/OP01-001')).toBe(570006248710)
-  expect(onePieceId('en/ST10-003')).toBe(745026503623)
-  for (const s of ['en/OP05-119_p1', 'en/OP01-001', 'en/P-084', 'en/OP05-119_p1#img']) {
+  // cards: one number per region
+  expect(onePieceCardId('en', 'OP05-119')).toBe(668695884659)
+  expect(onePieceCardId('en', 'OP01-001')).toBe(570006248710)
+  expect(onePieceCardId('en', 'ST10-003')).toBe(745026503623)
+  // images: one Bandai entry each
+  expect(onePieceImageId('en', 'OP05-119')).toBe(664718050776)
+  expect(onePieceImageId('en', 'OP05-119_p1')).toBe(1051636995080)
+  expect(onePieceImageId('en', 'OP01-001')).toBe(996841831959)
+  expect(onePieceImageId('en', 'OP01-001_p1')).toBe(847381541175)
+  expect(onePieceImageId('en', 'OP05-119_p1')).toBe(onePieceId('en/OP05-119_p1#img'))
+  for (const s of ['en/OP05-119', 'en/OP01-001', 'en/P-084', 'en/OP05-119_p1#img']) {
     const n = onePieceId(s)
     expect(n).toBeGreaterThanOrEqual(2 ** 39)
     expect(n).toBeLessThan(2 ** 40)
@@ -223,23 +242,24 @@ test('byGame picks the game value', () => expect(byGame('op', { ygo: 1, pkm: 2, 
     `gameOfId(n) === 'pkm'`.
   - `src/main/dev/directSources.ts:48`
   - `workers/portal/src/catalogLoad.ts:78`, where the side table's game comes from its
-    `games` when it has exactly one, so `onepiece_cards` means `'op'`.
+    `games` when it has exactly one, so `onepiece_cards` and `onepiece_images` mean `'op'`.
 - Test: `tests/portal/images.test.ts`, `tests/main/direct-sources.test.ts` (create it if no test
   covers `directSources`), `tests/portal/catalog-load.test.ts`
 
 **Interfaces:**
-- Consumes: `gameOfId`, `onePieceId` (Task 1).
+- Consumes: `gameOfId`, `onePieceImageId` (Task 1).
 
 The production uses of `PKM_ID_MIN` are these two. The other four are in tests:
 `token-sync.test.ts`, `catalog-feed.test.ts` and `card-art.test.tsx`, and they stay. A One Piece
 id must never reach the Yu-Gi-Oh path (YGOPRODeck URLs or the `card_images` lookup for passcodes).
 
 - [ ] **Step 1: Write the failing tests.**
-  - `images.test.ts`, `an op id never takes the Yu-Gi-Oh path`: `GET /img/small/<onePieceId('en/OP01-001#img')>`
+  - `images.test.ts`, `an op id never takes the Yu-Gi-Oh path`: `GET /img/small/<onePieceImageId('en', 'OP01-001')>`
     with no catalog row answers 404. The fake fetch records no call to `images.ygoprodeck.com`.
-  - `direct-sources`, `op ids get no YGOPRODeck url`: `card('small', onePieceId('en/OP01-001#img'))`
+  - `direct-sources`, `op ids get no YGOPRODeck url`: `card('small', onePieceImageId('en', 'OP01-001'))`
     is `null`, and a passcode still gets a YGOPRODeck URL.
-  - `catalog-load.test.ts`, `onepiece_cards rows must carry op ids`: a row whose `card_id` is a
+  - `catalog-load.test.ts`, `onepiece rows must carry op ids`: an `onepiece_cards` row whose
+    `card_id`, or an `onepiece_images` row whose `image_id`, is a
     Pokémon id gets 400 `is not a op id`. This runs after Task 3 creates the table, so mark it
     `.todo` here and turn it on in Task 3.
 - [ ] **Step 2: Run them and check they fail.** Run
@@ -252,7 +272,7 @@ id must never reach the Yu-Gi-Oh path (YGOPRODeck URLs or the `card_images` look
   `ids.ts`.
 - [ ] **Step 5: Commit.** `refactor(games): decide game by id only through gameOfId`
 
-### Task 3: The `onepiece_cards` table everywhere
+### Task 3: The `onepiece_cards` and `onepiece_images` tables everywhere
 
 **Files:**
 - Modify:
@@ -262,7 +282,7 @@ id must never reach the Yu-Gi-Oh path (YGOPRODeck URLs or the `card_images` look
   - `src/shared/catalogTables.ts`
   - `src/shared/catalogFeed.ts`: `CatalogTableName`, `PHONE_TABLES`
   - `src/main/db/meta.ts`: the `catalog_cursor:op` and `catalog_staging_cursor:op` keys
-  - `src/main/catalog/apply.ts:115`
+  - `src/main/catalog/apply.ts:105-115`
   - `src/phone/data/store.ts:385`
 - Create: `tests/fixtures/onePiece.ts`
 - Test: `tests/main/migration-v40.test.ts`, `tests/portal/migrate.test.ts`,
@@ -270,65 +290,104 @@ id must never reach the Yu-Gi-Oh path (YGOPRODeck URLs or the `card_images` look
   `workers/portal/test/do.test.ts` (existing: "all desktop + server migrations apply on DO SQLite")
 
 **Interfaces:**
-- Consumes: `onePieceId` (Task 1).
+- Consumes: `onePieceCardId` and `onePieceImageId` (Task 1).
 - Produces:
-  - **The table, on desktop, phone and server (`SCHEMA_V40` and `SCHEMA_V40_SERVER`):**
+  - **How One Piece fills the shared tables.** This is the Yu-Gi-Oh-like model, written into
+    the `SCHEMA_V40` doc comment:
+    - **`cards`:** one row per number per region. The id is `onePieceCardId('en', 'OP05-119')`,
+      and `name` is the card's name. Alternate arts never get a card row of their own.
+    - **`card_images`:** one row per Bandai entry, with `card_id` pointing at the number's card.
+      `OP05-119` is the base art, and `OP05-119_p1` and `_p2` are the parallels.
+    - **`card_printings`:** one row per set appearance × version.
+      - The version goes in **`set_rarity`**, as Pokémon stores its versions ("Normal",
+        "Reverse Holofoil").
+      - The form is the rarity code, plus the version label in parentheses when the printing
+        isn't the base art: `'SR'`, `'SR (Alternate Art)'`, `'SEC (Manga)'`, `'SP'`, `'TR'`.
+      - `variant` stays NULL. Yu-Gi-Oh uses `variant` for TCGplayer art variants, and it is not
+        part of `pkey`.
+      - Why `set_rarity`: the English `pkey` is `en|card_id|set_code|set_rarity` (V10, without the
+        set name), so `set_rarity` is the only column that keeps two versions under one
+        `set_code` apart.
+      - Step 2 must therefore keep `set_rarity` unique per card × `set_code`, for example by
+        numbering a second same-kind version (`'SR (Alternate Art 2)'`). An SP reprint listed
+        under a newer series keeps its own `set_name`, but it still needs its own `set_rarity`.
+    - **`collection_entries`:** each entry pairs `printing_id` with `image_id`, as Yu-Gi-Oh's do.
+      Which image a printing shows by default is step 2's to decide, from the Bandai entry and
+      the TCGplayer match. Step 1 adds no link from printing to image.
+  - **The tables, on desktop, phone and server (`SCHEMA_V40` and `SCHEMA_V40_SERVER`).** Only
+    game text goes in `onepiece_cards`. Art hashes live in the step 2 job's source cache, never
+    here.
 
     ```sql
     CREATE TABLE onepiece_cards (card_id INTEGER PRIMARY KEY REFERENCES cards(id),
-      source_id TEXT NOT NULL UNIQUE, bandai_id TEXT NOT NULL, number TEXT NOT NULL,
-      colors TEXT NOT NULL DEFAULT '[]', card_type TEXT NOT NULL, cost INTEGER, power INTEGER,
-      counter INTEGER, life INTEGER, attribute TEXT NOT NULL DEFAULT '[]',
-      traits TEXT NOT NULL DEFAULT '[]', effect TEXT, trigger TEXT, block_icon INTEGER,
-      rarity TEXT, image_url TEXT, art_hash TEXT);
+      number TEXT NOT NULL, colors TEXT NOT NULL DEFAULT '[]', card_type TEXT NOT NULL,
+      cost INTEGER, power INTEGER, counter INTEGER, life INTEGER,
+      attribute TEXT NOT NULL DEFAULT '[]', traits TEXT NOT NULL DEFAULT '[]',
+      effect TEXT, trigger TEXT, block_icon INTEGER);
     CREATE INDEX ix_onepiece_cards_number ON onepiece_cards(number);
+    CREATE TABLE onepiece_images (image_id INTEGER PRIMARY KEY REFERENCES card_images(image_id),
+      bandai_id TEXT NOT NULL);
     ```
 
-    - `colors`, `attribute` and `traits` are JSON arrays: multicolor cards, and the few cards
+    - `colors`, `attribute` and `traits` are JSON arrays, for multicolor cards and the few cards
       with two attributes.
-    - `number` is the base number that groups versions.
+    - `number` is the printed base number (`OP05-119`). It isn't unique: Japanese, later, has its
+      own card per number.
+    - `onepiece_images.bandai_id` (`OP05-119_p1`) is what the `/img` proxy needs to build
+      Bandai's image URL (`/images/cardlist/card/<bandai_id>.png`). Step 2 wires that up, and step
+      1's `/img` branch for `'op'` still answers null.
   - **Desktop and phone only:** `SCHEMA_V40` also adds
-    `${rollupTriggers('onepiece_cards', ['card_id', 'colors', 'card_type', 'attribute', 'traits', 'rarity'])}`.
+    `${rollupTriggers('onepiece_cards', ['card_id', 'colors', 'card_type', 'attribute', 'traits'])}`.
     The server override (`SCHEMA_V40_SERVER`) leaves rollups out, as V24 does. The phone runs
     `MIGRATIONS` through `migrateSql` (`src/phone/data/wasmSql.ts:123`), so it needs no step of its
     own.
-  - **`server-35`:** a frozen `SERVER_35_ONEPIECE_CARDS: FrozenTable`, the column list above, with
-    key `['card_id']`. The step adds `catalog_seq INTEGER NOT NULL DEFAULT 0`,
-    `ix_onepiece_cards_catalog_seq`, and `seqTriggers(t, "'op'")`, modelled on `pokemonSetArtStep`
-    (server-14). The table starts empty, so there is no backfill.
+  - **`server-35`:** two frozen tables, `SERVER_35_ONEPIECE_CARDS` (key `['card_id']`) and
+    `SERVER_35_ONEPIECE_IMAGES` (key `['image_id']`), each with the column list above. For each
+    table, the step adds `catalog_seq INTEGER NOT NULL DEFAULT 0`,
+    `ix_<table>_catalog_seq`, and `seqTriggers(t, "'op'")`, modelled on `pokemonSetArtStep`
+    (server-14). Both tables start empty, so there is no backfill.
   - **`CATALOG_TABLES`:**
-    - append `{ name: 'onepiece_cards', key: ['card_id'], columns: <all but catalog_seq>,
-      unique: ['source_id'], games: ['op'] }`
+    - append `{ name: 'onepiece_cards', key: ['card_id'], columns: <all but catalog_seq>, games: ['op'] }`
+    - append `{ name: 'onepiece_images', key: ['image_id'], columns: ['image_id', 'bandai_id'], games: ['op'] }`
     - the four shared tables (cards, card_images, card_printings, sets) go from `BOTH` to
       `['ygo', 'pkm', 'op']`
     - `LEGACY_CATALOG_TABLES` is untouched
-  - **`PHONE_TABLES`** gains `'onepiece_cards'`, after `pokemon_set_art`.
-  - **`apply.ts`:** a delete of `onepiece_cards` for an owned card is skipped, the same rule as
-    for `pokemon_cards`.
+  - **`PHONE_TABLES` and `CatalogTableName`** gain `'onepiece_cards'` and `'onepiece_images'`,
+    after `pokemon_set_art`.
+  - **`apply.ts`** skips two deletes:
+    - an `onepiece_cards` delete for an owned card, the same rule as for `pokemon_cards`
+    - an `onepiece_images` delete for an image an entry uses, the same rule as for
+      `card_images`
   - **Phone `resetOldFormat`:** it deletes `catalog_cursor:${g}` for every non-ygo game in
     `GAME_IDS`, not just `:pkm`.
-  - **`tests/fixtures/onePiece.ts`:** `seedOnePiece(db: SqlDb): { cardIds: number[]; printingIds: number[]; imageIds: number[] }`
-    - It inserts two One Piece cards, `en/OP01-001` (Leader) and `en/OP01-001_p1` (its
-      alternate art), each with `game = 'op'`, one `card_printings` row (set
-      `ROMANCE DAWN [OP-01]`, code `OP01-001`), one image (`#img` id) and an `onepiece_cards`
-      row.
-    - It also inserts one `sets` row named exactly like an English Yu-Gi-Oh fixture set.
+  - **`tests/fixtures/onePiece.ts`:** `seedOnePiece(db: SqlDb): { cardIds: number[]; printingIds: number[]; imageIds: number[] }`.
+    Every row it inserts has `game = 'op'`:
+    - **cards:** one card, `onePieceCardId('en', 'OP01-001')` (Leader), with its
+      `onepiece_cards` row
+    - **images:** two, `onePieceImageId('en', 'OP01-001')` and `onePieceImageId('en', 'OP01-001_p1')`,
+      each with its `onepiece_images` row
+    - **printings:** two in set `ROMANCE DAWN [OP-01]`, both with code `OP01-001`. One has
+      `set_rarity` `'L'` and the other `'L (Alternate Art)'`.
+    - **sets:** one row named exactly like an English Yu-Gi-Oh fixture set
 
 - [ ] **Step 1: Write the failing tests.**
   - `migration-v40.test.ts`: migrate a database seeded with the Yu-Gi-Oh fixtures and
     `seedPokemon`, then check:
-    - `onepiece_cards` exists and `seedOnePiece` succeeds
+    - `onepiece_cards` and `onepiece_images` exist, and `seedOnePiece` succeeds
+    - the two versions have distinct `pkey`s under one `set_code`
+      (`en|<card>|OP01-001|L` and `en|<card>|OP01-001|L (Alternate Art)`)
     - `SELECT pkey FROM card_printings ORDER BY id` is the same before and after
     - `PRAGMA foreign_key_check` is empty
     - updating `onepiece_cards.card_type` clears `catalog_rollups`
   - `migrate.test.ts`, `server-35 feeds onepiece_cards`:
-    - after `migrateServer` and `seedOnePiece`, the row's `catalog_seq > 0`
-    - deleting it writes a tombstone with `tbl = 'onepiece_cards'` and `game = 'op'`
+    - after `migrateServer` and `seedOnePiece`, the `onepiece_cards` and `onepiece_images` rows
+      have `catalog_seq > 0`
+    - deleting either writes a tombstone with its `tbl` and `game = 'op'`
   - `catalog-feed.test.ts`:
     - `catalogChanges(db, 0, 5000, undefined, 'op')` returns exactly the seeded One Piece rows
-      across cards, card_images, card_printings, sets and onepiece_cards
+      across cards, card_images, card_printings, sets, onepiece_cards and onepiece_images
     - the `'pkm'` feed and the legacy feed (no game) contain no `'op'` row and no
-      `onepiece_cards` table
+      `onepiece_*` table
     - `catalog-feed-legacy.test.ts`'s legacy snapshot still passes unchanged
   - `catalog-service.test.ts`, `first op pass starts from 0`: with `me.games` set to
     `['ygo','pkm','op']` and Yu-Gi-Oh's cursor at the latest seq, the client pulls every One Piece
@@ -341,7 +400,7 @@ id must never reach the Yu-Gi-Oh path (YGOPRODeck URLs or the `card_images` look
 - [ ] **Step 4: Run them and check they pass.** Run the same command, then
   `npm --prefix workers/portal test` (the DO migration test runs V40 and server-35 on real DO
   SQLite), then `npm test`. Everything should PASS, including the `game-index-plans` tests.
-- [ ] **Step 5: Commit.** `feat(db): onepiece_cards on desktop, phone and server (V40, server-35)`
+- [ ] **Step 5: Commit.** `feat(db): onepiece_cards and onepiece_images on desktop, phone and server (V40, server-35)`
 
 ### Task 4: The tester list on the server
 

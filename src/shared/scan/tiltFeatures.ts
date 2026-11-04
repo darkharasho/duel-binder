@@ -71,7 +71,7 @@ const H2 = TILT_H
 const W = 210
 const H = 306
 
-const REGIONS: Record<GameId, Regions> = {
+const REGIONS: Partial<Record<GameId, Regions>> = {
   ygo: {
     art: [0.13, 0.19, 0.87, 0.71],
     name: [0.07, 0.045, 0.8, 0.105],
@@ -764,6 +764,7 @@ export function tiltFeatures(frames: readonly Uint8Array[], game: GameId): TiltR
   // Fewer than three frames have no consecutive changes to compare.
   if (frames.length < 3) return null
   const regions = REGIONS[game]
+  if (!regions) throw new Error(`No tilt regions for ${game}`)
   const refAt = frames.length >> 1
   const patches = patchesOf(lumOf(frames[refAt]))
   const big = frames.map((f, i) => (i === refAt ? Float32Array.from(f) : align(f, patches)))

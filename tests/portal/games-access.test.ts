@@ -119,7 +119,7 @@ describe('per-user game access', () => {
   })
 
   it('/api/me lists Pokémon only for the ADMIN_DISCORD_ID account', async () => {
-    expect((await meFor(co)).games).toEqual(['ygo', 'pkm'])
+    expect((await meFor(co)).games).toEqual(['ygo', 'pkm', 'op'])
     expect((await meFor(cb)).games).toEqual(['ygo'])
   })
 

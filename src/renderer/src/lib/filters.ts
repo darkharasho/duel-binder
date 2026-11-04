@@ -13,6 +13,12 @@ type GameKey =
   | 'pkmTypes'
   | 'pkmStages'
   | 'pkmRarities'
+  | 'opColors'
+  | 'opCardTypes'
+  | 'opAttributes'
+  | 'opTraits'
+  | 'opRarities'
+  | 'opBlocks'
 export type ListKey = GameKey | 'setNames' | 'rarities'
 
 /** The part of a page's filters the card facets and ranges read and write. */
@@ -27,7 +33,13 @@ const GAME_KEYS: readonly string[] = [
   'pkmCategories',
   'pkmTypes',
   'pkmStages',
-  'pkmRarities'
+  'pkmRarities',
+  'opColors',
+  'opCardTypes',
+  'opAttributes',
+  'opTraits',
+  'opRarities',
+  'opBlocks'
 ] satisfies GameKey[]
 
 /** The pages' own names for some of the games' filters. */

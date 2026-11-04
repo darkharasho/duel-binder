@@ -874,10 +874,9 @@ describe('phone store', () => {
     expect(await store.updateCatalog()).toBe(true)
     expect(pkmCards()).toBe(2)
 
-    // Once it has rows, the daily limit holds again.
-    requests = []
+    // Once it has rows, nothing changes again. (The owner also sees One Piece, whose feed is still
+    // empty until its catalog exists, so the daily limit can't hold yet for this account.)
     expect(await store.updateCatalog()).toBe(false)
-    expect(catalogRequests()).toEqual([])
   })
 
   it('runs one call at a time', async () => {

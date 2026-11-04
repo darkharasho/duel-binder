@@ -15,7 +15,8 @@ interface Keys {
 }
 const KEYS: Record<GameId, Keys> = {
   ygo: { current: 'scan/fingerprints.bin', previous: 'scan/fingerprints.prev.bin' },
-  pkm: { current: 'scan/pkm/fingerprints.bin', previous: 'scan/pkm/fingerprints.prev.bin' }
+  pkm: { current: 'scan/pkm/fingerprints.bin', previous: 'scan/pkm/fingerprints.prev.bin' },
+  op: { current: 'scan/op/fingerprints.bin', previous: 'scan/op/fingerprints.prev.bin' }
 }
 const MAX_FINGERPRINT_BYTES = 8 * 1024 * 1024
 /** Which printings the fingerprint file's printing scans show (see fingerprintRefs.ts). */

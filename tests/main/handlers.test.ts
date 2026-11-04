@@ -85,7 +85,7 @@ async function makeHandlers(opts: { signedIn?: boolean } = {}) {
     account: account as unknown as AccountService,
     errorReports: { setEnabled: vi.fn() },
     emitDataChanged: vi.fn(),
-    fingerprints: { ygo: noFingerprints, pkm: noFingerprints },
+    fingerprints: { ygo: noFingerprints, pkm: noFingerprints, op: noFingerprints },
     ocr: {
       read: async () => [],
       readText: async () => ({ text: '', confidence: 0 }),

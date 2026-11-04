@@ -1,10 +1,16 @@
 import type { Language } from '../languages'
 
-export type GameId = 'ygo' | 'pkm'
+export type GameId = 'ygo' | 'pkm' | 'op'
 
-export const GAME_IDS: readonly GameId[] = ['ygo', 'pkm']
+export const GAME_IDS: readonly GameId[] = ['ygo', 'pkm', 'op']
 
 /** The UI words that differ per game. */
+/** What decides which games a viewer sees. */
+export interface ViewerFacts {
+  isOwner: boolean
+  testerGames: readonly GameId[]
+}
+
 export interface GameVocab {
   cardId: string
   printingCode: string
@@ -40,7 +46,8 @@ export interface GameDef {
   crossLanguagePriceFallback: boolean
   /** 'ygo': market, eBay, twin and set-price fallbacks. 'marketOnly': the printing's own market price, any language. */
   priceRule: 'ygo' | 'marketOnly'
-  access: 'everyone' | 'owner'
+  /** 'testers': the owner, plus the accounts on the game's tester list. */
+  access: 'everyone' | 'owner' | 'testers'
   vocab: GameVocab
   filters: FilterDef[]
   /** The card facts the details panel lists, in order, as keys of the card's game-specific facts. */

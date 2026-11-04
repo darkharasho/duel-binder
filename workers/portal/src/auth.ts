@@ -188,7 +188,7 @@ function isAdminUser(deps: AppDeps, userId: number): boolean {
 
 /** The games this user may use; the server's gate for every game-scoped route. */
 export function gamesFor(deps: AppDeps, userId: number): GameId[] {
-  return allowedGames(isAdminUser(deps, userId))
+  return allowedGames({ isOwner: isAdminUser(deps, userId), testerGames: [] })
 }
 
 /** Whether the request is signed in as the ADMIN_DISCORD_ID account. */

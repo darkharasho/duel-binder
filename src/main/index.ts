@@ -38,7 +38,7 @@ import { createAccountService } from './cloud/account'
 import { createMainErrorReports, goneMessage } from './errorReports'
 import { describeError, type ErrorDetails } from '@shared/errorReports'
 import { createCloudClient } from './cloud/client'
-import { GAME_IDS, type GameId } from '@shared/games'
+import { GAMES, GAME_IDS, type GameId } from '@shared/games'
 import { setMeta } from './db/meta'
 import type { FingerprintStore } from './scan/fingerprints'
 import { createFingerprintStore } from './scan/fingerprints'
@@ -340,11 +340,13 @@ async function bootstrap(): Promise<void> {
   // One store per game; they are tiny until something downloads into them.
   const fingerprints: Record<GameId, FingerprintStore> = {
     ygo: createFingerprintStore({ dir: join(userData, 'scan'), portal, game: 'ygo' }),
-    pkm: createFingerprintStore({ dir: join(userData, 'scan'), portal, game: 'pkm' })
+    pkm: createFingerprintStore({ dir: join(userData, 'scan'), portal, game: 'pkm' }),
+    op: createFingerprintStore({ dir: join(userData, 'scan'), portal, game: 'op' })
   }
   /** Re-downloads the files of the games this account can see (a game it can't has no file for it). */
   const refreshFingerprints = (): void => {
     for (const game of account.games()) {
+      if (!GAMES[game].features.scan) continue
       void fingerprints[game].refresh({ force: true }).catch(() => {})
     }
   }

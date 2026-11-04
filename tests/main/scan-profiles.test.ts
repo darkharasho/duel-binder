@@ -1,5 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it } from 'vitest'
+import { GAMES } from '../../src/shared/games'
 import { GAME_IDS } from '../../src/shared/games/types'
 import { SCAN_PROFILES, scanProfile, type Box } from '../../src/shared/scan/profiles'
 import {
@@ -24,8 +25,12 @@ describe('scan profiles', () => {
     expect(ygo.rarityLook).toBe(true)
   })
 
-  it('every game has a profile of boxes on the card', () => {
-    for (const game of GAME_IDS) {
+  it('a game with no scanner has no profile', () => {
+    expect(() => scanProfile('op')).toThrow('No scan profile for op')
+  })
+
+  it('every scanning game has a profile of boxes on the card', () => {
+    for (const game of GAME_IDS.filter((g) => GAMES[g].features.scan)) {
       const p = scanProfile(game)
       expect(p).toBe(SCAN_PROFILES[game])
       expect(p.game).toBe(game)

@@ -27,3 +27,10 @@ export const NUMBERED_TILE_BUTTON =
   '[grid-area:1/1/span_4] grid min-w-0 grid-cols-[minmax(0,1fr)] grid-rows-subgrid'
 /** On a checklist tile's heart: the name's row, inside the button's `p-1.5`. */
 export const NUMBERED_TILE_HEART = 'col-start-1 row-start-3 mr-1.5 self-center justify-self-end'
+
+/** A tile heart button's look and reach (see FavouriteHeart); `data-on` keeps it shown. */
+export const HEART_BUTTON = [
+  'relative z-10 grid size-6 shrink-0 place-items-center rounded-full text-muted-foreground outline-none transition-opacity hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring',
+  "after:absolute after:-inset-1 after:content-[''] max-md:after:-inset-2.5 [@media(pointer:coarse)]:after:-inset-2.5",
+  'opacity-0 focus-visible:opacity-100 group-hover/tile:opacity-100 group-focus-within/tile:opacity-100 data-[on=true]:opacity-100 max-md:opacity-100 [@media(pointer:coarse)]:opacity-100'
+].join(' ')

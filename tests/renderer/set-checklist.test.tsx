@@ -111,6 +111,60 @@ describe('SetChecklist', () => {
     expect(secret).toHaveAttribute('data-owned', 'false')
   })
 
+  it("a rarity tile's heart wants only that rarity's printing, not the whole card", async () => {
+    // The Ultra Rare is wanted (one of its three codes); the Secret Rare isn't.
+    const wanted = new Set<number>([PRINTING.alphaUltraEN001])
+    const list = vi.fn(async () => [...wanted].map((id) => ({ printing: { id } })))
+    const set = vi.fn(async (id: number) => void wanted.add(id))
+    const remove = vi.fn(async (id: number) => void wanted.delete(id))
+    const favourite = vi.fn(async () => undefined)
+    const api = createMockApi({
+      sets: { checklist: async () => metalRaidersChecklist },
+      wishlist: { list, set, remove },
+      favourites: { set: favourite }
+    } as never)
+    renderWithProviders(
+      <SetChecklist
+        setName="Metal Raiders"
+        language="en"
+        mode="rarities"
+        onModeChange={() => {}}
+        onBack={() => {}}
+        onAddMissing={() => {}}
+      />,
+      { api }
+    )
+    const secret = await screen.findByRole('button', { name: 'Want Alpha Dragon, Secret Rare' })
+    const ultra = await screen.findByRole('button', {
+      name: 'Stop wanting Alpha Dragon, Ultra Rare'
+    })
+    expect(secret).toHaveAttribute('aria-pressed', 'false')
+    expect(ultra).toHaveAttribute('aria-pressed', 'true')
+
+    await userEvent.click(secret)
+    expect(set).toHaveBeenCalledWith(PRINTING.alphaSecret, null)
+    expect(favourite).not.toHaveBeenCalled()
+    expect(secret).toHaveAttribute('aria-pressed', 'true')
+    expect(ultra).toHaveAttribute('aria-pressed', 'true')
+
+    // Off takes every code of the rarity off.
+    await userEvent.click(ultra)
+    await waitFor(() => expect(remove).toHaveBeenCalledTimes(3))
+    expect(remove.mock.calls.map((c) => (c as unknown[])[0])).toEqual([
+      PRINTING.alphaUltra001,
+      PRINTING.alphaUltraE001,
+      PRINTING.alphaUltraEN001
+    ])
+  })
+
+  it("a card tile's heart still favourites the card", async () => {
+    renderChecklist()
+    expect(
+      await screen.findByRole('button', { name: 'Favourite Alpha Dragon' })
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Want Alpha Dragon/ })).not.toBeInTheDocument()
+  })
+
   it('clicking an owned tile opens the detail panel', async () => {
     const { forCard } = renderChecklist()
     await userEvent.click(await screen.findByRole('button', { name: /^Alpha Dragon/ }))

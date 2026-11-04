@@ -334,9 +334,10 @@ const rollupTriggers = (table: string, cols?: string[]): string => {
   const guard = cols ? ` WHEN ${cols.map((c) => `OLD.${c} IS NOT NEW.${c}`).join(' OR ')}` : ''
   return ['INSERT', 'DELETE', 'UPDATE']
     .map(
-      (op) => `CREATE TRIGGER rollup_${table}_${op.toLowerCase()} AFTER ${op} ON ${table}${
-        op === 'UPDATE' ? guard : ''
-      } BEGIN DELETE FROM catalog_rollups; END;`
+      (op) =>
+        `CREATE TRIGGER rollup_${table}_${op.toLowerCase()} AFTER ${op} ON ${table}${
+          op === 'UPDATE' ? guard : ''
+        } BEGIN DELETE FROM catalog_rollups; END;`
     )
     .join('\n')
 }
@@ -506,6 +507,15 @@ DELETE FROM printing_art WHERE url IS NULL OR printing_id IN (
 );
 `
 
+/**
+ * Every stored "no scan" is looked up again: a new set's scans reach Yugipedia over weeks, and a
+ * miss stored at release was kept 30 days (MAMS's and the European RA05's overframes, among
+ * others). The server needs this too: its photos are what the apps show.
+ */
+export const SCHEMA_V39 = `
+DELETE FROM printing_art WHERE url IS NULL;
+`
+
 /** A printing's rarity as shown: "Starlight Rare (Extended Art)" for a labelled variant. */
 export const RARITY_LABEL = "p.set_rarity || COALESCE(' (' || p.variant || ')', '')"
 
@@ -548,5 +558,6 @@ export const MIGRATIONS: Migration[] = [
   { version: 35, sql: SCHEMA_V35, server: false },
   { version: 36, sql: SCHEMA_V36, server: false },
   { version: 37, sql: SCHEMA_V37, server: false },
-  { version: 38, sql: SCHEMA_V38 }
+  { version: 38, sql: SCHEMA_V38 },
+  { version: 39, sql: SCHEMA_V39 }
 ]

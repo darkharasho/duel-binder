@@ -9,9 +9,13 @@ import { deleteMeta, getMeta, setMeta } from '../../src/main/db/meta'
 describe('database', () => {
   it('V10 gives every printing a unique pkey', async () => {
     const db = await seededDb()
-    const row = db.prepare("SELECT pkey FROM card_printings WHERE language='en' LIMIT 1").get() as { pkey: string }
+    const row = db.prepare("SELECT pkey FROM card_printings WHERE language='en' LIMIT 1").get() as {
+      pkey: string
+    }
     expect(row.pkey).toMatch(/^en\|\d+\|.+\|.+$/)
-    const c = db.prepare('SELECT count(DISTINCT pkey) AS d, count(*) AS n FROM card_printings').get() as { d: number; n: number }
+    const c = db
+      .prepare('SELECT count(DISTINCT pkey) AS d, count(*) AS n FROM card_printings')
+      .get() as { d: number; n: number }
     expect(c.n).toBeGreaterThan(0)
     expect(c.d).toBe(c.n)
     db.close()
@@ -45,12 +49,37 @@ describe('database', () => {
     art.run(30, null)
     art.run(31, 'https://ms.yugipedia.com/dm.png')
     migrate(db)
-    expect(db.pragma('user_version', { simple: true })).toBe(38)
+    expect(db.pragma('user_version', { simple: true })).toBe(39)
     const left = db.prepare('SELECT printing_id, url FROM printing_art ORDER BY printing_id').all()
     expect(left).toEqual([
       { printing_id: 11, url: 'https://ms.yugipedia.com/n.png' },
       { printing_id: 31, url: 'https://ms.yugipedia.com/dm.png' }
     ])
+    db.close()
+  })
+
+  test("V39 forgets every stored miss, so a new set's late scans are found; found photos stay", () => {
+    const db = new Database(':memory:')
+    db.pragma('foreign_keys = ON')
+    for (const m of MIGRATIONS.slice(0, 38)) db.exec(m.sql)
+    db.pragma('user_version = 38')
+    db.prepare(
+      `INSERT INTO cards (id, name, type, frame_type, race, "desc", updated_at)
+       VALUES (1, 'Blue-Eyes White Dragon, the White Phantom Beast', 'Effect Monster', 'effect', 'Dragon', 'desc', '2026-11-03')`
+    ).run()
+    db.prepare(
+      `INSERT INTO card_printings (id, card_id, language, set_name, set_code, set_rarity, variant) VALUES
+       (1, 1, 'en', 'Magnificent Maestros', 'MAMS-EN001', 'Ultra Rare', NULL),
+       (2, 1, 'en', 'Magnificent Maestros', 'MAMS-EN001', 'Ultra Rare (Overframe)', NULL)`
+    ).run()
+    const art = db.prepare(
+      "INSERT INTO printing_art (printing_id, url, checked_at) VALUES (?, ?, 'x')"
+    )
+    art.run(1, 'https://x/plain.png')
+    art.run(2, null)
+    migrate(db)
+    expect(db.pragma('user_version', { simple: true })).toBe(39)
+    expect(db.prepare('SELECT printing_id FROM printing_art').all()).toEqual([{ printing_id: 1 }])
     db.close()
   })
 
@@ -71,14 +100,16 @@ describe('database', () => {
        (4, 1, 'de', 'Battles of Legend', 'BLGG-DE001', 'Starlight Rare', 'Chibi artwork'),
        (5, 1, 'ja', 'Rarity Collection', 'RC04-JP044', 'Ultra Rare', NULL)`
     ).run()
-    const art = db.prepare("INSERT INTO printing_art (printing_id, url, checked_at) VALUES (?, ?, 'x')")
+    const art = db.prepare(
+      "INSERT INTO printing_art (printing_id, url, checked_at) VALUES (?, ?, 'x')"
+    )
     art.run(1, 'https://x/plain.png')
     art.run(2, 'https://x/plain.png')
     art.run(3, 'https://x/cr.png')
     art.run(4, 'https://x/chibi.png')
     art.run(5, null)
     migrate(db)
-    expect(db.pragma('user_version', { simple: true })).toBe(38)
+    expect(db.pragma('user_version', { simple: true })).toBe(39)
     expect(db.prepare('SELECT printing_id FROM printing_art').all()).toEqual([{ printing_id: 1 }])
     db.close()
   })
@@ -98,7 +129,9 @@ describe('database', () => {
        (8, 1, 'ja', 'Original Artwork Collection', '', 'Ultra Rare (Manga-Style, Monochrome)', NULL),
        (9, 1, 'ja', 'Original Artwork Collection', '', 'Secret Rare', 'Manga-Style, Monochrome')`
     ).run()
-    const art = db.prepare("INSERT INTO printing_art (printing_id, url, checked_at) VALUES (?, 'https://x/c.png', 'x')")
+    const art = db.prepare(
+      "INSERT INTO printing_art (printing_id, url, checked_at) VALUES (?, 'https://x/c.png', 'x')"
+    )
     for (const id of [7, 8, 9]) art.run(id)
     // V21 alone: V38 later looks every art variant's photo up again.
     db.exec(MIGRATIONS[20].sql)
@@ -123,11 +156,13 @@ describe('database', () => {
     const ids = [7, 8]
     setMeta(db, 'intl_sets_synced_at', '2026-10-01T00:00:00.000Z')
     setMeta(db, 'tcgplayer_synced_at', '2026-10-01T00:00:00.000Z')
-    const art = db.prepare('INSERT INTO printing_art (printing_id, url, checked_at) VALUES (?, ?, ?)')
+    const art = db.prepare(
+      'INSERT INTO printing_art (printing_id, url, checked_at) VALUES (?, ?, ?)'
+    )
     art.run(ids[0], null, '2026-10-01')
     art.run(ids[1], 'https://x/y.png', '2026-10-01')
     migrate(db)
-    expect(db.pragma('user_version', { simple: true })).toBe(38)
+    expect(db.pragma('user_version', { simple: true })).toBe(39)
     expect(getMeta(db, 'intl_sets_synced_at')).toBeNull()
     expect(getMeta(db, 'tcgplayer_synced_at')).toBe('2026-10-01T00:00:00.000Z')
     expect(db.prepare('SELECT printing_id, url FROM printing_art').all()).toEqual([
@@ -156,9 +191,11 @@ describe('database', () => {
     )
     insert.run(5, 7, 2, 'first', '2026-10-01', '2026-10-02')
     insert.run(9, 8, 3, '', '2026-10-03', '2026-10-04')
-    db.prepare("INSERT INTO value_snapshots (date, total_value, total_cards) VALUES ('2026-10-04', 12.5, 5)").run()
+    db.prepare(
+      "INSERT INTO value_snapshots (date, total_value, total_cards) VALUES ('2026-10-04', 12.5, 5)"
+    ).run()
     migrate(db)
-    expect(db.pragma('user_version', { simple: true })).toBe(38)
+    expect(db.pragma('user_version', { simple: true })).toBe(39)
     const rows = db
       .prepare(
         'SELECT id, uid, owner_id, dirty, deleted_at, quantity, notes, created_at, updated_at FROM collection_entries ORDER BY id'
@@ -169,8 +206,28 @@ describe('database', () => {
     }
     expect(rows[0].uid).not.toBe(rows[1].uid)
     expect(rows.map((r) => ({ ...r, uid: undefined }))).toEqual([
-      { id: 5, uid: undefined, owner_id: 0, dirty: 1, deleted_at: null, quantity: 2, notes: 'first', created_at: '2026-10-01', updated_at: '2026-10-02' },
-      { id: 9, uid: undefined, owner_id: 0, dirty: 1, deleted_at: null, quantity: 3, notes: '', created_at: '2026-10-03', updated_at: '2026-10-04' }
+      {
+        id: 5,
+        uid: undefined,
+        owner_id: 0,
+        dirty: 1,
+        deleted_at: null,
+        quantity: 2,
+        notes: 'first',
+        created_at: '2026-10-01',
+        updated_at: '2026-10-02'
+      },
+      {
+        id: 9,
+        uid: undefined,
+        owner_id: 0,
+        dirty: 1,
+        deleted_at: null,
+        quantity: 3,
+        notes: '',
+        created_at: '2026-10-03',
+        updated_at: '2026-10-04'
+      }
     ])
     expect(db.prepare('SELECT * FROM value_snapshots').all()).toEqual([
       { owner_id: 0, game: 'ygo', date: '2026-10-04', total_value: 12.5, total_cards: 5 }
@@ -185,9 +242,11 @@ describe('database', () => {
       id: number
       card_id: number
     }
-    const img = (db.prepare('SELECT image_id FROM card_images WHERE card_id = ? LIMIT 1').get(p.card_id) as {
-      image_id: number
-    }).image_id
+    const img = (
+      db.prepare('SELECT image_id FROM card_images WHERE card_id = ? LIMIT 1').get(p.card_id) as {
+        image_id: number
+      }
+    ).image_id
     const insert = db.prepare(
       `INSERT INTO collection_entries (uid, owner_id, printing_id, image_id, quantity, created_at, updated_at, deleted_at)
        VALUES (?, ?, ?, ?, 1, 'x', 'x', ?)`
@@ -206,7 +265,9 @@ describe('database', () => {
     expect(cols('card_printings')).toEqual(expect.arrayContaining(['contributed', 'remote_id']))
     expect(cols('catalog_staging')).toEqual(['seq', 'tbl', 'row'])
     expect(cols('sync_issues')).toEqual(['owner_id', 'uid', 'pkey', 'reason', 'since'])
-    const idx = db.prepare("SELECT name FROM sqlite_master WHERE type='index' AND name='ix_printings_remote'").get()
+    const idx = db
+      .prepare("SELECT name FROM sqlite_master WHERE type='index' AND name='ix_printings_remote'")
+      .get()
     expect(idx).toBeTruthy()
     db.close()
   })
@@ -214,7 +275,9 @@ describe('database', () => {
   it('V26 finds a printing by card without reading the table', () => {
     const db = openDatabase(':memory:')
     const plan = db
-      .prepare("EXPLAIN QUERY PLAN SELECT id FROM card_printings WHERE game = 'pkm' AND card_id = 1 ORDER BY id")
+      .prepare(
+        "EXPLAIN QUERY PLAN SELECT id FROM card_printings WHERE game = 'pkm' AND card_id = 1 ORDER BY id"
+      )
       .all() as { detail: string }[]
     expect(plan.map((p) => p.detail).join(' ')).toContain('ix_printings_card')
     db.close()
@@ -222,9 +285,9 @@ describe('database', () => {
 
   test('migrate sets user_version 38 and is idempotent', () => {
     const db = openDatabase(':memory:')
-    expect(db.pragma('user_version', { simple: true })).toBe(38)
+    expect(db.pragma('user_version', { simple: true })).toBe(39)
     expect(() => migrate(db)).not.toThrow()
-    expect(db.pragma('user_version', { simple: true })).toBe(38)
+    expect(db.pragma('user_version', { simple: true })).toBe(39)
     db.close()
   })
 
@@ -247,10 +310,14 @@ describe('database', () => {
       `INSERT INTO collection_entries (id, printing_id, image_id, quantity, created_at, updated_at)
        VALUES (3, 7, 1, 2, '2026-10-23', '2026-10-23')`
     ).run()
-    db.prepare(`INSERT INTO sets (set_name, set_code) VALUES ('Legend of Blue Eyes White Dragon', 'LOB')`).run()
+    db.prepare(
+      `INSERT INTO sets (set_name, set_code) VALUES ('Legend of Blue Eyes White Dragon', 'LOB')`
+    ).run()
     migrate(db)
-    expect(db.pragma('user_version', { simple: true })).toBe(38)
-    expect(db.prepare('SELECT id, language FROM card_printings').all()).toEqual([{ id: 7, language: 'en' }])
+    expect(db.pragma('user_version', { simple: true })).toBe(39)
+    expect(db.prepare('SELECT id, language FROM card_printings').all()).toEqual([
+      { id: 7, language: 'en' }
+    ])
     expect(db.prepare('SELECT id, printing_id FROM collection_entries').all()).toEqual([
       { id: 3, printing_id: 7 }
     ])
@@ -290,7 +357,7 @@ describe('database', () => {
     db.pragma('user_version = 1')
     db.prepare("INSERT INTO meta (key, value) VALUES ('k', 'v')").run()
     migrate(db)
-    expect(db.pragma('user_version', { simple: true })).toBe(38)
+    expect(db.pragma('user_version', { simple: true })).toBe(39)
     expect(db.prepare('SELECT value FROM meta WHERE key = ?').get('k')).toEqual({ value: 'v' })
     expect(db.prepare('SELECT count(*) AS n FROM sets').get()).toEqual({ n: 0 })
     db.close()
@@ -395,9 +462,13 @@ test('v4 adds printing_art, which goes away with its printing', () => {
     "INSERT INTO cards (id, name, type, frame_type, race, \"desc\", updated_at) VALUES (1, 'A', 't', 'normal', 'r', '', 'x')"
   ).run()
   const p = db
-    .prepare("INSERT INTO card_printings (card_id, set_name, set_code, set_rarity) VALUES (1, 'S', 'S-001', 'Common')")
+    .prepare(
+      "INSERT INTO card_printings (card_id, set_name, set_code, set_rarity) VALUES (1, 'S', 'S-001', 'Common')"
+    )
     .run().lastInsertRowid
-  db.prepare("INSERT INTO printing_art (printing_id, url, checked_at) VALUES (?, NULL, 'now')").run(p)
+  db.prepare("INSERT INTO printing_art (printing_id, url, checked_at) VALUES (?, NULL, 'now')").run(
+    p
+  )
   db.prepare('DELETE FROM card_printings WHERE id = ?').run(p)
   expect(db.prepare('SELECT count(*) AS n FROM printing_art').get()).toEqual({ n: 0 })
 })

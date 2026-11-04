@@ -24,6 +24,7 @@ import { useScanHub } from './ScanHub'
 import { ArtDataNotice } from './ArtDataNotice'
 import { HitPriceInput } from './HitPriceInput'
 import { SET_UNREADABLE, statusText } from './scanText'
+import { ScanSoundToggle } from './ScanSoundToggle'
 import { SessionList } from './SessionList'
 import { SearchPicker } from './SearchPicker'
 import { PhotoButton } from './PhotoButton'
@@ -158,6 +159,7 @@ export function ScanPage({
               <div className="flex flex-wrap items-center gap-3">
                 {newScansAs}
                 {hitPrice}
+                <ScanSoundToggle />
                 <Button
                   variant="outline"
                   size="sm"
@@ -235,6 +237,7 @@ export function ScanPage({
             >
               Full screen
             </Button>
+            <ScanSoundToggle />
             <span className="ml-3" />
             {newScansAs}
             {hitPrice}

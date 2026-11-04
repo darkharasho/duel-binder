@@ -215,6 +215,19 @@ describe('Scan page', () => {
     expect(screen.queryByRole('button', { name: 'Open scan window' })).not.toBeInTheDocument()
   })
 
+  it('turns the found-card sound on and off from the page, remembered on this device', async () => {
+    localStorage.removeItem('scan.ping')
+    await renderScan()
+    await run()
+    const u = user()
+    await u.click(screen.getByRole('button', { name: 'Sound off' }))
+    expect(localStorage.getItem('scan.ping')).toBe('1')
+    const on = screen.getByRole('button', { name: 'Sound on' })
+    expect(on).toHaveAttribute('aria-pressed', 'true')
+    await u.click(on)
+    expect(localStorage.getItem('scan.ping')).toBeNull()
+  })
+
   it('learns the window is already open on mount, and gives it its settings', async () => {
     bridge = fakeBridge(true)
     localStorage.setItem('scan.defaultRarity', 'Secret Rare')

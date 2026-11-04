@@ -52,6 +52,8 @@ import { CardPanel, type CardPanelSeed } from '@/features/card/CardPanel'
 import { api, invalidateAfterEdit, queryKeys } from '@/lib/api'
 import { useBackHandler } from '@/lib/backStack'
 import { useFavourites } from '@/lib/favourites'
+import { useWishlist } from '@/lib/wishlist'
+import { RarityWishHeart } from '@/components/RarityWishHeart'
 import type { ActiveChip } from '@/lib/filters'
 import { useGame } from '@/lib/game'
 import { isPhone, isWeb } from '@/lib/platform'
@@ -186,6 +188,12 @@ export function SetChecklist({
   // Favourites are private: a friend's set has no hearts.
   const ownFavourites = useFavourites(!friend)
   const favourites = friend ? undefined : ownFavourites
+  // The printings wanted, for the hearts of "Every rarity" tiles.
+  const wishlist = useWishlist({ enabled: !friend && mode === 'rarities' })
+  const wanted = useMemo(
+    () => new Set((wishlist.data ?? []).map((w) => w.printing.id)),
+    [wishlist.data]
+  )
   const [bulk, setBulk] = useState(false)
   // Card ids shown in bulk mode, frozen so saves never re-filter a card away mid-click.
   const [frozen, setFrozen] = useState<{
@@ -572,6 +580,8 @@ export function SetChecklist({
               {shownTiles.map((t) => {
                 const owned = t.owned > 0
                 const priced = sort.by === 'price' ? tilePrice(t) : null
+                const rarityTile =
+                  t.rarity === null ? undefined : t.card.rarities.find((r) => r.rarity === t.rarity)
                 return (
                   <li
                     key={t.key}
@@ -633,13 +643,25 @@ export function SetChecklist({
                         )}
                       </span>
                     </button>
-                    {favourites && (
-                      <FavouriteHeart
-                        cardId={t.card.cardId}
-                        name={t.card.name}
-                        favourites={favourites}
+                    {favourites && t.rarity !== null && rarityTile ? (
+                      // One rarity's tile wants just that rarity, an overframe apart from the
+                      // plain card; a card's tile favourites the whole card.
+                      <RarityWishHeart
+                        printingId={rarityTile.defaultPrintingId}
+                        printingIds={rarityTile.codes.map((c) => c.printingId)}
+                        wanted={rarityTile.codes.some((c) => wanted.has(c.printingId))}
+                        label={`${t.card.name}, ${t.rarity}`}
                         className={NUMBERED_TILE_HEART}
                       />
+                    ) : (
+                      favourites && (
+                        <FavouriteHeart
+                          cardId={t.card.cardId}
+                          name={t.card.name}
+                          favourites={favourites}
+                          className={NUMBERED_TILE_HEART}
+                        />
+                      )
                     )}
                   </li>
                 )

@@ -137,6 +137,38 @@ describe('browseCards by language', () => {
     ])
   })
 
+  it('an art variant is its own rarity, kept in its rarity or apart, and its printing is preselected', async () => {
+    const db = await seededDb()
+    const dm = cardId(db, 'Dark Magician')
+    const printing = db.prepare(
+      `INSERT INTO card_printings (game, card_id, language, set_name, set_code, set_rarity, variant)
+       VALUES ('ygo', ?, 'en', ?, ?, ?, ?) RETURNING id`
+    )
+    // RA05 keeps the overframe apart from its rarity; MAMS names it in the rarity.
+    const ra05 = (
+      printing.get(dm, 'Rarity Collection 5', 'RA05-EN141', 'Ultra Rare', 'Overframe') as {
+        id: number
+      }
+    ).id
+    printing.get(dm, 'Rarity Collection 5', 'RA05-EN001', 'Ultra Rare', null)
+    const pot = cardId(db, 'Pot of Greed')
+    const mams = (
+      printing.get(pot, 'Magnificent Maestros', 'MAMS-EN001', 'Ultra Rare (Overframe)', null) as {
+        id: number
+      }
+    ).id
+    expect(browseFacets(db).rarities).toContain('Ultra Rare (Overframe)')
+    const overframe = browseCards(db, { ...BY_NAME, rarities: ['Ultra Rare (Overframe)'] })
+    expect(overframe.cards.map((c) => [c.name, c.defaultPrintingId])).toEqual([
+      ['Dark Magician', ra05],
+      ['Pot of Greed', mams]
+    ])
+    // The plain rarity leaves the overframe-only card out.
+    expect(names(browseCards(db, { ...BY_NAME, rarities: ['Ultra Rare'] }))).toEqual([
+      'Dark Magician'
+    ])
+  })
+
   it("dates and preselects the language's printings, an undated set taking its English date", async () => {
     const db = await multilingualDb()
     const de = browseCards(db, { sort: 'released', dir: 'desc', language: 'de' }).cards

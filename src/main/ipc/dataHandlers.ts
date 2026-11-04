@@ -16,6 +16,7 @@ import { adjustPrinting, getChecklist, listSetsFast } from '../repo/sets'
 import {
   cardsForImages,
   imagesForLanguage,
+  chineseOfArt,
   matchName,
   printingsByCode,
   printingsByNumber,
@@ -77,6 +78,7 @@ export const DATA_CHANNELS = [
   'scan:matchName',
   'scan:cardsForImages',
   'scan:imagesForLanguage',
+  'scan:chineseOfArt',
   'stats:get',
   'sets:list',
   'sets:checklist',
@@ -204,6 +206,11 @@ export function createDataHandlers({
       printingsForSet(db, setName, checkLanguage(language)),
     'scan:printingsForCards': async (cardIds: number[]) => printingsForCards(db, cardIds),
     'scan:matchName': async (text: string) => matchName(db, text),
+    'scan:chineseOfArt': async (cardIds: unknown) => {
+      if (!Array.isArray(cardIds) || !cardIds.every((i) => Number.isInteger(i)))
+        throw new Error('Card ids must be a list of integers')
+      return chineseOfArt(db, cardIds)
+    },
     'scan:imagesForLanguage': async (language: Language) =>
       imagesForLanguage(db, checkLanguage(language)),
     'scan:cardsForImages': async (imageIds: unknown) => {

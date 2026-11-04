@@ -601,6 +601,68 @@ describe('Simplified Chinese, as the user said', () => {
     // The picked set tells them apart.
     expect(await recognized(raw({ art }), zh(set))).toMatchObject({ cardId: 97 })
   })
+
+  describe("a main set's card, renumbered, through the English card whose art the catalog shows", () => {
+    // Ardent Obsidian (CSV5C) gathers Obsidian Flames and Paradox Rift cards under its own
+    // numbers. Its Kingambit shows OBF Kingambit's art; Deoxys is reprinted in another Chinese set.
+    const MAIN: ScanPrinting[] = [
+      p(2011, 201, 'Kingambit', 'en', 'Obsidian Flames', 'OBF 150/197', 2001),
+      p(2021, 202, 'Kingambit', 'zh-hans', 'Ardent Obsidian', 'CSV5C 098', 2002),
+      p(2031, 203, 'Deoxys', 'en', 'Paradox Rift', 'PAR 074/182', 2003),
+      p(2041, 204, 'Deoxys', 'zh-hans', 'Ardent Obsidian', 'CSV5C 055', 2004),
+      p(2051, 205, 'Deoxys', 'zh-hans', 'Other Set', 'CSVH3C 014', 2005),
+      p(2061, 206, 'Deoxys', 'ja', 'Ancient Roar', 'SV4K 040/66', 2006)
+    ]
+    const ALL = [...ZH, ...MAIN]
+    const links: Record<number, number> = { 202: 201, 204: 203, 205: 203 }
+    const mainLookups: ResolveContext['lookups'] = {
+      ...zhLookups,
+      printingsForCards: async (ids) => ALL.filter((q) => ids.includes(q.cardId)),
+      cardsForImages: async (ids) =>
+        ALL.map((q) => ({ imageId: q.imageIds[0], cardId: q.cardId })).filter((c) =>
+          ids.includes(c.imageId)
+        ),
+      chineseOfArt: async (ids) =>
+        MAIN.filter((q) => ids.includes(links[q.cardId])).map((q) => ({
+          twinId: links[q.cardId],
+          printing: q
+        }))
+    }
+    const main = (setPrintings: ScanPrinting[] | null = null): ResolveContext => ({
+      ...zh(setPrintings),
+      setName: setPrintings?.[0]?.setName ?? null,
+      lookups: mainLookups
+    })
+    const ardent = MAIN.filter((q) => q.setName === 'Ardent Obsidian')
+
+    it('names the Chinese card the English art is linked to', async () => {
+      const art = [{ imageId: 2001, distance: 20 }]
+      expect(await recognized(raw({ art }), main())).toMatchObject({
+        cardId: 202,
+        setCode: 'CSV5C 098',
+        via: 'art'
+      })
+      expect(await recognized(raw({ art }), main(ardent))).toMatchObject({ cardId: 202 })
+    })
+
+    it('is unsure across two Chinese reprints until their set is picked', async () => {
+      // The Japanese print's art is closest; the English one, just behind, carries the link.
+      const art = [
+        { imageId: 2006, distance: 18 },
+        { imageId: 2003, distance: 20 }
+      ]
+      expect(await resolveSignals(raw({ art }), main())).toEqual({ kind: 'unsure' })
+      expect(await recognized(raw({ art }), main(ardent))).toMatchObject({ cardId: 204 })
+    })
+
+    it('stands in only by number without the link lookup', async () => {
+      const art = [{ imageId: 2001, distance: 20 }]
+      const unlinked = { ...mainLookups, chineseOfArt: undefined }
+      expect(await resolveSignals(raw({ art }), { ...main(), lookups: unlinked })).toEqual({
+        kind: 'unsure'
+      })
+    })
+  })
 })
 
 describe('art found only by the holder search', () => {

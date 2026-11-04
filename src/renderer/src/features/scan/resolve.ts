@@ -66,7 +66,9 @@ export interface ResolveContext {
   lookups: Pick<
     Api['scan'],
     'printingsByCode' | 'printingsByNumber' | 'printingsForCards' | 'matchName' | 'cardsForImages'
-  >
+  > &
+    /** For Simplified Chinese: without it, a Chinese card stands in only by number (chineseTwins). */
+    Partial<Pick<Api['scan'], 'chineseOfArt'>>
 }
 
 /** The art's best match when it is one of the card's artworks, else the card's first. */

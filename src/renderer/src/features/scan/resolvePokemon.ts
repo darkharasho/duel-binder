@@ -38,11 +38,13 @@ const unaccented = (name: string): string => name.normalize('NFKD').replace(/\p{
 
 /**
  * The Simplified Chinese printings standing in for printings' cards, by the card each stands in
- * for. Most Chinese cards have no art of their own to match, but a Chinese set is often its
- * Japanese set's twin, card for card (30th Celebration and MEGA Expansion 30th Celebration share
- * every number and name, Classic Collection included): a Chinese card stands in for an English
- * or Japanese one that prints its number, of the same total, under its name. Within the picked
- * set when one is picked.
+ * for. Most Chinese cards have no art of their own to match, so a Chinese card stands in for:
+ * - the English card the catalog shows its art from (`art_twin_id`, chineseOfArt): a main set
+ *   such as CSV6C gathers its cards from several English sets, renumbered;
+ * - an English or Japanese card that prints its number, of the same total, under its name: a
+ *   Chinese set is often its Japanese set's twin, card for card (30th Celebration and MEGA
+ *   Expansion 30th Celebration share every number and name, Classic Collection included).
+ * Within the picked set when one is picked.
  */
 async function chineseTwins(
   printings: ScanPrinting[],
@@ -50,6 +52,17 @@ async function chineseTwins(
 ): Promise<Map<number, ScanPrinting[]>> {
   const out = new Map<number, ScanPrinting[]>()
   const inSet = ctx.setPrintings ? new Set(ctx.setPrintings.map((p) => p.printingId)) : null
+  const add = (cardId: number, twins: ScanPrinting[]): void => {
+    const list = out.get(cardId) ?? []
+    for (const t of twins) if (!list.some((x) => x.printingId === t.printingId)) list.push(t)
+    if (list.length) out.set(cardId, list)
+  }
+  const others = [
+    ...new Set(printings.filter((p) => p.language !== 'zh-hans').map((p) => p.cardId))
+  ]
+  const linked = others.length ? ((await ctx.lookups.chineseOfArt?.(others)) ?? []) : []
+  for (const { twinId, printing } of linked)
+    if (!inSet || inSet.has(printing.printingId)) add(twinId, [printing])
   const asked = new Map<string, Promise<ScanPrinting[]>>()
   for (const p of printings) {
     if (p.language === 'zh-hans') continue
@@ -63,10 +76,7 @@ async function chineseTwins(
         sameName(unaccented(t.name), unaccented(p.name)) &&
         (!inSet || inSet.has(t.printingId))
     )
-    if (!twins.length) continue
-    const list = out.get(p.cardId) ?? []
-    for (const t of twins) if (!list.some((x) => x.printingId === t.printingId)) list.push(t)
-    out.set(p.cardId, list)
+    add(p.cardId, twins)
   }
   return out
 }

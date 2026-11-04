@@ -22,7 +22,11 @@ export function productVersion(p: OpProduct): { kind: OpKind; label: string | nu
   const bracket = /\s*(\[[^\]]*\])$/.exec(name)
   if (bracket) { suffix = bracket[1]; name = name.slice(0, bracket.index).trim() }
   const groups: string[] = []
-  for (let m = /\s*\(([^()]*)\)$/.exec(name); m; m = /\s*\(([^()]*)\)$/.exec(name)) {
+  // A tag follows a space, or is several words (`Jinbe - PRB02-007(Alternate Art)`): a name's own
+  // one-word part stays (`Miss Doublefinger(Zala)`, `Mr.3(Galdino)`).
+  const TAG = /(?:\s+\(([^()]*)\)|\(([^()]*\s[^()]*)\))$/
+  for (let m = TAG.exec(name); m; m = TAG.exec(name)) {
+    m[1] = m[1] ?? m[2]
     groups.unshift(m[1].trim())
     name = name.slice(0, m.index)
   }

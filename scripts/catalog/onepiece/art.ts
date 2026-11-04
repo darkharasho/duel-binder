@@ -20,8 +20,16 @@ import type { BandaiEntry } from './types'
 const DAY_MS = 24 * 60 * 60 * 1000
 /** A TCGplayer picture this close to a Bandai one is a match (Task 5 uses these). */
 export const MATCH_MAX = 24
+/**
+ * The furthest a match by the margin rule may be. Bandai stamps SAMPLE across its art; TCGplayer's
+ * scans of the first sets (OP-01, ST-01, ST-02) have no stamp, which alone puts the same card 20 to
+ * 60 bits away. Another card is over 100 away, and MATCH_MARGIN still has to hold.
+ */
+export const STAMP_MAX = 64
 /** The runner-up must be this much further away than the match. */
 export const MATCH_MARGIN = 40
+/** Mutual-nearest matching (match.ts step 3b): one picture in two foil finishes, told apart by this much. */
+export const FINISH_MARGIN = 10
 /** Art this close to the stored hash is the same art, re-encoded. */
 export const SAME_ART_MAX = 24
 /** Downloads per night. */

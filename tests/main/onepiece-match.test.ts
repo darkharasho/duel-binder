@@ -80,12 +80,15 @@ describe('One Piece matching', () => {
     expect(r.matches.size).toBe(0)
     expect(r.notes.join('\n')).toContain('ambiguous')
   })
-  test('the runner-up counts even beyond MATCH_MAX', () => {
+  test('the runner-up counts even beyond MATCH_MAX; inside MATCH_MARGIN only mutual nearest by FINISH_MARGIN matches', () => {
     const e = { 'OP17-005_p1': H0 }
     const near = bits(range(0, 5))
     const far = run({ entries: [p1], bandai: e, tcg: { 708077: near, 712083: bits(range(100, 160)) } })
     expect(far.matches.get('OP17-005_p1')!.product.productId).toBe(708077)
-    const close = run({ entries: [p1], bandai: e, tcg: { 708077: near, 712083: bits(range(100, 130)) } })
+    // 5 against 30: inside MATCH_MARGIN, but one picture's two finishes sit that far apart.
+    const finish = run({ entries: [p1], bandai: e, tcg: { 708077: near, 712083: bits(range(100, 130)) } })
+    expect(finish.matches.get('OP17-005_p1')!.product.productId).toBe(708077)
+    const close = run({ entries: [p1], bandai: e, tcg: { 708077: near, 712083: bits(range(100, 112)) } })
     expect(close.matches.size).toBe(0)
     expect(close.notes.join('\n')).toContain('ambiguous')
   })
@@ -164,6 +167,74 @@ describe('One Piece matching', () => {
     const r = run({ entries: [sp], products: [plain], bandai: { 'OP14-108_p3': H0 }, tcg: { 900002: H0 } })
     expect(r.matches.size).toBe(0)
   })
+  describe('a premium booster', () => {
+    const PRB01 = ser('569301', 'booster', 'PRB-01', 'PRB01')
+    const at = (productId: number, name: string, number: string): OpProduct =>
+      ({ productId, groupId: 23496, name, number, rarity: 'C', imageUrl: `https://tcgplayer-cdn.tcgplayer.com/product/${productId}_200w.jpg` })
+    const e = (bandaiId: string, rarity: string): BandaiEntry =>
+      entry({ bandaiId, number: bandaiId.split('_')[0], rarity, seriesId: PRB01.id })
+    const got = (r: ReturnType<typeof matchSeries>): Record<string, number> =>
+      Object.fromEntries([...r.matches.values()].map((m) => [m.bandaiId, m.product.productId]))
+
+    test('SP takes the foils by mutual nearest, never the (Reprint); the reprint takes the (Reprint)', () => {
+      // OP01-029 in PRB-01: one picture as Jolly Roger Foil, Textured Foil and a plain reprint.
+      const products = [
+        at(593001, 'Bartolomeo (Jolly Roger Foil)', 'OP01-029'),
+        at(593002, 'Bartolomeo (Textured Foil)', 'OP01-029'),
+        at(593003, 'Bartolomeo (Reprint)', 'OP01-029')
+      ]
+      const r = run({
+        series: PRB01, products, entries: [e('OP01-029_p2', 'SP'), e('OP01-029_p3', 'SP'), e('OP01-029_r1', 'UC')],
+        bandai: { 'OP01-029_p2': bits(range(0, 4)), 'OP01-029_p3': bits(range(40, 58)), 'OP01-029_r1': bits(range(80, 81)) },
+        tcg: { 593001: H0, 593002: bits(range(40, 60)), 593003: bits(range(80, 81)) }
+      })
+      expect(got(r)).toEqual({ 'OP01-029_p2': 593001, 'OP01-029_p3': 593002, 'OP01-029_r1': 593003 })
+    })
+
+    test('a reprint entry with no (Reprint) product takes a leftover parallel: the Manga `_r2`', () => {
+      const products = [at(594001, 'Shanks (Alternate Art)', 'OP01-120'), at(594002, 'Shanks (Manga)', 'OP01-120'), at(594003, 'Shanks (Reprint)', 'OP01-120')]
+      const r = run({
+        series: PRB01, products, entries: [e('OP01-120_p5', 'SEC'), e('OP01-120_r1', 'SEC'), e('OP01-120_r2', 'SEC')],
+        bandai: { 'OP01-120_p5': H0, 'OP01-120_r1': H1, 'OP01-120_r2': H2 },
+        tcg: { 594001: H0, 594002: H2, 594003: H1 }
+      })
+      expect(got(r)).toEqual({ 'OP01-120_p5': 594001, 'OP01-120_r1': 594003, 'OP01-120_r2': 594002 })
+    })
+
+    test('a plain reprint does not take its foil entry\'s leftover finish', () => {
+      // The Textured Foil was not matched (its entry has no hash yet): the reprint is close to it, but so is that entry.
+      const products = [at(595001, 'Kid (Jolly Roger Foil)', 'OP03-057'), at(595002, 'Kid (Textured Foil)', 'OP03-057')]
+      const r = run({
+        series: PRB01, products, entries: [e('OP03-057_p2', 'SP'), e('OP03-057_p3', 'SP'), e('OP03-057_r1', 'R')],
+        bandai: { 'OP03-057_p2': H0, 'OP03-057_p3': bits(range(0, 6)), 'OP03-057_r1': bits(range(0, 8)) },
+        tcg: { 595001: H0, 595002: bits(range(0, 6)) }
+      })
+      expect(got(r)['OP03-057_r1']).toBeUndefined()
+    })
+  })
+
+  describe('stamp-free scans', () => {
+    test('match past MATCH_MAX up to STAMP_MAX when the margin holds', () => {
+      const r = run({ entries: [base, p2], bandai: { 'OP17-005': H0, 'OP17-005_p2': H2 }, tcg: { 711499: bits(range(0, 44)), 708077: H2 } })
+      expect(r.matches.get('OP17-005')!.product.productId).toBe(711499)
+      const tooFar = run({ entries: [base], bandai: { 'OP17-005': H0 }, tcg: { 711499: bits(range(0, 70)) } })
+      expect(tooFar.notes.join('\n')).toContain('art disagrees')
+    })
+    test('not when another entry of the number is nearer that product', () => {
+      // P-029_r2 in PRB-01: its only (Reprint) product is the Jolly Roger Foil entry's picture.
+      const PRB01 = ser('569301', 'booster', 'PRB-01', 'PRB01')
+      const products: OpProduct[] = [{ productId: 596001, groupId: 23496, name: 'Nami (Reprint)', number: 'P-029', rarity: 'P', imageUrl: null }]
+      const r = run({
+        series: PRB01, products,
+        entries: [entry({ bandaiId: 'P-029_p3', number: 'P-029', rarity: 'P' }), entry({ bandaiId: 'P-029_r2', number: 'P-029', rarity: 'P' })],
+        bandai: { 'P-029_p3': bits(range(0, 20)), 'P-029_r2': bits(range(100, 154)) },
+        tcg: { 596001: H0 }
+      })
+      expect(r.matches.has('P-029_r2')).toBe(false)
+      expect(r.notes).toContain('P-029_r2: no unambiguous TCGplayer product (art disagrees)')
+    })
+  })
+
   test('DON!! and sealed are skipped and counted', () => {
     const r = run({ entries: [base], bandai: { 'OP17-005': H0 }, tcg: { 711499: H0 } })
     expect(r.don).toBe(1)

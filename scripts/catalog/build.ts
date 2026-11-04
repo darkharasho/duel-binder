@@ -68,7 +68,7 @@ export interface JobOptions {
    */
   pokemon?: (work: Database.Database) => Promise<{ reports: PokemonReport[]; error: string | null }>
   /**
-   * Asks the portal to mirror new Pokémon set art into R2 (see warmSetArt); defaults to
+   * Asks the portal to mirror new set art (Pokémon, One Piece pack shots) into R2 (see warmSetArt); defaults to
    * `warmSetArt` against the portal, one image a second.
    */
   warmSetArt?: typeof warmSetArt
@@ -180,13 +180,19 @@ function logPokemon(reports: PokemonReport[], log: (line: string) => void): void
   }
 }
 
-/** Image keys of Pokémon set art in `work` that `base` lacks (every one when there is no base). */
+/**
+ * Image keys of set art in `work` that `base` lacks (every one when there is no base): Pokémon
+ * pack art and logos, and One Piece pack shots. Signed-out clients (the phone apps' images) only
+ * get what the portal's R2 already holds.
+ */
 export function newSetArtKeys(work: Database.Database, base: Database.Database | null): string[] {
   const keys = (db: Database.Database): string[] =>
     (
-      db.prepare('SELECT DISTINCT image_key FROM pokemon_set_art ORDER BY image_key').all() as {
-        image_key: string
-      }[]
+      db.prepare(
+        `SELECT image_key FROM pokemon_set_art
+         UNION SELECT image_key FROM sets WHERE game = 'op' AND image_key LIKE 'ob-%'
+         ORDER BY image_key`
+      ).all() as { image_key: string }[]
     ).map((r) => r.image_key)
   const old = new Set(base ? keys(base) : [])
   return keys(work).filter((k) => !old.has(k))
@@ -435,7 +441,8 @@ export async function runJob(opts: JobOptions): Promise<JobResult> {
       fetch: opts.fetch
     })
     log(`Uploaded ${uploaded.upserted} rows, deleted ${uploaded.deleted}`)
-    // New Pokémon pack art is fetched into the portal's R2 now, slowly, not by clients' first views.
+    // New set art (Pokémon packs and logos, One Piece pack shots) is fetched into the portal's R2
+    // now, slowly, not by clients' first views.
     const art = newSetArtKeys(work, base)
     if (art.length > 0) {
       const warmed = await (opts.warmSetArt ?? warmSetArt)({
@@ -445,7 +452,7 @@ export async function runJob(opts: JobOptions): Promise<JobResult> {
         fetch: opts.fetch
       })
       log(
-        `Pokémon set art: ${warmed.stored} stored, ${warmed.cached} already stored, ${warmed.failed} failed`
+        `Set art: ${warmed.stored} stored, ${warmed.cached} already stored, ${warmed.failed} failed`
       )
     }
 

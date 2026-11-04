@@ -20,6 +20,7 @@ import { uploadCatalog } from '../../scripts/catalog/upload'
 import type { AccuracyReport } from '../../scripts/catalog/accuracy'
 import {
   findShrinks,
+  newSetArtKeys,
   onePieceArtBudget,
   runJob as runRealJob,
   type JobOptions
@@ -516,6 +517,22 @@ describe('uploadCatalog', () => {
     await runJob({ ...job, pokemon: async () => ({ reports: [], error: null }) })
     await runJob({ ...job, pokemon: addArt('bp-1') })
     expect(warmed).toEqual([['bp-0'], ['bp-1']])
+  })
+
+  it('new set art includes One Piece pack shots, which signed-out phones can only get from R2', async () => {
+    const work = await workDb()
+    const base = openDatabase(join(dir, 'old.sqlite'))
+    const shot = (db: Database.Database, name: string, key: string | null): void => {
+      db.prepare("INSERT INTO sets (game, language, set_name, set_code, image_url, image_key) VALUES ('op', 'en', ?, ?, ?, ?)")
+        .run(name, name, key ? `https://en.onepiece-cardgame.com/renewal/images/products/${key}.webp` : null, key)
+    }
+    shot(base, 'OP01', 'ob-00000000000000000001')
+    shot(work, 'OP01', 'ob-00000000000000000001')
+    shot(work, 'OP02', 'ob-00000000000000000002')
+    shot(work, 'P', null)
+    expect(newSetArtKeys(work, base)).toEqual(['ob-00000000000000000002'])
+    base.close()
+    work.close()
   })
 
   it('a failing fingerprint upload is logged and the catalog base still advances', async () => {

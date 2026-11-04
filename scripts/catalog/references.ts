@@ -46,18 +46,22 @@ const SAME_ART_MAX_DISTANCE = ART_FAR_DISTANCE
 const REFERENCE_LANGUAGES = ['en', 'ja'] as const
 /** Foils whose shine changes how the art looks, so the plain art matches them poorly. */
 const FOIL = /^(starlight|ghost|collector's) rare/i
-/** Sets whose every card carries the manga's art, not the card art YGOPRODeck has (YAS1–3, YAC1). */
-const ORIGINAL_ART_SET = /^Original Artwork (Duel Set|Collection)\b/i
+/**
+ * Sets whose every card carries an art YGOPRODeck doesn't have: the manga's (YAS1–3, YAC1), or
+ * chibi art in every rarity (BLGG), where Yugipedia may have the Secret Rare's scan and not the
+ * Starlight Rare's.
+ */
+const NEW_ART_SET = /^(Original Artwork (Duel Set|Collection)|Battles of Legend: Glorious Gallery)\b/i
 
 /**
  * Whether a printing looks unlike its card's art from YGOPRODeck: an alternate or overframe art
  * (named in its variant or in brackets after its rarity), a printing its set list marks "New
  * artwork" (variant NEW_ART_VARIANT, e.g. LOCR-JP029–038, an art YGOPRODeck doesn't have yet), a
- * printing in a set of manga art (the Original Artwork Duel Sets and Collection), or a foil that
+ * printing in a set of new art (NEW_ART_SET), or a foil that
  * changes the picture.
  */
 export function wantsReference(rarity: string, variant: string | null, setName = ''): boolean {
-  if (FOIL.test(rarity.trim()) || ORIGINAL_ART_SET.test(setName.trim())) return true
+  if (FOIL.test(rarity.trim()) || NEW_ART_SET.test(setName.trim())) return true
   return namedVariant(rarity, variant) !== null
 }
 

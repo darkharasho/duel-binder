@@ -40,6 +40,12 @@ describe('wantsReference', () => {
     expect(wantsReference('Secret Rare', null, 'Original Artwork Collection')).toBe(true)
     expect(wantsReference('Ultra Rare', null, 'Starter Deck: Joey')).toBe(false)
   })
+
+  it("takes every printing of Battles of Legend: Glorious Gallery, whose art is all chibi", () => {
+    // BLGG-EN007's Starlight scan is a red link on Yugipedia; its Secret Rare, of the same art, isn't.
+    expect(wantsReference('Secret Rare', null, 'Battles of Legend: Glorious Gallery')).toBe(true)
+    expect(wantsReference('Secret Rare', null, 'Battles of Legend: Monster Mayhem')).toBe(false)
+  })
 })
 
 /** A card-shaped image (or any size) whose brightness ramps along x, or y, or a checker. */

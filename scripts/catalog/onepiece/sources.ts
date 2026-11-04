@@ -1,6 +1,6 @@
 import type { TcGroup, TcPrice } from '../pokemon/types'
 import { createLimiter, MAX_ATTEMPTS, MAX_CONCURRENCY, DEFAULT_RETRY_DELAY_MS, REPO_URL, retryDelay, type GetJsonOpts } from '../pokemon/http'
-import { BANDAI_EN, parseCardList, parseSeriesList } from './bandai'
+import { BANDAI_EN, packShots, parseCardList, parseProductTiles, parseSeriesList, PRODUCT_SUBCATEGORIES, type ProductTile } from './bandai'
 import type { OpCache } from './cache'
 import { opGroups, opPrices, opProducts, type OpProduct } from './tcgcsv'
 import type { BandaiEntry, BandaiSeries, OpSeriesKind } from './types'
@@ -25,7 +25,15 @@ export interface OnePieceSources {
   /** Raw bytes; `since` makes it conditional (null on 304). */
   bandaiImage(bandaiId: string, since?: string): Promise<{ bytes: Uint8Array; lastModified: string | null } | null>
   tcgImage(url: string): Promise<Uint8Array>
+  /**
+   * Series id to the pack (or deck box) shot on its product tile. Optional: a source without it
+   * (tests, older fakes) leaves every set's stored shot as it is.
+   */
+  packShots?(): Promise<Map<string, string>>
 }
+
+/** A product subcategory's page count is never near this; past it the listing is read as broken. */
+export const MAX_PRODUCT_PAGES = 30
 
 export interface OnePieceSourcesOpts {
   cache: OpCache
@@ -180,6 +188,24 @@ export function createOnePieceSources(o: OnePieceSourcesOpts): OnePieceSources {
 
     async tcgImage(url) {
       return new Uint8Array(await (await get(url)).arrayBuffer())
+    },
+
+    async packShots() {
+      // Each subcategory's pages until one adds no tile (past the last page Bandai repeats or
+      // empties it). Every tile counts, sleeves too: a page of them is not the end.
+      const pages: { subcategory: string; tiles: ProductTile[] }[] = []
+      for (const sub of PRODUCT_SUBCATEGORIES) {
+        const seen = new Set<string>()
+        for (let n = 1; ; n++) {
+          if (n > MAX_PRODUCT_PAGES) throw new Error(`Bandai ${sub} products run past ${MAX_PRODUCT_PAGES} pages`)
+          const tiles = parseProductTiles(await page(`/products/?subcategory=${sub}&page=${n}`), site)
+          const fresh = tiles.filter((t) => !seen.has(`${t.href} ${t.seriesId} ${t.imageUrl}`))
+          if (fresh.length === 0) break
+          for (const t of fresh) seen.add(`${t.href} ${t.seriesId} ${t.imageUrl}`)
+          pages.push({ subcategory: sub, tiles: fresh })
+        }
+      }
+      return packShots(pages)
     }
   }
 }
@@ -224,4 +250,29 @@ export function dedupeEntries(
     notes.push(`${id} is listed in ${listed}; kept in ${keptCode}`)
   }
   return { entries: entries.filter((e) => !keep.has(e.bandaiId) || keep.get(e.bandaiId) === e.seriesId), notes }
+}
+
+/**
+ * Tonight's pack shots, for the writer's `packShots`. Never throws: a listing that fails or reads
+ * empty is a note and leaves every set's stored shot as it is (undefined). Boosters and decks the
+ * listing has no shot for are noted by code.
+ */
+export async function readPackShots(
+  sources: OnePieceSources,
+  series: BandaiSeries[]
+): Promise<{ shots: Map<string, string> | undefined; notes: string[] }> {
+  if (!sources.packShots) return { shots: undefined, notes: [] }
+  let shots: Map<string, string>
+  try {
+    shots = await sources.packShots()
+  } catch (e) {
+    return { shots: undefined, notes: [`Bandai product listing failed: ${(e as Error).message}; set pack shots kept`] }
+  }
+  if (shots.size === 0) {
+    return { shots: undefined, notes: ['Bandai product listing has no pack shots; the page layout may have changed; set pack shots kept'] }
+  }
+  const missing = series
+    .filter((s) => (s.kind === 'booster' || s.kind === 'deck') && !shots.has(s.id))
+    .map((s) => s.setCode)
+  return { shots, notes: missing.length > 0 ? [`No pack shot on Bandai's product listing: ${missing.join(', ')}`] : [] }
 }

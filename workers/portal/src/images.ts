@@ -1,4 +1,5 @@
 import {
+  isOpPackUrl,
   opBandaiArtUrl,
   opTcgArtUrl,
   imageUrl,
@@ -481,6 +482,14 @@ function resolve(deps: AppDeps, path: string): Target | null {
         source: fixed(source, { 'User-Agent': USER_AGENT }),
         cache: SET_CACHE
       }
+    }
+    if (prefix === 'ob-') {
+      // A One Piece set's pack shot from Bandai's product listing.
+      const row = deps.db
+        .prepare("SELECT image_url FROM sets WHERE image_key = ? AND +game = 'op'")
+        .get(id) as { image_url: string | null } | undefined
+      if (!row?.image_url || !isOpPackUrl(row.image_url)) return null
+      return { key: `set/${id}`, source: fixed(row.image_url, { 'User-Agent': USER_AGENT }), cache: SET_CACHE }
     }
     if (prefix === 'yp-' || prefix === 'yc-') {
       const source = findSetImageUrl(deps.db, id)

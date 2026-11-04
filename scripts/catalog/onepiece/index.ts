@@ -5,7 +5,7 @@ import { isFrozen, refreshArt, type ArtBatch, type ArtPortal } from './art'
 import { openOpCache, type OpCache } from './cache'
 import { donCards } from './don'
 import { matchSeries, type OpMatch } from './match'
-import { createOnePieceSources, dedupeEntries, type OnePieceSources } from './sources'
+import { createOnePieceSources, dedupeEntries, readPackShots, type OnePieceSources } from './sources'
 import type { OpProduct } from './tcgcsv'
 import type { BandaiEntry, BandaiSeries } from './types'
 import { mapGroups, productVersion } from './versions'
@@ -80,6 +80,8 @@ export async function runOnePieceStep(
     const listed = await sources.series()
     notes.push(...listed.notes)
     const series = listed.series
+    const packs = await readPackShots(sources, series)
+    notes.push(...packs.notes)
     const groups = await sources.groups()
     const { bySeries, promoPool } = mapGroups(series, groups)
     const published = new Map<string, number>()
@@ -294,7 +296,8 @@ export async function runOnePieceStep(
         hashed,
         frozen,
         firstSeen,
-        don: { cards: don.cards, listed: don.listed, complete: failed.size === 0 }
+        don: { cards: don.cards, listed: don.listed, complete: failed.size === 0 },
+        packShots: packs.shots
       },
       { now, nowIso: date.toISOString() }
     )

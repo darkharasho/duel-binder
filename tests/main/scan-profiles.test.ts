@@ -77,7 +77,6 @@ describe('scan profiles', () => {
 
     it('reads the number bottom right with room for a loose outline', () => {
       const [band] = op().codeBands
-      expect(op().codeBands).toHaveLength(1)
       expect(inside(band)).toBe(true)
       for (const [card, n] of Object.entries(NUMBERS)) {
         // Off by a few percent either way, the number is still inside the band.
@@ -89,6 +88,26 @@ describe('scan profiles', () => {
       // Under the name and the traits bar's text (which ends by 0.935), above the card's edge.
       expect(band[1]).toBeGreaterThanOrEqual(0.93)
       expect(band[3]).toBeLessThanOrEqual(0.985)
+    })
+
+    it('reads it too off an outline that stops at the bottom bar, past the outline', () => {
+      const [, low] = op().codeBands
+      const reach = op().codeReach ?? 0
+      // Within the card and the reach around it.
+      expect(low.every((v) => v >= -reach && v <= 1 + reach)).toBe(true)
+      expect(low[3]).toBeGreaterThan(1)
+      // Held by its long sides, a card's outline can lose its bottom strip and end at the bottom
+      // bar's top edge (0.93 to 0.95 of the card): the number is then below the outline's end.
+      for (const end of [0.93, 0.95])
+        for (const [card, n] of Object.entries(NUMBERS)) {
+          const [top, bottom] = [n[1] / end, n[3] / end]
+          expect([card, end, low[1] <= top - 0.005 && low[3] >= bottom + 0.005]).toEqual([
+            card,
+            end,
+            true
+          ])
+          expect([card, low[0] <= n[0] - 0.015 && low[2] >= n[2] + 0.01]).toEqual([card, true])
+        }
     })
 
     it('has its profile for the number reader while its scanner stays off', () => {

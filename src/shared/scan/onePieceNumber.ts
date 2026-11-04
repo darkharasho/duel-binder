@@ -89,7 +89,8 @@ function codesAt(t: string, at: number, prefixes: readonly string[] | undefined)
  * rarity box and block icon), in the printed form and once each. The set code must be one of
  * `prefixes` (the catalog's, e.g. "OP05", "P") or, without them, one of Bandai's set families.
  * A lookalike letter or digit is taken for the one the number needs ("0P05-1I9"). With no dash,
- * the three digits must be real ones, and the line mustn't run on with a fourth.
+ * the set code must have digits, the three digits must be real ones, and the line mustn't run
+ * on with a fourth.
  */
 export function findOpNumbers(text: string, prefixes?: readonly string[]): string[] {
   const t = text.toUpperCase().replace(/[^A-Z0-9-]/g, '')
@@ -99,7 +100,15 @@ export function findOpNumbers(text: string, prefixes?: readonly string[]): strin
       const rest = t.slice(at + code.length)
       let digits: (string | null)[]
       if (rest[0] === '-') digits = [...rest.slice(1, 4)].map(asDigit)
-      else if (isDigit(rest[0]) && isDigit(rest[1]) && isDigit(rest[2]) && !isDigit(rest[3]))
+      // No dash: only after a set code with digits ("OP05119"); a lone "P" and three digits are
+      // too easily read out of nothing.
+      else if (
+        code.length > 1 &&
+        isDigit(rest[0]) &&
+        isDigit(rest[1]) &&
+        isDigit(rest[2]) &&
+        !isDigit(rest[3])
+      )
         digits = [...rest.slice(0, 3)]
       else continue
       if (digits.length !== 3 || digits.some((d) => d === null)) continue

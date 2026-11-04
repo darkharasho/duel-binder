@@ -65,6 +65,13 @@ export interface ScanProfile {
    * their line of ink (toBand): a small, soft, light number on a coloured bar reads far better so.
    */
   codeGray?: boolean
+  /**
+   * How far past the outline code bands may reach, as a share of the card's width and height
+   * (0 when left out). An outline found without art can stop at a printed bar's edge a few
+   * percent short of the card's end, which puts a number printed near that end outside it; with
+   * a reach, code bands may run past 0 or 1 by up to this much.
+   */
+  codeReach?: number
 }
 
 /**
@@ -118,8 +125,12 @@ const OP_PROFILE: ScanProfile = {
     // The number with room either way for an outline a few percent off (outlines found without
     // art run up to 3% inside the card's edge), which takes in the rarity box and part of the
     // block icon right of it (findOpNumbers reads past them).
-    [0.735, 0.934, 0.93, 0.98]
+    [0.735, 0.934, 0.93, 0.98],
+    // The same number below an outline that stops at the bottom bar's top edge (0.93 to 0.95 of
+    // the card), which fingers on a held card's long sides often leave as the likeliest outline.
+    [0.735, 0.975, 0.95, 1.05]
   ],
+  codeReach: 0.06,
   // Light numbers on coloured bars, about 15 px high on a 4K phone's frame.
   codeGray: true,
   // The name, over the traits bar.

@@ -37,6 +37,8 @@ describe('findOpNumbers', () => {
     // Too few digits, or digits running on with no dash to end the number.
     'OP05-11',
     'OP051191',
+    // A lone P needs its dash.
+    'P010',
     // A Yu-Gi-Oh set code.
     'LOB-EN005',
     // OP05-119 with its set digits lost is not promo P-119.

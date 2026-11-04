@@ -17,7 +17,7 @@
  * Options: --poses N (per card and size, default 4), --frames N (default 4), --heights 1080,2160
  * (the app frame's height: a 1080p camera's centre crop, and a 4K one's), --catalog <file> (the
  * catalog's numbers, one a line; default a stand-in of every number in Bandai's sets so far),
- * --band x0,y0,x1,y1 (try another number band), --need N (tries in a row, default 2),
+ * --band x0,y0,x1,y1[;…] (try other number bands), --reach r (their codeReach), --gray on|off, --need N (tries in a row, default 2),
  * --seed N, --save <dir> (writes each synthetic frame as a JPEG, to look at).
  *
  * A wrong read is a number in the right format that isn't the card's. "Gated wrong" is one the
@@ -601,11 +601,14 @@ async function main(): Promise<void> {
   const base = scanProfile('op')
   const profile: ScanProfile = {
     ...base,
-    ...(band ? { codeBands: [band.split(',').map(Number) as unknown as Box] } : {}),
+    ...(band
+      ? { codeBands: band.split(';').map((b) => b.split(',').map(Number) as unknown as Box) }
+      : {}),
+    ...(option('reach') ? { codeReach: Number(option('reach')) } : {}),
     ...(option('gray') ? { codeGray: option('gray') === 'on' } : {})
   }
   console.log(
-    `Number band ${JSON.stringify(profile.codeBands)}, ${profile.codeGray ? 'gray' : 'ink'} bands, ${catalog.size} catalog numbers`
+    `Number band ${JSON.stringify(profile.codeBands)}, ${profile.codeGray ? 'gray' : 'ink'} bands, reach ${profile.codeReach ?? 0}, ${catalog.size} catalog numbers`
   )
   const cv = await loadCv()
   const { read, dispose } = await reader(cv, profile, prefixes)

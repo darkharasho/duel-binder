@@ -378,6 +378,11 @@ describe('TCGplayer catalog', () => {
     )
     insertIntl.run(46986414, 'LOB-DE200') // Dark Magician's German copy of the missing code
     insertIntl.run(55144522, 'XYZ-DE001') // Pot of Greed, while TCGplayer names Dark Magician
+    // Asia numbers its own way: Pot of Greed under LOB-AE200 doesn't make LOB-EN200 two cards.
+    db.prepare(
+      `INSERT INTO card_printings (card_id, set_name, set_code, set_rarity, set_rarity_code, language)
+       VALUES (?, 'Elsewhere', ?, 'Common', '', ?)`
+    ).run(55144522, 'LOB-AE200', 'ae')
     const lob = db
       .prepare("SELECT set_name, set_rarity_code FROM card_printings WHERE set_code = 'LOB-EN005'")
       .get() as { set_name: string; set_rarity_code: string }

@@ -106,6 +106,7 @@ export function fingerprintSource(
   frameType: string,
   profile?: ScanProfile
 ): RgbaImage {
+  // op: step 4 gives One Piece its own art crop; this branch is the Pokémon one today.
   if (profile && profile.game !== 'ygo') return cropTo(img, profile.artBoxes[0])
   if (!frameType.includes('pendulum') || img.width > img.height) return img
   const height = Math.max(1, Math.round(img.height * PENDULUM_ART_VISIBLE))

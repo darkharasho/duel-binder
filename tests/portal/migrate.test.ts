@@ -5,6 +5,7 @@ import { catalogChanges } from '../../workers/portal/src/catalogFeed'
 import { userScope } from '../../workers/portal/src/scope'
 import { getChecklist } from '../../src/main/repo/sets'
 import { SHARED_SET_NAME, seedPokemon } from '../fixtures/pokemon'
+import { seedOnePiece } from '../fixtures/onePiece'
 
 function freshDb(): Database.Database {
   const db = new Database(':memory:')
@@ -130,7 +131,7 @@ function serverBefore12(): Database.Database {
   const db = freshDb()
   runSteps(db, [
     ...MIGRATIONS.filter((m) => m.version <= 18),
-    ...SERVER_STEPS.filter((s) => !['server-12', 'server-13', 'server-14', 'server-16', 'server-18', 'server-21', 'server-23', 'server-26', 'server-27', 'server-28'].includes(s.name))
+    ...SERVER_STEPS.filter((s) => !['server-12', 'server-13', 'server-14', 'server-16', 'server-18', 'server-21', 'server-23', 'server-26', 'server-27', 'server-28', 'server-35'].includes(s.name))
   ])
   db.exec(`
     INSERT INTO users (id, discord_id, username, created_at, updated_at) VALUES (1, 'd1', 'one', 'x', 'x');
@@ -376,7 +377,7 @@ describe('server-14 (pokemon_set_art in the change feed)', () => {
     const old = freshDb()
     runSteps(old, [
       ...MIGRATIONS.filter((m) => m.version <= 22),
-      ...SERVER_STEPS.filter((s) => s.name !== 'server-14')
+      ...SERVER_STEPS.filter((s) => s.name !== 'server-14' && s.name !== 'server-35')
     ])
     migrateServer(old)
     for (const db of [fresh, old]) {
@@ -494,5 +495,29 @@ describe('server-34 (email sign-in)', () => {
     const rows = db.prepare('SELECT email, password_hash FROM sign_ins').all() as { email: unknown; password_hash: unknown }[]
     expect(rows.length).toBeGreaterThan(0)
     for (const r of rows) expect(r).toEqual({ email: null, password_hash: null })
+  })
+})
+
+describe('server-35 feeds onepiece_cards', () => {
+  it('stamps the rows and tombstones deletes for game op', () => {
+    const db = freshDb()
+    migrateServer(db)
+    seedOnePiece(db)
+    for (const t of ['onepiece_cards', 'onepiece_images']) {
+      const stamps = db.prepare(`SELECT catalog_seq AS s FROM ${t}`).all() as { s: number }[]
+      expect(stamps.length, t).toBeGreaterThan(0)
+      for (const r of stamps) expect(r.s, t).toBeGreaterThan(0)
+    }
+    db.prepare('DELETE FROM onepiece_images').run()
+    db.prepare('DELETE FROM onepiece_cards').run()
+    expect(
+      (db.prepare('SELECT tbl, game FROM catalog_tombstones ORDER BY seq').all() as { tbl: string; game: string }[])
+        .filter((r) => r.tbl.startsWith('onepiece_'))
+    ).toEqual([
+      { tbl: 'onepiece_images', game: 'op' },
+      { tbl: 'onepiece_images', game: 'op' },
+      { tbl: 'onepiece_cards', game: 'op' }
+    ])
+    db.close()
   })
 })

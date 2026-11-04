@@ -18,6 +18,7 @@ import {
   verifyAppleSignIn
 } from './auth'
 import { cardTotal, planCardMerge } from './mergePlan'
+import { bindTesterInvites } from './testers'
 import { findAccount, refreshLegacyDiscordId, type DiscordProfile, type Identity } from './signIns'
 
 /** How long the merge screen has to confirm a merge. */
@@ -144,6 +145,7 @@ export async function beginLink(
     ).run(id.provider, id.subject, userId, nowIso, extra.email ?? null)
     refreshLegacyDiscordId(db, userId)
     const profile = id.provider === 'discord' ? extra.profile : undefined
+    if (profile) bindTesterInvites(db, userId, profile.username)
     db.prepare(
       `UPDATE users SET display_name = COALESCE(display_name, ?), avatar = COALESCE(avatar, ?),
          updated_at = ? WHERE id = ?`

@@ -275,6 +275,12 @@ function moveSignIns(
     .prepare('SELECT provider, subject FROM sign_ins WHERE user_id = ? ORDER BY provider, subject')
     .all(a.closed) as Identity[]
   db.prepare('UPDATE sign_ins SET user_id = ? WHERE user_id = ?').run(a.survivor, a.closed)
+  // Tester rows follow the sign-ins. Undoing a merge doesn't move them back: the owner re-adds
+  // them by hand. A game the survivor already holds keeps its own row (the closed account's row stays until the hold's purge deletes that account).
+  db.prepare('UPDATE OR IGNORE game_testers SET user_id = ? WHERE user_id = ?').run(
+    a.survivor,
+    a.closed
+  )
   const theirs = db
     .prepare('SELECT refresh_token FROM apple_tokens WHERE user_id = ?')
     .get(a.closed) as { refresh_token: string } | undefined

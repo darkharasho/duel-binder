@@ -10,6 +10,9 @@ import type {
 import type { CatalogChangesResponse } from '../../src/shared/catalogFeed'
 import { addUser, seededServerDb, memoryBucket, noPrintingArt, noPrices } from './helpers'
 import { seedPokemon } from '../fixtures/pokemon'
+import { seedOnePiece } from '../fixtures/onePiece'
+import { addEntry } from '../../src/main/repo/collection'
+import { userScope } from '../../workers/portal/src/scope'
 
 const BASE = 'https://portal.test'
 const NOW = new Date('2026-10-24T12:00:00.000Z')
@@ -183,5 +186,104 @@ describe('v0.20 client against the multi-game portal', () => {
 
     // The Pokémon entry is exactly as it was: same server_seq, not deleted.
     expect(pkmRows()).toEqual(pkmBefore)
+  })
+})
+
+/** A v0.20 client on a tester's account: One Piece is in `me`, but this client never asks for it. */
+describe('old client on a tester account', () => {
+  it('sees only Yu-Gi-Oh! and leaves the One Piece entry untouched', async () => {
+    const db = await seededServerDb()
+    const op = seedOnePiece(db)
+    const luffy = addUser(db, '1', 'luffy')
+    db.prepare("INSERT INTO game_testers (game, user_id) VALUES ('op', ?)").run(luffy)
+    db.prepare(
+      "INSERT INTO sessions (token_hash, user_id, kind, created_at, expires_at) VALUES (?, ?, 'desktop', ?, ?)"
+    ).run(
+      createHash('sha256').update('luffy-desktop').digest('hex'),
+      luffy,
+      NOW.toISOString(),
+      '2099-01-01T00:00:00.000Z'
+    )
+    const deps = {
+      db,
+      assets: { fetch: async () => new Response('nope', { status: 404 }) },
+      images: memoryBucket(),
+      printingArt: noPrintingArt,
+      prices: noPrices,
+      env: {
+        PUBLIC_URL: BASE,
+        SITE_URL: 'https://site.test',
+        DISCORD_CLIENT_ID: 'c',
+        DISCORD_CLIENT_SECRET: 's',
+        ADMIN_TOKEN: 'a',
+        PRICE_WORKER_URL: 'https://prices.test',
+        ADMIN_DISCORD_ID: OWNER_DISCORD
+      },
+      now: () => NOW,
+      fetch: (() => {
+        throw new Error('no network')
+      }) as unknown as typeof fetch
+    } as unknown as AppDeps
+    const send = (path: string, init: RequestInit = {}): Promise<Response> =>
+      handle(
+        new Request(BASE + path, {
+          ...init,
+          headers: { 'content-type': 'application/json', authorization: 'Bearer luffy-desktop' }
+        }),
+        deps
+      )
+    addEntry(
+      db,
+      { printingId: op.printingIds[0], imageId: op.imageIds[0], quantity: 3 },
+      NOW,
+      userScope(luffy, 'op')
+    )
+    const opRows = (): unknown[] =>
+      db.prepare("SELECT * FROM collection_entries WHERE game = 'op' ORDER BY id").all()
+    const before = opRows()
+    expect(before).toHaveLength(1)
+
+    const ygo = db
+      .prepare(
+        `SELECT p.id, p.pkey, i.image_id AS imageId FROM card_printings p
+         JOIN card_images i ON i.card_id = p.card_id
+         WHERE p.game = 'ygo' AND p.language = 'en' ORDER BY p.id, i.sort_order LIMIT 1`
+      )
+      .get() as Printing
+    const y: WireEntry = {
+      uid: crypto.randomUUID(),
+      pkey: ygo.pkey,
+      imageId: ygo.imageId,
+      quantity: 1,
+      notes: '',
+      createdAt: T0,
+      updatedAt: T0,
+      deletedAt: null
+    }
+
+    // Push: the Yu-Gi-Oh! entry is applied.
+    const pushed = await send('/api/sync/push', { method: 'POST', body: JSON.stringify({ entries: [y] }) })
+    expect(((await pushed.json()) as { results: PushResult[] }).results).toEqual([
+      { uid: y.uid, status: 'applied' }
+    ])
+    // Pull: Yu-Gi-Oh! only, with the cursor past the One Piece seq.
+    const pulled = (await (await send('/api/sync/pull?cursor=0')).json()) as PullResponse
+    expect(pulled.entries.map((e) => e.uid)).toEqual([y.uid])
+
+    // Price changes: nothing of One Piece, even with a price on its printing.
+    db.prepare('INSERT INTO intl_prices (printing_id, price, listing_count, checked_at) VALUES (?, ?, 1, ?)')
+      .run(op.printingIds[0], 9.5, T1)
+    db.prepare('INSERT INTO intl_prices (printing_id, price, listing_count, checked_at) VALUES (?, ?, 1, ?)')
+      .run(ygo.id, 1.5, T1)
+    const prices = (await (await send('/api/sync/price-changes?since=0')).json()) as PriceChangesResponse
+    expect(prices.prices.map((x) => x.pkey)).toEqual([ygo.pkey])
+
+    // Catalog feed: no One Piece rows and no game field.
+    const feedText = await (await send('/api/catalog/changes?since=0')).text()
+    expect(feedText).not.toContain('Monkey.D.Luffy')
+    expect(feedText).not.toContain('onepiece_')
+    expect(feedText).not.toContain('"game"')
+
+    expect(opRows()).toEqual(before)
   })
 })

@@ -330,7 +330,7 @@ export async function rpcRoute(req: Request, deps: AppDeps, channel: string): Pr
   if (!Object.hasOwn(HANDLERS, channel)) return json({ error: 'unknown-channel' }, 404)
   // The game comes from the caller and is checked against what they may use; unknown names fail too.
   const asked = req.headers.get(GAME_HEADER) || 'ygo'
-  const game = gamesFor(deps, user.id).find((g) => g === asked)
+  const game = gamesFor(deps, user.id, asked).find((g) => g === asked)
   if (!game) return json({ error: 'game-not-allowed' }, 403)
 
   let body: unknown

@@ -84,6 +84,7 @@ export function entryPrice(
   // intl_prices holds eBay prices for every language; European printings with no eBay price fall back to the English twin as an estimate.
   // eBay and YGOPRODeck prices are Yu-Gi-Oh! only for now: another game's unpriced copy has no price
   // and no source, never a YGOPRODeck label or an eBay "checking" that never comes.
+  // Kind A: YGOPRODeck/set-price fallbacks are Yu-Gi-Oh only; 'op' is market-only and takes the non-ygo path.
   const ygo = r.p_game === 'ygo'
   const marketOnly = marketOnlyGame(r.p_game)
   const market = english || marketOnly ? ((r.market_price as number | null) ?? null) : null
@@ -357,11 +358,14 @@ export function getFacets(db: SqlDb, scope: Scope = LOCAL): Facets {
         .all() as { v: string }[]
     ).map((r) => r.v)
   const owned = new Set(distinct('p.language'))
-  const pkm = scopeGame(db, scope) === 'pkm'
+  const game = scopeGame(db, scope)
+  const pkm = game === 'pkm'
+  // These three are Yu-Gi-Oh columns; 'op' gets its own facets in step 2.
+  const ygo = game === 'ygo'
   return {
-    cardTypes: pkm ? [] : distinct('c.type'),
-    attributes: pkm ? [] : distinct('c.attribute'),
-    archetypes: pkm ? [] : distinct('c.archetype'),
+    cardTypes: ygo ? distinct('c.type') : [],
+    attributes: ygo ? distinct('c.attribute') : [],
+    archetypes: ygo ? distinct('c.archetype') : [],
     setNames: distinct('p.set_name'),
     rarities: distinct('p.set_rarity'),
     languages: LANGUAGES.map((l) => l.code).filter((code) => owned.has(code)),

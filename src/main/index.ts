@@ -38,7 +38,7 @@ import { createAccountService } from './cloud/account'
 import { createMainErrorReports, goneMessage } from './errorReports'
 import { describeError, type ErrorDetails } from '@shared/errorReports'
 import { createCloudClient } from './cloud/client'
-import { GAME_IDS, type GameId } from '@shared/games'
+import { GAMES, GAME_IDS, isGameId, type GameId } from '@shared/games'
 import { setMeta } from './db/meta'
 import type { FingerprintStore } from './scan/fingerprints'
 import { createFingerprintStore } from './scan/fingerprints'
@@ -72,7 +72,8 @@ app.setPath(
 const captureDir = !app.isPackaged ? process.env['YGO_CAPTURE_DIR'] : undefined
 const fakeData = !app.isPackaged && (process.env['YGO_FAKE_DATA'] === '1' || !!captureDir)
 /** The game to capture, in a profile scripts/site/shots.sh filled with both games' catalogs. */
-const captureGame: GameId = process.env['YGO_CAPTURE_GAME'] === 'pkm' ? 'pkm' : 'ygo'
+const captureEnv = process.env['YGO_CAPTURE_GAME']
+const captureGame: GameId = isGameId(captureEnv) ? captureEnv : 'ygo'
 if (captureDir) app.commandLine.appendSwitch('force-device-scale-factor', '2')
 // Capture uses its own profile so it never collides with a running dev session's instance lock.
 if (fakeData)
@@ -340,11 +341,13 @@ async function bootstrap(): Promise<void> {
   // One store per game; they are tiny until something downloads into them.
   const fingerprints: Record<GameId, FingerprintStore> = {
     ygo: createFingerprintStore({ dir: join(userData, 'scan'), portal, game: 'ygo' }),
-    pkm: createFingerprintStore({ dir: join(userData, 'scan'), portal, game: 'pkm' })
+    pkm: createFingerprintStore({ dir: join(userData, 'scan'), portal, game: 'pkm' }),
+    op: createFingerprintStore({ dir: join(userData, 'scan'), portal, game: 'op' })
   }
   /** Re-downloads the files of the games this account can see (a game it can't has no file for it). */
   const refreshFingerprints = (): void => {
     for (const game of account.games()) {
+      if (!GAMES[game].features.scan) continue
       void fingerprints[game].refresh({ force: true }).catch(() => {})
     }
   }

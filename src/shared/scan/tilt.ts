@@ -26,6 +26,7 @@ export interface TiltModel {
 /** A catalog rarity's finish: a Yu-Gi-Oh! rarity's family, or a Pokémon version without its stamp. */
 export function tiltFinish(game: GameId, rarity: string): string {
   if (game === 'ygo') return rarityFamily(rarity)
+  // op: step 4 gives One Piece its own finishes; the rules below are Pokémon's.
   if (/reverse/i.test(rarity)) return 'Reverse Holofoil'
   if (/pattern$/i.test(rarity)) return rarity
   if (/^Mirror\b/i.test(rarity)) return rarity

@@ -91,7 +91,8 @@ const PKM_WINDOWS: readonly Box[] = [
   [0.097, 0.156, 0.9, 0.524]
 ]
 
-export const SCAN_PROFILES: Record<GameId, ScanProfile> = {
+// The Record<'ygo' | 'pkm'> part lists the games that have a scan profile today.
+export const SCAN_PROFILES: Record<'ygo' | 'pkm', ScanProfile> & Partial<Record<GameId, ScanProfile>> = {
   ygo: {
     game: 'ygo',
     artBoxes: Object.values(ART_BOXES),
@@ -152,5 +153,7 @@ export const SCAN_PROFILES: Record<GameId, ScanProfile> = {
 }
 
 export function scanProfile(game: GameId): ScanProfile {
-  return SCAN_PROFILES[game]
+  const profile = SCAN_PROFILES[game]
+  if (!profile) throw new Error(`No scan profile for ${game}`)
+  return profile
 }

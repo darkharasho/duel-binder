@@ -1,6 +1,7 @@
 import type { SqlDb } from '../db/sql'
 import type { BrowseCard, BrowseFacets, BrowseFilters, BrowsePage } from '../../shared/types'
 import { isLanguage, LANGUAGES, type Language } from '../../shared/languages'
+import { byGame, type GameId } from '../../shared/games'
 import { buildFtsQuery, escapeLike } from './cards'
 import { LOCAL, favouriteSql, scopeGame, type Scope } from './scope'
 import { pokemonFacets, pokemonSearch, pokemonWhere } from './pkmFilters'
@@ -94,9 +95,14 @@ const SORT_SQL: Record<BrowseFilters['sort'], string> = {
 const YGO_ONLY_SORTS = ['atk', 'def', 'level']
 
 /** A sort that doesn't exist on the game (or isn't known at all) sorts by name. */
-function sortSql(sort: string, game: string): string {
+function sortSql(sort: string, game: GameId): string {
   if (!Object.hasOwn(SORT_SQL, sort)) return SORT_SQL.name
-  if (game === 'pkm' ? YGO_ONLY_SORTS.includes(sort) : sort === 'hp') return SORT_SQL.name
+  const missing = byGame<(s: string) => boolean>(game, {
+    ygo: (s) => s === 'hp',
+    pkm: (s) => YGO_ONLY_SORTS.includes(s),
+    op: (s) => s === 'hp' || YGO_ONLY_SORTS.includes(s) // op: step 2 adds cost and power sorts
+  })
+  if (missing(sort)) return SORT_SQL.name
   return SORT_SQL[sort as BrowseFilters['sort']]
 }
 
@@ -173,6 +179,7 @@ function whereClause(
       `c.id IN (SELECT card_id FROM card_printings WHERE +game = ${scope.game} AND contributed = 0${lang})`
     )
   }
+  // Level is a Yu-Gi-Oh filter; 'op' sends none, so the extra clause never fires for it.
   if (!pkm && f.levelMin !== undefined) {
     where.push('COALESCE(c.level, c.linkval) >= ?')
     params.push(f.levelMin)
@@ -282,12 +289,15 @@ export function browseFacets(db: SqlDb, scope: Scope = LOCAL, language?: Languag
       `SELECT DISTINCT ${c} AS v FROM cards WHERE +game = ${scope.game} AND ${c} IS NOT NULL AND ${c} <> ''
        ORDER BY ${c}`
     )
-  const pkm = scopeGame(db, scope) === 'pkm'
+  const game = scopeGame(db, scope)
+  const pkm = game === 'pkm'
+  // These four are Yu-Gi-Oh columns; 'op' gets its own facets in step 2.
+  const ygo = game === 'ygo'
   return {
-    cardTypes: pkm ? [] : col('type'),
-    attributes: pkm ? [] : col('attribute'),
-    races: pkm ? [] : col('race'),
-    archetypes: pkm ? [] : col('archetype'),
+    cardTypes: ygo ? col('type') : [],
+    attributes: ygo ? col('attribute') : [],
+    races: ygo ? col('race') : [],
+    archetypes: ygo ? col('archetype') : [],
     setNames: distinct(
       `SELECT DISTINCT set_name AS v FROM card_printings WHERE +game = ${scope.game} AND contributed = 0${lang}
        ORDER BY set_name`

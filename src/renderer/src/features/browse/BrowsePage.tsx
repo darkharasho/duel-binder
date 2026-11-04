@@ -33,7 +33,7 @@ import {
   favouritesChip,
   sortOptions
 } from '@/lib/filters'
-import type { SortOption } from '@/lib/filters'
+import { HIDDEN_SORTS, type SortOption } from '@/lib/filters'
 import { useFavourites } from '@/lib/favourites'
 import { formatUsd } from '@/lib/format'
 import { useGame } from '@/lib/game'
@@ -60,9 +60,7 @@ const SORTS = [
 /** The game's sorts: ATK, DEF and Level are Yu-Gi-Oh!'s, HP is Pokémon's. */
 const sortsFor = (game: GameId): SortOption<BrowseSort>[] =>
   sortOptions<BrowseSort>(
-    SORTS.filter((s) =>
-      game === 'pkm' ? !['atk', 'def', 'level'].includes(s.value) : s.value !== 'hp'
-    )
+    SORTS.filter((s) => !HIDDEN_SORTS[game].includes(s.value))
   )
 
 const OWNED = [

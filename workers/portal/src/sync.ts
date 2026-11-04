@@ -185,7 +185,8 @@ export function applyPush(
   const applyOne = (e: WireEntry): PushResult => {
     const printing = findPrinting.get(e.imageId, e.pkey) as Printing | undefined
     // Never 'rejected' for a game the user can't use yet: that would make the client drop the uid.
-    if (!printing || !games.includes(printing.game)) return { uid: e.uid, status: 'unknown-printing' }
+    if (!printing || !games.includes(printing.game))
+      return { uid: e.uid, status: 'unknown-printing' }
     touched.add(printing.game)
 
     const existing = byUid.get(e.uid) as EntryRow | undefined
@@ -385,8 +386,10 @@ export async function syncRoute(req: Request, deps: AppDeps, path: string): Prom
 
   // The game named by `game` (default Yu-Gi-Oh!), checked against the user's games as RPC does.
   const asked = new URL(req.url).searchParams.get('game') || 'ygo'
-  const games = gamesFor(deps, user.id)
-  const game = games.find((g) => g === asked)
+  // Pushes name printings of any game, so they read the full list; the rest only check `asked`.
+  let every: GameId[] | undefined
+  const games = (): GameId[] => (every ??= gamesFor(deps, user.id))
+  const game = gamesFor(deps, user.id, asked).find((g) => g === asked)
   if (!game) return json({ error: 'game-not-allowed' }, 403)
 
   try {
@@ -422,7 +425,7 @@ export async function syncRoute(req: Request, deps: AppDeps, path: string): Prom
       if (Array.isArray(raw) && raw.length > MAX_PUSH) return json({ error: 'too-many' }, 413)
       const now = deps.now()
       const entries = checkPush(body, now)
-      const { results, wroteLive } = applyPush(deps.db, user.id, entries, now, games)
+      const { results, wroteLive } = applyPush(deps.db, user.id, entries, now, games())
       if (wroteLive) await deps.prices.soon()
       return json({ results })
     }
@@ -431,14 +434,14 @@ export async function syncRoute(req: Request, deps: AppDeps, path: string): Prom
       const raw = (body as { entries?: unknown } | null)?.entries
       if (Array.isArray(raw) && raw.length > MAX_PUSH) return json({ error: 'too-many' }, 413)
       const entries = checkWishPush(body, deps.now())
-      return json({ results: applyWishPush(deps.db, user.id, entries, games) })
+      return json({ results: applyWishPush(deps.db, user.id, entries, games()) })
     }
 
     if (path === 'favourites-push') {
       const raw = (body as { entries?: unknown } | null)?.entries
       if (Array.isArray(raw) && raw.length > MAX_PUSH) return json({ error: 'too-many' }, 413)
       const entries = checkFavouritePush(body, deps.now())
-      return json({ results: applyFavouritePush(deps.db, user.id, entries, games) })
+      return json({ results: applyFavouritePush(deps.db, user.id, entries, games()) })
     }
 
     if (path === 'binders-push' || path === 'binder-edits-push') {
@@ -448,8 +451,8 @@ export async function syncRoute(req: Request, deps: AppDeps, path: string): Prom
       return json({
         results:
           path === 'binders-push'
-            ? applyBinderPush(deps.db, user.id, checkBinderPush(body, now), games)
-            : applyBinderEditPush(deps.db, user.id, checkBinderEditPush(body, now), games)
+            ? applyBinderPush(deps.db, user.id, checkBinderPush(body, now), games())
+            : applyBinderEditPush(deps.db, user.id, checkBinderEditPush(body, now), games())
       })
     }
 
@@ -464,7 +467,7 @@ export async function syncRoute(req: Request, deps: AppDeps, path: string): Prom
       return json(result)
     }
     if (pkeys.length > MAX_PULL) return json({ error: 'too-many' }, 413)
-    return json(pricesFor(deps.db, pkeys, games))
+    return json(pricesFor(deps.db, pkeys, games()))
   } catch (e) {
     if (e instanceof CollectionError) return json({ error: e.message }, 400)
     throw e

@@ -3,7 +3,10 @@ import type { FilterDef } from '@shared/games'
 /** The filter fields behind each of the games' range filters (GameDef.filters, kind 'range'). */
 export const RANGE_FIELDS = {
   level: { min: 'levelMin', max: 'levelMax' },
-  hp: { min: 'hpMin', max: 'hpMax' }
+  hp: { min: 'hpMin', max: 'hpMax' },
+  cost: { min: 'costMin', max: 'costMax' },
+  power: { min: 'powerMin', max: 'powerMax' },
+  counter: { min: 'counterMin', max: 'counterMax' }
 } as const
 
 export type RangeKey = keyof typeof RANGE_FIELDS

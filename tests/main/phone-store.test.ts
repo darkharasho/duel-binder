@@ -15,6 +15,7 @@ import { PHONE_FORMAT } from '../../src/phone/data/phoneSchema'
 import { createPhoneStore, type PhoneStore } from '../../src/phone/data/store'
 import { inProcessPortal, PORTAL, SERVER_NOW } from './cloudHelpers'
 import { seedPokemon } from '../fixtures/pokemon'
+import { GAMES } from '../../src/shared/games'
 import { withOwnerOnlyPokemon } from '../fixtures/ownerOnlyGame'
 
 withOwnerOnlyPokemon()
@@ -651,6 +652,9 @@ describe('phone store', () => {
   })
 
   it("refresh pulls each game's fingerprints", async () => {
+    // Pokémon is open to everyone in the product, so its file is a public download. The suite's
+    // owner-only stand-in would (rightly) hide it from this anonymous fetch.
+    GAMES.pkm.access = 'everyone'
     portal.serverDb.close()
     portal = await inProcessPortal({ ADMIN_DISCORD_ID: 'discord-1-alice' })
     userId = portal.addUser('alice')
@@ -873,6 +877,11 @@ describe('phone store', () => {
     clock = new Date(SERVER_NOW.getTime() + 3_600_000)
     expect(await store.updateCatalog()).toBe(true)
     expect(pkmCards()).toBe(2)
+    // The owner also sees One Piece, which has no catalog yet: a row here keeps its emptiness
+    // from re-opening the daily limit, so the check below is about Pokémon alone.
+    db.prepare(
+      "INSERT INTO cards (id, game, name, type, frame_type, race, \"desc\", updated_at) VALUES (?, 'op', 'Luffy', 'Leader', 'op', '', '', '2026-10-29')"
+    ).run(2 ** 39 + 1)
 
     // Once it has rows, the daily limit holds again.
     requests = []

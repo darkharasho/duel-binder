@@ -253,7 +253,7 @@ const ENTRY_REFS: Record<string, [count: number, kind: string]> = {
     'admin stats: live rows for the counts; all rows incl. tombstones for the storage row count'
   ],
   'workers/portal/src/account.ts': [2, 'account deletion: every row of the deleted user, tombstones included'],
-  'src/main/catalog/apply.ts': [4, FK],
+  'src/main/catalog/apply.ts': [5, FK],
   'src/main/catalog/switch.ts': [
     4,
     'live rows for the census; all rows incl. tombstones for the dangling check and pruning (FK)'

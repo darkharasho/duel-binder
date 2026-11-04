@@ -138,6 +138,19 @@ export interface CollectionFilters {
   pkmRarities?: string[]
   hpMin?: number
   hpMax?: number
+  /** One Piece only. */
+  opColors?: string[]
+  opCardTypes?: string[]
+  opAttributes?: string[]
+  opTraits?: string[]
+  opRarities?: string[]
+  opBlocks?: string[]
+  costMin?: number
+  costMax?: number
+  powerMin?: number
+  powerMax?: number
+  counterMin?: number
+  counterMax?: number
   /** Only the cards the owner hearted. Never applied to a friend's collection: favourites are private. */
   favourites?: boolean
   sort: SortKey
@@ -170,6 +183,19 @@ export interface BrowseFilters {
   pkmRarities?: string[]
   hpMin?: number
   hpMax?: number
+  /** One Piece only. */
+  opColors?: string[]
+  opCardTypes?: string[]
+  opAttributes?: string[]
+  opTraits?: string[]
+  opRarities?: string[]
+  opBlocks?: string[]
+  costMin?: number
+  costMax?: number
+  powerMin?: number
+  powerMax?: number
+  counterMin?: number
+  counterMax?: number
   sort: BrowseSort
   dir: 'asc' | 'desc'
   offset?: number
@@ -217,6 +243,13 @@ export interface BrowseFacets {
   pkmTypes?: string[]
   pkmStages?: string[]
   pkmRarities?: string[]
+  /** One Piece only. */
+  opColors?: string[]
+  opCardTypes?: string[]
+  opAttributes?: string[]
+  opTraits?: string[]
+  opRarities?: string[]
+  opBlocks?: string[]
 }
 
 export interface Facets {
@@ -231,6 +264,13 @@ export interface Facets {
   pkmTypes?: string[]
   pkmStages?: string[]
   pkmRarities?: string[]
+  /** One Piece only. */
+  opColors?: string[]
+  opCardTypes?: string[]
+  opAttributes?: string[]
+  opTraits?: string[]
+  opRarities?: string[]
+  opBlocks?: string[]
 }
 
 export interface CollectionStats {

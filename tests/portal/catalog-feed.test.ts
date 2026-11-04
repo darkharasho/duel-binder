@@ -8,6 +8,7 @@ import { addUser, seededServerDb, memoryBucket, noPrintingArt } from './helpers'
 import { migrateServer } from '../../workers/portal/src/migrate'
 import { PKM_ID_MIN } from '../../src/shared/games'
 import { seedPokemon, SHARED_SET_NAME } from '../fixtures/pokemon'
+import { seedOnePiece } from '../fixtures/onePiece'
 import { withOwnerOnlyPokemon } from '../fixtures/ownerOnlyGame'
 
 withOwnerOnlyPokemon()
@@ -485,6 +486,27 @@ describe('per-game catalog feed', () => {
     expect(details).toHaveLength(2)
     for (const c of details) {
       expect('row' in c && 'image_url' in c.row && 'local_name' in c.row).toBe(true)
+    }
+  })
+
+  it('game=op from 0 returns exactly the One Piece rows, and no other feed holds one', async () => {
+    const { cardIds, printingIds, imageIds } = seedOnePiece(db)
+    const op = (await feed('?since=0&limit=5000&game=op')).changes
+    const count = (t: string): number => op.filter((c) => c.table === t).length
+    expect(op.every((c) => 'row' in c)).toBe(true)
+    expect(count('cards')).toBe(cardIds.length)
+    expect(count('card_images')).toBe(imageIds.length)
+    expect(count('card_printings')).toBe(printingIds.length)
+    expect(count('sets')).toBe(1)
+    expect(count('onepiece_cards')).toBe(1)
+    expect(count('onepiece_images')).toBe(imageIds.length)
+    expect(op).toHaveLength(1 + 2 + 2 + 1 + 1 + 2)
+    for (const c of op) if ('row' in c && c.row.game !== undefined) expect(c.row.game).toBe('op')
+
+    for (const qs of ['?since=0&limit=5000&game=pkm', '?since=0&limit=5000&game=ygo', '?since=0&limit=5000']) {
+      const other = (await feed(qs)).changes
+      expect(other.some((c) => c.table === 'onepiece_cards' || c.table === 'onepiece_images'), qs).toBe(false)
+      expect(other.some((c) => 'row' in c && c.row.game === 'op'), qs).toBe(false)
     }
   })
 

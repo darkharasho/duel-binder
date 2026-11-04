@@ -283,6 +283,39 @@ function pokemonSetArtStep(): ServerStep {
   }
 }
 
+/** Frozen, as of server-35: the One Piece tables desktop step 40 creates. */
+const SERVER_35_ONEPIECE_CARDS: FrozenTable = {
+  name: 'onepiece_cards',
+  key: ['card_id'],
+  columns: [
+    'card_id', 'number', 'colors', 'card_type', 'cost', 'power', 'counter', 'life', 'attribute',
+    'traits', 'effect', 'trigger', 'block_icon'
+  ]
+}
+const SERVER_35_ONEPIECE_IMAGES: FrozenTable = {
+  name: 'onepiece_images',
+  key: ['image_id'],
+  columns: ['image_id', 'bandai_id']
+}
+
+/**
+ * The One Piece tables join the change feed: `catalog_seq`, its index and the seq triggers, whose
+ * tombstones are One Piece ones. Desktop step 40 runs first and the tables start empty, so there is
+ * nothing to backfill.
+ */
+function onePieceStep(): ServerStep {
+  return {
+    name: 'server-35',
+    sql: [SERVER_35_ONEPIECE_CARDS, SERVER_35_ONEPIECE_IMAGES]
+      .flatMap((t) => [
+        `ALTER TABLE ${t.name} ADD COLUMN catalog_seq INTEGER NOT NULL DEFAULT 0;`,
+        `CREATE INDEX ix_${t.name}_catalog_seq ON ${t.name}(catalog_seq);`,
+        ...seqTriggers(t, "'op'")
+      ])
+      .join('\n')
+  }
+}
+
 /** Frozen, as of server-16: server-13's `pokemon_cards` entry plus `art_twin_id`. */
 const SERVER_16_POKEMON_CARDS: FrozenTable = {
   name: 'pokemon_cards',
@@ -620,6 +653,21 @@ CREATE TABLE provider_claims (ticket_hash TEXT PRIMARY KEY, provider TEXT NOT NU
   challenge TEXT, kind TEXT NOT NULL CHECK (kind IN ('web','desktop')), expires_at TEXT NOT NULL);
 CREATE TABLE auth_limits (kind TEXT NOT NULL, key TEXT NOT NULL, created_at TEXT NOT NULL);
 CREATE INDEX ix_auth_limits ON auth_limits(kind, key, created_at);
+`
+  },
+  onePieceStep(),
+  {
+    // The game tester list: who sees a 'testers' game besides the owner. A row is pending until
+    // its Discord username signs in (or is linked) and binds it to that account.
+    name: 'server-36',
+    sql: `
+CREATE TABLE game_testers (id INTEGER PRIMARY KEY, game TEXT NOT NULL,
+  discord_username TEXT, user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+  CHECK (discord_username IS NOT NULL OR user_id IS NOT NULL));
+CREATE UNIQUE INDEX ux_game_testers_user ON game_testers(game, user_id) WHERE user_id IS NOT NULL;
+CREATE UNIQUE INDEX ux_game_testers_pending ON game_testers(game, discord_username COLLATE NOCASE) WHERE user_id IS NULL;
+CREATE INDEX ix_game_testers_user_id ON game_testers(user_id);
+INSERT INTO game_testers (game, discord_username, user_id) VALUES ('op', 'dubgrumble', NULL);
 `
   }
 ]

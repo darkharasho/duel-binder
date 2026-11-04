@@ -4,6 +4,7 @@ import path from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { directImageSources } from '../../src/main/dev/directSources'
 import { createImageCache } from '../../src/main/images/cache'
+import { onePieceImageId } from '../../src/shared/games/ids'
 import { createLimiter } from '../../src/main/images/limiter'
 import type { SqlDb } from '../../src/main/db/sql'
 
@@ -57,6 +58,12 @@ describe('directImageSources', () => {
       expect(fetchFn).not.toHaveBeenCalled()
     }
   )
+
+  it('op ids get no YGOPRODeck url', () => {
+    const sources = directImageSources({ db: dbWith(null), version: '1.0.0' })
+    expect(sources.card('small', onePieceImageId('en', 'OP01-001'))).toBeNull()
+    expect(sources.card('small', 12345)?.url).toContain('images.ygoprodeck.com')
+  })
 
   it('refuses printing art outside Yugipedia and TCGplayer', async () => {
     const { cache, fetchFn } = make(dbWith(null), async () => 'https://evil.example/x.png')

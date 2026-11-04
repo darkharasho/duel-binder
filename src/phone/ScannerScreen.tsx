@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { englishSetName } from '@shared/setNames'
+import { printingNoun } from '@shared/games'
 import {
   ArrowRightIcon,
   CopyIcon,
@@ -22,7 +23,7 @@ import { useScanHub } from '@/features/scan/ScanHub'
 import { useScanPingSetting } from '@/lib/useScanPing'
 import type { PickerOption } from '@/features/scan/SearchPicker'
 import type { ScanRow } from '@/features/scan/session'
-import { scanProfile } from '@shared/scan/profiles'
+import { SCAN_PROFILES } from '@shared/scan/profiles'
 import { useGame } from '@/lib/game'
 import { formatUsd } from '@/lib/format'
 import { cn } from '@/lib/utils'
@@ -118,7 +119,7 @@ function LastScan({ row, burst }: { row: ScanRow; burst: number }): React.JSX.El
         {choices.length > 1 && (
           <button
             type="button"
-            aria-label={`Next ${row.game === 'pkm' ? 'version' : 'printing'} of ${row.name}`}
+            aria-label={`Next ${printingNoun(row.game ?? 'ygo')} of ${row.name}`}
             disabled={session.committing}
             onClick={cycle}
             className="flex h-12 w-11 flex-col items-center justify-center gap-0.5 rounded-xl text-[11px] text-white/75 active:bg-white/[0.08] disabled:opacity-50"
@@ -202,7 +203,7 @@ export function ScannerScreen({
   const { session } = useScanHub()
   const pickers = useScanPickers()
   // A game priced by version rather than Yu-Gi-Oh!'s rarities has no rarity for new scans.
-  const rarities = scanProfile(useGame().game).rarityLook
+  const rarities = SCAN_PROFILES[useGame().game]?.rarityLook ?? false
   const [reviewing, setReviewing] = useState(false)
   const [streaming, setStreaming] = useState(false)
   const [pingOn, setPingOn] = useScanPingSetting()

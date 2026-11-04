@@ -50,12 +50,14 @@ export type BinderEditAction = 'add' | 'remove'
 
 export const RULE_FIELDS: Record<GameId, readonly RuleField[]> = {
   ygo: ['name', 'cardType', 'frameType', 'race', 'attribute', 'level', 'archetype', 'set', 'rarity'],
-  pkm: ['name', 'artist', 'category', 'energyType', 'stage', 'set', 'rarity']
+  pkm: ['name', 'artist', 'category', 'energyType', 'stage', 'set', 'rarity'],
+  op: ['name', 'set', 'rarity']
 }
 
 export const GOALS: Record<GameId, readonly BinderGoal[]> = {
   ygo: ['none', 'card', 'art', 'printing'],
-  pkm: ['none', 'card', 'printing']
+  pkm: ['none', 'card', 'printing'],
+  op: ['none', 'card', 'printing']
 }
 
 const isObj = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v)

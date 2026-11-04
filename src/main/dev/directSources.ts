@@ -10,7 +10,7 @@ import {
   setImageUrl,
   YUGIPEDIA_IMAGE_PREFIX
 } from '../../shared/imageSources'
-import { PKM_ID_MIN } from '../../shared/games'
+import { gameOfId } from '../../shared/games'
 import type { ImageSources } from '../images/cache'
 import { printingImageKey } from '../images/cache'
 import { findPokemonSetArtUrl, findSetImageUrl } from '../repo/sets'
@@ -45,7 +45,10 @@ export function directImageSources(opts: {
   }
   return {
     card(size, id) {
-      if (id < PKM_ID_MIN) return { url: imageUrl(size, id) }
+      const game = gameOfId(id)
+      // Step 2 adds One Piece art sources.
+      if (game === 'op') return null
+      if (game === 'ygo') return { url: imageUrl(size, id) }
       const row = opts.db
         .prepare(
           'SELECT pc.image_url FROM card_images ci JOIN pokemon_cards pc ON pc.card_id = ci.card_id WHERE ci.image_id = ?'

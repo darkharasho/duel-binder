@@ -7,7 +7,7 @@ import { cuesOver, type RarityCues } from '@shared/scan/rarity'
 import type { Language } from '@shared/languages'
 import type { CardLanguage } from '@shared/scan/language'
 import { tellPokemonLanguage, type PokemonTextLanguage } from '@shared/scan/pokemonLanguage'
-import { scanProfile } from '@shared/scan/profiles'
+import { SCAN_PROFILES } from '@shared/scan/profiles'
 import {
   ABSENT_MS,
   ART_MAX_DISTANCE,
@@ -762,7 +762,8 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
     ): Promise<void> => {
       const stale = (): boolean =>
         !live || latest.current.setKey !== o.setKey || engineRef.current !== engine
-      const profile = scanProfile(o.game)
+      const profile = SCAN_PROFILES[o.game]
+      if (!profile) return
       setOutline(null)
       let best: ScanOutcome | null = null
       for (let i = 0; i < PHOTO_FRAMES && !stale(); i++) {
@@ -846,7 +847,9 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
       if (l.busy || l.stopped || !engine || !readyRef.current) return
       if (Date.now() < l.retryAt || o.setPrintings === undefined) return
       if (!video || video.readyState < 2) return
-      const profile = scanProfile(o.game)
+      // A game without a scan profile (One Piece) has nothing to scan: the loop idles.
+      const profile = SCAN_PROFILES[o.game]
+      if (!profile) return
       l.busy = true
       try {
         if (l.needsInit) {

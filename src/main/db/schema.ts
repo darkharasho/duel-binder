@@ -516,6 +516,41 @@ export const SCHEMA_V39 = `
 DELETE FROM printing_art WHERE url IS NULL;
 `
 
+/**
+ * One Piece (hidden game 'op'), in the Yu-Gi-Oh!-like card model on the shared tables:
+ * - `cards`: one row per number per region, id `onePieceCardId('en', 'OP05-119')`, `name` the card's
+ *   name. Alternate arts never get a card row.
+ * - `card_images`: one row per Bandai entry, `card_id` pointing at the number's card. `OP05-119` is
+ *   the base art, `OP05-119_p1` and `_p2` the parallels.
+ * - `card_printings`: one row per set appearance x version. The version goes in `set_rarity` (the
+ *   English pkey is `en|card_id|set_code|set_rarity`, so it is the only column that keeps two versions
+ *   under one set_code apart): the rarity code, plus the version label in parentheses when the
+ *   printing isn't the base art ('SR', 'SR (Alternate Art)', 'SEC (Manga)', 'SP'). `variant` stays
+ *   NULL. `set_rarity` must be unique per card x set_code ('SR (Alternate Art 2)' for a second one).
+ * - collection entries: pair `printing_id` with `image_id`, as Yu-Gi-Oh!'s do.
+ * `onepiece_cards` holds only game text. `colors`, `attribute` and `traits` are JSON arrays.
+ * `number` is the printed base number and isn't unique (Japanese has its own card per number).
+ * `onepiece_images.bandai_id` is what the /img proxy builds Bandai's image URL from.
+ * The server adds its change-feed columns in server-35.
+ */
+const ONEPIECE_TABLES = `
+CREATE TABLE onepiece_cards (card_id INTEGER PRIMARY KEY REFERENCES cards(id),
+  number TEXT NOT NULL, colors TEXT NOT NULL DEFAULT '[]', card_type TEXT NOT NULL,
+  cost INTEGER, power INTEGER, counter INTEGER, life INTEGER,
+  attribute TEXT NOT NULL DEFAULT '[]', traits TEXT NOT NULL DEFAULT '[]',
+  effect TEXT, trigger TEXT, block_icon INTEGER);
+CREATE INDEX ix_onepiece_cards_number ON onepiece_cards(number);
+CREATE TABLE onepiece_images (image_id INTEGER PRIMARY KEY REFERENCES card_images(image_id),
+  bandai_id TEXT NOT NULL);
+`
+
+export const SCHEMA_V40 = `${ONEPIECE_TABLES}
+${rollupTriggers('onepiece_cards', ['card_id', 'colors', 'card_type', 'attribute', 'traits'])}
+`
+
+/** The server keeps rollups out, as V24 does. */
+export const SCHEMA_V40_SERVER = ONEPIECE_TABLES
+
 /** A printing's rarity as shown: "Starlight Rare (Extended Art)" for a labelled variant. */
 export const RARITY_LABEL = "p.set_rarity || COALESCE(' (' || p.variant || ')', '')"
 
@@ -559,5 +594,6 @@ export const MIGRATIONS: Migration[] = [
   { version: 36, sql: SCHEMA_V36, server: false },
   { version: 37, sql: SCHEMA_V37, server: false },
   { version: 38, sql: SCHEMA_V38 },
-  { version: 39, sql: SCHEMA_V39 }
+  { version: 39, sql: SCHEMA_V39 },
+  { version: 40, sql: SCHEMA_V40, server: SCHEMA_V40_SERVER }
 ]

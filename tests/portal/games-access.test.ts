@@ -119,7 +119,7 @@ describe('per-user game access', () => {
   })
 
   it('/api/me lists Pokémon only for the ADMIN_DISCORD_ID account', async () => {
-    expect((await meFor(co)).games).toEqual(['ygo', 'pkm'])
+    expect((await meFor(co)).games).toEqual(['ygo', 'pkm', 'op'])
     expect((await meFor(cb)).games).toEqual(['ygo'])
   })
 
@@ -247,5 +247,44 @@ describe('per-user game access', () => {
         expect(await res.json()).toEqual({ error: 'game-not-allowed' })
       }
     })
+  })
+})
+
+describe('/api/me games list', () => {
+  // The file-wide fixture makes Pokémon owner-only; here it is open, as shipped.
+  beforeEach(() => {
+    GAMES.pkm.access = 'everyone'
+  })
+  it('gives the owner every game and anyone else only the open ones', async () => {
+    const db = await seededServerDb()
+    const deps: AppDeps = {
+      db,
+      assets: { fetch: async () => new Response('nope', { status: 404 }) },
+      images: memoryBucket(),
+      printingArt: noPrintingArt,
+      prices: noPrices,
+      env: {
+        PUBLIC_URL: BASE,
+        SITE_URL: 'https://site.test',
+        DISCORD_CLIENT_ID: 'c',
+        DISCORD_CLIENT_SECRET: 's',
+        ADMIN_TOKEN: 'admin',
+        PRICE_WORKER_URL: 'https://prices.test',
+        ADMIN_DISCORD_ID: OWNER_DISCORD
+      },
+      now: () => NOW,
+      fetch: (async () => new Response('?', { status: 404 })) as unknown as typeof fetch
+    }
+    const ownerId = addUser(db, OWNER_DISCORD, 'owner')
+    const otherId = addUser(db, '123', 'other')
+    const gamesOf = async (userId: number, token: string): Promise<string[]> => {
+      db.prepare(
+        'INSERT INTO sessions (token_hash, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)'
+      ).run(await sha256Hex(token), userId, NOW.toISOString(), new Date(NOW.getTime() + 3600_000).toISOString())
+      const res = await handle(new Request(BASE + '/api/me', { headers: { cookie: `session=${token}` } }), deps)
+      return ((await res.json()) as { games: string[] }).games
+    }
+    expect(await gamesOf(ownerId, 'o')).toEqual(['ygo', 'pkm', 'op'])
+    expect(await gamesOf(otherId, 'x')).toEqual(['ygo', 'pkm'])
   })
 })

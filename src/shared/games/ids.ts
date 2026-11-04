@@ -3,6 +3,9 @@ import type { GameId } from './types'
 /** Pokémon card ids live at or above this; Yu-Gi-Oh! passcodes are far below it. */
 export const PKM_ID_MIN = 2 ** 40
 
+/** One Piece card ids live in [2^39, 2^40): above every Yu-Gi-Oh! id, below Pokémon's. */
+export const ONEPIECE_ID_MIN = 2 ** 39
+
 /**
  * Yu-Gi-Oh! cards printed with no passcode that YGOPRODeck doesn't list (character tokens and the
  * like) have ids in [TOKEN_ID_MIN, TOKEN_ID_MAX): a Yugipedia page id above TOKEN_ID_MIN, the
@@ -79,6 +82,33 @@ export function pokemonId(sourceId: string): number {
   return Number(lo + (h % (2n ** 53n - lo)))
 }
 
+/**
+ * A stable numeric id for a One Piece row: the first 52 bits of SHA-256 of `op:${sourceId}`
+ * (7 bytes read, `>> 4`, as in pokemonId), taken mod 2^39 and added to 2^39, so it lands in
+ * [2^39, 2^40).
+ *
+ * The source-id convention (permanent once shipped):
+ * - A card is one number per region: `onePieceCardId('en', 'OP05-119')`, i.e.
+ *   `onePieceId('en/OP05-119')`. Alternate arts, manga, SP and TR share the card, so they share
+ *   its number and game text.
+ * - An image is one Bandai entry: `onePieceImageId('en', 'OP05-119')` is the base entry
+ *   (`'en/OP05-119#img'`) and `onePieceImageId('en', 'OP05-119_p1')` a parallel
+ *   (`'en/OP05-119_p1#img'`). The `#img` suffix follows scripts/catalog/pokemon/write.ts.
+ * Callers use the two wrappers, never the strings.
+ */
+export function onePieceId(sourceId: string): number {
+  const d = sha256(new TextEncoder().encode(`op:${sourceId}`))
+  let h = 0n
+  for (let i = 0; i < 7; i++) h = (h << 8n) | BigInt(d[i])
+  h >>= 4n
+  const lo = 2n ** 39n
+  return Number(lo + (h % lo))
+}
+
+export const onePieceCardId = (region: string, number: string): number => onePieceId(`${region}/${number}`)
+export const onePieceImageId = (region: string, bandaiId: string): number =>
+  onePieceId(`${region}/${bandaiId}#img`)
+
 export function gameOfId(id: number): GameId {
-  return id >= PKM_ID_MIN ? 'pkm' : 'ygo'
+  return id >= PKM_ID_MIN ? 'pkm' : id >= ONEPIECE_ID_MIN ? 'op' : 'ygo'
 }

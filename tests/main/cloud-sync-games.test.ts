@@ -13,7 +13,9 @@ import {
 import { addEntry } from '../../src/main/repo/collection'
 import { localScope } from '../../src/main/repo/scope'
 import { getMeta, setMeta } from '../../src/main/db/meta'
+import { gamesOf } from '../../src/shared/cloud'
 import type { Me, PriceChangesResponse, PullResponse, PulledEntry } from '../../src/shared/cloud'
+import { activeGame } from '../../src/main/cloud/activeGame'
 import type { GameId } from '../../src/shared/games'
 import { seedPokemon } from '../fixtures/pokemon'
 import { seededDb } from './helpers'
@@ -224,5 +226,14 @@ describe('per-game syncOnce', () => {
       'https://portal.test/api/sync/price-changes?since=5&game=ygo',
       'https://portal.test/api/sync/price-changes?since=6&game=pkm'
     ])
+  })
+
+  it('a me with op is read by gamesOf', () => {
+    expect(gamesOf({ games: ['ygo', 'op', 'xyz'] } as unknown as Me)).toEqual(['ygo', 'op'])
+    setMeta(db, 'active_game', 'op')
+    expect(activeGame(db, gamesOf({ games: ['ygo', 'op'] } as unknown as Me))).toBe('op')
+    // The tester list loses the account: op falls out of me.games, and the device returns to Yu-Gi-Oh!.
+    expect(activeGame(db, gamesOf({ games: ['ygo', 'pkm'] } as unknown as Me))).toBe('ygo')
+    expect(getMeta(db, 'active_game')).toBe('ygo')
   })
 })

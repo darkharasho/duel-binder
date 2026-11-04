@@ -11,7 +11,7 @@ import { FriendsPage } from '@/features/friends/FriendsPage'
 import { SetsPage } from '@/features/sets/SetsPage'
 import { WishlistPage } from '@/features/wishlist/WishlistPage'
 import { useFriendsAvailable } from '@/lib/friends'
-import { useGame } from '@/lib/game'
+import { pageInGame, useGame } from '@/lib/game'
 
 export interface AddInitial {
   card: CardSearchResult
@@ -73,8 +73,11 @@ export function PageSwitch({
   rip: React.ReactNode
   settings: React.ReactNode
 }): React.JSX.Element {
-  const { page, entryId, friendsKey, onNavigate, openAdd } = pages
-  const { game } = useGame()
+  const { entryId, friendsKey, onNavigate, openAdd } = pages
+  const { game, def } = useGame()
+  // A page the shown game lacks (Scan on One Piece) falls back to the dashboard in this same render;
+  // the shell's effect then moves `page` itself.
+  const page = pageInGame(pages.page, def) ? pages.page : 'dashboard'
   return (
     <Fragment key={game}>
       {page === 'dashboard' && (

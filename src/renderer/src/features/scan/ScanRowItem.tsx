@@ -8,7 +8,7 @@ import {
   TriangleAlertIcon,
   XIcon
 } from 'lucide-react'
-import { GAMES } from '@shared/games'
+import { GAMES, printingNoun } from '@shared/games'
 import { languageInfo, type Language } from '@shared/languages'
 import { printingChip, printingParts, printingSearch, printingText } from '@shared/printingLabel'
 import { englishSetName } from '@shared/setNames'
@@ -191,7 +191,7 @@ export const ScanRowItem = memo(function ScanRowItem({
                 <OptionLabel option={picked} compact />
               ) : (
                 <span className="truncate text-muted-foreground">
-                  {`Choose a ${row.game === 'pkm' ? 'version' : 'printing'}`}
+                  {`Choose a ${printingNoun(row.game ?? 'ygo')}`}
                 </span>
               )}
               <ChevronDownIcon aria-hidden className="size-3.5 shrink-0 opacity-60" />

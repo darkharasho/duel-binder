@@ -21,7 +21,7 @@ export interface CatalogTable {
   games: GameId[]
 }
 
-const BOTH: GameId[] = ['ygo', 'pkm']
+const ALL: GameId[] = ['ygo', 'pkm', 'op']
 const YGO: GameId[] = ['ygo']
 
 export const CATALOG_TABLES: CatalogTable[] = [
@@ -32,13 +32,13 @@ export const CATALOG_TABLES: CatalogTable[] = [
       'id', 'name', 'type', 'frame_type', 'race', 'attribute', 'level', 'linkval', 'atk', 'def',
       'archetype', 'desc', 'tcgplayer_price', 'updated_at', 'game'
     ],
-    games: BOTH
+    games: ALL
   },
   {
     name: 'card_images',
     key: ['image_id'],
     columns: ['image_id', 'card_id', 'sort_order', 'missing_from_api', 'game'],
-    games: BOTH
+    games: ALL
   },
   {
     name: 'card_printings',
@@ -47,7 +47,7 @@ export const CATALOG_TABLES: CatalogTable[] = [
       'card_id', 'set_name', 'set_code', 'set_rarity', 'set_rarity_code', 'set_price',
       'missing_from_api', 'language', 'tcg_product_id', 'variant', 'market_price', 'game'
     ],
-    games: BOTH
+    games: ALL
   },
   {
     name: 'sets',
@@ -56,7 +56,7 @@ export const CATALOG_TABLES: CatalogTable[] = [
       'game', 'language', 'set_name', 'set_code', 'tcg_date', 'image_url', 'image_key', 'list_rows',
       'unmatched_rows', 'series'
     ],
-    games: BOTH
+    games: ALL
   },
   {
     name: 'pack_art',
@@ -106,6 +106,21 @@ export const CATALOG_TABLES: CatalogTable[] = [
     key: ['language', 'set_name', 'kind', 'sort_order'],
     columns: ['language', 'set_name', 'kind', 'sort_order', 'image_url', 'image_key'],
     games: ['pkm']
+  },
+  {
+    name: 'onepiece_cards',
+    key: ['card_id'],
+    columns: [
+      'card_id', 'number', 'colors', 'card_type', 'cost', 'power', 'counter', 'life', 'attribute',
+      'traits', 'effect', 'trigger', 'block_icon'
+    ],
+    games: ['op']
+  },
+  {
+    name: 'onepiece_images',
+    key: ['image_id'],
+    columns: ['image_id', 'bandai_id'],
+    games: ['op']
   }
 ]
 

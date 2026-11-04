@@ -80,6 +80,7 @@ export function resetBorrowedArt(): void {
  * known. Waiting matters: asking for the card's own missing art first would fail it to a placeholder.
  */
 export function useBorrowedArt(imageId: number): BorrowedArt | null | undefined {
+  // Kind A: borrowed art is Pokémon-only (twins); 'op' shows its own art.
   const possible = imageId > 0 && gameOfId(imageId) === 'pkm' && canRead()
   useEffect(() => {
     if (possible) start()

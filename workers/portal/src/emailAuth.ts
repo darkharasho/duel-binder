@@ -26,6 +26,7 @@ import { codeMessage, emailEnabled } from './emailSend'
 import { logServerError } from './errors'
 import { hashPassword, verifyPassword } from './password'
 import { takeLinkCode } from './link'
+import { bindTesterInvites } from './testers'
 import { claimKey, keepAppleToken, peekClaim, spendClaim, type ClaimRow } from './emailClaim'
 import {
   createAccount,
@@ -376,7 +377,11 @@ export function matchedAccount(
 }
 
 /** A confirmed, unexpired sign-up flow, or undefined. */
-export function confirmedSignup(db: SqlDb, ticketHash: string, nowIso: string): FlowRow | undefined {
+export function confirmedSignup(
+  db: SqlDb,
+  ticketHash: string,
+  nowIso: string
+): FlowRow | undefined {
   return db
     .prepare(
       `SELECT ${FLOW_COLUMNS} FROM email_flows WHERE ticket_hash = ? AND purpose = 'signup' AND confirmed = 1 AND expires_at > ?`
@@ -395,7 +400,9 @@ export async function attachFromFlow(
   id: Identity,
   nowIso: string,
   /** Runs inside the same transaction once the email is attached (a throw undoes the attach). */
-  inTransaction?: (userId: number) => void
+  inTransaction?: (userId: number) => void,
+  /** The Discord username just reported, for a Discord identity: binds that name's tester invites. */
+  discordUsername?: string
 ): Promise<number> {
   const { db } = deps
   const ticketHash = await sha256Hex(ticket)
@@ -410,6 +417,7 @@ export async function attachFromFlow(
     if (userId !== matchedAccount(db, flow.email)?.userId) return other()
     attachEmail(db, userId, flow.email, flow.password_hash ?? '', nowIso)
     db.prepare('DELETE FROM email_flows WHERE ticket_hash = ?').run(ticketHash)
+    if (id.provider === 'discord' && discordUsername) bindTesterInvites(db, userId, discordUsername)
     inTransaction?.(userId)
     return userId
   })()
@@ -562,7 +570,9 @@ async function linkDiscordStep(deps: AppDeps, body: Record<string, unknown>): Pr
     deps,
     text(body, 'ticket'),
     { provider: 'discord', subject: taken.subject },
-    deps.now().toISOString()
+    deps.now().toISOString(),
+    undefined,
+    taken.profile.username
   )
   return { next: 'signed-in', userId, created: false }
 }
@@ -657,6 +667,8 @@ async function claimStep(
       'INSERT INTO sign_ins (provider, subject, user_id, created_at, email) VALUES (?, ?, ?, ?, ?)'
     ).run(live.provider, live.subject, live.userId, nowIso, live.email)
     keepAppleToken(db, live, live.userId, nowIso)
+    if (live.provider === 'discord' && live.profile.username)
+      bindTesterInvites(db, live.userId, live.profile.username)
     refreshLegacyDiscordId(db, live.userId)
     spendClaim(db, live.ticketHash)
     return { next: 'signed-in', userId: live.userId, created: false }
@@ -684,6 +696,8 @@ async function claimSeparateStep(
       nowIso
     )
     keepAppleToken(db, claim, userId, nowIso)
+    if (claim.provider === 'discord' && claim.profile.username)
+      bindTesterInvites(db, userId, claim.profile.username)
     spendClaim(db, claim.ticketHash)
     return { next: 'signed-in', userId, created }
   })()

@@ -416,10 +416,46 @@ describe('the writer', () => {
     expect(one('SELECT set_code FROM card_printings WHERE card_id = ?', id)).toEqual({ set_code: '2018SM-FR 6' })
   })
 
-  it('keeps a card without art on no art, never the English image', async () => {
+  it('keeps a card with no art and no English print on no art', async () => {
     await refreshPokemon(db, sources(), { langs: ['en', 'fr'] })
     expect(one('SELECT image_url, art_twin_id FROM pokemon_cards WHERE card_id = ?', pokemonId('fr/sv03-230'))).toEqual({
       image_url: null,
+      art_twin_id: null
+    })
+  })
+
+  it("links a card without art to its English print, labelled English, and reports it", async () => {
+    const bare = { ...CHARIZARD_FR, image: undefined }
+    const reports = await refreshPokemon(
+      db,
+      sources({
+        cards: async (lang) => {
+          if (lang === 'en') return [{ ...CHARIZARD_EN, image: 'https://assets.tcgdex.net/en/sv/sv03/125' }]
+          return lang === 'fr' ? europeanCards('fr', [bare, ENERGY_FR]) : []
+        }
+      }),
+      { langs: ['en', 'fr'] }
+    )
+    expect(one('SELECT image_url, art_twin_id FROM pokemon_cards WHERE card_id = ?', pokemonId('fr/sv03-125'))).toEqual({
+      image_url: null,
+      art_twin_id: pokemonId('en/sv03-125')
+    })
+    expect(reports.find((r) => r.lang === 'fr')!.artTwins).toEqual({ linked: 1, 'no twin': 1 })
+  })
+
+  it('borrows nothing from an English card of the same id that is another card', async () => {
+    const odd = card('sv03-125', 'Évoli', { category: 'Pokémon', dexId: [133], rarity: 'Commune' })
+    await refreshPokemon(
+      db,
+      sources({
+        cards: async (lang) => {
+          if (lang === 'en') return [{ ...CHARIZARD_EN, image: 'https://assets.tcgdex.net/en/sv/sv03/125' }]
+          return lang === 'fr' ? europeanCards('fr', [odd]) : []
+        }
+      }),
+      { langs: ['en', 'fr'] }
+    )
+    expect(one('SELECT art_twin_id FROM pokemon_cards WHERE card_id = ?', pokemonId('fr/sv03-125'))).toEqual({
       art_twin_id: null
     })
   })

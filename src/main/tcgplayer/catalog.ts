@@ -341,16 +341,22 @@ export function saveTcgVariants(db: Database.Database): { saved: number; added: 
   return { saved: seen.size, added }
 }
 
-/** Language letters of the same printing in other countries ("SR14-DE023" for "SR14-EN023"). */
-const OTHER_LANGUAGES = ['DE', 'FR', 'IT', 'PT', 'SP', 'JP', 'KR', 'AE']
+/**
+ * Language letters of the same printing in other countries ("SR14-DE023" for "SR14-EN023"). Europe
+ * shares the English numbering; Asia often numbers a set its own way (DUAD-AE081 is Blue Flame
+ * Swordsman, DUAD-EN081 Buio the Dawn's Light).
+ */
+const EUROPE = ['DE', 'FR', 'IT', 'PT', 'SP']
+const ASIA = ['JP', 'KR', 'AE']
 const ENGLISH_CODE = /^([A-Z0-9]+)-EN([A-Z]?\d+)$/
 
 /**
  * Adds the English printings TCGplayer sells under a card number no YGOPRODeck printing has
  * (YGOPRODeck files a few, like Droll & Lock Bird's SR14-EN023, under an alternate-art id and leaves
- * them off the card). The card is the one TCGplayer's name (minus its notes) or the same number in
- * another language points to; numbers that point to no card or to two are skipped. The set is the
- * one the other cards of that set code are in, else TCGplayer's set name. Each rarity's plain
+ * them off the card). The card is the one TCGplayer's name (minus its notes) and the same number in
+ * Europe point to; only when neither points anywhere, the one the number holds in Asia. Numbers that
+ * point to no card or to two are skipped. The set is the one the other cards of that set code are
+ * in, else TCGplayer's set name. Each rarity's plain
  * product becomes the printing and its other products art variants, as in saveTcgVariants.
  * Adds every printing's id to `seen`; returns how many rows are new.
  */
@@ -380,10 +386,13 @@ function saveMissingPrintings(db: Database.Database, seen: Set<number>): number 
   if (byCode.size === 0) return 0
 
   const named = db.prepare("SELECT id FROM cards WHERE game = 'ygo' AND name = ? COLLATE NOCASE")
-  const abroad = db.prepare(
-    `SELECT DISTINCT card_id FROM card_printings
-     WHERE game = 'ygo' AND language <> 'en' AND set_code IN (${OTHER_LANGUAGES.map(() => '?').join(', ')}) COLLATE NOCASE`
-  )
+  const abroad = (langs: string[]): Database.Statement =>
+    db.prepare(
+      `SELECT DISTINCT card_id FROM card_printings
+       WHERE game = 'ygo' AND language <> 'en' AND set_code IN (${langs.map(() => '?').join(', ')}) COLLATE NOCASE`
+    )
+  const inEurope = abroad(EUROPE)
+  const inAsia = abroad(ASIA)
   const setNames = db.prepare(
     "SELECT DISTINCT set_name FROM card_printings WHERE game = 'ygo' AND language = 'en' AND set_code LIKE ? AND set_name <> ''"
   )
@@ -414,12 +423,18 @@ function saveMissingPrintings(db: Database.Database, seen: Set<number>): number 
   let added = 0
   for (const [code, products] of byCode) {
     const [, prefix, number] = ENGLISH_CODE.exec(code) as RegExpExecArray
-    const cards = new Set<number>()
+    // The card TCGplayer names and the one the same number holds in Europe, which must agree;
+    // failing both, the one it holds in Asia.
     const name = products[0].name.replace(/\s*\([^()]*\)/g, '').trim()
-    for (const c of named.all(name) as { id: number }[]) cards.add(c.id)
-    const others = OTHER_LANGUAGES.map((l) => `${prefix}-${l}${number}`)
-    for (const c of abroad.all(...others) as { card_id: number }[]) cards.add(c.card_id)
-    if (cards.size !== 1) continue
+    const found = new Set((named.all(name) as { id: number }[]).map((c) => c.id))
+    const holders = (stmt: Database.Statement, langs: string[]): number[] =>
+      (stmt.all(...langs.map((l) => `${prefix}-${l}${number}`)) as { card_id: number }[]).map(
+        (c) => c.card_id
+      )
+    for (const id of holders(inEurope, EUROPE)) found.add(id)
+    if (found.size === 0) for (const id of holders(inAsia, ASIA)) found.add(id)
+    const cards = [...found]
+    if (cards.length !== 1) continue
     const [cardId] = cards
 
     const sets = (setNames.all(`${prefix}-EN%`) as { set_name: string }[]).map((r) => r.set_name)

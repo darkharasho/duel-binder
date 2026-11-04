@@ -59,6 +59,11 @@ const FINGERPRINTS_TIMEOUT_MS = 20_000
 const ART_PROGRESS_MS = 400
 /** How often a game with no fingerprint file looks for one while scanning. */
 const ART_RECHECK_MS = 60_000
+/**
+ * How often a game with a fingerprint file looks for a newer one while scanning, so a scanner left
+ * open for a stream picks up a catalog run's new art. The check of an unchanged file is a 304.
+ */
+const ART_UPDATE_CHECK_MS = 60 * 60_000
 const LOOKUP_TIMEOUT_MS = 30_000
 const LANGUAGE_TIMEOUT_MS = 20_000
 /**
@@ -406,8 +411,8 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
       }
       if (!live) return
       readyRef.current = true
-      // A newer file, once downloaded, goes to the engine between frames. With none yet, keep
-      // looking: the first one can be published while the scanner is open.
+      // A newer file, once downloaded, goes to the engine between frames. Keep looking while the
+      // scanner is open: every minute with none yet, hourly for a newer one.
       const refresh = async (): Promise<void> => {
         progressTimer = setInterval(() => {
           api.scan.fingerprintStatus(game).then(
@@ -424,7 +429,10 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
         if (!live) return
         setArtData(refreshed)
         if (refreshed?.updated) loop.current.needsInit = true
-        if (refreshed?.state !== 'ready') recheckTimer = setTimeout(refresh, ART_RECHECK_MS)
+        recheckTimer = setTimeout(
+          refresh,
+          refreshed?.state === 'ready' ? ART_UPDATE_CHECK_MS : ART_RECHECK_MS
+        )
       }
       await refresh()
     })()

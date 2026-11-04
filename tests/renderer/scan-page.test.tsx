@@ -919,6 +919,34 @@ describe('Scan page', () => {
     expect(engine.init).toHaveBeenCalledTimes(1)
   })
 
+  it('checks for a newer fingerprint file every hour while the scanner is open', async () => {
+    const old = new ArrayBuffer(8)
+    const fresh = new ArrayBuffer(16)
+    let file = old
+    const refreshFingerprints = vi.fn(async () => {
+      if (refreshFingerprints.mock.calls.length < 3) return { state: 'ready' as const, count: 1 }
+      file = fresh
+      return { state: 'ready' as const, count: 2, updated: true as const }
+    })
+    const engine = fakeEngine()
+    await renderScan(
+      { scan: { fingerprints: vi.fn(async () => file), refreshFingerprints } },
+      engine
+    )
+    await run(1000)
+    expect(refreshFingerprints).toHaveBeenCalledTimes(1)
+    // A ready file isn't rechecked every minute, only hourly.
+    await run(59 * 60_000)
+    expect(refreshFingerprints).toHaveBeenCalledTimes(1)
+    await run(60_000)
+    expect(refreshFingerprints).toHaveBeenCalledTimes(2)
+    expect(engine.init).toHaveBeenCalledTimes(1)
+    await run(60 * 60_000)
+    await run(100)
+    expect(refreshFingerprints).toHaveBeenCalledTimes(3)
+    expect(engine.init.mock.calls.at(-1)).toEqual([fresh, []])
+  })
+
   it('picking a set passes its image ids as candidates', async () => {
     const lob = {
       setName: 'Legend of Blue Eyes White Dragon',

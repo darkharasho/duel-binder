@@ -14,6 +14,7 @@ import type { TcGroup, TcPrice } from '../../scripts/catalog/pokemon/types'
 import { decodeImage } from '../../scripts/catalog/references'
 import { openDatabase } from '../../src/main/db/database'
 import { artHash } from '../../src/shared/scan/fingerprint'
+import { onePieceDonCardId } from '../../src/shared/games'
 import { hashHex } from '../../src/shared/scan/fingerprintRefs'
 
 const read = (name: string): string =>
@@ -218,19 +219,31 @@ describe('runOnePieceStep', () => {
     // Promos and cards with no product are written unpriced; an unmatched parallel waits.
     expect(row('EB01-043_p1')?.market_price).toBeNull()
     expect(row('EB04-061_p1')).toBeUndefined()
+    // The DON!! card, in its group's set, priced from its one (Foil) row.
+    expect(row('tcg:710859/Foil')).toEqual({
+      set_rarity_code: 'tcg:710859/Foil',
+      set_rarity: 'DON!! (Foil)',
+      tcg_product_id: 710859,
+      market_price: 5.55
+    })
+    expect(
+      work.prepare('SELECT name, "desc" FROM cards WHERE id = ?').get(onePieceDonCardId('en', 710859))
+    ).toEqual({ name: 'DON!! (Alternate Art) (Gold)', desc: '' })
     const r = out.report!
     expect(r).toMatchObject({
       series: 3,
-      printings: 10,
-      priced: 3,
+      printings: 11,
+      priced: 4,
       held: 1,
-      images: 11,
+      images: 12,
       tcgOnly: 4,
-      don: 1
+      don: 1,
+      donPriced: 1,
+      donHeld: 0
     })
     expect(r.perSet).toEqual([
       { setCode: 'OP15-EB04', printings: 1, priced: 0 },
-      { setCode: 'OP17', printings: 7, priced: 3 },
+      { setCode: 'OP17', printings: 8, priced: 4 },
       { setCode: 'P', printings: 2, priced: 0 }
     ])
     expect(r.notes).toContain('EB04-061_p2 is listed in OP15-EB04 and OP17; kept in OP17')
@@ -238,9 +251,9 @@ describe('runOnePieceStep', () => {
     const lines: string[] = []
     logOnePiece(r, (l) => lines.push(l))
     expect(lines[0]).toBe(
-      `One Piece en: 3 series, ${r.cards} cards, 10 printings (3 priced, 7 unpriced, 1 held), 11 images, 4 TCGplayer-only products skipped, 1 DON!! skipped, ${r.notes.length} notes`
+      `One Piece en: 3 series, ${r.cards} cards, 11 printings (4 priced, 7 unpriced, 1 held), 12 images, 4 TCGplayer-only products skipped, 1 DON!! cards (1 priced printings, 0 held), ${r.notes.length} notes`
     )
-    expect(lines).toContain('One Piece en OP17: 3/7 priced')
+    expect(lines).toContain('One Piece en OP17: 4/8 priced')
     for (const n of r.notes) expect(lines).toContain(`One Piece en: ${n}`)
   })
 

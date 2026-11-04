@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import type Database from 'better-sqlite3'
 import { afterEach, beforeEach, describe, expect, test } from 'vitest'
 import { parseCardList, parseSeriesList } from '../../scripts/catalog/onepiece/bandai'
+import type { DonCard } from '../../scripts/catalog/onepiece/don'
 import type { OpMatch } from '../../scripts/catalog/onepiece/match'
 import type { BandaiEntry } from '../../scripts/catalog/onepiece/types'
 import { HOLD_UNMATCHED_MS, writeOnePiece, type OnePieceReport, type OpPlan } from '../../scripts/catalog/onepiece/write'
@@ -13,7 +14,7 @@ import { runSync } from '../../src/main/sync/sync'
 import type { YgoClient } from '../../src/main/ygo/client'
 import type { ApiCard } from '../../src/main/ygo/mapCard'
 import { CATALOG_TABLES } from '../../src/shared/catalogTables'
-import { onePieceCardId, onePieceImageId } from '../../src/shared/games'
+import { onePieceCardId, onePieceDonCardId, onePieceDonImageId, onePieceImageId } from '../../src/shared/games'
 import fixture from '../fixtures/cardinfo.sample.json'
 import { seedPokemon } from '../fixtures/pokemon'
 
@@ -36,6 +37,10 @@ interface PlanIn {
   hashed?: string[]
   frozen?: string[]
   firstSeen?: Record<string, number>
+  don?: DonCard[]
+  /** DON!! product ids listed tonight; defaults to those of `don`. */
+  donListed?: number[]
+  donComplete?: boolean
 }
 
 function plan(p: PlanIn): OpPlan {
@@ -56,8 +61,26 @@ function plan(p: PlanIn): OpPlan {
     prices: new Map(Object.entries(p.prices ?? {}).map(([k, v]) => [Number(k), v])),
     hashed: new Set(p.hashed ?? p.entries.map((e) => e.bandaiId)),
     frozen: new Set(p.frozen ?? []),
-    firstSeen: new Map(Object.entries(p.firstSeen ?? {}))
+    firstSeen: new Map(Object.entries(p.firstSeen ?? {})),
+    don: {
+      cards: p.don ?? [],
+      listed: new Set(p.donListed ?? (p.don ?? []).map((d) => d.productId)),
+      complete: p.donComplete ?? true
+    }
   }
+}
+
+const PROMO_ID = SERIES[2].id
+const ACE: DonCard = {
+  productId: 593801, seriesId: OP17.id, name: 'DON!! (Ace)', description: 'Your Turn +1000',
+  versions: [
+    { code: 'tcg:593801/Normal', label: 'DON!!', price: 4.85 },
+    { code: 'tcg:593801/Foil', label: 'DON!! (Foil)', price: 13.16 }
+  ]
+}
+const GOLD: DonCard = {
+  productId: 482236, seriesId: PROMO_ID, name: 'DON!! (Gold)', description: null,
+  versions: [{ code: 'tcg:482236/Normal', label: 'DON!!', price: null }]
 }
 
 let dir: string
@@ -157,6 +180,63 @@ describe('writeOnePiece', () => {
       ['OP11-003_r1', 'RED Monkey.D.Luffy [ST-31]', 'UC (Reprint)', null, null]
     ])
     expect(r).toMatchObject({ printings: 2, priced: 1, held: 0 })
+  })
+
+  test('DON!! cards: a card per product, a printing per finish, TCGplayer art', () => {
+    const r = write({ entries: [fx('OP17-005')], don: [ACE, GOLD] })
+    const ace = onePieceDonCardId('en', 593801)
+    const gold = onePieceDonCardId('en', 482236)
+    expect(db.prepare(`SELECT id, name, type, "desc", frame_type FROM cards WHERE game = 'op' AND type = 'DON!!' ORDER BY name`).all()).toEqual([
+      { id: ace, name: 'DON!! (Ace)', type: 'DON!!', desc: 'Your Turn +1000', frame_type: 'op' },
+      { id: gold, name: 'DON!! (Gold)', type: 'DON!!', desc: '', frame_type: 'op' }
+    ])
+    expect(db.prepare('SELECT number, card_type, colors, effect FROM onepiece_cards WHERE card_id = ?').get(ace)).toEqual({
+      number: 'DON!!', card_type: 'DON!!', colors: '[]', effect: 'Your Turn +1000'
+    })
+    expect(db.prepare('SELECT card_id, sort_order FROM card_images WHERE image_id = ?').get(onePieceDonImageId('en', 593801))).toEqual({ card_id: ace, sort_order: 0 })
+    expect(db.prepare('SELECT bandai_id FROM onepiece_images WHERE image_id = ?').get(onePieceDonImageId('en', 593801))).toEqual({ bandai_id: 'tcg:593801' })
+    const don = printings().filter((p) => p.set_rarity_code.startsWith('tcg:'))
+    expect(don.map((p) => [p.set_rarity_code, p.card_id, p.set_name, p.set_code, p.set_rarity, p.tcg_product_id, p.market_price])).toEqual([
+      ['tcg:482236/Normal', gold, 'Promotion Cards', 'DON!!', 'DON!!', 482236, null],
+      ['tcg:593801/Foil', ace, 'THE WORLD’S STRONGEST WARRIORS [OP-17]', 'DON!!', 'DON!! (Foil)', 593801, 13.16],
+      ['tcg:593801/Normal', ace, 'THE WORLD’S STRONGEST WARRIORS [OP-17]', 'DON!!', 'DON!!', 593801, 4.85]
+    ])
+    // The promo set holds only a DON!! card tonight, and is written for it.
+    expect(db.prepare("SELECT set_code FROM sets WHERE game = 'op' ORDER BY set_code").all()).toEqual([{ set_code: 'OP17' }, { set_code: 'P' }])
+    expect(r).toMatchObject({ series: 2, cards: 3, printings: 4, priced: 2, images: 3, don: 2, donPriced: 2 })
+    expect(r.perSet).toEqual([{ setCode: 'OP17', printings: 3, priced: 2 }, { setCode: 'P', printings: 1, priced: 0 }])
+  })
+
+  test('DON!! rows: unchanged nights write nothing, prices move enough, names follow TCGplayer', () => {
+    write({ don: [ACE], entries: [] })
+    const before = db.prepare("SELECT * FROM card_printings WHERE game = 'op' ORDER BY id").all()
+    write({ don: [ACE], entries: [] }, NOW + DAY)
+    expect(db.prepare("SELECT * FROM card_printings WHERE game = 'op' ORDER BY id").all()).toEqual(before)
+    const moved: DonCard = { ...ACE, name: 'DON!! (Portgas.D.Ace)', versions: [{ ...ACE.versions[0], price: 6 }, ACE.versions[1]] }
+    write({ don: [moved], entries: [] }, NOW + 2 * DAY)
+    expect(printing('tcg:593801/Normal')!.market_price).toBe(6)
+    expect(printing('tcg:593801/Foil')!.market_price).toBe(13.16)
+    expect((db.prepare('SELECT name FROM cards WHERE id = ?').get(onePieceDonCardId('en', 593801)) as { name: string }).name).toBe('DON!! (Portgas.D.Ace)')
+  })
+
+  test('a DON!! product is flagged missing only when TCGplayer stops listing it on a complete night', () => {
+    write({ don: [ACE, GOLD], entries: [] })
+    const flags = (): number[] => printings().filter((p) => p.set_rarity_code.startsWith('tcg:')).map((p) => p.missing_from_api)
+    const goldImage = (): number =>
+      (db.prepare('SELECT missing_from_api AS m FROM card_images WHERE image_id = ?').get(onePieceDonImageId('en', 482236)) as { m: number }).m
+    // Held tonight (no price rows), still listed: kept as it is.
+    write({ don: [ACE], donListed: [593801, 482236], entries: [] }, NOW + DAY)
+    expect(flags()).toEqual([0, 0, 0])
+    // A TCGCSV group failed: nothing is flagged.
+    write({ don: [ACE], donComplete: false, entries: [] }, NOW + 2 * DAY)
+    expect(flags()).toEqual([0, 0, 0])
+    expect(goldImage()).toBe(0)
+    write({ don: [ACE], entries: [] }, NOW + 3 * DAY)
+    expect(flags()).toEqual([1, 0, 0])
+    expect(goldImage()).toBe(1)
+    write({ don: [ACE, GOLD], entries: [] }, NOW + 4 * DAY)
+    expect(flags()).toEqual([0, 0, 0])
+    expect(goldImage()).toBe(0)
   })
 
   test('labels never move, prices move enough', () => {
@@ -273,6 +353,7 @@ describe('writeOnePiece', () => {
     expect(Object.keys(before)).toContain('pokemon_cards')
     write({
       entries: [...TRIO, fx('OP17-001'), fx('OP17-019'), fx('EB04-061_p2'), fx('OP14-108_p3')],
+      don: [ACE, GOLD],
       matches: { 'OP17-005': [711499, null], 'OP17-005_p1': [712083, 'Manga'] },
       prices: { 711499: 0.25, 712083: 12 }
     })

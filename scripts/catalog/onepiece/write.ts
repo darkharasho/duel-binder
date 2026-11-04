@@ -1,8 +1,10 @@
 import type Database from 'better-sqlite3'
 import { movedEnough } from '../../../src/main/tcgplayer/prices'
-import { onePieceCardId, onePieceImageId } from '../../../src/shared/games'
+import { onePieceCardId, onePieceDonCardId, onePieceDonImageId, onePieceImageId } from '../../../src/shared/games'
 import { OP_CARD_TYPES } from '../../../src/shared/games/onePiece'
+import { OP_TCG_ART_RE, opTcgArtKey } from '../../../src/shared/imageSources'
 import type { TcGroup } from '../pokemon/types'
+import type { DonCard } from './don'
 import type { OpMatch } from './match'
 import type { BandaiEntry, BandaiSeries } from './types'
 import { entryKind } from './versions'
@@ -17,6 +19,8 @@ import { entryKind } from './versions'
  */
 
 const DAY_MS = 24 * 60 * 60 * 1000
+/** A DON!! card's onepiece_cards.number and its printings' set_code: it has no number of its own. */
+export const DON_NUMBER = 'DON!!'
 /** How long a parallel waits for a TCGplayer match before it is written as `<rarity> (Parallel)`. */
 export const HOLD_UNMATCHED_MS = 7 * DAY_MS
 
@@ -35,6 +39,11 @@ export interface OpPlan {
   frozen: Set<string>
   /** Bandai id to when the source cache first saw it. */
   firstSeen: Map<string, number>
+  /**
+   * Tonight's DON!! cards (donCards); `listed` holds every DON!! product seen, and `complete` says
+   * every TCGCSV group was read, so a stored DON!! product not listed is really gone. Absent: none.
+   */
+  don?: { cards: DonCard[]; listed: Set<number>; complete: boolean }
 }
 
 export interface OnePieceReport {
@@ -45,6 +54,9 @@ export interface OnePieceReport {
   /** Unmatched parallels waiting out HOLD_UNMATCHED_MS, with no printing yet. */
   held: number
   images: number
+  /** DON!! cards written, and their priced printings (both within the totals above). */
+  don: number
+  donPriced: number
   perSet: { setCode: string; printings: number; priced: number }[]
   notes: string[]
 }
@@ -92,22 +104,36 @@ function numbered(label: string, n: number): string {
 const unnumbered = (label: string): string => label.replace(/ \d+\)$/, ')').replace(/ \(\d+\)$/, '')
 
 /** Throws when two source strings give one id, over tonight's and the stored ones. */
-function checkIds(sources: Iterable<string>, idOf: (s: string) => number): void {
+function checkIds(sources: Iterable<string>, idOf: (s: string) => number, extra: [string, number][] = []): void {
   const seen = new Map<number, string>()
-  for (const s of [...new Set(sources)].sort(byBandaiId)) {
-    const id = idOf(s)
+  const pairs = [...[...new Set(sources)].sort(byBandaiId).map((s): [string, number] => [s, idOf(s)]), ...extra]
+  for (const [s, id] of pairs) {
     const other = seen.get(id)
     if (other !== undefined) throw new Error(`One Piece id collision: ${other} and ${s} → ${id}`)
     seen.set(id, s)
   }
 }
 
+/** The product id of a stored DON!! printing's code or image key (`tcg:593801/Foil`, `tcg:593801`); null for a Bandai id. */
+const donProduct = (code: string): number | null => {
+  const m = OP_TCG_ART_RE.exec(code.split('/')[0])
+  return m ? Number(m[1]) : null
+}
+
 export function writeOnePiece(work: Database.Database, plan: OpPlan, o: WriteOnePieceOpts): OnePieceReport {
   const cardIdOf = o.idOf?.card ?? ((n: string) => onePieceCardId('en', n))
   const imageIdOf = o.idOf?.image ?? ((b: string) => onePieceImageId('en', b))
-  const report: OnePieceReport = { series: 0, cards: 0, printings: 0, priced: 0, held: 0, images: 0, perSet: [], notes: [] }
-
   const seriesById = new Map(plan.series.map((s) => [s.id, s]))
+  const report: OnePieceReport = {
+    series: 0, cards: 0, printings: 0, priced: 0, held: 0, images: 0, don: 0, donPriced: 0, perSet: [], notes: []
+  }
+  const don = plan.don ?? { cards: [], listed: new Set<number>(), complete: true }
+  const donCards = don.cards.filter((d) => {
+    if (seriesById.has(d.seriesId)) return true
+    report.notes.push(`DON!! ${d.productId}: series ${d.seriesId} is not in the series list; skipped`)
+    return false
+  })
+
   const listed = [...plan.entries].sort((a, b) => byBandaiId(a.bandaiId, b.bandaiId))
   const written: BandaiEntry[] = []
   for (const e of listed) {
@@ -129,8 +155,20 @@ export function writeOnePiece(work: Database.Database, plan: OpPlan, o: WriteOne
 
   const storedNumbers = (work.prepare('SELECT number FROM onepiece_cards').all() as { number: string }[]).map((r) => r.number)
   const storedImages = work.prepare('SELECT image_id, bandai_id FROM onepiece_images').all() as { image_id: number; bandai_id: string }[]
-  checkIds([...listed.map((e) => e.number), ...storedNumbers], cardIdOf)
-  checkIds([...listed.map((e) => e.bandaiId), ...storedImages.map((r) => r.bandai_id)], imageIdOf)
+  // DON!! ids come from product ids (tonight's and the stored ones), in the same id range.
+  const donPids = [
+    ...new Set([...donCards.map((d) => d.productId), ...storedImages.map((r) => donProduct(r.bandai_id)).filter((x): x is number => x !== null)])
+  ].sort((x, y) => x - y)
+  checkIds(
+    [...listed.map((e) => e.number), ...storedNumbers.filter((n) => n !== DON_NUMBER)],
+    cardIdOf,
+    donPids.map((pid) => [`DON!! ${pid}`, onePieceDonCardId('en', pid)])
+  )
+  checkIds(
+    [...listed.map((e) => e.bandaiId), ...storedImages.map((r) => r.bandai_id).filter((b) => donProduct(b) === null)],
+    imageIdOf,
+    donPids.map((pid) => [opTcgArtKey(pid), onePieceDonImageId('en', pid)])
+  )
 
   const setByCode = work.prepare(
     "SELECT set_name, tcg_date FROM sets WHERE game = 'op' AND language = 'en' AND set_code = ?"
@@ -189,7 +227,7 @@ export function writeOnePiece(work: Database.Database, plan: OpPlan, o: WriteOne
     // Sets: inserted when absent, then frozen but for tcg_date. A set is found by its code, so a
     // renamed series keeps its first name.
     const setNameOf = new Map<string, string>()
-    const seriesWritten = new Set(written.map((e) => e.seriesId))
+    const seriesWritten = new Set([...written.map((e) => e.seriesId), ...donCards.map((d) => d.seriesId)])
     for (const s of plan.series) {
       if (!seriesWritten.has(s.id)) continue
       const date = plan.groupOf.get(s.id)?.publishedOn?.slice(0, 10) ?? null
@@ -221,6 +259,30 @@ export function writeOnePiece(work: Database.Database, plan: OpPlan, o: WriteOne
         effect: src.effect, trigger: src.trigger, block: src.block
       })
       report.cards++
+    }
+
+    // DON!! cards: one per product, its picture TCGplayer's (the image key names the product).
+    for (const d of donCards) {
+      const id = onePieceDonCardId('en', d.productId)
+      const desc = d.description ?? ''
+      const row = cardRow.get(id) as { name: string; type: string; desc: string } | undefined
+      if (!row) {
+        insertCard.run(id, d.name, DON_NUMBER, desc, o.nowIso)
+        cardsChanged = true
+      } else if (row.name !== d.name || row.type !== DON_NUMBER || row.desc !== desc) {
+        updateCard.run(d.name, DON_NUMBER, desc, o.nowIso, id)
+        cardsChanged = true
+      }
+      upsertDetails.run({
+        cardId: id, number: DON_NUMBER, colors: '[]', cardType: DON_NUMBER, cost: null, power: null, counter: null,
+        life: null, attribute: '[]', traits: '[]', effect: d.description, trigger: null, block: null
+      })
+      const imageId = onePieceDonImageId('en', d.productId)
+      upsertImage.run(imageId, id, 0)
+      insertBandaiId.run(imageId, opTcgArtKey(d.productId))
+      report.cards++
+      report.images++
+      report.don++
     }
 
     // Printings, loaded once: there is no index on set_rarity_code.
@@ -312,13 +374,46 @@ export function writeOnePiece(work: Database.Database, plan: OpPlan, o: WriteOne
       if (price !== null) report.priced++
     }
 
-    // Sticky: an entry Bandai no longer lists keeps its rows, flagged missing.
+    // DON!! printings: one per finish, keyed by product and finish.
+    for (const d of donCards) {
+      const cardId = onePieceDonCardId('en', d.productId)
+      const setName = setNameOf.get(d.seriesId)!
+      for (const v of d.versions) {
+        const p = existing.get(v.code)
+        let price = v.price
+        if (p) {
+          price = movedEnough(p.market_price, v.price) ? v.price : p.market_price
+          if (p.missing_from_api !== 0 || p.tcg_product_id !== d.productId || price !== p.market_price)
+            updatePrinting.run(0, d.productId, price, p.id)
+        } else {
+          const id = Number(insertPrinting.run(cardId, setName, DON_NUMBER, v.label, v.code, d.productId, price).lastInsertRowid)
+          existing.set(v.code, {
+            id, card_id: cardId, set_name: setName, set_code: DON_NUMBER, set_rarity: v.label, set_rarity_code: v.code,
+            tcg_product_id: d.productId, market_price: price, missing_from_api: 0
+          })
+        }
+        report.printings++
+        if (price !== null) {
+          report.priced++
+          report.donPriced++
+        }
+      }
+    }
+
+    // Sticky: an entry Bandai no longer lists keeps its rows, flagged missing. A DON!! product is
+    // gone when TCGplayer stops listing it, and only a night every group was read can say so.
+    const donWritten = new Set(donCards.flatMap((d) => d.versions.map((v) => v.code)))
+    const gone = (key: string): boolean => {
+      const pid = donProduct(key)
+      if (pid === null) return !listedIds.has(key)
+      return don.complete && !don.listed.has(pid) && !donWritten.has(key)
+    }
     for (const p of existing.values()) {
-      if (listedIds.has(p.set_rarity_code) || p.missing_from_api !== 0) continue
+      if (p.missing_from_api !== 0 || !gone(p.set_rarity_code)) continue
       updatePrinting.run(1, p.tcg_product_id, p.market_price, p.id)
     }
     for (const i of storedImages) {
-      if (!listedIds.has(i.bandai_id)) flagImage.run(i.image_id)
+      if (gone(i.bandai_id)) flagImage.run(i.image_id)
     }
 
     if (cardsChanged) work.exec(`INSERT INTO cards_fts(cards_fts) VALUES('rebuild')`)

@@ -4,7 +4,8 @@ import { describe, expect, test } from 'vitest'
 import { createLimiter, type GetJsonOpts } from '../../scripts/catalog/pokemon/http'
 import type { TcGroup } from '../../scripts/catalog/pokemon/types'
 import type { BandaiEntry, BandaiSeries } from '../../scripts/catalog/onepiece/types'
-import { opGroups, opPrices, opProducts } from '../../scripts/catalog/onepiece/tcgcsv'
+import { opGroups, opPrices, opProducts, type OpProduct } from '../../scripts/catalog/onepiece/tcgcsv'
+import { donCards, donName } from '../../scripts/catalog/onepiece/don'
 import { entryKind, mapGroups, productVersion, promoKey } from '../../scripts/catalog/onepiece/versions'
 
 const readJson = (name: string): { results: unknown[] } => JSON.parse(readFileSync(join(__dirname, '../fixtures/onepiece', name), 'utf8'))
@@ -106,5 +107,52 @@ describe('One Piece TCGplayer versions', () => {
   test('an unsuccessful envelope rejects', async () => {
     const o = opts(fakeFetch([], { '/68/groups': { success: false, errors: ['down'], results: [] } }))
     await expect(opGroups(o)).rejects.toThrow()
+  })
+
+  test('a DON!! card is named as the card says, with TCGplayer\'s version words', () => {
+    expect(donName('DON!! Card')).toBe('DON!!')
+    expect(donName('DON!! Card (Alternate Art) (Luffy and Loki) (Gold)')).toBe('DON!! (Alternate Art) (Luffy and Loki) (Gold)')
+    expect(donName('DON!! Card // Green Compass')).toBe('DON!! // Green Compass')
+    expect(donName('DON!! Card (Tournament Pack Vol. 2) [Winner]')).toBe('DON!! (Tournament Pack Vol. 2) [Winner]')
+  })
+  test('DON!! cards: one per product, a version per price subtype', () => {
+    const p = (productId: number, groupId: number, name: string, rarity: string | null, imageUrl: string | null = `https://x/${productId}_200w.jpg`): OpProduct =>
+      ({ productId, groupId, name, number: null, rarity, imageUrl, description: 'Your Turn +1000' })
+    const products = [
+      p(593801, 23496, 'DON!! Card (Ace)', 'DON!!'),
+      p(586181, 23496, 'DON!! Card (Uta) (Gold)', 'DON!!'),
+      p(482236, 17675, 'DON!! Card (Gold)', 'PR'),
+      p(493339, 17675, 'DON!! Card Pack Vol. 1', null),
+      p(719824, 17675, 'DON!! Card (Judge Promo Championship 26-27)', 'DON!!', null),
+      p(700001, 17675, 'DON!! Card (No Prices Yet)', 'DON!!'),
+      p(527633, 99999, 'DON!! Card', 'DON!!'),
+      { ...p(708077, 23496, 'Edward.Newgate (005) (Alternate Art)', 'SR'), number: 'OP17-005' }
+    ]
+    const prices = [
+      { productId: 593801, subTypeName: 'Normal', marketPrice: 4.85 },
+      { productId: 593801, subTypeName: 'Foil', marketPrice: 13.16 },
+      { productId: 586181, subTypeName: 'Foil', marketPrice: 165.03 },
+      { productId: 482236, subTypeName: 'Normal', marketPrice: null },
+      { productId: 719824, subTypeName: 'Normal', marketPrice: 1 },
+      { productId: 527633, subTypeName: 'Normal', marketPrice: 0.1 }
+    ]
+    const seriesOf = new Map([[23496, 'PRB01'], [17675, 'P']])
+    const r = donCards(products, prices, (g) => seriesOf.get(g))
+    expect(r.cards).toEqual([
+      { productId: 482236, seriesId: 'P', name: 'DON!! (Gold)', description: 'Your Turn +1000',
+        versions: [{ code: 'tcg:482236/Normal', label: 'DON!!', price: null }] },
+      { productId: 586181, seriesId: 'PRB01', name: 'DON!! (Uta) (Gold)', description: 'Your Turn +1000',
+        versions: [{ code: 'tcg:586181/Foil', label: 'DON!! (Foil)', price: 165.03 }] },
+      { productId: 593801, seriesId: 'PRB01', name: 'DON!! (Ace)', description: 'Your Turn +1000',
+        versions: [
+          { code: 'tcg:593801/Normal', label: 'DON!!', price: 4.85 },
+          { code: 'tcg:593801/Foil', label: 'DON!! (Foil)', price: 13.16 }
+        ] }
+    ])
+    // Every DON!! product is listed, held or not; one with no picture or no price rows waits.
+    expect([...r.listed].sort()).toEqual([482236, 527633, 586181, 593801, 700001, 719824])
+    expect(r.held).toBe(2)
+    // A group no series takes is noted, not guessed.
+    expect(r.unplaced).toEqual([527633])
   })
 })

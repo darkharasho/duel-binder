@@ -10,6 +10,27 @@ export interface OpProduct {
   number: string | null
   rarity: string | null
   imageUrl: string | null
+  /** TCGplayer's card text, tags stripped (a DON!! card's `Your Turn +1000`); absent in older fixtures. */
+  description?: string | null
+}
+
+/** Text of an extendedData HTML value: tags out, breaks as new lines, the common entities decoded. */
+function plain(html: string | null): string | null {
+  if (html === null) return null
+  const s = html
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<[^>]*>/g, '')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&')
+    .split('\n')
+    .map((l) => l.replace(/[ \t]+/g, ' ').trim())
+    .filter(Boolean)
+    .join('\n')
+  return s || null
 }
 
 interface Envelope<T> { success?: boolean; errors?: unknown[]; results: T[] }
@@ -36,6 +57,7 @@ export async function opProducts(groupId: number, o: GetJsonOpts): Promise<OpPro
     const field = (n: string): string | null => p.extendedData?.find((e) => e.name === n)?.value ?? null
     return {
       productId: p.productId, groupId: p.groupId, name: p.name, number: field('Number'), rarity: field('Rarity'),
+      description: plain(field('Description')),
       // A presale single has a URL before it has a picture; imageCount 0 says it would 403.
       imageUrl: p.imageCount === 0 ? null : p.imageUrl ?? null
     }

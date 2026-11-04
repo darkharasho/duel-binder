@@ -3,6 +3,7 @@ import { createLimiter } from '../pokemon/http'
 import type { TcPrice } from '../pokemon/types'
 import { isFrozen, refreshArt, type ArtBatch, type ArtPortal } from './art'
 import { openOpCache, type OpCache } from './cache'
+import { donCards } from './don'
 import { matchSeries, type OpMatch } from './match'
 import { createOnePieceSources, dedupeEntries, type OnePieceSources } from './sources'
 import type { OpProduct } from './tcgcsv'
@@ -13,8 +14,8 @@ import { writeOnePiece, type OnePieceReport as WrittenReport } from './write'
 export interface OnePieceReport extends WrittenReport {
   /** Live TCGplayer products no Bandai entry took (event stamps, pre-release cards, ...). */
   tcgOnly: number
-  /** DON!! products, left out for now (Builder's call 8). */
-  don: number
+  /** DON!! products not written tonight: no picture yet, or no price row to tell their finish. */
+  donHeld: number
 }
 
 export interface OnePieceStepOpts {
@@ -267,17 +268,27 @@ export async function runOnePieceStep(
     const all = new Map<number, OpProduct>()
     for (const list of products.values()) for (const p of list) all.set(p.productId, p)
     let tcgOnly = 0
-    let don = 0
     for (const p of all.values()) {
-      const skip = productVersion(p).skip
-      if (skip === 'don') don++
-      else if (skip === null && !taken.has(p.productId)) tcgOnly++
+      if (productVersion(p).skip === null && !taken.has(p.productId)) tcgOnly++
     }
+
+    // DON!! cards, from TCGCSV alone: a mapped group's go in its series' set, the pool's in the
+    // promotion cards'.
+    const seriesOfGroup = new Map<number, string>()
+    for (const [id, g] of bySeries) seriesOfGroup.set(g.groupId, id)
+    const promoSeries = series.find((s) => s.kind === 'promo')
+    if (promoSeries) for (const g of promoPool) seriesOfGroup.set(g.groupId, promoSeries.id)
+    const don = donCards([...all.values()], priceRows, (id) => seriesOfGroup.get(id))
+    if (don.unplaced.length > 0)
+      notes.push(`DON!! products in no series' group, left out: ${don.unplaced.join(', ')}`)
 
     // 6. Write.
     const written = writeOnePiece(
       work,
-      { series, entries, groupOf: bySeries, matches, prices, hashed, frozen, firstSeen },
+      {
+        series, entries, groupOf: bySeries, matches, prices, hashed, frozen, firstSeen,
+        don: { cards: don.cards, listed: don.listed, complete: failed.size === 0 }
+      },
       { now, nowIso: date.toISOString() }
     )
 
@@ -299,7 +310,7 @@ export async function runOnePieceStep(
     }
 
     return {
-      report: { ...written, notes: [...notes, ...written.notes], tcgOnly, don },
+      report: { ...written, notes: [...notes, ...written.notes], tcgOnly, donHeld: don.held },
       error: null,
       problems
     }
@@ -314,7 +325,7 @@ export async function runOnePieceStep(
 /** The step's summary line, one line per set, then every note. */
 export function logOnePiece(r: OnePieceReport, log: (line: string) => void): void {
   log(
-    `One Piece en: ${r.series} series, ${r.cards} cards, ${r.printings} printings (${r.priced} priced, ${r.printings - r.priced} unpriced, ${r.held} held), ${r.images} images, ${r.tcgOnly} TCGplayer-only products skipped, ${r.don} DON!! skipped, ${r.notes.length} notes`
+    `One Piece en: ${r.series} series, ${r.cards} cards, ${r.printings} printings (${r.priced} priced, ${r.printings - r.priced} unpriced, ${r.held} held), ${r.images} images, ${r.tcgOnly} TCGplayer-only products skipped, ${r.don} DON!! cards (${r.donPriced} priced printings, ${r.donHeld} held), ${r.notes.length} notes`
   )
   for (const s of r.perSet) log(`One Piece en ${s.setCode}: ${s.priced}/${s.printings} priced`)
   for (const n of r.notes) log(`One Piece en: ${n}`)

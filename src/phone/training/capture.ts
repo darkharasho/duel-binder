@@ -33,8 +33,21 @@ export async function grabFrame(video: HTMLVideoElement): Promise<ArrayBuffer> {
   )
 }
 
+// eslint-disable-next-line no-control-regex
+const CONTROL_RE = /[\u0000-\u001f\u007f-\u009f]/g
+
+/** Makes any device string pass readLabel: no control characters, 1-100 characters, trimmed. */
+function sanitizeDevice(s: string): string {
+  const clean = s.replace(CONTROL_RE, '').replace(/\s+/g, ' ').trim().slice(0, 100).trim()
+  return clean || 'unknown'
+}
+
 export function deviceFromUa(ua: string): string {
-  if (!ua) return 'unknown'
+  return sanitizeDevice(rawDeviceFromUa(ua))
+}
+
+function rawDeviceFromUa(ua: string): string {
+  if (!ua) return ''
   const android = /Android ([\d.]+); ([^;)]+)/.exec(ua)
   if (android) {
     const model = android[2].trim()
@@ -56,11 +69,10 @@ async function readDeviceModel(): Promise<string> {
   if (uaData) {
     try {
       const v = await uaData.getHighEntropyValues(['model', 'platform', 'platformVersion'])
-      const s = `${v.platform ?? ''} ${v.platformVersion ?? ''} ${v.model ?? ''}`
-        .replace(/\s+/g, ' ')
-        .trim()
-        .slice(0, 100)
-      if (s) return s
+      const s = sanitizeDevice(
+        `${v.platform ?? ''} ${v.platformVersion ?? ''} ${v.model ?? ''}`
+      )
+      if (s !== 'unknown') return s
     } catch {
       // fall through to the user agent
     }

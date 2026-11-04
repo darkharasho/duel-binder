@@ -7,7 +7,7 @@ import {
   grabFrame,
   newClientId
 } from '../../src/phone/training/capture'
-import { CLIENT_ID_RE } from '../../src/shared/training'
+import { CLIENT_ID_RE, readLabel } from '../../src/shared/training'
 
 describe('encodeWithinCap', () => {
   test('first quality under the cap wins', async () => {
@@ -92,4 +92,46 @@ test('app version passes the label rule', () => {
   vi.stubGlobal('__APP_VERSION__', '0.53.0')
   expect(appVersion()).toBe('0.53.0')
   vi.unstubAllGlobals()
+})
+
+describe('device always passes readLabel', () => {
+  const accepts = (device: string): boolean =>
+    readLabel(
+      new URLSearchParams({
+        game: 'ygo', card: '1', printing: '1', holder: 'bare', device,
+        app: '0.53.0', at: new Date().toISOString()
+      }),
+      new Date()
+    ) !== null
+
+  test('a long model is cut to 100', async () => {
+    vi.resetModules()
+    vi.stubGlobal('navigator', {
+      userAgent: 'ua',
+      userAgentData: {
+        getHighEntropyValues: async () => ({ platform: 'Android', platformVersion: '15', model: 'M'.repeat(300) })
+      }
+    })
+    const { deviceModel: fresh } = await import('../../src/phone/training/capture')
+    const d = await fresh()
+    vi.unstubAllGlobals()
+    expect(d.length).toBeLessThanOrEqual(100)
+    expect(accepts(d)).toBe(true)
+  })
+  test('control characters are stripped', () => {
+    const d = deviceFromUa('Mozilla/5.0 (Linux; Android 15; Pi\u0000xel\u0085 8) X')
+    expect(d).toBe('Android 15 Pixel 8')
+    expect(accepts(d)).toBe(true)
+    expect(accepts(deviceFromUa('Mozilla\u0007\u001f'.repeat(3)))).toBe(true)
+  })
+  test('a whitespace-only UA is unknown', () => {
+    const d = deviceFromUa('  \t\n ')
+    expect(d).toBe('unknown')
+    expect(accepts(d)).toBe(true)
+  })
+  test('a long Android model is capped', () => {
+    const d = deviceFromUa(`Mozilla/5.0 (Linux; Android 15; ${'M'.repeat(300)}) X`)
+    expect(d.length).toBe(100)
+    expect(accepts(d)).toBe(true)
+  })
 })

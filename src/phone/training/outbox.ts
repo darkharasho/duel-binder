@@ -11,7 +11,11 @@ export interface OutboxItem {
   kind: 'upload' | 'delete'
   /** Upload only. */
   label?: TrainingLabel
-  /** Upload only. An ArrayBuffer, not a Blob: older WebKit loses Blobs in IndexedDB. */
+  /**
+   * Upload only, and only on `put`: storage keeps the bytes apart from the item, so `all()` never
+   * returns them (read one with `jpeg(key)`). An ArrayBuffer, not a Blob: older WebKit loses Blobs
+   * in IndexedDB.
+   */
   jpeg?: ArrayBuffer
   /** Upload only: sends started. Above 0, the server may already hold the photo. */
   attempts?: number
@@ -19,8 +23,13 @@ export interface OutboxItem {
 }
 
 export interface OutboxStorage {
+  /** Every item, without its JPEG. */
   all(): Promise<OutboxItem[]>
+  /** Writes the item; its JPEG too when it has one, else any stored JPEG stays as it is. */
   put(item: OutboxItem): Promise<void>
+  /** One item's JPEG, or null. */
+  jpeg(key: string): Promise<ArrayBuffer | null>
+  /** Removes the item and its JPEG together. */
   remove(key: string): Promise<void>
 }
 
@@ -42,26 +51,43 @@ export interface Outbox {
   forget(userId: number, id: string): Promise<'dropped' | 'queued'>
   /** This account's queued uploads. */
   waiting(userId: number): Promise<number>
-  /** Sends this account's items, oldest first, until one says to retry later. */
+  /**
+   * Sends this account's items, oldest first, until one says to retry later. A drain asked for
+   * while one runs joins it, and the run goes round once more (unless it stopped on the daily cap
+   * or a sign-out), so a trigger during a hung send isn't lost.
+   */
   drain(userId: number, send: Sender): Promise<DrainResult>
   onChange(cb: () => void): () => void
+}
+
+const withoutJpeg = (i: OutboxItem): OutboxItem => {
+  const meta = { ...i }
+  delete meta.jpeg
+  return meta
 }
 
 /** An outbox storage in memory, for tests. */
 export function memoryOutboxStorage(): OutboxStorage {
   const items = new Map<string, OutboxItem>()
+  const jpegs = new Map<string, ArrayBuffer>()
   return {
     all: async () => [...items.values()].map((i) => ({ ...i })),
     put: async (i) => {
-      items.set(i.key, { ...i })
+      items.set(i.key, withoutJpeg(i))
+      if (i.jpeg) jpegs.set(i.key, i.jpeg)
     },
+    jpeg: async (key) => jpegs.get(key) ?? null,
     remove: async (key) => {
       items.delete(key)
+      jpegs.delete(key)
     }
   }
 }
 
-const STORE = 'outbox'
+const ITEMS = 'items'
+const JPEGS = 'jpegs'
+/** 2: the JPEGs moved to their own store, so reading the queue never loads them. */
+const DB_VERSION = 2
 
 const done = <T>(req: IDBRequest<T>): Promise<T> =>
   new Promise((resolve, reject) => {
@@ -77,7 +103,8 @@ const committed = (tx: IDBTransaction): Promise<void> =>
   })
 
 /**
- * The outbox on IndexedDB: object store 'outbox', keyed by `key`. The database is opened on first
+ * The outbox on IndexedDB: object store 'items' (keyed by `key`) for the queue, and 'jpegs' (same
+ * key) for the photos, so reading the queue never loads a photo. The database is opened on first
  * use, and only a write creates it, so a phone that never takes a training photo never gets one.
  */
 export function idbOutboxStorage(dbName = 'duel-binder-training'): OutboxStorage {
@@ -86,7 +113,7 @@ export function idbOutboxStorage(dbName = 'duel-binder-training'): OutboxStorage
   /** Opens the database; null when it doesn't exist yet and `create` is false. */
   const request = (create: boolean): Promise<IDBDatabase | null> =>
     new Promise((resolve, reject) => {
-      const req = indexedDB.open(dbName, 1)
+      const req = indexedDB.open(dbName, DB_VERSION)
       let declined = false
       req.onupgradeneeded = (e) => {
         if (!create && e.oldVersion === 0) {
@@ -95,7 +122,11 @@ export function idbOutboxStorage(dbName = 'duel-binder-training'): OutboxStorage
           req.transaction?.abort()
           return
         }
-        req.result.createObjectStore(STORE, { keyPath: 'key' })
+        const d = req.result
+        // Version 1's single store never shipped in a release: nothing to carry over.
+        if (d.objectStoreNames.contains('outbox')) d.deleteObjectStore('outbox')
+        if (!d.objectStoreNames.contains(ITEMS)) d.createObjectStore(ITEMS, { keyPath: 'key' })
+        if (!d.objectStoreNames.contains(JPEGS)) d.createObjectStore(JPEGS)
       }
       req.onsuccess = () => resolve(req.result)
       req.onerror = (e) => {
@@ -115,10 +146,15 @@ export function idbOutboxStorage(dbName = 'duel-binder-training'): OutboxStorage
       return db
     }
     db = opened
-    opened.onversionchange = () => {
-      opened.close()
+    const forget = (): void => {
       if (db === opened) db = null
     }
+    opened.onversionchange = () => {
+      opened.close()
+      forget()
+    }
+    // WebKit can drop the connection (say, after the app was in the background): open again.
+    opened.onclose = forget
     return opened
   }
 
@@ -126,21 +162,29 @@ export function idbOutboxStorage(dbName = 'duel-binder-training'): OutboxStorage
     all: async () => {
       const d = await open(false)
       if (!d) return []
-      const items = d.transaction(STORE, 'readonly').objectStore(STORE).getAll()
+      const items = d.transaction(ITEMS, 'readonly').objectStore(ITEMS).getAll()
       return done(items as IDBRequest<OutboxItem[]>)
     },
     put: async (item) => {
       const d = await open(true)
       if (!d) throw new Error('The training outbox could not be opened')
-      const tx = d.transaction(STORE, 'readwrite')
-      tx.objectStore(STORE).put(item)
+      const tx = d.transaction(item.jpeg ? [ITEMS, JPEGS] : [ITEMS], 'readwrite')
+      tx.objectStore(ITEMS).put(withoutJpeg(item))
+      if (item.jpeg) tx.objectStore(JPEGS).put(item.jpeg, item.key)
       await committed(tx)
+    },
+    jpeg: async (key) => {
+      const d = await open(false)
+      if (!d) return null
+      const got = d.transaction(JPEGS, 'readonly').objectStore(JPEGS).get(key)
+      return ((await done(got)) as ArrayBuffer | undefined) ?? null
     },
     remove: async (key) => {
       const d = await open(false)
       if (!d) return
-      const tx = d.transaction(STORE, 'readwrite')
-      tx.objectStore(STORE).delete(key)
+      const tx = d.transaction([ITEMS, JPEGS], 'readwrite')
+      tx.objectStore(ITEMS).delete(key)
+      tx.objectStore(JPEGS).delete(key)
       await committed(tx)
     }
   }
@@ -148,6 +192,8 @@ export function idbOutboxStorage(dbName = 'duel-binder-training'): OutboxStorage
 
 const uploadKey = (id: string): string => `upload:${id}`
 const deleteKey = (id: string): string => `delete:${id}`
+
+type Claim = { item: OutboxItem; jpeg: ArrayBuffer | null }
 
 /**
  * Training photos waiting to go up, and deletes waiting to be sent, kept in `storage` so they
@@ -161,6 +207,8 @@ export function createOutbox(storage: OutboxStorage, now: () => Date): Outbox {
   /** Client ids being sent right now. */
   const inFlight = new Set<string>()
   const runs = new Map<number, Promise<DrainResult>>()
+  /** Accounts whose running drain was asked for again: it goes round once more. */
+  const again = new Set<number>()
 
   // Every read-then-write of the storage runs in turn, so a forget never interleaves with a
   // drain claiming the same item.
@@ -176,31 +224,35 @@ export function createOutbox(storage: OutboxStorage, now: () => Date): Outbox {
       .filter((i) => i.userId === userId)
       .sort((a, b) => a.queuedAt.localeCompare(b.queuedAt))
 
-  /** This account's oldest item, marked as sending; for an upload, with one more attempt stored. */
-  const claimNext = (userId: number): Promise<OutboxItem | null> =>
+  /**
+   * This account's oldest item, marked as sending; for an upload, with one more attempt stored
+   * (the item only, never the photo) and its JPEG, the one photo read.
+   */
+  const claimNext = (userId: number): Promise<Claim | null> =>
     locked(async () => {
       const [next] = await mine(userId)
       if (!next) return null
-      inFlight.add(next.id)
-      if (next.kind === 'upload') {
-        const claimed = { ...next, attempts: (next.attempts ?? 0) + 1 }
-        await storage.put(claimed)
-        return claimed
+      if (next.kind === 'delete') {
+        inFlight.add(next.id)
+        return { item: next, jpeg: null }
       }
-      return next
+      const claimed = { ...next, attempts: (next.attempts ?? 0) + 1 }
+      await storage.put(claimed)
+      inFlight.add(next.id)
+      return { item: claimed, jpeg: await storage.jpeg(next.key) }
     })
 
-  async function run(userId: number, send: Sender): Promise<DrainResult> {
+  async function runOnce(userId: number, send: Sender): Promise<DrainResult> {
     const result: DrainResult = { sent: 0, dropped: [], stopped: null, summary: null }
     for (;;) {
-      const item = await claimNext(userId)
-      if (!item) return result
+      const claim = await claimNext(userId)
+      if (!claim) return result
+      const { item, jpeg } = claim
       let answer: Awaited<ReturnType<Sender['upload']>>
       try {
-        answer =
-          item.kind === 'upload'
-            ? await send.upload(item.id, item.label!, item.jpeg!)
-            : await send.remove(item.id)
+        if (item.kind === 'delete') answer = await send.remove(item.id)
+        else if (jpeg && item.label) answer = await send.upload(item.id, item.label, jpeg)
+        else answer = { ok: false, retry: false, reason: 'rejected' }
       } catch {
         answer = { ok: false, retry: true, reason: 'offline' }
       } finally {
@@ -216,6 +268,20 @@ export function createOutbox(storage: OutboxStorage, now: () => Date): Outbox {
         if (answer.summary) result.summary = answer.summary
       } else result.dropped.push({ id: item.id, reason: answer.reason })
       changed()
+    }
+  }
+
+  async function run(userId: number, send: Sender): Promise<DrainResult> {
+    const total: DrainResult = { sent: 0, dropped: [], stopped: null, summary: null }
+    for (;;) {
+      again.delete(userId)
+      const r = await runOnce(userId, send)
+      total.sent += r.sent
+      total.dropped.push(...r.dropped)
+      total.stopped = r.stopped
+      if (r.summary) total.summary = r.summary
+      if (!again.has(userId) || r.stopped === 'daily-cap' || r.stopped === 'signed-out')
+        return total
     }
   }
 
@@ -241,10 +307,12 @@ export function createOutbox(storage: OutboxStorage, now: () => Date): Outbox {
         const upload = (await storage.all()).find(
           (i) => i.key === uploadKey(id) && i.userId === userId
         )
-        const neverSent = upload && !(upload.attempts ?? 0) && !inFlight.has(id)
-        if (upload) await storage.remove(upload.key)
-        if (neverSent) return 'dropped' as const
-        // DELETE is idempotent: queued whenever the server may hold the photo.
+        if (upload && !(upload.attempts ?? 0) && !inFlight.has(id)) {
+          await storage.remove(upload.key)
+          return 'dropped' as const
+        }
+        // DELETE is idempotent: queued whenever the server may hold the photo. Queued before the
+        // upload goes, so a crash between the two leaves a re-upload and then its delete.
         await storage.put({
           key: deleteKey(id),
           id,
@@ -252,6 +320,7 @@ export function createOutbox(storage: OutboxStorage, now: () => Date): Outbox {
           kind: 'delete',
           queuedAt: now().toISOString()
         })
+        if (upload) await storage.remove(upload.key)
         return 'queued' as const
       })
       changed()
@@ -263,7 +332,10 @@ export function createOutbox(storage: OutboxStorage, now: () => Date): Outbox {
 
     drain: (userId, send) => {
       const running = runs.get(userId)
-      if (running) return running
+      if (running) {
+        again.add(userId)
+        return running
+      }
       const started = run(userId, send).finally(() => runs.delete(userId))
       runs.set(userId, started)
       return started

@@ -224,6 +224,82 @@ describe('training outbox', () => {
     })
   })
 
+  it('a drain asked for during a hung send goes round once more', async () => {
+    const box = createOutbox(memoryOutboxStorage(), clock())
+    await box.addUpload(1, 'a', label(1), jpeg())
+    const held = deferred<TrainingSend>()
+    let calls = 0
+    const send = sender({
+      a: () => (++calls === 1 ? held.promise : Promise.resolve(OK))
+    })
+
+    const first = box.drain(1, send)
+    await vi.waitFor(() => expect(send.upload).toHaveBeenCalledTimes(1))
+    // Back online while the first send hangs.
+    const second = box.drain(1, send)
+    held.resolve({ ok: false, retry: true, reason: 'offline' })
+
+    const [r1, r2] = await Promise.all([first, second])
+    expect(send.upload).toHaveBeenCalledTimes(2)
+    expect(r1).toEqual({ sent: 1, dropped: [], stopped: null, summary: SUMMARY })
+    expect(r2).toEqual(r1)
+    expect(await box.waiting(1)).toBe(0)
+  })
+
+  it('no second round after the daily cap or a sign-out', async () => {
+    for (const reason of ['daily-cap', 'signed-out'] as const) {
+      const box = createOutbox(memoryOutboxStorage(), clock())
+      await box.addUpload(1, 'a', label(1), jpeg())
+      const held = deferred<TrainingSend>()
+      const send = sender({ a: () => held.promise })
+
+      const first = box.drain(1, send)
+      await vi.waitFor(() => expect(send.upload).toHaveBeenCalledTimes(1))
+      void box.drain(1, send)
+      held.resolve({ ok: false, retry: true, reason })
+
+      expect(await first).toMatchObject({ sent: 0, stopped: reason })
+      expect(send.upload).toHaveBeenCalledTimes(1)
+      expect(await box.waiting(1)).toBe(1)
+    }
+  })
+
+  it('forget queues the delete before the upload item goes', async () => {
+    const storage = memoryOutboxStorage()
+    const box = createOutbox(storage, clock())
+    await box.addUpload(1, 'a', label(1), jpeg())
+    await box.drain(1, sender({ a: { ok: false, retry: true, reason: 'offline' } }))
+    const order: string[] = []
+    const put = storage.put
+    const remove = storage.remove
+    storage.put = async (i) => {
+      order.push(`put ${i.key}`)
+      return put(i)
+    }
+    storage.remove = async (k) => {
+      order.push(`remove ${k}`)
+      return remove(k)
+    }
+
+    expect(await box.forget(1, 'a')).toBe('queued')
+    expect(order).toEqual(['put delete:a', 'remove upload:a'])
+  })
+
+  it('a claim whose write fails leaves nothing marked as sending', async () => {
+    const storage = memoryOutboxStorage()
+    const box = createOutbox(storage, clock())
+    await box.addUpload(1, 'a', label(1), jpeg())
+    const put = storage.put
+    storage.put = async () => {
+      throw new Error('QuotaExceededError')
+    }
+    await expect(box.drain(1, sender())).rejects.toThrow('QuotaExceededError')
+    storage.put = put
+
+    // Never sent and not in flight: forgetting it just drops it.
+    expect(await box.forget(1, 'a')).toBe('dropped')
+  })
+
   it('tells listeners when the queue changes', async () => {
     const box = createOutbox(memoryOutboxStorage(), clock())
     const cb = vi.fn()
@@ -256,13 +332,71 @@ describe('idbOutboxStorage', () => {
     const all = await again.all()
     expect(all).toHaveLength(1)
     expect(all[0]).toMatchObject({ key: 'upload:a', id: 'a', userId: 1, label: label(1) })
+    // The queue comes back without its photos; they are read one at a time.
+    expect(all[0].jpeg).toBeUndefined()
+    const bytes = await again.jpeg('upload:a')
     // Not a Blob (checked by tag: fake-indexeddb clones into another realm's ArrayBuffer).
-    expect(Object.prototype.toString.call(all[0].jpeg)).toBe('[object ArrayBuffer]')
-    expect([...new Uint8Array(all[0].jpeg!)]).toEqual([0xff, 0xd8, 0xff, 9])
+    expect(Object.prototype.toString.call(bytes)).toBe('[object ArrayBuffer]')
+    expect([...new Uint8Array(bytes!)]).toEqual([0xff, 0xd8, 0xff, 9])
+
+    // Bumping attempts rewrites the item only; the photo stays.
+    await again.put({ ...all[0], attempts: 1 })
+    expect((await again.all())[0].attempts).toBe(1)
+    expect([...new Uint8Array((await again.jpeg('upload:a'))!)]).toEqual([0xff, 0xd8, 0xff, 9])
 
     await again.remove('upload:a')
     expect(await again.all()).toEqual([])
+    expect(await again.jpeg('upload:a')).toBeNull()
     expect(await idbOutboxStorage('outbox-round-trip').all()).toEqual([])
+  })
+
+  it('counting, forgetting and claiming never read a photo; a send reads only its own', async () => {
+    const reads: string[] = []
+    const proto = IDBObjectStore.prototype
+    const realGet = proto.get
+    const realGetAll = proto.getAll
+    const get = vi.spyOn(proto, 'get').mockImplementation(function (
+      this: IDBObjectStore,
+      query: IDBValidKey | IDBKeyRange
+    ) {
+      reads.push(`${this.name}.get`)
+      return realGet.call(this, query)
+    })
+    const getAll = vi.spyOn(proto, 'getAll').mockImplementation(function (
+      this: IDBObjectStore,
+      ...a: Parameters<IDBObjectStore['getAll']>
+    ) {
+      reads.push(`${this.name}.getAll`)
+      return realGetAll.apply(this, a)
+    })
+    try {
+      const box = createOutbox(idbOutboxStorage('outbox-reads'), clock())
+      await box.addUpload(1, 'a', label(1), jpeg(1))
+      await box.addUpload(1, 'b', label(2), jpeg(2))
+      await box.addUpload(1, 'c', label(3), jpeg(3))
+      reads.length = 0
+
+      expect(await box.waiting(1)).toBe(3)
+      expect(await box.forget(1, 'c')).toBe('dropped')
+      expect(await box.forget(1, 'z')).toBe('queued')
+      expect(reads.length).toBeGreaterThan(0)
+      expect(reads.every((r) => r.startsWith('items.'))).toBe(true)
+
+      reads.length = 0
+      const send = sender()
+      await box.drain(1, send)
+      expect(send.upload.mock.calls.map((c) => c[0])).toEqual(['a', 'b'])
+      expect([...new Uint8Array(send.upload.mock.calls[1][2] as ArrayBuffer)]).toEqual([
+        0xff, 0xd8, 0xff, 2
+      ])
+      expect(reads.filter((r) => r.startsWith('jpegs.'))).toEqual(['jpegs.get', 'jpegs.get'])
+      expect(reads.filter((r) => !r.startsWith('jpegs.')).every((r) => r === 'items.getAll')).toBe(
+        true
+      )
+    } finally {
+      get.mockRestore()
+      getAll.mockRestore()
+    }
   })
 
   it('reading an outbox that was never written creates no database', async () => {

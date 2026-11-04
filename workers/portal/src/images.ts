@@ -1,6 +1,5 @@
 import {
-  BANDAI_EN_IMAGE_PREFIX,
-  BANDAI_ID_RE,
+  opBandaiArtUrl,
   opTcgArtUrl,
   imageUrl,
   PACK_ART_PREFIX,
@@ -401,11 +400,13 @@ function resolve(deps: AppDeps, path: string): Target | null {
       const tcg = row ? opTcgArtUrl(row.bandai_id, kind === 'full' ? 'full' : 'small') : null
       if (tcg !== null)
         return { key: cardArtKey(kind, n), source: fixed(tcg), cache: CARD_CACHE, anonymous: true }
-      if (!row || !BANDAI_ID_RE.test(row.bandai_id)) return null
+      // English art is a bare Bandai id, Japanese `ja:<id>`.
+      const bandai = row ? opBandaiArtUrl(row.bandai_id) : null
+      if (bandai === null) return null
       // The PNG is always stored under card/full; the job's small copy takes card/small later.
       return {
         key: `card/full/${n}`,
-        source: fixed(`${BANDAI_EN_IMAGE_PREFIX}${row.bandai_id}.png`, {
+        source: fixed(bandai, {
           'User-Agent': USER_AGENT
         }),
         cache: kind === 'full' ? CARD_CACHE : FALLBACK_CACHE,

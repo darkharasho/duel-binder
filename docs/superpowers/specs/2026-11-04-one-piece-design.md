@@ -66,7 +66,7 @@ Each step ships on its own and depends on the one before.
    catalog to label against, so it ships after or with it.
 4. **One Piece scanner**: desktop scan, scan window overlay, phone scanner and Stream mode. Gated
    on the friend's photos; when it passes, One Piece opens to everyone in the same release.
-5. **Later, not designed here:** Japanese catalog and eBay prices, Simplified Chinese.
+5. **Later:** Japanese catalog and eBay prices (designed below in **Step 5a**), Simplified Chinese.
 
 Steps 1–3 are specified enough to plan. Step 4 is sketched so earlier steps don't box it in; it
 gets its own short design once the photos exist and a first replay has been run.
@@ -290,6 +290,151 @@ Needs a One Piece counterpart:
   passes, the release flips One Piece to `access: 'everyone'` and `features.scan: true`.
 - **Speed** (the owner's standing rule): report the added per-card latency, and keep slow steps
   skippable.
+
+## Step 5a: Japanese catalog and eBay prices (addendum, 2026-11-04)
+
+Status: decided by the builder on 2026-11-04, under the owner's grant of autonomy. Every call here
+is mine, marked so the owner can check it. Simplified Chinese stays later.
+
+### What was checked (2026-11-04)
+
+- Bandai's Japanese card list (www.onepiece-cardgame.com/cardlist) is the same static HTML as the
+  English one: a series `<select>` and one `<dl class="modalCol">` block per entry, images at
+  `/images/cardlist/card/<id>.png` (600×838 PNG). It lists **63 series** today (the brief guessed
+  about 113): 17 boosters, 2 premium boosters, 5 extra boosters, 36 starter and ultimate decks, plus
+  promotion cards (550901), limited-product cards (550801) and the Family Deck Set (550701).
+  `/cardlist/` answers with a 302 to the newest series.
+- It differs from the English page in its words, not its shape: Japanese `<h3>` labels (ライフ for
+  Life), colors as 赤/緑/青/紫/黒/黄, attributes as `<img alt="打">` (not `<i>Strike</i>`),
+  `SPカード` for SP, series labels like `ブースターパック 世界最強の戦士【OP-17】` with full-width
+  brackets, and card sets (入手情報) in Japanese. One entry has a typo'd type (キャラクタークター).
+- Japanese-only series: **EB-04** (EGGHEAD CRISIS; English folded it into OP14-EB04 and OP15-EB04),
+  separate **OP-14** and **OP-15**, the **Family Deck Set**, and most of the promotion and
+  limited-product pages (Japanese events and products).
+- The `_pN` suffixes mostly agree with English, but not always (OP05: Japanese `ST01-012_p4`,
+  English `ST01-012_p2`).
+- **Cross-language art hashes separate cleanly.** On 14 OP05 numbers (28 entries), the Japanese
+  entry was 20–52 bits from the English entry with the same art, and 108–136 bits from the other art
+  of the same number. So linking by image hash works for different art. Same-art versions stay apart.
+
+### Catalog (my calls)
+
+- **Identity.** A Japanese card is `onePieceCardId('ja', number)`, an image is
+  `onePieceImageId('ja', bandaiId)`, and a printing has `language = 'ja'` with `set_rarity_code` the
+  Japanese Bandai id. That is the id scheme step 1 fixed; no English id, key or row changes. The
+  Japanese `onepiece_images.bandai_id` is `ja:<bandai id>` (as DON!! uses `tcg:`), so the `/img`
+  proxy and the dev image source know to fetch from `www.onepiece-cardgame.com`. **No schema change.**
+- **One stage, two regions.** The English modules take a region: `parseSeriesList` and
+  `parseCardList` read either site's page, the sources take the site, the art store takes the
+  region, and `writeOnePiece` scopes every read and write to its language. The English run is
+  unchanged (its tests stand), but it now leaves Japanese rows alone. Before this, its "Bandai stopped
+  listing it" pass would have flagged every Japanese row missing, and its per-set priced share would
+  have mixed the two languages.
+- **Its own source cache**, `onepiece-ja-src.sqlite`, with its own `catalog.yml` cache entry, so no
+  existing cache path list changes. The English cache is opened read-only for its art hashes.
+- **The same schedule and politeness** as English: one page at a time, 1 s apart, image downloads
+  2 at a time, and `ONEPIECE_ART_BUDGET` (3000) downloads a night per region, so the first full
+  Japanese fetch takes two or three nights. `--no-onepiece` skips both regions, `--no-onepiece-ja`
+  only Japanese.
+- **Sets.** One set per Japanese series, in `sets` with `language = 'ja'`. The set name is the
+  English series' name when an English series has the same set code (`OP17`), so both languages read
+  alike. Otherwise it is the Japanese title and code (`蒼海の七傑 [OP-14]`). Promotion cards keep `P`
+  and limited products `OPC` (as English); the Family Deck Set gets `FDS`. No set dates (there's no
+  TCGCSV). Set names freeze once written, as in English.
+- **Card text.** A Japanese card whose number exists in English takes the English card's name, text
+  and traits, so search, the trait facet and the details panel read the same in both languages (card
+  data is per number, as the design's card identity says). A Japanese-only number keeps its Japanese
+  text. Colors, attribute and card type are mapped to the English words either way, so the filters
+  work. The Japanese name itself isn't stored: that needs an `onepiece_cards.local_name` column,
+  parked.
+- **Version labels.** There's no TCGplayer, so labels come from the art. A Japanese parallel whose
+  art is within 64 bits of exactly one English entry of the same number (with the next one 40 or
+  more bits further) takes that English printing's version label (`SR (Alternate Art)`,
+  `SEC (Manga)`). Otherwise it is `<rarity> (Parallel)`, numbered as English does. Base, SP, TR and
+  reprints are labelled as in English. A Japanese parallel is written on first sight, with no 7-day
+  hold, since there is no match to wait for. Labels freeze once written; a later link that disagrees
+  is a note.
+- **Art** is uploaded to R2 by the job, as English art is (`/api/admin/op-art`), hashed, and frozen
+  if it changes.
+
+### eBay sweep for Japanese One Piece (my calls)
+
+- **Queue.** `price_sweeps` rows keyed `op:<prefix>` with `language = 'ja'`, one per printed number
+  prefix (`OP17`, `EB04`, `ST01`, `PRB02`), not per series. So an SP reprint of `OP05-119` sold in
+  OP17 is swept with OP05's listings. Prefixes under 4 characters (`P`) aren't swept. No migration:
+  the table has no game column, and Pokémon set the pattern. The Yu-Gi-Oh and Pokémon queries that
+  find their own keys with `NOT LIKE 'pkm:%'` now also skip `op:`, so they see exactly the rows
+  they saw before.
+- **Search.** A new price Worker route, `/v1/onepiece-listings?code=OP17&lang=ja`, searches
+  `OP17 Japanese` in eBay category 183454 (CCG Individual Cards). Fixed price and USD only, the
+  graded condition (2750) dropped, at most 3 pages of 200 (3 calls). As for Pokémon, the Worker
+  returns raw listings and the portal picks from them, since only the portal knows the numbers and
+  versions.
+- **Listing filters** (all must pass): the title says Japanese and no other language (English,
+  Chinese, Korean, Thai, French). It is one raw single card (`isSingleCard`, plus the Pokémon
+  sweep's slab, several-cards, not-a-card, fake and bad-condition rules, now shared). It has no
+  event or special-printing words (promo, stamp, pre-release, championship, flagship, winner,
+  finalist, top 8, anniversary, serial, signed, error, jumbo, gold, DON!!, box topper). It has
+  exactly one card number, and that number is in the swept prefix.
+- **Listing to version.** The title's version words give one kind: TR (`TR`, `treasure`), SP
+  (`SP`, `SPC`, `special`), manga (`manga`, `comic`), super parallel (`super parallel`, `super
+  alt`), wanted poster, generic parallel (`parallel`, `alt art`, `alternate`, `AA`), or none (base).
+  Kinds that can't both be true (SP and TR) drop the listing. Each printing's kind comes from its
+  label. A listing prices a printing only if exactly one printing of that number has its kind, and
+  a generic parallel title needs exactly one printing of kind parallel. A number whose parallels
+  can't be told apart (two `Parallel`s) gets no parallel price. Reprint and promo printings are
+  never swept.
+- **Price**, as for Pokémon: each seller counts once, at their cheapest copy; a price needs at
+  least 3 sellers, goes through the shared `askingPrice` trim and passes the spread check (under 5
+  sellers, a top price over 3× the bottom one is dropped). Prices go to `intl_prices` and are never
+  erased. Each prefix is swept weekly, spread over 6 days. A printing with a market price (none
+  today) isn't swept.
+- **Clients.** The market-only price rule uses `intl_prices` only for Chinese (Pokémon) today. It
+  now also does for `op` in `ja`, by game and language together, so Pokémon Japanese is unchanged.
+  A Japanese One Piece card never takes an English price: the two are different printings with
+  different card ids, and there is no cross-language fallback (`crossLanguagePriceFallback: false`).
+
+### Call budget (my calls)
+
+The eBay sweeps already share one counter (`sweep_calls_day`), capped at `SWEEP_DAILY_CALLS` = 2000,
+with Yu-Gi-Oh first. Nothing about Yu-Gi-Oh or Pokémon changes:
+
+| Sweep | Before | After |
+| --- | --- | --- |
+| Yu-Gi-Oh Asian sets | up to 2000/day, first call on the budget | same |
+| Chinese Pokémon | up to `POKEMON_SWEEP_DAILY_CALLS` = 100/day, from what Yu-Gi-Oh can't need | same |
+| Japanese One Piece | none | up to `ONEPIECE_SWEEP_DAILY_CALLS` = 60/day (capped at 200), from what Yu-Gi-Oh can't need **and** Pokémon hasn't spent of its 100 today |
+| Total | ≤ 2000 | ≤ 2000 (all three count on the one counter) |
+
+About 60 Japanese prefixes × 3 calls is 180 calls a week, about 30 a day, so 60 leaves room for
+prefixes that page deeper. The knob is `ONEPIECE_SWEEP_DAILY_CALLS` in `wrangler.toml` ("0" is off),
+like Pokémon's. The sweep runs in the same alarm, after Pokémon's. It stands down while any Yu-Gi-Oh
+prefix is due, and when the eBay quota is unknown or near the reserve.
+
+### What the user sees (my calls)
+
+- **The language filter and badges are already data-driven** (Pokémon's work): the Language
+  section lists the languages a game has rows in, and printings show their language tag (JP). One
+  Piece gets Japanese in its Language filter as soon as Japanese rows land. Nothing new to build.
+- A Japanese price is an eBay asking price with its check date, shown as Chinese Pokémon's is.
+- Japanese cards are hidden from non-testers by the same server rules as English One Piece.
+
+### Deploy order
+
+1. The price Worker (`workers/ebay-prices`), with `/v1/onepiece-listings`.
+2. The portal: `/img` for `ja:` art, the op sweep and its knob. Until the price Worker is out, the
+   sweep's calls fail and each set backs off for a day. Until the portal is out, the job's Japanese
+   art uploads still work (the upload route only checks the id range), but `/img` returns 404 for
+   Japanese art on a cache miss.
+3. The nightly job (its cache entry in `catalog.yml`).
+4. A client release, for Japanese eBay prices on desktop and phone (the price rule lives in the
+   client's SQL). The web app gets it with the portal deploy.
+
+### Parked
+
+- The Japanese name (`local_name`), and Japanese text for cards with an English twin.
+- Prices for Japanese event promos (they are skipped).
+- Re-labelling a `Parallel` once its English twin appears (labels freeze).
 
 ## Getting builds to the friend
 

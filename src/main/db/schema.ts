@@ -530,7 +530,8 @@ DELETE FROM printing_art WHERE url IS NULL;
  * - collection entries: pair `printing_id` with `image_id`, as Yu-Gi-Oh!'s do.
  * `onepiece_cards` holds only game text. `colors`, `attribute` and `traits` are JSON arrays.
  * `number` is the printed base number and isn't unique (Japanese has its own card per number).
- * `onepiece_images.bandai_id` is what the /img proxy builds Bandai's image URL from.
+ * `onepiece_images.bandai_id` is what the /img proxy builds Bandai's image URL from (a bare id is
+ * English art, `ja:<id>` Japanese; see opBandaiArtUrl).
  * DON!! cards (none on Bandai's list) are one card per TCGplayer product: `number` and `set_code`
  * 'DON!!', a printing per finish (`set_rarity_code` `tcg:<product id>/<finish>`), and the image's
  * `bandai_id` `tcg:<product id>`, which /img serves from TCGplayer.

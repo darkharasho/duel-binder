@@ -174,6 +174,8 @@ describe('One Piece in the repos', () => {
     expect(setType({ setName: 'x', setCode: 'ST31' }, 'op')).toBe('deck')
     expect(setType({ setName: 'x', setCode: 'P' }, 'op')).toBe('promo')
     expect(setType({ setName: 'x', setCode: 'OPC' }, 'op')).toBe('collection')
+    // The Japanese Family Deck Set.
+    expect(setType({ setName: 'Family Deck Set', setCode: 'FDS' }, 'op')).toBe('deck')
     expect(setType({ setName: 'x', setCode: 'OP17' }, 'op')).toBe('booster')
     expect(setType({ setName: 'x', setCode: 'PRB01' }, 'op')).toBe('booster')
     expect(setType({ setName: 'Structure Deck: Yugi', setCode: 'SDY' })).toBe('deck')

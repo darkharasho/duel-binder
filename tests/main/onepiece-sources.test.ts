@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync, rmSync } from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { parseCardList, parseSeriesList } from '../../scripts/catalog/onepiece/bandai'
+import { BANDAI_JA, parseCardList, parseSeriesList } from '../../scripts/catalog/onepiece/bandai'
 import { openOpCache, type OpCache } from '../../scripts/catalog/onepiece/cache'
 import { createOnePieceSources, dedupeEntries, seriesDue, type OnePieceSources } from '../../scripts/catalog/onepiece/sources'
 
@@ -152,6 +152,23 @@ describe('One Piece sources', () => {
     const unknown = r.entries.map((e) => (e.bandaiId === 'EB04-061_p2' ? { ...e, cardSets: 'UNKNOWN' } : e))
     const u = dedupeEntries(SERIES, unknown, published)
     expect(u.entries.filter((e) => e.bandaiId === 'EB04-061_p2').map((e) => e.seriesId)).toEqual(['569115'])
+  })
+
+  it("the Japanese site's pages and images", async () => {
+    const reqs: string[] = []
+    const ja = fx('bandai-ja-op17.html')
+    const src = mk(fakeFetch({ '/cardlist/': ja, '?series=550117': ja }, reqs, (url) =>
+      url.endsWith('.png') ? new Response(new Uint8Array([1, 2]), { status: 200 }) : undefined
+    ), { t: at('2026-09-15') }, { site: BANDAI_JA })
+    const listed = await src.series()
+    expect(listed.series.map((s) => s.id)).toContain('550117')
+    await src.entries(listed.series.filter((s) => s.id === '550117'), new Map())
+    await src.bandaiImage('OP17-001_p1')
+    expect(reqs).toEqual([
+      'https://www.onepiece-cardgame.com/cardlist/',
+      'https://www.onepiece-cardgame.com/cardlist/?series=550117',
+      'https://www.onepiece-cardgame.com/images/cardlist/card/OP17-001_p1.png'
+    ])
   })
 
   it('conditional image fetch', async () => {

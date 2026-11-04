@@ -18,6 +18,7 @@ import { thumbsRoute } from './thumbs'
 import { alarmQueue, priceClientFor, runPriceAlarm, type PriceQueue } from './prices'
 import { sweepClientFor } from './sweep'
 import { pokemonDailyCalls } from './pokemonSweep'
+import { onePieceDailyCalls } from './onePieceSweep'
 import { handleSite } from './site/handler'
 import { routeHost } from './site/host'
 import { createReleaseSource, type Downloads } from './site/releases'
@@ -33,6 +34,8 @@ export interface WorkerEnv extends Env {
   EMAIL?: SendEmail
   /** Browse calls a day for the Chinese Pokémon sweep (wrangler.toml); see pokemonSweep.ts. */
   POKEMON_SWEEP_DAILY_CALLS?: string
+  /** Browse calls a day for the Japanese One Piece sweep (wrangler.toml); see onePieceSweep.ts. */
+  ONEPIECE_SWEEP_DAILY_CALLS?: string
 }
 
 /** The single Durable Object holding the catalog and every user's collection. */
@@ -70,7 +73,8 @@ export class Store extends DurableObject<WorkerEnv> {
       () => new Date(),
       sweepClientFor(this.env),
       {
-        pokemonDailyCalls: pokemonDailyCalls(this.env.POKEMON_SWEEP_DAILY_CALLS)
+        pokemonDailyCalls: pokemonDailyCalls(this.env.POKEMON_SWEEP_DAILY_CALLS),
+        onePieceDailyCalls: onePieceDailyCalls(this.env.ONEPIECE_SWEEP_DAILY_CALLS)
       }
     )
   }

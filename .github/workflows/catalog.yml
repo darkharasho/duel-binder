@@ -87,6 +87,16 @@ jobs:
             catalog-work/onepiece-src.sqlite-wal
           key: catalog-onepiece-${{ github.run_id }}-${{ github.run_attempt }}
           restore-keys: catalog-onepiece-
+      # The Japanese One Piece sources: their own cache too, so the English list above stays as it is.
+      # The key doesn't start with catalog-onepiece-, so neither restore can pick the other's.
+      - name: Restore One Piece Japanese sources
+        uses: actions/cache/restore@v4
+        with:
+          path: |
+            catalog-work/onepiece-ja-src.sqlite
+            catalog-work/onepiece-ja-src.sqlite-wal
+          key: catalog-opja-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: catalog-opja-
       - name: Restore base snapshot
         uses: actions/cache/restore@v4
         with:
@@ -159,6 +169,14 @@ jobs:
             catalog-work/onepiece-src.sqlite
             catalog-work/onepiece-src.sqlite-wal
           key: catalog-onepiece-${{ github.run_id }}-${{ github.run_attempt }}
+      - name: Save One Piece Japanese sources
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            catalog-work/onepiece-ja-src.sqlite
+            catalog-work/onepiece-ja-src.sqlite-wal
+          key: catalog-opja-${{ github.run_id }}-${{ github.run_attempt }}
       - name: Save base snapshot
         if: success()
         uses: actions/cache/save@v4

@@ -53,6 +53,8 @@ export type MetaKey =
   | 'price_sweeps_listed_at'
   | 'price_sweeps_pkm_listed_at'
   | 'sweep_pokemon_day'
+  | 'price_sweeps_op_listed_at'
+  | 'sweep_onepiece_day'
   /** The portal's eBay sweep calls for one UTC day, as `YYYY-MM-DD:N`. */
   | 'sweep_calls_day'
   /** When the token cards were last read from Yugipedia (ISO). */

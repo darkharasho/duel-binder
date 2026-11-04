@@ -39,6 +39,8 @@ export interface OnePieceSourcesOpts {
   pageGapMs?: number
   /** Per-request limit; defaults to REQUEST_TIMEOUT_MS. */
   requestTimeoutMs?: number
+  /** Which Bandai card list: BANDAI_EN (the default) or BANDAI_JA. */
+  site?: string
 }
 
 /**
@@ -71,6 +73,7 @@ const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms
 
 export function createOnePieceSources(o: OnePieceSourcesOpts): OnePieceSources {
   const { cache } = o
+  const site = o.site ?? BANDAI_EN
   const doFetch = timedFetch(o.fetch ?? fetch, o.requestTimeoutMs ?? REQUEST_TIMEOUT_MS)
   const now = o.now ?? Date.now
   const userAgent = `DuelBinder/${o.version} (${REPO_URL})`
@@ -105,7 +108,7 @@ export function createOnePieceSources(o: OnePieceSourcesOpts): OnePieceSources {
   function page(path: string): Promise<string> {
     const run = async (): Promise<string> => {
       if (pagesFetched++ > 0 && gap > 0) await sleep(gap)
-      return (await get(`${BANDAI_EN}${path}`, { Accept: 'text/html' })).text()
+      return (await get(`${site}${path}`, { Accept: 'text/html' })).text()
     }
     const p = pageChain.then(run, run)
     pageChain = p.catch(() => undefined)
@@ -169,7 +172,7 @@ export function createOnePieceSources(o: OnePieceSourcesOpts): OnePieceSources {
 
     async bandaiImage(bandaiId, since) {
       const res = await get(
-        `${BANDAI_EN}/images/cardlist/card/${bandaiId}.png`, since ? { 'If-Modified-Since': since } : {}, [304]
+        `${site}/images/cardlist/card/${bandaiId}.png`, since ? { 'If-Modified-Since': since } : {}, [304]
       )
       if (res.status === 304) return null
       return { bytes: new Uint8Array(await res.arrayBuffer()), lastModified: res.headers.get('last-modified') }

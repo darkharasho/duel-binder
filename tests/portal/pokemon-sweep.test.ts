@@ -641,3 +641,19 @@ describe('the Pokémon sweep', () => {
     })
   })
 })
+
+describe('yugiohReserve', () => {
+  it('holds calls for new Yu-Gi-Oh! sets due their daily re-sweep, not just weekly ones', async () => {
+    const { yugiohReserve } = await import('../../workers/portal/src/pokemonSweep')
+    const { SET_MAX_CALLS } = await import('../../workers/portal/src/sweep')
+    const db = new Database(':memory:')
+    migrateServer(db)
+    const add = (key: string, swept: string, released: string | null): void => {
+      db.prepare('INSERT INTO price_sweeps (key, language, swept_at, released) VALUES (?, ?, ?, ?)').run(key, 'ja', swept, released)
+    }
+    add('OLD', ago(2), '2020-01-01') // swept 2 days ago, old set: not due today
+    add('NEWY', ago(0.6), '2026-10-20') // new set swept yesterday: due again today
+    add('NEWT', ago(0.1), '2026-10-20') // new set already swept today
+    expect(yugiohReserve(db, NOW)).toBe(SET_MAX_CALLS)
+  })
+})

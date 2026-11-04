@@ -46,6 +46,9 @@ DISCORD_CLIENT_ID = "1563797080420655266"
 PRICE_WORKER_URL = "https://ygo-ebay-prices.project96.workers.dev"
 # The Chinese Pokémon eBay sweep's Browse calls a day; "0" is off (see src/pokemonSweep.ts).
 POKEMON_SWEEP_DAILY_CALLS = "100"
+# The Japanese One Piece eBay sweep's Browse calls a day; "0" is off (see src/onePieceSweep.ts). It shares
+# the 2000-a-day sweep budget, after Yu-Gi-Oh and Pokémon, and needs the price Worker's /v1/onepiece-listings.
+ONEPIECE_SWEEP_DAILY_CALLS = "60"
 # The only account the /admin dashboard opens for (.harasho). Not a secret: it only names who.
 ADMIN_DISCORD_ID = "201537071804973056"
 # Email + password sign-in: "off" hides it; "on" turns it on once Email Sending works (see README, Email sign-in).

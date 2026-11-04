@@ -57,8 +57,19 @@ export const isFallbackLogoUrl = (url: string): boolean =>
 
 /** English One Piece card art on Bandai's site: `<bandai id>.png`. */
 export const BANDAI_EN_IMAGE_PREFIX = 'https://en.onepiece-cardgame.com/images/cardlist/card/'
+/** Japanese One Piece card art on Bandai's Japanese site. */
+export const BANDAI_JA_IMAGE_PREFIX = 'https://www.onepiece-cardgame.com/images/cardlist/card/'
 /** A Bandai card id such as OP01-001 or OP01-001_p1; the only ids the art URL is built from. */
 export const BANDAI_ID_RE = /^[A-Z]+[0-9]*-[0-9]{3}(_[a-z][0-9]{1,2})?$/
+/**
+ * Bandai's PNG for an `onepiece_images.bandai_id`: a bare Bandai id is English art, `ja:<id>`
+ * Japanese. Null for any other key (a DON!! card's `tcg:` key, or anything malformed).
+ */
+export function opBandaiArtUrl(key: string): string | null {
+  if (BANDAI_ID_RE.test(key)) return `${BANDAI_EN_IMAGE_PREFIX}${key}.png`
+  if (key.startsWith('ja:') && BANDAI_ID_RE.test(key.slice(3))) return `${BANDAI_JA_IMAGE_PREFIX}${key.slice(3)}.png`
+  return null
+}
 /**
  * The `onepiece_images.bandai_id` of a One Piece card whose art is TCGplayer's (a DON!! card,
  * which Bandai's English list doesn't have): `tcg:<TCGplayer product id>`.

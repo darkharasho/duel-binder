@@ -398,6 +398,7 @@ describe('runJob', () => {
     await runJob({
       pokemon: async () => ({ reports: [], error: null }),
       onePiece: async () => ({ report: null, error: null, problems: [] }),
+      onePieceJapanese: async () => ({ report: null, error: null, problems: [] }),
       dir,
       url: 'https://portal.example',
       token: 'tok',

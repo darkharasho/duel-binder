@@ -30,6 +30,12 @@ const POKEMON_MAX_PAGES = 3
 const POKEMON_LANGS = new Set(['zh-hans', 'zh-hant'])
 const POKEMON_CODE = /^[A-Za-z0-9.]{3,12}$/
 const POKEMON_MAX_CODES = 2
+// One Piece sweep: one card-number prefix (OP05, ST01, EB04, PRB02) in Japanese, at most 3 calls, in
+// eBay's CCG Individual Cards category; the portal picks the listings (onePieceSweep.ts).
+const CCG_SINGLES_CATEGORY = '183454'
+const ONEPIECE_MAX_PAGES = 3
+const ONEPIECE_LANGS = new Set(['ja'])
+const ONEPIECE_CODE = /^[A-Z]{2,3}[0-9]{2}$/
 // 'ygo-collection-tracker' is what app versions before the Duel Binder rename send.
 const CLIENTS = new Set(['duel-binder', 'ygo-collection-tracker'])
 
@@ -161,20 +167,15 @@ async function lookupSet(env, key, lang) {
   return { ...setPrices(items, key), calls, checkedAt: new Date().toISOString() }
 }
 
-// One Chinese Pokémon set's raw listings. No matching here: only the portal knows the set's numbers,
-// names and versions, so it picks the listings (workers/portal/src/pokemonSweep.ts).
-async function lookupPokemonListings(env, codes, lang) {
-  // eBay's (a,b) is OR; sellers write the set code with and without its trailing C.
-  const codeQuery = codes.length > 1 ? `(${codes.join(',')})` : codes[0]
-  // Traditional sets print Japanese-style codes, so the code alone would mostly find Japanese cards.
-  const query = lang === 'zh-hant' ? `${codeQuery} Chinese` : codeQuery
+// Up to `maxPages` pages of a sweep query's raw listings: fixed price, USD, not graded.
+async function rawListings(env, query, category, maxPages) {
   const items = []
   let calls = 0
-  for (let page = 0; page < POKEMON_MAX_PAGES; page++) {
+  for (let page = 0; page < maxPages; page++) {
     const got = await search(env, query, {
       offset: page * SET_PAGE,
       limit: SET_PAGE,
-      category: POKEMON_CATEGORY,
+      category,
       filter: 'buyingOptions:{FIXED_PRICE}'
     })
     calls++
@@ -187,6 +188,21 @@ async function lookupPokemonListings(env, codes, lang) {
     if (got.length < SET_PAGE) break
   }
   return { items, calls, checkedAt: new Date().toISOString() }
+}
+
+// One Chinese Pokémon set's raw listings. No matching here: only the portal knows the set's numbers,
+// names and versions, so it picks the listings (workers/portal/src/pokemonSweep.ts).
+function lookupPokemonListings(env, codes, lang) {
+  // eBay's (a,b) is OR; sellers write the set code with and without its trailing C.
+  const codeQuery = codes.length > 1 ? `(${codes.join(',')})` : codes[0]
+  // Traditional sets print Japanese-style codes, so the code alone would mostly find Japanese cards.
+  const query = lang === 'zh-hant' ? `${codeQuery} Chinese` : codeQuery
+  return rawListings(env, query, POKEMON_CATEGORY, POKEMON_MAX_PAGES)
+}
+
+// One Japanese One Piece number prefix's raw listings; the portal picks them (onePieceSweep.ts).
+function lookupOnePieceListings(env, code, lang) {
+  return rawListings(env, `${code} ${EBAY_WORDS[lang]}`, CCG_SINGLES_CATEGORY, ONEPIECE_MAX_PAGES)
 }
 
 // Remaining Browse calls for the day; null fields on any failure.
@@ -254,6 +270,26 @@ export default {
         if (e?.status === 429) return respond({ error: 'rate limited' }, 429)
         console.error(
           'ebay pokemon listings failed',
+          String(e?.message ?? '')
+            .split(' ')
+            .slice(0, 2)
+            .join(' ')
+        )
+        return respond({ error: 'upstream' }, 502)
+      }
+    }
+    if (url.pathname === '/v1/onepiece-listings') {
+      const code = url.searchParams.get('code') ?? ''
+      const lang = url.searchParams.get('lang') ?? ''
+      if (!clientOk || !ONEPIECE_LANGS.has(lang) || !ONEPIECE_CODE.test(code)) {
+        return respond({ error: 'bad request' }, 400)
+      }
+      try {
+        return respond(await lookupOnePieceListings(env, code, lang))
+      } catch (e) {
+        if (e?.status === 429) return respond({ error: 'rate limited' }, 429)
+        console.error(
+          'ebay onepiece listings failed',
           String(e?.message ?? '')
             .split(' ')
             .slice(0, 2)

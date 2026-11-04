@@ -1,14 +1,17 @@
 import type { SqlDb } from '../../../src/main/db/sql'
-import { getMeta, setMeta } from '../../../src/main/db/meta'
+import { getMeta, setMeta, type MetaKey } from '../../../src/main/db/meta'
 import { askingPrice, isSingleCard, keptPrices } from '../../ebay-prices/src/price.js'
 import {
   DAY_MS,
+  NEW_SET_AHEAD_DAYS,
+  NEW_SET_DAYS,
   POKEMON_KEY_PREFIX,
   SET_MAX_CALLS,
   SWEEP_DAILY_CALLS,
   SWEEP_RESERVE,
   SweepRateLimited,
   WEEK_MS,
+  YUGIOH_KEYS,
   readCalls,
   utcDay,
   type PokemonListing,
@@ -42,8 +45,8 @@ export const POKEMON_SWEEP_DAYS = 6
 /** Sellers a price needs. Each counts once, so a dealer's many copies are one opinion. */
 export const MIN_SELLERS = 3
 /** Below this many sellers, a top price over MAX_SPREAD times the bottom one is a guess, not a price. */
-const SPREAD_SELLERS = 5
-const MAX_SPREAD = 3
+export const SPREAD_SELLERS = 5
+export const MAX_SPREAD = 3
 
 const LISTED_META = 'price_sweeps_pkm_listed_at'
 const DAY_META = 'sweep_pokemon_day'
@@ -102,13 +105,13 @@ export function languageOk(title: string, language: string): boolean {
 }
 
 /** The grading houses of these listings, which isSingleCard doesn't know or misses as "PSA10". */
-const SLAB =
+export const SLAB =
   /\b(?:psa|bgs|cgc|sgc|ccic|pcg|wcg|ags|hga|gma|ars)\s*\d|\b(?:ccic|pcg|wcg|ags|hga|gma)\b|\b(?:ace|tag)\s+\d|\bgem\s*(?:mt|mint)\b|\bpristine\b|\bgraded?\b|\bgrade\s*\d/i
-const SEVERAL =
+export const SEVERAL =
   /\b\d+\s*pcs?\b|\b\d+\s*cards\b|[&＆+]\s*\d|[&＆+]\s*(?:rev(?:erse)?|holo)\b|\b(?:complete|master|full)\s+set\b|\b(?:pick|choose|select)\b|\byour\s+choice\b/i
 const NOT_A_CARD = /\b(?:booster|sealed|box|tin|etb|sticker|coins?|sleeves?|playmat|binder|non[- ]?tcg|cases?|display|acrylic|frame[ds]?|magnets?|figures?|keychain|plush|poster)\b/i
-const FAKE = /\b(?:reprint|replica|fake|unofficial|handmade|fan\s*art)\b/i
-const BAD_CONDITION = /\b(?:damaged|dmg|creased?|heavily\s+played)\b/i
+export const FAKE = /\b(?:reprint|replica|fake|unofficial|handmade|fan\s*art)\b/i
+export const BAD_CONDITION = /\b(?:damaged|dmg|creased?|heavily\s+played)\b/i
 const OTHER_PRINTING =
   /\b(?:1st\s*ed(?:ition)?|first\s+edition|promos?|stamp(?:ed)?|errors?|misprints?|miscut|staff|pre-?release|jumbo|oversized?|metal\s+card|gold(?:en)?)\b/i
 
@@ -355,22 +358,45 @@ export function assignPokemonSweep(
   return { priced: prices.size }
 }
 
-function readDay(db: SqlDb, today: string): { calls: number; sets: number } {
-  const [day, calls, sets] = (getMeta(db, DAY_META) ?? '').split(':')
+/** A game sweep's calls and sets so far today, from its `day:calls:sets` meta row. */
+export function readSweepDay(db: SqlDb, meta: MetaKey, today: string): { calls: number; sets: number } {
+  const [day, calls, sets] = (getMeta(db, meta) ?? '').split(':')
   return day === today ? { calls: Number(calls) || 0, sets: Number(sets) || 0 } : { calls: 0, sets: 0 }
 }
 
-const NOT_POKEMON = `key NOT LIKE '${POKEMON_KEY_PREFIX}%'`
+const readDay = (db: SqlDb, today: string): { calls: number; sets: number } => readSweepDay(db, DAY_META, today)
+
+/** Calls the Pokémon sweep may still spend today, of `dailyCalls` (what the One Piece sweep leaves it). */
+export function pokemonCallsLeft(db: SqlDb, now: Date, dailyCalls: number): number {
+  return Math.max(0, dailyCalls - readDay(db, utcDay(now)).calls)
+}
+
+/** True when a Yu-Gi-Oh! prefix is due (another game's sweep then waits). */
+export function yugiohDue(db: SqlDb, now: Date): boolean {
+  const dueBefore = new Date(now.getTime() - WEEK_MS).toISOString()
+  return !!db
+    .prepare(`SELECT 1 FROM price_sweeps WHERE ${YUGIOH_KEYS} AND (swept_at IS NULL OR swept_at < ?) LIMIT 1`)
+    .get(dueBefore)
+}
 
 /**
  * What Yu-Gi-Oh!'s sweep could still spend today, at its dearest: every prefix that comes due before
- * the UTC day ends, at SET_MAX_CALLS each. Taking none of this is what keeps its sweep unchanged.
+ * the UTC day ends, at SET_MAX_CALLS each. That includes new sets, which runSweep re-sweeps daily.
+ * Taking none of this is what keeps its sweep unchanged.
  */
-function yugiohReserve(db: SqlDb, now: Date): number {
+export function yugiohReserve(db: SqlDb, now: Date): number {
   const dayEnd = new Date(`${utcDay(now)}T00:00:00.000Z`).getTime() + DAY_MS
   const row = db
-    .prepare(`SELECT COUNT(*) AS n FROM price_sweeps WHERE ${NOT_POKEMON} AND (swept_at IS NULL OR swept_at < ?)`)
-    .get(new Date(dayEnd - WEEK_MS).toISOString()) as { n: number }
+    .prepare(
+      `SELECT COUNT(*) AS n FROM price_sweeps WHERE ${YUGIOH_KEYS}
+         AND (swept_at IS NULL OR swept_at < ? OR (released BETWEEN ? AND ? AND swept_at < ?))`
+    )
+    .get(
+      new Date(dayEnd - WEEK_MS).toISOString(),
+      utcDay(new Date(now.getTime() - NEW_SET_DAYS * DAY_MS)),
+      utcDay(new Date(now.getTime() + NEW_SET_AHEAD_DAYS * DAY_MS)),
+      new Date(dayEnd - DAY_MS).toISOString()
+    ) as { n: number }
   return row.n * SET_MAX_CALLS
 }
 
@@ -391,10 +417,7 @@ export async function runPokemonSweep(
   refreshPokemonQueue(db, now)
   const today = utcDay(now)
   const dueBefore = new Date(now.getTime() - WEEK_MS).toISOString()
-  const yugiohDue = db
-    .prepare(`SELECT 1 FROM price_sweeps WHERE ${NOT_POKEMON} AND (swept_at IS NULL OR swept_at < ?) LIMIT 1`)
-    .get(dueBefore)
-  if (yugiohDue) return stopped
+  if (yugiohDue(db, now)) return stopped
 
   const day = readDay(db, today)
   const used = readCalls(db, today)

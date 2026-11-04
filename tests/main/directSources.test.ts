@@ -82,6 +82,15 @@ describe('directImageSources', () => {
     ).toBeNull()
   })
 
+  it("Japanese art (ja:<id>) gets the Japanese site's url", () => {
+    const opDb = { prepare: () => ({ get: () => ({ bandai_id: 'ja:OP01-001_p1' }) }) } as unknown as SqlDb
+    expect(directImageSources({ db: opDb, version: '1.0.0' }).card('full', onePieceImageId('ja', 'OP01-001_p1'))?.url).toBe(
+      'https://www.onepiece-cardgame.com/images/cardlist/card/OP01-001_p1.png'
+    )
+    const bad = { prepare: () => ({ get: () => ({ bandai_id: 'ja:../x' }) }) } as unknown as SqlDb
+    expect(directImageSources({ db: bad, version: '1.0.0' }).card('full', onePieceImageId('ja', 'OP01-001'))).toBeNull()
+  })
+
   it('a DON!! card (tcg:<product>) gets TCGplayer art per size', () => {
     const opDb = { prepare: () => ({ get: () => ({ bandai_id: 'tcg:593801' }) }) } as unknown as SqlDb
     const sources = directImageSources({ db: opDb, version: '1.0.0' })

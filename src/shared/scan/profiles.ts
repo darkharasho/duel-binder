@@ -91,7 +91,41 @@ const PKM_WINDOWS: readonly Box[] = [
   [0.097, 0.156, 0.9, 0.524]
 ]
 
-// The Record<'ygo' | 'pkm'> part lists the games that have a scan profile today.
+/**
+ * One Piece (63 x 88 mm, like Pokémon). Only its number is read for now, by the Contribute photos
+ * screen (step 3b); its scanner (step 4) is still off, so there are no fingerprints to match and
+ * the art box, name and text are where Bandai prints them, unused yet. Measured on Bandai's renders
+ * (en.onepiece-cardgame.com, 600 x 838): a Leader, Characters, an Event and a Stage, a promo, a
+ * premium booster, an alternate art, a manga SP and a full-art SEC. Every layout prints the number
+ * in the same place, bottom right, right-aligned against the rarity box: 0.755 (PRB01-001) or
+ * 0.81 (P-001) to 0.874 across, 0.945 to 0.963 down.
+ */
+const OP_PROFILE: ScanProfile = {
+  game: 'op',
+  // The art above the effect text, which starts at about 0.6 on Characters and Leaders.
+  artBoxes: [[0.08, 0.08, 0.92, 0.56]],
+  // Cards are full art with no printed window, so outlines are scored by their own edges alone.
+  windows: [],
+  windowArt: false,
+  innerFrames: [],
+  windowShape: null,
+  codeBands: [
+    // The number with room either way for an outline a few percent off, and the rarity box and
+    // block icon right of it (findOpNumbers reads past them). It stops above the card's edge and
+    // below the traits bar, whose text ends by 0.935.
+    [0.735, 0.932, 0.955, 0.977]
+  ],
+  // The name, over the traits bar.
+  nameBand: [0.12, 0.875, 0.88, 0.925],
+  textBox: [0.06, 0.6, 0.94, 0.83],
+  rarityLook: false,
+  foil: null,
+  holderSearch: false,
+  keepOutline: false
+}
+
+// The Record<'ygo' | 'pkm'> part lists the games that scan today; op's profile is for its number
+// reader only (OP_PROFILE).
 export const SCAN_PROFILES: Record<'ygo' | 'pkm', ScanProfile> & Partial<Record<GameId, ScanProfile>> = {
   ygo: {
     game: 'ygo',
@@ -149,7 +183,8 @@ export const SCAN_PROFILES: Record<'ygo' | 'pkm', ScanProfile> & Partial<Record<
     // Cards are often filmed in toploaders, cases and slabs, small in the frame.
     holderSearch: true,
     keepOutline: true
-  }
+  },
+  op: OP_PROFILE
 }
 
 export function scanProfile(game: GameId): ScanProfile {

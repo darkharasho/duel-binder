@@ -65,6 +65,23 @@ describe('directImageSources', () => {
     expect(sources.card('small', 12345)?.url).toContain('images.ygoprodeck.com')
   })
 
+  it('op ids get the Bandai url', () => {
+    const opDb = {
+      prepare: () => ({ get: () => ({ bandai_id: 'OP01-001_p1' }) })
+    } as unknown as SqlDb
+    const sources = directImageSources({ db: opDb, version: '1.0.0' })
+    for (const size of ['small', 'full', 'cropped'] as const)
+      expect(sources.card(size, onePieceImageId('en', 'OP01-001_p1'))?.url).toBe(
+        'https://en.onepiece-cardgame.com/images/cardlist/card/OP01-001_p1.png'
+      )
+    const bad = {
+      prepare: () => ({ get: () => ({ bandai_id: '../x' }) })
+    } as unknown as SqlDb
+    expect(
+      directImageSources({ db: bad, version: '1.0.0' }).card('small', onePieceImageId('en', 'OP01-001'))
+    ).toBeNull()
+  })
+
   it('refuses printing art outside Yugipedia and TCGplayer', async () => {
     const { cache, fetchFn } = make(dbWith(null), async () => 'https://evil.example/x.png')
     expect(await cache.getPrinting(1)).toBeNull()

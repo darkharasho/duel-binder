@@ -13,6 +13,7 @@ import { bindingSender } from './emailSend'
 import { createAnonImageQuota, createImageQuota, createMissCache, edgeImage } from './images'
 import { doSql } from './doSql'
 import { migrateServer } from './migrate'
+import { opArtRoute } from './opArt'
 import { thumbsRoute } from './thumbs'
 import { alarmQueue, priceClientFor, runPriceAlarm, type PriceQueue } from './prices'
 import { sweepClientFor } from './sweep'
@@ -121,6 +122,8 @@ export default {
       env.STORE.get(env.STORE.idFromName('main')).fetch(r)
     const thumbs = await thumbsRoute(req, env.IMAGES, env.ADMIN_TOKEN)
     if (thumbs) return thumbs
+    const opArt = await opArtRoute(req, env.IMAGES, env.ADMIN_TOKEN)
+    if (opArt) return opArt
     const art = await edgeImage(req, env.IMAGES, edgeCache(), (p) => ctx.waitUntil(p), store)
     // CORS after the cache, so the cached copy stays the same for every origin.
     if (art) return withAppCors(req, art)

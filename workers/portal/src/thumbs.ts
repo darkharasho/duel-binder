@@ -35,6 +35,19 @@ export interface ThumbBucket {
   }>
 }
 
+/** The admin bearer token check shared by the admin routes. */
+export async function adminAuthorized(
+  req: Request,
+  adminToken: string | undefined
+): Promise<boolean> {
+  const m = /^Bearer (.*)$/.exec(req.headers.get('authorization') ?? '')
+  return !!adminToken && !!m && (await tokenMatches(m[1], adminToken))
+}
+
+export const isJpegBytes = (b: Uint8Array): boolean => b[0] === 0xff && b[1] === 0xd8
+export const isPngBytes = (b: Uint8Array): boolean =>
+  [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a].every((v, i) => b[i] === v)
+
 const json = (body: unknown, status = 200): Response =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
 
@@ -60,8 +73,7 @@ export async function thumbsRoute(
   const url = new URL(req.url)
   const base = '/api/admin/thumbs/'
   if (!url.pathname.startsWith(base)) return null
-  const m = /^Bearer (.*)$/.exec(req.headers.get('authorization') ?? '')
-  if (!adminToken || !m || !(await tokenMatches(m[1], adminToken)))
+  if (!(await adminAuthorized(req, adminToken)))
     return json({ error: 'unauthorized' }, 401)
   const rest = url.pathname.slice(base.length)
 
@@ -102,12 +114,7 @@ export async function thumbsRoute(
       return json({ error: 'bad id' }, 400)
     const bytes = await req.arrayBuffer()
     const b = new Uint8Array(bytes)
-    if (
-      bytes.byteLength === 0 ||
-      bytes.byteLength > MAX_THUMB_BYTES ||
-      b[0] !== 0xff ||
-      b[1] !== 0xd8
-    )
+    if (bytes.byteLength === 0 || bytes.byteLength > MAX_THUMB_BYTES || !isJpegBytes(b))
       return json({ error: 'bad image' }, 400)
     await bucket.put(`${THUMB_PREFIX}${id}`, bytes, {
       httpMetadata: { contentType: 'image/jpeg' },

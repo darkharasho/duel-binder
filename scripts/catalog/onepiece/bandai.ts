@@ -1,7 +1,8 @@
+import { BANDAI_ID_RE } from '../../../src/shared/imageSources'
 import type { BandaiEntry, BandaiSeries } from './types'
 
 export const BANDAI_EN = 'https://en.onepiece-cardgame.com'
-export const BANDAI_ID_RE = /^[A-Z]+[0-9]*-[0-9]{3}(_[a-z][0-9]{1,2})?$/
+export { BANDAI_ID_RE } from '../../../src/shared/imageSources'
 
 // Regex parsing on purpose: the job bundle runs under Electron, with no DOM library.
 

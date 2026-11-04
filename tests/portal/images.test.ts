@@ -18,8 +18,10 @@ import {
   clientAddressKey,
   createAnonImageQuota,
   createImageQuota,
-  createMissCache
+  createMissCache,
+  edgeImage
 } from '../../workers/portal/src/images'
+import { seedOnePiece } from '../fixtures/onePiece'
 import { addUser, memoryBucket, noPrices, seededServerDb } from './helpers'
 
 const BASE = 'https://app.test'
@@ -928,5 +930,99 @@ describe('image route', () => {
 
   it('POST answers 405', async () => {
     expect((await get(`small/${imageId}`, 'POST')).status).toBe(405)
+  })
+})
+
+describe('op art', () => {
+  let db: Database.Database
+  let upstream: ReturnType<typeof vi.fn>
+  let deps: AppDeps
+  let bucket: ReturnType<typeof memoryBucket>
+  let printingUrl: ReturnType<typeof vi.fn<(id: number) => Promise<string | null>>>
+  let ids: number[]
+  let printingIds: number[]
+
+  beforeEach(async () => {
+    db = await seededServerDb()
+    ;({ imageIds: ids, printingIds } = seedOnePiece(db))
+    bucket = memoryBucket()
+    upstream = vi.fn(async () => imageResponse())
+    printingUrl = vi.fn(async (_id: number): Promise<string | null> => null)
+    deps = {
+      db,
+      assets: { fetch: async () => new Response('nope', { status: 404 }) },
+      images: bucket,
+      printingArt: { url: printingUrl },
+      prices: noPrices,
+      env: { PUBLIC_URL: BASE, SITE_URL: 'https://site.test', DISCORD_CLIENT_ID: 'c', DISCORD_CLIENT_SECRET: 's', ADMIN_TOKEN: 'a', PRICE_WORKER_URL: 'https://prices.test' },
+      now: () => new Date('2026-11-04T12:00:00.000Z'),
+      fetch: upstream as unknown as typeof fetch
+    }
+  })
+  afterEach(() => db.close())
+
+  const get = (path: string) =>
+    handle(new Request(`${BASE}/img/${path}`, { headers: { 'cf-connecting-ip': '198.51.100.7' } }), deps)
+  const stored = (key: string): void => {
+    bucket.store.set(key, { bytes: JPEG.buffer.slice(0) as ArrayBuffer, contentType: 'image/jpeg', etag: '"s"' })
+  }
+
+  it('serves a stored small copy for small and cropped', async () => {
+    stored(`card/small/${ids[0]}`)
+    for (const size of ['small', 'cropped']) {
+      // The edge path reads R2 by cardArtKey before anything reaches the resolver.
+      const res = await edgeImage(
+        new Request(`${BASE}/img/${size}/${ids[0]}`),
+        bucket,
+        null,
+        () => undefined,
+        async () => new Response('forwarded', { status: 500 })
+      )
+      expect(res!.status).toBe(200)
+      expect(new Uint8Array(await res!.arrayBuffer())).toEqual(JPEG)
+    }
+    expect(upstream).not.toHaveBeenCalled()
+  })
+
+  it('an R2 miss on full fetches the Bandai PNG and stores it for a year', async () => {
+    const res = await get(`full/${ids[0]}`)
+    expect(res.status).toBe(200)
+    expect(res.headers.get('cache-control')).toBe('public, max-age=31536000, immutable')
+    expect(upstream).toHaveBeenCalledTimes(1)
+    expect(upstream.mock.calls[0][0]).toBe('https://en.onepiece-cardgame.com/images/cardlist/card/OP01-001.png')
+    expect(bucket.store.has(`card/full/${ids[0]}`)).toBe(true)
+  })
+
+  it('an R2 miss on small serves the full PNG for an hour and leaves card/small absent', async () => {
+    const res = await get(`small/${ids[1]}`)
+    expect(res.status).toBe(200)
+    expect(res.headers.get('cache-control')).toBe('public, max-age=3600')
+    expect(upstream.mock.calls[0][0]).toBe('https://en.onepiece-cardgame.com/images/cardlist/card/OP01-001_p1.png')
+    expect(bucket.store.has(`card/full/${ids[1]}`)).toBe(true)
+    expect(bucket.store.has(`card/small/${ids[1]}`)).toBe(false)
+  })
+
+  it('an op printing with no photo is a 404 and never asks Yugipedia', async () => {
+    expect((await get(`printing/${printingIds[0]}`)).status).toBe(404)
+    expect(printingUrl).not.toHaveBeenCalled()
+    expect(upstream).not.toHaveBeenCalled()
+  })
+
+  it('an op id with no onepiece_images row is a 404', async () => {
+    db.prepare('DELETE FROM onepiece_images WHERE image_id = ?').run(ids[0])
+    expect((await get(`full/${ids[0]}`)).status).toBe(404)
+    expect(upstream).not.toHaveBeenCalled()
+  })
+
+  it('a bandai_id that is not an id is a 404 with no fetch', async () => {
+    db.prepare('UPDATE onepiece_images SET bandai_id = ? WHERE image_id = ?').run('../x', ids[0])
+    expect((await get(`full/${ids[0]}`)).status).toBe(404)
+    expect(upstream).not.toHaveBeenCalled()
+  })
+
+  it('Yu-Gi-Oh! keys stay card/<size>/<passcode>', async () => {
+    const pass = (db.prepare('SELECT min(image_id) AS id FROM card_images WHERE image_id < 100000000').get() as { id: number }).id
+    expect((await get(`cropped/${pass}`)).status).toBe(200)
+    expect(bucket.store.has(`card/cropped/${pass}`)).toBe(true)
   })
 })

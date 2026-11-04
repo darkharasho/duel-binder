@@ -130,14 +130,14 @@ describe('fingerprint store', () => {
     expect(await p).toEqual({ state: 'ready', count: 1, updated: true })
   })
 
-  it('does not fetch again within 24 hours unless forced', async () => {
+  it('does not fetch again within the hour unless forced', async () => {
     const fetch = vi.fn(async () => ok(body(2)))
     const store = make(fetch)
     await store.refresh()
-    clock += 23 * 3600_000
+    clock += 59 * 60_000
     expect(await store.refresh()).toEqual({ state: 'ready', count: 2 })
     expect(fetch).toHaveBeenCalledTimes(1)
-    clock += 2 * 3600_000
+    clock += 2 * 60_000
     fetch.mockResolvedValueOnce(new Response(null, { status: 304 }))
     await store.refresh()
     expect(fetch).toHaveBeenCalledTimes(2)
@@ -230,7 +230,7 @@ describe('fingerprint store', () => {
     expect(await store.refresh()).toEqual({ state: 'ready', count: 2, updated: true })
     fetch.mockResolvedValueOnce(new Response(null, { status: 304 }))
     expect(await store.refresh({ force: true })).toEqual({ state: 'ready', count: 2 })
-    // Within a day, nothing is fetched and nothing changes.
+    // Within the hour, nothing is fetched and nothing changes.
     expect(await store.refresh()).toEqual({ state: 'ready', count: 2 })
   })
 
@@ -332,15 +332,15 @@ describe('fingerprint store', () => {
       expect(await store.readRefs()).toBeNull()
     })
 
-    it('is asked for within the day by an install from before the refs, then daily', async () => {
-      // A file checked an hour ago by an app that knew nothing of refs.
+    it('is asked for at once by an install from before the refs, then hourly', async () => {
+      // A file checked half an hour ago by an app that knew nothing of refs.
       writeFileSync(join(dir, 'fingerprints.bin'), body(2))
       writeFileSync(
         join(dir, 'fingerprints.json'),
         JSON.stringify({
           etag: '"v1"',
           count: 2,
-          checkedAt: new Date(clock - 3600_000).toISOString()
+          checkedAt: new Date(clock - 30 * 60_000).toISOString()
         })
       )
       const fp = vi.fn<typeof globalThis.fetch>(async () => ok(body(2)))
@@ -351,7 +351,7 @@ describe('fingerprint store', () => {
       expect(await store.refresh()).toEqual({ state: 'ready', count: 2 })
       expect(fp).not.toHaveBeenCalled()
       expect(refsFetch).toHaveBeenCalledTimes(1)
-      // The portal has none yet: asked again at the daily check, not on every refresh.
+      // The portal has none yet: asked again at the hourly check, not on every refresh.
       await store.refresh()
       expect(refsFetch).toHaveBeenCalledTimes(1)
 
@@ -376,7 +376,7 @@ describe('fingerprint store', () => {
     expect(await store.read()).toBeNull()
     expect(store.status()).toEqual({ state: 'missing', count: 0 })
     expect(existsSync(join(dir, 'fingerprints.json'))).toBe(false)
-    // Within the day: the bad file doesn't wait for tomorrow, and nothing stale is revalidated.
+    // Within the hour: the bad file doesn't wait for the next check, and nothing stale is revalidated.
     expect(await store.refresh()).toEqual({ state: 'ready', count: 2, updated: true })
     expect(fetch).toHaveBeenCalledTimes(2)
     expect(fetch.mock.calls[1][1]).toMatchObject({ headers: {} })

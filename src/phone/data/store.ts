@@ -129,6 +129,11 @@ type StateKey =
   | 'history_pulled'
 
 const DAY_MS = 24 * 60 * 60 * 1000
+/**
+ * How long a fingerprint check holds. A check of an unchanged file is a 304, so this is short: a
+ * catalog run's new art reaches the scanner within the hour.
+ */
+const FINGERPRINT_CHECK_MS = 60 * 60 * 1000
 /** The revoke on sign-out is best effort and gives up after this long. */
 const REVOKE_TIMEOUT_MS = 10_000
 /** A portal call the user is waiting on (friends) gives up after this long. */
@@ -574,7 +579,7 @@ export function createPhoneStore(deps: {
     }
     if (!res.ok) {
       await res.body?.cancel()
-      // None on the portal yet: an empty row says it was asked, so the daily check asks again
+      // None on the portal yet: an empty row says it was asked, so the next check asks again
       // rather than every refresh (see refreshFingerprints).
       if (res.status === 404 && !known) store(null, new Uint8Array())
       return false
@@ -840,7 +845,7 @@ export function createPhoneStore(deps: {
           !force &&
           ready &&
           checked &&
-          now().getTime() - Date.parse(checked.checked_at) < DAY_MS
+          now().getTime() - Date.parse(checked.checked_at) < FINGERPRINT_CHECK_MS
         ) {
           // A phone from before the refs (no row for them) gets them now, not at the next check.
           const asked = db.prepare('SELECT 1 FROM phone_files WHERE name = ?').get(FINGERPRINT_REFS)

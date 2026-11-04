@@ -609,13 +609,15 @@ describe('phone store', () => {
     expect(new Uint8Array((await store.fingerprints('ygo'))!)).toEqual(file(2))
     expect(fpRequests().at(-1)!.headers.get('if-none-match')).toBeNull()
 
-    // Within a day: no request.
+    // Within the hour: no request.
     const n = fpRequests().length
+    expect(await store.refreshFingerprints({ game: 'ygo' })).toEqual({ state: 'ready', count: 2 })
+    clock = new Date(SERVER_NOW.getTime() + 59 * 60_000)
     expect(await store.refreshFingerprints({ game: 'ygo' })).toEqual({ state: 'ready', count: 2 })
     expect(fpRequests()).toHaveLength(n)
 
-    // A day later: revalidated, unchanged (304).
-    clock = new Date(SERVER_NOW.getTime() + 25 * 3_600_000)
+    // An hour later: revalidated, unchanged (304).
+    clock = new Date(SERVER_NOW.getTime() + 61 * 60_000)
     expect(await store.refreshFingerprints({ game: 'ygo' })).toEqual({ state: 'ready', count: 2 })
     const etag = portal.images.store.get('scan/fingerprints.bin')!.etag
     expect(fpRequests().at(-1)!.headers.get('if-none-match')).toBe(etag)
@@ -626,7 +628,7 @@ describe('phone store', () => {
         }
       ).checked_at
     ).toBe(clock.toISOString())
-    // Checked just now: within a day again.
+    // Checked just now: within the hour again.
     expect(await store.refreshFingerprints({ game: 'ygo' })).toEqual({ state: 'ready', count: 2 })
     expect(fpRequests()).toHaveLength(n + 1)
 
@@ -742,7 +744,7 @@ describe('phone store', () => {
     )
   })
 
-  it('a phone from before the refs asks for them within the day, then daily', async () => {
+  it('a phone from before the refs asks for them at once, then hourly', async () => {
     await ready()
     const hash = new Uint32Array(HASH_WORDS).fill(7)
     await portal.images.put(
@@ -760,7 +762,7 @@ describe('phone store', () => {
     const [refs0, fp0] = [asked(), fpAsked()]
     expect(await store.refreshFingerprints({ game: 'ygo' })).toEqual({ state: 'ready', count: 1 })
     expect([asked(), fpAsked()]).toEqual([refs0 + 1, fp0])
-    // The portal had none: not asked again until the daily check.
+    // The portal had none: not asked again until the hourly check.
     await store.refreshFingerprints({ game: 'ygo' })
     expect(asked()).toBe(refs0 + 1)
     expect(await store.fingerprintRefs()).toEqual([])

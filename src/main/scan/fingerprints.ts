@@ -7,7 +7,11 @@ import { parseFingerprintRefs, type FingerprintRefsFile } from '@shared/scan/fin
 import { readBody } from '@shared/scan/readBody'
 import type { FingerprintStatus } from '@shared/scan/types'
 
-const DAY_MS = 24 * 60 * 60 * 1000
+/**
+ * How long a check of the portal holds. A check of an unchanged file is a 304, so this is short:
+ * a catalog run's new art reaches the scanner within the hour, not the next day.
+ */
+export const CHECK_EVERY_MS = 60 * 60 * 1000
 /** A download that hasn't finished by then is given up on; the file on disk is kept. */
 const DOWNLOAD_TIMEOUT_MS = 30_000
 
@@ -17,7 +21,7 @@ interface Meta {
   checkedAt: string
   /**
    * The refs file's ETag: null once asked for and the portal had none (or gave none), absent
-   * until asked for (an install from before the refs), which asks within the day.
+   * until asked for (an install from before the refs), which asks at once.
    */
   refsEtag?: string | null
 }
@@ -109,7 +113,7 @@ export function createFingerprintStore(opts: {
     })
     if (!res.ok) {
       await res.body?.cancel()
-      // None on the portal yet: asked, so the daily check asks again rather than every refresh.
+      // None on the portal yet: asked, so the next check asks again rather than every refresh.
       if (res.status === 404 && meta && meta.refsEtag === undefined)
         saveMeta({ ...meta, refsEtag: null })
       return false
@@ -180,8 +184,8 @@ export function createFingerprintStore(opts: {
     },
     refresh({ force = false } = {}) {
       if (inFlight) return inFlight
-      const fresh = !force && meta && now().getTime() - Date.parse(meta.checkedAt) < DAY_MS
-      // An install from before the refs gets them now, not at its next daily check.
+      const fresh = !force && meta && now().getTime() - Date.parse(meta.checkedAt) < CHECK_EVERY_MS
+      // An install from before the refs gets them now, not at its next check.
       if (fresh && (!hasRefs || meta!.refsEtag !== undefined)) return Promise.resolve(status())
       downloading = true
       failed = false

@@ -119,6 +119,9 @@ export interface PkmVersion { label: string; productId: number | null; subTypeNa
  * 8. TCGdex's cosmos foil is its own version too, whichever type it files it under.
  * 9. A deck-only non-holo of a card boosters print as a holo is its own version too: TCGplayer files
  *    it in Deck Exclusives as "(Non-Holo)", so plain Normal would read as a pack printing.
+ * 10. A foil exclusive of a box, blister or deck, which TCGplayer files outside the card's set group
+ *    and TCGdex mostly doesn't list (withExclusives), is its own version under its treatment, priced
+ *    by its own row: the Knockout box's Cosmos Holo 30th Celebration Eevee.
  * Cards that reach rule 3 or 4 have no confirmed finish; the report counts them as unverified.
  */
 export const GENERATED_VARIANT_ID = 'generated'
@@ -176,6 +179,37 @@ const DECK_EXCLUSIVES_GROUP = 1840
 function productVersion(p: TcProduct): string | null {
   if (p.groupId === DECK_EXCLUSIVES_GROUP && /\(Non-Holo\)\s*$/.test(p.name)) return 'Deck Exclusive'
   return productTreatment(p.name)
+}
+
+/** A finish label for comparing: "Cosmos Holofoil" and "Cosmos Holo" are one finish. */
+const finishKey = (label: string): string => label.toLowerCase().replace(/holofoil/g, 'holo').replace(/\s+/g, '')
+
+/**
+ * A card's matched products with its foil exclusives (exclusiveProducts in match.ts) added, each
+ * reached with no variant subtype so it's labelled by its treatment and priced by its own row. An
+ * exclusive is left out when the card already has that product, or a matched product sold as that
+ * finish (a treatment product, or a "Cosmos Holofoil" subtype row): two rows on one label would
+ * leave a priced version unpriced.
+ */
+export function withExclusives<M extends { product: TcProduct; variantSubtype: string | null }>(
+  matched: M[],
+  extras: TcProduct[],
+  prices: Map<number, TcPrice[]>
+): (M | { product: TcProduct; variantSubtype: null })[] {
+  const ids = new Set(matched.map((m) => m.product.productId))
+  const finishes = new Set<string>()
+  for (const { product, variantSubtype } of matched) {
+    const own = versionSubtype(variantSubtype) === null ? productVersion(product) : null
+    if (own) finishes.add(finishKey(own))
+    for (const r of prices.get(product.productId) ?? []) finishes.add(finishKey(canonicalLabel(r.subTypeName)))
+  }
+  const out: (M | { product: TcProduct; variantSubtype: null })[] = [...matched]
+  for (const product of extras) {
+    const label = productTreatment(product.name)
+    if (label === null || ids.has(product.productId) || finishes.has(finishKey(label))) continue
+    out.push({ product, variantSubtype: null })
+  }
+  return out
 }
 
 /** Cards TCGdex has no cosmos variant for, whose Cosmos Holo a Dex export shows. */

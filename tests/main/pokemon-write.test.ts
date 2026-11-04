@@ -435,6 +435,35 @@ describe('refreshPokemon', () => {
     )
   })
 
+  it("adds a card's box exclusive Cosmos Holo with its own price (Knockout box Eevee)", async () => {
+    await refreshPokemon(db, fixtureSources())
+    const before = printings(db, 'en/sv01-001')
+    const extra: Record<number, TcProduct[]> = {
+      2289: [{ productId: 900001, groupId: 2289, name: 'Pineco - 001/198 (Cosmos Holo)', number: '001/198' }],
+      22880: [{ productId: 900002, groupId: 22880, name: 'Heracross - 002/198 (Cosmos Holo)', number: '002/198' }]
+    }
+    const boxed = fixtureSources({
+      groups: (l, g) =>
+        l === 'en'
+          ? [...g, { groupId: 2289, name: 'Blister Exclusives', abbreviation: 'BLE' }, { groupId: 22880, name: 'Prize Pack Series Cards', abbreviation: null }]
+          : g,
+      products: (l, id, p) => (l === 'en' && extra[id] ? extra[id] : p),
+      prices: (l, id, p) =>
+        l === 'en' && extra[id] ? extra[id].map((x) => ({ productId: x.productId, subTypeName: 'Holofoil', marketPrice: 2.5 })) : p
+    })
+    await refreshPokemon(db, boxed)
+    const after = printings(db, 'en/sv01-001')
+    expect(after.map((p) => [p.set_code, p.set_rarity, p.market_price, p.tcg_product_id])).toEqual([
+      ['SVI 001/198', 'Cosmos Holo', 2.5, 900001],
+      ['SVI 001/198', 'Normal', 0.12, 487828],
+      ['SVI 001/198', 'Reverse Holofoil', 0.22, 487828]
+    ])
+    // The existing versions keep their rows.
+    expect(after.filter((p) => p.set_rarity !== 'Cosmos Holo')).toEqual(before)
+    // Prize Pack cards are stamped: not taken as the plain card's Cosmos Holo.
+    expect(printings(db, 'en/sv01-002').map((p) => p.set_rarity)).not.toContain('Cosmos Holo')
+  })
+
   it('keeps a version that is no longer produced (sticky)', async () => {
     await refreshPokemon(db, fixtureSources())
     const before = printings(db, 'en/sv01-001')

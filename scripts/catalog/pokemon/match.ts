@@ -1,7 +1,7 @@
 import { hasNativeScript } from '../../../src/shared/setNames'
 import { baseEnglish } from './englishNames'
 import type { TcGroup, TcProduct, TdCard, TdSet } from './types'
-import { versionSubtype } from './versions'
+import { productTreatment, versionSubtype } from './versions'
 
 interface CardId { id: number; subtype: string | null }
 
@@ -244,6 +244,74 @@ export function isSameNumber(localId: string, number: string): boolean {
 }
 
 export interface MatchedProduct { product: TcProduct; variantSubtype: string | null }
+
+/**
+ * TCGplayer's groups of foil exclusives from boxes, blisters and decks, each filed under its own
+ * set's number: "Eevee - 116/128 (30th Celebration) (Cosmos Holo)" (Blister Exclusives, a Knockout
+ * box), "Eevee - 101/149 (Cosmos Holo)" (Miscellaneous Cards & Products), Cracked Ice theme-deck
+ * holos (Deck Exclusives), Alternate Art Promos. Prize Pack Series Cards (22880) are left out: they
+ * carry a Play! Pokémon stamp, which TCGdex records as its own variant.
+ */
+export const EXCLUSIVE_GROUPS: ReadonlySet<number> = new Set([1840, 1938, 2289, 2374])
+
+/** A product's name, also with a number that has no dash before it removed ("Dragonite 149/165 (…)"). */
+const exclusiveNames = (name: string): string[] => [
+  plainName(name),
+  plainName(name.replace(/\s+[a-z]*\d+[a-z]*\/\d+(?=\s|$)/i, ''))
+]
+
+/** A collector number for keys: "050a" and "50a" are one number. */
+const numberKey = (n: string): string => {
+  const m = NUMBER_RE.exec(n.trim())
+  return m ? `${parseInt(m[1], 10)}${m[2].toLowerCase()}` : n.trim().toLowerCase()
+}
+
+/**
+ * The foil exclusives (EXCLUSIVE_GROUPS) of English cards, by card id. TCGdex lists few of them and
+ * they sit outside the card's set group, so matchProducts never sees them. A product counts when its
+ * name ends in a foil treatment (productTreatment, so stamps and "(Reverse Holo)" don't), its Number
+ * is "{number}/{set size}", and exactly one card has that name and number in a set of that official
+ * size. A product some TCGdex card names (`taken`) is TCGdex's to place; a set whose localIds aren't
+ * printed numbers (OWN_NUMBERS) is skipped. A product that fits several cards is reported.
+ */
+export function exclusiveProducts(
+  sets: { set: TdSet; cards: TdCard[] }[],
+  products: Iterable<TcProduct>,
+  taken: ReadonlySet<number>
+): { byCard: Map<string, TcProduct[]>; problems: string[] } {
+  const index = new Map<string, TdCard[]>()
+  for (const { set, cards } of sets) {
+    const size = set.cardCount?.official
+    if (OWN_NUMBERS.has(set.id) || typeof size !== 'number' || size <= 0) continue
+    for (const c of cards) {
+      const key = `${numberKey(c.localId)}/${size}`
+      const list = index.get(key)
+      if (list) list.push(c)
+      else index.set(key, [c])
+    }
+  }
+  const byCard = new Map<string, TcProduct[]>()
+  const problems: string[] = []
+  for (const p of products) {
+    if (!EXCLUSIVE_GROUPS.has(p.groupId) || taken.has(p.productId) || productTreatment(p.name) === null) continue
+    const m = /^\s*([^/\s]+)\s*\/\s*0*(\d+)\s*$/.exec(p.number ?? '')
+    if (!m) continue
+    const names = exclusiveNames(p.name)
+    const hits = (index.get(`${numberKey(m[1])}/${parseInt(m[2], 10)}`) ?? []).filter((c) => {
+      const own = plainName(c.name)
+      return own !== '' && names.includes(own)
+    })
+    if (hits.length > 1) {
+      problems.push(`TCGplayer product ${p.productId} ${JSON.stringify(p.name)} fits several cards (${hits.map((c) => c.id).join(', ')}); left out`)
+      continue
+    }
+    if (hits.length === 0) continue
+    const list = byCard.get(hits[0].id)
+    if (list) list.push(p)
+    else byCard.set(hits[0].id, [p])
+  }
+  return { byCard, problems }
+}
 
 /**
  * The TCGplayer products of a card. Its TCGdex ids are used first: the variants' ids (each with the

@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
-import { matchGroup, matchProducts } from '../../scripts/catalog/pokemon/match'
-import { alwaysFoil, cardVersions, canonicalLabel, groupFinish, productTreatment, variantLabel } from '../../scripts/catalog/pokemon/versions'
+import { exclusiveProducts, matchGroup, matchProducts } from '../../scripts/catalog/pokemon/match'
+import { alwaysFoil, cardVersions, canonicalLabel, groupFinish, productTreatment, variantLabel, withExclusives } from '../../scripts/catalog/pokemon/versions'
 import type { TcGroup, TcPrice, TcProduct, TdCard, TdSet, TdVariant } from '../../scripts/catalog/pokemon/types'
 import { movedEnough } from '../../src/main/tcgplayer/prices'
 
@@ -516,6 +516,95 @@ describe('foil patterns', () => {
     expect(productTreatment('Sycamore - 107a/122 (Non-Holo)')).toBeNull()
     expect(productTreatment('Raichu - SM65 (#25 Pikachu Stamped)')).toBeNull()
     expect(productTreatment('Carracosta')).toBeNull()
+  })
+})
+
+describe('box and blister exclusives', () => {
+  // The owner's report: 30th Celebration Eevee 116/128 came as a Cosmos Holo in a Knockout box,
+  // which TCGplayer files in Blister Exclusives, not the set's group, and TCGdex doesn't list.
+  const eevee: TdCard = { ...brief({ id: '30th-116', localId: '116', name: 'Eevee', rarity: 'Common' }), set: { id: '30th', name: '30th Celebration' } }
+  const s30: TdSet = { id: '30th', name: '30th Celebration', cardCount: { official: 128, total: 158 }, cards: [] }
+  const ex = (productId: number, groupId: number, name: string, number: string | null): TcProduct => ({ productId, groupId, name, number })
+  const box = ex(717879, 2289, 'Eevee - 116/128 (30th Celebration) (Cosmos Holo)', '116/128')
+  const find = (products: TcProduct[], taken = new Set<number>(), sets = [{ set: s30, cards: [eevee] }]): ReturnType<typeof exclusiveProducts> =>
+    exclusiveProducts(sets, products, taken)
+
+  it('finds a cosmos holo filed in Blister Exclusives by name, number and set size', () => {
+    const r = find([box])
+    expect([...r.byCard]).toEqual([['30th-116', [box]]])
+    expect(r.problems).toEqual([])
+  })
+  it('reads a number with no dash before it, and the other exclusive groups', () => {
+    const misc = ex(1, 2374, 'Eevee 116/128 (Cosmos Holo)', '116/128')
+    const deck = ex(2, 1840, 'Eevee - 116/128 (Cracked Ice Holo)', '116/128')
+    expect(find([misc, deck]).byCard.get('30th-116')).toEqual([misc, deck])
+  })
+  it('leaves out Prize Pack (stamped), plain finishes, stamps and other groups', () => {
+    const r = find([
+      ex(1, 22880, 'Eevee - 116/128 (Cosmos Holo)', '116/128'),
+      ex(2, 2289, 'Eevee - 116/128 (Reverse Holo)', '116/128'),
+      ex(3, 2374, 'Eevee - 116/128 (Cosmos Holo) (Gamestop Promo)', '116/128'),
+      ex(4, 24722, 'Eevee - 116/128 (Cosmos Holo)', '116/128')
+    ])
+    expect(r.byCard.size).toBe(0)
+  })
+  it('needs the name, the number and the set size to agree', () => {
+    const r = find([
+      ex(1, 2289, 'Pikachu - 116/128 (Cosmos Holo)', '116/128'),
+      ex(2, 2289, 'Eevee - 117/128 (Cosmos Holo)', '117/128'),
+      ex(3, 2289, 'Eevee - 116/127 (Cosmos Holo)', '116/127'),
+      ex(4, 2289, 'Eevee (Cosmos Holo)', '116'),
+      ex(5, 2289, 'Eevee (Cosmos Holo)', null)
+    ])
+    expect(r.byCard.size).toBe(0)
+  })
+  it('leaves a product TCGdex already gives some card to TCGdex', () => {
+    expect(find([box], new Set([box.productId])).byCard.size).toBe(0)
+  })
+  it('matches nothing when two sets of that size have the card, and says so', () => {
+    const other: TdSet = { ...s30, id: 'zz' }
+    const twin: TdCard = { ...eevee, id: 'zz-116', set: { id: 'zz', name: 'ZZ' } }
+    const r = find([box], new Set(), [{ set: s30, cards: [eevee] }, { set: other, cards: [twin] }])
+    expect(r.byCard.size).toBe(0)
+    expect(r.problems).toEqual(['TCGplayer product 717879 "Eevee - 116/128 (30th Celebration) (Cosmos Holo)" fits several cards (30th-116, zz-116); left out'])
+  })
+  it("skips sets whose localIds aren't the printed numbers", () => {
+    const cc: TdSet = { ...s30, id: '30th-c' }
+    const r = find([box], new Set(), [{ set: cc, cards: [{ ...eevee, id: '30th-c-116', set: { id: '30th-c', name: 'CC' } }] }])
+    expect(r.byCard.size).toBe(0)
+  })
+
+  const row = (productId: number, subTypeName: string, marketPrice: number): TcPrice => ({ productId, subTypeName, marketPrice })
+  const pack = ex(714357, 24722, 'Eevee - 116/128', '116/128')
+  const prices = new Map<number, TcPrice[]>([
+    [714357, [row(714357, 'Holofoil', 0.21)]],
+    [717879, [row(717879, 'Holofoil', 1.5)]]
+  ])
+  const generated: TdCard = { ...eevee, variants_detailed: [{ type: 'normal', variantId: 'generated' }] }
+
+  it('gives the card its Cosmos Holo with its own price beside the pack Holofoil', () => {
+    const matched = withExclusives([{ product: pack, variantSubtype: null }], [box], prices)
+    expect(cardVersions(generated, matched, prices).versions).toEqual([
+      { label: 'Cosmos Holo', productId: 717879, subTypeName: 'Holofoil', price: 1.5 },
+      { label: 'Holofoil', productId: 714357, subTypeName: 'Holofoil', price: 0.21 }
+    ])
+  })
+  it("doesn't add an exclusive whose finish the card already has a product for", () => {
+    const own = ex(9, 2374, 'Eevee - 116/128 (Cosmos Holo)', '116/128')
+    const sub = ex(8, 24722, 'Eevee - 116/128', '116/128')
+    const withSub = new Map([...prices, [8, [row(8, 'Cosmos Holofoil', 3)]]])
+    const base = [{ product: pack, variantSubtype: null }]
+    expect(withExclusives([...base, { product: own, variantSubtype: null }], [box], prices).map((m) => m.product.productId)).toEqual([714357, 9])
+    expect(withExclusives([...base, { product: sub, variantSubtype: null }], [box], withSub).map((m) => m.product.productId)).toEqual([714357, 8])
+    expect(withExclusives([...base, { product: box, variantSubtype: null }], [box], prices).map((m) => m.product.productId)).toEqual([714357, 717879])
+  })
+  it('prices a TCGdex cosmos variant with no product from the exclusive', () => {
+    const c: TdCard = { ...eevee, variants_detailed: [{ type: 'holo', variantId: 'a' }, { type: 'holo', foil: 'cosmos', variantId: 'b' }] }
+    const matched = withExclusives([{ product: pack, variantSubtype: null }], [box], prices)
+    expect(cardVersions(c, matched, prices).versions.map((v) => [v.label, v.productId, v.price])).toEqual([
+      ['Cosmos Holo', 717879, 1.5],
+      ['Holofoil', 714357, 0.21]
+    ])
   })
 })
 

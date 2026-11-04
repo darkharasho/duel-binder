@@ -129,8 +129,11 @@ export interface OpParsedListing {
  */
 export function parseOnePieceListing(title: string, prefix: string): OpParsedListing | null {
   if (!JAPANESE.test(title) || OTHER_LANGUAGE.test(title) || !isSingleCard(title)) return null
-  if ([SLAB, SEVERAL, NOT_A_CARD, FAKE, BAD_CONDITION, OTHER_PRINTING].some((re) => re.test(title))) return null
-  const numbers = new Set([...title.matchAll(NUMBER)].map((m) => `${m[1].toUpperCase()}${m[2]}-${m[3]}`))
+  if ([SLAB, SEVERAL, NOT_A_CARD, FAKE, BAD_CONDITION, OTHER_PRINTING].some((re) => re.test(title)))
+    return null
+  const numbers = new Set(
+    [...title.matchAll(NUMBER)].map((m) => `${m[1].toUpperCase()}${m[2]}-${m[3]}`)
+  )
   if (numbers.size !== 1) return null
   const number = [...numbers][0]
   if (opPrefixOf(number) !== prefix) return null
@@ -253,12 +256,9 @@ export function assignOnePieceSweep(
   )
   db.transaction(() => {
     for (const [id, p] of prices) upsert.run(id, p.price, p.listingCount, checkedAt)
-    db.prepare('UPDATE price_sweeps SET swept_at = ?, calls = calls + ? WHERE key = ? AND language = ?').run(
-      now.toISOString(),
-      result.calls ?? 1,
-      `${ONEPIECE_KEY_PREFIX}${prefix}`,
-      language
-    )
+    db.prepare(
+      'UPDATE price_sweeps SET swept_at = ?, calls = calls + ? WHERE key = ? AND language = ?'
+    ).run(now.toISOString(), result.calls ?? 1, `${ONEPIECE_KEY_PREFIX}${prefix}`, language)
   })()
   return { priced: prices.size }
 }
@@ -288,7 +288,9 @@ export async function runOnePieceSweep(
   const reserve = yugiohReserve(db, now) + pokemonCallsLeft(db, now, pokemonDailyCalls)
   const calls = Math.min(dailyCalls - day.calls, SWEEP_DAILY_CALLS - used - reserve)
   const total = (
-    db.prepare(`SELECT COUNT(*) AS n FROM price_sweeps WHERE key LIKE '${ONEPIECE_KEY_PREFIX}%'`).get() as { n: number }
+    db
+      .prepare(`SELECT COUNT(*) AS n FROM price_sweeps WHERE key LIKE '${ONEPIECE_KEY_PREFIX}%'`)
+      .get() as { n: number }
   ).n
   const limit = Math.min(
     ONEPIECE_SWEEP_BATCH,

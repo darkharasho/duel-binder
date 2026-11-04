@@ -11,7 +11,8 @@ import { writeOnePiece, type OpPlan } from '../../scripts/catalog/onepiece/write
 import { openDatabase } from '../../src/main/db/database'
 import { onePieceCardId, onePieceImageId } from '../../src/shared/games'
 
-const read = (name: string): string => readFileSync(join(__dirname, '../fixtures/onepiece', name), 'utf8')
+const read = (name: string): string =>
+  readFileSync(join(__dirname, '../fixtures/onepiece', name), 'utf8')
 const EN_SERIES = parseSeriesList(read('bandai-op17.html')).series
 const EN_OP17 = EN_SERIES[0]
 const EN = parseCardList(read('bandai-op17.html'), EN_OP17.id).entries
@@ -48,12 +49,32 @@ function plan(series: BandaiSeries[], entries: BandaiEntry[], extra: Partial<OpP
 }
 const writeEn = (entries: BandaiEntry[], now = NOW): ReturnType<typeof writeOnePiece> =>
   writeOnePiece(db, plan(EN_SERIES, entries), { now, nowIso: new Date(now).toISOString() })
-const writeJa = (entries: BandaiEntry[], extra: Partial<OpPlan> = {}, now = NOW): ReturnType<typeof writeOnePiece> =>
-  writeOnePiece(db, plan(JA_SERIES, entries, extra), { now, nowIso: new Date(now).toISOString(), region: 'ja' })
+const writeJa = (
+  entries: BandaiEntry[],
+  extra: Partial<OpPlan> = {},
+  now = NOW
+): ReturnType<typeof writeOnePiece> =>
+  writeOnePiece(db, plan(JA_SERIES, entries, extra), {
+    now,
+    nowIso: new Date(now).toISOString(),
+    region: 'ja'
+  })
 
-interface Row { set_rarity_code: string; set_rarity: string; language: string; card_id: number; set_name: string; missing_from_api: number; pkey: string }
+interface Row {
+  set_rarity_code: string
+  set_rarity: string
+  language: string
+  card_id: number
+  set_name: string
+  missing_from_api: number
+  pkey: string
+}
 const rows = (language: string): Row[] =>
-  db.prepare("SELECT * FROM card_printings WHERE game = 'op' AND language = ? ORDER BY set_rarity_code").all(language) as Row[]
+  db
+    .prepare(
+      "SELECT * FROM card_printings WHERE game = 'op' AND language = ? ORDER BY set_rarity_code"
+    )
+    .all(language) as Row[]
 
 describe('writeOnePiece, Japanese', () => {
   test('writes Japanese ids, keys, sets and labels, with parallels on first sight', () => {
@@ -70,11 +91,14 @@ describe('writeOnePiece, Japanese', () => {
     ])
     expect(rows('ja')[2].pkey).toBe(`ja|${leader}|世界最強の戦士 [OP-17]|OP17-001|L`)
     expect(rows('en')).toEqual([])
-    expect(db.prepare('SELECT bandai_id FROM onepiece_images WHERE image_id = ?').get(onePieceImageId('ja', 'OP17-001_p1')))
-      .toEqual({ bandai_id: 'ja:OP17-001_p1' })
-    expect(db.prepare("SELECT language, set_name, set_code FROM sets WHERE game = 'op'").all()).toEqual([
-      { language: 'ja', set_name: '世界最強の戦士 [OP-17]', set_code: 'OP17' }
-    ])
+    expect(
+      db
+        .prepare('SELECT bandai_id FROM onepiece_images WHERE image_id = ?')
+        .get(onePieceImageId('ja', 'OP17-001_p1'))
+    ).toEqual({ bandai_id: 'ja:OP17-001_p1' })
+    expect(
+      db.prepare("SELECT language, set_name, set_code FROM sets WHERE game = 'op'").all()
+    ).toEqual([{ language: 'ja', set_name: '世界最強の戦士 [OP-17]', set_code: 'OP17' }])
     expect(r).toMatchObject({ cards: 3, printings: 4, priced: 0, held: 0, images: 4 })
     expect(r.perSet).toEqual([{ setCode: 'OP17', printings: 4, priced: 0 }])
   })
@@ -88,23 +112,50 @@ describe('writeOnePiece, Japanese', () => {
     writeEn([en('OP17-001')])
     writeJa([ja('OP17-001'), ja('OP17-061')])
     const card = (id: number): unknown =>
-      db.prepare(`SELECT c.name, c."desc", oc.traits, oc.colors, oc.life FROM cards c JOIN onepiece_cards oc ON oc.card_id = c.id WHERE c.id = ?`).get(id)
-    const english = card(onePieceCardId('en', 'OP17-001')) as { name: string; desc: string; traits: string }
-    expect(card(onePieceCardId('ja', 'OP17-001'))).toEqual({ ...english, colors: '["Red"]', life: 5 })
-    expect(card(onePieceCardId('ja', 'OP17-061'))).toMatchObject({ name: '大看板', traits: '["魚人族","百獣海賊団"]' })
+      db
+        .prepare(
+          `SELECT c.name, c."desc", oc.traits, oc.colors, oc.life FROM cards c JOIN onepiece_cards oc ON oc.card_id = c.id WHERE c.id = ?`
+        )
+        .get(id)
+    const english = card(onePieceCardId('en', 'OP17-001')) as {
+      name: string
+      desc: string
+      traits: string
+    }
+    expect(card(onePieceCardId('ja', 'OP17-001'))).toEqual({
+      ...english,
+      colors: '["Red"]',
+      life: 5
+    })
+    expect(card(onePieceCardId('ja', 'OP17-061'))).toMatchObject({
+      name: '大看板',
+      traits: '["魚人族","百獣海賊団"]'
+    })
   })
 
   test('each language leaves the other alone', () => {
     writeEn([en('OP17-001'), en('OP17-005')])
     const enIds = [en('OP17-001'), en('OP17-005')].map((e) => onePieceImageId('en', e.bandaiId))
     const hash = (): string =>
-      createHash('sha256').update(JSON.stringify([
-        db.prepare("SELECT * FROM card_printings WHERE language = 'en' ORDER BY id").all(),
-        db.prepare(`SELECT * FROM card_images WHERE image_id IN (${enIds.join(',')}) ORDER BY image_id`).all(),
-        db.prepare(`SELECT * FROM onepiece_images WHERE image_id IN (${enIds.join(',')}) ORDER BY image_id`).all(),
-        db.prepare("SELECT * FROM sets WHERE language = 'en' ORDER BY set_name").all(),
-        db.prepare(`SELECT * FROM cards WHERE id = ${onePieceCardId('en', 'OP17-001')}`).all()
-      ])).digest('hex')
+      createHash('sha256')
+        .update(
+          JSON.stringify([
+            db.prepare("SELECT * FROM card_printings WHERE language = 'en' ORDER BY id").all(),
+            db
+              .prepare(
+                `SELECT * FROM card_images WHERE image_id IN (${enIds.join(',')}) ORDER BY image_id`
+              )
+              .all(),
+            db
+              .prepare(
+                `SELECT * FROM onepiece_images WHERE image_id IN (${enIds.join(',')}) ORDER BY image_id`
+              )
+              .all(),
+            db.prepare("SELECT * FROM sets WHERE language = 'en' ORDER BY set_name").all(),
+            db.prepare(`SELECT * FROM cards WHERE id = ${onePieceCardId('en', 'OP17-001')}`).all()
+          ])
+        )
+        .digest('hex')
     const before = hash()
     writeJa([ja('OP17-001')])
     expect(hash()).toBe(before)
@@ -112,7 +163,11 @@ describe('writeOnePiece, Japanese', () => {
     const r = writeEn([en('OP17-001'), en('OP17-005')], NOW + 1000)
     expect(hash()).toBe(before)
     expect(rows('ja').map((p) => p.missing_from_api)).toEqual([0])
-    expect(db.prepare('SELECT missing_from_api AS m FROM card_images WHERE image_id = ?').get(onePieceImageId('ja', 'OP17-001'))).toEqual({ m: 0 })
+    expect(
+      db
+        .prepare('SELECT missing_from_api AS m FROM card_images WHERE image_id = ?')
+        .get(onePieceImageId('ja', 'OP17-001'))
+    ).toEqual({ m: 0 })
     expect(r.perSet).toEqual([{ setCode: 'OP17', printings: 2, priced: 0 }])
     // And Japanese again leaves English alone.
     writeJa([ja('OP17-001')], {}, NOW + 2000)
@@ -124,15 +179,28 @@ describe('writeOnePiece, Japanese', () => {
     writeEn([en('OP17-001')])
     writeJa([ja('OP17-001'), ja('OP17-001_p1')])
     writeJa([ja('OP17-001')], {}, NOW + 1000)
-    expect(rows('ja').map((p) => [p.set_rarity_code, p.missing_from_api])).toEqual([['OP17-001', 0], ['OP17-001_p1', 1]])
+    expect(rows('ja').map((p) => [p.set_rarity_code, p.missing_from_api])).toEqual([
+      ['OP17-001', 0],
+      ['OP17-001_p1', 1]
+    ])
     expect(rows('en').map((p) => p.missing_from_api)).toEqual([0])
-    expect(db.prepare('SELECT missing_from_api AS m FROM card_images WHERE image_id = ?').get(onePieceImageId('ja', 'OP17-001_p1'))).toEqual({ m: 1 })
+    expect(
+      db
+        .prepare('SELECT missing_from_api AS m FROM card_images WHERE image_id = ?')
+        .get(onePieceImageId('ja', 'OP17-001_p1'))
+    ).toEqual({ m: 1 })
   })
 
   test('a borrowed label that disagrees with the stored one is a note', () => {
     writeJa([ja('OP17-001'), ja('OP17-001_p1')])
-    const r = writeJa([ja('OP17-001'), ja('OP17-001_p1')], { labels: new Map([['OP17-001_p1', 'Alternate Art']]) }, NOW + 1000)
+    const r = writeJa(
+      [ja('OP17-001'), ja('OP17-001_p1')],
+      { labels: new Map([['OP17-001_p1', 'Alternate Art']]) },
+      NOW + 1000
+    )
     expect(rows('ja').map((p) => p.set_rarity)).toEqual(['L', 'L (Parallel)'])
-    expect(r.notes).toContain('OP17-001_p1: its English twin is Alternate Art, keeps "L (Parallel)"')
+    expect(r.notes).toContain(
+      'OP17-001_p1: its English twin is Alternate Art, keeps "L (Parallel)"'
+    )
   })
 })

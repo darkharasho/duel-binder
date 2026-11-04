@@ -52,9 +52,13 @@ export function englishArt(path: string): Map<string, string> {
   if (!existsSync(path)) return new Map()
   const db = new Database(path, { readonly: true, fileMustExist: true })
   try {
-    const has = db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'bandai_art'").get()
+    const has = db
+      .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'bandai_art'")
+      .get()
     if (!has) return new Map()
-    const rows = db.prepare('SELECT bandai_id, hash FROM bandai_art WHERE changed_hash IS NULL').all() as {
+    const rows = db
+      .prepare('SELECT bandai_id, hash FROM bandai_art WHERE changed_hash IS NULL')
+      .all() as {
       bandai_id: string
       hash: string
     }[]
@@ -93,19 +97,25 @@ export function twinLabel(hash: string, english: EnglishVersion[]): string | nul
 
 /** Takes the English set's name for a Japanese series with the same set code, so both read alike. */
 function englishNames(work: Database.Database, series: BandaiSeries[]): BandaiSeries[] {
-  const named = work.prepare("SELECT set_name FROM sets WHERE game = 'op' AND language = 'en' AND set_code = ?")
+  const named = work.prepare(
+    "SELECT set_name FROM sets WHERE game = 'op' AND language = 'en' AND set_code = ?"
+  )
   return series.map((s) => {
     const en = named.get(s.setCode) as { set_name: string } | undefined
     return en ? { ...s, setName: en.set_name } : s
   })
 }
 
-export async function runOnePieceJapaneseStep(work: Database.Database, o: JapaneseStepOpts): Promise<JapaneseStepResult> {
+export async function runOnePieceJapaneseStep(
+  work: Database.Database,
+  o: JapaneseStepOpts
+): Promise<JapaneseStepResult> {
   const problems: string[] = []
   let opened: OpCache | undefined
   try {
     const cache = (opened = openOpCache(o.cachePath))
-    const sources = o.sources ?? createOnePieceSources({ cache, version: o.version, log: o.log, site: BANDAI_JA })
+    const sources =
+      o.sources ?? createOnePieceSources({ cache, version: o.version, log: o.log, site: BANDAI_JA })
     const date = o.now?.() ?? new Date()
     const now = date.getTime()
     const notes: string[] = []
@@ -125,13 +135,27 @@ export async function runOnePieceJapaneseStep(work: Database.Database, o: Japane
     // 2. Art, in the site's order (newest first within each kind).
     const entriesOf = new Map<string, BandaiEntry[]>()
     for (const e of entries) entriesOf.set(e.seriesId, [...(entriesOf.get(e.seriesId) ?? []), e])
-    const batches: ArtBatch[] = series.map((s) => ({ seriesId: s.id, entries: entriesOf.get(s.id) ?? [], candidates: [] }))
+    const batches: ArtBatch[] = series.map((s) => ({
+      seriesId: s.id,
+      entries: entriesOf.get(s.id) ?? [],
+      candidates: []
+    }))
     const art = await refreshArt({
-      cache, sources, batches, stored: new Map(), portal: o.portal, now, log: o.log, budget: o.budget, region: 'ja'
+      cache,
+      sources,
+      batches,
+      stored: new Map(),
+      portal: o.portal,
+      now,
+      log: o.log,
+      budget: o.budget,
+      region: 'ja'
     })
     for (const id of art.firstNoticed) problems.push(`Bandai Japanese art changed: ${id}`)
     for (const id of art.tooLarge)
-      notes.push(`${id}: Bandai art is too large for the portal; not downloaded again until its re-check`)
+      notes.push(
+        `${id}: Bandai art is too large for the portal; not downloaded again until its re-check`
+      )
 
     const hashed = new Set<string>()
     const frozen = new Set<string>()
@@ -166,16 +190,36 @@ export async function runOnePieceJapaneseStep(work: Database.Database, o: Japane
     // 4. Write.
     const firstSeen = cache.firstSeenAll()
     const before = new Set(
-      (work.prepare("SELECT set_rarity_code AS c FROM card_printings WHERE game = 'op' AND language = 'ja'").all() as { c: string }[]).map((r) => r.c)
+      (
+        work
+          .prepare(
+            "SELECT set_rarity_code AS c FROM card_printings WHERE game = 'op' AND language = 'ja'"
+          )
+          .all() as { c: string }[]
+      ).map((r) => r.c)
     )
     const written = writeOnePiece(
       work,
-      { series, entries, groupOf: new Map(), matches: new Map(), prices: new Map(), hashed, frozen, firstSeen, labels },
+      {
+        series,
+        entries,
+        groupOf: new Map(),
+        matches: new Map(),
+        prices: new Map(),
+        hashed,
+        frozen,
+        firstSeen,
+        labels
+      },
       { now, nowIso: date.toISOString(), region: 'ja' }
     )
     let labelled = 0
     for (const [id] of labels) if (!before.has(id) && hashed.has(id) && !frozen.has(id)) labelled++
-    return { report: { ...written, notes: [...notes, ...written.notes], labelled }, error: null, problems }
+    return {
+      report: { ...written, notes: [...notes, ...written.notes], labelled },
+      error: null,
+      problems
+    }
   } catch (e) {
     return { report: null, error: e instanceof Error ? e.message : String(e), problems }
   } finally {

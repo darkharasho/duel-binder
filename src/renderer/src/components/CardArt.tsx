@@ -66,6 +66,11 @@ const ART_LABELS: Record<
     letters: 'EN',
     wide: { words: '@[5rem]:block', letters: '@[5rem]:hidden' }
   },
+  ja: {
+    words: 'Japanese art',
+    letters: 'JP',
+    wide: { words: '@[6rem]:block', letters: '@[6rem]:hidden' }
+  },
   'zh-hant': {
     words: 'Traditional Chinese art',
     letters: 'TC',

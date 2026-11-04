@@ -130,3 +130,56 @@ export function traditionalTwins(sets: TraditionalPlan[]): TraditionalFinder {
     }
   }
 }
+
+/**
+ * Simplified Chinese sets printed card for card from a Japanese set, by set id: the Japanese card is
+ * the same print, so its art is the right picture where an English twin's is only the same rules.
+ * 30th Celebration is M6a, its Classic Collection included; no Traditional Chinese edition exists.
+ */
+export const JAPANESE_MIRRORS: Readonly<Record<string, string>> = { '30thC': 'M6a' }
+
+export type MirrorOutcome = 'linked' | 'unmatched' | 'no Japanese art'
+
+/** "Basic Grass Energy" in the Japanese catalog is "Grass Energy" in the Simplified list. */
+const mirrorKey = (name: string): string => nameKey(name.replace(/^basic\s+/i, ''))
+
+/**
+ * Each Simplified card's Japanese print: the card of the same number and name, else, for a card
+ * numbered differently (the energies), the one card left of its name when it alone is left with
+ * that name. Cards of one name left over together (three RGB Mews) can't be told apart: none.
+ */
+export function japaneseMirror(
+  cards: { card: TdCard; name: string }[],
+  japanese: { card: TdCard; name: string; imageUrl: string | null }[]
+): Map<string, { outcome: MirrorOutcome; twin: TdCard | null }> {
+  const byNumber = new Map(japanese.map((j) => [numberKey(j.card.localId), j]))
+  const found = new Map<string, (typeof japanese)[number]>()
+  const used = new Set<string>()
+  for (const c of cards) {
+    const j = byNumber.get(numberKey(c.card.localId))
+    if (j && mirrorKey(j.name) === mirrorKey(c.name)) {
+      found.set(c.card.id, j)
+      used.add(j.card.id)
+    }
+  }
+  const left = cards.filter((c) => !found.has(c.card.id))
+  const leftJapanese = japanese.filter((j) => !used.has(j.card.id))
+  const ofName = <T extends { name: string }>(list: T[], key: string): T[] =>
+    list.filter((x) => mirrorKey(x.name) === key)
+  for (const c of left) {
+    const key = mirrorKey(c.name)
+    const js = ofName(leftJapanese, key)
+    if (js.length === 1 && ofName(left, key).length === 1) found.set(c.card.id, js[0])
+  }
+  return new Map(
+    cards.map((c) => {
+      const j = found.get(c.card.id)
+      const result: { outcome: MirrorOutcome; twin: TdCard | null } = !j
+        ? { outcome: 'unmatched', twin: null }
+        : j.imageUrl
+          ? { outcome: 'linked', twin: j.card }
+          : { outcome: 'no Japanese art', twin: null }
+      return [c.card.id, result]
+    })
+  )
+}

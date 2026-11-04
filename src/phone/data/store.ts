@@ -160,6 +160,7 @@ const READ_CHANNELS: ReadonlySet<DataChannel> = new Set<DataChannel>([
   'cards:browseFacets',
   'cards:borrowedArt',
   'cards:traditionalArt',
+  'cards:japaneseArt',
   'collection:list',
   'collection:forCard',
   'collection:facets',

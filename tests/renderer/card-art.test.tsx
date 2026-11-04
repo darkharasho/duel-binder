@@ -215,12 +215,14 @@ describe('CardArt with borrowed art', () => {
   const twin = PKM_ID_MIN + 2
   const load = (
     pairs: [number, number][],
-    traditional: [number, number][] = []
+    traditional: [number, number][] = [],
+    japanese: [number, number][] = []
   ): ReturnType<typeof vi.fn> => {
     const borrowedArt = vi.fn(async () => pairs)
     const traditionalArt = vi.fn(async () => traditional)
+    const japaneseArt = vi.fn(async () => japanese)
     const mock = createMockApi()
-    window.api = { ...mock, cards: { ...mock.cards, borrowedArt, traditionalArt } }
+    window.api = { ...mock, cards: { ...mock.cards, borrowedArt, traditionalArt, japaneseArt } }
     return borrowedArt
   }
   beforeEach(resetBorrowedArt)
@@ -247,6 +249,17 @@ describe('CardArt with borrowed art', () => {
     expect(label).toHaveTextContent('TC')
     expect(label).not.toHaveTextContent('English')
     expect(img.closest('[title="Traditional Chinese art"]')).toHaveClass('w-40')
+  })
+
+  it("a twin that is the card's Japanese print says Japanese art", async () => {
+    load([[own, twin]], [], [[own, twin]])
+    render(<CardArt imageId={own} size="full" alt="Pikachu" />)
+    const img = await screen.findByAltText('Pikachu (Japanese art)')
+    expect(img).toHaveAttribute('src', `ygo-img://full/${twin}`)
+    const label = screen.getByTestId('borrowed-art-label')
+    expect(label).toHaveTextContent('Japanese art')
+    expect(label).toHaveTextContent('JP')
+    expect(label).not.toHaveTextContent('English')
   })
 
   it('a card with only Traditional art shows it', async () => {

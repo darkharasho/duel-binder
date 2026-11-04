@@ -21,6 +21,7 @@ export function CardDetails({
 }): React.JSX.Element | null {
   const { def } = useGame()
   if (!card) return null
+  // 'op' takes the def.details path below, like Pokémon, and gets the printing facts.
   const stats =
     def.id === 'ygo'
       ? [

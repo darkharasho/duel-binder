@@ -3,7 +3,7 @@ import type { GameId } from '@shared/games'
 import { setType, type SetType } from '@shared/setTypes'
 import { englishSetName } from '@shared/setNames'
 import { rarityRank } from '@shared/scan/rarity'
-import { matchesSetSearch, sortOptions, type SortOption } from '@/lib/filters'
+import { HIDDEN_SORTS, matchesSetSearch, sortOptions, type SortOption } from '@/lib/filters'
 import { matchesLanguage } from '@/lib/languageFilter'
 import type {
   ChecklistCard,
@@ -32,9 +32,7 @@ const CHECKLIST_SORTS = [
 /** Sort choices for a set's cards: ATK, DEF and Level are Yu-Gi-Oh!'s, HP is Pokémon's. */
 export const checklistSorts = (game: GameId): SortOption<ChecklistSort>[] =>
   sortOptions<ChecklistSort>(
-    CHECKLIST_SORTS.filter((s) =>
-      game === 'pkm' ? !['atk', 'def', 'level'].includes(s.value) : s.value !== 'hp'
-    )
+    CHECKLIST_SORTS.filter((s) => !HIDDEN_SORTS[game].includes(s.value))
   )
 
 export interface Progress {

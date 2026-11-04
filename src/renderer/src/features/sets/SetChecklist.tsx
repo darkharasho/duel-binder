@@ -56,6 +56,7 @@ import { useFavourites } from '@/lib/favourites'
 import { useWishlist } from '@/lib/wishlist'
 import { RarityWishHeart } from '@/components/RarityWishHeart'
 import type { ActiveChip } from '@/lib/filters'
+import { byGame } from '@shared/games'
 import { useGame } from '@/lib/game'
 import { isPhone, isWeb } from '@/lib/platform'
 import { createSerialQueue } from '@/lib/serialQueue'
@@ -464,6 +465,7 @@ export function SetChecklist({
                     {bulk ? 'Done' : 'Bulk add'}
                   </Button>
                 )}
+                {/* Kind A: Pokémon-only; 'op' has no placeholder cards. */}
                 {!phone && !friend && !isWeb() && game === 'pkm' && (
                   <PlaceholdersButton set={data.set} cards={data.cards} />
                 )}
@@ -695,7 +697,8 @@ export function SetChecklist({
                   unownedCard && `${englishSetName(data.set.setName)} · ${unownedCard.numberLabel}`
                 }
                 preferSet={{ setName: data.set.setName, language: data.set.language }}
-                onlySet={game === 'ygo'}
+                // op: step 2 revisits; its cards, like Yu-Gi-Oh!'s, reappear across sets.
+                onlySet={byGame(game, { ygo: true, pkm: false, op: true })}
                 onSelectEntry={
                   selected
                     ? (entryId) => setSelected({ cardId: selected.cardId, entryId })

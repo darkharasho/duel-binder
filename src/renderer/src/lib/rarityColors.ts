@@ -1,4 +1,4 @@
-import type { GameId } from '@shared/games'
+import { byGame, type GameId } from '@shared/games'
 
 // Yu-Gi-Oh!'s rarities keep colours a collector would expect; anything else falls back to grey.
 export const RARITY_COLORS: Record<string, string> = {
@@ -29,9 +29,23 @@ const POKEMON_COLORS: Record<string, string> = {
   'Reverse Holofoil': '#8fb4cf'
 }
 
+// One Piece's rarity codes: C, UC and R are greys and blues; Leader, Secret, Special and Treasure
+// each take their own colour. P (promo) stays a quiet grey.
+const ONE_PIECE_COLORS: Record<string, string> = {
+  L: '#e5484d',
+  C: '#6d6b67',
+  UC: '#7fa6d6',
+  R: '#8ab4f8',
+  SR: '#e9c46a',
+  SEC: '#f0b4d0',
+  SP: '#5fd0c0',
+  TR: '#e6a96b',
+  P: '#a8a59f'
+}
+
 /** A game's rarity colours (exact labels). */
 export const rarityColors = (game: GameId): Record<string, string> =>
-  game === 'ygo' ? RARITY_COLORS : POKEMON_COLORS
+  byGame(game, { ygo: RARITY_COLORS, pkm: POKEMON_COLORS, op: ONE_PIECE_COLORS })
 
 /** A Pokémon version with its subtype in front ("Shadowless Holofoil") takes its base version's colour. */
 function pokemonColor(version: string): string | undefined {
@@ -43,7 +57,11 @@ function pokemonColor(version: string): string | undefined {
 }
 
 export function rarityColor(rarity: string, game: GameId = 'ygo'): string {
-  const own = game === 'ygo' ? RARITY_COLORS[rarity] : pokemonColor(rarity)
+  const own = byGame<string | undefined>(game, {
+    ygo: RARITY_COLORS[rarity],
+    pkm: pokemonColor(rarity),
+    op: ONE_PIECE_COLORS[rarity]
+  })
   return own ?? '#9ca3af'
 }
 

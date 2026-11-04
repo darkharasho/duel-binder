@@ -1,7 +1,7 @@
 import { useCallback, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { LayoutGrid, List } from 'lucide-react'
-import type { GameId } from '@shared/games'
+import { byGame, type GameId } from '@shared/games'
 import type { Language } from '@shared/languages'
 import type { CardSearchResult, CountMode, SetSummary } from '@shared/types'
 import { SET_TYPES, type SetType } from '@shared/setTypes'
@@ -167,7 +167,7 @@ export function SetsPage({ onAddCard, onAddMissing }: SetsPageProps): React.JSX.
 
   // Pokémon sets sit under their series ("Scarlet & Violet") while sorted by date; Yu-Gi-Oh! has
   // no series, and other sorts would split a series up anyway.
-  const bySeries = game === 'pkm' && sort === 'date'
+  const bySeries = byGame(game, { ygo: false, pkm: true, op: false }) && sort === 'date'
 
   const counts = useMemo(
     () => typeCounts(all, { filter, mode, language, game }),

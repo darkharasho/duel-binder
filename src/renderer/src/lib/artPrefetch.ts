@@ -51,7 +51,7 @@ const saveData = (): boolean =>
 async function srcsFor(tiles: readonly PrefetchTile[]): Promise<string[]> {
   const shown = tiles.slice(0, MAX_PREFETCH)
   const ygoPrintings = shown
-    .filter((t) => t.imageId != null && gameOfId(t.imageId) !== 'pkm' && t.printingId != null)
+    .filter((t) => t.imageId != null && gameOfId(t.imageId) === 'ygo' && t.printingId != null)
     .map((t) => t.printingId!)
   // On the phone a photo is named by the server's printing id, looked up in one batch.
   const photos = isPhone()

@@ -1,3 +1,4 @@
+import { isGameId } from '@shared/games'
 import type { GameId } from '@shared/games/types'
 import type { ScanRow } from '@/features/scan/session'
 
@@ -55,7 +56,7 @@ export function loadStream(): StreamRecord | null {
     const v: unknown = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? 'null')
     if (typeof v !== 'object' || v === null) return null
     const r = v as Record<string, unknown>
-    if ((r.game !== 'ygo' && r.game !== 'pkm') || !Array.isArray(r.rows)) return null
+    if (!isGameId(r.game) || !Array.isArray(r.rows)) return null
     const rows = r.rows.filter(
       (x): x is ScanRow =>
         typeof x === 'object' &&

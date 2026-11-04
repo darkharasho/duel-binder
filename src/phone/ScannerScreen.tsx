@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { englishSetName } from '@shared/setNames'
+import { printingNoun } from '@shared/games'
 import {
   ArrowRightIcon,
   CopyIcon,
@@ -118,7 +119,7 @@ function LastScan({ row, burst }: { row: ScanRow; burst: number }): React.JSX.El
         {choices.length > 1 && (
           <button
             type="button"
-            aria-label={`Next ${row.game === 'pkm' ? 'version' : 'printing'} of ${row.name}`}
+            aria-label={`Next ${printingNoun(row.game ?? 'ygo')} of ${row.name}`}
             disabled={session.committing}
             onClick={cycle}
             className="flex h-12 w-11 flex-col items-center justify-center gap-0.5 rounded-xl text-[11px] text-white/75 active:bg-white/[0.08] disabled:opacity-50"

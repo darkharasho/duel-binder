@@ -1,5 +1,5 @@
 import { LANGUAGES, type LanguageFilter } from '@shared/languages'
-import type { FilterDef, GameDef } from '@shared/games'
+import type { FilterDef, GameDef, GameId } from '@shared/games'
 import { englishSetName } from '@shared/setNames'
 import { DEFAULT_LANGUAGE } from '@/lib/languageFilter'
 import { RANGE_FIELDS, type RangeField, type RangeKey } from '@/lib/rangeFilters'
@@ -154,6 +154,16 @@ const SORT_WORDS = {
   number: { asc: 'low to high', desc: 'high to low' },
   date: { asc: 'oldest first', desc: 'newest first' }
 } as const
+
+/**
+ * Sorts a game has no column for: ATK, DEF and Level are Yu-Gi-Oh!'s, HP is Pokémon's. One Piece
+ * has none of them until step 2 adds cost and power.
+ */
+export const HIDDEN_SORTS: Record<GameId, readonly string[]> = {
+  ygo: ['hp'],
+  pkm: ['atk', 'def', 'level'],
+  op: ['atk', 'def', 'level', 'hp']
+}
 
 /** Each sort both ways, the way it starts in first: "Price: high to low", "Price: low to high". */
 export function sortOptions<T extends string>(

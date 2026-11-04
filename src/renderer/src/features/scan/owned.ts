@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
+import { printingNoun } from '@shared/games'
 import type { GameId } from '@shared/games/types'
 import type { ScanDraft } from '@shared/scan/types'
 import { api, queryKeys } from '@/lib/api'
@@ -66,7 +67,7 @@ export function ownedText(o: Owned, scanned: number, game: GameId = 'ygo'): stri
     o.copies > 0
       ? `Own ${o.copies}`
       : o.others > 0
-        ? `New ${game === 'pkm' ? 'version' : 'printing'} · ${others}`
+        ? `New ${printingNoun(game)} · ${others}`
         : 'New card'
   return scanned > 1 ? `${own} · ×${scanned} this scan` : own
 }

@@ -1,4 +1,5 @@
 import { useMemo, useRef, useState } from 'react'
+import { printingNoun } from '@shared/games'
 import {
   ChevronDownIcon,
   MinusIcon,
@@ -87,7 +88,7 @@ function ReviewRow({ row, disabled }: { row: ScanRow; disabled: boolean }): Reac
         </p>
         <PickerSheet
           label={pickerLabel(row)}
-          title={row.game === 'pkm' ? 'Version' : 'Printing'}
+          title={printingNoun(row.game ?? 'ygo') === 'version' ? 'Version' : 'Printing'}
           value={current === null ? null : String(current)}
           options={choices}
           onPick={(v) => session.setPrinting(row.key, Number(v))}
@@ -100,7 +101,7 @@ function ReviewRow({ row, disabled }: { row: ScanRow; disabled: boolean }): Reac
             <OptionLabel option={picked} compact />
           ) : (
             <span className="truncate text-muted-foreground">
-              {`Choose a ${row.game === 'pkm' ? 'version' : 'printing'}`}
+              {`Choose a ${printingNoun(row.game ?? 'ygo')}`}
             </span>
           )}
           <ChevronDownIcon aria-hidden className="size-3.5 shrink-0 opacity-60" />

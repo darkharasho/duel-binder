@@ -168,7 +168,8 @@ function CardArtImage({
   const loading = priority ? 'eager' : 'lazy'
   // No scan for Pokémon: scans are Yugipedia's, Yu-Gi-Oh! only. On the phone, none until the
   // printing's server id is known.
-  const photo = usePrintingPhotoSrc(gameOfId(imageId) === 'pkm' ? null : (printingId ?? null), {
+  // 'op' has no printing photos either.
+  const photo = usePrintingPhotoSrc(gameOfId(imageId) === 'ygo' ? (printingId ?? null) : null, {
     small: size !== 'full'
   })
   const scanSrc = printingId == null ? null : photo

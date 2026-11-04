@@ -1,4 +1,5 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
+import { isGameId } from '@shared/games'
 import type { GameId } from '@shared/games/types'
 import { isLanguage } from '@shared/languages'
 import { RARITY_TIERS } from '@shared/scan/rarity'
@@ -155,7 +156,7 @@ function useActiveGame(): GameId {
       const n = ++reads
       api.games.active().then(
         (g) => {
-          if (live && n === reads) setGame(g === 'pkm' ? 'pkm' : 'ygo')
+          if (live && n === reads) setGame(isGameId(g) ? g : 'ygo')
         },
         () => {
           // Unreadable: the game stays as it was.

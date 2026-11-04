@@ -10,21 +10,30 @@ const MARKET_ONLY_GAMES = Object.values(GAMES)
 export const isMarketOnly = `+p.game IN (${MARKET_ONLY_GAMES})`
 
 /**
- * Chinese Pokémon has no TCGplayer market, so the portal's eBay set sweep (workers/portal/src/pokemonSweep.ts)
- * is its price: that language's listings only, always USD, never another language's card.
+ * Chinese Pokémon and Japanese One Piece have no TCGplayer market, so the portal's eBay set sweeps
+ * (workers/portal/src/pokemonSweep.ts, onePieceSweep.ts) are their price: that language's listings
+ * only, always USD, never another language's card. Japanese is by game: Pokémon Japanese is not swept.
  */
 const SWEPT_LANGUAGES = ['zh-hans', 'zh-hant']
 const SWEPT_LANGUAGE_SQL = SWEPT_LANGUAGES.map((l) => `'${l}'`).join(',')
+/** Languages swept for one game only. */
+const SWEPT_BY_GAME: Record<string, string[]> = { op: ['ja'] }
 
 /** True when a market-price-only game's printing in this language may use its swept eBay price. */
-export const sweptLanguage = (language: string): boolean => SWEPT_LANGUAGES.includes(language)
+export const sweptPrinting = (game: unknown, language: string): boolean =>
+  SWEPT_LANGUAGES.includes(language) || (typeof game === 'string' && (SWEPT_BY_GAME[game] ?? []).includes(language))
+
+/** SQL condition: the printing alias `p` is in a swept language (sweptPrinting). */
+const SWEPT_SQL = `(p.language IN (${SWEPT_LANGUAGE_SQL})${Object.entries(SWEPT_BY_GAME)
+  .map(([g, ls]) => ` OR (p.game = '${g}' AND p.language IN (${ls.map((l) => `'${l}'`).join(',')}))`)
+  .join('')})`
 
 /** A market-price-only game's price, for a query that has `p` and `ip` (intl_prices). */
-export const MARKET_ONLY_PRICE = `CASE WHEN p.language IN (${SWEPT_LANGUAGE_SQL}) THEN COALESCE(p.market_price, ip.price) ELSE p.market_price END`
+export const MARKET_ONLY_PRICE = `CASE WHEN ${SWEPT_SQL} THEN COALESCE(p.market_price, ip.price) ELSE p.market_price END`
 
-/** The printing's set_price column: for market-price-only games hidden (NULL), or the swept eBay price of Chinese. */
+/** The printing's set_price column: for market-price-only games hidden (NULL), or the swept eBay price. */
 export const setPrice = (ebayPrices: string): string =>
-  `CASE WHEN ${isMarketOnly} THEN CASE WHEN p.language IN (${SWEPT_LANGUAGE_SQL})
+  `CASE WHEN ${isMarketOnly} THEN CASE WHEN ${SWEPT_SQL}
   THEN (SELECT swept.price FROM intl_prices swept WHERE swept.printing_id = p.id AND ${ebayPrices}) END ELSE p.set_price END`
 
 /** True when the game id is priced by its own market price only. */

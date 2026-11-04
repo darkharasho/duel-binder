@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type Database from 'better-sqlite3'
 import { seededDb } from './helpers'
 import { seedPokemon } from '../fixtures/pokemon'
-import { pokemonId } from '../../src/shared/games'
+import { onePieceCardId, onePieceImageId, pokemonId } from '../../src/shared/games'
 import { addEntry, listEntries } from '../../src/main/repo/collection'
 import { getCardDetail } from '../../src/main/repo/cards'
 import { printingsByCode } from '../../src/main/repo/scan'
@@ -219,6 +219,68 @@ describe('Chinese Pokémon takes its swept eBay price', () => {
     const prices = Object.fromEntries(getCardDetail(db, PIKACHU)!.printings.map((p) => [p.id, p.setPrice]))
     expect(prices[priced]).toBe(4.5)
     expect(prices[unpriced]).toBeNull()
+  })
+})
+
+describe('Japanese One Piece takes its swept eBay price', () => {
+  let db: Database.Database
+  let jaPriced: number
+  let jaUnpriced: number
+  let enUnpriced: number
+  const JA_CARD = onePieceCardId('ja', 'OP01-001')
+  const EN_CARD = onePieceCardId('en', 'OP01-001')
+
+  beforeEach(async () => {
+    db = await seededDb()
+    const card = db.prepare(
+      `INSERT INTO cards (id, game, name, type, frame_type, race, "desc", updated_at) VALUES (?, 'op', 'Luffy', 'Leader', 'op', '', '', '2026-11-04')`
+    )
+    card.run(JA_CARD)
+    card.run(EN_CARD)
+    const details = db.prepare("INSERT INTO onepiece_cards (card_id, number, card_type) VALUES (?, 'OP01-001', 'Leader')")
+    details.run(JA_CARD)
+    details.run(EN_CARD)
+    db.prepare("INSERT INTO sets (game, language, set_name, set_code) VALUES ('op', 'ja', 'ROMANCE DAWN [OP-01]', 'OP01')").run()
+    db.prepare("INSERT INTO sets (game, language, set_name, set_code) VALUES ('op', 'en', 'ROMANCE DAWN [OP-01]', 'OP01')").run()
+    const printing = db.prepare(
+      `INSERT INTO card_printings (game, card_id, language, set_name, set_code, set_rarity, set_rarity_code, market_price)
+       VALUES ('op', ?, ?, 'ROMANCE DAWN [OP-01]', 'OP01-001', ?, ?, ?)`
+    )
+    jaPriced = Number(printing.run(JA_CARD, 'ja', 'L', 'OP01-001', null).lastInsertRowid)
+    jaUnpriced = Number(printing.run(JA_CARD, 'ja', 'L (Parallel)', 'OP01-001_p1', null).lastInsertRowid)
+    // English has a market price for the same art; it must never stand in for Japanese.
+    printing.run(EN_CARD, 'en', 'L (Alternate Art)', 'OP01-001_p1', 120)
+    enUnpriced = Number(printing.run(EN_CARD, 'en', 'L', 'OP01-001', null).lastInsertRowid)
+    const add = db.prepare('INSERT INTO intl_prices (printing_id, price, listing_count, checked_at) VALUES (?, ?, 3, ?)')
+    add.run(jaPriced, 6.5, NOW.toISOString())
+    // An English op printing never takes an eBay row, whatever wrote it.
+    add.run(enUnpriced, 9.99, NOW.toISOString())
+    const image = db.prepare("INSERT INTO card_images (image_id, game, card_id, sort_order) VALUES (?, 'op', ?, 0)")
+    image.run(onePieceImageId('ja', 'OP01-001'), JA_CARD)
+    image.run(onePieceImageId('en', 'OP01-001'), EN_CARD)
+    setGame(db, 'op')
+    for (const id of [jaPriced, jaUnpriced])
+      addEntry(db, { printingId: id, imageId: onePieceImageId('ja', 'OP01-001'), quantity: 1 }, NOW)
+    addEntry(db, { printingId: enUnpriced, imageId: onePieceImageId('en', 'OP01-001'), quantity: 1 }, NOW)
+  })
+
+  const entry = (id: number): ReturnType<typeof listEntries>[number] =>
+    listEntries(db, ALL).find((e) => e.printing.id === id)!
+
+  it('an entry shows it as an eBay price', () => {
+    expect(entry(jaPriced)).toMatchObject({ unitPrice: 6.5, priceSource: 'ebay', priceListingCount: 3, noPriceReason: null })
+  })
+
+  it('no swept price is no price, never the English one', () => {
+    expect(entry(jaUnpriced)).toMatchObject({ unitPrice: null, priceSource: null, noPriceReason: null })
+    expect(entry(enUnpriced)).toMatchObject({ unitPrice: null, priceSource: null })
+  })
+
+  it('reaches the set list, the scan and the card detail', () => {
+    expect(getChecklist(db, 'ROMANCE DAWN [OP-01]', 'ja')!.cards.flatMap((c) => c.rarities.map((r) => r.price))).toContain(6.5)
+    const prices = Object.fromEntries(getCardDetail(db, JA_CARD)!.printings.map((p) => [p.id, p.setPrice]))
+    expect(prices[jaPriced]).toBe(6.5)
+    expect(prices[jaUnpriced]).toBeNull()
   })
 })
 

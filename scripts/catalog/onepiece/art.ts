@@ -202,7 +202,7 @@ export async function refreshArt(o: RefreshArtOptions): Promise<ArtResult> {
       try {
         const got = await sources.bandaiImage(e.bandaiId)
         result.fetched++
-        if (!got) return
+        if (!got) throw new Error('no image returned')
         const img = decodeImage(got.bytes)
         if (!img) throw new Error('not a PNG or JPEG')
         cache.putBandaiArt({
@@ -244,9 +244,10 @@ export async function refreshArt(o: RefreshArtOptions): Promise<ArtResult> {
   // 2. Uploads.
   if (o.portal) {
     const portal = o.portal
+    // Only entries from earlier nights: tonight's failed uploads wait for tomorrow.
     const pending = ordered.filter((e) => {
       const row = cache.getBandaiArt(e.bandaiId)
-      return row !== null && row.storedAt === null && row.changedHash === null
+      return row !== null && row.storedAt === null && row.changedHash === null && row.checkedAt < now
     })
     // Left from an earlier night: downloaded again, which costs budget; without budget it waits.
     const todo = spend(pending)
@@ -255,7 +256,7 @@ export async function refreshArt(o: RefreshArtOptions): Promise<ArtResult> {
       try {
         const got = await sources.bandaiImage(id)
         result.fetched++
-        if (!got) return
+        if (!got) throw new Error('no image returned')
         const img = decodeImage(got.bytes)
         if (!img) throw new Error('not a PNG or JPEG')
         const row = cache.getBandaiArt(id)!

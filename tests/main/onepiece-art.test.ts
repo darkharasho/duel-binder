@@ -243,6 +243,19 @@ describe('One Piece art', () => {
     expect(cache.getBandaiArt('100_p1')!.storedAt).toBe(DAY)
   })
 
+  it('a failed upload is not retried the same night', async () => {
+    const bad = { url: 'https://p', token: 't', fetch: (async () => new Response('no', { status: 400 })) as typeof fetch }
+    const r1 = await run({ now: 0, portal: bad })
+    expect(r1).toMatchObject({ failed: 1, uploaded: 0 })
+    expect(served.log).toEqual(['bandai 100_p1'])
+    expect(cache.getBandaiArt('100_p1')!.storedAt).toBeNull()
+    const puts: Put[] = []
+    const r2 = await run({ now: DAY, portal: portal(puts) })
+    expect(r2).toMatchObject({ failed: 0, uploaded: 1 })
+    expect(puts).toHaveLength(2)
+    expect(cache.getBandaiArt('100_p1')!.storedAt).toBe(DAY)
+  })
+
   it('a failed download is counted and tried again', async () => {
     served.fail.add('100_p1')
     const r = await run({ now: 0 })

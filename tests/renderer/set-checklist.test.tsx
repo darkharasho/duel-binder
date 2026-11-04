@@ -336,7 +336,7 @@ describe('SetChecklist', () => {
     const tile = await screen.findByRole('button', { name: 'Alpha Dragon' })
     expect(within(tile).getByTestId('printing-scan')).toHaveAttribute(
       'src',
-      expect.stringMatching(/^ygo-img:\/\/printing\/\d+$/)
+      expect.stringMatching(/^ygo-img:\/\/printing-small\/\d+$/)
     )
   })
 })

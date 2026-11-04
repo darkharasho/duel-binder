@@ -53,7 +53,7 @@ describe('art prefetch', () => {
       renderHook(() => useArtPrefetch(tiles))
       expect(started).toEqual([])
       await vi.runAllTimersAsync()
-      expect(started).toEqual(['ygo-img://small/5', 'ygo-img://printing/12', 'ygo-img://small/6'])
+      expect(started).toEqual(['ygo-img://small/5', 'ygo-img://printing-small/12', 'ygo-img://small/6'])
     } finally {
       vi.useRealTimers()
     }

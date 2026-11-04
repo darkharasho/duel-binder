@@ -13,9 +13,9 @@ export const cardImageSrc = (
   imageId: number,
   opts?: { now?: boolean }
 ): string => imageSrc(`${size}/${imageId}`) + now(opts)
-/** `small`: the photo's small copy for a grid (web and phone; the desktop keeps one copy on disk). */
+/** `small`: the photo's small copy, for a grid tile; the full view asks for the full photo. */
 const photoPath = (id: number, opts?: { small?: boolean }): string =>
-  opts?.small && isWeb() ? `printing-small/${id}` : `printing/${id}`
+  opts?.small ? `printing-small/${id}` : `printing/${id}`
 /**
  * Null on the phone: its printing ids aren't the server's. There a printing's photo is found by
  * the server's id instead (usePrintingPhotoSrc in printingPhotos.ts, then printingPhotoSrc).

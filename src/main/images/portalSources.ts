@@ -16,14 +16,17 @@ export function portalImageSources(opts: {
       ? { url: `${base}/img/${route}`, headers: { authorization: `Bearer ${token}` } }
       : null
   }
+  const photo = (printingId: number, route: string, query: string): ImageSource | null => {
+    const remote = opts.remoteId(printingId)
+    const source = remote === null ? null : at(`${route}/${remote}${query}`)
+    return source && { ...source, key: `srv-${remote}${opts.photoSuffix?.(printingId) ?? ''}` }
+  }
   return {
     card: (size, id) => at(`${size}/${id}`),
     set: (key) => at(`set/${encodeURIComponent(key)}`),
     konami: (key) => at(`konami/${encodeURIComponent(key)}`),
-    printing: async (printingId) => {
-      const remote = opts.remoteId(printingId)
-      const source = remote === null ? null : at(`printing/${remote}`)
-      return source && { ...source, key: `srv-${remote}${opts.photoSuffix?.(printingId) ?? ''}` }
-    }
+    printing: async (printingId) => photo(printingId, 'printing', ''),
+    // `?only`: a 404 when there's no small copy yet, not the full photo in its place.
+    printingSmall: async (printingId) => photo(printingId, 'printing-small', '?only')
   }
 }

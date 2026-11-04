@@ -86,7 +86,7 @@ describe('ScanRowItem', () => {
 
   it("shows the printing's own photo when the row keeps the card's first artwork", () => {
     renderWithProviders(<ScanRowItem row={row()} actions={actions} language={null} scanned={1} />)
-    expect(screen.getByTestId('printing-scan')).toHaveAttribute('src', 'ygo-img://printing/61362')
+    expect(screen.getByTestId('printing-scan')).toHaveAttribute('src', 'ygo-img://printing-small/61362')
   })
 
   it('keeps an alternate artwork the art match picked', () => {

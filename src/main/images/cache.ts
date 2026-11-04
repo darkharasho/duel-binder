@@ -57,12 +57,26 @@ export function parsePrintingImageUrl(url: string): number | null {
   return Number.isSafeInteger(id) && id > 0 ? id : null
 }
 
+/** Parses `ygo-img://printing-small/<id>` (a grid tile's photo); null unless the id is a positive integer. */
+export function parseSmallPrintingImageUrl(url: string): number | null {
+  const m = /^ygo-img:\/\/printing-small\/(\d+)\/?$/.exec(url)
+  if (!m) return null
+  const id = Number(m[1])
+  return Number.isSafeInteger(id) && id > 0 ? id : null
+}
+
+/** A photo the server had no small copy of is asked about again after this. */
+export const SMALL_RETRY_MS = 24 * 60 * 60 * 1000
+
 export interface ImageCache {
   /** `priority` downloads it ahead of what's already queued (an image someone's waiting on). */
   get(size: ImageSize, id: number, opts?: { priority?: boolean }): Promise<string | null>
   getSet(key: string, opts?: { priority?: boolean }): Promise<string | null>
-  /** The scan of one printing; null when it has none. */
-  getPrinting(printingId: number): Promise<string | null>
+  /**
+   * The scan of one printing; null when it has none. `small`: its small copy for a grid, else the
+   * full photo (already on disk, or while the server has no small copy).
+   */
+  getPrinting(printingId: number, opts?: { small?: boolean }): Promise<string | null>
   sizeBytes(): Promise<number>
   clear(): Promise<void>
 }
@@ -81,6 +95,8 @@ export interface ImageSources {
   set(key: string): ImageSource | null
   konami(key: string): ImageSource | null
   printing(printingId: number): Promise<ImageSource | null>
+  /** A printing photo's small copy, a JPEG; a 404 when the server has none. Same `key` as `printing`. */
+  printingSmall?(printingId: number): Promise<ImageSource | null>
 }
 
 const IMAGE_TIMEOUT_MS = 30_000
@@ -138,6 +154,7 @@ export function createImageCache(opts: {
   dir: string
   sources: ImageSources
   fetchFn?: typeof fetch
+  now?: () => number
   limit?: Limiter
   /** Rewrites a downloaded Konami logo in place (cutting out its white); a throw drops the download. */
   prepareLogo?: (file: string) => Promise<void>
@@ -145,6 +162,7 @@ export function createImageCache(opts: {
   onDownloads?: (d: ImageDownloads) => void
 }): ImageCache {
   const fetchFn = opts.fetchFn ?? fetch
+  const now = opts.now ?? Date.now
   const limit = opts.limit ?? defaultLimiter()
   const inFlight = new Map<string, Promise<string | null>>()
   /**
@@ -189,6 +207,7 @@ export function createImageCache(opts: {
       if (!contentType.startsWith('image/')) return null
       const target = typeof finalPath === 'string' ? finalPath : finalPath(contentType)
       if (target === null) return null
+      if (typeof finalPath !== 'string') await fs.mkdir(path.dirname(target), { recursive: true })
       await pipeline(
         Readable.fromWeb(res.body as unknown as WebReadableStream),
         createWriteStream(tmpPath)
@@ -249,6 +268,38 @@ export function createImageCache(opts: {
     return src === null ? null : cached(key, src, finalPath, prepare, undefined, priority)
   }
 
+  /** A printing photo already kept on disk under `key`, in whichever format it arrived. */
+  const printingOnDisk = async (key: string): Promise<string | null> => {
+    const base = path.join(opts.dir, 'printings', key)
+    for (const ext of PRINTING_EXTS) if (await exists(`${base}.${ext}`)) return `${base}.${ext}`
+    return null
+  }
+
+  async function fullPrinting(printingId: number): Promise<string | null> {
+    let src: ImageSource | null
+    try {
+      src = await opts.sources.printing(printingId)
+    } catch {
+      return null
+    }
+    if (src === null || !src.key) return null
+    const key = src.key
+    const onDisk = await printingOnDisk(key)
+    if (onDisk) return onDisk
+    if (missingPrintings.has(key)) return null
+    const base = path.join(opts.dir, 'printings', key)
+    return cached(
+      `printing/${key}`,
+      src,
+      (ct) => {
+        const ext = PRINTING_EXT[ct.split(';')[0].trim()]
+        return ext ? `${base}.${ext}` : null
+      },
+      undefined,
+      () => missingPrintings.add(key)
+    )
+  }
+
   return {
     get: (size, id, { priority = false } = {}) =>
       fromSource(
@@ -280,28 +331,38 @@ export function createImageCache(opts: {
       )
     },
 
-    async getPrinting(printingId) {
+    async getPrinting(printingId, { small = false } = {}) {
+      const full = (): Promise<string | null> => fullPrinting(printingId)
+      if (!small || !opts.sources.printingSmall) return full()
       let src: ImageSource | null
       try {
-        src = await opts.sources.printing(printingId)
+        src = await opts.sources.printingSmall(printingId)
       } catch {
-        return null
+        return full()
       }
-      if (src === null || !src.key) return null
+      if (src === null || !src.key) return full()
       const key = src.key
-      const base = path.join(opts.dir, 'printings', key)
-      for (const ext of PRINTING_EXTS) if (await exists(`${base}.${ext}`)) return `${base}.${ext}`
-      if (missingPrintings.has(key)) return null
-      return cached(
-        `printing/${key}`,
+      const thumb = path.join(opts.dir, 'printings-small', `${key}.jpg`)
+      if (await exists(thumb)) return thumb
+      // The server said it had none lately: the full photo until it's asked again.
+      const none = `${thumb.slice(0, -4)}.none`
+      const said = await fs.stat(none).catch(() => null)
+      if (said && now() - said.mtimeMs < SMALL_RETRY_MS) return full()
+      const onDisk = await printingOnDisk(key)
+      const pending = cached(
+        `printing-small/${key}`,
         src,
-        (ct) => {
-          const ext = PRINTING_EXT[ct.split(';')[0].trim()]
-          return ext ? `${base}.${ext}` : null
-        },
+        (ct) => (ct.split(';')[0].trim() === 'image/jpeg' ? thumb : null),
         undefined,
-        () => missingPrintings.add(key)
+        () =>
+          void fs
+            .mkdir(path.dirname(none), { recursive: true })
+            .then(() => fs.writeFile(none, ''))
+            .catch(() => undefined)
       )
+      // A tile with its full photo already kept shows that now; the small copy is for next time.
+      if (onDisk) return onDisk
+      return (await pending) ?? full()
     },
 
     async sizeBytes() {

@@ -15,8 +15,7 @@ describe('image URL helpers', () => {
     usePlatformApi('linux')
     expect(cardImageSrc('small', 12)).toBe('ygo-img://small/12')
     expect(printingImageSrc(5)).toBe('ygo-img://printing/5')
-    // One copy on disk: the desktop never asks for the small one.
-    expect(printingImageSrc(5, { small: true })).toBe('ygo-img://printing/5')
+    expect(printingImageSrc(5, { small: true })).toBe('ygo-img://printing-small/5')
     expect(setImageSrc('LOB')).toBe('ygo-img://set/LOB')
   })
 

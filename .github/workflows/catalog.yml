@@ -22,7 +22,7 @@ on:
         type: boolean
         default: false
       refresh_cards:
-        description: Read the YGOPRODeck card list now instead of on its daily timer
+        description: Read the YGOPRODeck card list and TCGplayer catalog now instead of on their daily and weekly timers
         type: boolean
         default: false
 

@@ -662,11 +662,13 @@ describe('uploadCatalog', () => {
     expect(stamp).toBeNull()
   })
 
-  it('--refresh-cards reads the card list before its daily timer', async () => {
+  it('--refresh-cards reads the card list and TCGplayer catalog before their timers', async () => {
     const seeded = await workDb()
     setMeta(seeded, 'last_sync_at', new Date().toISOString())
+    setMeta(seeded, 'tcgplayer_synced_at', new Date().toISOString())
     seeded.close()
     let stamp: string | null = 'unset'
+    let tcgStamp: string | null = 'unset'
     await runJob({
       dir,
       dryRun: true,
@@ -675,10 +677,12 @@ describe('uploadCatalog', () => {
       checkAccuracy: passing,
       refresh: async (work) => {
         stamp = getMeta(work, 'last_sync_at')
+        tcgStamp = getMeta(work, 'tcgplayer_synced_at')
       },
       log: () => {}
     })
     expect(stamp).toBeNull()
+    expect(tcgStamp).toBeNull()
   })
 
   it('a dry run counts changes without uploading or writing base', async () => {

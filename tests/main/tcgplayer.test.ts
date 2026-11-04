@@ -484,6 +484,83 @@ describe('TCGplayer catalog', () => {
     expect(added()).toEqual([])
   })
 
+  it('adds a rarity TCGplayer sells under a number YGOPRODeck lists with fewer rarities', async () => {
+    const db = await seededDb()
+    const lob = db
+      .prepare(
+        "SELECT card_id, set_name, set_rarity FROM card_printings WHERE set_code = 'LOB-EN005' AND language = 'en'"
+      )
+      .get() as { card_id: number; set_name: string; set_rarity: string }
+    const groups = [
+      { groupId: 10, modifiedOn: 'a', name: 'LOB group' },
+      { groupId: 20, modifiedOn: 'a', name: 'LOB: 25th Anniversary Edition' }
+    ]
+    const products = {
+      10: [product(1, 'LOB-EN005', lob.set_rarity, 1, 'Blue-Eyes White Dragon')],
+      20: [
+        // The Prismatic form of the rarity YGOPRODeck has: not a new rarity.
+        product(2, 'LOB-EN005', `Prismatic ${lob.set_rarity}`, 1, 'Blue-Eyes White Dragon (PUR)'),
+        product(3, 'LOB-EN005', 'Quarter Century Secret Rare', 1, 'Blue-Eyes White Dragon (QCSR)'),
+        product(
+          4,
+          'LOB-EN005',
+          'Quarter Century Secret Rare',
+          1,
+          'Blue-Eyes White Dragon (Alternate Art) (QCSR)'
+        ),
+        product(5, 'LOB-EN005', 'Promo', 1, 'Blue-Eyes White Dragon (Oversized)')
+      ]
+    }
+    const refresh = (
+      p: Record<number, unknown[]>,
+      modifiedOn: string
+    ): ReturnType<typeof refreshTcgCatalog> =>
+      refreshTcgCatalog(db, {
+        version: '1',
+        fetchFn: catalogFetch(
+          groups.map((g) => ({ ...g, modifiedOn })),
+          p
+        ) as unknown as typeof fetch
+      })
+    const r = await refresh(products, 'a')
+    expect(r.addedPrintings).toBe(2)
+    const rows = (): unknown[] =>
+      db
+        .prepare(
+          `SELECT card_id, set_name, set_rarity, tcg_product_id FROM card_printings
+           WHERE language = 'en' AND set_code = 'LOB-EN005' AND tcg_product_id IS NOT NULL
+           ORDER BY tcg_product_id`
+        )
+        .all()
+    const both = [
+      {
+        card_id: lob.card_id,
+        set_name: lob.set_name,
+        set_rarity: 'Quarter Century Secret Rare',
+        tcg_product_id: 3
+      },
+      {
+        card_id: lob.card_id,
+        set_name: lob.set_name,
+        set_rarity: 'Quarter Century Secret Rare (Alternate Art)',
+        tcg_product_id: 4
+      }
+    ]
+    expect(rows()).toEqual(both)
+
+    // Kept, and not added again, on the next run.
+    expect((await refresh(products, 'b')).addedPrintings).toBe(0)
+    expect(rows()).toEqual(both)
+
+    // Not while the number holds a placeholder rarity YGOPRODeck has yet to fill in.
+    db.prepare(
+      `INSERT INTO card_printings (card_id, set_name, set_code, set_rarity, set_rarity_code, language)
+       VALUES (?, ?, 'LOB-EN005', 'New', '', 'en')`
+    ).run(lob.card_id, lob.set_name)
+    await refresh(products, 'c')
+    expect(rows()).toEqual([])
+  })
+
   it('takes over a printing filled in from Yugipedia that it sells, and leaves the rest be', async () => {
     const db = await seededDb()
     const insert = db.prepare(

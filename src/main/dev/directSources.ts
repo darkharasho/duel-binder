@@ -1,8 +1,7 @@
 import type Database from 'better-sqlite3'
 import type { SqlDb } from '../db/sql'
 import {
-  BANDAI_EN_IMAGE_PREFIX,
-  BANDAI_ID_RE,
+  opBandaiArtUrl,
   opTcgArtUrl,
   BULBAGARDEN_IMAGE_PREFIX,
   TCGPLAYER_PACK_PREFIX,
@@ -55,9 +54,8 @@ export function directImageSources(opts: {
           .get(id) as { bandai_id: string } | undefined
         const tcg = op ? opTcgArtUrl(op.bandai_id, size === 'full' ? 'full' : 'small') : null
         if (tcg !== null) return { url: tcg, headers }
-        return op && BANDAI_ID_RE.test(op.bandai_id)
-          ? { url: `${BANDAI_EN_IMAGE_PREFIX}${op.bandai_id}.png`, headers }
-          : null
+        const bandai = op ? opBandaiArtUrl(op.bandai_id) : null
+        return bandai === null ? null : { url: bandai, headers }
       }
       if (game === 'ygo') return { url: imageUrl(size, id) }
       const row = opts.db

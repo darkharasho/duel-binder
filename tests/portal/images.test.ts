@@ -1034,6 +1034,22 @@ describe('op art', () => {
     expect(bucket.store.has(`card/small/${ids[0]}`)).toBe(true)
   })
 
+  it("Japanese art (ja:<id>) is fetched from Bandai's Japanese site", async () => {
+    db.prepare('UPDATE onepiece_images SET bandai_id = ? WHERE image_id = ?').run('ja:OP01-001_p1', ids[0])
+    const res = await get(`full/${ids[0]}`)
+    expect(res.status).toBe(200)
+    expect(upstream.mock.calls[0][0]).toBe('https://www.onepiece-cardgame.com/images/cardlist/card/OP01-001_p1.png')
+    expect(bucket.store.has(`card/full/${ids[0]}`)).toBe(true)
+  })
+
+  it('a ja: key that is not a Bandai id, or another region, is a 404 with no fetch', async () => {
+    for (const key of ['ja:../x', 'ja:', 'fr:OP01-001', 'ja:ja:OP01-001']) {
+      db.prepare('UPDATE onepiece_images SET bandai_id = ? WHERE image_id = ?').run(key, ids[0])
+      expect((await get(`full/${ids[0]}`)).status).toBe(404)
+    }
+    expect(upstream).not.toHaveBeenCalled()
+  })
+
   it('a tcg: key that is not a product id is a 404 with no fetch', async () => {
     db.prepare('UPDATE onepiece_images SET bandai_id = ? WHERE image_id = ?').run('tcg:../1', ids[0])
     expect((await get(`full/${ids[0]}`)).status).toBe(404)

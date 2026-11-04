@@ -1,9 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import {
-  createNumberGate,
-  findOpNumbers,
-  frameNumber
-} from '../../src/shared/scan/onePieceNumber'
+import { createNumberGate, findOpNumbers, frameNumber } from '../../src/shared/scan/onePieceNumber'
 
 const P = ['EB01', 'EB04', 'OP01', 'OP05', 'OP14', 'P', 'PRB01', 'ST01', 'ST10']
 
@@ -26,6 +22,8 @@ describe('findOpNumbers', () => {
     ['OPO5-1I9', 'OP05-119'],
     ['5T10-001', 'ST10-001'],
     ['E801-012', 'EB01-012'],
+    ['8710-00188', 'ST10-001'],
+    ['8T01-012', 'ST01-012'],
     // No dash, when the number ends there.
     ['OP05119', 'OP05-119'],
     ['OP05119 SEC', 'OP05-119']
@@ -40,7 +38,10 @@ describe('findOpNumbers', () => {
     'OP05-11',
     'OP051191',
     // A Yu-Gi-Oh set code.
-    'LOB-EN005'
+    'LOB-EN005',
+    // OP05-119 with its set digits lost is not promo P-119.
+    'W 0P-119C',
+    'OP-119'
   ])('%j holds none', (text) => expect(findOpNumbers(text, P)).toEqual([]))
 
   test('every number in the text, once each', () => {

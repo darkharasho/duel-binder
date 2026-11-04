@@ -24,9 +24,20 @@ export function prefixSuggestions(typed: string, prefixes: readonly string[], ma
 
 // ---- Numbers read off the camera ----
 
-/** Characters tesseract mixes up in this font: each digit's lookalike letter, and back. */
-const AS_LETTER: Record<string, string> = { '0': 'O', '1': 'I', '5': 'S', '8': 'B', '2': 'Z' }
-const AS_DIGIT: Record<string, string> = { O: '0', I: '1', S: '5', B: '8', Z: '2' }
+/**
+ * Characters tesseract mixes up in this font, small and soft: the letters a digit may have been
+ * (the set code's), and the digit a letter may have been (the set's and the card's number).
+ */
+const AS_LETTERS: Record<string, string> = {
+  '0': 'OD',
+  '1': 'IT',
+  '2': 'Z',
+  '5': 'S',
+  '7': 'T',
+  '8': 'BS'
+}
+const AS_LETTER: Record<string, string> = { '0': 'O', '1': 'I', '2': 'Z', '5': 'S', '8': 'B' }
+const AS_DIGIT: Record<string, string> = { O: '0', D: '0', I: '1', Z: '2', S: '5', B: '8' }
 
 const isDigit = (c: string | undefined): boolean => c !== undefined && c >= '0' && c <= '9'
 const asDigit = (c: string | undefined): string | null =>
@@ -42,7 +53,7 @@ function readsAs(read: string, code: string): boolean {
     const want = code[i]
     const got = read[i]
     if (got === want) continue
-    if (isDigit(want) ? AS_DIGIT[got] !== want : AS_LETTER[got] !== want) return false
+    if (isDigit(want) ? AS_DIGIT[got] !== want : !AS_LETTERS[got]?.includes(want)) return false
   }
   return true
 }
@@ -63,7 +74,14 @@ function codesAt(t: string, at: number, prefixes: readonly string[] | undefined)
       if (FAMILY_RE.test(code)) out.push(code)
     }
   }
-  return out.sort((a, b) => b.length - a.length)
+  // Not one that starts mid-way through a longer code: in "0P-119" (OP05-119 with its set digits
+  // lost), the "P" follows an O, so it isn't promo P-119.
+  const prev = t.slice(Math.max(0, at - 1), at)
+  const longer = prefixes ?? ['OP00', 'ST00', 'EB00', 'PRB00']
+  const midway = (code: string): boolean =>
+    prev !== '' &&
+    longer.some((p) => p.length > code.length && readsAs(prev + code, p.slice(0, code.length + 1)))
+  return out.filter((c) => !midway(c)).sort((a, b) => b.length - a.length)
 }
 
 /**

@@ -60,6 +60,11 @@ export interface ScanProfile {
    * stays where it is between frames, and the search is most of a frame's cost.
    */
   keepOutline: boolean
+  /**
+   * Whether code bands are handed to OCR as grayscale crops (toGrayBand) rather than cut down to
+   * their line of ink (toBand): a small, soft, light number on a coloured bar reads far better so.
+   */
+  codeGray?: boolean
 }
 
 /**
@@ -110,11 +115,13 @@ const OP_PROFILE: ScanProfile = {
   innerFrames: [],
   windowShape: null,
   codeBands: [
-    // The number with room either way for an outline a few percent off, and the rarity box and
-    // block icon right of it (findOpNumbers reads past them). It stops above the card's edge and
-    // below the traits bar, whose text ends by 0.935.
-    [0.735, 0.932, 0.955, 0.977]
+    // The number with room either way for an outline a few percent off (outlines found without
+    // art run up to 3% inside the card's edge), which takes in the rarity box and part of the
+    // block icon right of it (findOpNumbers reads past them).
+    [0.735, 0.934, 0.93, 0.98]
   ],
+  // Light numbers on coloured bars, about 15 px high on a 4K phone's frame.
+  codeGray: true,
   // The name, over the traits bar.
   nameBand: [0.12, 0.875, 0.88, 0.925],
   textBox: [0.06, 0.6, 0.94, 0.83],
@@ -126,7 +133,8 @@ const OP_PROFILE: ScanProfile = {
 
 // The Record<'ygo' | 'pkm'> part lists the games that scan today; op's profile is for its number
 // reader only (OP_PROFILE).
-export const SCAN_PROFILES: Record<'ygo' | 'pkm', ScanProfile> & Partial<Record<GameId, ScanProfile>> = {
+export const SCAN_PROFILES: Record<'ygo' | 'pkm', ScanProfile> &
+  Partial<Record<GameId, ScanProfile>> = {
   ygo: {
     game: 'ygo',
     artBoxes: Object.values(ART_BOXES),

@@ -6,7 +6,7 @@ import type { Mat } from '@techstark/opencv-js'
 import { SCAN_PROFILES, type ScanProfile } from '@shared/scan/profiles'
 import type { OcrBand, RgbaImage } from '@shared/scan/types'
 import type { ArtMatch, FrameSignals } from '../engine'
-import { toBand, toBlock, toInkBlock } from './bands'
+import { toBand, toBlock, toGrayBand, toInkBlock } from './bands'
 import { findCandidates, preferOuter, recognizeArt } from './candidates'
 import type { CV } from './cv'
 import { CARD_W, dist, rotate180, toMat, using, warpCard, type Quad } from './detect'
@@ -170,13 +170,13 @@ function analyzeFrame(
   const straight = card()
   // Not knowing which way up the card is, its text is read both ways.
   const ways = upright ? [straight] : [straight, rotate180(straight)]
+  // A profile's code bands as they are (codeGray), or cut down to their line of ink.
+  const cut = profile.codeGray ? toGrayBand : toBand
   return {
     found: true,
     quad,
     art,
-    codeBands: ways
-      .flatMap((c) => profile.codeBands.map((box) => toBand(c, box)))
-      .filter(hasPixels),
+    codeBands: ways.flatMap((c) => profile.codeBands.map((box) => cut(c, box))).filter(hasPixels),
     nameBands: ways.map((c) => toBand(c, profile.nameBand)).filter(hasPixels),
     // Only a card whose art matched: read off a guessed outline, it reads as a language too often.
     // A Pokémon card's is cut out twice, as it is and as ink on white (each read on its own): a

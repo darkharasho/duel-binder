@@ -22,12 +22,14 @@ import {
   applyRemoteBinder,
   applyRemoteBinderEdit,
   applyRemoteFavourite,
+  applyRemoteSession,
   applyRemoteWish,
   contributionGroups,
   dirtyBinderEdits,
   dirtyBinders,
   dirtyEntries,
   dirtyFavourites,
+  dirtySessions,
   dirtyWishes,
   gameCursor,
   pullPriceChanges,
@@ -35,6 +37,7 @@ import {
   markBinderEditPushed,
   markBinderPushed,
   markFavouritePushed,
+  markSessionsPushed,
   markPushed,
   markWishPushed,
   mergeHolds,
@@ -44,6 +47,7 @@ import {
   purgeCleanBinderEdits,
   purgeCleanBinders,
   purgeCleanFavourites,
+  purgeCleanSessions,
   purgeCleanTombstones,
   purgeCleanWishes,
   recordSyncIssue,
@@ -284,6 +288,56 @@ async function syncBinders(
 }
 
 /**
+ * Syncs `owner`'s scan sessions on their own routes: pull each game from its own cursor, then push.
+ * Best effort as syncBinders is. A portal that doesn't have the routes yet (404) leaves every session
+ * dirty without a word, and the rest of the sync carries on. Resolves whether anything changed.
+ */
+async function syncSessions(
+  db: SqlDb,
+  owner: number,
+  client: CloudClient,
+  games: GameId[]
+): Promise<boolean> {
+  let changed = false
+  try {
+    for (const game of games) {
+      let cursor = gameCursor(db, owner, game, 'sessions')
+      for (;;) {
+        const page = await client.sessionsPull(cursor, game)
+        db.transaction(() => {
+          for (const s of page.sessions) if (applyRemoteSession(db, owner, s)) changed = true
+          saveGameCursor(db, owner, game, 'sessions', page.cursor)
+        })()
+        cursor = page.cursor
+        if (!page.more || page.sessions.length === 0) break
+      }
+    }
+
+    const sent = new Set<string>()
+    for (;;) {
+      const batch = dirtySessions(db, owner, MAX_PUSH, sent)
+      if (batch.length === 0) break
+      for (const s of batch) sent.add(s.uid)
+      const results = await client.sessionsPush(batch)
+      const byUid = new Map(batch.map((s) => [s.uid, s]))
+      db.transaction(() => {
+        for (const r of results) {
+          const s = byUid.get(r.uid)
+          if (!s || r.status === 'skipped') continue
+          markSessionsPushed(db, owner, s)
+          if (r.status === 'stale' && applyRemoteSession(db, owner, r.current)) changed = true
+        }
+      })()
+    }
+  } catch (e) {
+    if (e instanceof CloudAuthError) throw e
+    if (!(e instanceof CloudNotFoundError) && !(e instanceof CloudOfflineError))
+      console.warn('Session sync failed; it stays queued', e)
+  }
+  return changed
+}
+
+/**
  * One sync of `owner`'s collection: push its unpushed rows, pull what the server has written since the
  * cursor, then fetch server prices. Each step commits as it goes, so a run cut off part way (offline,
  * app quit) loses nothing: unacknowledged pushes stay dirty and the cursor only moves with its page.
@@ -466,6 +520,9 @@ export async function syncOnce(
   // 6. Favourites, on their own routes as well.
   if (await syncFavourites(db, owner, client, games)) changed = true
 
+  // 6b. Scan sessions, on their own routes.
+  if (await syncSessions(db, owner, client, games)) changed = true
+
   // 7. Tidy up and record the run.
   db.transaction(() => {
     purgeCleanTombstones(db, owner)
@@ -473,6 +530,7 @@ export async function syncOnce(
     purgeCleanBinders(db, owner)
     purgeCleanBinderEdits(db, owner)
     purgeCleanFavourites(db, owner)
+    purgeCleanSessions(db, owner)
     saveAccountState(db, owner, { syncedAt: now().toISOString() })
     // recordSnapshot writes the active owner's (LOCAL) snapshot.
     if (changed && activeOwner(db) === owner) recordSnapshot(db, now())

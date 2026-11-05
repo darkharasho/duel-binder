@@ -739,6 +739,7 @@ export function createPhoneStore(deps: {
             'binders',
             'binder_edits',
             'favourites',
+            'scan_sessions',
             'value_snapshots',
             'sync_pending',
             'sync_issues',

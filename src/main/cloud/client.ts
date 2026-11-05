@@ -29,6 +29,11 @@ import type {
   WishPushResult
 } from '../../shared/cloud'
 import { GAME_HEADER } from '../../shared/cloud'
+import type {
+  ScanSessionPullResponse,
+  ScanSessionPushResult,
+  WireScanSession
+} from '../../shared/scanSessions'
 import type { GameId } from '../../shared/games'
 import type { PortalChannel } from '../../shared/portal'
 
@@ -77,6 +82,10 @@ export interface CloudClient {
   favouritesPush(entries: WireFavourite[]): Promise<FavouritePushResult[]>
   /** One page of the account's favourites of `game` after `cursor`; as `favouritesPush` on an old portal. */
   favouritesPull(cursor: number, game: GameId): Promise<FavouritePullResponse>
+  /** Pushes scan sessions; a portal without sessions rejects with CloudNotFoundError. */
+  sessionsPush(entries: WireScanSession[]): Promise<ScanSessionPushResult[]>
+  /** One page of the account's scan sessions of `game` after `cursor`; as `sessionsPush` on an old portal. */
+  sessionsPull(cursor: number, game: GameId): Promise<ScanSessionPullResponse>
   prices(pkeys: string[]): Promise<PricesResponse>
   /** One page of server price changes of `game` (default Yu-Gi-Oh!) after `since` (the price change feed). */
   priceChanges(since: number, game?: GameId): Promise<PriceChangesResponse>
@@ -221,6 +230,14 @@ export function createCloudClient(opts: {
       ).results,
     favouritesPull: (cursor, game) =>
       call<FavouritePullResponse>(`/api/sync/favourites-pull?cursor=${cursor}&game=${game}`, 'GET'),
+    sessionsPush: async (entries) =>
+      (
+        await call<{ results: ScanSessionPushResult[] }>('/api/sync/sessions-push', 'POST', {
+          entries
+        })
+      ).results,
+    sessionsPull: (cursor, game) =>
+      call<ScanSessionPullResponse>(`/api/sync/sessions-pull?cursor=${cursor}&game=${game}`, 'GET'),
     prices: (pkeys) => call<PricesResponse>('/api/sync/prices', 'POST', { pkeys }),
     priceChanges: (since, game = 'ygo') =>
       call<PriceChangesResponse>(`/api/sync/price-changes?since=${since}&game=${game}`, 'GET'),

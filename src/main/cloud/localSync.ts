@@ -6,6 +6,8 @@ import type { ContributedPrinting } from '../../shared/catalogFeed'
 import type { UnsyncedEntry } from '../../shared/types'
 import type { GameId } from '../../shared/games'
 import type { BinderEditAction, BinderEditLevel } from '../../shared/binders'
+import { mergeSessionCards } from '../repo/scanSessions'
+import type { ScanSessionCard, WireScanSession } from '../../shared/scanSessions'
 import { isLanguage } from '../../shared/languages'
 import {
   MAX_NOTES,
@@ -74,9 +76,9 @@ export function saveAccountState(
   ).run(owner, s.cursor ?? null, s.syncedAt ?? null, s.cursor ?? null, s.syncedAt ?? null)
 }
 
-/** A per-game sync feed: the account's entries, wishlist, binders, binder edits or favourites, or the server's price changes. */
+/** A per-game sync feed: the account's entries, wishlist, binders, binder edits, favourites or scan sessions, or the server's price changes. */
 export type SyncStream =
-  'entries' | 'prices' | 'wishlist' | 'binders' | 'binderEdits' | 'favourites'
+  'entries' | 'prices' | 'wishlist' | 'binders' | 'binderEdits' | 'favourites' | 'sessions'
 
 const hasLegacyCursor = (game: GameId, stream: SyncStream): boolean =>
   game === 'ygo' && (stream === 'entries' || stream === 'prices')
@@ -117,7 +119,14 @@ export function saveGameCursor(
 
 /** Whether this computer has never-signed-in entries, wishes, binders or favourites (owner 0), tombstones included. */
 export function hasLocalData(db: SqlDb): boolean {
-  return ['collection_entries', 'wishlist_entries', 'binders', 'binder_edits', 'favourites'].some(
+  return [
+    'collection_entries',
+    'wishlist_entries',
+    'binders',
+    'binder_edits',
+    'favourites',
+    'scan_sessions'
+  ].some(
     (table) => db.prepare(`SELECT 1 FROM ${table} WHERE owner_id = 0 LIMIT 1`).get() !== undefined
   )
 }
@@ -148,6 +157,10 @@ export function adoptLocalData(db: SqlDb, owner: number): number {
       owner
     )
     db.prepare('DELETE FROM favourites WHERE owner_id = 0').run()
+    db.prepare('UPDATE OR IGNORE scan_sessions SET owner_id = ?, dirty = 1 WHERE owner_id = 0').run(
+      owner
+    )
+    db.prepare('DELETE FROM scan_sessions WHERE owner_id = 0').run()
     return moved.changes
   })()
 }
@@ -158,6 +171,7 @@ const OWNED_TABLES = [
   'binders',
   'binder_edits',
   'favourites',
+  'scan_sessions',
   'value_snapshots',
   'sync_pending',
   'sync_issues'
@@ -180,7 +194,7 @@ const holdKey = (from: number): `merge_hold:${number}` => `merge_hold:${from}`
  * - Collection: unsent live rows stay held under `from` (never pushed, never shown) until `to` has
  *   pulled the merge (`resolveMergeHolds`), so a carried count is compared with the merged one and
  *   never lowers it. Calling this again before then changes nothing.
- * - Wishes, favourites, binders and binder edits keep their keys, and replace `to`'s row on the same
+ * - Wishes, favourites, binders, binder edits and scan sessions keep their keys, and replace `to`'s row on the same
  *   key. Their unsent tombstones move too, so a deletion still reaches the server.
  * Everything already sent is dropped, as is the old account's bookkeeping: the server's merged state
  * reaches this device through the normal cursor sync, and a stale row of `from` must never be pushed
@@ -197,7 +211,13 @@ export function adoptMergedData(db: SqlDb, from: number, to: number, now: string
       }
     ).n
     if (held > 0) setMeta(db, holdKey(from), String(to))
-    for (const table of ['wishlist_entries', 'binders', 'binder_edits', 'favourites']) {
+    for (const table of [
+      'wishlist_entries',
+      'binders',
+      'binder_edits',
+      'favourites',
+      'scan_sessions'
+    ]) {
       db.prepare(
         `UPDATE OR REPLACE ${table} SET owner_id = ?, updated_at = ?, dirty = 1 WHERE owner_id = ? AND dirty = 1`
       ).run(to, now, from)
@@ -1089,4 +1109,126 @@ export function listSyncIssues(db: SqlDb, owner: number): UnsyncedEntry[] {
       reason: r.reason
     }
   })
+}
+
+interface SessionRow {
+  uid: string
+  game: GameId
+  cards: string
+  friends_visible: number
+  created_at: string
+  updated_at: string
+  deleted_at: string | null
+  dirty: number
+}
+
+const SESSION_COLS = 'uid, game, cards, friends_visible, created_at, updated_at, deleted_at, dirty'
+
+const sessionToWire = (r: SessionRow): WireScanSession => ({
+  uid: r.uid,
+  game: r.game,
+  cards: JSON.parse(r.cards) as ScanSessionCard[],
+  friendsVisible: r.friends_visible !== 0,
+  createdAt: r.created_at,
+  updatedAt: r.updated_at,
+  deletedAt: r.deleted_at
+})
+
+const sameCards = (x: ScanSessionCard[], y: ScanSessionCard[]): boolean =>
+  x.length === y.length && x.every((c, i) => sameFields(c, y[i]))
+
+const sameSession = (x: WireScanSession, y: WireScanSession): boolean =>
+  sameCards(x.cards, y.cards) && sameFields({ ...x, cards: [] }, { ...y, cards: [] })
+
+/** Up to `limit` of the owner's unpushed scan sessions, tombstones included, leaving out the uids in `skip`. */
+export function dirtySessions(
+  db: SqlDb,
+  owner: number,
+  limit: number,
+  skip: ReadonlySet<string>
+): WireScanSession[] {
+  const rows = db
+    .prepare(
+      `SELECT ${SESSION_COLS} FROM scan_sessions
+       WHERE owner_id = ? AND dirty = 1 AND uid NOT IN (SELECT value FROM json_each(?))
+       ORDER BY updated_at, uid LIMIT ?`
+    )
+    .all(owner, JSON.stringify([...skip]), limit) as SessionRow[]
+  return rows.map(sessionToWire)
+}
+
+/** Marks a pushed session clean, unless it was edited again since `s` was read. */
+export function markSessionsPushed(db: SqlDb, owner: number, s: WireScanSession): void {
+  db.prepare(
+    'UPDATE scan_sessions SET dirty = 0 WHERE owner_id = ? AND uid = ? AND updated_at = ? AND deleted_at IS ?'
+  ).run(owner, s.uid, s.updatedAt, s.deletedAt)
+}
+
+/**
+ * Applies one server session, clean. Hidden, deleted and edit time follow the later edit as binders
+ * do, but the cards never lose a price: a price once set stays (mergeSessionCards), and a null here
+ * takes the server's value. Returns whether it wrote.
+ */
+export function applyRemoteSession(db: SqlDb, owner: number, s: WireScanSession): boolean {
+  const row = db
+    .prepare(`SELECT ${SESSION_COLS} FROM scan_sessions WHERE owner_id = ? AND uid = ?`)
+    .get(owner, s.uid) as SessionRow | undefined
+  if (!row && s.deletedAt !== null) return false
+  if (!row) {
+    db.prepare(
+      `INSERT INTO scan_sessions (owner_id, uid, game, cards, friends_visible, created_at, updated_at,
+                                  deleted_at, dirty)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0)`
+    ).run(
+      owner,
+      s.uid,
+      s.game,
+      JSON.stringify(s.cards),
+      s.friendsVisible ? 1 : 0,
+      s.createdAt,
+      s.updatedAt,
+      s.deletedAt
+    )
+    return true
+  }
+  const local = sessionToWire(row)
+  const merged = mergeSessionCards(local.cards, s.cards)
+  if (row.dirty === 1 && !replaces(s, local)) {
+    // Our newer edit stands, but a price the server has and we lack is still taken.
+    if (sameCards(merged, local.cards)) return false
+    db.prepare('UPDATE scan_sessions SET cards = ? WHERE owner_id = ? AND uid = ?').run(
+      JSON.stringify(merged),
+      owner,
+      s.uid
+    )
+    return true
+  }
+  const next: WireScanSession = { ...s, cards: merged }
+  if (row.dirty === 0 && sameSession(local, next)) return false
+  // A price we hold that the server lacks goes back up, as a newer edit.
+  const keeps = !sameCards(merged, s.cards)
+  const updatedAt =
+    keeps && new Date().toISOString() > s.updatedAt ? new Date().toISOString() : s.updatedAt
+  db.prepare(
+    `UPDATE scan_sessions SET game = ?, cards = ?, friends_visible = ?, created_at = ?, updated_at = ?,
+       deleted_at = ?, dirty = ? WHERE owner_id = ? AND uid = ?`
+  ).run(
+    next.game,
+    JSON.stringify(next.cards),
+    next.friendsVisible ? 1 : 0,
+    next.createdAt,
+    updatedAt,
+    next.deletedAt,
+    keeps ? 1 : 0,
+    owner,
+    s.uid
+  )
+  return true
+}
+
+/** Deletes the owner's session tombstones the server already has. */
+export function purgeCleanSessions(db: SqlDb, owner: number): void {
+  db.prepare(
+    'DELETE FROM scan_sessions WHERE owner_id = ? AND deleted_at IS NOT NULL AND dirty = 0'
+  ).run(owner)
 }

@@ -135,7 +135,16 @@ export function BinderView({ detail, readOnly, onEdit, onRemove }: Props): React
               {!readOnly && ' Open a card to add it.'}
             </p>
           ) : (
-            <BinderGrid cards={shown} onOpen={setOpen} onRemove={onRemove} readOnly={readOnly} />
+            <BinderGrid
+              // A new filter starts again from the first page.
+              resetKey={view}
+              uid={detail.uid}
+              cards={shown}
+              onOpen={setOpen}
+              onRemove={onRemove}
+              readOnly={readOnly}
+              markComplete={hasGoal}
+            />
           )}
         </>
       )}

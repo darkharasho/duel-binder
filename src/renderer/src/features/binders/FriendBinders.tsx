@@ -6,7 +6,7 @@ import { PageHeader } from '@/components/PageHeader'
 import { Button } from '@/components/ui/button'
 import { api, queryKeys } from '@/lib/api'
 import { useBackHandler } from '@/lib/backStack'
-import { Row } from './BindersPage'
+import { Row, SHELF } from './BindersPage'
 import { BinderView } from './BinderView'
 
 function Open({
@@ -59,7 +59,7 @@ export function FriendBinders({
   return (
     <div className="space-y-4 p-8 max-md:p-4">
       <PageHeader>{header}</PageHeader>
-      <ul className="space-y-3" aria-label="Binders">
+      <ul className={SHELF} aria-label="Binders">
         {binders.map((b) => (
           <Row key={b.uid} b={b} onOpen={() => setUid(b.uid)} />
         ))}

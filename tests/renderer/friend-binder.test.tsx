@@ -248,7 +248,7 @@ describe("a friend's binders tab", () => {
     await userEvent.click(await screen.findByRole('button', { name: /Blue-Eyes/ }))
     expect(await screen.findByRole('heading', { name: 'Blue-Eyes' })).toBeInTheDocument()
     expect(api.friends.binder).toHaveBeenCalledWith(7, 'b1')
-    expect(screen.getByText('Card 1')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Card 1' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /remove/i })).not.toBeInTheDocument()
   })

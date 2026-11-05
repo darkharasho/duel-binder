@@ -4,7 +4,7 @@
  * into partitions, and art settles which product is which. A product already stored on a printing
  * keeps it while its art still agrees.
  */
-import { distance, MATCH_MARGIN, MATCH_MAX } from './art'
+import { distance, FINISH_MARGIN, MATCH_MARGIN, MATCH_MAX, STAMP_MAX } from './art'
 import type { OpProduct } from './tcgcsv'
 import type { BandaiEntry, BandaiSeries } from './types'
 import { entryKind, productVersion, promoKey, reprintProduct } from './versions'
@@ -47,11 +47,15 @@ export function matchSeries(o: MatchOptions): { matches: Map<string, OpMatch>; n
   }
 
   const kinds = new Map(o.entries.map((e) => [e.bandaiId, entryKind(e, o.series)]))
+  const entriesOf = new Map<string, BandaiEntry[]>()
+  for (const e of o.entries) entriesOf.set(e.number, [...(entriesOf.get(e.number) ?? []), e])
   const inPartition = (e: BandaiEntry, p: OpProduct): boolean => {
     const kind = kinds.get(e.bandaiId)!
     const v = versions.get(p.productId)!
     if (kind === 'promo') return v.label !== null && promoKey(v.label) === promoKey(e.cardSets)
     if (kind === 'reprint') return reprintProduct(v)
+    // A premium booster's SP is TCGplayer's Jolly Roger Foil, Full Art, Gold, Manga...: any parallel.
+    if (kind === 'sp') return v.kind === 'sp' || (v.kind === 'parallel' && !reprintProduct(v))
     return v.kind === kind
   }
   const dist = (e: BandaiEntry, p: OpProduct): number | null => {
@@ -60,8 +64,9 @@ export function matchSeries(o: MatchOptions): { matches: Map<string, OpMatch>; n
     return a === null || b === null ? null : distance(a, b)
   }
   /**
-   * The product the rule picks among `pool`, or why none: the best must be within MATCH_MAX and
+   * The product the rule picks among `pool`, or why none: the best must be within STAMP_MAX and
    * ahead of the runner-up (any product of the pool with a hash, near or not) by MATCH_MARGIN.
+   * Past MATCH_MAX (a stamp-free scan) no other entry of the number may be nearer the product.
    */
   const pick = (e: BandaiEntry, pool: OpProduct[]): { product: OpProduct; d: number } | Reason => {
     if (pool.length === 0) return 'no candidate'
@@ -70,9 +75,15 @@ export function matchSeries(o: MatchOptions): { matches: Map<string, OpMatch>; n
       .filter((s): s is { product: OpProduct; d: number } => s.d !== null)
       .sort((a, b) => a.d - b.d)
     if (hashed.length === 0) return 'no art yet'
-    if (hashed[0].d > MATCH_MAX) return 'art disagrees'
-    if (hashed.length >= 2 && hashed[1].d - hashed[0].d < MATCH_MARGIN) return 'ambiguous'
-    return hashed[0]
+    const best = hashed[0]
+    if (best.d > STAMP_MAX) return 'art disagrees'
+    if (hashed.length >= 2 && hashed[1].d - best.d < MATCH_MARGIN) return 'ambiguous'
+    if (best.d > MATCH_MAX && (entriesOf.get(e.number) ?? []).some((x) => {
+      if (x === e) return false
+      const d = dist(x, best.product)
+      return d !== null && d <= best.d
+    })) return 'art disagrees'
+    return best
   }
   const label = (e: BandaiEntry, p: OpProduct): string | null =>
     kinds.get(e.bandaiId) === 'parallel' ? versions.get(p.productId)!.label : null
@@ -89,7 +100,7 @@ export function matchSeries(o: MatchOptions): { matches: Map<string, OpMatch>; n
     if (old !== undefined) {
       const p = byId.get(old)
       const d = p ? dist(e, p) : null
-      if (p && d !== null && d <= MATCH_MAX) {
+      if (p && d !== null && d <= STAMP_MAX) {
         take(e, p)
         reserved.add(p.productId)
         kept.push(e)
@@ -116,6 +127,54 @@ export function matchSeries(o: MatchOptions): { matches: Map<string, OpMatch>; n
     if (r && users.get(r.product.productId) === 1) take(e, r.product)
     else failed.set(e.bandaiId, failed.get(e.bandaiId) ?? 'ambiguous')
   }
+
+  // 3b. Mutual nearest among what is left of a number. One picture in two finishes (a premium
+  // booster's Jolly Roger Foil and Textured Foil) hashes a steady few bits apart, well inside
+  // MATCH_MARGIN: an entry takes the product it is nearest to by FINISH_MARGIN, when no other
+  // entry left for that product is within FINISH_MARGIN of it either.
+  const taken = new Set([...reserved, ...[...matches.values()].map((m) => m.product.productId)])
+  const left = open.filter((e) => !matches.has(e.bandaiId))
+  for (const e of left) {
+    const near = (byNumber.get(e.number) ?? [])
+      .filter((p) => !taken.has(p.productId) && inPartition(e, p))
+      .map((p) => ({ product: p, d: dist(e, p) }))
+      .filter((s): s is { product: OpProduct; d: number } => s.d !== null)
+      .sort((a, b) => a.d - b.d)
+    if (near.length === 0 || near[0].d > MATCH_MAX) continue
+    if (near.length >= 2 && near[1].d - near[0].d < FINISH_MARGIN) continue
+    const best = near[0]
+    const rival = left.some((x) => {
+      if (x === e || x.number !== e.number || matches.has(x.bandaiId) || !inPartition(x, best.product)) return false
+      const d = dist(x, best.product)
+      return d !== null && d - best.d < FINISH_MARGIN
+    })
+    if (rival) continue
+    take(e, best.product)
+    taken.add(best.product.productId)
+  }
+
+  // 3c. A reprint entry with no reprint product may be a parallel under another name: a premium
+  // booster files its Manga cards as `_r2`. It takes a parallel left over, by the strict rule, when
+  // no other entry of the number is within FINISH_MARGIN of that product (the plain reprint of a
+  // foil whose foil entry is matched is not that foil).
+  for (const e of left) {
+    if (matches.has(e.bandaiId) || kinds.get(e.bandaiId) !== 'reprint') continue
+    const same = o.entries.filter((x) => x !== e && x.number === e.number)
+    const pool = (byNumber.get(e.number) ?? []).filter((p) => {
+      const v = versions.get(p.productId)!
+      return !taken.has(p.productId) && v.kind === 'parallel' && !reprintProduct(v)
+    })
+    const r = pick(e, pool)
+    if (typeof r === 'string') continue
+    const rival = same.some((x) => {
+      const d = dist(x, r.product)
+      return d !== null && d - r.d < FINISH_MARGIN
+    })
+    if (rival) continue
+    take(e, r.product)
+    taken.add(r.product.productId)
+  }
+
   for (const e of open) {
     const reason = matches.has(e.bandaiId) ? undefined : failed.get(e.bandaiId)
     if (reason) notes.push(`${e.bandaiId}: no unambiguous TCGplayer product (${reason})`)

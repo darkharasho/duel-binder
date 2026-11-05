@@ -48,6 +48,10 @@ describe('One Piece TCGplayer versions', () => {
     expect(v('DON!! Card Pack Vol. 2', null, null).skip).toBe('sealed')
     expect(v("The World's Strongest Warriors Booster Box", null, null).skip).toBe('sealed')
     expect(v('Monkey.D.Luffy (Super Pre-Release) [Participant]', 'P-001', 'PR').label).toBe('Super Pre-Release [Participant]')
+    // A name's own one-word part has no space before it; a tag of several words may lack one too.
+    expect(v('Miss Doublefinger(Zala) (Reprint)', 'OP05-073', 'UC')).toEqual({ kind: 'parallel', label: 'Reprint', skip: null })
+    expect(v('Mr.3(Galdino)', 'OP01-085', 'UC')).toEqual({ kind: 'base', label: null, skip: null })
+    expect(v('Jinbe - PRB02-007(Alternate Art)', 'PRB02-007', 'R').label).toBe('Alternate Art')
   })
   test('entry kinds', () => {
     expect(entryKind(entry({ bandaiId: 'OP17-005' }), OP17)).toBe('base')

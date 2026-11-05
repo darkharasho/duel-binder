@@ -170,10 +170,11 @@ export function CollectionPage({
         : { ...f, sort: key, dir: key === 'name' ? 'asc' : 'desc' }
     )
 
-  const select = (e: EntryView): void => {
+  // Stable, so the grid's tiles don't all re-render when one is picked.
+  const select = useCallback((e: EntryView): void => {
     setSelectedId(e.id)
     setCardId(e.card.id)
-  }
+  }, [])
   const close = (): void => {
     setSelectedId(null)
     setCardId(null)

@@ -159,13 +159,13 @@ export const SetsList = memo(function SetsList({
 }: Props): React.JSX.Element {
   const groups = useMemo(() => (bySeries ? seriesGroups(sets) : null), [bySeries, sets])
   const ordered = useMemo(() => (groups ? groups.flatMap((g) => g.sets) : sets), [groups, sets])
-  const shown = useChunkedList(ordered)
+  const [shown, endRef] = useChunkedList(ordered)
   const Item = view === 'grid' ? GridItem : ListItem
   const items = (list: readonly SetSummary[]): React.JSX.Element[] =>
     list.map((s) => <Item key={`${s.language}|${s.setName}`} s={s} mode={mode} onOpen={onOpen} />)
   if (!groups) {
     return (
-      <ul id={id} aria-label={label} data-view={view} className={LIST_CLASS[view]}>
+      <ul ref={endRef} id={id} aria-label={label} data-view={view} className={LIST_CLASS[view]}>
         {items(shown)}
       </ul>
     )
@@ -179,7 +179,14 @@ export const SetsList = memo(function SetsList({
     return { g, run: shown.slice(start, start + g.sets.length) }
   })
   return (
-    <div id={id} role="group" aria-label={label} data-view={view} className="space-y-6">
+    <div
+      ref={endRef}
+      id={id}
+      role="group"
+      aria-label={label}
+      data-view={view}
+      className="space-y-6"
+    >
       {sections.map(({ g, run }) => {
         if (run.length === 0) return null
         const name = g.series ?? OTHER_SERIES

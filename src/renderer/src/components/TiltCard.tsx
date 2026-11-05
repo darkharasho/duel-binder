@@ -94,8 +94,9 @@ export function TiltCard({
         ref={inner}
         style={innerStyle}
         className={cn(
+          // At rest there's no transform: a 3D one, even at 0deg, gives every tile on a page of
+          // thousands its own compositor layer. Leaving eases from the tilt back to none.
           'group/tilt relative transition-transform duration-500 ease-out',
-          '[transform:rotateX(var(--tilt-x,0deg))_rotateY(var(--tilt-y,0deg))]',
           'data-[tilting]:duration-100 data-[tilting]:[transform:rotateX(var(--tilt-x,0deg))_rotateY(var(--tilt-y,0deg))_scale(1.05)]',
           'motion-reduce:transform-none',
           innerClassName

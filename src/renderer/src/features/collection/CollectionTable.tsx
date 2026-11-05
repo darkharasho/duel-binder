@@ -17,6 +17,7 @@ import {
 import { LanguageTag } from '@/components/LanguageTag'
 import type { Favourites } from '@/lib/favourites'
 import { useGame } from '@/lib/game'
+import { useChunkedList } from '@/lib/useChunkedList'
 import { EntryValue, StaleBadge, displayTotal } from './EntryValue'
 
 interface Props {
@@ -129,6 +130,8 @@ export function CollectionTable({
   favourites
 }: Props): React.JSX.Element {
   const table = useTable({ features, columns, data: entries })
+  // Thousands of rows at once hold the window; they arrive as the scroll nears them.
+  const [rows, endRef] = useChunkedList(table.getRowModel().rows)
 
   return (
     <FavouritesOfTable.Provider value={favourites}>
@@ -167,8 +170,8 @@ export function CollectionTable({
             </TableRow>
           ))}
         </TableHeader>
-        <TableBody>
-          {table.getRowModel().rows.map((row) => (
+        <TableBody ref={endRef}>
+          {rows.map((row) => (
             <TableRow
               key={row.id}
               data-nav-key={row.original.id}

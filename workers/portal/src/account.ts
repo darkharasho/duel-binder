@@ -18,7 +18,7 @@ const json = (body: unknown, status: number): Response =>
  * - `collection_entries` and `value_snapshots` don't cascade from `users`, so they go first;
  * - deleting the `users` row cascades to sessions, desktop_codes, friendships,
  *   friend_request_log, friend_blocks, printing_contributions, price_request_log, wishlist_entries,
- *   binders, binder_edits, favourites, sign_ins, apple_tokens, account_change_log, merge_tickets
+ *   binders, binder_edits, scan_sessions, favourites, sign_ins, apple_tokens, account_change_log, merge_tickets
  *   and training_photos (foreign keys are always on in a Durable Object); deleteAccountRoute
  *   deletes the training photos' R2 objects.
  * One statement per table: Durable Object SQLite rejects large compound queries. `account_merges`

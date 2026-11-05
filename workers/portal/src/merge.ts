@@ -13,6 +13,7 @@ import {
   NEXT_BINDER_EDIT_SEQ,
   NEXT_BINDER_SEQ,
   NEXT_FAVOURITE_SEQ,
+  NEXT_SESSION_SEQ,
   NEXT_SEQ,
   NEXT_WISH_SEQ,
   userScope
@@ -192,6 +193,20 @@ function mergeBinders(db: SqlDb, a: MergeArgs, nowIso: string): void {
   }
 }
 
+/** Copies `closed`'s live scan sessions, keeping uids; one the survivor already has (live or not) stays as it is. */
+function mergeSessions(db: SqlDb, a: MergeArgs, nowIso: string): void {
+  const uids = db
+    .prepare('SELECT uid FROM scan_sessions WHERE user_id = ? AND deleted_at IS NULL')
+    .all(a.closed) as { uid: string }[]
+  const copy = db.prepare(
+    `INSERT INTO scan_sessions (user_id, uid, game, cards, friends_visible, created_at, updated_at, seq)
+     SELECT ?, uid, game, cards, friends_visible, created_at, ?, ${NEXT_SESSION_SEQ}
+       FROM scan_sessions WHERE user_id = ? AND uid = ?
+     ON CONFLICT(user_id, uid) DO NOTHING`
+  )
+  for (const s of uids) copy.run(a.survivor, nowIso, a.closed, s.uid)
+}
+
 /**
  * Step 5: `closed`'s friendships, requests and blocks move to `survivor`. A friendship beats a
  * pending request, a block beats both, and anything between the two accounts disappears. Then
@@ -319,6 +334,7 @@ function applyMerge(db: SqlDb, a: MergeArgs): void {
   mergeWishlist(db, a, nowIso)
   mergeFavourites(db, a, nowIso)
   mergeBinders(db, a, nowIso)
+  mergeSessions(db, a, nowIso)
   mergeFriends(db, a, nowIso)
   const { moved, appleToken } = moveSignIns(db, a, nowIso)
 

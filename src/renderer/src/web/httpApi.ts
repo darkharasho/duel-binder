@@ -212,6 +212,7 @@ export function createHttpApi(opts: HttpApiOptions = {}): Api {
       wishlist: call('friends:wishlist'),
       binders: call('friends:binders'),
       binder: call('friends:binder'),
+      sessions: (friendId: number) => call('friends:sessions')(friendId),
       wanting: call('friends:wanting'),
       owning: call('friends:owning'),
       wishlistVisible: call('friends:wishlistVisible'),

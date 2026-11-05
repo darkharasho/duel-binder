@@ -82,6 +82,7 @@ import {
   wishlistVisible
 } from './wishlist'
 import { friendBinder, friendBinders } from './friendBinders'
+import { friendSessions } from './scanSessions'
 import { userScope } from './scope'
 import { dismissLinkHint, listSignIns, removeSignIn, setUsername } from './accountRpc'
 import { linkApple, linkCode } from './link'
@@ -257,6 +258,8 @@ const HANDLERS: { [C in Exclude<PortalChannel, AccountLinkChannel>]: Handler<C> 
     friendBinders(db, friendId(db, userId, id), game),
   'friends:binder': ({ db, userId, game }, _s, id, uid) =>
     friendBinder(db, friendId(db, userId, id), game, checkBounded(uid, 'uid', MAX_UID)),
+  'friends:sessions': ({ db, userId, game }, _s, id) =>
+    friendSessions(db, friendId(db, userId, id), game),
   'favourites:list': ({ db }, scope) => listFavourites(db, scope),
   'favourites:set': ({ db, now }, scope, cardId, on) =>
     setFavourite(db, checkId(cardId, 'cardId'), on, now(), scope),

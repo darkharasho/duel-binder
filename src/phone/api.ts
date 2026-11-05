@@ -254,6 +254,7 @@ export function createPhoneApi(deps: {
         })),
       // A friend's printing ids are the server's, so their binder cards show no printing scan.
       binders: portal('friends:binders'),
+      sessions: (friendId: number) => store.portal('friends:sessions', [friendId]),
       binder: async (userId: number, uid: string) => {
         const b = await store.portal<BinderDetail | null>('friends:binder', [userId, uid])
         return b && { ...b, cards: b.cards.map((c) => ({ ...c, printingScan: false })) }

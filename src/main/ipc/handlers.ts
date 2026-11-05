@@ -156,6 +156,8 @@ export function createHandlers({
         printingScan: false
       })),
     'friends:binders': async (userId: number) => account.portal('friends:binders', [userId]),
+    'friends:sessions': async (friendId: number) =>
+      account.portal('friends:sessions', [friendId]),
     'friends:binder': async (userId: number, uid: string) => {
       const b = await account.portal<BinderDetail | null>('friends:binder', [userId, uid])
       return b && { ...b, cards: b.cards.map((c) => ({ ...c, printingScan: false })) }

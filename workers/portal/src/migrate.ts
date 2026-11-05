@@ -683,6 +683,18 @@ CREATE UNIQUE INDEX ux_training_photos_client ON training_photos(user_id, client
 CREATE INDEX ix_training_photos_user_created ON training_photos(user_id, created_at);
 CREATE INDEX ix_training_photos_game ON training_photos(game, id);
 `
+  },
+  {
+    // Scan sessions: what one scanner Add put in the collection, synced like binders.
+    name: 'server-38',
+    sql: `
+CREATE TABLE scan_sessions (user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, uid TEXT NOT NULL,
+  game TEXT NOT NULL, cards TEXT NOT NULL, friends_visible INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL, updated_at TEXT NOT NULL, deleted_at TEXT,
+  seq INTEGER NOT NULL, PRIMARY KEY (user_id, uid));
+CREATE UNIQUE INDEX ux_scan_sessions_seq ON scan_sessions(seq);
+CREATE INDEX ix_scan_sessions_user_seq ON scan_sessions(user_id, seq);
+`
   }
 ]
 

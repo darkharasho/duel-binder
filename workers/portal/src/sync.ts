@@ -33,6 +33,7 @@ import {
   checkBinderEditPush,
   checkBinderPush
 } from './binderSync'
+import { applySessionPush, checkSessionPush, sessionPullSince } from './scanSessions'
 import { applyWishPush, checkWishPush, wishPullSince } from './wishlist'
 import { applyFavouritePush, checkFavouritePush, favouritePullSince } from './favourites'
 import { NEXT_SEQ, userScope } from './scope'
@@ -359,7 +360,8 @@ const POST_PATHS: ReadonlySet<string> = new Set([
   'wishlist-push',
   'binders-push',
   'binder-edits-push',
-  'favourites-push'
+  'favourites-push',
+  'sessions-push'
 ])
 const GET_PATHS: ReadonlySet<string> = new Set([
   'pull',
@@ -367,14 +369,15 @@ const GET_PATHS: ReadonlySet<string> = new Set([
   'wishlist-pull',
   'binders-pull',
   'binder-edits-pull',
-  'favourites-pull'
+  'favourites-pull',
+  'sessions-pull'
 ])
 
 /**
  * POST /api/sync/push, GET /api/sync/pull, GET /api/sync/price-changes, POST /api/sync/prices,
  * POST /api/sync/price-requests, POST /api/sync/wishlist-push and GET /api/sync/wishlist-pull, and the same
  * pairs for binders (binders-push/-pull), their edits (binder-edits-push/-pull) and favourites
- * (favourites-push/-pull);
+ * (favourites-push/-pull) and scan sessions (sessions-push/-pull);
  * desktop tokens only (the phone app has one too).
  */
 export async function syncRoute(req: Request, deps: AppDeps, path: string): Promise<Response> {
@@ -398,6 +401,8 @@ export async function syncRoute(req: Request, deps: AppDeps, path: string): Prom
       const cursor = /^\d{1,16}$/.test(raw) ? Number(raw) : NaN
       if (!Number.isSafeInteger(cursor))
         throw new CollectionError('cursor must be a whole number of at least 0')
+      if (path === 'sessions-pull')
+        return json(sessionPullSince(deps.db, user.id, game, cursor, MAX_PULL))
       const pull =
         path === 'pull'
           ? pullSince
@@ -442,6 +447,13 @@ export async function syncRoute(req: Request, deps: AppDeps, path: string): Prom
       if (Array.isArray(raw) && raw.length > MAX_PUSH) return json({ error: 'too-many' }, 413)
       const entries = checkFavouritePush(body, deps.now())
       return json({ results: applyFavouritePush(deps.db, user.id, entries, games()) })
+    }
+
+    if (path === 'sessions-push') {
+      const raw = (body as { entries?: unknown } | null)?.entries
+      if (Array.isArray(raw) && raw.length > MAX_PUSH) return json({ error: 'too-many' }, 413)
+      const entries = checkSessionPush(body, deps.now())
+      return json({ results: applySessionPush(deps.db, user.id, entries, games()) })
     }
 
     if (path === 'binders-push' || path === 'binder-edits-push') {

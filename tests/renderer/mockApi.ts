@@ -116,6 +116,7 @@ export function createMockApi(overrides: DeepPartial<Api> = {}): Api {
       })),
       wishlist: vi.fn(async () => []),
       binders: vi.fn(async () => []),
+      sessions: vi.fn(async () => []),
       binder: vi.fn(async () => null),
       wanting: vi.fn(async () => []),
       owning: vi.fn(async () => []),

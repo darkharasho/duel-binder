@@ -109,6 +109,8 @@ export interface Api {
     binders(userId: number): Promise<BinderSummary[]>
     /** One of those binders with its cards; null if it is private or unknown. */
     binder(userId: number, uid: string): Promise<BinderDetail | null>
+    /** An accepted friend's scan sessions they show, newest first. `game` is the active game, which the portal reads from the account. */
+    sessions(friendId: number, game: GameId): Promise<ScanSession[]>
     /** Friends who want this card and don't hide their wishlist. */
     wanting(cardId: number): Promise<FriendWantsCard[]>
     /** Which friends own these printings (sync keys), in one call; only those some friend owns. */
@@ -382,6 +384,7 @@ export const INVOKE_CHANNELS = [
   'friends:wishlist',
   'friends:binders',
   'friends:binder',
+  'friends:sessions',
   'friends:wanting',
   'friends:owning',
   'friends:wishlistVisible',

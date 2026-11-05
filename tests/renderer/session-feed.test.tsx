@@ -56,6 +56,16 @@ describe('sessionDate', () => {
   })
 })
 
+describe('sessionDate years', () => {
+  const now = new Date(2026, 10, 5, 12, 0)
+  it('adds the year only for another year', () => {
+    expect(sessionDate(new Date(2025, 10, 2, 20, 15).toISOString(), now)).toBe(
+      'Nov 2, 2025 · 8:15 PM'
+    )
+    expect(sessionDate(new Date(2026, 0, 2, 20, 15).toISOString(), now)).toBe('Jan 2 · 8:15 PM')
+  })
+})
+
 describe('replaySourceOfSession', () => {
   it('uses the session date in the header', () => {
     const s = session([card(5), card(2)], {

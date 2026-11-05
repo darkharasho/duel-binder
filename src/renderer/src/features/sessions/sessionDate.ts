@@ -11,15 +11,19 @@ const sameDay = (a: Date, b: Date): boolean =>
 const clock = (d: Date): string =>
   d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' }).replace(/\s/g, ' ')
 
+/** "Nov 2", with the year when it isn't this one: sessions are kept forever. */
+const dayOf = (d: Date, now = new Date()): string =>
+  d.toLocaleDateString('en-US', {
+    month: 'short',
+    day: 'numeric',
+    ...(d.getFullYear() !== now.getFullYear() && { year: 'numeric' })
+  })
+
 /** "Today · 9:42 PM", "Yesterday · 8:15 PM", else "Nov 2 · 8:15 PM". */
 export function sessionDate(iso: string, now = new Date()): string {
   const d = new Date(iso)
   const yesterday = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 1)
-  const day = sameDay(d, now)
-    ? 'Today'
-    : sameDay(d, yesterday)
-      ? 'Yesterday'
-      : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  const day = sameDay(d, now) ? 'Today' : sameDay(d, yesterday) ? 'Yesterday' : dayOf(d, now)
   return `${day} · ${clock(d)}`
 }
 
@@ -49,7 +53,7 @@ export function replaySourceOfSession(s: ScanSession): ReplaySource {
     })
   }
   const cards = s.cards.reduce((n, c) => n + c.quantity, 0)
-  const date = new Date(s.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  const date = dayOf(new Date(s.createdAt))
   return {
     pulls: choosePulls(candidates),
     header: `${date} · ${plural(cards, 'card', 'cards')} · ${formatUsd(sessionTotal(s.cards).value)}`

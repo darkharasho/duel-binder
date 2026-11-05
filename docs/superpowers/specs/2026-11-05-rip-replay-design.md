@@ -18,15 +18,14 @@ The owner opens packs on Discord streams and scan nights. Afterwards they want s
 
 ## How pulls are chosen
 
-**The top pulls by price, for all three games** (owner, 2026-11-05; replaced an earlier rarity-first plan, a hit-price threshold, and a fixed count).
+**Price only, for all three games** (owner, 2026-11-05; this replaced a rarity-first plan, a hit-price threshold, a fixed count and a common/uncommon exclusion, in that order).
 
-- **What makes it:** every pull that is not a common or uncommon and isn't priced at pennies (owner). The pennies floor is $1.00, so anything under a dollar is left out (my call on the number). There's no fixed count: a quiet night gives a short replay.
+- **What makes it:** every pull priced at $1.00 or more. The owner wanted pennies-priced bulk out, and $1.00 is my call on where "pennies" ends. Rarity plays no part: an expensive Yu-Gi-Oh! common makes it (owner). There's no fixed count, so a quiet night gives a short replay.
 - **At most 8** (owner). If more than 8 qualify, keep the 8 most expensive. They're shown cheapest first, building up to the most expensive, which is held longest.
-- **Commons and uncommons never count** (owner). Excluded: Common and Uncommon in every game (Yu-Gi-Oh! Common; Pokémon Common/Uncommon; One Piece C/UC), plus Yu-Gi-Oh! Short Print and Super Short Print, which are commons in all but name (my call).
-- **Pokémon needs the card's rarity looked up:** on a Pokémon `ScanRow`, `rarity` is the print version (Holo, Reverse Holo), so whether it's a Common or Uncommon has to come from the catalog's `pokemon_cards.rarity`. Pull selection looks it up and attaches it, on desktop and phone (Japanese/Chinese C/U equivalents included). The caption shows that card rarity too (e.g. "SPECIAL ILLUSTRATION RARE"), not the print version (my call).
-- Unpriced cards and best guesses (`row.guess`) never count.
-- **Tie-break:** the order pulled (my call).
-- **Duplicates:** one entry per card, labelled "×2" etc. if pulled more than once (my call).
+- Price is one copy's price (`priceOf(row)`). Unpriced cards and best guesses (`row.guess`) never count.
+- **Caption rarity (my call):** use the printing's `printedRarity` when it has one (Pokémon, e.g. "Special Illustration Rare"), else the row's `rarity`. No catalog lookup is needed: the printing option already carries `printedRarity`.
+- **Tie-break:** the order pulled, by `addedAt` (my call).
+- **Duplicates:** one entry per row, labelled "×2" etc. when its quantity is above 1 (my call).
 - **No qualifying pulls:** the button shows but is disabled with "No pulls to replay" (my call).
 - The summary's own "hit of the night" (`sessionSummary`) stays as it is. The replay's best pull is normally the same card, since both go by price.
 
@@ -44,7 +43,7 @@ The owner opens packs on Discord streams and scan nights. Afterwards they want s
 - A setting, off by default (my call): **Include camera moments**.
 - When on, each pull opens on about 2 s of the real camera footage from the moment that card was scanned, then a white flash, then the art slides in as above.
 - A pull with no saved footage just shows the art.
-- This needs the camera during the session to keep a short rolling buffer (a few seconds) and, when a card is added that could make the replay, keep the clip around that moment. It covers the phone camera in Stream (not the regular phone scanner) and the webcam in the desktop scan window. Keep only what could qualify (not a common/uncommon, $1.00 or more), cap the total (e.g. 12 clips, cheapest dropped first), and keep it in memory or temp storage. Throw it away when the session's list is cleared.
+- This needs the camera during the session to keep a short rolling buffer (a few seconds) and, when a card is added that could make the replay, keep the clip around that moment. It covers the phone camera in Stream (not the regular phone scanner) and the webcam in the desktop scan window. Keep only what could qualify ($1.00 or more), cap the total (e.g. 12 clips, cheapest dropped first), and keep it in memory or temp storage. Throw it away when the session's list is cleared.
 - Recording the whole night is out: the files would be too big.
 - The buffer must not slow scanning. The owner cares about scan speed ([scan-speed-priority]). Measure per-card latency with the setting on, and if it costs anything noticeable, it stays off by default and says so.
 
@@ -79,7 +78,7 @@ The owner opens packs on Discord streams and scan nights. Afterwards they want s
 
 - Slower scanning when the camera option is on.
 - A file over 10 MB that Discord refuses.
-- A replay padded out with commons/uncommons, or featuring wrong guesses.
+- A replay padded out with pennies-priced bulk, or featuring wrong guesses.
 - Blank or broken card frames in the video.
 
 ## Left to the builder

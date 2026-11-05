@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest'
-import { pickReplayPulls, replayHeader } from '@/features/scan/replay/pulls'
+import {
+  choosePulls,
+  pickReplayPulls,
+  replayHeader,
+  replaySourceOfRows,
+  type PullCandidate
+} from '@/features/scan/replay/pulls'
 import { formatUsd } from '@/lib/format'
 import { replayRow as row } from './replayRows'
 
@@ -56,5 +62,42 @@ describe('replayHeader', () => {
       row(5, { quantity: 2, addedAt: newest })
     ]
     expect(replayHeader(rows)).toBe(`Nov 4 · 3 cards · ${formatUsd(20)}`)
+  })
+})
+
+const cand = (price: number, o: Partial<PullCandidate> = {}): PullCandidate => ({
+  key: `k${price}-${o.name ?? ''}`,
+  name: 'c',
+  imageId: 1,
+  photoId: null,
+  rarity: null,
+  setCode: null,
+  price,
+  quantity: 1,
+  addedAt: 1,
+  guess: false,
+  ...o
+})
+
+describe('choosePulls', () => {
+  it('drops a guess and a $0.99 candidate', () => {
+    const out = choosePulls([cand(5, { guess: true }), cand(0.99), cand(2)])
+    expect(out.map((p) => p.price)).toEqual([2])
+  })
+
+  it('keeps the dearest 8 of 10 in play order', () => {
+    const out = choosePulls([5, 1, 9, 3, 10, 2, 7, 4, 8, 6].map((p) => cand(p)))
+    expect(out.map((p) => p.price)).toEqual([3, 4, 5, 6, 7, 8, 9, 10])
+  })
+})
+
+describe('replaySourceOfRows', () => {
+  it('pairs the picked pulls with the header', () => {
+    const rows = [row(5), row(0.5)]
+    expect(replaySourceOfRows(rows)).toEqual({
+      pulls: pickReplayPulls(rows),
+      header: replayHeader(rows)
+    })
+    expect(replaySourceOfRows(rows).header).toBe(replayHeader(rows))
   })
 })

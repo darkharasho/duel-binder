@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   SCAN_SIZES,
   SCAN_SIZE_MAX,
@@ -21,6 +21,7 @@ import {
 import { defaultEngine, type EngineFactory } from './engine'
 import { InPageScanner, type InPageCamera } from './InPageScanner'
 import { MakeReplay } from './replay/MakeReplay'
+import { replaySourceOfRows } from './replay/pulls'
 import { useScanHub } from './ScanHub'
 import { ArtDataNotice } from './ArtDataNotice'
 import { HitPriceInput } from './HitPriceInput'
@@ -57,6 +58,7 @@ export function ScanPage({
   // Set from the click until the window reports open: the page camera is released first.
   const [handingOff, setHandingOff] = useState(false)
   const inPage = openKnown && !open && !handingOff
+  const replaySource = useMemo(() => replaySourceOfRows(hub.session.rows), [hub.session.rows])
 
   // Once the window is open the handoff is over, so closing it brings the scanner back.
   if (open && handingOff) setHandingOff(false)
@@ -201,7 +203,7 @@ export function ScanPage({
             >
               {hub.summaryOn ? 'Hide summary' : 'Show summary'}
             </Button>
-            <MakeReplay rows={hub.session.rows} variant="desktop" />
+            <MakeReplay source={replaySource} variant="desktop" />
             <Select
               value={settings.fit}
               onValueChange={(fit) => setSettings({ fit: fit as ScanFit })}

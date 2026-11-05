@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { EngineFactory } from '@/features/scan/engine'
 import { useBackHandler } from '../backButton'
 import { useScanHub } from '@/features/scan/ScanHub'
@@ -6,6 +6,7 @@ import { flagText } from '@/features/scan/ScanRowItem'
 import { plural } from '@/features/scan/scanText'
 import type { ScanRow } from '@/features/scan/session'
 import { MakeReplay } from '@/features/scan/replay/MakeReplay'
+import { replaySourceOfRows } from '@/features/scan/replay/pulls'
 import { sessionSummary } from '@/features/scan/window/summary'
 import { PAGE_ROWS, SummaryScreen } from '@/features/scan/window/SummaryScreen'
 import { useGame } from '@/lib/game'
@@ -143,6 +144,13 @@ export function StreamScreen({
   if (current !== record) setRecord(current)
   const pulled = useCallback((row: ScanRow) => setRecord((r) => r && recordPull(r, row)), [])
 
+  // Only the end screen needs it, so a running stream doesn't price every scan twice.
+  const replayRows = phase === 'over' ? record?.rows : undefined
+  const replaySource = useMemo(
+    () => (replayRows ? replaySourceOfRows(replayRows) : null),
+    [replayRows]
+  )
+
   const started = phase !== 'start'
   // Android's back leaves the start screen, but never ends a running stream: it just shows the controls.
   useBackHandler(true, () => (started ? showControls() : onExit()))
@@ -246,7 +254,7 @@ export function StreamScreen({
             <button type="button" className={CONTROL} onClick={() => setReviewing(true)}>
               Review
             </button>
-            <MakeReplay rows={record.rows} variant="phone" />
+            {replaySource && <MakeReplay source={replaySource} variant="phone" />}
             <button
               type="button"
               className={CONTROL}

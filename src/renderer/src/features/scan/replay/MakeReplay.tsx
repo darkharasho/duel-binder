@@ -2,7 +2,6 @@ import { useEffect, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
-import type { ScanRow } from '../session'
 import { loadReplayArt, loadReplayLogo } from './art'
 import { loadReplayFonts } from './draw'
 import {
@@ -13,20 +12,20 @@ import {
   recordVideo,
   type ReplayFormat
 } from './encode'
-import { pickReplayPulls, replayHeader } from './pulls'
+import type { ReplaySource } from './pulls'
 import { replayFileName, saveReplay, type SaveResult } from './save'
 import { replayTimeline } from './timeline'
 
 type Make = (
-  rows: ScanRow[],
+  source: ReplaySource,
   format: ReplayFormat,
   opts: { signal: AbortSignal; onProgress: (p: number) => void }
 ) => Promise<SaveResult>
 
-/** The whole replay: pick the pulls, load their art, draw and encode, then save it. */
-const makeReplay: Make = async (rows, format, opts) => {
+/** The whole replay: load their art, draw and encode, then save it. */
+const makeReplay: Make = async (source, format, opts) => {
   const [loaded, logo] = await Promise.all([
-    loadReplayArt(pickReplayPulls(rows)),
+    loadReplayArt(source.pulls),
     loadReplayLogo(),
     loadReplayFonts()
   ])
@@ -34,7 +33,7 @@ const makeReplay: Make = async (rows, format, opts) => {
   const scene = {
     ...loaded,
     logo,
-    header: replayHeader(rows),
+    header: source.header,
     timeline: replayTimeline(loaded.pulls.length)
   }
   if (format === 'gif') return saveReplay(await encodeGif(scene, opts), replayFileName('gif'))
@@ -57,11 +56,11 @@ const PHONE_CONTROL =
  * (MP4 or GIF) where this device can record video at all.
  */
 export function MakeReplay({
-  rows,
+  source,
   variant,
   make = makeReplay
 }: {
-  rows: ScanRow[]
+  source: ReplaySource
   variant: 'phone' | 'desktop'
   make?: Make
 }): React.JSX.Element {
@@ -74,14 +73,14 @@ export function MakeReplay({
   const canVideo = video !== null
   const videoLabel = video?.ext.toUpperCase() ?? 'MP4'
   const chosen: ReplayFormat = canVideo ? format : 'gif'
-  const empty = pickReplayPulls(rows).length === 0
+  const empty = source.pulls.length === 0
 
   const start = async (): Promise<void> => {
     const ac = new AbortController()
     controller.current = ac
     setProgress(0)
     try {
-      const result = await make(rows, chosen, { signal: ac.signal, onProgress: setProgress })
+      const result = await make(source, chosen, { signal: ac.signal, onProgress: setProgress })
       if (result.saved)
         toast.success('Replay saved', result.where ? { description: result.where } : undefined)
     } catch (e) {

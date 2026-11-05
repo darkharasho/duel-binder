@@ -117,7 +117,7 @@ export function saveGameCursor(
   ).run(owner, game, stream, cursor)
 }
 
-/** Whether this computer has never-signed-in entries, wishes, binders or favourites (owner 0), tombstones included. */
+/** Whether this computer has never-signed-in entries, wishes, binders, favourites or scan sessions (owner 0), tombstones included. */
 export function hasLocalData(db: SqlDb): boolean {
   return [
     'collection_entries',
@@ -1206,7 +1206,7 @@ export function applyRemoteSession(db: SqlDb, owner: number, s: WireScanSession)
   const next: WireScanSession = { ...s, cards: merged }
   if (row.dirty === 0 && sameSession(local, next)) return false
   // A price we hold that the server lacks goes back up, as a newer edit.
-  const keeps = !sameCards(merged, s.cards)
+  const keeps = merged.some((c, i) => c.price !== null && s.cards[i]?.price === null)
   const updatedAt =
     keeps && new Date().toISOString() > s.updatedAt ? new Date().toISOString() : s.updatedAt
   db.prepare(

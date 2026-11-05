@@ -9,6 +9,7 @@ import {
   hasLocalData,
   setActiveOwner
 } from '../../src/main/cloud/localSync'
+import { addEntry } from '../../src/main/repo/collection'
 import {
   deleteScanSession,
   listScanSessions,
@@ -134,6 +135,17 @@ describe('scan session sync', () => {
   it('a portal without the sessions routes leaves the row dirty and the rest syncing', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
     recordScanSession(a, { uid: 's1', game: 'ygo', cards: [card()] })
+    const pid = (
+      a.prepare("SELECT id FROM card_printings WHERE set_code = 'LOB-EN005'").get() as {
+        id: number
+      }
+    ).id
+    const img = 46986414
+    addEntry(
+      a,
+      { printingId: pid, imageId: img, quantity: 1 },
+      new Date('2026-10-25T11:00:00.000Z')
+    )
     const old = (async (input: RequestInfo | URL, init?: RequestInit) =>
       /\/api\/sync\/sessions-/.test(String(input))
         ? Response.json({ error: 'Not found' }, { status: 404 })
@@ -141,6 +153,13 @@ describe('scan session sync', () => {
     await syncOnce(a, user, await clientFor(old), NOW)
     expect(rows(a)).toEqual([expect.objectContaining({ uid: 's1', dirty: 1 })])
     expect(warn).not.toHaveBeenCalled()
+    // The collection still synced.
+    expect(
+      portal.serverDb
+        .prepare('SELECT COUNT(*) AS n FROM collection_entries WHERE user_id = ?')
+        .get(user)
+    ).toEqual({ n: 1 })
+    expect(a.prepare('SELECT dirty FROM collection_entries').all()).toEqual([{ dirty: 0 }])
     // Later, the routes exist.
     await sync(a)
     expect(rows(a)).toEqual([expect.objectContaining({ dirty: 0 })])
@@ -164,5 +183,47 @@ describe('scan session sync', () => {
     const [s] = listScanSessions(a, 'ygo')
     expect(s.cards.map((c) => c.price)).toEqual([5, 3])
     expect(s.friendsVisible).toBe(false)
+    // Nothing remote lacked a price we hold, so nothing goes back up.
+    expect(rows(a)).toEqual([expect.objectContaining({ dirty: 0 })])
+  })
+
+  it('keeps a price the server lacks, dirty with a bumped edit time', () => {
+    recordScanSession(a, { uid: 's1', game: 'ygo', cards: [card({ price: 7 })] })
+    a.prepare("UPDATE scan_sessions SET updated_at = '2025-12-31T00:00:00.000Z'").run()
+    const local = listScanSessions(a, 'ygo')[0]
+    const at = '2026-01-01T00:00:00.000Z'
+    expect(
+      applyRemoteSession(a, user, {
+        ...local,
+        cards: [card({ price: null })],
+        friendsVisible: false,
+        updatedAt: at,
+        deletedAt: null
+      })
+    ).toBe(true)
+    const [s] = listScanSessions(a, 'ygo')
+    expect(s.cards[0].price).toBe(7)
+    expect(s.friendsVisible).toBe(false)
+    expect(s.updatedAt > at).toBe(true)
+    expect(rows(a)).toEqual([expect.objectContaining({ dirty: 1 })])
+  })
+
+  it('two different fills of one null leave the local price, hidden, and clean', () => {
+    recordScanSession(a, { uid: 's1', game: 'ygo', cards: [card({ price: 9 })] })
+    const local = listScanSessions(a, 'ygo')[0]
+    expect(
+      applyRemoteSession(a, user, {
+        ...local,
+        cards: [card({ price: 5 })],
+        friendsVisible: false,
+        updatedAt: '2099-01-01T00:00:00.000Z',
+        deletedAt: null
+      })
+    ).toBe(true)
+    const [s] = listScanSessions(a, 'ygo')
+    expect(s.cards[0].price).toBe(9)
+    expect(s.friendsVisible).toBe(false)
+    expect(s.updatedAt).toBe('2099-01-01T00:00:00.000Z')
+    expect(rows(a)).toEqual([expect.objectContaining({ dirty: 0 })])
   })
 })

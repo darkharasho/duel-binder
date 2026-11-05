@@ -552,6 +552,18 @@ export const SCHEMA_V40 = `${ONEPIECE_TABLES}
 ${rollupTriggers('onepiece_cards', ['card_id', 'colors', 'card_type', 'attribute', 'traits'])}
 `
 
+/**
+ * Scan sessions: the cards added in one scanner "Add to collection", kept as a JSON list with the
+ * prices they had then. Desktop and phone only; the server has its own table (server-38).
+ */
+export const SCHEMA_V41 = `
+CREATE TABLE scan_sessions (owner_id INTEGER NOT NULL DEFAULT 0, uid TEXT NOT NULL, game TEXT NOT NULL,
+  cards TEXT NOT NULL, friends_visible INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL, updated_at TEXT NOT NULL, deleted_at TEXT,
+  dirty INTEGER NOT NULL DEFAULT 1, PRIMARY KEY (owner_id, uid));
+CREATE INDEX ix_scan_sessions_dirty ON scan_sessions(owner_id) WHERE dirty = 1;
+`
+
 /** The server keeps rollups out, as V24 does. */
 export const SCHEMA_V40_SERVER = ONEPIECE_TABLES
 
@@ -599,5 +611,6 @@ export const MIGRATIONS: Migration[] = [
   { version: 37, sql: SCHEMA_V37, server: false },
   { version: 38, sql: SCHEMA_V38 },
   { version: 39, sql: SCHEMA_V39 },
-  { version: 40, sql: SCHEMA_V40, server: SCHEMA_V40_SERVER }
+  { version: 40, sql: SCHEMA_V40, server: SCHEMA_V40_SERVER },
+  { version: 41, sql: SCHEMA_V41, server: false }
 ]

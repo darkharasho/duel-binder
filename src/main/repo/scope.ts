@@ -58,6 +58,8 @@ export interface Scope {
   binderSync(table: 'binders' | 'binder_edits'): WishlistScope
   /** `favourites` scoping: the same shape as `wishlist`. */
   favourites: WishlistScope
+  /** `scan_sessions` scoping: the same shape as `wishlist`. */
+  sessions: WishlistScope
   /**
    * value_snapshots scoping. `insertCols`/`insertVals` are comma-terminated fragments placed before
    * `date` / `?` in an INSERT (and `insertCols + 'date'` is the upsert conflict target); `where` limits a read
@@ -157,6 +159,13 @@ export function localScope(game: string): Scope {
       marker: '1',
       touch: 'dirty = 1'
     }),
+    sessions: {
+      ownerCol: 'owner_id',
+      owner: ACTIVE_OWNER,
+      markerCol: 'dirty',
+      marker: '1',
+      touch: 'dirty = 1'
+    },
     favourites: {
       ownerCol: 'owner_id',
       owner: ACTIVE_OWNER,

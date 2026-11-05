@@ -69,12 +69,12 @@ describe('sessionSummary', () => {
     expect(s.list[1]).toMatchObject({ quantity: 2, guess: false, raw: false })
   })
 
-  it('the hit of the night is the dearest known card, over a dearer best guess', () => {
+  it('the hit of the session is the dearest known card, over a dearer best guess', () => {
     const s = sessionSummary([row(90, { guess: true }), row(12), row(4)], 20)
     expect(s.hit?.price).toBe(12)
   })
 
-  it('always has a hit of the night: a known card with no price, then the best guess', () => {
+  it('always has a hit: a known card with no price, then the best guess', () => {
     const known = row(null)
     expect(sessionSummary([row(90, { guess: true }), known], 20).hit?.key).toBe(known.key)
     expect(sessionSummary([row(5, { guess: true }), row(90, { guess: true })], 20).hit?.price).toBe(

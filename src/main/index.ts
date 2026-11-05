@@ -332,6 +332,16 @@ async function bootstrap(): Promise<void> {
       await db.backup(filePath)
       return filePath
     },
+    saveReplay: async (name, data) => {
+      const ext = name.slice(name.lastIndexOf('.') + 1)
+      const { canceled, filePath } = await dialog.showSaveDialog({
+        defaultPath: name,
+        filters: [{ name: ext === 'gif' ? 'GIF' : 'Video', extensions: [ext] }]
+      })
+      if (canceled || !filePath) return null
+      writeFileSync(filePath, data)
+      return filePath
+    },
     checkForUpdates: () => updater.check(),
     applyUpdate: () => updater.apply(),
     updateStatus: async () => updater.status()

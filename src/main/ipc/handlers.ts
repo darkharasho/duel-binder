@@ -45,6 +45,7 @@ export interface AppDeps {
   version(): string
   openDataFolder(): Promise<void>
   backupDatabase(): Promise<string | null>
+  saveReplay(name: string, data: Uint8Array): Promise<string | null>
   checkForUpdates(): Promise<UpdateStatus>
   applyUpdate(): Promise<void>
   updateStatus(): Promise<UpdateStatus>
@@ -218,6 +219,13 @@ export function createHandlers({
     'app:version': async () => app.version(),
     'app:openDataFolder': () => app.openDataFolder(),
     'app:backupDatabase': () => app.backupDatabase(),
+    'app:saveReplay': async (name: unknown, data: unknown) => {
+      // Only a plain replay file name: the dialog picks the folder, the renderer never does.
+      if (typeof name !== 'string' || !/^[\w.-]+\.(mp4|webm|gif)$/.test(name) || name.startsWith('.'))
+        throw new Error('Not a replay file name')
+      if (!(data instanceof Uint8Array)) throw new Error('Not replay bytes')
+      return app.saveReplay(name, data)
+    },
     'app:checkForUpdates': () => app.checkForUpdates(),
     'app:applyUpdate': () => app.applyUpdate(),
     'app:updateStatus': () => app.updateStatus(),

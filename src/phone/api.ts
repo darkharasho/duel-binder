@@ -338,6 +338,7 @@ export function createPhoneApi(deps: {
       version: async () => (typeof __APP_VERSION__ === 'string' ? __APP_VERSION__ : 'dev'),
       openDataFolder: notHere,
       backupDatabase: notHere,
+      saveReplay: notHere,
       checkForUpdates: notHere,
       applyUpdate: notHere,
       updateStatus: async () => UPDATE_IDLE,

@@ -265,6 +265,8 @@ export interface Api {
     version(): Promise<string>
     openDataFolder(): Promise<void>
     backupDatabase(): Promise<string | null>
+    /** Asks where to save a Rip Replay and writes it there; the path, or null when cancelled. */
+    saveReplay(name: string, data: Uint8Array): Promise<string | null>
     checkForUpdates(): Promise<UpdateStatus>
     applyUpdate(): Promise<void>
     /** Current updater status; no network. */
@@ -434,6 +436,7 @@ export const INVOKE_CHANNELS = [
   'app:version',
   'app:openDataFolder',
   'app:backupDatabase',
+  'app:saveReplay',
   'app:checkForUpdates',
   'app:applyUpdate',
   'app:updateStatus',

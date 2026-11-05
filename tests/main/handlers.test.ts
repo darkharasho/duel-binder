@@ -71,6 +71,7 @@ async function makeHandlers(opts: { signedIn?: boolean } = {}) {
       version: () => '0.0.0',
       openDataFolder: async () => {},
       backupDatabase: async () => null,
+      saveReplay,
       updateStatus: async () => ({ state: 'idle', mode: 'auto', version: null, error: null }),
       checkForUpdates: async () => ({ state: 'none', mode: 'auto', version: null, error: null }),
       applyUpdate: async () => {}
@@ -102,7 +103,21 @@ const noFingerprints = {
   refresh: async () => ({ state: 'missing' as const, count: 0 })
 }
 
+const saveReplay = vi.fn(async (_name: string, _data: Uint8Array) => '/home/me/rip.mp4')
+
 describe('createHandlers', () => {
+  it('app:saveReplay takes a replay file name and its bytes', async () => {
+    const { handlers } = await makeHandlers()
+    const data = new Uint8Array([1, 2, 3])
+    await expect(handlers['app:saveReplay']('rip-replay-2026-11-04.mp4', data)).resolves.toBe(
+      '/home/me/rip.mp4'
+    )
+    expect(saveReplay).toHaveBeenCalledWith('rip-replay-2026-11-04.mp4', data)
+    for (const bad of ['../evil.mp4', 'rip.exe', 'a/b.gif', 42])
+      await expect(handlers['app:saveReplay'](bad, data)).rejects.toThrow()
+    await expect(handlers['app:saveReplay']('rip.gif', 'not bytes')).rejects.toThrow()
+  })
+
   it('writes tell the account service', async () => {
     const { db, handlers, account } = await makeHandlers()
     const printing = db

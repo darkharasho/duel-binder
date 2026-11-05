@@ -226,6 +226,7 @@ export function createMockApi(overrides: DeepPartial<Api> = {}): Api {
       version: vi.fn(async () => '0.0.0'),
       openDataFolder: vi.fn(async () => undefined),
       backupDatabase: vi.fn(async () => null),
+      saveReplay: vi.fn(async () => null),
       checkForUpdates: vi.fn(async () => ({
         state: 'none',
         mode: 'auto',

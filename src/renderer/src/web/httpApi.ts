@@ -336,6 +336,7 @@ export function createHttpApi(opts: HttpApiOptions = {}): Api {
       version: async () => 'web',
       openDataFolder: unavailable,
       backupDatabase: unavailable,
+      saveReplay: unavailable,
       checkForUpdates: async () => UPDATE_IDLE,
       applyUpdate: unavailable,
       updateStatus: async () => UPDATE_IDLE,

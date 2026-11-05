@@ -61,3 +61,25 @@ export async function exitStream(): Promise<void> {
   wakeLock = null
   await lock?.release().catch(() => {})
 }
+
+/** The apps' file plugin method: writes the file to the app's cache and opens the share sheet. */
+interface SharePlugin {
+  shareFile(opts: { name: string; mime: string; base64: string }): Promise<void>
+}
+const Share = registerPlugin<SharePlugin>('Stream')
+
+const base64Of = (blob: Blob): Promise<string> =>
+  new Promise((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(String(reader.result).replace(/^data:[^,]*,/, ''))
+    reader.onerror = () => reject(reader.error ?? new Error("Couldn't read the file"))
+    reader.readAsDataURL(blob)
+  })
+
+/**
+ * The apps' share sheet for a file (Save Video is in it on iOS; any app on Android). Resolves when
+ * the sheet is up or closed.
+ */
+export async function shareFile(name: string, mime: string, blob: Blob): Promise<void> {
+  await Share.shareFile({ name, mime, base64: await base64Of(blob) })
+}

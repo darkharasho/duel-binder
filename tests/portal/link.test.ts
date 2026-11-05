@@ -273,6 +273,11 @@ describe('linking a sign-in', () => {
       `INSERT INTO wishlist_entries (user_id, pkey, game, quantity, created_at, updated_at, seq)
        VALUES (?, 'p1', 'ygo', 2, 'x', 'x', 1), (?, 'p2', 'ygo', 1, 'x', 'x', 2)`
     ).run(other, other)
+    db.prepare(
+      `INSERT INTO scan_sessions (user_id, uid, game, cards, created_at, updated_at, seq)
+       VALUES (?, 's1', 'ygo', '[]', 'x', 'x', 1), (?, 's2', 'ygo', '[]', 'x', 'x', 2)`
+    ).run(other, other)
+    db.prepare("UPDATE scan_sessions SET deleted_at = 'x' WHERE uid = 's2'").run()
 
     const code = await linkCode()
     const res = await result(await rpc('mine', 'account:linkCode', [code, VERIFIER]))
@@ -287,7 +292,8 @@ describe('linking a sign-in', () => {
         avatarUrl: null,
         cards: 5,
         binders: 0,
-        wishes: 0
+        wishes: 0,
+        sessions: 0
       },
       theirs: {
         username: 'kaiba',
@@ -296,7 +302,8 @@ describe('linking a sign-in', () => {
         avatarUrl: 'https://cdn.discordapp.com/avatars/111/av.png',
         cards: 9,
         binders: 1,
-        wishes: 2
+        wishes: 2,
+        sessions: 1
       },
       totals: { higher: 11, sum: 14, mine: 5, theirs: 9 }
     })

@@ -110,6 +110,47 @@ describe('portal scan sessions', () => {
     ).toEqual([{ uid: 's1', status: 'applied' }])
   })
 
+  it('a newer push with a null price keeps the stored price', () => {
+    applySessionPush(db, me, [session()], BOTH)
+    applySessionPush(
+      db,
+      me,
+      [session({ cards: [card({ price: null })], friendsVisible: false, updatedAt: T2 })],
+      BOTH
+    )
+    const [row] = sessionPullSince(db, me, 'ygo', 0).sessions
+    expect(row.cards[0].price).toBe(4.5)
+    expect(row).toMatchObject({ friendsVisible: false, updatedAt: T2 })
+  })
+
+  it('a newer push with a different price keeps the stored price', () => {
+    applySessionPush(db, me, [session()], BOTH)
+    applySessionPush(db, me, [session({ cards: [card({ price: 9 })], updatedAt: T2 })], BOTH)
+    expect(sessionPullSince(db, me, 'ygo', 0).sessions[0].cards[0].price).toBe(4.5)
+  })
+
+  it('a newer push fills a stored null', () => {
+    applySessionPush(db, me, [session({ cards: [card({ price: null })] })], BOTH)
+    applySessionPush(db, me, [session({ cards: [card({ price: 7 })], updatedAt: T2 })], BOTH)
+    expect(sessionPullSince(db, me, 'ygo', 0).sessions[0].cards[0].price).toBe(7)
+  })
+
+  it('a key order difference is still the same push', () => {
+    applySessionPush(db, me, [session()], BOTH)
+    const { uid, game, cards, friendsVisible, createdAt, updatedAt, deletedAt } = session()
+    const shuffled = {
+      deletedAt,
+      updatedAt,
+      createdAt,
+      friendsVisible,
+      cards: [{ ...card() }],
+      game,
+      uid
+    }
+    expect(applySessionPush(db, me, [shuffled], BOTH)).toEqual([{ uid: 's1', status: 'applied' }])
+    expect(cards.length).toBe(1)
+  })
+
   it('skips a game outside games and does not store a tombstone for an unknown uid', () => {
     expect(applySessionPush(db, me, [session({ game: 'pkm' })], ['ygo'])).toEqual([
       { uid: 's1', status: 'skipped' }

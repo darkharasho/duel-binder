@@ -4,6 +4,7 @@ import {
   checkSessionCards,
   deleteScanSession,
   fillScanSessionPrices,
+  mergeSessionCards,
   listScanSessions,
   recordScanSession,
   setScanSessionHidden
@@ -159,5 +160,29 @@ describe('migration V41 (scan_sessions)', () => {
     expect(old.prepare("SELECT value FROM meta WHERE key = 'keep'").get()).toEqual({ value: 'me' })
     expect(old.prepare('SELECT COUNT(*) AS n FROM scan_sessions').get()).toEqual({ n: 0 })
     old.close()
+  })
+})
+
+describe('mergeSessionCards', () => {
+  const c = (price: number | null, extra: Partial<ScanSessionCard> = {}): ScanSessionCard => ({
+    cardId: 1,
+    printingId: 2,
+    imageId: 3,
+    photoId: null,
+    name: 'A',
+    setCode: null,
+    rarity: null,
+    quantity: 1,
+    price,
+    guess: false,
+    addedAt: 10,
+    ...extra
+  })
+  it('keeps a stored price, fills a stored null', () => {
+    expect(mergeSessionCards([c(1), c(null)], [c(2), c(3)]).map((x) => x.price)).toEqual([1, 3])
+  })
+  it('keeps the stored cards when the lists differ', () => {
+    expect(mergeSessionCards([c(null)], [c(5), c(5)])).toEqual([c(null)])
+    expect(mergeSessionCards([c(null)], [c(5, { addedAt: 11 })])).toEqual([c(null)])
   })
 })

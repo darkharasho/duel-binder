@@ -1,7 +1,7 @@
 import type { SqlDb } from '../../../src/main/db/sql'
 import { checkObject } from '../../../src/main/repo/args'
 import { CollectionError } from '../../../src/main/repo/collection'
-import { checkSessionCards } from '../../../src/main/repo/scanSessions'
+import { checkSessionCards, mergeSessionCards } from '../../../src/main/repo/scanSessions'
 import { MAX_PULL, replaces } from '../../../src/shared/cloud'
 import { isGameId, type GameId } from '../../../src/shared/games'
 import type {
@@ -60,6 +60,25 @@ const wire = (r: SessionRow): WireScanSession => ({
   deletedAt: r.deleted_at
 })
 
+const sameCard = (a: ScanSessionCard, b: ScanSessionCard): boolean =>
+  (Object.keys(a) as (keyof ScanSessionCard)[]).length ===
+    (Object.keys(b) as (keyof ScanSessionCard)[]).length &&
+  (Object.keys(a) as (keyof ScanSessionCard)[]).every((k) => a[k] === b[k])
+
+/** Whether two sessions hold the same data, whatever order their keys came in. */
+function sameSession(a: WireScanSession, b: WireScanSession): boolean {
+  return (
+    a.uid === b.uid &&
+    a.game === b.game &&
+    a.friendsVisible === b.friendsVisible &&
+    a.createdAt === b.createdAt &&
+    a.updatedAt === b.updatedAt &&
+    a.deletedAt === b.deletedAt &&
+    a.cards.length === b.cards.length &&
+    a.cards.every((c, i) => sameCard(c, b.cards[i]))
+  )
+}
+
 /**
  * Applies pushed sessions for `userId`, latest edit wins per uid. A session of a game outside
  * `games` is skipped, so the client keeps it and retries. A tombstone for an unknown uid is not stored.
@@ -79,12 +98,15 @@ export function applySessionPush(
        friends_visible = excluded.friends_visible, created_at = excluded.created_at,
        updated_at = excluded.updated_at, deleted_at = excluded.deleted_at, seq = excluded.seq`
   )
-  const applyOne = (s: WireScanSession): ScanSessionPushResult => {
-    if (!games.includes(s.game)) return { uid: s.uid, status: 'skipped' }
-    const existing = find.get(userId, s.uid) as SessionRow | undefined
+  const applyOne = (pushed: WireScanSession): ScanSessionPushResult => {
+    if (!games.includes(pushed.game)) return { uid: pushed.uid, status: 'skipped' }
+    const existing = find.get(userId, pushed.uid) as SessionRow | undefined
+    let s = pushed
     if (existing) {
       const current = wire(existing)
-      if (JSON.stringify(current) === JSON.stringify(s)) return { uid: s.uid, status: 'applied' }
+      // A price once set never changes, whichever push is newer.
+      s = { ...pushed, cards: mergeSessionCards(current.cards, pushed.cards) }
+      if (sameSession(current, s)) return { uid: s.uid, status: 'applied' }
       if (!replaces(s, current)) return { uid: s.uid, status: 'stale', current }
     } else if (s.deletedAt !== null) {
       return { uid: s.uid, status: 'applied' }

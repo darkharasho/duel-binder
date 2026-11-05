@@ -25,6 +25,7 @@ function Account({ a, label }: { a: AccountSummary; label: string }): React.JSX.
       </div>
       <div className="text-muted-foreground">
         {count(a.cards)} · {a.binders} binder{a.binders === 1 ? '' : 's'} · {a.wishes} wishlist
+        {a.sessions ? ` · ${a.sessions} session${a.sessions === 1 ? '' : 's'}` : ''}
       </div>
     </div>
   )

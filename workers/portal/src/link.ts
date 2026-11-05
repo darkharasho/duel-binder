@@ -69,6 +69,11 @@ function accountSummary(db: Db, userId: number): AccountSummary {
       db,
       'SELECT count(*) AS n FROM wishlist_entries WHERE user_id = ? AND deleted_at IS NULL',
       userId
+    ),
+    sessions: countOf(
+      db,
+      'SELECT count(*) AS n FROM scan_sessions WHERE user_id = ? AND deleted_at IS NULL',
+      userId
     )
   }
 }

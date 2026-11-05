@@ -44,6 +44,8 @@ export interface AccountSummary {
   cards: number
   binders: number
   wishes: number
+  /** Live scan sessions; older portals leave it out. */
+  sessions?: number
 }
 
 /** Both accounts, and the signed-in account's card total after merging under each choice. */

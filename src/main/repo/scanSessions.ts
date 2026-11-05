@@ -52,6 +52,25 @@ export function checkSessionCards(v: unknown): ScanSessionCard[] {
   })
 }
 
+/**
+ * Combines a stored session's cards with an incoming copy of the same session: a price once set is
+ * never changed, a stored null takes the incoming price. A session's cards never change otherwise,
+ * so lists that differ in length or card identity (printing, image, added time) keep the stored ones.
+ */
+export function mergeSessionCards(
+  stored: ScanSessionCard[],
+  incoming: ScanSessionCard[]
+): ScanSessionCard[] {
+  const same =
+    stored.length === incoming.length &&
+    stored.every((c, i) => {
+      const n = incoming[i]
+      return c.printingId === n.printingId && c.imageId === n.imageId && c.addedAt === n.addedAt
+    })
+  if (!same) return stored
+  return stored.map((c, i) => (c.price === null ? { ...c, price: incoming[i].price } : c))
+}
+
 /** Records one Add as a session, visible to friends. Does nothing for a uid already held or no cards. */
 export function recordScanSession(
   db: SqlDb,

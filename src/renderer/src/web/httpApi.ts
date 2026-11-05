@@ -223,6 +223,12 @@ export function createHttpApi(opts: HttpApiOptions = {}): Api {
       set: call('wishlist:set'),
       remove: call('wishlist:remove')
     },
+    sessions: {
+      record: unavailable,
+      list: unavailable,
+      setHidden: unavailable,
+      delete: unavailable
+    },
     favourites: {
       list: call('favourites:list'),
       set: call('favourites:set')

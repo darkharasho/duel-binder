@@ -39,6 +39,16 @@ import { ruleFieldValues } from '../repo/binderRules'
 import { listWishlist, removeWish, setWish, settleWishlist, wishesForCard } from '../repo/wishlist'
 import { listFavourites, setFavourite } from '../repo/favourites'
 import { activeOwner, listSyncIssues } from '../cloud/localSync'
+import {
+  deleteScanSession,
+  fillScanSessionPrices,
+  listScanSessions,
+  recordScanSession,
+  setScanSessionHidden,
+  checkSessionCards
+} from '../repo/scanSessions'
+import { localScope } from '../repo/scope'
+import { isGameId } from '@shared/games'
 import { openPack, ripHistory, ripSession, ripSets, startRip } from '../repo/rip'
 import { activeGame, setActiveGame } from '../cloud/activeGame'
 import type { GameId } from '@shared/games'
@@ -63,6 +73,10 @@ export const DATA_CHANNELS = [
   'wishlist:forCard',
   'wishlist:set',
   'wishlist:remove',
+  'sessions:record',
+  'sessions:list',
+  'sessions:setHidden',
+  'sessions:delete',
   'favourites:list',
   'favourites:set',
   'binders:list',
@@ -183,6 +197,23 @@ export function createDataHandlers({
     'wishlist:set': async (printingId: number, quantity: number | null) =>
       edited(setWish(db, printingId, quantity)),
     'wishlist:remove': async (printingId: number) => edited(removeWish(db, printingId)),
+    'sessions:record': async (s: { uid: string; game: GameId; cards: unknown }) => {
+      if (!s || typeof s.uid !== 'string' || !s.uid) throw new Error('uid must be text')
+      if (!isGameId(s.game)) throw new Error('unknown game')
+      return edited(
+        recordScanSession(db, { uid: s.uid, game: s.game, cards: checkSessionCards(s.cards) })
+      )
+    },
+    'sessions:list': async (game: GameId) => {
+      if (!isGameId(game)) throw new Error('unknown game')
+      // Priced with the game it lists, as the wishlist is.
+      const scope = localScope(`'${game}'`)
+      fillScanSessionPrices(db, game, scope)
+      return listScanSessions(db, game, scope)
+    },
+    'sessions:setHidden': async (uid: string, hidden: boolean) =>
+      edited(setScanSessionHidden(db, uid, hidden === true)),
+    'sessions:delete': async (uid: string) => edited(deleteScanSession(db, uid)),
     'favourites:list': async () => listFavourites(db),
     'favourites:set': async (cardId: number, on: boolean) =>
       edited(setFavourite(db, wholeNumber(cardId, 'cardId'), on)),

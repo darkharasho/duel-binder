@@ -128,6 +128,12 @@ export function createMockApi(overrides: DeepPartial<Api> = {}): Api {
       set: vi.fn(async () => undefined),
       remove: vi.fn(async () => undefined)
     },
+    sessions: {
+      record: vi.fn(async () => undefined),
+      list: vi.fn(async () => []),
+      setHidden: vi.fn(async () => undefined),
+      delete: vi.fn(async () => undefined)
+    },
     favourites: {
       list: vi.fn(async () => []),
       set: vi.fn(async () => undefined)

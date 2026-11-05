@@ -223,6 +223,82 @@ describe('useScanSession', () => {
     expect(result.current.rows[0]).toMatchObject({ printingId: 201, error: 'boom' })
   })
 
+  describe('recording a session', () => {
+    const priced = (price: number): ScanDraft =>
+      draft({ options: [{ ...opt(101, 'Common'), price }, opt(102, 'Rare')] })
+    const other = (price: number): ScanDraft =>
+      draft({
+        cardId: 2,
+        printingId: 201,
+        imageId: 20,
+        options: [{ ...opt(201, 'Common'), cardId: 2, price, imageIds: [20] }]
+      })
+
+    it('records the cards that were added, with their prices, once', async () => {
+      const add = vi.fn().mockResolvedValueOnce({}).mockRejectedValueOnce(new Error('x'))
+      add.mockResolvedValueOnce({})
+      const { result } = setup(add)
+      const record = vi.fn(async () => undefined)
+      window.api.sessions.record = record
+      act(() => result.current.add(priced(5)))
+      act(() => result.current.add(other(7)))
+      act(() => result.current.add(draft({ cardId: 3, printingId: 301, imageId: 30 })))
+      await act(async () => void (await result.current.commit()))
+      expect(record).toHaveBeenCalledTimes(1)
+      const [arg] = record.mock.calls[0] as unknown as [
+        { uid: string; game: string; cards: Array<Record<string, unknown>> }
+      ]
+      expect(arg.uid).toMatch(/.+/)
+      expect(arg.game).toBe('ygo')
+      expect(arg.cards.map((c) => [c.printingId, c.price, c.quantity])).toEqual([
+        [301, null, 1],
+        [101, 5, 1]
+      ])
+    })
+
+    it('does not record when every add fails', async () => {
+      const add = vi.fn().mockRejectedValue(new Error('boom'))
+      const { result } = setup(add)
+      const record = vi.fn(async () => undefined)
+      window.api.sessions.record = record
+      act(() => result.current.add(draft()))
+      await act(async () => void (await result.current.commit()))
+      expect(record).not.toHaveBeenCalled()
+    })
+
+    it('records the quantity that was added, not one raised meanwhile', async () => {
+      let release!: () => void
+      const add = vi.fn(() => new Promise<never>((res) => (release = () => res({} as never))))
+      const { result } = setup(add)
+      const record = vi.fn(async () => undefined)
+      window.api.sessions.record = record
+      act(() => result.current.add(draft()))
+      const key = result.current.rows[0].key
+      let done!: Promise<unknown>
+      await act(async () => {
+        done = result.current.commit()
+      })
+      act(() => result.current.setQuantity(key, 3))
+      await act(async () => {
+        release()
+        await done
+      })
+      const [arg] = record.mock.calls[0] as unknown as [{ cards: Array<{ quantity: number }> }]
+      expect(arg.cards.map((c) => c.quantity)).toEqual([1])
+    })
+
+    it('a failing record leaves commit as it was', async () => {
+      const { result } = setup()
+      window.api.sessions.record = vi.fn(() => Promise.reject(new Error('no')))
+      act(() => result.current.add(draft()))
+      let out = { added: 0, failed: 0, cards: 0 }
+      await act(async () => {
+        out = await result.current.commit()
+      })
+      expect(out).toEqual({ added: 1, failed: 0, cards: 1 })
+    })
+  })
+
   it('rows needing a printing are not added', async () => {
     const { result, add } = setup()
     act(() => result.current.add(draft({ printingId: null, setCode: null, rarity: null })))

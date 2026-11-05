@@ -2,6 +2,7 @@ import type { PlaceholderRequest } from './placeholders'
 import type { ErrorDetails } from './errorReports'
 import type { UsageCounts } from './usage'
 import type { Language } from './languages'
+import type { ScanSession, ScanSessionCard } from './scanSessions'
 import type {
   AccountStatus,
   UnsyncedEntry,
@@ -123,6 +124,15 @@ export interface Api {
     /** Wants a printing; `quantity` null for no target. A target is kept above the copies owned. */
     set(printingId: number, quantity: number | null): Promise<void>
     remove(printingId: number): Promise<void>
+  }
+  /** The scanner's Add to collection sessions, in the game shown: each keeps the prices it had when added. */
+  sessions: {
+    record(s: { uid: string; game: GameId; cards: ScanSessionCard[] }): Promise<void>
+    /** Fills in prices still missing, then lists the game's sessions, newest first. */
+    list(game: GameId): Promise<ScanSession[]>
+    /** Hides a session from friends, or shows it again. */
+    setHidden(uid: string, hidden: boolean): Promise<void>
+    delete(uid: string): Promise<void>
   }
   /** The cards this account hearted, in the game shown; private, so friends never see them. */
   favourites: {
@@ -380,6 +390,10 @@ export const INVOKE_CHANNELS = [
   'wishlist:forCard',
   'wishlist:set',
   'wishlist:remove',
+  'sessions:record',
+  'sessions:list',
+  'sessions:setHidden',
+  'sessions:delete',
   'favourites:list',
   'favourites:set',
   'binders:list',

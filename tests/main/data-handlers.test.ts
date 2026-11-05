@@ -156,6 +156,37 @@ describe('data handlers', () => {
     expect(rows).toEqual([{ n: 2 }])
   })
 
+  it('sessions:* round-trip through the handlers', async () => {
+    const { db, onEdit, handlers } = await make()
+    const p = db
+      .prepare(
+        'SELECT p.id AS printingId, p.card_id AS cardId, i.image_id AS imageId FROM card_printings p JOIN card_images i ON i.card_id = p.card_id LIMIT 1'
+      )
+      .get() as { printingId: number; cardId: number; imageId: number }
+    const card = {
+      ...p,
+      photoId: null,
+      name: 'A card',
+      setCode: null,
+      rarity: null,
+      quantity: 2,
+      price: 3,
+      guess: false,
+      addedAt: 1
+    }
+    await handlers['sessions:record']({ uid: 'u-1', game: 'ygo', cards: [card] })
+    expect(onEdit).toHaveBeenCalledTimes(1)
+    let list = (await handlers['sessions:list']('ygo')) as Array<{ uid: string }>
+    expect(list.map((s) => s.uid)).toEqual(['u-1'])
+    await handlers['sessions:setHidden']('u-1', true)
+    list = (await handlers['sessions:list']('ygo')) as Array<{ uid: string }>
+    expect((list[0] as unknown as { friendsVisible: boolean }).friendsVisible).toBe(false)
+    await handlers['sessions:delete']('u-1')
+    expect(await handlers['sessions:list']('ygo')).toEqual([])
+    expect(onEdit).toHaveBeenCalledTimes(3)
+    await expect(handlers['sessions:list']('x; DROP TABLE cards')).rejects.toThrow()
+  })
+
   it('scan:cardsForImages rejects non-integer ids', async () => {
     const { handlers } = await make()
     await expect(handlers['scan:cardsForImages']([1, 'x'])).rejects.toThrow('list of integers')

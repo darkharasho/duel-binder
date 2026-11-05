@@ -45,6 +45,7 @@ export const queryKeys = {
   friendsOwning: (game: GameId, pkeys: string[]) => ['friends', 'owning', game, pkeys] as const,
   wishlistVisible: ['friends', 'wishlistVisible'] as const,
   wishlist: ['wishlist'] as const,
+  sessions: (game: string) => ['sessions', game] as const,
   wishlistForCard: (id: number) => ['wishlist', 'card', id] as const,
   binders: ['binders'] as const,
   binder: (uid: string) => ['binders', 'binder', uid] as const,

@@ -6,6 +6,8 @@ import { track } from '@/lib/usage'
 import { copiesOnList } from './owned'
 import type { ScanDraft } from './resolve'
 import { printingOf } from './scanLook'
+import { sessionCardOf } from './sessionCards'
+import type { ScanSessionCard } from '@shared/scanSessions'
 
 export interface ScanRow extends ScanDraft {
   key: string
@@ -290,6 +292,7 @@ export function useScanSession(game: GameId = 'ygo'): {
     let added = 0
     let failed = 0
     let cards = 0
+    const saved: ScanSessionCard[] = []
     // A row with no printing, or a Pokémon version still to pick, waits for one.
     const batch = ref.current.filter((r) => inGame(r, game))
     const unaddable = new Set(batch.filter((r) => printingOf(r) === null).map((r) => r.key))
@@ -308,6 +311,8 @@ export function useScanSession(game: GameId = 'ygo'): {
           })
           added++
           cards += row.quantity
+          const card = sessionCardOf(row, row.quantity)
+          if (card) saved.push(card)
           track('scan:add')
           for (const l of [...listeners.current]) {
             try {
@@ -336,6 +341,15 @@ export function useScanSession(game: GameId = 'ygo'): {
       committingRef.current = false
       setCommitting(false)
     }
+    // A record that fails mustn't touch the Add: the cards are in the collection either way.
+    if (saved.length > 0)
+      try {
+        void Promise.resolve(api.sessions.record({ uid: uniqueId(), game, cards: saved })).catch(
+          () => undefined
+        )
+      } catch {
+        // Nothing to do: the session is a record of the Add, not part of it.
+      }
     // A clean Add leaves an empty list: rows with no printing go too. Rows scanned meanwhile stay.
     if (added > 0 && failed === 0) update((list) => list.filter((r) => !unaddable.has(r.key)))
     if (added > 0) void invalidateAfterEdit(qc)

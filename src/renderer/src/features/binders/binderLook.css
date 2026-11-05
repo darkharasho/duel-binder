@@ -172,6 +172,8 @@
 
 .binder-page {
   position: relative;
+  /* Keeps a pocket's badges and buttons inside its page, so a turning page passes over them. */
+  isolation: isolate;
   min-width: 0;
   padding: 10px;
   border-radius: 3px;

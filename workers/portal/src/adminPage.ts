@@ -72,7 +72,9 @@ h3{font-size:13px;font-weight:600;margin:16px 0 6px}
 .chart{display:flex;align-items:flex-end;gap:3px;height:225px}
 .chart div{flex:1;min-height:2px;background:var(--accent);border-radius:2px 2px 0 0;opacity:.85}
 th{padding:6px 0;text-align:right;font-size:12px;font-weight:500;color:var(--muted)}
-th:first-child{text-align:left}
+th:first-child,th.l{text-align:left}
+th + th,td + td{padding-left:12px}
+td.act{text-align:right}
 .history a{color:var(--fg);text-decoration:none}
 .history a:hover{text-decoration:underline}
 .history td:not(:first-child){color:var(--muted)}
@@ -510,7 +512,7 @@ async function loadMerges() {
     else {
       const table = el('table', null, 'history')
       const head = el('tr')
-      for (const h of ['Closed', 'Into', 'Cards', 'Merged', 'Held until', '']) head.append(el('th', h))
+      for (const h of ['Closed', 'Into', 'Cards', 'Merged', 'Held until', '']) head.append(el('th', h, h === 'Into' ? 'l' : undefined))
       table.append(head)
       for (const m of merges) {
         const tr = el('tr')
@@ -532,7 +534,7 @@ async function loadMerges() {
           }
           loadMerges()
         })
-        const cell = el('td')
+        const cell = el('td', null, 'act')
         cell.append(undo)
         tr.append(el('td', '@' + m.closedUsername), el('td', '@' + m.survivorUsername), el('td', m.cards, 'v'),
           el('td', new Date(m.mergedAt).toLocaleString([], { dateStyle: 'short', timeStyle: 'short' }), 'v'),
@@ -562,7 +564,8 @@ async function loadTesters() {
       else {
         const table = el('table', null, 'history')
         const head = el('tr')
-        for (const h of ['Account', 'Discord', 'Status', '']) head.append(el('th', h))
+        for (const h of ['Account', 'Discord', 'Status']) head.append(el('th', h, 'l'))
+        head.append(el('th', ''))
         table.append(head)
         for (const t of mine) {
           const tr = el('tr')
@@ -586,7 +589,7 @@ async function loadTesters() {
               remove.disabled = false
             }
           })
-          const cell = el('td')
+          const cell = el('td', null, 'act')
           cell.append(remove)
           tr.append(el('td', t.username ? '@' + t.username : '-'), el('td', t.discordUsername ?? '-'),
             el('td', t.userId === null ? 'Pending' : 'Bound'), cell)
@@ -654,7 +657,7 @@ async function loadPhotos() {
     table.append(head)
     for (const r of rows) {
       const tr = el('tr')
-      for (const c of r) tr.append(el('td', String(c)))
+      r.forEach((c, i) => tr.append(el('td', String(c), i ? 'v' : undefined)))
       table.append(tr)
     }
     return table

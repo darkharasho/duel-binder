@@ -1,4 +1,4 @@
-import { useLayoutEffect, useState, useSyncExternalStore } from 'react'
+import { useEffect, useLayoutEffect, useState, useSyncExternalStore } from 'react'
 import { ChevronLeftIcon, ChevronRightIcon, XIcon } from 'lucide-react'
 import type { BinderCard } from '@shared/types'
 import { cssAspect } from '@shared/games'
@@ -55,6 +55,13 @@ function useFitWidth(el: HTMLElement | null, on: boolean): number | null {
   }, [el, on])
   return width
 }
+
+/** Whether a turn plays the page flip: not where motion is turned down, nor without animations (jsdom). */
+const canFlip = (): boolean =>
+  typeof document.body.animate === 'function' &&
+  !window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+/** Longer than any flip runs; the flip is dropped by then even if its end event never came. */
+const FLIP_MAX_MS = 1200
 
 /** Pockets on a page: three rows of three, as on a real binder page. */
 export const PER_PAGE = 9
@@ -114,13 +121,16 @@ function Pocket({
       >
         <div className="binder-card">
           {c.imageId ? (
-            <CardArt
-              imageId={c.imageId}
-              printingId={c.printingScan && c.printing ? c.printing.id : null}
-              size={tileImage}
-              alt=""
-              className={cn('w-full', missing && 'opacity-[0.13] grayscale')}
-            />
+            // Faded on a wrapper: the art's own fade-in would otherwise light a missing card up.
+            <div className={cn(missing && 'opacity-[0.13] grayscale')}>
+              <CardArt
+                imageId={c.imageId}
+                printingId={c.printingScan && c.printing ? c.printing.id : null}
+                size={tileImage}
+                alt=""
+                className="w-full"
+              />
+            </div>
           ) : (
             <div className="w-full bg-white/5" style={{ aspectRatio: cssAspect(aspect) }} />
           )}
@@ -210,13 +220,21 @@ export function BinderGrid({
   const aspect = useCardAspect()
   const [el, setEl] = useState<HTMLDivElement | null>(null)
   const fitWidth = useFitWidth(el, wide)
-  // The first page shown, and which way the last turn went (for its slide).
+  // The first page shown, and the first page before a turn while its page is still flipping over.
   const [state, setState] = useState<{
     page: number
-    dir: 'next' | 'prev' | null
+    from: number | null
+    /** Counts turns, so a turn made mid-flip starts its own flip. */
+    turn: number
     resetKey?: string
-  }>({ page: 0, dir: null, resetKey })
-  if (state.resetKey !== resetKey) setState({ page: 0, dir: null, resetKey })
+  }>({ page: 0, from: null, turn: 0, resetKey })
+  if (state.resetKey !== resetKey) setState({ page: 0, from: null, turn: 0, resetKey })
+  const settle = (): void => setState((s) => (s.from == null ? s : { ...s, from: null }))
+  useEffect(() => {
+    if (state.from == null) return
+    const t = setTimeout(settle, FLIP_MAX_MS)
+    return () => clearTimeout(t)
+  }, [state.from, state.turn])
 
   const pageCount = Math.max(1, Math.ceil(cards.length / PER_PAGE))
   const step = wide ? 2 : 1
@@ -228,7 +246,7 @@ export function BinderGrid({
   const turnTo = (page: number): void => {
     const to = Math.max(0, Math.min(page - (page % step), pageCount - 1))
     if (to === first) return
-    setState({ page: to, dir: to > first ? 'next' : 'prev', resetKey })
+    setState((s) => ({ page: to, from: canFlip() ? first : null, turn: s.turn + 1, resetKey }))
   }
   const prev = (): void => turnTo(first - step)
   const next = (): void => turnTo(first + step)
@@ -246,6 +264,48 @@ export function BinderGrid({
     step === 2 && first + 1 < pageCount
       ? `Pages ${first + 1}–${first + 2} of ${pageCount}`
       : `Page ${first + 1} of ${pageCount}`
+
+  // While a page flips, each side shows what lies under the turning leaf until the leaf lands.
+  const flip =
+    state.from != null && state.from !== first
+      ? { from: state.from, dir: state.from < first ? ('next' as const) : ('prev' as const) }
+      : null
+
+  /**
+   * The page being turned. On a spread it swings over the rings: the old page on its front, the
+   * new page on the other side on its back. A single page lifts off (next) or falls back on (prev).
+   */
+  const leaf = (f: { from: number; dir: 'next' | 'prev' }): React.JSX.Element => {
+    const faces = wide
+      ? f.dir === 'next'
+        ? { front: page(f.from + 1, 'right'), back: page(first, 'left'), over: 'right' }
+        : { front: page(f.from, 'left'), back: page(first + 1, 'right'), over: 'left' }
+      : f.dir === 'next'
+        ? { front: page(f.from, 'right'), back: null, over: 'single' }
+        : { front: page(first, 'right'), back: null, over: 'single' }
+    return (
+      <div
+        key={state.turn}
+        className="binder-leaf"
+        data-over={faces.over}
+        data-dir={f.dir}
+        aria-hidden
+        inert
+        onAnimationEnd={(e) => {
+          if (e.target === e.currentTarget) settle()
+        }}
+      >
+        <div className="binder-leaf-face" data-face="front">
+          {faces.front}
+        </div>
+        {faces.back && (
+          <div className="binder-leaf-face" data-face="back">
+            {faces.back}
+          </div>
+        )}
+      </div>
+    )
+  }
 
   const turning = pageCount > step
   const prevButton = (
@@ -277,12 +337,7 @@ export function BinderGrid({
     const these = p < pageCount ? pageCards(p) : []
     return (
       <div key={p} className="binder-page" data-side={side}>
-        <div
-          // Keyed on the page, so a turn replays the slide.
-          key={`${p}-${state.dir}`}
-          className="binder-sheet binder-turn"
-          data-dir={state.dir ?? undefined}
-        >
+        <div className="binder-sheet">
           {these.map((c) => (
             <Pocket
               key={c.key}
@@ -333,16 +388,17 @@ export function BinderGrid({
         >
           {wide ? (
             <>
-              {page(shown[0], 'left')}
+              {page(flip?.dir === 'next' ? flip.from : first, 'left')}
               <Rings />
-              {page(shown[1], 'right')}
+              {page(flip?.dir === 'prev' ? flip.from + 1 : first + 1, 'right')}
             </>
           ) : (
             <>
               <Rings />
-              {page(shown[0], 'right')}
+              {page(flip?.dir === 'prev' ? flip.from : first, 'right')}
             </>
           )}
+          {flip && leaf(flip)}
         </div>
         {wide && turning && nextButton}
       </div>

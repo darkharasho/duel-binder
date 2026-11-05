@@ -364,28 +364,154 @@
   height: 9px;
 }
 
-/* A page turn: the new pages slide in from the side they came from. */
-.binder-turn[data-dir='next'] {
-  animation: binder-turn-next 220ms cubic-bezier(0.2, 0.7, 0.2, 1);
+/* ---- A page turn: the leaf swings over the rings ---- */
+
+/* Every part of a spread sits in row 1 in a fixed column, so the turning leaf can lie over a page. */
+.binder-open {
+  perspective: 2600px;
 }
-.binder-turn[data-dir='prev'] {
-  animation: binder-turn-prev 220ms cubic-bezier(0.2, 0.7, 0.2, 1);
+.binder-open > * {
+  grid-row: 1;
 }
-@keyframes binder-turn-next {
+.binder-open > .binder-page[data-side='left'] {
+  grid-column: 1;
+}
+.binder-open > .binder-gutter {
+  grid-column: 2;
+}
+.binder-open > .binder-page[data-side='right'] {
+  grid-column: 3;
+}
+.binder-open[data-single='true'] > .binder-gutter {
+  grid-column: 1;
+}
+.binder-open[data-single='true'] > .binder-page[data-side='right'] {
+  grid-column: 2;
+}
+
+.binder-leaf {
+  position: relative;
+  z-index: 2;
+  pointer-events: none;
+  transform-style: preserve-3d;
+  animation-duration: 720ms;
+  animation-timing-function: cubic-bezier(0.45, 0.05, 0.2, 1);
+  animation-fill-mode: forwards;
+}
+/* Turned about the middle of the rings (half the 62px gutter), so it lands square on the other page. */
+.binder-leaf[data-over='right'] {
+  grid-column: 3;
+  transform-origin: -31px 50%;
+  animation-name: binder-leaf-next;
+}
+.binder-leaf[data-over='left'] {
+  grid-column: 1;
+  transform-origin: calc(100% + 31px) 50%;
+  animation-name: binder-leaf-prev;
+}
+.binder-leaf[data-over='single'] {
+  grid-column: 2;
+  transform-origin: -15px 50%;
+  animation-duration: 460ms;
+}
+.binder-leaf[data-over='single'][data-dir='next'] {
+  animation-name: binder-leaf-lift;
+  animation-timing-function: cubic-bezier(0.5, 0, 0.75, 0.4);
+}
+.binder-leaf[data-over='single'][data-dir='prev'] {
+  animation-name: binder-leaf-land;
+  animation-timing-function: cubic-bezier(0.25, 0.6, 0.5, 1);
+}
+.binder-leaf-face {
+  position: absolute;
+  inset: 0;
+  backface-visibility: hidden;
+}
+.binder-leaf-face > .binder-page {
+  height: 100%;
+}
+.binder-leaf-face[data-face='back'] {
+  transform: rotateY(180deg);
+}
+/* Light falls off as the leaf stands up, and comes back as it lies down. */
+.binder-leaf-face::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 4;
+  border-radius: 3px;
+  pointer-events: none;
+  background: #000;
+  opacity: 0;
+  animation: inherit;
+  animation-name: binder-leaf-shade-front;
+}
+.binder-leaf-face[data-face='back']::after {
+  animation-name: binder-leaf-shade-back;
+}
+.binder-leaf[data-dir='prev'] .binder-leaf-face[data-face='front']::after {
+  animation-name: binder-leaf-shade-front;
+}
+.binder-leaf[data-over='single'][data-dir='prev'] .binder-leaf-face::after {
+  animation-name: binder-leaf-shade-back;
+}
+@keyframes binder-leaf-next {
   from {
-    opacity: 0.4;
-    transform: translateX(14px);
+    transform: rotateY(0deg);
+  }
+  to {
+    transform: rotateY(-180deg);
   }
 }
-@keyframes binder-turn-prev {
+@keyframes binder-leaf-prev {
   from {
-    opacity: 0.4;
-    transform: translateX(-14px);
+    transform: rotateY(0deg);
+  }
+  to {
+    transform: rotateY(180deg);
+  }
+}
+@keyframes binder-leaf-lift {
+  from {
+    transform: rotateY(0deg);
+  }
+  to {
+    transform: rotateY(-90deg);
+  }
+}
+@keyframes binder-leaf-land {
+  from {
+    transform: rotateY(-90deg);
+  }
+  to {
+    transform: rotateY(0deg);
+  }
+}
+@keyframes binder-leaf-shade-front {
+  from {
+    opacity: 0;
+  }
+  50% {
+    opacity: 0.45;
+  }
+  to {
+    opacity: 0.45;
+  }
+}
+@keyframes binder-leaf-shade-back {
+  from {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 0.45;
+  }
+  to {
+    opacity: 0;
   }
 }
 @media (prefers-reduced-motion: reduce) {
-  .binder-turn[data-dir] {
-    animation: none;
+  .binder-leaf {
+    display: none;
   }
   .binder-cover {
     transition: none;

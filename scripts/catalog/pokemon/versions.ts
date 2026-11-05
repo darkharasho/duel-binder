@@ -266,14 +266,39 @@ export function cardVersions(
     problems.push(`${card.id}: TCGplayer product ${id} is reached under several variant subtypes (${names}); its versions are left unpriced`)
   }
 
+  // A product only stamped TCGdex variants point at (a museum or prerelease stamp TCGplayer sells on
+  // its own) is that stamped version: its rows price it, never a plain Normal or Holofoil.
+  const pointers = new Map<number, Set<TdVariant>>()
+  for (const v of card.variants_detailed ?? []) {
+    const id = v.thirdParty?.tcgplayer
+    if (typeof id !== 'number' || isGenerated(v)) continue
+    const set = pointers.get(id) ?? new Set<TdVariant>()
+    set.add(v)
+    pointers.set(id, set)
+  }
+  const stampedOnly = new Map<number, { label: string; finish: string }>()
+  for (const [id, vs] of pointers) {
+    const list = [...vs]
+    if (!list.every((v) => v.stamp?.length && versionSubtype(v.subtype) === null)) continue
+    const labels = new Set(list.map(variantLabel))
+    if (labels.size !== 1) continue
+    stampedOnly.set(id, { label: [...labels][0], finish: variantLabel({ type: list[0].type }) })
+  }
+
   for (const { product, variantSubtype } of matched) {
     const sub = versionSubtype(variantSubtype)
-    for (const row of prices.get(product.productId) ?? []) {
+    const rows = prices.get(product.productId) ?? []
+    const stamped = sub === null ? stampedOnly.get(product.productId) : undefined
+    for (const row of rows) {
       const name = row.subTypeName.trim()
       if (!(name in SUBTYPES)) {
         problems.push(`${card.id}: TCGplayer subtype "${name}" of product ${product.productId} is not in the version table`)
       }
-      const label = (sub === null ? productVersion(product) : null) ?? prefix(sub) + canonicalLabel(name)
+      // A stamped product's one row, or the row of its variant's finish, is the stamped version.
+      if (stamped && rows.length > 1 && canonicalLabel(name) !== stamped.finish) continue
+      const label = stamped
+        ? stamped.label
+        : (sub === null ? productVersion(product) : null) ?? prefix(sub) + canonicalLabel(name)
       const key = `${product.productId}\u0000${name}`
       if (ambiguous.has(product.productId)) {
         entry(label).ambiguous = true
@@ -296,6 +321,7 @@ export function cardVersions(
     ({ product, variantSubtype }) =>
       versionSubtype(variantSubtype) === null &&
       productVersion(product) === null &&
+      !stampedOnly.has(product.productId) &&
       (prices.get(product.productId)?.length ?? 0) > 0
   )
   const plainRows = plainProducts.length > 0

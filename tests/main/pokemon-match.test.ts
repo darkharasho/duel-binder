@@ -254,6 +254,52 @@ describe('cardVersions', () => {
     expect(r.versions).toEqual([{ label: 'Holofoil', productId: 1, subTypeName: 'Holofoil', price: 4 }])
     expect(r.problems).toEqual([])
   })
+  it('prices a stamped product as its stamped version, not a plain one (sv10.5w-051 Fossil Museum)', () => {
+    // TCGplayer sells the Fossil Museum Archeops as its own product with a single "Normal" row.
+    const plain = prod(642163, 24326, '051/086')
+    const stamped = prod(695136, 2374, '051/086')
+    const prices = new Map([
+      [642163, [
+        { productId: 642163, subTypeName: 'Holofoil', marketPrice: 0.18 },
+        { productId: 642163, subTypeName: 'Reverse Holofoil', marketPrice: 0.29 }
+      ]],
+      [695136, [{ productId: 695136, subTypeName: 'Normal', marketPrice: 24.88 }]]
+    ])
+    const c = brief({
+      rarity: 'Rare',
+      variants_detailed: [
+        { type: 'holo', thirdParty: { tcgplayer: 642163 } },
+        { type: 'reverse', thirdParty: { tcgplayer: 642163 } },
+        { type: 'holo', stamp: ['fossil-museum'], thirdParty: { tcgplayer: 695136 } }
+      ]
+    })
+    const { versions } = cardVersions(c, [{ product: plain, variantSubtype: null }, { product: stamped, variantSubtype: null }], prices)
+    expect(versions).toEqual([
+      { label: 'Fossil Museum Holofoil', productId: 695136, subTypeName: 'Normal', price: 24.88 },
+      { label: 'Holofoil', productId: 642163, subTypeName: 'Holofoil', price: 0.18 },
+      { label: 'Reverse Holofoil', productId: 642163, subTypeName: 'Reverse Holofoil', price: 0.29 }
+    ])
+  })
+  it("keeps the plain Holofoil's price when a stamped product also has a Holofoil row", () => {
+    const plain = prod(1, 9, '001/010')
+    const stamped = prod(2, 8, '001/010')
+    const prices = new Map([
+      [1, [{ productId: 1, subTypeName: 'Holofoil', marketPrice: 1 }]],
+      [2, [{ productId: 2, subTypeName: 'Holofoil', marketPrice: 30 }]]
+    ])
+    const c = brief({
+      variants_detailed: [
+        { type: 'holo', thirdParty: { tcgplayer: 1 } },
+        { type: 'holo', stamp: ['prerelease'], thirdParty: { tcgplayer: 2 } }
+      ]
+    })
+    const { versions, problems } = cardVersions(c, [{ product: plain, variantSubtype: null }, { product: stamped, variantSubtype: null }], prices)
+    expect(versions).toEqual([
+      { label: 'Holofoil', productId: 1, subTypeName: 'Holofoil', price: 1 },
+      { label: 'Prerelease Holofoil', productId: 2, subTypeName: 'Holofoil', price: 30 }
+    ])
+    expect(problems.filter((p) => !p.includes('not in the version table'))).toEqual([])
+  })
   it('keeps the no-rarity variant of PMCG1-001 unpriced', () => {
     const { versions } = versionsOf(JA, 'PMCG1-001')
     expect(versions).toEqual([

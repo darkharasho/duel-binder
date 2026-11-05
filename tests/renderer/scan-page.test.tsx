@@ -121,7 +121,7 @@ const navNames = (): (string | null)[] =>
     .map((b) => b.textContent)
 
 describe('Scan nav', () => {
-  it('nav shows Scan and Sessions on desktop between Browse and Rip, not on web', async () => {
+  it('nav shows Scan and Sessions on desktop between Browse and Friends, not on web', async () => {
     const { unmount } = renderWithProviders(<App />, {
       api: createMockApi({ account: { status: vi.fn(async () => signedIn) } })
     })
@@ -135,7 +135,6 @@ describe('Scan nav', () => {
       'Browse',
       'Scan',
       'Sessions',
-      'Rip',
       'Friends',
       'Settings'
     ])

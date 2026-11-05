@@ -100,6 +100,18 @@ describe('POST /api/usage', () => {
     expect((await post({ platform: 'android', events: { open: 1 } })).status).toBe(204)
   })
 
+  it("still counts Rip's events from an app older than its removal", async () => {
+    expect(
+      (await post({ platform: 'desktop', events: { open: 1, 'page:rip': 2, 'rip:pack': 3 } }))
+        .status
+    ).toBe(204)
+    expect(rows()).toEqual([
+      { day: '2026-10-28', platform: 'desktop', event: 'open', count: 1 },
+      { day: '2026-10-28', platform: 'desktop', event: 'page:rip', count: 2 },
+      { day: '2026-10-28', platform: 'desktop', event: 'rip:pack', count: 3 }
+    ])
+  })
+
   it('refuses events, platforms and counts outside the fixed list', async () => {
     for (const body of [
       { platform: 'desktop', events: { 'card:name:Dark Magician': 1 } },

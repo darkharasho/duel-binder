@@ -12,8 +12,6 @@ import { TitleBar } from '@/components/TitleBar'
 import { ScanHubProvider } from '@/features/scan/ScanHub'
 import { useUpdateToasts } from '@/features/settings/useUpdateToasts'
 
-// Loaded on demand, so the desktop-only Rip page stays out of the web bundle's first load.
-const RipPage = lazy(() => import('@/features/rip/RipPage').then((m) => ({ default: m.RipPage })))
 // Loaded on demand, so the web build (which has no Scan) never pulls in the vision worker.
 const ScanPage = lazy(() =>
   import('@/features/scan/ScanPage').then((m) => ({ default: m.ScanPage }))
@@ -94,13 +92,6 @@ function SignedInApp(): React.JSX.Element {
             !isWeb() && (
               <Suspense fallback={null}>
                 <ScanPage />
-              </Suspense>
-            )
-          }
-          rip={
-            !isWeb() && (
-              <Suspense fallback={null}>
-                <RipPage />
               </Suspense>
             )
           }

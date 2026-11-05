@@ -59,19 +59,17 @@ export function usePages(initial: Page = 'dashboard'): Pages {
 }
 
 /**
- * The page for `pages.page`. Scan, Rip and Settings differ between the shells, so each passes its
+ * The page for `pages.page`. Scan and Settings differ between the shells, so each passes its
  * own; the rest are the same pages with the same props. A game switch starts the page afresh, so
  * no filter, open card or set carries over from the other game.
  */
 export function PageSwitch({
   pages,
   scan,
-  rip,
   settings
 }: {
   pages: Pages
   scan: React.ReactNode
-  rip: React.ReactNode
   settings: React.ReactNode
 }): React.JSX.Element {
   const { entryId, friendsKey, onNavigate, openAdd } = pages
@@ -104,7 +102,6 @@ export function PageSwitch({
       )}
       {page === 'scan' && scan}
       {page === 'sessions' && <SessionsPage />}
-      {page === 'rip' && rip}
       {page === 'friends' && <FriendsPage key={friendsKey} />}
       {page === 'settings' && settings}
     </Fragment>

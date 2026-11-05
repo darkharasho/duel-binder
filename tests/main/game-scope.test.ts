@@ -10,7 +10,6 @@ import { getStats, recordSnapshot } from '../../src/main/repo/stats'
 import { cardsForImages, matchName, printingsByCode } from '../../src/main/repo/scan'
 import { shownPrinting } from '../../src/main/repo/shownPrinting'
 import { LOCAL } from '../../src/main/repo/scope'
-import { ripPool } from '../../src/main/repo/rip'
 import { refreshSets } from '../../src/main/sync/sets'
 import { runSync } from '../../src/main/sync/sync'
 
@@ -251,13 +250,6 @@ describe('game-scoped repo queries', () => {
     expect(() =>
       addEntry(db, { printingId: pkm.printingIds[0], imageId: pkm.cardIds[0], quantity: 1 }, now)
     ).toThrow()
-  })
-
-  it('Rip reads only Yu-Gi-Oh, whatever the active game', () => {
-    const before = ripPool(db, SHARED_SET_NAME)
-    expect(before).toEqual(ripPool(baseline, SHARED_SET_NAME))
-    setGame(db, 'pkm')
-    expect(ripPool(db, SHARED_SET_NAME)).toEqual(before)
   })
 
   it('the YGOPRODeck set refresh replaces only Yu-Gi-Oh sets', async () => {

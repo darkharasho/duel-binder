@@ -23,7 +23,6 @@ export type Page =
   | 'browse'
   | 'scan'
   | 'sessions'
-  | 'rip'
   | 'friends'
   | 'sets'
   | 'settings'
@@ -38,7 +37,6 @@ const NAV = [
   { page: 'browse', label: 'Browse' },
   { page: 'scan', label: 'Scan' },
   { page: 'sessions', label: 'Sessions' },
-  { page: 'rip', label: 'Rip' },
   { page: 'friends', label: 'Friends' },
   { page: 'settings', label: 'Settings' }
 ] as const
@@ -78,7 +76,7 @@ export function AppShell({
   }, [page, scroll])
   useEffect(() => trackOpen(), [])
   useEffect(() => track(`page:${page}`), [page])
-  // A switch to a game without this page (Scan or Rip) leaves it.
+  // A switch to a game without this page (Scan) leaves it.
   useEffect(() => {
     if (!pageInGame(page, def)) onNavigate('dashboard')
   }, [page, def, onNavigate])
@@ -111,7 +109,7 @@ export function AppShell({
             {NAV.filter(
               ({ page: p }) =>
                 (p !== 'friends' || friendsAvailable) &&
-                ((p !== 'scan' && p !== 'sessions' && p !== 'rip') || !isWeb()) &&
+                ((p !== 'scan' && p !== 'sessions') || !isWeb()) &&
                 pageInGame(p, def)
             ).map(({ page: p, label }) => (
               <button

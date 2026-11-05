@@ -319,6 +319,16 @@ describe("a friend's sessions tab", () => {
     expect(await within(sheet).findByRole('region', { name: 'Their copies' })).toBeInTheDocument()
   })
 
+  it('opens the plain card when they no longer have it', async () => {
+    const gone = { ...session, cards: [{ ...session.cards[0], cardId: 2002, name: 'Gone Dragon' }] }
+    open({ sessions: vi.fn(async () => [gone]) })
+    await userEvent.click(await screen.findByRole('radio', { name: 'Sessions' }))
+    await userEvent.click(await screen.findByRole('button', { name: /Gone Dragon/ }))
+    const sheet = await screen.findByRole('dialog')
+    expect(await within(sheet).findByText('Gone Dragon')).toBeInTheDocument()
+    expect(within(sheet).queryByRole('region', { name: 'Their copies' })).not.toBeInTheDocument()
+  })
+
   it('is hidden when none are shown', async () => {
     const { api } = open()
     await waitFor(() => expect(api.friends.sessions).toHaveBeenCalled())

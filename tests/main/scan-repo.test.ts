@@ -14,6 +14,7 @@ import { seededDb } from './helpers'
 import { getMeta, setMeta } from '../../src/main/db/meta'
 import { localScope } from '../../src/main/repo/scope'
 import { seedPokemon } from '../fixtures/pokemon'
+import { onePieceCardId, onePieceImageId } from '../../src/shared/games/ids'
 
 const LOB = 'Legend of Blue Eyes White Dragon'
 
@@ -430,5 +431,40 @@ describe('chineseOfArt', () => {
       [pikachu, 9102, 'zh-hans']
     ])
     expect(chineseOfArt(db, [], PKM)).toEqual([])
+  })
+})
+
+describe('One Piece printings', () => {
+  const OP = localScope("'op'")
+
+  it('carry their own art, so art matched picks the printing and not just the card', async () => {
+    const db = await seededDb()
+    const card = onePieceCardId('en', 'OP01-120')
+    db.prepare(
+      `INSERT INTO cards (id, name, type, frame_type, race, "desc", updated_at, game)
+       VALUES (?, 'Shanks', 'CHARACTER', 'op', '', '', '2026-11-04', 'op')`
+    ).run(card)
+    const image = db.prepare(
+      "INSERT INTO card_images (image_id, card_id, sort_order, missing_from_api, game) VALUES (?, ?, ?, 0, 'op')"
+    )
+    image.run(onePieceImageId('en', 'OP01-120'), card, 0)
+    image.run(onePieceImageId('en', 'OP01-120_p1'), card, 1)
+    const add = db.prepare(
+      `INSERT INTO card_printings (game, card_id, language, set_name, set_code, set_rarity, set_rarity_code)
+       VALUES ('op', ?, 'en', 'ROMANCE DAWN [OP-01]', 'OP01-120', ?, ?)`
+    )
+    add.run(card, 'SEC', 'OP01-120')
+    add.run(card, 'SEC (Alternate Art)', 'OP01-120_p1')
+    // A printing whose art the catalog lacks keeps the card's.
+    add.run(card, 'SEC (Parallel)', 'OP01-120_p9')
+    const byRarity = Object.fromEntries(
+      printingsByCode(db, 'op01-120', OP).map((p) => [p.rarity, p.imageIds])
+    )
+    expect(byRarity).toEqual({
+      SEC: [onePieceImageId('en', 'OP01-120')],
+      'SEC (Alternate Art)': [onePieceImageId('en', 'OP01-120_p1')],
+      'SEC (Parallel)': [onePieceImageId('en', 'OP01-120'), onePieceImageId('en', 'OP01-120_p1')]
+    })
+    expect(printingsByCode(db, 'OP01-120', OP)[0]).not.toHaveProperty('rarityCode')
   })
 })

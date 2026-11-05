@@ -77,7 +77,7 @@ describe('games', () => {
   test('One Piece definition', () => {
     const op = gameDef('op')
     expect(op.name).toBe('One Piece')
-    expect(op.features).toEqual({ scan: false, rip: false })
+    expect(op.features).toEqual({ scan: true, rip: false })
     expect(op.cardAspect).toEqual({ width: 600, height: 838 })
     expect([op.access, op.priceRule, op.crossLanguagePriceFallback]).toEqual(['testers', 'marketOnly', false])
     expect(isGameId('op')).toBe(true)

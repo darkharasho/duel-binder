@@ -100,6 +100,40 @@ describe('fingerprint store', () => {
     expect(urls.at(-1)).toBe('https://p.test/scan/fingerprints')
   })
 
+  it("sends the account's token only for a game not open to everyone", async () => {
+    const seen: Record<string, Record<string, string>> = {}
+    const fetch = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      seen[String(url)] = init?.headers as Record<string, string>
+      return ok(body(1))
+    }) as unknown as typeof globalThis.fetch
+    const token = (): string | null => 'tok'
+    for (const game of ['op', 'pkm'] as const) {
+      await createFingerprintStore({
+        dir,
+        portal: 'https://p.test',
+        game,
+        fetch,
+        token,
+        now
+      }).refresh()
+    }
+    expect(seen['https://p.test/scan/fingerprints?game=op']).toEqual({
+      authorization: 'Bearer tok'
+    })
+    expect(seen['https://p.test/scan/fingerprints?game=pkm']).toEqual({})
+    // Signed out: no header at all.
+    rmSync(join(dir, 'fingerprints-op.bin'))
+    await createFingerprintStore({
+      dir,
+      portal: 'https://p.test',
+      game: 'op',
+      fetch,
+      token: () => null,
+      now
+    }).refresh()
+    expect(seen['https://p.test/scan/fingerprints?game=op']).toEqual({})
+  })
+
   it('downloads a fresh file and becomes ready', async () => {
     const bytes = body(3)
     const fetch = vi.fn(async () => ok(bytes))

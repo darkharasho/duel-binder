@@ -847,7 +847,7 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
       if (l.busy || l.stopped || !engine || !readyRef.current) return
       if (Date.now() < l.retryAt || o.setPrintings === undefined) return
       if (!video || video.readyState < 2) return
-      // A game without a scan profile (One Piece) has nothing to scan: the loop idles.
+      // A game without a scan profile has nothing to scan: the loop idles.
       const profile = SCAN_PROFILES[o.game]
       if (!profile) return
       l.busy = true

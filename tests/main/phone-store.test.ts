@@ -686,6 +686,27 @@ describe('phone store', () => {
     expect(requests.some((r) => r.url.endsWith('/scan/fingerprints?game=pkm'))).toBe(true)
   })
 
+  it("downloads a hidden game's fingerprints signed in, as an account that may use it", async () => {
+    portal.serverDb.close()
+    portal = await inProcessPortal({ ADMIN_DISCORD_ID: 'discord-1-alice' })
+    userId = portal.addUser('alice')
+    token = await portal.desktopToken(userId)
+    me = { ...me, id: userId }
+    const bytes = encodeFingerprints([{ imageId: 1, hash: new Uint32Array(HASH_WORDS).fill(7) }])
+    await portal.images.put('scan/op/fingerprints.bin', bytes.slice().buffer, {
+      httpMetadata: { contentType: 'application/octet-stream' }
+    })
+    await ready()
+    await store.refreshFingerprints({ game: 'op', force: true })
+    expect(new Uint8Array((await store.fingerprints('op'))!)).toEqual(bytes)
+    const asked = requests.find((r) => r.url.endsWith('/scan/fingerprints?game=op'))!
+    expect(asked.headers.get('authorization')).toBe(`Bearer ${token}`)
+    // Yu-Gi-Oh's, open to everyone, goes without.
+    await store.refreshFingerprints({ game: 'ygo', force: true })
+    const ygo = requests.find((r) => r.url.endsWith('/scan/fingerprints'))!
+    expect(ygo.headers.get('authorization')).toBeNull()
+  })
+
   it("maps this phone's printing ids to the server's, for printing photos", async () => {
     await ready()
     const rows = db

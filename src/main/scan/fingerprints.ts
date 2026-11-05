@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, readFileSync, renameSync, rmSync, writeFileSync 
 import { readFile } from 'fs/promises'
 import { join } from 'path'
 import { decodeFingerprints } from '@shared/scan/fingerprintFile'
-import type { GameId } from '@shared/games'
+import { GAMES, type GameId } from '@shared/games'
 import { parseFingerprintRefs, type FingerprintRefsFile } from '@shared/scan/fingerprintRefs'
 import { readBody } from '@shared/scan/readBody'
 import type { FingerprintStatus } from '@shared/scan/types'
@@ -46,6 +46,11 @@ export function createFingerprintStore(opts: {
   portal: string
   game: GameId
   fetch?: typeof fetch
+  /**
+   * The signed-in account's Bearer token, or null signed out: a game not open to everyone has its
+   * file only for an account that may use it, so its download carries the token.
+   */
+  token?: () => string | null
   now?: () => Date
   timeoutMs?: number
 }): FingerprintStore {
@@ -129,6 +134,8 @@ export function createFingerprintStore(opts: {
   /** Resolves true when it wrote a new fingerprint file. */
   async function downloadFingerprints(): Promise<boolean> {
     const headers: Record<string, string> = meta?.etag ? { 'If-None-Match': meta.etag } : {}
+    const token = GAMES[game].access === 'everyone' ? null : (opts.token?.() ?? null)
+    if (token !== null) headers.authorization = `Bearer ${token}`
     // The timeout covers the body too: arrayBuffer() rejects once the signal aborts.
     const res = await doFetch(url, {
       headers,

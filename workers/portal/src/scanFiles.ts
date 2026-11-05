@@ -143,8 +143,8 @@ async function serve(
 /**
  * Download of the request's game's fingerprint file. Public for a game open to everyone. For any
  * other game it needs a signed-in user who may use it, and answers the same 404 as an empty
- * bucket otherwise, so it gives nothing away.
- * TODO(step 4): clients must send credentials on this fetch before a hidden game can scan.
+ * bucket otherwise, so it gives nothing away. The desktop and phone apps send their Bearer token
+ * for such a game.
  */
 export async function getFingerprints(req: Request, deps: AppDeps): Promise<Response> {
   const keys = keysOf(req)

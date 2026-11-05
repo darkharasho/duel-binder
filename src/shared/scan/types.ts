@@ -71,8 +71,8 @@ export interface ScanDraft {
   options: ScanPrinting[]
   flag: 'check-rarity' | 'pick-printing' | 'other-set' | null
   via: 'code' | 'art' | 'name'
-  /** A Pokémon card; left out for Yu-Gi-Oh, so its drafts are as they always were. */
-  game?: 'pkm'
+  /** A Pokémon or One Piece card; left out for Yu-Gi-Oh, so its drafts are as they always were. */
+  game?: 'pkm' | 'op'
   /** Shown in a graded slab; priced as the raw card. */
   slab?: true
   /**

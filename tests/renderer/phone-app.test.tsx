@@ -565,11 +565,9 @@ describe('phone app', () => {
     await openSettings(user)
     await user.click(screen.getByRole('button', { name: 'Contribute photos' }))
     await waitFor(() => expect(store.active).toBe('op'))
-    // The switch has rendered: One Piece has no Scan tab.
-    const nav = screen.getByRole('navigation', { name: 'Tabs' })
+    // The switch has rendered, and the screen is still Contribute photos.
     await waitFor(() =>
-      expect(within(nav).queryByRole('button', { name: 'Scan' })).not.toBeInTheDocument()
+      expect(screen.getByRole('textbox', { name: 'Card number' })).toBeInTheDocument()
     )
-    expect(screen.getByRole('textbox', { name: 'Card number' })).toBeInTheDocument()
   })
 })

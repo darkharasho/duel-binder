@@ -29,7 +29,7 @@ import { createDataHandlers, DATA_CHANNELS, type DataChannel } from '../../main/
 import { awaitingPrices, checkPrintingIds, requestPrices } from '../../main/cloud/priceRequests'
 import { PHONE_TABLES } from '../../shared/catalogFeed'
 import { gamesOf, type Me } from '../../shared/cloud'
-import { GAME_IDS, type GameId } from '../../shared/games'
+import { GAME_IDS, GAMES, type GameId } from '../../shared/games'
 import { FRIENDS_SIGNED_OUT, OFFLINE_MESSAGE } from '../../shared/friends'
 import type { PortalChannel } from '../../shared/portal'
 import { decodeFingerprints } from '../../shared/scan/fingerprintFile'
@@ -596,6 +596,9 @@ export function createPhoneStore(deps: {
       known?.etag && fingerprintStatus(game).state === 'ready'
         ? { 'If-None-Match': known.etag }
         : {}
+    // A game not open to everyone has its file only for an account that may use it.
+    const t = GAMES[game].access === 'everyone' ? null : token()
+    if (t !== null) headers.authorization = `Bearer ${t}`
     const res = await doFetch(`${base}/scan/fingerprints${game === 'ygo' ? '' : `?game=${game}`}`, {
       headers,
       signal: AbortSignal.timeout(30_000)

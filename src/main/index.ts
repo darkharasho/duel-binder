@@ -342,7 +342,12 @@ async function bootstrap(): Promise<void> {
   const fingerprints: Record<GameId, FingerprintStore> = {
     ygo: createFingerprintStore({ dir: join(userData, 'scan'), portal, game: 'ygo' }),
     pkm: createFingerprintStore({ dir: join(userData, 'scan'), portal, game: 'pkm' }),
-    op: createFingerprintStore({ dir: join(userData, 'scan'), portal, game: 'op' })
+    op: createFingerprintStore({
+      dir: join(userData, 'scan'),
+      portal,
+      game: 'op',
+      token: () => tokens.get()
+    })
   }
   /** Re-downloads the files of the games this account can see (a game it can't has no file for it). */
   const refreshFingerprints = (): void => {

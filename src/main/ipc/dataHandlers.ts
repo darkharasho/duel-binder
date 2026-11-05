@@ -49,7 +49,6 @@ import {
 } from '../repo/scanSessions'
 import { localScope } from '../repo/scope'
 import { isGameId } from '@shared/games'
-import { openPack, ripHistory, ripSession, ripSets, startRip } from '../repo/rip'
 import { activeGame, setActiveGame } from '../cloud/activeGame'
 import type { GameId } from '@shared/games'
 import type { CollectorNumber } from '@shared/scan/collectorNumber'
@@ -101,11 +100,6 @@ export const DATA_CHANNELS = [
   'sets:checklist',
   'sets:adjust',
   'account:unsynced',
-  'rip:sets',
-  'rip:start',
-  'rip:openPack',
-  'rip:session',
-  'rip:history',
   'games:available',
   'games:active',
   'games:setActive',
@@ -261,20 +255,6 @@ export function createDataHandlers({
     'sets:adjust': async (setName: string, language: Language, printingId: number, delta: 1 | -1) =>
       collected(adjustPrinting(db, setName, checkLanguage(language), printingId, delta)),
     'account:unsynced': async () => listSyncIssues(db, activeOwner(db)),
-    // Rip is never synced, so none of these tell the account service about an edit.
-    'rip:sets': async () => ripSets(db),
-    'rip:start': async (setName: unknown, packCount: unknown) => {
-      if (typeof setName !== 'string') throw new Error('Set name must be a string')
-      return startRip(db, setName, wholeNumber(packCount, 'Pack count'), new Date())
-    },
-    'rip:openPack': async (sessionId: unknown) =>
-      openPack(db, wholeNumber(sessionId, 'Session id')),
-    'rip:session': async (id: unknown) => ripSession(db, wholeNumber(id, 'Session id')),
-    'rip:history': async (opts?: { sessionOffset?: number }) =>
-      ripHistory(db, {
-        sessionOffset:
-          opts?.sessionOffset === undefined ? undefined : wholeNumber(opts.sessionOffset, 'Offset')
-      }),
     'games:available': async () => availableGames(),
     'games:active': async () => activeGame(db, availableGames()),
     'prices:ebayHidden': async () => ebayPricesHidden(db),

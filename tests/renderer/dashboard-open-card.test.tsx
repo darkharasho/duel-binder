@@ -82,7 +82,7 @@ describe.each(['linux', 'phone'])('Most valuable on %s (page switch)', (platform
   }
   function Pages(): React.JSX.Element {
     const pages = usePages('dashboard')
-    return <PageSwitch pages={pages} scan={null} rip={null} settings={null} />
+    return <PageSwitch pages={pages} scan={null} settings={null} />
   }
 
   it.each(['total', 'single'])(

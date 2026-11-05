@@ -193,6 +193,8 @@ ALTER TABLE card_printings ADD COLUMN contributed INTEGER NOT NULL DEFAULT 0;
 /**
  * Rip (simulated pack openings): local history only, never synced. Pulls keep a snapshot of the
  * card (no foreign key to the catalog) so history survives a catalog refresh. No prices.
+ * Rip has been removed; the tables stay (shipped step, and old databases keep their rows) but
+ * nothing reads or writes them.
  */
 export const SCHEMA_V16 = `
 CREATE TABLE rip_sessions (id INTEGER PRIMARY KEY, set_name TEXT NOT NULL, set_code TEXT NOT NULL,

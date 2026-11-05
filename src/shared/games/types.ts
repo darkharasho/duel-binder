@@ -37,7 +37,7 @@ export interface GameDef {
   name: string
   /** The game's dot in the game switch. */
   color: string
-  features: { scan: boolean; rip: boolean }
+  features: { scan: boolean }
   /**
    * The card art's width and height, in the proportion the game's card images are served at: every
    * art frame takes this aspect, so the picture fills it without being cut off.

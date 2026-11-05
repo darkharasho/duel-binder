@@ -40,11 +40,11 @@ describe('usage counts', () => {
   })
 
   it('sends early when the app is hidden', () => {
-    track('rip:pack')
+    track('scan:add')
     Object.defineProperty(document, 'visibilityState', { value: 'hidden', configurable: true })
     document.dispatchEvent(new Event('visibilitychange'))
     Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true })
-    expect(report()).toHaveBeenCalledWith({ 'rip:pack': 1 })
+    expect(report()).toHaveBeenCalledWith({ 'scan:add': 1 })
   })
 
   it('sends page:wishlist on its own, so an older portal keeps the rest of the report', () => {

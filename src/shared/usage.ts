@@ -16,15 +16,23 @@ export const USAGE_EVENTS = [
   'page:browse',
   'page:scan',
   'page:sessions',
-  'page:rip',
   'page:friends',
   'page:settings',
   'card:add',
   'scan:add',
-  'rip:pack',
   'friend:request'
 ] as const
 export type UsageEvent = (typeof USAGE_EVENTS)[number]
+
+/**
+ * Events the apps no longer send (Rip, removed) but older installs still may: the portal keeps
+ * counting them, so their reports aren't refused whole, and the admin page shows past totals.
+ */
+export const RETIRED_USAGE_EVENTS = ['page:rip', 'rip:pack'] as const
+type ReportedEvent = UsageEvent | (typeof RETIRED_USAGE_EVENTS)[number]
+const isReportedEvent = (name: string): name is ReportedEvent =>
+  (USAGE_EVENTS as readonly string[]).includes(name) ||
+  (RETIRED_USAGE_EVENTS as readonly string[]).includes(name)
 
 /** Event totals since the last report. */
 export type UsageCounts = Partial<Record<UsageEvent, number>>
@@ -32,10 +40,10 @@ export type UsageCounts = Partial<Record<UsageEvent, number>>
 /** The most one report may count for a single event. */
 export const MAX_USAGE_COUNT = 1000
 
-/** The body of `POST /api/usage`. */
+/** The body of `POST /api/usage`; retired events from an older app are let through. */
 export interface UsageReport {
   platform: UsagePlatform
-  events: UsageCounts
+  events: Partial<Record<ReportedEvent, number>>
 }
 
 const isObject = (v: unknown): v is Record<string, unknown> =>
@@ -46,12 +54,12 @@ export function checkUsageReport(v: unknown): UsageReport {
   if (!isObject(v) || !isObject(v.events)) throw new Error('bad-report')
   const platform = v.platform
   if (!USAGE_PLATFORMS.includes(platform as UsagePlatform)) throw new Error('bad-platform')
-  const events: UsageCounts = {}
+  const events: UsageReport['events'] = {}
   for (const [name, count] of Object.entries(v.events)) {
-    if (!USAGE_EVENTS.includes(name as UsageEvent)) throw new Error('bad-event')
+    if (!isReportedEvent(name)) throw new Error('bad-event')
     if (!Number.isInteger(count) || (count as number) < 1 || (count as number) > MAX_USAGE_COUNT)
       throw new Error('bad-count')
-    events[name as UsageEvent] = count as number
+    events[name] = count as number
   }
   return { platform: platform as UsagePlatform, events }
 }

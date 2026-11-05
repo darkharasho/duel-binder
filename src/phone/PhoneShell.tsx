@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import {
   BookOpenIcon,
@@ -7,7 +7,6 @@ import {
   HouseIcon,
   LayoutGridIcon,
   LibraryIcon,
-  PackageOpenIcon,
   ScanLineIcon,
   SearchIcon,
   SettingsIcon,
@@ -45,9 +44,6 @@ import { ContributeScreen } from './training/ContributeScreen'
 import { trainingOutbox } from './training/outbox'
 import { UpdateBanner } from './UpdateBanner'
 
-// Loaded on demand, as on the desktop, so Rip stays out of the first load.
-const RipPage = lazy(() => import('@/features/rip/RipPage').then((m) => ({ default: m.RipPage })))
-
 const TABS: { page: Page; label: string; icon: LucideIcon }[] = [
   { page: 'dashboard', label: 'Home', icon: HouseIcon },
   { page: 'collection', label: 'Collection', icon: LibraryIcon },
@@ -58,7 +54,6 @@ const MORE: { page: Page; label: string; icon: LucideIcon }[] = [
   { page: 'binders', label: 'Binders', icon: BookOpenIcon },
   { page: 'wishlist', label: 'Wishlist', icon: HeartIcon },
   { page: 'browse', label: 'Browse', icon: SearchIcon },
-  { page: 'rip', label: 'Rip', icon: PackageOpenIcon },
   { page: 'friends', label: 'Friends', icon: UsersIcon },
   { page: 'settings', label: 'Settings', icon: SettingsIcon }
 ]
@@ -137,11 +132,11 @@ function Shell({ engineFactory }: { engineFactory?: EngineFactory }): React.JSX.
   const [moreOpen, setMoreOpen] = useState(false)
   const requests = useFriendsOverview().data?.incoming.length ?? 0
   const { game, def, available, setGame } = useGame()
-  // Scan and Rip only for a game that has them; on Pokémon the raised Scan tab goes.
+  // Scan only for a game that has it; on Pokémon the raised Scan tab goes.
   const tabs = TABS.filter((t) => pageInGame(t.page, def))
   const more = MORE.filter((m) => pageInGame(m.page, def))
   useReadyChecks()
-  // A switch to a game without this page (Scan or Rip) goes Home.
+  // A switch to a game without this page (Scan) goes Home.
   useEffect(() => {
     if (!pageInGame(page, def)) onNavigate('dashboard')
   }, [page, def, onNavigate])
@@ -216,11 +211,6 @@ function Shell({ engineFactory }: { engineFactory?: EngineFactory }): React.JSX.
                   onClose={() => go('dashboard')}
                   onOpenSettings={() => go('settings')}
                 />
-              }
-              rip={
-                <Suspense fallback={null}>
-                  <RipPage />
-                </Suspense>
               }
               settings={<Settings onContribute={(g) => void openContribute(g)} />}
             />

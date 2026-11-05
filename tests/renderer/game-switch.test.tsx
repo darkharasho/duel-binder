@@ -77,7 +77,7 @@ describe('desktop game switch', () => {
     expect(screen.queryByRole('button', { name: /switch game/i })).not.toBeInTheDocument()
     expect(screen.queryByText('Yu-Gi-Oh!')).not.toBeInTheDocument()
     expect(navNames()).toContain('Scan')
-    expect(navNames()).toContain('Rip')
+    expect(navNames()).not.toContain('Rip')
   })
 
   it('shows both games and choosing Pokémon sets it active', async () => {
@@ -123,47 +123,24 @@ describe('desktop game switch', () => {
     expect(radios[2]).toHaveTextContent('One Piece')
   })
 
-  it('op shows Scan and not Rip', async () => {
+  it('op shows Scan', async () => {
     await renderDesktop(desktopApi(['ygo', 'pkm', 'op'], 'op'))
     expect(await screen.findByRole('button', { name: /switch game/i })).toHaveTextContent(
       'One Piece'
     )
     expect(navNames()).toContain('Scan')
-    expect(navNames()).not.toContain('Rip')
   })
 
-  it('on Rip, switching to op (no Rip) shows the dashboard without throwing', async () => {
-    let active: GameId = 'ygo'
-    const api = desktopApi(['ygo', 'pkm', 'op'], 'ygo', {
-      games: {
-        active: vi.fn(async () => active),
-        setActive: vi.fn(async (g: GameId) => {
-          active = g
-        })
-      }
-    })
-    await renderDesktop(api)
-    await userEvent.click(
-      within(screen.getByRole('navigation', { name: 'Main' })).getByRole('button', { name: 'Rip' })
-    )
-    await userEvent.click(await screen.findByRole('button', { name: /switch game/i }))
-    await userEvent.click(await screen.findByRole('menuitemradio', { name: /One Piece/ }))
-    expect(await screen.findByRole('button', { name: /switch game/i })).toHaveTextContent(
-      'One Piece'
-    )
-    expect(screen.getByRole('navigation', { name: 'Main' })).toBeInTheDocument()
-    expect(
-      await screen.findByRole('heading', { name: /dashboard|collection/i })
-    ).toBeInTheDocument()
-  })
-
-  it('Pokémon shows Scan and not Rip', async () => {
+  it('Pokémon shows Scan', async () => {
     await renderDesktop(desktopApi(['ygo', 'pkm'], 'pkm'))
     expect(await screen.findByRole('button', { name: /switch game/i })).toHaveTextContent('Pokémon')
     expect(navNames()).toContain('Scan')
-    expect(navNames()).not.toContain('Rip')
     expect(pageInGame('scan', GAMES.pkm)).toBe(true)
-    expect(pageInGame('rip', GAMES.pkm)).toBe(false)
+    // Scan and its Sessions leave a game without Scan; the rest stay.
+    const noScan = { ...GAMES.pkm, features: { scan: false } }
+    expect(pageInGame('scan', noScan)).toBe(false)
+    expect(pageInGame('sessions', noScan)).toBe(false)
+    expect(pageInGame('sets', noScan)).toBe(true)
   })
 
   it('shows Yu-Gi-Oh! and asks main for it when the game cannot be read', async () => {
@@ -209,7 +186,7 @@ describe('desktop game switch', () => {
     })
     await renderDesktop(api)
     await waitFor(() => expect(api.stats.get).toHaveBeenCalled())
-    expect(navNames()).not.toContain('Rip')
+    expect(await screen.findByRole('button', { name: /switch game/i })).toHaveTextContent('Pokémon')
     const reads = vi.mocked(api.stats.get).mock.calls.length
     // Signing in as someone without Pokémon resets the game in main.
     active = 'ygo'
@@ -217,8 +194,9 @@ describe('desktop game switch', () => {
     await act(async () => {
       for (const cb of onAccount) cb(signedIn)
     })
-    await waitFor(() => expect(navNames()).toContain('Rip'))
-    expect(screen.queryByRole('button', { name: /switch game/i })).not.toBeInTheDocument()
+    await waitFor(() =>
+      expect(screen.queryByRole('button', { name: /switch game/i })).not.toBeInTheDocument()
+    )
     await waitFor(() => expect(vi.mocked(api.stats.get).mock.calls.length).toBeGreaterThan(reads))
   })
 })
@@ -559,7 +537,6 @@ describe('phone game switch', () => {
     await userEvent.click(within(nav).getByRole('button', { name: 'More' }))
     const sheet = await screen.findByRole('dialog', { name: 'More' })
     expect(within(nav).getByRole('button', { name: 'Scan', hidden: true })).toBeInTheDocument()
-    expect(within(sheet).getByRole('button', { name: 'Rip' })).toBeInTheDocument()
     const group = within(sheet).getByRole('radiogroup', { name: 'Game' })
     expect(within(group).getByRole('radio', { name: /Yu-Gi-Oh!/ })).toHaveAttribute(
       'aria-checked',
@@ -567,10 +544,12 @@ describe('phone game switch', () => {
     )
     await userEvent.click(within(group).getByRole('radio', { name: /Pokémon/ }))
     expect(store.invoke).toHaveBeenCalledWith('games:setActive', ['pkm'])
-    // On Pokémon (the owner's) the raised Scan tab stays, and Rip leaves More (the open sheet
-    // hides the tabs).
+    // On Pokémon (the owner's) the raised Scan tab stays (the open sheet hides the tabs).
     await waitFor(() =>
-      expect(within(sheet).queryByRole('button', { name: 'Rip' })).not.toBeInTheDocument()
+      expect(within(group).getByRole('radio', { name: /Pokémon/ })).toHaveAttribute(
+        'aria-checked',
+        'true'
+      )
     )
     expect(within(nav).getByRole('button', { name: 'Scan', hidden: true })).toBeInTheDocument()
     expect(within(nav).getAllByRole('button', { hidden: true })).toHaveLength(5)

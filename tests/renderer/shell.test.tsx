@@ -90,7 +90,6 @@ describe('AppShell sets nav', () => {
       'Browse',
       'Scan',
       'Sessions',
-      'Rip',
       'Friends',
       'Settings'
     ])
@@ -184,19 +183,6 @@ describe('dashboard most valuable', () => {
     const dialog = await screen.findByRole('dialog')
     expect(await within(dialog).findByText('Blue-Eyes White Dragon')).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Collection', hidden: true })).toBeInTheDocument()
-  })
-})
-
-describe('AppShell rip nav', () => {
-  it('opens the Rip page from the nav', async () => {
-    await renderApp()
-    await userEvent.click(screen.getByRole('button', { name: 'Rip' }))
-    expect(await screen.findByRole('heading', { name: 'Rip' })).toBeInTheDocument()
-  })
-
-  it('has no Rip item on the web', async () => {
-    await renderApp(mockApi({ window: { platform: 'web' } }))
-    expect(screen.queryByRole('button', { name: 'Rip' })).not.toBeInTheDocument()
   })
 })
 

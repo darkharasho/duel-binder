@@ -19,7 +19,6 @@ import type {
 } from '../shared/types'
 import { withoutPrintings, type ScanSession } from '../shared/scanSessions'
 import type { PhoneStore } from './data/store'
-import { phonePackWrappers } from './packWrappers'
 // Declares __APP_VERSION__.
 import type {} from './globals'
 
@@ -300,10 +299,6 @@ export function createPhoneApi(deps: {
       send: () => {},
       onMessage: noUnsubscribe,
       onOpenChange: noUnsubscribe
-    },
-    rip: {
-      ...dataPart('rip'),
-      packWrappers: phonePackWrappers
     },
     stats: dataPart('stats'),
     prices: {

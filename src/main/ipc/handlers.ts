@@ -32,7 +32,6 @@ import { cardLanguage } from '@shared/scan/cardLanguage'
 import type { AccountService } from '../cloud/account'
 import type { MainErrorReports } from '../errorReports'
 import type { CatalogService } from '../catalog/service'
-import { readPackWrappers } from '../images/packWrappers'
 import { saveDebugFrame } from '../scan/debugFrames'
 
 export interface WindowDeps {
@@ -200,12 +199,6 @@ export function createHandlers({
     'usage:report': (events: unknown) => account.reportUsage(events),
     'errors:report': (details: unknown) => account.reportError(details),
     'errors:setEnabled': async (on: unknown) => errorReports.setEnabled(on === true),
-    'rip:packWrappers': async (key: unknown) => {
-      if (typeof key !== 'string') throw new Error('Pack image key must be a string')
-      // Ahead of the queue, like the pack's own <img>: the pack waits on it.
-      const file = await images.getSet(key, { priority: true })
-      return file ? readPackWrappers(file) : null
-    },
     'sync:status': async () => catalog.status(),
     'sync:run': async () => account.refreshCatalog(),
     'images:cacheSize': () => images.sizeBytes(),

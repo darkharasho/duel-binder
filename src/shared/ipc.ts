@@ -53,7 +53,6 @@ import type { DexPreview } from './dex/match'
 import type { DexRow } from './dex/parse'
 import type { CardLanguage } from './scan/language'
 import type { OcrKind, TextModel } from './scan/ocr'
-import type { PackWrappers, RipCard, RipHistory, RipSessionDetail, RipSet } from './rip/types'
 import type { GameId } from './games'
 import type { BinderDraft, BinderEditAction, BinderTarget, RuleField } from './binders'
 
@@ -209,16 +208,6 @@ export interface Api {
     send(m: ScanWindowMessage): void
     onMessage(cb: (m: ScanWindowMessage) => void): () => void
     onOpenChange(cb: (open: boolean) => void): () => void
-  }
-  /** Simulated pack openings. Desktop only; never synced. */
-  rip: {
-    sets(): Promise<RipSet[]>
-    start(setName: string, packCount: number): Promise<number>
-    openPack(sessionId: number): Promise<RipCard[]>
-    session(id: number): Promise<RipSessionDetail | null>
-    history(opts?: { sessionOffset?: number }): Promise<RipHistory>
-    /** Where the wrappers are in a set's pack photo (`packImageKey`); null when it shows one. */
-    packWrappers(packImageKey: string): Promise<PackWrappers | null>
   }
   stats: {
     get(): Promise<CollectionStats>
@@ -435,12 +424,6 @@ export const INVOKE_CHANNELS = [
   'scanWindow:isOpen',
   'scanWindow:toggleFullScreen',
   'scanWindow:setSize',
-  'rip:sets',
-  'rip:start',
-  'rip:openPack',
-  'rip:session',
-  'rip:history',
-  'rip:packWrappers',
   'stats:get',
   'prices:request',
   'sets:list',

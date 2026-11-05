@@ -33,7 +33,7 @@ export function handleImageProtocol(cache: ImageCache): void {
     const parsed = parseImageUrl(request.url)
     const setKey = parsed ? null : parseSetImageUrl(request.url)
     if (!parsed && !setKey) return new Response('Not found', { status: 404 })
-    // `?now`: someone's waiting on this one (Rip's next pack), so it goes ahead of the queue.
+    // `?now`: someone's waiting on this one so it goes ahead of the queue.
     const priority = new URL(request.url).searchParams.has('now')
     const file = parsed
       ? await cache.get(parsed.size, parsed.id, { priority })

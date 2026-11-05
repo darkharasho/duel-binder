@@ -303,12 +303,12 @@ describe("a friend's sessions tab", () => {
     ]
   }
 
-  it('shows the feed without owner controls, with Make replay', async () => {
+  it('shows the feed without owner controls or Make replay', async () => {
     const { api } = open({ sessions: vi.fn(async () => [session]) })
     await userEvent.click(await screen.findByRole('radio', { name: 'Sessions' }))
     expect(api.friends.sessions).toHaveBeenCalledWith(7)
     expect(await screen.findByRole('button', { name: /Alpha Dragon/ })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /Make replay/ })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Make replay/ })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Session options' })).not.toBeInTheDocument()
   })
 

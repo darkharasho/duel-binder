@@ -5,8 +5,7 @@ Date: 2026-11-05. Approved by the owner 2026-11-05. Follows Rip Replay (`2026-11
 ## Why
 
 After ripping packs the owner wants to come back to it: remake the replay the next morning, dig up a
-session from weeks ago, and let friends look back through those sessions and make the replay
-themselves. Today the scanner forgets a session as soon as its cards are added or the list is
+session from weeks ago, and let friends look back through those sessions. Today the scanner forgets a session as soon as its cards are added or the list is
 cleared, and a replay can only be made from the list on screen.
 
 ## Wording: "session", never "night"
@@ -76,7 +75,7 @@ A **feed**: each session is a header with a grid of small, clickable card tiles 
   untouched (owner worried about its vertical space).
 - **Phone:** a history button in the scanner's top bar beside Stream / Sound / Settings opens the
   same feed in a sheet.
-- **Friend page:** a **Sessions** tab after Binders, same feed, no ⋯ menu.
+- **Friend page:** a **Sessions** tab after Binders, same feed, no ⋯ menu and no **Make replay**.
 
 ## Make replay from a session
 
@@ -91,7 +90,8 @@ The header line in the video uses the session's date, not today's.
 - Every session is visible to friends by default; **Hide from friends** per session (like a
   binder's `friendsVisible`). A hidden session doesn't reach friends at all, nor does the fact that
   it exists (same as `friendBinders.ts`).
-- Friends see the feed and can **Make replay**; they cannot hide, delete or change anything.
+- Friends see the feed only: no **Make replay** (owner's call, 2026-11-05), and they cannot hide,
+  delete or change anything.
 - The friend page is per game (`userScope(friend, game)`), so the tab shows that game's sessions.
 
 ## Non-goals

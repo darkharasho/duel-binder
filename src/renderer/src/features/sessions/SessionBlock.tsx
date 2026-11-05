@@ -157,7 +157,8 @@ export function SessionBlock({
           </span>
         )}
         <span className="ml-auto flex items-center gap-2">
-          <MakeReplay source={source} variant={variant} />
+          {/* Replays are the owner's to make; a friend only looks. */}
+          {owner && <MakeReplay source={source} variant={variant} />}
           {owner && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>

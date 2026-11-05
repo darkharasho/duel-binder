@@ -72,40 +72,50 @@ export function BinderView({ detail, readOnly, onEdit, onRemove }: Props): React
       : [])
   ].join(' · ')
 
+  const chips = (
+    <>
+      {detail.rules.rules.map((r, i) => {
+        const t = ruleText(r)
+        return (
+          <Chip key={i} label={t.label}>
+            {t.value}
+          </Chip>
+        )
+      })}
+      {detail.editable && (
+        <>
+          <Chip label="Goal">{GOAL_LABEL[detail.goal]}</Chip>
+          <Chip label="Languages">{languagesLabel(detail.languages)}</Chip>
+        </>
+      )}
+      {!readOnly && <Chip label="Friends">{detail.friendsVisible ? 'can see' : 'cannot see'}</Chip>}
+    </>
+  )
+
   return (
     <div className="space-y-3">
-      <div className="flex items-center justify-between gap-3">
-        <h2 className="truncate text-xl font-semibold">{detail.name}</h2>
+      {/* Two lines above the binder: name and rules, then progress and the Show tabs. */}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <h2 className="min-w-0 max-w-[40%] shrink-0 truncate text-xl font-semibold max-md:max-w-[75%]">
+          {detail.name}
+        </h2>
+        {/* On a phone the rules wrap to their own line under the name. */}
+        <div className="order-last flex w-full flex-wrap gap-2 md:order-none md:w-auto md:min-w-0 md:flex-1">
+          {chips}
+        </div>
         {!readOnly &&
           (detail.editable ? (
             onEdit && (
-              <Button variant="secondary" size="sm" onClick={onEdit}>
+              <Button variant="secondary" size="sm" className="ml-auto shrink-0" onClick={onEdit}>
                 <PencilIcon className="size-3.5" />
                 Edit
               </Button>
             )
           ) : (
-            <p className="text-sm text-muted-foreground">Update the app to edit this binder.</p>
+            <p className="ml-auto shrink-0 text-sm text-muted-foreground">
+              Update the app to edit this binder.
+            </p>
           ))}
-      </div>
-      <div className="flex flex-wrap gap-2">
-        {detail.rules.rules.map((r, i) => {
-          const t = ruleText(r)
-          return (
-            <Chip key={i} label={t.label}>
-              {t.value}
-            </Chip>
-          )
-        })}
-        {detail.editable && (
-          <>
-            <Chip label="Goal">{GOAL_LABEL[detail.goal]}</Chip>
-            <Chip label="Languages">{languagesLabel(detail.languages)}</Chip>
-          </>
-        )}
-        {!readOnly && (
-          <Chip label="Friends">{detail.friendsVisible ? 'can see' : 'cannot see'}</Chip>
-        )}
       </div>
       {detail.tooBroad ? (
         <p className="text-sm text-muted-foreground">
@@ -115,10 +125,10 @@ export function BinderView({ detail, readOnly, onEdit, onRemove }: Props): React
       ) : (
         <>
           {/* Progress and the Show tabs share a row, so the binder below gets the height. */}
-          <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-3">
-            <div className="min-w-0 space-y-2">
+          <div className="flex flex-wrap items-center justify-between gap-x-8 gap-y-3">
+            <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
               {hasGoal && progress.total > 0 && (
-                <SetProgress progress={progress} className="w-80 max-w-full" />
+                <SetProgress progress={progress} className="w-40 shrink-0" />
               )}
               <p className="text-sm text-muted-foreground tabular-nums">
                 {summary}
@@ -134,7 +144,13 @@ export function BinderView({ detail, readOnly, onEdit, onRemove }: Props): React
               </p>
             </div>
             {hasGoal && (
-              <UnderlineTabs label="Show" value={view} options={VIEWS} onChange={setView} />
+              <UnderlineTabs
+                label="Show"
+                value={view}
+                options={VIEWS}
+                onChange={setView}
+                className="-mb-2"
+              />
             )}
           </div>
           {detail.cards.length === 0 ? (

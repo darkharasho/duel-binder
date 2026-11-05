@@ -221,7 +221,11 @@ export function createHandlers({
     'app:backupDatabase': () => app.backupDatabase(),
     'app:saveReplay': async (name: unknown, data: unknown) => {
       // Only a plain replay file name: the dialog picks the folder, the renderer never does.
-      if (typeof name !== 'string' || !/^[\w.-]+\.(mp4|webm|gif)$/.test(name) || name.startsWith('.'))
+      if (
+        typeof name !== 'string' ||
+        !/^[\w.-]+\.(mp4|webm|gif)$/.test(name) ||
+        name.startsWith('.')
+      )
         throw new Error('Not a replay file name')
       if (!(data instanceof Uint8Array)) throw new Error('Not replay bytes')
       return app.saveReplay(name, data)

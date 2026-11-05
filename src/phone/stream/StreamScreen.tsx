@@ -5,6 +5,7 @@ import { useScanHub } from '@/features/scan/ScanHub'
 import { flagText } from '@/features/scan/ScanRowItem'
 import { plural } from '@/features/scan/scanText'
 import type { ScanRow } from '@/features/scan/session'
+import { MakeReplay } from '@/features/scan/replay/MakeReplay'
 import { sessionSummary } from '@/features/scan/window/summary'
 import { PAGE_ROWS, SummaryScreen } from '@/features/scan/window/SummaryScreen'
 import { useGame } from '@/lib/game'
@@ -245,6 +246,7 @@ export function StreamScreen({
             <button type="button" className={CONTROL} onClick={() => setReviewing(true)}>
               Review
             </button>
+            <MakeReplay rows={record.rows} variant="phone" />
             <button
               type="button"
               className={CONTROL}

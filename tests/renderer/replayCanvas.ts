@@ -5,8 +5,7 @@ export function recordingContext(): { ctx: CanvasRenderingContext2D; calls: unkn
   const ctx = new Proxy({} as Record<string | symbol, unknown>, {
     get(target, prop) {
       if (prop in target) return target[prop]
-      if (prop === 'createLinearGradient' || prop === 'createRadialGradient')
-        return () => gradient
+      if (prop === 'createLinearGradient' || prop === 'createRadialGradient') return () => gradient
       if (prop === 'measureText') return (s: string) => ({ width: s.length * 10 })
       return (...args: unknown[]) => {
         calls.push([prop, ...args])

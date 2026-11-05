@@ -31,7 +31,7 @@ describe('replayFileName', () => {
 })
 
 describe('saveReplay', () => {
-  const desktopApi = (result: string | null) => {
+  const desktopApi = (result: string | null): ReturnType<typeof vi.fn> => {
     const save = vi.fn(async () => result)
     ;(window as unknown as { api: unknown }).api = { app: { saveReplay: save } }
     return save

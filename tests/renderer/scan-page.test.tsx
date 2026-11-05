@@ -420,6 +420,16 @@ describe('Scan page', () => {
     expect(lastSettings().paused).toBe(false)
   })
 
+  it('Make replay sits beside Show summary', async () => {
+    await renderScan()
+    await run()
+    await openWindow()
+    const replay = screen.getByRole('button', { name: 'Make replay' })
+    expect(replay.closest('div')).toContainElement(
+      screen.getByRole('button', { name: 'Show summary' })
+    )
+  })
+
   it('Show summary puts the list on the scan window, keeps it current, and ends with the window', async () => {
     await renderScan()
     await run()

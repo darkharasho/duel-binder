@@ -23,7 +23,17 @@ const { encodeGif, pickVideoType, MAX_BYTES } = await import('@/features/scan/re
 
 const scene: ReplayScene = {
   pulls: [
-    { key: 'a', name: 'A', imageId: 1, photoId: null, rarity: null, setCode: null, price: 2, quantity: 1, addedAt: 1 }
+    {
+      key: 'a',
+      name: 'A',
+      imageId: 1,
+      photoId: null,
+      rarity: null,
+      setCode: null,
+      price: 2,
+      quantity: 1,
+      addedAt: 1
+    }
   ],
   art: [{} as ImageBitmap],
   header: 'h',
@@ -55,9 +65,9 @@ describe('encodeGif', () => {
       this: HTMLCanvasElement
     ) {
       const { ctx } = recordingContext()
-      const canvas = this
+      const { width, height } = this
       ;(ctx as unknown as Record<string, unknown>).getImageData = () => ({
-        data: new Uint8ClampedArray(canvas.width * canvas.height * 4)
+        data: new Uint8ClampedArray(width * height * 4)
       })
       return ctx as never
     } as never)

@@ -20,6 +20,7 @@ import {
 } from '@/components/ui/select'
 import { defaultEngine, type EngineFactory } from './engine'
 import { InPageScanner, type InPageCamera } from './InPageScanner'
+import { MakeReplay } from './replay/MakeReplay'
 import { useScanHub } from './ScanHub'
 import { ArtDataNotice } from './ArtDataNotice'
 import { HitPriceInput } from './HitPriceInput'
@@ -200,6 +201,7 @@ export function ScanPage({
             >
               {hub.summaryOn ? 'Hide summary' : 'Show summary'}
             </Button>
+            <MakeReplay rows={hub.session.rows} variant="desktop" />
             <Select
               value={settings.fit}
               onValueChange={(fit) => setSettings({ fit: fit as ScanFit })}

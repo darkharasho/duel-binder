@@ -63,7 +63,14 @@ function centredText(
 }
 
 function backdrop(ctx: CanvasRenderingContext2D): void {
-  const g = ctx.createRadialGradient(REPLAY_W / 2, REPLAY_H * 0.3, 0, REPLAY_W / 2, REPLAY_H * 0.3, REPLAY_H * 0.8)
+  const g = ctx.createRadialGradient(
+    REPLAY_W / 2,
+    REPLAY_H * 0.3,
+    0,
+    REPLAY_W / 2,
+    REPLAY_H * 0.3,
+    REPLAY_H * 0.8
+  )
   g.addColorStop(0, '#2a1e4a')
   g.addColorStop(1, '#0d0a18')
   ctx.fillStyle = g
@@ -178,7 +185,12 @@ function pullFrame(
   }
 }
 
-function endFrame(ctx: CanvasRenderingContext2D, scene: ReplayScene, local: number, t: number): void {
+function endFrame(
+  ctx: CanvasRenderingContext2D,
+  scene: ReplayScene,
+  local: number,
+  t: number
+): void {
   const best = scene.pulls.length - 1
   const inP = easeOut(clamp01(local / SLIDE_MS))
   ctx.save()
@@ -200,7 +212,11 @@ function endFrame(ctx: CanvasRenderingContext2D, scene: ReplayScene, local: numb
 }
 
 /** Paints the replay at `t` ms. Same inputs, same picture: no clock, no randomness. */
-export function drawReplayFrame(ctx: CanvasRenderingContext2D, scene: ReplayScene, t: number): void {
+export function drawReplayFrame(
+  ctx: CanvasRenderingContext2D,
+  scene: ReplayScene,
+  t: number
+): void {
   const { segment, progress } = frameAt(scene.timeline, t)
   const length = segment.end - segment.start
   const local = progress * length

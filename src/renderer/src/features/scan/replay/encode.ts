@@ -39,7 +39,10 @@ const VIDEO_BITRATES = [2_000_000, 1_000_000]
 
 const aborted = (): DOMException => new DOMException('The replay was stopped', 'AbortError')
 
-function canvasOf(w: number, h: number): { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D } {
+function canvasOf(
+  w: number,
+  h: number
+): { canvas: HTMLCanvasElement; ctx: CanvasRenderingContext2D } {
   const canvas = document.createElement('canvas')
   canvas.width = w
   canvas.height = h
@@ -107,9 +110,8 @@ export async function recordVideo(
   type: VideoType,
   opts: { signal: AbortSignal; onProgress?: (p: number) => void }
 ): Promise<Blob> {
-  let blob: Blob | null = null
   for (const bitrate of VIDEO_BITRATES) {
-    blob = await recordOnce(scene, type, bitrate, opts)
+    const blob = await recordOnce(scene, type, bitrate, opts)
     if (blob.size <= MAX_BYTES) return blob
   }
   throw new Error('The video came out too big')

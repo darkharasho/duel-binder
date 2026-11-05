@@ -103,7 +103,9 @@ const noFingerprints = {
   refresh: async () => ({ state: 'missing' as const, count: 0 })
 }
 
-const saveReplay = vi.fn(async (_name: string, _data: Uint8Array) => '/home/me/rip.mp4')
+const saveReplay = vi.fn<(name: string, data: Uint8Array) => Promise<string | null>>(
+  async () => '/home/me/rip.mp4'
+)
 
 describe('createHandlers', () => {
   it('app:saveReplay takes a replay file name and its bytes', async () => {

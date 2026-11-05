@@ -21,7 +21,10 @@ describe('pickReplayPulls', () => {
   })
 
   it('breaks a price tie by pull order', () => {
-    const rows = [row(5, { name: 'later', addedAt: 200 }), row(5, { name: 'earlier', addedAt: 100 })]
+    const rows = [
+      row(5, { name: 'later', addedAt: 200 }),
+      row(5, { name: 'earlier', addedAt: 100 })
+    ]
     expect(pickReplayPulls(rows).map((p) => p.name)).toEqual(['earlier', 'later'])
   })
 
@@ -35,7 +38,9 @@ describe('pickReplayPulls', () => {
     const r = row(40, { rarity: 'Holo' })
     r.options[0].printedRarity = 'Special Illustration Rare'
     expect(pickReplayPulls([r])[0].rarity).toBe('Special Illustration Rare')
-    expect(pickReplayPulls([row(40, { rarity: 'Starlight Rare' })])[0].rarity).toBe('Starlight Rare')
+    expect(pickReplayPulls([row(40, { rarity: 'Starlight Rare' })])[0].rarity).toBe(
+      'Starlight Rare'
+    )
   })
 
   it('empty list gives no pulls', () => {

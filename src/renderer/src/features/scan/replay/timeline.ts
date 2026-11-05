@@ -41,8 +41,7 @@ export function frameAt(
   t: number
 ): { segment: ReplaySegment; progress: number } {
   const time = Math.max(0, t)
-  const segment =
-    tl.segments.find((s) => time < s.end) ?? tl.segments[tl.segments.length - 1]
+  const segment = tl.segments.find((s) => time < s.end) ?? tl.segments[tl.segments.length - 1]
   const progress = Math.min(1, (time - segment.start) / (segment.end - segment.start))
   return { segment, progress }
 }

@@ -672,6 +672,18 @@ describe('phone stream end', () => {
     expect(onExit).toHaveBeenCalled()
   })
 
+  it("the stream's end offers Make replay beside Review and Done", async () => {
+    const user = fakeTime()
+    await goLive(user)
+    await user.click(screen.getByRole('button', { name: 'Close stream' }))
+    const replay = screen.getByRole('button', { name: 'Make replay' })
+    expect(replay.parentElement?.parentElement).toContainElement(
+      screen.getByRole('button', { name: 'Done' })
+    )
+    // An empty stream has nothing to replay.
+    expect(replay).toBeDisabled()
+  })
+
   it('Done ends the record and keeps the list', async () => {
     const rows = three()
     const user = fakeTime()

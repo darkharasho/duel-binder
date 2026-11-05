@@ -12,8 +12,9 @@ import { NEW_ART_VARIANT } from '../../src/main/yugipedia/parse'
 import { artHash, fingerprintSource } from '../../src/shared/scan/fingerprint'
 import { decodeFingerprints, encodeFingerprints } from '../../src/shared/scan/fingerprintFile'
 import { hashHex, parseFingerprintRefs } from '../../src/shared/scan/fingerprintRefs'
+import { PNG } from 'pngjs'
 import { pokemonId } from '../../src/shared/games'
-import { tokenId } from '../../src/shared/games/ids'
+import { onePieceCardId, onePieceImageId, tokenId } from '../../src/shared/games/ids'
 import type { RgbaImage } from '../../src/shared/scan/types'
 
 let dir: string
@@ -617,5 +618,81 @@ describe('buildFingerprints for Pokémon', () => {
     ).toEqual([...ids].sort())
     expect(urls.sort()).toEqual(bases.map((b) => `${b}/low.jpg`).sort())
     expect(urls.some((u) => u.includes('ygoprodeck'))).toBe(false)
+  })
+})
+
+describe('One Piece fingerprints', () => {
+  /** A 60x84 PNG with a ramp in the art above the stamp and `below` filling the rest. */
+  const png = (below: number, vertical = false): Uint8Array => {
+    const p = new PNG({ width: 60, height: 84 })
+    for (let y = 0; y < 84; y++) {
+      for (let x = 0; x < 60; x++) {
+        const v = y < 84 * 0.42 ? Math.round(((vertical ? y : x) / 59) * 255) : below
+        p.data.set([v, v, v, 255], (y * 60 + x) * 4)
+      }
+    }
+    return new Uint8Array(PNG.sync.write(p))
+  }
+  const addOp = (region: string, number: string, bandaiId: string, imageKey: string): number => {
+    const cardId = onePieceCardId(region, number)
+    work
+      .prepare(
+        `INSERT OR IGNORE INTO cards (id, name, type, frame_type, race, "desc", updated_at, game)
+         VALUES (?, 'Zoro', 'Leader', '', '', '', '2026-01-01', 'op')`
+      )
+      .run(cardId)
+    const imageId = onePieceImageId(region, bandaiId)
+    work.prepare("INSERT INTO card_images (image_id, card_id, sort_order, game) VALUES (?, ?, 0, 'op')").run(imageId, cardId)
+    work.prepare('INSERT INTO onepiece_images (image_id, bandai_id) VALUES (?, ?)').run(imageId, imageKey)
+    return imageId
+  }
+
+  it('hashes Bandai art (English, Japanese) and a DON!! card’s TCGplayer art, above the SAMPLE stamp', async () => {
+    const en = addOp('en', 'OP01-001', 'OP01-001', 'OP01-001')
+    const ja = addOp('ja', 'OP01-001', 'OP01-001', 'ja:OP01-001')
+    const don = addOp('en', 'DON', 'DON', 'tcg:454999')
+    const urls: string[] = []
+    const out = await buildFingerprints({
+      work,
+      cachePath: join(dir, 'fingerprints-op.sqlite'),
+      game: 'op',
+      fetch: (async (input: RequestInfo | URL) => {
+        const url = String(input)
+        urls.push(url)
+        // The stamp band differs between the two sites' art; the crop never sees it.
+        if (url.endsWith('.png')) return new Response(png(url.includes('www.') ? 0 : 255) as BodyInit)
+        return new Response(jpeg(true) as BodyInit)
+      }) as typeof fetch
+    })
+    expect(out).toMatchObject({ count: 3, fetched: 3, failed: 0 })
+    expect(urls.sort()).toEqual([
+      'https://en.onepiece-cardgame.com/images/cardlist/card/OP01-001.png',
+      'https://tcgplayer-cdn.tcgplayer.com/product/454999_in_1000x1000.jpg',
+      'https://www.onepiece-cardgame.com/images/cardlist/card/OP01-001.png'
+    ])
+    // A photo of the card, no stamp: its art crop is both sites' exactly; the DON!! card is far.
+    const p = PNG.sync.read(Buffer.from(png(128)))
+    const photo = artHash(fingerprintSource({ width: p.width, height: p.height, data: p.data }, '', scanProfile('op')))
+    const near = decodeFingerprints(out.bytes).nearest(photo, 3)
+    expect(near.slice(0, 2).map((n) => n.distance)).toEqual([0, 0])
+    expect(near.slice(0, 2).map((n) => n.imageId).sort()).toEqual([en, ja].sort())
+    expect(near[2]).toMatchObject({ imageId: don })
+    expect(near[2].distance).toBeGreaterThan(0)
+  })
+
+  it('hashes an image again when its Bandai art moves, and keeps the rest', async () => {
+    const en = addOp('en', 'OP01-001', 'OP01-001', 'OP01-001')
+    addOp('en', 'OP01-002', 'OP01-002', 'OP01-002')
+    const build = (): ReturnType<typeof buildFingerprints> =>
+      buildFingerprints({
+        work,
+        cachePath: join(dir, 'fingerprints-op.sqlite'),
+        game: 'op',
+        fetch: (async () => new Response(png(0) as BodyInit)) as typeof fetch
+      })
+    expect(await build()).toMatchObject({ count: 2, fetched: 2 })
+    expect(await build()).toMatchObject({ count: 2, fetched: 0 })
+    work.prepare('UPDATE onepiece_images SET bandai_id = ? WHERE image_id = ?').run('OP01-001_p1', en)
+    expect(await build()).toMatchObject({ count: 2, fetched: 1 })
   })
 })

@@ -1,7 +1,7 @@
 import Database from 'better-sqlite3'
 import { decode } from 'jpeg-js'
 import type { GameId } from '../../src/shared/games'
-import { imageUrl } from '../../src/shared/imageSources'
+import { imageUrl, opBandaiArtUrl, opTcgArtUrl } from '../../src/shared/imageSources'
 import { scanProfile, type ScanProfile } from '../../src/shared/scan/profiles'
 import { HASH_WORDS, artHash, fingerprintSource, hamming } from '../../src/shared/scan/fingerprint'
 import { encodeFingerprints } from '../../src/shared/scan/fingerprintFile'
@@ -18,6 +18,7 @@ import {
 } from './references'
 
 const DEFAULT_CONCURRENCY = 6
+const OP_CONCURRENCY = 3
 const COMMIT_EVERY = 200
 /** Waits before each retry; an image is tried once plus once per entry. */
 const RETRY_DELAYS_MS = [1000, 2000]
@@ -28,6 +29,8 @@ const RETRY_DELAYS_MS = [1000, 2000]
 const HASH_VERSION = '3'
 /** Pokémon's own cache file has its own version: bump when the full-card crop changes. */
 const PKM_HASH_VERSION = '1'
+/** One Piece's, likewise: bump when its art crop (OP_PROFILE) changes. */
+const OP_HASH_VERSION = '1'
 /**
  * A token with a hash this close to another card's gets no records. Its art is often that card's,
  * and a whole-card scan sits nearer a photo than the art crop does, so it would win the match in
@@ -39,8 +42,9 @@ export interface FingerprintOptions {
   /** The work database; the game's `card_images` decide which ids the file holds. */
   work: Database.Database
   /**
-   * SQLite file caching one hash per image id, so each night fetches only new images. Pokémon
-   * needs a file of its own (`fingerprints-pkm.sqlite`): its version and ids are its own.
+   * SQLite file caching one hash per image id, so each night fetches only new images. Pokémon and
+   * One Piece each need a file of their own (`fingerprints-pkm.sqlite`, `fingerprints-op.sqlite`):
+   * their versions and ids are their own.
    */
   cachePath: string
   /** Which game's file to build; Yu-Gi-Oh without it. */
@@ -81,10 +85,12 @@ async function hashImage(
   for (let attempt = 0; ; attempt++) {
     const res = await fetchFn(url)
     if (res.ok) {
-      const img = decode(new Uint8Array(await res.arrayBuffer()), {
-        useTArray: true,
-        formatAsRGBA: true
-      })
+      const bytes = new Uint8Array(await res.arrayBuffer())
+      // Bandai's One Piece art is PNG; every other source is JPEG.
+      const img = url.endsWith('.png')
+        ? decodeImage(bytes)
+        : decode(bytes, { useTArray: true, formatAsRGBA: true })
+      if (!img) throw new Error('unreadable image')
       return artHash(fingerprintSource(img, frameType, profile))
     }
     await res.body?.cancel()
@@ -126,8 +132,8 @@ function tooCloseTokens(
 
 /**
  * Builds the scan fingerprint file for every `card_images` id of the game in `work`: Yu-Gi-Oh
- * from YGOPRODeck's cropped art, Pokémon from the full-card renders (cut to the art box by
- * fingerprintSource) with no printing scans. Hashes already in the
+ * from YGOPRODeck's cropped art, Pokémon from the full-card renders and One Piece from Bandai's
+ * (both cut to the game's art box by fingerprintSource), with no printing scans. Hashes already in the
  * cache are reused; the rest are downloaded and hashed, and an image that fails is skipped
  * (and counted) so it is tried again next run. Tokens too like another card are left out of the
  * finished set of records (see TOKEN_MIN_DISTANCE), however their hashes were come by.
@@ -141,8 +147,9 @@ export async function buildFingerprints(opts: FingerprintOptions): Promise<Finge
   const log = opts.log ?? ((): void => {})
   const game = opts.game ?? 'ygo'
   const pkm = game === 'pkm'
-  const profile = pkm ? scanProfile('pkm') : undefined
-  const hashVersion = pkm ? PKM_HASH_VERSION : HASH_VERSION
+  const op = game === 'op'
+  const profile = game === 'ygo' ? undefined : scanProfile(game)
+  const hashVersion = pkm ? PKM_HASH_VERSION : op ? OP_HASH_VERSION : HASH_VERSION
   const cache = new Database(opts.cachePath)
   try {
     cache.exec('CREATE TABLE IF NOT EXISTS fp (image_id INTEGER PRIMARY KEY, hash BLOB NOT NULL)')
@@ -164,7 +171,7 @@ export async function buildFingerprints(opts: FingerprintOptions): Promise<Finge
       // Older hashes are only still right for images known not to be Pendulum art (all are
       // stale for Pokémon, whose first version is the only one).
       const keep = (id: number): boolean =>
-        !pkm && frames.has(id) && !frames.get(id)!.includes('pendulum')
+        game === 'ygo' && frames.has(id) && !frames.get(id)!.includes('pendulum')
       const stale = (cache.prepare('SELECT image_id FROM fp').pluck().all() as number[]).filter(
         (id) => !keep(id)
       )
@@ -196,6 +203,29 @@ export async function buildFingerprints(opts: FingerprintOptions): Promise<Finge
         cached.delete(id)
       }
     }
+    if (op) {
+      // Bandai's art (`ja:` for Japanese), stamped SAMPLE below the crop; a DON!! card's is TCGplayer's.
+      for (const r of opts.work
+        .prepare(
+          `SELECT i.image_id, o.bandai_id FROM card_images i
+           JOIN onepiece_images o ON o.image_id = i.image_id WHERE i.game = 'op'`
+        )
+        .all() as { image_id: number; bandai_id: string }[]) {
+        const url = opTcgArtUrl(r.bandai_id, 'full') ?? opBandaiArtUrl(r.bandai_id)
+        if (url) urls.set(r.image_id, url)
+      }
+      // An image whose art moved to another Bandai id is hashed again.
+      cache.exec('CREATE TABLE IF NOT EXISTS src (image_id INTEGER PRIMARY KEY, url TEXT NOT NULL)')
+      const srcOf = new Map(
+        (cache.prepare('SELECT image_id, url FROM src').all() as { image_id: number; url: string }[]).map((r) => [r.image_id, r.url])
+      )
+      const drop = cache.prepare('DELETE FROM fp WHERE image_id = ?')
+      for (const id of [...cached].filter((x) => urls.get(x) !== srcOf.get(x))) {
+        drop.run(id)
+        cached.delete(id)
+      }
+    }
+    const putSrc = op ? cache.prepare('INSERT OR REPLACE INTO src (image_id, url) VALUES (?, ?)') : null
     const missing = ids.filter((id) => !cached.has(id))
     const todo = missing.filter((id) => !isTokenId(id))
     const tokens = missing.filter(isTokenId)
@@ -212,10 +242,11 @@ export async function buildFingerprints(opts: FingerprintOptions): Promise<Finge
       while (next < todo.length) {
         const id = todo[next++]
         try {
-          const url = pkm ? urls.get(id) : imageUrl('cropped', id)
+          const url = pkm || op ? urls.get(id) : imageUrl('cropped', id)
           if (!url) throw new Error('no image URL')
           const hash = await hashImage(fetchFn, url, frames.get(id)!, profile)
           insert.run(id, Buffer.from(hash.buffer, hash.byteOffset, hash.byteLength))
+          putSrc?.run(id, url)
           fetched++
           if (++pending >= COMMIT_EVERY) {
             cache.exec('COMMIT; BEGIN')
@@ -227,7 +258,8 @@ export async function buildFingerprints(opts: FingerprintOptions): Promise<Finge
         }
       }
     }
-    const workers = Math.max(1, opts.concurrency ?? DEFAULT_CONCURRENCY)
+    // Bandai's site is asked gently, as the One Piece step does.
+    const workers = Math.max(1, opts.concurrency ?? (op ? OP_CONCURRENCY : DEFAULT_CONCURRENCY))
     await Promise.all(Array.from({ length: Math.min(workers, todo.length) }, worker))
 
     // Token art is a Yugipedia scan of the whole card, cut as a photo is; one at a time, like the
@@ -272,7 +304,7 @@ export async function buildFingerprints(opts: FingerprintOptions): Promise<Finge
     // Printing scans are extras: trouble with them is logged and leaves the card art file as is.
     const references = { count: 0, fetched: 0, failed: 0 }
     const scans: ReferenceResult['entries'] = []
-    if (opts.references && !pkm) {
+    if (opts.references && game === 'ygo') {
       try {
         const out = await buildReferences({ ...opts.references, work: opts.work, cache, log })
         scans.push(...out.entries.filter((e) => idSet.has(e.imageId)))

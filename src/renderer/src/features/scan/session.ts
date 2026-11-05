@@ -7,7 +7,7 @@ import { copiesOnList } from './owned'
 import type { ScanDraft } from './resolve'
 import { printingOf } from './scanLook'
 import { sessionCardOf } from './sessionCards'
-import type { ScanSessionCard } from '@shared/scanSessions'
+import type { ScanSessionCardDraft } from '@shared/scanSessions'
 
 export interface ScanRow extends ScanDraft {
   key: string
@@ -292,7 +292,7 @@ export function useScanSession(game: GameId = 'ygo'): {
     let added = 0
     let failed = 0
     let cards = 0
-    const saved: ScanSessionCard[] = []
+    const saved: ScanSessionCardDraft[] = []
     // A row with no printing, or a Pokémon version still to pick, waits for one.
     const batch = ref.current.filter((r) => inGame(r, game))
     const unaddable = new Set(batch.filter((r) => printingOf(r) === null).map((r) => r.key))

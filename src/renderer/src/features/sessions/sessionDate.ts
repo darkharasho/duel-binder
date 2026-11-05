@@ -28,11 +28,8 @@ export function sessionDate(iso: string, now = new Date()): string {
 }
 
 /** A tile and the replay both identify a card by this. */
-export const sessionCardKey = (c: {
-  cardId: number
-  printingId: number
-  addedAt: number
-}): string => `${c.cardId}:${c.printingId}:${c.addedAt}`
+export const sessionCardKey = (c: { cardId: number; pkey: string; addedAt: number }): string =>
+  `${c.cardId}:${c.pkey}:${c.addedAt}`
 
 /** A replay source from a saved session: its saved prices, and its own date in the header. */
 export function replaySourceOfSession(s: ScanSession): ReplaySource {

@@ -13,6 +13,7 @@ const card = (price: number | null, over: Partial<ScanSessionCard> = {}): ScanSe
   n++
   return {
     cardId: n,
+    pkey: `en|${n}|X|R`,
     printingId: n,
     imageId: n,
     photoId: null,

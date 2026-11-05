@@ -1,7 +1,11 @@
 import type { SqlDb } from '../../../src/main/db/sql'
 import { checkObject } from '../../../src/main/repo/args'
 import { CollectionError } from '../../../src/main/repo/collection'
-import { checkSessionCards, mergeSessionCards } from '../../../src/main/repo/scanSessions'
+import {
+  checkSessionCards,
+  localizeSessions,
+  mergeSessionCards
+} from '../../../src/main/repo/scanSessions'
 import { MAX_PULL, replaces } from '../../../src/shared/cloud'
 import { isGameId, type GameId } from '../../../src/shared/games'
 import type {
@@ -65,6 +69,9 @@ const sameCard = (a: ScanSessionCard, b: ScanSessionCard): boolean =>
     (Object.keys(b) as (keyof ScanSessionCard)[]).length &&
   (Object.keys(a) as (keyof ScanSessionCard)[]).every((k) => a[k] === b[k])
 
+const sameCards = (a: ScanSessionCard[], b: ScanSessionCard[]): boolean =>
+  a.length === b.length && a.every((c, i) => sameCard(c, b[i]))
+
 /** Whether two sessions hold the same data, whatever order their keys came in. */
 function sameSession(a: WireScanSession, b: WireScanSession): boolean {
   return (
@@ -74,8 +81,7 @@ function sameSession(a: WireScanSession, b: WireScanSession): boolean {
     a.createdAt === b.createdAt &&
     a.updatedAt === b.updatedAt &&
     a.deletedAt === b.deletedAt &&
-    a.cards.length === b.cards.length &&
-    a.cards.every((c, i) => sameCard(c, b.cards[i]))
+    sameCards(a.cards, b.cards)
   )
 }
 
@@ -98,16 +104,28 @@ export function applySessionPush(
        friends_visible = excluded.friends_visible, created_at = excluded.created_at,
        updated_at = excluded.updated_at, deleted_at = excluded.deleted_at, seq = excluded.seq`
   )
+  const writeCards = db.prepare(
+    `UPDATE scan_sessions SET cards = ?, seq = ${NEXT_SESSION_SEQ} WHERE user_id = ? AND uid = ?`
+  )
   const applyOne = (pushed: WireScanSession): ScanSessionPushResult => {
     if (!games.includes(pushed.game)) return { uid: pushed.uid, status: 'skipped' }
     const existing = find.get(userId, pushed.uid) as SessionRow | undefined
     let s = pushed
     if (existing) {
-      const current = wire(existing)
+      let current = wire(existing)
       // A price once set never changes, whichever push is newer.
       s = { ...pushed, cards: mergeSessionCards(current.cards, pushed.cards) }
       if (sameSession(current, s)) return { uid: s.uid, status: 'applied' }
-      if (!replaces(s, current)) return { uid: s.uid, status: 'stale', current }
+      if (!replaces(s, current)) {
+        // An older or same-time push still brings its prices (a fill leaves the edit time as it
+        // was), but never its hidden or deleted state: those stay the stored edit's.
+        if (!sameCards(current.cards, s.cards)) {
+          writeCards.run(JSON.stringify(s.cards), userId, s.uid)
+          current = { ...current, cards: s.cards }
+          if (sameSession(current, s)) return { uid: s.uid, status: 'applied' }
+        }
+        return { uid: s.uid, status: 'stale', current }
+      }
     } else if (s.deletedAt !== null) {
       return { uid: s.uid, status: 'applied' }
     }
@@ -155,7 +173,11 @@ export function sessionPullSince(
   }
 }
 
-/** A friend's live sessions they chose to show, newest first. Hidden ones are left out entirely. */
+/**
+ * A friend's live sessions they chose to show, newest first. Hidden ones are left out entirely.
+ * Each card's printing is the server catalog's for its pkey (the ids stored are the friend's
+ * device's), right for the web app; the desktop and phone apps drop it (withoutPrintings).
+ */
 export function friendSessions(db: SqlDb, friend: number, game: GameId): ScanSession[] {
   const rows = db
     .prepare(
@@ -163,12 +185,15 @@ export function friendSessions(db: SqlDb, friend: number, game: GameId): ScanSes
          AND deleted_at IS NULL ORDER BY created_at DESC, uid DESC`
     )
     .all(friend, game) as SessionRow[]
-  return rows.map((r) => ({
-    uid: r.uid,
-    game: r.game,
-    cards: JSON.parse(r.cards) as ScanSessionCard[],
-    friendsVisible: true,
-    createdAt: r.created_at,
-    updatedAt: r.updated_at
-  }))
+  return localizeSessions(
+    db,
+    rows.map((r) => ({
+      uid: r.uid,
+      game: r.game,
+      cards: JSON.parse(r.cards) as ScanSessionCard[],
+      friendsVisible: true,
+      createdAt: r.created_at,
+      updatedAt: r.updated_at
+    }))
+  )
 }

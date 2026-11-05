@@ -7,6 +7,7 @@ import {
   mergeSessionCards,
   listScanSessions,
   recordScanSession,
+  sessionCardsOf,
   setScanSessionHidden
 } from '../../src/main/repo/scanSessions'
 import {
@@ -18,6 +19,7 @@ import { databaseAt, seededDb } from './helpers'
 
 const card = (over: Partial<ScanSessionCard> = {}): ScanSessionCard => ({
   cardId: 1,
+  pkey: 'en|1|ABC-001|Common',
   printingId: 1,
   imageId: 1,
   photoId: null,
@@ -37,7 +39,13 @@ describe('scan sessions on the device', () => {
     recordScanSession(db, { uid: 'a', game: 'ygo', cards: [card()] })
     const list = listScanSessions(db, 'ygo')
     expect(list).toHaveLength(1)
-    expect(list[0]).toMatchObject({ uid: 'a', game: 'ygo', friendsVisible: true, cards: [card()] })
+    // This catalog has no such pkey: the card stays, with no printing of this device.
+    expect(list[0]).toMatchObject({
+      uid: 'a',
+      game: 'ygo',
+      friendsVisible: true,
+      cards: [card({ printingId: null, photoId: null })]
+    })
   })
 
   it('keeps one session when the same uid is recorded twice', async () => {
@@ -102,12 +110,15 @@ describe('scan sessions on the device', () => {
       'UPDATE card_printings SET market_price = 9, set_price = 9, language = ? WHERE id = ?'
     ).run('en', p.id)
     db.prepare('DELETE FROM intl_prices').run()
+    const { pkey } = db.prepare('SELECT pkey FROM card_printings WHERE id = ?').get(p.id) as {
+      pkey: string
+    }
     recordScanSession(db, {
       uid: 'a',
       game: 'ygo',
       cards: [
-        card({ cardId: p.card_id, printingId: p.id, price: 5 }),
-        card({ cardId: p.card_id, printingId: p.id, price: null })
+        card({ cardId: p.card_id, pkey, printingId: p.id, price: 5 }),
+        card({ cardId: p.card_id, pkey, printingId: p.id, price: null })
       ]
     })
     db.prepare('UPDATE scan_sessions SET dirty = 0').run()
@@ -115,6 +126,102 @@ describe('scan sessions on the device', () => {
     expect(listScanSessions(db, 'ygo')[0].cards.map((c) => c.price)).toEqual([5, 9])
     expect(db.prepare('SELECT dirty FROM scan_sessions').get()).toEqual({ dirty: 1 })
     expect(fillScanSessionPrices(db, 'ygo')).toBe(0)
+  })
+
+  /** Two priced English printings of this catalog: the session's own, and an unrelated one. */
+  type Printing = { id: number; card_id: number; pkey: string }
+  const twoPrintings = async (): Promise<{
+    db: Awaited<ReturnType<typeof seededDb>>
+    right: Printing
+    other: Printing
+  }> => {
+    const db = await seededDb()
+    const [right, other] = db
+      .prepare('SELECT id, card_id, pkey FROM card_printings ORDER BY id LIMIT 2')
+      .all() as { id: number; card_id: number; pkey: string }[]
+    const price = db.prepare(
+      "UPDATE card_printings SET market_price = ?, set_price = ?, language = 'en' WHERE id = ?"
+    )
+    price.run(9, 9, right.id)
+    price.run(1, 1, other.id)
+    db.prepare('DELETE FROM intl_prices').run()
+    return { db, right, other }
+  }
+
+  it('reads and prices a card by its pkey, never by a printing id from another device', async () => {
+    const { db, right, other } = await twoPrintings()
+    // Another device's ids: its printing id is this catalog's unrelated printing.
+    recordScanSession(db, {
+      uid: 'a',
+      game: 'ygo',
+      cards: [
+        card({
+          cardId: right.card_id,
+          pkey: right.pkey,
+          printingId: other.id,
+          photoId: other.id,
+          price: null
+        }),
+        card({
+          pkey: 'en|999|NOPE-001|Common',
+          printingId: other.id,
+          photoId: other.id,
+          price: null
+        })
+      ]
+    })
+    expect(fillScanSessionPrices(db, 'ygo')).toBe(1)
+    const [s] = listScanSessions(db, 'ygo')
+    expect(s.cards[0]).toMatchObject({ printingId: right.id, photoId: right.id, price: 9 })
+    // A pkey this catalog lacks keeps the card, with no printing and no price.
+    expect(s.cards[1]).toMatchObject({ printingId: null, photoId: null, price: null })
+  })
+
+  it('a card added without its own photo gets none on another device', async () => {
+    const { db, right, other } = await twoPrintings()
+    recordScanSession(db, {
+      uid: 'a',
+      game: 'ygo',
+      cards: [card({ pkey: right.pkey, printingId: other.id, photoId: null })]
+    })
+    expect(listScanSessions(db, 'ygo')[0].cards[0]).toMatchObject({
+      printingId: right.id,
+      photoId: null
+    })
+  })
+
+  it('a fill changes the cards only, never the edit time', async () => {
+    const { db, right } = await twoPrintings()
+    recordScanSession(db, {
+      uid: 'a',
+      game: 'ygo',
+      cards: [card({ pkey: right.pkey, printingId: right.id, price: null })]
+    })
+    const at = '2026-01-01T00:00:00.000Z'
+    db.prepare('UPDATE scan_sessions SET dirty = 0, updated_at = ?').run(at)
+    expect(fillScanSessionPrices(db, 'ygo')).toBe(1)
+    expect(db.prepare('SELECT updated_at, dirty FROM scan_sessions').get()).toEqual({
+      updated_at: at,
+      dirty: 1
+    })
+  })
+})
+
+describe('sessionCardsOf', () => {
+  it('names each recorded card by its printing pkey and drops a printing this catalog lacks', async () => {
+    const db = await seededDb()
+    const p = db.prepare('SELECT id, pkey FROM card_printings LIMIT 1').get() as {
+      id: number
+      pkey: string
+    }
+    const { pkey: _drop, ...draft } = card({ printingId: p.id })
+    void _drop
+    expect(sessionCardsOf(db, [draft, { ...draft, printingId: 99_999_999 }])).toEqual([
+      card({ printingId: p.id, pkey: p.pkey })
+    ])
+    expect(sessionCardsOf(db, [{ ...draft, printingId: 99_999_999 }])).toEqual([])
+    expect(() => sessionCardsOf(db, [])).toThrow()
+    expect(() => sessionCardsOf(db, [{ ...draft, printingId: 'x' }])).toThrow(/session card/i)
   })
 })
 
@@ -133,11 +240,21 @@ describe('sessionTotal', () => {
 describe('checkSessionCards', () => {
   it('accepts well-formed cards', () => {
     expect(checkSessionCards([card()])).toEqual([card()])
+    expect(checkSessionCards([card({ printingId: null })])).toEqual([card({ printingId: null })])
+  })
+  it('needs a pkey of 1 to 300 characters', () => {
+    const rest: Record<string, unknown> = { ...card() }
+    delete rest.pkey
+    expect(() => checkSessionCards([rest])).toThrow(/session card/i)
+    expect(() => checkSessionCards([card({ pkey: '' })])).toThrow(/session card/i)
+    expect(() => checkSessionCards([card({ pkey: 'x'.repeat(301) })])).toThrow(/session card/i)
+    expect(checkSessionCards([card({ pkey: 'x'.repeat(300) })])).toHaveLength(1)
   })
   it('rejects a card missing printingId', () => {
     const rest: Record<string, unknown> = { ...card() }
     delete rest.printingId
     expect(() => checkSessionCards([rest])).toThrow(/session card/i)
+    expect(() => checkSessionCards([card({ printingId: 1.5 })])).toThrow(/session card/i)
   })
   it('rejects a negative quantity', () => {
     expect(() => checkSessionCards([card({ quantity: -1 })])).toThrow()
@@ -166,6 +283,7 @@ describe('migration V41 (scan_sessions)', () => {
 describe('mergeSessionCards', () => {
   const c = (price: number | null, extra: Partial<ScanSessionCard> = {}): ScanSessionCard => ({
     cardId: 1,
+    pkey: 'en|1|A-001|Common',
     printingId: 2,
     imageId: 3,
     photoId: null,
@@ -184,5 +302,9 @@ describe('mergeSessionCards', () => {
   it('keeps the stored cards when the lists differ', () => {
     expect(mergeSessionCards([c(null)], [c(5), c(5)])).toEqual([c(null)])
     expect(mergeSessionCards([c(null)], [c(5, { addedAt: 11 })])).toEqual([c(null)])
+    expect(mergeSessionCards([c(null)], [c(5, { pkey: 'en|1|A-002|Common' })])).toEqual([c(null)])
+  })
+  it('matches cards by pkey, as each device has its own printing ids', () => {
+    expect(mergeSessionCards([c(null)], [c(5, { printingId: 77, photoId: 77 })])).toEqual([c(5)])
   })
 })

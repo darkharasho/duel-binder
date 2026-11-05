@@ -2,7 +2,7 @@ import type { PlaceholderRequest } from './placeholders'
 import type { ErrorDetails } from './errorReports'
 import type { UsageCounts } from './usage'
 import type { Language } from './languages'
-import type { ScanSession, ScanSessionCard } from './scanSessions'
+import type { ScanSession, ScanSessionCardDraft } from './scanSessions'
 import type {
   AccountStatus,
   UnsyncedEntry,
@@ -40,7 +40,13 @@ import type { ScanWindowMessage } from './scanWindow'
 import type { ScanRef } from './scan/fingerprintRefs'
 import type { FingerprintStatus, OcrBand, ScanPrinting } from './scan/types'
 import type { EmailAuthView, EmailStep } from './emailAuth'
-import type { AddEmailResult, EmailCodeResult, MergeChoice, SignInMethod, SignInProvider } from './account'
+import type {
+  AddEmailResult,
+  EmailCodeResult,
+  MergeChoice,
+  SignInMethod,
+  SignInProvider
+} from './account'
 import type { Me } from './cloud'
 import type { CollectorNumber } from './scan/collectorNumber'
 import type { DexPreview } from './dex/match'
@@ -129,7 +135,8 @@ export interface Api {
   }
   /** The scanner's Add to collection sessions, in the game shown: each keeps the prices it had when added. */
   sessions: {
-    record(s: { uid: string; game: GameId; cards: ScanSessionCard[] }): Promise<void>
+    /** Records an Add's cards; each printing's pkey is looked up here, by its printing id. */
+    record(s: { uid: string; game: GameId; cards: ScanSessionCardDraft[] }): Promise<void>
     /** Fills in prices still missing, then lists the game's sessions, newest first. */
     list(game: GameId): Promise<ScanSession[]>
     /** Hides a session from friends, or shows it again. */

@@ -1,10 +1,10 @@
-import type { ScanSessionCard } from '@shared/scanSessions'
+import type { ScanSessionCardDraft } from '@shared/scanSessions'
 import { rarityOf } from './replay/pulls'
 import { photoFor, printingOf, priceOf } from './scanLook'
 import type { ScanRow } from './session'
 
 /** A row as one card of a session: what was added, at the price it showed. Null with no printing yet. */
-export function sessionCardOf(row: ScanRow, quantity: number): ScanSessionCard | null {
+export function sessionCardOf(row: ScanRow, quantity: number): ScanSessionCardDraft | null {
   const printingId = printingOf(row)
   if (printingId === null) return null
   return {

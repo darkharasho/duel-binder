@@ -45,7 +45,7 @@ import {
   listScanSessions,
   recordScanSession,
   setScanSessionHidden,
-  checkSessionCards
+  sessionCardsOf
 } from '../repo/scanSessions'
 import { localScope } from '../repo/scope'
 import { isGameId } from '@shared/games'
@@ -201,7 +201,7 @@ export function createDataHandlers({
       if (!s || typeof s.uid !== 'string' || !s.uid) throw new Error('uid must be text')
       if (!isGameId(s.game)) throw new Error('unknown game')
       return edited(
-        recordScanSession(db, { uid: s.uid, game: s.game, cards: checkSessionCards(s.cards) })
+        recordScanSession(db, { uid: s.uid, game: s.game, cards: sessionCardsOf(db, s.cards) })
       )
     },
     'sessions:list': async (game: GameId) => {

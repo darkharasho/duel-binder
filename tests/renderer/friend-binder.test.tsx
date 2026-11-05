@@ -288,6 +288,7 @@ describe("a friend's sessions tab", () => {
     cards: [
       {
         cardId: 1001,
+        pkey: 'en|1001|MRD-001|Ultra Rare',
         printingId: 7,
         imageId: 1001,
         photoId: null,

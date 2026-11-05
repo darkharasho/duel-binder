@@ -11,6 +11,7 @@ import type {
 } from '@shared/types'
 import { MAX_DEX_ROWS, type DexRow } from '@shared/dex/parse'
 import { checkPlaceholderRequest } from '@shared/placeholders'
+import { withoutPrintings, type ScanSession } from '@shared/scanSessions'
 import type { INVOKE_CHANNELS } from '@shared/ipc'
 import { INVOKE_CHANNELS as CHANNELS } from '@shared/ipc'
 import type { ImageCache } from '../images/cache'
@@ -156,8 +157,9 @@ export function createHandlers({
         printingScan: false
       })),
     'friends:binders': async (userId: number) => account.portal('friends:binders', [userId]),
+    // As friendEntry: the cards' printings are the server's, so they show the card art instead.
     'friends:sessions': async (friendId: number) =>
-      account.portal('friends:sessions', [friendId]),
+      (await account.portal<ScanSession[]>('friends:sessions', [friendId])).map(withoutPrintings),
     'friends:binder': async (userId: number, uid: string) => {
       const b = await account.portal<BinderDetail | null>('friends:binder', [userId, uid])
       return b && { ...b, cards: b.cards.map((c) => ({ ...c, printingScan: false })) }

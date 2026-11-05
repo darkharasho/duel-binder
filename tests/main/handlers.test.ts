@@ -461,6 +461,16 @@ describe('friends handlers', () => {
     expect(await handlers['friends:binder'](7, 'u')).toBeNull()
   })
 
+  it("a friend's sessions come with no printing of this computer", async () => {
+    const { handlers, account } = await makeHandlers({ signedIn: true })
+    const c = { cardId: 1, pkey: 'en|1|A-001|Common', printingId: 5, photoId: 5, imageId: 1 }
+    account.portal.mockResolvedValue([{ uid: 's', cards: [c] }])
+    expect(await handlers['friends:sessions'](7)).toEqual([
+      { uid: 's', cards: [{ ...c, printingId: null, photoId: null }] }
+    ])
+    expect(account.portal).toHaveBeenCalledWith('friends:sessions', [7])
+  })
+
   it('the other channels forward their arguments', async () => {
     const { handlers, account } = await makeHandlers({ signedIn: true })
     account.portal.mockResolvedValue(undefined)

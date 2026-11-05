@@ -177,6 +177,16 @@ describe('phone api', () => {
     expect(portal).toHaveBeenCalledWith('friends:collection', [5, {}])
   })
 
+  it("friends.sessions drops the server's printing ids", async () => {
+    const c = { cardId: 1, pkey: 'en|1|A-001|Common', printingId: 5, photoId: 5 }
+    const portal = vi.fn(async () => [{ uid: 's', cards: [c] }])
+    const { api } = setup(fakeStore({ portal: portal as unknown as PhoneStore['portal'] }))
+    expect(await api.friends.sessions(5)).toEqual([
+      { uid: 's', cards: [{ ...c, printingId: null, photoId: null }] }
+    ])
+    expect(portal).toHaveBeenCalledWith('friends:sessions', [5])
+  })
+
   it('friends calls go to store.portal', async () => {
     const { api, store } = setup()
     await api.friends.request('bob')

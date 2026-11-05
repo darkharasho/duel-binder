@@ -6,7 +6,7 @@ import type { ContributedPrinting } from '../../shared/catalogFeed'
 import type { UnsyncedEntry } from '../../shared/types'
 import type { GameId } from '../../shared/games'
 import type { BinderEditAction, BinderEditLevel } from '../../shared/binders'
-import { mergeSessionCards } from '../repo/scanSessions'
+import { mergeSessionCards, sameSessionCardList } from '../repo/scanSessions'
 import type { ScanSessionCard, WireScanSession } from '../../shared/scanSessions'
 import { isLanguage } from '../../shared/languages'
 import {
@@ -1157,11 +1157,15 @@ export function dirtySessions(
   return rows.map(sessionToWire)
 }
 
-/** Marks a pushed session clean, unless it was edited again since `s` was read. */
+/**
+ * Marks a pushed session clean, unless it changed since `s` was read: an edit, or a price fill
+ * (which leaves the edit time as it was, so the cards are compared too).
+ */
 export function markSessionsPushed(db: SqlDb, owner: number, s: WireScanSession): void {
   db.prepare(
-    'UPDATE scan_sessions SET dirty = 0 WHERE owner_id = ? AND uid = ? AND updated_at = ? AND deleted_at IS ?'
-  ).run(owner, s.uid, s.updatedAt, s.deletedAt)
+    `UPDATE scan_sessions SET dirty = 0
+     WHERE owner_id = ? AND uid = ? AND updated_at = ? AND deleted_at IS ? AND cards = ?`
+  ).run(owner, s.uid, s.updatedAt, s.deletedAt, JSON.stringify(s.cards))
 }
 
 /**
@@ -1205,10 +1209,12 @@ export function applyRemoteSession(db: SqlDb, owner: number, s: WireScanSession)
   }
   const next: WireScanSession = { ...s, cards: merged }
   if (row.dirty === 0 && sameSession(local, next)) return false
-  // A price we hold that the server lacks goes back up, as a newer edit.
-  const keeps = merged.some((c, i) => c.price !== null && s.cards[i]?.price === null)
-  const updatedAt =
-    keeps && new Date().toISOString() > s.updatedAt ? new Date().toISOString() : s.updatedAt
+  // A price we hold that the server lacks goes back up, dirty but at the server's edit time: a
+  // price carries no hidden or deleted state, and the server merges cards whatever the time.
+  const keeps =
+    s.deletedAt === null &&
+    sameSessionCardList(merged, s.cards) &&
+    merged.some((c, i) => c.price !== null && s.cards[i].price === null)
   db.prepare(
     `UPDATE scan_sessions SET game = ?, cards = ?, friends_visible = ?, created_at = ?, updated_at = ?,
        deleted_at = ?, dirty = ? WHERE owner_id = ? AND uid = ?`
@@ -1217,7 +1223,7 @@ export function applyRemoteSession(db: SqlDb, owner: number, s: WireScanSession)
     JSON.stringify(next.cards),
     next.friendsVisible ? 1 : 0,
     next.createdAt,
-    updatedAt,
+    next.updatedAt,
     next.deletedAt,
     keeps ? 1 : 0,
     owner,

@@ -2,12 +2,22 @@ import type { GameId } from './games'
 
 /** The most cards one scan session holds. */
 export const MAX_SESSION_CARDS = 1000
+/** The longest printing key a session card may carry. */
+export const MAX_SESSION_PKEY = 300
 
-/** One card added in a session, with the price it had when it was added. */
+/**
+ * One card added in a session, with the price it had when it was added. Printing ids differ
+ * between each app and the server, so `pkey` names the printing everywhere; `printingId` and
+ * `photoId` are filled from it by whoever reads the session, against their own catalog.
+ */
 export interface ScanSessionCard {
   cardId: number
-  printingId: number
+  /** The printing's sync key (card_printings.pkey): the card's identity on every device. */
+  pkey: string
+  /** The reader's id for the printing; null when its catalog lacks the pkey. */
+  printingId: number | null
   imageId: number
+  /** The reader's printing id when the card showed the printing's own photo, else null (card art). */
   photoId: number | null
   name: string
   setCode: string | null
@@ -19,6 +29,11 @@ export interface ScanSessionCard {
   guess: boolean
   /** Epoch milliseconds when the card was added. */
   addedAt: number
+}
+
+/** A card as the scanner records it: its printing id on this device, before the pkey is looked up. */
+export type ScanSessionCardDraft = Omit<ScanSessionCard, 'pkey' | 'printingId'> & {
+  printingId: number
 }
 
 /** What a list returns: the cards added in one scanner "Add to collection". */
@@ -62,4 +77,12 @@ export function sessionTotal(cards: ScanSessionCard[]): {
     }
   }
   return { value, priced, unpriced }
+}
+
+/**
+ * A friend's session as the server sent it, for an app whose printing ids aren't the server's:
+ * no printing of this catalog, so its art is the card's and its sheet opens the card itself.
+ */
+export function withoutPrintings(s: ScanSession): ScanSession {
+  return { ...s, cards: s.cards.map((c) => ({ ...c, printingId: null, photoId: null })) }
 }

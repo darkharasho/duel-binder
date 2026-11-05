@@ -17,6 +17,7 @@ import type {
   UpdateStatus,
   WishlistItem
 } from '../shared/types'
+import { withoutPrintings, type ScanSession } from '../shared/scanSessions'
 import type { PhoneStore } from './data/store'
 import { phonePackWrappers } from './packWrappers'
 // Declares __APP_VERSION__.
@@ -254,7 +255,8 @@ export function createPhoneApi(deps: {
         })),
       // A friend's printing ids are the server's, so their binder cards show no printing scan.
       binders: portal('friends:binders'),
-      sessions: (friendId: number) => store.portal('friends:sessions', [friendId]),
+      sessions: async (friendId: number) =>
+        (await store.portal<ScanSession[]>('friends:sessions', [friendId])).map(withoutPrintings),
       binder: async (userId: number, uid: string) => {
         const b = await store.portal<BinderDetail | null>('friends:binder', [userId, uid])
         return b && { ...b, cards: b.cards.map((c) => ({ ...c, printingScan: false })) }

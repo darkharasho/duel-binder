@@ -16,6 +16,7 @@ const session: ScanSession = {
   cards: [
     {
       cardId: 7,
+      pkey: 'en|7|SDY-006|Ultra Rare',
       printingId: 70,
       imageId: 700,
       photoId: null,

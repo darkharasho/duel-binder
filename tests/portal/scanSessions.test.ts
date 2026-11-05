@@ -26,6 +26,7 @@ const BASE = 'https://portal.test'
 
 const card = (extra: Partial<ScanSessionCard> = {}): ScanSessionCard => ({
   cardId: 1,
+  pkey: 'en|1|LOB-005|Ultra Rare',
   printingId: 2,
   imageId: 3,
   photoId: null,
@@ -110,6 +111,64 @@ describe('portal scan sessions', () => {
     ).toEqual([{ uid: 's1', status: 'applied' }])
   })
 
+  it('an older push still brings its prices, never its flags', () => {
+    applySessionPush(
+      db,
+      me,
+      [session({ cards: [card({ price: null })], friendsVisible: false, updatedAt: T2 })],
+      BOTH
+    )
+    const before = sessionPullSince(db, me, 'ygo', 0).cursor
+    // A fill elsewhere, at the old edit time, with the old (visible) flags.
+    expect(
+      applySessionPush(db, me, [session({ cards: [card({ price: 7, printingId: 99 })] })], BOTH)
+    ).toEqual([
+      {
+        uid: 's1',
+        status: 'stale',
+        current: session({ cards: [card({ price: 7 })], friendsVisible: false, updatedAt: T2 })
+      }
+    ])
+    const pull = sessionPullSince(db, me, 'ygo', before)
+    expect(pull.sessions).toMatchObject([{ friendsVisible: false, cards: [{ price: 7 }] }])
+    // A same-time fill is applied: only its prices were new.
+    applySessionPush(db, me, [session({ uid: 't', cards: [card({ price: null })] })], BOTH)
+    expect(
+      applySessionPush(db, me, [session({ uid: 't', cards: [card({ price: 3 })] })], BOTH)
+    ).toEqual([{ uid: 't', status: 'applied' }])
+    // Nor does it bring back a deleted session.
+    applySessionPush(db, me, [session({ uid: 't', updatedAt: T2, deletedAt: T2 })], BOTH)
+    applySessionPush(db, me, [session({ uid: 't', cards: [card({ price: 3 })] })], BOTH)
+    expect(friendSessions(db, me, 'ygo')).toEqual([])
+  })
+
+  it('friendSessions gives each card the server catalog printing for its pkey', () => {
+    const p = db
+      .prepare('SELECT id, card_id, pkey FROM card_printings ORDER BY id LIMIT 1')
+      .get() as {
+      id: number
+      card_id: number
+      pkey: string
+    }
+    applySessionPush(
+      db,
+      bob,
+      [
+        session({
+          cards: [
+            card({ cardId: p.card_id, pkey: p.pkey, printingId: 999, photoId: 999 }),
+            card({ pkey: 'en|1|NONE-001|Common', printingId: 999, photoId: null })
+          ]
+        })
+      ],
+      BOTH
+    )
+    expect(friendSessions(db, bob, 'ygo')[0].cards).toMatchObject([
+      { printingId: p.id, photoId: p.id },
+      { printingId: null, photoId: null }
+    ])
+  })
+
   it('a newer push with a null price keeps the stored price', () => {
     applySessionPush(db, me, [session()], BOTH)
     applySessionPush(
@@ -164,6 +223,13 @@ describe('portal scan sessions', () => {
     expect(check(session())).toEqual([session()])
     expect(() => check(session({ cards: [card({ quantity: 0 })] }))).toThrow(CollectionError)
     expect(() => check(session({ cards: [] }))).toThrow(CollectionError)
+    expect(() => check(session({ cards: [card({ pkey: '' })] }))).toThrow(CollectionError)
+    expect(() => check(session({ cards: [card({ pkey: 'x'.repeat(301) })] }))).toThrow(
+      CollectionError
+    )
+    const { pkey: _p, ...noKey } = card()
+    void _p
+    expect(() => check(session({ cards: [noKey as ScanSessionCard] }))).toThrow(CollectionError)
     expect(() =>
       check(session({ cards: Array.from({ length: MAX_SESSION_CARDS + 1 }, () => card()) }))
     ).toThrow(CollectionError)

@@ -12,6 +12,7 @@ import {
 import { addEntry } from '../../src/main/repo/collection'
 import {
   deleteScanSession,
+  fillScanSessionPrices,
   listScanSessions,
   recordScanSession,
   setScanSessionHidden
@@ -24,6 +25,7 @@ const NOW = (): Date => new Date('2026-10-25T20:00:00.000Z')
 
 const card = (over: Partial<ScanSessionCard> = {}): ScanSessionCard => ({
   cardId: 1,
+  pkey: 'en|1|ABC-001|Common',
   printingId: 1,
   imageId: 1,
   photoId: null,
@@ -50,6 +52,7 @@ const stamp = (db: Database.Database, at: string): void => {
     'UPDATE scan_sessions SET updated_at = ?, deleted_at = CASE WHEN deleted_at IS NULL THEN NULL ELSE ? END'
   ).run(at, at)
 }
+const T0 = '2026-10-25T10:00:00.000Z'
 const T1 = '2026-10-25T11:00:00.000Z'
 const T2 = '2026-10-25T12:00:00.000Z'
 
@@ -85,8 +88,113 @@ describe('scan session sync', () => {
     expect(rows(a)).toEqual([expect.objectContaining({ uid: 's1', dirty: 0 })])
     const b = await device()
     await sync(b)
-    expect(listScanSessions(b, 'ygo')).toMatchObject([{ uid: 's1', cards: [card()] }])
+    expect(listScanSessions(b, 'ygo')).toMatchObject([
+      { uid: 's1', cards: [card({ printingId: null })] }
+    ])
     expect(rows(b)).toEqual([expect.objectContaining({ dirty: 0 })])
+  })
+
+  /** Two printings of the device catalog, `right` priced 9 and `other` 1 on `db`. */
+  type Printing = { id: number; card_id: number; pkey: string }
+  const printings = (db: Database.Database): { right: Printing; other: Printing } => {
+    const [right, other] = db
+      .prepare('SELECT id, card_id, pkey FROM card_printings ORDER BY id LIMIT 2')
+      .all() as { id: number; card_id: number; pkey: string }[]
+    const price = db.prepare(
+      "UPDATE card_printings SET market_price = ?, set_price = ?, language = 'en' WHERE id = ?"
+    )
+    price.run(9, 9, right.id)
+    price.run(1, 1, other.id)
+    db.prepare('DELETE FROM intl_prices').run()
+    return { right, other }
+  }
+  const serverRow = (): Record<string, unknown> =>
+    portal.serverDb
+      .prepare('SELECT friends_visible, deleted_at, cards FROM scan_sessions WHERE uid = ?')
+      .get('s1') as Record<string, unknown>
+
+  it('a pulled session whose printing id is an unrelated printing here is read and priced by pkey', async () => {
+    const { right, other } = printings(a)
+    // Device A's printing id for the card is device B's unrelated `other`.
+    recordScanSession(a, {
+      uid: 's1',
+      game: 'ygo',
+      cards: [
+        card({
+          cardId: right.card_id,
+          pkey: right.pkey,
+          printingId: other.id,
+          photoId: other.id,
+          price: null
+        })
+      ]
+    })
+    await sync(a)
+    const b = await device()
+    printings(b)
+    await sync(b)
+    fillScanSessionPrices(b, 'ygo')
+    expect(listScanSessions(b, 'ygo')[0].cards[0]).toMatchObject({
+      printingId: right.id,
+      photoId: right.id,
+      price: 9
+    })
+  })
+
+  it('a fill on one device never shows a session hidden on another', async () => {
+    const { right } = printings(a)
+    recordScanSession(a, {
+      uid: 's1',
+      game: 'ygo',
+      cards: [card({ cardId: right.card_id, pkey: right.pkey, price: null })]
+    })
+    a.prepare('DELETE FROM card_printings WHERE id = ?').run(right.id)
+    stamp(a, T0)
+    await sync(a)
+    const b = await device()
+    printings(b)
+    await sync(b)
+    setScanSessionHidden(a, 's1', true)
+    stamp(a, T1)
+    await sync(a)
+    // B, not yet synced since the hide, fills the price.
+    expect(fillScanSessionPrices(b, 'ygo')).toBe(1)
+    await sync(b)
+    await sync(a)
+    expect(serverRow().friends_visible).toBe(0)
+    expect(JSON.parse(serverRow().cards as string)[0].price).toBe(9)
+    for (const db of [a, b]) {
+      expect(listScanSessions(db, 'ygo')).toMatchObject([
+        { friendsVisible: false, updatedAt: T1, cards: [{ price: 9 }] }
+      ])
+      expect(rows(db)).toEqual([expect.objectContaining({ dirty: 0 })])
+    }
+  })
+
+  it('a fill on one device never brings back a session deleted on another', async () => {
+    const { right } = printings(a)
+    recordScanSession(a, {
+      uid: 's1',
+      game: 'ygo',
+      cards: [card({ cardId: right.card_id, pkey: right.pkey, price: null })]
+    })
+    a.prepare('DELETE FROM card_printings WHERE id = ?').run(right.id)
+    stamp(a, T0)
+    await sync(a)
+    const b = await device()
+    printings(b)
+    await sync(b)
+    deleteScanSession(a, 's1')
+    stamp(a, T1)
+    await sync(a)
+    expect(fillScanSessionPrices(b, 'ygo')).toBe(1)
+    await sync(b)
+    await sync(a)
+    expect(serverRow().deleted_at).not.toBeNull()
+    for (const db of [a, b]) {
+      expect(listScanSessions(db, 'ygo')).toEqual([])
+      expect(rows(db)).toEqual([])
+    }
   })
 
   it('hiding on one device reaches the other', async () => {
@@ -187,7 +295,7 @@ describe('scan session sync', () => {
     expect(rows(a)).toEqual([expect.objectContaining({ dirty: 0 })])
   })
 
-  it('keeps a price the server lacks, dirty with a bumped edit time', () => {
+  it('keeps a price the server lacks, dirty with the server edit time', () => {
     recordScanSession(a, { uid: 's1', game: 'ygo', cards: [card({ price: 7 })] })
     a.prepare("UPDATE scan_sessions SET updated_at = '2025-12-31T00:00:00.000Z'").run()
     const local = listScanSessions(a, 'ygo')[0]
@@ -204,7 +312,8 @@ describe('scan session sync', () => {
     const [s] = listScanSessions(a, 'ygo')
     expect(s.cards[0].price).toBe(7)
     expect(s.friendsVisible).toBe(false)
-    expect(s.updatedAt > at).toBe(true)
+    // Dirty to send the price up, but the edit time is the server's: the flags it carries are too.
+    expect(s.updatedAt).toBe(at)
     expect(rows(a)).toEqual([expect.objectContaining({ dirty: 1 })])
   })
 

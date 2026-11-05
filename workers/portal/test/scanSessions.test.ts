@@ -55,6 +55,7 @@ const session = (extra: Partial<WireScanSession> = {}): WireScanSession => ({
   cards: [
     {
       cardId: 1,
+      pkey: 'en|1|LOB-005|Ultra Rare',
       printingId: 2,
       imageId: 3,
       photoId: null,
@@ -120,13 +121,36 @@ describe('scan sessions on Durable Object SQLite', () => {
     expect(stale.data.results[0]).toEqual({ uid: 's1', status: 'applied' })
     expect(stale.data.results[1]).toMatchObject({ uid: 's1', status: 'stale' })
 
+    // An older push brings its price into the stored session, not its flags.
+    const first = session().cards[0]
+    await s.call('pal', '/api/sync/sessions-push', {
+      entries: [
+        session({
+          uid: 'fill',
+          cards: [{ ...first, price: null }],
+          updatedAt: LATER,
+          friendsVisible: false
+        })
+      ]
+    })
+    const filled = await s.call<{ results: ScanSessionPushResult[] }>(
+      'pal',
+      '/api/sync/sessions-push',
+      { entries: [session({ uid: 'fill', cards: [{ ...first, price: 3 }] })] }
+    )
+    expect(filled.data.results[0]).toMatchObject({
+      status: 'stale',
+      current: { friendsVisible: false, cards: [{ price: 3 }] }
+    })
+
     const pull = await s.call<ScanSessionPullResponse>(
       'pal',
       '/api/sync/sessions-pull?cursor=0&game=ygo'
     )
     expect(pull.data.sessions.map((x) => [x.uid, x.friendsVisible])).toEqual([
       ['hid', false],
-      ['s1', false]
+      ['s1', false],
+      ['fill', false]
     ])
 
     await s.call('pal', '/api/sync/sessions-push', {
@@ -138,6 +162,8 @@ describe('scan sessions on Durable Object SQLite', () => {
     expect(read.status).toBe(200)
     expect(read.data.result.map((x) => x.uid)).toEqual(['s1'])
     expect(read.data.result[0]).not.toHaveProperty('deletedAt')
+    // Printings come from the server catalog by pkey; this one has none, so no stored id is kept.
+    expect(read.data.result[0].cards[0]).toMatchObject({ printingId: null, photoId: null })
 
     expect((await s.call('pal', '/api/account/delete', { confirm: 'delete' })).status).toBe(204)
     expect(await s.db((db) => db.prepare('SELECT user_id FROM scan_sessions').all())).toEqual([])

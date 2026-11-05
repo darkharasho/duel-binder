@@ -32,3 +32,13 @@ export function photoCount(
   if (summary) parts.push(`${summary.today}/${summary.dailyCap} today`)
   return parts.join(' · ')
 }
+
+/** Read number: the One Piece number held up in the preview's guide box, read on a tap. */
+export const SNAP_BUTTON = 'Read number'
+export const SNAP_READING = 'Reading…'
+export const SNAP_HINT = 'Hold the card number in the box'
+export const SNAP_NONE = "Couldn't read a number. Hold it in the box, a little closer."
+export const SNAP_MANY = 'More than one number read. Show just the one.'
+
+/** "3 shots of this version". */
+export const shotsOf = (n: number): string => `${n} ${n === 1 ? 'shot' : 'shots'} of this version`

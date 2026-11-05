@@ -15,6 +15,8 @@ import {
   NOT_SYNCED,
   NO_VERSIONS,
   OFFLINE_WAIT,
+  SNAP_MANY,
+  SNAP_NONE,
   CAP_REACHED,
   WHAT_TO_SHOOT
 } from '../../src/phone/training/copy'
@@ -26,6 +28,7 @@ import {
 } from '../../src/phone/training/outbox'
 import { renderWithProviders } from './mockApi'
 import { SETO, fakeStore, installPhoneApi, setOnline } from './phoneFakes'
+import type { SnapResult } from '../../src/phone/training/numberSnap'
 import { NOTHING, fakeEngine, stubCamera, stubVideo, type FakeEngine } from './scanFakes'
 import type { Mock } from 'vitest'
 import type { EngineFactory } from '@/features/scan/engine'
@@ -98,7 +101,11 @@ let grab: ReturnType<typeof vi.fn>
 function renderScreen(
   store: PhoneStore,
   onClose: () => void = () => {},
-  o: { engineFactory?: EngineFactory; game?: GameId } = {}
+  o: {
+    engineFactory?: EngineFactory
+    game?: GameId
+    snap?: (v: HTMLVideoElement) => Promise<SnapResult>
+  } = {}
 ): ReturnType<typeof renderWithProviders> {
   installPhoneApi(store)
   return renderWithProviders(
@@ -112,6 +119,7 @@ function renderScreen(
           now={() => NOW}
           engineFactory={o.engineFactory ?? (() => fakeEngine())}
           readPauseMs={5}
+          snap={o.snap}
         />
       </ScanHubProvider>
     </PhoneContext.Provider>,
@@ -527,5 +535,76 @@ describe('reading the number off the camera', () => {
     await waitFor(() => expect(engine.analyze).toHaveBeenCalled())
     view.unmount()
     expect(engine.dispose).toHaveBeenCalled()
+  })
+})
+
+describe('Read number', () => {
+  const readButton = (): HTMLElement => screen.getByRole('button', { name: 'Read number' })
+
+  it('fills in the number held in the box and lists its versions', async () => {
+    const user = userEvent.setup()
+    const snap = vi.fn(async (): Promise<SnapResult> => ({ number: 'OP01-001' }))
+    renderScreen(opStore(), () => {}, { snap })
+    await user.click(await screen.findByRole('button', { name: 'Read number' }))
+    expect(snap).toHaveBeenCalledOnce()
+    expect(numberBox()).toHaveValue('OP01-001')
+    expect(await screen.findByRole('button', { name: 'L' })).toBeInTheDocument()
+  })
+
+  it('says when nothing, or more than one number, read', async () => {
+    const user = userEvent.setup()
+    const results: SnapResult[] = [{ problem: 'none' }, { problem: 'many' }]
+    renderScreen(opStore(), () => {}, { snap: async () => results.shift()! })
+    await user.click(await screen.findByRole('button', { name: 'Read number' }))
+    expect(await screen.findByText(SNAP_NONE)).toBeInTheDocument()
+    await user.click(readButton())
+    expect(await screen.findByText(SNAP_MANY)).toBeInTheDocument()
+    expect(numberBox()).toHaveValue('')
+  })
+
+  it('a read that throws counts as nothing read', async () => {
+    const user = userEvent.setup()
+    renderScreen(opStore(), () => {}, {
+      snap: async () => {
+        throw new Error('ocr down')
+      }
+    })
+    await user.click(await screen.findByRole('button', { name: 'Read number' }))
+    expect(await screen.findByText(SNAP_NONE)).toBeInTheDocument()
+  })
+
+  it("other games' screens have no Read number", async () => {
+    renderScreen(opStore(), () => {}, { game: 'pkm' })
+    await screen.findByRole('textbox', { name: 'Card number' })
+    expect(screen.queryByRole('button', { name: 'Read number' })).not.toBeInTheDocument()
+  })
+})
+
+describe('shot feedback', () => {
+  it('counts the shots of the chosen version and shows the last one in the tray', async () => {
+    const user = userEvent.setup()
+    let n = 0
+    // jsdom has no object URLs; the class gets them for this test only.
+    const made = vi.fn(() => `blob:shot-${++n}`)
+    const revoked = vi.fn()
+    Object.assign(URL, { createObjectURL: made, revokeObjectURL: revoked })
+    onTestFinished(() => {
+      delete (URL as Partial<typeof URL>).createObjectURL
+      delete (URL as Partial<typeof URL>).revokeObjectURL
+    })
+    renderScreen(opStore())
+    await choose(user, 'L')
+    await waitFor(() => expect(shutter()).toBeEnabled())
+    await user.click(shutter())
+    expect(await screen.findByText('1 shot of this version')).toBeInTheDocument()
+    await waitFor(() => expect(shutter()).toBeEnabled())
+    await user.click(shutter())
+    expect(await screen.findByText('2 shots of this version')).toBeInTheDocument()
+    expect(screen.getByRole('img', { name: 'Last photo' })).toHaveAttribute('src', 'blob:shot-2')
+
+    await user.click(screen.getByRole('button', { name: 'Delete last photo' }))
+    expect(await screen.findByText('1 shot of this version')).toBeInTheDocument()
+    expect(revoked).toHaveBeenCalledWith('blob:shot-2')
+    expect(screen.getByRole('img', { name: 'Last photo' })).toHaveAttribute('src', 'blob:shot-1')
   })
 })

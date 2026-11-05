@@ -354,6 +354,12 @@ export interface Api {
      * Only the phone app has it; the desktop app and the web reject with `Not available here`.
      */
     merge(ticket: string, choice: MergeChoice): Promise<Me>
+    /**
+     * Opens the /admin dashboard, signed in, for the owner's account (`Me.admin`): the web goes to
+     * the page, the desktop opens it in a window, the phone in an in-app browser. Rejects for anyone
+     * else. `tab` opens one of its tabs (`ADMIN_TABS`); anything else opens its first.
+     */
+    openAdmin(tab?: AdminTab): Promise<void>
     onChange(cb: (s: AccountStatus) => void): () => void
   }
 }
@@ -488,7 +494,8 @@ export const INVOKE_CHANNELS = [
   'account:resendEmailCode',
   'account:changePassword',
   'account:changeEmail',
-  'account:merge'
+  'account:merge',
+  'account:openAdmin'
 ] as const
 
 export type InvokeChannel = (typeof INVOKE_CHANNELS)[number]
@@ -520,3 +527,20 @@ type ApiInvokeChannel = {
 type Equals<A, B> =
   (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false
 export const invokeChannelsMatchApi: Equals<InvokeChannel, ApiInvokeChannel> = true
+
+/** The /admin dashboard's tabs the apps link to, by their #id, in the dashboard's order. */
+export const ADMIN_TABS = [
+  { tab: 'overview', label: 'Overview' },
+  { tab: 'runs', label: 'Runs' },
+  { tab: 'people', label: 'Users' },
+  { tab: 'activity', label: 'Usage' },
+  { tab: 'errors', label: 'Errors' },
+  { tab: 'scanner', label: 'Scanner & prices' },
+  { tab: 'testers', label: 'Testers' }
+] as const
+export type AdminTab = (typeof ADMIN_TABS)[number]['tab']
+
+/** The dashboard link with `tab` as its #fragment, when it's one of `ADMIN_TABS`. */
+export function adminTabUrl(url: string, tab: unknown): string {
+  return ADMIN_TABS.some((t) => t.tab === tab) ? `${url.split('#')[0]}#${tab as string}` : url
+}

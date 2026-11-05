@@ -29,6 +29,18 @@ const base64Url = (bytes: Uint8Array): string =>
     .replace(/=+$/, '')
 const random = (n: number): string => base64Url(crypto.getRandomValues(new Uint8Array(n)))
 
+/**
+ * Shows the /admin dashboard a one-time link (`url`) opens, in the sign-in sheet: it never reaches
+ * the callback scheme, so it stays open until the owner closes it.
+ */
+export async function openAdminSheet(url: string): Promise<void> {
+  try {
+    await WebAuth.start({ url, callbackScheme: CALLBACK_SCHEME })
+  } catch (e) {
+    if ((e as { code?: string } | null)?.code !== 'CANCELLED') throw e
+  }
+}
+
 /** Thrown when the person closes the sign-in sheet; the screen just offers the button again. */
 export class SignInCancelled extends Error {}
 

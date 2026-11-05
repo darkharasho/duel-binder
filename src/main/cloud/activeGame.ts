@@ -43,15 +43,22 @@ export function reportingMe(client: CloudClient, onMe: (me: Me) => void): CloudC
 }
 
 /**
- * `user` with the games of a fresher `me` of the same account (no `games` when it has none), or null
- * when they're the games `user` already has.
+ * `user` with the games and admin flag of a fresher `me` of the same account (no `games` when it
+ * has none), or null when they're the ones `user` already has.
  */
 export function withGamesOf(user: Me, me: Me): Me | null {
   const now = gamesOf(me)
   const was = gamesOf(user)
-  if (now.length === was.length && now.every((g, i) => g === was[i])) return null
+  if (
+    now.length === was.length &&
+    now.every((g, i) => g === was[i]) &&
+    Boolean(me.admin) === Boolean(user.admin)
+  )
+    return null
   const next = { ...user }
   delete next.games
+  delete next.admin
   if (me.games !== undefined) next.games = me.games
+  if (me.admin) next.admin = me.admin
   return next
 }

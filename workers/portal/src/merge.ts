@@ -296,6 +296,8 @@ function moveSignIns(
     a.survivor,
     a.closed
   )
+  // So does admin: merging an admin account into another keeps the dashboard open to it.
+  db.prepare('UPDATE OR IGNORE admins SET user_id = ? WHERE user_id = ?').run(a.survivor, a.closed)
   // Training photos follow too, keeping their R2 keys; an undo leaves them with the survivor.
   db.prepare('UPDATE OR IGNORE training_photos SET user_id = ? WHERE user_id = ?').run(
     a.survivor,

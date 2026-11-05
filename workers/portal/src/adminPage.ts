@@ -1,5 +1,5 @@
 /**
- * GET /admin: the owner's dashboard, served only to the ADMIN_DISCORD_ID session (see app.ts). It
+ * GET /admin: the dashboard, served only to admin accounts (isAdminUser, see app.ts). It
  * holds no data itself and reads GET /admin/stats with that session's cookie.
  * It loads only when asked: each stats read counts every table, and free-plan row reads are capped daily.
  * Catalog and Release runs come from GitHub's public API, straight from the browser: the repository
@@ -646,6 +646,90 @@ async function loadTesters() {
   $('testers').replaceChildren(p)
 }
 
+/** The accounts that may open this dashboard, and a form to add one by app username. */
+async function loadAdmins() {
+  const p = el('section', null, 'panel')
+  p.append(el('h2', 'Admins'))
+  p.append(el('p', 'Admin belongs to the account, whichever way it signs in.', 'note'))
+  try {
+    const res = await fetch('/admin/admins', { credentials: 'same-origin' })
+    if (!res.ok) throw new Error('HTTP ' + res.status)
+    const { admins, you } = await res.json()
+    const table = el('table', null, 'history')
+    const head = el('tr')
+    for (const h of ['Account', 'Signs in with', 'Added']) head.append(el('th', h, 'l'))
+    head.append(el('th', ''))
+    table.append(head)
+    for (const a of admins) {
+      const tr = el('tr')
+      const cell = el('td', null, 'act')
+      if (admins.length > 1) {
+        const remove = el('button', 'Remove')
+        remove.type = 'button'
+        remove.addEventListener('click', async () => {
+          const who = a.userId === you ? 'yourself' : '@' + a.username
+          if (!confirm('Remove ' + who + ' from admins?')) return
+          remove.disabled = true
+          try {
+            const r = await fetch('/admin/admins/remove', {
+              method: 'POST',
+              credentials: 'same-origin',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({ userId: a.userId })
+            })
+            if (!r.ok) alert('Remove failed: ' + ((await r.json().catch(() => ({}))).error ?? 'HTTP ' + r.status))
+            else if (a.userId === you) location.reload()
+            else loadAdmins()
+          } catch (e) {
+            alert('Remove failed: ' + e.message)
+          } finally {
+            remove.disabled = false
+          }
+        })
+        cell.append(remove)
+      }
+      tr.append(el('td', '@' + a.username + (a.userId === you ? ' (you)' : '')),
+        el('td', a.signIns ? a.signIns.split(',').join(', ') : '-'),
+        el('td', new Date(a.addedAt).toLocaleDateString()), cell)
+      table.append(tr)
+    }
+    p.append(table)
+    const form = el('form', null, 'adder')
+    const name = el('input')
+    name.type = 'text'
+    name.required = true
+    name.placeholder = 'app username'
+    name.setAttribute('aria-label', 'App username')
+    const add = el('button', 'Add admin')
+    add.type = 'submit'
+    const msg = el('span', null, 'note')
+    form.append(name, add, msg)
+    form.addEventListener('submit', async (ev) => {
+      ev.preventDefault()
+      add.disabled = true
+      msg.textContent = ''
+      try {
+        const r = await fetch('/admin/admins', {
+          method: 'POST',
+          credentials: 'same-origin',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ username: name.value })
+        })
+        if (r.ok) return loadAdmins()
+        msg.textContent = (await r.json().catch(() => ({}))).error ?? 'HTTP ' + r.status
+      } catch (e) {
+        msg.textContent = e.message
+      } finally {
+        add.disabled = false
+      }
+    })
+    p.append(form)
+  } catch (e) {
+    p.append(el('p', 'Could not load admins: ' + e.message, 'note'))
+  }
+  $('admins').replaceChildren(p)
+}
+
 /** What the testers' training photos add up to: per game, per tester and per holder. */
 async function loadPhotos() {
   const p = el('section', null, 'panel')
@@ -686,7 +770,7 @@ async function loadPhotos() {
   $('photos').replaceChildren(p)
 }
 
-const TABS = ['overview', 'runs', 'people', 'activity', 'errors', 'scanner', 'storage', 'merges', 'testers', 'photos']
+const TABS = ['overview', 'runs', 'people', 'activity', 'errors', 'scanner', 'storage', 'merges', 'testers', 'admins', 'photos']
 
 function showTab() {
   const wanted = location.hash.slice(1)
@@ -700,12 +784,13 @@ function showTab() {
 
 window.addEventListener('hashchange', showTab)
 showTab()
-$('refresh').addEventListener('click', () => { load(); loadErrors(); loadRuns(); loadMerges(); loadTesters(); loadPhotos() })
+$('refresh').addEventListener('click', () => { load(); loadErrors(); loadRuns(); loadMerges(); loadTesters(); loadAdmins(); loadPhotos() })
 load()
 loadErrors()
 loadRuns()
 loadMerges()
 loadTesters()
+loadAdmins()
 loadPhotos()
 `
 
@@ -738,7 +823,7 @@ export function adminPage(): Response {
 <header><div class="wrap">
 <div class="top"><h1>Duel Binder</h1><span class="badge">Admin</span><span class="pulse" id="pulse"></span>
 <span class="grow"></span><span class="at" id="at"></span><a href="/">Back to the app</a><button id="refresh" type="button">Refresh</button></div>
-<nav aria-label="Admin sections"><a href="#overview">Overview</a><a href="#runs">Runs</a><a href="#people">Users</a><a href="#activity">Usage</a><a href="#errors">Errors</a><a href="#scanner">Scanner &amp; prices</a><a href="#storage">Storage</a><a href="#merges">Merges</a><a href="#testers">Testers</a><a href="#photos">Photos</a></nav>
+<nav aria-label="Admin sections"><a href="#overview">Overview</a><a href="#runs">Runs</a><a href="#people">Users</a><a href="#activity">Usage</a><a href="#errors">Errors</a><a href="#scanner">Scanner &amp; prices</a><a href="#storage">Storage</a><a href="#merges">Merges</a><a href="#testers">Testers</a><a href="#admins">Admins</a><a href="#photos">Photos</a></nav>
 </div></header>
 <main class="wrap">
 <section data-tab id="overview">
@@ -753,6 +838,7 @@ export function adminPage(): Response {
 <section data-tab class="stack" id="storage" hidden></section>
 <section data-tab id="merges" hidden></section>
 <section data-tab id="testers" hidden></section>
+<section data-tab id="admins" hidden></section>
 <section data-tab id="photos" hidden></section>
 </main>
 <script nonce="${nonce}">${SCRIPT}</script>

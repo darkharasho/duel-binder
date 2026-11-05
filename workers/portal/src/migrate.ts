@@ -695,6 +695,17 @@ CREATE TABLE scan_sessions (user_id INTEGER NOT NULL REFERENCES users(id) ON DEL
 CREATE UNIQUE INDEX ux_scan_sessions_seq ON scan_sessions(seq);
 CREATE INDEX ix_scan_sessions_user_seq ON scan_sessions(user_id, seq);
 `
+  },
+  {
+    // The accounts that may open /admin (admins.ts; the first is seeded from ADMIN_DISCORD_ID), and
+    // the one-time links that open the dashboard from the apps (adminHandoff.ts).
+    name: 'server-39',
+    sql: `
+CREATE TABLE admins (user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+  added_at TEXT NOT NULL);
+CREATE TABLE admin_handoffs (code_hash TEXT PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, expires_at TEXT NOT NULL);
+`
   }
 ]
 

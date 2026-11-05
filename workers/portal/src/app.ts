@@ -1,10 +1,12 @@
 import type { SqlDb } from '../../../src/main/db/sql'
+import { adminHandoffRoute, adminOpenRoute } from './adminHandoff'
 import { adminPage } from './adminPage'
 import { reportUsage } from './usage'
 import { reportError } from './errors'
 import { adminRoute } from './catalogLoad'
 import { adminMergeRoute } from './merge'
 import { adminTestersRoute } from './testers'
+import { adminAdminsRoute } from './admins'
 import { rpcRoute } from './rpc'
 import { syncRoute } from './sync'
 import { catalogRoute } from './catalogFeed'
@@ -119,6 +121,7 @@ async function route(req: Request, deps: AppDeps): Promise<Response> {
   if (req.method === 'GET' && url.pathname === '/api/me') return me(req, deps)
   if (req.method === 'GET' && url.pathname === '/api/site-account') return siteAccount(req, deps)
   if (url.pathname === '/api/account/delete') return deleteAccountRoute(req, deps)
+  if (url.pathname === '/api/admin/handoff') return adminHandoffRoute(req, deps)
   if (url.pathname === '/api/usage') return reportUsage(req, deps)
   if (url.pathname === '/api/errors') return reportError(req, deps)
   if (url.pathname.startsWith('/api/training/'))
@@ -144,8 +147,11 @@ async function route(req: Request, deps: AppDeps): Promise<Response> {
     return getFingerprintRefs(req, deps)
   if (req.method === 'GET' && url.pathname === '/admin')
     return (await isAdmin(req, deps)) ? adminPage() : json({ error: 'Not found' }, 404)
+  if (url.pathname === '/admin/open') return adminOpenRoute(req, deps)
   if (url.pathname === '/admin/merges' || url.pathname === '/admin/merges/undo')
     return adminMergeRoute(req, deps)
+  if (url.pathname === '/admin/admins' || url.pathname === '/admin/admins/remove')
+    return adminAdminsRoute(req, deps)
   if (url.pathname === '/admin/testers' || url.pathname === '/admin/testers/remove')
     return adminTestersRoute(req, deps)
   if (url.pathname === '/admin/training' || url.pathname.startsWith('/admin/training/'))

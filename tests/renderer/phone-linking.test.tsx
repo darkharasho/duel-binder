@@ -428,4 +428,24 @@ describe('phone Settings linking', () => {
     await waitFor(() => expect(store.sync).toHaveBeenCalled())
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Merge accounts' })).toBeNull())
   })
+
+  it('shows the owner an Admin dashboard row that opens the one-time link', async () => {
+    const user = userEvent.setup()
+    const tab = { location: { href: '' }, close: vi.fn() }
+    const open = vi.fn(() => tab)
+    vi.stubGlobal('open', open)
+    const { store } = setup({ status: 'linked' }, {}, { ...SETO, admin: true })
+    await openSettings(user)
+    await user.click(await screen.findByRole('button', { name: 'Admin dashboard' }))
+    expect(open).toHaveBeenCalledWith('', '_blank')
+    await waitFor(() => expect(tab.location.href).toBe('https://portal.test/admin/open?code=abc'))
+    expect(store.adminLink).toHaveBeenCalledOnce()
+  })
+
+  it('has no Admin dashboard row for anyone else', async () => {
+    const user = userEvent.setup()
+    setup({ status: 'linked' })
+    await openSettings(user)
+    expect(screen.queryByRole('button', { name: 'Admin dashboard' })).toBeNull()
+  })
 })

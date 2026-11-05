@@ -287,6 +287,7 @@ export function createMockApi(overrides: DeepPartial<Api> = {}): Api {
         displayName: null,
         avatarUrl: null
       })),
+      openAdmin: vi.fn(async () => undefined),
       onChange: vi.fn(() => () => {})
     }
   }

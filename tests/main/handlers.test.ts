@@ -40,6 +40,7 @@ const fakeAccount = (signedIn = false): FakeAccount => ({
   start: vi.fn(),
   stop: vi.fn(),
   portal: vi.fn(),
+  adminLink: vi.fn(async () => 'https://portal.test/admin/open?code=abc'),
   updateUser: vi.fn(),
   requestPrices: vi.fn(async () => {}),
   reportUsage: vi.fn(async () => {}),
@@ -75,7 +76,8 @@ async function makeHandlers(opts: { signedIn?: boolean } = {}) {
       saveReplay,
       updateStatus: async () => ({ state: 'idle', mode: 'auto', version: null, error: null }),
       checkForUpdates: async () => ({ state: 'none', mode: 'auto', version: null, error: null }),
-      applyUpdate: async () => {}
+      applyUpdate: async () => {},
+      openAdmin
     },
     window: {
       minimize: vi.fn(),
@@ -103,6 +105,8 @@ const noFingerprints = {
   status: () => ({ state: 'missing' as const, count: 0 }),
   refresh: async () => ({ state: 'missing' as const, count: 0 })
 }
+
+const openAdmin = vi.fn<(url: string) => Promise<void>>(async () => {})
 
 const saveReplay = vi.fn<(name: string, data: Uint8Array) => Promise<string | null>>(
   async () => '/home/me/rip.mp4'
@@ -250,6 +254,13 @@ describe('createHandlers', () => {
     await handlers['account:removeSignIn']('apple')
     expect(account.portal).toHaveBeenLastCalledWith('account:removeSignIn', ['apple'])
     expect(account.updateUser).toHaveBeenCalledTimes(2)
+  })
+
+  it('account:openAdmin opens the one-time link the account gets', async () => {
+    const { handlers, account } = await makeHandlers({ signedIn: true })
+    await handlers['account:openAdmin']()
+    expect(account.adminLink).toHaveBeenCalledOnce()
+    expect(openAdmin).toHaveBeenLastCalledWith('https://portal.test/admin/open?code=abc')
   })
 
   it('account:merge rejects on the desktop', async () => {

@@ -95,6 +95,8 @@ export interface PhoneStore {
   portal<T>(channel: PortalChannel, args: unknown[]): Promise<T>
   /** A portal call that doesn't wait for the serial queue, nor hold it up. */
   portalRead<T>(channel: PortalChannel, args: unknown[]): Promise<T>
+  /** A one-time link that opens the /admin dashboard, for the owner's account (CloudClient.adminLink). */
+  adminLink(): Promise<string>
   /**
    * Asks the portal to price the unpriced non-English printings among these (see requestPrices in
    * main/cloud/priceRequests); resolves how many it queued. Signed out, offline or failed: 0 (it
@@ -373,11 +375,16 @@ export function createPhoneStore(deps: {
   }
 
   function portalCall<T>(channel: PortalChannel, args: unknown[]): Promise<T> {
+    return asAccount((c) => c.rpc<T>(channel, args, activeGame(db, games())))
+  }
+
+  /** Runs a portal call as the signed-in account, offline failures as OFFLINE_MESSAGE. */
+  function asAccount<T>(call: (c: CloudClient) => Promise<T>): Promise<T> {
     return online(async () => {
       const t = token()
       if (t === null) throw new Error(FRIENDS_SIGNED_OUT)
       try {
-        return await client(t, PORTAL_TIMEOUT_MS).rpc<T>(channel, args, activeGame(db, games()))
+        return await call(client(t, PORTAL_TIMEOUT_MS))
       } catch (e) {
         if (e instanceof CloudOfflineError) throw new CloudOfflineError(OFFLINE_MESSAGE)
         throw e
@@ -805,6 +812,8 @@ export function createPhoneStore(deps: {
 
     portalRead: <T>(channel: PortalChannel, args: unknown[]) =>
       read(() => portalCall<T>(channel, args)),
+
+    adminLink: () => read(() => asAccount((c) => c.adminLink())),
 
     reportUsage: async (report) => {
       const t = token()

@@ -25,6 +25,7 @@ export const STORE_METHODS = [
   'invoke',
   'portal',
   'portalRead',
+  'adminLink',
   'requestPrices',
   'reportUsage',
   'reportError',

@@ -98,6 +98,8 @@ export interface AccountService {
    * Error(OFFLINE_MESSAGE) when offline, Error(SERVER_SIGNED_OUT) after a 401 (and signs the account out).
    */
   portal<T>(channel: PortalChannel, args: unknown[]): Promise<T>
+  /** A one-time link that opens the /admin dashboard, for the owner's account; rejects like `portal`. */
+  adminLink(): Promise<string>
   /**
    * Stores the signed-in account's `me` as the portal just returned it (a new username, a dismissed
    * hint) and emits the new status. A `me` of another account, or signed out, changes nothing.
@@ -468,6 +470,30 @@ export function createAccountService(deps: AccountDeps): AccountService {
     return signingIn
   }
 
+  /** Runs a portal call as the signed-in account; see AccountService.portal for how it rejects. */
+  async function asAccount<T>(call: (client: CloudClient) => Promise<T>): Promise<T> {
+    const current = token
+    if (current === null) throw new Error(FRIENDS_SIGNED_OUT)
+    const mine = session
+    const signal = portalAbort.signal
+    let result: T
+    try {
+      result = await call(deps.client(current, { signal, timeoutMs: PORTAL_TIMEOUT_MS }))
+    } catch (e) {
+      // The account changed during the call (a newer sign-in keeps its own token): nothing here concerns it.
+      if (mine !== session) throw new Error(FRIENDS_SIGNED_OUT, { cause: e })
+      if (e instanceof CloudAuthError) {
+        serverSignedOut()
+        throw new Error(SERVER_SIGNED_OUT, { cause: e })
+      }
+      if (e instanceof CloudOfflineError) throw new Error(OFFLINE_MESSAGE, { cause: e })
+      throw e
+    }
+    // The account changed while the call was in flight: its result belongs to the previous session.
+    if (mine !== session) throw new Error(FRIENDS_SIGNED_OUT)
+    return result
+  }
+
   return {
     status,
     isSignedIn: () => token !== null,
@@ -541,29 +567,12 @@ export function createAccountService(deps: AccountDeps): AccountService {
       return deps.catalog.status()
     },
 
-    async portal<T>(channel: PortalChannel, args: unknown[]): Promise<T> {
-      const current = token
-      if (current === null) throw new Error(FRIENDS_SIGNED_OUT)
-      const mine = session
-      const signal = portalAbort.signal
-      let result: T
-      try {
-        result = await deps
-          .client(current, { signal, timeoutMs: PORTAL_TIMEOUT_MS })
-          .rpc<T>(channel, args, activeGame(db, games()))
-      } catch (e) {
-        // The account changed during the call (a newer sign-in keeps its own token): nothing here concerns it.
-        if (mine !== session) throw new Error(FRIENDS_SIGNED_OUT, { cause: e })
-        if (e instanceof CloudAuthError) {
-          serverSignedOut()
-          throw new Error(SERVER_SIGNED_OUT, { cause: e })
-        }
-        if (e instanceof CloudOfflineError) throw new Error(OFFLINE_MESSAGE, { cause: e })
-        throw e
-      }
-      // The account changed while the call was in flight: its result belongs to the previous session.
-      if (mine !== session) throw new Error(FRIENDS_SIGNED_OUT)
-      return result
+    portal<T>(channel: PortalChannel, args: unknown[]): Promise<T> {
+      return asAccount((client) => client.rpc<T>(channel, args, activeGame(db, games())))
+    },
+
+    adminLink(): Promise<string> {
+      return asAccount((client) => client.adminLink())
     },
 
     updateUser(me: Me): AccountStatus {

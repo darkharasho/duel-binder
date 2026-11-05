@@ -25,7 +25,7 @@ const HISTORY_DAYS = 90
 const SEED = 0x59474f
 
 /** Deterministic PRNG (mulberry32) so every fresh fake profile looks the same. */
-function rng(seed: number): () => number {
+export function rng(seed: number): () => number {
   let a = seed
   return () => {
     a = (a + 0x6d2b79f5) | 0
@@ -35,7 +35,7 @@ function rng(seed: number): () => number {
   }
 }
 
-function shuffle<T>(items: T[], rand: () => number): T[] {
+export function shuffle<T>(items: T[], rand: () => number): T[] {
   for (let i = items.length - 1; i > 0; i--) {
     const j = Math.floor(rand() * (i + 1))
     ;[items[i], items[j]] = [items[j], items[i]]
@@ -53,7 +53,11 @@ const localDate = (d: Date): string =>
  * Returns the number of entries inserted.
  */
 export function seedFakeCollection(db: Database.Database, now = new Date()): number {
-  if (db.prepare('SELECT 1 FROM collection_entries WHERE deleted_at IS NULL LIMIT 1').get())
+  if (
+    db
+      .prepare('SELECT 1 FROM collection_entries WHERE owner_id = 0 AND deleted_at IS NULL LIMIT 1')
+      .get()
+  )
     return 0
   if (!db.prepare('SELECT 1 FROM cards LIMIT 1').get()) return 0
 
@@ -133,7 +137,7 @@ export function seedFakeCollection(db: Database.Database, now = new Date()): num
  */
 export function seedFakePokemon(db: Database.Database, now = new Date()): number {
   const has = `SELECT 1 FROM collection_entries e JOIN card_printings p ON p.id = e.printing_id
-     JOIN cards c ON c.id = p.card_id WHERE c.game = 'pkm' AND e.deleted_at IS NULL LIMIT 1`
+     JOIN cards c ON c.id = p.card_id WHERE e.owner_id = 0 AND c.game = 'pkm' AND e.deleted_at IS NULL LIMIT 1`
   if (db.prepare(has).get()) return 0
 
   const rand = rng(SEED)
@@ -184,54 +188,78 @@ const SESSION_PLAN: [hoursAgo: number, cards: number, hidden: boolean][] = [
  * marked as sent, so a later sign-in doesn't push them. Returns the number of sessions inserted.
  */
 export function seedFakeSessions(db: Database.Database, now = new Date()): number {
-  const owned = db.prepare(
-    `SELECT p.id AS printingId, p.card_id AS cardId, p.pkey, e.image_id AS imageId, c.name,
-            p.set_code AS setCode, ${RARITY_LABEL} AS rarity,
-            COALESCE(p.market_price, p.set_price) AS price
-     FROM collection_entries e JOIN card_printings p ON p.id = e.printing_id
-     JOIN cards c ON c.id = p.card_id
-     WHERE c.game = ? AND e.deleted_at IS NULL AND p.pkey IS NOT NULL ORDER BY e.printing_id`
-  )
-  const has = db.prepare('SELECT 1 FROM scan_sessions WHERE game = ? LIMIT 1')
-  const insert = db.prepare(
-    `INSERT OR IGNORE INTO scan_sessions (uid, game, cards, friends_visible, created_at, updated_at, dirty)
-     VALUES (?, ?, ?, ?, ?, ?, 0)`
-  )
   let inserted = 0
   db.transaction(() => {
-    for (const game of ['ygo', 'pkm'] as const) {
-      if (has.get(game)) continue
-      type Owned = Omit<ScanSessionCard, 'photoId' | 'quantity' | 'guess' | 'addedAt'>
-      const rand = rng(SEED + game.length)
-      const pool = shuffle(owned.all(game) as Owned[], rand)
-      if (pool.length === 0) continue
-      let next = 0
-      for (const [hoursAgo, size, hidden] of SESSION_PLAN) {
-        const start = now.getTime() - hoursAgo * 3_600_000
-        const picked = Array.from(
-          { length: Math.min(size, pool.length) },
-          () => pool[next++ % pool.length]
-        )
-        const cards = checkSessionCards(
-          picked.map((c, i) => ({
-            ...c,
-            photoId: null,
-            quantity: rand() < 0.2 ? 2 + Math.floor(rand() * 2) : 1,
-            guess: rand() < 0.1,
-            addedAt: start + i * 4_000
-          }))
-        )
-        const at = new Date(start + cards.length * 4_000).toISOString()
-        inserted += insert.run(
-          crypto.randomUUID(),
-          game,
-          JSON.stringify(cards),
-          hidden ? 0 : 1,
-          at,
-          at
-        ).changes
-      }
-    }
+    for (const game of ['ygo', 'pkm'] as const)
+      inserted += seedSessionsFor(db, 0, game, SESSION_PLAN, rng(SEED + game.length), now)
   })()
+  return inserted
+}
+
+/**
+ * Sessions per `plan` for one owner and game, drawn from the cards that owner has, marked as sent.
+ * No-op when the owner has a session of that game or no cards with a sync key. Returns the number
+ * inserted.
+ */
+export function seedSessionsFor(
+  db: Database.Database,
+  owner: number,
+  game: 'ygo' | 'pkm',
+  plan: [hoursAgo: number, cards: number, hidden: boolean][],
+  rand: () => number,
+  now: Date
+): number {
+  if (
+    db
+      .prepare('SELECT 1 FROM scan_sessions WHERE owner_id = ? AND game = ? LIMIT 1')
+      .get(owner, game)
+  )
+    return 0
+  type Owned = Omit<ScanSessionCard, 'photoId' | 'quantity' | 'guess' | 'addedAt'>
+  const owned = db
+    .prepare(
+      `SELECT p.id AS printingId, p.card_id AS cardId, p.pkey, e.image_id AS imageId, c.name,
+              p.set_code AS setCode, ${RARITY_LABEL} AS rarity,
+              COALESCE(p.market_price, p.set_price) AS price
+       FROM collection_entries e JOIN card_printings p ON p.id = e.printing_id
+       JOIN cards c ON c.id = p.card_id
+       WHERE e.owner_id = ? AND c.game = ? AND e.deleted_at IS NULL AND p.pkey IS NOT NULL
+       ORDER BY e.printing_id`
+    )
+    .all(owner, game) as Owned[]
+  const pool = shuffle(owned, rand)
+  if (pool.length === 0) return 0
+  const insert = db.prepare(
+    `INSERT OR IGNORE INTO scan_sessions (owner_id, uid, game, cards, friends_visible, created_at, updated_at, dirty)
+     VALUES (?, ?, ?, ?, ?, ?, ?, 0)`
+  )
+  let inserted = 0
+  let next = 0
+  for (const [hoursAgo, size, hidden] of plan) {
+    const start = now.getTime() - hoursAgo * 3_600_000
+    const picked = Array.from(
+      { length: Math.min(size, pool.length) },
+      () => pool[next++ % pool.length]
+    )
+    const cards = checkSessionCards(
+      picked.map((c, i) => ({
+        ...c,
+        photoId: null,
+        quantity: rand() < 0.2 ? 2 + Math.floor(rand() * 2) : 1,
+        guess: rand() < 0.1,
+        addedAt: start + i * 4_000
+      }))
+    )
+    const at = new Date(start + cards.length * 4_000).toISOString()
+    inserted += insert.run(
+      owner,
+      crypto.randomUUID(),
+      game,
+      JSON.stringify(cards),
+      hidden ? 0 : 1,
+      at,
+      at
+    ).changes
+  }
   return inserted
 }

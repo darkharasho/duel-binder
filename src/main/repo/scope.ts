@@ -107,20 +107,21 @@ export const favouriteSql = (scope: Scope, card = 'c'): string =>
   `${card}.id IN (SELECT f.card_id FROM favourites f WHERE ${scope.where('f')})`
 
 /**
- * The active owner's collection of one game on this device. `game` is trusted SQL: ACTIVE_GAME or a
- * quoted game id literal.
+ * One owner's collection of one game on this device: the active owner's unless `owner` names another
+ * (dev fake friends). `game` and `owner` are trusted SQL: ACTIVE_GAME or a quoted game id literal, and
+ * ACTIVE_OWNER or an integer literal.
  */
-export function localScope(game: string): Scope {
+export function localScope(game: string, owner: string = ACTIVE_OWNER): Scope {
   return {
     game,
     ebayPrices: EBAY_PRICES,
     where: (alias) =>
-      `${alias}.owner_id = ${ACTIVE_OWNER} AND ${alias}.game = ${game} AND ${alias}.deleted_at IS NULL`,
+      `${alias}.owner_id = ${owner} AND ${alias}.game = ${game} AND ${alias}.deleted_at IS NULL`,
     insertEntry(db, row) {
       const info = db
         .prepare(
           `INSERT INTO collection_entries (uid, owner_id, game, printing_id, image_id, quantity, notes, created_at, updated_at)
-           VALUES (?, ${ACTIVE_OWNER}, ${game}, ?, ?, ?, ?, ?, ?)`
+           VALUES (?, ${owner}, ${game}, ?, ?, ?, ?, ?, ?)`
         )
         .run(
           crypto.randomUUID(),
@@ -136,47 +137,47 @@ export function localScope(game: string): Scope {
     deleteEntry(db, id, ts) {
       // Owner 0 (never signed in) rows were never on the server: no one needs a tombstone, so drop the row.
       db.prepare(
-        `DELETE FROM collection_entries WHERE id = ? AND deleted_at IS NULL AND owner_id = 0 AND owner_id = ${ACTIVE_OWNER}
+        `DELETE FROM collection_entries WHERE id = ? AND deleted_at IS NULL AND owner_id = 0 AND owner_id = ${owner}
          AND game = ${game}`
       ).run(id)
       db.prepare(
         `UPDATE collection_entries SET deleted_at = ?, updated_at = ?, dirty = 1
-         WHERE id = ? AND deleted_at IS NULL AND owner_id = ${ACTIVE_OWNER} AND game = ${game}`
+         WHERE id = ? AND deleted_at IS NULL AND owner_id = ${owner} AND game = ${game}`
       ).run(ts, ts, id)
     },
     touch: 'dirty = 1',
     wishlist: {
       ownerCol: 'owner_id',
-      owner: ACTIVE_OWNER,
+      owner,
       markerCol: 'dirty',
       marker: '1',
       touch: 'dirty = 1'
     },
     binderSync: () => ({
       ownerCol: 'owner_id',
-      owner: ACTIVE_OWNER,
+      owner,
       markerCol: 'dirty',
       marker: '1',
       touch: 'dirty = 1'
     }),
     sessions: {
       ownerCol: 'owner_id',
-      owner: ACTIVE_OWNER,
+      owner,
       markerCol: 'dirty',
       marker: '1',
       touch: 'dirty = 1'
     },
     favourites: {
       ownerCol: 'owner_id',
-      owner: ACTIVE_OWNER,
+      owner,
       markerCol: 'dirty',
       marker: '1',
       touch: 'dirty = 1'
     },
     snapshotTable: {
       insertCols: 'owner_id, game, ',
-      insertVals: `${ACTIVE_OWNER}, ${game}, `,
-      where: `owner_id = ${ACTIVE_OWNER} AND game = ${game}`
+      insertVals: `${owner}, ${game}, `,
+      where: `owner_id = ${owner} AND game = ${game}`
     }
   }
 }

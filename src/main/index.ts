@@ -32,6 +32,7 @@ import { restrictPermissions } from './permissions'
 import { createScanWindowManager, type Rect, type ScanWindowManager } from './scanWindow'
 import { createHandlers, registerIpc, type AppDeps } from './ipc/handlers'
 import { seedFakeCollection, seedFakePokemon, seedFakeSessions } from './dev/fakeData'
+import { createFakeFriends, FAKE_ME, seedFakeFriends } from './dev/fakeFriends'
 import { resolveUserData } from './userData'
 import { captureShots, SHOTS } from './dev/capture'
 import { createAccountService } from './cloud/account'
@@ -294,6 +295,7 @@ async function bootstrap(): Promise<void> {
     if (fakeData && s.state === 'idle') {
       seedFakeCollection(db)
       seedFakeSessions(db)
+      seedFakeFriends(db)
       markSeeded()
     }
     broadcast(SYNC_PROGRESS, s)
@@ -302,6 +304,7 @@ async function bootstrap(): Promise<void> {
     seedFakeCollection(db)
     seedFakePokemon(db)
     seedFakeSessions(db)
+    seedFakeFriends(db)
     // Already seeded by an earlier run, or just now: nothing to wait for.
     if (db.prepare('SELECT 1 FROM collection_entries WHERE deleted_at IS NULL LIMIT 1').get())
       markSeeded()
@@ -379,6 +382,10 @@ async function bootstrap(): Promise<void> {
         launchedAt
       })
 
+  // Signed out, the fake profile still has a user and fake friends, so the Friends pages show.
+  const fakeFriends = fakeData ? createFakeFriends(db) : null
+  const withFakeUser = (s: AccountStatus): AccountStatus =>
+    fakeFriends && !s.user ? { ...s, user: FAKE_ME } : s
   const account = createAccountService({
     db,
     tokens,
@@ -400,7 +407,7 @@ async function bootstrap(): Promise<void> {
       }),
     emailAuth: (step, body) => emailAuthRequest(portal, step, body),
     emailEnabled: () => emailSignInEnabled(portal),
-    emit: (s: AccountStatus) => broadcast(ACCOUNT_CHANGED, s),
+    emit: (s: AccountStatus) => broadcast(ACCOUNT_CHANGED, withFakeUser(s)),
     emitDataChanged,
     isOnline: () => net.isOnline(),
     catalog,
@@ -458,7 +465,14 @@ async function bootstrap(): Promise<void> {
       app: appDeps,
       window: windowDeps,
       scanWindow,
-      account: fakeData ? { ...account, games: () => [...GAME_IDS] } : account,
+      account: fakeFriends
+        ? {
+            ...account,
+            games: () => [...GAME_IDS],
+            status: () => withFakeUser(account.status()),
+            portal: (channel, args) => fakeFriends.portal(account.portal, channel, args)
+          }
+        : account,
       errorReports,
       emitDataChanged,
       fingerprints,

@@ -242,7 +242,7 @@ export function SetChecklist({
         : [],
     [data, mode, filter, pickedRarities, pickedVersions, q, sort]
   )
-  const shownTiles = useChunkedList(tiles)
+  const [shownTiles, tilesEndRef] = useChunkedList(tiles)
   useArtPrefetch(
     useMemo(
       () =>
@@ -590,7 +590,10 @@ export function SetChecklist({
               adjust={adjust}
             />
           ) : (
-            <ul className="grid grid-cols-[repeat(auto-fill,minmax(calc(7.5rem*var(--card-scale,1)),1fr))] gap-3 max-md:grid-cols-3 max-md:gap-1.5">
+            <ul
+              ref={tilesEndRef}
+              className="grid grid-cols-[repeat(auto-fill,minmax(calc(7.5rem*var(--card-scale,1)),1fr))] gap-3 max-md:grid-cols-3 max-md:gap-1.5"
+            >
               {shownTiles.map((t) => {
                 const owned = t.owned > 0
                 const priced = sort.by === 'price' ? tilePrice(t) : null

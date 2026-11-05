@@ -1,3 +1,4 @@
+import { memo } from 'react'
 import { useTileImage } from '@/lib/cardSize'
 import type { EntryView } from '@shared/types'
 import { Badge } from '@/components/ui/badge'
@@ -26,61 +27,105 @@ export function CollectionGrid({
   onSelect,
   favourites
 }: Props): React.JSX.Element {
-  const shown = useChunkedList(entries)
+  const [shown, endRef] = useChunkedList(entries)
   const tileImage = useTileImage()
   return (
     <ul
+      ref={endRef}
       className="grid grid-cols-[repeat(auto-fill,minmax(calc(150px*var(--card-scale,1)),1fr))] gap-x-4 gap-y-6 max-md:grid-cols-3 max-md:gap-x-2 max-md:gap-y-4"
       aria-label="Collection grid"
     >
       {shown.map((e) => (
-        <li key={e.id} className={cn(TILE, 'lazy-item [--lazy-h:calc(310px*var(--card-scale,1))]')}>
-          <button
-            type="button"
-            data-nav-key={e.id}
-            onClick={() => onSelect(e)}
-            aria-pressed={e.id === selectedId}
-            className={cn(
-              TILE_BUTTON,
-              'group rounded-md p-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring aria-pressed:bg-white/[0.06]'
-            )}
-          >
-            <TiltCard className="mb-2">
-              <CardArt
-                imageId={e.imageId}
-                printingId={scanFor(e)}
-                size={tileImage}
-                alt={e.card.name}
-                className="w-full rounded-[4px] shadow-[0_8px_20px_rgb(0_0_0/0.45)]"
-              />
-              <Badge className="absolute right-1.5 top-1.5 font-mono shadow">×{e.quantity}</Badge>
-            </TiltCard>
-            <div className={cn('truncate text-[13px] font-semibold', favourites && TILE_NAME)}>
-              {e.card.name}
-            </div>
-            <div className="mt-0.5 min-w-0 space-y-0.5">
-              <div className="flex items-center gap-1 font-mono text-[11px] text-muted-foreground">
-                <span className="truncate">
-                  {e.printing.setCode} · {e.printing.setRarity}
-                </span>
-                <LanguageTag language={e.printing.language} />
-              </div>
-              <div className="font-mono text-xs">
-                <EntryValue entry={e} amount={displayTotal(e)} />
-              </div>
-              <StaleBadge entry={e} />
-            </div>
-          </button>
-          {favourites && (
-            <FavouriteHeart
-              cardId={e.card.id}
-              name={e.card.name}
-              favourites={favourites}
-              className={TILE_HEART}
-            />
-          )}
-        </li>
+        <GridTile
+          key={e.id}
+          entry={e}
+          selected={e.id === selectedId}
+          onSelect={onSelect}
+          tileImage={tileImage}
+          favourites={favourites}
+          favourite={favourites?.isFavourite(e.card.id)}
+        />
       ))}
     </ul>
   )
 }
+
+interface TileProps {
+  entry: EntryView
+  selected: boolean
+  onSelect: (entry: EntryView) => void
+  tileImage: ReturnType<typeof useTileImage>
+  favourites?: Favourites
+  /** Whether the heart is on: a heart toggle re-renders only its own tile, not the whole grid. */
+  favourite?: boolean
+}
+
+/**
+ * One entry's tile. Memoized so a selection, a heart or the next step of a long list renders only
+ * the tiles it changed, not the thousands already there.
+ */
+const GridTile = memo(
+  function GridTile({
+    entry: e,
+    selected,
+    onSelect,
+    tileImage,
+    favourites
+  }: TileProps): React.JSX.Element {
+    return (
+      <li className={cn(TILE, 'lazy-item [--lazy-h:calc(310px*var(--card-scale,1))]')}>
+        <button
+          type="button"
+          data-nav-key={e.id}
+          onClick={() => onSelect(e)}
+          aria-pressed={selected}
+          className={cn(
+            TILE_BUTTON,
+            'group rounded-md p-1 text-left outline-none focus-visible:ring-2 focus-visible:ring-ring aria-pressed:bg-white/[0.06]'
+          )}
+        >
+          <TiltCard className="mb-2">
+            <CardArt
+              imageId={e.imageId}
+              printingId={scanFor(e)}
+              size={tileImage}
+              alt={e.card.name}
+              className="w-full rounded-[4px] shadow-[0_8px_20px_rgb(0_0_0/0.45)]"
+            />
+            <Badge className="absolute right-1.5 top-1.5 font-mono shadow">×{e.quantity}</Badge>
+          </TiltCard>
+          <div className={cn('truncate text-[13px] font-semibold', favourites && TILE_NAME)}>
+            {e.card.name}
+          </div>
+          <div className="mt-0.5 min-w-0 space-y-0.5">
+            <div className="flex items-center gap-1 font-mono text-[11px] text-muted-foreground">
+              <span className="truncate">
+                {e.printing.setCode} · {e.printing.setRarity}
+              </span>
+              <LanguageTag language={e.printing.language} />
+            </div>
+            <div className="font-mono text-xs">
+              <EntryValue entry={e} amount={displayTotal(e)} />
+            </div>
+            <StaleBadge entry={e} />
+          </div>
+        </button>
+        {favourites && (
+          <FavouriteHeart
+            cardId={e.card.id}
+            name={e.card.name}
+            favourites={favourites}
+            className={TILE_HEART}
+          />
+        )}
+      </li>
+    )
+  },
+  (a, b) =>
+    a.entry === b.entry &&
+    a.selected === b.selected &&
+    a.onSelect === b.onSelect &&
+    a.tileImage === b.tileImage &&
+    (a.favourites === undefined) === (b.favourites === undefined) &&
+    a.favourite === b.favourite
+)

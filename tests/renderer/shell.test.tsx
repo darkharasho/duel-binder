@@ -89,6 +89,7 @@ describe('AppShell sets nav', () => {
       'Sets',
       'Browse',
       'Scan',
+      'Sessions',
       'Rip',
       'Friends',
       'Settings'
@@ -196,6 +197,23 @@ describe('AppShell rip nav', () => {
   it('has no Rip item on the web', async () => {
     await renderApp(mockApi({ window: { platform: 'web' } }))
     expect(screen.queryByRole('button', { name: 'Rip' })).not.toBeInTheDocument()
+  })
+})
+
+describe('AppShell sessions nav', () => {
+  it('lists Sessions right after Scan', async () => {
+    await renderApp()
+    const names = within(screen.getByRole('navigation', { name: 'Main' }))
+      .getAllByRole('button')
+      .map((b) => b.textContent)
+    expect(names.indexOf('Sessions')).toBe(names.indexOf('Scan') + 1)
+    await userEvent.click(screen.getByRole('button', { name: 'Sessions' }))
+    expect(await screen.findByRole('heading', { name: 'Sessions' })).toBeInTheDocument()
+  })
+
+  it('has no Sessions item on the web', async () => {
+    await renderApp(mockApi({ window: { platform: 'web' } }))
+    expect(screen.queryByRole('button', { name: 'Sessions' })).not.toBeInTheDocument()
   })
 })
 

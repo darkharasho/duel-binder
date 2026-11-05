@@ -15,6 +15,7 @@ export const USAGE_EVENTS = [
   'page:sets',
   'page:browse',
   'page:scan',
+  'page:sessions',
   'page:rip',
   'page:friends',
   'page:settings',

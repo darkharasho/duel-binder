@@ -8,6 +8,7 @@ import { BrowsePage } from '@/features/browse/BrowsePage'
 import { CollectionPage } from '@/features/collection/CollectionPage'
 import { DashboardPage } from '@/features/dashboard/DashboardPage'
 import { FriendsPage } from '@/features/friends/FriendsPage'
+import { SessionsPage } from '@/features/sessions/SessionsPage'
 import { SetsPage } from '@/features/sets/SetsPage'
 import { WishlistPage } from '@/features/wishlist/WishlistPage'
 import { useFriendsAvailable } from '@/lib/friends'
@@ -102,6 +103,7 @@ export function PageSwitch({
         />
       )}
       {page === 'scan' && scan}
+      {page === 'sessions' && <SessionsPage />}
       {page === 'rip' && rip}
       {page === 'friends' && <FriendsPage key={friendsKey} />}
       {page === 'settings' && settings}

@@ -57,7 +57,10 @@ export function useCardGame(imageId?: number): GameId {
 
 /** Whether a page is in this game: Scan and Rip are only for a game that has them. */
 export function pageInGame(page: string, def: GameDef): boolean {
-  return (page !== 'scan' || def.features.scan) && (page !== 'rip' || def.features.rip)
+  return (
+    ((page !== 'scan' && page !== 'sessions') || def.features.scan) &&
+    (page !== 'rip' || def.features.rip)
+  )
 }
 
 /**

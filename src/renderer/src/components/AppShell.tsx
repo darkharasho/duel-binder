@@ -22,6 +22,7 @@ export type Page =
   | 'binders'
   | 'browse'
   | 'scan'
+  | 'sessions'
   | 'rip'
   | 'friends'
   | 'sets'
@@ -36,6 +37,7 @@ const NAV = [
   { page: 'sets', label: 'Sets' },
   { page: 'browse', label: 'Browse' },
   { page: 'scan', label: 'Scan' },
+  { page: 'sessions', label: 'Sessions' },
   { page: 'rip', label: 'Rip' },
   { page: 'friends', label: 'Friends' },
   { page: 'settings', label: 'Settings' }
@@ -109,7 +111,7 @@ export function AppShell({
             {NAV.filter(
               ({ page: p }) =>
                 (p !== 'friends' || friendsAvailable) &&
-                ((p !== 'scan' && p !== 'rip') || !isWeb()) &&
+                ((p !== 'scan' && p !== 'sessions' && p !== 'rip') || !isWeb()) &&
                 pageInGame(p, def)
             ).map(({ page: p, label }) => (
               <button

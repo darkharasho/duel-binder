@@ -4,6 +4,7 @@ import { printingNoun } from '@shared/games'
 import {
   ArrowRightIcon,
   CopyIcon,
+  HistoryIcon,
   LanguagesIcon,
   LayersIcon,
   RadioIcon,
@@ -31,6 +32,7 @@ import { FoundBurst } from '@/features/scan/FoundBurst'
 import { PhoneCamera } from './PhoneCamera'
 import { PickerSheet } from './PickerSheet'
 import { ReviewSheet } from './ReviewSheet'
+import { SessionsSheet } from './SessionsSheet'
 import { StreamScreen } from './stream/StreamScreen'
 import {
   GLASS,
@@ -203,7 +205,9 @@ export function ScannerScreen({
   const { session } = useScanHub()
   const pickers = useScanPickers()
   // A game priced by version rather than Yu-Gi-Oh!'s rarities has no rarity for new scans.
-  const rarities = SCAN_PROFILES[useGame().game]?.rarityLook ?? false
+  const { game } = useGame()
+  const rarities = SCAN_PROFILES[game]?.rarityLook ?? false
+  const [sessionsOpen, setSessionsOpen] = useState(false)
   const [reviewing, setReviewing] = useState(false)
   const [streaming, setStreaming] = useState(false)
   const [pingOn, setPingOn] = useScanPingSetting()
@@ -260,6 +264,14 @@ export function ScannerScreen({
           className={cn(ROUND, 'absolute left-14 top-2 bg-black/45 text-white')}
         >
           <RadioIcon aria-hidden className="size-5" />
+        </button>
+        <button
+          type="button"
+          aria-label="Sessions"
+          onClick={() => setSessionsOpen(true)}
+          className={cn(ROUND, 'absolute left-[6.5rem] top-2 bg-black/45 text-white')}
+        >
+          <HistoryIcon aria-hidden className="size-5" />
         </button>
         <button
           type="button"
@@ -357,6 +369,7 @@ export function ScannerScreen({
         </button>
       </div>
       {reviewing && <ReviewSheet onClose={() => setReviewing(false)} />}
+      {sessionsOpen && <SessionsSheet game={game} onClose={() => setSessionsOpen(false)} />}
     </div>
   )
 }

@@ -1,5 +1,5 @@
 import { useRef } from 'react'
-import { act, screen, within } from '@testing-library/react'
+import { act, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Toaster } from '@/components/ui/sonner'
 import { useCamera } from '@/features/scan/useCamera'
@@ -18,6 +18,7 @@ import type { TiltReading } from '@shared/scan/tiltFeatures'
 import * as hubScan from '@/features/scan/useHubScan'
 import type { ScanDraft, ScanOutcome } from '@/features/scan/resolve'
 import { TILT_MS } from '@shared/scan/thresholds'
+import { handleBack } from '../../src/phone/backButton'
 import { createSyncTriggers } from '../../src/phone/syncTriggers'
 import type { PhoneStore } from '../../src/phone/data/store'
 import { createMockApi, renderWithProviders } from './mockApi'
@@ -138,6 +139,18 @@ const settle = (ms = 0): Promise<void> =>
   })
 
 describe('phone scanner', () => {
+  it('opens the Sessions sheet from the top bar and back closes it', async () => {
+    const store = fakeStore({ invoke: vi.fn(async () => []) })
+    installPhoneApi(store)
+    renderScanner(store)
+    await userEvent.click(screen.getByRole('button', { name: 'Sessions' }))
+    expect(await screen.findByRole('region', { name: 'Sessions' })).toBeInTheDocument()
+    act(() => {
+      handleBack()
+    })
+    await waitFor(() => expect(screen.queryByRole('region', { name: 'Sessions' })).toBeNull())
+  })
+
   it('Add to collection adds each row through the store and triggers one sync', async () => {
     vi.useFakeTimers()
     // Testing Library's async wrapper only advances fake timers it believes are Jest's.

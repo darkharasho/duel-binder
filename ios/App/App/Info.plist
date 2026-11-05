@@ -26,6 +26,8 @@
 	<false/>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>Saves your Rip Replay videos to Photos.</string>
 	<key>NSCameraUsageDescription</key>
 	<string>Duel Binder uses the camera to scan your cards. Pictures stay on your phone.</string>
 	<key>UIApplicationSceneManifest</key>

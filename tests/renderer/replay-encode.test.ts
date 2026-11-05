@@ -97,3 +97,49 @@ describe('encodeGif', () => {
     })
   })
 })
+
+describe('recordVideo', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+    vi.unstubAllGlobals()
+  })
+
+  // A hidden page stops drawing while the clock runs on: the video would freeze, so it stops.
+  it('stops with a message when the page is hidden mid-recording', async () => {
+    const { recordVideo } = await import('@/features/scan/replay/encode')
+    class FakeRecorder {
+      state = 'inactive'
+      ondataavailable: ((e: { data: Blob }) => void) | null = null
+      onstop: (() => void) | null = null
+      onerror: (() => void) | null = null
+      start(): void {
+        this.state = 'recording'
+      }
+      stop(): void {
+        this.state = 'inactive'
+        this.onstop?.()
+      }
+    }
+    vi.stubGlobal('MediaRecorder', FakeRecorder)
+    vi.stubGlobal('requestAnimationFrame', () => 1)
+    vi.stubGlobal('cancelAnimationFrame', () => {})
+    vi.spyOn(HTMLCanvasElement.prototype, 'getContext').mockImplementation(
+      () => recordingContext().ctx as never
+    )
+    Object.defineProperty(HTMLCanvasElement.prototype, 'captureStream', {
+      configurable: true,
+      value: () => ({ getTracks: () => [] })
+    })
+    const done = recordVideo(
+      scene,
+      { mime: 'video/mp4', ext: 'mp4' },
+      {
+        signal: new AbortController().signal
+      }
+    )
+    Object.defineProperty(document, 'hidden', { configurable: true, value: true })
+    document.dispatchEvent(new Event('visibilitychange'))
+    await expect(done).rejects.toThrow('Keep Duel Binder open while the replay records')
+    Object.defineProperty(document, 'hidden', { configurable: true, value: false })
+  })
+})

@@ -682,6 +682,8 @@ describe('phone stream end', () => {
     )
     // An empty stream has nothing to replay.
     expect(replay).toBeDisabled()
+    // Four controls don't fit across a small phone upright: the row wraps rather than clipping.
+    expect(screen.getByRole('button', { name: 'Done' }).parentElement).toHaveClass('flex-wrap')
   })
 
   it('Done ends the record and keeps the list', async () => {

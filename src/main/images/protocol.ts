@@ -13,7 +13,10 @@ const SCHEME = 'ygo-img'
 /** Must be called before `app.whenReady()`. */
 export function registerImageScheme(): void {
   protocol.registerSchemesAsPrivileged([
-    { scheme: SCHEME, privileges: { standard: true, secure: true, supportFetchAPI: true } }
+    {
+      scheme: SCHEME,
+      privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true }
+    }
   ])
 }
 

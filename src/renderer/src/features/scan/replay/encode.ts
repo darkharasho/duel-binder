@@ -79,13 +79,22 @@ function recordOnce(
       finish()
       reject(aborted())
     }
+    // A hidden page stops drawing while the clock runs on: the video would freeze, so stop.
+    const onHidden = (): void => {
+      if (!document.hidden || stopped) return
+      finish()
+      reject(new Error('Keep Duel Binder open while the replay records'))
+    }
     opts.signal.addEventListener('abort', onAbort, { once: true })
+    document.addEventListener('visibilitychange', onHidden)
     recorder.ondataavailable = (e) => {
       if (e.data.size > 0) chunks.push(e.data)
     }
     recorder.onstop = () => {
       opts.signal.removeEventListener('abort', onAbort)
-      if (!opts.signal.aborted) resolve(new Blob(chunks, { type: type.mime.split(';')[0] }))
+      document.removeEventListener('visibilitychange', onHidden)
+      if (!opts.signal.aborted && !document.hidden)
+        resolve(new Blob(chunks, { type: type.mime.split(';')[0] }))
     }
     recorder.onerror = () => {
       finish()

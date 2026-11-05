@@ -53,7 +53,9 @@ export function MakeReplay({
   const controller = useRef<AbortController | null>(null)
   useEffect(() => () => controller.current?.abort(), [])
 
-  const canVideo = pickVideoType() !== null
+  const video = pickVideoType()
+  const canVideo = video !== null
+  const videoLabel = video?.ext.toUpperCase() ?? 'MP4'
   const chosen: ReplayFormat = canVideo ? format : 'gif'
   const empty = pickReplayPulls(rows).length === 0
 
@@ -98,7 +100,7 @@ export function MakeReplay({
   const formatToggle = canVideo && (
     <button
       type="button"
-      aria-label={`Replay format: ${format === 'video' ? 'MP4' : 'GIF'}`}
+      aria-label={`Replay format: ${format === 'video' ? videoLabel : 'GIF'}`}
       className={
         variant === 'phone'
           ? PHONE_CONTROL
@@ -106,7 +108,7 @@ export function MakeReplay({
       }
       onClick={() => setFormat((f) => (f === 'video' ? 'gif' : 'video'))}
     >
-      {format === 'video' ? 'MP4' : 'GIF'}
+      {format === 'video' ? videoLabel : 'GIF'}
     </button>
   )
 

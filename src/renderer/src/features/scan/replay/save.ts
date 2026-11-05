@@ -45,7 +45,8 @@ export async function saveReplay(blob: Blob, name: string): Promise<SaveResult> 
       return { saved: true, where: null }
     } catch (e) {
       if (isAbort(e)) return { saved: false }
-      throw e
+      // A share needs a recent tap and the render outlasts it: the browser refuses, so download.
+      if (!(e instanceof DOMException && e.name === 'NotAllowedError')) throw e
     }
   }
   download(blob, name)

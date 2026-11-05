@@ -26,6 +26,12 @@ describe('MakeReplay', () => {
     expect(make).toHaveBeenCalledWith(expect.any(Array), 'gif', expect.anything())
   })
 
+  it('names the format the device will really record', () => {
+    vi.stubGlobal('MediaRecorder', { isTypeSupported: (m: string) => m.startsWith('video/webm') })
+    render(<MakeReplay rows={[row(5)]} variant="desktop" make={vi.fn()} />)
+    expect(screen.getByRole('button', { name: 'Replay format: WEBM' })).toHaveTextContent('WEBM')
+  })
+
   it('is disabled with no pulls', () => {
     render(<MakeReplay rows={[row(0.5), row(null)]} variant="desktop" make={vi.fn()} />)
     expect(screen.getByRole('button', { name: 'Make replay' })).toBeDisabled()

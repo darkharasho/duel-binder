@@ -242,7 +242,7 @@ export function StreamScreen({
               pageRows={portrait ? (summary.hit ? PORTRAIT_HIT_ROWS : PAGE_ROWS) : LANDSCAPE_ROWS}
             />
           </div>
-          <div className="flex shrink-0 justify-center gap-3 bg-neutral-950/65 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur-[2vw]">
+          <div className="flex shrink-0 flex-wrap justify-center gap-3 bg-neutral-950/65 pt-3 pb-[max(1rem,env(safe-area-inset-bottom))] backdrop-blur-[2vw]">
             <button type="button" className={CONTROL} onClick={() => setReviewing(true)}>
               Review
             </button>

@@ -153,10 +153,13 @@ function pullFrame(
   const rise = (1 - inP) * 60 - outP * 40
   const scale = 0.8 + 0.2 * inP - 0.1 * outP
 
-  ctx.fillStyle = 'rgba(255,255,255,0.56)'
-  ctx.font = `600 22px ${FONT}`
-  ctx.textAlign = 'right'
-  ctx.fillText(`#${rank} of ${of}`, REPLAY_W - 28, 54)
+  // A lone pull needs no count.
+  if (of > 1) {
+    ctx.fillStyle = 'rgba(255,255,255,0.56)'
+    ctx.font = `600 22px ${FONT}`
+    ctx.textAlign = 'right'
+    ctx.fillText(`#${rank} of ${of}`, REPLAY_W - 28, 54)
+  }
 
   ctx.save()
   ctx.globalAlpha = alpha

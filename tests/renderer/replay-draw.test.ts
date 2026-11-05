@@ -41,6 +41,13 @@ describe('drawReplayFrame', () => {
     expect(texts).toContain('#1 of 2')
   })
 
+  it('a lone pull has no "#1 of 1"', () => {
+    const s = scene([pull(4)])
+    const { ctx, calls } = recordingContext()
+    drawReplayFrame(ctx, s, middleOf(s, 0))
+    expect(textsOf(calls).join('\n')).not.toContain('#1 of 1')
+  })
+
   it('shows ×3 for a triple', () => {
     const s = scene([pull(4, { quantity: 3 })])
     const { ctx, calls } = recordingContext()

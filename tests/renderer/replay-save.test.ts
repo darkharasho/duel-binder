@@ -71,6 +71,20 @@ describe('saveReplay', () => {
     await expect(saveReplay(blob(), 'r.mp4')).resolves.toEqual({ saved: false })
   })
 
+  // A share needs a recent tap, and the render takes longer than that: the browser refuses it.
+  it('phone web downloads when the share is refused after a long render', async () => {
+    where.platform = 'phone-web'
+    const share = vi.fn(async () => {
+      throw new DOMException('', 'NotAllowedError')
+    })
+    vi.stubGlobal('navigator', { ...navigator, canShare: () => true, share })
+    URL.createObjectURL = vi.fn(() => 'blob:x')
+    URL.revokeObjectURL = vi.fn()
+    const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+    await expect(saveReplay(blob(), 'r.mp4')).resolves.toEqual({ saved: true, where: null })
+    expect(click).toHaveBeenCalledTimes(1)
+  })
+
   it("phone web downloads when it can't share", async () => {
     where.platform = 'phone-web'
     vi.stubGlobal('navigator', { ...navigator, canShare: undefined })

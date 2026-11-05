@@ -6,6 +6,8 @@ import { LANGUAGES, type Language } from '../../shared/languages'
 import { parsePrice } from '../../shared/pricing'
 import type { ScanPrinting } from '../../shared/scan/types'
 import type { CollectorNumber } from '../../shared/scan/collectorNumber'
+import { gameOfId } from '../../shared/games/ids'
+import { opPrintingImageId } from '../../shared/games/onePiece'
 import { enTwinPrice } from './enTwin'
 import { isMarketOnly, MARKET_ONLY_PRICE } from './priceRule'
 import { LOCAL, type Scope } from './scope'
@@ -24,12 +26,14 @@ interface PrintingRow {
   rawPrice: number | null
   localName: string | null
   printedRarity: string | null
+  /** card_printings.set_rarity_code: a One Piece printing's Bandai id, which names its own art. */
+  rarityCode: string
 }
 
 const select = (
   scope: Scope
 ): string => `SELECT p.id AS printingId, p.card_id AS cardId, c.name AS name, c.frame_type AS frameType,
-  p.set_name AS setName, p.set_code AS setCode, p.set_rarity AS rarity, p.variant AS variant, p.language AS language,
+  p.set_name AS setName, p.set_code AS setCode, p.set_rarity AS rarity, p.variant AS variant, p.language AS language, p.set_rarity_code AS rarityCode,
   CASE WHEN ${isMarketOnly} THEN ${MARKET_ONLY_PRICE} WHEN p.language = 'en' THEN COALESCE(p.market_price, ip.price, p.set_price) ELSE COALESCE(ip.price, ${enTwinPrice(scope.game)}) END AS rawPrice,
   pc.local_name AS localName, pc.rarity AS printedRarity
   FROM card_printings p JOIN cards c ON c.id = p.card_id AND +c.game = ${scope.game}
@@ -140,12 +144,16 @@ function withImages(db: SqlDb, rows: PrintingRow[], scope: Scope, twins = false)
       twinImages.set(f.cardId, [...(twinImages.get(f.cardId) ?? []), f.imageId])
   }
   return rows
-    .map(({ rawPrice, localName, printedRarity, ...r }) => {
+    .map(({ rawPrice, localName, printedRarity, rarityCode, ...r }) => {
       const twin = twinned.get(`${r.cardId}|${r.language}`)
+      const cardImages = images.get(r.cardId) ?? []
+      // A One Piece printing has art of its own (a parallel's, a reprint's): only that, when the
+      // catalog has it, so art matched picks the printing and not just the card.
+      const own = gameOfId(r.cardId) === 'op' ? opPrintingImageId(r.language, rarityCode) : null
       return {
         ...r,
         price: parsePrice(rawPrice),
-        imageIds: images.get(r.cardId) ?? [],
+        imageIds: own !== null && cardImages.includes(own) ? [own] : cardImages,
         // Only where the catalog has one, so a Yu-Gi-Oh printing is as it always was.
         ...(localName ? { localName } : {}),
         ...(printedRarity ? { printedRarity } : {}),

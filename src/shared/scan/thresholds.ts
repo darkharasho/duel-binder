@@ -17,6 +17,16 @@ export const ART_MIN_MARGIN = 10
  */
 export const PKM_ART_MIN_MARGIN = 24
 /**
+ * One Piece: how far ahead of the closest artwork of another number the best must be to trust it,
+ * and how close two printings' artworks of one number must be to count as the same art (an
+ * English card and its Japanese twin, a reprint in a premium booster), which the number read or
+ * the user then decides. The art box is cut above Bandai's SAMPLE stamp; on TCGplayer's
+ * stamp-free OP-01 scans the right card was a median 6 bits away and the nearest other card 90
+ * further, but there are no phone photos yet, so both start where Pokémon's group margin is.
+ */
+export const OP_ART_MIN_MARGIN = 24
+export const OP_SAME_ART = 24
+/**
  * A Japanese card's printed name is evidence of its language (readsJapaneseName) with this many
  * kana and kanji or more, and may be read one letter off with JA_NAME_FUZZY_LENGTH.
  */

@@ -10,7 +10,8 @@ import {
   TEXT_BOX
 } from '../../src/renderer/src/features/scan/vision/regions'
 
-const inside = (b: Box): boolean => b.every((v) => v >= 0 && v <= 1) && b[0] < b[2] && b[1] < b[3]
+const inside = (b: Box, reach = 0): boolean =>
+  b.every((v) => v >= -reach && v <= 1 + reach) && b[0] < b[2] && b[1] < b[3]
 
 describe('scan profiles', () => {
   it("ygo profile equals today's constants", () => {
@@ -36,8 +37,9 @@ describe('scan profiles', () => {
       expect(p.game).toBe(game)
       expect(p.artBoxes.length).toBeGreaterThan(0)
       expect(p.codeBands.length).toBeGreaterThan(0)
-      for (const b of [...p.artBoxes, ...p.codeBands, p.nameBand, p.textBox])
-        expect(inside(b)).toBe(true)
+      for (const b of [...p.artBoxes, p.nameBand, p.textBox]) expect(inside(b)).toBe(true)
+      // A code band may reach past the outline by codeReach.
+      for (const b of p.codeBands) expect(inside(b, p.codeReach ?? 0)).toBe(true)
     }
   })
 
@@ -110,10 +112,11 @@ describe('scan profiles', () => {
         }
     })
 
-    it('has its profile for the number reader while its scanner stays off', () => {
-      expect(GAMES.op.features.scan).toBe(false)
+    it('scans, its art box cut above the SAMPLE stamp (0.42 to 0.57 of the height)', () => {
+      expect(GAMES.op.features.scan).toBe(true)
       expect(op().game).toBe('op')
       for (const b of [...op().artBoxes, op().nameBand, op().textBox]) expect(inside(b)).toBe(true)
+      for (const [, top, , bottom] of op().artBoxes) expect(top < 0.42 && bottom <= 0.42).toBe(true)
     })
 
     it('needs no fingerprints, foil, holder search or rarity look', () => {

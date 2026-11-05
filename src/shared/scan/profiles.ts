@@ -104,9 +104,9 @@ const PKM_WINDOWS: readonly Box[] = [
 ]
 
 /**
- * One Piece (63 x 88 mm, like Pokémon). Only its number is read for now, by the Contribute photos
- * screen (step 3b); its scanner (step 4) is still off, so there are no fingerprints to match and
- * the art box, name and text are where Bandai prints them, unused yet. Measured on Bandai's renders
+ * One Piece (63 x 88 mm, like Pokémon). Its art and number are matched by the scanner
+ * (resolveOnePiece.ts) and its number read by the Contribute photos screen too; the name and
+ * text are where Bandai prints them, the text box read only to tell English from Japanese. Measured on Bandai's renders
  * (en.onepiece-cardgame.com, 600 x 838): a Leader, Characters, an Event and a Stage, a promo, a
  * premium booster, an alternate art, a manga SP and a full-art SEC. Every layout prints the number
  * in the same place, bottom right, right-aligned against the rarity box: 0.755 (PRB01-001) or
@@ -145,8 +145,7 @@ const OP_PROFILE: ScanProfile = {
   keepOutline: false
 }
 
-// The Record<'ygo' | 'pkm'> part lists the games that scan today; op's profile is for its number
-// reader only (OP_PROFILE).
+// The Record<'ygo' | 'pkm'> part lists the games every build has a profile for; op's is OP_PROFILE.
 export const SCAN_PROFILES: Record<'ygo' | 'pkm', ScanProfile> &
   Partial<Record<GameId, ScanProfile>> = {
   ygo: {

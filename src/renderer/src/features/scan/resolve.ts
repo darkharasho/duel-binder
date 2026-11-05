@@ -20,6 +20,7 @@ import {
 } from '@shared/scan/thresholds'
 import type { ScanDraft, ScanPrinting } from '@shared/scan/types'
 import type { ArtMatch, RawSignals } from './engine'
+import { resolveOnePieceSignals } from './resolveOnePiece'
 import { resolvePokemonSignals } from './resolvePokemon'
 import type { PokemonTextLanguage } from '@shared/scan/pokemonLanguage'
 
@@ -328,10 +329,12 @@ async function byName(raw: RawSignals, ctx: ResolveContext): Promise<ScanDraft |
  * when a card is in view but none of those is trusted. A code read that names a different card
  * than confident art is a misread one way or the other, so it's unsure too. When art was matched
  * and its closest artwork is past ART_FAR_DISTANCE, what's in view isn't taken for a card at all
- * unless its code or name reads: `none`. Pokémon cards are resolvePokemonSignals'.
+ * unless its code or name reads: `none`. Pokémon cards are resolvePokemonSignals', One Piece
+ * cards resolveOnePieceSignals'.
  */
 export async function resolveSignals(raw: RawSignals, ctx: ResolveContext): Promise<ScanOutcome> {
   if (ctx.game === 'pkm') return resolvePokemonSignals(raw, ctx)
+  if (ctx.game === 'op') return resolveOnePieceSignals(raw, ctx)
   if (!raw.found) return { kind: 'none' }
   const artCard = await confidentArt(raw, ctx)
   const code = await byCode(raw, ctx)

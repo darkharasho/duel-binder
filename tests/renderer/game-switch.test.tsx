@@ -123,16 +123,16 @@ describe('desktop game switch', () => {
     expect(radios[2]).toHaveTextContent('One Piece')
   })
 
-  it('op hides Rip and Scan', async () => {
+  it('op shows Scan and not Rip', async () => {
     await renderDesktop(desktopApi(['ygo', 'pkm', 'op'], 'op'))
     expect(await screen.findByRole('button', { name: /switch game/i })).toHaveTextContent(
       'One Piece'
     )
-    expect(navNames()).not.toContain('Scan')
+    expect(navNames()).toContain('Scan')
     expect(navNames()).not.toContain('Rip')
   })
 
-  it('on Scan, switching to op shows the dashboard without throwing', async () => {
+  it('on Rip, switching to op (no Rip) shows the dashboard without throwing', async () => {
     let active: GameId = 'ygo'
     const api = desktopApi(['ygo', 'pkm', 'op'], 'ygo', {
       games: {
@@ -144,7 +144,7 @@ describe('desktop game switch', () => {
     })
     await renderDesktop(api)
     await userEvent.click(
-      within(screen.getByRole('navigation', { name: 'Main' })).getByRole('button', { name: 'Scan' })
+      within(screen.getByRole('navigation', { name: 'Main' })).getByRole('button', { name: 'Rip' })
     )
     await userEvent.click(await screen.findByRole('button', { name: /switch game/i }))
     await userEvent.click(await screen.findByRole('menuitemradio', { name: /One Piece/ }))

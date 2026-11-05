@@ -86,9 +86,9 @@ The owner opens packs on Discord streams and scan nights. Afterwards they want s
 - How to render: canvas + `MediaRecorder`/WebCodecs, an encoder library, or Electron-side encoding. Pick per platform; it doesn't need to be the same everywhere.
 - Exact timings, easing and frame rate (24–30 fps is fine).
 - Where the camera buffer lives and how clips are cut.
-- Test approach: the pull selection and rarity ordering are pure functions and need unit tests. The video itself needs a manual device check on iOS, Android and desktop.
+- Test approach: pull selection and ordering are pure functions and need unit tests. The video itself needs a manual device check on iOS, Android and desktop.
 
 ## Reference
 
 - Mockup B (the countdown) was rendered in-app during the design chat on 2026-11-05.
-- Existing code: `src/phone/stream/record.ts` (what a stream pulled), `src/renderer/src/features/scan/window/summary.ts` (summary and hit rule), `src/shared/scan/rarity.ts` (Yu-Gi-Oh! order), `src/renderer/src/features/rip/SessionSummary.tsx` (`rankedHits`, the Rip version of the same idea).
+- Existing code: `src/phone/stream/record.ts` (what a stream pulled), `src/renderer/src/features/scan/window/summary.ts` (summary and hit rule), `src/renderer/src/features/rip/SessionSummary.tsx` (`rankedHits`, the Rip version of the same idea).

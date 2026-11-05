@@ -3,8 +3,16 @@ import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import type { ScanRow } from '../session'
-import { loadReplayArt } from './art'
-import { encodeGif, pickVideoType, recordVideo, type ReplayFormat } from './encode'
+import { loadReplayArt, loadReplayLogo } from './art'
+import { loadReplayFonts } from './draw'
+import {
+  canEncodeFrames,
+  encodeGif,
+  encodeVideoFrames,
+  pickVideoType,
+  recordVideo,
+  type ReplayFormat
+} from './encode'
 import { pickReplayPulls, replayHeader } from './pulls'
 import { replayFileName, saveReplay, type SaveResult } from './save'
 import { replayTimeline } from './timeline'
@@ -17,16 +25,25 @@ type Make = (
 
 /** The whole replay: pick the pulls, load their art, draw and encode, then save it. */
 const makeReplay: Make = async (rows, format, opts) => {
-  const loaded = await loadReplayArt(pickReplayPulls(rows))
+  const [loaded, logo] = await Promise.all([
+    loadReplayArt(pickReplayPulls(rows)),
+    loadReplayLogo(),
+    loadReplayFonts()
+  ])
   if (loaded.pulls.length === 0) throw new Error("Couldn't load the card art")
   const scene = {
     ...loaded,
+    logo,
     header: replayHeader(rows),
     timeline: replayTimeline(loaded.pulls.length)
   }
-  const video = format === 'video' ? pickVideoType() : null
-  const blob = video ? await recordVideo(scene, video, opts) : await encodeGif(scene, opts)
-  return saveReplay(blob, replayFileName(video ? video.ext : 'gif'))
+  if (format === 'gif') return saveReplay(await encodeGif(scene, opts), replayFileName('gif'))
+  // Frame by frame where the device can: sharper, and faster than playing it through.
+  if (await canEncodeFrames())
+    return saveReplay(await encodeVideoFrames(scene, opts), replayFileName('mp4'))
+  const video = pickVideoType()
+  if (!video) return saveReplay(await encodeGif(scene, opts), replayFileName('gif'))
+  return saveReplay(await recordVideo(scene, video, opts), replayFileName(video.ext))
 }
 
 const isAbort = (e: unknown): boolean => e instanceof DOMException && e.name === 'AbortError'

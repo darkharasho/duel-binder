@@ -35,7 +35,7 @@ export const GIF_STEPS = [
   { w: 240, h: 300, fps: 6 }
 ]
 
-const VIDEO_BITRATES = [2_000_000, 1_000_000]
+const VIDEO_BITRATES = [3_000_000, 1_500_000]
 
 const aborted = (): DOMException => new DOMException('The replay was stopped', 'AbortError')
 
@@ -128,11 +128,93 @@ export async function recordVideo(
 
 const nextTask = (): Promise<void> => new Promise((r) => setTimeout(r))
 
-/** Steps the scene frame by frame into a GIF, smaller each time it comes out over MAX_BYTES. */
-export async function encodeGif(
+export const VIDEO_FPS = 30
+
+/**
+ * The bitrate that fills about 80% of MAX_BYTES over `durationMs`, so a short replay gets more
+ * detail than a long one; capped where more stops showing.
+ */
+export function videoBitrate(durationMs: number): number {
+  const fit = (MAX_BYTES * 8 * 0.8) / (durationMs / 1000)
+  return Math.round(Math.min(8_000_000, fit))
+}
+
+/** Whether this device can encode H.264 frame by frame (WebCodecs); else it records in real time. */
+export async function canEncodeFrames(): Promise<boolean> {
+  if (typeof VideoEncoder === 'undefined') return false
+  const { canEncodeVideo } = await import('mediabunny')
+  return canEncodeVideo('avc', { width: REPLAY_W, height: REPLAY_H }).catch(() => false)
+}
+
+/**
+ * Whether this device encodes H.264 in hardware. Software H.264 (Chromium's OpenH264, all Linux
+ * gets) turns the deep backdrop's soft dark gradients to blocks at any bitrate.
+ */
+async function encodesInHardware(): Promise<boolean> {
+  const { canEncodeVideo } = await import('mediabunny')
+  return canEncodeVideo('avc', {
+    width: REPLAY_W,
+    height: REPLAY_H,
+    hardwareAcceleration: 'prefer-hardware'
+  }).catch(() => false)
+}
+
+/**
+ * Draws and encodes each frame in turn into an MP4: the deep backdrop where a hardware encoder can
+ * carry it, the bright one where not. Unlike recording, no frame is dropped and the
+ * encoder isn't rushed, so the bitrate goes where it's asked; smaller once if it's over the limit.
+ */
+export async function encodeVideoFrames(
   scene: ReplayScene,
   opts: { signal: AbortSignal; onProgress?: (p: number) => void }
 ): Promise<Blob> {
+  const { BufferTarget, CanvasSource, Mp4OutputFormat, Output } = await import('mediabunny')
+  const duration = scene.timeline.duration
+  const count = Math.ceil((duration / 1000) * VIDEO_FPS)
+  const first = videoBitrate(duration)
+  const hardware = await encodesInHardware()
+  const drawn: ReplayScene = { ...scene, backdrop: hardware ? 'deep' : 'bright' }
+  for (const [attempt, bitrate] of [first, Math.round(first * 0.6)].entries()) {
+    const { canvas, ctx } = canvasOf(REPLAY_W, REPLAY_H)
+    const target = new BufferTarget()
+    const output = new Output({ format: new Mp4OutputFormat({ fastStart: 'in-memory' }), target })
+    const source = new CanvasSource(canvas, {
+      codec: 'avc',
+      bitrate,
+      bitrateMode: 'variable',
+      latencyMode: 'quality',
+      keyFrameInterval: 2,
+      ...(hardware ? { hardwareAcceleration: 'prefer-hardware' as const } : {})
+    })
+    output.addVideoTrack(source, { frameRate: VIDEO_FPS })
+    await output.start()
+    try {
+      for (let i = 0; i < count; i++) {
+        if (opts.signal.aborted) throw aborted()
+        drawReplayFrame(ctx, drawn, (i * 1000) / VIDEO_FPS)
+        await source.add(i / VIDEO_FPS, 1 / VIDEO_FPS)
+        opts.onProgress?.((attempt + (i + 1) / count) / 2)
+      }
+      await output.finalize()
+    } catch (e) {
+      await output.cancel().catch(() => undefined)
+      throw e
+    }
+    const buffer = target.buffer
+    if (buffer && buffer.byteLength <= MAX_BYTES) return new Blob([buffer], { type: 'video/mp4' })
+  }
+  throw new Error('The video came out too big')
+}
+
+/**
+ * Steps the scene frame by frame into a GIF, smaller each time it comes out over MAX_BYTES. Always
+ * the deep backdrop: GIF has no blocks to fear.
+ */
+export async function encodeGif(
+  given: ReplayScene,
+  opts: { signal: AbortSignal; onProgress?: (p: number) => void }
+): Promise<Blob> {
+  const scene: ReplayScene = { ...given, backdrop: 'deep' }
   const duration = scene.timeline.duration
   for (const [attempt, step] of GIF_STEPS.entries()) {
     const { ctx } = canvasOf(step.w, step.h)

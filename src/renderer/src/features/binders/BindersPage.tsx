@@ -84,6 +84,16 @@ export function Row({ b, onOpen }: { b: BinderSummary; onOpen: () => void }): Re
   )
 }
 
+/** Back to the binders list, at the start of an open binder's name line. */
+export function BackToBinders({ onBack }: { onBack: () => void }): React.JSX.Element {
+  return (
+    <Button variant="ghost" size="sm" className="-ml-2 -mr-1 shrink-0" onClick={onBack}>
+      <ChevronLeftIcon className="size-4" />
+      Binders
+    </Button>
+  )
+}
+
 function Open({
   uid,
   onBack,
@@ -109,21 +119,24 @@ function Open({
   }
   return (
     <div className="space-y-4 p-8 max-md:p-4">
-      <PageHeader>
-        <Button variant="ghost" size="sm" onClick={onBack}>
-          <ChevronLeftIcon className="size-4" />
-          Binders
-        </Button>
-      </PageHeader>
       {q.data ? (
         <BinderView
           detail={q.data}
+          titleBar
+          back={<BackToBinders onBack={onBack} />}
           onEdit={onEdit && (() => q.data && onEdit(q.data))}
           onRemove={(card) => void remove(card)}
         />
-      ) : q.isSuccess ? (
-        <p className="text-sm text-muted-foreground">This binder no longer exists.</p>
-      ) : null}
+      ) : (
+        <>
+          <PageHeader>
+            <BackToBinders onBack={onBack} />
+          </PageHeader>
+          {q.isSuccess && (
+            <p className="text-sm text-muted-foreground">This binder no longer exists.</p>
+          )}
+        </>
+      )}
     </div>
   )
 }

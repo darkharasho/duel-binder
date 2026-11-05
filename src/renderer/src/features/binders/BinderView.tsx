@@ -3,6 +3,7 @@ import { PencilIcon } from 'lucide-react'
 import type { BinderCard, BinderDetail } from '@shared/types'
 import type { BinderRule } from '@shared/binders'
 import { CardSheet } from '@/components/CardSheet'
+import { PageHeader } from '@/components/PageHeader'
 import { UnderlineTabs } from '@/components/UnderlineTabs'
 import { Button } from '@/components/ui/button'
 import { SetProgress } from '@/features/sets/SetProgress'
@@ -46,10 +47,21 @@ interface Props {
   readOnly?: boolean
   onEdit?: () => void
   onRemove?: (card: BinderCard) => void
+  /** A back button, at the start of the name's line. */
+  back?: React.ReactNode
+  /** The name's line is the page's pinned title bar (the page has no header of its own). */
+  titleBar?: boolean
 }
 
 /** One binder: its rule, goal and progress, and a grid of its slots. */
-export function BinderView({ detail, readOnly, onEdit, onRemove }: Props): React.JSX.Element {
+export function BinderView({
+  detail,
+  readOnly,
+  onEdit,
+  onRemove,
+  back,
+  titleBar
+}: Props): React.JSX.Element {
   const [view, setView] = useState<View>('all')
   const [open, setOpen] = useState<BinderCard | null>(null)
   const progress = binderProgress(detail)
@@ -92,31 +104,36 @@ export function BinderView({ detail, readOnly, onEdit, onRemove }: Props): React
     </>
   )
 
+  // The first of two lines above the binder: name and rules; progress and the Show tabs follow.
+  const nameLine = (
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+      {back}
+      <h2 className="min-w-0 max-w-[40%] shrink-0 truncate text-xl font-semibold max-md:max-w-[75%]">
+        {detail.name}
+      </h2>
+      {/* On a phone the rules wrap to their own line under the name. */}
+      <div className="order-last flex w-full flex-wrap gap-2 md:order-none md:w-auto md:min-w-0 md:flex-1">
+        {chips}
+      </div>
+      {!readOnly &&
+        (detail.editable ? (
+          onEdit && (
+            <Button variant="secondary" size="sm" className="ml-auto shrink-0" onClick={onEdit}>
+              <PencilIcon className="size-3.5" />
+              Edit
+            </Button>
+          )
+        ) : (
+          <p className="ml-auto shrink-0 text-sm text-muted-foreground">
+            Update the app to edit this binder.
+          </p>
+        ))}
+    </div>
+  )
+
   return (
     <div className="space-y-3">
-      {/* Two lines above the binder: name and rules, then progress and the Show tabs. */}
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
-        <h2 className="min-w-0 max-w-[40%] shrink-0 truncate text-xl font-semibold max-md:max-w-[75%]">
-          {detail.name}
-        </h2>
-        {/* On a phone the rules wrap to their own line under the name. */}
-        <div className="order-last flex w-full flex-wrap gap-2 md:order-none md:w-auto md:min-w-0 md:flex-1">
-          {chips}
-        </div>
-        {!readOnly &&
-          (detail.editable ? (
-            onEdit && (
-              <Button variant="secondary" size="sm" className="ml-auto shrink-0" onClick={onEdit}>
-                <PencilIcon className="size-3.5" />
-                Edit
-              </Button>
-            )
-          ) : (
-            <p className="ml-auto shrink-0 text-sm text-muted-foreground">
-              Update the app to edit this binder.
-            </p>
-          ))}
-      </div>
+      {titleBar ? <PageHeader>{nameLine}</PageHeader> : nameLine}
       {detail.tooBroad ? (
         <p className="text-sm text-muted-foreground">
           This rule matches too many cards to track.

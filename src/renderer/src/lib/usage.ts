@@ -58,11 +58,17 @@ export function flushUsage(): void {
   const events = pending
   pending = {}
   // Each on its own: a portal from before an event refuses a whole report with it in.
-  const { 'page:wishlist': wishlist, 'page:binders': binders, ...rest } = events
+  const {
+    'page:wishlist': wishlist,
+    'page:binders': binders,
+    'page:sessions': sessions,
+    ...rest
+  } = events
   for (const batch of [
     rest,
     wishlist ? { 'page:wishlist': wishlist } : {},
-    binders ? { 'page:binders': binders } : {}
+    binders ? { 'page:binders': binders } : {},
+    sessions ? { 'page:sessions': sessions } : {}
   ]) {
     if (Object.keys(batch).length === 0) continue
     try {

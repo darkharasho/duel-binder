@@ -56,6 +56,20 @@ describe('usage counts', () => {
     expect(report()).toHaveBeenCalledWith({ 'page:wishlist': 1 })
   })
 
+  it('sends page:sessions on its own, so a 400 on it keeps the rest of the report', async () => {
+    report().mockImplementation(async (batch: Record<string, number>) => {
+      if ('page:sessions' in batch) throw new Error('400')
+    })
+    track('open')
+    track('page:wishlist')
+    track('page:sessions')
+    flushUsage()
+    expect(report()).toHaveBeenCalledTimes(3)
+    expect(report()).toHaveBeenCalledWith({ open: 1 })
+    expect(report()).toHaveBeenCalledWith({ 'page:wishlist': 1 })
+    expect(report()).toHaveBeenCalledWith({ 'page:sessions': 1 })
+  })
+
   it('counts and sends nothing once turned off, and drops what was waiting', () => {
     track('open')
     setUsageEnabled(false)

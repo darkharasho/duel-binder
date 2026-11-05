@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useState, useSyncExternalStore } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import { ChevronLeftIcon, ChevronRightIcon, XIcon } from 'lucide-react'
 import type { BinderCard } from '@shared/types'
 import { cssAspect } from '@shared/games'
@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { CardArt } from '@/components/CardArt'
 import { FavouriteHeart } from '@/components/FavouriteHeart'
+import { useArtPrefetch } from '@/lib/artPrefetch'
 import { useTileImage } from '@/lib/cardSize'
 import { useFavourites } from '@/lib/favourites'
 import { formatUsd } from '@/lib/format'
@@ -242,6 +243,21 @@ export function BinderGrid({
   const first = Math.min(state.page - (state.page % step), (Math.ceil(pageCount / step) - 1) * step)
   const shown = Array.from({ length: step }, (_, i) => first + i)
   const pageCards = (p: number): BinderCard[] => cards.slice(p * PER_PAGE, (p + 1) * PER_PAGE)
+  // The spreads either side load in the background, next first, so a turn shows their art at once.
+  useArtPrefetch(
+    useMemo(
+      () =>
+        [
+          ...cards.slice((first + step) * PER_PAGE, (first + 2 * step) * PER_PAGE),
+          ...cards.slice(Math.max(0, first - step) * PER_PAGE, first * PER_PAGE)
+        ].map((c) => ({
+          imageId: c.imageId || null,
+          printingId: c.printingScan && c.printing ? c.printing.id : null
+        })),
+      [cards, first, step]
+    ),
+    tileImage
+  )
 
   const turnTo = (page: number): void => {
     const to = Math.max(0, Math.min(page - (page % step), pageCount - 1))

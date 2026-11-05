@@ -48,19 +48,23 @@ export function prefetchArt(srcs: readonly string[]): void {
 const saveData = (): boolean =>
   (navigator as Navigator & { connection?: { saveData?: boolean } }).connection?.saveData === true
 
-async function srcsFor(tiles: readonly PrefetchTile[]): Promise<string[]> {
+async function srcsFor(
+  tiles: readonly PrefetchTile[],
+  size: 'small' | 'full'
+): Promise<string[]> {
+  const small = size !== 'full'
   const shown = tiles.slice(0, MAX_PREFETCH)
   const ygoPrintings = shown
     .filter((t) => t.imageId != null && gameOfId(t.imageId) === 'ygo' && t.printingId != null)
     .map((t) => t.printingId!)
   // On the phone a photo is named by the server's printing id, looked up in one batch.
   const photos = isPhone()
-    ? await phonePrintingPhotoSrcs(ygoPrintings, { small: true })
-    : new Map(ygoPrintings.map((id) => [id, printingImageSrc(id, { small: true })]))
+    ? await phonePrintingPhotoSrcs(ygoPrintings, { small })
+    : new Map(ygoPrintings.map((id) => [id, printingImageSrc(id, { small })]))
   const out: string[] = []
   for (const t of shown) {
     if (t.imageId == null) continue
-    out.push(cardImageSrc('small', t.imageId))
+    out.push(cardImageSrc(size, t.imageId))
     const photo = t.printingId != null ? photos.get(t.printingId) : null
     if (photo) out.push(photo)
   }
@@ -70,14 +74,17 @@ async function srcsFor(tiles: readonly PrefetchTile[]): Promise<string[]> {
 /**
  * Fetches a page's tile art in the background, in tile order, a few at a time, once the page is
  * idle: the first visit to a set then fills in ahead of the scroll instead of as each row nears
- * the screen. Leaving the page drops what hadn't started.
+ * the screen. Leaving the page drops what hadn't started. `size` is the art the tiles show.
  */
-export function useArtPrefetch(tiles: readonly PrefetchTile[]): void {
+export function useArtPrefetch(
+  tiles: readonly PrefetchTile[],
+  size: 'small' | 'full' = 'small'
+): void {
   useEffect(() => {
     if (tiles.length === 0 || saveData()) return
     let cancelled = false
     const start = (): void => {
-      void srcsFor(tiles).then((srcs) => {
+      void srcsFor(tiles, size).then((srcs) => {
         if (!cancelled) prefetchArt(srcs)
       })
     }
@@ -89,7 +96,7 @@ export function useArtPrefetch(tiles: readonly PrefetchTile[]): void {
       else clearTimeout(id as ReturnType<typeof setTimeout>)
       queue = []
     }
-  }, [tiles])
+  }, [tiles, size])
 }
 
 /** Forgets what was fetched, for tests. */

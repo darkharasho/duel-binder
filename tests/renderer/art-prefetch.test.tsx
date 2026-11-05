@@ -59,6 +59,17 @@ describe('art prefetch', () => {
     }
   })
 
+  it('fetches full-size art for tiles that show it', async () => {
+    vi.useFakeTimers()
+    try {
+      renderHook(() => useArtPrefetch([{ imageId: 5, printingId: 12 }], 'full'))
+      await vi.runAllTimersAsync()
+      expect(started).toEqual(['ygo-img://full/5', 'ygo-img://printing/12'])
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('leaving the page drops what had not started', async () => {
     vi.useFakeTimers()
     try {

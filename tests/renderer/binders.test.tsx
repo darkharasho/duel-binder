@@ -4,6 +4,7 @@ import type { BinderCard, BinderDetail, BinderSummary, CardRow } from '@shared/t
 import { BindersPage } from '@/features/binders/BindersPage'
 import { BinderView } from '@/features/binders/BinderView'
 import { binderColour } from '@/features/binders/binderColour'
+import { resetArtPrefetch } from '@/lib/artPrefetch'
 import { createMockApi, renderWithProviders } from './mockApi'
 import { handleBack, useBackHandler } from '../../src/phone/backButton'
 
@@ -312,6 +313,28 @@ describe('binder pages', () => {
       expect(within(grid).getAllByRole('listitem')).toHaveLength(2)
     } finally {
       delete proto.animate
+    }
+  })
+
+  it("loads the next spread's art in the background", async () => {
+    widen()
+    resetArtPrefetch()
+    const started: string[] = []
+    vi.stubGlobal(
+      'Image',
+      class {
+        set src(v: string) {
+          started.push(v)
+        }
+      }
+    )
+    try {
+      renderWithProviders(<BinderView detail={detail({ cards: many(45) })} />)
+      // Pages 3–4 hold cards 19–36: the first six of them start, in page order.
+      await waitFor(() => expect(started).toHaveLength(6), { timeout: 2000 })
+      expect(started.map((s) => Number(/(\d+)$/.exec(s)?.[1]))).toEqual([19, 20, 21, 22, 23, 24])
+    } finally {
+      vi.unstubAllGlobals()
     }
   })
 

@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { openDatabase } from '../../src/main/db/database'
-import { seedFakeCollection } from '../../src/main/dev/fakeData'
+import { seedFakeCollection, seedFakeSessions } from '../../src/main/dev/fakeData'
+import { listScanSessions } from '../../src/main/repo/scanSessions'
 import { seededDb } from './helpers'
 
 const NOW = new Date(2026, 9, 23, 12)
@@ -37,5 +38,27 @@ describe('seedFakeCollection', () => {
     const db = openDatabase(':memory:')
     expect(seedFakeCollection(db, NOW)).toBe(0)
     expect(db.prepare('SELECT COUNT(*) AS n FROM value_snapshots').get()).toEqual({ n: 0 })
+  })
+})
+
+describe('seedFakeSessions', () => {
+  it('adds sessions from owned cards, one hidden, once', async () => {
+    const db = await seededDb()
+    seedFakeCollection(db, NOW)
+    const n = seedFakeSessions(db, NOW)
+    expect(n).toBeGreaterThan(0)
+    const sessions = listScanSessions(db, 'ygo')
+    expect(sessions).toHaveLength(n)
+    expect(sessions.filter((s) => !s.friendsVisible)).toHaveLength(1)
+    expect(sessions.every((s) => s.cards.length > 0 && s.cards.every((c) => c.pkey))).toBe(true)
+    expect(db.prepare('SELECT COUNT(*) AS n FROM scan_sessions WHERE dirty = 1').get()).toEqual({
+      n: 0
+    })
+    expect(seedFakeSessions(db, NOW)).toBe(0)
+  })
+
+  it('does nothing without a collection', async () => {
+    const db = await seededDb()
+    expect(seedFakeSessions(db, NOW)).toBe(0)
   })
 })

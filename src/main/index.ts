@@ -31,7 +31,7 @@ import { createUpdater, updateMode, RELEASES_URL } from './updater'
 import { restrictPermissions } from './permissions'
 import { createScanWindowManager, type Rect, type ScanWindowManager } from './scanWindow'
 import { createHandlers, registerIpc, type AppDeps } from './ipc/handlers'
-import { seedFakeCollection, seedFakePokemon } from './dev/fakeData'
+import { seedFakeCollection, seedFakePokemon, seedFakeSessions } from './dev/fakeData'
 import { resolveUserData } from './userData'
 import { captureShots, SHOTS } from './dev/capture'
 import { createAccountService } from './cloud/account'
@@ -293,6 +293,7 @@ async function bootstrap(): Promise<void> {
     // Seed before the renderer hears "idle" and refetches.
     if (fakeData && s.state === 'idle') {
       seedFakeCollection(db)
+      seedFakeSessions(db)
       markSeeded()
     }
     broadcast(SYNC_PROGRESS, s)
@@ -300,6 +301,7 @@ async function bootstrap(): Promise<void> {
   if (fakeData) {
     seedFakeCollection(db)
     seedFakePokemon(db)
+    seedFakeSessions(db)
     // Already seeded by an earlier run, or just now: nothing to wait for.
     if (db.prepare('SELECT 1 FROM collection_entries WHERE deleted_at IS NULL LIMIT 1').get())
       markSeeded()

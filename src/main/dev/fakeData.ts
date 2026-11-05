@@ -1,5 +1,8 @@
 import type Database from 'better-sqlite3'
 import { getStats, recordSnapshot } from '../repo/stats'
+import { checkSessionCards } from '../repo/scanSessions'
+import { RARITY_LABEL } from '../db/schema'
+import type { ScanSessionCard } from '../../shared/scanSessions'
 
 /** Sets to own, with the share of each set's distinct cards to own. Missing sets are skipped. */
 const SET_PLAN: [setName: string, share: number][] = [
@@ -50,7 +53,8 @@ const localDate = (d: Date): string =>
  * Returns the number of entries inserted.
  */
 export function seedFakeCollection(db: Database.Database, now = new Date()): number {
-  if (db.prepare('SELECT 1 FROM collection_entries WHERE deleted_at IS NULL LIMIT 1').get()) return 0
+  if (db.prepare('SELECT 1 FROM collection_entries WHERE deleted_at IS NULL LIMIT 1').get())
+    return 0
   if (!db.prepare('SELECT 1 FROM cards LIMIT 1').get()) return 0
 
   const rand = rng(SEED)
@@ -73,7 +77,11 @@ export function seedFakeCollection(db: Database.Database, now = new Date()): num
   }
 
   const allPrintings = (
-    db.prepare(`SELECT id FROM card_printings WHERE missing_from_api = 0 AND language = 'en' AND card_id IN (SELECT id FROM cards WHERE game = 'ygo') ORDER BY id`).all() as {
+    db
+      .prepare(
+        `SELECT id FROM card_printings WHERE missing_from_api = 0 AND language = 'en' AND card_id IN (SELECT id FROM cards WHERE game = 'ygo') ORDER BY id`
+      )
+      .all() as {
       id: number
     }[]
   ).map((r) => r.id)
@@ -151,6 +159,77 @@ export function seedFakePokemon(db: Database.Database, now = new Date()): number
         const p = versions[Math.floor(rand() * versions.length)]
         const quantity = 1 + Math.floor(rand() * 3)
         inserted += insert.run(crypto.randomUUID(), p.id, p.image_id, quantity, ts, ts).changes
+      }
+    }
+  })()
+  return inserted
+}
+
+/**
+ * Sample scan sessions per game, drawn from the cards the fake profile owns: one big enough to need
+ * "+N more", two on the same day, one hidden from friends, and older ones going back weeks.
+ * Hours before `now`, card count, and whether it is hidden.
+ */
+const SESSION_PLAN: [hoursAgo: number, cards: number, hidden: boolean][] = [
+  [2, 40, false],
+  [7, 9, false],
+  [27, 3, false],
+  [74, 1, true],
+  [220, 16, false],
+  [650, 6, false]
+]
+
+/**
+ * Adds sample scan sessions for each game whose fake collection exists and has none yet. They are
+ * marked as sent, so a later sign-in doesn't push them. Returns the number of sessions inserted.
+ */
+export function seedFakeSessions(db: Database.Database, now = new Date()): number {
+  const owned = db.prepare(
+    `SELECT p.id AS printingId, p.card_id AS cardId, p.pkey, e.image_id AS imageId, c.name,
+            p.set_code AS setCode, ${RARITY_LABEL} AS rarity,
+            COALESCE(p.market_price, p.set_price) AS price
+     FROM collection_entries e JOIN card_printings p ON p.id = e.printing_id
+     JOIN cards c ON c.id = p.card_id
+     WHERE c.game = ? AND e.deleted_at IS NULL AND p.pkey IS NOT NULL ORDER BY e.printing_id`
+  )
+  const has = db.prepare('SELECT 1 FROM scan_sessions WHERE game = ? LIMIT 1')
+  const insert = db.prepare(
+    `INSERT OR IGNORE INTO scan_sessions (uid, game, cards, friends_visible, created_at, updated_at, dirty)
+     VALUES (?, ?, ?, ?, ?, ?, 0)`
+  )
+  let inserted = 0
+  db.transaction(() => {
+    for (const game of ['ygo', 'pkm'] as const) {
+      if (has.get(game)) continue
+      type Owned = Omit<ScanSessionCard, 'photoId' | 'quantity' | 'guess' | 'addedAt'>
+      const rand = rng(SEED + game.length)
+      const pool = shuffle(owned.all(game) as Owned[], rand)
+      if (pool.length === 0) continue
+      let next = 0
+      for (const [hoursAgo, size, hidden] of SESSION_PLAN) {
+        const start = now.getTime() - hoursAgo * 3_600_000
+        const picked = Array.from(
+          { length: Math.min(size, pool.length) },
+          () => pool[next++ % pool.length]
+        )
+        const cards = checkSessionCards(
+          picked.map((c, i) => ({
+            ...c,
+            photoId: null,
+            quantity: rand() < 0.2 ? 2 + Math.floor(rand() * 2) : 1,
+            guess: rand() < 0.1,
+            addedAt: start + i * 4_000
+          }))
+        )
+        const at = new Date(start + cards.length * 4_000).toISOString()
+        inserted += insert.run(
+          crypto.randomUUID(),
+          game,
+          JSON.stringify(cards),
+          hidden ? 0 : 1,
+          at,
+          at
+        ).changes
       }
     }
   })()

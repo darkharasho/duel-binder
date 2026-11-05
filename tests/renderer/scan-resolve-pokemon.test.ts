@@ -389,6 +389,44 @@ describe('resolvePokemonSignals', () => {
     )
   })
 
+  it('offers the reprints of its art in other sets, in its language, to switch to', async () => {
+    const reprints = [
+      { imageId: 101, distance: 30 },
+      { imageId: 201, distance: 31 },
+      { imageId: 301, distance: 32 }
+    ]
+    const item = await recognized(raw({ art: reprints, codeTexts: ['045/193'] }), pkm('en'))
+    expect(item).toMatchObject({ cardId: 1, printingId: 11 })
+    // Not the Japanese twin, nor Raichu: only Pikachu reprints in English.
+    expect(item.options.map((o) => o.printingId)).toEqual([11, 31])
+    // A card with no reprint near offers only its own versions.
+    const alone = await recognized(raw({ art: [{ imageId: 401, distance: 20 }] }), pkm('en'))
+    expect(alone.options.map((o) => o.printingId)).toEqual([41, 42])
+  })
+
+  it("offers an unseen twin's printings when they have an artwork", async () => {
+    const withTwin = (withArt: boolean): ResolveContext => ({
+      ...pkm('en'),
+      guessRules: ['twin'],
+      lookups: {
+        ...lookups,
+        printingsForCards: async (ids) =>
+          (await lookups.printingsForCards(ids)).map((p) =>
+            p.cardId === 1
+              ? { ...p, unseenTwin: true as const, unseenTwinCodes: ['SV4 201/182'] }
+              : p
+          ),
+        printingsByNumber: async (n) =>
+          (await lookups.printingsByNumber(n)).map((p) => (withArt ? p : { ...p, imageIds: [] }))
+      }
+    })
+    const art = [{ imageId: 101, distance: 20 }]
+    const item = await recognized(raw({ art }), withTwin(true))
+    expect(item.options.map((o) => o.printingId)).toEqual([11, 31])
+    const bare = await recognized(raw({ art }), withTwin(false))
+    expect(bare.options.map((o) => o.printingId)).toEqual([11])
+  })
+
   it('number and art disagree is unsure', async () => {
     const art = [{ imageId: 101, distance: 20 }]
     const ctx = pkm('en')

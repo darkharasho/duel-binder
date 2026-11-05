@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event'
 import type { BinderCard, BinderDetail, BinderSummary, CardRow } from '@shared/types'
 import { BindersPage } from '@/features/binders/BindersPage'
 import { BinderView } from '@/features/binders/BinderView'
+import { binderColour } from '@/features/binders/binderColour'
 import { createMockApi, renderWithProviders } from './mockApi'
 import { handleBack, useBackHandler } from '../../src/phone/backButton'
 
@@ -251,5 +252,64 @@ describe('binder edge cases', () => {
     expect(await screen.findByText('Nothing to track yet')).toBeInTheDocument()
     expect(screen.queryByText('Complete')).not.toBeInTheDocument()
     expect(screen.queryByText(/0 of 0/)).not.toBeInTheDocument()
+  })
+})
+
+describe('binder pages', () => {
+  const many = (n: number): BinderCard[] =>
+    Array.from({ length: n }, (_, i) => slot(i + 1, i < 9 ? 1 : 0))
+  // The test setup's matchMedia matches nothing, so a binder shows as on a phone unless widened.
+  const matchMedia = window.matchMedia
+  const widen = (): void => {
+    window.matchMedia = ((q: string) => ({
+      matches: true,
+      media: q,
+      addEventListener: () => {},
+      removeEventListener: () => {}
+    })) as never
+  }
+  afterEach(() => {
+    window.matchMedia = matchMedia
+  })
+
+  it('shows two pages of nine at a time, and turns them', async () => {
+    widen()
+    renderWithProviders(<BinderView detail={detail({ cards: many(20) })} />)
+    const grid = screen.getByRole('list', { name: 'Binder cards' })
+    expect(within(grid).getAllByRole('listitem')).toHaveLength(18)
+    expect(screen.getByText('Pages 1–2 of 3')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Previous pages' })).toBeDisabled()
+    await userEvent.click(screen.getByRole('button', { name: 'Next pages' }))
+    expect(within(grid).getAllByRole('listitem')).toHaveLength(2)
+    expect(screen.getByText('Page 3 of 3')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Next pages' })).toBeDisabled()
+    await userEvent.click(screen.getByRole('button', { name: 'Page 1, complete' }))
+    expect(screen.getByText('Pages 1–2 of 3')).toBeInTheDocument()
+  })
+
+  it('goes back to the first page when the filter changes', async () => {
+    widen()
+    renderWithProviders(<BinderView detail={detail({ cards: many(30) })} />)
+    await userEvent.click(screen.getByRole('button', { name: 'Next pages' }))
+    expect(screen.getByText('Pages 3–4 of 4')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('radio', { name: 'Missing' }))
+    expect(screen.getByText('Pages 1–2 of 3')).toBeInTheDocument()
+  })
+
+  it('shows one page at a time on a phone', () => {
+    renderWithProviders(<BinderView detail={detail({ cards: many(20) })} />)
+    const grid = screen.getByRole('list', { name: 'Binder cards' })
+    expect(within(grid).getAllByRole('listitem')).toHaveLength(9)
+    expect(screen.getByText('Page 1 of 3')).toBeInTheDocument()
+  })
+
+  it('has no page controls for a binder that fits on one spread', () => {
+    renderWithProviders(<BinderView detail={detail()} />)
+    expect(screen.queryByRole('navigation', { name: 'Pages' })).not.toBeInTheDocument()
+  })
+
+  it('gives a binder the same cover colour every time', () => {
+    expect(binderColour('b1')).toBe(binderColour('b1'))
+    expect(new Set(['a', 'b', 'c', 'd', 'e', 'f'].map(binderColour)).size).toBeGreaterThan(1)
   })
 })

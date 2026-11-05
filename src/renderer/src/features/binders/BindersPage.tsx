@@ -10,42 +10,50 @@ import { SetProgress } from '@/features/sets/SetProgress'
 import { api, queryKeys } from '@/lib/api'
 import { useBackHandler } from '@/lib/backStack'
 import { cn } from '@/lib/utils'
+import { binderStyle } from './binderColour'
 import { BinderForm } from './BinderForm'
+import './binderLook.css'
 import { BinderView } from './BinderView'
 import { GOAL_LABEL, binderProgress, languagesLabel } from './binderProgress'
+
+/** The list's layout: binders stood side by side like a shelf. */
+export const SHELF =
+  'grid grid-cols-[repeat(auto-fill,minmax(170px,1fr))] gap-x-8 gap-y-10 max-md:grid-cols-2 max-md:gap-x-4 max-md:gap-y-8'
 
 export function Row({ b, onOpen }: { b: BinderSummary; onOpen: () => void }): React.JSX.Element {
   const hasGoal = b.goal !== 'none'
   const progress = binderProgress(b)
   const total = progress.total
+  const complete = hasGoal && !b.tooBroad && progress.complete
   return (
-    <li>
+    <li className="min-w-0">
       <button
         type="button"
         onClick={onOpen}
-        className="flex w-full items-center gap-3 rounded-lg border border-white/[0.08] bg-white/[0.03] p-3 text-left outline-none hover:bg-white/[0.06] focus-visible:ring-2 focus-visible:ring-ring"
+        className="group/cover block w-full rounded-lg text-left outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-4 focus-visible:ring-offset-background"
       >
-        <div className="w-12 shrink-0 overflow-hidden rounded-[3px]">
-          {b.coverImageId ? (
-            <CardArt imageId={b.coverImageId} size="small" alt="" className="w-full" />
-          ) : (
-            <div className="aspect-[59/86] bg-white/10" />
-          )}
-        </div>
-        <div className="min-w-0 flex-1 space-y-1">
-          <div className="truncate font-semibold">{b.name}</div>
-          <div className="truncate text-xs text-muted-foreground">
-            {[
-              b.hasRules ? 'Rule' : 'Manual',
-              ...(b.editable
-                ? [GOAL_LABEL[b.goal], languagesLabel(b.languages)]
-                : ['needs a newer app']),
-              ...(b.friendsVisible ? [] : ['private'])
-            ].join(' · ')}
+        <div className="binder-cover binder-leather" style={binderStyle(b.uid)}>
+          <div className="binder-window">
+            {b.coverImageId ? (
+              <CardArt
+                imageId={b.coverImageId}
+                size="small"
+                alt=""
+                className="w-full rounded-[2px]"
+              />
+            ) : (
+              <div className="aspect-[59/86] rounded-[2px] bg-white/5" />
+            )}
           </div>
+          <div className="binder-title" data-foil={complete}>
+            {b.name}
+          </div>
+          {complete && <div className="binder-ribbon" aria-hidden />}
+        </div>
+        <div className="mt-5 min-w-0 space-y-1.5 px-1">
           {hasGoal && total > 0 && <SetProgress progress={progress} />}
           {!hasGoal ? (
-            <div className="text-xs text-muted-foreground tabular-nums">
+            <div className="text-xs tabular-nums">
               {b.tooBroad
                 ? 'Too broad to track'
                 : `${b.ownedSlots} ${b.ownedSlots === 1 ? 'card' : 'cards'}`}
@@ -55,17 +63,21 @@ export function Row({ b, onOpen }: { b: BinderSummary; onOpen: () => void }): Re
           ) : b.tooBroad ? (
             <div className="text-xs text-muted-foreground">Too broad to track</div>
           ) : (
-            <div
-              className={cn(
-                'text-xs tabular-nums',
-                progress.complete ? 'text-complete' : 'text-muted-foreground'
-              )}
-            >
+            <div className={cn('text-xs tabular-nums', progress.complete && 'text-complete')}>
               {progress.complete
                 ? 'Complete'
                 : `${progress.owned} of ${total} · ${b.missingSlots} missing`}
             </div>
           )}
+          <div className="truncate text-xs text-muted-foreground">
+            {[
+              b.hasRules ? 'Rule' : 'Manual',
+              ...(b.editable
+                ? [GOAL_LABEL[b.goal], languagesLabel(b.languages)]
+                : ['needs a newer app']),
+              ...(b.friendsVisible ? [] : ['private'])
+            ].join(' · ')}
+          </div>
         </div>
       </button>
     </li>
@@ -150,7 +162,7 @@ export function BindersPage(): React.JSX.Element {
           of one card.
         </p>
       ) : (
-        <ul className="space-y-3" aria-label="Binders">
+        <ul className={SHELF} aria-label="Binders">
           {binders.map((b) => (
             <Row key={b.uid} b={b} onOpen={() => setUid(b.uid)} />
           ))}

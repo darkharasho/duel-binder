@@ -227,6 +227,47 @@ const numberOf = (code: string): string =>
 /** Printed rarities, lowercased, that are mostly not foil. Any other rarity is a holo. */
 const PLAIN_RARITIES = new Set(['common', 'uncommon', 'rare', 'promo', 'none'])
 
+/**
+ * Other sets' printings the scanned art could equally be, for the row's printing picker: a
+ * reprint shares its original's art, so whichever set the scan picked may be wrong. They are the
+ * cards of the named card's name and language whose art matched within ART_MAX_DISTANCE, and its
+ * unseen twins (ScanPrinting.unseenTwinCodes), each only with an artwork, which the collection
+ * needs to add it. The scan's own pick stands; these are only there to switch to.
+ */
+async function reprintsOf(
+  raw: RawSignals,
+  item: ScanDraft,
+  ctx: ResolveContext
+): Promise<ScanPrinting[]> {
+  const own = item.options.filter((p) => p.cardId === item.cardId)
+  const card = own.find((p) => p.printingId === item.printingId) ?? own[0]
+  if (!card) return []
+  const near = raw.art.filter((a) => a.distance <= ART_MAX_DISTANCE).map((a) => a.imageId)
+  const others = near.length
+    ? unique((await ctx.lookups.cardsForImages(near)).map((c) => c.cardId)).filter(
+        (id) => id !== card.cardId
+      )
+    : []
+  const found = others.length ? await ctx.lookups.printingsForCards(others) : []
+  for (const code of new Set(own.flatMap((p) => p.unseenTwinCodes ?? []))) {
+    const n = numberOfCode(code)
+    if (n) found.push(...(await ctx.lookups.printingsByNumber({ setAbbrev: null, ...n })))
+  }
+  const seen = new Set<number>()
+  return found.filter((p) => {
+    if (
+      seen.has(p.printingId) ||
+      p.cardId === card.cardId ||
+      p.language !== card.language ||
+      !p.imageIds.length ||
+      !sameName(p.name, card.name)
+    )
+      return false
+    seen.add(p.printingId)
+    return true
+  })
+}
+
 /** The usual versions of a card of this printed rarity, likeliest first. */
 const baseVersions = (printedRarity: string | null | undefined): string[] =>
   !printedRarity || PLAIN_RARITIES.has(printedRarity.toLowerCase())
@@ -381,7 +422,9 @@ export async function resolvePokemonSignals(
     const twinned = stand.has(cardId) ? [] : item.options.filter((p) => p.unseenTwin)
     const twin = twinned.length ? await untold(twinned[0]) : false
     if (twin && !may(twin === 'maybe' ? 'twin-maybe' : 'twin')) return unsure
-    return { kind: 'recognized', item: guess ? { ...item, guess: true } : item }
+    const reprints = await reprintsOf(raw, item, ctx)
+    const offered = reprints.length ? { ...item, options: [...item.options, ...reprints] } : item
+    return { kind: 'recognized', item: guess ? { ...offered, guess: true } : offered }
   }
 
   /**

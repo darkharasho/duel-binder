@@ -90,4 +90,32 @@ describe('choicesFor', () => {
     ])
     expect(choices[1].search).toContain('en')
   })
+
+  it("lists a Pokémon card's reprints in other sets by code and set, its own versions plainly", () => {
+    const pkm = (
+      printingId: number,
+      cardId: number,
+      setName: string,
+      setCode: string
+    ): ScanPrinting => ({
+      ...printing(printingId, 'Holofoil', null),
+      cardId,
+      name: 'Pikachu',
+      frameType: 'pokemon',
+      setName,
+      setCode,
+      language: 'en',
+      price: 3
+    })
+    const own = [pkm(11, 1, '151', 'SV3 045/193')]
+    const plain = choicesFor(rowOf(own, { game: 'pkm', printingId: 11 }), 'en')
+    expect(plain.map((c) => [c.label, c.badge])).toEqual([['Holofoil · $3.00', undefined]])
+    const both = [...own, pkm(31, 3, 'Paradox Rift', 'SV4 201/182')]
+    const choices = choicesFor(rowOf(both, { game: 'pkm', printingId: 11 }), 'en')
+    expect(choices.map((c) => [c.badge, c.title, c.rarity, c.note])).toEqual([
+      ['SV3 045/193', '151', 'Holofoil', '$3.00'],
+      ['SV4 201/182', 'Paradox Rift', 'Holofoil', '$3.00']
+    ])
+    expect(choices[1].search).toContain('paradox rift')
+  })
 })

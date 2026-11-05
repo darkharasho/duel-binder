@@ -178,6 +178,21 @@ describe('useScanSession', () => {
     })
   })
 
+  it("setPrinting to a reprint in another set takes that card's name and artwork", () => {
+    const { result } = setup(undefined, 'pkm')
+    const reprint = { ...opt(301, 'Holofoil'), cardId: 3, name: 'Card 3', imageIds: [30] }
+    act(() => result.current.add(draft({ game: 'pkm', options: [opt(101, 'Common'), reprint] })))
+    act(() => result.current.setPrinting(result.current.rows[0].key, 301))
+    expect(result.current.rows[0]).toMatchObject({
+      cardId: 3,
+      name: 'Card 3',
+      imageId: 30,
+      printingId: 301,
+      setCode: 'SET-EN00301',
+      flag: null
+    })
+  })
+
   it('setQuantity below 1 removes the row', () => {
     const { result } = setup()
     act(() => result.current.add(draft()))

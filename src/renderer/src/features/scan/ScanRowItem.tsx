@@ -56,10 +56,13 @@ export const pickerLabel = (row: Pick<ScanDraft, 'game' | 'name'>): string =>
  * every one is listed. A code read is already one language, being one set code.
  *
  * A Pokémon card's versions share its number, so each shows its version and price instead.
+ * Its options may hold reprints of its art in other sets too (see resolvePokemon's reprintsOf),
+ * listed with the rest: then each also shows its code as a badge and its set's name, so a scan
+ * put in the wrong set can be moved to the right one.
  */
 // eslint-disable-next-line react-refresh/only-export-components -- shared with the phone's last-scan card
 export function choicesFor(row: ScanRow, language: Language | null): PickerOption[] {
-  const own = row.options.filter((o) => o.cardId === row.cardId)
+  const own = row.game === 'pkm' ? row.options : row.options.filter((o) => o.cardId === row.cardId)
   const matched =
     row.via === 'code' && row.printingId !== null && row.flag !== 'pick-printing'
       ? own.filter((o) => o.setCode === row.setCode)
@@ -69,16 +72,27 @@ export function choicesFor(row: ScanRow, language: Language | null): PickerOptio
     ? matched.filter((o) => o.language === language || o.printingId === row.printingId)
     : matched
   const languages = new Set(shown.map((o) => o.language)).size > 1
+  const sets = new Set(shown.map((o) => o.cardId)).size > 1
   return shown.map((o) => {
     const tag = languageInfo(o.language).tag
     if (row.game === 'pkm') {
-      const label = [o.rarity, o.price == null ? null : formatUsd(o.price), languages ? tag : null]
+      const note = [o.price == null ? null : formatUsd(o.price), languages ? tag : null]
         .filter(Boolean)
         .join(' · ')
+      const search = `${o.rarity} ${o.setCode} ${o.setName} ${tag}`.toLowerCase()
+      if (!sets) {
+        const label = [o.rarity, note].filter(Boolean).join(' · ')
+        return { key: String(o.printingId), label, search }
+      }
+      const title = englishSetName(o.setName)
       return {
         key: String(o.printingId),
-        label,
-        search: `${o.rarity} ${o.setCode} ${o.setName} ${tag}`.toLowerCase()
+        label: [`${o.setCode} ${title} - ${o.rarity}`, note].filter(Boolean).join(' · '),
+        search,
+        badge: o.setCode || undefined,
+        title,
+        rarity: o.rarity,
+        note: note || undefined
       }
     }
     const p = { setCode: o.setCode, setName: o.setName, rarity: o.rarity, variant: o.variant }

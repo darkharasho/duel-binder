@@ -168,8 +168,15 @@ export function useScanSession(game: GameId = 'ygo'): {
         const row = list.find((r) => r.key === key)
         const opt = row?.options.find((o) => o.printingId === printingId)
         if (!row || !opt) return list
+        // A reprint in another set is another card: its name, and an artwork of its own, which
+        // the collection needs the printing's card to have.
+        const card =
+          opt.cardId === row.cardId
+            ? {}
+            : { cardId: opt.cardId, name: opt.name, imageId: opt.imageIds[0] ?? row.imageId }
         const next: ScanRow = {
           ...row,
+          ...card,
           printingId,
           setCode: opt.setCode,
           rarity: opt.rarity,
@@ -242,7 +249,11 @@ export function useScanSession(game: GameId = 'ygo'): {
       ...new Set(
         ref.current
           .filter((r) => inGame(r, game) && r.options.some((o) => o.price == null))
-          .map((r) => r.cardId)
+          // An option may be another card's: a Pokémon reprint in another set.
+          .flatMap((r) => [
+            r.cardId,
+            ...r.options.filter((o) => o.price == null).map((o) => o.cardId)
+          ])
       )
     ]
     if (cardIds.length === 0) return

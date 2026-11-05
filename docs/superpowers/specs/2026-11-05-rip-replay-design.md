@@ -18,25 +18,23 @@ The owner opens packs on Discord streams and scan nights. Afterwards they want s
 
 ## How pulls are chosen
 
-Each game has its own rule (owner, 2026-11-05).
+**Price, for all three games** (owner, 2026-11-05; this replaced an earlier rarity-first plan).
 
-- **Pokémon: rarity, then price.** Order, top down: Special Illustration Rare, Illustration Rare, Ultra Rare, ex (Double Rare). ex is the lowest tier that qualifies (owner: "ex isn't that common"). Anything rarer than SIR (Hyper/gold-type) goes above it; where exactly is the builder's call. Within a tier, the higher price goes first. Reading of "a mixture of rarity + price" (my call): tier comes first, and price orders the cards inside a tier and decides which ex cards fill the last slots.
-- **Pokémon rarity lookup:** on a Pokémon `ScanRow`, `rarity` is the print version (Holo, Reverse Holo). The card rarity to rank by is the catalog's `pokemon_cards.rarity`, which pull selection has to look up and attach, on both desktop and phone. Map Japanese and Chinese names (SAR, AR, SR, UR, RR) to the same order.
-- **Yu-Gi-Oh!: price, plus a few rarities that always count.** A card qualifies if its price is at or above the owner's hit price (`settings.hitPrice`, the same rule the summary uses), **or** it's a Starlight Rare, a Prismatic Secret Rare or an Overframe printing (`'Overframe'` in rarity/variant, Yugipedia's "extended art"), whatever its price. Qualifying cards are ordered by price, highest first. The always-count rarities rank by price too, with no special place in the order (my call).
-- **One Piece:** not covered by the owner. Same as Pokémon (rarity then price) with its own top rarities (Manga/alt-art, SEC, SP, SR; my call on order and cut-off). Written down as an ordered list next to the others.
-- **Last tie-break:** the order pulled (my call).
-- Commons and base rares never make the replay unless a game's rule above lets them in. Best guesses (`row.guess`) never count, as in the summary's hit rule.
+- **What makes it:** a card priced at or above the owner's hit price (`settings.hitPrice`), the same rule the summary uses to count hits. Unpriced cards and best guesses (`row.guess`) never make it.
+- **Order:** by price, highest first. The dearest pull is the last one shown and is held longest. The last tie-break is the order pulled (my call).
+- No rarity exceptions: the earlier "Starlight / Prismatic / Overframe always count" rule is dropped along with rarity ranking (my reading of "just price").
+- **Caption rarity:** the caption still shows the row's rarity as the summary does (`setCode · rarity`). For Pokémon that's the print version (Holo, Reverse Holo). No catalog lookup is needed (my call).
 - **Duplicates:** one entry per card, labelled "×2" etc. if pulled more than once (my call).
-- **Count:** up to 8 pulls (my call, to fit 30 s). The best pull is last and held longest.
+- **Count:** up to 8 pulls (my call, to fit 30 s).
 - **No qualifying pulls:** the button shows but is disabled with "No big pulls to replay" (my call).
-- The summary screen's own "hit of the night" stays as it is. For Pokémon the replay ranks differently, so the two may disagree. That's accepted.
+- The replay and the summary's "hit of the night" use the same price rule, so the best pull matches the summary's hit.
 
 ## The look: countdown (owner picked mockup B)
 
 - **Shape:** 4:5 portrait, dark purple backdrop, matching the app.
 - **Header chip:** the date of the night, the number of cards and the list value, e.g. "Nov 4 · 142 cards · $310". There's no pack count, because a scan session doesn't know it. The rank sits top right: "#3 of 6".
 - **Each pull, in order from the lowest-ranked shown up to the best:** the card art slides up in with a holo sheen and holds while the caption shows the rarity in small gold capitals, the name, and the price. Then it slides off. About 3 s per pull (my call), with the best pull at 5–6 s.
-- **Close:** a short end card with the best pull and a tally like "1 SIR · 2 IR · 1 UR" (from mockup C, my call, about 2 s).
+- **Close:** a short end card with the best pull and a tally like "6 hits · $214" (from mockup C, my call, about 2 s).
 - A small "DUEL BINDER · RIP REPLAY" mark along the bottom throughout.
 - **Art:** the same art the summary already shows (the owner's own printing photo when `photoFor` gives one, else the catalog image). Art that fails to load drops that pull rather than showing a blank card (my call).
 
@@ -45,7 +43,7 @@ Each game has its own rule (owner, 2026-11-05).
 - A setting, off by default (my call): **Include camera moments**.
 - When on, each pull opens on about 2 s of the real camera footage from the moment that card was scanned, then a white flash, then the art slides in as above.
 - A pull with no saved footage just shows the art.
-- This needs the camera during the session to keep a short rolling buffer (a few seconds) and, when a card is added that could make the replay, keep the clip around that moment. It covers the phone camera in Stream (not the regular phone scanner) and the webcam in the desktop scan window. Keep only what could qualify, cap the total (e.g. 12 clips, oldest lowest-rarity dropped first), and keep it in memory or temp storage. Throw it away when the session's list is cleared.
+- This needs the camera during the session to keep a short rolling buffer (a few seconds) and, when a card is added that could make the replay, keep the clip around that moment. It covers the phone camera in Stream (not the regular phone scanner) and the webcam in the desktop scan window. Keep only what could qualify (at or above the hit price), cap the total (e.g. 12 clips, cheapest dropped first), and keep it in memory or temp storage. Throw it away when the session's list is cleared.
 - Recording the whole night is out: the files would be too big.
 - The buffer must not slow scanning. The owner cares about scan speed ([scan-speed-priority]). Measure per-card latency with the setting on, and if it costs anything noticeable, it stays off by default and says so.
 
@@ -80,7 +78,7 @@ Each game has its own rule (owner, 2026-11-05).
 
 - Slower scanning when the camera option is on.
 - A file over 10 MB that Discord refuses.
-- A replay that features commons or wrong guesses as "hits".
+- A replay that features cards under the hit price or wrong guesses as "hits".
 - Blank or broken card frames in the video.
 
 ## Left to the builder
@@ -88,7 +86,6 @@ Each game has its own rule (owner, 2026-11-05).
 - How to render: canvas + `MediaRecorder`/WebCodecs, an encoder library, or Electron-side encoding. Pick per platform; it doesn't need to be the same everywhere.
 - Exact timings, easing and frame rate (24–30 fps is fine).
 - Where the camera buffer lives and how clips are cut.
-- The full rarity lists for Pokémon and One Piece, within the rules above.
 - Test approach: the pull selection and rarity ordering are pure functions and need unit tests. The video itself needs a manual device check on iOS, Android and desktop.
 
 ## Reference

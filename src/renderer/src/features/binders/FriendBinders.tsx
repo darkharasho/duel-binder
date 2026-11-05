@@ -1,12 +1,10 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { ChevronLeftIcon } from 'lucide-react'
 import type { BinderSummary, Friend } from '@shared/types'
 import { PageHeader } from '@/components/PageHeader'
-import { Button } from '@/components/ui/button'
 import { api, queryKeys } from '@/lib/api'
 import { useBackHandler } from '@/lib/backStack'
-import { Row, SHELF } from './BindersPage'
+import { BackToBinders, Row, SHELF } from './BindersPage'
 import { BinderView } from './BinderView'
 
 function Open({
@@ -29,16 +27,15 @@ function Open({
   return (
     <div className="space-y-4 p-8 max-md:p-4">
       <PageHeader>{header}</PageHeader>
-      <Button variant="ghost" size="sm" className="-ml-2" onClick={onBack}>
-        <ChevronLeftIcon className="size-4" />
-        Binders
-      </Button>
       {q.data ? (
-        <BinderView detail={q.data} readOnly />
+        <BinderView detail={q.data} readOnly back={<BackToBinders onBack={onBack} />} />
       ) : (
-        !q.isPending && (
-          <p className="text-sm text-muted-foreground">This binder isn&apos;t available.</p>
-        )
+        <>
+          <BackToBinders onBack={onBack} />
+          {!q.isPending && (
+            <p className="text-sm text-muted-foreground">This binder isn&apos;t available.</p>
+          )}
+        </>
       )}
     </div>
   )

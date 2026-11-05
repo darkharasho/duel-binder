@@ -1,4 +1,4 @@
-import { useState, useSyncExternalStore } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import { ChevronLeftIcon, ChevronRightIcon, XIcon } from 'lucide-react'
 import type { BinderCard } from '@shared/types'
 import { cssAspect } from '@shared/games'
@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { CardArt } from '@/components/CardArt'
 import { FavouriteHeart } from '@/components/FavouriteHeart'
+import { useArtPrefetch } from '@/lib/artPrefetch'
 import { useTileImage } from '@/lib/cardSize'
 import { useFavourites } from '@/lib/favourites'
 import { formatUsd } from '@/lib/format'
@@ -14,6 +15,54 @@ import { useSwipe } from '@/lib/useSwipe'
 import { cn } from '@/lib/utils'
 import { binderStyle } from './binderColour'
 import './binderLook.css'
+
+/** The nearest ancestor that scrolls: the page the binder sits on. */
+function scrollParent(node: HTMLElement): HTMLElement {
+  for (let p = node.parentElement; p; p = p.parentElement) {
+    if (/(auto|scroll)/.test(getComputedStyle(p).overflowY)) return p
+  }
+  return document.scrollingElement as HTMLElement
+}
+
+/**
+ * The widest the open binder can be while all of it, and whatever sits below it, fits in the
+ * window without scrolling. Measured, as the header above it changes height from binder to binder.
+ */
+function useFitWidth(el: HTMLElement | null, on: boolean): number | null {
+  const [width, setWidth] = useState<number | null>(null)
+  useLayoutEffect(() => {
+    if (!el || !on || typeof ResizeObserver === 'undefined') return
+    const scroller = scrollParent(el)
+    const measure = (): void => {
+      const r = el.getBoundingClientRect()
+      if (!r.height || !r.width) return
+      const s = scroller.getBoundingClientRect()
+      const top = r.top - s.top + scroller.scrollTop
+      // What sits under the binder: the page marks, then each wrapper's bottom padding.
+      const root = el.closest('[data-binder-root]') ?? el
+      let below = root.getBoundingClientRect().bottom - r.bottom
+      for (let p = root.parentElement; p && p !== scroller; p = p.parentElement) {
+        below += parseFloat(getComputedStyle(p).paddingBottom) || 0
+      }
+      const fit = Math.floor((scroller.clientHeight - top - below) * (r.width / r.height))
+      // A couple of pixels either way is the binder settling; stop there.
+      setWidth((w) => (w != null && Math.abs(w - fit) < 3 ? w : fit))
+    }
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(scroller)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [el, on])
+  return width
+}
+
+/** Whether a turn plays the page flip: not where motion is turned down, nor without animations (jsdom). */
+const canFlip = (): boolean =>
+  typeof document.body.animate === 'function' &&
+  !window.matchMedia?.('(prefers-reduced-motion: reduce)').matches
+/** Longer than any flip runs; the flip is dropped by then even if its end event never came. */
+const FLIP_MAX_MS = 1200
 
 /** Pockets on a page: three rows of three, as on a real binder page. */
 export const PER_PAGE = 9
@@ -73,13 +122,16 @@ function Pocket({
       >
         <div className="binder-card">
           {c.imageId ? (
-            <CardArt
-              imageId={c.imageId}
-              printingId={c.printingScan && c.printing ? c.printing.id : null}
-              size={tileImage}
-              alt=""
-              className={cn('w-full', missing && 'opacity-[0.13] grayscale')}
-            />
+            // Faded on a wrapper: the art's own fade-in would otherwise light a missing card up.
+            <div className={cn(missing && 'opacity-[0.13] grayscale')}>
+              <CardArt
+                imageId={c.imageId}
+                printingId={c.printingScan && c.printing ? c.printing.id : null}
+                size={tileImage}
+                alt=""
+                className="w-full"
+              />
+            </div>
           ) : (
             <div className="w-full bg-white/5" style={{ aspectRatio: cssAspect(aspect) }} />
           )}
@@ -168,13 +220,22 @@ export function BinderGrid({
   const wide = useSyncExternalStore(subscribeWide, readWide)
   const aspect = useCardAspect()
   const [el, setEl] = useState<HTMLDivElement | null>(null)
-  // The first page shown, and which way the last turn went (for its slide).
+  const fitWidth = useFitWidth(el, wide)
+  // The first page shown, and the first page before a turn while its page is still flipping over.
   const [state, setState] = useState<{
     page: number
-    dir: 'next' | 'prev' | null
+    from: number | null
+    /** Counts turns, so a turn made mid-flip starts its own flip. */
+    turn: number
     resetKey?: string
-  }>({ page: 0, dir: null, resetKey })
-  if (state.resetKey !== resetKey) setState({ page: 0, dir: null, resetKey })
+  }>({ page: 0, from: null, turn: 0, resetKey })
+  if (state.resetKey !== resetKey) setState({ page: 0, from: null, turn: 0, resetKey })
+  const settle = (): void => setState((s) => (s.from == null ? s : { ...s, from: null }))
+  useEffect(() => {
+    if (state.from == null) return
+    const t = setTimeout(settle, FLIP_MAX_MS)
+    return () => clearTimeout(t)
+  }, [state.from, state.turn])
 
   const pageCount = Math.max(1, Math.ceil(cards.length / PER_PAGE))
   const step = wide ? 2 : 1
@@ -182,11 +243,26 @@ export function BinderGrid({
   const first = Math.min(state.page - (state.page % step), (Math.ceil(pageCount / step) - 1) * step)
   const shown = Array.from({ length: step }, (_, i) => first + i)
   const pageCards = (p: number): BinderCard[] => cards.slice(p * PER_PAGE, (p + 1) * PER_PAGE)
+  // The spreads either side load in the background, next first, so a turn shows their art at once.
+  useArtPrefetch(
+    useMemo(
+      () =>
+        [
+          ...cards.slice((first + step) * PER_PAGE, (first + 2 * step) * PER_PAGE),
+          ...cards.slice(Math.max(0, first - step) * PER_PAGE, first * PER_PAGE)
+        ].map((c) => ({
+          imageId: c.imageId || null,
+          printingId: c.printingScan && c.printing ? c.printing.id : null
+        })),
+      [cards, first, step]
+    ),
+    tileImage
+  )
 
   const turnTo = (page: number): void => {
     const to = Math.max(0, Math.min(page - (page % step), pageCount - 1))
     if (to === first) return
-    setState({ page: to, dir: to > first ? 'next' : 'prev', resetKey })
+    setState((s) => ({ page: to, from: canFlip() ? first : null, turn: s.turn + 1, resetKey }))
   }
   const prev = (): void => turnTo(first - step)
   const next = (): void => turnTo(first + step)
@@ -205,16 +281,79 @@ export function BinderGrid({
       ? `Pages ${first + 1}–${first + 2} of ${pageCount}`
       : `Page ${first + 1} of ${pageCount}`
 
+  // While a page flips, each side shows what lies under the turning leaf until the leaf lands.
+  const flip =
+    state.from != null && state.from !== first
+      ? { from: state.from, dir: state.from < first ? ('next' as const) : ('prev' as const) }
+      : null
+
+  /**
+   * The page being turned. On a spread it swings over the rings: the old page on its front, the
+   * new page on the other side on its back. A single page lifts off (next) or falls back on (prev).
+   */
+  const leaf = (f: { from: number; dir: 'next' | 'prev' }): React.JSX.Element => {
+    const faces = wide
+      ? f.dir === 'next'
+        ? { front: page(f.from + 1, 'right'), back: page(first, 'left'), over: 'right' }
+        : { front: page(f.from, 'left'), back: page(first + 1, 'right'), over: 'left' }
+      : f.dir === 'next'
+        ? { front: page(f.from, 'right'), back: null, over: 'single' }
+        : { front: page(first, 'right'), back: null, over: 'single' }
+    return (
+      <div
+        key={state.turn}
+        className="binder-leaf"
+        data-over={faces.over}
+        data-dir={f.dir}
+        aria-hidden
+        inert
+        onAnimationEnd={(e) => {
+          if (e.target === e.currentTarget) settle()
+        }}
+      >
+        <div className="binder-leaf-face" data-face="front">
+          {faces.front}
+        </div>
+        {faces.back && (
+          <div className="binder-leaf-face" data-face="back">
+            {faces.back}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  const turning = pageCount > step
+  const prevButton = (
+    <Button
+      variant="outline"
+      size="icon"
+      className="shrink-0 rounded-full"
+      aria-label="Previous pages"
+      disabled={first === 0}
+      onClick={prev}
+    >
+      <ChevronLeftIcon className="size-4" />
+    </Button>
+  )
+  const nextButton = (
+    <Button
+      variant="outline"
+      size="icon"
+      className="shrink-0 rounded-full"
+      aria-label="Next pages"
+      disabled={first + step >= pageCount}
+      onClick={next}
+    >
+      <ChevronRightIcon className="size-4" />
+    </Button>
+  )
+
   const page = (p: number, side: 'left' | 'right'): React.JSX.Element => {
     const these = p < pageCount ? pageCards(p) : []
     return (
       <div key={p} className="binder-page" data-side={side}>
-        <div
-          // Keyed on the page, so a turn replays the slide.
-          key={`${p}-${state.dir}`}
-          className="binder-sheet binder-turn"
-          data-dir={state.dir ?? undefined}
-        >
+        <div className="binder-sheet">
           {these.map((c) => (
             <Pocket
               key={c.key}
@@ -240,7 +379,8 @@ export function BinderGrid({
 
   return (
     <div
-      className="space-y-5"
+      data-binder-root
+      className="space-y-3"
       onKeyDown={(e) => {
         if (e.target instanceof HTMLInputElement) return
         if (e.key === 'ArrowLeft') prev()
@@ -249,54 +389,51 @@ export function BinderGrid({
         e.preventDefault()
       }}
     >
-      <div
-        ref={setEl}
-        role="list"
-        aria-label="Binder cards"
-        className="binder-open binder-leather mx-auto"
-        data-single={!wide}
-        style={binderStyle(uid)}
-      >
-        {wide ? (
-          <>
-            {page(shown[0], 'left')}
-            <Rings />
-            {page(shown[1], 'right')}
-          </>
-        ) : (
-          <>
-            <Rings />
-            {page(shown[0], 'right')}
-          </>
-        )}
+      <div className="flex items-center justify-center gap-3">
+        {wide && turning && prevButton}
+        <div
+          ref={setEl}
+          role="list"
+          aria-label="Binder cards"
+          className="binder-open binder-leather min-w-0 flex-1"
+          data-single={!wide}
+          style={{
+            ...binderStyle(uid),
+            ...(fitWidth != null && ({ '--fit-w': `${fitWidth}px` } as React.CSSProperties))
+          }}
+        >
+          {wide ? (
+            <>
+              {page(flip?.dir === 'next' ? flip.from : first, 'left')}
+              <Rings />
+              {page(flip?.dir === 'prev' ? flip.from + 1 : first + 1, 'right')}
+            </>
+          ) : (
+            <>
+              <Rings />
+              {page(flip?.dir === 'prev' ? flip.from : first, 'right')}
+            </>
+          )}
+          {flip && leaf(flip)}
+        </div>
+        {wide && turning && nextButton}
       </div>
-      {pageCount > step && (
-        <nav aria-label="Pages" className="flex flex-col items-center gap-3">
-          <div className="flex items-center gap-4">
-            <Button
-              variant="outline"
-              size="icon"
-              className="rounded-full"
-              aria-label="Previous pages"
-              disabled={first === 0}
-              onClick={prev}
-            >
-              <ChevronLeftIcon className="size-4" />
-            </Button>
-            <span className="min-w-28 text-center text-sm tabular-nums text-muted-foreground">
-              {label}
-            </span>
-            <Button
-              variant="outline"
-              size="icon"
-              className="rounded-full"
-              aria-label="Next pages"
-              disabled={first + step >= pageCount}
-              onClick={next}
-            >
-              <ChevronRightIcon className="size-4" />
-            </Button>
-          </div>
+      {turning && (
+        <nav
+          aria-label="Pages"
+          className={cn('flex items-center justify-center', wide ? 'gap-4' : 'flex-col gap-3')}
+        >
+          {wide ? (
+            <span className="text-sm tabular-nums text-muted-foreground">{label}</span>
+          ) : (
+            <div className="flex items-center gap-4">
+              {prevButton}
+              <span className="min-w-28 text-center text-sm tabular-nums text-muted-foreground">
+                {label}
+              </span>
+              {nextButton}
+            </div>
+          )}
           {pageCount <= MAX_MARKS ? (
             <div className="flex flex-wrap justify-center gap-1">
               {Array.from({ length: pageCount }, (_, p) => {

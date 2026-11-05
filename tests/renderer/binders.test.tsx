@@ -1,9 +1,10 @@
-import { act, renderHook, screen, within } from '@testing-library/react'
+import { act, renderHook, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { BinderCard, BinderDetail, BinderSummary, CardRow } from '@shared/types'
 import { BindersPage } from '@/features/binders/BindersPage'
 import { BinderView } from '@/features/binders/BinderView'
 import { binderColour } from '@/features/binders/binderColour'
+import { resetArtPrefetch } from '@/lib/artPrefetch'
 import { createMockApi, renderWithProviders } from './mockApi'
 import { handleBack, useBackHandler } from '../../src/phone/backButton'
 
@@ -285,6 +286,56 @@ describe('binder pages', () => {
     expect(screen.getByRole('button', { name: 'Next pages' })).toBeDisabled()
     await userEvent.click(screen.getByRole('button', { name: 'Page 1, complete' }))
     expect(screen.getByText('Pages 1–2 of 3')).toBeInTheDocument()
+  })
+
+  it('turns a page over, then settles on the new spread', async () => {
+    // Wide, with motion on: only the width query matches. jsdom has no animations; give it one.
+    window.matchMedia = ((q: string) => ({
+      matches: q.includes('min-width'),
+      media: q,
+      addEventListener: () => {},
+      removeEventListener: () => {}
+    })) as never
+    const proto = HTMLElement.prototype as { animate?: unknown }
+    proto.animate = () => ({})
+    try {
+      renderWithProviders(<BinderView detail={detail({ cards: many(20) })} />)
+      const grid = screen.getByRole('list', { name: 'Binder cards' })
+      await userEvent.click(screen.getByRole('button', { name: 'Next pages' }))
+      const leaf = grid.querySelector('.binder-leaf')
+      expect(leaf).toHaveAttribute('data-dir', 'next')
+      expect(leaf).toHaveAttribute('aria-hidden', 'true')
+      // Mid-turn: the old left page is still down, the new right page (empty here) shows under the leaf.
+      expect(within(grid).getAllByRole('listitem')).toHaveLength(9)
+      expect(screen.getByText('Page 3 of 3')).toBeInTheDocument()
+      // jsdom sends no animation end, so this is the fallback that drops a leaf whose end never came.
+      await waitFor(() => expect(grid.querySelector('.binder-leaf')).toBeNull(), { timeout: 2000 })
+      expect(within(grid).getAllByRole('listitem')).toHaveLength(2)
+    } finally {
+      delete proto.animate
+    }
+  })
+
+  it("loads the next spread's art in the background", async () => {
+    widen()
+    resetArtPrefetch()
+    const started: string[] = []
+    vi.stubGlobal(
+      'Image',
+      class {
+        set src(v: string) {
+          started.push(v)
+        }
+      }
+    )
+    try {
+      renderWithProviders(<BinderView detail={detail({ cards: many(45) })} />)
+      // Pages 3–4 hold cards 19–36: the first six of them start, in page order.
+      await waitFor(() => expect(started).toHaveLength(6), { timeout: 2000 })
+      expect(started.map((s) => Number(/(\d+)$/.exec(s)?.[1]))).toEqual([19, 20, 21, 22, 23, 24])
+    } finally {
+      vi.unstubAllGlobals()
+    }
   })
 
   it('goes back to the first page when the filter changes', async () => {

@@ -137,8 +137,12 @@
   position: relative;
   display: grid;
   grid-template-columns: 1fr 62px 1fr;
-  /* Wide enough for the card size, narrow enough that a spread fits the window's height. */
-  max-width: max(640px, min(calc(1240px * var(--card-scale, 1)), calc((100dvh - 290px) * 1.36)));
+  /* Wide enough for the card size, narrow enough that a spread fits the window's height
+     (--fit-w, measured by BinderGrid; the estimate stands in until it is). */
+  max-width: max(
+    640px,
+    min(calc(1240px * var(--card-scale, 1)), var(--fit-w, calc((100dvh - 290px) * 1.36)))
+  );
   padding: 14px;
   border-radius: 12px;
   box-shadow:

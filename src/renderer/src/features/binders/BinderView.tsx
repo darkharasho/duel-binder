@@ -73,7 +73,7 @@ export function BinderView({ detail, readOnly, onEdit, onRemove }: Props): React
   ].join(' · ')
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <div className="flex items-center justify-between gap-3">
         <h2 className="truncate text-xl font-semibold">{detail.name}</h2>
         {!readOnly &&
@@ -114,21 +114,29 @@ export function BinderView({ detail, readOnly, onEdit, onRemove }: Props): React
         </p>
       ) : (
         <>
-          <div className="space-y-2">
-            {hasGoal && progress.total > 0 && (
-              <SetProgress progress={progress} className="max-w-sm" />
-            )}
-            <p className="text-sm text-muted-foreground tabular-nums">{summary}</p>
-            {hasGoal && detail.unpricedMissing > 0 && (
-              <p className="text-xs text-muted-foreground">
-                {detail.unpricedMissing} {detail.unpricedMissing === 1 ? 'card has' : 'cards have'}{' '}
-                no price
+          {/* Progress and the Show tabs share a row, so the binder below gets the height. */}
+          <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-3">
+            <div className="min-w-0 space-y-2">
+              {hasGoal && progress.total > 0 && (
+                <SetProgress progress={progress} className="w-80 max-w-full" />
+              )}
+              <p className="text-sm text-muted-foreground tabular-nums">
+                {summary}
+                {hasGoal && detail.unpricedMissing > 0 && (
+                  <span className="text-xs">
+                    {' · '}
+                    <span>
+                      {detail.unpricedMissing}{' '}
+                      {detail.unpricedMissing === 1 ? 'card has' : 'cards have'} no price
+                    </span>
+                  </span>
+                )}
               </p>
+            </div>
+            {hasGoal && (
+              <UnderlineTabs label="Show" value={view} options={VIEWS} onChange={setView} />
             )}
           </div>
-          {hasGoal && (
-            <UnderlineTabs label="Show" value={view} options={VIEWS} onChange={setView} />
-          )}
           {detail.cards.length === 0 ? (
             <p className="text-sm text-muted-foreground">
               Nothing in this binder yet.

@@ -1,4 +1,4 @@
-import { useState, useSyncExternalStore } from 'react'
+import { useLayoutEffect, useState, useSyncExternalStore } from 'react'
 import { ChevronLeftIcon, ChevronRightIcon, XIcon } from 'lucide-react'
 import type { BinderCard } from '@shared/types'
 import { cssAspect } from '@shared/games'
@@ -14,6 +14,47 @@ import { useSwipe } from '@/lib/useSwipe'
 import { cn } from '@/lib/utils'
 import { binderStyle } from './binderColour'
 import './binderLook.css'
+
+/** The nearest ancestor that scrolls: the page the binder sits on. */
+function scrollParent(node: HTMLElement): HTMLElement {
+  for (let p = node.parentElement; p; p = p.parentElement) {
+    if (/(auto|scroll)/.test(getComputedStyle(p).overflowY)) return p
+  }
+  return document.scrollingElement as HTMLElement
+}
+
+/**
+ * The widest the open binder can be while all of it, and whatever sits below it, fits in the
+ * window without scrolling. Measured, as the header above it changes height from binder to binder.
+ */
+function useFitWidth(el: HTMLElement | null, on: boolean): number | null {
+  const [width, setWidth] = useState<number | null>(null)
+  useLayoutEffect(() => {
+    if (!el || !on || typeof ResizeObserver === 'undefined') return
+    const scroller = scrollParent(el)
+    const measure = (): void => {
+      const r = el.getBoundingClientRect()
+      if (!r.height || !r.width) return
+      const s = scroller.getBoundingClientRect()
+      const top = r.top - s.top + scroller.scrollTop
+      // What sits under the binder: the page marks, then each wrapper's bottom padding.
+      const root = el.closest('[data-binder-root]') ?? el
+      let below = root.getBoundingClientRect().bottom - r.bottom
+      for (let p = root.parentElement; p && p !== scroller; p = p.parentElement) {
+        below += parseFloat(getComputedStyle(p).paddingBottom) || 0
+      }
+      const fit = Math.floor((scroller.clientHeight - top - below) * (r.width / r.height))
+      // A couple of pixels either way is the binder settling; stop there.
+      setWidth((w) => (w != null && Math.abs(w - fit) < 3 ? w : fit))
+    }
+    measure()
+    const ro = new ResizeObserver(measure)
+    ro.observe(scroller)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [el, on])
+  return width
+}
 
 /** Pockets on a page: three rows of three, as on a real binder page. */
 export const PER_PAGE = 9
@@ -168,6 +209,7 @@ export function BinderGrid({
   const wide = useSyncExternalStore(subscribeWide, readWide)
   const aspect = useCardAspect()
   const [el, setEl] = useState<HTMLDivElement | null>(null)
+  const fitWidth = useFitWidth(el, wide)
   // The first page shown, and which way the last turn went (for its slide).
   const [state, setState] = useState<{
     page: number
@@ -205,6 +247,32 @@ export function BinderGrid({
       ? `Pages ${first + 1}–${first + 2} of ${pageCount}`
       : `Page ${first + 1} of ${pageCount}`
 
+  const turning = pageCount > step
+  const prevButton = (
+    <Button
+      variant="outline"
+      size="icon"
+      className="shrink-0 rounded-full"
+      aria-label="Previous pages"
+      disabled={first === 0}
+      onClick={prev}
+    >
+      <ChevronLeftIcon className="size-4" />
+    </Button>
+  )
+  const nextButton = (
+    <Button
+      variant="outline"
+      size="icon"
+      className="shrink-0 rounded-full"
+      aria-label="Next pages"
+      disabled={first + step >= pageCount}
+      onClick={next}
+    >
+      <ChevronRightIcon className="size-4" />
+    </Button>
+  )
+
   const page = (p: number, side: 'left' | 'right'): React.JSX.Element => {
     const these = p < pageCount ? pageCards(p) : []
     return (
@@ -240,7 +308,8 @@ export function BinderGrid({
 
   return (
     <div
-      className="space-y-5"
+      data-binder-root
+      className="space-y-3"
       onKeyDown={(e) => {
         if (e.target instanceof HTMLInputElement) return
         if (e.key === 'ArrowLeft') prev()
@@ -249,54 +318,50 @@ export function BinderGrid({
         e.preventDefault()
       }}
     >
-      <div
-        ref={setEl}
-        role="list"
-        aria-label="Binder cards"
-        className="binder-open binder-leather mx-auto"
-        data-single={!wide}
-        style={binderStyle(uid)}
-      >
-        {wide ? (
-          <>
-            {page(shown[0], 'left')}
-            <Rings />
-            {page(shown[1], 'right')}
-          </>
-        ) : (
-          <>
-            <Rings />
-            {page(shown[0], 'right')}
-          </>
-        )}
+      <div className="flex items-center justify-center gap-3">
+        {wide && turning && prevButton}
+        <div
+          ref={setEl}
+          role="list"
+          aria-label="Binder cards"
+          className="binder-open binder-leather min-w-0 flex-1"
+          data-single={!wide}
+          style={{
+            ...binderStyle(uid),
+            ...(fitWidth != null && ({ '--fit-w': `${fitWidth}px` } as React.CSSProperties))
+          }}
+        >
+          {wide ? (
+            <>
+              {page(shown[0], 'left')}
+              <Rings />
+              {page(shown[1], 'right')}
+            </>
+          ) : (
+            <>
+              <Rings />
+              {page(shown[0], 'right')}
+            </>
+          )}
+        </div>
+        {wide && turning && nextButton}
       </div>
-      {pageCount > step && (
-        <nav aria-label="Pages" className="flex flex-col items-center gap-3">
-          <div className="flex items-center gap-4">
-            <Button
-              variant="outline"
-              size="icon"
-              className="rounded-full"
-              aria-label="Previous pages"
-              disabled={first === 0}
-              onClick={prev}
-            >
-              <ChevronLeftIcon className="size-4" />
-            </Button>
-            <span className="min-w-28 text-center text-sm tabular-nums text-muted-foreground">
-              {label}
-            </span>
-            <Button
-              variant="outline"
-              size="icon"
-              className="rounded-full"
-              aria-label="Next pages"
-              disabled={first + step >= pageCount}
-              onClick={next}
-            >
-              <ChevronRightIcon className="size-4" />
-            </Button>
-          </div>
+      {turning && (
+        <nav
+          aria-label="Pages"
+          className={cn('flex items-center justify-center', wide ? 'gap-4' : 'flex-col gap-3')}
+        >
+          {wide ? (
+            <span className="text-sm tabular-nums text-muted-foreground">{label}</span>
+          ) : (
+            <div className="flex items-center gap-4">
+              {prevButton}
+              <span className="min-w-28 text-center text-sm tabular-nums text-muted-foreground">
+                {label}
+              </span>
+              {nextButton}
+            </div>
+          )}
           {pageCount <= MAX_MARKS ? (
             <div className="flex flex-wrap justify-center gap-1">
               {Array.from({ length: pageCount }, (_, p) => {

@@ -487,8 +487,10 @@ describe('reading the number off the camera', () => {
     await waitFor(() => expect(engine.analyze.mock.calls.length).toBeGreaterThan(calls + 4))
     expect(suggestion('OP01-001')).not.toBeInTheDocument()
     // The next card in the frame, then the first one back again.
+    // Counted from the switch: a slow runner may already be past any count taken earlier.
     card = 'OP02-024'
-    await waitFor(() => expect(engine.analyze.mock.calls.length).toBeGreaterThan(calls + 8))
+    const switched = engine.analyze.mock.calls.length
+    await waitFor(() => expect(engine.analyze.mock.calls.length).toBeGreaterThan(switched + 2))
     card = 'OP01-001'
     expect(await screen.findByRole('button', { name: 'Use OP01-001' })).toBeInTheDocument()
   })

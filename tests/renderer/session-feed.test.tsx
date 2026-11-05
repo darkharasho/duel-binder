@@ -106,12 +106,25 @@ describe('the session feed', () => {
     expect(ringed[0].getAttribute('aria-label')).toContain(cards[0].name)
   })
 
-  it('collapses 40 cards to 16 tiles and expands', async () => {
+  it('collapses 40 cards to two rows, the +N more tile last on row two, and expands', async () => {
     const cards = Array.from({ length: 40 }, (_, i) => card(i + 1))
     feed([session(cards)])
-    expect(screen.getAllByRole('button', { name: /^Card \d+/ })).toHaveLength(16)
-    await userEvent.click(screen.getByRole('button', { name: '+24 more' }))
+    // 8 columns until measured: 15 tiles and the "+25 more" tile fill the two rows.
+    expect(screen.getAllByRole('button', { name: /^Card \d+/ })).toHaveLength(15)
+    await userEvent.click(screen.getByRole('button', { name: '+25 more' }))
     expect(screen.getAllByRole('button', { name: /^Card \d+/ })).toHaveLength(40)
+  })
+
+  it('shows every card with no +N more tile when two rows hold them all', () => {
+    feed([session(Array.from({ length: 16 }, (_, i) => card(i + 1)))])
+    expect(screen.getAllByRole('button', { name: /^Card \d+/ })).toHaveLength(16)
+    expect(screen.queryByRole('button', { name: /more$/ })).toBeNull()
+  })
+
+  it('17 cards show 15 tiles and +2 more', () => {
+    feed([session(Array.from({ length: 17 }, (_, i) => card(i + 1)))])
+    expect(screen.getAllByRole('button', { name: /^Card \d+/ })).toHaveLength(15)
+    expect(screen.getByRole('button', { name: '+2 more' })).toBeInTheDocument()
   })
 
   it('shows a x2 badge for more than one copy', () => {

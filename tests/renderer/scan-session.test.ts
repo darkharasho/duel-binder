@@ -11,6 +11,7 @@ import { GameProvider } from '@/lib/game'
 import type { ScanDraft } from '@/features/scan/resolve'
 import { useScanLoop } from '@/features/scan/useScanLoop'
 import { createMockApi, renderWithProviders } from './mockApi'
+import { mutationInvalidationKeys } from '@/lib/api'
 import { fakeBridge, fakeEngine, quad, stubVideo, type FakeEngine } from './scanFakes'
 
 const KEY = 'scan.session.v1'
@@ -45,13 +46,14 @@ type Session = ReturnType<typeof useScanSession>
 function setup(
   add = vi.fn(async () => ({}) as never),
   game?: GameId
-): { add: typeof add } & RenderHookResult<Session, { game?: GameId }> {
+): { add: typeof add; client: QueryClient } & RenderHookResult<Session, { game?: GameId }> {
   window.api = createMockApi({ collection: { add } })
   const client = new QueryClient()
   const wrapper = ({ children }: { children: ReactNode }): ReactElement =>
     createElement(QueryClientProvider, { client }, children)
   return {
     add,
+    client,
     ...renderHook((props: { game?: GameId }) => useScanSession(props.game), {
       wrapper,
       initialProps: { game } as { game?: GameId }
@@ -285,6 +287,19 @@ describe('useScanSession', () => {
       })
       const [arg] = record.mock.calls[0] as unknown as [{ cards: Array<{ quantity: number }> }]
       expect(arg.cards.map((c) => c.quantity)).toEqual([1])
+    })
+
+    it('every edit refreshes the sessions, and so does a record once it lands', async () => {
+      expect(mutationInvalidationKeys).toContainEqual(['sessions'])
+      const { result, client } = setup()
+      let land!: () => void
+      window.api.sessions.record = vi.fn(() => new Promise<void>((res) => (land = res)))
+      const invalidate = vi.spyOn(client, 'invalidateQueries')
+      act(() => result.current.add(draft()))
+      await act(async () => void (await result.current.commit()))
+      invalidate.mockClear()
+      await act(async () => land())
+      expect(invalidate).toHaveBeenCalledWith({ queryKey: ['sessions'] })
     })
 
     it('a failing record leaves commit as it was', async () => {

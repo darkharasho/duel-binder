@@ -341,12 +341,13 @@ export function useScanSession(game: GameId = 'ygo'): {
       committingRef.current = false
       setCommitting(false)
     }
-    // A record that fails mustn't touch the Add: the cards are in the collection either way.
+    // A record that fails mustn't touch the Add: the cards are in the collection either way. It
+    // lands after the Add's own refresh, so the sessions refresh again once it has.
     if (saved.length > 0)
       try {
-        void Promise.resolve(api.sessions.record({ uid: uniqueId(), game, cards: saved })).catch(
-          () => undefined
-        )
+        void Promise.resolve(api.sessions.record({ uid: uniqueId(), game, cards: saved }))
+          .then(() => qc.invalidateQueries({ queryKey: ['sessions'] }))
+          .catch(() => undefined)
       } catch {
         // Nothing to do: the session is a record of the Add, not part of it.
       }

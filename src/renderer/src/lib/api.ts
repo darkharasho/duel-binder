@@ -64,7 +64,8 @@ export const mutationInvalidationKeys = [
   ['browse'],
   ['wishlist'],
   ['binders'],
-  ['favourites']
+  ['favourites'],
+  ['sessions']
 ] as const
 
 /**

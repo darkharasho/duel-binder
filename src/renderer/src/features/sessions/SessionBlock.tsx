@@ -125,9 +125,10 @@ export function SessionBlock({
         .map((x) => x.c),
     [session.cards]
   )
+  // Collapsed, two rows: the "+N more" tile takes row two's last slot.
   const cap = columns * 2
-  const collapsed = !expanded && sorted.length > cap + 1
-  const shown = collapsed ? sorted.slice(0, cap) : sorted
+  const collapsed = !expanded && sorted.length > cap
+  const shown = collapsed ? sorted.slice(0, cap - 1) : sorted
   const cards = session.cards.reduce((n, c) => n + c.quantity, 0)
 
   const run = async (fn: () => Promise<void>, failure: string): Promise<void> => {
@@ -205,7 +206,7 @@ export function SessionBlock({
             onClick={() => setExpanded(true)}
             className="flex aspect-[5/7] w-full items-center justify-center self-start rounded-[7px] border border-white/[0.06] bg-white/[0.03] text-center text-sm text-muted-foreground hover:bg-white/[0.07]"
           >
-            +{sorted.length - cap} more
+            +{sorted.length - shown.length} more
           </button>
         )}
       </div>

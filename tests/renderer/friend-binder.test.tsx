@@ -10,6 +10,7 @@ import type {
   Printing,
   CardRow
 } from '@shared/types'
+import type { ScanSession } from '@shared/scanSessions'
 import { FriendBinder } from '@/features/friends/FriendBinder'
 import { createMockApi, renderWithProviders } from './mockApi'
 import { metalRaidersChecklist } from './setFixtures'
@@ -274,5 +275,64 @@ describe("a friend's binders tab", () => {
     await userEvent.click(await screen.findByRole('radio', { name: 'Binders' }))
     await userEvent.click(await screen.findByRole('button', { name: /Blue-Eyes/ }))
     expect(await screen.findByText("This binder isn't available.")).toBeInTheDocument()
+  })
+})
+
+describe("a friend's sessions tab", () => {
+  const session: ScanSession = {
+    uid: 's1',
+    game: 'ygo',
+    friendsVisible: true,
+    createdAt: '2026-11-04T20:00:00.000Z',
+    updatedAt: '2026-11-04T20:00:00.000Z',
+    cards: [
+      {
+        cardId: 1001,
+        printingId: 7,
+        imageId: 1001,
+        photoId: null,
+        name: 'Alpha Dragon',
+        setCode: 'MRD-001',
+        rarity: 'Ultra Rare',
+        quantity: 1,
+        price: 12,
+        guess: false,
+        addedAt: 1
+      }
+    ]
+  }
+
+  it('shows the feed without owner controls, with Make replay', async () => {
+    const { api } = open({ sessions: vi.fn(async () => [session]) })
+    await userEvent.click(await screen.findByRole('radio', { name: 'Sessions' }))
+    expect(api.friends.sessions).toHaveBeenCalledWith(7)
+    expect(await screen.findByRole('button', { name: /Alpha Dragon/ })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Make replay/ })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Session options' })).not.toBeInTheDocument()
+  })
+
+  it('opens a tile on their copies', async () => {
+    open({ sessions: vi.fn(async () => [session]) })
+    await userEvent.click(await screen.findByRole('radio', { name: 'Sessions' }))
+    await userEvent.click(await screen.findByRole('button', { name: /Alpha Dragon/ }))
+    const sheet = await screen.findByRole('dialog')
+    expect(await within(sheet).findByRole('region', { name: 'Their copies' })).toBeInTheDocument()
+  })
+
+  it('is hidden when none are shown', async () => {
+    const { api } = open()
+    await waitFor(() => expect(api.friends.sessions).toHaveBeenCalled())
+    expect(screen.queryByRole('radio', { name: 'Sessions' })).not.toBeInTheDocument()
+  })
+
+  it('is hidden, without a toast, when the portal cannot answer', async () => {
+    const { api } = open({
+      sessions: vi.fn(async () => {
+        throw new Error('404')
+      })
+    })
+    await waitFor(() => expect(api.friends.sessions).toHaveBeenCalled())
+    expect(screen.queryByRole('radio', { name: 'Sessions' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
   })
 })

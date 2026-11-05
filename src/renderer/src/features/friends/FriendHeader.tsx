@@ -5,14 +5,15 @@ import { UnderlineTabs } from '@/components/UnderlineTabs'
 import { formatRelative } from '@/lib/format'
 import { FriendAvatar } from './FriendAvatar'
 
-export type BinderTab = 'dashboard' | 'collection' | 'sets' | 'wishlist' | 'binders'
+export type BinderTab = 'dashboard' | 'collection' | 'sets' | 'wishlist' | 'binders' | 'sessions'
 
 const BINDER_TABS = [
   { value: 'dashboard', label: 'Dashboard' },
   { value: 'collection', label: 'Collection' },
   { value: 'sets', label: 'Sets' },
   { value: 'wishlist', label: 'Wishlist' },
-  { value: 'binders', label: 'Binders' }
+  { value: 'binders', label: 'Binders' },
+  { value: 'sessions', label: 'Sessions' }
 ] as const
 
 /** Whose binder this is and its tabs, at the top of every tab's page header. */
@@ -22,7 +23,8 @@ export function FriendHeader({
   onTab,
   onBack,
   trailing,
-  showBinders = false
+  showBinders = false,
+  showSessions = false
 }: {
   friend: Friend
   tab: BinderTab
@@ -32,6 +34,8 @@ export function FriendHeader({
   trailing?: React.ReactNode
   /** Whether they share any binders; the Binders tab is hidden otherwise. */
   showBinders?: boolean
+  /** Whether they show any scan sessions; the Sessions tab is hidden otherwise. */
+  showSessions?: boolean
 }): React.JSX.Element {
   return (
     <>
@@ -54,7 +58,10 @@ export function FriendHeader({
         <UnderlineTabs
           label="Collection"
           value={tab}
-          options={showBinders ? BINDER_TABS : BINDER_TABS.filter((t) => t.value !== 'binders')}
+          options={BINDER_TABS.filter(
+            (t) =>
+              (t.value !== 'binders' || showBinders) && (t.value !== 'sessions' || showSessions)
+          )}
           onChange={onTab}
         />
         {trailing && <div className="flex items-center gap-3 pb-1">{trailing}</div>}

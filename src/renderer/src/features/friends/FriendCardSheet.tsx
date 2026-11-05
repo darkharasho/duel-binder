@@ -15,8 +15,8 @@ export function FriendCardSheet({
 }: {
   friend: Friend
   cardId: number
-  /** The copy to show first. */
-  entryId: number
+  /** The copy to show first; the first one when omitted. */
+  entryId?: number
   onClose: () => void
 }): React.JSX.Element {
   const [selected, setSelected] = useState(entryId)

@@ -53,7 +53,7 @@ const PHONE_CONTROL =
   'h-11 rounded-full border border-white/[0.13] bg-black/55 px-5 text-[15px] font-semibold text-white backdrop-blur-xl active:bg-black/70 disabled:opacity-50'
 
 /**
- * Make replay: a short video of the night's best pulls, saved to the device. Beside it, the format
+ * Make replay: a short video of the session's best pulls, saved to the device. Beside it, the format
  * (MP4 or GIF) where this device can record video at all.
  */
 export function MakeReplay({

@@ -18,7 +18,7 @@ const card = (row: ScanRow): ScanSummaryCard => ({
 /**
  * The list as the summary screen shows it. Value and unpriced copies are the Review list's own, so
  * the two never disagree. A best guess counts towards the value as it does there, but like a pull
- * it never counts as a hit. The night always has its hit of the night though: the dearest card known
+ * it never counts as a hit. The session always has its hit of the session though: the dearest card known
  * to be in hand, or with none of those priced a known card, or failing that the best guess.
  */
 export function sessionSummary(rows: ScanRow[], hitPrice: number): ScanSummary {

@@ -28,7 +28,7 @@ function rarityOf(row: ScanRow): string | null {
 }
 
 /**
- * The night's pulls for a replay, by price alone: every one at $1.00 or more that is known to be
+ * The session's pulls for a replay, by price alone: every one at $1.00 or more that is known to be
  * in hand, the dearest 8 at most, in play order (cheapest first, so the best comes last). Equal
  * prices play in the order they were pulled.
  */

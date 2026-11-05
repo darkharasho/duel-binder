@@ -101,7 +101,7 @@ describe('SummaryScreen', () => {
     window.api = createMockApi() as typeof window.api
     const rows = [row(25, { name: 'Pikachu' }), row(2, { name: 'Bulbasaur', quantity: 3 })]
     renderWithProviders(<SummaryScreen summary={sessionSummary(rows, 20)} />)
-    expect(screen.getByRole('region', { name: 'Hit of the night' })).toHaveTextContent('Pikachu')
+    expect(screen.getByRole('region', { name: 'Hit of the session' })).toHaveTextContent('Pikachu')
     const list = within(screen.getByRole('region', { name: 'Every card' }))
     expect(list.getByText('×3')).toBeInTheDocument()
     expect(list.getByText('$6.00')).toBeInTheDocument()
@@ -110,7 +110,7 @@ describe('SummaryScreen', () => {
   it('a row and a hit with no price say so instead of $0', () => {
     window.api = createMockApi() as typeof window.api
     renderWithProviders(<SummaryScreen summary={sessionSummary([row(null)], 20)} />)
-    const hit = within(screen.getByRole('region', { name: 'Hit of the night' }))
+    const hit = within(screen.getByRole('region', { name: 'Hit of the session' }))
     expect(hit.getByText('No price')).toBeInTheDocument()
     expect(
       within(screen.getByRole('region', { name: 'Every card' })).getByText('No price')
@@ -120,7 +120,7 @@ describe('SummaryScreen', () => {
   it('a hit that is only a best guess says so', () => {
     window.api = createMockApi() as typeof window.api
     renderWithProviders(<SummaryScreen summary={sessionSummary([row(90, { guess: true })], 20)} />)
-    const hit = within(screen.getByRole('region', { name: 'Hit of the night' }))
+    const hit = within(screen.getByRole('region', { name: 'Hit of the session' }))
     expect(hit.getByText('Best guess')).toBeInTheDocument()
     expect(hit.getByText('$90.00')).toBeInTheDocument()
   })

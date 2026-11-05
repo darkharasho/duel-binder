@@ -693,7 +693,7 @@ function pullFrame(
       ctx.fillStyle = GOLD
       centredText(
         ctx,
-        'TOP PULL OF THE NIGHT',
+        'TOP PULL OF THE SESSION',
         REPLAY_W / 2,
         122 + label.dy,
         700,
@@ -731,7 +731,7 @@ function endFrame(
   const art = scene.art[best]
   backdrop(ctx, scene, [{ art, alpha: 0.72 }], t)
 
-  // The best card steps back and up to make room for the night's other hits.
+  // The best card steps back and up to make room for the session's other hits.
   const move = easeInOut(ramp(local, 0, 700))
   const cy = CARD_Y + (END_Y - CARD_Y) * move
   rays(ctx, REPLAY_W / 2, cy, 0.16 * (1 - 0.5 * move), t)

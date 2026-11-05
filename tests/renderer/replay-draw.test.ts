@@ -125,7 +125,15 @@ describe('drawReplayFrame motion', () => {
     const { ctx, calls } = recordingContext()
     drawReplayFrame(ctx, s, start + 1200)
     expect(drew(calls, s.art[1])).toBe(false)
-    expect(textsOf(calls)).not.toContain('TOP PULL OF THE NIGHT')
+    expect(textsOf(calls)).not.toContain('TOP PULL OF THE SESSION')
+  })
+
+  it('names the best pull the top pull of the session once it has turned', () => {
+    const s = scene([pull(2), pull(12)])
+    const end = s.timeline.segments[1].end
+    const { ctx, calls } = recordingContext()
+    drawReplayFrame(ctx, s, end - 1)
+    expect(textsOf(calls)).toContain('TOP PULL OF THE SESSION')
   })
 
   it('counts the price up as it comes in', () => {

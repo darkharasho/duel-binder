@@ -35,11 +35,11 @@ function usePage(pages: number): number {
 function Hit({ card }: { card: ScanSummaryCard }): React.JSX.Element {
   return (
     <section
-      aria-label="Hit of the night"
+      aria-label="Hit of the session"
       className="flex w-[min(30vw,40vh)] shrink-0 flex-col portrait:w-[min(30vw,13vh)] portrait:self-center animate-in fade-in slide-in-from-bottom-[3vh] zoom-in-95 duration-700 motion-reduce:animate-none"
     >
       <p className="mb-[1vh] text-[clamp(0.8rem,1.4vw,1.3rem)] font-semibold tracking-wide text-amber-300">
-        Hit of the night
+        Hit of the session
       </p>
       <CardArt
         imageId={card.imageId}
@@ -105,7 +105,7 @@ function Row({ card }: { card: ScanSummaryCard }): React.JSX.Element {
   )
 }
 
-/** The night so far, over the camera blurred behind it: the hit, then every card and price. */
+/** The session so far, over the camera blurred behind it: the hit, then every card and price. */
 export function SummaryScreen({
   summary,
   leaving = false,

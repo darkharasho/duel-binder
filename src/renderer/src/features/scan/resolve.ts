@@ -16,6 +16,7 @@ import {
   ART_MIN_MARGIN,
   ART_REF_MIN_MARGIN,
   ART_TONE_MIN_LEAD,
+  CARD_BACK_MAX_DISTANCE,
   type PkmGuessRule
 } from '@shared/scan/thresholds'
 import type { ScanDraft, ScanPrinting } from '@shared/scan/types'
@@ -325,14 +326,27 @@ async function byName(raw: RawSignals, ctx: ResolveContext): Promise<ScanDraft |
 }
 
 /**
+ * Whether the card in view is a card back: its outline, or one over it, came within
+ * CARD_BACK_MAX_DISTANCE of one of the game's backs (artBack), and no closer to any card's art.
+ * A back matches some plain artwork a little and nothing well, and would be named as that.
+ */
+export function cardBackInView(raw: RawSignals): boolean {
+  if (raw.artBack === undefined || raw.artBack > CARD_BACK_MAX_DISTANCE) return false
+  const [top] = raw.art
+  return !top || raw.artBack <= top.distance
+}
+
+/**
  * What a frame shows: a card by its set code, else by its art, else by its name, or `unsure`
  * when a card is in view but none of those is trusted. A code read that names a different card
  * than confident art is a misread one way or the other, so it's unsure too. When art was matched
  * and its closest artwork is past ART_FAR_DISTANCE, what's in view isn't taken for a card at all
- * unless its code or name reads: `none`. Pokémon cards are resolvePokemonSignals', One Piece
- * cards resolveOnePieceSignals'.
+ * unless its code or name reads: `none`. A card back in view (cardBackInView) is `none` too,
+ * whatever else is read. Pokémon cards are resolvePokemonSignals', One Piece cards
+ * resolveOnePieceSignals'.
  */
 export async function resolveSignals(raw: RawSignals, ctx: ResolveContext): Promise<ScanOutcome> {
+  if (raw.found && cardBackInView(raw)) return { kind: 'none' }
   if (ctx.game === 'pkm') return resolvePokemonSignals(raw, ctx)
   if (ctx.game === 'op') return resolveOnePieceSignals(raw, ctx)
   if (!raw.found) return { kind: 'none' }

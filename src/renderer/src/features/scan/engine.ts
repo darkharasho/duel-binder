@@ -39,6 +39,11 @@ export interface FrameSignals {
    */
   artVia?: 'holder'
   /**
+   * For a game with card backs (cardBacks.ts): how close the card, or an outline over it, came
+   * to one of them (recognizeArt's back). Left out for other games.
+   */
+  artBack?: number
+  /**
    * The card's look for the rarity look model (rarityFeatures, LOOK_FEATURES order): only when
    * asked for (wantLook) and the card was turned upright, else null.
    */
@@ -104,6 +109,8 @@ export interface RawSignals {
   slab?: boolean
   /** As FrameSignals.artVia. */
   artVia?: 'holder'
+  /** As FrameSignals.artBack. */
+  artBack?: number
   look: number[] | null
   /** As FrameSignals.tiltKept. */
   tiltKept?: boolean
@@ -441,6 +448,7 @@ export function createScanEngine(deps: {
       // Only when set, so a frame's signals are as they were without the holder search or a tilt.
       const flags = {
         ...(signals.artVia ? { artVia: signals.artVia } : {}),
+        ...(signals.artBack !== undefined ? { artBack: signals.artBack } : {}),
         ...(signals.tiltKept ? { tiltKept: true } : {})
       }
       if (!wantText || !found)

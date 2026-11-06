@@ -1,4 +1,5 @@
 import type { Mat } from '@techstark/opencv-js'
+import { cardBackDistance } from '@shared/scan/cardBacks'
 import { artHash } from '@shared/scan/fingerprint'
 import type { ArtMatch, FingerprintIndex } from '@shared/scan/fingerprintFile'
 import { SCAN_PROFILES, type ScanProfile } from '@shared/scan/profiles'
@@ -359,7 +360,9 @@ export function mergeMatch(a: ArtMatch, b: ArtMatch): ArtMatch {
  * With jitter, the art box and way up that came closest to any artwork is tried again a little off
  * (jittered), keeping each image's best distances (mergeMatch): four more hashes and lookups
  * rather than sixteen for every box both ways up. The art boxes are profile's, and with its
- * windowArt, also where its art windows are found on the card.
+ * windowArt, also where its art windows are found on the card. `back` is how close the profile's
+ * art boxes, either way up, come to one of its game's card backs (cardBackDistance), for a game
+ * that has them: the same hashes, a few more comparisons.
  */
 export function rankArt(
   cv: CV,
@@ -369,7 +372,7 @@ export function rankArt(
   k = TOP_MATCHES,
   jitter = 0,
   profile: ScanProfile = SCAN_PROFILES.ygo
-): { matches: ArtMatch[]; upsideDown: boolean } {
+): { matches: ArtMatch[]; upsideDown: boolean; back?: number } {
   const upright = toMat(cv, card)
   const flipped = new cv.Mat()
   return using([upright, flipped], () => {
@@ -377,8 +380,14 @@ export function rankArt(
     cv.flip(upright, flipped, -1)
     const best = new Map<number, { match: ArtMatch; upsideDown: boolean }>()
     let closest: { mat: Mat; box: Box; distance: number } | null = null
-    const look = (mat: Mat, box: Box): void => {
-      const found = index.nearest(hashBox(cv, mat, box), k, candidates)
+    let back: number | null = null
+    const look = (mat: Mat, box: Box, backs = false): void => {
+      const hash = hashBox(cv, mat, box)
+      if (backs) {
+        const d = cardBackDistance(profile.game, hash)
+        if (d !== null) back = Math.min(back ?? d, d)
+      }
+      const found = index.nearest(hash, k, candidates)
       for (const match of found) {
         const prev = best.get(match.imageId)
         if (prev === undefined) best.set(match.imageId, { match, upsideDown: mat === flipped })
@@ -392,7 +401,7 @@ export function rankArt(
         closest = { mat, box, distance: found[0].distance }
     }
     for (const mat of [upright, flipped]) {
-      for (const box of profile.artBoxes) look(mat, box)
+      for (const box of profile.artBoxes) look(mat, box, true)
       if (profile.windowArt)
         for (const box of windowArtBoxes(
           { width: mat.cols, height: mat.rows, data: mat.data },
@@ -407,9 +416,11 @@ export function rankArt(
     const ranked = [...best.values()]
       .sort((a, b) => a.match.distance - b.match.distance || a.match.imageId - b.match.imageId)
       .slice(0, k)
+    const backDistance = back as number | null
     return {
       matches: ranked.map((r) => r.match),
-      upsideDown: ranked[0]?.upsideDown ?? false
+      upsideDown: ranked[0]?.upsideDown ?? false,
+      ...(backDistance === null ? {} : { back: backDistance })
     }
   })
 }

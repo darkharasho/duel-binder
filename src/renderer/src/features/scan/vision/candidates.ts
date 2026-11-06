@@ -3,6 +3,7 @@ import type { ArtMatch, FingerprintIndex } from '@shared/scan/fingerprintFile'
 import {
   ART_BOX_JITTER,
   ART_MAX_DISTANCE,
+  CARD_BACK_MAX_DISTANCE,
   HOLDER_EVENNESS,
   HOLDER_CLEAR_SIDES,
   HOLDER_MAX_BORDER,
@@ -675,6 +676,18 @@ function aroundInnerFrame(quad: Quad, frames: readonly Box[]): Quad[] {
   })
 }
 
+/** Whether either quad's centre lies inside the other: one card lies over the other. */
+function overlapping(a: Quad, b: Quad): boolean {
+  const centre = (q: Quad): Quad => {
+    const p: Point = [
+      (q[0][0] + q[1][0] + q[2][0] + q[3][0]) / 4,
+      (q[0][1] + q[1][1] + q[2][1] + q[3][1]) / 4
+    ]
+    return [p, p, p, p]
+  }
+  return contains(a, centre(b), 0) || contains(b, centre(a), 0)
+}
+
 /** A quad straightened at CARD_W and its closest artworks (rankArt). */
 type Ranked = { quad: Quad; card: RgbaImage } & ReturnType<typeof rankArt>
 
@@ -720,7 +733,9 @@ const LIVE_REGIONS = 1
  * 'holder' when that is what matched. So does the inner frame search of a profile with a holder
  * search, which costs as much. held is an earlier frame's outline: when art matches there, the
  * frame isn't searched at all. thorough false is a live frame's short holder search: see
- * LIVE_OUTLINES.
+ * LIVE_OUTLINES. For a game with card backs (cardBacks.ts), back is how close the card, or any
+ * candidate outline over it, came to one: a back is often outlined with the desk around it, its
+ * own outline a candidate that lost.
  */
 export function recognizeArt(
   cv: CV,
@@ -738,12 +753,21 @@ export function recognizeArt(
   upsideDown: boolean | null
   matches: ArtMatch[]
   via?: 'holder'
+  back?: number
 } | null {
   // Copied into OpenCV once for all the candidates' warps.
   return withMat(cv, img, (frame) => {
     const ranked = (quad: Quad): Ranked => {
       const card = warpCard(cv, frame, quad, CARD_W)
       return { quad, card, ...rankArt(cv, card, index, candidates, k, ART_BOX_JITTER, profile) }
+    }
+    // Every outline matched that came close to a card back, with how close.
+    const backs: { quad: Quad; back: number }[] = []
+    /** How close the card at quad, or an outline over it, came to a card back. */
+    const backAt = (quad: Quad, own: number | undefined): { back?: number } => {
+      let back = own
+      for (const b of backs) if (overlapping(quad, b.quad)) back = Math.min(back ?? b.back, b.back)
+      return back === undefined ? {} : { back }
     }
     if (held) {
       const still = ranked(held)
@@ -752,13 +776,14 @@ export function recognizeArt(
           quad: held,
           card: still.upsideDown ? rotate180(still.card) : still.card,
           upsideDown: still.upsideDown,
-          matches: still.matches
+          matches: still.matches,
+          ...backAt(held, still.back)
         }
     }
     const closest = (quads: Quad[], sure = -1): { quad: Quad; distance: number } | null => {
       let best: { quad: Quad; distance: number } | null = null
       for (const quad of quads) {
-        const { matches } = rankArt(
+        const { matches, back } = rankArt(
           cv,
           warpCard(cv, frame, quad, PICK_WIDTH),
           index,
@@ -767,6 +792,7 @@ export function recognizeArt(
           0,
           profile
         )
+        if (back !== undefined && back <= CARD_BACK_MAX_DISTANCE) backs.push({ quad, back })
         const distance = matches[0]?.distance ?? Infinity
         if (!best || distance < best.distance) best = { quad, distance }
         if (distance <= sure) break
@@ -827,7 +853,8 @@ export function recognizeArt(
         quad: outline,
         card: warpCard(cv, frame, outline, CARD_W),
         upsideDown: null,
-        matches
+        matches,
+        ...backAt(outline, outline === final.quad ? final.back : undefined)
       }
     }
     return {
@@ -835,7 +862,8 @@ export function recognizeArt(
       card: upsideDown ? rotate180(card) : card,
       upsideDown,
       matches,
-      ...(via ? { via } : {})
+      ...(via ? { via } : {}),
+      ...backAt(final.quad, final.back)
     }
   })
 }

@@ -17,10 +17,17 @@ import type { TdCard, TdSet } from './types'
  * `traditional_twin_id`, beside `art_twin_id`: an app from before the column ignores it and goes on
  * showing the English twin, correctly labelled, where `art_twin_id` holding a Traditional card
  * would have it call that "English art".
+ *
+ * A shiny card is the exception to the list's twin: its art is the shiny print's, never the plain
+ * card's the list names (151C's shiny Doduo shows Paldean Fates' 199/91, not 151's 084/165). So a
+ * Simplified shiny card takes the one English card of its name and rarity, from the list twin's
+ * series where several are left (`'shiny print'`). Shiny art is the same picture in every language,
+ * where an Illustration Rare's may be a Chinese one of its own, so only shiny cards do this.
  */
 
 export type TwinOutcome =
   | 'linked'
+  | 'shiny print'
   | 'no twin'
   | 'unmapped set'
   | 'number missing'
@@ -36,6 +43,8 @@ const nameKey = (name: string): string =>
     .toLowerCase()
 
 const numberKey = (n: string): string => n.replace(/^0+(?=\d)/, '').toUpperCase()
+
+const SHINY_RARITIES = new Set(['shiny rare', 'shiny ultra rare'])
 
 /** Traditional card names are only trusted once `nameTraditional` has run. */
 export type TraditionalOutcome =
@@ -63,6 +72,17 @@ export function englishTwins(sets: EnglishPlan[]): TwinFinder {
     if (code) byCode.set(code, [...(byCode.get(code) ?? []), s])
   }
 
+  // English shiny cards with art, by name and rarity.
+  const shiny = new Map<string, { card: TdCard; serie: string | undefined }[]>()
+  for (const s of sets) {
+    for (const c of s.cards) {
+      const rarity = rarityKey(c.card.rarity)
+      if (!c.imageUrl || !SHINY_RARITIES.has(rarity)) continue
+      const key = `${nameKey(c.card.name)}|${rarity}`
+      shiny.set(key, [...(shiny.get(key) ?? []), { card: c.card, serie: s.set.serie?.id }])
+    }
+  }
+
   return {
     find(card, name) {
       const no = (outcome: TwinOutcome): { outcome: TwinOutcome; twin: null } => ({
@@ -70,12 +90,19 @@ export function englishTwins(sets: EnglishPlan[]): TwinFinder {
         twin: null
       })
       const link = card.englishTwin
+      const plans = link ? (byCode.get(link.setCode) ?? []) : []
+      const plan = plans.length === 1 ? plans[0] : undefined
+      const hit =
+        link && plan?.cards.find((c) => numberKey(c.card.localId) === numberKey(link.number))
+      const rarity = rarityKey(card.rarity)
+      if (SHINY_RARITIES.has(rarity) && rarityKey(hit?.card.rarity) !== rarity) {
+        const all = shiny.get(`${nameKey(name)}|${rarity}`) ?? []
+        const inSerie = all.filter((c) => c.serie === plan?.set.serie?.id)
+        const one = all.length === 1 ? all : inSerie
+        if (one.length === 1) return { outcome: 'shiny print', twin: one[0].card }
+      }
       if (!link) return no('no twin')
-      const plans = byCode.get(link.setCode) ?? []
-      if (plans.length !== 1) return no('unmapped set')
-      const [plan] = plans
-      const number = numberKey(link.number)
-      const hit = plan.cards.find((c) => numberKey(c.card.localId) === number)
+      if (!plan) return no('unmapped set')
       if (!hit) return no('number missing')
       const twin = hit.card
       if (nameKey(twin.name) !== nameKey(name)) return no('name mismatch')

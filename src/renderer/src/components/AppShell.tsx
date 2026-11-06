@@ -147,7 +147,7 @@ export function AppShell({
                   className="flex flex-col"
                 >
                   {heading && (
-                    <h2 className="mb-0.5 mt-2 pl-3.5 text-[10.5px] font-medium uppercase tracking-[0.08em] text-muted-foreground/60">
+                    <h2 className="mb-0.5 mt-2 text-[10.5px] font-medium uppercase tracking-[0.08em] text-muted-foreground/60">
                       {heading}
                     </h2>
                   )}

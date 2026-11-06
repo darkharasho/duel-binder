@@ -113,6 +113,82 @@ describe('englishTwins', () => {
     )
     expect(find([enSet([])], { ...zh('1', 'C'), englishTwin: undefined }, 'Oddish')).toBe('no twin')
   })
+
+  describe('a shiny card', () => {
+    const PAF = { id: 'sv04.5', name: 'Paldean Fates' }
+    const paf = (
+      localId: string,
+      name: string,
+      rarity: string,
+      over: Partial<TdCard> = {}
+    ): TdCard => en(localId, name, rarity, { id: `sv04.5-${localId}`, set: PAF, ...over })
+    const pafSet = (cards: TdCard[], over: Partial<TdSet> = {}): EnglishPlan =>
+      enSet(cards, { ...PAF, abbreviation: { official: 'PAF' }, ...over })
+    const shinyZh = (number: string, rarity = 'Shiny Rare'): TdCard => ({
+      ...zh(number, 'S'),
+      rarity
+    })
+    const mew = enSet([en('084', 'Doduo', 'Common'), en('085', 'Dodrio', 'Uncommon')])
+
+    it("takes the English shiny print of its name, not the list's plain twin", () => {
+      const r = englishTwins([mew, pafSet([paf('199', 'Doduo', 'Shiny Rare')])]).find(
+        shinyZh('84'),
+        'Doduo'
+      )
+      expect(r).toMatchObject({ outcome: 'shiny print', twin: { id: 'sv04.5-199' } })
+    })
+
+    it('matches the rarity too: a Shiny Ultra Rare takes the Shiny Ultra Rare', () => {
+      const sets = [
+        mew,
+        pafSet([paf('199', 'Doduo', 'Shiny Rare'), paf('230', 'Doduo', 'Shiny Ultra Rare')])
+      ]
+      expect(englishTwins(sets).find(shinyZh('84', 'Shiny Ultra Rare'), 'Doduo').twin?.id).toBe(
+        'sv04.5-230'
+      )
+    })
+
+    it("of several, keeps the one from the list twin's series, and none if that leaves several", () => {
+      const sm = pafSet([paf('SV6', 'Doduo', 'Shiny Rare', { id: 'sma-SV6' })], {
+        id: 'sma',
+        serie: { id: 'sm' }
+      })
+      const sv = pafSet([paf('199', 'Doduo', 'Shiny Rare')])
+      expect(englishTwins([mew, sm, sv]).find(shinyZh('84'), 'Doduo').twin?.id).toBe('sv04.5-199')
+      const sv2 = pafSet([paf('200', 'Doduo', 'Shiny Rare')], {
+        id: 'sv09',
+        abbreviation: { official: 'X' }
+      })
+      expect(englishTwins([mew, sv, sv2]).find(shinyZh('84'), 'Doduo')).toMatchObject({
+        outcome: 'linked',
+        twin: { id: 'sv03-084' }
+      })
+    })
+
+    it('keeps a list twin that is already the shiny print, and ignores shiny prints without art', () => {
+      const own = enSet([en('084', 'Doduo', 'Shiny Rare')])
+      expect(
+        englishTwins([own, pafSet([paf('199', 'Doduo', 'Shiny Rare')])]).find(
+          shinyZh('84'),
+          'Doduo'
+        )
+      ).toMatchObject({
+        outcome: 'linked',
+        twin: { id: 'sv03-084' }
+      })
+      const noArt = pafSet([paf('199', 'Doduo', 'Shiny Rare', { image: undefined })])
+      expect(find([mew, noArt], shinyZh('84'), 'Doduo')).toBe('linked')
+    })
+
+    it('finds the shiny print with no list twin at all; other rarities never look', () => {
+      const sets = [
+        mew,
+        pafSet([paf('199', 'Doduo', 'Shiny Rare'), paf('250', 'Doduo', 'Illustration Rare')])
+      ]
+      expect(find(sets, { ...shinyZh('84'), englishTwin: undefined }, 'Doduo')).toBe('shiny print')
+      expect(find(sets, { ...zh('84', 'AR'), rarity: 'Illustration Rare' }, 'Doduo')).toBe('linked')
+    })
+  })
 })
 
 describe('traditionalTwins', () => {

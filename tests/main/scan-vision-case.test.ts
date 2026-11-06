@@ -12,15 +12,18 @@ import {
   type FingerprintIndex
 } from '../../src/shared/scan/fingerprintFile'
 import { ART_BOX_JITTER, ART_MAX_DISTANCE, ART_MIN_MARGIN } from '../../src/shared/scan/thresholds'
+import { SCAN_PROFILES } from '../../src/shared/scan/profiles'
 import type { RgbaImage } from '../../src/shared/scan/types'
 import { loadCv, type CV } from '../../src/renderer/src/features/scan/vision/cv'
 import {
   rankArt,
   warpCard,
+  withMat,
   type Point,
   type Quad
 } from '../../src/renderer/src/features/scan/vision/detect'
 import {
+  artAt,
   findCandidates,
   nudgeOutline,
   preferOuter,
@@ -210,4 +213,21 @@ describe('nudgeOutline', () => {
     },
     120_000
   )
+})
+
+describe('artAt', () => {
+  it("matches a card's art where it lies in the frame, either way up", () => {
+    for (const s of shots) {
+      const img = load(join(DIR, s.file))
+      const own = new Set([s.imageId])
+      // The same outline from its bottom-right corner: the card upside down to it.
+      const turned = [s.quad[2], s.quad[3], s.quad[0], s.quad[1]] as const
+      for (const quad of [s.quad, turned]) {
+        const { distance } = withMat(cv, img, (frame) =>
+          artAt(cv, frame, quad, index, own, SCAN_PROFILES.ygo)
+        )
+        expect(distance, s.file).toBeLessThanOrEqual(ART_MAX_DISTANCE)
+      }
+    }
+  }, 120_000)
 })

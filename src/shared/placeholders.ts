@@ -5,6 +5,8 @@ export interface PlaceholderCard {
   /** The printed number ("DLR 011/103"). */
   number: string
   rarity: string | null
+  /** A Pokémon card's finish ("Reverse Holofoil"), when the sheet has one pocket per finish. */
+  finish?: string | null
 }
 
 export const PLACEHOLDER_STYLES = {
@@ -38,6 +40,13 @@ export function rarityChip(rarity: string | null): { text: string; color: string
   return null
 }
 
+/** A reverse holo's pocket says so, where a rarity chip doesn't already take the spot. */
+export function finishChip(
+  finish: string | null | undefined
+): { text: string; color: string } | null {
+  return finish === 'Reverse Holofoil' ? { text: 'RH', color: '#8fb4cf' } : null
+}
+
 /** Checks what crossed from the renderer: these strings end up in a page and a file name. */
 export function checkPlaceholderRequest(input: unknown): PlaceholderRequest {
   const r = input as PlaceholderRequest
@@ -54,7 +63,8 @@ export function checkPlaceholderRequest(input: unknown): PlaceholderRequest {
         c.imageId > 0 &&
         typeof c.name === 'string' &&
         typeof c.number === 'string' &&
-        (c.rarity === null || typeof c.rarity === 'string')
+        (c.rarity === null || typeof c.rarity === 'string') &&
+        (c.finish === undefined || c.finish === null || typeof c.finish === 'string')
     )
   if (!ok) throw new Error('Bad placeholder request')
   return r

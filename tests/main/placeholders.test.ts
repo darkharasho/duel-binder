@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from 'vitest'
-import { rarityChip, sheetCount, type PlaceholderRequest } from '../../src/shared/placeholders'
+import {
+  checkPlaceholderRequest,
+  rarityChip,
+  sheetCount,
+  type PlaceholderRequest
+} from '../../src/shared/placeholders'
 
 vi.mock('electron', () => ({ BrowserWindow: class {}, dialog: {} }))
 const { placeholderHtml } = await import('../../src/main/placeholders')
@@ -35,5 +40,20 @@ describe('placeholder sheets', () => {
     expect(rarityChip('Special illustration rare')?.text).toBe('SIR')
     expect(rarityChip('Common')).toBeNull()
     expect(rarityChip(null)).toBeNull()
+  })
+  it('marks a reverse holo pocket, and names finishes other than Normal', () => {
+    const pocket = (finish: string, rarity: string | null = 'Common'): string =>
+      placeholderHtml({ ...request(1), cards: [{ ...request(1).cards[0], rarity, finish }] })
+    expect(pocket('Reverse Holofoil')).toContain('>RH</div>')
+    expect(pocket('Reverse Holofoil')).toContain('DLR 1/103 · Common · Reverse Holofoil')
+    expect(pocket('Normal')).toContain('>DLR</div>')
+    expect(pocket('Normal')).toContain('DLR 1/103 · Common</div>')
+    // A rarity chip keeps its spot over the finish.
+    expect(pocket('Reverse Holofoil', 'Illustration Rare')).toContain('>IR</div>')
+  })
+  it('turns away a finish that is not text', () => {
+    const bad = { ...request(1), cards: [{ ...request(1).cards[0], finish: 5 }] }
+    expect(() => checkPlaceholderRequest(bad)).toThrow()
+    expect(checkPlaceholderRequest({ ...request(1) })).toBeTruthy()
   })
 })

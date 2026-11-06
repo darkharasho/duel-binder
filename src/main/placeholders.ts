@@ -5,6 +5,7 @@ import { BrowserWindow, dialog } from 'electron'
 import {
   CARDS_PER_SHEET,
   PLACEHOLDER_STYLES,
+  finishChip,
   rarityChip,
   type PlaceholderCard,
   type PlaceholderRequest
@@ -38,8 +39,9 @@ body { font: 7pt system-ui, sans-serif; background: #fff }
 `
 
 function pocket(card: PlaceholderCard, req: PlaceholderRequest): string {
-  const chip = rarityChip(card.rarity)
-  const sub = [card.number, card.rarity].filter(Boolean).join(' · ')
+  const chip = rarityChip(card.rarity) ?? finishChip(card.finish)
+  const finish = card.finish === 'Normal' ? null : card.finish
+  const sub = [card.number, card.rarity, finish].filter(Boolean).join(' · ')
   return `<div class="pocket">
 <div class="name">${escapeHtml(card.name)}</div>
 <img src="ygo-img://full/${card.imageId}" alt="">

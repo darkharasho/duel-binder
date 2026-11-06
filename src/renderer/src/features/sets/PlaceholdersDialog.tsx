@@ -20,6 +20,7 @@ import {
 } from '@/components/ui/dialog'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { api } from '@/lib/api'
+import { versionCounts } from './setsView'
 
 const toPlaceholder = (c: ChecklistCard): PlaceholderCard => ({
   imageId: c.imageId,
@@ -28,7 +29,31 @@ const toPlaceholder = (c: ChecklistCard): PlaceholderCard => ({
   rarity: c.cardRarity ?? null
 })
 
-const plural = (n: number, one: string): string => `${n.toLocaleString()} ${one}${n === 1 ? '' : 's'}`
+/**
+ * One pocket per finish of a Pokémon card, in the set's finish order: a reverse holo has a pocket
+ * of its own in a master set binder. Missing means that finish isn't owned.
+ */
+function finishPockets(
+  cards: ChecklistCard[],
+  order: string[],
+  picked: string[],
+  missingOnly: boolean
+): PlaceholderCard[] {
+  const rank = (v: string): number => order.indexOf(v)
+  return cards.flatMap((c) =>
+    c.rarities
+      .filter((r) => picked.includes(r.rarity) && (!missingOnly || r.owned === 0))
+      .sort((a, b) => rank(a.rarity) - rank(b.rarity))
+      .map((r) => ({
+        ...toPlaceholder(c),
+        number: r.codes[0]?.setCode ?? c.numberLabel,
+        finish: r.rarity
+      }))
+  )
+}
+
+const plural = (n: number, one: string): string =>
+  `${n.toLocaleString()} ${one}${n === 1 ? '' : 's'}`
 
 /** Prints pockets for a binder: this set's missing cards, or all of them. */
 export function PlaceholdersButton({
@@ -42,8 +67,18 @@ export function PlaceholdersButton({
   const [scope, setScope] = useState<'missing' | 'all'>('missing')
   const [style, setStyle] = useState<PlaceholderStyle>('soft')
   const ordered = [...cards].sort((a, b) => (a.number ?? Infinity) - (b.number ?? Infinity))
-  const missing = ordered.filter((c) => c.owned === 0)
-  const chosen = scope === 'missing' ? missing : ordered
+  // A Pokémon set's finishes; a set of one finish (and Yu-Gi-Oh!) prints a pocket per card.
+  const versions = versionCounts({ set, cards }).map((v) => v.version)
+  const byFinish = versions.length > 1
+  const [finishes, setFinishes] = useState<string[]>(versions)
+  const picked = finishes.filter((f) => versions.includes(f))
+  const missing = byFinish
+    ? finishPockets(ordered, versions, picked, true)
+    : ordered.filter((c) => c.owned === 0).map(toPlaceholder)
+  const all = byFinish
+    ? finishPockets(ordered, versions, picked, false)
+    : ordered.map(toPlaceholder)
+  const chosen = scope === 'missing' ? missing : all
 
   const save = useMutation({
     mutationFn: () =>
@@ -51,7 +86,7 @@ export function PlaceholdersButton({
         setName: set.setName,
         setCode: set.setCode,
         style,
-        cards: chosen.map(toPlaceholder)
+        cards: chosen
       }),
     onSuccess: (path) => {
       if (!path) return
@@ -87,8 +122,25 @@ export function PlaceholdersButton({
               }}
             >
               <ToggleGroupItem value="missing">Missing ({missing.length})</ToggleGroupItem>
-              <ToggleGroupItem value="all">All ({ordered.length})</ToggleGroupItem>
+              <ToggleGroupItem value="all">All ({all.length})</ToggleGroupItem>
             </ToggleGroup>
+            {byFinish && (
+              <ToggleGroup
+                type="multiple"
+                variant="outline"
+                size="sm"
+                aria-label="Finishes"
+                className="flex-wrap"
+                value={picked}
+                onValueChange={setFinishes}
+              >
+                {versions.map((v) => (
+                  <ToggleGroupItem key={v} value={v}>
+                    {v}
+                  </ToggleGroupItem>
+                ))}
+              </ToggleGroup>
+            )}
             <ToggleGroup
               type="single"
               variant="outline"

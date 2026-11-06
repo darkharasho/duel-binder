@@ -76,7 +76,7 @@ describe('AppShell', () => {
 })
 
 describe('AppShell sets nav', () => {
-  it('lists Sets between Collection and Settings and opens it', async () => {
+  it('lists Sets in the Catalog group, after My cards, and opens it', async () => {
     await renderApp()
     const names = within(screen.getByRole('navigation', { name: 'Main' }))
       .getAllByRole('button')
@@ -84,17 +84,28 @@ describe('AppShell sets nav', () => {
     expect(names).toEqual([
       'Dashboard',
       'Collection',
-      'Wishlist',
       'Binders',
+      'Wishlist',
       'Sets',
       'Browse',
       'Scan',
       'Sessions',
-      'Friends',
-      'Settings'
+      'Friends'
     ])
     await userEvent.click(screen.getByRole('button', { name: 'Sets' }))
     expect(screen.getByRole('heading', { name: 'Sets' })).toBeInTheDocument()
+  })
+
+  it('keeps Settings below the main nav, under Add card, and opens it', async () => {
+    await renderApp()
+    const settings = screen.getByRole('button', { name: 'Settings' })
+    expect(screen.getByRole('navigation', { name: 'Main' })).not.toContainElement(settings)
+    expect(
+      screen.getByRole('button', { name: /Add card/ }).compareDocumentPosition(settings) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy()
+    await userEvent.click(settings)
+    expect(screen.getByRole('button', { name: 'Settings' })).toHaveAttribute('aria-current', 'page')
   })
 })
 
@@ -272,14 +283,24 @@ describe('SyncBanner', () => {
     })
     await renderApp(api)
     expect(
-      await screen.findByText("Card data can't update right now: Some reason. Duel Binder will try again.")
+      await screen.findByText(
+        "Card data can't update right now: Some reason. Duel Binder will try again."
+      )
     ).toBeInTheDocument()
     expect(screen.queryByText(/No card data yet/)).not.toBeInTheDocument()
   })
 
   it('says card data could not update, not offline, when a sync failed but cards exist', async () => {
     const api = mockApi({
-      sync: { status: async () => status({ state: 'error', error: 'HTTP 500', cardCount: 5, lastSyncAt: new Date().toISOString() }) }
+      sync: {
+        status: async () =>
+          status({
+            state: 'error',
+            error: 'HTTP 500',
+            cardCount: 5,
+            lastSyncAt: new Date().toISOString()
+          })
+      }
     })
     await renderApp(api)
     expect(
@@ -305,7 +326,10 @@ describe('SyncBanner', () => {
     const api = mockApi({
       sync: {
         status: async () =>
-          status({ blocked: "Your collection didn't match after updating card data", blockedRetry: 'next-launch' })
+          status({
+            blocked: "Your collection didn't match after updating card data",
+            blockedRetry: 'next-launch'
+          })
       }
     })
     await renderApp(api)
@@ -318,14 +342,18 @@ describe('SyncBanner', () => {
   })
 
   it('asks to connect when the first sync failed with no cards', async () => {
-    const api = mockApi({ sync: { status: async () => status({ state: 'error', error: 'HTTP 500', cardCount: 0 }) } })
+    const api = mockApi({
+      sync: { status: async () => status({ state: 'error', error: 'HTTP 500', cardCount: 0 }) }
+    })
     await renderApp(api)
     expect(await screen.findByText(/Connect to the internet/)).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Retry' })).toBeInTheDocument()
   })
 
   it('shows progress while downloading', async () => {
-    const api = mockApi({ sync: { status: async () => status({ state: 'downloading', cardCount: 0 }) } })
+    const api = mockApi({
+      sync: { status: async () => status({ state: 'downloading', cardCount: 0 }) }
+    })
     await renderApp(api)
     expect(await screen.findByText('Downloading card database…')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument()
@@ -334,7 +362,9 @@ describe('SyncBanner', () => {
 
 describe('CardArt', () => {
   it('loads from ygo-img and swaps to a placeholder on error', () => {
-    const { container } = renderWithProviders(<CardArt imageId={123} size="small" alt="Dark Magician" />)
+    const { container } = renderWithProviders(
+      <CardArt imageId={123} size="small" alt="Dark Magician" />
+    )
     const img = screen.getByAltText('Dark Magician')
     expect(img).toHaveAttribute('src', 'ygo-img://small/123')
     expect(img).toHaveAttribute('loading', 'lazy')

@@ -33,3 +33,34 @@ jobs:
         working-directory: workers/portal
       - run: npm test
         working-directory: workers/portal
+
+  # The scanner on the owner's real webcam photos (tests/main/scan-real.test.ts), so a change that
+  # names fewer cards, or a wrong one, fails its PR. The photos stay out of this public repo: they
+  # come from the private darkharasho/duel-binder-scan-corpus with a read-only deploy key, which
+  # pull requests from forks don't get, so there the job only warns.
+  scan-photos:
+    runs-on: ubuntu-latest
+    env:
+      HAS_CORPUS_KEY: ${{ secrets.SCAN_CORPUS_KEY != '' }}
+    steps:
+      - if: env.HAS_CORPUS_KEY != 'true'
+        run: echo "::warning::SCAN_CORPUS_KEY isn't set; skipping the real-photo scan tests"
+      - if: env.HAS_CORPUS_KEY == 'true'
+        uses: actions/checkout@v4
+      - if: env.HAS_CORPUS_KEY == 'true'
+        uses: actions/checkout@v4
+        with:
+          repository: darkharasho/duel-binder-scan-corpus
+          ssh-key: ${{ secrets.SCAN_CORPUS_KEY }}
+          path: scan-corpus
+      - if: env.HAS_CORPUS_KEY == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - if: env.HAS_CORPUS_KEY == 'true'
+        run: npm ci
+      - if: env.HAS_CORPUS_KEY == 'true'
+        run: npm test -- --silent=false tests/main/scan-real.test.ts
+        env:
+          SCAN_REAL_DIR: ${{ github.workspace }}/scan-corpus/ygo

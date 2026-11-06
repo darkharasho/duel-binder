@@ -699,22 +699,35 @@ function nudge(quad: Quad, side: number, t: number): Quad {
 /**
  * start with its sides moved one at a time (NUDGES), each kept where its art matches best at
  * PICK_WIDTH, for up to NUDGE_ROUNDS passes: an outline a few percent off the card's edge, on a
- * holder's rim, walked onto the card. At most NUDGE_ROUNDS * 4 * NUDGES.length lookups.
+ * holder's rim, walked onto the card. thorough tries every move, at most NUDGE_ROUNDS * 4 *
+ * NUDGES.length lookups; otherwise a side tries the near moves and goes further only in a direction
+ * that helped, two or three lookups a side instead of four, for a game whose frames are matched in
+ * a fraction of the time (a Yu-Gi-Oh card's frame in ~110 ms, where every move would add ~150).
  */
 export function nudgeOutline(
   start: { quad: Quad; distance: number },
-  distanceOf: (quad: Quad) => number
+  distanceOf: (quad: Quad) => number,
+  thorough = true
 ): { quad: Quad; distance: number } {
   let at = start
+  const tryMove = (base: Quad, side: number, t: number): boolean => {
+    const quad = nudge(base, side, t)
+    const distance = distanceOf(quad)
+    if (distance >= at.distance) return false
+    at = { quad, distance }
+    return true
+  }
   for (let round = 0; round < NUDGE_ROUNDS; round++) {
     const before = at
     for (let side = 0; side < 4; side++) {
       const base = at.quad
-      for (const t of NUDGES) {
-        const quad = nudge(base, side, t)
-        const distance = distanceOf(quad)
-        if (distance < at.distance) at = { quad, distance }
-      }
+      if (thorough) for (const t of NUDGES) tryMove(base, side, t)
+      else
+        for (const t of NUDGES.slice(0, 2))
+          if (tryMove(base, side, t)) {
+            tryMove(base, side, 2 * t)
+            break
+          }
     }
     if (at === before) break
   }
@@ -923,7 +936,7 @@ export function recognizeArt(
     // Still no sure match: the closest few outlines may sit a few percent off the card's edge.
     if (final && topDistance(final) > NUDGE_MAX_DISTANCE)
       for (const outline of outlines) {
-        const moved = nudgeOutline(outline, pickDistance)
+        const moved = nudgeOutline(outline, pickDistance, profile.holderSearch)
         if (moved === outline || moved.distance > ART_MAX_DISTANCE) continue
         const nudged = ranked(moved.quad)
         if (topDistance(nudged) <= NUDGE_MAX_DISTANCE && topDistance(nudged) < topDistance(final)) {

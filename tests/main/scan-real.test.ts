@@ -1,7 +1,8 @@
 // @vitest-environment node
 // Recognition on the owner's real webcam photos. They stay out of the (public) repo, so this only
 // runs when SCAN_REAL_DIR points at a folder holding shot_*.jpg, truth.json and the cropped/ art
-// that scripts/scan/prep-real.ts downloads:
+// that scripts/scan/prep-real.ts downloads. CI's scan-photos job runs it on a copy in the private
+// darkharasho/duel-binder-scan-corpus repo (ygo/); push changes to the shots or truth there too.
 //   SCAN_REAL_DIR=<dir> npx vitest run --maxWorkers=2 --silent=false tests/main/scan-real.test.ts
 // (--silent=false shows the per-shot and summary tables when the tests pass.)
 // SCAN_REAL_CROP=1 scans each shot at the app's framing (the live scan's centre crop), for
@@ -24,8 +25,12 @@ vi.mock('@techstark/opencv-js', async () => {
   return { default: createRequire(import.meta.url)('../../vendor/opencv/opencv.js') }
 })
 
-/** Share of recognizable shots that must be accepted with the right card. */
-const MIN_ACCEPTED_CORRECT = 0.6
+/**
+ * Share of recognizable shots that must be accepted with the right card: just under what main
+ * reaches (115/148 on 2026-11-06), so CI (which runs this on the private corpus) fails a change
+ * that loses ground. Raise it as the scanner gets better.
+ */
+const MIN_ACCEPTED_CORRECT = 0.77
 /**
  * ...and of those with a black (Xyz) frame, whose own edge barely shows against a dark desk, palm
  * or sleeve.

@@ -48,12 +48,18 @@ export function SyncBanner(): React.JSX.Element | null {
   return (
     <div
       role="status"
-      className="flex items-center gap-3 border-b bg-muted px-6 py-2.5 text-sm text-muted-foreground"
+      // The same glass as the page header and sidebar, so the art wash shows through.
+      className="relative z-30 flex items-center gap-3 border-b border-white/[0.06] bg-background/60 px-6 py-2.5 text-sm text-muted-foreground backdrop-blur-xl"
     >
-      {busy && <Loader2 className="size-4 animate-spin" aria-hidden />}
+      {busy && <Loader2 className="size-3.5 shrink-0 animate-spin" aria-hidden />}
       <span className="flex-1">{message}</span>
       {showRetry && (
-        <Button size="sm" variant="outline" onClick={retry}>
+        <Button
+          size="sm"
+          variant="outline"
+          className="border-white/20 bg-transparent hover:border-white/40 hover:bg-white/5"
+          onClick={retry}
+        >
           Retry
         </Button>
       )}

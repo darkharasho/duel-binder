@@ -108,6 +108,22 @@ const PICK_WIDTH = 210
  * window both ways up on every quad, some thousands of lookups, seconds on a live frame.
  */
 const INNER_SURE_DISTANCE = 40
+/**
+ * Side moves tried on an outline whose art matched nothing, as a share of the quad's width (left
+ * and right) or height (top and bottom), inward positive: a card in a toploader is often outlined
+ * a few percent off, on the holder's rim at one end, and the art hash doesn't forgive that.
+ */
+const NUDGES = [0.04, -0.04, 0.08, -0.08]
+/** How many of the closest outlines are nudged, and at most how many passes over their four sides. */
+const NUDGE_QUADS = 3
+const NUDGE_ROUNDS = 2
+/**
+ * A nudged outline's art must match at least this well at full size, and better than what was
+ * found without it. Stricter than ART_MAX_DISTANCE: a few dozen tries at near-misses would let
+ * some other card's art in now and then, and a flat Energy's art matches many a holder's rim at
+ * 66 to 80.
+ */
+const NUDGE_MAX_DISTANCE = 64
 
 interface Line {
   theta: number
@@ -652,6 +668,72 @@ export function preferOuter(quads: readonly Quad[]): Quad | null {
   return best
 }
 
+/** Corners moved for each side (top, right, bottom, left), each toward the corner opposite it. */
+const SIDE_CORNERS = [
+  [
+    [0, 3],
+    [1, 2]
+  ],
+  [
+    [1, 0],
+    [2, 3]
+  ],
+  [
+    [2, 1],
+    [3, 0]
+  ],
+  [
+    [3, 2],
+    [0, 1]
+  ]
+] as const
+
+/** quad (corners clockwise from top-left) with one side moved inward by t of the quad's size. */
+function nudge(quad: Quad, side: number, t: number): Quad {
+  const q = quad.map((p) => [p[0], p[1]])
+  for (const [a, b] of SIDE_CORNERS[side])
+    q[a] = [quad[a][0] + (quad[b][0] - quad[a][0]) * t, quad[a][1] + (quad[b][1] - quad[a][1]) * t]
+  return q as unknown as Quad
+}
+
+/**
+ * start with its sides moved one at a time (NUDGES), each kept where its art matches best at
+ * PICK_WIDTH, for up to NUDGE_ROUNDS passes: an outline a few percent off the card's edge, on a
+ * holder's rim, walked onto the card. thorough tries every move, at most NUDGE_ROUNDS * 4 *
+ * NUDGES.length lookups; otherwise a side tries the near moves and goes further only in a direction
+ * that helped, two or three lookups a side instead of four, for a game whose frames are matched in
+ * a fraction of the time (a Yu-Gi-Oh card's frame in ~110 ms, where every move would add ~150).
+ */
+export function nudgeOutline(
+  start: { quad: Quad; distance: number },
+  distanceOf: (quad: Quad) => number,
+  thorough = true
+): { quad: Quad; distance: number } {
+  let at = start
+  const tryMove = (base: Quad, side: number, t: number): boolean => {
+    const quad = nudge(base, side, t)
+    const distance = distanceOf(quad)
+    if (distance >= at.distance) return false
+    at = { quad, distance }
+    return true
+  }
+  for (let round = 0; round < NUDGE_ROUNDS; round++) {
+    const before = at
+    for (let side = 0; side < 4; side++) {
+      const base = at.quad
+      if (thorough) for (const t of NUDGES) tryMove(base, side, t)
+      else
+        for (const t of NUDGES.slice(0, 2))
+          if (tryMove(base, side, t)) {
+            tryMove(base, side, 2 * t)
+            break
+          }
+    }
+    if (at === before) break
+  }
+  return at
+}
+
 /**
  * The card's outline were quad one of its inner frames (profile.innerFrames), either way up: a
  * black (Xyz) card's edge barely shows against a dark desk, palm or sleeve, so its outline may not
@@ -780,6 +862,10 @@ export function recognizeArt(
           ...backAt(held, still.back)
         }
     }
+    const scored: { quad: Quad; distance: number }[] = []
+    const pickDistance = (quad: Quad): number =>
+      rankArt(cv, warpCard(cv, frame, quad, PICK_WIDTH), index, candidates, 1, 0, profile)
+        .matches[0]?.distance ?? Infinity
     const closest = (quads: Quad[], sure = -1): { quad: Quad; distance: number } | null => {
       let best: { quad: Quad; distance: number } | null = null
       for (const quad of quads) {
@@ -794,6 +880,7 @@ export function recognizeArt(
         )
         if (back !== undefined && back <= CARD_BACK_MAX_DISTANCE) backs.push({ quad, back })
         const distance = matches[0]?.distance ?? Infinity
+        scored.push({ quad, distance })
         if (!best || distance < best.distance) best = { quad, distance }
         if (distance <= sure) break
       }
@@ -801,6 +888,7 @@ export function recognizeArt(
     }
     const { quads, windows } = searchCandidates(cv, frame, profile)
     let best = closest(quads)
+    const outlines = [...scored].sort((a, b) => a.distance - b.distance).slice(0, NUDGE_QUADS)
     // The candidate that lost to the card around an inner frame, matched again at full size too
     // when the profile looks for art windows: at PICK_WIDTH a window's card is often misjudged.
     let runnerUp: Quad | null = null
@@ -845,6 +933,18 @@ export function recognizeArt(
         via = 'holder'
       }
     }
+    // Still no sure match: the closest few outlines may sit a few percent off the card's edge.
+    if (final && topDistance(final) > NUDGE_MAX_DISTANCE)
+      for (const outline of outlines) {
+        const moved = nudgeOutline(outline, pickDistance, profile.holderSearch)
+        if (moved === outline || moved.distance > ART_MAX_DISTANCE) continue
+        const nudged = ranked(moved.quad)
+        if (topDistance(nudged) <= NUDGE_MAX_DISTANCE && topDistance(nudged) < topDistance(final)) {
+          final = nudged
+          via = undefined
+          break
+        }
+      }
     if (!final) return null
     const { card, matches, upsideDown } = final
     if (topDistance(final) > ART_MAX_DISTANCE) {

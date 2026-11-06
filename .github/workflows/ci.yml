@@ -33,3 +33,49 @@ jobs:
         working-directory: workers/portal
       - run: npm test
         working-directory: workers/portal
+
+  # The scanner on real photos, so a change that names fewer cards, or a wrong one, fails its PR:
+  # the owner's Yu-Gi-Oh webcam shots (scan-real.test.ts), and the owner's Pokémon photos as live
+  # frames at the app's crop (scan-pkm-real.test.ts; the eBay photos beside them take half an hour,
+  # run those by hand). The photos stay out of this public repo: they come from the private
+  # darkharasho/duel-binder-scan-corpus with a read-only deploy key, which pull requests from forks
+  # don't get, so there the job only warns.
+  scan-photos:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - game: ygo
+            test: tests/main/scan-real.test.ts
+          - game: pkm
+            test: tests/main/scan-pkm-real.test.ts
+    env:
+      HAS_CORPUS_KEY: ${{ secrets.SCAN_CORPUS_KEY != '' }}
+    steps:
+      - if: env.HAS_CORPUS_KEY != 'true'
+        run: echo "::warning::SCAN_CORPUS_KEY isn't set; skipping the real-photo scan tests"
+      - if: env.HAS_CORPUS_KEY == 'true'
+        uses: actions/checkout@v4
+      - if: env.HAS_CORPUS_KEY == 'true'
+        uses: actions/checkout@v4
+        with:
+          repository: darkharasho/duel-binder-scan-corpus
+          ssh-key: ${{ secrets.SCAN_CORPUS_KEY }}
+          path: scan-corpus
+          sparse-checkout: ${{ matrix.game }}
+      - if: env.HAS_CORPUS_KEY == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - if: env.HAS_CORPUS_KEY == 'true'
+        run: npm ci
+      - if: env.HAS_CORPUS_KEY == 'true'
+        run: npm test -- --silent=false ${{ matrix.test }}
+        env:
+          SCAN_REAL_DIR: ${{ github.workspace }}/scan-corpus/ygo
+          SCAN_PKM_DIR: ${{ github.workspace }}/scan-corpus/pkm
+          SCAN_PKM_TRUTH: ${{ github.workspace }}/scan-corpus/pkm/pkm-truth.owner.json
+          SCAN_PKM_LIVE: '1'
+          SCAN_PKM_CROP: '1'

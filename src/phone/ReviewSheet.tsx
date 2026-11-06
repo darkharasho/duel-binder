@@ -25,7 +25,7 @@ import { plural } from '@/features/scan/scanText'
 import { formatUsd } from '@/lib/format'
 import { cn } from '@/lib/utils'
 import { useBackHandler } from './backButton'
-import { PickerSheet } from './PickerSheet'
+import { PrintingSheet } from './PrintingSheet'
 import {
   GLASS,
   listValue,
@@ -86,7 +86,7 @@ function ReviewRow({ row, disabled }: { row: ScanRow; disabled: boolean }): Reac
             </span>
           )}
         </p>
-        <PickerSheet
+        <PrintingSheet
           label={pickerLabel(row)}
           title={printingNoun(row.game ?? 'ygo') === 'version' ? 'Version' : 'Printing'}
           value={current === null ? null : String(current)}
@@ -105,7 +105,7 @@ function ReviewRow({ row, disabled }: { row: ScanRow; disabled: boolean }): Reac
             </span>
           )}
           <ChevronDownIcon aria-hidden className="size-3.5 shrink-0 opacity-60" />
-        </PickerSheet>
+        </PrintingSheet>
         {flag && (
           <p className="mt-1 flex items-center gap-1 text-xs text-amber-300">
             <TriangleAlertIcon aria-hidden className="size-3.5 shrink-0" />

@@ -566,14 +566,91 @@ describe('phone scanner', () => {
       const sheet = screen.getByRole('region', { name: 'Review' })
       await user.click(within(sheet).getByRole('combobox', { name: 'Rarity for Dark Magician' }))
       const picker = screen.getByRole('dialog', { name: 'Printing' })
+      const sets = within(picker).getByRole('list', { name: 'Sets' })
+      expect(
+        within(sets)
+          .getAllByRole('button')
+          .map((b) => b.textContent)
+      ).toEqual([
+        'LOB-EN005 Legend of Blue Eyes White Dragon1',
+        'LOB-JP005 Legend of Blue Eyes White Dragon1'
+      ])
+      // The picked printing's set opens on its versions.
+      expect(
+        within(picker)
+          .getAllByRole('option')
+          .map((o) => o.getAttribute('aria-label'))
+      ).toEqual(['LOB-EN005 Legend of Blue Eyes White Dragon - Ultra Rare · EN'])
+    })
+
+    it("the review's printing picker opens a set onto its versions, and the search narrows both", async () => {
+      const user = userEvent.setup()
+      localStorage.setItem('language.filter', 'all')
+      localStorage.setItem(
+        SESSION_KEY,
+        JSON.stringify([
+          row({
+            via: 'art',
+            flag: null,
+            options: [
+              printing(),
+              printing({
+                printingId: 102,
+                setCode: 'SDY-006',
+                setName: 'Starter Deck: Yugi',
+                rarity: 'Common'
+              }),
+              printing({
+                printingId: 103,
+                setCode: 'SDY-006',
+                setName: 'Starter Deck: Yugi',
+                rarity: 'Rare'
+              })
+            ]
+          })
+        ])
+      )
+      const store = fakeStore()
+      installPhoneApi(store)
+      renderScanner(store)
+      await user.click(await screen.findByRole('button', { name: 'Review 1 scanned' }))
+      const sheet = screen.getByRole('region', { name: 'Review' })
+      const trigger = within(sheet).getByRole('combobox', { name: 'Rarity for Dark Magician' })
+      await user.click(trigger)
+      const picker = screen.getByRole('dialog', { name: 'Printing' })
+      const lob = within(picker).getByRole('button', { name: /^LOB-EN005/ })
+      const sdy = within(picker).getByRole('button', { name: /^SDY-006/ })
+      expect(lob).toHaveAttribute('aria-expanded', 'true')
+      expect(sdy).toHaveAttribute('aria-expanded', 'false')
+      expect(within(picker).getByRole('option', { name: /Ultra Rare/ })).toHaveAttribute(
+        'aria-selected',
+        'true'
+      )
+
+      // Tapping another set opens it in place of the first.
+      await user.click(sdy)
+      expect(within(picker).getByRole('listbox')).toHaveAccessibleName(
+        'Versions in SDY-006 Starter Deck: Yugi'
+      )
       expect(
         within(picker)
           .getAllByRole('option')
           .map((o) => o.textContent)
-      ).toEqual([
-        'LOB-EN005Legend of Blue Eyes White Dragon - Ultra RareEN',
-        'LOB-JP005Legend of Blue Eyes White Dragon - RareJP'
-      ])
+      ).toEqual(['Common', 'Rare'])
+
+      // A search down to one set opens it.
+      await user.click(sdy)
+      await user.type(within(picker).getByRole('searchbox'), 'ultra')
+      expect(within(picker).getAllByRole('button', { name: /^LOB|^SDY/ })).toHaveLength(1)
+      await user.click(within(picker).getByRole('option', { name: /Ultra Rare/ }))
+      expect(screen.queryByRole('dialog', { name: 'Printing' })).not.toBeInTheDocument()
+
+      await user.click(trigger)
+      await user.click(within(screen.getByRole('dialog')).getByRole('button', { name: /^SDY-006/ }))
+      await user.click(screen.getByRole('option', { name: 'SDY-006 Starter Deck: Yugi - Rare' }))
+      expect(trigger).toHaveTextContent('Rare')
+      const saved = JSON.parse(localStorage.getItem(SESSION_KEY)!) as ScanRow[]
+      expect(saved[0]).toMatchObject({ printingId: 103, setCode: 'SDY-006', rarity: 'Rare' })
     })
 
     it('a new scan pops the found bubble and buzzes; saved rows and count changes do not', async () => {

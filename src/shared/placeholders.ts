@@ -7,6 +7,10 @@ export interface PlaceholderCard {
   rarity: string | null
   /** A Pokémon card's finish ("Reverse Holofoil"), when the sheet has one pocket per finish. */
   finish?: string | null
+  /** The pocket's own set, where a sheet mixes sets (a binder); else the request's. */
+  setName?: string | null
+  /** The pocket's own set code for the footer chip; else the request's. */
+  setCode?: string | null
 }
 
 export const PLACEHOLDER_STYLES = {
@@ -47,6 +51,8 @@ export function finishChip(
   return finish === 'Reverse Holofoil' ? { text: 'RH', color: '#8fb4cf' } : null
 }
 
+const optionalText = (v: unknown): boolean => v === undefined || v === null || typeof v === 'string'
+
 /** Checks what crossed from the renderer: these strings end up in a page and a file name. */
 export function checkPlaceholderRequest(input: unknown): PlaceholderRequest {
   const r = input as PlaceholderRequest
@@ -60,11 +66,13 @@ export function checkPlaceholderRequest(input: unknown): PlaceholderRequest {
     r.cards.every(
       (c) =>
         Number.isSafeInteger(c?.imageId) &&
-        c.imageId > 0 &&
+        c.imageId >= 0 &&
         typeof c.name === 'string' &&
         typeof c.number === 'string' &&
         (c.rarity === null || typeof c.rarity === 'string') &&
-        (c.finish === undefined || c.finish === null || typeof c.finish === 'string')
+        optionalText(c.finish) &&
+        optionalText(c.setName) &&
+        optionalText(c.setCode)
     )
   if (!ok) throw new Error('Bad placeholder request')
   return r

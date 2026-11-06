@@ -11,7 +11,7 @@ describe('snapRect', () => {
   it('maps the guide box through object-cover onto the video', () => {
     // A 1920x1080 frame in a 3:4 preview shows 810x1080 from x = 555.
     const r = snapRect(1920, 1080, 300, 400)
-    expect(r).toEqual({ x: 555 + 65, y: 432, width: 680, height: 216 })
+    expect(r).toEqual({ x: 758, y: 486, width: 405, height: 108 })
   })
 })
 

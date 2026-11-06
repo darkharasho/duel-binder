@@ -1,5 +1,4 @@
-import type { PhoneStore } from '../data/store'
-import type { TrainingLabel, TrainingSummary } from '../../shared/training'
+import type { TrainingLabel, TrainingSend, TrainingSummary } from '../../shared/training'
 
 /** A training photo waiting to go up, or a server delete waiting to be sent. */
 export interface OutboxItem {
@@ -34,8 +33,8 @@ export interface OutboxStorage {
 }
 
 export interface Sender {
-  upload: PhoneStore['trainingUpload']
-  remove: PhoneStore['trainingDelete']
+  upload(clientId: string, label: TrainingLabel, jpeg: ArrayBuffer): Promise<TrainingSend>
+  remove(clientId: string): Promise<TrainingSend>
 }
 
 export type DrainResult = {

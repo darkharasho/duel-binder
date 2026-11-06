@@ -6,6 +6,8 @@ import { useUpdateStatus } from './useUpdateToasts'
 import { api, queryKeys } from '@/lib/api'
 import { formatRelative } from '@/lib/format'
 import { useGame } from '@/lib/game'
+import { useContribute } from '@/features/training/contributeContext'
+import { GAMES } from '@shared/games'
 import { isWeb } from '@/lib/platform'
 import { AccountSection } from './AccountSection'
 import { DexImportButton } from './DexImportDialog'
@@ -99,6 +101,7 @@ function DesktopSettings(): React.JSX.Element {
   const qc = useQueryClient()
   const sync = useSyncStatus()
   const { available } = useGame()
+  const { testerGame, open: contribute } = useContribute()
   const version = useQuery({ queryKey: ['app', 'version'], queryFn: () => api.app.version() })
   const cache = useQuery({
     queryKey: ['images', 'cacheSize'],
@@ -190,6 +193,18 @@ function DesktopSettings(): React.JSX.Element {
       <Section title="Scanner">
         <ScanPingToggle />
       </Section>
+
+      {testerGame !== undefined && (
+        <Section title="Contribute photos">
+          <p className="text-sm text-muted-foreground">
+            Photos of your {GAMES[testerGame].name} cards teach the scanner. Hold a card up to the
+            camera, check its number and version, and shoot.
+          </p>
+          <Button size="sm" onClick={() => contribute(testerGame)}>
+            Contribute photos
+          </Button>
+        </Section>
+      )}
 
       <Section title="Prices">
         <p className="text-sm text-muted-foreground">Prices come from your Duel Binder account.</p>

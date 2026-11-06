@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import logo from '@/assets/logo.svg'
 import { useFriendsAvailable, useFriendsOverview } from '@/lib/friends'
+import { useContribute } from '@/features/training/contributeContext'
 import { pageInGame, useGame } from '@/lib/game'
 import { isMac, isWeb } from '@/lib/platform'
 import { cn } from '@/lib/utils'
@@ -55,6 +56,7 @@ export function AppShell({
   children
 }: AppShellProps): React.JSX.Element {
   const friendsAvailable = useFriendsAvailable()
+  const { testerGame, open: contribute } = useContribute()
   const { def, available } = useGame()
   const requests = useFriendsOverview().data?.incoming.length ?? 0
   const mainRef = useRef<HTMLElement>(null)
@@ -146,6 +148,20 @@ export function AppShell({
               </button>
             ))}
           </nav>
+          {testerGame !== undefined && (
+            <button
+              type="button"
+              onClick={() => {
+                // The scanner lets go of the camera first.
+                if (page === 'scan') onNavigate('dashboard')
+                contribute(testerGame)
+              }}
+              className="-mt-4 flex items-center gap-2 rounded-sm py-1.5 text-left text-sm text-muted-foreground transition-colors duration-150 hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
+            >
+              <span aria-hidden className="size-1.5 rounded-full bg-transparent" />
+              Contribute photos
+            </button>
+          )}
           {me.data?.admin && (
             <a
               href="/admin"

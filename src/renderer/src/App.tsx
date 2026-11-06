@@ -11,6 +11,7 @@ import { SignInScreen } from '@/features/account/SignInScreen'
 import { TitleBar } from '@/components/TitleBar'
 import { ScanHubProvider } from '@/features/scan/ScanHub'
 import { useUpdateToasts } from '@/features/settings/useUpdateToasts'
+import { ContributeProvider } from '@/features/training/contribute'
 
 // Loaded on demand, so the web build (which has no Scan) never pulls in the vision worker.
 const ScanPage = lazy(() =>
@@ -82,7 +83,7 @@ function SignedInApp(): React.JSX.Element {
   }, [openAdd])
 
   return (
-    <>
+    <ContributeProvider>
       {!isWeb() && <DesktopOnlyEffects />}
       <AppShell page={page} onNavigate={onNavigate} onAddCard={() => openAdd()}>
         <AccountNotices />
@@ -100,7 +101,7 @@ function SignedInApp(): React.JSX.Element {
       </AppShell>
       <PagesAddCard pages={pages} />
       <Toaster />
-    </>
+    </ContributeProvider>
   )
 }
 

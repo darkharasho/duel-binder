@@ -29,18 +29,38 @@ export type Page =
   | 'settings'
 export type NavigateFn = (page: Page, opts?: { entryId?: number }) => void
 
-const NAV = [
-  { page: 'dashboard', label: 'Dashboard' },
-  { page: 'collection', label: 'Collection' },
-  { page: 'wishlist', label: 'Wishlist' },
-  { page: 'binders', label: 'Binders' },
-  { page: 'sets', label: 'Sets' },
-  { page: 'browse', label: 'Browse' },
-  { page: 'scan', label: 'Scan' },
-  { page: 'sessions', label: 'Sessions' },
-  { page: 'friends', label: 'Friends' },
-  { page: 'settings', label: 'Settings' }
-] as const
+// Pages in groups, so the list reads as a few places rather than one long run. Settings sits at the
+// bottom with the other extras.
+const NAV_GROUPS: readonly { heading?: string; pages: readonly { page: Page; label: string }[] }[] =
+  [
+    { pages: [{ page: 'dashboard', label: 'Dashboard' }] },
+    {
+      heading: 'My cards',
+      pages: [
+        { page: 'collection', label: 'Collection' },
+        { page: 'binders', label: 'Binders' },
+        { page: 'wishlist', label: 'Wishlist' }
+      ]
+    },
+    {
+      heading: 'Catalog',
+      pages: [
+        { page: 'sets', label: 'Sets' },
+        { page: 'browse', label: 'Browse' }
+      ]
+    },
+    {
+      heading: 'Scanner',
+      pages: [
+        { page: 'scan', label: 'Scan' },
+        { page: 'sessions', label: 'Sessions' }
+      ]
+    },
+    { heading: 'Social', pages: [{ page: 'friends', label: 'Friends' }] }
+  ]
+
+const ITEM =
+  'flex items-center gap-2 rounded-sm py-1.5 text-left text-sm text-muted-foreground transition-colors duration-150 hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring'
 
 interface AppShellProps {
   page: Page
@@ -96,7 +116,7 @@ export function AppShell({
         </>
       )}
       <div className="flex min-h-0 flex-1">
-        <aside className="flex w-[200px] shrink-0 flex-col gap-6 border-r border-white/[0.06] px-4 pb-5 pt-1">
+        <aside className="flex w-[200px] shrink-0 flex-col gap-5 border-r border-white/[0.06] px-4 pb-5 pt-1">
           {available.length > 1 ? (
             <SidebarGameSwitch />
           ) : (
@@ -107,70 +127,43 @@ export function AppShell({
               </span>
             </div>
           )}
-          <nav aria-label="Main" className="flex flex-col">
-            {NAV.filter(
-              ({ page: p }) =>
-                (p !== 'friends' || friendsAvailable) &&
-                ((p !== 'scan' && p !== 'sessions') || !isWeb()) &&
-                pageInGame(p, def)
-            ).map(({ page: p, label }) => (
-              <button
-                key={p}
-                type="button"
-                aria-label={
-                  p === 'friends' && requests > 0
-                    ? `Friends, ${requests} ${requests === 1 ? 'request' : 'requests'}`
-                    : undefined
-                }
-                aria-current={page === p ? 'page' : undefined}
-                onClick={() => onNavigate(p)}
-                className={cn(
-                  'flex items-center gap-2 rounded-sm py-1.5 text-left text-sm text-muted-foreground transition-colors duration-150 hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring',
-                  page === p && 'font-semibold text-foreground'
-                )}
-              >
-                <span
-                  aria-hidden
-                  className={cn(
-                    'size-1.5 rounded-full',
-                    page === p ? 'bg-foreground' : 'bg-transparent'
+          <nav
+            aria-label="Main"
+            className="-mx-1 flex min-h-0 flex-1 flex-col overflow-y-auto px-1"
+          >
+            {NAV_GROUPS.map(({ heading, pages }) => {
+              const shown = pages.filter(
+                ({ page: p }) =>
+                  (p !== 'friends' || friendsAvailable) &&
+                  ((p !== 'scan' && p !== 'sessions') || !isWeb()) &&
+                  pageInGame(p, def)
+              )
+              if (shown.length === 0) return null
+              return (
+                <div
+                  key={heading ?? 'top'}
+                  role="group"
+                  aria-label={heading}
+                  className="flex flex-col"
+                >
+                  {heading && (
+                    <h2 className="mb-0.5 mt-2 pl-3.5 text-[10.5px] font-medium uppercase tracking-[0.08em] text-muted-foreground/60">
+                      {heading}
+                    </h2>
                   )}
-                />
-                {label}
-                {p === 'friends' && requests > 0 && (
-                  <span
-                    aria-hidden
-                    className="rounded-full bg-primary px-1.5 text-[11px] font-semibold leading-4 text-primary-foreground"
-                  >
-                    {requests}
-                  </span>
-                )}
-              </button>
-            ))}
+                  {shown.map(({ page: p, label }) => (
+                    <NavItem
+                      key={p}
+                      label={label}
+                      active={page === p}
+                      onClick={() => onNavigate(p)}
+                      badge={p === 'friends' ? requests : 0}
+                    />
+                  ))}
+                </div>
+              )
+            })}
           </nav>
-          {testerGame !== undefined && (
-            <button
-              type="button"
-              onClick={() => {
-                // The scanner lets go of the camera first.
-                if (page === 'scan') onNavigate('dashboard')
-                contribute(testerGame)
-              }}
-              className="-mt-4 flex items-center gap-2 rounded-sm py-1.5 text-left text-sm text-muted-foreground transition-colors duration-150 hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
-            >
-              <span aria-hidden className="size-1.5 rounded-full bg-transparent" />
-              Contribute photos
-            </button>
-          )}
-          {me.data?.admin && (
-            <a
-              href="/admin"
-              className="-mt-4 flex items-center gap-2 rounded-sm py-1.5 text-sm text-muted-foreground transition-colors duration-150 hover:text-foreground focus-visible:outline-2 focus-visible:outline-ring"
-            >
-              <span aria-hidden className="size-1.5 rounded-full bg-transparent" />
-              Admin
-            </a>
-          )}
           <button
             type="button"
             onClick={onAddCard}
@@ -181,6 +174,33 @@ export function AppShell({
               {isMac() ? '⌘K' : 'Ctrl K'}
             </kbd>
           </button>
+          <div className="-mt-2 flex flex-col border-t border-white/[0.06] pt-2">
+            {testerGame !== undefined && (
+              <button
+                type="button"
+                onClick={() => {
+                  // The scanner lets go of the camera first.
+                  if (page === 'scan') onNavigate('dashboard')
+                  contribute(testerGame)
+                }}
+                className={ITEM}
+              >
+                <span aria-hidden className="size-1.5 rounded-full bg-transparent" />
+                Contribute photos
+              </button>
+            )}
+            {me.data?.admin && (
+              <a href="/admin" className={ITEM}>
+                <span aria-hidden className="size-1.5 rounded-full bg-transparent" />
+                Admin
+              </a>
+            )}
+            <NavItem
+              label="Settings"
+              active={page === 'settings'}
+              onClick={() => onNavigate('settings')}
+            />
+          </div>
         </aside>
         <div className="relative flex min-w-0 flex-1 flex-col">
           <SyncBanner />
@@ -193,5 +213,43 @@ export function AppShell({
         </div>
       </div>
     </div>
+  )
+}
+
+function NavItem({
+  label,
+  active,
+  onClick,
+  badge = 0
+}: {
+  label: string
+  active: boolean
+  onClick: () => void
+  badge?: number
+}): React.JSX.Element {
+  return (
+    <button
+      type="button"
+      aria-label={
+        badge > 0 ? `${label}, ${badge} ${badge === 1 ? 'request' : 'requests'}` : undefined
+      }
+      aria-current={active ? 'page' : undefined}
+      onClick={onClick}
+      className={cn(ITEM, active && 'font-semibold text-foreground')}
+    >
+      <span
+        aria-hidden
+        className={cn('size-1.5 rounded-full', active ? 'bg-foreground' : 'bg-transparent')}
+      />
+      {label}
+      {badge > 0 && (
+        <span
+          aria-hidden
+          className="rounded-full bg-primary px-1.5 text-[11px] font-semibold leading-4 text-primary-foreground"
+        >
+          {badge}
+        </span>
+      )}
+    </button>
   )
 }

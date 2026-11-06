@@ -136,7 +136,7 @@ const navNames = (): (string | null)[] =>
     .map((b) => b.textContent)
 
 describe('Scan nav', () => {
-  it('nav shows Scan and Sessions on desktop between Browse and Friends, not on web', async () => {
+  it('nav shows Scan and Sessions on desktop in the Scanner group between Browse and Friends, not on web', async () => {
     const { unmount } = renderWithProviders(<App />, {
       api: createMockApi({ account: { status: vi.fn(async () => signedIn) } })
     })
@@ -144,14 +144,13 @@ describe('Scan nav', () => {
     expect(navNames()).toEqual([
       'Dashboard',
       'Collection',
-      'Wishlist',
       'Binders',
+      'Wishlist',
       'Sets',
       'Browse',
       'Scan',
       'Sessions',
-      'Friends',
-      'Settings'
+      'Friends'
     ])
     unmount()
 

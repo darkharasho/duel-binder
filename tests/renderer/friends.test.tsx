@@ -1,4 +1,4 @@
-import { act, screen, waitFor } from '@testing-library/react'
+import { act, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { AppShell } from '@/components/AppShell'
 import { FriendsPage } from '@/features/friends/FriendsPage'
@@ -59,12 +59,15 @@ const shell = (api: Api): void => {
 }
 
 describe('friends nav', () => {
-  it('is shown between Browse and Settings on web', () => {
+  it('is shown last in the main nav, after Browse, on web', () => {
     shell(make({ friends: [], incoming: [], blocked: [] }))
-    const names = screen.getAllByRole('button').map((b) => b.textContent)
-    const i = names.indexOf('Friends')
-    expect(names[i - 1]).toBe('Browse')
-    expect(names[i + 1]).toBe('Settings')
+    const names = within(screen.getByRole('navigation', { name: 'Main' }))
+      .getAllByRole('button')
+      .map((b) => b.textContent)
+    expect(names.slice(-2)).toEqual(['Browse', 'Friends'])
+    expect(screen.getByRole('group', { name: 'Social' })).toContainElement(
+      screen.getByRole('button', { name: 'Friends' })
+    )
   })
 
   it('is hidden on desktop when signed out', async () => {
@@ -284,7 +287,9 @@ describe('friends page', () => {
       api: make({ friends: [], incoming: [], blocked: [] })
     })
     expect(
-      await screen.findByText('No friends yet. Add one by their Duel Binder username, shown under their name in Settings.')
+      await screen.findByText(
+        'No friends yet. Add one by their Duel Binder username, shown under their name in Settings.'
+      )
     ).toBeInTheDocument()
   })
 
@@ -301,7 +306,9 @@ describe('friends page', () => {
     expect(await screen.findByText(OFFLINE_MESSAGE)).toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Retry' }))
     expect(
-      await screen.findByText('No friends yet. Add one by their Duel Binder username, shown under their name in Settings.')
+      await screen.findByText(
+        'No friends yet. Add one by their Duel Binder username, shown under their name in Settings.'
+      )
     ).toBeInTheDocument()
   })
 

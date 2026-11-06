@@ -6,7 +6,23 @@ import eslintPluginReactHooks from 'eslint-plugin-react-hooks'
 import eslintPluginReactRefresh from 'eslint-plugin-react-refresh'
 
 export default defineConfig(
-  { ignores: ['**/node_modules', '**/dist', '**/out', '.claude/**', '.superpowers/**', '**/.wrangler', 'workers/portal/site/app/**', 'catalog-work/**', 'ios/App/App/public/**'] },
+  {
+    ignores: [
+      '**/node_modules',
+      '**/dist',
+      '**/out',
+      '.claude/**',
+      '.superpowers/**',
+      '**/.wrangler',
+      'workers/portal/site/app/**',
+      'catalog-work/**',
+      // Built phone bundles (Capacitor copies them into the native projects).
+      'ios/App/App/public/**',
+      'android/app/src/main/assets/public/**',
+      'android/app/build/**',
+      'android/build/**'
+    ]
+  },
   tseslint.configs.recommended,
   eslintPluginReact.configs.flat.recommended,
   eslintPluginReact.configs.flat['jsx-runtime'],
@@ -25,7 +41,12 @@ export default defineConfig(
     },
     rules: {
       ...eslintPluginReactHooks.configs.recommended.rules,
-      ...eslintPluginReactRefresh.configs.vite.rules
+      ...eslintPluginReactRefresh.configs.vite.rules,
+      // A leading underscore marks a parameter that's there for the signature.
+      '@typescript-eslint/no-unused-vars': [
+        'error',
+        { argsIgnorePattern: '^_', varsIgnorePattern: '^_', caughtErrorsIgnorePattern: '^_' }
+      ]
     }
   },
   {
@@ -50,6 +71,15 @@ export default defineConfig(
       }
     },
     rules: { '@typescript-eslint/explicit-function-return-type': 'off' }
+  },
+  {
+    // Tests, and the shadcn/ui components (generated, and they export variants alongside
+    // components on purpose).
+    files: ['tests/**/*.{ts,tsx}', 'src/renderer/src/components/ui/**/*.tsx'],
+    rules: {
+      '@typescript-eslint/explicit-function-return-type': 'off',
+      'react-refresh/only-export-components': 'off'
+    }
   },
   eslintConfigPrettier
 )

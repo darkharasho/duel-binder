@@ -158,7 +158,12 @@ export async function addEmail(
 }
 
 /** A pending add or change flow of this user that can still take a code, or undefined. */
-function pendingFlow(db: SqlDb, userId: number, ticketHash: string, nowIso: string) {
+function pendingFlow(
+  db: SqlDb,
+  userId: number,
+  ticketHash: string,
+  nowIso: string
+): FlowRow | undefined {
   const flow = db
     .prepare(
       `SELECT ${FLOW_COLUMNS} FROM email_flows WHERE ticket_hash = ? AND expires_at > ? AND confirmed = 0 AND purpose IN ('add', 'change')`

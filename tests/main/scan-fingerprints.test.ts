@@ -53,6 +53,7 @@ describe('fingerprint store', () => {
   it('reports how far along a download is', async () => {
     const bytes = body(3)
     const shares: (number | undefined)[] = []
+    // eslint-disable-next-line prefer-const -- read by the stream before it is assigned
     let store: ReturnType<typeof make>
     const stream = new ReadableStream<Uint8Array>({
       pull(c) {

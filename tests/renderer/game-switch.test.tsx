@@ -154,6 +154,94 @@ describe('desktop game switch', () => {
     expect(api.games.setActive).toHaveBeenCalledTimes(1)
   })
 
+  /** Desktop with Yu-Gi-Oh! (1234 cards) and Pokémon (none); main says data changed on a switch. */
+  function switchingApi(ygoStats: () => Promise<number>): {
+    api: Api
+    choose: (g: string) => Promise<void>
+    accountChanged: () => void
+  } {
+    const changed: (() => void)[] = []
+    const onAccount: ((s: AccountStatus) => void)[] = []
+    let active: GameId = 'ygo'
+    const base = createMockApi({})
+    const api = desktopApi(['ygo', 'pkm'], 'ygo', {
+      account: {
+        onChange: vi.fn((cb: (s: AccountStatus) => void) => {
+          onAccount.push(cb)
+          return () => {}
+        })
+      },
+      app: {
+        onDataChanged: vi.fn((cb: () => void) => {
+          changed.push(cb)
+          return () => {}
+        })
+      },
+      games: {
+        active: vi.fn(async () => active),
+        setActive: vi.fn(async (g: GameId) => {
+          active = g
+          for (const cb of changed) cb()
+        })
+      },
+      stats: {
+        get: vi.fn(async () => {
+          const empty = await base.stats.get()
+          return { ...empty, totalCards: active === 'ygo' ? await ygoStats() : 0 }
+        })
+      }
+    })
+    const choose = async (g: string): Promise<void> => {
+      await userEvent.click(await screen.findByRole('button', { name: /switch game/i }))
+      await userEvent.click(await screen.findByRole('menuitemradio', { name: new RegExp(g) }))
+    }
+    const accountChanged = (): void => {
+      for (const cb of onAccount) cb(signedIn)
+    }
+    return { api, choose, accountChanged }
+  }
+
+  it('switching back shows the game as it was left while it refetches', async () => {
+    let ygo = (): Promise<number> => Promise.resolve(1234)
+    const { api, choose } = switchingApi(() => ygo())
+    await renderDesktop(api)
+    expect(await screen.findByText('1234')).toBeInTheDocument()
+    await choose('Pokémon')
+    expect(await screen.findByText('Your collection is empty')).toBeInTheDocument()
+    ygo = () => new Promise(() => {})
+    await choose('Yu-Gi-Oh!')
+    expect(await screen.findByText('1234')).toBeInTheDocument()
+    expect(screen.queryByText('Your collection is empty')).not.toBeInTheDocument()
+  })
+
+  it("an account change forgets the games' last pages", async () => {
+    let ygo = (): Promise<number> => Promise.resolve(1234)
+    const { api, choose, accountChanged } = switchingApi(() => ygo())
+    await renderDesktop(api)
+    await screen.findByText('1234')
+    await choose('Pokémon')
+    await screen.findByText('Your collection is empty')
+    act(() => accountChanged())
+    ygo = () => new Promise(() => {})
+    await choose('Yu-Gi-Oh!')
+    await waitFor(() =>
+      expect(screen.queryByText('Your collection is empty')).not.toBeInTheDocument()
+    )
+    expect(screen.queryByText('1234')).not.toBeInTheDocument()
+  })
+
+  it('a switch reads each page once, not again for the data-changed it sets off', async () => {
+    const { api, choose } = switchingApi(() => Promise.resolve(1234))
+    // The app's staleTime, so a page remounting on its fresh rows doesn't read them again.
+    renderWithProviders(<App />, { api, staleTime: 30_000 })
+    await screen.findByText('1234')
+    const before = vi.mocked(api.stats.get).mock.calls.length
+    await choose('Pokémon')
+    await screen.findByText('Your collection is empty')
+    await new Promise((r) => setTimeout(r, 50))
+    expect(vi.mocked(api.stats.get).mock.calls.length - before).toBe(1)
+  })
+
   it('pins the query roots a game switch keeps', () => {
     expect([...GAME_FREE]).toEqual(['account', 'sync', 'me', 'update', 'app', 'images', 'phone'])
   })
@@ -566,7 +654,10 @@ describe('phone game switch', () => {
     expect(store.invoke).toHaveBeenCalledWith('games:setActive', ['op'])
     await userEvent.click(await screen.findByRole('button', { name: 'Close' }))
     const switches = (): unknown[] =>
-      vi.mocked(store.invoke).mock.calls.filter((c) => c[0] === 'games:setActive').map((c) => c[1])
+      vi
+        .mocked(store.invoke)
+        .mock.calls.filter((c) => c[0] === 'games:setActive')
+        .map((c) => c[1])
     await waitFor(() => expect(switches()).toEqual([['op'], ['ygo']]))
   })
 })

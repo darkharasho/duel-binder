@@ -298,11 +298,11 @@ export function createMockApi(overrides: DeepPartial<Api> = {}): Api {
 
 export function renderWithProviders(
   ui: ReactElement,
-  { api = createMockApi() }: { api?: Api } = {}
+  { api = createMockApi(), staleTime }: { api?: Api; staleTime?: number } = {}
 ) {
   window.api = api
   const client = new QueryClient({
-    defaultOptions: { queries: { retry: false }, mutations: { retry: false } }
+    defaultOptions: { queries: { retry: false, staleTime }, mutations: { retry: false } }
   })
   const wrapper = ({ children }: { children: ReactNode }): ReactElement =>
     createElement(QueryClientProvider, { client }, createElement(TooltipProvider, null, children))

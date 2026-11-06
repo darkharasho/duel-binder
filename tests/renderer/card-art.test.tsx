@@ -55,6 +55,31 @@ describe('CardArt', () => {
     expect(screen.getByAltText('Kuriboh')).toHaveClass('opacity-0')
   })
 
+  it('a revisit shows art loaded before at once: no shimmer, no fade, not lazy', () => {
+    const first = render(<CardArt imageId={5} size="small" alt="Kuriboh" />)
+    fireEvent.load(screen.getByAltText('Kuriboh'))
+    first.unmount()
+    render(<CardArt imageId={5} size="small" alt="Kuriboh" />)
+    const img = screen.getByAltText('Kuriboh')
+    expect(img).toHaveAttribute('loading', 'eager')
+    expect(img).not.toHaveClass('art-loading')
+    fireEvent.load(img)
+    expect(img).not.toHaveClass('art-reveal')
+  })
+
+  it('a revisit shows a printing scan loaded before over the default art from the first frame', () => {
+    const first = render(<CardArt imageId={5} printingId={9} size="small" alt="Kuriboh" />)
+    fireEvent.load(screen.getByTestId('printing-scan'))
+    first.unmount()
+    const { container } = render(<CardArt imageId={5} printingId={9} size="small" alt="Kuriboh" />)
+    const scan = screen.getByTestId('printing-scan')
+    expect(scan).toHaveClass('opacity-100')
+    expect(scan).not.toHaveClass('transition-opacity')
+    expect(scan).toHaveAttribute('loading', 'eager')
+    expect(screen.getByAltText('Kuriboh')).toHaveClass('opacity-0')
+    expect(container.firstElementChild).not.toHaveClass('art-loading')
+  })
+
   it('keeps the default art when the printing has no scan', () => {
     render(<CardArt imageId={5} printingId={9} size="small" alt="Kuriboh" />)
     fireEvent.error(screen.getByTestId('printing-scan'))

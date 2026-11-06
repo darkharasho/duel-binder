@@ -31,6 +31,17 @@ export const GAME_FREE: ReadonlySet<string> = new Set([
 
 const YGO_ONLY: { game: GameId; available: GameId[] } = { game: 'ygo', available: ['ygo'] }
 
+/** Whether a query's rows belong to the game shown (so a switch drops them). */
+const ofGame = (q: { queryKey: readonly unknown[] }): boolean =>
+  !GAME_FREE.has(String(q.queryKey[0]))
+
+/**
+ * Set while this window switches the game. Main says data changed when the game does; the switch
+ * reloads every page itself, so the data-changed refetch would only do the same reads twice.
+ */
+let switching = false
+export const switchingGame = (): boolean => switching
+
 /** Outside a provider (a page rendered on its own, in tests) everything is Yu-Gi-Oh!. */
 const GameContext = createContext<GameState>({
   ...YGO_ONLY,
@@ -79,6 +90,11 @@ export function GameProvider({
   // Reads can overlap (a switch and its data-changed event); only the latest one lands.
   const reads = useRef(0)
   const fellBack = useRef(false)
+  /**
+   * Each game's rows as a switch away from it left them, shown at once when switching back (and
+   * refetched behind them), so a switch back isn't a blank page. Dropped on any account change.
+   */
+  const saved = useRef(new Map<GameId, { key: readonly unknown[]; data: unknown; at: number }[]>())
 
   const read = useCallback(async (): Promise<void> => {
     const n = ++reads.current
@@ -104,14 +120,19 @@ export function GameProvider({
       k && k.game === next.game && k.available.join() === next.available.join() ? k : next
     )
     // Query keys don't name the game, so the old game's rows are dropped, not just refetched.
-    if (before !== null && before !== next.game)
-      void qc.resetQueries({ predicate: (q) => !GAME_FREE.has(String(q.queryKey[0])) })
+    if (before !== null && before !== next.game) {
+      saved.current.clear()
+      void qc.resetQueries({ predicate: ofGame })
+    }
   }, [qc])
 
   useEffect(() => {
     void read()
     const offData = api.app.onDataChanged(() => void read())
-    const offAccount = api.account.onChange(() => void read())
+    const offAccount = api.account.onChange(() => {
+      saved.current.clear()
+      void read()
+    })
     return () => {
       offData()
       offAccount()
@@ -120,10 +141,39 @@ export function GameProvider({
 
   const setGame = useCallback(
     async (g: GameId): Promise<void> => {
-      await api.games.setActive(g)
+      if (shown.current === g) return
+      switching = true
+      try {
+        await api.games.setActive(g)
+      } finally {
+        switching = false
+      }
+      // Read after the wait: a quicker switch may have landed meanwhile, and these rows are its.
+      const from = shown.current
+      if (from === g) return
+      // Main shows `g` now: switch at once, not after reading it back (which queued behind the
+      // pages' refetches, keeping the old game on screen for half a second).
+      reads.current++
+      if (from !== null) {
+        const rows = qc
+          .getQueryCache()
+          .findAll({ predicate: ofGame })
+          .filter((q) => q.state.status === 'success')
+          .map((q) => ({ key: q.queryKey, data: q.state.data, at: q.state.dataUpdatedAt }))
+        saved.current.set(from, rows)
+      }
+      shown.current = g
+      setKnown((k) => ({ game: g, available: k?.available ?? YGO_ONLY.available }))
+      void qc.resetQueries({ predicate: ofGame })
+      // Refetching already (the reset), but the game's last rows show meanwhile.
+      for (const r of saved.current.get(g) ?? [])
+        qc.setQueryData(r.key, r.data, { updatedAt: r.at })
+      saved.current.delete(g)
+      // Stale, so a page opened later refetches too (its rows may predate a sync).
+      void qc.invalidateQueries({ predicate: ofGame, refetchType: 'none' })
       await read()
     },
-    [read]
+    [qc, read]
   )
 
   const value = useMemo<GameState>(() => {

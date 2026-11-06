@@ -22,6 +22,7 @@ import {
 } from '../../src/renderer/src/features/scan/vision/detect'
 import {
   findCandidates,
+  nudgeOutline,
   preferOuter,
   recognizeArt
 } from '../../src/renderer/src/features/scan/vision/candidates'
@@ -177,5 +178,27 @@ describe('rankArt with a jittered art box', () => {
     const median = (xs: number[]): number => [...xs].sort((a, b) => a - b)[xs.length >> 1]
     expect(median(own.jittered)).toBeLessThanOrEqual(median(own.plain) - 10)
     expect(own.jittered.every((d, i) => d <= own.plain[i])).toBe(true)
+  }, 120_000)
+})
+
+describe('nudgeOutline', () => {
+  it("walks an outline that runs onto a holder's rim back onto the card", () => {
+    // The outline overshoots the card's top and left edges by 6%, as one following a toploader's
+    // rim at one end does: its art matches nothing until the nudge walks those sides in.
+    for (const s of shots) {
+      const img = load(join(DIR, s.file))
+      const own = new Set([s.imageId])
+      const distanceOf = (quad: Quad): number =>
+        rankArt(cv, warpCard(cv, img, quad, 210), index, own, 1, 0).matches[0]?.distance ?? 128
+      const over = [
+        cardPoint(s.quad, -0.06, -0.06),
+        cardPoint(s.quad, 1, -0.06),
+        cardPoint(s.quad, 1, 1),
+        cardPoint(s.quad, -0.06, 1)
+      ] as unknown as Quad
+      const from = { quad: over, distance: distanceOf(over) }
+      expect(from.distance, s.file).toBeGreaterThan(ART_MAX_DISTANCE)
+      expect(nudgeOutline(from, distanceOf).distance, s.file).toBeLessThanOrEqual(ART_MAX_DISTANCE)
+    }
   }, 120_000)
 })

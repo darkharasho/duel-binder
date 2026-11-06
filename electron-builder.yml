@@ -27,6 +27,13 @@ asarUnpack:
 win:
   target: nsis
   executableName: duel-binder
+  # Signed with Azure Artifact Signing so SmartScreen doesn't warn. Credentials come from
+  # AZURE_TENANT_ID / AZURE_CLIENT_ID / AZURE_CLIENT_SECRET (see README.md, Release).
+  azureSignOptions:
+    publisherName: Michael Stephens
+    endpoint: https://eus.codesigning.azure.net/
+    codeSigningAccountName: darkharasho-signing
+    certificateProfileName: public-trust
 nsis:
   artifactName: ${name}-${version}-setup.${ext}
   shortcutName: ${productName}

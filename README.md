@@ -11,7 +11,7 @@ Pokémon card data comes from [TCGdex](https://tcgdex.dev). This project is not 
 Release builds are not code-signed by a paid certificate, so the OS warns on first launch:
 
 - **macOS:** the app is ad-hoc signed. Right-click the app and choose Open, or go to System Settings → Privacy & Security and click Open Anyway. Alternatively run `xattr -dr com.apple.quarantine "/Applications/Duel Binder.app"`. The mac build does not auto-update; it shows a notice with a link to the new release.
-- **Windows:** SmartScreen may say "Windows protected your PC". Click More info → Run anyway.
+- **Windows:** the installer is signed (Azure Artifact Signing, publisher Michael Stephens). Older unsigned releases may make SmartScreen say "Windows protected your PC"; click More info → Run anyway.
 
 ## Run
 
@@ -36,6 +36,8 @@ npm test
 1. Bump `version` in `package.json`.
 2. Commit, then tag `vX.Y.Z` (it must match `package.json`) and push the tag: `git tag vX.Y.Z && git push origin vX.Y.Z`.
 3. The `Release` workflow tests, then builds Linux (AppImage), Windows (NSIS) and macOS (dmg + zip, universal) and publishes them to a GitHub release along with the `latest*.yml` update feeds.
+
+Windows signing is required: the Windows build signs the installer and `duel-binder.exe` with Azure Artifact Signing (`win.azureSignOptions` in `electron-builder.yml`: account `darkharasho-signing`, profile `public-trust`). It needs the repo secrets `AZURE_TENANT_ID`, `AZURE_CLIENT_ID` and `AZURE_CLIENT_SECRET` (set them with `~/.claude/templates/windows-signing/set-azure-signing-secrets.sh duel-binder`), and fails if the installer's signature isn't valid.
 
 macOS signing is optional. Set the repo secrets `CSC_LINK`, `CSC_KEY_PASSWORD`, `APPLE_ID`, `APPLE_APP_SPECIFIC_PASSWORD` and `APPLE_TEAM_ID` to sign and notarize. Without them the mac build is ad-hoc signed and the app shows a download notice instead of auto-installing updates.
 

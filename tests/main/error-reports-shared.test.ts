@@ -95,10 +95,12 @@ describe('scrubErrorDetails', () => {
     expect(scrubErrorDetails({ appVersion: '1', ...once })).toEqual({ appVersion: '1', ...once })
   })
 
-  it('stays fast on a hostile string', () => {
+  // Each of these was quadratic once (~300 ms apiece at the input cap); now they take a few ms,
+  // so the limit has room for a slow CI runner.
+  it.each([['a-'], ['a'], ['a.'], ['1'], ['eyJa.']])('stays fast on a long run of %j', (unit) => {
     const start = performance.now()
-    scrub('a-'.repeat(50_000), '/home/'.repeat(50_000))
-    expect(performance.now() - start).toBeLessThan(1000)
+    scrub(unit.repeat(50_000), '/home/'.repeat(50_000))
+    expect(performance.now() - start).toBeLessThan(250)
   })
 })
 

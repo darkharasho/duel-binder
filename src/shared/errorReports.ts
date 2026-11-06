@@ -35,10 +35,12 @@ const HOME_DIR = new RegExp(
   String.raw`(${SEPARATOR}(?:users|home)${SEPARATOR})[^\\/\r\n:()'"<>|?*]+`,
   'gi'
 )
-const EMAIL = /[a-z0-9._%+-]+@[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,}/gi
+// The lookbehinds start a match only where a run of name characters starts. Trying every
+// position inside a long run (as `\b` or no anchor does) makes these quadratic.
+const EMAIL = /(?<![a-z0-9._%+-])[a-z0-9._%+-]+@[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,}/gi
 const BEARER = /\b(bearer)\s+[a-z0-9._~+/-]+=*/gi
 const SECRET_FIELD =
-  /\b([a-z0-9_-]*(?:token|secret|password|passwd|api[_-]?key|session|cookie|authorization|auth)["']?\s*[:=]\s*["']?)[^\s"'&,;)]+/gi
+  /(?<![a-z0-9_-])([a-z0-9_-]*(?:token|secret|password|passwd|api[_-]?key|session|cookie|authorization|auth)["']?\s*[:=]\s*["']?)[^\s"'&,;)]+/gi
 const JWT = /\beyJ[a-z0-9_-]+\.[a-z0-9_-]+(?:\.[a-z0-9_-]+)?/gi
 // Session tokens are 43 base64url characters, hashes are hex; plain long names have no digit.
 const LONG_RANDOM = /[a-z0-9_-]{24,}/gi

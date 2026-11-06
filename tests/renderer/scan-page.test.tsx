@@ -25,6 +25,21 @@ import {
 } from './scanFakes'
 
 const SESSION_KEY = 'scan.session.v1'
+
+/** The printing dropdown's sets, one per code and set name; empty when the card is in one set. */
+const setsListed = (): (string | null)[] => {
+  const sets = screen.queryByRole('listbox', { name: 'Sets' })
+  return sets
+    ? within(sets)
+        .getAllByRole('option')
+        .map((o) => o.textContent)
+    : []
+}
+/** The versions it lists for the set picked, by their whole names. */
+const versionsListed = (): (string | null)[] =>
+  within(screen.getByRole('listbox', { name: /^Versions/ }))
+    .getAllByRole('option')
+    .map((o) => o.getAttribute('aria-label'))
 // Wall-clock time, captured before any test fakes the timers (and performance with them).
 const realNow = performance.now.bind(performance)
 
@@ -1293,7 +1308,10 @@ describe('Scan page', () => {
     expect(screen.getByText('Check rarity')).toBeInTheDocument()
     const u = user()
     await u.click(screen.getByRole('combobox', { name: 'Rarity for Dark Magician' }))
-    expect(screen.getAllByRole('option').map((o) => o.textContent)).toEqual([
+    // One set: no column of sets, just its versions under its name.
+    expect(setsListed()).toEqual([])
+    expect(screen.getAllByRole('option').map((o) => o.textContent)).toEqual(['Common', 'Rare'])
+    expect(versionsListed()).toEqual([
       'LOB-EN005 Legend of Blue Eyes White Dragon - Common',
       'LOB-EN005 Legend of Blue Eyes White Dragon - Rare'
     ])
@@ -1332,17 +1350,30 @@ describe('Scan page', () => {
     await run()
     const u = user()
     await u.click(screen.getByRole('combobox', { name: 'Rarity for Dark Magician' }))
-    expect(screen.getAllByRole('option').map((o) => o.textContent)).toEqual([
-      'LOB-EN005 Legend of Blue Eyes White Dragon - Ultra Rare EN',
-      'SDY-006 Legend of Blue Eyes White Dragon - Common DE'
+    // Sets on the left; with none picked yet, the first one's versions on the right.
+    expect(setsListed()).toEqual([
+      'LOB-EN005 Legend of Blue Eyes White Dragon',
+      'SDY-006 Legend of Blue Eyes White Dragon'
     ])
+    expect(versionsListed()).toEqual([
+      'LOB-EN005 Legend of Blue Eyes White Dragon - Ultra Rare · EN'
+    ])
+    // A search down to one set picks it.
     await u.type(screen.getByPlaceholderText('Search code, rarity or set…'), 'sdy')
-    expect(screen.getAllByRole('option')).toHaveLength(1)
+    expect(setsListed()).toEqual(['SDY-006 Legend of Blue Eyes White Dragon'])
+    expect(versionsListed()).toEqual(['SDY-006 Legend of Blue Eyes White Dragon - Common · DE'])
     await u.click(
-      screen.getByRole('option', { name: 'SDY-006 Legend of Blue Eyes White Dragon - Common DE' })
+      screen.getByRole('option', { name: 'SDY-006 Legend of Blue Eyes White Dragon - Common · DE' })
     )
+    // Opening again starts on the picked printing's set, with it marked.
     await u.click(screen.getByRole('combobox', { name: 'Rarity for Dark Magician' }))
-    expect(screen.getAllByRole('option')).toHaveLength(2)
+    expect(setsListed()).toHaveLength(2)
+    expect(
+      screen.getByRole('option', { name: 'SDY-006 Legend of Blue Eyes White Dragon' })
+    ).toHaveAttribute('aria-selected', 'true')
+    expect(
+      screen.getByRole('option', { name: 'SDY-006 Legend of Blue Eyes White Dragon - Common · DE' })
+    ).toHaveAttribute('aria-selected', 'true')
   })
 
   it("the printing dropdown lists the scan language's printings, keeping the row's own", async () => {
@@ -1372,23 +1403,23 @@ describe('Scan page', () => {
     const u = user()
     const picker = (): HTMLElement =>
       screen.getByRole('combobox', { name: 'Rarity for Dark Magician' })
-    const listed = (): (string | null)[] => screen.getAllByRole('option').map((o) => o.textContent)
     // English is picked (the default): English printings, and the German one the row is on.
     await u.click(picker())
-    expect(listed()).toEqual([
-      'LOB-EN005 Legend of Blue Eyes White Dragon - Ultra Rare EN',
-      'SDY-006 Legend of Blue Eyes White Dragon - Common DE',
-      'SDY-EN006 Legend of Blue Eyes White Dragon - Common EN'
+    expect(setsListed()).toEqual([
+      'LOB-EN005 Legend of Blue Eyes White Dragon',
+      'SDY-006 Legend of Blue Eyes White Dragon',
+      'SDY-EN006 Legend of Blue Eyes White Dragon'
     ])
+    expect(versionsListed()).toEqual(['SDY-006 Legend of Blue Eyes White Dragon - Common · DE'])
     await u.keyboard('{Escape}')
 
     // Picking Japanese on the Scan page narrows it to Japanese, still keeping the row's own.
     await u.click(screen.getByRole('combobox', { name: 'Language' }))
     await u.click(screen.getByRole('option', { name: /Japanese/ }))
     await u.click(picker())
-    expect(listed()).toEqual([
-      'SDY-006 Legend of Blue Eyes White Dragon - Common DE',
-      'LOB-JP005 Legend of Blue Eyes White Dragon - Rare JP'
+    expect(setsListed()).toEqual([
+      'SDY-006 Legend of Blue Eyes White Dragon',
+      'LOB-JP005 Legend of Blue Eyes White Dragon'
     ])
   })
 
@@ -1421,9 +1452,9 @@ describe('Scan page', () => {
     await run()
     const u = user()
     await u.click(screen.getByRole('combobox', { name: 'Rarity for Dark Magician' }))
-    expect(screen.getAllByRole('option').map((o) => o.textContent)).toEqual([
-      'LOB-JP005 Legend of Blue Eyes White Dragon - Rare',
-      'SDJ-JP001 Legend of Blue Eyes White Dragon - Common'
+    expect(setsListed()).toEqual([
+      'LOB-JP005 Legend of Blue Eyes White Dragon',
+      'SDJ-JP001 Legend of Blue Eyes White Dragon'
     ])
     await u.keyboard('{Escape}')
 
@@ -1431,7 +1462,7 @@ describe('Scan page', () => {
     await u.click(screen.getByRole('combobox', { name: 'Set' }))
     await u.click(screen.getByRole('option', { name: 'Any set' }))
     await u.click(screen.getByRole('combobox', { name: 'Rarity for Dark Magician' }))
-    expect(screen.getAllByRole('option')).toHaveLength(3)
+    expect(setsListed()).toHaveLength(3)
   })
 
   it('a code read in another language still lists its rarities', async () => {
@@ -1448,10 +1479,88 @@ describe('Scan page', () => {
     await run()
     const u = user()
     await u.click(screen.getByRole('combobox', { name: 'Rarity for Dark Magician' }))
-    expect(screen.getAllByRole('option').map((o) => o.textContent)).toEqual([
+    expect(setsListed()).toEqual([])
+    expect(versionsListed()).toEqual([
       'LOCR-JP036 Legend of Blue Eyes White Dragon - Common',
       'LOCR-JP036 Legend of Blue Eyes White Dragon - Secret Rare'
     ])
+  })
+
+  it('the printing dropdown splits sets from versions, searchable and keyboard-driven', async () => {
+    localStorage.setItem('language.filter', 'all')
+    const options = [
+      printing({ printingId: 401, setCode: 'LOB-EN005', rarity: 'Ultra Rare' }),
+      printing({
+        printingId: 402,
+        setCode: 'SDY-006',
+        setName: 'Starter Deck: Yugi',
+        rarity: 'Common'
+      }),
+      printing({
+        printingId: 403,
+        setCode: 'SDY-006',
+        setName: 'Starter Deck: Yugi',
+        rarity: 'Rare'
+      }),
+      printing({ printingId: 404, setCode: 'MRD-001', setName: 'Metal Raiders', rarity: 'Common' })
+    ]
+    localStorage.setItem(
+      SESSION_KEY,
+      JSON.stringify([
+        row({
+          key: 'c1:46986414',
+          printingId: 403,
+          setCode: 'SDY-006',
+          rarity: 'Rare',
+          flag: null,
+          via: 'art',
+          options
+        })
+      ])
+    )
+    await renderScan()
+    await run()
+    const u = user()
+    const picker = screen.getByRole('combobox', { name: 'Rarity for Dark Magician' })
+    await u.click(picker)
+    expect(setsListed()).toEqual([
+      'LOB-EN005 Legend of Blue Eyes White Dragon',
+      'SDY-006 Starter Deck: Yugi',
+      'MRD-001 Metal Raiders'
+    ])
+    // It opens on the picked printing's set, with that printing marked.
+    expect(screen.getByRole('listbox', { name: /^Versions/ })).toHaveAccessibleName(
+      'Versions in SDY-006 Starter Deck: Yugi'
+    )
+    expect(versionsListed()).toEqual([
+      'SDY-006 Starter Deck: Yugi - Common',
+      'SDY-006 Starter Deck: Yugi - Rare'
+    ])
+    expect(
+      screen.getByRole('option', { name: 'SDY-006 Starter Deck: Yugi - Rare' })
+    ).toHaveAttribute('aria-selected', 'true')
+
+    // A rarity keeps the sets that came in it.
+    const search = screen.getByRole('combobox', { name: 'Search code, rarity or set…' })
+    await u.type(search, 'common')
+    expect(setsListed()).toEqual(['SDY-006 Starter Deck: Yugi', 'MRD-001 Metal Raiders'])
+    expect(versionsListed()).toEqual(['SDY-006 Starter Deck: Yugi - Common'])
+    await u.clear(search)
+
+    // Left to the sets, down a set, right to its versions, Enter picks.
+    await u.keyboard('{ArrowLeft}{ArrowDown}')
+    expect(versionsListed()).toEqual(['MRD-001 Metal Raiders - Common'])
+    await u.keyboard('{ArrowRight}{Enter}')
+    const saved = JSON.parse(localStorage.getItem(SESSION_KEY)!) as ScanRow[]
+    expect(saved[0]).toMatchObject({ printingId: 404, setCode: 'MRD-001', rarity: 'Common' })
+    expect(screen.queryByRole('listbox', { name: 'Sets' })).not.toBeInTheDocument()
+
+    // Up and down move within the versions; Enter on a set moves over to its versions.
+    await u.click(picker)
+    await u.keyboard('{ArrowLeft}{ArrowUp}{Enter}{ArrowDown}{Enter}')
+    expect((JSON.parse(localStorage.getItem(SESSION_KEY)!) as ScanRow[])[0]).toMatchObject({
+      printingId: 403
+    })
   })
 
   it('New scans as is searchable and remembered', async () => {
@@ -1741,6 +1850,51 @@ describe('Pokémon on the Scan page', () => {
     expect(screen.getByLabelText('Price of Pikachu')).toHaveTextContent('$3.50')
     expect(screen.queryByText('Check version')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Add 1 card to collection' })).toBeEnabled()
+  })
+
+  it("a Pokémon card's reprints list as sets, each with its versions and prices", async () => {
+    localStorage.setItem(
+      SESSION_KEY,
+      JSON.stringify([
+        row({
+          key: '501:500',
+          cardId: 5,
+          name: 'Pikachu',
+          imageId: 500,
+          printingId: 502,
+          setCode: 'PAL 045/193',
+          rarity: 'Reverse Holofoil',
+          options: [
+            pkmOption({}),
+            pkmOption({ printingId: 502, rarity: 'Reverse Holofoil', price: 3.5 }),
+            pkmOption({
+              printingId: 601,
+              cardId: 6,
+              setName: 'Journey Together',
+              setCode: 'JTG 149/159',
+              price: 0.12
+            })
+          ],
+          flag: null,
+          via: 'art',
+          game: 'pkm'
+        })
+      ])
+    )
+    await renderPkm()
+    const u = user()
+    await u.click(screen.getByRole('combobox', { name: 'Version for Pikachu' }))
+    expect(setsListed()).toEqual(['PAL 045/193 Paldea Evolved', 'JTG 149/159 Journey Together'])
+    expect(
+      within(screen.getByRole('listbox', { name: /^Versions/ }))
+        .getAllByRole('option')
+        .map((o) => o.textContent)
+    ).toEqual(['Normal $1.00', 'Reverse Holofoil $3.50'])
+    await u.click(screen.getByRole('option', { name: 'JTG 149/159 Journey Together' }))
+    await u.click(
+      screen.getByRole('option', { name: 'JTG 149/159 Journey Together - Normal · $0.12' })
+    )
+    expect(screen.getByLabelText('Price of Pikachu')).toHaveTextContent('$0.12')
   })
 
   it('scans Pokémon with its own engine and fingerprints, with no rarity default', async () => {

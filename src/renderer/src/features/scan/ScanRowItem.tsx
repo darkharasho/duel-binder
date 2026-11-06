@@ -18,7 +18,8 @@ import { cn } from '@/lib/utils'
 import { ownedText, surePrinting, useOwned } from './owned'
 import type { ScanDraft } from './resolve'
 import { GLASS, photoFor, priceOf, priceRange, printingOf, versionToPick } from './scanLook'
-import { OptionLabel, SearchPicker, type PickerOption } from './SearchPicker'
+import { PrintingPicker } from './PrintingPicker'
+import { OptionLabel, type PickerOption } from './SearchPicker'
 import type { ScanRow } from './session'
 
 // eslint-disable-next-line react-refresh/only-export-components -- shared with the phone's last-scan card
@@ -189,14 +190,13 @@ export const ScanRowItem = memo(function ScanRowItem({
             </span>
           )}
         </p>
-        <SearchPicker
+        <PrintingPicker
           label={pickerLabel(row)}
           value={current === null ? null : String(current)}
           options={choices}
           onPick={pick}
           searchPlaceholder="Search code, rarity or set…"
           disabled={disabled}
-          badges
           className="mt-1.5 h-8 max-w-full justify-start gap-1.5 rounded-full border-white/[0.12] bg-white/[0.08] px-2.5 text-xs shadow-none dark:bg-white/[0.08] dark:hover:bg-white/[0.14]"
           renderTrigger={(picked) => (
             <>

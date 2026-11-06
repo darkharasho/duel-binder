@@ -1,5 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import { choicesFor } from '../../src/renderer/src/features/scan/ScanRowItem'
+import {
+  activeGroup,
+  filterGroups,
+  groupKeyOf,
+  groupPrintings
+} from '../../src/renderer/src/features/scan/printingGroups'
+import type { PickerOption } from '../../src/renderer/src/features/scan/SearchPicker'
 import type { ScanRow } from '../../src/renderer/src/features/scan/session'
 import type { ScanPrinting } from '../../src/shared/scan/types'
 
@@ -117,5 +124,72 @@ describe('choicesFor', () => {
       ['SV4 201/182', 'Paradox Rift', 'Holofoil', '$3.00']
     ])
     expect(choices[1].search).toContain('paradox rift')
+  })
+})
+
+describe('groupPrintings', () => {
+  const opt = (
+    key: string,
+    badge: string | undefined,
+    title: string,
+    rarity?: string
+  ): PickerOption => ({
+    key,
+    label: [badge, rarity ? `${title} - ${rarity}` : title].filter(Boolean).join(' '),
+    search: [badge, title, rarity].filter(Boolean).join(' ').toLowerCase(),
+    badge,
+    title,
+    rarity
+  })
+
+  it('makes one set per code and set name, in order, with its rarities as versions', () => {
+    const groups = groupPrintings([
+      opt('1', 'LOB-EN005', 'Legend of Blue Eyes', 'Common'),
+      opt('2', 'SDY-006', 'Starter Deck: Yugi', 'Common'),
+      opt('3', 'LOB-EN005', 'Legend of Blue Eyes', 'Rare'),
+      // A native-script set's name isn't shown: its title is the rarity, so it groups by code.
+      opt('4', 'LOB-JP005', 'Rare'),
+      opt('5', 'LOB-JP005', 'Secret Rare')
+    ])
+    expect(groups.map((g) => [g.badge, g.title, g.versions.map((v) => v.text)])).toEqual([
+      ['LOB-EN005', 'Legend of Blue Eyes', ['Common', 'Rare']],
+      ['SDY-006', 'Starter Deck: Yugi', ['Common']],
+      ['LOB-JP005', '', ['Rare', 'Secret Rare']]
+    ])
+    expect(groupKeyOf(groups, '3')).toBe(groups[0].key)
+    expect(groupKeyOf(groups, '9')).toBeNull()
+  })
+
+  it('puts options with no set in one group, showing their labels', () => {
+    const [only, ...rest] = groupPrintings([
+      { key: '1', label: 'Normal · $1.00' },
+      { key: '2', label: 'Reverse Holofoil · $3.50' }
+    ])
+    expect(rest).toEqual([])
+    expect(only.versions.map((v) => v.text)).toEqual(['Normal · $1.00', 'Reverse Holofoil · $3.50'])
+  })
+
+  it('filters sets by code or name, or by holding a matching version', () => {
+    const groups = groupPrintings([
+      opt('1', 'LOB-EN005', 'Legend of Blue Eyes', 'Common'),
+      opt('2', 'LOB-EN005', 'Legend of Blue Eyes', 'Rare'),
+      opt('3', 'SDY-006', 'Starter Deck: Yugi', 'Common')
+    ])
+    const by = (q: string): string[][] =>
+      filterGroups(groups, q).map((g) => [g.badge!, ...g.versions.map((v) => v.text)])
+    expect(by('')).toEqual([
+      ['LOB-EN005', 'Common', 'Rare'],
+      ['SDY-006', 'Common']
+    ])
+    expect(by('legend')).toEqual([['LOB-EN005', 'Common', 'Rare']])
+    expect(by('common')).toEqual([
+      ['LOB-EN005', 'Common'],
+      ['SDY-006', 'Common']
+    ])
+    expect(by('lob rare')).toEqual([['LOB-EN005', 'Rare']])
+    expect(by('zzz')).toEqual([])
+    // The chosen set stays while listed; else the first listed shows.
+    expect(activeGroup(filterGroups(groups, 'common'), groups[1].key)?.badge).toBe('SDY-006')
+    expect(activeGroup(filterGroups(groups, 'rare'), groups[1].key)?.badge).toBe('LOB-EN005')
   })
 })

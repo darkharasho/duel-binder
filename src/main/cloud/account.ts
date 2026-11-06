@@ -5,6 +5,7 @@ import { deleteMeta, getMeta, setMeta } from '../db/meta'
 import { gamesOf, type Me } from '../../shared/cloud'
 import { FRIENDS_SIGNED_OUT, OFFLINE_MESSAGE } from '../../shared/friends'
 import type { PortalChannel } from '../../shared/portal'
+import type { TrainingSend } from '../../shared/training'
 import type { EmailAuthReply, EmailAuthView, EmailStep } from '../../shared/emailAuth'
 import type { AccountStatus, SyncStatus } from '../../shared/types'
 import type { CatalogService } from '../catalog/service'
@@ -112,6 +113,11 @@ export interface AccountService {
   reportUsage(events: unknown): Promise<void>
   /** Sends an anonymous error report when signed in and online; drops it otherwise. Never rejects. */
   reportError(details: unknown): Promise<void>
+  /**
+   * A training photo call (upload, delete or the counts) as the signed-in account. Never rejects:
+   * signed out answers `signed-out`, and a 401 also signs the account out.
+   */
+  training(send: (client: CloudClient) => Promise<TrainingSend>): Promise<TrainingSend>
   start(): void
   stop(): void
 }
@@ -613,6 +619,17 @@ export function createAccountService(deps: AccountDeps): AccountService {
       } catch {
         // Best effort, and an older portal has no such route: never a reason to bother anyone.
       }
+    },
+
+    async training(send) {
+      const current = token
+      if (current === null) return { ok: false, retry: true, reason: 'signed-out' }
+      const mine = session
+      // Its own timeouts: a photo upload gets longer than PORTAL_TIMEOUT_MS.
+      const r = await send(deps.client(current, { signal: portalAbort.signal }))
+      if (!r.ok && r.reason === 'signed-out' && mine === session && token === current)
+        serverSignedOut()
+      return r
     },
 
     start() {

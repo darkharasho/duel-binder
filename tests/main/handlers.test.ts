@@ -43,7 +43,8 @@ const fakeAccount = (signedIn = false): FakeAccount => ({
   updateUser: vi.fn(),
   requestPrices: vi.fn(async () => {}),
   reportUsage: vi.fn(async () => {}),
-  reportError: vi.fn(async () => {})
+  reportError: vi.fn(async () => {}),
+  training: vi.fn(async () => ({ ok: true as const, summary: null }))
 })
 
 async function makeHandlers(opts: { signedIn?: boolean } = {}) {

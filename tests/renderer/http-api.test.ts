@@ -124,6 +124,8 @@ describe('createHttpApi', () => {
     const { api } = setup(reply(200, {}))
     for (const channel of INVOKE_CHANNELS) {
       const [ns, method] = channel.split(':')
+      // Training photos are the desktop's only (Api.training is optional); the web has none.
+      if (ns === 'training') continue
       const fn = (api as never as Record<string, Record<string, unknown>>)[ns][method]
       expect(typeof fn, channel).toBe('function')
     }

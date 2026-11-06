@@ -36,6 +36,12 @@ import type {
 } from '../../shared/scanSessions'
 import type { GameId } from '../../shared/games'
 import type { PortalChannel } from '../../shared/portal'
+import {
+  labelParams,
+  trainingAnswer,
+  type TrainingLabel,
+  type TrainingSend
+} from '../../shared/training'
 
 /** The portal answered 401: the desktop token is unknown, expired or revoked. */
 export class CloudAuthError extends Error {
@@ -111,11 +117,20 @@ export interface CloudClient {
   errorReport(report: ErrorReport): Promise<void>
   /** Calls a portal RPC channel for `game` (default: none sent, which the server takes as Yu-Gi-Oh!). */
   rpc<T>(channel: PortalChannel, args: unknown[], game?: GameId): Promise<T>
+  /** Sends one labelled training photo (idempotent per client id). Never throws. */
+  trainingUpload(clientId: string, label: TrainingLabel, jpeg: ArrayBuffer): Promise<TrainingSend>
+  /** Deletes this account's training photo with that client id, if the server has it. Never throws. */
+  trainingDelete(clientId: string): Promise<TrainingSend>
+  /** This account's training photo counts for `game`. Never throws. */
+  trainingSummary(game: GameId): Promise<TrainingSend>
 }
 
 const DEFAULT_TIMEOUT_MS = 30_000
 /** Catalog pages are large, so they get longer than an ordinary call. */
 const CATALOG_TIMEOUT_MS = 120_000
+/** A training photo is up to 8 MB, so its upload gets longer than the other training calls. */
+const TRAINING_UPLOAD_TIMEOUT_MS = 60_000
+const TRAINING_TIMEOUT_MS = 15_000
 
 /** The portal API as the desktop calls it, with its desktop token as a Bearer token. */
 export function createCloudClient(opts: {
@@ -195,7 +210,38 @@ export function createCloudClient(opts: {
     }
   }
 
+  /** A /api/training/ call as a TrainingSend; offline when the portal can't be reached. */
+  async function training(
+    path: string,
+    init: { method: string; headers?: Record<string, string>; body?: ArrayBuffer },
+    callTimeoutMs: number
+  ): Promise<TrainingSend> {
+    const signals = [AbortSignal.timeout(callTimeoutMs), ...(opts.signal ? [opts.signal] : [])]
+    try {
+      const res = await doFetch(`${base}/api/training/${path}`, {
+        method: init.method,
+        headers: { ...init.headers, authorization: `Bearer ${opts.token}` },
+        body: init.body,
+        redirect: 'error',
+        signal: AbortSignal.any(signals)
+      })
+      return await trainingAnswer(res)
+    } catch {
+      return { ok: false, retry: true, reason: 'offline' }
+    }
+  }
+
   return {
+    trainingUpload: (clientId, label, jpeg) =>
+      training(
+        `photos/${encodeURIComponent(clientId)}?${labelParams(label)}`,
+        { method: 'POST', headers: { 'content-type': 'image/jpeg' }, body: jpeg },
+        TRAINING_UPLOAD_TIMEOUT_MS
+      ),
+    trainingDelete: (clientId) =>
+      training(`photos/${encodeURIComponent(clientId)}`, { method: 'DELETE' }, TRAINING_TIMEOUT_MS),
+    trainingSummary: (game) =>
+      training(`summary?game=${encodeURIComponent(game)}`, { method: 'GET' }, TRAINING_TIMEOUT_MS),
     me: () => call<Me>('/api/me', 'GET'),
     push: async (entries) =>
       (await call<PushResponse>('/api/sync/push', 'POST', { entries })).results,

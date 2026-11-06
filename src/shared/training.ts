@@ -25,7 +25,39 @@ export interface TrainingLabel {
   takenAt: string
 }
 
-export interface TrainingSummary { total: number; today: number; dailyCap: number }
+export interface TrainingSummary {
+  total: number
+  today: number
+  dailyCap: number
+}
+
+/** How a training photo call went; `retry` says whether to keep the outbox item for later. */
+export type TrainingSend =
+  | { ok: true; summary: TrainingSummary | null }
+  | {
+      ok: false
+      retry: boolean
+      reason: 'offline' | 'signed-out' | 'daily-cap' | 'too-big' | 'rejected'
+    }
+
+/** How a /api/training/ answer reads as a TrainingSend (401 is the caller's: it signs out). */
+export async function trainingAnswer(res: Response): Promise<TrainingSend> {
+  if (res.status === 401) return { ok: false, retry: true, reason: 'signed-out' }
+  if (res.status >= 500) return { ok: false, retry: true, reason: 'offline' }
+  if (res.status === 429) return { ok: false, retry: true, reason: 'daily-cap' }
+  if (res.status === 413) return { ok: false, retry: false, reason: 'too-big' }
+  if (res.status !== 200 && res.status !== 204)
+    return { ok: false, retry: false, reason: 'rejected' }
+  if (res.status === 204) return { ok: true, summary: null }
+  const body = (await res.json().catch(() => null)) as Partial<TrainingSummary> | null
+  return {
+    ok: true,
+    summary:
+      body && typeof body.total === 'number' && typeof body.today === 'number'
+        ? { total: body.total, today: body.today, dailyCap: Number(body.dailyCap) }
+        : null
+  }
+}
 
 export function labelParams(l: TrainingLabel): URLSearchParams {
   return new URLSearchParams({
@@ -66,7 +98,12 @@ export function readLabel(q: URLSearchParams, now: Date): TrainingLabel | null {
   const t = at.getTime()
   if (Number.isNaN(t) || t < now.getTime() - 30 * DAY_MS || t > now.getTime() + DAY_MS) return null
   return {
-    game, cardId, printingId, holder: holder as TrainingHolder, device, appVersion,
+    game,
+    cardId,
+    printingId,
+    holder: holder as TrainingHolder,
+    device,
+    appVersion,
     takenAt: at.toISOString()
   }
 }

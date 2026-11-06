@@ -38,7 +38,13 @@ import { scanRefs } from '../../main/repo/scanRefs'
 import { readBody } from '../../shared/scan/readBody'
 import type { FingerprintStatus } from '../../shared/scan/types'
 import type { CollectionStats, UnsyncedEntry } from '../../shared/types'
-import { labelParams, type TrainingLabel, type TrainingSummary } from '../../shared/training'
+import {
+  labelParams,
+  trainingAnswer,
+  type TrainingLabel,
+  type TrainingSend,
+  type TrainingSummary
+} from '../../shared/training'
 import { PHONE_FORMAT } from './phoneSchema'
 
 export type PhoneAccount = { state: 'signed-out' } | { state: 'signed-in'; user: Me }
@@ -63,14 +69,7 @@ export interface PhoneSyncState {
   signedOut: boolean
 }
 
-/** How a training photo call went; `retry` says whether to keep the outbox item for later. */
-export type TrainingSend =
-  | { ok: true; summary: TrainingSummary | null }
-  | {
-      ok: false
-      retry: boolean
-      reason: 'offline' | 'signed-out' | 'daily-cap' | 'too-big' | 'rejected'
-    }
+export type { TrainingSend } from '../../shared/training'
 
 export interface PhoneStore {
   account(): Promise<PhoneAccount>
@@ -359,24 +358,8 @@ export function createPhoneStore(deps: {
     } catch {
       return { ok: false, retry: true, reason: 'offline' }
     }
-    if (res.status === 401) {
-      if (token() === t) serverSignedOut()
-      return { ok: false, retry: true, reason: 'signed-out' }
-    }
-    if (res.status >= 500) return { ok: false, retry: true, reason: 'offline' }
-    if (res.status === 429) return { ok: false, retry: true, reason: 'daily-cap' }
-    if (res.status === 413) return { ok: false, retry: false, reason: 'too-big' }
-    if (res.status !== 200 && res.status !== 204)
-      return { ok: false, retry: false, reason: 'rejected' }
-    if (res.status === 204) return { ok: true, summary: null }
-    const body = (await res.json().catch(() => null)) as Partial<TrainingSummary> | null
-    return {
-      ok: true,
-      summary:
-        body && typeof body.total === 'number' && typeof body.today === 'number'
-          ? { total: body.total, today: body.today, dailyCap: Number(body.dailyCap) }
-          : null
-    }
+    if (res.status === 401 && token() === t) serverSignedOut()
+    return trainingAnswer(res)
   }
 
   /** Runs a call to the portal; a 401 signs the phone out before the error goes on. */

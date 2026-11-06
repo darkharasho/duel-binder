@@ -20,7 +20,15 @@ import type { ScanWindowManager } from '../scanWindow'
 import type { FingerprintStore } from '../scan/fingerprints'
 import { checkOcrBands, type Ocr } from '../scan/ocr'
 import { isOcrKind, isTextModel, readTexts } from '@shared/scan/ocr'
-import type { GameId } from '@shared/games'
+import { isGameId, type GameId } from '@shared/games'
+import {
+  CLIENT_ID_RE,
+  MAX_TRAINING_PHOTO_BYTES,
+  labelParams,
+  readLabel,
+  type TrainingLabel
+} from '@shared/training'
+import { checkPrintingIds } from '../cloud/priceRequests'
 import type { Me } from '@shared/cloud'
 import type { SignInProvider } from '@shared/account'
 import type { EmailStep } from '@shared/emailAuth'
@@ -65,6 +73,32 @@ export interface HandlerDeps {
   emitDataChanged(): void
   fingerprints: Record<GameId, FingerprintStore>
   ocr: Ocr
+}
+
+/** A training photo from the renderer, checked as the portal would check it; null when it isn't one. */
+export function checkTrainingUpload(
+  clientId: unknown,
+  label: unknown,
+  jpeg: unknown,
+  now = new Date()
+): { clientId: string; label: TrainingLabel; jpeg: ArrayBuffer } | null {
+  if (typeof clientId !== 'string' || !CLIENT_ID_RE.test(clientId)) return null
+  if (label === null || typeof label !== 'object') return null
+  let checked: TrainingLabel | null
+  try {
+    checked = readLabel(labelParams(label as TrainingLabel), now)
+  } catch {
+    return null
+  }
+  if (!checked) return null
+  const bytes =
+    jpeg instanceof ArrayBuffer
+      ? jpeg
+      : jpeg instanceof Uint8Array
+        ? (jpeg.buffer.slice(jpeg.byteOffset, jpeg.byteOffset + jpeg.byteLength) as ArrayBuffer)
+        : null
+  if (!bytes || bytes.byteLength === 0 || bytes.byteLength > MAX_TRAINING_PHOTO_BYTES) return null
+  return { clientId, label: checked, jpeg: bytes }
 }
 
 /** A renderer's parsed export, checked before it reaches the database. */
@@ -197,6 +231,34 @@ export function createHandlers({
     },
     'prices:request': (printingIds: unknown) => account.requestPrices(printingIds),
     'usage:report': (events: unknown) => account.reportUsage(events),
+    'training:upload': async (clientId: unknown, label: unknown, jpeg: unknown) => {
+      const checked = checkTrainingUpload(clientId, label, jpeg)
+      if (!checked) return { ok: false, retry: false, reason: 'rejected' } as const
+      return account.training((c) =>
+        c.trainingUpload(checked.clientId, checked.label, checked.jpeg)
+      )
+    },
+    'training:remove': async (clientId: unknown) => {
+      if (typeof clientId !== 'string' || !CLIENT_ID_RE.test(clientId))
+        return { ok: false, retry: false, reason: 'rejected' } as const
+      return account.training((c) => c.trainingDelete(clientId))
+    },
+    'training:summary': async (game: unknown) => {
+      if (typeof game !== 'string' || !isGameId(game)) return null
+      const r = await account.training((c) => c.trainingSummary(game))
+      return r.ok ? r.summary : null
+    },
+    'training:serverIds': async (printingIds: unknown) => {
+      const get = db.prepare(
+        'SELECT remote_id FROM card_printings WHERE id = ? AND remote_id IS NOT NULL'
+      )
+      const out: [number, number][] = []
+      for (const id of checkPrintingIds(printingIds)) {
+        const row = get.get(id) as { remote_id: number } | undefined
+        if (row) out.push([id, row.remote_id])
+      }
+      return out
+    },
     'errors:report': (details: unknown) => account.reportError(details),
     'errors:setEnabled': async (on: unknown) => errorReports.setEnabled(on === true),
     'sync:status': async () => catalog.status(),

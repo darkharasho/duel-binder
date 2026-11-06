@@ -1,6 +1,7 @@
 import type { PlaceholderRequest } from './placeholders'
 import type { ErrorDetails } from './errorReports'
 import type { UsageCounts } from './usage'
+import type { TrainingLabel, TrainingSend, TrainingSummary } from './training'
 import type { Language } from './languages'
 import type { ScanSession, ScanSessionCardDraft } from './scanSessions'
 import type {
@@ -263,6 +264,18 @@ export interface Api {
     /** Sends anonymous event totals; never rejects, and drops them when signed out or offline. */
     report(events: UsageCounts): Promise<void>
   }
+  /**
+   * The desktop only: testers' training photos (Contribute photos), as the signed-in account. The
+   * phone's screen calls its own store instead. None of these reject.
+   */
+  training?: {
+    upload(clientId: string, label: TrainingLabel, jpeg: ArrayBuffer): Promise<TrainingSend>
+    remove(clientId: string): Promise<TrainingSend>
+    /** This account's photo counts for `game`; null signed out, offline or refused. */
+    summary(game: GameId): Promise<TrainingSummary | null>
+    /** `[local printing id, server id]` for those of these printings the server knows. */
+    serverIds(printingIds: number[]): Promise<[number, number][]>
+  }
   errors: {
     /** Sends an anonymous, scrubbed error report; never rejects, and drops it when signed out or offline. */
     report(details: ErrorDetails): Promise<void>
@@ -438,6 +451,10 @@ export const INVOKE_CHANNELS = [
   'window:close',
   'window:isMaximized',
   'usage:report',
+  'training:upload',
+  'training:remove',
+  'training:summary',
+  'training:serverIds',
   'errors:report',
   'errors:setEnabled',
   'app:version',
@@ -493,10 +510,12 @@ export const SCAN_WINDOW_SEND = 'scanWindow:send'
 // subscriptions (sync.onProgress, app.onUpdateStatus) are excluded by type.
 type ApiInvokeChannel = {
   [N in keyof Api & string]: {
-    [M in keyof Api[N] & string]: Api[N][M] extends (...args: never[]) => Promise<unknown>
+    [M in keyof NonNullable<Api[N]> & string]: NonNullable<Api[N]>[M] extends (
+      ...args: never[]
+    ) => Promise<unknown>
       ? `${N}:${M}`
       : never
-  }[keyof Api[N] & string]
+  }[keyof NonNullable<Api[N]> & string]
 }[keyof Api & string]
 type Equals<A, B> =
   (<T>() => T extends A ? 1 : 2) extends <T>() => T extends B ? 1 : 2 ? true : false

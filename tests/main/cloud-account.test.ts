@@ -947,6 +947,20 @@ describe('account portal calls', () => {
     expect(new TokenStore(tokenFile(), fakeCipher).get()).toBeNull()
     expect(token).toBeTruthy()
   })
+
+  it('training calls answer signed-out without a token, and a 401 signs out', async () => {
+    const service = makeService()
+    const send = vi.fn(async () => ({ ok: true as const, summary: null }))
+    expect(await service.training(send)).toEqual({ ok: false, retry: true, reason: 'signed-out' })
+    expect(send).not.toHaveBeenCalled()
+
+    await signInAs(service, me(alice, 'alice'))
+    portal.serverDb.prepare('DELETE FROM sessions').run()
+    const r = await service.training((c) => c.trainingSummary('ygo'))
+    expect(r).toEqual({ ok: false, retry: true, reason: 'signed-out' })
+    expect(service.status().state).toBe('signed-out')
+    expect(service.isSignedIn()).toBe(false)
+  })
 })
 
 describe('price requests', () => {

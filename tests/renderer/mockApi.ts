@@ -180,6 +180,12 @@ export function createMockApi(overrides: DeepPartial<Api> = {}): Api {
       setActive: vi.fn(async () => undefined)
     },
     usage: { report: vi.fn(async () => undefined) },
+    training: {
+      upload: vi.fn(async () => ({ ok: true as const, summary: null })),
+      remove: vi.fn(async () => ({ ok: true as const, summary: null })),
+      summary: vi.fn(async () => null),
+      serverIds: vi.fn(async () => [])
+    },
     errors: { report: vi.fn(async () => undefined), setEnabled: vi.fn(async () => undefined) },
     sets: {
       list: vi.fn(async () => []),

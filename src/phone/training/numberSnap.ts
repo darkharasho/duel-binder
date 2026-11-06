@@ -3,10 +3,13 @@ import { findOpNumbers } from '@shared/scan/onePieceNumber'
 import type { OcrBand } from '@shared/scan/types'
 
 /**
- * The guide box on the preview the number is held in, as fractions of the preview: a wide strip
- * across the middle, so a number held close fills it.
+ * The guide box on the preview the number is held in, as fractions of the preview: a small strip
+ * in the middle, just big enough for the number. A wider one took in the card's type ("CP9") and
+ * rarity badge, which tesseract ran into the number ("CP9517-0712O"), and made testers hold the
+ * card nearly against the lens to fill it. On a 4K camera the number reads at a quarter of the
+ * box's width (Dub's OP17-071 photo, 2026-11-05).
  */
-export const SNAP_BOX = { left: 0.08, top: 0.4, width: 0.84, height: 0.2 } as const
+export const SNAP_BOX = { left: 0.25, top: 0.45, width: 0.5, height: 0.1 } as const
 
 /** Bands are scaled to at most this wide: tesseract reads a line no better any bigger. */
 const MAX_WIDTH = 1200

@@ -172,6 +172,32 @@ describe('desktop contribute photos', () => {
     await waitFor(async () => expect(await waiting()).toBe(0))
   })
 
+  it('picks the camera beside the controls; Esc in the camera list closes only the list', async () => {
+    const { getUserMedia } = stubCamera()
+    navigator.mediaDevices.enumerateDevices = vi.fn(async () => [
+      { deviceId: 'cam1', kind: 'videoinput', label: 'Desk webcam', groupId: 'g' },
+      { deviceId: 'cam2', kind: 'videoinput', label: 'Laptop camera', groupId: 'h' }
+    ]) as never
+    const onClose = vi.fn()
+    const user = userEvent.setup()
+    renderDesktop(onClose)
+    const picker = screen.getByRole('combobox', { name: 'Camera' })
+    await waitFor(() => expect(picker).toHaveTextContent('Desk webcam'))
+    await user.click(picker)
+    await user.keyboard('{Escape}')
+    expect(onClose).not.toHaveBeenCalled()
+    await user.click(screen.getByRole('combobox', { name: 'Camera' }))
+    await user.click(screen.getByRole('option', { name: 'Laptop camera' }))
+    await waitFor(() =>
+      expect(getUserMedia).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          video: expect.objectContaining({ deviceId: { exact: 'cam2' } })
+        })
+      )
+    )
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
   it('typing elsewhere goes to the number box, and Esc closes', async () => {
     const user = userEvent.setup()
     const onClose = vi.fn()

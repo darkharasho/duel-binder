@@ -64,4 +64,63 @@ describe('PlaceholdersButton', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Placeholders' }))
     expect(screen.getByRole('button', { name: 'Save PDF' })).toBeDisabled()
   })
+
+  describe('a set with finishes', () => {
+    const finish = (rarity: string, owned: number, number: number) => ({
+      rarity,
+      owned,
+      codes: [{ setCode: `DLR ${number}/103` }]
+    })
+    const pkm = (number: number, ...rarities: ReturnType<typeof finish>[]): ChecklistCard =>
+      ({
+        ...card(
+          number,
+          rarities.reduce((n, r) => n + r.owned, 0)
+        ),
+        rarities
+      }) as ChecklistCard
+    const cards = [
+      pkm(2, finish('Reverse Holofoil', 0, 2), finish('Holofoil', 1, 2)),
+      pkm(1, finish('Normal', 1, 1), finish('Reverse Holofoil', 0, 1))
+    ]
+    const openFinishes = async (): Promise<ReturnType<typeof vi.fn>> => {
+      const save = vi.fn(async (_request: PlaceholderRequest) => '/tmp/x.pdf' as string | null)
+      renderWithProviders(<PlaceholdersButton set={set} cards={cards} />, {
+        api: createMockApi({ placeholders: { save } })
+      })
+      await userEvent.click(screen.getByRole('button', { name: 'Placeholders' }))
+      return save
+    }
+
+    it('prints a pocket per missing finish, reverse holos included by default', async () => {
+      const save = await openFinishes()
+      expect(screen.getByRole('button', { name: 'Reverse Holofoil' })).toHaveAttribute(
+        'aria-pressed',
+        'true'
+      )
+      expect(screen.getByRole('radio', { name: 'All (4)' })).toBeInTheDocument()
+      await userEvent.click(screen.getByRole('button', { name: 'Save PDF' }))
+      await waitFor(() => expect(save).toHaveBeenCalled())
+      expect(save.mock.calls[0]?.[0].cards).toMatchObject([
+        { name: 'Card 1', number: 'DLR 1/103', finish: 'Reverse Holofoil' },
+        { name: 'Card 2', number: 'DLR 2/103', finish: 'Reverse Holofoil' }
+      ])
+    })
+
+    it('leaves out a finish turned off, in finish order per card', async () => {
+      const save = await openFinishes()
+      await userEvent.click(screen.getByRole('button', { name: 'Reverse Holofoil' }))
+      expect(screen.getByText('0 cards on 0 sheets.')).toBeInTheDocument()
+      await userEvent.click(screen.getByRole('radio', { name: 'All (2)' }))
+      await userEvent.click(screen.getByRole('button', { name: 'Reverse Holofoil' }))
+      await userEvent.click(screen.getByRole('button', { name: 'Save PDF' }))
+      await waitFor(() => expect(save).toHaveBeenCalled())
+      expect(save.mock.calls[0]?.[0].cards.map((c) => `${c.name} ${c.finish}`)).toEqual([
+        'Card 1 Normal',
+        'Card 1 Reverse Holofoil',
+        'Card 2 Holofoil',
+        'Card 2 Reverse Holofoil'
+      ])
+    })
+  })
 })

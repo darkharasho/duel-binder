@@ -1,4 +1,4 @@
-import { fireEvent, screen } from '@testing-library/react'
+import { fireEvent, screen, within } from '@testing-library/react'
 import App from '@/App'
 import { SettingsPage } from '@/features/settings/SettingsPage'
 import { createMockApi, renderWithProviders } from './mockApi'
@@ -26,19 +26,20 @@ describe('web build', () => {
     expect(screen.queryByRole('button', { name: 'Close' })).not.toBeInTheDocument()
   })
 
-  it('shows the Admin link only to the admin account', async () => {
+  it('shows the Admin section only to the admin account', async () => {
     stubMe({ ...seto, admin: true })
-    const { unmount } = renderWithProviders(<App />, {
-      api: createMockApi({ window: { platform: 'web' } })
-    })
-    expect(await screen.findByRole('link', { name: 'Admin' })).toHaveAttribute('href', '/admin')
+    const api = createMockApi({ window: { platform: 'web' } })
+    const { unmount } = renderWithProviders(<App />, { api })
+    const admin = await screen.findByRole('group', { name: 'Admin' })
+    fireEvent.click(within(admin).getByRole('button', { name: 'Overview' }))
+    expect(api.account.openAdmin).toHaveBeenCalledWith('overview')
     unmount()
 
     stubMe(seto)
     renderWithProviders(<App />, { api: createMockApi({ window: { platform: 'web' } }) })
     await vi.waitFor(() => expect(fetch).toHaveBeenCalledWith('/api/me', expect.anything()))
     await screen.findByRole('button', { name: 'Dashboard' })
-    expect(screen.queryByRole('link', { name: 'Admin' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('group', { name: 'Admin' })).not.toBeInTheDocument()
   })
 
   it('web settings shows the account and sign-out', async () => {

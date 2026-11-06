@@ -1,5 +1,7 @@
 import type { Mat } from '@techstark/opencv-js'
 import type { ArtMatch, FingerprintIndex } from '@shared/scan/fingerprintFile'
+import { cardBackDistance } from '@shared/scan/cardBacks'
+import { artHash } from '@shared/scan/fingerprint'
 import {
   ART_BOX_JITTER,
   ART_MAX_DISTANCE,
@@ -734,6 +736,94 @@ export function nudgeOutline(
   return at
 }
 
+/** Side of the square an art box is straightened to before it's shrunk for hashing. */
+const ART_PATCH = 128
+/**
+ * How many of the cards placed round inner frames are matched in full first (shortlist): those
+ * whose art, where it would lie, comes closest. Only when none of them matches are the rest. For a
+ * profile with art windows (windowArt) only: a held Pokémon card's cards round its art window
+ * number dozens (one for each layout, each way up), a Yu-Gi-Oh card's round its inner frame two.
+ */
+const SHORTLIST = 4
+
+/**
+ * How close the art where profile's art box falls on a card at quad comes to any artwork, either
+ * way up, and to a card back: the art box straightened straight from the frame and hashed, two
+ * hashes and lookups, a fraction of rankArt's (which also looks for the art window on a
+ * straightened card, each way up). Too rough to judge a card by, as rankArt's window search makes
+ * up for an inner frame taken for the wrong layout's, but enough to order the dozens of cards placed
+ * round inner frames (aroundInnerFrame) so the likeliest are matched first.
+ */
+export function artAt(
+  cv: CV,
+  frame: Mat,
+  quad: Quad,
+  index: FingerprintIndex,
+  candidates: ReadonlySet<number> | undefined,
+  profile: ScanProfile
+): { distance: number; back?: number } {
+  const at = homography(quad)
+  const to = cv.matFromArray(4, 1, cv.CV_32FC2, [
+    0,
+    0,
+    ART_PATCH,
+    0,
+    ART_PATCH,
+    ART_PATCH,
+    0,
+    ART_PATCH
+  ])
+  const patch = new cv.Mat()
+  const small = new cv.Mat()
+  return using([to, patch, small], () => {
+    let distance = Infinity
+    let back: number | undefined
+    for (const [x0, y0, x1, y1] of profile.artBoxes)
+      for (const corners of [
+        [
+          [x0, y0],
+          [x1, y0],
+          [x1, y1],
+          [x0, y1]
+        ],
+        // Upside down: the box turned round the card's centre, its corners still from its top-left.
+        [
+          [1 - x0, 1 - y0],
+          [1 - x1, 1 - y0],
+          [1 - x1, 1 - y1],
+          [1 - x0, 1 - y1]
+        ]
+      ]) {
+        const from = cv.matFromArray(
+          4,
+          1,
+          cv.CV_32FC2,
+          corners.flatMap(([u, v]) => at(u, v))
+        )
+        const m = cv.getPerspectiveTransform(from, to)
+        try {
+          cv.warpPerspective(
+            frame,
+            patch,
+            m,
+            new cv.Size(ART_PATCH, ART_PATCH),
+            cv.INTER_LINEAR,
+            cv.BORDER_REPLICATE
+          )
+        } finally {
+          from.delete()
+          m.delete()
+        }
+        cv.resize(patch, small, new cv.Size(32, 32), 0, 0, cv.INTER_AREA)
+        const hash = artHash({ width: 32, height: 32, data: small.data })
+        const d = cardBackDistance(profile.game, hash)
+        if (d !== null) back = Math.min(back ?? d, d)
+        distance = Math.min(distance, index.nearest(hash, 1, candidates)[0]?.distance ?? Infinity)
+      }
+    return back === undefined ? { distance } : { distance, back }
+  })
+}
+
 /**
  * The card's outline were quad one of its inner frames (profile.innerFrames), either way up: a
  * black (Xyz) card's edge barely shows against a dark desk, palm or sleeve, so its outline may not
@@ -886,6 +976,17 @@ export function recognizeArt(
       }
       return best
     }
+    // The few of quads whose art, where it would lie on the card, comes closest to any artwork.
+    const shortlist = (quads: Quad[]): Quad[] =>
+      quads
+        .map((quad) => {
+          const { distance, back } = artAt(cv, frame, quad, index, candidates, profile)
+          if (back !== undefined && back <= CARD_BACK_MAX_DISTANCE) backs.push({ quad, back })
+          return { quad, distance }
+        })
+        .sort((a, b) => a.distance - b.distance)
+        .slice(0, SHORTLIST)
+        .map((x) => x.quad)
     const { quads, windows } = searchCandidates(cv, frame, profile)
     let best = closest(quads)
     const outlines = [...scored].sort((a, b) => a.distance - b.distance).slice(0, NUDGE_QUADS)
@@ -896,13 +997,20 @@ export function recognizeArt(
     // held card's art window.
     if ((!best || best.distance > ART_MAX_DISTANCE) && (holderPass || !profile.holderSearch)) {
       const short = profile.holderSearch && !thorough
-      const around = closest(
-        [
-          ...(short ? quads.slice(0, LIVE_OUTLINES) : quads),
-          ...(short ? windows.slice(0, LIVE_WINDOWS) : windows)
-        ].flatMap((q) => aroundInnerFrame(q, profile.innerFrames)),
-        profile.holderSearch ? INNER_SURE_DISTANCE : -1
-      )
+      const placed = [
+        ...(short ? quads.slice(0, LIVE_OUTLINES) : quads),
+        ...(short ? windows.slice(0, LIVE_WINDOWS) : windows)
+      ].flatMap((q) => aroundInnerFrame(q, profile.innerFrames))
+      const sure = profile.holderSearch ? INNER_SURE_DISTANCE : -1
+      const first = profile.windowArt ? shortlist(placed) : placed
+      let around = closest(first, sure)
+      if (!around || around.distance > ART_MAX_DISTANCE) {
+        const rest = closest(
+          placed.filter((q) => !first.includes(q)),
+          sure
+        )
+        if (rest && (!around || rest.distance < around.distance)) around = rest
+      }
       if (around && (!best || around.distance < best.distance)) {
         if (best && profile.windowShape) runnerUp = best.quad
         best = around

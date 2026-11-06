@@ -3,13 +3,16 @@
 // app's own path per photo: the vision worker's analyze (detect, warp, art, version cues, slab),
 // tesseract for the collector number and the language (one read per model, as the scan window
 // reads scan:readText), then resolveSignals with the app's lookups. The photos and the catalog
-// stay out of the (public) repo, so this runs only when SCAN_PKM_DIR points at them:
+// stay out of the (public) repo, so this runs only when SCAN_PKM_DIR points at them. CI's
+// scan-photos job runs the owner's photos (pkm-truth.owner.json) live at the app's crop, from a copy
+// in the private darkharasho/duel-binder-scan-corpus repo (pkm/); push changes there too.
 //   SCAN_PKM_DIR=~/scan-capture   pkm-truth.json, the photos it names, and pkm-work/ (catalog.sqlite
 //                                 and fingerprints-pkm.bin, from scripts/scan/pokemon-corpus/prep.ts)
 //   SCAN_PKM_TRUTH=<file>         another truth file (default SCAN_PKM_DIR/pkm-truth.json)
 //   SCAN_PKM_OUT=<file>           also write the per-photo rows there as JSON, with every signal the
 //                                 resolver takes (raws), so resolver changes can be replayed offline
 //   SCAN_PKM_LIVE=1               as a live frame: short holder search, language preset from the truth
+//                                 (English or Japanese; photos in other languages are left out)
 //   SCAN_PKM_CROP=1               scan each photo at the app's framing: the live scan's centre crop
 //                                 (810x1080 of a 1080p frame), not the whole photo
 //   SCAN_PKM_DIR=~/scan-capture npm test -- --silent=false tests/main/scan-pkm-real.test.ts
@@ -193,6 +196,12 @@ describe.skipIf(!READY)('the Pokémon scanner on real photos', () => {
       }
       if (!existsSync(path)) {
         skipped.push(`${t.file}: no such file`)
+        continue
+      }
+      // A live frame's language is the one picked in the scan window, preset here from the truth;
+      // only English and Japanese are, so a Chinese card would be scanned as English and named.
+      if (LIVE && t.language && t.language !== preset(t)) {
+        skipped.push(`${t.file}: no live preset for ${t.language}`)
         continue
       }
       let img: RgbaImage

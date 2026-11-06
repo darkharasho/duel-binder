@@ -56,4 +56,24 @@ describe('placeholder sheets', () => {
     expect(() => checkPlaceholderRequest(bad)).toThrow()
     expect(checkPlaceholderRequest({ ...request(1) })).toBeTruthy()
   })
+  it("names a pocket's own set and code on a sheet that mixes sets", () => {
+    const base = request(1).cards[0]
+    const mixed = {
+      ...request(1),
+      setName: 'My binder',
+      setCode: '',
+      cards: [
+        { ...base, setName: 'Legend of Blue Eyes White Dragon', setCode: 'LOB' },
+        { ...base, imageId: 0, name: 'Any print' }
+      ]
+    }
+    const html = placeholderHtml(checkPlaceholderRequest(mixed))
+    expect(html).toContain('>Legend of Blue Eyes White Dragon</div>')
+    expect(html).toContain('>LOB</div>')
+    // The second pocket has no set of its own, no code to show and no art: just its name.
+    expect(html).toContain('>My binder</div>')
+    expect(html.match(/class="chip"/g)).toHaveLength(1)
+    expect(html).not.toContain('ygo-img://full/0')
+    expect(() => checkPlaceholderRequest({ ...mixed, cards: [{ ...base, setName: 5 }] })).toThrow()
+  })
 })

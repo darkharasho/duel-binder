@@ -367,6 +367,23 @@ export function listBinders(
   })
 }
 
+// A set's date: its own, else its English namesake's, as the Browse page dates them.
+const SET_DATE = 'COALESCE(s.tcg_date, es.tcg_date)'
+const SET_JOINS = `LEFT JOIN sets s ON s.game = p.game AND s.language = p.language AND s.set_name = p.set_name
+  LEFT JOIN sets es ON es.game = p.game AND es.language = 'en' AND es.set_name = p.set_name`
+
+/** Each card's first release: the earliest dated set of its listed printings, in any language. */
+function firstReleases(db: SqlDb, cardIds: number[], scope: Scope): Map<number, string> {
+  const rows = db
+    .prepare(
+      `SELECT p.card_id, MIN(${SET_DATE}) AS d FROM card_printings p ${SET_JOINS}
+       WHERE +p.game = ${scope.game} AND p.card_id IN ${IN_LIST} AND +p.contributed = 0
+       GROUP BY p.card_id`
+    )
+    .all(JSON.stringify(cardIds)) as { card_id: number; d: string | null }[]
+  return new Map(rows.flatMap((r) => (r.d ? [[r.card_id, r.d] as const] : [])))
+}
+
 const CARD_COLS = `c.id, c.name, c.type, c.frame_type, c.race, c.attribute, c.level, c.linkval, c.atk,
   c.def, c.archetype, c.desc, c.tcgplayer_price, ${POKEMON_COLS}`
 
@@ -392,14 +409,18 @@ function binderCards(db: SqlDb, slots: Slot[], scope: Scope): BinderCard[] {
     ? (db
         .prepare(
           `SELECT p.id, p.card_id, p.set_name, p.set_code, ${RARITY_LABEL} AS set_rarity, p.set_rarity_code,
-                  ${printingPrice(scope)} AS set_price, p.missing_from_api, p.language, p.contributed
+                  ${printingPrice(scope)} AS set_price, p.missing_from_api, p.language, p.contributed,
+                  ${SET_DATE} AS release_date
            FROM card_printings p
            LEFT JOIN intl_prices ip ON ip.printing_id = p.id AND ${scope.ebayPrices}
+           ${SET_JOINS}
            WHERE +p.game = ${scope.game} AND p.id IN ${IN_LIST}`
         )
-        .all(JSON.stringify(printingIds)) as PrintingDbRow[])
+        .all(JSON.stringify(printingIds)) as (PrintingDbRow & { release_date: string | null })[])
     : []
   const printings = new Map<number, Printing>(printingRows.map((r) => [r.id, rowToPrinting(r)]))
+  const printingDates = new Map(printingRows.map((r) => [r.id, r.release_date]))
+  const cardDates = firstReleases(db, cardIds, scope)
 
   return slots.flatMap((slot) => {
     const found = cards.get(slot.cardId)
@@ -412,6 +433,10 @@ function binderCards(db: SqlDb, slots: Slot[], scope: Scope): BinderCard[] {
         imageId: slot.imageId ?? found.firstImage ?? 0,
         printing: (slot.printing && printings.get(slot.printing.printingId)) ?? null,
         printingScan: true,
+        releaseDate:
+          (slot.level === 'printing' && slot.printing
+            ? printingDates.get(slot.printing.printingId)
+            : cardDates.get(slot.cardId)) ?? null,
         owned: slot.owned,
         added: slot.added,
         price: slot.price

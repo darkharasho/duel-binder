@@ -724,3 +724,43 @@ describe('listBinders summaries', () => {
     expect(shown).toEqual([...shown].sort((a, b) => a - b))
   })
 })
+
+describe('binder release dates', () => {
+  const dateSet = (db: Database.Database, setName: string, date: string): void => {
+    db.prepare(
+      `INSERT OR REPLACE INTO sets (game, language, set_name, set_code, tcg_date)
+       VALUES ('ygo', 'en', ?, 'X', ?)`
+    ).run(setName, date)
+  }
+
+  it("dates a printing slot by its set, and a card slot by the card's first release", async () => {
+    const db = await seededDb()
+    dateSet(db, 'Legend of Blue Eyes White Dragon', '2002-03-08')
+    dateSet(db, 'Starter Deck: Yugi', '2002-03-29')
+    const byPrinting = saveBinder(db, draft(goal('printing'), name('Dark Magician')), T1)
+    const dates = Object.fromEntries(
+      getBinder(db, byPrinting)!.cards.map((c) => [c.printing?.setCode, c.releaseDate])
+    )
+    expect(dates).toEqual({ 'LOB-EN005': '2002-03-08', 'SDY-006': '2002-03-29' })
+
+    const byCard = saveBinder(db, draft({}, name('Dark Magician')), T1)
+    expect(getBinder(db, byCard)?.cards[0].releaseDate).toBe('2002-03-08')
+  })
+
+  it("takes a foreign printing's date from its English namesake; null when undated", async () => {
+    const db = await seededDb()
+    dateSet(db, 'Starter Deck: Yugi', '2002-03-29')
+    const pkey = insertPrinting(db, POT, 'SDY-DE001', 'Common', 0, 'de')
+    db.prepare("UPDATE card_printings SET set_name = 'Starter Deck: Yugi' WHERE pkey = ?").run(pkey)
+    const german = saveBinder(
+      db,
+      draft({ ...goal('printing'), languages: ['de'] }, name('Pot of Greed')),
+      T1
+    )
+    expect(getBinder(db, german)?.cards.map((c) => c.releaseDate)).toEqual(['2002-03-29'])
+
+    const fresh = await seededDb()
+    const undated = saveBinder(fresh, draft({}, name('Pot of Greed')), T1)
+    expect(getBinder(fresh, undated)?.cards.map((c) => c.releaseDate)).toEqual([null])
+  })
+})

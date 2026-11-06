@@ -8,9 +8,20 @@ import { UnderlineTabs } from '@/components/UnderlineTabs'
 import { Button } from '@/components/ui/button'
 import { SetProgress } from '@/features/sets/SetProgress'
 import { CardPanel } from '@/features/card/CardPanel'
+import { SortControl } from '@/components/SortControl'
 import { formatUsd } from '@/lib/format'
+import { useGame } from '@/lib/game'
+import { isWeb } from '@/lib/platform'
 import { BinderGrid } from './BinderGrid'
+import { BinderPlaceholdersButton } from './BinderPlaceholders'
 import { GOAL_LABEL, binderProgress, languagesLabel } from './binderProgress'
+import {
+  binderSorts,
+  readBinderOrder,
+  saveBinderOrder,
+  sortBinderCards,
+  type BinderOrder
+} from './binderSort'
 
 type View = 'all' | 'owned' | 'missing'
 const VIEWS = [
@@ -64,14 +75,30 @@ export function BinderView({
 }: Props): React.JSX.Element {
   const [view, setView] = useState<View>('all')
   const [open, setOpen] = useState<BinderCard | null>(null)
+  const { game } = useGame()
+  const [order, setOrder] = useState<{ uid: string; order: BinderOrder }>(() => ({
+    uid: detail.uid,
+    order: readBinderOrder(detail.uid, detail.goal)
+  }))
+  // Another binder opened in the same view reads its own saved order.
+  const current = order.uid === detail.uid ? order.order : readBinderOrder(detail.uid, detail.goal)
+  const sorts = binderSorts(detail.goal)
+  const chooseOrder = (o: BinderOrder): void => {
+    setOrder({ uid: detail.uid, order: o })
+    saveBinderOrder(detail.uid, o)
+  }
   const progress = binderProgress(detail)
   const hasGoal = detail.goal !== 'none'
+  const sorted = useMemo(
+    () => sortBinderCards(detail.cards, current, game),
+    [detail.cards, current, game]
+  )
   const shown = useMemo(
     () =>
-      detail.cards.filter((c) =>
+      sorted.filter((c) =>
         view === 'owned' ? c.owned > 0 : view === 'missing' ? c.owned === 0 : true
       ),
-    [detail.cards, view]
+    [sorted, view]
   )
   const summary = [
     hasGoal && progress.total === 0
@@ -142,7 +169,7 @@ export function BinderView({
       ) : (
         <>
           {/* Progress and the Show tabs share a row, so the binder below gets the height. */}
-          <div className="flex flex-wrap items-center justify-between gap-x-8 gap-y-3">
+          <div className="@container flex flex-wrap items-center justify-between gap-x-8 gap-y-3">
             <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-2">
               {hasGoal && progress.total > 0 && (
                 <SetProgress progress={progress} className="w-40 shrink-0" />
@@ -160,15 +187,28 @@ export function BinderView({
                 )}
               </p>
             </div>
-            {hasGoal && (
-              <UnderlineTabs
-                label="Show"
-                value={view}
-                options={VIEWS}
-                onChange={setView}
-                className="-mb-2"
-              />
-            )}
+            <div className="ml-auto flex flex-wrap items-center gap-3">
+              {hasGoal && (
+                <UnderlineTabs
+                  label="Show"
+                  value={view}
+                  options={VIEWS}
+                  onChange={setView}
+                  className="-mb-2"
+                />
+              )}
+              {detail.cards.length > 1 && (
+                <SortControl
+                  options={sorts}
+                  value={current.by}
+                  dir={current.dir}
+                  onChange={(by, dir) => chooseOrder({ by, dir })}
+                />
+              )}
+              {!readOnly && !isWeb() && detail.cards.length > 0 && (
+                <BinderPlaceholdersButton detail={detail} cards={sorted} />
+              )}
+            </div>
           </div>
           {detail.cards.length === 0 ? (
             <p className="text-sm text-muted-foreground">
@@ -177,8 +217,8 @@ export function BinderView({
             </p>
           ) : (
             <BinderGrid
-              // A new filter starts again from the first page.
-              resetKey={view}
+              // A new filter or order starts again from the first page.
+              resetKey={`${view}:${current.by}:${current.dir}`}
               uid={detail.uid}
               cards={shown}
               onOpen={setOpen}

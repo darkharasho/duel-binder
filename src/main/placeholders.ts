@@ -42,11 +42,13 @@ function pocket(card: PlaceholderCard, req: PlaceholderRequest): string {
   const chip = rarityChip(card.rarity) ?? finishChip(card.finish)
   const finish = card.finish === 'Normal' ? null : card.finish
   const sub = [card.number, card.rarity, finish].filter(Boolean).join(' · ')
+  const chipText = chip?.text ?? (card.setCode || req.setCode)
+  // A card with no art (image 0) keeps just its name.
+  const art = card.imageId > 0 ? `\n<img src="ygo-img://full/${card.imageId}" alt="">` : ''
   return `<div class="pocket">
-<div class="name">${escapeHtml(card.name)}</div>
-<img src="ygo-img://full/${card.imageId}" alt="">
-<div class="rail"><div class="text"><div class="set">${escapeHtml(req.setName)}</div><div class="sub">${escapeHtml(sub)}</div></div>
-<div class="chip"${chip ? ` style="background:${chip.color};color:#14151c"` : ''}>${escapeHtml(chip?.text ?? req.setCode)}</div></div>
+<div class="name">${escapeHtml(card.name)}</div>${art}
+<div class="rail"><div class="text"><div class="set">${escapeHtml(card.setName || req.setName)}</div><div class="sub">${escapeHtml(sub)}</div></div>
+${chipText ? `<div class="chip"${chip ? ` style="background:${chip.color};color:#14151c"` : ''}>${escapeHtml(chipText)}</div>` : ''}</div>
 </div>`
 }
 

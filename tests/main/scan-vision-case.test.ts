@@ -30,7 +30,7 @@ import { cardPoint, inCase, TIGHT_CASE, WIDE_CASE, type CaseStyle } from './scan
 // Same reason as in scan-vision-detect.test.ts: hand vitest the plain OpenCV module.
 vi.mock('@techstark/opencv-js', async () => {
   const { createRequire } = await import('node:module')
-  return { default: createRequire(import.meta.url)('@techstark/opencv-js') }
+  return { default: createRequire(import.meta.url)('../../vendor/opencv/opencv.js') }
 })
 
 const DIR = 'tests/fixtures/scan'

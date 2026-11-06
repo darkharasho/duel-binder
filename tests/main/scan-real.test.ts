@@ -21,7 +21,7 @@ import { appFrame } from './scan-app-frame'
 // Same reason as in scan-vision-detect.test.ts: hand vitest the plain OpenCV module.
 vi.mock('@techstark/opencv-js', async () => {
   const { createRequire } = await import('node:module')
-  return { default: createRequire(import.meta.url)('@techstark/opencv-js') }
+  return { default: createRequire(import.meta.url)('../../vendor/opencv/opencv.js') }
 })
 
 /** Share of recognizable shots that must be accepted with the right card. */

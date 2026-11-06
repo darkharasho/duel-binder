@@ -9,7 +9,13 @@ const root = fileURLToPath(new URL('../../', import.meta.url))
  */
 export default defineConfig({
   root,
-  resolve: { alias: { '@shared': `${root}src/shared` } },
+  resolve: {
+    alias: {
+      '@shared': `${root}src/shared`,
+      // The trimmed OpenCV.js build the apps ship (see electron.vite.config.ts).
+      '@techstark/opencv-js': `${root}vendor/opencv/opencv.js`
+    }
+  },
   build: {
     ssr: true,
     outDir: `${root}out/catalog`,

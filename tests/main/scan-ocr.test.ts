@@ -15,7 +15,7 @@ import { toBand } from '../../src/renderer/src/features/scan/vision/bands'
 // See scan-vision-detect.test.ts: hand over the plain OpenCV module so importing it settles.
 vi.mock('@techstark/opencv-js', async () => {
   const { createRequire } = await import('node:module')
-  return { default: createRequire(import.meta.url)('@techstark/opencv-js') }
+  return { default: createRequire(import.meta.url)('../../vendor/opencv/opencv.js') }
 })
 
 const DIR = 'tests/fixtures/scan'

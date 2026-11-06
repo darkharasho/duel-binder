@@ -15,7 +15,7 @@ import { inCase, TIGHT_CASE, WIDE_CASE } from './scanCase'
 
 vi.mock('@techstark/opencv-js', async () => {
   const { createRequire } = await import('node:module')
-  return { default: createRequire(import.meta.url)('@techstark/opencv-js') }
+  return { default: createRequire(import.meta.url)('../../vendor/opencv/opencv.js') }
 })
 
 const DIR = 'tests/fixtures/scan'

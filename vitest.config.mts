@@ -4,7 +4,9 @@ import react from '@vitejs/plugin-react'
 
 const alias = {
   '@': resolve('src/renderer/src'),
-  '@shared': resolve('src/shared')
+  '@shared': resolve('src/shared'),
+  // The trimmed OpenCV.js build the apps ship (see electron.vite.config.ts).
+  '@techstark/opencv-js': resolve('vendor/opencv/opencv.js')
 }
 
 export default defineConfig({

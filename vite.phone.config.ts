@@ -49,7 +49,10 @@ const STUB = '\0node-builtin-stub'
  * Packages allowed to import Node builtins, which get an empty module: OpenCV's Emscripten build
  * reaches for `fs` and `path` only inside its Node branch.
  */
-const BUILTIN_STUB_IMPORTERS = [/[\\/]node_modules[\\/]@techstark[\\/]opencv-js[\\/]/]
+const BUILTIN_STUB_IMPORTERS = [
+  /[\\/]node_modules[\\/]@techstark[\\/]opencv-js[\\/]/,
+  /[\\/]vendor[\\/]opencv[\\/]opencv\.js$/
+]
 
 /**
  * Fails the build when anything imports a Node builtin, Electron or better-sqlite3, naming the
@@ -192,7 +195,9 @@ export default defineConfig(({ mode }) => {
     resolve: {
       alias: {
         '@': resolve('src/renderer/src'),
-        '@shared': resolve('src/shared')
+        '@shared': resolve('src/shared'),
+        // The trimmed OpenCV.js build (core + imgproc); the package stays for its types.
+        '@techstark/opencv-js': resolve('vendor/opencv/opencv.js')
       }
     },
     define: {

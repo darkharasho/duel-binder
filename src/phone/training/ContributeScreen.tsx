@@ -11,6 +11,13 @@ import {
 } from 'lucide-react'
 import { defaultEngine, type EngineFactory } from '@/features/scan/engine'
 import { useScanHub } from '@/features/scan/ScanHub'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue
+} from '@/components/ui/select'
 import { useCamera } from '@/features/scan/useCamera'
 import { api } from '@/lib/api'
 import { cardImageSrc } from '@/lib/images'
@@ -165,6 +172,11 @@ const panel = 'rounded-2xl border border-white/[0.08] bg-black/45 backdrop-blur-
 const numberExists = async (number: string): Promise<boolean> =>
   (await api.scan.printingsByCode(number)).length > 0
 
+/** A webcam's usual shape, until the camera says its own. */
+const DESKTOP_DEFAULT_ASPECT = 16 / 9
+/** A camera listed before permission has no id; its item opens the default camera. */
+const UNNAMED_CAMERA = 'unnamed-camera-'
+
 /**
  * Testers' training photos: type a card's number (or, for One Piece, take the one the camera
  * read), pick the version in hand and its holder, then shoot. Each shot goes to the outbox with
@@ -201,7 +213,7 @@ export function ContributeScreen({
   const deps = usePhoneDeps(givenDeps)
   const userId = deps.userId
   const outbox = useMemo(() => given ?? trainingOutbox(), [given])
-  const { settings } = useScanHub()
+  const { settings, setSettings } = useScanHub()
   // The desktop asks for no facing (like its scanner); the camera picked on Scan is used.
   const camera = useCamera(settings.deviceId, desktop ? undefined : 'environment')
   const videoRef = useRef<HTMLVideoElement>(null)
@@ -211,6 +223,55 @@ export function ContributeScreen({
     video.srcObject = camera.stream
     if (camera.stream) void video.play?.()?.catch(() => undefined)
   }, [camera.stream])
+
+  // The desktop's preview takes the camera's own shape (a webcam is landscape), as large as fits,
+  // so it shows the whole frame a photo keeps and the guide box sits where the reader looks.
+  const [videoAspect, setVideoAspect] = useState(DESKTOP_DEFAULT_ASPECT)
+  useEffect(() => {
+    const video = videoRef.current
+    if (!desktop || !video) return
+    const read = (): void => {
+      if (video.videoWidth && video.videoHeight)
+        setVideoAspect(video.videoWidth / video.videoHeight)
+    }
+    read()
+    video.addEventListener('loadedmetadata', read)
+    video.addEventListener('resize', read)
+    return () => {
+      video.removeEventListener('loadedmetadata', read)
+      video.removeEventListener('resize', read)
+    }
+  }, [desktop, camera.stream])
+  const stageRef = useRef<HTMLDivElement>(null)
+  const [stage, setStage] = useState<{ width: number; height: number } | null>(null)
+  useEffect(() => {
+    const el = stageRef.current
+    if (!desktop || !el || typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver(([entry]) => {
+      const { width, height } = entry.contentRect
+      setStage({ width, height })
+    })
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [desktop])
+  const boxSize =
+    stage && stage.width > 0 && stage.height > 0
+      ? stage.width / stage.height > videoAspect
+        ? { width: Math.round(stage.height * videoAspect), height: Math.round(stage.height) }
+        : { width: Math.round(stage.width), height: Math.round(stage.width / videoAspect) }
+      : null
+
+  // The open camera, shown as picked only when it's listed (ids are blank before permission) and
+  // not in error, so picking it again reopens it.
+  const openCamera = camera.stream?.getVideoTracks()[0]?.getSettings().deviceId ?? ''
+  const activeCamera =
+    !camera.error && camera.devices.some((d) => d.deviceId === openCamera) ? openCamera : ''
+  const pickCamera = (id: string): void => {
+    const deviceId = id.startsWith(UNNAMED_CAMERA) ? null : id
+    // A different camera opens from the settings change; re-picking the current one retries it.
+    if (deviceId === settings.deviceId) camera.retry()
+    else setSettings({ deviceId })
+  }
 
   const [text, setText] = useState('')
   const number = normalizeOpNumber(text)
@@ -483,6 +544,10 @@ export function ContributeScreen({
       const k = keys.current
       const s = state.current
       const target = e.target as HTMLElement | null
+      // The camera list keeps its own keys (Esc closes the list, not the screen); its closed
+      // button keeps only Esc.
+      if (target?.closest('[role="listbox"]')) return
+      if (target?.closest('[role="combobox"]') && e.key !== 'Escape') return
       const typing = target?.tagName === 'INPUT'
       const inOtherControl =
         !typing && target !== null && target.closest('summary, details') !== null
@@ -560,9 +625,13 @@ export function ContributeScreen({
     <div
       className={
         desktop
-          ? 'relative mx-auto aspect-[3/4] h-[calc(100dvh-16rem)] min-h-72 shrink-0 overflow-hidden rounded-2xl border-2 border-white/10 bg-black'
+          ? cn(
+              'relative shrink-0 overflow-hidden rounded-2xl border-2 border-white/10 bg-black',
+              !boxSize && 'size-full'
+            )
           : 'relative mx-auto aspect-[3/4] h-[50dvh] max-w-[calc(100%-1.5rem)] shrink-0 overflow-hidden rounded-3xl bg-black'
       }
+      style={desktop && boxSize ? boxSize : undefined}
     >
       <video
         ref={videoRef}
@@ -916,10 +985,31 @@ export function ContributeScreen({
         </header>
         <div className="flex min-h-0 flex-1 gap-5 p-5">
           <div className="flex min-w-0 flex-1 flex-col gap-3">
-            {cameraBox}
+            <div ref={stageRef} className="flex min-h-0 flex-1 items-center justify-center">
+              {cameraBox}
+            </div>
             {shutter}
           </div>
           <aside className="flex w-[360px] shrink-0 flex-col gap-4 overflow-auto">
+            <Select
+              value={activeCamera}
+              onValueChange={pickCamera}
+              disabled={camera.devices.length === 0}
+            >
+              <SelectTrigger aria-label="Camera" className="w-full">
+                <CameraIcon aria-hidden className="size-4 text-muted-foreground" />
+                <SelectValue
+                  placeholder={camera.devices.length ? 'Choose a camera' : 'No camera'}
+                />
+              </SelectTrigger>
+              <SelectContent>
+                {camera.devices.map((d, i) => (
+                  <SelectItem key={d.deviceId || i} value={d.deviceId || `${UNNAMED_CAMERA}${i}`}>
+                    {d.label || `Camera ${i + 1}`}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             {numberSection}
             {holderGroup}
             {tips}

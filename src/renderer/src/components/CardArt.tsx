@@ -5,7 +5,7 @@ import { useCardAspect, useCardGame } from '@/lib/game'
 import { useBorrowedArt, type BorrowedArt } from '@/lib/borrowedArt'
 import { cardImageSrc } from '@/lib/images'
 import { usePrintingPhotoSrc } from '@/lib/printingPhotos'
-import { useArtLoad } from './artLoad'
+import { artLoadedOnce, markArtLoaded, useArtLoad } from './artLoad'
 import { CardPlaceholder } from './CardPlaceholder'
 
 interface CardArtProps {
@@ -19,7 +19,10 @@ interface CardArtProps {
   priority?: boolean
 }
 
-/** The printing's scan, faded in over the default art; removed if the printing has none. */
+/**
+ * The printing's scan, faded in over the default art; removed if the printing has none. One that
+ * has loaded before this session shows at once, with no fade (a page switch remounts every tile).
+ */
 function PrintingScan({
   src,
   onLoaded
@@ -27,7 +30,8 @@ function PrintingScan({
   src: string
   onLoaded: (loaded: boolean) => void
 }): React.JSX.Element | null {
-  const [state, setState] = useState<'loading' | 'loaded' | 'failed'>('loading')
+  const [known] = useState(() => artLoadedOnce(src))
+  const [state, setState] = useState<'loading' | 'loaded' | 'failed'>(known ? 'loaded' : 'loading')
   if (state === 'failed') return null
   return (
     <img
@@ -35,9 +39,10 @@ function PrintingScan({
       alt=""
       aria-hidden
       data-testid="printing-scan"
-      loading="lazy"
+      loading={known ? 'eager' : 'lazy'}
       draggable={false}
       onLoad={() => {
+        markArtLoaded(src)
         setState('loaded')
         onLoaded(true)
       }}
@@ -46,7 +51,8 @@ function PrintingScan({
         onLoaded(false)
       }}
       className={cn(
-        'absolute inset-0 size-full object-cover transition-opacity duration-300',
+        'absolute inset-0 size-full object-cover',
+        !known && 'transition-opacity duration-300',
         state === 'loaded' ? 'opacity-100' : 'opacity-0'
       )}
     />
@@ -147,7 +153,6 @@ function CardArtImage({
   priority
 }: CardArtProps): React.JSX.Element {
   const [failed, setFailed] = useState(false)
-  const [scanShown, setScanShown] = useState<number | null>(null)
   const aspect = useCardAspect(imageId)
   const game = useCardGame(imageId)
   // Inline, not a class: the ratio is the card's game's, known only at runtime.
@@ -165,7 +170,7 @@ function CardArtImage({
         backgroundPosition: 'center'
       }
     : undefined
-  const loading = priority ? 'eager' : 'lazy'
+  const loading = art.loading(src, priority ? 'eager' : 'lazy')
   // No scan for Pokémon: scans are Yugipedia's, Yu-Gi-Oh! only. On the phone, none until the
   // printing's server id is known.
   // 'op' has no printing photos either.
@@ -173,6 +178,10 @@ function CardArtImage({
     small: size !== 'full'
   })
   const scanSrc = printingId == null ? null : photo
+  // A scan seen before this session covers the default art from the first frame.
+  const [scanShown, setScanShown] = useState<number | null>(() =>
+    printingId != null && scanSrc !== null && artLoadedOnce(scanSrc) ? printingId : null
+  )
   if (printingId == null || scanSrc === null) {
     if (failed)
       return <CardPlaceholder game={game} className={className} label={alt} aspect={aspect} />

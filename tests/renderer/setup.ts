@@ -1,4 +1,6 @@
 import '@testing-library/jest-dom/vitest'
+import { afterEach } from 'vitest'
+import { resetArtLoaded } from '@/components/artLoad'
 
 // jsdom lacks matchMedia (used by sonner and theme code).
 if (!window.matchMedia) {
@@ -31,3 +33,6 @@ if (!Element.prototype.hasPointerCapture) {
   Element.prototype.setPointerCapture = () => {}
   Element.prototype.releasePointerCapture = () => {}
 }
+
+// Loaded art is remembered for the session; each test starts with none.
+afterEach(() => resetArtLoaded())

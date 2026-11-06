@@ -76,7 +76,7 @@ export function SetArt({
           alt=""
           aria-hidden
           data-testid="set-art-backdrop"
-          loading="lazy"
+          loading={art.loading(backdrop)}
           draggable={false}
           onError={cover ? fail('cover') : undefined}
           {...art.bind(backdrop)}
@@ -93,7 +93,7 @@ export function SetArt({
             src={front[1]}
             alt=""
             data-testid={`set-art-${front[0]}`}
-            loading="lazy"
+            loading={art.loading(front[1])}
             draggable={false}
             onError={fail(front[0])}
             {...art.bind(front[1])}

@@ -134,6 +134,48 @@ function guardNavigation(win: BrowserWindow): void {
   })
 }
 
+let adminWindow: BrowserWindow | null = null
+
+/**
+ * The owner's /admin dashboard, opened by a one-time link (`url`) that signs this window in. Its
+ * cookies live in an in-memory partition, so the session ends with the app; it never leaves the
+ * portal, and its other links open in the browser.
+ */
+function openAdminWindow(url: string, portal: string): void {
+  const origin = new URL(portal).origin
+  if (new URL(url).origin !== origin) throw new Error('Not a portal link')
+  if (adminWindow && !adminWindow.isDestroyed()) {
+    void adminWindow.loadURL(url)
+    adminWindow.focus()
+    return
+  }
+  const win = new BrowserWindow({
+    width: 1120,
+    height: 820,
+    title: 'Duel Binder admin',
+    autoHideMenuBar: true,
+    backgroundColor: '#111113',
+    ...(process.platform === 'linux' ? { icon } : {}),
+    webPreferences: { partition: 'admin', sandbox: true, contextIsolation: true }
+  })
+  adminWindow = win
+  win.on('closed', () => {
+    if (adminWindow === win) adminWindow = null
+  })
+  win.webContents.on('will-navigate', (event, to) => {
+    if (new URL(to).origin !== origin) event.preventDefault()
+  })
+  win.webContents.setWindowOpenHandler((details) => {
+    try {
+      if (new URL(details.url).protocol === 'https:') void shell.openExternal(details.url)
+    } catch {
+      // invalid URL: deny
+    }
+    return { action: 'deny' }
+  })
+  void win.loadURL(url)
+}
+
 /** The scan window: the camera and the pull overlays, in a window the owner can share. */
 function createScanBrowserWindow(bounds: Rect | null): BrowserWindow {
   const win = new BrowserWindow({
@@ -349,7 +391,8 @@ async function bootstrap(): Promise<void> {
     },
     checkForUpdates: () => updater.check(),
     applyUpdate: () => updater.apply(),
-    updateStatus: async () => updater.status()
+    updateStatus: async () => updater.status(),
+    openAdmin: async (url) => openAdminWindow(url, portal)
   }
 
   const emitDataChanged = (): void => broadcast(DATA_CHANGED, undefined)

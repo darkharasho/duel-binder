@@ -1,5 +1,5 @@
 import { DATA_CHANNELS, type DataChannel } from '../main/ipc/dataHandlers'
-import { APP_PLATFORM, type AppPlatform } from '../renderer/src/lib/portal'
+import { APP_PLATFORM, isNativeApp, type AppPlatform } from '../renderer/src/lib/portal'
 import type { Api } from '../shared/ipc'
 import type { Me } from '../shared/cloud'
 import type { MergeChoice } from '../shared/account'
@@ -19,6 +19,7 @@ import type {
 } from '../shared/types'
 import { withoutPrintings, type ScanSession } from '../shared/scanSessions'
 import type { PhoneStore } from './data/store'
+import { openAdminSheet } from './nativeSignIn'
 // Declares __APP_VERSION__.
 import type {} from './globals'
 
@@ -391,6 +392,23 @@ export function createPhoneApi(deps: {
         await store.updateUser(me)
         await emitAccount().catch(() => {})
         return me
+      },
+      openAdmin: async () => {
+        if (isNativeApp()) {
+          await openAdminSheet(await store.adminLink())
+          return
+        }
+        // The tab opens before any await, while the tap still allows one, and goes to the link once
+        // it's made (the web app's own session cookie may have run out).
+        const tab = window.open('', '_blank')
+        try {
+          const url = await store.adminLink()
+          if (tab) tab.location.href = url
+          else window.location.assign(url)
+        } catch (e) {
+          tab?.close()
+          throw e
+        }
       },
       onChange: (cb) => events.on('account', cb)
     }

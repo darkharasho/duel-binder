@@ -1,13 +1,15 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
 import logo from '@/assets/logo.svg'
+import { toast } from 'sonner'
+import { ADMIN_TABS } from '@shared/ipc'
+import { useAccountUser } from '@/lib/accountUser'
+import { api } from '@/lib/api'
 import { useFriendsAvailable, useFriendsOverview } from '@/lib/friends'
 import { useContribute } from '@/features/training/contributeContext'
 import { pageInGame, useGame } from '@/lib/game'
 import { isMac, isWeb } from '@/lib/platform'
 import { cn } from '@/lib/utils'
 import { track, trackOpen } from '@/lib/usage'
-import { fetchMe } from '@/web/account'
 import { ArtWash } from './ArtWash'
 import { ArtWashContext } from './artWashContext'
 import { SidebarGameSwitch } from './GameSwitch'
@@ -69,6 +71,9 @@ interface AppShellProps {
   children: React.ReactNode
 }
 
+const GROUP_HEADING =
+  'mb-0.5 mt-2 text-[10.5px] font-medium uppercase tracking-[0.08em] text-muted-foreground/60'
+
 export function AppShell({
   page,
   onNavigate,
@@ -90,8 +95,8 @@ export function AppShell({
     []
   )
   const [wash, setWash] = useState<string | null>(null)
-  // Shares the account section's query; the portal flags only the owner's account as admin.
-  const me = useQuery({ queryKey: ['me'], queryFn: () => fetchMe(), enabled: isWeb() })
+  // The portal flags only the owner's account as admin.
+  const { user } = useAccountUser()
   // Each page opens at its top, not wherever the previous page was scrolled to.
   useLayoutEffect(() => {
     scroll.set(0)
@@ -146,11 +151,7 @@ export function AppShell({
                   aria-label={heading}
                   className="flex flex-col"
                 >
-                  {heading && (
-                    <h2 className="mb-0.5 mt-2 text-[10.5px] font-medium uppercase tracking-[0.08em] text-muted-foreground/60">
-                      {heading}
-                    </h2>
-                  )}
+                  {heading && <h2 className={GROUP_HEADING}>{heading}</h2>}
                   {shown.map(({ page: p, label }) => (
                     <NavItem
                       key={p}
@@ -163,6 +164,33 @@ export function AppShell({
                 </div>
               )
             })}
+            {/* Only the admin accounts see this. The web goes to /admin; the desktop signs in with a
+                token, not the page's cookie, so it opens the dashboard in its own window through a
+                one-time link. */}
+            {user?.admin && (
+              <div role="group" aria-label="Admin" className="flex flex-col">
+                <h2 className={GROUP_HEADING}>Admin</h2>
+                {ADMIN_TABS.map(({ tab, label }) => (
+                  <button
+                    key={tab}
+                    type="button"
+                    onClick={() =>
+                      void api.account
+                        .openAdmin(tab)
+                        .catch((e: unknown) =>
+                          toast.error(
+                            e instanceof Error ? e.message : "Couldn't open the dashboard"
+                          )
+                        )
+                    }
+                    className={ITEM}
+                  >
+                    <span aria-hidden className="size-1.5 rounded-full bg-transparent" />
+                    {label}
+                  </button>
+                ))}
+              </div>
+            )}
           </nav>
           <button
             type="button"
@@ -188,12 +216,6 @@ export function AppShell({
                 <span aria-hidden className="size-1.5 rounded-full bg-transparent" />
                 Contribute photos
               </button>
-            )}
-            {me.data?.admin && (
-              <a href="/admin" className={ITEM}>
-                <span aria-hidden className="size-1.5 rounded-full bg-transparent" />
-                Admin
-              </a>
             )}
             <NavItem
               label="Settings"

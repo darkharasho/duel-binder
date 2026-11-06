@@ -115,6 +115,11 @@ export interface CloudClient {
   usage(report: UsageReport): Promise<void>
   /** Stores an anonymous error report. */
   errorReport(report: ErrorReport): Promise<void>
+  /**
+   * A one-time link that opens the /admin dashboard signed in, for the owner's account only
+   * (anyone else: CloudNotFoundError). It works once, within a minute.
+   */
+  adminLink(): Promise<string>
   /** Calls a portal RPC channel for `game` (default: none sent, which the server takes as Yu-Gi-Oh!). */
   rpc<T>(channel: PortalChannel, args: unknown[], game?: GameId): Promise<T>
   /** Sends one labelled training photo (idempotent per client id). Never throws. */
@@ -308,6 +313,7 @@ export function createCloudClient(opts: {
     revoke: () => call<void>('/auth/desktop/revoke', 'POST', undefined, false),
     usage: (report) => call<void>('/api/usage', 'POST', report, false),
     errorReport: (report) => call<void>('/api/errors', 'POST', report, false),
+    adminLink: async () => (await call<{ url: string }>('/api/admin/handoff', 'POST')).url,
     rpc: async <T>(channel: PortalChannel, args: unknown[], game?: GameId) =>
       (
         await call<{ result: T }>(

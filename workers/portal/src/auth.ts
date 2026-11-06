@@ -177,14 +177,32 @@ export async function mintSession(
   return token
 }
 
-function isAdminUser(deps: AppDeps, userId: number): boolean {
-  const admin = deps.env.ADMIN_DISCORD_ID
-  if (!admin) return false
-  return (
-    deps.db
+/**
+ * Whether this account is on the admin list (`admins`, server-39). The list belongs to accounts,
+ * not to any sign-in: an admin keeps it whichever way they sign in, and other accounts are added
+ * from the dashboard. While the list is empty, the account holding the ADMIN_DISCORD_ID sign-in is
+ * written to it as the first admin; after that ADMIN_DISCORD_ID is never read again.
+ */
+export function isAdminUser(deps: AppDeps, userId: number): boolean {
+  const { db } = deps
+  const listed = db
+    .prepare(
+      'SELECT 1 FROM admins a JOIN users u ON u.id = a.user_id WHERE a.user_id = ? AND u.closed_at IS NULL'
+    )
+    .get(userId)
+  if (listed !== undefined) return true
+  const seed = deps.env.ADMIN_DISCORD_ID
+  if (!seed || db.prepare('SELECT 1 FROM admins LIMIT 1').get() !== undefined) return false
+  const owner =
+    db
       .prepare("SELECT 1 FROM sign_ins WHERE user_id = ? AND provider = 'discord' AND subject = ?")
-      .get(userId, admin) !== undefined
-  )
+      .get(userId, seed) !== undefined
+  if (owner)
+    db.prepare('INSERT OR IGNORE INTO admins (user_id, added_at) VALUES (?, ?)').run(
+      userId,
+      deps.now().toISOString()
+    )
+  return owner
 }
 
 /**
@@ -200,7 +218,7 @@ export function gamesFor(deps: AppDeps, userId: number, asked?: string): GameId[
   })
 }
 
-/** Whether the request is signed in as the ADMIN_DISCORD_ID account. */
+/** Whether the request is signed in as an admin account (isAdminUser). */
 export async function isAdmin(req: Request, deps: AppDeps): Promise<boolean> {
   const user = await currentUser(req, deps)
   return user !== null && isAdminUser(deps, user.id)

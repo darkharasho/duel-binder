@@ -282,6 +282,26 @@ export function Settings({
         </section>
       )}
 
+      {user.admin && (
+        <section aria-label="Admin" className="space-y-2">
+          <Group>
+            <button
+              type="button"
+              className={rowButton}
+              onClick={() =>
+                void api.account
+                  .openAdmin()
+                  .catch((e: unknown) =>
+                    toast.error(e instanceof Error ? e.message : "Couldn't open the dashboard")
+                  )
+              }
+            >
+              Admin dashboard
+            </button>
+          </Group>
+        </section>
+      )}
+
       <section aria-label="About" className="space-y-2">
         <Group>
           <a href={PRIVACY_URL} target="_blank" rel="noreferrer" className={rowButton}>

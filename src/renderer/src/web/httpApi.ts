@@ -1,6 +1,6 @@
 import { GAME_HEADER, gamesOf, type Me } from '../../../shared/cloud'
 import { isGameId, type GameId } from '../../../shared/games'
-import type { Api } from '../../../shared/ipc'
+import { adminTabUrl, type Api } from '../../../shared/ipc'
 import type { PortalChannel } from '../../../shared/portal'
 import { OFFLINE_MESSAGE } from '../../../shared/friends'
 import type { SyncStatus, UpdateStatus } from '../../../shared/types'
@@ -371,6 +371,8 @@ export function createHttpApi(opts: HttpApiOptions = {}): Api {
       changePassword: call('account:changePassword'),
       changeEmail: call('account:changeEmail'),
       merge: () => Promise.reject(new Error('Not available here')),
+      // The page itself reads the session cookie, so the web just goes there.
+      openAdmin: async (tab) => window.location.assign(adminTabUrl('/admin', tab)),
       onChange: noUnsubscribe
     }
   }

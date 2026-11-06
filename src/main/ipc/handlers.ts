@@ -13,7 +13,7 @@ import { MAX_DEX_ROWS, type DexRow } from '@shared/dex/parse'
 import { checkPlaceholderRequest } from '@shared/placeholders'
 import { withoutPrintings, type ScanSession } from '@shared/scanSessions'
 import type { INVOKE_CHANNELS } from '@shared/ipc'
-import { INVOKE_CHANNELS as CHANNELS } from '@shared/ipc'
+import { adminTabUrl, INVOKE_CHANNELS as CHANNELS } from '@shared/ipc'
 import type { ImageCache } from '../images/cache'
 import { createDataHandlers } from './dataHandlers'
 import type { ScanWindowManager } from '../scanWindow'
@@ -57,6 +57,8 @@ export interface AppDeps {
   checkForUpdates(): Promise<UpdateStatus>
   applyUpdate(): Promise<void>
   updateStatus(): Promise<UpdateStatus>
+  /** Shows the /admin dashboard a one-time link opens (`AccountService.adminLink`). */
+  openAdmin(url: string): Promise<void>
 }
 
 export interface HandlerDeps {
@@ -304,6 +306,8 @@ export function createHandlers({
     'account:deleteAccount': async () => {
       throw new Error('Delete your account from app.duelbinder.com')
     },
+    'account:openAdmin': async (tab?: unknown) =>
+      app.openAdmin(adminTabUrl(await account.adminLink(), tab)),
     'account:signIns': async () => account.portal('account:signIns', []),
     'account:setUsername': async (name: string) => {
       const me = await account.portal<Me>('account:setUsername', [name])

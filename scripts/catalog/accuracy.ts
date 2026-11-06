@@ -5,9 +5,10 @@
  * text is read, so the art alone has to carry each shot, the hardest case the app sees.
  *
  * Pokémon's file is checked the same way on tests/fixtures/scan-pkm, through the frame analysis
- * (art, version cues, slab) and `resolvePokemonSignals`. Its shots have no text read either: the
- * language a card's text would read as comes from the manifest, so what's under test is that the
- * art and that language name the right card, in the right language and, when sure, version.
+ * (art, version cues, slab, card backs) and `resolveSignals` (resolvePokemonSignals). Its shots
+ * have no text read either: the language a card's text would read as comes from the manifest, so
+ * what's under test is that the art and that language name the right card, in the right language
+ * and, when sure, version.
  */
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -32,7 +33,6 @@ import {
   type ResolveContext,
   type ScanOutcome
 } from '../../src/renderer/src/features/scan/resolve'
-import { resolvePokemonSignals } from '../../src/renderer/src/features/scan/resolvePokemon'
 import { analyze } from '../../src/renderer/src/features/scan/vision/analyze'
 import { recognizeArt } from '../../src/renderer/src/features/scan/vision/candidates'
 import type { CV } from '../../src/renderer/src/features/scan/vision/cv'
@@ -160,7 +160,8 @@ async function pokemonOutcome(
   lookups: ResolveContext['lookups']
 ): Promise<ScanOutcome> {
   const signals = analyze(cv, img, index, null, false, false, scanProfile('pkm'))
-  return resolvePokemonSignals(
+  // As the app resolves a frame: resolveSignals, so a card back in view is nothing.
+  return resolveSignals(
     {
       found: signals.found,
       quad: signals.quad,
@@ -171,6 +172,7 @@ async function pokemonOutcome(
       cues: null,
       version: signals.version,
       slab: signals.slab,
+      ...(signals.artBack !== undefined ? { artBack: signals.artBack } : {}),
       look: null
     },
     {

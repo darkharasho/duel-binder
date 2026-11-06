@@ -59,6 +59,13 @@ export const ART_TONE_MIN_LEAD = 8
  * view, rather than a card it couldn't recognize.
  */
 export const ART_FAR_DISTANCE = 100
+/**
+ * A card outline whose art comes this close to one of the game's card backs (cardBacks.ts), and
+ * that overlaps the card the art was matched on, is a card back: nothing is named unless the
+ * card's art matches closer still. On the owner's frames (each back's own reference left out),
+ * card-back outlines came 16-36 from the others, and no real card's outline closer than 102.
+ */
+export const CARD_BACK_MAX_DISTANCE = 64
 /** Closest artworks fetched per frame, so a different card shows up past a card's alternate arts. */
 export const ART_MATCH_DEPTH = 20
 /**

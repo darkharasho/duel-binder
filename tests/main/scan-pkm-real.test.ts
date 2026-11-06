@@ -271,7 +271,8 @@ describe.skipIf(!READY)('the Pokémon scanner on real photos', () => {
         nameTexts: names.map((c) => c.trim()).filter(Boolean),
         version: signals.version,
         slab: signals.slab,
-        ...(signals.artVia ? { artVia: signals.artVia } : {})
+        ...(signals.artVia ? { artVia: signals.artVia } : {}),
+        ...(signals.artBack !== undefined ? { artBack: signals.artBack } : {})
       }
       const outcome = await resolveSignals(
         { ...signalsRead, textBands, cues: null, look: null },

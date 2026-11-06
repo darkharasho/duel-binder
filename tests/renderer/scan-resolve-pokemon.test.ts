@@ -5,6 +5,7 @@ import type { ScanPrinting } from '@shared/scan/types'
 import {
   ART_FAR_DISTANCE,
   ART_MAX_DISTANCE,
+  CARD_BACK_MAX_DISTANCE,
   PKM_ART_MIN_MARGIN,
   PKM_GUESS_REPRINT_LEAD,
   PKM_PHOTO_REPRINT_LEAD
@@ -513,6 +514,35 @@ describe('resolvePokemonSignals', () => {
       { imageId: 999, distance: 32 }
     ]
     expect(await resolveSignals(raw({ art }), pkm('en'))).toEqual({ kind: 'unsure' })
+  })
+
+  it('a card back in view is nothing, though its art came near a card', async () => {
+    // A pile of backs on the desk: outlined with the desk around it, the closest art is a card's
+    // under the art limit, and the back's own outline, over it, came close to a card back.
+    const art = [
+      { imageId: 101, distance: 74 },
+      { imageId: 201, distance: 76 }
+    ]
+    const ctx = guessing('en')
+    expect(await recognized(raw({ art }), ctx)).toMatchObject({ cardId: 1 })
+    expect(await resolveSignals(raw({ art, artBack: 22 }), ctx)).toEqual({ kind: 'none' })
+    // Not even a number read names it.
+    expect(await resolveSignals(raw({ art, artBack: 22, codeTexts: ['045/193'] }), ctx)).toEqual({
+      kind: 'none'
+    })
+  })
+
+  it('a card is named when no back came close, or its own art came closer', async () => {
+    const ctx = pkm('en')
+    const far = [
+      { imageId: 101, distance: 74 },
+      { imageId: 201, distance: 76 }
+    ]
+    expect(
+      await recognized(raw({ art: far, artBack: CARD_BACK_MAX_DISTANCE + 1 }), ctx)
+    ).toMatchObject({ cardId: 1 })
+    // A card held over a pile of backs: its art matched closer than the backs.
+    expect(await recognized(raw({ art: twins, artBack: 40 }), ctx)).toMatchObject({ cardId: 1 })
   })
 })
 

@@ -15,7 +15,7 @@ import { createMockApi, renderWithProviders } from './mockApi'
 
 const slot = (
   name: string,
-  over: Partial<BinderCard> & { card?: Partial<CardRow> } = {}
+  over: Omit<Partial<BinderCard>, 'card'> & { card?: Partial<CardRow> } = {}
 ): BinderCard => {
   const { card, ...rest } = over
   return {

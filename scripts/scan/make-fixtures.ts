@@ -747,7 +747,11 @@ async function makePokemon(): Promise<void> {
 
   writeFileSync(
     join(PKM_OUT, 'manifest.json'),
-    JSON.stringify({ shots, distractors: distractors.map(({ image, ...d }) => d) }, null, 2) + '\n'
+    JSON.stringify(
+      { shots, distractors: distractors.map(({ image: _image, ...d }) => d) },
+      null,
+      2
+    ) + '\n'
   )
   console.log(`${shots.length} shots, ${targets.length + distractors.length} reference images`)
 }

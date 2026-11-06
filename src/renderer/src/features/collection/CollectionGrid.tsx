@@ -11,7 +11,8 @@ import { TILE, TILE_BUTTON, TILE_HEART, TILE_NAME } from '@/components/tileLayou
 import type { Favourites } from '@/lib/favourites'
 import { useChunkedList } from '@/lib/useChunkedList'
 import { cn } from '@/lib/utils'
-import { EntryValue, StaleBadge, displayTotal } from './EntryValue'
+import { EntryValue, StaleBadge } from './EntryValue'
+import { displayTotal } from './displayTotal'
 
 interface Props {
   entries: EntryView[]

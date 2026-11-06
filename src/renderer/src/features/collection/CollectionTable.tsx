@@ -18,7 +18,8 @@ import { LanguageTag } from '@/components/LanguageTag'
 import type { Favourites } from '@/lib/favourites'
 import { useGame } from '@/lib/game'
 import { useChunkedList } from '@/lib/useChunkedList'
-import { EntryValue, StaleBadge, displayTotal } from './EntryValue'
+import { EntryValue, StaleBadge } from './EntryValue'
+import { displayTotal } from './displayTotal'
 
 interface Props {
   entries: EntryView[]

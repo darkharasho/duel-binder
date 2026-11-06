@@ -107,10 +107,6 @@ export function EbayPriceLine({ entry }: { entry: EntryView }): React.JSX.Elemen
   return <p className="text-xs text-muted-foreground">{ebayPriceDetail(entry)}</p>
 }
 
-/** Total for display: null (shown as "—") when the entry has no price at all. */
-export const displayTotal = (e: EntryView): number | null =>
-  e.unitPrice === null ? null : e.totalValue
-
 export function StaleBadge({ entry }: { entry: EntryView }): React.JSX.Element | null {
   if (!entry.printing.missingFromApi) return null
   return (

@@ -8,7 +8,8 @@ import type { PanelNav } from '@/components/panelNav'
 import { scanFor } from '@/components/scanFor'
 import { SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { cn } from '@/lib/utils'
-import { EbayPriceLine, EntryValue, displayTotal } from '../collection/EntryValue'
+import { EbayPriceLine, EntryValue } from '../collection/EntryValue'
+import { displayTotal } from '../collection/displayTotal'
 
 /** A friend's card with their copies, read-only; rendered inside a CardSheet. Fetches nothing. */
 export function FriendEntryPanel({

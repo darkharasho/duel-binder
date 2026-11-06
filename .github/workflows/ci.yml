@@ -25,6 +25,8 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      # Errors only: the formatting warnings are many and don't fail the build.
+      - run: npm run lint -- --quiet
       - run: npm run typecheck
       - run: npm test
       - run: npm ci

@@ -16,7 +16,8 @@ import {
   SelectValue
 } from '@/components/ui/select'
 import { api, invalidateAfterEdit } from '@/lib/api'
-import { EntryValue, StaleBadge, displayTotal } from './EntryValue'
+import { EntryValue, StaleBadge } from './EntryValue'
+import { displayTotal } from './displayTotal'
 
 /**
  * Edit form for one entry; remounted (via `key`) when the selected entry changes. An edit from

@@ -41,7 +41,7 @@ import {
 // would make importing it never settle; hand over the plain module instead.
 vi.mock('@techstark/opencv-js', async () => {
   const { createRequire } = await import('node:module')
-  return { default: createRequire(import.meta.url)('@techstark/opencv-js') }
+  return { default: createRequire(import.meta.url)('../../vendor/opencv/opencv.js') }
 })
 
 const DIR = 'tests/fixtures/scan'

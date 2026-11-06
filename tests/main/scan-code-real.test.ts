@@ -36,7 +36,7 @@ import { loadCv, type CV } from '../../src/renderer/src/features/scan/vision/cv'
 // Same reason as in scan-vision-detect.test.ts: hand vitest the plain OpenCV module.
 vi.mock('@techstark/opencv-js', async () => {
   const { createRequire } = await import('node:module')
-  return { default: createRequire(import.meta.url)('@techstark/opencv-js') }
+  return { default: createRequire(import.meta.url)('../../vendor/opencv/opencv.js') }
 })
 
 const REAL = process.env.SCAN_REAL_DIR

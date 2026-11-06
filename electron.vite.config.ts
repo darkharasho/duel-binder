@@ -19,7 +19,9 @@ export default defineConfig({
     resolve: {
       alias: {
         '@': resolve('src/renderer/src'),
-        '@shared': shared
+        '@shared': shared,
+        // The trimmed OpenCV.js build (core + imgproc); the package stays for its types.
+        '@techstark/opencv-js': resolve('vendor/opencv/opencv.js')
       }
     },
     plugins: [react(), tailwindcss()]

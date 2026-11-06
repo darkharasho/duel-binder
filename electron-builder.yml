@@ -10,7 +10,10 @@ files:
   - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
   - '!{docs,tests,.github,.superpowers}/**'
-  - '!{scripts,catalog-work,out/catalog}/**'
+  - '!{scripts,catalog-work,out/catalog,vendor}/**'
+  # The renderer bundles OpenCV.js (vendor/opencv, aliased in electron.vite.config.ts); the main
+  # process never loads it, and the package is only kept for its types.
+  - '!node_modules/@techstark/opencv-js/**'
   - '!*.tsbuildinfo'
   - '!{components.json,vitest.config.mts}'
   # Only the best_int models are read (langPath); the full-size ones would add ~50 MB.

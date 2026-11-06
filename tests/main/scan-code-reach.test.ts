@@ -14,7 +14,7 @@ import { rotate180, warpCard, type Quad } from '../../src/renderer/src/features/
 // Hand vitest the plain OpenCV module (see scan-vision-detect.test.ts).
 vi.mock('@techstark/opencv-js', async () => {
   const { createRequire } = await import('node:module')
-  return { default: createRequire(import.meta.url)('@techstark/opencv-js') }
+  return { default: createRequire(import.meta.url)('../../vendor/opencv/opencv.js') }
 })
 
 let cv: CV

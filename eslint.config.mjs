@@ -16,6 +16,7 @@ export default defineConfig(
       '**/.wrangler',
       'workers/portal/site/app/**',
       'catalog-work/**',
+      'vendor/**',
       // Built phone bundles (Capacitor copies them into the native projects).
       'ios/App/App/public/**',
       'android/app/src/main/assets/public/**',

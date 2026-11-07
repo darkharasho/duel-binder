@@ -48,10 +48,15 @@ const nameKey = (name: string): string => normalizeName(name) || name
 
 /**
  * The series of each card's sets, by card; null for a card with a set of no series on record
- * (or no set at all), which is then taken to share any series.
+ * (or no set at all), which is then taken to share any series. Empty for a database whose sets
+ * have no series column (the built catalog the photo gate reads; the app's has it since V36).
  */
 function seriesOf(db: SqlDb, cardIds: number[], scope: Scope): Map<number, Set<string> | null> {
   const out = new Map<number, Set<string> | null>()
+  const hasSeries = db
+    .prepare(`SELECT 1 FROM pragma_table_info('sets') WHERE name = 'series'`)
+    .get()
+  if (!hasSeries) return out
   for (let i = 0; i < cardIds.length; i += 500) {
     const chunk = cardIds.slice(i, i + 500)
     const rows = db

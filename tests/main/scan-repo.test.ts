@@ -428,6 +428,10 @@ describe('a Pokémon art twin with no artwork', () => {
     // A stamped promo of the set, from its own series' promo set.
     setSeries.run('Old Kit', 'Mega Evolution')
     expect(twinned()).toBe(true)
+    // A database whose sets have no series column (the built catalog): series unknown, a twin.
+    setSeries.run('Old Kit', 'Trainer kits')
+    db.exec('ALTER TABLE sets DROP COLUMN series')
+    expect(twinned()).toBe(true)
   })
 })
 

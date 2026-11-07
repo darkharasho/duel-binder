@@ -774,17 +774,13 @@ describe('Scan page', () => {
   })
 
   it('scans the centre crop the preview shows and draws the outline in its space', async () => {
-    // The worker tells the quad in the whole picture's pixels.
-    const whole = quad.map(([x, y]) => [x + 140, y]) as unknown as typeof quad
-    const engine = fakeEngine(() => ({ ...NOTHING, found: true, quad: whole }))
+    const engine = fakeEngine(() => ({ ...NOTHING, found: true, quad }))
     const { container } = await renderScan({}, engine)
     await run(500)
-    // The stubbed camera is 640x480: the preview shows its centre 360x480, read first, and the
-    // whole picture goes with it for when that crop keeps missing (framing.ts).
-    expect(grabbed).toHaveBeenLastCalledWith(expect.any(HTMLVideoElement))
-    const [frame, opts] = engine.analyze.mock.calls[0] as [ImageBitmap, { region?: unknown }]
-    expect([frame.width, frame.height]).toEqual([640, 480])
-    expect(opts.region).toEqual({ x: 140, y: 0, width: 360, height: 480 })
+    // The stubbed camera is 640x480: the preview shows its centre 360x480.
+    expect(grabbed).toHaveBeenLastCalledWith(expect.any(HTMLVideoElement), 140, 0, 360, 480)
+    const frame = engine.analyze.mock.calls[0][0] as ImageBitmap
+    expect([frame.width, frame.height]).toEqual([360, 480])
     const svg = container.querySelector('svg[preserveAspectRatio]')!
     expect(svg).toHaveAttribute('viewBox', '0 0 360 480')
     expect(svg.querySelector('polygon')).toHaveAttribute('points', '10,10 110,10 110,160 10,160')

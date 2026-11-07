@@ -160,8 +160,7 @@ export function stubVideo(): ReturnType<typeof vi.fn> {
     get: () => Date.now() / 1000
   })
   const grabbed = vi.fn(
-    // The whole picture when no crop is given.
-    async (_src: unknown, _x?: number, _y?: number, width = 640, height = 480) =>
+    async (_src: unknown, _x: number, _y: number, width: number, height: number) =>
       ({ width, height, close: vi.fn() }) as unknown as ImageBitmap
   )
   vi.stubGlobal('createImageBitmap', grabbed)

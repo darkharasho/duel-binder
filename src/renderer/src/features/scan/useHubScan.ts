@@ -32,8 +32,7 @@ export function useHubScan({
   tiltModels = null,
   onStalled,
   paused = false,
-  onPull,
-  wholeFrame = false
+  onPull
 }: {
   videoRef: RefObject<HTMLVideoElement | null>
   stream: MediaStream | null
@@ -44,8 +43,6 @@ export function useHubScan({
   onStalled?: () => void
   /** Stops scanning while the camera keeps showing (a stream screen that isn't live). */
   paused?: boolean
-  /** As useScanLoop's: the desktop webcam's. */
-  wholeFrame?: boolean
   /** Hears each pull once it's counted: `pull.id` is the row key, `scanned` the copies on the list. */
   onPull?: (pull: Pull, scanned: number, draft: ScanDraft) => void
 }): { loop: ScanLoop; setUnreadable: boolean; found: Pull | null } {
@@ -96,8 +93,7 @@ export function useHubScan({
     tiltModels,
     onDraft,
     onRarityRead: reread,
-    onStalled,
-    wholeFrame
+    onStalled
   })
 
   useEffect(() => {

@@ -47,11 +47,45 @@ const languageRank = (l: Language): number => LANGUAGES.findIndex((x) => x.code 
 const nameKey = (name: string): string => normalizeName(name) || name
 
 /**
+ * The series of each card's sets, by card; null for a card with a set of no series on record
+ * (or no set at all), which is then taken to share any series. Empty for a database whose sets
+ * have no series column (the built catalog the photo gate reads; the app's has it since V36).
+ */
+function seriesOf(db: SqlDb, cardIds: number[], scope: Scope): Map<number, Set<string> | null> {
+  const out = new Map<number, Set<string> | null>()
+  const hasSeries = db
+    .prepare(`SELECT 1 FROM pragma_table_info('sets') WHERE name = 'series'`)
+    .get()
+  if (!hasSeries) return out
+  for (let i = 0; i < cardIds.length; i += 500) {
+    const chunk = cardIds.slice(i, i + 500)
+    const rows = db
+      .prepare(
+        `SELECT DISTINCT p.card_id AS cardId, s.series AS series FROM card_printings p
+         LEFT JOIN sets s ON s.game = p.game AND s.language = p.language AND s.set_name = p.set_name
+         WHERE +p.game = ${scope.game} AND p.card_id IN (${chunk.map(() => '?').join(',')})`
+      )
+      .all(...chunk) as { cardId: number; series: string | null }[]
+    for (const r of rows) {
+      const seen = out.get(r.cardId)
+      if (seen === null) continue
+      if (r.series === null) out.set(r.cardId, null)
+      else out.set(r.cardId, (seen ?? new Set()).add(r.series))
+    }
+  }
+  return out
+}
+
+/**
  * [`${cardId}|${language}`, the twin's set code] for each of cardIds with an art twin the scanner can't see
  * (ScanPrinting.unseenTwin): a card of the same name and illustrator with no artwork, or only a
  * tcgplayer product photo, a poor reference (often a 403, or matched far behind the card it
  * reprints), and a printing in that language. A Japanese card may be named in English or
  * Japanese, and names are compared by their letters ("Tapu Lele-GX", "Umbreon ☆").
+ * With no illustrator on record for either card (a set TCGdex doesn't have yet), a shared name
+ * says little: such a twin counts only when a set of each is in one series, as a set's stamped
+ * promos are (Delta Reign's Masquerain and MEP 111), and an old trainer kit's card of the name isn't.
+ * A set with no series on record keeps the twin.
  */
 function unseenTwins(
   db: SqlDb,
@@ -62,7 +96,7 @@ function unseenTwins(
   const rows = db
     .prepare(
       `SELECT pc.card_id AS cardId, c.name AS name, pc.local_name AS localName,
-         t.card_id AS twinId, tc.name AS twinName, t.local_name AS twinLocal
+         pc.illustrator AS illustrator, t.card_id AS twinId, tc.name AS twinName, t.local_name AS twinLocal
        FROM pokemon_cards pc CROSS JOIN cards c CROSS JOIN pokemon_cards t CROSS JOIN cards tc
        WHERE pc.card_id IN (${cardIds.map(() => '?').join(',')}) AND c.id = pc.card_id
          AND (t.image_url IS NULL OR t.image_url LIKE 'https://tcgplayer-cdn.%')
@@ -72,15 +106,26 @@ function unseenTwins(
     cardId: number
     name: string
     localName: string | null
+    illustrator: string | null
     twinId: number
     twinName: string
     twinLocal: string | null
   }[]
-  const twins = rows.filter(
+  const named = rows.filter(
     (r) =>
       nameKey(r.name) === nameKey(r.twinName) ||
       (r.localName ?? r.name) === (r.twinLocal ?? r.twinName)
   )
+  const unknown = named.filter((r) => r.illustrator === null)
+  const series = unknown.length
+    ? seriesOf(db, [...new Set(unknown.flatMap((r) => [r.cardId, r.twinId]))], scope)
+    : new Map<number, Set<string> | null>()
+  const sameSeries = (a: number, b: number): boolean => {
+    const x = series.get(a)
+    const y = series.get(b)
+    return !x || !y || [...x].some((s) => y.has(s))
+  }
+  const twins = named.filter((r) => r.illustrator !== null || sameSeries(r.cardId, r.twinId))
   if (!twins.length) return []
   const ids = [...new Set(twins.map((t) => t.twinId))]
   const languages = db

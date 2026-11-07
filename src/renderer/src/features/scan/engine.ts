@@ -7,6 +7,7 @@ import type { ArtMatch } from '@shared/scan/fingerprintFile'
 import type { ScanRef } from '@shared/scan/fingerprintRefs'
 import type { OcrBand, RgbaImage } from '@shared/scan/types'
 import type { Quad } from './vision/detect'
+import type { CropRect } from './crop'
 import type { TiltReading } from '@shared/scan/tiltFeatures'
 import type { TiltReply, TiltRequest } from './vision/tilt.worker'
 
@@ -73,6 +74,11 @@ export type WorkerRequest =
       tilt?: number[]
       /** When the frame was grabbed, on the scan loop's clock (performance.now()); sent with tilt. */
       at?: number
+      /**
+       * The part of the frame the preview shows, read first (framing.ts); the whole frame is
+       * read when it is left out. The quad comes back in the whole frame's pixels either way.
+       */
+      region?: CropRect
     }
   /** Narrows live frames' art search to these artworks, or null for all of it, until told again. */
   | { type: 'scope'; imageIds: number[] | null }
@@ -140,6 +146,8 @@ export interface ScanEngine {
       at?: number
       /** Read only the code bands, not the names: a number reader's frame (the Contribute screen). */
       codesOnly?: boolean
+      /** As the frame request's region. */
+      region?: CropRect
     }
   ): Promise<RawSignals>
   /** Live frames match only these artworks from now on; null for every one. */
@@ -410,7 +418,7 @@ export function createScanEngine(deps: {
 
     async analyze(
       frame,
-      { candidates, wantText, wantLook = false, photo = false, tilt, at, codesOnly = false }
+      { candidates, wantText, wantLook = false, photo = false, tilt, at, codesOnly = false, region }
     ) {
       const id = nextId++
       const grabbed = at ?? performance.now()
@@ -429,7 +437,8 @@ export function createScanEngine(deps: {
               wantBands: wantText,
               wantLook,
               ...(photo ? { photo: true as const } : {}),
-              ...(tilt ? { tilt, at: grabbed } : {})
+              ...(tilt ? { tilt, at: grabbed } : {}),
+              ...(region ? { region } : {})
             },
             [bitmap ? frame : (frame.data.buffer as ArrayBuffer)]
           )

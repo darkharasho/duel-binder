@@ -280,6 +280,26 @@ describe('resolvePokemonSignals', () => {
     expect(await resolveSignals(signals, ctx(`CLC ${original}`))).toEqual({ kind: 'unsure' })
   })
 
+  it("a read of a card's own number with a misread total still tells it from its twin", async () => {
+    const ctx = (code: string): ResolveContext => ({
+      ...pkm('en'),
+      lookups: {
+        ...lookups,
+        printingsForCards: async (ids) =>
+          PKM.filter((p) => ids.includes(p.cardId)).map((p) =>
+            p.cardId === 1 ? { ...p, unseenTwin: true as const, unseenTwinCodes: [code] } : p
+          )
+      }
+    })
+    const own = PKM.find((p) => p.cardId === 1 && p.language === 'en')!.setCode
+    const [number] = own.split(' ').at(-1)!.split('/')
+    // "003/903" for 003/103: no printing has it, but 003 isn't the promo's 111.
+    const signals = raw({ art: [twins[0]], codeTexts: [`FF ${number}/903`] })
+    expect(await recognized(signals, ctx('MEP 111'))).toMatchObject({ cardId: 1 })
+    // A twin of the same number (a Classic Collection reprint) still can't be told.
+    expect(await resolveSignals(signals, ctx(`CLC ${number}/999`))).toEqual({ kind: 'unsure' })
+  })
+
   it('a twin whose product photo is other art does not stop a card', async () => {
     const ctx = (distance: number): ResolveContext => ({
       ...pkm('en'),

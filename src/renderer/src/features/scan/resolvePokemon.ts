@@ -224,6 +224,24 @@ const unique = (ids: number[]): number[] => [...new Set(ids)]
 const numberOf = (code: string): string =>
   (code.trim().split(/\s+/).at(-1) ?? '').replace(/^0+(?=\d)/, '')
 
+/** A collector number with no leading zeros: "003" and "3" are one number. */
+const bare = (n: string): string => n.replace(/^0+(?=\d)/, '')
+
+/**
+ * Whether a number read shows code's number (its total aside) and none shows a number of
+ * twinCodes; never when a twin prints the same number.
+ */
+function readsOwnNumber(raw: RawSignals, code: string, twinCodes: string[]): boolean {
+  const own = numberOfCode(code)?.number
+  if (!own) return false
+  const twins = new Set(twinCodes.flatMap((c) => numberOfCode(c)?.number ?? []).map(bare))
+  if (twins.has(bare(own))) return false
+  const read = new Set(
+    raw.codeTexts.flatMap((t) => collectorNumberCandidates(t).map((n) => bare(n.number)))
+  )
+  return read.has(bare(own)) && ![...twins].some((n) => read.has(n))
+}
+
 /** Printed rarities, lowercased, that are mostly not foil. Any other rarity is a holo. */
 const PLAIN_RARITIES = new Set(['common', 'uncommon', 'rare', 'promo', 'none'])
 
@@ -399,6 +417,9 @@ export async function resolvePokemonSignals(
     const read = numbered.filter((n) => n.cardId === p.cardId).map((n) => numberOf(n.setCode))
     const told = !!p.unseenTwinCodes?.length && read.length > 0
     if (told && !p.unseenTwinCodes!.some((c) => read.includes(numberOf(c)))) return false
+    // A read of the card's own number tells it from twins of other numbers, though its total is
+    // misread ("003/903" for 003/103) and so finds no printing.
+    if (p.unseenTwinCodes?.length && readsOwnNumber(raw, p.setCode, p.unseenTwinCodes)) return false
     const twins = p.unseenTwinImages ?? []
     if (!ctx.artDistance || !twins.length || twins.length < new Set(p.unseenTwinCodes).size)
       return 'yes'

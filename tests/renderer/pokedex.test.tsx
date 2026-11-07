@@ -2,7 +2,7 @@ import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { PokedexCard, PokedexSpecies, PokedexSummary } from '@shared/types'
 import { PokedexPage } from '@/features/pokedex/PokedexPage'
-import { dexTiles, progress, visibleTiles } from '@/features/pokedex/pokedexView'
+import { dexTiles, percentText, progress, visibleTiles } from '@/features/pokedex/pokedexView'
 import { invalidateAfterEdit, mutationInvalidationKeys } from '@/lib/api'
 import { createMockApi, renderWithProviders } from './mockApi'
 
@@ -73,12 +73,24 @@ describe('pokedexView', () => {
     expect(progress(tiles, 1)).toEqual({ caught: 2, total: 151 })
     expect(progress(tiles, 2)).toEqual({ caught: 1, total: 100 })
   })
+
+  it('shows one decimal under 10%, whole numbers from 10%, and 100% only when complete', () => {
+    expect(percentText({ caught: 0, total: 1025 })).toBe('0')
+    expect(percentText({ caught: 2, total: 1025 })).toBe('0.2')
+    expect(percentText({ caught: 51, total: 1025 })).toBe('5.0')
+    expect(percentText({ caught: 101, total: 1025 })).toBe('9.9')
+    // 9.96%: rounds up into the whole numbers.
+    expect(percentText({ caught: 1021, total: 10250 })).toBe('10')
+    expect(percentText({ caught: 500, total: 1025 })).toBe('49')
+    expect(percentText({ caught: 1024, total: 1025 })).toBe('99')
+    expect(percentText({ caught: 1025, total: 1025 })).toBe('100')
+  })
 })
 
 describe('the Pokédex page', () => {
   it('shows progress, the generations and a copies badge', async () => {
     renderWithProviders(<PokedexPage />, { api: dexApi() })
-    expect(await screen.findByText(/2 \/ 1025 caught/)).toBeInTheDocument()
+    expect(await screen.findByText('2 / 1025 caught · 0.2%')).toBeInTheDocument()
     expect(screen.getByText('Generation I · Kanto')).toBeInTheDocument()
     expect(screen.getByText('Generation IX · Paldea')).toBeInTheDocument()
     expect(within(tile('Charizard')).getByText('×4')).toBeInTheDocument()
@@ -157,6 +169,29 @@ describe('the Pokédex page', () => {
     const panel = await screen.findByRole('dialog')
     await userEvent.click(await within(panel).findByRole('button', { name: /Dark Charizard/ }))
     await waitFor(() => expect(api.cards.get).toHaveBeenCalledWith(2))
+  })
+
+  it('a card with no image shows the placeholder and asks for no image', async () => {
+    const api = createMockApi({
+      pokedex: {
+        summary: vi.fn(async () => summary),
+        species: vi.fn(async (n: number) => ({
+          dexNo: n,
+          owned: [{ ...card(7, 'Charizard Promo', 1), imageId: 0 }],
+          missing: []
+        }))
+      }
+    })
+    renderWithProviders(<PokedexPage />, { api })
+    await screen.findByText(/2 \/ 1025 caught/)
+    await userEvent.click(tile('Charizard'))
+    const panel = await screen.findByRole('dialog')
+    const yours = await within(panel).findByRole('region', { name: 'Yours' })
+    expect(within(yours).getByTestId('card-art-placeholder')).toBeInTheDocument()
+    // The only image in the card tile is none at all; the panel's one img is the sprite.
+    const imgs = [...panel.querySelectorAll('img')].map((i) => i.getAttribute('src') ?? '')
+    expect(imgs.every((src) => src.includes('sprite/'))).toBe(true)
+    expect(imgs.some((src) => /(^|\/)0($|[/?.])/.test(src))).toBe(false)
   })
 
   it('a species with no cards says so', async () => {

@@ -71,7 +71,7 @@ const Tile = memo(function Tile({
 }): React.JSX.Element {
   const caught = tile.copies > 0
   return (
-    <li className="lazy-item [--lazy-h:128px]">
+    <li className="lazy-item [--lazy-h:128px] max-md:[--lazy-h:85px]">
       <button
         type="button"
         data-caught={caught}

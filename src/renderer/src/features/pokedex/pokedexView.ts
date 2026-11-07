@@ -51,6 +51,16 @@ export const dexNumber = (n: number): string => `#${String(n).padStart(3, '0')}`
 export const percent = ({ caught, total }: { caught: number; total: number }): number =>
   total === 0 ? 0 : caught === total ? 100 : Math.min(99, Math.round((caught / total) * 100))
 
+/**
+ * The percentage to show: one decimal under 10% (2 of 1025 is "0.2", not "0"), whole numbers from
+ * there, and never "100" before the last one.
+ */
+export function percentText({ caught, total }: { caught: number; total: number }): string {
+  if (caught === 0 || total === 0) return '0'
+  const tenths = Math.round((caught / total) * 1000) / 10
+  return tenths < 10 ? tenths.toFixed(1) : String(percent({ caught, total }))
+}
+
 /** The tiles grouped by generation, in order, leaving out generations with none. */
 export function byGeneration(
   tiles: readonly DexTile[]

@@ -8,7 +8,7 @@ import { CardPanel } from '@/features/card/CardPanel'
 import { api, queryKeys } from '@/lib/api'
 import { DexBar, PokedexGrid } from './PokedexGrid'
 import { PokedexPanel } from './PokedexPanel'
-import { dexTiles, percent, progress, visibleTiles, type DexFilter } from './pokedexView'
+import { dexTiles, percentText, progress, visibleTiles, type DexFilter } from './pokedexView'
 
 const FILTERS: { value: DexFilter; label: string }[] = [
   { value: 'all', label: 'All' },
@@ -42,7 +42,7 @@ export function PokedexPage(): React.JSX.Element {
             <h1 className="text-2xl font-semibold tracking-tight">Pokédex</h1>
             <p className="mt-0.5 text-[13px] text-foreground/75 tabular-nums">
               {summary.isSuccess
-                ? `${total.caught} / ${POKEDEX_SIZE} caught · ${percent(total)}%`
+                ? `${total.caught} / ${POKEDEX_SIZE} caught · ${percentText(total)}%`
                 : summary.isError
                   ? "Couldn't load your Pokédex"
                   : 'Loading…'}

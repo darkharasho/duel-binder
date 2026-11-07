@@ -7,7 +7,7 @@ import { applyChanges } from '../../src/main/catalog/apply'
 import type { CatalogChangesResponse } from '../../src/shared/catalogFeed'
 import { seedPokemon } from '../fixtures/pokemon'
 
-const page = (rows: Record<string, number | null>[], cursor: number, more: boolean): CatalogChangesResponse => ({
+const page = (rows: Record<string, number | string | null>[], cursor: number, more: boolean): CatalogChangesResponse => ({
   changes: rows.map((row, i) => ({ seq: i + 1, table: 'pokemon_cards', row })),
   cursor,
   more,
@@ -96,6 +96,36 @@ describe('backfillArtTwins for Traditional links', () => {
     expect(fetchPage).toHaveBeenCalledTimes(1)
     expect(twinOf(db, ids[0])).toBe(ids[1])
     expect(traditionalOf(db, ids[0])).toBe(ids[1])
+    db.close()
+  })
+})
+
+describe('backfillArtTwins for Pokédex numbers', () => {
+  const dexOf = (db: Database.Database, id: number): unknown =>
+    db.prepare('SELECT dex_no AS n, dex_extra AS e FROM pokemon_cards WHERE card_id = ?').get(id)
+
+  it('an app that already synced Pokémon gets dex_no and dex_extra, even with its art keys set', async () => {
+    const { db, ids } = fresh()
+    setMeta(db, 'catalog_cursor:pkm', '500')
+    setMeta(db, 'art_twins_backfilled', '1')
+    setMeta(db, 'traditional_twins_backfilled', '1')
+    const fetchPage = vi.fn().mockResolvedValue(
+      page(
+        [
+          { card_id: ids[0], dex_no: 25, dex_extra: '26' },
+          { card_id: ids[1], dex_no: null, dex_extra: null }
+        ],
+        3,
+        false
+      )
+    )
+    await backfillArtTwins(db, fetchPage)
+    await backfillArtTwins(db, fetchPage)
+    expect(fetchPage).toHaveBeenCalledTimes(1)
+    expect(dexOf(db, ids[0])).toEqual({ n: 25, e: '26' })
+    expect(dexOf(db, ids[1])).toEqual({ n: null, e: null })
+    expect(getMeta(db, 'dex_nos_backfilled')).toBe('1')
+    expect(getMeta(db, 'dex_extras_backfilled')).toBe('1')
     db.close()
   })
 })

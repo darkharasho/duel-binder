@@ -217,6 +217,7 @@ const ENTRY_REFS: Record<string, [count: number, kind: string]> = {
   'src/main/repo/dexImport.ts': [2, SCOPED],
   'src/main/repo/scope.ts': [5, SCOPED],
   'src/main/repo/sets.ts': [6, SCOPED],
+  'src/main/repo/pokedex.ts': [2, SCOPED],
   'src/main/repo/shownPrinting.ts': [1, SCOPED],
   'src/main/repo/stats.ts': [1, SCOPED],
   'workers/portal/src/scope.ts': [3, SCOPED],

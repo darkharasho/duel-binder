@@ -302,6 +302,7 @@ export function createPhoneApi(deps: {
       onOpenChange: noUnsubscribe
     },
     stats: dataPart('stats'),
+    pokedex: dataPart('pokedex'),
     prices: {
       ...dataPart('prices'),
       request: async (printingIds) => {

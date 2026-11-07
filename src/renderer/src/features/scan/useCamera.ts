@@ -48,6 +48,11 @@ const constraints = (deviceId: string | null, facing?: CameraFacing): MediaStrea
     // being ideal, not min, any lower resolution still opens.
     width: { ideal: 3840 },
     height: { ideal: 2160 },
+    // 60 fps on desktop where the camera has it at that size (Elgato's Facecam 4K does): each frame
+    // is then exposed for at most 1/60 s, so a hand-held card blurs half as much. Chromium opens
+    // 30 when not asked. Ideal again, so a camera without 60 still opens; the phone (facing) keeps
+    // its default, sparing battery and heat.
+    ...(facing ? {} : { frameRate: { ideal: 60 } }),
     ...(deviceId
       ? { deviceId: { exact: deviceId } }
       : facing

@@ -199,6 +199,21 @@ export type PkmGuessRule =
  * and overall (tests/main/scan-pkm-guess-curve.test.ts replays the others). Language-default costs
  * 12 Chinese photos; twin is right less often than wrong.
  */
+/**
+ * With a set picked and no art matched, two cards of the set whose name the name band reads are
+ * told apart by the art when the closest is this far ahead of the other (resolvePokemon's
+ * nameInSet). On the owner's 30th Celebration Lapras 131 photos (art 108–114, nothing within
+ * ART_MAX_DISTANCE), it led Lapras 017 by 12 and 16 on the two whose name read.
+ */
+export const PKM_NAME_ART_LEAD = 10
+/**
+ * With a set picked and no art matched, how nearly the name band must read a name of the set
+ * (englishNameLikeness), and how far behind every other name of the set must come: the set's few
+ * names are far apart, so a read as garbled as "LaAprase" (0.83 to Lapras, at most 0.33 to any
+ * other 30th Celebration name) still says which.
+ */
+export const PKM_NAME_IN_SET_LIKENESS = 0.8
+export const PKM_NAME_IN_SET_CLEAR = 0.3
 export const PKM_GUESS_RULES: readonly PkmGuessRule[] = [
   'language',
   'reprint',

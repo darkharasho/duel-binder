@@ -47,7 +47,8 @@ import {
   matchName,
   printingsByCode,
   printingsByNumber,
-  printingsForCards
+  printingsForCards,
+  printingsForSet
 } from '../../src/main/repo/scan'
 import { localScope } from '../../src/main/repo/scope'
 import { resolveSignals, type ResolveContext } from '../../src/renderer/src/features/scan/resolve'
@@ -123,6 +124,8 @@ const CROP = process.env.SCAN_PKM_CROP === '1'
 const EDGE = process.env.SCAN_PKM_EDGE !== '0'
 // A live frame: the short holder search, and the language told rather than read.
 const LIVE = process.env.SCAN_PKM_LIVE === '1'
+/** A set picked in the scanner, by name ("30th Celebration"): its art only, and its printings. */
+const SET = process.env.SCAN_PKM_SET || null
 const preset = (t: Truth): 'en' | 'ja' => (t.language === 'ja' ? 'ja' : 'en')
 if (DIR && !READY)
   console.warn(`Pokémon real-photo gate skipped: no truth file at ${TRUTH} (see the test's header)`)
@@ -217,13 +220,26 @@ describe.skipIf(!READY)('the Pokémon scanner on real photos', () => {
         skipped.push(`${t.file}: ${e instanceof Error ? e.message : e}`)
         continue
       }
+      const setPrintings = SET ? printingsForSet(db, SET, preset(t), scope) : null
       const start = performance.now()
       const frameIndex = LIVE ? liveIndex(preset(t)) : index
       const region = CROP && EDGE ? centreCrop(img.width, img.height) : null
       const signals = readFramed(
         img,
         region,
-        (im, first) => analyze(cv, im, frameIndex, null, true, false, profile, true, first, !LIVE),
+        (im, first) =>
+          analyze(
+            cv,
+            im,
+            frameIndex,
+            setPrintings ? [...new Set(setPrintings.flatMap((p) => p.imageIds))] : null,
+            true,
+            false,
+            profile,
+            true,
+            first,
+            !LIVE
+          ),
         (im) => findCandidates(cv, im, profile)
       )
       cues[t.file] = signals.version
@@ -290,8 +306,8 @@ describe.skipIf(!READY)('the Pokémon scanner on real photos', () => {
         {
           game: 'pkm',
           ...(LIVE ? {} : { reprintLead: PKM_PHOTO_REPRINT_LEAD }),
-          setName: null,
-          setPrintings: null,
+          setName: SET,
+          setPrintings,
           defaultRarity: null,
           artDistance: async (a, b) => index.distanceBetween(a, b),
           lookups,

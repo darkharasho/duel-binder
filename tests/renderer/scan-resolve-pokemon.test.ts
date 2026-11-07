@@ -1090,3 +1090,92 @@ describe('Pokémon version cues (rule 7)', () => {
     expect('slab' in (await recognized(raw({ art }), pkm('en')))).toBe(false)
   })
 })
+
+describe('the name read, in a picked set the art matched nothing in', () => {
+  // 30th Celebration's two Lapras (017 and the full-art 131) and its Snorlax.
+  const SET: ScanPrinting[] = [
+    [71, '30th 017/128', 'Holofoil', 701, 'Lapras'],
+    [72, '30th 131/128', 'Illustration Rare', 702, 'Lapras'],
+    [73, '30th 051/128', 'Normal', 703, 'Snorlax']
+  ].map(([cardId, setCode, rarity, imageId, name]) =>
+    printing({
+      printingId: (cardId as number) * 10,
+      cardId: cardId as number,
+      name: name as string,
+      frameType: 'pokemon',
+      setName: '30th Celebration',
+      setCode: setCode as string,
+      rarity: rarity as string,
+      language: 'en',
+      imageIds: [imageId as number]
+    })
+  )
+  const ALL = [...PKM, ...SET]
+  const inSet = (picked: boolean): ResolveContext => ({
+    ...pkm(null),
+    guessRules: undefined,
+    readLocalName: async () => [],
+    setName: picked ? '30th Celebration' : null,
+    setPrintings: picked ? SET : null,
+    lookups: {
+      ...lookups,
+      printingsForCards: async (ids) => ALL.filter((p) => ids.includes(p.cardId)),
+      cardsForImages: async (ids) =>
+        ALL.flatMap((p) => p.imageIds.map((imageId) => ({ imageId, cardId: p.cardId }))).filter(
+          (c, i, all) =>
+            ids.includes(c.imageId) && all.findIndex((d) => d.imageId === c.imageId) === i
+        )
+    }
+  })
+  /** Every artwork searched, none within ART_MAX_DISTANCE. */
+  const far = (lapras131: number, lapras017: number) =>
+    [
+      { imageId: 702, distance: lapras131 },
+      { imageId: 701, distance: lapras017 },
+      { imageId: 703, distance: 120 }
+    ].sort((a, b) => a.distance - b.distance)
+
+  it('names the one card of the name, a misread letter and all', async () => {
+    const out = await recognized(
+      raw({ art: far(110, 110), nameTexts: ['Snorlex HP'] }),
+      inSet(true)
+    )
+    expect(out).toMatchObject({ cardId: 73, via: 'name' })
+    expect(out.guess).toBeFalsy()
+  })
+
+  it('tells two cards of the name by the art, as a guess, only when it leads clearly', async () => {
+    const out = await recognized(
+      raw({ art: far(108, 124), nameTexts: ['LaAprase vr'] }),
+      inSet(true)
+    )
+    expect(out).toMatchObject({ cardId: 72, via: 'name', guess: true })
+    expect(
+      (await resolveSignals(raw({ art: far(116, 120), nameTexts: ['Lapras'] }), inSet(true))).kind
+    ).not.toBe('recognized')
+  })
+
+  it('names nothing on a read near no name of the set, or as near two', async () => {
+    for (const nameTexts of [['Lapa'], ['Lapras Snorlax']])
+      expect(
+        (await resolveSignals(raw({ art: far(110, 120), nameTexts }), inSet(true))).kind
+      ).not.toBe('recognized')
+  })
+
+  it('names nothing with no set picked, or a name no card of the set has', async () => {
+    expect(
+      (await resolveSignals(raw({ art: far(108, 124), nameTexts: ['Lapras'] }), inSet(false))).kind
+    ).not.toBe('recognized')
+    expect(
+      (await resolveSignals(raw({ art: far(108, 124), nameTexts: ['Pikachu'] }), inSet(true))).kind
+    ).not.toBe('recognized')
+  })
+
+  it('leaves a card the art matched to the art', async () => {
+    const out = await recognized(
+      raw({ art: [{ imageId: 701, distance: 40 }], nameTexts: ['Snorlax'] }),
+      { ...inSet(true), readLanguage: vi.fn(async () => 'en' as const) }
+    )
+    expect(out).toMatchObject({ cardId: 71, via: 'art' })
+  })
+})

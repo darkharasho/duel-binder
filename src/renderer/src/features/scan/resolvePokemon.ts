@@ -13,6 +13,9 @@ import {
   ART_MAX_DISTANCE,
   PKM_ART_MIN_MARGIN,
   PKM_GUESS_NAME_LIKENESS,
+  PKM_NAME_ART_LEAD,
+  PKM_NAME_IN_SET_CLEAR,
+  PKM_NAME_IN_SET_LIKENESS,
   PKM_TWIN_MAYBE_ART,
   PKM_TWIN_OTHER_ART,
   PKM_GUESS_REPRINT_LEAD,
@@ -164,6 +167,37 @@ async function clearOfOtherNames(raw: RawSignals, ctx: ResolveContext): Promise<
   return true
 }
 
+/**
+ * Of cards, the one whose artwork comes closest and by how much ahead of the next: a card none of
+ * whose artworks is ranked is further than the last ranked, so it is behind by at least that.
+ * Null when the closest isn't ranked, or a card isn't and the ranking stopped short of
+ * ART_MATCH_DEPTH (it holds every artwork searched, so that card's art wasn't searched at all).
+ */
+async function closestOf(
+  raw: RawSignals,
+  cards: number[],
+  ctx: ResolveContext
+): Promise<{ cardId: number; lead: number } | null> {
+  const cardOf = new Map(
+    (await ctx.lookups.cardsForImages(raw.art.map((a) => a.imageId))).map((c) => [
+      c.imageId,
+      c.cardId
+    ])
+  )
+  const closest = new Map<number, number>()
+  for (const a of raw.art) {
+    const cardId = cardOf.get(a.imageId)
+    if (cardId !== undefined && cards.includes(cardId) && !closest.has(cardId))
+      closest.set(cardId, a.distance)
+  }
+  const ranked = [...closest].sort((a, b) => a[1] - b[1])
+  if (!ranked.length) return null
+  const [[cardId, best]] = ranked
+  if (ranked.length > 1) return { cardId, lead: ranked[1][1] - best }
+  if (raw.art.length < ART_MATCH_DEPTH) return null
+  return { cardId, lead: raw.art[raw.art.length - 1].distance - best }
+}
+
 /** How much closer the closest of cards' artworks is than the closest of the next card's. */
 async function artLead(raw: RawSignals, cards: number[], ctx: ResolveContext): Promise<number> {
   const cardOf = new Map(
@@ -302,7 +336,7 @@ async function draft(
   cardId: number,
   raw: RawSignals,
   ctx: ResolveContext,
-  via: 'code' | 'art'
+  via: ScanDraft['via']
 ): Promise<ScanDraft | null> {
   const options = await ctx.lookups.printingsForCards([cardId])
   if (!options.length) return null
@@ -434,7 +468,7 @@ export async function resolvePokemonSignals(
     if (closest >= PKM_TWIN_OTHER_ART) return false
     return closest < PKM_TWIN_MAYBE_ART ? 'yes' : 'maybe'
   }
-  const named = async (cardId: number, via: 'code' | 'art'): Promise<ScanOutcome> => {
+  const named = async (cardId: number, via: ScanDraft['via']): Promise<ScanOutcome> => {
     const item = await draft(cardId, raw, ctx, via)
     if (!item) return unsure
     // A Chinese card named through its twin is told from its reprints by the number already
@@ -547,6 +581,45 @@ export async function resolvePokemonSignals(
     return may('reprint') ? closest : null
   }
 
+  /**
+   * With a set picked and no art matched, the set's card whose name the name band reads: a pale
+   * full-art foil under room light (30th Celebration's Lapras 131) can hash as far from its own art
+   * as from any other, though its name reads plainly. Among only the set's names an English read
+   * needs no more than PKM_NAME_IN_SET_LIKENESS (englishNameLikeness), with every other name of
+   * the set PKM_NAME_IN_SET_CLEAR behind; a Japanese one is read as readsJapaneseName has it. Two
+   * cards of the set by that name (Lapras 017 and 131) are told by the art, the closest named, as
+   * a guess, when PKM_NAME_ART_LEAD ahead of the other; else none. Either way the art, though
+   * past ART_MAX_DISTANCE, must be closest to that name of all the set's cards: a card of another
+   * set by a name the set has (any Pikachu, with a set picked over a mixed pile) is not.
+   */
+  const nameInSet = async (): Promise<ScanOutcome | null> => {
+    const set = ctx.setPrintings
+    if (!set?.length) return null
+    const en = set.filter((p) => p.language === 'en')
+    const likeness = new Map<string, number>()
+    for (const p of en)
+      if (!likeness.has(p.name)) likeness.set(p.name, englishNameLikeness(raw.nameTexts, p.name))
+    const [best, next] = [...likeness].sort((a, b) => b[1] - a[1])
+    const read =
+      best &&
+      best[1] >= PKM_NAME_IN_SET_LIKENESS &&
+      (next?.[1] ?? 0) <= best[1] - PKM_NAME_IN_SET_CLEAR
+        ? en.filter((p) => p.name === best[0])
+        : []
+    const jaSet = set.filter((p) => p.language === 'ja')
+    const reads = jaSet.length ? await localNames() : []
+    const ja = jaSet.filter((p) => reads.some((r) => readsJapaneseName(r, p.localName ?? p.name)))
+    const ids = unique([...read, ...ja].map((p) => p.cardId))
+    if (!ids.length) return null
+    const top = await closestOf(raw, unique(set.map((p) => p.cardId)), ctx)
+    if (!top || !ids.includes(top.cardId)) return null
+    if (ids.length === 1) return named(ids[0], 'name')
+    const closest = await closestOf(raw, ids, ctx)
+    if (!closest || closest.lead < PKM_NAME_ART_LEAD) return null
+    guess = true
+    return named(closest.cardId, 'name')
+  }
+
   if (numbered.length) {
     const name = group.length ? null : await nameRead(raw, ctx)
     const cards = numbered.filter((p) =>
@@ -558,10 +631,13 @@ export async function resolvePokemonSignals(
       const id = await pick(cards)
       return id === null ? unsure : named(id, 'code')
     }
-    if (!group.length || !may('misread')) return unsure
+    if (!group.length) return (await nameInSet()) ?? unsure
+    if (!may('misread')) return unsure
   }
 
   if (!group.length) {
+    const byName = await nameInSet()
+    if (byName) return byName
     const [top] = raw.art
     return top && top.distance > ART_FAR_DISTANCE ? { kind: 'none', far: true } : unsure
   }

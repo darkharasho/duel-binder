@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { loadReplayArt, loadReplayLogo, replayArtSrc } from '@/features/scan/replay/art'
+import { loadReplayArt, loadReplayLogo, replayArtSrcs } from '@/features/scan/replay/art'
 import type { ReplayPull } from '@/features/scan/replay/pulls'
 import { cardImageSrc, printingImageSrc } from '@/lib/images'
 
@@ -20,13 +20,23 @@ const bitmap = (src: string): ImageBitmap => ({ src }) as unknown as ImageBitmap
 describe('loadReplayArt', () => {
   it('drops a pull whose art fails and keeps order', async () => {
     const pulls = [pull(1), pull(2), pull(3)]
-    const bad = replayArtSrc(pulls[1])
+    const bad = replayArtSrcs(pulls[1])[0]
     const out = await loadReplayArt(pulls, async (src) => {
       if (src === bad) throw new Error('404')
       return bitmap(src)
     })
     expect(out.pulls.map((p) => p.key)).toEqual(['k1', 'k3'])
-    expect(out.art).toEqual([bitmap(replayArtSrc(pulls[0])), bitmap(replayArtSrc(pulls[2]))])
+    expect(out.art).toEqual([bitmap(cardImageSrc('full', 1)), bitmap(cardImageSrc('full', 3))])
+  })
+
+  it("falls back to the card's art when the printing has no photo", async () => {
+    const photo = printingImageSrc(407046)!
+    const out = await loadReplayArt([pull(1, { photoId: 407046 })], async (src) => {
+      if (src === photo) throw new Error('Art 404')
+      return bitmap(src)
+    })
+    expect(out.pulls.map((p) => p.key)).toEqual(['k1'])
+    expect(out.art).toEqual([bitmap(cardImageSrc('full', 1))])
   })
 
   it('all fail gives nothing', async () => {
@@ -35,10 +45,10 @@ describe('loadReplayArt', () => {
   })
 })
 
-describe('replayArtSrc', () => {
-  it('prefers the printing photo on desktop', () => {
-    expect(replayArtSrc(pull(5, { photoId: 7 }))).toBe(printingImageSrc(7))
-    expect(replayArtSrc(pull(5))).toBe(cardImageSrc('full', 5))
+describe('replayArtSrcs', () => {
+  it('the printing photo first on desktop, then the card art', () => {
+    expect(replayArtSrcs(pull(5, { photoId: 7 }))).toEqual([printingImageSrc(7), cardImageSrc('full', 5)])
+    expect(replayArtSrcs(pull(5))).toEqual([cardImageSrc('full', 5)])
   })
 })
 

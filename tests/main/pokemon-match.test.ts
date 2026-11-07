@@ -349,6 +349,15 @@ describe('cardVersions', () => {
     expect(r.versions).toEqual([{ label: 'Cosmos Holofoil', productId: 1, subTypeName: 'Cosmos Holofoil', price: 3 }])
     expect(r.problems).toHaveLength(1)
   })
+  it('adds the reverse holo the owner has seen on the Delta Reign Legendary stadium halves', () => {
+    const p = prod(1, 9, '094/103')
+    const prices = new Map([[1, [{ productId: 1, subTypeName: 'Normal', marketPrice: 0.2 }]]])
+    const labels = (id: string): string[] =>
+      cardVersions(brief({ id }), [{ product: p, variantSubtype: null }], prices).versions.map((v) => v.label)
+    for (const n of ['094', '095', '096', '097', '098', '099'])
+      expect(labels(`me06-${n}`)).toEqual(['Normal', 'Reverse Holofoil'])
+    expect(labels('me06-093')).toEqual(['Normal'])
+  })
   it('makes a TCGdex cosmos foil its own version, beside the plain one', () => {
     const labels = (id: string, variants_detailed: TdVariant[]): string[] =>
       cardVersions(brief({ id, variants_detailed }), [], new Map()).versions.map((v) => v.label)

@@ -148,7 +148,8 @@ function Scanner({
     tiltModels,
     onDraft,
     onRarityRead,
-    onStalled: camera.retry
+    onStalled: camera.retry,
+    wholeFrame: true
   })
 
   useEffect(() => {

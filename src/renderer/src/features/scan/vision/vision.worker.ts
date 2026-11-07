@@ -8,6 +8,8 @@ import type { FrameSignals, WorkerReply, WorkerRequest } from '../engine'
 import { analyze } from './analyze'
 import { loadCv } from './cv'
 import type { Quad } from './detect'
+import { findCandidates } from './candidates'
+import { readFramed } from './framing'
 import { holderBudget } from './holderBudget'
 import { createTiltFrames, framesForTilt, keepsForTilt, keepsOutline } from './tiltFrames'
 
@@ -126,18 +128,28 @@ async function handle(msg: WorkerRequest): Promise<void> {
     // other. A Yu-Gi-Oh frame keeps its outline only while kept for a read, and a live frame after
     // one neither tries that outline nor keeps one of its own.
     const keep = keepsOutline(profile, !!msg.tilt)
-    const { upright, ...signals } = analyze(
-      cv,
+    // Read at the centre crop, and wider when the card runs off it (framing.ts); the quad is told
+    // in whole-frame pixels.
+    const holderPass = budget.allow()
+    const { upright, ...signals } = readFramed(
       pixels(msg.image),
-      liveIndex,
-      msg.candidates,
-      msg.wantBands,
-      msg.wantLook,
-      profile,
-      budget.allow(),
-      keep ? held : null,
-      false,
-      !!msg.tilt
+      msg.region ?? null,
+      (img, first) =>
+        analyze(
+          cv,
+          img,
+          liveIndex,
+          msg.candidates,
+          msg.wantBands,
+          msg.wantLook,
+          profile,
+          holderPass,
+          first,
+          false,
+          !!msg.tilt
+        ),
+      (img) => findCandidates(cv, img, profile),
+      keep ? held : null
     )
     if (upright && msg.tilt && msg.at !== undefined && keepsForTilt(signals.art, msg.tilt)) {
       tilt.keep(upright, msg.at)

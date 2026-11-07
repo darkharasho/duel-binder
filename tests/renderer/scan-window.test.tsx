@@ -277,10 +277,12 @@ describe('Scan window', () => {
     const engine = fakeEngine(() => ({ ...NOTHING, found: true, quad }))
     const { container } = await renderWindow(engine)
     await run(500)
-    // The stubbed camera is 640x480: the centre 360x480 is scanned.
-    expect(grabbed).toHaveBeenLastCalledWith(expect.any(HTMLVideoElement), 140, 0, 360, 480)
-    const frame = engine.analyze.mock.calls[0][0] as ImageBitmap
-    expect([frame.width, frame.height]).toEqual([360, 480])
+    // The stubbed camera is 640x480: the centre 360x480 is read first, the whole picture when it
+    // keeps missing (framing.ts).
+    expect(grabbed).toHaveBeenLastCalledWith(expect.any(HTMLVideoElement))
+    const [frame, opts] = engine.analyze.mock.calls[0] as [ImageBitmap, { region?: unknown }]
+    expect([frame.width, frame.height]).toEqual([640, 480])
+    expect(opts.region).toEqual({ x: 140, y: 0, width: 360, height: 480 })
     // Scanning is silent on stream: the card the loop found gets no outline.
     expect(container.querySelector('svg, polygon')).toBeNull()
   })

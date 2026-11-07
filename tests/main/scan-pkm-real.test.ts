@@ -52,8 +52,11 @@ import {
 import { localScope } from '../../src/main/repo/scope'
 import { resolveSignals, type ResolveContext } from '../../src/renderer/src/features/scan/resolve'
 import { analyze } from '../../src/renderer/src/features/scan/vision/analyze'
+import { findCandidates } from '../../src/renderer/src/features/scan/vision/candidates'
 import { loadCv, type CV } from '../../src/renderer/src/features/scan/vision/cv'
 import { appFrame } from './scan-app-frame'
+import { centreCrop } from '../../src/renderer/src/features/scan/crop'
+import { readFramed } from '../../src/renderer/src/features/scan/vision/framing'
 import { problemsOf, type Truth } from './scan-pkm-score'
 
 // Same reason as in scan-vision-detect.test.ts: hand vitest the plain OpenCV module.
@@ -116,6 +119,8 @@ const TRUTH = DIR ? home(process.env.SCAN_PKM_TRUTH ?? join(DIR, 'pkm-truth.json
 const WORK = DIR ? join(DIR, 'pkm-work') : undefined
 const READY = !!DIR && existsSync(TRUTH!)
 const CROP = process.env.SCAN_PKM_CROP === '1'
+/** With CROP, a frame whose card runs off the crop is read again wider (readFramed); 0 turns it off. */
+const EDGE = process.env.SCAN_PKM_EDGE !== '0'
 // A live frame: the short holder search, and the language told rather than read.
 const LIVE = process.env.SCAN_PKM_LIVE === '1'
 const preset = (t: Truth): 'en' | 'ja' => (t.language === 'ja' ? 'ja' : 'en')
@@ -207,23 +212,19 @@ describe.skipIf(!READY)('the Pokémon scanner on real photos', () => {
       let img: RgbaImage
       try {
         img = loadImage(path)
-        if (CROP) img = appFrame(img)
+        if (CROP && !EDGE) img = appFrame(img)
       } catch (e) {
         skipped.push(`${t.file}: ${e instanceof Error ? e.message : e}`)
         continue
       }
       const start = performance.now()
-      const signals = analyze(
-        cv,
+      const frameIndex = LIVE ? liveIndex(preset(t)) : index
+      const region = CROP && EDGE ? centreCrop(img.width, img.height) : null
+      const signals = readFramed(
         img,
-        LIVE ? liveIndex(preset(t)) : index,
-        null,
-        true,
-        false,
-        profile,
-        true,
-        null,
-        !LIVE
+        region,
+        (im, first) => analyze(cv, im, frameIndex, null, true, false, profile, true, first, !LIVE),
+        (im) => findCandidates(cv, im, profile)
       )
       cues[t.file] = signals.version
       // As the scan engine reads them: empty bands dropped, the code band as a collector number.
@@ -281,6 +282,7 @@ describe.skipIf(!READY)('the Pokémon scanner on real photos', () => {
         version: signals.version,
         slab: signals.slab,
         ...(signals.artVia ? { artVia: signals.artVia } : {}),
+        ...(signals.artBack !== undefined ? { artBack: signals.artBack } : {}),
         ...(signals.artBack !== undefined ? { artBack: signals.artBack } : {})
       }
       const outcome = await resolveSignals(

@@ -77,7 +77,7 @@ describe('games', () => {
   test('One Piece definition', () => {
     const op = gameDef('op')
     expect(op.name).toBe('One Piece')
-    expect(op.features).toEqual({ scan: true })
+    expect(op.features).toEqual({ scan: true, pokedex: false })
     expect(op.cardAspect).toEqual({ width: 600, height: 838 })
     expect([op.access, op.priceRule, op.crossLanguagePriceFallback]).toEqual(['testers', 'marketOnly', false])
     expect(isGameId('op')).toBe(true)
@@ -85,8 +85,8 @@ describe('games', () => {
   })
   test('byGame picks the game value', () => expect(byGame('op', { ygo: 1, pkm: 2, op: 3 })).toBe(3))
   test('features', () => {
-    expect(gameDef('ygo').features).toEqual({ scan: true })
-    expect(gameDef('pkm').features).toEqual({ scan: true })
+    expect(gameDef('ygo').features).toEqual({ scan: true, pokedex: false })
+    expect(gameDef('pkm').features).toEqual({ scan: true, pokedex: true })
     expect(gameDef('pkm').access).toBe('everyone')
     expect(gameDef('pkm').crossLanguagePriceFallback).toBe(false)
   })

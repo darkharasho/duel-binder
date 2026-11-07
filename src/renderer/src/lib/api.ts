@@ -47,7 +47,9 @@ export const queryKeys = {
   binders: ['binders'] as const,
   binder: (uid: string) => ['binders', 'binder', uid] as const,
   bindersForCard: (id: number) => ['binders', 'card', id] as const,
-  favourites: ['favourites'] as const
+  favourites: ['favourites'] as const,
+  pokedex: ['pokedex'] as const,
+  pokedexSpecies: (n: number) => ['pokedex', n] as const
 }
 
 /** Query-key prefixes to invalidate after any collection mutation. */
@@ -61,7 +63,9 @@ export const mutationInvalidationKeys = [
   ['wishlist'],
   ['binders'],
   ['favourites'],
-  ['sessions']
+  ['sessions'],
+  // Also the species panels, `['pokedex', n]`.
+  ['pokedex']
 ] as const
 
 /**

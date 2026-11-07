@@ -242,6 +242,10 @@ export function createMockApi(overrides: DeepPartial<Api> = {}): Api {
       onUpdateStatus: vi.fn(() => () => {}),
       onDataChanged: vi.fn(() => () => {})
     },
+    pokedex: {
+      summary: vi.fn(async () => ({ caught: [] })),
+      species: vi.fn(async (dexNo: number) => ({ dexNo, owned: [], missing: [] }))
+    },
     binders: {
       list: vi.fn(async () => []),
       get: vi.fn(async () => null),

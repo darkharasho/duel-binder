@@ -35,7 +35,7 @@ export const ONE_PIECE: GameDef = {
   color: '#3b82c4',
   // Scans for the testers who can see the game (access); its art match is ungated until there are
   // phone photos to gate it on.
-  features: { scan: true },
+  features: { scan: true, pokedex: false },
   cardAspect: { width: 600, height: 838 },
   crossLanguagePriceFallback: false,
   priceRule: 'marketOnly',

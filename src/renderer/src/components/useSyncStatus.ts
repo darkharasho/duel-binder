@@ -16,7 +16,16 @@ export function useSyncStatus(): SyncStatus | undefined {
       qc.setQueryData(queryKeys.sync, next)
       // Card data (and prices) changed: refresh everything derived from it.
       if (prev && isSyncing(prev) && !isSyncing(next) && next.state !== 'error') {
-        for (const key of ['entries', 'facets', 'stats', 'forCard', 'search', 'card', 'sets']) {
+        for (const key of [
+          'entries',
+          'facets',
+          'stats',
+          'forCard',
+          'search',
+          'card',
+          'sets',
+          'pokedex'
+        ]) {
           void qc.invalidateQueries({ queryKey: [key] })
         }
       }

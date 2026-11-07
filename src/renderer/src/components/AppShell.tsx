@@ -23,6 +23,7 @@ export type Page =
   | 'collection'
   | 'wishlist'
   | 'binders'
+  | 'pokedex'
   | 'browse'
   | 'scan'
   | 'sessions'
@@ -41,6 +42,7 @@ const NAV_GROUPS: readonly { heading?: string; pages: readonly { page: Page; lab
       pages: [
         { page: 'collection', label: 'Collection' },
         { page: 'binders', label: 'Binders' },
+        { page: 'pokedex', label: 'Pokédex' },
         { page: 'wishlist', label: 'Wishlist' }
       ]
     },

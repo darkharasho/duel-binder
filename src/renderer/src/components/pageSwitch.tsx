@@ -8,6 +8,7 @@ import { BrowsePage } from '@/features/browse/BrowsePage'
 import { CollectionPage } from '@/features/collection/CollectionPage'
 import { DashboardPage } from '@/features/dashboard/DashboardPage'
 import { FriendsPage } from '@/features/friends/FriendsPage'
+import { PokedexPage } from '@/features/pokedex/PokedexPage'
 import { SessionsPage } from '@/features/sessions/SessionsPage'
 import { SetsPage } from '@/features/sets/SetsPage'
 import { WishlistPage } from '@/features/wishlist/WishlistPage'
@@ -91,6 +92,7 @@ export function PageSwitch({
       )}
       {page === 'wishlist' && <WishlistPage />}
       {page === 'binders' && <BindersPage />}
+      {page === 'pokedex' && <PokedexPage />}
       {page === 'browse' && (
         <BrowsePage onAddCard={(card, printingId) => openAdd({ card, printingId })} />
       )}

@@ -39,3 +39,7 @@ if [ "$failed" -ne 0 ]; then
   echo "failed numbers: $(ls "$dir/fail" | sort -n | tr '\n' ' ')" >&2
   exit 1
 fi
+if [ "$uploaded" -ne "$SIZE" ]; then
+  echo "expected $SIZE uploads, got $uploaded" >&2
+  exit 1
+fi

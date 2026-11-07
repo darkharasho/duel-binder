@@ -16,6 +16,7 @@ import {
   type ImageSize
 } from '../../../src/shared/imageSources'
 import { gameOfId, isTokenId } from '../../../src/shared/games/ids'
+import { POKEDEX_SIZE } from '../../../src/shared/pokedex'
 import { uprightJpeg } from '../../../src/shared/upright'
 import { findPokemonSetArtUrl, findSetImageUrl } from '../../../src/main/repo/sets'
 import { TCGPLAYER_IMAGE_PREFIX } from '../../../src/main/tcgplayer/catalog'
@@ -290,6 +291,9 @@ const cardArtKey = (size: ImageSize, n: number): string =>
       ? `card/${size === 'full' ? 'full' : 'small'}/${n}`
       : `card/${size}/${n}`
 
+/** A Pokédex sprite by national number, kept in R2 as sprite/<n>.png. */
+const SPRITE_PATH_RE = /^\/img\/sprite\/([1-9]\d{0,3})$/
+
 const CARD_PATH_RE = /^\/img\/(small|full|cropped)\/(\d+)$/
 /** A printing photo's small copy, by the server's printing id (see thumbs.ts). */
 const THUMB_PATH_RE = /^\/img\/printing-small\/([1-9]\d{0,15})$/
@@ -352,6 +356,21 @@ export async function edgeImage(
         )
       )
   }
+  const sprite = SPRITE_PATH_RE.exec(url.pathname)
+  if (sprite && Number(sprite[1]) <= POKEDEX_SIZE) {
+    const stored = await bucket.get(`sprite/${sprite[1]}.png`).catch(() => null)
+    if (stored)
+      return keep(
+        locked(
+          new Response(stored.body, {
+            headers: {
+              'content-type': stored.httpMetadata?.contentType ?? 'image/png',
+              'cache-control': CARD_CACHE
+            }
+          })
+        )
+      )
+  }
   const small = THUMB_PATH_RE.exec(url.pathname)
   if (small) {
     const thumb = await bucket.get(`printing-small/${small[1]}`).catch(() => null)
@@ -391,6 +410,11 @@ function resolve(deps: AppDeps, path: string): Target | null {
     return handArt(`${HAND_ART_PREFIX}${id}/${rest[0]}`, CARD_CACHE)
   }
   if (id === undefined || rest.length > 0) return null
+  if (kind === 'sprite') {
+    // R2 only (uploaded by hand); anonymous so the phone's unsigned requests are served.
+    if (!/^[1-9]\d{0,3}$/.test(id) || Number(id) > POKEDEX_SIZE) return null
+    return { key: `sprite/${id}.png`, source: async () => null, cache: CARD_CACHE, anonymous: true }
+  }
   if (kind === 'small' || kind === 'full' || kind === 'cropped') {
     if (!/^\d+$/.test(id)) return null
     const n = Number(id)

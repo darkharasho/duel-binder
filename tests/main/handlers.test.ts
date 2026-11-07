@@ -61,6 +61,7 @@ async function makeHandlers(opts: { signedIn?: boolean } = {}) {
   const images = {
     get: vi.fn(),
     getSet: vi.fn(async () => null),
+    getSprite: vi.fn(async () => null),
     getPrinting: vi.fn(),
     sizeBytes: async () => 0,
     clear: async () => {}

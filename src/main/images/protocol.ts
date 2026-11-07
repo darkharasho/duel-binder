@@ -5,6 +5,7 @@ import {
   parsePrintingImageUrl,
   parseSetImageUrl,
   parseSmallPrintingImageUrl,
+  parseSpriteImageUrl,
   type ImageCache
 } from './cache'
 
@@ -26,6 +27,13 @@ export function handleImageProtocol(cache: ImageCache): void {
     const printingId = smallId ?? parsePrintingImageUrl(request.url)
     if (printingId !== null) {
       const file = await cache.getPrinting(printingId, { small: smallId !== null })
+      return file
+        ? net.fetch(pathToFileURL(file).toString())
+        : new Response('Not found', { status: 404 })
+    }
+    const spriteN = parseSpriteImageUrl(request.url)
+    if (spriteN !== null) {
+      const file = await cache.getSprite(spriteN)
       return file
         ? net.fetch(pathToFileURL(file).toString())
         : new Response('Not found', { status: 404 })

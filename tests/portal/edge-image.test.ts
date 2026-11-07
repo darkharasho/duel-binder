@@ -59,6 +59,25 @@ describe('artwork from the edge, ahead of the Durable Object', () => {
     expect(await res?.text()).toBe('cached')
   })
 
+  it('serves a stored sprite from R2 as a png, and caches it at the edge', async () => {
+    const store = durableObject()
+    const bucket = memoryBucket()
+    await bucket.put('sprite/25.png', JPEG.buffer, { httpMetadata: { contentType: 'image/png' } })
+    const edge = memoryEdge()
+    const waits: Promise<unknown>[] = []
+    const res = await edgeImage(new Request(url('sprite/25')), bucket, edge, (p) => waits.push(p), store.fetch)
+    expect(res?.status).toBe(200)
+    expect(res?.headers.get('content-type')).toBe('image/png')
+    expect(res?.headers.get('cache-control')).toContain('immutable')
+    await Promise.all(waits)
+    expect(edge.store.has(url('sprite/25'))).toBe(true)
+    expect(store.calls).toEqual([])
+    // Out of range or absent: left to the Durable Object, which answers 404.
+    await edgeImage(new Request(url('sprite/1026')), bucket, null, () => {}, store.fetch)
+    await edgeImage(new Request(url('sprite/26')), bucket, null, () => {}, store.fetch)
+    expect(store.calls).toEqual(['/img/sprite/1026', '/img/sprite/26'])
+  })
+
   it('shares one cache entry whoever asks: the key drops the Authorization header', async () => {
     const store = durableObject()
     const bucket = memoryBucket()

@@ -5,6 +5,7 @@ import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import type { ReadableStream as WebReadableStream } from 'node:stream/web'
 import { createLimiter, type Limiter } from './limiter'
+import { POKEDEX_SIZE } from '../../shared/pokedex'
 import { setImageKey } from '../../shared/setImages'
 import {
   imageUrl,
@@ -49,6 +50,14 @@ export function parseSetImageUrl(url: string): string | null {
   return /^ygo-img:\/\/set\/([A-Za-z0-9_-]+)\/?(?:\?.*)?$/.exec(url)?.[1] ?? null
 }
 
+/** Parses `ygo-img://sprite/<n>`; null unless n is a national Pokédex number. */
+export function parseSpriteImageUrl(url: string): number | null {
+  const m = /^ygo-img:\/\/sprite\/([1-9]\d{0,3})\/?$/.exec(url)
+  if (!m) return null
+  const n = Number(m[1])
+  return n <= POKEDEX_SIZE ? n : null
+}
+
 /** Parses `ygo-img://printing/<id>`; null unless the id is a positive integer. */
 export function parsePrintingImageUrl(url: string): number | null {
   const m = /^ygo-img:\/\/printing\/(\d+)\/?$/.exec(url)
@@ -72,6 +81,8 @@ export interface ImageCache {
   /** `priority` downloads it ahead of what's already queued (an image someone's waiting on). */
   get(size: ImageSize, id: number, opts?: { priority?: boolean }): Promise<string | null>
   getSet(key: string, opts?: { priority?: boolean }): Promise<string | null>
+  /** A Pokédex sprite by national number; null when n is out of range or it can't be fetched. */
+  getSprite(n: number): Promise<string | null>
   /**
    * The scan of one printing; null when it has none. `small`: its small copy for a grid, else the
    * full photo (already on disk, or while the server has no small copy).
@@ -94,6 +105,7 @@ export interface ImageSources {
   card(size: ImageSize, id: number): ImageSource | null
   set(key: string): ImageSource | null
   konami(key: string): ImageSource | null
+  sprite(n: number): ImageSource | null
   printing(printingId: number): Promise<ImageSource | null>
   /** A printing photo's small copy, a JPEG; a 404 when the server has none. Same `key` as `printing`. */
   printingSmall?(printingId: number): Promise<ImageSource | null>
@@ -328,6 +340,15 @@ export function createImageCache(opts: {
         path.join(opts.dir, 'sets', `${key}.jpg`),
         undefined,
         priority
+      )
+    },
+
+    async getSprite(n) {
+      if (!Number.isInteger(n) || n < 1 || n > POKEDEX_SIZE) return null
+      return fromSource(
+        () => opts.sources.sprite(n),
+        `sprite/${n}`,
+        path.join(opts.dir, 'sprites', `${n}.png`)
       )
     },
 

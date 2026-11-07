@@ -2,7 +2,7 @@ import { createElement } from 'react'
 import { render, screen } from '@testing-library/react'
 import { CardArt } from '@/components/CardArt'
 import { cardArtUrl, coverArtUrl, setArtUrl } from '@/components/artWashContext'
-import { cardImageSrc, printingImageSrc, printingPhotoSrc, setImageSrc } from '@/lib/images'
+import { cardImageSrc, printingImageSrc, printingPhotoSrc, setImageSrc, spriteSrc } from '@/lib/images'
 import { isMac, isPhone, isWeb } from '@/lib/platform'
 import { createMockApi } from './mockApi'
 
@@ -26,6 +26,13 @@ describe('image URL helpers', () => {
     expect(printingImageSrc(5)).toBe('/img/printing/5')
     expect(printingImageSrc(5, { small: true })).toBe('/img/printing-small/5')
     expect(setImageSrc('LOB')).toBe('/img/set/LOB')
+  })
+
+  it('builds sprite URLs on desktop and the web', () => {
+    usePlatformApi('linux')
+    expect(spriteSrc(6)).toBe('ygo-img://sprite/6')
+    usePlatformApi('web')
+    expect(spriteSrc(6)).toBe('/img/sprite/6')
   })
 
   it('builds /img/ URLs on the phone, with no printing scans', () => {

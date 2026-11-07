@@ -24,6 +24,14 @@ export function portalImageSources(opts: {
   return {
     card: (size, id) => at(`${size}/${id}`),
     set: (key) => at(`set/${encodeURIComponent(key)}`),
+    // Sprites are public: the bearer goes along when there is one, but its absence is no reason to skip.
+    sprite: (n) => {
+      const token = opts.token()
+      return {
+        url: `${base}/img/sprite/${n}`,
+        ...(token && { headers: { authorization: `Bearer ${token}` } })
+      }
+    },
     konami: (key) => at(`konami/${encodeURIComponent(key)}`),
     printing: async (printingId) => photo(printingId, 'printing', ''),
     // `?only`: a 404 when there's no small copy yet, not the full photo in its place.

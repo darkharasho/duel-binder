@@ -123,24 +123,23 @@ export function pokedexSpecies(db: SqlDb, dexNo: number, scope: Scope = LOCAL): 
 
   // Missing: the species' other cards, shown by their newest English printing (any language if none is English).
   const rest = cardIds.filter((id) => !owned.has(id))
-  const printings =
-    rest.length === 0
-      ? []
-      : (db
-          .prepare(
-            `SELECT c.id AS card_id, c.name, p.set_name, p.language, COALESCE(${SET_DATE}, '') AS date
+  // Printings of every card of the species: whether any is English decides the fallback, owned or not.
+  const allPrintings = db
+    .prepare(
+      `SELECT c.id AS card_id, c.name, p.set_name, p.language, COALESCE(${SET_DATE}, '') AS date
              FROM card_printings p
              JOIN cards c ON c.id = p.card_id AND +c.game = ${scope.game}
              ${SET_JOINS}
              WHERE +p.game = ${scope.game} AND p.card_id IN (SELECT value FROM json_each(?))`
-          )
-          .all(JSON.stringify(rest)) as {
-          card_id: number
-          name: string
-          set_name: string
-          language: string
-          date: string
-        }[])
+    )
+    .all(json) as {
+    card_id: number
+    name: string
+    set_name: string
+    language: string
+    date: string
+  }[]
+  const printings = allPrintings.filter((r) => !owned.has(r.card_id))
   const images = new Map<number, number>()
   if (printings.length > 0) {
     const imgs = db
@@ -161,8 +160,8 @@ export function pokedexSpecies(db: SqlDb, dexNo: number, scope: Scope = LOCAL): 
     date: r.date,
     copies: 0
   })
-  const english = printings.filter((r) => r.language === 'en')
-  const pool = english.length > 0 ? english : printings
+  const hasEnglish = allPrintings.some((r) => r.language === 'en')
+  const pool = hasEnglish ? printings.filter((r) => r.language === 'en') : printings
   const best = new Map<number, Pick>()
   for (const r of pool) {
     const pick = toPick(r)

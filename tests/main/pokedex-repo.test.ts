@@ -166,6 +166,13 @@ describe('pokedexSpecies', () => {
     expect(r.missing.map((c) => c.cardId)).toEqual([ja.cardId])
   })
 
+  it('has no missing cards when every English card is owned, whatever Japanese cards remain', () => {
+    const en = card('Charizard', 6)
+    own(en.printingId, en.cardId)
+    card('リザードン', 6, { language: 'ja', setName: 'JP' })
+    expect(pokedexSpecies(db, 6, PKM).missing).toEqual([])
+  })
+
   it('returns nothing for a species with no cards', () => {
     expect(pokedexSpecies(db, 1025, PKM)).toEqual({ dexNo: 1025, owned: [], missing: [] })
   })

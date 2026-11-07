@@ -14,7 +14,6 @@ import {
 import { api } from '@/lib/api'
 import { GameProvider, useGame } from '@/lib/game'
 import { playScanPing } from '@/lib/scanPing'
-import { cn } from '@/lib/utils'
 import { defaultEngine, type EngineFactory } from '../engine'
 import type { ScanDraft } from '../resolve'
 import { cameraResolution, useCamera } from '../useCamera'
@@ -22,6 +21,7 @@ import { useScanSets } from '../setPrintings'
 import { useScanLoop } from '../useScanLoop'
 import { createOutbox, type Outbox } from './outbox'
 import { pullOf } from './overlay'
+import { SmoothVideo } from '../SmoothVideo'
 import { PullOverlay } from './PullOverlay'
 import { SummaryOverlay } from './SummaryScreen'
 import { useOverlay } from './useOverlay'
@@ -189,15 +189,10 @@ function Scanner({
       onDoubleClick={() => void window.api.scanWindow.toggleFullScreen()}
     >
       {/* The zoom only changes what the window shows; recognition still reads the whole frame. */}
-      <video
-        ref={videoRef}
-        autoPlay
-        muted
-        playsInline
-        className={cn(
-          'size-full object-center',
-          settings.fit === 'whole' ? 'object-contain' : 'object-cover'
-        )}
+      <SmoothVideo
+        videoRef={videoRef}
+        fit={settings.fit === 'whole' ? 'contain' : 'cover'}
+        className="size-full"
         style={settings.zoom > 1 ? { transform: `scale(${settings.zoom})` } : undefined}
       />
       <PullOverlay pull={overlay} scanned={scanned} />

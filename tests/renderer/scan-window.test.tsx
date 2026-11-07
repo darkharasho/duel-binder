@@ -768,13 +768,17 @@ describe('Scan window', () => {
       stubCamera()
       await renderWindow(fakeEngine(() => NOTHING))
       const video = document.querySelector('video')!
+      // The zoom is on the picture's box, the video and the smooth canvas over it alike.
+      const picture = video.parentElement!
       expect(video).toHaveClass('object-cover')
-      expect(video.style.transform).toBe('')
+      expect(screen.getByTestId('smooth-video')).toHaveClass('object-cover')
+      expect(picture.style.transform).toBe('')
 
       settings({ fit: 'whole', zoom: 2 })
       await run()
       expect(video).toHaveClass('object-contain')
-      expect(video.style.transform).toBe('scale(2)')
+      expect(screen.getByTestId('smooth-video')).toHaveClass('object-contain')
+      expect(picture.style.transform).toBe('scale(2)')
     })
   })
 })

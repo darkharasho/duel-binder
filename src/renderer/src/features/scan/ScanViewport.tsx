@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button'
 import { cn } from '@/lib/utils'
 import { CardOutline } from './CardOutline'
 import { PhotoButton } from './PhotoButton'
+import { SmoothVideo } from './SmoothVideo'
 import { statusText } from './scanText'
 import type { CameraError } from './useCamera'
 import type { ScanLoop } from './useScanLoop'
@@ -15,7 +16,9 @@ import type { ScanLoop } from './useScanLoop'
  *
  * `zoom` enlarges the picture on its centre, the outline with it so it stays on the card; it's
  * only what's shown, the scan still reads the whole frame. With `onZoom`, ctrl/cmd + the wheel
- * over the picture zooms it.
+ * over the picture zooms it. `smooth` shows the picture through SmoothVideo, shrunk smoothly
+ * rather than sampled (the desktop's 4K webcams); a phone's own camera needs no such shrink and
+ * would only spend battery on it.
  */
 export function ScanViewport({
   videoRef,
@@ -26,6 +29,7 @@ export function ScanViewport({
   className,
   zoom = 1,
   onZoom,
+  smooth = false,
   children
 }: {
   videoRef: RefObject<HTMLVideoElement | null>
@@ -36,6 +40,7 @@ export function ScanViewport({
   className?: string
   zoom?: number
   onZoom?: (zoom: number) => void
+  smooth?: boolean
   children?: React.ReactNode
 }): React.JSX.Element {
   const outline = loop.outline
@@ -77,13 +82,17 @@ export function ScanViewport({
             className="absolute inset-0"
             style={zoom > 1 ? { transform: `scale(${zoom})` } : undefined}
           >
-            <video
-              ref={videoRef}
-              autoPlay
-              muted
-              playsInline
-              className="h-full w-full object-cover object-center"
-            />
+            {smooth ? (
+              <SmoothVideo videoRef={videoRef} className="h-full w-full" />
+            ) : (
+              <video
+                ref={videoRef}
+                autoPlay
+                muted
+                playsInline
+                className="h-full w-full object-cover object-center"
+              />
+            )}
             {outline && (
               <CardOutline
                 quad={outline.quad}

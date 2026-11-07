@@ -98,6 +98,7 @@ export function InPageScanner({
   return (
     <section aria-label="Camera" className="flex w-min shrink-0 flex-col gap-3">
       <ScanViewport
+        smooth
         videoRef={videoRef}
         error={camera.error}
         messages={CAMERA_MESSAGES}

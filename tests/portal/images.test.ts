@@ -9,7 +9,9 @@ import {
   POKEMONTCG_IMAGE_PREFIX,
   YUGIPEDIA_IMAGE_PREFIX
 } from '../../src/shared/imageSources'
+import { encode } from 'jpeg-js'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { jpegSize } from '../../src/shared/upright'
 import { handle, type AppDeps } from '../../workers/portal/src/app'
 import { TCGPLAYER_IMAGE_PREFIX } from '../../src/main/tcgplayer/catalog'
 import {
@@ -26,7 +28,8 @@ import { addUser, memoryBucket, noPrices, seededServerDb } from './helpers'
 
 const BASE = 'https://app.test'
 const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3])
-const imageResponse = (): Response => new Response(JPEG, { status: 200, headers: { 'content-type': 'image/jpeg' } })
+const imageResponse = (): Response =>
+  new Response(JPEG, { status: 200, headers: { 'content-type': 'image/jpeg' } })
 
 describe('token card art', () => {
   const YP = 'https://ms.yugipedia.com/'
@@ -45,7 +48,10 @@ describe('token card art', () => {
       `INSERT INTO cards (id, name, type, frame_type, race, "desc", updated_at)
        VALUES (?, 'Token (Nash)', 'Token', 'token', 'Token', '', '2026-10-25')`
     ).run(card)
-    db.prepare('INSERT INTO card_images (image_id, card_id, sort_order) VALUES (?, ?, 0)').run(image, card)
+    db.prepare('INSERT INTO card_images (image_id, card_id, sort_order) VALUES (?, ?, 0)').run(
+      image,
+      card
+    )
     deps = {
       db,
       assets: { fetch: async () => new Response('nope', { status: 404 }) },
@@ -53,7 +59,14 @@ describe('token card art', () => {
       printingArt: { url: vi.fn(async () => null) },
       tokenArt,
       prices: noPrices,
-      env: { PUBLIC_URL: BASE, SITE_URL: 'https://site.test', DISCORD_CLIENT_ID: 'c', DISCORD_CLIENT_SECRET: 's', ADMIN_TOKEN: 'a', PRICE_WORKER_URL: 'https://prices.test' },
+      env: {
+        PUBLIC_URL: BASE,
+        SITE_URL: 'https://site.test',
+        DISCORD_CLIENT_ID: 'c',
+        DISCORD_CLIENT_SECRET: 's',
+        ADMIN_TOKEN: 'a',
+        PRICE_WORKER_URL: 'https://prices.test'
+      },
       now: () => new Date('2026-10-25T12:00:00.000Z'),
       fetch: upstream as unknown as typeof fetch
     }
@@ -61,7 +74,10 @@ describe('token card art', () => {
   afterEach(() => db.close())
 
   const get = (path: string): Promise<Response> =>
-    handle(new Request(`${BASE}/img/${path}`, { headers: { 'cf-connecting-ip': '198.51.100.7' } }), deps)
+    handle(
+      new Request(`${BASE}/img/${path}`, { headers: { 'cf-connecting-ip': '198.51.100.7' } }),
+      deps
+    )
 
   test('comes from Yugipedia, signed out too, and never from YGOPRODeck', async () => {
     expect((await get(`full/${image}`)).status).toBe(200)
@@ -73,12 +89,16 @@ describe('token card art', () => {
   describe('art over the size limit', () => {
     const TOO_BIG = 16 * 1024 * 1024
     const header = (): Response =>
-      new Response(JPEG, { headers: { 'content-type': 'image/jpeg', 'content-length': String(TOO_BIG) } })
+      new Response(JPEG, {
+        headers: { 'content-type': 'image/jpeg', 'content-length': String(TOO_BIG) }
+      })
     const signedIn = (path: string): Promise<Response> =>
       handle(new Request(`${BASE}/img/${path}`, { headers: { cookie: 'session=tok' } }), deps)
 
     beforeEach(() => {
-      db.prepare('INSERT INTO sessions (token_hash, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)').run(
+      db.prepare(
+        'INSERT INTO sessions (token_hash, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)'
+      ).run(
         createHash('sha256').update('tok').digest('hex'),
         addUser(db, '1', 'alice'),
         '2026-10-25T11:00:00.000Z',
@@ -104,7 +124,10 @@ describe('token card art', () => {
       expect(upstream).toHaveBeenCalledTimes(1)
 
       const other = tokenId(779)
-      db.prepare('INSERT INTO card_images (image_id, card_id, sort_order) VALUES (?, ?, 1)').run(other, tokenId(1))
+      db.prepare('INSERT INTO card_images (image_id, card_id, sort_order) VALUES (?, ?, 1)').run(
+        other,
+        tokenId(1)
+      )
       deps.imageQuota = createImageQuota(() => 0, { limit: 10, windowMs: 3_600_000 })
       expect((await signedIn(`full/${other}`)).status).toBe(404)
       expect((await get(`full/${other}`)).status).toBe(404)
@@ -113,7 +136,10 @@ describe('token card art', () => {
 
     test('is told by the body when no content-length says so', async () => {
       upstream.mockImplementation(
-        async () => new Response(new Uint8Array(10 * 1024 * 1024 + 1), { headers: { 'content-type': 'image/jpeg' } })
+        async () =>
+          new Response(new Uint8Array(10 * 1024 * 1024 + 1), {
+            headers: { 'content-type': 'image/jpeg' }
+          })
       )
       expect((await signedIn(`full/${image}`)).status).toBe(404)
       expect((await signedIn(`full/${image}`)).status).toBe(404)
@@ -170,17 +196,17 @@ describe('image route', () => {
     printingArt.url.mockClear()
     bucket = memoryBucket()
     upstream = vi.fn(async () => imageResponse())
-    imageId = (db.prepare('SELECT image_id FROM card_images LIMIT 1').get() as { image_id: number }).image_id
+    imageId = (db.prepare('SELECT image_id FROM card_images LIMIT 1').get() as { image_id: number })
+      .image_id
     const uid = addUser(db, '1', 'alice')
-    const hash = [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode('tok')))]
+    const hash = [
+      ...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode('tok')))
+    ]
       .map((b) => b.toString(16).padStart(2, '0'))
       .join('')
-    db.prepare('INSERT INTO sessions (token_hash, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)').run(
-      hash,
-      uid,
-      '2026-10-25T11:00:00.000Z',
-      '2026-10-25T23:00:00.000Z'
-    )
+    db.prepare(
+      'INSERT INTO sessions (token_hash, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)'
+    ).run(hash, uid, '2026-10-25T11:00:00.000Z', '2026-10-25T23:00:00.000Z')
     cookie = 'session=tok'
     deps = {
       db,
@@ -188,7 +214,14 @@ describe('image route', () => {
       images: bucket,
       printingArt,
       prices: noPrices,
-      env: { PUBLIC_URL: BASE, SITE_URL: 'https://site.test', DISCORD_CLIENT_ID: 'c', DISCORD_CLIENT_SECRET: 's', ADMIN_TOKEN: 'a', PRICE_WORKER_URL: 'https://prices.test' },
+      env: {
+        PUBLIC_URL: BASE,
+        SITE_URL: 'https://site.test',
+        DISCORD_CLIENT_ID: 'c',
+        DISCORD_CLIENT_SECRET: 's',
+        ADMIN_TOKEN: 'a',
+        PRICE_WORKER_URL: 'https://prices.test'
+      },
       now: () => new Date('2026-10-25T12:00:00.000Z'),
       fetch: upstream as unknown as typeof fetch
     }
@@ -198,7 +231,8 @@ describe('image route', () => {
   let cookie = ''
   const get = (path: string, method = 'GET'): Promise<Response> =>
     handle(new Request(`${BASE}/img/${path}`, { method, headers: { cookie } }), deps)
-  const getAnon = (path: string): Promise<Response> => handle(new Request(`${BASE}/img/${path}`), deps)
+  const getAnon = (path: string): Promise<Response> =>
+    handle(new Request(`${BASE}/img/${path}`), deps)
   const getFrom = (ip: string, path: string, withCookie = false): Promise<Response> =>
     handle(
       new Request(`${BASE}/img/${path}`, {
@@ -209,13 +243,17 @@ describe('image route', () => {
 
   describe('Pokémon art and set logos', () => {
     const PKM = 2 ** 40
-    const addPokemon = (n: number, url: string | null): number => {
+    const addPokemon = (n: number, url: string | null, name = 'Pika'): number => {
       const id = PKM + n
       db.prepare(
-        "INSERT INTO cards (id, name, type, frame_type, race, \"desc\", updated_at, game) VALUES (?, 'Pika', 'Pokemon', 'pokemon', '', '', 'x', 'pkm')"
-      ).run(id)
-      db.prepare("INSERT INTO card_images (image_id, card_id, sort_order, game) VALUES (?, ?, 0, 'pkm')").run(id, id)
-      db.prepare("INSERT INTO pokemon_cards (card_id, category, source_id, image_url) VALUES (?, 'Pokemon', ?, ?)").run(id, `s${n}`, url)
+        "INSERT INTO cards (id, name, type, frame_type, race, \"desc\", updated_at, game) VALUES (?, ?, 'Pokemon', 'pokemon', '', '', 'x', 'pkm')"
+      ).run(id, name)
+      db.prepare(
+        "INSERT INTO card_images (image_id, card_id, sort_order, game) VALUES (?, ?, 0, 'pkm')"
+      ).run(id, id)
+      db.prepare(
+        "INSERT INTO pokemon_cards (card_id, category, source_id, image_url) VALUES (?, 'Pokemon', ?, ?)"
+      ).run(id, `s${n}`, url)
       return id
     }
     const addSet = (key: string, url: string | null, game = 'pkm'): void => {
@@ -236,8 +274,12 @@ describe('image route', () => {
     it('serves owner-supplied art from R2 only, and never fetches it', async () => {
       const id = addPokemon(9, `${HAND_ART_PREFIX}en-me06-011`)
       expect((await get(`small/${id}`)).status).toBe(404)
-      await bucket.put('hand/en-me06-011/low.jpg', JPEG.buffer, { httpMetadata: { contentType: 'image/jpeg' } })
-      await bucket.put('hand/en-me06-011/high.jpg', JPEG.buffer, { httpMetadata: { contentType: 'image/jpeg' } })
+      await bucket.put('hand/en-me06-011/low.jpg', JPEG.buffer, {
+        httpMetadata: { contentType: 'image/jpeg' }
+      })
+      await bucket.put('hand/en-me06-011/high.jpg', JPEG.buffer, {
+        httpMetadata: { contentType: 'image/jpeg' }
+      })
       expect((await getAnon(`small/${id}`)).status).toBe(200)
       expect((await getAnon(`full/${id}`)).status).toBe(200)
       // The catalog job fingerprints the file itself, at its URL.
@@ -251,8 +293,49 @@ describe('image route', () => {
       const id = addPokemon(2, 'https://tcgplayer-cdn.tcgplayer.com/product/487828_200w.jpg')
       await get(`full/${id}`)
       await get(`small/${id}`)
-      expect(upstream.mock.calls[0][0]).toBe('https://tcgplayer-cdn.tcgplayer.com/product/487828_in_1000x1000.jpg')
-      expect(upstream.mock.calls[1][0]).toBe('https://tcgplayer-cdn.tcgplayer.com/product/487828_200w.jpg')
+      expect(upstream.mock.calls[0][0]).toBe(
+        'https://tcgplayer-cdn.tcgplayer.com/product/487828_in_1000x1000.jpg'
+      )
+      expect(upstream.mock.calls[1][0]).toBe(
+        'https://tcgplayer-cdn.tcgplayer.com/product/487828_200w.jpg'
+      )
+    })
+
+    it('stands sideways TCGplayer art (a LEGEND half) upright before keeping it', async () => {
+      const landscape = new Uint8Array(
+        encode({ width: 42, height: 30, data: new Uint8Array(42 * 30 * 4).fill(128) }, 90).data
+      )
+      const portrait = new Uint8Array(
+        encode({ width: 30, height: 42, data: new Uint8Array(30 * 42 * 4).fill(128) }, 90).data
+      )
+      const jpeg = (b: Uint8Array<ArrayBuffer>) => async () =>
+        new Response(b, { status: 200, headers: { 'content-type': 'image/jpeg' } })
+      const legend = addPokemon(
+        10,
+        'https://tcgplayer-cdn.tcgplayer.com/product/716199_200w.jpg',
+        'Darkrai & Cresselia LEGEND'
+      )
+      upstream.mockImplementationOnce(jpeg(landscape))
+      const res = await get(`small/${legend}`)
+      expect(jpegSize(new Uint8Array(await res.arrayBuffer()))).toEqual({ width: 30, height: 42 })
+      expect(jpegSize(new Uint8Array(bucket.store.get(`card/small/${legend}`)!.bytes))).toEqual({
+        width: 30,
+        height: 42
+      })
+      // A portrait one is kept byte for byte.
+      const plain = addPokemon(11, 'https://tcgplayer-cdn.tcgplayer.com/product/487828_200w.jpg')
+      upstream.mockImplementationOnce(jpeg(portrait))
+      await get(`small/${plain}`)
+      expect(new Uint8Array(bucket.store.get(`card/small/${plain}`)!.bytes)).toEqual(portrait)
+      // A BREAK card is landscape as it stands: kept as it came.
+      const brk = addPokemon(
+        12,
+        'https://tcgplayer-cdn.tcgplayer.com/product/716162_200w.jpg',
+        'Greninja BREAK'
+      )
+      upstream.mockImplementationOnce(jpeg(landscape))
+      await get(`small/${brk}`)
+      expect(new Uint8Array(bucket.store.get(`card/small/${brk}`)!.bytes)).toEqual(landscape)
     })
 
     it('serves cropped Pokémon art as the small art, under its own key', async () => {
@@ -262,14 +345,22 @@ describe('image route', () => {
       expect(bucket.store.has(`card/cropped/${id}`)).toBe(true)
       const tp = addPokemon(8, 'https://tcgplayer-cdn.tcgplayer.com/product/487828_200w.jpg')
       await get(`cropped/${tp}`)
-      expect(upstream.mock.calls[1][0]).toBe('https://tcgplayer-cdn.tcgplayer.com/product/487828_200w.jpg')
+      expect(upstream.mock.calls[1][0]).toBe(
+        'https://tcgplayer-cdn.tcgplayer.com/product/487828_200w.jpg'
+      )
     })
 
     it('404s a foreign host, a lookalike host and a null url without fetching', async () => {
       const evil = addPokemon(3, 'https://evil.example/x')
       const like = addPokemon(4, 'https://assets.tcgdex.net.evil.com/en/x')
       const none = addPokemon(5, null)
-      for (const p of [`full/${evil}`, `full/${like}`, `small/${none}`, `cropped/${none}`, `full/${PKM + 99}`]) {
+      for (const p of [
+        `full/${evil}`,
+        `full/${like}`,
+        `small/${none}`,
+        `cropped/${none}`,
+        `full/${PKM + 99}`
+      ]) {
         expect((await get(p)).status).toBe(404)
       }
       expect(upstream).not.toHaveBeenCalled()
@@ -340,16 +431,19 @@ describe('image route', () => {
     it('404s an unknown td- key, a foreign logo host and a non-pkm row without fetching', async () => {
       addSet('td-en-bad', 'https://evil.example/logo')
       addSet('td-en-ygo', 'https://assets.tcgdex.net/en/x/logo', 'ygo')
-      for (const k of ['td-en-nope', 'td-en-bad', 'td-en-ygo']) expect((await get(`set/${k}`)).status).toBe(404)
+      for (const k of ['td-en-nope', 'td-en-bad', 'td-en-ygo'])
+        expect((await get(`set/${k}`)).status).toBe(404)
       expect(upstream).not.toHaveBeenCalled()
     })
 
     it('serves a One Piece pack shot from Bandai, and 404s one off Bandai or on another game', async () => {
-      const shot = 'https://en.onepiece-cardgame.com/renewal/images/products/boosters/op01/img_item01.webp'
+      const shot =
+        'https://en.onepiece-cardgame.com/renewal/images/products/boosters/op01/img_item01.webp'
       addSet('ob-0123456789abcdef0123', shot, 'op')
       addSet('ob-bad', 'https://evil.example/pack.webp', 'op')
       addSet('ob-ygo', shot, 'ygo')
-      for (const k of ['ob-nope', 'ob-bad', 'ob-ygo']) expect((await get(`set/${k}`)).status).toBe(404)
+      for (const k of ['ob-nope', 'ob-bad', 'ob-ygo'])
+        expect((await get(`set/${k}`)).status).toBe(404)
       expect(upstream).not.toHaveBeenCalled()
       expect((await get('set/ob-0123456789abcdef0123')).status).toBe(200)
       expect(upstream.mock.calls[0][0]).toBe(shot)
@@ -363,9 +457,13 @@ describe('image route', () => {
     db.prepare(
       "INSERT INTO cards (id, name, type, frame_type, race, \"desc\", updated_at, game) VALUES (?, 'Luffy', 'Leader', 'op', '', '', 'x', 'op')"
     ).run(id)
-    db.prepare("INSERT INTO card_images (image_id, card_id, sort_order, game) VALUES (?, ?, 0, 'op')").run(id, id)
+    db.prepare(
+      "INSERT INTO card_images (image_id, card_id, sort_order, game) VALUES (?, ?, 0, 'op')"
+    ).run(id, id)
     expect((await get(`small/${id}`)).status).toBe(404)
-    expect(upstream.mock.calls.map((c) => String(c[0])).filter((u) => u.includes('ygoprodeck'))).toEqual([])
+    expect(
+      upstream.mock.calls.map((c) => String(c[0])).filter((u) => u.includes('ygoprodeck'))
+    ).toEqual([])
   })
 
   it('serves a card image from upstream once, then from R2', async () => {
@@ -375,7 +473,9 @@ describe('image route', () => {
     expect(first.headers.get('cache-control')).toBe('public, max-age=31536000, immutable')
     expect(new Uint8Array(await first.arrayBuffer())).toEqual(JPEG)
     expect(upstream).toHaveBeenCalledTimes(1)
-    expect(upstream.mock.calls[0][0]).toBe(`https://images.ygoprodeck.com/images/cards_small/${imageId}.jpg`)
+    expect(upstream.mock.calls[0][0]).toBe(
+      `https://images.ygoprodeck.com/images/cards_small/${imageId}.jpg`
+    )
     expect(bucket.store.has(`card/small/${imageId}`)).toBe(true)
 
     const second = await get(`small/${imageId}`)
@@ -432,7 +532,7 @@ describe('image route', () => {
       expect(upstream).not.toHaveBeenCalled()
     })
 
-    it('fetches a known printing\'s photo for the phone, metered before the lookup', async () => {
+    it("fetches a known printing's photo for the phone, metered before the lookup", async () => {
       const id = (db.prepare('SELECT id FROM card_printings LIMIT 1').get() as { id: number }).id
       printingUrl = `${YUGIPEDIA_IMAGE_PREFIX}x.jpg`
       const res = await getFrom(IP, `printing/${id}`)
@@ -445,10 +545,12 @@ describe('image route', () => {
       expect(printingArt.url).not.toHaveBeenCalled()
     })
 
-    it('a signed-out printing lookup spends the address\'s quota even when no photo is found', async () => {
+    it("a signed-out printing lookup spends the address's quota even when no photo is found", async () => {
       const t = 1_000_000
       deps.anonImageQuota = createImageQuota<string>(() => t, { limit: 1, windowMs: 3_600_000 })
-      const ids = (db.prepare('SELECT id FROM card_printings LIMIT 2').all() as { id: number }[]).map((r) => r.id)
+      const ids = (
+        db.prepare('SELECT id FROM card_printings LIMIT 2').all() as { id: number }[]
+      ).map((r) => r.id)
       printingUrl = null
       expect((await getFrom(IP, `printing/${ids[0]}`)).status).toBe(404)
       expect((await getFrom(IP, `printing/${ids[1]}`)).status).toBe(429)
@@ -456,12 +558,12 @@ describe('image route', () => {
     })
 
     it('set and konami misses still need a session', async () => {
-      db.prepare("INSERT INTO konami_logos (set_name, image_url, image_key) VALUES ('Set', ?, 'km-abc')").run(
-        `${KONAMI_LOGO_PREFIX}logos/a.png`
-      )
-      db.prepare("INSERT INTO sets (language, set_name, set_code, image_url, image_key) VALUES ('en', 'Cover Set', 'CVR', ?, 'yp-abc123')").run(
-        'https://ms.yugipedia.com/a/ab/Cover.png'
-      )
+      db.prepare(
+        "INSERT INTO konami_logos (set_name, image_url, image_key) VALUES ('Set', ?, 'km-abc')"
+      ).run(`${KONAMI_LOGO_PREFIX}logos/a.png`)
+      db.prepare(
+        "INSERT INTO sets (language, set_name, set_code, image_url, image_key) VALUES ('en', 'Cover Set', 'CVR', ?, 'yp-abc123')"
+      ).run('https://ms.yugipedia.com/a/ab/Cover.png')
       for (const path of ['set/LOB', 'set/yp-abc123', 'konami/km-abc']) {
         const res = await getFrom(IP, path)
         expect(res.status).toBe(404)
@@ -474,7 +576,9 @@ describe('image route', () => {
       let t = 1_000_000
       deps.anonImageQuota = createImageQuota<string>(() => t, { limit: 2, windowMs: 3_600_000 })
       deps.imageQuota = createImageQuota(() => t, { limit: 2, windowMs: 3_600_000 })
-      const ids = (db.prepare('SELECT image_id FROM card_images LIMIT 4').all() as { image_id: number }[]).map((r) => r.image_id)
+      const ids = (
+        db.prepare('SELECT image_id FROM card_images LIMIT 4').all() as { image_id: number }[]
+      ).map((r) => r.image_id)
       expect(ids.length).toBe(4)
       expect((await getFrom(IP, `small/${ids[0]}`)).status).toBe(200)
       expect((await getFrom(IP, `small/${ids[1]}`)).status).toBe(200)
@@ -499,7 +603,8 @@ describe('image route', () => {
     })
 
     it('unwraps IPv4-mapped IPv6 and groups other IPv6 by /56', () => {
-      const key = (ip: string): string | null => clientAddressKey(new Request(BASE, { headers: { 'cf-connecting-ip': ip } }))
+      const key = (ip: string): string | null =>
+        clientAddressKey(new Request(BASE, { headers: { 'cf-connecting-ip': ip } }))
       expect(key('203.0.113.7')).toBe('203.0.113.7')
       expect(key('::ffff:203.0.113.7')).toBe('203.0.113.7')
       expect(key('0:0:0:0:0:FFFF:203.0.113.7')).toBe('203.0.113.7')
@@ -515,7 +620,9 @@ describe('image route', () => {
       let t = 1_000_000
       deps.anonImageQuota = createAnonImageQuota(() => t, { perAddress: 2, global: 3 })
       deps.imageQuota = createImageQuota(() => t, { limit: 5, windowMs: 3_600_000 })
-      const ids = (db.prepare('SELECT image_id FROM card_images LIMIT 4').all() as { image_id: number }[]).map((r) => r.image_id)
+      const ids = (
+        db.prepare('SELECT image_id FROM card_images LIMIT 4').all() as { image_id: number }[]
+      ).map((r) => r.image_id)
       expect((await getFrom('198.51.100.1', `small/${ids[0]}`)).status).toBe(200)
       expect((await getFrom('198.51.100.2', `small/${ids[1]}`)).status).toBe(200)
       t += 600_000
@@ -538,7 +645,8 @@ describe('image route', () => {
       expect(quota.retryAfterMs(IP)).toBe(3_600_000)
       let n = ANON_IMAGE_LIMIT
       for (let a = 0; n < ANON_IMAGE_GLOBAL_LIMIT; a++) {
-        for (let i = 0; i < ANON_IMAGE_LIMIT && n < ANON_IMAGE_GLOBAL_LIMIT; i++, n++) expect(quota.take(`10.0.0.${a}`)).toBe(true)
+        for (let i = 0; i < ANON_IMAGE_LIMIT && n < ANON_IMAGE_GLOBAL_LIMIT; i++, n++)
+          expect(quota.take(`10.0.0.${a}`)).toBe(true)
       }
       t = 1000
       expect(quota.take('192.0.2.1')).toBe(false)
@@ -551,7 +659,9 @@ describe('image route', () => {
     it('remembers an upstream failure and answers signed-out callers 404 without refetching', async () => {
       const t = 0
       deps.anonMisses = createMissCache(() => t, { ttlMs: 3_600_000, maxKeys: 100 })
-      upstream.mockResolvedValueOnce(new Response('nope', { status: 404, headers: { 'content-type': 'image/jpeg' } }))
+      upstream.mockResolvedValueOnce(
+        new Response('nope', { status: 404, headers: { 'content-type': 'image/jpeg' } })
+      )
       expect((await getFrom(IP, `cropped/${imageId}`)).status).toBe(404)
       expect((await getFrom('198.51.100.9', `cropped/${imageId}`)).status).toBe(404)
       expect(upstream).toHaveBeenCalledTimes(1)
@@ -636,9 +746,13 @@ describe('image route', () => {
   })
 
   it('upstream 404 or non-image answers 404 and stores nothing', async () => {
-    upstream.mockResolvedValueOnce(new Response('nope', { status: 404, headers: { 'content-type': 'image/jpeg' } }))
+    upstream.mockResolvedValueOnce(
+      new Response('nope', { status: 404, headers: { 'content-type': 'image/jpeg' } })
+    )
     expect((await get(`small/${imageId}`)).status).toBe(404)
-    upstream.mockResolvedValueOnce(new Response('<html>', { status: 200, headers: { 'content-type': 'text/html' } }))
+    upstream.mockResolvedValueOnce(
+      new Response('<html>', { status: 200, headers: { 'content-type': 'text/html' } })
+    )
     expect((await get(`small/${imageId}`)).status).toBe(404)
     upstream.mockRejectedValueOnce(new Error('network'))
     expect((await get(`small/${imageId}`)).status).toBe(404)
@@ -656,7 +770,9 @@ describe('image route', () => {
 
     it('yp- key resolves through the sets table and sends a User-Agent', async () => {
       const url = 'https://ms.yugipedia.com/a/ab/Cover.png'
-      db.prepare("INSERT INTO sets (language, set_name, set_code, image_url, image_key) VALUES ('en', 'Cover Set', 'CVR', ?, 'yp-abc123')").run(url)
+      db.prepare(
+        "INSERT INTO sets (language, set_name, set_code, image_url, image_key) VALUES ('en', 'Cover Set', 'CVR', ?, 'yp-abc123')"
+      ).run(url)
       const res = await get('set/yp-abc123')
       expect(res.status).toBe(200)
       expect(upstream.mock.calls[0][0]).toBe('https://img.yugipedia.com/a/ab/Cover.png')
@@ -666,7 +782,9 @@ describe('image route', () => {
     })
 
     it('yp- key whose stored URL is off-prefix, or unknown, answers 404', async () => {
-      db.prepare("INSERT INTO sets (language, set_name, set_code, image_url, image_key) VALUES ('en', 'Evil Set', 'EVL', 'https://evil.test/x.png', 'yp-evil')").run()
+      db.prepare(
+        "INSERT INTO sets (language, set_name, set_code, image_url, image_key) VALUES ('en', 'Evil Set', 'EVL', 'https://evil.test/x.png', 'yp-evil')"
+      ).run()
       expect((await get('set/yp-evil')).status).toBe(404)
       expect((await get('set/yp-missing')).status).toBe(404)
       expect(upstream).not.toHaveBeenCalled()
@@ -682,7 +800,9 @@ describe('image route', () => {
 
   it('yc- key resolves through pack_art and fetches the official URL', async () => {
     const url = `${PACK_ART_PREFIX}2024/01/pack.jpg`
-    db.prepare("INSERT INTO pack_art (set_name, image_url, image_key) VALUES ('Pack', ?, 'yc-abc')").run(url)
+    db.prepare(
+      "INSERT INTO pack_art (set_name, image_url, image_key) VALUES ('Pack', ?, 'yc-abc')"
+    ).run(url)
     const res = await get('set/yc-abc')
     expect(res.status).toBe(200)
     expect(upstream.mock.calls[0][0]).toBe(url)
@@ -694,21 +814,29 @@ describe('image route', () => {
       expect((await get(`small/${imageId}`)).status).toBe(404)
     }
     expect(bucket.store.size).toBe(0)
-    upstream.mockResolvedValueOnce(new Response(JPEG, { headers: { 'content-type': 'Image/PNG; charset=binary' } }))
+    upstream.mockResolvedValueOnce(
+      new Response(JPEG, { headers: { 'content-type': 'Image/PNG; charset=binary' } })
+    )
     const ok = await get(`small/${imageId}`)
     expect(ok.status).toBe(200)
     expect(ok.headers.get('content-type')).toBe('image/png')
   })
 
   it('locks down every response', async () => {
-    for (const res of [await get(`small/${imageId}`), await get('small/0'), await get(`small/${imageId}`, 'POST')]) {
+    for (const res of [
+      await get(`small/${imageId}`),
+      await get('small/0'),
+      await get(`small/${imageId}`, 'POST')
+    ]) {
       expect(res.headers.get('x-content-type-options')).toBe('nosniff')
       expect(res.headers.get('content-security-policy')).toBe('sandbox')
     }
   })
 
   it('does not follow redirects and treats them as a miss', async () => {
-    upstream.mockResolvedValueOnce(new Response(null, { status: 302, headers: { location: 'https://evil.test/x.png' } }))
+    upstream.mockResolvedValueOnce(
+      new Response(null, { status: 302, headers: { location: 'https://evil.test/x.png' } })
+    )
     expect((await get(`small/${imageId}`)).status).toBe(404)
     expect((upstream.mock.calls[0][1] as RequestInit).redirect).toBe('manual')
     expect(bucket.store.size).toBe(0)
@@ -733,10 +861,16 @@ describe('image route', () => {
     expect(upstream).not.toHaveBeenCalled()
     expect((await get(`set/${'a'.repeat(200)}`)).status).toBe(200)
     upstream.mockResolvedValueOnce(
-      new Response(JPEG, { headers: { 'content-type': 'image/jpeg', 'content-length': String(11 * 1024 * 1024) } })
+      new Response(JPEG, {
+        headers: { 'content-type': 'image/jpeg', 'content-length': String(11 * 1024 * 1024) }
+      })
     )
     expect((await get(`small/${imageId}`)).status).toBe(404)
-    upstream.mockResolvedValueOnce(new Response(new Uint8Array(10 * 1024 * 1024 + 1), { headers: { 'content-type': 'image/jpeg' } }))
+    upstream.mockResolvedValueOnce(
+      new Response(new Uint8Array(10 * 1024 * 1024 + 1), {
+        headers: { 'content-type': 'image/jpeg' }
+      })
+    )
     expect((await get(`full/${imageId}`)).status).toBe(404)
     expect([...bucket.store.keys()]).toEqual([`set/${'a'.repeat(200)}`])
   })
@@ -745,7 +879,9 @@ describe('image route', () => {
     deps.anonMisses = createMissCache(() => 0, { ttlMs: 3_600_000, maxKeys: 100 })
     upstream.mockImplementation(
       async () =>
-        new Response(JPEG, { headers: { 'content-type': 'image/jpeg', 'content-length': String(11 * 1024 * 1024) } })
+        new Response(JPEG, {
+          headers: { 'content-type': 'image/jpeg', 'content-length': String(11 * 1024 * 1024) }
+        })
     )
     expect((await get('set/abc')).status).toBe(404)
     expect((await get('set/abc')).status).toBe(404)
@@ -840,7 +976,9 @@ describe('image route', () => {
 
     it('counts printing art lookups against the quota before asking the resolver', async () => {
       deps.imageQuota = createImageQuota(() => 1_000_000, { limit: 2, windowMs: 3_600_000 })
-      await bucket.put('printing/9', JPEG.buffer as ArrayBuffer, { httpMetadata: { contentType: 'image/jpeg' } })
+      await bucket.put('printing/9', JPEG.buffer as ArrayBuffer, {
+        httpMetadata: { contentType: 'image/jpeg' }
+      })
       expect((await get('printing/1')).status).toBe(404) // resolves to nothing, still spends a unit
       expect((await get('printing/2')).status).toBe(404)
       printingArt.url.mockClear()
@@ -853,7 +991,9 @@ describe('image route', () => {
     })
 
     it('a stored photo is served without asking the resolver', async () => {
-      await bucket.put('printing/7', JPEG.buffer as ArrayBuffer, { httpMetadata: { contentType: 'image/jpeg' } })
+      await bucket.put('printing/7', JPEG.buffer as ArrayBuffer, {
+        httpMetadata: { contentType: 'image/jpeg' }
+      })
       expect((await get('printing/7')).status).toBe(200)
       expect(printingArt.url).not.toHaveBeenCalled()
     })
@@ -861,7 +1001,11 @@ describe('image route', () => {
 
   describe('Konami logos and the upstream quota', () => {
     const addLogo = (key: string, url = `${KONAMI_LOGO_PREFIX}logos/a.png`): void => {
-      db.prepare("INSERT INTO konami_logos (set_name, image_url, image_key) VALUES (?, ?, ?)").run(`Set ${key}`, url, key)
+      db.prepare('INSERT INTO konami_logos (set_name, image_url, image_key) VALUES (?, ?, ?)').run(
+        `Set ${key}`,
+        url,
+        key
+      )
     }
 
     it('mirrors a Konami logo under konami/<key>', async () => {
@@ -899,7 +1043,9 @@ describe('image route', () => {
     it('limits upstream fetches per user but never R2 hits', async () => {
       let t = 1_000_000
       deps.imageQuota = createImageQuota(() => t, { limit: 2, windowMs: 3_600_000 })
-      await bucket.put('card/small/1', JPEG.buffer as ArrayBuffer, { httpMetadata: { contentType: 'image/jpeg' } })
+      await bucket.put('card/small/1', JPEG.buffer as ArrayBuffer, {
+        httpMetadata: { contentType: 'image/jpeg' }
+      })
       expect((await get('set/AAA')).status).toBe(200)
       expect((await get('set/BBB')).status).toBe(200)
       const limited = await get('set/CCC')
@@ -965,7 +1111,14 @@ describe('op art', () => {
       images: bucket,
       printingArt: { url: printingUrl },
       prices: noPrices,
-      env: { PUBLIC_URL: BASE, SITE_URL: 'https://site.test', DISCORD_CLIENT_ID: 'c', DISCORD_CLIENT_SECRET: 's', ADMIN_TOKEN: 'a', PRICE_WORKER_URL: 'https://prices.test' },
+      env: {
+        PUBLIC_URL: BASE,
+        SITE_URL: 'https://site.test',
+        DISCORD_CLIENT_ID: 'c',
+        DISCORD_CLIENT_SECRET: 's',
+        ADMIN_TOKEN: 'a',
+        PRICE_WORKER_URL: 'https://prices.test'
+      },
       now: () => new Date('2026-11-04T12:00:00.000Z'),
       fetch: upstream as unknown as typeof fetch
     }
@@ -973,9 +1126,16 @@ describe('op art', () => {
   afterEach(() => db.close())
 
   const get = (path: string): Promise<Response> =>
-    handle(new Request(`${BASE}/img/${path}`, { headers: { 'cf-connecting-ip': '198.51.100.7' } }), deps)
+    handle(
+      new Request(`${BASE}/img/${path}`, { headers: { 'cf-connecting-ip': '198.51.100.7' } }),
+      deps
+    )
   const stored = (key: string): void => {
-    bucket.store.set(key, { bytes: JPEG.buffer.slice(0) as ArrayBuffer, contentType: 'image/jpeg', etag: '"s"' })
+    bucket.store.set(key, {
+      bytes: JPEG.buffer.slice(0) as ArrayBuffer,
+      contentType: 'image/jpeg',
+      etag: '"s"'
+    })
   }
 
   it('serves a stored small copy for small and cropped', async () => {
@@ -1000,7 +1160,9 @@ describe('op art', () => {
     expect(res.status).toBe(200)
     expect(res.headers.get('cache-control')).toBe('public, max-age=31536000, immutable')
     expect(upstream).toHaveBeenCalledTimes(1)
-    expect(upstream.mock.calls[0][0]).toBe('https://en.onepiece-cardgame.com/images/cardlist/card/OP01-001.png')
+    expect(upstream.mock.calls[0][0]).toBe(
+      'https://en.onepiece-cardgame.com/images/cardlist/card/OP01-001.png'
+    )
     expect(bucket.store.has(`card/full/${ids[0]}`)).toBe(true)
   })
 
@@ -1008,7 +1170,9 @@ describe('op art', () => {
     const res = await get(`small/${ids[1]}`)
     expect(res.status).toBe(200)
     expect(res.headers.get('cache-control')).toBe('public, max-age=3600')
-    expect(upstream.mock.calls[0][0]).toBe('https://en.onepiece-cardgame.com/images/cardlist/card/OP01-001_p1.png')
+    expect(upstream.mock.calls[0][0]).toBe(
+      'https://en.onepiece-cardgame.com/images/cardlist/card/OP01-001_p1.png'
+    )
     expect(bucket.store.has(`card/full/${ids[1]}`)).toBe(true)
     expect(bucket.store.has(`card/small/${ids[1]}`)).toBe(false)
   })
@@ -1032,24 +1196,36 @@ describe('op art', () => {
   })
 
   it('a DON!! card (tcg:<product>) fetches TCGplayer art per size, under card/<size>, for a year', async () => {
-    db.prepare('UPDATE onepiece_images SET bandai_id = ? WHERE image_id = ?').run('tcg:593801', ids[0])
+    db.prepare('UPDATE onepiece_images SET bandai_id = ? WHERE image_id = ?').run(
+      'tcg:593801',
+      ids[0]
+    )
     const full = await get(`full/${ids[0]}`)
     expect(full.status).toBe(200)
     expect(full.headers.get('cache-control')).toBe('public, max-age=31536000, immutable')
-    expect(upstream.mock.calls[0][0]).toBe('https://tcgplayer-cdn.tcgplayer.com/product/593801_in_1000x1000.jpg')
+    expect(upstream.mock.calls[0][0]).toBe(
+      'https://tcgplayer-cdn.tcgplayer.com/product/593801_in_1000x1000.jpg'
+    )
     expect(bucket.store.has(`card/full/${ids[0]}`)).toBe(true)
     const small = await get(`small/${ids[0]}`)
     expect(small.status).toBe(200)
     expect(small.headers.get('cache-control')).toBe('public, max-age=31536000, immutable')
-    expect(upstream.mock.calls[1][0]).toBe('https://tcgplayer-cdn.tcgplayer.com/product/593801_200w.jpg')
+    expect(upstream.mock.calls[1][0]).toBe(
+      'https://tcgplayer-cdn.tcgplayer.com/product/593801_200w.jpg'
+    )
     expect(bucket.store.has(`card/small/${ids[0]}`)).toBe(true)
   })
 
   it("Japanese art (ja:<id>) is fetched from Bandai's Japanese site", async () => {
-    db.prepare('UPDATE onepiece_images SET bandai_id = ? WHERE image_id = ?').run('ja:OP01-001_p1', ids[0])
+    db.prepare('UPDATE onepiece_images SET bandai_id = ? WHERE image_id = ?').run(
+      'ja:OP01-001_p1',
+      ids[0]
+    )
     const res = await get(`full/${ids[0]}`)
     expect(res.status).toBe(200)
-    expect(upstream.mock.calls[0][0]).toBe('https://www.onepiece-cardgame.com/images/cardlist/card/OP01-001_p1.png')
+    expect(upstream.mock.calls[0][0]).toBe(
+      'https://www.onepiece-cardgame.com/images/cardlist/card/OP01-001_p1.png'
+    )
     expect(bucket.store.has(`card/full/${ids[0]}`)).toBe(true)
   })
 
@@ -1062,13 +1238,20 @@ describe('op art', () => {
   })
 
   it('a tcg: key that is not a product id is a 404 with no fetch', async () => {
-    db.prepare('UPDATE onepiece_images SET bandai_id = ? WHERE image_id = ?').run('tcg:../1', ids[0])
+    db.prepare('UPDATE onepiece_images SET bandai_id = ? WHERE image_id = ?').run(
+      'tcg:../1',
+      ids[0]
+    )
     expect((await get(`full/${ids[0]}`)).status).toBe(404)
     expect(upstream).not.toHaveBeenCalled()
   })
 
   it('Yu-Gi-Oh! keys stay card/<size>/<passcode>', async () => {
-    const pass = (db.prepare('SELECT min(image_id) AS id FROM card_images WHERE image_id < 100000000').get() as { id: number }).id
+    const pass = (
+      db
+        .prepare('SELECT min(image_id) AS id FROM card_images WHERE image_id < 100000000')
+        .get() as { id: number }
+    ).id
     expect((await get(`cropped/${pass}`)).status).toBe(200)
     expect(bucket.store.has(`card/cropped/${pass}`)).toBe(true)
   })

@@ -2,10 +2,30 @@ import logoSrc from '@/assets/logo.svg'
 import { cardImageSrc, printingImageSrc } from '@/lib/images'
 import type { ReplayPull } from './pulls'
 
-/** The owner's own photo of the printing where there is one (desktop only), else the card's art. */
-export function replayArtSrc(pull: ReplayPull): string {
+/**
+ * Where a pull's art is tried, in order: the owner's own photo of the printing (desktop only), then
+ * the card's art. A pull's photoId names its printing whether or not a photo was ever taken.
+ */
+export function replayArtSrcs(pull: ReplayPull): string[] {
   const photo = pull.photoId === null ? null : printingImageSrc(pull.photoId)
-  return photo ?? cardImageSrc('full', pull.imageId)
+  const art = cardImageSrc('full', pull.imageId)
+  return photo ? [photo, art] : [art]
+}
+
+/** The first of srcs that loads. */
+async function firstLoaded(
+  srcs: string[],
+  load: (src: string) => Promise<ImageBitmap>
+): Promise<ImageBitmap> {
+  let failure: unknown = new Error('No art')
+  for (const src of srcs) {
+    try {
+      return await load(src)
+    } catch (e) {
+      failure = e
+    }
+  }
+  throw failure
 }
 
 /**
@@ -18,12 +38,12 @@ async function fetchBitmap(src: string): Promise<ImageBitmap> {
   return createImageBitmap(await res.blob())
 }
 
-/** Each pull's art, loaded together. A pull whose art won't load is dropped; the order holds. */
+/** Each pull's art, loaded together. A pull none of whose art loads is dropped; the order holds. */
 export async function loadReplayArt(
   pulls: ReplayPull[],
   load: (src: string) => Promise<ImageBitmap> = fetchBitmap
 ): Promise<{ pulls: ReplayPull[]; art: ImageBitmap[] }> {
-  const results = await Promise.allSettled(pulls.map((p) => load(replayArtSrc(p))))
+  const results = await Promise.allSettled(pulls.map((p) => firstLoaded(replayArtSrcs(p), load)))
   const out: { pulls: ReplayPull[]; art: ImageBitmap[] } = { pulls: [], art: [] }
   results.forEach((r, i) => {
     if (r.status !== 'fulfilled') return

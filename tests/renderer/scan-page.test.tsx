@@ -805,8 +805,11 @@ describe('Scan page', () => {
     expect(layer.querySelector('svg[preserveAspectRatio] polygon')).not.toBeNull()
     expect(screen.getByText('2.00×')).toBeInTheDocument()
     // Display only: the scan still reads the preview's whole crop.
+    engine.analyze.mockClear()
     await run(500)
-    expect(grabbed).toHaveBeenLastCalledWith(expect.any(HTMLVideoElement), 140, 0, 360, 480)
+    const regions = engine.analyze.mock.calls.map((c) => (c[1] as { region?: unknown }).region)
+    expect(regions.length).toBeGreaterThan(0)
+    for (const r of regions) expect(r).toEqual({ x: 140, y: 0, width: 360, height: 480 })
     // Its own setting, apart from the scan window's zoom.
     expect(localStorage.getItem('scan.pageZoom')).toBe('2')
     expect(localStorage.getItem('scan.zoom')).toBeNull()

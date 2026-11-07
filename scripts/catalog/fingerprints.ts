@@ -5,7 +5,7 @@ import { imageUrl, opBandaiArtUrl, opTcgArtUrl } from '../../src/shared/imageSou
 import { scanProfile, type ScanProfile } from '../../src/shared/scan/profiles'
 import { HASH_WORDS, artHash, fingerprintSource, hamming } from '../../src/shared/scan/fingerprint'
 import { encodeFingerprints } from '../../src/shared/scan/fingerprintFile'
-import type { RgbaImage } from '../../src/shared/scan/types'
+import { upright } from '../../src/shared/upright'
 import { encodeFingerprintRefs } from '../../src/shared/scan/fingerprintRefs'
 import { isTokenId, TOKEN_ID_MIN } from '../../src/shared/games/ids'
 import type { YugipediaClient } from '../../src/main/yugipedia/client'
@@ -76,22 +76,7 @@ const UNSCANNED_SOURCES = ['zh-hant', 'fr', 'de', 'it', 'es']
 
 const sleep = (ms: number): Promise<void> => new Promise((resolve) => setTimeout(resolve, ms))
 
-/**
- * img stood upright: a landscape image turned a quarter counter-clockwise. TCGplayer shows a
- * sideways card (a LEGEND half) as it is printed, wider than tall, but a card is scanned as a
- * portrait card, as TCGdex stores those halves.
- */
-export function upright(img: RgbaImage): RgbaImage {
-  const { width: w, height: h } = img
-  if (w <= h) return img
-  const data = new Uint8Array(w * h * 4)
-  for (let y = 0; y < w; y++)
-    for (let x = 0; x < h; x++) {
-      const from = (x * w + (w - 1 - y)) * 4
-      data.set(img.data.subarray(from, from + 4), (y * h + x) * 4)
-    }
-  return { width: h, height: w, data }
-}
+export { upright }
 
 /** Downloads and hashes one cropped art image; 429 and 5xx are retried, anything else rejects. */
 async function hashImage(

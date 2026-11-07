@@ -1128,20 +1128,29 @@ describe('the name read, in a picked set the art matched nothing in', () => {
     }
   })
   /** Every artwork searched, none within ART_MAX_DISTANCE. */
-  const far = (lapras131: number, lapras017: number) =>
+  const far = (lapras131: number, lapras017: number, snorlax = 120) =>
     [
       { imageId: 702, distance: lapras131 },
       { imageId: 701, distance: lapras017 },
-      { imageId: 703, distance: 120 }
+      { imageId: 703, distance: snorlax }
     ].sort((a, b) => a.distance - b.distance)
 
   it('names the one card of the name, a misread letter and all', async () => {
     const out = await recognized(
-      raw({ art: far(110, 110), nameTexts: ['Snorlex HP'] }),
+      raw({ art: far(110, 110, 104), nameTexts: ['Snorlex HP'] }),
       inSet(true)
     )
     expect(out).toMatchObject({ cardId: 73, via: 'name' })
     expect(out.guess).toBeFalsy()
+  })
+
+  it('names nothing when another card of the set is closer by art (a card of another set)', async () => {
+    for (const nameTexts of [['Snorlax'], ['Lapras']]) {
+      const art = nameTexts[0] === 'Snorlax' ? far(100, 110, 104) : far(110, 112, 100)
+      expect((await resolveSignals(raw({ art, nameTexts }), inSet(true))).kind).not.toBe(
+        'recognized'
+      )
+    }
   })
 
   it('tells two cards of the name by the art, as a guess, only when it leads clearly', async () => {

@@ -588,7 +588,9 @@ export async function resolvePokemonSignals(
    * needs no more than PKM_NAME_IN_SET_LIKENESS (englishNameLikeness), with every other name of
    * the set PKM_NAME_IN_SET_CLEAR behind; a Japanese one is read as readsJapaneseName has it. Two
    * cards of the set by that name (Lapras 017 and 131) are told by the art, the closest named, as
-   * a guess, when PKM_NAME_ART_LEAD ahead of the other; else none.
+   * a guess, when PKM_NAME_ART_LEAD ahead of the other; else none. Either way the art, though
+   * past ART_MAX_DISTANCE, must be closest to that name of all the set's cards: a card of another
+   * set by a name the set has (any Pikachu, with a set picked over a mixed pile) is not.
    */
   const nameInSet = async (): Promise<ScanOutcome | null> => {
     const set = ctx.setPrintings
@@ -608,8 +610,10 @@ export async function resolvePokemonSignals(
     const reads = jaSet.length ? await localNames() : []
     const ja = jaSet.filter((p) => reads.some((r) => readsJapaneseName(r, p.localName ?? p.name)))
     const ids = unique([...read, ...ja].map((p) => p.cardId))
-    if (ids.length === 1) return named(ids[0], 'name')
     if (!ids.length) return null
+    const top = await closestOf(raw, unique(set.map((p) => p.cardId)), ctx)
+    if (!top || !ids.includes(top.cardId)) return null
+    if (ids.length === 1) return named(ids[0], 'name')
     const closest = await closestOf(raw, ids, ctx)
     if (!closest || closest.lead < PKM_NAME_ART_LEAD) return null
     guess = true

@@ -140,7 +140,8 @@ function tooCloseTokens(
  * Traditional Chinese and European Pokémon cards stay out: the scanner reads English and Japanese
  * cards only.
  * Art a Chinese card borrows (art_twin_id, traditional_twin_id) stays out too: only a card's own
- * image_url is hashed.
+ * image_url is hashed. Energy cards stay out: a basic Energy's flat art matches many a frame that
+ * holds no card (owner, 2026-11-06), so the scanner never names one from its art.
  */
 export async function buildFingerprints(opts: FingerprintOptions): Promise<FingerprintResult> {
   const fetchFn = opts.fetch ?? fetch
@@ -160,7 +161,7 @@ export async function buildFingerprints(opts: FingerprintOptions): Promise<Finge
         `SELECT i.image_id, i.card_id, COALESCE(c.frame_type, '') AS frame_type
          FROM card_images i LEFT JOIN cards c ON c.id = i.card_id
          LEFT JOIN pokemon_cards p ON p.card_id = i.card_id
-         WHERE i.game = ? AND ${UNSCANNED_SOURCES.map((l) => `COALESCE(p.source_id, '') NOT LIKE '${l}/%'`).join(' AND ')}`
+         WHERE i.game = ? AND COALESCE(p.category, '') <> 'Energy' AND ${UNSCANNED_SOURCES.map((l) => `COALESCE(p.source_id, '') NOT LIKE '${l}/%'`).join(' AND ')}`
       )
       .all(game) as { image_id: number; card_id: number; frame_type: string }[]
     const frames = new Map(images.map((r) => [r.image_id, r.frame_type]))

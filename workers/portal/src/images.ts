@@ -251,7 +251,7 @@ interface Target {
   meterFirst?: boolean
   /** A fixed YGOPRODeck card image: signed-out requests may fill it too, under the per-address quota. */
   anonymous?: boolean
-  /** Stand a landscape JPEG upright before keeping it: TCGplayer photographs a LEGEND half sideways. */
+  /** Stand a sideways JPEG upright before keeping it: TCGplayer photographs a LEGEND half sideways. */
   upright?: boolean
 }
 
@@ -420,9 +420,9 @@ function resolve(deps: AppDeps, path: string): Target | null {
     if (game === 'pkm') {
       const row = deps.db
         .prepare(
-          'SELECT pc.image_url FROM card_images ci JOIN pokemon_cards pc ON pc.card_id = ci.card_id WHERE ci.image_id = ?'
+          'SELECT pc.image_url, c.name FROM card_images ci JOIN pokemon_cards pc ON pc.card_id = ci.card_id JOIN cards c ON c.id = ci.card_id WHERE ci.image_id = ?'
         )
-        .get(n) as { image_url: string | null } | undefined
+        .get(n) as { image_url: string | null; name: string } | undefined
       if (row?.image_url?.startsWith(HAND_ART_PREFIX))
         return handArt(`${row.image_url}/${kind === 'full' ? 'high' : 'low'}.jpg`, CARD_CACHE)
       // TCGdex and TCGplayer have no crop, so a Pokémon `cropped` (a set tile's backdrop) is the small art.
@@ -435,7 +435,8 @@ function resolve(deps: AppDeps, path: string): Target | null {
         source: fixed(url),
         cache: CARD_CACHE,
         anonymous: true,
-        upright: url.startsWith(TCGPLAYER_CDN_PREFIX)
+        // Only a LEGEND half: a BREAK card is landscape as it stands, and TCGplayer shows it so.
+        upright: url.startsWith(TCGPLAYER_CDN_PREFIX) && /\bLEGEND\b/i.test(row!.name)
       }
     }
     if (!deps.db.prepare('SELECT 1 FROM card_images WHERE image_id = ?').get(n)) return null

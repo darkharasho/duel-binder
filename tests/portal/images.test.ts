@@ -243,11 +243,11 @@ describe('image route', () => {
 
   describe('Pokémon art and set logos', () => {
     const PKM = 2 ** 40
-    const addPokemon = (n: number, url: string | null): number => {
+    const addPokemon = (n: number, url: string | null, name = 'Pika'): number => {
       const id = PKM + n
       db.prepare(
-        "INSERT INTO cards (id, name, type, frame_type, race, \"desc\", updated_at, game) VALUES (?, 'Pika', 'Pokemon', 'pokemon', '', '', 'x', 'pkm')"
-      ).run(id)
+        "INSERT INTO cards (id, name, type, frame_type, race, \"desc\", updated_at, game) VALUES (?, ?, 'Pokemon', 'pokemon', '', '', 'x', 'pkm')"
+      ).run(id, name)
       db.prepare(
         "INSERT INTO card_images (image_id, card_id, sort_order, game) VALUES (?, ?, 0, 'pkm')"
       ).run(id, id)
@@ -310,7 +310,11 @@ describe('image route', () => {
       )
       const jpeg = (b: Uint8Array<ArrayBuffer>) => async () =>
         new Response(b, { status: 200, headers: { 'content-type': 'image/jpeg' } })
-      const legend = addPokemon(10, 'https://tcgplayer-cdn.tcgplayer.com/product/716199_200w.jpg')
+      const legend = addPokemon(
+        10,
+        'https://tcgplayer-cdn.tcgplayer.com/product/716199_200w.jpg',
+        'Darkrai & Cresselia LEGEND'
+      )
       upstream.mockImplementationOnce(jpeg(landscape))
       const res = await get(`small/${legend}`)
       expect(jpegSize(new Uint8Array(await res.arrayBuffer()))).toEqual({ width: 30, height: 42 })
@@ -323,6 +327,15 @@ describe('image route', () => {
       upstream.mockImplementationOnce(jpeg(portrait))
       await get(`small/${plain}`)
       expect(new Uint8Array(bucket.store.get(`card/small/${plain}`)!.bytes)).toEqual(portrait)
+      // A BREAK card is landscape as it stands: kept as it came.
+      const brk = addPokemon(
+        12,
+        'https://tcgplayer-cdn.tcgplayer.com/product/716162_200w.jpg',
+        'Greninja BREAK'
+      )
+      upstream.mockImplementationOnce(jpeg(landscape))
+      await get(`small/${brk}`)
+      expect(new Uint8Array(bucket.store.get(`card/small/${brk}`)!.bytes)).toEqual(landscape)
     })
 
     it('serves cropped Pokémon art as the small art, under its own key', async () => {

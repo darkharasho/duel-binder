@@ -1126,7 +1126,6 @@ describe('the name read, in a picked set the art matched nothing in', () => {
     ...pkm(null),
     guessRules: undefined,
     readLocalName: async () => [],
-    setName: picked ? '30th Celebration' : null,
     setPrintings: picked ? SET : null,
     lookups: {
       ...lookups,

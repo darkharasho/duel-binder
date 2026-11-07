@@ -52,8 +52,8 @@ gotta-catch-'em-all goal and shows at a glance which Pokémon you still have no 
 ## Constraints and facts from the code
 
 - The catalog build already fetches TCGdex `dexId` (`scripts/catalog/pokemon/types.ts:20`) but **doesn't
-  store it**. A new column on `pokemon_cards` (e.g. `dex_ids`, a card can show several Pokémon — Tag Team
-  "Pikachu & Zekrom-GX" has two) must be added to the schema, `MIGRATIONS` + the Worker's `SERVER_STEPS`, the
+  store it**. New columns on `pokemon_cards` (`dex_no` indexed, plus `dex_extra` because a card can show several
+  Pokémon — Tag Team "Pikachu & Zekrom-GX" has two) must be added to the schema, `MIGRATIONS` + the Worker's `SERVER_STEPS`, the
   row writer (`scripts/catalog/pokemon/write.ts`) and `src/shared/catalogTables.ts` so it syncs.
 - Not every card has a TCGdex `dexId`: Simplified Chinese (from the PTCG-card-data list), TCGplayer-only
   upcoming cards. These take it from their `art_twin_id` English card, else by English name match. TCGdex's

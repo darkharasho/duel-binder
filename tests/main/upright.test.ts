@@ -30,7 +30,7 @@ describe('upright', () => {
 
 describe('jpegSize', () => {
   it('reads the frame header', () => {
-    expect(jpegSize(halves(40, 24))).toEqual({ width: 40, height: 24 })
+    expect(jpegSize(halves(42, 30))).toEqual({ width: 42, height: 30 })
   })
   it('is null for anything that is not a JPEG', () => {
     expect(jpegSize(new Uint8Array([0x89, 0x50, 0x4e, 0x47]))).toBeNull()
@@ -40,26 +40,27 @@ describe('jpegSize', () => {
 
 describe('uprightJpeg', () => {
   it('stands a landscape JPEG upright: its left half ends up at the bottom', () => {
-    const out = uprightJpeg(halves(40, 24))!
-    expect(jpegSize(out)).toEqual({ width: 24, height: 40 })
+    const out = uprightJpeg(halves(42, 30))!
+    expect(jpegSize(out)).toEqual({ width: 30, height: 42 })
     const [top, bottom] = [pixel(out, 12, 5), pixel(out, 12, 34)]
     expect(top[2]).toBeGreaterThan(200) // blue: the right half
     expect(bottom[0]).toBeGreaterThan(200) // red: the left half
   })
 
-  it('leaves portrait and unreadable images alone', () => {
-    expect(uprightJpeg(halves(24, 40))).toBeNull()
+  it('leaves portrait, unreadable and wider-than-a-card images alone', () => {
+    expect(uprightJpeg(halves(30, 42))).toBeNull()
+    expect(uprightJpeg(halves(100, 57))).toBeNull() // TCGplayer's "Image Coming Soon" shape
     expect(uprightJpeg(new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3]))).toBeNull()
   })
 
   it('works without a global Buffer, as in a Worker', () => {
-    const input = halves(40, 24)
+    const input = halves(42, 30)
     const g = globalThis as { Buffer?: unknown }
     const saved = g.Buffer
     delete g.Buffer
     try {
       const out = uprightJpeg(input)
-      expect(out && jpegSize(out)).toEqual({ width: 24, height: 40 })
+      expect(out && jpegSize(out)).toEqual({ width: 30, height: 42 })
       expect(g.Buffer).toBeUndefined()
     } finally {
       g.Buffer = saved

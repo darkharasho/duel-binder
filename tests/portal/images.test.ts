@@ -303,20 +303,20 @@ describe('image route', () => {
 
     it('stands sideways TCGplayer art (a LEGEND half) upright before keeping it', async () => {
       const landscape = new Uint8Array(
-        encode({ width: 40, height: 24, data: new Uint8Array(40 * 24 * 4).fill(128) }, 90).data
+        encode({ width: 42, height: 30, data: new Uint8Array(42 * 30 * 4).fill(128) }, 90).data
       )
       const portrait = new Uint8Array(
-        encode({ width: 24, height: 40, data: new Uint8Array(24 * 40 * 4).fill(128) }, 90).data
+        encode({ width: 30, height: 42, data: new Uint8Array(30 * 42 * 4).fill(128) }, 90).data
       )
       const jpeg = (b: Uint8Array<ArrayBuffer>) => async () =>
         new Response(b, { status: 200, headers: { 'content-type': 'image/jpeg' } })
       const legend = addPokemon(10, 'https://tcgplayer-cdn.tcgplayer.com/product/716199_200w.jpg')
       upstream.mockImplementationOnce(jpeg(landscape))
       const res = await get(`small/${legend}`)
-      expect(jpegSize(new Uint8Array(await res.arrayBuffer()))).toEqual({ width: 24, height: 40 })
+      expect(jpegSize(new Uint8Array(await res.arrayBuffer()))).toEqual({ width: 30, height: 42 })
       expect(jpegSize(new Uint8Array(bucket.store.get(`card/small/${legend}`)!.bytes))).toEqual({
-        width: 24,
-        height: 40
+        width: 30,
+        height: 42
       })
       // A portrait one is kept byte for byte.
       const plain = addPokemon(11, 'https://tcgplayer-cdn.tcgplayer.com/product/487828_200w.jpg')

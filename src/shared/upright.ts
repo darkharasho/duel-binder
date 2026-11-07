@@ -44,12 +44,20 @@ export function jpegSize(bytes: Uint8Array): { width: number; height: number } |
 }
 
 /**
- * The JPEG stood upright (see upright), re-encoded; null when it is already portrait or can't be
- * read. Only the header is read for a portrait image, so passing every card image through is cheap.
+ * A card lying on its side is 88 × 63 mm, about 1.4 wide to 1 tall. Anything wider (TCGplayer's
+ * 1000 × 573 "Image Coming Soon" placeholder, say) isn't a card on its side and is left alone.
+ */
+const SIDEWAYS_CARD = { min: 1.3, max: 1.5 }
+
+/**
+ * The JPEG stood upright (see upright), re-encoded; null when it isn't a card on its side (see
+ * SIDEWAYS_CARD) or can't be read. Only the header is read for any other image, so passing every
+ * card image through is cheap.
  */
 export function uprightJpeg(bytes: Uint8Array, quality = 90): Uint8Array | null {
   const size = jpegSize(bytes)
-  if (!size || size.width <= size.height) return null
+  const ratio = size && size.width / size.height
+  if (!ratio || ratio < SIDEWAYS_CARD.min || ratio > SIDEWAYS_CARD.max) return null
   let img: RgbaImage
   try {
     img = decode(bytes, { useTArray: true, formatAsRGBA: true, maxMemoryUsageInMB: 64 })

@@ -389,6 +389,46 @@ describe('a Pokémon art twin with no artwork', () => {
     expect(twinned()).toEqual([true, true])
     expect(printingsByCode(db, 'LOB-EN005').every((r) => !('unseenTwin' in r))).toBe(true)
   })
+
+  it('with no illustrator on record, a twin counts only from a set of the same series', async () => {
+    const db = await seededDb()
+    const { cardIds } = seedPokemon(db)
+    const [pikachu] = cardIds
+    db.prepare(
+      "UPDATE pokemon_cards SET image_url = 'https://assets/x', illustrator = NULL WHERE card_id = ?"
+    ).run(pikachu)
+    db.prepare(
+      `INSERT INTO cards (id, game, name, type, frame_type, race, "desc", updated_at)
+       VALUES (9010, 'pkm', 'Pikachu', 'Pokémon', 'pokemon', 'Basic', '', '2026-10-29')`
+    ).run()
+    db.prepare(
+      `INSERT INTO pokemon_cards (card_id, category, hp, types, stage, rarity, illustrator, source_id, image_url)
+       VALUES (9010, 'Pokémon', 60, '[]', 'Basic', 'Common', NULL, 'en/tk-1', NULL)`
+    ).run()
+    db.prepare(
+      `INSERT INTO card_printings (game, card_id, language, set_name, set_code, set_rarity)
+       VALUES ('pkm', 9010, 'en', 'Old Kit', 'TK 1/30', 'Normal')`
+    ).run()
+    const twinned = (): boolean =>
+      printingsForCards(db, [pikachu], PKM).some(
+        (p) => p.language === 'en' && p.unseenTwin === true
+      )
+    const own = db
+      .prepare("SELECT set_name FROM card_printings WHERE card_id = ? AND language = 'en'")
+      .pluck()
+      .get(pikachu) as string
+    // No series on record: still a twin, as before.
+    expect(twinned()).toBe(true)
+    const setSeries = db.prepare(
+      `INSERT OR REPLACE INTO sets (game, language, set_name, set_code, series) VALUES ('pkm', 'en', ?, 'X', ?)`
+    )
+    setSeries.run(own, 'Mega Evolution')
+    setSeries.run('Old Kit', 'Trainer kits')
+    expect(twinned()).toBe(false)
+    // A stamped promo of the set, from its own series' promo set.
+    setSeries.run('Old Kit', 'Mega Evolution')
+    expect(twinned()).toBe(true)
+  })
 })
 
 describe('chineseOfArt', () => {

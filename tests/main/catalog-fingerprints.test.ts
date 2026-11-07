@@ -5,11 +5,11 @@ import Database from 'better-sqlite3'
 import { decode, encode } from 'jpeg-js'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { runJob } from '../../scripts/catalog/build'
-import { buildFingerprints, uploadFingerprints } from '../../scripts/catalog/fingerprints'
+import { upright, buildFingerprints, uploadFingerprints } from '../../scripts/catalog/fingerprints'
 import { openDatabase } from '../../src/main/db/database'
 import { scanProfile } from '../../src/shared/scan/profiles'
 import { NEW_ART_VARIANT } from '../../src/main/yugipedia/parse'
-import { artHash, fingerprintSource } from '../../src/shared/scan/fingerprint'
+import { HASH_WORDS, artHash, fingerprintSource, hamming } from '../../src/shared/scan/fingerprint'
 import { decodeFingerprints, encodeFingerprints } from '../../src/shared/scan/fingerprintFile'
 import { hashHex, parseFingerprintRefs } from '../../src/shared/scan/fingerprintRefs'
 import { PNG } from 'pngjs'
@@ -81,6 +81,21 @@ function imageFetch(requested: string[] = []): typeof fetch {
     const body = IMAGES[id]
     return body ? new Response(body as BodyInit) : new Response('', { status: 404 })
   }) as typeof fetch
+}
+
+/** A fingerprint file's hashes, in file order. */
+function decodeIdsAndHashes(bytes: Uint8Array): { records: Uint32Array[] } {
+  const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+  const version = view.getUint8(4)
+  const count = view.getUint32(7, true)
+  const idBytes = version === 2 ? 8 : 4
+  const words = HASH_WORDS
+  const records: Uint32Array[] = []
+  for (let i = 0; i < count; i++) {
+    const o = 11 + i * (idBytes + words * 4) + idBytes
+    records.push(Uint32Array.from({ length: words }, (_, w) => view.getUint32(o + w * 4, true)))
+  }
+  return { records }
 }
 
 describe('buildFingerprints', () => {
@@ -515,6 +530,102 @@ describe('buildFingerprints for Pokémon', () => {
     })
     expect(out).toMatchObject({ count: 1, fetched: 1, failed: 0 })
     expect(urls).toEqual(['https://assets.tcgdex.net/en/sv03-045/low.jpg'])
+  })
+
+  it('stands a landscape image upright, turned a quarter counter-clockwise', () => {
+    // 3 wide, 2 tall: pixel values 1..6 row by row.
+    const px = (v: number): number[] => [v, v, v, 255]
+    const img = { width: 3, height: 2, data: new Uint8Array([1, 2, 3, 4, 5, 6].flatMap(px)) }
+    const up = upright(img)
+    expect([up.width, up.height]).toEqual([2, 3])
+    expect([...up.data].filter((_, i) => i % 4 === 0)).toEqual([3, 6, 2, 5, 1, 4])
+    const portrait = { width: 2, height: 3, data: new Uint8Array(24) }
+    expect(upright(portrait)).toBe(portrait)
+  })
+
+  it('hashes a TCGplayer image of a sideways card as the portrait card it is', async () => {
+    const size = [210, 150]
+    const ramp = (w: number, h: number, at: (x: number, y: number) => number): Uint8Array => {
+      const data = Buffer.alloc(w * h * 4)
+      for (let y = 0; y < h; y++)
+        for (let x = 0; x < w; x++) {
+          const v = at(x, y)
+          data.set([v, v, v, 255], (y * w + x) * 4)
+        }
+      return new Uint8Array(encode({ data, width: w, height: h }, 95).data)
+    }
+    // The same picture, sideways and stood up: portrait (x, y) is landscape (W-1-y, x).
+    const pic = (x: number, y: number): number =>
+      Math.round(128 + 60 * Math.sin(x / 9) * Math.cos(y / 13) + 60 * Math.sin((x + 2 * y) / 23))
+    const landscape = ramp(size[0], size[1], pic)
+    const portrait = ramp(size[1], size[0], (x, y) => pic(size[0] - 1 - y, x))
+    const build = async (bytes: Uint8Array, tag: string): Promise<Uint8Array> => {
+      const sourceId = `en/30th-c-0${tag}`
+      const cardId = pokemonId(sourceId)
+      work
+        .prepare(
+          `INSERT INTO cards (id, name, type, frame_type, race, "desc", updated_at, game)
+           VALUES (?, 'P', 'Pokemon', 'pokemon', '', '', '2026-01-01', 'pkm')`
+        )
+        .run(cardId)
+      work
+        .prepare("INSERT INTO card_images (image_id, card_id, sort_order, game) VALUES (987654321, ?, 0, 'pkm')")
+        .run(cardId)
+      work
+        .prepare(`INSERT INTO pokemon_cards (card_id, category, source_id, image_url) VALUES (?, 'Pokemon', ?, ?)`)
+        .run(cardId, sourceId, 'https://tcgplayer-cdn.tcgplayer.com/product/716199_200w.jpg')
+      const out = await buildFingerprints({
+        work,
+        cachePath: join(dir, `fingerprints-pkm-${tag}.sqlite`),
+        fetch: (async () => new Response(bytes as BodyInit)) as typeof fetch,
+        game: 'pkm'
+      })
+      work.prepare('DELETE FROM pokemon_cards WHERE card_id = ?').run(cardId)
+      work.prepare('DELETE FROM card_images WHERE card_id = ?').run(cardId)
+      return out.bytes
+    }
+    const hashOf = (bytes: Uint8Array): Uint32Array => {
+      const { records } = decodeIdsAndHashes(bytes)
+      return records[0]
+    }
+    const sideways = hashOf(await build(landscape, '19'))
+    const stood = hashOf(await build(portrait, '20'))
+    expect(hamming(sideways, 0, stood, 0)).toBeLessThanOrEqual(32)
+  })
+
+  it('hashes cached TCGplayer images again once, now stood upright', async () => {
+    const sourceId = 'en/30th-c-019'
+    const cardId = pokemonId(sourceId)
+    work
+      .prepare(
+        `INSERT INTO cards (id, name, type, frame_type, race, "desc", updated_at, game)
+         VALUES (?, 'P', 'Pokemon', 'pokemon', '', '', '2026-01-01', 'pkm')`
+      )
+      .run(cardId)
+    work.prepare("INSERT INTO card_images (image_id, card_id, sort_order, game) VALUES (987654322, ?, 0, 'pkm')").run(cardId)
+    work
+      .prepare(`INSERT INTO pokemon_cards (card_id, category, source_id, image_url) VALUES (?, 'Pokemon', ?, ?)`)
+      .run(cardId, sourceId, 'https://tcgplayer-cdn.tcgplayer.com/product/716199_200w.jpg')
+    const cachePath = join(dir, 'fingerprints-pkm-upright.sqlite')
+    let fetches = 0
+    const build = (): ReturnType<typeof buildFingerprints> =>
+      buildFingerprints({
+        work,
+        cachePath,
+        fetch: (async () => {
+          fetches++
+          return new Response(jpeg(false) as BodyInit)
+        }) as typeof fetch,
+        game: 'pkm'
+      })
+    await build()
+    // A cache from before: the hash is there, the upright mark isn't.
+    const cache = new Database(cachePath)
+    cache.prepare("DELETE FROM meta WHERE key = 'upright'").run()
+    cache.close()
+    await build()
+    await build()
+    expect(fetches).toBe(2)
   })
 
   it('leaves Energy cards out of the pkm file: their plain art matches anything', async () => {

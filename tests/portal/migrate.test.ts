@@ -131,7 +131,7 @@ function serverBefore12(): Database.Database {
   const db = freshDb()
   runSteps(db, [
     ...MIGRATIONS.filter((m) => m.version <= 18),
-    ...SERVER_STEPS.filter((s) => !['server-12', 'server-13', 'server-14', 'server-16', 'server-18', 'server-21', 'server-23', 'server-26', 'server-27', 'server-28', 'server-35'].includes(s.name))
+    ...SERVER_STEPS.filter((s) => !['server-12', 'server-13', 'server-14', 'server-16', 'server-18', 'server-21', 'server-23', 'server-26', 'server-27', 'server-28', 'server-35', 'server-40'].includes(s.name))
   ])
   db.exec(`
     INSERT INTO users (id, discord_id, username, created_at, updated_at) VALUES (1, 'd1', 'one', 'x', 'x');
@@ -257,7 +257,7 @@ describe('server-13 (pokemon_cards image_url and local_name)', () => {
     const fresh = freshDb()
     migrateServer(fresh)
     const old = freshDb()
-    runSteps(old, [...MIGRATIONS, ...SERVER_STEPS.filter((s) => !['server-13', 'server-16', 'server-18', 'server-21', 'server-23', 'server-28'].includes(s.name))])
+    runSteps(old, [...MIGRATIONS, ...SERVER_STEPS.filter((s) => !['server-13', 'server-16', 'server-18', 'server-21', 'server-23', 'server-28', 'server-40'].includes(s.name))])
     expect(cols(old)).not.toContain('image_url')
     seedPokemon(old)
     migrateServer(old)
@@ -305,7 +305,7 @@ describe('server-16 (pokemon_cards art_twin_id)', () => {
     const fresh = freshDb()
     migrateServer(fresh)
     const old = freshDb()
-    runSteps(old, [...MIGRATIONS, ...SERVER_STEPS.filter((s) => !['server-16', 'server-18', 'server-21', 'server-23', 'server-28'].includes(s.name))])
+    runSteps(old, [...MIGRATIONS, ...SERVER_STEPS.filter((s) => !['server-16', 'server-18', 'server-21', 'server-23', 'server-28', 'server-40'].includes(s.name))])
     expect(cols(old)).not.toContain('art_twin_id')
     seedPokemon(old)
     migrateServer(old)
@@ -336,7 +336,7 @@ describe('server-18 (pokemon_cards traditional_twin_id)', () => {
     const fresh = freshDb()
     migrateServer(fresh)
     const old = freshDb()
-    runSteps(old, [...MIGRATIONS, ...SERVER_STEPS.filter((s) => s.name !== 'server-18')])
+    runSteps(old, [...MIGRATIONS, ...SERVER_STEPS.filter((s) => s.name !== 'server-18' && s.name !== 'server-40')])
     expect(cols(old)).not.toContain('traditional_twin_id')
     seedPokemon(old)
     migrateServer(old)
@@ -364,6 +364,45 @@ describe('server-18 (pokemon_cards traditional_twin_id)', () => {
   })
 })
 
+describe('server-40 (pokemon_cards dex_no / dex_extra)', () => {
+  const cols = (db: Database.Database): string[] =>
+    (db.prepare('PRAGMA table_info(pokemon_cards)').all() as { name: string }[]).map((c) => c.name)
+
+  it('a fresh server and an upgraded one both have the columns, and old rows keep null', () => {
+    const fresh = freshDb()
+    migrateServer(fresh)
+    const old = freshDb()
+    runSteps(old, [...MIGRATIONS.filter((m) => m.version <= 41), ...SERVER_STEPS.filter((s) => s.name !== 'server-40')])
+    expect(cols(old)).not.toContain('dex_no')
+    seedPokemon(old)
+    migrateServer(old)
+    for (const db of [fresh, old]) {
+      expect(cols(db)).toContain('dex_no')
+      expect(cols(db)).toContain('dex_extra')
+    }
+    expect(rows(old, 'SELECT DISTINCT dex_no, dex_extra FROM pokemon_cards')).toEqual([
+      { dex_no: null, dex_extra: null }
+    ])
+    fresh.close()
+    old.close()
+  })
+
+  it('a change to either column alone raises the row catalog_seq', () => {
+    const db = freshDb()
+    migrateServer(db)
+    const { cardIds } = seedPokemon(db)
+    const seqOf = (): number =>
+      (db.prepare('SELECT catalog_seq AS s FROM pokemon_cards WHERE card_id = ?').get(cardIds[0]) as { s: number }).s
+    const first = seqOf()
+    db.prepare('UPDATE pokemon_cards SET dex_no = ? WHERE card_id = ?').run(643, cardIds[0])
+    const second = seqOf()
+    expect(second).toBeGreaterThan(first)
+    db.prepare('UPDATE pokemon_cards SET dex_extra = ? WHERE card_id = ?').run('644', cardIds[0])
+    expect(seqOf()).toBeGreaterThan(second)
+    db.close()
+  })
+})
+
 describe('server-14 (pokemon_set_art in the change feed)', () => {
   const art = (db: Database.Database, order: number, key: string): void => {
     db.prepare(
@@ -377,7 +416,7 @@ describe('server-14 (pokemon_set_art in the change feed)', () => {
     const old = freshDb()
     runSteps(old, [
       ...MIGRATIONS.filter((m) => m.version <= 22),
-      ...SERVER_STEPS.filter((s) => s.name !== 'server-14' && s.name !== 'server-35')
+      ...SERVER_STEPS.filter((s) => s.name !== 'server-14' && s.name !== 'server-35' && s.name !== 'server-40')
     ])
     migrateServer(old)
     for (const db of [fresh, old]) {

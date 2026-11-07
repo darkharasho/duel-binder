@@ -47,7 +47,8 @@ export function InPageScanner({
     stream: camera.stream,
     engineFactory,
     tiltModels: TILT_MODELS,
-    onStalled: camera.retry
+    onStalled: camera.retry,
+    wholeFrame: true
   })
 
   const { devices, error, retry, stream } = camera

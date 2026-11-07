@@ -251,12 +251,13 @@ describe('Scan page', () => {
     expect(lastSettings()).toEqual({
       deviceId: null,
       paused: false,
-      set: null,
+      sets: [],
       scanLanguage: 'en',
       defaultRarity: 'Secret Rare',
       hitPrice: 20,
       fit: 'fill',
-      zoom: 1
+      zoom: 1,
+      cameraControls: {}
     })
   })
 
@@ -414,17 +415,16 @@ describe('Scan page', () => {
     const before = sentSettings().length
     act(() => bridge.emit({ kind: 'ready' }))
     expect(sentSettings()).toHaveLength(before + 1)
-    expect(lastSettings()).toMatchObject({ set: null, paused: false, hitPrice: 20 })
+    expect(lastSettings()).toMatchObject({ sets: [], paused: false, hitPrice: 20 })
 
     await openWindow()
     const u = user()
-    await u.click(screen.getByRole('combobox', { name: 'Set' }))
+    await u.click(screen.getByRole('combobox', { name: 'Sets' }))
     await u.click(screen.getByRole('option', { name: 'Legend of Blue Eyes White Dragon' }))
-    expect(lastSettings().set).toEqual({
-      setName: 'Legend of Blue Eyes White Dragon',
-      language: 'en'
-    })
-    expect(JSON.parse(localStorage.getItem('scan.set')!)).toEqual(lastSettings().set)
+    expect(lastSettings().sets).toEqual([
+      { setName: 'Legend of Blue Eyes White Dragon', language: 'en' }
+    ])
+    expect(JSON.parse(localStorage.getItem('scan.set')!)).toEqual(lastSettings().sets)
 
     await u.click(screen.getByRole('button', { name: 'Pause' }))
     expect(lastSettings().paused).toBe(true)
@@ -552,7 +552,9 @@ describe('Scan page', () => {
     await renderScan()
     await openWindow({ setUnreadable: true, artReady: false })
     expect(
-      screen.getByText("Couldn't load this set's cards, so cards are matched against every set.")
+      screen.getByText(
+        "Couldn't load the picked sets' cards, so cards are matched against every set."
+      )
     ).toBeInTheDocument()
     expect(
       screen.getByText(
@@ -790,6 +792,89 @@ describe('Scan page', () => {
     expect(svg.querySelector('polygon')).toHaveAttribute('points', '10,10 110,10 110,160 10,160')
   })
 
+  it('zooms the in-page picture and its outline together, scanning the same crop', async () => {
+    const engine = fakeEngine(() => ({ ...NOTHING, found: true, quad }))
+    const { container } = await renderScan({}, engine)
+    await run(500)
+    const layer = screen.getByTestId('scan-zoom')
+    expect(layer).not.toHaveStyle({ transform: 'scale(2)' })
+    fireEvent.change(screen.getByRole('slider', { name: 'Zoom' }), { target: { value: '2' } })
+    expect(layer).toHaveStyle({ transform: 'scale(2)' })
+    // The outline is drawn inside the zoomed layer, so it stays over the card.
+    expect(layer.querySelector('video')).not.toBeNull()
+    expect(layer.querySelector('svg[preserveAspectRatio] polygon')).not.toBeNull()
+    expect(screen.getByText('2.00×')).toBeInTheDocument()
+    // Display only: the scan still reads the preview's whole crop.
+    engine.analyze.mockClear()
+    await run(500)
+    const regions = engine.analyze.mock.calls.map((c) => (c[1] as { region?: unknown }).region)
+    expect(regions.length).toBeGreaterThan(0)
+    for (const r of regions) expect(r).toEqual({ x: 140, y: 0, width: 360, height: 480 })
+    // Its own setting, apart from the scan window's zoom.
+    expect(localStorage.getItem('scan.pageZoom')).toBe('2')
+    expect(localStorage.getItem('scan.zoom')).toBeNull()
+
+    // Ctrl or Cmd + the wheel over the picture zooms too; the plain wheel leaves it be.
+    const box = layer.parentElement!
+    fireEvent.wheel(box, { deltaY: -100, ctrlKey: true })
+    expect(screen.getByRole('slider', { name: 'Zoom' })).toHaveValue('2.1')
+    fireEvent.wheel(box, { deltaY: 100, metaKey: true })
+    fireEvent.wheel(box, { deltaY: 100, metaKey: true })
+    expect(screen.getByRole('slider', { name: 'Zoom' })).toHaveValue('1.9')
+    fireEvent.wheel(box, { deltaY: 100 })
+    expect(screen.getByRole('slider', { name: 'Zoom' })).toHaveValue('1.9')
+    expect(container.querySelector('[data-testid="scan-zoom"]')).toBe(layer)
+  })
+
+  it('starts the in-page picture at the remembered zoom', async () => {
+    localStorage.setItem('scan.pageZoom', '1.5')
+    await renderScan()
+    await run(500)
+    expect(screen.getByRole('slider', { name: 'Zoom' })).toHaveValue('1.5')
+    expect(screen.getByTestId('scan-zoom')).toHaveStyle({ transform: 'scale(1.5)' })
+  })
+
+  it('shows the resolution the in-page camera really opened at', async () => {
+    stubCamera(undefined, { width: 1920, height: 1080, frameRate: 30 })
+    await renderScan()
+    await run(500)
+    expect(screen.getByLabelText('Camera resolution')).toHaveTextContent('1920×1080 · 30 fps')
+  })
+
+  it("shows the resolution the scan window's camera really opened at", async () => {
+    bridge = fakeBridge(true)
+    await renderScan()
+    await run()
+    expect(screen.queryByLabelText('Camera resolution')).not.toBeInTheDocument()
+    await openWindow({ resolution: { width: 3840, height: 2160, frameRate: 30 } })
+    expect(screen.getByLabelText('Camera resolution')).toHaveTextContent('3840×2160 · 30 fps')
+  })
+
+  it("sets the scan window's camera controls from Camera settings, saved per camera", async () => {
+    bridge = fakeBridge(true)
+    await renderScan()
+    await run()
+    expect(screen.queryByRole('button', { name: 'Camera settings' })).not.toBeInTheDocument()
+    await openWindow({
+      cameraControls: {
+        deviceId: 'cam1',
+        autoExposure: true,
+        autoWhiteBalance: null,
+        ranges: { brightness: { min: -9, max: 9, step: 1, value: 4 } }
+      }
+    })
+    act(() => screen.getByRole('button', { name: 'Camera settings' }).click())
+    fireEvent.change(screen.getByRole('slider', { name: 'Brightness' }), {
+      target: { value: '2' }
+    })
+    expect(lastSettings().cameraControls).toEqual({ cam1: { brightness: 2 } })
+    expect(JSON.parse(localStorage.getItem('scan.cameraControls')!)).toEqual({
+      cam1: { brightness: 2 }
+    })
+    act(() => screen.getByRole('button', { name: 'Reset' }).click())
+    expect(lastSettings().cameraControls).toEqual({})
+  })
+
   it('draws no outline round a card-shaped thing far from any artwork', async () => {
     const book: RawSignals = {
       ...NOTHING,
@@ -1010,7 +1095,7 @@ describe('Scan page', () => {
 
     // English sets only, by their code, until another language is picked.
     const u = user()
-    await u.click(screen.getByRole('combobox', { name: 'Set' }))
+    await u.click(screen.getByRole('combobox', { name: 'Sets' }))
     expect(screen.getAllByRole('option').map((o) => o.textContent)).toEqual([
       'Any set',
       'LOB - Legend of Blue Eyes White Dragon',
@@ -1022,7 +1107,7 @@ describe('Scan page', () => {
 
     await u.click(screen.getByRole('combobox', { name: 'Language' }))
     await u.click(screen.getByRole('option', { name: 'German' }))
-    await u.click(screen.getByRole('combobox', { name: 'Set' }))
+    await u.click(screen.getByRole('combobox', { name: 'Sets' }))
     expect(screen.getAllByRole('option').map((o) => o.textContent)).toEqual([
       'Any set',
       'LOB - Legend of Blue Eyes White Dragon'
@@ -1030,27 +1115,25 @@ describe('Scan page', () => {
     await u.click(screen.getByRole('option', { name: 'LOB - Legend of Blue Eyes White Dragon' }))
     await run(500)
     expect(printingsForSet).toHaveBeenCalledWith('Legend of Blue Eyes White Dragon', 'de')
-    expect(screen.getByRole('combobox', { name: 'Set' })).toHaveTextContent(
+    expect(screen.getByRole('combobox', { name: 'Sets' })).toHaveTextContent(
       'LOB - Legend of Blue Eyes White Dragon'
     )
     expect(engine.analyze.mock.calls.at(-1)?.[1]).toMatchObject({
       candidates: [46986414, 46986415, 89631139]
     })
-    expect(JSON.parse(localStorage.getItem('scan.set')!)).toEqual({
-      setName: 'Legend of Blue Eyes White Dragon',
-      language: 'de'
-    })
+    expect(JSON.parse(localStorage.getItem('scan.set')!)).toEqual([
+      { setName: 'Legend of Blue Eyes White Dragon', language: 'de' }
+    ])
 
     // The set follows to a language that has it; every language tags each set with its own.
     await u.click(screen.getByRole('combobox', { name: 'Language' }))
     await u.click(screen.getByRole('option', { name: 'English' }))
-    expect(JSON.parse(localStorage.getItem('scan.set')!)).toEqual({
-      setName: 'Legend of Blue Eyes White Dragon',
-      language: 'en'
-    })
+    expect(JSON.parse(localStorage.getItem('scan.set')!)).toEqual([
+      { setName: 'Legend of Blue Eyes White Dragon', language: 'en' }
+    ])
     await u.click(screen.getByRole('combobox', { name: 'Language' }))
     await u.click(screen.getByRole('option', { name: 'All languages' }))
-    expect(screen.getByRole('combobox', { name: 'Set' })).toHaveTextContent(
+    expect(screen.getByRole('combobox', { name: 'Sets' })).toHaveTextContent(
       'LOB - Legend of Blue Eyes White Dragon · EN'
     )
   })
@@ -1066,11 +1149,112 @@ describe('Scan page', () => {
     await renderScan({ sets: { list: vi.fn(async () => [mrd, lobDe]) } })
     await run()
     const u = user()
-    expect(screen.getByRole('combobox', { name: 'Set' })).toHaveTextContent('MRD - Metal Raiders')
+    expect(screen.getByRole('combobox', { name: 'Sets' })).toHaveTextContent('MRD - Metal Raiders')
     await u.click(screen.getByRole('combobox', { name: 'Language' }))
     await u.click(screen.getByRole('option', { name: 'German' }))
-    expect(screen.getByRole('combobox', { name: 'Set' })).toHaveTextContent('Any set')
+    expect(screen.getByRole('combobox', { name: 'Sets' })).toHaveTextContent('Any set')
     expect(JSON.parse(localStorage.getItem('scan.set') ?? 'null')).toBeNull()
+  })
+
+  it('picks several sets and scans the art of them all', async () => {
+    const lob = {
+      setName: 'Legend of Blue Eyes White Dragon',
+      setCode: 'LOB',
+      language: 'en'
+    } as SetSummary
+    const mrd = { setName: 'Metal Raiders', setCode: 'MRD', language: 'en' } as SetSummary
+    const printingsForSet = vi.fn(async (name: string) =>
+      name === lob.setName
+        ? [printing({ imageIds: [1, 2] })]
+        : [printing({ printingId: 103, cardId: 2, imageIds: [3] })]
+    )
+    const engine = fakeEngine()
+    await renderScan(
+      { sets: { list: vi.fn(async () => [mrd, lob]) }, scan: { printingsForSet } },
+      engine
+    )
+    await run(500)
+    const u = user()
+    await u.click(screen.getByRole('combobox', { name: 'Sets' }))
+    await u.click(screen.getByRole('option', { name: 'LOB - Legend of Blue Eyes White Dragon' }))
+    // The list stays open for the next pick.
+    await u.click(screen.getByRole('option', { name: 'MRD - Metal Raiders' }))
+    await u.keyboard('{Escape}')
+    await run(500)
+    expect(printingsForSet).toHaveBeenCalledWith(lob.setName, 'en')
+    expect(printingsForSet).toHaveBeenCalledWith(mrd.setName, 'en')
+    expect(screen.getByRole('combobox', { name: 'Sets' })).toHaveTextContent('2 sets')
+    expect(engine.analyze.mock.calls.at(-1)?.[1]).toMatchObject({ candidates: [1, 2, 3] })
+    expect(JSON.parse(localStorage.getItem('scan.set')!)).toEqual([
+      { setName: lob.setName, language: 'en' },
+      { setName: mrd.setName, language: 'en' }
+    ])
+
+    // Each picked set is a chip that takes it off.
+    await u.click(screen.getByRole('button', { name: 'Remove MRD - Metal Raiders' }))
+    await run(500)
+    expect(screen.getByRole('combobox', { name: 'Sets' })).toHaveTextContent(
+      'LOB - Legend of Blue Eyes White Dragon'
+    )
+    expect(engine.analyze.mock.calls.at(-1)?.[1]).toMatchObject({ candidates: [1, 2] })
+
+    // Clear is back to any set, which forgets the pick.
+    await u.click(screen.getByRole('button', { name: 'Clear sets' }))
+    await run(500)
+    expect(screen.getByRole('combobox', { name: 'Sets' })).toHaveTextContent('Any set')
+    expect(localStorage.getItem('scan.set')).toBeNull()
+    expect(engine.analyze.mock.calls.at(-1)?.[1]).toMatchObject({ candidates: null })
+  })
+
+  it('picked sets follow to a language that has them, the rest dropped', async () => {
+    localStorage.setItem(
+      'scan.set',
+      JSON.stringify([
+        { setName: 'Metal Raiders', language: 'en' },
+        { setName: 'Legend of Blue Eyes White Dragon', language: 'en' }
+      ])
+    )
+    const list = [
+      { setName: 'Metal Raiders', setCode: 'MRD', language: 'en' },
+      { setName: 'Legend of Blue Eyes White Dragon', setCode: 'LOB', language: 'en' },
+      { setName: 'Legend of Blue Eyes White Dragon', setCode: 'LOB-DE', language: 'de' }
+    ] as SetSummary[]
+    await renderScan({ sets: { list: vi.fn(async () => list) } })
+    await run()
+    const u = user()
+    await u.click(screen.getByRole('combobox', { name: 'Language' }))
+    await u.click(screen.getByRole('option', { name: 'German' }))
+    expect(JSON.parse(localStorage.getItem('scan.set')!)).toEqual([
+      { setName: 'Legend of Blue Eyes White Dragon', language: 'de' }
+    ])
+  })
+
+  it("leaves out a picked set whose cards can't be read, and scans the others", async () => {
+    localStorage.setItem(
+      'scan.set',
+      JSON.stringify([
+        { setName: 'Metal Raiders', language: 'en' },
+        { setName: 'Legend of Blue Eyes White Dragon', language: 'en' }
+      ])
+    )
+    const engine = fakeEngine()
+    await renderScan(
+      {
+        scan: {
+          printingsForSet: vi.fn(async (name: string) => {
+            if (name === 'Metal Raiders') throw new Error('db gone')
+            return [printing({ imageIds: [7] })]
+          })
+        }
+      },
+      engine
+    )
+    await run(1000)
+    expect(
+      screen.getByText("Couldn't load the cards of Metal Raiders, so that set is left out.")
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/so cards are matched against every set/)).not.toBeInTheDocument()
+    expect(engine.analyze.mock.calls.at(-1)?.[1]).toMatchObject({ candidates: [7] })
   })
 
   it("a set whose cards can't be read scans as any set and says so", async () => {
@@ -1088,7 +1272,9 @@ describe('Scan page', () => {
     )
     await run(1000)
     expect(
-      screen.getByText("Couldn't load this set's cards, so cards are matched against every set.")
+      screen.getByText(
+        "Couldn't load the picked sets' cards, so cards are matched against every set."
+      )
     ).toBeInTheDocument()
     expect(engine.analyze.mock.calls.at(-1)?.[1]).toMatchObject({ candidates: null })
   })
@@ -1122,7 +1308,7 @@ describe('Scan page', () => {
     expect(engine.analyze.mock.calls.length).toBe(calls)
 
     const u = user()
-    await u.click(screen.getByRole('combobox', { name: 'Set' }))
+    await u.click(screen.getByRole('combobox', { name: 'Sets' }))
     await u.click(screen.getByRole('option', { name: 'Metal Raiders' }))
     await run(500)
     expect(screen.getByText('Scanning stopped after repeated errors.')).toBeInTheDocument()
@@ -1294,11 +1480,11 @@ describe('Scan page', () => {
     localStorage.setItem('scan.camera', 'cam9')
     await renderScan()
     await run()
-    expect(screen.getByRole('combobox', { name: 'Set' })).toHaveTextContent('Metal Raiders')
+    expect(screen.getByRole('combobox', { name: 'Sets' })).toHaveTextContent('Metal Raiders')
     expect(screen.getByLabelText('Hit price')).toHaveValue(50)
     act(() => bridge.emit({ kind: 'ready' }))
     expect(lastSettings()).toMatchObject({
-      set: { setName: 'Metal Raiders', language: 'en' },
+      sets: [{ setName: 'Metal Raiders', language: 'en' }],
       hitPrice: 50,
       deviceId: 'cam9'
     })
@@ -1462,7 +1648,7 @@ describe('Scan page', () => {
     await u.keyboard('{Escape}')
 
     // With any set, every language is listed.
-    await u.click(screen.getByRole('combobox', { name: 'Set' }))
+    await u.click(screen.getByRole('combobox', { name: 'Sets' }))
     await u.click(screen.getByRole('option', { name: 'Any set' }))
     await u.click(screen.getByRole('combobox', { name: 'Rarity for Dark Magician' }))
     expect(setsListed()).toHaveLength(3)
@@ -1987,14 +2173,14 @@ describe('The hub with two games', () => {
     localStorage.setItem('scan.set', JSON.stringify(mrd))
     const hub = await renderHub('ygo')
     act(() => bridge.emit({ kind: 'ready' }))
-    expect(hub.seen()?.set).toEqual(mrd)
+    expect(hub.seen()?.sets).toEqual([mrd])
 
     // Pokémon doesn't inherit the Yu-Gi-Oh! set.
     await hub.switchTo('pkm')
-    expect(hub.seen()?.set).toBeNull()
+    expect(hub.seen()?.sets).toEqual([])
     expect(JSON.parse(localStorage.getItem('scan.set')!)).toEqual(mrd)
 
     await hub.switchTo('ygo')
-    expect(hub.seen()?.set).toEqual(mrd)
+    expect(hub.seen()?.sets).toEqual([mrd])
   })
 })

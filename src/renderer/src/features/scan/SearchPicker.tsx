@@ -1,5 +1,5 @@
 import { memo, useState } from 'react'
-import { ChevronDownIcon } from 'lucide-react'
+import { CheckIcon, ChevronDownIcon, XIcon } from 'lucide-react'
 import { Popover } from 'radix-ui'
 import {
   Command,
@@ -157,15 +157,126 @@ export const SearchPicker = memo(function SearchPicker({
   )
 })
 
+/**
+ * A SearchPicker that picks any number of options: each pick toggles one and leaves the list open
+ * for the next. With several picked they show as chips beside it, each with its own remove
+ * button; with any picked, a Clear takes them all off. `noneKey` is the option that stands for
+ * none picked ("Any set"): listed checked when `values` is just it, and never a chip.
+ */
+export const MultiSearchPicker = memo(function MultiSearchPicker({
+  label,
+  values,
+  options,
+  onToggle,
+  onClear,
+  noneKey,
+  placeholder = 'Choose…',
+  many = (n) => `${n} picked`,
+  searchPlaceholder = 'Search…',
+  className
+}: {
+  /** The trigger's accessible name; each chip's remove button is named after it too. */
+  label: string
+  values: readonly string[]
+  options: readonly PickerOption[]
+  onToggle: (key: string) => void
+  onClear: () => void
+  noneKey?: string
+  /** The trigger with none picked. */
+  placeholder?: string
+  /** The trigger with several picked ("3 sets"). */
+  many?: (n: number) => string
+  searchPlaceholder?: string
+  className?: string
+}): React.JSX.Element {
+  const [open, setOpen] = useState(false)
+  const picked = values
+    .filter((key) => key !== noneKey)
+    .map((key) => options.find((o) => o.key === key) ?? { key, label: key })
+  const summary =
+    picked.length === 0 ? placeholder : picked.length === 1 ? picked[0].label : many(picked.length)
+  return (
+    <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+      <Popover.Root open={open} onOpenChange={setOpen}>
+        <Popover.Trigger asChild>
+          <button
+            type="button"
+            role="combobox"
+            aria-label={label}
+            aria-expanded={open}
+            className={cn(
+              'flex h-8 items-center justify-between gap-2 rounded-md border border-input bg-transparent px-3 text-sm shadow-xs outline-none focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 dark:bg-input/30 dark:hover:bg-input/50',
+              className
+            )}
+          >
+            <span className={cn('truncate', !picked.length && 'text-muted-foreground')}>
+              {summary}
+            </span>
+            <ChevronDownIcon className="size-4 shrink-0 opacity-50" />
+          </button>
+        </Popover.Trigger>
+        <Popover.Portal>
+          <Popover.Content
+            align="start"
+            sideOffset={4}
+            className="z-50 w-[max(var(--radix-popover-trigger-width),18rem)] max-w-[calc(100vw-1rem)] rounded-md border bg-popover p-0 text-popover-foreground shadow-md"
+          >
+            <PickerList
+              options={options}
+              searchPlaceholder={searchPlaceholder}
+              badges={false}
+              picked={values}
+              onPick={onToggle}
+            />
+          </Popover.Content>
+        </Popover.Portal>
+      </Popover.Root>
+      {/* Several picked: each one, so a set can be taken off without opening the list. */}
+      {picked.length > 1 &&
+        picked.map((o) => (
+          <span
+            key={o.key}
+            className="inline-flex h-7 max-w-56 items-center gap-1 rounded-full border border-input bg-input/30 pl-2.5 pr-1 text-xs"
+          >
+            <span className="truncate" title={o.label}>
+              {o.label}
+            </span>
+            <button
+              type="button"
+              aria-label={`Remove ${o.label}`}
+              onClick={() => onToggle(o.key)}
+              className="rounded-full p-0.5 text-muted-foreground hover:bg-accent hover:text-foreground"
+            >
+              <XIcon className="size-3" />
+            </button>
+          </span>
+        ))}
+      {picked.length > 0 && (
+        <button
+          type="button"
+          aria-label={`Clear ${label.toLowerCase()}`}
+          onClick={onClear}
+          className="h-7 rounded-md px-2 text-xs text-muted-foreground hover:bg-accent hover:text-foreground"
+        >
+          Clear
+        </button>
+      )}
+    </div>
+  )
+})
+
 function PickerList({
   options,
   searchPlaceholder,
   badges,
+  picked,
   onPick
 }: {
   options: readonly PickerOption[]
   searchPlaceholder: string
   badges: boolean
+  /** Keys shown checked, for a picker of several. */
+  picked?: readonly string[]
   onPick: (key: string) => void
 }): React.JSX.Element {
   const [query, setQuery] = useState('')
@@ -183,7 +294,18 @@ function PickerList({
         <CommandEmpty>Nothing matches.</CommandEmpty>
         <CommandGroup>
           {shown.map((o) => (
-            <CommandItem key={o.key} value={o.key} onSelect={() => onPick(o.key)}>
+            <CommandItem
+              key={o.key}
+              value={o.key}
+              onSelect={() => onPick(o.key)}
+              data-checked={picked?.includes(o.key) || undefined}
+            >
+              {picked && (
+                <CheckIcon
+                  aria-hidden
+                  className={cn('size-4 shrink-0', !picked.includes(o.key) && 'invisible')}
+                />
+              )}
               {badges ? <OptionLabel option={o} /> : o.label}
             </CommandItem>
           ))}

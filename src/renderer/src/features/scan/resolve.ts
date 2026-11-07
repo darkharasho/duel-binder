@@ -41,8 +41,10 @@ export interface ResolveContext {
   guessRules?: readonly PkmGuessRule[]
   /** The art lead the reprint guess needs; PKM_GUESS_REPRINT_LEAD when left out. */
   reprintLead?: number
-  setName: string | null
-  /** The picked set's printings in its language; null when no set is picked. */
+  /**
+   * The picked sets' printings, each in its set's language, together; null when no set is
+   * picked. Whether a printing is in a picked set is told by its being in here.
+   */
   setPrintings: ScanPrinting[] | null
   defaultRarity: string | null
   /**

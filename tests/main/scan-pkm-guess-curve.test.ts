@@ -107,7 +107,6 @@ describe.skipIf(!DIR || !RAW || !existsSync(RAW))('Pokémon best guesses, replay
           {
             game: 'pkm',
             guessRules,
-            setName: null,
             setPrintings: null,
             defaultRarity: null,
             lookups,

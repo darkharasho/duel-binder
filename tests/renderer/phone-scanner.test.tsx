@@ -295,7 +295,10 @@ describe('phone scanner', () => {
 
     const stage = camera.querySelector('[data-camera-stage]')!
     expect(stage).toHaveClass('min-h-0', 'flex-1', '[container-type:size]')
-    const viewport = container.querySelector('video:not([aria-hidden])')!.parentElement!
+    // The preview's box: the video sits in its zoom layer, one level down.
+    const viewport = container
+      .querySelector('video:not([aria-hidden])')!
+      .closest('[data-camera-stage] > div')!
     expect(stage.contains(viewport)).toBe(true)
     // 3:4 at the largest size that fits the stage, so the scanned crop is what the preview shows.
     expect(viewport).toHaveClass('aspect-[3/4]', 'w-[min(100cqw,75cqh)]')

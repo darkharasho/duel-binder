@@ -140,7 +140,6 @@ const raw = (r: Partial<RawSignals>): RawSignals => ({
 
 const pkm = (read: Read): ResolveContext & { readLanguage: ReturnType<typeof vi.fn> } => ({
   game: 'pkm',
-  setName: null,
   setPrintings: null,
   defaultRarity: null,
   // What's certain; the rules are on in the best-guess tests below.
@@ -627,7 +626,6 @@ describe('Simplified Chinese, as the user said', () => {
   }
   const zh = (setPrintings: ScanPrinting[] | null = null): ResolveContext => ({
     game: 'pkm',
-    setName: setPrintings ? '30th Celebration' : null,
     setPrintings,
     defaultRarity: null,
     guessRules: undefined,
@@ -683,6 +681,20 @@ describe('Simplified Chinese, as the user said', () => {
     )
   })
 
+  it('names the Chinese twin in the second of two picked sets', async () => {
+    const other = ZH.filter((q) => q.setName === 'Other Set')
+    const art = [{ imageId: 905, distance: 20 }]
+    // Exeggcute's twin is in 30th Celebration: picked second, after Other Set, it's found there.
+    expect(await recognized(raw({ art }), zh([...other, ...set]))).toMatchObject({
+      cardId: 94,
+      setCode: '30thC 001/103'
+    })
+    // Eevee's two twins, one in each picked set, are both in the picked sets: unsure again.
+    expect(
+      await resolveSignals(raw({ art: [{ imageId: 909, distance: 20 }] }), zh([...other, ...set]))
+    ).toEqual({ kind: 'unsure' })
+  })
+
   it("is unsure when two Chinese cards print the twin's name and number", async () => {
     const art = [{ imageId: 909, distance: 20 }]
     expect(await resolveSignals(raw({ art }), zh())).toEqual({ kind: 'unsure' })
@@ -718,7 +730,6 @@ describe('Simplified Chinese, as the user said', () => {
     }
     const main = (setPrintings: ScanPrinting[] | null = null): ResolveContext => ({
       ...zh(setPrintings),
-      setName: setPrintings?.[0]?.setName ?? null,
       lookups: mainLookups
     })
     const ardent = MAIN.filter((q) => q.setName === 'Ardent Obsidian')
@@ -949,7 +960,7 @@ describe('ygo path unchanged', () => {
     cardsForImages: async (ids) =>
       DM.imageIds.filter((i) => ids.includes(i)).map((imageId) => ({ imageId, cardId: 1 }))
   }
-  const base = { setName: null, setPrintings: null, defaultRarity: null, lookups: ygoLookups }
+  const base = { setPrintings: null, defaultRarity: null, lookups: ygoLookups }
 
   it.each([
     ['left out', base],
@@ -1115,7 +1126,6 @@ describe('the name read, in a picked set the art matched nothing in', () => {
     ...pkm(null),
     guessRules: undefined,
     readLocalName: async () => [],
-    setName: picked ? '30th Celebration' : null,
     setPrintings: picked ? SET : null,
     lookups: {
       ...lookups,

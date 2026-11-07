@@ -94,9 +94,8 @@ const raw = (r: Partial<RawSignals>): RawSignals => ({
   look: null,
   ...r
 })
-const noSet = { setName: null, setPrintings: null, defaultRarity: null, lookups }
+const noSet = { setPrintings: null, defaultRarity: null, lookups }
 const withSet = (setName: string): ResolveContext => ({
-  setName,
   setPrintings: inSet(setName),
   defaultRarity: null,
   lookups
@@ -331,6 +330,22 @@ describe('resolveSignals', () => {
     expect(await resolveSignals(raw({ art }), withSet(LOB))).toEqual({ kind: 'unsure' })
     const loose = [{ imageId: 101, distance: ART_MAX_DISTANCE }]
     expect((await resolveSignals(raw({ art: loose }), noSet)).kind).toBe('recognized')
+  })
+
+  it('with two sets picked, art in the second one is found in it', async () => {
+    const both: ResolveContext = { ...withSet(SDY), setPrintings: [...inSet(SDY), ...inSet(LOB)] }
+    // Blue-Eyes is only in LOB, the second set picked.
+    const item = await recognized(raw({ art: [{ imageId: 201, distance: 20 }] }), both)
+    expect(item).toMatchObject({ via: 'art', printingId: 21, setCode: 'LOB-EN001', flag: null })
+    // With SDY picked alone, Blue-Eyes art isn't named: it's no card of the set.
+    expect(
+      await resolveSignals(raw({ art: [{ imageId: 201, distance: 20 }] }), withSet(SDY))
+    ).toEqual({ kind: 'unsure' })
+    // A code from either picked set isn't flagged as another set's.
+    expect(await recognized(raw({ codeTexts: ['LOB-EN001'] }), both)).toMatchObject({ flag: null })
+    expect(await recognized(raw({ codeTexts: ['LOB-EN001'] }), withSet(SDY))).toMatchObject({
+      flag: 'other-set'
+    })
   })
 
   it('an alternate artwork of the same card does not kill the margin', async () => {
@@ -700,7 +715,6 @@ describe('printings told by a reference scan of their art', () => {
   it('takes the family by art within a picked set and with no code read', async () => {
     const inYac1 = await recognized(raw({ art: art(70, 30) }), {
       ...ctx,
-      setName: YAC1,
       setPrintings: OWN
     })
     expect(inYac1).toMatchObject({ printingId: 35, artPrintings: OVERFRAME })

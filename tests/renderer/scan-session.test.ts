@@ -741,7 +741,6 @@ describe('useScanLoop', () => {
           engineFactory: factory,
           game,
           running: true,
-          setName: null,
           setKey: 'any',
           setPrintings: null,
           defaultRarity: null,

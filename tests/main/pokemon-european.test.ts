@@ -524,14 +524,14 @@ describe('the writer', () => {
 describe('the scanner', () => {
   it('keeps to English and Japanese with a European set picked, so no row loses its printings', () => {
     expect(isPokemonLanguage('fr')).toBe(false)
-    expect(liveLanguage({ set: { setName: 'Flammes Obsidiennes', language: 'fr' }, scanLanguage: 'ja' })).toBe('ja')
+    expect(liveLanguage({ sets: [{ setName: 'Flammes Obsidiennes', language: 'fr' }], scanLanguage: 'ja' })).toBe('ja')
   })
 
   it('scans Simplified Chinese, picked or with a Simplified set picked, but not Traditional', () => {
     expect(isPokemonLanguage('zh-hans')).toBe(true)
     expect(isPokemonLanguage('zh-hant')).toBe(false)
-    expect(liveLanguage({ set: { setName: '30th Celebration', language: 'zh-hans' }, scanLanguage: 'en' })).toBe('zh-hans')
-    expect(liveLanguage({ set: null, scanLanguage: 'zh-hans' })).toBe('zh-hans')
+    expect(liveLanguage({ sets: [{ setName: '30th Celebration', language: 'zh-hans' }], scanLanguage: 'en' })).toBe('zh-hans')
+    expect(liveLanguage({ sets: [], scanLanguage: 'zh-hans' })).toBe('zh-hans')
   })
 })
 

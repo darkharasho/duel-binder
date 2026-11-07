@@ -2,9 +2,10 @@ import { act, renderHook, waitFor } from '@testing-library/react'
 import { useCamera } from '@/features/scan/useCamera'
 import { stubCamera } from './scanFakes'
 
+const SIZE = { width: { ideal: 3840 }, height: { ideal: 2160 } }
 const DESKTOP = {
   audio: false,
-  video: { width: { ideal: 3840 }, height: { ideal: 2160 } }
+  video: { ...SIZE, frameRate: { ideal: 60 } }
 }
 
 afterEach(() => {
@@ -19,7 +20,7 @@ describe('useCamera', () => {
     await waitFor(() => expect(rear.result.current.stream).not.toBeNull())
     expect(getUserMedia).toHaveBeenLastCalledWith({
       audio: false,
-      video: { ...DESKTOP.video, facingMode: { ideal: 'environment' } }
+      video: { ...SIZE, facingMode: { ideal: 'environment' } }
     })
     rear.unmount()
 
@@ -35,7 +36,7 @@ describe('useCamera', () => {
     await waitFor(() => expect(r.result.current.stream).not.toBeNull())
     expect(getUserMedia).toHaveBeenLastCalledWith({
       audio: false,
-      video: { ...DESKTOP.video, deviceId: { exact: 'cam1' } }
+      video: { ...SIZE, deviceId: { exact: 'cam1' } }
     })
     r.unmount()
   })

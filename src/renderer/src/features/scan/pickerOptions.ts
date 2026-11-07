@@ -4,7 +4,13 @@ import { isLanguage, LANGUAGES, languageInfo, type Language } from '@shared/lang
 import { RARITY_TIERS } from '@shared/scan/rarity'
 import { englishSetName, setNameTooltip } from '@shared/setNames'
 import { setPrefix } from '@shared/sets'
-import { isPokemonLanguage, liveLanguage, POKEMON_LANGUAGES } from '@shared/scanWindow'
+import {
+  isPokemonLanguage,
+  liveLanguage,
+  POKEMON_LANGUAGES,
+  scanSetKey as setKeyOf,
+  type ScanSet as PickedSet
+} from '@shared/scanWindow'
 import { api, queryKeys } from '@/lib/api'
 import { useGame } from '@/lib/game'
 import { matchesLanguage, useLanguageFilter } from '@/lib/languageFilter'
@@ -19,13 +25,6 @@ export const RARITY_OPTIONS: PickerOption[] = [
   ...RARITY_TIERS.map((r) => ({ key: r, label: r }))
 ]
 
-interface PickedSet {
-  setName: string
-  language: Language
-}
-
-const setKeyOf = (s: PickedSet): string => `${s.language}|${s.setName}`
-
 /** "MAMO - Magnificent Monsters", with the language tag when sets of every language are listed. */
 function pickedLabel(s: PickedSet & { setCode?: string }, withTag: boolean): string {
   const name = setLabel(s.setName, s.setCode)
@@ -34,15 +33,18 @@ function pickedLabel(s: PickedSet & { setCode?: string }, withTag: boolean): str
 
 /**
  * The language the scanner is set to, which narrows each scanned row's printing dropdown: the
- * Language picked on the Scan page, or under "All languages" the picked set's language; null
- * under "All languages" with any set, when every language is listed.
+ * Language picked on the Scan page, or under "All languages" the picked sets' language; null
+ * under "All languages" with any set, or with sets of more than one language, when every
+ * language is listed.
  */
 export function useScanLanguage(): Language | null {
   const { settings } = useScanHub()
   const [language] = useLanguageFilter()
   const { game } = useGame()
   if (game === 'pkm') return liveLanguage(settings)
-  return language !== 'all' ? language : (settings.set?.language ?? null)
+  if (language !== 'all') return language
+  const languages = new Set(settings.sets.map((s) => s.language))
+  return languages.size === 1 ? [...languages][0] : null
 }
 
 /** One SearchPicker's value, options and pick handler. */
@@ -52,15 +54,28 @@ export interface PickerProps {
   onPick: (key: string) => void
 }
 
+/** A MultiSearchPicker's picked keys, options and handlers. */
+export interface MultiPickerProps {
+  values: readonly string[]
+  options: readonly PickerOption[]
+  /** Adds the option, or takes it away when it's already picked. */
+  onToggle: (key: string) => void
+  onClear: () => void
+}
+
 /**
  * The scan "Language", "Set" and "New scans as" pickers. The language is the app's shared
- * language filter and narrows the sets listed; the set and rarity are the scan hub's settings.
+ * language filter and narrows the sets listed; the sets and rarity are the scan hub's settings.
  * The same for the desktop Scan page and the phone scanner. Live Pokémon scanning has to be told
  * its language, so there it's the scan's own setting, with no "All languages".
+ *
+ * `sets` picks several sets (the desktop Scan page); `set` picks one, replacing whatever was
+ * picked (the phone's chip). "Any set" is no set picked.
  */
 export function useScanPickers(): {
   language: PickerProps
   set: PickerProps
+  sets: MultiPickerProps
   rarity: PickerProps
 } {
   const { settings, setSettings } = useScanHub()
@@ -68,7 +83,7 @@ export function useScanPickers(): {
   const { game } = useGame()
   const pokemon = game === 'pkm'
   const language = pokemon ? liveLanguage(settings) : shared
-  const picked = settings.set
+  const picked = settings.sets
   const withTag = language === 'all'
 
   // Not refetched while scanning (focus or staleness); data-changed events still invalidate it.
@@ -122,30 +137,44 @@ export function useScanPickers(): {
   }, [sets.data, language, pokemon])
 
   const { byKey } = setOptions
-  // A remembered set missing from the list (still loading, say) still shows as picked.
-  const pickedSetOptions = useMemo(
-    () =>
-      picked && !byKey.has(setKeyOf(picked))
-        ? [
-            ...setOptions.options,
-            {
-              key: setKeyOf(picked),
-              label: pickedLabel(picked, withTag || !matchesLanguage(language, picked.language))
-            }
-          ]
-        : setOptions.options,
-    [picked, byKey, setOptions.options, withTag, language]
+  // Remembered sets missing from the list (still loading, say) still show as picked.
+  const pickedSetOptions = useMemo(() => {
+    const missing = picked.filter((p) => !byKey.has(setKeyOf(p)))
+    return missing.length
+      ? [
+          ...setOptions.options,
+          ...missing.map((p) => ({
+            key: setKeyOf(p),
+            label: pickedLabel(p, withTag || !matchesLanguage(language, p.language))
+          }))
+        ]
+      : setOptions.options
+  }, [picked, byKey, setOptions.options, withTag, language])
+  const setOf = useCallback(
+    (key: string): PickedSet | null =>
+      byKey.get(key) ?? picked.find((p) => setKeyOf(p) === key) ?? null,
+    [byKey, picked]
   )
   const pickSet = useCallback(
     (key: string): void => {
-      setSettings({
-        set: byKey.get(key) ?? (picked && key === setKeyOf(picked) ? picked : null)
-      })
+      const set = setOf(key)
+      setSettings({ sets: set ? [set] : [] })
     },
-    [byKey, picked, setSettings]
+    [setOf, setSettings]
   )
+  const toggleSet = useCallback(
+    (key: string): void => {
+      if (key === ANY) return setSettings({ sets: [] })
+      if (picked.some((p) => setKeyOf(p) === key))
+        return setSettings({ sets: picked.filter((p) => setKeyOf(p) !== key) })
+      const set = setOf(key)
+      if (set) setSettings({ sets: [...picked, set] })
+    },
+    [picked, setOf, setSettings]
+  )
+  const clearSets = useCallback((): void => setSettings({ sets: [] }), [setSettings])
 
-  // A picked set follows to the new language where that language has it, else it's cleared.
+  // Picked sets follow to the new language where that language has them; the rest are dropped.
   const pickLanguage = useCallback(
     (key: string): void => {
       if (key !== 'all' && !isLanguage(key)) return
@@ -154,9 +183,17 @@ export function useScanPickers(): {
       } else {
         setLanguage(key)
       }
-      if (!picked || key === 'all' || key === picked.language) return
-      const same = (sets.data ?? []).find((s) => s.language === key && s.setName === picked.setName)
-      setSettings({ set: same ? { setName: same.setName, language: same.language } : null })
+      if (!picked.length || key === 'all' || picked.every((p) => p.language === key)) return
+      const moved: PickedSet[] = []
+      for (const p of picked) {
+        const same =
+          p.language === key
+            ? p
+            : (sets.data ?? []).find((s) => s.language === key && s.setName === p.setName)
+        const next = same && { setName: same.setName, language: same.language }
+        if (next && !moved.some((m) => setKeyOf(m) === setKeyOf(next))) moved.push(next)
+      }
+      setSettings({ sets: moved })
     },
     [picked, sets.data, pokemon, setLanguage, setSettings]
   )
@@ -170,7 +207,18 @@ export function useScanPickers(): {
 
   return {
     language: { value: language, options: languageOptions, onPick: pickLanguage },
-    set: { value: picked ? setKeyOf(picked) : ANY, options: pickedSetOptions, onPick: pickSet },
+    set: {
+      value: picked.length ? setKeyOf(picked[0]) : ANY,
+      options: pickedSetOptions,
+      onPick: pickSet
+    },
+    sets: {
+      values: picked.length ? picked.map(setKeyOf) : [ANY],
+      // "Any set" stays first: picking it clears the list, which is what any set is.
+      options: pickedSetOptions,
+      onToggle: toggleSet,
+      onClear: clearSets
+    },
     rarity: { value: settings.defaultRarity ?? AUTO, options: RARITY_OPTIONS, onPick: pickRarity }
   }
 }

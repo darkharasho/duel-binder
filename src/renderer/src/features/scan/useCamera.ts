@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import type { CameraResolution } from '@shared/scanWindow'
 
 /** `busy`: the camera is there but held by something else (another app, or the other scanner). */
 export type CameraError = 'denied' | 'none' | 'lost' | 'busy'
@@ -25,6 +26,16 @@ function remember(deviceId: string): void {
   }
 }
 
+/**
+ * What the stream's camera really delivers, from its track settings, or null with no stream (or
+ * one that won't say). The constraints only ask for 4K; this is what was actually opened.
+ */
+export function cameraResolution(stream: MediaStream | null): CameraResolution | null {
+  const s = stream?.getVideoTracks()[0]?.getSettings()
+  if (!s?.width || !s.height) return null
+  return { width: s.width, height: s.height, frameRate: s.frameRate ?? null }
+}
+
 const stop = (s: MediaStream): void => s.getTracks().forEach((t) => t.stop())
 
 /** Which way the camera should face when no device is picked: the phone's rear camera. */
@@ -37,6 +48,11 @@ const constraints = (deviceId: string | null, facing?: CameraFacing): MediaStrea
     // being ideal, not min, any lower resolution still opens.
     width: { ideal: 3840 },
     height: { ideal: 2160 },
+    // 60 fps on desktop where the camera has it at that size (Elgato's Facecam 4K does): each frame
+    // is then exposed for at most 1/60 s, so a hand-held card blurs half as much. Chromium opens
+    // 30 when not asked. Ideal again, so a camera without 60 still opens; the phone (facing) keeps
+    // its default, sparing battery and heat.
+    ...(facing ? {} : { frameRate: { ideal: 60 } }),
     ...(deviceId
       ? { deviceId: { exact: deviceId } }
       : facing

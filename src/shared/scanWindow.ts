@@ -20,16 +20,32 @@ export type PokemonLanguage = (typeof POKEMON_LANGUAGES)[number]
 export const isPokemonLanguage = (v: unknown): v is PokemonLanguage =>
   (POKEMON_LANGUAGES as readonly unknown[]).includes(v)
 
-/** The language a live Pokémon scan takes cards to be in: the picked set's, or the one chosen. */
-export function liveLanguage(s: Pick<ScanWindowSettings, 'set' | 'scanLanguage'>): PokemonLanguage {
-  return isPokemonLanguage(s.set?.language) ? s.set.language : s.scanLanguage
+/** A set picked to scan, by name and language. */
+export interface ScanSet {
+  setName: string
+  language: Language
+}
+
+/** The key a picked set goes by in pickers and lists. */
+export const scanSetKey = (s: ScanSet): string => `${s.language}|${s.setName}`
+
+/**
+ * The language a live Pokémon scan takes cards to be in: the picked sets', or the one chosen.
+ * Sets are only listed in the scan's language, so picked ones share it; the first one says.
+ */
+export function liveLanguage(
+  s: Pick<ScanWindowSettings, 'sets' | 'scanLanguage'>
+): PokemonLanguage {
+  const first = s.sets[0]?.language
+  return isPokemonLanguage(first) ? first : s.scanLanguage
 }
 
 /** What the main window tells the scan window to scan with. */
 export interface ScanWindowSettings {
   deviceId: string | null
   paused: boolean
-  set: { setName: string; language: Language } | null
+  /** The sets picked to scan; empty for any set. */
+  sets: ScanSet[]
   /** The language live Pokémon cards are scanned in, with no set of a language picked. */
   scanLanguage: PokemonLanguage
   defaultRarity: string | null
@@ -38,7 +54,58 @@ export interface ScanWindowSettings {
   fit: ScanFit
   /** How far the picture is zoomed in on its centre, 1 (not at all) to SCAN_ZOOM_MAX. */
   zoom: number
+  /** The picture controls set for each camera, by device id; a camera with none keeps its own. */
+  cameraControls: Record<string, CameraControlValues>
 }
+
+/** The camera picture controls with a range, as Chromium names them (Image Capture). */
+export const CAMERA_RANGES = [
+  'exposureTime',
+  'brightness',
+  'contrast',
+  'saturation',
+  'sharpness',
+  'colorTemperature'
+] as const
+export type CameraRange = (typeof CAMERA_RANGES)[number]
+
+/**
+ * Picture controls set for a camera. Only those set are applied, over what the camera had when
+ * first opened. exposureTime is in 100 microsecond units and only applies with autoExposure off;
+ * colorTemperature (kelvin) likewise with autoWhiteBalance off.
+ */
+export type CameraControlValues = Partial<Record<CameraRange, number>> & {
+  autoExposure?: boolean
+  autoWhiteBalance?: boolean
+}
+
+export interface CameraControlRange {
+  min: number
+  max: number
+  step: number
+  /** What the camera is set to now. */
+  value: number
+}
+
+/** The picture controls the open camera offers, with what each is set to now. */
+export interface CameraControls {
+  deviceId: string
+  /** Whether exposure is automatic; null where the camera has no choice. */
+  autoExposure: boolean | null
+  autoWhiteBalance: boolean | null
+  ranges: Partial<Record<CameraRange, CameraControlRange>>
+}
+
+/** A camera track's real picture size and frame rate (frameRate null where it isn't said). */
+export interface CameraResolution {
+  width: number
+  height: number
+  frameRate: number | null
+}
+
+/** "3840×2160 · 30 fps", or the size alone with no frame rate. */
+export const resolutionText = (r: CameraResolution): string =>
+  `${r.width}×${r.height}${r.frameRate ? ` · ${Math.round(r.frameRate)} fps` : ''}`
 
 export type ScanFit = 'fill' | 'whole'
 export const SCAN_ZOOM_MAX = 3
@@ -61,12 +128,19 @@ export interface ScanWindowState {
   devices: { deviceId: string; label: string }[]
   /** The camera actually open, from its track settings. */
   openDeviceId: string | null
+  /** What the open camera really delivers, from its track settings; null while none is open. */
+  resolution?: CameraResolution | null
+  /** The open camera's picture controls; null while none is open or it offers none. */
+  cameraControls?: CameraControls | null
   cameraError: 'denied' | 'none' | 'lost' | 'busy' | null
   loop: ScanStatus
   artReady: boolean | null
   /** Where the artwork data stands, while there is none to match against. */
   artData?: FingerprintStatus | null
+  /** No picked set's printings could be read, so cards are matched against every set. */
   setUnreadable: boolean
+  /** Picked sets left out because their printings couldn't be read, while the others scan. */
+  setsSkipped?: ScanSet[]
   /** The window's picture in the pixels a capture sees, not screen points. */
   size?: { width: number; height: number }
 }

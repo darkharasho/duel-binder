@@ -306,7 +306,6 @@ describe.skipIf(!READY)('the Pokémon scanner on real photos', () => {
         {
           game: 'pkm',
           ...(LIVE ? {} : { reprintLead: PKM_PHOTO_REPRINT_LEAD }),
-          setName: SET,
           setPrintings,
           defaultRarity: null,
           artDistance: async (a, b) => index.distanceBetween(a, b),

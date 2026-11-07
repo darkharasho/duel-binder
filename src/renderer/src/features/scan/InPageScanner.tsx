@@ -1,12 +1,14 @@
-import { useEffect, useRef } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { TILT_MODELS } from '@shared/scan/tiltModel'
+import type { CameraControls, CameraResolution } from '@shared/scanWindow'
 import { defaultEngine, type EngineFactory } from './engine'
 import { useScanHub } from './ScanHub'
 import { FoundBurst } from './FoundBurst'
-import { ScanViewport } from './ScanViewport'
+import { clampZoom, ScanViewport, ZoomSlider } from './ScanViewport'
 import { ArtDataNotice } from './ArtDataNotice'
-import { SET_UNREADABLE } from './scanText'
-import { useCamera, type CameraError } from './useCamera'
+import { SET_UNREADABLE, setsSkippedText } from './scanText'
+import { cameraResolution, useCamera, type CameraError } from './useCamera'
+import { useCameraControls } from './cameraControls'
 import { useHubScan } from './useHubScan'
 
 const CAMERA_MESSAGES: Record<CameraError, string> = {
@@ -16,6 +18,35 @@ const CAMERA_MESSAGES: Record<CameraError, string> = {
   busy: 'The camera is in use by another app. Close it there, then try again.'
 }
 
+/**
+ * The in-page picture's zoom. Its own, not the scan window's (settings.zoom): the page shows a
+ * narrow portrait crop and the window a whole stream layout, so one zoom rarely suits both.
+ */
+const PAGE_ZOOM_KEY = 'scan.pageZoom'
+
+function readPageZoom(): number {
+  try {
+    const n = Number(localStorage.getItem(PAGE_ZOOM_KEY))
+    return n >= 1 ? clampZoom(n) : 1
+  } catch {
+    return 1
+  }
+}
+
+function usePageZoom(): [number, (zoom: number) => void] {
+  const [zoom, setZoomState] = useState(readPageZoom)
+  const setZoom = useCallback((next: number): void => {
+    const z = clampZoom(next)
+    setZoomState(z)
+    try {
+      localStorage.setItem(PAGE_ZOOM_KEY, String(z))
+    } catch {
+      // Unavailable storage only costs the remembered zoom.
+    }
+  }, [])
+  return [zoom, setZoom]
+}
+
 /** What the page's camera picker needs from the in-page camera. */
 export interface InPageCamera {
   devices: MediaDeviceInfo[]
@@ -23,6 +54,10 @@ export interface InPageCamera {
   openDeviceId: string
   error: CameraError | null
   retry: () => void
+  /** What the open camera really delivers; null while none is open. */
+  resolution: CameraResolution | null
+  /** The open camera's picture controls; null while none is open or it offers none. */
+  controls: CameraControls | null
 }
 
 /**
@@ -42,7 +77,9 @@ export function InPageScanner({
   const { settings } = useScanHub()
   const videoRef = useRef<HTMLVideoElement>(null)
   const camera = useCamera(settings.deviceId)
-  const { loop, setUnreadable, found } = useHubScan({
+  const cameraControls = useCameraControls(camera.stream, settings.cameraControls)
+  const [zoom, setZoom] = usePageZoom()
+  const { loop, setUnreadable, setsSkipped, found } = useHubScan({
     videoRef,
     stream: camera.stream,
     engineFactory,
@@ -54,25 +91,36 @@ export function InPageScanner({
   const { devices, error, retry, stream } = camera
   const openDeviceId =
     stream?.getVideoTracks()[0]?.getSettings().deviceId ?? settings.deviceId ?? ''
+  const res = cameraResolution(stream)
+  const { width = 0, height = 0, frameRate = null } = res ?? {}
   useEffect(() => {
-    onCamera({ devices, openDeviceId, error, retry })
-  }, [onCamera, devices, openDeviceId, error, retry])
+    const resolution = width ? { width, height, frameRate } : null
+    onCamera({ devices, openDeviceId, error, retry, resolution, controls: cameraControls })
+  }, [onCamera, devices, openDeviceId, error, retry, width, height, frameRate, cameraControls])
   useEffect(() => () => onCamera(null), [onCamera])
 
   return (
     <section aria-label="Camera" className="flex w-min shrink-0 flex-col gap-3">
       <ScanViewport
+        smooth
         videoRef={videoRef}
         error={camera.error}
         messages={CAMERA_MESSAGES}
         onRetryCamera={camera.retry}
         loop={loop}
+        zoom={zoom}
+        onZoom={setZoom}
         className="aspect-[3/4] h-[calc(100vh-15rem)] min-h-72 rounded-lg border-2 border-white/10"
       >
         {found && <FoundBurst key={found.key} name={found.name} price={found.price} />}
       </ScanViewport>
       {setUnreadable && <p className="text-xs text-muted-foreground">{SET_UNREADABLE}</p>}
+      {setsSkipped.length > 0 && (
+        <p className="text-xs text-muted-foreground">{setsSkippedText(setsSkipped)}</p>
+      )}
       {loop.artReady === false && <ArtDataNotice status={loop.artData} />}
+      {/* Only what's shown: the scan still reads the camera's whole picture. */}
+      <ZoomSlider value={zoom} onChange={setZoom} />
       {controls}
     </section>
   )

@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { TILT_MODELS } from '@shared/scan/tiltModel'
-import type { CameraResolution } from '@shared/scanWindow'
+import type { CameraControls, CameraResolution } from '@shared/scanWindow'
 import { defaultEngine, type EngineFactory } from './engine'
 import { useScanHub } from './ScanHub'
 import { FoundBurst } from './FoundBurst'
@@ -8,6 +8,7 @@ import { clampZoom, ScanViewport, ZoomSlider } from './ScanViewport'
 import { ArtDataNotice } from './ArtDataNotice'
 import { SET_UNREADABLE, setsSkippedText } from './scanText'
 import { cameraResolution, useCamera, type CameraError } from './useCamera'
+import { useCameraControls } from './cameraControls'
 import { useHubScan } from './useHubScan'
 
 const CAMERA_MESSAGES: Record<CameraError, string> = {
@@ -55,6 +56,8 @@ export interface InPageCamera {
   retry: () => void
   /** What the open camera really delivers; null while none is open. */
   resolution: CameraResolution | null
+  /** The open camera's picture controls; null while none is open or it offers none. */
+  controls: CameraControls | null
 }
 
 /**
@@ -74,6 +77,7 @@ export function InPageScanner({
   const { settings } = useScanHub()
   const videoRef = useRef<HTMLVideoElement>(null)
   const camera = useCamera(settings.deviceId)
+  const cameraControls = useCameraControls(camera.stream, settings.cameraControls)
   const [zoom, setZoom] = usePageZoom()
   const { loop, setUnreadable, setsSkipped, found } = useHubScan({
     videoRef,
@@ -91,8 +95,8 @@ export function InPageScanner({
   const { width = 0, height = 0, frameRate = null } = res ?? {}
   useEffect(() => {
     const resolution = width ? { width, height, frameRate } : null
-    onCamera({ devices, openDeviceId, error, retry, resolution })
-  }, [onCamera, devices, openDeviceId, error, retry, width, height, frameRate])
+    onCamera({ devices, openDeviceId, error, retry, resolution, controls: cameraControls })
+  }, [onCamera, devices, openDeviceId, error, retry, width, height, frameRate, cameraControls])
   useEffect(() => () => onCamera(null), [onCamera])
 
   return (

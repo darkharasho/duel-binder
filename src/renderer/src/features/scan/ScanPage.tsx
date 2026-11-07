@@ -3,6 +3,7 @@ import {
   SCAN_SIZES,
   SCAN_SIZE_MAX,
   resolutionText,
+  type CameraControlValues,
   type ScanFit,
   type ScanWindowState
 } from '@shared/scanWindow'
@@ -19,6 +20,7 @@ import {
 } from '@/components/ui/select'
 import { defaultEngine, type EngineFactory } from './engine'
 import { InPageScanner, type InPageCamera } from './InPageScanner'
+import { CameraControlsPanel } from './CameraControlsPanel'
 import { ZoomSlider } from './ScanViewport'
 import { MakeReplay } from './replay/MakeReplay'
 import { replaySourceOfRows } from './replay/pulls'
@@ -57,6 +59,7 @@ export function ScanPage({
   const [local, setLocal] = useState<InPageCamera | null>(null)
   // Set from the click until the window reports open: the page camera is released first.
   const [handingOff, setHandingOff] = useState(false)
+  const [showControls, setShowControls] = useState(false)
   const inPage = openKnown && !open && !handingOff
   const replaySource = useMemo(() => replaySourceOfRows(hub.session.rows), [hub.session.rows])
 
@@ -94,6 +97,20 @@ export function ScanPage({
       : open
         ? (state?.resolution ?? null)
         : null
+  const cameraControls = cameraError
+    ? null
+    : inPage
+      ? (local?.controls ?? null)
+      : open
+        ? (state?.cameraControls ?? null)
+        : null
+  const setCameraControls = (values: CameraControlValues | null): void => {
+    if (!cameraControls) return
+    const { [cameraControls.deviceId]: _old, ...others } = settings.cameraControls
+    setSettings({
+      cameraControls: values ? { ...others, [cameraControls.deviceId]: values } : others
+    })
+  }
   // Shown as picked only when it's one of the listed cameras (ids are blank before permission),
   // and not while the camera is in error, so picking it again reopens it.
   const activeCamera =
@@ -171,7 +188,24 @@ export function ScanPage({
               {resolutionText(resolution)}
             </span>
           )}
+          {cameraControls && (
+            <Button
+              variant="outline"
+              size="sm"
+              aria-expanded={showControls}
+              onClick={() => setShowControls((v) => !v)}
+            >
+              Camera settings
+            </Button>
+          )}
         </div>
+        {cameraControls && showControls && (
+          <CameraControlsPanel
+            controls={cameraControls}
+            values={settings.cameraControls[cameraControls.deviceId] ?? {}}
+            onChange={setCameraControls}
+          />
+        )}
       </PageHeader>
 
       {inPage ? (

@@ -17,6 +17,7 @@ import { playScanPing } from '@/lib/scanPing'
 import { defaultEngine, type EngineFactory } from '../engine'
 import type { ScanDraft } from '../resolve'
 import { cameraResolution, useCamera } from '../useCamera'
+import { useCameraControls } from '../cameraControls'
 import { useScanSets } from '../setPrintings'
 import { useScanLoop } from '../useScanLoop'
 import { createOutbox, type Outbox } from './outbox'
@@ -84,6 +85,7 @@ function Scanner({
   const videoRef = useRef<HTMLVideoElement>(null)
   const { game } = useGame()
   const camera = useCamera(settings.deviceId)
+  const cameraControls = useCameraControls(camera.stream, settings.cameraControls)
   const { overlay, push, clear } = useOverlay()
   const [scanned, setScanned] = useState<Readonly<Record<string, number>>>({})
   const pulls = useRef(0)
@@ -167,6 +169,7 @@ function Scanner({
     devices: camera.devices.map((d) => ({ deviceId: d.deviceId, label: d.label })),
     openDeviceId: camera.stream?.getVideoTracks()[0]?.getSettings().deviceId ?? null,
     resolution: cameraResolution(camera.stream),
+    cameraControls,
     cameraError: camera.error,
     loop: loop.status,
     artReady: loop.artReady,

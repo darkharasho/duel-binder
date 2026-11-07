@@ -256,7 +256,8 @@ describe('Scan page', () => {
       defaultRarity: 'Secret Rare',
       hitPrice: 20,
       fit: 'fill',
-      zoom: 1
+      zoom: 1,
+      cameraControls: {}
     })
   })
 
@@ -844,6 +845,31 @@ describe('Scan page', () => {
     expect(screen.queryByLabelText('Camera resolution')).not.toBeInTheDocument()
     await openWindow({ resolution: { width: 3840, height: 2160, frameRate: 30 } })
     expect(screen.getByLabelText('Camera resolution')).toHaveTextContent('3840×2160 · 30 fps')
+  })
+
+  it("sets the scan window's camera controls from Camera settings, saved per camera", async () => {
+    bridge = fakeBridge(true)
+    await renderScan()
+    await run()
+    expect(screen.queryByRole('button', { name: 'Camera settings' })).not.toBeInTheDocument()
+    await openWindow({
+      cameraControls: {
+        deviceId: 'cam1',
+        autoExposure: true,
+        autoWhiteBalance: null,
+        ranges: { brightness: { min: -9, max: 9, step: 1, value: 4 } }
+      }
+    })
+    act(() => screen.getByRole('button', { name: 'Camera settings' }).click())
+    fireEvent.change(screen.getByRole('slider', { name: 'Brightness' }), {
+      target: { value: '2' }
+    })
+    expect(lastSettings().cameraControls).toEqual({ cam1: { brightness: 2 } })
+    expect(JSON.parse(localStorage.getItem('scan.cameraControls')!)).toEqual({
+      cam1: { brightness: 2 }
+    })
+    act(() => screen.getByRole('button', { name: 'Reset' }).click())
+    expect(lastSettings().cameraControls).toEqual({})
   })
 
   it('draws no outline round a card-shaped thing far from any artwork', async () => {

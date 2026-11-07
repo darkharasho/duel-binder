@@ -31,6 +31,7 @@ const LANGUAGE_KEY = 'scan.pokemonLanguage'
 const HIT_PRICE_KEY = 'scan.hitPrice'
 const FIT_KEY = 'scan.fit'
 const ZOOM_KEY = 'scan.zoom'
+const CAMERA_CONTROLS_KEY = 'scan.cameraControls'
 const SEEN_KEY = 'scan.drafts.seen'
 const DEFAULT_HIT_PRICE = 20
 const HIGHLIGHT_MS = 1500
@@ -118,6 +119,13 @@ const parseZoom = (raw: string): number | null => {
   return n >= 1 && n <= SCAN_ZOOM_MAX ? n : null
 }
 
+const parseCameraControls = (raw: string): ScanWindowSettings['cameraControls'] | null => {
+  const v: unknown = JSON.parse(raw)
+  return typeof v === 'object' && v !== null && !Array.isArray(v)
+    ? (v as ScanWindowSettings['cameraControls'])
+    : null
+}
+
 const initialSettings = (): ScanWindowSettings => ({
   deviceId: rememberedCamera(),
   paused: false,
@@ -126,7 +134,8 @@ const initialSettings = (): ScanWindowSettings => ({
   defaultRarity: read(RARITY_KEY, (r) => (RARITY_TIERS.includes(r) ? r : null)),
   hitPrice: read(HIT_PRICE_KEY, parseHitPrice) ?? DEFAULT_HIT_PRICE,
   fit: read(FIT_KEY, (f): ScanFit | null => (f === 'whole' || f === 'fill' ? f : null)) ?? 'fill',
-  zoom: read(ZOOM_KEY, parseZoom) ?? 1
+  zoom: read(ZOOM_KEY, parseZoom) ?? 1,
+  cameraControls: read(CAMERA_CONTROLS_KEY, parseCameraControls) ?? {}
 })
 
 /**
@@ -283,6 +292,7 @@ export function ScanHubProvider({ children }: { children: React.ReactNode }): Re
       if ('hitPrice' in patch) write(HIT_PRICE_KEY, String(next.hitPrice))
       if ('fit' in patch) write(FIT_KEY, next.fit)
       if ('zoom' in patch) write(ZOOM_KEY, String(next.zoom))
+      if ('cameraControls' in patch) write(CAMERA_CONTROLS_KEY, JSON.stringify(next.cameraControls))
       setSettingsState(next)
       // Sent now, not from an effect, so a retry sent right after reaches the window after it.
       // Main drops it while no window is open.

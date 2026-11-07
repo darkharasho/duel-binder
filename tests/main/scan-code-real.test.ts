@@ -159,7 +159,6 @@ describe.skipIf(!DB || !FP || (!REAL && !SCANS))('set codes read on real photos 
 
   async function measure(shots: Shot[]): Promise<Row[]> {
     const ctx: ResolveContext = {
-      setName: null,
       setPrintings: null,
       defaultRarity: null,
       lookups: {

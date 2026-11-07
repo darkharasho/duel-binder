@@ -100,8 +100,14 @@ export interface FakeTrack {
   end(): void
 }
 
-/** Stubs getUserMedia (resolving, or rejecting with a DOMException name) and the video/canvas bits. */
-export function stubCamera(fail?: string): {
+/**
+ * Stubs getUserMedia (resolving, or rejecting with a DOMException name) and the video/canvas bits.
+ * `settings` adds to what the track says it delivers (its size and frame rate, say).
+ */
+export function stubCamera(
+  fail?: string,
+  settings: Partial<MediaTrackSettings> = {}
+): {
   track: FakeTrack
   getUserMedia: ReturnType<typeof vi.fn>
 } {
@@ -109,7 +115,7 @@ export function stubCamera(fail?: string): {
   const track = {
     kind: 'video',
     stop: vi.fn(),
-    getSettings: () => ({ deviceId: 'cam1' }),
+    getSettings: () => ({ deviceId: 'cam1', ...settings }),
     addEventListener: (type: string, cb: () => void) => {
       if (type === 'ended') listeners.push(cb)
     },

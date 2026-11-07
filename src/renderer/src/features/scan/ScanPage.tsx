@@ -2,8 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import {
   SCAN_SIZES,
   SCAN_SIZE_MAX,
-  SCAN_ZOOM_MAX,
-  SCAN_ZOOM_STEP,
+  resolutionText,
   type ScanFit,
   type ScanWindowState
 } from '@shared/scanWindow'
@@ -20,15 +19,16 @@ import {
 } from '@/components/ui/select'
 import { defaultEngine, type EngineFactory } from './engine'
 import { InPageScanner, type InPageCamera } from './InPageScanner'
+import { ZoomSlider } from './ScanViewport'
 import { MakeReplay } from './replay/MakeReplay'
 import { replaySourceOfRows } from './replay/pulls'
 import { useScanHub } from './ScanHub'
 import { ArtDataNotice } from './ArtDataNotice'
 import { HitPriceInput } from './HitPriceInput'
-import { SET_UNREADABLE, statusText } from './scanText'
+import { SET_UNREADABLE, setsSkippedText, statusText } from './scanText'
 import { ScanSoundToggle } from './ScanSoundToggle'
 import { SessionList } from './SessionList'
-import { SearchPicker } from './SearchPicker'
+import { MultiSearchPicker, SearchPicker } from './SearchPicker'
 import { PhotoButton } from './PhotoButton'
 import { useScanPickers } from './pickerOptions'
 import { useGame } from '@/lib/game'
@@ -87,6 +87,13 @@ export function ScanPage({
   const devices = inPage ? (local?.devices ?? []) : (state?.devices ?? [])
   const openCamera = inPage ? (local?.openDeviceId ?? '') : (state?.openDeviceId ?? null)
   const cameraError = inPage ? (local?.error ?? null) : (state?.cameraError ?? null)
+  const resolution = cameraError
+    ? null
+    : inPage
+      ? (local?.resolution ?? null)
+      : open
+        ? (state?.resolution ?? null)
+        : null
   // Shown as picked only when it's one of the listed cameras (ids are blank before permission),
   // and not while the camera is in error, so picking it again reopens it.
   const activeCamera =
@@ -126,11 +133,15 @@ export function ScanPage({
             searchPlaceholder="Search languages…"
             className="w-40"
           />
-          <SearchPicker
-            label="Set"
-            value={pickers.set.value}
-            options={pickers.set.options}
-            onPick={pickers.set.onPick}
+          <MultiSearchPicker
+            label="Sets"
+            values={pickers.sets.values}
+            options={pickers.sets.options}
+            onToggle={pickers.sets.onToggle}
+            onClear={pickers.sets.onClear}
+            noneKey="any"
+            placeholder="Any set"
+            many={(n) => `${n} sets`}
             searchPlaceholder="Search sets…"
             className="w-72"
           />
@@ -150,6 +161,16 @@ export function ScanPage({
               ))}
             </SelectContent>
           </Select>
+          {/* What the camera really opened at, which can be well under the 4K asked for. */}
+          {resolution && (
+            <span
+              aria-label="Camera resolution"
+              title="What the camera is actually sending"
+              className="text-xs text-muted-foreground tabular-nums"
+            >
+              {resolutionText(resolution)}
+            </span>
+          )}
         </div>
       </PageHeader>
 
@@ -216,22 +237,7 @@ export function ScanPage({
                 <SelectItem value="whole">Whole picture</SelectItem>
               </SelectContent>
             </Select>
-            <label className="flex items-center gap-2 text-sm">
-              Zoom
-              <input
-                type="range"
-                aria-label="Zoom"
-                min={1}
-                max={SCAN_ZOOM_MAX}
-                step={SCAN_ZOOM_STEP}
-                value={settings.zoom}
-                onChange={(e) => setSettings({ zoom: Number(e.target.value) })}
-                className="w-28 accent-primary"
-              />
-              <span className="w-11 text-muted-foreground tabular-nums">
-                {settings.zoom.toFixed(2)}×
-              </span>
-            </label>
+            <ZoomSlider value={settings.zoom} onChange={(zoom) => setSettings({ zoom })} />
             <WindowSize open={open} size={state?.size} />
             <Button
               variant="outline"
@@ -280,6 +286,9 @@ export function ScanPage({
             )}
             {open && state?.setUnreadable && (
               <p className="text-xs text-muted-foreground">{SET_UNREADABLE}</p>
+            )}
+            {open && !!state?.setsSkipped?.length && (
+              <p className="text-xs text-muted-foreground">{setsSkippedText(state.setsSkipped)}</p>
             )}
             {open && state?.artReady === false && <ArtDataNotice status={state.artData} />}
           </div>

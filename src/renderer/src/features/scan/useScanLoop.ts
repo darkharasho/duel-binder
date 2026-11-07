@@ -100,10 +100,9 @@ export interface ScanLoopOptions {
   game: GameId
   /** A camera stream is up and scanning isn't paused. */
   running: boolean
-  /** The picked set, or null for any set. Changing it starts a fresh showing. */
-  setName: string | null
+  /** Names the picked sets (or any set); changing it starts a fresh showing. */
   setKey: string
-  /** The picked set's printings; null for any set, undefined while they load. */
+  /** The picked sets' printings, together; null for any set, undefined while they load. */
   setPrintings: ScanPrinting[] | null | undefined
   defaultRarity: string | null
   /**
@@ -291,8 +290,9 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
   const [artReady, setArtReady] = useState<boolean | null>(null)
   const [artData, setArtData] = useState<FingerprintStatus | null>(null)
 
-  // The picked set's artworks, worked out once per set rather than per frame. A Chinese set's
-  // cards mostly have none to match: their twins' art is found among all of it.
+  // The picked sets' artworks, worked out once per pick rather than per frame. A Chinese set's
+  // cards mostly have none to match: their twins' art is found among all of it, so with one
+  // picked, every set's art is searched.
   const candidates = useMemo(
     () =>
       opts.setPrintings && !opts.setPrintings.some((p) => p.language === 'zh-hans')
@@ -802,7 +802,6 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
           resolveSignals(raw, {
             game: o.game,
             reprintLead: PKM_PHOTO_REPRINT_LEAD,
-            setName: o.setName,
             setPrintings: o.setPrintings ?? null,
             defaultRarity: o.defaultRarity,
             cardLanguage: (cardId) => languageOf(cardId, raw.textBands),
@@ -931,7 +930,6 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
           outcome = await within(
             resolveSignals(raw, {
               game: o.game,
-              setName: o.setName,
               setPrintings,
               defaultRarity: o.defaultRarity,
               cardLanguage: (cardId) => languageOf(cardId, raw.textBands),

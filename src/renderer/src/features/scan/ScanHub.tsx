@@ -7,7 +7,9 @@ import {
   SCAN_ZOOM_MAX,
   isFromScanWindow,
   isPokemonLanguage,
+  scanSetKey,
   type ScanFit,
+  type ScanSet,
   type ScanSummary,
   type ScanWindowSettings,
   type ScanWindowState
@@ -19,7 +21,10 @@ import { useScanSession } from './session'
 import { sessionSummary } from './window/summary'
 import { rememberedCamera } from './useCamera'
 
-/** Yu-Gi-Oh!'s keeps the key it always had, so an existing pick survives. */
+/**
+ * Yu-Gi-Oh!'s keeps the key it always had, so an existing pick survives. Each holds the game's
+ * picked sets as a list; one saved before several could be picked is a lone set (parseSets).
+ */
 const setKeyOf = (game: GameId): string => (game === 'ygo' ? 'scan.set' : `scan.set.${game}`)
 const RARITY_KEY = 'scan.defaultRarity'
 const LANGUAGE_KEY = 'scan.pokemonLanguage'
@@ -83,12 +88,25 @@ function write(key: string, value: string | null): void {
   }
 }
 
-const parseSet = (raw: string): ScanWindowSettings['set'] => {
-  const v = JSON.parse(raw) as { setName?: unknown; language?: unknown }
-  return typeof v.setName === 'string' && isLanguage(v.language)
-    ? { setName: v.setName, language: v.language }
+const parseOneSet = (v: unknown): ScanSet | null => {
+  const o = (typeof v === 'object' && v !== null ? v : {}) as Record<string, unknown>
+  return typeof o.setName === 'string' && isLanguage(o.language)
+    ? { setName: o.setName, language: o.language }
     : null
 }
+
+/**
+ * The picked sets saved: a list, or the single set saved before several could be picked, which
+ * becomes a list of one. Anything unreadable in it is dropped, and a set listed twice kept once.
+ */
+// eslint-disable-next-line react-refresh/only-export-components -- exported for its tests
+export const parseSets = (raw: string): ScanSet[] => {
+  const v: unknown = JSON.parse(raw)
+  const sets = (Array.isArray(v) ? v : [v]).map(parseOneSet).filter((x) => x !== null)
+  return sets.filter((x, i) => sets.findIndex((y) => scanSetKey(y) === scanSetKey(x)) === i)
+}
+
+const readSets = (game: GameId): ScanSet[] => read(setKeyOf(game), parseSets) ?? []
 
 const parseHitPrice = (raw: string): number | null => {
   const n = Number(raw)
@@ -103,7 +121,7 @@ const parseZoom = (raw: string): number | null => {
 const initialSettings = (): ScanWindowSettings => ({
   deviceId: rememberedCamera(),
   paused: false,
-  set: read(setKeyOf('ygo'), parseSet),
+  sets: readSets('ygo'),
   scanLanguage: read(LANGUAGE_KEY, (l) => (isPokemonLanguage(l) ? l : null)) ?? 'en',
   defaultRarity: read(RARITY_KEY, (r) => (RARITY_TIERS.includes(r) ? r : null)),
   hitPrice: read(HIT_PRICE_KEY, parseHitPrice) ?? DEFAULT_HIT_PRICE,
@@ -258,8 +276,8 @@ export function ScanHubProvider({ children }: { children: React.ReactNode }): Re
     (patch: Partial<ScanWindowSettings>): void => {
       const next = { ...settingsRef.current, ...patch }
       settingsRef.current = next
-      if ('set' in patch)
-        write(setKeyOf(gameRef.current), next.set ? JSON.stringify(next.set) : null)
+      if ('sets' in patch)
+        write(setKeyOf(gameRef.current), next.sets.length ? JSON.stringify(next.sets) : null)
       if ('defaultRarity' in patch) write(RARITY_KEY, next.defaultRarity)
       if ('scanLanguage' in patch) write(LANGUAGE_KEY, next.scanLanguage)
       if ('hitPrice' in patch) write(HIT_PRICE_KEY, String(next.hitPrice))
@@ -273,11 +291,11 @@ export function ScanHubProvider({ children }: { children: React.ReactNode }): Re
     [sendSettings]
   )
 
-  // Each game has its own picked set: a set of the other game would find nothing here.
+  // Each game has its own picked sets: a set of the other game would find nothing here.
   useEffect(() => {
     if (gameRef.current === game) return
     gameRef.current = game
-    setSettings({ set: read(setKeyOf(game), parseSet) })
+    setSettings({ sets: readSets(game) })
   }, [game, setSettings])
 
   const { copiesOf } = session

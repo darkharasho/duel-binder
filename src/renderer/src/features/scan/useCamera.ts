@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
+import type { CameraResolution } from '@shared/scanWindow'
 
 /** `busy`: the camera is there but held by something else (another app, or the other scanner). */
 export type CameraError = 'denied' | 'none' | 'lost' | 'busy'
@@ -23,6 +24,16 @@ function remember(deviceId: string): void {
   } catch {
     // Unavailable storage only costs the remembered choice.
   }
+}
+
+/**
+ * What the stream's camera really delivers, from its track settings, or null with no stream (or
+ * one that won't say). The constraints only ask for 4K; this is what was actually opened.
+ */
+export function cameraResolution(stream: MediaStream | null): CameraResolution | null {
+  const s = stream?.getVideoTracks()[0]?.getSettings()
+  if (!s?.width || !s.height) return null
+  return { width: s.width, height: s.height, frameRate: s.frameRate ?? null }
 }
 
 const stop = (s: MediaStream): void => s.getTracks().forEach((t) => t.stop())

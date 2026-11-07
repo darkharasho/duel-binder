@@ -63,7 +63,6 @@ const art = (...pairs: [number, number][]): ArtMatch[] =>
   pairs.map(([imageId, distance]) => ({ imageId, distance }))
 const ctx = (over: Partial<ResolveContext> = {}): ResolveContext => ({
   game: 'op',
-  setName: null,
   setPrintings: null,
   defaultRarity: null,
   lookups,
@@ -119,13 +118,13 @@ describe('resolveOnePieceSignals', () => {
 
   it('keeps to the picked set: the reprint in PRB-01, certain', async () => {
     const setPrintings = PRINTINGS.filter((p) => p.setName === PRB01)
-    const item = await recognized(raw({ art: BASE_ART }), ctx({ setName: PRB01, setPrintings }))
+    const item = await recognized(raw({ art: BASE_ART }), ctx({ setPrintings }))
     expect(item).toMatchObject({ printingId: 13, flag: null })
   })
 
   it('flags a card from another set than the picked one', async () => {
     const setPrintings = PRINTINGS.filter((p) => p.setCode === 'OP04-044')
-    const item = await recognized(raw({ art: ALT_ART }), ctx({ setPrintings, setName: 'x' }))
+    const item = await recognized(raw({ art: ALT_ART }), ctx({ setPrintings }))
     expect(item).toMatchObject({ printingId: 12, flag: 'other-set' })
   })
 

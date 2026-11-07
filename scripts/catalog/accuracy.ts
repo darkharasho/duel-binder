@@ -140,7 +140,7 @@ export async function checkAccuracy(
         cues: null,
         look: null
       },
-      { setName: null, setPrintings: null, defaultRarity: null, lookups }
+      { setPrintings: null, defaultRarity: null, lookups }
     )
     if (outcome.kind !== 'recognized') report.missed.push(label)
     // Or by name: YGOPRODeck renumbers a card now and then (Monster Reborn's main id moved from
@@ -177,7 +177,6 @@ async function pokemonOutcome(
     },
     {
       game: 'pkm',
-      setName: null,
       setPrintings: null,
       defaultRarity: null,
       lookups,

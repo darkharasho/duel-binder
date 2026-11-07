@@ -26,7 +26,7 @@ import {
 const SETTINGS: ScanWindowSettings = {
   deviceId: null,
   paused: false,
-  set: null,
+  sets: [],
   scanLanguage: 'en',
   defaultRarity: null,
   hitPrice: 20,
@@ -413,12 +413,43 @@ describe('Scan window', () => {
     await run(500)
     expect(engine.analyze.mock.calls[0][1]).toMatchObject({ candidates: null })
 
-    settings({ set: { setName: 'Legend of Blue Eyes White Dragon', language: 'de' } })
+    settings({ sets: [{ setName: 'Legend of Blue Eyes White Dragon', language: 'de' }] })
     await run(500)
     expect(printingsForSet).toHaveBeenCalledWith('Legend of Blue Eyes White Dragon', 'de')
     expect(engine.analyze.mock.calls.at(-1)?.[1]).toMatchObject({
       candidates: [46986414, 46986415, 89631139]
     })
+  })
+
+  it('two picked sets pass the image ids of both as candidates', async () => {
+    stubCamera()
+    const printingsForSet = vi.fn(async (name: string) =>
+      name === 'Metal Raiders'
+        ? [printing({ printingId: 103, cardId: 2, imageIds: [3] })]
+        : [printing({ imageIds: [1, 2] })]
+    )
+    const engine = fakeEngine()
+    await renderWindow(
+      engine,
+      { scan: { printingsForSet } },
+      {
+        sets: [
+          { setName: 'Legend of Blue Eyes White Dragon', language: 'en' },
+          { setName: 'Metal Raiders', language: 'en' }
+        ]
+      }
+    )
+    await run(500)
+    expect(printingsForSet).toHaveBeenCalledTimes(2)
+    expect(engine.analyze.mock.calls.at(-1)?.[1]).toMatchObject({ candidates: [1, 2, 3] })
+    expect(lastState()).toMatchObject({ setUnreadable: false, setsSkipped: [] })
+  })
+
+  it("reports the camera's real resolution", async () => {
+    stubCamera(undefined, { width: 3840, height: 2160, frameRate: 30 })
+    await renderWindow(fakeEngine())
+    await run(500)
+    expect(lastState().resolution).toEqual({ width: 3840, height: 2160, frameRate: 30 })
   })
 
   it('refetches set printings when data changes', async () => {
@@ -436,7 +467,7 @@ describe('Scan window', () => {
           })
         }
       },
-      { set: { setName: 'Legend of Blue Eyes White Dragon', language: 'en' } }
+      { sets: [{ setName: 'Legend of Blue Eyes White Dragon', language: 'en' }] }
     )
     await run(500)
     expect(printingsForSet).toHaveBeenCalledTimes(1)
@@ -458,7 +489,7 @@ describe('Scan window', () => {
           })
         }
       },
-      { set: { setName: 'Metal Raiders', language: 'en' } }
+      { sets: [{ setName: 'Metal Raiders', language: 'en' }] }
     )
     await run(1000)
     expect(lastState().setUnreadable).toBe(true)
@@ -488,7 +519,7 @@ describe('Scan window', () => {
     await run(5000)
     expect(engine.analyze.mock.calls.length).toBe(calls)
 
-    settings({ set: { setName: 'Metal Raiders', language: 'en' } })
+    settings({ sets: [{ setName: 'Metal Raiders', language: 'en' }] })
     await run(500)
     expect(lastState().loop).toEqual({ kind: 'stopped' })
 

@@ -1,5 +1,6 @@
 import type { FingerprintStatus } from '@shared/scan/types'
-import type { ScanStatus } from '@shared/scanWindow'
+import type { ScanSet, ScanStatus } from '@shared/scanWindow'
+import { englishSetName } from '@shared/setNames'
 
 export const plural = (n: number, one: string, many: string): string =>
   `${n} ${n === 1 ? one : many}`
@@ -22,7 +23,13 @@ export function statusText(s: ScanStatus): string {
 }
 
 export const SET_UNREADABLE =
-  "Couldn't load this set's cards, so cards are matched against every set."
+  "Couldn't load the picked sets' cards, so cards are matched against every set."
+
+/** Picked sets left out of the scan because their cards couldn't be loaded. */
+export const setsSkippedText = (sets: readonly ScanSet[]): string =>
+  `Couldn't load the cards of ${sets.map((s) => englishSetName(s.setName)).join(', ')}, so ${
+    sets.length === 1 ? 'that set is' : 'those sets are'
+  } left out.`
 
 export function artDataText(status: FingerprintStatus | null | undefined): string {
   const still = 'Set codes and names still work.'

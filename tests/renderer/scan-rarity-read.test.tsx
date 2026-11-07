@@ -93,7 +93,6 @@ function mount(
         engineFactory: () => engine,
         game: 'pkm',
         running,
-        setName: null,
         setKey,
         setPrintings: null,
         defaultRarity,

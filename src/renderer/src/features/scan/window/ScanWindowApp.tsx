@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQueryClient } from '@tanstack/react-query'
 import type { GameId } from '@shared/games/types'
-import type { Language } from '@shared/languages'
 import type { TiltModel } from '@shared/scan/tilt'
 import { TILT_MODELS } from '@shared/scan/tiltModel'
 import { liveLanguage } from '@shared/scanWindow'
@@ -18,7 +17,8 @@ import { playScanPing } from '@/lib/scanPing'
 import { cn } from '@/lib/utils'
 import { defaultEngine, type EngineFactory } from '../engine'
 import type { ScanDraft } from '../resolve'
-import { useCamera } from '../useCamera'
+import { cameraResolution, useCamera } from '../useCamera'
+import { useScanSets } from '../setPrintings'
 import { useScanLoop } from '../useScanLoop'
 import { createOutbox, type Outbox } from './outbox'
 import { pullOf } from './overlay'
@@ -27,7 +27,6 @@ import { SummaryOverlay } from './SummaryScreen'
 import { useOverlay } from './useOverlay'
 
 const WINDOW_TITLE = 'Duel Binder — Scan'
-const ANY = 'any'
 /** How often pulls the main window hasn't acknowledged are sent again. */
 const RESEND_MS = 2000
 
@@ -94,14 +93,7 @@ function Scanner({
   })
 
   const queryClient = useQueryClient()
-  const picked = settings.set
-  const setPrintings = useQuery({
-    queryKey: ['scan', 'setPrintings', picked?.setName, picked?.language as Language | undefined],
-    queryFn: () => api.scan.printingsForSet(picked!.setName, picked!.language),
-    enabled: picked !== null,
-    staleTime: Infinity,
-    refetchOnWindowFocus: false
-  })
+  const { setKey, setPrintings, setUnreadable, setsSkipped } = useScanSets(settings.sets)
   // Staleness is infinite, so printings are only re-read when a background sync changes data
   // (a price that arrives after the card was first scanned must show).
   useEffect(
@@ -111,10 +103,6 @@ function Scanner({
       }),
     [queryClient]
   )
-  // A set whose printings can't be read scans as any set rather than not at all.
-  const setUnreadable = picked !== null && setPrintings.isError
-  const scanSet = setUnreadable ? null : picked
-
   const onDraft = useCallback(
     (draft: ScanDraft): string => {
       const id = outbox.put(draft)
@@ -139,9 +127,8 @@ function Scanner({
     engineFactory,
     game,
     running: camera.stream !== null && !settings.paused,
-    setName: scanSet?.setName ?? null,
-    setKey: scanSet ? `${scanSet.language}|${scanSet.setName}` : ANY,
-    setPrintings: scanSet === null ? null : setPrintings.data,
+    setKey,
+    setPrintings,
     defaultRarity: settings.defaultRarity,
     language: game === 'pkm' ? liveLanguage(settings) : null,
     filterLanguage: game === 'ygo' || game === 'op' ? printedLanguage(filter) : null,
@@ -179,11 +166,13 @@ function Scanner({
   const state: ScanWindowState = {
     devices: camera.devices.map((d) => ({ deviceId: d.deviceId, label: d.label })),
     openDeviceId: camera.stream?.getVideoTracks()[0]?.getSettings().deviceId ?? null,
+    resolution: cameraResolution(camera.stream),
     cameraError: camera.error,
     loop: loop.status,
     artReady: loop.artReady,
     artData: loop.artData,
     setUnreadable,
+    setsSkipped,
     size
   }
   const serialized = JSON.stringify(state)

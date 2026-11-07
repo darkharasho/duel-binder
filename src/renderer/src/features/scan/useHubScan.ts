@@ -1,12 +1,9 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
-import { useQuery } from '@tanstack/react-query'
 import type { GameId } from '@shared/games/types'
-import type { Language } from '@shared/languages'
 import type { LookModel } from '@shared/scan/look'
 import type { TiltModel } from '@shared/scan/tilt'
-import { liveLanguage } from '@shared/scanWindow'
+import { liveLanguage, type ScanSet } from '@shared/scanWindow'
 import { printedLanguage, useLanguageFilter } from '@/lib/languageFilter'
-import { api } from '@/lib/api'
 import { useGame } from '@/lib/game'
 import { playScanPing } from '@/lib/scanPing'
 import type { EngineFactory } from './engine'
@@ -14,13 +11,13 @@ import type { ScanDraft } from './resolve'
 import { useScanHub } from './ScanHub'
 import { useScanLoop, type ScanLoop } from './useScanLoop'
 import { pullOf, type Pull } from './window/overlay'
-
-const ANY = 'any'
+import { useScanSets } from './setPrintings'
 
 /**
  * Scans `stream` (shown in `videoRef`) for the game shown with the hub's settings, counting pulls
- * through the hub: the in-page scanner of the desktop Scan page and the phone scanner. `setUnreadable`: the picked
- * set's printings couldn't be read, so cards are matched against every set. `lookModel`: the
+ * through the hub: the in-page scanner of the desktop Scan page and the phone scanner. `setUnreadable`: none of the
+ * picked sets' printings could be read, so cards are matched against every set; `setsSkipped`:
+ * picked sets left out because theirs couldn't be, while the others scan. `lookModel`: the
  * rarity look model, which only the phone scanner uses (see useScanLoop). `tiltModels`: the
  * tilt-to-read-rarity models; a scanner given none never holds a card for a tilt (Stream mode).
  */
@@ -48,21 +45,16 @@ export function useHubScan({
   wholeFrame?: boolean
   /** Hears each pull once it's counted: `pull.id` is the row key, `scanned` the copies on the list. */
   onPull?: (pull: Pull, scanned: number, draft: ScanDraft) => void
-}): { loop: ScanLoop; setUnreadable: boolean; found: Pull | null } {
+}): {
+  loop: ScanLoop
+  setUnreadable: boolean
+  setsSkipped: ScanSet[]
+  found: Pull | null
+} {
   const { settings, count, reread, session } = useScanHub()
   const { copiesOf } = session
   const { game } = useGame()
-  const picked = settings.set
-  const setPrintings = useQuery({
-    queryKey: ['scan', 'setPrintings', picked?.setName, picked?.language as Language | undefined],
-    queryFn: () => api.scan.printingsForSet(picked!.setName, picked!.language),
-    enabled: picked !== null,
-    staleTime: Infinity,
-    refetchOnWindowFocus: false
-  })
-  // A set whose printings can't be read scans as any set rather than not at all.
-  const setUnreadable = picked !== null && setPrintings.isError
-  const scanSet = setUnreadable ? null : picked
+  const { setKey, setPrintings, setUnreadable, setsSkipped } = useScanSets(settings.sets)
 
   // The latest card found, for the "found it" moment; a new key each time replays it.
   const [found, setFound] = useState<Pull | null>(null)
@@ -86,9 +78,8 @@ export function useHubScan({
     engineFactory,
     game,
     running: stream !== null && !paused,
-    setName: scanSet?.setName ?? null,
-    setKey: scanSet ? `${scanSet.language}|${scanSet.setName}` : ANY,
-    setPrintings: scanSet === null ? null : setPrintings.data,
+    setKey,
+    setPrintings,
     defaultRarity: settings.defaultRarity,
     language: game === 'pkm' ? liveLanguage(settings) : null,
     filterLanguage: game === 'ygo' || game === 'op' ? printedLanguage(filter) : null,
@@ -105,5 +96,5 @@ export function useHubScan({
     if (video) video.srcObject = stream
   }, [videoRef, stream])
 
-  return { loop, setUnreadable, found }
+  return { loop, setUnreadable, setsSkipped, found }
 }

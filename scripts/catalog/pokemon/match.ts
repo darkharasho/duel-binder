@@ -101,7 +101,7 @@ function sameNumber(localId: string, number: string): boolean {
 }
 
 /** A name without its number tail or notes; both spellings occur ("Muk - 004/092", "Muk -004/092"). */
-const namePart = (name: string): string =>
+export const namePart = (name: string): string =>
   name.replace(/\s+-\s*\S*\d.*$/, '').replace(/\s+-\s.*$/, '').replace(/\s*[([].*$/, '')
 
 /** A card name for comparing: no number tail or notes, no accents, case or punctuation. */

@@ -505,6 +505,28 @@ describe('refreshPokemon', () => {
     expect(printings(db, 'en/sv01-001').map((p) => p.missing_from_api)).toEqual([0, 0])
   })
 
+  it('stores each Pokémon card\'s dex number and none for a Trainer', async () => {
+    const trainer = fixtureSources({
+      card: (lang, c) =>
+        lang === 'en' && c.id === 'sv01-002' ? { ...c, category: 'Trainer', dexId: undefined } : c
+    })
+    await refreshPokemon(db, trainer)
+    const dex = (source: string) =>
+      db.prepare('SELECT dex_no, dex_extra FROM pokemon_cards WHERE card_id = ?').get(cid(source))
+    expect(dex('en/sv01-001')).toEqual({ dex_no: 204, dex_extra: null })
+    expect(dex('en/base1-4')).toEqual({ dex_no: 6, dex_extra: null })
+    expect(dex('en/sv01-002')).toEqual({ dex_no: null, dex_extra: null })
+  })
+
+  it('writes nothing to pokemon_cards on a second run with no source change', async () => {
+    await refreshPokemon(db, fixtureSources())
+    db.exec(`CREATE TABLE pkm_writes (n INTEGER);
+      CREATE TRIGGER pkm_ins AFTER INSERT ON pokemon_cards BEGIN INSERT INTO pkm_writes VALUES (1); END;
+      CREATE TRIGGER pkm_upd AFTER UPDATE ON pokemon_cards BEGIN INSERT INTO pkm_writes VALUES (1); END;`)
+    await refreshPokemon(db, fixtureSources())
+    expect(db.prepare('SELECT COUNT(*) AS c FROM pkm_writes').get()).toEqual({ c: 0 })
+  })
+
   it('ignores penny moves and keeps updated_at when nothing changed (churn)', async () => {
     await refreshPokemon(db, fixtureSources(), { now: clock('2026-10-29T03:00:00.000Z') })
     const before = snapshot(db)

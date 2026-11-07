@@ -517,6 +517,44 @@ describe('buildFingerprints for Pokémon', () => {
     expect(urls).toEqual(['https://assets.tcgdex.net/en/sv03-045/low.jpg'])
   })
 
+  it('leaves Energy cards out of the pkm file: their plain art matches anything', async () => {
+    for (const [sourceId, category] of [
+      ['en/sv03-045', 'Pokemon'],
+      ['en/sve-003', 'Energy'],
+      ['en/me03-086', 'Energy']
+    ]) {
+      const cardId = pokemonId(sourceId)
+      work
+        .prepare(
+          `INSERT INTO cards (id, name, type, frame_type, race, "desc", updated_at, game)
+           VALUES (?, 'P', 'Pokemon', 'pokemon', '', '', '2026-01-01', 'pkm')`
+        )
+        .run(cardId)
+      work
+        .prepare(
+          "INSERT INTO card_images (image_id, card_id, sort_order, game) VALUES (?, ?, 0, 'pkm')"
+        )
+        .run(pokemonId(`${sourceId}#img`), cardId)
+      work
+        .prepare(
+          `INSERT INTO pokemon_cards (card_id, category, source_id, image_url) VALUES (?, ?, ?, ?)`
+        )
+        .run(cardId, category, sourceId, `https://assets.tcgdex.net/${sourceId}`)
+    }
+    const urls: string[] = []
+    const out = await buildFingerprints({
+      work,
+      cachePath: join(dir, 'fingerprints-pkm.sqlite'),
+      fetch: (async (input: string | URL | Request) => {
+        urls.push(String(input))
+        return new Response(jpeg(false) as BodyInit)
+      }) as typeof fetch,
+      game: 'pkm'
+    })
+    expect(out).toMatchObject({ count: 1, fetched: 1, failed: 0 })
+    expect(urls).toEqual(['https://assets.tcgdex.net/en/sv03-045/low.jpg'])
+  })
+
   it('never hashes art a Chinese card borrows, only the English card it belongs to', async () => {
     const ids_: number[] = []
     for (const [n, sourceId, url, twin] of [

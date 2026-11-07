@@ -28,8 +28,7 @@ import {
 import type { FingerprintStatus, OcrBand, ScanPrinting } from '@shared/scan/types'
 import type { PokemonLanguage, ScanStatus } from '@shared/scanWindow'
 import { api } from '@/lib/api'
-import { centreCrop, type CropRect } from './crop'
-import { shiftQuad } from './vision/framing'
+import { centreCrop } from './crop'
 import type { EngineFactory, FrameSignals, ScanEngine } from './engine'
 import {
   describeLook,
@@ -134,12 +133,6 @@ export interface ScanLoopOptions {
   onRarityRead?: (rowId: string, draft: ScanDraft) => void
   /** The camera's picture stopped moving; reopening the camera is the cure. */
   onStalled?: () => void
-  /**
-   * Read the whole picture when the preview's centre crop keeps finding no card (framing.ts): a
-   * desktop webcam, where a card is often held off to one side and the crop can't be aimed. The
-   * phone, aimed at the card, reads the crop alone.
-   */
-  wholeFrame?: boolean
 }
 
 export interface ScanLoop {
@@ -259,25 +252,13 @@ async function keepDebugShot(
   await api.scan.debugFrame(jpeg, note).catch(() => undefined)
 }
 
-/**
- * A live frame: the preview's centre crop, or with whole the whole picture and that crop as its
- * region, for the worker to read the crop first and the whole when the crop keeps missing
- * (framing.ts). width and height are the crop's, as the preview shows it.
- */
 async function grab(
-  video: HTMLVideoElement,
-  whole = false
-): Promise<{ frame: ImageBitmap; width: number; height: number; region?: CropRect } | null> {
+  video: HTMLVideoElement
+): Promise<{ frame: ImageBitmap; width: number; height: number } | null> {
   if (!video.videoWidth || !video.videoHeight) return null
-  const region = centreCrop(video.videoWidth, video.videoHeight)
-  const { x, y, width, height } = region
-  if (whole) return { frame: await createImageBitmap(video), width, height, region }
+  const { x, y, width, height } = centreCrop(video.videoWidth, video.videoHeight)
   return { frame: await createImageBitmap(video, x, y, width, height), width, height }
 }
-
-/** A quad in the whole frame, in the crop's pixels for drawing over the preview. */
-const inPreview = (quad: Quad, region: CropRect | undefined): Quad =>
-  region ? shiftQuad(quad, -region.x, -region.y) : quad
 
 /**
  * Runs the scan engine over the camera, one frame at a time, and turns what it sees into counted
@@ -886,16 +867,16 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
           await photo(engine, video, o, l.photoQuiet)
           return
         }
-        const grabbed = await grab(video, !!o.wholeFrame).catch(() => null)
+        const grabbed = await grab(video).catch(() => null)
         if (!grabbed) return
         if (!live) {
           grabbed.frame.close()
           return
         }
-        const { frame, width, height, region } = grabbed
+        const { frame, width, height } = grabbed
         const setPrintings = o.setPrintings
         const candidates = o.candidates
-        const shot = KEEP_FRAMES ? debugShot(frame, frame.width, frame.height, l) : null
+        const shot = KEEP_FRAMES ? debugShot(frame, width, height, l) : null
         const started = performance.now()
         // A counted card being read: its frames are kept for the reading, as grabbed.
         const read = l.read
@@ -905,8 +886,7 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
             candidates,
             wantText: l.lastFound,
             wantLook: !!o.lookModel && profile.rarityLook,
-            ...(read ? { tilt: read.imageIds, at: started } : {}),
-            ...(region ? { region } : {})
+            ...(read ? { tilt: read.imageIds, at: started } : {})
           })
         } catch {
           // An engine thrown away for another game owes nothing.
@@ -956,7 +936,7 @@ export function useScanLoop(opts: ScanLoopOptions): ScanLoop {
         // Something card-shaped that is no card gets no outline either.
         setOutline(
           raw.found && raw.quad && outcome.kind !== 'none'
-            ? { quad: inPreview(raw.quad, region), width, height }
+            ? { quad: raw.quad, width, height }
             : null
         )
         // Only Yu-Gi-Oh's rarities are read by the look of the card.

@@ -7,7 +7,7 @@ import type { Me } from '../../../src/shared/cloud'
 import { isGameId } from '../../../src/shared/games'
 import type { AppDeps } from './app'
 import { deleteUserData } from './account'
-import { fromPublicOrigin, isAdmin, loadMe, sha256Hex } from './auth'
+import { adminWriteAllowed, isAdmin, loadMe, sha256Hex } from './auth'
 import { planCardMerge } from './mergePlan'
 import {
   NEXT_BINDER_EDIT_SEQ,
@@ -443,7 +443,9 @@ export function purgeHolds(db: SqlDb, now: Date): void {
     // same shot twice). This runs inside sync transactions with no R2, so the keys are logged for a sweep.
     const keys = (leftPhotos.all(closed_id) as { r2_key: string }[]).map((r) => r.r2_key)
     if (keys.length > 0)
-      console.warn(`purge of account ${closed_id} left ${keys.length} training photo(s) in R2: ${keys.join(', ')}`)
+      console.warn(
+        `purge of account ${closed_id} left ${keys.length} training photo(s) in R2: ${keys.join(', ')}`
+      )
     deleteUserData(db, closed_id)
     stamp.run(nowIso, closed_id)
   }
@@ -631,7 +633,7 @@ export async function adminMergeRoute(req: Request, deps: AppDeps): Promise<Resp
     return json({ merges: rows })
   }
   if (req.method === 'POST' && path === '/admin/merges/undo') {
-    if (!(await isAdmin(req, deps)) || !fromPublicOrigin(req, deps)) return notFound
+    if (!(await isAdmin(req, deps)) || !adminWriteAllowed(req, deps)) return notFound
     const type = req.headers.get('content-type')
     if (type === null || type.split(';')[0].trim().toLowerCase() !== 'application/json')
       return json({ error: 'unsupported-media-type' }, 415)

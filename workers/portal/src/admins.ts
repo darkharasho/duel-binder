@@ -1,5 +1,5 @@
 import type { AppDeps } from './app'
-import { currentUser, fromPublicOrigin, isAdminUser } from './auth'
+import { currentUser, adminWriteAllowed, isAdminUser } from './auth'
 
 const json = (body: unknown, status = 200): Response =>
   new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } })
@@ -36,7 +36,7 @@ export async function adminAdminsRoute(req: Request, deps: AppDeps): Promise<Res
   if (req.method === 'GET' && path === '/admin/admins') return json({ admins: list(), you: me.id })
   if (req.method !== 'POST' || (path !== '/admin/admins' && path !== '/admin/admins/remove'))
     return notFound
-  if (!fromPublicOrigin(req, deps)) return notFound
+  if (!adminWriteAllowed(req, deps)) return notFound
   const type = req.headers.get('content-type')
   if (type === null || type.split(';')[0].trim().toLowerCase() !== 'application/json')
     return json({ error: 'unsupported-media-type' }, 415)

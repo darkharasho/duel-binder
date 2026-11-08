@@ -254,3 +254,61 @@ describe('game tester list', () => {
     expect(gamesFor(deps, me)).toContain('op')
   })
 })
+
+describe('admin writes from the desktop app', () => {
+  it('a desktop Bearer token may add, remove, undo with no origin; a desktop token of a non-admin may not', async () => {
+    const db = await seededServerDb()
+    const deps: AppDeps = {
+      db,
+      assets: { fetch: async () => new Response('nope', { status: 404 }) },
+      images: memoryBucket(),
+      printingArt: noPrintingArt,
+      prices: noPrices,
+      env: {
+        PUBLIC_URL: BASE,
+        SITE_URL: 'https://site.test',
+        DISCORD_CLIENT_ID: 'c',
+        DISCORD_CLIENT_SECRET: 's',
+        ADMIN_TOKEN: 'admin',
+        PRICE_WORKER_URL: 'https://prices.test',
+        ADMIN_DISCORD_ID: '999'
+      },
+      now: () => START,
+      fetch: (async () => new Response('?', { status: 404 })) as unknown as typeof fetch
+    }
+    const owner = addUser(db, '999', 'owner')
+    const kaiba = addUser(db, '111', 'kaiba')
+    for (const [id, tok] of [
+      [owner, 'tok-owner'],
+      [kaiba, 'tok-kaiba']
+    ] as const)
+      db.prepare(
+        "INSERT INTO sessions (token_hash, user_id, kind, created_at, expires_at) VALUES (?, ?, 'desktop', ?, ?)"
+      ).run(
+        sha256Hex(tok),
+        id,
+        START.toISOString(),
+        new Date(START.getTime() + 30 * DAY).toISOString()
+      )
+    const post = (path: string, token: string, body: unknown): Promise<Response> =>
+      handle(
+        new Request(BASE + path, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json', authorization: `Bearer ${token}` },
+          body: JSON.stringify(body)
+        }),
+        deps
+      )
+    expect(
+      (await post('/admin/testers', 'tok-kaiba', { game: 'op', username: 'kaiba' })).status
+    ).toBe(404)
+    expect(
+      (await post('/admin/testers', 'tok-owner', { game: 'op', username: 'kaiba' })).status
+    ).toBe(200)
+    expect(gamesFor(deps, kaiba)).toContain('op')
+    expect((await post('/admin/admins', 'tok-owner', { username: 'kaiba' })).status).toBe(200)
+    expect((await post('/admin/admins/remove', 'tok-owner', { userId: kaiba })).status).toBe(200)
+    // No merge with that id: past the origin check, the route answers its own 400.
+    expect((await post('/admin/merges/undo', 'tok-owner', { closedId: 12345 })).status).toBe(400)
+  })
+})

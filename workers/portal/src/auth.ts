@@ -778,6 +778,15 @@ export function fromPublicOrigin(req: Request, deps: AppDeps): boolean {
   return req.headers.get('origin') === new URL(deps.env.PUBLIC_URL).origin
 }
 
+/**
+ * Whether an admin write may go ahead: the app's Bearer token (an `Authorization` header means the
+ * cookie is never read, so another site can't ride on it), or the web session from the portal's
+ * own origin.
+ */
+export function adminWriteAllowed(req: Request, deps: AppDeps): boolean {
+  return req.headers.get('authorization') !== null || fromPublicOrigin(req, deps)
+}
+
 /** The Set-Cookie value that removes the web `session` cookie. */
 export const clearSessionCookie = (): string => clearCookie('session')
 

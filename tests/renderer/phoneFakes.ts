@@ -123,6 +123,7 @@ export function fakeStore(
     fingerprints: vi.fn(async () => null),
     fingerprintRefs: vi.fn(async () => []),
     printingPhotoIds: vi.fn(async () => []),
+    localPrintingIds: vi.fn(async (): Promise<[number, number][]> => []),
     fingerprintStatus: vi.fn(async () => ({ state: 'ready' as const, count: 3 })),
     refreshFingerprints: vi.fn(async () => ({ state: 'ready' as const, count: 3 })),
     trainingUpload: vi.fn(async () => ({ ok: true as const, summary: null })),

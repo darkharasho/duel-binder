@@ -34,7 +34,14 @@ import {
   type SlotPrinting,
   type SlotResult
 } from './binderSlots'
-import { onePieceRead, POKEMON_COLS, rowToCard, rowToPrinting, type CardDbRow, type PrintingDbRow } from './cards'
+import {
+  onePieceRead,
+  POKEMON_COLS,
+  rowToCard,
+  rowToPrinting,
+  type CardDbRow,
+  type PrintingDbRow
+} from './cards'
 import { CollectionError } from './collection'
 import { LOCAL, scopeGame, type Scope } from './scope'
 import { printingPrice } from './sets'
@@ -317,11 +324,46 @@ function firstImage(db: SqlDb, cardId: number, scope: Scope): number | null {
   return row?.image_id ?? null
 }
 
-/** The first owned slot's art, or else the first slot's. */
-function coverImage(db: SqlDb, slots: Slot[], scope: Scope): number | null {
+/**
+ * The printing whose photo shows on each owned card or art slot: of the copies filling it, the
+ * dearest, or else the oldest. So an owned overframe or other chase printing shows as itself in a
+ * slot that only asks for the card. A printing slot shows its own printing, owned or not.
+ */
+function shownPrintings(db: SqlDb, slots: Slot[], scope: Scope): Map<string, number> {
+  const open = slots.filter((s) => s.level !== 'printing' && s.ownedPkeys.length > 0)
+  const pkeys = [...new Set(open.flatMap((s) => s.ownedPkeys))]
+  if (pkeys.length === 0) return new Map()
+  const rows = db
+    .prepare(
+      `${printingsSql(scope, `p.pkey, p.id, ${printingPrice(scope)} AS price`)} AND p.pkey IN ${IN_LIST}`
+    )
+    .all(JSON.stringify(pkeys)) as { pkey: string; id: number; price: number | null }[]
+  const byPkey = new Map(rows.map((r) => [r.pkey, r]))
+  const shown = new Map<string, number>()
+  for (const slot of open) {
+    let best: { id: number; price: number | null } | undefined
+    for (const pkey of slot.ownedPkeys) {
+      const p = byPkey.get(pkey)
+      if (p && (!best || (p.price ?? 0) > (best.price ?? 0))) best = p
+    }
+    if (best) shown.set(slot.key, best.id)
+  }
+  return shown
+}
+
+/** The first owned slot's art, or else the first slot's, and the printing whose photo shows over it (an overframe as itself). */
+function cover(
+  db: SqlDb,
+  slots: Slot[],
+  scope: Scope
+): Pick<BinderSummary, 'coverImageId' | 'coverPrintingId'> {
   const slot = slots.find((s) => s.owned > 0) ?? slots[0]
-  if (!slot) return null
-  return slot.imageId ?? firstImage(db, slot.cardId, scope)
+  if (!slot) return { coverImageId: null, coverPrintingId: null }
+  return {
+    coverImageId: slot.imageId ?? firstImage(db, slot.cardId, scope),
+    coverPrintingId:
+      slot.printing?.printingId ?? shownPrintings(db, [slot], scope).get(slot.key) ?? null
+  }
 }
 
 function summarize(
@@ -342,7 +384,7 @@ function summarize(
     ownedSlots: loaded.result.ownedSlots,
     missingSlots: loaded.result.missingSlots,
     tooBroad: loaded.tooBroad,
-    coverImageId: coverImage(db, loaded.result.slots, scope)
+    ...cover(db, loaded.result.slots, scope)
   }
 }
 
@@ -421,6 +463,7 @@ function binderCards(db: SqlDb, slots: Slot[], scope: Scope): BinderCard[] {
   const printings = new Map<number, Printing>(printingRows.map((r) => [r.id, rowToPrinting(r)]))
   const printingDates = new Map(printingRows.map((r) => [r.id, r.release_date]))
   const cardDates = firstReleases(db, cardIds, scope)
+  const shown = shownPrintings(db, slots, scope)
 
   return slots.flatMap((slot) => {
     const found = cards.get(slot.cardId)
@@ -433,6 +476,7 @@ function binderCards(db: SqlDb, slots: Slot[], scope: Scope): BinderCard[] {
         imageId: slot.imageId ?? found.firstImage ?? 0,
         printing: (slot.printing && printings.get(slot.printing.printingId)) ?? null,
         printingScan: true,
+        ...(shown.has(slot.key) && { photoPrintingId: shown.get(slot.key) }),
         releaseDate:
           (slot.level === 'printing' && slot.printing
             ? printingDates.get(slot.printing.printingId)

@@ -176,7 +176,7 @@ export function sessionPullSince(
 /**
  * A friend's live sessions they chose to show, newest first. Hidden ones are left out entirely.
  * Each card's printing is the server catalog's for its pkey (the ids stored are the friend's
- * device's), right for the web app; the desktop and phone apps drop it (withoutPrintings).
+ * device's), right for the web app; the desktop and phone apps look it up in their own catalog (friendSession).
  */
 export function friendSessions(db: SqlDb, friend: number, game: GameId): ScanSession[] {
   const rows = db

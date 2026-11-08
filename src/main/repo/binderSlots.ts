@@ -31,6 +31,8 @@ export interface Slot {
   imageId: number | null
   printing: SlotPrinting | null
   owned: number
+  /** The pkeys of the owned copies that fill the slot, oldest entry first, each once. */
+  ownedPkeys: string[]
   added: boolean
   price: number | null
 }
@@ -46,6 +48,11 @@ const push = <K, V>(map: Map<K, V[]>, key: K, value: V): void => {
   const list = map.get(key)
   if (list) list.push(value)
   else map.set(key, [value])
+}
+const pushOnce = <K>(map: Map<K, string[]>, key: K, pkey: string): void => {
+  const list = map.get(key)
+  if (!list) map.set(key, [pkey])
+  else if (!list.includes(pkey)) list.push(pkey)
 }
 const plus = <K>(map: Map<K, number>, key: K, n: number): void => {
   map.set(key, (map.get(key) ?? 0) + n)
@@ -103,7 +110,7 @@ export function buildSlots(
     if (p.qualifies) ruleCards.add(p.cardId)
   }
 
-  const plans = new Map<string, Omit<Slot, 'owned' | 'price'>>()
+  const plans = new Map<string, Omit<Slot, 'owned' | 'ownedPkeys' | 'price'>>()
   const cardsWithSlots = new Set<number>()
   const put = (
     level: BinderEditLevel,
@@ -199,14 +206,20 @@ export function buildSlots(
   const ownedByCard = tally<number>()
   const ownedByArt = tally<number>()
   const ownedByPrinting = new Map<string, number>()
+  const pkeysByCard = { any: new Map<number, string[]>(), rule: new Map<number, string[]>() }
+  const pkeysByArt = { any: new Map<number, string[]>(), rule: new Map<number, string[]>() }
   for (const c of copies) {
-    if (removedPrintings.has(c.pkey)) continue
+    if (removedPrintings.has(c.pkey) || c.quantity <= 0) continue
     plus(ownedByCard.any, c.cardId, c.quantity)
     plus(ownedByArt.any, c.imageId, c.quantity)
     plus(ownedByPrinting, c.pkey, c.quantity)
+    pushOnce(pkeysByCard.any, c.cardId, c.pkey)
+    pushOnce(pkeysByArt.any, c.imageId, c.pkey)
     if (byKey.get(c.pkey)?.qualifies) {
       plus(ownedByCard.rule, c.cardId, c.quantity)
       plus(ownedByArt.rule, c.imageId, c.quantity)
+      pushOnce(pkeysByCard.rule, c.cardId, c.pkey)
+      pushOnce(pkeysByArt.rule, c.imageId, c.pkey)
     }
   }
   const cheapestByCard = tally<number>()
@@ -227,9 +240,17 @@ export function buildSlots(
   for (const plan of plans.values()) {
     const fill = plan.added ? 'any' : 'rule'
     let owned: number | undefined
-    if (plan.level === 'printing') owned = ownedByPrinting.get(plan.printing?.pkey ?? '')
-    else if (plan.level === 'art') owned = ownedByArt[fill].get(plan.imageId ?? 0)
-    else owned = ownedByCard[fill].get(plan.cardId)
+    let ownedPkeys: string[] = []
+    if (plan.level === 'printing') {
+      owned = ownedByPrinting.get(plan.printing?.pkey ?? '')
+      if (owned && plan.printing) ownedPkeys = [plan.printing.pkey]
+    } else if (plan.level === 'art') {
+      owned = ownedByArt[fill].get(plan.imageId ?? 0)
+      ownedPkeys = pkeysByArt[fill].get(plan.imageId ?? 0) ?? []
+    } else {
+      owned = ownedByCard[fill].get(plan.cardId)
+      ownedPkeys = pkeysByCard[fill].get(plan.cardId) ?? []
+    }
 
     let price: number | null = null
     if (owned) result.ownedSlots++
@@ -242,7 +263,7 @@ export function buildSlots(
       if (price === null) result.unpricedMissing++
       else result.valueToFinish += price
     }
-    result.slots.push({ ...plan, owned: owned ?? 0, price })
+    result.slots.push({ ...plan, owned: owned ?? 0, ownedPkeys, price })
   }
   return result
 }

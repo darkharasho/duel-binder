@@ -3,15 +3,28 @@ import { clipboard, ipcMain } from 'electron'
 import type { Language } from '@shared/languages'
 import type {
   BinderDetail,
+  BinderSummary,
   CollectionFilters,
   EntryView,
   FriendStats,
+  SetChecklist,
   UpdateStatus,
   WishlistItem
 } from '@shared/types'
 import { MAX_DEX_ROWS, type DexRow } from '@shared/dex/parse'
 import { checkPlaceholderRequest } from '@shared/placeholders'
-import { withoutPrintings, type ScanSession } from '@shared/scanSessions'
+import type { ScanSession } from '@shared/scanSessions'
+import {
+  friendBinder,
+  friendBinders,
+  friendChecklist,
+  friendItem,
+  friendSession,
+  friendStats,
+  serverIdsOf,
+  type LocalPrintings
+} from '@shared/friendPrintings'
+import { localPrintings } from '../repo/friendPrintings'
 import type { INVOKE_CHANNELS } from '@shared/ipc'
 import { adminTabUrl, INVOKE_CHANNELS as CHANNELS } from '@shared/ipc'
 import type { ImageCache } from '../images/cache'
@@ -104,9 +117,6 @@ export function checkTrainingUpload(
 }
 
 /** A renderer's parsed export, checked before it reaches the database. */
-/** Printing ids differ between the server and this computer, so a friend's entries get no printing scans. */
-const friendEntry = (e: EntryView): EntryView => ({ ...e, printingScan: false })
-
 function dexRows(rows: unknown): DexRow[] {
   const text = ['locale', 'series', 'set', 'id', 'number', 'name', 'variant'] as const
   const ok =
@@ -142,6 +152,7 @@ export function createHandlers({
   fingerprints,
   ocr
 }: HandlerDeps): Handlers {
+  const local = (serverIds: number[]): LocalPrintings => localPrintings(db, serverIds)
   return {
     ...createDataHandlers({
       db,
@@ -170,34 +181,44 @@ export function createHandlers({
     'friends:remove': async (userId: number) => account.portal('friends:remove', [userId]),
     'friends:block': async (userId: number) => account.portal('friends:block', [userId]),
     'friends:unblock': async (userId: number) => account.portal('friends:unblock', [userId]),
-    'friends:collection': async (userId: number, f: CollectionFilters) =>
-      (await account.portal<EntryView[]>('friends:collection', [userId, f])).map(friendEntry),
+    // A friend's printing ids are the server's: each is looked up in this catalog (friendPrintings.ts).
+    'friends:collection': async (userId: number, f: CollectionFilters) => {
+      const entries = await account.portal<EntryView[]>('friends:collection', [userId, f])
+      const ids = local(serverIdsOf.items(entries))
+      return entries.map((e) => friendItem(e, ids))
+    },
     'friends:facets': async (userId: number) => account.portal('friends:facets', [userId]),
     'friends:stats': async (userId: number) => {
       const s = await account.portal<FriendStats>('friends:stats', [userId])
-      return {
-        ...s,
-        topEntries: s.topEntries.map(friendEntry),
-        topSingles: s.topSingles.map(friendEntry),
-        recentEntries: s.recentEntries.map(friendEntry)
-      }
+      return friendStats(s, local(serverIdsOf.stats(s)))
     },
     'friends:sets': async (userId: number) => account.portal('friends:sets', [userId]),
-    'friends:checklist': async (userId: number, setName: string, language: Language) =>
-      account.portal('friends:checklist', [userId, setName, language]),
+    'friends:checklist': async (userId: number, setName: string, language: Language) => {
+      const s = await account.portal<SetChecklist | null>('friends:checklist', [
+        userId,
+        setName,
+        language
+      ])
+      return s && friendChecklist(s, local(serverIdsOf.checklist(s)))
+    },
     'friends:forCard': async (cardId: number) => account.portal('friends:forCard', [cardId]),
-    'friends:wishlist': async (userId: number) =>
-      (await account.portal<WishlistItem[]>('friends:wishlist', [userId])).map((w) => ({
-        ...w,
-        printingScan: false
-      })),
-    'friends:binders': async (userId: number) => account.portal('friends:binders', [userId]),
-    // As friendEntry: the cards' printings are the server's, so they show the card art instead.
-    'friends:sessions': async (friendId: number) =>
-      (await account.portal<ScanSession[]>('friends:sessions', [friendId])).map(withoutPrintings),
+    'friends:wishlist': async (userId: number) => {
+      const items = await account.portal<WishlistItem[]>('friends:wishlist', [userId])
+      const ids = local(serverIdsOf.items(items))
+      return items.map((w) => friendItem(w, ids))
+    },
+    'friends:binders': async (userId: number) => {
+      const bs = await account.portal<BinderSummary[]>('friends:binders', [userId])
+      return friendBinders(bs, local(serverIdsOf.binders(bs)))
+    },
+    'friends:sessions': async (friendId: number) => {
+      const sessions = await account.portal<ScanSession[]>('friends:sessions', [friendId])
+      const ids = local(serverIdsOf.sessions(sessions))
+      return sessions.map((s) => friendSession(s, ids))
+    },
     'friends:binder': async (userId: number, uid: string) => {
       const b = await account.portal<BinderDetail | null>('friends:binder', [userId, uid])
-      return b && { ...b, cards: b.cards.map((c) => ({ ...c, printingScan: false })) }
+      return b && friendBinder(b, local(serverIdsOf.binder(b)))
     },
     'friends:wanting': async (cardId: number) => account.portal('friends:wanting', [cardId]),
     'friends:owning': async (pkeys: string[]) => account.portal('friends:owning', [pkeys]),

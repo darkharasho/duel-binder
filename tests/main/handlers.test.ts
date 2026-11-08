@@ -6,7 +6,8 @@ import { INVOKE_CHANNELS } from '../../src/shared/ipc'
 import { createHandlers } from '../../src/main/ipc/handlers'
 import type { AccountService } from '../../src/main/cloud/account'
 import type { PortalChannel } from '../../src/shared/portal'
-import type { AccountStatus, SyncStatus } from '../../src/shared/types'
+import type Database from 'better-sqlite3'
+import type { AccountStatus, SetChecklist, SyncStatus } from '../../src/shared/types'
 import { seededDb } from './helpers'
 
 type FakeAccount = { [K in Exclude<keyof AccountService, 'portal'>]: Mock<AccountService[K]> } & {
@@ -406,39 +407,103 @@ describe('friends handlers', () => {
     expect(account.portal).toHaveBeenCalledWith('friends:overview', [])
   })
 
-  it('collection forwards and marks every entry as having no printing scan', async () => {
-    const { handlers, account } = await makeHandlers({ signedIn: true })
+  /** A printing of the test catalog whose server id isn't its id here, as for LOCR-JP001's overframe. */
+  const twin = (db: Database.Database): { local: number; server: number } => {
+    const { id } = db.prepare('SELECT id FROM card_printings LIMIT 1').get() as { id: number }
+    db.prepare('UPDATE card_printings SET remote_id = NULL WHERE remote_id = ?').run(id)
+    db.prepare('UPDATE card_printings SET remote_id = ? WHERE id = ?').run(id + 500000, id)
+    return { local: id, server: id + 500000 }
+  }
+
+  it("collection forwards, each entry showing this catalog's photo of its printing", async () => {
+    const { db, handlers, account } = await makeHandlers({ signedIn: true })
+    const { local, server } = twin(db)
     const f = { sort: 'name', dir: 'asc' } as const
     account.portal.mockResolvedValue([
-      { id: 1, printingScan: true },
-      { id: 2, printingScan: true }
+      { id: 1, printing: { id: server }, printingScan: true },
+      // A printing this catalog lacks: no photo, never another printing's that has the same id.
+      { id: 2, printing: { id: 987654321 }, printingScan: true }
     ])
     const out = await handlers['friends:collection'](7, f)
     expect(account.portal).toHaveBeenCalledWith('friends:collection', [7, f])
     expect(out).toEqual([
-      { id: 1, printingScan: false },
-      { id: 2, printingScan: false }
+      { id: 1, printing: { id: server }, printingScan: false, photoPrintingId: local },
+      { id: 2, printing: { id: 987654321 }, printingScan: false, photoPrintingId: null }
     ])
   })
 
-  it('a friend binder is forwarded with every card marked as having no printing scan', async () => {
-    const { handlers, account } = await makeHandlers({ signedIn: true })
-    account.portal.mockResolvedValue({ uid: 'u', cards: [{ key: 'a', printingScan: true }] })
+  it("a friend's set checklist shows this catalog's photo for each rarity", async () => {
+    const { db, handlers, account } = await makeHandlers({ signedIn: true })
+    const { local, server } = twin(db)
+    // The server's id is this catalog's id of some other printing: its photo must not show.
+    const other = { defaultPrintingId: local, rarity: 'Common' }
+    const mine = { defaultPrintingId: server, rarity: 'Ultra Rare (Overframe)' }
+    account.portal.mockResolvedValue({ set: {}, cards: [{ cardId: 1, rarities: [mine, other] }] })
+    const out = (await handlers['friends:checklist'](7, 'Set', 'ja')) as SetChecklist
+    expect(out.cards[0].rarities.map((r) => r.photoPrintingId)).toEqual([local, null])
+    expect(account.portal).toHaveBeenCalledWith('friends:checklist', [7, 'Set', 'ja'])
+    account.portal.mockResolvedValue(null)
+    expect(await handlers['friends:checklist'](7, 'Set', 'ja')).toBeNull()
+  })
+
+  it('a friend binder is forwarded, its cards showing their printing photos', async () => {
+    const { db, handlers, account } = await makeHandlers({ signedIn: true })
+    const { local, server } = twin(db)
+    account.portal.mockResolvedValue({
+      uid: 'u',
+      cards: [
+        { key: 'a', printing: { id: server }, printingScan: true },
+        { key: 'b', printing: null, printingScan: true },
+        // A card slot showing the friend's owned printing.
+        { key: 'c', printing: null, printingScan: true, photoPrintingId: server }
+      ]
+    })
     expect(await handlers['friends:binder'](7, 'u')).toEqual({
       uid: 'u',
-      cards: [{ key: 'a', printingScan: false }]
+      coverPrintingId: null,
+      cards: [
+        { key: 'a', printing: { id: server }, printingScan: false, photoPrintingId: local },
+        { key: 'b', printing: null, printingScan: false, photoPrintingId: null },
+        { key: 'c', printing: null, printingScan: false, photoPrintingId: local }
+      ]
     })
     expect(account.portal).toHaveBeenCalledWith('friends:binder', [7, 'u'])
     account.portal.mockResolvedValue(null)
     expect(await handlers['friends:binder'](7, 'u')).toBeNull()
   })
 
-  it("a friend's sessions come with no printing of this computer", async () => {
-    const { handlers, account } = await makeHandlers({ signedIn: true })
-    const c = { cardId: 1, pkey: 'en|1|A-001|Common', printingId: 5, photoId: 5, imageId: 1 }
-    account.portal.mockResolvedValue([{ uid: 's', cards: [c] }])
+  it("a friend's binder covers show this catalog's photo of their printing", async () => {
+    const { db, handlers, account } = await makeHandlers({ signedIn: true })
+    const { local, server } = twin(db)
+    account.portal.mockResolvedValue([
+      { uid: 'a', coverImageId: 1, coverPrintingId: server },
+      { uid: 'b', coverImageId: 1, coverPrintingId: null },
+      // An older server sends none.
+      { uid: 'c', coverImageId: 1 }
+    ])
+    expect(
+      ((await handlers['friends:binders'](7)) as { coverPrintingId: number | null }[]).map(
+        (b) => b.coverPrintingId
+      )
+    ).toEqual([local, null, null])
+  })
+
+  it("a friend's sessions come on this computer's printings", async () => {
+    const { db, handlers, account } = await makeHandlers({ signedIn: true })
+    const { local, server } = twin(db)
+    const c = { cardId: 1, pkey: 'en|1|A-001|Common', printingId: server, photoId: server }
+    const plain = { ...c, photoId: null }
+    const unknown = { ...c, printingId: 987654321, photoId: 987654321 }
+    account.portal.mockResolvedValue([{ uid: 's', cards: [c, plain, unknown] }])
     expect(await handlers['friends:sessions'](7)).toEqual([
-      { uid: 's', cards: [{ ...c, printingId: null, photoId: null }] }
+      {
+        uid: 's',
+        cards: [
+          { ...c, printingId: local, photoId: local },
+          { ...c, printingId: local, photoId: null },
+          { ...c, printingId: null, photoId: null }
+        ]
+      }
     ])
     expect(account.portal).toHaveBeenCalledWith('friends:sessions', [7])
   })

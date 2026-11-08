@@ -37,6 +37,7 @@ export function Row({ b, onOpen }: { b: BinderSummary; onOpen: () => void }): Re
             {b.coverImageId ? (
               <CardArt
                 imageId={b.coverImageId}
+                printingId={b.coverPrintingId}
                 size="small"
                 alt=""
                 className="w-full rounded-[2px]"

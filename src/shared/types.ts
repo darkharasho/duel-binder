@@ -106,6 +106,12 @@ export interface EntryView {
    * desktop or phone app, whose printing ids are the server's, not this catalog's.
    */
   printingScan: boolean
+  /**
+   * A friend's item seen from the desktop or phone app: this catalog's id for its printing, whose
+   * photo shows (printingScan is false there, the printing's id being the server's). See
+   * friendPrintings.ts.
+   */
+  photoPrintingId?: number | null
   unitPrice: number | null
   priceApproximate: boolean
   /** null: no price from any source the entry's game has (Pokémon has only TCGplayer for now). */
@@ -443,6 +449,8 @@ export interface ChecklistRarity {
   owned: number
   codes: ChecklistCode[] // sorted by setCode
   defaultPrintingId: number // pickDefaultCode over codes
+  /** A friend's checklist: this catalog's printing for defaultPrintingId's photo, as on EntryView. */
+  photoPrintingId?: number | null
   entryId: number | null // most recently updated entry of this rarity in this set
   price: number | null // dearest printing price of this rarity in this set
 }
@@ -521,6 +529,8 @@ export interface WishlistItem {
   imageId: number
   /** As on EntryView: false for a friend's item seen from the desktop or phone app. */
   printingScan: boolean
+  /** As on EntryView. */
+  photoPrintingId?: number | null
   /** Copies wanted; null for no target, which never removes the row by itself. */
   quantity: number | null
   /** Copies of this printing in the list owner's collection. */
@@ -563,6 +573,11 @@ export interface BinderSummary {
   /** The rules match over MAX_BINDER_MATCHES printings, so there are no slots to show. */
   tooBroad: boolean
   coverImageId: number | null
+  /**
+   * The cover slot's printing, whose photo shows over coverImageId; on a friend's binder seen from
+   * the desktop or phone app, this catalog's twin of it (friendPrintings.ts). Absent from an older server.
+   */
+  coverPrintingId?: number | null
 }
 
 /** One slot of a binder, owned or missing. */
@@ -576,6 +591,8 @@ export interface BinderCard {
   printing: Printing | null
   /** As on EntryView: false for a friend's binder seen from the desktop or phone app. */
   printingScan: boolean
+  /** As on EntryView. */
+  photoPrintingId?: number | null
   /**
    * When the slot came out: its printing's set date, or else the card's first release. Null when
    * undated, and absent from a server that predates it.

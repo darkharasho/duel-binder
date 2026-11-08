@@ -67,3 +67,18 @@ export function photoFor(
   const own = row.options.find((o) => o.printingId === row.printingId)
   return own && own.imageIds[0] === row.imageId ? own.printingId : null
 }
+
+/**
+ * The photo the stream overlay and summary show for a draft (photoFor): when its printing is sure,
+ * or when a reference scan told its art (artPrintings) though not its foil. An overframe is found
+ * by its art family (overframe Ultra, Prismatic and Grand Master look alike), so it stays flagged
+ * Check rarity; its family's photo is still its art, where the default art would be the plain card.
+ */
+export function shownPhoto(
+  row: Pick<ScanDraft, 'options' | 'printingId' | 'imageId' | 'flag' | 'artPrintings'>
+): number | null {
+  const unsure = row.flag === 'pick-printing' || row.flag === 'check-rarity'
+  if (unsure && !(row.printingId !== null && row.artPrintings?.includes(row.printingId)))
+    return null
+  return photoFor(row)
+}

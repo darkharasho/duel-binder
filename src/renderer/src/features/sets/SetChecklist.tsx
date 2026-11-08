@@ -51,6 +51,7 @@ import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { TooltipProvider } from '@/components/ui/tooltip'
 import { UnderlineTabs } from '@/components/UnderlineTabs'
 import { CardPanel, type CardPanelSeed } from '@/features/card/CardPanel'
+import { usePrefetchNeighbours } from '@/features/card/usePrefetchNeighbours'
 import { api, invalidateAfterEdit, queryKeys } from '@/lib/api'
 import { useBackHandler } from '@/lib/backStack'
 import { useFavourites } from '@/lib/favourites'
@@ -257,6 +258,12 @@ export function SetChecklist({
     )
   )
   const tileImage = useTileImage()
+  // A friend's cards open in their own panel, which doesn't load these.
+  const openIndex = friend ? -1 : tiles.findIndex((t) => t.key === openKey)
+  usePrefetchNeighbours(
+    openIndex === -1 ? undefined : tiles[openIndex - 1]?.card.cardId,
+    openIndex === -1 ? undefined : tiles[openIndex + 1]?.card.cardId
+  )
 
   // Recompute the frozen ids on entering bulk mode and when the filter or count mode changes.
   if (bulk && data && (!frozen || frozen.filter !== filter || frozen.mode !== mode)) {
@@ -429,12 +436,7 @@ export function SetChecklist({
   }
   const unownedCard = unowned ? data.cards.find((c) => c.cardId === unowned.cardId) : undefined
   const openCardId = selected?.cardId ?? unownedCard?.cardId
-  const nav = listNav(
-    tiles,
-    tiles.findIndex((t) => t.key === openKey),
-    open,
-    (t) => t.key
-  )
+  const nav = listNav(tiles, openIndex, open, (t) => t.key)
 
   return (
     <TooltipProvider>

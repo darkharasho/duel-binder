@@ -24,6 +24,7 @@ import { SortControl } from '@/components/SortControl'
 import { Button } from '@/components/ui/button'
 import { UnderlineTabs } from '@/components/UnderlineTabs'
 import { CardPanel } from '@/features/card/CardPanel'
+import { usePrefetchNeighbours } from '@/features/card/usePrefetchNeighbours'
 import { api, queryKeys } from '@/lib/api'
 import {
   cardFilterChips,
@@ -61,9 +62,7 @@ const SORTS = [
 
 /** The game's sorts: ATK, DEF and Level are Yu-Gi-Oh!'s, HP is Pokémon's, Cost and Power One Piece's. */
 const sortsFor = (game: GameId): SortOption<BrowseSort>[] =>
-  sortOptions<BrowseSort>(
-    SORTS.filter((s) => !HIDDEN_SORTS[game].includes(s.value))
-  )
+  sortOptions<BrowseSort>(SORTS.filter((s) => !HIDDEN_SORTS[game].includes(s.value)))
 
 const OWNED = [
   { value: 'all', label: 'All cards' },
@@ -186,9 +185,14 @@ export function BrowsePage({ onAddCard }: Props): React.JSX.Element {
     setUnowned(null)
   }
   const openId = selected?.cardId ?? unowned?.id
+  const openIndex = openId === undefined ? -1 : cards.findIndex((c) => c.id === openId)
+  usePrefetchNeighbours(
+    openIndex === -1 ? undefined : cards[openIndex - 1]?.id,
+    openIndex === -1 ? undefined : cards[openIndex + 1]?.id
+  )
   const nav = listNav(
     cards,
-    cards.findIndex((c) => c.id === openId),
+    openIndex,
     // listNav only calls this on a step, never during render.
     // eslint-disable-next-line react-hooks/refs
     (c) => void open(c),

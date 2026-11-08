@@ -378,6 +378,20 @@ describe('CollectionPage', () => {
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
   })
 
+  it('shows no entry count until the list arrives', async () => {
+    const api = createMockApi({ collection: { list: () => new Promise<EntryView[]>(() => {}) } })
+    renderWithProviders(<CollectionPage />, { api })
+    expect(await screen.findByText(/Prices updated never/)).toBeInTheDocument()
+    expect(screen.queryByText(/0 entries/)).not.toBeInTheDocument()
+  })
+
+  it('loads the next card in the list while one is open, so a step shows it at once', async () => {
+    const forCard = vi.fn(async (id: number) => [dm, bew].filter((e) => e.card.id === id))
+    setup([dm, bew], { collection: { forCard } }, { initialEntryId: dm.id })
+    await screen.findByRole('dialog')
+    await waitFor(() => expect(forCard).toHaveBeenCalledWith(bew.card.id))
+  })
+
   it('opens the detail panel for initialEntryId', async () => {
     setup([dm, bew], {}, { initialEntryId: 2 })
     expect(await screen.findByRole('dialog')).toBeInTheDocument()

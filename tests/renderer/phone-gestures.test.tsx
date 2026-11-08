@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { fireEvent, screen, waitFor } from '@testing-library/react'
 import { CardSheet } from '@/components/CardSheet'
 import { PanelCardArt } from '@/components/PanelCardArt'
@@ -27,6 +28,27 @@ function swipe(el: Element, from: [number, number], to: [number, number], moves 
       fireEvent.touchMove(el, at(x, y))
     }
     fireEvent.touchEnd(el, { touches: [], changedTouches: [{ clientX: to[0], clientY: to[1] }] })
+  } finally {
+    clock.mockRestore()
+  }
+}
+
+/** A one-finger drag through `points`, 16ms apart (a 60fps flick), lifting at the last. */
+function drag(el: Element, points: [number, number][]): void {
+  let now = 1000
+  const clock = vi.spyOn(performance, 'now').mockImplementation(() => now)
+  const at = ([x, y]: [number, number]): { touches: object[]; changedTouches: object[] } => ({
+    touches: [{ clientX: x, clientY: y }],
+    changedTouches: [{ clientX: x, clientY: y }]
+  })
+  try {
+    fireEvent.touchStart(el, at(points[0]))
+    for (const p of points.slice(1)) {
+      now += 16
+      fireEvent.touchMove(el, at(p))
+    }
+    const last = points[points.length - 1]
+    fireEvent.touchEnd(el, { touches: [], changedTouches: at(last).changedTouches })
   } finally {
     clock.mockRestore()
   }
@@ -68,6 +90,58 @@ describe('phone card swipes', () => {
     swipe(sheet, [5, 100], [5 + WIDTH * 0.4, 700])
     await new Promise((r) => setTimeout(r, 300))
     expect(onClose).not.toHaveBeenCalled()
+  })
+
+  it('a quick thumb flick up the drawer that starts sideways at the edge does not go back', async () => {
+    const { onClose, sheet } = renderSheet('phone', undefined)
+    // A thumb's arc: sideways first (so it locks as an edge swipe), then up the drawer.
+    drag(sheet, [
+      [8, 600],
+      [24, 598],
+      [40, 540],
+      [55, 440],
+      [70, 320]
+    ])
+    await new Promise((r) => setTimeout(r, 300))
+    expect(onClose).not.toHaveBeenCalled()
+    expect(sheet.style.transform).toBe('')
+  })
+
+  it('a short quick flick from the edge does not go back', async () => {
+    const { onClose, sheet } = renderSheet('phone', undefined)
+    drag(sheet, [
+      [8, 300],
+      [28, 301],
+      [50, 302]
+    ])
+    await new Promise((r) => setTimeout(r, 300))
+    expect(onClose).not.toHaveBeenCalled()
+  })
+
+  it('a long quick flick from the edge still goes back', async () => {
+    const { onClose, sheet } = renderSheet('phone', undefined)
+    drag(sheet, [
+      [8, 300],
+      [60, 302],
+      [120, 304],
+      [180, 306]
+    ])
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1))
+  })
+
+  it('swiping right from the card’s left edge steps back instead of closing', () => {
+    const nav = { prev: vi.fn(), next: vi.fn() }
+    const { onClose, sheet } = renderSheet('phone', nav)
+    vi.useFakeTimers()
+    try {
+      // The Pokémon card starts ~16px in; a swipe from just inside it is the card's, not the edge's.
+      swipe(sheet, [24, 300], [600, 300])
+      vi.advanceTimersByTime(200)
+      expect(nav.prev).toHaveBeenCalledTimes(1)
+      expect(onClose).not.toHaveBeenCalled()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('swiping left steps to the next card and right to the previous', () => {
@@ -114,6 +188,30 @@ describe('phone card swipes', () => {
       expect(nav.next).toHaveBeenCalledTimes(1)
       expect(page.style.transition).toContain('transform 280ms')
       expect(page.style.transform).toBe('')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('the next card is on the page before it slides in', () => {
+    // A page whose step changes the open card, as the real pages do.
+    function Steps(): React.JSX.Element {
+      const [n, setN] = useState(1)
+      return (
+        <CardSheet onClose={vi.fn()}>
+          <PanelCardArt imageId={100 + n} alt={`Card ${n}`} nav={{ next: () => setN(n + 1) }} />
+          <p>Showing card {n}</p>
+        </CardSheet>
+      )
+    }
+    renderWithProviders(<Steps />, { api: createMockApi({ window: { platform: 'phone' } }) })
+    const sheet = screen.getByRole('dialog')
+    vi.useFakeTimers()
+    try {
+      swipe(sheet, [700, 300], [200, 300])
+      // Outside act, so nothing renders unless the step does so itself before the slide starts.
+      vi.advanceTimersByTime(200)
+      expect(screen.getByText('Showing card 2')).toBeInTheDocument()
     } finally {
       vi.useRealTimers()
     }

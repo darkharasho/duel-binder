@@ -40,6 +40,7 @@ import { useFilterPanel } from '@/lib/useFilterPanel'
 import { CollectionGrid } from './CollectionGrid'
 import { CollectionTable } from './CollectionTable'
 import { CardPanel } from '../card/CardPanel'
+import { usePrefetchNeighbours } from '@/features/card/usePrefetchNeighbours'
 import { FriendEntryPanel } from '../friends/FriendEntryPanel'
 import { DEFAULT_FILTERS } from './defaultFilters'
 
@@ -196,11 +197,11 @@ export function CollectionPage({
     friend !== undefined &&
     entries.isError &&
     (entries.data === undefined || entries.isPlaceholderData)
-  const nav = listNav(
-    list,
-    list.findIndex((e) => e.id === selectedId),
-    select,
-    (e) => e.id
+  const openIndex = selectedId === null ? -1 : list.findIndex((e) => e.id === selectedId)
+  const nav = listNav(list, openIndex, select, (e) => e.id)
+  usePrefetchNeighbours(
+    friend || openIndex === -1 ? undefined : list[openIndex - 1]?.card.id,
+    friend || openIndex === -1 ? undefined : list[openIndex + 1]?.card.id
   )
   // The collection tints the page with its first card in the current order.
   useArtWash(list[0] ? cardArtUrl(list[0].imageId) : null)
@@ -225,8 +226,14 @@ export function CollectionPage({
   const languageLabel = LANGUAGES.find((l) => l.code === languageFilter)?.label ?? ''
   const entryCount = (
     <p className="text-sm text-muted-foreground tabular-nums">
-      {list.length} {list.length === 1 ? 'entry' : 'entries'}
-      {!friend && <> · Prices updated {formatRelative(stats.data?.pricesUpdatedAt ?? null)}</>}
+      {/* No count until the list arrives: "0 entries" would flash on every first open. */}
+      {entries.data !== undefined && (
+        <>
+          {list.length} {list.length === 1 ? 'entry' : 'entries'}
+        </>
+      )}
+      {entries.data !== undefined && !friend && ' · '}
+      {!friend && <>Prices updated {formatRelative(stats.data?.pricesUpdatedAt ?? null)}</>}
     </p>
   )
   const viewToggle = (

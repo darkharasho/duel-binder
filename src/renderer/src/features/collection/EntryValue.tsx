@@ -36,9 +36,13 @@ const NO_PRICE_TIPS = {
   unavailable: 'Prices unavailable'
 } as const
 
+const JAPANESE_TIP =
+  "No Korean eBay listings · estimate from the Japanese printing's eBay asking price"
+
 /** The plain-language eBay price description: asking-price label + checked date + listing count. */
 function ebayPriceDetail(entry: EntryView): string {
   if (entry.unitPrice === null) return NO_PRICE_TIPS[entry.noPriceReason ?? 'unavailable']
+  if (entry.priceFromJapanese) return JAPANESE_TIP
   const parts = ['eBay asking price']
   if (entry.priceCheckedAt !== null) parts.push(`checked ${formatRelative(entry.priceCheckedAt)}`)
   if (entry.priceListingCount !== null)
@@ -77,9 +81,11 @@ export function EntryValue({
   const noPrice = amount === null
   const tip = noPrice
     ? NO_PRICE_TIPS[entry.noPriceReason ?? 'unavailable']
-    : entry.priceCheckedAt === null
-      ? 'eBay asking price'
-      : `eBay asking price · checked ${formatRelative(entry.priceCheckedAt)}`
+    : entry.priceFromJapanese
+      ? JAPANESE_TIP
+      : entry.priceCheckedAt === null
+        ? 'eBay asking price'
+        : `eBay asking price · checked ${formatRelative(entry.priceCheckedAt)}`
   return (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -87,7 +93,10 @@ export function EntryValue({
           <span className="text-muted-foreground">No price</span>
         ) : (
           <span className="inline-flex items-baseline gap-1">
-            <span className="tabular-nums">{formatUsd(amount)}</span>
+            <span className="tabular-nums">
+              {entry.priceApproximate && <span aria-label="approximately">≈</span>}
+              {formatUsd(amount)}
+            </span>
             <span className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
               eBay
             </span>

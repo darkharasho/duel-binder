@@ -103,3 +103,88 @@ describe('English twin price estimate', () => {
     expect(e.priceSource).toBe('ebay')
   })
 })
+
+describe('Japanese twin price estimate for Korean printings', () => {
+  const KO_SET = 'Twin Test Set (KR)'
+  const JA_SET = 'Twin Test Set (JP)'
+  const ebay = (key: string, price: number | null): void => {
+    db.prepare('INSERT INTO intl_prices (printing_id, price, listing_count, checked_at) VALUES (?, ?, ?, ?)').run(
+      ids[key],
+      price,
+      price === null ? 0 : 6,
+      '2026-11-08T00:00:00.000Z'
+    )
+  }
+
+  beforeAll(() => {
+    const cardId = (db.prepare('SELECT id FROM cards ORDER BY id LIMIT 1').get() as { id: number }).id
+    add('jaUltra', 'TWK-JP001', 'Ultra Rare', 'ja', JA_SET, null, cardId)
+    add('jaSuper', 'TWK-JP002', 'Super Rare', 'ja', JA_SET, null, cardId)
+    add('jaUnpriced', 'TWK-JP003', 'Common', 'ja', JA_SET, null, cardId)
+    add('ko', 'TWK-KR001', 'Ultra Rare', 'ko', KO_SET, null, cardId)
+    add('koOwn', 'TWK-KR002', 'Super Rare', 'ko', KO_SET, null, cardId)
+    add('koSecret', 'TWK-KR001', 'Secret Rare', 'ko', KO_SET, null, cardId)
+    add('koUnpriced', 'TWK-KR003', 'Common', 'ko', KO_SET, null, cardId)
+    ebay('jaUltra', 8)
+    ebay('jaSuper', 3)
+    ebay('jaUnpriced', null)
+    ebay('ko', null) // swept, no Korean listings
+    ebay('koOwn', 1.25)
+    for (const k of ['ko', 'koOwn', 'koSecret', 'koUnpriced']) addEntry(db, { printingId: ids[k], imageId, quantity: 1 })
+  })
+
+  it('a Korean copy with no eBay price takes the Japanese eBay price as an estimate', () => {
+    const e = entryFor('ko')
+    expect(e.unitPrice).toBe(8)
+    expect(e.priceApproximate).toBe(true)
+    expect(e.priceSource).toBe('ebay')
+    expect(e.priceFromJapanese).toBe(true)
+    expect(e.noPriceReason).toBeNull()
+  })
+
+  it('its own eBay price beats the Japanese estimate', () => {
+    const e = entryFor('koOwn')
+    expect(e.unitPrice).toBe(1.25)
+    expect(e.priceApproximate).toBe(false)
+    expect(e.priceFromJapanese).toBeUndefined()
+  })
+
+  it('rarity must match, and an unpriced Japanese twin gives nothing', () => {
+    expect(entryFor('koSecret').unitPrice).toBeNull()
+    expect(entryFor('koUnpriced').unitPrice).toBeNull()
+  })
+
+  it('Japanese and English printings never take it', () => {
+    expect(entryFor('jp').unitPrice).toBeNull()
+  })
+
+  it('checklist and scan use the estimate', () => {
+    const card = getChecklist(db, KO_SET, 'ko')!.cards[0]
+    expect(card.rarities.find((r) => r.rarity === 'Ultra Rare')!.price).toBe(8)
+    expect(printingsByCode(db, 'TWK-KR001').find((p) => p.rarity === 'Ultra Rare')!.price).toBe(8)
+  })
+
+  it('hiding eBay prices hides the estimate too', () => {
+    db.prepare("INSERT INTO meta (key, value) VALUES ('hide_ebay_prices', '1')").run()
+    try {
+      expect(entryFor('ko').unitPrice).toBeNull()
+    } finally {
+      db.prepare("DELETE FROM meta WHERE key = 'hide_ebay_prices'").run()
+    }
+  })
+
+  it('twin lookup does not scan the printings', () => {
+    const sqls: string[] = []
+    const prepare = db.prepare.bind(db)
+    db.prepare = ((sql: string) => {
+      sqls.push(sql)
+      return prepare(sql)
+    }) as typeof db.prepare
+    listEntries(db, { sort: 'name', dir: 'asc' })
+    db.prepare = prepare
+    const sql = sqls.find((s) => s.includes('en_twin_price'))!
+    const plan = (db.prepare(`EXPLAIN QUERY PLAN ${sql}`).all() as { detail: string }[]).map((r) => r.detail).join('\n')
+    expect(plan).not.toMatch(/SCAN ja\b/)
+    expect(plan).not.toMatch(/SCAN jp\b/)
+  })
+})

@@ -28,6 +28,7 @@ export function createAdminRuns(doFetch: typeof fetch = fetch): AdminRuns {
     if (res.status === 304 && had) return had.body as T
     if (res.status === 403 || res.status === 429)
       throw new Error('GitHub limit reached for now. It resets within the hour.')
+    if (res.status >= 500) throw new Error(`GitHub isn't answering right now (${res.status}).`)
     if (!res.ok) throw new Error(`GitHub answered ${res.status}`)
     const body = (await res.json()) as T
     const etag = res.headers.get('etag')

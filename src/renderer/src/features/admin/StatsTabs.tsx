@@ -34,7 +34,7 @@ function Opens({ days }: { days: AdminStats['usage']['opensByDay'] }): React.JSX
             <div
               key={d.day}
               title={`${d.day}: ${n(d.count)} opens`}
-              className="min-h-[2px] flex-1 rounded-t-[2px] bg-primary/85 hover:bg-primary"
+              className="min-h-[2px] flex-1 rounded-t-[2px] bg-foreground/25 transition-colors hover:bg-foreground/60"
               style={{ height: `${Math.max(1, (d.count / max) * 100)}%` }}
             />
           ))}

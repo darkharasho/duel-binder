@@ -1,7 +1,7 @@
 import type { GhJob, GhRun } from '@shared/admin'
 import { cn } from '@/lib/utils'
 import { shortWhen } from './adminTabs'
-import { Grid, Meter, Note, Panel } from './parts'
+import { Failed, Grid, Meter, Note, Panel } from './parts'
 import {
   isLive,
   minutes,
@@ -206,7 +206,19 @@ export function RunsTab({ view }: { view: RunsView }): React.JSX.Element {
 }
 
 /** The Overview's three newest runs. */
-export function LatestRuns({ view }: { view: RunsView | undefined }): React.JSX.Element | null {
+export function LatestRuns({
+  view,
+  error
+}: {
+  view: RunsView | undefined
+  error: unknown
+}): React.JSX.Element | null {
+  if (error)
+    return (
+      <Panel title="Latest runs">
+        <Failed error={error} />
+      </Panel>
+    )
   if (!view) return null
   return (
     <Panel title="Latest runs">

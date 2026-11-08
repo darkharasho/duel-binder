@@ -124,7 +124,10 @@ export function AdminPage({
           q={stats}
           show={(s) =>
             tab === 'overview' ? (
-              <OverviewTab stats={s} latestRuns={<LatestRuns view={runs.data} />} />
+              <OverviewTab
+                stats={s}
+                latestRuns={<LatestRuns view={runs.data} error={runs.error} />}
+              />
             ) : tab === 'people' ? (
               <UsersTab stats={s} />
             ) : tab === 'activity' ? (

@@ -114,6 +114,8 @@ export interface EntryView {
   /** eBay listings behind the asking price (non-English copies only). */
   priceListingCount: number | null
   noPriceReason: 'no-listings' | 'pending' | 'unavailable' | null
+  /** A Korean copy with no eBay price of its own, priced (approximately) by its Japanese twin's eBay price. */
+  priceFromJapanese?: true
   totalValue: number
 }
 

@@ -16,7 +16,7 @@ import { getMeta } from '../db/meta'
 import { LOCAL, favouriteSql, scopeGame, type Scope } from './scope'
 import { pokemonFacets, pokemonSearch, pokemonWhere } from './pkmFilters'
 import { onePieceFacets, onePieceWhere, opRarityWhere, opVersionWhere } from './opFilters'
-import { enTwinPrice } from './enTwin'
+import { twinPrice } from './enTwin'
 import { marketOnlyGame, setPrice, sweptPrinting } from './priceRule'
 import {
   buildFtsQuery,
@@ -54,7 +54,7 @@ export const cardPriceColumns = (scope: Scope, opCols = ''): string => `
          c.id AS id, c.name, c.type, c.frame_type, c.race, c.attribute, c.level, c.linkval, c.atk, c.def,
          c.archetype, c.desc, c.tcgplayer_price, ${POKEMON_COLS}${opCols},
          p.id AS p_id, p.card_id, p.set_name, p.set_code, ${RARITY_LABEL} AS set_rarity, p.set_rarity_code, ${setPrice(scope.ebayPrices)} AS set_price,
-         p.market_price, ${enTwinPrice(scope.game)} AS en_twin_price, p.game AS p_game,
+         p.market_price, ${twinPrice(scope)} AS en_twin_price, p.game AS p_game,
          p.missing_from_api, p.language, p.contributed,
          ip.printing_id AS ip_id, ip.price AS ip_price, ip.checked_at AS ip_checked_at,
          ip.listing_count AS ip_listing_count`
@@ -82,6 +82,7 @@ type EntryPrice = Pick<
   | 'priceCheckedAt'
   | 'priceListingCount'
   | 'noPriceReason'
+  | 'priceFromJapanese'
 >
 
 /** A printing's price from a row of `cardPriceColumns`, by the rules of the row's game. */
@@ -103,6 +104,8 @@ export function entryPrice(
   const marketOnly = marketOnlyGame(r.p_game)
   const market = english || marketOnly ? ((r.market_price as number | null) ?? null) : null
   const twin = !english && !marketOnly && ebayPrice === null ? ((r.en_twin_price as number | null) ?? null) : null
+  // A Korean printing's twin price is its Japanese twin's eBay price (twinPrice), not an English TCGplayer one.
+  const japaneseTwin = twin !== null && printing.language === 'ko'
   // A market-only game takes eBay only where a set sweep prices it (Chinese Pokémon, Japanese One Piece), and only when there is a price.
   const swept = marketOnly && market === null && ebayPrice !== null && sweptPrinting(r.p_game, printing.language)
   const ebay = swept || (!marketOnly && market === null && twin === null && (english || !ygo ? ebayPrice !== null : true))
@@ -129,7 +132,8 @@ export function entryPrice(
   return {
     unitPrice,
     priceApproximate: approximate,
-    priceSource: market !== null || twin !== null ? 'tcgplayer' : ebay ? 'ebay' : ygo ? 'ygoprodeck' : null,
+    priceSource: japaneseTwin ? 'ebay' : market !== null || twin !== null ? 'tcgplayer' : ebay ? 'ebay' : ygo ? 'ygoprodeck' : null,
+    ...(japaneseTwin ? { priceFromJapanese: true as const } : {}),
     priceCheckedAt: ebay ? ((r.ip_checked_at as string | null) ?? null) : null,
     priceListingCount: ebay ? ((r.ip_listing_count as number | null) ?? null) : null,
     noPriceReason

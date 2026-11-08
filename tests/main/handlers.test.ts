@@ -453,7 +453,9 @@ describe('friends handlers', () => {
       uid: 'u',
       cards: [
         { key: 'a', printing: { id: server }, printingScan: true },
-        { key: 'b', printing: null, printingScan: true }
+        { key: 'b', printing: null, printingScan: true },
+        // A card slot showing the friend's owned printing.
+        { key: 'c', printing: null, printingScan: true, photoPrintingId: server }
       ]
     })
     expect(await handlers['friends:binder'](7, 'u')).toEqual({
@@ -461,7 +463,8 @@ describe('friends handlers', () => {
       coverPrintingId: null,
       cards: [
         { key: 'a', printing: { id: server }, printingScan: false, photoPrintingId: local },
-        { key: 'b', printing: null, printingScan: false, photoPrintingId: null }
+        { key: 'b', printing: null, printingScan: false, photoPrintingId: null },
+        { key: 'c', printing: null, printingScan: false, photoPrintingId: local }
       ]
     })
     expect(account.portal).toHaveBeenCalledWith('friends:binder', [7, 'u'])

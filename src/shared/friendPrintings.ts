@@ -38,7 +38,7 @@ export const friendBinder = (b: BinderDetail, ids: LocalPrintings): BinderDetail
   cards: b.cards.map((c) => ({
     ...c,
     printingScan: false,
-    photoPrintingId: c.printingScan && c.printing ? local(ids, c.printing.id) : null
+    photoPrintingId: local(ids, c.printingScan && c.printing ? c.printing.id : c.photoPrintingId)
   }))
 })
 
@@ -75,7 +75,10 @@ export const serverIdsOf = {
     b
       ? [
           ...serverIdsOf.binders([b]),
-          ...b.cards.flatMap((c) => (c.printing ? [c.printing.id] : []))
+          ...b.cards.flatMap((c) => [
+            ...(c.printing ? [c.printing.id] : []),
+            ...(c.photoPrintingId != null ? [c.photoPrintingId] : [])
+          ])
         ]
       : [],
   binders: (bs: BinderSummary[]): number[] =>

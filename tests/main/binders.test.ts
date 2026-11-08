@@ -203,7 +203,13 @@ describe('saveBinder, listBinders and getBinder', () => {
       const stored = db.prepare('SELECT * FROM binders WHERE uid = ?').get(uid)
 
       const [row] = listBinders(db)
-      expect(row).toMatchObject({ uid, editable: false, hasRules: true, ownedSlots: 0, missingSlots: 0 })
+      expect(row).toMatchObject({
+        uid,
+        editable: false,
+        hasRules: true,
+        ownedSlots: 0,
+        missingSlots: 0
+      })
       expect(GOALS.ygo).toContain(row.goal)
       expect(getBinder(db, uid)).toMatchObject({ editable: false, cards: [] })
       expect(bindersForCard(db, DARK_MAGICIAN)).toEqual([
@@ -374,6 +380,43 @@ describe('slots read from the catalog and the collection', () => {
     give(db, LOB_DM)
     expect(listBinders(db)[0].coverPrintingId).toBe(printingId(db, LOB_DM))
     expect(getBinder(db, uid)?.coverPrintingId).toBe(printingId(db, LOB_DM))
+  })
+
+  it("an owned card slot shows its dearest owned printing's photo, as does its cover", async () => {
+    const db = await seededDb()
+    const price = (pkey: string, p: number): void => {
+      db.prepare('UPDATE card_printings SET market_price = ? WHERE pkey = ?').run(p, pkey)
+    }
+    price(LOB_DM, 5)
+    price(SDY_DM, 80)
+    const uid = saveBinder(db, draft({}, name('Dark Magician')), T1)
+    const slot = () => getBinder(db, uid)?.cards.find((c) => c.card.id === DARK_MAGICIAN)
+    expect(slot()?.photoPrintingId).toBeUndefined()
+    give(db, LOB_DM)
+    expect(slot()?.photoPrintingId).toBe(printingId(db, LOB_DM))
+    give(db, SDY_DM)
+    expect(slot()).toMatchObject({ printing: null, photoPrintingId: printingId(db, SDY_DM) })
+    expect(listBinders(db)[0].coverPrintingId).toBe(printingId(db, SDY_DM))
+    // With no prices, the oldest copy shows.
+    price(LOB_DM, 0)
+    price(SDY_DM, 0)
+    db.prepare('UPDATE card_printings SET set_price = NULL WHERE pkey IN (?, ?)').run(
+      LOB_DM,
+      SDY_DM
+    )
+    expect(slot()?.photoPrintingId).toBe(printingId(db, LOB_DM))
+  })
+
+  it('an art slot shows the photo of a copy of that art only', async () => {
+    const db = await seededDb()
+    const uid = saveBinder(db, draft(goal('art'), name('Dark Magician')), T1)
+    const arts = getBinder(db, uid)?.cards ?? []
+    expect(arts.length).toBeGreaterThan(1)
+    const [first, second] = arts
+    give(db, LOB_DM, first.imageId)
+    const after = getBinder(db, uid)?.cards ?? []
+    expect(after.find((c) => c.key === first.key)?.photoPrintingId).toBe(printingId(db, LOB_DM))
+    expect(after.find((c) => c.key === second.key)?.photoPrintingId).toBeUndefined()
   })
 
   it('reads only the active owner', async () => {
@@ -671,8 +714,16 @@ describe('listBinders summaries', () => {
   it('equal getBinder for every goal, with copies, edits and a too-broad binder', async () => {
     const db = await seededDb()
     give(db, LOB_DM)
-    const dmImage = (db.prepare('SELECT image_id FROM card_images WHERE card_id = ? LIMIT 1').get(POT) as { image_id: number }).image_id
-    const potPrinting = (db.prepare('SELECT id FROM card_printings WHERE card_id = ? LIMIT 1').get(POT) as { id: number }).id
+    const dmImage = (
+      db.prepare('SELECT image_id FROM card_images WHERE card_id = ? LIMIT 1').get(POT) as {
+        image_id: number
+      }
+    ).image_id
+    const potPrinting = (
+      db.prepare('SELECT id FROM card_printings WHERE card_id = ? LIMIT 1').get(POT) as {
+        id: number
+      }
+    ).id
     addEntry(db, { printingId: potPrinting, imageId: dmImage, quantity: 2 }, T1)
     const goals: BinderGoal[] = ['none', 'card', 'art', 'printing']
     const ruleSets: BinderRule[][] = [

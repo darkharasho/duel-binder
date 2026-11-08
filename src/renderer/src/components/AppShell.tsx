@@ -169,27 +169,6 @@ export function AppShell({
                 </div>
               )
             })}
-            {/* Only the admin accounts see this. The desktop opens the admin page in the app, its
-                sections as tabs along the top; the web goes to the portal's /admin page instead. */}
-            {user?.admin && (
-              <div role="group" aria-label="Admin" className="mt-2 flex flex-col">
-                <NavItem
-                  label="Admin"
-                  active={page === 'admin'}
-                  onClick={() =>
-                    api.admin
-                      ? onNavigate('admin')
-                      : void api.account
-                          .openAdmin()
-                          .catch((e: unknown) =>
-                            toast.error(
-                              e instanceof Error ? e.message : "Couldn't open the dashboard"
-                            )
-                          )
-                  }
-                />
-              </div>
-            )}
           </nav>
           <button
             type="button"
@@ -215,6 +194,27 @@ export function AppShell({
                 <span aria-hidden className="size-1.5 rounded-full bg-transparent" />
                 Contribute photos
               </button>
+            )}
+            {/* Only the admin accounts see this. The desktop opens the admin page in the app, its
+                sections as tabs along the top; the web goes to the portal's /admin page instead. */}
+            {user?.admin && (
+              <div role="group" aria-label="Admin" className="flex flex-col">
+                <NavItem
+                  label="Admin"
+                  active={page === 'admin'}
+                  onClick={() =>
+                    api.admin
+                      ? onNavigate('admin')
+                      : void api.account
+                          .openAdmin()
+                          .catch((e: unknown) =>
+                            toast.error(
+                              e instanceof Error ? e.message : "Couldn't open the dashboard"
+                            )
+                          )
+                  }
+                />
+              </div>
             )}
             <NavItem
               label="Settings"

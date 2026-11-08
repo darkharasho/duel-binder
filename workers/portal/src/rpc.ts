@@ -20,6 +20,8 @@ import {
   traditionalArt
 } from '../../../src/main/repo/cards'
 import { browseCards, browseFacets } from '../../../src/main/repo/browse'
+import { pokedexSpecies, pokedexSummary } from '../../../src/main/repo/pokedex'
+import { POKEDEX_SIZE } from '../../../src/shared/pokedex'
 import {
   CollectionError,
   addEntry,
@@ -293,6 +295,12 @@ const HANDLERS: { [C in Exclude<PortalChannel, AccountLinkChannel>]: Handler<C> 
     const query = checkString(q, 'q')
     if (query.length > MAX_QUERY) throw new CollectionError('q is too long')
     return ruleFieldValues(db, field, query, scope)
+  },
+  'pokedex:summary': ({ db }, scope) => pokedexSummary(db, scope),
+  'pokedex:species': ({ db }, scope, dexNo) => {
+    const n = checkId(dexNo, 'dexNo')
+    if (n > POKEDEX_SIZE) throw new CollectionError('dexNo is out of range')
+    return pokedexSpecies(db, n, scope)
   },
   'stats:get': ({ db }, scope) => getStats(db, scope),
   'account:signIns': ({ db, userId }) => listSignIns(db, userId),

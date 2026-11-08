@@ -47,6 +47,9 @@ export type MetaKey =
   /** Set once this database has its art links; see backfillArtTwins. */
   | 'art_twins_backfilled'
   | 'traditional_twins_backfilled'
+  /** Set once this database has its Pokédex numbers; see backfillArtTwins. */
+  | 'dex_nos_backfilled'
+  | 'dex_extras_backfilled'
   /** Set once this database has its Pokémon set series; see backfillSetSeries. */
   | 'set_series_backfilled'
   /** UTC day (YYYY-MM-DD) the portal last listed its eBay sweep prefixes. */

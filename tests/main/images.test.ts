@@ -6,7 +6,7 @@ import { createLimiter, type Limiter } from '../../src/main/images/limiter'
 import type { ImageSources } from '../../src/main/images/cache'
 import type { ImageDownloads } from '../../src/shared/types'
 import { portalImageSources } from '../../src/main/images/portalSources'
-import { createImageCache, idleDownloads, throttleDownloads, imageUrl, parseImageUrl, parsePrintingImageUrl, parseSetImageUrl, parseSmallPrintingImageUrl, setImageKey, setImageUrl, SMALL_RETRY_MS, yugipediaImageKey } from '../../src/main/images/cache'
+import { createImageCache, idleDownloads, throttleDownloads, imageUrl, parseImageUrl, parsePrintingImageUrl, parseSetImageUrl, parseSmallPrintingImageUrl, parseSpriteImageUrl, setImageKey, setImageUrl, SMALL_RETRY_MS, yugipediaImageKey } from '../../src/main/images/cache'
 
 let dir: string
 beforeEach(async () => {
@@ -25,6 +25,7 @@ const direct = (over: Partial<ImageSources> = {}): ImageSources => ({
   card: (size, id) => ({ url: imageUrl(size, id) }),
   set: (key) => ({ url: setImageUrl(key) }),
   konami: () => null,
+  sprite: (n) => ({ url: `https://sprites.example/${n}.png` }),
   printing: async () => null,
   ...over
 })
@@ -339,6 +340,44 @@ describe('parsePrintingImageUrl', () => {
     expect(parsePrintingImageUrl('ygo-img://printing/42')).toBe(42)
     expect(parsePrintingImageUrl('ygo-img://printing/0')).toBeNull()
     expect(parsePrintingImageUrl('ygo-img://printing/../x')).toBeNull()
+  })
+})
+
+describe('Pokédex sprites', () => {
+  it('parses ygo-img://sprite/<n>', () => {
+    expect(parseSpriteImageUrl('ygo-img://sprite/25')).toBe(25)
+    expect(parseSpriteImageUrl('ygo-img://sprite/0')).toBeNull()
+    expect(parseSpriteImageUrl('ygo-img://sprite/1026')).toBeNull()
+    expect(parseSpriteImageUrl('ygo-img://sprite/x')).toBeNull()
+    expect(parseSpriteImageUrl('ygo-img://set/25')).toBeNull()
+  })
+
+  it('downloads a sprite once and reuses the file', async () => {
+    const fetchFn = vi.fn(async () => okResponse('png', 'image/png'))
+    const cache = createImageCache({ sources: direct(), dir, fetchFn: fetchFn as unknown as typeof fetch, limit: noLimit })
+    const file = await cache.getSprite(25)
+    expect(file).toBe(path.join(dir, 'sprites', '25.png'))
+    expect(await cache.getSprite(25)).toBe(file)
+    expect(fetchFn).toHaveBeenCalledTimes(1)
+    expect(await cache.getSprite(0)).toBeNull()
+  })
+
+  it('asks the portal with no token and sends no authorization header', async () => {
+    const fetchFn = vi.fn(async (_url: string, _init?: RequestInit) => okResponse('png', 'image/png'))
+    const cache = createImageCache({
+      dir,
+      fetchFn: fetchFn as unknown as typeof fetch,
+      limit: noLimit,
+      sources: portalImageSources({ portal: PORTAL, token: () => null, remoteId: () => null })
+    })
+    expect(await cache.getSprite(6)).toBe(path.join(dir, 'sprites', '6.png'))
+    expect(fetchFn.mock.calls[0][0]).toBe(`${PORTAL}/img/sprite/6`)
+    expect(new Headers(fetchFn.mock.calls[0][1]?.headers).get('authorization')).toBeNull()
+  })
+
+  it('adds the bearer token when there is one', () => {
+    const src = portalImageSources({ portal: PORTAL, token: () => 'tok', remoteId: () => null }).sprite(6)
+    expect(src).toEqual({ url: `${PORTAL}/img/sprite/6`, headers: { authorization: 'Bearer tok' } })
   })
 })
 

@@ -66,8 +66,9 @@ export function useCardGame(imageId?: number): GameId {
   return imageId !== undefined && imageId > 0 ? gameOfId(imageId) : game
 }
 
-/** Whether a page is in this game: Scan (and its Sessions) only for a game that has it. */
+/** Whether a page is in this game: Scan (and its Sessions) and the Pokédex only for a game that has them. */
 export function pageInGame(page: string, def: GameDef): boolean {
+  if (page === 'pokedex') return def.features.pokedex
   return (page !== 'scan' && page !== 'sessions') || def.features.scan
 }
 

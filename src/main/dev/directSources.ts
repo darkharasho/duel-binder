@@ -90,6 +90,7 @@ export function directImageSources(opts: {
       return { url: setImageUrl(key) }
     },
     konami: (key) => resolved(key, KONAMI_LOGO_PREFIX),
+    sprite: () => null, // R2 only; the dev build has no sprites
     async printing(printingId) {
       const url = (await opts.resolvePrintingArt?.(printingId)) ?? null
       const key = printingImageKey(url)

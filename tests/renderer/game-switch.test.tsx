@@ -137,10 +137,28 @@ describe('desktop game switch', () => {
     expect(navNames()).toContain('Scan')
     expect(pageInGame('scan', GAMES.pkm)).toBe(true)
     // Scan and its Sessions leave a game without Scan; the rest stay.
-    const noScan = { ...GAMES.pkm, features: { scan: false } }
+    const noScan = { ...GAMES.pkm, features: { scan: false, pokedex: true } }
     expect(pageInGame('scan', noScan)).toBe(false)
     expect(pageInGame('sessions', noScan)).toBe(false)
     expect(pageInGame('sets', noScan)).toBe(true)
+  })
+
+  it('the Pokédex is in Pokémon only', async () => {
+    expect(pageInGame('pokedex', GAMES.pkm)).toBe(true)
+    expect(pageInGame('pokedex', GAMES.ygo)).toBe(false)
+    expect(pageInGame('pokedex', GAMES.op)).toBe(false)
+    await renderDesktop(desktopApi(['ygo', 'pkm'], 'pkm'))
+    await screen.findByRole('button', { name: /switch game/i })
+    await waitFor(() => expect(navNames()).toContain('Pokédex'))
+    // Right after Binders, in My cards.
+    const names = navNames()
+    expect(names[names.indexOf('Binders') + 1]).toBe('Pokédex')
+  })
+
+  it('Yu-Gi-Oh! has no Pokédex', async () => {
+    await renderDesktop(desktopApi(['ygo', 'pkm'], 'ygo'))
+    await screen.findByRole('button', { name: /switch game/i })
+    expect(navNames()).not.toContain('Pokédex')
   })
 
   it('shows Yu-Gi-Oh! and asks main for it when the game cannot be read', async () => {

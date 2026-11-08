@@ -3,16 +3,18 @@ import { getMeta, setMeta } from '../db/meta'
 import type { CatalogChangesResponse } from '../../shared/catalogFeed'
 import { catalogCursorKey } from './apply'
 
-/** Each link column, and the meta key set once this database has that column's links. */
+/** Each link or Pokédex column, and the meta key set once this database has that column's values. */
 const LINKS = [
   { column: 'art_twin_id', done: 'art_twins_backfilled' },
-  { column: 'traditional_twin_id', done: 'traditional_twins_backfilled' }
+  { column: 'traditional_twin_id', done: 'traditional_twins_backfilled' },
+  { column: 'dex_no', done: 'dex_nos_backfilled' },
+  { column: 'dex_extra', done: 'dex_extras_backfilled' }
 ] as const
 
 /**
  * An app from before a link column dropped it from the rows it pulled, and its cursor is past them,
  * so the feed will never send those links again. Once, after that update, an app with a Pokémon
- * cursor reads `pokemon_cards` from the start and takes only the links it lacks. A database that
+ * cursor reads `pokemon_cards` from the start and takes only the links and Pokédex numbers it lacks. A database that
  * has never pulled Pokémon gets them with the rows, and so does anything changed from here on.
  */
 export async function backfillArtTwins(

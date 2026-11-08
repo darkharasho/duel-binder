@@ -4,6 +4,7 @@ import {
   SCHEMA_V20,
   SCHEMA_V27,
   SCHEMA_V28,
+  SCHEMA_V42,
   SCHEMA_V36,
   type Migration
 } from '../../../src/main/db/schema'
@@ -375,6 +376,25 @@ function setSeriesStep(): ServerStep {
   }
 }
 
+/** Frozen, as of server-40: server-18's `pokemon_cards` entry plus `dex_no` and `dex_extra`. */
+const SERVER_40_POKEMON_CARDS: FrozenTable = {
+  name: 'pokemon_cards',
+  key: ['card_id'],
+  columns: [...SERVER_18_POKEMON_CARDS.columns, 'dex_no', 'dex_extra']
+}
+
+/** `dex_no` / `dex_extra` (the server's V42), and the seq triggers recreated over them, as in server-18. */
+function dexNumberStep(): ServerStep {
+  return {
+    name: 'server-40',
+    sql: [
+      SCHEMA_V42.trim(),
+      ...['ins', 'upd', 'del'].map((op) => `DROP TRIGGER IF EXISTS trg_pokemon_cards_seq_${op};`),
+      ...seqTriggers(SERVER_40_POKEMON_CARDS, "'pkm'")
+    ].join('\n')
+  }
+}
+
 /**
  * Server-only steps, run after every desktop step. Append only; never edit a shipped step.
  *
@@ -706,7 +726,8 @@ CREATE TABLE admins (user_id INTEGER PRIMARY KEY REFERENCES users(id) ON DELETE 
 CREATE TABLE admin_handoffs (code_hash TEXT PRIMARY KEY,
   user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE, expires_at TEXT NOT NULL);
 `
-  }
+  },
+  dexNumberStep()
 ]
 
 /**

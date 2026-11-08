@@ -566,6 +566,18 @@ CREATE TABLE scan_sessions (owner_id INTEGER NOT NULL DEFAULT 0, uid TEXT NOT NU
 CREATE INDEX ix_scan_sessions_dirty ON scan_sessions(owner_id) WHERE dirty = 1;
 `
 
+/**
+ * Pokédex numbers on each Pokémon card: `dex_no` is the first species (NULL for Trainers, Energy and
+ * unknown), `dex_extra` the other species, comma-separated ascending (e.g. '644'). Desktop and phone
+ * only: server-40 repeats this SQL and recreates the seq triggers over the new columns.
+ */
+export const SCHEMA_V42 = `
+ALTER TABLE pokemon_cards ADD COLUMN dex_no INTEGER;
+ALTER TABLE pokemon_cards ADD COLUMN dex_extra TEXT;
+CREATE INDEX ix_pokemon_cards_dex ON pokemon_cards(dex_no) WHERE dex_no IS NOT NULL;
+CREATE INDEX ix_pokemon_cards_dex_extra ON pokemon_cards(card_id) WHERE dex_extra IS NOT NULL;
+`
+
 /** The server keeps rollups out, as V24 does. */
 export const SCHEMA_V40_SERVER = ONEPIECE_TABLES
 
@@ -614,5 +626,6 @@ export const MIGRATIONS: Migration[] = [
   { version: 38, sql: SCHEMA_V38 },
   { version: 39, sql: SCHEMA_V39 },
   { version: 40, sql: SCHEMA_V40, server: SCHEMA_V40_SERVER },
-  { version: 41, sql: SCHEMA_V41, server: false }
+  { version: 41, sql: SCHEMA_V41, server: false },
+  { version: 42, sql: SCHEMA_V42, server: false }
 ]

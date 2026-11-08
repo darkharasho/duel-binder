@@ -62,13 +62,15 @@ export function flushUsage(): void {
     'page:wishlist': wishlist,
     'page:binders': binders,
     'page:sessions': sessions,
+    'page:pokedex': pokedex,
     ...rest
   } = events
   for (const batch of [
     rest,
     wishlist ? { 'page:wishlist': wishlist } : {},
     binders ? { 'page:binders': binders } : {},
-    sessions ? { 'page:sessions': sessions } : {}
+    sessions ? { 'page:sessions': sessions } : {},
+    pokedex ? { 'page:pokedex': pokedex } : {}
   ]) {
     if (Object.keys(batch).length === 0) continue
     try {

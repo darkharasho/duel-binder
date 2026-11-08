@@ -2,6 +2,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import {
   BookOpenIcon,
+  CircleDotIcon,
   EllipsisIcon,
   HeartIcon,
   HouseIcon,
@@ -52,6 +53,7 @@ const TABS: { page: Page; label: string; icon: LucideIcon }[] = [
 ]
 const MORE: { page: Page; label: string; icon: LucideIcon }[] = [
   { page: 'binders', label: 'Binders', icon: BookOpenIcon },
+  { page: 'pokedex', label: 'Pokédex', icon: CircleDotIcon },
   { page: 'wishlist', label: 'Wishlist', icon: HeartIcon },
   { page: 'browse', label: 'Browse', icon: SearchIcon },
   { page: 'friends', label: 'Friends', icon: UsersIcon },

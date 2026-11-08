@@ -241,6 +241,35 @@ describe('image route', () => {
       deps
     )
 
+  describe('Pokédex sprites', () => {
+    const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47])
+    it('serves a stored sprite signed out and signed in, and never fetches upstream', async () => {
+      await bucket.put('sprite/6.png', PNG.buffer, { httpMetadata: { contentType: 'image/png' } })
+      for (const res of [await getAnon('sprite/6'), await get('sprite/6')]) {
+        expect(res.status).toBe(200)
+        expect(res.headers.get('content-type')).toBe('image/png')
+        expect(res.headers.get('cache-control')).toContain('immutable')
+        expect(new Uint8Array(await res.arrayBuffer())).toEqual(PNG)
+      }
+      expect(upstream).not.toHaveBeenCalled()
+    })
+
+    it('404s ids outside the Pokédex and odd paths', async () => {
+      await bucket.put('sprite/1025.png', PNG.buffer, { httpMetadata: { contentType: 'image/png' } })
+      await bucket.put('sprite/0.png', PNG.buffer, { httpMetadata: { contentType: 'image/png' } })
+      await bucket.put('sprite/1026.png', PNG.buffer, { httpMetadata: { contentType: 'image/png' } })
+      expect((await getAnon('sprite/1025')).status).toBe(200)
+      for (const p of ['sprite/0', 'sprite/1026', 'sprite/6/x', 'sprite/abc', 'sprite/06', 'sprite'])
+        expect((await getAnon(p)).status).toBe(404)
+    })
+
+    it('404s an R2 miss with no upstream fetch', async () => {
+      expect((await getAnon('sprite/7')).status).toBe(404)
+      expect((await get('sprite/7')).status).toBe(404)
+      expect(upstream).not.toHaveBeenCalled()
+    })
+  })
+
   describe('Pokémon art and set logos', () => {
     const PKM = 2 ** 40
     const addPokemon = (n: number, url: string | null, name = 'Pika'): number => {

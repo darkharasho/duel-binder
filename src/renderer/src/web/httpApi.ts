@@ -273,6 +273,7 @@ export function createHttpApi(opts: HttpApiOptions = {}): Api {
       onOpenChange: noUnsubscribe
     },
     stats: { get: call('stats:get') },
+    pokedex: { summary: call('pokedex:summary'), species: call('pokedex:species') },
     // Not on the web (yet): the desktop and phone ask, by printing key, for what their screens show.
     prices: {
       request: async () => {},

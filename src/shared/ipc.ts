@@ -21,6 +21,8 @@ import type {
   ChecklistCard,
   CollectionFilters,
   CollectionStats,
+  PokedexSpecies,
+  PokedexSummary,
   EntryView,
   Facets,
   FriendRequestResult,
@@ -212,6 +214,10 @@ export interface Api {
   }
   stats: {
     get(): Promise<CollectionStats>
+  }
+  pokedex: {
+    summary(): Promise<PokedexSummary>
+    species(dexNo: number): Promise<PokedexSpecies>
   }
   prices: {
     /**
@@ -443,6 +449,8 @@ export const INVOKE_CHANNELS = [
   'scanWindow:isOpen',
   'scanWindow:toggleFullScreen',
   'scanWindow:setSize',
+  'pokedex:summary',
+  'pokedex:species',
   'stats:get',
   'prices:request',
   'sets:list',

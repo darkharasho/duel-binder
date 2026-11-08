@@ -70,6 +70,18 @@ describe('usage counts', () => {
     expect(report()).toHaveBeenCalledWith({ 'page:sessions': 1 })
   })
 
+  it('sends page:pokedex on its own, so a portal without it keeps the rest of the report', async () => {
+    report().mockImplementation(async (batch: Record<string, number>) => {
+      if ('page:pokedex' in batch) throw new Error('400')
+    })
+    track('open')
+    track('page:pokedex')
+    flushUsage()
+    expect(report()).toHaveBeenCalledTimes(2)
+    expect(report()).toHaveBeenCalledWith({ open: 1 })
+    expect(report()).toHaveBeenCalledWith({ 'page:pokedex': 1 })
+  })
+
   it('counts and sends nothing once turned off, and drops what was waiting', () => {
     track('open')
     setUsageEnabled(false)

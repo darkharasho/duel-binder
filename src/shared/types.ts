@@ -609,3 +609,24 @@ export interface CardBinder {
   /** The edit on this card, or else on one of its printings. */
   edit: BinderEditAction | null
 }
+
+/** One Pokédex species the collection holds: National Pokédex number and copies owned. */
+export interface PokedexSummary {
+  caught: { dexNo: number; copies: number }[]
+}
+
+export interface PokedexCard {
+  cardId: number
+  imageId: number
+  name: string
+  setName: string
+  language: Language
+  /** 0 in `missing`. */
+  copies: number
+}
+
+export interface PokedexSpecies {
+  dexNo: number
+  owned: PokedexCard[]
+  missing: PokedexCard[]
+}

@@ -25,5 +25,7 @@ export const printingImageSrc = (printingId: number, opts?: { small?: boolean })
 /** A printing's photo by the server's printing id: the phone's way to it. */
 export const printingPhotoSrc = (serverId: number, opts?: { small?: boolean }): string =>
   imageSrc(photoPath(serverId, opts))
+/** A Pokédex sprite by national number. */
+export const spriteSrc = (n: number): string => imageSrc(`sprite/${n}`)
 export const setImageSrc = (key: string, opts?: { now?: boolean }): string =>
   imageSrc(`set/${key}`) + now(opts)

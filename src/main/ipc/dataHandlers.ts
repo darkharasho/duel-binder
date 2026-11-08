@@ -25,6 +25,8 @@ import {
   printingsForSet
 } from '../repo/scan'
 import { getStats, recordSnapshot } from '../repo/stats'
+import { pokedexSpecies, pokedexSummary } from '../repo/pokedex'
+import { POKEDEX_SIZE } from '../../shared/pokedex'
 import type { BinderDraft, BinderEditAction, BinderTarget, RuleField } from '../../shared/binders'
 import {
   bindersForCard,
@@ -95,6 +97,8 @@ export const DATA_CHANNELS = [
   'scan:imagesForLanguage',
   'scan:chineseOfArt',
   'scan:numberPrefixes',
+  'pokedex:summary',
+  'pokedex:species',
   'stats:get',
   'sets:list',
   'sets:checklist',
@@ -247,6 +251,12 @@ export function createDataHandlers({
       if (!Array.isArray(imageIds) || !imageIds.every((i) => Number.isInteger(i)))
         throw new Error('Image ids must be a list of integers')
       return cardsForImages(db, imageIds)
+    },
+    'pokedex:summary': async () => pokedexSummary(db),
+    'pokedex:species': async (dexNo: number) => {
+      const n = wholeNumber(dexNo, 'dexNo')
+      if (n < 1 || n > POKEDEX_SIZE) throw new Error(`dexNo must be between 1 and ${POKEDEX_SIZE}`)
+      return pokedexSpecies(db, n)
     },
     'stats:get': async () => getStats(db),
     'sets:list': async () => listSetsFast(db),

@@ -50,6 +50,8 @@ export const PORTAL_CHANNELS = [
   'binders:edit',
   'binders:forCard',
   'binders:fieldValues',
+  'pokedex:summary',
+  'pokedex:species',
   'stats:get',
   'sets:list',
   'sets:checklist',

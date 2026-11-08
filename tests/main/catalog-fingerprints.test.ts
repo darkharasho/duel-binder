@@ -628,19 +628,21 @@ describe('buildFingerprints for Pokémon', () => {
     expect(fetches).toBe(2)
   })
 
-  it('leaves Energy cards out of the pkm file: their plain art matches anything', async () => {
-    for (const [sourceId, category] of [
-      ['en/sv03-045', 'Pokemon'],
-      ['en/sve-003', 'Energy'],
-      ['en/me03-086', 'Energy']
+  it('leaves basic Energy out of the pkm file (plain art matches anything), keeps Special Energy', async () => {
+    for (const [sourceId, category, name] of [
+      ['en/sv03-045', 'Pokemon', 'Pikachu'],
+      ['en/sve-003', 'Energy', 'Fire Energy'],
+      ['en/me03-086', 'Energy', 'Basic Water Energy'],
+      ['en/svp-208', 'Energy', 'Basic Darkness Energy - 208/SV-P (Championship Series 2025)'],
+      ['en/sv04-182', 'Energy', 'Reversal Energy']
     ]) {
       const cardId = pokemonId(sourceId)
       work
         .prepare(
           `INSERT INTO cards (id, name, type, frame_type, race, "desc", updated_at, game)
-           VALUES (?, 'P', 'Pokemon', 'pokemon', '', '', '2026-01-01', 'pkm')`
+           VALUES (?, ?, 'Pokemon', 'pokemon', '', '', '2026-01-01', 'pkm')`
         )
-        .run(cardId)
+        .run(cardId, name)
       work
         .prepare(
           "INSERT INTO card_images (image_id, card_id, sort_order, game) VALUES (?, ?, 0, 'pkm')"
@@ -662,8 +664,11 @@ describe('buildFingerprints for Pokémon', () => {
       }) as typeof fetch,
       game: 'pkm'
     })
-    expect(out).toMatchObject({ count: 1, fetched: 1, failed: 0 })
-    expect(urls).toEqual(['https://assets.tcgdex.net/en/sv03-045/low.jpg'])
+    expect(out).toMatchObject({ count: 2, fetched: 2, failed: 0 })
+    expect(urls.sort()).toEqual([
+      'https://assets.tcgdex.net/en/sv03-045/low.jpg',
+      'https://assets.tcgdex.net/en/sv04-182/low.jpg'
+    ])
   })
 
   it('never hashes art a Chinese card borrows, only the English card it belongs to', async () => {

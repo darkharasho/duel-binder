@@ -134,6 +134,14 @@ function tooCloseTokens(
 }
 
 /**
+ * A basic Energy's English name: "Fire Energy", "Basic Water Energy", or one with a printing note
+ * after it ("Basic Darkness Energy - 208/SV-P (Championship Series 2025)"). The catalog has no
+ * basic/special field, and every printing's `cards.name` is English, Japanese cards included.
+ */
+const BASIC_ENERGY =
+  /^(Basic )?(Grass|Fire|Water|Lightning|Psychic|Fighting|Darkness|Metal|Fairy) Energy( - |$)/
+
+/**
  * Builds the scan fingerprint file for every `card_images` id of the game in `work`: Yu-Gi-Oh
  * from YGOPRODeck's cropped art, Pokémon from the full-card renders and One Piece from Bandai's
  * (both cut to the game's art box by fingerprintSource), with no printing scans. Hashes already in the
@@ -143,8 +151,9 @@ function tooCloseTokens(
  * Traditional Chinese and European Pokémon cards stay out: the scanner reads English and Japanese
  * cards only.
  * Art a Chinese card borrows (art_twin_id, traditional_twin_id) stays out too: only a card's own
- * image_url is hashed. Energy cards stay out: a basic Energy's flat art matches many a frame that
- * holds no card (owner, 2026-11-06), so the scanner never names one from its art.
+ * image_url is hashed. Basic Energy stays out: its flat art matches many a frame that holds no
+ * card (owner, 2026-11-06), so the scanner never names one from its art. Special Energy (Reversal
+ * Energy and the like) has art of its own and stays in (owner, 2026-11-07).
  */
 export async function buildFingerprints(opts: FingerprintOptions): Promise<FingerprintResult> {
   const fetchFn = opts.fetch ?? fetch
@@ -159,14 +168,23 @@ export async function buildFingerprints(opts: FingerprintOptions): Promise<Finge
     cache.exec('CREATE TABLE IF NOT EXISTS fp (image_id INTEGER PRIMARY KEY, hash BLOB NOT NULL)')
     // A truncated or foreign blob would corrupt the file; drop it so it is fetched again.
     cache.prepare('DELETE FROM fp WHERE length(hash) != ?').run(HASH_WORDS * 4)
-    const images = opts.work
-      .prepare(
-        `SELECT i.image_id, i.card_id, COALESCE(c.frame_type, '') AS frame_type
-         FROM card_images i LEFT JOIN cards c ON c.id = i.card_id
-         LEFT JOIN pokemon_cards p ON p.card_id = i.card_id
-         WHERE i.game = ? AND COALESCE(p.category, '') <> 'Energy' AND ${UNSCANNED_SOURCES.map((l) => `COALESCE(p.source_id, '') NOT LIKE '${l}/%'`).join(' AND ')}`
-      )
-      .all(game) as { image_id: number; card_id: number; frame_type: string }[]
+    const images = (
+      opts.work
+        .prepare(
+          `SELECT i.image_id, i.card_id, COALESCE(c.frame_type, '') AS frame_type,
+                  COALESCE(p.category, '') AS category, COALESCE(c.name, '') AS name
+           FROM card_images i LEFT JOIN cards c ON c.id = i.card_id
+           LEFT JOIN pokemon_cards p ON p.card_id = i.card_id
+           WHERE i.game = ? AND ${UNSCANNED_SOURCES.map((l) => `COALESCE(p.source_id, '') NOT LIKE '${l}/%'`).join(' AND ')}`
+        )
+        .all(game) as {
+        image_id: number
+        card_id: number
+        frame_type: string
+        category: string
+        name: string
+      }[]
+    ).filter((r) => !(r.category === 'Energy' && BASIC_ENERGY.test(r.name)))
     const frames = new Map(images.map((r) => [r.image_id, r.frame_type]))
     const cardOf = new Map(images.map((r) => [r.image_id, r.card_id]))
     cache.exec('CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)')

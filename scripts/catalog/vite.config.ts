@@ -9,6 +9,9 @@ const root = fileURLToPath(new URL('../../', import.meta.url))
  */
 export default defineConfig({
   root,
+  // The output is ESM, which has no __dirname. The vendored OpenCV build reads it bare in its Node
+  // branch (`scriptDirectory=__dirname+"/"`), so loading cv crashed the fingerprint stages.
+  define: { __dirname: 'import.meta.dirname' },
   resolve: {
     alias: {
       '@shared': `${root}src/shared`,

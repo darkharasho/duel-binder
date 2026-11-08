@@ -142,6 +142,13 @@ const BASIC_ENERGY =
   /^(Basic )?(Grass|Fire|Water|Lightning|Psychic|Fighting|Darkness|Metal|Fairy) Energy( - |$)/
 
 /**
+ * A basic Energy's printed Japanese or Chinese name ("基本草エネルギー", "基本火能量", "基本【炎】能量").
+ * It catches the few whose English name is junk from the source (a Japanese basic Grass Energy
+ * named "Training Court").
+ */
+const BASIC_ENERGY_LOCAL = /^基本.{1,6}(エネルギー|能量)$/
+
+/**
  * Builds the scan fingerprint file for every `card_images` id of the game in `work`: Yu-Gi-Oh
  * from YGOPRODeck's cropped art, Pokémon from the full-card renders and One Piece from Bandai's
  * (both cut to the game's art box by fingerprintSource), with no printing scans. Hashes already in the
@@ -172,7 +179,8 @@ export async function buildFingerprints(opts: FingerprintOptions): Promise<Finge
       opts.work
         .prepare(
           `SELECT i.image_id, i.card_id, COALESCE(c.frame_type, '') AS frame_type,
-                  COALESCE(p.category, '') AS category, COALESCE(c.name, '') AS name
+                  COALESCE(p.category, '') AS category, COALESCE(c.name, '') AS name,
+                  COALESCE(p.local_name, '') AS local_name
            FROM card_images i LEFT JOIN cards c ON c.id = i.card_id
            LEFT JOIN pokemon_cards p ON p.card_id = i.card_id
            WHERE i.game = ? AND ${UNSCANNED_SOURCES.map((l) => `COALESCE(p.source_id, '') NOT LIKE '${l}/%'`).join(' AND ')}`
@@ -183,8 +191,15 @@ export async function buildFingerprints(opts: FingerprintOptions): Promise<Finge
         frame_type: string
         category: string
         name: string
+        local_name: string
       }[]
-    ).filter((r) => !(r.category === 'Energy' && BASIC_ENERGY.test(r.name)))
+    ).filter(
+      (r) =>
+        !(
+          r.category === 'Energy' &&
+          (BASIC_ENERGY.test(r.name) || BASIC_ENERGY_LOCAL.test(r.local_name))
+        )
+    )
     const frames = new Map(images.map((r) => [r.image_id, r.frame_type]))
     const cardOf = new Map(images.map((r) => [r.image_id, r.card_id]))
     cache.exec('CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)')

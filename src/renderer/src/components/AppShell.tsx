@@ -1,7 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import logo from '@/assets/logo.svg'
 import { toast } from 'sonner'
-import { ADMIN_TABS } from '@shared/ipc'
 import type { AdminPageTab } from '@/features/admin/adminTabs'
 import { useAccountUser } from '@/lib/accountUser'
 import { api } from '@/lib/api'
@@ -70,8 +69,6 @@ const ITEM =
 
 interface AppShellProps {
   page: Page
-  /** The admin page's tab, for the Admin group's highlight. */
-  adminTab?: AdminPageTab
   onNavigate: NavigateFn
   onAddCard: () => void
   children: React.ReactNode
@@ -82,7 +79,6 @@ const GROUP_HEADING =
 
 export function AppShell({
   page,
-  adminTab,
   onNavigate,
   onAddCard,
   children
@@ -173,39 +169,25 @@ export function AppShell({
                 </div>
               )
             })}
-            {/* Only the admin accounts see this. The desktop shows the admin pages in the app; the
-                web goes to the portal's /admin page instead. */}
+            {/* Only the admin accounts see this. The desktop opens the admin page in the app, its
+                sections as tabs along the top; the web goes to the portal's /admin page instead. */}
             {user?.admin && (
-              <div role="group" aria-label="Admin" className="flex flex-col">
-                <h2 className={GROUP_HEADING}>Admin</h2>
-                {ADMIN_TABS.map(({ tab, label }) =>
-                  api.admin ? (
-                    <NavItem
-                      key={tab}
-                      label={label}
-                      active={page === 'admin' && adminTab === tab}
-                      onClick={() => onNavigate('admin', { adminTab: tab })}
-                    />
-                  ) : (
-                    <button
-                      key={tab}
-                      type="button"
-                      onClick={() =>
-                        void api.account
-                          .openAdmin(tab)
+              <div role="group" aria-label="Admin" className="mt-2 flex flex-col">
+                <NavItem
+                  label="Admin"
+                  active={page === 'admin'}
+                  onClick={() =>
+                    api.admin
+                      ? onNavigate('admin')
+                      : void api.account
+                          .openAdmin()
                           .catch((e: unknown) =>
                             toast.error(
                               e instanceof Error ? e.message : "Couldn't open the dashboard"
                             )
                           )
-                      }
-                      className={ITEM}
-                    >
-                      <span aria-hidden className="size-1.5 rounded-full bg-transparent" />
-                      {label}
-                    </button>
-                  )
-                )}
+                  }
+                />
               </div>
             )}
           </nav>

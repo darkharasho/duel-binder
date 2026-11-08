@@ -67,10 +67,11 @@ describe('desktop admin pages', () => {
     api.admin = admin
     renderWithProviders(<App />, { api })
     const group = await screen.findByRole('group', { name: 'Admin' })
-    await userEvent.click(within(group).getByRole('button', { name: 'Overview' }))
+    expect(within(group).getAllByRole('button')).toHaveLength(1)
+    await userEvent.click(within(group).getByRole('button', { name: 'Admin' }))
     expect(await screen.findByText('active this month')).toBeInTheDocument()
     expect(screen.getByText('33')).toBeInTheDocument()
-    await userEvent.click(within(group).getByRole('button', { name: 'Users' }))
+    await userEvent.click(screen.getByRole('radio', { name: 'Users' }))
     expect(await screen.findByText('Largest collections')).toBeInTheDocument()
     await userEvent.click(screen.getByRole('radio', { name: 'Storage' }))
     expect(await screen.findByText(/of the 5 GB free-plan limit/)).toBeInTheDocument()
@@ -91,7 +92,8 @@ describe('desktop admin pages', () => {
     api.admin = admin
     renderWithProviders(<App />, { api })
     const group = await screen.findByRole('group', { name: 'Admin' })
-    await userEvent.click(within(group).getByRole('button', { name: 'Testers' }))
+    await userEvent.click(within(group).getByRole('button', { name: 'Admin' }))
+    await userEvent.click(await screen.findByRole('radio', { name: 'Testers' }))
     expect(await screen.findByText('@kaiba')).toBeInTheDocument()
     await userEvent.type(screen.getByRole('textbox', { name: 'Username' }), 'yugi')
     await userEvent.click(screen.getByRole('button', { name: 'Add' }))
@@ -116,22 +118,22 @@ describe('desktop admin pages', () => {
     api.admin = admin
     renderWithProviders(<App />, { api })
     const group = await screen.findByRole('group', { name: 'Admin' })
-    await userEvent.click(within(group).getByRole('button', { name: 'Overview' }))
+    await userEvent.click(within(group).getByRole('button', { name: 'Admin' }))
     await userEvent.click(await screen.findByRole('radio', { name: 'Merges' }))
     expect(await screen.findByRole('alert')).toHaveTextContent('This account is not an admin.')
   })
 })
 
 describe('desktop Admin section', () => {
-  it('opens the portal dashboard at the tab picked where there are no admin pages', async () => {
+  it('opens the portal dashboard where there are no admin pages', async () => {
     const api = createMockApi({
       window: { platform: 'linux' },
       account: { status: vi.fn(async () => status(true)) }
     })
     renderWithProviders(<App />, { api })
     const admin = await screen.findByRole('group', { name: 'Admin' })
-    await userEvent.click(within(admin).getByRole('button', { name: 'Runs' }))
-    expect(api.account.openAdmin).toHaveBeenCalledExactlyOnceWith('runs')
+    await userEvent.click(within(admin).getByRole('button', { name: 'Admin' }))
+    expect(api.account.openAdmin).toHaveBeenCalledExactlyOnceWith()
   })
 
   it('is not there for anyone else', async () => {

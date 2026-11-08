@@ -85,12 +85,7 @@ function SignedInApp(): React.JSX.Element {
   return (
     <ContributeProvider>
       {!isWeb() && <DesktopOnlyEffects />}
-      <AppShell
-        page={page}
-        adminTab={pages.adminTab}
-        onNavigate={onNavigate}
-        onAddCard={() => openAdd()}
-      >
+      <AppShell page={page} onNavigate={onNavigate} onAddCard={() => openAdd()}>
         <AccountNotices />
         <PageSwitch
           pages={pages}

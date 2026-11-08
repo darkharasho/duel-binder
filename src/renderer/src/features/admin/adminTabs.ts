@@ -1,6 +1,4 @@
-import type { AdminTab } from '@shared/ipc'
-
-/** Every admin page tab, in the portal dashboard's order; the sidebar links the `ADMIN_TABS` ones. */
+/** Every admin page tab, in the portal dashboard's order. */
 export const ADMIN_PAGE_TABS = [
   { value: 'overview', label: 'Overview' },
   { value: 'runs', label: 'Runs' },
@@ -16,10 +14,6 @@ export const ADMIN_PAGE_TABS = [
 ] as const satisfies readonly { value: string; label: string }[]
 
 export type AdminPageTab = (typeof ADMIN_PAGE_TABS)[number]['value']
-
-// Every sidebar tab is one of these.
-const sidebarTabsListed: AdminTab extends AdminPageTab ? true : false = true
-void sidebarTabsListed
 
 /** The admin queries' keys; a Refresh drops them all. Nothing re-reads on its own. */
 export const adminKeys = {

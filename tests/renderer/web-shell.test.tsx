@@ -31,8 +31,8 @@ describe('web build', () => {
     const api = createMockApi({ window: { platform: 'web' } })
     const { unmount } = renderWithProviders(<App />, { api })
     const admin = await screen.findByRole('group', { name: 'Admin' })
-    fireEvent.click(within(admin).getByRole('button', { name: 'Overview' }))
-    expect(api.account.openAdmin).toHaveBeenCalledWith('overview')
+    fireEvent.click(within(admin).getByRole('button', { name: 'Admin' }))
+    expect(api.account.openAdmin).toHaveBeenCalledWith()
     unmount()
 
     stubMe(seto)

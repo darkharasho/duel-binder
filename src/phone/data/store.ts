@@ -240,6 +240,8 @@ export function createPhoneStore(deps: {
   })
 
   let queue: Promise<unknown> = Promise.resolve()
+  /** The last data-channel write queued (an edit), settled; a game switch waits for it. */
+  let edits: Promise<unknown> = Promise.resolve()
   /** Runs `fn` after every call queued before it, whatever their outcome. */
   function serial<T>(fn: () => Promise<T> | T): Promise<T> {
     const run = queue.then(fn, fn)
@@ -807,7 +809,15 @@ export function createPhoneStore(deps: {
     invoke: (channel, args) => {
       if (!(DATA_CHANNELS as readonly string[]).includes(channel))
         return Promise.reject(new Error(`Unknown data channel: ${String(channel)}`))
-      return (READ_CHANNELS.has(channel) ? read : serial)(() => handlers[channel](...args))
+      const run = (): Promise<unknown> => handlers[channel](...args)
+      if (READ_CHANNELS.has(channel)) return read(run)
+      // A game switch doesn't queue behind a sync or a download, which can take seconds and
+      // kept the old game on screen with no sign of the switch. It waits only for the edits
+      // queued before it, which act on the game shown when they were made.
+      if (channel === 'games:setActive') return edits.then(() => read(run))
+      const queued = serial(run)
+      edits = queued.catch(() => {})
+      return queued
     },
 
     portal: <T>(channel: PortalChannel, args: unknown[]) =>

@@ -661,6 +661,28 @@ describe('phone game switch', () => {
     expect(within(nav).getAllByRole('button', { hidden: true })).toHaveLength(5)
   })
 
+  it('the chip shows the game being switched to, with a spinner, until the switch lands', async () => {
+    const store = phoneStore({ available: ['ygo', 'pkm'], active: 'ygo' })
+    let release!: () => void
+    const gate = new Promise<void>((r) => (release = r))
+    const answer = store.invoke
+    store.invoke = vi.fn(async (channel: DataChannel, args: unknown[]) => {
+      if (channel === 'games:setActive') await gate
+      return answer(channel, args)
+    }) as typeof store.invoke
+    renderPhone(store)
+    const nav = await tabs()
+    await userEvent.click(within(nav).getByRole('button', { name: 'Collection' }))
+    await screen.findByRole('heading', { name: 'Collection' })
+    await userEvent.click(screen.getByRole('button', { name: 'Switch game, showing Yu-Gi-Oh!' }))
+    await userEvent.click(await screen.findByRole('menuitemradio', { name: /Pokémon/ }))
+    const busy = await screen.findByRole('button', { name: 'Switching game to Pokémon' })
+    expect(busy).toHaveAttribute('aria-busy', 'true')
+    release()
+    const done = await screen.findByRole('button', { name: 'Switch game, showing Pokémon' })
+    expect(done).not.toHaveAttribute('aria-busy')
+  })
+
   it('closing Contribute photos goes back to the game shown before', async () => {
     const store = phoneStore({ available: ['ygo', 'op'], active: 'ygo' })
     renderPhone(store)

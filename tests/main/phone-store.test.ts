@@ -1160,6 +1160,36 @@ describe('phone store: active game', () => {
     expect(rpc.map((r) => r.headers.get('x-duel-game'))).toEqual(['ygo', 'pkm'])
   })
 
+  it("a switch doesn't wait for a slow portal call, only for the edits queued before it", async () => {
+    await store.signIn(token, { ...me, games: ['ygo', 'pkm'] })
+    let release!: () => void
+    const gate = new Promise<void>((r) => (release = r))
+    let stalled = false
+    net = (async (input, init) => {
+      if (String(input).includes('/api/rpc/')) {
+        stalled = true
+        await gate
+      }
+      return real(input, init)
+    }) as typeof fetch
+    // A queued network job (a sync, a catalog or fingerprint download works the same way).
+    const slow = store.portal('friends:overview', [])
+    await vi.waitFor(() => expect(stalled).toBe(true))
+    await store.invoke('games:setActive', ['pkm'])
+    expect(activeGameMeta()).toBe('pkm')
+
+    // An edit queued behind it runs before a later switch, under the game it was made in.
+    const order: string[] = []
+    const edit = store.invoke('prices:setEbayHidden', [true]).then(() => order.push('edit'))
+    const back = store.invoke('games:setActive', ['ygo']).then(() => order.push('switch'))
+    await new Promise((r) => setTimeout(r, 10))
+    expect(order).toEqual([])
+    release()
+    await Promise.all([slow, edit, back])
+    expect(order).toEqual(['edit', 'switch'])
+    expect(activeGameMeta()).toBe('ygo')
+  })
+
   it('a server sign-out shows Yu-Gi-Oh! again', async () => {
     await store.signIn(token, { ...me, games: ['ygo', 'pkm'] })
     await store.invoke('games:setActive', ['pkm'])

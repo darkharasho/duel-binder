@@ -49,7 +49,7 @@ export function PageHeader({
       {chip ? (
         <div className="flex items-start gap-3">
           <div className="min-w-0 flex-1 space-y-3">{children}</div>
-          <GameChip className="mt-1" />
+          <GameChip />
         </div>
       ) : (
         children

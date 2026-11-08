@@ -10,6 +10,11 @@ export interface GameState {
   def: GameDef
   /** The games this account may switch between; the switch shows only with more than one. */
   available: GameId[]
+  /**
+   * The game being switched to, until its pages have loaded: the switches show it at once, with
+   * a spinner, so a slow switch doesn't look like a missed tap.
+   */
+  switchingTo: GameId | null
   setGame(g: GameId): Promise<void>
 }
 
@@ -46,6 +51,7 @@ export const switchingGame = (): boolean => switching
 const GameContext = createContext<GameState>({
   ...YGO_ONLY,
   def: GAMES.ygo,
+  switchingTo: null,
   setGame: async () => {}
 })
 
@@ -91,6 +97,9 @@ export function GameProvider({
   // Reads can overlap (a switch and its data-changed event); only the latest one lands.
   const reads = useRef(0)
   const fellBack = useRef(false)
+  const [switchingTo, setSwitchingTo] = useState<GameId | null>(null)
+  // Only the latest switch clears the spinner.
+  const switches = useRef(0)
   /**
    * Each game's rows as a switch away from it left them, shown at once when switching back (and
    * refetched behind them), so a switch back isn't a blank page. Dropped on any account change.
@@ -143,15 +152,26 @@ export function GameProvider({
   const setGame = useCallback(
     async (g: GameId): Promise<void> => {
       if (shown.current === g) return
+      const n = ++switches.current
+      const done = (): void => {
+        if (n === switches.current) setSwitchingTo(null)
+      }
+      setSwitchingTo(g)
       switching = true
       try {
         await api.games.setActive(g)
+      } catch (e) {
+        done()
+        throw e
       } finally {
         switching = false
       }
       // Read after the wait: a quicker switch may have landed meanwhile, and these rows are its.
       const from = shown.current
-      if (from === g) return
+      if (from === g) {
+        done()
+        return
+      }
       // Main shows `g` now: switch at once, not after reading it back (which queued behind the
       // pages' refetches, keeping the old game on screen for half a second).
       reads.current++
@@ -165,7 +185,8 @@ export function GameProvider({
       }
       shown.current = g
       setKnown((k) => ({ game: g, available: k?.available ?? YGO_ONLY.available }))
-      void qc.resetQueries({ predicate: ofGame })
+      // The spinner stays until the pages on screen have the new game's rows.
+      void qc.resetQueries({ predicate: ofGame }).then(done, done)
       // Refetching already (the reset), but the game's last rows show meanwhile.
       for (const r of saved.current.get(g) ?? [])
         qc.setQueryData(r.key, r.data, { updatedAt: r.at })
@@ -179,8 +200,8 @@ export function GameProvider({
 
   const value = useMemo<GameState>(() => {
     const { game, available } = known ?? YGO_ONLY
-    return { game, available, def: GAMES[game], setGame }
-  }, [known, setGame])
+    return { game, available, def: GAMES[game], switchingTo, setGame }
+  }, [known, switchingTo, setGame])
 
   if (!known && fallback !== undefined) return <>{fallback}</>
   return <GameContext.Provider value={value}>{children}</GameContext.Provider>

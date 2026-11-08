@@ -46,6 +46,7 @@ import {
   type TrainingSummary
 } from '../../shared/training'
 import { PHONE_FORMAT } from './phoneSchema'
+import { localPrintings } from '../../main/repo/friendPrintings'
 
 export type PhoneAccount = { state: 'signed-out' } | { state: 'signed-in'; user: Me }
 
@@ -115,6 +116,8 @@ export interface PhoneStore {
    * id: the server's id names a printing's photo (/img/printing/<id>). Others are left out.
    */
   printingPhotoIds(printingIds: number[]): Promise<[number, number][]>
+  /** `[the server's printing id, this phone's]` for those of these the catalog has (friendPrintings.ts). */
+  localPrintingIds(serverIds: number[]): Promise<[number, number][]>
   fingerprintStatus(game: GameId): Promise<FingerprintStatus>
   refreshFingerprints(opts: { game: GameId; force?: boolean }): Promise<FingerprintStatus>
   /**
@@ -884,6 +887,12 @@ export function createPhoneStore(deps: {
         }
         return out
       })
+    },
+
+    localPrintingIds: async (serverIds) => {
+      // Never throws on a bad id: a friend's page shouldn't fail over one; localPrintings skips it.
+      const ids = Array.isArray(serverIds) ? serverIds : []
+      return read(() => [...localPrintings(db, ids)])
     },
 
     fingerprintStatus: (game) =>

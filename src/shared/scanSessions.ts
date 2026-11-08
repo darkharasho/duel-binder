@@ -78,11 +78,3 @@ export function sessionTotal(cards: ScanSessionCard[]): {
   }
   return { value, priced, unpriced }
 }
-
-/**
- * A friend's session as the server sent it, for an app whose printing ids aren't the server's:
- * no printing of this catalog, so its art is the card's and its sheet opens the card itself.
- */
-export function withoutPrintings(s: ScanSession): ScanSession {
-  return { ...s, cards: s.cards.map((c) => ({ ...c, printingId: null, photoId: null })) }
-}

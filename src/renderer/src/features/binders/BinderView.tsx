@@ -4,6 +4,7 @@ import type { BinderCard, BinderDetail } from '@shared/types'
 import type { BinderRule } from '@shared/binders'
 import { CardSheet } from '@/components/CardSheet'
 import { PageHeader } from '@/components/PageHeader'
+import { binderScanFor } from '@/components/scanFor'
 import { UnderlineTabs } from '@/components/UnderlineTabs'
 import { Button } from '@/components/ui/button'
 import { SetProgress } from '@/features/sets/SetProgress'
@@ -233,13 +234,13 @@ export function BinderView({
         <CardSheet onClose={() => setOpen(null)}>
           <CardPanel
             cardId={open.card.id}
-            printingId={open.printingScan && open.printing ? open.printing.id : null}
+            printingId={binderScanFor(open)}
             seed={{
               name: open.card.name,
               type: open.card.type,
               imageId: open.imageId,
               price: open.price,
-              defaultPrintingId: open.printingScan && open.printing ? open.printing.id : null
+              defaultPrintingId: binderScanFor(open)
             }}
             onClose={() => setOpen(null)}
           />

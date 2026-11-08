@@ -365,6 +365,17 @@ describe('slots read from the catalog and the collection', () => {
     expect(listBinders(db)[0].coverImageId).toBe(POT)
   })
 
+  it("a printing slot's cover shows that printing's photo; a card slot's has none", async () => {
+    const db = await seededDb()
+    const uid = saveBinder(db, draft(), T1)
+    setBinderEdit(db, uid, { level: 'card', target: String(POT) }, 'add', T1)
+    expect(listBinders(db)[0].coverPrintingId).toBeNull()
+    setBinderEdit(db, uid, { level: 'printing', target: LOB_DM }, 'add', T1)
+    give(db, LOB_DM)
+    expect(listBinders(db)[0].coverPrintingId).toBe(printingId(db, LOB_DM))
+    expect(getBinder(db, uid)?.coverPrintingId).toBe(printingId(db, LOB_DM))
+  })
+
   it('reads only the active owner', async () => {
     const db = await seededDb()
     give(db, LOB_DM)

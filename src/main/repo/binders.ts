@@ -317,11 +317,18 @@ function firstImage(db: SqlDb, cardId: number, scope: Scope): number | null {
   return row?.image_id ?? null
 }
 
-/** The first owned slot's art, or else the first slot's. */
-function coverImage(db: SqlDb, slots: Slot[], scope: Scope): number | null {
+/** The first owned slot's art, or else the first slot's, and its printing, whose photo shows over it (an overframe as itself). */
+function cover(
+  db: SqlDb,
+  slots: Slot[],
+  scope: Scope
+): Pick<BinderSummary, 'coverImageId' | 'coverPrintingId'> {
   const slot = slots.find((s) => s.owned > 0) ?? slots[0]
-  if (!slot) return null
-  return slot.imageId ?? firstImage(db, slot.cardId, scope)
+  if (!slot) return { coverImageId: null, coverPrintingId: null }
+  return {
+    coverImageId: slot.imageId ?? firstImage(db, slot.cardId, scope),
+    coverPrintingId: slot.printing?.printingId ?? null
+  }
 }
 
 function summarize(
@@ -342,7 +349,7 @@ function summarize(
     ownedSlots: loaded.result.ownedSlots,
     missingSlots: loaded.result.missingSlots,
     tooBroad: loaded.tooBroad,
-    coverImageId: coverImage(db, loaded.result.slots, scope)
+    ...cover(db, loaded.result.slots, scope)
   }
 }
 

@@ -10,14 +10,27 @@ import { checkOcrBands, isOcrKind, isTextModel, readTexts, type Ocr } from '../s
 import type {
   AccountStatus,
   BinderDetail,
+  BinderSummary,
   CollectionFilters,
   EntryView,
   FriendStats,
+  SetChecklist,
   SyncStatus,
   UpdateStatus,
   WishlistItem
 } from '../shared/types'
-import { withoutPrintings, type ScanSession } from '../shared/scanSessions'
+import type { ScanSession } from '../shared/scanSessions'
+import type { Language } from '../shared/languages'
+import {
+  friendBinder,
+  friendBinders,
+  friendChecklist,
+  friendItem,
+  friendSession,
+  friendStats,
+  serverIdsOf,
+  type LocalPrintings
+} from '../shared/friendPrintings'
 import type { PhoneStore } from './data/store'
 import { openAdminSheet } from './nativeSignIn'
 // Declares __APP_VERSION__.
@@ -106,6 +119,8 @@ export function createPhoneApi(deps: {
   events: PhoneEvents
 }): Api {
   const { store, ocr, triggers, events } = deps
+  const local = async (serverIds: number[]): Promise<LocalPrintings> =>
+    new Map(serverIds.length ? await store.localPrintingIds(serverIds) : [])
 
   const data = new Map<string, Record<string, Fn>>()
   for (const channel of DATA_CHANNELS) {
@@ -227,39 +242,45 @@ export function createPhoneApi(deps: {
       remove: portal('friends:remove'),
       block: portal('friends:block'),
       unblock: portal('friends:unblock'),
-      // Printing ids differ between the server and the phone, so a friend's entries get no printing scans.
-      collection: async (userId: number, f: CollectionFilters) =>
-        (await store.portal<EntryView[]>('friends:collection', [userId, f])).map((e) => ({
-          ...e,
-          printingScan: false
-        })),
+      // A friend's printing ids are the server's: each is looked up in this catalog (friendPrintings.ts).
+      collection: async (userId: number, f: CollectionFilters) => {
+        const entries = await store.portal<EntryView[]>('friends:collection', [userId, f])
+        const ids = await local(serverIdsOf.items(entries))
+        return entries.map((e) => friendItem(e, ids))
+      },
       facets: portal('friends:facets'),
       stats: async (userId: number) => {
         const s = await store.portal<FriendStats>('friends:stats', [userId])
-        const noScan = (e: EntryView): EntryView => ({ ...e, printingScan: false })
-        return {
-          ...s,
-          topEntries: s.topEntries.map(noScan),
-          topSingles: s.topSingles.map(noScan),
-          recentEntries: s.recentEntries.map(noScan)
-        }
+        return friendStats(s, await local(serverIdsOf.stats(s)))
       },
       sets: portal('friends:sets'),
-      checklist: portal('friends:checklist'),
+      checklist: async (userId: number, setName: string, language: Language) => {
+        const s = await store.portal<SetChecklist | null>('friends:checklist', [
+          userId,
+          setName,
+          language
+        ])
+        return s && friendChecklist(s, await local(serverIdsOf.checklist(s)))
+      },
       // Off the serial queue: a card opening must not hold up the edits behind it.
       forCard: (cardId: number) => store.portalRead('friends:forCard', [cardId]),
-      wishlist: async (userId: number) =>
-        (await store.portal<WishlistItem[]>('friends:wishlist', [userId])).map((w) => ({
-          ...w,
-          printingScan: false
-        })),
-      // A friend's printing ids are the server's, so their binder cards show no printing scan.
-      binders: portal('friends:binders'),
-      sessions: async (friendId: number) =>
-        (await store.portal<ScanSession[]>('friends:sessions', [friendId])).map(withoutPrintings),
+      wishlist: async (userId: number) => {
+        const items = await store.portal<WishlistItem[]>('friends:wishlist', [userId])
+        const ids = await local(serverIdsOf.items(items))
+        return items.map((w) => friendItem(w, ids))
+      },
+      binders: async (userId: number) => {
+        const bs = await store.portal<BinderSummary[]>('friends:binders', [userId])
+        return friendBinders(bs, await local(serverIdsOf.binders(bs)))
+      },
+      sessions: async (friendId: number) => {
+        const sessions = await store.portal<ScanSession[]>('friends:sessions', [friendId])
+        const ids = await local(serverIdsOf.sessions(sessions))
+        return sessions.map((s) => friendSession(s, ids))
+      },
       binder: async (userId: number, uid: string) => {
         const b = await store.portal<BinderDetail | null>('friends:binder', [userId, uid])
-        return b && { ...b, cards: b.cards.map((c) => ({ ...c, printingScan: false })) }
+        return b && friendBinder(b, await local(serverIdsOf.binder(b)))
       },
       wanting: (cardId: number) => store.portalRead('friends:wanting', [cardId]),
       owning: (pkeys: string[]) => store.portalRead('friends:owning', [pkeys]),

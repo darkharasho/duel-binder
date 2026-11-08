@@ -32,6 +32,7 @@ export const STORE_METHODS = [
   'fingerprints',
   'fingerprintRefs',
   'printingPhotoIds',
+  'localPrintingIds',
   'fingerprintStatus',
   'refreshFingerprints',
   'trainingUpload',

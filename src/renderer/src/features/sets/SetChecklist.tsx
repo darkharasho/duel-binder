@@ -13,6 +13,7 @@ import type {
   SetSummary
 } from '@shared/types'
 import { CardArt } from '@/components/CardArt'
+import { rarityScanFor } from '@/components/scanFor'
 import { useArtPrefetch } from '@/lib/artPrefetch'
 import { checklistUnpriced, useRequestPrices } from '@/lib/priceRequests'
 import { useTileImage } from '@/lib/cardSize'
@@ -248,8 +249,9 @@ export function SetChecklist({
       () =>
         tiles.map((t) => ({
           imageId: t.card.imageId,
-          printingId: (t.card.rarities.find((r) => r.rarity === t.rarity) ?? t.card.rarities[0])
-            ?.defaultPrintingId
+          printingId: rarityScanFor(
+            t.card.rarities.find((r) => r.rarity === t.rarity) ?? t.card.rarities[0]
+          )
         })),
       [tiles]
     )
@@ -624,12 +626,9 @@ export function SetChecklist({
                       <TiltCard className="mb-1">
                         <CardArt
                           imageId={t.card.imageId}
-                          printingId={
-                            (
-                              t.card.rarities.find((r) => r.rarity === t.rarity) ??
-                              t.card.rarities[0]
-                            )?.defaultPrintingId
-                          }
+                          printingId={rarityScanFor(
+                            t.card.rarities.find((r) => r.rarity === t.rarity) ?? t.card.rarities[0]
+                          )}
                           size={tileImage}
                           alt=""
                           className="w-full"

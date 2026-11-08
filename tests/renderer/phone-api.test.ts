@@ -60,6 +60,7 @@ function fakeStore(over: Partial<PhoneStore> = {}): PhoneStore {
     fingerprints: vi.fn(async () => null),
     fingerprintRefs: vi.fn(async () => []),
     printingPhotoIds: vi.fn(async () => []),
+    localPrintingIds: vi.fn(async (): Promise<[number, number][]> => []),
     fingerprintStatus: vi.fn(async () => ({ state: 'ready' as const, count: 3 })),
     refreshFingerprints: vi.fn(async () => ({ state: 'ready' as const, count: 3 })),
     trainingUpload: vi.fn(async () => ({ ok: true as const, summary: null })),
@@ -166,24 +167,42 @@ describe('phone api', () => {
     expect(triggers.afterAdd).not.toHaveBeenCalled()
   })
 
-  it('friends.collection clears printingScan', async () => {
+  it("friends.collection shows this phone's photo of each entry's printing", async () => {
     const entries = [
-      { id: 1, printingScan: true },
-      { id: 2, printingScan: false }
+      { id: 1, printing: { id: 40 }, printingScan: true },
+      { id: 2, printing: { id: 41 }, printingScan: true }
     ] as EntryView[]
     const portal = vi.fn(async () => entries)
-    const { api } = setup(fakeStore({ portal: portal as unknown as PhoneStore['portal'] }))
+    const localPrintingIds = vi.fn(async (): Promise<[number, number][]> => [[40, 7]])
+    const { api } = setup(
+      fakeStore({ portal: portal as unknown as PhoneStore['portal'], localPrintingIds })
+    )
     const got = await api.friends.collection(5, {} as never)
-    expect(got.map((e) => e.printingScan)).toEqual([false, false])
+    expect(got.map((e) => [e.printingScan, e.photoPrintingId])).toEqual([
+      [false, 7],
+      [false, null]
+    ])
+    expect(localPrintingIds).toHaveBeenCalledWith([40, 41])
     expect(portal).toHaveBeenCalledWith('friends:collection', [5, {}])
   })
 
-  it("friends.sessions drops the server's printing ids", async () => {
+  it("friends.sessions puts the cards on this phone's printings", async () => {
     const c = { cardId: 1, pkey: 'en|1|A-001|Common', printingId: 5, photoId: 5 }
-    const portal = vi.fn(async () => [{ uid: 's', cards: [c] }])
-    const { api } = setup(fakeStore({ portal: portal as unknown as PhoneStore['portal'] }))
+    const portal = vi.fn(async () => [
+      { uid: 's', cards: [c, { ...c, printingId: 6, photoId: 6 }] }
+    ])
+    const localPrintingIds = vi.fn(async (): Promise<[number, number][]> => [[5, 9]])
+    const { api } = setup(
+      fakeStore({ portal: portal as unknown as PhoneStore['portal'], localPrintingIds })
+    )
     expect(await api.friends.sessions(5)).toEqual([
-      { uid: 's', cards: [{ ...c, printingId: null, photoId: null }] }
+      {
+        uid: 's',
+        cards: [
+          { ...c, printingId: 9, photoId: 9 },
+          { ...c, printingId: null, photoId: null }
+        ]
+      }
     ])
     expect(portal).toHaveBeenCalledWith('friends:sessions', [5])
   })

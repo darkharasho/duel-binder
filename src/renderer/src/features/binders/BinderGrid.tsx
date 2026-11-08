@@ -5,6 +5,7 @@ import { cssAspect } from '@shared/games'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { CardArt } from '@/components/CardArt'
+import { binderScanFor } from '@/components/scanFor'
 import { FavouriteHeart } from '@/components/FavouriteHeart'
 import { useArtPrefetch } from '@/lib/artPrefetch'
 import { useTileImage } from '@/lib/cardSize'
@@ -126,7 +127,7 @@ function Pocket({
             <div className={cn(missing && 'opacity-[0.13] grayscale')}>
               <CardArt
                 imageId={c.imageId}
-                printingId={c.printingScan && c.printing ? c.printing.id : null}
+                printingId={binderScanFor(c)}
                 size={tileImage}
                 alt=""
                 className="w-full"

@@ -1,13 +1,12 @@
 import type { ScanSummary, ScanSummaryCard } from '@shared/scanWindow'
-import { surePrinting } from '../owned'
-import { listValue, photoFor, priceOf } from '../scanLook'
+import { listValue, priceOf, shownPhoto } from '../scanLook'
 import type { ScanRow } from '../session'
 
 const card = (row: ScanRow): ScanSummaryCard => ({
   key: row.key,
   name: row.name,
   imageId: row.imageId,
-  photoId: surePrinting(row) === null ? null : photoFor(row),
+  photoId: shownPhoto(row),
   detail: [row.setCode, row.rarity].filter(Boolean).join(' · '),
   quantity: row.quantity,
   price: priceOf(row) ?? null,

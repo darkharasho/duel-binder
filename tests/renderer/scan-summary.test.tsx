@@ -61,6 +61,13 @@ describe('sessionSummary', () => {
     expect(s.list.map((c) => c.photoId)).toEqual([null, sure.printingId])
   })
 
+  it('carries the photo of an overframe whose art a scan told while its rarity is checked', () => {
+    const overframe = row(169, { flag: 'check-rarity' })
+    const told = { ...overframe, artPrintings: [overframe.printingId!] }
+    expect(sessionSummary([overframe], 20).list[0].photoId).toBeNull()
+    expect(sessionSummary([told], 20).list[0].photoId).toBe(told.printingId)
+  })
+
   it('lists every row dearest first, no price last', () => {
     const rows = [row(null), row(3), row(50, { guess: true, slab: true }), row(9, { quantity: 2 })]
     const s = sessionSummary(rows, 20)

@@ -83,6 +83,16 @@ describe('pullOf', () => {
     ).toBeNull()
   })
 
+  it('shows the photo of a printing whose art a reference scan told, while its foil is checked', () => {
+    // LOCR-JP001's overframe Ultra Rare: the scan told the overframe family, not which foil.
+    const overframe = draft({ flag: 'check-rarity', artPrintings: [1] })
+    expect(pullOf(overframe, 20, 1).photoId).toBe(1)
+    // With no scan telling the art, an unsure rarity keeps the card's default art.
+    expect(pullOf(draft({ flag: 'check-rarity' }), 20, 1).photoId).toBeNull()
+    // A family the drafted printing isn't in says nothing of its art.
+    expect(pullOf(draft({ flag: 'check-rarity', artPrintings: [2] }), 20, 1).photoId).toBeNull()
+  })
+
   it('is a hit at exactly the hit price', () => {
     expect(pullOf(draft({}, { price: 20 }), 20, 1).hit).toBe(true)
   })

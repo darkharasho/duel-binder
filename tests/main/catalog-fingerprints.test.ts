@@ -629,8 +629,10 @@ describe('buildFingerprints for Pokémon', () => {
   })
 
   it('leaves basic Energy out of the pkm file (plain art matches anything), keeps Special Energy', async () => {
-    for (const [sourceId, category, name] of [
+    for (const [sourceId, category, name, localName = null] of [
       ['en/sv03-045', 'Pokemon', 'Pikachu'],
+      // A Japanese basic Grass Energy the source names "Training Court": its local name gives it away.
+      ['ja/S8-127', 'Energy', 'Training Court', '基本草エネルギー'],
       ['en/sve-003', 'Energy', 'Fire Energy'],
       ['en/me03-086', 'Energy', 'Basic Water Energy'],
       ['en/svp-208', 'Energy', 'Basic Darkness Energy - 208/SV-P (Championship Series 2025)'],
@@ -650,9 +652,10 @@ describe('buildFingerprints for Pokémon', () => {
         .run(pokemonId(`${sourceId}#img`), cardId)
       work
         .prepare(
-          `INSERT INTO pokemon_cards (card_id, category, source_id, image_url) VALUES (?, ?, ?, ?)`
+          `INSERT INTO pokemon_cards (card_id, category, source_id, image_url, local_name)
+           VALUES (?, ?, ?, ?, ?)`
         )
-        .run(cardId, category, sourceId, `https://assets.tcgdex.net/${sourceId}`)
+        .run(cardId, category, sourceId, `https://assets.tcgdex.net/${sourceId}`, localName)
     }
     const urls: string[] = []
     const out = await buildFingerprints({

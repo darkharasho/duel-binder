@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useState } from 'react'
+import { Fragment, Suspense, lazy, useCallback, useState } from 'react'
 import type { CardSearchResult } from '@shared/types'
 import type { NavigateFn, Page } from '@/components/AppShell'
 import { useDataChanged } from '@/components/useDataChanged'
@@ -12,8 +12,15 @@ import { PokedexPage } from '@/features/pokedex/PokedexPage'
 import { SessionsPage } from '@/features/sessions/SessionsPage'
 import { SetsPage } from '@/features/sets/SetsPage'
 import { WishlistPage } from '@/features/wishlist/WishlistPage'
+import type { AdminPageTab } from '@/features/admin/adminTabs'
+import { api } from '@/lib/api'
 import { useFriendsAvailable } from '@/lib/friends'
 import { pageInGame, useGame } from '@/lib/game'
+
+// Only admins ever open it, so it loads only then.
+const AdminPage = lazy(() =>
+  import('@/features/admin/AdminPage').then((m) => ({ default: m.AdminPage }))
+)
 
 export interface AddInitial {
   card: CardSearchResult
@@ -23,6 +30,7 @@ export interface AddInitial {
 /** The signed-in app's page state: which page shows, the Add card dialog, and data-changed refetches. */
 export interface Pages {
   page: Page
+  adminTab: AdminPageTab
   entryId: number | undefined
   friendsKey: number
   onNavigate: NavigateFn
@@ -37,6 +45,7 @@ export interface Pages {
 export function usePages(initial: Page = 'dashboard'): Pages {
   const [chosenPage, setPage] = useState<Page>(initial)
   const [entryId, setEntryId] = useState<number | undefined>()
+  const [adminTab, setAdminTab] = useState<AdminPageTab>('overview')
   const [friendsKey, setFriendsKey] = useState(0)
   const friendsAvailable = useFriendsAvailable()
   // Desktop sign-out takes the Friends nav item away; don't leave its page showing.
@@ -52,11 +61,22 @@ export function usePages(initial: Page = 'dashboard'): Pages {
 
   const onNavigate: NavigateFn = useCallback((next, opts) => {
     setEntryId(opts?.entryId)
+    if (opts?.adminTab) setAdminTab(opts.adminTab)
     if (next === 'friends') setFriendsKey((k) => k + 1)
     setPage(next)
   }, [])
 
-  return { page, entryId, friendsKey, onNavigate, openAdd, addOpen, setAddOpen, addInitial }
+  return {
+    page,
+    adminTab,
+    entryId,
+    friendsKey,
+    onNavigate,
+    openAdd,
+    addOpen,
+    setAddOpen,
+    addInitial
+  }
 }
 
 /**
@@ -73,7 +93,7 @@ export function PageSwitch({
   scan: React.ReactNode
   settings: React.ReactNode
 }): React.JSX.Element {
-  const { entryId, friendsKey, onNavigate, openAdd } = pages
+  const { entryId, friendsKey, onNavigate, openAdd, adminTab } = pages
   const { game, def } = useGame()
   // A page the shown game lacks (Scan on One Piece) falls back to the dashboard in this same render;
   // the shell's effect then moves `page` itself.
@@ -106,6 +126,19 @@ export function PageSwitch({
       {page === 'sessions' && <SessionsPage />}
       {page === 'friends' && <FriendsPage key={friendsKey} />}
       {page === 'settings' && settings}
+      {page === 'admin' && (
+        <Suspense fallback={null}>
+          <AdminPage
+            tab={adminTab}
+            onTab={(t) => onNavigate('admin', { adminTab: t })}
+            onLeave={() => {
+              onNavigate('dashboard')
+              // A sync reads the account again, which takes the Admin group away.
+              void api.account.syncNow().catch(() => {})
+            }}
+          />
+        </Suspense>
+      )}
     </Fragment>
   )
 }

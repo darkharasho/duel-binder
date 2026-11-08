@@ -8,7 +8,7 @@ import {
   matchesTone,
   askingPrice
 } from './price.js'
-import { setPrices } from './set.js'
+import { setPrices, parseListing, sweepKey } from './set.js'
 
 const OAUTH_URL = 'https://api.ebay.com/identity/v1/oauth2/token'
 const BROWSE_URL = 'https://api.ebay.com/buy/browse/v1/item_summary/search'
@@ -47,10 +47,13 @@ export function resetTokenCache() {
 }
 
 async function cacheKey(p) {
-  const joined = ['v3', p.code, p.name.toLowerCase(), p.set, p.rarity, p.lang].join('|')
-  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(joined))
+  // A one-rarity lookup keeps its v3 key, so those cached results stay good.
+  const v = p.rarities > 1 ? 'v4' : 'v3'
+  const fields = [v, p.code, p.name.toLowerCase(), p.set, p.rarity, p.lang]
+  if (p.rarities > 1) fields.push(String(p.rarities))
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(fields.join('|')))
   const hex = [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('')
-  return `v3:${hex}`
+  return `${v}:${hex}`
 }
 
 const respond = (body, status = 200) =>
@@ -113,8 +116,35 @@ async function search(env, query, { offset = 0, limit = 50, category = '31395', 
   return data.itemSummaries ?? []
 }
 
+// A rarity without its bracketed tone or variant, lower case: "ultra rare" for "Ultra Rare (Overframe)".
+const baseRarity = (r) =>
+  String(r ?? '')
+    .replace(/\s*\([^()]*\)\s*$/, '')
+    .trim()
+    .toLowerCase()
+
+/**
+ * The listing's rarity as the set sweep reads it (abbreviations too, "PSER" is Prismatic Secret
+ * Rare), base form; null when it names none or several, or the lookup has no code.
+ */
+function listingRarity(title, ref) {
+  if (!ref.code) return null
+  const r = parseListing(title, sweepKey(ref.code)).rarity
+  return r === null ? null : baseRarity(r)
+}
+
+/** True when the title names the requested rarity, spelled out or as the sweep's abbreviation. */
+function namesAskedRarity(title, ref) {
+  const asked = baseRarity(ref.rarity)
+  if (asked === '') return true
+  return String(title).toLowerCase().includes(asked) || listingRarity(title, ref) === asked
+}
+
 function matchingPrices(items, ref, { otherRarities = true } = {}) {
-  // The first pass also drops listings naming a longer rarity that contains the requested one.
+  // The first pass also drops listings naming a longer rarity that contains the requested one. When
+  // the code comes in several rarities (ref.rarities), a listing must name the requested one: one
+  // naming none could be any of them, and eBay's own match on the rarity words is loose.
+  const several = ref.rarities > 1
   return items
     .filter(
       (i) =>
@@ -124,6 +154,7 @@ function matchingPrices(items, ref, { otherRarities = true } = {}) {
         (otherRarities
           ? !namesLongerRarity(i.title, ref.rarity)
           : !namesOtherRarity(i.title, ref.rarity)) &&
+        (!several || namesAskedRarity(i.title, ref)) &&
         i.price?.currency === 'USD'
     )
     .map((i) => Number.parseFloat(i.price.value))
@@ -306,7 +337,9 @@ export default {
       name: (q.get('name') ?? '').trim(),
       set: (q.get('set') ?? '').trim(),
       rarity: (q.get('rarity') ?? '').trim(),
-      lang: q.get('lang') ?? ''
+      lang: q.get('lang') ?? '',
+      // How many rarities the catalog has under this code and language; 1 when not sent.
+      rarities: Math.min(Math.max(Number.parseInt(q.get('rarities') ?? '1', 10) || 1, 1), 99)
     }
     if (
       !CLIENTS.has(request.headers.get('X-Client')) ||

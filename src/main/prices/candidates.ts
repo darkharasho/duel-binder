@@ -20,6 +20,8 @@ export interface PriceCandidate {
   set: string
   rarity: string
   lang: Language
+  /** How many rarities this set code has in this language (see RARITIES). */
+  rarities: number
 }
 
 // Owned by anyone: deliberately global across desktop owners and server users; tombstones don't count.
@@ -60,6 +62,14 @@ function candidateFilter(
 const PRICED_RARITY = `p.set_rarity || CASE WHEN p.variant LIKE '%, Color' OR p.variant LIKE '%, Monochrome'
   THEN ' (' || p.variant || ')' ELSE '' END`
 
+/**
+ * How many rarities the printing's set code has in its language: RV01-KR005 comes in Ultra, Secret
+ * and Prismatic Secret, so 3. The price Worker then counts only listings naming the asked rarity, so
+ * one rarity's price isn't put on the others. A blank code counts as 1.
+ */
+const RARITIES = `CASE WHEN p.set_code = '' THEN 1 ELSE (SELECT COUNT(DISTINCT q.set_rarity) FROM card_printings q
+  WHERE q.set_code = p.set_code COLLATE NOCASE AND q.language = p.language AND +q.game = p.game) END`
+
 // intl_prices holds eBay prices for every language.
 const CANDIDATE_FROM = `FROM card_printings p
        JOIN cards c ON c.id = p.card_id
@@ -85,7 +95,8 @@ export function priceCandidates(
   }
   return db
     .prepare(
-      `SELECT p.id, p.pkey, p.set_code AS code, c.name, p.set_name AS "set", ${PRICED_RARITY} AS rarity, p.language AS lang
+      `SELECT p.id, p.pkey, p.set_code AS code, c.name, p.set_name AS "set", ${PRICED_RARITY} AS rarity, p.language AS lang,
+         ${RARITIES} AS rarities
        ${CANDIDATE_FROM}
        WHERE ${f.where}
        ORDER BY ${OWNED} DESC, ip.printing_id IS NULL DESC, ip.checked_at, p.id

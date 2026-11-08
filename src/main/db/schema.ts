@@ -578,6 +578,25 @@ CREATE INDEX ix_pokemon_cards_dex ON pokemon_cards(dex_no) WHERE dex_no IS NOT N
 CREATE INDEX ix_pokemon_cards_dex_extra ON pokemon_cards(card_id) WHERE dex_extra IS NOT NULL;
 `
 
+/**
+ * Drops per-card eBay prices that one lookup put on several rarities of a code: the price Worker used
+ * to count listings naming no rarity for every rarity, so RV01-KR005's Ultra, Secret and Prismatic
+ * Secret all read $77.99. A group is one card, language, code and price over 2+ rarities, checked at
+ * different times (per-card lookups; a set sweep stamps one time and splits by rarity). The dropped
+ * rows are due again and are looked up with the rarity count. The server runs it too (server-41), or
+ * it would hand the old prices back.
+ */
+export const SCHEMA_V43 = `
+DELETE FROM intl_prices WHERE printing_id IN (
+  SELECT ip.printing_id FROM intl_prices ip JOIN card_printings p ON p.id = ip.printing_id
+  JOIN (SELECT p2.card_id, p2.language, p2.set_code, ip2.price
+        FROM intl_prices ip2 JOIN card_printings p2 ON p2.id = ip2.printing_id
+        WHERE ip2.price IS NOT NULL AND p2.game = 'ygo' AND p2.language <> 'en' AND p2.set_code <> ''
+        GROUP BY p2.card_id, p2.language, p2.set_code, ip2.price
+        HAVING COUNT(DISTINCT p2.set_rarity) > 1 AND MIN(ip2.checked_at) <> MAX(ip2.checked_at)) g
+    ON g.card_id = p.card_id AND g.language = p.language AND g.set_code = p.set_code AND g.price = ip.price);
+`
+
 /** The server keeps rollups out, as V24 does. */
 export const SCHEMA_V40_SERVER = ONEPIECE_TABLES
 
@@ -627,5 +646,6 @@ export const MIGRATIONS: Migration[] = [
   { version: 39, sql: SCHEMA_V39 },
   { version: 40, sql: SCHEMA_V40, server: SCHEMA_V40_SERVER },
   { version: 41, sql: SCHEMA_V41, server: false },
-  { version: 42, sql: SCHEMA_V42, server: false }
+  { version: 42, sql: SCHEMA_V42, server: false },
+  { version: 43, sql: SCHEMA_V43, server: false }
 ]

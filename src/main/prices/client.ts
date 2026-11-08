@@ -13,6 +13,8 @@ export interface PriceQuery {
   set: string
   rarity: string
   lang: Language
+  /** Rarities under this code and language; sent only when more than 1. */
+  rarities?: number
 }
 
 export interface PriceResult {
@@ -39,6 +41,7 @@ export function createPriceClient(opts: { url: string; fetchFn?: typeof fetch })
         rarity: q.rarity,
         lang: q.lang
       })
+      if (q.rarities !== undefined && q.rarities > 1) params.set('rarities', String(q.rarities))
       const ctrl = new AbortController()
       const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS)
       try {
